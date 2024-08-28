@@ -80,9 +80,17 @@ private:
 
     using ProgressCallbackFunc = std::function<void (ui64, ui64)>;
 
-    TStatus UpsertCsv(IInputStream& input, const TString& dbPath, const TImportFileSettings& settings,
-                    std::optional<ui64> inputSizeHint, ProgressCallbackFunc & progressCallback);
-    TStatus UpsertCsvByBlocks(const TString& filePath, const TString& dbPath, const TImportFileSettings& settings);
+    TStatus UpsertCsv(IInputStream& input,
+                      const TString& dbPath,
+                      const TImportFileSettings& settings,
+                      const TString& filePath,
+                      std::optional<ui64> inputSizeHint,
+                      ProgressCallbackFunc & progressCallback);
+
+    TStatus UpsertCsvByBlocks(const TString& filePath,
+                              const TString& dbPath,
+                              const TImportFileSettings& settings);
+
     TAsyncStatus UpsertTValueBuffer(const TString& dbPath, TValueBuilder& builder);
 
     TStatus UpsertJson(IInputStream &input, const TString &dbPath, const TImportFileSettings &settings,

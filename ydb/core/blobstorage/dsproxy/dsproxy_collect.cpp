@@ -41,7 +41,7 @@ class TBlobStorageGroupCollectGarbageRequest : public TBlobStorageGroupRequestAc
         Y_ABORT_UNLESS(record.HasVDiskID());
         const TVDiskID vdisk = VDiskIDFromVDiskID(record.GetVDiskID());
 
-        A_LOG_LOG_S(false, PriorityForStatusInbound(status), "DSPC01", "received"
+        DSP_LOG_LOG_S(PriorityForStatusInbound(status), "DSPC01", "received"
                << " TEvVCollectGarbageResult# " << ev->Get()->ToString());
 
         Process(status, vdisk, record.HasIncarnationGuid() ? std::make_optional(record.GetIncarnationGuid()) : std::nullopt);
@@ -110,7 +110,7 @@ class TBlobStorageGroupCollectGarbageRequest : public TBlobStorageGroupRequestAc
         auto result = std::make_unique<TEvBlobStorage::TEvCollectGarbageResult>(status, TabletId, RecordGeneration,
             PerGenerationCounter, Channel);
         result->ErrorReason = ErrorReason;
-        A_LOG_LOG_S(true, status == NKikimrProto::OK ? NLog::PRI_INFO : NLog::PRI_NOTICE, "DSPC02", "Result# " << result->Print(false));
+        DSP_LOG_LOG_S(status == NKikimrProto::OK ? NLog::PRI_INFO : NLog::PRI_NOTICE, "DSPC02", "Result# " << result->Print(false));
         SendResponseAndDie(std::move(result));
     }
 
@@ -159,7 +159,7 @@ public:
     {}
 
     void Bootstrap() override {
-        A_LOG_INFO_S("DSPC03", "bootstrap"
+        DSP_LOG_INFO_S("DSPC03", "bootstrap"
             << " ActorId# " << SelfId()
             << " Group# " << Info->GroupID
             << " TabletId# " << TabletId
@@ -174,11 +174,11 @@ public:
             << " RestartCounter# " << RestartCounter);
 
         for (const auto& item : Keep ? *Keep : TVector<TLogoBlobID>()) {
-            A_LOG_INFO_S("DSPC04", "Keep# " << item);
+            DSP_LOG_INFO_S("DSPC04", "Keep# " << item);
         }
 
         for (const auto& item : DoNotKeep ? *DoNotKeep : TVector<TLogoBlobID>()) {
-            A_LOG_INFO_S("DSPC05", "DoNotKeep# " << item);
+            DSP_LOG_INFO_S("DSPC05", "DoNotKeep# " << item);
         }
 
         for (const auto& vdisk : Info->GetVDisks()) {

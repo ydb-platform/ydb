@@ -8,6 +8,13 @@
 #include <variant>
 #include <functional>
 
+struct Node;
+
+namespace NYql {
+class TExprNode;
+struct TExprContext;
+}
+
 namespace NYql::NPg {
 
 constexpr ui32 UnknownOid = 705;
@@ -75,6 +82,7 @@ struct TProcDesc {
     ui32 VariadicArgType = 0;
     TString VariadicArgName;
     TVector<TMaybe<TString>> DefaultArgs;
+    TExprNode* ExprNode = nullptr;
     ui32 ExtensionIndex = 0;
 };
 
@@ -435,6 +443,26 @@ public:
     virtual ~IExtensionLoader() = default;
     virtual void Load(ui32 extensionIndex, const TString& name, const TString& path) = 0;
 };
+
+class ISystemFunctionsParser {
+public:
+    virtual ~ISystemFunctionsParser() = default;
+    virtual void Parse(const TString& sql, TVector<TProcDesc>& procs) const = 0;
+};
+
+class ISqlLanguageParser {
+public:
+    virtual ~ISqlLanguageParser() = default;
+    virtual void Parse(const TString& sql, TProcDesc& proc) = 0;
+    virtual void ParseNode(const Node* stmt, TProcDesc& proc) = 0;
+    virtual void Freeze() = 0;
+    virtual TExprContext& GetContext() = 0;
+};
+
+void SetSqlLanguageParser(std::unique_ptr<ISqlLanguageParser> parser);
+ISqlLanguageParser* GetSqlLanguageParser();
+
+void LoadSystemFunctions(ISystemFunctionsParser& parser);
 
 // either RegisterExtensions or ImportExtensions should be called at most once, see ClearExtensions as well
 void RegisterExtensions(const TVector<TExtensionDesc>& extensions, bool typesOnly,

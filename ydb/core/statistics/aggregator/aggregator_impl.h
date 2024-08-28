@@ -50,6 +50,7 @@ private:
     struct TTxAnalyzeTableRequest;
     struct TTxAnalyzeTableResponse;
     struct TTxAnalyzeTableDeliveryProblem;
+    struct TTxAnalyzeDeadline;
     struct TTxNavigate;
     struct TTxResolve;
     struct TTxDatashardScanResponse;
@@ -71,6 +72,7 @@ private:
             EvAckTimeout,
             EvSendAnalyze,
             EvAnalyzeDeliveryProblem,
+            EvAnalyzeDeadline,
 
             EvEnd
         };
@@ -84,6 +86,7 @@ private:
         struct TEvResolve : public TEventLocal<TEvResolve, EvResolve> {};
         struct TEvSendAnalyze : public TEventLocal<TEvSendAnalyze, EvSendAnalyze> {};
         struct TEvAnalyzeDeliveryProblem : public TEventLocal<TEvAnalyzeDeliveryProblem, EvAnalyzeDeliveryProblem> {};
+        struct TEvAnalyzeDeadline : public TEventLocal<TEvAnalyzeDeadline, EvAnalyzeDeadline> {};
 
         struct TEvAckTimeout : public TEventLocal<TEvAckTimeout, EvAckTimeout> {
             size_t SeqNo = 0;
@@ -147,6 +150,7 @@ private:
     void Handle(TEvPrivate::TEvAckTimeout::TPtr& ev);
     void Handle(TEvPrivate::TEvSendAnalyze::TPtr& ev);
     void Handle(TEvPrivate::TEvAnalyzeDeliveryProblem::TPtr& ev);
+    void Handle(TEvPrivate::TEvAnalyzeDeadline::TPtr& ev);
 
     void InitializeStatisticsTable();
     void Navigate();
@@ -210,6 +214,7 @@ private:
             hFunc(TEvPrivate::TEvAckTimeout, Handle);
             hFunc(TEvPrivate::TEvSendAnalyze, Handle);
             hFunc(TEvPrivate::TEvAnalyzeDeliveryProblem, Handle);
+            hFunc(TEvPrivate::TEvAnalyzeDeadline, Handle);
 
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
@@ -322,6 +327,8 @@ private:
     static constexpr size_t SendAnalyzeCount = 100;
     static constexpr TDuration SendAnalyzePeriod = TDuration::Seconds(1);
     static constexpr TDuration AnalyzeDeliveryProblemPeriod = TDuration::Seconds(1);
+    static constexpr TDuration AnalyzeDeadline = TDuration::Days(1);
+    static constexpr TDuration AnalyzeDeadlinePeriod = TDuration::Seconds(1);
 
     enum ENavigateType {
         Analyze,

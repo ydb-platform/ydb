@@ -269,8 +269,8 @@ void TCommandImportFromCsv::Config(TConfig& config) {
         config.Opts->AddLongOption("delimiter", "Field delimiter in rows")
             .RequiredArgument("STRING").StoreResult(&Delimiter).DefaultValue(Delimiter);
     }
-    config.Opts->AddLongOption("null-value", "Value that would be interpreted as NULL")
-            .RequiredArgument("STRING").StoreResult(&NullValue).DefaultValue(NullValue);
+    config.Opts->AddLongOption("null-value", "Value that would be interpreted as NULL, no NULL value by default")
+            .RequiredArgument("STRING").StoreResult(&NullValue);
     // TODO: quoting/quote_char
 }
 
@@ -286,9 +286,7 @@ int TCommandImportFromCsv::Run(TConfig& config) {
     settings.Header(Header);
     settings.NewlineDelimited(NewlineDelimited);
     settings.HeaderRow(HeaderRow);
-    if (config.ParseResult->Has("null-value")) {
-        settings.NullValue(NullValue);
-    }
+    settings.NullValue(NullValue);
 
     if (Delimiter.size() != 1) {
         throw TMisuseException()

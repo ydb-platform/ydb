@@ -57,6 +57,7 @@ struct TKikimrSettings {
     NCommon::TConfSetting<TString, false> OptOverrideStatistics;
     NCommon::TConfSetting<TString, false> OptCardinalityHints;
     NCommon::TConfSetting<TString, false> OptJoinAlgoHints;
+    NCommon::TConfSetting<TString, false> OptJoinOrderHints;
 
     /* Disable optimizer rules */
     NCommon::TConfSetting<bool, false> OptDisableTopSort;

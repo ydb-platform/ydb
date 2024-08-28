@@ -323,6 +323,8 @@ namespace NKikimr::NStorage {
         // Root node operation
 
         void CheckRootNodeStatus();
+        void BecomeRoot();
+        void UnbecomeRoot();
         void HandleErrorTimeout();
         void ProcessGather(TEvGather *res);
         bool HasQuorum() const;
@@ -549,7 +551,11 @@ namespace NKikimr::NStorage {
         }
 
         // process responses
+        std::set<TNodeIdentifier> seen;
         generateSuccessful([&](const TNodeIdentifier& node) {
+            const auto& [_, inserted] = seen.insert(node);
+            Y_ABORT_UNLESS(inserted);
+
             const auto it = nodeMap.find(node.NodeId());
             if (it == nodeMap.end() || TNodeIdentifier(*it->second) != node) { // unexpected node answers
                 return;

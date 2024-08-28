@@ -320,7 +320,7 @@ message TSystemStateInfo {
     optional string DataCenter = 16;
     optional uint32 RackId = 17;
     optional string Rack = 18;
-    optional string Host = 19;
+    optional string Host = 19 [(DefaultField) = true];
     optional string Version = 20 [(DefaultField) = true];
     repeated TPoolStats PoolStats = 21 [(DefaultField) = true];
     repeated TEndpoint Endpoints = 22 [(DefaultField) = true];

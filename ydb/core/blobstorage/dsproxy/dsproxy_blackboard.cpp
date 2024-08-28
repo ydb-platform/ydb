@@ -191,13 +191,15 @@ void TBlobState::GetWorstPredictedDelaysNs(const TBlobStorageGroupInfo &info, TG
     std::partial_sort(outNWorst->begin(), outNWorst->begin() + sortedPrefixSize, outNWorst->end());
 }
 
-bool TBlobState::HasWrittenQuorum(const TBlobStorageGroupInfo& info, const TBlobStorageGroupInfo::TGroupVDisks& expired) const {
+bool TBlobState::HasWrittenQuorum(const TBlobStorageGroupInfo& info, 
+        std::optional<const TBlobStorageGroupInfo::TGroupVDisks> expired) const {
     TSubgroupPartLayout layout;
     for (ui32 diskIdx = 0, numDisks = Disks.size(); diskIdx < numDisks; ++diskIdx) {
         const TDisk& disk = Disks[diskIdx];
         for (ui32 partIdx = 0, numParts = disk.DiskParts.size(); partIdx < numParts; ++partIdx) {
             const TDiskPart& part = disk.DiskParts[partIdx];
-            if (part.Situation == ESituation::Present && !expired[disk.OrderNumber]) {
+            bool isExpired = expired.has_value() ? expired.value()[disk.OrderNumber] : false;
+            if (part.Situation == ESituation::Present && !isExpired) {    
                 layout.AddItem(diskIdx, partIdx, info.Type);
             }
         }

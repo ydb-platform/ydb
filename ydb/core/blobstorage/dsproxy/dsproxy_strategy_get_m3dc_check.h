@@ -49,7 +49,7 @@ namespace NKikimr {
 
             bool requested = false;
             for (ui32 diskIdx = 0; diskIdx < state.Disks.size(); ++diskIdx) {
-                requested = DoRequestDisk(state, groupDiskRequests, diskIdx);
+                requested = requested || DoRequestDisk(state, groupDiskRequests, diskIdx);
             }
 
             TBlobStorageGroupInfo::TSubgroupVDisks failed(&info.GetTopology()), possiblyWritten(&info.GetTopology());

@@ -1249,6 +1249,7 @@ struct TEvBlobStorage {
             bool DoNotKeep = false;
             std::optional<bool> LooksLikePhantom; // filled only when PhantomCheck is true
             bool IntegrityCheckFailed = false;
+            bool CompletenessFailed = false;
             bool CorruptedPartFound = false;
             ui32 CorruptedPartIndex = 0;
 
@@ -1303,8 +1304,27 @@ struct TEvBlobStorage {
                 if (response.RequestedSize) {
                     str << " RequestedSize# " << response.RequestedSize;
                 }
+                if (response.CompletenessFailed) {
+                    str << " CompletenessFailed# " << response.CompletenessFailed;
+                }
+                if (response.IntegrityCheckFailed) {
+                    str << " IntegrityCheckFailed# " << response.IntegrityCheckFailed;
+                    if (response.CorruptedPartFound) {
+                        str << " CorruptedPartFound# " << response.CorruptedPartFound;
+                        str << " CorruptedPartIndex# " << response.CorruptedPartIndex;
+                    }
+                }
                 if (isFull) {
                     str << " Buffer# " << response.Buffer.ConvertToString().Quote();
+                    str << " PartMap# [";
+                    for (const auto &item : response.PartMap) {
+                        str << "{DiskOrderNumber: " << item.DiskOrderNumber
+                            << ", PartIdRequested: " << item.PartIdRequested
+                            << ", RequestIndex: " << item.RequestIndex
+                            << ", ResponseIndex: " << item.ResponseIndex
+                            << "}, ";
+                    }
+                    str << "]";
                 }
                 str << "}";
                 if (ErrorReason.size()) {

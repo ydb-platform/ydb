@@ -100,8 +100,8 @@ struct TBlobState {
             NKikimrBlobStorage::EVDiskQueueId queueId, TDiskDelayPredictions *outNWorst,
             double multipler = 1) const;
     TString ToString() const;
-    bool HasWrittenQuorum(const TBlobStorageGroupInfo& info, const TBlobStorageGroupInfo::TGroupVDisks& expired) const;
-            
+    bool HasWrittenQuorum(const TBlobStorageGroupInfo& info,
+            std::optional<const TBlobStorageGroupInfo::TGroupVDisks> expired = std::nullopt) const;
     static TString SituationToString(ESituation situation);
 };
 

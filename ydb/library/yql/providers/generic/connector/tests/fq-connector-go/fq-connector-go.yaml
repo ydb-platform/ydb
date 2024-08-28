@@ -23,3 +23,37 @@ paging:
 
 conversion:
   use_unsafe_converters: true
+
+data_source_default:  &data_source_default_var
+  open_connection_timeout: 5s
+  ping_connection_timeout: 5s
+  exponential_backoff:
+    initial_interval: 500ms
+    randomization_factor: 0.5
+    multiplier: 1.5
+    max_interval: 20s
+    max_elapsed_time: 2m
+
+datasources:
+  clickhouse:
+    <<: *data_source_default_var
+    
+  greenplum:
+    <<: *data_source_default_var
+
+  ms_sql_server:
+    <<: *data_source_default_var
+
+  mysql:
+    <<: *data_source_default_var
+    result_chan_capacity: 1024
+
+  postgresql:
+    <<: *data_source_default_var
+
+  oracle:
+    <<: *data_source_default_var
+
+  ydb:
+    <<: *data_source_default_var
+    use_underlay_network_for_dedicated_databases: false

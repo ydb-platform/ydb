@@ -1,4 +1,5 @@
 #include "logic.h"
+
 #include <ydb/core/formats/arrow/switch/switch_type.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
 
@@ -63,64 +64,78 @@ TSparsedMerger::TWriter::TWriter(const TColumnMergeContext& context)
     IndexBuilderImpl = (arrow::UInt32Builder*)(IndexBuilder.get());
 }
 
-bool TSparsedMerger::TCursor::AddIndexTo(const ui32 index, TWriter& writer) {
+bool TSparsedMerger::TPlainChunkCursor::AddIndexTo(const ui32 index, TWriter& writer, const TColumnMergeContext& context) {
+    if (ChunkFinishPosition <= index) {
+        InitArrays(index);
+    }
+    AFL_VERIFY(ChunkStartPosition <= index);
+    if (NArrow::ColumnEqualsScalar(ChunkAddress->GetArray(), index - ChunkStartPosition, context.GetLoader()->GetDefaultValue())) {
+        return false;
+    } else {
+        writer.AddRealData(ChunkAddress->GetArray(), index - ChunkStartPosition);
+        return true;
+    }
+}
+
+bool TSparsedMerger::TSparsedChunkCursor::AddIndexTo(const ui32 index, TWriter& writer, const TColumnMergeContext& /*context*/) {
+    AFL_VERIFY(ChunkStartGlobalPosition <= index);
     if (index < NextGlobalPosition) {
         return false;
-    } else if (index == NextGlobalPosition) {
-        if (index == CommonShift + Chunk->GetRecordsCount()) {
+    } else {
+        if (FinishGlobalPosition <= index) {
             InitArrays(index);
-            if (index != NextGlobalPosition) {
+        }
+        if (index == NextGlobalPosition) {
+            writer.AddRealData(Chunk->GetColValue(), NextLocalPosition);
+            if (++NextLocalPosition < Chunk->GetNotDefaultRecordsCount()) {
+                NextGlobalPosition = ChunkStartGlobalPosition + Chunk->GetIndexUnsafeFast(NextLocalPosition);
+                return true;
+            } else {
+                NextGlobalPosition = ChunkStartGlobalPosition + Chunk->GetRecordsCount();
                 return false;
             }
-        }
-        writer.AddRealData(Chunk->GetColValue(), NextLocalPosition);
-        if (++NextLocalPosition < Chunk->GetNotDefaultRecordsCount()) {
-            NextGlobalPosition = CommonShift + Chunk->GetIndexUnsafeFast(NextLocalPosition);
-            return true;
         } else {
-            NextGlobalPosition = CommonShift + Chunk->GetRecordsCount();
+            bool found = false;
+            for (; NextLocalPosition < Chunk->GetNotDefaultRecordsCount(); ++NextLocalPosition) {
+                NextGlobalPosition = ChunkStartGlobalPosition + Chunk->GetIndexUnsafeFast(NextLocalPosition);
+                if (NextGlobalPosition == index) {
+                    writer.AddRealData(Chunk->GetColValue(), NextLocalPosition);
+                    found = true;
+                } else if (index < NextGlobalPosition) {
+                    return found;
+                }
+            }
+            NextGlobalPosition = ChunkStartGlobalPosition + Chunk->GetRecordsCount();
             return false;
         }
     }
-    AFL_VERIFY(Chunk->GetStartPosition() <= index);
-    if (CommonShift + Chunk->GetRecordsCount() <= index) {
+}
+
+bool TSparsedMerger::TCursor::AddIndexTo(const ui32 index, TWriter& writer) {
+    if (Array && FinishGlobalPosition <= index) {
         InitArrays(index);
     }
-    bool found = false;
-    for (; NextLocalPosition < Chunk->GetNotDefaultRecordsCount(); ++NextLocalPosition) {
-        NextGlobalPosition = CommonShift + Chunk->GetIndexUnsafeFast(NextLocalPosition);
-        if (NextGlobalPosition == index) {
-            writer.AddRealData(Chunk->GetColValue(), NextLocalPosition);
-            found = true;
-        } else if (index < NextGlobalPosition) {
-            return found;
-        }
+    if (SparsedCursor) {
+        return SparsedCursor->AddIndexTo(index, writer, Context);
+    } else if (PlainCursor) {
+        return PlainCursor->AddIndexTo(index, writer, Context);
+    } else {
+        return false;
     }
-    NextGlobalPosition = CommonShift + Chunk->GetRecordsCount();
-    return false;
 }
 
 void TSparsedMerger::TCursor::InitArrays(const ui32 position) {
-    if (!CurrentOwnedArray || !CurrentOwnedArray->GetAddress().Contains(position)) {
-        CurrentOwnedArray = Array->GetArray(CurrentOwnedArray, position, Array);
-        if (CurrentOwnedArray->GetArray()->GetType() == NArrow::NAccessor::IChunkedArray::EType::SparsedArray) {
-            CurrentSparsedArray = static_pointer_cast<NArrow::NAccessor::TSparsedArray>(CurrentOwnedArray->GetArray());
-        } else {
-            CurrentSparsedArray = make_shared<NArrow::NAccessor::TSparsedArray>(*CurrentOwnedArray->GetArray(), Context.GetDefaultValue());
-        }
-        Chunk.reset();
+    AFL_VERIFY(!CurrentOwnedArray || !CurrentOwnedArray->GetAddress().Contains(position));
+    CurrentOwnedArray = Array->GetArray(CurrentOwnedArray, position, Array);
+    if (CurrentOwnedArray->GetArray()->GetType() == NArrow::NAccessor::IChunkedArray::EType::SparsedArray) {
+        auto sparsedArray = static_pointer_cast<NArrow::NAccessor::TSparsedArray>(CurrentOwnedArray->GetArray());
+        SparsedCursor = std::make_shared<TSparsedChunkCursor>(sparsedArray, &*CurrentOwnedArray);
+        PlainCursor = nullptr;
+    } else {
+        PlainCursor = make_shared<TPlainChunkCursor>(CurrentOwnedArray->GetArray(), &*CurrentOwnedArray);
+        SparsedCursor = nullptr;
     }
-    if (!Chunk || Chunk->GetFinishPosition() <= position) {
-        Chunk = CurrentSparsedArray->GetSparsedChunk(CurrentOwnedArray->GetAddress().GetLocalIndex(position));
-        AFL_VERIFY(Chunk->GetRecordsCount());
-        AFL_VERIFY(CurrentOwnedArray->GetAddress().GetGlobalStartPosition() + Chunk->GetStartPosition() <= position && 
-            position < CurrentOwnedArray->GetAddress().GetGlobalStartPosition() + Chunk->GetFinishPosition())
-            ("pos", position)("start", Chunk->GetStartPosition())("finish", Chunk->GetFinishPosition())(
-            "shift", CurrentOwnedArray->GetAddress().GetGlobalStartPosition());
-    }
-    CommonShift = CurrentOwnedArray->GetAddress().GetGlobalStartPosition() + Chunk->GetStartPosition();
-    NextGlobalPosition = CurrentOwnedArray->GetAddress().GetGlobalStartPosition() + Chunk->GetFirstIndexNotDefault();
-    NextLocalPosition = 0;
+    FinishGlobalPosition = CurrentOwnedArray->GetAddress().GetGlobalStartPosition() + CurrentOwnedArray->GetArray()->GetRecordsCount();
 }
 
 }   // namespace NKikimr::NOlap::NCompaction

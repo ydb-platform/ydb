@@ -25,6 +25,7 @@ import "ydb/core/protos/memory_controller_config.proto";
 import "ydb/core/protos/netclassifier.proto";
 import "ydb/core/protos/node_broker.proto";
 import "ydb/core/protos/pqconfig.proto";
+import "ydb/core/protos/replication.proto";
 import "ydb/core/protos/resource_broker.proto";
 import "ydb/core/protos/shared_cache.proto";
 import "ydb/core/protos/stream.proto";
@@ -118,6 +119,7 @@ message TActorSystemConfig {
     optional ENodeType NodeType = 14 [default = COMPUTE];
     optional uint32 ForceIOPoolThreads = 17;
     optional bool UseSharedThreads = 18;
+    optional bool UseRingQueue = 19;
 
     optional bool MonitorStuckActors = 15;
     optional EActorSystemProfile ActorSystemProfile = 16;
@@ -1514,6 +1516,8 @@ message THiveConfig {
     optional double NodeUsageRangeToKick = 75 [default = 0.2];
     optional bool LessSystemTabletsMoves = 77 [default = true];
     optional uint64 MaxPingsInFlight = 78 [default = 1000];
+    optional string CutHistoryDenyList = 76 [default = "ColumnShard,KeyValue,PersQueue,BlobDepot"];
+    optional string CutHistoryAllowList = 79 [default = "DataShard"];
 }
 
 message TBlobCacheConfig {
@@ -1560,6 +1564,12 @@ message TColumnShardConfig {
 
     optional uint32 MaxInFlightIntervalsOnRequest = 16;
     optional uint32 MaxReadStaleness_ms = 18 [default = 300000];
+    optional uint32 GCIntervalMs = 19 [default = 30000];
+    optional uint32 CompactionActualizationLagMs = 20 [default = 1000];
+    optional uint32 ActualizationTasksLagMs = 21 [default = 1000];
+    optional uint32 LagForCompactionBeforeTieringsMs = 22 [default = 3600000];
+    optional uint32 OptimizerFreshnessCheckDurationMs = 23 [default = 300000];
+    optional uint32 SmallPortionDetectSizeLimit = 24 [default = 1048576];  // 1 << 20
 }
 
 message TSchemeShardConfig {
@@ -1947,6 +1957,7 @@ message TAppConfig {
     optional TMetadataCacheConfig MetadataCacheConfig = 80;
     optional TMemoryControllerConfig MemoryControllerConfig = 81;
 	optional TGroupedMemoryLimiterConfig GroupedMemoryLimiterConfig = 82;
+    optional NKikimrReplication.TReplicationDefaults ReplicationConfig = 83;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

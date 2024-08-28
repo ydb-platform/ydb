@@ -503,8 +503,12 @@ namespace Tests {
         if (!planResolution) {
             planResolution = Settings->UseRealThreads ? 7 : 500;
         }
+        ui32 timecastBuckets = Settings->DomainTimecastBuckets;
+        if (!timecastBuckets) {
+            timecastBuckets = TDomainsInfo::TDomain::DefaultTimecastBucketsPerMediator;
+        }
         auto domain = TDomainsInfo::TDomain::ConstructDomainWithExplicitTabletIds(Settings->DomainName, domainId, ChangeStateStorage(SchemeRoot, domainId),
-                                                                                  planResolution,
+                                                                                  planResolution, timecastBuckets,
                                                                                   TVector<ui64>{TDomainsInfo::MakeTxCoordinatorIDFixed(1)},
                                                                                   TVector<ui64>{TDomainsInfo::MakeTxMediatorIDFixed(1)},
                                                                                   TVector<ui64>{TDomainsInfo::MakeTxAllocatorIDFixed(1)},
@@ -602,7 +606,12 @@ namespace Tests {
 
         NKikimrBlobStorage::TDefineHostConfig hostConfig;
         hostConfig.SetHostConfigId(nodeId);
-        TString path = TStringBuilder() << Runtime->GetTempDir() << "pdisk_1.dat";
+        TString path;
+        if (Settings->UseSectorMap) {
+            path ="SectorMap:test-client[:2000]";
+        } else {
+            path = TStringBuilder() << Runtime->GetTempDir() << "pdisk_1.dat";
+        }
         hostConfig.AddDrive()->SetPath(path);
         if (Settings->Verbose) {
             Cerr << "test_client.cpp: SetPath # " << path << Endl;

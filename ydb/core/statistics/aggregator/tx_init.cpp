@@ -194,12 +194,14 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
             while (!rowset.EndOfSet()) {
                 TString operationId = rowset.GetValue<Schema::ForceTraversalOperations::OperationId>();
                 TString types = rowset.GetValue<Schema::ForceTraversalOperations::Types>();
+                ui64 createdAt = rowset.GetValue<Schema::ForceTraversalOperations::CreatedAt>();
 
                 TForceTraversalOperation operation {
                     .OperationId = operationId,
                     .Tables = {},
                     .Types = types,
-                    .ReplyToActorId = {}
+                    .ReplyToActorId = {},
+                    .CreatedAt = TInstant::FromValue(createdAt)
                 };
                 Self->ForceTraversals.emplace_back(operation);
 
@@ -207,6 +209,8 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                     return false;
                 }
             }
+
+            Self->TabletCounters->Simple()[COUNTER_FORCE_TRAVERSALS_INFLIGHT_SIZE].Set(Self->ForceTraversals.size());
 
             SA_LOG_D("[" << Self->TabletID() << "] Loaded ForceTraversalOperations: "
                 << "table count# " << Self->ForceTraversals.size());
@@ -270,12 +274,20 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
         Self->SubscribeForConfigChanges(ctx);
 
         Self->Schedule(Self->PropagateInterval, new TEvPrivate::TEvPropagate());
-        Self->Schedule(Self->TraversalPeriod, new TEvPrivate::TEvScheduleTraversal());
-        Self->Schedule(Self->SendAnalyzePeriod, new TEvPrivate::TEvSendAnalyze());
+
+        if (Self->EnableColumnStatistics) {
+            Self->Schedule(Self->TraversalPeriod, new TEvPrivate::TEvScheduleTraversal());
+            Self->Schedule(Self->SendAnalyzePeriod, new TEvPrivate::TEvSendAnalyze());
+            Self->Schedule(Self->AnalyzeDeliveryProblemPeriod, new TEvPrivate::TEvAnalyzeDeliveryProblem());
+            Self->Schedule(Self->AnalyzeDeadlinePeriod, new TEvPrivate::TEvAnalyzeDeadline());
+        } else {
+            SA_LOG_W("[" << Self->TabletID() << "] TTxInit::Complete. EnableColumnStatistics=false");
+        }
 
         Self->InitializeStatisticsTable();
 
         if (Self->TraversalPathId && Self->TraversalStartKey) {
+            SA_LOG_D("[" << Self->TabletID() << "] TTxInit::Complete. Start navigate. PathId " << Self->TraversalPathId);
             Self->NavigateType = ENavigateType::Traversal;
             Self->NavigatePathId = Self->TraversalPathId;
             Self->Navigate();

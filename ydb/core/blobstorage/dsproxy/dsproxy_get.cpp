@@ -251,7 +251,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
             << " sent over MaxSaneRequests# " << MaxSaneRequests
             << " requests, internal state# " << GetImpl.DumpFullState();
         ErrorReason = err.Str();
-        R_LOG_CRIT_S("BPG70", ErrorReason);
+        DSP_LOG_CRIT_S("BPG70", ErrorReason);
         ReplyAndDie(NKikimrProto::ERROR);
     }
 
@@ -278,7 +278,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
         TVDiskIdShort shortId(vDiskId);
         const NKikimrProto::EReplyStatus status = record.GetStatus();
         NActors::NLog::EPriority priority = PriorityForStatusInbound(status);
-        A_LOG_LOG_S(priority != NActors::NLog::PRI_DEBUG, priority, "BPG30", "Handle VPuEventResult"
+        DSP_LOG_LOG_S(priority, "BPG30", "Handle VPuEventResult"
             << " status# " << NKikimrProto::EReplyStatus_Name(status).data()
             << " node# " << GetVDiskActorId(shortId).NodeId());
 
@@ -384,7 +384,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
         LWPROBE(DSProxyRequestDuration, TEvBlobStorage::EvGet, requestSize, duration.SecondsFloat() * 1000.0, tabletId,
                 evResult->GroupId, channel, NKikimrBlobStorage::EGetHandleClass_Name(handleClass),
                 success);
-        A_LOG_LOG_S(true, success ? NLog::PRI_INFO : NLog::PRI_NOTICE, "BPG68", "Result# " << evResult->Print(false));
+        DSP_LOG_LOG_S(success ? NLog::PRI_INFO : NLog::PRI_NOTICE, "BPG68", "Result# " << evResult->Print(false));
 
         if (TActivationContext::Now() - StartTime >= LongRequestThreshold) {
             if (AllowToReport(GetImpl.GetHandleClass())) {
@@ -445,7 +445,7 @@ public:
     }
 
     void Bootstrap() override {
-        A_LOG_INFO_S("BPG01", "bootstrap"
+        DSP_LOG_INFO_S("BPG01", "bootstrap"
             << " ActorId# " << SelfId()
             << " Group# " << Info->GroupID
             << " Query# " << GetImpl.DumpQuery()

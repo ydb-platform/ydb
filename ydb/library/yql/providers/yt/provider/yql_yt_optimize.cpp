@@ -370,7 +370,7 @@ TYtSection MakeEmptySection(TYtSection section, NNodes::TYtDSink dataSink, bool 
     if (section.Paths().Size() == 1) {
         auto srcTableInfo = TYtTableBaseInfo::Parse(section.Paths().Item(0).Table());
         if (keepSortness && srcTableInfo->RowSpec && srcTableInfo->RowSpec->IsSorted()) {
-            outTable.RowSpec->CopySortness(*srcTableInfo->RowSpec, TYqlRowSpecInfo::ECopySort::WithCalc);
+            outTable.RowSpec->CopySortness(ctx, *srcTableInfo->RowSpec, TYqlRowSpecInfo::ECopySort::WithCalc);
         }
     }
     outTable.SetUnique(section.Ref().GetConstraint<TDistinctConstraintNode>(), section.Pos(), ctx);

@@ -214,10 +214,10 @@ struct TEventTypeField {
     PROBE(PDiskChunkReadPieceComplete, GROUPS("PDisk", "PDiskRequest"), \
       TYPES(TPDiskIdField, ui64, ui64, double), \
       NAMES("pdisk", "size", "relativeOffset", "deviceTimeMs")) \
-    PROBE(PDiskAddWritePieceToScheduler, GROUPS("PDisk", "PDiskRequest"), \
+    PROBE(PDiskChunkWriteAddToScheduler, GROUPS("PDisk", "PDiskRequest"), \
       TYPES(TPDiskIdField, ui64, double, ui64, bool, ui64, ui64), \
       NAMES("pdisk", "reqId", "creationTimeSec", "owner", "isFast", "priorityClass", "size")) \
-    PROBE(PDiskChunkWritePieceSendToDevice, GROUPS("PDisk", "PDiskRequest"), \
+    PROBE(PDiskChunkWriteLastPieceSendToDevice, GROUPS("PDisk", "PDiskRequest"), \
       TYPES(TPDiskIdField, ui64, ui64, ui64, ui64), \
       NAMES("pdisk", "owner", "chunkIdx", "pieceOffset", "pieceSize")) \
     PROBE(PDiskLogWriteComplete, GROUPS("PDisk", "PDiskRequest"), \
@@ -273,13 +273,15 @@ struct TEventTypeField {
     PROBE(DSProxyPutBootstrapDone, GROUPS("DSProxy","Durations"), \
       TYPES(ui64, double, double, double, double, ui64, ui64), \
       NAMES("size", "wilsonMs", "allocateMs", "waitTotalMs", "splitTotalMs", "splitTotalCount", "blobIdx")) \
-    PROBE(DSProxyPutReply, GROUPS("DSProxy"), TYPES(), NAMES()) \
+    PROBE(DSProxyPutReply, GROUPS("DSProxy"), TYPES(TString, TString, TString), NAMES("blobId", "status", "errorReason")) \
     PROBE(DSProxyPutResumeBootstrap, GROUPS("DSProxy"), TYPES(), NAMES()) \
     PROBE(DSProxyPutPauseBootstrap, GROUPS("DSProxy"), TYPES(), NAMES()) \
-    PROBE(DSProxyScheduleAccelerate, GROUPS("DSProxy"), TYPES(), NAMES()) \
+    PROBE(DSProxyScheduleAccelerate, GROUPS("DSProxy"), TYPES(double), NAMES("timeBeforeAccelerationMs")) \
     PROBE(DSProxyStartTransfer, GROUPS("DSProxy"), TYPES(), NAMES()) \
     PROBE(VDiskStartProcessing, GROUPS("DSProxy"), TYPES(), NAMES()) \
     PROBE(VDiskReply, GROUPS("DSProxy"), TYPES(), NAMES()) \
+    PROBE(DSProxyPutRequest, GROUPS("DSProxy", "LWTrackStart"), TYPES(ui32, TString, TString, TString, ui64, ui64), NAMES("groupId", "deviceType", "handleClass", "tactic", "count", "totalSize")) \
+    PROBE(DSProxyVPutSent, GROUPS("DSProxy"), TYPES(NKikimr::TEventTypeField, TString, ui32, ui32, ui64, bool), NAMES("type", "vDiskId", "vdiskOrderNum", "count", "totalSize", "accelerate")) \
 /**/
 LWTRACE_DECLARE_PROVIDER(BLOBSTORAGE_PROVIDER)
 

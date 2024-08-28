@@ -1248,6 +1248,48 @@ TEST(TPhoenixTest, UniquePtr)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace NPolymorphicTemplate {
+
+struct TBase;
+
+template <class T>
+struct TDerived;
+
+struct TBase
+    : public IPersistent
+{
+    virtual void Foo() = 0;
+
+    PHOENIX_DECLARE_POLYMORPHIC_TYPE(TBase, 0x0f07ba7c);
+};
+
+void TBase::RegisterMetadata(auto&& /*registrar*/)
+{ }
+
+PHOENIX_DEFINE_TYPE(TBase);
+
+template <class T>
+struct TDerived
+    : public TBase
+{
+    void Foo() override
+    { }
+
+    PHOENIX_DECLARE_POLYMORPHIC_TEMPLATE_TYPE(TDerived, 0x8bf17dc9);
+};
+
+template <class T>
+void TDerived<T>::RegisterMetadata(auto&& registrar)
+{
+    registrar.template BaseType<TBase>();
+}
+
+PHOENIX_DEFINE_TEMPLATE_TYPE(TDerived, <int>);
+
+} // namespace NPolymorphicTemplate
+
+////////////////////////////////////////////////////////////////////////////////
+
 namespace NPolymorphicRawPtr {
 
 struct TBase;
@@ -1532,6 +1574,39 @@ void TOuter::TInner::RegisterMetadata(auto&& registrar)
 TEST(TPhoenixTest, PrivateInner)
 {
     NPrivateInner::TOuter::Test();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NSeveralSpecializationsOfOneTemplate {
+
+struct TDerivedFromTemplate
+    : public TPair<double, double>
+{
+    bool operator==(const TDerivedFromTemplate&) const = default;
+
+    PHOENIX_DECLARE_TYPE(TDerivedFromTemplate, 0xf09c298f);
+};
+
+void TDerivedFromTemplate::RegisterMetadata(auto&& registrar)
+{
+    registrar.template BaseType<TPair<double, double>>();
+}
+
+PHOENIX_DEFINE_TYPE(TDerivedFromTemplate);
+
+} // namespace NSeveralSpecializationsOfOneTemplate
+
+TEST(TPhoenixTest, SeveralSpecializationsOfOneTemplate)
+{
+    using namespace NSeveralSpecializationsOfOneTemplate;
+
+    TDerivedFromTemplate tp1;
+    tp1.First = 1.1;
+    tp1.Second = 2.2;
+
+    auto tp2 = Deserialize<TDerivedFromTemplate>(Serialize(tp1));
+    EXPECT_EQ(tp1, tp2);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

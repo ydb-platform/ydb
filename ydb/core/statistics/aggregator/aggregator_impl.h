@@ -14,6 +14,7 @@
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>
 
+#include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -48,6 +49,8 @@ private:
     struct TTxAnalyze;
     struct TTxAnalyzeTableRequest;
     struct TTxAnalyzeTableResponse;
+    struct TTxAnalyzeTableDeliveryProblem;
+    struct TTxAnalyzeDeadline;
     struct TTxNavigate;
     struct TTxResolve;
     struct TTxDatashardScanResponse;
@@ -68,6 +71,8 @@ private:
             EvResolve,
             EvAckTimeout,
             EvSendAnalyze,
+            EvAnalyzeDeliveryProblem,
+            EvAnalyzeDeadline,
 
             EvEnd
         };
@@ -80,6 +85,8 @@ private:
         struct TEvRequestDistribution : public TEventLocal<TEvRequestDistribution, EvRequestDistribution> {};
         struct TEvResolve : public TEventLocal<TEvResolve, EvResolve> {};
         struct TEvSendAnalyze : public TEventLocal<TEvSendAnalyze, EvSendAnalyze> {};
+        struct TEvAnalyzeDeliveryProblem : public TEventLocal<TEvAnalyzeDeliveryProblem, EvAnalyzeDeliveryProblem> {};
+        struct TEvAnalyzeDeadline : public TEventLocal<TEvAnalyzeDeadline, EvAnalyzeDeadline> {};
 
         struct TEvAckTimeout : public TEventLocal<TEvAckTimeout, EvAckTimeout> {
             size_t SeqNo = 0;
@@ -142,6 +149,8 @@ private:
     void Handle(TEvStatistics::TEvAggregateKeepAlive::TPtr& ev);
     void Handle(TEvPrivate::TEvAckTimeout::TPtr& ev);
     void Handle(TEvPrivate::TEvSendAnalyze::TPtr& ev);
+    void Handle(TEvPrivate::TEvAnalyzeDeliveryProblem::TPtr& ev);
+    void Handle(TEvPrivate::TEvAnalyzeDeadline::TPtr& ev);
 
     void InitializeStatisticsTable();
     void Navigate();
@@ -204,6 +213,8 @@ private:
             hFunc(TEvStatistics::TEvAggregateKeepAlive, Handle);
             hFunc(TEvPrivate::TEvAckTimeout, Handle);
             hFunc(TEvPrivate::TEvSendAnalyze, Handle);
+            hFunc(TEvPrivate::TEvAnalyzeDeliveryProblem, Handle);
+            hFunc(TEvPrivate::TEvAnalyzeDeadline, Handle);
 
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
@@ -217,6 +228,11 @@ private:
     TString Database;
 
     std::mt19937_64 RandomGenerator;
+
+    TTabletCountersBase* TabletCounters;
+    TAutoPtr<TTabletCountersBase> TabletCountersPtr;
+
+    TInstant AggregationRequestBeginTime;
 
     bool EnableStatistics = false;
     bool EnableColumnStatistics = false;
@@ -251,7 +267,6 @@ private:
     std::queue<TEvStatistics::TEvRequestStats::TPtr> PendingRequests;
     bool ProcessUrgentInFlight = false;
 
-    bool IsSchemeshardSeen = false;
     bool IsStatisticsTableCreated = false;
     bool PendingSaveStatistics = false;
     bool PendingDeleteStatistics = false;
@@ -311,6 +326,9 @@ private:
 
     static constexpr size_t SendAnalyzeCount = 100;
     static constexpr TDuration SendAnalyzePeriod = TDuration::Seconds(1);
+    static constexpr TDuration AnalyzeDeliveryProblemPeriod = TDuration::Seconds(1);
+    static constexpr TDuration AnalyzeDeadline = TDuration::Days(1);
+    static constexpr TDuration AnalyzeDeadlinePeriod = TDuration::Seconds(1);
 
     enum ENavigateType {
         Analyze,
@@ -348,6 +366,7 @@ private: // stored in local db
 
         enum class EStatus : ui8 {
             None,
+            DeliveryProblem,
             AnalyzeStarted,
             AnalyzeFinished,
         };
@@ -373,6 +392,7 @@ private: // stored in local db
         std::vector<TForceTraversalTable> Tables;
         TString Types;
         TActorId ReplyToActorId;
+        TInstant CreatedAt;
     };
     std::list<TForceTraversalOperation> ForceTraversals;
 

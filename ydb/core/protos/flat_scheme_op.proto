@@ -482,6 +482,11 @@ message TRequestedMaxIndex {
     optional string ColumnName = 1;
 }
 
+message TRequestedCountMinSketch {
+    // sketch built on the combined data from the set of columns
+    repeated string ColumnNames = 1;
+}
+
 message TOlapIndexRequested {
     optional string Name = 1;
     optional TCompressionOptions Compression = 3;
@@ -491,6 +496,7 @@ message TOlapIndexRequested {
     oneof Implementation {
         TRequestedBloomFilter BloomFilter = 40;
         TRequestedMaxIndex MaxIndex = 41;
+        TRequestedCountMinSketch CountMinSketch = 42;
     }
 }
 
@@ -502,6 +508,10 @@ message TBloomFilter {
 
 message TMaxIndex {
     optional uint32 ColumnId = 1;
+}
+
+message TCountMinSketch {
+    repeated uint32 ColumnIds = 1;
 }
 
 message TOlapIndexDescription {
@@ -517,6 +527,7 @@ message TOlapIndexDescription {
     oneof Implementation {
         TBloomFilter BloomFilter = 41;
         TMaxIndex MaxIndex = 42;
+        TCountMinSketch CountMinSketch = 43;
     }
 }
 
@@ -1679,7 +1690,7 @@ message TIndexBuildConfig {
 message TIndexBuildControl {
     optional string TablePath = 1;
     optional string IndexName = 2;
-    optional uint64 SnaphotTxId = 3;
+    optional uint64 SnapshotTxId = 3;
     optional uint64 BuildIndexId = 4;
 }
 
@@ -1855,6 +1866,7 @@ message TDescribeOptions {
     optional bool ReturnChannelsBinding = 8 [default = false];
     optional bool ReturnRangeKey = 9 [default = true];
     optional bool ReturnSetVal = 10 [default = false];
+    optional bool ReturnIndexTableBoundaries = 11 [default = false];
 }
 
 // Request to read scheme for a specific path

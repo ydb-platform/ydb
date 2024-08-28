@@ -11,22 +11,29 @@ struct TStatisticsAggregator::TTxScheduleTrasersal : public TTxBase {
 
     TTxType GetTxType() const override { return TXTYPE_SCHEDULE_TRAVERSAL; }
 
-    bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        SA_LOG_T("[" << Self->TabletID() << "] TTxScheduleTrasersal::Execute");
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
 
         if (!Self->EnableColumnStatistics) {
             return true;
         }
+
+        TDuration time = TDuration ::Zero();
+        if (!Self->ForceTraversals.empty()) {
+            time = ctx.Now() - Self->ForceTraversals.front().CreatedAt;
+        }
+        Self->TabletCounters->Simple()[COUNTER_FORCE_TRAVERSAL_INFLIGHT_MAX_TIME].Set(time.MicroSeconds());
 
         if (Self->TraversalPathId) {
             SA_LOG_T("[" << Self->TabletID() << "] TTxScheduleTrasersal::Execute. Traverse is in progress. PathId " << Self->TraversalPathId);
             return true;
         }
 
-        if (!Self->IsSchemeshardSeen) {
+        if (Self->ScheduleTraversals.empty()) {
             SA_LOG_T("[" << Self->TabletID() << "] TTxScheduleTrasersal. No info from schemeshard");
             return true;
         }
+
+        SA_LOG_T("[" << Self->TabletID() << "] TTxScheduleTrasersal::Execute");
 
         NIceDb::TNiceDb db(txc.DB);
 

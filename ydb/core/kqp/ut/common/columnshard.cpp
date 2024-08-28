@@ -22,7 +22,7 @@ namespace NKqp {
                 }
                 SecretableSecretKey: {
                     Value: {
-                        Data: "secretSecretKey"
+                        Data: "fakeSecret"
                     }
                 }
             }

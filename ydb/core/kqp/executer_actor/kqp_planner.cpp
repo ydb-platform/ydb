@@ -53,6 +53,10 @@ void BuildInitialTaskResources(const TKqpTasksGraph& graph, ui64 taskId, TTaskRe
     ret.HeavyProgram = opts.GetHasMapJoin();
 }
 
+bool LimitCPU(TIntrusivePtr<TUserRequestContext> ctx) {
+    return ctx->PoolId && ctx->PoolConfig.has_value() && ctx->PoolConfig->TotalCpuLimitPercentPerNode > 0;
+}
+
 }
 
 bool TKqpPlanner::UseMockEmptyPlanner = false;
@@ -100,6 +104,10 @@ TKqpPlanner::TKqpPlanner(TKqpPlanner::TArgs&& args)
             Database = TStringBuilder() << '/' << domain->Name;
             LOG_E("Database not set, use " << Database);
         }
+    }
+
+    if (LimitCPU(UserRequestContext)) {
+        AllowSinglePartitionOpt = false;
     }
 }
 
@@ -226,6 +234,7 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
     request.SetDatabase(Database);
     if (UserRequestContext->PoolConfig.has_value()) {
         request.SetMemoryPoolPercent(UserRequestContext->PoolConfig->QueryMemoryLimitPercentPerNode);
+        request.SetMaxCpuShare(UserRequestContext->PoolConfig->TotalCpuLimitPercentPerNode / 100.0);
     }
 
     return result;
@@ -554,7 +563,19 @@ void TKqpPlanner::CompletedCA(ui64 taskId, TActorId computeActor) {
     YQL_ENSURE(it != PendingComputeActors.end());
     LastStats.emplace_back(std::move(it->second));
     PendingComputeActors.erase(it);
-    return;
+
+    LOG_I("Compute actor has finished execution: " << computeActor.ToString());
+}
+
+void TKqpPlanner::TaskNotStarted(ui64 taskId) {
+    // NOTE: should be invoked only while shutting down - when node is disconnected.
+
+    auto& task = TasksGraph.GetTask(taskId);
+
+    YQL_ENSURE(!task.ComputeActorId);
+    YQL_ENSURE(!task.Meta.Completed);
+
+    PendingComputeTasks.erase(taskId);
 }
 
 TProgressStat::TEntry TKqpPlanner::CalculateConsumptionUpdate() {

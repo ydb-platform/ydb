@@ -80,9 +80,13 @@ constexpr auto TPgTablesScanBase::ActorActivityType() {
 }
 
 void TPgTablesScanBase::ProceedToScan() {
-    auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvDescribeScheme>(AppData()->TenantName);
+    auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvDescribeScheme>();
     NKikimrSchemeOp::TDescribePath& record = request->Record;
-    record.SetPath(AppData()->TenantName);
+    auto pathVec = SplitPath(TablePath_);
+    auto sz = pathVec.size();
+    Y_ENSURE(sz > 2 && pathVec[sz - 2] == ".sys");
+    pathVec.pop_back(); pathVec.pop_back();
+    record.SetPath(JoinPath(pathVec));
     record.MutableOptions()->SetReturnPartitioningInfo(false);
     record.MutableOptions()->SetReturnPartitionConfig(false);
     record.MutableOptions()->SetReturnChildren(true);
@@ -98,7 +102,8 @@ void TPgTablesScanBase::Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeRe
     switch (status) {
         case NKikimrScheme::StatusSuccess: {
             const auto& pathDescription = record.GetPathDescription();
-            Y_ENSURE(pathDescription.GetSelf().GetPathType() == NKikimrSchemeOp::EPathTypeDir);
+            Y_ENSURE(pathDescription.GetSelf().GetPathType() == NKikimrSchemeOp::EPathTypeDir 
+                || pathDescription.GetSelf().GetPathType() == NKikimrSchemeOp::EPathTypeSubDomain);
             break;
         }
         case NKikimrScheme::StatusPathDoesNotExist:
@@ -158,12 +163,14 @@ void TPgTablesScanBase::StateWork(TAutoPtr<IEventHandle>& ev) {
 
 TPgTablesScanBase::TPgTablesScanBase(
     const NActors::TActorId &ownerId, ui32 scanId, const TTableId &tableId,
+    const TString& tablePath,
     const TTableRange &tableRange,
     const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn> &columns,
     const TVector<Schema::PgColumn>& schemaColumns,
     THashMap<TString, TRowFiller>&& fillers,
     THashMap<TString, TStaticRowFiller>&& staticFillers)
     : NKikimr::NSysView::TScanActorBase<TPgTablesScanBase>(ownerId, scanId, tableId, tableRange, columns),
+      TablePath_(tablePath),
       SchemaColumns_(schemaColumns),
       Fillers_(std::move(fillers)),
       StaticFillers_(std::move(staticFillers)) {}
@@ -171,12 +178,14 @@ TPgTablesScanBase::TPgTablesScanBase(
 
 TPgTablesScan::TPgTablesScan(
     const NActors::TActorId &ownerId, ui32 scanId, const TTableId &tableId,
+    const TString& tablePath,
     const TTableRange &tableRange,
     const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn> &columns)
     : TPgTablesScanBase(
         ownerId,
         scanId,
         tableId,
+        tablePath,
         tableRange,
         columns,
         Singleton<Schema::PgTablesSchemaProvider>()->GetColumns(PgTablesName),
@@ -214,12 +223,14 @@ TPgTablesScan::TPgTablesScan(
 
 TInformationSchemaTablesScan::TInformationSchemaTablesScan(
     const NActors::TActorId &ownerId, ui32 scanId, const TTableId &tableId,
+    const TString& tablePath,
     const TTableRange &tableRange,
     const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn> &columns)
     : TPgTablesScanBase(
         ownerId,
         scanId,
         tableId,
+        tablePath,
         tableRange,
         columns,
         Singleton<Schema::PgTablesSchemaProvider>()->GetColumns(InformationSchemaTablesName),
@@ -242,12 +253,14 @@ TInformationSchemaTablesScan::TInformationSchemaTablesScan(
 
 TPgClassScan::TPgClassScan(
     const NActors::TActorId &ownerId, ui32 scanId, const TTableId &tableId,
+    const TString& tablePath,
     const TTableRange &tableRange,
     const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn> &columns)
     : TPgTablesScanBase(
         ownerId,
         scanId,
         tableId,
+        tablePath,
         tableRange,
         columns,
         Singleton<Schema::PgTablesSchemaProvider>()->GetColumns(PgClassName),
@@ -304,22 +317,22 @@ TPgClassScan::TPgClassScan(
     });
 }
 
-THolder<NActors::IActor> CreatePgTablesScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
+THolder<NActors::IActor> CreatePgTablesScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId, const TString& tablePath,
     const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
 {
-    return MakeHolder<TPgTablesScan>(ownerId, scanId, tableId, tableRange, columns);
+    return MakeHolder<TPgTablesScan>(ownerId, scanId, tableId, tablePath, tableRange, columns);
 }
 
-THolder<NActors::IActor> CreateInformationSchemaTablesScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
+THolder<NActors::IActor> CreateInformationSchemaTablesScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId, const TString& tablePath,
     const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
 {
-    return MakeHolder<TInformationSchemaTablesScan>(ownerId, scanId, tableId, tableRange, columns);
+    return MakeHolder<TInformationSchemaTablesScan>(ownerId, scanId, tableId, tablePath, tableRange, columns);
 }
 
-THolder<NActors::IActor> CreatePgClassScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
+THolder<NActors::IActor> CreatePgClassScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId, const TString& tablePath,
     const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
 {
-    return MakeHolder<TPgClassScan>(ownerId, scanId, tableId, tableRange, columns);
+    return MakeHolder<TPgClassScan>(ownerId, scanId, tableId, tablePath, tableRange, columns);
 }
 
 } // NSysView

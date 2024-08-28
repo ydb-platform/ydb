@@ -1,5 +1,6 @@
 {% include 'header.sql.jinja' %}
 
+-- TODO this commit should be reverted upon proper fix for https://github.com/ydb-platform/ydb/issues/7565
 -- NB: Subquerys
 -- start query 1 in stream 0 using template query65.tpl and seed 1819994127
 select
@@ -28,6 +29,7 @@ select
  where sb.ss_store_sk = sc.ss_store_sk and
        sc.revenue <= $z0_1_35 * sb.ave and
        s_store_sk = sc.ss_store_sk and
+       s_store_sk = sb.ss_store_sk and
        i_item_sk = sc.ss_item_sk
  order by s_store_name, i_item_desc
 	, i_wholesale_cost, sc.revenue, i_current_price

@@ -398,6 +398,8 @@ const char * GetFunctionName(EAggregate op) {
             return "min_max";
         case EAggregate::Sum:
             return "sum";
+        case EAggregate::NumRows:
+            return "num_rows";
 #if 0 // TODO
         case EAggregate::Avg:
             return "mean";
@@ -424,6 +426,8 @@ const char * GetHouseFunctionName(EAggregate op) {
         case EAggregate::Avg:
             return "ch.avg";
 #endif
+        case EAggregate::NumRows:
+            return "ch.num_rows";
         default:
             break;
     }
@@ -448,6 +452,8 @@ CH::AggFunctionId GetHouseFunction(EAggregate op) {
         case EAggregate::Avg:
             return CH::AggFunctionId::AGG_AVG;
 #endif
+        case EAggregate::NumRows:
+            return CH::AggFunctionId::AGG_NUM_ROWS;
         default:
             break;
     }
@@ -678,6 +684,27 @@ IStepFunction<TAggregateAssign>::TPtr TAggregateAssign::GetFunction(arrow::compu
     return std::make_shared<TAggregateFunction>(ctx);
 }
 
+TString TAggregateAssign::DebugString() const {
+    TStringBuilder sb;
+    sb << "{";
+    if (Operation != EAggregate::Unspecified) {
+        sb << "op=" << GetFunctionName(Operation) << ";";
+    }
+    if (Arguments.size()) {
+        sb << "arguments=[";
+        for (auto&& i : Arguments) {
+            sb << i.DebugString() << ";";
+        }
+        sb << "];";
+    }
+    sb << "options=" << ScalarOpts.ToString() << ";";
+    if (KernelFunction) {
+        sb << "kernel=" << KernelFunction->name() << ";";
+    }
+    sb << "column=" << Column.DebugString() << ";";
+    sb << "}";
+    return sb;
+}
 
 arrow::Status TProgramStep::ApplyAssignes(TDatumBatch& batch, arrow::compute::ExecContext* ctx) const {
     if (Assignes.empty()) {

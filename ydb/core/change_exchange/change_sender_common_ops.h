@@ -76,7 +76,7 @@ template <class TChangeRecord>
 class TBaseChangeSender {
     using TIncompleteRecord = TEvChangeExchange::TEvRequestRecords::TRecordInfo;
     // we need this to safely cast and call Out on a container
-    static_assert(std::derived_from<TChangeRecordContainer<TChangeRecord>, TBaseChangeRecordContainer>);
+    static_assert(std::derived_from<TChangeRecordContainer<TChangeRecord>, IChangeRecordContainer>);
 
     struct TEnqueuedRecord: TIncompleteRecord {
         bool ReEnqueued = false;

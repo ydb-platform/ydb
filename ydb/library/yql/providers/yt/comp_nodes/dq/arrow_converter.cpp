@@ -619,8 +619,15 @@ public:
 
     arrow::Datum Convert(std::shared_ptr<arrow::ArrayData> block) override {
         if (arrow::Type::DICTIONARY == block->type->id()) {
-            if (static_cast<const arrow::DictionaryType&>(*block->type).value_type()->Equals(Settings_.ArrowType)) {
+            auto valType = static_cast<const arrow::DictionaryType&>(*block->type).value_type();
+            if (valType->Equals(Settings_.ArrowType)) {
+                // just unpack
                 return DictPrimitiveConverter_.Convert(block);
+            }  else if (arrow::Type::UINT8 == Settings_.ArrowType->id() && arrow::Type::BOOL == valType->id()) {
+                // unpack an cast
+                auto result = arrow::compute::Cast(DictPrimitiveConverter_.Convert(block), Settings_.ArrowType);
+                YQL_ENSURE(result.ok());
+                return *result;
             } else {
                 return DictYsonConverter_.Convert(block);
             }
@@ -631,7 +638,7 @@ public:
                 return block;
             } else if (arrow::Type::UINT8 == Settings_.ArrowType->id() && arrow::Type::BOOL == blockType->id()) {
                 auto result = arrow::compute::Cast(arrow::Datum(*block), Settings_.ArrowType);
-                Y_ENSURE(result.ok());
+                YQL_ENSURE(result.ok());
                 return *result;
             } else {
                 YQL_ENSURE(arrow::Type::BINARY == blockType->id());

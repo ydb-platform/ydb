@@ -65,7 +65,7 @@ SELECT
 
 В YQL отсутствует неявное преобразование типов из `Optional<T>` в `T`, поэтому выполнимость `NOT NULL` ограничения на колонку таблицы обеспечивается на этапе компиляции запроса {{ ydb-short-name }}.
 
-Создать non-nullable колонку в таблице {{ ydb-short-name }} можно с помощью операции [CREATE TABLE](../../../reference/syntax/create_table.md), пользуясь ключевым словом `NOT NULL`.
+Создать non-nullable колонку в таблице {{ ydb-short-name }} можно с помощью операции [CREATE TABLE](../../../reference/syntax/create_table/index.md), пользуясь ключевым словом `NOT NULL`.
 **Пример**
 ```sql
 CREATE TABLE t (

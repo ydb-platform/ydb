@@ -47,7 +47,6 @@ _decorator_non_return = object()
 _marker = object()
 
 
-
 def invariant(call):
     f_locals = sys._getframe(1).f_locals
     tags = f_locals.setdefault(TAGGED_DATA, {})
@@ -72,9 +71,11 @@ class Element:
     # We can't say this yet because we don't have enough
     # infrastructure in place.
     #
-    #implements(IElement)
+    # implements(IElement)
 
-    def __init__(self, __name__, __doc__=''): # pylint:disable=redefined-builtin
+    def __init__(
+        self, __name__, __doc__='',
+    ):  # pylint:disable=redefined-builtin
         if not __doc__ and __name__.find(' ') >= 0:
             __doc__ = __name__
             __name__ = None
@@ -108,7 +109,9 @@ class Element:
 
     def queryTaggedValue(self, tag, default=None):
         """ Returns the value associated with 'tag'. """
-        return self.__tagged_values.get(tag, default) if self.__tagged_values else default
+        return self.__tagged_values.get(
+            tag, default,
+        ) if self.__tagged_values else default
 
     def getTaggedValueTags(self):
         """ Returns a collection of all tags. """
@@ -125,7 +128,7 @@ class Element:
     getDirectTaggedValueTags = getTaggedValueTags
 
 
-SpecificationBasePy = object # filled by _use_c_impl.
+SpecificationBasePy = object  # filled by _use_c_impl.
 
 
 @_use_c_impl
@@ -170,7 +173,7 @@ class SpecificationBase:
     def isOrExtends(self, interface):
         """Is the interface the same as or extend the given interface
         """
-        return interface in self._implied # pylint:disable=no-member
+        return interface in self._implied  # pylint:disable=no-member
 
     __call__ = isOrExtends
 
@@ -181,10 +184,11 @@ class NameAndModuleComparisonMixin:
     # attributes. Subclasses will be mutually comparable; but because equality
     # and hashing semantics are missing from this class, take care in how
     # you define those two attributes: If you stick with the default equality
-    # and hashing (identity based) you should make sure that all possible ``__name__``
-    # and ``__module__`` pairs are unique ACROSS ALL SUBCLASSES. (Actually, pretty
-    # much the same thing goes if you define equality and hashing to be based on
-    # those two attributes: they must still be consistent ACROSS ALL SUBCLASSES.)
+    # and hashing (identity based) you should make sure that all possible
+    # ``__name__`` and ``__module__`` pairs are unique ACROSS ALL SUBCLASSES.
+    # (Actually, pretty much the same thing goes if you define equality and
+    # hashing to be based on those two attributes: they must still be
+    # consistent ACROSS ALL SUBCLASSES.)
 
     # pylint:disable=assigning-non-slot
     __slots__ = ()
@@ -206,8 +210,8 @@ class NameAndModuleComparisonMixin:
 
            For example, ``class Foo(object)`` and ``class Foo(Interface)``
            in the same file would compare equal, depending on the order of
-           operands. Writing code like this by hand would be unusual, but it could
-           happen with dynamic creation of types and interfaces.
+           operands. Writing code like this by hand would be unusual, but it
+           could happen with dynamic creation of types and interfaces.
 
         None is treated as a pseudo interface that implies the loosest
         contact possible, no contract. For that reason, all interfaces
@@ -333,6 +337,7 @@ class InterfaceBase(NameAndModuleComparisonMixin, SpecificationBasePy):
             return c
         return c != 0
 
+
 adapter_hooks = _use_c_impl([], 'adapter_hooks')
 
 
@@ -367,7 +372,7 @@ class Specification(SpecificationBase):
         # 4700 had 0 dependents, 1400 had 1, 382 had 2 and so on. Only one
         # for <type> had 1664. So there's savings to be had deferring
         # the creation of dependents.
-        self._dependents = None # type: weakref.WeakKeyDictionary
+        self._dependents = None  # type: weakref.WeakKeyDictionary
         self._bases = ()
         self._implied = {}
         self._v_attrs = None
@@ -410,9 +415,8 @@ class Specification(SpecificationBase):
         self.changed(self)
 
     __bases__ = property(
-        lambda self: self._bases,
-        __setBases,
-        )
+        lambda self: self._bases, __setBases,
+    )
 
     # This method exists for tests to override the way we call
     # ro.calculate_ro(), usually by adding extra kwargs. We don't
@@ -422,26 +426,25 @@ class Specification(SpecificationBase):
     _do_calculate_ro = calculate_ro
 
     def _calculate_sro(self):
-        """
-        Calculate and return the resolution order for this object, using its ``__bases__``.
+        """Compute resolution order for this object using its ``__bases__``.
 
-        Ensures that ``Interface`` is always the last (lowest priority) element.
+        Ensures that ``Interface`` is always the last (lowest priority)
+        element.
         """
-        # We'd like to make Interface the lowest priority as a
-        # property of the resolution order algorithm. That almost
-        # works out naturally, but it fails when class inheritance has
-        # some bases that DO implement an interface, and some that DO
-        # NOT. In such a mixed scenario, you wind up with a set of
-        # bases to consider that look like this: [[..., Interface],
-        # [..., object], ...]. Depending on the order of inheritance,
-        # Interface can wind up before or after object, and that can
-        # happen at any point in the tree, meaning Interface can wind
-        # up somewhere in the middle of the order. Since Interface is
-        # treated as something that everything winds up implementing
-        # anyway (a catch-all for things like adapters), having it high up
-        # the order is bad. It's also bad to have it at the end, just before
-        # some concrete class: concrete classes should be HIGHER priority than
-        # interfaces (because there's only one class, but many implementations).
+        # We'd like to make Interface the lowest priority as a property of the
+        # resolution order algorithm. That almost works out naturally, but it
+        # fails when class inheritance has some bases that DO implement an
+        # interface, and some that DO NOT. In such a mixed scenario, you wind
+        # up with a set of bases to consider that look like this: [[...,
+        # Interface], [..., object], ...]. Depending on the order of
+        # inheritance, Interface can wind up before or after object, and that
+        # can happen at any point in the tree, meaning Interface can wind up
+        # somewhere in the middle of the order. Since Interface is treated as
+        # something that everything winds up implementing anyway (a catch-all
+        # for things like adapters), having it high up the order is bad. It's
+        # also bad to have it at the end, just before some concrete class:
+        # concrete classes should be HIGHER priority than interfaces (because
+        # there's only one class, but many implementations).
         #
         # One technically nice way to fix this would be to have
         # ``implementedBy(object).__bases__ = (Interface,)``
@@ -462,9 +465,9 @@ class Specification(SpecificationBase):
         })
         root = self._ROOT
         if root is not None and sro and sro[-1] is not root:
-            # In one dataset of 1823 Interface objects, 1117 ClassProvides objects,
-            # sro[-1] was root 4496 times, and only not root 118 times. So it's
-            # probably worth checking.
+            # In one dataset of 1823 Interface objects, 1117 ClassProvides
+            # objects, sro[-1] was root 4496 times, and only not root 118
+            # times. So it's probably worth checking.
 
             # Once we don't have to deal with old-style classes,
             # we can add a check and only do this if base_count > 1,
@@ -502,7 +505,9 @@ class Specification(SpecificationBase):
 
         # Now, advise our dependents of change
         # (being careful not to create the WeakKeyDictionary if not needed):
-        for dependent in tuple(self._dependents.keys() if self._dependents else ()):
+        for dependent in tuple(
+            self._dependents.keys() if self._dependents else ()
+        ):
             dependent.changed(originally_changed)
 
         # Just in case something called get() at some point
@@ -526,10 +531,11 @@ class Specification(SpecificationBase):
         Test whether an interface in the specification extends the
         given interface
         """
-        return ((interface in self._implied)
-                and
-                ((not strict) or (self != interface))
-                )
+        return (
+            (interface in self._implied) and (
+                (not strict) or (self != interface)
+            )
+        )
 
     def weakref(self, callback=None):
         return weakref.ref(self, callback)
@@ -552,14 +558,13 @@ class Specification(SpecificationBase):
 
 
 class _InterfaceMetaClass(type):
-    # Handling ``__module__`` on ``InterfaceClass`` is tricky. We need
-    # to be able to read it on a type and get the expected string. We
-    # also need to be able to set it on an instance and get the value
-    # we set. So far so good. But what gets tricky is that we'd like
-    # to store the value in the C structure (``InterfaceBase.__ibmodule__``) for
-    # direct access during equality, sorting, and hashing. "No
-    # problem, you think, I'll just use a property" (well, the C
-    # equivalents, ``PyMemberDef`` or ``PyGetSetDef``).
+    # Handling ``__module__`` on ``InterfaceClass`` is tricky. We need to be
+    # able to read it on a type and get the expected string. We also need to
+    # be able to set it on an instance and get the value we set. So far so
+    # good. But what gets tricky is that we'd like to store the value in the C
+    # structure (``InterfaceBase.__ibmodule__``) for direct access during
+    # equality, sorting, and hashing. "No problem, you think, I'll just use a
+    # property" (well, the C equivalents, ``PyMemberDef`` or ``PyGetSetDef``).
     #
     # Except there is a problem. When a subclass is created, the
     # metaclass (``type``) always automatically puts the expected
@@ -578,13 +583,14 @@ class _InterfaceMetaClass(type):
     # (when implemented in C). Since that includes methods like
     # ``providedBy``, that's probably not acceptable.
     #
-    # All the other methods involve modifying subclasses. This can be
-    # done either on the fly in some cases, as instances are
-    # constructed, or by using a metaclass. These next few can be done on the fly.
+    # All the other methods involve modifying subclasses. This can be done
+    # either on the fly in some cases, as instances are constructed, or by
+    # using a metaclass. These next few can be done on the fly.
     #
-    # (2) Make ``__module__`` a descriptor in each subclass dictionary.
-    # It can't be a straight up ``@property`` descriptor, though, because accessing
-    # it on the class returns a ``property`` object, not the desired string.
+    # (2) Make ``__module__`` a descriptor in each subclass dictionary.  It
+    # can't be a straight up ``@property`` descriptor, though, because
+    # accessing it on the class returns a ``property`` object, not the desired
+    # string.
     #
     # (3) Implement a data descriptor (``__get__`` and ``__set__``)
     # that is both a subclass of string, and also does the redirect of
@@ -599,11 +605,12 @@ class _InterfaceMetaClass(type):
     # This works, preserves the ability to read and write
     # ``__module__``, and eliminates any penalty accessing other
     # attributes. But it slows down accessing ``__module__`` of
-    # instances by 200% (40ns to 124ns), requires editing class dicts on the fly
-    # (in InterfaceClass.__init__), thus slightly slowing down all interface creation,
-    # and is ugly.
+    # instances by 200% (40ns to 124ns), requires editing class dicts on the
+    # fly (in InterfaceClass.__init__), thus slightly slowing down all
+    # interface creation, and is ugly.
     #
-    # (4) As in the last step, but make it a non-data descriptor (no ``__set__``).
+    # (4) As in the last step, but make it a non-data descriptor (no
+    # ``__set__``).
     #
     # If you then *also* store a copy of ``__ibmodule__`` in
     # ``__module__`` in the instance's dict, reading works for both
@@ -673,7 +680,8 @@ def interfacemethod(func):
     define the ``__adapt__`` method, but other interface methods can be
     overridden this way too.
 
-    .. seealso:: `zope.interface.interfaces.IInterfaceDeclaration.interfacemethod`
+    .. seealso::
+        `zope.interface.interfaces.IInterfaceDeclaration.interfacemethod`
     """
     f_locals = sys._getframe(1).f_locals
     methods = f_locals.setdefault(INTERFACE_METHODS, {})
@@ -692,10 +700,16 @@ class InterfaceClass(_InterfaceClassBase):
     # We can't say this yet because we don't have enough
     # infrastructure in place.
     #
-    #implements(IInterface)
+    # implements(IInterface)
 
-    def __new__(cls, name=None, bases=(), attrs=None, __doc__=None, # pylint:disable=redefined-builtin
-                __module__=None):
+    def __new__(
+        cls,
+        name=None,
+        bases=(),
+        attrs=None,
+        __doc__=None,  # pylint:disable=redefined-builtin
+        __module__=None,
+    ):
         assert isinstance(bases, tuple)
         attrs = attrs or {}
         needs_custom_class = attrs.pop(INTERFACE_METHODS, None)
@@ -716,7 +730,7 @@ class InterfaceClass(_InterfaceClassBase):
             else:
                 cls_bases = (cls, _InterfaceClassWithCustomMethods)
 
-            cls = type(cls)( # pylint:disable=self-cls-assignment
+            cls = type(cls)(  # pylint:disable=self-cls-assignment
                 name + "<WithCustomMethods>",
                 cls_bases,
                 needs_custom_class
@@ -724,8 +738,14 @@ class InterfaceClass(_InterfaceClassBase):
 
         return _InterfaceClassBase.__new__(cls)
 
-    def __init__(self, name, bases=(), attrs=None, __doc__=None,  # pylint:disable=redefined-builtin
-                 __module__=None):
+    def __init__(
+        self,
+        name,
+        bases=(),
+        attrs=None,
+        __doc__=None,  # pylint:disable=redefined-builtin
+        __module__=None,
+    ):
         # We don't call our metaclass parent directly
         # pylint:disable=non-parent-init-called
         # pylint:disable=super-init-not-called
@@ -745,7 +765,7 @@ class InterfaceClass(_InterfaceClassBase):
                     # This is how cPython figures out the module of
                     # a class, but of course it does it in C. :-/
                     __module__ = sys._getframe(1).f_globals['__name__']
-                except (AttributeError, KeyError): # pragma: no cover
+                except (AttributeError, KeyError):  # pragma: no cover
                     pass
 
         InterfaceBase.__init__(self, name, __module__)
@@ -773,7 +793,7 @@ class InterfaceClass(_InterfaceClassBase):
         Specification.__init__(self, bases)
         self.__attrs = self.__compute_attrs(attrs)
 
-        self.__identifier__ = "{}.{}".format(__module__, name)
+        self.__identifier__ = f"{__module__}.{name}"
 
     def __compute_attrs(self, attrs):
         # Make sure that all recorded attributes (and methods) are of type
@@ -806,7 +826,7 @@ class InterfaceClass(_InterfaceClassBase):
                 # https://github.com/python/cpython/pull/118475
                 '__firstlineno__',
             )
-            and aval is not _decorator_non_return
+            and aval is not _decorator_non_return  # noqa W503
         }
 
     def interfaces(self):
@@ -821,7 +841,7 @@ class InterfaceClass(_InterfaceClassBase):
         """Same interface or extends?"""
         return self == other or other.extends(self)
 
-    def names(self, all=False): # pylint:disable=redefined-builtin
+    def names(self, all=False):  # pylint:disable=redefined-builtin
         """Return the attribute names defined by the interface."""
         if not all:
             return self.__attrs.keys()
@@ -836,7 +856,9 @@ class InterfaceClass(_InterfaceClassBase):
     def __iter__(self):
         return iter(self.names(all=True))
 
-    def namesAndDescriptions(self, all=False): # pylint:disable=redefined-builtin
+    def namesAndDescriptions(
+        self, all=False  # pylint:disable=redefined-builtin
+    ):
         """Return attribute names and descriptions defined by interface."""
         if not all:
             return self.__attrs.items()
@@ -886,8 +908,8 @@ class InterfaceClass(_InterfaceClassBase):
 
     def queryTaggedValue(self, tag, default=None):
         """
-        Queries for the value associated with *tag*, returning it from the nearest
-        interface in the ``__iro__``.
+        Queries for the value associated with *tag*, returning it from the
+        nearest interface in the ``__iro__``.
 
         If not found, returns *default*.
         """
@@ -916,21 +938,21 @@ class InterfaceClass(_InterfaceClassBase):
             return self._v_repr
         except AttributeError:
             name = str(self)
-            r = "<{} {}>".format(self.__class__.__name__, name)
-            self._v_repr = r # pylint:disable=attribute-defined-outside-init
+            r = f"<{self.__class__.__name__} {name}>"
+            self._v_repr = r  # pylint:disable=attribute-defined-outside-init
             return r
 
     def __str__(self):
         name = self.__name__
         m = self.__ibmodule__
         if m:
-            name = '{}.{}'.format(m, name)
+            name = f'{m}.{name}'
         return name
 
     def _call_conform(self, conform):
         try:
             return conform(self)
-        except TypeError: # pragma: no cover
+        except TypeError:  # pragma: no cover
             # We got a TypeError. It might be an error raised by
             # the __conform__ implementation, or *we* may have
             # made the TypeError by calling an unbound method
@@ -944,7 +966,7 @@ class InterfaceClass(_InterfaceClassBase):
                 raise
             # This clever trick is from Phillip Eby
 
-        return None # pragma: no cover
+        return None  # pragma: no cover
 
     def __reduce__(self):
         return self.__name__
@@ -957,6 +979,7 @@ class InterfaceClass(_InterfaceClassBase):
         """Allow type hinting syntax: None | Interface."""
         return Union[other, self]
 
+
 Interface = InterfaceClass("Interface", __module__='zope.interface')
 # Interface is the only member of its own SRO.
 Interface._calculate_sro = lambda: (Interface,)
@@ -965,9 +988,11 @@ assert Interface.__sro__ == (Interface,)
 Specification._ROOT = Interface
 ro._ROOT = Interface
 
+
 class _InterfaceClassWithCustomMethods(InterfaceClass):
     """
-    Marker class for interfaces with custom methods that override InterfaceClass methods.
+    Marker class for interfaces with custom methods that override
+    InterfaceClass methods.
     """
 
 
@@ -989,7 +1014,12 @@ class Attribute(Element):
     def __str__(self):
         of = ''
         if self.interface is not None:
-            of = self.interface.__module__ + '.' + self.interface.__name__ + '.'
+            of = (
+                self.interface.__module__ +
+                '.' +
+                self.interface.__name__ +
+                '.'
+            )
         # self.__name__ may be None during construction (e.g., debugging)
         return of + (self.__name__ or '<unknown>') + self._get_str_info()
 
@@ -1016,14 +1046,18 @@ class Method(Attribute):
 
     positional = required = ()
     _optional = varargs = kwargs = None
+
     def _get_optional(self):
         if self._optional is None:
             return {}
         return self._optional
+
     def _set_optional(self, opt):
         self._optional = opt
+
     def _del_optional(self):
         self._optional = None
+
     optional = property(_get_optional, _set_optional, _del_optional)
 
     def __call__(self, *args, **kw):
@@ -1144,5 +1178,6 @@ from zope.interface.exceptions import InvalidInterface
 # This ensures that ``Interface`` winds up in the flattened()
 # list of the immutable declaration. It correctly overrides changed()
 # as a no-op, so we bypass that.
-from zope.interface.declarations import _empty
+# pylint:disable=wrong-import-position
+from zope.interface.declarations import _empty  # isort: skip
 Specification.changed(_empty, _empty)

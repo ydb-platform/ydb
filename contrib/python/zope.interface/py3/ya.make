@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(6.4.post2)
+VERSION(7.0.3)
 
 LICENSE(ZPL-2.1)
 

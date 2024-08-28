@@ -59,7 +59,7 @@ __all__ = [
 # ``tuple([t fon t in range(10)])``      ->  82ns
 # ``tuple(t for t in range(10))``        -> 177ns
 # ``tuple(map(lambda t: t, range(10)))`` -> 168ns
-#
+
 
 class BaseAdapterRegistry:
     """
@@ -68,36 +68,40 @@ class BaseAdapterRegistry:
 
     Subclasses can set the following attributes to control how the data
     is stored; in particular, these hooks can be helpful for ZODB
-    persistence. They can be class attributes that are the named (or similar) type, or
-    they can be methods that act as a constructor for an object that behaves
-    like the types defined here; this object will not assume that they are type
-    objects, but subclasses are free to do so:
+    persistence. They can be class attributes that are the named
+    (or similar) type, or they can be methods that act as a constructor
+    for an object that behaves like the types defined here; this object
+    will not assume that they are type objects, but subclasses are free
+    to do so:
 
     _sequenceType = list
       This is the type used for our two mutable top-level "byorder" sequences.
-      Must support mutation operations like ``append()`` and ``del seq[index]``.
-      These are usually small (< 10). Although at least one of them is
-      accessed when performing lookups or queries on this object, the other
-      is untouched. In many common scenarios, both are only required when
-      mutating registrations and subscriptions (like what
+      Must support mutation operations like ``append()`` and ``del
+      seq[index]``.  These are usually small (< 10). Although at least one of
+      them is accessed when performing lookups or queries on this object, the
+      other is untouched. In many common scenarios, both are only required
+      when mutating registrations and subscriptions (like what
       :meth:`zope.interface.interfaces.IComponents.registerUtility` does).
       This use pattern makes it an ideal candidate to be a
       :class:`~persistent.list.PersistentList`.
+
     _leafSequenceType = tuple
       This is the type used for the leaf sequences of subscribers.
       It could be set to a ``PersistentList`` to avoid many unnecessary data
-      loads when subscribers aren't being used. Mutation operations are directed
-      through :meth:`_addValueToLeaf` and :meth:`_removeValueFromLeaf`; if you use
-      a mutable type, you'll need to override those.
+      loads when subscribers aren't being used. Mutation operations are
+      directed through :meth:`_addValueToLeaf` and
+      :meth:`_removeValueFromLeaf`; if you use a mutable type, you'll need to
+      override those.
+
     _mappingType = dict
-      This is the mutable mapping type used for the keyed mappings.
-      A :class:`~persistent.mapping.PersistentMapping`
-      could be used to help reduce the number of data loads when the registry is large
-      and parts of it are rarely used. Further reductions in data loads can come from
-      using a :class:`~BTrees.OOBTree.OOBTree`, but care is required
-      to be sure that all required/provided
-      values are fully ordered (e.g., no required or provided values that are classes
-      can be used).
+      This is the mutable mapping type used for the keyed mappings.  A
+      :class:`~persistent.mapping.PersistentMapping` could be used to help
+      reduce the number of data loads when the registry is large and parts of
+      it are rarely used. Further reductions in data loads can come from using
+      a :class:`~BTrees.OOBTree.OOBTree`, but care is required to be sure that
+      all required/provided values are fully ordered (e.g., no required or
+      provided values that are classes can be used).
+
     _providedType = dict
       This is the mutable mapping type used for the ``_provided`` mapping.
       This is separate from the generic mapping type because the values
@@ -106,9 +110,10 @@ class BaseAdapterRegistry:
       The same caveats regarding key types
       apply as for ``_mappingType``.
 
-    It is possible to also set these on an instance, but because of the need to
-    potentially also override :meth:`_addValueToLeaf` and :meth:`_removeValueFromLeaf`,
-    this may be less useful in a persistent scenario; using a subclass is recommended.
+    It is possible to also set these on an instance, but because of the need
+    to potentially also override :meth:`_addValueToLeaf` and
+    :meth:`_removeValueFromLeaf`, this may be less useful in a persistent
+    scenario; using a subclass is recommended.
 
     .. versionchanged:: 5.3.0
         Add support for customizing the way internal data
@@ -209,18 +214,20 @@ class BaseAdapterRegistry:
         Add the value *new_item* to the *existing_leaf_sequence*, which may
         be ``None``.
 
-        Subclasses that redefine `_leafSequenceType` should override this method.
+        Subclasses that redefine `_leafSequenceType` should override this
+        method.
 
         :param existing_leaf_sequence:
             If *existing_leaf_sequence* is not *None*, it will be an instance
-            of `_leafSequenceType`. (Unless the object has been unpickled
-            from an old pickle and the class definition has changed, in which case
-            it may be an instance of a previous definition, commonly a `tuple`.)
+            of `_leafSequenceType`. (Unless the object has been unpickled from
+            an old pickle and the class definition has changed, in which case
+            it may be an instance of a previous definition, commonly a
+            `tuple`.)
 
         :return:
            This method returns the new value to be stored. It may mutate the
-           sequence in place if it was not ``None`` and the type is mutable, but
-           it must also return it.
+           sequence in place if it was not ``None`` and the type is mutable,
+           but it must also return it.
 
         .. versionadded:: 5.3.0
         """
@@ -337,9 +344,9 @@ class BaseAdapterRegistry:
 
     def _all_entries(self, byorder):
         # Recurse through the mapping levels of the `byorder` sequence,
-        # reconstructing a flattened sequence of ``(required, provided, name, value)``
-        # tuples that can be used to reconstruct the sequence with the appropriate
-        # registration methods.
+        # reconstructing a flattened sequence of ``(required, provided, name,
+        # value)`` tuples that can be used to reconstruct the sequence with
+        # the appropriate registration methods.
         #
         # Locally reference the `byorder` data; it might be replaced while
         # this method is running (see ``rebuild``).
@@ -461,7 +468,9 @@ class BaseAdapterRegistry:
 
         .. versionadded:: 5.3.0
         """
-        for required, provided, _name, value in self._all_entries(self._subscribers):
+        for required, provided, _name, value in self._all_entries(
+            self._subscribers,
+        ):
             for v in value:
                 yield (required, provided, v)
 
@@ -570,7 +579,6 @@ class BaseAdapterRegistry:
         registrations = buffer(registrations)
         subscriptions = buffer(subscriptions)
 
-
         # Replace the base data structures as well as _v_lookup.
         self.__init__(self.__bases__)
         # Re-register everything previously registered and subscribed.
@@ -584,18 +592,20 @@ class BaseAdapterRegistry:
         # part of passing that notification to the change of objects.)
         for args in registrations:
             self.register(*args)
+
         for args in subscriptions:
             self.subscribe(*args)
 
-    # XXX hack to fake out twisted's use of a private api.  We need to get them
-    # to use the new registered method.
-    def get(self, _): # pragma: no cover
+    # XXX hack to fake out twisted's use of a private api.
+    # We need to get them to use the new registered method.
+    def get(self, _):  # pragma: no cover
         class XXXTwistedFakeOut:
             selfImplied = {}
         return XXXTwistedFakeOut
 
 
 _not_in_mapping = object()
+
 
 @_use_c_impl
 class LookupBase:
@@ -693,7 +703,6 @@ class LookupBase:
 
         return result
 
-
     def subscriptions(self, required, provided):
         cache = self._scache.get(provided)
         if cache is None:
@@ -710,33 +719,42 @@ class LookupBase:
 
 
 @_use_c_impl
-class VerifyingBase(LookupBaseFallback):
+class VerifyingBase(LookupBaseFallback):  # noqa F821
     # Mixin for lookups against registries which "chain" upwards, and
     # whose lookups invalidate their own caches whenever a parent registry
     # bumps its own '_generation' counter.  E.g., used by
     # zope.component.persistentregistry
 
     def changed(self, originally_changed):
-        LookupBaseFallback.changed(self, originally_changed)
+        LookupBaseFallback.changed(self, originally_changed)  # noqa F821
         self._verify_ro = self._registry.ro[1:]
         self._verify_generations = [r._generation for r in self._verify_ro]
 
     def _verify(self):
-        if ([r._generation for r in self._verify_ro]
-            != self._verify_generations):
+        if (
+            [
+                r._generation for r in self._verify_ro
+            ] != self._verify_generations
+        ):
             self.changed(None)
 
     def _getcache(self, provided, name):
         self._verify()
-        return LookupBaseFallback._getcache(self, provided, name)
+        return LookupBaseFallback._getcache(  # noqa F821
+            self, provided, name,
+        )
 
     def lookupAll(self, required, provided):
         self._verify()
-        return LookupBaseFallback.lookupAll(self, required, provided)
+        return LookupBaseFallback.lookupAll(  # noqa F821
+            self, required, provided,
+        )
 
     def subscriptions(self, required, provided):
         self._verify()
-        return LookupBaseFallback.subscriptions(self, required, provided)
+        return LookupBaseFallback.subscriptions(  # noqa F821
+            self, required, provided,
+        )
 
 
 class AdapterLookupBase:
@@ -754,7 +772,6 @@ class AdapterLookupBase:
             if r is not None:
                 r.unsubscribe(self)
         self._required.clear()
-
 
     # Extendors
     # ---------
@@ -778,7 +795,7 @@ class AdapterLookupBase:
     # the interface's __iro__ has changed.  This is unlikely enough that
     # we'll take our chances for now.
 
-    def init_extendors(self):
+    def init_extendors(self):  # noqa E301
         self._extendors = {}
         for p in self._registry._provided:
             self.add_extendor(p)
@@ -788,19 +805,20 @@ class AdapterLookupBase:
         for i in provided.__iro__:
             extendors = _extendors.get(i, ())
             _extendors[i] = (
-                [e for e in extendors if provided.isOrExtends(e)]
-                +
-                [provided]
-                +
-                [e for e in extendors if not provided.isOrExtends(e)]
-                )
+                [
+                    e for e in extendors if provided.isOrExtends(e)
+                ] + [
+                    provided
+                ] + [
+                    e for e in extendors if not provided.isOrExtends(e)
+                ]
+            )
 
     def remove_extendor(self, provided):
         _extendors = self._extendors
         for i in provided.__iro__:
             _extendors[i] = [e for e in _extendors.get(i, ())
                              if e != provided]
-
 
     def _subscribe(self, *required):
         _refs = self._required
@@ -838,7 +856,9 @@ class AdapterLookupBase:
         if factory is None:
             return default
 
-        result = factory(*[o.__self__ if isinstance(o, super) else o for o in objects])
+        result = factory(*[
+            o.__self__ if isinstance(o, super) else o for o in objects
+        ])
         if result is None:
             return default
 
@@ -889,7 +909,9 @@ class AdapterLookupBase:
         return result
 
     def subscribers(self, objects, provided):
-        subscriptions = self.subscriptions([providedBy(o) for o in objects], provided)
+        subscriptions = self.subscriptions(
+            [providedBy(o) for o in objects], provided
+        )
         if provided is None:
             result = ()
             for subscription in subscriptions:
@@ -902,8 +924,10 @@ class AdapterLookupBase:
                     result.append(subscriber)
         return result
 
+
 class AdapterLookup(AdapterLookupBase, LookupBase):
     pass
+
 
 @implementer(IAdapterRegistry)
 class AdapterRegistry(BaseAdapterRegistry):
@@ -949,6 +973,7 @@ class AdapterRegistry(BaseAdapterRegistry):
 class VerifyingAdapterLookup(AdapterLookupBase, VerifyingBase):
     pass
 
+
 @implementer(IAdapterRegistry)
 class VerifyingAdapterRegistry(BaseAdapterRegistry):
     """
@@ -957,13 +982,15 @@ class VerifyingAdapterRegistry(BaseAdapterRegistry):
 
     LookupClass = VerifyingAdapterLookup
 
+
 def _convert_None_to_Interface(x):
     if x is None:
         return Interface
     else:
         return x
 
-def _lookup(components, specs, provided, name, i, l):
+
+def _lookup(components, specs, provided, name, i, l):  # noqa: E741
     # this function is called very often.
     # The components.get in loops is executed 100 of 1000s times.
     # by loading get into a local variable the bytecode
@@ -973,7 +1000,7 @@ def _lookup(components, specs, provided, name, i, l):
         for spec in specs[i].__sro__:
             comps = components_get(spec)
             if comps:
-                r = _lookup(comps, specs, provided, name, i+1, l)
+                r = _lookup(comps, specs, provided, name, i + 1, l)
                 if r is not None:
                     return r
     else:
@@ -986,26 +1013,32 @@ def _lookup(components, specs, provided, name, i, l):
 
     return None
 
-def _lookupAll(components, specs, provided, result, i, l):
+
+def _lookupAll(components, specs, provided, result, i, l):  # noqa: E741
     components_get = components.get  # see _lookup above
     if i < l:
         for spec in reversed(specs[i].__sro__):
             comps = components_get(spec)
             if comps:
-                _lookupAll(comps, specs, provided, result, i+1, l)
+                _lookupAll(comps, specs, provided, result, i + 1, l)
     else:
         for iface in reversed(provided):
             comps = components_get(iface)
             if comps:
                 result.update(comps)
 
-def _subscriptions(components, specs, provided, name, result, i, l):
+
+def _subscriptions(
+    components, specs, provided, name, result, i, l  # noqa: E741
+):
     components_get = components.get  # see _lookup above
     if i < l:
         for spec in reversed(specs[i].__sro__):
             comps = components_get(spec)
             if comps:
-                _subscriptions(comps, specs, provided, name, result, i+1, l)
+                _subscriptions(
+                    comps, specs, provided, name, result, i + 1, l
+                )
     else:
         for iface in reversed(provided):
             comps = components_get(iface)

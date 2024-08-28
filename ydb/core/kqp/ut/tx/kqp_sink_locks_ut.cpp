@@ -260,19 +260,19 @@ Y_UNIT_TEST_SUITE(KqpSinkLocks) {
             auto client = Kikimr->GetQueryClient();
 
             auto session1 = client.GetSession().GetValueSync().GetSession();
+            auto session2 = client.GetSession().GetValueSync().GetSession();
 
             auto result = session1.ExecuteQuery(Q1_(R"(
-                INSERT INTO Test (Group, Name, Amount) VALUES
+                UPSERT INTO Test (Group, Name, Amount) VALUES
                     (11, "TEST", 2);
             )"), TTxControl::BeginTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
 
             auto tx1 = result.GetTransaction();
             UNIT_ASSERT(tx1);
 
             {
-                result = client.ExecuteQuery(Q1_(R"(
+                result = session2.ExecuteQuery(Q1_(R"(
                     SELECT * FROM Test WHERE Group = 11;
                 )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());

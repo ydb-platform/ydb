@@ -2556,9 +2556,6 @@ private:
                     for (const auto& tag : attrs[SecurityTagsName].AsList()) {
                         securityTags.push_back(tag.AsString());
                     }
-                    if (!securityTags.empty()) {
-                        metaInfo->Attrs[SecurityTagsName] = JoinSeq(';', securityTags);
-                    }
                     statInfo->SecurityTags = {securityTags.begin(), securityTags.end()};
                 }
 

@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package Ydb.BSConfig.V1;
+
+option java_package = "com.yandex.ydb.bsconfig.v1";
+option java_outer_classname = "BSConfigGrpc";
+option java_multiple_files = true;
+
+import "ydb/public/api/protos/ydb_bsconfig.proto";
+
+service BSConfigService {
+
+    // Initialize Blobstorage host configs and box
+    rpc Define(BSConfig.DefineRequest) returns (BSConfig.DefineResponse);
+
+    rpc Fetch(BSConfig.FetchRequest) returns (BSConfig.FetchResponse);
+
+    rpc Evict(BSConfig.EvictRequest) returns (BSConfig.EvictResponse);
+}

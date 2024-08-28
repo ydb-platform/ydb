@@ -1,6 +1,7 @@
 #include <ydb/core/protos/blobstorage.pb.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/blobstorage_config.pb.h>
+#include <ydb/public/api/protos/ydb_bsconfig.pb.h>
 #include <ydb/library/yaml_config/yaml_config_parser.h>
 #include "cli.h"
 #include "cli_cmds.h"
@@ -148,6 +149,83 @@ public:
     }
 };
 
+class TDefine : public TClientCommand {
+    TString YamlFile;
+public:
+    TInit()
+        : TClientCommand("define", {}, "Define storage config using yaml description")
+    {}
+
+    void Config(TConfig& config) override {
+        TClientCommand::Config(config);
+
+        config.Opts->AddLongOption("yaml-file", "read storage config from yaml file")
+            .Required()
+            .RequiredArgument("PATH")
+            .StoreResult(&YamlFile);
+    }
+
+    int Run(TConfig& config) override {
+        TString data;
+
+        try {
+            data = TUnbufferedFileInput(YamlFile).ReadAll();
+        } catch (const yexception& ex) {
+            Cerr << "failed to read config from file: " << ex.what() << Endl;
+            return EXIT_FAILURE;
+        }
+
+        Ydb::
+        TAutoPtr<NMsgBusProxy::TBusBlobStorageConfigRequest> msg(new NMsgBusProxy::TBusBlobStorageConfigRequest);
+
+        NKikimrClient::TBlobStorageConfigRequest& request = msg->Record;
+
+        try {
+            request.MutableRequest()->CopyFrom(NKikimr::NYaml::BuildInitDistributedStorageCommand(data));
+        } catch (const yexception& ex) {
+            Cerr << "failed to parse config from file: " << ex.what() << Endl;
+            return EXIT_FAILURE;
+        }
+
+        if (DryRun) {
+            request.MutableRequest()->SetRollback(true);
+        }
+
+        auto callback = [](const NMsgBusProxy::TBusResponse& response) {
+            const auto& record = response.Record;
+            if (record.HasBlobStorageConfigResponse()) {
+                TString data;
+                const auto& response = record.GetBlobStorageConfigResponse();
+                if (google::protobuf::TextFormat::PrintToString(response, &data)) {
+                    Cout << data;
+                } else {
+                    Cerr << "failed to print protobuf" << Endl;
+                    return EXIT_FAILURE;
+                }
+                return response.GetSuccess() ? EXIT_SUCCESS : 2;
+            }
+            return record.GetStatus() == NMsgBusProxy::MSTATUS_OK ? EXIT_SUCCESS : EXIT_FAILURE;
+        };
+
+        return MessageBusCall<NMsgBusProxy::TBusBlobStorageConfigRequest, NMsgBusProxy::TBusResponse>(config, msg, callback);
+    }
+};
+
+class TFetch : public TClientCommand {
+
+public:
+    TFetch()
+        : TClientCommand("fetch", {}, "Fetch yaml config similar to the init config")
+    {}
+
+    void Config(TConfig& config) override {
+        TClientCommand::Config(config);
+    }
+
+    int Run(TConfig& config) override {
+        return 0;
+    }
+};
 
 class TInvoke : public TClientCommand {
     ui32 AvailabilityDomain = 1;

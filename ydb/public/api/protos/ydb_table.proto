@@ -72,7 +72,7 @@ message VectorIndexSettings {
         SIMILARITY_UNSPECIFIED = 0;
         SIMILARITY_COSINE = 1;
         SIMILARITY_INNER_PRODUCT = 2;
-    }   
+    }
 
     enum VectorType {
         VECTOR_TYPE_UNSPECIFIED = 0;

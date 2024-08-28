@@ -100,7 +100,6 @@ public:
     }
 
     void UpdateTableStats(const TShardIdx shardIdx, const TPathId& pathId, const TPartitionStats& newStats) {
-        Stats.TableStats[shardIdx]; // insert if none
         Stats.UpdateTableStats(shardIdx, pathId, newStats);
     }
 

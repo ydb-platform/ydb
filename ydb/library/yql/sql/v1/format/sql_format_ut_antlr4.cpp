@@ -14,6 +14,7 @@ struct TSetup {
     TSetup() {
         NSQLTranslation::TTranslationSettings settings;
         settings.Arena = &Arena;
+        settings.Antlr4Parser = true;
         Formatter = NSQLFormat::MakeSqlFormatter(settings);
     }
     

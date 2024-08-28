@@ -1614,12 +1614,12 @@ bool TSqlTranslation::CreateTableEntry(const TRule_create_table_entry& node, TCr
                         }
 
                         auto& token = spec.GetBlock2().GetToken1();
-                        switch (UnifiedToken(token.GetId(), Context().Settings.Antlr4Parser)) {
-                            case UnifiedToken(SQLv1LexerTokens::TOKEN_ASC, 0):
-                            case UnifiedToken(SQLv1Antlr4Lexer::TOKEN_ASC, 1):
+                        switch (UnifiedToken(token.GetId())) {
+                            case ANTLR3_TOKEN(ASC):
+                            case ANTLR4_TOKEN(ASC):
                                 return true;
-                            case UnifiedToken(SQLv1LexerTokens::TOKEN_DESC, 0):
-                            case UnifiedToken(SQLv1Antlr4Lexer::TOKEN_DESC, 1):
+                            case ANTLR3_TOKEN(DESC):
+                            case ANTLR4_TOKEN(DESC):
                                 desc = true;
                                 return true;
                             default:
@@ -3610,13 +3610,13 @@ bool TSqlTranslation::SortSpecification(const TRule_sort_specification& node, TV
     if (node.HasBlock2()) {
         const auto& token = node.GetBlock2().GetToken1();
         Token(token);
-        switch (UnifiedToken(token.GetId(), Context().Settings.Antlr4Parser)) {
-            case UnifiedToken(SQLv1LexerTokens::TOKEN_ASC, 0):
-            case UnifiedToken(SQLv1Antlr4Lexer::TOKEN_ASC, 1):
+        switch (UnifiedToken(token.GetId())) {
+            case ANTLR3_TOKEN(ASC):
+            case ANTLR4_TOKEN(ASC):
                 Ctx.IncrementMonCounter("sql_features", "OrderByAsc");
                 break;
-            case UnifiedToken(SQLv1LexerTokens::TOKEN_DESC, 0):
-            case UnifiedToken(SQLv1Antlr4Lexer::TOKEN_DESC, 1):
+            case ANTLR3_TOKEN(DESC):
+            case ANTLR4_TOKEN(DESC):
                 asc = false;
                 Ctx.IncrementMonCounter("sql_features", "OrderByDesc");
                 break;
@@ -3647,13 +3647,13 @@ bool TSqlTranslation::SortSpecificationList(const TRule_sort_specification_list&
 
 bool TSqlTranslation::IsDistinctOptSet(const TRule_opt_set_quantifier& node) const {
     TPosition pos;
-    return node.HasBlock1() && ((!Ctx.Settings.Antlr4Parser && node.GetBlock1().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_DISTINCT) || 
-                               (Ctx.Settings.Antlr4Parser && node.GetBlock1().GetToken1().GetId() == SQLv1Antlr4Lexer::TOKEN_DISTINCT));
+    return node.HasBlock1() && ((UnifiedToken(node.GetBlock1().GetToken1().GetId()) == ANTLR3_TOKEN(DISTINCT)) || 
+                                (UnifiedToken(node.GetBlock1().GetToken1().GetId()) == ANTLR4_TOKEN(DISTINCT)));
 }
 
 bool TSqlTranslation::IsDistinctOptSet(const TRule_opt_set_quantifier& node, TPosition& distinctPos) const {
-    if (node.HasBlock1() && ((!Ctx.Settings.Antlr4Parser && node.GetBlock1().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_DISTINCT) ||
-                            (Ctx.Settings.Antlr4Parser && node.GetBlock1().GetToken1().GetId() == SQLv1Antlr4Lexer::TOKEN_DISTINCT))) {
+    if (node.HasBlock1() && ((UnifiedToken(node.GetBlock1().GetToken1().GetId()) == ANTLR3_TOKEN(DISTINCT)) ||
+                             (UnifiedToken(node.GetBlock1().GetToken1().GetId()) == ANTLR4_TOKEN(DISTINCT)))) {
         distinctPos = Ctx.TokenPosition(node.GetBlock1().GetToken1());
         return true;
     }

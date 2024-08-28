@@ -132,7 +132,6 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
         return false;
     }
 
-    bool antlr4Parser = Context().Settings.Antlr4Parser;
     switch (altCase) {
         case TRule_sql_stmt_core::kAltSqlStmtCore1: {
             bool success = false;
@@ -221,13 +220,11 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             if (rule.HasBlock2()) { // OR REPLACE
                 replaceIfExists = true;
                 Y_DEBUG_ABORT_UNLESS(
-                    (!antlr4Parser &&
-                    rule.GetBlock2().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_OR &&
-                    rule.GetBlock2().GetToken2().GetId() == SQLv1LexerTokens::TOKEN_REPLACE)
+                    (UnifiedToken(rule.GetBlock2().GetToken1().GetId()) == ANTLR3_TOKEN(OR) && 
+                     UnifiedToken(rule.GetBlock2().GetToken2().GetId()) == ANTLR3_TOKEN(REPLACE))
                     ||
-                    (antlr4Parser &&
-                    rule.GetBlock2().GetToken1().GetId() == SQLv1Antlr4Lexer::TOKEN_OR &&
-                    rule.GetBlock2().GetToken2().GetId() == SQLv1Antlr4Lexer::TOKEN_REPLACE)
+                    (UnifiedToken(rule.GetBlock2().GetToken1().GetId()) == ANTLR4_TOKEN(OR) && 
+                     UnifiedToken(rule.GetBlock2().GetToken2().GetId()) == ANTLR4_TOKEN(REPLACE))
                 );
             }
 
@@ -236,8 +233,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             ETableType tableType = ETableType::Table;
             bool temporary = false;
             if (block.HasAlt2() && (
-                (!antlr4Parser && block.GetAlt2().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_TABLESTORE) || 
-                (antlr4Parser && block.GetAlt2().GetToken1().GetId() == SQLv1Antlr4Lexer::TOKEN_TABLESTORE)
+                (UnifiedToken(block.GetAlt2().GetToken1().GetId()) == ANTLR3_TOKEN(TABLESTORE)) || 
+                (UnifiedToken(block.GetAlt2().GetToken1().GetId()) == ANTLR4_TOKEN(TABLESTORE))
             )) {
                 tableType = ETableType::TableStore;
                 if (isCreateTableAs) {
@@ -246,8 +243,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                     return false;
                 }
             } else if (block.HasAlt3() && (
-                       (!antlr4Parser && block.GetAlt3().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_EXTERNAL) ||
-                       (antlr4Parser && block.GetAlt3().GetToken1().GetId() == SQLv1Antlr4Lexer::TOKEN_EXTERNAL)
+                       (UnifiedToken(block.GetAlt3().GetToken1().GetId()) == ANTLR3_TOKEN(EXTERNAL)) ||
+                       (UnifiedToken(block.GetAlt3().GetToken1().GetId()) == ANTLR4_TOKEN(EXTERNAL))
                     )) {
                 tableType = ETableType::ExternalTable;
                 if (isCreateTableAs) {
@@ -255,10 +252,10 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                         << "CREATE TABLE AS is not supported for EXTERNAL TABLE";
                     return false;
                 }
-            } else if (block.HasAlt4() && ((!antlr4Parser && block.GetAlt4().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_TEMP) || 
-                                           (antlr4Parser && block.GetAlt4().GetToken1().GetId() == SQLv1Antlr4Lexer::TOKEN_TEMP)) ||
-                       block.HasAlt5() && ((!antlr4Parser && block.GetAlt5().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_TEMPORARY) || 
-                                           (antlr4Parser && block.GetAlt5().GetToken1().GetId() == SQLv1Antlr4Lexer::TOKEN_TEMPORARY))) {
+            } else if (block.HasAlt4() && ((UnifiedToken(block.GetAlt4().GetToken1().GetId()) == ANTLR3_TOKEN(TEMP)) || 
+                                           (UnifiedToken(block.GetAlt4().GetToken1().GetId()) == ANTLR4_TOKEN(TEMP))) ||
+                       block.HasAlt5() && ((UnifiedToken(block.GetAlt5().GetToken1().GetId()) == ANTLR3_TOKEN(TEMPORARY)) || 
+                                           (UnifiedToken(block.GetAlt5().GetToken1().GetId()) == ANTLR4_TOKEN(TEMPORARY)))) {
                 temporary = true;
             }
 
@@ -266,15 +263,13 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             if (rule.HasBlock4()) { // IF NOT EXISTS
                 existingOk = true;
                 Y_DEBUG_ABORT_UNLESS(
-                    (!antlr4Parser &&
-                    rule.GetBlock4().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_IF &&
-                    rule.GetBlock4().GetToken2().GetId() == SQLv1LexerTokens::TOKEN_NOT &&
-                    rule.GetBlock4().GetToken3().GetId() == SQLv1LexerTokens::TOKEN_EXISTS)
+                    (UnifiedToken(rule.GetBlock4().GetToken1().GetId()) == ANTLR3_TOKEN(IF) &&
+                     UnifiedToken(rule.GetBlock4().GetToken2().GetId()) == ANTLR3_TOKEN(NOT) &&
+                     UnifiedToken(rule.GetBlock4().GetToken3().GetId()) == ANTLR3_TOKEN(EXISTS))
                     ||
-                    (antlr4Parser &&
-                    rule.GetBlock4().GetToken1().GetId() == SQLv1Antlr4Lexer::TOKEN_IF &&
-                    rule.GetBlock4().GetToken2().GetId() == SQLv1Antlr4Lexer::TOKEN_NOT &&
-                    rule.GetBlock4().GetToken3().GetId() == SQLv1Antlr4Lexer::TOKEN_EXISTS)
+                    (UnifiedToken(rule.GetBlock4().GetToken1().GetId()) == ANTLR4_TOKEN(IF) &&
+                     UnifiedToken(rule.GetBlock4().GetToken2().GetId()) == ANTLR4_TOKEN(NOT) &&
+                     UnifiedToken(rule.GetBlock4().GetToken3().GetId()) == ANTLR4_TOKEN(EXISTS))
                 );
             }
 
@@ -361,13 +356,11 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             if (rule.HasBlock3()) { // IF EXISTS
                 missingOk = true;
                 Y_DEBUG_ABORT_UNLESS(
-                    (!antlr4Parser &&
-                    rule.GetBlock3().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_IF &&
-                    rule.GetBlock3().GetToken2().GetId() == SQLv1LexerTokens::TOKEN_EXISTS)
+                    (UnifiedToken(rule.GetBlock3().GetToken1().GetId()) == ANTLR3_TOKEN(IF) &&
+                     UnifiedToken(rule.GetBlock3().GetToken2().GetId()) == ANTLR3_TOKEN(EXISTS))
                     ||
-                    (antlr4Parser &&
-                    rule.GetBlock3().GetToken1().GetId() == SQLv1Antlr4Lexer::TOKEN_IF &&
-                    rule.GetBlock3().GetToken2().GetId() == SQLv1Antlr4Lexer::TOKEN_EXISTS)
+                    (UnifiedToken(rule.GetBlock3().GetToken1().GetId()) == ANTLR4_TOKEN(IF) &&
+                     UnifiedToken(rule.GetBlock3().GetToken2().GetId()) == ANTLR4_TOKEN(EXISTS))
                 );
             }
 
@@ -458,7 +451,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
         case TRule_sql_stmt_core::kAltSqlStmtCore15: {
             Ctx.BodyPart();
             const auto& rule = core.GetAlt_sql_stmt_core15().GetRule_alter_table_stmt1();
-            const bool isTablestore = (!antlr4Parser && rule.GetToken2().GetId() == SQLv1LexerTokens::TOKEN_TABLESTORE) || (antlr4Parser && rule.GetToken2().GetId() == SQLv1Antlr4Lexer::TOKEN_TABLESTORE);
+            const bool isTablestore = (UnifiedToken(rule.GetToken2().GetId()) == ANTLR3_TOKEN(TABLESTORE)) || (UnifiedToken(rule.GetToken2().GetId()) == ANTLR4_TOKEN(TABLESTORE));
             TTableRef tr;
             if (!SimpleTableRefImpl(rule.GetRule_simple_table_ref3(), tr)) {
                 return false;
@@ -724,7 +717,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             switch (node.GetBlock4().Alt_case()) {
                 case TRule_alter_group_stmt_TBlock4::kAlt1: {
                     auto& addDropNode = node.GetBlock4().GetAlt1();
-                    const bool isDrop = (!antlr4Parser && addDropNode.GetToken1().GetId() == SQLv1LexerTokens::TOKEN_DROP) || (antlr4Parser && addDropNode.GetToken1().GetId() == SQLv1Antlr4Lexer::TOKEN_DROP);
+                    const bool isDrop = (UnifiedToken(addDropNode.GetToken1().GetId()) == ANTLR3_TOKEN(DROP)) || (UnifiedToken(addDropNode.GetToken1().GetId()) == ANTLR4_TOKEN(DROP));
                     TVector<TDeferredAtom> roles;
                     bool allowSystemRoles = false;
                     roles.emplace_back();
@@ -773,18 +766,16 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 return false;
             }
 
-            const bool isUser = (!antlr4Parser && node.GetToken2().GetId() == SQLv1LexerTokens::TOKEN_USER) || (antlr4Parser && node.GetToken2().GetId() == SQLv1Antlr4Lexer::TOKEN_USER);
+            const bool isUser = (UnifiedToken(node.GetToken2().GetId()) == ANTLR3_TOKEN(USER)) || (UnifiedToken(node.GetToken2().GetId()) == ANTLR4_TOKEN(USER));
             bool missingOk = false;
             if (node.HasBlock3()) { // IF EXISTS
                 missingOk = true;
                 Y_DEBUG_ABORT_UNLESS(
-                    (!antlr4Parser &&
-                    node.GetBlock3().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_IF &&
-                    node.GetBlock3().GetToken2().GetId() == SQLv1LexerTokens::TOKEN_EXISTS)
+                    (UnifiedToken(node.GetBlock3().GetToken1().GetId()) == ANTLR3_TOKEN(IF) &&
+                     UnifiedToken(node.GetBlock3().GetToken2().GetId()) == ANTLR3_TOKEN(EXISTS))
                     ||
-                    (antlr4Parser &&
-                    node.GetBlock3().GetToken1().GetId() == SQLv1Antlr4Lexer::TOKEN_IF &&
-                    node.GetBlock3().GetToken2().GetId() == SQLv1Antlr4Lexer::TOKEN_EXISTS)
+                    (UnifiedToken(node.GetBlock3().GetToken1().GetId()) == ANTLR4_TOKEN(IF) &&
+                     UnifiedToken(node.GetBlock3().GetToken2().GetId()) == ANTLR4_TOKEN(EXISTS))
                 );
             }
 
@@ -820,15 +811,13 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             if (node.HasBlock3()) { // IF NOT EXISTS
                 existingOk = true;
                 Y_DEBUG_ABORT_UNLESS(
-                    (!antlr4Parser &&
-                    node.GetBlock3().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_IF &&
-                    node.GetBlock3().GetToken2().GetId() == SQLv1LexerTokens::TOKEN_NOT &&
-                    node.GetBlock3().GetToken3().GetId() == SQLv1LexerTokens::TOKEN_EXISTS)
+                    (UnifiedToken(node.GetBlock3().GetToken1().GetId()) == ANTLR3_TOKEN(IF) &&
+                     UnifiedToken(node.GetBlock3().GetToken2().GetId()) == ANTLR3_TOKEN(NOT) &&
+                     UnifiedToken(node.GetBlock3().GetToken3().GetId()) == ANTLR3_TOKEN(EXISTS))
                     ||
-                    (antlr4Parser &&
-                    node.GetBlock3().GetToken1().GetId() == SQLv1Antlr4Lexer::TOKEN_IF &&
-                    node.GetBlock3().GetToken2().GetId() == SQLv1Antlr4Lexer::TOKEN_NOT &&
-                    node.GetBlock3().GetToken3().GetId() == SQLv1Antlr4Lexer::TOKEN_EXISTS)
+                    (UnifiedToken(node.GetBlock3().GetToken1().GetId()) == ANTLR4_TOKEN(IF) &&
+                     UnifiedToken(node.GetBlock3().GetToken2().GetId()) == ANTLR4_TOKEN(NOT) &&
+                     UnifiedToken(node.GetBlock3().GetToken3().GetId()) == ANTLR4_TOKEN(EXISTS))
                 );
             }
 
@@ -880,13 +869,11 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             if (node.HasBlock3()) { // IF EXISTS
                 missingOk = true;
                 Y_DEBUG_ABORT_UNLESS(
-                    (!antlr4Parser &&
-                    node.GetBlock3().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_IF &&
-                    node.GetBlock3().GetToken2().GetId() == SQLv1LexerTokens::TOKEN_EXISTS)
+                    (UnifiedToken(node.GetBlock3().GetToken1().GetId()) == ANTLR3_TOKEN(IF) &&
+                     UnifiedToken(node.GetBlock3().GetToken2().GetId()) == ANTLR3_TOKEN(EXISTS))
                     ||
-                    (antlr4Parser &&
-                    node.GetBlock3().GetToken1().GetId() == SQLv1Antlr4Lexer::TOKEN_IF &&
-                    node.GetBlock3().GetToken2().GetId() == SQLv1Antlr4Lexer::TOKEN_EXISTS)
+                    (UnifiedToken(node.GetBlock3().GetToken1().GetId()) == ANTLR4_TOKEN(IF) &&
+                     UnifiedToken(node.GetBlock3().GetToken2().GetId()) == ANTLR4_TOKEN(EXISTS))
                 );
             }
 
@@ -917,13 +904,11 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             if (node.HasBlock2()) { // OR REPLACE
                 replaceIfExists = true;
                 Y_DEBUG_ABORT_UNLESS(
-                    (!antlr4Parser &&
-                    node.GetBlock2().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_OR &&
-                    node.GetBlock2().GetToken2().GetId() == SQLv1LexerTokens::TOKEN_REPLACE)
+                    (UnifiedToken(node.GetBlock2().GetToken1().GetId()) == ANTLR3_TOKEN(OR) &&
+                     UnifiedToken(node.GetBlock2().GetToken2().GetId()) == ANTLR3_TOKEN(REPLACE))
                     ||
-                    (antlr4Parser &&
-                    node.GetBlock2().GetToken1().GetId() == SQLv1Antlr4Lexer::TOKEN_OR &&
-                    node.GetBlock2().GetToken2().GetId() == SQLv1Antlr4Lexer::TOKEN_REPLACE)
+                    (UnifiedToken(node.GetBlock2().GetToken1().GetId()) == ANTLR4_TOKEN(OR) &&
+                     UnifiedToken(node.GetBlock2().GetToken2().GetId()) == ANTLR4_TOKEN(REPLACE))
                 );
             }
 
@@ -931,15 +916,13 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             if (node.HasBlock6()) { // IF NOT EXISTS
                 existingOk = true;
                 Y_DEBUG_ABORT_UNLESS(
-                    (!antlr4Parser &&
-                    node.GetBlock6().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_IF &&
-                    node.GetBlock6().GetToken2().GetId() == SQLv1LexerTokens::TOKEN_NOT &&
-                    node.GetBlock6().GetToken3().GetId() == SQLv1LexerTokens::TOKEN_EXISTS)
+                    (UnifiedToken(node.GetBlock6().GetToken1().GetId()) == ANTLR3_TOKEN(IF) &&
+                     UnifiedToken(node.GetBlock6().GetToken2().GetId()) == ANTLR3_TOKEN(NOT) &&
+                     UnifiedToken(node.GetBlock6().GetToken3().GetId()) == ANTLR3_TOKEN(EXISTS))
                     ||
-                    (antlr4Parser &&
-                    node.GetBlock6().GetToken1().GetId() == SQLv1Antlr4Lexer::TOKEN_IF &&
-                    node.GetBlock6().GetToken2().GetId() == SQLv1Antlr4Lexer::TOKEN_NOT &&
-                    node.GetBlock6().GetToken3().GetId() == SQLv1Antlr4Lexer::TOKEN_EXISTS)
+                    (UnifiedToken(node.GetBlock6().GetToken1().GetId()) == ANTLR4_TOKEN(IF) &&
+                     UnifiedToken(node.GetBlock6().GetToken2().GetId()) == ANTLR4_TOKEN(NOT) &&
+                     UnifiedToken(node.GetBlock6().GetToken3().GetId()) == ANTLR4_TOKEN(EXISTS))
                 );
             }
 
@@ -995,13 +978,11 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             if (node.HasBlock5()) { // IF EXISTS
                 missingOk = true;
                 Y_DEBUG_ABORT_UNLESS(
-                    (!antlr4Parser &&
-                    node.GetBlock5().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_IF &&
-                    node.GetBlock5().GetToken2().GetId() == SQLv1LexerTokens::TOKEN_EXISTS)
+                    (UnifiedToken(node.GetBlock5().GetToken1().GetId()) == ANTLR3_TOKEN(IF) &&
+                     UnifiedToken(node.GetBlock5().GetToken2().GetId()) == ANTLR3_TOKEN(EXISTS))
                     ||
-                    (antlr4Parser &&
-                    node.GetBlock5().GetToken1().GetId() == SQLv1Antlr4Lexer::TOKEN_IF &&
-                    node.GetBlock5().GetToken2().GetId() == SQLv1Antlr4Lexer::TOKEN_EXISTS)
+                    (UnifiedToken(node.GetBlock5().GetToken1().GetId()) == ANTLR4_TOKEN(IF) &&
+                     UnifiedToken(node.GetBlock5().GetToken2().GetId()) == ANTLR4_TOKEN(EXISTS))
                 );
             }
 

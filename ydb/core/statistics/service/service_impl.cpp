@@ -913,10 +913,12 @@ private:
         const auto tabletId = ev->Get()->TabletId;
         auto tabletPipe = AggregationStatistics.LocalTablets.TabletsPipes.find(tabletId);
         if (tabletPipe == AggregationStatistics.LocalTablets.TabletsPipes.end()) {
+            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+                "Tablet " << tabletId << " has already been processed");
             return;
         }
 
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+        LOG_ERROR_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
                 "No result was received from the tablet " << tabletId);
 
         auto clientId = tabletPipe->second;

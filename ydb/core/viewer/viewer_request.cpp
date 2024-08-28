@@ -4,6 +4,9 @@
 #include "viewer_render.h"
 #include "viewer_sysinfo.h"
 #include "viewer_tabletinfo.h"
+#include "viewer_vdiskinfo.h"
+#include "viewer_pdiskinfo.h"
+#include "viewer_bsgroupinfo.h"
 #include "wb_req.h"
 
 namespace NKikimr::NViewer {
@@ -41,14 +44,34 @@ public:
         TBase::Bootstrap();
     }
 
-    template<typename ResponseType> void MergeWhiteboardResponses(TEvViewer::TEvViewerResponse* response, TMap<TNodeId, ResponseType>& perNodeStateInfo, const TString& fields);
+    THolder<TRequestEventType> BuildRequest() override;
 
-    template<> void MergeWhiteboardResponses<NKikimrWhiteboard::TEvTabletStateResponse>(TEvViewer::TEvViewerResponse* response, TMap<TNodeId, NKikimrWhiteboard::TEvTabletStateResponse>& perNodeStateInfo, const TString& fields) {
+    template<typename ResponseType>
+    void MergeWhiteboardResponses(TEvViewer::TEvViewerResponse* response, TMap<TNodeId, ResponseType>& perNodeStateInfo, const TString& fields);
+
+    template<>
+    void MergeWhiteboardResponses<NKikimrWhiteboard::TEvTabletStateResponse>(TEvViewer::TEvViewerResponse* response, TMap<TNodeId, NKikimrWhiteboard::TEvTabletStateResponse>& perNodeStateInfo, const TString& fields) {
         NKikimr::NViewer::MergeWhiteboardResponses(*(response->Record.MutableTabletResponse()), perNodeStateInfo, fields);
     }
 
-    template<> void MergeWhiteboardResponses<NKikimrWhiteboard::TEvSystemStateResponse>(TEvViewer::TEvViewerResponse* response, TMap<TNodeId, NKikimrWhiteboard::TEvSystemStateResponse>& perNodeStateInfo, const TString& fields) {
+    template<>
+    void MergeWhiteboardResponses<NKikimrWhiteboard::TEvSystemStateResponse>(TEvViewer::TEvViewerResponse* response, TMap<TNodeId, NKikimrWhiteboard::TEvSystemStateResponse>& perNodeStateInfo, const TString& fields) {
         NKikimr::NViewer::MergeWhiteboardResponses(*(response->Record.MutableSystemResponse()), perNodeStateInfo, fields);
+    }
+
+    template<>
+    void MergeWhiteboardResponses<NKikimrWhiteboard::TEvVDiskStateResponse>(TEvViewer::TEvViewerResponse* response, TMap<TNodeId, NKikimrWhiteboard::TEvVDiskStateResponse>& perNodeStateInfo, const TString& fields) {
+        NKikimr::NViewer::MergeWhiteboardResponses(*(response->Record.MutableVDiskResponse()), perNodeStateInfo, fields);
+    }
+
+    template<>
+    void MergeWhiteboardResponses<NKikimrWhiteboard::TEvPDiskStateResponse>(TEvViewer::TEvViewerResponse* response, TMap<TNodeId, NKikimrWhiteboard::TEvPDiskStateResponse>& perNodeStateInfo, const TString& fields) {
+        NKikimr::NViewer::MergeWhiteboardResponses(*(response->Record.MutablePDiskResponse()), perNodeStateInfo, fields);
+    }
+
+    template<>
+    void MergeWhiteboardResponses<NKikimrWhiteboard::TEvBSGroupStateResponse>(TEvViewer::TEvViewerResponse* response, TMap<TNodeId, NKikimrWhiteboard::TEvBSGroupStateResponse>& perNodeStateInfo, const TString& fields) {
+        NKikimr::NViewer::MergeWhiteboardResponses(*(response->Record.MutableBSGroupResponse()), perNodeStateInfo, fields);
     }
 
     void ReplyAndPassAway() override {
@@ -72,19 +95,57 @@ IActor* CreateViewerRequestHandler(TEvViewer::TEvViewerRequest::TPtr& request) {
             return new TViewerWhiteboardRequest<TEvWhiteboard::TEvTabletStateRequest, TEvWhiteboard::TEvTabletStateResponse>(request);
         case NKikimrViewer::TEvViewerRequest::kSystemRequest:
             return new TViewerWhiteboardRequest<TEvWhiteboard::TEvSystemStateRequest, TEvWhiteboard::TEvSystemStateResponse>(request);
+        case NKikimrViewer::TEvViewerRequest::kVDiskRequest:
+            return new TViewerWhiteboardRequest<TEvWhiteboard::TEvVDiskStateRequest, TEvWhiteboard::TEvVDiskStateResponse>(request);
+        case NKikimrViewer::TEvViewerRequest::kPDiskRequest:
+            return new TViewerWhiteboardRequest<TEvWhiteboard::TEvPDiskStateRequest, TEvWhiteboard::TEvPDiskStateResponse>(request);
+        case NKikimrViewer::TEvViewerRequest::kBSGroupRequest:
+            return new TViewerWhiteboardRequest<TEvWhiteboard::TEvBSGroupStateRequest, TEvWhiteboard::TEvBSGroupStateResponse>(request);
         case NKikimrViewer::TEvViewerRequest::kQueryRequest:
             return new TJsonQueryOld(request);
         case NKikimrViewer::TEvViewerRequest::kRenderRequest:
             return new TJsonRender(request);
         case NKikimrViewer::TEvViewerRequest::kAutocompleteRequest:
             return new TJsonAutocomplete(request);
-        case NKikimrViewer::TEvViewerRequest::kReserved16:
-        case NKikimrViewer::TEvViewerRequest::kReserved17:
-        case NKikimrViewer::TEvViewerRequest::kReserved18:
-        case NKikimrViewer::TEvViewerRequest::REQUEST_NOT_SET:
+        default:
             return nullptr;
     }
     return nullptr;
+}
+
+template<>
+THolder<TEvWhiteboard::TEvTabletStateRequest> TViewerWhiteboardRequest<TEvWhiteboard::TEvTabletStateRequest, TEvWhiteboard::TEvTabletStateResponse>::BuildRequest() {
+    auto request = TBase::BuildRequest();
+    request->Record.MergeFrom(Event->Get()->Record.GetTabletRequest());
+    return request;
+}
+
+template<>
+THolder<TEvWhiteboard::TEvSystemStateRequest> TViewerWhiteboardRequest<TEvWhiteboard::TEvSystemStateRequest, TEvWhiteboard::TEvSystemStateResponse>::BuildRequest() {
+    auto request = TBase::BuildRequest();
+    request->Record.MergeFrom(Event->Get()->Record.GetSystemRequest());
+    return request;
+}
+
+template<>
+THolder<TEvWhiteboard::TEvVDiskStateRequest> TViewerWhiteboardRequest<TEvWhiteboard::TEvVDiskStateRequest, TEvWhiteboard::TEvVDiskStateResponse>::BuildRequest() {
+    auto request = TBase::BuildRequest();
+    request->Record.MergeFrom(Event->Get()->Record.GetVDiskRequest());
+    return request;
+}
+
+template<>
+THolder<TEvWhiteboard::TEvPDiskStateRequest> TViewerWhiteboardRequest<TEvWhiteboard::TEvPDiskStateRequest, TEvWhiteboard::TEvPDiskStateResponse>::BuildRequest() {
+    auto request = TBase::BuildRequest();
+    request->Record.MergeFrom(Event->Get()->Record.GetPDiskRequest());
+    return request;
+}
+
+template<>
+THolder<TEvWhiteboard::TEvBSGroupStateRequest> TViewerWhiteboardRequest<TEvWhiteboard::TEvBSGroupStateRequest, TEvWhiteboard::TEvBSGroupStateResponse>::BuildRequest() {
+    auto request = TBase::BuildRequest();
+    request->Record.MergeFrom(Event->Get()->Record.GetBSGroupRequest());
+    return request;
 }
 
 bool IsPostContent(const NMon::TEvHttpInfo::TPtr& event) {

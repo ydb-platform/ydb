@@ -63,6 +63,13 @@ public:
         if (params.Has("static")) {
             TBase::RequestSettings.StaticNodesOnly = FromStringWithDefault<bool>(params.Get("static"), false);
         }
+        if (params.Has("fields_required")) {
+            if (params.Get("fields_required") == "all") {
+                TBase::RequestSettings.FieldsRequired = {-1};
+            } else {
+                SplitIds(params.Get("fields_required"), ',', TBase::RequestSettings.FieldsRequired);
+            }
+        }
         TBase::RequestSettings.Format = params.Get("format");
         TBase::Bootstrap();
     }

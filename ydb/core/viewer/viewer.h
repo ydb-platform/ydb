@@ -48,7 +48,7 @@ struct TRequestSettings {
     TDuration RetryPeriod = TDuration::MilliSeconds(500);
     TString Format;
     std::optional<bool> StaticNodesOnly;
-    bool DistributedMerge = false;
+    std::vector<i32> FieldsRequired;
 
     bool Followers = true; // hive tablet info
     bool Metrics = true; // hive tablet info

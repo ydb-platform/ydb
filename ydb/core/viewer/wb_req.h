@@ -63,6 +63,14 @@ public:
                 request->Record.SetFormat(RequestSettings.Format);
             }
         }
+
+        constexpr bool hasFieldsRequired = requires(const TRequestEventType* r) {r->Record.GetFieldsRequired();};
+        if constexpr (hasFieldsRequired) {
+            if (!RequestSettings.FieldsRequired.empty()) {
+                request->Record.MutableFieldsRequired()->Add(RequestSettings.FieldsRequired.begin(), RequestSettings.FieldsRequired.end());
+            }
+        }
+
         if (RequestSettings.ChangedSince != 0) {
             request->Record.SetChangedSince(RequestSettings.ChangedSince);
         }

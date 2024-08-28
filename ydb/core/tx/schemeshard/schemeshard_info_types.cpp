@@ -1704,7 +1704,7 @@ void OlapTableAggregatedStats::UpdateShardStats(TShardIdx datashardIdx, const TP
     oldStats = newStats;
 }
 
-void TAggregatedStats::UpdateShardStats(TShardIdx datashardIdx, const TPartitionStats& newStats) {
+void TTableAggregatedStats::UpdateShardStats(TShardIdx datashardIdx, const TPartitionStats& newStats) {
     // Ignore stats from unknown datashard (it could have been split)
     if (!PartitionStats.contains(datashardIdx))
         return;
@@ -1794,9 +1794,10 @@ void TAggregatedStats::UpdateShardStats(TShardIdx datashardIdx, const TPartition
     }
 }
 
-void TAggregatedStats::UpdateTableStats(TShardIdx datashardIdx, const TPathId& pathId, const TPartitionStats& newStats) {
+void TAggregatedStats::UpdateTableStats(TShardIdx shardIdx, const TPathId& pathId, const TPartitionStats& newStats) {
     auto& tableStats = TableStats[pathId];
-    tableStats.UpdateShardStats(datashardIdx, newStats);
+    tableStats.PartitionStats[shardIdx]; // insert if none
+    tableStats.UpdateShardStats(shardIdx, newStats);
 }
 
 void TTableInfo::RegisterSplitMergeOp(TOperationId opId, const TTxState& txState) {

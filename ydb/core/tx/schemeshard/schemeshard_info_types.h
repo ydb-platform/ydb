@@ -328,13 +328,17 @@ struct OlapTableAggregatedStats {
     void UpdateShardStats(TShardIdx datashardIdx, const TPartitionStats& newStats);
 };
 
-struct TAggregatedStats {
+struct TTableAggregatedStats {
     TPartitionStats Aggregated;
     THashMap<TShardIdx, TPartitionStats> PartitionStats;
-    THashMap<TPathId, OlapTableAggregatedStats> TableStats;
     size_t PartitionStatsUpdated = 0;
 
     void UpdateShardStats(TShardIdx datashardIdx, const TPartitionStats& newStats);
+};
+
+struct TAggregatedStats : public TTableAggregatedStats {
+    THashMap<TPathId, TTableAggregatedStats> TableStats;
+
     void UpdateTableStats(TShardIdx datashardIdx, const TPathId& pathId, const TPartitionStats& newStats);
 };
 

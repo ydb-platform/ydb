@@ -1,8 +1,5 @@
 #include "change_exchange.h"
 
-#include <util/string/builder.h>
-#include <util/string/join.h>
-
 namespace NKikimr::NChangeExchange {
 
 /// TEvEnqueueRecords
@@ -99,15 +96,14 @@ TEvChangeExchange::TEvRecords::TEvRecords(TChangeRecordVector&& records)
 {
 }
 
-
 TString TEvChangeExchange::TEvRecords::ToString() const {
-    return std::visit(
-        [&](auto& records){
-            return TStringBuilder() << ToStringHeader() << " {"
-                << " Records " << ((TBaseChangeRecordContainer*)records.get())->Out()
-            << " }";
-        },
-        Records);
+    auto visitor = [&](auto& records){
+        return TStringBuilder() << ToStringHeader() << " {"
+            << " Records " << reinterpret_cast<IChangeRecordContainer*>(records.get())->Out()
+        << " }";
+    };
+
+    return std::visit(visitor, Records);
 }
 
 /// TEvForgetRecords

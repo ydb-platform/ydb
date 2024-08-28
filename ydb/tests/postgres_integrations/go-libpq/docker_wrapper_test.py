@@ -8,7 +8,6 @@ from ydb.tests.postgres_integrations import library as tl
 
 
 def filter_formatter(test_names: typing.List[str]) -> str:
-    test_names = [item[len("golang-lib-pq/"):] for item in test_names]
     return "^(" + "|".join(test_names) + ")$"
 
 

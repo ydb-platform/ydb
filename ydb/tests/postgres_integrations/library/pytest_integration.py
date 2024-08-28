@@ -127,7 +127,7 @@ def _prepare_docker_env(pgwire_port: str, test_names: List[str]) -> List[str]:
         "PGPASSWORD=1234",
         "PGHOST=localhost",
         f"PGPORT={pgwire_port}",
-        "PGDATABASE=local",
+        "PGDATABASE=/Root",
         "PQGOSSLTESTS=0",
         "PQSSLCERTTEST_PATH=certs",
         f"YDB_PG_TESTFILTER={test_filter}",
@@ -268,7 +268,13 @@ def _read_tests_result(filepath: str) -> Dict[str, TestCase]:
         raise Exception(f"Unknown field val for field '{field_name}':\n{field_val}")
 
     for test_case in test_cases:
-        name = test_case["@classname"] + "/" + test_case["@name"]
+        class_name = test_case["@classname"]
+        test_name = test_case["@name"]
+        if class_name == "":
+            name = test_name
+        else:
+            name = test_case["@classname"] + "/" + test_case["@name"]
+
         print("rekby-debug", test_case)
         if "failure" in test_case:
             test_state = TestState.FAILED

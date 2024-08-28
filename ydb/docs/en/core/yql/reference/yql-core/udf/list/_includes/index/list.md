@@ -7,7 +7,9 @@
 * [DateTime](../../datetime.md)
 * [Url](../../url.md)
 * [Ip](../../ip.md)
+{% if backend_name == "YDB" %}
 * [Knn](../../knn.md)
+{% endif %}
 * [Yson](../../yson.md)
 * [Digest](../../digest.md)
 * [Math](../../math.md)

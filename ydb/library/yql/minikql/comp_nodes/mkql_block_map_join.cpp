@@ -22,21 +22,17 @@ size_t CalcMaxBlockLength(const TVector<TType*>& items) {
 }
 
 template <bool RightRequired>
-class TBlockJoinState : public TComputationValue<TBlockJoinState<RightRequired>>
-{
-using TBase = TComputationValue<TBlockJoinState>;
+class TBlockJoinState : public TBlockState {
 public:
     TBlockJoinState(TMemoryUsageInfo* memInfo, TComputationContext& ctx,
                     const TVector<TType*>& inputItems,
                     const TVector<TType*> outputItems,
                     NUdf::TUnboxedValue**const fields)
-        : TBase(memInfo)
+        : TBlockState(memInfo, outputItems.size())
         , InputWidth_(inputItems.size() - 1)
         , OutputWidth_(outputItems.size() - 1)
         , Inputs_(inputItems.size())
         , InputsDescr_(ToValueDescr(inputItems))
-        , Deques(OutputWidth_)
-        , Arrays(OutputWidth_)
     {
         const auto& pgBuilder = ctx.Builder->GetPgBuilder();
         MaxLength_ = CalcMaxBlockLength(outputItems);
@@ -86,61 +82,15 @@ public:
         OutputRows_++;
     }
 
-    void MakeBlocks() {
-        if (OutputRows_ == 0) {
-            return;
-        }
+    void MakeBlocks(const THolderFactory& holderFactory) {
+        Values.back() = holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(OutputRows_)));
+        OutputRows_ = 0;
         BuilderAllocatedSize_ = 0;
 
         for (size_t i = 0; i < Builders_.size(); i++) {
-            const auto& datum = Builders_[i]->Build(IsFinished_);
-            Deques[i].clear();
-            MKQL_ENSURE(datum.is_arraylike(), "Unexpected block type (expecting array or chunked array)");
-            ForEachArrayData(datum, [this, i](const auto& arrayData) {
-                Deques[i].push_back(arrayData);
-            });
+            Values[i] = holderFactory.CreateArrowBlock(Builders_[i]->Build(IsFinished_));
         }
-    }
-
-    ui64 Slice() {
-        auto sliceSize = OutputRows_;
-        for (size_t i = 0; i < Deques.size(); i++) {
-            const auto& arrays = Deques[i];
-            if (arrays.empty()) {
-                continue;
-            }
-            Y_ABORT_UNLESS(ui64(arrays.front()->length) <= OutputRows_);
-            sliceSize = std::min<ui64>(sliceSize, arrays.front()->length);
-        }
-
-        for (size_t i = 0; i < Arrays.size(); i++) {
-            auto& arrays = Deques[i];
-            if (arrays.empty()) {
-                continue;
-            }
-            if (auto& head = arrays.front(); ui64(head->length) == sliceSize) {
-                Arrays[i] = std::move(head);
-                arrays.pop_front();
-            } else {
-                Arrays[i] = Chop(head, sliceSize);
-            }
-        }
-
-        OutputRows_ -= sliceSize;
-        return sliceSize;
-    }
-
-    NUdf::TUnboxedValuePod Get(const ui64 sliceSize, const THolderFactory& holderFactory, const size_t idx) const {
-        MKQL_ENSURE(idx <= OutputWidth_, "Deques index overflow");
-        // Return the slice length as the last column value (i.e. block length).
-        if (idx == OutputWidth_) {
-            return holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(sliceSize)));
-        }
-        if (auto array = Arrays[idx]) {
-            return holderFactory.CreateArrowBlock(std::move(array));
-        } else {
-            return NUdf::TUnboxedValuePod();
-        }
+        FillArrays();
     }
 
     TBlockItem GetItem(size_t idx) const {
@@ -209,8 +159,6 @@ private:
     size_t OutputWidth_;
     TUnboxedValueVector Inputs_;
     const std::vector<arrow::ValueDescr> InputsDescr_;
-    TVector<std::deque<std::shared_ptr<arrow::ArrayData>>> Deques;
-    TVector<std::shared_ptr<arrow::ArrayData>> Arrays;
     TVector<std::unique_ptr<IBlockReader>> Readers_;
     TVector<std::unique_ptr<IBlockItemConverter>> Converters_;
     TVector<std::unique_ptr<IArrayBuilder>> Builders_;
@@ -275,7 +223,7 @@ public:
         if (s.IsEmpty()) {
             return EFetchResult::Finish;
         }
-        s.MakeBlocks();
+        s.MakeBlocks(ctx.HolderFactory);
         const auto sliceSize = s.Slice();
 
         for (size_t i = 0; i < ResultJoinItems_.size(); i++) {

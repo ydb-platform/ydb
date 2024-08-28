@@ -30,7 +30,7 @@ build {
 
   provisioner "file" {
     content     = <<EOF
-set -x
+set -xe
 apt-get update
 # wait for unattended-upgrade is finished
 apt-get -o DPkg::Lock::Timeout=600 -y --no-install-recommends dist-upgrade
@@ -39,7 +39,7 @@ apt-get -y install --no-install-recommends \
   liblttng-ust1 lld-14 llvm-14 m4 make ninja-build parallel postgresql-client postgresql-client \
   python-is-python3 python3-pip s3cmd s3cmd zlib1g
 
-apt-get -y purge lxd-agent-loader snapd modemanager
+apt-get -y purge lxd-agent-loader snapd modemmanager
 apt-get -y autoremove
 
 pip3 install conan==1.59 pytest==7.1.3 pytest-timeout pytest-xdist==3.3.1 setproctitle==1.3.2 \
@@ -61,6 +61,7 @@ EOF
   provisioner "file" {
     content     = <<EOF
 #!/bin/env/sh
+set -xe
 
 mkdir -p /opt/cache/actions-runner/latest
 

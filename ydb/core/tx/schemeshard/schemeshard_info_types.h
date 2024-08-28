@@ -324,11 +324,11 @@ private:
 struct TAggregatedStats {
     TPartitionStats Aggregated;
     THashMap<TShardIdx, TPartitionStats> PartitionStats;
-    THashMap<TPathId, TPartitionStats> TableStats;
+    THashMap<TShardIdx, THashMap<TPathId, TPartitionStats>> TableStats;
     size_t PartitionStatsUpdated = 0;
 
     void UpdateShardStats(TShardIdx datashardIdx, const TPartitionStats& newStats);
-    void UpdateTableStats(const TPathId& pathId, const TPartitionStats& newStats);
+    void UpdateTableStats(TShardIdx datashardIdx, const TPathId& pathId, const TPartitionStats& newStats);
 };
 
 struct TSubDomainInfo;

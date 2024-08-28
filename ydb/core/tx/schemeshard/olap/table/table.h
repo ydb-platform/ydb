@@ -99,8 +99,9 @@ public:
         Stats.UpdateShardStats(shardIdx, newStats);
     }
 
-    void UpdateTableStats(const TPathId& pathId, const TPartitionStats& newStats) {
-        Stats.UpdateTableStats(pathId, newStats);
+    void UpdateTableStats(const TShardIdx shardIdx, const TPathId& pathId, const TPartitionStats& newStats) {
+        Stats.TableStats[shardIdx]; // insert if none
+        Stats.UpdateTableStats(shardIdx, pathId, newStats);
     }
 
     TConclusion<std::shared_ptr<NOlap::NAlter::ISSEntity>> BuildEntity(const TPathId& pathId, const NOlap::NAlter::TEntityInitializationContext& iContext) const;

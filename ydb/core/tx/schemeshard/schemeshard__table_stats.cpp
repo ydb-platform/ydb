@@ -327,7 +327,7 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
                             "add stats for exists table with pathId=" << tablePathId);
 
                 auto columnTable = Self->ColumnTables.TakeVerified(tablePathId);
-                columnTable->UpdateTableStats(tablePathId, newTableStats);
+                columnTable->UpdateTableStats(shardIdx, tablePathId, newTableStats);
             } else {
                 LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                            "failed add stats for table with pathId=" << tablePathId);

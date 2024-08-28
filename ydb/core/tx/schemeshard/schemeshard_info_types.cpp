@@ -1763,13 +1763,19 @@ void TAggregatedStats::UpdateShardStats(TShardIdx datashardIdx, const TPartition
     }
 }
 
-void TAggregatedStats::UpdateTableStats(const TPathId& pathId, const TPartitionStats& newStats) {
-    if (!TableStats.contains(pathId)) {
-        TableStats[pathId] = newStats;
+void TAggregatedStats::UpdateTableStats(TShardIdx datashardIdx, const TPathId& pathId, const TPartitionStats& newStats) {
+    // Ignore stats from unknown datashard (it could have been split)
+    if (!TableStats.contains(datashardIdx)) {
         return;
     }
 
-    TPartitionStats& oldStats = TableStats[pathId];
+    auto& tableStats = TableStats[pathId];
+    if (!tableStats.contains(pathId)) {
+        tableStats[pathId] = newStats;
+        return;
+    }
+
+    TPartitionStats& oldStats = tableStats[pathId];
 
     if (newStats.SeqNo <= oldStats.SeqNo) {
         // Ignore outdated message
@@ -1788,8 +1794,8 @@ void TAggregatedStats::UpdateTableStats(const TPathId& pathId, const TPartitionS
         oldStats.RangeReads = 0;
         oldStats.RangeReadRows = 0;
     }
-    TableStats[pathId].RowCount += (newStats.RowCount - oldStats.RowCount);
-    TableStats[pathId].DataSize += (newStats.DataSize - oldStats.DataSize);
+    tableStats[pathId].RowCount += (newStats.RowCount - oldStats.RowCount);
+    tableStats[pathId].DataSize += (newStats.DataSize - oldStats.DataSize);
 }
 
 void TTableInfo::RegisterSplitMergeOp(TOperationId opId, const TTxState& txState) {

@@ -6,6 +6,14 @@
 namespace NKikimr::NPQ::NBalancing {
 
 
+struct LowLoadSessionComparator {
+    bool operator()(const TSession* lhs, const TSession* rhs) const;
+};
+
+using TLowLoadOrderedSessions = std::set<TSession*, LowLoadSessionComparator>;
+
+
+
 //
 // TPartition
 //
@@ -868,6 +876,8 @@ void TConsumer::RegisterReadingSession(TSession* session, const TActorContext& c
                 CreateFamily({partitionId}, ctx);
             }
         }
+    } else {
+        OrderedSessions.reset();
     }
 }
 
@@ -886,6 +896,9 @@ std::vector<TPartitionFamily*> Snapshot(const std::unordered_map<size_t, const s
 void TConsumer::UnregisterReadingSession(TSession* session, const TActorContext& ctx) {
     auto pipe = session->Pipe;
     Sessions.erase(session->Pipe);
+    if (!session->WithGroups()) {
+        OrderedSessions.reset();
+    }
 
     for (auto* family : Snapshot(Families)) {
         auto special = family->SpecialSessions.erase(pipe);
@@ -1156,11 +1169,11 @@ void TConsumer::ScheduleBalance(const TActorContext& ctx) {
     ctx.Send(Balancer.TopicActor.SelfId(), new TEvPQ::TEvBalanceConsumer(ConsumerName));
 }
 
-TOrderedSessions OrderSessions(
+TLowLoadOrderedSessions OrderSessions(
     const std::unordered_map<TActorId, TSession*>& values,
     std::function<bool (const TSession*)> predicate = [](const TSession*) { return true; }
 ) {
-    TOrderedSessions result;
+    TLowLoadOrderedSessions result;
     for (auto& [_, v] : values) {
         if (predicate(v)) {
             result.insert(v);
@@ -1244,7 +1257,7 @@ void TConsumer::Balance(const TActorContext& ctx) {
         }
     }
 
-    TOrderedSessions commonSessions = OrderSessions(Sessions, [](auto* session) {
+    TLowLoadOrderedSessions commonSessions = OrderSessions(Sessions, [](auto* session) {
         return !session->WithGroups();
     });
 
@@ -1253,7 +1266,7 @@ void TConsumer::Balance(const TActorContext& ctx) {
         auto families = OrderFamilies(UnreadableFamilies);
         for (auto it = families.rbegin(); it != families.rend(); ++it) {
             auto* family = *it;
-            TOrderedSessions specialSessions;
+            TLowLoadOrderedSessions specialSessions;
             auto& sessions = (family->IsCommon()) ? commonSessions : (specialSessions = OrderSessions(family->SpecialSessions));
 
             auto sit = sessions.begin();
@@ -1297,7 +1310,11 @@ void TConsumer::Balance(const TActorContext& ctx) {
                 GetPrefix() << "start rebalancing. familyCount=" << familyCount << ", sessionCount=" << commonSessions.size()
                 << ", desiredFamilyCount=" << desiredFamilyCount << ", allowPlusOne=" << allowPlusOne);
 
-        for (auto it = commonSessions.rbegin(); it != commonSessions.rend(); ++it) {
+        if (!OrderedSessions) {
+            OrderedSessions.emplace();
+            OrderedSessions->insert(commonSessions.begin(), commonSessions.end());
+        }
+        for (auto it = OrderedSessions->begin(); it != OrderedSessions->end(); ++it) {
             auto* session = *it;
             auto targerFamilyCount = desiredFamilyCount + (allowPlusOne ? 1 : 0);
             auto families = OrderFamilies(session->Families);
@@ -1308,7 +1325,7 @@ void TConsumer::Balance(const TActorContext& ctx) {
                 }
             }
 
-            if (allowPlusOne && session->ActiveFamilyCount > desiredFamilyCount) {
+            if (allowPlusOne) {
                 --allowPlusOne;
             }
         }
@@ -1397,7 +1414,8 @@ TSession::TSession(const TActorId& pipe)
             , InactivePartitionCount(0)
             , ReleasingPartitionCount(0)
             , ActiveFamilyCount(0)
-            , ReleasingFamilyCount(0) {
+            , ReleasingFamilyCount(0)
+            , Order(RandomNumber<size_t>()) {
 }
 
 bool TSession::WithGroups() const { return !Partitions.empty(); }
@@ -1850,17 +1868,22 @@ bool TPartitionFamilyComparator::operator()(const TPartitionFamily* lhs, const T
 }
 
 bool SessionComparator::operator()(const TSession* lhs, const TSession* rhs) const {
+    if (lhs->Order != rhs->Order) {
+        return lhs->Order < rhs->Order;
+    }
+    return lhs->SessionName < rhs->SessionName;
+}
+
+
+bool LowLoadSessionComparator::operator()(const TSession* lhs, const TSession* rhs) const {
     if (lhs->ActiveFamilyCount != rhs->ActiveFamilyCount) {
         return lhs->ActiveFamilyCount < rhs->ActiveFamilyCount;
     }
-    if (lhs->ActivePartitionCount != rhs->ActivePartitionCount) {
-        return lhs->ActivePartitionCount < rhs->ActivePartitionCount;
-    }
-    if (lhs->InactivePartitionCount != rhs->InactivePartitionCount) {
-        return lhs->InactivePartitionCount < rhs->InactivePartitionCount;
-    }
     if (lhs->Partitions.size() != rhs->Partitions.size()) {
         return lhs->Partitions.size() < rhs->Partitions.size();
+    }
+    if (lhs->Order != rhs->Order) {
+        return lhs->Order < rhs->Order;
     }
     return lhs->SessionName < rhs->SessionName;
 }

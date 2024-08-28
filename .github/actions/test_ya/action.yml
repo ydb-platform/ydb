@@ -273,12 +273,12 @@ runs:
             echo "10 [Test history](${TESTMO_HISTORY_URL})" >> $SUMMARY_LINKS
           fi
 
-          CURRENT_MESSAGE="**${BUILD_PRESET}** is running..." 
+          CURRENT_MESSAGE="ya make is running..." 
           if [ $IS_RETRY = 0 ]; then
-            CURRENT_MESSAGE="Check $CURRENT_MESSAGE"
+            CURRENT_MESSAGE="$CURRENT_MESSAGE"
             RERUN_FAILED_OPT=""
           else
-            CURRENT_MESSAGE="Failed tests rerun (try $RETRY) $CURRENT_MESSAGE"
+            CURRENT_MESSAGE="$CURRENT_MESSAGE (failed tests rerun, try $RETRY)"
             RERUN_FAILED_OPT="-X"
           fi
 

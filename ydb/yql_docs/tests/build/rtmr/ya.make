@@ -1,5 +1,5 @@
 DOCS()
 
-DOCS_DIR(ydb/docs/ru/core/yql/reference)
+PEERDIR(ydb/docs/ru/core)
 
 END()

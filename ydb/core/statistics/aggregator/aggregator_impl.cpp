@@ -5,6 +5,8 @@
 
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/protos/feature_flags.pb.h>
+#include <ydb/core/protos/counters_statistics_aggregator.pb.h>
+#include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
@@ -21,6 +23,14 @@ TStatisticsAggregator::TStatisticsAggregator(const NActors::TActorId& tablet, TT
 
     auto seed = std::random_device{}();
     RandomGenerator.seed(seed);
+
+    TabletCountersPtr.Reset(new TProtobufTabletCounters<
+        ESimpleCounters_descriptor,
+        ECumulativeCounters_descriptor,
+        EPercentileCounters_descriptor,
+        ETxTypes_descriptor
+    >());
+    TabletCounters = TabletCountersPtr.Get();
 }
 
 void TStatisticsAggregator::OnDetach(const TActorContext& ctx) {
@@ -34,6 +44,7 @@ void TStatisticsAggregator::OnTabletDead(TEvTablet::TEvTabletDead::TPtr&, const 
 void TStatisticsAggregator::OnActivateExecutor(const TActorContext& ctx) {
     SA_LOG_I("[" << TabletID() << "] OnActivateExecutor");
 
+    Executor()->RegisterExternalTabletCounters(TabletCountersPtr);
     Execute(CreateTxInitSchema(), ctx);
 }
 
@@ -483,8 +494,15 @@ void TStatisticsAggregator::Handle(TEvPrivate::TEvRequestDistribution::TPtr&) {
 }
 
 void TStatisticsAggregator::Handle(TEvStatistics::TEvAggregateKeepAlive::TPtr& ev) {
+    const auto round = ev->Get()->Record.GetRound();
+    if (round == GlobalTraversalRound && AggregationRequestBeginTime) {
+        TInstant now = AppData(TlsActivationContext->AsActorContext())->TimeProvider->Now();
+        TDuration time = now - AggregationRequestBeginTime;
+        TabletCounters->Simple()[COUNTER_AGGREGATION_TIME].Set(time.MicroSeconds());
+    }
+
     auto ack = std::make_unique<TEvStatistics::TEvAggregateKeepAliveAck>();
-    ack->Record.SetRound(ev->Get()->Record.GetRound());
+    ack->Record.SetRound(round);
     Send(ev->Sender, ack.release());
     Schedule(KeepAliveTimeout, new TEvPrivate::TEvAckTimeout(++KeepAliveSeqNo));
 }
@@ -779,6 +797,7 @@ void TStatisticsAggregator::DeleteForceTraversalOperation(const TString& operati
     }
 
     ForceTraversals.remove_if([operationId](const TForceTraversalOperation& elem) { return elem.OperationId == operationId;});
+    TabletCounters->Simple()[COUNTER_FORCE_TRAVERSALS_INFLIGHT_SIZE].Set(ForceTraversals.size());
 }
 
 TStatisticsAggregator::TForceTraversalTable* TStatisticsAggregator::ForceTraversalTable(const TString& operationId, const TPathId& pathId) {

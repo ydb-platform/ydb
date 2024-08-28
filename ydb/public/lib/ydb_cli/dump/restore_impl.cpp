@@ -139,7 +139,6 @@ TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbP
         dbBasePath = dbBasePath.Parent();
     }
 
-   
     auto oldDirectoryList = RecursiveList(SchemeClient, dbBasePath);
     if (!oldDirectoryList.Status.IsSuccess()) {
         return Result<TRestoreResult>(EStatus::SCHEME_ERROR, "Can not list existing directory");
@@ -167,16 +166,18 @@ TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbP
             continue;
         }
 
+        const auto& fullPath = entry.Name; // RecursiveList returns full path instead of entry's name
+
         switch (entry.Type) {
             case ESchemeEntryType::Directory: {
-                auto result = NConsoleClient::RemoveDirectoryRecursive(SchemeClient, TableClient, entry.Name, {}, true, false);
+                auto result = NConsoleClient::RemoveDirectoryRecursive(SchemeClient, TableClient, fullPath, {}, true, false);
                 if (!result.IsSuccess()) {
                     return restoreResult;
                 }
                 break;
             }
             case ESchemeEntryType::Table: {
-                auto result = TableClient.RetryOperationSync([path = entry.Name](TSession session) {
+                auto result = TableClient.RetryOperationSync([path = fullPath](TSession session) {
                     return session.DropTable(path).GetValueSync();
                 });
                 if (!result.IsSuccess()) {

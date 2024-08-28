@@ -85,17 +85,17 @@ def modify_permissions(scheme_client, path):
         path,
         ydb.ModifyPermissionsSettings()
         .grant_permissions(
-            "ilnaz@staff", (
+            "alice", (
                 "ydb.generic.read",
                 "ydb.generic.write",
             )
         )
         .grant_permissions(
-            "innokentii@staff", (
+            "bob", (
                 "ydb.generic.read",
             )
         )
-        .change_owner("pixcc@staff")
+        .change_owner("eve")
     )
 
 

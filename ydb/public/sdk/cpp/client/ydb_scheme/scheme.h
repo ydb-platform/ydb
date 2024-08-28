@@ -145,7 +145,7 @@ struct TModifyPermissionsSettings : public TOperationRequestSettings<TModifyPerm
     }
 
     TModifyPermissionsSettings() = default;
-    TModifyPermissionsSettings(const ::Ydb::Scheme::ModifyPermissionsRequest& request);
+    explicit TModifyPermissionsSettings(const ::Ydb::Scheme::ModifyPermissionsRequest& request);
 };
 
 class TSchemeClient {

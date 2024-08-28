@@ -453,7 +453,7 @@ namespace NKikimr::NBsController {
                         return ss.Str();
                     };
         
-                    STLOG(PRI_INFO, BS_SELFHEAL, BSS07, "group can't be reassigned right now " << log(), (GroupId, group.GroupId));
+                    STLOG(PRI_INFO, BS_SELFHEAL, BSSH11, "group can't be reassigned right now " << log(), (GroupId, group.GroupId));
                 }
             }
 

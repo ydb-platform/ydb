@@ -542,11 +542,11 @@ bool TKqpPlanner::AcknowledgeCA(ui64 taskId, TActorId computeActor, const NYql::
     return false;
 }
 
-void TKqpPlanner::CompletedCA(ui64 taskId, TActorId computeActor) {
+bool TKqpPlanner::CompletedCA(ui64 taskId, TActorId computeActor) {
     auto& task = TasksGraph.GetTask(taskId);
     if (task.Meta.Completed) {
         YQL_ENSURE(!PendingComputeActors.contains(computeActor));
-        return;
+        return false;
     }
 
     task.Meta.Completed = true;
@@ -556,6 +556,8 @@ void TKqpPlanner::CompletedCA(ui64 taskId, TActorId computeActor) {
     PendingComputeActors.erase(it);
 
     LOG_I("Compute actor has finished execution: " << computeActor.ToString());
+
+    return true;
 }
 
 void TKqpPlanner::TaskNotStarted(ui64 taskId) {

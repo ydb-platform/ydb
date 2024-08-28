@@ -633,6 +633,7 @@ public:
         LWTRACK(
             DSProxyPutRequest, Orbit,
             Info->GroupID.GetRawId(),
+            DeviceTypeStr(Info->GetDeviceType(), true),
             NKikimrBlobStorage::EPutHandleClass_Name(HandleClass),
             TEvBlobStorage::TEvPut::TacticName(Tactic),
             PutImpl.Blobs.size(),

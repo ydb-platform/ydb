@@ -614,7 +614,6 @@ blob_storage_config:
 auth_config:
   #...
   ldap_authentication:
-    host: "ldap-hostname-01.example.net" # DEPRECATED: Use Hosts instead it
     hosts:
       - "ldap-hostname-01.example.net"
       - "ldap-hostname-02.example.net"

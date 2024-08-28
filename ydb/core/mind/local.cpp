@@ -652,12 +652,11 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             const NKikimrWhiteboard::TSystemStateInfo& info = record.GetSystemStateInfo(0);
 
             if (info.HasNumberOfCpus()) {
-                ui64 cpuUsageSum = 0;
+                double cpuUsageSum = 0;
                 for (const auto& poolInfo : info.poolstats()) {
                     cpuUsageSum += poolInfo.usage() * poolInfo.threads();
                 }
-
-                CpuUsage = static_cast<double>(cpuUsageSum) / info.GetNumberOfCpus();
+                CpuUsage = cpuUsageSum / info.GetNumberOfCpus();
             }
 
             if (static_cast<ui32>(info.PoolStatsSize()) > AppData()->UserPoolId) {

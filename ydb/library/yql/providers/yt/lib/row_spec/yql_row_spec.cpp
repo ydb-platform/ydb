@@ -437,7 +437,7 @@ bool TYqlRowSpecInfo::ParseType(const NYT::TNode& rowSpecAttr, TExprContext& ctx
 
 bool TYqlRowSpecInfo::ParseSort(const NYT::TNode& rowSpecAttr, TExprContext& ctx, const TPositionHandle& pos) {
     if (rowSpecAttr.HasKey(RowSpecAttrSortMembers) || rowSpecAttr.HasKey(RowSpecAttrSortedBy) || rowSpecAttr.HasKey(RowSpecAttrSortDirections)) {
-        ClearSortness();
+        ClearSortness(ctx);
     }
     if (rowSpecAttr.HasKey(RowSpecAttrSortDirections)) {
         for (auto& item: rowSpecAttr[RowSpecAttrSortDirections].AsList()) {
@@ -559,7 +559,7 @@ void TYqlRowSpecInfo::ParseConstraints(const NYT::TNode& rowSpecAttr) {
 
 bool TYqlRowSpecInfo::ValidateSort(const TYTSortInfo& sortInfo, TExprContext& ctx, const TPositionHandle& pos) {
     if (sortInfo.Keys.empty() && IsSorted()) {
-        ClearSortness();
+        ClearSortness(ctx);
         if (!ctx.AddWarning(YqlIssue(ctx.GetPosition(pos), EYqlIssueCode::TIssuesIds_EIssueCode_YT_ROWSPEC_DIFF_SORT,
             "Table attribute '_yql_row_spec' defines sorting, but the table is not really sorted. The sorting will be ignored."))) {
             return false;
@@ -573,13 +573,13 @@ bool TYqlRowSpecInfo::ValidateSort(const TYTSortInfo& sortInfo, TExprContext& ct
     } else if (IsSorted()) {
         bool diff = false;
         if (SortedBy.size() > sortInfo.Keys.size()) {
-            ClearSortness(sortInfo.Keys.size());
+            ClearSortness(ctx, sortInfo.Keys.size());
             diff = true;
         }
         auto backendSort = GetForeignSort();
         for (size_t i = 0; i < backendSort.size(); ++i) {
             if (backendSort[i].first != sortInfo.Keys[i].first || backendSort[i].second != (bool)sortInfo.Keys[i].second) {
-                ClearSortness(i);
+                ClearSortness(ctx, i);
                 diff = true;
                 break;
             }
@@ -1396,7 +1396,7 @@ const TStructExprType* TYqlRowSpecInfo::GetExtendedType(TExprContext& ctx) const
     return extended ? ctx.MakeType<TStructExprType>(items) : Type;
 }
 
-bool TYqlRowSpecInfo::CopySortness(const TYqlRowSpecInfo& from, ECopySort mode) {
+bool TYqlRowSpecInfo::CopySortness(TExprContext& ctx, const TYqlRowSpecInfo& from, ECopySort mode) {
     SortDirections = from.SortDirections;
     SortMembers = from.SortMembers;
     SortedBy = from.SortedBy;
@@ -1408,16 +1408,16 @@ bool TYqlRowSpecInfo::CopySortness(const TYqlRowSpecInfo& from, ECopySort mode) 
         for (size_t i = 0; i < SortMembers.size(); ++i) {
             const auto itemNdx = Type->FindItem(SortMembers[i]);
             if (!itemNdx || (SortedBy[i] == SortMembers[i] && Type->GetItems()[*itemNdx]->GetItemType() != SortedByTypes[i])) {
-                sortIsChanged = ClearSortness(i);
+                sortIsChanged = ClearSortness(ctx, i);
                 break;
             } else if (ECopySort::Pure == mode && SortedBy[i] != SortMembers[i]) {
-                sortIsChanged = ClearSortness(i);
+                sortIsChanged = ClearSortness(ctx, i);
                 break;
             }
         }
         if (ECopySort::WithCalc != mode) {
             if (SortMembers.size() < SortedBy.size()) {
-                sortIsChanged = ClearSortness(SortMembers.size()) || sortIsChanged;
+                sortIsChanged = ClearSortness(ctx, SortMembers.size()) || sortIsChanged;
             }
         }
     }
@@ -1431,42 +1431,42 @@ void TYqlRowSpecInfo::CopyConstraints(const TYqlRowSpecInfo& from) {
     Distinct = from.Distinct;
 }
 
-bool TYqlRowSpecInfo::KeepPureSortOnly() {
+bool TYqlRowSpecInfo::KeepPureSortOnly(TExprContext& ctx) {
     bool sortIsChanged = false;
     for (size_t i = 0; i < SortMembers.size(); ++i) {
         if (!Type->FindItem(SortMembers[i])) {
-            sortIsChanged = ClearSortness(i);
+            sortIsChanged = ClearSortness(ctx, i);
             break;
         } else if (SortedBy[i] != SortMembers[i]) {
-            sortIsChanged = ClearSortness(i);
+            sortIsChanged = ClearSortness(ctx, i);
             break;
         }
     }
     if (SortMembers.size() < SortedBy.size()) {
-        sortIsChanged = ClearSortness(SortMembers.size()) || sortIsChanged;
+        sortIsChanged = ClearSortness(ctx, SortMembers.size()) || sortIsChanged;
     }
     return sortIsChanged;
 }
 
-bool TYqlRowSpecInfo::ClearNativeDescendingSort() {
+bool TYqlRowSpecInfo::ClearNativeDescendingSort(TExprContext& ctx) {
     for (size_t i = 0; i < SortDirections.size(); ++i) {
         if (!SortDirections[i] && Type->FindItem(SortedBy[i])) {
-            return ClearSortness(i);
+            return ClearSortness(ctx, i);
         }
     }
     return false;
 }
 
-bool TYqlRowSpecInfo::MakeCommonSortness(const TYqlRowSpecInfo& from) {
+bool TYqlRowSpecInfo::MakeCommonSortness(TExprContext& ctx, const TYqlRowSpecInfo& from) {
     bool sortIsChanged = false;
     UniqueKeys = false; // Merge of two and more tables cannot have unique keys
     const size_t resultSize = Min<size_t>(SortMembers.size(), from.SortMembers.size()); // Truncate all calculated columns
     if (SortedBy.size() > resultSize) {
-        sortIsChanged = ClearSortness(resultSize);
+        sortIsChanged = ClearSortness(ctx, resultSize);
     }
     for (size_t i = 0; i < resultSize; ++i) {
         if (SortMembers[i] != from.SortMembers[i] || SortedBy[i] != from.SortedBy[i] || SortedByTypes[i] != from.SortedByTypes[i] || SortDirections[i] != from.SortDirections[i]) {
-            sortIsChanged = ClearSortness(i) || sortIsChanged;
+            sortIsChanged = ClearSortness(ctx, i) || sortIsChanged;
             break;
         }
     }
@@ -1482,13 +1482,15 @@ bool TYqlRowSpecInfo::CompareSortness(const TYqlRowSpecInfo& with, bool checkUni
         && (!checkUniqueFlag || UniqueKeys == with.UniqueKeys);
 }
 
-bool TYqlRowSpecInfo::ClearSortness(size_t fromMember) {
+bool TYqlRowSpecInfo::ClearSortness(TExprContext& ctx, size_t fromMember) {
     if (fromMember <= SortMembers.size()) {
         SortMembers.erase(SortMembers.begin() + fromMember, SortMembers.end());
         SortedBy.erase(SortedBy.begin() + fromMember, SortedBy.end());
         SortedByTypes.erase(SortedByTypes.begin() + fromMember, SortedByTypes.end());
         SortDirections.erase(SortDirections.begin() + fromMember, SortDirections.end());
         UniqueKeys = false;
+        ConstraintsNode.Clear();
+        Sorted = MakeSortConstraint(ctx);
         return true;
     }
     return false;

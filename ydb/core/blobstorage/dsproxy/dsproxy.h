@@ -55,8 +55,8 @@ const ui32 MaskSizeBits = 32;
 constexpr bool DefaultEnablePutBatching = true;
 constexpr bool DefaultEnableVPatch = false;
 
-constexpr float DefaultSlowDiskThreshold = 2;
-constexpr float DefaultPredictedDelayMultiplier = 1;
+constexpr double DefaultSlowDiskThreshold = 2;
+constexpr double DefaultPredictedDelayMultiplier = 1;
 
 constexpr bool WithMovingPatchRequestToStaticNode = true;
 
@@ -192,8 +192,8 @@ inline void SetExecutionRelay(IEventBase& ev, std::shared_ptr<TEvBlobStorage::TE
 }
 
 struct TAccelerationParams {
-    double SlowDiskThreshold = 2;
-    double PredictedDelayMultiplier = 1;
+    double SlowDiskThreshold = DefaultSlowDiskThreshold;
+    double PredictedDelayMultiplier = DefaultPredictedDelayMultiplier;
 };
 
 class TBlobStorageGroupRequestActor : public TActor<TBlobStorageGroupRequestActor> {
@@ -354,8 +354,7 @@ struct TBlobStorageGroupRangeParameters {
     TBlobStorageGroupRequestActor::TTypeSpecificParameters TypeSpecific = {
         .LogComponent = NKikimrServices::BS_PROXY_RANGE,
         .Name = "DSProxy.Range",
-        .Activity = NKikimrServices::TActivity::BS_GROUP_RANGE
-        ,
+        .Activity = NKikimrServices::TActivity::BS_GROUP_RANGE,
     };
 };
 IActor* CreateBlobStorageGroupRangeRequest(TBlobStorageGroupRangeParameters params);

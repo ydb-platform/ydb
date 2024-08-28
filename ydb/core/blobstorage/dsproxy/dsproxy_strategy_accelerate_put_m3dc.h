@@ -45,7 +45,7 @@ public:
             }
         }
         if (badDiskMask > 0) {
-            // Mark the 'bad' disk as the single slow disk
+            // Mark all the slow disks
             for (size_t diskIdx = 0; diskIdx < state.Disks.size(); ++diskIdx) {
                 state.Disks[diskIdx].IsSlow = badDiskMask & (1 << diskIdx);
             }

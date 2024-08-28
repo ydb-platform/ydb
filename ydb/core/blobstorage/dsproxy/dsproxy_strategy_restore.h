@@ -127,19 +127,7 @@ public:
         }
 
         TStackVec<ui32, 2> slowDiskSubgroupIdxs;
-        if (info.GetTotalVDisksNum() > 1) {
-            // Find the slowest disk, if there are more than 1
-            TDiskDelayPredictions worstDisks;
-            state.GetWorstPredictedDelaysNs(info, *blackboard.GroupQueues,
-                    HandleClassToQueueId(blackboard.PutHandleClass),
-                    &worstDisks, accelerationParams.PredictedDelayMultiplier);
-
-            // Check if the slowest disk exceptionally slow, or just not very fast
-            if (worstDisks[1].PredictedNs > 0 && worstDisks[0].PredictedNs > worstDisks[1].PredictedNs *
-                    accelerationParams.SlowDiskThreshold) {
-                slowDiskSubgroupIdxs.push_back(worstDisks[0].DiskIdx);
-            }
-        }
+        MakeSlowSubgroupDiskMaskForTwoSlowest(state, info, blackboard, true, accelerationParams, &slowDiskSubgroupIdxs);
 
         bool isDone = false;
         if (!slowDiskSubgroupIdxs.empty()) {

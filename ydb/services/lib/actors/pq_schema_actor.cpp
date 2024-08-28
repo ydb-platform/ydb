@@ -99,9 +99,6 @@ namespace NKikimr::NGRpcProxy::V1 {
         auto* consumer = config->AddConsumers();
 
         consumer->SetName(consumerName);
-        if (NPQ::ReadRuleCompatible()) {
-            config->AddReadRules(consumerName);
-        }
 
         if (rr.starting_message_timestamp_ms() < 0) {
             return TMsgPqCodes(
@@ -110,9 +107,6 @@ namespace NKikimr::NGRpcProxy::V1 {
             );
         }
         consumer->SetReadFromTimestampsMs(rr.starting_message_timestamp_ms());
-        if (NPQ::ReadRuleCompatible()) {
-            config->AddReadFromTimestampsMs(rr.starting_message_timestamp_ms());
-        }
 
         if (!Ydb::PersQueue::V1::TopicSettings::Format_IsValid((int)rr.supported_format()) || rr.supported_format() == 0) {
             return TMsgPqCodes(
@@ -121,9 +115,6 @@ namespace NKikimr::NGRpcProxy::V1 {
             );
         }
         consumer->SetFormatVersion(rr.supported_format() - 1);
-        if (NPQ::ReadRuleCompatible()) {
-            config->AddConsumerFormatVersions(rr.supported_format() - 1);
-        }
 
         if (rr.version() < 0) {
             return TMsgPqCodes(
@@ -132,12 +123,8 @@ namespace NKikimr::NGRpcProxy::V1 {
             );
         }
         consumer->SetVersion(rr.version());
-        if (NPQ::ReadRuleCompatible()) {
-            config->AddReadRuleVersions(rr.version());
-        }
 
         auto* cct = consumer->MutableCodec();
-        auto* ct = NPQ::ReadRuleCompatible() ? config->AddConsumerCodecs() : nullptr;
         if (rr.supported_codecs().size() > MAX_SUPPORTED_CODECS_COUNT) {
             return TMsgPqCodes(
                 TStringBuilder() << "supported_codecs count cannot be more than "
@@ -156,17 +143,10 @@ namespace NKikimr::NGRpcProxy::V1 {
 
             cct->AddIds(codec - 1);
             cct->AddCodecs(codecName);
-
-            if (NPQ::ReadRuleCompatible()) {
-                ct->CopyFrom(*cct);
-            }
         }
 
         if (rr.important()) {
             consumer->SetImportant(true);
-            if (NPQ::ReadRuleCompatible()) {
-                config->MutablePartitionConfig()->AddImportantClientId(consumerName);
-            }
         }
 
         if (!rr.service_type().empty()) {
@@ -178,9 +158,6 @@ namespace NKikimr::NGRpcProxy::V1 {
                 );
             }
             consumer->SetServiceType(rr.service_type());
-            if (NPQ::ReadRuleCompatible()) {
-                config->AddReadRuleServiceTypes(rr.service_type());
-            }
         } else {
             if (pqConfig.GetDisallowDefaultClientServiceType()) {
                 return TMsgPqCodes(
@@ -190,9 +167,6 @@ namespace NKikimr::NGRpcProxy::V1 {
             }
             const auto& defaultCientServiceType = pqConfig.GetDefaultClientServiceType().GetName();
             consumer->SetServiceType(defaultCientServiceType);
-            if (NPQ::ReadRuleCompatible()) {
-                config->AddReadRuleServiceTypes(defaultCientServiceType);
-            }
         }
         return TMsgPqCodes("", Ydb::PersQueue::ErrorCode::OK);
     }
@@ -238,9 +212,6 @@ namespace NKikimr::NGRpcProxy::V1 {
         auto* consumer = config->AddConsumers();
 
         consumer->SetName(consumerName);
-        if (NPQ::ReadRuleCompatible()) {
-            config->AddReadRules(consumerName);
-        }
 
         if (rr.read_from().seconds() < 0) {
             return TMsgPqCodes(
@@ -249,19 +220,10 @@ namespace NKikimr::NGRpcProxy::V1 {
             );
         }
         consumer->SetReadFromTimestampsMs(rr.read_from().seconds() * 1000);
-        if (NPQ::ReadRuleCompatible()) {
-            config->AddReadFromTimestampsMs(rr.read_from().seconds() * 1000);
-        }
-
         consumer->SetFormatVersion(0);
-        if (NPQ::ReadRuleCompatible()) {
-            config->AddConsumerFormatVersions(0);
-        }
-
-        TString serviceType;
 
         const auto& defaultClientServiceType = pqConfig.GetDefaultClientServiceType().GetName();
-        serviceType = defaultClientServiceType;
+        TString serviceType = defaultClientServiceType;
 
         TString passwordHash = "";
         bool hasPassword = false;
@@ -318,17 +280,9 @@ namespace NKikimr::NGRpcProxy::V1 {
         }
 
         consumer->SetServiceType(serviceType);
-        if (NPQ::ReadRuleCompatible()) {
-            config->AddReadRuleServiceTypes(serviceType);
-        }
-
         consumer->SetVersion(version);
-        if (NPQ::ReadRuleCompatible()) {
-            config->AddReadRuleVersions(version);
-        }
 
         auto* cct = consumer->MutableCodec();
-        auto* ct = NPQ::ReadRuleCompatible() ? config->AddConsumerCodecs() : nullptr;
 
         for(const auto& codec : rr.supported_codecs().codecs()) {
             if ((!Ydb::Topic::Codec_IsValid(codec) && codec < Ydb::Topic::CODEC_CUSTOM) || codec == 0) {
@@ -339,10 +293,6 @@ namespace NKikimr::NGRpcProxy::V1 {
             }
             cct->AddIds(codec - 1);
             cct->AddCodecs(Ydb::Topic::Codec_IsValid(codec) ? LegacySubstr(to_lower(Ydb::Topic::Codec_Name((Ydb::Topic::Codec)codec)), 6) : "CUSTOM");
-
-            if (NPQ::ReadRuleCompatible()) {
-                ct->CopyFrom(*cct);
-            }
         }
 
         if (rr.important()) {
@@ -350,9 +300,6 @@ namespace NKikimr::NGRpcProxy::V1 {
                 return TMsgPqCodes(TStringBuilder() << "important flag is forbiden for consumer " << rr.name(), Ydb::PersQueue::ErrorCode::INVALID_ARGUMENT);
             }
             consumer->SetImportant(true);
-            if (NPQ::ReadRuleCompatible()) {
-                config->MutablePartitionConfig()->AddImportantClientId(consumerName);
-            }
         }
 
         return TMsgPqCodes("", Ydb::PersQueue::ErrorCode::OK);
@@ -363,7 +310,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         NKikimrPQ::TPQTabletConfig* config,
         const NKikimrPQ::TPQTabletConfig& originalConfig,
         const TString& consumerName,
-        const NKikimrPQ::TPQConfig& pqConfig
+        const NKikimrPQ::TPQConfig& /*pqConfig*/
     ) {
         config->ClearReadRuleVersions();
         config->ClearReadRules();
@@ -374,45 +321,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         config->ClearReadRuleServiceTypes();
         config->ClearConsumers();
 
-        if (NPQ::ReadRuleCompatible()) {
-            for (const auto& importantConsumer : originalConfig.GetPartitionConfig().GetImportantClientId()) {
-                if (importantConsumer != consumerName) {
-                    config->MutablePartitionConfig()->AddImportantClientId(importantConsumer);
-                }
-            }
-        }
-
         bool removed = false;
-
-        if (NPQ::ReadRuleCompatible()) {
-            for (size_t i = 0; i < originalConfig.ReadRulesSize(); i++) {
-                auto& readRule = originalConfig.GetReadRules(i);
-
-                if (readRule == consumerName) {
-                    removed = true;
-                    continue;
-                }
-
-                config->AddReadRuleVersions(originalConfig.GetReadRuleVersions(i));
-                config->AddReadRules(readRule);
-                config->AddReadFromTimestampsMs(originalConfig.GetReadFromTimestampsMs(i));
-                config->AddConsumerFormatVersions(originalConfig.GetConsumerFormatVersions(i));
-                auto* ct = config->AddConsumerCodecs();
-                for (size_t j = 0; j < originalConfig.GetConsumerCodecs(i).CodecsSize(); j++) {
-                    ct->AddCodecs(originalConfig.GetConsumerCodecs(i).GetCodecs(j));
-                    ct->AddIds(originalConfig.GetConsumerCodecs(i).GetIds(j));
-                }
-                if (i < originalConfig.ReadRuleServiceTypesSize()) {
-                    config->AddReadRuleServiceTypes(originalConfig.GetReadRuleServiceTypes(i));
-                } else {
-                    if (pqConfig.GetDisallowDefaultClientServiceType()) {
-                        return TStringBuilder() << "service type cannot be empty for consumer '"
-                            << readRule << "'";
-                    }
-                    config->AddReadRuleServiceTypes(pqConfig.GetDefaultClientServiceType().GetName());
-                }
-            }
-        }
 
         for (auto& consumer : originalConfig.GetConsumers()) {
             if (consumerName == consumer.GetName()) {

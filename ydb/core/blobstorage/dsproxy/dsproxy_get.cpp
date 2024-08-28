@@ -388,7 +388,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
 
         if (TActivationContext::Now() - StartTime >= LongRequestThreshold) {
             if (AllowToReport(GetImpl.GetHandleClass())) {
-                R_LOG_WARN_S("BPG71", "TEvGet Request was being processed for more than " << LongRequestThreshold
+                DSP_LOG_WARN_S("BPG71", "TEvGet Request was being processed for more than " << LongRequestThreshold
                         << " GroupId# " << Info->GroupID
                         << " SubrequestsCount# " << evResult->ResponseSz
                         << " RequestTotalSize# " << requestSize

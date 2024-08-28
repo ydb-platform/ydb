@@ -503,7 +503,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
         if (TActivationContext::Monotonic() - StartTime >= LongRequestThreshold) {
             bool allowToReport = AllowToReport(HandleClass);
             if (allowToReport) {
-                R_LOG_WARN_S("BPP71", "TEvPut Request was being processed for more than " << LongRequestThreshold
+                DSP_LOG_WARN_S("BPP71", "TEvPut Request was being processed for more than " << LongRequestThreshold
                         << " GroupId# " << Info->GroupID
                         << " HandleClass# " << NKikimrBlobStorage::EPutHandleClass_Name(HandleClass)
                         << " Tactic# " << TEvBlobStorage::TEvPut::TacticName(Tactic)

@@ -148,7 +148,8 @@ private:
             NKikimrLdap::BerFree(ber, 0);
         }
         std::vector<TString> allUserGroups;
-        if (!directUserGroups.empty()) {
+        auto& extendedSettings = Settings.GetExtendedSettings();
+        if (extendedSettings.GetEnableNestedGroupsSearch() && !directUserGroups.empty()) {
             // Active Directory has special matching rule to fetch nested groups in one request it is MatchingRuleInChain
             // We don`t know what is ldap server. Is it Active Directory or OpenLdap or other server?
             // If using MatchingRuleInChain return empty list of groups it means that ldap server isn`t Active Directory
@@ -158,6 +159,8 @@ private:
                 allUserGroups = std::move(directUserGroups);
                 GetNestedGroups(ld, &allUserGroups);
             }
+        } else {
+            allUserGroups = std::move(directUserGroups);
         }
         NKikimrLdap::MsgFree(entry);
         NKikimrLdap::Unbind(ld);
@@ -306,7 +309,10 @@ private:
     std::vector<TString> TryToGetGroupsUseMatchingRuleInChain(LDAP* ld, LDAPMessage* entry) const {
         static const TString matchingRuleInChain = "1.2.840.113556.1.4.1941"; // Only Active Directory supports
         TStringBuilder filter;
-        filter << "(member:" << matchingRuleInChain << ":=" << NKikimrLdap::GetDn(ld, entry) << ')';
+        char* dn = NKikimrLdap::GetDn(ld, entry);
+        filter << "(member:" << matchingRuleInChain << ":=" << dn << ')';
+        NKikimrLdap::MemFree(dn);
+        dn = nullptr;
         LDAPMessage* searchMessage = nullptr;
         int result = NKikimrLdap::Search(ld, Settings.GetBaseDn(), NKikimrLdap::EScope::SUBTREE, filter, NKikimrLdap::noAttributes, 0, &searchMessage);
         if (!NKikimrLdap::IsSuccess(result)) {
@@ -320,7 +326,10 @@ private:
         std::vector<TString> groups;
         groups.reserve(countEntries);
         for (LDAPMessage* groupEntry = NKikimrLdap::FirstEntry(ld, searchMessage); groupEntry != nullptr; groupEntry = NKikimrLdap::NextEntry(ld, groupEntry)) {
-            groups.push_back(NKikimrLdap::GetDn(ld, groupEntry));
+            dn = NKikimrLdap::GetDn(ld, groupEntry);
+            groups.push_back(dn);
+            NKikimrLdap::MemFree(dn);
+            dn = nullptr;
         }
         NKikimrLdap::MsgFree(searchMessage);
         return groups;

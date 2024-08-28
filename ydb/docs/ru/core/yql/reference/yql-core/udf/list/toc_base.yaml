@@ -6,7 +6,7 @@ items:
 - { name: Histogram,              href: histogram.md }
 - { name: Hyperscan,              href: hyperscan.md }
 - { name: Ip,                     href: ip.md }
-- { name: Knn,                    href: knn.md }
+- { name: Knn,                    href: knn.md, when: backend_name == "YDB" }
 - { name: Math,                   href: math.md }
 - { name: Pcre,                   href: pcre.md }
 - { name: Pire,                   href: pire.md }

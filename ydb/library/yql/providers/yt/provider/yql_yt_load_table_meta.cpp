@@ -192,7 +192,7 @@ public:
                     if (!rowSpec->Parse(tableDesc.Meta->Attrs, ctx)) {
                         return TStatus::Error;
                     }
-                    if (!State_->Configuration->UseNativeDescSort.Get().GetOrElse(false) && rowSpec->ClearNativeDescendingSort()) {
+                    if (!State_->Configuration->UseNativeDescSort.Get().GetOrElse(false) && rowSpec->ClearNativeDescendingSort(ctx)) {
                         if (!ctx.AddWarning(YqlIssue(TPosition(), EYqlIssueCode::TIssuesIds_EIssueCode_YT_NATIVE_DESC_SORT_IGNORED, "Native descending sort is ignored"))) {
                             return TStatus::Error;
                         }

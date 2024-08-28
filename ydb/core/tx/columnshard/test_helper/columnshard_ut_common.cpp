@@ -51,14 +51,14 @@ void ProvideTieringSnapshot(TTestBasicRuntime& runtime, const TActorId& sender, 
     ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, event.release());
 }
 
-bool ProposeSchemaTx(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, NOlap::TSnapshot snap) {
+bool ProposeSchemaTx(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, const ui64 txId) {
     auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(
-        NKikimrTxColumnShard::TX_KIND_SCHEMA, 0, sender, snap.GetTxId(), txBody);
+        NKikimrTxColumnShard::TX_KIND_SCHEMA, 0, sender, txId, txBody);
 
     ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, event.release());
     auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender);
     const auto& res = ev->Get()->Record;
-    UNIT_ASSERT_EQUAL(res.GetTxId(), snap.GetTxId());
+    UNIT_ASSERT_EQUAL(res.GetTxId(), txId);
     UNIT_ASSERT_EQUAL(res.GetTxKind(), NKikimrTxColumnShard::TX_KIND_SCHEMA);
     return (res.GetStatus() == NKikimrTxColumnShard::PREPARED);
 }
@@ -207,7 +207,7 @@ void ScanIndexStats(TTestBasicRuntime& runtime, TActorId& sender, const std::vec
 
 void ProposeCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 shardId, ui64 txId, const std::vector<ui64>& writeIds) {
     NKikimrTxColumnShard::ETransactionKind txKind = NKikimrTxColumnShard::ETransactionKind::TX_KIND_COMMIT;
-    TString txBody = TTestSchema::CommitTxBody(0, writeIds);
+    TString txBody = TTestSchema::CommitTxBody(writeIds);
 
     ForwardToTablet(runtime, shardId, sender,
                 new TEvColumnShard::TEvProposeTransaction(txKind, sender, txId, txBody));
@@ -463,13 +463,14 @@ namespace NKikimr::NColumnShard {
         }
 
         using namespace NTxUT;
-        bool ok = ProposeSchemaTx(runtime, sender, txBody, snapshot);
+        bool ok = ProposeSchemaTx(runtime, sender, txBody, snapshot.GetTxId());
         UNIT_ASSERT_VALUES_EQUAL(ok, succeed);
         if (succeed) {
             PlanSchemaTx(runtime, sender, snapshot);
         }
     }
 
+    
     void SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, ui64 pathId,
                  const TestTableDescription& table, TString codec) {
         using namespace NTxUT;

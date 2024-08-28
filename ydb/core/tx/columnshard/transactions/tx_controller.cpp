@@ -11,7 +11,7 @@ TTxController::TTxController(TColumnShard& owner)
     , Counters(owner.Counters.GetCSCounters().TxProgress) {
 }
 
-bool TTxController::HaveOutdatedTxs() const {
+bool TTxController::HaveOutdatedTxs() const { 
     if (DeadlineQueue.empty()) {
         return false;
     }
@@ -108,7 +108,8 @@ std::shared_ptr<TTxController::ITransactionOperator> TTxController::UpdateTxSour
 TTxController::TTxInfo TTxController::RegisterTx(const std::shared_ptr<TTxController::ITransactionOperator>& txOperator, const TString& txBody,
     NTabletFlatExecutor::TTransactionContext& txc) {
     NIceDb::TNiceDb db(txc.DB);
-    auto& txInfo = txOperator->GetTxInfo();
+    auto& txInfo = txOperator->MutableTxInfo();
+    //txInfo.MinStep = GetAllowedStep();
     AFL_VERIFY(txInfo.MaxStep == Max<ui64>());
     AFL_VERIFY(Operators.emplace(txInfo.TxId, txOperator).second);
 
@@ -196,6 +197,9 @@ std::optional<TTxController::TTxInfo> TTxController::PopFirstPlannedTx() {
         auto& item = node.value();
         TPlanQueueItem tx(item.Step, item.TxId);
         RunningQueue.emplace(std::move(item));
+        if (PlanQueue.empty()) {
+            
+        }
         return GetTxInfoVerified(item.TxId);
     }
     return std::nullopt;

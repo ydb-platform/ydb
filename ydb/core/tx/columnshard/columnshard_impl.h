@@ -50,6 +50,7 @@ namespace NKikimr::NOlap {
 class TCleanupPortionsColumnEngineChanges;
 class TCleanupTablesColumnEngineChanges;
 class TTTLColumnEngineChanges;
+class TMoveTablesColumnEngineChanges;
 class TChangesWithAppend;
 class TCompactColumnEngineChanges;
 class TInsertColumnEngineChanges;
@@ -163,6 +164,7 @@ class TColumnShard
     friend class NOlap::TCleanupPortionsColumnEngineChanges;
     friend class NOlap::TCleanupTablesColumnEngineChanges;
     friend class NOlap::TTTLColumnEngineChanges;
+    friend class NOlap::TMoveTablesColumnEngineChanges;
     friend class NOlap::TChangesWithAppend;
     friend class NOlap::TCompactColumnEngineChanges;
     friend class NOlap::TInsertColumnEngineChanges;
@@ -511,12 +513,13 @@ private:
     void UpdateSchemaSeqNo(const TMessageSeqNo& seqNo, NTabletFlatExecutor::TTransactionContext& txc);
     void ProtectSchemaSeqNo(const NKikimrTxColumnShard::TSchemaSeqNo& seqNoProto, NTabletFlatExecutor::TTransactionContext& txc);
 
-    void RunSchemaTx(const NKikimrTxColumnShard::TSchemaTxBody& body, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc);
+    bool ProgressSchemaTx(const NKikimrTxColumnShard::TSchemaTxBody& body, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc);
     void RunInit(const NKikimrTxColumnShard::TInitShard& body, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc);
     void RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& body, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc);
     void RunAlterTable(const NKikimrTxColumnShard::TAlterTable& body, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc);
     void RunDropTable(const NKikimrTxColumnShard::TDropTable& body, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc);
     void RunAlterStore(const NKikimrTxColumnShard::TAlterStore& body, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc);
+    bool ProgressMoveTable(const NKikimrTxColumnShard::TMoveTable& proto, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc);
 
     void StartIndexTask(std::vector<const NOlap::TInsertedData*>&& dataToIndex, const i64 bytesToIndex);
     void SetupIndexation();
@@ -524,6 +527,7 @@ private:
     bool SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls = {});
     void SetupCleanupPortions();
     void SetupCleanupTables();
+//    void SetupMoveTables();
     void SetupCleanupInsertTable();
     void SetupGC();
 

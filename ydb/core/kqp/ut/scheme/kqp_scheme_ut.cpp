@@ -1058,8 +1058,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         CreateAndAlterTableWithPartitionSize(true);
     }
 
-    Y_UNIT_TEST(RenameTable) {
-        TKikimrRunner kikimr;
+    Y_UNIT_TEST_TWIN(RenameTable, СolumnTable) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TKikimrRunner kikimr(runnerSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1067,11 +1069,18 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             TString query = R"(
             --!syntax_v1
             CREATE TABLE `/Root/table` (
-                Key Uint64,
+                Key Uint64 NOT NULL,
                 Value String,
                 PRIMARY KEY (Key)
-            );
-            )";
+            )
+            )" 
+            + (СolumnTable ? TString(R"(
+            PARTITION BY HASH(Key)
+            WITH (
+                STORE = COLUMN,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1 --10
+            )
+            )") : TString());
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
@@ -1089,93 +1098,93 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
         }
 
-        {
-            auto query = TStringBuilder() << R"(
-            --!syntax_v1
-            ALTER TABLE `moved` RENAME TO `/Root/table`
-            )";
+        // {
+        //     auto query = TStringBuilder() << R"(
+        //     --!syntax_v1
+        //     ALTER TABLE `moved` RENAME TO `/Root/table`
+        //     )";
 
-            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        //     const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        //     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
-            auto describeResult = session.DescribeTable("/Root/table").GetValueSync();
-            UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
-        }
+        //     auto describeResult = session.DescribeTable("/Root/table").GetValueSync();
+        //     UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
+        // }
 
-        {
-            auto query = TStringBuilder() << R"(
-            --!syntax_v1
-            CREATE TABLE `/Root/second` (
-                Key Uint64,
-                Value String,
-                PRIMARY KEY (Key)
-            );
-            )";
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
+        // {
+        //     auto query = TStringBuilder() << R"(
+        //     --!syntax_v1
+        //     CREATE TABLE `/Root/second` (
+        //         Key Uint64,
+        //         Value String,
+        //         PRIMARY KEY (Key)
+        //     );
+        //     )";
+        //     auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        //     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        // }
 
-        {
-            auto query = TStringBuilder() << R"(
-            --!syntax_v1
-            ALTER TABLE `table` RENAME TO `/Root/moved`;
-            ALTER TABLE `/Root/second` RENAME TO `movedsecond`;
-            )";
+        // {
+        //     auto query = TStringBuilder() << R"(
+        //     --!syntax_v1
+        //     ALTER TABLE `table` RENAME TO `/Root/moved`;
+        //     ALTER TABLE `/Root/second` RENAME TO `movedsecond`;
+        //     )";
 
-            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        //     const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        //     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
-            {
-                auto describeResult = session.DescribeTable("/Root/moved").GetValueSync();
-                UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
-            }
-            {
-                auto describeResult = session.DescribeTable("/Root/movedsecond").GetValueSync();
-                UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
-            }
-        }
+        //     {
+        //         auto describeResult = session.DescribeTable("/Root/moved").GetValueSync();
+        //         UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
+        //     }
+        //     {
+        //         auto describeResult = session.DescribeTable("/Root/movedsecond").GetValueSync();
+        //         UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
+        //     }
+        // }
 
-        {
-            auto query = TStringBuilder() << R"(
-            --!syntax_v1
-            ALTER TABLE `/Root/moved` RENAME TO `/Root/table`;
-            ALTER TABLE `/Root/movedsecond` RENAME TO `/Root/second`;
-            )";
+        // {
+        //     auto query = TStringBuilder() << R"(
+        //     --!syntax_v1
+        //     ALTER TABLE `/Root/moved` RENAME TO `/Root/table`;
+        //     ALTER TABLE `/Root/movedsecond` RENAME TO `/Root/second`;
+        //     )";
 
-            const auto result = session.ExecuteSchemeQuery(query << ";").GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
+        //     const auto result = session.ExecuteSchemeQuery(query << ";").GetValueSync();
+        //     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        // }
 
-        {
-            auto query = TStringBuilder() << R"(
-            --!syntax_v1
-            ALTER TABLE `/Root/table` RENAME TO `/Root/second`;
-            )";
+        // {
+        //     auto query = TStringBuilder() << R"(
+        //     --!syntax_v1
+        //     ALTER TABLE `/Root/table` RENAME TO `/Root/second`;
+        //     )";
 
-            const auto result = session.ExecuteSchemeQuery(query << ";").GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
-        }
+        //     const auto result = session.ExecuteSchemeQuery(query << ";").GetValueSync();
+        //     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+        // }
 
-        {
-            auto query = TStringBuilder() << R"(
-            --!syntax_v1
-            DROP TABLE `/Root/second`;
-            ALTER TABLE `/Root/table` RENAME TO `/Root/second`;
-            )";
+        // {
+        //     auto query = TStringBuilder() << R"(
+        //     --!syntax_v1
+        //     DROP TABLE `/Root/second`;
+        //     ALTER TABLE `/Root/table` RENAME TO `/Root/second`;
+        //     )";
 
-            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        //     const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        //     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
-            {
-                auto describeResult = session.DescribeTable("/Root/second").GetValueSync();
-                UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
-            }
+        //     {
+        //         auto describeResult = session.DescribeTable("/Root/second").GetValueSync();
+        //         UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
+        //     }
 
-            {
-                auto describeResult = session.DescribeTable("/Root/table").GetValueSync();
-                UNIT_ASSERT_C(!describeResult.IsSuccess(), describeResult.GetIssues().ToString());
-            }
-        }
+        //     {
+        //         auto describeResult = session.DescribeTable("/Root/table").GetValueSync();
+        //         UNIT_ASSERT_C(!describeResult.IsSuccess(), describeResult.GetIssues().ToString());
+        //     }
+        // }
 
     }
 

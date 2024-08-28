@@ -86,6 +86,8 @@ public:
     ui64 PathId;
     TString TieringUsage;
     std::optional<NOlap::TSnapshot> DropVersion;
+    std::optional<ui64> MovedToPathId; //The table was moved to a new pathId at DropVersion
+    NKikimrTxColumnShard::TTableVersionInfo VersionInfo;
     YDB_READONLY_DEF(TSet<NOlap::TSnapshot>, Versions);
 
 public:
@@ -114,8 +116,29 @@ public:
         Versions.insert(snapshot);
     }
 
+    void SetMoveVersion(const NOlap::TSnapshot& version, ui64 newPathId) {
+        DropVersion = version;
+        MovedToPathId = newPathId;
+    }
+
+    void UpdateVersion(const NOlap::TSnapshot& snapshot, std::optional<NKikimrTxColumnShard::TTableVersionInfo> versionInfo) {
+        Versions.insert(snapshot);
+        if (versionInfo) {
+            VersionInfo.CopyFrom(*versionInfo);
+        }
+    }
+
+    const NKikimrTxColumnShard::TTableVersionInfo& GetVersionInfo() const {
+        return VersionInfo;
+    }
+
+
     bool IsDropped() const {
         return DropVersion.has_value();
+    }
+
+    std::optional<ui64> GetOptionalMovedToPathId() const {
+        return MovedToPathId;
     }
 
     TTableInfo() = default;
@@ -123,6 +146,12 @@ public:
     TTableInfo(const ui64 pathId)
         : PathId(pathId)
     {}
+    TTableInfo(const ui64 pathId, const TSet<NOlap::TSnapshot>& versions, const NKikimrTxColumnShard::TTableVersionInfo& versionInfo)
+        : PathId(pathId)
+        , Versions(versions)
+    {
+        VersionInfo.CopyFrom(versionInfo);
+    }
 
     template <class TRow>
     bool InitFromDB(const TRow& rowset) {
@@ -131,17 +160,23 @@ public:
         if (rowset.template HaveValue<Schema::TableInfo::DropStep>() && rowset.template HaveValue<Schema::TableInfo::DropTxId>()) {
             DropVersion.emplace(rowset.template GetValue<Schema::TableInfo::DropStep>(), rowset.template GetValue<Schema::TableInfo::DropTxId>());
         }
+        if (rowset.template HaveValue<Schema::TableInfo::MovedTo>()) {
+            MovedToPathId = rowset.template GetValue<Schema::TableInfo::DropStep>();
+            AFL_VERIFY(!!DropVersion)("reason", "moved_no_snapshot")("path_id", PathId)("moved_to", *MovedToPathId);
+        }
         return true;
     }
 };
 
 class TTablesManager {
+
 private:
     THashMap<ui64, TTableInfo> Tables;
     THashSet<ui32> SchemaPresetsIds;
     THashSet<ui64> PathsToDrop;
+    std::optional<std::pair<ui64, ui64>> PathToMove; //{src, dst} Only one table move at a time is supported
     TTtl Ttl;
-    std::unique_ptr<NOlap::IColumnEngine> PrimaryIndex;
+    std::unique_ptr<NOlap::IColumnEngine> PrimaryIndex; //
     std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
     ui64 TabletId = 0;
 public:
@@ -162,8 +197,8 @@ public:
         return PathsToDrop;
     }
 
-    THashSet<ui64>& MutablePathsToDrop() {
-        return PathsToDrop;
+    const std::optional<std::pair<ui64, ui64>>& GetPathToMove() const {
+        return PathToMove;
     }
 
     const THashMap<ui64, TTableInfo>& GetTables() const {
@@ -185,7 +220,7 @@ public:
 
     const NOlap::TIndexInfo& GetIndexInfo(const NOlap::TSnapshot& version) const {
         Y_ABORT_UNLESS(!!PrimaryIndex);
-        return PrimaryIndex->GetVersionedIndex().GetSchema(version)->GetIndexInfo();
+        return PrimaryIndex->GetVersionedIndex().GetSchema(version)->GetIndexInfo(); //<<--
     }
 
     const std::unique_ptr<NOlap::IColumnEngine>& GetPrimaryIndex() const {
@@ -235,6 +270,8 @@ public:
 
     void DropTable(const ui64 pathId, const NOlap::TSnapshot& version, NIceDb::TNiceDb& db);
     void DropPreset(const ui32 presetId, const NOlap::TSnapshot& version, NIceDb::TNiceDb& db);
+
+    void CloneTable(const ui64 srcPathId, const ui64 dstPathId, const NOlap::TSnapshot& snapshot, NIceDb::TNiceDb& db, std::shared_ptr<TTiersManager> tiers);
 
     void RegisterTable(TTableInfo&& table, NIceDb::TNiceDb& db);
     bool RegisterSchemaPreset(const TSchemaPreset& schemaPreset, NIceDb::TNiceDb& db);

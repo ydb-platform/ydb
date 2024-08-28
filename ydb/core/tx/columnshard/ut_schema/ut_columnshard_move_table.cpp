@@ -1,0 +1,181 @@
+#include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
+#include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
+#include <ydb/core/base/blobstorage.h>
+#include <util/string/printf.h>
+#include <arrow/api.h>
+#include <arrow/ipc/reader.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
+#include <ydb/core/tx/columnshard/columnshard_impl.h>
+#include <ydb/core/tx/columnshard/engines/changes/with_appended.h>
+#include <ydb/core/tx/columnshard/engines/changes/compaction.h>
+#include <ydb/core/tx/columnshard/engines/changes/cleanup_portions.h>
+#include <ydb/core/tx/columnshard/operations/write_data.h>
+#include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
+#include <ydb/core/tx/columnshard/hooks/testing/controller.h>
+#include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
+#include <ydb/core/tx/columnshard/test_helper/controllers.h>
+#include <ydb/core/tx/columnshard/test_helper/shard_reader.h>
+#include <ydb/library/actors/protos/unittests.pb.h>
+#include <ydb/core/formats/arrow/simple_builder/filler.h>
+#include <ydb/core/formats/arrow/simple_builder/array.h>
+#include <ydb/core/formats/arrow/simple_builder/batch.h>
+#include <util/string/join.h>
+
+namespace NKikimr {
+
+using namespace NColumnShard;
+using namespace Tests;
+using namespace NTxUT;
+
+namespace
+{
+
+namespace NTypeIds = NScheme::NTypeIds;
+using TTypeId = NScheme::TTypeId;
+using TTypeInfo = NScheme::TTypeInfo;
+using TDefaultTestsController = NKikimr::NYDBTest::NColumnShard::TController;
+
+} //namespace
+
+Y_UNIT_TEST_SUITE(MoveTable) {
+    const TestTableDescription table;
+    Y_UNIT_TEST(EmptyTable) {
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        const ui64 srcPathId = 1;
+        TestTableDescription testTabe{};
+        PrepareTablet(runtime, srcPathId, testTabe.Schema);
+
+        ui64 txId = 10;
+        const ui64 dstPathId = 2;
+        TMessageSeqNo seqNo;
+        UNIT_ASSERT(ProposeSchemaTx(runtime, sender, TTestSchema::MoveTableTxBody(srcPathId, dstPathId, ++seqNo), ++txId));
+    }
+
+    Y_UNIT_TEST(WithUncomittedData) {
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        const ui64 srcPathId = 1;
+        TestTableDescription testTabe{};
+        PrepareTablet(runtime, srcPathId, testTabe.Schema);
+
+        ui64 txId = 10;
+        int writeId = 10;
+        std::vector<ui64> writeIds;
+        bool ok = WriteData(runtime, sender, writeId++, srcPathId, MakeTestBlob({0, 100}, testTabe.Schema), testTabe.Schema, true, &writeIds);
+        UNIT_ASSERT(ok);
+        const ui64 dstPathId = 2;
+        TMessageSeqNo seqNo;
+        UNIT_ASSERT(ProposeSchemaTx(runtime, sender, TTestSchema::MoveTableTxBody(srcPathId, dstPathId, ++seqNo), ++txId));
+    }
+
+    Y_UNIT_TEST(WithData) {
+
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        const ui64 srcPathId = 1;
+        TestTableDescription testTabe{};
+        PrepareTablet(runtime, srcPathId, testTabe.Schema);
+
+        ui64 txId = 10;
+        ui64 planStep = 10;
+        int writeId = 10;
+        std::vector<ui64> writeIds;
+        bool ok = WriteData(runtime, sender, writeId++, srcPathId, MakeTestBlob({0, 100}, testTabe.Schema), testTabe.Schema, true, &writeIds);
+        UNIT_ASSERT(ok);
+        ProposeCommit(runtime, sender, ++txId, writeIds);
+        PlanCommit(runtime, sender, ++planStep, txId);
+        csDefaultControllerGuard->WaitIndexation(TDuration::Seconds(3));
+
+        const ui64 dstPathId = 2;
+        TMessageSeqNo seqNo;
+        UNIT_ASSERT(ProposeSchemaTx(runtime, sender, TTestSchema::MoveTableTxBody(srcPathId, dstPathId, ++seqNo), ++txId));
+        PlanSchemaTx(runtime, sender, {++planStep, txId});
+
+        {
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, dstPathId, NOlap::TSnapshot(planStep, txId));
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(rb);
+            UNIT_ASSERT_EQUAL(rb->num_rows(), 100);
+        }
+
+        {
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, srcPathId, NOlap::TSnapshot(planStep, txId));
+            UNIT_ASSERT(!reader.ReadAll());
+        }
+
+    }
+
+    Y_UNIT_TEST(RenameAbsentTable_Negative) {
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        const ui64 srcPathId = 1;
+        TestTableDescription testTabe{};
+        PrepareTablet(runtime, srcPathId, testTabe.Schema);
+
+        const ui64 absentPathId = 111;
+        const ui64 dstPathId = 2;
+        ui64 txId = 10;
+        TMessageSeqNo seqNo;
+        UNIT_ASSERT(!ProposeSchemaTx(runtime, sender, TTestSchema::MoveTableTxBody(absentPathId, dstPathId, ++seqNo), ++txId));
+    }
+
+    Y_UNIT_TEST(RenameToItself_Negative) {
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        const ui64 srcPathId = 1;
+        TestTableDescription testTabe{};
+        PrepareTablet(runtime, srcPathId, testTabe.Schema);
+        ui64 txId = 10;
+        TMessageSeqNo seqNo;
+        UNIT_ASSERT(!ProposeSchemaTx(runtime, sender, TTestSchema::MoveTableTxBody(srcPathId, srcPathId, ++seqNo), ++txId));
+    }
+
+    // Y_UNIT_TEST(RenameToExisting_Negative) {
+    //     auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>(runtime);
+    //     TColumnShardTestSetup testSetup;
+
+    //     const ui64 srcTableLocalPathId = 1;
+    //     testSetup.CreateTable(srcTableLocalPathId);
+
+    //     const ui64 dstTableLocalPathId = 2;
+    //     testSetup.CreateTable(dstTableLocalPathId);
+
+    //     UNIT_ASSERT(!testSetup.ProposeRenameTableTx(srcTableLocalPathId, dstTableLocalPathId, testSetup.AllocateTxId()));  
+    // }
+
+    // Y_UNIT_TEST(RenameCyclic) {
+    //     TColumnShardTestSetup testSetup;
+    //     const ui64 srcTableLocalPathId = 1;
+    //     testSetup.CreateTable(srcTableLocalPathId);
+
+    //     for(size_t i = 0; i != 10; ++i){
+    //         const auto src = (i + 1) % 3;
+    //         const auto dst = (i + 2) % 3;
+    //         const auto renameTxId = testSetup.AllocateTxId();
+    //         const auto beforeRename = testSetup.GetLastKnownSnapshot();
+    //         UNIT_ASSERT(testSetup.ProposeRenameTableTx(src, dst, renameTxId));  
+    //         testSetup.PlanTxAndWatForResult(beforeRename.GetPlanStep() + 10, renameTxId);
+    //         Sleep(TDuration::Seconds(3));//todo remove me
+    //     }
+    // }
+
+
+
+}
+}// namespace NKikimr

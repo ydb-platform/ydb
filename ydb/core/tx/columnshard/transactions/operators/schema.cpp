@@ -63,16 +63,34 @@ TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecut
         break;
         case NKikimrTxColumnShard::TSchemaTxBody::kEnsureTables:
         {
-            auto validationStatus = ValidateTables(SchemaTxBody.GetEnsureTables().GetTables());
+            const auto& tables = SchemaTxBody.GetEnsureTables().GetTables();
+            auto validationStatus = ValidateTables(tables);
             if (validationStatus.IsFail()) {
                 return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "Invalid schema: " + validationStatus.GetErrorMessage());
             }
-            WaitPathIdsToErase = GetNotErasedTableIds(owner, SchemaTxBody.GetEnsureTables().GetTables());
+            WaitPathIdsToErase = GetNotErasedTableIds(owner, tables);
         }
         break;
         case NKikimrTxColumnShard::TSchemaTxBody::kAlterTable:
         case NKikimrTxColumnShard::TSchemaTxBody::kAlterStore:
         case NKikimrTxColumnShard::TSchemaTxBody::kDropTable:
+            break;
+        case NKikimrTxColumnShard::TSchemaTxBody::kMoveTable:
+        {
+            const auto srcPathId = SchemaTxBody.GetMoveTable().GetSrcPathId();
+            if (!owner.TablesManager.HasTable(srcPathId)) {
+                return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "No such table");
+            }
+            const auto dstPathId = SchemaTxBody.GetMoveTable().GetDstPathId();
+            if (owner.TablesManager.HasTable(dstPathId)) {
+                return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "Rename to existing table");
+            }
+            if (owner.TablesManager.HasTable(dstPathId, true)) {
+                WaitPathIdsToErase = {dstPathId};
+            }
+            WaitForEmptyPlanQueue = true;
+            break;
+        }
         case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET:
             break;
     }
@@ -179,6 +197,18 @@ void TSchemaTransactionOperator::DoOnTabletInit(TColumnShard& owner) {
         case NKikimrTxColumnShard::TSchemaTxBody::kAlterTable:
         case NKikimrTxColumnShard::TSchemaTxBody::kAlterStore:
         case NKikimrTxColumnShard::TSchemaTxBody::kDropTable:
+            break;
+        case NKikimrTxColumnShard::TSchemaTxBody::kMoveTable:
+        {
+            const auto srcPathId = SchemaTxBody.GetMoveTable().GetSrcPathId();
+            AFL_VERIFY(owner.TablesManager.HasTable(srcPathId));
+           // const auto dstPathId = SchemaTxBody.GetMoveTable().GetDstPathId();
+            // if (owner.TablesManager.HasTable(dstPathId)) {
+            //     AFL_VERIFY(owner.TablesManager.Has)
+            // }
+        }
+            
+
         case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET:
             break;
     }
@@ -192,8 +222,11 @@ void TSchemaTransactionOperator::DoOnTabletInit(TColumnShard& owner) {
 }
 
 void TSchemaTransactionOperator::DoStartProposeOnComplete(TColumnShard& owner, const TActorContext& /*ctx*/) {
-    AFL_VERIFY(WaitPathIdsToErase.size());
-    owner.Subscribers->RegisterSubscriber(std::make_shared<TWaitEraseTablesTxSubscriber>(WaitPathIdsToErase, GetTxId()));
+    if (!WaitPathIdsToErase.empty()) {
+        owner.Subscribers->RegisterSubscriber(std::make_shared<TWaitEraseTablesTxSubscriber>(WaitPathIdsToErase, GetTxId()));
+    } else {
+        owner.Subscribers->RegisterSubscriber(std::make_shared<TWaitPlanQueueEmptyTxSubscriber>());
+    }
 }
 
 }

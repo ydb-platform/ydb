@@ -130,6 +130,19 @@ const NKikimr::NOlap::TGranuleAdditiveSummary& TGranuleMeta::GetAdditiveSummary(
     return *AdditiveSummaryCache;
 }
 
+TGranuleMeta::TGranuleMeta(const TGranuleMeta& copyFrom, const ui64 pathId, const TGranulesStorage& owner) 
+    : Portions(copyFrom.Portions)
+    , AdditiveSummaryCache(copyFrom.AdditiveSummaryCache)
+    , PathId(pathId)
+    , Counters(copyFrom.Counters)
+    , PortionInfoGuard(owner.GetCounters().BuildPortionBlobsGuard())
+    , Stats(copyFrom.Stats)
+    , StoragesManager(copyFrom.StoragesManager)
+    , OptimizerPlanner(copyFrom.OptimizerPlanner)
+    , ActualizationIndex(copyFrom.ActualizationIndex)
+    , PortionsIndex(copyFrom.PortionsIndex)
+{}
+
 TGranuleMeta::TGranuleMeta(const ui64 pathId, const TGranulesStorage& owner, const NColumnShard::TGranuleDataCounters& counters, const TVersionedIndex& versionedIndex)
     : PathId(pathId)
     , Counters(counters)

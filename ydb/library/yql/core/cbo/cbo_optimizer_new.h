@@ -108,6 +108,19 @@ struct TJoinAlgoHints {
     TJoinAlgoHints(const TString& json);
 };
 
+struct TJoinOrderHints {
+    std::shared_ptr<IBaseOptimizerNode> HintsTree;
+
+    TJoinOrderHints() {}
+    TJoinOrderHints(const TString& json);
+};
+
+struct TOptimizerHints {
+    TCardinalityHints CardinalityHints;
+    TJoinAlgoHints JoinAlgoHints;
+    TJoinOrderHints JoinOrderHints;
+};
+
 /**
  * This is a temporary structure for KQP provider
  * We will soon be supporting multiple providers and we will need to design
@@ -235,8 +248,8 @@ struct IOptimizerNew {
     virtual ~IOptimizerNew() = default;
     virtual std::shared_ptr<TJoinOptimizerNode> JoinSearch(
         const std::shared_ptr<TJoinOptimizerNode>& joinTree, 
-        TCardinalityHints hints = {}, 
-        TJoinAlgoHints joinHints = {}) = 0;
+        const TOptimizerHints& hints = {}
+    ) = 0;
 };
 
 } // namespace NYql

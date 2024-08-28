@@ -14,7 +14,7 @@ namespace NTable {
 
         void Describe(IOutputStream &out) const noexcept
         {
-            const ui64 sys = Parts.IndexBytes + Parts.ByKeyBytes + Parts.OtherBytes;
+            const ui64 sys = Parts.FlatIndexBytes + Parts.BTreeIndexBytes + Parts.ByKeyBytes + Parts.OtherBytes;
 
             out
                 << "DBase{" << Tables << "t " << Parts.PartsCount << "p"

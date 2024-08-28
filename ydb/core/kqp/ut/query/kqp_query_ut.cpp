@@ -1483,7 +1483,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT(!prepareResult.IsSuccess());
             UNIT_ASSERT_C(
-                prepareResult.GetIssues().ToString().Contains("Query can be executed only in per-statement mode (NoTx)"),
+                prepareResult.GetIssues().ToString().Contains("CTAS statement can be executed only in NoTx mode."),
                 prepareResult.GetIssues().ToString());
         }
 

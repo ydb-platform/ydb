@@ -437,7 +437,7 @@ bool TYqlRowSpecInfo::ParseType(const NYT::TNode& rowSpecAttr, TExprContext& ctx
 
 bool TYqlRowSpecInfo::ParseSort(const NYT::TNode& rowSpecAttr, TExprContext& ctx, const TPositionHandle& pos) {
     if (rowSpecAttr.HasKey(RowSpecAttrSortMembers) || rowSpecAttr.HasKey(RowSpecAttrSortedBy) || rowSpecAttr.HasKey(RowSpecAttrSortDirections)) {
-        ClearSortness();
+        ClearSortness(ctx);
     }
     if (rowSpecAttr.HasKey(RowSpecAttrSortDirections)) {
         for (auto& item: rowSpecAttr[RowSpecAttrSortDirections].AsList()) {
@@ -506,63 +506,13 @@ NYT::TNode TYqlRowSpecInfo::GetConstraintsNode() const {
     if (ConstraintsNode.HasValue())
         return ConstraintsNode;
 
-    auto map = NYT::TNode::CreateMap();
-
-    const auto pathToNode = [](const TPartOfConstraintBase::TPathType& path) -> NYT::TNode {
-        if (1U == path.size())
-            return TStringBuf(path.front());
-
-        auto list = NYT::TNode::CreateList();
-        for (const auto& col : path)
-            list.Add(TStringBuf(col));
-        return list;
-    };
-
-    const auto setToNode = [pathToNode](const TPartOfConstraintBase::TSetType& set) -> NYT::TNode {
-        if (1U == set.size() && 1U == set.front().size())
-            return TStringBuf(set.front().front());
-
-        auto list = NYT::TNode::CreateList();
-        for (const auto& path : set)
-            list.Add(pathToNode(path));
-        return list;
-    };
-
+    TConstraintSet set;
     if (HasNonTrivialSort()) {
-        auto list = NYT::TNode::CreateList();
-        for (const auto& item : Sorted->GetContent()) {
-            auto pair = NYT::TNode::CreateList();
-            auto set = NYT::TNode::CreateList();
-            for (const auto& path : item.first)
-                set.Add(pathToNode(path));
-            pair.Add(set).Add(item.second);
-            list.Add(pair);
-        }
-        map[Sorted->GetName()] = list;
+        set.AddConstraint(Sorted);
     }
-
-    if (Unique) {
-        auto list = NYT::TNode::CreateList();
-        for (const auto& sets : Unique->GetContent()) {
-            auto part = NYT::TNode::CreateList();
-            for (const auto& set : sets)
-                part.Add(setToNode(set));
-            list.Add(part);
-        }
-        map[Unique->GetName()] = list;
-    }
-
-    if (Distinct) {
-        auto list = NYT::TNode::CreateList();
-        for (const auto& sets : Distinct->GetContent()) {
-            auto part = NYT::TNode::CreateList();
-            for (const auto& set : sets)
-                part.Add(setToNode(set));
-            list.Add(part);
-        }
-        map[Distinct->GetName()] = list;
-    }
-    return map;
+    set.AddConstraint(Unique);
+    set.AddConstraint(Distinct);
+    return set.ToYson();
 }
 
 void TYqlRowSpecInfo::FillConstraints(NYT::TNode& attrs) const {
@@ -575,61 +525,7 @@ void TYqlRowSpecInfo::ParseConstraintsNode(TExprContext& ctx) {
         return;
 
     try  {
-        const auto nodeToPath = [&ctx](const NYT::TNode& node) {
-            if (node.IsString())
-                return TPartOfConstraintBase::TPathType{ctx.AppendString(node.AsString())};
-
-            TPartOfConstraintBase::TPathType path;
-            for (const auto& col : node.AsList())
-                path.emplace_back(ctx.AppendString(col.AsString()));
-            return path;
-        };
-
-        const auto nodeToSet = [&ctx, nodeToPath](const NYT::TNode& node) {
-            if (node.IsString())
-                return TPartOfConstraintBase::TSetType{TPartOfConstraintBase::TPathType(1U, ctx.AppendString(node.AsString()))};
-
-            TPartOfConstraintBase::TSetType set;
-            for (const auto& col : node.AsList())
-                set.insert_unique(nodeToPath(col));
-            return set;
-        };
-
-        const auto& constraints = ConstraintsNode.AsMap();
-
-        if (const auto it = constraints.find(TSortedConstraintNode::Name()); constraints.cend() != it) {
-            TSortedConstraintNode::TContainerType sorted;
-            for (const auto& pair : it->second.AsList()) {
-                TPartOfConstraintBase::TSetType set;
-                for (const auto& path : pair.AsList().front().AsList())
-                    set.insert_unique(nodeToPath(path));
-                sorted.emplace_back(std::move(set), pair.AsList().back().AsBool());
-            }
-            if (!sorted.empty())
-                Sorted = ctx.MakeConstraint<TSortedConstraintNode>(std::move(sorted));
-        }
-        if (const auto it = constraints.find(TUniqueConstraintNode::Name()); constraints.cend() != it) {
-            TUniqueConstraintNode::TContentType content;
-            for (const auto& item : it->second.AsList()) {
-                TPartOfConstraintBase::TSetOfSetsType sets;
-                for (const auto& part : item.AsList())
-                    sets.insert_unique(nodeToSet(part));
-                content.insert_unique(std::move(sets));
-            }
-            if (!content.empty())
-                Unique = ctx.MakeConstraint<TUniqueConstraintNode>(std::move(content));
-        }
-        if (const auto it = constraints.find(TDistinctConstraintNode::Name()); constraints.cend() != it) {
-            TDistinctConstraintNode::TContentType content;
-            for (const auto& item : it->second.AsList()) {
-                TPartOfConstraintBase::TSetOfSetsType sets;
-                for (const auto& part : item.AsList())
-                    sets.insert_unique(nodeToSet(part));
-                content.insert_unique(std::move(sets));
-            }
-            if (!content.empty())
-                Distinct = ctx.MakeConstraint<TDistinctConstraintNode>(std::move(content));
-        }
+        SetConstraints(ctx.MakeConstraintSet(ConstraintsNode));
     } catch (const yexception& error) {
         Sorted = nullptr;
         Unique = nullptr;
@@ -663,7 +559,7 @@ void TYqlRowSpecInfo::ParseConstraints(const NYT::TNode& rowSpecAttr) {
 
 bool TYqlRowSpecInfo::ValidateSort(const TYTSortInfo& sortInfo, TExprContext& ctx, const TPositionHandle& pos) {
     if (sortInfo.Keys.empty() && IsSorted()) {
-        ClearSortness();
+        ClearSortness(ctx);
         if (!ctx.AddWarning(YqlIssue(ctx.GetPosition(pos), EYqlIssueCode::TIssuesIds_EIssueCode_YT_ROWSPEC_DIFF_SORT,
             "Table attribute '_yql_row_spec' defines sorting, but the table is not really sorted. The sorting will be ignored."))) {
             return false;
@@ -677,13 +573,13 @@ bool TYqlRowSpecInfo::ValidateSort(const TYTSortInfo& sortInfo, TExprContext& ct
     } else if (IsSorted()) {
         bool diff = false;
         if (SortedBy.size() > sortInfo.Keys.size()) {
-            ClearSortness(sortInfo.Keys.size());
+            ClearSortness(ctx, sortInfo.Keys.size());
             diff = true;
         }
         auto backendSort = GetForeignSort();
         for (size_t i = 0; i < backendSort.size(); ++i) {
             if (backendSort[i].first != sortInfo.Keys[i].first || backendSort[i].second != (bool)sortInfo.Keys[i].second) {
-                ClearSortness(i);
+                ClearSortness(ctx, i);
                 diff = true;
                 break;
             }
@@ -1500,7 +1396,7 @@ const TStructExprType* TYqlRowSpecInfo::GetExtendedType(TExprContext& ctx) const
     return extended ? ctx.MakeType<TStructExprType>(items) : Type;
 }
 
-bool TYqlRowSpecInfo::CopySortness(const TYqlRowSpecInfo& from, ECopySort mode) {
+bool TYqlRowSpecInfo::CopySortness(TExprContext& ctx, const TYqlRowSpecInfo& from, ECopySort mode) {
     SortDirections = from.SortDirections;
     SortMembers = from.SortMembers;
     SortedBy = from.SortedBy;
@@ -1512,16 +1408,16 @@ bool TYqlRowSpecInfo::CopySortness(const TYqlRowSpecInfo& from, ECopySort mode) 
         for (size_t i = 0; i < SortMembers.size(); ++i) {
             const auto itemNdx = Type->FindItem(SortMembers[i]);
             if (!itemNdx || (SortedBy[i] == SortMembers[i] && Type->GetItems()[*itemNdx]->GetItemType() != SortedByTypes[i])) {
-                sortIsChanged = ClearSortness(i);
+                sortIsChanged = ClearSortness(ctx, i);
                 break;
             } else if (ECopySort::Pure == mode && SortedBy[i] != SortMembers[i]) {
-                sortIsChanged = ClearSortness(i);
+                sortIsChanged = ClearSortness(ctx, i);
                 break;
             }
         }
         if (ECopySort::WithCalc != mode) {
             if (SortMembers.size() < SortedBy.size()) {
-                sortIsChanged = ClearSortness(SortMembers.size()) || sortIsChanged;
+                sortIsChanged = ClearSortness(ctx, SortMembers.size()) || sortIsChanged;
             }
         }
     }
@@ -1535,42 +1431,42 @@ void TYqlRowSpecInfo::CopyConstraints(const TYqlRowSpecInfo& from) {
     Distinct = from.Distinct;
 }
 
-bool TYqlRowSpecInfo::KeepPureSortOnly() {
+bool TYqlRowSpecInfo::KeepPureSortOnly(TExprContext& ctx) {
     bool sortIsChanged = false;
     for (size_t i = 0; i < SortMembers.size(); ++i) {
         if (!Type->FindItem(SortMembers[i])) {
-            sortIsChanged = ClearSortness(i);
+            sortIsChanged = ClearSortness(ctx, i);
             break;
         } else if (SortedBy[i] != SortMembers[i]) {
-            sortIsChanged = ClearSortness(i);
+            sortIsChanged = ClearSortness(ctx, i);
             break;
         }
     }
     if (SortMembers.size() < SortedBy.size()) {
-        sortIsChanged = ClearSortness(SortMembers.size()) || sortIsChanged;
+        sortIsChanged = ClearSortness(ctx, SortMembers.size()) || sortIsChanged;
     }
     return sortIsChanged;
 }
 
-bool TYqlRowSpecInfo::ClearNativeDescendingSort() {
+bool TYqlRowSpecInfo::ClearNativeDescendingSort(TExprContext& ctx) {
     for (size_t i = 0; i < SortDirections.size(); ++i) {
         if (!SortDirections[i] && Type->FindItem(SortedBy[i])) {
-            return ClearSortness(i);
+            return ClearSortness(ctx, i);
         }
     }
     return false;
 }
 
-bool TYqlRowSpecInfo::MakeCommonSortness(const TYqlRowSpecInfo& from) {
+bool TYqlRowSpecInfo::MakeCommonSortness(TExprContext& ctx, const TYqlRowSpecInfo& from) {
     bool sortIsChanged = false;
     UniqueKeys = false; // Merge of two and more tables cannot have unique keys
     const size_t resultSize = Min<size_t>(SortMembers.size(), from.SortMembers.size()); // Truncate all calculated columns
     if (SortedBy.size() > resultSize) {
-        sortIsChanged = ClearSortness(resultSize);
+        sortIsChanged = ClearSortness(ctx, resultSize);
     }
     for (size_t i = 0; i < resultSize; ++i) {
         if (SortMembers[i] != from.SortMembers[i] || SortedBy[i] != from.SortedBy[i] || SortedByTypes[i] != from.SortedByTypes[i] || SortDirections[i] != from.SortDirections[i]) {
-            sortIsChanged = ClearSortness(i) || sortIsChanged;
+            sortIsChanged = ClearSortness(ctx, i) || sortIsChanged;
             break;
         }
     }
@@ -1586,13 +1482,15 @@ bool TYqlRowSpecInfo::CompareSortness(const TYqlRowSpecInfo& with, bool checkUni
         && (!checkUniqueFlag || UniqueKeys == with.UniqueKeys);
 }
 
-bool TYqlRowSpecInfo::ClearSortness(size_t fromMember) {
+bool TYqlRowSpecInfo::ClearSortness(TExprContext& ctx, size_t fromMember) {
     if (fromMember <= SortMembers.size()) {
         SortMembers.erase(SortMembers.begin() + fromMember, SortMembers.end());
         SortedBy.erase(SortedBy.begin() + fromMember, SortedBy.end());
         SortedByTypes.erase(SortedByTypes.begin() + fromMember, SortedByTypes.end());
         SortDirections.erase(SortDirections.begin() + fromMember, SortDirections.end());
         UniqueKeys = false;
+        ConstraintsNode.Clear();
+        Sorted = MakeSortConstraint(ctx);
         return true;
     }
     return false;

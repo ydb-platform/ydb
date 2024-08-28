@@ -154,10 +154,10 @@ void TPQReadService::TSession::SendEvent(IEventBase* ev) {
 void TPQReadService::TSession::CreateActor(std::unique_ptr<NPersQueue::TTopicsListController>&& topicsHandler) {
     auto classifier = Proxy->GetClassifier();
 
-    ActorId = Proxy->ActorSystem->Register(
-        new TReadSessionActor(this, *topicsHandler, Cookie, SchemeCache, NewSchemeCache, Counters,
-                                    classifier ? classifier->ClassifyAddress(GetPeerName())
-                                                         : "unknown"));
+    auto* actor = new TReadSessionActor(this, *topicsHandler, Cookie, SchemeCache, NewSchemeCache, Counters,
+                                    classifier ? classifier->ClassifyAddress(GetPeerName()) : "unknown");
+    ui32 poolId = Proxy->ActorSystem->AppData<::NKikimr::TAppData>()->UserPoolId;
+    ActorId = Proxy->ActorSystem->Register(actor, TMailboxType::HTSwap, poolId);
 }
 
 
@@ -169,12 +169,13 @@ ui64 TPQReadService::TSession::GetCookie() const {
 ///////////////////////////////////////////////////////////////////////////////
 
 
-TPQReadService::TPQReadService(NKikimr::NGRpcService::TGRpcPersQueueService* service, grpc::ServerCompletionQueue* cq,
+TPQReadService::TPQReadService(NKikimr::NGRpcService::TGRpcPersQueueService* service,
+                             const std::vector<grpc::ServerCompletionQueue*>& cqs,
                              NActors::TActorSystem* as, const TActorId& schemeCache,
                              TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
                              const ui32 maxSessions)
     : Service(service)
-    , CQ(cq)
+    , CQS(cqs)
     , ActorSystem(as)
     , SchemeCache(schemeCache)
     , Counters(counters)
@@ -244,7 +245,7 @@ void TPQReadService::WaitReadSession() {
 
     ActorSystem->Send(MakeGRpcProxyStatusID(ActorSystem->NodeId), new TEvGRpcProxyStatus::TEvUpdateStatus(0,0,1,0));
 
-    TSessionRef session(new TSession(shared_from_this(), CQ, cookie, SchemeCache, NewSchemeCache, Counters,
+    TSessionRef session(new TSession(shared_from_this(), CQS[cookie % CQS.size()], cookie, SchemeCache, NewSchemeCache, Counters,
                                      NeedDiscoverClusters, TopicConverterFactory));
 
     {

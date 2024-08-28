@@ -1402,7 +1402,7 @@ bool JoinOrderAndAlgosMatch(const TString& optimized, const TString& reference){
 }
 
 /* Temporary solution to canonize tests */
-NJson::TJsonValue CanonizeJoinOrderImpl(const NJson::TJsonValue& opt) {
+NJson::TJsonValue GetDetailedJoinOrderImpl(const NJson::TJsonValue& opt) {
     NJson::TJsonValue res;
 
     auto op = opt.GetMapSafe().at("Operators").GetArraySafe()[0];
@@ -1416,18 +1416,41 @@ NJson::TJsonValue CanonizeJoinOrderImpl(const NJson::TJsonValue& opt) {
     
     auto subplans = opt.GetMapSafe().at("Plans").GetArraySafe();
     for (size_t i = 0; i< subplans.size(); ++i) {
-        res["args"].AppendValue(CanonizeJoinOrderImpl(subplans[i]));
+        res["args"].AppendValue(GetDetailedJoinOrderImpl(subplans[i]));
     }
     return res;
 }
 
-/* Temporary solution to canonize tests */
-NJson::TJsonValue CanonizeJoinOrder(const TString& deserializedPlan) {
+NJson::TJsonValue GetDetailedJoinOrder(const TString& deserializedPlan) {
     NJson::TJsonValue optRoot;
     NJson::ReadJsonTree(deserializedPlan, &optRoot, true);
     optRoot = SimplifyPlan(optRoot.GetMapSafe().at("SimplifiedPlan"));
-    return CanonizeJoinOrderImpl(SimplifyPlan(optRoot));
+    return GetDetailedJoinOrderImpl(SimplifyPlan(optRoot));
 }
+
+NJson::TJsonValue GetJoinOrderImpl(const NJson::TJsonValue& opt) {
+    if (!opt.GetMapSafe().contains("Plans")) {
+        auto op = opt.GetMapSafe().at("Operators").GetArraySafe()[0];
+        return op.GetMapSafe().at("Table").GetStringSafe();
+    }
+
+    NJson::TJsonValue res;
+
+    auto subplans = opt.GetMapSafe().at("Plans").GetArraySafe();
+    for (size_t i = 0; i < subplans.size(); ++i) {
+        res.AppendValue(GetJoinOrderImpl(subplans[i]));
+    }
+
+    return res;
+}
+
+NJson::TJsonValue GetJoinOrder(const TString& deserializedPlan) {
+    NJson::TJsonValue optRoot;
+    NJson::ReadJsonTree(deserializedPlan, &optRoot, true);
+    optRoot = SimplifyPlan(optRoot.GetMapSafe().at("SimplifiedPlan"));
+    return GetJoinOrderImpl(SimplifyPlan(optRoot));
+}
+
 
 } // namspace NKqp
 } // namespace NKikimr

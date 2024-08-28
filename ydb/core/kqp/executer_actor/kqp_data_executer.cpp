@@ -845,6 +845,7 @@ private:
             case NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED: {
                 return ReplyErrorAndDie(Ydb::StatusIds::ABORTED, issues);
             }
+            case NKikimrDataEvents::TEvWriteResult::STATUS_DISK_SPACE_EXHAUSTED:
             case NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR: {
                 return ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, issues);
             }

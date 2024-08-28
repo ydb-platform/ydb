@@ -120,10 +120,10 @@ public:
         InitState();
         if (!Patches.size()) {
             ExternalController->OnAlteringProblem("no patches");
-            return TBase::PassAway();
+            return this->PassAway();
         }
         if (!BuildRestoreObjectIds()) {
-            return TBase::PassAway();
+            return this->PassAway();
         }
 
         TBase::Register(new NRequest::TYDBCallbackRequest<NRequest::TDialogCreateSession>(
@@ -146,7 +146,7 @@ public:
         Y_ABORT_UNLESS(TransactionId);
         std::vector<TObject> objects = std::move(ev->Get()->MutableObjects());
         if (!PrepareRestoredObjects(objects)) {
-            TBase::PassAway();
+            this->PassAway();
         } else {
             Manager->PrepareObjectsBeforeModification(std::move(objects), InternalController, Context, TAlterOperationContext(SessionId, TransactionId, RestoreObjectIds));
         }
@@ -159,12 +159,12 @@ public:
         for (auto&& i : ev->Get()->GetObjects()) {
             if (!records.AddRecordNativeValues(i.SerializeToRecord())) {
                 ExternalController->OnAlteringProblem("unexpected serialization inconsistency");
-                return TBase::PassAway();
+                return this->PassAway();
             }
         }
         if (!ProcessPreparedObjects(std::move(records))) {
             ExternalController->OnAlteringProblem("cannot process prepared objects");
-            return TBase::PassAway();
+            return this->PassAway();
         }
     }
 
@@ -183,6 +183,15 @@ public:
         ExternalController->OnAlteringProblem("cannot restore objects: " + ev->Get()->GetErrorMessage());
     }
 
+    void PassAway() override {
+        if (SessionId) {
+            NMetadata::NRequest::TDialogDeleteSession::TRequest deleteRequest;
+            deleteRequest.set_session_id(SessionId);
+            TBase::Register(new NRequest::TYDBCallbackRequest<NRequest::TDialogDeleteSession>(deleteRequest, UserToken, TBase::SelfId()));
+        }
+
+        TBase::PassAway();
+    }
 };
 
 template <class TObject>

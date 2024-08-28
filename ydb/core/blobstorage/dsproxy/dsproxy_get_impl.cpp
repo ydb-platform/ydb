@@ -149,7 +149,7 @@ void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReas
         }
     }
     NActors::NLog::EPriority priority = PriorityForStatusOutbound(status);
-    A_LOG_LOG_SX(logCtx, priority != NActors::NLog::PRI_DEBUG, priority, "BPG29", "Response# " << outGetResult->Print(false));
+    DSP_LOG_LOG_SX(logCtx, priority, "BPG29", "Response# " << outGetResult->Print(false));
     if (CollectDebugInfo || (IsVerboseNoDataEnabled && IsNoData)) {
         TStringStream str;
         logCtx.LogAcc.Output(str);
@@ -253,7 +253,7 @@ void TGetImpl::GenerateInitialRequests(TLogContext &logCtx, TDeque<std::unique_p
 
     for (ui32 queryIdx = 0; queryIdx < QuerySize; ++queryIdx) {
         const TEvBlobStorage::TEvGet::TQuery &query = Queries[queryIdx];
-        R_LOG_DEBUG_SX(logCtx, "BPG56", "query.Id# " << query.Id.ToString()
+        DSP_LOG_DEBUG_SX(logCtx, "BPG56", "query.Id# " << query.Id.ToString()
             << " shift# " << query.Shift
             << " size# " << query.Size);
         Blackboard.AddNeeded(query.Id, query.Shift, query.Size);
@@ -294,7 +294,7 @@ void TGetImpl::PrepareRequests(TLogContext &logCtx, TDeque<std::unique_ptr<TEvBl
 
     for (auto& vget : gets) {
         if (vget) {
-            R_LOG_DEBUG_SX(logCtx, "BPG14", "Send get to orderNumber# "
+            DSP_LOG_DEBUG_SX(logCtx, "BPG14", "Send get to orderNumber# "
                 << Info->GetTopology().GetOrderNumber(VDiskIDFromVDiskID(vget->Record.GetVDiskID()))
                 << " vget# " << vget->ToString());
             outVGets.push_back(std::move(vget));
@@ -312,7 +312,7 @@ void TGetImpl::PrepareVPuts(TLogContext &logCtx, TDeque<std::unique_ptr<TEvBlobS
             put.Id.PartId() != 3 || put.Buffer.IsEmpty());
         auto vput = std::make_unique<TEvBlobStorage::TEvVPut>(put.Id, put.Buffer, vdiskId, true, nullptr, Deadline,
             Blackboard.PutHandleClass);
-        R_LOG_DEBUG_SX(logCtx, "BPG15", "Send put to orderNumber# " << put.OrderNumber << " vput# " << vput->ToString());
+        DSP_LOG_DEBUG_SX(logCtx, "BPG15", "Send put to orderNumber# " << put.OrderNumber << " vput# " << vput->ToString());
         outVPuts.push_back(std::move(vput));
         ++VPutRequests;
     }

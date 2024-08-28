@@ -1,17 +1,13 @@
 {
-  "op_name":"InnerJoin (Grace)",
+  "op_name":"InnerJoin (MapJoin)",
   "args":
     [
       {
-        "op_name":"InnerJoin (Grace)",
+        "op_name":"InnerJoin (MapJoin)",
         "args":
           [
             {
-              "op_name":"TableFullScan",
-              "table":"partsupp"
-            },
-            {
-              "op_name":"InnerJoin (MapJoin)",
+              "op_name":"InnerJoin (Grace)",
               "args":
                 [
                   {
@@ -19,7 +15,7 @@
                     "table":"supplier"
                   },
                   {
-                    "op_name":"InnerJoin (MapJoin)",
+                    "op_name":"InnerJoin (Grace)",
                     "args":
                       [
                         {
@@ -33,23 +29,23 @@
                       ]
                   }
                 ]
+            },
+            {
+              "op_name":"TableFullScan",
+              "table":"partsupp"
             }
           ]
       },
       {
-        "op_name":"InnerJoin (MapJoin)",
+        "op_name":"InnerJoin (Grace)",
         "args":
           [
             {
-              "op_name":"InnerJoin (Grace)",
+              "op_name":"InnerJoin (MapJoin)",
               "args":
                 [
                   {
-                    "op_name":"TableFullScan",
-                    "table":"partsupp"
-                  },
-                  {
-                    "op_name":"InnerJoin (MapJoin)",
+                    "op_name":"InnerJoin (Grace)",
                     "args":
                       [
                         {
@@ -57,7 +53,7 @@
                           "table":"supplier"
                         },
                         {
-                          "op_name":"InnerJoin (MapJoin)",
+                          "op_name":"InnerJoin (Grace)",
                           "args":
                             [
                               {
@@ -71,6 +67,10 @@
                             ]
                         }
                       ]
+                  },
+                  {
+                    "op_name":"TableFullScan",
+                    "table":"partsupp"
                   }
                 ]
             },

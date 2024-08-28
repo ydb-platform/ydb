@@ -3,26 +3,26 @@
   "args":
     [
       {
-        "op_name":"LeftJoin (MapJoin)",
+        "op_name":"LeftJoin (Grace)",
         "args":
           [
             {
-              "op_name":"LeftJoin (MapJoin)",
+              "op_name":"TableFullScan",
+              "table":"quotas_browsers_relation"
+            },
+            {
+              "op_name":"LeftJoin (Grace)",
               "args":
                 [
                   {
                     "op_name":"TableFullScan",
-                    "table":"quotas_browsers_relation"
+                    "table":"browsers"
                   },
                   {
-                    "op_name":"TableLookup",
-                    "table":"browsers"
+                    "op_name":"TableFullScan",
+                    "table":"browser_groups"
                   }
                 ]
-            },
-            {
-              "op_name":"TableLookup",
-              "table":"browser_groups"
             }
           ]
       },

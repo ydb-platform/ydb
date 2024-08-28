@@ -1123,7 +1123,7 @@ public:
                         .AddAttribute(TString("sorted_by"))
                         .AddAttribute(TString("revision"))
                         .AddAttribute(TString("content_revision"))
-                        .AddAttribute(TString("security_tags"))
+                        .AddAttribute(TString(SecurityTagsName))
                     )
                 ).Apply([tableName, execCtx = std::move(execCtx)](const TFuture<NYT::TNode>& f) {
                     execCtx->StoreQueryCache();
@@ -1137,7 +1137,7 @@ public:
                     statInfo->ModifyTime = TInstant::ParseIso8601(strModifyTime).Seconds();
                     statInfo->TableRevision = attrs["revision"].IntCast<ui64>();
                     statInfo->SecurityTags = {};
-                    for (const auto& tagNode : attrs["security_tags"].AsList()) {
+                    for (const auto& tagNode : attrs[SecurityTagsName].AsList()) {
                         statInfo->SecurityTags.insert(tagNode.AsString());
                     }
                     statInfo->Revision = GetContentRevision(attrs);
@@ -5061,7 +5061,7 @@ private:
             for (const auto& tag : securityTags) {
                 tagsAttrNode.Add(tag);
             }
-            attrs["security_tags"] = std::move(tagsAttrNode);
+            attrs[SecurityTagsName] = std::move(tagsAttrNode);
         }
     }
 

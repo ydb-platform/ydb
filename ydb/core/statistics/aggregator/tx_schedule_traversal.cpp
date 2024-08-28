@@ -18,10 +18,10 @@ struct TStatisticsAggregator::TTxScheduleTrasersal : public TTxBase {
         }
 
         TDuration time = TDuration ::Zero();
-        if (!ForceTraversals.empty()) {
-            time = ctx.Now() - ForceTraversals.front().CreatedAt;
+        if (!Self->ForceTraversals.empty()) {
+            time = ctx.Now() - Self->ForceTraversals.front().CreatedAt;
         }
-        TabletCounters->Simple()[COUNTER_FORCE_TRAVERSAL_INFLIGHT_MAX_TIME].Set(time.MicroSeconds());
+        Self->TabletCounters->Simple()[COUNTER_FORCE_TRAVERSAL_INFLIGHT_MAX_TIME].Set(time.MicroSeconds());
 
         if (Self->TraversalPathId) {
             SA_LOG_T("[" << Self->TabletID() << "] TTxScheduleTrasersal::Execute. Traverse is in progress. PathId " << Self->TraversalPathId);

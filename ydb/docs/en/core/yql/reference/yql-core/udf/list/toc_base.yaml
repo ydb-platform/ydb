@@ -1,17 +1,17 @@
 items:
 - name: Overview
   href: index.md
+- { name: DateTime,               href: datetime.md }
+- { name: Digest,                 href: digest.md }
+- { name: Histogram,              href: histogram.md }
 - { name: Hyperscan,              href: hyperscan.md }
+- { name: Ip,                     href: ip.md }
+- { name: Knn,                    href: knn.md, when: backend_name == "YDB" }
+- { name: Math,                   href: math.md }
 - { name: Pcre,                   href: pcre.md }
 - { name: Pire,                   href: pire.md }
 - { name: Re2,                    href: re2.md }
 - { name: String,                 href: string.md }
 - { name: Unicode,                href: unicode.md }
-- { name: DateTime,               href: datetime.md }
 - { name: Url,                    href: url.md }
-- { name: Ip,                     href: ip.md }
-- { name: Knn,                    href: knn.md, when: backend_name == "YDB" }
 - { name: Yson,                   href: yson.md }
-- { name: Digest,                 href: digest.md }
-- { name: Math,                   href: math.md }
-- { name: Histogram,              href: histogram.md }

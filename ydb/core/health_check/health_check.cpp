@@ -251,6 +251,7 @@ public:
     struct TGroupState {
         TString ErasureSpecies;
         std::vector<const NKikimrSysView::TVSlotEntry*> VSlots;
+        ui32 Generation;
     };
 
     struct TSelfCheckResult {
@@ -1276,12 +1277,17 @@ public:
         for (const auto& group : Groups->GetEntries()) {
             auto groupId = group.GetKey().GetGroupId();
             auto poolId = group.GetInfo().GetStoragePoolId();
-            GroupState[groupId].ErasureSpecies = group.GetInfo().GetErasureSpeciesV2();
+            auto& groupState = GroupState[groupId];
+            groupState.ErasureSpecies = group.GetInfo().GetErasureSpeciesV2();
+            groupState.Generation = group.GetInfo().GetGeneration();
             StoragePoolState[poolId].Groups.emplace(groupId);
         }
         for (const auto& vSlot : VSlots->GetEntries()) {
             auto vSlotId = GetVSlotId(vSlot.GetKey());
-            GroupState[vSlot.GetInfo().GetGroupId()].VSlots.push_back(&vSlot);
+            auto groupStateIt = GroupState.find(vSlot.GetInfo().GetGroupId());
+            if (groupStateIt != GroupState.end() && vSlot.GetInfo().GetGroupGeneration() == groupStateIt->second.Generation) {
+                groupStateIt->second.VSlots.push_back(&vSlot);
+            }
         }
         for (const auto& pool : StoragePools->GetEntries()) { // there is no specific pool for static group here
             ui64 poolId = pool.GetKey().GetStoragePoolId();

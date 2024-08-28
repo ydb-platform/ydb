@@ -784,8 +784,8 @@ public:
                      Ydb::StatusIds::StatusCode &code,
                      TString &error,
                      const TActorContext &ctx);
-    Ydb::TOperationId MakeOperationId(const TString &path, ui64 txId, TTenant::EAction action);
-    Ydb::TOperationId MakeOperationId(TTenant::TPtr tenant, TTenant::EAction action);
+    NKikimr::NOperationId::TOperationId MakeOperationId(const TString &path, ui64 txId, TTenant::EAction action);
+    NKikimr::NOperationId::TOperationId MakeOperationId(TTenant::TPtr tenant, TTenant::EAction action);
     TStoragePool::TPtr MakeStoragePool(TTenant::TPtr tenant, const TString &kind, ui64 size);
 
     void CreateSubDomain(TTenant::TPtr tenant, const TActorContext &ctx);

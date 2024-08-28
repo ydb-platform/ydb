@@ -1,5 +1,9 @@
 LIBRARY()
 
+ADDINCL(
+    ydb/public/sdk/cpp
+)
+
 SRCS(
     fq.cpp
     scope.cpp

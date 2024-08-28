@@ -46,7 +46,7 @@ namespace {
                     Writer->OnKeyedItem("Position");
                     Writer->OnBeginMap();
                     Writer->OnKeyedItem("File");
-                    Writer->OnStringScalar(pos->File ? pos->File : "<main>");
+                    Writer->OnStringScalar(!pos->File.empty() ? pos->File : "<main>");
                     Writer->OnKeyedItem("Row");
                     Writer->OnInt64Scalar(pos->Row);
                     Writer->OnKeyedItem("Column");

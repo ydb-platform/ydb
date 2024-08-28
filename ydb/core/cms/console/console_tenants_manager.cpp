@@ -1721,10 +1721,10 @@ bool TTenantsManager::CheckAccess(const TString &token,
     return false;
 }
 
-Ydb::TOperationId TTenantsManager::MakeOperationId(const TString &path, ui64 txId, TTenant::EAction action)
+NKikimr::NOperationId::TOperationId TTenantsManager::MakeOperationId(const TString &path, ui64 txId, TTenant::EAction action)
 {
-    Ydb::TOperationId id;
-    id.SetKind(Ydb::TOperationId::CMS_REQUEST);
+    NKikimr::NOperationId::TOperationId id;
+    id.GetMutableKind() = NKikimr::NOperationId::TOperationId::CMS_REQUEST;
     AddOptionalValue(id, "tenant", path);
     AddOptionalValue(id, "cmstid", ToString(Self.TabletID()));
     AddOptionalValue(id, "txid", ToString(txId));
@@ -1732,10 +1732,10 @@ Ydb::TOperationId TTenantsManager::MakeOperationId(const TString &path, ui64 txI
     return id;
 }
 
-Ydb::TOperationId TTenantsManager::MakeOperationId(TTenant::TPtr tenant, TTenant::EAction action)
+NKikimr::NOperationId::TOperationId TTenantsManager::MakeOperationId(TTenant::TPtr tenant, TTenant::EAction action)
 {
-    Ydb::TOperationId id;
-    id.SetKind(Ydb::TOperationId::CMS_REQUEST);
+    NKikimr::NOperationId::TOperationId id;
+    id.GetMutableKind() = NKikimr::NOperationId::TOperationId::CMS_REQUEST;
     AddOptionalValue(id, "tenant", tenant->Path);
     AddOptionalValue(id, "cmstid", ToString(Self.TabletID()));
     AddOptionalValue(id, "txid", ToString(tenant->TxId));
@@ -2139,8 +2139,8 @@ void TTenantsManager::SendTenantNotifications(TTenant::TPtr tenant,
     for (auto &subscriber : tenant->Subscribers) {
         auto notification = MakeHolder<TEvConsole::TEvOperationCompletionNotification>();
         auto &operation = *notification->Record.MutableResponse()->mutable_operation();
-        Ydb::TOperationId id = MakeOperationId(tenant, action);
-        operation.set_id(ProtoToString(id));
+        NKikimr::NOperationId::TOperationId id = MakeOperationId(tenant, action);
+        operation.set_id(id.ToString());
         operation.set_ready(true);
         operation.set_status(code);
 

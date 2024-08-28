@@ -1,5 +1,9 @@
 LIBRARY()
 
+ADDINCL(
+    ydb/public/sdk/cpp
+)
+
 SRCS(
     ydb_clickhouse_internal.cpp
     ydb_logstore.cpp

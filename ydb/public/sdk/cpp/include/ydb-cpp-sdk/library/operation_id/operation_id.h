@@ -35,6 +35,15 @@ public:
 
     TOperationId();
     explicit TOperationId(const std::string& string, bool allowEmpty = false);
+    
+    TOperationId(const TOperationId& other);
+    TOperationId(TOperationId&& other) = default;
+
+    TOperationId& operator=(const TOperationId& other);
+    TOperationId& operator=(TOperationId&& other) = default;
+
+    ~TOperationId() = default;
+
     EKind GetKind() const;
     EKind& GetMutableKind();
 
@@ -47,6 +56,7 @@ public:
 
 private:
     bool IsValidKind(int kind);
+    void CopyData(const TOperationId::TDataList& otherData);
 
     EKind Kind;
     TDataList Data;

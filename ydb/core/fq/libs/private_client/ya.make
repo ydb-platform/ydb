@@ -1,5 +1,9 @@
 LIBRARY()
 
+ADDINCL(
+    ydb/public/sdk/cpp
+)
+
 SRCS(
     internal_service.cpp
     loopback_service.cpp

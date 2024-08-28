@@ -141,7 +141,7 @@ public:
         if ((Components_ & TSerializedExprGraphComponents::Positions) && !(command & SAME_POSITION)) {
             const auto& pos = Ctx.GetPosition(node.Pos());
             ui32 fileNum = 0;
-            if (pos.File) {
+            if (!pos.File.empty()) {
                 auto fileIt = Files_.find(pos.File);
                 YQL_ENSURE(fileIt != Files_.end());
                 fileNum = fileIt->second;
@@ -184,7 +184,7 @@ private:
             const auto& pos = Ctx.GetPosition(node.Pos());
             const auto& file = pos.File;
             ui32 fileNum = 0;
-            if (file) {
+            if (!file.empty()) {
                 fileNum = Files_.emplace(file, 1 + (ui32)Files_.size()).first->second;
             }
 

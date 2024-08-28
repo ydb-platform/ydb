@@ -203,7 +203,7 @@ public:
     }
 
     TString GetSessionId() const override {
-        return ReadSession ? ReadSession->GetSessionId() : TString{"empty"};
+        return ReadSession ? TString{ReadSession->GetSessionId()} : TString{"empty"};
     }
 
 private:
@@ -267,7 +267,7 @@ private:
         bool recheckBatch = false;
 
         if (freeSpace > 0) {
-            auto events = GetReadSession().GetEvents(false, TMaybe<size_t>(), static_cast<size_t>(freeSpace));
+            auto events = GetReadSession().GetEvents(false, std::nullopt, static_cast<size_t>(freeSpace));
             recheckBatch = !events.empty();
 
             ui32 batchItemsEstimatedCount = 0;
@@ -435,9 +435,9 @@ private:
             const auto partitionKey = MakePartitionKey(event.GetPartitionSession());
             const auto partitionKeyStr = ToString(partitionKey);
             for (const auto& message : event.GetMessages()) {
-                const TString& data = message.GetData();
+                const std::string& data = message.GetData();
                 Self.IngressStats.Bytes += data.size();
-                LWPROBE(PqReadDataReceived, TString(TStringBuilder() << Self.TxId), Self.SourceParams.GetTopicPath(), data);
+                LWPROBE(PqReadDataReceived, TString(TStringBuilder() << Self.TxId), Self.SourceParams.GetTopicPath(), TString{data});
                 SRC_LOG_T("SessionId: " << Self.GetSessionId() << " Key: " << partitionKeyStr << " Data received: " << message.DebugString(true));
 
                 if (message.GetWriteTime() < Self.StartingMessageTimestamp) {
@@ -480,7 +480,7 @@ private:
 
             SRC_LOG_D("SessionId: " << Self.GetSessionId() << " Key: " << partitionKeyStr << " StartPartitionSessionEvent received");
 
-            TMaybe<ui64> readOffset;
+            std::optional<ui64> readOffset;
             const auto offsetIt = Self.PartitionToOffset.find(partitionKey);
             if (offsetIt != Self.PartitionToOffset.end()) {
                 readOffset = offsetIt->second;
@@ -536,7 +536,7 @@ private:
         }
 
         std::pair<NUdf::TUnboxedValuePod, i64> CreateItem(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message) {
-            const TString& data = message.GetData();
+            const std::string& data = message.GetData();
 
             i64 usedSpace = 0;
             NUdf::TUnboxedValuePod item;

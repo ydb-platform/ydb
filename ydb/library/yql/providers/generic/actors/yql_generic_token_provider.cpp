@@ -43,7 +43,7 @@ namespace NYql::NDq {
         // 3. Otherwise use credentials provider to get token
         Y_ENSURE(CredentialsProvider_, "CredentialsProvider is not initialized");
 
-        TString iamToken;
+        std::string iamToken;
         try {
             iamToken = CredentialsProvider_->GetAuthInfo();
         } catch (const std::exception& e) {

@@ -53,7 +53,7 @@ TFuture<TStatus> CheckGeneration(
 
     TResultSetParser parser(selectResult.GetResultSet(0));
     if (parser.TryNextRow()) {
-        context->GenerationRead = parser.ColumnParser(context->GenerationColumn).GetOptionalUint64().GetOrElse(0);
+        context->GenerationRead = parser.ColumnParser(context->GenerationColumn).GetOptionalUint64().value_or(0);
     }
 
     bool isOk = false;
@@ -137,7 +137,7 @@ TFuture<TStatus> UpsertGeneration(const TGenerationContextPtr& context) {
     auto ttxControl = TTxControl::Tx(*context->Transaction);
     if (context->CommitTx) {
         ttxControl.CommitTx();
-        context->Transaction.Clear();
+        context->Transaction.reset();
     }
 
     return context->Session.ExecuteDataQuery(query, ttxControl).Apply(
@@ -298,7 +298,7 @@ TFuture<TStatus> RollbackTransaction(const TGenerationContextPtr& context) {
     }
 
     auto future = context->Transaction->Rollback();
-    context->Transaction.Clear();
+    context->Transaction.reset();
     return future;
 }
 

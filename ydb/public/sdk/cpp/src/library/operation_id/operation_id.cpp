@@ -120,6 +120,26 @@ TOperationId::TOperationId(const std::string &string, bool allowEmpty) {
     }
 }
 
+TOperationId::TOperationId(const TOperationId& other) {
+    Kind = other.Kind;
+    CopyData(other.Data);
+}
+
+TOperationId& TOperationId::operator=(const TOperationId& other) {
+    Kind = other.Kind;
+    Data.clear();
+    Index.clear();
+    CopyData(other.Data);
+    return *this;
+}
+
+void TOperationId::CopyData(const TOperationId::TDataList& otherData) {
+    for (const auto& data : otherData) {
+        Data.push_back(std::make_unique<TData>(data->Key, data->Value));
+        Index[data->Key].push_back(&Data.back()->Value);
+    }
+}
+
 TOperationId::EKind TOperationId::GetKind() const {
     return Kind;
 }

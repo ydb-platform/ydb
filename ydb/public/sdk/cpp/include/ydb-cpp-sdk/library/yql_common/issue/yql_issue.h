@@ -112,7 +112,7 @@ class TIssue;
 using TIssuePtr = TIntrusivePtr<TIssue>;
 class TIssue: public TThrRefBase {
     std::vector<TIntrusivePtr<TIssue>> Children_;
-    std::string Message;
+    TString Message;
 public:
     TPosition Position;
     TPosition EndPosition;
@@ -209,7 +209,7 @@ public:
     }
 
     // Unsafe method. Doesn't call SanitizeNonAscii(Message)
-    std::string* MutableMessage() {
+    TString* MutableMessage() {
         return &Message;
     }
 

@@ -3,7 +3,7 @@
 #include <ydb-cpp-sdk/client/types/status/status.h>
 #include <ydb-cpp-sdk/client/types/status_codes.h>
 
-#include <ydb-cpp-sdk/library/retry/retry_policy.h>
+#include <library/cpp/retry/retry_policy.h>
 
 namespace NYdb::NTopic {
 

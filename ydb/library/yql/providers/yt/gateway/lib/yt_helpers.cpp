@@ -624,7 +624,7 @@ void FillResultFromOperationError(NCommon::TOperationResult& result, const NYT::
             auto parsedPos = TryParseTerminationMessage(message);
             if (message.size() < failedJob.Stderr.size()) {
                 if (uniqueErrors.emplace(message).second) {
-                    rootIssue.AddSubIssue(MakeIntrusive<TIssue>(YqlIssue(parsedPos.GetOrElse(pos), TIssuesIds::DEFAULT_ERROR, TString{message})));
+                    rootIssue.AddSubIssue(MakeIntrusive<TIssue>(YqlIssue(parsedPos.value_or(pos), TIssuesIds::DEFAULT_ERROR, TString{message})));
                 }
             } else {
                 TString errorDescription = failedJob.Error.ShortDescription();

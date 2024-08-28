@@ -33,9 +33,9 @@ struct TEvents {
 
     struct TEvDbResponse : NActors::TEventLocal<TEvDbResponse, EvDbResponse> {
         NYdb::TStatus Status;
-        TVector<NYdb::TResultSet> ResultSets;
+        std::vector<NYdb::TResultSet> ResultSets;
 
-        TEvDbResponse(NYdb::TStatus status, const TVector<NYdb::TResultSet>& resultSets)
+        TEvDbResponse(NYdb::TStatus status, const std::vector<NYdb::TResultSet>& resultSets)
             : Status(status)
             , ResultSets(resultSets)
         {}

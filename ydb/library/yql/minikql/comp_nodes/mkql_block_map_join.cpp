@@ -21,7 +21,8 @@ size_t CalcMaxBlockLength(const TVector<TType*>& items) {
         }));
 }
 
-class TBlockJoinState : public TComputationValue<TBlockJoinState>
+template <bool RightRequired>
+class TBlockJoinState : public TComputationValue<TBlockJoinState<RightRequired>>
 {
 using TBase = TComputationValue<TBlockJoinState>;
 public:
@@ -67,13 +68,19 @@ public:
             AddItem(GetItem(i), i);
         }
         // Convert and append items from the "right" dict.
-        if (value) {
+        if constexpr (RightRequired) {
             for (size_t i = InputWidth_, j = 0; i < OutputWidth_; i++, j++) {
                 AddValue(value.GetElement(j), i);
             }
         } else {
-            for (size_t i = InputWidth_; i < OutputWidth_; i++) {
-                AddValue(value, i);
+            if (value) {
+                for (size_t i = InputWidth_, j = 0; i < OutputWidth_; i++, j++) {
+                    AddValue(value.GetElement(j), i);
+                }
+            } else {
+                for (size_t i = InputWidth_; i < OutputWidth_; i++) {
+                    AddValue(value, i);
+                }
             }
         }
         OutputRows_++;
@@ -213,7 +220,7 @@ template <bool WithoutRight, bool RightRequired>
 class TBlockWideMapJoinWrapper : public TStatefulWideFlowComputationNode<TBlockWideMapJoinWrapper<WithoutRight, RightRequired>>
 {
 using TBaseComputation = TStatefulWideFlowComputationNode<TBlockWideMapJoinWrapper<WithoutRight, RightRequired>>;
-using TState = TBlockJoinState;
+using TState = TBlockJoinState<RightRequired>;
 public:
     TBlockWideMapJoinWrapper(TComputationMutables& mutables,
         const TVector<TType*>&& resultJoinItems, const TVector<TType*>&& leftFlowItems,

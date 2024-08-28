@@ -1,0 +1,38 @@
+name: Create Github Actions Runner VM image
+on:
+  workflow_dispatch:
+
+jobs:
+  packer:
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+           .github
+           ydb/ci/
+
+      - name: packer build
+        shell: bash
+        env:
+          YC_SERVICE_ACCOUNT_KEY_FILE: /tmp/yc_sa.json
+          CUSTOM_VARS_FILE: /tmp/custom.pkrvars.hcl
+          YC_SA_JSON_CREDENTIALS: ${{ secrets.YC_SA_JSON_CREDENTIALS }}
+          GH_RUNNER_BUILD_IMAGE_CUSTOM_VARS_HCL: ${{ vars.GH_RUNNER_BUILD_IMAGE_CUSTOM_VARS_HCL }}
+        run: |
+          echo "$YC_SA_JSON_CREDENTIALS" > "$YC_SERVICE_ACCOUNT_KEY_FILE"
+          echo "$GH_RUNNER_BUILD_IMAGE_CUSTOM_VARS_HCL" > "$CUSTOM_VARS_FILE"
+          
+          args=()
+          if [ -s "$CUSTOM_VARS_FILE" ]; then
+            args+=(-var-file="$CUSTOM_VARS_FILE")
+          fi
+          
+          set -x
+          cd ./ydb/ci/gh-runner-image/
+          packer init .
+          packer build "${args[@]}" .
+      
+    

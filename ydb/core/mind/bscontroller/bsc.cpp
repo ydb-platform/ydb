@@ -337,7 +337,7 @@ void TBlobStorageController::ValidateInternalState() {
             Y_ABORT_UNLESS(donor->GetShortVDiskId() == vslot->GetShortVDiskId());
         }
         if (vslot->Group) {
-            if (vslot->Status == NKikimrBlobStorage::EVDiskStatus::READY) {
+            if (vslot->GetStatus() == NKikimrBlobStorage::EVDiskStatus::READY) {
                 Y_DEBUG_ABORT_UNLESS(vslot->IsReady || vslot->IsInVSlotReadyTimestampQ());
             } else {
                 Y_DEBUG_ABORT_UNLESS(!vslot->IsReady && !vslot->IsInVSlotReadyTimestampQ());
@@ -401,7 +401,7 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
             const auto& record = msg->Record;
             for (const auto& item : record.GetVDiskStatus()) {
                 const TVSlotId vslotId(item.GetNodeId(), item.GetPDiskId(), item.GetVSlotId());
-                if (TVSlotInfo *slot = FindVSlot(vslotId); slot && slot->Status > item.GetStatus()) {
+                if (TVSlotInfo *slot = FindVSlot(vslotId); slot && slot->GetStatus() > item.GetStatus()) {
                     return 1;
                 } else if (const auto it = StaticVSlots.find(vslotId); it != StaticVSlots.end() && it->second.VDiskStatus > item.GetStatus()) {
                     return 1;

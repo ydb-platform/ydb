@@ -181,6 +181,21 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
 
             return IGraphTransformer::TStatus::Repeat;
         }
+    } else if (expectedType.GetKind() == ETypeAnnotationKind::Resource && sourceType.GetKind() == ETypeAnnotationKind::Resource) {
+        const auto from = sourceType.Cast<TResourceExprType>()->GetTag();
+        const auto to = expectedType.Cast<TResourceExprType>()->GetTag();
+        if (from == "DateTime2.TM" && to == "DateTime2.TM64") {
+            node = ctx.Builder(node->Pos())
+                .Callable("Apply")
+                    .Callable(0, "Udf")
+                        .Atom(0, "DateTime2.Convert", TNodeFlags::Default)
+                    .Seal()
+                    .Add(1, std::move(node))
+                .Seal()
+                .Build();
+
+            return IGraphTransformer::TStatus::Repeat;
+        }
     } else if (expectedType.GetKind() == ETypeAnnotationKind::Resource && sourceType.GetKind() == ETypeAnnotationKind::Data) {
         const auto fromSlot = sourceType.Cast<TDataExprType>()->GetSlot();
         const auto to = expectedType.Cast<TResourceExprType>()->GetTag();
@@ -228,43 +243,6 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
                         .Seal()
                     .Seal()
                     .Add(1, std::move(node))
-                .Seal()
-                .Build();
-
-            return IGraphTransformer::TStatus::Repeat;
-
-        } else if (to == "DateTime2.TM64"
-                && GetDataTypeInfo(fromSlot).Features & (NUdf::EDataTypeFeatures::DateType | NUdf::EDataTypeFeatures::TzDateType)
-                && !(GetDataTypeInfo(fromSlot).Features & NUdf::EDataTypeFeatures::BigDateType))
-        {
-            const auto pos = node->Pos();
-            auto resource = ctx.Builder(pos)
-                .Callable("Apply")
-                    .Callable(0, "Udf")
-                        .Atom(0, "DateTime2.Split", TNodeFlags::Default)
-                        .Callable(1, "Void")
-                        .Seal()
-                        .Callable(2, "TupleType")
-                            .Callable(0, "TupleType")
-                                .Callable(0, "DataType")
-                                    .Atom(0, sourceType.Cast<TDataExprType>()->GetName(), TNodeFlags::Default)
-                                .Seal()
-                            .Seal()
-                            .Callable(1, "StructType")
-                            .Seal()
-                            .Callable(2, "TupleType")
-                            .Seal()
-                        .Seal()
-                    .Seal()
-                    .Add(1, std::move(node))
-                .Seal()
-                .Build();
-            node = ctx.Builder(pos)
-                .Callable("Apply")
-                    .Callable(0, "Udf")
-                        .Atom(0, "DateTime2.Convert", TNodeFlags::Default)
-                        .Seal()
-                    .Add(1, std::move(resource))
                 .Seal()
                 .Build();
 

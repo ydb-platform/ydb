@@ -98,7 +98,10 @@ struct TTM64Storage {
     }
 
     void FromTimestamp64(const NUdf::IDateBuilder& builder, i64 value, ui16 tzId = 0) {
-        const i64 datetime = (value >= 0 ? value : (value - 1000000ll)) / 1000000ll;
+        i64 datetime = value / 1000000ll;
+        if (value % 1000000ll < 0) {
+            datetime -= 1;
+        }
         FromDatetime64(builder, datetime, tzId);
         Microsecond = value - datetime * 1000000ll;
     }

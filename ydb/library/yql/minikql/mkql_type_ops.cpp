@@ -1057,7 +1057,6 @@ public:
     }
 
     bool MakeDate32(i32 year, ui32 month, ui32 day, i32& value) const {
-        // TODO remove (year==0) condition to treat 0 and -1 years equally?
         if (Y_UNLIKELY(year == 0 || year < NUdf::MIN_YEAR32 || year >= NUdf::MAX_YEAR32)) {
             return false;
         }
@@ -1436,23 +1435,6 @@ bool SplitDate32(i32 value, i32& year, ui32& month, ui32& day, ui32& dayOfYear, 
 bool SplitTzDate32(i32 value, i32& year, ui32& month, ui32& day, ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 tzId) {
     return TDateTable::Instance().SplitTzDate32(value, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId);
 }
-
-/*
-bool SplitDatetime64(i64 value, i32& year, ui32& month, ui32& day, ui32& hour, ui32& min, ui32& sec,
-        ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek)
-{
-    return TDateTable::Instance().SplitDatetime64(value, year, month, day, hour, min, sec,
-        dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
-}
-
-bool SplitTimestamp64(i64 value, i32& year, ui32& month, ui32& day, ui32& hour, ui32& min, ui32& sec, ui32& usec,
-        ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek)
-{
-    return TDateTable::Instance().SplitTimestamp64(value, year, month, day, hour, min, sec, usec,
-        dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
-}
-
-*/
 
 bool SplitTzDatetime64(i64 value, i32& year, ui32& month, ui32& day, ui32& hour, ui32& min, ui32& sec,
         ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 tzId)

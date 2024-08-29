@@ -8,4 +8,5 @@ RECURSE(
     services
     tests
     tools
+    yql_docs
 )

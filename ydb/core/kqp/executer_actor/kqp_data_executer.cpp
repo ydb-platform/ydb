@@ -1154,6 +1154,36 @@ private:
                 CheckExecutionComplete();
                 return;
             }
+            case NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN: {
+                LOG_D("Broken locks: " << res->Record.DebugString());
+                YQL_ENSURE(shardState->State == TShardState::EState::Executing);
+                shardState->State = TShardState::EState::Finished;
+                Counters->TxProxyMon->TxResultAborted->Inc();
+                LocksBroken = true;
+
+                TMaybe<TString> tableName;
+                if (!res->Record.GetTxLocks().empty()) {
+                    auto& lock = res->Record.GetTxLocks(0);
+                    auto tableId = TTableId(lock.GetSchemeShard(), lock.GetPathId());
+                    auto it = FindIf(TasksGraph.GetStagesInfo(), [tableId](const auto& x){ return x.second.Meta.TableId.HasSamePath(tableId); });
+                    if (it != TasksGraph.GetStagesInfo().end()) {
+                        tableName = it->second.Meta.TableConstInfo->Path;
+                    }
+                }
+
+                // Reply as soon as we know which table had locks invalidated
+                if (tableName) {
+                    auto message = TStringBuilder()
+                        << "Transaction locks invalidated. Table: " << *tableName;
+
+                    return ReplyErrorAndDie(Ydb::StatusIds::ABORTED,
+                        YqlIssue({}, TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message));
+                }
+
+
+                CheckExecutionComplete();
+                return;
+            }
             default:
             {
                 return ShardError(res->Record);
@@ -1673,17 +1703,14 @@ private:
     }
 
     void ExecuteEvWriteTransaction(ui64 shardId, NKikimrDataEvents::TEvWrite& evWrite) {
-        YQL_ENSURE(!ImmediateTx);
         TShardState shardState;
-        shardState.State = TShardState::EState::Preparing;
+        shardState.State = ImmediateTx ? TShardState::EState::Executing : TShardState::EState::Preparing;
         shardState.DatashardState.ConstructInPlace();
 
         auto evWriteTransaction = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>();
         evWriteTransaction->Record = evWrite;
-        evWriteTransaction->Record.SetTxMode(NKikimrDataEvents::TEvWrite::MODE_PREPARE);
+        evWriteTransaction->Record.SetTxMode(ImmediateTx ? NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE : NKikimrDataEvents::TEvWrite::MODE_PREPARE);
         evWriteTransaction->Record.SetTxId(TxId);
-
-        evWriteTransaction->Record.MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
 
         auto locksCount = evWriteTransaction->Record.GetLocks().LocksSize();
         shardState.DatashardState->ShardReadLocks = locksCount > 0;

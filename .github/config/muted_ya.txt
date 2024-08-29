@@ -24,6 +24,7 @@ ydb/core/kqp/ut/service [*/*]*
 ydb/core/kqp/ut/service KqpQueryService.ExecuteQueryPgTableSelect
 ydb/core/kqp/ut/service KqpQueryService.QueryOnClosedSession
 ydb/core/kqp/ut/service KqpService.CloseSessionsWithLoad
+ydb/core/kqp/ut/tx KqpSnapshotRead.ReadOnlyTxWithIndexCommitsOnConcurrentWrite+withSink
 ydb/core/persqueue/ut [*/*]*
 ydb/core/persqueue/ut TPQTest.*DirectRead*
 ydb/core/persqueue/ut/ut_with_sdk [*/*]*

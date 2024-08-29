@@ -131,6 +131,7 @@ def upload_results(result_path, s3_folder, ydb):
 
 def test_tpc():
     is_ci = os.environ.get("OUTPUT_DIR") is not None
+    print("is ci: ", is_ci, file=sys.stderr)
 
     runner = Runner()
     runner.wrapped_run("h", 1, 1, r"q1\.sql")
@@ -144,3 +145,4 @@ def test_tpc():
         print(f"s3 folder: {s3_folder}", file=sys.stderr)
 
         upload_results(result_path, s3_folder, "")
+    exit(1)

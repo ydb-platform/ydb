@@ -779,7 +779,7 @@ private:
             UpdateRequestTrackingStatsScheduled = true;
         }
 
-        LWPROBE(BackPressureRequestTrackingStats, Info->GroupID.GetRawId(), DeviceTypeStr(Info->GetDeviceType(), true), VDiskId.ToStringWOGeneration(), WorstDuration.MilliSeconds());
+        LWPROBE(BackPressureRequestTrackingStats, RecentGroup->GetGroupID(), EPDiskType_Name(RecentGroup->GetDeviceType()), VDiskId.ToStringWOGeneration(), WorstDuration.MicroSeconds() / 1000.0);
     }
 
     ////////////////////////////////////////////////////////////////////////

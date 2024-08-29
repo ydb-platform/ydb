@@ -216,9 +216,10 @@ public:
                     blockState.Finish();
                     break;
                 }
+                // Leave the loop, if no values left in the flow.
+                Y_DEBUG_ABORT_UNLESS(blockState.IsFinished());
+                break;
             }
-            // Leave the outer loop, if no values left in the flow.
-            Y_DEBUG_ABORT_UNLESS(blockState.IsFinished());
             break;
         } while (true);
 

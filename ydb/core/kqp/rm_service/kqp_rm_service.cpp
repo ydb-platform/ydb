@@ -142,6 +142,13 @@ public:
         return Counters;
     }
 
+    TPlannerPlacingOptions GetPlacingOptions() override {
+        return TPlannerPlacingOptions{
+            .MaxNonParallelTasksExecutionLimit = MaxNonParallelTasksExecutionLimit.load(),
+            .MaxNonParallelTopStageExecutionLimit = MaxNonParallelTopStageExecutionLimit.load(),
+        };
+    }
+
     void CreateResourceInfoExchanger(
             const NKikimrConfig::TTableServiceConfig::TResourceManager::TInfoExchangerSettings& settings) {
         PublishResourcesByExchanger = true;
@@ -414,6 +421,8 @@ public:
         MinChannelBufferSize.store(config.GetMinChannelBufferSize());
         MaxTotalChannelBuffersSize.store(config.GetMaxTotalChannelBuffersSize());
         QueryMemoryLimit.store(config.GetQueryMemoryLimit());
+        MaxNonParallelTopStageExecutionLimit.store(config.GetMaxNonParallelTopStageExecutionLimit());
+        MaxNonParallelTasksExecutionLimit.store(config.GetMaxNonParallelTasksExecutionLimit());
     }
 
     ui32 GetNodeId() override {
@@ -460,6 +469,8 @@ public:
     std::atomic<i32> ExecutionUnitsLimit;
     TLimitedResource<ui64> ScanQueryMemoryResource;
     std::atomic<i64> ExternalDataQueryMemory = 0;
+    std::atomic<ui64> MaxNonParallelTopStageExecutionLimit = 1;
+    std::atomic<ui64> MaxNonParallelTasksExecutionLimit = 8;
 
     // current state
     std::atomic<ui64> LastResourceBrokerTaskId = 0;

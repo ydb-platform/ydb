@@ -400,7 +400,7 @@ runs:
               --instance "https://$TESTMO_PROXY_ADDR" --run-id "$TESTMO_RUN_ID" \
               --results "$TESTMO_JUNIT_REPORT_PARTS/*.xml"
 
-            TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:run:complete --instance "https://$TESTMO_PROXY_ADDR" --run-id $TESTMO_RUN_ID
+            TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:run:complete --instance "https://$TESTMO_PROXY_ADDR" --run-id $TESTMO_RUN_ID || true
             echo "runid=" >> $GITHUB_OUTPUT
           fi
 
@@ -440,7 +440,7 @@ runs:
       shell: bash
       run: |
         if [ ${{ steps.build.outputs.runid }} ]; then
-          TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:run:complete --instance "https://$TESTMO_PROXY_ADDR" --run-id ${{ steps.build.outputs.runid }}
+          TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:run:complete --instance "https://$TESTMO_PROXY_ADDR" --run-id ${{ steps.build.outputs.runid }} || true
         fi
         if [ ${{ inputs.testman_token }} ]; then
           kill $TESTMO_PROXY_PID

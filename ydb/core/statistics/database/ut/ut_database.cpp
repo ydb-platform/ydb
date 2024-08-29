@@ -3,6 +3,8 @@
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/statistics/database/database.h>
 
+#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+
 #include <thread>
 
 namespace NKikimr::NStat {
@@ -87,6 +89,41 @@ Y_UNIT_TEST_SUITE(StatisticsSaveLoad) {
         auto loadResponseA = runtime.GrabEdgeEvent<TEvStatistics::TEvLoadStatisticsQueryResponse>(sender);
         UNIT_ASSERT(!loadResponseA->Get()->Success);
     }
+
+    Y_UNIT_TEST(ForbidAccess) {
+        TTestEnv env(1, 1);
+        auto init = [&] () {
+            CreateDatabase(env, "Database");
+            CreateUniformTable(env, "Database", "Table");
+        };
+        std::thread initThread(init);
+
+        auto& runtime = *env.GetServer().GetRuntime();
+        runtime.SimulateSleep(TDuration::Seconds(10));
+        initThread.join();
+
+        NYdb::EStatus status;
+        auto test = [&] () {
+            auto driverConfig = NYdb::TDriverConfig()
+                .SetEndpoint(env.GetEndpoint())
+                .SetAuthToken("user@builtin");
+            auto driver = NYdb::TDriver(driverConfig);
+            auto db = NYdb::NTable::TTableClient(driver);
+            auto session = db.CreateSession().GetValueSync().GetSession();
+
+            auto result = session.ExecuteDataQuery(R"(
+                SELECT * FROM `/Root/Database/.metadata/_statistics`;
+            )", NYdb::NTable::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            status = result.GetStatus();
+        };
+        std::thread testThread(test);
+
+        runtime.SimulateSleep(TDuration::Seconds(10));
+        testThread.join();
+
+        UNIT_ASSERT_VALUES_EQUAL(status, NYdb::EStatus::SCHEME_ERROR);
+    }
+
 }
 
 } // NKikimr::NStat

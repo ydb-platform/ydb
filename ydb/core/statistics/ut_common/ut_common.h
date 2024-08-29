@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/core/statistics/events.h>
+
 #include <ydb/core/testlib/test_client.h>
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -87,8 +89,12 @@ struct TAnalyzedTable {
     void ToProto(NKikimrStat::TTable& tableProto) const;
 };
 
-void Analyze(TTestActorRuntime& runtime, const std::vector<TAnalyzedTable>& table, ui64 saTabletId);
-void AnalyzeTable(TTestActorRuntime& runtime, const TAnalyzedTable& table, ui64 shardTabletId);
+std::unique_ptr<TEvStatistics::TEvAnalyze> MakeAnalyzeRequest(const std::vector<TAnalyzedTable>& tables, const TString operationId = "operationId");
+
+void Analyze(TTestActorRuntime& runtime, ui64 saTabletId, const std::vector<TAnalyzedTable>& table, const TString operationId = "operationId");
+void AnalyzeTable(TTestActorRuntime& runtime, ui64 shardTabletId, const TAnalyzedTable& table);
+void AnalyzeStatus(TTestActorRuntime& runtime, ui64 saTabletId, const TString operationId, const NKikimrStat::TEvAnalyzeStatusResponse::EStatus expectedStatus);
+
 
 } // namespace NStat
 } // namespace NKikimr

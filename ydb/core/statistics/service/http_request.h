@@ -55,6 +55,7 @@ private:
     const TActorId ReplyToActorId;
 
     TPathId PathId;
+    TString OperationId;
     ui64 StatisticsAggregatorId = 0;
 
     static const ui64 FirstRoundCookie = 1;

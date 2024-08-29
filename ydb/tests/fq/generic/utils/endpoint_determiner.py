@@ -9,9 +9,7 @@ class EndpointDeterminer:
     docker_compose_yml: os.PathLike
 
     def __init__(self, docker_compose_yml: os.PathLike):
-        self.docker_compose_bin = yatest.common.build_path(
-            "library/recipes/docker_compose/bin/docker-compose"
-        )
+        self.docker_compose_bin = yatest.common.build_path("library/recipes/docker_compose/bin/docker-compose")
         self.docker_compose_yml = docker_compose_yml
 
     def get_port(self, service_name: str, internal_port: int) -> int:
@@ -28,6 +26,4 @@ class EndpointDeterminer:
             external_port = int(out.split(b":")[1])
             return external_port
         except subprocess.CalledProcessError as e:
-            raise RuntimeError(
-                f"docker-compose error: {e.output} (code {e.returncode})"
-            )
+            raise RuntimeError(f"docker-compose error: {e.output} (code {e.returncode})")

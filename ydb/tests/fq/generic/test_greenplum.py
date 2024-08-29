@@ -27,7 +27,7 @@ class TestGreenplum:
 
         sql = Rf"""
             SELECT *
-            FROM {conn_name}.{table_name};
+            FROM {conn_name}.{table_name} ORDER BY number;
             """
 
         query_id = fq_client.create_query(
@@ -44,6 +44,6 @@ class TestGreenplum:
             optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.INT32))
         )
         assert len(result_set.rows) == 3
-        assert result_set.rows[0].items[0].int32_value == 1
-        assert result_set.rows[1].items[0].int32_value == 2
-        assert result_set.rows[2].items[0].int32_value == 3
+        assert result_set.rows[0].items[0].int32_value == 3
+        assert result_set.rows[1].items[0].int32_value == 14
+        assert result_set.rows[2].items[0].int32_value == 15

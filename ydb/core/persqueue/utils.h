@@ -21,9 +21,6 @@ TString SourceIdHash(const TString& sourceId);
 
 void Migrate(NKikimrPQ::TPQTabletConfig& config);
 
-// This function required for marking the code which required remove after 25-1
-constexpr bool ReadRuleCompatible() { return true; }
-
 bool HasConsumer(const NKikimrPQ::TPQTabletConfig& config, const TString& consumerName);
 size_t ConsumerCount(const NKikimrPQ::TPQTabletConfig& config);
 

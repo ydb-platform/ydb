@@ -124,7 +124,8 @@
             "Base": "TKqlReadTableRangesBase",
             "Match": {"Type": "CallableBase"},
             "Children": [
-                {"Index": 5, "Name": "Process", "Type": "TCoLambda"}
+                {"Index": 5, "Name": "Process", "Type": "TCoLambda"},
+                {"Index": 6, "Name": "UnchangedFilter", "Type": "TCoLambda", "Optional": true}
             ]
         },
         {

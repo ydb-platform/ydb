@@ -741,7 +741,7 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
 
     auto flatmap = node.Cast<TCoFlatMap>();
     auto read = flatmap.Input().Cast<TKqpReadOlapTableRanges>();
-
+    
     if (read.Process().Body().Raw() != read.Process().Args().Arg(0).Raw()) {
         return node;
     }
@@ -835,6 +835,10 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
         .Settings(read.Settings())
         .ExplainPrompt(read.ExplainPrompt())
         .Process(newProcessLambda)
+        .UnchangedFilter(/*ctx.DeepCopyLambda(flatmap.Lambda().Ref())*/)
+            .Args({"args"})
+            .Body("args")
+            .Build()
         .Done();
 
 #ifdef ENABLE_COLUMNS_PRUNING

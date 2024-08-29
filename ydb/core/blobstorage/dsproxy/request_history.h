@@ -9,7 +9,7 @@ private:
     struct TBaseEntry {
         ui32 TimeUs;
         TBaseEntry(TInstant startTime)
-            : TimeUs((TActivationContext::Now() - startTime).MicroSeconds())
+            : TimeUs((TInstant::Now() - startTime).MicroSeconds())
         {}
     };
 
@@ -164,7 +164,7 @@ public:
 public:
     THistory(const TIntrusivePtr<TBlobStorageGroupInfo>& info)
         : Info(info)
-        , StartTime(TActivationContext::Now())
+        , StartTime(TInstant::Now())
     {}
 
     void AddVPut(ui8 partId, ui32 queryCount, ui32 orderNumber) {

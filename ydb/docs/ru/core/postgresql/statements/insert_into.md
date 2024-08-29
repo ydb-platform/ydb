@@ -1,4 +1,4 @@
-# INSERT INTO (вставка строк в таблицу)
+# INSERT INTO (вставка строк в строковую таблицу)
 
 {% include [../_includes/alert_preview.md)](../_includes/alert_preview.md) %}
 
@@ -8,7 +8,7 @@ INSERT INTO <table name> (<column name>, ...)
 VALUES (<value>);
 ```
 
-Инструкция `INSERT INTO` предназначена для добавления строк в таблицу. Она может добавить одну или несколько строк за одно исполнение. Пример вставки одной строки в таблицу "people":
+Инструкция `INSERT INTO` предназначена для добавления строк в строковую таблицу. Она может добавить одну или несколько строк за одно исполнение. Пример вставки одной строки в таблицу "people":
 ```sql
 INSERT INTO people (name, lastname, age, country, state, city, birthday, sex) 
 VALUES ('John', 'Doe', 30, 'USA', 'California', 'Los Angeles', CAST('1992-01-15' AS Date), 'Male');

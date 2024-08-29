@@ -236,7 +236,7 @@ public:
 
     const i64 SysReserveSize = 5;
     const i64 CommonStaticLogSize = 70;
-    const i64 MinCommonLogSize = 200;
+    i64 MaxCommonLogChunks = 200;
 
     TChunkTracker()
         : GlobalQuota(new TPerOwnerQuotaTracker())
@@ -272,8 +272,9 @@ public:
             return false;
         }
 
+        MaxCommonLogChunks = params.MaxCommonLogChunks;
         if (params.SeparateCommonLog) {
-            i64 commonLog = MinCommonLogSize;
+            i64 commonLog = MaxCommonLogChunks;
             if (commonLog + staticLog < params.CommonLogSize) {
                 commonLog = params.CommonLogSize - staticLog;
             }
@@ -314,6 +315,7 @@ public:
                 OwnerQuota->InitialAllocate(ownerId, chunks);
                 bool isOk = SharedQuota->InitialAllocate(chunks);
                 if (!isOk) {
+                    outErrorReason = (TStringBuilder() << "Error adding OwnerQuota, ownerId# " << ownerId << " chunks# " << chunks);
                     return false;
                 }
             }
@@ -322,10 +324,12 @@ public:
         if (params.CommonLogSize) {
             if (params.SeparateCommonLog) {
                 if (!GlobalQuota->InitialAllocate(OwnerSystem, params.CommonLogSize)) {
+                    outErrorReason = (TStringBuilder() << "Error InitialAllocate with SeparateCommonLog, size# " << params.CommonLogSize);
                     return false;
                 }
             } else {
                 if (!SharedQuota->InitialAllocate(params.CommonLogSize)) {
+                    outErrorReason = (TStringBuilder() << "Error InitialAllocate, size# " << params.CommonLogSize);
                     return false;
                 }
             }

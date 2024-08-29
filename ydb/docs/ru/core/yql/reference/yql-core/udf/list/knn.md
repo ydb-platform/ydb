@@ -169,7 +169,13 @@ $facts = AsList(
 $K = 10;
 $TargetEmbedding = Knn::ToBinaryStringFloat([1.2f, 2.3f, 3.4f, 4.5f]);
 
-SELECT * FROM {% if backend_name == "YDB" %} Facts {% else %} AS_TABLE($facts) {% endif %}
+SELECT *
+{% if backend_name == "YDB" %}
+FROM Facts
+{% else %}
+FROM AS_TABLE($facts)
+{% endif %}
+
 WHERE user="Williams"
 ORDER BY Knn::CosineDistance(embedding, $TargetEmbedding)
 LIMIT $K;
@@ -181,7 +187,13 @@ LIMIT $K;
 $R = 0.1f;
 $TargetEmbedding = Knn::ToBinaryStringFloat([1.2f, 2.3f, 3.4f, 4.5f]);
 
-SELECT * FROM {% if backend_name == "YDB" %} Facts {% else %} AS_TABLE($facts) {% endif %}
+SELECT *
+{% if backend_name == "YDB" %}
+FROM Facts
+{% else %}
+FROM AS_TABLE($facts)
+{% endif %}
+
 WHERE Knn::CosineDistance(embedding, $TargetEmbedding) < $R;
 ```
 
@@ -261,11 +273,21 @@ $Target = [1.2f, 2.3f, 3.4f, 4.5f];
 $TargetEmbeddingBit = Knn::ToBinaryStringBit($Target);
 $TargetEmbeddingFloat = Knn::ToBinaryStringFloat($Target);
 
-$Ids = SELECT id FROM {% if backend_name == "YDB" %} Facts {% else %} AS_TABLE($facts) {% endif %}
+$Ids = SELECT id
+{% if backend_name == "YDB" %}
+FROM Facts
+{% else %}
+FROM AS_TABLE($facts)
+{% endif %}
 ORDER BY Knn::CosineDistance(embedding_bit, $TargetEmbeddingBit)
 LIMIT $K * 10;
 
-SELECT * FROM {% if backend_name == "YDB" %} Facts {% else %} AS_TABLE($facts) {% endif %}
+SELECT *
+{% if backend_name == "YDB" %}
+FROM Facts
+{% else %}
+FROM AS_TABLE($facts)
+{% endif %}
 WHERE id IN $Ids
 ORDER BY Knn::CosineDistance(embedding, $TargetEmbeddingFloat)
 LIMIT $K;

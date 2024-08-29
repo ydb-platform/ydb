@@ -152,9 +152,9 @@ def main():
                     from  `test_results/test_runs_column`
                     where
                         status in ('failure','mute')
-                        and job_name in ('Nightly-run', 'Postcommit_relwithdebinfo')
-                        and build_type = 'relwithdebinfo' and
-                        run_timestamp >= Date('{last_date}') -{history_for_n_day}*Interval("P1D") 
+                        and job_name in ('Nightly-run', 'Postcommit_relwithdebinfo','Postcommit_asan')
+                        and branch = 'main'
+                        and run_timestamp >= Date('{last_date}') -{history_for_n_day}*Interval("P1D") 
                 ) as tests_with_fails
                 cross join (
                     select 
@@ -162,8 +162,8 @@ def main():
                     from  `test_results/test_runs_column`
                     where
                         status in ('failure','mute')
-                        and job_name in ('Nightly-run', 'Postcommit_relwithdebinfo')
-                        and build_type = 'relwithdebinfo'
+                        and job_name in ('Nightly-run', 'Postcommit_relwithdebinfo','Postcommit_asan')
+                        and branch = 'main'
                         and run_timestamp>= Date('{last_date}')
                     ) as date_list
                 ) as test_and_date

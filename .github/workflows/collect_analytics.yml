@@ -28,7 +28,7 @@ jobs:
       run: |
         python3 -m pip install ydb ydb[yc] codeowners
 
-    # Every 2 runs = every 2 hours
+    # Every 2 runs = every 1 hours
     - name: Collect testowners 
       if: ${{ (github.event.schedule || '') == '' || (github.run_number % 2) == 1 }} 
       run: python3 .github/scripts/analytics/upload_testowners.py
@@ -39,4 +39,12 @@ jobs:
     - name: Collect test history data with window 1 day
       if: ${{ (github.event.schedule || '') == '' || (github.run_number % 4) == 1 }} 
       run: python3 .github/scripts/analytics/flaky_tests_history.py --days-window=1
+    # Every 4 runs = every 4 hours
+    - name: Collect test history data with window 10 run relwithdebinfo for main
+      if: ${{ (github.event.schedule || '') == '' || (github.run_number % 4) == 1 }} 
+      run: python3 .github/scripts/analytics/flaky_tests_history_n_runs.py --runs=10 
+    - name: Collect test history data with window 10 run release-asan for main
+      if: ${{ (github.event.schedule || '') == '' || (github.run_number % 4) == 1 }} 
+      run: python3 .github/scripts/analytics/flaky_tests_history_n_runs.py --runs=10 --build_type=release-asan
+
 

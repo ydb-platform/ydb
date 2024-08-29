@@ -9,7 +9,6 @@ import traceback
 import time
 import ydb
 from collections import Counter
-#from upload_test_results import get_codeowners_for_tests
 
 dir = os.path.dirname(__file__)
 config = configparser.ConfigParser()

@@ -10,9 +10,8 @@ services:
     volumes:
     - ./clickhouse:/docker-entrypoint-initdb.d
   greenplum:
-    image: ghcr.io/ydb-platform/fq-connector-go_greenplum:6.25.3@sha256:0627a657b179ff73949fec05201f3e164b92639281eff248cd07669ce7247eec
+    image: ghcr.io/ydb-platform/fq-connector-go_greenplum:6.25.3-6432@sha256:9e862b05719b289b447562fbce6c003916a764a549f924a4175eecd7e7891a0b
     container_name: tests-fq-generic-greenplum
-    hostname: localhost
     volumes:
       - ./greenplum/init_db.sh:/init_db.sh
   fq-connector-go:

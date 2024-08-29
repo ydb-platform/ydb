@@ -4,6 +4,12 @@ import sys
 import os
 import shutil
 import json
+import time
+import ydb
+
+
+DATABASE_ENDPOINT = "grpcs://lb.etnvsjbk7kh1jc6bbfi8.ydb.mdb.yandexcloud.net:2135"
+DATABASE_PATH = "/ru-central1/b1ggceeul2pkher8vhb6/etnvsjbk7kh1jc6bbfi8"
 
 
 class Runner:
@@ -73,7 +79,17 @@ class RunParams:
         return "RunParams(" + ", ".join(result) + "})"
 
 
-class RunQueryData:
+class RunResults:
+    def __init__(self):
+        self.exitcode = None
+        self.read_bytes = None
+        self.write_bytes = None
+        self.user_time = None
+        self.system_time = None
+        self.rss = None
+        self.output_hash = None
+        self.perf_file_path = None
+
     def from_json(self, json):
         self.exitcode = json["exitcode"]
         io_info = json["io"]
@@ -91,7 +107,7 @@ class RunQueryData:
         return "RunQueryData(" + ", ".join(result) + "})"
 
 
-def upload_results(result_path, s3_folder, ydb):
+def upload_results(result_path, s3_folder, test_start):
     results_map = {}
     for entry in result_path.glob("*/*"):
         if not entry.is_dir():
@@ -114,7 +130,7 @@ def upload_results(result_path, s3_folder, ydb):
             if name[0] == "q":
                 query_num = int(name[1:].split("-")[0])
                 if query_num not in this_result:
-                    this_result[query_num] = RunQueryData()
+                    this_result[query_num] = RunResults()
 
             if file.suffix == ".svg":
                 dst = file.relative_to(result_path)
@@ -142,10 +158,46 @@ def upload_results(result_path, s3_folder, ydb):
             results_map[params] = value
 
     print(results_map, file=sys.stderr)
-    # store those to ydb
+
+    with ydb.Driver(
+        endpoint=DATABASE_ENDPOINT,
+        database=DATABASE_PATH,
+        credentials=ydb.credentials_from_env_variables()
+    ) as driver:
+        driver.wait(timeout=5)
+
+        session = ydb.retry_operation_sync(
+            lambda: driver.table_client.session().create()
+        )
+        for params, results in results_map.items():
+            with session.transaction() as tx:
+                mapping = {
+                    "BenchmarkType" : params.variant,
+                    "Scale" : params.datasize,
+                    "QueryNum" : params.query,
+                    "WithSpilling" : params.is_spilling,
+                    "Timestamp" : test_start,
+                    "WasSpillingInAggregation" : None,
+                    "WasSpillingInJoin" : None,
+                    "WasSpillingInChannels" : None,
+                    "MaxTasksPerStage" : params.tasks,
+                    "PerfFileLink" : results.perf_file_path,
+                    "ExitCode" : results.exitcode,
+                    "ResultHash" : results.output_hash,
+                    "SpilledBytes" : results.read_bytes,
+                    "UserTime" : results.user_time,
+                    "SystemTime" : results.syste_time
+                }
+                sql = 'UPSERT INTO dq_spilling_nightly_runs ({columns}) VALUES ({values})'.format(
+                    columns=", ".join(mapping.keys()),
+                    values=", ".join(mapping.values()))
+                print(sql, file=sys.stderr)
+                tx.execute(sql, commit_tx=True)
 
 
 def test_tpc():
+    test_start = time.time()
+
     is_ci = os.environ.get("PUBLIC_DIR") is not None
     print("is ci: ", is_ci, file=sys.stderr)
 
@@ -158,5 +210,5 @@ def test_tpc():
         s3_folder = pathlib.Path(os.environ["PUBLIC_DIR"]).resolve()
         print(f"s3 folder: {s3_folder}", file=sys.stderr)
 
-        upload_results(result_path, s3_folder, "")
+        upload_results(result_path, s3_folder, test_start)
     exit(1)

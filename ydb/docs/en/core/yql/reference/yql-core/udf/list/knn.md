@@ -145,6 +145,20 @@ $vector = [1.f, 2.f, 3.f, 4.f];
 UPSERT INTO Facts (id, user, fact, embedding) 
 VALUES (123, "Williams", "Full name is John Williams", Untag(Knn::ToBinaryStringFloat($vector), "FloatVector"));
 ```
+{% else %}
+### Data declaration
+
+```sql
+$vector = [1.f, 2.f, 3.f, 4.f];
+$facts = AsList(
+    AsStruct(
+        123 AS id,  -- Id of fact
+        "Williams" AS user,  -- User name
+        "Full name is John Williams" AS fact,  -- Human-readable description of a user fact
+        Knn::ToBinaryStringFloat($vector) AS embedding,  -- Binary representation of embedding vector
+    ),
+);
+```
 {% endif %}
 
 ### Exact search of K nearest vectors
@@ -153,7 +167,7 @@ VALUES (123, "Williams", "Full name is John Williams", Untag(Knn::ToBinaryString
 $K = 10;
 $TargetEmbedding = Knn::ToBinaryStringFloat([1.2f, 2.3f, 3.4f, 4.5f]);
 
-SELECT * FROM Facts
+SELECT * FROM {% if backend_name == "YDB" %} Facts {% else %} AS_TABLE($facts) {% endif %}
 WHERE user="Williams"
 ORDER BY Knn::CosineDistance(embedding, $TargetEmbedding)
 LIMIT $K;
@@ -165,7 +179,7 @@ LIMIT $K;
 $R = 0.1f;
 $TargetEmbedding = Knn::ToBinaryStringFloat([1.2f, 2.3f, 3.4f, 4.5f]);
 
-SELECT * FROM Facts
+SELECT * FROM {% if backend_name == "YDB" %} Facts {% else %} AS_TABLE($facts) {% endif %}
 WHERE Knn::CosineDistance(embedding, $TargetEmbedding) < $R;
 ```
 
@@ -195,6 +209,21 @@ CREATE TABLE Facts (
 $vector = [1.f, 2.f, 3.f, 4.f];
 UPSERT INTO Facts (id, user, fact, embedding, embedding_bit) 
 VALUES (123, "Williams", "Full name is John Williams", Untag(Knn::ToBinaryStringFloat($vector), "FloatVector"), Untag(Knn::ToBinaryStringBit($vector), "BitVector"));
+```
+{% else %}
+### Data declaration
+
+```sql
+$vector = [1.f, 2.f, 3.f, 4.f];
+$facts = AsList(
+    AsStruct(
+        123 AS id,  -- Id of fact
+        "Williams" AS user,  -- User name
+        "Full name is John Williams" AS fact,  -- Human-readable description of a user fact
+        Knn::ToBinaryStringFloat($vector) AS embedding,  -- Binary representation of embedding vector
+        Knn::ToBinaryStringBit($vector) AS embedding_bit,  -- Binary representation of embedding vector
+    ),
+);
 ```
 {% endif %}
 
@@ -231,11 +260,11 @@ $Target = [1.2f, 2.3f, 3.4f, 4.5f];
 $TargetEmbeddingBit = Knn::ToBinaryStringBit($Target);
 $TargetEmbeddingFloat = Knn::ToBinaryStringFloat($Target);
 
-$Ids = SELECT id FROM Facts
+$Ids = SELECT id FROM {% if backend_name == "YDB" %} Facts {% else %} AS_TABLE($facts) {% endif %}
 ORDER BY Knn::CosineDistance(embedding_bit, $TargetEmbeddingBit)
 LIMIT $K * 10;
 
-SELECT * FROM Facts
+SELECT * FROM {% if backend_name == "YDB" %} Facts {% else %} AS_TABLE($facts) {% endif %}
 WHERE id IN $Ids
 ORDER BY Knn::CosineDistance(embedding, $TargetEmbeddingFloat)
 LIMIT $K;

@@ -122,12 +122,6 @@ struct TSampleQueries {
     }
 
     template <typename TResult>
-    static void CheckOverloaded(const TResult& result, const TString& poolId) {
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::OVERLOADED, result.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), TStringBuilder() << "Too many pending requests for pool " << poolId);
-    }
-
-    template <typename TResult>
     static void CheckCancelled(const TResult& result) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::CANCELLED, result.GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Request timeout exceeded, cancelling after");

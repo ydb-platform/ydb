@@ -166,6 +166,11 @@ struct TEvPrivate {
     };
 
     struct TEvStopPoolHandler : public NActors::TEventLocal<TEvStopPoolHandler, EvStopPoolHandler> {
+        explicit TEvStopPoolHandler(bool resetCounters)
+            : ResetCounters(resetCounters)
+        {}
+
+        const bool ResetCounters;
     };
 
     struct TEvCancelRequest : public NActors::TEventLocal<TEvCancelRequest, EvCancelRequest> {
@@ -196,11 +201,15 @@ struct TEvPrivate {
     };
 
     struct TEvCpuQuotaResponse : public NActors::TEventLocal<TEvCpuQuotaResponse, EvCpuQuotaResponse> {
-        explicit TEvCpuQuotaResponse(bool quotaAccepted)
+        explicit TEvCpuQuotaResponse(bool quotaAccepted, double maxClusterLoad, NYql::TIssues issues)
             : QuotaAccepted(quotaAccepted)
+            , MaxClusterLoad(maxClusterLoad)
+            , Issues(std::move(issues))
         {}
 
         const bool QuotaAccepted;
+        const double MaxClusterLoad;
+        const NYql::TIssues Issues;
     };
 
     struct TEvCpuLoadResponse : public NActors::TEventLocal<TEvCpuLoadResponse, EvCpuLoadResponse> {

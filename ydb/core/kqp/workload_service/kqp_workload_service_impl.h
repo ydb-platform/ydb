@@ -121,7 +121,7 @@ struct TPoolState {
             return;
         }
 
-        ActorContext.Send(PoolHandler, new TEvPrivate::TEvStopPoolHandler());
+        ActorContext.Send(PoolHandler, new TEvPrivate::TEvStopPoolHandler(false));
         PoolHandler = *NewPoolHandler;
         NewPoolHandler = std::nullopt;
         InFlightRequests = 0;
@@ -160,7 +160,7 @@ struct TCpuQuotaManagerState {
         auto response = CpuQuotaManager.RequestCpuQuota(0.0, maxClusterLoad);
 
         bool quotaAccepted = response.Status == NYdb::EStatus::SUCCESS;
-        ActorContext.Send(poolHandler, new TEvPrivate::TEvCpuQuotaResponse(quotaAccepted), 0, coockie);
+        ActorContext.Send(poolHandler, new TEvPrivate::TEvCpuQuotaResponse(quotaAccepted, maxClusterLoad, std::move(response.Issues)), 0, coockie);
 
         // Schedule notification
         if (!quotaAccepted) {

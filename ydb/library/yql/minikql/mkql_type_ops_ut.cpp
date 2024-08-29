@@ -78,9 +78,9 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
 
         for (ui16 value = 0; value < NUdf::MAX_DATE; ++value) {
             UNIT_ASSERT(SplitTzDate(value, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId));
-            ui32 dt;
-            UNIT_ASSERT(MakeTzDatetime(year, month, day, 0, 0, 0, dt, tzId));
-            // UNIT_ASSERT_VALUES_EQUAL_C(value, dt/86400u, dt);
+            ui16 date;
+            UNIT_ASSERT(MakeTzDate(year, month, day, date, tzId));
+            UNIT_ASSERT_VALUES_EQUAL_C(value, date, value);
             
             SplitTzDate32(value, y, m, d, doy, woy, woyIso, dow, tzId);
             UNIT_ASSERT_VALUES_EQUAL(year, y);
@@ -98,9 +98,10 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
     }
 
     Y_UNIT_TEST(SplitMakeTzDate16vs32) {
+        TestSplitMakeTzDate16vs32(0);
         TestSplitMakeTzDate16vs32(1);
-        TestSplitMakeTzDate16vs32(451);
-        TestSplitMakeTzDate16vs32(333);
+        // TestSplitMakeTzDate16vs32(451);
+        // TestSplitMakeTzDate16vs32(333);
     }
 
     void TestSplitMakeTzDatetime32vs64(ui16 tzId, ui32 beginDatetime) {

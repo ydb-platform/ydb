@@ -1364,6 +1364,13 @@ bool SplitInterval(i64 value, bool& sign, ui32& day, ui32& hour, ui32& min, ui32
     return true;
 }
 
+bool MakeTzDate(ui32 year, ui32 month, ui32 day, ui16& value, ui16 tzId) {
+    ui32 datetime;
+    auto result = MakeTzDatetime(year, month, day, 0u, 0u, 0u, datetime, tzId);
+    value = datetime / 86400u;
+    return result;
+}
+
 bool MakeTzDatetime(ui32 year, ui32 month, ui32 day, ui32 hour, ui32 min, ui32 sec, ui32& value, ui16 tzId) {
     if (tzId) {
         const auto& tz = Singleton<TTimezones>()->GetZone(tzId);

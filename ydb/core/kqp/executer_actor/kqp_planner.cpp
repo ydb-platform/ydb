@@ -64,7 +64,6 @@ bool TKqpPlanner::UseMockEmptyPlanner = false;
 // Task can allocate extra memory during execution.
 // So, we estimate total memory amount required for task as apriori task size multiplied by this constant.
 constexpr ui32 MEMORY_ESTIMATION_OVERFLOW = 2;
-constexpr ui32 MAX_NON_PARALLEL_TASKS_EXECUTION_LIMIT = 8;
 
 TKqpPlanner::TKqpPlanner(TKqpPlanner::TArgs&& args)
     : TxId(args.TxId)
@@ -275,9 +274,18 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
 
     auto localResources = ResourceManager_->GetLocalResources();
     Y_UNUSED(MEMORY_ESTIMATION_OVERFLOW);
+
+    auto placingOptions = ResourceManager_->GetPlacingOptions();
+
+    bool singleNodeExecutionMakeSence = (
+        ResourceEstimations.size() <= placingOptions.MaxNonParallelTasksExecutionLimit ||
+        // all readers are located on the one node.
+        TasksPerNode.size() == 1
+    );
+
     if (LocalRunMemoryEst * MEMORY_ESTIMATION_OVERFLOW <= localResources.Memory[NRm::EKqpMemoryPool::ScanQuery] &&
         ResourceEstimations.size() <= localResources.ExecutionUnits &&
-        ResourceEstimations.size() <= MAX_NON_PARALLEL_TASKS_EXECUTION_LIMIT)
+        singleNodeExecutionMakeSence)
     {
         ui64 selfNodeId = ExecuterId.NodeId();
         for(ui64 taskId: ComputeTasks) {
@@ -312,6 +320,41 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
         return std::make_unique<IEventHandle>(ExecuterId, ExecuterId, ev.Release());
     }
 
+    std::vector<ui64> deepestTasks;
+    ui64 maxLevel = 0;
+    for(auto& task: TasksGraph.GetTasks()) {
+        // const auto& task = TasksGraph.GetTask(taskId);
+        const auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
+        const NKqpProto::TKqpPhyStage& stage = stageInfo.Meta.GetStage(stageInfo.Id);
+        const ui64 stageLevel = stage.GetProgram().GetSettings().GetStageLevel();
+
+        if (stageLevel > maxLevel) {
+            maxLevel = stageLevel;
+            deepestTasks.clear();
+        }
+
+        if (stageLevel == maxLevel) {
+            deepestTasks.push_back(task.Id);
+        }
+    }
+
+    THashMap<ui64, ui64> alreadyAssigned;
+    for(auto& [nodeId, tasks] : TasksPerNode) {
+        for(ui64 taskId: tasks) {
+            alreadyAssigned.emplace(taskId, nodeId);
+        }
+    }
+
+    if (deepestTasks.size() <= placingOptions.MaxNonParallelTopStageExecutionLimit) {
+        // looks like the merge / union all connection
+        for(ui64 taskId: deepestTasks) {
+            auto [it, success] = alreadyAssigned.emplace(taskId, ExecuterId.NodeId());
+            if (success) {
+                TasksPerNode[ExecuterId.NodeId()].push_back(taskId);
+            }
+        }
+    }
+
     auto planner = (UseMockEmptyPlanner ? CreateKqpMockEmptyPlanner() : CreateKqpGreedyPlanner());  // KqpMockEmptyPlanner is a mock planner for tests
 
     auto ctx = TlsActivationContext->AsActorContext();
@@ -327,13 +370,6 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
     LogMemoryStatistics([TxId = TxId, &UserRequestContext = UserRequestContext](TStringBuf msg) { LOG_D(msg); });
 
     auto plan = planner->Plan(ResourcesSnapshot, ResourceEstimations);
-
-    THashMap<ui64, ui64> alreadyAssigned;
-    for(auto& [nodeId, tasks] : TasksPerNode) {
-        for(ui64 taskId: tasks) {
-            alreadyAssigned.emplace(taskId, nodeId);
-        }
-    }
 
     if (!plan.empty()) {
         for (auto& group : plan) {

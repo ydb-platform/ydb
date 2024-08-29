@@ -114,6 +114,7 @@ void Analyze(TTestActorRuntime& runtime, ui64 saTabletId, const std::vector<TAna
 void AnalyzeTable(TTestActorRuntime& runtime, ui64 shardTabletId, const TAnalyzedTable& table);
 void AnalyzeStatus(TTestActorRuntime& runtime, TActorId sender, ui64 saTabletId, const TString operationId, const NKikimrStat::TEvAnalyzeStatusResponse::EStatus expectedStatus);
 
+void WaitForSavedStatistics(TTestActorRuntime& runtime, const TPathId& pathId);
 
 } // namespace NStat
 } // namespace NKikimr

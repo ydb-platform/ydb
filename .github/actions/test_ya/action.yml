@@ -99,8 +99,8 @@ runs:
           TESTMO_TOKEN=${{ inputs.testman_token }} ./ydb/ci/testmo-proxy/testmo-proxy.py -l $TESTMO_PROXY_ADDR \
             --cert-file "$TMP_DIR/cert.pem" \
             --cert-key "$TMP_DIR/key.pem" \
-            --target-timeout 3,10 \
-            --max-request-time 55 \
+            --target-timeout 3,60 \
+            --max-request-time 200 \
             "$TESTMO_URL" > $PUBLIC_DIR/testmo_proxy.log 2>&1 &
             
           TESTMO_PROXY_PID=$!

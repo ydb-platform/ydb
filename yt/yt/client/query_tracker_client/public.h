@@ -13,6 +13,7 @@ YT_DEFINE_ERROR_ENUM(
     ((QueryNotFound)        (3901))
     ((QueryResultNotFound)  (3902))
     ((TooManyAcos)          (3903))
+    ((StateMismatch)        (3904))
 );
 
 ////////////////////////////////////////////////////////////////////////////////

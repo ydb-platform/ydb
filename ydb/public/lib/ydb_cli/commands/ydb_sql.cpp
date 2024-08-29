@@ -75,40 +75,53 @@ int TCommandExecuteSqlBase::ExecuteScriptAsync(TDriver& driver, NQuery::TQueryCl
         settings
     );
 
-    auto result = asyncResult.GetValueSync();
-    ThrowOnError(result);
+    Operation = asyncResult.GetValueSync();
+    ThrowOnError(Operation.value());
     if (AsyncWait) {
         NOperation::TOperationClient operationClient(driver);
-        return WaitForResultAndPrintResponse(queryClient, operationClient, result.Id(), result);
+        return WaitAndPrintResults(queryClient, operationClient, Operation->Id());
     } else {
-        return PrintResponse(result);
+        return PrintOperationInfo(Operation.value());
     }
 }
 
-int TCommandExecuteSqlBase::PrintResponse(const NQuery::TScriptExecutionOperation& operation) {
+int TCommandExecuteSqlBase::PrintOperationInfo(const NQuery::TScriptExecutionOperation& operation) {
     std::string quotedId = "\"" + ProtoToString(operation.Id()) + "\"";
     Cout << "Operation info:" << Endl << operation.ToString() << Endl
         << "To get current execution status: ydb sql-async get " << quotedId << Endl
         << "To wait for completion: ydb sql-async wait " << quotedId << Endl
-        << "To cancel execution: ydb sql-async cancel " << quotedId << Endl
+        << "To cancel operation: ydb sql-async cancel " << quotedId << Endl
         << "To forget operation: ydb sql-async forget " << quotedId << Endl
         << "To fetch results: ydb sql-async fetch " << quotedId << Endl;
     return EXIT_SUCCESS;
 }
 
-int TCommandExecuteSqlBase::WaitForResultAndPrintResponse(
+int TCommandExecuteSqlBase::WaitAndPrintResults(
         NQuery::TQueryClient& queryClient,
         NOperation::TOperationClient& operationClient,
-        const TOperation::TOperationId& operationId,
-        const NQuery::TScriptExecutionOperation& operation) {
+        const TOperation::TOperationId& operationId) {
     SetInterruptHandlers();
+    if (!WaitForCompletion(operationClient, operationId)) {
+        return EXIT_FAILURE;
+    }
+    return PrintScriptResults(queryClient);
+
+    if (IsInterrupted()) {
+        Cerr << "<INTERRUPTED>" << Endl;
+            return EXIT_FAILURE;
+    }
+    return EXIT_SUCCESS;
+}
+
+bool TCommandExecuteSqlBase::WaitForCompletion(NOperation::TOperationClient& operationClient,
+        const TOperation::TOperationId& operationId) {
     // Throw exception on getting operation info if it is the first getOperation, then retry
     bool firstGetOperation = true;
     TWaitingBar waitingBar("Waiting for qeury execution to finish... ");
     int fakeCounter = 0;
     while (!IsInterrupted()) {
-        NQuery::TScriptExecutionOperation execScriptOperation = firstGetOperation
-            ? operation
+        NQuery::TScriptExecutionOperation execScriptOperation = (firstGetOperation && Operation)
+            ? Operation.value()
             : operationClient
                 .Get<NQuery::TScriptExecutionOperation>(operationId)
                 .GetValueSync();
@@ -121,36 +134,46 @@ int TCommandExecuteSqlBase::WaitForResultAndPrintResponse(
             Sleep(TDuration::Seconds(1));
             continue;
         }
+        Operation = execScriptOperation;
         waitingBar.Finish(true);
-        TResultSetPrinter printer(OutputFormat, &IsInterrupted);
-
-        for (size_t resultSetIndex = 0; resultSetIndex < execScriptOperation.Metadata().ResultSetsMeta.size(); ++resultSetIndex) {
-            TString const* nextFetchToken = nullptr;
-            while (!IsInterrupted()) {
-                NYdb::NQuery::TFetchScriptResultsSettings settings;
-                if (nextFetchToken != nullptr) {
-                    settings.FetchToken(*nextFetchToken);
-                }
-
-                // TODO: fetch with retries
-                auto asyncResult = queryClient.FetchScriptResults(operationId, resultSetIndex, settings);
-                auto result = asyncResult.GetValueSync();
-
-                if (result.HasResultSet()) {
-                    printer.Print(result.ExtractResultSet());
-                }
-
-                if (result.GetNextFetchToken()) {
-                    nextFetchToken = &result.GetNextFetchToken();
-                } else {
-                    break;
-                }
-            }
-        }
         break;
     }
     waitingBar.Finish(false);
 
+    if (IsInterrupted()) {
+        Cerr << "<INTERRUPTED>" << Endl;
+            return false;
+    }
+    return true;
+}
+
+int TCommandExecuteSqlBase::PrintScriptResults(NQuery::TQueryClient& queryClient) {
+    Y_ENSURE(Operation.has_value());
+    TResultSetPrinter printer(OutputFormat, &IsInterrupted);
+
+    for (size_t resultSetIndex = 0; resultSetIndex < Operation->Metadata().ResultSetsMeta.size(); ++resultSetIndex) {
+        TString const* nextFetchToken = nullptr;
+        while (!IsInterrupted()) {
+            NYdb::NQuery::TFetchScriptResultsSettings settings;
+            if (nextFetchToken != nullptr) {
+                settings.FetchToken(*nextFetchToken);
+            }
+
+            // TODO: fetch with retries
+            auto asyncResult = queryClient.FetchScriptResults(Operation->Id(), resultSetIndex, settings);
+            auto result = asyncResult.GetValueSync();
+
+            if (result.HasResultSet()) {
+                printer.Print(result.ExtractResultSet());
+            }
+
+            if (result.GetNextFetchToken()) {
+                nextFetchToken = &result.GetNextFetchToken();
+            } else {
+                break;
+            }
+        }
+    }
     if (IsInterrupted()) {
         Cerr << "<INTERRUPTED>" << Endl;
             return EXIT_FAILURE;
@@ -221,11 +244,11 @@ int TCommandSql::Run(TConfig& config) {
         return ExecuteScriptAsync(driver, client);
     } else {
         // Single stream execution
-        return ExecuteQueryStream(client);
+        return StreamExecuteQuery(client);
     }
 }
 
-int TCommandSql::ExecuteQueryStream(NQuery::TQueryClient& client) {
+int TCommandSql::StreamExecuteQuery(NQuery::TQueryClient& client) {
     NQuery::TExecuteQuerySettings settings;
 
     if (ExplainMode) {
@@ -399,19 +422,13 @@ void TCommandSqlAsyncFetch::Config(TConfig& config) {
 void TCommandSqlAsyncFetch::Parse(TConfig& config) {
     TCommandWithScriptExecutionOperationId::Parse(config);
     ParseCommonOutputOptions();
-    try {
-        OperationId = TOperationId(config.ParseResult->GetFreeArgs()[0]);
-    } catch (const yexception& ex) {
-        throw TMisuseException() << "Invalid operation ID";
-    }
 }
 
 int TCommandSqlAsyncFetch::Run(TConfig& config) {
     TDriver driver = CreateDriver(config);
     NQuery::TQueryClient queryClient(driver);
     NOperation::TOperationClient operationClient(driver);
-    auto operation = GetOperation(driver);
-    return WaitForResultAndPrintResponse(queryClient, operationClient, OperationId, operation);
+    return WaitAndPrintResults(queryClient, operationClient, OperationId);
 }
 
 TCommandSqlAsyncGet::TCommandSqlAsyncGet()
@@ -428,11 +445,6 @@ void TCommandSqlAsyncGet::Config(TConfig& config) {
 
 void TCommandSqlAsyncGet::Parse(TConfig& config) {
     TCommandWithScriptExecutionOperationId::Parse(config);
-    try {
-        OperationId = TOperationId(config.ParseResult->GetFreeArgs()[0]);
-    } catch (const yexception& ex) {
-        throw TMisuseException() << "Invalid operation ID";
-    }
 }
 
 int TCommandSqlAsyncGet::Run(TConfig& config) {
@@ -451,6 +463,28 @@ int TCommandSqlAsyncGet::Run(TConfig& config) {
             ThrowOnError(operation);
             return EXIT_FAILURE;
     }   
+}
+
+TCommandSqlAsyncWait::TCommandSqlAsyncWait()
+    : TCommandWithScriptExecutionOperationId("wait", {}, "Wait for async script execution completion by operation id")
+{}
+
+void TCommandSqlAsyncWait::Config(TConfig& config) {
+    TCommandWithScriptExecutionOperationId::Config(config);
+}
+
+void TCommandSqlAsyncWait::Parse(TConfig& config) {
+    TCommandWithScriptExecutionOperationId::Parse(config);
+}
+
+int TCommandSqlAsyncWait::Run(TConfig& config) {
+    TDriver driver = CreateDriver(config);
+    NQuery::TQueryClient queryClient(driver);
+    NOperation::TOperationClient operationClient(driver);
+    SetInterruptHandlers();
+    return WaitForCompletion(operationClient, OperationId)
+        ? EXIT_SUCCESS
+        : EXIT_FAILURE;
 }
 
 

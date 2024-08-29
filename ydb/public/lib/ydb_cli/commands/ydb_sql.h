@@ -23,11 +23,11 @@ public:
 
 protected:
     int ExecuteScriptAsync(TDriver& driver, NQuery::TQueryClient& client);
-    int PrintResponse(const NQuery::TScriptExecutionOperation& operation);
-    int WaitForResultAndPrintResponse(NQuery::TQueryClient& queryClient, NOperation::TOperationClient& operationClient,
-        const TOperation::TOperationId& operationId,
-        // First query status object. Received either form ExecuteQueryScriptResponse or from OperationService explicitly
-        const NQuery::TScriptExecutionOperation& operation);
+    int PrintOperationInfo(const NQuery::TScriptExecutionOperation& operation);
+    bool WaitForCompletion(NOperation::TOperationClient& operationClient, const TOperation::TOperationId& operationId);
+    int PrintScriptResults(NQuery::TQueryClient& queryClient);
+    int WaitAndPrintResults(NQuery::TQueryClient& queryClient, NOperation::TOperationClient& operationClient,
+        const TOperation::TOperationId& operationId);
 
     TString CollectStatsMode;
     TString Query;
@@ -35,6 +35,8 @@ protected:
     TString Syntax;
     TString ResultsTtl;
     bool AsyncWait = false;
+    // Operation status object. May be received either form ExecuteQueryScriptResponse or from OperationService explicitly
+    std::optional<NQuery::TScriptExecutionOperation> Operation = std::nullopt;
 };
 
 class TCommandSql : public TYdbCommand, public TCommandExecuteSqlBase {
@@ -48,7 +50,7 @@ public:
     void SetScript(TString&& script);
 
 private:
-    int ExecuteQueryStream(NQuery::TQueryClient& client);
+    int StreamExecuteQuery(NQuery::TQueryClient& client);
     int PrintResponse(NQuery::TExecuteQueryIterator& result);
 
     bool ExplainMode = false;
@@ -92,6 +94,17 @@ public:
 class TCommandSqlAsyncGet : public TCommandWithScriptExecutionOperationId, public TCommandWithFormat {
 public:
     TCommandSqlAsyncGet();
+    virtual void Config(TConfig& config) override;
+    virtual void Parse(TConfig& config) override;
+    virtual int Run(TConfig& config) override;
+
+private:
+    int PrintResponse(const NQuery::TScriptExecutionOperation& operation);
+};
+
+class TCommandSqlAsyncWait : public TCommandWithScriptExecutionOperationId, public TCommandExecuteSqlBase {
+public:
+    TCommandSqlAsyncWait();
     virtual void Config(TConfig& config) override;
     virtual void Parse(TConfig& config) override;
     virtual int Run(TConfig& config) override;

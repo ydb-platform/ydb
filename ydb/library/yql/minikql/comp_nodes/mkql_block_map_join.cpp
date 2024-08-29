@@ -184,51 +184,51 @@ public:
     {}
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
-        auto& s = GetState(state, ctx);
+        auto& blockState = GetState(state, ctx);
         auto** fields = ctx.WideFields.data() + WideFieldsIndex_;
         const auto dict = Dict_->GetValue(ctx);
 
         do {
-            while (s.IsNotFull() && s.NextRow()) {
-                const auto key = MakeKeysTuple(ctx, s, LeftKeyColumns_);
+            while (blockState.IsNotFull() && blockState.NextRow()) {
+                const auto key = MakeKeysTuple(ctx, blockState, LeftKeyColumns_);
                 if constexpr (WithoutRight) {
                     if (key && dict.Contains(key) == RightRequired) {
-                        s.CopyRow();
+                        blockState.CopyRow();
                     }
                 } else if constexpr (RightRequired) {
                     if (NUdf::TUnboxedValue lookup; key && (lookup = dict.Lookup(key))) {
-                        s.MakeRow(lookup);
+                        blockState.MakeRow(lookup);
                     }
                 } else {
-                    s.MakeRow(dict.Lookup(key));
+                    blockState.MakeRow(dict.Lookup(key));
                 }
             }
-            if (!s.IsFinished()) {
+            if (!blockState.IsFinished()) {
                 switch (Flow_->FetchValues(ctx, fields)) {
                 case EFetchResult::Yield:
                     return EFetchResult::Yield;
                 case EFetchResult::One:
-                    s.Reset();
+                    blockState.Reset();
                     continue;
                 case EFetchResult::Finish:
-                    s.Finish();
+                    blockState.Finish();
                     break;
                 }
             }
             // Leave the outer loop, if no values left in the flow.
-            Y_DEBUG_ABORT_UNLESS(s.IsFinished());
+            Y_DEBUG_ABORT_UNLESS(blockState.IsFinished());
             break;
         } while (true);
 
-        if (s.IsEmpty()) {
+        if (blockState.IsEmpty()) {
             return EFetchResult::Finish;
         }
-        s.MakeBlocks(ctx.HolderFactory);
-        const auto sliceSize = s.Slice();
+        blockState.MakeBlocks(ctx.HolderFactory);
+        const auto sliceSize = blockState.Slice();
 
         for (size_t i = 0; i < ResultJoinItems_.size(); i++) {
             if (const auto out = output[i]) {
-                *out = s.Get(sliceSize, ctx.HolderFactory, i);
+                *out = blockState.Get(sliceSize, ctx.HolderFactory, i);
             }
         }
 

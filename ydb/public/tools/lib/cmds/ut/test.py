@@ -30,8 +30,6 @@ def test_kikimr_config_generator_generic_connector_config():
 
 
 def test_merge_two_yaml_configs():
-Nikita-Levuskin marked this conversation as resolved.
-Nikita-Levuskin marked this conversation as resolved.
     patched_yaml = yatest.common.output_path("patched.yaml")
 
     with open(yatest.common.source_path("ydb/public/tools/lib/cmds/ut/config.yaml"), 'r') as fh:

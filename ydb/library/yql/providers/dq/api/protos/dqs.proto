@@ -40,6 +40,7 @@ message TAllocateWorkersRequest {
     uint64 FreeWorkerAfterMs = 14;
     NYql.NDqProto.EDqStatsMode StatsMode = 16;
     reserved 17;
+    string Scheduler = 18;
 }
 
 message TWorkerGroup {

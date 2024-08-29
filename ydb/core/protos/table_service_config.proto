@@ -298,7 +298,7 @@ message TTableServiceConfig {
 
     optional bool EnableQueryServiceSpilling = 63 [ default = true ];
 
-    optional uint32 DefaultCostBasedOptimizationLevel = 64 [default = 2];
+    optional uint32 DefaultCostBasedOptimizationLevel = 64 [default = 3];
 
     optional bool EnableConstantFolding = 65 [ default = true ];
 

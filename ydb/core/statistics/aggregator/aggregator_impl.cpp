@@ -657,26 +657,30 @@ void TStatisticsAggregator::ScheduleNextTraversal(NIceDb::TNiceDb& db) {
     if (!LastTraversalWasForce) {
         LastTraversalWasForce = true;
 
-        for (TForceTraversalOperation& operation : ForceTraversals) {
-            for (TForceTraversalTable& operationTable : operation.Tables) {
-                if (operationTable.Status == TForceTraversalTable::EStatus::AnalyzeFinished) {
-                    UpdateForceTraversalTableStatus(TForceTraversalTable::EStatus::TraversalStarted, operation.OperationId, operationTable,  db);
-                    pathId = operationTable.PathId;
-                    break;
+        if (ForceTraversals.empty()) {
+            SA_LOG_D("[" << TabletID() << "] ScheduleNextTraversal. No force traversals.");
+        } else {
+            for (TForceTraversalOperation& operation : ForceTraversals) {
+                for (TForceTraversalTable& operationTable : operation.Tables) {
+                    if (operationTable.Status == TForceTraversalTable::EStatus::AnalyzeFinished) {
+                        UpdateForceTraversalTableStatus(TForceTraversalTable::EStatus::TraversalStarted, operation.OperationId, operationTable,  db);
+                        pathId = operationTable.PathId;
+                        break;
+                    }
                 }
+                
+                if (!pathId) {
+                    SA_LOG_D("[" << TabletID() << "] ScheduleNextTraversal. All the force traversal tables sent the requests. OperationId=" << operation.OperationId);
+                    continue;
+                }
+
+                ForceTraversalOperationId = operation.OperationId;
+                break;
             }
-            
+
             if (!pathId) {
-                SA_LOG_D("[" << TabletID() << "] ScheduleNextTraversal. All the force traversal tables sent the requests. OperationId=" << operation.OperationId);
-                continue;
+                SA_LOG_D("[" << TabletID() << "] ScheduleNextTraversal. All the force traversal operations sent the requests.");
             }
-
-            ForceTraversalOperationId = operation.OperationId;
-            break;
-        }
-
-        if (!pathId) {
-            SA_LOG_D("[" << TabletID() << "] ScheduleNextTraversal. All the force traversal operations sent the requests.");
         }
     }
 

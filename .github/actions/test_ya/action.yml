@@ -105,6 +105,9 @@ runs:
           TESTMO_PROXY_PID=$!
           echo "TESTMO_PROXY_ADDR=$TESTMO_PROXY_ADDR" >> $GITHUB_ENV
           echo "TESTMO_PROXY_PID=$TESTMO_PROXY_PID" >> $GITHUB_ENV
+
+          # testmo rejects self-signed cert without this setting
+          echo "NODE_TLS_REJECT_UNAUTHORIZED=0" >> $GITHUB_ENV
         fi
 
     - name: ya build and test

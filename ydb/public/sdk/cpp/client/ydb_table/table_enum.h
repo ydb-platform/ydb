@@ -8,7 +8,15 @@ namespace NTable {
 //! Column family compression codec
 enum class EColumnFamilyCompression {
     None,
+    GZIP,
+    SNAPPY,
+    LZO,
+    BROTLI,
+    LZ4_RAW,
     LZ4,
+    LZ4_HADOOP,
+    ZSTD,
+    BZ2,
 };
 
 //! State of build index operation

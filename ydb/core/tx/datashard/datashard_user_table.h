@@ -203,10 +203,25 @@ struct TUserTable : public TThrRefBase {
             switch (codec) {
                 case NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain:
                     return ECodec::Plain;
+                case NKikimrSchemeOp::EColumnCodec::ColumnCodecGZIP:
+                    return ECodec::GZIP;
+                case NKikimrSchemeOp::EColumnCodec::ColumnCodecSNAPPY:
+                    return ECodec::SNAPPY;
+                case NKikimrSchemeOp::EColumnCodec::ColumnCodecLZO:
+                    return ECodec::LZO;
+                case NKikimrSchemeOp::EColumnCodec::ColumnCodecBROTLI:
+                    return ECodec::BROTLI;
+                case NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4RAW:
+                    return ECodec::LZ4_RAW;
                 case NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4:
-                case NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD: // FIXME: not supported
                     return ECodec::LZ4;
-                // keep no default
+                case NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4HADOOP:
+                    return ECodec::LZ4_HADOOP;
+                case NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD:
+                    return ECodec::ZSTD;
+                case NKikimrSchemeOp::EColumnCodec::ColumnCodecBZ2:
+                    return ECodec::BZ2;
+                    // keep no default
             }
             Y_ABORT("unexpected");
         }

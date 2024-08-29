@@ -7971,6 +7971,40 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         testHelper.CreateTable(testTable, EStatus::SCHEME_ERROR);
     }
 
+    Y_UNIT_TEST(CreateTableWithDefaultFamily) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TKikimrRunner runner(runnerSettings);
+        auto tableClient = runner.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        TString tableName = "/Root/TableWithDefaultFamily";
+
+        auto query = TStringBuilder() << R"(CREATE TABLE `)" << tableName << R"(` (
+                Key Uint64 NOT NULL,
+                Value1 String,
+                Value2 Uint32,
+                PRIMARY KEY (Key),
+                FAMILY default (
+                     DATA = "test",
+                     COMPRESSION = "snappy"
+                ))
+                WITH (STORE = COLUMN);)";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        Cerr << query << Endl;
+        auto tableSettings = NYdb::NTable::TDescribeTableSettings().WithTableStatistics(true);
+        auto describeResult = session.DescribeTable(tableName, tableSettings).GetValueSync();
+        UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
+        auto columns = describeResult.GetTableDescription().GetColumns();
+        for (const auto& column : describeResult.GetTableDescription().GetTableColumns()) {
+            UNIT_ASSERT_VALUES_EQUAL(column.Family, "default");
+        }
+        const auto& columnFamilies = describeResult.GetTableDescription().GetColumnFamilies();
+        UNIT_ASSERT_VALUES_EQUAL(columnFamilies.size(), 1);
+        for (const auto& family : columnFamilies) {
+            Cerr << "Family " << family.GetName() << "\n Data: " << family.GetData() << "\n COMPRESSION: " << family.GetCompression() << "\n";
+        }
+    }
 }
 
 Y_UNIT_TEST_SUITE(KqpOlapTypes) {

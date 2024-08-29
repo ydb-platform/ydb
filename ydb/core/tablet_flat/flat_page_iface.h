@@ -75,8 +75,16 @@ namespace NPage {
     };
 
     enum class ECodec : ui8 {
-        Plain   = 0,    /* Keep data in page as-is  */
-        LZ4     = 1,    /* Use lz4fast compressor   */
+        Plain = 0, /* Keep data in page as-is  */
+        GZIP = 1,
+        SNAPPY = 2,
+        LZO = 3,
+        BROTLI = 4,
+        LZ4_RAW = 5,
+        LZ4 = 6, /* Use lz4fast compressor   */
+        LZ4_HADOOP = 7,
+        ZSTD = 8,
+        BZ2 = 9,
     };
 
     enum class ECache {

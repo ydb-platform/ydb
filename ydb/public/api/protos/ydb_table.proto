@@ -513,7 +513,15 @@ message ColumnFamily {
     enum Compression {
         COMPRESSION_UNSPECIFIED = 0;
         COMPRESSION_NONE = 1;
-        COMPRESSION_LZ4 = 2;
+        COMPRESSION_GZIP = 2;
+        COMPRESSION_SNAPPY = 3;
+        COMPRESSION_LZO = 4;
+        COMPRESSION_BROTLI = 5;
+        COMPRESSION_LZ4_RAW = 6;
+        COMPRESSION_LZ4 = 7;
+        COMPRESSION_LZ4_HADOOP = 8;
+        COMPRESSION_ZSTD = 9;
+        COMPRESSION_BZ2 = 10;
     }
 
     // Name of the column family, the name "default" must be used for the
@@ -526,9 +534,12 @@ message ColumnFamily {
     // Optionally specify how data should be compressed
     Compression compression = 3;
 
+    // Optionally specify level compression
+    int32 compression_level = 4;
+
     // When enabled table data will be kept in memory
     // WARNING: DO NOT USE
-    Ydb.FeatureFlag.Status keep_in_memory = 4;
+    Ydb.FeatureFlag.Status keep_in_memory = 5;
 }
 
 message PartitioningSettings {

@@ -1025,6 +1025,8 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                         family.Compression = TString(
                             familySetting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
                         );
+                    } else if (name = "compression_level") {
+                        family.CompressionLevel = FromString<i32>(familySetting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
                     } else {
                         ctx.AddError(TIssue(ctx.GetPosition(familySetting.Name().Pos()),
                             TStringBuilder() << "Unknown column family setting name: " << name));

@@ -615,14 +615,41 @@ namespace {
                 case NTable::EColumnFamilyCompression::None:
                     compression = "None";
                     break;
+                case NTable::EColumnFamilyCompression::GZIP:
+                    compression = "GZIP";
+                    break;
+                case NTable::EColumnFamilyCompression::SNAPPY:
+                    compression = "SNAPPY";
+                    break;
+                case NTable::EColumnFamilyCompression::LZO:
+                    compression = "LZO";
+                    break;
+                case NTable::EColumnFamilyCompression::BROTLI:
+                    compression = "BROTLI";
+                    break;
+                case NTable::EColumnFamilyCompression::LZ4_RAW:
+                    compression = "LZ4_RAW";
+                    break;
                 case NTable::EColumnFamilyCompression::LZ4:
                     compression = "LZ4";
                     break;
+                case NTable::EColumnFamilyCompression::LZ4_HADOOP:
+                    compression = "LZ4_HADOOP";
+                    break;
+                case NTable::EColumnFamilyCompression::ZSTD:
+                    compression = "ZSTD";
+                    break;
+                case NTable::EColumnFamilyCompression::BZ2:
+                    compression = "BZ2";
+                    break;
                 default:
-                    compression = TStringBuilder() << "unknown("
-                        << static_cast<size_t>(family.GetCompression().GetRef()) << ")";
+                    compression = TStringBuilder() << "unknown(" << static_cast<size_t>(family.GetCompression().GetRef()) << ")";
                 }
             }
+            TStringBuilder compresssionLevel;
+            // if (family.GetCompressionLevel().Defined()) {
+            //     compresssionLevel << compresssionLevel << family.GetCompressionLevel().GetRef();
+            // }
             TStringBuilder keepInMemory;
             if (family.GetKeepInMemory().Defined()) {
                 keepInMemory << keepInMemory << family.GetKeepInMemory().GetRef();
@@ -631,7 +658,8 @@ namespace {
                 .Column(0, family.GetName())
                 .Column(1, data ? data.GetRef() : "")
                 .Column(2, compression)
-                .Column(3, keepInMemory);
+                .Column(3, compresssionLevel)
+                .Column(4, keepInMemory);
         }
         Cout << Endl << "Column families: " << Endl;
         Cout << table;

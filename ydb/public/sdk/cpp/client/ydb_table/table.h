@@ -533,6 +533,7 @@ public:
     const TString& GetName() const;
     TMaybe<TString> GetData() const;
     TMaybe<EColumnFamilyCompression> GetCompression() const;
+    TMaybe<i32> GetCompressionLevel() const;
     TMaybe<bool> GetKeepInMemory() const;
 
 private:

@@ -128,8 +128,24 @@ bool ConvertCreateTableSettingsToProto(NYql::TKikimrTableMetadataPtr metadata, Y
         if (family.Compression) {
             if (to_lower(family.Compression.GetRef()) == "off") {
                 familyProto->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_NONE);
+            } else if (to_lower(family.Compression.GetRef()) == "gzip") {
+                familyProto->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_GZIP);
+            } else if (to_lower(family.Compression.GetRef()) == "snappy") {
+                familyProto->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_SNAPPY);
+            } else if (to_lower(family.Compression.GetRef()) == "lzo") {
+                familyProto->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZO);
+            } else if (to_lower(family.Compression.GetRef()) == "brotli") {
+                familyProto->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_BROTLI);
+            } else if (to_lower(family.Compression.GetRef()) == "lz4raw") {
+                familyProto->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZ4_RAW);
             } else if (to_lower(family.Compression.GetRef()) == "lz4") {
                 familyProto->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZ4);
+            } else if (to_lower(family.Compression.GetRef()) == "lz4hadoop") {
+                familyProto->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZ4_HADOOP);
+            } else if (to_lower(family.Compression.GetRef()) == "zstd") {
+                familyProto->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_ZSTD);
+            } else if (to_lower(family.Compression.GetRef()) == "bz2") {
+                familyProto->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_BZ2);
             } else {
                 code = Ydb::StatusIds::BAD_REQUEST;
                 error = TStringBuilder() << "Unknown compression '" << family.Compression.GetRef() << "' for a column family";
@@ -385,6 +401,65 @@ void FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
         columnDesc.SetName(columnIt->second.Name);
         columnDesc.SetType(columnIt->second.Type);
         columnDesc.SetNotNull(columnIt->second.NotNull);
+        // columnDesc.MutableSerializer()->set_allocated_arrowcompression();
+    }
+
+    for (const auto& keyColumn : metadata.KeyColumnNames) {
+        schema.AddKeyColumnNames(keyColumn);
+    }
+
+    schema.SetEngine(NKikimrSchemeOp::EColumnTableEngine::COLUMN_ENGINE_REPLACING_TIMESERIES);
+}
+
+template <>
+void FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const TKikimrTableMetadata& metadata)
+{
+    Y_ENSURE(metadata.ColumnOrder.size() == metadata.Columns.size());
+    for (const auto& name : metadata.ColumnOrder) {
+        auto columnIt = metadata.Columns.find(name);
+        Y_ENSURE(columnIt != metadata.Columns.end());
+
+        NKikimrSchemeOp::TOlapColumnDescription& columnDesc = *schema.AddColumns();
+        columnDesc.SetName(columnIt->second.Name);
+        columnDesc.SetType(columnIt->second.Type);
+        columnDesc.SetNotNull(columnIt->second.NotNull);
+    }
+
+    auto getCodecFromString = [](const TMaybe<TString>& codec) {
+        if (!codec.Defined()) {
+            return NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain;
+        }
+        auto codecName = to_lower(codec.GetRef());
+        if (codecName == "none") {
+            return NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain;
+        } else if (codecName == "gzip") {
+            return NKikimrSchemeOp::EColumnCodec::ColumnCodecGZIP;
+        } else if (codecName == "snappy") {
+            return NKikimrSchemeOp::EColumnCodec::ColumnCodecSNAPPY;
+        } else if (codecName == "brotli") {
+            return NKikimrSchemeOp::EColumnCodec::ColumnCodecBROTLI;
+        } else if (codecName == "lz4raw") {
+            return NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4RAW;
+        } else if (codecName == "lz4") {
+            return NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4;
+        } else if (codecName == "lz4hadoop") {
+            return NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4HADOOP;
+        } else if (codecName == "zstd") {
+            return NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD;
+        } else if (codecName == "bz2") {
+            return NKikimrSchemeOp::EColumnCodec::ColumnCodecBZ2;
+        }
+        return NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain;
+    };
+
+    for (const auto& family : metadata.ColumnFamilies) {
+        if (family.Name == "default") {
+            auto defaultFamily = schema.MutableDefaultCompression();
+            defaultFamily->SetCodec(getCodecFromString(family.Compression));
+            defaultFamily->SetLevel(family.CompressionLevel.Defined() ? family.CompressionLevel.GetRef() : 20);
+        } else {
+            Cerr << "TOlapIndexDescription\n";
+        }
     }
 
     for (const auto& keyColumn : metadata.KeyColumnNames) {

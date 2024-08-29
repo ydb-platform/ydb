@@ -320,7 +320,7 @@ Yson::SerializeJson($data) AS whole_data;
 {
     "a": "z",
     "x": "y"
-}	
+}
 ```
 
 |

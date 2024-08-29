@@ -461,7 +461,7 @@ select
     cast($x as TzDate), -- 2019-10-21,GMT
     cast(AddTimezone($x, "Europe/Moscow") as TzDate), -- 2019-10-21,Europe/Moscow
     cast(AddTimezone($x, "Europe/Moscow") as Date), -- 2019-10-21
-	DateTime::Format("%Y-%m-%d %Z")(AddTimezone($x, "Europe/Moscow")), -- 2019-10-22 Europe/Moscow
+  DateTime::Format("%Y-%m-%d %Z")(AddTimezone($x, "Europe/Moscow")), -- 2019-10-22 Europe/Moscow
 ```
 
 Стоит отметить, что некоторые значения в типaх TzDatetime и TzTimestamp, имеющие положительное смещение таймзоны, не могут быть преобразованы в тип TzDate. Рассмотрим следующий пример:

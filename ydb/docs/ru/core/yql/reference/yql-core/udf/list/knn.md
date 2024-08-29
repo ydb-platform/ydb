@@ -206,7 +206,7 @@ $MapInt8 = ($x) -> {
     $min = -5.0f;
     $max =  5.0f;
     $range = $max - $min;
-	RETURN CAST(Math::Round(IF($x < $min, -127, IF($x > $max, 127, ($x / $range) * 255))) As Int8)
+  RETURN CAST(Math::Round(IF($x < $min, -127, IF($x > $max, 127, ($x / $range) * 255))) As Int8)
 };
 
 $FloatList = [-1.2f, 2.3f, 3.4f, -4.7f];

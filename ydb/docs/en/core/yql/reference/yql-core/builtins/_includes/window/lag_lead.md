@@ -31,15 +31,15 @@ WINDOW w As (
 );
 
 /* Output:
-item	odd	lag1
+item  odd  lag1
 --------------------
-2	0	NULL
-4	0	2
-6	0	4
-1	1	NULL
-3	1	1
-5	1	3
-7	1	5
+2  0  NULL
+4  0  2
+6  0  4
+1  1  NULL
+3  1  1
+5  1  3
+7  1  5
 */
 
 ```

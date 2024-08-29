@@ -105,7 +105,7 @@
             types.StructFieldValue("title", types.TextValue("IT Crowd")),
             types.StructFieldValue("series_info", types.TextValue(
               "The IT Crowd is a British sitcom produced by Channel 4, written by Graham Linehan, produced by "+
-        			"Ash Atalla and starring Chris O'Dowd, Richard Ayoade, Katherine Parkinson, and Matt Berry.",
+              "Ash Atalla and starring Chris O'Dowd, Richard Ayoade, Katherine Parkinson, and Matt Berry.",
             )),
             types.StructFieldValue("comment", types.NullValue(types.TypeText)),
           ),

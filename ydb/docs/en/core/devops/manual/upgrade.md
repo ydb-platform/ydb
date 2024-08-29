@@ -33,10 +33,10 @@ Also, in any case, you cannot roll back more than 2 major versions relative to t
 
 ### Examples of version compatibility
 
-* v.22.2.5	->	v.22.2.47: Update is possible.
-* v.22.2.47	->	v.22.3.21: Update is possible.
-* v.22.2.40	->	v.22.3.21: Update is impossible, first upgrade to the latest minor version (v.22.2.47).
-* v.22.2.47	->	v.22.4.5: Update is impossible, upgrade to the next major version first (v.22.3.*).
+* v.22.2.5  ->  v.22.2.47: Update is possible.
+* v.22.2.47  ->  v.22.3.21: Update is possible.
+* v.22.2.40  ->  v.22.3.21: Update is impossible, first upgrade to the latest minor version (v.22.2.47).
+* v.22.2.47  ->  v.22.4.5: Update is impossible, upgrade to the next major version first (v.22.3.*).
 
 ## Checking update results {#upgrade_check}
 

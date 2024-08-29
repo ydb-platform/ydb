@@ -7,7 +7,7 @@ log-levels:
   MD006: 'error' # Consider starting bulleted lists at the beginning of the line
   MD007: 'error' # Unordered list indentation
   MD009: 'error' # Trailing spaces
-  MD010: 'disabled' # Hard tabs
+  MD010: 'error' # Hard tabs
   MD011: 'disabled' # Reversed link syntax
   MD012: 'disabled' # Multiple consecutive blank lines
   MD013: 'disabled' # Line length
@@ -51,7 +51,7 @@ log-levels:
   MD054: 'disabled' # Link and image style
   MD055: 'disabled' # Table pipe style
   MD056: 'disabled' # Table column count
-  
+
   YFM001: 'disabled' # Inline code length
   YFM002: 'disabled' # No header found in the file for the link text
   YFM003: 'error'    # Link is unreachable

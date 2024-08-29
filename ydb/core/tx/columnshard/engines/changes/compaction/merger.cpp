@@ -59,7 +59,7 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
         for (auto&& p : Batches) {
             ui32 columnIdx = 0;
             for (auto&& i : p->GetSchema()->GetFields()) {
-                const std::optional<ui32> columnId = resultFiltered->GetIndexInfo().GetColumnIdOptional(i->name());
+                const std::optional<ui32> columnId = resultFiltered->GetColumnIdOptional(i->name());
                 if (columnId) {
                     auto it = columnsData.find(*columnId);
                     if (it == columnsData.end()) {

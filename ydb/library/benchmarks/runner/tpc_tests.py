@@ -130,7 +130,7 @@ def upload_results(result_path, s3_folder, ydb):
 
 
 def test_tpc():
-    is_ci = os.environ.get("OUTPUT_DIR") is not None
+    is_ci = os.environ.get("PUBLIC_DIR") is not None
     print("is ci: ", is_ci, file=sys.stderr)
 
     runner = Runner()
@@ -139,7 +139,7 @@ def test_tpc():
     print("results path:", result_path, file=sys.stderr)
 
     if is_ci:
-        s3_folder = pathlib.Path(os.environ["OUTPUT_DIR"]).resolve()
+        s3_folder = pathlib.Path(os.environ["PUBLIC_DIR"]).resolve()
         tmp = s3_folder / "CREATE_ME"
         tmp.mkdir()
         print(f"s3 folder: {s3_folder}", file=sys.stderr)

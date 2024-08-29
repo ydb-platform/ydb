@@ -5,6 +5,7 @@
 #include <ydb/public/lib/ydb_cli/common/print_utils.h>
 #include <ydb/public/lib/ydb_cli/common/scheme_printers.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <google/protobuf/port_def.inc>
 
 #include <util/string/join.h>
 
@@ -303,7 +304,11 @@ static int PrintProtoJsonBase64(const T& msg) {
     const auto status = MessageToJsonString(msg, &json, opts);
 
     if (!status.ok()) {
+        #if PROTOBUF_VERSION >= 4022005
+        Cerr << "Error occurred while converting proto to json: " << status.message() << Endl;
+        #else
         Cerr << "Error occurred while converting proto to json: " << status.message().ToString() << Endl;
+        #endif
         return EXIT_FAILURE;
     }
 

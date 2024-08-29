@@ -324,9 +324,9 @@ class TestStreamingJoin(TestYdsBase):
             offset += 500
 
         read_data = self.read_stream(len(messages))
-        print(streamlookup, testcase, file=sys.stderr)
-        print(sql, file=sys.stderr)
-        print(*zip(messages, read_data), file=sys.stderr, sep="\n")
+        # print(streamlookup, testcase, file=sys.stderr)
+        # print(sql, file=sys.stderr)
+        # print(*zip(messages, read_data), file=sys.stderr, sep="\n")
         for r, exp in zip(read_data, messages):
             r = json.loads(r)
             exp = json.loads(exp[1])

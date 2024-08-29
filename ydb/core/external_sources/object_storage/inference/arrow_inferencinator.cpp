@@ -266,8 +266,8 @@ std::variant<ArrowFields, TString> InferJsonTypes(std::shared_ptr<arrow::io::Ran
     return table->fields();
 }
 
-std::variant<ArrowFields, TString> InferType(EFileFormat format, std::shared_ptr<arrow::io::RandomAccessFile> file, std::shared_ptr<FormatConfig> config) {
-    switch (format) {
+std::variant<ArrowFields, TString> InferType(std::shared_ptr<arrow::io::RandomAccessFile> file, std::shared_ptr<FormatConfig> config) {
+    switch (config->Format) {
     case EFileFormat::CsvWithNames:
         return InferCsvTypes(std::move(file), std::dynamic_pointer_cast<CsvConfig>(config));
     case EFileFormat::TsvWithNames:
@@ -279,7 +279,7 @@ std::variant<ArrowFields, TString> InferType(EFileFormat format, std::shared_ptr
         return InferJsonTypes(std::move(file), std::dynamic_pointer_cast<JsonConfig>(config));
     case EFileFormat::Undefined:
     default:
-        return TStringBuilder{} << "unexpected format: " << ConvertFileFormat(format);
+        return TStringBuilder{} << "unexpected format: " << ConvertFileFormat(config->Format);
     }
 }
 
@@ -312,7 +312,7 @@ public:
         }
 
         auto& file = *ev->Get();
-        auto mbArrowFields = InferType(file.Format, file.File, file.Config);
+        auto mbArrowFields = InferType(file.File, file.Config);
         if (std::holds_alternative<TString>(mbArrowFields)) {
             ctx.Send(RequesterId_, MakeErrorSchema(file.Path, NFq::TIssuesIds::INTERNAL_ERROR, std::get<TString>(mbArrowFields)));
             RequesterId_ = {};

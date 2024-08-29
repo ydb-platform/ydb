@@ -28,12 +28,11 @@ namespace NKikimr::NExternalSource::NObjectStorage::NInference {
 class TArrowFileFetcher : public NActors::TActorBootstrapped<TArrowFileFetcher> {
     static constexpr uint64_t PrefixSize = 10_MB;
 public:
-    TArrowFileFetcher(NActors::TActorId s3FetcherId, EFileFormat format, const THashMap<TString, TString>& params)
+    TArrowFileFetcher(NActors::TActorId s3FetcherId, const THashMap<TString, TString>& params)
         : S3FetcherId_{s3FetcherId}
-        , Format_{format}
-        , Config_{MakeFormatConfig(format, params)}
+        , Config_{MakeFormatConfig(params)}
     {
-        Y_ABORT_UNLESS(IsArrowInferredFormat(Format_));
+        Y_ABORT_UNLESS(IsArrowInferredFormat(Config_->Format));
         
         auto decompression = params.FindPtr("compression");
         if (decompression) {
@@ -60,7 +59,7 @@ public:
             .MetadataRequest = false,
         };
 
-        switch (Format_) {
+        switch (Config_->Format) {
             case EFileFormat::CsvWithNames:
             case EFileFormat::TsvWithNames:
             case EFileFormat::JsonEachRow:
@@ -77,7 +76,7 @@ public:
                 ctx.Send(localRequest.Requester, MakeError(
                     localRequest.Path,
                     NFq::TIssuesIds::UNSUPPORTED,
-                    TStringBuilder{} << "unsupported format for inference: " << ConvertFileFormat(Format_))
+                    TStringBuilder{} << "unsupported format for inference: " << ConvertFileFormat(Config_->Format))
                 );
                 return;
             }
@@ -103,11 +102,11 @@ public:
         }
 
         std::shared_ptr<arrow::io::RandomAccessFile> file;
-        switch (Format_) {
+        switch (Config_->Format) {
             case EFileFormat::CsvWithNames:
             case EFileFormat::TsvWithNames: {
                 file = CleanupCsvFile(data, request, std::dynamic_pointer_cast<CsvConfig>(Config_)->ParseOpts, ctx);
-                ctx.Send(request.Requester, new TEvArrowFile(std::move(file), request.Path, Format_, Config_));
+                ctx.Send(request.Requester, new TEvArrowFile(Config_, std::move(file), request.Path));
                 break;
             }
             case EFileFormat::Parquet: {
@@ -116,13 +115,13 @@ public:
                     return;
                 }
                 file = BuildParquetFileFromMetadata(data, request, ctx);
-                ctx.Send(request.Requester, new TEvArrowFile(std::move(file), request.Path, Format_, Config_));
+                ctx.Send(request.Requester, new TEvArrowFile(Config_, std::move(file), request.Path));
                 break;
             }
             case EFileFormat::JsonEachRow:
             case EFileFormat::JsonList: {
                 file = CleanupJsonFile(data, request, std::dynamic_pointer_cast<JsonConfig>(Config_)->ParseOpts, ctx);
-                ctx.Send(request.Requester, new TEvArrowFile(std::move(file), request.Path, Format_, Config_));
+                ctx.Send(request.Requester, new TEvArrowFile(Config_, std::move(file), request.Path));
                 break;
             }
             case EFileFormat::Undefined:
@@ -172,9 +171,10 @@ private:
     }
 
     void HandleAsRAFile(TRequest&& insertedRequest, const NActors::TActorContext& ctx) {
+        auto format = Config_->Format;
         auto error = MakeError(
             insertedRequest.Path, NFq::TIssuesIds::UNSUPPORTED,
-            TStringBuilder{} << "got unsupported format: " << ConvertFileFormat(Format_) << '(' << static_cast<ui32>(Format_) << ')'
+            TStringBuilder{} << "got unsupported format: " << ConvertFileFormat(format) << '(' << static_cast<ui32>(format) << ')'
         );
         SendError(ctx, error);
     }
@@ -281,7 +281,7 @@ private:
         std::shared_ptr<arrow::Buffer> whole, partial;
         auto arrowData = BuildBufferFromData(data, request, ctx);
 
-        if (Format_ == EFileFormat::JsonList) {
+        if (Config_->Format == EFileFormat::JsonList) {
             auto empty = std::make_shared<arrow::Buffer>(nullptr, 0);
             int64_t count = 1;
             auto status = chunker->ProcessSkip(empty, arrowData, false, &count, &whole);
@@ -354,13 +354,12 @@ private:
 
     // Fields
     NActors::TActorId S3FetcherId_;
-    EFileFormat Format_;
     std::shared_ptr<FormatConfig> Config_;
     TMaybe<TString> DecompressionFormat_;
     std::unordered_map<TString, TRequest> InflightRequests_; // Path -> Request
 };
 
-NActors::IActor* CreateArrowFetchingActor(NActors::TActorId s3FetcherId, EFileFormat format, const THashMap<TString, TString>& params) {
-    return new TArrowFileFetcher{s3FetcherId, format, params};
+NActors::IActor* CreateArrowFetchingActor(NActors::TActorId s3FetcherId, const THashMap<TString, TString>& params) {
+    return new TArrowFileFetcher{s3FetcherId, params};
 }
 } // namespace NKikimr::NExternalSource::NObjectStorage::NInference

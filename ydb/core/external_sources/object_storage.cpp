@@ -382,8 +382,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
 
         meta->Attributes.erase("withinfer");
 
-        auto fileFormat = NObjectStorage::NInference::ConvertFileFormat(*format);
-        auto arrowFetcherId = ActorSystem->Register(NObjectStorage::NInference::CreateArrowFetchingActor(s3FetcherId, fileFormat, meta->Attributes));
+        auto arrowFetcherId = ActorSystem->Register(NObjectStorage::NInference::CreateArrowFetchingActor(s3FetcherId, meta->Attributes));
         auto arrowInferencinatorId = ActorSystem->Register(NObjectStorage::NInference::CreateArrowInferencinator(arrowFetcherId));
 
         return afterListing.Apply([arrowInferencinatorId, meta, actorSystem = ActorSystem](const NThreading::TFuture<NYql::NS3Lister::TObjectListEntry>& entryFut) {
@@ -485,12 +484,11 @@ private:
 
         auto bufferReader = std::make_shared<arrow::io::BufferReader>(std::move(partitionBuffer));
         auto file = std::dynamic_pointer_cast<arrow::io::RandomAccessFile>(bufferReader);
-        auto format = NObjectStorage::NInference::EFileFormat::CsvWithNames;
-        auto config = NObjectStorage::NInference::MakeFormatConfig(format);
+        auto config = NObjectStorage::NInference::MakeFormatConfig({{ "format", "csv_with_names" }});
         config->ShouldMakeOptional = false;
         ActorSystem->Register(new NKqp::TActorRequestHandler<NObjectStorage::TEvArrowFile, NObjectStorage::TEvInferredFileSchema, TMetadataResult>(
             arrowInferencinatorId,
-            new NObjectStorage::TEvArrowFile(std::move(file), "", format, config),
+            new NObjectStorage::TEvArrowFile(config, std::move(file), ""),
             promise,
             std::move(partitionsToMetadata)
         ));

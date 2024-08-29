@@ -37,28 +37,43 @@ std::shared_ptr<FormatConfig> MakeJsonListConfig(const THashMap<TString, TString
 
 }
 
-std::shared_ptr<FormatConfig> MakeFormatConfig(EFileFormat format, const THashMap<TString, TString>& params) {
+std::shared_ptr<FormatConfig> MakeFormatConfig(const THashMap<TString, TString>& params) {
+    EFileFormat format;
+    if (auto formatPtr = params.FindPtr("format"); formatPtr) {
+        format = ConvertFileFormat(*formatPtr);
+    }
+    
     if (auto delimiter = params.FindPtr("csvdelimiter"); delimiter) {
         if (format != EFileFormat::CsvWithNames) {
             throw yexception() << "invalid parameter: csv_delimiter should only be specified for 'csv_with_names' format";
         }
     }
 
+    std::shared_ptr<FormatConfig> config;
     switch (format) {
     case EFileFormat::CsvWithNames:
-        return MakeCsvConfig(params);
+        config = MakeCsvConfig(params);
+        break;
     case EFileFormat::TsvWithNames:
-        return MakeTsvConfig(params);
+        config = MakeTsvConfig(params);
+        break;
     case EFileFormat::Parquet:
-        return MakeParquetConfig(params);
+        config = MakeParquetConfig(params);
+        break;
     case EFileFormat::JsonEachRow:
-        return MakeJsonEachRowConfig(params);
+        config = MakeJsonEachRowConfig(params);
+        break;
     case EFileFormat::JsonList:
-        return MakeJsonListConfig(params);
+        config = MakeJsonListConfig(params);
+        break;
     case EFileFormat::Undefined:
     default:
         throw yexception() << "invalid parameter: unknown format specified";
     }
+
+    config->Format = format;
+    config->ShouldMakeOptional = true;
+    return config;
 }
 
 } // namespace NKikimr::NExternalSource::NObjectStorage::NInference

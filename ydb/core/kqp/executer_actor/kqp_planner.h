@@ -73,7 +73,7 @@ public:
     std::unique_ptr<IEventHandle> PlanExecution();
     std::unique_ptr<IEventHandle> AssignTasksToNodes();
     bool AcknowledgeCA(ui64 taskId, TActorId computeActor, const NYql::NDqProto::TEvComputeActorState* state);
-    void CompletedCA(ui64 taskId, TActorId computeActor);
+    bool CompletedCA(ui64 taskId, TActorId computeActor);
     void TaskNotStarted(ui64 taskId);
     TProgressStat::TEntry CalculateConsumptionUpdate();
     void ShiftConsumption();

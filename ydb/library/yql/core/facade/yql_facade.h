@@ -237,7 +237,7 @@ public:
         return ResultProviderConfig_->CommittedResults;
     }
 
-    TMaybe<TString> GetQueryAst();
+    TMaybe<TString> GetQueryAst(TMaybe<size_t> memoryLimit = {});
     TMaybe<TString> GetQueryPlan(const TPlanSettings& settings = {});
 
     void SetDiagnosticFormat(NYson::EYsonFormat format) {
@@ -398,6 +398,13 @@ private:
     const TIntrusivePtr<IRandomProvider> RandomProvider_;
     const TIntrusivePtr<ITimeProvider> TimeProvider_;
     const ui64 NextUniqueId_;
+
+    TAstNode* AstRoot_;
+    std::unique_ptr<TMemoryPool> AstPool_;
+    const IModuleResolver::TPtr Modules_;
+    TAutoPtr<TExprContext> ExprCtx_;
+    TTypeAnnotationContextPtr TypeCtx_;
+
     TVector<TDataProviderInitializer> DataProvidersInit_;
     TAdaptiveLock DataProvidersLock_;
     TVector<TDataProviderInfo> DataProviders_;
@@ -417,15 +424,11 @@ private:
     ESourceSyntax SourceSyntax_;
     ui16 SyntaxVersion_;
 
-    TAstNode* AstRoot_;
-    std::unique_ptr<TMemoryPool> AstPool_;
-    TAutoPtr<TExprContext> ExprCtx_;
-    const IModuleResolver::TPtr Modules_;
     TExprNode::TPtr ExprRoot_;
     TExprNode::TPtr SavedExprRoot_;
     mutable TAdaptiveLock SessionIdLock_;
     TString SessionId_;
-    TTypeAnnotationContextPtr TypeCtx_;
+    NThreading::TFuture<void> CloseLastSessionFuture_;
     TAutoPtr<IPlanBuilder> PlanBuilder_;
     TAutoPtr<IGraphTransformer> Transformer_;
     TIntrusivePtr<TResultProviderConfig> ResultProviderConfig_;

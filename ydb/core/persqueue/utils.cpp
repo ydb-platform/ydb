@@ -101,7 +101,7 @@ void Migrate(NKikimrPQ::TPQTabletConfig& config) {
         config.ClearConsumerCodecs();
         config.ClearReadRuleServiceTypes();
         config.ClearReadRuleVersions();
-        config.ClearReadRuleVersions();
+        config.ClearReadRuleGenerations();
     }
 
     if (!config.PartitionsSize()) {

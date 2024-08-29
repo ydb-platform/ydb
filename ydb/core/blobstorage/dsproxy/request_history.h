@@ -7,9 +7,9 @@ namespace NKikimr {
 class THistory {
 private:
     struct TBaseEntry {
-        ui32 TimeUs;
+        TDuration Timestamp;
         TBaseEntry(TInstant startTime)
-            : TimeUs((TInstant::Now() - startTime).MicroSeconds())
+            : Timestamp(TInstant::Now() - startTime)
         {}
     };
 
@@ -28,7 +28,7 @@ private:
         void Output(IOutputStream& str, const char* typeName, const TIntrusivePtr<TBlobStorageGroupInfo>& info,
                 const TLogoBlobID* blobId) const {
             str << typeName         << "{"
-                << " TimestampMs# " << 0.001 * TimeUs;
+                << " TimestampMs# " << Timestamp.MilliSeconds();
             if (blobId && PartIdx != InvalidPartId) {
                 str << " sample PartId# "  << TLogoBlobID(*blobId, PartIdx).ToString();
             }
@@ -53,7 +53,7 @@ private:
 
         void Output(IOutputStream& str, const char* typeName, const TIntrusivePtr<TBlobStorageGroupInfo>& info) const {
             str << typeName         << "{"
-                << " TimestampMs# " << 0.001 * TimeUs
+                << " TimestampMs# " << Timestamp.MilliSeconds()
                 << " VDiskId# "     << info->GetVDiskId(OrderNumber).ToString()
                 << " NodeId# "      << info->GetActorId(OrderNumber).NodeId()
                 << " Status# "      << NKikimrProto::EReplyStatus_Name(Status);
@@ -71,7 +71,6 @@ private:
 
         void Output(IOutputStream& str, const TIntrusivePtr<TBlobStorageGroupInfo>& info,
                 const TLogoBlobID* blobId) const {
-            Y_UNUSED(blobId);
             TVRequestEntry::Output(str, "TEvVPut", info, blobId);
         }
     };
@@ -117,7 +116,7 @@ private:
         {}
 
         void Output(IOutputStream& str, const char* typeName) const {
-            str << typeName << "{ TimestampMs# " << 0.001 * TimeUs << " }";
+            str << typeName << "{ TimestampMs# " << Timestamp.MilliSeconds() << " }";
         }
     };
 

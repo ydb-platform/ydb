@@ -4,6 +4,7 @@
 #include <ydb/core/blobstorage/dsproxy/dsproxy_request_reporting.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
+#include <ydb/core/util/stlog.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <library/cpp/digest/crc32c/crc32c.h>
 #include <util/generic/set.h>
@@ -388,13 +389,14 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
 
         if (TActivationContext::Now() - StartTime >= LongRequestThreshold) {
             if (AllowToReport(GetImpl.GetHandleClass())) {
-                DSP_LOG_WARN_S("BPG71", "TEvGet Request was being processed for more than " << LongRequestThreshold
-                        << " GroupId# " << Info->GroupID
-                        << " SubrequestsCount# " << evResult->ResponseSz
-                        << " RequestTotalSize# " << requestSize
-                        << " HandleClass# " << NKikimrBlobStorage::EGetHandleClass_Name(handleClass)
-                        << " RestartCounter# " << RestartCounter
-                        << " History# " << GetImpl.PrintHistory());
+                STLOG(PRI_WARN, BS_PROXY_GET, BPG71, "Long TEvGet request detected",            \
+                        (LongRequestThreshold, LongRequestThreshold),                           \
+                        (GroupId, Info->GroupID),                                               \
+                        (SubrequestsCount, evResult->ResponseSz),                               \
+                        (RequestTotalSize, requestSize),                                        \
+                        (HandleClass, NKikimrBlobStorage::EGetHandleClass_Name(handleClass)),   \
+                        (RestartCounter, RestartCounter),                                       \
+                        (History, GetImpl.PrintHistory()));
             }
         }
         return SendResponseAndDie(std::unique_ptr<TEvBlobStorage::TEvGetResult>(evResult.Release()));

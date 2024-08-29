@@ -6,6 +6,7 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
+#include <ydb/core/util/stlog.h>
 
 #include <util/generic/ymath.h>
 #include <util/system/datetime.h>
@@ -503,12 +504,13 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
         if (TActivationContext::Monotonic() - StartTime >= LongRequestThreshold) {
             bool allowToReport = AllowToReport(HandleClass);
             if (allowToReport) {
-                DSP_LOG_WARN_S("BPP71", "TEvPut Request was being processed for more than " << LongRequestThreshold
-                        << " GroupId# " << Info->GroupID
-                        << " HandleClass# " << NKikimrBlobStorage::EPutHandleClass_Name(HandleClass)
-                        << " Tactic# " << TEvBlobStorage::TEvPut::TacticName(Tactic)
-                        << " RestartCounter# " << RestartCounter
-                        << " History# " << PutImpl.PrintHistory());
+                STLOG(PRI_WARN, BS_PROXY_PUT, BPP71, "Long TEvPut request detected",            \
+                        (LongRequestThreshold, LongRequestThreshold),                           \
+                        (GroupId, Info->GroupID),                                               \
+                        (HandleClass, NKikimrBlobStorage::EPutHandleClass_Name(HandleClass)),   \
+                        (Tactic, TEvBlobStorage::TEvPut::TacticName(Tactic)),                   \
+                        (RestartCounter, RestartCounter),                                       \
+                        (History, PutImpl.PrintHistory()));
             }
         }
     }

@@ -69,6 +69,13 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
         tester.Execute();
     }
 
+    Y_UNIT_TEST(OlapSnapshotExpiration) {
+        TSnapshotExpiration tester;
+        tester.SetFastSnapshotExpiration(true);
+        tester.SetIsOlap(true);
+        tester.Execute();
+    }
+
     class TReadOnlyTxCommitsOnConcurrentWrite : public TTableDataModificationTester {
     protected:
         void DoExecute() override {
@@ -130,7 +137,13 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
         tester.SetIsOlap(false);
         tester.Execute();
     }
-    
+
+    Y_UNIT_TEST(OlapReadOnlyTxCommitsOnConcurrentWrite) {
+        TReadOnlyTxCommitsOnConcurrentWrite tester;
+        tester.SetIsOlap(true);
+        tester.Execute();
+    }
+
     class TReadWriteTxFailsOnConcurrentWrite1 : public TTableDataModificationTester {
     protected:
         void DoExecute() override {
@@ -169,6 +182,12 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
     Y_UNIT_TEST(ReadWriteTxFailsOnConcurrentWrite1) {
         TReadWriteTxFailsOnConcurrentWrite1 tester;
         tester.SetIsOlap(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(OlapReadWriteTxFailsOnConcurrentWrite1) {
+        TReadWriteTxFailsOnConcurrentWrite1 tester;
+        tester.SetIsOlap(true);
         tester.Execute();
     }
 
@@ -215,6 +234,12 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
     Y_UNIT_TEST(ReadWriteTxFailsOnConcurrentWrite2) {
         TReadWriteTxFailsOnConcurrentWrite2 tester;
         tester.SetIsOlap(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(OlapReadWriteTxFailsOnConcurrentWrite2) {
+        TReadWriteTxFailsOnConcurrentWrite2 tester;
+        tester.SetIsOlap(true);
         tester.Execute();
     }
 
@@ -266,6 +291,12 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
     Y_UNIT_TEST(ReadWriteTxFailsOnConcurrentWrite3) {
         TReadWriteTxFailsOnConcurrentWrite3 tester;
         tester.SetIsOlap(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(OlapReadWriteTxFailsOnConcurrentWrite3) {
+        TReadWriteTxFailsOnConcurrentWrite3 tester;
+        tester.SetIsOlap(true);
         tester.Execute();
     }
 }

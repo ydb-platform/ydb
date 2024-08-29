@@ -62,6 +62,12 @@ Y_UNIT_TEST_SUITE(KqpSinkLocks) {
         tester.Execute();
     }
 
+    Y_UNIT_TEST(TInvalidateOlap) {
+        TInvalidate tester;
+        tester.SetIsOlap(true);
+        tester.Execute();
+    }
+
     class TInvalidateOnCommit : public TTableDataModificationTester {
     protected:
         void DoExecute() override {
@@ -112,6 +118,11 @@ Y_UNIT_TEST_SUITE(KqpSinkLocks) {
         tester.Execute();
     }
 
+    Y_UNIT_TEST(InvalidateOlapOnCommit) {
+        TInvalidateOnCommit tester;
+        tester.SetIsOlap(true);
+        tester.Execute();
+    }
 
     class TDifferentKeyUpdate : public TTableDataModificationTester {
     protected:
@@ -145,6 +156,12 @@ Y_UNIT_TEST_SUITE(KqpSinkLocks) {
     Y_UNIT_TEST(DifferentKeyUpdate) {
         TDifferentKeyUpdate tester;
         tester.SetIsOlap(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(DifferentKeyUpdateOlap) {
+        TDifferentKeyUpdate tester;
+        tester.SetIsOlap(true);
         tester.Execute();
     }
 
@@ -196,6 +213,12 @@ Y_UNIT_TEST_SUITE(KqpSinkLocks) {
     Y_UNIT_TEST(EmptyRange) {
         TEmptyRange tester;
         tester.SetIsOlap(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(EmptyRangeOlap) {
+        TEmptyRange tester;
+        tester.SetIsOlap(true);
         tester.Execute();
     }
 
@@ -254,6 +277,12 @@ Y_UNIT_TEST_SUITE(KqpSinkLocks) {
         tester.Execute();
     }
 
+    Y_UNIT_TEST(EmptyRangeAlreadyBrokenOlap) {
+        TEmptyRangeAlreadyBroken tester;
+        tester.SetIsOlap(true);
+        tester.Execute();
+    }
+
     class TUncommittedRead : public TTableDataModificationTester {
     protected:
         void DoExecute() override {
@@ -292,6 +321,12 @@ Y_UNIT_TEST_SUITE(KqpSinkLocks) {
     Y_UNIT_TEST(UncommittedRead) {
         TUncommittedRead tester;
         tester.SetIsOlap(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(OlapUncommittedRead) {
+        TUncommittedRead tester;
+        tester.SetIsOlap(true);
         tester.Execute();
     }
 }

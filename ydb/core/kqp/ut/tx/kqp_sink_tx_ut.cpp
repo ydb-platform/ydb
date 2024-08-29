@@ -57,6 +57,12 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
         tester.Execute();
     }
 
+    Y_UNIT_TEST(OlapDeferredEffects) {
+        TDeferredEffects tester;
+        tester.SetIsOlap(true);
+        tester.Execute();
+    }
+
     class TExplicitTcl : public TTableDataModificationTester {
     protected:
         void DoExecute() override {
@@ -97,6 +103,12 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
     Y_UNIT_TEST(ExplicitTcl) {
         TExplicitTcl tester;
         tester.SetIsOlap(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(OlapExplicitTcl) {
+        TExplicitTcl tester;
+        tester.SetIsOlap(true);
         tester.Execute();
     }
 
@@ -148,6 +160,12 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
         tester.Execute();
     }
 
+    Y_UNIT_TEST(OlapLocksAbortOnCommit) {
+        TLocksAbortOnCommit tester;
+        tester.SetIsOlap(true);
+        tester.Execute();
+    }
+
     class TInvalidateOnError : public TTableDataModificationTester {
     protected:
         void DoExecute() override {
@@ -177,6 +195,12 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
     Y_UNIT_TEST(InvalidateOnError) {
         TInvalidateOnError tester;
         tester.SetIsOlap(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(OlapInvalidateOnError) {
+        TInvalidateOnError tester;
+        tester.SetIsOlap(true);
         tester.Execute();
     }
 
@@ -218,6 +242,12 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
         tester.Execute();
     }
 
+    Y_UNIT_TEST(OlapInteractive) {
+        TInteractive tester;
+        tester.SetIsOlap(true);
+        tester.Execute();
+    }
+
     class TSnapshotRO : public TTableDataModificationTester {
     protected:
         void DoExecute() override {
@@ -253,6 +283,12 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
     Y_UNIT_TEST(SnapshotRO) {
         TSnapshotRO tester;
         tester.SetIsOlap(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(OlapSnapshotRO) {
+        TSnapshotRO tester;
+        tester.SetIsOlap(true);
         tester.Execute();
     }
 
@@ -295,6 +331,12 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
     Y_UNIT_TEST(SnapshotROInteractive1) {
         TSnapshotROInteractive1 tester;
         tester.SetIsOlap(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(OlapSnapshotROInteractive1) {
+        TSnapshotROInteractive1 tester;
+        tester.SetIsOlap(true);
         tester.Execute();
     }
 
@@ -341,6 +383,12 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
     Y_UNIT_TEST(SnapshotROInteractive2) {
         TSnapshotROInteractive2 tester;
         tester.SetIsOlap(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(OlapSnapshotROInteractive2) {
+        TSnapshotROInteractive2 tester;
+        tester.SetIsOlap(true);
         tester.Execute();
     }
 }

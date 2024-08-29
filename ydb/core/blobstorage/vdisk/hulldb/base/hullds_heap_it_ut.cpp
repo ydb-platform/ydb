@@ -85,9 +85,9 @@ namespace NKikimr {
             }
 
             void GenRandLogoBlobOrderedSsts(ui32 maxPlus, ui32 maxRec, ui32 maxSsts, ui32 step = 0) {
-                LogoBlobOrderedSsts.push_back(GenerateOrderedSsts(step, TAppData::RandomProvider->GenRand64() % maxPlus,
-                                                        TAppData::RandomProvider->GenRand64() % maxRec,
-                                                        TAppData::RandomProvider->GenRand64() % maxSsts));
+                LogoBlobOrderedSsts.push_back(GenerateOrderedSsts(step, TAppData::RandomProvider->GenRand64() % maxPlus + 1,
+                                                        TAppData::RandomProvider->GenRand64() % maxRec + 1,
+                                                        TAppData::RandomProvider->GenRand64() % maxSsts + 1));
             }
 
             std::shared_ptr<TFreshAppendix> CreateAppendix(const TVector<int> &v, ui64 tabletId = 0, ui32 generation = 0,
@@ -334,7 +334,7 @@ namespace NKikimr {
             sampler.GenRandLogoBlobOrderedSsts(50, 100, 100);
             auto logoBlobOrderedSsts = sampler.PrepareLogoBlobOrderedSsts();
             TLevelSlice<TKeyLogoBlob, TMemRecLogoBlob>::TBackwardIterator levelSliceIterator(hullCtx, logoBlobOrderedSsts);
-            BackwardIterationBenchmark(levelSliceIterator, "LevelSliceBackwardIterator", CreateKey(500001));
+            BackwardIterationBenchmark(levelSliceIterator, "LevelSliceBackwardIterator", CreateKey(1'000'000));
         }
     }
 

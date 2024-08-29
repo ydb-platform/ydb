@@ -311,6 +311,8 @@ public:
                 // process the next tuple from the left flow.
                 if (NUdf::TUnboxedValue lookup; key && (lookup = dict.Lookup(key))) {
                     iterState.Reset(std::move(lookup));
+                } else if constexpr (!RightRequired) {
+                    blockState.MakeRow(NUdf::TUnboxedValue());
                 }
                 continue;
             }
@@ -481,6 +483,11 @@ IComputationNode* WrapBlockMapJoinCore(TCallable& callable, const TComputationNo
             std::move(joinItems), std::move(leftFlowItems), std::move(leftKeyColumns),
             static_cast<IComputationWideFlowNode*>(flow), dict);
     case EJoinKind::Left:
+        if (isMulti) {
+            return new TBlockWideMultiMapJoinWrapper<false>(ctx.Mutables,
+                std::move(joinItems), std::move(leftFlowItems), std::move(leftKeyColumns),
+                static_cast<IComputationWideFlowNode*>(flow), dict);
+        }
         return new TBlockWideMapJoinWrapper<false, false>(ctx.Mutables,
             std::move(joinItems), std::move(leftFlowItems), std::move(leftKeyColumns),
             static_cast<IComputationWideFlowNode*>(flow), dict);

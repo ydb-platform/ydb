@@ -19,6 +19,7 @@ using TKSVSet = TSet<std::tuple_element_t<0, TKSV>>;
 template <bool isMulti>
 using TKSW = std::tuple<ui64, ui64, TStringBuf, std::optional<TStringBuf>>;
 using TKSWMap = TMap<std::tuple_element_t<0, TKSW<false>>, TString>;
+using TKSWMultiMap = TMap<std::tuple_element_t<0, TKSW<true>>, TVector<TString>>;
 template <typename TupleType>
 using TArrays = std::array<std::shared_ptr<arrow::ArrayData>, std::tuple_size_v<TupleType>>;
 
@@ -95,12 +96,40 @@ const TRuntimeNode MakeDict(TProgramBuilder& pgmBuilder, const TMap<TKey, TStrin
         });
 }
 
+template <typename TKey>
+const TRuntimeNode MakeMultiDict(TProgramBuilder& pgmBuilder, const TMap<TKey, TVector<TString>>& pairValues) {
+    const auto dictStructType = pgmBuilder.NewStructType({
+        {"Key",     pgmBuilder.NewDataType(NUdf::TDataType<TKey>::Id)},
+        {"Payload", pgmBuilder.NewDataType(NUdf::EDataSlot::String)}
+    });
+
+    TRuntimeNode::TList dictListItems;
+    for (const auto& [key, values] : pairValues) {
+        for (const auto& value : values) {
+            dictListItems.push_back(pgmBuilder.NewStruct({
+                {"Key",     pgmBuilder.NewDataLiteral<TKey>(key)},
+                {"Payload", pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(value)}
+            }));
+        }
+    }
+
+    const auto dictList = pgmBuilder.NewList(dictStructType, dictListItems);
+    return pgmBuilder.ToHashedDict(dictList, true,
+        [&](TRuntimeNode item) {
+            return pgmBuilder.Member(item, "Key");
+        }, [&](TRuntimeNode item) {
+            return pgmBuilder.NewTuple({pgmBuilder.Member(item, "Payload")});
+        });
+}
+
 template <typename TRightPayload>
 const TRuntimeNode MakeRightNode(TProgramBuilder& pgmBuilder, const TRightPayload& values) {
     if constexpr (std::is_same_v<TRightPayload, TKSVSet>) {
         return MakeSet(pgmBuilder, values);
     } else if constexpr (std::is_same_v<TRightPayload, TKSWMap>) {
         return MakeDict(pgmBuilder, values);
+    } else if constexpr (std::is_same_v<TRightPayload, TKSWMultiMap>) {
+        return MakeMultiDict(pgmBuilder, values);
     } else {
         Y_ABORT("Not supported payload type");
     }
@@ -210,7 +239,9 @@ const TRuntimeNode BuildBlockJoin(TProgramBuilder& pgmBuilder, EJoinKind joinKin
 
 template <typename TOutputTuple, typename TDictPayloadType
     = std::conditional<std::is_same_v<TOutputTuple, TKSV>, TKSVSet,
-      std::conditional<std::is_same_v<TOutputTuple, TKSW<false>>, TKSWMap, void>>>
+      std::conditional<std::is_same_v<TOutputTuple, TKSW<false>>, TKSWMap,
+      std::conditional<std::is_same_v<TOutputTuple, TKSW<true>>, TKSWMultiMap,
+          void>>>>
 TVector<TOutputTuple> DoTestBlockJoinOnUint64(EJoinKind joinKind,
     TVector<TKSV> leftValues, TDictPayloadType rightValues, size_t blockSize
 ) {
@@ -341,11 +372,51 @@ void TestBlockJoinWithRightOnUint64(EJoinKind joinKind) {
     }
 }
 
+void TestBlockMultiJoinWithRightOnUint64(EJoinKind joinKind) {
+    constexpr size_t testSize = 1 << 14;
+    constexpr size_t valueSize = 3;
+    static const TVector<TString> threeLetterValues = GenerateValues(valueSize);
+    static const TSet<ui64> fibSet = {1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144,
+        233, 377, 610, 987, 1597, 2584, 4181, 6765, 10946, 17711};
+
+    TVector<TKSV> testKSV;
+    for (size_t k = 0; k < testSize; k++) {
+        testKSV.push_back(std::make_tuple(k, k * 1001, threeLetterValues[k]));
+    }
+
+    static TKSWMultiMap fibMultiMap;
+    for (const auto& key : fibSet) {
+        if (key < threeLetterValues.size()) {
+            fibMultiMap[key] = {std::to_string(key), threeLetterValues[key]};
+        }
+    }
+
+    TVector<TKSW<true>> expectedKSW;
+    for (const auto& ksv : testKSV) {
+        const auto found = fibMultiMap.find(std::get<0>(ksv));
+        if (found != fibMultiMap.cend()) {
+            for (const auto& right : found->second) {
+                expectedKSW.push_back(std::make_tuple(std::get<0>(ksv), std::get<1>(ksv),
+                                                      std::get<2>(ksv), right));
+            }
+        }
+    }
+
+    for (size_t blockSize = 8; blockSize <= testSize; blockSize <<= 1) {
+        const auto gotKSW = DoTestBlockJoinOnUint64<TKSW<true>>(joinKind, testKSV, fibMultiMap, blockSize);
+        UNIT_ASSERT_EQUAL(expectedKSW, gotKSW);
+    }
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinBasicTest) {
     Y_UNIT_TEST(TestInnerOnUint64) {
         TestBlockJoinWithRightOnUint64(EJoinKind::Inner);
+    }
+
+    Y_UNIT_TEST(TestInnerMultiOnUint64) {
+        TestBlockMultiJoinWithRightOnUint64(EJoinKind::Inner);
     }
 
     Y_UNIT_TEST(TestLeftOnUint64) {

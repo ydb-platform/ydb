@@ -11,6 +11,7 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/client/minikql_compile/db_key_resolver.h>
+#include <ydb/core/kqp/common/kqp_data_integrity_trails.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_actor.h>
 #include <ydb/core/kqp/common/kqp_tx.h>
@@ -991,6 +992,8 @@ private:
             transaction.SetFlags(TEvTxProxy::TEvProposeTransaction::FlagVolatile);
         }
 
+        NDataIntegrity::LogIntegrityTrails("PlannedTx", Request.UserTraceId, TxId, {}, TlsActivationContext->AsActorContext());
+
         LOG_T("Execute planned transaction, coordinator: " << TxCoordinator);
         Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvForward(ev.Release(), TxCoordinator, /* subscribe */ true));
     }
@@ -1689,6 +1692,9 @@ private:
                     dataTransaction.SerializeAsString(),
                     flags));
             }
+
+            NDataIntegrity::LogIntegrityTrails("DatashardTx", Request.UserTraceId, TxId, shardId, TlsActivationContext->AsActorContext());
+
             ResponseEv->Orbit.Fork(evData->Orbit);
             ev = std::move(evData);
         }
@@ -1721,6 +1727,8 @@ private:
             << ", locks: " << evWriteTransaction->Record.GetLocks().ShortDebugString());
 
         auto traceId = ExecuterSpan.GetTraceId();
+
+        NDataIntegrity::LogIntegrityTrails("EvWriteTx", Request.UserTraceId, TxId, shardId, TlsActivationContext->AsActorContext());
 
         LOG_D("ExecuteEvWriteTransaction traceId.verbosity: " << std::to_string(traceId.GetVerbosity()));
 

@@ -14,6 +14,12 @@ public:
     TSchemaSubset() = default;
     TSchemaSubset(const std::set<ui32>& fieldsIdx, const ui32 fieldsCount);
 
+    static TSchemaSubset AllFieldsAccepted() {
+        TSchemaSubset result;
+        result.Exclude = true;
+        return result;
+    }
+
     template <class T>
     std::vector<T> Apply(const std::vector<T>& fullSchema) const {
         if (FieldIdx.empty()) {

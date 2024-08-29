@@ -59,6 +59,7 @@
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 #include <ydb/library/yql/minikql/mkql_utils.h>
 #include <ydb/library/yql/protos/yql_mount.pb.h>
+#include <ydb/library/yql/protos/pg_ext.pb.h>
 #include <ydb/library/yql/core/file_storage/proto/file_storage.pb.h>
 #include <ydb/library/yql/core/file_storage/http_download/http_download.h>
 #include <ydb/library/yql/core/file_storage/file_storage.h>
@@ -67,6 +68,8 @@
 #include <ydb/library/yql/core/services/yql_out_transformers.h>
 #include <ydb/library/yql/core/url_lister/url_lister_manager.h>
 #include <ydb/library/yql/core/yql_library_compiler.h>
+#include <ydb/library/yql/core/pg_ext/yql_pg_ext.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/parser.h>
 #include <ydb/library/yql/utils/log/tls_backend.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/utils/backtrace/backtrace.h>
@@ -129,6 +132,7 @@ struct TRunOptions {
     IOutputStream* ErrStream = &Cerr;
     IOutputStream* TracePlan = &Cerr;
     bool UseMetaFromGraph = false;
+    bool WithFinalIssues = false;
 };
 
 class TStoreMappingFunctor: public NLastGetopt::IOptHandler {
@@ -406,6 +410,9 @@ int RunProgram(TProgramPtr program, const TRunOptions& options, const THashMap<T
         auto config = TOptPipelineConfigurator(program, options.PrintPlan, options.TracePlan);
         status = program->RunWithConfig(options.User, config);
     }
+    if (options.WithFinalIssues) {
+        program->FinalizeIssues();
+    }
     program->PrintErrorsTo(*options.ErrStream);
     if (status == TProgram::TStatus::Error) {
         if (options.TraceOpt) {
@@ -477,6 +484,7 @@ int RunMain(int argc, const char* argv[])
     clusterMapping["pg_catalog"] = PgProviderName;
     clusterMapping["information_schema"] = PgProviderName;
 
+    TString pgExtConfig;
     TString mountConfig;
     TString mestricsPusherConfig;
     TString udfResolver;
@@ -672,6 +680,8 @@ int RunMain(int argc, const char* argv[])
         .RequiredArgument("ENDPOINT")
         .StoreResult(&tokenAccessorEndpoint);
     opts.AddLongOption("yson-attrs", "Provide operation yson attribues").StoreResult(&ysonAttrs);
+    opts.AddLongOption("pg-ext", "pg extensions config file").StoreResult(&pgExtConfig);
+    opts.AddLongOption("with-final-issues").NoArgument();
     opts.AddHelpOption('h');
 
     opts.SetFreeArgsNum(0);
@@ -775,6 +785,20 @@ int RunMain(int argc, const char* argv[])
           : NYson::EYsonFormat::Pretty;
 
     runOptions.User = user;
+
+    NPg::SetSqlLanguageParser(NSQLTranslationPG::CreateSqlLanguageParser());
+    NPg::LoadSystemFunctions(*NSQLTranslationPG::CreateSystemFunctionsParser());
+    if (!pgExtConfig.empty()) {
+        NProto::TPgExtensions config;
+        Y_ABORT_UNLESS(NKikimr::ParsePBFromFile(pgExtConfig, &config));
+        TVector<NPg::TExtensionDesc> extensions;
+        PgExtensionsFromProto(config, extensions);
+        NPg::RegisterExtensions(extensions, false,
+            *NSQLTranslationPG::CreateExtensionSqlParser(),
+            NKikimr::NMiniKQL::CreateExtensionLoader().get());
+    }
+
+    NPg::GetSqlLanguageParser()->Freeze();
 
     TUserDataTable dataTable;
     FillUsedFiles(filesMappingList, dataTable);
@@ -911,7 +935,7 @@ int RunMain(int argc, const char* argv[])
         if (!httpGateway) {
             httpGateway = IHTTPGateway::Make(gatewaysConfig.HasHttpGateway() ? &gatewaysConfig.GetHttpGateway() : nullptr);
         }
-        dataProvidersInit.push_back(GetS3DataProviderInitializer(httpGateway, nullptr, true));
+        dataProvidersInit.push_back(GetS3DataProviderInitializer(httpGateway, nullptr, true, nullptr));
     }
 
     if (gatewaysConfig.HasPq()) {
@@ -970,6 +994,7 @@ int RunMain(int argc, const char* argv[])
     }
 
     TExprContext ctx;
+    ctx.NextUniqueId = NPg::GetSqlLanguageParser()->GetContext().NextUniqueId;
     IModuleResolver::TPtr moduleResolver;
     if (!mountConfig.empty()) {
         TModulesTable modules;
@@ -1073,6 +1098,10 @@ int RunMain(int argc, const char* argv[])
 
     if (ysonAttrs) {
         program->SetOperationAttrsYson(ysonAttrs);
+    }
+
+    if (res.Has("with-final-issues")) {
+        runOptions.WithFinalIssues = true;
     }
 
     int result = RunProgram(std::move(program), runOptions, clusters, sqlFlags);

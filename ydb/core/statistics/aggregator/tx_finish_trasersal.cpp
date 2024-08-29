@@ -5,18 +5,20 @@
 namespace NKikimr::NStat {
 
 struct TStatisticsAggregator::TTxFinishTraversal : public TTxBase {
-    ui64 OperationId;
-    ui64 Cookie;
+    TString OperationId;
     TPathId PathId;
     TActorId ReplyToActorId;
 
     TTxFinishTraversal(TSelf* self)
         : TTxBase(self)
         , OperationId(self->ForceTraversalOperationId)
-        , Cookie(self->ForceTraversalCookie)
-        , PathId(self->TraversalTableId.PathId)
-        , ReplyToActorId(self->ForceTraversalReplyToActorId)
-    {}
+        , PathId(self->TraversalPathId)
+    {
+        auto forceTraversal = Self->CurrentForceTraversalOperation();
+        if (forceTraversal) {
+            ReplyToActorId = forceTraversal->ReplyToActorId;
+        }
+    }
 
     TTxType GetTxType() const override { return TXTYPE_FINISH_TRAVERSAL; }
 
@@ -38,17 +40,17 @@ struct TStatisticsAggregator::TTxFinishTraversal : public TTxBase {
             return;
         }
 
-        bool operationsRemain = std::any_of(Self->ForceTraversals.begin(), Self->ForceTraversals.end(), 
-            [this](const TForceTraversal& elem) { return elem.OperationId == OperationId;});        
+        auto forceTraversalRemained = Self->ForceTraversalOperation(OperationId);       
         
-        if (operationsRemain) {
+        if (forceTraversalRemained) {
             SA_LOG_D("[" << Self->TabletID() << "] TTxFinishTraversal::Complete. Don't send TEvAnalyzeResponse. " <<
-                "There are pending operations, Cookie " << Cookie << " , ActorId=" << ReplyToActorId);
+                "There are pending operations, OperationId " << OperationId << " , ActorId=" << ReplyToActorId);
         } else {
             SA_LOG_D("[" << Self->TabletID() << "] TTxFinishTraversal::Complete. " <<
-                "Send TEvAnalyzeResponse, Cookie=" << Cookie << ", ActorId=" << ReplyToActorId);
+                "Send TEvAnalyzeResponse, OperationId=" << OperationId << ", ActorId=" << ReplyToActorId);
             auto response = std::make_unique<TEvStatistics::TEvAnalyzeResponse>();
-            response->Record.SetCookie(Cookie);
+            response->Record.SetOperationId(OperationId);
+            response->Record.SetStatus(NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS);
             ctx.Send(ReplyToActorId, response.release());
         }
     }

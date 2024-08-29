@@ -36,7 +36,7 @@ ALTER TABLE episodes DROP column is_deleted;
 ALTER TABLE `series` ADD INDEX `title_index` GLOBAL ON (`title`);
 ```
 
-You can specify any index parameters from the [`CREATE TABLE`](../create_table.md#secondary_index) command.
+You can specify any index parameters from the [`CREATE TABLE`](../create_table/secondary_index.md) command.
 
 {% if backend_name == "YDB" %}
 
@@ -50,7 +50,7 @@ Indexes have type-specific parameters that can be tuned. Global indexes, whether
 
 {% note info %}
 
-Currently, specifying secondary index partitioning settings during index creation is not supported in either the [`ALTER TABLE ADD INDEX`](#add-index) or the [`CREATE TABLE INDEX`](../create_table.md#secondary_index) statements.
+Currently, specifying secondary index partitioning settings during index creation is not supported in either the [`ALTER TABLE ADD INDEX`](#add-index) or the [`CREATE TABLE INDEX`](../create_table/secondary_index.md) statements.
 
 {% endnote %}
 
@@ -83,6 +83,7 @@ These settings cannot be [reset](#additional-reset).
 #### Example
 
 The query in the following example enables automatic partitioning by load for the index named `title_index` of table `series` and sets its minimum partition count to 5:
+
 ```sql
 ALTER TABLE `series` ALTER INDEX `title_index` SET (
     AUTO_PARTITIONING_BY_LOAD = ENABLED,
@@ -214,7 +215,7 @@ If a YQL query contains multiple `ALTER TABLE ... RENAME TO ...` commands, each 
 Renaming can be used to move a table from one directory inside the database to another, for example:
 
 ```sql
-ALTER TABLE `table1` RENAME TO `/backup/table1`;
+ALTER TABLE `table1` RENAME TO `backup/table1`;
 ```
 
 ## Changing column groups {#column-family}
@@ -238,11 +239,11 @@ The two previous commands from listings 8 and 9 can be combined into one ```ALTE
 
 ```sql
 ALTER TABLE series_with_families
-	ADD FAMILY family_small (
-    	DATA = "ssd",
-    	COMPRESSION = "off"
-	),
-	ALTER COLUMN release_date SET FAMILY family_small;
+    ADD FAMILY family_small (
+        DATA = "ssd",
+        COMPRESSION = "off"
+    ),
+    ALTER COLUMN release_date SET FAMILY family_small;
 ```
 
 Using the ```ALTER FAMILY``` command, you can change the parameters of the column group. The code below changes the storage type to ```hdd``` for the ```default``` column group in the ```series_with_families``` table:
@@ -257,7 +258,7 @@ Available types of storage devices depend on the {{ ydb-short-name }} cluster co
 
 {% endnote %}
 
-You can specify any parameters of a group of columns from the [`CREATE TABLE`](create_table.md#column-family) command.
+You can specify any parameters of a group of columns from the [`CREATE TABLE`](../create_table/family.md) command.
 
 
 ## Changing additional table parameters {#additional-alter}

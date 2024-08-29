@@ -19,23 +19,31 @@ public:
         : EndChunkIdx(endChunkIdx)
         , EndSectorIdx(endSectorIdx)
         , CommonLogger(commonLogger)
-        , CompletionLogWrite(completionLogWrite) { }
+        , CompletionLogWrite(completionLogWrite)
+    {
+        Orbit = std::move(completionLogWrite->Orbit);
+    }
+
+    void SetUpCompletionLogWrite() {
+        CompletionLogWrite->SubmitTime = SubmitTime;
+        CompletionLogWrite->GetTime = GetTime;
+        CompletionLogWrite->SetResult(Result);
+        CompletionLogWrite->SetErrorReason(ErrorReason);
+        CompletionLogWrite->Orbit = std::move(Orbit);
+    }
 
     void Exec(TActorSystem *actorSystem) override {
         CommonLogger->FirstUncommitted = TFirstUncommitted(EndChunkIdx, EndSectorIdx);
         
-        CompletionLogWrite->SetResult(Result);
-        CompletionLogWrite->SetErrorReason(ErrorReason);
+        SetUpCompletionLogWrite();
         CompletionLogWrite->Exec(actorSystem);
 
         delete this;
     }
 
     void Release(TActorSystem *actorSystem) override {
-        CompletionLogWrite->SetResult(Result);
-        CompletionLogWrite->SetErrorReason(ErrorReason);
+        SetUpCompletionLogWrite();
         CompletionLogWrite->Release(actorSystem);
-
         delete this;
     }
 };
@@ -1450,6 +1458,7 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
                     params.SeparateCommonLog = true;
                 }
                 params.CommonLogSize = LogChunks.size();
+                params.MaxCommonLogChunks = Cfg->MaxCommonLogChunks;
                 params.SpaceColorBorder = Cfg->SpaceColorBorder;
                 for (ui32 ownerId = OwnerBeginUser; ownerId < OwnerEndUser; ++ownerId) {
                     if (OwnerData[ownerId].VDiskId != TVDiskID::InvalidId) {

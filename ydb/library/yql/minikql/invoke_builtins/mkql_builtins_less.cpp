@@ -299,6 +299,7 @@ void RegisterLess(TKernelFamilyMap& kernelFamilyMap) {
 
     AddNumericComparisonKernels<TLessOp>(*family);
     AddDateComparisonKernels<TDiffDateLessOp>(*family);
+    AddDecimalComparisonKernels<TDecimalLess>(*family);
     RegisterStringKernelLess(*family);
 
     kernelFamilyMap["Less"] = std::move(family);

@@ -332,7 +332,7 @@ public:
                         auto kind = FromString<EYtSettingType>(setting.Name().Value());
                         if (EYtSettingType::Take == kind || EYtSettingType::Skip == kind) {
                             TSyncMap syncList;
-                            if (!IsYtCompleteIsolatedLambda(setting.Value().Ref(), syncList, usedCluster, true, false) || !syncList.empty()) {
+                            if (!IsYtCompleteIsolatedLambda(setting.Value().Ref(), syncList, usedCluster, false) || !syncList.empty()) {
                                 hasTake = false;
                                 break;
                             }
@@ -800,7 +800,7 @@ private:
                         }
                     }
                 } else {
-                    mapOut.RowSpec->CopySortness(TYqlRowSpecInfo(outTable.RowSpec()));
+                    mapOut.RowSpec->CopySortness(ctx, TYqlRowSpecInfo(outTable.RowSpec()));
                 }
                 mapOut.SetUnique(distinct, map.Mapper().Pos(), ctx);
                 mapOut.RowSpec->SetConstraints(outTable.Ref().GetConstraintSet());
@@ -817,7 +817,7 @@ private:
                 auto merge = TYtMerge(writer);
                 auto prevRowSpec = TYqlRowSpecInfo(merge.Output().Item(0).RowSpec());
                 TYtOutTableInfo mergeOut(outStructType, prevRowSpec.GetNativeYtTypeFlags());
-                mergeOut.RowSpec->CopySortness(prevRowSpec, TYqlRowSpecInfo::ECopySort::WithDesc);
+                mergeOut.RowSpec->CopySortness(ctx, prevRowSpec, TYqlRowSpecInfo::ECopySort::WithDesc);
                 mergeOut.SetUnique(distinct, merge.Pos(), ctx);
                 mergeOut.RowSpec->SetConstraints(outTable.Ref().GetConstraintSet());
 
@@ -976,7 +976,7 @@ private:
                         }
                         filterColumns[i] = ToAtomList(columns, node.Pos(), ctx);
                     }
-                    rowSpec->ClearSortness();
+                    rowSpec->ClearSortness(ctx);
                     outTables.push_back(TYtOutTable(ctx.ChangeChild(out.Ref(), TYtOutTable::idx_RowSpec, rowSpec->ToExprNode(ctx, out.Pos()).Ptr())));
                     changedOutSort = true;
                 } else {
@@ -1903,7 +1903,7 @@ private:
 
         // Rebuild output table
         TYtOutTableInfo outTableInfo(outTable);
-        outTableInfo.RowSpec->ClearSortness();
+        outTableInfo.RowSpec->ClearSortness(ctx);
         outTableInfo.RowSpec->SetType(ctx.MakeType<TStructExprType>(TVector<const TItemExprType*>()));
 
         auto newOp = ctx.ShallowCopy(*node);
@@ -1973,7 +1973,7 @@ private:
         auto outTable = op.Output().Item(0);
         TYtOutTableInfo outTableInfo(outTable);
         if (outTableInfo.RowSpec->IsSorted()) {
-            outTableInfo.RowSpec->ClearSortness();
+            outTableInfo.RowSpec->ClearSortness(ctx);
             newOp->ChildRef(TYtWithUserJobsOpBase::idx_Output) =
                 Build<TYtOutSection>(ctx, op.Output().Pos())
                     .Add(outTableInfo.ToExprNode(ctx, outTable.Pos()).Cast<TYtOutTable>())

@@ -11,6 +11,7 @@ option java_package = "ru.yandex.kikimr.proto";
 extend google.protobuf.FieldOptions {
     optional uint64 InsignificantChangeAmount = 70553;
     optional uint32 InsignificantChangePercent = 70554;
+    optional bool DefaultField = 70555;
 }
 
 enum EFlag {
@@ -47,28 +48,29 @@ message TTabletStateInfo {
         Reserved16 = 16;
     }
 
-    optional uint64 TabletId = 1;
+    optional uint64 TabletId = 1 [(DefaultField) = true];
     optional uint64 CreateTime = 2;
-    optional uint64 ChangeTime = 3;
-    optional ETabletState State = 4;
+    optional uint64 ChangeTime = 3 [(DefaultField) = true];
+    optional ETabletState State = 4 [(DefaultField) = true];
     optional uint32 UserState = 5; // implementation-dependent
-    optional uint32 Generation = 6;
-    optional NKikimrTabletBase.TTabletTypes.EType Type = 7;
+    optional uint32 Generation = 6 [(DefaultField) = true];
+    optional NKikimrTabletBase.TTabletTypes.EType Type = 7 [(DefaultField) = true];
     optional string Host = 8;
     repeated uint32 ChannelGroupIDs = 9; // BS Group per channel
     repeated TCustomTabletAttribute Attributes = 10;
     optional uint32 NodeId = 11; // filled during merge
-    optional bool Leader = 12; // leader or follower
+    optional bool Leader = 12 [(DefaultField) = true]; // leader or follower
     optional uint32 Count = 13; // filled during group count
-    optional uint32 FollowerId = 14;
+    optional uint32 FollowerId = 14 [(DefaultField) = true];
     optional EFlag Overall = 15; // filled during merge
-    optional NKikimrSubDomains.TDomainKey TenantId = 16;
-    optional fixed64 HiveId = 17;
+    optional NKikimrSubDomains.TDomainKey TenantId = 16 [(DefaultField) = true];
+    optional fixed64 HiveId = 17 [(DefaultField) = true];
     optional string EndOfRangeKeyPrefix = 18; // filled during merge
 }
 
 message TEvTabletStateRequest {
     optional uint64 ChangedSince = 1;
+    repeated int32 FieldsRequired = 2 [packed = true];
     optional string Format = 5; // it could be "packed5"
     optional string GroupBy = 20; // it's either empty or "Type,State" for now
     repeated fixed64 FilterTabletId = 22;
@@ -99,6 +101,7 @@ message TNodeStateInfo {
 
 message TEvNodeStateRequest {
     optional uint64 ChangedSince = 1;
+    repeated int32 FieldsRequired = 2 [packed = true];
 }
 
 message TEvNodeStateResponse {
@@ -108,34 +111,35 @@ message TEvNodeStateResponse {
 }
 
 message TPDiskStateInfo {
-    optional uint32 PDiskId = 1;
+    optional uint32 PDiskId = 1 [(DefaultField) = true];
     optional uint64 CreateTime = 2;
-    optional uint64 ChangeTime = 3;
-    optional string Path = 4;
-    optional uint64 Guid = 5;
-    optional uint64 Category = 6;
-    optional uint64 AvailableSize = 7 [(InsignificantChangeAmount) = 104857600]; // 100Mb
-    optional uint64 TotalSize = 8;
-    optional NKikimrBlobStorage.TPDiskState.E State = 9;
+    optional uint64 ChangeTime = 3 [(DefaultField) = true];
+    optional string Path = 4 [(DefaultField) = true];
+    optional uint64 Guid = 5 [(DefaultField) = true];
+    optional uint64 Category = 6 [(DefaultField) = true];
+    optional uint64 AvailableSize = 7 [(DefaultField) = true, (InsignificantChangeAmount) = 104857600]; // 100Mb
+    optional uint64 TotalSize = 8 [(DefaultField) = true];
+    optional NKikimrBlobStorage.TPDiskState.E State = 9 [(DefaultField) = true];
     optional uint32 NodeId = 10; // filled during merge
     optional uint32 Count = 13; // filled during group count
-    optional EFlag Device = 14;
-    optional EFlag Realtime = 15;
+    optional EFlag Device = 14 [(DefaultField) = true];
+    optional EFlag Realtime = 15 [(DefaultField) = true];
     // State as flag - to be filled
     optional EFlag StateFlag = 16;
     // overall state - to be filled
     optional EFlag Overall = 17;
-    optional string SerialNumber = 18;
-    optional uint64 SystemSize = 19;
-    optional uint64 LogUsedSize = 20;
-    optional uint64 LogTotalSize = 21;
-    optional uint32 ExpectedSlotCount = 22;
-    optional uint64 EnforcedDynamicSlotSize = 23;
-    optional uint32 NumActiveSlots = 24;
+    optional string SerialNumber = 18 [(DefaultField) = true];
+    optional uint64 SystemSize = 19 [(DefaultField) = true];
+    optional uint64 LogUsedSize = 20 [(DefaultField) = true];
+    optional uint64 LogTotalSize = 21 [(DefaultField) = true];
+    optional uint32 ExpectedSlotCount = 22 [(DefaultField) = true];
+    optional uint64 EnforcedDynamicSlotSize = 23 [(DefaultField) = true];
+    optional uint32 NumActiveSlots = 24 [(DefaultField) = true];
 }
 
 message TEvPDiskStateRequest {
     optional uint64 ChangedSince = 1;
+    repeated int32 FieldsRequired = 2 [packed = true];
 }
 
 message TEvPDiskStateResponse {
@@ -172,13 +176,13 @@ message TVDiskSatisfactionRank {
 }
 
 message TVDiskStateInfo {
-    optional NKikimrBlobStorage.TVDiskID VDiskId = 1;
+    optional NKikimrBlobStorage.TVDiskID VDiskId = 1 [(DefaultField) = true];
     optional uint64 CreateTime = 2;
-    optional uint64 ChangeTime = 3;
-    optional uint32 PDiskId = 4;
-    optional uint32 VDiskSlotId = 5;
-    optional uint64 Guid = 6;
-    optional uint64 Kind = 7;
+    optional uint64 ChangeTime = 3 [(DefaultField) = true];
+    optional uint32 PDiskId = 4 [(DefaultField) = true];
+    optional uint32 VDiskSlotId = 5 [(DefaultField) = true];
+    optional uint64 Guid = 6 [(DefaultField) = true];
+    optional uint64 Kind = 7 [(DefaultField) = true];
     optional uint32 NodeId = 9; // filled during merge
     optional uint32 Count = 17; // filled during group count
 
@@ -186,48 +190,49 @@ message TVDiskStateInfo {
     optional EFlag Overall = 10;
 
     // Current state of VDisk
-    optional EVDiskState VDiskState = 11;
+    optional EVDiskState VDiskState = 11 [(DefaultField) = true];
     // Disk space flags
-    optional EFlag DiskSpace = 12;
+    optional EFlag DiskSpace = 12 [(DefaultField) = true];
     // Compaction satisfaction rank
-    optional TVDiskSatisfactionRank SatisfactionRank = 13;
+    optional TVDiskSatisfactionRank SatisfactionRank = 13 [(DefaultField) = true];
     // Is VDisk replicated? (i.e. contains all blobs it must have)
-    optional bool Replicated = 14;
+    optional bool Replicated = 14 [(DefaultField) = true];
     // Does this VDisk has any yet unreplicated phantom-like blobs?
-    optional bool UnreplicatedPhantoms = 20 [default = false];
+    optional bool UnreplicatedPhantoms = 20 [default = false, (DefaultField) = true];
     // The same for the non-phantom-like blobs.
-    optional bool UnreplicatedNonPhantoms = 21 [default = false];
+    optional bool UnreplicatedNonPhantoms = 21 [default = false,  (DefaultField) = true];
     // Replication progress (0 to 1). Only for replication, not blob scrubbing.
-    optional float ReplicationProgress = 30;
+    optional float ReplicationProgress = 30 [(DefaultField) = true];
     // Replication ETA.
-    optional uint32 ReplicationSecondsRemaining = 31;
+    optional uint32 ReplicationSecondsRemaining = 31 [(DefaultField) = true];
     // How many unsynced VDisks from current BlobStorage group we see
-    optional uint64 UnsyncedVDisks = 15 [default = 0];
+    optional uint64 UnsyncedVDisks = 15 [default = 0, (DefaultField) = true];
     // How much this VDisk have allocated on corresponding PDisk
-    optional uint64 AllocatedSize = 16 [(InsignificantChangeAmount) = 536870912]; // 512MiB
+    optional uint64 AllocatedSize = 16 [(InsignificantChangeAmount) = 536870912, (DefaultField) = true]; // 512MiB
     // How much space is available for VDisk corresponding to PDisk's hard space limits
-    optional uint64 AvailableSize = 28 [(InsignificantChangeAmount) = 536870912]; // 512MiB
+    optional uint64 AvailableSize = 28 [(InsignificantChangeAmount) = 536870912,  (DefaultField) = true]; // 512MiB
     // Does this disk has some unreadable but not yet restored blobs?
-    optional bool HasUnreadableBlobs = 24;
-    optional fixed64 IncarnationGuid = 25;
-    optional bool DonorMode = 26;
-    optional fixed64 InstanceGuid = 27; // VDisk actor instance guid
-    repeated NKikimrBlobStorage.TVSlotId Donors = 29;
+    optional bool HasUnreadableBlobs = 24 [(DefaultField) = true];
+    optional fixed64 IncarnationGuid = 25 [(DefaultField) = true];
+    optional bool DonorMode = 26 [(DefaultField) = true];
+    optional fixed64 InstanceGuid = 27 [(DefaultField) = true]; // VDisk actor instance guid
+    repeated NKikimrBlobStorage.TVSlotId Donors = 29 [(DefaultField) = true];
 
     // VDisk (Skeleton) Front Queue Status
-    optional EFlag FrontQueues = 18;
+    optional EFlag FrontQueues = 18 [(DefaultField) = true];
 
     // VDisk storage pool label
-    optional string StoragePoolName = 19;
+    optional string StoragePoolName = 19 [(DefaultField) = true];
 
     // Read bytes per second from PDisk for TEvVGet blobs only
-    optional uint64 ReadThroughput = 22;
+    optional uint64 ReadThroughput = 22 [(DefaultField) = true];
     // Write bytes per second to PDisk for TEvVPut blobs and replication bytes only
-    optional uint64 WriteThroughput = 23;
+    optional uint64 WriteThroughput = 23 [(DefaultField) = true];
 }
 
 message TEvVDiskStateRequest {
     optional uint64 ChangedSince = 1;
+    repeated int32 FieldsRequired = 2 [packed = true];
 }
 
 message TEvVDiskStateResponse {
@@ -237,29 +242,30 @@ message TEvVDiskStateResponse {
 }
 
 message TBSGroupStateInfo {
-    optional uint32 GroupID = 1;
-    optional string ErasureSpecies = 2;
-    repeated NKikimrBlobStorage.TVDiskID VDiskIds = 3;
+    optional uint32 GroupID = 1 [(DefaultField) = true];
+    optional string ErasureSpecies = 2 [(DefaultField) = true];
+    repeated NKikimrBlobStorage.TVDiskID VDiskIds = 3 [(DefaultField) = true];
     optional uint64 ChangeTime = 4;
     optional uint32 NodeId = 5; // filled during merge
-    optional uint32 GroupGeneration = 6;
+    optional uint32 GroupGeneration = 6 [(DefaultField) = true];
     optional EFlag Overall = 7;
-    optional EFlag Latency = 8;
+    optional EFlag Latency = 8 [(DefaultField) = true];
     optional uint32 Count = 13; // filled during group count
-    optional string StoragePoolName = 14; // from BS_CONTROLLER
-    optional uint64 AllocatedSize = 15 [(InsignificantChangeAmount) = 100000000];
-    optional uint64 AvailableSize = 16 [(InsignificantChangeAmount) = 100000000];
-    optional uint64 ReadThroughput = 17;
-    optional uint64 WriteThroughput = 18;
-    optional bool Encryption = 19;
-    repeated uint32 VDiskNodeIds = 20;
-    optional uint64 BlobDepotId = 21; // if set, then this is virtual group
-    optional bool NoVDisksInGroup = 22;
-    optional uint64 BlobDepotOnlineTime = 23;
+    optional string StoragePoolName = 14 [(DefaultField) = true]; // from BS_CONTROLLER
+    optional uint64 AllocatedSize = 15 [(InsignificantChangeAmount) = 100000000, (DefaultField) = true];
+    optional uint64 AvailableSize = 16 [(InsignificantChangeAmount) = 100000000,  (DefaultField) = true];
+    optional uint64 ReadThroughput = 17 [(DefaultField) = true];
+    optional uint64 WriteThroughput = 18 [(DefaultField) = true];
+    optional bool Encryption = 19 [(DefaultField) = true];
+    repeated uint32 VDiskNodeIds = 20 [(DefaultField) = true];
+    optional uint64 BlobDepotId = 21 [(DefaultField) = true]; // if set, then this is virtual group
+    optional bool NoVDisksInGroup = 22 [(DefaultField) = true];
+    optional uint64 BlobDepotOnlineTime = 23 [(DefaultField) = true];
 }
 
 message TEvBSGroupStateRequest {
     optional uint64 ChangedSince = 1;
+    repeated int32 FieldsRequired = 2 [packed = true];
 }
 
 message TEvBSGroupStateResponse {
@@ -299,12 +305,12 @@ message TSystemStateInfo {
         optional uint64 LimitBytes = 2;
     }
 
-    optional uint64 StartTime = 1;
-    optional uint64 ChangeTime = 2;
+    optional uint64 StartTime = 1 [(DefaultField) = true];
+    optional uint64 ChangeTime = 2 [(DefaultField) = true];
     optional TLegacyNodeLocation SystemLocation = 3;
-    repeated double LoadAverage = 4;
-    optional uint32 NumberOfCpus = 5;
-    optional EFlag SystemState = 6;
+    repeated double LoadAverage = 4 [(DefaultField) = true];
+    optional uint32 NumberOfCpus = 5 [(DefaultField) = true];
+    optional EFlag SystemState = 6 [(DefaultField) = true];
     optional EFlag MessageBusState = 7;
     optional EFlag GRpcState = 8;
     optional uint32 NodeId = 9; // filled during merge
@@ -314,29 +320,30 @@ message TSystemStateInfo {
     optional string DataCenter = 16;
     optional uint32 RackId = 17;
     optional string Rack = 18;
-    optional string Host = 19;
-    optional string Version = 20;
-    repeated TPoolStats PoolStats = 21;
-    repeated TEndpoint Endpoints = 22;
-    repeated string Roles = 23;
-    repeated string Tenants = 24;
-    optional string ClusterName = 25;
-    optional uint64 MemoryUsed = 26;
-    optional uint64 MemoryLimit = 27;
+    optional string Host = 19 [(DefaultField) = true];
+    optional string Version = 20 [(DefaultField) = true];
+    repeated TPoolStats PoolStats = 21 [(DefaultField) = true];
+    repeated TEndpoint Endpoints = 22 [(DefaultField) = true];
+    repeated string Roles = 23 [(DefaultField) = true];
+    repeated string Tenants = 24 [(DefaultField) = true];
+    optional string ClusterName = 25 [(DefaultField) = true];
+    optional uint64 MemoryUsed = 26 [(DefaultField) = true];
+    optional uint64 MemoryLimit = 27 [(DefaultField) = true];
     optional EConfigState ConfigState = 28 [default = Consistent];
     optional uint64 MemoryUsedInAlloc = 29;
-    optional double MaxDiskUsage = 30;
-    optional NActorsInterconnect.TNodeLocation Location = 31;
+    optional double MaxDiskUsage = 30 [(DefaultField) = true];
+    optional NActorsInterconnect.TNodeLocation Location = 31 [(DefaultField) = true];
     optional int64 MaxClockSkewWithPeerUs = 32; // a positive value means the peer is ahead in time; a negative value means it's behind
     optional uint32 MaxClockSkewPeerId = 33;
     optional uint64 DisconnectTime = 34;
     optional TNodeSharedCache SharedCacheStats = 35; // TODO: use memory stats
-    optional uint32 TotalSessions = 36;
-    optional string NodeName = 37;
+    optional uint32 TotalSessions = 36 [(DefaultField) = true];
+    optional string NodeName = 37 [(DefaultField) = true];
 }
 
 message TEvSystemStateRequest {
     optional uint64 ChangedSince = 1;
+    repeated int32 FieldsRequired = 2 [packed = true];
 }
 
 message TEvSystemStateResponse {

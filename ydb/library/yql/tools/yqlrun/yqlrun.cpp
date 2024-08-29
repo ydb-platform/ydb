@@ -138,6 +138,13 @@ public:
         out << baseSS.Data();
     }
 
+    void FinalizeIssues() {
+        BaseProg->FinalizeIssues();
+        for (auto& info : Infos) {
+            info.Prog->FinalizeIssues();
+        }
+    }
+
     void PrintErrorsTo(IOutputStream& out) const {
         TStringStream baseSS;
         BaseProg->PrintErrorsTo(baseSS);
@@ -474,6 +481,7 @@ int Main(int argc, const char *argv[])
     opts.AddLongOption("test-format", "compare formatted query's AST with the original query's AST (only syntaxVersion=1 is supported)").NoArgument();
     opts.AddLongOption("show-kernels", "show all Arrow kernel families").NoArgument();
     opts.AddLongOption("pg-ext", "pg extensions config file").StoreResult(&pgExtConfig);
+    opts.AddLongOption("with-final-issues", "Include some final messages (like statistic) in issues").NoArgument();
 
     opts.SetFreeArgsMax(0);
     TOptsParseResult res(&opts, argc, argv);
@@ -492,6 +500,8 @@ int Main(int argc, const char *argv[])
         return 0;
     }
 
+    NPg::SetSqlLanguageParser(NSQLTranslationPG::CreateSqlLanguageParser());
+    NPg::LoadSystemFunctions(*NSQLTranslationPG::CreateSystemFunctionsParser());
     if (!pgExtConfig.empty()) {
         NProto::TPgExtensions config;
         Y_ABORT_UNLESS(NKikimr::ParsePBFromFile(pgExtConfig, &config));
@@ -501,6 +511,8 @@ int Main(int argc, const char *argv[])
             *NSQLTranslationPG::CreateExtensionSqlParser(),
             NKikimr::NMiniKQL::CreateExtensionLoader().get());
     }
+
+    NPg::GetSqlLanguageParser()->Freeze();
 
     const bool parseOnly = res.Has("parse-only");
     const bool compileOnly = res.Has("compile-only");
@@ -593,6 +605,7 @@ int Main(int argc, const char *argv[])
     }
 
     TExprContext ctx;
+    ctx.NextUniqueId = NPg::GetSqlLanguageParser()->GetContext().NextUniqueId;
     IModuleResolver::TPtr moduleResolver;
     if (!mountConfig.empty()) {
         TModulesTable modules;
@@ -842,6 +855,9 @@ int Main(int argc, const char *argv[])
         status = program->Lineage(username, traceOut, exprOut, withTypes);
     }
 
+    if (res.Has("with-final-issues")) {
+        program->FinalizeIssues();
+    }
     program->PrintErrorsTo(*errStream);
     if (status == TProgram::TStatus::Error) {
         return 1;
@@ -927,7 +943,8 @@ int RunUI(int argc, const char* argv[])
     }
 
     NMiniKQL::FindUdfsInDir(udfsDir, &udfsPaths);
-
+    NPg::SetSqlLanguageParser(NSQLTranslationPG::CreateSqlLanguageParser());
+    NPg::LoadSystemFunctions(*NSQLTranslationPG::CreateSystemFunctionsParser());
     if (!pgExtConfig.empty()) {
         NProto::TPgExtensions config;
         Y_ABORT_UNLESS(NKikimr::ParsePBFromFile(pgExtConfig, &config));
@@ -937,6 +954,8 @@ int RunUI(int argc, const char* argv[])
             *NSQLTranslationPG::CreateExtensionSqlParser(),
             NKikimr::NMiniKQL::CreateExtensionLoader().get());
     }
+
+    NPg::GetSqlLanguageParser()->Freeze();
 
     THolder<TGatewaysConfig> gatewaysConfig;
     if (!gatewaysCfgFile.empty()) {
@@ -965,6 +984,7 @@ int RunUI(int argc, const char* argv[])
     CommonInit(res, udfResolverPath, udfResolverFilterSyscalls, udfsPaths, fileStorage, udfResolver, funcRegistry, udfIndex);
 
     TExprContext ctx;
+    ctx.NextUniqueId = NPg::GetSqlLanguageParser()->GetContext().NextUniqueId;
     IModuleResolver::TPtr moduleResolver;
     if (!mountConfig.empty()) {
         TModulesTable modules;

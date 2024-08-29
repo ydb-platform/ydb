@@ -13,6 +13,8 @@
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/parser/pg_catalog/catalog.h>
 
+#include <library/cpp/yson/node/node_io.h>
+
 #include <util/generic/map.h>
 #include <util/string/cast.h>
 #include <util/generic/xrange.h>
@@ -2074,12 +2076,6 @@ TExprNode::TPtr SimpleFlatMap(const TExprNode::TPtr& node, TExprContext& ctx, TO
         }
     }
 
-    if (lambdaBody.IsCallable("ForwardList")) {
-        const bool keepList = node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::List && lambdaBody.Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow;
-        YQL_CLOG(DEBUG, Core) << (keepList ? "Pull" : "Drop") << " out " << lambdaBody.Content() << " from " << node->Content() << " lambda root.";
-        return ctx.WrapByCallableIf(keepList, lambdaBody.Content(), ctx.ChangeChild(*node, 1U, ctx.DeepCopyLambda(node->Tail(), lambdaBody.HeadPtr())));
-    }
-
     if (CanRewriteToEmptyContainer(*node)) {
         const auto& inputToCheck = SkipCallables(node->Head(), SkippableCallables);
         if (IsEmptyContainer(inputToCheck) || IsEmpty(inputToCheck, *optCtx.Types)) {
@@ -2272,7 +2268,7 @@ TExprNode::TPtr HasNullOverVariant(const TExprNode::TPtr& node, TExprContext& ct
 }
 
 constexpr std::initializer_list<std::string_view> FlowPriority = {
-    "AssumeSorted", "AssumeUnique", "AssumeDistinct",
+    "AssumeSorted", "AssumeUnique", "AssumeDistinct", "AssumeConstraints",
     "Map", "OrderedMap", "MapNext",
     "Filter", "OrderedFilter",
     "FlatMap", "OrderedFlatMap",
@@ -5940,7 +5936,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     };
 
     map["Unordered"] = map["UnorderedSubquery"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
-        if (node->Head().IsCallable({"AsList","EquiJoin","Filter","Map","FlatMap","MultiMap","Extend", "Apply"})) {
+        if (node->Head().IsCallable({"AsList","EquiJoin","Filter","Map","FlatMap","MultiMap","Extend", "Apply","PartitionByKey","PartitionsByKeys"})) {
             YQL_CLOG(DEBUG, Core) << "Drop " << node->Content() << " over " << node->Head().Content();
             return node->HeadPtr();
         }
@@ -5948,6 +5944,22 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         if (node->Head().IsCallable("AssumeSorted")) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
             return ctx.ChangeChild(*node, 0, node->Head().HeadPtr());
+        }
+
+        if (node->Head().IsCallable("AssumeConstraints") && node->Head().GetConstraint<TSortedConstraintNode>()) {
+            TConstraintSet constrSet = node->Head().GetConstraintSet();
+            constrSet.RemoveConstraint<TSortedConstraintNode>();
+            YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
+            auto res = ctx.ChangeChild(*node, 0, node->Head().HeadPtr());
+            if (constrSet) {
+                res = ctx.Builder(node->Head().Pos())
+                    .Callable("AssumeConstraints")
+                        .Add(0, std::move(res))
+                        .Atom(1, NYT::NodeToYsonString(constrSet.ToYson(), NYson::EYsonFormat::Text), TNodeFlags::MultilineContent)
+                    .Seal()
+                    .Build();
+            }
+            return res;
         }
 
         return node;

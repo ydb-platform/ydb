@@ -227,7 +227,7 @@ protected:
                             }
                         }
                     } else {
-                        mapOut.RowSpec->CopySortness(TYqlRowSpecInfo(map.Output().Item(0).RowSpec()));
+                        mapOut.RowSpec->CopySortness(ctx, TYqlRowSpecInfo(map.Output().Item(0).RowSpec()));
                     }
                     mapOut.SetUnique(path.Ref().GetConstraint<TDistinctConstraintNode>(), map.Mapper().Pos(), ctx);
 
@@ -266,7 +266,7 @@ protected:
                     }
 
                     TYtOutTableInfo mergeOut(ctx.MakeType<TStructExprType>(structItems), prevRowSpec.GetNativeYtTypeFlags());
-                    mergeOut.RowSpec->CopySortness(prevRowSpec, TYqlRowSpecInfo::ECopySort::WithDesc);
+                    mergeOut.RowSpec->CopySortness(ctx, prevRowSpec, TYqlRowSpecInfo::ECopySort::WithDesc);
                     if (auto nativeType = prevRowSpec.GetNativeYtType()) {
                         mergeOut.RowSpec->CopyTypeOrders(*nativeType);
                     }
@@ -341,12 +341,12 @@ protected:
                     t.FinishHandler(),
                 };
                 for (auto lambda : lambdas) {
-                    if (!IsYtCompleteIsolatedLambda(lambda.Ref(), syncList, cluster, true, false)) {
+                    if (!IsYtCompleteIsolatedLambda(lambda.Ref(), syncList, cluster, false)) {
                         return node;
                     }
                 }
             } else if (trait.Ref().IsCallable("AggApply")) {
-                if (!IsYtCompleteIsolatedLambda(*trait.Ref().Child(2), syncList, cluster, true, false)) {
+                if (!IsYtCompleteIsolatedLambda(*trait.Ref().Child(2), syncList, cluster, false)) {
                     return node;
                 }
             }
@@ -1344,7 +1344,7 @@ protected:
         TYtDSource dataSource = GetDataSource(input, ctx);
         TString cluster = TString{dataSource.Cluster().Value()};
         TSyncMap syncList;
-        if (!IsYtCompleteIsolatedLambda(countBase.Count().Ref(), syncList, cluster, true, false)) {
+        if (!IsYtCompleteIsolatedLambda(countBase.Count().Ref(), syncList, cluster, false)) {
             return node;
         }
 

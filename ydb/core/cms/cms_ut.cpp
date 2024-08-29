@@ -1810,7 +1810,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
     Y_UNIT_TEST(EmergencyDuringRollingRestart)
     {
-        TCmsTestEnv env(TTestEnvOpts(8).WithEnableCMSRequestPriorities());
+        TCmsTestEnv env(8);
 
         // Start rolling restart
         auto rollingRestart = env.CheckPermissionRequest
@@ -1839,7 +1839,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
     Y_UNIT_TEST(ScheduledEmergencyDuringRollingRestart)
     {
-        TCmsTestEnv env(TTestEnvOpts(8).WithEnableCMSRequestPriorities());
+        TCmsTestEnv env(8);
 
         // Start rolling restart
         auto rollingRestart = env.CheckPermissionRequest
@@ -1871,7 +1871,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
     Y_UNIT_TEST(WalleRequestDuringRollingRestart)
     {
-        TCmsTestEnv env(TTestEnvOpts(8).WithEnableCMSRequestPriorities());
+        TCmsTestEnv env(8);
 
         // Start rolling restart
         auto rollingRestart = env.CheckPermissionRequest
@@ -1899,7 +1899,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
     Y_UNIT_TEST(ScheduledWalleRequestDuringRollingRestart)
     {
-        TCmsTestEnv env(TTestEnvOpts(8).WithEnableCMSRequestPriorities());
+        TCmsTestEnv env(8);
 
         // Start rolling restart
         auto rollingRestart = env.CheckPermissionRequest
@@ -1930,7 +1930,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
     Y_UNIT_TEST(EnableCMSRequestPrioritiesFeatureFlag)
     {
-        TCmsTestEnv env(8);
+        TCmsTestEnv env(TTestEnvOpts(8).WithoutEnableCMSRequestPriorities());
         // Start rolling restart with specified priority
         auto rollingRestart = env.CheckPermissionRequest
             ("user", true, false, true, true, -80, TStatus::WRONG_REQUEST,
@@ -1943,7 +1943,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
     Y_UNIT_TEST(SamePriorityRequest)
     {
-        TCmsTestEnv env(TTestEnvOpts(8).WithEnableCMSRequestPriorities());
+        TCmsTestEnv env(8);
 
         // Start rolling restart
         auto rollingRestart = env.CheckPermissionRequest
@@ -1973,7 +1973,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
     Y_UNIT_TEST(SamePriorityRequest2)
     {
-        TCmsTestEnv env(TTestEnvOpts(8).WithEnableCMSRequestPriorities());
+        TCmsTestEnv env(8);
 
         // Start rolling restart
         auto rollingRestart = env.CheckPermissionRequest
@@ -2003,7 +2003,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
     Y_UNIT_TEST(PriorityRange)
     {
-        TCmsTestEnv env(TTestEnvOpts(8).WithEnableCMSRequestPriorities());
+        TCmsTestEnv env(8);
 
         const TString expectedReason = "Priority value is out of range";
         
@@ -2024,7 +2024,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
     Y_UNIT_TEST(WalleTasksDifferentPriorities)
     {
-        TCmsTestEnv env(TTestEnvOpts(8).WithEnableCMSRequestPriorities());
+        TCmsTestEnv env(8);
 
         // Without node limits
         NKikimrCms::TCmsConfig config;

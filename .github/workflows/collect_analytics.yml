@@ -1,0 +1,33 @@
+name: Collect-analytics-run
+on:
+  schedule:
+    - cron: "0 */4 * * *"  # Every 4 h
+  workflow_dispatch:
+    inputs:
+      commit_sha:
+        type: string
+        default: ""
+        
+defaults:
+  run:
+    shell: bash
+jobs:
+  main:
+    name: Checkout and setup
+    runs-on: [ self-hosted ]
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ inputs.commit_sha }}
+    - name: Setup ydb access
+      uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+      with:
+        ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+    - name: Install dependencies
+      run: |
+        python3 -m pip install ydb ydb[yc] codeowners
+    - name: Collect test history data with window 5 days
+      run: python3 .github/scripts/analytics/flaky_tests_history.py --days-window=5
+    - name: Collect test history data with window 1 day 
+      run: python3 .github/scripts/analytics/flaky_tests_history.py --days-window=1

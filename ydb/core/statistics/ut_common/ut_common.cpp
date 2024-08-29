@@ -1,6 +1,5 @@
 #include "ut_common.h"
 
-#include <ydb/core/statistics/events.h>
 #include <ydb/core/statistics/service/service.h>
 
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -11,6 +10,9 @@
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
+
+// TODO remove thread
+#include <thread>
 
 using namespace NYdb;
 using namespace NYdb::NTable;
@@ -41,7 +43,8 @@ NKikimrSubDomains::TSubDomainSettings GetSubDomainDefaultSettings(const TString 
     return subdomain;
 }
 
-TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, ui32 storagePools) {
+TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, ui32 storagePools, bool useRealThreads)
+    : CSController(NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>()) {
     auto mbusPort = PortManager.GetPort();
     auto grpcPort = PortManager.GetPort();
 
@@ -49,7 +52,7 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, ui32 storagePools) {
     Settings->SetDomainName("Root");
     Settings->SetNodeCount(staticNodes);
     Settings->SetDynamicNodeCount(dynamicNodes);
-    Settings->SetUseRealThreads(false);
+    Settings->SetUseRealThreads(useRealThreads);
 
     NKikimrConfig::TFeatureFlags featureFlags;
     featureFlags.SetEnableStatistics(true);
@@ -74,6 +77,10 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, ui32 storagePools) {
     Endpoint = "localhost:" + ToString(grpcPort);
     DriverConfig = NYdb::TDriverConfig().SetEndpoint(Endpoint);
     Driver = MakeHolder<NYdb::TDriver>(DriverConfig);
+
+    CSController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+    CSController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
+    CSController->SetOverrideReduceMemoryIntervalLimit(1LLU << 30);
 
     Server->GetRuntime()->SetLogPriority(NKikimrServices::STATISTICS, NActors::NLog::PRI_DEBUG);
 }
@@ -236,9 +243,21 @@ void CreateColumnStoreTable(TTestEnv& env, const TString& databaseName, const TS
     )", fullTableName.c_str(), shardCount)).GetValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
+    result = session.ExecuteSchemeQuery(Sprintf(R"(
+        ALTER OBJECT `%s` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=cms_key, TYPE=COUNT_MIN_SKETCH,
+                    FEATURES=`{"column_names" : ['Key']}`);
+    )", fullTableName.c_str())).GetValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+    result = session.ExecuteSchemeQuery(Sprintf(R"(
+        ALTER OBJECT `%s` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=cms_value, TYPE=COUNT_MIN_SKETCH,
+                    FEATURES=`{"column_names" : ['Value']}`);
+    )", fullTableName.c_str())).GetValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
     NYdb::TValueBuilder rows;
     rows.BeginList();
-    for (size_t i = 0; i < 100; ++i) {
+    for (size_t i = 0; i < ColumnTableRowsNumber; ++i) {
         auto key = TValueBuilder().Uint64(i).Build();
         auto value = TValueBuilder().OptionalUint64(i).Build();
         rows.AddListItem();
@@ -248,9 +267,36 @@ void CreateColumnStoreTable(TTestEnv& env, const TString& databaseName, const TS
         rows.EndStruct();
     }
     rows.EndList();
-
     result = client.BulkUpsert(fullTableName, rows.Build()).GetValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+    env.GetController()->WaitActualization(TDuration::Seconds(1));
+}
+
+std::vector<TTableInfo> CreateDatabaseColumnTables(TTestEnv& env, ui8 tableCount, ui8 shardCount) {
+    auto init = [&] () {
+        CreateDatabase(env, "Database");
+        for (ui8 tableId = 1; tableId <= tableCount; tableId++) {
+            CreateColumnStoreTable(env, "Database", Sprintf("Table%u", tableId), shardCount);
+        }
+    };
+    std::thread initThread(init);
+
+    auto& runtime = *env.GetServer().GetRuntime();
+    auto sender = runtime.AllocateEdgeActor();
+
+    runtime.SimulateSleep(TDuration::Seconds(10));
+    initThread.join();
+
+    std::vector<TTableInfo> ret;
+    for (ui8 tableId = 1; tableId <= tableCount; tableId++) {
+        TTableInfo tableInfo;
+        const TString path = Sprintf("/Root/Database/Table%u", tableId);
+        tableInfo.ShardIds = GetColumnTableShards(runtime, sender, path);
+        tableInfo.PathId = ResolvePathId(runtime, path, &tableInfo.DomainKey, &tableInfo.SaTabletId);
+        ret.emplace_back(tableInfo);
+    }
+    return ret;
 }
 
 void DropTable(TTestEnv& env, const TString& databaseName, const TString& tableName) {
@@ -263,12 +309,12 @@ void DropTable(TTestEnv& env, const TString& databaseName, const TString& tableN
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
-std::shared_ptr<TCountMinSketch> ExtractCountMin(TTestActorRuntime& runtime, TPathId pathId) {
+std::shared_ptr<TCountMinSketch> ExtractCountMin(TTestActorRuntime& runtime, const TPathId& pathId, ui64 columnTag) {
     auto statServiceId = NStat::MakeStatServiceID(runtime.GetNodeId(1));
 
     NStat::TRequest req;
     req.PathId = pathId;
-    req.ColumnTag = 1;
+    req.ColumnTag = columnTag;
 
     auto evGet = std::make_unique<TEvStatistics::TEvGetStatistics>();
     evGet->StatType = NStat::EStatType::COUNT_MIN_SKETCH;
@@ -290,7 +336,15 @@ std::shared_ptr<TCountMinSketch> ExtractCountMin(TTestActorRuntime& runtime, TPa
     return stat.CountMin;
 }
 
-void ValidateCountMin(TTestActorRuntime& runtime, TPathId pathId) {
+void ValidateCountMinColumnshard(TTestActorRuntime& runtime, const TPathId& pathId, ui64 expectedProbe) {
+    auto countMin = ExtractCountMin(runtime, pathId);
+
+    ui32 value = 1;
+    auto actualProbe = countMin->Probe((const char *)&value, sizeof(value));
+    UNIT_ASSERT_VALUES_EQUAL(actualProbe, expectedProbe);
+}
+
+void ValidateCountMinDatashard(TTestActorRuntime& runtime, TPathId pathId) {
     auto countMin = ExtractCountMin(runtime, pathId);
 
     for (ui32 i = 0; i < 4; ++i) {
@@ -300,7 +354,7 @@ void ValidateCountMin(TTestActorRuntime& runtime, TPathId pathId) {
     }
 }
 
-void ValidateCountMinAbsense(TTestActorRuntime& runtime, TPathId pathId) {
+void ValidateCountMinDatashardAbsense(TTestActorRuntime& runtime, TPathId pathId) {
     auto statServiceId = NStat::MakeStatServiceID(runtime.GetNodeId(1));
 
     NStat::TRequest req;
@@ -323,31 +377,74 @@ void ValidateCountMinAbsense(TTestActorRuntime& runtime, TPathId pathId) {
     UNIT_ASSERT(!rsp.Success);
 }
 
-void Analyze(TTestActorRuntime& runtime, const std::vector<TPathId>& pathIds, ui64 saTabletId) {
-    const ui64 cookie = 555;
+TAnalyzedTable::TAnalyzedTable(const TPathId& pathId)
+    : PathId(pathId)
+{}
+
+TAnalyzedTable::TAnalyzedTable(const TPathId& pathId, const std::vector<ui32>& columnTags)
+    : PathId(pathId)
+    , ColumnTags(columnTags)
+{}
+
+void TAnalyzedTable::ToProto(NKikimrStat::TTable& tableProto) const {
+    PathIdFromPathId(PathId, tableProto.MutablePathId());
+    tableProto.MutableColumnTags()->Add(ColumnTags.begin(), ColumnTags.end());
+}
+
+std::unique_ptr<TEvStatistics::TEvAnalyze> MakeAnalyzeRequest(const std::vector<TAnalyzedTable>& tables, const TString operationId) {
     auto ev = std::make_unique<TEvStatistics::TEvAnalyze>();
-    auto& record = ev->Record;
-    record.SetCookie(cookie);
-    for (const TPathId& pathId : pathIds)
-        PathIdFromPathId(pathId, record.AddTables()->MutablePathId());
+    NKikimrStat::TEvAnalyze& record = ev->Record;
+    record.SetOperationId(operationId);
+    record.AddTypes(NKikimrStat::EColumnStatisticType::TYPE_COUNT_MIN_SKETCH);
+    for (const TAnalyzedTable& table : tables)
+        table.ToProto(*record.AddTables());
+    return ev;
+}
+
+void Analyze(TTestActorRuntime& runtime, ui64 saTabletId, const std::vector<TAnalyzedTable>& tables, const TString operationId) {
+    auto ev = MakeAnalyzeRequest(tables, operationId);
 
     auto sender = runtime.AllocateEdgeActor();
     runtime.SendToPipe(saTabletId, sender, ev.release());
     auto evResponse = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
 
-    UNIT_ASSERT_VALUES_EQUAL(evResponse->Get()->Record.GetCookie(), cookie);
+    const auto& record = evResponse->Get()->Record;
+    UNIT_ASSERT_VALUES_EQUAL(record.GetOperationId(), operationId);
+    UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS);
 }
 
-void AnalyzeTable(TTestActorRuntime& runtime, const TPathId& pathId, ui64 shardTabletId) {
+void AnalyzeTable(TTestActorRuntime& runtime, ui64 shardTabletId, const TAnalyzedTable& table) {
     auto ev = std::make_unique<TEvStatistics::TEvAnalyzeTable>();
     auto& record = ev->Record;
-    PathIdFromPathId(pathId, record.MutableTable()->MutablePathId());
+    table.ToProto(*record.MutableTable());
     record.AddTypes(NKikimrStat::EColumnStatisticType::TYPE_COUNT_MIN_SKETCH);
 
     auto sender = runtime.AllocateEdgeActor();
     runtime.SendToPipe(shardTabletId, sender, ev.release());
     runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeTableResponse>(sender);
 }
+
+void AnalyzeStatus(TTestActorRuntime& runtime, TActorId sender, ui64 saTabletId, const TString operationId, const NKikimrStat::TEvAnalyzeStatusResponse::EStatus expectedStatus) {
+    auto analyzeStatusRequest = std::make_unique<TEvStatistics::TEvAnalyzeStatus>();
+    analyzeStatusRequest->Record.SetOperationId(operationId);
+    runtime.SendToPipe(saTabletId, sender, analyzeStatusRequest.release());
+
+    auto analyzeStatusResponse = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeStatusResponse>(sender);
+    UNIT_ASSERT(analyzeStatusResponse);
+    UNIT_ASSERT_VALUES_EQUAL(analyzeStatusResponse->Get()->Record.GetOperationId(), operationId);
+    UNIT_ASSERT_VALUES_EQUAL(analyzeStatusResponse->Get()->Record.GetStatus(), expectedStatus);
+}
+
+void WaitForSavedStatistics(TTestActorRuntime& runtime, const TPathId& pathId) {
+    bool eventSeen = false;
+    auto observer = runtime.AddObserver<TEvStatistics::TEvSaveStatisticsQueryResponse>([&](auto& ev){
+        if (ev->Get()->PathId == pathId)
+            eventSeen = true;
+    });
+
+    runtime.WaitFor("TEvSaveStatisticsQueryResponse", [&]{ return eventSeen; });
+}
+
 
 
 } // NStat

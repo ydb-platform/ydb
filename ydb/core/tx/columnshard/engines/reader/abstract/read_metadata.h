@@ -42,8 +42,14 @@ private:
 
 protected:
     std::shared_ptr<ISnapshotSchema> ResultIndexSchema;
+    ui64 TxId = 0;
+
 public:
     using TConstPtr = std::shared_ptr<const TReadMetadataBase>;
+
+    ui64 GetTxId() const {
+        return TxId;
+    }
 
     const TVersionedIndex& GetIndexVersions() const {
         AFL_VERIFY(IndexVersionsPointer);

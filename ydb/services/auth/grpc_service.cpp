@@ -32,18 +32,21 @@ void TGRpcAuthService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 #error ADD_REQUEST macro already defined
 #endif
 
-#define ADD_REQUEST_LIMIT(NAME, CB, LIMIT_TYPE) \
+#define ADD_REQUEST_LIMIT(NAME, CB, RATE_LIMITER_MODE, AUDIT_MODE) \
     MakeIntrusive<TGRpcRequest<Ydb::Auth::NAME##Request, Ydb::Auth::NAME##Response, TGRpcAuthService>>     \
         (this, this->GetService(), CQ_,                                                                    \
             [this](NYdbGrpc::IRequestContextBase *ctx) {                                                   \
                 NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer(), GetSdkBuildInfo(ctx));     \
                 ActorSystem_->Send(GRpcRequestProxyId_,                                                    \
                     new TGrpcRequestOperationCall<Ydb::Auth::NAME##Request, Ydb::Auth::NAME##Response>     \
-                        (ctx, &CB, TRequestAuxSettings{TRateLimiterMode::LIMIT_TYPE, nullptr}));           \
+                        (ctx, &CB, TRequestAuxSettings{                                                    \
+                            .RlMode = RATE_LIMITER_MODE,                                                   \
+                            .AuditMode = AUDIT_MODE,                                                       \
+                        }));                                                                               \
             }, &Ydb::Auth::V1::AuthService::AsyncService::Request ## NAME,                                 \
             #NAME, logger, getCounterBlock("login", #NAME))->Run();
 
-    ADD_REQUEST_LIMIT(Login, DoLoginRequest, Off)
+    ADD_REQUEST_LIMIT(Login, DoLoginRequest, TRateLimiterMode::Off, TAuditMode::Auditable)
 
 #undef ADD_REQUEST_LIMIT
 

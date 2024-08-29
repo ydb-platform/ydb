@@ -1634,7 +1634,17 @@ public:
     template<class U,
         class Ud = typename std::decay<U>::type,
         class E1 = typename std::enable_if< !std::is_same<Ud, variant>::value && !std::is_base_of<variant, Ud>::value && !detail::is_in_place_index<Ud>::value && !detail::is_in_place_type<Ud>::value >::type,
+
+#if BOOST_WORKAROUND(BOOST_MSVC, < 1950)
+
+        class V = mp11::mp_apply_q< mp11::mp_bind_front<detail::resolve_overload_type, U&&>, variant >,
+
+#else
+
         class V = detail::resolve_overload_type<U&&, T...>,
+
+#endif
+
         class E2 = typename std::enable_if<std::is_constructible<V, U&&>::value>::type
         >
     constexpr variant( U&& u )

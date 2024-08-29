@@ -25,6 +25,8 @@
 #include <library/cpp/yt/mlock/mlock.h>
 #include <library/cpp/yt/stockpile/stockpile.h>
 
+#include <library/cpp/yt/system/exit.h>
+
 #include <tcmalloc/malloc_extension.h>
 
 #include <absl/debugging/stacktrace.h>
@@ -74,7 +76,7 @@ public:
     {
         Owner_->OnError(CurrentExceptionMessage());
         Cerr << Endl << "Try running '" << Owner_->Argv0_ << " --help' for more information." << Endl;
-        Owner_->Exit(EProgramExitCode::OptionsError);
+        Owner_->Exit(ToUnderlying(EProcessExitCode::ArgumentsError));
     }
 
 private:
@@ -137,35 +139,24 @@ int TProgram::Run(int argc, const char** argv)
     if (!CrashOnError_) {
         try {
             run();
-            Exit(EProgramExitCode::OK);
+            Exit(ToUnderlying(EProcessExitCode::OK));
         } catch (...) {
             OnError(CurrentExceptionMessage());
-            Exit(EProgramExitCode::ProgramError);
+            Exit(ToUnderlying(EProcessExitCode::GenericError));
         }
     } else {
         run();
-        Exit(EProgramExitCode::OK);
+        Exit(ToUnderlying(EProcessExitCode::OK));
     }
 
     // Cannot reach this due to #Exit calls above.
     YT_ABORT();
 }
 
-void TProgram::Abort(EProgramExitCode code) noexcept
-{
-    Abort(static_cast<int>(code));
-}
-
 void TProgram::Abort(int code) noexcept
 {
     NLogging::TLogManager::Get()->Shutdown();
-
-    ::_exit(code);
-}
-
-void TProgram::Exit(EProgramExitCode code) noexcept
-{
-    Exit(static_cast<int>(code));
+    AbortProcess(code);
 }
 
 void TProgram::Exit(int code) noexcept
@@ -329,7 +320,7 @@ void ExitZero(int /*unused*/)
     // TODO(babenko): replace with pure "exit" some day.
     // Currently this causes some RPC requests to master to be replied with "Promise abandoned" error,
     // which is not retriable.
-    _exit(0);
+    AbortProcess(ToUnderlying(EProcessExitCode::OK));
 }
 
 } // namespace

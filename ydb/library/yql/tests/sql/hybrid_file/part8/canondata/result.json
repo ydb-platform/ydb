@@ -601,6 +601,20 @@
             "uri": "https://{canondata_backend}/1942173/3bb27fb0a55607bffaebde9a7abc4b2ec4ca0495/resource.tar.gz#test.test_blocks-combine_all_avg_filter--Plan_/plan.txt"
         }
     ],
+    "test.test[blocks-decimal_op_decimal--Debug]": [
+        {
+            "checksum": "d480ca1abe3826553d9cebc7d69dbe52",
+            "size": 2307,
+            "uri": "https://{canondata_backend}/1784117/9a028b554396b6c7b4c994aa1d76185e37e768c0/resource.tar.gz#test.test_blocks-decimal_op_decimal--Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[blocks-decimal_op_decimal--Plan]": [
+        {
+            "checksum": "e65c86ba6e55033fe5f47711b65bba6d",
+            "size": 4093,
+            "uri": "https://{canondata_backend}/1784117/9a028b554396b6c7b4c994aa1d76185e37e768c0/resource.tar.gz#test.test_blocks-decimal_op_decimal--Plan_/plan.txt"
+        }
+    ],
     "test.test[blocks-distinct_mixed_all--Debug]": [
         {
             "checksum": "6975773fe7a0c24aeba19c9a36ae09a2",
@@ -1555,9 +1569,9 @@
     ],
     "test.test[join-mergejoin_saves_output_sort--Debug]": [
         {
-            "checksum": "b4cae2682cd732507fbccba50382a32e",
-            "size": 18455,
-            "uri": "https://{canondata_backend}/1889210/a6f1d19efb8c2d66757fb3f23bc191e0ff7fca4e/resource.tar.gz#test.test_join-mergejoin_saves_output_sort--Debug_/opt.yql_patched"
+            "checksum": "a67a1b27ade6b885fbd620277428037b",
+            "size": 18422,
+            "uri": "https://{canondata_backend}/1925821/1873361bb520be4a239fac9059d3043c1d7028a9/resource.tar.gz#test.test_join-mergejoin_saves_output_sort--Debug_/opt.yql_patched"
         }
     ],
     "test.test[join-mergejoin_saves_output_sort--Plan]": [
@@ -2573,6 +2587,20 @@
             "checksum": "c1f2d837c3623c81dd596a9877913fb8",
             "size": 948,
             "uri": "https://{canondata_backend}/1923547/94f377eaa1d93890e1345ac4940cc6fa07bddd4f/resource.tar.gz#test.test_pg_catalog-pg_timezone_abbrevs-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[produce-fuse_reduces_with_presort--Debug]": [
+        {
+            "checksum": "a0be01e2962b39871f4097f1d598a1ca",
+            "size": 7199,
+            "uri": "https://{canondata_backend}/1942525/70eec467682e96dfaac0f3c809005b8a22cce54f/resource.tar.gz#test.test_produce-fuse_reduces_with_presort--Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[produce-fuse_reduces_with_presort--Plan]": [
+        {
+            "checksum": "b7d4ddc5c9f07fedb74a72b0789bd050",
+            "size": 7633,
+            "uri": "https://{canondata_backend}/1942525/70eec467682e96dfaac0f3c809005b8a22cce54f/resource.tar.gz#test.test_produce-fuse_reduces_with_presort--Plan_/plan.txt"
         }
     ],
     "test.test[produce-reduce_lambda_list_mem-default.txt-Debug]": [

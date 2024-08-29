@@ -1,8 +1,8 @@
 #pragma once
 
 #include "change_exchange.h"
-#include "change_sender_resolver.h"
 #include "change_sender_partitioner.h"
+#include "change_sender_resolver.h"
 
 #include <ydb/core/change_exchange/change_sender_monitoring.h>
 
@@ -17,8 +17,6 @@
 #include <util/generic/map.h>
 #include <util/generic/set.h>
 #include <util/string/builder.h>
-
-#include <concepts>
 
 namespace NKikimr::NChangeExchange {
 
@@ -72,11 +70,11 @@ public:
     virtual IActor* CreateSender(ui64 partitionId) const = 0;
 };
 
-template <class TChangeRecord>
+template <typename TChangeRecord>
 class TBaseChangeSender {
     using TIncompleteRecord = TEvChangeExchange::TEvRequestRecords::TRecordInfo;
     // we need this to safely cast and call Out on a container
-    static_assert(std::derived_from<TChangeRecordContainer<TChangeRecord>, TBaseChangeRecordContainer>);
+    static_assert(std::derived_from<TChangeRecordContainer<TChangeRecord>, IChangeRecordContainer>);
 
     struct TEnqueuedRecord: TIncompleteRecord {
         bool ReEnqueued = false;
@@ -291,7 +289,7 @@ class TBaseChangeSender {
         }
 
         Y_ABORT_UNLESS(sender.ActorId);
-        ActorOps->Send(sender.ActorId, new TEvChangeExchange::TEvRecords(std::make_shared<TChangeRecordContainer<TChangeRecord>>(std::exchange(sender.Prepared, {}))));
+        ActorOps->Send(sender.ActorId, TEvChangeExchange::TEvRecords::New<TChangeRecord>(std::exchange(sender.Prepared, {})));
     }
 
     void ReEnqueueRecords(const TSender& sender) {
@@ -767,6 +765,8 @@ private:
     IActorOps* const ActorOps;
     IChangeSenderResolver* const Resolver;
     ISenderFactory* const SenderFactory;
+    THolder<IChangeSenderPartitioner<TChangeRecord>> Partitioner;
+
 protected:
     TActorId ChangeServer;
     const TPathId PathId;
@@ -783,7 +783,6 @@ private:
 
     TVector<ui64> GonePartitions;
 
-    THolder<IChangeSenderPartitioner<TChangeRecord>> Partitioner;
 }; // TBaseChangeSender
 
 }

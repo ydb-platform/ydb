@@ -5,8 +5,8 @@
 #include <util/string/builder.h>
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
-
-#include <library/cpp/disjoint_sets/disjoint_sets.h>
+#include <util/string/cast.h>
+#include <util/string/printf.h>
 
 const TString& ToString(NYql::EJoinKind);
 const TString& ToString(NYql::EJoinAlgoType);
@@ -28,6 +28,14 @@ namespace {
         {"LeftSemi",EJoinKind::LeftSemi},
         {"RightSemi",EJoinKind::RightSemi},
         {"Cross",EJoinKind::Cross}};
+
+    THashMap<TString,TCardinalityHints::ECardOperation> HintOpMap = {
+        {"+",TCardinalityHints::ECardOperation::Add},
+        {"-",TCardinalityHints::ECardOperation::Subtract},
+        {"*",TCardinalityHints::ECardOperation::Multiply},
+        {"/",TCardinalityHints::ECardOperation::Divide},
+        {"#",TCardinalityHints::ECardOperation::Replace}};
+
 }
 
 EJoinKind ConvertToJoinKind(const TString& joinString) {
@@ -101,11 +109,10 @@ void TJoinOptimizerNode::Print(std::stringstream& stream, int ntabs) {
     }
     stream << "\n";
 
-    for (int i = 0; i < ntabs; i++){
-        stream << "    ";
-    }
-
     if (Stats) {
+        for (int i = 0; i < ntabs; i++){
+            stream << "    ";
+        }
         stream << *Stats << "\n";
     }
 
@@ -162,7 +169,8 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
     const TOptimizerStatistics& rightStats,
     const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions,
     EJoinAlgoType joinAlgo,
-    EJoinKind joinKind) const
+    EJoinKind joinKind,
+    TCardinalityHints::TCardinalityHint* maybeHint) const
 {
     TVector<TString> leftJoinKeys;
     TVector<TString> rightJoinKeys;
@@ -172,7 +180,7 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
         rightJoinKeys.emplace_back(c.second.AttributeName);
     }
 
-    return ComputeJoinStats(leftStats, rightStats, leftJoinKeys, rightJoinKeys, joinAlgo, joinKind);
+    return ComputeJoinStats(leftStats, rightStats, leftJoinKeys, rightJoinKeys, joinAlgo, joinKind, maybeHint);
 }
 
 TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
@@ -181,7 +189,8 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
     const TVector<TString>& leftJoinKeys,
     const TVector<TString>& rightJoinKeys,
     EJoinAlgoType joinAlgo,
-    EJoinKind joinKind) const
+    EJoinKind joinKind,
+    TCardinalityHints::TCardinalityHint* maybeHint) const
 {
     double newCard{};
     EStatisticsType outputType;
@@ -189,7 +198,18 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
     bool rightKeyColumns = false;
     double selectivity = 1.0;
 
-    if (IsPKJoin(rightStats,rightJoinKeys)) {
+    bool isRightPKJoin = IsPKJoin(rightStats,rightJoinKeys);
+    bool isLeftPKJoin = IsPKJoin(leftStats,leftJoinKeys);
+
+    if (isRightPKJoin && isLeftPKJoin) {
+        auto rightPKJoinCard = leftStats.Nrows * rightStats.Selectivity;
+        auto leftPKJoinCard = rightStats.Nrows * leftStats.Selectivity;
+        if (rightPKJoinCard > leftPKJoinCard) {
+            isRightPKJoin = false;
+        }
+    }
+
+    if (isRightPKJoin) {
         switch (joinKind) {
             case EJoinKind::LeftJoin:
             case EJoinKind::LeftOnly:
@@ -206,8 +226,11 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
         } else {
             outputType = leftStats.Type;
         }
-    } else if (IsPKJoin(leftStats,leftJoinKeys)) {
+    } else if (isLeftPKJoin) {
         switch (joinKind) {
+            case EJoinKind::RightJoin:
+            case EJoinKind::RightOnly:
+                newCard = rightStats.Nrows; break;
             default: {
                 newCard = leftStats.Selectivity * rightStats.Nrows;
             }
@@ -240,6 +263,10 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
         outputType = EStatisticsType::ManyManyJoin;
     }
 
+    if (maybeHint) {
+        newCard = maybeHint->ApplyHint(newCard);
+    }
+
     int newNCols = leftStats.Ncols + rightStats.Ncols;
     double newByteSize = leftStats.Nrows ? (leftStats.ByteSize / leftStats.Nrows) * newCard : 0 +
             rightStats.Nrows ? (rightStats.ByteSize / rightStats.Nrows) * newCard : 0;
@@ -258,5 +285,74 @@ const TBaseProviderContext& TBaseProviderContext::Instance() {
     return staticContext;
 }
 
+TCardinalityHints::TCardinalityHints(const TString& json) {
+    auto jsonValue = NJson::TJsonValue();
+    NJson::ReadJsonTree(json, &jsonValue, true);
+
+    for (auto s : jsonValue.GetArraySafe()) {
+        auto h = s.GetMapSafe();
+
+        TCardinalityHints::TCardinalityHint hint;
+
+        for (auto t : h.at("labels").GetArraySafe()) {
+            hint.JoinLabels.push_back(t.GetStringSafe());
+        }
+
+        auto op = h.at("op").GetStringSafe();
+        hint.Operation = HintOpMap.at(op);
+
+        hint.Value = h.at("value").GetDoubleSafe();
+        Hints.push_back(hint);
+    }
+}
+
+std::shared_ptr<IBaseOptimizerNode> MakeJoinTreeFromJson(const NJson::TJsonValue& jsonTree) {
+    if (jsonTree.IsArray()) {
+        auto children = jsonTree.GetArraySafe();
+        Y_ENSURE(children.size() == 2, Sprintf("Expected 2 inputs for JoinOrder hints, got: %ld", children.size()));
+        
+        auto joinNode = TJoinOptimizerNode(
+            MakeJoinTreeFromJson(children[0]),
+            MakeJoinTreeFromJson(children[1]),
+            {},
+            EJoinKind::Cross, // just a stub
+            EJoinAlgoType::Undefined,
+            true
+        );
+        return std::make_shared<TJoinOptimizerNode>(std::move(joinNode));
+    }
+
+    Y_ENSURE(
+        jsonTree.IsString(),
+        Sprintf("A relation must be a string for JoinOrder hints! Got %s, expected a string.", jsonTree.GetStringRobust().c_str())
+    );
+    return std::make_shared<TRelOptimizerNode>(jsonTree.GetStringSafe(), nullptr);
+}
+
+TJoinOrderHints::TJoinOrderHints(const TString& json) {
+    NJson::TJsonValue jsonTree;
+    NJson::ReadJsonTree(json, &jsonTree, true);
+    HintsTree = MakeJoinTreeFromJson(jsonTree);
+}
+
+TJoinAlgoHints::TJoinAlgoHints(const TString& json) {
+    auto jsonValue = NJson::TJsonValue();
+    NJson::ReadJsonTree(json, &jsonValue, true);
+
+    for (auto s : jsonValue.GetArraySafe()) {
+        auto h = s.GetMapSafe();
+
+        TJoinAlgoHints::TJoinAlgoHint hint;
+
+        for (auto t : h.at("labels").GetArraySafe()) {
+            hint.JoinLabels.push_back(t.GetStringSafe());
+        }
+
+        auto algo = h.at("algo").GetStringSafe();
+        hint.JoinHint = FromString<EJoinAlgoType>(algo);
+
+        Hints.push_back(hint);
+    }
+}
 
 } // namespace NYql

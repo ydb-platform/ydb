@@ -268,9 +268,9 @@ public:
 
     TString MakeForward(const TRequestState& request, const std::vector<ui32>& nodes) override {
         if (nodes.empty()) {
-            return GetHTTPINTERNALERROR(request, "text/plain", "Couldn't resolve database nodes");
+            return GetHTTPBADREQUEST(request, "text/plain", "Couldn't resolve database nodes");
         }
-        if (request->Request.GetUri().StartsWith("/node/")) {
+        if (!request.Request->Request.GetHeader("X-Forwarded-From-Node").empty()) {
             return GetHTTPBADREQUEST(request, "text/plain", "Can't do double forward");
         }
         // we expect that nodes order is the same for all requests
@@ -316,6 +316,11 @@ public:
             capabilities[name] = version;
         }
         return capabilities;
+    }
+
+    int GetCapabilityVersion(const TString& name) override {
+        std::lock_guard guard(JsonHandlersMutex);
+        return JsonHandlers.GetCapabilityVersion(name);
     }
 
     void RegisterVirtualHandler(
@@ -475,36 +480,12 @@ private:
             if (type.empty()) {
                 type = "application/json";
             }
-            if (AllowOrigin) {
-                ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(
-                    "HTTP/1.1 204 No Content\r\n"
-                    "Access-Control-Allow-Origin: " + AllowOrigin + "\r\n"
-                    "Access-Control-Allow-Credentials: true\r\n"
-                    "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept,X-Trace-Verbosity,X-Want-Trace\r\n"
-                    "Access-Control-Allow-Methods: OPTIONS, GET, POST\r\n"
-                    "Allow: OPTIONS, GET, POST\r\n"
-                    "Content-Type: " + type + "\r\n"
-                    "Connection: Keep-Alive\r\n\r\n", 0, NMon::IEvHttpInfoRes::EContentType::Custom));
-            } else {
-                TString origin = TString(msg->Request.GetHeader("Origin"));
-                if (!origin.empty()) {
-                    ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(
-                        "HTTP/1.1 204 No Content\r\n"
-                        "Access-Control-Allow-Origin: " + origin + "\r\n"
-                        "Access-Control-Allow-Credentials: true\r\n"
-                        "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept,X-Trace-Verbosity,X-Want-Trace\r\n"
-                        "Access-Control-Allow-Methods: OPTIONS, GET, POST\r\n"
-                        "Allow: OPTIONS, GET, POST\r\n"
-                        "Content-Type: " + type + "\r\n"
-                        "Connection: Keep-Alive\r\n\r\n", 0, NMon::IEvHttpInfoRes::EContentType::Custom));
-                } else {
-                    ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(
-                        "HTTP/1.1 204 No Content\r\n"
-                        "Allow: OPTIONS, GET, POST\r\n"
-                        "Content-Type: " + type + "\r\n"
-                        "Connection: Keep-Alive\r\n\r\n", 0, NMon::IEvHttpInfoRes::EContentType::Custom));
-                }
-            }
+            TStringBuilder response;
+            response << "HTTP/1.1 204 No Content\r\n";
+            FillCORS(response, msg);
+            response << "Content-Type: " + type + "\r\n"
+                        "Connection: Keep-Alive\r\n\r\n";
+            Send(ev->Sender, new NMon::TEvHttpInfoRes(response, 0, NMon::IEvHttpInfoRes::EContentType::Custom));
             return;
         }
         TString path("/" + msg->Request.GetPage()->Path + msg->Request.GetPathInfo());
@@ -608,11 +589,15 @@ void TViewer::FillCORS(TStringBuilder& stream, const TRequestState& request) {
     } else if (request && request->Request.GetHeaders().HasHeader("Origin")) {
         origin = request->Request.GetHeader("Origin");
     }
+    if (origin.empty()) {
+        origin = "*";
+    }
     if (origin) {
         stream << "Access-Control-Allow-Origin: " << origin << "\r\n"
                << "Access-Control-Allow-Credentials: true\r\n"
                << "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept,X-Trace-Verbosity,X-Want-Trace\r\n"
-               << "Access-Control-Allow-Methods: OPTIONS, GET, POST\r\n";
+               << "Access-Control-Allow-Methods: OPTIONS, GET, POST, DELETE\r\n"
+               << "Allow: OPTIONS, GET, POST, DELETE\r\n";
     }
 }
 
@@ -731,44 +716,6 @@ TString TViewer::GetHTTPFORWARD(const TRequestState& request, const TString& loc
     FillTraceId(res, request);
     res << "\r\n";
     return res;
-}
-
-void MakeErrorReply(NJson::TJsonValue& jsonResponse, TString& message, const NYdb::TStatus& status) {
-    google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage> protoIssues;
-    NYql::IssuesToMessage(status.GetIssues(), &protoIssues);
-
-    message.clear();
-
-    NJson::TJsonValue& jsonIssues = jsonResponse["issues"];
-    for (const auto& queryIssue : protoIssues) {
-        NJson::TJsonValue& issue = jsonIssues.AppendValue({});
-        NProtobufJson::Proto2Json(queryIssue, issue);
-    }
-
-    TString textStatus = TStringBuilder() << status.GetStatus();
-    jsonResponse["status"] = textStatus;
-
-    // find first deepest error
-    std::stable_sort(protoIssues.begin(), protoIssues.end(), [](const Ydb::Issue::IssueMessage& a, const Ydb::Issue::IssueMessage& b) -> bool {
-        return a.severity() < b.severity();
-    });
-
-    const google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>* protoIssuesPtr = &protoIssues;
-    while (protoIssuesPtr->size() > 0 && protoIssuesPtr->at(0).issuesSize() > 0) {
-        protoIssuesPtr = &protoIssuesPtr->at(0).issues();
-    }
-
-    if (protoIssuesPtr->size() > 0) {
-        const Ydb::Issue::IssueMessage& issue = protoIssuesPtr->at(0);
-        NProtobufJson::Proto2Json(issue, jsonResponse["error"]);
-        message = issue.message();
-    } else {
-        jsonResponse["error"]["message"] = textStatus;
-    }
-
-    if (message.empty()) {
-        message = textStatus;
-    }
 }
 
 NKikimrViewer::EFlag GetFlagFromTabletState(NKikimrWhiteboard::TTabletStateInfo::ETabletState state) {

@@ -4,7 +4,7 @@ items:
 - { name: Выражения,                    href: expressions.md }
 - { name: ACTION,                       href: action.md }
 - { name: ALTER GROUP,                  href: alter-group.md,                when: feature_user_and_group }
-- { name: ALTER TABLE,                  href: alter_table.md,                when: feature_map_tables }
+- { name: ALTER TABLE,                  include: { mode: link, path: alter_table/toc_p.yaml },                when: feature_map_tables }
 - { name: ALTER VIEW,                   href: alter-view.md,                 when: feature_view }
 - { name: ALTER TOPIC,                  href: alter-topic.md,                when: feature_topic_control_plane }
 - { name: ALTER USER,                   href: alter-user.md,                 when: feature_user_and_group }
@@ -13,7 +13,7 @@ items:
 - { name: CREATE EXTERNAL TABLE,        href: create-external-table.md,      when: feature_federated_queries}
 - { name: CREATE OBJECT TYPE SECRET,    href: create-object-type-secret.md,  when: feature_federated_queries}
 - { name: CREATE OBJECT TYPE SECRET_ACCESS,    href: create-object-type-secret-access.md,  when: feature_federated_queries}
-- { name: CREATE TABLE,                 href: create_table.md }
+- { name: CREATE TABLE,                 include: { mode: link, path: create_table/toc_p.yaml } }
 - { name: CREATE VIEW,                  href: create-view.md,                when: feature_view }
 - { name: CREATE TOPIC,                 href: create-topic.md,               when: feature_topic_control_plane }
 - { name: CREATE USER,                  href: create-user.md,                when: feature_user_and_group }

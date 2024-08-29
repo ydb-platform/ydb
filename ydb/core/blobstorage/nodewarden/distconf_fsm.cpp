@@ -17,30 +17,39 @@ namespace NKikimr::NStorage {
         if (RootState == ERootState::INITIAL && hasQuorum) { // becoming root node
             Y_ABORT_UNLESS(!Scepter);
             Scepter = std::make_shared<TScepter>();
-
-            auto makeAllBoundNodes = [&] {
-                TStringStream s;
-                const char *sep = "{";
-                for (const auto& [nodeId, _] : AllBoundNodes) {
-                    s << std::exchange(sep, " ") << nodeId;
-                }
-                s << '}';
-                return s.Str();
-            };
-            STLOG(PRI_DEBUG, BS_NODE, NWDC19, "Starting config collection", (Scepter, Scepter->Id),
-                (AllBoundNodes, makeAllBoundNodes()));
-            RootState = ERootState::IN_PROGRESS;
-            TEvScatter task;
-            task.SetTaskId(RandomNumber<ui64>());
-            task.MutableCollectConfigs();
-            IssueScatterTask(TActorId(), std::move(task));
+            BecomeRoot();
         } else if (Scepter && !hasQuorum) { // unbecoming root node -- lost quorum
             SwitchToError("quorum lost");
         }
     }
 
+    void TDistributedConfigKeeper::BecomeRoot() {
+        auto makeAllBoundNodes = [&] {
+            TStringStream s;
+            const char *sep = "{";
+            for (const auto& [nodeId, _] : AllBoundNodes) {
+                s << std::exchange(sep, " ") << nodeId;
+            }
+            s << '}';
+            return s.Str();
+        };
+        STLOG(PRI_DEBUG, BS_NODE, NWDC19, "Starting config collection", (Scepter, Scepter->Id),
+            (AllBoundNodes, makeAllBoundNodes()));
+        RootState = ERootState::IN_PROGRESS;
+        TEvScatter task;
+        task.SetTaskId(RandomNumber<ui64>());
+        task.MutableCollectConfigs();
+        IssueScatterTask(TActorId(), std::move(task));
+    }
+
+    void TDistributedConfigKeeper::UnbecomeRoot() {
+    }
+
     void TDistributedConfigKeeper::SwitchToError(const TString& reason) {
         STLOG(PRI_ERROR, BS_NODE, NWDC38, "SwitchToError", (RootState, RootState), (Reason, reason));
+        if (Scepter) {
+            UnbecomeRoot();
+        }
         Scepter.reset();
         RootState = ERootState::ERROR_TIMEOUT;
         ErrorReason = reason;
@@ -498,36 +507,15 @@ namespace NKikimr::NStorage {
     void TDistributedConfigKeeper::Perform(TEvGather::TCollectConfigs *response,
             const TEvScatter::TCollectConfigs& /*request*/, TScatterTask& task) {
         THashMap<TStorageConfigMeta, TEvGather::TCollectConfigs::TNode*> baseConfigs;
+        THashSet<TNodeIdentifier> nodesAlreadyReplied{SelfNode};
 
-        auto addBaseConfig = [&](const TEvGather::TCollectConfigs::TNode& item) {
-            const auto& config = item.GetBaseConfig();
-            auto& ptr = baseConfigs[config];
-            if (!ptr) {
-                ptr = response->AddNodes();
-                ptr->MutableBaseConfig()->CopyFrom(config);
-            }
-            ptr->MutableNodeIds()->MergeFrom(item.GetNodeIds());
-        };
-
-        auto addPerDiskConfig = [&](const TEvGather::TCollectConfigs::TPersistentConfig& item, auto addFunc, auto& set) {
-            const auto& config = item.GetConfig();
-            auto& ptr = set[config];
-            if (!ptr) {
-                ptr = (response->*addFunc)();
-                ptr->MutableConfig()->CopyFrom(config);
-            }
-            ptr->MutableDisks()->MergeFrom(item.GetDisks());
-        };
-
-        TEvGather::TCollectConfigs::TNode s;
-        SelfNode.Serialize(s.AddNodeIds());
-        auto *cfg = s.MutableBaseConfig();
-        cfg->CopyFrom(BaseConfig);
-        addBaseConfig(s);
+        auto *ptr = response->AddNodes();
+        ptr->MutableBaseConfig()->CopyFrom(BaseConfig);
+        SelfNode.Serialize(ptr->AddNodeIds());
+        baseConfigs.emplace(BaseConfig, ptr);
 
         THashMap<TStorageConfigMeta, TEvGather::TCollectConfigs::TPersistentConfig*> committedConfigs;
         THashMap<TStorageConfigMeta, TEvGather::TCollectConfigs::TPersistentConfig*> proposedConfigs;
-
         for (auto& item : *response->MutableCommittedConfigs()) {
             committedConfigs[item.GetConfig()] = &item;
         }
@@ -535,29 +523,77 @@ namespace NKikimr::NStorage {
             proposedConfigs[item.GetConfig()] = &item;
         }
 
+        auto addBaseConfig = [&](const TEvGather::TCollectConfigs::TNode& item, auto *nodesToIgnore) {
+            const auto& config = item.GetBaseConfig();
+            auto& ptr = baseConfigs[config];
+            for (const auto& nodeId : item.GetNodeIds()) {
+                TNodeIdentifier n(nodeId);
+                if (const auto [_, inserted] = nodesAlreadyReplied.emplace(n); inserted) {
+                    if (!ptr) {
+                        ptr = response->AddNodes();
+                        ptr->MutableBaseConfig()->CopyFrom(config);
+                    }
+                    ptr->AddNodeIds()->CopyFrom(nodeId);
+                } else {
+                    nodesToIgnore->insert(std::move(n));
+                }
+            }
+        };
+
+        auto addPerDiskConfig = [&](const TEvGather::TCollectConfigs::TPersistentConfig& item, auto addFunc, auto& set,
+                const auto& nodesToIgnore) {
+            const auto& config = item.GetConfig();
+            auto& ptr = set[config];
+            for (const auto& disk : item.GetDisks()) {
+                if (!nodesToIgnore.contains(TNodeIdentifier(disk.GetNodeId()))) {
+                    if (!ptr) {
+                        ptr = (response->*addFunc)();
+                        ptr->MutableConfig()->CopyFrom(config);
+                    }
+                    ptr->AddDisks()->CopyFrom(disk);
+                }
+            }
+        };
+
         for (const auto& reply : task.CollectedResponses) {
             if (reply.HasCollectConfigs()) {
                 const auto& cc = reply.GetCollectConfigs();
+
+                THashSet<TNodeIdentifier> nodesToIgnore;
                 for (const auto& item : cc.GetNodes()) {
-                    addBaseConfig(item);
+                    addBaseConfig(item, &nodesToIgnore);
                 }
                 for (const auto& item : cc.GetCommittedConfigs()) {
-                    addPerDiskConfig(item, &TEvGather::TCollectConfigs::AddCommittedConfigs, committedConfigs);
+                    addPerDiskConfig(item, &TEvGather::TCollectConfigs::AddCommittedConfigs, committedConfigs, nodesToIgnore);
                 }
                 for (const auto& item : cc.GetProposedConfigs()) {
-                    addPerDiskConfig(item, &TEvGather::TCollectConfigs::AddProposedConfigs, proposedConfigs);
+                    addPerDiskConfig(item, &TEvGather::TCollectConfigs::AddProposedConfigs, proposedConfigs, nodesToIgnore);
                 }
-                response->MutableNoMetadata()->MergeFrom(cc.GetNoMetadata());
-                response->MutableErrors()->MergeFrom(cc.GetErrors());
+                for (const auto& item : cc.GetNoMetadata()) {
+                    if (!nodesToIgnore.contains(TNodeIdentifier(item.GetNodeId()))) {
+                        response->AddNoMetadata()->CopyFrom(item);
+                    }
+                }
+                for (const auto& item : cc.GetErrors()) {
+                    if (!nodesToIgnore.contains(TNodeIdentifier(item.GetNodeId()))) {
+                        response->AddErrors()->CopyFrom(item);
+                    }
+                }
             }
         }
     }
 
     void TDistributedConfigKeeper::Perform(TEvGather::TProposeStorageConfig *response,
             const TEvScatter::TProposeStorageConfig& /*request*/, TScatterTask& task) {
+        THashSet<TNodeIdentifier> nodesAlreadyReplied;
         for (const auto& reply : task.CollectedResponses) {
             if (reply.HasProposeStorageConfig()) {
-                response->MutableStatus()->MergeFrom(reply.GetProposeStorageConfig().GetStatus());
+                const auto& config = reply.GetProposeStorageConfig();
+                for (const auto& status : config.GetStatus()) {
+                    if (const auto [_, inserted] = nodesAlreadyReplied.insert(status.GetNodeId()); inserted) {
+                        response->AddStatus()->CopyFrom(status);
+                    }
+                }
             }
         }
     }

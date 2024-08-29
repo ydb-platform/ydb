@@ -1,6 +1,7 @@
 #include "make_config.h"
 
 #include <util/datetime/base.h>
+#include <util/string/printf.h>
 
 #include <ydb/core/persqueue/utils.h>
 
@@ -49,6 +50,15 @@ NKikimrPQ::TPQTabletConfig MakeConfig(const TMakeConfigParams& params)
     config.SetMeteringMode(params.MeteringMode);
     config.MutablePartitionConfig()->SetLifetimeSeconds(TDuration::Hours(24).Seconds());
     config.MutablePartitionConfig()->SetWriteSpeedInBytesPerSecond(10 << 20);
+
+    if (params.HugeConfig) {
+        for (size_t i = 0; i < 2'500; ++i) {
+            TString name = Sprintf("fake-consumer-%s-%" PRISZT,
+                                   TString(3'000, 'a').data(), i);
+            config.AddReadRules(name);
+            config.AddReadRuleGenerations(1);
+        }
+    }
 
     Migrate(config);
 

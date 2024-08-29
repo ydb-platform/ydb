@@ -1,6 +1,8 @@
 PY23_LIBRARY()
 
-LICENSE(MIT)
+LICENSE(Service-Py23-Proxy)
+
+VERSION(Service-proxy-version)
 
 IF (PYTHON2)
     PEERDIR(

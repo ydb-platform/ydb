@@ -11,7 +11,7 @@ namespace NYdb::NConsoleClient {
     TWorkloadCommandBenchmark::TWorkloadCommandBenchmark(NYdbWorkload::TWorkloadParams& params, const NYdbWorkload::IWorkloadQueryGenerator::TWorkloadType& workload)
         : TWorkloadCommandBase(workload.CommandName, params, NYdbWorkload::TWorkloadParams::ECommandType::Run, workload.Description, workload.Type)
     {
-        
+
     }
 
 
@@ -334,11 +334,11 @@ bool TWorkloadCommandBenchmark::RunBench(TClient& client, NYdbWorkload::IWorkloa
         bool planSaved = false;
         for (ui32 i = 0; i < IterationsCount; ++i) {
             auto t1 = TInstant::Now();
-            TQueryBenchmarkResult res = TQueryBenchmarkResult::Error("undefined");
+            TQueryBenchmarkResult res = TQueryBenchmarkResult::Error("undefined", "undefined", "undefined");
             try {
                 res = Execute(query, client);
             } catch (...) {
-                res = TQueryBenchmarkResult::Error(CurrentExceptionMessage());
+                res = TQueryBenchmarkResult::Error(CurrentExceptionMessage(), "", "");
             }
             auto duration = TInstant::Now() - t1;
 

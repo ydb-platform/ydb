@@ -3,10 +3,12 @@
 #include <ydb/core/protos/hive.pb.h>
 #include <ydb/core/statistics/service/service.h>
 
+#include <util/string/vector.h>
+
 namespace NKikimr::NStat {
 
 struct TStatisticsAggregator::TTxResponseTabletDistribution : public TTxBase {
-    NKikimrHive::TEvResponseTabletDistribution Record;
+    const NKikimrHive::TEvResponseTabletDistribution HiveRecord;
 
     enum class EAction : ui8 {
         None,
@@ -16,27 +18,47 @@ struct TStatisticsAggregator::TTxResponseTabletDistribution : public TTxBase {
     };
     EAction Action = EAction::None;
 
-    std::unique_ptr<TEvStatistics::TEvAggregateStatistics> Request;
+    std::unique_ptr<TEvStatistics::TEvAggregateStatistics> AggregateStatisticsRequest;
 
-    TTxResponseTabletDistribution(TSelf* self, NKikimrHive::TEvResponseTabletDistribution&& record)
+    TTxResponseTabletDistribution(TSelf* self, NKikimrHive::TEvResponseTabletDistribution&& hiveRecord)
         : TTxBase(self)
-        , Record(std::move(record))
+        , HiveRecord(std::move(hiveRecord))
     {}
 
     TTxType GetTxType() const override { return TXTYPE_RESPONSE_TABLET_DISTRIBUTION; }
 
+    bool ExecuteStartForceTraversal(TTransactionContext& txc) {
+        ++Self->TraversalRound;
+        ++Self->GlobalTraversalRound;
+        
+        NIceDb::TNiceDb db(txc.DB);
+        Self->PersistGlobalTraversalRound(db);
+
+        AggregateStatisticsRequest = std::make_unique<TEvStatistics::TEvAggregateStatistics>(); 
+        auto& outRecord = AggregateStatisticsRequest->Record;
+        outRecord.SetRound(Self->GlobalTraversalRound);
+        PathIdFromPathId(Self->TraversalPathId, outRecord.MutablePathId());
+
+        const auto forceTraversalTable = Self->CurrentForceTraversalTable();
+        if (forceTraversalTable) {
+            TVector<ui32> columnTags = Scan<ui32>(SplitString(forceTraversalTable->ColumnTags, ","));
+            outRecord.MutableColumnTags()->Add(columnTags.begin(), columnTags.end());
+        }
+
+        for (auto& inNode : HiveRecord.GetNodes()) {
+            auto& outNode = *outRecord.AddNodes();
+            outNode.SetNodeId(inNode.GetNodeId());
+            outNode.MutableTabletIds()->CopyFrom(inNode.GetTabletIds());
+        }
+
+        return true;        
+    }
+
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         SA_LOG_D("[" << Self->TabletID() << "] TTxResponseTabletDistribution::Execute");
 
-        NIceDb::TNiceDb db(txc.DB);
-
-        Request = std::make_unique<TEvStatistics::TEvAggregateStatistics>();
-        auto& outRecord = Request->Record;
-
-        PathIdFromPathId(Self->TraversalTableId.PathId, outRecord.MutablePathId());
-
         auto distribution = Self->TabletsForReqDistribution;
-        for (auto& inNode : Record.GetNodes()) {
+        for (auto& inNode : HiveRecord.GetNodes()) {
             if (inNode.GetNodeId() == 0) {
                 // these tablets are probably in Hive boot queue
                 if (Self->HiveRequestRound < Self->MaxHiveRequestRoundCount) {
@@ -44,11 +66,7 @@ struct TStatisticsAggregator::TTxResponseTabletDistribution : public TTxBase {
                 }
                 continue;
             }
-            auto& outNode = *outRecord.AddNodes();
-            outNode.SetNodeId(inNode.GetNodeId());
-            outNode.MutableTabletIds()->Reserve(inNode.TabletIdsSize());
             for (auto tabletId : inNode.GetTabletIds()) {
-                outNode.AddTabletIds(tabletId);
                 distribution.erase(tabletId);
             }
         }
@@ -59,17 +77,13 @@ struct TStatisticsAggregator::TTxResponseTabletDistribution : public TTxBase {
 
         if (!distribution.empty() && Self->ResolveRound < Self->MaxResolveRoundCount) {
             // these tablets do not exist in Hive anymore
+            Self->NavigatePathId = Self->TraversalPathId;
             Action = EAction::ScheduleResolve;
             return true;
         }
 
-        ++Self->TraversalRound;
-        ++Self->GlobalTraversalRound;
-        Self->PersistGlobalTraversalRound(db);
-        outRecord.SetRound(Self->GlobalTraversalRound);
         Action = EAction::SendAggregate;
-
-        return true;
+        return ExecuteStartForceTraversal(txc);
     }
 
     void Complete(const TActorContext& ctx) override {
@@ -85,8 +99,9 @@ struct TStatisticsAggregator::TTxResponseTabletDistribution : public TTxBase {
             break;
 
         case EAction::SendAggregate:
-            ctx.Send(MakeStatServiceID(Self->SelfId().NodeId()), Request.release());
+            ctx.Send(MakeStatServiceID(Self->SelfId().NodeId()), AggregateStatisticsRequest.release());
             ctx.Schedule(KeepAliveTimeout, new TEvPrivate::TEvAckTimeout(++Self->KeepAliveSeqNo));
+            Self->AggregationRequestBeginTime = AppData(ctx)->TimeProvider->Now();
             break;
 
         default:

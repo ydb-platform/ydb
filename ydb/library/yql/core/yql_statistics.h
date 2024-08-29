@@ -19,6 +19,12 @@ enum EStatisticsType : ui32 {
     ManyManyJoin
 };
 
+enum EStorageType : ui32 {
+    NA,
+    RowStorage,
+    ColumnStorage
+};
+
 // Providers may subclass this struct to associate specific statistics, useful to
 // derive stats for higher-level operators in the plan.
 struct IProviderStatistics {
@@ -61,7 +67,9 @@ struct TOptimizerStatistics {
     double Selectivity = 1.0;
     TIntrusivePtr<TKeyColumns> KeyColumns;
     TIntrusivePtr<TColumnStatMap> ColumnStatistics;
+    EStorageType StorageType = EStorageType::NA;
     std::unique_ptr<const IProviderStatistics> Specific;
+    std::shared_ptr<TVector<TString>> Labels = {};
 
     TOptimizerStatistics(TOptimizerStatistics&&) = default;
     TOptimizerStatistics() {}
@@ -74,12 +82,15 @@ struct TOptimizerStatistics {
         double cost = 0.0,
         TIntrusivePtr<TKeyColumns> keyColumns = {},
         TIntrusivePtr<TColumnStatMap> columnMap = {},
+        EStorageType storageType = EStorageType::NA,
         std::unique_ptr<IProviderStatistics> specific = nullptr);
 
     TOptimizerStatistics& operator+=(const TOptimizerStatistics& other);
     bool Empty() const;
 
     friend std::ostream& operator<<(std::ostream& os, const TOptimizerStatistics& s);
+
+    TString ToString() const;
 };
 
 std::shared_ptr<TOptimizerStatistics> OverrideStatistics(const TOptimizerStatistics& s, const TStringBuf& tablePath, const std::shared_ptr<NJson::TJsonValue>& stats);

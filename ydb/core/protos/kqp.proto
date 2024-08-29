@@ -550,6 +550,11 @@ message TEvStartKqpTasksRequest {
     optional uint64 OutputChunkMaxSize = 7 [default = 0]; // 0 - use some default value
     optional string SerializedGUCSettings = 8;
     optional string SchedulerGroup = 9;
+    optional double MemoryPoolPercent = 10 [default = 100];
+    optional string Database = 11;
+    optional double MaxCpuShare = 12;
+    optional uint64 LockTxId = 13;
+    optional uint32 LockNodeId = 14;
 }
 
 message TEvStartKqpTasksResponse {

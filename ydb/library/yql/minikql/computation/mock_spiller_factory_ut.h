@@ -10,6 +10,9 @@ using namespace NActors;
 class TMockSpillerFactory : public ISpillerFactory
 {
 public:
+    void SetTaskCounters(TIntrusivePtr<NYql::NDq::TSpillingTaskCounters> /*spillingTaskCounters*/) override {
+    }
+
     ISpiller::TPtr CreateSpiller() override {
         return CreateMockSpiller();
     }

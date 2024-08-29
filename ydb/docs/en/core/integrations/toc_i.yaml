@@ -15,3 +15,5 @@ items:
   href: hibernate.md
 - name: Importing from JDBC data sources
   href: import-jdbc.md
+- name: DBeaver
+  href: ide/dbeaver.md

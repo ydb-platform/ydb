@@ -5,6 +5,7 @@
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/base/ticket_parser.h>
 
+#include <library/cpp/json/json_writer.h>
 #include <library/cpp/lwtrace/all.h>
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 #include <ydb/library/actors/core/probes.h>
@@ -145,6 +146,11 @@ public:
         return {};
     }
 
+    bool AcceptsJsonResponse() {
+        TStringBuf acceptHeader = GetHeader("Accept");
+        return acceptHeader.find(TStringBuf("application/json")) != TStringBuf::npos;
+    }
+
     virtual TStringBuf GetCookie(TStringBuf name) const override {
         NHttp::TCookies cookies(GetHeader("Cookie"));
         return cookies.Get(name);
@@ -211,15 +217,17 @@ public:
         SendRequest();
     }
     void ReplyWith(NHttp::THttpOutgoingResponsePtr response) {
-        TString url(Event->Get()->Request->URL.Before('?'));
-        TString status(response->Status);
-        NMonitoring::THistogramPtr ResponseTimeHgram = NKikimr::GetServiceCounters(NKikimr::AppData()->Counters, "utils")
-            ->GetSubgroup("subsystem", "mon")
-            ->GetSubgroup("url", url)
-            ->GetSubgroup("status", status)
-            ->GetHistogram("ResponseTimeMs", NMonitoring::ExponentialHistogram(20, 2, 1));
-        ResponseTimeHgram->Collect(Event->Get()->Request->Timer.Passed() * 1000);
-
+        if (response->Status.StartsWith("2")) {
+            TString url(Event->Get()->Request->URL.Before('?'));
+            TString status(response->Status);
+            NMonitoring::THistogramPtr ResponseTimeHgram = NKikimr::GetServiceCounters(NKikimr::AppData()->Counters,
+                    ActorMonPage->MonServiceName)
+                ->GetSubgroup("subsystem", "mon")
+                ->GetSubgroup("url", url)
+                ->GetSubgroup("status", status)
+                ->GetHistogram("ResponseTimeMs", NMonitoring::ExponentialHistogram(20, 2, 1));
+            ResponseTimeHgram->Collect(Event->Get()->Request->Timer.Passed() * 1000);
+        }
         Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
     }
 
@@ -239,18 +247,23 @@ public:
         response << "HTTP/1.1 204 No Content\r\n"
                     "Access-Control-Allow-Origin: " << origin << "\r\n"
                     "Access-Control-Allow-Credentials: true\r\n"
-                    "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept\r\n"
+                    "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept,X-Trace-Verbosity,X-Want-Trace\r\n"
                     "Access-Control-Allow-Methods: OPTIONS, GET, POST, PUT, DELETE\r\n"
-                    "Content-Type: " + type + "\r\n"
+                    "Content-Type: " << type << "\r\n"
                     "Connection: keep-alive\r\n\r\n";
         ReplyWith(request->CreateResponseString(response));
         PassAway();
     }
 
+    bool CredentialsProvided() {
+        return Container.GetCookie("ydb_session_id") || Container.GetHeader("Authorization");
+    }
+
     TString YdbToHttpError(Ydb::StatusIds::StatusCode status) {
         switch (status) {
         case Ydb::StatusIds::UNAUTHORIZED:
-            return "401 Unauthorized";
+            // YDB status UNAUTHORIZED is used for both access denied case and if no credentials were provided.
+            return CredentialsProvided() ? "403 Forbidden" : "401 Unauthorized";
         case Ydb::StatusIds::INTERNAL_ERROR:
             return "500 Internal Server Error";
         case Ydb::StatusIds::UNAVAILABLE:
@@ -267,26 +280,45 @@ public:
     }
 
     void ReplyErrorAndPassAway(const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult& result) {
+        ReplyErrorAndPassAway(result.Status, result.Issues, true);
+    }
+
+    void ReplyErrorAndPassAway(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues, bool addAccessControlHeaders) {
         NHttp::THttpIncomingRequestPtr request = Event->Get()->Request;
-        NHttp::THeaders headers(request->Headers);
         TStringBuilder response;
         TStringBuilder body;
-        const TString httpError = YdbToHttpError(result.Status);
-        body << "<html><body><h1>" << httpError << "</h1>";
-        if (result.Issues) {
-            body << "<p>" << result.Issues.ToString() << "</p>";
+        TStringBuf contentType;
+        const TString httpError = YdbToHttpError(status);
+
+        if (Container.AcceptsJsonResponse()) {
+            contentType = "application/json";
+            NJson::TJsonValue json;
+            TString message;
+            MakeJsonErrorReply(json, message, issues, NYdb::EStatus(status));
+            NJson::WriteJson(&body.Out, &json);
+        } else {
+            contentType = "text/html";
+            body << "<html><body><h1>" << httpError << "</h1>";
+            if (issues) {
+                body << "<p>" << issues.ToString() << "</p>";
+            }
+            body << "</body></html>";
         }
-        body << "</body></html>";
-        TString origin = TString(headers["Origin"]);
-        if (origin.empty()) {
-            origin = "*";
-        }
+
         response << "HTTP/1.1 " << httpError << "\r\n";
-        response << "Access-Control-Allow-Origin: " << origin << "\r\n";
-        response << "Access-Control-Allow-Credentials: true\r\n";
-        response << "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept\r\n";
-        response << "Access-Control-Allow-Methods: OPTIONS, GET, POST, PUT, DELETE\r\n";
-        response << "Content-Type: text/html\r\n";
+        if (addAccessControlHeaders) {
+            NHttp::THeaders headers(request->Headers);
+            TString origin = TString(headers["Origin"]);
+            if (origin.empty()) {
+                origin = "*";
+            }
+            response << "Access-Control-Allow-Origin: " << origin << "\r\n";
+            response << "Access-Control-Allow-Credentials: true\r\n";
+            response << "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept\r\n";
+            response << "Access-Control-Allow-Methods: OPTIONS, GET, POST, PUT, DELETE\r\n";
+        }
+
+        response << "Content-Type: " << contentType << "\r\n";
         response << "Content-Length: " << body.Size() << "\r\n";
         response << "\r\n";
         response << body;
@@ -295,21 +327,9 @@ public:
     }
 
     void ReplyForbiddenAndPassAway(const TString& error = {}) {
-        NHttp::THttpIncomingRequestPtr request = Event->Get()->Request;
-        TStringBuilder response;
-        TStringBuilder body;
-        body << "<html><body><h1>403 Forbidden</h1>";
-        if (!error.empty()) {
-            body << "<p>" << error << "</p>";
-        }
-        body << "</body></html>";
-        response << "HTTP/1.1 403 Forbidden\r\n";
-        response << "Content-Type: text/html\r\n";
-        response << "Content-Length: " << body.Size() << "\r\n";
-        response << "\r\n";
-        response << body;
-        ReplyWith(request->CreateResponseString(response));
-        PassAway();
+        NYql::TIssues issues;
+        issues.AddIssue(error);
+        ReplyErrorAndPassAway(Ydb::StatusIds::UNAUTHORIZED, issues, false);
     }
 
     void SendRequest(const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult* result = nullptr) {
@@ -355,13 +375,15 @@ public:
             return ReplyErrorAndPassAway(result);
         }
         bool found = false;
-        for (const TString& sid : ActorMonPage->AllowedSIDs) {
-            if (result.UserToken->IsExist(sid)) {
-                found = true;
-                break;
+        if (result.UserToken) {
+            for (const TString& sid : ActorMonPage->AllowedSIDs) {
+                if (result.UserToken->IsExist(sid)) {
+                    found = true;
+                    break;
+                }
             }
         }
-        if (found || ActorMonPage->AllowedSIDs.empty()) {
+        if (found || ActorMonPage->AllowedSIDs.empty() || !result.UserToken) {
             SendRequest(&result);
         } else {
             return ReplyForbiddenAndPassAway("SID is not allowed");
@@ -533,10 +555,26 @@ public:
         }
     }
 
+    TString RewriteWithForwardedFromNode(const TString& response) {
+        NHttp::THttpParser<NHttp::THttpRequest, NHttp::TSocketBuffer> parser(response);
+
+        NHttp::THeadersBuilder headers(parser.Headers);
+        headers.Set("X-Forwarded-From-Node", TStringBuilder() << Event->Sender.NodeId());
+
+        NHttp::THttpRenderer<NHttp::THttpRequest, NHttp::TSocketBuffer> renderer;
+        renderer.InitRequest(parser.Method, parser.URL, parser.Protocol, parser.Version);
+        renderer.Set(headers);
+        if (parser.HaveBody()) {
+            renderer.SetBody(parser.Body); // it shouldn't be here, 30x with a body is a bad idea
+        }
+        renderer.Finish();
+        return renderer.AsString();
+    }
+
     void Bootstrap() {
         NHttp::THttpConfig::SocketAddressType address;
         FromProto(address, Event->Get()->Record.GetAddress());
-        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(Event->Get()->Record.GetHttpRequest(), Endpoint, address);
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(RewriteWithForwardedFromNode(Event->Get()->Record.GetHttpRequest()), Endpoint, address);
         TStringBuilder prefix;
         prefix << "/node/" << TActivationContext::ActorSystem()->NodeId;
         if (request->URL.SkipPrefix(prefix)) {
@@ -850,7 +888,8 @@ NMonitoring::IMonPage* TAsyncHttpMon::RegisterActorPage(TRegisterActorPageFields
         fields.ActorSystem,
         fields.ActorId,
         fields.AllowedSIDs ? fields.AllowedSIDs : Config.AllowedSIDs,
-        fields.UseAuth ? Config.Authorizer : TRequestAuthorizer());
+        fields.UseAuth ? Config.Authorizer : TRequestAuthorizer(),
+        fields.MonServiceName);
     if (fields.Index) {
         fields.Index->Register(page);
         if (fields.SortPages) {

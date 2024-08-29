@@ -28,12 +28,6 @@ struct TDqSettings {
         File        /* "file" */,
     };
 
-    enum class EEnabledSpillingNodes : ui64 {
-        None        = 0ULL      /* None */,
-        GraceJoin   = 1ULL      /* "GraceJoin" */,
-        All         = ~0ULL     /* "All" */,
-    };
-
     struct TDefault {
         static constexpr ui32 MaxTasksPerStage = 20U;
         static constexpr ui32 MaxTasksPerOperation = 70U;
@@ -62,7 +56,7 @@ struct TDqSettings {
         static constexpr bool ExportStats = false;
         static constexpr ETaskRunnerStats TaskRunnerStats = ETaskRunnerStats::Basic;
         static constexpr ESpillingEngine SpillingEngine = ESpillingEngine::Disable;
-        static constexpr ui32 CostBasedOptimizationLevel = 3;
+        static constexpr ui32 CostBasedOptimizationLevel = 4;
         static constexpr ui32 MaxDPccpDPTableSize = 40000U;
         static constexpr ui64 MaxAttachmentsSize = 2_GB;
         static constexpr bool SplitStageOnDqReplicate = true;
@@ -144,6 +138,7 @@ struct TDqSettings {
 
     NCommon::TConfSetting<ui64, false> _MaxAttachmentsSize;
     NCommon::TConfSetting<bool, false> DisableCheckpoints;
+    NCommon::TConfSetting<bool, false> UseGraceJoinCoreForMap;
 
     // This options will be passed to executor_actor and worker_actor
     template <typename TProtoConfig>

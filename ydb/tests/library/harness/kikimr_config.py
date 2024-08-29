@@ -165,7 +165,6 @@ class KikimrConfigGenerator(object):
             default_user_sid=None,
             pg_compatible_expirement=False,
             generic_connector_config=None,  # typing.Optional[TGenericConnectorConfig]
-            pgwire_port=None,
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -261,10 +260,6 @@ class KikimrConfigGenerator(object):
         if os.getenv('PGWIRE_LISTENING_PORT', ''):
             self.yaml_config["local_pg_wire_config"] = {}
             self.yaml_config["local_pg_wire_config"]["listening_port"] = os.getenv('PGWIRE_LISTENING_PORT')
-
-        if pgwire_port:
-            self.yaml_config["local_pg_wire_config"] = {}
-            self.yaml_config["local_pg_wire_config"]["listening_port"] = pgwire_port
 
         if disable_iterator_reads:
             self.yaml_config["table_service_config"]["enable_kqp_scan_query_source_read"] = False
@@ -390,6 +385,9 @@ class KikimrConfigGenerator(object):
         if default_user_sid:
             self.yaml_config["domains_config"]["security_config"]["default_user_sids"] = [default_user_sid]
 
+        if os.getenv("YDB_HARD_MEMORY_LIMIT_BYTES"):
+            self.yaml_config["memory_controller_config"] = {"hard_limit_bytes": int(os.getenv("YDB_HARD_MEMORY_LIMIT_BYTES"))}
+
         if pg_compatible_expirement:
             self.yaml_config["table_service_config"]["enable_prepared_ddl"] = True
             self.yaml_config["table_service_config"]["enable_ast_cache"] = True
@@ -397,13 +395,11 @@ class KikimrConfigGenerator(object):
             self.yaml_config["feature_flags"]['enable_temp_tables'] = True
             self.yaml_config["feature_flags"]['enable_table_pg_types'] = True
             self.yaml_config['feature_flags']['enable_uniq_constraint'] = True
-            if not "local_pg_wire_config" in self.yaml_config:
+            if "local_pg_wire_config" not in self.yaml_config:
                 self.yaml_config["local_pg_wire_config"] = {}
 
-            ydb_pg_port=5432
-            if 'YDB_PG_PORT' in os.environ:
-                ydb_pg_port = os.environ['YDB_PG_PORT']
-            self.yaml_config['local_pg_wire_config']['listening_port'] = ydb_pg_port
+            ydb_pgwire_port = self.port_allocator.get_node_port_allocator(node_id).pgwire_port
+            self.yaml_config['local_pg_wire_config']['listening_port'] = ydb_pgwire_port
 
             # https://github.com/ydb-platform/ydb/issues/5152
             # self.yaml_config["table_service_config"]["enable_pg_consts_to_params"] = True

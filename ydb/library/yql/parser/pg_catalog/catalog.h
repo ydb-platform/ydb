@@ -3,9 +3,17 @@
 #include <util/generic/maybe.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
+#include <util/generic/set.h>
 #include <util/stream/output.h>
 #include <variant>
 #include <functional>
+
+struct Node;
+
+namespace NYql {
+class TExprNode;
+struct TExprContext;
+}
 
 namespace NYql::NPg {
 
@@ -43,6 +51,7 @@ struct TOperDesc {
     ui32 ProcId = 0;
     ui32 ComId = 0;
     ui32 NegateId = 0;
+    ui32 ExtensionIndex = 0;
 };
 
 enum class EProcKind : char {
@@ -72,6 +81,8 @@ struct TProcDesc {
     ui32 VariadicType = 0;
     ui32 VariadicArgType = 0;
     TString VariadicArgName;
+    TVector<TMaybe<TString>> DefaultArgs;
+    TExprNode* ExprNode = nullptr;
     ui32 ExtensionIndex = 0;
 };
 
@@ -152,6 +163,7 @@ struct TCastDesc {
     ECastMethod Method = ECastMethod::Function;
     ui32 FunctionId = 0;
     ECoercionCode CoercionCode = ECoercionCode::Unknown;
+    ui32 ExtensionIndex = 0;
 };
 
 enum class EAggKind : char {
@@ -173,6 +185,8 @@ struct TAggregateDesc {
     ui32 DeserializeFuncId = 0;
     TString InitValue;
     bool FinalExtra = false;
+    ui32 NumDirectArgs = 0;
+    ui32 ExtensionIndex = 0;
 };
 
 enum class EAmType {
@@ -198,12 +212,19 @@ enum class EOpClassMethod {
     Hash
 };
 
+struct TOpFamilyDesc {
+    TString Name;
+    ui32 FamilyId = 0;
+    ui32 ExtensionIndex = 0;
+};
+
 struct TOpClassDesc {
     EOpClassMethod Method = EOpClassMethod::Btree;
     ui32 TypeId = 0;
     TString Name;
     TString Family;
     ui32 FamilyId = 0;
+    ui32 ExtensionIndex = 0;
 };
 
 struct TAmOpDesc {
@@ -213,6 +234,7 @@ struct TAmOpDesc {
     ui32 LeftType = 0;
     ui32 RightType = 0;
     ui32 OperId = 0;
+    ui32 ExtensionIndex = 0;
 };
 
 enum class EBtreeAmStrategy {
@@ -230,6 +252,7 @@ struct TAmProcDesc {
     ui32 LeftType = 0;
     ui32 RightType = 0;
     ui32 ProcId = 0;
+    ui32 ExtensionIndex = 0;
 };
 
 enum class EBtreeAmProcNum {
@@ -325,6 +348,10 @@ struct TTableInfoKey {
         return Schema == other.Schema && Name == other.Name;
     }
 
+    bool operator<(const TTableInfoKey& other) const {
+        return std::tie(Schema, Name) < std::tie(other.Schema, other.Name);
+    }
+
     size_t Hash() const {
         auto stringHasher = THash<TString>();
         return CombineHashes(stringHasher(Schema), stringHasher(Name));
@@ -367,6 +394,7 @@ const TVector<TMaybe<TString>>* ReadTable(
     size_t& rowStep);
 
 bool AreAllFunctionsAllowed();
+void AllowFunction(const TString& name);
 
 struct TExtensionDesc {
     TString Name;               // postgis
@@ -374,6 +402,8 @@ struct TExtensionDesc {
     TVector<TString> SqlPaths;  // paths to SQL files with DDL (CREATE TYPE/CREATE FUNCTION/etc), DML (INSERT/VALUES)
     TString LibraryPath;        // file path
     bool TypesOnly = false;     // Can't be loaded if true
+    TString LibraryMD5;         // optional
+    TString Version;            // version of extension
 };
 
 class IExtensionSqlBuilder {
@@ -390,6 +420,16 @@ public:
 
     virtual void InsertValues(const TTableInfoKey& table, const TVector<TString>& columns,
         const TVector<TMaybe<TString>>& data) = 0; // row based layout
+
+    virtual void CreateCast(const TCastDesc& desc) = 0;
+
+    virtual void PrepareOper(ui32 extensionIndex, const TString& name, const TVector<ui32>& args) = 0;
+
+    virtual void UpdateOper(const TOperDesc& desc) = 0;
+
+    virtual void CreateAggregate(const TAggregateDesc& desc) = 0;
+
+    virtual void CreateOpClass(const TOpClassDesc& opclass, const TVector<TAmOpDesc>& ops, const TVector<TAmProcDesc>& procs) = 0;
 };
 
 class IExtensionSqlParser {
@@ -404,9 +444,33 @@ public:
     virtual void Load(ui32 extensionIndex, const TString& name, const TString& path) = 0;
 };
 
-// should be called at most once before other catalog functions
+class ISystemFunctionsParser {
+public:
+    virtual ~ISystemFunctionsParser() = default;
+    virtual void Parse(const TString& sql, TVector<TProcDesc>& procs) const = 0;
+};
+
+class ISqlLanguageParser {
+public:
+    virtual ~ISqlLanguageParser() = default;
+    virtual void Parse(const TString& sql, TProcDesc& proc) = 0;
+    virtual void ParseNode(const Node* stmt, TProcDesc& proc) = 0;
+    virtual void Freeze() = 0;
+    virtual TExprContext& GetContext() = 0;
+};
+
+void SetSqlLanguageParser(std::unique_ptr<ISqlLanguageParser> parser);
+ISqlLanguageParser* GetSqlLanguageParser();
+
+void LoadSystemFunctions(ISystemFunctionsParser& parser);
+
+// either RegisterExtensions or ImportExtensions should be called at most once, see ClearExtensions as well
 void RegisterExtensions(const TVector<TExtensionDesc>& extensions, bool typesOnly,
     IExtensionSqlParser& parser, IExtensionLoader* loader);
+// converts all library paths to basenames
+TString ExportExtensions(const TMaybe<TSet<ui32>>& filter = Nothing());
+void ImportExtensions(const TString& exported, bool typesOnly, IExtensionLoader* loader);
+void ClearExtensions();
 
 void EnumExtensions(std::function<void(ui32 extensionIndex, const TExtensionDesc&)> f);
 const TExtensionDesc& LookupExtension(ui32 extensionIndex);

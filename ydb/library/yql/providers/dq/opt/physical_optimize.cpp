@@ -52,6 +52,8 @@ public:
         AddHandler(0, &TCoLMap::Match, HNDL(PushLMapToStage<false>));
         AddHandler(0, &TCoOrderedLMap::Match, HNDL(BuildOrderedLMapOverMuxStage));
         AddHandler(0, &TCoLMap::Match, HNDL(BuildLMapOverMuxStage));
+        AddHandler(0, &TCoUnorderedBase::Match, HNDL(PushUnorderedToStage<false>));
+        AddHandler(0, &TDqStage::Match, HNDL(UnorderedOverStageInput<false>));
         if (enablePrecompute) {
             AddHandler(0, &TCoHasItems::Match, HNDL(BuildHasItems<false>));
             AddHandler(0, &TCoSqlIn::Match, HNDL(BuildSqlIn<false>));
@@ -80,6 +82,8 @@ public:
         AddHandler(1, &TCoAssumeSorted::Match, HNDL(BuildSortStage<true>));
         AddHandler(1, &TCoOrderedLMap::Match, HNDL(PushOrderedLMapToStage<true>));
         AddHandler(1, &TCoLMap::Match, HNDL(PushLMapToStage<true>));
+        AddHandler(1, &TCoUnorderedBase::Match, HNDL(PushUnorderedToStage<true>));
+        AddHandler(1, &TDqStage::Match, HNDL(UnorderedOverStageInput<true>));
         if (enablePrecompute) {
             AddHandler(1, &TCoHasItems::Match, HNDL(BuildHasItems<true>));
             AddHandler(1, &TCoSqlIn::Match, HNDL(BuildSqlIn<true>));
@@ -134,6 +138,17 @@ protected:
     TMaybeNode<TExprBase> BuildLMapOverMuxStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
         return DqBuildLMapOverMuxStage(node, ctx, optCtx, *getParents());
     }
+
+    template <bool IsGlobal>
+    TMaybeNode<TExprBase> PushUnorderedToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
+        return DqPushUnorderedToStage(node, ctx, optCtx, *getParents(), IsGlobal);
+    }
+
+    template <bool IsGlobal>
+    TMaybeNode<TExprBase> UnorderedOverStageInput(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
+        return DqUnorderedOverStageInput(node, ctx, optCtx, *Types, *getParents(), IsGlobal);
+    }
+
 
     template <bool IsGlobal>
     TMaybeNode<TExprBase> PushCombineToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
@@ -255,7 +270,8 @@ protected:
         const auto join = node.Cast<TDqJoin>();
         const TParentsMap* parentsMap = getParents();
         const auto mode = Config->HashJoinMode.Get().GetOrElse(EHashJoinMode::Off);
-        return DqBuildJoin(join, ctx, optCtx, *parentsMap, IsGlobal, /* pushLeftStage = */ false /* TODO */, mode);
+        const auto useGraceJoin = Config->UseGraceJoinCoreForMap.Get().GetOrElse(false);
+        return DqBuildJoin(join, ctx, optCtx, *parentsMap, IsGlobal, /* pushLeftStage = */ false /* TODO */, mode, true, useGraceJoin);
     }
 
     template <bool IsGlobal>

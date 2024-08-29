@@ -6,6 +6,7 @@
 #include <util/string/join.h>
 #include <ydb/core/external_sources/object_storage/inference/arrow_fetcher.h>
 #include <ydb/core/external_sources/object_storage/inference/arrow_inferencinator.h>
+#include <ydb/core/external_sources/object_storage/inference/infer_config.h>
 #include <ydb/core/kqp/gateway/actors/kqp_ic_gateway_actors.h>
 #include <ydb/core/protos/external_sources.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
@@ -383,7 +384,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
 
         auto fileFormat = NObjectStorage::NInference::ConvertFileFormat(*format);
         auto arrowFetcherId = ActorSystem->Register(NObjectStorage::NInference::CreateArrowFetchingActor(s3FetcherId, fileFormat, meta->Attributes));
-        auto arrowInferencinatorId = ActorSystem->Register(NObjectStorage::NInference::CreateArrowInferencinator(arrowFetcherId, fileFormat, meta->Attributes));
+        auto arrowInferencinatorId = ActorSystem->Register(NObjectStorage::NInference::CreateArrowInferencinator(arrowFetcherId));
 
         return afterListing.Apply([arrowInferencinatorId, meta, actorSystem = ActorSystem](const NThreading::TFuture<NYql::NS3Lister::TObjectListEntry>& entryFut) {
             auto promise = NThreading::NewPromise<TMetadataResult>();
@@ -413,6 +414,11 @@ struct TObjectStorageExternalSource : public IExternalSource {
 
             return promise.GetFuture();
         }).Apply([arrowInferencinatorId, meta, partByData, partitionedBy, this](const NThreading::TFuture<TMetadataResult>& result) {
+            auto& value = result.GetValue();
+            if (!value.Success()) {
+                return result;
+            }
+
             return InferPartitionedColumnsTypes(arrowInferencinatorId, partByData, partitionedBy, result);
         }).Apply([](const NThreading::TFuture<TMetadataResult>& result) {
             auto& value = result.GetValue();
@@ -435,7 +441,7 @@ private:
         const NThreading::TFuture<TMetadataResult>& result) const {
 
         auto& value = result.GetValue();
-        if (!value.Success() || partitionedBy.empty()) {
+        if (partitionedBy.empty()) {
             return result;
         }
 
@@ -460,14 +466,14 @@ private:
             if (response.Status.IsSuccess()) {
                 THashMap<TString, Ydb::Type> inferredTypes;
                 for (const auto& column : response.Fields) {
-                    inferredTypes[column.name()] = column.type();
+                    if (ValidateCommonProjectionType(column.type(), column.name()).Empty()) {
+                        inferredTypes[column.name()] = column.type();
+                    }
                 }
                 
                 for (auto& destColumn : *meta->Schema.mutable_column()) {
                     if (auto type = inferredTypes.FindPtr(destColumn.name()); type) {
-                        destColumn.mutable_type()->set_type_id(type->has_optional_type() ? 
-                            type->optional_type().item().type_id() : 
-                            type->type_id());
+                        destColumn.mutable_type()->set_type_id(type->type_id());
                     }
                 }
             }
@@ -477,10 +483,14 @@ private:
             metaPromise.SetValue(std::move(result));
         };
 
-        auto file = std::make_shared<arrow::io::BufferReader>(std::move(partitionBuffer));
-        ActorSystem->Register(new NKqp::TActorRequestHandler<NObjectStorage::TEvInferPartitions, NObjectStorage::TEvInferredFileSchema, TMetadataResult>(
+        auto bufferReader = std::make_shared<arrow::io::BufferReader>(std::move(partitionBuffer));
+        auto file = std::dynamic_pointer_cast<arrow::io::RandomAccessFile>(bufferReader);
+        auto format = NObjectStorage::NInference::EFileFormat::CsvWithNames;
+        auto config = NObjectStorage::NInference::MakeFormatConfig(format);
+        config->ShouldMakeOptional = false;
+        ActorSystem->Register(new NKqp::TActorRequestHandler<NObjectStorage::TEvArrowFile, NObjectStorage::TEvInferredFileSchema, TMetadataResult>(
             arrowInferencinatorId,
-            new NObjectStorage::TEvInferPartitions(std::move(std::dynamic_pointer_cast<arrow::io::RandomAccessFile>(file))),
+            new NObjectStorage::TEvArrowFile(std::move(file), "", format, config),
             promise,
             std::move(partitionsToMetadata)
         ));

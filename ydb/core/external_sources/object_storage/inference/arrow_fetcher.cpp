@@ -107,7 +107,7 @@ public:
             case EFileFormat::CsvWithNames:
             case EFileFormat::TsvWithNames: {
                 file = CleanupCsvFile(data, request, std::dynamic_pointer_cast<CsvConfig>(Config_)->ParseOpts, ctx);
-                ctx.Send(request.Requester, new TEvArrowFile(std::move(file), request.Path));
+                ctx.Send(request.Requester, new TEvArrowFile(std::move(file), request.Path, Format_, Config_));
                 break;
             }
             case EFileFormat::Parquet: {
@@ -116,13 +116,13 @@ public:
                     return;
                 }
                 file = BuildParquetFileFromMetadata(data, request, ctx);
-                ctx.Send(request.Requester, new TEvArrowFile(std::move(file), request.Path));
+                ctx.Send(request.Requester, new TEvArrowFile(std::move(file), request.Path, Format_, Config_));
                 break;
             }
             case EFileFormat::JsonEachRow:
             case EFileFormat::JsonList: {
                 file = CleanupJsonFile(data, request, std::dynamic_pointer_cast<JsonConfig>(Config_)->ParseOpts, ctx);
-                ctx.Send(request.Requester, new TEvArrowFile(std::move(file), request.Path));
+                ctx.Send(request.Requester, new TEvArrowFile(std::move(file), request.Path, Format_, Config_));
                 break;
             }
             case EFileFormat::Undefined:

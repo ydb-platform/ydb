@@ -8,6 +8,7 @@
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
+#include <ydb/core/external_sources/object_storage/inference/infer_config.h>
 #include <ydb/core/fq/libs/config/protos/issue_id.pb.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/status/status.h>
@@ -26,7 +27,6 @@ enum EEventTypes : ui32 {
 
     // Move somewhere separate?
     EvInferFileSchema,
-    EvInferPartitions,
     EvInferredFileSchema,
 
     EvArrowFile,
@@ -110,11 +110,19 @@ struct TEvS3RangeError : public NActors::TEventLocal<TEvS3RangeError, EvS3RangeE
 };
 
 struct TEvArrowFile : public NActors::TEventLocal<TEvArrowFile, EvArrowFile> {
-    TEvArrowFile(std::shared_ptr<arrow::io::RandomAccessFile> file, TString path)
-        : File{std::move(file)}
+    TEvArrowFile(
+        std::shared_ptr<arrow::io::RandomAccessFile> file,
+        TString path,
+        NInference::EFileFormat format,
+        std::shared_ptr<NInference::FormatConfig> config)
+        : Format{format}
+        , Config{std::move(config)}
+        , File{std::move(file)}
         , Path{std::move(path)}
     {}
 
+    NInference::EFileFormat Format;
+    std::shared_ptr<NInference::FormatConfig> Config;
     std::shared_ptr<arrow::io::RandomAccessFile> File;
     TString Path;
 };
@@ -127,14 +135,6 @@ struct TEvInferFileSchema : public NActors::TEventLocal<TEvInferFileSchema, EvIn
 
     TString Path;
     ui64 Size = 0;
-};
-
-struct TEvInferPartitions : public NActors::TEventLocal<TEvInferPartitions, EvInferPartitions> {
-    explicit TEvInferPartitions(std::shared_ptr<arrow::io::RandomAccessFile> file)
-        : File{std::move(file)}
-    {}
-
-    std::shared_ptr<arrow::io::RandomAccessFile> File;
 };
 
 struct TEvInferredFileSchema : public NActors::TEventLocal<TEvInferredFileSchema, EvInferredFileSchema> {

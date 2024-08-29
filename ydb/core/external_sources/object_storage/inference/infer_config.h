@@ -9,6 +9,8 @@ namespace NKikimr::NExternalSource::NObjectStorage::NInference {
 
 struct FormatConfig {
     virtual ~FormatConfig() noexcept = default;
+
+    bool ShouldMakeOptional = true;
 };
 
 struct CsvConfig : public FormatConfig {

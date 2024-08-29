@@ -27,7 +27,11 @@ namespace NKikimr::NExternalSource::NObjectStorage::NInference {
 
 namespace {
 
-bool ShouldBeOptional(const arrow::DataType& type) {
+bool ShouldBeOptional(const arrow::DataType& type, std::shared_ptr<FormatConfig> config) {
+    if (!config->ShouldMakeOptional) {
+        return false;
+    }
+
     switch (type.id()) {
     case arrow::Type::NA:
     case arrow::Type::STRING:
@@ -40,8 +44,8 @@ bool ShouldBeOptional(const arrow::DataType& type) {
     }
 }
 
-bool ArrowToYdbType(Ydb::Type& maybeOptionalType, const arrow::DataType& type) {
-    auto& resType = ShouldBeOptional(type) ? *maybeOptionalType.mutable_optional_type()->mutable_item() : maybeOptionalType;
+bool ArrowToYdbType(Ydb::Type& maybeOptionalType, const arrow::DataType& type, std::shared_ptr<FormatConfig> config) {
+    auto& resType = ShouldBeOptional(type, config) ? *maybeOptionalType.mutable_optional_type()->mutable_item() : maybeOptionalType;
     switch (type.id()) {
     case arrow::Type::NA:
         resType.set_type_id(Ydb::Type::UTF8);
@@ -123,7 +127,7 @@ bool ArrowToYdbType(Ydb::Type& maybeOptionalType, const arrow::DataType& type) {
         for (const auto& field : type.fields()) {
             auto& member = *structType.add_members();
             auto& memberType = *member.mutable_type();
-            if (!ArrowToYdbType(memberType, *field->type())) {
+            if (!ArrowToYdbType(memberType, *field->type(), config)) {
                 return false;
             }
             member.mutable_name()->assign(field->name().data(), field->name().size());
@@ -135,7 +139,7 @@ bool ArrowToYdbType(Ydb::Type& maybeOptionalType, const arrow::DataType& type) {
         auto& variant = *resType.mutable_variant_type()->mutable_struct_items();
         for (const auto& field : type.fields()) {
             auto& member = *variant.add_members();
-            if (!ArrowToYdbType(*member.mutable_type(), *field->type())) {
+            if (!ArrowToYdbType(*member.mutable_type(), *field->type(), config)) {
                 return false;
             }
             if (field->name().empty()) {
@@ -283,13 +287,9 @@ std::variant<ArrowFields, TString> InferType(EFileFormat format, std::shared_ptr
 
 class TArrowInferencinator : public NActors::TActorBootstrapped<TArrowInferencinator> {
 public:
-    TArrowInferencinator(NActors::TActorId arrowFetcher, EFileFormat format, const THashMap<TString, TString>& params)
-        : Format_{format}
-        , Config_{MakeFormatConfig(Format_, params)}
-        , ArrowFetcherId_{arrowFetcher}
-    {
-        Y_ABORT_UNLESS(IsArrowInferredFormat(Format_));
-    }
+    TArrowInferencinator(NActors::TActorId arrowFetcher)
+        : ArrowFetcherId_{arrowFetcher}
+    {}
 
     void Bootstrap() {
         Become(&TArrowInferencinator::WorkingState);
@@ -297,7 +297,6 @@ public:
 
     STRICT_STFUNC(WorkingState,
         HFunc(TEvInferFileSchema, HandleInferRequest);
-        HFunc(TEvInferPartitions, HandlePartitionsRequest);
         HFunc(TEvFileError, HandleFileError);
         HFunc(TEvArrowFile, HandleFileInference);
     )
@@ -307,17 +306,33 @@ public:
         ctx.Send(ArrowFetcherId_, ev->Release());
     }
 
-    void HandlePartitionsRequest(TEvInferPartitions::TPtr& ev, const NActors::TActorContext& ctx) {
-        RequesterId_ = ev->Sender;
-        auto config = MakeFormatConfig(EFileFormat::CsvWithNames);
-
-        InferFileSchema(ev->Get()->File, "", EFileFormat::CsvWithNames, config, ctx);
-    }
-
     void HandleFileInference(TEvArrowFile::TPtr& ev, const NActors::TActorContext& ctx) {
-        auto& file = *ev->Get();
+        if (!RequesterId_) {
+            RequesterId_ = ev->Sender;
+        }
 
-        InferFileSchema(file.File, file.Path, Format_, Config_, ctx);
+        auto& file = *ev->Get();
+        auto mbArrowFields = InferType(file.Format, file.File, file.Config);
+        if (std::holds_alternative<TString>(mbArrowFields)) {
+            ctx.Send(RequesterId_, MakeErrorSchema(file.Path, NFq::TIssuesIds::INTERNAL_ERROR, std::get<TString>(mbArrowFields)));
+            RequesterId_ = {};
+            return;
+        }
+        auto& arrowFields = std::get<ArrowFields>(mbArrowFields);
+        std::vector<Ydb::Column> ydbFields;
+        for (const auto& field : arrowFields) {
+            ydbFields.emplace_back();
+            auto& ydbField = ydbFields.back();
+            if (!ArrowToYdbType(*ydbField.mutable_type(), *field->type(), file.Config)) {
+                ctx.Send(RequesterId_, MakeErrorSchema(file.Path, NFq::TIssuesIds::UNSUPPORTED, TStringBuilder{} << "couldn't convert arrow type to ydb: " << field->ToString()));
+                RequesterId_ = {};
+                return;
+            }
+            ydbField.mutable_name()->assign(field->name());
+        }
+
+        ctx.Send(RequesterId_, new TEvInferredFileSchema(file.Path, std::move(ydbFields)));
+        RequesterId_ = {};
     }
 
     void HandleFileError(TEvFileError::TPtr& ev, const NActors::TActorContext& ctx) {
@@ -326,39 +341,11 @@ public:
     }
 
 private:
-    void InferFileSchema(
-        std::shared_ptr<arrow::io::RandomAccessFile> file,
-        const TString& path,
-        const EFileFormat& format,
-        const std::shared_ptr<FormatConfig>& config,
-        const NActors::TActorContext& ctx) {
-        
-        auto mbArrowFields = InferType(format, file, config);
-        if (std::holds_alternative<TString>(mbArrowFields)) {
-            ctx.Send(RequesterId_, MakeErrorSchema(path, NFq::TIssuesIds::INTERNAL_ERROR, std::get<TString>(mbArrowFields)));
-            return;
-        }
-        auto& arrowFields = std::get<ArrowFields>(mbArrowFields);
-        std::vector<Ydb::Column> ydbFields;
-        for (const auto& field : arrowFields) {
-            ydbFields.emplace_back();
-            auto& ydbField = ydbFields.back();
-            if (!ArrowToYdbType(*ydbField.mutable_type(), *field->type())) {
-                ctx.Send(RequesterId_, MakeErrorSchema(path, NFq::TIssuesIds::UNSUPPORTED, TStringBuilder{} << "couldn't convert arrow type to ydb: " << field->ToString()));
-                return;
-            }
-            ydbField.mutable_name()->assign(field->name());
-        }
-        ctx.Send(RequesterId_, new TEvInferredFileSchema(path, std::move(ydbFields)));
-    }
-
-    EFileFormat Format_;
-    std::shared_ptr<FormatConfig> Config_;
     NActors::TActorId ArrowFetcherId_;
     NActors::TActorId RequesterId_;
 };
 
-NActors::IActor* CreateArrowInferencinator(NActors::TActorId arrowFetcher, EFileFormat format, const THashMap<TString, TString>& params) {
-    return new TArrowInferencinator{arrowFetcher, format, params};
+NActors::IActor* CreateArrowInferencinator(NActors::TActorId arrowFetcher) {
+    return new TArrowInferencinator{arrowFetcher};
 }
 } // namespace NKikimr::NExternalSource::NObjectStorage::NInference

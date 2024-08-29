@@ -156,6 +156,42 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
             UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
         }
     }
+
+    Y_UNIT_TEST(TieringInvalidColumn) {
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(runnerSettings);
+        TLocalHelper localHelper(testHelper.GetKikimr());
+        NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
+        Tests::NCommon::TLoggerInit(testHelper.GetKikimr()).Initialize();
+        Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->SetSecretKey("fakeSecret");
+
+        localHelper.CreateTestOlapTable();
+        testHelper.CreateTier("tier1");
+
+        {
+            const TString query = R"(
+                ALTER TABLE `olapStore/olapTable` ADD COLUMN utfColumn Utf8 NOT NULL;
+                ALTER TABLE `olapStore/olapTable` ADD COLUMN nullableColumn Timestamp;
+                ALTER TABLE `olapStore/olapTable` ADD COLUMN tempColumn Timestamp NOT NULL;
+            )";
+            auto result = testHelper.GetSession().ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+        }
+
+        testHelper.CreateTieringRule("tier1", "XXXwrongColumnXXX", NYdb::EStatus::GENERIC_ERROR);
+        testHelper.CreateTieringRule("tier1", "utfColumn", NYdb::EStatus::GENERIC_ERROR);
+        testHelper.CreateTieringRule("tier1", "nullableColumn", NYdb::EStatus::GENERIC_ERROR);
+        const TString tieringRule = testHelper.CreateTieringRule("tier1", "tempColumn");
+
+        {
+            const TString query = "ALTER TABLE `olapStore/olapTable` DROP COLUMN tempColumn";
+            auto result = testHelper.GetSession().ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+        }
+    }
 }
 
 }   // namespace NKikimr::NKqp

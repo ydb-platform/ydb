@@ -314,15 +314,6 @@ public:
     bool ErasePortion(const ui64 portion);
 
     explicit TGranuleMeta(const ui64 pathId, const TGranulesStorage& owner, const NColumnShard::TGranuleDataCounters& counters, const TVersionedIndex& versionedIndex);
-    TGranuleMeta(const TGranuleMeta& copyFrom, const ui64 pathId, const TGranulesStorage& owner);
-
-    std::shared_ptr<TGranuleMeta> Clone(ui64 newPathId, const TGranulesStorage& owner) {
-        auto result = std::make_shared<TGranuleMeta>(*this, newPathId, owner);
-        for(auto& [i, portionInfo]: result->Portions) {
-            portionInfo->SetPathId(newPathId);
-        }
-        return result;
-    }
 
     bool Empty() const noexcept { return Portions.empty(); }
 };

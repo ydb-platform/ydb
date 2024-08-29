@@ -297,7 +297,6 @@ bool WriteDatetime64(IOutputStream& out, i64 value) {
     if (Y_UNLIKELY(NUdf::MIN_DATETIME64 > value || value > NUdf::MAX_DATETIME64)) {
         return false;
     }
-    // TODO use DownscaleDatetime64
 
     auto date = value / 86400;
     value -= date * 86400;
@@ -344,7 +343,6 @@ bool WriteTimestamp64(IOutputStream& out, i64 value) {
         return false;
     }
 
-    // TODO use DownscaleTimestamp64
     auto date = value / 86400000000ll;
     value -= date * 86400000000ll;
     if (value < 0) {
@@ -446,28 +444,6 @@ void ToLocalTime64(i64 utcSeconds, ui16 tzId, i32& year, ui32& month, ui32& day,
     sec = converted.second();
 }
 
-/*
-ui32 FromLocalTime(ui16 tzId, ui32 year, ui32 month, ui32 day, ui32 hour, ui32 min, ui32 sec) {
-    const auto& tz = Singleton<TTimezones>()->GetZone(tzId);
-    cctz::civil_second cs(year, month, day, hour, min, sec);
-    auto absoluteSeconds = std::chrono::system_clock::to_time_t(tz.lookup(cs).pre);
-    if (absoluteSeconds < 0) {
-        return 0;
-    }
-
-    if ((ui32)absoluteSeconds >= NUdf::MAX_DATETIME) {
-        return NUdf::MAX_DATETIME - 1;
-    }
-
-    return absoluteSeconds;
-}
-
-i64 FromLocalTime64(ui16 tzId, i32 year, ui32 month, ui32 day, ui32 hour, ui32 min, ui32 sec) {
-    const auto& tz = Singleton<TTimezones>()->GetZone(tzId);
-    cctz::civil_second cs(year, month, day, hour, min, sec);
-    return std::chrono::system_clock::to_time_t(tz.lookup(cs).pre);
-}
-*/
 }
 
 NUdf::TUnboxedValuePod ValueToString(NUdf::EDataSlot type, NUdf::TUnboxedValuePod value) {
@@ -810,7 +786,7 @@ namespace {
 constexpr i32 SOLAR_CYCLE_DAYS = 146097;
 constexpr i32 SOLAR_CYCLE_YEARS = 400;
 
-i32 UpdateBySolarCycleModulo2(i32 date, i32& solarCycles) {
+i32 UpdateBySolarCycleModulo(i32 date, i32& solarCycles) {
     solarCycles = date / SOLAR_CYCLE_DAYS;
     date = date % SOLAR_CYCLE_DAYS;
     if (Y_UNLIKELY(date < 0)) {
@@ -819,17 +795,6 @@ i32 UpdateBySolarCycleModulo2(i32 date, i32& solarCycles) {
     }
     Y_ASSERT(0 <= date && date < SOLAR_CYCLE_DAYS);
     return date;
-}
-
-i32 UpdateBySolarCycleModulo(i32& date) {
-    i32 solarCycles = date / SOLAR_CYCLE_DAYS;
-    date = date % SOLAR_CYCLE_DAYS;
-    if (Y_UNLIKELY(date < 0)) {
-        solarCycles -= 1;
-        date += SOLAR_CYCLE_DAYS;
-    }
-    Y_ASSERT(0 <= date && date < SOLAR_CYCLE_DAYS);
-    return solarCycles;
 }
 
 class TDateTable {
@@ -896,7 +861,7 @@ public:
 
     void SplitDate32(i32 value, i32& year, ui32& month, ui32& day) const {
         i32 solarCycles;
-        value = UpdateBySolarCycleModulo2(value, solarCycles);
+        value = UpdateBySolarCycleModulo(value, solarCycles);
         value = EnrichYear2(value, solarCycles, year);
         EnrichMonthDay(year, value, month, day);
     }
@@ -908,7 +873,6 @@ public:
                 [](ui32 value, const TYearCache& entry) {
                     return value < entry.CumulatveDays;
                 });
-        //TODO  dayOfYear = 1 + date;
         dayOfWeek = 1 + (3 + solarDate) % 7;
         weekOfYear = (dayOfYear + cache->WeekOffset) / 7;
         weekOfYearIso8601 = (dayOfYear + cache->Iso8601WeekOffset) / 7;
@@ -923,7 +887,7 @@ public:
             ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek) const
     {
         i32 solarCycles;
-        auto solarDate = UpdateBySolarCycleModulo2(date, solarCycles);
+        auto solarDate = UpdateBySolarCycleModulo(date, solarCycles);
         date = EnrichYear2(solarDate, solarCycles, year);
         EnrichMonthDay(year, date, month, day);
 
@@ -1119,14 +1083,13 @@ public:
         return true;
     }
 
-    // Seems it is not used
-    // TODO remove from DateBuilder API in distinct PR
     bool EnrichDate(ui16 value, ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek) const {
         return EnrichByOffset(++value, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
     }
 
     void EnrichDate32(i32 date, ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek) const {
-        UpdateBySolarCycleModulo(date);
+        i32 solarCycles;
+        UpdateBySolarCycleModulo(date, solarCycles);
         auto& info = DaysCache_[date];
         dayOfYear = 1 + info.DayOfYear;
         weekOfYear = info.WeekOfYear;
@@ -1161,7 +1124,6 @@ private:
     };
 
     struct TYearCache {
-        // TODO change to i32?
         ui32 CumulatveDays : 18; // max SOLAR_CYCLE_DAYS
         ui32 WeekOffset: 4;
         ui32 Iso8601WeekOffset: 4;
@@ -1187,7 +1149,6 @@ private:
     }
 
     i32 EnrichYear2(i32 value, i32 solarCycles, i32& year) const {
-        // TODO use YearsCache_ and return/update TYearCache
         auto y = std::upper_bound(Years_.cbegin(), Years_.cend(), value) - 1;
         value -= *y;
         year = NUdf::MIN_YEAR + SOLAR_CYCLE_YEARS * solarCycles + std::distance(Years_.cbegin(), y);
@@ -1217,34 +1178,12 @@ private:
             auto daysInYear = IsLeapYear(year) ? 366u : 365u;
             auto lastDayOfWeek = (dayOfWeek + daysInYear - 1) % 7;
             YearsCache_[yearIdx] = TYearCache(date, 7 + dayOfWeek, (dayOfWeek >= 4) ? dayOfWeek : dayOfWeek + 7, lastDayOfWeek, weekOfYearIso8601 == 53);
-// if (yearIdx <= 15) {
-//     Cerr
-//         << " year " << year
-//         << " days " << YearsCache_[yearIdx].CumulatveDays
-//         << " weekOffset " << YearsCache_[yearIdx].WeekOffset
-//         << " isoWeekOffset " << YearsCache_[yearIdx].Iso8601WeekOffset
-//         << " lastDayOfWeek " << YearsCache_[yearIdx].LastDayOfWeek
-//         << " firstIsoWeek " << YearsCache_[yearIdx].FirstIsoWeek53
-//         << Endl;
-// }
             ui32 weekOfYear = 1;
             for (ui32 dayOfYear = 0; dayOfYear < daysInYear; ++dayOfYear) {
                 ui32 month, day;
                 EnrichMonthDay(year, dayOfYear, month, day);
                 DaysCache_[date] = TDayCache(month, day, dayOfYear, weekOfYear, weekOfYearIso8601);
 
-//if (date == 0) {
-//    Cerr
-//        << "date " << date
-//        << " year " << year
-//        << " Month " << DaysCache_[date].Month
-//        << " Day " << DaysCache_[date].Day
-//        << " DayOfYear " << DaysCache_[date].DayOfYear
-//        << " WeekOfYear " << DaysCache_[date].WeekOfYear
-//        << " WeekOfYearIso8601 " << DaysCache_[date].WeekOfYearIso8601
-//        << " DayOfWeek " << DaysCache_[date].DayOfWeek
-//        << Endl;
-//}
                 date++;
                 if (dayOfWeek < 6) {
                     dayOfWeek++;

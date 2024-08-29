@@ -1393,7 +1393,7 @@ const TResourceExprType* CommonType(TPositionHandle pos, const TResourceExprType
     }
 
     if (tag == "DateTime2.TM" &&
-        (GetDataTypeInfo(slot).Features & (NUdf::EDataTypeFeatures::DateType | NUdf::EDataTypeFeatures::TzDateType))) // TODO bigdate
+        (GetDataTypeInfo(slot).Features & (NUdf::EDataTypeFeatures::DateType | NUdf::EDataTypeFeatures::TzDateType)))
     {
         return resource;
     }

@@ -11,9 +11,6 @@
 extern "C" {
 #include <ydb/library/yql/parser/pg_wrapper/postgresql/src/include/datatype/timestamp.h>
 #include <ydb/library/yql/parser/pg_wrapper/postgresql/src/include/utils/datetime.h>
-#include <ydb/library/yql/parser/pg_wrapper/postgresql/src/include/utils/date.h>
-#include <ydb/library/yql/parser/pg_wrapper/postgresql/src/include/pgtime.h>
-#include <time.h>
 }
 
 using namespace NYql;

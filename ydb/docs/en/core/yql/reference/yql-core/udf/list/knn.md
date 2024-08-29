@@ -31,7 +31,7 @@ Approximate methods do not perform a complete search of the source data. Due to 
 This document provides an [example of approximate search](#approximate-search-examples) using scalar quantization. This example does not require the creation of a secondary vector index.
 
 **Scalar quantization** is a method to compress vectors by mapping coordinates to a smaller space.
-{{ ydb-short-name }} support exact search for `Float`, `Int8`, `Uint8`, `Bit` vectors.
+This module supports exact search for `Float`, `Int8`, `Uint8`, `Bit` vectors.
 So, it's possible to apply scalar quantization from `Float` to one of these other types.
 
 Scalar quantization decreases read/write times by reducing vector size in bytes. For example, after quantization from `Float` to `Bit,` each vector becomes 32 times smaller.
@@ -45,7 +45,7 @@ It is recommended to measure if such quantization provides sufficient accuracy/r
 ## Data types
 
 In mathematics, a vector of real or integer numbers is used to store points.
-In {{ ydb-short-name }}, vectors are stored in the `String` data type, which is a binary serialized representation of a vector.
+In this module, vectors are stored in the `String` data type, which is a binary serialized representation of a vector.
 
 ## Functions
 
@@ -57,7 +57,9 @@ Conversion functions are needed to serialize vectors into an internal binary rep
 
 All serialization functions wrap returned `String` data into [Tagged](../../types/special.md) types.
 
+{% if backend_name == "YDB" %}
 The binary representation of the vector can be stored in the {{ ydb-short-name }} table column. Currently {{ ydb-short-name }} does not support storing `Tagged`, so before storing binary representation vectors you must call [Untag](../../builtins/basic#as-tagged).
+{% endif %}
 
 #### Function signatures
 
@@ -123,6 +125,7 @@ Error: Failed to find UDF function: Knn.CosineDistance, reason: Error: Module: K
 
 ## Еxact search examples
 
+{% if backend_name == "YDB" %}
 ### Creating a table
 
 ```sql
@@ -142,6 +145,7 @@ $vector = [1.f, 2.f, 3.f, 4.f];
 UPSERT INTO Facts (id, user, fact, embedding) 
 VALUES (123, "Williams", "Full name is John Williams", Untag(Knn::ToBinaryStringFloat($vector), "FloatVector"));
 ```
+{% endif %}
 
 ### Exact search of K nearest vectors
 
@@ -171,6 +175,7 @@ This example differs from the [exact search example](#еxact-search-examples) by
 
 This allows to first do a approximate preliminary search by the `embedding_bit` column, and then refine the results by the original vector column `embegging`.
 
+{% if backend_name == "YDB" %}
 ### Creating a table
 
 ```sql
@@ -191,6 +196,7 @@ $vector = [1.f, 2.f, 3.f, 4.f];
 UPSERT INTO Facts (id, user, fact, embedding, embedding_bit) 
 VALUES (123, "Williams", "Full name is John Williams", Untag(Knn::ToBinaryStringFloat($vector), "FloatVector"), Untag(Knn::ToBinaryStringBit($vector), "BitVector"));
 ```
+{% endif %}
 
 ### Scalar quantization
 

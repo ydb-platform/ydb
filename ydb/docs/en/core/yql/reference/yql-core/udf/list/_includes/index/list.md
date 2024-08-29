@@ -3,9 +3,7 @@
 * [Histogram](../../histogram.md)
 * [Hyperscan](../../hyperscan.md)
 * [Ip](../../ip.md)
-{% if backend_name == "YDB" %}
 * [Knn](../../knn.md)
-{% endif %}
 * [Math](../../math.md)
 * [Pcre](../../pcre.md)
 * [Pire](../../pire.md)

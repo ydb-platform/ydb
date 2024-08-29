@@ -1,6 +1,8 @@
 #include "limiting_allocator.h"
 
 #include <util/memory/pool.h>
+#include <util/generic/yexception.h>
+
 namespace {
 class TLimitingAllocator : public IAllocator {
 public:
@@ -14,6 +16,7 @@ public:
     }
 
     void Release(const TBlock& block) override final {
+        Y_ENSURE(Allocated_ >= block.Len);
         Allocated_ -= block.Len;
         Alloc_->Release(block);
     }

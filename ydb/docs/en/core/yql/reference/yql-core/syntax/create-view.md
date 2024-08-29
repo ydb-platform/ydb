@@ -17,7 +17,8 @@ AS <query>
 * `name` - the name of the view to be created. The name must be distinct from the names of all other schema objects.
 * `query` - the `SELECT` query, which will be used to produce the logical table the view represents.
 * `WITH ( <view_option_name> [= <view_option_value>] [, ... ] )` specifies optional parameters for a view. The following parameters are supported:
-    * `security_invoker` (Bool) causes the underlying base relations to be checked against the privileges of the user of the view rather than the view owner. {#security_invoker}
+
+  * `security_invoker` (Bool) causes the underlying base relations to be checked against the privileges of the user of the view rather than the view owner. {#security_invoker}
 
 ## Notes {#notes}
 

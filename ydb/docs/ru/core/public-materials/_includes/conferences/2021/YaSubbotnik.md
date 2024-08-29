@@ -1,4 +1,4 @@
-### Мультиарендный подход Яндекса к построению инфраструктуры работы с данными {#2021-conf-yasub-multirendn}
+## Мультиарендный подход Яндекса к построению инфраструктуры работы с данными {#2021-conf-yasub-multirendn}
 
 {% include notitle [database_internals_tag](../../tags.md#database_internals) %}
 

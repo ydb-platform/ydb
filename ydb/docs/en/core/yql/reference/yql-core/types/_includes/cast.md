@@ -3,9 +3,11 @@
 ## Rules for casting primitive data types.
 
 * When casting primitive data types, some of the source information may be discarded unless contained in the target type. For example:
-    * The `Float`/`Double` fractional part, when casting to integer types.
-    * The `Datetime`/`Timestamp` time, when casting to `Date`.
-    * The timezone, when casting from timezone types to date/time types without a timezone.
+
+  * The `Float`/`Double` fractional part, when casting to integer types.
+  * The `Datetime`/`Timestamp` time, when casting to `Date`.
+  * The timezone, when casting from timezone types to date/time types without a timezone.
+
 * If, in a certain combination of the source and target type, casting can't be performed for all possible values of the source type, then, if the casting fails, `CAST` returns `NULL`. In such cases, one `Optional` level is added to the return value type, unless already present. For example, the constructs: `CAST("3.14" AS Float?)` and `CAST("3.14" AS Float)` are fully equivalent and return `Float?`.
 * If casting is possible for all values of the source type, then adding '?' works the same way as`Just` on top: `CAST(3.14 AS Utf8?)` is same as `Just(CAST(3.14 AS Utf8))`
 All combinations of primitive data types for which `CAST` can be used are described [here](../primitive.md).

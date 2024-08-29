@@ -113,25 +113,23 @@ See the operator's source code [on GitHub](https://github.com/ydb-platform/ydb-k
 
 Use `helm` to deploy the {{ ydb-short-name }} {{ k8s }} operator to the cluster:
 
-  Run the command:
+```bash
+helm install ydb-operator ydb/ydb-operator
+```
 
-  ```bash
-  helm install ydb-operator ydb/ydb-operator
-  ```
+* `ydb-operator`: The installation name.
+* `ydb/ydb-operator`: The name of the chart in the repository you have added earlier.
 
-  * `ydb-operator`: The installation name.
-  * `ydb/ydb-operator`: The name of the chart in the repository you have added earlier.
+Result:
 
-  Result:
-
-  ```text
-  NAME: ydb-operator
-  LAST DEPLOYED: Thu Aug 12 19:32:28 2021
-  NAMESPACE: default
-  STATUS: deployed
-  REVISION: 1
-  TEST SUITE: None
-  ```
+```text
+NAME: ydb-operator
+LAST DEPLOYED: Thu Aug 12 19:32:28 2021
+NAMESPACE: default
+STATUS: deployed
+REVISION: 1
+TEST SUITE: None
+```
 
 ### Deploy storage nodes
 

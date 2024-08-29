@@ -1,4 +1,4 @@
-### Распределенные транзакции в {{ ydb-short-name }} {#2019-conf-hl-dist-transc}
+## Распределенные транзакции в {{ ydb-short-name }} {#2019-conf-hl-dist-transc}
 
 {% include notitle [database_internals_tag](../../tags.md#database_internals) %}
 
@@ -14,7 +14,7 @@
 
 [Слайды](https://presentations.ydb.tech/2019/ru/highload_moscow/presentation.pdf)
 
-### {{ ydb-name }} — как мы обеспечиваем отказоустойчивость {#2019-conf-hl-faul-tol}
+## {{ ydb-name }} — как мы обеспечиваем отказоустойчивость {#2019-conf-hl-faul-tol}
 
 {% include notitle [database_internals_tag](../../tags.md#database_internals) %}
 

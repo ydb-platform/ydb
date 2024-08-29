@@ -222,7 +222,7 @@ do = create; type = table; scheme = {}
 { home = { sandello = { mytable = <type = table> # ; anothertable = <type = table> # } ; monster = { } } }
 ```
 
-# YPATH {#ypath}
+## YPATH {#ypath}
 
 В данном разделе собрана информация про YPath — язык, описывающий пути к объектам в YSON.
 

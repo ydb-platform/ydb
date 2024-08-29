@@ -15,8 +15,8 @@ When adding, updating, or deleting a table row, CDC generates a change record by
 
 * The number of topic partitions is fixed as of changefeed creation and remains unchanged (unlike tables, topics are not elastic).
 * Changefeeds support records of the following types of operations:
-   * Updates
-   * Erases
+  * Updates
+  * Erases
 
    Adding rows is a special update case, and a record of adding a row in a changefeed will look similar to an update record.
 

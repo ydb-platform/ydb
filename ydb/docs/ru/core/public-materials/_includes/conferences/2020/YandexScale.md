@@ -1,4 +1,4 @@
-### Serverless: публичный запуск {{ ydb-name }} {#2021-conf-yandex-scale}
+## Serverless: публичный запуск {{ ydb-name }} {#2021-conf-yandex-scale}
 
 {% include notitle [overview_tag](../../tags.md#overview) %}
 

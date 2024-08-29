@@ -1,4 +1,4 @@
-### {{ ydb-short-name }} — параллельная асинхронная репликация в распределенной базе {#2024-true-tech}
+## {{ ydb-short-name }} — параллельная асинхронная репликация в распределенной базе {#2024-true-tech}
 
 {% include notitle [database_internals_tag](../../tags.md#database_internals) %}
 

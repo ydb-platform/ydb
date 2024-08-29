@@ -1,2 +1,67 @@
 log-levels:
-  YFM001: 'disabled'
+  MD001: 'error' # Heading levels should only increment by one level at a time
+  MD002: 'error' # First heading should be a top-level heading
+  MD003: 'disabled' # Heading style
+  MD004: 'disabled' # Unordered list style
+  MD005: 'error' # Inconsistent indentation for list items at the same level
+  MD006: 'error' # Consider starting bulleted lists at the beginning of the line
+  MD007: 'error' # Unordered list indentation
+  MD009: 'disabled' # Trailing spaces
+  MD010: 'disabled' # Hard tabs
+  MD011: 'disabled' # Reversed link syntax
+  MD012: 'disabled' # Multiple consecutive blank lines
+  MD013: 'disabled' # Line length
+  MD014: 'disabled' # Dollar signs used before commands without showing output
+  MD018: 'disabled' # No space after hash on atx style heading
+  MD019: 'disabled' # Multiple spaces after hash on atx style heading
+  MD020: 'disabled' # No space inside hashes on closed atx style heading
+  MD021: 'disabled' # Multiple spaces inside hashes on closed atx style heading
+  MD022: 'disabled' # Headings should be surrounded by blank lines
+  MD023: 'disabled' # Headings must start at the beginning of the line
+  MD024: 'disabled' # Multiple headings with the same content
+  MD025: 'disabled' # Multiple top-level headings in the same document
+  MD026: 'disabled' # Trailing punctuation in heading
+  MD027: 'disabled' # Multiple spaces after blockquote symbol
+  MD028: 'disabled' # Blank line inside blockquote
+  MD029: 'disabled' # Ordered list item prefix
+  MD030: 'disabled' # Spaces after list markers
+  MD031: 'disabled' # Fenced code blocks should be surrounded by blank lines
+  MD032: 'disabled' # Lists should be surrounded by blank lines
+  MD033: 'disabled' # Inline HTML
+  MD034: 'disabled' # Bare URL used
+  MD035: 'disabled' # Horizontal rule style
+  MD036: 'disabled' # Emphasis used instead of a heading
+  MD037: 'disabled' # Spaces inside emphasis markers
+  MD038: 'disabled' # Spaces inside code span elements
+  MD039: 'disabled' # Spaces inside link text
+  MD040: 'disabled' # Fenced code blocks should have a language specified
+  MD041: 'disabled' # First line in a file should be a top-level heading
+  MD042: 'disabled' # No empty links
+  MD043: 'disabled' # Required heading structure
+  MD044: 'disabled' # Proper names should have the correct capitalization
+  MD045: 'disabled' # Images should have alternate text (alt text)
+  MD046: 'disabled' # Code block style
+  MD047: 'disabled' # Files should end with a single newline character
+  MD048: 'disabled' # Code fence style
+  MD049: 'disabled' # Emphasis style should be consistent
+  MD050: 'disabled' # Strong style should be consistent
+  MD051: 'disabled' # Link fragments should be valid
+  MD052: 'disabled' # Reference links and images should use a label that is defined
+  MD053: 'disabled' # Link and image reference definitions should be needed
+  MD054: 'disabled' # Link and image style
+  MD055: 'disabled' # Table pipe style
+  MD056: 'disabled' # Table column count
+  
+  YFM001: 'disabled' # Inline code length
+  YFM002: 'disabled' # No header found in the file for the link text
+  YFM003: 'error'    # Link is unreachable
+  YFM004: 'error'    # Table not closed
+  YFM005: 'error'    # Tab list not closed
+  YFM006: 'error'    # Term definition duplicated
+  YFM007: 'error'    # Term used without definition
+  YFM008: 'error'    # Term inside definition not allowed
+  YFM009: 'error'    # Term definition used not at the end of file
+
+# Inline code length
+YFM001:
+  maximum: 100

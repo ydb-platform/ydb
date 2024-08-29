@@ -1,4 +1,4 @@
-### Большой таблеточный взрыв {#2021-conf-yatalks-big-tablet-exp}
+## Большой таблеточный взрыв {#2021-conf-yatalks-big-tablet-exp}
 
 {% include notitle [overview_tag](../../tags.md#overview) %}
 
@@ -6,7 +6,7 @@
 
 @[YouTube](https://www.youtube.com/watch?v=Ay6_ffxK4us&t=7076s)
 
-### Миграция приложения с PostgreSQL на Yandex {{ ydb-name }} Serverless. Производительность, стоимость, риски. {#2021-conf-yatalks-cloud-o-serverless}
+## Миграция приложения с PostgreSQL на Yandex {{ ydb-name }} Serverless. Производительность, стоимость, риски. {#2021-conf-yatalks-cloud-o-serverless}
 
 <div style="display:flex; flex-direction: row; justify-content: flex-start; flex-wrap: wrap; column-gap: 10px;">
 

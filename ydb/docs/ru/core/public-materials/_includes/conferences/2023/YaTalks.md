@@ -1,4 +1,4 @@
-### Искусство бенчмаркинга распределённых баз данных на примере {{ ydb-short-name }} {#2023-conf-yt-bench}
+## Искусство бенчмаркинга распределённых баз данных на примере {{ ydb-short-name }} {#2023-conf-yt-bench}
 
 {% include notitle [testing_tag](../../tags.md#testing) %}
 

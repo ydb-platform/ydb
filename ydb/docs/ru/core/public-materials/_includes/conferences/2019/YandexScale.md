@@ -1,4 +1,4 @@
-### {{ ydb-name }} — эффективная альтернатива традиционным noSQL-решениям {#2019-conf-yascale-ydb-nosql-alt}
+## {{ ydb-name }} — эффективная альтернатива традиционным noSQL-решениям {#2019-conf-yascale-ydb-nosql-alt}
 
 {% include notitle [overview_tag](../../tags.md#overview) %}
 
@@ -14,7 +14,7 @@
 
 [Слайды](https://presentations.ydb.tech/2019/ru/yandex_scale_nosql_alternative/presentation.pdf)
 
-### {{ ydb-name }} at Scale: опыт применения в высоконагруженных сервисах Яндекса {#2019-conf-yascale-ydb-at-scale}
+## {{ ydb-name }} at Scale: опыт применения в высоконагруженных сервисах Яндекса {#2019-conf-yascale-ydb-at-scale}
 
 {% include notitle [use_cases_tag](../../tags.md#use_cases) %}
 

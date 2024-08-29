@@ -37,7 +37,7 @@ The use of the `topic read` and `topic write` commands with standard I/O devices
    {{ ydb-cli }} -p quickstart topic write topic1 --format newline-delimited
    ```
 
-### Running of an SQL query with the transmission of messages from the topic as parameters {#example-read-to-yql-param}
+## Running of an SQL query with the transmission of messages from the topic as parameters {#example-read-to-yql-param}
 
 * Running a YQL, passing each message read from `topic1` as a parameter
 

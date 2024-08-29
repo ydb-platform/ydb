@@ -5,8 +5,10 @@
 `LIKE` works as follows:
 
 * Patterns can include two special characters:
-    * `%`: Zero or more of any characters.
-    * `_`: Exactly one of any character.
+  
+  * `%`: Zero or more of any characters.
+  * `_`: Exactly one of any character.
+  
 All other characters are literals that represent themselves.
 * As opposed to `REGEXP`, `LIKE` must be matched exactly. For example, to search a substring, add `%` at the beginning and end of the pattern.
 * `ILIKE` is a case-insensitive version of `LIKE`.

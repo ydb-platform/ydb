@@ -5,7 +5,7 @@
 DBeaver allows you to work with {{ ydb-short-name }} using the Java DataBase Connectivity ([JDBC](https://en.wikipedia.org/wiki/Java_Database_Connectivity)) protocol. This article demonstrates how to set up this integration.
 
 
-### Connecting the {{ ydb-name }} JDBC Driver to DBeaver {#dbeaver_ydb}
+## Connecting the {{ ydb-name }} JDBC Driver to DBeaver {#dbeaver_ydb}
 
 
 To connect to {{ ydb-name }} from DBeaver, you will need the JDBC driver. Follow these steps to download the JDBC driver:
@@ -37,7 +37,7 @@ Follow these steps to connect the downloaded JDBC driver:
 
     ![](./_assets/dbeaver-driver-management-driver_set.png)
 
-### Creating a Connection to {{ ydb-name }} {#dbeaver_ydb_connection}
+## Creating a Connection to {{ ydb-name }} {#dbeaver_ydb_connection}
 
 Perform the following steps to establish a connection:
 
@@ -66,7 +66,7 @@ Perform the following steps to establish a connection:
 1. Click **Finish** to save the connection.
 
 
-### Working with {{ ydb-name }} {#dbeaver_ydb_connection}
+## Working with {{ ydb-name }} {#dbeaver_ydb_connection}
 
 With DBeaver, you can view the list and structure of tables:
 

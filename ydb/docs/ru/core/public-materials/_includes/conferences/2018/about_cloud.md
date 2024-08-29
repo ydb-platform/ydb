@@ -1,4 +1,4 @@
-###  Три доклада о {{ ydb-short-name }} с about:cloud {#2018-conf-about-cloud}
+##  Три доклада о {{ ydb-short-name }} с about:cloud {#2018-conf-about-cloud}
 
 <div style="display:flex; flex-direction: row; justify-content: flex-start; flex-wrap: wrap; column-gap: 10px;">
 

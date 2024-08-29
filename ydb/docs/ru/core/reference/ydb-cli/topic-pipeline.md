@@ -37,7 +37,7 @@
   {{ ydb-cli }} -p quickstart topic write topic1 --format newline-delimited
   ```
 
-### Исполнение YQL-запроса с передачей сообщений из топика в качестве параметров {#example-read-to-yql-param}
+## Исполнение YQL-запроса с передачей сообщений из топика в качестве параметров {#example-read-to-yql-param}
 
 * Исполнение YQL-запроса с передачей параметром каждого сообщения, считанного из топика `topic1`
 

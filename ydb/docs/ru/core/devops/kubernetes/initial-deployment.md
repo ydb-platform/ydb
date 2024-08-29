@@ -121,27 +121,25 @@ Helm-чарт устанавливает [YDB Kubernetes Operator](https://githu
 
 ### Установите {{ ydb-short-name }} {{ k8s }} оператор
 
-Разверните {{ ydb-short-name }} {{ k8s }} оператор на кластере с помощью `helm`:
+Разверните {{ ydb-short-name }} {{ k8s }} оператор на кластере с помощью `helm`, выполните команду:
 
-  Выполните команду:
+```bash
+helm install ydb-operator ydb/ydb-operator
+```
 
-  ```bash
-  helm install ydb-operator ydb/ydb-operator
-  ```
+* `ydb-operator` — имя установки;
+* `ydb/ydb-operator` — название чарта в добавленном ранее репозитории.
 
-  * `ydb-operator` — имя установки;
-  * `ydb/ydb-operator` — название чарта в добавленном ранее репозитории.
+Результат выполнения:
 
-  Результат выполнения:
-
-  ```text
-  NAME: ydb-operator
-  LAST DEPLOYED: Thu Aug 12 19:32:28 2021
-  NAMESPACE: default
-  STATUS: deployed
-  REVISION: 1
-  TEST SUITE: None
-  ```
+```text
+NAME: ydb-operator
+LAST DEPLOYED: Thu Aug 12 19:32:28 2021
+NAMESPACE: default
+STATUS: deployed
+REVISION: 1
+TEST SUITE: None
+```
 
 
 ### Разверните узлы хранения

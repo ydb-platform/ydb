@@ -1,4 +1,4 @@
-### YDB Topic Service: как мы повышали производительность очереди сообщений {#2023-conf-hl-ydb-topic}
+## YDB Topic Service: как мы повышали производительность очереди сообщений {#2023-conf-hl-ydb-topic}
 
 <div class = "multi-tags-container">
 
@@ -17,7 +17,7 @@
 [Слайды](https://presentations.ydb.tech/2023/ru/highload/ydb_topic_service/presentation.pdf)
 
 
-### Особенности шин данных для очень больших инсталляций на примере YDB Topics {#2023-conf-hl-data-bus}
+## Особенности шин данных для очень больших инсталляций на примере YDB Topics {#2023-conf-hl-data-bus}
 
 {% include notitle [database_internals_tag](../../tags.md#database_internals) %}
 
@@ -30,7 +30,7 @@
 [Слайды](https://presentations.ydb.tech/2023/ru/highload/ydb_topics_data_bus/presentation.pdf)
 
 
-### Поиск по образцу на последовательностях строк в БД {#2023-conf-hl-search-inline}
+## Поиск по образцу на последовательностях строк в БД {#2023-conf-hl-search-inline}
 
 {% include notitle [database_internals_tag](../../tags.md#database_internals) %}
 
@@ -43,7 +43,7 @@
 [Слайды](https://presentations.ydb.tech/2023/ru/highload/template_search_in_str_seq/presentation.pdf)
 
 
-### Из pytest в Go. Тестовое окружение на фикстурах {#2023-conf-hl-pytest-go}
+## Из pytest в Go. Тестовое окружение на фикстурах {#2023-conf-hl-pytest-go}
 
 {% include notitle [testing_tag](../../tags.md#testing) %}
 

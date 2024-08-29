@@ -1,4 +1,4 @@
-### Scale it easy: YDB's high performance in a nutshell {#2023-conf-hl-serbia-scale}
+## Scale it easy: YDB's high performance in a nutshell {#2023-conf-hl-serbia-scale}
 
 {% include notitle [database_internals_tag](../../tags.md#database_internals) %}
 

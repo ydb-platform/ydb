@@ -1,4 +1,4 @@
-### YDB Java SDK: борьба за производительность {#2023-conf-jp-ydb-jsdk}
+## YDB Java SDK: борьба за производительность {#2023-conf-jp-ydb-jsdk}
 
 {% include notitle [overview_tag](../../tags.md#overview) %}
 

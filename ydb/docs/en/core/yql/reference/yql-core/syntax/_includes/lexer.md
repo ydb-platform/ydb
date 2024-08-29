@@ -45,6 +45,7 @@ The list of keywords is not fixed and is going to expand as the language develop
 
 **Identifiers** are tokens that identify the names of tables, columns, and other objects in YQL. Identifiers in YQL are always case-sensitive.
 An identifier can be written in the body of the program without any special formatting, if the identifier:
+
 * Is not a keyword
 * Begins with a Latin letter or underscore
 * Is followed by a Latin letter, an underscore, or a number
@@ -130,6 +131,7 @@ SELECT /*+ foo(123) */ 1; -- warning 'Hint foo will not be used'
 ```
 
 What's important is that SQL hints are hints for an optimizer, so:
+
 * Hints never affect search results.
 * As YQL optimizers improve, a situation is possible when a hint becomes outdated and is ignored (for example, the algorithm based on a given hint completely changes or the optimizer becomes so sophisticated that it can be expected to choose the best solution, so some manual settings are likely to interfere).
 
@@ -178,10 +180,11 @@ SELECT $text;
 
 * For string literals, including [multi-string](#multiline-string-literals) ones, the `String` type is used by default (see also [PRAGMA UnicodeLiterals](../pragma.md#UnicodeLiterals)).
 * You can use the following suffixes to explicitly control the literal type:
-   * `s` — `String`;
-   * `u` — `Utf8`;
-   * `y` — `Yson`;
-   * `j` — `Json`.
+
+  * `s` — `String`
+  * `u` — `Utf8`
+  * `y` — `Yson`
+  * `j` — `Json`
 
 **Example:**
 ```yql
@@ -192,14 +195,18 @@ SELECT "foo"u, '[1;2]'y, @@{"a":null}@@j;
 
 * Integer literals have the default type `Int32`, if they fit within the Int32 range. Otherwise, they automatically expand to `Int64`.
 * You can use the following suffixes to explicitly control the literal type:
-   * `l`: `Int64`.
-   * `s`: `Int16`.
-   * `t`: `Int8`.
+
+  * `l`: `Int64`
+  * `s`: `Int16`
+  * `t`: `Int8`
+
 * Add the suffix `u` to convert a type to its corresponding unsigned type:
-   * `ul`: `Uint64`.
-   * `u`: `Uint32`.
-   * `us`: `Uint16`.
-   * `ut`: `Uint8`.
+
+  * `ul`: `Uint64`
+  * `u`: `Uint32`
+  * `us`: `Uint16`
+  * `ut`: `Uint8`
+
 * You can also use hexadecimal, octal, and binary format for integer literals using the prefixes `0x`, `0o` and `0b`, respectively. You can arbitrarily combine them with the above-mentioned suffixes.
 * Floating point literals have the `Double` type by default, but you can use the suffix `f` to narrow it down to `Float`.
 

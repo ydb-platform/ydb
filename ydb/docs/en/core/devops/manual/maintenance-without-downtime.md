@@ -37,13 +37,18 @@ Completed actions are automatically removed from the task.
 ### Availability mode {#availability-mode}
 
 In a maintenance task, you need to specify the cluster's availability mode to comply with when checking whether actions can be performed. The following modes are supported:
+
 - **Strong**: a mode that minimizes the risk of availability loss.
-    - No more than one unavailable [VDisk](../../concepts/cluster/distributed_storage.md#storage-groups) is allowed in each affected storage group.
-    - No more than one unavailable State Storage ring is allowed.
+
+  - No more than one unavailable [VDisk](../../concepts/cluster/distributed_storage.md#storage-groups) is allowed in each affected storage group.
+  - No more than one unavailable State Storage ring is allowed.
+
 - **Weak**: a mode that does not allow exceeding the failure model.
-    - For affected storage groups with the [block-4-2](../../deploy/configuration/config.md#reliability) scheme, no more than two unavailable VDisks are allowed.
-    - For affected storage groups with the [mirror-3-dc](../../deploy/configuration/config.md#reliability) scheme, up to four unavailable VDisks are allowed, three of which must be in the same data center. 
-    - No more than `(nto_select - 1) / 2` unavailable State Storage rings are allowed.
+
+  - For affected storage groups with the [block-4-2](../../deploy/configuration/config.md#reliability) scheme, no more than two unavailable VDisks are allowed.
+  - For affected storage groups with the [mirror-3-dc](../../deploy/configuration/config.md#reliability) scheme, up to four unavailable VDisks are allowed, three of which must be in the same data center. 
+  - No more than `(nto_select - 1) / 2` unavailable State Storage rings are allowed.
+  - 
 - **Force**: a forced mode, the failure model is ignored. *Not recommended for use.*
 
 ### Priority {#priority}
@@ -63,11 +68,12 @@ By default, each database and the cluster as a whole are allowed to have no more
 To check if the actions of a maintenance task can be performed, the CMS sequentially goes through each action group in the task and checks the action from the group:
 - If the action's object is a host, the CMS checks whether the action can be performed with all nodes running on the host. 
 - If the action's object is a node, the CMS checks:
-    - Whether there is a lock on the node.
-    - Whether it's possible to lock the node according to the limits of unavailable nodes.
-    - Whether it's possible to lock all VDisks of the node according to the availability mode.
-    - Whether it's possible to lock the State Storage ring of the node according to the availability mode.
-    - Whether it's possible to lock the node according to the limit of unavailable nodes on which cluster system tablets can run.
+
+  - Whether there is a lock on the node.
+  - Whether it's possible to lock the node according to the limits of unavailable nodes.
+  - Whether it's possible to lock all VDisks of the node according to the availability mode.
+  - Whether it's possible to lock the State Storage ring of the node according to the availability mode.
+  - Whether it's possible to lock the node according to the limit of unavailable nodes on which cluster system tablets can run.
 
 The action can be performed if the checks are successful, and temporary locks are acquired on the checked nodes. The CMS then considers the next group of actions. Temporary locks help to understand whether the actions requested in different groups conflict with each other. Once the check is complete, the temporary locks are released.
 

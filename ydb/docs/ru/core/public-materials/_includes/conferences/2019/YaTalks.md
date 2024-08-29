@@ -1,4 +1,4 @@
-### {{ ydb-name }} — как выжать 10K IOPS из HDD и вставить в таблицу 50K записей на одном ядре {#2019-conf-yatalks-10k-iops}
+## {{ ydb-name }} — как выжать 10K IOPS из HDD и вставить в таблицу 50K записей на одном ядре {#2019-conf-yatalks-10k-iops}
 
 {% include notitle [use_cases_tag](../../tags.md#use_cases) %}
 
@@ -9,7 +9,7 @@
 
 [Слайды](https://storage.yandexcloud.net/ydb-public-talks/yatalks-ydb.pptx)
 
-### {{ ydb-name }}: Distributed SQL база данных Яндекса {#2019-conf-yatalks-dist-sql}
+## {{ ydb-name }}: Distributed SQL база данных Яндекса {#2019-conf-yatalks-dist-sql}
 
 {% include notitle [database_internals_tag](../../tags.md#database_internals) %}
 

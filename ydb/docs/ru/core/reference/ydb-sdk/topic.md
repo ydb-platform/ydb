@@ -386,20 +386,21 @@
   ```
 
   После создания писателя его необходимо инициализировать. Для этого есть два метода:
-    - `init()`: неблокирующий, запускает процесс инициализации в фоне и не ждёт его завершения.
-      ```java
-      writer.init();
-      ```
-    - `initAndWait()`: блокирующий, запускает процесс инициализации и ждёт его завершения. Если в процессе инициализации возникла ошибка, будет брошено исключение.
-      ```java
-      try {
-          writer.initAndWait();
-          logger.info("Init finished succsessfully");
-      } catch (Exception exception) {
-          logger.error("Exception while initializing writer: ", exception);
-          return;
-      }
-      ```
+
+  - `init()`: неблокирующий, запускает процесс инициализации в фоне и не ждёт его завершения.
+    ```java
+    writer.init();
+    ```
+  - `initAndWait()`: блокирующий, запускает процесс инициализации и ждёт его завершения. Если в процессе инициализации возникла ошибка, будет брошено исключение.
+    ```java
+    try {
+        writer.initAndWait();
+        logger.info("Init finished succsessfully");
+    } catch (Exception exception) {
+        logger.error("Exception while initializing writer: ", exception);
+        return;
+    }
+    ```
 
 - Java (async)
 
@@ -1027,20 +1028,20 @@
   ```
 
   После создания синхронного читателя необходимо инициализировать. Для этого следует воспользоваться одним их двух методов:
-    - `init()`: неблокирующий, запускает процесс инициализации в фоне и не ждёт его завершения.
-      ```java
-      reader.init();
-      ```
-    - `initAndWait()`: блокирующий, запускает процесс инициализации и ждёт его завершения. Если в процессе инициализации возникла ошибка, будет брошено исключение.
-      ```java
-      try {
-          reader.initAndWait();
-          logger.info("Init finished succsessfully");
-      } catch (Exception exception) {
-          logger.error("Exception while initializing reader: ", exception);
-          return;
-      }
-      ```
+  - `init()`: неблокирующий, запускает процесс инициализации в фоне и не ждёт его завершения.
+    ```java
+    reader.init();
+    ```
+  - `initAndWait()`: блокирующий, запускает процесс инициализации и ждёт его завершения. Если в процессе инициализации возникла ошибка, будет брошено исключение.
+    ```java
+    try {
+        reader.initAndWait();
+        logger.info("Init finished succsessfully");
+    } catch (Exception exception) {
+        logger.error("Exception while initializing reader: ", exception);
+        return;
+    }
+    ```
 
 - Java (async)
 

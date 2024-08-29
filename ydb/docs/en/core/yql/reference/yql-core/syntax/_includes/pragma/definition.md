@@ -9,8 +9,9 @@ Redefinition of settings.
 * `x`: (optional) The category of the setting.
 * `y`: The name of the setting.
 * `z`: (optional for flags) The value of the setting. The following suffixes are acceptable:
-    * `Kb`, `Mb`, `Gb`:  For the data amounts.
-    * `sec`, `min`, `h`, `d`: For the time values.
+
+  * `Kb`, `Mb`, `Gb`:  For the data amounts.
+  * `sec`, `min`, `h`, `d`: For the time values.
 
 **Examples**
 

@@ -1,4 +1,4 @@
-### {{ ydb-name }}: распределенные запросы в облаках {#2019-conf-backendconf}
+## {{ ydb-name }}: распределенные запросы в облаках {#2019-conf-backendconf}
 
 {% include notitle [database_internals_tag](../../tags.md#database_internals) %}
 

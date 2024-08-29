@@ -375,21 +375,22 @@ Only connections with matching [producer and message group](../../concepts/topic
   ```
 
   Writer should be initialized after it is created. There are two methods to do that:
-    - `init()`: non-blocking, launches initialization in background and doesn't wait for it to finish.
-      ```java
-      writer.init();
-      ```
-    - `initAndWait()`: blocking, launches initialization and waits for it to finish.
-      If an error occurs during this process, exception will be thrown.
-      ```java
-      try {
-          writer.initAndWait();
-          logger.info("Init finished succsessfully");
-      } catch (Exception exception) {
-          logger.error("Exception while initializing writer: ", exception);
-          return;
-      }
-      ```
+
+  - `init()`: non-blocking, launches initialization in background and doesn't wait for it to finish.
+    ```java
+    writer.init();
+    ```
+  - `initAndWait()`: blocking, launches initialization and waits for it to finish.
+    If an error occurs during this process, exception will be thrown.
+    ```java
+    try {
+        writer.initAndWait();
+        logger.info("Init finished succsessfully");
+    } catch (Exception exception) {
+        logger.error("Exception while initializing writer: ", exception);
+        return;
+    }
+    ```
 
 - Java (async)
 
@@ -591,51 +592,49 @@ Only connections with matching [producer and message group](../../concepts/topic
 
 - Go
 
-   When connected, you can specify the synchronous message write option: topicoptions.WithSyncWrite(true). Then Write will only return after receiving a confirmation from the server that all messages passed in the call have been saved. If necessary, the SDK will reconnect and retry sending messages as usual. In this mode, the context only controls the response time from the SDK, meaning the SDK will continue trying to send messages even after the context is canceled.
+  When connected, you can specify the synchronous message write option: topicoptions.WithSyncWrite(true). Then Write will only return after receiving a confirmation from the server that all messages passed in the call have been saved. If necessary, the SDK will reconnect and retry sending messages as usual. In this mode, the context only controls the response time from the SDK, meaning the SDK will continue trying to send messages even after the context is canceled.
 
-   ```go
+  ```go
 
-   producerAndGroupID := "group-id"
-   writer, _ := db.Topic().StartWriter(producerAndGroupID, "topicName",
-     topicoptions.WithMessageGroupID(producerAndGroupID),
-     topicoptions.WithSyncWrite(true),
-   )
+  producerAndGroupID := "group-id"
+  writer, _ := db.Topic().StartWriter(producerAndGroupID, "topicName",
+    topicoptions.WithMessageGroupID(producerAndGroupID),
+    topicoptions.WithSyncWrite(true),
+  )
 
-   err = writer.Write(ctx,
-     topicwriter.Message{Data: strings.NewReader("1")},
-     topicwriter.Message{Data: bytes.NewReader([]byte{1,2,3})},
-     topicwriter.Message{Data: strings.NewReader("3")},
-   )
-   if err == nil {
-     return err
-   }
-   ```
+  err = writer.Write(ctx,
+    topicwriter.Message{Data: strings.NewReader("1")},
+    topicwriter.Message{Data: bytes.NewReader([]byte{1,2,3})},
+    topicwriter.Message{Data: strings.NewReader("3")},
+  )
+  if err == nil {
+    return err
+  }
+  ```
 
 - Python
 
-   There are two ways to get a message write acknowledgement from the server:
+  There are two ways to get a message write acknowledgement from the server:
 
-   * `flush()`: Waits until all the messages previously written to the internal buffer are acknowledged.
-   * `write_with_ack(...)`: Sends a message and waits for the acknowledgement of its delivery from the server. This method is slow when you are sending multiple messages in a row.
+  * `write_with_ack(...)`: Sends a message and waits for the acknowledgement of its delivery from the server. This method is slow when you are sending multiple messages in a row.
 
-   ```python
-   # Put multiple messages to the internal buffer and then wait
-   # until all of them are delivered to the server.
-   for mess in messages:
-       writer.write(mess)
+  ```python
+  # Put multiple messages to the internal buffer and then wait
+  # until all of them are delivered to the server.
+  for mess in messages:
+      writer.write(mess)
 
-   writer.flush()
+  writer.flush()
 
-   # You can send multiple messages and wait for an acknowledgment for the entire group.
-   writer.write_with_ack(["mess-1", "mess-2"])
+  # You can send multiple messages and wait for an acknowledgment for the entire group.
+  writer.write_with_ack(["mess-1", "mess-2"])
 
-   # Waiting on sending each message: this method will return the result only after an
-   # acknowledgment from the server.
-   # This is the slowest message delivery option; use it when this mode is
-   # absolutely needed.
-   writer.write_with_ack("message")
-
-   ```
+  # Waiting on sending each message: this method will return the result only after an
+  # acknowledgment from the server.
+  # This is the slowest message delivery option; use it when this mode is
+  # absolutely needed.
+  writer.write_with_ack("message")
+  ```
 
 - Java (sync)
 
@@ -706,29 +705,29 @@ For more details on using data compression for topics, see [here](../../concepts
 
 - Go
 
-   By default, the SDK selects the codec automatically based on topic settings. In automatic mode, the SDK first sends one group of messages with each of the allowed codecs, then it sometimes tries to compress messages with all the available codecs, and then selects the codec that yields the smallest message size. If the list of allowed codecs for the topic is empty, the SDK makes automatic selection between Raw and Gzip codecs.
+  By default, the SDK selects the codec automatically based on topic settings. In automatic mode, the SDK first sends one group of messages with each of the allowed codecs, then it sometimes tries to compress messages with all the available codecs, and then selects the codec that yields the smallest message size. If the list of allowed codecs for the topic is empty, the SDK makes automatic selection between Raw and Gzip codecs.
 
-   If necessary, a fixed codec can be set in the connection options. It will then be used and no measurements will be taken.
+  If necessary, a fixed codec can be set in the connection options. It will then be used and no measurements will be taken.
 
-   ```go
-   producerAndGroupID := "group-id"
-   writer, _ := db.Topic().StartWriter(producerAndGroupID, "topicName",
-     topicoptions.WithMessageGroupID(producerAndGroupID),
-     topicoptions.WithCodec(topictypes.CodecGzip),
-   )
-   ```
+  ```go
+  producerAndGroupID := "group-id"
+  writer, _ := db.Topic().StartWriter(producerAndGroupID, "topicName",
+    topicoptions.WithMessageGroupID(producerAndGroupID),
+    topicoptions.WithCodec(topictypes.CodecGzip),
+  )
+  ```
 
 - Python
 
-   By default, the SDK selects the codec automatically based on topic settings. In automatic mode, the SDK first sends one group of messages with each of the allowed codecs, then it sometimes tries to compress messages with all the available codecs, and then selects the codec that yields the smallest message size. If the list of allowed codecs for the topic is empty, the SDK makes automatic selection between Raw and Gzip codecs.
+  By default, the SDK selects the codec automatically based on topic settings. In automatic mode, the SDK first sends one group of messages with each of the allowed codecs, then it sometimes tries to compress messages with all the available codecs, and then selects the codec that yields the smallest message size. If the list of allowed codecs for the topic is empty, the SDK makes automatic selection between Raw and Gzip codecs.
 
-   If necessary, a fixed codec can be set in the connection options. It will then be used and no measurements will be taken.
+  If necessary, a fixed codec can be set in the connection options. It will then be used and no measurements will be taken.
 
-   ```python
-   writer = driver.topic_client.writer(topic_path,
-       codec=ydb.TopicCodec.GZIP,
-   )
-   ```
+  ```python
+  writer = driver.topic_client.writer(topic_path,
+      codec=ydb.TopicCodec.GZIP,
+  )
+  ```
 
 - Java
 
@@ -1028,21 +1027,22 @@ Topic can have several Consumers and for each of them server stores its own read
   ```
 
   After a reader is created, it has to be initialized. Sync reader has two methods for this:
-    - `init()`: non-blocking, launches initialization in background and does not wait for it to finish.
-      ```java
-      reader.init();
-      ```
-    - `initAndWait()`: blocking, launches initialization and waits for it to finish.
-      If an error occurs during this process, exception will be thrown.
-      ```java
-      try {
-          reader.initAndWait();
-          logger.info("Init finished succsessfully");
-      } catch (Exception exception) {
-          logger.error("Exception while initializing reader: ", exception);
-          return;
-      }
-      ```
+
+  - `init()`: non-blocking, launches initialization in background and does not wait for it to finish.
+    ```java
+    reader.init();
+    ```
+  - `initAndWait()`: blocking, launches initialization and waits for it to finish.
+    If an error occurs during this process, exception will be thrown.
+    ```java
+    try {
+        reader.initAndWait();
+        logger.info("Init finished succsessfully");
+    } catch (Exception exception) {
+        logger.error("Exception while initializing reader: ", exception);
+        return;
+    }
+    ```
 
 - Java (async)
 

@@ -1,4 +1,4 @@
-### Эволюция акторной системы {#2022-conf-hl-actor-sys}
+## Эволюция акторной системы {#2022-conf-hl-actor-sys}
 
 {% include notitle [database_internals_tag](../../tags.md#database_internals) %}
 
@@ -16,7 +16,7 @@
 
 [Слайды](https://presentations.ydb.tech/2022/ru/highload_foundation_actor_system/presentation.pdf)
 
-### Считаем число просмотров видео для десятков миллионов пользователей в день {#2022-conf-hl-count-video-view}
+## Считаем число просмотров видео для десятков миллионов пользователей в день {#2022-conf-hl-count-video-view}
 
 {% include notitle [use_cases_tag](../../tags.md#use_cases) %}
 
@@ -33,7 +33,7 @@
 
 [Слайды](https://presentations.ydb.tech/2022/ru/highload_foundation_dzen/presentation.pdf)
 
-### Миллион RPS в {{ ydb-short-name }}: история одного переезда Метрики {#2022-conf-hl-mil-rps}
+## Миллион RPS в {{ ydb-short-name }}: история одного переезда Метрики {#2022-conf-hl-mil-rps}
 
 {% include notitle [use_cases_tag](../../tags.md#use_cases) %}
 

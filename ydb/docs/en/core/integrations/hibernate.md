@@ -1,4 +1,4 @@
-# {{ ydb-short-name }} dialect for Hibernate #
+# {{ ydb-short-name }} dialect for Hibernate
 
 ## Overview {#overview}
 

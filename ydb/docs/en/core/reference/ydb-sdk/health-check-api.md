@@ -41,12 +41,14 @@ message IssueLog {
 
 * `id`: A unique problem ID within this response.
 * `status`: Status (severity) of the current problem. It can take one of the following values:
-   * `RED`: A component is faulty or unavailable.
-   * `ORANGE`: A serious problem, we are one step away from losing accessibility. Intervention may be required.
-   * `YELLOW`: A minor problem, no risks to accessibility. We recommend you continue monitoring the problem.
-   * `BLUE`: Temporary minor degradation that does not affect database accessibility.
-   * `GREEN`: No problems were detected.
-   * `GREY`: Failed to determine the status (a problem with the self-diagnostic mechanism).
+
+  * `RED`: A component is faulty or unavailable.
+  * `ORANGE`: A serious problem, we are one step away from losing accessibility. Intervention may be required.
+  * `YELLOW`: A minor problem, no risks to accessibility. We recommend you continue monitoring the problem.
+  * `BLUE`: Temporary minor degradation that does not affect database accessibility.
+  * `GREEN`: No problems were detected.
+  * `GREY`: Failed to determine the status (a problem with the self-diagnostic mechanism).
+
 * `message`: [Text that describes the problem](#problems).
 * `location`: Location of the problem.
 * `reason`: Possible IDs of the nested problems that led to the current problem.

@@ -72,31 +72,33 @@ In the inventory file `50-inventory.yaml`, you need to specify the current list 
 
 Next, you need to make the following changes in the `vars` section of the inventory file:
 
-  * `ansible_user` – specify the user for Ansible to connect via SSH.
-  * `ansible_ssh_common_args: "-o ProxyJump=<ansible_user>@<static-node-1-IP>"` – option for connecting Ansible to a server by IP, from which {{ ydb-short-name }} will be installed (including ProxyJump server). It is used when installing {{ ydb-short-name }} from a local machine not included in the private DNS zone.
-  * `ansible_ssh_private_key_file` – change the default private SSH-key path to the actual one: `"../<ssh-private-key-name>"`.
-  * Choose one of the available options for deploying {{ ydb-short-name }} executables:
-    * `ydb_version`: automatically download one of the [{{ ydb-short-name }} official releases](../../downloads/index.md#ydb-server) by version number. For example, `23.4.11`.
-    * `ydb_git_version`: automatically compile the {{ ydb-short-name }} executables from the source code, downloaded from [the official GitHub repository](https://github.com/ydb-platform/ydb). The setting's value is a branch, tag, or commit name. For example, `main`.
-    * `ydb_archive`: a local filesystem path for a {{ ydb-short-name }} distribution archive [downloaded](../../downloads/index.md#ydb-server) or otherwise prepared in advance.
-    * `ydbd_binary` and `ydb_cli_binary`: local filesystem paths for {{ ydb-short-name }} server and client executables, [downloaded](../../downloads/index.md#ydb-server) or otherwise prepared in advance.
+* `ansible_user` – specify the user for Ansible to connect via SSH.
+* `ansible_ssh_common_args: "-o ProxyJump=<ansible_user>@<static-node-1-IP>"` – option for connecting Ansible to a server by IP, from which {{ ydb-short-name }} will be installed (including ProxyJump server). It is used when installing {{ ydb-short-name }} from a local machine not included in the private DNS zone.
+* `ansible_ssh_private_key_file` – change the default private SSH-key path to the actual one: `"../<ssh-private-key-name>"`.
+* Choose one of the available options for deploying {{ ydb-short-name }} executables:
+
+  * `ydb_version`: automatically download one of the [{{ ydb-short-name }} official releases](../../downloads/index.md#ydb-server) by version number. For example, `23.4.11`.
+  * `ydb_git_version`: automatically compile the {{ ydb-short-name }} executables from the source code, downloaded from [the official GitHub repository](https://github.com/ydb-platform/ydb). The setting's value is a branch, tag, or commit name. For example, `main`.
+  * `ydb_archive`: a local filesystem path for a {{ ydb-short-name }} distribution archive [downloaded](../../downloads/index.md#ydb-server) or otherwise prepared in advance.
+  * `ydbd_binary` and `ydb_cli_binary`: local filesystem paths for {{ ydb-short-name }} server and client executables, [downloaded](../../downloads/index.md#ydb-server) or otherwise prepared in advance.
 
 #### Optional changes in the inventory files
 
 Feel free to change these settings if needed, but it is not necessary in straightforward cases:
 
-  * `ydb_cores_static` – set the number of CPU cores allocated to static nodes.
-  * `ydb_cores_dynamic` – set the number of CPU cores allocated to dynamic nodes.
-  * `ydb_tls_dir` – specify a local path to a folder with TLS certificates prepared in advance. It must contain the `ca.crt` file and subdirectories with names matching node hostnames, containing certificates for a given node. If omitted, self-signed TLS certificates will be generated automatically for the whole {{ ydb-short-name }} cluster.
-  * `ydb_brokers` – list the FQDNs of the broker nodes. For example:
-    ```yaml
-    ydb_brokers:
-        - static-node-1.ydb-cluster.com
-        - static-node-2.ydb-cluster.com
-        - static-node-3.ydb-cluster.com
-    ``` 
+* `ydb_cores_static` – set the number of CPU cores allocated to static nodes.
+* `ydb_cores_dynamic` – set the number of CPU cores allocated to dynamic nodes.
+* `ydb_tls_dir` – specify a local path to a folder with TLS certificates prepared in advance. It must contain the `ca.crt` file and subdirectories with names matching node hostnames, containing certificates for a given node. If omitted, self-signed TLS certificates will be generated automatically for the whole {{ ydb-short-name }} cluster.
+* `ydb_brokers` – list the FQDNs of the broker nodes. For example:
+  ```yaml
+  ydb_brokers:
+      - static-node-1.ydb-cluster.com
+      - static-node-2.ydb-cluster.com
+      - static-node-3.ydb-cluster.com
+  ``` 
 
 The value of the `ydb_database_groups` variable in the `vars` section has a fixed value tied to the redundancy type and does not depend on the size of the cluster:
+
 * For the redundancy type `block-4-2`, the value of `ydb_database_groups` is seven.
 * For the redundancy type `mirror-3-dc`, the value of `ydb_database_groups` is eight.
 

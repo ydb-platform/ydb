@@ -1,4 +1,4 @@
-### Реализовать OLAP: как мы делали колоночное хранение в {{ ydb-short-name }} {#2023-conf-hl-olap}
+## Реализовать OLAP: как мы делали колоночное хранение в {{ ydb-short-name }} {#2023-conf-hl-olap}
 
 <div class = "multi-tags-container">
 
@@ -21,7 +21,7 @@
 [Слайды](https://presentations.ydb.tech/2023/ru/highload/olap/presentation.pdf)
 
 
-### database/sql: плохой, хороший и злой. Опыт разработки драйвера для распределенной СУБД YDB {#2023-conf-hl-database-sql}
+## database/sql: плохой, хороший и злой. Опыт разработки драйвера для распределенной СУБД YDB {#2023-conf-hl-database-sql}
 
 {% include notitle [database_internals_tag](../../tags.md#database_internals) %}
 
@@ -36,7 +36,7 @@
 [Слайды](https://presentations.ydb.tech/2023/ru/golang_conf/database_sql/presentation.pdf)
 
 
-### YDB-оптимизации производительности под ARM {#2023-conf-hl-ydb-opt}
+## YDB-оптимизации производительности под ARM {#2023-conf-hl-ydb-opt}
 
 {% include notitle [testing_tag](../../tags.md#testing) %}
 

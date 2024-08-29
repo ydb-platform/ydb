@@ -1,4 +1,4 @@
-### Как клиенты облака используют {{ ydb-short-name }} Serverless {#2021-conf-about-cloud-ydb-serverless}
+## Как клиенты облака используют {{ ydb-short-name }} Serverless {#2021-conf-about-cloud-ydb-serverless}
 
 {% include notitle [use_cases_tag](../../tags.md#use_cases) %}
 

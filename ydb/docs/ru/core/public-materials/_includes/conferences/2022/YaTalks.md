@@ -1,4 +1,4 @@
-### Open Source трибуна. {{ ydb-short-name }} в Open Source — что это такое? {#2022-conf-yatalks-open-source}
+## Open Source трибуна. {{ ydb-short-name }} в Open Source — что это такое? {#2022-conf-yatalks-open-source}
 
 {% include notitle [overview_tag](../../tags.md#overview) %}
 

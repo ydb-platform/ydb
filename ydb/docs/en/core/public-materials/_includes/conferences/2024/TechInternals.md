@@ -1,4 +1,4 @@
-### YDB vs. TPC-C: the Good, the Bad, and the Ugly behind High-Performance Benchmarking {#2024-conf-techinternals-highload}
+## YDB vs. TPC-C: the Good, the Bad, and the Ugly behind High-Performance Benchmarking {#2024-conf-techinternals-highload}
 
 {% include notitle [testing-tag](../../tags.md#database_internals) %}
 

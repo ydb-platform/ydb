@@ -188,6 +188,12 @@ protected:
                     true,
                     false
         );
+
+        if (ComputeActorSpan) {
+            ComputeActorSpan.Attribute("stageLevel", static_cast<int>(Task.GetProgram().GetSettings().GetStageLevel()));
+            ComputeActorSpan.Attribute("stageId", static_cast<int>(Task.GetStageId()));
+        }
+
         Alloc->SetGUCSettings(GUCSettings);
         InitMonCounters(taskCounters);
         if (ownMemoryQuota) {

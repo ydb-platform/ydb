@@ -20,4 +20,6 @@ enum ETxTypes {
     TXTYPE_AGGR_STAT_RESPONSE = 10 [(TxTypeOpts) = {Name: "TxAggregateStatisticsResponse"}];
     TXTYPE_RESPONSE_TABLET_DISTRIBUTION = 11 [(TxTypeOpts) = {Name: "TxResponseTabletDistribution"}];
     TXTYPE_ACK_TIMEOUT = 12        [(TxTypeOpts) = {Name: "TxAckTimeout"}];
+    TXTYPE_ANALYZE_TABLE_REQUEST = 13 [(TxTypeOpts) = {Name: "TxAnalyzeTableRequest"}];
+    TXTYPE_ANALYZE_TABLE_RESPONSE = 14 [(TxTypeOpts) = {Name: "TxAnalyzeTableResponse"}];
 }

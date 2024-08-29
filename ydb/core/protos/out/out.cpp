@@ -240,6 +240,10 @@ Y_DECLARE_OUT_SPEC(, NKikimrDataEvents::TEvWrite::ETxMode, stream, value) {
     stream << NKikimrDataEvents::TEvWrite::ETxMode_Name(value);
 }
 
+Y_DECLARE_OUT_SPEC(, NKikimrStat::TEvAnalyzeResponse_EStatus, stream, value) {
+    stream << NKikimrStat::TEvAnalyzeResponse_EStatus_Name(value);
+}
+
 Y_DECLARE_OUT_SPEC(, NKikimrStat::TEvAnalyzeStatusResponse_EStatus, stream, value) {
     stream << NKikimrStat::TEvAnalyzeStatusResponse_EStatus_Name(value);
 }

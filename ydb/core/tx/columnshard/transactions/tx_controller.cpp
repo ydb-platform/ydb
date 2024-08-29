@@ -53,7 +53,7 @@ bool TTxController::Load(NTabletFlatExecutor::TTransactionContext& txc) {
         const ui64 txId = rowset.GetValue<Schema::TxInfo::TxId>();
         const NKikimrTxColumnShard::ETransactionKind txKind = rowset.GetValue<Schema::TxInfo::TxKind>();
         ITransactionOperator::TPtr txOperator(ITransactionOperator::TFactory::Construct(txKind, TTxInfo(txKind, txId)));
-        Y_ABORT_UNLESS(!!txOperator);
+        AFL_VERIFY(!!txOperator)("kind", txKind);
         const TString txBody = rowset.GetValue<Schema::TxInfo::TxBody>();
         AFL_VERIFY(txOperator->Parse(Owner, txBody, true));
 

@@ -74,7 +74,7 @@ void TPDisk::ProcessChunkOwnerMap(TMap<ui32, TChunkState> &chunkOwnerMap) {
         if (state.OwnerId != OwnerSystem || state.OwnerId == ownerId) {
             if (IsOwnerUser(state.OwnerId) && state.CommitState == TChunkState::DATA_COMMITTED) {
                 Mon.CommitedDataChunks->Dec();
-                P_LOG(PRI_DEBUG, BPD01, "Decrement CommitedDataChunks", (CommitedDataChunks, Mon.CommitedDataChunks->Val()),
+                P_LOG(PRI_DEBUG, BPD01, "CommitedDataChunks is decremented", (CommitedDataChunks, Mon.CommitedDataChunks->Val()),
                     (ChunkIdx, chunkIdx), (PrevOwnerId, (ui32)state.OwnerId));
             }
             state.OwnerId = ownerId;
@@ -83,7 +83,7 @@ void TPDisk::ProcessChunkOwnerMap(TMap<ui32, TChunkState> &chunkOwnerMap) {
                 state.CommitState = TChunkState::DATA_COMMITTED;
                 if (IsOwnerUser(ownerId)) {
                     Mon.CommitedDataChunks->Inc();
-                    P_LOG(PRI_DEBUG, BPD01, "Increment CommitedDataChunks", (CommitedDataChunks, Mon.CommitedDataChunks->Val()),
+                    P_LOG(PRI_DEBUG, BPD01, "CommitedDataChunks is incremented", (CommitedDataChunks, Mon.CommitedDataChunks->Val()),
                         (ChunkIdx, chunkIdx), (PrevOwnerId, (ui32)state.OwnerId));
                 }
             } else {
@@ -285,8 +285,8 @@ TLogReader::TLogReader(bool isInitial,TPDisk *pDisk, TActorSystem * const actorS
         ui64 lastNonce, ui32 logEndChunkIdx, ui64 logEndSectorIdx, TReqId reqId,
         TVector<TLogChunkItem> &&chunksToRead, ui64 firstLsnToKeep, ui64 firstNonceToKeep, TVDiskID ownerVDiskId)
     : IsInitial(isInitial)
-    , PDiskCtx(pDisk->PDiskCtx)
     , PDisk(pDisk)
+    , PDiskCtx(pDisk->PDiskCtx)
     , ReplyTo(replyTo)
     , Owner(owner)
     , OwnerLogStartPosition(ownerLogStartPosition)
@@ -328,8 +328,8 @@ TLogReader::TLogReader(bool isInitial,TPDisk *pDisk, TActorSystem * const actorS
     , CurrentChunkToRead(ChunksToRead.end())
     , ParseCommits(false) // Actual only if IsInitial
 {
-    Y_ABORT_UNLESS(PDiskCtx);
-    Y_ABORT_UNLESS(PDiskCtx->ActorSystem == actorSystem);
+    Y_DEBUG_ABORT_UNLESS(PDiskCtx);
+    Y_DEBUG_ABORT_UNLESS(PDiskCtx->ActorSystem == actorSystem);
     Y_ABORT_UNLESS(PDisk->PDiskThread.Id() == TThread::CurrentThreadId(), "Constructor of TLogReader must be called"
             " from PDiskThread");
     Cypher.SetKey(PDisk->Format.LogKey);
@@ -547,7 +547,8 @@ void TLogReader::NotifyError(ui64 offsetRead, TString& errorReason) {
 
 TString TLogReader::SelfInfo() {
     TStringStream ss;
-    ss << " LogReader"
+    ss << "PDiskId# " << PDisk->PDiskId
+        << " LogReader"
         << " IsInitial# " << IsInitial;
     if (!IsInitial) {
         ss << " Owner# " << ui32(Owner)
@@ -686,7 +687,7 @@ void TLogReader::ProcessLogPageNonceJump2(ui8 *data, const ui64 previousNonce, c
 
 
         if (SectorIdx == 0) {
-            P_LOG(PRI_WARN, BPD01, SelfInfo() << " nonce jump2 ",
+            P_LOG(PRI_WARN, LR016, SelfInfo() << " nonce jump2 ",
                     (IsEndOfSplice, ChunkInfo->IsEndOfSplice),
                     (" replacing ChunkInfo->DesiredPrevChunkLastNonce# ", ChunkInfo->DesiredPrevChunkLastNonce),
                     (" with nonceJumpLogPageHeader2->PreviousNonce# ", nonceJumpLogPageHeader2->PreviousNonce));
@@ -705,7 +706,7 @@ void TLogReader::ProcessLogPageNonceJump2(ui8 *data, const ui64 previousNonce, c
         if (previousNonce > nonceJumpLogPageHeader2->PreviousNonce &&
                 previousDataNonce > nonceJumpLogPageHeader2->PreviousNonce) {
             // We just came across an outdated nonce jump. This means the end of the log.
-            P_LOG(PRI_WARN, BPD01, SelfInfo() << " ReplyOk",
+            P_LOG(PRI_WARN, LR001, SelfInfo() << " ReplyOk",
                     (currentSectorIdx, SectorIdx),
                     (previousNonce, previousNonce),
                     (previousDataNonce, previousDataNonce),

@@ -149,17 +149,15 @@ TCheckDiskFormatResult TPDisk::ReadChunk0Format(ui8* formatSectors, const NPDisk
                 Format.UpgradeFrom(diskFormat);
                 if (Format.IsErasureEncodeUserChunks()) {
                     P_LOG(PRI_ERROR, BPD80, "Read from disk Format has FormatFlagErasureEncodeUserChunks set, "
-                            << " but current version of PDisk can't work with it"
-                            << " Format# " << Format.ToString()
-                            << " Marker# BPD80");
+                            << " but current version of PDisk can't work with it",
+                            (Format, Format.ToString()));
                     Y_FAIL_S("PDiskId# " << PDiskId
                             << "Unable to run PDisk on disk with FormatFlagErasureEncodeUserChunks set");
                 }
                 if (Format.IsErasureEncodeUserLog()) {
                     P_LOG(PRI_ERROR, BPD801, "Read from disk Format has FormatFlagErasureEncodeUserLog set, "
-                            << " but current version of PDisk can't work with it"
-                            << " Format# " << Format.ToString()
-                            << " Marker# BPD801");
+                            << " but current version of PDisk can't work with it",
+                            (Format, Format.ToString()));
                     Y_FAIL_S("PDiskId# " << PDiskId
                             << "Unable to run PDisk on disk with FormatFlagErasureEncodeUserLog set");
                 }
@@ -1119,9 +1117,8 @@ std::unique_ptr<TEvChunkLockResult> TPDisk::ChunkLockFromQuota(TOwner owner, NKi
     ui32 number = Keeper.ColorFlagLimit(owner, color);
     ui32 used = Keeper.GetOwnerUsed(owner);
     if (number <= used) {
-        P_LOG(PRI_ERROR, BPD01,
-            "Can't lock chunks by color# " << TPDiskSpaceColor_Name(color) <<
-            ", this space color flag is already raised. Marker# BPD33");
+        P_LOG(PRI_ERROR, BPD33, "Can't lock chunks by color since this space color flag is already raised",
+            (Color, TPDiskSpaceColor_Name(color)));
         return std::unique_ptr<TEvChunkLockResult>(new NPDisk::TEvChunkLockResult(NKikimrProto::ERROR,
             {}, Keeper.GetFreeChunkCount(), "Space color flag is already raised"));
     } else {
@@ -1371,7 +1368,7 @@ bool TPDisk::ValidateForgetChunk(ui32 chunkIdx, TOwner owner, TStringStream& out
             << " > total# " << ChunkState.size()
             << " ownerId# " << owner
             << " Marker# BPD89";
-        P_LOG(PRI_ERROR, BPD01, outErrorReason.Str());
+        P_LOG(PRI_ERROR, BPD89, outErrorReason.Str());
         return false;
     }
     if (ChunkState[chunkIdx].OwnerId != owner) {
@@ -1380,7 +1377,7 @@ bool TPDisk::ValidateForgetChunk(ui32 chunkIdx, TOwner owner, TStringStream& out
             << ", ownerId# " << owner
             << " != real ownerId# " << ChunkState[chunkIdx].OwnerId
             << " Marker# BPD90";
-        P_LOG(PRI_ERROR, BPD01, outErrorReason.Str());
+        P_LOG(PRI_ERROR, BPD90, outErrorReason.Str());
         return false;
     }
     if (ChunkState[chunkIdx].CommitState != TChunkState::DATA_RESERVED_DECOMMIT_IN_PROGRESS
@@ -1390,7 +1387,7 @@ bool TPDisk::ValidateForgetChunk(ui32 chunkIdx, TOwner owner, TStringStream& out
             << " Can't forget chunkIdx# " << chunkIdx
             << " in CommitState# " << ChunkState[chunkIdx].CommitState
             << " ownerId# " << owner << " Marker# BPD91";
-        P_LOG(PRI_ERROR, BPD01, outErrorReason.Str());
+        P_LOG(PRI_ERROR, BPD91, outErrorReason.Str());
         return false;
     }
     return true;
@@ -1583,9 +1580,7 @@ void TPDisk::EventUndelivered(TUndelivered &req) {
     {
         for (ui32 i = OwnerBeginUser; i < OwnerEndUser; ++i) {
             if (OwnerData[i].CutLogId == req.Sender) {
-                P_LOG(PRI_CRIT, BPD01, "PDiskId# " << (ui32)PDiskId
-                        << " TEvCutLog was undelivered to VDiskId# " << OwnerData[i].VDiskId.ToStringWOGeneration()
-                        << " Marker# BPD24");
+                P_LOG(PRI_CRIT, BPD24, "TEvCutLog was undelivered to vdisk", (VDiskId, OwnerData[i].VDiskId.ToString()));
                 return;
             }
 
@@ -2202,10 +2197,10 @@ void TPDisk::Slay(TSlay &evSlay) {
         auto it = VDiskOwners.find(vDiskId);
         if (it == VDiskOwners.end()) {
             TStringStream str;
-            str << "PDiskId# " << (ui32)PDiskId << " Can't slay VDiskId# " << evSlay.VDiskId;
+            str << "PDiskId# " << PDiskId << " Can't slay VDiskId# " << evSlay.VDiskId;
             str << " as it is not created yet or is already slain"
                 << " Marker# BPD31";
-            P_LOG(PRI_ERROR, BPD01, str.Str());
+            P_LOG(PRI_ERROR, BPD31, str.Str());
             THolder<NPDisk::TEvSlayResult> result(new NPDisk::TEvSlayResult(
                 NKikimrProto::ALREADY,
                 GetStatusFlags(evSlay.Owner, evSlay.OwnerGroupType), evSlay.VDiskId, evSlay.SlayOwnerRound,
@@ -2218,10 +2213,10 @@ void TPDisk::Slay(TSlay &evSlay) {
         TOwnerRound ownerRound = OwnerData[owner].OwnerRound;
         if (evSlay.SlayOwnerRound <= ownerRound) {
             TStringStream str;
-            str << "PDiskId# " << (ui32)PDiskId << " Can't slay VDiskId# " << evSlay.VDiskId;
+            str << "PDiskId# " << PDiskId << " Can't slay VDiskId# " << evSlay.VDiskId;
             str << " as SlayOwnerRound# " << evSlay.SlayOwnerRound << " <= ownerRound# " << ownerRound
                 << " Marker# BPD32";
-            P_LOG(PRI_ERROR, BPD01, str.Str());
+            P_LOG(PRI_ERROR, BPD32, str.Str());
             THolder<NPDisk::TEvSlayResult> result(new NPDisk::TEvSlayResult(
                 NKikimrProto::RACE,
                 GetStatusFlags(evSlay.Owner, evSlay.OwnerGroupType), evSlay.VDiskId, evSlay.SlayOwnerRound,
@@ -2679,11 +2674,7 @@ bool TPDisk::Initialize(TActorSystem *actorSystem, const TActorId &pDiskActor) {
             *Mon.PDiskDetailedState = TPDiskMon::TPDisk::ErrorOpenFileUnknown;
         }
         ErrorStr = errStr.Str();
-        if (ActorSystem) {
-            P_LOG(PRI_CRIT, BPD01, "PDiskId# " << (ui32)PDiskId
-                << " BlockDevice initialization error! " << errStr.Str()
-                << " Marker# BPD39");
-        }
+        P_LOG(PRI_CRIT, BPD39," BlockDevice initialization error", (Details, ErrorStr));
         return false;
     }
 
@@ -2695,9 +2686,7 @@ bool TPDisk::Initialize(TActorSystem *actorSystem, const TActorId &pDiskActor) {
         TStringStream str;
         str << "serial number mismatch, expected# " << Cfg->ExpectedSerial.Quote()
             << " but got# " << DriveData.SerialNumber.Quote();
-        if (ActorSystem) {
-            LOG_WARN_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDiskId << " " << str.Str());
-        }
+        P_LOG(PRI_WARN, BPD01, str.Str());
         ErrorStr = str.Str();
 
         *Mon.PDiskState = NKikimrBlobStorage::TPDiskState::OpenFileError;

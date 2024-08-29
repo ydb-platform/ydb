@@ -89,8 +89,6 @@ struct TPDiskCtx;
 class TSysLogReader : public TThrRefBase {
     TPDisk *const PDisk;
     std::shared_ptr<TPDiskCtx> PDiskCtx;
-    // TActorSystem *ActorSystem; // deprecated
-    // TActorId ReplyTo; // deprecated
     const TReqId ReqId;
 
     THolder<TEvReadLogResult> Result;

@@ -394,7 +394,10 @@ void TestBlockMultiJoinWithRightOnUint64(EJoinKind joinKind) {
     TVector<TKSW<true>> expectedKSW;
     for (const auto& ksv : testKSV) {
         const auto found = fibMultiMap.find(std::get<0>(ksv));
-        if (found != fibMultiMap.cend()) {
+        if (found == fibMultiMap.cend() && joinKind == EJoinKind::Left) {
+            expectedKSW.push_back(std::make_tuple(std::get<0>(ksv), std::get<1>(ksv),
+                                                  std::get<2>(ksv), std::nullopt));
+        } else {
             for (const auto& right : found->second) {
                 expectedKSW.push_back(std::make_tuple(std::get<0>(ksv), std::get<1>(ksv),
                                                       std::get<2>(ksv), right));
@@ -421,6 +424,10 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinBasicTest) {
 
     Y_UNIT_TEST(TestLeftOnUint64) {
         TestBlockJoinWithRightOnUint64(EJoinKind::Left);
+    }
+
+    Y_UNIT_TEST(TestLeftMultiOnUint64) {
+        TestBlockMultiJoinWithRightOnUint64(EJoinKind::Left);
     }
 
     Y_UNIT_TEST(TestLeftSemiOnUint64) {

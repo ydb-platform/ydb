@@ -362,33 +362,58 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
         planner->SetLogFunc([TxId = TxId, &UserRequestContext = UserRequestContext](TStringBuf msg) { LOG_D(msg); });
     }
 
-    THashMap<ui64, size_t> nodeIdtoIdx;
-    for (size_t idx = 0; idx < ResourcesSnapshot.size(); ++idx) {
-        nodeIdtoIdx[ResourcesSnapshot[idx].nodeid()] = idx;
-    }
-
     LogMemoryStatistics([TxId = TxId, &UserRequestContext = UserRequestContext](TStringBuf msg) { LOG_D(msg); });
 
-    auto plan = planner->Plan(ResourcesSnapshot, ResourceEstimations);
+    ui64 selfNodeId = ExecuterId.NodeId();
+    TString selfNodeDC;
 
-    if (!plan.empty()) {
-        for (auto& group : plan) {
-            for(ui64 taskId: group.TaskIds) {
-                auto [it, success] = alreadyAssigned.emplace(taskId, group.NodeId);
-                if (success) {
-                    TasksPerNode[group.NodeId].push_back(taskId);
-                }
-            }
+    TVector<const NKikimrKqp::TKqpNodeResources*> allNodes;
+    TVector<const NKikimrKqp::TKqpNodeResources*> executerDcNodes;
+    allNodes.reserve(ResourcesSnapshot.size());
+
+    for(auto& snapNode: ResourcesSnapshot) {
+        const TString& dc = snapNode.GetKqpProxyNodeResources().GetDataCenterId();
+        if (snapNode.GetNodeId() == selfNodeId) {
+            selfNodeDC = dc;
+            break;
         }
+    }
 
-        return nullptr;
-    }  else {
+    for(auto& snapNode: ResourcesSnapshot) {
+        allNodes.push_back(&snapNode);
+        if (selfNodeDC == snapNode.GetKqpProxyNodeResources().GetDataCenterId()) {
+            executerDcNodes.push_back(&snapNode);
+        }
+    }
+
+    TVector<IKqpPlannerStrategy::TResult> plan;
+
+    if (!executerDcNodes.empty()) {
+        plan = planner->Plan(executerDcNodes, ResourceEstimations);
+    }
+
+    if (plan.empty()) {
+        plan = planner->Plan(allNodes, ResourceEstimations);
+    }
+
+    if (plan.empty()) {
         LogMemoryStatistics([TxId = TxId, &UserRequestContext = UserRequestContext](TStringBuf msg) { LOG_E(msg); });
 
         auto ev = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
             TStringBuilder() << "Not enough resources to execute query. " << "TraceId: " << UserRequestContext->TraceId);
         return std::make_unique<IEventHandle>(ExecuterId, ExecuterId, ev.Release());
     }
+
+    for (auto& group : plan) {
+        for(ui64 taskId: group.TaskIds) {
+            auto [it, success] = alreadyAssigned.emplace(taskId, group.NodeId);
+            if (success) {
+                TasksPerNode[group.NodeId].push_back(taskId);
+            }
+        }
+    }
+
+    return nullptr;
 }
 
 const IKqpGateway::TKqpSnapshot& TKqpPlanner::GetSnapshot() const {

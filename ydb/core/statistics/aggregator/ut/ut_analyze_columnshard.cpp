@@ -12,12 +12,18 @@ namespace NStat {
 
 
 Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
-    Y_UNIT_TEST(AnalyzeOneColumnTable) {
+    Y_UNIT_TEST(AnalyzeTable) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
         auto tableInfo = CreateDatabaseColumnTables(env, 1, 1)[0];
 
         AnalyzeTable(runtime, tableInfo.ShardIds[0], tableInfo.PathId);
+    }
+    
+    Y_UNIT_TEST(Analyze) {
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+        auto tableInfo = CreateDatabaseColumnTables(env, 1, 1)[0];
 
         Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
     }

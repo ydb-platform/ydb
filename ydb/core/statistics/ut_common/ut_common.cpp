@@ -435,6 +435,17 @@ void AnalyzeStatus(TTestActorRuntime& runtime, TActorId sender, ui64 saTabletId,
     UNIT_ASSERT_VALUES_EQUAL(analyzeStatusResponse->Get()->Record.GetStatus(), expectedStatus);
 }
 
+void WaitForSavedStatistics(TTestActorRuntime& runtime, const TPathId& pathId) {
+    bool eventSeen = false;
+    auto observer = runtime.AddObserver<TEvStatistics::TEvSaveStatisticsQueryResponse>([&](auto& ev){
+        if (ev->Get()->PathId == pathId)
+            eventSeen = true;
+    });
+
+    runtime.WaitFor("TEvSaveStatisticsQueryResponse", [&]{ return eventSeen; });
+}
+
+
 
 } // NStat
 } // NKikimr

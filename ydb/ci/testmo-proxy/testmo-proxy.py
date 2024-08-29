@@ -83,6 +83,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
         self._proxy_request("POST")
 
+    def do_PUT(self):
+        self._proxy_request("PUT")
+
+    def do_DELETE(self):
+        self._proxy_request("DELETE")
+
 
 def main():
     parser = argparse.ArgumentParser()

@@ -395,7 +395,7 @@ runs:
             # archive unitest reports (transformed)
             tar -C $TESTMO_JUNIT_REPORT_PARTS/.. -czf $PUBLIC_DIR/junit_parts.xml.tar.gz $(basename $TESTMO_JUNIT_REPORT_PARTS)
             
-            TESTMO_TOKEN=${{ inputs.testman_token }} NODE_TLS_REJECT_UNAUTHORIZED=0 testmo automation:run:submit-thread \
+            TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:run:submit-thread \
               --instance "https://$TESTMO_PROXY_ADDR" --run-id "$TESTMO_RUN_ID" \
               --results "$TESTMO_JUNIT_REPORT_PARTS/*.xml"
 
@@ -441,7 +441,9 @@ runs:
         if [ ${{ steps.build.outputs.runid }} ]; then
           TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:run:complete --instance "https://$TESTMO_PROXY_ADDR" --run-id ${{ steps.build.outputs.runid }}
         fi
-        kill $TESTMO_PROXY_PID
+        if [ ${{ inputs.testman_token }} ]; then
+          kill $TESTMO_PROXY_PID
+        fi
     - name: analyze tests results
       shell: bash
       env:

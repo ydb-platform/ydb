@@ -54,9 +54,10 @@ constexpr auto ServiceLivenessCheckPeriod = TDuration::MilliSeconds(100);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TRequestQueuePtr CreateRequestQueue(TString name, const NProfiling::TProfiler& profiler)
+TRequestQueuePtr CreateRequestQueue(const std::string& name, const NProfiling::TProfiler& profiler)
 {
-    return New<TRequestQueue>(name, profiler.WithTag("user", name));
+    // TODO(babenko): migrate to std::string
+    return New<TRequestQueue>(name, profiler.WithTag("user", TString(name)));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1110,10 +1111,10 @@ private:
         if (TraceContext_ && TraceContext_->IsRecorded()) {
             TraceContext_->AddTag(RequestInfoAnnotation, logMessage);
             const auto& authenticationIdentity = GetAuthenticationIdentity();
-            if (authenticationIdentity.User) {
+            if (!authenticationIdentity.User.empty()) {
                 TStringBuilder builder;
                 builder.AppendString(authenticationIdentity.User);
-                if (authenticationIdentity.UserTag && authenticationIdentity.UserTag != authenticationIdentity.User) {
+                if (!authenticationIdentity.UserTag.empty() && authenticationIdentity.UserTag != authenticationIdentity.User) {
                     builder.AppendChar(':');
                     builder.AppendString(authenticationIdentity.UserTag);
                 }
@@ -1306,8 +1307,8 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TRequestQueue::TRequestQueue(TString name, NProfiling::TProfiler profiler)
-    : Name_(std::move(name))
+TRequestQueue::TRequestQueue(const std::string& name, NProfiling::TProfiler profiler)
+    : Name_(name)
     , BytesThrottler_{CreateReconfigurableThroughputThrottler(InfiniteRequestThrottlerConfig,
         NLogging::TLogger(),
         profiler.WithPrefix("/bytes_throttler"))}
@@ -1375,7 +1376,7 @@ void TRequestQueue::Configure(const TMethodConfigPtr& config)
     SubscribeToThrottlers();
 }
 
-const TString& TRequestQueue::GetName() const
+const std::string& TRequestQueue::GetName() const
 {
     return Name_;
 }
@@ -1874,7 +1875,7 @@ void TServiceBase::OnRequestAuthenticated(
                 return;
             }
         }
-        requestHeader.set_user(std::move(authResult.User));
+        requestHeader.set_user(ToProto<TProtobufString>(authResult.User));
 
         auto* credentialsExt = requestHeader.MutableExtension(
             NRpc::NProto::TCredentialsExt::credentials_ext);
@@ -1947,7 +1948,8 @@ void TServiceBase::RegisterRequestQueue(
 
     auto profiler = runtimeInfo->Profiler.WithSparse();
     if (runtimeInfo->Descriptor.RequestQueueProvider) {
-        profiler = profiler.WithTag("queue", requestQueue->GetName());
+        // TODO(babenko): switch to std::string
+        profiler = profiler.WithTag("queue", TString(requestQueue->GetName()));
     }
     profiler.AddFuncGauge("/request_queue_size", MakeStrong(this), [=] {
         return requestQueue->GetQueueSize();
@@ -2340,10 +2342,12 @@ TServiceBase::TMethodPerformanceCountersPtr TServiceBase::CreateMethodPerformanc
 
     auto profiler = runtimeInfo->Profiler.WithSparse();
     if (userTag) {
+        // TODO(babenko): switch to std::string
         profiler = profiler.WithTag("user", TString(userTag));
     }
     if (runtimeInfo->Descriptor.RequestQueueProvider) {
-        profiler = profiler.WithTag("queue", requestQueue->GetName());
+        // TODO(babenko): switch to std::string
+        profiler = profiler.WithTag("queue", TString(requestQueue->GetName()));
     }
     return New<TMethodPerformanceCounters>(profiler, TimeHistogramConfig_.Acquire());
 }

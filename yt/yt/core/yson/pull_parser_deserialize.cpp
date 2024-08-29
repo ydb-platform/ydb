@@ -85,7 +85,16 @@ void Deserialize(double& value, TYsonPullParserCursor* cursor)
     }
 }
 
-// TString.
+// std::string
+void Deserialize(std::string& value, TYsonPullParserCursor* cursor)
+{
+    MaybeSkipAttributes(cursor);
+    EnsureYsonToken("string", *cursor, EYsonItemType::StringValue);
+    value = (*cursor)->UncheckedAsString();
+    cursor->Next();
+}
+
+// TString
 void Deserialize(TString& value, TYsonPullParserCursor* cursor)
 {
     MaybeSkipAttributes(cursor);

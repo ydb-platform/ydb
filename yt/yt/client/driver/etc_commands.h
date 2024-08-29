@@ -114,7 +114,7 @@ public:
     static void Register(TRegistrar registrar);
 
 private:
-    TString User;
+    std::string User;
     NYPath::TRichYPath Path;
     NYTree::EPermission Permission;
 

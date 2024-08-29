@@ -51,14 +51,15 @@ TSampler::TSampler(
     , TracesSampled_(Profiler_.Counter("/traces_sampled"))
 { }
 
-void TSampler::SampleTraceContext(const TString& user, const TTraceContextPtr& traceContext)
+void TSampler::SampleTraceContext(const std::string& user, const TTraceContextPtr& traceContext)
 {
     auto config = Config_.Acquire();
 
     auto [userState, inserted] = Users_.FindOrInsert(user, [&] {
         auto state = New<TUserState>();
 
-        auto profiler = Profiler_.WithSparse().WithTag("user", user);
+        // TODO(babenko): switch to std::string
+        auto profiler = Profiler_.WithSparse().WithTag("user", TString(user));
         state->TracesSampledByUser = profiler.Counter("/traces_sampled_by_user");
         state->TracesSampledByProbability = profiler.Counter("/traces_sampled_by_probability");
 

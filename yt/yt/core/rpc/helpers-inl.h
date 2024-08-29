@@ -6,6 +6,8 @@
 
 #include "authentication_identity.h"
 
+#include <yt/yt/core/misc/protobuf_helpers.h>
+
 namespace NYT::NRpc {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -13,24 +15,28 @@ namespace NYT::NRpc {
 template <class T>
 void WriteAuthenticationIdentityToProto(T* proto, const TAuthenticationIdentity& identity)
 {
+    using NYT::ToProto;
+
     if (identity.User == RootUserName) {
         proto->clear_user();
     } else {
-        proto->set_user(identity.User);
+        proto->set_user(ToProto<TProtobufString>(identity.User));
     }
     if (identity.UserTag == identity.User) {
         proto->clear_user_tag();
     } else {
-        proto->set_user_tag(identity.UserTag);
+        proto->set_user_tag(ToProto<TProtobufString>(identity.UserTag));
     }
 }
 
 template <class T>
 TAuthenticationIdentity ParseAuthenticationIdentityFromProto(const T& proto)
 {
+    using NYT::FromProto;
+
     TAuthenticationIdentity identity;
-    identity.User = proto.has_user() ? proto.user() : RootUserName;
-    identity.UserTag = proto.has_user_tag() ? proto.user_tag () : identity.User;
+    identity.User = proto.has_user() ? FromProto<std::string>(proto.user()) : RootUserName;
+    identity.UserTag = proto.has_user_tag() ? FromProto<std::string>(proto.user_tag()) : identity.User;
     return identity;
 }
 

@@ -466,7 +466,9 @@ protected:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TRequestQueuePtr CreateRequestQueue(TString name, const NProfiling::TProfiler& profiler = {});
+TRequestQueuePtr CreateRequestQueue(
+    const std::string& name,
+    const NProfiling::TProfiler& profiler = {});
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -1082,7 +1084,7 @@ class TRequestQueue
     : public TRefCounted
 {
 public:
-    explicit TRequestQueue(TString name, NProfiling::TProfiler profiler);
+    TRequestQueue(const std::string& name, NProfiling::TProfiler profiler);
 
     bool Register(TServiceBase* service, TServiceBase::TRuntimeMethodInfo* runtimeInfo);
     void Configure(const TMethodConfigPtr& config);
@@ -1101,10 +1103,11 @@ public:
     void ConfigureWeightThrottler(const NConcurrency::TThroughputThrottlerConfigPtr& config);
     void ConfigureBytesThrottler(const NConcurrency::TThroughputThrottlerConfigPtr& config);
 
-    const TString& GetName() const;
+    const std::string& GetName() const;
 
 private:
-    const TString Name_;
+    const std::string Name_;
+
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, RegisterLock_);
     std::atomic<bool> Registered_ = false;
     TServiceBase* Service_;

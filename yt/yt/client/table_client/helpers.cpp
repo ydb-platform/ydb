@@ -464,6 +464,25 @@ void FromUnversionedValue(TString* value, TUnversionedValue unversionedValue)
 
 void ToUnversionedValue(
     TUnversionedValue* unversionedValue,
+    const std::string& value,
+    const TRowBufferPtr& rowBuffer,
+    int id,
+    EValueFlags flags)
+{
+    ToUnversionedValue(unversionedValue, static_cast<TStringBuf>(value), rowBuffer, id, flags);
+}
+
+void FromUnversionedValue(std::string* value, TUnversionedValue unversionedValue)
+{
+    TStringBuf uncapturedValue;
+    FromUnversionedValue(&uncapturedValue, unversionedValue);
+    *value = std::string(uncapturedValue);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void ToUnversionedValue(
+    TUnversionedValue* unversionedValue,
     TStringBuf value,
     const TRowBufferPtr& rowBuffer,
     int id,
@@ -475,7 +494,7 @@ void ToUnversionedValue(
 void FromUnversionedValue(TStringBuf* value, TUnversionedValue unversionedValue)
 {
     if (unversionedValue.Type == EValueType::Null) {
-        *value = TStringBuf{};
+        *value = {};
         return;
     }
     if (unversionedValue.Type != EValueType::String) {
@@ -483,6 +502,18 @@ void FromUnversionedValue(TStringBuf* value, TUnversionedValue unversionedValue)
             unversionedValue.Type);
     }
     *value = unversionedValue.AsStringBuf();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void ToUnversionedValue(
+    TUnversionedValue* unversionedValue,
+    std::string_view value,
+    const TRowBufferPtr& rowBuffer,
+    int id,
+    EValueFlags flags)
+{
+    *unversionedValue = rowBuffer->CaptureValue(MakeUnversionedStringValue(TStringBuf(value), id, flags));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -142,7 +142,7 @@ extern const TRealmId NullRealmId;
 using TMutationId = TGuid;
 extern const TMutationId NullMutationId;
 
-extern const TString RootUserName;
+extern const std::string RootUserName;
 
 constexpr int TypicalMessagePartCount = 8;
 

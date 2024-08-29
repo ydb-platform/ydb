@@ -310,12 +310,12 @@ private:
                 Request_->GetService(),
                 Request_->GetMethod(),
                 MakeFormatterWrapper([&] (auto* builder) {
-                    if (Request_->GetUser()) {
+                    if (!Request_->GetUser().empty()) {
                         builder->AppendFormat("User: %v, ", Request_->GetUser());
                     }
                 }),
                 MakeFormatterWrapper([&] (auto* builder) {
-                    if (Request_->GetUserTag() && Request_->GetUserTag() != Request_->GetUser()) {
+                    if (!Request_->GetUserTag().empty() && Request_->GetUserTag() != Request_->GetUser()) {
                         builder->AppendFormat("UserTag: %v, ", Request_->GetUserTag());
                     }
                 }),

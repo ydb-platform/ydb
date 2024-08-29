@@ -49,7 +49,7 @@ public:
         TSamplerConfigPtr config = New<TSamplerConfig>(),
         const NProfiling::TProfiler& profiler = TracingProfiler());
 
-    void SampleTraceContext(const TString& user, const TTraceContextPtr& traceContext);
+    void SampleTraceContext(const std::string& user, const TTraceContextPtr& traceContext);
 
     void UpdateConfig(TSamplerConfigPtr config);
 

@@ -49,9 +49,7 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
         auto& runtime = *env.GetServer().GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
-        auto schemeShardStatsBlocker = runtime.AddObserver<TEvStatistics::TEvSchemeShardStats>([&](auto& ev) {
-            ev.Reset();
-        });
+        TBlockEvents<TEvStatistics::TEvAnalyzeTableResponse> block(runtime);
 
         auto tableInfo = CreateDatabaseColumnTables(env, 1, 1)[0];
 
@@ -64,7 +62,19 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
 
         AnalyzeStatus(runtime, sender, tableInfo.SaTabletId, operationId, NKikimrStat::TEvAnalyzeStatusResponse::STATUS_ENQUEUED);
 
-        schemeShardStatsBlocker.Remove();
+        // Check EvRemoteHttpInfo
+        {
+            auto httpRequest = std::make_unique<NActors::NMon::TEvRemoteHttpInfo>("/app?");
+            runtime.SendToPipe(tableInfo.SaTabletId, sender, httpRequest.release(), 0, {});
+            auto httpResponse = runtime.GrabEdgeEventRethrow<NActors::NMon::TEvRemoteHttpInfoRes>(sender);
+            TString body = httpResponse->Get()->Html;
+            Cerr << body << Endl;
+            UNIT_ASSERT(body.Size() > 500);
+            UNIT_ASSERT(body.Contains("ForceTraversals: 1"));
+        }
+
+        block.Unblock();
+        block.Stop();
 
         auto analyzeResonse = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
         UNIT_ASSERT_VALUES_EQUAL(analyzeResonse->Get()->Record.GetOperationId(), operationId);

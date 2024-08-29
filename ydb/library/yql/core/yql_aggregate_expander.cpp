@@ -1506,7 +1506,7 @@ TExprNode::TPtr TAggregateExpander::BuildFinalizeByKeyLambda(const TExprNode::TP
                 .Seal()
             .Seal()
         .Build();
-    if (AllowSpilling && !FinalColumnNames.empty()) {
+    if (AllowSpilling) {
         auto saveLambda = Ctx.Builder(Node->Pos())
             .Lambda()
                 .Param("key")
@@ -2535,7 +2535,8 @@ TExprNode::TPtr TAggregateExpander::GeneratePostAggregateSerializePhase() {
         pickleType = KeyColumns->ChildrenSize() > 1 ? Ctx.MakeType<TTupleExprType>(keyItemTypes) : keyItemTypes[0];
         pickleTypeNode = ExpandType(Node->Pos(), *pickleType, Ctx);
     }
-    auto columnNames = FinalColumnNames;
+    bool aggregateOnly = (Suffix != "");
+    const auto& columnNames = aggregateOnly ? FinalColumnNames : InitialColumnNames;
     return Ctx.Builder(Node->Pos())
         .Lambda()
             .Param("key")

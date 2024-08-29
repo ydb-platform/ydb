@@ -748,8 +748,8 @@ message TPDiskInfo {
 message TFeatureFlagsConfig {
     message TFeatureFlag {
         string Name = 1;
-        bool Enabled = 2;
-        bool IsDefault = 3;
+        bool Current = 2;
+        bool Default = 3;
     }
 
     message TDatabase {

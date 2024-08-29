@@ -43,7 +43,8 @@ NKikimrSubDomains::TSubDomainSettings GetSubDomainDefaultSettings(const TString 
     return subdomain;
 }
 
-TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, ui32 storagePools) {
+TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, ui32 storagePools, bool useRealThreads)
+    : CSController(NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>()) {
     auto mbusPort = PortManager.GetPort();
     auto grpcPort = PortManager.GetPort();
 
@@ -76,6 +77,10 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, ui32 storagePools) {
     Endpoint = "localhost:" + ToString(grpcPort);
     DriverConfig = NYdb::TDriverConfig().SetEndpoint(Endpoint);
     Driver = MakeHolder<NYdb::TDriver>(DriverConfig);
+
+    CSController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+    CSController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
+    CSController->SetOverrideReduceMemoryIntervalLimit(1LLU << 30);
 
     Server->GetRuntime()->SetLogPriority(NKikimrServices::STATISTICS, NActors::NLog::PRI_DEBUG);
 }
@@ -238,9 +243,21 @@ void CreateColumnStoreTable(TTestEnv& env, const TString& databaseName, const TS
     )", fullTableName.c_str(), shardCount)).GetValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
+    result = session.ExecuteSchemeQuery(Sprintf(R"(
+        ALTER OBJECT `%s` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=cms_key, TYPE=COUNT_MIN_SKETCH,
+                    FEATURES=`{"column_names" : ['Key']}`);
+    )", fullTableName.c_str())).GetValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+    result = session.ExecuteSchemeQuery(Sprintf(R"(
+        ALTER OBJECT `%s` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=cms_value, TYPE=COUNT_MIN_SKETCH,
+                    FEATURES=`{"column_names" : ['Value']}`);
+    )", fullTableName.c_str())).GetValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
     NYdb::TValueBuilder rows;
     rows.BeginList();
-    for (size_t i = 0; i < 100; ++i) {
+    for (size_t i = 0; i < ColumnTableRowsNumber; ++i) {
         auto key = TValueBuilder().Uint64(i).Build();
         auto value = TValueBuilder().OptionalUint64(i).Build();
         rows.AddListItem();
@@ -250,9 +267,10 @@ void CreateColumnStoreTable(TTestEnv& env, const TString& databaseName, const TS
         rows.EndStruct();
     }
     rows.EndList();
-
     result = client.BulkUpsert(fullTableName, rows.Build()).GetValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+    env.GetController()->WaitActualization(TDuration::Seconds(1));
 }
 
 std::vector<TTableInfo> CreateDatabaseColumnTables(TTestEnv& env, ui8 tableCount, ui8 shardCount) {

@@ -943,7 +943,7 @@ public:
             request.OutputChunkMaxSize = queryState->GetOutputChunkMaxSize();
             if (Y_LIKELY(queryState->PreparedQuery)) {
                 ui64 resultSetsCount = queryState->PreparedQuery->GetPhysicalQuery().ResultBindingsSize();
-                request.AllowTrailingResults = (resultSetsCount == 1 && queryState->Statements.size() <= 1);
+                request.AllowTrailingResults = (resultSetsCount <= 1 && queryState->Statements.size() <= 1);
                 request.AllowTrailingResults &= (QueryState->RequestEv->GetSupportsStreamTrailingResult());
             }
         }

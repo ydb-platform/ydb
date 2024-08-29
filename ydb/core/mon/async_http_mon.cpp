@@ -220,7 +220,8 @@ public:
         if (response->Status.StartsWith("2")) {
             TString url(Event->Get()->Request->URL.Before('?'));
             TString status(response->Status);
-            NMonitoring::THistogramPtr ResponseTimeHgram = NKikimr::GetServiceCounters(NKikimr::AppData()->Counters, "utils")
+            NMonitoring::THistogramPtr ResponseTimeHgram = NKikimr::GetServiceCounters(NKikimr::AppData()->Counters,
+                    ActorMonPage->MonServiceName)
                 ->GetSubgroup("subsystem", "mon")
                 ->GetSubgroup("url", url)
                 ->GetSubgroup("status", status)
@@ -887,7 +888,8 @@ NMonitoring::IMonPage* TAsyncHttpMon::RegisterActorPage(TRegisterActorPageFields
         fields.ActorSystem,
         fields.ActorId,
         fields.AllowedSIDs ? fields.AllowedSIDs : Config.AllowedSIDs,
-        fields.UseAuth ? Config.Authorizer : TRequestAuthorizer());
+        fields.UseAuth ? Config.Authorizer : TRequestAuthorizer(),
+        fields.MonServiceName);
     if (fields.Index) {
         fields.Index->Register(page);
         if (fields.SortPages) {

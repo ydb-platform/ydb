@@ -13,14 +13,16 @@ struct TActorFactory : public IActorFactory {
         NActors::TActorId rowDispatcherActorId,
         ui32 partitionId,
         NYdb::TDriver driver,
-        std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory) const override {
+        std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
+        const ::NMonitoring::TDynamicCounterPtr& counters) const override {
 
         auto actorPtr = NFq::NewTopicSession(
             config,
             rowDispatcherActorId,
             partitionId,
             driver,
-            credentialsProviderFactory
+            credentialsProviderFactory,
+            counters
         );
         return NActors::TlsActivationContext->ExecutorThread.RegisterActor(actorPtr.release(), NActors::TMailboxType::HTSwap, Max<ui32>());
     }

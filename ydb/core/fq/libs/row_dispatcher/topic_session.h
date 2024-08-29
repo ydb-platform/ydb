@@ -17,6 +17,7 @@ std::unique_ptr<NActors::IActor> NewTopicSession(
     NActors::TActorId rowDispatcherActorId,
     ui32 partitionId,
     NYdb::TDriver driver,
-    std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory);
+    std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
+    const ::NMonitoring::TDynamicCounterPtr& counters);
 
 } // namespace NFq

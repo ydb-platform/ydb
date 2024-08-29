@@ -30,7 +30,8 @@ struct TTestActorFactory : public NFq::NRowDispatcher::IActorFactory {
         NActors::TActorId /*rowDispatcherActorId*/,
         ui32 /*partitionId*/,
         NYdb::TDriver /*driver*/,
-        std::shared_ptr<NYdb::ICredentialsProviderFactory> /*credentialsProviderFactory*/) const override {
+        std::shared_ptr<NYdb::ICredentialsProviderFactory> /*credentialsProviderFactory*/,
+        const ::NMonitoring::TDynamicCounterPtr& /*counters*/) const override {
         auto actorId  = Runtime.AllocateEdgeActor();
         ActorIds.push(actorId);
         return actorId;

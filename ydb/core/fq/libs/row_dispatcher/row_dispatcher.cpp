@@ -321,7 +321,8 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr &ev) {
             CreateCredentialsProviderFactoryForStructuredToken(
                 CredentialsFactory,
                 ev->Get()->Record.GetToken(),
-                ev->Get()->Record.GetAddBearerToToken()));
+                ev->Get()->Record.GetAddBearerToToken()),
+            Counters);
         SessionInfo& sessionInfo = topicSessionInfo.Sessions[sessionActorId];
         sessionInfo.Consumers[ev->Sender] = consumerInfo;
     } else {

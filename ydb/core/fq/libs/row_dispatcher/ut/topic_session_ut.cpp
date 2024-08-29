@@ -45,7 +45,8 @@ public:
             RowDispatcherActorId,
             0,
             Driver,
-            CredentialsProviderFactory
+            CredentialsProviderFactory,
+            MakeIntrusive<NMonitoring::TDynamicCounters>()
             ).release());
         Runtime.EnableScheduleForActor(TopicSession);
 

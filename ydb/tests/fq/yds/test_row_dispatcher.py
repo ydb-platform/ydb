@@ -617,6 +617,7 @@ class TestPqRowDispatcher(TestYdsBase):
         wait_row_dispatcher_sensor_value(kikimr, "ClientsCount", 1)
         wait_row_dispatcher_sensor_value(kikimr, "RowsSent", 1, exact_match=False)
         wait_row_dispatcher_sensor_value(kikimr, "IncomingRequests", 1, exact_match=False)
+        wait_row_dispatcher_sensor_value(kikimr, "RowsRead", 1, exact_match=False)
 
         stop_yds_query(client, query_id)
 

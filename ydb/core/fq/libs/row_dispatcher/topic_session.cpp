@@ -24,6 +24,17 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TTopicSessionMetrics {
+    TTopicSessionMetrics(const ::NMonitoring::TDynamicCounterPtr& counters)
+        : Counters(counters) {
+        RowsRead = Counters->GetCounter("RowsRead");
+    }
+
+    ::NMonitoring::TDynamicCounterPtr Counters;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RowsRead;
+};
+
+
 struct TEvPrivate {
     // Event ids
     enum EEv : ui32 {
@@ -101,6 +112,8 @@ private:
     NConfig::TRowDispatcherConfig Config;
     ui64 UsedSize = 0;
     TMaybe<TParserInputType> CurrentParserTypes;
+    const ::NMonitoring::TDynamicCounterPtr Counters;
+    TTopicSessionMetrics Metrics;
 
 public:
     explicit TTopicSession(
@@ -108,7 +121,8 @@ public:
         NActors::TActorId rowDispatcherActorId,
         ui32 partitionId,
         NYdb::TDriver driver,
-        std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory);
+        std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
+        const ::NMonitoring::TDynamicCounterPtr& counters);
 
     void Bootstrap();
     void PassAway() override;
@@ -190,7 +204,8 @@ TTopicSession::TTopicSession(
     NActors::TActorId rowDispatcherActorId,
     ui32 partitionId,
     NYdb::TDriver driver,
-    std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory)
+    std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
+    const ::NMonitoring::TDynamicCounterPtr& counters)
     : RowDispatcherActorId(rowDispatcherActorId)
     , PartitionId(partitionId)
     , Driver(driver)
@@ -198,6 +213,8 @@ TTopicSession::TTopicSession(
     , BufferSize(16_MB)
     , LogPrefix("TopicSession")
     , Config(config)
+    , Counters(counters)
+    , Metrics(counters)
 {
 }
 
@@ -382,6 +399,7 @@ void TTopicSession::CloseTopicSession() {
 }
 
 std::optional<NYql::TIssues> TTopicSession::ProcessDataReceivedEvent(NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& event) {
+    Metrics.RowsRead->Add(event.GetMessages().size());
     for (const auto& message : event.GetMessages()) {
         const TString& data = message.GetData();
         IngressStats.Bytes += data.size();
@@ -659,8 +677,9 @@ std::unique_ptr<NActors::IActor> NewTopicSession(
     NActors::TActorId rowDispatcherActorId,
     ui32 partitionId,
     NYdb::TDriver driver,
-    std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory) {
-    return std::unique_ptr<NActors::IActor>(new TTopicSession(config, rowDispatcherActorId, partitionId, driver, credentialsProviderFactory));
+    std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
+    const ::NMonitoring::TDynamicCounterPtr& counters) {
+    return std::unique_ptr<NActors::IActor>(new TTopicSession(config, rowDispatcherActorId, partitionId, driver, credentialsProviderFactory, counters));
 }
 
 } // namespace NFq

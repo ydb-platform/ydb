@@ -77,7 +77,6 @@ protected:
     i64 MaxClockSkewWithPeerUs;
     ui32 MaxClockSkewPeerId;
     NKikimrWhiteboard::TSystemStateInfo SystemStateInfo;
-    NKikimrMemory::TMemoryStats MemoryStats;
     THolder<NTracing::ITraceCollection> TabletIntrospectionData;
 
     ::NMonitoring::TDynamicCounters::TCounterPtr MaxClockSkewWithPeerUsCounter;
@@ -691,31 +690,41 @@ protected:
     }
 
     void Handle(TEvWhiteboard::TEvMemoryStatsUpdate::TPtr &ev, const TActorContext &ctx) {
-        MemoryStats.Swap(&ev->Get()->Record);
+        const auto& memoryStats = ev->Get()->Record;
 
         // Note: copy stats to sys info fields for backward compatibility
-        NKikimrWhiteboard::TSystemStateInfo systemStateUpdate;
-        if (MemoryStats.HasAnonRss()) {
-            systemStateUpdate.SetMemoryUsed(MemoryStats.GetAnonRss());
+        if (memoryStats.HasAnonRss()) {
+            SystemStateInfo.SetMemoryUsed(memoryStats.GetAnonRss());
+        } else {
+            SystemStateInfo.ClearMemoryUsed();
         }
-        if (MemoryStats.HasHardLimit()) {
-            systemStateUpdate.SetMemoryLimit(MemoryStats.GetHardLimit());
+        if (memoryStats.HasHardLimit()) {
+            SystemStateInfo.SetMemoryLimit(memoryStats.GetHardLimit());
+        } else {
+            SystemStateInfo.ClearMemoryLimit();
         }
-        if (MemoryStats.HasAllocatedMemory()) {
-            systemStateUpdate.SetMemoryUsedInAlloc(MemoryStats.GetAllocatedMemory());
+        if (memoryStats.HasAllocatedMemory()) {
+            SystemStateInfo.SetMemoryUsedInAlloc(memoryStats.GetAllocatedMemory());
+        } else {
+            SystemStateInfo.ClearMemoryUsedInAlloc();
+        }
+        if (memoryStats.HasSharedCacheConsumption()) {
+            SystemStateInfo.MutableSharedCacheStats()->SetUsedBytes(memoryStats.GetSharedCacheConsumption());
+        } else {
+            SystemStateInfo.MutableSharedCacheStats()->ClearUsedBytes();
+        }
+        if (memoryStats.HasSharedCacheLimit()) {
+            SystemStateInfo.MutableSharedCacheStats()->SetLimitBytes(memoryStats.GetSharedCacheLimit());
+        } else {
+            SystemStateInfo.MutableSharedCacheStats()->ClearLimitBytes();
         }
 
-        // Note: is rendered in UI as 'Caches', so let's pass aggregated caches stats (not only Shared Cache stats)
-        if (MemoryStats.HasConsumersConsumption()) {
-            systemStateUpdate.MutableSharedCacheStats()->SetUsedBytes(MemoryStats.GetConsumersConsumption());
-        }
-        if (MemoryStats.HasConsumersLimit()) {
-            systemStateUpdate.MutableSharedCacheStats()->SetLimitBytes(MemoryStats.GetConsumersLimit());
-        }
+        SystemStateInfo.MutableMemoryStats()->Swap(&ev->Get()->Record);
 
-        if (CheckedMerge(SystemStateInfo, systemStateUpdate)) {
-            SystemStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
-        }
+        // Note: there is no big reason (and an easy way) to compare the previous and the new memory stats
+        // and allocated memory stat is expected to change every time
+        // so always update change time unconditionally
+        SystemStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
     }
 
     void Handle(TEvWhiteboard::TEvSystemStateAddEndpoint::TPtr &ev, const TActorContext &ctx) {

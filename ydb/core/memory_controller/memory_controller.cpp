@@ -224,8 +224,6 @@ private:
         memoryStats.SetHardLimit(hardLimitBytes);
         memoryStats.SetSoftLimit(softLimitBytes);
         memoryStats.SetTargetUtilization(targetUtilizationBytes);
-        memoryStats.SetConsumersConsumption(consumersConsumption);
-        memoryStats.SetOtherConsumption(otherConsumption);
         if (hasMemTotalHardLimit) memoryStats.SetExternalConsumption(externalConsumption);
 
         ui64 consumersLimitBytes = 0;
@@ -251,7 +249,6 @@ private:
         }
 
         Counters->GetCounter("Stats/ConsumersLimit")->Set(consumersLimitBytes);
-        memoryStats.SetConsumersLimit(consumersLimitBytes);
 
         ui64 queryExecutionConsumption = TAlignedPagePool::GetGlobalPagePoolSize();
         ui64 queryExecutionLimitBytes = ResourceBrokerSelfConfig.QueryExecutionLimitBytes 

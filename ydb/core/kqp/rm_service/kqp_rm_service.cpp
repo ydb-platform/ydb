@@ -146,6 +146,7 @@ public:
         return TPlannerPlacingOptions{
             .MaxNonParallelTasksExecutionLimit = MaxNonParallelTasksExecutionLimit.load(),
             .MaxNonParallelTopStageExecutionLimit = MaxNonParallelTopStageExecutionLimit.load(),
+            .PreferLocalDatacenterExecution = PreferLocalDatacenterExecution.load(),
         };
     }
 
@@ -423,6 +424,7 @@ public:
         QueryMemoryLimit.store(config.GetQueryMemoryLimit());
         MaxNonParallelTopStageExecutionLimit.store(config.GetMaxNonParallelTopStageExecutionLimit());
         MaxNonParallelTasksExecutionLimit.store(config.GetMaxNonParallelTasksExecutionLimit());
+        PreferLocalDatacenterExecution.store(config.GetPreferLocalDatacenterExecution());
     }
 
     ui32 GetNodeId() override {
@@ -471,6 +473,7 @@ public:
     std::atomic<i64> ExternalDataQueryMemory = 0;
     std::atomic<ui64> MaxNonParallelTopStageExecutionLimit = 1;
     std::atomic<ui64> MaxNonParallelTasksExecutionLimit = 8;
+    std::atomic<bool> PreferLocalDatacenterExecution = true;
 
     // current state
     std::atomic<ui64> LastResourceBrokerTaskId = 0;

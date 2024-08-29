@@ -46,6 +46,8 @@ class LoadSuiteBase:
                 allure.attach(result.plan.table, 'Plan table', attachment_type=allure.attachment_type.TEXT)
             if result.plan.ast is not None:
                 allure.attach(result.plan.ast, 'Plan ast', attachment_type=allure.attachment_type.TEXT)
+            if result.plan.svg is not None:
+                allure.attach(result.plan.svg, 'Plan svg', attachment_type=allure.attachment_type.SVG)
 
         if result.stdout is not None:
             allure.attach(result.stdout, 'Stdout', attachment_type=allure.attachment_type.TEXT)

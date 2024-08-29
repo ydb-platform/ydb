@@ -4715,6 +4715,62 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorConsistency) {
             "{ items { uint32_value: 6 } items { uint32_value: 60 } }, "
             "{ items { uint32_value: 7 } items { uint32_value: 70 } }");
     }
+}
+
+Y_UNIT_TEST_SUITE(DataShardReadIteratorScheme) {
+
+    Y_UNIT_TEST(ReadDecimal) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false);
+        TServer::TPtr server = new TServer(serverSettings);
+
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        auto opts = TShardedTableOptions()
+                .Columns({{"key", "Decimal", true, false},
+                          {"value", "Decimal", false, false}});
+        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+
+        ExecSQL(server, sender, R"(
+            UPSERT INTO `/Root/table-1` (key, value) VALUES 
+                (UNWRAP(Decimal("155555555555555", 22, 9)), UNWRAP(Decimal("255555555555555", 22, 9))), 
+                (UNWRAP(Decimal("355555555555555", 22, 9)), UNWRAP(Decimal("455555555555555", 22, 9))),
+                (UNWRAP(Decimal("555555555555555", 22, 9)), UNWRAP(Decimal("655555555555555", 22, 9))), 
+                (UNWRAP(Decimal("755555555555555", 22, 9)), UNWRAP(Decimal("855555555555555", 22, 9)));
+        )");        
+
+        
+        auto read = KqpSimpleSend(runtime, 
+            "SELECT key, value FROM `/Root/table-1` ORDER BY key");
+        UNIT_ASSERT_VALUES_EQUAL(
+            FormatResult(AwaitResponse(runtime, std::move(read))),
+            "{ items { low_128: 12609526036060773888 high_128: 8432 } items { low_128: 12809902456581463552 high_128: 13853 } }, "
+            "{ items { low_128: 13010278877102153216 high_128: 19274 } items { low_128: 13210655297622842880 high_128: 24695 } }, "
+            "{ items { low_128: 13411031718143532544 high_128: 30116 } items { low_128: 13611408138664222208 high_128: 35537 } }, "
+            "{ items { low_128: 13811784559184911872 high_128: 40958 } items { low_128: 14012160979705601536 high_128: 46379 } }");
+            
+        auto readFilter = KqpSimpleSend(runtime, R"(
+            SELECT key, value FROM `/Root/table-1` 
+            WHERE key < Decimal("555555555555555", 22, 9) ORDER BY key)");
+        UNIT_ASSERT_VALUES_EQUAL(
+            FormatResult(AwaitResponse(runtime, std::move(readFilter))),
+            "{ items { low_128: 12609526036060773888 high_128: 8432 } items { low_128: 12809902456581463552 high_128: 13853 } }, "
+            "{ items { low_128: 13010278877102153216 high_128: 19274 } items { low_128: 13210655297622842880 high_128: 24695 } }");
+
+        auto readSum = KqpSimpleSend(runtime, R"(
+            SELECT SUM(key), SUM(value), SUM(key) == Decimal("1822222222222220", 22, 9) FROM `/Root/table-1`)");
+        UNIT_ASSERT_VALUES_EQUAL(
+            FormatResult(AwaitResponse(runtime, std::move(readSum))),
+            "{ items { low_128: 15949133043072268288 high_128: 98782 } items { low_128: 16750638725155026944 high_128: 120466 } items { bool_value: true } }");
+
+    }    
 
 }
 

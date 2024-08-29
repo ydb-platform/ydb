@@ -71,14 +71,12 @@ private:
             return;
         }
 
+        // Note: we send the poison message and wait for the pipe to close
         NTabletPipe::SendData(SelfId(), PipeClient, new TEvents::TEvPoison);
-        NTabletPipe::CloseClient(SelfId(), PipeClient);
-        this->Reply(Ydb::StatusIds::SUCCESS);
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr&) {
-        this->Reply(Ydb::StatusIds::UNDETERMINED,
-            TStringBuilder() << "Tablet " << TabletId << " disconnected");
+        this->Reply(Ydb::StatusIds::SUCCESS);
     }
 
     void Handle(TEvents::TEvWakeup::TPtr&) {

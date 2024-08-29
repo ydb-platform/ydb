@@ -100,6 +100,7 @@ public:
     }
 
     void UpdateTableStats(const TShardIdx shardIdx, const TPathId& pathId, const TPartitionStats& newStats) {
+        Stats.TableStats[pathId].Aggregated.PartCount = GetColumnShards().size();
         Stats.UpdateTableStats(shardIdx, pathId, newStats);
     }
 

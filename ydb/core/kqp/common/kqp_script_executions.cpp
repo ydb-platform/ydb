@@ -6,7 +6,7 @@ namespace NKikimr::NKqp {
 
 TString ScriptExecutionOperationFromExecutionId(const TString& executionId) {
     NOperationId::TOperationId operationId;
-    operationId.GetMutableKind() = NOperationId::TOperationId::SCRIPT_EXECUTION;
+    operationId.SetKind(NOperationId::TOperationId::SCRIPT_EXECUTION);
     NOperationId::AddOptionalValue(operationId, "id", executionId);
     return operationId.ToString();
 }

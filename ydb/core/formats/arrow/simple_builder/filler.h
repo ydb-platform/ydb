@@ -37,7 +37,7 @@ public:
 template <class TArrowType>
 class TPoolFiller {
 private:
-    using CType = TArrowType::c_type;
+    using CType = typename TArrowType::c_type;
 
 private:
     std::vector<CType> Data;

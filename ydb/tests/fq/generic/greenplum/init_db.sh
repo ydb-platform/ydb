@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-psql -v ON_ERROR_STOP=1 --username gpadmin --dbname template1 <<-EOSQL
+psql -p 6432 -v ON_ERROR_STOP=1 --username gpadmin --dbname template1 <<-EOSQL
     CREATE TABLE simple_table (number INT);
     INSERT INTO simple_table VALUES ((1)), ((2)), ((3));
 

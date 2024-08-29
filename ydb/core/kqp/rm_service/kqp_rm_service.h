@@ -239,6 +239,7 @@ struct TKqpLocalNodeResources {
 struct TPlannerPlacingOptions {
     ui64 MaxNonParallelTasksExecutionLimit = 8;
     ui64 MaxNonParallelTopStageExecutionLimit = 1;
+    bool PreferLocalDatacenterExecution = true;
 };
 
 /// per node singleton with instant API

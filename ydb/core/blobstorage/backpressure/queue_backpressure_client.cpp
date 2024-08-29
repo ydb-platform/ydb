@@ -778,6 +778,8 @@ private:
             ctx.Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup);
             UpdateRequestTrackingStatsScheduled = true;
         }
+
+        LWPROBE(BackPressureRequestTrackingStats, Info->GroupID.GetRawId(), DeviceTypeStr(Info->GetDeviceType(), true), VDiskId.ToStringWOGeneration(), WorstDuration.MilliSeconds());
     }
 
     ////////////////////////////////////////////////////////////////////////

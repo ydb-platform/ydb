@@ -16,8 +16,9 @@ namespace {
 
 using TKSV = std::tuple<ui64, ui64, TStringBuf>;
 using TKSVSet = TSet<std::tuple_element_t<0, TKSV>>;
+template <bool isMulti>
 using TKSW = std::tuple<ui64, ui64, TStringBuf, std::optional<TStringBuf>>;
-using TKSWMap = TMap<std::tuple_element_t<0, TKSW>, TString>;
+using TKSWMap = TMap<std::tuple_element_t<0, TKSW<false>>, TString>;
 template <typename TupleType>
 using TArrays = std::array<std::shared_ptr<arrow::ArrayData>, std::tuple_size_v<TupleType>>;
 
@@ -147,7 +148,7 @@ TVector<TupleType> ArraysToTuples(const TArrays<TupleType>& arrays,
     TVector<ui8> rightNulls;
     const int32_t* rightOffsets = nullptr;
     const char* rightValuesBuffer = nullptr;
-    if constexpr (std::is_same_v<TupleType, TKSW>) {
+    if constexpr (!std::is_same_v<TupleType, TKSV>) {
         if (maybeNull) {
             rightNulls.resize(blockSize);
             DecompressToSparseBitmap(rightNulls.data(), arrays[3]->buffers[0]->data(),
@@ -158,7 +159,7 @@ TVector<TupleType> ArraysToTuples(const TArrays<TupleType>& arrays,
     }
     for (auto i = 0; i < blockSize; i++) {
         const TStringBuf leftValue(leftValuesBuffer + leftOffsets[i], leftOffsets[i + 1] - leftOffsets[i]);
-        if constexpr (std::is_same_v<TupleType, TKSW>) {
+        if constexpr (!std::is_same_v<TupleType, TKSV>) {
             if (!rightNulls.empty() && rightNulls[i] == 0) {
                 tuplesVector.push_back(std::make_tuple(keyBuffer[i], subkeyBuffer[i], leftValue, std::nullopt));
                 continue;
@@ -209,7 +210,7 @@ const TRuntimeNode BuildBlockJoin(TProgramBuilder& pgmBuilder, EJoinKind joinKin
 
 template <typename TOutputTuple, typename TDictPayloadType
     = std::conditional<std::is_same_v<TOutputTuple, TKSV>, TKSVSet,
-      std::conditional<std::is_same_v<TOutputTuple, TKSW>, TKSWMap, void>>>
+      std::conditional<std::is_same_v<TOutputTuple, TKSW<false>>, TKSWMap, void>>>
 TVector<TOutputTuple> DoTestBlockJoinOnUint64(EJoinKind joinKind,
     TVector<TKSV> leftValues, TDictPayloadType rightValues, size_t blockSize
 ) {
@@ -305,7 +306,7 @@ void TestBlockJoinWithRightOnUint64(EJoinKind joinKind) {
     constexpr size_t testSize = 1 << 14;
     constexpr size_t valueSize = 3;
     static const TVector<TString> threeLetterValues = GenerateValues(valueSize);
-    static const TSet<ui64> fib = {1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144,
+    static const TSet<ui64> fibSet = {1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144,
         233, 377, 610, 987, 1597, 2584, 4181, 6765, 10946, 17711};
 
     TVector<TKSV> testKSV;
@@ -313,11 +314,11 @@ void TestBlockJoinWithRightOnUint64(EJoinKind joinKind) {
         testKSV.push_back(std::make_tuple(k, k * 1001, threeLetterValues[k]));
     }
 
-    static TMap<ui64, TString> fibMap;
-    for (const auto& key : fib) {
+    static TKSWMap fibMap;
+    for (const auto& key : fibSet) {
         fibMap[key] = std::to_string(key);
     }
-    TVector<TKSW> testKSW;
+    TVector<TKSW<false>> testKSW;
     std::transform(testKSV.cbegin(), testKSV.cend(), std::back_inserter(testKSW),
         [](const auto& ksv) {
             const auto found = fibMap.find(std::get<0>(ksv));
@@ -326,15 +327,16 @@ void TestBlockJoinWithRightOnUint64(EJoinKind joinKind) {
             return std::make_tuple(std::get<0>(ksv), std::get<1>(ksv),
                                    std::get<2>(ksv), right);
         });
-    TVector<TKSW> expectedKSW;
+    TVector<TKSW<false>> expectedKSW;
     if (joinKind == EJoinKind::Inner) {
         std::copy_if(testKSW.cbegin(), testKSW.cend(), std::back_inserter(expectedKSW),
-            [](const auto& ksw) { return fib.contains(std::get<0>(ksw)); });
+            [](const auto& ksw) { return fibSet.contains(std::get<0>(ksw)); });
     } else {
         expectedKSW = testKSW;
     }
+
     for (size_t blockSize = 8; blockSize <= testSize; blockSize <<= 1) {
-        const auto gotKSW = DoTestBlockJoinOnUint64<TKSW>(joinKind, testKSV, fibMap, blockSize);
+        const auto gotKSW = DoTestBlockJoinOnUint64<TKSW<false>>(joinKind, testKSV, fibMap, blockSize);
         UNIT_ASSERT_EQUAL(expectedKSW, gotKSW);
     }
 }

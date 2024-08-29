@@ -1,5 +1,17 @@
 # DELETE FROM
 
+{% if oss == true and backend_name == "YDB" %}
+
+{% note warning %}
+
+{% include [OLAP_not_allow_text](../../../../_includes/not_allow_for_olap_text.md) %}
+
+Instead of using `DELETE FROM` to remove data from columnar tables, you can use the mechanism of deleting rows by time — [TTL](../../../../concepts/ttl.md). TTL can be set when [creating](../create_table/index.md) the table via `CREATE TABLE` or [modified](../alter_table.md) later via `ALTER TABLE`.
+
+{% endnote %}
+
+{% endif %}
+
 Deletes rows that match the `WHERE` clause, from the table.{% if feature_mapreduce %}  The table is searched by name in the database specified by the [USE](../use.md) operator.{% endif %}
 
 **Example**

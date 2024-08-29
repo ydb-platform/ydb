@@ -267,7 +267,7 @@ void InitViewerCheckAccessJsonHandler(TJsonHandlers& jsonHandlers) {
 }
 
 void InitViewerFeatureFlagsJsonHandler(TJsonHandlers& handlers) {
-    handlers.AddHandler("/viewer/feature_flags", new TJsonHandler<TJsonFeatureFlags>(TJsonFeatureFlags::GetSwagger()));
+    handlers.AddHandler("/viewer/feature_flags", new TJsonHandler<TJsonFeatureFlags>(TJsonFeatureFlags::GetSwagger()), 2);
 }
 
 void InitViewerJsonHandlers(TJsonHandlers& jsonHandlers) {

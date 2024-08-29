@@ -192,6 +192,7 @@ struct TEvStatistics {
     {
         Ydb::StatusIds::StatusCode Status;
         NYql::TIssues Issues;
+        TPathId PathId;
         bool Success = true;
     };
 

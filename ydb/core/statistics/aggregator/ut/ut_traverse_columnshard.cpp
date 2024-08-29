@@ -36,7 +36,7 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
         auto& runtime = *env.GetServer().GetRuntime();
         auto tableInfo = CreateDatabaseColumnTables(env, 1, 10)[0];
 
-        runtime.SimulateSleep(TDuration::Seconds(30));
+        WaitForSavedStatistics(runtime, tableInfo.PathId);
 
         auto countMin = ExtractCountMin(runtime, tableInfo.PathId);
 
@@ -49,13 +49,13 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
         auto tableInfo = CreateDatabaseColumnTables(env, 1, 10)[0];
         auto sender = runtime.AllocateEdgeActor();
 
-        runtime.SimulateSleep(TDuration::Seconds(30));
+        WaitForSavedStatistics(runtime, tableInfo.PathId);
 
         RebootTablet(runtime, tableInfo.ShardIds[0], sender);
 
         auto countMin = ExtractCountMin(runtime, tableInfo.PathId);
 
-        UNIT_ASSERT(CheckCountMinSketch(countMin, 1000000));
+        UNIT_ASSERT(CheckCountMinSketch(countMin, ColumnTableRowsNumber));
     }    
 
     Y_UNIT_TEST(TraverseColumnTableRebootSaTabletBeforeResolve) {
@@ -77,7 +77,7 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
         block.Unblock();
         block.Stop();
 
-        runtime.SimulateSleep(TDuration::Seconds(10));
+        WaitForSavedStatistics(runtime, tableInfo.PathId);
 
         auto countMin = ExtractCountMin(runtime, tableInfo.PathId);
         UNIT_ASSERT(CheckCountMinSketch(countMin, ColumnTableRowsNumber));
@@ -203,7 +203,7 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
             }
         });
 
-        runtime.SimulateSleep(TDuration::Seconds(30));
+        WaitForSavedStatistics(runtime, tableInfo.PathId);
 
         auto countMin = ExtractCountMin(runtime, tableInfo.PathId);
         UNIT_ASSERT(CheckCountMinSketch(countMin, ColumnTableRowsNumber));
@@ -240,7 +240,7 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
             }
         });
 
-        runtime.SimulateSleep(TDuration::Seconds(30));
+        WaitForSavedStatistics(runtime, tableInfo.PathId);
 
         auto countMin = ExtractCountMin(runtime, tableInfo.PathId);
         UNIT_ASSERT(CheckCountMinSketch(countMin, ColumnTableRowsNumber));
@@ -272,7 +272,7 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
             }
         });
 
-        runtime.SimulateSleep(TDuration::Seconds(30));
+        WaitForSavedStatistics(runtime, tableInfo.PathId);
 
         auto countMin = ExtractCountMin(runtime, tableInfo.PathId);
 
@@ -309,7 +309,7 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
             }
         });
 
-        runtime.SimulateSleep(TDuration::Seconds(60));
+        WaitForSavedStatistics(runtime, tableInfo.PathId);
 
         auto countMin = ExtractCountMin(runtime, tableInfo.PathId);
 

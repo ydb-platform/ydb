@@ -6,7 +6,7 @@ log-levels:
   MD005: 'error' # Inconsistent indentation for list items at the same level
   MD006: 'error' # Consider starting bulleted lists at the beginning of the line
   MD007: 'error' # Unordered list indentation
-  MD009: 'disabled' # Trailing spaces
+  MD009: 'error' # Trailing spaces
   MD010: 'disabled' # Hard tabs
   MD011: 'disabled' # Reversed link syntax
   MD012: 'disabled' # Multiple consecutive blank lines

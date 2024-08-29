@@ -27,7 +27,7 @@ $config = [
     'iam_config'  => [
         // 'root_cert_file' => './CA.pem',  Root CA file (uncomment for dedicated server only)
     ],
-    
+
     'credentials' => new AccessTokenAuthentication('AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA') // use from reference/ydb-sdk/auth
 ];
 

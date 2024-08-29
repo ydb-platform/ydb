@@ -77,8 +77,8 @@ Create a new column-oriented table with the necessary columns in any existing {{
 CREATE TABLE `logstash_demo` (
     `uuid`     Text NOT NULL,      -- identifier
     `ts`       Timestamp NOT NULL, -- timestamp of event creation
-    `message`  Text,           
-    `user`     Text,           
+    `message`  Text,
+    `user`     Text,
     `level`    Int32,
 
     PRIMARY KEY (
@@ -119,7 +119,7 @@ curl -H "content-type: application/json" -XPUT 'http://127.0.0.1:9876/http/ping'
 ```
 All commands return `ok` if the messages are sent.
 
-#### Check that the messages are stored in {{ ydb-short-name }} 
+#### Check that the messages are stored in {{ ydb-short-name }}
 
 To check that all sent messages are written to the table, execute the following query using [ScanQuery mode](../reference/ydb-cli/commands/scan-query.md):
 ```sql

@@ -77,8 +77,8 @@ ydb_storage {
 CREATE TABLE `logstash_demo` (
     `uuid`     Text NOT NULL,      -- Уникальный идентификатор
     `ts`       Timestamp NOT NULL, -- Время создания сообщения
-    `message`  Text,           
-    `user`     Text,           
+    `message`  Text,
+    `user`     Text,
     `level`    Int32,
 
     PRIMARY KEY (
@@ -119,7 +119,7 @@ curl -H "content-type: application/json" -XPUT 'http://127.0.0.1:9876/http/ping'
 ```
 Все команды должны вернуть `ok` в случае успешного выполнения.
 
-#### Проверка наличия записанных сообщений в {{ ydb-short-name }} 
+#### Проверка наличия записанных сообщений в {{ ydb-short-name }}
 Теперь можно убедиться что все отправленные сообщения записаны в таблице. Выполним запрос (не забывая что чтение из колоночной таблицы возможно только в [режиме ScanQuery](../reference/ydb-cli/commands/scan-query.md)):
 ```sql
 SELECT * FROM `logstash_demo`;

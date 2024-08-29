@@ -8,7 +8,7 @@ Table of contents:
 
 - [Initializing the driver](init.md)
 - [Authentication](auth.md)
-  
+
   - [Using a token](auth-access-token.md)
   - [Anonymous](auth-anonymous.md)
   - [Service account file](auth-service-account.md)
@@ -21,7 +21,7 @@ Table of contents:
   - [Random choice](balancing-random-choice.md)
   - [Prefer the nearest data center](balancing-prefer-local.md)
   - [Prefer the availability zone](balancing-prefer-location.md)
-  
+
 - [Running repeat queries](retry.md)
 - [Setting the session pool size](session-pool-limit.md)
 - [Inserting data](upsert.md)

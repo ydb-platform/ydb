@@ -5,7 +5,7 @@ Deletes rows that match the `WHERE` clause, from the table.{% if feature_mapredu
 **Example**
 
 ```sql
-DELETE FROM my_table 
+DELETE FROM my_table
 WHERE Key1 == 1 AND Key2 >= "One";
 ```
 

@@ -37,7 +37,7 @@ ALTER TABLE <table_name> ALTER INDEX <index_name> SET <partitioning_setting_name
 ALTER TABLE <table_name> ALTER INDEX <index_name> SET (<partitioning_setting_name_1> = <value_1>, ...);
 ```
 
-* `<table_name>` - имя таблицы, индекс которой нужно изменить. 
+* `<table_name>` - имя таблицы, индекс которой нужно изменить.
 * `<index_name>` - имя индекса, который нужно изменить.
 * `<partitioning_setting_name>` - имя изменяемого параметра, который должен быть одним из следующих:
   * [AUTO_PARTITIONING_BY_SIZE]({{ concept_table }}#auto_partitioning_by_size)

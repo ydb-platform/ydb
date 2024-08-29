@@ -11,7 +11,7 @@ The point in time for these types is stored in UTC, and the timezone label doesn
 select --these expressions are always true for any timezones:  the timezone doesn't affect the point in time.
     AddTimezone(CurrentUtcDate(), "Europe/Moscow") ==
         AddTimezone(CurrentUtcDate(), "America/New_York"),
-    AddTimezone(CurrentUtcDatetime(), "Europe/Moscow") == 
+    AddTimezone(CurrentUtcDatetime(), "Europe/Moscow") ==
         AddTimezone(CurrentUtcDatetime(), "America/New_York");
 ```
 

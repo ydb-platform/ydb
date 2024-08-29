@@ -398,7 +398,7 @@ A **LogoBlob** is a piece of binary immutable data identified by [LogoBlobID](#l
 #### LogoBlobID {#logoblobid}
 
 A **LogoBlobID** is the [LogoBlob](#logoblob) identifier in the [Distributed storage](#distributed-storage). It has a structure of the form `[TabletID, Generation, Step, Channel, Cookie, BlobSize, PartID]`. The key elements of LogoBlobID are:
-  
+
 * `TabletID` is an [ID](#tabletid) of the tablet that the LogoBlob belongs to.
 * `Generation` is the generation of the tablet in which the blob was recorded.
 * `Channel` is the tablet [channel](#channel) where the LogoBlob is recorded.
@@ -533,7 +533,7 @@ During the distributed query execution, **mediator time** is the logical time be
 #### MiniKQL {#minikql}
 
 **MiniKQL** is a language that allows the expression of a single [deterministic transaction](#deterministic-transactions) in the system. It is a functional, strongly typed language. Conceptually, the language describes a graph of reading from the database, performing calculations on the read data, and writing the results to the database and/or to a special document representing the query result (shown to the user). The MiniKQL transaction must explicitly set its read set (readable data) and assume a deterministic selection of execution branches (for example, there is no random).
-  
+
 MiniKQL is a low-level language. The system's end users only see queries in the [YQL](#yql) language, which relies on MiniKQL in its implementation.
 
 #### KQP {#kqp}

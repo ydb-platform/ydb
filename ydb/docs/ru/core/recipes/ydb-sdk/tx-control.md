@@ -23,7 +23,7 @@ description: "В статье вы ознакомитесь как в разны
   import (
     "context"
     "os"
-    
+
     "github.com/ydb-platform/ydb-go-sdk/v3"
     "github.com/ydb-platform/ydb-go-sdk/v3/table"
   )
@@ -38,7 +38,7 @@ description: "В статье вы ознакомитесь как в разны
     if err != nil {
       panic(err)
     }
-    defer db.Close(ctx) 
+    defer db.Close(ctx)
     txControl := table.TxControl(
       table.BeginTx(table.WithSerializableReadWrite()),
       table.CommitTx(),
@@ -74,7 +74,7 @@ description: "В статье вы ознакомитесь как в разны
       'iam_config'  => [
           // 'root_cert_file' => './CA.pem',  Root CA file (uncomment for dedicated server only)
       ],
-      
+
       'credentials' => new AccessTokenAuthentication('AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA') // use from reference/ydb-sdk/auth
   ];
 
@@ -98,7 +98,7 @@ description: "В статье вы ознакомитесь как в разны
   import (
     "context"
     "os"
-    
+
     "github.com/ydb-platform/ydb-go-sdk/v3"
     "github.com/ydb-platform/ydb-go-sdk/v3/table"
   )
@@ -113,7 +113,7 @@ description: "В статье вы ознакомитесь как в разны
     if err != nil {
       panic(err)
     }
-    defer db.Close(ctx) 
+    defer db.Close(ctx)
     txControl := table.TxControl(
       table.BeginTx(table.WithOnlineReadOnly(table.WithInconsistentReads())),
       table.CommitTx(),
@@ -146,7 +146,7 @@ description: "В статье вы ознакомитесь как в разны
   import (
     "context"
     "os"
-    
+
     "github.com/ydb-platform/ydb-go-sdk/v3"
     "github.com/ydb-platform/ydb-go-sdk/v3/table"
   )
@@ -161,7 +161,7 @@ description: "В статье вы ознакомитесь как в разны
     if err != nil {
       panic(err)
     }
-    defer db.Close(ctx) 
+    defer db.Close(ctx)
     txControl := table.TxControl(
       table.BeginTx(table.WithStaleReadOnly()),
       table.CommitTx(),
@@ -194,7 +194,7 @@ description: "В статье вы ознакомитесь как в разны
   import (
     "context"
     "os"
-    
+
     "github.com/ydb-platform/ydb-go-sdk/v3"
     "github.com/ydb-platform/ydb-go-sdk/v3/table"
   )
@@ -209,7 +209,7 @@ description: "В статье вы ознакомитесь как в разны
     if err != nil {
       panic(err)
     }
-    defer db.Close(ctx) 
+    defer db.Close(ctx)
     txControl := table.TxControl(
       table.BeginTx(table.WithSnapshotReadOnly()),
       table.CommitTx(),

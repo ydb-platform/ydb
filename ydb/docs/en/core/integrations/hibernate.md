@@ -25,7 +25,7 @@ Add the following dependency to your project:
     <dependency>
         <groupId>tech.ydb.dialects</groupId>
         <artifactId>hibernate-ydb-dialect</artifactId>
-        <version>${hibernate.ydb.dialect.version}</version> 
+        <version>${hibernate.ydb.dialect.version}</version>
     </dependency>
     ```
 
@@ -56,24 +56,24 @@ Or, if you are using programmatic configuration:
 {% list tabs %}
 
 - Java
-  
+
   ```java
   import org.hibernate.cfg.AvailableSettings;
   import org.hibernate.cfg.Configuration;
-  
+
   public static Configuration basedConfiguration() {
       return new Configuration()
               .setProperty(AvailableSettings.JAKARTA_JDBC_DRIVER, YdbDriver.class.getName())
               .setProperty(AvailableSettings.DIALECT, YdbDialect.class.getName());
   }
   ```
-  
+
 - Kotlin
 
   ```kotlin
   import org.hibernate.cfg.AvailableSettings
   import org.hibernate.cfg.Configuration
-  
+
   fun basedConfiguration(): Configuration = Configuration().apply {
       setProperty(AvailableSettings.JAKARTA_JDBC_DRIVER, YdbDriver::class.name)
       setProperty(AvailableSettings.DIALECT, YdbDialect::class.name)
@@ -118,21 +118,21 @@ For example, for the `Group` class:
   @Entity
   @Table(name = "Groups", indexes = @Index(name = "group_name_index", columnList = "GroupName"))
   public class Group {
-  
+
       @Id
       @Column(name = "GroupId")
       private int id;
-  
+
       @Column(name = "GroupName")
       private String name;
-  
+
       @OneToMany(mappedBy = "group")
       private List<Student> students;
   }
   ```
-  
+
 - Kotlin
-  
+
   ```kotlin
   @Entity
   @Table(name = "Groups", indexes = [Index(name = "group_name_index", columnList = "GroupName")])
@@ -140,10 +140,10 @@ For example, for the `Group` class:
       @Id
       @Column(name = "GroupId")
       val id: Int,
-      
+
       @Column(name = "GroupName")
       val name: String,
-    
+
       @OneToMany(mappedBy = "group")
       val students: List<Student>
   )
@@ -161,7 +161,7 @@ CREATE TABLE Groups (
 );
 
 ALTER TABLE Groups
-  ADD INDEX group_name_index GLOBAL 
+  ADD INDEX group_name_index GLOBAL
        ON (GroupName);
 ```
 
@@ -175,7 +175,7 @@ If you evolve the Group entity by adding the `deparment` field:
   @Column
   private String department;
   ```
-  
+
 - Kotlin
 
   ```kotlin
@@ -194,7 +194,7 @@ jakarta.persistence.schema-generation.database.action=update
 The result of changing the schema is:
 
 ```sql
-ALTER TABLE Groups 
+ALTER TABLE Groups
    ADD COLUMN department Text
 ```
 
@@ -213,21 +213,21 @@ For example, for `@OneToMany` generates a SQL script:
 - FetchType.LAZY
 
   ```sql
-  SELECT 
+  SELECT
       g1_0.GroupId,
-      g1_0.GroupName 
-  FROM 
-      Groups g1_0 
+      g1_0.GroupName
+  FROM
+      Groups g1_0
   WHERE
       g1_0.GroupName='M3439'
-  
-  SELECT 
+
+  SELECT
       s1_0.GroupId,
       s1_0.StudentId,
-      s1_0.StudentName 
-  FROM 
-      Students s1_0 
-  WHERE 
+      s1_0.StudentName
+  FROM
+      Students s1_0
+  WHERE
       s1_0.GroupId=?
   ```
 
@@ -239,12 +239,12 @@ For example, for `@OneToMany` generates a SQL script:
       g1_0.GroupName,
       s1_0.GroupId,
       s1_0.StudentId,
-      s1_0.StudentName 
+      s1_0.StudentName
   FROM
-      Groups g1_0 
+      Groups g1_0
   JOIN
-      Students s1_0 
-          on g1_0.GroupId=s1_0.GroupId 
+      Students s1_0
+          on g1_0.GroupId=s1_0.GroupId
   WHERE
       g1_0.GroupName='M3439'
   ```
@@ -275,65 +275,65 @@ Create a simple entity and repository:
   public class Employee {
       @Id
       private long id;
-  
+
       @Column(name = "full_name")
       private String fullName;
-  
+
       @Column
       private String email;
-  
+
       @Column(name = "hire_date")
       private LocalDate hireDate;
-  
+
       @Column
       private java.math.BigDecimal salary;
-  
+
       @Column(name = "is_active")
       private boolean isActive;
-  
+
       @Column
       private String department;
-  
+
       @Column
       private int age;
   }
-  
+
   public interface EmployeeRepository implements CrudRepository<Employee, Long> {}
   ```
-  
-- Kotlin 
-  
+
+- Kotlin
+
   ```kotlin
   @Entity
   @Table(name = "employee")
   data class Employee(
       @Id
       val id: Long,
-  
+
       @Column(name = "full_name")
       val fullName: String,
-  
+
       @Column
       val email: String,
-  
+
       @Column(name = "hire_date")
       val hireDate: LocalDate,
-  
+
       @Column
       val salary: java.math.BigDecimal,
-  
+
       @Column(name = "is_active")
       val isActive: Boolean,
-  
+
       @Column
       val department: String,
-  
+
       @Column
       val age: Int,
   )
-  
+
   interface EmployeeRepository : CrudRepository<Employee, Long>
-  
+
   fun EmployeeRepository.findByIdOrNull(id: Long): Employee? = this.findById(id).orElse(null)
   ```
 
@@ -356,20 +356,20 @@ Usage example:
       "YDB AppTeam",
       23
   );
-  
-  /* The following SQL will be executed: 
-  INSERT INTO employee (age,department,email,full_name,hire_date,is_active,limit_date_password,salary,id) 
-  VALUES (?,?,?,?,?,?,?,?,?) 
+
+  /* The following SQL will be executed:
+  INSERT INTO employee (age,department,email,full_name,hire_date,is_active,limit_date_password,salary,id)
+  VALUES (?,?,?,?,?,?,?,?,?)
   */
   employeeRepository.save(employee);
-  
+
   assertEquals(employee, employeeRepository.findById(employee.getId()).get());
-  
+
   /* The following SQL will be executed:
   DELETE FROM employee WHERE id=?
    */
   employeeRepository.delete(employee);
-  
+
   assertNull(employeeRepository.findById(employee.getId()).orElse(null));
   ```
 
@@ -386,20 +386,20 @@ Usage example:
       "YDB AppTeam",
       23
   )
-  
-  /* The following SQL will be executed: 
-  INSERT INTO employee (age,department,email,full_name,hire_date,is_active,limit_date_password,salary,id) 
-  VALUES (?,?,?,?,?,?,?,?,?) 
+
+  /* The following SQL will be executed:
+  INSERT INTO employee (age,department,email,full_name,hire_date,is_active,limit_date_password,salary,id)
+  VALUES (?,?,?,?,?,?,?,?,?)
   */
   employeeRepository.save(employee)
-  
+
   assertEquals(employee, employeeRepository.findByIdOrNull(employee.id))
-  
+
   /* The following SQL will be executed:
   DELETE FROM employee WHERE id=?
    */
   employeeRepository.delete(employee)
-  
+
   assertNull(employeeRepository.findByIdOrNull(employee.id))
   ```
 

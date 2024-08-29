@@ -37,7 +37,7 @@ Links to the lists of packages that will be installed for Ubuntu 22.04 or Astra 
   + `flush handlers` - Calls accumulated handlers. Executes the handler `restart journald`, which restarts the `systemd-journald` service.
   + `start journald` - Starts and enables the `systemd-journald.service`. Subsequently, the service will start automatically at system boot.
 
-* `configure kernel` – A block of tasks for kernel configuration:  
+* `configure kernel` – A block of tasks for kernel configuration:
 
   + `configure /etc/modules-load.d dir` - Creates the `/etc/modules-load.d` directory with owner and group permissions for the root user and `0755` permissions.
   + `setup conntrack module` - Copies the `nf_conntrack` line into the file `/etc/modules-load.d/conntrack.conf` to load the `nf_conntrack` module at system start.
@@ -45,7 +45,7 @@ Links to the lists of packages that will be installed for Ubuntu 22.04 or Astra 
   + `setup sysctl files` - Applies templates to create configuration files in `/etc/sysctl.d/` for various system settings (such as security, network, and filesystem settings). The list of files includes `10-console-messages.conf`, `10-link-restrictions.conf`, and others. After completing this task, a notification is sent to apply the kernel settings changes.
   + `flush handlers` - Calls accumulated handlers. Executes the handler `apply kernel settings`, which runs the `sysctl -p` command to apply the kernel parameters specified in `/etc/sysctl.conf` or in other files in the `/etc/sysctl.d/` directory.
 
-* `configure cpu governor` – A block of tasks for configuring the CPU frequency management mode: 
+* `configure cpu governor` – A block of tasks for configuring the CPU frequency management mode:
 
   + `install cpufrequtils` - Installs the `cpufrequtils` package from apt. The task is set with cache check parameters and a task timeout of 300 seconds to expedite task execution and avoid an infinite loop waiting for apt package updates.
   + `use performance cpu governor` - Creates the file `/etc/default/cpufrequtils` with content "GOVERNOR=performance", which sets the CPU governor mode to "performance" (disabling power-saving mode when CPU cores are idle). After completing the task, a notification is sent to restart the `cpufrequtils` service.

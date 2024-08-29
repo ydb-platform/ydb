@@ -60,7 +60,7 @@ YDB CLI определяет значения этих параметров из
    ``` yaml
    folder-id: b2ge70qdcff4bo9q6t19
    ```
-   
+
 
 3. [Создайте сервисный аккаунт]{% if lang == "ru" %}(https://cloud.yandex.ru/docs/iam/operations/sa/create){% endif %}{% if lang == "en" %}(https://cloud.yandex.com/docs/iam/operations/sa/create){% endif %}, выполнив следующую команду:
 

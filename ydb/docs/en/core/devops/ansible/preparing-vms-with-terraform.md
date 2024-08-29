@@ -18,7 +18,7 @@ resource "aws_instance" "ydb-vm" {
   key_name               = var.req_key_pair
   vpc_security_group_ids = [var.input_security_group_id]
   subnet_id              = element(var.input_subnet_ids, count.index % length(var.input_subnet_ids))
-  
+
   tags = {
     Name                 = "ydb-node-${count.index +1}"
     Username             = "ubuntu"
@@ -122,7 +122,7 @@ Most cluster parameters are adjustable (number of VMs, size and type of connecte
 
 ## Create infrastructure in AWS to deploy {{ ydb-short-name }} cluster {#aws-cluster}
 
-{% include [aws](./_includes/terraform/aws.md) %} 
+{% include [aws](./_includes/terraform/aws.md) %}
 
 ## Create infrastructure in Azure to deploy {{ ydb-short-name }} cluster {#azure-cluster}
 

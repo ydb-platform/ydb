@@ -7,7 +7,7 @@ query1 UNION [ALL] query2 (UNION [ALL] query3 ...)
 Union of more than two queries is interpreted as a left-associative operation, that is
 
 ```yql
-query1 UNION query2 UNION ALL query3 
+query1 UNION query2 UNION ALL query3
 ```
 is interpreted as
 ```yql

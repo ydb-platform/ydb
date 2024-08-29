@@ -1,12 +1,12 @@
-Для создания инфраструктуры в Yandex Cloud с помощью Terraform нужно: 
+Для создания инфраструктуры в Yandex Cloud с помощью Terraform нужно:
 
 1. Подготовить облако к работе:
     * [Зарегистрироваться](https://console.cloud.yandex.ru/) в Yandex Cloud.
-    * [Подключить](https://cloud.yandex.com/ru/docs/billing/concepts/billing-account) платежный аккаунт. 
+    * [Подключить](https://cloud.yandex.com/ru/docs/billing/concepts/billing-account) платежный аккаунт.
     * [Убедится](https://console.cloud.yandex.ru/billing) в наличии достаточного количества средств для создания девяти ВМ.
 2. Установить и настроить Yandex Cloud CLI:
     * [Скачать](https://cloud.yandex.ru/ru/docs/cli/quickstart) Yandex Cloud CLI.
-    * [Создать](https://cloud.yandex.ru/ru/docs/cli/quickstart#initialize) профиль 
+    * [Создать](https://cloud.yandex.ru/ru/docs/cli/quickstart#initialize) профиль
 3. [Создать](https://cloud.yandex.com/ru/docs/tutorials/infrastructure-management/terraform-quickstart#get-credentials) сервисный аккаунт с помощью CLI.
 4. [Сгенерировать](https://cloud.yandex.ru/ru/docs/cli/operations/authentication/service-account#auth-as-sa) SA ключ в JSON формате для подключения Terraform к облаку с помощью CLI: `yc iam key create --service-account-name <acc name> --output <file name> --folder-id <cloud folder id>`. Будет сгенерирован SA ключ, а в терминал будет выведена секретная информация:
     ```
@@ -19,7 +19,7 @@
     ```
     Скопируйте `access_key.id` и `secret`. Значения этих полей нужны будут в дальнейшем при работе с AWS CLI.
 5. [Скачать](https://aws.amazon.com/ru/cli/) AWS CLI.
-6. Настроить окружение AWS CLI: 
+6. Настроить окружение AWS CLI:
     * Запустите команду `aws configure` и последовательно введите сохраненные ранее `access_key.id` и `secret`. Для значения региона используйте `ru-central1`:
     ```
     aws configure
@@ -28,7 +28,7 @@
     Default region name [None]: ru-central1
     Default output format [None]:
     ```
-    Будут созданы файлы `~/.aws/credentials` и `~/.aws/config`. 
+    Будут созданы файлы `~/.aws/credentials` и `~/.aws/config`.
 7. Отредактировать `~/.aws/credentials` и `~/.aws/config` следующим образом:
     * Добавьте `[Ya_def_reg]` в `~/.aws/config` перед `region = ru-central1-a`.
     * Добавьте `[Yandex]` перед секретной информацией о ключах подключения.
@@ -44,7 +44,7 @@
 
 1. `terraform init` – установка провайдера и инициализация модулей.
 2. `terraform plan` – создание плана будущей инфраструктуры.
-3. `terraform apply` (повторное выполнение) – создание ресурсов в облаке. 
+3. `terraform apply` (повторное выполнение) – создание ресурсов в облаке.
 
 Далее используются команды `terraform plan`, `terraform apply` и `terraform destroy` (уничтожение созданной инфраструктуры).
 

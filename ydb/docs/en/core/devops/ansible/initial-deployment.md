@@ -13,7 +13,7 @@ For large-scale setups, it is recommended to use at least 9 servers for highly a
 * Additional SSD drives for data, at least 120 GB each.
 * SSH access.
 * Network connectivity between machines in the cluster.
-* OS: Ubuntu 18+, Debian 9+. 
+* OS: Ubuntu 18+, Debian 9+.
 * Internet access is needed to update repositories and download necessary packages.
 
 {% endnote %}
@@ -95,7 +95,7 @@ Feel free to change these settings if needed, but it is not necessary in straigh
       - static-node-1.ydb-cluster.com
       - static-node-2.ydb-cluster.com
       - static-node-3.ydb-cluster.com
-  ``` 
+  ```
 
 The value of the `ydb_database_groups` variable in the `vars` section has a fixed value tied to the redundancy type and does not depend on the size of the cluster:
 
@@ -154,8 +154,8 @@ The default {{ ydb-short-name }} configuration file already includes almost all 
       body: 1
       data_center: 'zone-a'
       rack: '1'
-  ...    
-  ```  
+  ...
+  ```
 * `blob_storage_config` section:
   ```yaml
   ...
@@ -164,7 +164,7 @@ The default {{ ydb-short-name }} configuration file already includes almost all 
         - node_id: static-node-1.ydb-cluster.com
           pdisk_category: SSD
           path: /dev/disk/by-partlabel/ydb_disk_1
-  ...        
+  ...
   ```
 
 The rest of the sections and settings in the configuration file can remain unchanged.

@@ -28,7 +28,7 @@ UPSERT (расшифровывается как UPDATE or INSERT) обновля
 
 ``` yql
 UPSERT INTO my_table
-SELECT pk_column, data_column1, col24 as data_column3 FROM other_table  
+SELECT pk_column, data_column1, col24 as data_column3 FROM other_table
 ```
 
 ``` yql

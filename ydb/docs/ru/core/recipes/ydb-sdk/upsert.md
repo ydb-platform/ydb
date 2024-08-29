@@ -14,7 +14,7 @@
   import (
     "context"
     "os"
-    
+
     "github.com/ydb-platform/ydb-go-sdk/v3"
     "github.com/ydb-platform/ydb-go-sdk/v3/table"
     "github.com/ydb-platform/ydb-go-sdk/v3/table/types"
@@ -30,7 +30,7 @@
     if err != nil {
       panic(err)
     }
-    defer db.Close(ctx) 
+    defer db.Close(ctx)
     // execute upsert with native ydb data
     err = db.Table().DoTx( // Do retry operation on errors with best effort
       ctx, // context manages exiting from Do
@@ -75,7 +75,7 @@
     "context"
     "database/sql"
     "os"
-    
+
     _ "github.com/ydb-platform/ydb-go-sdk/v3"
     "github.com/ydb-platform/ydb-go-sdk/v3/retry"
     "github.com/ydb-platform/ydb-go-sdk/v3/types"
@@ -86,7 +86,7 @@
     if err != nil {
       panic(err)
     }
-    defer db.Close(ctx) 
+    defer db.Close(ctx)
     // execute upsert with native ydb data
     err = retry.DoTx(ctx, db, func(ctx context.Context, tx *sql.Tx) error {
       if _, err = tx.ExecContext(ctx,`
@@ -98,7 +98,7 @@
             series_info,
             comment
           FROM AS_TABLE($seriesData);
-        `, 
+        `,
         sql.Named("seriesData", types.ListValue(
           types.StructValue(
             types.StructFieldValue("series_id", types.Uint64Value(1)),

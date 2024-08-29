@@ -10,15 +10,15 @@ VALUES (<value>);
 
 Инструкция `INSERT INTO` предназначена для добавления строк в таблицу. Она может добавить одну или несколько строк за одно исполнение. Пример вставки одной строки в таблицу "people":
 ```sql
-INSERT INTO people (name, lastname, age, country, state, city, birthday, sex) 
+INSERT INTO people (name, lastname, age, country, state, city, birthday, sex)
 VALUES ('John', 'Doe', 30, 'USA', 'California', 'Los Angeles', CAST('1992-01-15' AS Date), 'Male');
-``` 
+```
 
-В этой записи мы не указали столбец `id` и не задали ему значение – это сделано намеренно, так как в таблице "people" у столбца "id" задан тип данных `Serial`. При выполнении инструкции `INSERT INTO` значение столбца "id" будет присвоено автоматически с учетом предыдущих значений – будет выполнен инкремент текущего значения "id". 
+В этой записи мы не указали столбец `id` и не задали ему значение – это сделано намеренно, так как в таблице "people" у столбца "id" задан тип данных `Serial`. При выполнении инструкции `INSERT INTO` значение столбца "id" будет присвоено автоматически с учетом предыдущих значений – будет выполнен инкремент текущего значения "id".
 
 Для множественной вставки строк в таблицу используется та же конструкция с перечислением групп данных для вставки через запятую:
 ```sql
-INSERT INTO people (name, lastname, age, country, state, city, birthday, sex) 
+INSERT INTO people (name, lastname, age, country, state, city, birthday, sex)
 VALUES
     ('Jane', 'Smith', 25, 'Canada', 'Ontario', 'Toronto', CAST('1997-08-23' AS Date), 'Female'),
     ('Alice', 'Johnson', 28, 'UK', 'England', 'London', CAST('1994-05-05' AS Date), 'Female'),
@@ -38,13 +38,13 @@ VALUES
     ('Paul', 'Harris', 23, 'Canada', 'Saskatchewan', 'Saskatoon', CAST('1999-08-19' AS Date), 'Male'),
     ('Quinn', 'Lewis', 34, 'UK', 'England', 'Manchester', CAST('1988-07-25' AS DATE), 'Female'),
     ('Rachel', 'Young', 42, 'USA', 'Ohio', 'Cleveland', CAST('1980-02-03' AS Date), 'Female');
-``` 
+```
 
 В обоих примерах для указания даты выпуска фильма, мы использовали функцию `CAST()`, которая используется для преобразования одного типа данных в другой. В данном случае мы с помощью ключевого слова `AS` и типа данных `Date` явно указали, что хотим преобразовать строковое представление даты в формате [ISO8601](https://ru.wikipedia.org/wiki/ISO_8601).
 
 Указать нужный тип данных, например, `DATE` можно и альтернативным способом с помощью оператора приведения типов `::`, который используется для явного приведения значения одного типа данных к другому. Пример использования оператора `::` может выглядеть так:
 ```sql
-INSERT INTO people (name, lastname, age, country, state, city, birthday, sex) 
+INSERT INTO people (name, lastname, age, country, state, city, birthday, sex)
 VALUES ('Sam', 'Walker', 60, 'Canada', 'Nova Scotia', 'Halifax', '1962-04-15'::Date, 'Male');
 ```
 

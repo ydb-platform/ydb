@@ -8,10 +8,10 @@
 
 </div>
 
-{{ ydb-short-name }} – это платформа, которая умеет обрабатывать большой поток быстрых транзакций (OLTP, Online Transaction Processing). Команда, в которой работает {{ team.novozhilova.name }} ({{ team.novozhilova.position }}) захотела научить YDB обрабатывать другой тип запросов — аналитические (OLAP, Online Analytical Processing). 
+{{ ydb-short-name }} – это платформа, которая умеет обрабатывать большой поток быстрых транзакций (OLTP, Online Transaction Processing). Команда, в которой работает {{ team.novozhilova.name }} ({{ team.novozhilova.position }}) захотела научить YDB обрабатывать другой тип запросов — аналитические (OLAP, Online Analytical Processing).
 
-Из доклада вы узнаете ответы на вопросы: 
-* Достаточно ли просто поменять систему хранения, упаковать данные по колонкам, чтобы получить профит? 
+Из доклада вы узнаете ответы на вопросы:
+* Достаточно ли просто поменять систему хранения, упаковать данные по колонкам, чтобы получить профит?
 * Зачем это было нужно и какая польза от таких расширений системе в целом?
 
 @[YouTube](https://www.youtube.com/watch?v=6A7ZfMsHJRM&list=PLH-XmS0lSi_yksBrXBOIgnuW_RmwfLKYn&index=59&pp=iAQB)

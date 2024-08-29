@@ -15,10 +15,10 @@ You need to have a GitHub account to suggest any changes to the YDB source code.
 * If you have a yubikey, you can use the legacy key from the yubikey:
   * Let's assume you have already configured yubikey (or configure yubikey locally)
   * On your laptop: `skotty ssh keys`
-  * Upload `legacy@yubikey` ssh key to github (over ui: https://github.com/settings/keys) 
+  * Upload `legacy@yubikey` ssh key to github (over ui: https://github.com/settings/keys)
   * test connection on laptop: `ssh -T git@github.com`
 
-#### Remote development 
+#### Remote development
 If you are developing on a remote dev host you can use the key from your laptop (generated keys or keys from yubikey). You need to configure key forwarding. (Full instructions are on  [this GitHub page](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/using-ssh-agent-forwarding) ).
 
 Suppose your remote machine is dev123456.search.yandex.net.
@@ -202,14 +202,14 @@ When the changes are completed and locally tested (see [Ya Build and Test](build
 
   Visit your branch's page on GitHub.com (https://github.com/{your_github_user_name}/ydb/tree/{branch_name}), press `Contribute` and then `Open Pull Request`.
   You can also use the link in the `git push` output to open a Pull Request:
-  
+
   ```
   ...
   remote: Resolving deltas: 100% (1/1), completed with 1 local object.
-  remote: 
+  remote:
   remote: Create a pull request for '{branch_name}' on GitHub by visiting:
   remote:      https://github.com/{your_github_user_name}/test/pull/new/{branch_name}
-  ... 
+  ...
   ```
 
 - GitHub CLI
@@ -218,11 +218,11 @@ When the changes are completed and locally tested (see [Ya Build and Test](build
   ```
   cd ~/ydbwork/ydb
   ```
-  
+
   ```
   gh pr create --title "Feature 42 implemented"
   ```
-  
+
   After answering some questions, the Pull Request will be created and you will get a link to its page on GitHub.com.
 
 {% endlist %}

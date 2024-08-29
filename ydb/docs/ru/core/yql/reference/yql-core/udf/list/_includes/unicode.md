@@ -94,7 +94,7 @@ select Unicode::RemoveAll("abandon", "an"); -- "bdo"
 
 ```sql
 select Unicode::ToCodePointList("Щавель"); -- [1065, 1072, 1074, 1077, 1083, 1100]
-select Unicode::FromCodePointList(AsList(99,111,100,101,32,112,111,105,110,116,115,32,99,111,110,118,101,114,116,101,114)); -- "code points converter"  
+select Unicode::FromCodePointList(AsList(99,111,100,101,32,112,111,105,110,116,115,32,99,111,110,118,101,114,116,101,114)); -- "code points converter"
 ```
 
 * ```Unicode::Reverse(Utf8{Flags:AutoMap}) -> Utf8```

@@ -182,7 +182,7 @@ description: "В разделе приведены примеры кода ау�
           'insecure' => true,
           // 'root_cert_file' => './CA.pem', // Root CA file (uncomment for dedicated server)
       ],
-      
+
       'credentials' => new EnvironCredentials()
   ];
 

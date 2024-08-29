@@ -82,7 +82,7 @@ Use binary distributions to install the connector on a physical or virtual Linux
 
         If successful, the service should enter the `active (running)` state. Check it with the following command:
         ```bash
-        sudo systemctl status fq-connector-go 
+        sudo systemctl status fq-connector-go
         ● fq-connector-go.service - YDB FQ Connector Go
             Loaded: loaded (/etc/systemd/system/fq-connector-go.service; enabled; vendor preset: enabled)
             Active: active (running) since Thu 2024-02-29 17:51:42 MSK; 2s ago
@@ -96,7 +96,7 @@ Use binary distributions to install the connector on a physical or virtual Linux
 
 ### Running in Docker {#fq-connector-go-docker}
 
-1. To run the connector, use the official [Docker image](https://github.com/ydb-platform/fq-connector-go/pkgs/container/fq-connector-go). It already contains the service's [configuration file](https://github.com/ydb-platform/fq-connector-go/blob/main/app/server/config/config.prod.yaml). Start the service with default settings using the following command: 
+1. To run the connector, use the official [Docker image](https://github.com/ydb-platform/fq-connector-go/pkgs/container/fq-connector-go). It already contains the service's [configuration file](https://github.com/ydb-platform/fq-connector-go/blob/main/app/server/config/config.prod.yaml). Start the service with default settings using the following command:
 
     ```bash
     docker run -d \
@@ -126,7 +126,7 @@ Use binary distributions to install the connector on a physical or virtual Linux
         cert: "/opt/ydb/certs/fq-connector-go.crt"
         key: "/opt/ydb/certs/fq-connector-go.key"
     ```
-    When starting the container, mount the directory with the TLS key pair inside it so that they are accessible to the `fq-connector-go` process at the paths specified in the configuration file: 
+    When starting the container, mount the directory with the TLS key pair inside it so that they are accessible to the `fq-connector-go` process at the paths specified in the configuration file:
 
     ```bash
     docker run -d \
@@ -146,7 +146,7 @@ Use binary distributions to install the connector on a physical or virtual Linux
     awk -v cmd='openssl x509 -noout -subject' ' /BEGIN/{close(cmd)};{print | cmd}' < /etc/ssl/certs/ca-certificates.crt
     ```
 
-    If the source TLS keys are issued by a CA that is not included in the trusted list, add the CA certificate to the system paths of the container with the connector. For example, build a custom Docker image based on the existing one. Prepare the following `Dockerfile`: 
+    If the source TLS keys are issued by a CA that is not included in the trusted list, add the CA certificate to the system paths of the container with the connector. For example, build a custom Docker image based on the existing one. Prepare the following `Dockerfile`:
 
     ```Dockerfile
     FROM ghcr.io/ydb-platform/fq-connector-go:latest
@@ -167,7 +167,7 @@ Use binary distributions to install the connector on a physical or virtual Linux
 
 ### Configuration {#fq-connector-go-config}
 
-A current example of the `fq-connector-go` service configuration file can be found in the [repository](https://github.com/ydb-platform/fq-connector-go/blob/main/app/server/config/config.prod.yaml). 
+A current example of the `fq-connector-go` service configuration file can be found in the [repository](https://github.com/ydb-platform/fq-connector-go/blob/main/app/server/config/config.prod.yaml).
 
 | Parameter | Description |
 |-----------|-------------|

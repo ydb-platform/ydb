@@ -193,7 +193,7 @@ $data = Yson(@@{
         "user_agent" = "Mozilla/5.0"
     }
 }@@);
-SELECT Yson::ConvertTo($data, 
+SELECT Yson::ConvertTo($data,
     Struct<
         name: String,
         age: Uint32,

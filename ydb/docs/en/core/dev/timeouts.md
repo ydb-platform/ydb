@@ -39,7 +39,7 @@ Timeout usage example:
 
   ```python
   import ydb
-  
+
   def execute_in_tx(session, query):
     settings = ydb.BaseRequestSettings()
     settings = settings.with_timeout(0.5)  # transport timeout
@@ -60,10 +60,10 @@ Timeout usage example:
   #include <ydb/public/sdk/cpp/client/ydb.h>
   #include <ydb/public/sdk/cpp/client/ydb_table.h>
   #include <ydb/public/sdk/cpp/client/ydb_value.h>
-  
+
   using namespace NYdb;
   using namespace NYdb::NTable;
-  
+
   TAsyncStatus ExecuteInTx(TSession& session, TString query, TParams params) {
     return session.ExecuteDataQuery(
         query
@@ -82,11 +82,11 @@ Timeout usage example:
   ```go
   import (
     "context"
-  
+
     ydb "github.com/ydb-platform/ydb-go-sdk/v3"
     "github.com/ydb-platform/ydb-go-sdk/v3/table"
   )
-  
+
   func executeInTx(ctx context.Context, s table.Session, query string) {
 	ctx, cancel := context.WithTimeout(ctx, time.Millisecond*300) // client and by default operation timeout
 	defer cancel()

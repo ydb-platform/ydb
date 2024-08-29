@@ -191,7 +191,7 @@ Arguments:
 ```sql
 SELECT DictAggregate(AsDict(
     AsTuple(1, AsList("foo", "bar")),
-    AsTuple(2, AsList("baz", "qwe"))), 
+    AsTuple(2, AsList("baz", "qwe"))),
     AggregationFactory("Max"));
 -- {1 : "foo", 2 : "qwe" }
 ```
@@ -277,7 +277,7 @@ Construct a dictionary containing all the keys with their values in the first di
 ```yql
 SELECT SetDifference(ToSet(AsList(1, 2, 3)), ToSet(AsList(3, 4))); -- { 1, 2 }
 SELECT SetDifference(
-    AsDict(AsTuple(1, "foo"), AsTuple(2, "bar")), 
+    AsDict(AsTuple(1, "foo"), AsTuple(2, "bar")),
     ToSet(AsList(2, 3)));
 -- { 1 : "foo" }
 ```

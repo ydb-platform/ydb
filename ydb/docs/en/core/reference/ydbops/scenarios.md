@@ -1,4 +1,4 @@
-# Scenarios 
+# Scenarios
 
 ## Performing {{ ydb-short-name }} cluster restart using ydbops
 
@@ -31,7 +31,7 @@ The following examples assume you have specified all the required connection opt
 The command will restart all the nodes in the cluster: all storage nodes first, followed by all tenant nodes.
 
 ```bash
-ydbops restart 
+ydbops restart
 ```
 
 ### Restarting only storage or tenant nodes

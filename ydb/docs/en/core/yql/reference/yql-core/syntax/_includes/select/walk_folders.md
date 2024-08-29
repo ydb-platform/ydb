@@ -34,7 +34,7 @@ Returns a single column `State` with the same type as `InitialState`.
     ```
 1. DiveHandler — a lambda function that is called after `ResolveHandler`. It takes the list of descendant directories of the current directory, the current state, the list of requested attributes for the parent directory, and the current traversal depth. It returns a `Tuple<List<Tuple<String,String>>, TypeOf(InitialState)>` — a tuple of the list of directories to visit (after processing the current directory) with the requested meta-attributes and the next state. The obtained paths are placed in the traversal queue.
     Signature: `(List<Struct<'Path':String, 'Type':String, 'Attributes':Yson>>, TypeOf(InitialState), List<String>, Int32) -> Tuple<List<Tuple<String,String>>, TypeOf(InitialState)>`.
-    Default implementation: 
+    Default implementation:
     ```yql
     -- Visit each subdirectory, requesting the same attributes as the parent directory.
         ($nodes, $state, $rootAttrList, $level) -> {
@@ -46,7 +46,7 @@ Returns a single column `State` with the same type as `InitialState`.
     Signature: `(List<Struct<'Path':String, 'Type':String, 'Attributes':Yson>>, TypeOf(InitialState), Int32) -> TypeOf(InitialState)`.
     Default implementation: `($nodes, $state, $level) -> ($state)`
 
-{% note warning %}    
+{% note warning %}
 
 * WalkFolders can create a significant load on the master. It should be used with caution when dealing with attributes that contain large values (such as schema), and one should avoid traversing subtrees that are large in size and/or depth. Directory listing requests within a single WalkFolders invocation can be executed in parallel; when requesting attributes with large values, you should reduce the number of simultaneous requests using the pragma `yt.BatchListFolderConcurrency`.
 * Handlers are executed via [EvaluateExpr](../../../builtins/basic.md#evaluate_expr_atom), which has a limitation on the number of YQL AST nodes. Therefore, it is not possible to use containers of extremely large size in the State. This limitation can be circumvented by either making multiple WalkFolders calls and merging the results, or by serializing the new state into a string without intermediate deserialization (e.g., JSON/Yson lines).
@@ -174,7 +174,7 @@ $diveHandler = ($nodes, $state, $reqAttrs, $_) -> {
     $_, $collectedPaths = $state;
     -- заканчиваем обход, если набрали необходимое число узлов
     $nextToVisit =  IF(
-        ListLength($collectedPaths) > $take, 
+        ListLength($collectedPaths) > $take,
         [],
         $pathsWithReqAttrs
     );
@@ -185,7 +185,7 @@ $postHandler = ($nodes, $state, $_) -> {
     $visited, $collectedPaths = $state;
     $paths = ListExtract($nodes, "Path");
     $itemsToTake = IF(
-        $visited < $skip, 
+        $visited < $skip,
         0,
         $take - ListLength($collectedPaths)
     );

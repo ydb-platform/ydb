@@ -6,7 +6,7 @@
 
 @[YouTube](https://youtu.be/8AR1u5OZIm8)
 
-Из доклада вы узнаете: 
+Из доклада вы узнаете:
 * Как реализован ACID механизм.
 * Какие есть уровни изоляции.
 * Как работают распределенные транзакции.
@@ -22,6 +22,6 @@
 
 @[YouTube](https://youtu.be/-GlRSxG4JQU?t=10779)
 
-[ {{ team.kuznetcov.name }} ]( {{ team.kuznetcov.profile }} ) ( {{ team.kuznetcov.position }} ) рассказал о том, как {{ ydb-short-name }} хранит данные с избыточностью и как {{ ydb-short-name }} решает задачу распределенного консенсуса.  
+[ {{ team.kuznetcov.name }} ]( {{ team.kuznetcov.profile }} ) ( {{ team.kuznetcov.position }} ) рассказал о том, как {{ ydb-short-name }} хранит данные с избыточностью и как {{ ydb-short-name }} решает задачу распределенного консенсуса.
 
 [Слайды](https://presentations.ydb.tech/2019/ru/highload_siberia/presentation.pdf)

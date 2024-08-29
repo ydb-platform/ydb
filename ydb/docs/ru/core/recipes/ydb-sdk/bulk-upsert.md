@@ -21,7 +21,7 @@ description: "В статье вы ознакомитесь с примерам�
   import (
     "context"
     "os"
-    
+
     "github.com/ydb-platform/ydb-go-sdk/v3"
     "github.com/ydb-platform/ydb-go-sdk/v3/table"
     "github.com/ydb-platform/ydb-go-sdk/v3/table/types"
@@ -37,7 +37,7 @@ description: "В статье вы ознакомитесь с примерам�
     if err != nil {
       panic(err)
     }
-    defer db.Close(ctx) 
+    defer db.Close(ctx)
     type logMessage struct {
       App       string
       Host      string

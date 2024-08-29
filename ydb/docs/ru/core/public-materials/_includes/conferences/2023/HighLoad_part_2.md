@@ -25,7 +25,7 @@
 
 @[YouTube](https://www.youtube.com/watch?v=zKPOAdNOQx4&list=PLH-XmS0lSi_yksBrXBOIgnuW_RmwfLKYn&index=92&pp=iAQB)
 
-Доклад будет интересен разработчикам и командам эксплуатации, особенно в компаниях больших размеров. 
+Доклад будет интересен разработчикам и командам эксплуатации, особенно в компаниях больших размеров.
 
 [Слайды](https://presentations.ydb.tech/2023/ru/highload/ydb_topics_data_bus/presentation.pdf)
 
@@ -38,7 +38,7 @@
 
 @[YouTube](https://www.youtube.com/watch?v=TSFVV0zGSBI&list=PLH-XmS0lSi_yksBrXBOIgnuW_RmwfLKYn&index=130&pp=iAQB)
 
-Отдельная часть выступления посвящена отличиям в обработке аналитических запросов на табличках и обработке на потоках «живых» данных. Доклад будет интересен разработчикам БД, дата-аналитикам, а также всем, кто интересуется поиском по образцу на больших данных. 
+Отдельная часть выступления посвящена отличиям в обработке аналитических запросов на табличках и обработке на потоках «живых» данных. Доклад будет интересен разработчикам БД, дата-аналитикам, а также всем, кто интересуется поиском по образцу на больших данных.
 
 [Слайды](https://presentations.ydb.tech/2023/ru/highload/template_search_in_str_seq/presentation.pdf)
 
@@ -51,6 +51,6 @@
 
 @[YouTube](https://www.youtube.com/watch?v=Vtg8UmU62OA&list=PLH-XmS0lSi_yksBrXBOIgnuW_RmwfLKYn&index=100&pp=iAQB)
 
-Доклад будет интересен разработчикам на Go и тимлидам. 
+Доклад будет интересен разработчикам на Go и тимлидам.
 
 [Слайды](https://presentations.ydb.tech/2023/ru/golang_conf/from_pytest_to_go/presentation.pdf)

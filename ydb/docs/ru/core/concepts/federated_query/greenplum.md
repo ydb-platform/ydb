@@ -7,7 +7,7 @@
     ```sql
     CREATE OBJECT greenplum_datasource_user_password (TYPE SECRET) WITH (value = "<password>");
     ```
-1. Создать [внешний источник данных](../datamodel/external_data_source.md), описывающий определённую базу данных в составе кластера Greenplum. В параметр `LOCATION` нужно передать сетевой адрес [мастер-ноды](https://greenplum.org/introduction-to-greenplum-architecture/) Greenplum. При чтении по умолчанию используется [пространство имен](https://docs.vmware.com/en/VMware-Greenplum/6/greenplum-database/ref_guide-system_catalogs-pg_namespace.html) `public`, но это значение можно изменить с помощью опционального параметра `SCHEMA`. Включить шифрование соединений к внешней базе данных можно с помощью параметра `USE_TLS="TRUE"`. 
+1. Создать [внешний источник данных](../datamodel/external_data_source.md), описывающий определённую базу данных в составе кластера Greenplum. В параметр `LOCATION` нужно передать сетевой адрес [мастер-ноды](https://greenplum.org/introduction-to-greenplum-architecture/) Greenplum. При чтении по умолчанию используется [пространство имен](https://docs.vmware.com/en/VMware-Greenplum/6/greenplum-database/ref_guide-system_catalogs-pg_namespace.html) `public`, но это значение можно изменить с помощью опционального параметра `SCHEMA`. Включить шифрование соединений к внешней базе данных можно с помощью параметра `USE_TLS="TRUE"`.
     ```sql
     CREATE EXTERNAL DATA SOURCE greenplum_datasource WITH (
         SOURCE_TYPE="Greenplum",

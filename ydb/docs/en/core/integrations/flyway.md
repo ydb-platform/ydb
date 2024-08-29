@@ -19,13 +19,13 @@ To use Flyway with {{ ydb-short-name }} in a Java / Kotlin application or a Grad
       <artifactId>flyway-core</artifactId>
       <version>${flyway.core.version}</version>
   </dependency>
-  
+
   <dependency>
       <groupId>tech.ydb.jdbc</groupId>
       <artifactId>ydb-jdbc-driver</artifactId>
       <version>${ydb.jdbc.version}</version>
   </dependency>
-  
+
   <dependency>
       <groupId>tech.ydb.dialects</groupId>
       <artifactId>flyway-ydb-dialect</artifactId>

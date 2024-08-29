@@ -49,11 +49,11 @@ Making a primitive type from an internal representation. It's always successful 
 
 ```yql
 SELECT
-    DateTime::MakeTimestamp(DateTime::Split(Datetime("2019-01-01T15:30:00Z"))), 
+    DateTime::MakeTimestamp(DateTime::Split(Datetime("2019-01-01T15:30:00Z"))),
       -- 2019-01-01T15:30:00.000000Z
-    DateTime::MakeDate(Datetime("2019-01-01T15:30:00Z")), 
+    DateTime::MakeDate(Datetime("2019-01-01T15:30:00Z")),
       -- 2019-01-01
-    DateTime::MakeTimestamp(DateTime::Split(TzDatetime("2019-01-01T00:00:00,Europe/Moscow"))), 
+    DateTime::MakeTimestamp(DateTime::Split(TzDatetime("2019-01-01T00:00:00,Europe/Moscow"))),
       -- 2018-12-31T21:00:00Z (conversion to UTC)
     DateTime::MakeDate(TzDatetime("2019-01-01T12:00:00,GMT"))
       -- 2019-01-01 (Datetime -> Date with implicit Split)>
@@ -202,27 +202,27 @@ The functions treat periods longer than one day in a different manner than the s
 
 ```yql
 SELECT
-    DateTime::MakeDate(DateTime::StartOfYear(Date("2019-06-06"))), 
+    DateTime::MakeDate(DateTime::StartOfYear(Date("2019-06-06"))),
       -- 2019-01-01 (implicit Split here and below)
-    DateTime::MakeDatetime(DateTime::StartOfQuarter(Datetime("2019-06-06T01:02:03Z"))), 
+    DateTime::MakeDatetime(DateTime::StartOfQuarter(Datetime("2019-06-06T01:02:03Z"))),
       -- 2019-04-01T00:00:00Z (time components are reset to zero)
-    DateTime::MakeDate(DateTime::StartOfMonth(Timestamp("2019-06-06T01:02:03.456789Z"))), 
+    DateTime::MakeDate(DateTime::StartOfMonth(Timestamp("2019-06-06T01:02:03.456789Z"))),
       -- 2019-06-01
-    DateTime::MakeDate(DateTime::StartOfWeek(Date("1970-01-01"))), 
+    DateTime::MakeDate(DateTime::StartOfWeek(Date("1970-01-01"))),
       -- NULL (the beginning of the epoch is Thursday, the beginning of the week is 1969-12-29 that is beyond the limits)
-    DateTime::MakeTimestamp(DateTime::StartOfWeek(Date("2019-01-01"))), 
+    DateTime::MakeTimestamp(DateTime::StartOfWeek(Date("2019-01-01"))),
       -- 2018-12-31T00:00:00Z
-    DateTime::MakeDatetime(DateTime::StartOfDay(Datetime("2019-06-06T01:02:03Z"))), 
+    DateTime::MakeDatetime(DateTime::StartOfDay(Datetime("2019-06-06T01:02:03Z"))),
       -- 2019-06-06T00:00:00Z
-    DateTime::MakeTzDatetime(DateTime::StartOfDay(TzDatetime("1970-01-01T05:00:00,Europe/Moscow"))), 
+    DateTime::MakeTzDatetime(DateTime::StartOfDay(TzDatetime("1970-01-01T05:00:00,Europe/Moscow"))),
       -- NULL (beyond the epoch in GMT)
-    DateTime::MakeTzTimestamp(DateTime::StartOfDay(TzTimestamp("1970-01-02T05:00:00.000000,Europe/Moscow"))), 
+    DateTime::MakeTzTimestamp(DateTime::StartOfDay(TzTimestamp("1970-01-02T05:00:00.000000,Europe/Moscow"))),
       -- 1970-01-02T00:00:00,Europe/Moscow (the beginning of the day in Moscow)
-    DateTime::MakeDatetime(DateTime::StartOf(Datetime("2019-06-06T23:45:00Z"), Interval("PT7H"))), 
+    DateTime::MakeDatetime(DateTime::StartOf(Datetime("2019-06-06T23:45:00Z"), Interval("PT7H"))),
       -- 2019-06-06T21:00:00Z
-    DateTime::MakeDatetime(DateTime::StartOf(Datetime("2019-06-06T23:45:00Z"), Interval("PT20M"))), 
+    DateTime::MakeDatetime(DateTime::StartOf(Datetime("2019-06-06T23:45:00Z"), Interval("PT20M"))),
       -- 2019-06-06T23:40:00Z
-    DateTime::TimeOfDay(Timestamp("2019-02-14T01:02:03.456789Z")); 
+    DateTime::TimeOfDay(Timestamp("2019-02-14T01:02:03.456789Z"));
       -- 1 hour 2 minutes 3 seconds 456789 microseconds
 ```
 
@@ -284,7 +284,7 @@ All other characters in the format string are passed on without changes.
 $format = DateTime::Format("%Y-%m-%d %H:%M:%S %Z");
 
 SELECT
-    $format(DateTime::Split(TzDatetime("2019-01-01T01:02:03,Europe/Moscow"))); 
+    $format(DateTime::Split(TzDatetime("2019-01-01T01:02:03,Europe/Moscow")));
       -- "2019-01-01 01:02:03 Europe/Moscow"
 ```
 
@@ -337,13 +337,13 @@ For the common formats, wrappers around the corresponding util methods are suppo
 
 ```yql
 SELECT
-    DateTime::MakeTimestamp(DateTime::ParseRfc822("Fri, 4 Mar 2005 19:34:45 EST")), 
+    DateTime::MakeTimestamp(DateTime::ParseRfc822("Fri, 4 Mar 2005 19:34:45 EST")),
       -- 2005-03-05T00:34:45Z
-    DateTime::MakeTimestamp(DateTime::ParseIso8601("2009-02-14T02:31:30+0300")), 
+    DateTime::MakeTimestamp(DateTime::ParseIso8601("2009-02-14T02:31:30+0300")),
       -- 2009-02-13T23:31:30Z
-    DateTime::MakeTimestamp(DateTime::ParseHttp("Sunday, 06-Nov-94 08:49:37 GMT")), 
+    DateTime::MakeTimestamp(DateTime::ParseHttp("Sunday, 06-Nov-94 08:49:37 GMT")),
       -- 1994-11-06T08:49:37Z
-    DateTime::MakeTimestamp(DateTime::ParseX509("20091014165533Z")) 
+    DateTime::MakeTimestamp(DateTime::ParseX509("20091014165533Z"))
       -- 2009-10-14T16:55:33Z
 ```
 

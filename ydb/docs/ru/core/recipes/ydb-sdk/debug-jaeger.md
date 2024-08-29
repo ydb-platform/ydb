@@ -128,7 +128,7 @@
         if err != nil {
             panic(err)
         }
-        
+
         db := sql.OpnDB(connector)
         defer db.Close()
         ...

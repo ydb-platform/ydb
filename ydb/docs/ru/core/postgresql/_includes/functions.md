@@ -33,19 +33,19 @@ There are also some comparison predicates, as shown in Table 9.2. These behave m
 2 BETWEEN 1 AND 3 → true
 2 BETWEEN 3 AND 1 → false
 ```||
-|| datatype NOT BETWEEN datatype AND datatype → boolean | Not between (the negation of BETWEEN). | 
+|| datatype NOT BETWEEN datatype AND datatype → boolean | Not between (the negation of BETWEEN). |
 ```sql
 2 NOT BETWEEN 1 AND 3 → false
 ```||
-|| datatype BETWEEN SYMMETRIC datatype AND datatype → boolean | Between, after sorting the two endpoint values. |
+|| datatype BETWEEN SYMMETRIC datatype AND datatype → boolean | Between, after sorting the two endpoint values.|
 ```sql
 2 BETWEEN SYMMETRIC 3 AND 1 → true
 ```||
-||datatype NOT BETWEEN SYMMETRIC datatype AND datatype → boolean | Not between, after sorting the two endpoint values. | 
+||datatype NOT BETWEEN SYMMETRIC datatype AND datatype → boolean | Not between, after sorting the two endpoint values. |
 ```sql
 2 NOT BETWEEN SYMMETRIC 3 AND 1 → false
 ```||
-||datatype IS DISTINCT FROM datatype → boolean | Not equal, treating null as a comparable value. (NOT SUPPORTED) |
+||datatype IS DISTINCT FROM datatype → boolean | Not equal, treating null as a comparable value. (NOT SUPPORTED)|
 ```sql
 #1 IS DISTINCT FROM NULL → true
 #NULL IS DISTINCT FROM NULL → false
@@ -118,10 +118,10 @@ Table 9.4. Mathematical Operators
 ```sql
 5 % 4 → 1
 ```||
-||numeric ^ numeric → numeric  
+||numeric ^ numeric → numeric
 double precision ^ double precision → double precision|
 
-Exponentiation.  
+Exponentiation.
 Unlike typical mathematical practice, multiple uses of ^ will associate left to right by default.|
 ```sql
 2 ^ 3 → 8
@@ -180,13 +180,13 @@ abs(-17.4) → 17.4
 ```sql
 cbrt(64.0) → 4
 ```||
-||ceil ( numeric ) → numeric  
+||ceil ( numeric ) → numeric
 ceil ( double precision ) → double precision|Nearest integer greater than or equal to argument|
 ```sql
 ceil(42.2) → 43
 ceil(-42.8) → -42
 ```||
-||ceiling ( numeric ) → numeric  
+||ceiling ( numeric ) → numeric
 ceiling ( double precision ) → double precision|Nearest integer greater than or equal to argument(same as ceil)|
 ```sql
 ceiling(95.3) → 96
@@ -199,7 +199,7 @@ degrees(0.5) → 28.64788975654116
 ```sql
 div(9, 4) → 2
 ```||
-||exp ( numeric ) → numeric  
+||exp ( numeric ) → numeric
 exp ( double precision ) → double precision|Exponential (e raised to the given power)|
 ```sql
 exp(1.0) → 2.7182818284590452
@@ -208,7 +208,7 @@ exp(1.0) → 2.7182818284590452
 ```sql
 factorial(5) → 120
 ```||
-||floor ( numeric ) → numeric  
+||floor ( numeric ) → numeric
 floor ( double precision ) → double precision|Nearest integer less than or equal to argument|
 ```sql
 floor(42.8) → 42
@@ -224,17 +224,17 @@ Least common multiple (the smallest strictly positive number that is an integral
 ```sql
 lcm(1071, 462) → 23562
 ```||
-||ln ( numeric ) → numeric  
+||ln ( numeric ) → numeric
 ln ( double precision ) → double precision|Natural logarithm|
 ```sql
 ln(2.0) → 0.6931471805599453
 ```||
-||log ( numeric ) → numeric  
+||log ( numeric ) → numeric
 log ( double precision ) → double precision|Base 10 logarithm|
 ```sql
 log(100) → 2
 ```||
-||log10 ( numeric ) → numeric  
+||log10 ( numeric ) → numeric
 log10 ( double precision ) → double precision|Base 10 logarithm (same as log)|
 ```sql
 log10(1000) → 3
@@ -256,7 +256,7 @@ mod(9, 4) → 1
 ```sql
 pi() → 3.141592653589793
 ```||
-||power ( a numeric, b numeric ) → numeric  
+||power ( a numeric, b numeric ) → numeric
 power ( a double precision, b double precision ) → double precision|a raised to the power of b|
 ```sql
 power(9, 3) → 729
@@ -265,7 +265,7 @@ power(9, 3) → 729
 ```sql
 radians(45.0) → 0.7853981633974483
 ```||
-||round ( numeric ) → numeric  
+||round ( numeric ) → numeric
 round ( double precision ) → double precision|Rounds to nearest integer. For numeric, ties are broken by rounding away from zero. For double precision, the tie-breaking behavior is platform dependent, but “round to nearest even” is the most common rule.|
 ```sql
 round(42.4) → 42
@@ -280,13 +280,13 @@ round(1234.56, -1) → 1230
 ```sql
 scale(8.4100) → 4
 ```||
-||sign ( numeric ) → numeric  
+||sign ( numeric ) → numeric
 sign ( double precision ) → double precision|
 Sign of the argument (-1, 0, or +1)|
 ```sql
 sign(-8.4) → -1
 ```||
-||sqrt ( numeric ) → numeric  
+||sqrt ( numeric ) → numeric
 sqrt ( double precision ) → double precision|
 Square root|
 ```sql
@@ -297,7 +297,7 @@ Reduces the value's scale (number of fractional decimal digits) by removing trai
 ```sql
 trim_scale(8.4100) → 8.41
 ```||
-||trunc ( numeric ) → numeric  
+||trunc ( numeric ) → numeric
 trunc ( double precision ) → double precision|
 Truncates to integer (towards zero)|
 ```sql
@@ -308,7 +308,7 @@ trunc(-42.8) → -42
 ```sql
 trunc(42.4382, 2) → 42.43
 ```||
-||width_bucket ( operand numeric, low numeric, high numeric, count integer ) → integer  
+||width_bucket ( operand numeric, low numeric, high numeric, count integer ) → integer
 width_bucket ( operand double precision, low double precision, high double precision, count integer ) → integer|
 Returns the number of the bucket in which operand falls in a histogram having count equal-width buckets spanning the range low to high. Returns 0 or count+1 for an input outside that range.|
 ```sql
@@ -449,7 +449,7 @@ Table 9.9. SQL String Functions and Operators
 ```sql
 'Post' || 'greSQL' → PostgreSQL
 ```||
-||text \|\| anynonarray → text  
+||text \|\| anynonarray → text
 anynonarray \|\| text → text|
 Converts the non-string input to text, then concatenates the two strings. (The non-string input cannot be of an array type, because that would create ambiguity with the array \|\| operators. If you want to concatenate an array's text equivalent, cast it to text explicitly.) (UNSUPPORTED)|
 ```sql
@@ -465,7 +465,7 @@ U&'\0061\0308bc' IS NFD NORMALIZED → true
 ```sql
 bit_length('jose') → 32
 ```||
-||char_length ( text ) → integer  
+||char_length ( text ) → integer
 character_length ( text ) → integer|
 Returns number of characters in the string.|
 ```sql
@@ -512,7 +512,7 @@ Extracts the first substring matching POSIX regular expression; see Section 9.7.
 ```sql
 substring('Thomas' from '...$') → mas
 ```||
-||substring ( string text SIMILAR pattern text ESCAPE escape text ) → text  
+||substring ( string text SIMILAR pattern text ESCAPE escape text ) → text
 substring ( string text FROM pattern text FOR escape text ) → text|
 Extracts the first substring matching SQL regular expression; see Section 9.7.2. The first form has been specified since SQL:2003; the second form was only in SQL:1999 and should be considered obsolete.|
 ```sql
@@ -723,14 +723,14 @@ Splits the string at occurrences of delimiter and returns the resulting fields a
 ```sql
 #string_to_table('xx~^~yy~^~zz', '~^~', 'yy') → [xx,NULL,zz]
 ```||
-||to_ascii ( string text ) → text  
-to_ascii ( string text, encoding name ) → text  
+||to_ascii ( string text ) → text
+to_ascii ( string text, encoding name ) → text
 to_ascii ( string text, encoding integer ) → text|
 Converts string to ASCII from another encoding, which may be identified by name or number. If encoding is omitted the database encoding is assumed (which in practice is the only useful case). The conversion consists primarily of dropping accents. Conversion is only supported from LATIN1, LATIN2, LATIN9, and WIN1250 encodings. (See the unaccent module for another, more flexible solution.) (NOT SUPPORTED)|
 ```sql
 #to_ascii('Karél') → Karel
 ```||
-||to_hex ( integer ) → text  
+||to_hex ( integer ) → text
 to_hex ( bigint ) → text|
 Converts the number to its equivalent hexadecimal representation.|
 ```sql
@@ -2298,7 +2298,7 @@ Do these objects intersect? Available for these pairs of types: (box, box), (lse
 ```sql
 lseg '[(-1,0),(1,0)]' ?# box '(2,2),(-2,-2)' → true
 ```||
-||?- line → boolean  
+||?- line → boolean
 ?- lseg → boolean|
 Is line horizontal?|
 ```sql
@@ -2309,7 +2309,7 @@ Are points horizontally aligned (that is, have same y coordinate)?|
 ```sql
 point '(1,0)' ?- point '(0,0)' → true
 ```||
-||?\| line → boolean  
+||?\| line → boolean
 ?\| lseg → boolean|
 Is line vertical?|
 ```sql
@@ -2320,13 +2320,13 @@ Are points vertically aligned (that is, have same x coordinate)?|
 ```sql
 point '(0,1)' ?| point '(0,0)' → true
 ```||
-||line ?-\| line → boolean  
+||line ?-\| line → boolean
 lseg ?-\| lseg → boolean|
 Are lines perpendicular?|
 ```sql
 lseg '[(0,0),(0,1)]' ?-| lseg '[(0,0),(1,0)]' → true
 ```||
-||line ?\|\| line → boolean  
+||line ?\|\| line → boolean
 lseg ?\|\| lseg → boolean|
 Are lines parallel?|
 ```sql
@@ -2895,38 +2895,38 @@ Table 9.44. json and jsonb Operators
 
 #|
 ||Operator|Description|Example(s)||
-||json -> integer → json  
+||json -> integer → json
 jsonb -> integer → jsonb|
 Extracts n'th element of JSON array (array elements are indexed from zero, but negative integers count from the end).|
 ```sql
 '[{"a":"foo"},{"b":"bar"},{"c":"baz"}]'::json -> 2 → {"c":"baz"}
 '[{"a":"foo"},{"b":"bar"},{"c":"baz"}]'::json -> -3 → {"a":"foo"}
 ```||
-||json -> text → json  
+||json -> text → json
 jsonb -> text → jsonb|
 Extracts JSON object field with the given key.|
 ```sql
 '{"a": {"b":"foo"}}'::json -> 'a' → {"b":"foo"}
 ```||
-||json ->> integer → text  
+||json ->> integer → text
 jsonb ->> integer → text|
 Extracts n'th element of JSON array, as text.|
 ```sql
 '[1,2,3]'::json ->> 2 → 3
 ```||
-||json ->> text → text  
+||json ->> text → text
 jsonb ->> text → text|
 Extracts JSON object field with the given key, as text.|
 ```sql
 '{"a":1,"b":2}'::json ->> 'b' → 2
 ```||
-||json #> text[] → json  
+||json #> text[] → json
 jsonb #> text[] → jsonb|
 Extracts JSON sub-object at the specified path, where path elements can be either field keys or array indexes. (NOT SUPPORTED)|
 ```sql
 #'{"a": {"b": ["foo","bar"]}}'::json #> '{a,b,1}' → "bar"
 ```||
-||json #>> text[] → text  
+||json #>> text[] → text
 jsonb #>> text[] → text|
 Extracts JSON sub-object at the specified path as text. (NOT SUPPORTED)|
 ```sql
@@ -3025,7 +3025,7 @@ Table 9.46. JSON Creation Functions
 
 #|
 ||Function|Description|Example(s)||
-||to_json ( anyelement ) → json  
+||to_json ( anyelement ) → json
 to_jsonb ( anyelement ) → jsonb|
 Converts any SQL value to json or jsonb. Arrays and composites are converted recursively to arrays and objects (multidimensional arrays become arrays of arrays in JSON). Otherwise, if there is a cast from the SQL data type to json, the cast function will be used to perform the conversion;[a] otherwise, a scalar JSON value is produced. For any scalar other than a number, a Boolean, or a null value, the text representation will be used, with escaping as necessary to make it a valid JSON string value. (NOT SUPPORTED)|
 ```sql
@@ -3042,26 +3042,26 @@ Converts an SQL composite value to a JSON object. The behavior is the same as to
 ```sql
 #row_to_json(row(1,'foo')) → {"f1":1,"f2":"foo"}
 ```||
-||json_build_array ( VARIADIC "any" ) → json  
+||json_build_array ( VARIADIC "any" ) → json
 jsonb_build_array ( VARIADIC "any" ) → jsonb|
 Builds a possibly-heterogeneously-typed JSON array out of a variadic argument list. Each argument is converted as per to_json or to_jsonb. (NOT SUPPORTED)|
 ```sql
 json_build_array(1, 2, 'foo', 4, 5) → [1, 2, "foo", 4, 5]
 ```||
-||json_build_object ( VARIADIC "any" ) → json  
+||json_build_object ( VARIADIC "any" ) → json
 jsonb_build_object ( VARIADIC "any" ) → jsonb|
 Builds a JSON object out of a variadic argument list. By convention, the argument list consists of alternating keys and values. Key arguments are coerced to text; value arguments are converted as per to_json or to_jsonb. (NOT SUPPORTED)|
 ```sql
 #json_build_object('foo', 1, 2, row(3,'bar')) → {"foo" : 1, "2" : {"f1":3,"f2":"bar"}}
 ```||
-||json_object ( text[] ) → json  
+||json_object ( text[] ) → json
 jsonb_object ( text[] ) → jsonb|
 Builds a JSON object out of a text array. The array must have either exactly one dimension with an even number of members, in which case they are taken as alternating key/value pairs, or two dimensions such that each inner array has exactly two elements, which are taken as a key/value pair. All values are converted to JSON strings.|
 ```sql
 json_object('{a, 1, b, "def", c, 3.5}') → {"a" : "1", "b" : "def", "c" : "3.5"}
 json_object('{{a, 1}, {b, "def"}, {c, 3.5}}') → {"a" : "1", "b" : "def", "c" : "3.5"}
 ```||
-||json_object ( keys text[], values text[] ) → json  
+||json_object ( keys text[], values text[] ) → json
 jsonb_object ( keys text[], values text[] ) → jsonb|
 This form of json_object takes keys and values pairwise from separate text arrays. Otherwise it is identical to the one-argument form.|
 ```sql
@@ -3075,7 +3075,7 @@ Table 9.47. JSON Processing Functions
 
 #|
 ||Function|Description|Example(s)||
-||json_array_elements ( json ) → setof json  
+||json_array_elements ( json ) → setof json
 jsonb_array_elements ( jsonb ) → setof jsonb|
 Expands the top-level JSON array into a set of JSON values.|
 ```sql
@@ -3085,7 +3085,7 @@ true
 [2,false]
 ]
 ```||
-||json_array_elements_text ( json ) → setof text  
+||json_array_elements_text ( json ) → setof text
 jsonb_array_elements_text ( jsonb ) → setof text|
 Expands the top-level JSON array into a set of text values.|
 ```sql
@@ -3094,14 +3094,14 @@ foo
 bar
 ]
 ```||
-||json_array_length ( json ) → integer  
+||json_array_length ( json ) → integer
 jsonb_array_length ( jsonb ) → integer|
 Returns the number of elements in the top-level JSON array.|
 ```sql
 json_array_length('[1,2,3,{"f1":1,"f2":[5,6]},4]') → 5
 jsonb_array_length('[]') → 0
 ```||
-||json_each ( json ) → setof record ( key text, value json )  
+||json_each ( json ) → setof record ( key text, value json )
 jsonb_each ( jsonb ) → setof record ( key text, value jsonb )|
 Expands the top-level JSON object into a set of key/value pairs.|
 
@@ -3111,7 +3111,7 @@ a,"foo"
 b,"bar"
 ]
 ```||
-||json_each_text ( json ) → setof record ( key text, value text )  
+||json_each_text ( json ) → setof record ( key text, value text )
 jsonb_each_text ( jsonb ) → setof record ( key text, value text )|
 Expands the top-level JSON object into a set of key/value pairs. The returned values will be of type text.|
 ```sql
@@ -3120,19 +3120,19 @@ a,foo
 b,bar
 ]
 ```||
-||json_extract_path ( from_json json, VARIADIC path_elems text[] ) → json  
+||json_extract_path ( from_json json, VARIADIC path_elems text[] ) → json
 jsonb_extract_path ( from_json jsonb, VARIADIC path_elems text[] ) → jsonb|
 Extracts JSON sub-object at the specified path. (This is functionally equivalent to the #> operator, but writing the path out as a variadic list can be more convenient in some cases.) (NOT SUPPORTED)|
 ```sql
 json_extract_path('{"f2":{"f3":1},"f4":{"f5":99,"f6":"foo"}}', 'f4', 'f6') → "foo"
 ```||
-||json_extract_path_text ( from_json json, VARIADIC path_elems text[] ) → text  
+||json_extract_path_text ( from_json json, VARIADIC path_elems text[] ) → text
 jsonb_extract_path_text ( from_json jsonb, VARIADIC path_elems text[] ) → text|
 Extracts JSON sub-object at the specified path as text. (This is functionally equivalent to the #>> operator.) (NOT SUPPORTED)|
 ```sql
 json_extract_path_text('{"f2":{"f3":1},"f4":{"f5":99,"f6":"foo"}}', 'f4', 'f6') → foo
 ```||
-||json_object_keys ( json ) → setof text  
+||json_object_keys ( json ) → setof text
 jsonb_object_keys ( jsonb ) → setof text|
 Returns the set of keys in the top-level JSON object.|
 ```sql
@@ -3141,7 +3141,7 @@ f1
 f2
 ]
 ```||
-||json_populate_record ( base anyelement, from_json json ) → anyelement  
+||json_populate_record ( base anyelement, from_json json ) → anyelement
 jsonb_populate_record ( base anyelement, from_json jsonb ) → anyelement|
 Expands the top-level JSON object to a row having the composite type of the base argument. The JSON object is scanned for fields whose names match column names of the output row type, and their values are inserted into those columns of the output. (Fields that do not correspond to any output column name are ignored.) In typical use, the value of base is just NULL, which means that any output columns that do not match any object field will be filled with nulls. However, if base isn't NULL then the values it contains will be used for unmatched columns. (NOT SUPPORTED)
 
@@ -3162,11 +3162,11 @@ Otherwise, the ordinary text representation of the JSON value is fed to the inpu
 While the example below uses a constant JSON value, typical use would be to reference a json or jsonb column laterally from another table in the query's FROM clause. Writing json_populate_record in the FROM clause is good practice, since all of the extracted columns are available for use without duplicate function calls.
 
 ```sql
-#CREATE TYPE subrowtype as (d int, e text); 
+#CREATE TYPE subrowtype as (d int, e text);
 #CREATE type myrowtype as (a int, b text[], c subrowtype);
 #SELECT * FROM json_populate_record(null::myrowtype, '{"a": 1, "b": ["2", "a b"], "c": {"d": 4, "e": "a b c"}, "x": "foo"}') → 1,{2,"a b"},(4,"a b c")
 ```||
-||json_populate_recordset ( base anyelement, from_json json ) → setof anyelement  
+||json_populate_recordset ( base anyelement, from_json json ) → setof anyelement
 jsonb_populate_recordset ( base anyelement, from_json jsonb ) → setof anyelement|
 Expands the top-level JSON array of objects to a set of rows having the composite type of the base argument. Each element of the JSON array is processed as described above for json[b]_populate_record. (NOT SUPPORTED)|
 ```sql
@@ -3176,14 +3176,14 @@ Expands the top-level JSON array of objects to a set of rows having the composit
 3,4
 ]
 ```||
-||json_to_record ( json ) → record  
+||json_to_record ( json ) → record
 jsonb_to_record ( jsonb ) → record|
 Expands the top-level JSON object to a row having the composite type defined by an AS clause. (As with all functions returning record, the calling query must explicitly define the structure of the record with an AS clause.) The output record is filled from fields of the JSON object, in the same way as described above for json[b]_populate_record. Since there is no input record value, unmatched columns are always filled with nulls. (NOT SUPPORTED)|
 ```sql
 #CREATE TYPE myrowtype as (a int, b text);
 #SELECT * FROM json_to_record('{"a":1,"b":[1,2,3],"c":[1,2,3],"e":"bar","r": {"a": 123, "b": "a b c"}}') as x(a int, b text, c int[], d text, r myrowtype) → 1,[1,2,3],{1,2,3},(123,"a b c")
 ```||
-||json_to_recordset ( json ) → setof record  
+||json_to_recordset ( json ) → setof record
 jsonb_to_recordset ( jsonb ) → setof record|
 Expands the top-level JSON array of objects to a set of rows having the composite type defined by an AS clause. (As with all functions returning record, the calling query must explicitly define the structure of the record with an AS clause.) Each element of the JSON array is processed as described above for json[b]_populate_record. (NOT SUPPORTED)|
 ```SQL
@@ -3210,7 +3210,7 @@ Returns target with new_value inserted. If the item designated by the path is an
 jsonb_insert('{"a": [0,1,2]}', '{a, 1}', '"new_value"') → {"a": [0, "new_value", 1, 2]}
 jsonb_insert('{"a": [0,1,2]}', '{a, 1}', '"new_value"', true) → {"a": [0, 1, "new_value", 2]}
 ```||
-||json_strip_nulls ( json ) → json  
+||json_strip_nulls ( json ) → json
 jsonb_strip_nulls ( jsonb ) → jsonb|
 Deletes all object fields that have null values from the given JSON value, recursively. Null values that are not object fields are untouched.|
 ```sql
@@ -3245,10 +3245,10 @@ Returns the first JSON item returned by the JSON path for the specified JSON val
 ```sql
 jsonb_path_query_first('{"a":[1,2,3,4,5]}', '$.a[*] ? (@ >= $min && @ <= $max)', '{"min":2, "max":4}', false) → 2
 ```||
-||jsonb_path_exists_tz ( target jsonb, path jsonpath [, vars jsonb [, silent boolean ]] ) → boolean  
-jsonb_path_match_tz ( target jsonb, path jsonpath [, vars jsonb [, silent boolean ]] ) → boolean  
-jsonb_path_query_tz ( target jsonb, path jsonpath [, vars jsonb [, silent boolean ]] ) → setof jsonb  
-jsonb_path_query_array_tz ( target jsonb, path jsonpath [, vars jsonb [, silent boolean ]] ) → jsonb  
+||jsonb_path_exists_tz ( target jsonb, path jsonpath [, vars jsonb [, silent boolean ]] ) → boolean
+jsonb_path_match_tz ( target jsonb, path jsonpath [, vars jsonb [, silent boolean ]] ) → boolean
+jsonb_path_query_tz ( target jsonb, path jsonpath [, vars jsonb [, silent boolean ]] ) → setof jsonb
+jsonb_path_query_array_tz ( target jsonb, path jsonpath [, vars jsonb [, silent boolean ]] ) → jsonb
 jsonb_path_query_first_tz ( target jsonb, path jsonpath [, vars jsonb [, silent boolean ]] ) → jsonb|
 These functions act like their counterparts described above without the _tz suffix, except that these functions support comparisons of date/time values that require timezone-aware conversions. The example below requires interpretation of the date-only value 2015-08-02 as a timestamp with time zone, so the result depends on the current TimeZone setting. Due to this dependency, these functions are marked as stable, which means these functions cannot be used in indexes. Their counterparts are immutable, and so can be used in indexes; but they will throw errors if asked to make such comparisons. (NOT SUPPORTED)|
 ```sql
@@ -3265,7 +3265,7 @@ jsonb_pretty('[{"f1":1,"f2":null}, 2]') → """[
     2
 ]"""
 ```||
-||json_typeof ( json ) → text  
+||json_typeof ( json ) → text
 jsonb_typeof ( jsonb ) → text|
 Returns the type of the top-level JSON value as a text string. Possible types are object, array, string, number, boolean, and null. (The null result should not be confused with an SQL NULL; see the examples.)|
 ```sql
@@ -3488,7 +3488,7 @@ Equality comparison (this, and the other comparison operators, work on all JSON 
 jsonb_path_query_array('[1, "a", 1, 3]', '$[*] ? (@ == 1)', '{}', false) → [1, 1]
 jsonb_path_query_array('[1, "a", 1, 3]', '$[*] ? (@ == "a")', '{}', false) → ["a"]
 ```||
-||value != value → boolean  
+||value != value → boolean
 value <> value → boolean|
 Non-equality comparison|
 ```sql
@@ -3877,12 +3877,12 @@ No|
 ```sql
 SELECT array_agg(x) FROM (VALUES (Array[1,2]),(Array[3,4])) a(x) → {{1,2},{3,4}}
 ```||
-||avg ( smallint ) → numeric  
-avg ( integer ) → numeric  
-avg ( bigint ) → numeric  
-avg ( numeric ) → numeric  
-avg ( real ) → double precision  
-avg ( double precision ) → double precision  
+||avg ( smallint ) → numeric
+avg ( integer ) → numeric
+avg ( bigint ) → numeric
+avg ( numeric ) → numeric
+avg ( real ) → double precision
+avg ( double precision ) → double precision
 avg ( interval ) → interval|
 Computes the average (arithmetic mean) of all the non-null input values.|
 Yes|
@@ -3895,9 +3895,9 @@ SELECT avg(x::real) FROM (VALUES (1),(2),(3)) a(x) → 2
 SELECT avg(x::double precision) FROM (VALUES (1),(2),(3)) a(x) → 2
 SELECT avg(cast(x as interval day)) FROM (VALUES ('1'),('2'),('3')) a(x) → 2 days
 ```||
-||bit_and ( smallint ) → smallint  
-bit_and ( integer ) → integer  
-bit_and ( bigint ) → bigint  
+||bit_and ( smallint ) → smallint
+bit_and ( integer ) → integer
+bit_and ( bigint ) → bigint
 bit_and ( bit ) → bit|
 Computes the bitwise AND of all non-null input values.|
 Yes|
@@ -3907,9 +3907,9 @@ SELECT bit_and(x::integer) FROM (VALUES (5),(6),(7)) a(x) → 4
 SELECT bit_and(x::bigint) FROM (VALUES (5),(6),(7)) a(x) → 4
 SELECT bit_and(x::bit(3)) FROM (VALUES ('101'),('110'),('111')) a(x) → 100
 ```||
-||bit_or ( smallint ) → smallint  
-bit_or ( integer ) → integer  
-bit_or ( bigint ) → bigint  
+||bit_or ( smallint ) → smallint
+bit_or ( integer ) → integer
+bit_or ( bigint ) → bigint
 bit_or ( bit ) → bit|
 Computes the bitwise OR of all non-null input values.|
 Yes|
@@ -3919,9 +3919,9 @@ SELECT bit_or(x::integer) FROM (VALUES (4),(5),(6)) a(x) → 7
 SELECT bit_or(x::bigint) FROM (VALUES (4),(5),(6)) a(x) → 7
 SELECT bit_or(x::bit(3)) FROM (VALUES ('100'),('101'),('110')) a(x) → 111
 ```||
-||bit_xor ( smallint ) → smallint  
-bit_xor ( integer ) → integer  
-bit_xor ( bigint ) → bigint  
+||bit_xor ( smallint ) → smallint
+bit_xor ( integer ) → integer
+bit_xor ( bigint ) → bigint
 bit_xor ( bit ) → bit|
 Computes the bitwise exclusive OR of all non-null input values. Can be useful as a checksum for an unordered set of values.|
 Yes|
@@ -3967,7 +3967,7 @@ SELECT every(x) FROM (VALUES (null),(false),(true)) a(x) → false
 SELECT every(x) FROM (VALUES (null),(true),(true)) a(x) → true
 SELECT every(x) FROM (VALUES (null::bool),(null::bool),(null::bool)) a(x) → NULL
 ```||
-||json_agg ( anyelement ) → json  
+||json_agg ( anyelement ) → json
 jsonb_agg ( anyelement ) → jsonb|
 Collects all the input values, including nulls, into a JSON array. Values are converted to JSON as per to_json or to_jsonb. (NOT SUPPORTED)|
 No|
@@ -3975,7 +3975,7 @@ No|
 #SELECT json_agg(x) FROM (VALUES (1),(2),(3)) a(x) → [1,2,3]
 #SELECT jsonb_agg(x) FROM (VALUES ('a'),('b'),('c')) a(x) → ["a","b","c"]
 ```||
-||json_object_agg ( key any, value any ) → json  
+||json_object_agg ( key any, value any ) → json
 jsonb_object_agg ( key any, value any ) → jsonb|
 Collects all the key/value pairs into a JSON object. Key arguments are coerced to text; value arguments are converted as per to_json or to_jsonb. Values can be null, but not keys.|
 No|
@@ -4049,12 +4049,12 @@ SELECT min(array[x,x]) FROM (VALUES (interval '1' day),(interval '2' day),(inter
 Computes the union of the non-null input values. (NOT SUPPORTED)|
 No|
 ||
-||range_intersect_agg ( value anyrange ) → anyrange  
+||range_intersect_agg ( value anyrange ) → anyrange
 range_intersect_agg ( value anymultirange ) → anymultirange|
 Computes the intersection of the non-null input values. (NOT SUPPORTED)|
 No|
 ||
-||string_agg ( value text, delimiter text ) → text  
+||string_agg ( value text, delimiter text ) → text
 string_agg ( value bytea, delimiter bytea ) → bytea|
 Concatenates the non-null input values into a string. Each value after the first is preceded by the corresponding delimiter (if it's not null).|
 No|
@@ -4062,13 +4062,13 @@ No|
 SELECT string_agg(x,'') FROM (VALUES ('a'),('b'),('c')) a(x) → abc
 SELECT string_agg(x::bytea,','::bytea) FROM (VALUES ('a'),('b'),('c')) a(x) → a,b,c
 ```||
-||sum ( smallint ) → bigint  
-sum ( integer ) → bigint  
-sum ( bigint ) → numeric  
-sum ( numeric ) → numeric  
-sum ( real ) → real  
-sum ( double precision ) → double precision  
-sum ( interval ) → interval  
+||sum ( smallint ) → bigint
+sum ( integer ) → bigint
+sum ( bigint ) → numeric
+sum ( numeric ) → numeric
+sum ( real ) → real
+sum ( double precision ) → double precision
+sum ( interval ) → interval
 sum ( money ) → money|
 Computes the sum of the non-null input values.|
 Yes|
@@ -4237,11 +4237,11 @@ Table 9.59. Ordered-Set Aggregate Functions (NOT SUPPORTED)
 ||mode () WITHIN GROUP ( ORDER BY anyelement ) → anyelement|
 Computes the mode, the most frequent value of the aggregated argument (arbitrarily choosing the first one if there are multiple equally-frequent values). The aggregated argument must be of a sortable type.|
 No||
-||percentile_cont ( fraction double precision ) WITHIN GROUP ( ORDER BY double precision ) → double precision  
+||percentile_cont ( fraction double precision ) WITHIN GROUP ( ORDER BY double precision ) → double precision
 percentile_cont ( fraction double precision ) WITHIN GROUP ( ORDER BY interval ) → interval|
 Computes the continuous percentile, a value corresponding to the specified fraction within the ordered set of aggregated argument values. This will interpolate between adjacent input items if needed.|
 No||
-||percentile_cont ( fractions double precision[] ) WITHIN GROUP ( ORDER BY double precision ) → double precision[]  
+||percentile_cont ( fractions double precision[] ) WITHIN GROUP ( ORDER BY double precision ) → double precision[]
 percentile_cont ( fractions double precision[] ) WITHIN GROUP ( ORDER BY interval ) → interval[]|
 Computes multiple continuous percentiles. The result is an array of the same dimensions as the fractions parameter, with each non-null element replaced by the (possibly interpolated) value corresponding to that percentile.|
 No||
@@ -4711,11 +4711,11 @@ Table 9.63. Series Generating Functions
 
 #|
 ||Function|Description||
-||generate_series ( start integer, stop integer [, step integer ] ) → setof integer  
-generate_series ( start bigint, stop bigint [, step bigint ] ) → setof bigint  
+||generate_series ( start integer, stop integer [, step integer ] ) → setof integer
+generate_series ( start bigint, stop bigint [, step bigint ] ) → setof bigint
 generate_series ( start numeric, stop numeric [, step numeric ] ) → setof numeric|
 Generates a series of values from start to stop, with a step size of step. step defaults to 1.||
-||generate_series ( start timestamp, stop timestamp, step interval ) → setof timestamp  
+||generate_series ( start timestamp, stop timestamp, step interval ) → setof timestamp
 generate_series ( start timestamp with time zone, stop timestamp with time zone, step interval ) → setof timestamp with time zone|
 Generates a series of values from start to stop, with a step size of step.||
 |#

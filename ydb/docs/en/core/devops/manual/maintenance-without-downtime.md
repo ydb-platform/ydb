@@ -46,9 +46,9 @@ In a maintenance task, you need to specify the cluster's availability mode to co
 - **Weak**: a mode that does not allow exceeding the failure model.
 
   - For affected storage groups with the [block-4-2](../../deploy/configuration/config.md#reliability) scheme, no more than two unavailable VDisks are allowed.
-  - For affected storage groups with the [mirror-3-dc](../../deploy/configuration/config.md#reliability) scheme, up to four unavailable VDisks are allowed, three of which must be in the same data center. 
+  - For affected storage groups with the [mirror-3-dc](../../deploy/configuration/config.md#reliability) scheme, up to four unavailable VDisks are allowed, three of which must be in the same data center.
   - No more than `(nto_select - 1) / 2` unavailable State Storage rings are allowed.
-  - 
+  -
 - **Force**: a forced mode, the failure model is ignored. *Not recommended for use.*
 
 ### Priority {#priority}
@@ -66,7 +66,7 @@ By default, each database and the cluster as a whole are allowed to have no more
 ## Checking algorithm {#checking-algorithm}
 
 To check if the actions of a maintenance task can be performed, the CMS sequentially goes through each action group in the task and checks the action from the group:
-- If the action's object is a host, the CMS checks whether the action can be performed with all nodes running on the host. 
+- If the action's object is a host, the CMS checks whether the action can be performed with all nodes running on the host.
 - If the action's object is a node, the CMS checks:
 
   - Whether there is a lock on the node.

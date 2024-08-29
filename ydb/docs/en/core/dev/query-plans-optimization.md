@@ -5,8 +5,8 @@ Before executing a query, it is essential to analyze its execution plan to detec
 Let's consider the following query that searches for episodes by title:
 
 ``` sql
-SELECT season_id, episode_id 
-  FROM episodes 
+SELECT season_id, episode_id
+  FROM episodes
   WHERE title = 'The Work Outing'
 ```
 
@@ -23,8 +23,8 @@ Let's build a plan for this query. You can do this via either UI or {{ ydb-short
   You can build a query plan via {{ ydb-short-name }} [CLI](../reference/ydb-cli/_includes/index.md) using the following command:
   ```
   ydb -p <profile_name> table query explain \
-    -q "SELECT season_id, episode_id 
-    FROM episodes 
+    -q "SELECT season_id, episode_id
+    FROM episodes
     WHERE title = 'The Work Outing'"
   ```
 
@@ -72,11 +72,11 @@ Let's build the query plan using the secondary index `title_index`. Secondary in
   Command:
   ```
   ydb -p <profile_name> table query explain \
-    -q "SELECT season_id, episode_id 
+    -q "SELECT season_id, episode_id
     FROM episodes VIEW title_index
     WHERE title = 'The Work Outing'"
   ```
-  
+
   Result:
   ```
   Query Plan:

@@ -8,7 +8,7 @@ Syntax of the `DROP TABLE` statement:
 
 The `DROP TABLE <table name>;` statement is used to delete a table. For example: `DROP TABLE people;`. If the table being deleted does not exist – an error message will be displayed:
 ```
-Error: Cannot find table '...' because it does not exist or you do not have access permissions. 
+Error: Cannot find table '...' because it does not exist or you do not have access permissions.
 Please check correctness of table path and user permissions., code: 2003.
 ```
 

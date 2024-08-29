@@ -39,7 +39,7 @@ BlockWardHistogram
 
 По умолчанию `HISTOGRAM` является синонимом к `AdaptiveWardHistogram`. Обе функции эквивалентны и взаимозаменимы во всех контекстах.
 
-Алгоритмы Distance, Weight и Ward отличаются формулами объединения двух точек в одну: 
+Алгоритмы Distance, Weight и Ward отличаются формулами объединения двух точек в одну:
 
 ``` c++
     TWeightedValue CalcDistanceQuality(const TWeightedValue& left, const TWeightedValue& right) {

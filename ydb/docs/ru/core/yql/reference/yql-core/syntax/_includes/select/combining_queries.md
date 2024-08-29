@@ -7,7 +7,7 @@ query1 UNION [ALL] query2 (UNION [ALL] query3 ...)
 Объединение более двух запросов интерпретируется как левоассоциативная операция, то есть
 
 ```yql
-query1 UNION query2 UNION ALL query3 
+query1 UNION query2 UNION ALL query3
 ```
 интерпретируется как
 ```yql

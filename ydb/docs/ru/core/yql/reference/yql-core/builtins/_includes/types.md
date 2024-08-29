@@ -6,7 +6,7 @@
 **Примеры**
 ``` yql
 $itemType = TypeOf($item);
-SELECT CAST($foo AS ListType($itemType));  -- каст $foo к типу List<$itemType> 
+SELECT CAST($foo AS ListType($itemType));  -- каст $foo к типу List<$itemType>
 ```
 
 ## FormatType {#formattype}
@@ -69,7 +69,7 @@ InstanceOf(Type)->объект типа Type
 ```
 
 Возвращает экземпляр объекта указанного типа. Полученный объект не имеет какого-то определенного значения.
-InstanceOf можно использовать только в том случае, если результат выражения в котором InstanceOf используется зависит от типа InstanceOf, но не от значения.   
+InstanceOf можно использовать только в том случае, если результат выражения в котором InstanceOf используется зависит от типа InstanceOf, но не от значения.
 В противном случае операция будет завершена с ошибкой.
 
 **Примеры**
@@ -78,7 +78,7 @@ SELECT InstanceOf(ParseType("Int32")) + 1.0; -- ошибка (Can't execute Inst
 SELECT FormatType(TypeOf(
     InstanceOf(ParseType("Int32")) +
     InstanceOf(ParseType("Double"))
-)); -- вернет Double, так как сложение Int32 и Double возвращает Double (InstanceOf используется в контексте, где важен только его тип, но не значение) 
+)); -- вернет Double, так как сложение Int32 и Double возвращает Double (InstanceOf используется в контексте, где важен только его тип, но не значение)
 ```
 
 ## DataType {#datatype}
@@ -664,7 +664,7 @@ SELECT ResourceTypeTag(ParseTypeHandle("Resource<foo>")); -- foo
 
 **Сигнатура**
 ```
-ResourceTypeHandle(String)->хэндл типа ресурса  
+ResourceTypeHandle(String)->хэндл типа ресурса
 ```
 Построение хендла типа ресурса по значению тега, переданного в аргумент. Обратная функция - [ResourceTypeTag](#resourcetypetag).
 
@@ -692,7 +692,7 @@ SELECT FormatType($t.Base), $t.Tag; -- Int32, foo
 
 **Сигнатура**
 ```
-TaggedTypeHandle(TypeHandle, String)->хэндл декорированного типа  
+TaggedTypeHandle(TypeHandle, String)->хэндл декорированного типа
 ```
 Построение хендла декорированного типа по хендлу базового типа и имени тега, переданных в аргументах. Обратная функция - [TaggedTypeComponents](#taggedtypecomponents).
 
@@ -796,7 +796,7 @@ CallableArgument(TypeHandle, [String, [List<String>]])->Struct<Flags:List<String
 
 **Сигнатура**
 ```
-CallableTypeHandle(TypeHandle, List<Struct<Flags:List<String>,Name:String,Type:TypeHandle>>, [Uint32, [String]])->хэндл типа вызываемого значения 
+CallableTypeHandle(TypeHandle, List<Struct<Flags:List<String>,Name:String,Type:TypeHandle>>, [Uint32, [String]])->хэндл типа вызываемого значения
 ```
 Построение хендла типа вызываемого значения по следующим аргументам:
 
@@ -825,7 +825,7 @@ SELECT FormatType(
 
 **Сигнатура**
 ```
-LambdaArgumentsCount(LambdaFunction)->Uint32 
+LambdaArgumentsCount(LambdaFunction)->Uint32
 ```
 Получение количества аргументов в лямбда-функции.
 
@@ -839,7 +839,7 @@ SELECT LambdaArgumentsCount(($x, $y)->($x+$y))
 
 **Сигнатура**
 ```
-LambdaOptionalArgumentsCount(LambdaFunction)->Uint32 
+LambdaOptionalArgumentsCount(LambdaFunction)->Uint32
 ```
 Получение количества опциональных аргументов в лямбда-функции.
 

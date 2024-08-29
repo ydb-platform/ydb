@@ -58,7 +58,7 @@ LIMIT 10;
 
 Все функции сериализации упаковывают возвращаемые данные типа `String` в [Tagged](../../types/special.md) тип.
 
-Бинарное представление вектора можно сохранить в {{ ydb-short-name }} колонку. 
+Бинарное представление вектора можно сохранить в {{ ydb-short-name }} колонку.
 В настоящий момент {{ ydb-short-name }} не поддерживает хранение `Tagged` типов и поэтому перед сохранением бинарного представления векторов нужно извлечь `String` с помощью функции [Untag](../../builtins/basic#as-tagged).
 
 #### Сигнатуры функций
@@ -141,7 +141,7 @@ CREATE TABLE Facts (
 
 ```sql
 $vector = [1.f, 2.f, 3.f, 4.f];
-UPSERT INTO Facts (id, user, fact, embedding) 
+UPSERT INTO Facts (id, user, fact, embedding)
 VALUES (123, "Williams", "Full name is John Williams", Untag(Knn::ToBinaryStringFloat($vector), "FloatVector"));
 ```
 
@@ -189,7 +189,7 @@ CREATE TABLE Facts (
 
 ```sql
 $vector = [1.f, 2.f, 3.f, 4.f];
-UPSERT INTO Facts (id, user, fact, embedding, embedding_bit) 
+UPSERT INTO Facts (id, user, fact, embedding, embedding_bit)
 VALUES (123, "Williams", "Full name is John Williams", Untag(Knn::ToBinaryStringFloat($vector), "FloatVector"), Untag(Knn::ToBinaryStringBit($vector), "BitVector"));
 ```
 

@@ -5,7 +5,7 @@
 {% list tabs %}
 
 - Linux
-  
+
   Чтобы установить {{ ydb-short-name }} CLI, выполните команду:
 
   ```bash

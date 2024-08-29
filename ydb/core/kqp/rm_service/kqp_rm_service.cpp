@@ -184,6 +184,13 @@ public:
         return Counters;
     }
 
+    TPlannerPlacingOptions GetPlacingOptions() override {
+        return TPlannerPlacingOptions{
+            .MaxNonParallelTasksExecutionLimit = MaxNonParallelTasksExecutionLimit.load(),
+            .MaxNonParallelTopStageExecutionLimit = MaxNonParallelTopStageExecutionLimit.load(),
+        };
+    }
+
     void CreateResourceInfoExchanger(
             const NKikimrConfig::TTableServiceConfig::TResourceManager::TInfoExchangerSettings& settings) {
         ResourceSnapshotState = std::make_shared<TResourceSnapshotState>();
@@ -465,6 +472,8 @@ public:
         MaxTotalChannelBuffersSize.store(config.GetMaxTotalChannelBuffersSize());
         QueryMemoryLimit.store(config.GetQueryMemoryLimit());
         SpillingPercent.store(config.GetSpillingPercent());
+        MaxNonParallelTopStageExecutionLimit.store(config.GetMaxNonParallelTopStageExecutionLimit());
+        MaxNonParallelTasksExecutionLimit.store(config.GetMaxNonParallelTasksExecutionLimit());
     }
 
     ui32 GetNodeId() override {
@@ -512,6 +521,8 @@ public:
     std::atomic<double> SpillingPercent;
     TIntrusivePtr<TMemoryResource> TotalMemoryResource;
     std::atomic<i64> ExternalDataQueryMemory = 0;
+    std::atomic<ui64> MaxNonParallelTopStageExecutionLimit = 1;
+    std::atomic<ui64> MaxNonParallelTasksExecutionLimit = 8;
 
     // current state
     std::atomic<ui64> LastResourceBrokerTaskId = 0;

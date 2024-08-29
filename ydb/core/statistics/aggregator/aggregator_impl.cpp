@@ -450,6 +450,9 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvAnalyzeStatus::TPtr& ev) {
             outRecord.SetStatus(NKikimrStat::TEvAnalyzeStatusResponse::STATUS_NO_OPERATION);
         }
     }
+
+    SA_LOG_D("[" << TabletID() << "] Send TEvStatistics::TEvAnalyzeStatusResponse. Status " << outRecord.GetStatus());
+
     Send(ev->Sender, response.release(), 0, ev->Cookie);
 }
 

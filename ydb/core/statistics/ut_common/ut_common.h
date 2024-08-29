@@ -103,7 +103,7 @@ std::unique_ptr<TEvStatistics::TEvAnalyze> MakeAnalyzeRequest(const std::vector<
 
 void Analyze(TTestActorRuntime& runtime, ui64 saTabletId, const std::vector<TAnalyzedTable>& table, const TString operationId = "operationId");
 void AnalyzeTable(TTestActorRuntime& runtime, ui64 shardTabletId, const TAnalyzedTable& table);
-void AnalyzeStatus(TTestActorRuntime& runtime, ui64 saTabletId, const TString operationId, const NKikimrStat::TEvAnalyzeStatusResponse::EStatus expectedStatus);
+void AnalyzeStatus(TTestActorRuntime& runtime, TActorId sender, ui64 saTabletId, const TString operationId, const NKikimrStat::TEvAnalyzeStatusResponse::EStatus expectedStatus);
 
 
 } // namespace NStat

@@ -83,7 +83,8 @@ runs:
         mkdir -p $PUBLIC_DIR
 
         echo "LAST_JUNIT_REPORT_XML=$PUBLIC_DIR/last_junit.xml" >> $GITHUB_ENV
-        echo "TESTMO_URL=${{ inputs.testman_url }}" >> $GITHUB_ENV
+        export TESTMO_URL=${{ inputs.testman_url }}
+        echo "TESTMO_URL=$TESTMO_URL" >> $GITHUB_ENV
         echo "SUMMARY_LINKS=$PUBLIC_DIR/summary_links.txt" >> $GITHUB_ENV
         echo "BUILD_PRESET=${{ inputs.build_preset }}" >> $GITHUB_ENV
 

@@ -24,7 +24,7 @@ public:
             bool isErrorDisk = false;
             for (ui32 partIdx = beginPartIdx; partIdx < endPartIdx; ++partIdx) {
                 if (disk.DiskParts[partIdx].Situation == TBlobState::ESituation::Error) {
-                    R_LOG_DEBUG_SX(logCtx, "BPG50", "Id# " << state.Id.ToString()
+                    DSP_LOG_DEBUG_SX(logCtx, "BPG50", "Id# " << state.Id.ToString()
                         << " restore disk# " << diskIdx
                         << " part# " << partIdx
                         << " error");
@@ -36,7 +36,7 @@ public:
             if (!isErrorDisk) {
                 for (ui32 partIdx = beginPartIdx; partIdx < endPartIdx; ++partIdx) {
                     const TBlobState::ESituation partSituation = disk.DiskParts[partIdx].Situation;
-                    R_LOG_DEBUG_SX(logCtx, "BPG51", "Id# " << state.Id.ToString()
+                    DSP_LOG_DEBUG_SX(logCtx, "BPG51", "Id# " << state.Id.ToString()
                         << " restore disk# " << diskIdx
                         << " part# " << partIdx
                         << " situation# " << TBlobState::SituationToString(partSituation));
@@ -60,7 +60,7 @@ public:
         const ui32 optimisticReplicas = optimisticLayout.CountEffectiveReplicas(info.Type);
         *optimisticState = info.BlobState(optimisticReplicas, errorDisks);
 
-        R_LOG_DEBUG_SX(logCtx, "BPG55", "restore Id# " << state.Id.ToString()
+        DSP_LOG_DEBUG_SX(logCtx, "BPG55", "restore Id# " << state.Id.ToString()
             << " optimisticReplicas# " << optimisticReplicas
             << " optimisticState# " << TBlobStorageGroupInfo::BlobStateToString(*optimisticState));
     }

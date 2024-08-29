@@ -19,6 +19,8 @@ namespace NKikimr::NStorage {
         const ui64 pdiskGuid = pdisk.GetPDiskGuid();
         const ui32 pdiskID = pdisk.GetPDiskID();
         const ui64 pdiskCategory = pdisk.GetPDiskCategory();
+        const NPDisk::EDeviceType deviceType = TPDiskCategory(pdiskCategory).Type();
+
         const ui64 inMemoryForTestsBufferBytes = pdisk.GetInMemoryForTestsBufferBytes();
         Y_VERIFY_S(!inMemoryForTestsBufferBytes, "InMemory PDisk is deprecated, use SectorMap instead");
 
@@ -38,6 +40,7 @@ namespace NKikimr::NStorage {
         if (pdisk.HasExpectedSerial()) {
             pdiskConfig->ExpectedSerial = pdisk.GetExpectedSerial();
         }
+        pdiskConfig->MaxCommonLogChunks = deviceType == NPDisk::DEVICE_TYPE_ROT ? MaxCommonLogChunksHDD : MaxCommonLogChunksSSD;
 
         // Path scheme: "SectorMap:unique_name[:3000]"
         // where '3000' is device size of in GiB.

@@ -23,13 +23,15 @@ static constexpr ui64 MAX_SHARD_RESOLVES = 3;
 
 
 TKqpScanFetcherActor::TKqpScanFetcherActor(const NKikimrKqp::TKqpSnapshot& snapshot,
-    const TComputeRuntimeSettings& settings, std::vector<NActors::TActorId>&& computeActors, const ui64 txId,
+    const TComputeRuntimeSettings& settings, std::vector<NActors::TActorId>&& computeActors, const ui64 txId, const ui64 lockTxId, const ui32 lockNodeId,
     const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta, const TShardsScanningPolicy& shardsScanningPolicy,
     TIntrusivePtr<TKqpCounters> counters, NWilson::TTraceId traceId)
     : Meta(meta)
     , ScanDataMeta(Meta)
     , RuntimeSettings(settings)
     , TxId(txId)
+    , LockTxId(lockTxId)
+    , LockNodeId(lockNodeId)
     , ComputeActorIds(std::move(computeActors))
     , Snapshot(snapshot)
     , ShardsScanningPolicy(shardsScanningPolicy)
@@ -415,6 +417,8 @@ std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TKqpScanFetcherActor::BuildEv
     ev->Record.SetStatsMode(RuntimeSettings.StatsMode);
     ev->Record.SetScanId(scanId);
     ev->Record.SetTxId(std::get<ui64>(TxId));
+    ev->Record.SetLockTxId(LockTxId);
+    ev->Record.SetLockNodeId(LockNodeId);
     ev->Record.SetTablePath(ScanDataMeta.TablePath);
     ev->Record.SetSchemaVersion(ScanDataMeta.TableId.SchemaVersion);
 

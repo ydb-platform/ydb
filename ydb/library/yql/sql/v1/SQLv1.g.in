@@ -6,7 +6,7 @@ options {
 }
 
 // Input is a list of statements.
-sql_query: sql_stmt_list | (PRAGMA ANSI DIGITS ansi_sql_stmt_list);
+sql_query: sql_stmt_list | PRAGMA ANSI DIGITS ansi_sql_stmt_list;
 sql_stmt_list: SEMICOLON* sql_stmt (SEMICOLON+ sql_stmt)* SEMICOLON* EOF;
 ansi_sql_stmt_list: SEMICOLON* EOF;
 
@@ -210,8 +210,8 @@ json_exists: JSON_EXISTS LPAREN
   json_exists_handler?
 RPAREN;
 
-json_query_wrapper: (WITHOUT ARRAY?) | WITH (CONDITIONAL | UNCONDITIONAL)? ARRAY?;
-json_query_handler: ERROR | NULL | (EMPTY ARRAY) | (EMPTY OBJECT);
+json_query_wrapper: WITHOUT ARRAY? | WITH (CONDITIONAL | UNCONDITIONAL)? ARRAY?;
+json_query_handler: ERROR | NULL | EMPTY ARRAY | EMPTY OBJECT;
 
 json_query: JSON_QUERY LPAREN
   json_common_args
@@ -248,7 +248,7 @@ invoke_expr_tail:
     (null_treatment | filter_clause)? (OVER window_name_or_specification)?
 ;
 
-using_call_expr: (an_id_or_type NAMESPACE an_id_or_type | an_id_expr | bind_parameter | (EXTERNAL FUNCTION)) invoke_expr;
+using_call_expr: (an_id_or_type NAMESPACE an_id_or_type | an_id_expr | bind_parameter | EXTERNAL FUNCTION) invoke_expr;
 
 key_expr: LBRACE_SQUARE expr RBRACE_SQUARE;
 

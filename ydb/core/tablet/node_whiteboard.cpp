@@ -386,6 +386,136 @@ protected:
         return modified;
     }
 
+    static void CopyField(::google::protobuf::Message& protoTo,
+                          const ::google::protobuf::Message& protoFrom,
+                          const ::google::protobuf::Reflection& reflectionTo,
+                          const ::google::protobuf::Reflection& reflectionFrom,
+                          const ::google::protobuf::FieldDescriptor* field) {
+        using namespace ::google::protobuf;
+        if (field->is_repeated()) {
+            FieldDescriptor::CppType type = field->cpp_type();
+            int size = reflectionFrom.FieldSize(protoFrom, field);
+            if (size != 0) {
+                reflectionTo.ClearField(&protoTo, field);
+                for (int i = 0; i < size; ++i) {
+                    switch (type) {
+                    case FieldDescriptor::CPPTYPE_INT32:
+                        reflectionTo.AddInt32(&protoTo, field, reflectionFrom.GetRepeatedInt32(protoFrom, field, i));
+                        break;
+                    case FieldDescriptor::CPPTYPE_INT64:
+                        reflectionTo.AddInt64(&protoTo, field, reflectionFrom.GetRepeatedInt64(protoFrom, field, i));
+                        break;
+                    case FieldDescriptor::CPPTYPE_UINT32:
+                        reflectionTo.AddUInt32(&protoTo, field, reflectionFrom.GetRepeatedUInt32(protoFrom, field, i));
+                        break;
+                    case FieldDescriptor::CPPTYPE_UINT64:
+                        reflectionTo.AddUInt64(&protoTo, field, reflectionFrom.GetRepeatedUInt64(protoFrom, field, i));
+                        break;
+                    case FieldDescriptor::CPPTYPE_DOUBLE:
+                        reflectionTo.AddDouble(&protoTo, field, reflectionFrom.GetRepeatedDouble(protoFrom, field, i));
+                        break;
+                    case FieldDescriptor::CPPTYPE_FLOAT:
+                        reflectionTo.AddFloat(&protoTo, field, reflectionFrom.GetRepeatedFloat(protoFrom, field, i));
+                        break;
+                    case FieldDescriptor::CPPTYPE_BOOL:
+                        reflectionTo.AddBool(&protoTo, field, reflectionFrom.GetRepeatedBool(protoFrom, field, i));
+                        break;
+                    case FieldDescriptor::CPPTYPE_ENUM:
+                        reflectionTo.AddEnum(&protoTo, field, reflectionFrom.GetRepeatedEnum(protoFrom, field, i));
+                        break;
+                    case FieldDescriptor::CPPTYPE_STRING:
+                        reflectionTo.AddString(&protoTo, field, reflectionFrom.GetRepeatedString(protoFrom, field, i));
+                        break;
+                    case FieldDescriptor::CPPTYPE_MESSAGE:
+                        reflectionTo.AddMessage(&protoTo, field)->CopyFrom(reflectionFrom.GetRepeatedMessage(protoFrom, field, i));
+                        break;
+                    }
+                }
+            }
+        } else {
+            if (reflectionFrom.HasField(protoFrom, field)) {
+                FieldDescriptor::CppType type = field->cpp_type();
+                switch (type) {
+                case FieldDescriptor::CPPTYPE_INT32:
+                    reflectionTo.SetInt32(&protoTo, field, reflectionFrom.GetInt32(protoFrom, field));
+                    break;
+                case FieldDescriptor::CPPTYPE_INT64:
+                    reflectionTo.SetInt64(&protoTo, field, reflectionFrom.GetInt64(protoFrom, field));
+                    break;
+                case FieldDescriptor::CPPTYPE_UINT32:
+                    reflectionTo.SetUInt32(&protoTo, field, reflectionFrom.GetUInt32(protoFrom, field));
+                    break;
+                case FieldDescriptor::CPPTYPE_UINT64:
+                    reflectionTo.SetUInt64(&protoTo, field, reflectionFrom.GetUInt64(protoFrom, field));
+                    break;
+                case FieldDescriptor::CPPTYPE_DOUBLE:
+                    reflectionTo.SetDouble(&protoTo, field, reflectionFrom.GetDouble(protoFrom, field));
+                    break;
+                case FieldDescriptor::CPPTYPE_FLOAT:
+                    reflectionTo.SetFloat(&protoTo, field, reflectionFrom.GetFloat(protoFrom, field));
+                    break;
+                case FieldDescriptor::CPPTYPE_BOOL:
+                    reflectionTo.SetBool(&protoTo, field, reflectionFrom.GetBool(protoFrom, field));
+                    break;
+                case FieldDescriptor::CPPTYPE_ENUM:
+                    reflectionTo.SetEnum(&protoTo, field, reflectionFrom.GetEnum(protoFrom, field));
+                    break;
+                case FieldDescriptor::CPPTYPE_STRING:
+                    reflectionTo.SetString(&protoTo, field, reflectionFrom.GetString(protoFrom, field));
+                    break;
+                case FieldDescriptor::CPPTYPE_MESSAGE:
+                    reflectionTo.MutableMessage(&protoTo, field)->CopyFrom(reflectionFrom.GetMessage(protoFrom, field));
+                    break;
+                }
+            }
+        }
+    }
+
+    static void SelectiveCopy(::google::protobuf::Message& protoTo, const ::google::protobuf::Message& protoFrom, const ::google::protobuf::RepeatedField<arc_i32>& fields) {
+        using namespace ::google::protobuf;
+        const Descriptor& descriptor = *protoTo.GetDescriptor();
+        const Reflection& reflectionTo = *protoTo.GetReflection();
+        const Reflection& reflectionFrom = *protoFrom.GetReflection();
+        for (auto fieldNumber : fields) {
+            const FieldDescriptor* field = descriptor.FindFieldByNumber(fieldNumber);
+            if (field) {
+                CopyField(protoTo, protoFrom, reflectionTo, reflectionFrom, field);
+            }
+        }
+    }
+
+    template<typename TMessage>
+    static ::google::protobuf::RepeatedField<arc_i32> GetDefaultFields(const TMessage& message) {
+        using namespace ::google::protobuf;
+        const Descriptor& descriptor = *message.GetDescriptor();
+        ::google::protobuf::RepeatedField<arc_i32> defaultFields;
+        int fieldCount = descriptor.field_count();
+        for (int index = 0; index < fieldCount; ++index) {
+            const FieldDescriptor* field = descriptor.field(index);
+            const auto& options(field->options());
+            if (options.HasExtension(NKikimrWhiteboard::DefaultField)) {
+                if (options.GetExtension(NKikimrWhiteboard::DefaultField)) {
+                    defaultFields.Add(field->number());
+                }
+            }
+        }
+        return defaultFields;
+    }
+
+    template<typename TMessage, typename TRequest>
+    static void Copy(TMessage& to, const TMessage& from, const TRequest& request) {
+        if (request.FieldsRequiredSize() > 0) {
+            if (request.FieldsRequiredSize() == 1 && request.GetFieldsRequired(0) == -1) { // all fields
+                to.CopyFrom(from);
+            } else {
+                SelectiveCopy(to, from, request.GetFieldsRequired());
+            }
+        } else {
+            static auto defaultFields = GetDefaultFields(to);
+            SelectiveCopy(to, from, defaultFields);
+        }
+    }
+
     void SetRole(TStringBuf roleName) {
         for (const auto& role : SystemStateInfo.GetRoles()) {
             if (role == roleName) {
@@ -709,14 +839,6 @@ protected:
         }
     }
 
-    static void CopyTabletStateInfo(
-        NKikimrWhiteboard::TTabletStateInfo& dst,
-        const NKikimrWhiteboard::TTabletStateInfo& src,
-        const NKikimrWhiteboard::TEvTabletStateRequest&)
-    {
-        dst = src;
-    }
-
     void Handle(TEvWhiteboard::TEvTabletStateRequest::TPtr &ev, const TActorContext &ctx) {
         auto now = TMonotonic::Now();
         const auto& request = ev->Get()->Record;
@@ -739,7 +861,7 @@ protected:
                     for (const auto& pr : TabletStateInfo) {
                         if (pr.second.changetime() >= changedSince) {
                             NKikimrWhiteboard::TTabletStateInfo& tabletStateInfo = *record.add_tabletstateinfo();
-                            CopyTabletStateInfo(tabletStateInfo, pr.second, request);
+                            Copy(tabletStateInfo, pr.second, request);
                         }
                     }
                 } else {
@@ -748,12 +870,12 @@ protected:
                         if (it != TabletStateInfo.end()) {
                             if (it->second.changetime() >= changedSince) {
                                 NKikimrWhiteboard::TTabletStateInfo& tabletStateInfo = *record.add_tabletstateinfo();
-                                CopyTabletStateInfo(tabletStateInfo, it->second, request);
+                                Copy(tabletStateInfo, it->second, request);
                             }
                         }
                     }
                 }
-            } else if (request.groupby() == "Type,State") { // the only supported group-by for now
+            } else if (request.groupby() == "Type,State" || request.groupby() == "NodeId,Type,State") { // the only supported group-by for now
                 std::unordered_map<std::pair<NKikimrTabletBase::TTabletTypes::EType,
                     NKikimrWhiteboard::TTabletStateInfo::ETabletState>, NKikimrWhiteboard::TTabletStateInfo> stateGroupBy;
                 for (const auto& [id, stateInfo] : TabletStateInfo) {
@@ -784,7 +906,7 @@ protected:
         for (const auto& pr : NodeStateInfo) {
             if (pr.second.GetChangeTime() >= changedSince) {
                 NKikimrWhiteboard::TNodeStateInfo &nodeStateInfo = *record.AddNodeStateInfo();
-                nodeStateInfo.CopyFrom(pr.second);
+                Copy(nodeStateInfo, pr.second, request);
             }
         }
         response->Record.SetResponseTime(ctx.Now().MilliSeconds());
@@ -815,7 +937,7 @@ protected:
         for (const auto& pr : PDiskStateInfo) {
             if (pr.second.GetChangeTime() >= changedSince) {
                 NKikimrWhiteboard::TPDiskStateInfo &pDiskStateInfo = *record.AddPDiskStateInfo();
-                pDiskStateInfo.CopyFrom(pr.second);
+                Copy(pDiskStateInfo, pr.second, request);
             }
         }
         response->Record.SetResponseTime(ctx.Now().MilliSeconds());
@@ -839,7 +961,7 @@ protected:
         for (const auto& pr : VDiskStateInfo) {
             if (pr.second.GetChangeTime() >= changedSince) {
                 NKikimrWhiteboard::TVDiskStateInfo &vDiskStateInfo = *record.AddVDiskStateInfo();
-                vDiskStateInfo.CopyFrom(pr.second);
+                Copy(vDiskStateInfo, pr.second, request);
             }
         }
         response->Record.SetResponseTime(ctx.Now().MilliSeconds());
@@ -854,7 +976,7 @@ protected:
         for (const auto& pr : BSGroupStateInfo) {
             if (pr.second.GetChangeTime() >= changedSince) {
                 NKikimrWhiteboard::TBSGroupStateInfo &bSGroupStateInfo = *record.AddBSGroupStateInfo();
-                bSGroupStateInfo.CopyFrom(pr.second);
+                Copy(bSGroupStateInfo, pr.second, request);
             }
         }
         response->Record.SetResponseTime(ctx.Now().MilliSeconds());
@@ -868,7 +990,7 @@ protected:
         auto& record = response->Record;
         if (SystemStateInfo.GetChangeTime() >= changedSince) {
             NKikimrWhiteboard::TSystemStateInfo &systemStateInfo = *record.AddSystemStateInfo();
-            systemStateInfo.CopyFrom(SystemStateInfo);
+            Copy(systemStateInfo, SystemStateInfo, request);
         }
         response->Record.SetResponseTime(ctx.Now().MilliSeconds());
         ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);

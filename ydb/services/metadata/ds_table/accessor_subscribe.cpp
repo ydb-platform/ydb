@@ -52,6 +52,9 @@ void TDSAccessorNotifier::OnSnapshotRefresh() {
             ++it;
         }
     }
+    if (!Asked.empty()) {
+        Sender<TEvRefresh>().SendTo(SelfId());
+    }
 }
 
 void TDSAccessorNotifier::OnBootstrap() {

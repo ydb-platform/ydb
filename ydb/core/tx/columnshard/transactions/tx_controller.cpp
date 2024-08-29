@@ -55,7 +55,7 @@ bool TTxController::Load(NTabletFlatExecutor::TTransactionContext& txc) {
         ITransactionOperator::TPtr txOperator(ITransactionOperator::TFactory::Construct(txKind, TTxInfo(txKind, txId)));
         Y_ABORT_UNLESS(!!txOperator);
         const TString txBody = rowset.GetValue<Schema::TxInfo::TxBody>();
-        Y_ABORT_UNLESS(txOperator->Parse(Owner, txBody, true));
+        AFL_VERIFY(txOperator->Parse(Owner, txBody, true));
 
         auto& txInfo = txOperator->MutableTxInfo();
         txInfo.MaxStep = rowset.GetValue<Schema::TxInfo::MaxStep>();

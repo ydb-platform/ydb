@@ -23,13 +23,15 @@ static constexpr TDuration RL_MAX_BATCH_DELAY = TDuration::Seconds(50);
 
 } // anonymous namespace
 
-TKqpScanComputeActor::TKqpScanComputeActor(TComputeActorSchedulingOptions cpuOptions, const TActorId& executerId, ui64 txId, NDqProto::TDqTask* task,
-    IDqAsyncIoFactory::TPtr asyncIoFactory,
+TKqpScanComputeActor::TKqpScanComputeActor(TComputeActorSchedulingOptions cpuOptions, const TActorId& executerId, ui64 txId, ui64 lockTxId, ui32 lockNodeId,
+    NDqProto::TDqTask* task, IDqAsyncIoFactory::TPtr asyncIoFactory,
     const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits, NWilson::TTraceId traceId,
     TIntrusivePtr<NActors::TProtoArenaHolder> arena)
     : TBase(std::move(cpuOptions), executerId, txId, task, std::move(asyncIoFactory), AppData()->FunctionRegistry, settings,
         memoryLimits, /* ownMemoryQuota = */ true, /* passExceptions = */ true, /*taskCounters = */ nullptr, std::move(traceId), std::move(arena))
     , ComputeCtx(settings.StatsMode)
+    , LockTxId(lockTxId)
+    , LockNodeId(lockNodeId)
 {
     InitializeTask();
     YQL_ENSURE(GetTask().GetMeta().UnpackTo(&Meta), "Invalid task meta: " << GetTask().GetMeta().DebugString());
@@ -103,6 +105,19 @@ void TKqpScanComputeActor::FillExtraStats(NDqProto::TDqComputeActorStats* dst, b
     }
 }
 
+TMaybe<google::protobuf::Any> TKqpScanComputeActor::ExtraData() {
+    NKikimrTxDataShard::TEvKqpInputActorResultInfo resultInfo;
+    for (const auto& lock : Locks) {
+        resultInfo.AddLocks()->CopyFrom(lock);
+    }
+    for (const auto& lock : BrokenLocks) {
+        resultInfo.AddLocks()->CopyFrom(lock);
+    }
+    google::protobuf::Any result;
+    result.PackFrom(resultInfo);
+    return result;
+}
+
 void TKqpScanComputeActor::HandleEvWakeup(EEvWakeupTag tag) {
     AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "HandleEvWakeup")("self_id", SelfId());
     switch (tag) {
@@ -130,6 +145,14 @@ void TKqpScanComputeActor::Handle(TEvScanExchange::TEvTerminateFromFetcher::TPtr
 void TKqpScanComputeActor::Handle(TEvScanExchange::TEvSendData::TPtr& ev) {
     ALS_DEBUG(NKikimrServices::KQP_COMPUTE) << "TEvSendData: " << ev->Sender << "/" << SelfId();
     auto& msg = *ev->Get();
+    
+    for (const auto& lock : msg.GetLocksInfo().Locks) {
+        Locks.insert(lock);
+    }
+    for (const auto& lock : msg.GetLocksInfo().Locks) {
+        BrokenLocks.insert(lock);
+    }
+
     auto guard = TaskRunner->BindAllocator();
     if (!!msg.GetArrowBatch()) {
         ScanData->AddData(NMiniKQL::TBatchDataAccessor(msg.GetArrowBatch(), std::move(msg.MutableDataIndexes())), msg.GetTabletId(), TaskRunner->GetHolderFactory());

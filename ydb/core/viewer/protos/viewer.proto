@@ -444,7 +444,10 @@ message TStorageGroupInfo {
     uint64 Read = 17;
     uint64 Write = 18;
     float DiskSpaceUsage = 19;
-    repeated TStorageVDisk VDisks = 20;
+    uint64 LatencyPutTabletLog = 20;
+    uint64 LatencyPutUserData = 21;
+    uint64 LatencyGetFast = 22;
+    repeated TStorageVDisk VDisks = 30;
 }
 
 message TStorageGroupGroup {
@@ -479,8 +482,8 @@ message TStorageGroupsInfo {
     uint32 Version = 1;
     optional uint32 TotalGroups = 2;
     optional uint32 FoundGroups = 3;
-    optional uint32 FieldsAvailable = 4;
-    optional uint32 FieldsRequired = 5;
+    optional string FieldsAvailable = 4;
+    optional string FieldsRequired = 5;
     optional bool NeedFilter = 6;
     optional bool NeedGroup = 7;
     optional bool NeedSort = 8;
@@ -634,12 +637,16 @@ message TEvViewerRequest {
     oneof Request {
         NKikimrWhiteboard.TEvTabletStateRequest TabletRequest = 11;
         NKikimrWhiteboard.TEvSystemStateRequest SystemRequest = 12;
+        NKikimrWhiteboard.TEvVDiskStateRequest VDiskRequest = 16;
+        NKikimrWhiteboard.TEvPDiskStateRequest PDiskRequest = 17;
+        NKikimrWhiteboard.TEvBSGroupStateRequest BSGroupRequest = 18;
         THttpProxyRequest QueryRequest = 13;
         THttpProxyRequest RenderRequest = 14;
         TSchemeCacheRequest AutocompleteRequest = 15;
-        bytes Reserved16 = 16;
-        bytes Reserved17 = 17;
-        bytes Reserved18 = 18;
+        bytes Reserved19 = 19;
+        bytes Reserved20 = 20;
+        bytes Reserved21 = 21;
+        bytes Reserved22 = 22;
     }
 }
 
@@ -648,12 +655,16 @@ message TEvViewerResponse {
     oneof Response {
         NKikimrWhiteboard.TEvTabletStateResponse TabletResponse = 11;
         NKikimrWhiteboard.TEvSystemStateResponse SystemResponse = 12;
+        NKikimrWhiteboard.TEvVDiskStateResponse VDiskResponse = 16;
+        NKikimrWhiteboard.TEvPDiskStateResponse PDiskResponse = 17;
+        NKikimrWhiteboard.TEvBSGroupStateResponse BSGroupResponse = 18;
         NKikimrKqp.TEvQueryResponse QueryResponse = 13;
         NKikimrGraph.TEvMetricsResult RenderResponse = 14;
         TQueryAutocomplete AutocompleteResponse = 15;
-        bytes Reserved16 = 16;
-        bytes Reserved17 = 17;
-        bytes Reserved18 = 18;
+        bytes Reserved19 = 19;
+        bytes Reserved20 = 20;
+        bytes Reserved21 = 21;
+        bytes Reserved22 = 22;
     }
 }
 
@@ -737,8 +748,8 @@ message TPDiskInfo {
 message TFeatureFlagsConfig {
     message TFeatureFlag {
         string Name = 1;
-        bool Enabled = 2;
-        bool IsDefault = 3;
+        bool Current = 2;
+        bool Default = 3;
     }
 
     message TDatabase {

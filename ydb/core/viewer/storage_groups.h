@@ -107,6 +107,7 @@ enum class EGroupFields : ui8 {
     PDiskId,
     VDisk, // VDisk information
     PDisk, // PDisk information
+    Latency,
     COUNT
 };
 
@@ -235,7 +236,7 @@ public:
         ui64 AllocatedSize = 0;
         ui64 AvailableSize = 0;
         TString Status;
-        NKikimrBlobStorage::EVDiskStatus VDiskStatus = NKikimrBlobStorage::EVDiskStatus::ERROR;
+        std::optional<NKikimrBlobStorage::EVDiskStatus> VDiskStatus;
         ui64 Read = 0;
         ui64 Write = 0;
         NKikimrViewer::EFlag DiskSpace = NKikimrViewer::EFlag::Grey;
@@ -317,6 +318,27 @@ public:
             return MissingDisks == 0 ? TString("0") : TStringBuilder() << "-" << MissingDisks;
         }
 
+        static int RoundUpTime(int v) {
+            static const int roundUp[] = {1, 5, 10, 50, 100, 200, 500, 1000};
+            auto it = std::lower_bound(std::begin(roundUp), std::end(roundUp), v);
+            if (it == std::end(roundUp)) {
+                return 1000;
+            }
+            return *it;
+        }
+
+        TString GetLatencyForGroup() const {
+            if (PutTabletLogLatency == 0) {
+                return "-";
+            } else if (PutTabletLogLatency < 1000) {
+                return TStringBuilder() << RoundUpTime(PutTabletLogLatency) << "us";
+            } else if (PutTabletLogLatency < 1000000) {
+                return TStringBuilder() << RoundUpTime(PutTabletLogLatency / 1000) << "ms";
+            } else {
+                return TStringBuilder() << RoundUpTime(PutTabletLogLatency / 1000000) << "s";
+            }
+        }
+
         // none: ok, dead:1
         // block-4-2: ok, replicating:1 starting:1, degraded:1, degraded:2, dead:3
         // mirror-3-dc: ok, degraded:1(1), degraded:1(2), degraded:1(3), degraded:2(3,1), dead:3(3,1,1)
@@ -331,7 +353,7 @@ public:
             static_assert(sizeof(TVDiskID::FailRealm) == 1, "expecting byte");
             std::vector<ui8> failedDomainsPerRealm;
             for (const TVDisk& vdisk : VDisks) {
-                if (vdisk.VDiskStatus != NKikimrBlobStorage::EVDiskStatus::READY) {
+                if (vdisk.VDiskStatus && *vdisk.VDiskStatus != NKikimrBlobStorage::EVDiskStatus::READY) {
                     if (ErasureSpecies == TErasureType::ErasureMirror3dc) {
                         if (failedDomainsPerRealm.size() <= vdisk.VDiskId.FailRealm) {
                             failedDomainsPerRealm.resize(vdisk.VDiskId.FailRealm + 1);
@@ -339,10 +361,10 @@ public:
                         failedDomainsPerRealm[vdisk.VDiskId.FailRealm]++;
                     }
                     ++MissingDisks;
-                    if (vdisk.VDiskStatus == NKikimrBlobStorage::EVDiskStatus::INIT_PENDING) {
+                    if (*vdisk.VDiskStatus == NKikimrBlobStorage::EVDiskStatus::INIT_PENDING) {
                         ++startingDisks;
                     }
-                    if (vdisk.VDiskStatus == NKikimrBlobStorage::EVDiskStatus::REPLICATING) {
+                    if (*vdisk.VDiskStatus == NKikimrBlobStorage::EVDiskStatus::REPLICATING) {
                         ++replicatingDisks;
                     }
                 }
@@ -452,6 +474,10 @@ public:
             Read = read;
             Write = write;
         }
+
+        ui64 GetLatencyForSort() const {
+            return PutTabletLogLatency;
+        }
     };
 
     using TGroupData = std::vector<TGroup>;
@@ -478,7 +504,8 @@ public:
                                                     .set(+EGroupFields::Erasure)
                                                     .set(+EGroupFields::Usage)
                                                     .set(+EGroupFields::Used)
-                                                    .set(+EGroupFields::Limit);
+                                                    .set(+EGroupFields::Limit)
+                                                    .set(+EGroupFields::Latency);
     const TFieldsType FieldsBsPools = TFieldsType().set(+EGroupFields::PoolName)
                                                    .set(+EGroupFields::Kind)
                                                    .set(+EGroupFields::MediaType)
@@ -569,6 +596,12 @@ public:
             result = EGroupFields::PDisk;
         } else if (field == "DiskSpaceUsage") {
             result = EGroupFields::DiskSpaceUsage;
+        } else if (field == "NodeId") {
+            result = EGroupFields::NodeId;
+        } else if (field == "PDiskId") {
+            result = EGroupFields::PDiskId;
+        } else if (field == "Latency") {
+            result = EGroupFields::Latency;
         }
         return result;
     }
@@ -931,6 +964,10 @@ public:
                     GroupCollection([](const TGroup* group) { return group->State; });
                     SortCollection(GroupGroups, [](const TGroupGroup& groupGroup) { return groupGroup.Name; });
                     break;
+                case EGroupFields::Latency:
+                    GroupCollection([](const TGroup* group) { return group->GetLatencyForGroup(); });
+                    SortCollection(GroupGroups, [](const TGroupGroup& groupGroup) { return groupGroup.Name; }, true);
+                    break;
                 case EGroupFields::Read:
                 case EGroupFields::Write:
                 case EGroupFields::NodeId:
@@ -998,6 +1035,9 @@ public:
                     break;
                 case EGroupFields::State:
                     SortCollection(GroupView, [](const TGroup* group) { return group->State; }, ReverseSort);
+                    break;
+                case EGroupFields::Latency:
+                    SortCollection(GroupView, [](const TGroup* group) { return group->GetLatencyForSort(); }, ReverseSort);
                     break;
                 case EGroupFields::PDiskId:
                 case EGroupFields::NodeId:
@@ -1147,7 +1187,10 @@ public:
         vDisk.AvailableSize = info.GetAvailableSize();
         //vDisk.Kind = info.GetKind();
         vDisk.Status = info.GetStatusV2();
-        NKikimrBlobStorage::EVDiskStatus_Parse(info.GetStatusV2(), &vDisk.VDiskStatus);
+        NKikimrBlobStorage::EVDiskStatus vDiskStatus;
+        if (vDisk.Status && NKikimrBlobStorage::EVDiskStatus_Parse(vDisk.Status, &vDiskStatus)) {
+            vDisk.VDiskStatus = vDiskStatus;
+        }
     }
 
     bool AreBSControllerRequestsDone() const {
@@ -1432,7 +1475,6 @@ public:
                 for (auto& vDiskId : info->GetVDiskIds()) {
                     TVDisk& vDisk = group.VDisks.emplace_back();
                     vDisk.VDiskId = VDiskIDFromVDiskID(vDiskId);
-                    vDisk.VDiskStatus = NKikimrBlobStorage::EVDiskStatus::ERROR;
                 }
                 if (capacity != GroupData.capacity()) {
                     // we expect to never do this
@@ -1493,7 +1535,9 @@ public:
                 vDisk.VDiskStatus = info.GetReplicated() ? NKikimrBlobStorage::EVDiskStatus::READY : NKikimrBlobStorage::EVDiskStatus::REPLICATING;
                 break;
         }
-        vDisk.Status = NKikimrBlobStorage::EVDiskStatus_Name(vDisk.VDiskStatus);
+        if (vDisk.VDiskStatus) {
+            vDisk.Status = NKikimrBlobStorage::EVDiskStatus_Name(*vDisk.VDiskStatus);
+        }
         vDisk.DiskSpace = static_cast<NKikimrViewer::EFlag>(info.GetDiskSpace());
         vDisk.Donor = info.GetDonorMode();
         for (auto& donor : info.GetDonors()) {
@@ -1829,9 +1873,9 @@ public:
     void ReplyAndPassAway() override {
         ApplyEverything();
         NKikimrViewer::TStorageGroupsInfo json;
-        json.SetVersion(2);
-        json.SetFieldsAvailable(FieldsAvailable.to_ulong());
-        json.SetFieldsRequired(FieldsRequired.to_ulong());
+        json.SetVersion(Viewer->GetCapabilityVersion("/storage/groups"));
+        json.SetFieldsAvailable(FieldsAvailable.to_string());
+        json.SetFieldsRequired(FieldsRequired.to_string());
         if (NeedFilter) {
             json.SetNeedFilter(true);
         }
@@ -1906,6 +1950,11 @@ public:
                 }
                 if (FieldsAvailable.test(+EGroupFields::Available)) {
                     jsonGroup.SetAvailable(group->Available);
+                }
+                if (FieldsAvailable.test(+EGroupFields::Latency)) {
+                    jsonGroup.SetLatencyPutTabletLog(group->PutTabletLogLatency);
+                    jsonGroup.SetLatencyPutUserData(group->PutUserDataLatency);
+                    jsonGroup.SetLatencyGetFast(group->GetFastLatency);
                 }
             }
         } else {
@@ -2002,6 +2051,7 @@ public:
                           * `AllocationUnits`
                           * `Read`
                           * `Write`
+                          * `Latency`
                     required: false
                     type: string
                   - name: group
@@ -2018,6 +2068,7 @@ public:
                           * `MediaType`
                           * `MissingDisks`
                           * `State`
+                          * `Latency`
                     required: false
                     type: string
                   - name: fields_required
@@ -2043,6 +2094,7 @@ public:
                           * `Write`
                           * `PDisk`
                           * `VDisk`
+                          * `Latency`
                     required: false
                     type: string
                   - name: offset

@@ -12,6 +12,10 @@ enum class ERecursiveRemovePrompt {
     Never,
 };
 
+struct TRemovePathRecursiveSettings : public NScheme::TRemoveDirectorySettings {
+    FLUENT_SETTING_DEFAULT(bool, NotExistsIsOk, false);
+};
+
 bool Prompt(ERecursiveRemovePrompt mode, const TString& path, NScheme::ESchemeEntryType type, bool first = true);
 
 TStatus RemoveDirectoryRecursive(
@@ -38,7 +42,7 @@ TStatus RemovePathRecursive(
     NTopic::TTopicClient& topicClient,
     const TString& path,
     ERecursiveRemovePrompt prompt,
-    const NScheme::TRemoveDirectorySettings& settings = {},
+    const TRemovePathRecursiveSettings& settings = {},
     bool createProgressBar = true);
 
 }

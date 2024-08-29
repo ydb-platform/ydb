@@ -786,6 +786,8 @@ int RunMain(int argc, const char* argv[])
 
     runOptions.User = user;
 
+    NPg::SetSqlLanguageParser(NSQLTranslationPG::CreateSqlLanguageParser());
+    NPg::LoadSystemFunctions(*NSQLTranslationPG::CreateSystemFunctionsParser());
     if (!pgExtConfig.empty()) {
         NProto::TPgExtensions config;
         Y_ABORT_UNLESS(NKikimr::ParsePBFromFile(pgExtConfig, &config));
@@ -795,6 +797,8 @@ int RunMain(int argc, const char* argv[])
             *NSQLTranslationPG::CreateExtensionSqlParser(),
             NKikimr::NMiniKQL::CreateExtensionLoader().get());
     }
+
+    NPg::GetSqlLanguageParser()->Freeze();
 
     TUserDataTable dataTable;
     FillUsedFiles(filesMappingList, dataTable);
@@ -931,7 +935,7 @@ int RunMain(int argc, const char* argv[])
         if (!httpGateway) {
             httpGateway = IHTTPGateway::Make(gatewaysConfig.HasHttpGateway() ? &gatewaysConfig.GetHttpGateway() : nullptr);
         }
-        dataProvidersInit.push_back(GetS3DataProviderInitializer(httpGateway, nullptr, true, actorSystemManager->GetActorSystem()));
+        dataProvidersInit.push_back(GetS3DataProviderInitializer(httpGateway, nullptr, true, nullptr));
     }
 
     if (gatewaysConfig.HasPq()) {
@@ -990,6 +994,7 @@ int RunMain(int argc, const char* argv[])
     }
 
     TExprContext ctx;
+    ctx.NextUniqueId = NPg::GetSqlLanguageParser()->GetContext().NextUniqueId;
     IModuleResolver::TPtr moduleResolver;
     if (!mountConfig.empty()) {
         TModulesTable modules;

@@ -404,6 +404,7 @@ public:
         OPTION_FIELD(TMaybe<ui32>, PublicId)
         OPTION_FIELD(TYtSettings::TConstPtr, Config)
         OPTION_FIELD(TString, OperationHash)
+        OPTION_FIELD_DEFAULT(TSet<TString>, SecurityTags, {})
     };
 
     //////////////////////////////////////////////////////////////

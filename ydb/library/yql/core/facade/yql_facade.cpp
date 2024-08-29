@@ -12,6 +12,7 @@
 #include <ydb/library/yql/core/services/yql_eval_params.h>
 #include <ydb/library/yql/utils/log/context.h>
 #include <ydb/library/yql/utils/log/profile.h>
+#include <ydb/library/yql/utils/limiting_allocator.h>
 #include <ydb/library/yql/core/services/yql_out_transformers.h>
 #include <ydb/library/yql/core/extract_predicate/extract_predicate_dbg.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
@@ -1388,7 +1389,7 @@ TFuture<IGraphTransformer::TStatus> TProgram::AsyncTransformWithFallback(bool ap
     });
 }
 
-TMaybe<TString> TProgram::GetQueryAst() {
+TMaybe<TString> TProgram::GetQueryAst(TMaybe<size_t> memoryLimit) {
     if (ExternalQueryAst_) {
         return ExternalQueryAst_;
     }
@@ -1397,7 +1398,17 @@ TMaybe<TString> TProgram::GetQueryAst() {
     astStream.Reserve(DEFAULT_AST_BUF_SIZE);
 
     if (ExprRoot_) {
-        auto ast = ConvertToAst(*ExprRoot_, *ExprCtx_, TExprAnnotationFlags::None, true);
+        std::unique_ptr<IAllocator> limitingAllocator;
+        TConvertToAstSettings settings;
+        settings.AnnotationFlags = TExprAnnotationFlags::None;
+        settings.RefAtoms = true;
+        settings.Allocator = TDefaultAllocator::Instance();
+        if (memoryLimit) {
+            limitingAllocator = MakeLimitingAllocator(*memoryLimit, TDefaultAllocator::Instance());
+            settings.Allocator = limitingAllocator.get();
+        }
+
+        auto ast = ConvertToAst(*ExprRoot_, *ExprCtx_, settings);
         ast.Root->PrettyPrintTo(astStream, TAstPrintFlags::ShortQuote | TAstPrintFlags::PerLine);
         return astStream.Str();
     } else if (AstRoot_) {

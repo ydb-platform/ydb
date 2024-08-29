@@ -85,6 +85,7 @@ protected:
         ui32 writeIdx = 0;
         for (auto& [shard, infos] : splittedData.GetShardsInfo()) {
             for (auto&& shardInfo : infos) {
+                InternalController->GetCounters()->OnRequest(shardInfo->GetRowsCount(), shardInfo->GetBytes());
                 sumBytes += shardInfo->GetBytes();
                 rowsCount += shardInfo->GetRowsCount();
                 this->Register(new NEvWrite::TShardWriter(shard, shardsSplitter->GetTableId(), DedupId, shardInfo, ActorSpan, InternalController, ++writeIdx, NEvWrite::EModificationType::Replace));

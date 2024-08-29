@@ -461,9 +461,9 @@ Checks whether the string is in the specified Unicode normalization form. The op
 ```sql
 U&'\0061\0308bc' IS NFD NORMALIZED → true
 ```||
-||bit_length ( text ) → integer|Returns number of bits in the string (8 times the octet_length) (UNSUPPORTED)|
+||bit_length ( text ) → integer|Returns number of bits in the string (8 times the octet_length)|
 ```sql
-#bit_length('jose') → 32
+bit_length('jose') → 32
 ```||
 ||char_length ( text ) → integer  
 character_length ( text ) → integer|
@@ -514,9 +514,9 @@ substring('Thomas' from '...$') → mas
 ```||
 ||substring ( string text SIMILAR pattern text ESCAPE escape text ) → text  
 substring ( string text FROM pattern text FOR escape text ) → text|
-Extracts the first substring matching SQL regular expression; see Section 9.7.2. The first form has been specified since SQL:2003; the second form was only in SQL:1999 and should be considered obsolete. (NOT SUPPORTED)|
+Extracts the first substring matching SQL regular expression; see Section 9.7.2. The first form has been specified since SQL:2003; the second form was only in SQL:1999 and should be considered obsolete.|
 ```sql
-#substring('Thomas' similar '%#"o_a#"_' escape '#') → oma
+substring('Thomas' similar '%#"o_a#"_' escape '#') → oma
 ```||
 ||trim ( [ LEADING \| TRAILING \| BOTH ] [ characters text ] FROM string text ) → text|
 Removes the longest string containing only characters in characters (a space by default) from the start, end, or both ends (BOTH is the default) of string.|
@@ -602,9 +602,9 @@ Computes the MD5 hash of the argument, with the result written in hexadecimal.|
 md5('abc') → 900150983cd24fb0d6963f7d28e17f72
 ```||
 ||parse_ident ( qualified_identifier text [, strict_mode boolean DEFAULT true ] ) → text[]|
-Splits qualified_identifier into an array of identifiers, removing any quoting of individual identifiers. By default, extra characters after the last identifier are considered an error; but if the second parameter is false, then such extra characters are ignored. (This behavior is useful for parsing names for objects like functions.) Note that this function does not truncate over-length identifiers. If you want truncation you can cast the result to name[]. (NOT SUPPORTED)|
+Splits qualified_identifier into an array of identifiers, removing any quoting of individual identifiers. By default, extra characters after the last identifier are considered an error; but if the second parameter is false, then such extra characters are ignored. (This behavior is useful for parsing names for objects like functions.) Note that this function does not truncate over-length identifiers. If you want truncation you can cast the result to name[].|
 ```sql
-#parse_ident('"SomeSchema".someTable') → {SomeSchema,sometable}
+parse_ident('"SomeSchema".someTable') → {SomeSchema,someTable}
 ```||
 ||pg_client_encoding ( ) → name|
 Returns current client encoding name.|
@@ -768,9 +768,9 @@ Concatenates the two binary strings.|
 '\x123456'::bytea || '\x789a00bcde'::bytea → \x123456789a00bcde
 ```||
 ||bit_length ( bytea ) → integer|
-Returns number of bits in the binary string (8 times the octet_length). (NOT SUPPORTED)|
+Returns number of bits in the binary string (8 times the octet_length).|
 ```sql
-#bit_length('\x123456'::bytea) → 24
+bit_length('\x123456'::bytea) → 24
 ```||
 ||octet_length ( bytea ) → integer|
 Returns number of bytes in the binary string.|
@@ -985,9 +985,9 @@ Returns the number of bits set in the bit string (also known as “popcount”).
 bit_count(B'10111') → 4
 ```||
 ||bit_length ( bit ) → integer|
-Returns number of bits in the bit string. (NOT SUPPORTED)|
+Returns number of bits in the bit string.|
 ```sql
-#bit_length(B'10111') → 5
+bit_length(B'10111') → 5
 ```||
 ||length ( bit ) → integer|
 Returns number of bits in the bit string.|
@@ -1145,13 +1145,13 @@ As with SIMILAR TO, the specified pattern must match the entire data string, or 
 
 The escape-double-quote separators actually divide substring's pattern into three independent regular expressions; for example, a vertical bar (|) in any of the three sections affects only that section. Also, the first and third of these regular expressions are defined to match the smallest possible amount of text, not the largest, when there is any ambiguity about how much of the data string matches which pattern. (In POSIX parlance, the first and third regular expressions are forced to be non-greedy.)
 
-As an extension to the SQL standard, PostgreSQL allows there to be just one escape-double-quote separator, in which case the third regular expression is taken as empty; or no separators, in which case the first and third regular expressions are taken as empty. (NOT SUPPORTED)
+As an extension to the SQL standard, PostgreSQL allows there to be just one escape-double-quote separator, in which case the third regular expression is taken as empty; or no separators, in which case the first and third regular expressions are taken as empty.
 
 Some examples, with #" delimiting the return string:
 
 ```sql
-#substring('foobar' similar '%#"o_b#"%' escape '#')   → oob
-#substring('foobar' similar '#"o_b#"%' escape '#')    → NULL
+substring('foobar' similar '%#"o_b#"%' escape '#')   → oob
+substring('foobar' similar '#"o_b#"%' escape '#')    → NULL
 ```
 
 9.7.3. POSIX Regular Expressions
@@ -1565,9 +1565,9 @@ Subtract arguments, producing a “symbolic” result that uses years and months
 age(timestamp '2001-04-10', timestamp '1957-06-13') → 43 years 9 mons 27 days
 ```||
 ||age ( timestamp ) → interval|
-Subtract argument from current_date (at midnight) (NOT SUPPORTED)|
+Subtract argument from current_date (at midnight)|
 ```sql
-#age(timestamp '1957-06-13') → 62 years 6 mons 10 days
+age(timestamp '1957-06-13') ~→ 62 years 6 mons 10 days
 ```||
 ||clock_timestamp ( ) → timestamp with time zone|
 Current date and time (changes during statement execution); see Section 9.9.5|
@@ -1753,7 +1753,7 @@ This expression yields true when two time periods (defined by their endpoints) o
 
 ```sql
 (DATE '2001-02-16', DATE '2001-12-21') OVERLAPS (DATE '2001-10-30', DATE '2002-10-30') → true
-#(DATE '2001-02-16', INTERVAL '100 days') OVERLAPS (DATE '2001-10-30', DATE '2002-10-30') → false
+(DATE '2001-02-16', INTERVAL '100 days') OVERLAPS (DATE '2001-10-30', DATE '2002-10-30') → false
 (DATE '2001-10-29', DATE '2001-10-30') OVERLAPS (DATE '2001-10-30', DATE '2001-10-31') → false
 (DATE '2001-10-30', DATE '2001-10-30') OVERLAPS (DATE '2001-10-30', DATE '2001-10-31') → true
 ```
@@ -2518,9 +2518,9 @@ Converts box to a 4-point polygon.|
 polygon(box '(1,1),(0,0)') → ((0,0),(0,1),(1,1),(1,0))
 ```||
 ||polygon ( circle ) → polygon|
-Converts circle to a 12-point polygon. (NOT SUPPORTED)|
+Converts circle to a 12-point polygon.|
 ```sql
-#polygon(circle '<(0,0),2>') → ((-2,0),​(-1.7320508075688774,0.9999999999999999),​(-1.0000000000000002,1.7320508075688772),​(-1.2246063538223773e-16,2),​(0.9999999999999996,1.7320508075688774),​(1.732050807568877,1.0000000000000007),​(2,2.4492127076447545e-16),​(1.7320508075688776,-0.9999999999999994),​(1.0000000000000009,-1.7320508075688767),​(3.673819061467132e-16,-2),​(-0.9999999999999987,-1.732050807568878),​(-1.7320508075688767,-1.0000000000000009))
+polygon(circle '<(0,0),2>') → ((-2,0),(-1.7320508075688774,0.9999999999999999),(-1.0000000000000002,1.7320508075688772),(-1.2246467991473532e-16,2),(0.9999999999999996,1.7320508075688774),(1.732050807568877,1.0000000000000007),(2,2.4492935982947064e-16),(1.7320508075688776,-0.9999999999999994),(1.0000000000000009,-1.7320508075688767),(3.6739403974420594e-16,-2),(-0.9999999999999987,-1.732050807568878),(-1.7320508075688767,-1.0000000000000009))
 ```||
 ||polygon ( path ) → polygon|
 Converts closed path to a polygon with the same list of points.|
@@ -3196,18 +3196,18 @@ Expands the top-level JSON array of objects to a set of rows having the composit
 Returns target with the item designated by path replaced by new_value, or with new_value added if create_if_missing is true (which is the default) and the item designated by path does not exist. All earlier steps in the path must exist, or the target is returned unchanged. As with the path oriented operators, negative integers that appear in the path count from the end of JSON arrays. If the last path step is an array index that is out of range, and create_if_missing is true, the new value is added at the beginning of the array if the index is negative, or at the end of the array if it is positive.|
 ```sql
 jsonb_set('[{"f1":1,"f2":null},2,null,3]', '{0,f1}', '[2,3,4]', false) → [{"f1": [2, 3, 4], "f2": null}, 2, null, 3]
-#jsonb_set('[{"f1":1,"f2":null},2]', '{0,f3}', '[2,3,4]') → [{"f1": 1, "f2": null, "f3": [2, 3, 4]}, 2]
+jsonb_set('[{"f1":1,"f2":null},2]', '{0,f3}', '[2,3,4]') → [{"f1": 1, "f2": null, "f3": [2, 3, 4]}, 2]
 ```||
 ||jsonb_set_lax ( target jsonb, path text[], new_value jsonb [, create_if_missing boolean [, null_value_treatment text ]] ) → jsonb|
 If new_value is not NULL, behaves identically to jsonb_set. Otherwise behaves according to the value of null_value_treatment which must be one of 'raise_exception', 'use_json_null', 'delete_key', or 'return_target'. The default is 'use_json_null'.|
 ```sql
-#jsonb_set_lax('[{"f1":1,"f2":null},2,null,3]', '{0,f1}', null) → [{"f1": null, "f2": null}, 2, null, 3]
+jsonb_set_lax('[{"f1":1,"f2":null},2,null,3]', '{0,f1}', null) → [{"f1": null, "f2": null}, 2, null, 3]
 jsonb_set_lax('[{"f1":99,"f2":null},2]', '{0,f3}', null, true, 'return_target') → [{"f1": 99, "f2": null}, 2]
 ```||
 ||jsonb_insert ( target jsonb, path text[], new_value jsonb [, insert_after boolean ] ) → jsonb|
 Returns target with new_value inserted. If the item designated by the path is an array element, new_value will be inserted before that item if insert_after is false (which is the default), or after it if insert_after is true. If the item designated by the path is an object field, new_value will be inserted only if the object does not already contain that key. All earlier steps in the path must exist, or the target is returned unchanged. As with the path oriented operators, negative integers that appear in the path count from the end of JSON arrays. If the last path step is an array index that is out of range, the new value is added at the beginning of the array if the index is negative, or at the end of the array if it is positive.|
 ```sql
-#jsonb_insert('{"a": [0,1,2]}', '{a, 1}', '"new_value"') → {"a": [0, "new_value", 1, 2]}
+jsonb_insert('{"a": [0,1,2]}', '{a, 1}', '"new_value"') → {"a": [0, "new_value", 1, 2]}
 jsonb_insert('{"a": [0,1,2]}', '{a, 1}', '"new_value"', true) → {"a": [0, 1, "new_value", 2]}
 ```||
 ||json_strip_nulls ( json ) → json  

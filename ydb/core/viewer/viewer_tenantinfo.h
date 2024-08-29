@@ -645,35 +645,38 @@ public:
                 TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
                 auto* domain = domains->GetDomain();
                 TStackVec<TTabletId, 64> tablets;
-                for (TTabletId tabletId : entry.DomainInfo->Params.GetCoordinators()) {
-                    tablets.emplace_back(tabletId);
-                }
-                for (TTabletId tabletId : entry.DomainInfo->Params.GetMediators()) {
-                    tablets.emplace_back(tabletId);
-                }
-                if (entry.DomainInfo->Params.HasSchemeShard()) {
-                    tablets.emplace_back(entry.DomainInfo->Params.GetSchemeShard());
-                } else {
-
-                    tablets.emplace_back(domain->SchemeRoot);
-                    tablets.emplace_back(MakeBSControllerID());
-                    tablets.emplace_back(MakeConsoleID());
-                }
-                TTabletId hiveId = domains->GetHive();
-                if (entry.DomainInfo->Params.HasHive()) {
-                    hiveId = entry.DomainInfo->Params.GetHive();
-                } else {
-                    if (tenant.GetType() == NKikimrViewer::Serverless) {
-                        auto itResourceNavigate = NavigateKeySetResult.find(tenant.GetResourceId());
-                        if (itResourceNavigate != NavigateKeySetResult.end() && itResourceNavigate->second.IsOk()) {
-                            NSchemeCache::TSchemeCacheNavigate::TEntry entry = itResourceNavigate->second.Get()->Request->ResultSet.front();
-                            if (entry.DomainInfo->Params.HasHive()) {
-                                hiveId = entry.DomainInfo->Params.GetHive();
+                TTabletId hiveId;
+                if (entry.DomainInfo) {
+                    for (TTabletId tabletId : entry.DomainInfo->Params.GetCoordinators()) {
+                        tablets.emplace_back(tabletId);
+                    }
+                    for (TTabletId tabletId : entry.DomainInfo->Params.GetMediators()) {
+                        tablets.emplace_back(tabletId);
+                    }
+                    if (entry.DomainInfo->Params.HasSchemeShard()) {
+                        tablets.emplace_back(entry.DomainInfo->Params.GetSchemeShard());
+                    } else {
+                        tablets.emplace_back(domain->SchemeRoot);
+                    }
+                    if (entry.DomainInfo->Params.HasHive()) {
+                        tablets.emplace_back(hiveId = entry.DomainInfo->Params.GetHive());
+                    } else {
+                        if (tenant.GetType() == NKikimrViewer::Serverless) {
+                            auto itResourceNavigate = NavigateKeySetResult.find(tenant.GetResourceId());
+                            if (itResourceNavigate != NavigateKeySetResult.end() && itResourceNavigate->second.IsOk()) {
+                                NSchemeCache::TSchemeCacheNavigate::TEntry entry = itResourceNavigate->second.Get()->Request->ResultSet.front();
+                                if (entry.DomainInfo->Params.HasHive()) {
+                                    tablets.emplace_back(hiveId = entry.DomainInfo->Params.GetHive());
+                                }
                             }
+                        } else {
+                            tablets.emplace_back(hiveId = domains->GetHive());
                         }
                     }
+                } else {
+                    tablets.emplace_back(domain->SchemeRoot);
+                    tablets.emplace_back(hiveId = domains->GetHive());
                 }
-                tablets.emplace_back(hiveId);
 
                 if (SystemTablets) {
                     for (TTabletId tabletId : tablets) {

@@ -44,11 +44,11 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
     IEventBase* MakeRequest() override {
         switch (OperationId.GetKind()) {
         case TOperationId::EXPORT:
-            return new TEvExport::TEvForgetExportRequest(TxId, DatabaseName, RawOperationId);
+            return new TEvExport::TEvForgetExportRequest(TxId, GetDatabaseName(), RawOperationId);
         case TOperationId::IMPORT:
-            return new TEvImport::TEvForgetImportRequest(TxId, DatabaseName, RawOperationId);
+            return new TEvImport::TEvForgetImportRequest(TxId, GetDatabaseName(), RawOperationId);
         case TOperationId::BUILD_INDEX:
-            return new TEvIndexBuilder::TEvForgetRequest(TxId, DatabaseName, RawOperationId);
+            return new TEvIndexBuilder::TEvForgetRequest(TxId, GetDatabaseName(), RawOperationId);
         default:
             Y_ABORT("unreachable");
         }
@@ -97,7 +97,7 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
     }
 
     void SendForgetScriptExecutionOperation() {
-        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKqp::TEvForgetScriptExecutionOperation(DatabaseName, OperationId));
+        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKqp::TEvForgetScriptExecutionOperation(GetDatabaseName(), OperationId));
     }
 
 public:

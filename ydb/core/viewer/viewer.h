@@ -48,7 +48,7 @@ struct TRequestSettings {
     TDuration RetryPeriod = TDuration::MilliSeconds(500);
     TString Format;
     std::optional<bool> StaticNodesOnly;
-    bool DistributedMerge = false;
+    std::vector<i32> FieldsRequired;
 
     bool Followers = true; // hive tablet info
     bool Metrics = true; // hive tablet info
@@ -201,6 +201,7 @@ public:
     virtual TActorId FindRunningQuery(const TString& queryId) = 0;
 
     virtual NJson::TJsonValue GetCapabilities() = 0;
+    virtual int GetCapabilityVersion(const TString& name) = 0;
 };
 
 void SetupPQVirtualHandlers(IViewer* viewer);

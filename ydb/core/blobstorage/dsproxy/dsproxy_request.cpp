@@ -595,7 +595,7 @@ namespace NKikimr {
 
         auto done = [&](NKikimrProto::EReplyStatus status, const TString& message) {
             ErrorReason = message;
-            A_LOG_LOG_S(true, PriorityForStatusResult(status), "DSP10", "Query failed " << message);
+            DSP_LOG_LOG_S(PriorityForStatusResult(status), "DSP10", "Query failed " << message);
             ReplyAndDie(status);
             return true;
         };
@@ -623,7 +623,7 @@ namespace NKikimr {
                 << vdiskId.ToString());
         }
 
-        A_LOG_INFO_S("DSP99", "Handing RACE response from " << vdiskId << " GroupGeneration# " << Info->GroupGeneration
+        DSP_LOG_INFO_S("DSP99", "Handing RACE response from " << vdiskId << " GroupGeneration# " << Info->GroupGeneration
             << " Response# " << SingleLineProto(record));
 
         // process the RACE status

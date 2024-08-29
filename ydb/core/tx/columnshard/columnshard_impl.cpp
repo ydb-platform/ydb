@@ -476,13 +476,6 @@ void TColumnShard::RunDropTable(const NKikimrTxColumnShard::TDropTable& dropProt
 
     LOG_S_DEBUG("DropTable for pathId: " << pathId << " at tablet " << TabletID());
     TablesManager.DropTable(pathId, version, db);
-
-    // TODO: Allow to read old snapshots after DROP
-    TBlobGroupSelector dsGroupSelector(Info());
-    NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
-    THashSet<TWriteId> writesToAbort = InsertTable->DropPath(dbTable, pathId);
-
-    TryAbortWrites(db, dbTable, std::move(writesToAbort));
 }
 
 void TColumnShard::RunAlterStore(const NKikimrTxColumnShard::TAlterStore& proto, const NOlap::TSnapshot& version,

@@ -1774,9 +1774,9 @@
     ],
     "test.test[join-mergejoin_saves_output_sort--Debug]": [
         {
-            "checksum": "b466fa4cd7de29d3516265235d152608",
-            "size": 14410,
-            "uri": "https://{canondata_backend}/1942415/14c2050022adcb6379d90c4a2a09abf0847e7643/resource.tar.gz#test.test_join-mergejoin_saves_output_sort--Debug_/opt.yql"
+            "checksum": "a24333420ab20fca434fdf01767a3ebc",
+            "size": 14377,
+            "uri": "https://{canondata_backend}/1597364/616e247e5d5ae1750729c48aba2deef832a81906/resource.tar.gz#test.test_join-mergejoin_saves_output_sort--Debug_/opt.yql"
         }
     ],
     "test.test[join-mergejoin_saves_output_sort--Plan]": [
@@ -2961,9 +2961,9 @@
     ],
     "test.test[pg_catalog-pg_description_pg_syntax-default.txt-Results]": [
         {
-            "checksum": "eb554063631a6cc6651dafeb9604e07f",
+            "checksum": "c409b6d485074ebf17560f4723affc3d",
             "size": 2768,
-            "uri": "https://{canondata_backend}/1925842/98b226ff2d3bf479e3a19a07499c6861d2975d73/resource.tar.gz#test.test_pg_catalog-pg_description_pg_syntax-default.txt-Results_/results.txt"
+            "uri": "https://{canondata_backend}/1773845/589814889e9fb4d6d34f5e6d53336daf3a27b51e/resource.tar.gz#test.test_pg_catalog-pg_description_pg_syntax-default.txt-Results_/results.txt"
         }
     ],
     "test.test[pg_catalog-pg_timezone_abbrevs-default.txt-Debug]": [

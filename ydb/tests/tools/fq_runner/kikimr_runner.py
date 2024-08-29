@@ -147,6 +147,7 @@ class BaseTenant(abc.ABC):
         gateways['yql_core'] = {}
         gateways['yql_core']['flags'] = []
         gateways['yql_core']['flags'].append({'name': "_EnableMatchRecognize"})
+        gateways['yql_core']['flags'].append({'name': "_EnableStreamLookupJoin"})
 
     def fill_storage_config(self, storage, directory):
         storage['endpoint'] = os.getenv("YDB_ENDPOINT")

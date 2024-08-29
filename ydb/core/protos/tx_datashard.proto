@@ -1551,6 +1551,8 @@ message TEvKqpScan {
     optional bytes OlapProgram = 19;
     optional NKikimrSchemeOp.EOlapProgramType OlapProgramType = 20;
     optional TComputeShardingPolicy ComputeShardingPolicy = 23;
+    optional uint64 LockTxId = 24;
+    optional uint32 LockNodeId = 25;
 }
 
 message TEvCompactTable {

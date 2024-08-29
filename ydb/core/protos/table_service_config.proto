@@ -46,6 +46,9 @@ message TTableServiceConfig {
 
         optional uint64 MinMemAllocSize = 23 [default = 8388608]; // 8 MiB
         optional uint64 MinMemFreeSize = 24  [default = 33554432]; // 32 MiB
+
+        optional uint64 MaxNonParallelTasksExecutionLimit = 25 [default = 8];
+        optional uint64 MaxNonParallelTopStageExecutionLimit = 26 [default = 1];
     }
 
     message TSpillingServiceConfig {
@@ -298,7 +301,7 @@ message TTableServiceConfig {
 
     optional bool EnableQueryServiceSpilling = 63 [ default = true ];
 
-    optional uint32 DefaultCostBasedOptimizationLevel = 64 [default = 3];
+    optional uint32 DefaultCostBasedOptimizationLevel = 64 [default = 4];
 
     optional bool EnableConstantFolding = 65 [ default = true ];
 
@@ -306,24 +309,13 @@ message TTableServiceConfig {
 
     optional string EnableSpillingNodes = 67 [ default = "All" ];
 
-    message TSubPoolsConfiguration {
-        repeated TComputePoolConfiguration SubPools = 1;
-    }
-
-    message TComputePoolConfiguration {
-        optional double MaxCpuShare = 1;
-        oneof ResourceConfiguration {
-            string Name = 2;
-            TSubPoolsConfiguration SubPoolsConfiguration = 3;
-        }
-    }
-
     message TComputeSchedulerSettings {
         optional uint64 AdvanceTimeIntervalUsec = 1 [default = 50000];
         optional uint64 ForgetOverflowTimeoutUsec = 2 [default = 2000000];
+        optional uint64 ActivePoolPollingSec = 3 [default = 10];
     }
 
-    optional TComputePoolConfiguration PoolsConfiguration = 68;
+    reserved 68;
     optional TComputeSchedulerSettings ComputeSchedulerSettings = 70;
 
     optional bool EnableRowsDuplicationCheck = 69 [ default = false ];

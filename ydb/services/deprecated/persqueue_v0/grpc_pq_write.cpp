@@ -113,11 +113,10 @@ bool TPQWriteServiceImpl::TSession::CreateActor(const TString &localCluster) {
     }
 
     auto classifier = Proxy->GetClassifier();
-    ActorId = Proxy->ActorSystem->Register(
-        new TWriteSessionActor(this, Cookie, SchemeCache, Counters, localCluster,
-                                        classifier ? classifier->ClassifyAddress(GetPeerName())
-                                                   : "unknown"), TMailboxType::Simple, 0
-    );
+    auto* actor = new TWriteSessionActor(this, Cookie, SchemeCache, Counters, localCluster,
+                    classifier ? classifier->ClassifyAddress(GetPeerName()) : "unknown");
+    ui32 poolId = Proxy->ActorSystem->AppData<::NKikimr::TAppData>()->UserPoolId;
+    ActorId = Proxy->ActorSystem->Register(actor, TMailboxType::HTSwap, poolId);
     return true;
 }
 
@@ -125,8 +124,9 @@ void TPQWriteServiceImpl::TSession::SendEvent(IEventBase* ev) {
     std::unique_ptr<IEventBase>  e;
     e.reset(ev);
 
-    TGuard<TSpinLock> lock(Lock);
+    auto lock(Guard(Lock));
     if (ActorId) {
+        lock.Release();
         Proxy->ActorSystem->Send(ActorId, e.release());
     }
 }
@@ -162,11 +162,10 @@ ui64 TPQWriteServiceImpl::NextCookie() {
 
 
 void TPQWriteServiceImpl::ReleaseSession(TSessionRef session) {
-    with_lock (Lock) {
-        bool erased = Sessions.erase(session->GetCookie());
-        if (erased) {
-            ActorSystem->Send(MakeGRpcProxyStatusID(ActorSystem->NodeId), new TEvGRpcProxyStatus::TEvUpdateStatus(0, 0, -1, 0));
-        }
+    auto lock(Guard(Lock));
+    if (Sessions.erase(session->GetCookie())) {
+        lock.Release();
+        ActorSystem->Send(MakeGRpcProxyStatusID(ActorSystem->NodeId), new TEvGRpcProxyStatus::TEvUpdateStatus(0, 0, -1, 0));
     }
 }
 

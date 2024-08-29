@@ -26,7 +26,7 @@ class TBlobStorageGroupStatusRequest : public TBlobStorageGroupRequestActor {
         Y_ABORT_UNLESS(record.HasVDiskID());
         const TVDiskID vdisk = VDiskIDFromVDiskID(record.GetVDiskID());
 
-        A_LOG_LOG_S(false, PriorityForStatusInbound(status), "DSPS01", "Handle TEvVStatusResult"
+        DSP_LOG_LOG_S(PriorityForStatusInbound(status), "DSPS01", "Handle TEvVStatusResult"
             << " status# " << NKikimrProto::EReplyStatus_Name(status).data()
             << " From# " << vdisk.ToString()
             << " StatusFlags# " << (record.HasStatusFlags() ? Sprintf("%" PRIx32, record.GetStatusFlags()).data() : "NA")
@@ -63,7 +63,7 @@ class TBlobStorageGroupStatusRequest : public TBlobStorageGroupRequestActor {
             result->ApproximateFreeSpaceShare = *ApproximateFreeSpaceShare;
         }
         result->ErrorReason = ErrorReason;
-        A_LOG_DEBUG_S("DSPS03", "ReplyAndDie Result# " << result->Print(false));
+        DSP_LOG_DEBUG_S("DSPS03", "ReplyAndDie Result# " << result->Print(false));
         SendResponseAndDie(std::move(result));
     }
 
@@ -92,7 +92,7 @@ public:
     {}
 
     void Bootstrap() override {
-        A_LOG_INFO_S("DSPS05", "bootstrap"
+        DSP_LOG_INFO_S("DSPS05", "bootstrap"
             << " ActorId# " << SelfId()
             << " Group# " << Info->GroupID
             << " Deadline# " << Deadline
@@ -102,7 +102,7 @@ public:
             const ui64 cookie = TVDiskIdShort(Info->GetVDiskId(vdisk.OrderNumber)).GetRaw();
 
             auto vd = Info->GetVDiskId(vdisk.OrderNumber);
-            A_LOG_DEBUG_S("DSPS04", "Sending TEvVStatus"
+            DSP_LOG_DEBUG_S("DSPS04", "Sending TEvVStatus"
                 << " vDiskId# " << vd
                 << " node# " << Info->GetActorId(vd).NodeId());
 

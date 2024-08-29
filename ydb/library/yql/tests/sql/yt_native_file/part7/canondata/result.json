@@ -1953,6 +1953,27 @@
             "uri": "https://{canondata_backend}/1871102/ae8b5d002551349280cb6bef50e922859b127b33/resource.tar.gz#test.test_pg-join_using_tables2-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[pg-lang_sql-default.txt-Debug]": [
+        {
+            "checksum": "06e912c6a23b3f1d6c24593a54f1f3a4",
+            "size": 426,
+            "uri": "https://{canondata_backend}/1937001/56964fe1911c6507a60bbf6a9c866a54db23794d/resource.tar.gz#test.test_pg-lang_sql-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[pg-lang_sql-default.txt-Plan]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1937001/56964fe1911c6507a60bbf6a9c866a54db23794d/resource.tar.gz#test.test_pg-lang_sql-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[pg-lang_sql-default.txt-Results]": [
+        {
+            "checksum": "a39682472821484c86bb310f5f7f661f",
+            "size": 734,
+            "uri": "https://{canondata_backend}/1937001/56964fe1911c6507a60bbf6a9c866a54db23794d/resource.tar.gz#test.test_pg-lang_sql-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[pg-order_by_distinct_same_expr-default.txt-Debug]": [
         {
             "checksum": "11462e4fa00fdd30ef84dabcef1f78dd",
@@ -2368,9 +2389,9 @@
     ],
     "test.test[pg_catalog-pg_proc-default.txt-Results]": [
         {
-            "checksum": "e5bc0852aa5e315a747928f13728544c",
+            "checksum": "4cfeab0b8e8be3f9b8ea9924fc351d4f",
             "size": 5106,
-            "uri": "https://{canondata_backend}/1881367/0f1f826fece81822e9ffe93cd993d45264445d77/resource.tar.gz#test.test_pg_catalog-pg_proc-default.txt-Results_/results.txt"
+            "uri": "https://{canondata_backend}/1931696/372ddc49a6c4dd35067ab9b459135df50d875713/resource.tar.gz#test.test_pg_catalog-pg_proc-default.txt-Results_/results.txt"
         }
     ],
     "test.test[pg_duplicated-order_by_with_duplicates-default.txt-Debug]": [

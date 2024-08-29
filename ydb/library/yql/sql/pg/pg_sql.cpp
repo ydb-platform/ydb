@@ -28,6 +28,7 @@ extern "C" {
 #include "util/charset/utf8.h"
 #include "utils.h"
 #include "ydb/public/api/protos/ydb_value.pb.h"
+#include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/sql/settings/partitioning.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/config.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/parser.h>
@@ -354,13 +355,15 @@ public:
     };
 
     TConverter(TVector<TAstParseResult>& astParseResults, const NSQLTranslation::TTranslationSettings& settings,
-            const TString& query, TVector<TStmtParseInfo>* stmtParseInfo, bool perStatementResult)
+            const TString& query, TVector<TStmtParseInfo>* stmtParseInfo, bool perStatementResult,
+            TMaybe<ui32> sqlProcArgsCount)
         : AstParseResults(astParseResults)
         , Settings(settings)
         , DqEngineEnabled(Settings.DqDefaultAuto->Allow())
         , BlockEngineEnabled(Settings.BlockDefaultAuto->Allow())
         , StmtParseInfo(stmtParseInfo)
         , PerStatementResult(perStatementResult)
+        , SqlProcArgsCount(sqlProcArgsCount)
     {
         Y_ENSURE(settings.Mode == NSQLTranslation::ESqlMode::QUERY || settings.Mode == NSQLTranslation::ESqlMode::LIMITED_VIEW);
         Y_ENSURE(settings.Mode != NSQLTranslation::ESqlMode::LIMITED_VIEW || !perStatementResult);
@@ -437,11 +440,16 @@ public:
         AstParseResults[StatementId].Issues.AddIssue(issue);
     }
 
-    TAstNode* ParseResult(const List* raw, const TMaybe<ui32> statementId = Nothing()) {
+    void PrepareStatements() {
         auto configSource = L(A("DataSource"), QA(TString(NYql::ConfigProviderName)));
         State.Statements.push_back(L(A("let"), A("world"), L(A(TString(NYql::ConfigureName)), A("world"), configSource,
             QA("OrderedColumns"))));
+    }
 
+    TAstNode* ParseResult(const List* raw, const TMaybe<ui32> statementId = Nothing()) {
+        PrepareStatements();
+
+        auto configSource = L(A("DataSource"), QA(TString(NYql::ConfigProviderName)));
         ui32 blockEnginePgmPos = State.Statements.size();
         State.Statements.push_back(configSource);
         ui32 costBasedOptimizerPos = State.Statements.size();
@@ -498,6 +506,10 @@ public:
             State.Statements.erase(State.Statements.begin() + blockEnginePgmPos);
         }
 
+        return FinishStatements();
+    }
+
+    TAstNode* FinishStatements() {
         return VL(State.Statements.data(), State.Statements.size());
     }
 
@@ -1464,6 +1476,16 @@ public:
 
         currentCTEs[view.Name] = view;
         return true;
+    }
+
+    [[nodiscard]]
+    TAstNode* AsScalarContext(TAstNode* subquery) {
+        return L(A("SingleMember"), L(A("Head"), L(A("Take"), subquery, L(A("Uint64"), QA("1")))));
+    }
+
+    [[nodiscard]]
+    TAstNode* MakeLambda(TVector<TAstNode*> args, TAstNode* body) {
+        return L(A("lambda"), QVL(args), body);
     }
 
     [[nodiscard]]
@@ -3264,7 +3286,18 @@ public:
         if (source == nullptr || key == nullptr) {
             return {};
         }
-        const auto readExpr = L(
+        const auto readExpr = this->SqlProcArgsCount ?
+        L(A("Cons!"),
+            A("world"),
+            L(
+                A("PgTableContent"),
+                QA("pg_catalog"),
+                QAX(value->relname),
+                L(A("Void")),
+                QL()
+            )
+        ) :
+        L(
             A("Read!"),
             A("world"),
             source,
@@ -3519,11 +3552,29 @@ public:
     }
 
     TAstNode* ParseParamRefExpr(const ParamRef* value) {
+        if (SqlProcArgsCount && (value->number < 1 || (ui32)value->number > *SqlProcArgsCount)) {
+            AddError(TStringBuilder() << "Unexpected parameter number: " << value->number);
+            return nullptr;
+        }
+
         const auto varName = PREPARED_PARAM_PREFIX + ToString(value->number);
         if (!State.ParamNameToPgTypeName.contains(varName)) {
             State.ParamNameToPgTypeName[varName] = DEFAULT_PARAM_TYPE;
         }
         return A(varName);
+    }
+
+    TAstNode* ParseReturnStmt(const ReturnStmt* value) {
+        TExprSettings settings;
+        settings.AllowColumns = false;
+        settings.Scope = "RETURN";
+        auto expr = ParseExpr(value->returnval, settings);
+        if (!expr) {
+            return nullptr;
+        }
+
+        State.Statements.push_back(L(A("return"), expr));
+        return State.Statements.back();
     }
 
     TAstNode* ParseSQLValueFunction(const SQLValueFunction* value) {
@@ -5062,6 +5113,10 @@ private:
     }
 
     NYql::TPosition Location2Position(int location) const {
+        if (!QuerySize) {
+            return NYql::TPosition(0, 0);
+        }
+
         if (location < 0) {
             return NYql::TPosition(0, 0);
         }
@@ -5127,6 +5182,7 @@ private:
     ui32 StatementId = 0;
     TVector<TStmtParseInfo>* StmtParseInfo;
     bool PerStatementResult;
+    TMaybe<ui32> SqlProcArgsCount;
     bool HasSelectInLimitedView = false;
 };
 
@@ -5138,7 +5194,7 @@ const THashMap<TStringBuf, TString> TConverter::ProviderToInsertModeMap = {
 NYql::TAstParseResult PGToYql(const TString& query, const NSQLTranslation::TTranslationSettings& settings, TStmtParseInfo* stmtParseInfo) {
     TVector<NYql::TAstParseResult> results;
     TVector<TStmtParseInfo> stmtParseInfos;
-    TConverter converter(results, settings, query, &stmtParseInfos, false);
+    TConverter converter(results, settings, query, &stmtParseInfos, false, Nothing());
     NYql::PGParse(query, converter);
     if (stmtParseInfo) {
         Y_ENSURE(!stmtParseInfos.empty());
@@ -5151,12 +5207,197 @@ NYql::TAstParseResult PGToYql(const TString& query, const NSQLTranslation::TTran
 
 TVector<NYql::TAstParseResult> PGToYqlStatements(const TString& query, const NSQLTranslation::TTranslationSettings& settings, TVector<TStmtParseInfo>* stmtParseInfo) {
     TVector<NYql::TAstParseResult> results;
-    TConverter converter(results, settings, query, stmtParseInfo, true);
+    TConverter converter(results, settings, query, stmtParseInfo, true, Nothing());
     NYql::PGParse(query, converter);
     for (auto& res : results) {
         res.ActualSyntaxType = NYql::ESyntaxType::Pg;
     }
     return results;
+}
+
+bool ParseTypeName(const PG_TypeName* typeName, TString& value, bool* setOf = nullptr) {
+    auto len = ListLength(typeName->names);
+    if (len < 1 || len > 2) {
+        return false;
+    }
+
+    if (len == 2) {
+        auto schemaStr = to_lower(TString(StrVal(ListNodeNth(typeName->names, 0))));
+        if (schemaStr != "pg_catalog") {
+            return false;
+        }
+    }
+
+    value = to_lower(TString(StrVal(ListNodeNth(typeName->names, len - 1))));
+    if (ListLength(typeName->arrayBounds) && !value.StartsWith('_')) {
+        value = "_" + value;
+    }
+
+    if (!setOf && typeName->setof) {
+        return false;
+    }
+
+    if (setOf) {
+        *setOf = typeName->setof;
+    }
+
+    return true;
+}
+
+bool ParseCreateFunctionStmtImpl(const CreateFunctionStmt* value, ui32 extensionIndex,
+    NPg::IExtensionSqlBuilder* builder, NYql::NPg::TProcDesc& desc) {
+    if (ListLength(value->funcname) != 1) {
+        return false;
+    }
+
+    auto nameNode = ListNodeNth(value->funcname, 0);
+    auto name = to_lower(TString(StrVal(nameNode)));
+    desc.ExtensionIndex = extensionIndex;
+    desc.Name = name;
+    desc.IsStrict = false;
+    if (value->returnType) {
+        TString resultTypeStr;
+        if (!ParseTypeName(value->returnType, resultTypeStr, &desc.ReturnSet)) {
+            return false;
+        }
+
+        if (builder) {
+            builder->PrepareType(extensionIndex, resultTypeStr);
+        }
+
+        desc.ResultType = NPg::LookupType(resultTypeStr).TypeId;
+    } else {
+        desc.ResultType = NPg::LookupType("record").TypeId;
+    }
+
+    for (ui32 pass = 0; pass < 2; ++pass) {
+        for (int i = 0; i < ListLength(value->options); ++i) {
+            auto node = LIST_CAST_NTH(DefElem, value->options, i);
+            TString defnameStr(node->defname);
+            if (pass == 1 && defnameStr == "as") {
+                auto asList = CAST_NODE(List, node->arg);
+                auto asListLen = ListLength(asList);
+                if (desc.Lang == NPg::LangC) {
+                    if (asListLen < 1 || asListLen > 2) {
+                        return false;
+                    }
+
+                    auto extStr = TString(StrVal(ListNodeNth(asList, 0)));
+                    auto srcStr = asListLen > 1 ?
+                        TString(StrVal(ListNodeNth(asList, 1))) :
+                        name;
+
+                    Y_ENSURE(extensionIndex == NPg::LookupExtensionByInstallName(extStr));
+                    desc.Src = srcStr;
+                } else if (desc.Lang == NPg::LangInternal || desc.Lang == NPg::LangSQL) {
+                    if (asListLen != 1) {
+                        return false;
+                    }
+
+                    auto srcStr = TString(StrVal(ListNodeNth(asList, 0)));
+                    desc.Src = srcStr;
+                }
+            } else if (pass == 0 && defnameStr == "strict") {
+                desc.IsStrict  = BoolVal(node->arg);
+            } else if (pass == 0 && defnameStr == "language") {
+                auto langStr = to_lower(TString(StrVal(node->arg)));
+                if (langStr == "c") {
+                    desc.Lang = NPg::LangC;
+                } else if (extensionIndex == 0 && langStr == "internal") {
+                    desc.Lang = NPg::LangInternal;
+                } else if (langStr == "sql") {
+                    desc.Lang = NPg::LangSQL;
+                } else {
+                    return false;
+                }
+            }
+        }
+    }
+
+    bool hasArgNames = false;
+    for (int i = 0; i < ListLength(value->parameters); ++i) {
+        auto node = LIST_CAST_NTH(FunctionParameter, value->parameters, i);
+        hasArgNames = hasArgNames || (node->name != nullptr);
+        if (node->mode == FUNC_PARAM_IN || node->mode == FUNC_PARAM_DEFAULT) {
+            if (node->defexpr) {
+                desc.DefaultArgs.emplace_back();
+                auto& value = desc.DefaultArgs.back();
+                auto expr = node->defexpr;
+                if (NodeTag(expr) == T_TypeCast) {
+                    expr = CAST_NODE(TypeCast, expr)->arg;
+                }
+
+                if (NodeTag(expr) != T_A_Const) {
+                    return false;
+                }
+
+                auto pgConst = GetValueNType(CAST_NODE(A_Const, expr));
+                if (!pgConst) {
+                    return false;
+                }
+
+                value = pgConst->value;
+            } else {
+                Y_ENSURE(desc.DefaultArgs.empty());
+            }
+
+            desc.InputArgNames.push_back(node->name ? node->name : "");
+        } else if (node->mode == FUNC_PARAM_OUT) {
+            desc.OutputArgNames.push_back(node->name ? node->name : "");
+        } else if (node->mode == FUNC_PARAM_VARIADIC) {
+            desc.VariadicArgName = node->name ? node->name : "";
+        } else {
+            return false;
+        }
+
+        TString argTypeStr;
+        if (!ParseTypeName(node->argType, argTypeStr)) {
+            return false;
+        }
+
+        if (builder) {
+            builder->PrepareType(extensionIndex, argTypeStr);
+        }
+
+        const auto& argTypeDesc = NPg::LookupType(argTypeStr);
+        if (node->mode == FUNC_PARAM_IN || node->mode == FUNC_PARAM_DEFAULT) {
+            desc.ArgTypes.push_back(argTypeDesc.TypeId);
+        } else if (node->mode == FUNC_PARAM_VARIADIC) {
+            desc.VariadicType = (argTypeDesc.ArrayTypeId == argTypeDesc.TypeId) ? argTypeDesc.ElementTypeId : argTypeDesc.TypeId;
+            desc.VariadicArgType = argTypeDesc.TypeId;
+        } else if (node->mode == FUNC_PARAM_OUT) {
+            desc.OutputArgTypes.push_back(argTypeDesc.TypeId);
+        }
+    }
+
+    if (!hasArgNames) {
+        desc.InputArgNames.clear();
+        desc.VariadicArgName.clear();
+        desc.OutputArgNames.clear();
+    }
+
+    if (desc.Lang == NPg::LangSQL) {
+        auto parser = NPg::GetSqlLanguageParser();
+        if (!value->sql_body) {
+            if (parser) {
+                parser->Parse(desc.Src, desc);
+            } else {
+                return false;
+            }
+        } else {
+            if (parser) {
+                parser->ParseNode(value->sql_body, desc);
+            } else {
+                return false;
+            }
+        }
+
+        if (!desc.ExprNode) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 class TExtensionHandler : public IPGParseEvents {
@@ -5636,119 +5877,8 @@ public:
     [[nodiscard]]
     bool ParseCreateFunctionStmt(const CreateFunctionStmt* value) {
         NYql::NPg::TProcDesc desc;
-        if (value->sql_body) {
+        if (!ParseCreateFunctionStmtImpl(value, ExtensionIndex, &Builder, desc)) {
             return false;
-        }
-
-        if (ListLength(value->funcname) != 1) {
-            return false;
-        }
-
-        auto nameNode = ListNodeNth(value->funcname, 0);
-        auto name = to_lower(TString(StrVal(nameNode)));
-        desc.Name = name;
-        desc.IsStrict = false;
-        if (value->returnType) {
-            TString resultTypeStr;
-            if (!ParseTypeName(value->returnType, resultTypeStr)) {
-                return false;
-            }
-
-            Builder.PrepareType(ExtensionIndex, resultTypeStr);
-            desc.ResultType = NPg::LookupType(resultTypeStr).TypeId;
-        } else {
-            desc.ResultType = NPg::LookupType("record").TypeId;
-        }
-
-        for (ui32 pass = 0; pass < 2; ++pass) {
-            for (int i = 0; i < ListLength(value->options); ++i) {
-                auto node = LIST_CAST_NTH(DefElem, value->options, i);
-                TString defnameStr(node->defname);
-                if (pass == 1 && defnameStr == "as") {
-                    auto asList = CAST_NODE(List, node->arg);
-                    auto asListLen = ListLength(asList);
-                    if (asListLen < 1 || asListLen > 2) {
-                        return false;
-                    }
-
-                    auto extStr = TString(StrVal(ListNodeNth(asList, 0)));
-                    auto srcStr = asListLen > 1 ?
-                        TString(StrVal(ListNodeNth(asList, 1))) :
-                        name;
-
-                    Y_ENSURE(ExtensionIndex == NPg::LookupExtensionByInstallName(extStr));
-                    desc.ExtensionIndex = ExtensionIndex;
-                    desc.Src = srcStr;
-                } else if (pass == 0 && defnameStr == "strict") {
-                    desc.IsStrict  = BoolVal(node->arg);
-                } else if (pass == 0 && defnameStr == "language") {
-                    auto langStr = TString(StrVal(node->arg));
-                    if (langStr == "c") {
-                        desc.Lang = NPg::LangC;
-                    } else {
-                        return false;
-                    }
-                }
-            }
-        }
-
-        bool hasArgNames = false;
-        for (int i = 0; i < ListLength(value->parameters); ++i) {
-            auto node = LIST_CAST_NTH(FunctionParameter, value->parameters, i);
-            hasArgNames = hasArgNames || (node->name != nullptr);
-            if (node->mode == FUNC_PARAM_IN || node->mode == FUNC_PARAM_DEFAULT) {
-                if (node->defexpr) {
-                    desc.DefaultArgs.emplace_back();
-                    auto& value = desc.DefaultArgs.back();
-                    auto expr = node->defexpr;
-                    if (NodeTag(expr) == T_TypeCast) {
-                        expr = CAST_NODE(TypeCast, expr)->arg;
-                    }
-
-                    if (NodeTag(expr) != T_A_Const) {
-                        return false;
-                    }
-
-                    auto pgConst = GetValueNType(CAST_NODE(A_Const, expr));
-                    if (!pgConst) {
-                        return false;
-                    }
-
-                    value = pgConst->value;
-                } else {
-                    Y_ENSURE(desc.DefaultArgs.empty());
-                }
-
-                desc.InputArgNames.push_back(node->name ? node->name : "");
-            } else if (node->mode == FUNC_PARAM_OUT) {
-                desc.OutputArgNames.push_back(node->name ? node->name : "");
-            } else if (node->mode == FUNC_PARAM_VARIADIC) {
-                desc.VariadicArgName = node->name ? node->name : "";
-            } else {
-                return false;
-            }
-
-            TString argTypeStr;
-            if (!ParseTypeName(node->argType, argTypeStr)) {
-                return false;
-            }
-
-            Builder.PrepareType(ExtensionIndex, argTypeStr);
-            auto argTypeId = NPg::LookupType(argTypeStr).TypeId;
-            if (node->mode == FUNC_PARAM_IN || node->mode == FUNC_PARAM_DEFAULT) {
-                desc.ArgTypes.push_back(argTypeId);
-            } else if (node->mode == FUNC_PARAM_VARIADIC) {
-                desc.VariadicType = argTypeId;
-                desc.VariadicArgType = argTypeId;
-            } else if (node->mode == FUNC_PARAM_OUT) {
-                desc.OutputArgTypes.push_back(argTypeId);
-            }
-        }
-
-        if (!hasArgNames) {
-            desc.InputArgNames.clear();
-            desc.VariadicArgName.clear();
-            desc.OutputArgNames.clear();
         }
 
         Builder.CreateProc(desc);
@@ -5984,27 +6114,6 @@ public:
         return true;
     }
 
-    bool ParseTypeName(const PG_TypeName* typeName, TString& value) {
-        auto len = ListLength(typeName->names);
-        if (len < 1 || len > 2) {
-            return false;
-        }
-
-        if (len == 2) {
-            auto schemaStr = to_lower(TString(StrVal(ListNodeNth(typeName->names, 0))));
-            if (schemaStr != "pg_catalog") {
-                return false;
-            }
-        }
-
-        value = to_lower(TString(StrVal(ListNodeNth(typeName->names, len - 1))));
-        if (ListLength(typeName->arrayBounds) && !value.StartsWith('_')) {
-            value = "_" + value;
-        }
-
-        return true;
-    }
-
 private:
     const ui32 ExtensionIndex;
     NYql::NPg::IExtensionSqlBuilder& Builder;
@@ -6022,8 +6131,163 @@ public:
     }
 };
 
+class TSystemFunctionsHandler : public IPGParseEvents {
+public:
+    TSystemFunctionsHandler(TVector<NPg::TProcDesc>& procs)
+        : Procs(procs)
+    {}
+
+    void OnResult(const List* raw) final {
+        for (int i = 0; i < ListLength(raw); ++i) {
+            if (!ParseRawStmt(LIST_CAST_NTH(RawStmt, raw, i))) {
+                continue;
+            }
+        }
+    }
+
+    void OnError(const TIssue& issue) final {
+        throw yexception() << "Can't parse system functions: " << issue.ToString();
+    }
+
+    [[nodiscard]]
+    bool ParseRawStmt(const RawStmt* value) {
+        auto node = value->stmt;
+        switch (NodeTag(node)) {
+        case T_CreateFunctionStmt:
+            return ParseCreateFunctionStmt(CAST_NODE(CreateFunctionStmt, node));
+        default:
+            return false;
+        }
+    }
+
+    [[nodiscard]]
+    bool ParseCreateFunctionStmt(const CreateFunctionStmt* value) {
+        NYql::NPg::TProcDesc desc;
+        if (!ParseCreateFunctionStmtImpl(value, 0, nullptr, desc)) {
+            return false;
+        }
+
+        Procs.push_back(desc);
+        return true;
+    }
+
+private:
+    TVector<NPg::TProcDesc>& Procs;
+};
+
+class TSystemFunctionsParser : public NYql::NPg::ISystemFunctionsParser {
+public:
+    void Parse(const TString& sql, TVector<NPg::TProcDesc>& procs) const final {
+        TSystemFunctionsHandler handler(procs);
+        NYql::PGParse(sql, handler);
+    }
+};
+
+class TSqlLanguageParser : public NYql::NPg::ISqlLanguageParser, public IPGParseEvents {
+public:
+    TSqlLanguageParser() {
+        Settings.ClusterMapping["pg_catalog"] = TString(PgProviderName);
+        Settings.Mode = NSQLTranslation::ESqlMode::LIMITED_VIEW;
+    }
+
+    void Parse(const TString& sql, NPg::TProcDesc& proc) final {
+        Y_ENSURE(!FreezeGuard.Defined());
+        CurrentProc = &proc;
+        NYql::PGParse(sql, *this);
+        CurrentProc = nullptr;
+    }
+
+    void ParseNode(const Node* stmt, NPg::TProcDesc& proc) final {
+        Y_ENSURE(!FreezeGuard.Defined());
+        proc.ExprNode = nullptr;
+        if (proc.VariadicType) {
+            // Can't be expressed as usual lambda
+            return;
+        }
+
+        TVector<NYql::TAstParseResult> results(1);
+        results[0].Pool = std::make_unique<TMemoryPool>(4096);
+        TVector<TStmtParseInfo> stmtParseInfos(1);
+        TConverter converter(results, Settings, "", &stmtParseInfos, false, proc.ArgTypes.size());
+        converter.PrepareStatements();
+        TAstNode* root = nullptr;
+        switch (NodeTag(stmt)) {
+        case T_SelectStmt:
+            root = converter.ParseSelectStmt(CAST_NODE(SelectStmt, stmt), {.Inner = false});
+            break;
+        case T_ReturnStmt:
+            root = converter.ParseReturnStmt(CAST_NODE(ReturnStmt, stmt));
+            break;
+        default:
+            return;
+        }
+
+        if (!root) {
+            Cerr << "Can't parse SQL for function: " << proc.Name << ", " << results[0].Issues.ToString();
+            return;
+        }
+
+        root = converter.L(converter.A("block"), converter.Q(converter.FinishStatements()));
+        if (NodeTag(stmt) == T_SelectStmt) {
+            root = converter.AsScalarContext(root);
+        }
+
+        TVector<TAstNode*> args;
+        for (ui32 i = 0; i < proc.ArgTypes.size(); ++i) {
+            args.push_back(converter.A("$p" + ToString(i + 1)));
+        }
+
+        root = converter.MakeLambda(args, root);
+        auto program = converter.L(converter.L(converter.A("return"), root));
+        TExprNode::TPtr graph;
+        Ctx.IssueManager.Reset();
+        if (!CompileExpr(*program, graph, Ctx, nullptr, nullptr, false, Max<ui32>(), 1)) {
+            Cerr << "Can't compile  SQL for function: " << proc.Name << ", " << Ctx.IssueManager.GetIssues().ToString();
+            return;
+        }
+
+        SavedNodes.push_back(graph);
+        proc.ExprNode = graph.Get();
+    }
+
+    void Freeze() final {
+        Y_ENSURE(!FreezeGuard.Defined());
+        FreezeGuard.ConstructInPlace(Ctx);
+    }
+
+    TExprContext& GetContext() final {
+        Y_ENSURE(FreezeGuard.Defined());
+        return Ctx;
+    }
+
+    void OnResult(const List* raw) final {
+        if (ListLength(raw) == 1) {
+            ParseNode(LIST_CAST_NTH(RawStmt, raw, 0)->stmt, *CurrentProc);
+        }
+    }
+
+    void OnError(const TIssue& issue) final {
+        throw yexception() << "Can't parse SQL for function: " << CurrentProc->Name << ", " << issue.ToString();
+    }
+
+private:
+    NSQLTranslation::TTranslationSettings Settings;
+    TExprContext Ctx;
+    TVector<TExprNode::TPtr> SavedNodes;
+    TMaybe<TExprContext::TFreezeGuard> FreezeGuard;
+    NPg::TProcDesc* CurrentProc = nullptr;
+};
+
 std::unique_ptr<NPg::IExtensionSqlParser> CreateExtensionSqlParser() {
     return std::make_unique<TExtensionSqlParser>();
+}
+
+std::unique_ptr<NYql::NPg::ISystemFunctionsParser> CreateSystemFunctionsParser() {
+    return std::make_unique<TSystemFunctionsParser>();
+}
+
+std::unique_ptr<NYql::NPg::ISqlLanguageParser> CreateSqlLanguageParser() {
+    return std::make_unique<TSqlLanguageParser>();
 }
 
 } // NSQLTranslationPG

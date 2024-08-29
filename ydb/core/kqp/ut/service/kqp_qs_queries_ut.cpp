@@ -3896,7 +3896,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
         {
             auto it = client.StreamExecuteQuery(R"sql(
-                SELECT * FROM `/Root/ColumnShard`;
+                SELECT * FROM `/Root/ColumnShard` ORDER BY Col1;
             )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
             TString output = StreamResultToYson(it);
@@ -3909,7 +3909,8 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             auto it = client.StreamExecuteQuery(R"sql(
                 SELECT * FROM `/Root/DataShard`
                 UNION ALL
-                SELECT * FROM `/Root/ColumnShard`;
+                SELECT * FROM `/Root/ColumnShard`
+                ORDER BY Col1;
             )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
             TString output = StreamResultToYson(it);
@@ -3920,8 +3921,9 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
         {
             auto it = client.StreamExecuteQuery(R"sql(
-                SELECT r.Col3, c.Col3 FROM `/Root/DataShard` AS r
-                JOIN `/Root/ColumnShard` AS c ON r.Col1 + 1 = c.Col1;
+                SELECT r.Col3 AS a, c.Col3 AS b FROM `/Root/DataShard` AS r
+                JOIN `/Root/ColumnShard` AS c ON r.Col1 + 1 = c.Col1
+                ORDER BY a;
             )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
             TString output = StreamResultToYson(it);
@@ -4391,6 +4393,46 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                             ).GetValueSync();
 
             UNIT_ASSERT_VALUES_EQUAL(alterResult.GetStatus(), EStatus::SUCCESS);
+        }
+    }
+
+    Y_UNIT_TEST(TableSink_OlapRWQueries) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        const TString query = R"(
+            CREATE TABLE `/Root/ColumnShard` (
+                Col1 Uint64 NOT NULL,
+                Col2 String,
+                Col3 Int32 NOT NULL,
+                PRIMARY KEY (Col1)
+            )
+            PARTITION BY HASH(Col1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 3);
+        )";
+
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto client = kikimr.GetQueryClient();
+        {
+            auto result = client.ExecuteQuery(R"(
+                REPLACE INTO `/Root/ColumnShard` (Col1, Col2, Col3) VALUES
+                    (1u, "test1", 10), (2u, "test2", 11), (3u, "test3", 12), (4u, NULL, 13);
+                SELECT * FROM `/Root/ColumnShard`;
+                INSERT INTO `/Root/ColumnShard` SELECT Col1 + 100 AS Col1, Col2, Col3 FROM `/Root/ColumnShard`;
+                SELECT * FROM `/Root/ColumnShard`;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(1)));
         }
     }
 }

@@ -2719,6 +2719,8 @@ struct TExprContext : private TNonCopyable {
     template <typename T, typename... Args>
     const T* MakeConstraint(Args&&... args);
 
+    TConstraintSet MakeConstraintSet(const NYT::TNode& serializedConstraints);
+
     void AddError(const TIssue& error) {
         ENSURE_NOT_FROZEN_CTX
         IssueManager.RaiseIssue(error);
@@ -2844,6 +2846,7 @@ struct TConvertToAstSettings {
     bool PrintArguments = false;
     bool AllowFreeArgs = false;
     bool NormalizeAtomFlags = false;
+    IAllocator* Allocator = TDefaultAllocator::Instance();
 };
 
 TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& ctx, const TConvertToAstSettings& settings);

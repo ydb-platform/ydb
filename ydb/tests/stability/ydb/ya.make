@@ -1,4 +1,3 @@
-SUBSCRIBER(g:kikimr)
 PY3TEST()
 
 TEST_SRCS(
@@ -7,7 +6,7 @@ TEST_SRCS(
 
 TIMEOUT(18000)
 SIZE(LARGE)
-TAG(ya:not_autocheck ya:fat)
+TAG(ya:manual)
 
 DATA(
     arcadia/ydb/tests/stability/resources

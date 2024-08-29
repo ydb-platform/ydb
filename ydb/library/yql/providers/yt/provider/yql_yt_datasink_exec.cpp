@@ -642,6 +642,19 @@ private:
             YQL_CLOG(DEBUG, ProviderYt) << "Operation hash: " << HexEncode(operationHash).Quote() << ", cache mode: " << queryCacheMode;
         }
 
+        TSet<TString> securityTags;
+        VisitExpr(optimizedNode->ChildPtr(TYtDqProcessWrite::idx_Input), [&securityTags](const TExprNode::TPtr& node) -> bool {
+            if (TYtTableBase::Match(node.Get())) {
+                if (auto stat = TYtTableBaseInfo::GetStat(TExprBase(node))) {
+                    for (const auto& tag : stat->SecurityTags) {
+                        securityTags.insert(tag);
+                    }
+                }
+                return false;
+            }
+            return true;
+        });
+
         YQL_CLOG(DEBUG, ProviderYt) << "Preparing " << input->Content() << " (UniqueId=" << input->UniqueId() << ")";
 
         auto future = State_->Gateway->Prepare(input, ctx,
@@ -649,6 +662,7 @@ private:
                 .PublicId(State_->Types->TranslateOperationId(input->UniqueId()))
                 .Config(std::move(config))
                 .OperationHash(operationHash)
+                .SecurityTags(securityTags)
             );
 
         return WrapModifyFuture(future, [operationHash, state = State_](const IYtGateway::TRunResult& res,

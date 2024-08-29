@@ -23,6 +23,11 @@ using TEvYmqDeleteMessageRequest = TGrpcRequestOperationCall<Ydb::Ymq::V1::Delet
 using TEvYmqPurgeQueueRequest = TGrpcRequestOperationCall<Ydb::Ymq::V1::PurgeQueueRequest, Ydb::Ymq::V1::PurgeQueueResponse>;
 using TEvYmqDeleteQueueRequest = TGrpcRequestOperationCall<Ydb::Ymq::V1::DeleteQueueRequest, Ydb::Ymq::V1::DeleteQueueResponse>;
 using TEvYmqChangeMessageVisibilityRequest = TGrpcRequestOperationCall<Ydb::Ymq::V1::ChangeMessageVisibilityRequest, Ydb::Ymq::V1::ChangeMessageVisibilityResponse>;
+using TEvYmqSetQueueAttributesRequest = TGrpcRequestOperationCall<Ydb::Ymq::V1::SetQueueAttributesRequest, Ydb::Ymq::V1::SetQueueAttributesResponse>;
+using TEvYmqSendMessageBatchRequest = TGrpcRequestOperationCall<Ydb::Ymq::V1::SendMessageBatchRequest, Ydb::Ymq::V1::SendMessageBatchResponse>;
+using TEvYmqDeleteMessageBatchRequest = TGrpcRequestOperationCall<Ydb::Ymq::V1::DeleteMessageBatchRequest, Ydb::Ymq::V1::DeleteMessageBatchResponse>;
+using TEvYmqChangeMessageVisibilityBatchRequest = TGrpcRequestOperationCall<Ydb::Ymq::V1::ChangeMessageVisibilityBatchRequest, Ydb::Ymq::V1::ChangeMessageVisibilityBatchResponse>;
+using TEvYmqListDeadLetterSourceQueuesRequest = TGrpcRequestOperationCall<Ydb::Ymq::V1::ListDeadLetterSourceQueuesRequest, Ydb::Ymq::V1::ListDeadLetterSourceQueuesResponse>;
 
 }
 }

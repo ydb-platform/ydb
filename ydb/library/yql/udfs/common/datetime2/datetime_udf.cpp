@@ -804,23 +804,6 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
     }
 
     template <>
-    TUnboxedValue TSplit<TTzDate32>::Run(
-        const IValueBuilder* valueBuilder,
-        const TUnboxedValuePod* args) const
-    {
-        try {
-            EMPTY_RESULT_ON_EMPTY_ARG(0);
-
-            TUnboxedValuePod result(0);
-            auto& storage = Reference64(result);
-            storage.FromDate32(valueBuilder->GetDateBuilder(), args[0].Get<i32>(), args[0].GetTimezoneId());
-            return result;
-        } catch (const std::exception& e) {
-            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
-        }
-    }
-
-    template <>
     TUnboxedValue TSplit<TTzDatetime>::Run(
         const IValueBuilder* valueBuilder,
         const TUnboxedValuePod* args) const
@@ -839,23 +822,6 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
     }
 
     template <>
-    TUnboxedValue TSplit<TTzDatetime64>::Run(
-        const IValueBuilder* valueBuilder,
-        const TUnboxedValuePod* args) const
-    {
-        try {
-            EMPTY_RESULT_ON_EMPTY_ARG(0);
-
-            TUnboxedValuePod result(0);
-            auto& storage = Reference64(result);
-            storage.FromDatetime64(valueBuilder->GetDateBuilder(), args[0].Get<i64>(), args[0].GetTimezoneId());
-            return result;
-        } catch (const std::exception& e) {
-            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
-        }
-    }
-
-    template <>
     TUnboxedValue TSplit<TTzTimestamp>::Run(
         const IValueBuilder* valueBuilder,
         const TUnboxedValuePod* args) const
@@ -867,23 +833,6 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
             TUnboxedValuePod result(0);
             auto& storage = Reference(result);
             storage.FromTimestamp(builder, args[0].Get<ui64>(), args[0].GetTimezoneId());
-            return result;
-        } catch (const std::exception& e) {
-            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
-        }
-    }
-
-    template <>
-    TUnboxedValue TSplit<TTzTimestamp64>::Run(
-        const IValueBuilder* valueBuilder,
-        const TUnboxedValuePod* args) const
-    {
-        try {
-            EMPTY_RESULT_ON_EMPTY_ARG(0);
-
-            TUnboxedValuePod result(0);
-            auto& storage = Reference64(result);
-            storage.FromTimestamp64(valueBuilder->GetDateBuilder(), args[0].Get<i64>(), args[0].GetTimezoneId());
             return result;
         } catch (const std::exception& e) {
             UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
@@ -1018,30 +967,6 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
     SIMPLE_STRICT_UDF(TMakeTimestamp64, TTimestamp64(TAutoMap<TResource<TM64ResourceName>>)) {
         auto& storage = Reference64(args[0]);
         return TUnboxedValuePod(storage.ToTimestamp64(valueBuilder->GetDateBuilder()));
-    }
-
-    SIMPLE_STRICT_UDF(TMakeTzDate32, TTzDate32(TAutoMap<TResource<TM64ResourceName>>)) {
-        valueBuilder->GetDateBuilder();
-        auto& storage = Reference64(args[0]);
-        TUnboxedValuePod result(storage.ToDate32(valueBuilder->GetDateBuilder()));
-        result.SetTimezoneId(storage.TimezoneId);
-        return result;
-    }
-
-    SIMPLE_STRICT_UDF(TMakeTzDatetime64, TTzDatetime64(TAutoMap<TResource<TM64ResourceName>>)) {
-        valueBuilder->GetDateBuilder();
-        auto& storage = Reference64(args[0]);
-        TUnboxedValuePod result(storage.ToDatetime64(valueBuilder->GetDateBuilder()));
-        result.SetTimezoneId(storage.TimezoneId);
-        return result;
-    }
-
-    SIMPLE_STRICT_UDF(TMakeTzTimestamp64, TTzTimestamp64(TAutoMap<TResource<TM64ResourceName>>)) {
-        valueBuilder->GetDateBuilder();
-        auto& storage = Reference64(args[0]);
-        TUnboxedValuePod result(storage.ToTimestamp64(valueBuilder->GetDateBuilder()));
-        result.SetTimezoneId(storage.TimezoneId);
-        return result;
     }
 
 
@@ -2351,10 +2276,7 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
             TTzTimestamp,
             TDate32,
             TDatetime64,
-            TTimestamp64,
-            TTzDate32,
-            TTzDatetime64,
-            TTzTimestamp64>,
+            TTimestamp64>,
 
         TMakeDate,
         TMakeDatetime,
@@ -2368,9 +2290,6 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
         TMakeDate32,
         TMakeDatetime64,
         TMakeTimestamp64,
-        TMakeTzDate32,
-        TMakeTzDatetime64,
-        TMakeTzTimestamp64,
 
         TGetYear,
         TGetDayOfYear,

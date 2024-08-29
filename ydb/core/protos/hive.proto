@@ -245,8 +245,9 @@ message TTabletMetrics {
 message TEvTabletMetrics {
     repeated TTabletMetrics TabletMetrics = 1;
     optional NKikimrTabletBase.TMetrics TotalResourceUsage = 2;
-    optional double TotalNodeUsage = 3;
     optional NKikimrTabletBase.TMetrics ResourceMaximum = 4;
+    optional double TotalNodeUsage = 3;
+    optional double TotalNodeCpuUsage = 5;
 }
 
 message TEvReassignTablet {

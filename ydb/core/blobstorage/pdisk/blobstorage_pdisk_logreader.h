@@ -61,9 +61,10 @@ class TLogReader : public TLogReaderBase {
     };
 
     bool IsInitial;
-    TPDisk * const PDisk;
-    TActorSystem * const ActorSystem;
-    const TActorId ReplyTo;
+    std::shared_ptr<TPDiskCtx> PDiskCtx;
+    TPDisk * PDisk; // deprecated
+    TActorSystem * ActorSystem; // deprecated
+    TActorId ReplyTo;
 
     TOwner Owner;
     TLogPosition OwnerLogStartPosition;

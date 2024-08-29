@@ -46,12 +46,14 @@ class TCompletionEventSender;
 
 class TPDisk : public IPDisk {
 public:
-    ui32 PDiskId;
-    TActorId PDiskActor;
+    std::shared_ptr<TPDiskCtx> PDiskCtx;
+    ui32 PDiskId; // deprecated, moved to PDiskCtx
+    TActorId PDiskActor; // deprecated, moved to PDiskCtx
 
     // Monitoring
-    TPDiskMon Mon;
+    TPDiskMon Mon; // deprecated, moved to PDiskCtx
 
+    TActorSystem *ActorSystem; // deprecated, moved to PDiskCtx
 
     // Static state
     TDriveModel DriveModel;
@@ -119,7 +121,6 @@ public:
     TNonceSet ForceLogNonceDiff;
 
     // Static state
-    TActorSystem *ActorSystem;
     alignas(16) TDiskFormat Format;
     ui64 ExpectedDiskGuid;
     TPDiskCategory PDiskCategory;

@@ -97,6 +97,8 @@ class TPDiskActor : public TActorBootstrapped<TPDiskActor> {
 
     THolder<IEventHandle> ControledStartResult;
 
+    std::shared_ptr<TPDiskCtx> PDiskCtx;
+
     class TWhiteboardFlag {
     private:
         class TSource {
@@ -219,6 +221,8 @@ public:
                 ->GetSubgroup("media", to_lower(cfg->PDiskCategory.TypeStrShort())))
     {
         Y_ABORT_UNLESS(MainKey.IsInitialized);
+        PDiskCtx = std::make_shared<TPDiskCtx>();
+        PDiskCtx->PDiskId = cfg->PDiskId;
     }
 
     ~TPDiskActor() {
@@ -232,6 +236,8 @@ public:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Bootstrap state
     void Bootstrap(const TActorContext &ctx) {
+        PDiskCtx->ActorSystem = ctx.ActorSystem();
+        P_LOG(PRI_CRIT, BPD01, "Bootstrap, ActorSystem# " << (void*)PDiskCtx->ActorSystem);
         auto mon = AppData()->Mon;
         if (mon && !Cfg->MetadataOnly) {
             NMonitoring::TIndexMonPage *actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
@@ -266,7 +272,7 @@ public:
             str << "PDiskId# " << (ui32)PDisk->PDiskId
                 << " MainKey is invalid, ErrorReason# " << MainKey.ErrorReason;
             InitError(str.Str());
-            LOG_CRIT_S(*TlsActivationContext, NKikimrServices::BS_PDISK, str.Str());
+            P_LOG(PRI_CRIT, BPD01, str.Str());
         } else if (!isOk) {
             TStringStream str;
             str << "PDiskId# " << (ui32)PDisk->PDiskId
@@ -274,7 +280,7 @@ public:
                 << " Can not be initialized";
             InitError(str.Str());
             str << " Config: " << Cfg->ToString();
-            LOG_CRIT_S(*TlsActivationContext, NKikimrServices::BS_PDISK, str.Str());
+            P_LOG(PRI_CRIT, BPD01, str.Str());
         } else {
             PDisk->InitiateReadSysLog(SelfId());
             StateErrorReason =
@@ -356,7 +362,7 @@ public:
             str << "PDiskId# " << (ui32)PDisk->PDiskId
                 << " Can not be formated! Reason# " << ev->Get()->ErrorStr
                 << " Switching to StateError. Config: " << Cfg->ToString();
-            LOG_CRIT_S(*TlsActivationContext, NKikimrServices::BS_PDISK, str.Str());
+            P_LOG(PRI_CRIT, BPD01, str.Str());
             InitError(str.Str());
         }
     }
@@ -391,7 +397,7 @@ public:
             }
             InitError(str.Str());
             str << " Config: " << Cfg->ToString();
-            LOG_CRIT_S(*TlsActivationContext, NKikimrServices::BS_PDISK, str.Str());
+            P_LOG(PRI_CRIT, BPD01, str.Str());
         }
     }
 
@@ -506,7 +512,7 @@ public:
             str << "PDiskId# " << (ui32)PDisk->PDiskId
                 << " Format chunks cannot be reencrypted! Reason# " << ev->Get()->ErrorReason
                 << " Switching to StateError. Config: " << Cfg->ToString();
-            LOG_CRIT_S(*TlsActivationContext, NKikimrServices::BS_PDISK, str.Str());
+            P_LOG(PRI_CRIT, BPD01, str.Str());
             InitError(str.Str());
         }
     }

@@ -1561,15 +1561,17 @@ struct TEvWriteMetadataResult : TEventLocal<TEvWriteMetadataResult, TEvBlobStora
 struct TPDiskCtx {
     TActorSystem *ActorSystem = nullptr;
     ui32 PDiskId = 0;
-    TPDiskMon *Mon = nullptr; // now is unused
+    TActorId PDiskActor; 
+    TPDiskMon *Mon = nullptr;
 };
 
-extern thread_local TPDiskCtx PDiskCtx;
+#define P_LOG_X(CTX, LEVEL, MARKER, ...) \
+        STLOGX(CTX, LEVEL, BS_PDISK, MARKER, __VA_ARGS__);
 
 #define P_LOG(LEVEL, MARKER, ...) \
     do { \
-        if (PDiskCtx.ActorSystem) { \
-            STLOGX(*PDiskCtx.ActorSystem, LEVEL, BS_PDISK, MARKER, __VA_ARGS__, (PDiskId, PDiskCtx.PDiskId)); \
+        if (PDiskCtx && PDiskCtx->ActorSystem) { \
+            STLOGX(*PDiskCtx->ActorSystem, LEVEL, BS_PDISK, MARKER, __VA_ARGS__, (PDiskId, PDiskCtx->PDiskId)); \
         } \
     } while (false)
 

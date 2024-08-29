@@ -905,7 +905,7 @@ void TPDisk::LogWrite(TLogWrite &evLog, TVector<ui32> &logChunksToCommit) {
         TStringStream str;
         str << "PDiskId# " << PDiskId << " Can't preallocate log chunks!"
             << " Marker# BPD70";
-        LOG_ERROR(*ActorSystem, NKikimrServices::BS_PDISK, "%s", str.Str().c_str());
+        P_LOG(PRI_ERROR, BPD01, str.Str());
         evLog.Result.Reset(new NPDisk::TEvLogResult(NKikimrProto::OUT_OF_SPACE,
                     NotEnoughDiskSpaceStatusFlags(evLog.Owner, evLog.OwnerGroupType), str.Str()));
         evLog.Result->Results.push_back(NPDisk::TEvLogResult::TRecord(evLog.Lsn, evLog.Cookie));
@@ -1532,6 +1532,7 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
             // Start reading metadata.
             ReadFormattedMetadataIfNeeded();
 
+            P_LOG(PRI_NOTICE, BPD01, "PDisk have successfully started");
             // Output the fully initialized state for each owner and each chunk.
             LOG_NOTICE_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDiskId
                     << " Successfully started");

@@ -1943,13 +1943,12 @@ void TPDisk::YardInitFinish(TYardInit &evYardInit) {
 
         AddCbsSet(owner);
 
-        LOG_NOTICE_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDiskId
-                << " new owner is created. ownerId# " << owner
-                << " vDiskId# " << vDiskId.ToStringWOGeneration()
-                << " FirstNonceToKeep# " << SysLogFirstNoncesToKeep.FirstNonceToKeep[owner]
-                << " CutLogId# " << ownerData.CutLogId
-                << " ownerRound# " << ownerData.OwnerRound
-                << " Marker# BPD02");
+        P_LOG(PRI_NOTICE, BPD02, "New owner is created",
+                (ownerId, owner),
+                (vDiskId, vDiskId.ToString()),
+                (FirstNonceToKeep, SysLogFirstNoncesToKeep.FirstNonceToKeep[owner]),
+                (CutLogId, ownerData.CutLogId),
+                (ownerRound, ownerData.OwnerRound));
 
         AskVDisksToCutLogs(OwnerSystem, false);
     }
@@ -2119,8 +2118,7 @@ void TPDisk::KillOwner(TOwner owner, TOwnerRound killOwnerRound, TCompletionEven
                         pushedOwnerIntoQuarantine = true;
                         ADD_RECORD_WITH_TIMESTAMP_TO_OPERATION_LOG(OwnerData[owner].OperationLog, "KillOwner(), Add owner to quarantine, OwnerId# " << owner);
                         QuarantineOwners.push_back(owner);
-                        LOG_NOTICE_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDiskId
-                                << " push ownerId# " << owner << " into quarantine");
+                        P_LOG(PRI_NOTICE, BPD01, "Push owner into quarantine", (Owner, (ui32)owner));
                     }
                 } else {
                     ForceDeleteChunk(i);
@@ -2132,15 +2130,12 @@ void TPDisk::KillOwner(TOwner owner, TOwnerRound killOwnerRound, TCompletionEven
             ADD_RECORD_WITH_TIMESTAMP_TO_OPERATION_LOG(OwnerData[owner].OperationLog, "KillOwner(), Add owner to quarantine, "
                     << "HaveRequestsInFlight, OwnerId# " << owner);
             QuarantineOwners.push_back(owner);
-            LOG_NOTICE_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDiskId
-                    << " push ownerId# " << owner
-                    << " into quarantine as there are requests in flight");
+            P_LOG(PRI_NOTICE, BPD01, "Push owner into quarantine as there are requests in flight", (Owner, (ui32)owner));
         }
         if (!pushedOwnerIntoQuarantine) {
             ADD_RECORD_WITH_TIMESTAMP_TO_OPERATION_LOG(OwnerData[owner].OperationLog, "KillOwner(), Remove owner without quarantine, OwnerId# " << owner);
             Keeper.RemoveOwner(owner);
-            LOG_NOTICE_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDiskId
-                    << " removed ownerId# " << owner << " from chunks Keeper");
+            P_LOG(PRI_NOTICE, BPD01, "removed owner from chunks Keeper", (Owner, (ui32)owner));
         }
 
         TryTrimChunk(false, 0, NWilson::TSpan{});

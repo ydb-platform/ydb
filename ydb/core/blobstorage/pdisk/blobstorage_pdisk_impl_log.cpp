@@ -131,7 +131,6 @@ void TPDisk::InitLogChunksInfo() {
 void TPDisk::PrintLogChunksInfo(const TString& msg) {
     auto debugPrint = [&] () {
         TStringStream str;
-        str << "PDiskId# " << PDiskId << " PrintLogChunksInfo " << msg;
         str << " [";
         for (auto it = LogChunks.begin(); it != LogChunks.end(); ++it) {
             str << "{";
@@ -155,7 +154,7 @@ void TPDisk::PrintLogChunksInfo(const TString& msg) {
         return str.Str();
     };
 
-    LOG_NOTICE_S(*ActorSystem, NKikimrServices::BS_PDISK_TEST, debugPrint());
+    P_LOG(PRI_NOTICE, BPD01, "PrintLogChunksInfo " << msg, (LogChunks, debugPrint()));
 }
 
 bool TPDisk::LogNonceJump(ui64 previousNonce) {
@@ -1532,12 +1531,9 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
             // Start reading metadata.
             ReadFormattedMetadataIfNeeded();
 
-            P_LOG(PRI_NOTICE, BPD01, "PDisk have successfully started");
             // Output the fully initialized state for each owner and each chunk.
-            LOG_NOTICE_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDiskId
-                    << " Successfully started");
-            LOG_INFO_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDiskId
-                    << " Startup owner info# " << StartupOwnerInfo());
+            P_LOG(PRI_NOTICE, BPD01, "PDisk have successfully started");
+            P_LOG(PRI_INFO, BPD01, "", (StartupOwnerInfo, StartupOwnerInfo()));
 
             return;
         }

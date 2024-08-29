@@ -13,8 +13,6 @@ services:
     image: ghcr.io/ydb-platform/fq-connector-go_greenplum:6.25.3@sha256:0627a657b179ff73949fec05201f3e164b92639281eff248cd07669ce7247eec
     container_name: tests-fq-generic-greenplum
     hostname: localhost
-    ports:
-      - '5432'
     volumes:
       - ./greenplum/init_db.sh:/init_db.sh
   fq-connector-go:

@@ -209,7 +209,7 @@ public:
                     blockState.MakeRow(dict.Lookup(key));
                 }
             }
-            if (!blockState.IsFinished()) {
+            if (blockState.IsNotFull() && !blockState.IsFinished()) {
                 switch (Flow_->FetchValues(ctx, fields)) {
                 case EFetchResult::Yield:
                     return EFetchResult::Yield;

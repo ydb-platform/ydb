@@ -1,7 +1,8 @@
 #include "ydb_benchmark.h"
 #include "benchmark_utils.h"
-#include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
+#include <ydb/public/lib/ydb_cli/common/plan2svg.h>
+#include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <library/cpp/json/json_writer.h>
 #include <util/string/printf.h>
 #include <util/folder/path.h>
@@ -93,7 +94,7 @@ TString TWorkloadCommandBenchmark::PatchQuery(const TStringBuf& original) const 
 
     std::vector<TStringBuf> lines;
     for (auto& line : StringSplitter(result).Split('\n').SkipEmpty()) {
-        if (line.StartsWith("--")) {
+        if (line.StartsWith("--") && !line.StartsWith("--!")) {
             continue;
         }
 
@@ -385,6 +386,12 @@ bool TWorkloadCommandBenchmark::RunBench(TClient& client, NYdbWorkload::IWorkloa
                 {
                     TFileOutput out(PlanFileName + ".ast");
                     out << res.GetPlanAst();
+                }
+                {
+                    TPlanVisualizer pv;
+                    pv.LoadPlans(res.GetQueryPlan());
+                    TFileOutput out(PlanFileName + ".svg");
+                    out << pv.PrintSvgSafe();
                 }
                 planSaved = true;
             }

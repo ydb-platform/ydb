@@ -22,19 +22,6 @@ void TCommandExecuteSqlBase::DeclareScriptOptions(TClientCommand::TConfig& confi
         .StoreResult(&Query);
     config.Opts->AddLongOption('f', "file", "Path to file with script (query) text").RequiredArgument("PATH")
         .StoreResult(&QueryFile);
-
-    AddFormats(config, {
-        EOutputFormat::Pretty,
-        EOutputFormat::JsonUnicode,
-        EOutputFormat::JsonUnicodeArray,
-        EOutputFormat::JsonBase64,
-        EOutputFormat::JsonBase64Array,
-        EOutputFormat::Csv,
-        EOutputFormat::Tsv,
-        EOutputFormat::Parquet,
-    });
-
-    config.SetFreeArgsNum(0);
 }
 
 void TCommandExecuteSqlBase::DeclareCommonInputOptions(TClientCommand::TConfig& config) {
@@ -46,7 +33,6 @@ void TCommandExecuteSqlBase::DeclareCommonInputOptions(TClientCommand::TConfig& 
     config.Opts->AddLongOption("results-ttl", "Amount of time to store query results on server. "
             "By default it is 86400s (24 hours).").RequiredArgument("SECONDS")
         .StoreResult(&ResultsTtl);
-    config.SetFreeArgsNum(0);
 }
 
 void TCommandExecuteSqlBase::DeclareCommonOutputOptions(TClientCommand::TConfig& config) {
@@ -99,11 +85,14 @@ int TCommandExecuteSqlBase::ExecuteScriptAsync(TDriver& driver, NQuery::TQueryCl
     }
 }
 
-int TCommandExecuteSqlBase::PrintResponse(const NQuery::TScriptExecutionOperation& result) {
-    // TODO: replace id with actual id
-    Cout << "Operation info:" << Endl << result.ToString() << Endl
-        << "To wait for completion type \"ydb sql-async wait <id>\"" << Endl
-        << "To fetch results type \"ydb sql-async fetch <id>\"";
+int TCommandExecuteSqlBase::PrintResponse(const NQuery::TScriptExecutionOperation& operation) {
+    std::string quotedId = "\"" + ProtoToString(operation.Id()) + "\"";
+    Cout << "Operation info:" << Endl << operation.ToString() << Endl
+        << "To get current execution status: ydb sql-async get " << quotedId << Endl
+        << "To wait for completion: ydb sql-async wait " << quotedId << Endl
+        << "To cancel execution: ydb sql-async cancel " << quotedId << Endl
+        << "To forget operation: ydb sql-async forget " << quotedId << Endl
+        << "To fetch results: ydb sql-async fetch " << quotedId << Endl;
     return EXIT_SUCCESS;
 }
 
@@ -174,7 +163,7 @@ TCommandSql::TCommandSql()
 {}
 
 void TCommandSql::Config(TConfig& config) {
-    TYdbCommand::Config(config);
+    TClientCommand::Config(config);
     DeclareScriptOptions(config);
     config.Opts->AddLongOption("explain", "Execute explain request for the query. Shows query logical plan. "
             "The query is not actually executed, thus does not affect the database.")
@@ -200,6 +189,8 @@ void TCommandSql::Config(TConfig& config) {
         .StoreTrue(&AsyncWait);
     DeclareCommonInputOptions(config);
     DeclareCommonOutputOptions(config);
+
+    config.SetFreeArgsNum(0);
 }
 
 void TCommandSql::Parse(TConfig& config) {
@@ -338,6 +329,7 @@ TCommandSqlAsync::TCommandSqlAsync()
 {
     AddCommand(std::make_unique<TCommandSqlAsyncExecute>());
     AddCommand(std::make_unique<TCommandSqlAsyncFetch>());
+    AddCommand(std::make_unique<TCommandSqlAsyncGet>());
 }
 
 TCommandSqlAsyncExecute::TCommandSqlAsyncExecute()
@@ -352,6 +344,8 @@ void TCommandSqlAsyncExecute::Config(TConfig& config) {
         .StoreTrue(&AsyncWait);
     DeclareCommonInputOptions(config);
     DeclareCommonOutputOptions(config);
+
+    config.SetFreeArgsNum(0);
 }
 
 void TCommandSqlAsyncExecute::Parse(TConfig& config) {
@@ -380,8 +374,7 @@ void TCommandWithScriptExecutionOperationId::Parse(TConfig& config) {
         throw TMisuseException() << "Invalid operation ID";
     }
     if (OperationId.GetKind() != TOperationId::EKind::TOperationId_EKind_SCRIPT_EXECUTION) {
-        throw TMisuseException() << "Invalid operation kind: expected SCRIPT_EXECUTION, but got "
-            << OperationId.GetKind() << ".";
+        throw TMisuseException() << "Invalid operation kind: expected SCRIPT_EXECUTION";
     }
 }
 
@@ -421,6 +414,44 @@ int TCommandSqlAsyncFetch::Run(TConfig& config) {
     return WaitForResultAndPrintResponse(queryClient, operationClient, OperationId, operation);
 }
 
+TCommandSqlAsyncGet::TCommandSqlAsyncGet()
+    : TCommandWithScriptExecutionOperationId("get", {}, "Get and print current status of async script execution by operation id")
+{}
+
+void TCommandSqlAsyncGet::Config(TConfig& config) {
+    TCommandWithScriptExecutionOperationId::Config(config);
+    AddFormats(config, {
+        EOutputFormat::Pretty,
+        EOutputFormat::ProtoJsonBase64,
+    });
+}
+
+void TCommandSqlAsyncGet::Parse(TConfig& config) {
+    TCommandWithScriptExecutionOperationId::Parse(config);
+    try {
+        OperationId = TOperationId(config.ParseResult->GetFreeArgs()[0]);
+    } catch (const yexception& ex) {
+        throw TMisuseException() << "Invalid operation ID";
+    }
+}
+
+int TCommandSqlAsyncGet::Run(TConfig& config) {
+    TDriver driver = CreateDriver(config);
+    NQuery::TQueryClient queryClient(driver);
+    NOperation::TOperationClient operationClient(driver);
+    auto operation = GetOperation(driver);
+    switch (operation.Status().GetStatus()) {
+        case EStatus::SUCCESS:
+            PrintOperation(operation, OutputFormat);
+            return EXIT_SUCCESS;
+        case EStatus::CANCELLED:
+            PrintOperation(operation, OutputFormat);
+            return EXIT_FAILURE;
+        default:
+            ThrowOnError(operation);
+            return EXIT_FAILURE;
+    }   
+}
 
 
 }

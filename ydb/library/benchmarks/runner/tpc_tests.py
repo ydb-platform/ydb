@@ -132,18 +132,18 @@ def upload_results(result_path, s3_folder, test_start):
                 if query_num not in this_result:
                     this_result[query_num] = RunResults()
 
-            if file.suffix == ".svg":
-                dst = file.relative_to(result_path)
-                this_result[query_num].perf_file_path = dst
-                # copying files to folder that will be synced with s3
-                dst = (s3_folder / dst).resolve()
-                dst.parent.mkdir(parents=True, exist_ok=True)
-                res = shutil.copy2(str(file.resolve()), str(dst))
-                print(res, file=sys.stderr)
-            # q<num>-stdout.txt
-            if file.stem == f"q{query_num}-stdout":
-                with open(file, "r") as stdout:
-                    this_result[query_num].output_hash = hash(stdout.read().strip())
+                if file.suffix == ".svg":
+                    dst = file.relative_to(result_path)
+                    this_result[query_num].perf_file_path = dst
+                    # copying files to folder that will be synced with s3
+                    dst = (s3_folder / dst).resolve()
+                    dst.parent.mkdir(parents=True, exist_ok=True)
+                    res = shutil.copy2(str(file.resolve()), str(dst))
+                    print(res, file=sys.stderr)
+                # q<num>-stdout.txt
+                if file.stem == f"q{query_num}-stdout":
+                    with open(file, "r") as stdout:
+                        this_result[query_num].output_hash = hash(stdout.read().strip())
 
         summary_file = entry / "summary.json"
 

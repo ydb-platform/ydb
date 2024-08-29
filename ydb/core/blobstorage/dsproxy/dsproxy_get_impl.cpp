@@ -143,7 +143,7 @@ void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReas
                 if (IntegrityCheck && !IsDataConsistent(blobState, data)) {
                     outResponse.Status = NKikimrProto::ERROR;
                     outResponse.IntegrityCheckFailed = true;
-                    outResponse.CompletenessFailed = !blobState.HasWrittenQuorum(*Info);
+                    outResponse.CompletenessFailed = !blobState.HasWrittenQuorum(*Info, nullptr);
                     ui32 corruptedPartIdx = 0;
 
                     switch (Info->Type.GetErasure()) {
@@ -152,7 +152,6 @@ void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReas
                             outResponse.CorruptedPartFound = FindCorruptedPartMirror(blobState, corruptedPartIdx);
                             outResponse.CorruptedPartIndex = corruptedPartIdx;
                             break;
-
                         default: {
                             outResponse.CorruptedPartFound = FindCorruptedPart42(blobState, data, corruptedPartIdx);
                             outResponse.CorruptedPartIndex = corruptedPartIdx;
@@ -365,7 +364,7 @@ EStrategyOutcome TGetImpl::RunMirror3dcStrategy(TLogContext &logCtx) {
 
 EStrategyOutcome TGetImpl::RunMirror3of4Strategy(TLogContext &logCtx) {
     TStackVec<IStrategy*, 1> strategies;
-    TMirror3of4GetStrategy s1;
+    TMirror3of4GetStrategy s1(IntegrityCheck);
     strategies.push_back(&s1);
     TPut3of4Strategy s2(TEvBlobStorage::TEvPut::TacticMaxThroughput);
     if (MustRestoreFirst) {

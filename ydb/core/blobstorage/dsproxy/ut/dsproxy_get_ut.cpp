@@ -1213,6 +1213,16 @@ Y_UNIT_TEST(TestMirror3dcGetSpecificCorrupted) {
     UNIT_ASSERT_VALUES_EQUAL(testPassed, 3);
 }
 
+Y_UNIT_TEST(TestMirror3of4GetSpecificCorrupted) {
+    ui32 testPassed = 0;
+    for (ui32 domainIdx = 0; domainIdx < 8; ++domainIdx) {
+        if (SpecificTestCorrupted(TErasureType::ErasureMirror3of4, domainIdx, 8000000)) {
+            ++testPassed;
+        }
+    }
+    UNIT_ASSERT_VALUES_EQUAL(testPassed, 4);
+}
+
 }
 
 Y_UNIT_TEST_SUITE(TDSProxyLooksLikeLostTheBlob) {

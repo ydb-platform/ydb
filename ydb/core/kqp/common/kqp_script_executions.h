@@ -9,6 +9,6 @@ namespace NKikimr::NKqp {
 
 TString ScriptExecutionOperationFromExecutionId(const TString& executionId);
 TMaybe<TString> ScriptExecutionIdFromOperation(const TString& operationId);
-TMaybe<TString> ScriptExecutionIdFromOperation(const NOperationId::TOperationId& operationId);
+TMaybe<std::string> ScriptExecutionIdFromOperation(const NOperationId::TOperationId& operationId);
 
 } // namespace NKikimr::NKqp

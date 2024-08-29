@@ -144,15 +144,11 @@ TOperationId::EKind TOperationId::GetKind() const {
     return Kind;
 }
 
-TOperationId::EKind& TOperationId::GetMutableKind() {
-    return Kind;
+void TOperationId::SetKind(const EKind& kind) {
+    Kind = kind;
 }
 
 const TOperationId::TDataList& TOperationId::GetData() const {
-    return Data;
-}
-
-TOperationId::TDataList& TOperationId::GetMutableData() {
     return Data;
 }
 

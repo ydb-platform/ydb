@@ -45,7 +45,7 @@ public:
     ~TOperationId() = default;
 
     EKind GetKind() const;
-    EKind& GetMutableKind();
+    void SetKind(const EKind& kind);
 
     const TDataList& GetData() const;
     TDataList& GetMutableData();

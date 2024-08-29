@@ -51,7 +51,7 @@ namespace NYql::NDq {
             return TString(e.what());
         }
 
-        Y_ENSURE(iamToken, "CredentialsProvider returned empty IAM token");
+        Y_ENSURE(!iamToken.empty(), "CredentialsProvider returned empty IAM token");
 
         *dsi.mutable_credentials()->mutable_token()->mutable_value() = std::move(iamToken);
         return {};

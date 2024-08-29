@@ -74,6 +74,10 @@ static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false,
 
     NKikimrKqp::TKqpSetting setting;
 
+    setting.SetName("CostBasedOptimizationLevel");
+    setting.SetValue("4");
+    settings.push_back(setting);
+    
     if (stats != "") {
         setting.SetName("OptOverrideStatistics");
         setting.SetValue(stats);

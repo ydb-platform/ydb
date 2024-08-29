@@ -1,15 +1,11 @@
 {
-  "op_name":"InnerJoin (Grace)",
+  "op_name":"InnerJoin (MapJoin)",
   "args":
     [
       {
-        "op_name":"InnerJoin (Grace)",
+        "op_name":"InnerJoin (MapJoin)",
         "args":
           [
-            {
-              "op_name":"TableFullScan",
-              "table":"partsupp"
-            },
             {
               "op_name":"InnerJoin (MapJoin)",
               "args":
@@ -23,7 +19,7 @@
                     "args":
                       [
                         {
-                          "op_name":"TableLookup",
+                          "op_name":"TableFullScan",
                           "table":"region"
                         },
                         {
@@ -33,6 +29,10 @@
                       ]
                   }
                 ]
+            },
+            {
+              "op_name":"TableFullScan",
+              "table":"partsupp"
             }
           ]
       },
@@ -41,13 +41,9 @@
         "args":
           [
             {
-              "op_name":"InnerJoin (Grace)",
+              "op_name":"InnerJoin (MapJoin)",
               "args":
                 [
-                  {
-                    "op_name":"TableFullScan",
-                    "table":"partsupp"
-                  },
                   {
                     "op_name":"InnerJoin (MapJoin)",
                     "args":
@@ -61,7 +57,7 @@
                           "args":
                             [
                               {
-                                "op_name":"TableLookup",
+                                "op_name":"TableFullScan",
                                 "table":"region"
                               },
                               {
@@ -71,6 +67,10 @@
                             ]
                         }
                       ]
+                  },
+                  {
+                    "op_name":"TableFullScan",
+                    "table":"partsupp"
                   }
                 ]
             },

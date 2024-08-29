@@ -15,13 +15,13 @@
                     "table":"quotas_browsers_relation"
                   },
                   {
-                    "op_name":"TableLookup",
+                    "op_name":"TableFullScan",
                     "table":"browsers"
                   }
                 ]
             },
             {
-              "op_name":"TableLookup",
+              "op_name":"TableFullScan",
               "table":"browser_groups"
             }
           ]

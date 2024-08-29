@@ -45,9 +45,30 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr RowsCount;
     NMonitoring::THistogramPtr PackageSize;
 
+    NMonitoring::THistogramPtr DurationToStartCommit;
+    NMonitoring::THistogramPtr DurationToFinishCommit;
+    NMonitoring::THistogramPtr DurationToStartWriting;
+    NMonitoring::THistogramPtr DurationToTxStarted;
+
     THashMap<TString, NMonitoring::TDynamicCounters::TCounterPtr> CodesCount;
 public:
     TUploadCounters();
+
+    void OnTxStarted(const TDuration d) const {
+        DurationToTxStarted->Collect(d.MilliSeconds());
+    }
+
+    void OnWritingStarted(const TDuration d) const {
+        DurationToStartWriting->Collect(d.MilliSeconds());
+    }
+
+    void OnStartCommit(const TDuration d) const {
+        DurationToStartCommit->Collect(d.MilliSeconds());
+    }
+
+    void OnFinishCommit(const TDuration d) const {
+        DurationToFinishCommit->Collect(d.MilliSeconds());
+    }
 
     void OnRequest(const ui64 rowsCount) const {
         RequestsCount->Add(1);
@@ -741,6 +762,7 @@ private:
     }
 
     void WriteToColumnTable(const NActors::TActorContext& ctx) {
+        UploadCounters.OnWritingStarted(TAppData::TimeProvider->Now() - StartTime);
         TString accessCheckError;
         if (!CheckAccess(accessCheckError)) {
             return ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, LogPrefix() << accessCheckError, ctx);
@@ -765,6 +787,7 @@ private:
 
     void Handle(NLongTxService::TEvLongTxService::TEvBeginTxResult::TPtr& ev, const TActorContext& ctx) {
         const auto* msg = ev->Get();
+        UploadCounters.OnTxStarted(TAppData::TimeProvider->Now() - StartTime);
 
         if (msg->Record.GetStatus() != Ydb::StatusIds::SUCCESS) {
             NYql::TIssues issues;
@@ -894,6 +917,7 @@ private:
     }
 
     void CommitLongTx(const TActorContext& ctx) {
+        UploadCounters.OnStartCommit(TAppData::TimeProvider->Now() - StartTime);
         TActorId longTxServiceId = NLongTxService::MakeLongTxServiceID(ctx.SelfID.NodeId());
         ctx.Send(longTxServiceId, new NLongTxService::TEvLongTxService::TEvCommitTx(LongTxId), 0, 0, Span.GetTraceId());
         TBase::Become(&TThis::StateWaitCommitLongTx);
@@ -908,6 +932,7 @@ private:
     }
 
     void Handle(NLongTxService::TEvLongTxService::TEvCommitTxResult::TPtr& ev, const NActors::TActorContext& ctx) {
+        UploadCounters.OnFinishCommit(TAppData::TimeProvider->Now() - StartTime);
         const auto* msg = ev->Get();
 
         if (msg->Record.GetStatus() == Ydb::StatusIds::SUCCESS) {

@@ -57,6 +57,10 @@ public:
             Self->ProgressTxController->FinishPlannedTx(txId, txc);
             Self->Counters.GetTabletCounters()->IncCounter(COUNTER_PLANNED_TX_COMPLETED);
         }
+        Self->ProgressTxInFlight = false;
+        if (!!Self->ProgressTxController->GetPlannedTx()) {
+            Self->EnqueueProgressTx(ctx);
+        }
         return true;
     }
 
@@ -75,10 +79,6 @@ public:
         }
         if (LastCompletedTx) {
             Self->LastCompletedTx = std::max(*LastCompletedTx, Self->LastCompletedTx);
-        }
-        Self->ProgressTxInFlight = false;
-        if (!!Self->ProgressTxController->GetPlannedTx()) {
-            Self->EnqueueProgressTx(ctx);
         }
         Self->SetupIndexation();
     }

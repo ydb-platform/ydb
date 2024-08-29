@@ -76,7 +76,7 @@ namespace NKqp {
         void DropTable(const TString& tableName);
         void CreateTier(const TString& tierName);
         TString CreateTieringRule(const TString& tierName, const TString& columnName, const NYdb::EStatus expectedStatus = NYdb::EStatus::SUCCESS);
-        void SetTiering(const TString& tableName, const TString& ruleName);
+        void SetTiering(const TString& tableName, const TString& ruleName, const NYdb::EStatus expectedStatus = NYdb::EStatus::SUCCESS);
         void ResetTiering(const TString& tableName);
         void BulkUpsert(const TColumnTable& table, TTestHelper::TUpdatesBuilder& updates, const Ydb::StatusIds_StatusCode& opStatus = Ydb::StatusIds::SUCCESS);
         void BulkUpsert(const TColumnTable& table, std::shared_ptr<arrow::RecordBatch> batch, const Ydb::StatusIds_StatusCode& opStatus = Ydb::StatusIds::SUCCESS);

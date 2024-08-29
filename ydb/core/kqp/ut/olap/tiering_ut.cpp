@@ -181,10 +181,15 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
             UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
         }
 
-        testHelper.CreateTieringRule("tier1", "XXXwrongColumnXXX", NYdb::EStatus::GENERIC_ERROR);
-        testHelper.CreateTieringRule("tier1", "utfColumn", NYdb::EStatus::GENERIC_ERROR);
-        testHelper.CreateTieringRule("tier1", "nullableColumn", NYdb::EStatus::GENERIC_ERROR);
-        const TString tieringRule = testHelper.CreateTieringRule("tier1", "tempColumn");
+        const TString ruleWithUnknownColumn = testHelper.CreateTieringRule("tier1", "XXXwrongColumnXXX");
+        const TString ruleWithUtfColumn = testHelper.CreateTieringRule("tier1", "utfColumn");
+        const TString ruleWithNullableColumn = testHelper.CreateTieringRule("tier1", "nullableColumn");
+        const TString ruleWithTempColumn = testHelper.CreateTieringRule("tier1", "tempColumn");
+        
+        testHelper.SetTiering("olapStore/olapTable", ruleWithUnknownColumn, NYdb::EStatus::GENERIC_ERROR);
+        testHelper.SetTiering("olapStore/olapTable", ruleWithUtfColumn, NYdb::EStatus::GENERIC_ERROR);
+        testHelper.SetTiering("olapStore/olapTable", ruleWithNullableColumn, NYdb::EStatus::GENERIC_ERROR);
+        testHelper.SetTiering("olapStore/olapTable", ruleWithTempColumn, NYdb::EStatus::SUCCESS);
 
         {
             const TString query = "ALTER TABLE `olapStore/olapTable` DROP COLUMN tempColumn";

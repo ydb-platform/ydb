@@ -75,10 +75,10 @@ namespace NKqp {
         return ruleName;
     }
 
-    void TTestHelper::SetTiering(const TString& tableName, const TString& ruleName) {
+    void TTestHelper::SetTiering(const TString& tableName, const TString& ruleName, const EStatus expectedStatus) {
         auto alterQuery = TStringBuilder() << "ALTER TABLE `" << tableName <<  "` SET (TIERING = '" << ruleName << "')";
         auto result = Session.ExecuteSchemeQuery(alterQuery).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expectedStatus, result.GetIssues().ToString());
     }
 
     void TTestHelper::ResetTiering(const TString& tableName) {

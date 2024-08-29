@@ -49,3 +49,6 @@ SVC_NAME=$(cat .service)
 systemctl daemon-reload || fail "failed to reload systemd"
 systemctl enable $SVC_NAME
 systemctl start $SVC_NAME
+
+echo "GH_RUNNER_NAME=${RUNNER_NAME}"> /etc/default/unified_agent
+systemctl restart unified-agent.service

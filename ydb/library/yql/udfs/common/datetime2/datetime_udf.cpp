@@ -583,8 +583,8 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
         }
     };
 
-    template <const char* ResourceName, size_t ResourceSize, typename TUserDataType>
-    class TSplitBase : public TBoxedValue {
+    template <typename TUserDataType>
+    class TSplit : public TBoxedValue {
         const TSourcePosition Pos_;
 
     public:
@@ -641,8 +641,7 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
                 }
                 
                 if (!typesOnly) {
-                    builder.Implementation(
-                        new TSplitBase<ResourceName, ResourceSize, TUserDataType>(builder.GetSourcePosition()));
+                    builder.Implementation(new TSplit<TUserDataType>(builder.GetSourcePosition()));
                 }
             }
 
@@ -678,6 +677,21 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
     template <>
     void TSplitKernelExec<TTzTimestamp>::Split(TBlockItem arg, TTMStorage &storage, const IValueBuilder& builder) {
         storage.FromTimestamp(builder.GetDateBuilder(), arg.Get<ui64>(), arg.GetTimezoneId());
+    }
+
+    template <>
+    void TSplitKernelExec<TDate32>::Split(TBlockItem, TTMStorage&, const IValueBuilder&) {
+        ythrow yexception() << "Not implemented";
+    }
+
+    template <>
+    void TSplitKernelExec<TDatetime64>::Split(TBlockItem, TTMStorage&, const IValueBuilder&) {
+        ythrow yexception() << "Not implemented";
+    }
+
+    template <>
+    void TSplitKernelExec<TTimestamp64>::Split(TBlockItem, TTMStorage&, const IValueBuilder&) {
+        ythrow yexception() << "Not implemented";
     }
 
     template <>
@@ -897,12 +911,6 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
     }
     END_SIMPLE_ARROW_UDF(TMakeDate, TMakeDateKernelExec<TDate>::Do);
 
-    SIMPLE_STRICT_UDF(TMakeDate32, TDate32(TAutoMap<TResource<TM64ResourceName>>)) {
-        valueBuilder->GetDateBuilder(); // TODO
-        auto& storage = Reference64(args[0]);
-        return TUnboxedValuePod(storage.ToDate32());
-    }
-
     BEGIN_SIMPLE_STRICT_ARROW_UDF(TMakeDatetime, TDatetime(TAutoMap<TResource<TMResourceName>>)) {
         auto& builder = valueBuilder->GetDateBuilder();
         auto& storage = Reference(args[0]);
@@ -968,7 +976,6 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
         auto& storage = Reference64(args[0]);
         return TUnboxedValuePod(storage.ToTimestamp64(valueBuilder->GetDateBuilder()));
     }
-
 
     // Get*
 

@@ -2105,7 +2105,38 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
     });
 
     AddCallable("CombineByKeyWithSpilling", [](const TExprNode& node, TMkqlBuildContext& ctx) {
-        return CombineByKeyImpl(node, ctx);
+        NNodes::TCoCombineByKeyWithSpilling combine(&node);
+        const bool isStreamOrFlow = combine.Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Stream ||
+            combine.Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow;
+
+        YQL_ENSURE(!isStreamOrFlow);
+
+        const auto input = MkqlBuildExpr(combine.Input().Ref(), ctx);
+
+        TRuntimeNode preMapList = ctx.ProgramBuilder.FlatMap(input, [&](TRuntimeNode item) {
+            return MkqlBuildLambda(combine.PreMapLambda().Ref(), ctx, {item});
+        });
+
+        const auto dict = ctx.ProgramBuilder.ToHashedDict(preMapList, true, [&](TRuntimeNode item) {
+            return MkqlBuildLambda(combine.KeySelectorLambda().Ref(), ctx, {item});
+        }, [&](TRuntimeNode item) {
+            return item;
+        });
+
+        const auto values = ctx.ProgramBuilder.DictItems(dict);
+        return ctx.ProgramBuilder.FlatMap(values, [&](TRuntimeNode item) {
+            auto key = ctx.ProgramBuilder.Nth(item, 0);
+            auto payloadList = ctx.ProgramBuilder.Nth(item, 1);
+            auto fold1 = ctx.ProgramBuilder.Fold1(payloadList, [&](TRuntimeNode item2) {
+                return MkqlBuildLambda(combine.InitHandlerLambda().Ref(), ctx, {key, item2});
+            }, [&](TRuntimeNode item2, TRuntimeNode state) {
+                return MkqlBuildLambda(combine.UpdateHandlerLambda().Ref(), ctx, {key, item2, state});
+            });
+            auto res = ctx.ProgramBuilder.FlatMap(fold1, [&](TRuntimeNode state) {
+                return MkqlBuildLambda(combine.FinishHandlerLambda().Ref(), ctx, {key, state});
+            });
+            return res;
+        });
     });
 
     AddCallable("Enumerate", [](const TExprNode& node, TMkqlBuildContext& ctx) {

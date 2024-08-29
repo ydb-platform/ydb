@@ -549,17 +549,15 @@ IGraphTransformer::TStatus WideCombinerWithSpillingWrapper(const TExprNode::TPtr
     }
 
     auto serializeRetType = GetWideLambdaOutputType(*serializeHandler, ctx.Expr);
-    TTypeAnnotationNode::TListType actualRetType;
+
+    argTypes.erase(argTypes.cbegin() + keyTypes.size(), argTypes.cend());
     for (auto type : serializeRetType->GetItems()) {
         if (type->GetKind() == ETypeAnnotationKind::Optional) {
             type = type->Cast<TOptionalExprType>()->GetItemType();
         }
-        actualRetType.push_back(type);
+        argTypes.push_back(type);
     }
-    serializeRetType = ctx.Expr.MakeType<TMultiExprType>(actualRetType);
 
-    argTypes.erase(argTypes.cbegin() + keyTypes.size(), argTypes.cend());
-    argTypes.insert(argTypes.cbegin() + keyTypes.size(), serializeRetType->GetItems().begin(), serializeRetType->GetItems().end());
     if (const auto status = ConvertToLambda(deserializeHandler, ctx.Expr, argTypes.size()); status.Level != IGraphTransformer::TStatus::Ok) {
         return status;
     }

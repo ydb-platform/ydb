@@ -1025,6 +1025,8 @@ private:
             operatorId = Visit(maybeCondense.Cast(), planNode);
         } else if (auto maybeCombiner = TMaybeNode<TCoCombineCore>(node)) {
             operatorId = Visit(maybeCombiner.Cast(), planNode);
+        } else if (auto maybeCombinerWithSpilling = TMaybeNode<TCoCombineCoreWithSpilling>(node)) {
+            operatorId = Visit(maybeCombinerWithSpilling.Cast(), planNode);
         } else if (auto maybeSort = TMaybeNode<TCoSort>(node)) {
             operatorId = Visit(maybeSort.Cast(), planNode);
         } else if (auto maybeTop = TMaybeNode<TCoTop>(node)) {
@@ -1155,6 +1157,15 @@ private:
     }
 
     std::variant<ui32, TArgContext> Visit(const TCoCombineCore& combiner, TQueryPlanNode& planNode) {
+        TOperator op;
+        op.Properties["Name"] = "Aggregate";
+        op.Properties["GroupBy"] = NPlanUtils::PrettyExprStr(combiner.KeyExtractor());
+        op.Properties["Aggregation"] = NPlanUtils::PrettyExprStr(combiner.UpdateHandler());
+
+        return AddOperator(planNode, "Aggregate", std::move(op));
+    }
+
+    std::variant<ui32, TArgContext> Visit(const TCoCombineCoreWithSpilling& combiner, TQueryPlanNode& planNode) {
         TOperator op;
         op.Properties["Name"] = "Aggregate";
         op.Properties["GroupBy"] = NPlanUtils::PrettyExprStr(combiner.KeyExtractor());
@@ -2033,9 +2044,9 @@ NJson::TJsonValue ReconstructQueryPlanRec(const NJson::TJsonValue& plan,
 
         newPlans.AppendValue(ReconstructQueryPlanRec(
             plan.GetMapSafe().at("Plans").GetArraySafe()[0],
-            0, 
-            planIndex, 
-            precomputes, 
+            0,
+            planIndex,
+            precomputes,
             nodeCounter));
 
         newPlans.AppendValue(lookupPlan);

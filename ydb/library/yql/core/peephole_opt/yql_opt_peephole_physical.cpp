@@ -6042,10 +6042,11 @@ TExprNode::TPtr OptimizeWideCombinerWithSpilling(const TExprNode::TPtr& node, TE
 
         FlattenLambdaBody(children[3U], tupleExpandMap, originalStateSize, flattenSize, ctx);
         FlattenLambdaBody(children[4U], tupleExpandMap, originalStateSize, flattenSize, ctx);
+        FlattenLambdaBody(children[7U], tupleExpandMap, originalStateSize, flattenSize, ctx); // The same as init lambda
+
         FlattenLambdaArgs(children[4U], tupleExpandMap, originalStateSize, flattenSize, ctx, node->Child(3U)->Head().ChildrenSize());
         FlattenLambdaArgs(children[5U], tupleExpandMap, originalStateSize, flattenSize, ctx, node->Child(2U)->ChildrenSize() - 1U);
         FlattenLambdaArgs(children[6U], tupleExpandMap, originalStateSize, flattenSize, ctx, node->Child(2U)->ChildrenSize() - 1U);
-        FlattenLambdaArgs(children[7U], tupleExpandMap, originalStateSize, flattenSize, ctx, node->Child(2U)->ChildrenSize() - 1U);
 
         return ctx.ChangeChildren(*node, std::move(children));
     }

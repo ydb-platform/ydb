@@ -89,6 +89,24 @@ runs:
 
         python3 -m pip install ydb ydb[yc] codeowners
 
+        if [ ${{ inputs.testman_token }} ]; then
+          TESTMO_PROXY_ADDR=127.0.0.1:8888
+          openssl req -x509 -newkey rsa:2048 \
+            -keyout $TMP_DIR/key.pem -out $TMP_DIR/cert.pem \
+            -sha256 -days 1 -nodes -subj "/CN=127.0.0.1"
+          
+          TESTMO_TOKEN=${{ inputs.testman_token }} ./ydb/ci/testmo-proxy/testmo-proxy.py -l $TESTMO_PROXY_ADDR \
+            --cert-file "$TMP_DIR/cert.pem" \
+            --cert-key "$TMP_DIR/key.pem" \
+            --target-timeout 3,10 \
+            --max-request-time 55 \
+            "$TESTMO_URL" &
+            
+          TESTMO_PROXY_PID=$!
+          echo "TESTMO_PROXY_ADDR=$TESTMO_PROXY_ADDR" >> $GITHUB_ENV
+          echo "TESTMO_PROXY_PID=$TESTMO_PROXY_PID" >> $GITHUB_ENV
+        fi
+
     - name: ya build and test
       id: build
       shell: bash
@@ -260,7 +278,7 @@ runs:
             TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:resources:add-link --name build --url "$TESTMO_RUN_URL" --resources testmo.json
             TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:resources:add-field --name git-sha --type string --value "${GITHUB_SHA:0:7}" --resources testmo.json
             TESTMO_RUN_ID=$(
-              TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:run:create --instance "$TESTMO_URL" --project-id ${{ inputs.testman_project_id }} \
+              TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:run:create --instance "https://$TESTMO_PROXY_ADDR" --project-id ${{ inputs.testman_project_id }} \
                 --name "$TESTMO_RUN_NAME" --source "$TESTMO_SOURCE" --resources testmo.json \
                 --tags "$TESTMO_BRANCH_TAG" --tags "$TESTMO_EXTRA_TAG"
             )
@@ -373,29 +391,12 @@ runs:
             .github/scripts/tests/split-junit.py -o "$TESTMO_JUNIT_REPORT_PARTS" "$CURRENT_JUNIT_XML_PATH"
             # archive unitest reports (transformed)
             tar -C $TESTMO_JUNIT_REPORT_PARTS/.. -czf $PUBLIC_DIR/junit_parts.xml.tar.gz $(basename $TESTMO_JUNIT_REPORT_PARTS)
-
-            TESTMO_PROXY_ADDR=127.0.0.1:8888
-
-            openssl req -x509 -newkey rsa:2048 \
-              -keyout $TMP_DIR/key.pem -out $TMP_DIR/cert.pem \
-              -sha256 -days 1 -nodes -subj "/CN=127.0.0.1"
-            
-            TESTMO_TOKEN=${{ inputs.testman_token }} ./ydb/ci/testmo-proxy/testmo-proxy.py -l $TESTMO_PROXY_ADDR \
-              --cert-file "$TMP_DIR/cert.pem" \
-              --cert-key "$TMP_DIR/key.pem" \
-              --target-timeout 3,10 \
-              --max-request-time 55 \
-              "$TESTMO_URL" &
-            
-            testmo_proxy_pid=$!
             
             TESTMO_TOKEN=${{ inputs.testman_token }} NODE_TLS_REJECT_UNAUTHORIZED=0 testmo automation:run:submit-thread \
               --instance "https://$TESTMO_PROXY_ADDR" --run-id "$TESTMO_RUN_ID" \
               --results "$TESTMO_JUNIT_REPORT_PARTS/*.xml"
-            
-            kill $testmo_proxy_pid
 
-            TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:run:complete --instance "$TESTMO_URL" --run-id $TESTMO_RUN_ID
+            TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:run:complete --instance "$https://$TESTMO_PROXY_ADDR" --run-id $TESTMO_RUN_ID
             echo "runid=" >> $GITHUB_OUTPUT
           fi
 
@@ -435,8 +436,9 @@ runs:
       shell: bash
       run: |
         if [ ${{ steps.build.outputs.runid }} ]; then
-          TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:run:complete --instance "$TESTMO_URL" --run-id ${{ steps.build.outputs.runid }}
+          TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:run:complete --instance "https://$TESTMO_PROXY_ADDR" --run-id ${{ steps.build.outputs.runid }}
         fi
+        kill $TESTMO_PROXY_PID
     - name: analyze tests results
       shell: bash
       env:

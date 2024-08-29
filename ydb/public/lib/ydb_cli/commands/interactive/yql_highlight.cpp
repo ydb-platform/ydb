@@ -7,12 +7,15 @@ namespace NYdb {
     namespace NConsoleClient {
 
         YQLHighlight::ColorSchema YQLHighlight::ColorSchema::Default() {
+            using replxx::color::rgb666;
+
             return {
                 .keyword = Color::BLUE,
-                .operation = Color::YELLOW,
-                .identifier = Color::RED,
-                .string = Color::GREEN,
-                .number = Color::CYAN,
+                .operation = rgb666(3, 3, 3),
+                .simple_identifier = Color::DEFAULT,
+                .quoted_identifier = rgb666(1, 3, 3),
+                .string = rgb666(3, 0, 0),
+                .number = Color::BRIGHTGREEN,
                 .unknown = Color::DEFAULT,
             };
         }
@@ -349,9 +352,17 @@ namespace NYdb {
                 }
             }
 
-            bool IsIdentifier(const antlr4::Token* token) {
+            bool IsSimpleIdentifier(const antlr4::Token* token) {
                 switch (token->getType()) {
                     case YQLLexer::ID_PLAIN:
+                        return true;
+                    default:
+                        return false;
+                }
+            }
+
+            bool IsQuotedIdentifier(const antlr4::Token* token) {
+                switch (token->getType()) {
                     case YQLLexer::ID_QUOTED:
                         return true;
                     default:
@@ -385,8 +396,11 @@ namespace NYdb {
                 if (IsString(token)) {
                     return schema.string;
                 }
-                if (IsIdentifier(token)) {
-                    return schema.identifier;
+                if (IsSimpleIdentifier(token)) {
+                    return schema.simple_identifier;
+                }
+                if (IsQuotedIdentifier(token)) {
+                    return schema.quoted_identifier;
                 }
                 if (IsNumber(token)) {
                     return schema.number;

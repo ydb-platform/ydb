@@ -4415,7 +4415,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 PRIMARY KEY (Col1)
             )
             PARTITION BY HASH(Col1)
-            WITH (STORE = ROW, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 3);
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 3);
         )";
 
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();

@@ -237,7 +237,7 @@ public:
         return ResultProviderConfig_->CommittedResults;
     }
 
-    TMaybe<TString> GetQueryAst();
+    TMaybe<TString> GetQueryAst(TMaybe<size_t> memoryLimit = {});
     TMaybe<TString> GetQueryPlan(const TPlanSettings& settings = {});
 
     void SetDiagnosticFormat(NYson::EYsonFormat format) {

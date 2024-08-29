@@ -2716,7 +2716,7 @@ TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& exprContext, c
     ctx.RefAtoms = settings.RefAtoms;
     ctx.AllowFreeArgs = settings.AllowFreeArgs;
     ctx.NormalizeAtomFlags = settings.NormalizeAtomFlags;
-    ctx.Pool = std::make_unique<TMemoryPool>(4096);
+    ctx.Pool = std::make_unique<TMemoryPool>(4096, TMemoryPool::TExpGrow::Instance(), settings.Allocator);
     ctx.Frames.push_back(TFrameContext());
     ctx.CurrentFrame = &ctx.Frames.front();
     VisitNode(root, 0ULL, ctx);

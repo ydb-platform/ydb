@@ -46,7 +46,7 @@ public:
         auto* domain = domains->GetDomain();
         DomainPath = "/" + domain->Name;
 
-        Direct |= Event->Get()->Request.GetUri().StartsWith("/node/"); // we're already forwarding
+        Direct |= !TBase::Event->Get()->Request.GetHeader("X-Forwarded-From-Node").empty(); // we're already forwarding
         Direct |= (FilterDatabase == AppData()->TenantName); // we're already on the right node
         if (FilterDatabase && !Direct) {
             RequestStateStorageEndpointsLookup(FilterDatabase); // to find some dynamic node and redirect there
@@ -100,8 +100,12 @@ public:
             if (field->cpp_type() == google::protobuf::FieldDescriptor::CPPTYPE_BOOL) {
                 auto& feat = features[field->name()];
                 feat.SetName(field->name());
-                feat.SetEnabled(reflection->GetBool(featureFlags, field));
-                feat.SetIsDefault(field->default_value_bool());
+                if (reflection->HasField(featureFlags, field)) {
+                    feat.SetCurrent(reflection->GetBool(featureFlags, field));
+                }
+                if (field->has_default_value()) {
+                    feat.SetDefault(field->default_value_bool());
+                }
             }
         }
         return features;
@@ -121,7 +125,7 @@ public:
 
         // prepare response
         NKikimrViewer::TFeatureFlagsConfig Result;
-        Result.SetVersion(1);
+        Result.SetVersion(Viewer->GetCapabilityVersion("/viewer/feature_flags"));
         for (const auto& [database, features] : FeatureFlagsByDatabase) {
             auto databaseProto = Result.AddDatabases();
             databaseProto->SetName(database);

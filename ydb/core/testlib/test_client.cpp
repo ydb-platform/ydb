@@ -29,6 +29,7 @@
 #include <ydb/services/ydb/ydb_scripting.h>
 #include <ydb/services/ydb/ydb_table.h>
 #include <ydb/services/ydb/ydb_logstore.h>
+#include <ydb/services/tablet/ydb_tablet.h>
 #include <ydb/services/discovery/grpc_service.h>
 #include <ydb/services/rate_limiter/grpc_service.h>
 #include <ydb/services/persqueue_cluster_discovery/grpc_service.h>
@@ -429,6 +430,7 @@ namespace Tests {
         GRpcServer->AddService(new NGRpcService::TGRpcYmqService(system, counters, grpcRequestProxies[0], true));
         GRpcServer->AddService(new NGRpcService::TGRpcMonitoringService(system, counters, grpcRequestProxies[0], true));
         GRpcServer->AddService(new NGRpcService::TGRpcYdbQueryService(system, counters, grpcRequestProxies, true, 1));
+        GRpcServer->AddService(new NGRpcService::TGRpcYdbTabletService(system, counters, grpcRequestProxies, true, 1));
         if (Settings->EnableYq) {
             GRpcServer->AddService(new NGRpcService::TGRpcFederatedQueryService(system, counters, grpcRequestProxies[0]));
             GRpcServer->AddService(new NGRpcService::TGRpcFqPrivateTaskService(system, counters, grpcRequestProxies[0]));

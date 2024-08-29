@@ -152,6 +152,7 @@ RECURSE(
     base
     counters
     local_rpc
+    tablet
 )
 
 RECURSE_FOR_TESTS(

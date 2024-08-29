@@ -54,13 +54,13 @@ class TListOperationsRPC: public TRpcOperationRequestActor<TListOperationsRPC, T
 
         switch (ParseKind(GetProtoRequest()->kind())) {
         case TOperationId::SS_BG_TASKS:
-            return new NSchemeShard::NBackground::TEvListRequest(DatabaseName, request.page_size(), request.page_token());
+            return new NSchemeShard::NBackground::TEvListRequest(GetDatabaseName(), request.page_size(), request.page_token());
         case TOperationId::EXPORT:
-            return new TEvExport::TEvListExportsRequest(DatabaseName, request.page_size(), request.page_token(), request.kind());
+            return new TEvExport::TEvListExportsRequest(GetDatabaseName(), request.page_size(), request.page_token(), request.kind());
         case TOperationId::IMPORT:
-            return new TEvImport::TEvListImportsRequest(DatabaseName, request.page_size(), request.page_token(), request.kind());
+            return new TEvImport::TEvListImportsRequest(GetDatabaseName(), request.page_size(), request.page_token(), request.kind());
         case TOperationId::BUILD_INDEX:
-            return new TEvIndexBuilder::TEvListRequest(DatabaseName, request.page_size(), request.page_token());
+            return new TEvIndexBuilder::TEvListRequest(GetDatabaseName(), request.page_size(), request.page_token());
         default:
             Y_ABORT("unreachable");
         }
@@ -141,7 +141,7 @@ class TListOperationsRPC: public TRpcOperationRequestActor<TListOperationsRPC, T
     }
 
     void SendListScriptExecutions() {
-        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKqp::TEvListScriptExecutionOperations(DatabaseName, GetProtoRequest()->page_size(), GetProtoRequest()->page_token()));
+        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKqp::TEvListScriptExecutionOperations(GetDatabaseName(), GetProtoRequest()->page_size(), GetProtoRequest()->page_token()));
     }
 
     void Handle(NKqp::TEvListScriptExecutionOperationsResponse::TPtr& ev) {

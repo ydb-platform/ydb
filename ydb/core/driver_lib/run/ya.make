@@ -165,6 +165,7 @@ PEERDIR(
     ydb/services/persqueue_v1
     ydb/services/rate_limiter
     ydb/services/replication
+    ydb/services/tablet
     ydb/services/ydb
 )
 

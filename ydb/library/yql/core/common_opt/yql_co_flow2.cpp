@@ -25,7 +25,10 @@ bool AllowSubsetFieldsForNode(const TExprNode& node, const TOptimizeContext& opt
 bool AllowComplexFiltersOverAggregatePushdown(const TOptimizeContext& optCtx) {
     YQL_ENSURE(optCtx.Types);
     static const TString pushdown = to_lower(TString("PushdownComplexFiltersOverAggregate"));
-    return optCtx.Types->OptimizerFlags.contains(pushdown);
+    static const TString noPushdown = to_lower(TString("DisablePushdownComplexFiltersOverAggregate"));
+    return optCtx.Types->OptimizerFlags.contains(pushdown) &&
+           !optCtx.Types->OptimizerFlags.contains(noPushdown) &&
+           optCtx.Types->MaxAggPushdownPredicates > 0;
 }
 
 TExprNode::TPtr AggregateSubsetFieldsAnalyzer(const TCoAggregate& node, TExprContext& ctx, const TParentsMap& parentsMap) {
@@ -1370,7 +1373,7 @@ TExprBase FilterOverAggregate(const TCoFlatMapBase& node, TExprContext& ctx, TOp
             ui64 inputs = 0;
 
             auto calculator = BuildProgram(p, marked, calcCache, keyPredicates, inputs);
-            if (!calculator || keyPredicates.empty() || keyPredicates.size() > 6) {
+            if (!calculator || keyPredicates.empty() || keyPredicates.size() > optCtx.Types->MaxAggPushdownPredicates) {
                 continue;
             }
 

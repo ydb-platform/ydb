@@ -2846,6 +2846,7 @@ struct TConvertToAstSettings {
     bool PrintArguments = false;
     bool AllowFreeArgs = false;
     bool NormalizeAtomFlags = false;
+    IAllocator* Allocator = TDefaultAllocator::Instance();
 };
 
 TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& ctx, const TConvertToAstSettings& settings);

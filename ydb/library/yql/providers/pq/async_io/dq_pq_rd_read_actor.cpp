@@ -433,7 +433,7 @@ void TDqPqRdReadActor::PassAway() { // Is called from Compute Actor
 }
 
 i64 TDqPqRdReadActor::GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& buffer, TMaybe<TInstant>& /*watermark*/, bool&, i64 freeSpace) {
-    SRC_LOG_D("GetAsyncInputData freeSpace = " << freeSpace);
+    SRC_LOG_T("GetAsyncInputData freeSpace = " << freeSpace);
 
     ProcessState();
     if (ReadyBuffer.empty() || !freeSpace) {
@@ -540,7 +540,7 @@ void TDqPqRdReadActor::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::T
 }
 
 void TDqPqRdReadActor::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvPing::TPtr& ev) {
-    SRC_LOG_D("TEvRetryQueuePrivate::TEvPing");
+    SRC_LOG_T("TEvRetryQueuePrivate::TEvPing");
     ui64 partitionId = ev->Get()->EventQueueId;
 
     auto sessionIt = Sessions.find(partitionId);
@@ -552,7 +552,7 @@ void TDqPqRdReadActor::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvPing::TP
 }
 
 void TDqPqRdReadActor::Handle(const NActors::TEvents::TEvPing::TPtr& ev) {
-    SRC_LOG_D("NActors::TEvents::TEvPing");
+    SRC_LOG_T("NActors::TEvents::TEvPing");
     Send(ev->Sender, new NActors::TEvents::TEvPong());
 }
 
@@ -691,7 +691,7 @@ void TDqPqRdReadActor::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvSessionC
 }
 
 void TDqPqRdReadActor::Handle(NActors::TEvents::TEvPong::TPtr &ev) {
-    SRC_LOG_D("TEvPong from " << ev->Sender);
+    SRC_LOG_T("TEvPong from " << ev->Sender);
 }
 
 std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(

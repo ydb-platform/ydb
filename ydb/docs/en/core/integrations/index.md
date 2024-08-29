@@ -16,7 +16,7 @@ In addition to its own native protocol, {{ ydb-name }} has a compatibility layer
 | Embedded UI | [Instruction](../reference/embedded-ui/index.md) | |
 | [DBeaver](https://dbeaver.com)  |  [Instruction](ide/dbeaver.md) | By [JDBC-driver](https://github.com/ydb-platform/ydb-jdbc-driver/releases)|
 | JetBrains Database viewer |  —  | By [JDBC-driver](https://github.com/ydb-platform/ydb-jdbc-driver/releases)|
-| [JetBrains DataGrip](https://www.jetbrains.com/datagrip/) |  — | By [JDBC-driver](https://github.com/ydb-platform/ydb-jdbc-driver/releases)|
+| [JetBrains DataGrip](https://www.jetbrains.com/datagrip/) |  [Instruction](ide/datagrip.md) | By [JDBC-driver](https://github.com/ydb-platform/ydb-jdbc-driver/releases)|
 | Other JDBC-compatible IDEs | — | By [JDBC-driver](https://github.com/ydb-platform/ydb-jdbc-driver/releases)|
 
 

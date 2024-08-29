@@ -2,7 +2,7 @@
 
 [DataGrip](https://www.jetbrains.com/datagrip/) is a powerful cross-platform tool for relational and NoSQL databases.
 
-DataGrip allows you to work with {{ ydb-short-name }} using the Java DataBase Connectivity ([JDBC](https://en.wikipedia.org/wiki/Java_Database_Connectivity)) protocol. This article demonstrates how to set up this integration.
+DataGrip allows you to work with {{ ydb-short-name }} using the Java Database Connectivity ([JDBC](https://en.wikipedia.org/wiki/Java_Database_Connectivity)) protocol. This article demonstrates how to set up this integration.
 
 
 ### Adding the {{ ydb-short-name }} JDBC Driver to DataGrip {#datagrip_ydb}

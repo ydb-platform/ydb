@@ -1,7 +1,7 @@
-#include "ut_common.h"
+#include <ydb/core/statistics/ut_common/ut_common.h>
 
 #include <ydb/core/statistics/events.h>
-#include <ydb/core/statistics/save_load_stats.h>
+#include <ydb/core/statistics/database/database.h>
 
 #include <thread>
 

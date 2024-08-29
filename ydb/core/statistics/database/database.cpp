@@ -1,6 +1,6 @@
-#include "save_load_stats.h"
+#include "database.h"
 
-#include "events.h"
+#include <ydb/core/statistics/events.h>
 
 #include <ydb/library/table_creator/table_creator.h>
 #include <ydb/library/query_actor/query_actor.h>
@@ -74,7 +74,6 @@ private:
     const ui64 StatType;
     const std::vector<ui32> ColumnTags;
     const std::vector<TString> Data;
-
 public:
     TSaveStatisticsQuery(const TPathId& pathId, ui64 statType,
         std::vector<ui32>&& columnTags, std::vector<TString>&& data)

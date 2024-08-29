@@ -59,11 +59,12 @@ class Runner:
 
 
 class RunParams:
-    def __init__(self, is_spilling, variant, datasize, tasks):
+    def __init__(self, is_spilling, variant, datasize, tasks, query):
         self.is_spilling = is_spilling
         self.variant = variant
         self.datasize = datasize
         self.tasks = tasks
+        self.query = query
 
     def __repr__(self):
         result = []
@@ -73,8 +74,7 @@ class RunParams:
 
 
 class RunQueryData:
-    def __init__(self, json, perf_files_map):
-        self.query = json["q"]
+    def from_json(self, json):
         self.exitcode = json["exitcode"]
         io_info = json["io"]
         self.read_bytes = io_info["read_bytes"]
@@ -83,8 +83,6 @@ class RunQueryData:
         self.user_time = resourse_usage["utime"]
         self.system_time = resourse_usage["stime"]
         self.rss = resourse_usage["maxrss"]
-
-        self.perf_file = perf_files_map.get(self.query)
 
     def __repr__(self):
         result = []
@@ -98,32 +96,50 @@ def upload_results(result_path, s3_folder, ydb):
     for entry in result_path.glob("*/*"):
         if not entry.is_dir():
             continue
+        this_result = {}
         suffix = entry.relative_to(result_path)
         # {no|with}-spilling/<variant>-<datasize>-<tasks>
         is_spilling = suffix.parts[0].split("-")[0] == "with"
         variant, datasize, tasks = suffix.parts[1].split("-")
-        params = RunParams(is_spilling, variant, int(datasize), int(tasks))
 
-        perf_files_map = {}
+        print(list(entry.iterdir()), file=sys.stderr)
+
         for file in entry.iterdir():
             if not file.is_file():
                 continue
+            name = file.name
+            print(file, name, file=sys.stderr)
+            if len(file.suffixes) > 0:
+                name = name.rsplit(file.suffixes[0])[0]
+            if name[0] == "q":
+                query_num = int(name[1:].split("-")[0])
+                if query_num not in this_result:
+                    this_result[query_num] = RunQueryData()
+
             if file.suffix == ".svg":
-                query = file.stem
                 dst = file.relative_to(result_path)
-                perf_files_map[query] = dst
+                this_result[query_num].perf_file_path = dst
                 # copying files to folder that will be synced with s3
                 dst = (s3_folder / dst).resolve()
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 res = shutil.copy2(str(file.resolve()), str(dst))
                 print(res, file=sys.stderr)
+            # q<num>-stdout.txt
+            if file.stem == f"q{query_num}-stdout":
+                with open(file, "r") as stdout:
+                    this_result[query_num].output_hash = hash(stdout.read().strip())
 
         summary_file = entry / "summary.json"
-        this_result = []
+
         with open(summary_file, "r") as res_file:
             for line in res_file.readlines()[1:]:
-                this_result.append(RunQueryData(json.loads(line), perf_files_map))
-        results_map[params] = this_result
+                info = json.loads(line)
+                query_num = int(info["q"][1:])
+                this_result[query_num].from_json(info)
+
+        for key, value in this_result.items():
+            params = RunParams(is_spilling, variant, datasize, tasks, key)
+            results_map[params] = value
 
     print(results_map, file=sys.stderr)
     # store those to ydb
@@ -140,8 +156,6 @@ def test_tpc():
 
     if is_ci:
         s3_folder = pathlib.Path(os.environ["PUBLIC_DIR"]).resolve()
-        tmp = s3_folder / "CREATE_ME"
-        tmp.mkdir()
         print(f"s3 folder: {s3_folder}", file=sys.stderr)
 
         upload_results(result_path, s3_folder, "")

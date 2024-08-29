@@ -474,6 +474,9 @@ void TNodeInfo::UpdateResourceTotalUsage(const NKikimrHive::TEvTabletMetrics& me
         AveragedNodeTotalUsage.Push(metrics.GetTotalNodeUsage());
         NodeTotalUsage = AveragedNodeTotalUsage.GetValue();
     }
+    if (metrics.HasTotalNodeCpuUsage()) {
+        AveragedNodeTotalCpuUsage.Push(metrics.GetTotalNodeCpuUsage());
+    }
 }
 
 TResourceRawValues TNodeInfo::GetResourceCurrentValues() const {

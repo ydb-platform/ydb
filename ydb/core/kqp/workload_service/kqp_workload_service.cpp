@@ -381,7 +381,7 @@ private:
 
         if (auto poolState = GetPoolState(database, poolId)) {
             if (poolState->NewPoolHandler) {
-                Send(*poolState->NewPoolHandler, new TEvPrivate::TEvStopPoolHandler());
+                Send(*poolState->NewPoolHandler, new TEvPrivate::TEvStopPoolHandler(false));
             }
             poolState->NewPoolHandler = ev->Get()->NewHandler;
             poolState->UpdateHandler();
@@ -443,7 +443,7 @@ private:
         for (const auto& [poolKey, poolState] : PoolIdToState) {
             if (!poolState.InFlightRequests && TInstant::Now() - poolState.LastUpdateTime > IDLE_DURATION) {
                 CpuQuotaManager->CleanupHandler(poolState.PoolHandler);
-                Send(poolState.PoolHandler, new TEvPrivate::TEvStopPoolHandler());
+                Send(poolState.PoolHandler, new TEvPrivate::TEvStopPoolHandler(true));
                 poolsToDelete.emplace_back(poolKey);
             }
         }

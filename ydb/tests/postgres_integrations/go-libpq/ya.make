@@ -3,16 +3,12 @@ PY3TEST()
 FORK_TEST_FILES()
 TIMEOUT(600)
 
-INCLUDE(${ARCADIA_ROOT}/library/recipes/docker_compose/recipe.inc)
 
-IF (AUTOCHECK)
-    # copy from https://docs.yandex-team.ru/devtools/test/environment#docker-compose
-    REQUIREMENTS(
-        container:4467981730 # container with docker
-        cpu:all dns:dns64
-    )
-
-ENDIF()
+# copy from https://docs.yandex-team.ru/devtools/test/environment#docker-compose
+REQUIREMENTS(
+    container:4467981730 # container with docker
+    cpu:all dns:dns64
+)
 
 IF(OPENSOURCE)
     SIZE(MEDIUM) # for run per PR

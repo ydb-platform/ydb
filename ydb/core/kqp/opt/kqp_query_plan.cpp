@@ -980,7 +980,8 @@ private:
 
         if (auto maybeRead = TMaybeNode<TKqlReadTableBase>(node)) {
             operatorId = Visit(maybeRead.Cast(), planNode);
-        } else if (auto maybeReadRanges = TMaybeNode<TKqlReadTableRangesBase>(node)) {
+        } else if (TMaybeNode<TKqlReadTableRangesBase>(node) && !TMaybe<TKqpReadOlapTableRangesBase>(node)) {
+            auto maybeReadRanges = TMaybeNode<TKqlReadTableRangesBase>(node);
             operatorId = Visit(maybeReadRanges.Cast(), planNode);
         } else if (auto maybeLookup = TMaybeNode<TKqlLookupTableBase>(node)) {
             operatorId = Visit(maybeLookup.Cast(), planNode);
@@ -1076,6 +1077,27 @@ private:
 
                 auto mapLambdaInputs = Visit(map.Lambda().Body().Ptr(), planNode);
                 inputIds.insert(inputIds.end(), mapLambdaInputs.begin(), mapLambdaInputs.end());
+            } else if (TMaybeNode<TKqpReadOlapTableRangesBase>(node)) {
+                auto olapTable = TExprBase(node).Cast<TKqpReadOlapTableRangesBase>();
+
+                auto pred = [](const TExprNode::TPtr& n) -> bool { 
+                    if (auto maybeFilter = TMaybeNode<TKqpOlapFilter>(n)) { return true; } return false; 
+                };
+                if (auto maybeOlapFilter = FindNode(olapTable.Process().Body().Ptr(), pred)) {
+                    auto olapFilter = TExprBase(maybeOlapFilter).Cast<TKqpOlapFilter>();
+
+                    TOperator op;
+                    op.Properties["Name"] = "Filter";
+                    
+                    op.Properties["Predicate"] = OlapStr(olapFilter.Condition().Ptr());
+
+                    AddOptimizerEstimates(op, olapFilter);
+
+                    operatorId = AddOperator(planNode, "Filter", std::move(op));
+                    inputIds.push_back(Visit(olapTable, planNode));
+                } else {
+                    operatorId = Visit(olapTable, planNode);
+                }
             } else {
                 for (const auto& child : node->Children()) {
                     if(!child->IsLambda()) {
@@ -1098,6 +1120,49 @@ private:
         }
 
         return inputIds;
+    }
+
+    TString OlapStr(const TExprNode::TPtr& node) {
+        TVector<TString> s;
+
+        if (TMaybeNode<TKqpOlapNot>(node)) {
+            s.emplace_back("Not");
+        } else if (auto maybeList = TMaybeNode<TCoAtomList>(node)) {
+            auto listPtr = maybeList.Cast().Ptr();
+            size_t listSize = listPtr->Children().size();
+            if (listSize == 3) {
+                THashMap<TString, TString> strComp = {
+                    {"eq", "=="}, 
+                    {"neq", "!="},
+                    {"lt", "<"},
+                    {"lte", "<="},
+                    {"gt", ">"},
+                    {"gte", ">="}
+                };
+                TString compSign = TString(listPtr->Child(0)->Content());
+                if (strComp.contains(compSign)) {
+                    TString attr = TString(listPtr->Child(1)->Content());
+                    TString value = TString(listPtr->Child(2)->Child(0)->Content());
+                    
+                    return Sprintf("%s %s %s", attr.c_str(), strComp[compSign].c_str(), value.c_str());
+                }
+            }
+        }
+
+        for (const auto& child: node->Children()) {
+            auto childStr = OlapStr(child);
+            if (!childStr.empty()) {
+                s.push_back(std::move(childStr));
+            }
+        }
+
+        TString delim = " ";
+        if (TMaybeNode<TKqpOlapAnd>(node)) {
+            delim = " And ";
+        } else if (TMaybeNode<TKqpOlapOr>(node)) {
+            delim = " Or ";
+        } 
+        return JoinStrings(s, delim);
     }
 
     TVector<std::variant<ui32, TArgContext>> Visit(const TCoMap& map, TQueryPlanNode& planNode) {
@@ -2118,6 +2183,11 @@ NJson::TJsonValue ReconstructQueryPlanRec(const NJson::TJsonValue& plan,
 
     auto opName = op.GetMapSafe().at("Name").GetStringSafe();
 
+    if (opName == "CrossJoin") {
+        int kek = 2;
+        (void)kek;
+    }
+
     THashSet<ui32> processedExternalOperators;
     THashSet<ui32> processedInternalOperators;
     for (auto opInput : op.GetMapSafe().at("Inputs").GetArraySafe()) {
@@ -2389,6 +2459,7 @@ void PhyQuerySetTxPlans(NKqpProto::TKqpPhyQuery& queryProto, const TKqpPhysicalQ
     const TIntrusivePtr<NYql::TKikimrTablesData> tablesData, TKikimrConfiguration::TPtr config,
     TTypeAnnotationContext& typeCtx, TIntrusivePtr<NOpt::TKqpOptimizeContext> optCtx)
 {
+    Cerr << "BAD IDEA" << Endl;
     TSerializerCtx serializerCtx(ctx, cluster, tablesData, config, query.Transactions().Size(), std::move(pureTxResults), typeCtx, optCtx);
 
     /* bindingName -> stage */

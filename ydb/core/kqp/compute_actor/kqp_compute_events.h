@@ -11,6 +11,11 @@
 
 namespace NKikimr::NKqp {
 
+struct TLocksInfo {
+    TVector<NKikimrDataEvents::TLock> Locks;
+    TVector<NKikimrDataEvents::TLock> BrokenLocks;
+};
+
 struct TEvKqpCompute {
     struct TEvRemoteScanData : public TEventPB<TEvRemoteScanData, NKikimrKqp::TEvRemoteScanData,
         TKqpComputeEvents::EvRemoteScanData> {};
@@ -54,6 +59,7 @@ struct TEvKqpCompute {
         bool PageFault = false; // page fault was the reason for sending this message
         mutable THolder<TEvRemoteScanData> Remote;
         std::shared_ptr<IShardScanStats> StatsOnFinished;
+        TLocksInfo LocksInfo;
 
         template <class T>
         const T& GetStatsAs() const {

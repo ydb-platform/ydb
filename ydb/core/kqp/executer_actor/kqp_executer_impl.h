@@ -411,11 +411,11 @@ protected:
         YQL_ENSURE(Planner);
         bool ack = Planner->AcknowledgeCA(taskId, computeActor, &state);
 
-        // Don't finalize stats twice.
-        if (Planner->CompletedCA(taskId, computeActor)) {
-            switch (state.GetState()) {
-                case NYql::NDqProto::COMPUTE_STATE_FAILURE:
-                case NYql::NDqProto::COMPUTE_STATE_FINISHED: {
+        switch (state.GetState()) {
+            case NYql::NDqProto::COMPUTE_STATE_FAILURE:
+            case NYql::NDqProto::COMPUTE_STATE_FINISHED:
+                // Don't finalize stats twice.
+                if (Planner->CompletedCA(taskId, computeActor)) {
                     ExtraData[computeActor].Swap(state.MutableExtraData());
 
                     if (Stats) {
@@ -429,9 +429,8 @@ protected:
                     LastTaskId = taskId;
                     LastComputeActorId = computeActor.ToString();
                 }
-                default:
-                    ; // ignore all other states.
-            }
+            default:
+                ; // ignore all other states.
         }
 
         return ack;

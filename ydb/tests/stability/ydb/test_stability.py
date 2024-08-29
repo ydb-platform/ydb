@@ -131,6 +131,10 @@ class TestSetupForStability(object):
                 'screen -d -m bash -c "while true; do /Berkanavt/nemesis/bin/olap_workload --database /Root/db1 ; done"',
                 raise_on_error=True
             )
+            node.ssh_command(
+                'screen -d -m bash -c "while true; do /Berkanavt/nemesis/bin/olap_workload_tiering --duration 4800 --database /Root/db1 __S3_params__ ; done"',
+                raise_on_error=True
+            )
         sleep_time_min = 90
 
         logger.info('Sleeping for {} minute(s)'.format(sleep_time_min))

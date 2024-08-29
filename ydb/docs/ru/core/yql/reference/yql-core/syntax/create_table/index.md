@@ -141,12 +141,12 @@ WITH (
 
 **Пример**:
 ```sql
-  CREATE TABLE <table_name> (
-    a Uint64,
-    b Uint64,
-    c Float,
-    PRIMARY KEY (a, b)
-  );
+CREATE TABLE <table_name> (
+  a Uint64,
+  b Uint64,
+  c Float,
+  PRIMARY KEY (a, b)
+);
 ```
 {% endif %}
 

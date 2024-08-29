@@ -61,6 +61,21 @@ def wait_actor_count(kikimr, activity, expected_count):
         time.sleep(1)
     pass
 
+def wait_row_dispatcher_sensor_value(kikimr, sensor, expected_count, exact_match = True):
+    deadline = time.time() + 60
+    while True:
+        count = 0
+        for node_index in kikimr.compute_plane.kikimr_cluster.nodes:
+            value = kikimr.compute_plane.get_sensors(node_index, "yq").find_sensor(
+               {"subsystem": "row_dispatcher", "sensor": sensor})
+            count += value if value is not None else 0 
+        if count == expected_count:
+            break
+        if not exact_match and count > expected_count:
+            break
+        assert time.time() < deadline, f"Waiting sensor {sensor} value failed, current count {count}"
+        time.sleep(1)
+    pass
 
 class TestPqRowDispatcher(TestYdsBase):
 
@@ -277,7 +292,6 @@ class TestPqRowDispatcher(TestYdsBase):
 
         issues = str(client.describe_query(query_id).result.query.transient_issue)
         assert "Row dispatcher will use the predicate: WHERE event_class =" in issues, "Incorrect Issues: " + issues
-
 
     @yq_v1
     def test_start_new_query(self, kikimr, client):
@@ -580,3 +594,32 @@ class TestPqRowDispatcher(TestYdsBase):
 
         stop_yds_query(client, query_id)
         wait_actor_count(kikimr, "YQ_ROW_DISPATCHER_SESSION", 0)
+
+    @yq_v1
+    def test_sensors(self, kikimr, client):
+        client.create_yds_connection(
+            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), use_row_dispatcher=True
+        )
+        self.init_topics("test_sensors")
+
+        sql = Rf'''
+            INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
+            SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
+                WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL));'''
+
+        query_id = start_yds_query(kikimr, client, sql)
+        
+        self.write_stream(['{"time": 101}'])
+        assert self.read_stream(1, topic_path=self.output_topic) == ['101']
+
+        wait_actor_count(kikimr, "DQ_PQ_READ_ACTOR", 1)
+        wait_actor_count(kikimr, "YQ_ROW_DISPATCHER_SESSION", 1)
+        wait_row_dispatcher_sensor_value(kikimr, "ClientsCount", 1)
+        wait_row_dispatcher_sensor_value(kikimr, "RowsSent", 1, exact_match=False)
+        wait_row_dispatcher_sensor_value(kikimr, "IncomingRequests", 1, exact_match=False)
+
+        stop_yds_query(client, query_id)
+
+        wait_actor_count(kikimr, "DQ_PQ_READ_ACTOR", 0)
+        wait_actor_count(kikimr, "YQ_ROW_DISPATCHER_SESSION", 0)
+        wait_row_dispatcher_sensor_value(kikimr, "ClientsCount", 0)

@@ -20,6 +20,7 @@ std::unique_ptr<NActors::IActor> NewRowDispatcherService(
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const TYqSharedResources::TPtr& yqSharedResources,
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
-    const TString& tenant);
+    const TString& tenant,
+    const ::NMonitoring::TDynamicCounterPtr& counters);
 
 } // namespace NFq

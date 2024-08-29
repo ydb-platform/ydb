@@ -50,7 +50,7 @@ struct TFixture : public TPqIoTestFixture {
                 actor.SelfId(),         // computeActorId
                 LocalRowDispatcherId,
                 actor.GetHolderFactory(),
-                //MakeIntrusive<NMonitoring::TDynamicCounters>(), // TODO
+                MakeIntrusive<NMonitoring::TDynamicCounters>(),
                 freeSpace);
 
             actor.InitAsyncInput(dqSource, dqSourceAsActor);
@@ -226,10 +226,9 @@ struct TFixture : public TPqIoTestFixture {
     NActors::TActorId RowDispatcher2;
 };
 
-Y_UNIT_TEST_SUITE(TDqPqRdReadActorTest) {
-    Y_UNIT_TEST_F(TestReadFromTopic2, TFixture) {
+Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
+    Y_UNIT_TEST_F(TestReadFromTopic, TFixture) {
         StartSession();
-
         ProcessSomeJsons(0, {Json1, Json2}, RowDispatcher1);
     }
 

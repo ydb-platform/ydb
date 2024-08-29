@@ -171,7 +171,14 @@ void Init(
     }
 
     if (protoConfig.GetRowDispatcher().GetEnabled()) {
-        auto rowDispatcher = NFq::NewRowDispatcherService(protoConfig.GetRowDispatcher(), protoConfig.GetCommon(), NKikimr::CreateYdbCredentialsProviderFactory, yqSharedResources, credentialsFactory, tenant);
+        auto rowDispatcher = NFq::NewRowDispatcherService(
+            protoConfig.GetRowDispatcher(),
+            protoConfig.GetCommon(),
+            NKikimr::CreateYdbCredentialsProviderFactory,
+            yqSharedResources,
+            credentialsFactory,
+            tenant,
+            yqCounters->GetSubgroup("subsystem", "row_dispatcher"));
         actorRegistrator(NFq::RowDispatcherServiceActorId(), rowDispatcher.release());
     }
 
@@ -220,7 +227,7 @@ void Init(
 
         RegisterDqInputTransformLookupActorFactory(*asyncIoFactory);
         RegisterDqPqReadActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory, yqCounters->GetSubgroup("subsystem", "DqSourceTracker"));
-        RegisterDqPqRdReadActorFactory(*asyncIoFactory, credentialsFactory);
+        RegisterDqPqRdReadActorFactory(*asyncIoFactory, credentialsFactory, yqCounters->GetSubgroup("subsystem", "DqSourceTracker"));
         RegisterYdbReadActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory);
 
         s3ActorsFactory->RegisterS3ReadActorFactory(*asyncIoFactory, credentialsFactory, httpGateway, s3HttpRetryPolicy, readActorFactoryCfg,

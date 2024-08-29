@@ -34,8 +34,12 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
     const NActors::TActorId& computeActorId,
     const NActors::TActorId& localRowDispatcherActorId,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+    const ::NMonitoring::TDynamicCounterPtr& counters,
     i64 bufferSize = PQRdReadDefaultFreeSpace);
 
-void RegisterDqPqRdReadActorFactory(TDqAsyncIoFactory& factory, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory);
+void RegisterDqPqRdReadActorFactory(
+    TDqAsyncIoFactory& factory,
+    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+    const ::NMonitoring::TDynamicCounterPtr& counters);
 
 } // namespace NYql::NDq

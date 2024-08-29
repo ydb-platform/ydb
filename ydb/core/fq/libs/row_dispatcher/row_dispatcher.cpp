@@ -26,6 +26,20 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TRowDispatcherMetrics {
+    TRowDispatcherMetrics(const ::NMonitoring::TDynamicCounterPtr& counters)
+        : Counters(counters) {
+        ErrorsCount = Counters->GetCounter("ErrorsCount");
+        ClientsCount = Counters->GetCounter("ClientsCount");
+        RowsSent = Counters->GetCounter("RowsSent");
+    }
+
+    ::NMonitoring::TDynamicCounterPtr Counters;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ErrorsCount;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ClientsCount;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RowsSent;
+};
+
 class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
     NConfig::TRowDispatcherConfig Config;
     NConfig::TCommonConfig CommonConfig;
@@ -38,6 +52,8 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
     ui64 NextEventQueueId = 0;
     TString Tenant;
     NFq::NRowDispatcher::IActorFactory::TPtr ActorFactory;
+    const ::NMonitoring::TDynamicCounterPtr Counters;
+    TRowDispatcherMetrics Metrics;
 
     using ConsumerSessionKey = std::pair<TActorId, ui32>;                   // ReadActorId / PartitionId
     using TopicSessionKey = std::tuple<TString, TString, TString, ui32>;    // Endpoint / Database / TopicPath / PartitionId
@@ -95,7 +111,8 @@ public:
         const TYqSharedResources::TPtr& yqSharedResources,
         NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
         const TString& tenant,
-        const NFq::NRowDispatcher::IActorFactory::TPtr& actorFactory);
+        const NFq::NRowDispatcher::IActorFactory::TPtr& actorFactory,
+        const ::NMonitoring::TDynamicCounterPtr& counters);
 
     void Bootstrap();
 
@@ -153,7 +170,8 @@ TRowDispatcher::TRowDispatcher(
     const TYqSharedResources::TPtr& yqSharedResources,
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const TString& tenant,
-    const NFq::NRowDispatcher::IActorFactory::TPtr& actorFactory)
+    const NFq::NRowDispatcher::IActorFactory::TPtr& actorFactory,
+    const ::NMonitoring::TDynamicCounterPtr& counters)
     : Config(config)
     , CommonConfig(commonConfig)
     , CredentialsProviderFactory(credentialsProviderFactory)
@@ -161,7 +179,9 @@ TRowDispatcher::TRowDispatcher(
     , CredentialsFactory(credentialsFactory)
     , LogPrefix("RowDispatcher: ")
     , Tenant(tenant)
-    , ActorFactory(actorFactory) {
+    , ActorFactory(actorFactory)
+    , Counters(counters)
+    , Metrics(counters) {
 }
 
 void TRowDispatcher::Bootstrap() {
@@ -170,7 +190,7 @@ void TRowDispatcher::Bootstrap() {
 
     if (Config.GetCoordinator().GetEnabled()) {
         const auto& config = Config.GetCoordinator();
-        auto coordinatorId = Register(NewCoordinator(SelfId(), config, YqSharedResources, Tenant).release());
+        auto coordinatorId = Register(NewCoordinator(SelfId(), config, YqSharedResources, Tenant, Counters).release());
         Register(NewLeaderElection(SelfId(), coordinatorId, config, CredentialsProviderFactory, YqSharedResources, Tenant).release());
     }
 }
@@ -179,9 +199,6 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& 
     LOG_ROW_DISPATCHER_DEBUG("Coordinator changed, new leader " << ev->Get()->CoordinatorActorId);
 
     CoordinatorActorId = ev->Get()->CoordinatorActorId;
-    if (!CoordinatorActorId) {
-// TODO
-    }
     Send(*CoordinatorActorId, new NActors::TEvents::TEvPing(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
     for (auto actorId : CoordinatorChangedSubscribers) {
         Send(
@@ -225,7 +242,7 @@ void TRowDispatcher::Handle(NActors::TEvents::TEvWakeup::TPtr&) {
 }
 
 void TRowDispatcher::Handle(NActors::TEvents::TEvPong::TPtr &) {
-    LOG_ROW_DISPATCHER_DEBUG("NActors::TEvents::TEvPong ");
+    LOG_ROW_DISPATCHER_TRACE("NActors::TEvents::TEvPong ");
 }
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscribe::TPtr &ev) {
@@ -317,6 +334,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr &ev) {
     consumerInfo->EventsQueue.Send(new NFq::TEvRowDispatcher::TEvStartSessionAck(consumerInfo->Proto));
 
     Forward(ev, sessionActorId);
+    Metrics.ClientsCount->Set(Consumers.size());
     PrintInternalState("After AddConsumer:");
 }
 
@@ -399,6 +417,7 @@ void TRowDispatcher::DeleteConsumer(const ConsumerSessionKey& key) {
     }
     ConsumersByEventQueueId.erase(consumerIt->second->EventQueueId);
     Consumers.erase(consumerIt);
+    Metrics.ClientsCount->Set(Consumers.size());
     PrintInternalState("After DeleteConsumer");
 }
 
@@ -453,6 +472,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr &ev) {
         LOG_ROW_DISPATCHER_WARN("Ignore MessageBatch, no such session");
         return;
     }
+    Metrics.RowsSent->Add(ev->Get()->Record.MessagesSize());
     LOG_ROW_DISPATCHER_TRACE("Forward TEvMessageBatch to " << ev->Get()->ReadActorId);
     it->second->EventsQueue.Send(ev.Release()->Release().Release());
 }
@@ -465,6 +485,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr &ev) {
         LOG_ROW_DISPATCHER_WARN("Ignore MessageBatch, no such session");
         return;
     }
+    Metrics.ErrorsCount->Inc();
     LOG_ROW_DISPATCHER_TRACE("Forward TEvSessionError to " << ev->Get()->ReadActorId);
     it->second->EventsQueue.Send(ev.Release()->Release().Release());
     DeleteConsumer(key);
@@ -481,9 +502,18 @@ std::unique_ptr<NActors::IActor> NewRowDispatcher(
     const TYqSharedResources::TPtr& yqSharedResources,
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const TString& tenant,
-    const NFq::NRowDispatcher::IActorFactory::TPtr& actorFactory)
+    const NFq::NRowDispatcher::IActorFactory::TPtr& actorFactory,
+    const ::NMonitoring::TDynamicCounterPtr& counters)
 {
-    return std::unique_ptr<NActors::IActor>(new TRowDispatcher(config, commonConfig, credentialsProviderFactory, yqSharedResources, credentialsFactory, tenant, actorFactory));
+    return std::unique_ptr<NActors::IActor>(new TRowDispatcher(
+        config,
+        commonConfig,
+        credentialsProviderFactory,
+        yqSharedResources,
+        credentialsFactory,
+        tenant,
+        actorFactory,
+        counters));
 }
 
 } // namespace NFq

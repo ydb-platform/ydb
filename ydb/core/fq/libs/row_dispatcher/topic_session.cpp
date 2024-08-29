@@ -224,7 +224,7 @@ void TTopicSession::SubscribeOnNextEvent() {
         return;
     }
 
-    LOG_ROW_DISPATCHER_DEBUG("SubscribeOnNextEvent");
+    LOG_ROW_DISPATCHER_TRACE("SubscribeOnNextEvent");
     IsWaitingEvents = true;
     NActors::TActorSystem* actorSystem = NActors::TActivationContext::ActorSystem();
     ReadSession->WaitEvent().Subscribe([actorSystem, selfId = SelfId()](const auto&){
@@ -288,7 +288,7 @@ void TTopicSession::CreateTopicSession() {
 }
 
 void TTopicSession::Handle(NFq::TEvPrivate::TEvPqEventsReady::TPtr&) {
-    LOG_ROW_DISPATCHER_DEBUG("TEvPqEventsReady");
+    LOG_ROW_DISPATCHER_TRACE("TEvPqEventsReady");
     IsWaitingEvents = false;
     HandleNewEvents();
     SubscribeOnNextEvent();
@@ -318,6 +318,7 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvDataParsed::TPtr& ev) {
 }
 
 void TTopicSession::Handle(NFq::TEvPrivate::TEvDataAfterFilteration::TPtr& ev) {
+    LOG_ROW_DISPATCHER_TRACE("TEvDataAfterFilteration,  " << ev->Get()->ReadActorId.ToString());
     auto it = Clients.find(ev->Get()->ReadActorId);
     if (it == Clients.end()) {
         LOG_ROW_DISPATCHER_ERROR("Skip DataAfterFilteration, wrong read actor, id " << ev->Get()->ReadActorId.ToString());
@@ -479,7 +480,7 @@ void TTopicSession::SendData(ClientsInfo& info) {
         event->Record.AddMessages()->CopyFrom(message);
         info.Buffer.pop();
     }
-    LOG_ROW_DISPATCHER_DEBUG("SendData to " << info.ReadActorId << ", batch size " << event->Record.MessagesSize());
+    LOG_ROW_DISPATCHER_TRACE("SendData to " << info.ReadActorId << ", batch size " << event->Record.MessagesSize());
     Send(RowDispatcherActorId, event.release());
 }
 
@@ -568,6 +569,7 @@ void TTopicSession::InitParser(const NYql::NPq::NProto::TDqPqTopicSource& source
         return;
     }
     try {
+        CurrentParserTypes = std::make_pair(GetVector(sourceParams.GetColumns()), GetVector(sourceParams.GetColumnTypes()));
         NActors::TActorSystem* actorSystem = NActors::TActivationContext::ActorSystem();
         Parser = NewJsonParser(
             "",

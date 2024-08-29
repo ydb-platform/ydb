@@ -69,21 +69,27 @@ namespace {
 
 LWTRACE_USING(DQ_PQ_PROVIDER);
 
-struct TEvPrivate {
-    // Event ids
-    enum EEv : ui32 {
-        EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
-        EvSourceDataReady = EvBegin,
-        EvEnd
-    };
-
-    static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE)");
-
-    // Events
-    struct TEvSourceDataReady : public TEventLocal<TEvSourceDataReady, EvSourceDataReady> {};
-};
-
 } // namespace
+
+struct TRowDispatcherReadActorMetrics {
+    TRowDispatcherReadActorMetrics(const TTxId& txId, ui64 taskId, const ::NMonitoring::TDynamicCounterPtr& counters)
+        : TxId(std::visit([](auto arg) { return ToString(arg); }, txId))
+        , Counters(counters) {
+        SubGroup = Counters->GetSubgroup("sink", "RdPqRead");
+        auto sink = SubGroup->GetSubgroup("tx_id", TxId);
+        auto task = sink->GetSubgroup("task_id", ToString(taskId));
+        InFlyGetNextBatch = task->GetCounter("InFlyGetNextBatch");
+    }
+
+    ~TRowDispatcherReadActorMetrics() {
+        SubGroup->RemoveSubgroup("id", TxId);
+    }
+
+    TString TxId;
+    ::NMonitoring::TDynamicCounterPtr Counters;
+    ::NMonitoring::TDynamicCounterPtr SubGroup;
+    ::NMonitoring::TDynamicCounters::TCounterPtr InFlyGetNextBatch;
+};
 
 class TDqPqRdReadActor : public NActors::TActor<TDqPqRdReadActor>, public IDqComputeActorAsyncInput {
 public:
@@ -134,6 +140,7 @@ private:
     std::queue<TReadyBatch> ReadyBuffer;
     EState State = EState::INIT;
     ui64 CoordinatorRequestCookie = 0;
+    TRowDispatcherReadActorMetrics Metrics;
 
     struct SessionInfo {
         enum class ESessionStatus {
@@ -173,7 +180,8 @@ public:
         const NActors::TActorId& computeActorId,
         const NActors::TActorId& localRowDispatcherActorId,
         const TString& token,
-        bool addBearerToToken);
+        bool addBearerToToken,
+        const ::NMonitoring::TDynamicCounterPtr& counters);
 
     void Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr &ev);
     void Handle(NFq::TEvRowDispatcher::TEvCoordinatorResult::TPtr &ev);
@@ -238,7 +246,8 @@ TDqPqRdReadActor::TDqPqRdReadActor(
         const NActors::TActorId& computeActorId,
         const NActors::TActorId& localRowDispatcherActorId,
         const TString& token,
-        bool addBearerToToken)
+        bool addBearerToToken,
+        const ::NMonitoring::TDynamicCounterPtr& counters)
         : TActor<TDqPqRdReadActor>(&TDqPqRdReadActor::StateFunc)
         , InputIndex(inputIndex)
         , TxId(txId)
@@ -252,6 +261,7 @@ TDqPqRdReadActor::TDqPqRdReadActor(
         , Token(token)
         , AddBearerToToken(addBearerToToken)
         , LocalRowDispatcherActorId(localRowDispatcherActorId)
+        , Metrics(txId, taskId, counters)
 {
     MetadataFields.reserve(SourceParams.MetadataFieldsSize());
     TPqMetaExtractor fieldsExtractor;
@@ -427,7 +437,6 @@ i64 TDqPqRdReadActor::GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& b
 
     ProcessState();
     if (ReadyBuffer.empty() || !freeSpace) {
-        //    SubscribeOnNextEvent();
         return 0;
     }
     i64 usedSpace = 0;
@@ -452,7 +461,6 @@ i64 TDqPqRdReadActor::GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& b
     } while (freeSpace > 0 && !ReadyBuffer.empty());
 
     ProcessState();
-
     return usedSpace;
 }
 
@@ -464,7 +472,6 @@ std::vector<ui64> TDqPqRdReadActor::GetPartitionsToRead() const {
         res.emplace_back(currentPartition); // 0-based in topic API
         currentPartition += ReadParams.GetPartitioningParams().GetDqPartitionsCount();
     } while (currentPartition < ReadParams.GetPartitioningParams().GetTopicPartitionsCount());
-
     return res;
 }
 
@@ -494,7 +501,6 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr &ev) 
         SRC_LOG_W("Wrong seq num, ignore message");
         return;
     }
-
     Stop(ev->Get()->Record.GetMessage());
 }
 
@@ -502,12 +508,10 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr &ev
     SRC_LOG_D("TEvNewDataArrived from " << ev->Sender << ", part id " << ev->Get()->Record.GetPartitionId());
     SRC_LOG_D("Sessions size  " << Sessions.size());
 
-
     ui64 partitionId = ev->Get()->Record.GetPartitionId();
     auto sessionIt = Sessions.find(partitionId);
     if (sessionIt == Sessions.end()) {
-        //SRC_LOG_E("Unknown partition id " << GetPartitionId);
-        Stop("Internal error: unknown partition id");
+        Stop("Internal error: unknown partition id " + ToString(partitionId));
         return;
     }
 
@@ -517,6 +521,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr &ev
         return;
     }
     sessionInfo.NewDataArrived = true;
+    Metrics.InFlyGetNextBatch->Inc();
     auto event = std::make_unique<NFq::TEvRowDispatcher::TEvGetNextBatch>();
     event->Record.SetPartitionId(partitionId);
     sessionInfo.EventsQueue.Send(event.release());
@@ -651,6 +656,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr &ev) 
         return;
     }
 
+    Metrics.InFlyGetNextBatch->Dec();
     auto& sessionInfo = it->second;
     if (!sessionInfo.EventsQueue.OnEventReceived(ev)) {
         SRC_LOG_W("Wrong seq num, ignore message");
@@ -700,6 +706,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
     const NActors::TActorId& computeActorId,
     const NActors::TActorId& localRowDispatcherActorId,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+    const ::NMonitoring::TDynamicCounterPtr& counters,
     i64 /*bufferSize*/) // TODO
 {
     auto taskParamsIt = taskParams.find("pq");
@@ -724,7 +731,8 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
         computeActorId,
         localRowDispatcherActorId,
         token,
-        addBearerToToken
+        addBearerToToken,
+        counters
     );
 
     return {actor, actor};
@@ -732,9 +740,10 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
 
 void RegisterDqPqRdReadActorFactory(
     TDqAsyncIoFactory& factory,
-    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory) {
+    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+    const ::NMonitoring::TDynamicCounterPtr& counters) {
     factory.RegisterSource<NPq::NProto::TDqPqTopicSource>("PqRdSource",
-        [credentialsFactory = std::move(credentialsFactory)](
+        [credentialsFactory = std::move(credentialsFactory), counters](
             NPq::NProto::TDqPqTopicSource&& settings,
             IDqAsyncIoFactory::TSourceArguments&& args)
     {
@@ -751,6 +760,7 @@ void RegisterDqPqRdReadActorFactory(
             args.ComputeActorId,
             NFq::RowDispatcherServiceActorId(),
             args.HolderFactory,
+            counters,
             PQRdReadDefaultFreeSpace);
     });
 }

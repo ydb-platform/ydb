@@ -73,7 +73,8 @@ public:
             yqSharedResources,
             credentialsFactory,
             "Tenant",
-            TestActorFactory
+            TestActorFactory,
+            MakeIntrusive<NMonitoring::TDynamicCounters>()
             ).release());
 
         Runtime.EnableScheduleForActor(RowDispatcher);

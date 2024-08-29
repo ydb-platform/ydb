@@ -23,6 +23,19 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TCoordinatorMetrics {
+    TCoordinatorMetrics(const ::NMonitoring::TDynamicCounterPtr& counters)
+        : Counters(counters) {
+        IncomingRequests = Counters->GetCounter("IncomingRequests");
+        LeaderChangedCount = Counters->GetCounter("LeaderChangedCount");
+    }
+
+    ::NMonitoring::TDynamicCounterPtr Counters;
+    ::NMonitoring::TDynamicCounters::TCounterPtr IncomingRequests;
+    ::NMonitoring::TDynamicCounters::TCounterPtr LeaderChangedCount;
+
+};
+
 class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
 
     using TPartitionKey = std::tuple<TString, TString, TString, ui64>;     // Endpoint / Database / TopicName / PartitionId 
@@ -32,7 +45,6 @@ class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
     TActorId LocalRowDispatcherId;
     const TString LogPrefix;
     const TString Tenant;
-    bool IsLeader = false;
 
     struct RowDispatcherInfo {
         bool Connected = false;
@@ -40,13 +52,15 @@ class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
     };
     TMap<NActors::TActorId, RowDispatcherInfo> RowDispatchers;
     THashMap<TPartitionKey, TActorId> PartitionLocations;
+    TCoordinatorMetrics Metrics;
 
 public:
     TActorCoordinator(
         NActors::TActorId localRowDispatcherId,
         const NConfig::TRowDispatcherCoordinatorConfig& config,
         const TYqSharedResources::TPtr& yqSharedResources,
-        const TString& tenant);
+        const TString& tenant,
+        const ::NMonitoring::TDynamicCounterPtr& counters);
 
     void Bootstrap();
 
@@ -80,12 +94,14 @@ TActorCoordinator::TActorCoordinator(
     NActors::TActorId localRowDispatcherId,
     const NConfig::TRowDispatcherCoordinatorConfig& config,
     const TYqSharedResources::TPtr& yqSharedResources,
-    const TString& tenant)
+    const TString& tenant,
+    const ::NMonitoring::TDynamicCounterPtr& counters)
     : Config(config)
     , YqSharedResources(yqSharedResources)
     , LocalRowDispatcherId(localRowDispatcherId)
     , LogPrefix("Coordinator: ")
-    , Tenant(tenant) {
+    , Tenant(tenant)
+    , Metrics(counters) {
     AddRowDispatcher(localRowDispatcherId);
 }
 
@@ -135,12 +151,12 @@ void TActorCoordinator::PrintInternalState() {
     str << "Known row dispatchers:\n";
 
     for (const auto& [actorId, info] : RowDispatchers) {
-        str << "   actorId " << actorId << ", connected " << info.Connected << "\n";
+        str << "    " << actorId << ", connected " << info.Connected << "\n";
     }
 
     str << "\nLocations:\n";
     for (auto& [key, actorId] : PartitionLocations) {
-        str << "  endpoint: " << std::get<0>(key) << ", db: " << std::get<1>(key) << ", topic " << std::get<2>(key) << ", partId " << std::get<3>(key)  <<  ",  row dispatcher actor id: " << actorId << "\n";
+        str << "    " << std::get<0>(key) << " / " << std::get<1>(key) << " / " << std::get<2>(key) << ", partId " << std::get<3>(key)  <<  ",  row dispatcher actor id: " << actorId << "\n";
     }
     LOG_ROW_DISPATCHER_DEBUG(str.Str());
 }
@@ -174,11 +190,8 @@ void TActorCoordinator::Handle(NActors::TEvents::TEvUndelivered::TPtr &ev) {
 }
 
 void TActorCoordinator::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& ev) {
-    LOG_ROW_DISPATCHER_DEBUG("new leader " << ev->Get()->CoordinatorActorId);
-    LOG_ROW_DISPATCHER_DEBUG("SelfId " << SelfId());
-
-    IsLeader = SelfId() == ev->Get()->CoordinatorActorId;
-    LOG_ROW_DISPATCHER_DEBUG("IsLeader " << IsLeader);
+    LOG_ROW_DISPATCHER_DEBUG("New leader " << ev->Get()->CoordinatorActorId << ", SelfId " << SelfId());
+    Metrics.LeaderChangedCount->Inc();
 }
 
 NActors::TActorId TActorCoordinator::GetAndUpdateLocation(TPartitionKey key) {
@@ -206,12 +219,12 @@ NActors::TActorId TActorCoordinator::GetAndUpdateLocation(TPartitionKey key) {
 }
 
 void TActorCoordinator::Handle(NFq::TEvRowDispatcher::TEvCoordinatorRequest::TPtr& ev) {
-    LOG_ROW_DISPATCHER_DEBUG("TEvCoordinatorRequest: ");
     const auto source =  ev->Get()->Record.GetSource();
-    LOG_ROW_DISPATCHER_DEBUG("  TopicPath " << source.GetTopicPath());
+    LOG_ROW_DISPATCHER_DEBUG("TEvCoordinatorRequest from " << ev->Sender.ToString() << ", " << source.GetTopicPath());
+    Metrics.IncomingRequests->Inc();
     
     for (auto& partitionId : ev->Get()->Record.GetPartitionId()) {
-        LOG_ROW_DISPATCHER_DEBUG("  partitionId " << partitionId);
+        LOG_ROW_DISPATCHER_TRACE("  partitionId " << partitionId);
     }
     Y_ENSURE(!RowDispatchers.empty());
 
@@ -253,9 +266,10 @@ std::unique_ptr<NActors::IActor> NewCoordinator(
     NActors::TActorId rowDispatcherId,
     const NConfig::TRowDispatcherCoordinatorConfig& config,
     const TYqSharedResources::TPtr& yqSharedResources,
-    const TString& tenant)
+    const TString& tenant,
+    const ::NMonitoring::TDynamicCounterPtr& counters)
 {
-    return std::unique_ptr<NActors::IActor>(new TActorCoordinator(rowDispatcherId, config, yqSharedResources, tenant));
+    return std::unique_ptr<NActors::IActor>(new TActorCoordinator(rowDispatcherId, config, yqSharedResources, tenant, counters));
 }
 
 } // namespace NFq

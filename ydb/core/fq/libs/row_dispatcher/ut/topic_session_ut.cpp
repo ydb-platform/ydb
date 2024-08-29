@@ -136,7 +136,6 @@ public:
     NActors::TActorId RowDispatcherActorId;
     NYdb::TDriver Driver = NYdb::TDriver(NYdb::TDriverConfig().SetLog(CreateLogBackend("cerr")));
     std::shared_ptr<NYdb::ICredentialsProviderFactory> CredentialsProviderFactory;
-    //NYql::NPq::NProto::TDqPqTopicSource Settings;
     NActors::TActorId ReadActorId1;
     NActors::TActorId ReadActorId2;
     ui64 PartitionId = 0;

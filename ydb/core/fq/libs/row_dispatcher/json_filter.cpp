@@ -58,8 +58,6 @@ public:
         const NFq::TFilterInputSpec& spec,
         NYql::NPureCalc::TWorkerHolder<NYql::NPureCalc::IPushStreamWorker> worker)
         : Worker(std::move(worker)) {
-        LOG_ROW_DISPATCHER_DEBUG("TFilterInputConsumer::TFilterInputConsumer()");
-
         const NKikimr::NMiniKQL::TStructType* structType = Worker->GetInputType();
         const auto nMembers = structType->GetMembersCount();
 
@@ -207,7 +205,6 @@ struct NYql::NPureCalc::TInputSpecTraits<NFq::TFilterInputSpec> {
         const NFq::TFilterInputSpec& spec,
         NYql::NPureCalc::TWorkerHolder<NYql::NPureCalc::IPushStreamWorker> worker)
     {
-        LOG_STREAMS_IMPL(DEBUG, YQ_ROW_DISPATCHER, "MakeConsumer()")
         return MakeHolder<NFq::TFilterInputConsumer>(spec, std::move(worker));
     }
 };
@@ -244,13 +241,11 @@ public:
             Sql,
             NYql::NPureCalc::ETranslationMode::SQL
         );
-        LOG_ROW_DISPATCHER_DEBUG("Program created");
         InputConsumer = Program->Apply(MakeHolder<TFilterOutputConsumer>(callback));
-        LOG_ROW_DISPATCHER_DEBUG("InputConsumer created");
+        LOG_ROW_DISPATCHER_DEBUG("Program created");
     }
 
     void Push(ui64 offset, const TList<TString>& value) {
-        LOG_ROW_DISPATCHER_TRACE("Push");
         InputConsumer->OnObject(std::make_pair(offset, value));
     }
 

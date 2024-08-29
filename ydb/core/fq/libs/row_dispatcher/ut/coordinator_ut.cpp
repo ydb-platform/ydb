@@ -45,7 +45,8 @@ public:
             LocalRowDispatcherId,
             config,
             yqSharedResources,
-            "Tenant"
+            "Tenant",
+            MakeIntrusive<NMonitoring::TDynamicCounters>()
             ).release());
 
         Runtime.EnableScheduleForActor(Coordinator);

@@ -22,6 +22,12 @@ bool AllowSubsetFieldsForNode(const TExprNode& node, const TOptimizeContext& opt
     return optCtx.IsSingleUsage(node) || optCtx.Types->OptimizerFlags.contains(multiUsageFlags);
 }
 
+bool AllowComplexFiltersOverAggregatePushdown(const TOptimizeContext& optCtx) {
+    YQL_ENSURE(optCtx.Types);
+    static const TString pushdown = to_lower(TString("PushdownComplexFiltersOverAggregate"));
+    return optCtx.Types->OptimizerFlags.contains(pushdown);
+}
+
 TExprNode::TPtr AggregateSubsetFieldsAnalyzer(const TCoAggregate& node, TExprContext& ctx, const TParentsMap& parentsMap) {
     auto inputType = node.Input().Ref().GetTypeAnn();
     auto structType = inputType->GetKind() == ETypeAnnotationKind::List
@@ -1040,16 +1046,281 @@ TExprNode::TPtr OptimizeCollect(const TExprNode::TPtr& node, TExprContext& ctx, 
     return node;
 }
 
-TExprBase FilterOverAggregate(const TCoFlatMapBase& node, TExprContext& ctx, const TParentsMap& parentsMap) {
+enum ESubgraphType {
+    EXPR_CONST,
+    EXPR_KEYS,
+    EXPR_PAYLOADS,
+    EXPR_MIXED,
+};
+
+TNodeMap<ESubgraphType> MarkSubgraphForAggregate(const TExprNode::TPtr& root, const TCoArgument& row, const THashSet<TStringBuf>& keys) {
+    TNodeMap<ESubgraphType> result;
+    size_t insideDependsOn = 0;
+    VisitExpr(root, [&](const TExprNode::TPtr& node) {
+        if (node->IsComplete()) {
+            result[node.Get()] = EXPR_CONST;
+            return false;
+        }
+        if (node->IsCallable("DependsOn")) {
+            ++insideDependsOn;
+            return true;
+        }
+
+        if (!insideDependsOn && node->IsCallable("Member") && &node->Head() == row.Raw()) {
+            result[node.Get()] = keys.contains(node->Child(1)->Content()) ? EXPR_KEYS : EXPR_PAYLOADS;
+            return false;
+        }
+
+        if (node->IsArgument()) {
+            result[node.Get()] = node.Get() == row.Raw() ? EXPR_MIXED : EXPR_CONST;
+            return false;
+        }
+
+        return true;
+    }, [&](const TExprNode::TPtr& node) {
+        if (node->IsCallable("DependsOn")) {
+            YQL_ENSURE(insideDependsOn);
+            --insideDependsOn;
+        }
+        if (result.contains(node.Get())) {
+            return true;
+        }
+        ESubgraphType derivedType = EXPR_CONST;
+        for (auto& child : node->ChildrenList()) {
+            auto it = result.find(child.Get());
+            YQL_ENSURE(it != result.end());
+            switch (it->second) {
+            case EXPR_CONST:
+                break;
+            case EXPR_KEYS: {
+                if (derivedType == EXPR_CONST) {
+                    derivedType = EXPR_KEYS;
+                } else if (derivedType == EXPR_PAYLOADS) {
+                    derivedType = EXPR_MIXED;
+                }
+                break;
+            }
+            case EXPR_PAYLOADS: {
+                if (derivedType == EXPR_CONST) {
+                    derivedType = EXPR_PAYLOADS;
+                } else if (derivedType == EXPR_KEYS) {
+                    derivedType = EXPR_MIXED;
+                }
+                break;
+            }
+            case EXPR_MIXED:
+                derivedType = EXPR_MIXED;
+                break;
+            }
+        }
+        YQL_ENSURE(result.insert({node.Get(), derivedType}).second);
+        return true;
+    });
+
+    return result;
+}
+
+class ICalcualtor : public TThrRefBase {
+public:
+    TMaybe<bool> Calculate() const {
+        if (!Cached_.Defined()) {
+            Cached_ = DoCalculate();
+        }
+        return *Cached_;
+    }
+
+    void DropCache() {
+        Cached_ = {};
+        DropChildCaches();
+    }
+
+    using TPtr = TIntrusivePtr<ICalcualtor>;
+protected:
+    virtual TMaybe<bool> DoCalculate() const = 0;
+    virtual void DropChildCaches() = 0;
+private:
+    mutable TMaybe<TMaybe<bool>> Cached_;
+};
+
+class TUnknownValue : public ICalcualtor {
+public:
+    TUnknownValue() = default;
+private:
+    TMaybe<bool> DoCalculate() const override {
+        return {};
+    }
+    void DropChildCaches() override {
+    }
+};
+
+class TImmediateValue : public ICalcualtor {
+public:
+    TImmediateValue(ui64& input, size_t index)
+        : Input_(&input)
+        , Index_(index)
+    {
+        YQL_ENSURE(index < 64);
+    }
+private:
+    TMaybe<bool> DoCalculate() const override {
+        return ((*Input_) & (ui64(1) << Index_)) != 0;
+    }
+    void DropChildCaches() override {
+    }
+
+    const ui64* const Input_;
+    const size_t Index_;
+};
+
+class TAndValue : public ICalcualtor {
+public:
+    explicit TAndValue(TVector<ICalcualtor::TPtr>&& children)
+        : Children_(std::move(children))
+    {
+        YQL_ENSURE(!Children_.empty());
+    }
+private:
+    TMaybe<bool> DoCalculate() const override {
+        bool allTrue = true;
+        for (auto& child : Children_) {
+            YQL_ENSURE(child);
+            auto val = child->Calculate();
+            if (!val.Defined()) {
+                allTrue = false;
+            } else if (!*val) {
+                return false;
+            }
+        }
+        if (allTrue) {
+            return true;
+        }
+        return {};
+    }
+    void DropChildCaches() override {
+        for (auto& child : Children_) {
+            child->DropCache();
+        }
+    }
+
+    const TVector<ICalcualtor::TPtr> Children_;
+};
+
+class TOrValue : public ICalcualtor {
+public:
+    explicit TOrValue(TVector<ICalcualtor::TPtr>&& children)
+        : Children_(std::move(children))
+    {
+        YQL_ENSURE(!Children_.empty());
+    }
+private:
+    TMaybe<bool> DoCalculate() const override {
+        bool allFalse = true;
+        for (auto& child : Children_) {
+            YQL_ENSURE(child);
+            auto val = child->Calculate();
+            if (!val.Defined()) {
+                allFalse = false;
+            } else if (*val) {
+                return true;
+            }
+        }
+        if (allFalse) {
+            return false;
+        }
+        return {};
+    }
+
+    void DropChildCaches() override {
+        for (auto& child : Children_) {
+            child->DropCache();
+        }
+    }
+
+    const TVector<ICalcualtor::TPtr> Children_;
+};
+
+class TNotValue : public ICalcualtor {
+public:
+    explicit TNotValue(ICalcualtor::TPtr child)
+        : Child_(std::move(child))
+    {
+        YQL_ENSURE(Child_);
+    }
+private:
+    TMaybe<bool> DoCalculate() const override {
+        auto val = Child_->Calculate();
+        if (!val.Defined()) {
+            return val;
+        }
+        return !*val;
+    }
+
+    void DropChildCaches() override {
+        Child_->DropCache();
+    }
+    const ICalcualtor::TPtr Child_;
+};
+
+ICalcualtor::TPtr BuildProgram(const TExprNode::TPtr& node, const TNodeMap<ESubgraphType>& markedGraph,
+    TNodeMap<ICalcualtor::TPtr>& calcCache, TExprNodeList& keyPredicates, ui64& inputs)
+{
+    auto cached = calcCache.find(node.Get());
+    if (cached != calcCache.end()) {
+        return cached->second;
+    }
+
+    if (node->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Data || node->GetTypeAnn()->Cast<TDataExprType>()->GetSlot() != EDataSlot::Bool) {
+        return nullptr;
+    }
+
+    auto it = markedGraph.find(node.Get());
+    YQL_ENSURE(it != markedGraph.end());
+    ESubgraphType type = it->second;
+
+    ICalcualtor::TPtr result;
+    if (type == EXPR_CONST || type == EXPR_PAYLOADS) {
+        result = new TUnknownValue();
+    } else if (type == EXPR_KEYS) {
+        size_t index = keyPredicates.size();
+        if (index >= 64) {
+            return nullptr;
+        }
+        result = new TImmediateValue(inputs, index);
+        keyPredicates.push_back(node);
+    } else if (node->IsCallable({"And", "Or", "Not"})) {
+        YQL_ENSURE(type == EXPR_MIXED);
+        YQL_ENSURE(node->ChildrenSize());
+        TVector<ICalcualtor::TPtr> childCalcs;
+        childCalcs.reserve(node->ChildrenSize());
+        for (auto& childNode : node->ChildrenList()) {
+            childCalcs.emplace_back(BuildProgram(childNode, markedGraph, calcCache, keyPredicates, inputs));
+            if (!childCalcs.back()) {
+                return nullptr;
+            }
+        }
+        if (node->IsCallable("And")) {
+            result = new TAndValue(std::move(childCalcs));
+        } else if (node->IsCallable("Or")) {
+            result = new TOrValue(std::move(childCalcs));
+        } else {
+            result = new TNotValue(childCalcs.front());
+        }
+    }
+
+    if (result) {
+        calcCache[node.Get()] = result;
+    }
+    return result;
+}
+
+TExprBase FilterOverAggregate(const TCoFlatMapBase& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+    YQL_ENSURE(optCtx.ParentsMap);
     if (!TCoConditionalValueBase::Match(node.Lambda().Body().Raw())) {
         return node;
     }
 
-    TExprBase arg = node.Lambda().Args().Arg(0);
+    const TCoArgument arg = node.Lambda().Args().Arg(0);
     TCoConditionalValueBase body = node.Lambda().Body().Cast<TCoConditionalValueBase>();
-    if (HasDependsOn(body.Predicate().Ptr(), arg.Ptr())) {
-        return node;
-    }
 
     const TCoAggregate agg = node.Input().Cast<TCoAggregate>();
     THashSet<TStringBuf> keyColumns;
@@ -1066,22 +1337,74 @@ TExprBase FilterOverAggregate(const TCoFlatMapBase& node, TExprContext& ctx, con
 
     TExprNodeList pushComponents;
     TExprNodeList restComponents;
+    size_t separableComponents = 0;
     for (auto& p : andComponents) {
         TSet<TStringBuf> usedFields;
         if (p->IsCallable("Likely") ||
-            !HaveFieldsSubset(p, arg.Ref(), usedFields, parentsMap) ||
+            HasDependsOn(p, arg.Ptr()) ||
+            !HaveFieldsSubset(p, arg.Ref(), usedFields, *optCtx.ParentsMap) ||
             !AllOf(usedFields, [&](TStringBuf field) { return keyColumns.contains(field); }) ||
-            !IsStrict(p))
+            !p->IsComplete() && !IsStrict(p))
         {
             restComponents.push_back(p);
         } else {
             pushComponents.push_back(p);
+            ++separableComponents;
+        }
+    }
+
+    size_t nonSeparableComponents = 0;
+    size_t maxKeyPredicates = 0;
+    if (AllowComplexFiltersOverAggregatePushdown(optCtx)) {
+        for (auto& p : restComponents) {
+            if (p->IsCallable("Likely")) {
+                continue;
+            }
+            const TNodeMap<ESubgraphType> marked = MarkSubgraphForAggregate(p, arg, keyColumns);
+            auto rootIt = marked.find(p.Get());
+            YQL_ENSURE(rootIt != marked.end());
+            YQL_ENSURE(rootIt->second == EXPR_MIXED, "Key-only or const predicates should be handled earlier");
+
+            TNodeMap<ICalcualtor::TPtr> calcCache;
+            TExprNodeList keyPredicates;
+            ui64 inputs = 0;
+
+            auto calculator = BuildProgram(p, marked, calcCache, keyPredicates, inputs);
+            if (!calculator || keyPredicates.empty() || keyPredicates.size() > 6) {
+                continue;
+            }
+
+            ui64 maxInputs = ui64(1) << keyPredicates.size();
+            maxKeyPredicates = std::max(maxKeyPredicates, keyPredicates.size());
+            bool canPush = false;
+            for (inputs = 0; inputs < maxInputs; ++inputs) {
+                // the goal is to find all keyPredicate values for which p yields False value irrespective of all constants and payloads
+                auto pResult = calculator->Calculate();
+                if (pResult.Defined() && !*pResult) {
+                    canPush = true;
+                    TExprNodeList orItems;
+                    for (size_t i = 0; i < keyPredicates.size(); ++i) {
+                        // not (P1 == X and P2 == Y) ->   (P1 != X or P2 != Y)
+                        // P1 != X: (X is true -> not P1, X is false -> P1)
+                        bool value = (inputs & (ui64(1) << i)) != 0;
+                        orItems.emplace_back(ctx.WrapByCallableIf(value, "Not", TExprNode::TPtr(keyPredicates[i])));
+                    }
+                    pushComponents.push_back(ctx.NewCallable(p->Pos(), "Or", std::move(orItems)));
+                }
+                calculator->DropCache();
+            }
+            nonSeparableComponents += canPush;
+            p = ctx.WrapByCallableIf(canPush, "Likely", std::move(p));
         }
     }
 
     if (pushComponents.empty()) {
         return node;
     }
+
+    YQL_CLOG(DEBUG, Core) << "Filter over Aggregate : " << separableComponents << " separable, "
+                          << nonSeparableComponents << " non-separable predicates out of " << andComponents.size()
+                          << ". Pushed " << pushComponents.size() << " components. Maximum analyzed key predicates " << maxKeyPredicates;
 
     TExprNode::TPtr pushPred = ctx.NewCallable(body.Predicate().Pos(), "And", std::move(pushComponents));
     TExprNode::TPtr restPred = restComponents.empty() ?
@@ -1123,13 +1446,12 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
             }
 
             if (self.Input().Ref().IsCallable("Aggregate")) {
-                auto ret = FilterOverAggregate(self, ctx, *optCtx.ParentsMap);
+                auto ret = FilterOverAggregate(self, ctx, optCtx);
                 if (!ret.Raw()) {
                     return nullptr;
                 }
 
                 if (ret.Raw() != self.Raw()) {
-                    YQL_CLOG(DEBUG, Core) << "Filter over Aggregate";
                     return ret.Ptr();
                 }
             }

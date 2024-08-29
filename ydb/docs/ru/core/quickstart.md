@@ -210,14 +210,22 @@ SELECT "Hello, world!"u;
    );
    ```
 
-   Ключевым отличием в создании колоночной таблицы от строковой таблицы является использование блока [дополнительных параметров](./yql/reference/yql-core/syntax/crea) `WITH`, в котором задаётся параметр `STORE = COLUMN`. 
+   Ключевым отличием в создании колоночной таблицы от строковой таблицы является использование блока [дополнительных параметров](./yql/reference/yql-core/syntax/create_table/with.md) `WITH`, в котором задаётся параметр `STORE = COLUMN`.
 
 {% endlist %}
 
 
 ## Добавление тестовых данных
 
-Теперь давайте заполним нашу таблицу первыми данными. Самый простой способ - использовать литералы:
+{% note warning %}
+
+{% include [not_alow_for_olap](./_includes/not_allow_for_olap_text.md) %}
+
+{% include [ways_add_data_to_olap](./_includes/ways_add_data_to_olap.md) %}
+
+{% endnote %}
+
+Теперь давайте заполним нашу строковую таблицу первыми данными. Самый простой способ - использовать литералы:
 
 ```sql
 INSERT INTO example (key, value)

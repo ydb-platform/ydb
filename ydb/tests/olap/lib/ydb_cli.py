@@ -26,10 +26,12 @@ class YdbCliHelper:
             return [cli]
 
     class QueuePlan:
-        def __init__(self, plan: dict | None = None, table: str | None = None, ast: str | None = None) -> None:
+        def __init__(self, plan: dict | None = None, table: str | None = None, ast: str | None = None, svg: str | None = None) -> None:
             self.plan = plan
             self.table = table
             self.ast = ast
+            self.svg = svg
+
 
     class WorkloadRunResult:
         def __init__(
@@ -115,6 +117,9 @@ class YdbCliHelper:
             if (os.path.exists(plan_path + '.ast')):
                 with open(plan_path + '.ast') as f:
                     plan.ast = f.read()
+            if (os.path.exists(plan_path + '.svg')):
+                with open(plan_path + '.svg') as f:
+                    plan.svg = f.read()
 
             return YdbCliHelper.WorkloadRunResult(
                 stats=stats,

@@ -236,6 +236,9 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                 if (status == TForceTraversalTable::EStatus::AnalyzeStarted) {
                     // Resent TEvAnalyzeTable to shards
                     status = TForceTraversalTable::EStatus::None;
+                } else if (status == TForceTraversalTable::EStatus::TraversalStarted) {
+                    // Reset traversal
+                    status = TForceTraversalTable::EStatus::AnalyzeFinished;
                 }
 
                 auto pathId = TPathId(ownerId, localPathId);

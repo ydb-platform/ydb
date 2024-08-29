@@ -1458,6 +1458,7 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
                     params.SeparateCommonLog = true;
                 }
                 params.CommonLogSize = LogChunks.size();
+                params.MaxCommonLogChunks = Cfg->MaxCommonLogChunks;
                 params.SpaceColorBorder = Cfg->SpaceColorBorder;
                 for (ui32 ownerId = OwnerBeginUser; ownerId < OwnerEndUser; ++ownerId) {
                     if (OwnerData[ownerId].VDiskId != TVDiskID::InvalidId) {

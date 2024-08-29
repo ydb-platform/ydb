@@ -672,6 +672,7 @@ void TStatisticsAggregator::ScheduleNextTraversal(NIceDb::TNiceDb& db) {
             }
 
             ForceTraversalOperationId = operation.OperationId;
+            break;
         }
 
         if (!pathId) {

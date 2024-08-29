@@ -81,7 +81,8 @@ TFuture<TStatus> CheckGeneration(
     }
     }
 
-    context->Transaction = selectResult.GetTransaction();
+    context->Transaction = TMaybe<TTransaction>(selectResult.GetTransaction().value());
+    selectResult.GetTransaction().reset();
 
     if (!isOk) {
         RollbackTransaction(context); // don't care about result

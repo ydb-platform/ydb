@@ -16,7 +16,7 @@ TMaybe<TString> ScriptExecutionIdFromOperation(const TString& operationId) {
     return ScriptExecutionIdFromOperation(operation);
 }
 
-TMaybe<TString> ScriptExecutionIdFromOperation(const NOperationId::TOperationId& operationId) {
+TMaybe<std::string> ScriptExecutionIdFromOperation(const NOperationId::TOperationId& operationId) {
     if (operationId.GetKind() != NOperationId::TOperationId::SCRIPT_EXECUTION) {
         return Nothing();
     }

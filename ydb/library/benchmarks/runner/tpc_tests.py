@@ -198,11 +198,13 @@ def upload_results(result_path, s3_folder, test_start):
 
 
 def prepare_login_to_ydb():
+    import pip
+
+    pip.main(['install', 'ydb', 'ydb[yc]'])
+
     if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
         raise AttributeError("Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping uploading")
     os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = os.environ["CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"]
-
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "ydb", "ydb[yc]"])
 
 
 def test_tpc():

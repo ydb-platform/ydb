@@ -58,7 +58,9 @@ SELECT Url::Encode("http://ydb.tech/страница");
 
 Разбирает URL на составные части.
 
-* ```Url::Parse(Parse{Flags:AutoMap}) -> Struct< Frag: String?, Host: String?, ParseError: String?, Pass: String?, Path: String?, Port: String?, Query: String?, Scheme: String?, User: String? >```
+```
+Url::Parse(Parse{Flags:AutoMap}) -> Struct< Frag: String?, Host: String?, ParseError: String?, Pass: String?, Path: String?, Port: String?, Query: String?, Scheme: String?, User: String? >
+```
 
 **Примеры**
 

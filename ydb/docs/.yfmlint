@@ -52,16 +52,16 @@ log-levels:
   MD055: 'disabled' # Table pipe style
   MD056: 'disabled' # Table column count
 
-  YFM001: 'disabled' # Inline code length
-  YFM002: 'disabled' # No header found in the file for the link text
-  YFM003: 'error'    # Link is unreachable
-  YFM004: 'error'    # Table not closed
-  YFM005: 'error'    # Tab list not closed
-  YFM006: 'error'    # Term definition duplicated
-  YFM007: 'error'    # Term used without definition
-  YFM008: 'error'    # Term inside definition not allowed
-  YFM009: 'error'    # Term definition used not at the end of file
+  YFM001: 'error' # Inline code length
+  YFM002: 'error' # No header found in the file for the link text
+  YFM003: 'error' # Link is unreachable
+  YFM004: 'error' # Table not closed
+  YFM005: 'error' # Tab list not closed
+  YFM006: 'error' # Term definition duplicated
+  YFM007: 'error' # Term used without definition
+  YFM008: 'error' # Term inside definition not allowed
+  YFM009: 'error' # Term definition used not at the end of file
 
 # Inline code length
 YFM001:
-  maximum: 100
+  maximum: 140

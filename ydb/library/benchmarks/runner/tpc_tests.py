@@ -43,7 +43,7 @@ class Runner:
         self.results_path = self.output / "results"
         self.results_path.mkdir()
 
-        self.cmd = [str(self.deps["run_tests"]) + "/run_tests"]
+        self.cmd = [str(self.deps["run_tests"]) + "/run_tests", "--is-test"]
         self.cmd += ["--dqrun", str(self.deps["dqrun"]) + "/dqrun"]
         self.cmd += ["--gen-queries", str(self.deps["gen-queries"]) + "/gen_queries"]
         self.cmd += ["--result-compare", str(self.deps["result-compare"]) + "/result_compare"]
@@ -60,7 +60,8 @@ class Runner:
         cmd += ["--variant", f"{variant}"]
         cmd += ["--datasize", f"{datasize}"]
         cmd += ["--tasks", f"{tasks}"]
-        cmd += ["--query-filter", f"{query_filter}"]
+        if query_filter:
+            cmd += ["--query-filter", f"{query_filter}"]
         yatest.common.execute(cmd)
 
 

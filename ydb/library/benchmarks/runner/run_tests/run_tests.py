@@ -14,30 +14,55 @@ def variant(string):
 def paths(string):
     return list(map(pathlib.Path, string.split(";")))
 
+def parse_args():
+    subparser = argparse.ArgumentParser()
 
-def parse_args(passed=None):
+    subparser.add_argument('--is-test', action="store_true", default=False)
 
-    parser = argparse.ArgumentParser()
+    subparser.add_argument('--datasize', type=int, default=1)
+    subparser.add_argument('--variant', type=variant, default='h')
+    subparser.add_argument('--tasks', type=int, default=1)
 
-    parser.add_argument('--datasize', type=int, default=1)
-    parser.add_argument('--variant', type=variant, default='h')
-    parser.add_argument('--tasks', type=int, default=1)
+    subparser.add_argument('-o', '--output', default="./results")
+    subparser.add_argument('--clean-old', action="store_true", default=False)
+    subparser.add_argument('--query-filter', action="append", default=[])
 
-    parser.add_argument('--dqrun', type=pathlib.Path)
-    parser.add_argument('--gen-queries', type=pathlib.Path)
-    parser.add_argument('--downloaders-dir', type=pathlib.Path)
-    parser.add_argument('--udfs-dir', type=paths)
-    parser.add_argument('--fs-cfg', type=pathlib.Path)
-    parser.add_argument('--flame-graph', type=pathlib.Path)
-    parser.add_argument('--result-compare', type=pathlib.Path)
-    parser.add_argument('--gateways-cfg', type=pathlib.Path)
-    parser.add_argument('--runner-path', type=pathlib.Path)
+    args, argv = subparser.parse_known_args()
 
-    parser.add_argument('-o', '--output', default="./results")
-    parser.add_argument('--clean-old', action="store_true", default=False)
-    parser.add_argument('--query-filter', action="append", default=[])
+    if args.is_test:
+        parser = argparse.ArgumentParser()
 
-    return parser.parse_args(passed)
+        parser.add_argument('--dqrun', type=pathlib.Path)
+        parser.add_argument('--gen-queries', type=pathlib.Path)
+        parser.add_argument('--downloaders-dir', type=pathlib.Path)
+        parser.add_argument('--udfs-dir', type=paths)
+        parser.add_argument('--fs-cfg', type=pathlib.Path)
+        parser.add_argument('--flame-graph', type=pathlib.Path)
+        parser.add_argument('--result-compare', type=pathlib.Path)
+        parser.add_argument('--gateways-cfg', type=pathlib.Path)
+        parser.add_argument('--runner-path', type=pathlib.Path)
+
+        return parser.parse_args(argv, namespace=args)
+    else:
+        parser = argparse.ArgumentParser()
+
+        parser.add_argument('--ydb-root', type=lambda path: pathlib.Path(path).resolve(), default="../../../../")
+
+        args = parser.parse_args(argv, namespace=args)
+
+        args.dqrun = args.ydb_root / "ydb" / "library" / "yql" / "tools" / "dqrun" / "dqrun"
+        args.gen_queries = args.ydb_root / "ydb" / "library" / "benchmarks" / "gen_queries" / "gen_queries"
+        args.downloaders_dir = args.ydb_root / "ydb" / "library" / "benchmarks" / "runner"
+        args.fs_cfg = args.ydb_root / "ydb" / "library" / "yql" / "tools" / "dqrun" / "examples" / "fs.conf"
+        args.flame_graph = args.ydb_root / "contrib" / "tools" / "flame-graph"
+        args.result_compare = args.ydb_root / "ydb" / "library" / "benchmarks" / "runner" / "result_compare" / "result_compare"
+        args.gateways_cfg = args.ydb_root / "ydb" / "library" / "benchmarks" / "runner" / "runner" / "test-gateways.conf"
+        args.runner_path = args.ydb_root / "ydb" / "library" / "benchmarks" / "runner" / "runner" / "runner"
+
+        udfs_prefix = args.ydb_root / "ydb" / "library" / "yql" / "udfs" / "common"
+        args.udfs_dir = [udfs_prefix / name for name in ["set", "url_base", "datetime2", "re2", "math", "unicode_base"]]
+
+        return args
 
 
 class Runner:
@@ -83,7 +108,7 @@ class Runner:
 
     def run(self):
         cmd = ["/usr/bin/time", f"{str(self.args.runner_path)}"]
-        # cmd += ["--perf"]
+        cmd += ["--perf"]
         for it in self.args.query_filter:
             cmd += ["--include-q", it]
         cmd += ["--query-dir", f"{str(self.queries_dir)}/{self.args.variant}"]
@@ -98,10 +123,12 @@ class Runner:
         print("Running runner...", file=stderr)
         subprocess.run(cmd)
 
+        print(self.result_dir)
         return self.result_dir
 
 
 def result_compare(args, to_compare):
+    print("Comparing...")
     cmd = [f"{args.result_compare}"]
     cmd += ["-v"]
     cmd += to_compare
@@ -109,8 +136,10 @@ def result_compare(args, to_compare):
         subprocess.run(cmd, stdout=result_table)
 
 
-def run(passed=None):
-    args = parse_args(passed)
+def main():
+    args = parse_args()
+
+    print(args)
 
     results = []
     print("With spilling...", file=stderr)
@@ -119,10 +148,6 @@ def run(passed=None):
     results.append(Runner(args, False).run())
 
     result_compare(args, results)
-
-
-def main():
-    run()
 
 
 if __name__ == "__main__":

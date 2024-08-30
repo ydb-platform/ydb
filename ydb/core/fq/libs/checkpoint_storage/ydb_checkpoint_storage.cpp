@@ -415,7 +415,7 @@ TFuture<TStatus> ProcessCheckpoints(
             *parser.ColumnParser("modified_by").GetOptionalTimestamp());
 
         if (loadGraphDescription) {
-            if (const TMaybe<TString> graphDescription = parser.ColumnParser("graph_description").GetOptionalString(); graphDescription && *graphDescription) {
+            if (const std::optional<std::string> graphDescription = parser.ColumnParser("graph_description").GetOptionalString(); graphDescription && !graphDescription.value().empty()) {
                 NProto::TCheckpointGraphDescription graphDesc;
                 if (!graphDesc.ParseFromString(*graphDescription)) {
                     NYql::TIssues issues;

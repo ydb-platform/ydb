@@ -8,7 +8,7 @@ log-levels:
   MD007: 'error' # Unordered list indentation
   MD009: 'error' # Trailing spaces
   MD010: 'error' # Hard tabs
-  MD011: 'disabled' # Reversed link syntax
+  MD011: 'error' # Reversed link syntax
   MD012: 'disabled' # Multiple consecutive blank lines
   MD013: 'disabled' # Line length
   MD014: 'disabled' # Dollar signs used before commands without showing output
@@ -19,7 +19,7 @@ log-levels:
   MD022: 'disabled' # Headings should be surrounded by blank lines
   MD023: 'disabled' # Headings must start at the beginning of the line
   MD024: 'disabled' # Multiple headings with the same content
-  MD025: 'disabled' # Multiple top-level headings in the same document
+  MD025: 'error' # Multiple top-level headings in the same document
   MD026: 'disabled' # Trailing punctuation in heading
   MD027: 'disabled' # Multiple spaces after blockquote symbol
   MD028: 'disabled' # Blank line inside blockquote

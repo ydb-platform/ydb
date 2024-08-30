@@ -475,7 +475,7 @@ sudo chmod 700 /opt/ydb/certs
 {% endnote %}
 
 
-# Особенности установки {{ ydb-short-name }} в незащищенном режиме
+## Особенности установки {{ ydb-short-name }} в незащищенном режиме
 
 {% note warning %}
 

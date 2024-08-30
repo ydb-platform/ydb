@@ -1,8 +1,3 @@
----
-title: "Instructions for initializing the driver in {{ ydb-short-name }}"
-description: "The article describes the examples of the code for connecting to {{ ydb-short-name }} (driver creation) in different {{ ydb-short-name }} SDKs."
----
-
 # Initialize the driver
 
 {% include [work in progress message](_includes/addition.md) %}

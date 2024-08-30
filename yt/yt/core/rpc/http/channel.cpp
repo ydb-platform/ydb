@@ -173,7 +173,7 @@ private:
             : Client_(client)
         {
             TSharedRef httpRequestBody;
-            THeadersPtr httpRequestHeaders = TranslateRequest(request);
+            auto httpRequestHeaders = TranslateRequest(request);
 
             auto protocol = parentChannel->IsHttps_ ? "https" : "http";
             // See TServer::DoRegisterService().
@@ -235,11 +235,12 @@ private:
         }
 
     private:
-        IClientPtr Client_;
+        const IClientPtr Client_;
+
         TFuture<IResponsePtr> Response_;
 
         // This function does the backwards transformation of NRpc::NHttp::THttpHandler::TranslateRequest().
-        THeadersPtr TranslateRequest(IClientRequestPtr& request)
+        THeadersPtr TranslateRequest(const IClientRequestPtr& request)
         {
             using namespace NHeaders;
             using NYT::FromProto;
@@ -305,12 +306,14 @@ private:
                 httpHeaders->Add(UserAgentHeaderName, rpcHeader.user_agent());
             }
 
-            if (auto& user = request->GetUser()) {
-                httpHeaders->Add(UserNameHeaderName, user);
+            if (const auto& user = request->GetUser(); !user.empty()) {
+                // TODO(babenko): switch to std:::string
+                httpHeaders->Add(UserNameHeaderName, TString(user));
             }
 
-            if (auto& user_tag = request->GetUserTag()) {
-                httpHeaders->Add(UserTagHeaderName, user_tag);
+            if (const auto& userTag = request->GetUserTag(); !userTag.empty()) {
+                // TODO(babenko): switch to std:::string
+                httpHeaders->Add(UserTagHeaderName, TString(userTag));
             }
 
             if (rpcHeader.has_timeout()) {

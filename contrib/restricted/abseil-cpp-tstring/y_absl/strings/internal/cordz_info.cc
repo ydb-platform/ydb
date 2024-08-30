@@ -307,9 +307,14 @@ CordzInfo::CordzInfo(CordRep* rep, const CordzInfo* src,
                      MethodIdentifier method, int64_t sampling_stride)
     : rep_(rep),
       stack_depth_(
+#ifdef Y_ABSL_DONT_USE_DEBUG_LIBRARY
+          0
+#else 
           static_cast<size_t>(y_absl::GetStackTrace(stack_,
                                                   /*max_depth=*/kMaxStackDepth,
-                                                  /*skip_count=*/1))),
+                                                  /*skip_count=*/1))
+#endif
+      ),
       parent_stack_depth_(FillParentStack(src, parent_stack_)),
       method_(method),
       parent_method_(GetParentMethod(src)),

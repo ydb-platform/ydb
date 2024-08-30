@@ -980,7 +980,7 @@ private:
 
         if (auto maybeRead = TMaybeNode<TKqlReadTableBase>(node)) {
             operatorId = Visit(maybeRead.Cast(), planNode);
-        } else if (TMaybeNode<TKqlReadTableRangesBase>(node) && !TMaybe<TKqpReadOlapTableRangesBase>(node)) {
+        } else if (TMaybeNode<TKqlReadTableRangesBase>(node) && !TMaybeNode<TKqpReadOlapTableRangesBase>(node)) {
             auto maybeReadRanges = TMaybeNode<TKqlReadTableRangesBase>(node);
             operatorId = Visit(maybeReadRanges.Cast(), planNode);
         } else if (auto maybeLookup = TMaybeNode<TKqlLookupTableBase>(node)) {

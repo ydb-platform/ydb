@@ -183,19 +183,23 @@ LIMIT $K;
 
 ### Точный поиск векторов, находящихся в радиусе R
 
+{% if backend_name == "YDB" %}
 ```sql
 $R = 0.1f;
 $TargetEmbedding = Knn::ToBinaryStringFloat([1.2f, 2.3f, 3.4f, 4.5f]);
 
-SELECT *
-{% if backend_name == "YDB" %}
-FROM Facts
-{% else %}
-FROM AS_TABLE($facts)
-{% endif %}
-
+SELECT * FROM Facts
 WHERE Knn::CosineDistance(embedding, $TargetEmbedding) < $R;
 ```
+{% else %}
+```sql
+$R = 0.1f;
+$TargetEmbedding = Knn::ToBinaryStringFloat([1.2f, 2.3f, 3.4f, 4.5f]);
+
+SELECT * FROM AS_TABLE($facts)
+WHERE Knn::CosineDistance(embedding, $TargetEmbedding) < $R;
+```
+{% endif %}
 
 ## Примеры приближенного поиска
 
@@ -267,28 +271,36 @@ SELECT ListMap($FloatList, $MapInt8);
 * получается приближенный список векторов;
 * в этом списке производим поиск без использования квантования.
 
+{% if backend_name == "YDB" %}
 ```sql
 $K = 10;
 $Target = [1.2f, 2.3f, 3.4f, 4.5f];
 $TargetEmbeddingBit = Knn::ToBinaryStringBit($Target);
 $TargetEmbeddingFloat = Knn::ToBinaryStringFloat($Target);
 
-$Ids = SELECT id
-{% if backend_name == "YDB" %}
-FROM Facts
-{% else %}
-FROM AS_TABLE($facts)
-{% endif %}
+$Ids = SELECT id FROM Facts
 ORDER BY Knn::CosineDistance(embedding_bit, $TargetEmbeddingBit)
 LIMIT $K * 10;
 
-SELECT *
-{% if backend_name == "YDB" %}
-FROM Facts
-{% else %}
-FROM AS_TABLE($facts)
-{% endif %}
+SELECT * FROM Facts
 WHERE id IN $Ids
 ORDER BY Knn::CosineDistance(embedding, $TargetEmbeddingFloat)
 LIMIT $K;
 ```
+{% else %}
+```sql
+$K = 10;
+$Target = [1.2f, 2.3f, 3.4f, 4.5f];
+$TargetEmbeddingBit = Knn::ToBinaryStringBit($Target);
+$TargetEmbeddingFloat = Knn::ToBinaryStringFloat($Target);
+
+$Ids = SELECT id FROM AS_TABLE($facts)
+ORDER BY Knn::CosineDistance(embedding_bit, $TargetEmbeddingBit)
+LIMIT $K * 10;
+
+SELECT * FROM AS_TABLE($facts)
+WHERE id IN $Ids
+ORDER BY Knn::CosineDistance(embedding, $TargetEmbeddingFloat)
+LIMIT $K;
+```
+{% endif %}

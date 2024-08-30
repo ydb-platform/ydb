@@ -2,9 +2,9 @@
 
 {% note info %}
 
-{% include [not_allow_for_olap](../../../core/_includes/not_allow_for_olap_text.md) %}
+{% include [not_allow_for_olap](../../_includes/not_allow_for_olap_text.md) %}
 
-{% include [ways_add_data_to_olap](../../../core/_includes/ways_add_data_to_olap.md) %}
+{% include [ways_add_data_to_olap](../../_includes/ways_add_data_to_olap.md) %}
 
 {% endnote %}
 

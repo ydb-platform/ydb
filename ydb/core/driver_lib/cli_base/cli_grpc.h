@@ -23,7 +23,7 @@ int DoGRpcRequest(const NGRpcProxy::TGRpcClientConfig &clientConfig,
 {
     int res = 0;
 
-    if (!clientConfig.Locator) {
+    if (clientConfig.Locator.empty()) {
         Cerr << "GRPC call error: GRPC server is not specified (MBus protocol is not supported for this command)." << Endl;
         return -2;
     }

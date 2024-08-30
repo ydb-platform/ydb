@@ -982,7 +982,7 @@ private:
             } else {
                 if (record.ResponsesLeft == 0 && (record.TokenType == TDerived::ETokenType::Unknown || record.TokenType == TDerived::ETokenType::AccessService || record.TokenType == TDerived::ETokenType::ApiKey)) {
                     bool retryable = IsRetryableGrpcError(response->Status);
-                    SetError(key, record, {response->Status.Msg, retryable});
+                    SetError(key, record, {TString{response->Status.Msg}, retryable});
                 }
             }
             if (record.ResponsesLeft == 0) {
@@ -1011,7 +1011,7 @@ private:
             auto& record = it->second;
             record.ResponsesLeft--;
             if (!ev->Get()->Status.Ok()) {
-                SetError(key, record, {ev->Get()->Status.Msg});
+                SetError(key, record, {TString{ev->Get()->Status.Msg}});
             } else {
                 GetDerived()->SetToken(key, record, ev);
             }
@@ -1033,7 +1033,7 @@ private:
             auto& record = it->second;
             record.ResponsesLeft--;
             if (!ev->Get()->Status.Ok()) {
-                SetError(key, record, {ev->Get()->Status.Msg});
+                SetError(key, record, {TString{ev->Get()->Status.Msg}});
             } else {
                 SetToken(key, record, new NACLib::TUserToken(record.Ticket, ev->Get()->Response.name() + "@" + ServiceDomain, {}));
             }
@@ -1201,7 +1201,7 @@ private:
                     }
                 }
             } else {
-                SetAccessServiceBulkAuthorizeError(key, record, response->Status.Msg, IsRetryableGrpcError(response->Status));
+                SetAccessServiceBulkAuthorizeError(key, record, TString{response->Status.Msg}, IsRetryableGrpcError(response->Status));
             }
             if (record.ResponsesLeft == 0) {
                 Respond(record);
@@ -1282,7 +1282,7 @@ private:
                     }
                 }
             } else {
-                SetAccessServiceBulkAuthorizeError(key, record, response->Status.Msg, IsRetryableGrpcError(response->Status));
+                SetAccessServiceBulkAuthorizeError(key, record, TString{response->Status.Msg}, IsRetryableGrpcError(response->Status));
             }
             Respond(record);
         }
@@ -1322,7 +1322,7 @@ private:
                     }
                 } else {
                     bool retryable = IsRetryableGrpcError(response->Status);
-                    itPermission->second.Error = {response->Status.Msg, retryable};
+                    itPermission->second.Error = {TString{response->Status.Msg}, retryable};
                     if (itPermission->second.Subject.empty() || !retryable) {
                         itPermission->second.Subject.clear();
                         BLOG_TRACE("Ticket "

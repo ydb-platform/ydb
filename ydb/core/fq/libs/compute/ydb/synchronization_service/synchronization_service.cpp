@@ -646,7 +646,7 @@ private:
     }
 
     static bool IsPathExistsIssue(const NYdb::TStatus& status) {
-        return status.GetIssues().ToOneLineString().Contains("error: path exist");
+        return status.GetIssues().ToOneLineString().contains("error: path exist");
     }
 
     bool AlterResourcePool(size_t index) {

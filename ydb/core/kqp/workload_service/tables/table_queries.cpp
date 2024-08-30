@@ -444,7 +444,7 @@ public:
         , PoolId(poolId)
         , SessionId(sessionId)
         , StartTime(startTime)
-        , WaitDeadline(waitDeadline)
+        , WaitDeadline(waitDeadline ? std::optional<TInstant>(waitDeadline.GetRef()) : std::nullopt)
         , LeaseDuration(leaseDuration)
     {}
 
@@ -507,7 +507,7 @@ private:
     const TString PoolId;
     const TString SessionId;
     const TInstant StartTime;
-    const TMaybe<TInstant> WaitDeadline;
+    const std::optional<TInstant> WaitDeadline;
     const TDuration LeaseDuration;
 };
 
@@ -564,7 +564,7 @@ public:
             return;
         }
 
-        TMaybe<ui32> nodeId = result.ColumnParser("node_id").GetOptionalUint32();
+        std::optional<ui32> nodeId = result.ColumnParser("node_id").GetOptionalUint32();
         if (!nodeId) {
             Finish(Ydb::StatusIds::INTERNAL_ERROR, "Node id is not specified for delayed request");
             return;
@@ -576,7 +576,7 @@ public:
             return;
         }
 
-        TMaybe<TString> sessionId = result.ColumnParser("session_id").GetOptionalUtf8();
+        std::optional<std::string> sessionId = result.ColumnParser("session_id").GetOptionalUtf8();
         if (!sessionId) {
             Finish(Ydb::StatusIds::INTERNAL_ERROR, "Session id is not specified for delayed request");
             return;
@@ -585,7 +585,7 @@ public:
         RequestSessionId = *sessionId;
         UpdateLogInfo(PoolId, DatabaseId, RequestSessionId);
 
-        TMaybe<TInstant> startTime = result.ColumnParser("start_time").GetOptionalTimestamp();
+        std::optional<TInstant> startTime = result.ColumnParser("start_time").GetOptionalTimestamp();
         if (!startTime) {
             Finish(Ydb::StatusIds::INTERNAL_ERROR, "Start time is not specified for delayed request");
             return;

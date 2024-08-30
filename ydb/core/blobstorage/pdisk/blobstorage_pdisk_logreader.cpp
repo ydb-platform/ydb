@@ -783,7 +783,7 @@ bool TLogReader::ProcessSectorSet(TSectorData *sector) {
 
     const ui64 magic = format.MagicLogChunk;
     TSectorRestorator restorator(false, LogErasureDataParts, false, format,
-        PDisk->ActorSystem, PDisk->PDiskActor, PDisk->PDiskId, &PDisk->Mon, PDisk->BufferPool.Get());
+        PCtx.get(), &PDisk->Mon, PDisk->BufferPool.Get());
     restorator.Restore(sector->GetData(), sector->Offset, magic, LastNonce, Owner);
 
     if (!restorator.GoodSectorFlags) {
@@ -1149,7 +1149,7 @@ bool TLogReader::ProcessNextChunkReference(TSectorData& sector) {
     TDiskFormat &format = PDisk->Format;
 
     TSectorRestorator restorator(true, 0, format.IsErasureEncodeNextChunkReference(),
-            PDisk->Format, PDisk->ActorSystem, PDisk->PDiskActor, PDisk->PDiskId, &PDisk->Mon,
+            PDisk->Format, PCtx.get(), &PDisk->Mon,
             PDisk->BufferPool.Get());
     restorator.Restore(sector.GetData(), sector.Offset, format.MagicNextLogChunkReference, LastNonce,
             Owner);

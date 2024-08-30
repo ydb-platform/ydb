@@ -136,7 +136,7 @@ TCompletionChunkReadPart::TCompletionChunkReadPart(TPDisk *pDisk, TIntrusivePtr<
 
 TCompletionChunkReadPart::~TCompletionChunkReadPart() {
     if (CumulativeCompletion) {
-        CumulativeCompletion->PartDeleted(PDisk->ActorSystem);
+        CumulativeCompletion->PartDeleted(PDisk->PCtx->ActorSystem);
     }
     AtomicSub(PDisk->InFlightChunkRead, RawReadSize);
 }
@@ -189,7 +189,7 @@ void TCompletionChunkReadPart::Exec(TActorSystem *actorSystem) {
         ui32 beginUserOffset = sectorIdx * userSectorSize;
 
         TSectorRestorator restorator(false, 1, false,
-            format, actorSystem, PDisk->PDiskActor, PDisk->PDiskId, &PDisk->Mon, PDisk->BufferPool.Get());
+            format, PDisk->PCtx.get(), &PDisk->Mon, PDisk->BufferPool.Get());
         ui64 lastNonce = Min((ui64)0, chunkNonce - 1);
         restorator.Restore(source, format.Offset(Read->ChunkIdx, sectorIdx), format.MagicDataChunk, lastNonce,
                 Read->Owner);

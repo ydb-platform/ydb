@@ -49,11 +49,11 @@ public:
     std::shared_ptr<TPDiskCtx> PCtx;
     ui32 PDiskId; // deprecated, moved to PCtx
     TActorId PDiskActor; // deprecated, moved to PCtx
+    // TActorSystem *ActorSystem; // deprecated, moved to PCtx
 
     // Monitoring
     TPDiskMon Mon; // deprecated, moved to PCtx
 
-    TActorSystem *ActorSystem; // deprecated, moved to PCtx
 
     // Static state
     TDriveModel DriveModel;

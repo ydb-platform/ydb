@@ -45,7 +45,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         start_time = time.monotonic()
 
         response = None
-        sleep_for_5xx = 10  # sec
+        sleep_for_5xx = 30  # sec
         sleep_for_timeout = 0.25  # sec
 
         while time.monotonic() - start_time < self._max_request_time:

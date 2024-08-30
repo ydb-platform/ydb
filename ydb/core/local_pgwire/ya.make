@@ -1,5 +1,9 @@
 LIBRARY()
 
+ADDINCL(
+    ydb/public/sdk/cpp
+)
+
 SRCS(
     local_pgwire_auth_actor.cpp
     local_pgwire_connection.cpp

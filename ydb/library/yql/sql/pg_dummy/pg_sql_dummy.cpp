@@ -514,7 +514,7 @@ TConvertResult PgNativeBinaryFromNativeText(const TString& str, const ITypeDesc*
     throw yexception() << "PG types are not supported";
 }
 
-TConvertResult PgNativeBinaryFromNativeText(const std::string& str, ui32 pgTypeId) {
+TConvertResult PgNativeBinaryFromNativeText(const TString& str, ui32 pgTypeId) {
     Y_UNUSED(str);
     Y_UNUSED(pgTypeId);
     throw yexception() << "PG types are not supported";

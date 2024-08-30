@@ -6,10 +6,6 @@ SRCS(
     status.cpp
 )
 
-ADDINCL(
-    ydb/public/sdk/cpp
-)
-
 PEERDIR(
     contrib/libs/protobuf
     ydb/public/sdk/cpp/src/library/grpc/client

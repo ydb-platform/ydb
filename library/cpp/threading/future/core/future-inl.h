@@ -843,7 +843,7 @@ namespace NThreading {
     }
 
     template <typename T>
-    inline void TPromise<T>::SetException(const std::string& e) {
+    inline void TPromise<T>::SetException(const TString& e) {
         EnsureInitialized();
         State->SetException(std::make_exception_ptr(yexception() << e));
     }
@@ -927,7 +927,7 @@ namespace NThreading {
         return State && State->IsReady();
     }
 
-    inline void TPromise<void>::SetException(const std::string& e) {
+    inline void TPromise<void>::SetException(const TString& e) {
         EnsureInitialized();
         State->SetException(std::make_exception_ptr(yexception() << e));
     }

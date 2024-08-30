@@ -418,7 +418,7 @@ private:
 
 struct TCreateRateLimiterResourceRequestDesc {
     TString Path;
-    TMaybe<double> Limit;
+    std::optional<double> Limit;
 };
 
 class TCreateRateLimiterResourceActor : public TRecursiveCreateActorBase<TCreateRateLimiterResourceRequestDesc> {

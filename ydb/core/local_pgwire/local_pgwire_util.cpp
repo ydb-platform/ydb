@@ -200,7 +200,7 @@ Ydb::TypedValue GetTypedValueFromParam(int16_t format, const std::vector<uint8_t
 
 NYdb::NScripting::TExecuteYqlResult ConvertProtoResponseToSdkResult(Ydb::Scripting::ExecuteYqlResponse&& proto) {
     TVector<NYdb::TResultSet> res;
-    TMaybe<NYdb::NTable::TQueryStats> queryStats;
+    std::optional<NYdb::NTable::TQueryStats> queryStats;
     {
         Ydb::Scripting::ExecuteYqlResult result;
         proto.mutable_operation()->mutable_result()->UnpackTo(&result);
@@ -212,7 +212,7 @@ NYdb::NScripting::TExecuteYqlResult ConvertProtoResponseToSdkResult(Ydb::Scripti
         }
     }
     NYdb::TPlainStatus alwaysSuccess;
-    return {NYdb::TStatus(std::move(alwaysSuccess)), std::move(res), std::optional<NYdb::NTable::TQueryStats>(queryStats.GetRef())};
+    return {NYdb::TStatus(std::move(alwaysSuccess)), std::move(res), queryStats};
 }
 
 int16_t GetFormatForColumn(size_t index, const std::vector<int16_t>& format) {

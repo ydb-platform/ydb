@@ -20,11 +20,11 @@ from decimal import Decimal
 
 
 def create_tables(pool,  table_path):
-    print(f"> create table: {table_path}")
+    print(f"> create table if not exists:'{table_path}'")
 
     def callee(session):
         session.execute_scheme(f"""
-            CREATE table IF NOT EXISTS`{table_path}` (
+            CREATE table IF NOT EXISTS `{table_path}` (
                 build_type Utf8 NOT NULL,
                 job_name Utf8,
                 job_id Uint64,
@@ -180,7 +180,7 @@ def main():
 
     path_in_database = "test_results"
     dir = os.path.dirname(__file__)
-    git_root = f"{dir}/../.."
+    git_root = f"{dir}/../../.."
     codeowners = f"{git_root}/.github/TESTOWNERS"
     config = configparser.ConfigParser()
     config_file_path = f"{git_root}/.github/config/ydb_qa_db.ini"

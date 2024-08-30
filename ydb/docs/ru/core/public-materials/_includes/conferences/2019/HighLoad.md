@@ -22,6 +22,6 @@
 
 @[YouTube](https://youtu.be/-GlRSxG4JQU?t=10779)
 
-[ {{ team.kuznetcov.name }} ]( {{ team.kuznetcov.profile }} ) ( {{ team.kuznetcov.position }} ) рассказал о том, как {{ ydb-short-name }} хранит данные с избыточностью и как {{ ydb-short-name }} решает задачу распределенного консенсуса.
+[{{ team.kuznetcov.name }}]({{ team.kuznetcov.profile }}) ({{ team.kuznetcov.position }}) рассказал о том, как {{ ydb-short-name }} хранит данные с избыточностью и как {{ ydb-short-name }} решает задачу распределенного консенсуса.
 
 [Слайды](https://presentations.ydb.tech/2019/ru/highload_siberia/presentation.pdf)

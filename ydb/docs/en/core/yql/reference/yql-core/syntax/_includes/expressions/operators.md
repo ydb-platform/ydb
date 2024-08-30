@@ -43,7 +43,7 @@ SELECT 3 > 0 AND false;
 
 Bitwise operations on numbers:
 
-* `&`, `|`, `^`: AND, OR, and XOR, respectively. Don't confuse bitwise operations with the related keywords. The keywords `AND`, `OR`, and `XOR` are used * for Boolean values only*, but not for numbers.
+* `&`, `|`, `^`: AND, OR, and XOR, respectively. Don't confuse bitwise operations with the related keywords. The keywords `AND`, `OR`, and `XOR` are used *for Boolean values only*, but not for numbers.
 * ` ~ `: A negation.
 * `<`, `>`: Left or right shifts.
 * `|<`, `>|`: Circular left or right shifts.

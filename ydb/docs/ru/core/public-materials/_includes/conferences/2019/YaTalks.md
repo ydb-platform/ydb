@@ -13,7 +13,8 @@
 
 {% include notitle [database_internals_tag](../../tags.md#database_internals) %}
 
-[ {{ team.puchin.name }} ]( {{ team.puchin.profile }} ) ( {{ team.puchin.position }} ) рассказал об основных моментах, связанных с выполнением распределенных запросов в {{ ydb-short-name }}:
+[{{ team.puchin.name }}]({{ team.puchin.profile }}) ({{ team.puchin.position }}) рассказал об основных моментах, связанных с выполнением распределенных запросов в {{ ydb-short-name }}:
+
 * Модель транзакций и уровни изоляции.
 * Особенности SQL-диалекта Yandex Query Language (YQL).
 * Многошаговые транзакции и механизм оптимистичных блокировок.

@@ -2,11 +2,12 @@
 
 {% include notitle [overview_tag](../../tags.md#overview) %}
 
-[ {{ team.fomichev.name }} ]( {{ team.fomichev.profile }} ) ( {{ team.fomichev.position }} ) рассказал, как и зачем была создана {{ ydb-name }}, чем она отличается от других БД и для каких задач она лучше всего подходит.
+[{{ team.fomichev.name }}]({{ team.fomichev.profile }}) ({{ team.fomichev.position }}) рассказал, как и зачем была создана {{ ydb-name }}, чем она отличается от других БД и для каких задач она лучше всего подходит.
 
 @[YouTube](https://youtu.be/MlSdUq5RIN8)
 
 В докладе подробно разобраны следующие свойства {{ ydb-short-name }}:
+
 * Автоматический split/merge шардов.
 * Автоматическое восстановление после сбоев за время обнаружения отказа.
 * Синхронная репликация данных, в том числе в геораспределенной конфигурации данных.
@@ -23,6 +24,7 @@
 @[YouTube](https://youtu.be/kubFwIKJjBY)
 
 Вы узнаете:
+
 * Как {{ ydb-short-name }} хранит гигабайты данных умных устройств.
 * Почему разработчики Алисы выбрали {{ ydb-short-name }} для хранения логов.
 * Какие преимущества есть у {{ ydb-short-name }} перед Cassandra и MongoDB.

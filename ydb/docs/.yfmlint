@@ -31,9 +31,9 @@ log-levels:
   MD034: 'disabled' # Bare URL used
   MD035: 'disabled' # Horizontal rule style
   MD036: 'disabled' # Emphasis used instead of a heading
-  MD037: 'disabled' # Spaces inside emphasis markers
-  MD038: 'disabled' # Spaces inside code span elements
-  MD039: 'disabled' # Spaces inside link text
+  MD037: 'error' # Spaces inside emphasis markers
+  MD038: 'error' # Spaces inside code span elements
+  MD039: 'error' # Spaces inside link text
   MD040: 'disabled' # Fenced code blocks should have a language specified
   MD041: 'disabled' # First line in a file should be a top-level heading
   MD042: 'error' # No empty links

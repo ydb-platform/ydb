@@ -2,7 +2,7 @@
 
 {% include notitle [overview_tag](../../tags.md#overview) %}
 
-Современная распределённая БД, как и сама Вселенная, состоит из мельчайших частиц. Из частиц, которые мы называем таблетками, строится петабайтная вселенная данных Yandex Database. [ {{ team.fomichev.name }} ]( {{ team.fomichev.profile }} ) ( {{ team.fomichev.position }} ) рассказал о том, какую задачу решают таблетки, как они обеспечивают согласованные изменения данных и отказоустойчивое хранение, а также как мечты помогают нам создавать новые технологии космического масштаба, не ограничиваясь стандартными решениями.
+Современная распределённая БД, как и сама Вселенная, состоит из мельчайших частиц. Из частиц, которые мы называем таблетками, строится петабайтная вселенная данных Yandex Database. [{{ team.fomichev.name }}]({{ team.fomichev.profile }}) ({{ team.fomichev.position }}) рассказал о том, какую задачу решают таблетки, как они обеспечивают согласованные изменения данных и отказоустойчивое хранение, а также как мечты помогают нам создавать новые технологии космического масштаба, не ограничиваясь стандартными решениями.
 
 @[YouTube](https://www.youtube.com/watch?v=Ay6_ffxK4us&t=7076s)
 
@@ -20,8 +20,8 @@
 
 В докладе показано:
 * Что нового в Cloud Functions. Глеб Борисов.
-* Как клиенты облака используют Yandex Database Serverless. [ {{ team.kovalenko.name }} ]( {{ team.kovalenko.profile }} ) ( {{ team.kovalenko.position }} ).
-* Миграция приложения с PostgreSQL на Yandex Database Serverless. Производительность, стоимость, риски. [ {{ team.smirnov.name }} ]( {{ team.smirnov.profile }} ) ( {{ team.smirnov.position }} ).
+* Как клиенты облака используют Yandex Database Serverless. [{{ team.kovalenko.name }}]({{ team.kovalenko.profile }}) ({{ team.kovalenko.position }}).
+* Миграция приложения с PostgreSQL на Yandex Database Serverless. Производительность, стоимость, риски. [{{ team.smirnov.name }}]({{ team.smirnov.profile }}) ({{ team.smirnov.position }}).
 
 @[YouTube](https://www.youtube.com/watch?v=8bgtMxkduV8&t=3946s)
 

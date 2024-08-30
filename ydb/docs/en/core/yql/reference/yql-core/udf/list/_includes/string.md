@@ -127,7 +127,7 @@ Functions for ASCII strings:
 
 * ```String::HumanReadableBytes(Uint64{Flags:AutoMap}) -> String```
 
-* ```String::Prec(Double{Flags:AutoMap}, Uint64) -> String* ```
+* ```String::Prec(Double{Flags:AutoMap}, Uint64) -> String```
 
 * ```String::Reverse(String?) -> String?```
 

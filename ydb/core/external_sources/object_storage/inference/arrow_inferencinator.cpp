@@ -1,4 +1,5 @@
 #include "arrow_inferencinator.h"
+#include "infer_config.h"
 
 #include <arrow/table.h>
 #include <arrow/csv/options.h>
@@ -27,7 +28,11 @@ namespace NKikimr::NExternalSource::NObjectStorage::NInference {
 
 namespace {
 
-bool ShouldBeOptional(const arrow::DataType& type) {
+bool ShouldBeOptional(const arrow::DataType& type, std::shared_ptr<FormatConfig> config) {
+    if (!config->ShouldMakeOptional) {
+        return false;
+    }
+
     switch (type.id()) {
     case arrow::Type::NA:
     case arrow::Type::STRING:
@@ -40,8 +45,8 @@ bool ShouldBeOptional(const arrow::DataType& type) {
     }
 }
 
-bool ArrowToYdbType(Ydb::Type& maybeOptionalType, const arrow::DataType& type) {
-    auto& resType = ShouldBeOptional(type) ? *maybeOptionalType.mutable_optional_type()->mutable_item() : maybeOptionalType;
+bool ArrowToYdbType(Ydb::Type& maybeOptionalType, const arrow::DataType& type, std::shared_ptr<FormatConfig> config) {
+    auto& resType = ShouldBeOptional(type, config) ? *maybeOptionalType.mutable_optional_type()->mutable_item() : maybeOptionalType;
     switch (type.id()) {
     case arrow::Type::NA:
         resType.set_type_id(Ydb::Type::UTF8);
@@ -123,7 +128,7 @@ bool ArrowToYdbType(Ydb::Type& maybeOptionalType, const arrow::DataType& type) {
         for (const auto& field : type.fields()) {
             auto& member = *structType.add_members();
             auto& memberType = *member.mutable_type();
-            if (!ArrowToYdbType(memberType, *field->type())) {
+            if (!ArrowToYdbType(memberType, *field->type(), config)) {
                 return false;
             }
             member.mutable_name()->assign(field->name().data(), field->name().size());
@@ -135,7 +140,7 @@ bool ArrowToYdbType(Ydb::Type& maybeOptionalType, const arrow::DataType& type) {
         auto& variant = *resType.mutable_variant_type()->mutable_struct_items();
         for (const auto& field : type.fields()) {
             auto& member = *variant.add_members();
-            if (!ArrowToYdbType(*member.mutable_type(), *field->type())) {
+            if (!ArrowToYdbType(*member.mutable_type(), *field->type(), config)) {
                 return false;
             }
             if (field->name().empty()) {
@@ -176,27 +181,12 @@ TEvInferredFileSchema* MakeErrorSchema(TString path, NFq::TIssuesIds::EIssueCode
 
 }
 
-struct FormatConfig {
-    virtual ~FormatConfig() noexcept = default;
-};
-
-struct CsvConfig : public FormatConfig {
-    arrow::csv::ParseOptions ParseOpts = arrow::csv::ParseOptions::Defaults();
-    arrow::csv::ConvertOptions ConvOpts = arrow::csv::ConvertOptions::Defaults();
-};
-
-struct JsonConfig : public FormatConfig {
-    arrow::json::ParseOptions ParseOpts = arrow::json::ParseOptions::Defaults();
-};
-
-using TsvConfig = CsvConfig;
-
 namespace {
 
 using ArrowField = std::shared_ptr<arrow::Field>;
 using ArrowFields = std::vector<ArrowField>;
 
-std::variant<ArrowFields, TString> InferCsvTypes(std::shared_ptr<arrow::io::RandomAccessFile> file, const CsvConfig& config) {
+std::variant<ArrowFields, TString> InferCsvTypes(std::shared_ptr<arrow::io::RandomAccessFile> file, std::shared_ptr<CsvConfig> config) {
     int64_t fileSize;
     if (auto sizeStatus = file->GetSize().Value(&fileSize); !sizeStatus.ok()) {
         return TStringBuilder{} << "coudn't get file size: " << sizeStatus.ToString();
@@ -207,8 +197,8 @@ std::variant<ArrowFields, TString> InferCsvTypes(std::shared_ptr<arrow::io::Rand
         arrow::io::default_io_context(),
         std::move(file),
         arrow::csv::ReadOptions{.use_threads = false, .block_size = static_cast<int32_t>(fileSize)},
-        config.ParseOpts,
-        config.ConvOpts
+        config->ParseOpts,
+        config->ConvOpts
     )
     .Value(&reader);
 
@@ -249,7 +239,7 @@ std::variant<ArrowFields, TString> InferParquetTypes(std::shared_ptr<arrow::io::
     return schema->fields();
 }
 
-std::variant<ArrowFields, TString> InferJsonTypes(std::shared_ptr<arrow::io::RandomAccessFile> file, const JsonConfig& config) {
+std::variant<ArrowFields, TString> InferJsonTypes(std::shared_ptr<arrow::io::RandomAccessFile> file, std::shared_ptr<JsonConfig> config) {
     int64_t fileSize;
     if (auto sizeStatus = file->GetSize().Value(&fileSize); !sizeStatus.ok()) {
         return TStringBuilder{} << "coudn't get file size: " << sizeStatus.ToString();
@@ -260,7 +250,7 @@ std::variant<ArrowFields, TString> InferJsonTypes(std::shared_ptr<arrow::io::Ran
         arrow::default_memory_pool(),
         std::move(file),
         arrow::json::ReadOptions{.use_threads = false, .block_size = static_cast<int32_t>(fileSize)},
-        config.ParseOpts
+        config->ParseOpts
     ).Value(&reader);
 
     if (!readerStatus.ok()) {
@@ -277,49 +267,20 @@ std::variant<ArrowFields, TString> InferJsonTypes(std::shared_ptr<arrow::io::Ran
     return table->fields();
 }
 
-std::variant<ArrowFields, TString> InferType(EFileFormat format, std::shared_ptr<arrow::io::RandomAccessFile> file, const FormatConfig& config) {
-    switch (format) {
+std::variant<ArrowFields, TString> InferType(std::shared_ptr<arrow::io::RandomAccessFile> file, std::shared_ptr<FormatConfig> config) {
+    switch (config->Format) {
     case EFileFormat::CsvWithNames:
-        return InferCsvTypes(std::move(file), static_cast<const CsvConfig&>(config));
+        return InferCsvTypes(std::move(file), std::dynamic_pointer_cast<CsvConfig>(config));
     case EFileFormat::TsvWithNames:
-        return InferCsvTypes(std::move(file), static_cast<const TsvConfig&>(config));
+        return InferCsvTypes(std::move(file), std::dynamic_pointer_cast<TsvConfig>(config));
     case EFileFormat::Parquet:
         return InferParquetTypes(std::move(file));
     case EFileFormat::JsonEachRow:
     case EFileFormat::JsonList:
-        return InferJsonTypes(std::move(file), static_cast<const JsonConfig&>(config));
+        return InferJsonTypes(std::move(file), std::dynamic_pointer_cast<JsonConfig>(config));
     case EFileFormat::Undefined:
     default:
-        return std::variant<ArrowFields, TString>{std::in_place_type_t<TString>{}, TStringBuilder{} << "unexpected format: " << ConvertFileFormat(format)};
-    }
-}
-
-std::unique_ptr<CsvConfig> MakeCsvConfig(const THashMap<TString, TString>&) { // TODO: extract params
-    return std::make_unique<CsvConfig>();
-}
-
-std::unique_ptr<TsvConfig> MakeTsvConfig(const THashMap<TString, TString>& params) {
-    auto config = MakeCsvConfig(params);
-    config->ParseOpts.delimiter = '\t';
-    return config;
-}
-
-std::unique_ptr<JsonConfig> MakeJsonConfig(const THashMap<TString, TString>&) {
-    return std::make_unique<JsonConfig>();
-}
-
-std::unique_ptr<FormatConfig> MakeFormatConfig(EFileFormat format, const THashMap<TString, TString>& params) {
-    switch (format) {
-    case EFileFormat::CsvWithNames:
-        return MakeCsvConfig(params);
-    case EFileFormat::TsvWithNames:
-        return MakeTsvConfig(params);
-    case EFileFormat::JsonEachRow:
-    case EFileFormat::JsonList:
-        return MakeJsonConfig(params);
-    case EFileFormat::Undefined:
-    default:
-        return nullptr;
+        return TStringBuilder{} << "unexpected format: " << ConvertFileFormat(config->Format);
     }
 }
 
@@ -327,16 +288,9 @@ std::unique_ptr<FormatConfig> MakeFormatConfig(EFileFormat format, const THashMa
 
 class TArrowInferencinator : public NActors::TActorBootstrapped<TArrowInferencinator> {
 public:
-    TArrowInferencinator(
-        NActors::TActorId arrowFetcher,
-        EFileFormat format,
-        const THashMap<TString, TString>& params)
-        : Format_{format}
-        , Config_{MakeFormatConfig(Format_, params)}
-        , ArrowFetcherId_{arrowFetcher}
-    {
-        Y_ABORT_UNLESS(IsArrowInferredFormat(Format_));
-    }
+    TArrowInferencinator(NActors::TActorId arrowFetcher)
+        : ArrowFetcherId_{arrowFetcher}
+    {}
 
     void Bootstrap() {
         Become(&TArrowInferencinator::WorkingState);
@@ -354,10 +308,15 @@ public:
     }
 
     void HandleFileInference(TEvArrowFile::TPtr& ev, const NActors::TActorContext& ctx) {
+        if (!RequesterId_) {
+            RequesterId_ = ev->Sender;
+        }
+
         auto& file = *ev->Get();
-        auto mbArrowFields = InferType(Format_, file.File, *Config_);
+        auto mbArrowFields = InferType(file.File, file.Config);
         if (std::holds_alternative<TString>(mbArrowFields)) {
             ctx.Send(RequesterId_, MakeErrorSchema(file.Path, NFq::TIssuesIds::INTERNAL_ERROR, std::get<TString>(mbArrowFields)));
+            RequesterId_ = {};
             return;
         }
         auto& arrowFields = std::get<ArrowFields>(mbArrowFields);
@@ -365,13 +324,16 @@ public:
         for (const auto& field : arrowFields) {
             ydbFields.emplace_back();
             auto& ydbField = ydbFields.back();
-            if (!ArrowToYdbType(*ydbField.mutable_type(), *field->type())) {
+            if (!ArrowToYdbType(*ydbField.mutable_type(), *field->type(), file.Config)) {
                 ctx.Send(RequesterId_, MakeErrorSchema(file.Path, NFq::TIssuesIds::UNSUPPORTED, TStringBuilder{} << "couldn't convert arrow type to ydb: " << field->ToString()));
+                RequesterId_ = {};
                 return;
             }
             ydbField.mutable_name()->assign(field->name());
         }
+
         ctx.Send(RequesterId_, new TEvInferredFileSchema(file.Path, std::move(ydbFields)));
+        RequesterId_ = {};
     }
 
     void HandleFileError(TEvFileError::TPtr& ev, const NActors::TActorContext& ctx) {
@@ -380,17 +342,11 @@ public:
     }
 
 private:
-    EFileFormat Format_;
-    std::unique_ptr<FormatConfig> Config_;
     NActors::TActorId ArrowFetcherId_;
     NActors::TActorId RequesterId_;
 };
 
-NActors::IActor* CreateArrowInferencinator(
-    NActors::TActorId arrowFetcher,
-    EFileFormat format,
-    const THashMap<TString, TString>& params) {
-
-    return new TArrowInferencinator{arrowFetcher, format, params};
+NActors::IActor* CreateArrowInferencinator(NActors::TActorId arrowFetcher) {
+    return new TArrowInferencinator{arrowFetcher};
 }
 } // namespace NKikimr::NExternalSource::NObjectStorage::NInference

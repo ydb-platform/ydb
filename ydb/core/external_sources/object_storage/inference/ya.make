@@ -9,6 +9,7 @@ ADDINCL(
 SRCS(
     arrow_fetcher.cpp
     arrow_inferencinator.cpp
+    infer_config.cpp
 )
 
 PEERDIR(

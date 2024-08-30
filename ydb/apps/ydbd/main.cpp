@@ -8,6 +8,8 @@
 #include <ydb/library/yql/parser/pg_wrapper/interface/comp_factory.h>
 
 
+// rebuild
+
 int main(int argc, char **argv) {
     SetupTerminateHandler();
 

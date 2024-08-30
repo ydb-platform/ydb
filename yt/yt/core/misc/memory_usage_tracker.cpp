@@ -233,7 +233,7 @@ TError TMemoryUsageTrackerGuard::SetSizeImpl(i64 size, auto acquirer)
     return {};
 }
 
-void TMemoryUsageTrackerGuard::IncrementSize(i64 sizeDelta)
+void TMemoryUsageTrackerGuard::IncreaseSize(i64 sizeDelta)
 {
     SetSize(Size_ + sizeDelta);
 }

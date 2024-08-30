@@ -666,7 +666,6 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::AssumeConstraints(TExpr
     }
 
     return Build<TYtOutput>(ctx, assume.Pos())
-        .InitFrom(input.Cast<TYtOutput>())
         .Operation(newOp)
         .OutIndex(input.Cast<TYtOutput>().OutIndex())
         .Mode(sorted ? TMaybeNode<TCoAtom>() : input.Cast<TYtOutput>().Mode())

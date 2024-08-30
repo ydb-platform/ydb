@@ -1,5 +1,7 @@
 LIBRARY()
 
+VERSION(Service-proxy-version)
+
 LICENSE(
     BSD-1-Clause AND
     BSD-2-Clause AND

@@ -15,7 +15,7 @@ You need to have a GitHub account to suggest any changes to the YDB source code.
 * If you have a yubikey, you can use the legacy key from the yubikey:
   * Let's assume you have already configured yubikey (or configure yubikey locally)
   * On your laptop: `skotty ssh keys`
-  * Upload `legacy@yubikey` ssh key to github (over ui: https://github.com/settings/keys)
+  * Upload `legacy@yubikey` ssh key to github ([via UI](https://github.com/settings/keys))
   * test connection on laptop: `ssh -T git@github.com`
 
 #### Remote development

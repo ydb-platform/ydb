@@ -29,7 +29,7 @@ PRAGMA Warning("disable", "1101");
 
 With some exceptions, you can return the settings values to their default states using `PRAGMA my_pragma = default;`.
 
-For the full list of available settings, [see the table below](#pragmas).
+For the full list of available settings, [see the table below](../../pragma.md#pragmas).
 
 ### Scope {#pragmascope}
 

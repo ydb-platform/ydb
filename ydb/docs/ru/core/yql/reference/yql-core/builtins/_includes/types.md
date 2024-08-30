@@ -250,9 +250,9 @@ ListItemType(ListType)->тип элемента списочного типа
 StreamItemType(StreamType)->тип элемента потокового типа
 ```
 
-{% if feature_codegen %} Если этим функциям передается тип, то они выполняют{% else %}Выполняют{% endif %} действие, обратное [OptionalType](#optionaltype), [ListType](#listtype) и [StreamType](#streamtype) — возвращают тип элемента по типу соответствующего контейнера.
+{% if feature_codegen %} Если этим функциям передается тип, то они выполняют{% else %}Выполняют{% endif %} действие, обратное [OptionalType](#optionaltype), [ListType](#listtype) и [StreamType](#listtype) — возвращают тип элемента по типу соответствующего контейнера.
 {% if feature_codegen %}
-Если этим функциям передается хендл типа, то выполняют действие, обратное [OptionalTypeHandle](#optionaltypehandle), [ListTypeHandle](#listtypehandle) и [StreamTypeHandle](#streamtypehandle) - возвращают хендл типа элемента по хендлу типа соответствующего контейнера.
+Если этим функциям передается хендл типа, то выполняют действие, обратное [OptionalTypeHandle](#optionaltypehandle), [ListTypeHandle](#list-stream-typehandle) и [StreamTypeHandle](#list-stream-typehandle) - возвращают хендл типа элемента по хендлу типа соответствующего контейнера.
 {% endif %}
 
 **Примеры**

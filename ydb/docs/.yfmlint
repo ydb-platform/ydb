@@ -36,7 +36,7 @@ log-levels:
   MD039: 'disabled' # Spaces inside link text
   MD040: 'disabled' # Fenced code blocks should have a language specified
   MD041: 'disabled' # First line in a file should be a top-level heading
-  MD042: 'disabled' # No empty links
+  MD042: 'error' # No empty links
   MD043: 'disabled' # Required heading structure
   MD044: 'disabled' # Proper names should have the correct capitalization
   MD045: 'disabled' # Images should have alternate text (alt text)
@@ -45,7 +45,7 @@ log-levels:
   MD048: 'disabled' # Code fence style
   MD049: 'disabled' # Emphasis style should be consistent
   MD050: 'disabled' # Strong style should be consistent
-  MD051: 'disabled' # Link fragments should be valid
+  MD051: 'error' # Link fragments should be valid
   MD052: 'disabled' # Reference links and images should use a label that is defined
   MD053: 'disabled' # Link and image reference definitions should be needed
   MD054: 'disabled' # Link and image style

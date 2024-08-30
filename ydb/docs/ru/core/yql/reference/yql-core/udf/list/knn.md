@@ -165,21 +165,27 @@ $facts = AsList(
 
 ### Точный поиск K ближайших векторов
 
+{% if backend_name == "YDB" %}
 ```sql
 $K = 10;
 $TargetEmbedding = Knn::ToBinaryStringFloat([1.2f, 2.3f, 3.4f, 4.5f]);
 
-SELECT *
-{% if backend_name == "YDB" %}
-FROM Facts
-{% else %}
-FROM AS_TABLE($facts)
-{% endif %}
-
+SELECT * FROM Facts
 WHERE user="Williams"
 ORDER BY Knn::CosineDistance(embedding, $TargetEmbedding)
 LIMIT $K;
 ```
+{% else %}
+```sql
+$K = 10;
+$TargetEmbedding = Knn::ToBinaryStringFloat([1.2f, 2.3f, 3.4f, 4.5f]);
+
+SELECT * FROM AS_TABLE($facts)
+WHERE user="Williams"
+ORDER BY Knn::CosineDistance(embedding, $TargetEmbedding)
+LIMIT $K;
+```
+{% endif %}
 
 ### Точный поиск векторов, находящихся в радиусе R
 

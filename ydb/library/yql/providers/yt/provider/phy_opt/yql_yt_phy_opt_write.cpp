@@ -47,11 +47,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::DqWrite(TExprBase node,
     }
 
     TSyncMap syncList;
-<<<<<<<
-    if (!IsYtCompleteIsolatedLambda(write.Content().Ref(), syncList, true)) {
-=======
-    if (!IsYtCompleteIsolatedLambda(*content, syncList, true, true)) {
->>>>>>>
+    if (!IsYtCompleteIsolatedLambda(*content, syncList, true)) {
         return node;
     }
 

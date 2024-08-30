@@ -505,7 +505,7 @@ private:
 
             for (const auto& value : values.GetArray()) {
                 Y_ENSURE(value.GetType() == NJson::JSON_STRING);
-                if (columns.find(value.GetString()) != columns.end()) {
+                if (columns.contains(value.GetString())) {
                     throw yexception() << "invalid partitioned_by parameter, column " << value.GetString() << "mentioned twice";
                 }
                 columns.insert(value.GetString());

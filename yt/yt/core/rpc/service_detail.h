@@ -1136,8 +1136,6 @@ private:
     void ScheduleRequestsFromQueue();
     void RunRequest(TServiceBase::TServiceContextPtr context);
 
-    i64 GetTotalRequestSize(const TServiceBase::TServiceContextPtr& context);
-
     void IncrementQueueSize(const TServiceBase::TServiceContextPtr& context);
     void DecrementQueueSize(const TServiceBase::TServiceContextPtr& context);
 

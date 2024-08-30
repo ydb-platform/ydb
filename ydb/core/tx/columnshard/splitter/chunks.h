@@ -156,6 +156,14 @@ public:
     std::vector<TChunkedColumnReader>::const_iterator end() const {
         return Columns.end();
     }
+
+    std::vector<TChunkedColumnReader>::iterator begin() {
+        return Columns.begin();
+    }
+
+    std::vector<TChunkedColumnReader>::iterator end() {
+        return Columns.end();
+    }    
 };
 
 }

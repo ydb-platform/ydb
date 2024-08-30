@@ -134,7 +134,7 @@ def main():
             except StopIteration:
                 break
     
-        if results[0] and results[0].get( 'max_date_window', default_start_date) is not None:
+        if results[0] and results[0].get( 'max_date_window', default_start_date) is not None and results[0].get( 'max_date_window', default_start_date) > default_start_date:
             last_date = results[0].get(
                 'max_date_window', default_start_date).strftime('%Y-%m-%d')
             last_datetime = results[0].get(

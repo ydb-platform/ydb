@@ -208,6 +208,12 @@ def test_tpc():
     print("results path:", result_path, file=sys.stderr)
 
     if is_ci:
+        if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
+            print("Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping uploading", file=sys.stderr)
+            return 1
+
+        os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = os.environ["CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"]
+
         s3_folder = pathlib.Path(os.environ["PUBLIC_DIR"]).resolve()
         print(f"s3 folder: {s3_folder}", file=sys.stderr)
 

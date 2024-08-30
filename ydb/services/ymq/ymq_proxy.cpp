@@ -267,6 +267,7 @@ namespace NKikimr::NYmq::V1 {
     private:
         NKikimr::NSQS::TSendMessageRequest* GetRequest(THolder<TSqsRequest>& requestHolder) override {
             auto result = requestHolder->MutableSendMessage();
+
             for (auto& srcAttribute: GetProtoRequest()->Getmessage_attributes()) {
                 auto dstAttribute = result->MutableMessageAttributes()->Add();
                 dstAttribute->SetName(srcAttribute.first);
@@ -274,10 +275,22 @@ namespace NKikimr::NYmq::V1 {
                 dstAttribute->SetBinaryValue(srcAttribute.second.Getbinary_value());
                 dstAttribute->SetDataType(srcAttribute.second.Getdata_type());
             }
-            result->SetMessageDeduplicationId(GetProtoRequest()->message_deduplication_id());
-            result->SetMessageGroupId(GetProtoRequest()->message_group_id());
-            result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->queue_url())->second);
-            result->SetMessageBody(GetProtoRequest()->message_body());
+
+            if (GetProtoRequest()->Hasdelay_seconds()) {
+                result->SetDelaySeconds(GetProtoRequest()->Getdelay_seconds());
+            }
+
+            if (GetProtoRequest()->Hasmessage_deduplication_id()) {
+                result->SetMessageDeduplicationId(GetProtoRequest()->Getmessage_deduplication_id());
+            }
+
+            if (GetProtoRequest()->Hasmessage_group_id()) {
+                result->SetMessageGroupId(GetProtoRequest()->message_group_id());
+            }
+
+            result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->Getqueue_url())->second);
+
+            result->SetMessageBody(GetProtoRequest()->Getmessage_body());
 
             return result;
         }
@@ -376,14 +389,29 @@ namespace NKikimr::NYmq::V1 {
                     result->SetAttributeName(i, attributeNames[i]);
                 }
             }
-            result->SetMaxNumberOfMessages(GetProtoRequest()->max_number_of_messages());
+
+            if (GetProtoRequest()->Hasmax_number_of_messages()) {
+                result->SetMaxNumberOfMessages(GetProtoRequest()->Getmax_number_of_messages());
+            }
+
             for (int i = 0; i < GetProtoRequest()->Getmessage_attribute_names().size(); i++) {
                 result->SetMessageAttributeName(i, GetProtoRequest()->Getmessage_attribute_names()[i]);
             }
+
             result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->queue_url())->second);
-            result->SetReceiveRequestAttemptId(GetProtoRequest()->Getreceive_request_attempt_id());
-            result->SetVisibilityTimeout(GetProtoRequest()->Getvisibility_timeout());
-            result->SetWaitTimeSeconds(GetProtoRequest()->Getwait_time_seconds());
+
+            if (GetProtoRequest()->Hasreceive_request_attempt_id()) {
+                result->SetReceiveRequestAttemptId(GetProtoRequest()->Getreceive_request_attempt_id());
+            }
+
+            if (GetProtoRequest()->Hasvisibility_timeout()) {
+                result->SetVisibilityTimeout(GetProtoRequest()->Getvisibility_timeout());
+            }
+
+            if (GetProtoRequest()->Haswait_time_seconds()) {
+                result->SetWaitTimeSeconds(GetProtoRequest()->Getwait_time_seconds());
+            }
+
             return result;
         }
 
@@ -559,7 +587,9 @@ namespace NKikimr::NYmq::V1 {
     private:
         NKikimr::NSQS::TListQueuesRequest* GetRequest(THolder<TSqsRequest>& requestHolder) override {
             auto result = requestHolder->MutableListQueues();
-            result->SetQueueNamePrefix(GetProtoRequest()->Getqueue_name_prefix());
+            if (GetProtoRequest()->Hasqueue_name_prefix()) {
+                result->SetQueueNamePrefix(GetProtoRequest()->Getqueue_name_prefix());
+            }
             return result;
         }
     };
@@ -818,10 +848,18 @@ namespace NKikimr::NYmq::V1 {
     private:
         NKikimr::NSQS::TSendMessageBatchRequest* GetRequest(THolder<TSqsRequest>& requestHolder) override {
             auto result = requestHolder->MutableSendMessageBatch();
+
             result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->Getqueue_url())->second);
+
             for (auto& requestEntry : GetProtoRequest()->Getentries()) {
                 auto entry = requestHolder->MutableSendMessageBatch()->MutableEntries()->Add();
+
+                if (requestEntry.Hasdelay_seconds()) {
+                    entry->SetDelaySeconds(requestEntry.Getdelay_seconds());
+                }
+
                 entry->SetId(requestEntry.Getid());
+
                 for (auto& srcAttribute: requestEntry.Getmessage_attributes()) {
                     auto dstAttribute = entry->MutableMessageAttributes()->Add();
                     dstAttribute->SetName(srcAttribute.first);
@@ -829,8 +867,15 @@ namespace NKikimr::NYmq::V1 {
                     dstAttribute->SetBinaryValue(srcAttribute.second.Getbinary_value());
                     dstAttribute->SetDataType(srcAttribute.second.Getdata_type());
                 }
-                entry->SetMessageDeduplicationId(requestEntry.Getmessage_deduplication_id());
-                entry->SetMessageGroupId(requestEntry.Getmessage_group_id());
+
+                if (requestEntry.Hasmessage_deduplication_id()) {
+                    entry->SetMessageDeduplicationId(requestEntry.Getmessage_deduplication_id());
+                }
+
+                if (requestEntry.Hasmessage_group_id()) {
+                    entry->SetMessageGroupId(requestEntry.Getmessage_group_id());
+                }
+
                 entry->SetMessageBody(requestEntry.Getmessage_body());
             }
             return result;
@@ -935,7 +980,9 @@ namespace NKikimr::NYmq::V1 {
             for (auto& requestEntry : GetProtoRequest()->Getentries()) {
                 auto entry = requestHolder->MutableChangeMessageVisibilityBatch()->MutableEntries()->Add();
                 entry->SetId(requestEntry.Getid());
-                entry->SetVisibilityTimeout(requestEntry.Getvisibility_timeout());
+                if (requestEntry.Hasvisibility_timeout()) {
+                    entry->SetVisibilityTimeout(requestEntry.Getvisibility_timeout());
+                }
                 entry->SetReceiptHandle(requestEntry.Getreceipt_handle());
             }
             return result;

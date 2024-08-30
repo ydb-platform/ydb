@@ -220,11 +220,7 @@ TRestoreResult TRestoreClient::RestoreFolder(const TFsPath& fsPath, const TStrin
     }
 
     if (IsFileExists(fsPath.Child(EMPTY_FILE_NAME))) {
-        auto result = MakeDirectory(SchemeClient, Join('/', dbPath, fsPath.GetName()));
-        if (!result.IsSuccess()) {
-            return result;
-        }
-        return RestorePermissions(fsPath, Join('/', dbPath, fsPath.GetName()), settings, oldEntries);
+        return RestoreEmptyDir(fsPath, Join('/', dbPath, fsPath.GetName()), settings, oldEntries);
     }
 
     TMaybe<TRestoreResult> result;
@@ -235,11 +231,7 @@ TRestoreResult TRestoreClient::RestoreFolder(const TFsPath& fsPath, const TStrin
         if (IsFileExists(child.Child(SCHEME_FILE_NAME))) {
             result = RestoreTable(child, Join('/', dbPath, child.GetName()), settings, oldEntries);
         } else if (IsFileExists(child.Child(EMPTY_FILE_NAME))) {
-            result = MakeDirectory(SchemeClient, Join('/', dbPath, child.GetName()));
-            if (result.Defined() && !result->IsSuccess()) {
-                return *result;
-            }
-            result = RestorePermissions(child, Join('/', dbPath, child.GetName()), settings, oldEntries);
+            result = RestoreEmptyDir(child, Join('/', dbPath, child.GetName()), settings, oldEntries);
         } else if (child.IsDirectory()) {
             result = RestoreFolder(child, Join('/', dbPath, child.GetName()), settings, oldEntries);
         }
@@ -463,6 +455,15 @@ TRestoreResult TRestoreClient::RestoreIndexes(const TString& dbPath, const TTabl
 TRestoreResult TRestoreClient::RestorePermissions(const TFsPath& fsPath, const TString& dbPath,
     const TRestoreSettings& settings, const THashSet<TString>& oldEntries)
 {   
+    if (fsPath.Child(INCOMPLETE_FILE_NAME).Exists()) {
+        return Result<TRestoreResult>(EStatus::BAD_REQUEST,
+            TStringBuilder() << "There is incomplete file in folder: " << fsPath.GetPath());
+    }
+
+    if (!settings.RestoreACL_) {
+        return Result<TRestoreResult>();
+    }
+
     if (oldEntries.contains(dbPath)) {
         return Result<TRestoreResult>();
     }
@@ -473,6 +474,22 @@ TRestoreResult TRestoreClient::RestorePermissions(const TFsPath& fsPath, const T
 
     auto permissions = ReadPermissions(fsPath.Child(PERMISSIONS_FILE_NAME));
     return ModifyPermissions(SchemeClient, dbPath, TModifyPermissionsSettings(permissions));
+}
+
+TRestoreResult TRestoreClient::RestoreEmptyDir(const TFsPath& fsPath, const TString &dbPath,
+    const TRestoreSettings& settings, const THashSet<TString>& oldEntries)
+{
+    if (fsPath.Child(INCOMPLETE_FILE_NAME).Exists()) {
+        return Result<TRestoreResult>(EStatus::BAD_REQUEST,
+            TStringBuilder() << "There is incomplete file in folder: " << fsPath.GetPath());
+    }
+
+    auto result = MakeDirectory(SchemeClient, dbPath);
+    if (!result.IsSuccess()) {
+        return result;
+    }
+
+    return RestorePermissions(fsPath, dbPath, settings, oldEntries);
 }
 
 } // NDump

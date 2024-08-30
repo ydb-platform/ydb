@@ -5,9 +5,10 @@
 #include "util.h"
 
 #include <ydb/public/api/protos/ydb_table.pb.h>
+#include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
+#include <ydb/public/lib/ydb_cli/dump/util/util.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <library/cpp/string_utils/quote/quote.h>
@@ -432,8 +433,8 @@ Ydb::Table::CreateTableRequest ProtoFromTableDescription(const NTable::TTableDes
 
 NScheme::TSchemeEntry DescribePath(TDriver driver, const TString& fullPath) {
     NScheme::TSchemeClient client(driver);
-
-    auto status = client.DescribePath(fullPath).GetValueSync();
+    
+    auto status = NDump::DescribePath(client, fullPath);
     VerifyStatus(status);
     LOG_DEBUG("Path is described, fullPath: " << fullPath);
 

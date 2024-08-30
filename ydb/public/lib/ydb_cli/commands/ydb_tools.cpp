@@ -142,6 +142,9 @@ void TCommandRestore::Config(TConfig& config) {
 
     config.Opts->AddLongOption("restore-indexes", "Whether to restore indexes or not")
         .DefaultValue(defaults.RestoreIndexes_).StoreResult(&RestoreIndexes);
+    
+    config.Opts->AddLongOption("restore-acl", "Whether to restore ACL and owner or not")
+        .DefaultValue(defaults.RestoreACL_).StoreResult(&RestoreACL);
 
     config.Opts->AddLongOption("skip-document-tables", TStringBuilder()
             << "Document API tables cannot be restored for now. "
@@ -197,6 +200,7 @@ int TCommandRestore::Run(TConfig& config) {
         .DryRun(IsDryRun)
         .RestoreData(RestoreData)
         .RestoreIndexes(RestoreIndexes)
+        .RestoreACL(RestoreACL)
         .SkipDocumentTables(SkipDocumentTables)
         .SavePartialResult(SavePartialResult)
         .RowsPerRequest(NYdb::SizeFromString(RowsPerRequest))

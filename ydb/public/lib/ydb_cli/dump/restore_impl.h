@@ -37,6 +37,7 @@ public:
 
 class TRestoreClient {
     TRestoreResult RestoreFolder(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings, const THashSet<TString>& oldEntries);
+    TRestoreResult RestoreEmptyDir(const TFsPath& fsPath, const TString &dbPath, const TRestoreSettings& settings, const THashSet<TString>& oldEntries);
     TRestoreResult RestoreTable(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings, const THashSet<TString>& oldEntries);
 
     TRestoreResult CheckSchema(const TString& dbPath, const NTable::TTableDescription& desc);

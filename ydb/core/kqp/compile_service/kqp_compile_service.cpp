@@ -41,6 +41,9 @@ public:
         YQL_ENSURE(compileResult->PreparedQuery);
 
         auto queryIt = QueryIndex.emplace(query, compileResult->Uid);
+        if (!queryIt.second) {
+            EraseByUid(compileResult->Uid);
+        }
         Y_ENSURE(queryIt.second);
     }
 
@@ -672,6 +675,8 @@ private:
             Y_ENSURE(query.UserSid == userSid);
         }
 
+        LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Try to find query by queryId, queryId: " << query.SerializeToString());
+
         auto compileResult = QueryCache.FindByQuery(query, request.KeepInCache);
         if (HasTempTablesNameClashes(compileResult, request.TempTablesState)) {
             compileResult = nullptr;
@@ -853,7 +858,7 @@ private:
         try {
             if (compileResult->Status == Ydb::StatusIds::SUCCESS) {
                 if (!hasTempTablesNameClashes) {
-                    UpdateQueryCache(compileResult, keepInCache, compileRequest.CompileSettings.IsQueryActionPrepare, isPerStatementExecution);
+                    UpdateQueryCache(ctx, compileResult, keepInCache, compileRequest.CompileSettings.IsQueryActionPrepare, isPerStatementExecution);
                 }
 
                 if (ev->Get()->ReplayMessage && !QueryReplayBackend->IsNull()) {
@@ -935,15 +940,21 @@ private:
         return compileResult->PreparedQuery->HasTempTables(tempTablesState, withSessionId);
     }
 
-    void UpdateQueryCache(TKqpCompileResult::TConstPtr compileResult, bool keepInCache, bool isQueryActionPrepare, bool isPerStatementExecution) {
+    void UpdateQueryCache(const TActorContext& ctx, TKqpCompileResult::TConstPtr compileResult, bool keepInCache, bool isQueryActionPrepare, bool isPerStatementExecution) {
         if (QueryCache.FindByUid(compileResult->Uid, false)) {
             QueryCache.Replace(compileResult);
         } else if (keepInCache) {
+            if (compileResult->Query) {
+                LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Insert query into compile cache, queryId: " << compileResult->Query->SerializeToString());
+                if (QueryCache.FindByQuery(*compileResult->Query, keepInCache)) {
+                    LOG_ERROR_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Trying to insert query into compile cache when it is already there");
+                }
+            }
             if (QueryCache.Insert(compileResult, TableServiceConfig.GetEnableAstCache(), isPerStatementExecution)) {
                 Counters->CompileQueryCacheEvicted->Inc();
             }
             if (compileResult->Query && isQueryActionPrepare) {
-                if (InsertPreparingQuery(compileResult, true, isPerStatementExecution)) {
+                if (InsertPreparingQuery(ctx, compileResult, true, isPerStatementExecution)) {
                     Counters->CompileQueryCacheEvicted->Inc();
                 };
             }
@@ -954,6 +965,8 @@ private:
         YQL_ENSURE(queryAst.Ast);
         YQL_ENSURE(queryAst.Ast->IsOk());
         YQL_ENSURE(queryAst.Ast->Root);
+        LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Try to find query by ast, queryId: " << compileRequest.Query.SerializeToString()
+            << ", ast: " << queryAst.Ast->Root->ToString());
         auto compileResult = QueryCache.FindByAst(compileRequest.Query, *queryAst.Ast, compileRequest.CompileSettings.KeepInCache);
 
         if (HasTempTablesNameClashes(compileResult, compileRequest.TempTablesState)) {
@@ -1022,7 +1035,7 @@ private:
     }
 
 private:
-    bool InsertPreparingQuery(const TKqpCompileResult::TConstPtr& compileResult, bool keepInCache, bool isPerStatementExecution) {
+    bool InsertPreparingQuery(const TActorContext& ctx, const TKqpCompileResult::TConstPtr& compileResult, bool keepInCache, bool isPerStatementExecution) {
         YQL_ENSURE(compileResult->Query);
         auto query = *compileResult->Query;
 
@@ -1047,6 +1060,7 @@ private:
         auto newCompileResult = TKqpCompileResult::Make(CreateGuidAsString(), compileResult->Status, compileResult->Issues, compileResult->MaxReadType, std::move(query), compileResult->Ast);
         newCompileResult->AllowCache = compileResult->AllowCache;
         newCompileResult->PreparedQuery = compileResult->PreparedQuery;
+        LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Insert preparing query with params, queryId: " << query.SerializeToString());
         return QueryCache.Insert(newCompileResult, TableServiceConfig.GetEnableAstCache(), isPerStatementExecution);
     }
 

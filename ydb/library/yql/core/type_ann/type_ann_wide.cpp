@@ -552,9 +552,6 @@ IGraphTransformer::TStatus WideCombinerWithSpillingWrapper(const TExprNode::TPtr
 
     argTypes.erase(argTypes.cbegin() + keyTypes.size(), argTypes.cend());
     for (auto type : serializeRetType->GetItems()) {
-        if (type->GetKind() == ETypeAnnotationKind::Optional) {
-            type = type->Cast<TOptionalExprType>()->GetItemType();
-        }
         argTypes.push_back(type);
     }
 

@@ -665,7 +665,7 @@ int RunMain(int argc, const char* argv[])
         dataProvidersInit.push_back(GetClickHouseDataProviderInitializer(httpGateway));
     }
 
-    const auto driverConfig = NYdb::TDriverConfig().SetLog(CreateLogBackend("cerr"));
+    const auto driverConfig = NYdb::TDriverConfig().SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr").Release()));
     NYdb::TDriver driver(driverConfig);
 
     Y_DEFER {

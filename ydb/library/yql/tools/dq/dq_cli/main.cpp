@@ -299,7 +299,7 @@ void OpenSession(TServiceConnection<DqService>& service, const TString& sessionI
         if (status.Ok()) {
             promise.SetValue();
         } else {
-            promise.SetException(status.Msg);
+            promise.SetException(TString{status.Msg});
         }
     };
 
@@ -333,7 +333,7 @@ Yql::DqsProto::RoutesResponse Routes(TServiceConnection<DqService>& service, con
         if (status.Ok()) {
             promise.SetValue(resp);
         } else {
-            promise.SetException(status.Msg);
+            promise.SetException(TString{status.Msg});
         }
     };
 
@@ -361,7 +361,7 @@ Yql::DqsProto::BenchmarkResponse Bench(TServiceConnection<DqService>& service, c
         if (status.Ok()) {
             promise.SetValue(resp);
         } else {
-            promise.SetException(status.Msg);
+            promise.SetException(TString{status.Msg});
         }
     };
 

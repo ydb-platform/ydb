@@ -418,7 +418,7 @@ private:
 
 struct TCreateRateLimiterResourceRequestDesc {
     TString Path;
-    std::optional<double> Limit;
+    TMaybe<double> Limit;
 };
 
 class TCreateRateLimiterResourceActor : public TRecursiveCreateActorBase<TCreateRateLimiterResourceRequestDesc> {
@@ -474,7 +474,11 @@ private:
     }
 
     NYdb::TAsyncStatus CallYdbSdk(const TCreateRateLimiterResourceRequestDesc& req) override {
-        return Connection->RateLimiterClient.CreateResource(CoordinationNodePath, req.Path, NYdb::NRateLimiter::TCreateResourceSettings().MaxUnitsPerSecond(req.Limit));
+        return Connection->RateLimiterClient.CreateResource(
+            CoordinationNodePath,
+            req.Path,
+            NYdb::NRateLimiter::TCreateResourceSettings()
+                .MaxUnitsPerSecond(req.Limit ? std::optional<double>(req.Limit.GetRef()) : std::optional<double>()));
     }
 
 private:
@@ -537,7 +541,12 @@ private:
     }
 
     NYdb::TAsyncStatus CallYdbSdk() override {
-        return Connection->RateLimiterClient.AlterResource(CoordinationNodePath, ResourcePath, NYdb::NRateLimiter::TAlterResourceSettings().MaxUnitsPerSecond(Limit));
+        return Connection->RateLimiterClient.AlterResource(
+            CoordinationNodePath,
+            ResourcePath,
+            NYdb::NRateLimiter::TAlterResourceSettings()
+                .MaxUnitsPerSecond(Limit ? std::optional<ui64>(Limit.GetRef()) : std::optional<ui64>())
+        );
     }
 
 private:

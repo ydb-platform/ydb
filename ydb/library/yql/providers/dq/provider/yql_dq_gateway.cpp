@@ -622,7 +622,7 @@ public:
             } else {
                 YQL_CLOG(ERROR, ProviderDq) << "OpenSession error: " << status.Msg;
                 this_->DropSession(sessionId);
-                promise.SetException(status.Msg);
+                promise.SetException(TString{status.Msg});
             }
         };
 

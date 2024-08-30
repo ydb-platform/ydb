@@ -84,7 +84,7 @@ struct TYqSharedResourcesImpl : public TActorSystemPtrMixin, public TYqSharedRes
             cfg.SetGrpcMemoryQuota(config.GetGrpcMemoryQuota());
         }
         cfg.SetDiscoveryMode(NYdb::EDiscoveryMode::Async); // We are in actor system!
-        cfg.SetLog(MakeHolder<NKikimr::TDeferredActorLogBackend>(ActorSystemPtr, NKikimrServices::EServiceKikimr::YDB_SDK));
+        cfg.SetLog(std::make_unique<NKikimr::TDeferredActorLogBackend>(ActorSystemPtr, NKikimrServices::EServiceKikimr::YDB_SDK));
         return cfg;
     }
 

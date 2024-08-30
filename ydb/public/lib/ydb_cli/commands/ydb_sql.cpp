@@ -30,9 +30,9 @@ void TCommandExecuteSqlBase::DeclareCommonInputOptions(TClientCommand::TConfig& 
     config.Opts->AddLongOption("syntax", "Query syntax [yql, pg]")
         .RequiredArgument("[String]").DefaultValue("yql").StoreResult(&Syntax)
         .Hidden();
-    config.Opts->AddLongOption("results-ttl", "Amount of time to store query results on server. "
-            "By default it is 86400s (24 hours).").RequiredArgument("SECONDS")
-        .StoreResult(&ResultsTtl);
+    config.Opts->AddLongOption("results-ttl", "Amount of time to store script execution results on server "
+        "(for async operations only). By default it is 86400s (24 hours).")
+        .RequiredArgument("SECONDS").DefaultValue("86400").StoreResult(&ResultsTtl);
 }
 
 void TCommandExecuteSqlBase::DeclareCommonOutputOptions(TClientCommand::TConfig& config) {
@@ -69,30 +69,34 @@ int TCommandExecuteSqlBase::ExecuteScriptAsync(TDriver& driver, NQuery::TQueryCl
     settings.ExecMode(NQuery::EExecMode::Execute);
     settings.StatsMode(ParseQueryStatsModeOrThrow(CollectStatsMode, NQuery::EStatsMode::None));
 
+    if (ResultsTtl) {
+        settings.ResultsTtl(TDuration::Seconds(FromString<ui64>(ResultsTtl)));
+    }
+
     // Execute query without parameters
-    auto asyncResult = queryClient.ExecuteScript(
+    Operation = queryClient.ExecuteScript(
         Query,
         settings
-    );
-
-    Operation = asyncResult.GetValueSync();
-    ThrowOnError(Operation.value());
+    ).GetValueSync();
+    ThrowOnError(Operation.value().Status());
     if (AsyncWait) {
+        Cerr << "Operation \"" << ProtoToString(Operation->Id()) << "\" started." << Endl;
         NOperation::TOperationClient operationClient(driver);
         return WaitAndPrintResults(queryClient, operationClient, Operation->Id());
     } else {
-        return PrintOperationInfo(Operation.value());
+        return PrintOperationInfo();
     }
 }
 
-int TCommandExecuteSqlBase::PrintOperationInfo(const NQuery::TScriptExecutionOperation& operation) {
-    std::string quotedId = "\"" + ProtoToString(operation.Id()) + "\"";
-    Cout << "Operation info:" << Endl << operation.ToString() << Endl
+int TCommandExecuteSqlBase::PrintOperationInfo() {
+    Y_ENSURE(Operation.has_value());
+    Cout << "Operation info:" << Endl << Operation->ToString() << Endl;
+    std::string quotedId = "\"" + ProtoToString(Operation->Id()) + "\"";
+    Cerr << "To wait for completion and fetch results: ydb sql-async fetch " << quotedId << Endl
         << "To get current execution status: ydb sql-async get " << quotedId << Endl
-        << "To wait for completion: ydb sql-async wait " << quotedId << Endl
+        << "To wait for completion only: ydb sql-async wait " << quotedId << Endl
         << "To cancel operation: ydb sql-async cancel " << quotedId << Endl
-        << "To forget operation: ydb sql-async forget " << quotedId << Endl
-        << "To fetch results: ydb sql-async fetch " << quotedId << Endl;
+        << "To forget operation: ydb sql-async forget " << quotedId << Endl;
     return EXIT_SUCCESS;
 }
 
@@ -100,7 +104,6 @@ int TCommandExecuteSqlBase::WaitAndPrintResults(
         NQuery::TQueryClient& queryClient,
         NOperation::TOperationClient& operationClient,
         const TOperation::TOperationId& operationId) {
-    SetInterruptHandlers();
     if (!WaitForCompletion(operationClient, operationId)) {
         return EXIT_FAILURE;
     }
@@ -115,9 +118,10 @@ int TCommandExecuteSqlBase::WaitAndPrintResults(
 
 bool TCommandExecuteSqlBase::WaitForCompletion(NOperation::TOperationClient& operationClient,
         const TOperation::TOperationId& operationId) {
+    SetInterruptHandlers();
     // Throw exception on getting operation info if it is the first getOperation, then retry
     bool firstGetOperation = true;
-    TWaitingBar waitingBar("Waiting for qeury execution to finish... ");
+    TWaitingBar waitingBar("Waiting for script execution to finish... ");
     int fakeCounter = 0;
     while (!IsInterrupted()) {
         NQuery::TScriptExecutionOperation execScriptOperation = (firstGetOperation && Operation)
@@ -182,7 +186,7 @@ int TCommandExecuteSqlBase::PrintScriptResults(NQuery::TQueryClient& queryClient
 }
 
 TCommandSql::TCommandSql()
-    : TYdbCommand("sql", {}, "Execute SQL query")
+    : TYdbCommand("sql", {}, "Execute SQL script (query)")
 {}
 
 void TCommandSql::Config(TConfig& config) {
@@ -197,9 +201,10 @@ void TCommandSql::Config(TConfig& config) {
         .StoreTrue(&ExplainAnalyzeMode);
     config.Opts->AddLongOption("async", "Execute script (query) asynchronously. "
             "Operation will be started on server and its Id will be printed. "
-            "To get operation status use \"ydb operation get\" command. "
-            "To fetch query results use \"--fetch <operation_id>\" option of this command.\n"
-            "Note: query results will be stored on server and thus consume storage resources.")
+            "To get operation status use \"ydb sql-async get\" command. "
+            "To fetch query results use \"ydb sql-async fetch\" command.\n"
+            "Note: query results will be stored on server and thus consume storage resources. "
+            "Use --results-ttl option to set how long results should be stored for")
         .StoreTrue(&RunAsync);
     config.Opts->AddLongOption("async-wait",
             "Execute script (query) asynchronously and wait for results (using polling).\n"
@@ -208,7 +213,8 @@ void TCommandSql::Config(TConfig& config) {
             "the stream breaks and command execution finishes with error. "
             "If this option is used, the polling process continues and query results may still be received after reconnect.\n"
             "  - Using this option will probably reduce performance due to artifitial delays between polling requests.\n"
-            "Note: query results will be stored on server and thus consume storage resources.")
+            "Note: query results will be stored on server and thus consume storage resources. "
+            "Use --results-ttl option to set how long results should be stored for")
         .StoreTrue(&AsyncWait);
     DeclareCommonInputOptions(config);
     DeclareCommonOutputOptions(config);
@@ -353,6 +359,10 @@ TCommandSqlAsync::TCommandSqlAsync()
     AddCommand(std::make_unique<TCommandSqlAsyncExecute>());
     AddCommand(std::make_unique<TCommandSqlAsyncFetch>());
     AddCommand(std::make_unique<TCommandSqlAsyncGet>());
+    AddCommand(std::make_unique<TCommandSqlAsyncWait>());
+    AddCommand(std::make_unique<TCommandSqlAsyncCancel>());
+    AddCommand(std::make_unique<TCommandSqlAsyncForget>());
+    AddCommand(std::make_unique<TCommandSqlAsyncList>());
 }
 
 TCommandSqlAsyncExecute::TCommandSqlAsyncExecute()
@@ -401,14 +411,6 @@ void TCommandWithScriptExecutionOperationId::Parse(TConfig& config) {
     }
 }
 
-NQuery::TScriptExecutionOperation TCommandWithScriptExecutionOperationId::GetOperation(TDriver& driver) {
-    NOperation::TOperationClient operationClient(driver);
-    NQuery::TScriptExecutionOperation execScriptOperation = operationClient
-        .Get<NQuery::TScriptExecutionOperation>(OperationId)
-        .GetValueSync();
-    return execScriptOperation;
-}
-
 TCommandSqlAsyncFetch::TCommandSqlAsyncFetch()
     : TCommandWithScriptExecutionOperationId("fetch", {}, "Fetch results of async script execution by operation id")
 {}
@@ -443,48 +445,102 @@ void TCommandSqlAsyncGet::Config(TConfig& config) {
     });
 }
 
-void TCommandSqlAsyncGet::Parse(TConfig& config) {
-    TCommandWithScriptExecutionOperationId::Parse(config);
-}
-
 int TCommandSqlAsyncGet::Run(TConfig& config) {
-    TDriver driver = CreateDriver(config);
-    NQuery::TQueryClient queryClient(driver);
-    NOperation::TOperationClient operationClient(driver);
-    auto operation = GetOperation(driver);
+    NOperation::TOperationClient client(CreateDriver(config));
+    NQuery::TScriptExecutionOperation operation = client
+        .Get<NQuery::TScriptExecutionOperation>(OperationId)
+        .GetValueSync();
+    std::string quotedId = "\"" + ProtoToString(operation.Id()) + "\"";
     switch (operation.Status().GetStatus()) {
         case EStatus::SUCCESS:
             PrintOperation(operation, OutputFormat);
+            if (operation.Ready()) {
+                Cerr << "To fetch results: ydb sql-async fetch " << quotedId << Endl;
+            } else {
+                Cerr << "To wait for completion and fetch results: ydb sql-async fetch " << quotedId << Endl
+                    << "To wait for completion only: ydb sql-async wait " << quotedId << Endl
+                    << "To cancel operation: ydb sql-async cancel " << quotedId << Endl;
+            }
+            Cerr << "To forget operation: ydb sql-async forget " << quotedId << Endl;
             return EXIT_SUCCESS;
         case EStatus::CANCELLED:
             PrintOperation(operation, OutputFormat);
+            Cerr << "To forget operation: ydb sql-async forget " << quotedId << Endl;
             return EXIT_FAILURE;
         default:
-            ThrowOnError(operation);
+            ThrowOnError(operation.Status());
             return EXIT_FAILURE;
-    }   
+    }
 }
 
 TCommandSqlAsyncWait::TCommandSqlAsyncWait()
     : TCommandWithScriptExecutionOperationId("wait", {}, "Wait for async script execution completion by operation id")
 {}
 
-void TCommandSqlAsyncWait::Config(TConfig& config) {
-    TCommandWithScriptExecutionOperationId::Config(config);
-}
-
-void TCommandSqlAsyncWait::Parse(TConfig& config) {
-    TCommandWithScriptExecutionOperationId::Parse(config);
-}
-
 int TCommandSqlAsyncWait::Run(TConfig& config) {
-    TDriver driver = CreateDriver(config);
-    NQuery::TQueryClient queryClient(driver);
-    NOperation::TOperationClient operationClient(driver);
-    SetInterruptHandlers();
-    return WaitForCompletion(operationClient, OperationId)
-        ? EXIT_SUCCESS
-        : EXIT_FAILURE;
+    NOperation::TOperationClient client(CreateDriver(config));
+    if (WaitForCompletion(client, OperationId)) {
+        std::string quotedId = "\"" + ProtoToString(OperationId) + "\"";
+        Cerr << "Operation completed." << Endl
+            << "To fetch results: ydb sql-async fetch " << quotedId << Endl
+            << "To forget operation: ydb sql-async forget " << quotedId << Endl;
+        return EXIT_SUCCESS;
+    } else {
+        return EXIT_FAILURE;
+    }
+}
+
+TCommandSqlAsyncCancel::TCommandSqlAsyncCancel()
+    : TCommandWithScriptExecutionOperationId("cancel", {}, "Cancel async script execution by operation id")
+{}
+
+int TCommandSqlAsyncCancel::Run(TConfig& config) {
+    NOperation::TOperationClient client(CreateDriver(config));
+    ThrowOnError(client.Cancel(OperationId).GetValueSync());
+    Cerr << "Operation cancelled. To forget operation: ydb sql-async forget \""
+        << ProtoToString(OperationId) << "\"" << Endl;
+    return EXIT_SUCCESS;
+}
+
+TCommandSqlAsyncForget::TCommandSqlAsyncForget()
+    : TCommandWithScriptExecutionOperationId("forget", {}, "Forget async script execution operation by id")
+{}
+
+int TCommandSqlAsyncForget::Run(TConfig& config) {
+    NOperation::TOperationClient client(CreateDriver(config));
+    ThrowOnError(client.Forget(OperationId).GetValueSync());
+    return EXIT_SUCCESS;
+}
+
+TCommandSqlAsyncList::TCommandSqlAsyncList()
+    : TYdbCommand("list", {}, "List async script execution operations")
+{}
+
+void TCommandSqlAsyncList::Config(TConfig& config) {
+    TYdbCommand::Config(config);
+
+    config.Opts->AddLongOption('s', "page-size", "Page size")
+        .RequiredArgument("NUM").StoreResult(&PageSize);
+    config.Opts->AddLongOption('t', "page-token", "Page token")
+        .RequiredArgument("STRING").StoreResult(&PageToken);
+    AddFormats(config, { EOutputFormat::Pretty, EOutputFormat::ProtoJsonBase64 });
+
+    config.SetFreeArgsNum(0);
+}
+
+void TCommandSqlAsyncList::Parse(TConfig& config) {
+    TYdbCommand::Parse(config);
+    ParseFormats();
+}
+
+int TCommandSqlAsyncList::Run(TConfig& config) {
+    NOperation::TOperationClient client(CreateDriver(config));
+    NOperation::TOperationsList<NQuery::TScriptExecutionOperation> operations = client.List<NQuery::TScriptExecutionOperation>(
+        PageSize, PageToken)
+        .GetValueSync();
+    ThrowOnError(operations);
+    PrintOperationsList(operations, OutputFormat);
+    return EXIT_SUCCESS;
 }
 
 

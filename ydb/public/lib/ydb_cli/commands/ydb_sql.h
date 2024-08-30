@@ -23,7 +23,7 @@ public:
 
 protected:
     int ExecuteScriptAsync(TDriver& driver, NQuery::TQueryClient& client);
-    int PrintOperationInfo(const NQuery::TScriptExecutionOperation& operation);
+    int PrintOperationInfo();
     bool WaitForCompletion(NOperation::TOperationClient& operationClient, const TOperation::TOperationId& operationId);
     int PrintScriptResults(NQuery::TQueryClient& queryClient);
     int WaitAndPrintResults(NQuery::TQueryClient& queryClient, NOperation::TOperationClient& operationClient,
@@ -33,7 +33,7 @@ protected:
     TString Query;
     TString QueryFile;
     TString Syntax;
-    TString ResultsTtl;
+    TString ResultsTtl = "86400";
     bool AsyncWait = false;
     // Operation status object. May be received either form ExecuteQueryScriptResponse or from OperationService explicitly
     std::optional<NQuery::TScriptExecutionOperation> Operation = std::nullopt;
@@ -78,8 +78,6 @@ public:
     virtual void Parse(TConfig& config) override;
 
 protected:
-    NQuery::TScriptExecutionOperation GetOperation(TDriver& driver);
-
     NKikimr::NOperationId::TOperationId OperationId;
 };
 
@@ -95,22 +93,37 @@ class TCommandSqlAsyncGet : public TCommandWithScriptExecutionOperationId, publi
 public:
     TCommandSqlAsyncGet();
     virtual void Config(TConfig& config) override;
-    virtual void Parse(TConfig& config) override;
     virtual int Run(TConfig& config) override;
-
-private:
-    int PrintResponse(const NQuery::TScriptExecutionOperation& operation);
 };
 
 class TCommandSqlAsyncWait : public TCommandWithScriptExecutionOperationId, public TCommandExecuteSqlBase {
 public:
     TCommandSqlAsyncWait();
+    virtual int Run(TConfig& config) override;
+};
+
+class TCommandSqlAsyncCancel : public TCommandWithScriptExecutionOperationId {
+public:
+    TCommandSqlAsyncCancel();
+    virtual int Run(TConfig& config) override;
+};
+
+class TCommandSqlAsyncForget : public TCommandWithScriptExecutionOperationId {
+public:
+    TCommandSqlAsyncForget();
+    virtual int Run(TConfig& config) override;
+};
+
+class TCommandSqlAsyncList : public TYdbCommand, public TCommandWithFormat {
+public:
+    TCommandSqlAsyncList();
     virtual void Config(TConfig& config) override;
     virtual void Parse(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 
 private:
-    int PrintResponse(const NQuery::TScriptExecutionOperation& operation);
+    ui64 PageSize = 0;
+    TString PageToken;
 };
 
 }

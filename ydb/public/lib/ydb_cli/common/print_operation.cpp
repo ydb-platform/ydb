@@ -325,7 +325,7 @@ namespace {
                 Cout << table;
             }
             if (operations.NextPageToken()) {
-                Cout << Endl << "Next page token: " << operations.NextPageToken() << Endl;
+                Cout << Endl << "Next page token: \"" << operations.NextPageToken() << "\"" << Endl;
             }
             break;
 

@@ -46,11 +46,11 @@ log-levels:
   MD049: 'disabled' # Emphasis style should be consistent
   MD050: 'disabled' # Strong style should be consistent
   MD051: 'error' # Link fragments should be valid
-  MD052: 'disabled' # Reference links and images should use a label that is defined
-  MD053: 'disabled' # Link and image reference definitions should be needed
-  MD054: 'disabled' # Link and image style
-  MD055: 'disabled' # Table pipe style
-  MD056: 'disabled' # Table column count
+  MD052: 'error' # Reference links and images should use a label that is defined
+  MD053: 'error' # Link and image reference definitions should be needed
+  MD054: 'error' # Link and image style
+  MD055: 'error' # Table pipe style
+  MD056: 'error' # Table column count
 
   YFM001: 'error' # Inline code length
   YFM002: 'error' # No header found in the file for the link text

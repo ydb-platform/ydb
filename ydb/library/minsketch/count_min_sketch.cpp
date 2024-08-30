@@ -9,6 +9,7 @@ TCountMinSketch* TCountMinSketch::Create(ui64 width, ui64 depth) {
     auto* data = ::malloc(size);
     auto* sketch = reinterpret_cast<TCountMinSketch*>(data);
     std::memset(sketch, 0, size);
+    sketch->Version = 1;
     sketch->Width = width;
     sketch->Depth = depth;
     sketch->ElementCount = 0;

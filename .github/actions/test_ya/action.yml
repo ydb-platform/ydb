@@ -87,7 +87,7 @@ runs:
         echo "SUMMARY_LINKS=$PUBLIC_DIR/summary_links.txt" >> $GITHUB_ENV
         echo "BUILD_PRESET=${{ inputs.build_preset }}" >> $GITHUB_ENV
 
-        python3 -m pip install ydb ydb[yc]
+        python3 -m pip install ydb ydb[yc] codeowners
 
     - name: ya build and test
       id: build

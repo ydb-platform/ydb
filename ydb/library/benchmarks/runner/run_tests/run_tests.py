@@ -14,6 +14,7 @@ def variant(string):
 def paths(string):
     return list(map(pathlib.Path, string.split(";")))
 
+
 def parse_args():
     subparser = argparse.ArgumentParser()
 

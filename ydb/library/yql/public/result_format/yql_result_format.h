@@ -1,11 +1,36 @@
 #pragma once
 
+#include <ydb/library/yql/public/issue/yql_issue.h>
+
 #include <library/cpp/yson/node/node.h>
 #include <library/cpp/yson/node/node.h>
 
 namespace NYql::NResult {
 
 class TUnsupportedException : public yexception {};
+
+struct TFullResultRef {
+    TVector<TString> Reference;
+    TMaybe<TVector<TString>> Columns;
+    bool Remove = false;
+};
+
+struct TWrite {
+    const NYT::TNode* Type = nullptr;
+    const NYT::TNode* Data = nullptr;
+    bool IsTruncated = false;
+    TVector<TFullResultRef> Refs;
+};
+
+struct TResult {
+    TMaybe<TPosition> Position;
+    TMaybe<TString> Label;
+    TVector<TWrite> Writes;
+    bool IsUnordered = false;
+    bool IsTruncated = false;
+};
+
+TVector<TResult> ParseResponse(const NYT::TNode& responseNode);
 
 class ITypeVisitor {
 public:
@@ -136,7 +161,6 @@ public:
     TTypeBuilder();
     const NYT::TNode& GetResult() const;
 
-private:
     void OnVoid() final;
     void OnNull() final;
     void OnEmptyList() final;

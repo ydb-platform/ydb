@@ -3281,7 +3281,7 @@ bool TPersQueue::CheckTxWriteOperation(const NKikimrPQ::TPartitionOperation& ope
     TPartitionId partitionId(operation.GetPartitionId(),
                              writeId,
                              operation.GetSupportivePartition());
-    PQ_LOG_D("partitionId=" << partitionId);
+    PQ_LOG_D("PartitionId " << partitionId << " for WriteId " << writeId);
     return Partitions.contains(partitionId);
 }
 
@@ -3292,7 +3292,7 @@ bool TPersQueue::CheckTxWriteOperations(const NKikimrPQ::TDataTransaction& txBod
     }
 
     const TWriteId writeId = GetWriteId(txBody);
-    PQ_LOG_D("writeId=" << writeId);
+    PQ_LOG_D("Transaction TxId " << txBody << "writeId=" << writeId);
 
     for (auto& operation : txBody.GetOperations()) {
         auto isWrite = [](const NKikimrPQ::TPartitionOperation& o) {
@@ -3318,7 +3318,7 @@ void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransact
     const NKikimrPQ::TDataTransaction& txBody = event.GetData();
 
     if (TabletState != NKikimrPQ::ENormal) {
-        PQ_LOG_D("invalid PQ tablet state (" << NKikimrPQ::ETabletState_Name(TabletState) << ")");
+        PQ_LOG_D("TxId " << event.GetTxId() << " invalid PQ tablet state (" << NKikimrPQ::ETabletState_Name(TabletState) << ")");
         SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
                                     event.GetTxId(),
                                     NKikimrPQ::TError::ERROR,
@@ -3332,7 +3332,7 @@ void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransact
     //
 
     if (txBody.OperationsSize() <= 0) {
-        PQ_LOG_D("empty list of operations");
+        PQ_LOG_D("TxId " << event.GetTxId() << " empty list of operations");
         SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
                                     event.GetTxId(),
                                     NKikimrPQ::TError::BAD_REQUEST,
@@ -3342,7 +3342,7 @@ void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransact
     }
 
     if (!CheckTxWriteOperations(txBody)) {
-        PQ_LOG_D("invalid WriteId " << txBody.GetWriteId());
+        PQ_LOG_D("TxId " << event.GetTxId() << " invalid WriteId " << txBody.GetWriteId());
         SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
                                     event.GetTxId(),
                                     NKikimrPQ::TError::BAD_REQUEST,
@@ -3351,9 +3351,35 @@ void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransact
         return;
     }
 
+    if (txBody.HasWriteId()) {
+        const TWriteId writeId = GetWriteId(txBody);
+        if (!TxWrites.contains(writeId)) {
+            SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
+                                        event.GetTxId(),
+                                        NKikimrPQ::TError::BAD_REQUEST,
+                                        "unknown WriteId",
+                                        ctx);
+            return;
+        }
+
+        TTxWriteInfo& writeInfo = TxWrites.at(writeId);
+        if (writeInfo.Deleting) {
+            PQ_LOG_W("TxId " << event.GetTxId() << " WriteId " << writeId << " will be deleted");
+            SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
+                                        event.GetTxId(),
+                                        NKikimrPQ::TError::BAD_REQUEST,
+                                        "WriteId will be deleted",
+                                        ctx);
+            return;
+        }
+
+        writeInfo.TxId = event.GetTxId();
+        PQ_LOG_D("TxId " << event.GetTxId() << " WriteId " << writeId);
+    }
+
     TMaybe<TPartitionId> partitionId = FindPartitionId(txBody);
     if (!partitionId.Defined()) {
-        PQ_LOG_D("unknown partition for WriteId " << txBody.GetWriteId());
+        PQ_LOG_W("TxId " << event.GetTxId() << " unknown partition for WriteId " << txBody.GetWriteId());
         SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
                                     event.GetTxId(),
                                     NKikimrPQ::TError::INTERNAL,
@@ -4390,13 +4416,9 @@ bool TPersQueue::WriteIdIsDisabled(const TMaybe<TWriteId>& writeId) const
 
 void TPersQueue::DeleteWriteId(const TMaybe<TWriteId>& writeId)
 {
-    if (!writeId.Defined()) {
+    if (!writeId.Defined() || !TxWrites.contains(*writeId)) {
         return;
     }
-
-    Y_ABORT_UNLESS(TxWrites.contains(*writeId),
-                   "PQ %" PRIu64 ", WriteId {%" PRIu64 ", %" PRIu64 "}",
-                   TabletID(), writeId->NodeId, writeId->KeyId);
 
     PQ_LOG_D("delete WriteId " << *writeId);
     TxWrites.erase(*writeId);
@@ -4759,9 +4781,13 @@ void TPersQueue::Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& e
     PQ_LOG_D("delete write info for WriteId " << writeId << " and TxId " << txId);
 
     auto* tx = GetTransaction(ctx, txId);
+    if (tx) {
+        PQ_LOG_D("TxId " << tx->TxId << " state " << NKikimrPQ::TTransaction_EState_Name(tx->State));
+    }
     if (!tx ||
         (tx->State == NKikimrPQ::TTransaction::EXECUTED) ||
         (tx->State == NKikimrPQ::TTransaction::WAIT_RS_ACKS)) {
+        // the transaction has already been completed
         BeginDeletePartitions(writeInfo);
     }
 }

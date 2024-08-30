@@ -643,6 +643,9 @@ void TKqpPlanner::TaskNotStarted(ui64 taskId) {
     YQL_ENSURE(!task.ComputeActorId);
     YQL_ENSURE(!task.Meta.Completed);
 
+    // Mark as completed, because node disconnect may be temporary, and CA will send TEvDqCompute::TEvState while shutting down
+    task.Meta.Completed = true;
+
     PendingComputeTasks.erase(taskId);
 }
 

@@ -223,6 +223,7 @@ def main():
                                         )
                                     where run_number <= {history_for_n_runs}
                                 )
+                                order by full_name,run_timestamp 
                         ) as hist
                         ON test_and_date.full_name=hist.full_name
                     )

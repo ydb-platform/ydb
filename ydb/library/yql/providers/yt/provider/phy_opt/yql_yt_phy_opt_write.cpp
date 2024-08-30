@@ -669,30 +669,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::YtDqWrite(TExprBase nod
             .Build().Done();
     }
 
-    const auto& items = GetSeqItemType(write.Input().Ref().GetTypeAnn())->Cast<TStructExprType>()->GetItems();
-    auto expand = ctx.Builder(write.Pos())
-        .Callable("ExpandMap")
-            .Add(0, write.Input().Ptr())
-            .Lambda(1)
-                .Param("item")
-                .Do([&](TExprNodeBuilder& lambda) -> TExprNodeBuilder& {
-                    ui32 i = 0U;
-                    for (const auto& item : items) {
-                        lambda.Callable(i++, "Member")
-                            .Arg(0, "item")
-                            .Atom(1, item->GetName())
-                        .Seal();
-                    }
-                    return lambda;
-                })
-            .Seal()
-        .Seal().Build();
-
-    return Build<TCoDiscard>(ctx, write.Pos())
-        .Input<TYtDqWideWrite>()
-            .Input(std::move(expand))
-            .Settings(write.Settings())
-        .Build().Done();
+    return node;
 }
 
 TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Fill(TExprBase node, TExprContext& ctx) const {

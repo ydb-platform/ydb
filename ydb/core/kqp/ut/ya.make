@@ -2,6 +2,7 @@ RECURSE_FOR_TESTS(
     arrow
     cost
     data
+    data_integrity
     effects
     federated_query
     indexes

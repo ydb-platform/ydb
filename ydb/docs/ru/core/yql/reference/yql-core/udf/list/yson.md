@@ -278,7 +278,7 @@ SELECT Yson::ConvertToDoubleDict($yson, Yson::Options(false as Strict)); --- { "
 
 Если во всём запросе требуется применять одинаковые значения настроек библиотеки Yson, то удобнее воспользоваться [PRAGMA yson.AutoConvert;](../../syntax/pragma.md#yson.autoconvert) и/или [PRAGMA yson.Strict;](../../syntax/pragma.md#yson.strict). Также эти `PRAGMA` являются единственным способом повлиять на неявные вызовы библиотеки Yson, которые возникают при работе с типами данных Yson/Json.
 
-{% if oss %}
+{% if oss and ya_make != true %}
 
 ## Смотрите также
 

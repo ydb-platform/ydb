@@ -247,7 +247,7 @@ The following arguments are supported:
 
 * `column` — (required) column properties (see the [column](#column) argument).
 * `family` - (optional) is a column group (see the [family](#family) argument).
-* `primary_key` — (required) [primary key](../yql/reference/syntax/create_table.md#columns) of the table that contains an ordered list of column names of the primary key.
+* `primary_key` — (required) [primary key](../yql/reference/syntax/create_table/index.md) of the table that contains an ordered list of column names of the primary key.
 * `ttl` — (optional) TTL (see the [ttl](#ttl) argument).
 * `partitioning_settings` — (optional) partitioning settings (see the argument [partitioning_settings](#partitioning-settings)).
 * `key_bloom_filter` — (optional) (bool) use [Bloom filter for primary key](../concepts/datamodel/table.md#bloom-filter), the default value is false.
@@ -255,7 +255,7 @@ The following arguments are supported:
 
 #### column {#column}
 
-The `column` argument describes the [column properties](../yql/reference/syntax/create_table.md#columns) of the table.
+The `column` argument describes the [column properties](../yql/reference/syntax/create_table/index.md) of the table.
 
 {% note warning %}
 
@@ -281,11 +281,11 @@ column {
 
 #### family {#family}
 
-The `family` argument describes [column group properties](../yql/reference/syntax/create_table.md#column-family).
+The `family` argument describes [column group properties](../yql/reference/syntax/create_table/index.md).
 
 * `name` - (required) is the name of the column group.
-* `data` — (required) [storage device type](../yql/reference/syntax/create_table#column-family) for column data of this group.
-* `compression` — (required) [data compression codec](../yql/reference/syntax/create_table#column-family).
+* `data` — (required) [storage device type](../yql/reference/syntax/create_table/index.md) for column data of this group.
+* `compression` — (required) [data compression codec](../yql/reference/syntax/create_table/index.md).
 
 Example:
 
@@ -368,7 +368,7 @@ The following arguments are supported:
 * `table_id` - terraform-table identifier. Specify if `table_path` or `connection_string` is not specified.
 
 * `name` - (required) is the name of the index.
-* `type` - (required) is the index type [global_sync | global_async](../yql/reference/syntax/create_table.md#secondary_index).
+* `type` - (required) is the index type [global_sync | global_async](../yql/reference/syntax/create_table/secondary_index.md).
 * `columns` - (required) is an ordered list of column names participating in the index.
 * `cover` - (required) is a list of additional columns for the covering index.
 

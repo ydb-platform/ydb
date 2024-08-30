@@ -3,6 +3,7 @@
 #include "kqp_query_state.h"
 #include "kqp_query_stats.h"
 
+#include <ydb/core/kqp/common/kqp_data_integrity_trails.h>
 #include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
 #include <ydb/core/kqp/common/kqp_ru_calc.h>
 #include <ydb/core/kqp/common/kqp_timeouts.h>
@@ -367,6 +368,8 @@ public:
         YQL_ENSURE(ev->Get()->GetSessionId() == SessionId,
                 "Invalid session, expected: " << SessionId << ", got: " << ev->Get()->GetSessionId());
 
+        NDataIntegrity::LogIntegrityTrails(ev, TlsActivationContext->AsActorContext());
+
         if (ev->Get()->HasYdbStatus() && ev->Get()->GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
             NYql::TIssues issues;
             NYql::IssuesFromMessage(ev->Get()->GetQueryIssues(), issues);
@@ -378,14 +381,14 @@ public:
                 << status
                 << " msg: "
                 << errMsg <<".");
-            ReplyProcessError(ev->Sender, proxyRequestId, status, errMsg);
+            ReplyProcessError(ev, status, errMsg);
             return;
         }
 
         if (ShutdownState && ShutdownState->SoftTimeoutReached()) {
             // we reached the soft timeout, so at this point we don't allow to accept new queries for session.
             LOG_N("system shutdown requested: soft timeout reached, no queries can be accepted");
-            ReplyProcessError(ev->Sender, proxyRequestId, Ydb::StatusIds::BAD_SESSION, "Session is under shutdown");
+            ReplyProcessError(ev, Ydb::StatusIds::BAD_SESSION, "Session is under shutdown");
             CleanupAndPassAway();
             return;
         }
@@ -395,7 +398,6 @@ public:
         YQL_ENSURE(QueryState->GetDatabase() == Settings.Database,
                 "Wrong database, expected:" << Settings.Database << ", got: " << QueryState->GetDatabase());
 
-        QueryState->EnsureAction();
         auto action = QueryState->GetAction();
 
         LWTRACK(KqpSessionQueryRequest,
@@ -969,6 +971,7 @@ public:
         if (queryState) {
             request.Snapshot = queryState->TxCtx->GetSnapshot();
             request.IsolationLevel = *queryState->TxCtx->EffectiveIsolationLevel;
+            request.UserTraceId = queryState->UserRequestContext->TraceId;
         } else {
             request.IsolationLevel = NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE;
         }
@@ -1291,8 +1294,8 @@ public:
         const bool useEvWrite = ((HasOlapTable && Settings.TableService.GetEnableOlapSink()) || (!HasOlapTable && Settings.TableService.GetEnableOltpSink()))
             && (request.QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_GENERIC_QUERY
                 || request.QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY
-                || request.QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_DML
-                || request.QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_PREPARED_DML);
+                || (!HasOlapTable && request.QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_DML)
+                || (!HasOlapTable && request.QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_PREPARED_DML));
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
             QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(),
             RequestCounters, Settings.TableService,
@@ -1863,9 +1866,10 @@ public:
         Cleanup(IsFatalError(record->GetYdbStatus()));
     }
 
-    void ReplyProcessError(const TActorId& sender, ui64 proxyRequestId, Ydb::StatusIds::StatusCode ydbStatus,
+    void ReplyProcessError(const TEvKqp::TEvQueryRequest::TPtr& request, Ydb::StatusIds::StatusCode ydbStatus,
             const TString& message)
     {
+        ui64 proxyRequestId = request->Cookie;
         LOG_W("Reply query error, msg: " << message << " proxyRequestId: " << proxyRequestId);
         auto response = std::make_unique<TEvKqp::TEvQueryResponse>();
         response->Record.GetRef().SetYdbStatus(ydbStatus);
@@ -1874,12 +1878,20 @@ public:
         issues.AddIssue(issue);
         NYql::IssuesToMessage(issues, response->Record.GetRef().MutableResponse()->MutableQueryIssues());
         AddTrailingInfo(response->Record.GetRef());
-        Send(sender, response.release(), 0, proxyRequestId);
+
+        NDataIntegrity::LogIntegrityTrails(
+            request->Get()->GetTraceId(), 
+            request->Get()->GetAction(), 
+            request->Get()->GetType(), 
+            response, 
+            TlsActivationContext->AsActorContext()
+        );
+
+        Send(request->Sender, response.release(), 0, proxyRequestId);
     }
 
     void ReplyBusy(TEvKqp::TEvQueryRequest::TPtr& ev) {
-        ui64 proxyRequestId = ev->Cookie;
-        ReplyProcessError(ev->Sender, proxyRequestId, Ydb::StatusIds::SESSION_BUSY, "Pending previous query completion");
+        ReplyProcessError(ev, Ydb::StatusIds::SESSION_BUSY, "Pending previous query completion");
     }
 
     static bool IsFatalError(const Ydb::StatusIds::StatusCode status) {
@@ -1926,6 +1938,14 @@ public:
         for (auto& issue : record.GetResponse().GetQueryIssues()) {
             Counters->ReportIssues(Settings.DbCounters, CachedIssueCounters, issue);
         }
+
+        NDataIntegrity::LogIntegrityTrails(
+            QueryState->UserRequestContext->TraceId,
+            QueryState->GetAction(),
+            QueryState->GetType(),
+            QueryResponse, 
+            TlsActivationContext->AsActorContext()
+        );
 
         Send(QueryState->Sender, QueryResponse.release(), 0, QueryState->ProxyRequestId);
         LOG_D("Sent query response back to proxy, proxyRequestId: " << QueryState->ProxyRequestId

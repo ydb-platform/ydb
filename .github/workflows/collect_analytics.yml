@@ -37,5 +37,9 @@ jobs:
       run: python3 .github/scripts/analytics/flaky_tests_history_n_runs.py --runs=10 
     - name: Collect test history data with window 10 run release-asan for main
       run: python3 .github/scripts/analytics/flaky_tests_history_n_runs.py --runs=10 --build_type=release-asan
+    - name: Collect test history data with window 50 run relwithdebinfo for main
+      run: python3 .github/scripts/analytics/flaky_tests_history_n_runs.py --runs=50 
+    - name: Collect test history data with window 50 run release-asan for main
+      run: python3 .github/scripts/analytics/flaky_tests_history_n_runs.py --runs=50 --build_type=release-asan
 
 

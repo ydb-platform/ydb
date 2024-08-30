@@ -34,13 +34,16 @@ def create_tables(pool,  table_path):
                 `build_type` Utf8 NOT NULL,
                 `branch` Utf8 NOT NULL,
                 `runs_window` Uint64 NOT NULL,
+                `first_run` Timestamp,
+                `last_run` Timestamp ,
+                `owners` Utf8 NOT NULL,
                 `history` String,
                 `history_class` String,
                 `pass_count` Uint64,
                 `mute_count` Uint64,
                 `fail_count` Uint64,
                 `skip_count` Uint64,
-                PRIMARY KEY (`test_name`, `suite_folder`, `full_name`,date_window,runs_window,build_type,branch)
+                PRIMARY KEY (`test_name`, `suite_folder`, `full_name`,date_window,runs_window,build_type,branch,owners)
             )
                 PARTITION BY HASH(`full_name`,build_type,branch)
                 WITH (STORE = COLUMN)
@@ -59,6 +62,9 @@ def bulk_upsert(table_client, table_path, rows):
         .add_column("branch", ydb.OptionalType(ydb.PrimitiveType.Utf8))
         .add_column("full_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
         .add_column("date_window", ydb.OptionalType(ydb.PrimitiveType.Date))
+        .add_column("first_run", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
+        .add_column("last_run", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
+        .add_column("owners", ydb.OptionalType(ydb.PrimitiveType.Utf8))
         .add_column("runs_window", ydb.OptionalType(ydb.PrimitiveType.Uint64))
         .add_column("history", ydb.OptionalType(ydb.PrimitiveType.String))
         .add_column("history_class", ydb.OptionalType(ydb.PrimitiveType.String))
@@ -150,7 +156,10 @@ def main():
                     history_list,
                     dist_hist,
                     suite_folder,
-                    test_name
+                    test_name,
+                    owners,
+                    first_run,
+                    last_run
                 from (
                     select
                         full_name,
@@ -160,13 +169,20 @@ def main():
                         AGG_LIST(status) as history_list ,
                         String::JoinFromList( AGG_LIST_DISTINCT(status) ,',') as dist_hist,
                         suite_folder,
-                        test_name
+                        test_name,
+                        owners,
+                        min(run_timestamp) as first_run,
+                        max(run_timestamp) as last_run
                     from (
                         select * from (
-                                select t1.test_name, t1.suite_folder, t1.full_name,
-                                Date('{date}') as date_base,
-                               '{build_type}' as  build_type,
-                               '{branch}' as  branch
+                                select 
+                                    t1.suite_folder,
+                                    t1.test_name,
+                                    t1.full_name,
+                                    t1.owners, 
+                                    Date('{date}') as date_base,
+                                    '{build_type}' as  build_type,
+                                    '{branch}' as  branch
                                 from  `test_results/analytics/testowners` as t1
                             ) as test_and_date
                         left JOIN (
@@ -175,11 +191,11 @@ def main():
                                     suite_folder || '/' || test_name as full_name,
                                     run_timestamp,
                                     status ,
-                                    ROW_NUMBER() OVER (PARTITION BY test_name ORDER BY run_timestamp DESC) AS run_number
+                                    ROW_NUMBER() OVER (PARTITION BY suite_folder,test_name ORDER BY run_timestamp DESC) AS run_number
                                 from  `test_results/test_runs_column`
                                 where
-                                    run_timestamp <= Date('{date}') 
-                                    and run_timestamp >= Date('{date}') -14*Interval("P1D") 
+                                    run_timestamp <= Date('{date}') + Interval("P1D")
+                                    and run_timestamp >= Date('{date}') -13*Interval("P1D") 
                                     and job_name in ('Postcommit_relwithdebinfo','Postcommit_asan')
                                     and build_type = '{build_type}'
                                     and status != 'skipped'
@@ -189,7 +205,7 @@ def main():
                         ) as hist
                         ON test_and_date.full_name=hist.full_name
                     )
-                    GROUP BY full_name,suite_folder,test_name,date_base,build_type,branch
+                    GROUP BY full_name,suite_folder,test_name,date_base,build_type,branch,owners
             
                 )
             """
@@ -217,6 +233,9 @@ def main():
                 prepared_for_update_rows.append({
                     'suite_folder': row['suite_folder'],
                     'test_name': row['test_name'],
+                    'first_run': row['first_run'],
+                    'last_run': row['last_run'],
+                    'owners': row['owners'],
                     'full_name': row['full_name'],
                     'date_window': row['date_base'],
                     'build_type': row['build_type'],

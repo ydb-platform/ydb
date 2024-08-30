@@ -342,6 +342,19 @@ Y_UNIT_TEST_SUITE(TYqlDecimalTest) {
         CheckMul<35>("inf", "-inf", "-inf");
         CheckMul<35>("inf", "nan", "nan");
     }
+
+    Y_UNIT_TEST(TestRescaleFrom22To35) {
+        TInt128 v = 123456789876ll;
+        TString expected = "123.456789876";
+
+        TString result22 = ToString(v, 22, 9);
+        UNIT_ASSERT_VALUES_EQUAL(result22, expected);
+        TString result35 = ToString(v, 35, 9);
+        UNIT_ASSERT_VALUES_EQUAL(result35, expected);
+ 
+        TInt128 parsed35 = FromString(result22, 35, 9);
+        UNIT_ASSERT(parsed35 == v);
+    }
 }
 
 }

@@ -12,57 +12,35 @@ namespace NYT::NClient::NHedging::NRpc {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TClientConfig
-    : public virtual NYTree::TYsonStruct
+struct TConnectionWithPenaltyConfig
+    : public virtual NApi::NRpcProxy::TConnectionConfig
 {
-    NApi::NRpcProxy::TConnectionConfigPtr Connection;
     TDuration InitialPenalty;
 
-    REGISTER_YSON_STRUCT(TClientConfig);
+    REGISTER_YSON_STRUCT(TConnectionWithPenaltyConfig);
 
     static void Register(TRegistrar registrar);
 };
 
-DEFINE_REFCOUNTED_TYPE(TClientConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
 //! The options for hedging client.
+//! TODO(bulatman) Rename to `THedgingClientConfig`.
 struct THedgingClientOptions
-    : public virtual NYTree::TYsonStructLite
+    : public virtual NYTree::TYsonStruct
 {
-    std::vector<TClientConfigPtr> ClientConfigs;
-
-    struct TClientOptions
-    {
-        TClientOptions(
-            NApi::IClientPtr client,
-            const std::string& clusterName,
-            TDuration initialPenalty,
-            TCounterPtr counter = {});
-
-        TClientOptions(
-            NApi::IClientPtr client,
-            TDuration initialPenalty,
-            TCounterPtr counter = {});
-
-        NApi::IClientPtr Client;
-        std::string ClusterName;
-        TDuration InitialPenalty;
-        TCounterPtr Counter;
-    };
-
+    std::vector<TIntrusivePtr<TConnectionWithPenaltyConfig>> Connections;
     TDuration BanPenalty;
     TDuration BanDuration;
     THashMap<TString, TString> Tags;
 
-    // This parameter is set on postprocessor.
-    TVector<TClientOptions> Clients;
-
-    REGISTER_YSON_STRUCT_LITE(THedgingClientOptions);
+    REGISTER_YSON_STRUCT(THedgingClientOptions);
 
     static void Register(TRegistrar registrar);
 };
+
+DEFINE_REFCOUNTED_TYPE(THedgingClientOptions)
 
 ////////////////////////////////////////////////////////////////////////////////
 

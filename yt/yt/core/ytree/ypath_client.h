@@ -39,11 +39,11 @@ public:
     void DeclareClientFeature(int featureId) override;
     void RequireServerFeature(int featureId) override;
 
-    const TString& GetUser() const override;
-    void SetUser(const TString& user) override;
+    const std::string& GetUser() const override;
+    void SetUser(const std::string& user) override;
 
-    const TString& GetUserTag() const override;
-    void SetUserTag(const TString& tag) override;
+    const std::string& GetUserTag() const override;
+    void SetUserTag(const std::string& tag) override;
 
     void SetUserAgent(const TString& userAgent) override;
 

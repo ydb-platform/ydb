@@ -206,8 +206,8 @@ NActors::TActorId TActorCoordinator::GetAndUpdateLocation(TPartitionKey key) {
         auto& info = it->second;
         if (!info.Connected) {
             it++;
-            if (it == RowDispatchers.end()) {
-                it = RowDispatchers.begin();
+            if (it == std::end(RowDispatchers)) {
+                it = std::begin(RowDispatchers);
             }
             continue;
         }

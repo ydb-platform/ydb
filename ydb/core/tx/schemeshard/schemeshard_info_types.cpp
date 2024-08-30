@@ -565,7 +565,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
         for (const auto& indexDescription : op.GetTableIndexes()) {
             if (indexDescription.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
                 errStr = "Table with vector indexes doesn't support TTL";
-                return nullptr;                
+                return nullptr;
             }
         }
 
@@ -2061,6 +2061,7 @@ TString TExportInfo::ToString() const {
         << " DomainPathId: " << DomainPathId
         << " ExportPathId: " << ExportPathId
         << " UserSID: '" << UserSID << "'"
+        << " PeerName: '" << PeerName << "'"
         << " State: " << State
         << " WaitTxId: " << WaitTxId
         << " Issue: '" << Issue << "'"
@@ -2489,7 +2490,7 @@ bool TSequenceInfo::ValidateCreate(const NKikimrSchemeOp::TSequenceDescription& 
 }
 
 // validate type of the sequence
-std::optional<std::pair<i64, i64>> ValidateSequenceType(const TString& sequenceName, const TString& dataType, 
+std::optional<std::pair<i64, i64>> ValidateSequenceType(const TString& sequenceName, const TString& dataType,
         const NScheme::TTypeRegistry& typeRegistry, bool pgTypesEnabled, TString& errStr) {
 
     i64 dataTypeMaxValue, dataTypeMinValue;
@@ -2521,7 +2522,7 @@ std::optional<std::pair<i64, i64>> ValidateSequenceType(const TString& sequenceN
                 errStr = Sprintf("Type '%s' specified for sequence '%s' is not supported", dataType.data(), sequenceName.c_str());
                 return std::nullopt;
             }
-        }                    
+        }
     } else {
         auto* typeDesc = NPg::TypeDescFromPgTypeName(typeName);
         if (!typeDesc) {

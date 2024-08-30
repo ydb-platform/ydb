@@ -212,7 +212,7 @@ def test_tpc():
     print("results path:", result_path, file=sys.stderr)
 
     if is_ci:
-        # prepare_login_to_ydb()
+        prepare_login_to_ydb()
 
         s3_folder = pathlib.Path(os.environ["PUBLIC_DIR"]).resolve()
         print(f"s3 folder: {s3_folder}", file=sys.stderr)

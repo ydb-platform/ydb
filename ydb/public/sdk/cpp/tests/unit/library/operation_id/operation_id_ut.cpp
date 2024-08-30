@@ -18,7 +18,7 @@ Y_UNIT_TEST_SUITE(OperationIdTest) {
 
     Y_UNIT_TEST(PreparedQueryIdCompatibleFormatter) {
         TOperationId opId;
-        opId.GetMutableKind() = TOperationId::PREPARED_QUERY_ID;
+        opId.SetKind(TOperationId::PREPARED_QUERY_ID);
         AddOptionalValue(opId, "id", PreparedQueryId);
         auto result = opId.ToString();
         UNIT_ASSERT_VALUES_EQUAL(FormatPreparedQueryIdCompat(PreparedQueryId), result);

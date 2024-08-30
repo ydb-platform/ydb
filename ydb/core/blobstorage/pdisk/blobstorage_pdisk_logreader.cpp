@@ -286,7 +286,7 @@ TLogReader::TLogReader(bool isInitial,TPDisk *pDisk, TActorSystem * const actorS
         TVector<TLogChunkItem> &&chunksToRead, ui64 firstLsnToKeep, ui64 firstNonceToKeep, TVDiskID ownerVDiskId)
     : IsInitial(isInitial)
     , PDisk(pDisk)
-    , PDiskCtx(pDisk->PDiskCtx)
+    , PCtx(pDisk->PCtx)
     , ReplyTo(replyTo)
     , Owner(owner)
     , OwnerLogStartPosition(ownerLogStartPosition)
@@ -328,8 +328,8 @@ TLogReader::TLogReader(bool isInitial,TPDisk *pDisk, TActorSystem * const actorS
     , CurrentChunkToRead(ChunksToRead.end())
     , ParseCommits(false) // Actual only if IsInitial
 {
-    Y_DEBUG_ABORT_UNLESS(PDiskCtx);
-    Y_DEBUG_ABORT_UNLESS(PDiskCtx->ActorSystem == actorSystem);
+    Y_DEBUG_ABORT_UNLESS(PCtx);
+    Y_DEBUG_ABORT_UNLESS(PCtx->ActorSystem == actorSystem);
     Y_ABORT_UNLESS(PDisk->PDiskThread.Id() == TThread::CurrentThreadId(), "Constructor of TLogReader must be called"
             " from PDiskThread");
     Cypher.SetKey(PDisk->Format.LogKey);
@@ -1134,7 +1134,7 @@ void TLogReader::Reply() {
         );
     }
     P_LOG(PRI_DEBUG, BPD01, "Reply to owner", (Owner, (ui32)Owner), (Result, Result->ToString()));
-    PDiskCtx->ActorSystem->Send(ReplyTo, Result.Release());
+    PCtx->ActorSystem->Send(ReplyTo, Result.Release());
     if (!IsInitial) {
         PDisk->Mon.LogRead.CountResponse(ResultSize);
     }

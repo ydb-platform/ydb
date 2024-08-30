@@ -23,7 +23,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 TPDisk::TPDisk(const TIntrusivePtr<TPDiskConfig> cfg, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
-    : PDiskCtx(std::make_shared<TPDiskCtx>())
+    : PCtx(std::make_shared<TPDiskCtx>())
     , PDiskId(cfg->PDiskId)
     , Mon(counters, PDiskId, cfg.Get())
     , ActorSystem(nullptr)
@@ -53,8 +53,8 @@ TPDisk::TPDisk(const TIntrusivePtr<TPDiskConfig> cfg, const TIntrusivePtr<::NMon
     , ExpectedSlotCount(cfg->ExpectedSlotCount)
     , UseHugePages(cfg->UseSpdkNvmeDriver)
 {
-    PDiskCtx->PDiskId = cfg->PDiskId;
-    PDiskCtx->Mon = &Mon;
+    PCtx->PDiskId = cfg->PDiskId;
+    PCtx->Mon = &Mon;
 
     SlowdownAddLatencyNs = TControlWrapper(0, 0, 100'000'000'000ll);
     EnableForsetiBinLog = TControlWrapper(0, 0, 1);
@@ -432,7 +432,7 @@ bool ParseSectorOffset(const TDiskFormat& format, TActorSystem *actorSystem, ui3
         } else {
             reason = "outLastSectorIdx >= chunkSizeUsableSectors";
         }
-        P_LOG_X(*actorSystem, PRI_ERROR, BPD01, reason, (PDiskId, pDiskId), (OutSectorIdx, outSectorIdx),
+        STLOGX(*actorSystem, PRI_ERROR, BS_PDISK, BPD01, reason, (PDiskId, pDiskId), (OutSectorIdx, outSectorIdx),
             (OutLastSectorIdx, outLastSectorIdx), (ChunkSizeUsableSectors, chunkSizeUsableSectors),
             (Offset, offset), (Size, size));
         return false;
@@ -731,7 +731,7 @@ void TPDisk::AskVDisksToCutLogs(TOwner ownerFilter, bool doForce) {
                                 << " Send CutLog to# " << data.CutLogId.ToString().data()
                                 << " ownerId#" << ui32(chunkOwner)
                                 << " cutLog# " << cutLog->ToString());
-                        ActorSystem->Send(new IEventHandle(data.CutLogId, PDiskCtx->PDiskActor, cutLog.Release(),
+                        ActorSystem->Send(new IEventHandle(data.CutLogId, PCtx->PDiskActor, cutLog.Release(),
                                     IEventHandle::FlagTrackDelivery, 0));
                         data.AskedFreeUpToLsn = lsn;
                         data.AskedToCutLogAt = now;
@@ -790,7 +790,7 @@ void TPDisk::AskVDisksToCutLogs(TOwner ownerFilter, bool doForce) {
                                 << " cutLog# " << cutLog->ToString()
                                 << " LogChunks# " << str.Str());
                     }
-                    ActorSystem->Send(new IEventHandle(data.CutLogId, PDiskCtx->PDiskActor, cutLog.Release(),
+                    ActorSystem->Send(new IEventHandle(data.CutLogId, PCtx->PDiskActor, cutLog.Release(),
                                 IEventHandle::FlagTrackDelivery, 0));
                     data.AskedFreeUpToLsn = lsn;
                     data.AskedToCutLogAt = now;
@@ -2607,8 +2607,6 @@ bool TPDisk::Initialize(TActorSystem *actorSystem, const TActorId &pDiskActor) {
     actorSystem->AppData<TAppData>()->Icb->RegisterLocalControl(control, \
             TStringBuilder() << "PDisk_" << PDiskId << "_" << #control)
 
-    PDiskActor = pDiskActor;
-    PDiskCtx->PDiskActor = pDiskActor;
     if (!IsStarted) {
         if (actorSystem && actorSystem->AppData<TAppData>() && actorSystem->AppData<TAppData>()->Icb) {
             REGISTER_LOCAL_CONTROL(SlowdownAddLatencyNs);
@@ -2633,9 +2631,13 @@ bool TPDisk::Initialize(TActorSystem *actorSystem, const TActorId &pDiskActor) {
                 }
             }
         }
-        Y_ABORT_UNLESS(BlockDevice);
-        BlockDevice->Initialize(actorSystem, PDiskCtx->PDiskActor);
+        PCtx->PDiskActor = pDiskActor;
+        PCtx->ActorSystem = ActorSystem;
+        PDiskActor = pDiskActor;
         ActorSystem = actorSystem;
+
+        Y_ABORT_UNLESS(BlockDevice);
+        BlockDevice->Initialize(actorSystem, pDiskActor);
         ReqCreator.SetActorSystem(actorSystem);
         IsStarted = true;
 
@@ -3471,7 +3473,7 @@ void TPDisk::EnqueueAll() {
 
 void TPDisk::Update() {
     Mon.UpdateDurationTracker.UpdateStarted();
-    PDiskCtx->ActorSystem = ActorSystem;
+    PCtx->ActorSystem = ActorSystem;
 
     // ui32 userSectorSize = 0;
 

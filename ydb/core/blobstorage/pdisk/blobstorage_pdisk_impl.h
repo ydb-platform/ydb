@@ -46,14 +46,14 @@ class TCompletionEventSender;
 
 class TPDisk : public IPDisk {
 public:
-    std::shared_ptr<TPDiskCtx> PDiskCtx;
-    ui32 PDiskId; // deprecated, moved to PDiskCtx
-    TActorId PDiskActor; // deprecated, moved to PDiskCtx
+    std::shared_ptr<TPDiskCtx> PCtx;
+    ui32 PDiskId; // deprecated, moved to PCtx
+    TActorId PDiskActor; // deprecated, moved to PCtx
 
     // Monitoring
-    TPDiskMon Mon; // deprecated, moved to PDiskCtx
+    TPDiskMon Mon; // deprecated, moved to PCtx
 
-    TActorSystem *ActorSystem; // deprecated, moved to PDiskCtx
+    TActorSystem *ActorSystem; // deprecated, moved to PCtx
 
     // Static state
     TDriveModel DriveModel;

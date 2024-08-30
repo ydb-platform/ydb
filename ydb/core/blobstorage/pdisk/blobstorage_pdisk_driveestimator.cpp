@@ -1,4 +1,5 @@
 #include "blobstorage_pdisk_driveestimator.h"
+#include "blobstorage_pdisk.h"
 
 #include <ydb/library/pdisk_io/aio.h>
 #include <ydb/library/pdisk_io/wcache.h>

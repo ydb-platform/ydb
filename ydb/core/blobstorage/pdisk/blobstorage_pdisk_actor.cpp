@@ -97,7 +97,7 @@ class TPDiskActor : public TActorBootstrapped<TPDiskActor> {
 
     THolder<IEventHandle> ControledStartResult;
 
-    std::shared_ptr<TPDiskCtx> PDiskCtx;
+    std::shared_ptr<TPDiskCtx> PCtx;
 
     class TWhiteboardFlag {
     private:
@@ -221,8 +221,8 @@ public:
                 ->GetSubgroup("media", to_lower(cfg->PDiskCategory.TypeStrShort())))
     {
         Y_ABORT_UNLESS(MainKey.IsInitialized);
-        PDiskCtx = std::make_shared<TPDiskCtx>();
-        PDiskCtx->PDiskId = cfg->PDiskId;
+        PCtx = std::make_shared<TPDiskCtx>();
+        PCtx->PDiskId = cfg->PDiskId;
     }
 
     ~TPDiskActor() {
@@ -236,8 +236,8 @@ public:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Bootstrap state
     void Bootstrap(const TActorContext &ctx) {
-        PDiskCtx->ActorSystem = ctx.ActorSystem();
-        P_LOG(PRI_CRIT, BPD01, "Bootstrap, ActorSystem# " << (void*)PDiskCtx->ActorSystem);
+        PCtx->ActorSystem = ctx.ActorSystem();
+        P_LOG(PRI_CRIT, BPD01, "Bootstrap, ActorSystem# " << (void*)PCtx->ActorSystem);
         auto mon = AppData()->Mon;
         if (mon && !Cfg->MetadataOnly) {
             NMonitoring::TIndexMonPage *actorsMonPage = mon->RegisterIndexPage("actors", "Actors");

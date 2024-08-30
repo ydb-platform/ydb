@@ -63,7 +63,7 @@ public:
 
 TSysLogReader::TSysLogReader(TPDisk *pDisk, TActorSystem *const actorSystem, const TActorId &replyTo, TReqId reqId)
     : PDisk(pDisk)
-    , PDiskCtx(pDisk->PDiskCtx)
+    , PCtx(pDisk->PCtx)
     , ReqId(reqId)
     , Result(new TEvReadLogResult(NKikimrProto::ERROR, TLogPosition{0, 0}, TLogPosition::Invalid(),
                 true, 0, nullptr, 0))
@@ -71,8 +71,8 @@ TSysLogReader::TSysLogReader(TPDisk *pDisk, TActorSystem *const actorSystem, con
     , SizeToRead(PDisk->Format.SysLogSectorCount * ReplicationFactor * PDisk->Format.SectorSize)
     , Data(SizeToRead)
 {
-    Y_ABORT_UNLESS(actorSystem == PDiskCtx->ActorSystem);
-    Y_ABORT_UNLESS(replyTo == PDiskCtx->PDiskActor);
+    Y_ABORT_UNLESS(actorSystem == PCtx->ActorSystem);
+    Y_ABORT_UNLESS(replyTo == PCtx->PDiskActor);
     Cypher.SetKey(PDisk->Format.SysLogKey);
     AtomicIncrement(PDisk->InFlightLogRead);
 
@@ -159,7 +159,7 @@ void TSysLogReader::RestoreSectorSets() {
         const ui64 magic = format.MagicSysLogChunk;
         const bool isErasureEncode = format.IsErasureEncodeSysLog();
         TSectorRestorator restorator(true, LogErasureDataParts, isErasureEncode, format,
-            PDiskCtx->ActorSystem, PDisk->PDiskActor, PDisk->PDiskId, &PDisk->Mon, PDisk->BufferPool.Get());
+            PCtx->ActorSystem, PDisk->PDiskActor, PDisk->PDiskId, &PDisk->Mon, PDisk->BufferPool.Get());
         restorator.Restore(sectorSetData, sectorIdx * format.SectorSize, magic, 0, 0);
 
         if (!restorator.GoodSectorFlags) {
@@ -393,7 +393,7 @@ void TSysLogReader::PrepareResult() {
 void TSysLogReader::Reply() {
     if (!IsReplied) {
         P_LOG(PRI_DEBUG, BPD01, Result->ToString());
-        PDiskCtx->ActorSystem->Send(PDiskCtx->PDiskActor, Result.Release());
+        PCtx->ActorSystem->Send(PCtx->PDiskActor, Result.Release());
         IsReplied = true;
     }
 }

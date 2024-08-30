@@ -88,7 +88,7 @@ struct TPDiskCtx;
 
 class TSysLogReader : public TThrRefBase {
     TPDisk *const PDisk;
-    std::shared_ptr<TPDiskCtx> PDiskCtx;
+    std::shared_ptr<TPDiskCtx> PCtx;
     const TReqId ReqId;
 
     THolder<TEvReadLogResult> Result;

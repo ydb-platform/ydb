@@ -1563,15 +1563,18 @@ struct TPDiskCtx {
     ui32 PDiskId = 0;
     TActorId PDiskActor; 
     TPDiskMon *Mon = nullptr;
-};
 
-#define P_LOG_X(CTX, LEVEL, MARKER, ...) \
-        STLOGX(CTX, LEVEL, BS_PDISK, MARKER, __VA_ARGS__);
+    TPDiskCtx() = default;
+
+    TPDiskCtx(TActorSystem *actorSystem)
+        : ActorSystem(actorSystem)
+    {}
+};
 
 #define P_LOG(LEVEL, MARKER, ...) \
     do { \
-        if (PDiskCtx && PDiskCtx->ActorSystem) { \
-            STLOGX(*PDiskCtx->ActorSystem, LEVEL, BS_PDISK, MARKER, __VA_ARGS__, (PDiskId, PDiskCtx->PDiskId)); \
+        if (PCtx && PCtx->ActorSystem) { \
+            STLOGX(*PCtx->ActorSystem, LEVEL, BS_PDISK, MARKER, __VA_ARGS__, (PDiskId, PCtx->PDiskId)); \
         } \
     } while (false)
 

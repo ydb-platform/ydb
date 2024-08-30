@@ -49,6 +49,7 @@ message TTableServiceConfig {
 
         optional uint64 MaxNonParallelTasksExecutionLimit = 25 [default = 8];
         optional uint64 MaxNonParallelTopStageExecutionLimit = 26 [default = 1];
+        optional bool PreferLocalDatacenterExecution = 27 [ default = true ];
     }
 
     message TSpillingServiceConfig {

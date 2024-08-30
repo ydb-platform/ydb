@@ -1041,16 +1041,21 @@ void TPersQueue::InitTxWrites(const NKikimrPQ::TTabletTxInfo& info,
     for (size_t i = 0; i != info.TxWritesSize(); ++i) {
         auto& txWrite = info.GetTxWrites(i);
         const TWriteId writeId = GetWriteId(txWrite);
-        ui32 partitionId = txWrite.GetOriginalPartitionId();
-        TPartitionId shadowPartitionId(partitionId, writeId, txWrite.GetInternalPartitionId());
 
-        TxWrites[writeId].Partitions.emplace(partitionId, shadowPartitionId);
+        TTxWriteInfo& writeInfo = TxWrites[writeId];
+        if (txWrite.HasOriginalPartitionId()) {
+            ui32 partitionId = txWrite.GetOriginalPartitionId();
+            TPartitionId shadowPartitionId(partitionId, writeId, txWrite.GetInternalPartitionId());
 
-        AddSupportivePartition(shadowPartitionId);
-        CreateSupportivePartitionActor(shadowPartitionId, ctx);
+            writeInfo.Partitions.emplace(partitionId, shadowPartitionId);
+
+            AddSupportivePartition(shadowPartitionId);
+            CreateSupportivePartitionActor(shadowPartitionId, ctx);
+
+            NextSupportivePartitionId = Max(NextSupportivePartitionId, shadowPartitionId.InternalPartitionId + 1);
+        }
+
         SubscribeWriteId(writeId, ctx);
-
-        NextSupportivePartitionId = Max(NextSupportivePartitionId, shadowPartitionId.InternalPartitionId + 1);
     }
 
     NewSupportivePartitions.clear();
@@ -3599,6 +3604,7 @@ void TPersQueue::SubscribeWriteId(const TWriteId& writeId,
 void TPersQueue::UnsubscribeWriteId(const TWriteId& writeId,
                                     const TActorContext& ctx)
 {
+    PQ_LOG_D("send TEvUnsubscribeLock for WriteId " << writeId);
     ctx.Send(NLongTxService::MakeLongTxServiceID(writeId.NodeId),
              new NLongTxService::TEvLongTxService::TEvUnsubscribeLock(writeId.KeyId, writeId.NodeId));
 }
@@ -3900,11 +3906,16 @@ void TPersQueue::SavePlanStep(NKikimrPQ::TTabletTxInfo& info)
 void TPersQueue::SaveTxWrites(NKikimrPQ::TTabletTxInfo& info)
 {
     for (auto& [writeId, write] : TxWrites) {
-        for (auto [partitionId, shadowPartitionId] : write.Partitions) {
+        if (write.Partitions.empty()) {
             auto* txWrite = info.MutableTxWrites()->Add();
             SetWriteId(*txWrite, writeId);
-            txWrite->SetOriginalPartitionId(partitionId);
-            txWrite->SetInternalPartitionId(shadowPartitionId.InternalPartitionId);
+        } else {
+            for (auto [partitionId, shadowPartitionId] : write.Partitions) {
+                auto* txWrite = info.MutableTxWrites()->Add();
+                SetWriteId(*txWrite, writeId);
+                txWrite->SetOriginalPartitionId(partitionId);
+                txWrite->SetInternalPartitionId(shadowPartitionId.InternalPartitionId);
+            }
         }
     }
 
@@ -4349,6 +4360,9 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
 
             WriteTx(tx, NKikimrPQ::TTransaction::EXECUTED);
 
+            PQ_LOG_D("delete partitions for TxId " << tx.TxId);
+            BeginDeletePartitions(tx);
+
             tx.State = NKikimrPQ::TTransaction::EXECUTED;
             PQ_LOG_D("TxId " << tx.TxId <<
                      ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
@@ -4749,7 +4763,7 @@ void TPersQueue::ProcessCheckPartitionStatusRequests(const TPartitionId& partiti
     }
 }
 
-void TPersQueue::Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& ev, const TActorContext& ctx)
+void TPersQueue::Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& ev)
 {
     PQ_LOG_D("Handle TEvLongTxService::TEvLockStatus " << ev->Get()->Record.ShortDebugString());
 
@@ -4770,26 +4784,14 @@ void TPersQueue::Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& e
         return;
     }
 
-    if (!writeInfo.TxId.Defined()) {
-        PQ_LOG_D("delete write info for WriteId " << writeId);
-        // the message TEvProposeTransaction will not come anymore
-        BeginDeletePartitions(writeInfo);
+    if (writeInfo.TxId.Defined()) {
+        // the message `TEvProposeTransaction` has already arrived
+        PQ_LOG_D("there is already a transaction TxId " << writeInfo.TxId << " for WriteId " << writeId);
         return;
     }
 
-    ui64 txId = *writeInfo.TxId;
-    PQ_LOG_D("delete write info for WriteId " << writeId << " and TxId " << txId);
-
-    auto* tx = GetTransaction(ctx, txId);
-    if (tx) {
-        PQ_LOG_D("TxId " << tx->TxId << " state " << NKikimrPQ::TTransaction_EState_Name(tx->State));
-    }
-    if (!tx ||
-        (tx->State == NKikimrPQ::TTransaction::EXECUTED) ||
-        (tx->State == NKikimrPQ::TTransaction::WAIT_RS_ACKS)) {
-        // the transaction has already been completed
-        BeginDeletePartitions(writeInfo);
-    }
+    PQ_LOG_D("delete partitions for WriteId " << writeId);
+    BeginDeletePartitions(writeInfo);
 }
 
 void TPersQueue::Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, const TActorContext& ctx)
@@ -4889,6 +4891,16 @@ void TPersQueue::BeginDeletePartitions(TTxWriteInfo& writeInfo)
     writeInfo.Deleting = true;
 }
 
+void TPersQueue::BeginDeletePartitions(const TDistributedTransaction& tx)
+{
+    if (!tx.WriteId.Defined() || !TxWrites.contains(*tx.WriteId)) {
+        return;
+    }
+
+    TTxWriteInfo& writeInfo = TxWrites.at(*tx.WriteId);
+    BeginDeletePartitions(writeInfo);
+}
+
 TString TPersQueue::LogPrefix() const {
     return TStringBuilder() << "[PQ: " << TabletID() << "] ";
 }
@@ -4943,7 +4955,7 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         HFuncTraced(TEvMediatorTimecast::TEvRegisterTabletResult, Handle);
         HFuncTraced(TEvPQ::TEvCheckPartitionStatusRequest, Handle);
         HFuncTraced(TEvPQ::TEvPartitionScaleStatusChanged, Handle);
-        HFuncTraced(NLongTxService::TEvLongTxService::TEvLockStatus, Handle);
+        hFuncTraced(NLongTxService::TEvLongTxService::TEvLockStatus, Handle);
         HFuncTraced(TEvPQ::TEvReadingPartitionStatusRequest, Handle);
         HFuncTraced(TEvPQ::TEvDeletePartitionDone, Handle);
         HFuncTraced(TEvPQ::TEvTransactionCompleted, Handle);

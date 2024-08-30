@@ -180,7 +180,7 @@ def main():
 
     path_in_database = "test_results"
     dir = os.path.dirname(__file__)
-    git_root = f"{dir}/../.."
+    git_root = f"{dir}/../../.."
     codeowners = f"{git_root}/.github/TESTOWNERS"
     config = configparser.ConfigParser()
     config_file_path = f"{git_root}/.github/config/ydb_qa_db.ini"

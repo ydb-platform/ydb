@@ -527,11 +527,11 @@ private:
 
 bool IsPathDoesNotExistIssue(const TStatus& status) {
     auto oneLineError = status.GetIssues().ToOneLineString();
-    return oneLineError.Contains("Path does not exist") || oneLineError.Contains("path hasn't been resolved");
+    return oneLineError.contains("Path does not exist") || oneLineError.contains("path hasn't been resolved");
 }
 
 bool IsPathExistsIssue(const TStatus& status) {
-    return status.GetIssues().ToOneLineString().Contains("error: path exist");
+    return status.GetIssues().ToOneLineString().contains("error: path exist");
 }
 
 } // namespace
@@ -586,7 +586,7 @@ IActor* MakeCreateConnectionActor(
              &counters,
              permissions](TActorId sender, const TStatus& status) {
                 if (status.GetStatus() == EStatus::ALREADY_EXISTS ||
-                    status.GetIssues().ToOneLineString().Contains("error: path exist")) {
+                    status.GetIssues().ToOneLineString().contains("error: path exist")) {
                     TActivationContext::ActorSystem()->Register(
                         new TGenerateRecoverySQLIfExternalDataSourceAlreadyExistsActor(
                             sender,
@@ -863,7 +863,7 @@ IActor* MakeCreateBindingActor(const TActorId& proxyActorId,
              &counters,
              permissions](TActorId sender, const TStatus& status) {
                 if (status.GetStatus() == EStatus::ALREADY_EXISTS ||
-                    status.GetIssues().ToOneLineString().Contains("error: path exist")) {
+                    status.GetIssues().ToOneLineString().contains("error: path exist")) {
                     TActivationContext::ActorSystem()->Register(
                         new TGenerateRecoverySQLIfExternalDataTableAlreadyExistsActor(
                             sender,

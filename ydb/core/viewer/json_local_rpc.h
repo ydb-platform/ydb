@@ -33,6 +33,7 @@ protected:
     std::vector<HTTP_METHOD> AllowedMethods = {};
     TAutoPtr<TEvLocalRpcPrivate::TEvGrpcRequestResult<TProtoResult>> Result;
     NThreading::TFuture<TProtoResponse> RpcFuture;
+    Ydb::Operations::OperationParams::OperationMode OperationMode = Ydb::Operations::OperationParams::SYNC;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {

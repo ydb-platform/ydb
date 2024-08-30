@@ -24,6 +24,7 @@ SRCS(
     json_handlers_pdisk.cpp
     json_handlers_scheme.cpp
     json_handlers_storage.cpp
+    json_handlers_query.cpp
     json_handlers_vdisk.cpp
     json_handlers_viewer.cpp
     json_handlers_pq.cpp
@@ -43,6 +44,8 @@ SRCS(
     pdisk_restart.h
     pdisk_status.h
     query_autocomplete_helper.h
+    query_execute_script.h
+    query_fetch_script.h
     scheme_directory.h
     storage_groups.h
     vdisk_blobindexstat.h

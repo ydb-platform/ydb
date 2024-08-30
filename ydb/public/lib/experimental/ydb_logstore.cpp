@@ -98,7 +98,7 @@ TSchema::TSchema(const Ydb::LogStore::Schema& schema)
 void TSchema::SerializeTo(Ydb::LogStore::Schema& schema) const {
     for (const auto& c : Columns) {
         auto& col = *schema.add_columns();
-        col.set_name(c.Name);
+        col.set_name(TString(c.Name));
         col.mutable_type()->CopyFrom(TProtoAccessor::GetProto(c.Type));
     }
     for (const auto& pkc : PrimaryKeyColumns) {

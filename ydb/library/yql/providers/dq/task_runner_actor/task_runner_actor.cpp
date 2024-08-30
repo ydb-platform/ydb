@@ -346,7 +346,7 @@ private:
             TStringBuf terminationMessage = stderrStr;
             auto parsedPos = TryParseTerminationMessage(terminationMessage);
             if (terminationMessage.size() < stderrStr.size()) {
-                issue.AddSubIssue(MakeIntrusive<TIssue>(YqlIssue(parsedPos.GetOrElse(TPosition()), TIssuesIds::DQ_GATEWAY_ERROR, TString{terminationMessage})));
+                issue.AddSubIssue(MakeIntrusive<TIssue>(YqlIssue(parsedPos.value_or(TPosition()), TIssuesIds::DQ_GATEWAY_ERROR, TString{terminationMessage})));
             }
         }
         Y_ABORT_UNLESS(queryStatus != NYql::NDqProto::StatusIds::SUCCESS);

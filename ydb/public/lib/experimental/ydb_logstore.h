@@ -5,6 +5,8 @@
 #include <ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/api/protos/draft/ydb_logstore.pb.h>
 
+#include <util/generic/hash.h>
+
 namespace Ydb::LogStore {
 
 class Schema;

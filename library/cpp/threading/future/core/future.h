@@ -233,7 +233,7 @@ namespace NThreading {
         //   NOTE: returns true even if value was extracted from promise
         //   good replace for HasValue() || HasException()
         bool IsReady() const;
-        void SetException(const TString& e);
+        void SetException(const std::string& e);
         void SetException(std::exception_ptr e);
         bool TrySetException(std::exception_ptr e);
 
@@ -278,7 +278,7 @@ namespace NThreading {
         //   allows to check readiness without locking cheker-thread
         //   good replace for HasValue() || HasException()
         bool IsReady() const;
-        void SetException(const TString& e);
+        void SetException(const std::string& e);
         void SetException(std::exception_ptr e);
         bool TrySetException(std::exception_ptr e);
 

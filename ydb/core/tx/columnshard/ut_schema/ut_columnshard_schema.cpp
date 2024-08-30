@@ -174,7 +174,7 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
 {
     auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
     csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
-    csControllerGuard->SetTasksActualizationLag(TDuration::Zero());
+    csControllerGuard->SetOverrideTasksActualizationLag(TDuration::Zero());
     std::vector<ui64> ts = {1600000000, 1620000000};
 
     ui32 ttlIncSeconds = 1;
@@ -526,7 +526,7 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
 
     auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
     csControllerGuard->DisableBackground(NYDBTest::ICSController::EBackground::TTL);
-    csControllerGuard->SetTasksActualizationLag(TDuration::Zero());
+    csControllerGuard->SetOverrideTasksActualizationLag(TDuration::Zero());
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
 

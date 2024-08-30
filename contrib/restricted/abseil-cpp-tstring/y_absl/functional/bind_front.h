@@ -34,6 +34,8 @@
 #include <functional>  // For std::bind_front.
 #endif  // defined(__cpp_lib_bind_front) && __cpp_lib_bind_front >= 201907L
 
+#include <utility>
+
 #include "y_absl/functional/internal/front_binder.h"
 #include "y_absl/utility/utility.h"
 
@@ -182,8 +184,7 @@ template <class F, class... BoundArgs>
 constexpr functional_internal::bind_front_t<F, BoundArgs...> bind_front(
     F&& func, BoundArgs&&... args) {
   return functional_internal::bind_front_t<F, BoundArgs...>(
-      y_absl::in_place, y_absl::forward<F>(func),
-      y_absl::forward<BoundArgs>(args)...);
+      y_absl::in_place, std::forward<F>(func), std::forward<BoundArgs>(args)...);
 }
 #endif  // defined(__cpp_lib_bind_front) && __cpp_lib_bind_front >= 201907L
 

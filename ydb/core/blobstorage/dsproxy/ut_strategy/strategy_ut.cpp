@@ -166,7 +166,7 @@ void RunStrategyTest(TBlobStorageGroupType type) {
 
             TString state = blackboard[id].ToString();
 
-            auto outcome = blackboard.RunStrategy(logCtx, strategy);
+            auto outcome = blackboard.RunStrategy(logCtx, strategy, TAccelerationParams{});
 
             TString nextState = blackboard[id].ToString();
             if (const auto [it, inserted] = transitions.try_emplace(state, std::make_tuple(outcome, nextState)); !inserted) {
@@ -174,7 +174,7 @@ void RunStrategyTest(TBlobStorageGroupType type) {
             }
 
             if (outcome == EStrategyOutcome::IN_PROGRESS) {
-                auto temp = blackboard.RunStrategy(logCtx, strategy);
+                auto temp = blackboard.RunStrategy(logCtx, strategy, TAccelerationParams{});
                 UNIT_ASSERT_EQUAL(temp, outcome);
                 UNIT_ASSERT_VALUES_EQUAL(blackboard[id].ToString(), nextState);
             }
@@ -329,7 +329,7 @@ Y_UNIT_TEST_SUITE(DSProxyStrategyTest) {
         logCtx.SuppressLog = true;
 
         auto runStrategies = [&](TBlackboard& blackboard) {
-            return blackboard.RunStrategy(logCtx, TMirror3dcGetWithRestoreStrategy());
+            return blackboard.RunStrategy(logCtx, TMirror3dcGetWithRestoreStrategy(), TAccelerationParams{});
         };
 
         const ui32 base = RandomNumber(512u);

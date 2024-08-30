@@ -51,7 +51,7 @@
                                                 "TopSortBy": "row.k"
                                             },
                                             {
-                                                "Condition": "k = k",
+                                                "Condition": "p.k = ss.k",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 8
@@ -160,7 +160,10 @@
                     }
                 ]
             }
-        ]
+        ],
+        "Stats": {
+            "ResourcePoolId": "default"
+        }
     },
     "meta": {
         "type": "query",

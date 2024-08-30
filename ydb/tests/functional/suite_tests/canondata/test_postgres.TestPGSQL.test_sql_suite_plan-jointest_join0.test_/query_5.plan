@@ -42,7 +42,7 @@
                                                 "TopSortBy": "argument.qr.qq"
                                             },
                                             {
-                                                "Condition": "qq = unique2",
+                                                "Condition": "qr.qq = c.unique2",
                                                 "Inputs": [
                                                     {
                                                         "InternalOperatorId": 2
@@ -258,7 +258,10 @@
                     }
                 ]
             }
-        ]
+        ],
+        "Stats": {
+            "ResourcePoolId": "default"
+        }
     },
     "meta": {
         "type": "query",

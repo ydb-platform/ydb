@@ -44,6 +44,7 @@ void DoCreateIncrBackupTable(const TOperationId& opId, const TPath& dst, NKikimr
     auto& desc = *outTx.MutableCreateTable();
     desc.CopyFrom(tableDesc);
     desc.SetName(dst.LeafName());
+    desc.SetSystemColumnNamesAllowed(true);
 
     auto& attrsDesc = *outTx.MutableAlterUserAttributes();
     attrsDesc.SetPathName(dst.LeafName());
@@ -59,7 +60,7 @@ void DoCreateIncrBackupTable(const TOperationId& opId, const TPath& dst, NKikimr
     // TODO: cleanup all sequences
 
     auto* col = desc.AddColumns();
-    col->SetName("__incrBackupImpl_deleted");
+    col->SetName("__ydb_incrBackupImpl_deleted");
     col->SetType("Bool");
 
     result.push_back(CreateNewTable(NextPartId(opId, result), outTx));

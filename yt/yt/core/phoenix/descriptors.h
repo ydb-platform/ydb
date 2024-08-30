@@ -29,7 +29,6 @@ class TFieldDescriptor
 public:
     const TString& GetName() const;
     TFieldTag GetTag() const;
-    bool IsDeprecated() const;
 
     const TFieldSchemaPtr& GetSchema() const;
 
@@ -39,7 +38,6 @@ private:
 
     TString Name_;
     TFieldTag Tag_;
-    bool Deprecated_ = false;
     int MinVersion_ = std::numeric_limits<int>::min();
     int MaxVersion_ = std::numeric_limits<int>::max();
 
@@ -61,8 +59,10 @@ public:
 
     std::vector<TTypeTag> GetBaseTypeTags() const;
 
-    void* TryConstruct() const;
-    void* ConstructOrThrow() const;
+    template <class T>
+    T* TryConstruct() const;
+    template <class T>
+    T* ConstructOrThrow() const;
 
 private:
     friend class NDetail::TTypeRegistry;
@@ -74,7 +74,8 @@ private:
     std::vector<std::unique_ptr<TFieldDescriptor>> Fields_;
     std::vector<const TTypeDescriptor*> BaseTypes_;
     bool Template_ = false;
-    TConstructor Constructor_ = nullptr;
+    TPolymorphicConstructor PolymorphicConstructor_ = nullptr;
+    TConcreteConstructor ConcreteConstructor_ = nullptr;
 
     mutable std::once_flag SchemaOnceFlag_;
     mutable TTypeSchemaPtr Schema_;
@@ -90,9 +91,11 @@ public:
     const NYson::TYsonString& GetSchemaYson() const;
 
     const TTypeDescriptor* FindTypeDescriptorByTag(TTypeTag tag) const ;
+    const TTypeDescriptor& GetTypeDescriptorByTag(TTypeTag tag) const;
     const TTypeDescriptor& GetTypeDescriptorByTagOrThrow(TTypeTag tag) const;
 
     const TTypeDescriptor* FindTypeDescriptorByTypeIndex(std::type_index typeIndex) const ;
+    const TTypeDescriptor& GetTypeDescriptorByTypeIndex(std::type_index typeIndex) const;
     const TTypeDescriptor& GetTypeDescriptorByTypeIndexOrThrow(std::type_index typeIndex) const;
 
 private:
@@ -112,3 +115,6 @@ private:
 
 } // namespace NYT::NPhoenix2
 
+#define DESCRIPTORS_INL_H_
+#include "descriptors-inl.h"
+#undef DESCRIPTORS_INL_H_

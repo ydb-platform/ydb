@@ -739,6 +739,13 @@
             "uri": "https://{canondata_backend}/1899731/7897b30eef0bb27e4ec2a81827074c48697423a5/resource.tar.gz#test.test_column_group-groups-lookup-Results_/results.txt"
         }
     ],
+    "test.test[column_group-insert_diff_groups1_fail--Debug]": [],
+    "test.test[column_group-insert_diff_groups1_fail--Plan]": [],
+    "test.test[column_group-insert_diff_groups1_fail--Results]": [
+        {
+            "uri": "file://test.test_column_group-insert_diff_groups1_fail--Results_/extracted"
+        }
+    ],
     "test.test[column_order-insert_with_desc_sort_and_native_types-default.txt-Debug]": [
         {
             "checksum": "8d9d1101d61c96254d2d67b4736ed680",
@@ -2259,6 +2266,27 @@
             "checksum": "deffd6d652624eb4eb0b6f1b6c93f873",
             "size": 890,
             "uri": "https://{canondata_backend}/1903280/4c77300cd3fef018d27d7f75b6ff956e63258b21/resource.tar.gz#test.test_pragma-yson_auto_convert--Results_/results.txt"
+        }
+    ],
+    "test.test[produce-fuse_reduces_with_presort--Debug]": [
+        {
+            "checksum": "7eec75c62c340d46b9fd0d652345e21a",
+            "size": 3577,
+            "uri": "https://{canondata_backend}/1889210/f2ee730cb1f26eb197a3bfb0493ec60757c5a916/resource.tar.gz#test.test_produce-fuse_reduces_with_presort--Debug_/opt.yql"
+        }
+    ],
+    "test.test[produce-fuse_reduces_with_presort--Plan]": [
+        {
+            "checksum": "9e8381980dc1e802f465fa49ee5dfd14",
+            "size": 11259,
+            "uri": "https://{canondata_backend}/1889210/f2ee730cb1f26eb197a3bfb0493ec60757c5a916/resource.tar.gz#test.test_produce-fuse_reduces_with_presort--Plan_/plan.txt"
+        }
+    ],
+    "test.test[produce-fuse_reduces_with_presort--Results]": [
+        {
+            "checksum": "487e3e6ee23dd6103b213486901febc4",
+            "size": 7301,
+            "uri": "https://{canondata_backend}/1889210/f2ee730cb1f26eb197a3bfb0493ec60757c5a916/resource.tar.gz#test.test_produce-fuse_reduces_with_presort--Results_/results.txt"
         }
     ],
     "test.test[produce-yql-10297-default.txt-Debug]": [

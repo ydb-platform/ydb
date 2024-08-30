@@ -41,7 +41,7 @@
                                                 "Name": "Limit"
                                             },
                                             {
-                                                "Condition": "k = k",
+                                                "Condition": "p.k = c.k",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 15
@@ -211,7 +211,10 @@
                 ],
                 "Subplan Name": "CTE precompute_1_0"
             }
-        ]
+        ],
+        "Stats": {
+            "ResourcePoolId": "default"
+        }
     },
     "meta": {
         "type": "query",

@@ -59,7 +59,7 @@
                                                 "Predicate": "item.t1.stringu1 > item.t2.stringu2"
                                             },
                                             {
-                                                "Condition": "subq1.y1 = unique1",
+                                                "Condition": "subq1.y1 = t2.unique1",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 36
@@ -197,7 +197,7 @@
                                         "Node Type": "InnerJoin (MapJoin)-Filter",
                                         "Operators": [
                                             {
-                                                "Condition": "unique2 = d1",
+                                                "Condition": "t1.unique2 = subq1.d1",
                                                 "Inputs": [
                                                     {
                                                         "InternalOperatorId": 1
@@ -238,7 +238,7 @@
                                                                         "Node Type": "LeftJoin (MapJoin)",
                                                                         "Operators": [
                                                                             {
-                                                                                "Condition": "f1 = v1.x2",
+                                                                                "Condition": "i1.f1 = subq1.v1.x2",
                                                                                 "Inputs": [
                                                                                     {
                                                                                         "ExternalPlanNodeId": 15
@@ -270,7 +270,7 @@
                                                                                                         "Node Type": "LeftJoin (MapJoin)",
                                                                                                         "Operators": [
                                                                                                             {
-                                                                                                                "Condition": "x1 = y2",
+                                                                                                                "Condition": "v1.x1 = v2.y2",
                                                                                                                 "Inputs": [
                                                                                                                     {
                                                                                                                         "ExternalPlanNodeId": 8
@@ -479,7 +479,10 @@
                 ],
                 "Subplan Name": "CTE precompute_0_0"
             }
-        ]
+        ],
+        "Stats": {
+            "ResourcePoolId": "default"
+        }
     },
     "meta": {
         "type": "query",

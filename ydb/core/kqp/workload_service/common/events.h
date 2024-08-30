@@ -30,6 +30,7 @@ struct TEvPrivate {
         EvResignPoolHandler,
         EvStopPoolHandler,
         EvCancelRequest,
+        EvUpdatePoolSubscription,
 
         EvCpuQuotaRequest,
         EvCpuQuotaResponse,
@@ -75,14 +76,18 @@ struct TEvPrivate {
     };
 
     struct TEvFetchPoolResponse : public NActors::TEventLocal<TEvFetchPoolResponse, EvFetchPoolResponse> {
-        TEvFetchPoolResponse(Ydb::StatusIds::StatusCode status, const NResourcePool::TPoolSettings& poolConfig, TPathId pathId, NYql::TIssues issues)
+        TEvFetchPoolResponse(Ydb::StatusIds::StatusCode status, const TString& database, const TString& poolId, const NResourcePool::TPoolSettings& poolConfig, TPathId pathId, NYql::TIssues issues)
             : Status(status)
+            , Database(database)
+            , PoolId(poolId)
             , PoolConfig(poolConfig)
             , PathId(pathId)
             , Issues(std::move(issues))
         {}
 
         const Ydb::StatusIds::StatusCode Status;
+        const TString Database;
+        const TString PoolId;
         const NResourcePool::TPoolSettings PoolConfig;
         const TPathId PathId;
         const NYql::TIssues Issues;
@@ -161,6 +166,11 @@ struct TEvPrivate {
     };
 
     struct TEvStopPoolHandler : public NActors::TEventLocal<TEvStopPoolHandler, EvStopPoolHandler> {
+        explicit TEvStopPoolHandler(bool resetCounters)
+            : ResetCounters(resetCounters)
+        {}
+
+        const bool ResetCounters;
     };
 
     struct TEvCancelRequest : public NActors::TEventLocal<TEvCancelRequest, EvCancelRequest> {
@@ -169,6 +179,16 @@ struct TEvPrivate {
         {}
 
         const TString SessionId;
+    };
+
+    struct TEvUpdatePoolSubscription : public NActors::TEventLocal<TEvUpdatePoolSubscription, EvUpdatePoolSubscription> {
+        explicit TEvUpdatePoolSubscription(TPathId pathId, const std::unordered_set<TActorId>& subscribers)
+            : PathId(pathId)
+            , Subscribers(subscribers)
+        {}
+
+        const TPathId PathId;
+        const std::unordered_set<TActorId> Subscribers;
     };
 
     // Cpu load requests
@@ -181,11 +201,15 @@ struct TEvPrivate {
     };
 
     struct TEvCpuQuotaResponse : public NActors::TEventLocal<TEvCpuQuotaResponse, EvCpuQuotaResponse> {
-        explicit TEvCpuQuotaResponse(bool quotaAccepted)
+        explicit TEvCpuQuotaResponse(bool quotaAccepted, double maxClusterLoad, NYql::TIssues issues)
             : QuotaAccepted(quotaAccepted)
+            , MaxClusterLoad(maxClusterLoad)
+            , Issues(std::move(issues))
         {}
 
         const bool QuotaAccepted;
+        const double MaxClusterLoad;
+        const NYql::TIssues Issues;
     };
 
     struct TEvCpuLoadResponse : public NActors::TEventLocal<TEvCpuLoadResponse, EvCpuLoadResponse> {

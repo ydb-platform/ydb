@@ -44,6 +44,13 @@ void PipeReaderToWriterByBatches(
     const TRowBatchReadOptions& options,
     TDuration pipeDelay = TDuration::Zero());
 
+void PipeReaderToAdaptiveWriterByBatches(
+    const NApi::ITableReaderPtr& reader,
+    const NFormats::ISchemalessFormatWriterPtr& writer,
+    TRowBatchReadOptions startingOptions,
+    TCallback<void(TRowBatchReadOptions* mutableOptions, TDuration timeForBatch)> optionsUpdater,
+    TDuration pipeDelay = TDuration::Zero());
+
 void PipeInputToOutput(
     IInputStream* input,
     IOutputStream* output,

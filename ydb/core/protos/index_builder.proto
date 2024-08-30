@@ -106,3 +106,14 @@ message TEvListResponse {
     repeated TIndexBuild Entries = 3;
     optional string NextPageToken = 4;
 }
+
+enum EBuildStatus {
+    INVALID = 0;
+    ACCEPTED = 1;
+    IN_PROGRESS = 2;
+    DONE = 3;
+
+    ABORTED = 4;
+    BUILD_ERROR = 5;
+    BAD_REQUEST = 6;
+}

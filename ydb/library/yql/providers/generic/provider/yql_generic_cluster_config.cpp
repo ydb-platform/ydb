@@ -345,6 +345,10 @@ namespace NYql {
         NConnector::NApi::EDataSourceKind::POSTGRESQL,
     };
 
+    bool DataSourceMustHaveDataBaseName(const NConnector::NApi::EDataSourceKind& sourceKind) {
+        return traditionalRelationalDatabaseKinds.contains(sourceKind) && sourceKind != NConnector::NApi::ORACLE;
+    }
+
     void ValidateGenericClusterConfig(
         const NYql::TGenericClusterConfig& clusterConfig,
         const TString& context) {
@@ -430,9 +434,9 @@ namespace NYql {
             }
         }
 
-        // All the databases with exception to managed YDB:
+        // All the databases with exception to managed YDB and Oracle:
         // * DATABASE_NAME is mandatory field
-        if (traditionalRelationalDatabaseKinds.contains(clusterConfig.GetKind())) {
+        if (DataSourceMustHaveDataBaseName(clusterConfig.GetKind())) {
             if (!clusterConfig.GetDatabaseName()) {
                 return ValidationError(
                     clusterConfig,

@@ -32,6 +32,7 @@ struct TExecutionOptions {
 
     std::vector<TString> ScriptQueries;
     TString SchemeQuery;
+    bool UseTemplates = false;
 
     ui32 LoopCount = 1;
     TDuration LoopDelay;
@@ -70,8 +71,13 @@ struct TExecutionOptions {
     }
 
     NKqpRun::TRequestOptions GetSchemeQueryOptions() const {
+        TString sql = SchemeQuery;
+        if (UseTemplates) {
+            ReplaceYqlTokenTemplate(sql);
+        }
+
         return {
-            .Query = SchemeQuery,
+            .Query = sql,
             .Action = NKikimrKqp::EQueryAction::QUERY_ACTION_EXECUTE,
             .TraceId = DefaultTraceId,
             .PoolId = "",
@@ -79,10 +85,17 @@ struct TExecutionOptions {
         };
     }
 
-    NKqpRun::TRequestOptions GetScriptQueryOptions(size_t index, TInstant startTime) const {
+    NKqpRun::TRequestOptions GetScriptQueryOptions(size_t index, size_t queryId, TInstant startTime) const {
         Y_ABORT_UNLESS(index < ScriptQueries.size());
+
+        TString sql = ScriptQueries[index];
+        if (UseTemplates) {
+            ReplaceYqlTokenTemplate(sql);
+            SubstGlobal(sql, "${QUERY_ID}", ToString(queryId));
+        }
+
         return {
-            .Query = ScriptQueries[index],
+            .Query = sql,
             .Action = GetScriptQueryAction(index),
             .TraceId = TStringBuilder() << GetValue(index, TraceIds, DefaultTraceId) << "-" << startTime.ToString(),
             .PoolId = GetValue(index, PoolIds, TString()),
@@ -97,6 +110,15 @@ private:
             return defaultValue;
         }
         return values[std::min(index, values.size() - 1)];
+    }
+
+    static void ReplaceYqlTokenTemplate(TString& sql) {
+        const TString variableName = TStringBuilder() << "${" << NKqpRun::YQL_TOKEN_VARIABLE << "}";
+        if (const TString& yqlToken = GetEnv(NKqpRun::YQL_TOKEN_VARIABLE)) {
+            SubstGlobal(sql, variableName, yqlToken);
+        } else if (sql.Contains(variableName)) {
+            ythrow yexception() << "Failed to replace ${YQL_TOKEN} template, please specify YQL_TOKEN environment variable\n";
+        }
     }
 };
 
@@ -134,7 +156,7 @@ void RunArgumentQueries(const TExecutionOptions& executionOptions, NKqpRun::TKqp
 
         switch (executionCase) {
         case TExecutionOptions::EExecutionCase::GenericScript:
-            if (!runner.ExecuteScript(executionOptions.GetScriptQueryOptions(id, startTime))) {
+            if (!runner.ExecuteScript(executionOptions.GetScriptQueryOptions(id, queryId, startTime))) {
                 ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Script execution failed";
             }
             Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Fetching script results..." << colors.Default() << Endl;
@@ -150,19 +172,19 @@ void RunArgumentQueries(const TExecutionOptions& executionOptions, NKqpRun::TKqp
             break;
 
         case TExecutionOptions::EExecutionCase::GenericQuery:
-            if (!runner.ExecuteQuery(executionOptions.GetScriptQueryOptions(id, startTime))) {
+            if (!runner.ExecuteQuery(executionOptions.GetScriptQueryOptions(id, queryId, startTime))) {
                 ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Query execution failed";
             }
             break;
 
         case TExecutionOptions::EExecutionCase::YqlScript:
-            if (!runner.ExecuteYqlScript(executionOptions.GetScriptQueryOptions(id, startTime))) {
+            if (!runner.ExecuteYqlScript(executionOptions.GetScriptQueryOptions(id, queryId, startTime))) {
                 ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Yql script execution failed";
             }
             break;
 
         case TExecutionOptions::EExecutionCase::AsyncQuery:
-            runner.ExecuteQueryAsync(executionOptions.GetScriptQueryOptions(id, startTime));
+            runner.ExecuteQueryAsync(executionOptions.GetScriptQueryOptions(id, queryId, startTime));
             break;
         }
     }
@@ -260,14 +282,6 @@ class TMain : public TMainClassArgs {
         return TFileInput(file).ReadAll();
     }
 
-    static void ReplaceTemplate(const TString& variableName, const TString& variableValue, TString& query) {
-        TString variableTemplate = TStringBuilder() << "${" << variableName << "}";
-        for (size_t position = query.find(variableTemplate); position != TString::npos; position = query.find(variableTemplate, position)) {
-            query.replace(position, variableTemplate.size(), variableValue);
-            position += variableValue.size();
-        }
-    }
-
     static IOutputStream* GetDefaultOutput(const TString& file) {
         if (file == "-") {
             return &Cout;
@@ -315,13 +329,15 @@ protected:
             .RequiredArgument("file")
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
                 ExecutionOptions.SchemeQuery = LoadFile(option->CurVal());
-                ReplaceTemplate(NKqpRun::YQL_TOKEN_VARIABLE, YqlToken, ExecutionOptions.SchemeQuery);
             });
         options.AddLongOption('p', "script-query", "Script query to execute (typically DML query)")
             .RequiredArgument("file")
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
                 ExecutionOptions.ScriptQueries.emplace_back(LoadFile(option->CurVal()));
             });
+        options.AddLongOption("templates", "Enable templates for -s and -p queries, such as ${YQL_TOKEN} and ${QUERY_ID}")
+            .NoArgument()
+            .SetFlag(&ExecutionOptions.UseTemplates);
 
         options.AddLongOption('t', "table", "File with input table (can be used by YT with -E flag), table@file")
             .RequiredArgument("table@file")

@@ -24,4 +24,7 @@ message TMemoryStats {
 
     optional uint64 MemTableConsumption = 16;
     optional uint64 MemTableLimit = 17;
+
+    optional uint64 QueryExecutionConsumption = 18;
+    optional uint64 QueryExecutionLimit = 19;
 }

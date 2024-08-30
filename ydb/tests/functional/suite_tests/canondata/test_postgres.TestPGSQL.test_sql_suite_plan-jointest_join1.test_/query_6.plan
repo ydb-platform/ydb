@@ -42,7 +42,7 @@
                                                 "TopSortBy": "argument.J1_TBL.i"
                                             },
                                             {
-                                                "Condition": "i = k",
+                                                "Condition": "J1_TBL.i = J2_TBL.k",
                                                 "Inputs": [
                                                     {
                                                         "InternalOperatorId": 2
@@ -164,7 +164,10 @@
                     }
                 ]
             }
-        ]
+        ],
+        "Stats": {
+            "ResourcePoolId": "default"
+        }
     },
     "meta": {
         "type": "query",

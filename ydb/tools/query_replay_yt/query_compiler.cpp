@@ -587,6 +587,8 @@ private:
             }
         }
 
+        QueryId = ReplayDetails["query_id"].GetStringSafe();
+
         TKqpQuerySettings settings(queryType);
         Query = std::make_unique<NKikimr::NKqp::TKqpQueryId>(
             ReplayDetails["query_cluster"].GetStringSafe(),
@@ -660,6 +662,7 @@ private:
 private:
     TActorId Owner;
     TIntrusivePtr<TModuleResolverState> ModuleResolverState;
+    TString QueryId;
     std::unique_ptr<TKqpQueryId> Query;
     TGUCSettings::TPtr GUCSettings = std::make_shared<TGUCSettings>();
     TKqpSettings KqpSettings;

@@ -1193,6 +1193,9 @@ struct TTableColumnarStatistics
     /// Total data weight for all chunks for each of requested columns.
     THashMap<TString, i64> ColumnDataWeight;
 
+    /// Estimated number of unique elements for each column.
+    THashMap<TString, ui64> ColumnEstimatedUniqueCounts;
+
     /// Total weight of all old chunks that don't keep columnar statistics.
     i64 LegacyChunksDataWeight = 0;
 

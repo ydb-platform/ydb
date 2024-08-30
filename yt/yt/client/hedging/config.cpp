@@ -15,11 +15,11 @@ void TClientConfig::Register(TRegistrar registrar)
 
 THedgingClientOptions::TClientOptions::TClientOptions(
     NApi::IClientPtr client,
-    TString clusterName,
+    const std::string& clusterName,
     TDuration initialPenalty,
     TCounterPtr counter)
     : Client(std::move(client))
-    , ClusterName(std::move(clusterName))
+    , ClusterName(clusterName)
     , InitialPenalty(initialPenalty)
     , Counter(std::move(counter))
 { }

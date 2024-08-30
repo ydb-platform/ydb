@@ -1945,8 +1945,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(CreateTableWithPartitionAtKeysUuid) {
-        TKikimrSettings kikimrSettings = TKikimrSettings()
-            .SetEnableUuidAsPrimaryKey(true);
+        TKikimrSettings kikimrSettings;
         TKikimrRunner kikimr(kikimrSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1990,8 +1989,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(CreateTableWithUniformPartitionsUuid) {
-        TKikimrSettings kikimrSettings = TKikimrSettings()
-            .SetEnableUuidAsPrimaryKey(true);
+        TKikimrSettings kikimrSettings;
         TKikimrRunner kikimr(kikimrSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -4215,6 +4213,22 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetRetentionPeriod(), TDuration::Hours(1));
         }
 
+        { // alter
+            auto query = R"(
+                --!syntax_v1
+                ALTER TOPIC `/Root/table/feed_2` SET (
+                    RETENTION_PERIOD = Interval("PT2H")
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto desc = pq.DescribeTopic("/Root/table/feed_2").ExtractValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetRetentionPeriod(), TDuration::Hours(2));
+        }
+
         { // non-positive (invalid)
             auto query = R"(
                 --!syntax_v1
@@ -5520,7 +5534,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 month Int64 NOT NULL
             ) WITH (
                 DATA_SOURCE=")" << externalDataSourceName << R"(",
-                LOCATION="/folder1/*",
+                LOCATION="/folder1/",
                 FORMAT="json_as_string",
                 `projection.enabled`="true",
                 `projection.year.type`="integer",
@@ -5545,7 +5559,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_ASSERT(externalTable.ExternalTableInfo);
         UNIT_ASSERT_VALUES_EQUAL(externalTable.ExternalTableInfo->Description.ColumnsSize(), 4);
         UNIT_ASSERT_VALUES_EQUAL(externalTable.ExternalTableInfo->Description.GetDataSourcePath(), externalDataSourceName);
-        UNIT_ASSERT_VALUES_EQUAL(externalTable.ExternalTableInfo->Description.GetLocation(), "/folder1/*");
+        UNIT_ASSERT_VALUES_EQUAL(externalTable.ExternalTableInfo->Description.GetLocation(), "/folder1/");
     }
 
     Y_UNIT_TEST(CreateExternalTableWithUpperCaseSettings) {
@@ -5568,7 +5582,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 Month Int64 NOT NULL
             ) WITH (
                 DATA_SOURCE=")" << externalDataSourceName << R"(",
-                LOCATION="/folder1/*",
+                LOCATION="/folder1/",
                 FORMAT="json_as_string",
                 `projection.enabled`="true",
                 `projection.Year.type`="integer",
@@ -5593,7 +5607,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_ASSERT(externalTable.ExternalTableInfo);
         UNIT_ASSERT_VALUES_EQUAL(externalTable.ExternalTableInfo->Description.ColumnsSize(), 4);
         UNIT_ASSERT_VALUES_EQUAL(externalTable.ExternalTableInfo->Description.GetDataSourcePath(), externalDataSourceName);
-        UNIT_ASSERT_VALUES_EQUAL(externalTable.ExternalTableInfo->Description.GetLocation(), "/folder1/*");
+        UNIT_ASSERT_VALUES_EQUAL(externalTable.ExternalTableInfo->Description.GetLocation(), "/folder1/");
     }
 
     Y_UNIT_TEST(DoubleCreateExternalTable) {
@@ -6496,7 +6510,13 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(DisableResourcePools) {
-        TKikimrRunner kikimr(TKikimrSettings().SetEnableResourcePools(false));
+        NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetEnableResourcePools(false);
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings()
+            .SetAppConfig(config)
+            .SetEnableResourcePools(false));
+
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -6593,7 +6613,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
-        auto resourcePoolDesc = Navigate(runtime, runtime.AllocateEdgeActor(), "Root/.resource_pools/MyResourcePool", NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+        auto resourcePoolDesc = Navigate(runtime, runtime.AllocateEdgeActor(), "Root/.metadata/workload_manager/pools/MyResourcePool", NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
         const auto& resourcePool = resourcePoolDesc->ResultSet.at(0);
         UNIT_ASSERT_VALUES_EQUAL(resourcePool.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindResourcePool);
         UNIT_ASSERT(resourcePool.ResourcePoolInfo);
@@ -6625,7 +6645,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             auto& runtime = *kikimr.GetTestServer().GetRuntime();
-            auto resourcePoolDesc = Navigate(runtime, runtime.AllocateEdgeActor(), "Root/.resource_pools/MyResourcePool", NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+            auto resourcePoolDesc = Navigate(runtime, runtime.AllocateEdgeActor(), "Root/.metadata/workload_manager/pools/MyResourcePool", NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
             UNIT_ASSERT_VALUES_EQUAL(resourcePoolDesc->ResultSet.at(0).Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindResourcePool);
         }
 
@@ -6636,7 +6656,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 );)";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Check failed: path: '/Root/.resource_pools/MyResourcePool', error: path exist");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Check failed: path: '/Root/.metadata/workload_manager/pools/MyResourcePool', error: path exist");
         }
     }
 
@@ -6661,7 +6681,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             auto& runtime = *kikimr.GetTestServer().GetRuntime();
-            auto resourcePoolDesc = Navigate(runtime, runtime.AllocateEdgeActor(), "Root/.resource_pools/MyResourcePool", NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+            auto resourcePoolDesc = Navigate(runtime, runtime.AllocateEdgeActor(), "Root/.metadata/workload_manager/pools/MyResourcePool", NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
             const auto& properties = resourcePoolDesc->ResultSet.at(0).ResourcePoolInfo->Description.GetProperties().GetProperties();
             UNIT_ASSERT_VALUES_EQUAL(properties.size(), 2);
             UNIT_ASSERT_VALUES_EQUAL(properties.at("concurrent_query_limit"), "20");
@@ -6678,7 +6698,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             auto& runtime = *kikimr.GetTestServer().GetRuntime();
-            auto resourcePoolDesc = Navigate(runtime, runtime.AllocateEdgeActor(), "Root/.resource_pools/MyResourcePool", NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+            auto resourcePoolDesc = Navigate(runtime, runtime.AllocateEdgeActor(), "Root/.metadata/workload_manager/pools/MyResourcePool", NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
             const auto& properties = resourcePoolDesc->ResultSet.at(0).ResourcePoolInfo->Description.GetProperties().GetProperties();
             UNIT_ASSERT_VALUES_EQUAL(properties.size(), 3);
             UNIT_ASSERT_VALUES_EQUAL(properties.at("concurrent_query_limit"), "30");
@@ -6734,7 +6754,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
 
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
-        auto resourcePoolDesc = Navigate(runtime, runtime.AllocateEdgeActor(), "Root/.resource_pools/MyResourcePool", NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+        auto resourcePoolDesc = Navigate(runtime, runtime.AllocateEdgeActor(), "Root/.metadata/workload_manager/pools/MyResourcePool", NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
         const auto& resourcePool = resourcePoolDesc->ResultSet.at(0);
         UNIT_ASSERT_VALUES_EQUAL(resourcePoolDesc->ErrorCount, 1);
         UNIT_ASSERT_VALUES_EQUAL(resourcePool.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindUnknown);
@@ -6796,7 +6816,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         // DROP RESOURCE POOL CLASSIFIER
         checkQuery("DROP RESOURCE POOL CLASSIFIER MyResourcePoolClassifier;",
-            EStatus::SUCCESS);
+            EStatus::GENERIC_ERROR,
+            "Classifier with name MyResourcePoolClassifier not found in database /Root");
     }
 
     Y_UNIT_TEST(ResourcePoolClassifiersValidation) {
@@ -7021,6 +7042,27 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
+    Y_UNIT_TEST(AlterNonExistingResourcePoolClassifier) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetEnableResourcePools(true);
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings()
+            .SetAppConfig(config)
+            .SetEnableResourcePools(true));
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto query = R"(
+            ALTER RESOURCE POOL CLASSIFIER MyResourcePoolClassifier
+                SET (MEMBERNAME = "test@user", RANK = 100),
+                RESET (RESOURCE_POOL);
+            )";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Classifier with name MyResourcePoolClassifier not found in database /Root");
+    }
+
     Y_UNIT_TEST(DropResourcePoolClassifier) {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetEnableResourcePools(true);
@@ -7048,6 +7090,23 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(FetchResourcePoolClassifiers(kikimr), "{\"resource_pool_classifiers\":[]}");
         }
+    }
+
+    Y_UNIT_TEST(DropNonExistingResourcePoolClassifier) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetEnableResourcePools(true);
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings()
+            .SetAppConfig(config)
+            .SetEnableResourcePools(true));
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto query = "DROP RESOURCE POOL CLASSIFIER MyResourcePoolClassifier;";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Classifier with name MyResourcePoolClassifier not found in database /Root");
     }
 }
 

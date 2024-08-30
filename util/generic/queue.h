@@ -24,11 +24,11 @@ public:
         this->c.clear();
     }
 
-    inline S& Container() {
+    inline S& Container() Y_LIFETIME_BOUND {
         return this->c;
     }
 
-    inline const S& Container() const {
+    inline const S& Container() const Y_LIFETIME_BOUND {
         return this->c;
     }
 };
@@ -48,11 +48,19 @@ public:
         this->c.clear();
     }
 
-    inline S& Container() {
+    inline T PopValue() {
+        Y_ASSERT(!this->empty());
+        std::pop_heap(Container().begin(), Container().end(), this->comp);
+        T value = std::move(Container().back());
+        this->c.pop_back();
+        return value;
+    }
+
+    inline S& Container() Y_LIFETIME_BOUND {
         return this->c;
     }
 
-    inline const S& Container() const {
+    inline const S& Container() const Y_LIFETIME_BOUND {
         return this->c;
     }
 };

@@ -27,8 +27,6 @@
 #include "Timezone.hh"
 #include "TypeImpl.hh"
 
-#include <util/generic/string.h>
-
 namespace orc {
 
   /**
@@ -713,14 +711,14 @@ namespace orc {
 
       proto::DecimalStatistics* decStats = pbStats.mutable_decimal_statistics();
       if (_stats.hasMinimum()) {
-        decStats->set_minimum(TProtoStringType(_stats.getMinimum().toString(true)));
-        decStats->set_maximum(TProtoStringType(_stats.getMaximum().toString(true)));
+        decStats->set_minimum(TProtobufString(_stats.getMinimum().toString(true)));
+        decStats->set_maximum(TProtobufString(_stats.getMaximum().toString(true)));
       } else {
         decStats->clear_minimum();
         decStats->clear_maximum();
       }
       if (_stats.hasSum()) {
-        decStats->set_sum(TProtoStringType(_stats.getSum().toString(true)));
+        decStats->set_sum(TProtobufString(_stats.getSum().toString(true)));
       } else {
         decStats->clear_sum();
       }
@@ -1227,8 +1225,8 @@ namespace orc {
 
       proto::StringStatistics* strStats = pbStats.mutable_string_statistics();
       if (_stats.hasMinimum()) {
-        strStats->set_minimum(TProtoStringType(_stats.getMinimum()));
-        strStats->set_maximum(TProtoStringType(_stats.getMaximum()));
+        strStats->set_minimum(TProtobufString(_stats.getMinimum()));
+        strStats->set_maximum(TProtobufString(_stats.getMaximum()));
       } else {
         strStats->clear_minimum();
         strStats->clear_maximum();

@@ -1232,7 +1232,7 @@ namespace NTypeAnnImpl {
 
         YQL_ENSURE(IsSameAnnotation(*memberType, *resultType) ||
                    IsSameAnnotation(*ctx.Expr.MakeType<TOptionalExprType>(memberType), *resultType));
-        
+
         output = ctx.Expr.Builder(input->Pos())
             .Callable("IfStrict")
                 .Callable(0, "Exists")
@@ -2749,8 +2749,8 @@ namespace NTypeAnnImpl {
                 if (!(*dataTypeOne == *dataTypeTwo)) {
                     ctx.Expr.AddError(TIssue(
                         ctx.Expr.GetPosition(input->Pos()),
-                        TStringBuilder() << "Cannot calculate with different decimals: " 
-                            << static_cast<const TTypeAnnotationNode&>(*dataType[0]) << " != " 
+                        TStringBuilder() << "Cannot calculate with different decimals: "
+                            << static_cast<const TTypeAnnotationNode&>(*dataType[0]) << " != "
                             << static_cast<const TTypeAnnotationNode&>(*dataType[1])
                     ));
 
@@ -6193,18 +6193,18 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         };
 
         auto mergeMembers = [&ctx, &buildJustMember, &input, &left, &right, &mergeLambda](const TStringBuf& name, bool hasLeft, bool hasRight) -> TExprNode::TPtr {
-            auto leftMaybe = hasLeft ? 
+            auto leftMaybe = hasLeft ?
                 buildJustMember(left, name) :
                 ctx.Expr.NewCallable(input->Pos(), "Nothing", {
                     ExpandType(input->Pos(), *ctx.Expr.MakeType<TOptionalExprType>(right->GetTypeAnn()->Cast<TStructExprType>()->FindItemType(name)), ctx.Expr)
                 });
-            
-            auto rightMaybe = hasRight ? 
+
+            auto rightMaybe = hasRight ?
                 buildJustMember(right, name) :
                 ctx.Expr.NewCallable(input->Pos(), "Nothing", {
                     ExpandType(input->Pos(), *ctx.Expr.MakeType<TOptionalExprType>(left->GetTypeAnn()->Cast<TStructExprType>()->FindItemType(name)), ctx.Expr)
                 });
-            
+
             return ctx.Expr.Builder(input->Pos())
                 .List()
                     .Atom(0, name)
@@ -6492,7 +6492,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                             .With(1, result)
                         .Seal()
                     .Build();
-                }                        
+                }
             }
         } else if (collection->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Tuple) {
             for (size_t idx = 0; idx < collection->GetTypeAnn()->Cast<TTupleExprType>()->GetSize(); idx++) {
@@ -6523,7 +6523,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (result) { 
+        if (result) {
             output = result;
         } else {
             output = ctx.Expr.Builder(input->Pos()).Callable("Null").Seal().Build();
@@ -8935,10 +8935,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         TExprNode::TListType applyChildren = input->ChildrenList();
         applyChildren.pop_back(); // Remove position of list argument
 
-        if (input->Head().Type() != TExprNode::Lambda) {
-            if (!EnsureCallableType(input->Head(), ctx.Expr)) {
-                return IGraphTransformer::TStatus::Error;
-            }
+        if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Callable) {
             const TCallableExprType* callableType = input->Head().GetTypeAnn()->Cast<TCallableExprType>();
 
             if (applyChildren.size() < callableType->GetArgumentsSize() + 1 - callableType->GetOptionalArgumentsCount()) {
@@ -8992,11 +8989,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
         else {
             auto lambda = input->HeadPtr();
-            const auto args = lambda->Child(0);
-            if (input->ChildrenSize() - 2 != args->ChildrenSize()) {
-                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "Different arguments count, lambda has "
-                    << args->ChildrenSize() << " arguments, but provided " << (input->ChildrenSize() - 2)));
-                return IGraphTransformer::TStatus::Error;
+            auto status = ConvertToLambda(lambda, ctx.Expr, input->ChildrenSize() - 2);
+            if (status == IGraphTransformer::TStatus::Error) {
+                return status;
             }
 
             output = ctx.Expr.Builder(input->Pos())
@@ -9103,6 +9098,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         if (extractKeyLambda->IsAtom()) {
             TExprNode::TPtr applied;
             if (udf->IsLambda()) {
+                if (udf->Head().ChildrenSize() != 1) {
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(pos), TStringBuilder() << "Expected lambda with one argument, but got: " << udf->Head().ChildrenSize()));
+                    return IGraphTransformer::TStatus::Error;
+                }
+
                 applied = ctx.Expr.Builder(pos)
                     .Apply(udf)
                         .With(0, udfInput)
@@ -12170,6 +12170,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["AssumeUniqueHint"] = &AssumeConstraintWrapper<false>;
         Functions["AssumeDistinctHint"] = &AssumeConstraintWrapper<false>;
         Functions["AssumeChopped"] = &AssumeConstraintWrapper<true>;
+        Functions["AssumeConstraints"] = &AssumeConstraintsWrapper;
         Functions["AssumeAllMembersNullableAtOnce"] = &AssumeAllMembersNullableAtOnceWrapper;
         Functions["AssumeStrict"] = &AssumeStrictWrapper;
         Functions["AssumeNonStrict"] = &AssumeStrictWrapper;

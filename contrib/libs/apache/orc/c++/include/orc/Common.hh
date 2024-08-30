@@ -23,9 +23,13 @@
 #include "orc/Type.hh"
 #include "orc/Vector.hh"
 
+#include <google/protobuf/message.h>
+
 #include <string>
 
 namespace orc {
+
+  using TProtobufString = decltype(std::declval<::google::protobuf::MessageLite>().GetTypeName());
 
   class FileVersion {
    private:

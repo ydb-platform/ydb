@@ -179,7 +179,7 @@ def get_canonical_test_resources(unit):
     return [], []
 
 
-def java_srcdirs_to_data(unit, var):
+def java_srcdirs_to_data(unit, var, serialize_result=True):
     extra_data = []
     for srcdir in (unit.get(var) or '').replace('$' + var, '').split():
         if srcdir == '.':
@@ -195,7 +195,7 @@ def java_srcdirs_to_data(unit, var):
             srcdir = os.path.join('$S', unit.get('MODDIR'), srcdir)
         if srcdir.startswith('$S'):
             extra_data.append(srcdir.replace('$S', 'arcadia'))
-    return serialize_list(extra_data)
+    return serialize_list(extra_data) if serialize_result else extra_data
 
 
 def extract_java_system_properties(unit, args):
@@ -799,14 +799,21 @@ class TestData:
     @classmethod
     def ktlint(cls, unit, flat_args, spec_args):
         if unit.get('_USE_KTLINT_OLD') == 'yes':
-            extra_test_data = serialize_list([KTLINT_OLD_EDITOR_CONFIG])
+            extra_test_data = [KTLINT_OLD_EDITOR_CONFIG]
         else:
             data_list = [KTLINT_CURRENT_EDITOR_CONFIG]
             baseline_path_relative = unit.get('_KTLINT_BASELINE_FILE')
             if baseline_path_relative:
                 baseline_path = unit.resolve_arc_path(baseline_path_relative).replace('$S', 'arcadia')
                 data_list += [baseline_path]
-            extra_test_data = serialize_list(data_list)
+            extra_test_data = data_list
+
+        # XXX
+        if unit.get('_WITH_YA_1931') != 'yes':
+            extra_test_data += java_srcdirs_to_data(unit, 'ALL_SRCDIRS', serialize_result=False)
+
+        extra_test_data = serialize_list(extra_test_data)
+
         return {cls.KEY: extra_test_data}
 
     @classmethod

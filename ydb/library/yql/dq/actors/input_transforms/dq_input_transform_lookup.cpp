@@ -168,9 +168,8 @@ private: //IDqComputeActorAsyncInput
             const auto maxKeysInRequest = LookupSource.first->GetMaxSupportedKeysInRequest();
             IDqAsyncLookupSource::TUnboxedValueMap keysForLookup{maxKeysInRequest, KeyTypeHelper->GetValueHash(), KeyTypeHelper->GetValueEqual()};
             while (
-                ((InputFlowFetchStatus = FetchWideInputValue(inputRowItems)) == NUdf::EFetchStatus::Ok) && 
-                (keysForLookup.size() < maxKeysInRequest)
-            ) {
+                (keysForLookup.size() < maxKeysInRequest) &&
+                ((InputFlowFetchStatus = FetchWideInputValue(inputRowItems)) == NUdf::EFetchStatus::Ok)) {
                 NUdf::TUnboxedValue* keyItems;
                 NUdf::TUnboxedValue key = HolderFactory.CreateDirectArrayHolder(InputJoinColumns.size(), keyItems);
                 for (size_t i = 0; i != InputJoinColumns.size(); ++i) {
@@ -384,6 +383,25 @@ THashMap<TStringBuf, size_t> GetNameToIndex(const ::google::protobuf::RepeatedPt
     return result;
 }
 
+THashMap<TStringBuf, size_t> GetNameToIndex(const NMiniKQL::TStructType* type) {
+    THashMap<TStringBuf, size_t> result;
+    for (ui32 i = 0; i != type->GetMembersCount(); ++i) {
+        result[type->GetMemberName(i)] = i;
+    }
+    return result;
+}
+
+TVector<size_t> GetJoinColumnIndexes(const ::google::protobuf::RepeatedPtrField<TProtoStringType>& names, const THashMap<TStringBuf, size_t>& joinColumns) {
+    TVector<size_t> result;
+    result.reserve(joinColumns.size());
+    for (int i = 0; i != names.size(); ++i) {
+        if (auto p = joinColumns.FindPtr(names[i])) {
+            result.push_back(*p);
+        }
+    }
+    return result;
+}
+
 TVector<size_t> GetJoinColumnIndexes(const NMiniKQL::TStructType* type, const THashMap<TStringBuf, size_t>& joinColumns) {
     TVector<size_t> result;
     result.reserve(joinColumns.size());
@@ -411,14 +429,15 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
 
     const auto rightRowType = DeserializeStructType(settings.GetRightSource().GetSerializedRowType(), args.TypeEnv);
 
-    auto leftJoinColumns = GetNameToIndex(settings.GetLeftJoinKeyNames());
+    auto inputColumns = GetNameToIndex(narrowInputRowType);
     auto rightJoinColumns = GetNameToIndex(settings.GetRightJoinKeyNames());
-    Y_ABORT_UNLESS(leftJoinColumns.size() == rightJoinColumns.size());
 
-    auto leftJoinColumnIndexes = GetJoinColumnIndexes(narrowInputRowType, leftJoinColumns);
-    Y_ABORT_UNLESS(leftJoinColumnIndexes.size() == leftJoinColumns.size());
+    auto leftJoinColumnIndexes = GetJoinColumnIndexes(
+            settings.GetLeftJoinKeyNames(),
+            inputColumns);
     auto rightJoinColumnIndexes  = GetJoinColumnIndexes(rightRowType, rightJoinColumns);
     Y_ABORT_UNLESS(rightJoinColumnIndexes.size() == rightJoinColumns.size());
+    Y_ABORT_UNLESS(leftJoinColumnIndexes.size() == rightJoinColumnIndexes.size());
     
     const auto& [lookupKeyType, lookupPayloadType] = SplitLookupTableColumns(rightRowType, rightJoinColumns, args.TypeEnv);
     const auto& outputColumnsOrder = CategorizeOutputRowItems(

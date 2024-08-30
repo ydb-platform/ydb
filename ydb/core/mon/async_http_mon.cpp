@@ -220,7 +220,8 @@ public:
         if (response->Status.StartsWith("2")) {
             TString url(Event->Get()->Request->URL.Before('?'));
             TString status(response->Status);
-            NMonitoring::THistogramPtr ResponseTimeHgram = NKikimr::GetServiceCounters(NKikimr::AppData()->Counters, "utils")
+            NMonitoring::THistogramPtr ResponseTimeHgram = NKikimr::GetServiceCounters(NKikimr::AppData()->Counters,
+                    ActorMonPage->MonServiceName)
                 ->GetSubgroup("subsystem", "mon")
                 ->GetSubgroup("url", url)
                 ->GetSubgroup("status", status)
@@ -246,9 +247,10 @@ public:
         response << "HTTP/1.1 204 No Content\r\n"
                     "Access-Control-Allow-Origin: " << origin << "\r\n"
                     "Access-Control-Allow-Credentials: true\r\n"
-                    "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept\r\n"
-                    "Access-Control-Allow-Methods: OPTIONS, GET, POST, PUT, DELETE\r\n"
-                    "Content-Type: " + type + "\r\n"
+                    "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept,X-Trace-Verbosity,X-Want-Trace,traceparent\r\n"
+                    "Access-Control-Expose-Headers: traceresponse,X-Worker-Name\r\n"
+                    "Access-Control-Allow-Methods: OPTIONS,GET,POST,PUT,DELETE\r\n"
+                    "Content-Type: " << type << "\r\n"
                     "Connection: keep-alive\r\n\r\n";
         ReplyWith(request->CreateResponseString(response));
         PassAway();
@@ -374,13 +376,15 @@ public:
             return ReplyErrorAndPassAway(result);
         }
         bool found = false;
-        for (const TString& sid : ActorMonPage->AllowedSIDs) {
-            if (result.UserToken->IsExist(sid)) {
-                found = true;
-                break;
+        if (result.UserToken) {
+            for (const TString& sid : ActorMonPage->AllowedSIDs) {
+                if (result.UserToken->IsExist(sid)) {
+                    found = true;
+                    break;
+                }
             }
         }
-        if (found || ActorMonPage->AllowedSIDs.empty()) {
+        if (found || ActorMonPage->AllowedSIDs.empty() || !result.UserToken) {
             SendRequest(&result);
         } else {
             return ReplyForbiddenAndPassAway("SID is not allowed");
@@ -552,10 +556,26 @@ public:
         }
     }
 
+    TString RewriteWithForwardedFromNode(const TString& response) {
+        NHttp::THttpParser<NHttp::THttpRequest, NHttp::TSocketBuffer> parser(response);
+
+        NHttp::THeadersBuilder headers(parser.Headers);
+        headers.Set("X-Forwarded-From-Node", TStringBuilder() << Event->Sender.NodeId());
+
+        NHttp::THttpRenderer<NHttp::THttpRequest, NHttp::TSocketBuffer> renderer;
+        renderer.InitRequest(parser.Method, parser.URL, parser.Protocol, parser.Version);
+        renderer.Set(headers);
+        if (parser.HaveBody()) {
+            renderer.SetBody(parser.Body); // it shouldn't be here, 30x with a body is a bad idea
+        }
+        renderer.Finish();
+        return renderer.AsString();
+    }
+
     void Bootstrap() {
         NHttp::THttpConfig::SocketAddressType address;
         FromProto(address, Event->Get()->Record.GetAddress());
-        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(Event->Get()->Record.GetHttpRequest(), Endpoint, address);
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(RewriteWithForwardedFromNode(Event->Get()->Record.GetHttpRequest()), Endpoint, address);
         TStringBuilder prefix;
         prefix << "/node/" << TActivationContext::ActorSystem()->NodeId;
         if (request->URL.SkipPrefix(prefix)) {
@@ -869,7 +889,8 @@ NMonitoring::IMonPage* TAsyncHttpMon::RegisterActorPage(TRegisterActorPageFields
         fields.ActorSystem,
         fields.ActorId,
         fields.AllowedSIDs ? fields.AllowedSIDs : Config.AllowedSIDs,
-        fields.UseAuth ? Config.Authorizer : TRequestAuthorizer());
+        fields.UseAuth ? Config.Authorizer : TRequestAuthorizer(),
+        fields.MonServiceName);
     if (fields.Index) {
         fields.Index->Register(page);
         if (fields.SortPages) {

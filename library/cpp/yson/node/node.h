@@ -3,7 +3,6 @@
 #include <util/generic/bt_exception.h>
 #include <util/generic/cast.h>
 #include <util/generic/hash.h>
-#include <util/generic/variant.h>
 #include <util/generic/vector.h>
 #include <util/generic/yexception.h>
 #include <util/generic/ylimits.h>

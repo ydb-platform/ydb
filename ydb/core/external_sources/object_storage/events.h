@@ -119,11 +119,13 @@ struct TEvArrowFile : public NActors::TEventLocal<TEvArrowFile, EvArrowFile> {
 };
 
 struct TEvInferFileSchema : public NActors::TEventLocal<TEvInferFileSchema, EvInferFileSchema> {
-    explicit TEvInferFileSchema(TString&& path)
+    explicit TEvInferFileSchema(TString&& path, ui64 size)
         : Path{std::move(path)}
+        , Size{size}
     {}
 
     TString Path;
+    ui64 Size = 0;
 };
 
 struct TEvInferredFileSchema : public NActors::TEventLocal<TEvInferredFileSchema, EvInferredFileSchema> {

@@ -2,9 +2,9 @@
 
 PROGRAM(python3)
 
-VERSION(3.12.4)
+VERSION(3.12.5)
 
-ORIGINAL_SOURCE(https://github.com/python/cpython/archive/v3.12.4.tar.gz)
+ORIGINAL_SOURCE(https://github.com/python/cpython/archive/v3.12.5.tar.gz)
 
 LICENSE(Python-2.0)
 

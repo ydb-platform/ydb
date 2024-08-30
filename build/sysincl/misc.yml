@@ -529,7 +529,6 @@
 - source_filter: "^contrib/tools/bison/data"
   includes:
     - "]b4_location_include["
-    - "position.hh"
 
 - source_filter: "^contrib/libs/libheif"
   includes:

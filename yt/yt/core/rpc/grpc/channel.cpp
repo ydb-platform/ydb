@@ -95,7 +95,7 @@ public:
             statusDetail = "Unknown error";
         }
 
-        return TError(StatusCodeToErrorCode(static_cast<grpc_status_code>(statusCode)), statusDetail)
+        return TError(StatusCodeToErrorCode(static_cast<grpc_status_code>(statusCode)), std::move(statusDetail), TError::DisableFormat)
             << TErrorAttribute("status_code", statusCode);
     }
 
@@ -206,7 +206,7 @@ public:
     }
 
     // Custom methods.
-    const TString& GetEndpointAddress() const
+    const std::string& GetEndpointAddress() const
     {
         return EndpointAddress_;
     }
@@ -593,7 +593,7 @@ private:
                 if (serializedError) {
                     error = DeserializeError(serializedError);
                 } else {
-                    error = TError(StatusCodeToErrorCode(ResponseStatusCode_), ResponseStatusDetails_.AsString())
+                    error = TError(StatusCodeToErrorCode(ResponseStatusCode_), ResponseStatusDetails_.AsString(), TError::DisableFormat)
                         << TErrorAttribute("status_code", ResponseStatusCode_);
                 }
                 NotifyError(TStringBuf("Request failed"), error);
@@ -722,7 +722,7 @@ class TChannelFactory
     : public IChannelFactory
 {
 public:
-    IChannelPtr CreateChannel(const TString& address) override
+    IChannelPtr CreateChannel(const std::string& address) override
     {
         auto config = New<TChannelConfig>();
         config->Address = address;

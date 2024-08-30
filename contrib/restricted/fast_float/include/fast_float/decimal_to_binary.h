@@ -127,8 +127,9 @@ adjusted_mantissa compute_float(int64_t q, uint64_t w)  noexcept  {
   // but in practice, we can win big with the compute_product_approximation if its additional branch
   // is easily predicted. Which is best is data specific.
   int upperbit = int(product.high >> 63);
+  int shift = upperbit + 64 - binary::mantissa_explicit_bits() - 3;
 
-  answer.mantissa = product.high >> (upperbit + 64 - binary::mantissa_explicit_bits() - 3);
+  answer.mantissa = product.high >> shift;
 
   answer.power2 = int32_t(detail::power(int32_t(q)) + upperbit - lz - binary::minimum_exponent());
   if (answer.power2 <= 0) { // we have a subnormal?
@@ -164,7 +165,7 @@ adjusted_mantissa compute_float(int64_t q, uint64_t w)  noexcept  {
     // To be in-between two floats we need that in doing
     //   answer.mantissa = product.high >> (upperbit + 64 - binary::mantissa_explicit_bits() - 3);
     // ... we dropped out only zeroes. But if this happened, then we can go back!!!
-    if((answer.mantissa  << (upperbit + 64 - binary::mantissa_explicit_bits() - 3)) ==  product.high) {
+    if((answer.mantissa  << shift) ==  product.high) {
       answer.mantissa &= ~uint64_t(1);          // flip it so that we do not round up
     }
   }

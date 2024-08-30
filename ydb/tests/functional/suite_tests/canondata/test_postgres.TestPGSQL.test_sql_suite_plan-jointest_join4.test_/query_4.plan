@@ -78,7 +78,7 @@
                                                 "TopSortBy": "row.name"
                                             },
                                             {
-                                                "Condition": "a = a.code",
+                                                "Condition": "c.a = ss.a.code",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 17
@@ -110,7 +110,7 @@
                                                                         "Node Type": "LeftJoin (MapJoin)",
                                                                         "Operators": [
                                                                             {
-                                                                                "Condition": "code = a",
+                                                                                "Condition": "a.code = b_grp.a",
                                                                                 "Inputs": [
                                                                                     {
                                                                                         "ExternalPlanNodeId": 10
@@ -291,7 +291,10 @@
                     }
                 ]
             }
-        ]
+        ],
+        "Stats": {
+            "ResourcePoolId": "default"
+        }
     },
     "meta": {
         "type": "query",

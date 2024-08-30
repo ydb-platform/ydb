@@ -34,6 +34,8 @@ public:
     void Handle(NEvents::TEvExternal::TEvFinishGroup::TPtr& ev);
     void Handle(NEvents::TEvExternal::TEvStartProcess::TPtr& ev);
     void Handle(NEvents::TEvExternal::TEvFinishProcess::TPtr& ev);
+    void Handle(NEvents::TEvExternal::TEvStartProcessScope::TPtr& ev);
+    void Handle(NEvents::TEvExternal::TEvFinishProcessScope::TPtr& ev);
 
     void Bootstrap();
 
@@ -46,6 +48,8 @@ public:
             hFunc(NEvents::TEvExternal::TEvFinishGroup, Handle);
             hFunc(NEvents::TEvExternal::TEvStartProcess, Handle);
             hFunc(NEvents::TEvExternal::TEvFinishProcess, Handle);
+            hFunc(NEvents::TEvExternal::TEvStartProcessScope, Handle);
+            hFunc(NEvents::TEvExternal::TEvFinishProcessScope, Handle);
             default:
                 AFL_VERIFY(false)("ev_type", ev->GetTypeName());
         }

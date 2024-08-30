@@ -232,12 +232,12 @@ private:
             Retry();
         }
 
-        void HandleResponse(TSharedRefArray message, TString address) override
+        void HandleResponse(TSharedRefArray message, const std::string& address) override
         {
             YT_LOG_DEBUG("Request attempt succeeded (RequestId: %v)",
                 Request_->GetRequestId());
 
-            ResponseHandler_->HandleResponse(std::move(message), std::move(address));
+            ResponseHandler_->HandleResponse(std::move(message), address);
         }
 
         void HandleStreamingPayload(const TStreamingPayload& /*payload*/) override

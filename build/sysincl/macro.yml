@@ -877,7 +877,7 @@
   includes:
     - LT_CONFIG_H: $U/config.h
 
-- source_filter: "^contrib/libs/xpdf-3.04/splash"
+- source_filter: "^contrib/deprecated/xpdf"
   includes:
     - FT_CFF_DRIVER_H: contrib/libs/freetype/include/freetype/ftdriver.h
 

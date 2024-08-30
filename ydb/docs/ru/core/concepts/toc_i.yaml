@@ -10,6 +10,8 @@ items:
   include:
     path: datamodel/toc_p.yaml
     mode: link
+- name: Топология кластера
+  href: topology.md
 - name: Транзакции
   href: transactions.md
 - name: Вторичные индексы
@@ -25,8 +27,10 @@ items:
   href: limits-ydb.md
 - name: Многоверсионное управление конкурентным доступом (MVCC)
   href: mvcc.md
-- name: Топология кластера
-  href: topology.md
+
+- name: Асинхронная репликация
+  href: async-replication.md
+  when: feature_async_replication
 - name: Федеративные запросы
   include:
     path: federated_query/toc_p.yaml

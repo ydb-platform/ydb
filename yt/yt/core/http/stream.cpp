@@ -682,7 +682,7 @@ TSharedRef THttpOutput::GetHeadersPart(std::optional<size_t> contentLength)
 
     if (contentLength) {
         if (MessageType_ == EMessageType::Response ||
-            (MessageType_ == EMessageType::Request && methodNeedsContentLength)) {
+            (MessageType_ == EMessageType::Request && (*contentLength > 0 || methodNeedsContentLength))) {
             messageHeaders << "Content-Length: " << *contentLength << "\r\n";
         }
     } else {

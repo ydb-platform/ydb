@@ -28,9 +28,14 @@ public:
         if (params.Has("database")) {
             database = params.Get("database");
         }
-        if (database && database != AppData()->TenantName) {
-            BLOG_TRACE("Requesting StateStorageEndpointsLookup for " << database);
-            RequestStateStorageEndpointsLookup(database); // to find some dynamic node and redirect query there
+        bool direct = false;;
+        if (params.Has("direct")) {
+            direct = FromStringWithDefault<bool>(params.Get("direct"), direct);
+        }
+        direct |= !TBase::Event->Get()->Request.GetHeader("X-Forwarded-From-Node").empty(); // we're already forwarding
+        direct |= (database == AppData()->TenantName); // we're already on the right node or don't use database filter
+        if (database && !direct) {
+            return RedirectToDatabase(database); // to find some dynamic node and redirect query there
         } else {
             if (params.Has("path")) {
                 RequestSchemeCacheNavigate(params.Get("path"));
@@ -43,14 +48,8 @@ public:
         Become(&TThis::StateRequestedDescribe, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
     }
 
-    void Handle(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
-        BLOG_TRACE("Received TEvBoardInfo");
-        ReplyAndPassAway(Viewer->MakeForward(Event->Get(), GetNodesFromBoardReply(ev)));
-    }
-
     STATEFN(StateRequestedDescribe) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvStateStorage::TEvBoardInfo, Handle);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
@@ -166,6 +165,9 @@ public:
                     auto& pbAce = *pbCommon.AddACL();
                     FillACE(ace, pbAce);
                 }
+                if (acl.GetInterruptInheritance()) {
+                    pbCommon.SetInterruptInheritance(true);
+                }
             }
             if (entry.Self->Info.HasEffectiveACL()) {
                 NACLib::TACL acl(entry.Self->Info.GetEffectiveACL());
@@ -245,6 +247,8 @@ public:
                                                             type: array
                                                             items:
                                                                 type: string
+                                            InterruptInheritance:
+                                                type: boolean
                                             EffectiveACL:
                                                 type: array
                                                 items:

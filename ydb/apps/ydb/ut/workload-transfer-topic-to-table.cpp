@@ -81,7 +81,7 @@ TString ExecYdb(const TList<TString>& args, bool checkExitCode = true)
     //
     // ydb -e grpc://${YDB_ENDPOINT} -d /${YDB_DATABASE} workload transfer topic-to-table ${args}
     //
-    return RunYdb({"--user", "root", "--no-password", "workload", "transfer", "topic-to-table"}, args,
+    return RunYdb({"workload", "transfer", "topic-to-table"}, args,
                   checkExitCode);
 }
 
@@ -96,8 +96,6 @@ void RunYdb(const TList<TString>& args,
 
 Y_UNIT_TEST(Default_Run)
 {
-    RunYdb({"-v", "yql", "-s", R"(ALTER USER root PASSWORD "")"}, TList<TString>());
-
     ExecYdb({"init"});
     auto output = ExecYdb({"run", "-s", "10"});
     ExecYdb({"clean"});
@@ -110,8 +108,6 @@ Y_UNIT_TEST(Default_Run)
 
 Y_UNIT_TEST(Default_Init_Clean)
 {
-    RunYdb({"-v", "yql", "-s", R"(ALTER USER root PASSWORD "")"}, TList<TString>());
-
     const TString topic = "transfer-topic";
     const TString table = "transfer-table";
 
@@ -121,8 +117,6 @@ Y_UNIT_TEST(Default_Init_Clean)
 
 Y_UNIT_TEST(Specific_Init_Clean)
 {
-    RunYdb({"-v", "yql", "-s", R"(ALTER USER root PASSWORD "")"}, TList<TString>());
-
     const TString topic = "my-topic";
     const TString table = "my-table";
 
@@ -140,15 +134,11 @@ Y_UNIT_TEST(Specific_Init_Clean)
 
 Y_UNIT_TEST(Clean_Without_Init)
 {
-    RunYdb({"-v", "yql", "-s", R"(ALTER USER root PASSWORD "")"}, TList<TString>());
-
     UNIT_ASSERT_EXCEPTION(ExecYdb({"clean"}), yexception);
 }
 
 Y_UNIT_TEST(Double_Init)
 {
-    RunYdb({"-v", "yql", "-s", R"(ALTER USER root PASSWORD "")"}, TList<TString>());
-
     ExecYdb({"init"});
     UNIT_ASSERT_EXCEPTION(ExecYdb({"init"}), yexception);
     ExecYdb({"clean"});
@@ -172,8 +162,6 @@ void EnsureStatisticsColumns(const TList<TString>& args,
 
 Y_UNIT_TEST(Statistics)
 {
-    RunYdb({"-v", "yql", "-s", R"(ALTER USER root PASSWORD "")"}, TList<TString>());
-
     EnsureStatisticsColumns({"run", "-s", "1", "--warmup", "0"},
                             {"Window", "Write speed", "Write time", "Inflight", "Read speed", "Topic time", "Select time", "Upsert time", "Commit time"},
                             {"#", "msg/s", "MB/s", "percentile,ms", "percentile,msg", "msg/s", "MB/s", "percentile,ms", "percentile,ms", "percentile,ms", "percentile,ms"});

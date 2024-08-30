@@ -113,12 +113,28 @@ TPKRangeFilter::EUsageClass TPKRangeFilter::IsPortionInPartialUsage(const NArrow
     return EUsageClass::PartialUsage;
 }
 
-std::optional<NKikimr::NOlap::TPKRangeFilter> TPKRangeFilter::Build(TPredicateContainer&& from, TPredicateContainer&& to) {
+TConclusion<TPKRangeFilter> TPKRangeFilter::Build(TPredicateContainer&& from, TPredicateContainer&& to) {
     if (!from.CrossRanges(to)) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "cannot_build_predicate_range")("error", "predicates from/to not intersected");
-        return {};
+        return TConclusionStatus::Fail("predicates from/to not intersected");
     }
     return TPKRangeFilter(std::move(from), std::move(to));
+}
+
+bool TPKRangeFilter::CheckPoint(const NArrow::TReplaceKey& point) const {
+    std::partial_ordering equalityWithFrom = std::partial_ordering::greater;
+    if (const auto& from = PredicateFrom.GetReplaceKey()) {
+        equalityWithFrom = point.ComparePartNotNull(*from, from->Size());
+    }
+    std::partial_ordering equalityWithTo = std::partial_ordering::less;
+    if (const auto& to = PredicateTo.GetReplaceKey()) {
+        equalityWithTo = point.ComparePartNotNull(*to, to->Size());
+    }
+    const bool startInternal = (equalityWithFrom == std::partial_ordering::equivalent && PredicateFrom.IsInclude()) ||
+                               (equalityWithFrom == std::partial_ordering::greater);
+    const bool endInternal = (equalityWithTo == std::partial_ordering::equivalent && PredicateTo.IsInclude()) ||
+                             (equalityWithTo == std::partial_ordering::less);
+    return startInternal && endInternal;
 }
 
 }

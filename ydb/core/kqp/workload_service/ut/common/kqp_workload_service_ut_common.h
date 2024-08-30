@@ -14,7 +14,7 @@
 
 namespace NKikimr::NKqp::NWorkload {
 
-inline constexpr TDuration FUTURE_WAIT_TIMEOUT = TDuration::Seconds(30);
+inline constexpr TDuration FUTURE_WAIT_TIMEOUT = TDuration::Seconds(60);
 
 
 // Query runner
@@ -24,7 +24,7 @@ struct TQueryRunnerSettings {
 
     // Query settings
     FLUENT_SETTING_DEFAULT(ui32, NodeIndex, 0);
-    FLUENT_SETTING_DEFAULT(TString, PoolId, "");
+    FLUENT_SETTING_DEFAULT(std::optional<TString>, PoolId, std::nullopt);
     FLUENT_SETTING_DEFAULT(TString, UserSID, "user@" BUILTIN_SYSTEM_DOMAIN);
 
     // Runner settings
@@ -76,6 +76,7 @@ struct TYdbSetupSettings {
     FLUENT_SETTING_DEFAULT(double, QueryMemoryLimitPercentPerNode, -1);
     FLUENT_SETTING_DEFAULT(double, DatabaseLoadCpuThreshold, -1);
 
+    NResourcePool::TPoolSettings GetDefaultPoolSettings() const;
     TIntrusivePtr<IYdbSetup> Create() const;
 };
 
@@ -118,12 +119,6 @@ struct TSampleQueries {
     template <typename TResult>
     static void CheckSuccess(const TResult& result) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-    }
-
-    template <typename TResult>
-    static void CheckOverloaded(const TResult& result, const TString& poolId) {
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::OVERLOADED, result.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), TStringBuilder() << "Too many pending requests for pool " << poolId);
     }
 
     template <typename TResult>

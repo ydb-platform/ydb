@@ -58,7 +58,7 @@ NApi::IClientPtr CreateTestHedgingClient(
 
 IPenaltyProviderPtr CreateReplicationLagPenaltyProvider(
     const NYPath::TYPath& path,
-    const TString& cluster,
+    const std::string& cluster,
     TDuration maxTabletLag,
     TDuration lagPenalty,
     NApi::IClientPtr client,
@@ -68,7 +68,7 @@ IPenaltyProviderPtr CreateReplicationLagPenaltyProvider(
     TReplicationLagPenaltyProviderConfig config;
 
     config.SetTablePath(path);
-    config.AddReplicaClusters(cluster);
+    config.AddReplicaClusters(TProtobufString(cluster));
     config.SetMaxTabletsWithLagFraction(0.5);
     config.SetMaxTabletLag(maxTabletLag.Seconds());
     config.SetCheckPeriod(checkPeriod.Seconds());

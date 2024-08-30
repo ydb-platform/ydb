@@ -12,6 +12,7 @@
 #include <ydb/library/yql/core/services/yql_eval_params.h>
 #include <ydb/library/yql/utils/log/context.h>
 #include <ydb/library/yql/utils/log/profile.h>
+#include <ydb/library/yql/utils/limiting_allocator.h>
 #include <ydb/library/yql/core/services/yql_out_transformers.h>
 #include <ydb/library/yql/core/extract_predicate/extract_predicate_dbg.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
@@ -267,6 +268,8 @@ TProgram::TProgram(
     , RandomProvider_(randomProvider)
     , TimeProvider_(timeProvider)
     , NextUniqueId_(nextUniqueId)
+    , AstRoot_(nullptr)
+    , Modules_(modules)
     , DataProvidersInit_(dataProvidersInit)
     , Credentials_(MakeIntrusive<NYql::TCredentials>(*credentials))
     , UrlListerManager_(urlListerManager)
@@ -280,8 +283,6 @@ TProgram::TProgram(
     , SourceCode_(sourceCode)
     , SourceSyntax_(ESourceSyntax::Unknown)
     , SyntaxVersion_(0)
-    , AstRoot_(nullptr)
-    , Modules_(modules)
     , ExprRoot_(nullptr)
     , SessionId_(sessionId)
     , ResultType_(IDataProvider::EResultFormat::Yson)
@@ -502,13 +503,6 @@ bool TProgram::FillParseResult(NYql::TAstParseResult&& astRes, NYql::TWarningRul
 TString TProgram::GetSessionId() const {
     with_lock(SessionIdLock_) {
         return SessionId_;
-    }
-}
-
-TString TProgram::TakeSessionId() {
-    // post-condition: SessionId_ will be empty
-    with_lock(SessionIdLock_) {
-        return std::move(SessionId_);
     }
 }
 
@@ -1395,7 +1389,7 @@ TFuture<IGraphTransformer::TStatus> TProgram::AsyncTransformWithFallback(bool ap
     });
 }
 
-TMaybe<TString> TProgram::GetQueryAst() {
+TMaybe<TString> TProgram::GetQueryAst(TMaybe<size_t> memoryLimit) {
     if (ExternalQueryAst_) {
         return ExternalQueryAst_;
     }
@@ -1404,7 +1398,17 @@ TMaybe<TString> TProgram::GetQueryAst() {
     astStream.Reserve(DEFAULT_AST_BUF_SIZE);
 
     if (ExprRoot_) {
-        auto ast = ConvertToAst(*ExprRoot_, *ExprCtx_, TExprAnnotationFlags::None, true);
+        std::unique_ptr<IAllocator> limitingAllocator;
+        TConvertToAstSettings settings;
+        settings.AnnotationFlags = TExprAnnotationFlags::None;
+        settings.RefAtoms = true;
+        settings.Allocator = TDefaultAllocator::Instance();
+        if (memoryLimit) {
+            limitingAllocator = MakeLimitingAllocator(*memoryLimit, TDefaultAllocator::Instance());
+            settings.Allocator = limitingAllocator.get();
+        }
+
+        auto ast = ConvertToAst(*ExprRoot_, *ExprCtx_, settings);
         ast.Root->PrettyPrintTo(astStream, TAstPrintFlags::ShortQuote | TAstPrintFlags::PerLine);
         return astStream.Str();
     } else if (AstRoot_) {
@@ -1702,14 +1706,22 @@ NThreading::TFuture<void> TProgram::CleanupLastSession() {
 NThreading::TFuture<void> TProgram::CloseLastSession() {
     YQL_LOG_CTX_ROOT_SESSION_SCOPE(GetSessionId());
 
-    TString sessionId = TakeSessionId();
-    if (sessionId.empty()) {
-        return MakeFuture();
-    }
-
     TVector<TDataProviderInfo> dataProviders;
     with_lock (DataProvidersLock_) {
         dataProviders = DataProviders_;
+    }
+
+    auto promise = NThreading::NewPromise<void>();
+
+    TString sessionId;
+    with_lock(SessionIdLock_) {
+        // post-condition: SessionId_ will be empty
+        sessionId = std::move(SessionId_);
+        if (sessionId.empty()) {
+            return CloseLastSessionFuture_;
+        }
+
+        CloseLastSessionFuture_ = promise.GetFuture();
     }
 
     TVector<NThreading::TFuture<void>> closeFutures;
@@ -1719,11 +1731,14 @@ NThreading::TFuture<void> TProgram::CloseLastSession() {
             dp.CloseSession(sessionId);
         }
         if (dp.CloseSessionAsync) {
-            dp.CloseSessionAsync(sessionId);
+            closeFutures.push_back(dp.CloseSessionAsync(sessionId));
         }
     }
 
-    return NThreading::WaitExceptionOrAll(closeFutures);
+    return NThreading::WaitExceptionOrAll(closeFutures)
+        .Apply([promise = std::move(promise)](const NThreading::TFuture<void>&) mutable {
+            promise.SetValue();
+        });
 }
 
 TString TProgram::ResultsAsString() const {

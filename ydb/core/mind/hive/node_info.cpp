@@ -238,22 +238,6 @@ bool TNodeInfo::IsAbleToRunTablet(const TTabletInfo& tablet, TTabletDebugState* 
         const TFollowerTabletInfo& follower = tablet.AsFollower();
         const TFollowerGroup& followerGroup = follower.FollowerGroup;
         const TLeaderTabletInfo& leader = follower.LeaderTablet;
-        if (followerGroup.RequireAllDataCenters) {
-            auto dataCenters = Hive.GetRegisteredDataCenters();
-            ui32 maxFollowersPerDataCenter = (followerGroup.GetComputedFollowerCount(Hive.GetDataCenters()) + dataCenters - 1) / dataCenters; // ceil
-            ui32 existingFollowers;
-            if (tablet.IsAlive()) {
-                existingFollowers = leader.GetFollowersAliveOnDataCenterExcludingFollower(Location.GetDataCenterId(), tablet);
-            } else {
-                existingFollowers = leader.GetFollowersAliveOnDataCenter(Location.GetDataCenterId());
-            }
-            if (maxFollowersPerDataCenter <= existingFollowers) {
-                if (debugState) {
-                    debugState->NodesFilledWithDatacenterFollowers++;
-                }
-                return false;
-            }
-        }
         if (followerGroup.RequireDifferentNodes) {
             if (leader.IsSomeoneAliveOnNode(Id)) {
                 if (debugState) {
@@ -489,6 +473,9 @@ void TNodeInfo::UpdateResourceTotalUsage(const NKikimrHive::TEvTabletMetrics& me
     if (metrics.HasTotalNodeUsage()) {
         AveragedNodeTotalUsage.Push(metrics.GetTotalNodeUsage());
         NodeTotalUsage = AveragedNodeTotalUsage.GetValue();
+    }
+    if (metrics.HasTotalNodeCpuUsage()) {
+        AveragedNodeTotalCpuUsage.Push(metrics.GetTotalNodeCpuUsage());
     }
 }
 

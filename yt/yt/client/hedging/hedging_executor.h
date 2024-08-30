@@ -86,10 +86,10 @@ private:
             NApi::IClientPtr client,
             NProfiling::TCpuDuration initialPenalty,
             TCounterPtr counter,
-            TString clusterName);
+            const std::string& clusterName);
 
         NApi::IClientPtr Client;
-        TString ClusterName;
+        std::string ClusterName;
         NProfiling::TCpuDuration AdaptivePenalty;
         NProfiling::TCpuDuration InitialPenalty;
         NProfiling::TCpuDuration ExternalPenalty;

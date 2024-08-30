@@ -7,6 +7,7 @@
 #include "command.h"
 #include "config.h"
 #include "cypress_commands.h"
+#include "distributed_table_commands.h"
 #include "etc_commands.h"
 #include "file_commands.h"
 #include "journal_commands.h"
@@ -394,6 +395,9 @@ public:
             REGISTER_ALL(TRevokeLeaseCommand,              "revoke_lease",                    Null,       Structured, true,  false);
             REGISTER_ALL(TReferenceLeaseCommand,           "reference_lease",                 Null,       Structured, true,  false);
             REGISTER_ALL(TUnreferenceLeaseCommand,         "unreference_lease",               Null,       Structured, true,  false);
+            REGISTER_ALL(TStartDistributedWriteSessionCommand,    "start_distributed_write_session",    Null,    Structured, true, false);
+            REGISTER_ALL(TFinishDistributedWriteSessionCommand,   "finish_distributed_write_session",   Null,    Null,       true, false);
+            REGISTER_ALL(TParticipantWriteTableCommand,           "participant_write_table",            Tabular, Structured, true, true );
         }
 
 #undef REGISTER

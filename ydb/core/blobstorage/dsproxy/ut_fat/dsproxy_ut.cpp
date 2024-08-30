@@ -3421,6 +3421,7 @@ class TTestBlobStorageProxyBatchedPutRequestDoesNotContainAHugeBlob : public TTe
                             .HandleClass = HandleClass,
                             .Tactic = Tactic,
                             .EnableRequestMod3x3ForMinLatency = false,
+                            .AccelerationParams = TAccelerationParams{},
                         });
 
                 ctx.Register(reqActor);
@@ -4204,8 +4205,20 @@ public:
         TIntrusivePtr<TDsProxyNodeMon> dsProxyNodeMon(new TDsProxyNodeMon(counters, true));
         TDsProxyPerPoolCounters perPoolCounters(counters);
         TIntrusivePtr<TStoragePoolCounters> storagePoolCounters = perPoolCounters.GetPoolCounters("pool_name");
+        TControlWrapper enablePutBatching(args.EnablePutBatching, false, true);
+        TControlWrapper enableVPatch(DefaultEnableVPatch, false, true);
+        TControlWrapper slowDiskThreshold(DefaultSlowDiskThreshold * 1000, 1, 1000000);
+        TControlWrapper predictedDelayMultiplier(DefaultPredictedDelayMultiplier * 1000, 1, 1000000);
         std::unique_ptr<IActor> proxyActor{CreateBlobStorageGroupProxyConfigured(TIntrusivePtr(bsInfo), false,
-            dsProxyNodeMon, TIntrusivePtr(storagePoolCounters), args.EnablePutBatching, DefaultEnableVPatch)};
+                dsProxyNodeMon, TIntrusivePtr(storagePoolCounters),
+                TBlobStorageProxyParameters{
+                    .EnablePutBatching = enablePutBatching,
+                    .EnableVPatch = enableVPatch,
+                    .SlowDiskThreshold = slowDiskThreshold,
+                    .PredictedDelayMultiplier = predictedDelayMultiplier,
+                }
+            )
+        };
         TActorSetupCmd bsproxySetup(proxyActor.release(), TMailboxType::Revolving, 3);
         setup1->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(env->ProxyId, std::move(bsproxySetup)));
 

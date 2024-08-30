@@ -118,7 +118,8 @@ protected:
                 true,               // defaultWatermarksMode
                 true);              // syncActor
         } else {
-            output = DqRewriteAggregate(node, ctx, TypesCtx, false, KqpCtx.Config->HasOptEnableOlapPushdown() || KqpCtx.Config->HasOptUseFinalizeByKey(), KqpCtx.Config->HasOptUseFinalizeByKey());
+            NDq::TSpillingSettings spillingSettings(KqpCtx.Config->GetEnabledSpillingNodes());
+            output = DqRewriteAggregate(node, ctx, TypesCtx, false, KqpCtx.Config->HasOptEnableOlapPushdown() || KqpCtx.Config->HasOptUseFinalizeByKey(), KqpCtx.Config->HasOptUseFinalizeByKey(), spillingSettings.IsAggregationSpillingEnabled());
         }
         if (output) {
             DumpAppliedRule("RewriteAggregate", node.Ptr(), output.Cast().Ptr(), ctx);
@@ -153,20 +154,26 @@ protected:
             *opt, [](auto& rels, auto label, auto node, auto stat) {
                 rels.emplace_back(std::make_shared<TKqpRelOptimizerNode>(TString(label), stat, node));
             },
-            KqpCtx.EquiJoinsCount);
+            KqpCtx.EquiJoinsCount,
+            TOptimizerHints{
+                .CardinalityHints = KqpCtx.GetCardinalityHints(),
+                .JoinAlgoHints = KqpCtx.GetJoinAlgoHints(),
+                .JoinOrderHints = KqpCtx.GetJoinOrderHints()
+            }
+        );
         DumpAppliedRule("OptimizeEquiJoinWithCosts", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 
     TMaybeNode<TExprBase> RewriteEquiJoin(TExprBase node, TExprContext& ctx) {
-        bool useCBO = Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->DefaultCostBasedOptimizationLevel) == 3;
+        bool useCBO = Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->DefaultCostBasedOptimizationLevel) >= 2;
         TExprBase output = DqRewriteEquiJoin(node, KqpCtx.Config->GetHashJoinMode(), useCBO, ctx, TypesCtx, KqpCtx.JoinsCount);
         DumpAppliedRule("RewriteEquiJoin", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 
     TMaybeNode<TExprBase> JoinToIndexLookup(TExprBase node, TExprContext& ctx) {
-        bool useCBO = Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->DefaultCostBasedOptimizationLevel) == 3;
+        bool useCBO = Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->DefaultCostBasedOptimizationLevel) >= 2;
         TExprBase output = KqpJoinToIndexLookup(node, ctx, KqpCtx, useCBO);
         DumpAppliedRule("JoinToIndexLookup", node.Ptr(), output.Ptr(), ctx);
         return output;

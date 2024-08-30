@@ -189,7 +189,8 @@ class ScaleController:
             labels.extend(preset['additional_labels'])
 
         vm_labels = {self.prefix: runner_name}
-        user_data = create_userdata(self.gh.html_url, new_runner_token, runner_name, labels, self.cfg.ssh_keys)
+        user_data = create_userdata(self.gh.html_url, new_runner_token, runner_name, labels, self.cfg.ssh_keys,
+                                    self.cfg.agent_mirror_url_prefix)
 
         placement = random.choice(self.cfg.yc_zones)
         zone_id = placement['zone_id']
@@ -198,7 +199,7 @@ class ScaleController:
         self.logger.info("start runner %s in %s (%s)", runner_name, zone_id, labels)
 
         try:
-            instance = self.yc.start_vm(zone_id, subnet_id, runner_name, preset_name, user_data, vm_labels)
+            response = self.yc.start_vm(zone_id, subnet_id, runner_name, preset_name, user_data, vm_labels)
         except grpc.RpcError as rpc_error:
             # noinspection PyUnresolvedReferences
             if rpc_error.code() == grpc.StatusCode.RESOURCE_EXHAUSTED:
@@ -206,7 +207,7 @@ class ScaleController:
             else:
                 raise
 
-        self.logger.info("instance %s started", instance.id)
+        self.logger.info("starting, operation_id=%s", response.id)
         return runner_name
 
     def delete_runner(self, runner):

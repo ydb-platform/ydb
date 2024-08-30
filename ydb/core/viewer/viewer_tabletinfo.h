@@ -122,7 +122,7 @@ public:
                 TTabletId uiTabletId(FromStringWithDefault<TTabletId>(strTabletId, {}));
                 if (uiTabletId) {
                     Tablets[uiTabletId] = NKikimrTabletBase::TTabletTypes::Unknown;
-                    Request->Record.AddFilterTabletId(uiTabletId);
+                    request->Record.AddFilterTabletId(uiTabletId);
                 }
             }
         }

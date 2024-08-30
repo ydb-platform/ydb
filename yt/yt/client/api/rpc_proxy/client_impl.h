@@ -129,6 +129,11 @@ public:
         NChaosClient::TReplicationCardId replicationCardId,
         const TAlterReplicationCardOptions& options = {}) override;
 
+    // Distributed table client
+    TFuture<ITableWriterPtr> CreateParticipantTableWriter(
+        const TDistributedWriteCookiePtr& cookie,
+        const TParticipantTableWriterOptions& options) override;
+
     // Queues.
     TFuture<NQueueClient::IQueueRowsetPtr> PullQueue(
         const NYPath::TRichYPath& queuePath,
@@ -357,7 +362,7 @@ public:
 
     TFuture<void> SwitchLeader(
         NHydra::TCellId cellId,
-        const TString& newLeaderAddress,
+        const std::string& newLeaderAddress,
         const TSwitchLeaderOptions& options) override;
 
     TFuture<void> ResetStateHash(
@@ -368,15 +373,15 @@ public:
         const NApi::TGCCollectOptions& options) override;
 
     TFuture<void> KillProcess(
-        const TString& address,
+        const std::string& address,
         const NApi::TKillProcessOptions& options) override;
 
     TFuture<TString> WriteCoreDump(
-        const TString& address,
+        const std::string& address,
         const NApi::TWriteCoreDumpOptions& options) override;
 
     TFuture<TGuid> WriteLogBarrier(
-        const TString& address,
+        const std::string& address,
         const TWriteLogBarrierOptions& options) override;
 
     TFuture<TString> WriteOperationControllerCoreDump(
@@ -384,7 +389,7 @@ public:
         const NApi::TWriteOperationControllerCoreDumpOptions& options) override;
 
     TFuture<void> HealExecNode(
-        const TString& address,
+        const std::string& address,
         const THealExecNodeOptions& options) override;
 
     TFuture<void> SuspendCoordinator(
@@ -417,35 +422,35 @@ public:
 
     TFuture<TMaintenanceIdPerTarget> AddMaintenance(
         EMaintenanceComponent component,
-        const TString& address,
+        const std::string& address,
         EMaintenanceType type,
         const TString& comment,
         const TAddMaintenanceOptions& options) override;
 
     TFuture<TMaintenanceCountsPerTarget> RemoveMaintenance(
         EMaintenanceComponent component,
-        const TString& address,
+        const std::string& address,
         const TMaintenanceFilter& filter,
         const TRemoveMaintenanceOptions& options) override;
 
     TFuture<TDisableChunkLocationsResult> DisableChunkLocations(
-        const TString& nodeAddress,
+        const std::string& nodeAddress,
         const std::vector<TGuid>& locationUuids,
         const TDisableChunkLocationsOptions& options) override;
 
     TFuture<TDestroyChunkLocationsResult> DestroyChunkLocations(
-        const TString& nodeAddress,
+        const std::string& nodeAddress,
         bool recoverUnlinkedDisks,
         const std::vector<TGuid>& locationUuids,
         const TDestroyChunkLocationsOptions& options) override;
 
     TFuture<TResurrectChunkLocationsResult> ResurrectChunkLocations(
-        const TString& nodeAddress,
+        const std::string& nodeAddress,
         const std::vector<TGuid>& locationUuids,
         const TResurrectChunkLocationsOptions& options) override;
 
     TFuture<TRequestRestartResult> RequestRestart(
-        const TString& nodeAddress,
+        const std::string& nodeAddress,
         const TRequestRestartOptions& options) override;
 
     // Query tracker
@@ -574,7 +579,7 @@ private:
     NRpc::IChannelPtr CreateSequoiaAwareRetryingChannel(NRpc::IChannelPtr channel, bool retryProxyBanned) const;
     // Returns an RPC channel to use for API calls to the particular address (e.g.: AttachTransaction).
     // The channel is non-retrying, so should be wrapped into retrying channel on demand.
-    NRpc::IChannelPtr CreateNonRetryingChannelByAddress(const TString& address) const;
+    NRpc::IChannelPtr CreateNonRetryingChannelByAddress(const std::string& address) const;
 
     TConnectionPtr GetRpcProxyConnection() override;
     TClientPtr GetRpcProxyClient() override;

@@ -1,12 +1,12 @@
 # INSERT INTO
 
-{% if oss == "true" and backend_name == "YDB" %}
+{% if oss == true and backend_name == "YDB" %}
 
 {% note warning %}
 
 {% include [OLAP_not_allow_text](../../../../_includes/not_allow_for_olap_text.md) %}
 
-{% include [OLAP_not_allow_text](../../../../_includes/ways_add_data_to_olap.md) %}
+{% include [ways_add_data_to_olap](../../../../_includes/ways_add_data_to_olap.md) %}
 
 {% endnote %}
 

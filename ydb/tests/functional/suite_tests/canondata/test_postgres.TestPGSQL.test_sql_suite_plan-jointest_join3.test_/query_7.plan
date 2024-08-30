@@ -53,7 +53,7 @@
                                                 "Predicate": "Not Exist(item.qa.id) Or item.qa.id > 0"
                                             },
                                             {
-                                                "Condition": "a_id = id",
+                                                "Condition": "qb.a_id = qa.id",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 15
@@ -222,7 +222,10 @@
                 ],
                 "Subplan Name": "CTE precompute_0_0"
             }
-        ]
+        ],
+        "Stats": {
+            "ResourcePoolId": "default"
+        }
     },
     "meta": {
         "type": "query",

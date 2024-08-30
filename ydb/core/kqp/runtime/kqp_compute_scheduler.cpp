@@ -1,5 +1,13 @@
 #include "kqp_compute_scheduler.h"
 
+#include <ydb/core/protos/table_service_config.pb.h>
+
+#include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/kqp/common/events/workload_service.h>
+
+#include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/cms/console/console.h>
+
 namespace {
     static constexpr ui64 FromDuration(TDuration d) {
         return d.MicroSeconds();
@@ -134,6 +142,8 @@ public:
     static constexpr double BatchCalcDecay = 0;
     TDuration BatchTime = AvgBatch;
 
+    TDuration OverflowToleranceTimeout = TDuration::Seconds(1);
+
     static constexpr TDuration ActivationPenalty = TDuration::MicroSeconds(10);
 
     size_t Wakeups = 0;
@@ -197,53 +207,23 @@ struct TComputeScheduler::TImpl {
     THashMap<TString, size_t> PoolId;
     std::vector<std::unique_ptr<TSchedulerEntity::TGroupRecord>> Records;
 
-    struct TRule {
-        size_t Parent;
-        double Weight = 0;
-
-        double Share;
-        TMaybe<size_t> RecordId = {};
-        double SubRulesSum = 0;
-        bool Empty = true;
-    };
-    std::vector<TRule> Rules;
-
     double SumCores;
 
     TIntrusivePtr<TKqpCounters> Counters;
     TDuration SmoothPeriod = TDuration::MilliSeconds(100);
+    TDuration ForgetInteval = TDuration::Seconds(2);
 
     TDuration MaxDelay = TDuration::Seconds(10);
 
-    void AssignWeights() {
-        ssize_t rootRule = static_cast<ssize_t>(Rules.size()) - 1;
-        for (size_t i = 0; i < Rules.size(); ++i) {
-            Rules[i].SubRulesSum = 0;
-            Rules[i].Empty = true;
-        }
-        for (ssize_t i = 0; i < static_cast<ssize_t>(Rules.size()); ++i) {
-            if (Rules[i].RecordId) {
-                Rules[i].Empty = Records[*Rules[i].RecordId]->MutableStats.Next()->EntitiesWeight < MinEntitiesWeight;
-                Rules[i].SubRulesSum = Rules[i].Share;
-            }
-            if (i != rootRule && !Rules[i].Empty) {
-                Rules[Rules[i].Parent].Empty = false;
-                Rules[Rules[i].Parent].SubRulesSum += Rules[i].SubRulesSum;
-            }
-        }
-        for (ssize_t i = static_cast<ssize_t>(Rules.size()) - 1; i >= 0; --i) {
-            if (i == static_cast<ssize_t>(Rules.size()) - 1) {
-                Rules[i].Weight = SumCores * Rules[i].Share;
-            } else if (!Rules[i].Empty) {
-                Rules[i].Weight = Rules[Rules[i].Parent].Weight * Rules[i].Share / Rules[Rules[i].Parent].SubRulesSum;
-            } else {
-                Rules[i].Weight = 0;
-            }
-            if (Rules[i].RecordId) {
-                Records[*Rules[i].RecordId]->MutableStats.Next()->Weight = Rules[i].Weight;
-            }
-        }
-     }
+    void AssignWeights() { }
+
+    void CreateGroup(TString groupName, double maxShare, NMonotonic::TMonotonic now) {
+        PoolId[groupName] = Records.size();
+        auto group = std::make_unique<TSchedulerEntity::TGroupRecord>();
+        group->MutableStats.Next()->LastNowRecalc = now;
+        group->MutableStats.Next()->Weight = maxShare;
+        Records.push_back(std::move(group));
+    }
 };
 
 TComputeScheduler::TComputeScheduler() {
@@ -251,68 +231,6 @@ TComputeScheduler::TComputeScheduler() {
 }
 
 TComputeScheduler::~TComputeScheduler() = default;
-
-void TComputeScheduler::SetPriorities(TDistributionRule rule, double cores, TMonotonic now) {
-    THashSet<TString> seenNames;
-    std::function<void(TDistributionRule&)> exploreNames = [&](TDistributionRule& rule) {
-        if (rule.SubRules.empty()) {
-            seenNames.insert(rule.Name);
-        } else {
-            for (auto& subRule : rule.SubRules) {
-                exploreNames(subRule);
-            }
-        }
-    };
-    exploreNames(rule);
-
-    for (auto& k : seenNames) {
-        auto ptr = Impl->PoolId.FindPtr(k);
-        if (!ptr) {
-            Impl->PoolId[k] = Impl->Records.size();
-            auto group = std::make_unique<TSchedulerEntity::TGroupRecord>();
-            group->MutableStats.Next()->LastNowRecalc = now;
-            Impl->Records.push_back(std::move(group));
-        }
-    }
-    for (auto& [k, v] : Impl->PoolId) {
-        if (!seenNames.contains(k)) {
-            auto& group = Impl->Records[Impl->PoolId[k]]->MutableStats;
-            group.Next()->Weight = 0;
-            group.Next()->Disabled = true;
-            group.Publish();
-        }
-    }
-    Impl->SumCores = cores;
-
-    TVector<TImpl::TRule> rules;
-    std::function<size_t(TDistributionRule&)> makeRules = [&](TDistributionRule& rule) {
-        size_t result;
-        if (rule.SubRules.empty()) {
-            result = rules.size();
-            rules.push_back(TImpl::TRule{.Share = rule.Share, .RecordId=Impl->PoolId[rule.Name]});
-        } else {
-            TVector<size_t> toAssign;
-            for (auto& subRule : rule.SubRules) {
-                toAssign.push_back(makeRules(subRule));
-            }
-            size_t result = rules.size();
-            rules.push_back(TImpl::TRule{.Share = rule.Share});
-            for (auto i : toAssign) {
-                rules[i].Parent = result;
-            }
-            return result;
-        }
-        return result;
-    };
-    makeRules(rule);
-    Impl->Rules.swap(rules);
-
-    Impl->AssignWeights();
-    for (auto& record : Impl->Records) {
-        record->MutableStats.Publish();
-    }
-}
-
 
 TSchedulerEntityHandle TComputeScheduler::Enroll(TString groupName, double weight, TMonotonic now) {
     Y_ENSURE(Impl->PoolId.contains(groupName), "unknown scheduler group");
@@ -361,10 +279,13 @@ void TComputeScheduler::AdvanceTime(TMonotonic now) {
             }
             double delta = 0;
 
-            v.Next()->TrackedBefore = Impl->Records[i]->TrackedMicroSeconds.load();
+            auto tracked = Impl->Records[i]->TrackedMicroSeconds.load();
             v.Next()->MaxLimitDeviation = Impl->SmoothPeriod.MicroSeconds() * v.Next()->Weight;
             v.Next()->LastNowRecalc = now;
-            v.Next()->TrackedBefore = Min<ssize_t>(group.get()->Limit(now) - group.get()->MaxLimitDeviation, v.Next()->TrackedBefore);
+            v.Next()->TrackedBefore = 
+                Max<ssize_t>(
+                    tracked - FromDuration(Impl->ForgetInteval) * group.get()->Weight, 
+                    Min<ssize_t>(group.get()->Limit(now) - group.get()->MaxLimitDeviation, tracked));
 
             if (!group.get()->Disabled && group.get()->EntitiesWeight > MinEntitiesWeight) {
                 delta = FromDuration(now - group.get()->LastNowRecalc) * group.get()->Weight / group.get()->EntitiesWeight;
@@ -425,9 +346,35 @@ void TComputeScheduler::SetMaxDeviation(TDuration period) {
     Impl->SmoothPeriod = period;
 }
 
+void TComputeScheduler::SetForgetInterval(TDuration period) {
+    Impl->ForgetInteval = period;
+}
+
 bool TComputeScheduler::Disabled(TString group) {
     auto ptr = Impl->PoolId.FindPtr(group);
     return !ptr || Impl->Records[*ptr]->MutableStats.Current().get()->Disabled;
+}
+
+
+bool TComputeScheduler::Disable(TString group, TMonotonic now) {
+    auto ptr = Impl->PoolId.FindPtr(group);
+    if (Impl->Records[*ptr]->MutableStats.Current().get()->Weight > MinEntitiesWeight) {
+        return false;
+    }
+    Impl->Records[*ptr]->MutableStats.Next()->Disabled = true;
+    AdvanceTime(now);
+    return true;
+}
+
+void TComputeScheduler::UpdateMaxShare(TString group, double share, TMonotonic now) {
+    auto ptr = Impl->PoolId.FindPtr(group);
+    if (!ptr) {
+        Impl->CreateGroup(group, share, now);
+    } else {
+        auto& record = Impl->Records[*ptr];
+        record->MutableStats.Next()->Weight = share;
+    }
+    AdvanceTime(now);
 }
 
 
@@ -436,6 +383,109 @@ bool TComputeScheduler::Disabled(TString group) {
         ->GetKqpCounters()
         ->GetSubgroup("NodeScheduler/Group", group)
         ->GetCounter("Usage", true);
+}
+
+
+struct TEvPingPool : public TEventLocal<TEvPingPool, TKqpComputeSchedulerEvents::EvPingPool> {
+    TString Database;
+    TString Pool;
+
+    TEvPingPool(TString database, TString pool)
+        : Database(database)
+        , Pool(pool)
+    {
+    }
+};
+
+class TSchedulerActor : public TActorBootstrapped<TSchedulerActor> {
+public:
+    TSchedulerActor(TSchedulerActorOptions options)
+        : Opts(options)
+    {
+        if (!Opts.Scheduler) {
+            Opts.Scheduler = std::make_shared<TComputeScheduler>();
+        }
+        Opts.Scheduler->SetForgetInterval(Opts.ForgetOverflowTimeout);
+        Opts.Scheduler->ReportCounters(Opts.Counters);
+    }
+
+    void Bootstrap() {
+        Schedule(Opts.AdvanceTimeInterval, new TEvents::TEvWakeup());
+
+        ui32 tableServiceConfigKind = (ui32) NKikimrConsole::TConfigItem::TableServiceConfigItem;
+        Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
+             new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({tableServiceConfigKind}),
+             IEventHandle::FlagTrackDelivery);
+
+        Become(&TSchedulerActor::State);
+    }
+
+    STATEFN(State) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
+            hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
+
+            hFunc(NWorkload::TEvUpdatePoolInfo, Handle);
+
+            hFunc(TEvSchedulerDeregister, Handle);
+            hFunc(TEvSchedulerNewPool, Handle);
+            hFunc(TEvPingPool, Handle);
+            hFunc(TEvents::TEvWakeup, Handle);
+            default: {
+                Y_ABORT("Unexpected event 0x%x for TKqpSchedulerService", ev->GetTypeRewrite());
+            }
+        }
+    }
+
+    void Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_NODE, "Subscribed for config changes");
+    }
+
+    void Handle(TEvSchedulerDeregister::TPtr& ev) {
+        if (ev->Get()->SchedulerEntity) {
+            Opts.Scheduler->Deregister(*ev->Get()->SchedulerEntity, TlsActivationContext->Monotonic());
+        }
+    }
+
+    void Handle(TEvSchedulerNewPool::TPtr& ev) {
+        Send(MakeKqpWorkloadServiceId(SelfId().NodeId()), new NWorkload::TEvSubscribeOnPoolChanges(ev->Get()->Database, ev->Get()->Pool));
+        Opts.Scheduler->UpdateMaxShare(ev->Get()->Pool, ev->Get()->MaxShare, TlsActivationContext->Monotonic());
+    }
+
+    void Handle(TEvPingPool::TPtr& ev) {
+        Send(MakeKqpWorkloadServiceId(SelfId().NodeId()), new NWorkload::TEvSubscribeOnPoolChanges(ev->Get()->Database, ev->Get()->Pool));
+    }
+
+    void Handle(NWorkload::TEvUpdatePoolInfo::TPtr& ev) {
+        if (ev->Get()->Config.has_value()) {
+            Opts.Scheduler->UpdateMaxShare(ev->Get()->PoolId, ev->Get()->Config->TotalCpuLimitPercentPerNode / 100.0, TlsActivationContext->Monotonic());
+        } else {
+            if (!Opts.Scheduler->Disable(ev->Get()->PoolId, TlsActivationContext->Monotonic())) {
+                Schedule(Opts.ActivePoolPollingTimeout.ToDeadLine(), new TEvPingPool(ev->Get()->Database, ev->Get()->PoolId));
+            }
+        }
+    }
+
+    void Handle(TEvents::TEvWakeup::TPtr&) {
+        Opts.Scheduler->AdvanceTime(TlsActivationContext->Monotonic());
+        Schedule(Opts.AdvanceTimeInterval, new TEvents::TEvWakeup());
+    }
+
+    void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
+        auto &event = ev->Get()->Record;
+        auto& config = event.GetConfig().GetTableServiceConfig().GetComputeSchedulerSettings();
+
+        Opts.AdvanceTimeInterval = TDuration::MicroSeconds(config.GetAdvanceTimeIntervalUsec());
+        Opts.ActivePoolPollingTimeout = TDuration::Seconds(config.GetActivePoolPollingSec());
+        Opts.Scheduler->SetForgetInterval(TDuration::MicroSeconds(config.GetForgetOverflowTimeoutUsec()));
+    }
+
+private:
+    TSchedulerActorOptions Opts;
+};
+
+IActor* CreateSchedulerActor(TSchedulerActorOptions opts) {
+    return new TSchedulerActor(opts);
 }
 
 } // namespace NKqp

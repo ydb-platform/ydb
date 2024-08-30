@@ -48,6 +48,14 @@ struct TJsonHandlers {
         }
         return it->second.get();
     }
+
+    int GetCapabilityVersion(const TString& name) const {
+        auto it = Capabilities.find(name);
+        if (it == Capabilities.end()) {
+            return 0;
+        }
+        return it->second;
+    }
 };
 
 class TSimpleYamlBuilder {

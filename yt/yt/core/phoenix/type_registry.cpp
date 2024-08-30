@@ -80,6 +80,11 @@ public:
         if (!Sealed_.exchange(true)) {
             YT_LOG_INFO("Type registry is sealed");
         }
+        return GetUniverseDescriptorUnchecked();
+    }
+
+    const TUniverseDescriptor& GetUniverseDescriptorUnchecked()
+    {
         return UniverseDescriptor_;
     }
 
@@ -88,13 +93,23 @@ private:
     std::atomic<bool> Sealed_;
 };
 
+TTypeRegistry* GetTypeRegistry()
+{
+    return LeakySingleton<NDetail::TTypeRegistry>();
+}
+
+const TTypeDescriptor& GetTypeDescriptorByTagUnchecked(TTypeTag tag)
+{
+    return GetTypeRegistry()->GetUniverseDescriptorUnchecked().GetTypeDescriptorByTag(tag);
+}
+
 } // namespace NDetail
 
 ////////////////////////////////////////////////////////////////////////////////
 
 ITypeRegistry* ITypeRegistry::Get()
 {
-    return LeakySingleton<NDetail::TTypeRegistry>();
+    return NDetail::GetTypeRegistry();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

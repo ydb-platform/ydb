@@ -479,7 +479,7 @@ public:
                 range.Save(&out);
 
                 paths.clear();
-                ReadPathsList(srcDesc, {}, serialized, paths);
+                ReadPathsList({}, serialized, paths);
 
                 const NDq::TS3ReadActorFactoryConfig& readActorConfig = State_->Configuration->S3ReadActorFactoryConfig;
                 ui64 fileSizeLimit = readActorConfig.FileSizeLimit;
@@ -546,7 +546,8 @@ public:
                         TS3Credentials(State_->CredentialsFactory, State_->Configuration->Tokens.at(cluster)),
                         pathPattern,
                         pathPatternVariant,
-                        NS3Lister::ES3PatternType::Wildcard
+                        NS3Lister::ES3PatternType::Wildcard,
+                        State_->Configuration->AllowLocalFiles
                     ),
                     NActors::TMailboxType::HTSwap,
                     State_->ExecutorPoolId

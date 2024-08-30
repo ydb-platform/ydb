@@ -59,7 +59,7 @@
                                                 "Predicate": "item.b.thousand == item.a.q1 And item.a.q1 == item.b.hundred"
                                             },
                                             {
-                                                "Condition": "q1 = unique2",
+                                                "Condition": "a.q1 = b.unique2",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 8
@@ -168,7 +168,10 @@
                     }
                 ]
             }
-        ]
+        ],
+        "Stats": {
+            "ResourcePoolId": "default"
+        }
     },
     "meta": {
         "type": "query",

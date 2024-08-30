@@ -123,7 +123,7 @@ NJson::TJsonValue TResourcePoolClassifierConfig::GetDebugJson() const {
 }
 
 bool TResourcePoolClassifierConfig::operator==(const TResourcePoolClassifierConfig& other) const {
-    return std::tie(Database, Name, Rank, ConfigJson) != std::tie(other.Database, other.Name, other.Rank, other.ConfigJson);
+    return std::tie(Database, Name, Rank, ConfigJson) == std::tie(other.Database, other.Name, other.Rank, other.ConfigJson);
 }
 
 NMetadata::IClassBehaviour::TPtr TResourcePoolClassifierConfig::GetBehaviour() {

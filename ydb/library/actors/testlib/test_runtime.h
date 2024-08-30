@@ -701,7 +701,7 @@ namespace NActors {
             std::shared_ptr<void> AppData0;
             THolder<TActorSystem> ActorSystem;
             THolder<IExecutorPool> SchedulerPool;
-            TVector<IExecutorPool*> ExecutorPools;
+            THashMap<ui32, IExecutorPool*> ExecutorPools;
             THolder<TExecutorThread> ExecutorThread;
             std::unique_ptr<IHarmonizer> Harmonizer;
         };

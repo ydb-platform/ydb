@@ -50,6 +50,7 @@ std::atomic<bool> IPv6Enabled_ = false;
 
 const char* ReadLocalHostName() noexcept
 {
+    NYT::NOrigin::EnableOriginOverrides();
     // Writer-side imposes AcqRel ordering, so all preceding writes must be visible.
     char* ptr = LocalHostNamePtr.load(std::memory_order::relaxed);
     return ptr ? ptr : LocalHostNameData;
@@ -85,6 +86,8 @@ void GuardedWriteString(std::atomic<char*>& storage, char* initial, TStringBuf s
 
 void WriteLocalHostName(TStringBuf hostName) noexcept
 {
+    NYT::NOrigin::EnableOriginOverrides();
+
     static NThreading::TForkAwareSpinLock Lock;
     auto guard = Guard(Lock);
 

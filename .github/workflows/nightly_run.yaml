@@ -5,18 +5,6 @@ on:
   workflow_dispatch:
 
 jobs:
-  cmake_x86_64:
-    name: Build/test x86_64
-    strategy:
-      matrix: ${{ fromJSON(vars.NIGHTLY_CMAKE_X64_MATRIX) }}
-      fail-fast: false
-
-    uses: ./.github/workflows/build_and_test_provisioned.yml
-    with:
-      runner_label: auto-provisioned
-      sanitizer: ${{matrix.sanitizer}}
-    secrets: inherit
-
   ya_x86_64:
     name: Build/test x86_64 using YA
     uses: ./.github/workflows/build_and_test_ya_provisioned.yml

@@ -41,7 +41,7 @@
                                                 "Name": "Limit"
                                             },
                                             {
-                                                "Condition": "zt3.f3 = f1",
+                                                "Condition": "zt3.f3 = zt1.f1",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 27
@@ -178,7 +178,7 @@
                                         "Node Type": "LeftJoin (MapJoin)",
                                         "Operators": [
                                             {
-                                                "Condition": "f2 = f3",
+                                                "Condition": "zt2.f2 = zt3.f3",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 13
@@ -333,7 +333,10 @@
                 ],
                 "Subplan Name": "CTE precompute_0_0"
             }
-        ]
+        ],
+        "Stats": {
+            "ResourcePoolId": "default"
+        }
     },
     "meta": {
         "type": "query",

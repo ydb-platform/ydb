@@ -5,6 +5,7 @@ from typing import Optional, Union, Dict, Any, Sequence, Iterable, Generator, Bi
 
 from clickhouse_connect.driver.client import Client
 from clickhouse_connect.driver.common import StreamContext
+from clickhouse_connect.driver.httpclient import HttpClient
 from clickhouse_connect.driver.external import ExternalData
 from clickhouse_connect.driver.query import QueryContext, QueryResult
 from clickhouse_connect.driver.summary import QuerySummary
@@ -20,7 +21,10 @@ class AsyncClient:
     """
 
     def __init__(self, *, client: Client):
+        if isinstance(client, HttpClient):
+            client.headers['User-Agent'] = client.headers['User-Agent'].replace('mode:sync;', 'mode:async;')
         self.client = client
+
 
     def set_client_setting(self, key, value):
         """

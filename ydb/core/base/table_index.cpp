@@ -105,9 +105,8 @@ bool IsCompatibleIndex(NKikimrSchemeOp::EIndexType indexType, const TTableColumn
             explain = "should be at least single index key column";
             return false;
         }
-        if (index.KeyColumns.size() <= table.Keys.size() &&
-            std::equal(index.KeyColumns.begin(), index.KeyColumns.end(), table.Keys.begin())) {
-            explain = "index keys are prefix of table keys";
+        if (index.KeyColumns == table.Keys) {
+            explain = "index keys shouldn't be table keys";
             return false;
         }
     } else {

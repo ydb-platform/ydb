@@ -227,7 +227,7 @@ protected:
                             }
                         }
                     } else {
-                        mapOut.RowSpec->CopySortness(TYqlRowSpecInfo(map.Output().Item(0).RowSpec()));
+                        mapOut.RowSpec->CopySortness(ctx, TYqlRowSpecInfo(map.Output().Item(0).RowSpec()));
                     }
                     mapOut.SetUnique(path.Ref().GetConstraint<TDistinctConstraintNode>(), map.Mapper().Pos(), ctx);
 
@@ -266,7 +266,7 @@ protected:
                     }
 
                     TYtOutTableInfo mergeOut(ctx.MakeType<TStructExprType>(structItems), prevRowSpec.GetNativeYtTypeFlags());
-                    mergeOut.RowSpec->CopySortness(prevRowSpec, TYqlRowSpecInfo::ECopySort::WithDesc);
+                    mergeOut.RowSpec->CopySortness(ctx, prevRowSpec, TYqlRowSpecInfo::ECopySort::WithDesc);
                     if (auto nativeType = prevRowSpec.GetNativeYtType()) {
                         mergeOut.RowSpec->CopyTypeOrders(*nativeType);
                     }

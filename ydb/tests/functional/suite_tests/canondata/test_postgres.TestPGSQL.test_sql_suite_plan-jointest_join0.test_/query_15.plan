@@ -41,7 +41,7 @@
                                                 "Name": "Limit"
                                             },
                                             {
-                                                "Condition": "f1 = unique2",
+                                                "Condition": "a.f1 = b.unique2",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 8
@@ -148,7 +148,10 @@
                     }
                 ]
             }
-        ]
+        ],
+        "Stats": {
+            "ResourcePoolId": "default"
+        }
     },
     "meta": {
         "type": "query",

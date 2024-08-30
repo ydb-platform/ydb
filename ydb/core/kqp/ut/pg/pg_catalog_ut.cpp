@@ -497,6 +497,22 @@ Y_UNIT_TEST_SUITE(PgCatalog) {
                 ["pg_proc"]
             ])", FormatResultSetYson(result.GetResultSet(0)));
         }
+        { //https://github.com/ydb-platform/ydb/issues/7287
+            auto result = db.ExecuteQuery(R"(
+                drop table table1;
+            )", NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            result = db.ExecuteQuery(R"(
+                create table table1(id serial primary key);
+            )", NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            result = db.ExecuteQuery(R"(
+                select tablename from pg_tables where hasindexes='pg_proc';
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT(result.GetIssues().ToString().Contains("invalid input syntax for type boolean: \"pg_proc\""));
+        }
     }
 }
 

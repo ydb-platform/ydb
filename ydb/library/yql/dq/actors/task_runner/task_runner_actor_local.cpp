@@ -431,6 +431,12 @@ private:
             }   
         }
 
+        if (settings.GetEnableSpilling()) {
+            auto wakeUpCallback = ev->Get()->ExecCtx->GetWakeupCallback();
+            auto errorCallback = ev->Get()->ExecCtx->GetErrorCallback();
+            TaskRunner->SetSpillerFactory(std::make_shared<TDqSpillerFactory>(TxId, NActors::TActivationContext::ActorSystem(), wakeUpCallback, errorCallback));
+        }
+
         TaskRunner->Prepare(settings, ev->Get()->MemoryLimits, *ev->Get()->ExecCtx);
 
         THashMap<ui64, std::pair<NUdf::TUnboxedValue, IDqAsyncInputBuffer::TPtr>> inputTransforms;
@@ -438,12 +444,6 @@ private:
             if (auto t = TaskRunner->GetInputTransform(i)) {
                 inputTransforms[i] = *t;
             }
-        }
-
-        if (settings.GetEnableSpilling()) {
-            auto wakeUpCallback = ev->Get()->ExecCtx->GetWakeupCallback();
-            auto errorCallback = ev->Get()->ExecCtx->GetErrorCallback();
-            TaskRunner->SetSpillerFactory(std::make_shared<TDqSpillerFactory>(TxId, NActors::TActivationContext::ActorSystem(), wakeUpCallback, errorCallback));
         }
 
         auto event = MakeHolder<TEvTaskRunnerCreateFinished>(

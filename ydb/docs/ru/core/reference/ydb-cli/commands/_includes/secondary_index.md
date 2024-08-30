@@ -8,7 +8,7 @@
 
 {% include [conn_options_ref.md](conn_options_ref.md) %}
 
-Также добавить или удалить вторичный индекс можно с помощью директив [ADD INDEX и DROP INDEX](../../../../yql/reference/syntax/alter_table.md#secondary-index) операции YQL ALTER TABLE.
+Также добавить или удалить вторичный индекс можно с помощью директив [ADD INDEX и DROP INDEX](../../../../yql/reference/syntax/alter_table/secondary_index.md) операции YQL ALTER TABLE.
 
 О назначении и применении вторичных индексов при разработке приложений можно прочитать в статье [Вторичные индексы](../../../../dev/secondary-indexes.md).
 

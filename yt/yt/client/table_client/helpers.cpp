@@ -332,6 +332,7 @@ TVersionedRow YsonToVersionedRow(
                 builder.AddValue(MakeVersionedSentinelValue(EValueType::Null, timestamp, id, flags));
                 break;
             default:
+                value->MutableAttributes()->Clear();
                 builder.AddValue(MakeVersionedAnyValue(ConvertToYsonString(value).AsStringBuf(), timestamp, id, flags));
                 break;
         }

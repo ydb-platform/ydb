@@ -179,8 +179,8 @@ protected:
     void StartRequest() override {
         LOG_D("Start pool fetching");
         auto event = NTableCreator::BuildSchemeCacheNavigateRequest(
-            {{".resource_pools", PoolId}},
-            Database,
+            {{".metadata/workload_manager/pools", PoolId}},
+            Database ? Database : AppData()->TenantName,
             UserToken
         );
         event->ResultSet[0].Access |= NACLib::SelectRow;
@@ -221,7 +221,7 @@ private:
         }
 
         Issues.AddIssues(std::move(issues));
-        Send(ReplyActorId, new TEvPrivate::TEvFetchPoolResponse(status, PoolConfig, PathIdFromPathId(PathId), std::move(Issues)));
+        Send(ReplyActorId, new TEvPrivate::TEvFetchPoolResponse(status, Database, PoolId, PoolConfig, PathIdFromPathId(PathId), std::move(Issues)));
         PassAway();
     }
 
@@ -326,7 +326,7 @@ protected:
         auto event = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
 
         auto& schemeTx = *event->Record.MutableTransaction()->MutableModifyScheme();
-        schemeTx.SetWorkingDir(JoinPath({Database, ".resource_pools"}));
+        schemeTx.SetWorkingDir(JoinPath({Database ? Database : AppData()->TenantName, ".metadata/workload_manager/pools"}));
         schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateResourcePool);
         schemeTx.SetInternal(true);
 
@@ -483,7 +483,13 @@ public:
                 }
                 return;
             case EStatus::Ok:
-                Serverless = result.DomainInfo && result.DomainInfo->IsServerless();
+                if (!IsSubDomainPath(result)) {
+                    Reply(Ydb::StatusIds::UNSUPPORTED, TStringBuilder() << "Invalid database path " << Database << ", please check the correctness of the path");
+                    return;
+                }
+                if (result.DomainInfo) {
+                    Serverless = result.DomainInfo->IsServerless();
+                }
                 Reply(Ydb::StatusIds::SUCCESS);
                 return;
         }
@@ -500,7 +506,11 @@ public:
 protected:
     void StartRequest() override {
         LOG_D("Start database fetching");
-        auto event = NTableCreator::BuildSchemeCacheNavigateRequest({{}}, Database, UserToken);
+        auto event = NTableCreator::BuildSchemeCacheNavigateRequest(
+            {{}},
+            Database ? Database : AppData()->TenantName,
+            UserToken
+        );
         event->ResultSet[0].Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
         event->ResultSet[0].Access |= CheckAccess;
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(event.Release()), IEventHandle::FlagTrackDelivery);
@@ -529,6 +539,18 @@ private:
         Issues.AddIssues(std::move(issues));
         Send(ReplyActorId, new TEvPrivate::TEvFetchDatabaseResponse(status, Database, Serverless, std::move(Issues)));
         PassAway();
+    }
+
+    static bool IsSubDomainPath(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry) {
+        switch (entry.Kind) {
+            case NSchemeCache::TSchemeCacheNavigate::EKind::KindSubdomain:
+            case NSchemeCache::TSchemeCacheNavigate::EKind::KindExtSubdomain:
+                return true;
+            case NSchemeCache::TSchemeCacheNavigate::EKind::KindPath:
+                return entry.Self->Info.GetPathId() == NSchemeShard::RootPathId;
+            default:
+                return false;
+        }
     }
 
 private:

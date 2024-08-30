@@ -71,6 +71,7 @@ class Client(ABC):
             if apply_server_timezone is None:
                 apply_server_timezone = dst_safe
             self.apply_server_timezone = apply_server_timezone == 'always' or coerce_bool(apply_server_timezone)
+            self.server_tz = server_tz
         except UnknownTimeZoneError:
             logger.warning('Warning, server is using an unrecognized timezone %s, will use UTC default', server_tz)
 

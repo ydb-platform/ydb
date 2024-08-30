@@ -53,6 +53,10 @@ void BuildInitialTaskResources(const TKqpTasksGraph& graph, ui64 taskId, TTaskRe
     ret.HeavyProgram = opts.GetHasMapJoin();
 }
 
+bool LimitCPU(TIntrusivePtr<TUserRequestContext> ctx) {
+    return ctx->PoolId && ctx->PoolConfig.has_value() && ctx->PoolConfig->TotalCpuLimitPercentPerNode > 0;
+}
+
 }
 
 bool TKqpPlanner::UseMockEmptyPlanner = false;
@@ -60,10 +64,11 @@ bool TKqpPlanner::UseMockEmptyPlanner = false;
 // Task can allocate extra memory during execution.
 // So, we estimate total memory amount required for task as apriori task size multiplied by this constant.
 constexpr ui32 MEMORY_ESTIMATION_OVERFLOW = 2;
-constexpr ui32 MAX_NON_PARALLEL_TASKS_EXECUTION_LIMIT = 8;
 
 TKqpPlanner::TKqpPlanner(TKqpPlanner::TArgs&& args)
     : TxId(args.TxId)
+    , LockTxId(args.LockTxId)
+    , LockNodeId(args.LockNodeId)
     , ExecuterId(args.Executer)
     , Snapshot(args.Snapshot)
     , Database(args.Database)
@@ -89,7 +94,6 @@ TKqpPlanner::TKqpPlanner(TKqpPlanner::TArgs&& args)
     , ResourceManager_(args.ResourceManager_)
     , CaFactory_(args.CaFactory_)
 {
-
     if (GUCSettings) {
         SerializedGUCSettings = GUCSettings->SerializeToString();
     }
@@ -100,6 +104,10 @@ TKqpPlanner::TKqpPlanner(TKqpPlanner::TArgs&& args)
             Database = TStringBuilder() << '/' << domain->Name;
             LOG_E("Database not set, use " << Database);
         }
+    }
+
+    if (LimitCPU(UserRequestContext)) {
+        AllowSinglePartitionOpt = false;
     }
 }
 
@@ -177,6 +185,8 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
     auto result = std::make_unique<TEvKqpNode::TEvStartKqpTasksRequest>(TasksGraph.GetMeta().GetArenaIntrusivePtr());
     auto& request = result->Record;
     request.SetTxId(TxId);
+    request.SetLockTxId(LockTxId);
+    request.SetLockNodeId(LockNodeId);
     ActorIdToProto(ExecuterId, request.MutableExecuterActorId());
 
     if (Deadline) {
@@ -226,6 +236,7 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
     request.SetDatabase(Database);
     if (UserRequestContext->PoolConfig.has_value()) {
         request.SetMemoryPoolPercent(UserRequestContext->PoolConfig->QueryMemoryLimitPercentPerNode);
+        request.SetMaxCpuShare(UserRequestContext->PoolConfig->TotalCpuLimitPercentPerNode / 100.0);
     }
 
     return result;
@@ -263,9 +274,18 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
 
     auto localResources = ResourceManager_->GetLocalResources();
     Y_UNUSED(MEMORY_ESTIMATION_OVERFLOW);
+
+    auto placingOptions = ResourceManager_->GetPlacingOptions();
+
+    bool singleNodeExecutionMakeSence = (
+        ResourceEstimations.size() <= placingOptions.MaxNonParallelTasksExecutionLimit ||
+        // all readers are located on the one node.
+        TasksPerNode.size() == 1
+    );
+
     if (LocalRunMemoryEst * MEMORY_ESTIMATION_OVERFLOW <= localResources.Memory[NRm::EKqpMemoryPool::ScanQuery] &&
         ResourceEstimations.size() <= localResources.ExecutionUnits &&
-        ResourceEstimations.size() <= MAX_NON_PARALLEL_TASKS_EXECUTION_LIMIT)
+        singleNodeExecutionMakeSence)
     {
         ui64 selfNodeId = ExecuterId.NodeId();
         for(ui64 taskId: ComputeTasks) {
@@ -300,21 +320,23 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
         return std::make_unique<IEventHandle>(ExecuterId, ExecuterId, ev.Release());
     }
 
-    auto planner = (UseMockEmptyPlanner ? CreateKqpMockEmptyPlanner() : CreateKqpGreedyPlanner());  // KqpMockEmptyPlanner is a mock planner for tests
+    std::vector<ui64> deepestTasks;
+    ui64 maxLevel = 0;
+    for(auto& task: TasksGraph.GetTasks()) {
+        // const auto& task = TasksGraph.GetTask(taskId);
+        const auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
+        const NKqpProto::TKqpPhyStage& stage = stageInfo.Meta.GetStage(stageInfo.Id);
+        const ui64 stageLevel = stage.GetProgram().GetSettings().GetStageLevel();
 
-    auto ctx = TlsActivationContext->AsActorContext();
-    if (ctx.LoggerSettings() && ctx.LoggerSettings()->Satisfies(NActors::NLog::PRI_DEBUG, NKikimrServices::KQP_EXECUTER)) {
-        planner->SetLogFunc([TxId = TxId, &UserRequestContext = UserRequestContext](TStringBuf msg) { LOG_D(msg); });
+        if (stageLevel > maxLevel) {
+            maxLevel = stageLevel;
+            deepestTasks.clear();
+        }
+
+        if (stageLevel == maxLevel) {
+            deepestTasks.push_back(task.Id);
+        }
     }
-
-    THashMap<ui64, size_t> nodeIdtoIdx;
-    for (size_t idx = 0; idx < ResourcesSnapshot.size(); ++idx) {
-        nodeIdtoIdx[ResourcesSnapshot[idx].nodeid()] = idx;
-    }
-
-    LogMemoryStatistics([TxId = TxId, &UserRequestContext = UserRequestContext](TStringBuf msg) { LOG_D(msg); });
-
-    auto plan = planner->Plan(ResourcesSnapshot, ResourceEstimations);
 
     THashMap<ui64, ui64> alreadyAssigned;
     for(auto& [nodeId, tasks] : TasksPerNode) {
@@ -323,24 +345,75 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
         }
     }
 
-    if (!plan.empty()) {
-        for (auto& group : plan) {
-            for(ui64 taskId: group.TaskIds) {
-                auto [it, success] = alreadyAssigned.emplace(taskId, group.NodeId);
-                if (success) {
-                    TasksPerNode[group.NodeId].push_back(taskId);
-                }
+    if (deepestTasks.size() <= placingOptions.MaxNonParallelTopStageExecutionLimit) {
+        // looks like the merge / union all connection
+        for(ui64 taskId: deepestTasks) {
+            auto [it, success] = alreadyAssigned.emplace(taskId, ExecuterId.NodeId());
+            if (success) {
+                TasksPerNode[ExecuterId.NodeId()].push_back(taskId);
             }
         }
+    }
 
-        return nullptr;
-    }  else {
+    auto planner = (UseMockEmptyPlanner ? CreateKqpMockEmptyPlanner() : CreateKqpGreedyPlanner());  // KqpMockEmptyPlanner is a mock planner for tests
+
+    auto ctx = TlsActivationContext->AsActorContext();
+    if (ctx.LoggerSettings() && ctx.LoggerSettings()->Satisfies(NActors::NLog::PRI_DEBUG, NKikimrServices::KQP_EXECUTER)) {
+        planner->SetLogFunc([TxId = TxId, &UserRequestContext = UserRequestContext](TStringBuf msg) { LOG_D(msg); });
+    }
+
+    LogMemoryStatistics([TxId = TxId, &UserRequestContext = UserRequestContext](TStringBuf msg) { LOG_D(msg); });
+
+    ui64 selfNodeId = ExecuterId.NodeId();
+    TString selfNodeDC;
+
+    TVector<const NKikimrKqp::TKqpNodeResources*> allNodes;
+    TVector<const NKikimrKqp::TKqpNodeResources*> executerDcNodes;
+    allNodes.reserve(ResourcesSnapshot.size());
+
+    for(auto& snapNode: ResourcesSnapshot) {
+        const TString& dc = snapNode.GetKqpProxyNodeResources().GetDataCenterId();
+        if (snapNode.GetNodeId() == selfNodeId) {
+            selfNodeDC = dc;
+            break;
+        }
+    }
+
+    for(auto& snapNode: ResourcesSnapshot) {
+        allNodes.push_back(&snapNode);
+        if (selfNodeDC == snapNode.GetKqpProxyNodeResources().GetDataCenterId()) {
+            executerDcNodes.push_back(&snapNode);
+        }
+    }
+
+    TVector<IKqpPlannerStrategy::TResult> plan;
+
+    if (!executerDcNodes.empty() && placingOptions.PreferLocalDatacenterExecution) {
+        plan = planner->Plan(executerDcNodes, ResourceEstimations);
+    }
+
+    if (plan.empty()) {
+        plan = planner->Plan(allNodes, ResourceEstimations);
+    }
+
+    if (plan.empty()) {
         LogMemoryStatistics([TxId = TxId, &UserRequestContext = UserRequestContext](TStringBuf msg) { LOG_E(msg); });
 
         auto ev = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
             TStringBuilder() << "Not enough resources to execute query. " << "TraceId: " << UserRequestContext->TraceId);
         return std::make_unique<IEventHandle>(ExecuterId, ExecuterId, ev.Release());
     }
+
+    for (auto& group : plan) {
+        for(ui64 taskId: group.TaskIds) {
+            auto [it, success] = alreadyAssigned.emplace(taskId, group.NodeId);
+            if (success) {
+                TasksPerNode[group.NodeId].push_back(taskId);
+            }
+        }
+    }
+
+    return nullptr;
 }
 
 const IKqpGateway::TKqpSnapshot& TKqpPlanner::GetSnapshot() const {
@@ -367,6 +440,8 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
     auto startResult = CaFactory_->CreateKqpComputeActor({
         .ExecuterId = ExecuterId,
         .TxId = TxId,
+        .LockTxId = LockTxId,
+        .LockNodeId = LockNodeId,
         .Task = taskDesc,
         .TxInfo = TxInfo,
         .RuntimeSettings = settings,
@@ -389,12 +464,7 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
 
     TActorId* actorId = std::get_if<TActorId>(&startResult);
     Y_ABORT_UNLESS(actorId);
-    task.ComputeActorId = *actorId;
-
-    LOG_D("Executing task: " << taskId << " on compute actor: " << task.ComputeActorId);
-
-    auto result = PendingComputeActors.emplace(task.ComputeActorId, TProgressStat());
-    YQL_ENSURE(result.second);
+    AcknowledgeCA(taskId, *actorId, nullptr);
     return TString();
 }
 
@@ -479,8 +549,6 @@ std::unique_ptr<IEventHandle> TKqpPlanner::PlanExecution() {
                     if (!result.empty()) {
                         return MakeActorStartFailureError(ExecuterId, result);
                     }
-
-                    PendingComputeTasks.erase(taskId);
                 }
             }
         }
@@ -522,11 +590,93 @@ void TKqpPlanner::Unsubscribe() {
     }
 }
 
-THashMap<TActorId, TProgressStat>& TKqpPlanner::GetPendingComputeActors() {
+bool TKqpPlanner::AcknowledgeCA(ui64 taskId, TActorId computeActor, const NYql::NDqProto::TEvComputeActorState* state) {
+    auto& task = TasksGraph.GetTask(taskId);
+    if (!task.ComputeActorId) {
+        task.ComputeActorId = computeActor;
+        PendingComputeTasks.erase(taskId);
+        auto [it, success] = PendingComputeActors.try_emplace(computeActor);
+        YQL_ENSURE(success);
+        if (state && state->HasStats()) {
+            it->second.Set(state->GetStats());
+        }
+
+        return true;
+    }
+
+    YQL_ENSURE(task.ComputeActorId == computeActor);
+    auto it = PendingComputeActors.find(computeActor);
+    if (!task.Meta.Completed) {
+        YQL_ENSURE(it != PendingComputeActors.end());
+    }
+
+    if (it != PendingComputeActors.end() && state && state->HasStats()) {
+        it->second.Set(state->GetStats());
+    }
+
+    return false;
+}
+
+bool TKqpPlanner::CompletedCA(ui64 taskId, TActorId computeActor) {
+    auto& task = TasksGraph.GetTask(taskId);
+    if (task.Meta.Completed) {
+        YQL_ENSURE(!PendingComputeActors.contains(computeActor));
+        return false;
+    }
+
+    task.Meta.Completed = true;
+    auto it = PendingComputeActors.find(computeActor);
+    YQL_ENSURE(it != PendingComputeActors.end());
+    LastStats.emplace_back(std::move(it->second));
+    PendingComputeActors.erase(it);
+
+    LOG_I("Compute actor has finished execution: " << computeActor.ToString());
+
+    return true;
+}
+
+void TKqpPlanner::TaskNotStarted(ui64 taskId) {
+    // NOTE: should be invoked only while shutting down - when node is disconnected.
+
+    auto& task = TasksGraph.GetTask(taskId);
+
+    YQL_ENSURE(!task.ComputeActorId);
+    YQL_ENSURE(!task.Meta.Completed);
+
+    PendingComputeTasks.erase(taskId);
+}
+
+TProgressStat::TEntry TKqpPlanner::CalculateConsumptionUpdate() {
+    TProgressStat::TEntry consumption;
+
+    for (const auto& p : PendingComputeActors) {
+        const auto& t = p.second.GetLastUsage();
+        consumption += t;
+    }
+
+    for (const auto& p : LastStats) {
+        const auto& t = p.GetLastUsage();
+        consumption += t;
+    }
+
+    return consumption;
+}
+
+void TKqpPlanner::ShiftConsumption() {
+    for (auto& p : PendingComputeActors) {
+        p.second.Update();
+    }
+
+    for (auto& p : LastStats) {
+        p.Update();
+    }
+}
+
+const THashMap<TActorId, TProgressStat>& TKqpPlanner::GetPendingComputeActors() {
     return PendingComputeActors;
 }
 
-THashSet<ui64>& TKqpPlanner::GetPendingComputeTasks() {
+const THashSet<ui64>& TKqpPlanner::GetPendingComputeTasks() {
     return PendingComputeTasks;
 }
 

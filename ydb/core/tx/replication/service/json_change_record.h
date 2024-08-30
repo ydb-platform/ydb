@@ -41,7 +41,6 @@ public:
     TString GetSourceId() const;
 
     void Serialize(NKikimrTxDataShard::TEvApplyReplicationChanges_TChange& record, TSerializationContext& ctx) const;
-    void Serialize(NKikimrTxDataShard::TEvApplyReplicationChanges_TChange& record) const;
 
     TConstArrayRef<TCell> GetKey(TMemoryPool& pool) const;
     TConstArrayRef<TCell> GetKey() const;
@@ -84,19 +83,9 @@ namespace NKikimr {
 
 template <>
 struct TChangeRecordContainer<NReplication::NService::TChangeRecord>
-    : public TBaseChangeRecordContainer
+    : public TBaseChangeRecordContainer<NReplication::NService::TChangeRecord>
 {
-    TChangeRecordContainer() = default;
-
-    explicit TChangeRecordContainer(TVector<NReplication::NService::TChangeRecord::TPtr>&& records)
-        : Records(std::move(records))
-    {}
-
-    TVector<NReplication::NService::TChangeRecord::TPtr> Records;
-
-    TString Out() override {
-        return TStringBuilder() << "[" << JoinSeq(",", Records) << "]";
-    }
+    using TBaseChangeRecordContainer<NReplication::NService::TChangeRecord>::TBaseChangeRecordContainer;
 };
 
 template <>

@@ -41,7 +41,7 @@
                                                 "Name": "Limit"
                                             },
                                             {
-                                                "Condition": "join_key = foo2.f1",
+                                                "Condition": "foo1.join_key = foo3.foo2.f1",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 14
@@ -73,7 +73,7 @@
                                                                         "Node Type": "LeftJoin (MapJoin)",
                                                                         "Operators": [
                                                                             {
-                                                                                "Condition": "f1 = unique2",
+                                                                                "Condition": "foo2.f1 = ss2.unique2",
                                                                                 "Inputs": [
                                                                                     {
                                                                                         "ExternalPlanNodeId": 8
@@ -198,7 +198,10 @@
                     }
                 ]
             }
-        ]
+        ],
+        "Stats": {
+            "ResourcePoolId": "default"
+        }
     },
     "meta": {
         "type": "query",

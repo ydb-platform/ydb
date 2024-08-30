@@ -323,6 +323,7 @@ bool TDistributedTransaction::HaveParticipantsDecision() const
 
 bool TDistributedTransaction::HaveAllRecipientsReceive() const
 {
+    PQ_LOG_D("PredicateAcks: " << PredicateAcksCount << "/" << PredicateRecipients.size());
     return PredicateRecipients.size() == PredicateAcksCount;
 }
 
@@ -387,18 +388,6 @@ void TDistributedTransaction::AddCmdWriteConfigTx(NKikimrPQ::TTransaction& tx)
 {
     *tx.MutableTabletConfig() = TabletConfig;
     *tx.MutableBootstrapConfig() = BootstrapConfig;
-}
-
-void TDistributedTransaction::AddCmdDelete(NKikimrClient::TKeyValueRequest& request)
-{
-    TString key = GetKey();
-    auto range = request.AddCmdDeleteRange()->MutableRange();
-    range->SetFrom(key);
-    range->SetIncludeFrom(true);
-    range->SetTo(key);
-    range->SetIncludeTo(true);
-
-    PQ_LOG_D("add CmdDeleteRange for key " << key);
 }
 
 void TDistributedTransaction::SetDecision(NKikimrTx::TReadSetData::EDecision& var, NKikimrTx::TReadSetData::EDecision value)

@@ -39,13 +39,13 @@ TConclusion<bool> TColumnBlobsFetchingStep::DoExecuteInplace(
 }
 
 ui64 TColumnBlobsFetchingStep::DoPredictRawBytes(const std::shared_ptr<IDataSource>& source) const {
-    ui64 result = source->GetColumnRawBytes(Columns->GetColumnIds());
+    ui64 result = source->GetColumnRawBytes(Columns.GetColumnIds());
     if (source->GetContext()->GetReadMetadata()->Limit && source->GetExclusiveIntervalOnly()) {
         result = std::max<ui64>(result * 1.0 * source->GetContext()->GetReadMetadata()->Limit / source->GetRecordsCount(),
-            source->GetColumnBlobBytes(Columns->GetColumnIds()));
+            source->GetColumnBlobBytes(Columns.GetColumnIds()));
     }
     if (!result) {
-        return Columns->GetColumnIds().size() * source->GetRecordsCount() *
+        return Columns.GetColumnIds().size() * source->GetRecordsCount() *
                sizeof(ui32);   // null for all records for all columns in future will be
     } else {
         return result;
@@ -53,7 +53,7 @@ ui64 TColumnBlobsFetchingStep::DoPredictRawBytes(const std::shared_ptr<IDataSour
 }
 
 ui64 TColumnBlobsFetchingStep::GetProcessingDataSize(const std::shared_ptr<IDataSource>& source) const {
-    return source->GetColumnBlobBytes(Columns->GetColumnIds());
+    return source->GetColumnBlobBytes(Columns.GetColumnIds());
 }
 
 TConclusion<bool> TIndexBlobsFetchingStep::DoExecuteInplace(
@@ -222,18 +222,18 @@ TConclusion<bool> TAllocateMemoryStep::DoExecuteInplace(
     const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
 
     auto allocation = std::make_shared<TFetchingStepAllocation>(source, GetProcessingDataSize(source), step);
-    NGroupedMemoryManager::TScanMemoryLimiterOperator::SendToAllocation(
-        source->GetContext()->GetProcessMemoryControlId(), source->GetFirstIntervalId(), { allocation }, (ui32)StageIndex);
+    NGroupedMemoryManager::TScanMemoryLimiterOperator::SendToAllocation(source->GetContext()->GetProcessMemoryControlId(),
+        source->GetContext()->GetCommonContext()->GetScanId(), source->GetFirstIntervalId(), { allocation }, (ui32)StageIndex);
     return false;
 }
 
 ui64 TAllocateMemoryStep::GetProcessingDataSize(const std::shared_ptr<IDataSource>& source) const {
-    ui64 size = source->GetColumnRawBytes(Columns->GetColumnIds());
+    ui64 size = source->GetColumnRawBytes(Columns.GetColumnIds());
 
     if (source->GetStageData().GetUseFilter() && source->GetContext()->GetReadMetadata()->Limit) {
         const ui32 filtered = source->GetStageData().GetFilteredCount(source->GetRecordsCount(), source->GetContext()->GetReadMetadata()->Limit);
         if (filtered < source->GetRecordsCount()) {
-            size = std::max<ui64>(size * 1.0 * filtered / source->GetRecordsCount(), source->GetColumnBlobBytes(Columns->GetColumnIds()));
+            size = std::max<ui64>(size * 1.0 * filtered / source->GetRecordsCount(), source->GetColumnBlobBytes(Columns.GetColumnIds()));
         }
     }
     return size;

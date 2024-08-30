@@ -509,6 +509,7 @@ void Deserialize(TTableColumnarStatistics& statistics, const TNode& node)
 {
     const auto& nodeMap = node.AsMap();
     DESERIALIZE_ITEM("column_data_weights", statistics.ColumnDataWeight);
+    DESERIALIZE_ITEM("column_estimated_unique_counts", statistics.ColumnEstimatedUniqueCounts);
     DESERIALIZE_ITEM("legacy_chunks_data_weight", statistics.LegacyChunksDataWeight);
     DESERIALIZE_ITEM("timestamp_total_weight", statistics.TimestampTotalWeight);
 }

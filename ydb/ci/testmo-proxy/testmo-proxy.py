@@ -52,7 +52,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             try:
                 response = requests.request(method, url, data=body, headers=headers, timeout=self._timeout)
                 if 500 <= response.status_code < 600:
-                    self.log_message(f"going to retry {response} after sleeping {sleep_for_5xx} sec")
+                    self.log_message(f"! received status={response.status_code}, content={response.content}")
+                    self.log_message(f"sleep for {sleep_for_5xx} sec")
                     time.sleep(sleep_for_5xx)
                 else:
                     break

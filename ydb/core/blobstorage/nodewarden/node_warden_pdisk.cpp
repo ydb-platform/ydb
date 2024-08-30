@@ -121,8 +121,6 @@ namespace NKikimr::NStorage {
             pdiskConfig->HashedMainKey[i] = TStringBuilder() << Hex(hasher.GetHashResult(), HF_ADDX);
         }
 
-        pdiskConfig->Initialize();
-
         return pdiskConfig;
     }
 

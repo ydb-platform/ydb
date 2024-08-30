@@ -109,11 +109,13 @@ namespace NMonitoring {
                 Y_ENSURE(!name.Empty(), "trying to write metric with empty name");
 
                 char ch = name[0];
-                if (!NPrometheus::IsValidMetricNameStart(ch)) {
+                if (NPrometheus::IsValidMetricNameStart(ch)) {
+                    Out_->Write(ch);
+                } else {
                     Out_->Write('_');
                 }
 
-                for (size_t i = 0, len = name.length(); i < len; i++) {
+                for (size_t i = 1, len = name.length(); i < len; i++) {
                     ch = name[i];
                     if (NPrometheus::IsValidMetricNameContinuation(ch)) {
                         Out_->Write(ch);

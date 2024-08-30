@@ -88,7 +88,9 @@ public:
         , BuildIndexId(buildIndexId)
         , Init(std::move(init))
     {
-        LogPrefix = TStringBuilder() << "TUploadSampleK: build index id: " << BuildIndexId << " ";
+        LogPrefix = TStringBuilder() 
+            << "TUploadSampleK: BuildIndexId: " << BuildIndexId 
+            << " ResponseActorId: " << ResponseActorId;
         Limits.MaxUploadRowsRetryCount = limits.MaxRetries;
         Y_ASSERT(!Init.empty());
     }
@@ -103,11 +105,11 @@ public:
     }
 
     void Describe(IOutputStream& out) const noexcept override {
-        out << Debug();
+        out << LogPrefix << Debug();
     }
 
     TString Debug() const {
-        return TStringBuilder() << LogPrefix << UploadStatus.ToString();
+        return UploadStatus.ToString();
     }
 
     void Bootstrap(const NActors::TActorContext& ctx) {
@@ -163,9 +165,10 @@ private:
 
         if (Uploader) {
             Y_VERIFY_S(Uploader == ev->Sender,
-                       "Mismatch"
-                           << " Uploader: " << Uploader.ToString()
-                           << " ev->Sender: " << ev->Sender.ToString());
+                       LogPrefix << "Mismatch"
+                                 << " Uploader: " << Uploader.ToString()
+                                 << " ev->Sender: " << ev->Sender.ToString()
+                                 << Debug());
         } else {
             return;
         }
@@ -174,7 +177,7 @@ private:
         UploadStatus.Issues = std::move(ev->Get()->Issues);
 
         if (UploadStatus.IsRetriable() && RetryCount < Limits.MaxUploadRowsRetryCount) {
-            LOG_N("Got retriable error, " << Debug());
+            LOG_N("Got retriable error, " << Debug() << " RetryCount: " << RetryCount);
 
             ctx.Schedule(Limits.GetTimeoutBackouff(RetryCount), new TEvents::TEvWakeup());
             return;
@@ -915,7 +918,7 @@ public:
         if (!buildInfoPtr) {
             return true;
         }
-        auto& buildInfo = **buildInfoPtr;
+        auto& buildInfo = *buildInfoPtr->Get();
         LOG_D("TTxReply : TEvSampleKResponse"
               << ", TIndexBuildInfo: " << buildInfo
               << ", record: " << record.ShortDebugString());
@@ -1062,7 +1065,7 @@ public:
         if (!buildInfoPtr) {
             return true;
         }
-        auto& buildInfo = **buildInfoPtr;
+        auto& buildInfo = *buildInfoPtr->Get();
         LOG_D("TTxReply : TEvUploadSampleKResponse"
               << ", TIndexBuildInfo: " << buildInfo
               << ", record: " << record.ShortDebugString());

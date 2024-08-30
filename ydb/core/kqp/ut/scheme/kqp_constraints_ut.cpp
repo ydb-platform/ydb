@@ -1046,7 +1046,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         {
             auto query = R"(
                 --!syntax_v1
-                ALTER TABLE `/Root/AlterTableAddNotNullColumn` ADD COLUMN Valuf1 Decimal(22,9) NOT NULL DEFAULT Decimal("1.11", 22, 9);
+                ALTER TABLE `/Root/AlterTableAddNotNullColumn` ADD COLUMN Valuf1 Decimal(35,9) NOT NULL DEFAULT Decimal("1.11", 35, 9);
             )";
 
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();

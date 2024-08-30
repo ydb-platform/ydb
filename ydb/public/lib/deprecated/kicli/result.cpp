@@ -159,7 +159,7 @@ template <> TString TReadTableResult::ValueToString<TFormatCSV>(const YdbOld::Va
             auto p = reinterpret_cast<char*>(&val);
             reinterpret_cast<ui64*>(p)[0] = value.low_128();
             reinterpret_cast<ui64*>(p)[1] = value.high_128();
-            // In Kikimr the only decimal column type supported is Decimal(22,9).
+            // In Kikimr the only decimal column type supported is Decimal(35,9).
             return NYql::NDecimal::ToString(val, NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE);
         }
     default:

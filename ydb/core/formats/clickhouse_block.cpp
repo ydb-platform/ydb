@@ -433,7 +433,7 @@ public:
         Register(new TFixedSizeDataType<ui16>("Date"));
         Register(new TFixedSizeDataType<ui32>("DateTime"));
 
-        Register(new TFixedSizeDataType<NYql::NDecimal::TInt128>("Decimal(22,9)"));
+        Register(new TFixedSizeDataType<NYql::NDecimal::TInt128>("Decimal(35, 9)"));
     }
 
     TDataTypePtr Get(TStringBuf name) const {
@@ -472,7 +472,7 @@ public:
         CONVERT(Timestamp,  UInt64);
         CONVERT(Interval,   Int64);
 
-        CONVERT(Decimal, Decimal(22,9));
+        CONVERT(Decimal, Decimal(35, 9));
 
         // Some internal types
         CONVERT(PairUi64Ui64,   String);

@@ -279,14 +279,14 @@ namespace {
         switch (type->GetSlot()) {
         case EDataSlot::Decimal:
             if (const auto dataExprParamsType = dynamic_cast<const TDataExprParamsType*>(type)) {
-                if (dataExprParamsType->GetParamOne() != "22") {
+                if (dataExprParamsType->GetParamOne() != "35") {
                     columnTypeError(typeNode.Pos(), columnName, TStringBuilder() << "Bad decimal precision \""
-                        << dataExprParamsType->GetParamOne() << "\". Only Decimal(22,9) is supported for table columns");
+                        << dataExprParamsType->GetParamOne() << "\". Only Decimal(35,9) is supported for table columns");
                     return false;
                 }
                 if (dataExprParamsType->GetParamTwo() != "9") {
                     columnTypeError(typeNode.Pos(), columnName, TStringBuilder() << "Bad decimal scale \""
-                        << dataExprParamsType->GetParamTwo() << "\". Only Decimal(22,9) is supported for table columns");
+                        << dataExprParamsType->GetParamTwo() << "\". Only Decimal(35,9) is supported for table columns");
                     return false;
                 }
             }

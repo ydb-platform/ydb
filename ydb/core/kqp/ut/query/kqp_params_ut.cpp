@@ -667,7 +667,7 @@ Y_UNIT_TEST_SUITE(KqpParams) {
             DECLARE $ParamUint64 AS Uint64;
             DECLARE $ParamFloat AS Float;
             DECLARE $ParamDouble AS Double;
-            DECLARE $ParamDecimal AS Decimal(22, 9);
+            DECLARE $ParamDecimal AS Decimal(35, 9);
             DECLARE $ParamDyNumber AS DyNumber;
             DECLARE $ParamString AS String;
             DECLARE $ParamUtf8 AS Utf8;

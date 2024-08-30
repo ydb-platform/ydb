@@ -223,7 +223,7 @@ bool TKikimrTableDescription::Load(TExprContext& ctx, bool withSystemColumns) {
         auto& column = pair.second;
 
         // Currently Kikimr doesn't have parametrized types and Decimal type
-        // is passed with no params. It's known to always be Decimal(22,9),
+        // is passed with no params. It's known to always be Decimal(35,9),
         // so we transform Decimal type here.
         const TTypeAnnotationNode *type;
         if (to_lower(column.Type) == "decimal") {

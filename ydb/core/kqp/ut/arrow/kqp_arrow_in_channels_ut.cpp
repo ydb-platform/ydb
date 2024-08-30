@@ -37,7 +37,7 @@ void InsertAllColumnsAndCheckSelectAll(TKikimrRunner* runner) {
             DatetimeValue Datetime,
             TimestampValue Timestamp,
             IntervalValue Interval,
-            DecimalValue Decimal(22,9),
+            DecimalValue Decimal(35,9),
             JsonValue Json,
             YsonValue Yson,
             JsonDocumentValue JsonDocument,
@@ -50,7 +50,7 @@ void InsertAllColumnsAndCheckSelectAll(TKikimrRunner* runner) {
     auto insertResult = session.ExecuteDataQuery(R"(
         --!syntax_v1
         INSERT INTO `/Root/Tmp` (Key, BoolValue, Int32Value, Uint32Value, Int64Value, Uint64Value, FloatValue, DoubleValue, StringValue, Utf8Value, DateValue, DatetimeValue, TimestampValue, IntervalValue, DecimalValue, JsonValue, YsonValue, JsonDocumentValue, DyNumberValue) VALUES
-        (42, true, -1, 1, -2, 2, CAST(3.0 AS Float), 4.0, "five", Utf8("six"), Date("2007-07-07"), Datetime("2008-08-08T08:08:08Z"), Timestamp("2009-09-09T09:09:09.09Z"), Interval("P10D"), CAST("11.11" AS Decimal(22, 9)), "[12]", "[13]", JsonDocument("[14]"), DyNumber("15.15"));
+        (42, true, -1, 1, -2, 2, CAST(3.0 AS Float), 4.0, "five", Utf8("six"), Date("2007-07-07"), Datetime("2008-08-08T08:08:08Z"), Timestamp("2009-09-09T09:09:09.09Z"), Interval("P10D"), CAST("11.11" AS Decimal(35, 9)), "[12]", "[13]", JsonDocument("[14]"), DyNumber("15.15"));
     )", TTxControl::BeginTx().CommitTx()).GetValueSync();
     UNIT_ASSERT_C(insertResult.IsSuccess(), insertResult.GetIssues().ToString());
 

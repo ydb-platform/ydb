@@ -415,8 +415,8 @@ static Ydb::Type* AddColumn(Ydb::Table::ColumnMeta* newColumn, const TColumn& co
         if (protoType == NYql::NProto::TypeIds::Decimal) {
             auto typeParams = columnType->mutable_decimal_type();
             // TODO: Change TEvDescribeSchemeResult to return decimal params
-            typeParams->set_precision(22);
-            typeParams->set_scale(9);
+            typeParams->set_precision(NKikimr::NScheme::DECIMAL_PRECISION);
+            typeParams->set_scale(NKikimr::NScheme::DECIMAL_SCALE);
         } else {
             NMiniKQL::ExportPrimitiveTypeToProto(protoType, *columnType);
         }
@@ -456,8 +456,8 @@ Ydb::Type* AddColumn<NKikimrSchemeOp::TColumnDescription>(Ydb::Table::ColumnMeta
         if (protoType == NYql::NProto::TypeIds::Decimal) {
             auto typeParams = columnType->mutable_decimal_type();
             // TODO: Change TEvDescribeSchemeResult to return decimal params
-            typeParams->set_precision(22);
-            typeParams->set_scale(9);
+            typeParams->set_precision(NScheme::DECIMAL_PRECISION);
+            typeParams->set_scale(NScheme::DECIMAL_SCALE);
         } else {
             NMiniKQL::ExportPrimitiveTypeToProto(protoType, *columnType);
         }

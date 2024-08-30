@@ -234,13 +234,13 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
         auto partitions = TExplicitPartitions()
             .AppendSplitPoints(TValueBuilder()
-                .BeginTuple().AddElement().BeginOptional().Decimal(TDecimalValue("1.5", 22, 9)).EndOptional().EndTuple()
+                .BeginTuple().AddElement().BeginOptional().Decimal(TDecimalValue("1.5", 35, 9)).EndOptional().EndTuple()
                 .Build());
 
         auto ret = session.CreateTable("/Root/DecimalTest",
                 TTableBuilder()
-                    .AddNullableColumn("Key", TDecimalType(22, 9))
-                    .AddNullableColumn("Value", TDecimalType(22, 9))
+                    .AddNullableColumn("Key", TDecimalType(35, 9))
+                    .AddNullableColumn("Value", TDecimalType(35, 9))
                     .SetPrimaryKeyColumn("Key")
                     // .SetPartitionAtKeys(partitions)  // Error at split boundary 0: Unsupported typeId 4865 at index 0
                     .Build()).GetValueSync();
@@ -259,7 +259,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
         auto result = session.ExecuteDataQuery(R"(
             --!syntax_v1
-            DECLARE $in AS List<Struct<Key: Decimal(22, 9), Value: Decimal(22, 9)>>;
+            DECLARE $in AS List<Struct<Key: Decimal(35, 9), Value: Decimal(35, 9)>>;
             REPLACE INTO `/Root/DecimalTest`
                 SELECT Key, Value FROM AS_TABLE($in);
         )", TTxControl::BeginTx().CommitTx(), params).GetValueSync();

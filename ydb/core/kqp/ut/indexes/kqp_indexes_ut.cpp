@@ -179,7 +179,7 @@ Y_UNIT_TEST_SUITE(KqpIndexMetadata) {
             const TString createTableSql(R"(
                 --!syntax_v1
                 CREATE TABLE `/Root/tg` (
-                    id Utf8, b Utf8, am Decimal(22, 9), cur Utf8, pa_id Utf8, system_date Timestamp, status Utf8, type Utf8, product Utf8,
+                    id Utf8, b Utf8, am Decimal(35, 9), cur Utf8, pa_id Utf8, system_date Timestamp, status Utf8, type Utf8, product Utf8,
                     PRIMARY KEY (b, id),
                     INDEX tg_index GLOBAL SYNC ON (`b`, `pa_id`, `system_date`, `id`)
                     COVER(status, type, product, am)
@@ -204,7 +204,7 @@ Y_UNIT_TEST_SUITE(KqpIndexMetadata) {
                 DECLARE $constant_param_2 AS Text;
                 DECLARE $type_1 AS List<Text>;
                 DECLARE $status_1 AS Text;
-                DECLARE $am_1 AS Decimal(22, 9);
+                DECLARE $am_1 AS Decimal(35, 9);
 
                 SELECT *
                 FROM tg

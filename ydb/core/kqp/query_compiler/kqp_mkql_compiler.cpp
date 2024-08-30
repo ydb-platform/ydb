@@ -75,7 +75,7 @@ TSmallVec<bool> GetSkipNullKeys(const TKqpReadTableSettings& settings, const TKi
 NMiniKQL::TType* CreateColumnType(const NKikimr::NScheme::TTypeInfo& typeInfo, const TKqlCompileContext& ctx) {
     auto typeId = typeInfo.GetTypeId();
     if (typeId == NUdf::TDataType<NUdf::TDecimal>::Id) {
-        return ctx.PgmBuilder().NewDecimalType(22, 9);
+        return ctx.PgmBuilder().NewDecimalType(NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE);
     } else if (typeId == NKikimr::NScheme::NTypeIds::Pg) {
         return ctx.PgmBuilder().NewPgType(NPg::PgTypeIdFromTypeDesc(typeInfo.GetTypeDesc()));
     } else {

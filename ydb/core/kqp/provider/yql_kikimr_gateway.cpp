@@ -195,8 +195,8 @@ void SetColumnType(Ydb::Type& protoType, const TString& typeName, bool notNull) 
             protoType.mutable_optional_type()->mutable_item()->mutable_decimal_type();
         // We have no params right now
         // TODO: Fix decimal params support for kikimr
-        decimal->set_precision(22);
-        decimal->set_scale(9);
+        decimal->set_precision(NKikimr::NScheme::DECIMAL_PRECISION);
+        decimal->set_scale(NKikimr::NScheme::DECIMAL_SCALE);
     } else {
         auto& primitive = notNull ? protoType : *protoType.mutable_optional_type()->mutable_item();
         auto id = NUdf::GetDataTypeInfo(dataSlot).TypeId;

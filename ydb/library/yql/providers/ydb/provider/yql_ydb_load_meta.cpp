@@ -32,7 +32,7 @@ const TTypeAnnotationNode* MakeYqlType(NYdb::TTypeParser&& type, TExprContext& c
         }
         case NYdb::TTypeParser::ETypeKind::Primitive:
             if (const auto typeId = static_cast<NUdf::TDataTypeId>(type.GetPrimitive()); NUdf::TDataType<NUdf::TDecimal>::Id == typeId)
-                return ctx.MakeType<TDataExprParamsType>(NUdf::EDataSlot::Decimal, "22", "9");
+                return ctx.MakeType<TDataExprParamsType>(NUdf::EDataSlot::Decimal, "35", "9");
             else
                 return ctx.MakeType<TDataExprType>(NUdf::GetDataSlot(static_cast<NUdf::TDataTypeId>(type.GetPrimitive())));
         default:

@@ -2285,7 +2285,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto query = TStringBuilder() << R"(
             CREATE TABLE `)" << tableName << R"(` (
                 Key Uint64,
-                Value Decimal(35,9),
+                Value Decimal(22,9),
                 PRIMARY KEY (Key)
             );)";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
@@ -2307,7 +2307,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto query = TStringBuilder() << R"(
             CREATE TABLE `)" << tableName << R"(` (
                 Key Uint64,
-                Value Decimal(22,9),
+                Value Decimal(35,9),
                 PRIMARY KEY (Key)
             );)";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
@@ -2328,7 +2328,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto kind = parser.GetKind();
             UNIT_ASSERT_EQUAL(kind, TTypeParser::ETypeKind::Decimal);
             TDecimalType decimalType = parser.GetDecimal();
-            UNIT_ASSERT_EQUAL(decimalType.Precision, 22);
+            UNIT_ASSERT_EQUAL(decimalType.Precision, 35);
             UNIT_ASSERT_EQUAL(decimalType.Scale, 9);
         }
     }
@@ -2964,7 +2964,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         {
             auto query = TStringBuilder() << R"(
             ALTER TABLE `)" << tableName << R"(`
-                 ADD COLUMN Value2 Decimal(35,9);
+                 ADD COLUMN Value2 Decimal(22,9);
             )";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
@@ -2982,7 +2982,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         {
             auto query = TStringBuilder() << R"(
             ALTER TABLE `)" << tableName << R"(`
-                 ADD COLUMN Value2 Decimal(22,9);
+                 ADD COLUMN Value2 Decimal(35,9);
             )";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -3001,7 +3001,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto kind = parser.GetKind();
             UNIT_ASSERT_EQUAL(kind, TTypeParser::ETypeKind::Decimal);
             TDecimalType decimalType = parser.GetDecimal();
-            UNIT_ASSERT_EQUAL(decimalType.Precision, 22);
+            UNIT_ASSERT_EQUAL(decimalType.Precision, 35);
             UNIT_ASSERT_EQUAL(decimalType.Scale, 9);
         }
     }
@@ -8071,12 +8071,12 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
         testHelper.ReadData("SELECT dec FROM `/Root/ColumnTableTest` WHERE id=3", "[[\"-inf\"]]");
         testHelper.ReadData("SELECT dec FROM `/Root/ColumnTableTest` WHERE id=4", "[[\"nan\"]]");
         testHelper.ReadData("SELECT dec FROM `/Root/ColumnTableTest` WHERE id=5", "[[\"nan\"]]");
-        testHelper.ReadData("SELECT id FROM `/Root/ColumnTableTest` WHERE dec=CAST(\"10.1\" As Decimal(22,9))", "[[1]]");
-        testHelper.ReadData("SELECT id FROM `/Root/ColumnTableTest` WHERE dec=CAST(\"inf\" As Decimal(22,9)) ORDER BY id", "[[2];[8]]");
-        testHelper.ReadData("SELECT id FROM `/Root/ColumnTableTest` WHERE dec=CAST(\"-inf\" As Decimal(22,9)) ORDER BY id", "[[3];[9]]");
+        testHelper.ReadData("SELECT id FROM `/Root/ColumnTableTest` WHERE dec=CAST(\"10.1\" As Decimal(35,9))", "[[1]]");
+        testHelper.ReadData("SELECT id FROM `/Root/ColumnTableTest` WHERE dec=CAST(\"inf\" As Decimal(35,9)) ORDER BY id", "[[2];[8]]");
+        testHelper.ReadData("SELECT id FROM `/Root/ColumnTableTest` WHERE dec=CAST(\"-inf\" As Decimal(35,9)) ORDER BY id", "[[3];[9]]");
         // Nan cannot by find.
-        testHelper.ReadData("SELECT id FROM `/Root/ColumnTableTest` WHERE dec=CAST(\"nan\" As Decimal(22,9))", "[]");
-        testHelper.ReadData("SELECT id FROM `/Root/ColumnTableTest` WHERE dec=CAST(\"-nan\" As Decimal(22,9))", "[]");
+        testHelper.ReadData("SELECT id FROM `/Root/ColumnTableTest` WHERE dec=CAST(\"nan\" As Decimal(35,9))", "[]");
+        testHelper.ReadData("SELECT id FROM `/Root/ColumnTableTest` WHERE dec=CAST(\"-nan\" As Decimal(35,9))", "[]");
         testHelper.ReadData("SELECT dec FROM `/Root/ColumnTableTest` WHERE id > 5 ORDER BY dec", "[[\"-inf\"];[\"1.1\"];[\"2.1\"];[\"12.1\"];[\"15.1\"];[\"inf\"]]");
     }
 
@@ -8106,7 +8106,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
             UNIT_ASSERT_C(result.IsSuccess() , result.GetIssues().ToString());
         }
         testHelper.ReadData("SELECT dec FROM `/Root/ColumnTableTest` WHERE id=1", "[[\"10.1\"]]");
-        testHelper.ReadData("SELECT id FROM `/Root/ColumnTableTest` WHERE dec=CAST(\"10.1\" As Decimal(22,9))", "[[1]]");
+        testHelper.ReadData("SELECT id FROM `/Root/ColumnTableTest` WHERE dec=CAST(\"10.1\" As Decimal(35,9))", "[[1]]");
         testHelper.ReadData("SELECT dec FROM `/Root/ColumnTableTest` WHERE id > 5 ORDER BY dec", "[[\"1.1\"];[\"2\"];[\"12.1\"];[\"15.1\"]]");
     }
 

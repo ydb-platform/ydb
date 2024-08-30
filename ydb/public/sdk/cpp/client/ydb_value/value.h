@@ -224,7 +224,7 @@ private:
 struct TDecimalValue {
     TString ToString() const;
     TDecimalValue(const Ydb::Value& decimalValueProto, const TDecimalType& decimalType);
-    TDecimalValue(const TString& decimalString, ui8 precision = 22, ui8 scale = 9);
+    TDecimalValue(const TString& decimalString, ui8 precision = 35, ui8 scale = 9);
 
     TDecimalType DecimalType_;
     ui64 Low_;

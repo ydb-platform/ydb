@@ -1951,7 +1951,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         UNIT_ASSERT(session.CreateTable("/Root/DecimalTest",
             TTableBuilder()
                 .AddNullableColumn("Key", EPrimitiveType::Uint64)
-                .AddNullableColumn("Value", TDecimalType(22, 9))
+                .AddNullableColumn("Value", TDecimalType(35, 9))
                 .SetPrimaryKeyColumn("Key")
                 .Build()).GetValueSync().IsSuccess());
 
@@ -1968,7 +1968,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         auto result = session.ExecuteDataQuery(R"(
                 --!syntax_v1
-                DECLARE $in AS List<Struct<Key: Uint64, Value: Decimal(22, 9)>>;
+                DECLARE $in AS List<Struct<Key: Uint64, Value: Decimal(35, 9)>>;
 
                 REPLACE INTO `/Root/DecimalTest`
                     SELECT Key, Value FROM AS_TABLE($in);

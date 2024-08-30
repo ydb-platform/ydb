@@ -1411,7 +1411,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     }
 
     Y_UNIT_TEST(DeclareDecimalParameter) {
-        NYql::TAstParseResult res = SqlToYql("declare $value as Decimal(22,9); select $value as cnt;");
+        NYql::TAstParseResult res = SqlToYql("declare $value as Decimal(35,9); select $value as cnt;");
         UNIT_ASSERT(res.Root);
     }
 

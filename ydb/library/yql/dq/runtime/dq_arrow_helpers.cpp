@@ -156,7 +156,7 @@ template <>
 NUdf::TUnboxedValue GetUnboxedValue<arrow::Decimal128Type>(std::shared_ptr<arrow::Array> column, ui32 row) {
     auto array = std::static_pointer_cast<arrow::Decimal128Array>(column);
     auto data = array->GetView(row);
-    // We check that Decimal(22,9) but it may not be true
+    // We check that Decimal(35,9) but it may not be true
     // TODO Support other decimal precisions.
     const auto& type = arrow::internal::checked_cast<const arrow::Decimal128Type&>(*array->type());
     Y_ABORT_UNLESS(type.precision() == NScheme::DECIMAL_PRECISION, "Unsupported Decimal precision.");

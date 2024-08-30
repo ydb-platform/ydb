@@ -576,7 +576,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
                     .AddNullableColumn("Column_Json",  EPrimitiveType::Json)
                     .AddNullableColumn("Column_JsonDocument", EPrimitiveType::JsonDocument)
                     .AddNullableColumn("Column_DyNumber", EPrimitiveType::DyNumber)
-                    .AddNullableColumn("Column_Decimal",  TDecimalType(22, 9))
+                    .AddNullableColumn("Column_Decimal",  TDecimalType(35, 9))
 // These types are not currently supported for table columns
 //                    .AddNullableColumn("Column_Int8",  EPrimitiveType::Int8)
 //                    .AddNullableColumn("Column_Int16",  EPrimitiveType::Int16)
@@ -798,7 +798,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
             auto tableBuilder = client.GetTableBuilder();
             tableBuilder
                     .AddNullableColumn("Key", EPrimitiveType::Uint32)
-                    .AddNullableColumn("Value_Decimal",     TDecimalType(22, 9))
+                    .AddNullableColumn("Value_Decimal",     TDecimalType(35, 9))
                     .AddNullableColumn("Value_Date",        EPrimitiveType::Date)
                     .AddNullableColumn("Value_DateTime",    EPrimitiveType::Datetime)
                     .AddNullableColumn("Value_Timestamp",   EPrimitiveType::Timestamp)

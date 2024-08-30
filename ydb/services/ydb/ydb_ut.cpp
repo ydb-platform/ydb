@@ -4962,9 +4962,9 @@ Y_UNIT_TEST_SUITE(TYqlDecimalTests) {
 
         ExecYql(channel, sessionId,
                 "UPSERT INTO `/Root/table-1` (key, value) VALUES "
-                "(1, CAST(\"1\" as DECIMAL(22,9))),"
-                "(2, CAST(\"22.22\" as DECIMAL(22,9))),"
-                "(3, CAST(\"9999999999999.999999999\" as DECIMAL(22,9)));");
+                "(1, CAST(\"1\" as DECIMAL(35, 9))),"
+                "(2, CAST(\"22.22\" as DECIMAL(35, 9))),"
+                "(3, CAST(\"9999999999999.999999999\" as DECIMAL(35, 9)));");
 
         CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key=1;",
                               {{1, 0}});
@@ -4985,9 +4985,9 @@ Y_UNIT_TEST_SUITE(TYqlDecimalTests) {
 
         ExecYql(channel, sessionId,
                 "UPSERT INTO `/Root/table-1` (key, value) VALUES "
-                "(1, CAST(\"-1\" as DECIMAL(22,9))),"
-                "(2, CAST(\"-22.22\" as DECIMAL(22,9))),"
-                "(3, CAST(\"-9999999999999.999999999\" as DECIMAL(22,9)));");
+                "(1, CAST(\"-1\" as DECIMAL(35, 9))),"
+                "(2, CAST(\"-22.22\" as DECIMAL(35, 9))),"
+                "(3, CAST(\"-9999999999999.999999999\" as DECIMAL(35, 9)));");
 
         CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key=1;",
                               {{-1, 0}});
@@ -5020,40 +5020,40 @@ Y_UNIT_TEST_SUITE(TYqlDecimalTests) {
 
         ExecYql(channel, sessionId, R"(
                 UPSERT INTO `/Root/table-1` (key, value) VALUES
-                (CAST("1" as DECIMAL(22,9)), CAST("1" as DECIMAL(22,9))),
-                (CAST("22.22" as DECIMAL(22,9)), CAST("22.22" as DECIMAL(22,9))),
-                (CAST("9999999999999.999999999" as DECIMAL(22,9)), CAST("9999999999999.999999999" as DECIMAL(22,9))),
-                (CAST("-1" as DECIMAL(22,9)), CAST("-1" as DECIMAL(22,9))),
-                (CAST("-22.22" as DECIMAL(22,9)), CAST("-22.22" as DECIMAL(22,9))),
-                (CAST("-9999999999999.999999999" as DECIMAL(22,9)), CAST("-9999999999999.999999999" as DECIMAL(22,9)));
+                (CAST("1" as DECIMAL(35, 9)), CAST("1" as DECIMAL(35, 9))),
+                (CAST("22.22" as DECIMAL(35, 9)), CAST("22.22" as DECIMAL(35, 9))),
+                (CAST("9999999999999.999999999" as DECIMAL(35, 9)), CAST("9999999999999.999999999" as DECIMAL(35, 9))),
+                (CAST("-1" as DECIMAL(35, 9)), CAST("-1" as DECIMAL(35, 9))),
+                (CAST("-22.22" as DECIMAL(35, 9)), CAST("-22.22" as DECIMAL(35, 9))),
+                (CAST("-9999999999999.999999999" as DECIMAL(35, 9)), CAST("-9999999999999.999999999" as DECIMAL(35, 9)));
         )");
 
-        CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key=CAST(\"1\" as DECIMAL(22,9));",
+        CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key=CAST(\"1\" as DECIMAL(35, 9));",
                               {{1, 0}});
 
-        CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key=CAST(\"22.22\" as DECIMAL(22,9));",
+        CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key=CAST(\"22.22\" as DECIMAL(35, 9));",
                               {{22, 220000000}});
 
-        CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key=CAST(\"9999999999999.999999999\" as DECIMAL(22,9));",
+        CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key=CAST(\"9999999999999.999999999\" as DECIMAL(35, 9));",
                               {{9999999999999, 999999999}});
 
-        CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key=CAST(\"-1\" as DECIMAL(22,9));",
+        CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key=CAST(\"-1\" as DECIMAL(35, 9));",
                               {{-1, 0}});
 
-        CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key=CAST(\"-22.22\" as DECIMAL(22,9));",
+        CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key=CAST(\"-22.22\" as DECIMAL(35, 9));",
                               {{-22, 220000000}});
 
-        CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key=CAST(\"-9999999999999.999999999\" as DECIMAL(22,9));",
+        CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key=CAST(\"-9999999999999.999999999\" as DECIMAL(35, 9));",
                               {{-9999999999999, 999999999}});
 
-        CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key >= CAST(\"-22.22\" as DECIMAL(22,9))",
+        CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key >= CAST(\"-22.22\" as DECIMAL(35, 9))",
                               {{-22, 220000000}, {-1, 0},
                                {1, 0}, {22, 220000000}, {9999999999999, 999999999}});
 
-        CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key < CAST(\"-22.22\" as DECIMAL(22,9))",
+        CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key < CAST(\"-22.22\" as DECIMAL(35, 9))",
                               {{-9999999999999, 999999999}});
 
-        CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key > CAST(\"-22.222\" as DECIMAL(22,9)) AND key < CAST(\"22.222\" as DECIMAL(22,9))",
+        CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key > CAST(\"-22.222\" as DECIMAL(35, 9)) AND key < CAST(\"22.222\" as DECIMAL(35, 9))",
                               {{-22, 220000000}, {-1, 0},
                                {1, 0}, {22, 220000000}});
     }

@@ -145,8 +145,8 @@ bool ConvertSchemaFromInternalToPublic(const NKikimrSchemeOp::TColumnTableSchema
 #if 0 // not supported
         if (typeId == NYql::NProto::TypeIds::Decimal) {
             auto typeParams = item.mutable_decimal_type();
-            typeParams->set_precision(22);
-            typeParams->set_scale(9);
+            typeParams->set_precision(NScheme::DECIMAL_PRECISION);
+            typeParams->set_scale(NScheme::DECIMAL_SCALE);
         } else {
 #endif
         {

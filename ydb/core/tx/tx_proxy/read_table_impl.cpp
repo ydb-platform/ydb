@@ -1770,8 +1770,8 @@ private:
                         if (id == NYql::NProto::Decimal) {
                             auto decimalType = xType->mutable_decimal_type();
                             //TODO: Pass decimal params here
-                            decimalType->set_precision(22);
-                            decimalType->set_scale(9);
+                            decimalType->set_precision(NScheme::DECIMAL_PRECISION);
+                            decimalType->set_scale(NScheme::DECIMAL_SCALE);
                         } else {
                             xType->set_type_id(static_cast<Ydb::Type::PrimitiveTypeId>(id));
                         }

@@ -151,7 +151,7 @@ Y_UNIT_TEST_SUITE(KqpTypes) {
         // Compare to decimal
         result = session.ExecuteDataQuery(Q1_(R"(
             $dn1 = CAST("13.1" AS DyNumber);
-            $dc1 = CAST("13.1" AS Decimal(22,9));
+            $dc1 = CAST("13.1" AS Decimal(35,9));
 
             SELECT
                 $dn1 = $dc1,

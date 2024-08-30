@@ -302,7 +302,7 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
         auto session = CreateSession(connection);
 
         auto result = session.ExecuteDataQuery(R"___(
-            SELECT CAST("184467440737.12345678" as Decimal(22,9));
+            SELECT CAST("184467440737.12345678" as Decimal(35, 9));
         )___", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
 
         UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
@@ -345,7 +345,7 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
             auto tableBuilder = client.GetTableBuilder();
             tableBuilder
                 .AddNullableColumn("Key", EPrimitiveType::Int32)
-                .AddNullableColumn("Value", TDecimalType(22,9));
+                .AddNullableColumn("Value", TDecimalType(35, 9));
             tableBuilder.SetPrimaryKeyColumn("Key");
             auto result = session.CreateTable("/Root/FooTable", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
@@ -354,7 +354,7 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
 
         {
             TString query = R"___(
-                DECLARE $Value AS Decimal(22,9);
+                DECLARE $Value AS Decimal(35, 9);
                 DECLARE $Key AS Int32;
                 UPSERT INTO `Root/FooTable` (Key, Value) VALUES
                     ($Key, $Value);
@@ -1462,15 +1462,15 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             CREATE TABLE `Root/Test` (
                 Key Uint64 NOT NULL,
                 Value String,
-                Amount Decimal(22,9) NOT NULL,
+                Amount Decimal(35, 9) NOT NULL,
                 PRIMARY KEY (Key)
             );
         )___").ExtractValueSync();
         UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
         result = session.ExecuteDataQuery(R"___(
-            UPSERT INTO `Root/Test` (Key, Value, Amount) VALUES (0u, "Zero", UNWRAP(CAST("0.11" AS Decimal(22, 9))));
-            UPSERT INTO `Root/Test` (Key, Value, Amount) VALUES (1u, "One", UNWRAP(CAST("1.11" AS Decimal(22, 9))));
+            UPSERT INTO `Root/Test` (Key, Value, Amount) VALUES (0u, "Zero", UNWRAP(CAST("0.11" AS Decimal(35, 9))));
+            UPSERT INTO `Root/Test` (Key, Value, Amount) VALUES (1u, "One", UNWRAP(CAST("1.11" AS Decimal(35, 9))));
         )___", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 

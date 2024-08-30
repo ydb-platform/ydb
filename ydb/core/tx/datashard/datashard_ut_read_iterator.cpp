@@ -4740,10 +4740,10 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorScheme) {
 
         ExecSQL(server, sender, R"(
             UPSERT INTO `/Root/table-1` (key, value) VALUES 
-                (UNWRAP(Decimal("155555555555555", 22, 9)), UNWRAP(Decimal("255555555555555", 22, 9))), 
-                (UNWRAP(Decimal("355555555555555", 22, 9)), UNWRAP(Decimal("455555555555555", 22, 9))),
-                (UNWRAP(Decimal("555555555555555", 22, 9)), UNWRAP(Decimal("655555555555555", 22, 9))), 
-                (UNWRAP(Decimal("755555555555555", 22, 9)), UNWRAP(Decimal("855555555555555", 22, 9)));
+                (UNWRAP(Decimal("155555555555555", 35, 9)), UNWRAP(Decimal("255555555555555", 35, 9))), 
+                (UNWRAP(Decimal("355555555555555", 35, 9)), UNWRAP(Decimal("455555555555555", 35, 9))),
+                (UNWRAP(Decimal("555555555555555", 35, 9)), UNWRAP(Decimal("655555555555555", 35, 9))), 
+                (UNWRAP(Decimal("755555555555555", 35, 9)), UNWRAP(Decimal("855555555555555", 35, 9)));
         )");        
 
         
@@ -4758,14 +4758,14 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorScheme) {
             
         auto readFilter = KqpSimpleSend(runtime, R"(
             SELECT key, value FROM `/Root/table-1` 
-            WHERE key < Decimal("555555555555555", 22, 9) ORDER BY key)");
+            WHERE key < Decimal("555555555555555", 35, 9) ORDER BY key)");
         UNIT_ASSERT_VALUES_EQUAL(
             FormatResult(AwaitResponse(runtime, std::move(readFilter))),
             "{ items { low_128: 12609526036060773888 high_128: 8432 } items { low_128: 12809902456581463552 high_128: 13853 } }, "
             "{ items { low_128: 13010278877102153216 high_128: 19274 } items { low_128: 13210655297622842880 high_128: 24695 } }");
 
         auto readSum = KqpSimpleSend(runtime, R"(
-            SELECT SUM(key), SUM(value), SUM(key) == Decimal("1822222222222220", 22, 9) FROM `/Root/table-1`)");
+            SELECT SUM(key), SUM(value), SUM(key) == Decimal("1822222222222220", 35, 9) FROM `/Root/table-1`)");
         UNIT_ASSERT_VALUES_EQUAL(
             FormatResult(AwaitResponse(runtime, std::move(readSum))),
             "{ items { low_128: 15949133043072268288 high_128: 98782 } items { low_128: 16750638725155026944 high_128: 120466 } items { bool_value: true } }");

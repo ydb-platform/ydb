@@ -399,7 +399,7 @@ private:
                 auto columnTypeId = column->Type.GetTypeId();
                 YQL_ENSURE(columnTypeId != NScheme::NTypeIds::Pg, "pg types are not supported");
 
-                // Decimal type is transformed into parametrized Decimal(22, 9).
+                // Decimal type is transformed into parametrized Decimal(35, 9).
                 if (columnTypeId == NYql::NProto::TypeIds::Decimal) {
                     columnDataType = ctx.MakeType<TDataExprParamsType>(
                         NUdf::GetDataSlot(columnTypeId),

@@ -658,6 +658,29 @@ public:
         return read;
     }
 
+    TExprNode::TPtr RecaptureWrite(const TExprNode::TPtr& write, TExprContext& ctx) override {
+        if (auto maybeWrite = TMaybeNode<TYtWriteTable>(write)) {
+            if (State_->Configuration->_EnableYtDqProcessWriteConstraints.Get().GetOrElse(DEFAULT_ENABLE_DQ_WRITE_CONSTRAINTS)) {
+                const auto& content = maybeWrite.Cast().Content();
+                if (content.Maybe<TCoAssumeConstraints>()) {
+                    return write;
+                }
+                if (content.Raw()->GetConstraint<TSortedConstraintNode>() || content.Raw()->GetConstraint<TDistinctConstraintNode>() || content.Raw()->GetConstraint<TUniqueConstraintNode>()) {
+                    return Build<TYtWriteTable>(ctx, write->Pos())
+                        .InitFrom(maybeWrite.Cast())
+                        .Content<TCoAssumeConstraints>()
+                            .Input(maybeWrite.Cast().Content())
+                            .Value()
+                                .Value(NYT::NodeToYsonString(content.Raw()->GetConstraintSet().ToYson(), NYson::EYsonFormat::Text), TNodeFlags::MultilineContent)
+                            .Build()
+                        .Build()
+                        .Done().Ptr();
+                }
+            }
+        }
+        return write;
+    }
+
     void FillLookupSourceSettings(const TExprNode& node, ::google::protobuf::Any& settings, TString& sourceType) override {
         const TDqLookupSourceWrap wrap(&node);
         auto table = wrap.Input().Cast<TYtTable>();
@@ -702,17 +725,19 @@ public:
                 return false;
             }
 
-            const auto content = maybeWrite.Cast().Content().Raw();
-            if (const auto sorted = content->GetConstraint<TSortedConstraintNode>()) {
-                if (const auto distinct = content->GetConstraint<TDistinctConstraintNode>()) {
-                    if (distinct->IsOrderBy(*sorted)) {
-                        AddInfo(ctx, "unsupported write of unique data", false);
+            if (!State_->Configuration->_EnableYtDqProcessWriteConstraints.Get().GetOrElse(DEFAULT_ENABLE_DQ_WRITE_CONSTRAINTS)) {
+                const auto content = maybeWrite.Cast().Content().Raw();
+                if (const auto sorted = content->GetConstraint<TSortedConstraintNode>()) {
+                    if (const auto distinct = content->GetConstraint<TDistinctConstraintNode>()) {
+                        if (distinct->IsOrderBy(*sorted)) {
+                            AddInfo(ctx, "unsupported write of unique data", false);
+                            return false;
+                        }
+                    }
+                    if (!content->IsCallable({"Sort", "TopSort", "AssumeSorted"})) {
+                        AddInfo(ctx, "unsupported write of sorted data", false);
                         return false;
                     }
-                }
-                if (!content->IsCallable({"Sort", "TopSort", "AssumeSorted"})) {
-                    AddInfo(ctx, "unsupported write of sorted data", false);
-                    return false;
                 }
             }
             return true;

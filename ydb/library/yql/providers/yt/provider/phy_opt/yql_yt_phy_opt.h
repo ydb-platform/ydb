@@ -73,7 +73,8 @@ private:
     NNodes::TMaybeNode<NNodes::TExprBase> FuseInnerMap(NNodes::TExprBase node, TExprContext& ctx, const TGetParents& getParents) const;
 
     NNodes::TMaybeNode<NNodes::TExprBase> FuseOuterMap(NNodes::TExprBase node, TExprContext& ctx, const TGetParents& getParents) const;
-    NNodes::TMaybeNode<NNodes::TExprBase> AssumeSorted(NNodes::TExprBase node, TExprContext& ctx, const TGetParents& getParents) const;
+
+    NNodes::TMaybeNode<NNodes::TExprBase> AssumeConstraints(NNodes::TExprBase node, TExprContext& ctx, const TGetParents& getParents) const;
 
     NNodes::TMaybeNode<NNodes::TExprBase> LambdaFieldsSubset(NNodes::TYtWithUserJobsOpBase op, size_t lambdaIdx, TExprContext& ctx, const TGetParents& getParents) const;
 

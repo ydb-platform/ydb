@@ -27,67 +27,109 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::DqWrite(TExprBase node,
     }
 
     auto write = node.Cast<TYtWriteTable>();
-    if (!TDqCnUnionAll::Match(write.Content().Raw())) {
+    auto content = write.Content().Ptr();
+    if (TCoAssumeConstraints::Match(content.Get())) {
+        content = TCoAssumeConstraints(content).Input().Ptr();
+    }
+    if (!TDqCnUnionAll::Match(content.Get())) {
         return node;
     }
 
     const TStructExprType* outItemType;
-    if (auto type = GetSequenceItemType(write.Content(), false, ctx)) {
+    if (auto type = GetSequenceItemType(TExprBase(content), false, ctx)) {
         outItemType = type->Cast<TStructExprType>();
     } else {
         return node;
     }
 
-    if (!NDq::IsSingleConsumerConnection(write.Content().Cast<TDqCnUnionAll>(), *getParents())) {
+    if (!NDq::IsSingleConsumerConnection(TDqCnUnionAll(content), *getParents())) {
         return node;
     }
 
     TSyncMap syncList;
+<<<<<<<
     if (!IsYtCompleteIsolatedLambda(write.Content().Ref(), syncList, true)) {
+=======
+    if (!IsYtCompleteIsolatedLambda(*content, syncList, true, true)) {
+>>>>>>>
         return node;
     }
 
     const ui64 nativeTypeFlags = State_->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE;
     TYtOutTableInfo outTable(outItemType, nativeTypeFlags);
 
-    const auto dqUnion = write.Content().Cast<TDqCnUnionAll>();
-
+    bool sortOnlyLambda = true;
     TMaybeNode<TCoSort> sort;
     TMaybeNode<TCoTopSort> topSort;
     TMaybeNode<TDqCnMerge> mergeConnection;
-    auto topLambdaBody = dqUnion.Output().Stage().Program().Body();
 
-    // Look for the sort-only stage or DcCnMerge connection.
-    bool sortOnlyLambda = true;
-    auto& topNode = SkipCallables(topLambdaBody.Ref(), {"ToFlow", "FromFlow", "ToStream"});
-    if (auto maybeSort = TMaybeNode<TCoSort>(&topNode)) {
-        sort = maybeSort;
-    } else if (auto maybeTopSort = TMaybeNode<TCoTopSort>(&topNode)) {
-        topSort = maybeTopSort;
+    TCoLambda preprocessingLambda = Build<TCoLambda>(ctx, write.Pos())
+        .Args({"stream"})
+        .Body("stream")
+        .Done();
+
+    const auto dqUnion = TDqCnUnionAll(content);
+
+    if (State_->Configuration->_EnableYtDqProcessWriteConstraints.Get().GetOrElse(DEFAULT_ENABLE_DQ_WRITE_CONSTRAINTS)) {
+        if (write.Content().Maybe<TCoAssumeConstraints>()) {
+            if (auto sorted = write.Content().Ref().GetConstraint<TSortedConstraintNode>()) {
+
+                const bool useNativeDescSort = State_->Configuration->UseNativeDescSort.Get().GetOrElse(DEFAULT_USE_NATIVE_DESC_SORT);
+
+                TKeySelectorBuilder builder(write.Pos(), ctx, useNativeDescSort, outItemType);
+                builder.ProcessConstraint(*sorted);
+                builder.FillRowSpecSort(*outTable.RowSpec);
+                if (builder.NeedMap()) {
+                    preprocessingLambda = Build<TCoLambda>(ctx, write.Pos())
+                        .Args({"stream"})
+                        .Body<TExprApplier>()
+                            .Apply(TCoLambda(builder.MakeRemapLambda(true)))
+                            .With(0, "stream")
+                        .Build()
+                    .Done();
+                }
+            }
+            outTable.RowSpec->SetConstraints(write.Content().Ref().GetConstraintSet());
+            outTable.SetUnique(write.Content().Ref().GetConstraint<TDistinctConstraintNode>(), write.Pos(), ctx);
+        }
+
     } else {
-        sortOnlyLambda = false;
-        if (auto inputs = dqUnion.Output().Stage().Inputs(); inputs.Size() == 1 && inputs.Item(0).Maybe<TDqCnMerge>().IsValid()) {
-            if (SkipCallables(topNode, {"Skip", "Take"}).IsArgument()) {
-                mergeConnection = inputs.Item(0).Maybe<TDqCnMerge>();
-            } else if (topNode.IsCallable(TDqReplicate::CallableName()) && topNode.Head().IsArgument()) {
-                auto ndx = FromString<size_t>(dqUnion.Output().Index().Value());
-                YQL_ENSURE(ndx + 1 < topNode.ChildrenSize());
-                if (&topNode.Child(ndx + 1)->Head().Head() == &topNode.Child(ndx + 1)->Tail()) { // trivial lambda
+        auto topLambdaBody = dqUnion.Output().Stage().Program().Body();
+
+        // Look for the sort-only stage or DcCnMerge connection.
+        auto& topNode = SkipCallables(topLambdaBody.Ref(), {"ToFlow", "FromFlow", "ToStream"});
+        if (auto maybeSort = TMaybeNode<TCoSort>(&topNode)) {
+            sort = maybeSort;
+        } else if (auto maybeTopSort = TMaybeNode<TCoTopSort>(&topNode)) {
+            topSort = maybeTopSort;
+        } else {
+            sortOnlyLambda = false;
+            if (auto inputs = dqUnion.Output().Stage().Inputs(); inputs.Size() == 1 && inputs.Item(0).Maybe<TDqCnMerge>().IsValid()) {
+                if (SkipCallables(topNode, {"Skip", "Take"}).IsArgument()) {
                     mergeConnection = inputs.Item(0).Maybe<TDqCnMerge>();
+                } else if (topNode.IsCallable(TDqReplicate::CallableName()) && topNode.Head().IsArgument()) {
+                    auto ndx = FromString<size_t>(dqUnion.Output().Index().Value());
+                    YQL_ENSURE(ndx + 1 < topNode.ChildrenSize());
+                    if (&topNode.Child(ndx + 1)->Head().Head() == &topNode.Child(ndx + 1)->Tail()) { // trivial lambda
+                        mergeConnection = inputs.Item(0).Maybe<TDqCnMerge>();
+                    }
                 }
             }
         }
-    }
 
-    if (sortOnlyLambda) {
-        auto& bottomNode = SkipCallables(topNode.Head(), {"ToFlow", "FromFlow", "ToStream"});
-        sortOnlyLambda = bottomNode.IsArgument();
+        if (sortOnlyLambda) {
+            auto& bottomNode = SkipCallables(topNode.Head(), {"ToFlow", "FromFlow", "ToStream"});
+            sortOnlyLambda = bottomNode.IsArgument();
+        }
     }
 
     TCoLambda writeLambda = Build<TCoLambda>(ctx, write.Pos())
         .Args({"stream"})
         .Body<TDqWrite>()
-            .Input("stream")
+            .Input<TExprApplier>()
+                .Apply(preprocessingLambda)
+                .With(0, "stream")
+            .Build()
             .Provider().Value(YtProviderName).Build()
             .Settings().Build()
         .Build()

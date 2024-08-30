@@ -61,9 +61,14 @@ public:
 
     void ReportCounters(TIntrusivePtr<TKqpCounters>);
 
-    void UpdateMaxShare(TString, double, TMonotonic now);
     
     void SetCapacity(ui64 cores);
+
+    void UpdateGroupShare(TString name, double share, TMonotonic now);
+    void UpdatePerQueryShare(TString name, double share, TMonotonic now);
+
+    ui64 MakePerQueryGroup(TMonotonic now, double share, TString baseGroup);
+    void AddToGroup(TMonotonic now, ui64, TSchedulerEntityHandle&);
 
     void SetMaxDeviation(TDuration);
     void SetForgetInterval(TDuration);
@@ -73,10 +78,10 @@ public:
 
     void AdvanceTime(TMonotonic now);
 
-    void Deregister(TSchedulerEntity& self, TMonotonic now);
+    void Deregister(TSchedulerEntityHandle& self, TMonotonic now);
 
     bool Disabled(TString group);
-    bool Disable(TString group, TMonotonic now);
+    void Disable(TString group, TMonotonic now);
 
 private:
     struct TImpl;
@@ -114,12 +119,10 @@ struct TEvSchedulerDeregister : public TEventLocal<TEvSchedulerDeregister, TKqpC
 struct TEvSchedulerNewPool : public TEventLocal<TEvSchedulerNewPool, TKqpComputeSchedulerEvents::EvNewPool> {
     TString Database;
     TString Pool;
-    double MaxShare;
 
-    TEvSchedulerNewPool(TString database, TString pool, double maxShare)
+    TEvSchedulerNewPool(TString database, TString pool)
         : Database(database)
         , Pool(pool)
-        , MaxShare(maxShare)
     {
     }
 };

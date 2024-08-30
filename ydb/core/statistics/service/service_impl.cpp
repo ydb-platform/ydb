@@ -1246,13 +1246,7 @@ private:
         TBase::PassAway();
     }
 
-    void Handle(NMon::TEvHttpInfo::TPtr& ev) {
-        if (!EnableStatistics) {
-            Send(ev->Sender, new NMon::TEvHttpInfoRes("Satistics is disabled"));
-            return;
-        }
-
-        TStringStream str;
+    void PrintStatServiceState(TStringStream& str) {
         HTML(str) {
             PRE() {
                 str << "---- StatisticsService ----" << Endl << Endl;
@@ -1309,6 +1303,89 @@ private:
                 str << "Nodes: " << AggregationStatistics.Nodes.size() << Endl;
                 str << "CountMinSketches: " << AggregationStatistics.CountMinSketches.size() << Endl;
             }
+        }
+    }
+
+    void Handle(NMon::TEvHttpInfo::TPtr& ev) {
+        auto& request = ev->Get()->Request;
+
+        auto method = request.GetMethod();
+        if (method == HTTP_METHOD_POST) {
+            if (!EnableColumnStatistics) {
+                Send(ev->Sender, new NMon::TEvHttpInfoRes("Column statistics is disabled"));
+                return;
+            }
+
+            auto& params = request.GetPostParams();
+            auto itAction = params.find("action");
+            if (itAction == params.end()) {
+                Send(ev->Sender, new NMon::TEvHttpInfoRes("'action' parameter is required"));
+                return;
+            }
+            if (itAction->second != "analyze") {
+                Send(ev->Sender, new NMon::TEvHttpInfoRes("Unknown 'action' parameter"));
+                return;
+            }
+            auto itPath = params.find("path");
+            if (itPath == params.end()) {
+                Send(ev->Sender, new NMon::TEvHttpInfoRes("'path' parameter is required"));
+                return;
+            }
+            Register(new THttpRequest(THttpRequest::EType::ANALYZE, itPath->second, ev->Sender));
+            return;
+
+        } else if (method == HTTP_METHOD_GET) {
+            auto& params = request.GetParams();
+            if (params.empty()) {
+                TStringStream str;
+                PrintStatServiceState(str);
+                Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));
+                return;
+            }
+
+            if (!EnableColumnStatistics) {
+                Send(ev->Sender, new NMon::TEvHttpInfoRes("Column statistics is disabled"));
+                return;
+            }
+
+            auto itAction = params.find("action");
+            if (itAction == params.end()) {
+                Send(ev->Sender, new NMon::TEvHttpInfoRes("'action' parameter is required"));
+                return;
+            }
+            if (itAction->second != "status") {
+                Send(ev->Sender, new NMon::TEvHttpInfoRes("Unknown 'action' parameter"));
+                return;
+            }
+            auto itPath = params.find("path");
+            if (itPath == params.end()) {
+                Send(ev->Sender, new NMon::TEvHttpInfoRes("'path' parameter is required"));
+                return;
+            }
+            Register(new THttpRequest(THttpRequest::EType::STATUS, itPath->second, ev->Sender));
+            return;
+        }
+
+        TStringStream str;
+        HTML(str) {
+            str << "<form method=\"post\" id=\"analyzePath\" name=\"analyzePath\" class=\"form-group\">" << Endl;
+            str << "<input type=\"hidden\" name=\"action\" value=\"analyze\"/>";
+            DIV() {
+                str << "<input type=\"text\" class=\"form-control\" id=\"path\" name=\"path\"/>";
+            }
+            DIV() {
+                str << "<input class=\"btn btn-default\" type=\"submit\" value=\"Analyze\"/>";
+            }
+            str << "</form>" << Endl;
+            str << "<form method=\"get\" id=\"pathStatus\" name=\"pathStatus\" class=\"form-group\">" << Endl;
+            str << "<input type=\"hidden\" name=\"action\" value=\"status\"/>";
+            DIV() {
+                str << "<input type=\"text\" class=\"form-control\" id=\"path\" name=\"path\"/>";
+            }
+            DIV() {
+                str << "<input class=\"btn btn-default\" type=\"submit\" value=\"Status\"/>";
+            }
+            str << "</form>" << Endl;
         }
 
         Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));

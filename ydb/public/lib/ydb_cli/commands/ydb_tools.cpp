@@ -54,7 +54,7 @@ void TCommandDump::Config(TConfig& config) {
     config.Opts->AddLongOption('o', "output", "[Required] Path in a local filesystem to a directory to place dump into."
             " Directory should either not exist or be empty.")
         .StoreResult(&FilePath);
-    config.Opts->AddLongOption("scheme-only", "Dump only scheme")
+    config.Opts->AddLongOption("scheme-only", "Dump only scheme including ACL and owner")
         .StoreTrue(&IsSchemeOnly);
     config.Opts->AddLongOption("avoid-copy", "Avoid copying."
             " By default, YDB makes a copy of a table before dumping it to reduce impact on workload and ensure consistency.\n"

@@ -199,6 +199,10 @@ def list_all_dirs(prefix, path=""):
     return paths
 
 
+def is_system_object(object):
+    return object.name.startswith(".")
+
+
 class BaseTestBackupInFiles(object):
     @classmethod
     def setup_class(cls):
@@ -258,6 +262,13 @@ class BaseTestBackupInFiles(object):
                     os.listdir(backup_files_dir + "/" + _dir),
                     has_items("scheme.pb", "permissions.pb")
                 )
+
+    def scheme_listdir(self, path):
+        return [
+            child.name
+            for child in self.driver.scheme_client.list_directory(path).children
+            if not is_system_object(child)
+        ]
 
 
 class TestBackupSingle(BaseTestBackupInFiles):
@@ -833,8 +844,8 @@ class TestPermissionsBackupRestoreSingleTable(BaseTestBackupInFiles):
             is_(["table"])
         )
         assert_that(
-            [child.name for child in self.driver.scheme_client.list_directory("/Root").children],
-            is_(["folder", ".sys"])
+            self.scheme_listdir("/Root"),
+            is_(["folder"])
         )
 
         # Restore table
@@ -850,11 +861,11 @@ class TestPermissionsBackupRestoreSingleTable(BaseTestBackupInFiles):
         yatest_common.execute(restore_cmd)
 
         assert_that(
-            [child.name for child in self.driver.scheme_client.list_directory("/Root").children],
-            contains_inanyorder("folder", "restored", ".sys")
+            self.scheme_listdir("/Root"),
+            contains_inanyorder("folder", "restored")
         )
         assert_that(
-            [child.name for child in self.driver.scheme_client.list_directory("/Root/restored").children],
+            self.scheme_listdir("/Root/restored"),
             is_(["table"])
         )
         assert_that(
@@ -889,8 +900,8 @@ class TestPermissionsBackupRestoreFolderWithTable(BaseTestBackupInFiles):
             ]
         )
         assert_that(
-            [child.name for child in self.driver.scheme_client.list_directory("/Root").children],
-            is_(["folder", ".sys"])
+            self.scheme_listdir("/Root"),
+            is_(["folder"])
         )
 
         # Restore folder with table
@@ -906,8 +917,8 @@ class TestPermissionsBackupRestoreFolderWithTable(BaseTestBackupInFiles):
         yatest_common.execute(restore_cmd)
 
         assert_that(
-            [child.name for child in self.driver.scheme_client.list_directory("/Root").children],
-            contains_inanyorder("folder", "restored", ".sys")
+            self.scheme_listdir("/Root"),
+            contains_inanyorder("folder", "restored")
         )
         assert_that(
             is_permissions_the_same(self.driver.scheme_client, "/Root/folder/", "/Root/restored/folder/"),
@@ -945,8 +956,8 @@ class TestPermissionsBackupRestoreDontOverwriteOnAlreadyExisting(BaseTestBackupI
             ]
         )
         assert_that(
-            [child.name for child in self.driver.scheme_client.list_directory("/Root").children],
-            is_(["folder", ".sys"])
+            self.scheme_listdir("/Root"),
+            is_(["folder"])
         )
 
         # Recreate table and folder but without permissions and data
@@ -963,8 +974,8 @@ class TestPermissionsBackupRestoreDontOverwriteOnAlreadyExisting(BaseTestBackupI
             .with_primary_keys("id")
         )
         assert_that(
-            [child.name for child in self.driver.scheme_client.list_directory("/Root").children],
-            is_(["folder", ".sys"])
+            self.scheme_listdir("/Root"),
+            is_(["folder"])
         )
 
         # Restore folder with table in already existing folder and table
@@ -979,8 +990,8 @@ class TestPermissionsBackupRestoreDontOverwriteOnAlreadyExisting(BaseTestBackupI
         ]
         yatest_common.execute(restore_cmd)
         assert_that(
-            [child.name for child in self.driver.scheme_client.list_directory("/Root").children],
-            contains_inanyorder("folder", ".sys")
+            self.scheme_listdir("/Root"),
+            is_(["folder"])
         )
 
         # Restore folder with table one more time in another folder
@@ -996,8 +1007,8 @@ class TestPermissionsBackupRestoreDontOverwriteOnAlreadyExisting(BaseTestBackupI
         yatest_common.execute(restore_cmd)
 
         assert_that(
-            [child.name for child in self.driver.scheme_client.list_directory("/Root").children],
-            contains_inanyorder("folder", "restored", ".sys")
+            self.scheme_listdir("/Root"),
+            contains_inanyorder("folder", "restored")
         )
 
         assert_that(
@@ -1045,8 +1056,8 @@ class TestPermissionsBackupRestoreSchemeOnly(BaseTestBackupInFiles):
             ]
         )
         assert_that(
-            [child.name for child in self.driver.scheme_client.list_directory("/Root").children],
-            is_(["folder", ".sys"])
+            self.scheme_listdir("/Root"),
+            is_(["folder"])
         )
 
         # Restore folder with table
@@ -1062,8 +1073,8 @@ class TestPermissionsBackupRestoreSchemeOnly(BaseTestBackupInFiles):
         yatest_common.execute(restore_cmd)
 
         assert_that(
-            [child.name for child in self.driver.scheme_client.list_directory("/Root").children],
-            contains_inanyorder("folder", "restored", ".sys")
+            self.scheme_listdir("/Root"),
+            contains_inanyorder("folder", "restored")
         )
         assert_that(
             is_permissions_the_same(self.driver.scheme_client, "/Root/folder/", "/Root/restored/folder/"),
@@ -1095,8 +1106,8 @@ class TestPermissionsBackupRestoreEmptyDir(BaseTestBackupInFiles):
             ]
         )
         assert_that(
-            [child.name for child in self.driver.scheme_client.list_directory("/Root").children],
-            is_(["folder", ".sys"])
+            self.scheme_listdir("/Root"),
+            is_(["folder"])
         )
 
         # Restore folder
@@ -1112,8 +1123,8 @@ class TestPermissionsBackupRestoreEmptyDir(BaseTestBackupInFiles):
         yatest_common.execute(restore_cmd)
 
         assert_that(
-            [child.name for child in self.driver.scheme_client.list_directory("/Root").children],
-            contains_inanyorder("folder", "restored", ".sys")
+            self.scheme_listdir("/Root"),
+            contains_inanyorder("folder", "restored")
         )
         assert_that(
             is_permissions_the_same(self.driver.scheme_client, "/Root/folder/", "/Root/restored/folder/"),
@@ -1149,8 +1160,8 @@ class TestRestoreACLOption(BaseTestBackupInFiles):
             is_(["table"])
         )
         assert_that(
-            [child.name for child in self.driver.scheme_client.list_directory("/Root").children],
-            is_(["folder", ".sys"])
+            self.scheme_listdir("/Root"),
+            is_(["folder"])
         )
 
         # Restore table
@@ -1167,11 +1178,11 @@ class TestRestoreACLOption(BaseTestBackupInFiles):
         yatest_common.execute(restore_cmd)
 
         assert_that(
-            [child.name for child in self.driver.scheme_client.list_directory("/Root").children],
-            contains_inanyorder("folder", "restored", ".sys")
+            self.scheme_listdir("/Root"),
+            contains_inanyorder("folder", "restored")
         )
         assert_that(
-            [child.name for child in self.driver.scheme_client.list_directory("/Root/restored").children],
+            self.scheme_listdir("/Root/restored"),
             is_(["table"])
         )
         assert_that(

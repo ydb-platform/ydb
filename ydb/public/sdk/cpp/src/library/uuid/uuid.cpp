@@ -43,6 +43,20 @@ void UuidToString(ui16 dw[8], IOutputStream& out) {
     WriteHex(dw[7], out, true);
 }
 
+std::string UuidBytesToString(const std::string& in) {
+    TStringStream ss;
+    
+    UuidBytesToString(TString(in), ss);
+
+    return std::string(ss.Str());
+}
+
+void UuidBytesToString(const std::string& in, IOutputStream& out) {
+    ui16 dw[8];
+    std::memcpy(dw, in.data(), sizeof(dw));
+    NUuid::UuidToString(dw, out);
+}
+
 void UuidHalfsToByteString(ui64 low, ui64 hi, IOutputStream& out) {
     union {
         char bytes[16];

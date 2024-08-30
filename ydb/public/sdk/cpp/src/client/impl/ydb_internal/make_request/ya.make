@@ -6,10 +6,6 @@ SRCS(
     make.cpp
 )
 
-ADDINCL(
-    ydb/public/sdk/cpp
-)
-
 PEERDIR(
     contrib/libs/protobuf
     ydb/public/api/protos

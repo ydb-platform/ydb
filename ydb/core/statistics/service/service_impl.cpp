@@ -1247,73 +1247,68 @@ private:
     }
 
     void Handle(NMon::TEvHttpInfo::TPtr& ev) {
-        auto& request = ev->Get()->Request;
-
-        if (!EnableColumnStatistics) {
-            Send(ev->Sender, new NMon::TEvHttpInfoRes("Column statistics is disabled"));
-            return;
-        }
-
-        auto method = request.GetMethod();
-        if (method == HTTP_METHOD_POST) {
-            auto& params = request.GetPostParams();
-            auto itAction = params.find("action");
-            if (itAction == params.end()) {
-                Send(ev->Sender, new NMon::TEvHttpInfoRes("'action' parameter is required"));
-                return;
-            }
-            if (itAction->second != "analyze") {
-                Send(ev->Sender, new NMon::TEvHttpInfoRes("Unknown 'action' parameter"));
-                return;
-            }
-            auto itPath = params.find("path");
-            if (itPath == params.end()) {
-                Send(ev->Sender, new NMon::TEvHttpInfoRes("'path' parameter is required"));
-                return;
-            }
-            Register(new THttpRequest(THttpRequest::EType::ANALYZE, itPath->second, ev->Sender));
-            return;
-
-        } else if (method == HTTP_METHOD_GET) {
-            auto& params = request.GetParams();
-            auto itAction = params.find("action");
-            if (itAction == params.end()) {
-                Send(ev->Sender, new NMon::TEvHttpInfoRes("'action' parameter is required"));
-                return;
-            }
-            if (itAction->second != "status") {
-                Send(ev->Sender, new NMon::TEvHttpInfoRes("Unknown 'action' parameter"));
-                return;
-            }
-            auto itPath = params.find("path");
-            if (itPath == params.end()) {
-                Send(ev->Sender, new NMon::TEvHttpInfoRes("'path' parameter is required"));
-                return;
-            }
-            Register(new THttpRequest(THttpRequest::EType::STATUS, itPath->second, ev->Sender));
+        if (!EnableStatistics) {
+            Send(ev->Sender, new NMon::TEvHttpInfoRes("Satistics is disabled"));
             return;
         }
 
         TStringStream str;
         HTML(str) {
-            str << "<form method=\"post\" id=\"analyzePath\" name=\"analyzePath\" class=\"form-group\">" << Endl;
-            str << "<input type=\"hidden\" name=\"action\" value=\"analyze\"/>";
-            DIV() {
-                str << "<input type=\"text\" class=\"form-control\" id=\"path\" name=\"path\"/>";
+            PRE() {
+                str << "---- StatisticsService ----" << Endl << Endl;
+                str << "StatisticsAggregatorId: " << StatisticsAggregatorId << Endl;
+                str << "SAPipeClientId: " << SAPipeClientId << Endl;
+
+                str << "InFlight: " << InFlight.size();
+                {
+                    ui32 simple{ 0 };
+                    ui32 countMin{ 0 };
+                    for (auto it = InFlight.begin(); it != InFlight.end(); ++it) {
+                        if (it->second.StatType == EStatType::SIMPLE) {
+                            ++simple;
+                        } else if (it->second.StatType == EStatType::COUNT_MIN_SKETCH) {
+                            ++countMin;
+                        }
+                    }
+                    str << "[SIMPLE: " << simple << ", COUNT_MIN_SKETCH: " << countMin << "]" << Endl;
+                }
+                str << "NextRequestId: " << NextRequestId << Endl;
+
+                str << "LoadQueriesInFlight: " << LoadQueriesInFlight.size() << Endl;
+                str << "NextLoadQueryCookie: " << NextLoadQueryCookie << Endl;
+
+                str << "NeedSchemeShards: " << NeedSchemeShards.size() << Endl;
+                str << "Statistics: " << Statistics.size() << Endl;
+
+                str << "ResolveSAStage: ";
+                if (ResolveSAStage == RSA_INITIAL) {
+                    str << "RSA_INITIAL";
+                } else if (ResolveSAStage == RSA_IN_FLIGHT) {
+                    str << "RSA_IN_FLIGHT";
+                }
+                else {
+                    str << "RSA_FINISHED";
+                }
+                str << Endl;
+
+                str << "AggregateKeepAlivePeriod: " << Settings.AggregateKeepAlivePeriod << Endl;
+                str << "AggregateKeepAliveTimeout: " << Settings.AggregateKeepAliveTimeout << Endl;
+                str << "AggregateKeepAliveAckTimeout: " << Settings.AggregateKeepAliveAckTimeout << Endl;
+                str << "StatisticsRequestTimeout: " << Settings.StatisticsRequestTimeout << Endl;
+                str << "MaxInFlightTabletRequests: " << Settings.MaxInFlightTabletRequests << Endl;
+                str << "FanOutFactor: " << Settings.FanOutFactor << Endl;
+
+                str << "---- AggregationStatistics ----" << Endl;
+                str << "Round: " << AggregationStatistics.Round << Endl;
+                str << "Cookie: " << AggregationStatistics.Cookie << Endl;
+                str << "PathId: " << AggregationStatistics.PathId.ToString() << Endl;
+                str << "LastAckHeartbeat: " << AggregationStatistics.LastAckHeartbeat << Endl;
+                str << "ParentNode: " << AggregationStatistics.ParentNode << Endl;
+                str << "PprocessedNodes: " << AggregationStatistics.PprocessedNodes << Endl;
+                str << "TotalStatisticsResponse: " << AggregationStatistics.TotalStatisticsResponse << Endl;
+                str << "Nodes: " << AggregationStatistics.Nodes.size() << Endl;
+                str << "CountMinSketches: " << AggregationStatistics.CountMinSketches.size() << Endl;
             }
-            DIV() {
-                str << "<input class=\"btn btn-default\" type=\"submit\" value=\"Analyze\"/>";
-            }
-            str << "</form>" << Endl;
-            str << "<form method=\"get\" id=\"pathStatus\" name=\"pathStatus\" class=\"form-group\">" << Endl;
-            str << "<input type=\"hidden\" name=\"action\" value=\"status\"/>";
-            DIV() {
-                str << "<input type=\"text\" class=\"form-control\" id=\"path\" name=\"path\"/>";
-            }
-            DIV() {
-                str << "<input class=\"btn btn-default\" type=\"submit\" value=\"Status\"/>";
-            }
-            str << "</form>" << Endl;
         }
 
         Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));

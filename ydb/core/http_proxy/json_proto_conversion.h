@@ -367,7 +367,7 @@ inline void JsonToProto(const NJson::TJsonValue& jsonValue, NProtoBuf::Message* 
                             break;
                         case google::protobuf::FieldDescriptor::CPPTYPE_MESSAGE: {
                             if (fieldDescriptor->is_map()) {
-                                AddJsonObjectToProtoAsMap(fieldDescriptor, reflection, message, value, depth);
+                                AddJsonObjectToProtoAsMap(fieldDescriptor, reflection, message, value, depth + 1);
                             } else {
                                 auto *msg = reflection->MutableMessage(message, fieldDescriptor);
                                 JsonToProto(value, msg, depth + 1);

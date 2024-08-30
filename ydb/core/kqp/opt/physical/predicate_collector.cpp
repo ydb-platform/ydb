@@ -144,6 +144,12 @@ bool AbstractTreeCanBePushed(const TExprBase& expr, const TExprNode* ) {
 bool CheckExpressionNodeForPushdown(const TExprBase& node, const TExprNode* lambdaArg) {
     if constexpr (NKikimr::NSsa::RuntimeVersion >= 5U) {
         if (node.Maybe<TCoIf>() || node.Maybe<TCoJust>() || node.Maybe<TCoCoalesce>()) {
+            // Temporary fix for https://github.com/ydb-platform/ydb/issues/7967
+            if (auto ifPred = node.Maybe<TCoIf>()) {
+                if (ifPred.ThenValue().Maybe<TCoNothing>() || ifPred.ElseValue().Maybe<TCoNothing>()) {
+                    return false;
+                }
+            }
             return true;
         }
     }

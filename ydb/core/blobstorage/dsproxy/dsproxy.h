@@ -58,7 +58,6 @@ constexpr bool DefaultEnableVPatch = false;
 constexpr float DefaultSlowDiskThreshold = 2;
 constexpr float DefaultPredictedDelayMultiplier = 1;
 constexpr TDuration DefaultLongRequestThreshold = TDuration::Seconds(50);
-constexpr TDuration DefaultLongRequestReportingDelay = TDuration::Seconds(60);
 
 constexpr bool WithMovingPatchRequestToStaticNode = true;
 

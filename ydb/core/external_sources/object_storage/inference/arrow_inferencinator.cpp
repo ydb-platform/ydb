@@ -101,7 +101,11 @@ bool ArrowToYdbType(Ydb::Type& maybeOptionalType, const arrow::DataType& type, s
         resType.set_type_id(Ydb::Type::DATETIME64);
         return true;
     case arrow::Type::TIMESTAMP:
-        resType.set_type_id(Ydb::Type::TIMESTAMP);
+        if (config->Format == EFileFormat::JsonEachRow || config->Format == EFileFormat::JsonList) {
+            maybeOptionalType.set_type_id(Ydb::Type::UTF8);
+        } else {
+            resType.set_type_id(Ydb::Type::TIMESTAMP);
+        }
         return true;
     case arrow::Type::TIME32: // TODO: is there anything?
         return false;

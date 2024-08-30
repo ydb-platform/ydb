@@ -6,6 +6,10 @@ ADDINCL(
     ydb/library/yql/udfs/common/clickhouse/client/src
 )
 
+CFLAGS(
+    -Wno-unused-parameter
+)
+
 SRCS(
     arrow_fetcher.cpp
     arrow_inferencinator.cpp

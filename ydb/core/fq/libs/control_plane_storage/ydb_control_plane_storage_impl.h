@@ -252,7 +252,7 @@ protected:
     {
     }
 
-    std::pair<TAsyncStatus, std::shared_ptr<TVector<NYdb::TResultSet>>> Read(
+    std::pair<TAsyncStatus, std::shared_ptr<std::vector<NYdb::TResultSet>>> Read(
         const TString& query,
         const NYdb::TParams& params,
         const TRequestCounters& requestCounters,
@@ -262,7 +262,7 @@ protected:
 
     TAsyncStatus Validate(
         NActors::TActorSystem* actorSystem,
-        std::shared_ptr<TMaybe<TTransaction>> transaction,
+        std::shared_ptr<std::optional<TTransaction>> transaction,
         size_t item, const TVector<TValidationQuery>& validators,
         TSession session,
         std::shared_ptr<bool> successFinish,
@@ -281,7 +281,7 @@ protected:
     TAsyncStatus ReadModifyWrite(
         const TString& readQuery,
         const NYdb::TParams& readParams,
-        const std::function<std::pair<TString, NYdb::TParams>(const TVector<NYdb::TResultSet>&)>& prepare,
+        const std::function<std::pair<TString, NYdb::TParams>(const std::vector<NYdb::TResultSet>&)>& prepare,
         const TRequestCounters& requestCounters,
         TDebugInfoPtr debugInfo = {},
         const TVector<TValidationQuery>& validators = {},
@@ -907,7 +907,7 @@ private:
     struct TPickTaskParams {
         TString ReadQuery;
         TParams ReadParams;
-        std::function<std::pair<TString, NYdb::TParams>(const TVector<NYdb::TResultSet>&)> PrepareParams;
+        std::function<std::pair<TString, NYdb::TParams>(const std::vector<NYdb::TResultSet>&)> PrepareParams;
         TString QueryId;
         bool RetryOnTli = false;
     };

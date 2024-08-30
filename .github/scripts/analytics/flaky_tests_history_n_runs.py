@@ -43,7 +43,7 @@ def create_tables(pool,  table_path):
                 `mute_count` Uint64,
                 `fail_count` Uint64,
                 `skip_count` Uint64,
-                PRIMARY KEY (`test_name`, `suite_folder`, `full_name`,date_window,runs_window,build_type,branch,owners)
+                PRIMARY KEY (`test_name`, `suite_folder`, `full_name`,date_window,runs_window,build_type,branch)
             )
                 PARTITION BY HASH(`full_name`,build_type,branch)
                 WITH (STORE = COLUMN)
@@ -135,14 +135,14 @@ def main():
                 break
     
         if results[0] and results[0].get( 'max_date_window', default_start_date) is not None and results[0].get( 'max_date_window', default_start_date) > default_start_date:
-            last_date = results[0].get(
-                'max_date_window', default_start_date).strftime('%Y-%m-%d')
             last_datetime = results[0].get(
                 'max_date_window', default_start_date)
-        else:
-            last_date = default_start_date.strftime('%Y-%m-%d')
-            last_datetime = default_start_date
 
+        else:
+            last_datetime = default_start_date
+            
+        last_date = last_datetime.strftime('%Y-%m-%d')
+        
         print(f'last hisotry date: {last_date}')
         today = datetime.date.today()
         date_list = [today - datetime.timedelta(days=x) for x in range((today - last_datetime).days+1)]
@@ -154,7 +154,7 @@ def main():
                     build_type,
                     branch,
                     history_list,
-                    dist_hist,
+                    if(dist_hist = '','no_runs',dist_hist) as dist_hist,
                     suite_folder,
                     test_name,
                     owners,
@@ -167,7 +167,7 @@ def main():
                         build_type,
                         branch,
                         AGG_LIST(status) as history_list ,
-                        String::JoinFromList( AGG_LIST_DISTINCT(status) ,',') as dist_hist,
+                        String::JoinFromList( ListSort(AGG_LIST_DISTINCT(status)) ,',') as dist_hist,
                         suite_folder,
                         test_name,
                         owners,
@@ -187,21 +187,42 @@ def main():
                             ) as test_and_date
                         left JOIN (
                             select * from (
-                                select
-                                    suite_folder || '/' || test_name as full_name,
-                                    run_timestamp,
-                                    status ,
-                                    ROW_NUMBER() OVER (PARTITION BY suite_folder,test_name ORDER BY run_timestamp DESC) AS run_number
-                                from  `test_results/test_runs_column`
-                                where
-                                    run_timestamp <= Date('{date}') + Interval("P1D")
-                                    and run_timestamp >= Date('{date}') -13*Interval("P1D") 
-                                    and job_name in ('Postcommit_relwithdebinfo','Postcommit_asan')
-                                    and build_type = '{build_type}'
-                                    and status != 'skipped'
-                                    and branch = '{branch}'
-                            )
-                            where run_number <= {history_for_n_runs}
+                                select * from (
+                                    select * from (
+                                        select
+                                            suite_folder || '/' || test_name as full_name,
+                                            run_timestamp,
+                                            status ,
+                                            ROW_NUMBER() OVER (PARTITION BY suite_folder,test_name ORDER BY run_timestamp DESC) AS run_number
+                                        from  `test_results/test_runs_column`
+                                        where
+                                            run_timestamp <= Date('{date}') + Interval("P1D")
+                                            and run_timestamp >= Date('{date}') -13*Interval("P1D") 
+                                            and job_name in ('Postcommit_relwithdebinfo','Postcommit_asan')
+                                            and build_type = '{build_type}'
+                                            and status != 'skipped'
+                                            and branch = '{branch}'
+                                        )
+                                    where run_number <= {history_for_n_runs}
+                                    )
+                                Union all
+                                    select * from (
+                                        select
+                                            suite_folder || '/' || test_name as full_name,
+                                            run_timestamp,
+                                            status ,
+                                            ROW_NUMBER() OVER (PARTITION BY suite_folder,test_name ORDER BY run_timestamp DESC) AS run_number
+                                        from  `test_results/test_runs_column`
+                                        where
+                                            run_timestamp <= Date('{date}') + Interval("P1D")
+                                            and run_timestamp >= Date('{date}') -13*Interval("P1D") 
+                                            and job_name in ('Postcommit_relwithdebinfo','Postcommit_asan')
+                                            and build_type = '{build_type}'
+                                            and status = 'skipped'
+                                            and branch = '{branch}'
+                                        )
+                                    where run_number <= {history_for_n_runs}
+                                )
                         ) as hist
                         ON test_and_date.full_name=hist.full_name
                     )

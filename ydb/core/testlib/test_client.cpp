@@ -2219,54 +2219,6 @@ namespace Tests {
         UNIT_ASSERT((NMsgBusProxy::EResponseStatus)responseDelete.GetStatus());
     }
 
-    bool TClient::LocalQuery(const ui64 tabletId, const TString &pgmText, NKikimrMiniKQL::TResult& result) {
-        TAutoPtr<NMsgBusProxy::TBusTabletLocalMKQL> request = new NMsgBusProxy::TBusTabletLocalMKQL();
-        request->Record.SetTabletID(ChangeStateStorage(tabletId, Domain));
-        request->Record.SetWithRetry(true);
-        auto *mkql = request->Record.MutableProgram();
-        mkql->MutableProgram()->SetText(pgmText);
-
-        TAutoPtr<NBus::TBusMessage> reply;
-        auto status = SyncCall(request, reply);
-        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
-
-        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
-        UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(), NMsgBusProxy::MSTATUS_OK);
-
-        if (response.HasExecutionEngineEvaluatedResponse())
-            result.CopyFrom(response.GetExecutionEngineEvaluatedResponse());
-
-        return response.GetExecutionEngineResponseStatus() == ui32(NMiniKQL::IEngineFlat::EStatus::Complete);
-    }
-
-    bool TClient::LocalSchemeTx(const ui64 tabletId, const NTabletFlatScheme::TSchemeChanges& changes, bool dryRun,
-                                NTabletFlatScheme::TSchemeChanges& scheme, TString& err) {
-        TAutoPtr<NMsgBusProxy::TBusTabletLocalSchemeTx> request = new NMsgBusProxy::TBusTabletLocalSchemeTx();
-        request->Record.SetTabletID(ChangeStateStorage(tabletId, Domain));
-        request->Record.SetDryRun(dryRun);
-        auto *schemeChanges = request->Record.MutableSchemeChanges();
-        schemeChanges->CopyFrom(changes);
-
-        TAutoPtr<NBus::TBusMessage> reply;
-        auto status = SyncCall(request, reply);
-        UNIT_ASSERT_EQUAL(status, NBus::MESSAGE_OK);
-
-        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
-        UNIT_ASSERT_EQUAL(response.GetStatus(), NMsgBusProxy::MSTATUS_OK);
-
-        err = response.GetErrorReason();
-        scheme.CopyFrom(response.GetLocalDbScheme());
-
-        return err.empty();
-    }
-
-    bool TClient::LocalSchemeTx(const ui64 tabletId, const TString &schemeChangesStr, bool dryRun,
-                                NTabletFlatScheme::TSchemeChanges& scheme, TString& err) {
-        NTabletFlatScheme::TSchemeChanges schemeChanges;
-        ::google::protobuf::TextFormat::ParseFromString(schemeChangesStr, &schemeChanges);
-        return LocalSchemeTx(tabletId, schemeChanges, dryRun, scheme, err);
-    }
-
     bool TClient::Compile(const TString &mkql, TString &compiled) {
         TAutoPtr<NMsgBusProxy::TBusRequest> request = new NMsgBusProxy::TBusRequest();
         auto* mkqlTx = request->Record.MutableTransaction()->MutableMiniKQLTransaction();

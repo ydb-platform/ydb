@@ -11,47 +11,24 @@ In addition to its own native protocol, {{ ydb-name }} has a compatibility layer
 
 ## Graphical Interface Clients {#gui}
 
-|  Environment | Instruction | Compatibility Level |
-| --- | --- | --- |
-| Embedded UI | [Instruction](../reference/embedded-ui/index.md) | |
-| [DBeaver](https://dbeaver.com)  |  [Instruction](ide/dbeaver.md) | By [JDBC-driver](https://github.com/ydb-platform/ydb-jdbc-driver/releases)|
-| JetBrains Database viewer |  —  | By [JDBC-driver](https://github.com/ydb-platform/ydb-jdbc-driver/releases)|
-| [JetBrains DataGrip](https://www.jetbrains.com/datagrip/) |  [Instruction](ide/datagrip.md) | By [JDBC-driver](https://github.com/ydb-platform/ydb-jdbc-driver/releases)|
-| Other JDBC-compatible IDEs | — | By [JDBC-driver](https://github.com/ydb-platform/ydb-jdbc-driver/releases)|
-
+{% include notitle [Table of contents](gui_clients/_includes/toc-table.md) %}
 
 ## Data Visualization (Business Intelligence, BI) {#bi}
 
-| Environment | Compatibility Level  | Instruction |
-| --- | :---: | --- |
-| [Grafana](https://grafana.com) | Full| [Instruction](grafana.md) |
+{% include notitle [Table of contents](visualization/_includes/toc-table.md) %}
 
 
 ## Data Ingestion {#ingestion}
 
-| Delivery System | Instruction |
-| --- | --- |
-| [FluentBit](https://fluentbit.io) | [Instruction](fluent-bit.md) |
-| [LogStash](https://www.elastic.co/logstash) | [Instruction](logstash.md) |
-| [Kafka Connect Sink](https://docs.confluent.io/platform/current/connect/index.html) | [Instruction](https://github.com/ydb-platform/ydb-kafka-sink-connector) |
-| Arbitrary [JDBC data sources](https://en.wikipedia.org/wiki/Java_Database_Connectivity) | [Instruction](import-jdbc.md) |
-
+{% include notitle [Table of contents](ingestion/_includes/toc-table.md) %}
 
 ### Streaming Data Ingestion {#streaming-ingestion}
 
-| Delivery System | Instruction |
-| --- | --- |
-| [Apache Kafka API](https://kafka.apache.org) | [Instruction](../reference/kafka-api/index.md) |
-
+{% include notitle [Table of contents](ingestion/_includes/toc-table-streaming.md) %}
 
 ## Data Migrations {#schema_migration}
 
-| Environment | Instruction |
-| --- | --- |
-| [goose](https://github.com/pressly/goose/) | [Instruction](goose.md) |
-| [Liquibase](https://www.liquibase.com) | [Instruction](liquibase.md) |
-| [Flyway](https://documentation.red-gate.com/fd/) | [Instruction](flyway.md) |
-| [Hibernate](https://hibernate.org/orm/) | [Instruction](hibernate.md) |
+{% include notitle [Table of contents](migration/_includes/toc-table.md) %}
 
 ## See Also
 

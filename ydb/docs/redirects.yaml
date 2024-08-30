@@ -300,6 +300,30 @@ common:
   - from: /reference/ydb-cli/export_import/tools_restore.md
     to: /reference/ydb-cli/export-import/tools-restore.md
 
+# Redirects for integrations
+  - from: /integrations/grafana.md
+    to: /integrations/visualization/grafana.md
+  - from: /integrations/ide/dbeaver.md
+    to: /integrations/gui_clients/dbeaver.md
+  - from: /integrations/ide/datagrip.md
+    to: /integrations/gui_clients/datagrip.md
+  - from: /integrations/fluent-bit.md
+    to: /integrations/ingestion/fluent-bit.md
+  - from: /integrations/import-jdbc.md
+    to: /integrations/ingestion/import-jdbc.md
+  - from: /integrations/logstash.md
+    to: /integrations/ingestion/logstash.md
+  - from: /integrations/spring-data-jdbc.md
+    to: /integrations/ingestion/spring-data-jdbc.md
+  - from: /integrations/flyway.md
+    to: /integrations/migration/flyway.md
+  - from: /integrations/goose.md
+    to: /integrations/migration/goose.md
+  - from: /integrations/hibernate.md
+    to: /integrations/migration/hibernate.md
+  - from: /integrations/liquibase.md
+    to: /integrations/migration/liquibase.md
+
 ru:
   - from: /concepts/column-table.md
     to: /concepts/datamodel/table.md

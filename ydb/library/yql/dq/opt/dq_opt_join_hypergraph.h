@@ -272,21 +272,23 @@ public:
     {}
 
     void Apply(const TJoinOrderHints& hints) {
-        auto labels = ApplyHintsToSubgraph(hints.HintsTree);
-        auto nodes = Graph_.GetNodesByRelNames(labels);
-        
-        for (size_t i = 0; i < Graph_.GetEdges().size(); ++i) {
-            TNodeSet newLeft = Graph_.GetEdge(i).Left;
-            if (Overlaps(Graph_.GetEdge(i).Left, nodes) && !IsSubset(Graph_.GetEdge(i).Right, nodes)) {
-                newLeft |= nodes;
-            }
+        for (const auto& hintTree: hints.HintTrees) {
+            auto labels = ApplyHintsToSubgraph(hintTree);
+            auto nodes = Graph_.GetNodesByRelNames(labels);
+            
+            for (size_t i = 0; i < Graph_.GetEdges().size(); ++i) {
+                TNodeSet newLeft = Graph_.GetEdge(i).Left;
+                if (Overlaps(Graph_.GetEdge(i).Left, nodes) && !IsSubset(Graph_.GetEdge(i).Right, nodes)) {
+                    newLeft |= nodes;
+                }
 
-            TNodeSet newRight = Graph_.GetEdge(i).Right;
-            if (Overlaps(Graph_.GetEdge(i).Right, nodes) && !IsSubset(Graph_.GetEdge(i).Left, nodes)) {
-                newRight |= nodes;
-            }
+                TNodeSet newRight = Graph_.GetEdge(i).Right;
+                if (Overlaps(Graph_.GetEdge(i).Right, nodes) && !IsSubset(Graph_.GetEdge(i).Left, nodes)) {
+                    newRight |= nodes;
+                }
 
-            Graph_.UpdateEdgeSides(i, newLeft, newRight);
+                Graph_.UpdateEdgeSides(i, newLeft, newRight);
+            }
         }
     }
 

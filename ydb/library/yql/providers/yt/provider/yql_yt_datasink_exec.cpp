@@ -252,6 +252,30 @@ private:
                 << ", cache mode: " << queryCacheMode;
         }
 
+        TSet<TString> addSecTags;
+        for (size_t pos = 0; pos < optimizedNode->ChildrenSize(); pos++) {
+            auto childPtr = optimizedNode->ChildPtr(pos);
+            if (childPtr->Type() == TExprNode::Lambda) {
+                VisitExpr(childPtr, [&addSecTags](const TExprNode::TPtr& node) -> bool {
+                    if (TYtTableContent::Match(node.Get())) {
+                        VisitExpr(node, [&addSecTags](const TExprNode::TPtr& node) -> bool {
+                            if (TYtTableBase::Match(node.Get())) {
+                                if (auto stat = TYtTableBaseInfo::GetStat(TExprBase(node))) {
+                                    for (const auto& tag : stat->SecurityTags) {
+                                        addSecTags.insert(tag);
+                                    }
+                                }
+                                return false;
+                            }
+                            return true;
+                        });
+                        return false;
+                    }
+                    return true;
+                });
+            }
+        }
+
         YQL_CLOG(DEBUG, ProviderYt) << "Executing " << input->Content() << " (UniqueId=" << input->UniqueId() << ")";
 
         return State_->Gateway->Run(optimizedNode, ctx,
@@ -265,6 +289,7 @@ private:
                 .OptLLVM(State_->Types->OptLLVM.GetOrElse(TString()))
                 .OperationHash(operationHash)
                 .SecureParams(secureParams)
+                .AdditionalSecurityTags(addSecTags)
             );
     }
 

@@ -13,7 +13,7 @@ REQUIREMENTS(
 )
 
 TIMEOUT(600)
-SIZE(MEDIUM)
+SIZE(LARGE)
 
 DEPENDS(
     ydb/tests/tools/ydb_serializable

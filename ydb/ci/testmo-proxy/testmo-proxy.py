@@ -49,7 +49,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
         while time.monotonic() - start_time < self._max_request_time:
             try:
                 response = requests.request(method, url, data=body, headers=headers, timeout=self._timeout)
-                break
+                if 500 <= response.status_code < 600:
+                    self.log_message(f"going to retry {response}")
+                else:
+                    break
             except requests.exceptions.RequestException as e:
                 self.log_message("! catch %s, retry", e)
                 time.sleep(0.25)

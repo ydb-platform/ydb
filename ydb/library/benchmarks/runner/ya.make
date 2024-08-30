@@ -6,6 +6,10 @@ TEST_SRCS(
     tpc_tests.py
 )
 
+PEERDIR(
+    ydb/public/sdk/python
+)
+
 DEPENDS(
     ydb/library/benchmarks/runner/run_tests
     ydb/library/yql/tools/dqrun

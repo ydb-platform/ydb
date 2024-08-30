@@ -152,6 +152,10 @@ const TOperationId::TDataList& TOperationId::GetData() const {
     return Data;
 }
 
+TOperationId::TDataList& TOperationId::GetMutableData() {
+    return Data;
+}
+
 const std::vector<const std::string*>& TOperationId::GetValue(const std::string &key) const {
     auto it = Index.find(key);
     if (it != Index.end()) {

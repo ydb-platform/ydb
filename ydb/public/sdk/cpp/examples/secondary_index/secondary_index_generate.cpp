@@ -2,6 +2,7 @@
 
 #include <util/thread/pool.h>
 
+#include <mutex>
 #include <random>
 
 using namespace NLastGetopt;

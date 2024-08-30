@@ -794,7 +794,7 @@ public:
 protected:
     void Initialize(std::shared_ptr<TPDiskCtx> pCtx) override {
         PCtx = std::move(pCtx);
-        Y_ABORT_UNLESS(PCtx && PCtx->ActorSystem);
+        Y_ABORT_UNLESS(PCtx);
 
         TString errStr = TDeviceMode::Validate(Flags);
         if (errStr) {

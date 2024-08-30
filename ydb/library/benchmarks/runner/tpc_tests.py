@@ -5,7 +5,6 @@ import os
 import shutil
 import json
 import time
-import ydb
 import subprocess
 
 
@@ -161,40 +160,38 @@ def upload_results(result_path, s3_folder, test_start):
 
     print(results_map, file=sys.stderr)
 
-    with ydb.Driver(
-        endpoint=DATABASE_ENDPOINT,
-        database=DATABASE_PATH,
-        credentials=ydb.credentials_from_env_variables()
-    ) as driver:
-        driver.wait(timeout=5)
+    def execute(sql):
+        ydb = pathlib.Path(yatest.common.binary_path("ydb/apps/ydb")).resolve()
+        cmd = [str(ydb) + "/ydb"]
+        cmd += ["-e", DATABASE_ENDPOINT]
+        cmd += ["-d", DATABASE_PATH]
+        cmd += ["scripting", "yql", "-s"]
+        cmd += [sql]
+        subprocess.run(cmd)
 
-        session = ydb.retry_operation_sync(
-            lambda: driver.table_client.session().create()
-        )
-        for params, results in results_map.items():
-            with session.transaction() as tx:
-                mapping = {
-                    "BenchmarkType" : params.variant,
-                    "Scale" : params.datasize,
-                    "QueryNum" : params.query,
-                    "WithSpilling" : params.is_spilling,
-                    "Timestamp" : test_start,
-                    "WasSpillingInAggregation" : None,
-                    "WasSpillingInJoin" : None,
-                    "WasSpillingInChannels" : None,
-                    "MaxTasksPerStage" : params.tasks,
-                    "PerfFileLink" : results.perf_file_path,
-                    "ExitCode" : results.exitcode,
-                    "ResultHash" : results.output_hash,
-                    "SpilledBytes" : results.read_bytes,
-                    "UserTime" : results.user_time,
-                    "SystemTime" : results.syste_time
-                }
-                sql = 'UPSERT INTO dq_spilling_nightly_runs ({columns}) VALUES ({values})'.format(
-                    columns=", ".join(mapping.keys()),
-                    values=", ".join(mapping.values()))
-                print(sql, file=sys.stderr)
-                tx.execute(sql, commit_tx=True)
+    for params, results in results_map.items():
+        mapping = {
+            "BenchmarkType" : params.variant,
+            "Scale" : params.datasize,
+            "QueryNum" : params.query,
+            "WithSpilling" : params.is_spilling,
+            "Timestamp" : test_start,
+            "WasSpillingInAggregation" : None,
+            "WasSpillingInJoin" : None,
+            "WasSpillingInChannels" : None,
+            "MaxTasksPerStage" : params.tasks,
+            "PerfFileLink" : results.perf_file_path,
+            "ExitCode" : results.exitcode,
+            "ResultHash" : results.output_hash,
+            "SpilledBytes" : results.read_bytes,
+            "UserTime" : results.user_time,
+            "SystemTime" : results.system_time
+        }
+        sql = 'UPSERT INTO dq_spilling_nightly_runs ({columns}) VALUES ({values})'.format(
+            columns=", ".join(map(str, mapping.keys())),
+            values=", ".join(map(str, mapping.values())))
+        print(sql, file=sys.stderr)
+        execute(sql)
 
 
 def prepare_login_to_ydb():
@@ -215,7 +212,7 @@ def test_tpc():
     print("results path:", result_path, file=sys.stderr)
 
     if is_ci:
-        prepare_login_to_ydb()
+        # prepare_login_to_ydb()
 
         s3_folder = pathlib.Path(os.environ["PUBLIC_DIR"]).resolve()
         print(f"s3 folder: {s3_folder}", file=sys.stderr)

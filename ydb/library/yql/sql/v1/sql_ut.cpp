@@ -2497,6 +2497,11 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
             "<main>:1:40: Error: with: alternative is not implemented yet: 743:20: global_index\n");
     }
 
+    Y_UNIT_TEST(AlterTableAddIndexLocalIsNotSupported) {
+        ExpectFailWithError("USE plato; ALTER TABLE table ADD INDEX idx LOCAL ON (col)",
+            "<main>:1:40: Error: local: alternative is not implemented yet: 743:35: local_index\n");
+    }
+
     Y_UNIT_TEST(AlterTableAlterIndexSetPartitioningIsCorrect) {
         const auto result = SqlToYql("USE plato; ALTER TABLE table ALTER INDEX index SET AUTO_PARTITIONING_MIN_PARTITIONS_COUNT 10");
         UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());

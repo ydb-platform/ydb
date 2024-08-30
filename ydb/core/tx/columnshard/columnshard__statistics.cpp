@@ -12,17 +12,25 @@ namespace NKikimr::NColumnShard {
 
 void TColumnShard::Handle(NStat::TEvStatistics::TEvAnalyzeTable::TPtr& ev, const TActorContext&) {
     auto& requestRecord = ev->Get()->Record;
-    // TODO Start a potentially long analysis process.
-    // ...
 
-
-
-    // Return the response when the analysis is completed
     auto response = std::make_unique<NStat::TEvStatistics::TEvAnalyzeTableResponse>();
     auto& responseRecord = response->Record;
     responseRecord.SetOperationId(requestRecord.GetOperationId());
     responseRecord.MutablePathId()->CopyFrom(requestRecord.GetTable().GetPathId());
     responseRecord.SetShardTabletId(TabletID());
+
+    if (requestRecord.TypesSize() > 0 && (requestRecord.TypesSize() > 1 || requestRecord.GetTypes(0) != NKikimrStat::TYPE_COUNT_MIN_SKETCH)) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", "Unsupported statistic type in analyze request");
+
+        Send(ev->Sender, response.release(), 0, ev->Cookie);
+        return;
+    }
+
+    // TODO Start a potentially long analysis process.
+    // ...
+
+
+
     Send(ev->Sender, response.release(), 0, ev->Cookie);
 }
 
@@ -62,9 +70,18 @@ void TColumnShard::Handle(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, 
         sketchesByColumns.emplace(id, TCountMinSketch::Create());
     }
 
+    auto actualSchema = index.GetVersionedIndex().GetLastCriticalSchema();
+    AFL_VERIFY(actualSchema);
+    // ui32 totalVisiblePortions = 0;
+    // ui32 actualVisiblePortions = 0;
+
     for (const auto& [_, portionInfo] : spg->GetPortions()) {
         if (portionInfo->IsVisible(GetMaxReadVersion())) {
             std::shared_ptr<NOlap::ISnapshotSchema> portionSchema = portionInfo->GetSchema(index.GetVersionedIndex());
+            // totalVisiblePortions++;
+            // if (portionSchema->GetVersion() >= actualSchema->GetVersion()) {
+            //     actualVisiblePortions++;
+            // }
             for (ui32 columnId : columnTagsRequested) {
                 auto indexMeta = portionSchema->GetIndexInfo().GetIndexMetaCountMinSketch({columnId});
 
@@ -83,6 +100,10 @@ void TColumnShard::Handle(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, 
             }
         }
     }
+
+    // double freshness = totalVisiblePortions > 0 ? (double)actualVisiblePortions / (double)totalVisiblePortions : 0.;
+
+    // Cerr << ">>> freshness is " << freshness << Endl;
 
     respRecord.SetStatus(NKikimrStat::TEvStatisticsResponse::STATUS_SUCCESS);
 

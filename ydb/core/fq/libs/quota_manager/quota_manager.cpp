@@ -416,7 +416,7 @@ private:
                 builder.AddString("subject", executer.State.SubjectType);
                 builder.AddString("id", executer.State.SubjectId);
             },
-            [](TReadQuotaExecuter& executer, const TVector<NYdb::TResultSet>& resultSets) {
+            [](TReadQuotaExecuter& executer, const std::vector<NYdb::TResultSet>& resultSets) {
                 TResultSetParser parser(resultSets.front());
                 while (parser.TryNextRow()) {
                     auto name = *parser.ColumnParser(METRIC_NAME_COLUMN_NAME).GetOptionalString();
@@ -570,7 +570,7 @@ private:
                 builder.AddString("id", executer.State.SubjectId);
                 builder.AddString("metric", executer.State.MetricName);
             },
-            [](TSyncQuotaExecuter& executer, const TVector<NYdb::TResultSet>& resultSets) {
+            [](TSyncQuotaExecuter& executer, const std::vector<NYdb::TResultSet>& resultSets) {
                 TResultSetParser parser(resultSets.front());
                 if (parser.TryNextRow()) {
                     auto limitUpdatedAt = parser.ColumnParser(LIMIT_UPDATED_AT_COLUMN_NAME).GetOptionalTimestamp();

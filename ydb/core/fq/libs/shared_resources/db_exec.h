@@ -85,7 +85,7 @@ class TDbExecuter : public TDbExecutable {
 public:
     using TCallback = std::function<void(TDbExecuter<TState>&)>;
     using TBuildCallback = std::function<void(TDbExecuter<TState>&, TSqlQueryBuilder&)>;
-    using TResultCallback = std::function<void(TDbExecuter<TState>&, const TVector<NYdb::TResultSet>&)>;
+    using TResultCallback = std::function<void(TDbExecuter<TState>&, const std::vector<NYdb::TResultSet>&)>;
 
 private:
     struct TExecStep {
@@ -99,7 +99,7 @@ private:
     ui32 CurrentStepIndex = 0;
     ui32 InsertStepIndex = 0;
     NActors::TActorId HandlerActorId;
-    TMaybe<TTransaction> Transaction;
+    std::optional<TTransaction> Transaction;
     NActors::TActorSystem* ActorSystem = nullptr;
     TCallback HandlerCallback;
     TCallback StateInitCallback;
@@ -157,7 +157,7 @@ public:
                     if (!status.IsSuccess()) {
                         return MakeFuture(status);
                     } else {
-                        self->Transaction.Clear();
+                        self->Transaction.reset();
                         return self->NextStep(session);
                     }
                 });
@@ -198,16 +198,16 @@ public:
                 auto status = static_cast<TStatus>(result);
 
                 if (status.GetStatus() == EStatus::SCHEME_ERROR) { // retry if table does not exist
-                    self->Transaction.Clear();
+                    self->Transaction.reset();
                     return MakeFuture(TStatus{EStatus::UNAVAILABLE, NYql::TIssues{status.GetIssues()}});
                 }
                 if (!status.IsSuccess()) {
-                    self->Transaction.Clear();
+                    self->Transaction.reset();
                     return MakeFuture(status);
                 }
 
                 if (self->Steps[self->CurrentStepIndex].Commit) {
-                    self->Transaction.Clear();
+                    self->Transaction.reset();
                 } else if (!self->Transaction) {
                     self->Transaction = result.GetTransaction();
                 }

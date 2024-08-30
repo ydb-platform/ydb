@@ -93,7 +93,7 @@ public:
         }
         Params.ExecutionId = response.ExecutionId;
         Params.OperationId = response.OperationId;
-        LOG_I("ExecuterResponse (success). ExecutionId: " << Params.ExecutionId << " OperationId: " << ProtoToString(Params.OperationId));
+        LOG_I("ExecuterResponse (success). ExecutionId: " << Params.ExecutionId << " OperationId: " << Params.OperationId.ToString());
         Register(ActorFactory->CreateStatusTracker(SelfId(), Connector, Pinger, Params.OperationId).release());
     }
 
@@ -165,7 +165,7 @@ public:
     void Handle(TEvents::TEvQueryActionResult::TPtr& ev) {
         LOG_I("QueryActionResult: " << FederatedQuery::QueryAction_Name(ev->Get()->Action));
         // Start cancel operation only when StatusTracker or ResultWriter is running
-        if (Params.OperationId.GetKind() != Ydb::TOperationId::UNUSED && !IsAborted && !FinalizationStarted) {
+        if (Params.OperationId.GetKind() != NKikimr::NOperationId::TOperationId::UNUSED && !IsAborted && !FinalizationStarted) {
             IsAborted = true;
             Register(ActorFactory->CreateStopper(SelfId(), Connector, Pinger, Params.OperationId).release());
         }
@@ -188,14 +188,14 @@ public:
             Register(ActorFactory->CreateInitializer(SelfId(), Pinger).release());
             break;
         case FederatedQuery::QueryMeta::RUNNING:
-            if (Params.OperationId.GetKind() == Ydb::TOperationId::UNUSED) {
+            if (Params.OperationId.GetKind() == NKikimr::NOperationId::TOperationId::UNUSED) {
                 Register(ActorFactory->CreateExecuter(SelfId(), Connector, Pinger).release()); // restart query
             } else {
                 Register(ActorFactory->CreateStatusTracker(SelfId(), Connector, Pinger, Params.OperationId).release());
             }
             break;
         case FederatedQuery::QueryMeta::COMPLETING:
-            if (Params.OperationId.GetKind() != Ydb::TOperationId::UNUSED) {
+            if (Params.OperationId.GetKind() != NKikimr::NOperationId::TOperationId::UNUSED) {
                 Register(ActorFactory->CreateResultWriter(SelfId(), Connector, Pinger, Params.OperationId, false).release());
             } else {
                 CreateFinalizer(Params.Status);
@@ -204,7 +204,7 @@ public:
         case FederatedQuery::QueryMeta::FAILING:
         case FederatedQuery::QueryMeta::ABORTING_BY_USER:
         case FederatedQuery::QueryMeta::ABORTING_BY_SYSTEM:
-            if (Params.OperationId.GetKind() != Ydb::TOperationId::UNUSED) {
+            if (Params.OperationId.GetKind() != NKikimr::NOperationId::TOperationId::UNUSED) {
                 Register(ActorFactory->CreateStatusTracker(SelfId(), Connector, Pinger, Params.OperationId).release());
             } else {
                 CreateFinalizer(Params.Status);

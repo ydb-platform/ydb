@@ -394,7 +394,7 @@ public:
 
     // Schedules EvReadLogResult event for the system log
     void ResetInit();
-    bool Initialize(TActorSystem *actorSystem, const TActorId &pDiskActorId); // Called by actor
+    bool Initialize(std::shared_ptr<TPDiskCtx> pCtx); // Called by actor
     void InitiateReadSysLog(const TActorId &pDiskActor); // Called by actor
     void ProcessReadLogResult(const TEvReadLogResult &evReadLogResult, const TActorId &pDiskActor);
 

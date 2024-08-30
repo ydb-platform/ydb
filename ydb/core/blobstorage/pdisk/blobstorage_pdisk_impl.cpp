@@ -44,7 +44,7 @@ TPDisk::TPDisk(const TIntrusivePtr<TPDiskConfig> cfg, const TIntrusivePtr<::NMon
     , Keeper(Mon, cfg)
     , CostLimitNs(cfg->CostLimitNs)
     , PDiskThread(*this)
-    , BlockDevice(CreateRealBlockDevice(cfg->GetDevicePath(), cfg->PDiskId, Mon,
+    , BlockDevice(CreateRealBlockDevice(cfg->GetDevicePath(), Mon,
                     HPCyclesMs(ReorderingMs), DriveModel.SeekTimeNs(), cfg->DeviceInFlight,
                     TDeviceMode::LockFile | (cfg->UseSpdkNvmeDriver ? TDeviceMode::UseSpdk : 0),
                     cfg->MaxQueuedCompletionActions, cfg->SectorMap, this))
@@ -54,7 +54,7 @@ TPDisk::TPDisk(const TIntrusivePtr<TPDiskConfig> cfg, const TIntrusivePtr<::NMon
     , UseHugePages(cfg->UseSpdkNvmeDriver)
 {
     PCtx->PDiskId = cfg->PDiskId;
-    PCtx->Mon = &Mon;
+    // PCtx->Mon = &Mon;
 
     SlowdownAddLatencyNs = TControlWrapper(0, 0, 100'000'000'000ll);
     EnableForsetiBinLog = TControlWrapper(0, 0, 1);
@@ -2602,13 +2602,15 @@ void TPDisk::OnDriveStartup() {
 // Internal interface
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-bool TPDisk::Initialize(TActorSystem *actorSystem, const TActorId &pDiskActor) {
+bool TPDisk::Initialize(std::shared_ptr<TPDiskCtx> pCtx) {
+    PCtx = std::move(pCtx);
+
 #define REGISTER_LOCAL_CONTROL(control) \
-    actorSystem->AppData<TAppData>()->Icb->RegisterLocalControl(control, \
+    PCtx->ActorSystem->AppData<TAppData>()->Icb->RegisterLocalControl(control, \
             TStringBuilder() << "PDisk_" << PDiskId << "_" << #control)
 
     if (!IsStarted) {
-        if (actorSystem && actorSystem->AppData<TAppData>() && actorSystem->AppData<TAppData>()->Icb) {
+        if (PCtx->ActorSystem && PCtx->ActorSystem->AppData<TAppData>() && PCtx->ActorSystem->AppData<TAppData>()->Icb) {
             REGISTER_LOCAL_CONTROL(SlowdownAddLatencyNs);
             REGISTER_LOCAL_CONTROL(EnableForsetiBinLog);
             REGISTER_LOCAL_CONTROL(ForsetiMinLogCostNsControl);
@@ -2631,18 +2633,19 @@ bool TPDisk::Initialize(TActorSystem *actorSystem, const TActorId &pDiskActor) {
                 }
             }
         }
-        PCtx->PDiskActor = pDiskActor;
-        PCtx->ActorSystem = ActorSystem;
-        PDiskActor = pDiskActor;
-        ActorSystem = actorSystem;
+        //PCtx->PDiskActor = pDiskActor; // ???
+        //PCtx->ActorSystem = ActorSystem; // ???
+
+        PDiskActor = PCtx->PDiskActor;
+        ActorSystem = PCtx->ActorSystem;
 
         Y_ABORT_UNLESS(BlockDevice);
-        BlockDevice->Initialize(actorSystem, pDiskActor);
-        ReqCreator.SetActorSystem(actorSystem);
+        BlockDevice->Initialize(PCtx);
+        ReqCreator.SetActorSystem(PCtx->ActorSystem);
         IsStarted = true;
 
         BufferPool = THolder<TBufferPool>(CreateBufferPool(Cfg->BufferPoolBufferSizeBytes, Cfg->BufferPoolBufferCount,
-                UseHugePages, {Mon.DeviceBufferPoolFailedAllocations, ActorSystem, PDiskId}));
+                UseHugePages, {Mon.DeviceBufferPoolFailedAllocations, PCtx->ActorSystem, PDiskId}));
 
         P_LOG(PRI_NOTICE, BPD01, "PDisk initialized", (Cfg, Cfg->ToString()), (DriveModel, DriveModel.ToString()));
     }

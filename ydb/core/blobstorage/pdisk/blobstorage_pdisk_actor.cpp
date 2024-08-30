@@ -237,6 +237,7 @@ public:
     // Bootstrap state
     void Bootstrap(const TActorContext &ctx) {
         PCtx->ActorSystem = ctx.ActorSystem();
+        PCtx->PDiskActor = SelfId();
         P_LOG(PRI_CRIT, BPD01, "Bootstrap, ActorSystem# " << (void*)PCtx->ActorSystem);
         auto mon = AppData()->Mon;
         if (mon && !Cfg->MetadataOnly) {
@@ -265,7 +266,7 @@ public:
         DeviceFlag.RemoveSources();
         DeviceFlag.AddSource(PDisk->Mon.L6);
 
-        bool isOk = PDisk->Initialize(TlsActivationContext->ActorSystem(), SelfId());
+        bool isOk = PDisk->Initialize(PCtx);
 
         if (!MainKey) {
             TStringStream str;
@@ -349,7 +350,7 @@ public:
                     "PDiskId# " << PDisk->PDiskId << " device formatting done");
         } else {
             PDisk.Reset(new TPDisk(Cfg, PDiskCounters));
-            PDisk->Initialize(TlsActivationContext->ActorSystem(), SelfId());
+            PDisk->Initialize(PCtx);
             Y_ABORT_UNLESS(PDisk->PDiskThread.Running());
 
             *PDisk->Mon.PDiskState = NKikimrBlobStorage::TPDiskState::InitialFormatReadError;
@@ -457,7 +458,7 @@ public:
         LOG_WARN_S(*TlsActivationContext, NKikimrServices::BS_PDISK, "PDiskId# " << PDisk->PDiskId << PDisk->ErrorStr);
 
         // Is used to pass parameters into formatting thread, because TThread can pass only void*
-        using TCookieType = std::tuple<TDiskFormat, NPDisk::TKey, TIntrusivePtr<TPDiskConfig>, NActors::TActorSystem*, TActorId>;
+        using TCookieType = std::tuple<TDiskFormat, NPDisk::TKey, TIntrusivePtr<TPDiskConfig>, std::shared_ptr<TPDiskCtx>>;
         FormattingThread.Reset(new TThread(
             [] (void *cookie) -> void* {
                 std::unique_ptr<TCookieType> params(static_cast<TCookieType*>(cookie));
@@ -465,12 +466,11 @@ public:
                 NPDisk::TKey mainKey = std::get<1>(*params);
                 TIntrusivePtr<TPDiskConfig> cfg = std::get<2>(*params);
                 const TIntrusivePtr<::NMonitoring::TDynamicCounters> counters(new ::NMonitoring::TDynamicCounters);
-                NActors::TActorSystem* actorSystem = std::get<3>(*params);
-                TActorId pdiskActor = std::get<4>(*params);
+                std::shared_ptr<TPDiskCtx> pCtx = std::get<3>(*params);
 
                 THolder<NPDisk::TPDisk> pDisk(new NPDisk::TPDisk(cfg, counters));
 
-                pDisk->Initialize(actorSystem, TActorId());
+                pDisk->Initialize(std::move(pCtx));
 
                 if (!pDisk->BlockDevice->IsGood()) {
                     ythrow yexception() << "Failed to initialize temporal PDisk for format rewriting, info# " << pDisk->BlockDevice->DebugInfo();
@@ -478,14 +478,14 @@ public:
 
                 try {
                     pDisk->WriteApplyFormatRecord(format, mainKey);
-                    actorSystem->Send(pdiskActor, new TEvFormatReencryptionFinish(true, ""));
+                    pCtx->ActorSystem->Send(pCtx->PDiskActor, new TEvFormatReencryptionFinish(true, ""));
                 } catch (yexception ex) {
-                    LOG_ERROR_S(*actorSystem, NKikimrServices::BS_PDISK, "Reencryption error, what#" << ex.what());
-                    actorSystem->Send(pdiskActor, new TEvFormatReencryptionFinish(false, ex.what()));
+                    STLOGX(*pCtx->ActorSystem, PRI_ERROR, BS_PDISK, BPD01, "Reencryption error", (What, ex.what()));
+                    pCtx->ActorSystem->Send(pCtx->PDiskActor, new TEvFormatReencryptionFinish(false, ex.what()));
                 }
                 return nullptr;
             },
-            new TCookieType(format, newMainKey, PDisk->Cfg, TlsActivationContext->ActorSystem(), SelfId())
+            new TCookieType(format, newMainKey, PDisk->Cfg, PCtx)
         ));
         FormattingThread->Start();
     }
@@ -499,7 +499,7 @@ public:
                     "PDiskId# " << PDisk->PDiskId << " format chunks reencryption finished");
         } else {
             PDisk.Reset(new TPDisk(Cfg, PDiskCounters));
-            PDisk->Initialize(TlsActivationContext->ActorSystem(), SelfId());
+            PDisk->Initialize(PCtx);
             Y_ABORT_UNLESS(PDisk->PDiskThread.Running());
 
             *PDisk->Mon.PDiskState = NKikimrBlobStorage::TPDiskState::InitialFormatReadError;

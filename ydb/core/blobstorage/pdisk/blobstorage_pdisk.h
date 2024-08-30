@@ -1562,7 +1562,7 @@ struct TPDiskCtx {
     TActorSystem *ActorSystem = nullptr;
     ui32 PDiskId = 0;
     TActorId PDiskActor; 
-    TPDiskMon *Mon = nullptr;
+    // TPDiskMon *Mon = nullptr; TODO implement it
 
     TPDiskCtx() = default;
 

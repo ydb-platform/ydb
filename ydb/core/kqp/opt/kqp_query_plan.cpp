@@ -2033,9 +2033,9 @@ NJson::TJsonValue ReconstructQueryPlanRec(const NJson::TJsonValue& plan,
 
         newPlans.AppendValue(ReconstructQueryPlanRec(
             plan.GetMapSafe().at("Plans").GetArraySafe()[0],
-            0, 
-            planIndex, 
-            precomputes, 
+            0,
+            planIndex,
+            precomputes,
             nodeCounter));
 
         newPlans.AppendValue(lookupPlan);
@@ -2817,7 +2817,7 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
 TString SerializeAnalyzePlan(const NKqpProto::TKqpStatsQuery& queryStats, const TString& poolId) {
     TVector<const TString> txPlans;
     for (const auto& execStats: queryStats.GetExecutions()) {
-        for (const auto& txPlan: execStats.GetTxPlansWithStats()) {
+        for (const auto& [txId, txPlan]: execStats.GetTxPlansWithStats()) {
             txPlans.push_back(txPlan);
         }
     }

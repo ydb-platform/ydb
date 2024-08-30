@@ -282,7 +282,7 @@ You will see that the cluster was initialized successfully when the cluster init
 
 ## Create a database {#create-db}
 
-To work with [row](../../concepts/datamodel/table.md#row-oriented-tables) and [column](../../concepts/datamodel/table.md#column-oriented-tables) oriented tables, you need to create at least one database and run a process (or processes) to serve this database (dynamic nodes):
+To work with [row-oriented](../../concepts/datamodel/table.md#row-oriented-tables) and [column-oriented](../../concepts/datamodel/table.md#column-oriented-tables) tables, you need to create at least one database and run a process (or processes) to serve this database (dynamic nodes):
 
 To execute the administrative command for database creation, you will need the `ca.crt` certificate file issued by the Certificate Authority (see the above description of cluster initialization).
 
@@ -436,11 +436,11 @@ In the command examples above, `<node.ydb.tech>` is the FQDN of the server runni
 
 When running the account creation and group assignment commands, the {{ ydb-short-name }} CLI client will request the `root` user's password. You can avoid multiple password entries by creating a connection profile as described in the [{{ ydb-short-name }} CLI documentation](../../reference/ydb-cli/profile/index.md).
 
-## Test the created database {#try-first-db}
+## Start using the created database {#try-first-db}
 
 1. Install the {{ ydb-short-name }} CLI as described in the [documentation](../../reference/ydb-cli/install.md).
 
-1. Create a testing row (`test_row_table`) or column (`test_column_table`) oriented table:
+1. Create a test row (`test_row_table`) or column (`test_column_table`) oriented table:
 
 {% list tabs %}
 

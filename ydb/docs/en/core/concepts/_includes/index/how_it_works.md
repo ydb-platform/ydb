@@ -28,7 +28,11 @@ From the user's perspective, everything inside {{ ydb-short-name }} is organized
 
 Logically, from the user's point of view, both types of tables look the same. The main difference between row tables and column tables lies in the way data is stored. In row tables, the values of all columns in each row are stored together, while in column tables — on the contrary, each column is stored separately, so cells related to different rows are stored next to each other.
 
-Regardless of the type of table, it must contain a primary key. In the primary key of column tables, only columns with `NOT NULL` can be used. Data in tables is physically sorted by the primary key. Row tables are automatically partitioned by the ranges of primary keys depending on the volume of data, while data in column tables is partitioned not by the primary key but by the hash of the partitioning columns. Each range of primary keys in a table is processed by a specific [tablet](../../cluster/common_scheme_ydb.md#tablets), called a *data shard* for row tables and a *column shard* for column tables.
+Regardless of its type, each table must contain a primary key. Column tables can use only  `NOT NULL` columns as primary keys. Data in tables is physically sorted by the primary key. Partitioning works differently in row and column tables:
+* Row tables are automatically partitioned by the ranges of primary keys depending on the volume of data.
+* Column tables are partitioned by the hash of the partitioning columns.
+
+Each range of primary keys in a table is processed by a specific [tablet](../../cluster/common_scheme_ydb.md#tablets), called a data shard for row tables and a column shard for column tables.
 
 #### Split by load {#split-by-load}
 

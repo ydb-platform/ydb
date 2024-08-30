@@ -1,4 +1,4 @@
 RECURSE(
-    cpp_v2
+    cpp
     python
 )

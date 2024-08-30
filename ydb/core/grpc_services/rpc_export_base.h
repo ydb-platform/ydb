@@ -11,9 +11,9 @@ namespace NKikimr {
 namespace NGRpcService {
 
 struct TExportConv {
-    static Ydb::TOperationId MakeOperationId(const ui64 id, NKikimrExport::TExport::SettingsCase kind) {
-        Ydb::TOperationId operationId;
-        operationId.SetKind(Ydb::TOperationId::EXPORT);
+    static NKikimr::NOperationId::TOperationId MakeOperationId(const ui64 id, NKikimrExport::TExport::SettingsCase kind) {
+        NKikimr::NOperationId::TOperationId operationId;
+        operationId.SetKind(NKikimr::NOperationId::TOperationId::EXPORT);
         NOperationId::AddOptionalValue(operationId, "id", ToString(id));
 
         switch (kind) {
@@ -34,7 +34,7 @@ struct TExportConv {
     static Ydb::Operations::Operation ToOperation(const NKikimrExport::TExport& exprt) {
         Ydb::Operations::Operation operation;
 
-        operation.set_id(NOperationId::ProtoToString(MakeOperationId(exprt.GetId(), exprt.GetSettingsCase())));
+        operation.set_id(MakeOperationId(exprt.GetId(), exprt.GetSettingsCase()).ToString());
         operation.set_status(exprt.GetStatus());
         if (operation.status() == Ydb::StatusIds::SUCCESS) {
             operation.set_ready(exprt.GetProgress() == Ydb::Export::ExportProgress::PROGRESS_DONE);

@@ -13,8 +13,8 @@
 
 #define TypeName PG_TypeName
 #define SortBy PG_SortBy
-// #define Sort PG_Sort
-// #define Unique PG_Unique
+#define Sort PG_Sort
+#define Unique PG_Unique
 #undef SIZEOF_SIZE_T
 extern "C" {
 #include "postgres.h"
@@ -47,6 +47,8 @@ extern "C" {
 #undef Max
 #undef TypeName
 #undef SortBy
+#undef Sort
+#undef Unique
 #undef LOG
 #undef INFO
 #undef NOTICE

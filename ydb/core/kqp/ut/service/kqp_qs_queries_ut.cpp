@@ -4426,13 +4426,13 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             auto result = client.ExecuteQuery(R"(
                 REPLACE INTO `/Root/ColumnShard` (Col1, Col2, Col3) VALUES
                     (1u, "test1", 10), (2u, "test2", 11), (3u, "test3", 12), (4u, NULL, 13);
-                SELECT * FROM `/Root/ColumnShard`;
+                SELECT * FROM `/Root/ColumnShard` ORDER BY Col1;
                 INSERT INTO `/Root/ColumnShard` SELECT Col1 + 100 AS Col1, Col2, Col3 FROM `/Root/ColumnShard`;
-                SELECT * FROM `/Root/ColumnShard`;
+                SELECT * FROM `/Root/ColumnShard` ORDER BY Col1;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
-            CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(1)));
+            CompareYson(R"([[1u;["test1"];10];[2u;["test2"];11];[3u;["test3"];12];[4u;#;13]])", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(R"([[1u;["test1"];10];[2u;["test2"];11];[3u;["test3"];12];[4u;#;13];[101u;["test1"];10];[102u;["test2"];11];[103u;["test3"];12];[104u;#;13]])", FormatResultSetYson(result.GetResultSet(1)));
         }
     }
 }

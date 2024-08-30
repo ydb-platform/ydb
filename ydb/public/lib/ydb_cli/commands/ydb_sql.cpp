@@ -122,7 +122,6 @@ bool TCommandExecuteSqlBase::WaitForCompletion(NOperation::TOperationClient& ope
     // Throw exception on getting operation info if it is the first getOperation, then retry
     bool firstGetOperation = true;
     TWaitingBar waitingBar("Waiting for script execution to finish... ");
-    int fakeCounter = 0;
     while (!IsInterrupted()) {
         NQuery::TScriptExecutionOperation execScriptOperation = (firstGetOperation && Operation)
             ? Operation.value()
@@ -133,7 +132,7 @@ bool TCommandExecuteSqlBase::WaitForCompletion(NOperation::TOperationClient& ope
             ThrowOnError(execScriptOperation.Status());
             firstGetOperation = false;
         }
-        if (!execScriptOperation.Status().IsSuccess() || !execScriptOperation.Ready() || ++fakeCounter <= 5) {
+        if (!execScriptOperation.Status().IsSuccess() || !execScriptOperation.Ready()) {
             waitingBar.Render();
             Sleep(TDuration::Seconds(1));
             continue;

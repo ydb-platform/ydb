@@ -8,8 +8,13 @@
 namespace NYdb {
 namespace NConsoleClient {
 
+namespace {
+    static const size_t DEFAULT_BATCH_LIMIT = 1000;
+    static const TDuration DEFAULT_BATCH_MAX_DELAY = TDuration::Seconds(1);
+}
+
 void TCommandWithParameters::ParseParameters(TClientCommand::TConfig& config) {
-    switch (InputFormat) {
+    switch (ParamFormat) {
         case EOutputFormat::Default:
         case EOutputFormat::JsonUnicode:
             InputEncoding = EBinaryStringEncoding::Unicode;
@@ -18,7 +23,7 @@ void TCommandWithParameters::ParseParameters(TClientCommand::TConfig& config) {
             InputEncoding = EBinaryStringEncoding::Base64;
             break;
         default:
-            throw TMisuseException() << "Unknown input format: " << InputFormat;
+            throw TMisuseException() << "Unknown param format: " << ParamFormat;
     }
 
     switch (StdinFormat) {
@@ -57,13 +62,24 @@ void TCommandWithParameters::ParseParameters(TClientCommand::TConfig& config) {
                 << "--param '$input=1'";
         }
         if (Parameters.find(paramName) != Parameters.end()) {
-            throw TMisuseException() << "Parameter $" << paramName << " value found in more than one source: \'--param\' option.";
+            throw TMisuseException() << "Parameter $" << paramName << " value found in more than one source: --param option.";
         }
         Parameters[paramName] = parameterOption.substr(equalPos + 1);
-        ParameterSources[paramName] = "\'--param\' option";
+        ParameterSources[paramName] = "--param option";
     }
 
     for (auto& file : ParameterFiles) {
+        if (file == "-") {
+            if (ReadParametersFromStdin) {
+                throw TMisuseException() << "Param file \"-\" provided several times";
+            }
+            if (IsStdinInteractive()) {
+                throw TMisuseException() << "Path to param file is \"-\", meaning that parameter value[s] should be read "
+                    "from stdin. This is only available in non-interactive mode";
+            }
+            ReadParametersFromStdin = true;
+            continue;
+        }
         TString data;
         data = ReadFromFile(file, "param-file");
         std::map<TString, TString> params;
@@ -77,14 +93,15 @@ void TCommandWithParameters::ParseParameters(TClientCommand::TConfig& config) {
             ParameterSources[name] = "param file " + file;
         }
     }
-    if (StdinFormat != EOutputFormat::Csv && StdinFormat != EOutputFormat::Tsv && (!Columns.Empty() || config.ParseResult->Has("skip-rows"))) {
-        throw TMisuseException() << "Options \"--columns\" and  \"--skip-rows\" requires \"csv\" or \"tsv\" formats";
+    if (StdinFormat != EOutputFormat::Csv && StdinFormat != EOutputFormat::Tsv && (!Columns.Empty() || config.ParseResult->Has("param-skip-rows")
+            || config.ParseResult->Has("skip-rows"))) {
+        throw TMisuseException() << "Options --param-columns and  --param-skip-rows requires \"csv\" or \"tsv\" formats";
     }
     if (StdinParameters.empty() && StdinFormat == EOutputFormat::Raw) {
-        throw TMisuseException() << "For \"raw\" format \"--stdin-par\" option should be used.";
+        throw TMisuseException() << "For \"raw\" format --param-name-stdin option should be used.";
     }
-    if (!StdinParameters.empty() && IsStdinInteractive()) {
-        throw TMisuseException() << "\"--stdin-par\" option is allowed only with non-interactive stdin.";
+    if (!StdinParameters.empty() && !ReadParametersFromStdin) {
+        throw TMisuseException() << "--param-name-stdin option is allowed only with non-interactive stdin.";
     }
     if (BatchMode == EBatchMode::Full || BatchMode == EBatchMode::Adaptive) {
         if (StdinParameters.size() > 1) {
@@ -99,95 +116,160 @@ void TCommandWithParameters::ParseParameters(TClientCommand::TConfig& config) {
 
     for (auto it = StdinParameters.begin(); it != StdinParameters.end(); ++it) {
         if (std::find(StdinParameters.begin(), it, *it) != it) {
-            throw TMisuseException() << "Parameter $" << *it << " value found in more than one source: \'--stdin-par\' option.";
+            throw TMisuseException() << "Parameter $" << *it << " value found in more than one --param-name-stdin option.";
         }
         if (Parameters.find("$" + *it) != Parameters.end()) {
-            throw TMisuseException() << "Parameter $" << *it << " value found in more than one source: \'--stdin-par\' option, "
+            throw TMisuseException() << "Parameter $" << *it << " value found in more than one source: --param-name-stdin option, "
                 << ParameterSources["$" + *it] << ".";
         }
     }
-    if (BatchMode != EBatchMode::Adaptive && (config.ParseResult->Has("batch-limit") || config.ParseResult->Has("batch-max-delay"))) {
-        throw TMisuseException() << "Options \"--batch-limit\" and \"--batch-max-delay\" are allowed only in \"adaptive\" batch mode.";
+    if (BatchMode != EBatchMode::Adaptive && (config.ParseResult->Has("param-batch-limit")
+            || config.ParseResult->Has("param-batch-max-delay") || config.ParseResult->Has("batch-limit")
+            || config.ParseResult->Has("batch-max-delay"))) {
+        throw TMisuseException() << "Options --param-batch-limit and --param-batch-max-delay are allowed only in \"adaptive\" batch mode.";
+    }
+    if (DeprecatedSkipRows != 0) {
+        SkipRows = DeprecatedSkipRows;
+    }
+    if (DeprecatedBatchLimit != DEFAULT_BATCH_LIMIT) {
+        BatchLimit = DeprecatedBatchLimit;
+    }
+    if (DeprecatedBatchMaxDelay != DEFAULT_BATCH_MAX_DELAY) {
+        BatchMaxDelay = DeprecatedBatchMaxDelay;
     }
 }
 
 void TCommandWithParameters::AddParametersOption(TClientCommand::TConfig& config, const TString& clarification) {
-    TStringStream descr;
+    TStringStream paramDescr;
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
-    descr << "Query parameter[s].";
+    paramDescr << "Query parameter[s].";
     if (clarification) {
-        descr << ' ' << clarification;
+        paramDescr << ' ' << clarification;
     }
-    descr << Endl << "Several parameter options can be specified. " << Endl
-        << "To change input format use --input-format option." << Endl
+    paramDescr << Endl << "Several parameter options can be specified." << Endl
+        << "To change input parameter format use --param-format option." << Endl
         << "Escaping depends on operating system.";
-    config.Opts->AddLongOption('p', "param", descr.Str())
+    if (config.HelpCommandVerbosiltyLevel <= 1) {
+        paramDescr << Endl << "Use -hh option to see usage examples and all other options to work with parameters.";
+    }
+    paramDescr << Endl << "More information and examples in the documentation:" << Endl
+        << "https://ydb.tech/docs/en/reference/ydb-cli/parameterized-queries-cli";
+    config.Opts->AddLongOption('p', "param", paramDescr.Str())
         .RequiredArgument("$name=value").AppendTo(&ParameterOptions);
-    config.Opts->AddLongOption("param-file", "File name with parameter names and values "
-        "in json format. You may specify this option repeatedly.")
+
+    TStringStream paramFileDescr;
+    paramFileDescr << "Path to a file with parameter name[s] and value[s]." << Endl
+        << "This option may be specified several times." << Endl
+        << "To change input parameter format use --param-format option.";
+    if (config.HelpCommandVerbosiltyLevel <= 1) {
+        paramFileDescr << Endl << "Use -hh option to see all other options to work with parameters.";
+    }
+    paramFileDescr << Endl << "More information and examples in the documentation:" << Endl
+        << "https://ydb.tech/docs/en/reference/ydb-cli/parameterized-queries-cli";
+    config.Opts->AddLongOption("param-file", paramFileDescr.Str())
         .RequiredArgument("PATH").AppendTo(&ParameterFiles);
 
-    AddOptionExamples(
-        "param",
-        TExampleSetBuilder()
-            .Title("Examples (with default json-unicode format)")
-            .BeginExample()
-                .Title("One parameter of type Uint64")
-                .Text(TStringBuilder() << "What cli expects:     " << colors.BoldColor() << "$id=3" << colors.OldColor() << Endl
-                    << "How to pass in linux: " << colors.BoldColor() << "--param '$id=3'" << colors.OldColor())
-            .EndExample()
-            .BeginExample()
-                .Title("Two parameters of types Uint64 and Utf8")
-                .Text(TStringBuilder() << "What cli expects:     " << colors.BoldColor() << "$key=1 $value=\"One\"" << colors.OldColor() << Endl
-                    << "How to pass in linux: " << colors.BoldColor() << "--param '$key=3' --param '$value=\"One\"'" << colors.OldColor())
-            .EndExample()
-            .BeginExample()
-                .Title("More complex parameter of type List<Struct<key:Uint64, value:Utf8>>")
-                .Text(TStringBuilder() << "What cli expects:     " << colors.BoldColor() << "$values=[{\"key\":1,\"value\":\"one\"},{\"key\":2,\"value\":\"two\"}]" << colors.OldColor() << Endl
-                    << "How to pass in linux: " << colors.BoldColor() << "--param '$values=[{\"key\":1,\"value\":\"one\"},{\"key\":2,\"value\":\"two\"}]'" << colors.OldColor())
-            .EndExample()
-        .Build()
-    );
+    if (config.HelpCommandVerbosiltyLevel > 1) {
+        AddOptionExamples(
+            "param",
+            TExampleSetBuilder()
+                .Title("Examples (with default json-unicode format)")
+                .BeginExample()
+                    .Title("One parameter of type Uint64")
+                    .Text(TStringBuilder() << "What cli expects:     " << colors.BoldColor() << "$id=3" << colors.OldColor() << Endl
+                        << "How to pass in linux: " << colors.BoldColor() << "--param '$id=3'" << colors.OldColor())
+                .EndExample()
+                .BeginExample()
+                    .Title("Two parameters of types Uint64 and Utf8")
+                    .Text(TStringBuilder() << "What cli expects:     " << colors.BoldColor() << "$key=1 $value=\"One\"" << colors.OldColor() << Endl
+                        << "How to pass in linux: " << colors.BoldColor() << "--param '$key=3' --param '$value=\"One\"'" << colors.OldColor())
+                .EndExample()
+                .BeginExample()
+                    .Title("More complex parameter of type List<Struct<key:Uint64, value:Utf8>>")
+                    .Text(TStringBuilder() << "What cli expects:     " << colors.BoldColor() << "$values=[{\"key\":1,\"value\":\"one\"},{\"key\":2,\"value\":\"two\"}]" << colors.OldColor() << Endl
+                        << "How to pass in linux: " << colors.BoldColor() << "--param '$values=[{\"key\":1,\"value\":\"one\"},{\"key\":2,\"value\":\"two\"}]'" << colors.OldColor())
+                .EndExample()
+            .Build()
+        );
+    }
 }
 
 void TCommandWithParameters::AddParametersStdinOption(TClientCommand::TConfig& config, const TString& requestString) {
+    auto& paramColumns = config.Opts->AddLongOption("param-columns", "String with column names that replaces header "
+        "when passing parameters in CSV/TSV format. It is assumed that there is no header in the parameters file")
+        .RequiredArgument("STR").StoreResult(&Columns);
+    config.Opts->AddLongOption("columns", "For backward compatibility")
+        .RequiredArgument("STR").StoreResult(&Columns).Hidden();
+    config.Opts->MutuallyExclusive("param-columns", "columns");
+
+    auto& paramSkipRows = config.Opts->AddLongOption("param-skip-rows", "Number of header rows to skip when passing "
+        "parameters in CSV/TSV format (not including the row of column names, if any).")
+        .RequiredArgument("NUM").StoreResult(&SkipRows).DefaultValue(0);
+    config.Opts->AddLongOption("skip-rows", "For backward compatibility")
+        .RequiredArgument("NUM").StoreResult(&DeprecatedSkipRows).DefaultValue(0).Hidden();
+    config.Opts->MutuallyExclusive("param-skip-rows", "skip-rows");
+
+    auto& paramNameStdin = config.Opts->AddLongOption("param-name-stdin", "Name of a parameter whose value is provided"
+        " on stdin, without a $ sign. This name is required when you use the raw format in --stdin-param-format.\n"
+        "When used with JSON formats, stdin is interpreted not as a JSON document but as a JSON value passed to "
+        "the parameter with the specified name.")
+        .RequiredArgument("STRING").AppendTo(&StdinParameters);
+    config.Opts->AddLongOption("stdin-par", "For backward compatibility").RequiredArgument("STRING")
+        .AppendTo(&StdinParameters).Hidden();
+    config.Opts->MutuallyExclusive("param-name-stdin", "stdin-par");
+
     TStringStream descr;
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
     descr << "Batching mode for stdin parameters processing. Available options:\n  "
         << colors.BoldColor() << "iterative" << colors.OldColor()
         << "\n    Executes " << requestString << " for each parameter set (exactly one execution "
-        "when no framing specified in \"stdin-format\")\n  "
+        "when no framing is specified in --stdin-param-format option)\n  "
         << colors.BoldColor() << "full" << colors.OldColor()
         << "\n    Executes " << requestString << " once, with all parameter sets wrapped in json list, when EOF is reached on stdin\n  "
         << colors.BoldColor() << "adaptive" << colors.OldColor()
-        << "\n    Executes " << requestString << " with a json list of parameter sets every time when its number reaches batch-limit, "
-        "or the waiting time reaches batch-max-delay."
+        << "\n    Executes " << requestString << " with a json list of parameter sets every time when its number reaches param-batch-limit, "
+        "or the waiting time reaches param-batch-max-delay. An stdin parameter name must be specified via "
+        "--param-name-stdin option for \"adaptive\" batch mode."
         "\nDefault: " << colors.CyanColor() << "\"iterative\"" << colors.OldColor() << ".";
-    config.Opts->AddLongOption("columns", "String with column names that replaces header. "
-            "Relevant when passing parameters in CSV/TSV format only. "
-            "It is assumed that there is no header in the file")
-            .RequiredArgument("STR").StoreResult(&Columns);
-    config.Opts->AddLongOption("skip-rows", "Number of header rows to skip (not including the row of column names, if any). "
-            "Relevant when passing parameters in CSV/TSV format only.")
-            .RequiredArgument("NUM").StoreResult(&SkipRows).DefaultValue(0);
-    config.Opts->AddLongOption("stdin-par", "Parameter name on stdin, required/applicable when stdin-format implies values only.")
-            .RequiredArgument("STRING").AppendTo(&StdinParameters);
-    config.Opts->AddLongOption("batch", descr.Str()).RequiredArgument("STRING").StoreResult(&BatchMode);
-    config.Opts->AddLongOption("batch-limit", "Maximum size of list for adaptive batching mode").RequiredArgument("INT")
-            .StoreResult(&BatchLimit).DefaultValue(1000);
-    config.Opts->AddLongOption("batch-max-delay", "Maximum delay to process first item in the list for adaptive batching mode")
-            .RequiredArgument("VAL").StoreResult(&BatchMaxDelay).DefaultValue(TDuration::Seconds(1));
+
+    auto& paramBatch = config.Opts->AddLongOption("param-batch", descr.Str()).RequiredArgument("STRING")
+        .StoreResult(&BatchMode);
+    config.Opts->AddLongOption("batch", "For backward compatibility").RequiredArgument("STRING")
+        .StoreResult(&BatchMode).Hidden();
+    config.Opts->MutuallyExclusive("param-batch", "batch");
+
+    auto& paramBatchLimit = config.Opts->AddLongOption("param-batch-limit",
+        "Maximum size of list for adaptive parameter batching mode")
+        .RequiredArgument("INT").StoreResult(&BatchLimit).DefaultValue(DEFAULT_BATCH_LIMIT);
+    config.Opts->AddLongOption("batch-limit", "For backward compatibility")
+            .RequiredArgument("INT").StoreResult(&DeprecatedBatchLimit).DefaultValue(DEFAULT_BATCH_LIMIT).Hidden();
+    config.Opts->MutuallyExclusive("param-batch-limit", "batch-limit");
+
+    auto& paramBatchMaxDelay = config.Opts->AddLongOption("param-batch-max-delay",
+        "Maximum delay to process first item in the list for adaptive parameter batching mode")
+        .RequiredArgument("VAL").StoreResult(&BatchMaxDelay).DefaultValue(DEFAULT_BATCH_MAX_DELAY);
+    config.Opts->AddLongOption("batch-max-delay", "For backward compatibility")
+            .RequiredArgument("VAL").StoreResult(&DeprecatedBatchMaxDelay).DefaultValue(DEFAULT_BATCH_MAX_DELAY).Hidden();
+    config.Opts->MutuallyExclusive("param-batch-max-delay", "batch-max-delay");
+    if (config.HelpCommandVerbosiltyLevel <= 1) {
+        paramColumns.Hidden();
+        paramSkipRows.Hidden();
+        paramNameStdin.Hidden();
+        paramBatch.Hidden();
+        paramBatchLimit.Hidden();
+        paramBatchMaxDelay.Hidden();
+    }
 }
 
 void TCommandWithParameters::AddParams(TParamsBuilder& paramBuilder) {
-     switch (InputFormat) {
+     switch (ParamFormat) {
         case EOutputFormat::Default:
         case EOutputFormat::JsonUnicode:
         case EOutputFormat::JsonBase64: {
             for (const auto&[name, value] : Parameters) {
                 auto paramIt = ParamTypes.find(name);
                 if (paramIt == ParamTypes.end()) {
-                    if (ParameterSources[name] == "\'--param\' option") {
+                    if (ParameterSources[name] == "--param option") {
                         throw TMisuseException() << "Query does not contain parameter \"" << name << "\".";
                     } else {
                         continue;
@@ -199,7 +281,7 @@ void TCommandWithParameters::AddParams(TParamsBuilder& paramBuilder) {
             break;
         }
         default:
-            Y_ABORT_UNLESS(false, "Unexpected input format");
+            Y_ABORT_UNLESS(false, "Unexpected param format");
     }
 }
 
@@ -208,7 +290,7 @@ bool TCommandWithParameters::GetNextParams(THolder<TParamsBuilder>& paramBuilder
     if (IsFirstEncounter) {
         IsFirstEncounter = false;
         ParamTypes = ValidateResult->GetParameterTypes();
-        if (IsStdinInteractive()) {
+        if (!ReadParametersFromStdin) {
             AddParams(*paramBuilder);
             return true;
         }
@@ -234,7 +316,7 @@ bool TCommandWithParameters::GetNextParams(THolder<TParamsBuilder>& paramBuilder
             Input = MakeHolder<TSimpleParamStream>();
         }
     }
-    if (IsStdinInteractive()) {
+    if (!ReadParametersFromStdin) {
         return false;
     }
 

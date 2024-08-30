@@ -26,8 +26,8 @@ namespace {
         { EOutputFormat::Csv, "Parameter names and values in csv format" },
         { EOutputFormat::Tsv, "Parameter names and values in tsv format" },
         { EOutputFormat::NewlineDelimited, "Newline character delimits parameter sets on stdin and triggers "
-                                            "processing in accordance to \"batch\" option" },
-        { EOutputFormat::Raw, "Binary value with no transformations or parsing, parameter name is set by an \"stdin-par\" option" },
+                                            "processing in accordance to --param-batch option" },
+        { EOutputFormat::Raw, "Binary value with no transformations or parsing, parameter name is set by an --param-name-stdin option" },
         { EOutputFormat::NoFraming, "Data from stdin is taken as a single set of parameters" },
     };
 
@@ -97,8 +97,8 @@ void TCommandWithFormat::AddDeprecatedJsonOption(TClientCommand::TConfig& config
         .Hidden();
 }
 
-void TCommandWithFormat::AddInputFormats(TClientCommand::TConfig& config, 
-                                         const TVector<EOutputFormat>& allowedFormats, EOutputFormat defaultFormat) {
+void TCommandWithFormat::AddInputFormats(TClientCommand::TConfig& config, const TVector<EOutputFormat>& allowedFormats,
+        EOutputFormat defaultFormat) {
     TStringStream description;
     description << "Input format. Available options: ";
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
@@ -117,11 +117,37 @@ void TCommandWithFormat::AddInputFormats(TClientCommand::TConfig& config,
     AllowedInputFormats = allowedFormats;
 }
 
+void TCommandWithFormat::AddParamFormats(TClientCommand::TConfig& config, const TVector<EOutputFormat>& allowedFormats,
+        EOutputFormat defaultFormat) {
+    TStringStream description;
+    description << "Parameters format. Format of parameters expected in --param option[s] or file provided with --param-file option Available options: ";
+    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    Y_ABORT_UNLESS(std::find(allowedFormats.begin(), allowedFormats.end(), defaultFormat) != allowedFormats.end(), 
+        "Couldn't find default format %s in allowed formats", (TStringBuilder() << defaultFormat).c_str());
+    for (const auto& format : allowedFormats) {
+        auto findResult = InputFormatDescriptions.find(format);
+        Y_ABORT_UNLESS(findResult != InputFormatDescriptions.end(),
+            "Couldn't find description for %s input format", (TStringBuilder() << format).c_str());
+        description << "\n  " << colors.BoldColor() << format << colors.OldColor()
+            << "\n    " << findResult->second;
+    }
+    description << "\nDefault: " << colors.CyanColor() << "\"" << defaultFormat << "\"" << colors.OldColor() << ".";
+    auto& paramFormatOption = config.Opts->AddLongOption("param-format", description.Str())
+        .RequiredArgument("STRING").StoreResult(&ParamFormat);
+    if (config.HelpCommandVerbosiltyLevel <= 1) {
+        paramFormatOption.Hidden();
+    }
+    config.Opts->AddLongOption("input-format", "For backward compatibility")
+        .RequiredArgument("STRING").StoreResult(&LegacyInputFormat).Hidden();
+    config.Opts->MutuallyExclusive("param-format", "input-format");
+    AllowedInputFormats = allowedFormats;
+}
+
 void TCommandWithFormat::AddStdinFormats(TClientCommand::TConfig &config, const TVector<EOutputFormat>& allowedStdinFormats,
                                          const TVector<EOutputFormat>& allowedFramingFormats) {
     TStringStream description;
     description << "Stdin parameters format and framing. Specify this option twice to select both.\n"
-                << "1. Parameters format. Available options: ";
+                << "1. Parameters format. Format of parameters expected on the stdin. Available options: ";
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
     for (const auto& format : allowedStdinFormats) {
         auto findResult = StdinFormatDescriptions.find(format);
@@ -140,10 +166,17 @@ void TCommandWithFormat::AddStdinFormats(TClientCommand::TConfig &config, const 
                     << "\n    " << findResult->second;
     }
     description << "\nDefault: " << colors.CyanColor() << "\"no-framing\"" << colors.OldColor() << ".";
-    config.Opts->AddLongOption("stdin-format", description.Str())
+    auto& stdinParamFormat = config.Opts->AddLongOption("stdin-param-format", description.Str())
             .RequiredArgument("STRING").AppendTo(&StdinFormats);
+    config.Opts->AddLongOption("stdin-format", "For backward compatibility").RequiredArgument("STRING")
+        .AppendTo(&StdinFormats).Hidden();
+    config.Opts->MutuallyExclusive("stdin-param-format", "stdin-format");
+    if (config.HelpCommandVerbosiltyLevel <= 1) {
+        stdinParamFormat.Hidden();
+    }
     AllowedStdinFormats = allowedStdinFormats;
     AllowedFramingFormats = allowedFramingFormats;
+    
 }
 
 void TCommandWithFormat::AddFormats(TClientCommand::TConfig& config, 
@@ -184,7 +217,7 @@ void TCommandWithFormat::AddMessagingFormats(TClientCommand::TConfig& config, co
 }
 
 void TCommandWithFormat::ParseFormats() {
-    if (InputFormat != EOutputFormat::Default
+    if ((InputFormat != EOutputFormat::Default)
             && std::find(AllowedInputFormats.begin(), AllowedInputFormats.end(), InputFormat) == AllowedInputFormats.end()) {
         throw TMisuseException() << "Input format " << InputFormat << " is not available for this command";
     }
@@ -221,11 +254,17 @@ void TCommandWithFormat::ParseFormats() {
         }
     }
 
-    if (OutputFormat == EOutputFormat::Default || DeprecatedOptionUsed) {
-        return;
+    if (OutputFormat != EOutputFormat::Default && !DeprecatedOptionUsed) {
+        if (std::find(AllowedFormats.begin(), AllowedFormats.end(), OutputFormat) == AllowedFormats.end()) {
+            throw TMisuseException() << "Output format " << OutputFormat << " is not available for this command";
+        }
     }
-    if (std::find(AllowedFormats.begin(), AllowedFormats.end(), OutputFormat) == AllowedFormats.end()) {
-        throw TMisuseException() << "Output format " << OutputFormat << " is not available for this command";
+    if (LegacyInputFormat != EOutputFormat::Default) {
+        ParamFormat = LegacyInputFormat;
+    }
+    if ((ParamFormat != EOutputFormat::Default)
+            && std::find(AllowedInputFormats.begin(), AllowedInputFormats.end(), ParamFormat) == AllowedInputFormats.end()) {
+        throw TMisuseException() << "Param format " << ParamFormat << " is not available for this command";
     }
 }
 

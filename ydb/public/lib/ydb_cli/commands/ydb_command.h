@@ -21,6 +21,10 @@ public:
     static TDriver CreateDriver(const TConfig& config);
     static TDriver CreateDriver(const TConfig& config, THolder<TLogBackend>&& loggingBackend);
 
+protected:
+    NScripting::TExplainYqlResult ExplainQuery(TClientCommand::TConfig& config, const TString& queryText,
+        NScripting::ExplainYqlRequestMode mode);
+
 private:
     static TDriverConfig CreateDriverConfig(const TConfig& config);
 };
@@ -65,9 +69,6 @@ protected:
         }
         return std::forward<TSettingsType>(settings);
     }
-
-    NScripting::TExplainYqlResult ExplainQuery(TClientCommand::TConfig& config, const TString& queryText,
-        NScripting::ExplainYqlRequestMode mode);
 
     TString OperationTimeout;
 };

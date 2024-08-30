@@ -1088,7 +1088,7 @@ TFuture<ICheckpointStorage::TGetTotalCheckpointsStateSizeResult> TCheckpointStor
 
                         TResultSetParser parser = queryResult.GetResultSetParser(0);
                         if (parser.TryNextRow()) {
-                            result->Size = parser.ColumnParser(0).GetOptionalUint64().GetOrElse(0);
+                            result->Size = parser.ColumnParser(0).GetOptionalUint64().value_or(0);
                         } else {
                             result->Size = 0;
                         }

@@ -49,7 +49,7 @@ public:
         : DatabasePath(databasePath) {}
 
     TIntrusivePtr<NYql::TIssue> Run(const NYql::TIssue& issue) {
-        auto msg = RemoveDatabaseFromStr(issue.GetMessage(), DatabasePath);
+        auto msg = RemoveDatabaseFromStr(TString(issue.GetMessage()), DatabasePath);
         auto newIssue = MakeIntrusive<NYql::TIssue>(issue.Position, issue.EndPosition, msg);
         newIssue->SetCode(issue.GetCode(), issue.GetSeverity());
         for (auto issue : issue.GetSubIssues()) {
@@ -245,7 +245,7 @@ FederatedQuery::IamAuth GetAuth(const FederatedQuery::Connection& connection) {
     }
 }
 
-TString RemoveDatabaseFromStr(std::string str, const TString& databasePath) {
+TString RemoveDatabaseFromStr(TString str, const TString& databasePath) {
     TString escapedPath = RE2::QuoteMeta(databasePath);
     RE2::GlobalReplace(&str,
                        TStringBuilder {} << R"(db.\[)" << escapedPath << R"(\/([^ '"]+)\]|)" << escapedPath << R"(\/([^ '"]+))",

@@ -486,7 +486,7 @@ private:
                 readOffset = offsetIt->second;
             }
             SRC_LOG_D("SessionId: " << Self.GetSessionId() << " Key: " << partitionKeyStr << " Confirm StartPartitionSession with offset " << readOffset);
-            event.Confirm(std::optional<ui64>(readOffset.Get()));
+            event.Confirm(readOffset);
         }
 
         void operator()(NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent& event) {

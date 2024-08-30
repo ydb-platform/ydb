@@ -40,19 +40,20 @@ class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
 
     using TPartitionKey = std::tuple<TString, TString, TString, ui64>;     // Endpoint / Database / TopicName / PartitionId 
 
+    struct RowDispatcherInfo {
+        bool Connected = false;
+        TSet<TPartitionKey> Locations;
+    };
+
     NConfig::TRowDispatcherCoordinatorConfig Config;
     TYqSharedResources::TPtr YqSharedResources;
     TActorId LocalRowDispatcherId;
     const TString LogPrefix;
     const TString Tenant;
-
-    struct RowDispatcherInfo {
-        bool Connected = false;
-        TSet<TPartitionKey> Locations;
-    };
     TMap<NActors::TActorId, RowDispatcherInfo> RowDispatchers;
     THashMap<TPartitionKey, TActorId> PartitionLocations;
     TCoordinatorMetrics Metrics;
+    ui64 LocationRandomCounter = 0;
 
 public:
     TActorCoordinator(
@@ -195,10 +196,8 @@ void TActorCoordinator::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPt
 }
 
 NActors::TActorId TActorCoordinator::GetAndUpdateLocation(TPartitionKey key) {
-    static ui64 counter = 0;
-
     Y_ENSURE(!PartitionLocations.contains(key));
-    auto rand = counter++ % RowDispatchers.size();
+    auto rand = LocationRandomCounter++ % RowDispatchers.size();
 
     auto it = std::begin(RowDispatchers);
     std::advance(it, rand);
@@ -220,12 +219,14 @@ NActors::TActorId TActorCoordinator::GetAndUpdateLocation(TPartitionKey key) {
 
 void TActorCoordinator::Handle(NFq::TEvRowDispatcher::TEvCoordinatorRequest::TPtr& ev) {
     const auto source =  ev->Get()->Record.GetSource();
-    LOG_ROW_DISPATCHER_DEBUG("TEvCoordinatorRequest from " << ev->Sender.ToString() << ", " << source.GetTopicPath());
-    Metrics.IncomingRequests->Inc();
-    
+
+    TStringStream str;
+    str << "TEvCoordinatorRequest from " << ev->Sender.ToString() << ", " << source.GetTopicPath() << ", partIds: ";
     for (auto& partitionId : ev->Get()->Record.GetPartitionId()) {
-        LOG_ROW_DISPATCHER_TRACE("  partitionId " << partitionId);
+        str << partitionId << ", ";
     }
+    LOG_ROW_DISPATCHER_DEBUG(str.Str());
+    Metrics.IncomingRequests->Inc();
     Y_ENSURE(!RowDispatchers.empty());
 
     TMap<NActors::TActorId, TSet<ui64>> tmpResult;
@@ -246,7 +247,6 @@ void TActorCoordinator::Handle(NFq::TEvRowDispatcher::TEvCoordinatorRequest::TPt
     for (auto [actorId, partitions] : tmpResult) {
         auto* partitionsProto = response->Record.AddPartitions();
         ActorIdToProto(actorId, partitionsProto->MutableActorId());
-        LOG_ROW_DISPATCHER_DEBUG("  rowDispatcherActorId " << actorId);
         for (auto partitionId : partitions) {
             partitionsProto->AddPartitionId(partitionId);
         }

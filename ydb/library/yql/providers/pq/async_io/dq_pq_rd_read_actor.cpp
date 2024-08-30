@@ -376,12 +376,9 @@ void TDqPqRdReadActor::LoadState(const TSourceState& state) {
             for (const NPq::NProto::TDqPqTopicSourceState::TPartitionReadState& partitionProto : stateProto.GetPartitions()) {
                 ui64& offset = PartitionToOffset[TPartitionKey{partitionProto.GetCluster(), partitionProto.GetPartition()}];
                 if (offset) {
-                    SRC_LOG_D("offset1: " << offset);
-                    SRC_LOG_D("partitionProto.GetOffset(): " << partitionProto.GetOffset());
                     offset = Min(offset, partitionProto.GetOffset());
                 } else {
                     offset = partitionProto.GetOffset();
-                    SRC_LOG_D("offset2: " << offset);
                 }
             }
             minStartingMessageTs = Min(minStartingMessageTs, TInstant::MilliSeconds(stateProto.GetStartingMessageTimestampMs()));

@@ -345,10 +345,10 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvDataAfterFilteration::TPtr& ev) {
 }
 
 void TTopicSession::Handle(TEvRowDispatcher::TEvGetNextBatch::TPtr& ev) {
-    LOG_ROW_DISPATCHER_DEBUG("TEvGetNextBatch from " << ev->Sender.ToString());
+    LOG_ROW_DISPATCHER_TRACE("TEvGetNextBatch from " << ev->Sender.ToString());
     auto it = Clients.find(ev->Sender);
     if (it == Clients.end()) {
-        LOG_ROW_DISPATCHER_DEBUG("Wrong ClientSettings"); // TODO
+        LOG_ROW_DISPATCHER_ERROR("Wrong ClientSettings");
         return;
     }
     SendData(it->second);
@@ -642,7 +642,7 @@ void TTopicSession::SendDataArrived(ClientsInfo& info) {
         return;
     }
     info.DataArrivedSent = true;
-    LOG_ROW_DISPATCHER_DEBUG("Send TEvNewDataArrived to " << info.ReadActorId);
+    LOG_ROW_DISPATCHER_TRACE("Send TEvNewDataArrived to " << info.ReadActorId);
     auto event = std::make_unique<TEvRowDispatcher::TEvNewDataArrived>();
     event->Record.SetPartitionId(PartitionId);
     event->ReadActorId = info.ReadActorId;

@@ -225,7 +225,6 @@ void TRowDispatcher::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TP
 void TRowDispatcher::Handle(NActors::TEvents::TEvUndelivered::TPtr &ev) {
     LOG_ROW_DISPATCHER_DEBUG("TEvUndelivered, ev: " << ev->Get()->ToString());
     LOG_ROW_DISPATCHER_DEBUG("TEvUndelivered, Reason: " << ev->Get()->Reason);
-    LOG_ROW_DISPATCHER_DEBUG("TEvUndelivered, Data: " << ev->Get()->Data);
     Schedule(TDuration::Seconds(1), new NActors::TEvents::TEvWakeup());
 
     for (auto& [actorId, consumer] : Consumers) {

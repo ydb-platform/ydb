@@ -17,8 +17,6 @@ namespace {
         return TDuration::MicroSeconds(t);
     }
 
-    static constexpr double MinEntitiesWeight = 1e-8;
-
     static constexpr TDuration AvgBatch = TDuration::MicroSeconds(100);
 }
 
@@ -110,7 +108,7 @@ public:
         double Weight = 0;
         TMonotonic LastNowRecalc;
         bool Disabled = false;
-        double EntitiesWeight = 0;
+        i64 EntitiesWeight = 0;
         double MaxDeviation = 0;
         double MaxLimitDeviation = 0;
 
@@ -128,11 +126,37 @@ public:
 
         double Share;
 
+        ::NMonitoring::TDynamicCounters::TCounterPtr Vtime;
+        ::NMonitoring::TDynamicCounters::TCounterPtr EntitiesWeight;
+        ::NMonitoring::TDynamicCounters::TCounterPtr Limit;
+        ::NMonitoring::TDynamicCounters::TCounterPtr Weight;
+
+        ::NMonitoring::TDynamicCounters::TCounterPtr SchedulerClock;
+        ::NMonitoring::TDynamicCounters::TCounterPtr SchedulerLimitUs;
+        ::NMonitoring::TDynamicCounters::TCounterPtr SchedulerTrackedUs;
+
+        TString Name;
+
+        void InitCounters(const TIntrusivePtr<TKqpCounters>& counters) {
+            if (Vtime || !Name) {
+                return;
+            }
+
+            auto group = counters->GetKqpCounters()->GetSubgroup("NodeScheduler/Group", Name);
+            Vtime = group->GetCounter("VTime", true);
+            EntitiesWeight = group->GetCounter("Entities", false);
+            Limit = group->GetCounter("Limit", true);
+            Weight = group->GetCounter("Weight", false);
+            SchedulerClock = group->GetCounter("Clock", false);
+            SchedulerTrackedUs = group->GetCounter("Tracked", true);
+            SchedulerLimitUs = group->GetCounter("AbsoluteLimit", true);
+        }
+
         TMultithreadPublisher<TGroupMutableStats> MutableStats;
     };
 
     TGroupRecord* Group;
-    double Weight;
+    i64 Weight;
     double Vruntime = 0;
     double Vstart;
 
@@ -197,15 +221,6 @@ public:
 };
 
 struct TComputeScheduler::TImpl {
-    TVector<::NMonitoring::TDynamicCounters::TCounterPtr> VtimeCounters;
-    TVector<::NMonitoring::TDynamicCounters::TCounterPtr> EntitiesWeightCounters;
-    TVector<::NMonitoring::TDynamicCounters::TCounterPtr> LimitCounters;
-    TVector<::NMonitoring::TDynamicCounters::TCounterPtr> WeightCounters;
-
-    TVector<::NMonitoring::TDynamicCounters::TCounterPtr> SchedulerClock;
-    TVector<::NMonitoring::TDynamicCounters::TCounterPtr> SchedulerLimitUs;
-    TVector<::NMonitoring::TDynamicCounters::TCounterPtr> SchedulerTrackedUs;
-
     THashMap<TString, size_t> PoolId;
     std::vector<std::unique_ptr<TSchedulerEntity::TGroupRecord>> Records;
 
@@ -217,9 +232,13 @@ struct TComputeScheduler::TImpl {
 
     TDuration MaxDelay = TDuration::Seconds(10);
 
+    void AssignWeight(TSchedulerEntity::TGroupRecord* record) {
+        record->MutableStats.Next()->Weight = SumCores * record->Share;
+    }
+
     void AssignWeights() {
         for (auto& record : Records) {
-            record->MutableStats.Next()->Weight = SumCores * record->Share;
+            AssignWeight(record.get());
         }
     }
 
@@ -227,7 +246,42 @@ struct TComputeScheduler::TImpl {
         PoolId[groupName] = Records.size();
         auto group = std::make_unique<TSchedulerEntity::TGroupRecord>();
         group->Share = maxShare;
+        group->Name = groupName;
+        AssignWeight(group.get());
         Records.push_back(std::move(group));
+    }
+
+    void CompactGroups() {
+        std::vector<i64> remap;
+        std::vector<std::unique_ptr<TSchedulerEntity::TGroupRecord>> records;
+
+        std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> vtimeCounters;
+        std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> entitiesWeightCounters;
+        std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> limitCounters;
+        std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> weightCounters;
+
+        std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> schedulerClock;
+        std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> schedulerLimitUs;
+        std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> schedulerTrackedUs;
+
+        for (size_t i = 0; i < Records.size(); ++i) {
+            auto record = Records[i]->MutableStats.Current();
+            if (record.get()->Disabled || record.get()->EntitiesWeight == 0) {
+                // to delete
+                remap.push_back(-1);
+            } else {
+                records.emplace_back(std::move(Records[i]));
+                remap.push_back(i);
+            }
+        }
+
+        Records.swap(records);
+
+        for (auto& [k, v] : PoolId) {
+            if (remap[v] >= 0) {
+                v = remap[v];
+            }
+        }
     }
 };
 
@@ -237,7 +291,7 @@ TComputeScheduler::TComputeScheduler() {
 
 TComputeScheduler::~TComputeScheduler() = default;
 
-TSchedulerEntityHandle TComputeScheduler::Enroll(TString groupName, double weight, TMonotonic now) {
+TSchedulerEntityHandle TComputeScheduler::Enroll(TString groupName, i64 weight, TMonotonic now) {
     Y_ENSURE(Impl->PoolId.contains(groupName), "unknown scheduler group");
     auto* groupEntry = Impl->Records[Impl->PoolId.at(groupName)].get();
     groupEntry->MutableStats.Next()->EntitiesWeight += weight;
@@ -253,30 +307,12 @@ TSchedulerEntityHandle TComputeScheduler::Enroll(TString groupName, double weigh
 }
 
 void TComputeScheduler::AdvanceTime(TMonotonic now) {
-    if (Impl->Counters) {
-        if (Impl->VtimeCounters.size() < Impl->Records.size()) {
-            Impl->VtimeCounters.resize(Impl->Records.size());
-            Impl->EntitiesWeightCounters.resize(Impl->Records.size());
-            Impl->LimitCounters.resize(Impl->Records.size());
-            Impl->WeightCounters.resize(Impl->Records.size());
-            Impl->SchedulerClock.resize(Impl->Records.size());
-            Impl->SchedulerLimitUs.resize(Impl->Records.size());
-            Impl->SchedulerTrackedUs.resize(Impl->Records.size());
-
-            for (auto& [k, i] : Impl->PoolId) {
-                auto group = Impl->Counters->GetKqpCounters()->GetSubgroup("NodeScheduler/Group", k);
-                Impl->VtimeCounters[i] = group->GetCounter("VTime", true);
-                Impl->EntitiesWeightCounters[i] = group->GetCounter("Entities", false);
-                Impl->LimitCounters[i] = group->GetCounter("Limit", true);
-                Impl->WeightCounters[i] = group->GetCounter("Weight", false);
-                Impl->SchedulerClock[i] = group->GetCounter("Clock", false);
-                Impl->SchedulerTrackedUs[i] = group->GetCounter("Tracked", true);
-                Impl->SchedulerLimitUs[i] = group->GetCounter("AbsoluteLimit", true);
-            }
-        }
-    }
     for (size_t i = 0; i < Impl->Records.size(); ++i) {
-        auto& v = Impl->Records[i]->MutableStats;
+        auto* record = Impl->Records[i].get();
+        if (Impl->Counters) {
+            record->InitCounters(Impl->Counters);
+        }
+        auto& v = record->MutableStats;
         {
             auto group = v.Current();
             if (group.get()->LastNowRecalc > now) {
@@ -292,23 +328,24 @@ void TComputeScheduler::AdvanceTime(TMonotonic now) {
                     tracked - FromDuration(Impl->ForgetInteval) * group.get()->Weight, 
                     Min<ssize_t>(group.get()->Limit(now) - group.get()->MaxLimitDeviation, tracked));
 
-            if (!group.get()->Disabled && group.get()->EntitiesWeight > MinEntitiesWeight) {
+            if (!group.get()->Disabled && group.get()->EntitiesWeight > 0) {
                 delta = FromDuration(now - group.get()->LastNowRecalc) * group.get()->Weight / group.get()->EntitiesWeight;
                 v.Next()->MaxDeviation = (FromDuration(Impl->SmoothPeriod) * v.Next()->Weight) / v.Next()->EntitiesWeight;
             }
 
-            if (Impl->VtimeCounters.size() > i && Impl->VtimeCounters[i]) {
-                Impl->SchedulerLimitUs[i]->Set(group.get()->Limit(now));
-                Impl->SchedulerTrackedUs[i]->Set(Impl->Records[i]->TrackedMicroSeconds.load());
-                Impl->SchedulerClock[i]->Add(now.MicroSeconds() - group.get()->LastNowRecalc.MicroSeconds());
-                Impl->VtimeCounters[i]->Add(delta);
-                Impl->EntitiesWeightCounters[i]->Set(v.Next()->EntitiesWeight);
-                Impl->LimitCounters[i]->Add(FromDuration(now - group.get()->LastNowRecalc) * group.get()->Weight);
-                Impl->WeightCounters[i]->Set(group.get()->Weight);
+            if (Impl->Records[i]->Vtime) {
+                record->SchedulerLimitUs->Set(group.get()->Limit(now));
+                record->SchedulerTrackedUs->Set(Impl->Records[i]->TrackedMicroSeconds.load());
+                record->SchedulerClock->Add(now.MicroSeconds() - group.get()->LastNowRecalc.MicroSeconds());
+                record->Vtime->Add(delta);
+                record->EntitiesWeight->Set(v.Next()->EntitiesWeight);
+                record->Limit->Add(FromDuration(now - group.get()->LastNowRecalc) * group.get()->Weight);
+                record->Weight->Set(group.get()->Weight);
             }
         }
         v.Publish();
     }
+    Impl->CompactGroups();
 }
 
 void TComputeScheduler::Deregister(TSchedulerEntity& self, TMonotonic now) {
@@ -363,7 +400,7 @@ bool TComputeScheduler::Disabled(TString group) {
 
 bool TComputeScheduler::Disable(TString group, TMonotonic now) {
     auto ptr = Impl->PoolId.FindPtr(group);
-    if (Impl->Records[*ptr]->MutableStats.Current().get()->Weight > MinEntitiesWeight) {
+    if (Impl->Records[*ptr]->MutableStats.Current().get()->Weight > 0) {
         return false;
     }
     Impl->Records[*ptr]->MutableStats.Next()->Disabled = true;

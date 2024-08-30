@@ -69,7 +69,7 @@ public:
     void SetForgetInterval(TDuration);
     ::NMonitoring::TDynamicCounters::TCounterPtr GetGroupUsageCounter(TString group) const;
 
-    TSchedulerEntityHandle Enroll(TString group, double weight, TMonotonic now);
+    TSchedulerEntityHandle Enroll(TString group, i64 weight, TMonotonic now);
 
     void AdvanceTime(TMonotonic now);
 

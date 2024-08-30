@@ -6,6 +6,7 @@ import shutil
 import json
 import time
 import ydb
+import subprocess
 
 
 DATABASE_ENDPOINT = "grpcs://lb.etnvsjbk7kh1jc6bbfi8.ydb.mdb.yandexcloud.net:2135"
@@ -196,6 +197,14 @@ def upload_results(result_path, s3_folder, test_start):
                 tx.execute(sql, commit_tx=True)
 
 
+def prepare_login_to_ydb():
+    if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
+        raise AttributeError("Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping uploading")
+    os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = os.environ["CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"]
+
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "ydb", "ydb[yc]"])
+
+
 def test_tpc():
     test_start = time.time()
 
@@ -208,11 +217,7 @@ def test_tpc():
     print("results path:", result_path, file=sys.stderr)
 
     if is_ci:
-        if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
-            print("Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping uploading", file=sys.stderr)
-            return 1
-
-        os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = os.environ["CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"]
+        prepare_login_to_ydb()
 
         s3_folder = pathlib.Path(os.environ["PUBLIC_DIR"]).resolve()
         print(f"s3 folder: {s3_folder}", file=sys.stderr)

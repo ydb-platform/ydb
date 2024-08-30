@@ -208,13 +208,8 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         }
 
         TVector<TString> billRecords;
-        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->Type == NMetering::TEvMetering::TEvWriteMeteringJson::EventType) {
-                auto* msg = ev->Get<NMetering::TEvMetering::TEvWriteMeteringJson>();
-                billRecords.push_back(msg->MeteringJson);
-            }
-
-            return TTestActorRuntime::EEventAction::PROCESS;
+        observerHolder = runtime.AddObserver<NMetering::TEvMetering::TEvWriteMeteringJson>([&](NMetering::TEvMetering::TEvWriteMeteringJson::TPtr& event) {
+            billRecords.push_back(event->Get()->MeteringJson);
         });
 
         TestBuildVectorIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/CommonDB", "/MyRoot/CommonDB/Table", "index1", "embedding");

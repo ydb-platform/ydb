@@ -10,7 +10,9 @@ using namespace NActors;
 class TJsonTenants : public TViewerPipeClient {
     using TThis = TJsonTenants;
     using TBase = TViewerPipeClient;
+    IViewer* Viewer;
     NKikimrViewer::TTenants Result;
+    NMon::TEvHttpInfo::TPtr Event;
     TJsonSettings JsonSettings;
     ui32 Timeout = 0;
     bool State = true;
@@ -18,14 +20,15 @@ class TJsonTenants : public TViewerPipeClient {
 
 public:
     TJsonTenants(IViewer* viewer, NMon::TEvHttpInfo::TPtr &ev)
-        : TBase(viewer, ev)
+        : Viewer(viewer)
+        , Event(ev)
     {}
 
     void Bootstrap() override {
         const auto& params(Event->Get()->Request.GetParams());
         JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), true);
         JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);
-        InitConfig();
+        InitConfig(params);
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
         State = FromStringWithDefault<bool>(params.Get("state"), true);
         TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;

@@ -9,13 +9,16 @@ using namespace NActors;
 class TJsonHiveStats : public TViewerPipeClient {
     using TThis = TJsonHiveStats;
     using TBase = TViewerPipeClient;
+    IViewer* Viewer;
+    NMon::TEvHttpInfo::TPtr Event;
     TAutoPtr<TEvHive::TEvResponseHiveDomainStats> HiveStats;
     TJsonSettings JsonSettings;
     ui32 Timeout = 0;
 
 public:
     TJsonHiveStats(IViewer* viewer, NMon::TEvHttpInfo::TPtr &ev)
-        : TBase(viewer, ev)
+        : Viewer(viewer)
+        , Event(ev)
     {}
 
     void Bootstrap() override {
@@ -24,7 +27,7 @@ public:
         JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), true);
         JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
-        InitConfig();
+        InitConfig(params);
         if (hiveId != 0 ) {
             THolder<TEvHive::TEvRequestHiveDomainStats> request = MakeHolder<TEvHive::TEvRequestHiveDomainStats>();
             request->Record.SetReturnFollowers(FromStringWithDefault(params.Get("followers"), false));

@@ -24,6 +24,8 @@ class TJsonVDiskEvict : public TViewerPipeClient {
 protected:
     using TThis = TJsonVDiskEvict;
     using TBase = TViewerPipeClient;
+    IViewer* Viewer;
+    NMon::TEvHttpInfo::TPtr Event;
     ui32 Timeout = 0;
     ui32 ActualRetries = 0;
     ui32 Retries = 0;
@@ -40,7 +42,8 @@ protected:
 
 public:
     TJsonVDiskEvict(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
-        : TBase(viewer, ev)
+        : Viewer(viewer)
+        , Event(ev)
     {}
 
     inline ui32 GetRequiredParam(const TCgiParameters& params, const std::string& name, ui32& obj) {
@@ -87,7 +90,7 @@ public:
                 0, NMon::IEvHttpInfoRes::EContentType::Custom));
             return PassAway();
         }
-        TBase::InitConfig();
+        TBase::InitConfig(params);
 
         Force = FromStringWithDefault<bool>(params.Get("force"), false);
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);

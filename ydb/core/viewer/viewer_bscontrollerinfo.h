@@ -25,7 +25,7 @@ public:
         JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), false);
         JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
-        InitConfig();
+        InitConfig(params);
         RequestBSControllerInfo();
         Become(&TThis::StateRequestedInfo, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
     }

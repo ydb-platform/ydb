@@ -56,7 +56,6 @@ public:
             TString name;
             name = field->name();
             TString value = params.Get(name);
-            Cerr << "jjjjjjj name " << name << Endl;
             if (!value.empty()) {
                 FieldDescriptor::CppType type = field->cpp_type();
                 switch (type) {
@@ -120,7 +119,6 @@ public:
     bool Params2Proto(TProtoRequest& request) {
         auto postData = Event->Get()->Request.GetPostContent();
         if (!postData.empty()) {
-            Cerr << "jjjjjjjjj GET" << Endl;
             try {
                 NProtobufJson::Json2Proto(postData, request);
             }
@@ -129,7 +127,6 @@ public:
                 return false;
             }
         } else {
-            Cerr << "jjjjjjjjj POST" << Endl;
             const auto& params(Event->Get()->Request.GetParams());
             Params2Proto(params, request);
         }
@@ -171,7 +168,6 @@ public:
             return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Method is not allowed"));
         }
         if (Database.empty()) {
-            Cerr << "!!!! field 'database' is required" << Endl;
             return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "field 'database' is required"));
         }
         if (TBase::NeedToRedirect()) {

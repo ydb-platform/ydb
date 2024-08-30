@@ -25,7 +25,7 @@ TViewerPipeClient::TViewerPipeClient(IViewer* viewer, NMon::TEvHttpInfo::TPtr& e
     : Viewer(viewer)
     , Event(ev)
 {
-    InitConfig();
+    InitConfig(Event->Get()->Request.GetParams());
     NWilson::TTraceId traceId;
     TStringBuf traceparent = Event->Get()->Request.GetHeader("traceparent");
     if (traceparent) {
@@ -589,8 +589,7 @@ std::vector<TNodeId> TViewerPipeClient::GetNodesFromBoardReply(TEvStateStorage::
     return GetNodesFromBoardReply(*ev->Get());
 }
 
-void TViewerPipeClient::InitConfig() {
-    const TCgiParameters& params = Event->Get()->Request.GetParams();
+void TViewerPipeClient::InitConfig(const TCgiParameters& params) {
     Followers = FromStringWithDefault(params.Get("followers"), Followers);
     Metrics = FromStringWithDefault(params.Get("metrics"), Metrics);
     WithRetry = FromStringWithDefault(params.Get("with_retry"), WithRetry);
@@ -598,18 +597,6 @@ void TViewerPipeClient::InitConfig() {
     Database = params.Get("database");
     if (!Database) {
         Database = params.Get("tenant");
-    }
-    if (!Database) {
-        auto postData = Event->Get()->Request.GetPostContent();
-        Cerr << "jjjjjj postData: " << postData << Endl;
-        static NJson::TJsonReaderConfig JsonConfig;
-        NJson::TJsonValue requestData;
-        bool success = NJson::ReadJsonTree(postData, &JsonConfig, &requestData);
-        Cerr << "jjjjjj success: " << success << Endl;
-        if (success) {
-            Database = requestData["database"].GetStringRobust();
-            Cerr << "jjjjjj Database from post data: " << Database << Endl;
-        }
     }
     Direct = FromStringWithDefault<bool>(params.Get("direct"), Direct);
     JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), true);

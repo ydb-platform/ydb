@@ -25,7 +25,7 @@ public:
     {
         const auto& params(Event->Get()->Request.GetParams());
 
-        InitConfig();
+        InitConfig(params);
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 30000);
     }
 
@@ -35,7 +35,7 @@ public:
         auto& request = ViewerRequest->Get()->Record.GetRenderRequest();
 
         TCgiParameters params(request.GetUri());
-        InitConfig();
+        InitConfig(params);
         Direct = true;
         Timeout = ViewerRequest->Get()->Record.GetTimeout();
     }

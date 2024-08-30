@@ -305,7 +305,8 @@ void SetRequestSyncOperationMode(TRequest&) {
 template<typename TRpc>
 NThreading::TFuture<typename TRpc::TResponse> DoLocalRpc(typename TRpc::TRequest&& proto, const TString& database,
         const TMaybe<TString>& token, const TMaybe<TString>& requestType,
-        TActorSystem* actorSystem, bool internalCall = false) {
+        TActorSystem* actorSystem, bool internalCall = false)
+{
     auto promise = NThreading::NewPromise<typename TRpc::TResponse>();
 
     SetRequestSyncOperationMode(proto);

@@ -50,7 +50,7 @@ public:
         : TBase(viewer, ev)
     {
         const auto& params(Event->Get()->Request.GetParams());
-        InitConfig();
+        InitConfig(params);
         ParseCgiParameters(params);
         if (IsPostContent()) {
             TStringBuf content = Event->Get()->Request.GetPostContent();

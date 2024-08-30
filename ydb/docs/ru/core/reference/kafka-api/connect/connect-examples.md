@@ -1,7 +1,7 @@
 # Примеры настройки коннекторов
-В разделе приведены примеры файлов настройки коннекторов Kafka Connect для работы с YDB по протоколу Kafka.
+В разделе приведены примеры файлов настройки коннекторов Kafka Connect для работы с {{ ydb-short-name }} по протоколу Kafka.
 
-## Из файла в YDB
+## Из файла в {{ ydb-short-name }}
 Пример файла настроек FileSource коннектора `/etc/kafka-connect-worker/file-sink.properties` для переноса данных из файла в топик:
 ```ini
 name=local-file-source
@@ -11,7 +11,7 @@ file=/etc/kafka-connect-worker/file_to_read.json
 topic=<topic-name>
 ```
 
-## Из YDB в PostgreSQL
+## Из {{ ydb-short-name }} в PostgreSQL
 Пример файла настроек JDBCSink коннектора `/etc/kafka-connect-worker/jdbc-sink.properties` для переноса данных из топика в таблицу PostgreSQL. Используется коннектор [Kafka Connect JDBC Connector](https://github.com/confluentinc/kafka-connect-jdbc).
 ```ini
 name=postgresql-sink
@@ -35,7 +35,7 @@ pk.mode=none
 auto.evolve=true
 ```
 
-## Из PostgreSQL в YDB
+## Из PostgreSQL в {{ ydb-short-name }}
 Пример файла настроек JDBCSource коннектора `/etc/kafka-connect-worker/jdbc-source.properties` для переноса данных из PostgreSQL таблицы в топик. Используется коннектор [Kafka Connect JDBC Connector](https://github.com/confluentinc/kafka-connect-jdbc).
 ```ini
 name=postgresql-source
@@ -52,7 +52,7 @@ poll.interval.ms=1000
 validate.non.null=false
 ```
 
-## Из YDB в S3
+## Из {{ ydb-short-name }} в S3
 Пример файла настроек S3Sink коннектора `/etc/kafka-connect-worker/s3-sink.properties` для переноса данных из топика в S3. Используется коннектор [Aiven's S3 Sink Connector for Apache Kafka](https://github.com/Aiven-Open/s3-connector-for-apache-kafka).
 ```ini
 name=s3-sink

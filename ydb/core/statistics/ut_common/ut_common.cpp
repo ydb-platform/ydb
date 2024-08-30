@@ -83,9 +83,6 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, ui32 storagePools, bool 
     CSController->SetOverrideReduceMemoryIntervalLimit(1LLU << 30);
 
     Server->GetRuntime()->SetLogPriority(NKikimrServices::STATISTICS, NActors::NLog::PRI_DEBUG);
-        Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_DEBUG);
-        // Server->GetRuntime()->SetLogPriority(NKikimrServices::K, NActors::NLog::PRI_DEBUG);
-
 }
 
 TTestEnv::~TTestEnv() {
@@ -312,7 +309,7 @@ void DropTable(TTestEnv& env, const TString& databaseName, const TString& tableN
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
-std::shared_ptr<TCountMinSketch> ExtractCountMin(TTestActorRuntime& runtime, TPathId pathId, ui64 columnTag) {
+std::shared_ptr<TCountMinSketch> ExtractCountMin(TTestActorRuntime& runtime, const TPathId& pathId, ui64 columnTag) {
     auto statServiceId = NStat::MakeStatServiceID(runtime.GetNodeId(1));
 
     NStat::TRequest req;

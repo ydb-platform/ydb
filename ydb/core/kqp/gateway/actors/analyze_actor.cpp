@@ -1,6 +1,7 @@
 #include "analyze_actor.h"
 
 #include <ydb/core/base/path.h>
+#include <ydb/core/util/ulid.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 
@@ -13,6 +14,18 @@ enum {
 };
 
 using TNavigate = NSchemeCache::TSchemeCacheNavigate;
+
+TString MakeOperationId() {
+    TULIDGenerator ulidGen;
+    return ulidGen.Next(TActivationContext::Now()).ToBinary();
+}
+
+TAnalyzeActor::TAnalyzeActor(TString tablePath, TVector<TString> columns, NThreading::TPromise<NYql::IKikimrGateway::TGenericResult> promise)
+    : TablePath(tablePath)
+    , Columns(columns) 
+    , Promise(promise)
+    , OperationId(MakeOperationId())
+{}
 
 void TAnalyzeActor::Bootstrap() {
     using TNavigate = NSchemeCache::TSchemeCacheNavigate;
@@ -29,7 +42,6 @@ void TAnalyzeActor::Bootstrap() {
 }
 
 void TAnalyzeActor::Handle(NStat::TEvStatistics::TEvAnalyzeResponse::TPtr& ev, const TActorContext& ctx) {
-    Y_UNUSED(ev);
     Y_UNUSED(ctx);
 
     const auto& record = ev->Get()->Record;

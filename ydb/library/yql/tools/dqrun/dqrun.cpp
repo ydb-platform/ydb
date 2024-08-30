@@ -75,6 +75,7 @@
 #include <ydb/library/yql/utils/backtrace/backtrace.h>
 #include <ydb/library/yql/utils/bindings/utils.h>
 #include <ydb/library/yql/core/qplayer/storage/file/yql_qstorage_file.h>
+#include <ydb/library/yql/public/result_format/yql_result_format.h>
 
 #include <ydb/core/fq/libs/actors/database_resolver.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/db_async_resolver_impl.h>
@@ -133,6 +134,7 @@ struct TRunOptions {
     IOutputStream* TracePlan = &Cerr;
     bool UseMetaFromGraph = false;
     bool WithFinalIssues = false;
+    bool ValidateResultFormat = false;
 };
 
 class TStoreMappingFunctor: public NLastGetopt::IOptHandler {
@@ -424,13 +426,26 @@ int RunProgram(TProgramPtr program, const TRunOptions& options, const THashMap<T
 
     Cout << "Getting results..." << Endl;
     if (program->HasResults()) {
-        NYson::TYsonWriter yson(options.ResultOut, options.ResultsFormat);
+        TString str;
+        TStringOutput out(str);
+        NYson::TYsonWriter yson(options.ValidateResultFormat ? &out : options.ResultOut, options.ResultsFormat);
         yson.OnBeginList();
         for (const auto& result: program->Results()) {
             yson.OnListItem();
             yson.OnRaw(result);
         }
         yson.OnEndList();
+        if (options.ValidateResultFormat) {
+            auto node = NYT::NodeFromYsonString(str);
+            for (const auto& r : NResult::ParseResponse(node)) {
+                for (const auto& write : r.Writes) {
+                    NResult::TEmptyTypeVisitor visitor;
+                    NResult::ParseType(*write.Type, visitor);
+                }
+            }
+
+            options.ResultOut->Write(str.Data(), str.Size());
+        }
     }
 
     if (options.LineageStream) {
@@ -682,6 +697,7 @@ int RunMain(int argc, const char* argv[])
     opts.AddLongOption("yson-attrs", "Provide operation yson attribues").StoreResult(&ysonAttrs);
     opts.AddLongOption("pg-ext", "pg extensions config file").StoreResult(&pgExtConfig);
     opts.AddLongOption("with-final-issues").NoArgument();
+    opts.AddLongOption("validate-result-format", "Check that result-format can parse Result").NoArgument();
     opts.AddHelpOption('h');
 
     opts.SetFreeArgsNum(0);
@@ -1102,6 +1118,10 @@ int RunMain(int argc, const char* argv[])
 
     if (res.Has("with-final-issues")) {
         runOptions.WithFinalIssues = true;
+    }
+
+    if (res.Has("validate-result-format")) {
+        runOptions.ValidateResultFormat = true;
     }
 
     int result = RunProgram(std::move(program), runOptions, clusters, sqlFlags);

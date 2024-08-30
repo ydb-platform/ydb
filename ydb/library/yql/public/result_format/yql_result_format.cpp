@@ -486,234 +486,241 @@ void TTypeBuilder::Pop() {
     Stack.pop_back();
 }
 
-void TThrowingTypeVisitor::OnVoid() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnVoid() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnNull() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnNull() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnEmptyList() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnEmptyList() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnEmptyDict() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnEmptyDict() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnBool() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnBool() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnInt8() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnInt8() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnUint8() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnUint8() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnInt16() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnInt16() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnUint16() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnUint16() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnInt32() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnInt32() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnUint32() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnUint32() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnInt64() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnInt64() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnUint64() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnUint64() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnFloat() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnFloat() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnDouble() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnDouble() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnString() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnString() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnUtf8() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnUtf8() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnYson() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnYson() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnJson() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnJson() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnJsonDocument() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnJsonDocument() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnUuid() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnUuid() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnDyNumber() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnDyNumber() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnDate() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnDate() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnDatetime() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnDatetime() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnTimestamp() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnTimestamp() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnTzDate() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnTzDate() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnTzDatetime() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnTzDatetime() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnTzTimestamp() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnTzTimestamp() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnInterval() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnInterval() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnDate32() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnDate32() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnDatetime64() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnDatetime64() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnTimestamp64() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnTimestamp64() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnTzDate32() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnTzDate32() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnTzDatetime64() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnTzDatetime64() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnTzTimestamp64() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnTzTimestamp64() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnInterval64() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnInterval64() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnDecimal(ui32 precision, ui32 scale) {
+void TSameActionTypeVisitor::OnDecimal(ui32 precision, ui32 scale) {
     Y_UNUSED(precision);
     Y_UNUSED(scale);
-    UNEXPECTED;
+    Do();
 }
 
-void TThrowingTypeVisitor::OnBeginOptional() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnBeginOptional() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnEndOptional() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnEndOptional() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnBeginList() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnBeginList() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnEndList() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnEndList() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnBeginTuple() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnBeginTuple() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnTupleItem() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnTupleItem() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnEndTuple() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnEndTuple() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnBeginStruct() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnBeginStruct() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnStructItem(TStringBuf member) {
+void TSameActionTypeVisitor::OnStructItem(TStringBuf member) {
     Y_UNUSED(member);
-    UNEXPECTED;
+    Do();
 }
 
-void TThrowingTypeVisitor::OnEndStruct() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnEndStruct() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnBeginDict() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnBeginDict() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnDictKey() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnDictKey() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnDictPayload() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnDictPayload() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnEndDict() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnEndDict() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnBeginVariant() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnBeginVariant() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnEndVariant() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnEndVariant() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnBeginTagged(TStringBuf tag) {
+void TSameActionTypeVisitor::OnBeginTagged(TStringBuf tag) {
     Y_UNUSED(tag);
-    UNEXPECTED;
+    Do();
 }
 
-void TThrowingTypeVisitor::OnEndTagged() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnEndTagged() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnPgType(TStringBuf name, TStringBuf category) {
+void TSameActionTypeVisitor::OnPgType(TStringBuf name, TStringBuf category) {
     Y_UNUSED(name);
     Y_UNUSED(category);
+    Do();
+}
+
+void TThrowingTypeVisitor::Do() {
     UNEXPECTED;
+}
+
+void TEmptyTypeVisitor::Do() {
 }
 
 TVector<TResult> ParseResponse(const NYT::TNode& responseNode) {

@@ -17,6 +17,8 @@ DEPENDS(
     ydb/library/yql/udfs/common/url_base
     ydb/library/yql/udfs/common/datetime2
     ydb/library/yql/udfs/common/re2
+    ydb/library/yql/udfs/common/math
+    ydb/library/yql/udfs/common/unicode_base
 )
 
 DATA_FILES(

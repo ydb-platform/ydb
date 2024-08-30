@@ -70,7 +70,7 @@ public:
                 try {
                     auto response = future.ExtractValueSync();
                     if (response.Status().IsSuccess()) {
-                        actorSystem->Send(recipient, new TEvYdbCompute::TEvExecuteScriptResponse(response.Id(), response.Metadata().ExecutionId), 0, cookie);
+                        actorSystem->Send(recipient, new TEvYdbCompute::TEvExecuteScriptResponse(TString{response.Id()}, TString{response.Metadata().ExecutionId}), 0, cookie);
                     } else {
                         actorSystem->Send(
                             recipient,
@@ -98,7 +98,7 @@ public:
             .Apply([actorSystem = NActors::TActivationContext::ActorSystem(), recipient = ev->Sender, cookie = ev->Cookie, database = ComputeConnection.database()](auto future) {
                 try {
                     auto response = future.ExtractValueSync();
-                    if (response.Id().GetKind() != Ydb::TOperationId::UNUSED) {
+                    if (response.Id().GetKind() != NKikimr::NOperationId::UNUSED) {
                         actorSystem->Send(
                             recipient, 
                             new TEvYdbCompute::TEvGetOperationResponse(
@@ -142,7 +142,7 @@ public:
                 try {
                     auto response = future.ExtractValueSync();
                     if (response.IsSuccess()) {
-                        actorSystem->Send(recipient, new TEvYdbCompute::TEvFetchScriptResultResponse(response.ExtractResultSet(), response.GetNextFetchToken()), 0, cookie);
+                        actorSystem->Send(recipient, new TEvYdbCompute::TEvFetchScriptResultResponse(response.ExtractResultSet(), TString{response.GetNextFetchToken()}), 0, cookie);
                     } else {
                         actorSystem->Send(
                             recipient,

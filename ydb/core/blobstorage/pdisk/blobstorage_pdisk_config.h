@@ -383,8 +383,8 @@ struct TPDiskConfig : public TThrRefBase {
 
         if (cfg->HasChunkBaseLimit()) {
             ui32 limit = cfg->GetChunkBaseLimit();
-            limit = Min<i64>(130, limit);
-            limit = Max<i64>(13, limit);
+            limit = Min<ui32>(130, limit);
+            limit = Max<ui32>(13, limit);
             ChunkBaseLimit = limit;
         }
     }

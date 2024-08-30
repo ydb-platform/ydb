@@ -2183,11 +2183,6 @@ NJson::TJsonValue ReconstructQueryPlanRec(const NJson::TJsonValue& plan,
 
     auto opName = op.GetMapSafe().at("Name").GetStringSafe();
 
-    if (opName == "CrossJoin") {
-        int kek = 2;
-        (void)kek;
-    }
-
     THashSet<ui32> processedExternalOperators;
     THashSet<ui32> processedInternalOperators;
     for (auto opInput : op.GetMapSafe().at("Inputs").GetArraySafe()) {

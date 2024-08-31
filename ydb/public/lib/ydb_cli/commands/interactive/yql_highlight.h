@@ -3,6 +3,8 @@
 #include <contrib/libs/antlr4_cpp_runtime/src/Token.h>
 #include <contrib/restricted/patched/replxx/include/replxx.hxx>
 
+#include <regex>
+
 namespace NYdb {
     namespace NConsoleClient {
 
@@ -44,6 +46,7 @@ namespace NYdb {
 
         private:
             ColorSchema Coloring;
+            std::regex BuiltinFunctionRegex;
         };
 
     }

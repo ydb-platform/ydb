@@ -7,7 +7,7 @@
 namespace NYdb {
     namespace NConsoleClient {
 
-        YQLHighlight::ColorSchema YQLHighlight::ColorSchema::Default() {
+        YQLHighlight::ColorSchema YQLHighlight::ColorSchema::Monaco() {
             using replxx::color::rgb666;
 
             return {

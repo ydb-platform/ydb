@@ -94,7 +94,7 @@ TLineReader::TLineReader(std::string prompt, std::string historyFilePath, Sugges
     };
 
     auto highlighter_callback = [](const auto& text, auto& colors) {
-        return YQLHighlight(YQLHighlight::ColorSchema::Default()).Apply(text, colors);
+        return YQLHighlight(YQLHighlight::ColorSchema::Monaco()).Apply(text, colors);
     };
 
     Rx.set_completion_callback(completion_callback);

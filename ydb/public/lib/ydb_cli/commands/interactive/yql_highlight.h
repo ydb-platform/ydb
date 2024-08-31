@@ -22,7 +22,7 @@ namespace NYdb {
                 Color number;
                 Color unknown;
 
-                static ColorSchema Default();
+                static ColorSchema Monaco();
             };
 
         public:

@@ -1142,7 +1142,10 @@ private:
                 TString compSign = TString(listPtr->Child(0)->Content());
                 if (strComp.contains(compSign)) {
                     TString attr = TString(listPtr->Child(1)->Content());
-                    TString value = TString(listPtr->Child(2)->Child(0)->Content());
+                    TString value;
+                    if (listPtr->Child(2)->ChildrenSize() >= 1) {
+                        value = TString(listPtr->Child(2)->Child(0)->Content());
+                    }
                     
                     return Sprintf("%s %s %s", attr.c_str(), strComp[compSign].c_str(), value.c_str());
                 }

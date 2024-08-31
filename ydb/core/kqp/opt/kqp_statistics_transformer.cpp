@@ -341,8 +341,8 @@ public:
             resSelectivity = tmpSelectivity;
         } else if (auto notNode = input.Maybe<TKqpOlapNot>()) {
             resSelectivity = 1 - Compute(notNode.Cast().Value());
-        } else if (auto maybeList = input.Maybe<TCoAtomList>()) {
-            auto listPtr = maybeList.Cast().Ptr()->Child(1);
+        } else if (input.Maybe<TCoAtomList>() && input.Ptr()->ChildrenSize() >= 1) {
+            auto listPtr = input.Maybe<TCoAtomList>().Cast().Ptr()->Child(1);
             size_t listSize = listPtr->ChildrenSize();
 
             if (listSize == 3) {
@@ -357,7 +357,6 @@ public:
                         .Name("row")
                     .Done();
 
-                // TCoAtom attrAtom(dummyCtx.NewAtom(dummyPos, std::move(attr)));
                 auto member = 
                         Build<TCoMember>(dummyCtx, dummyPos)
                             .Struct(rowArg)

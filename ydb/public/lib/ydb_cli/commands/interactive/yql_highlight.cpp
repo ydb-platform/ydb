@@ -65,7 +65,7 @@ namespace NYdb {
                 .operation = rgb666(3, 3, 3),
                 .identifier = {
                     .function = rgb666(4, 1, 5),
-                    .simple = Color::DEFAULT,
+                    .variable = Color::DEFAULT,
                     .quoted = rgb666(1, 3, 3),
                 },
                 .string = rgb666(3, 0, 0),
@@ -102,7 +102,7 @@ namespace NYdb {
         void YQLHighlight::Reset(std::string_view query) {
             Chars.load(query.data(), query.length());
             Lexer.reset();
-            Tokens.reset();
+            Tokens.setTokenSource(&Lexer);
 
             Tokens.fill();
         }
@@ -114,8 +114,8 @@ namespace NYdb {
             if (IsFunctionIdentifier(token)) {
                 return Coloring.identifier.function;
             }
-            if (IsSimpleIdentifier(token)) {
-                return Coloring.identifier.simple;
+            if (IsVariableIdentifier(token)) {
+                return Coloring.identifier.variable;
             }
             if (IsQuotedIdentifier(token)) {
                 return Coloring.identifier.quoted;
@@ -469,7 +469,7 @@ namespace NYdb {
                                                               (index < Tokens.size() - 1 && Tokens.get(index + 1)->getType() == YQLLexer::NAMESPACE));
         }
 
-        bool YQLHighlight::IsSimpleIdentifier(const antlr4::Token* token) const {
+        bool YQLHighlight::IsVariableIdentifier(const antlr4::Token* token) const {
             return token->getType() == YQLLexer::ID_PLAIN;
         }
 

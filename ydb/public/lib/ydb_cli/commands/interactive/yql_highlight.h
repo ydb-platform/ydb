@@ -23,7 +23,7 @@ namespace NYdb {
                 Color operation;
                 struct {
                     Color function;
-                    Color simple;
+                    Color variable;
                     Color quoted;
                 } identifier;
                 Color string;
@@ -46,7 +46,7 @@ namespace NYdb {
             bool IsKeyword(const antlr4::Token* token) const;
             bool IsOperation(const antlr4::Token* token) const;
             bool IsFunctionIdentifier(const antlr4::Token* token);
-            bool IsSimpleIdentifier(const antlr4::Token* token) const;
+            bool IsVariableIdentifier(const antlr4::Token* token) const;
             bool IsQuotedIdentifier(const antlr4::Token* token) const;
             bool IsString(const antlr4::Token* token) const;
             bool IsNumber(const antlr4::Token* token) const;

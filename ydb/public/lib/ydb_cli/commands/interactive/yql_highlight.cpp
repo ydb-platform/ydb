@@ -13,9 +13,11 @@ namespace NYdb {
             return {
                 .keyword = Color::BLUE,
                 .operation = rgb666(3, 3, 3),
-                .function_identifier = rgb666(4, 1, 5),
-                .simple_identifier = Color::DEFAULT,
-                .quoted_identifier = rgb666(1, 3, 3),
+                .identifier = {
+                    .function = rgb666(4, 1, 5),
+                    .simple = Color::DEFAULT,
+                    .quoted = rgb666(1, 3, 3),
+                },
                 .string = rgb666(3, 0, 0),
                 .number = Color::BRIGHTGREEN,
                 .unknown = Color::DEFAULT,
@@ -404,13 +406,13 @@ namespace NYdb {
                     return schema.string;
                 }
                 if (IsFunctionIdentifier(token)) {
-                    return schema.function_identifier;
+                    return schema.identifier.function;
                 }
                 if (IsSimpleIdentifier(token)) {
-                    return schema.simple_identifier;
+                    return schema.identifier.simple;
                 }
                 if (IsQuotedIdentifier(token)) {
-                    return schema.quoted_identifier;
+                    return schema.identifier.quoted;
                 }
                 if (IsNumber(token)) {
                     return schema.number;

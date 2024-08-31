@@ -436,11 +436,13 @@ int RunProgram(TProgramPtr program, const TRunOptions& options, const THashMap<T
         }
         yson.OnEndList();
         if (options.ValidateResultFormat) {
-            auto node = NYT::NodeFromYsonString(str);
-            for (const auto& r : NResult::ParseResponse(node)) {
-                for (const auto& write : r.Writes) {
-                    NResult::TEmptyTypeVisitor visitor;
-                    NResult::ParseType(*write.Type, visitor);
+            if (!str.empty()) {
+                auto node = NYT::NodeFromYsonString(str);
+                for (const auto& r : NResult::ParseResponse(node)) {
+                    for (const auto& write : r.Writes) {
+                        NResult::TEmptyTypeVisitor visitor;
+                        NResult::ParseType(*write.Type, visitor);
+                    }
                 }
             }
 

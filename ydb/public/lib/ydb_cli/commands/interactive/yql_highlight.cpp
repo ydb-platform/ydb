@@ -410,30 +410,15 @@ namespace NYdb {
         }
 
         bool YQLHighlight::IsSimpleIdentifier(const antlr4::Token* token) const {
-            switch (token->getType()) {
-                case YQLLexer::ID_PLAIN:
-                    return true;
-                default:
-                    return false;
-            }
+            return token->getType() == YQLLexer::ID_PLAIN;
         }
 
         bool YQLHighlight::IsQuotedIdentifier(const antlr4::Token* token) const {
-            switch (token->getType()) {
-                case YQLLexer::ID_QUOTED:
-                    return true;
-                default:
-                    return false;
-            }
+            return token->getType() == YQLLexer::ID_QUOTED;
         }
 
         bool YQLHighlight::IsString(const antlr4::Token* token) const {
-            switch (token->getType()) {
-                case YQLLexer::STRING_VALUE:
-                    return true;
-                default:
-                    return false;
-            }
+            return token->getType() == YQLLexer::STRING_VALUE;
         }
 
         bool YQLHighlight::IsNumber(const antlr4::Token* token) const {

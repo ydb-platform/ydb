@@ -9,6 +9,8 @@ Video recordings from conferences and webinars. The materials are divided by cat
 
   - 2024
 
+    {% include [KubeCon + CloudNativeCon + Open Source Summit](./_includes/conferences/2024/kubecon-hongkong.md) %}
+
     {% include [COSCUP](./_includes/conferences/2024/coscup.md) %}
 
     {% include [TechInternals](./_includes/conferences/2024/TechInternals.md) %}

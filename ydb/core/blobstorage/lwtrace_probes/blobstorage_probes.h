@@ -280,8 +280,9 @@ struct TEventTypeField {
     PROBE(DSProxyStartTransfer, GROUPS("DSProxy"), TYPES(), NAMES()) \
     PROBE(VDiskStartProcessing, GROUPS("DSProxy"), TYPES(), NAMES()) \
     PROBE(VDiskReply, GROUPS("DSProxy"), TYPES(), NAMES()) \
-    PROBE(DSProxyPutRequest, GROUPS("DSProxy", "LWTrackStart"), TYPES(ui32, TString, TString, ui64, ui64), NAMES("groupId", "handleClass", "tactic", "count", "totalSize")) \
+    PROBE(DSProxyPutRequest, GROUPS("DSProxy", "LWTrackStart"), TYPES(ui32, TString, TString, TString, ui64, ui64), NAMES("groupId", "deviceType", "handleClass", "tactic", "count", "totalSize")) \
     PROBE(DSProxyVPutSent, GROUPS("DSProxy"), TYPES(NKikimr::TEventTypeField, TString, ui32, ui32, ui64, bool), NAMES("type", "vDiskId", "vdiskOrderNum", "count", "totalSize", "accelerate")) \
+    PROBE(BackPressureRequestTrackingStats, GROUPS("BSQUEUE"), TYPES(ui32, TString, TString, double), NAMES("groupId", "deviceType", "vDiskId", "worstDurationMs")) \
 /**/
 LWTRACE_DECLARE_PROVIDER(BLOBSTORAGE_PROVIDER)
 

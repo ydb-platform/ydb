@@ -106,7 +106,7 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
     bool PrepareParams(TTransactionContext &txc, const TAppData *appData) {
         Y_UNUSED(txc);
         if (SourceProgram.Params.Binary) {
-            SerializedMiniKQLParams = SourceProgram.Program.Binary;
+            SerializedMiniKQLParams = SourceProgram.Params.Binary;
             return true;
         }
 

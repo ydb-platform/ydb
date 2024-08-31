@@ -466,7 +466,9 @@ protected:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TRequestQueuePtr CreateRequestQueue(TString name, const NProfiling::TProfiler& profiler = {});
+TRequestQueuePtr CreateRequestQueue(
+    const std::string& name,
+    const NProfiling::TProfiler& profiler = {});
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -939,10 +941,16 @@ private:
     static constexpr size_t RequestBucketCount = 64;
     std::array<TRequestBucket, RequestBucketCount> RequestBuckets_;
 
+    struct TReplyBusData
+    {
+        THashSet<TServiceContext*> Contexts;
+        TCallback<void(const TError&)> BusTerminationHandler;
+    };
+
     struct TReplyBusBucket
     {
         YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock);
-        THashMap<NYT::NBus::IBusPtr, THashSet<TServiceContext*>> ReplyBusToContexts;
+        THashMap<NYT::NBus::IBusPtr, TReplyBusData> ReplyBusToData;
     };
 
     static constexpr size_t ReplyBusBucketCount = 64;
@@ -1076,7 +1084,7 @@ class TRequestQueue
     : public TRefCounted
 {
 public:
-    explicit TRequestQueue(TString name, NProfiling::TProfiler profiler);
+    TRequestQueue(const std::string& name, NProfiling::TProfiler profiler);
 
     bool Register(TServiceBase* service, TServiceBase::TRuntimeMethodInfo* runtimeInfo);
     void Configure(const TMethodConfigPtr& config);
@@ -1095,10 +1103,11 @@ public:
     void ConfigureWeightThrottler(const NConcurrency::TThroughputThrottlerConfigPtr& config);
     void ConfigureBytesThrottler(const NConcurrency::TThroughputThrottlerConfigPtr& config);
 
-    const TString& GetName() const;
+    const std::string& GetName() const;
 
 private:
-    const TString Name_;
+    const std::string Name_;
+
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, RegisterLock_);
     std::atomic<bool> Registered_ = false;
     TServiceBase* Service_;
@@ -1126,8 +1135,6 @@ private:
 
     void ScheduleRequestsFromQueue();
     void RunRequest(TServiceBase::TServiceContextPtr context);
-
-    i64 GetTotalRequestSize(const TServiceBase::TServiceContextPtr& context);
 
     void IncrementQueueSize(const TServiceBase::TServiceContextPtr& context);
     void DecrementQueueSize(const TServiceBase::TServiceContextPtr& context);

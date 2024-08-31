@@ -94,6 +94,14 @@ void Migrate(NKikimrPQ::TPQTabletConfig& config) {
             }
             consumer->SetImportant(IsImportantClient(config, consumer->GetName()));
         }
+
+        config.ClearReadRules();
+        config.ClearReadFromTimestampsMs();
+        config.ClearConsumerFormatVersions();
+        config.ClearConsumerCodecs();
+        config.ClearReadRuleServiceTypes();
+        config.ClearReadRuleVersions();
+        config.ClearReadRuleGenerations();
     }
 
     if (!config.PartitionsSize()) {

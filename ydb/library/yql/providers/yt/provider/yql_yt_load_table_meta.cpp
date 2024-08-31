@@ -229,27 +229,6 @@ public:
                     tableDesc.Meta->Attrs.erase(TString{YqlRowSpecAttribute}.append("_qb2"));
                 }
 
-                if (HasReadIntents(tableDesc.Intents)) {
-                    if (auto securityTagsAttr = tableDesc.Meta->Attrs.FindPtr(SecurityTagsName)) {
-                        const TString tmpFolder = GetTablesTmpFolder(*State_->Configuration);
-                        if (!securityTagsAttr->empty() && tmpFolder.empty()) {
-                            TStringBuilder msg;
-                            msg << "Table " << cluster << "." << tableName
-                                << " contains sensitive data, but is used with the default tmp folder."
-                                << " This may lead to sensitive data being leaked, consider using a protected tmp folder with the TmpFolder pragma.";
-                            auto issue = YqlIssue(TPosition(), EYqlIssueCode::TIssuesIds_EIssueCode_YT_SECURE_DATA_IN_COMMON_TMP, msg);
-                            if (State_->Configuration->ForceTmpSecurity.Get().GetOrElse(false)) {
-                                ctx.AddError(issue);
-                                return TStatus::Error;
-                            } else {
-                                if (!ctx.AddWarning(issue)) {
-                                    return TStatus::Error;
-                                }
-                            }
-                        }
-                    }
-                }
-
                 if (0 == LoadCtx->Epoch) {
                     if (!tableDesc.Fill(
                         cluster, tableName, ctx,
@@ -264,6 +243,25 @@ public:
 
             if (auto stat = LoadCtx->Result.Data[i].Stat) {
                 tableDesc.Stat = stat;
+                if (HasReadIntents(tableDesc.Intents)) {
+                    const auto& securityTagsSet = tableDesc.Stat->SecurityTags;
+                    const TString tmpFolder = GetTablesTmpFolder(*State_->Configuration);
+                    if (!securityTagsSet.empty() && tmpFolder.empty()) {
+                        TStringBuilder msg;
+                        msg << "Table " << cluster << "." << tableName
+                            << " contains sensitive data, but is used with the default tmp folder."
+                            << " This may lead to sensitive data being leaked, consider using a protected tmp folder with the TmpFolder pragma.";
+                        auto issue = YqlIssue(TPosition(), EYqlIssueCode::TIssuesIds_EIssueCode_YT_SECURE_DATA_IN_COMMON_TMP, msg);
+                        if (State_->Configuration->ForceTmpSecurity.Get().GetOrElse(false)) {
+                            ctx.AddError(issue);
+                            return TStatus::Error;
+                        } else {
+                            if (!ctx.AddWarning(issue)) {
+                                return TStatus::Error;
+                            }
+                        }
+                    }
+                }
             }
         }
 

@@ -374,20 +374,6 @@ namespace NActors {
         typedef TAutoPtr<THandle> TPtr;
     };
 
-#define DEFINE_SIMPLE_LOCAL_EVENT(eventType, header)                    \
-    TString ToStringHeader() const override {                           \
-        return TString(header);                                         \
-    }                                                                   \
-    bool SerializeToArcadiaStream(NActors::TChunkSerializer*) const override { \
-        Y_ABORT("Local event " #eventType " is not serializable");       \
-    }                                                                   \
-    static IEventBase* Load(NActors::TEventSerializedData*) {           \
-        Y_ABORT("Local event " #eventType " has no load method");        \
-    }                                                                   \
-    bool IsSerializable() const override {                              \
-        return false;                                                   \
-    }
-
 #define DEFINE_SIMPLE_NONLOCAL_EVENT(eventType, header)                 \
     TString ToStringHeader() const override {                           \
         return TString(header);                                         \

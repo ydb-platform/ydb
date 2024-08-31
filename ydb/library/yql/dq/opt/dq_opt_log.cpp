@@ -386,16 +386,6 @@ TExprBase DqExpandMatchRecognize(TExprBase node, TExprContext& ctx, TTypeAnnotat
     return TExprBase(ExpandMatchRecognize(node.Ptr(), ctx, typeAnnCtx));
 }
 
-IDqOptimization* GetDqOptCallback(const TExprBase& providerRead, TTypeAnnotationContext& typeAnnCtx) {
-    if (providerRead.Ref().ChildrenSize() > 1 && TCoDataSource::Match(providerRead.Ref().Child(1))) {
-        auto dataSourceName = providerRead.Ref().Child(1)->Child(0)->Content();
-        auto datasource = typeAnnCtx.DataSourceMap.FindPtr(dataSourceName);
-        YQL_ENSURE(datasource);
-        return (*datasource)->GetDqOptimization();
-    }
-    return nullptr;
-}
-
 TMaybeNode<TExprBase> UnorderedOverDqReadWrap(TExprBase node, TExprContext& ctx, const std::function<const TParentsMap*()>& getParents, bool enableDqReplicate, TTypeAnnotationContext& typeAnnCtx) {
     const auto unordered = node.Cast<TCoUnorderedBase>();
     if (const auto maybeRead = unordered.Input().Maybe<TDqReadWrapBase>().Input()) {

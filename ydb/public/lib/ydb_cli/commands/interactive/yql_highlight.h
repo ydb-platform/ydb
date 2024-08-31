@@ -13,6 +13,7 @@ namespace NYdb {
             struct ColorSchema {
                 Color keyword;
                 Color operation;
+                Color function_identifier;
                 Color simple_identifier;
                 Color quoted_identifier;
                 Color string;

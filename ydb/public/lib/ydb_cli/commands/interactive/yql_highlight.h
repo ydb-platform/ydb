@@ -1,5 +1,6 @@
 #pragma once
 
+#include <contrib/libs/antlr4_cpp_runtime/src/Token.h>
 #include <contrib/restricted/patched/replxx/include/replxx.hxx>
 
 namespace NYdb {
@@ -30,6 +31,16 @@ namespace NYdb {
 
         public:
             void Apply(std::string_view query, Colors& colors);
+
+        private:
+            YQLHighlight::Color ColorOf(const antlr4::Token* token) const;
+            bool IsKeyword(const antlr4::Token* token) const;
+            bool IsOperation(const antlr4::Token* token) const;
+            bool IsFunctionIdentifier(const antlr4::Token* token) const;
+            bool IsSimpleIdentifier(const antlr4::Token* token) const;
+            bool IsQuotedIdentifier(const antlr4::Token* token) const;
+            bool IsString(const antlr4::Token* token) const;
+            bool IsNumber(const antlr4::Token* token) const;
 
         private:
             ColorSchema Coloring;

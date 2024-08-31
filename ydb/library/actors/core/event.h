@@ -374,17 +374,25 @@ namespace NActors {
         typedef TAutoPtr<THandle> TPtr;
     };
 
-#define DEFINE_SIMPLE_NONLOCAL_EVENT(eventType, header)                 \
-    TString ToStringHeader() const override {                           \
-        return TString(header);                                         \
-    }                                                                   \
-    bool SerializeToArcadiaStream(NActors::TChunkSerializer*) const override { \
-        return true;                                                    \
-    }                                                                   \
-    static IEventBase* Load(NActors::TEventSerializedData*) {           \
-        return new eventType();                                         \
-    }                                                                   \
-    bool IsSerializable() const override {                              \
-        return true;                                                    \
-    }
+
+    // Non-local event with empty serialization 
+    template <typename TEv, ui32 TEventType>
+    class TEventSimpleNonLocal: public TEventBase<TEv, TEventType> {
+    public:
+        TString ToStringHeader() const override {
+            return TypeName<TEv>();
+        }
+
+        bool SerializeToArcadiaStream(TChunkSerializer* /*serializer*/) const override {
+            return true;
+        }
+
+        bool IsSerializable() const override {
+            return true;
+        }
+
+        static IEventBase* Load(TEventSerializedData*) {
+            return new TEv();
+        }
+    };
 }

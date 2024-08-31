@@ -238,6 +238,11 @@ void TMemoryUsageTrackerGuard::IncreaseSize(i64 sizeDelta)
     SetSize(Size_ + sizeDelta);
 }
 
+void TMemoryUsageTrackerGuard::DecreaseSize(i64 sizeDelta)
+{
+    SetSize(Size_ - sizeDelta);
+}
+
 TMemoryUsageTrackerGuard TMemoryUsageTrackerGuard::TransferMemory(i64 size)
 {
     YT_VERIFY(Size_ >= size);

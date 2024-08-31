@@ -10,7 +10,7 @@ YDB clusters typically run on commodity hardware with shared-nothing architectur
 
 One of the key building blocks of YDB's compute layer is called a *tablet*. They are stateful logical components implementing various aspects of YDB.
 
-The next level of detail of overall YDB architecture is explained in the [YDB cluster documentation section](../../cluster/index.md).
+The next level of detail of overall YDB architecture is explained in the [YDB cluster documentation section](../../../contributor/general-schema.md).
 
 ### Hierarchy
 

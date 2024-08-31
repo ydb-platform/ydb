@@ -213,7 +213,7 @@ After successfully creating the {{ ydb-short-name }} cluster, you can check its 
 ![ydb-cluster-check](../../_assets/ydb-cluster-check.png)
 
 This section displays the following parameters of the {{ ydb-short-name }} cluster, reflecting its state:
-* `Tablets` – a list of running [tablets](../../concepts/cluster/common_scheme_ydb.md#tablets). All tablet state indicators should be green;
+* `Tablets` – a list of running [tablets](../../concepts/glossary.md#tablet). All tablet state indicators should be green;
 * `Nodes` – the number and state of static and dynamic nodes launched in the cluster. The node state indicator should be green, and the ratio of created to launched nodes should be equal. For example, 27/27 for a nine-node cluster.
 The `Load` indicators (amount of RAM used) and `Storage` (amount of disk space used) should also be green.
 

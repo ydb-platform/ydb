@@ -67,4 +67,4 @@ To efficiently delete outdated data, we recommend using [TTL](../../concepts/ttl
 
 #### Syncing two data centers in geographically distributed clusters {#sinc-between-dc}
 
-The lead [tablet](../../concepts/cluster/common_scheme_ydb.md#tablets) writes data to a [distributed network storage](../../concepts/cluster/distributed_storage.md) that saves copies to several data centers. {{ ydb-short-name }} does not commit a user query until after the required number of copies are saved to the required number of data centers.
+The lead [tablet](../../concepts/glossary.md#tablet) writes data to a [distributed network storage](../../concepts/glossary.md#distributed-storage) that saves copies to several data centers. {{ ydb-short-name }} does not commit a user query until after the required number of copies are saved to the required number of data centers.

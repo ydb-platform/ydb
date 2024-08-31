@@ -1,6 +1,6 @@
 # Volatile configurations
 
-Volatile configurations are a special type of configuration that complements dynamic configurations while being non-persistent. These configurations are discarded when the Console [tablet](../../concepts/cluster/common_scheme_ydb.md#tablets) is moved or restarted, as well as when the main configuration is updated.
+Volatile configurations are a special type of configuration that complements dynamic configurations while being non-persistent. These configurations are discarded when the Console [tablet](../../concepts/glossary.md#tablet) is moved or restarted, as well as when the main configuration is updated.
 
 Primary use cases:
 

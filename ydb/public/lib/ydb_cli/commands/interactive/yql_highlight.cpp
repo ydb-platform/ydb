@@ -77,19 +77,18 @@ namespace NYdb {
         YQLHighlight::YQLHighlight(ColorSchema color)
             : Coloring(color)
             , BuiltinFunctionRegex(builtinFunctionPattern, std::regex_constants::ECMAScript | std::regex_constants::icase)
+            , Chars()
+            , Lexer(&Chars)
+            , Tokens(&Lexer)
         {
+            Lexer.removeErrorListeners();
         }
 
         void YQLHighlight::Apply(std::string_view query, Colors& colors) {
-            antlr4::ANTLRInputStream chars(query);
-            YQLLexer lexer(&chars);
-            antlr4::BufferedTokenStream tokens(&lexer);
+            Reset(query);
 
-            lexer.removeErrorListeners();
-            tokens.fill();
-
-            for (std::size_t i = 0; i < tokens.size(); ++i) {
-                const auto* token = tokens.get(i);
+            for (std::size_t i = 0; i < Tokens.size(); ++i) {
+                const auto* token = Tokens.get(i);
                 const auto color = ColorOf(token);
 
                 const std::ptrdiff_t start = token->getStartIndex();
@@ -100,7 +99,15 @@ namespace NYdb {
             }
         }
 
-        YQLHighlight::Color YQLHighlight::ColorOf(const antlr4::Token* token) const {
+        void YQLHighlight::Reset(std::string_view query) {
+            Chars.load(query.data(), query.length());
+            Lexer.reset();
+            Tokens.reset();
+
+            Tokens.fill();
+        }
+
+        YQLHighlight::Color YQLHighlight::ColorOf(const antlr4::Token* token) {
             if (IsString(token)) {
                 return Coloring.string;
             }
@@ -455,8 +462,11 @@ namespace NYdb {
             }
         }
 
-        bool YQLHighlight::IsFunctionIdentifier(const antlr4::Token* token) const {
-            return token->getType() == YQLLexer::ID_PLAIN && std::regex_search(token->getText(), BuiltinFunctionRegex);
+        bool YQLHighlight::IsFunctionIdentifier(const antlr4::Token* token) {
+            const auto index = token->getTokenIndex();
+            return token->getType() == YQLLexer::ID_PLAIN && (std::regex_search(token->getText(), BuiltinFunctionRegex) ||
+                                                              (1 <= index && Tokens.get(index - 1)->getType() == YQLLexer::NAMESPACE) ||
+                                                              (index < Tokens.size() - 1 && Tokens.get(index + 1)->getType() == YQLLexer::NAMESPACE));
         }
 
         bool YQLHighlight::IsSimpleIdentifier(const antlr4::Token* token) const {

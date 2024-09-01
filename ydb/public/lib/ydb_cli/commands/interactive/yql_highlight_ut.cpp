@@ -1,6 +1,7 @@
 #include "yql_highlight.h"
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/string/split.h>
 #include <util/system/compiler.h>
 
 using namespace NYdb::NConsoleClient;
@@ -29,7 +30,7 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
         return symbols;
     }();
 
-    TVector<YQLHighlight::Color> ColorsFromPattern(const TString& symbols) {
+    TVector<YQLHighlight::Color> ColorsFromPattern(const TStringBuf& symbols) {
         TVector<YQLHighlight::Color> result(symbols.Size());
         for (std::size_t i = 0; i < symbols.Size(); ++i) {
             result[i] = colors.at(symbols[i]);
@@ -53,8 +54,8 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
         return result;
     }
 
-    void Check(YQLHighlight& highlight, const TString& query,
-               const TString& pattern) {
+    void Check(YQLHighlight& highlight, const TStringBuf& query,
+               const TStringBuf& pattern) {
         auto actual = Apply(highlight, query);
         UNIT_ASSERT_EQUAL_C(Apply(highlight, query), ColorsFromPattern(pattern),
                             SymbolsFromColors(actual));
@@ -162,11 +163,24 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
             "  Bool(field), Math::Sin(var) "
             "FROM `local/test/space/table` JOIN test;";
 
+        const TString pattern =
+            "kkkkkk "
+            "  nnnnnno sssssssssssssssso "
+            "  on o on o n o nooo fffovvvvvvvvvvoo "
+            "  ttttovvvvvoo ffffoofffovvvo "
+            "kkkk qqqqqqqqqqqqqqqqqqqqqqqq kkkk vvvvo";
+
         YQLHighlight highlight(Coloring);
-        for (std::size_t size = 0; size < query.Size(); ++size) {
+        for (std::size_t size = 0; size <= query.Size(); ++size) {
             const TStringBuf prefix(query, 0, size);
+
             auto colors = Apply(highlight, prefix);
             Y_DO_NOT_OPTIMIZE_AWAY(colors);
+
+            if (size == query.Size() || IsSpace(pattern[size])) {
+                const TStringBuf pattern_prefix(pattern, 0, size);
+                Check(highlight, prefix, pattern_prefix);
+            }
         }
     }
 }

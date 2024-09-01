@@ -38,7 +38,7 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
 
     TVector<YQLHighlight::Color> Apply(YQLHighlight& highlight,
                                        const TString& query) {
-        TVector<YQLHighlight::Color> colors(query.Size());
+        TVector<YQLHighlight::Color> colors(query.Size(), YQLHighlight::Color::DEFAULT);
         highlight.Apply(query, colors);
         return colors;
     }
@@ -113,11 +113,12 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
         Check(highlight, "\"test\"", "ssssss");
         Check(highlight, "\"", "o");
         Check(highlight, "\"\"\"", "sso");
+        Check(highlight, "\"\\\"", "ooo");
+        Check(highlight, "\"\\\"\"", "ssss");
     }
 
     Y_UNIT_TEST(Number) {
         YQLHighlight highlight(Coloring);
-
         Check(highlight, "1234", "nnnn");
         Check(highlight, "-123", "onnn");
     }
@@ -134,5 +135,12 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
             "FROM `local/test/space/table` JOIN test;",
             "kkkkkk nnnnnno sssssssssssssssso on o on o n o nooo fffovvvvvvvvvvo"
             "kkkk qqqqqqqqqqqqqqqqqqqqqqqq kkkk vvvvo");
+    }
+
+    Y_UNIT_TEST(Emoji) {
+        YQLHighlight highlight(Coloring);
+        Check(highlight, "☺️", "uuuuuu");
+        Check(highlight, "\"☺️\"", "ssssuuuu");
+        Check(highlight, "`☺️`", "qqqquuuu");
     }
 }

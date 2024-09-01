@@ -94,7 +94,7 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
         Check(highlight, "Math::Sin", "ffffoofff");
         Check(highlight, "Math", "vvvv");
         Check(highlight, "Math::", "ffffoo");
-        Check(highlight, "::Sin", "oofff");
+        Check(highlight, "::Sin", "oovvv");
     }
 
     Y_UNIT_TEST(VariableIdentifier) {

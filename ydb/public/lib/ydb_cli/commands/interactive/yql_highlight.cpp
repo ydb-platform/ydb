@@ -478,10 +478,13 @@ namespace NYdb {
         }
 
         bool YQLHighlight::IsFunctionIdentifier(const antlr4::Token* token) {
+            if (token->getType() != YQLLexer::ID_PLAIN) {
+                return false;
+            }
             const auto index = token->getTokenIndex();
-            return token->getType() == YQLLexer::ID_PLAIN && (std::regex_search(token->getText(), BuiltinFunctionRegex) ||
-                                                              (1 <= index && Tokens.get(index - 1)->getType() == YQLLexer::NAMESPACE) ||
-                                                              (index < Tokens.size() - 1 && Tokens.get(index + 1)->getType() == YQLLexer::NAMESPACE));
+            return std::regex_search(token->getText(), BuiltinFunctionRegex) ||
+                   (2 <= index && Tokens.get(index - 1)->getType() == YQLLexer::NAMESPACE && Tokens.get(index - 2)->getType() == YQLLexer::ID_PLAIN) ||
+                   (index < Tokens.size() - 1 && Tokens.get(index + 1)->getType() == YQLLexer::NAMESPACE);
         }
 
         bool YQLHighlight::IsVariableIdentifier(const antlr4::Token* token) const {

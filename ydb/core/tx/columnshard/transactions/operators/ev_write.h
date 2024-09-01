@@ -10,6 +10,7 @@ namespace NKikimr::NColumnShard {
         static inline auto Registrator = TFactory::TRegistrator<TEvWriteTransactionOperator>(NKikimrTxColumnShard::TX_KIND_COMMIT_WRITE);
     private:
         virtual TProposeResult DoStartProposeOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) override {
+            ///???
             owner.OperationsManager->LinkTransaction(LockId, GetTxId(), txc);
             return TProposeResult();
         }

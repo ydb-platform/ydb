@@ -2866,6 +2866,73 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         Cerr << sizeof(NArrow::TReplaceKey) << Endl;
         Cerr << sizeof(NArrow::NMerger::TSortableBatchPosition) << Endl;
     }
+
+    Y_UNIT_TEST(PathLock) {
+        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+        csControllerGuard->SetOverrideReadTimeoutClean(TDuration::Max());
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+
+        runtime.SetLogPriority(NKikimrServices::BLOB_CACHE, NActors::NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+
+        TDispatchOptions options;
+        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+        runtime.DispatchEvents(options);
+
+        ui64 writeId = 0;
+        ui64 tableId = 1;
+        TestTableDescription table;
+        SetupSchema(runtime, sender, tableId, table);
+
+        const auto lockManager = csControllerGuard->GetLockManager();
+        auto newTxLock = std::make_shared<NOlap::NDataLocks::TListTablesLock>(NOlap::NDataLocks::TManager::GetNewDataTxLockName(tableId), THashSet<ui64>{tableId}, NOlap::NDataLocks::ELockCategory::NewTx);
+        auto genericLock = std::make_shared<NOlap::NDataLocks::TListTablesLock>("some_lock_name", THashSet<ui64>{tableId}, NOlap::NDataLocks::ELockCategory::Generic);
+
+        auto newTxLockGuard = lockManager->RegisterLock(newTxLock);
+        auto genericLockGuard = lockManager->RegisterLock(genericLock);
+
+        // write 1: ins:1, cmt:0, idx:0
+        std::vector<ui64> writeIds;
+        const auto data =  MakeTestBlob({100, 200}, table.Schema);
+        UNIT_ASSERT(!WriteData(runtime, sender, writeId, tableId, data, table.Schema, true, &writeIds));
+        newTxLockGuard->Release(*lockManager);
+        UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, data, table.Schema, true, &writeIds));
+
+        ui64 planStep = 21;
+        ui64 txId = 100;
+
+        newTxLockGuard = lockManager->RegisterLock(newTxLock);
+        ProposeCommit(runtime, sender, txId, writeIds, false);
+        newTxLockGuard->Release(*lockManager);
+        ProposeCommit(runtime, sender, txId, writeIds, true);
+        newTxLockGuard = lockManager->RegisterLock(newTxLock);
+        //if we already accepted propose we complete a commit
+        PlanCommit(runtime, sender, planStep, txId);
+
+
+        {
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(!rb);
+        }
+        newTxLockGuard->Release(*lockManager);
+
+        {
+            NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 3);
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(rb);
+            UNIT_ASSERT_EQUAL(rb->num_rows(), 100);
+            UNIT_ASSERT(reader.IsCorrectlyFinished());
+        }
+    }
+    //TODO test compaction
+
 }
 
 }

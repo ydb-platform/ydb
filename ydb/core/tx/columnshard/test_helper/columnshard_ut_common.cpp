@@ -205,7 +205,7 @@ void ScanIndexStats(TTestBasicRuntime& runtime, TActorId& sender, const std::vec
     ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, scan.release());
 }
 
-void ProposeCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 shardId, ui64 txId, const std::vector<ui64>& writeIds) {
+void ProposeCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 shardId, ui64 txId, const std::vector<ui64>& writeIds, bool expectSuccess) {
     NKikimrTxColumnShard::ETransactionKind txKind = NKikimrTxColumnShard::ETransactionKind::TX_KIND_COMMIT;
     TString txBody = TTestSchema::CommitTxBody(0, writeIds);
 
@@ -218,11 +218,15 @@ void ProposeCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 shardId, u
     auto& res = Proto(event);
     UNIT_ASSERT_EQUAL(res.GetTxKind(), txKind);
     UNIT_ASSERT_EQUAL(res.GetTxId(), txId);
-    UNIT_ASSERT_EQUAL(res.GetStatus(), NKikimrTxColumnShard::EResultStatus::PREPARED);
+    if (expectSuccess) {
+        UNIT_ASSERT_EQUAL(res.GetStatus(), NKikimrTxColumnShard::EResultStatus::PREPARED);
+    } else {
+        UNIT_ASSERT_EQUAL(res.GetStatus(), NKikimrTxColumnShard::EResultStatus::ERROR);
+    }
 }
 
-void ProposeCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 txId, const std::vector<ui64>& writeIds) {
-    ProposeCommit(runtime, sender, TTestTxConfig::TxTablet0, txId, writeIds);
+void ProposeCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 txId, const std::vector<ui64>& writeIds, bool expectSuccess) {
+    ProposeCommit(runtime, sender, TTestTxConfig::TxTablet0, txId, writeIds, expectSuccess);
 }
 
 void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 planStep, const TSet<ui64>& txIds) {

@@ -26,7 +26,7 @@ protected:
         return 0;
     }
     virtual std::shared_ptr<NDataLocks::ILock> DoBuildDataLock() const override {
-        return std::make_shared<NDataLocks::TListTablesLock>(TypeString() + "::" + GetTaskIdentifier(), TablesToDrop);
+        return std::make_shared<NDataLocks::TListTablesLock>(TypeString() + "::" + GetTaskIdentifier(), TablesToDrop, NDataLocks::ELockCategory::Generic);
     }
 
 public:

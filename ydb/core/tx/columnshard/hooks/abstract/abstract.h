@@ -27,6 +27,9 @@ class TPortionInfo;
 namespace NIndexes {
 class TIndexMetaContainer;
 }
+namespace  NDataLocks {
+class TManager;
+}
 }   // namespace NKikimr::NOlap
 namespace arrow {
 class RecordBatch;
@@ -264,7 +267,7 @@ public:
         const TDuration defaultValue = TDuration::MilliSeconds(GetConfig().GetOptimizerFreshnessCheckDurationMs());
         return DoGetOptimizerFreshnessCheckDuration(defaultValue);
     }
-
+    
     virtual void OnTieringModified(const std::shared_ptr<NColumnShard::TTiersManager>& /*tiers*/) {
     }
 
@@ -284,6 +287,10 @@ public:
 
     virtual void OnCleanupActors(const ui64 tabletId) {
         Y_UNUSED(tabletId);
+    }
+
+    virtual const NOlap::NDataLocks::TManager* GetLockManager() const {
+        return nullptr;
     }
 };
 

@@ -188,7 +188,14 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
     }
 
     if (!TablesManager.IsReadyForWrite(tableId)) {
-        LOG_S_NOTICE("Write (fail) into pathId:" << writeMeta.GetTableId() << (TablesManager.HasPrimaryIndex()? "": " no index")
+        LOG_S_NOTICE("Write (fail) into pathId:" << tableId << (TablesManager.HasPrimaryIndex()? "": " no index")
+            << " at tablet " << TabletID());
+
+        return returnFail(COUNTER_WRITE_FAIL, EWriteFailReason::NoTable);
+    }
+
+    if (DataLocksManager->IsLocked(tableId, NOlap::NDataLocks::TLockFilter::Only({NOlap::NDataLocks::TManager::GetNewDataTxLockName(tableId)}))) {
+        LOG_S_NOTICE("Write (fail) into locked pathId:" << tableId
             << " at tablet " << TabletID());
 
         return returnFail(COUNTER_WRITE_FAIL, EWriteFailReason::NoTable);
@@ -314,6 +321,7 @@ void TProposeWriteTransaction::Complete(const TActorContext& ctx) {
 }
 
 void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActorContext& ctx) {
+    ///???
     NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())("event", "TEvWrite");
 
     const auto& record = ev->Get()->Record;

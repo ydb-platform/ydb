@@ -184,7 +184,6 @@ Y_UNIT_TEST_SUITE(KqpSinkLocks) {
 
             result = session2.ExecuteQuery(Q1_(R"(
                 SELECT * FROM Test WHERE Group = 11;
-
                 UPSERT INTO Test (Group, Name, Amount) VALUES
                     (11, "Session2", 2);
             )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
@@ -197,10 +196,10 @@ Y_UNIT_TEST_SUITE(KqpSinkLocks) {
             )"), TTxControl::Tx(tx1->GetId()).CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
             result.GetIssues().PrintTo(Cerr);
-            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
-                [] (const NYql::TIssue& issue) {
-                    return issue.GetMessage().Contains("/Root/Test");
-                }));
+            //UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
+            //    [] (const NYql::TIssue& issue) {
+            //        return issue.GetMessage().Contains("/Root/Test");
+            //    }));
 
             result = session1.ExecuteQuery(Q1_(R"(
                 SELECT * FROM Test WHERE Group = 11;

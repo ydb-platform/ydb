@@ -149,14 +149,14 @@ void TKqpScanComputeActor::Handle(TEvScanExchange::TEvSendData::TPtr& ev) {
     for (const auto& lock : msg.GetLocksInfo().Locks) {
         Locks.insert(lock);
     }
-    for (const auto& lock : msg.GetLocksInfo().Locks) {
+    for (const auto& lock : msg.GetLocksInfo().BrokenLocks) {
         BrokenLocks.insert(lock);
     }
 
     auto guard = TaskRunner->BindAllocator();
     if (!!msg.GetArrowBatch()) {
         ScanData->AddData(NMiniKQL::TBatchDataAccessor(msg.GetArrowBatch(), std::move(msg.MutableDataIndexes())), msg.GetTabletId(), TaskRunner->GetHolderFactory());
-    } else {
+    } else if (!msg.GetRows().empty()) {
         ScanData->AddData(std::move(msg.MutableRows()), msg.GetTabletId(), TaskRunner->GetHolderFactory());
     }
     if (IsQuotingEnabled()) {

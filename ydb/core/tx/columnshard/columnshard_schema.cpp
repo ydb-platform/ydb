@@ -59,6 +59,7 @@ bool Schema::InsertTable_Load(NIceDb::TNiceDb& db, const IBlobGroupSelector* dsG
 }
 
 void Schema::SaveTxInfo(NIceDb::TNiceDb& db, const TFullTxInfo& txInfo, const TString& txBody) {
+    AFL_VERIFY(txInfo.TxKind != NKikimrTxColumnShard::TX_KIND_NONE);
     db.Table<TxInfo>().Key(txInfo.TxId).Update(
         NIceDb::TUpdate<TxInfo::TxKind>(txInfo.TxKind),
         NIceDb::TUpdate<TxInfo::TxBody>(txBody),

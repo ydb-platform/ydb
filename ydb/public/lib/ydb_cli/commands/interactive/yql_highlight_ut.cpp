@@ -128,5 +128,11 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
               "kkkkkk vvo vvvvv kkkk vvvvv");
         Check(highlight, "INSERT INTO users (id, alias) VALUES (12, \"tester\")",
               "kkkkkk kkkk vvvvv ovvo vvvvvo kkkkkk onno sssssssso");
+        Check(
+            highlight,
+            "SELECT 123467, \"Hello, {name}!\", (1 + (5 * 1 / 0)), MIN(identifier)"
+            "FROM `local/test/space/table` JOIN test;",
+            "kkkkkk nnnnnno sssssssssssssssso on o on o n o nooo fffovvvvvvvvvvo"
+            "kkkk qqqqqqqqqqqqqqqqqqqqqqqq kkkk vvvvo");
     }
 }

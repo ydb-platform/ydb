@@ -367,6 +367,12 @@ public:
             return false;
         }
 
+        // Do not use locks for scan queries (always readonly & not interactive).
+        if (GetType() == NKikimrKqp::QUERY_TYPE_AST_SCAN
+            || GetType() == NKikimrKqp::QUERY_TYPE_SQL_SCAN) {
+            return false;
+        }
+
         // Inconsistent writes (CTAS) don't require locks.
         if (IsSplitted() && !HasTxSinkInTx(tx)) {
             return false;

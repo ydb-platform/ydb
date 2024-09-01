@@ -57,6 +57,13 @@ namespace NYdb {
             "voidtypehandle|way|worldcode|weakfield"
             ")$");
 
+        constexpr const char* typePattern = ( //
+            "^("
+            "bool|date|datetime|decimal|double|float|int16|int32|int64|int8|interval|json|jsondocument|"
+            "string|timestamp|tzdate|tzdatetime|tztimestamp|uint16|uint32|uint64|uint8|utf8|uuid|yson|"
+            "text|bytes"
+            ")$");
+
         YQLHighlight::ColorSchema YQLHighlight::ColorSchema::Monaco() {
             using replxx::color::rgb666;
 
@@ -65,6 +72,7 @@ namespace NYdb {
                 .operation = rgb666(3, 3, 3),
                 .identifier = {
                     .function = rgb666(4, 1, 5),
+                    .type = rgb666(2, 3, 2),
                     .variable = Color::DEFAULT,
                     .quoted = rgb666(1, 3, 3),
                 },
@@ -80,6 +88,7 @@ namespace NYdb {
                 .operation = Color::GRAY,
                 .identifier = {
                     .function = Color::MAGENTA,
+                    .type = Color::YELLOW,
                     .variable = Color::RED,
                     .quoted = Color::CYAN,
                 },
@@ -92,6 +101,7 @@ namespace NYdb {
         YQLHighlight::YQLHighlight(ColorSchema color)
             : Coloring(color)
             , BuiltinFunctionRegex(builtinFunctionPattern, std::regex_constants::ECMAScript | std::regex_constants::icase)
+            , TypeRegex(typePattern, std::regex_constants::ECMAScript | std::regex_constants::icase)
             , Chars()
             , Lexer(&Chars)
             , Tokens(&Lexer)
@@ -128,6 +138,9 @@ namespace NYdb {
             }
             if (IsFunctionIdentifier(token)) {
                 return Coloring.identifier.function;
+            }
+            if (IsTypeIdentifier(token)) {
+                return Coloring.identifier.type;
             }
             if (IsVariableIdentifier(token)) {
                 return Coloring.identifier.variable;
@@ -485,6 +498,10 @@ namespace NYdb {
             return std::regex_search(token->getText(), BuiltinFunctionRegex) ||
                    (2 <= index && Tokens.get(index - 1)->getType() == YQLLexer::NAMESPACE && Tokens.get(index - 2)->getType() == YQLLexer::ID_PLAIN) ||
                    (index < Tokens.size() - 1 && Tokens.get(index + 1)->getType() == YQLLexer::NAMESPACE);
+        }
+
+        bool YQLHighlight::IsTypeIdentifier(const antlr4::Token* token) const {
+            return token->getType() == YQLLexer::ID_PLAIN && std::regex_search(token->getText(), TypeRegex);
         }
 
         bool YQLHighlight::IsVariableIdentifier(const antlr4::Token* token) const {

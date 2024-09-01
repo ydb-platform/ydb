@@ -23,6 +23,7 @@ namespace NYdb {
                 Color operation;
                 struct {
                     Color function;
+                    Color type;
                     Color variable;
                     Color quoted;
                 } identifier;
@@ -47,6 +48,7 @@ namespace NYdb {
             bool IsKeyword(const antlr4::Token* token) const;
             bool IsOperation(const antlr4::Token* token) const;
             bool IsFunctionIdentifier(const antlr4::Token* token);
+            bool IsTypeIdentifier(const antlr4::Token* token) const;
             bool IsVariableIdentifier(const antlr4::Token* token) const;
             bool IsQuotedIdentifier(const antlr4::Token* token) const;
             bool IsString(const antlr4::Token* token) const;
@@ -55,6 +57,7 @@ namespace NYdb {
         private:
             ColorSchema Coloring;
             std::regex BuiltinFunctionRegex;
+            std::regex TypeRegex;
 
             antlr4::ANTLRInputStream Chars;
             YQLLexer Lexer;

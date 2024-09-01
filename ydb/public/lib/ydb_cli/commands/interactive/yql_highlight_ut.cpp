@@ -12,6 +12,7 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
         {'k', Coloring.keyword},
         {'o', Coloring.operation},
         {'f', Coloring.identifier.function},
+        {'t', Coloring.identifier.type},
         {'v', Coloring.identifier.variable},
         {'q', Coloring.identifier.quoted},
         {'s', Coloring.string},
@@ -97,6 +98,12 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
         Check(highlight, "::Sin", "oovvv");
     }
 
+    Y_UNIT_TEST(TypeIdentifier) {
+        YQLHighlight highlight(Coloring);
+        Check(highlight, "Bool", "tttt");
+        Check(highlight, "Bool(value)", "ttttovvvvvo");
+    }
+
     Y_UNIT_TEST(VariableIdentifier) {
         YQLHighlight highlight(Coloring);
         Check(highlight, "test", "vvvv");
@@ -135,6 +142,11 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
             "FROM `local/test/space/table` JOIN test;",
             "kkkkkk nnnnnno sssssssssssssssso on o on o n o nooo fffovvvvvvvvvvo"
             "kkkk qqqqqqqqqqqqqqqqqqqqqqqq kkkk vvvvo");
+        Check(
+            highlight,
+            "SELECT Bool(phone) FROM customer",
+            "kkkkkk ttttovvvvvo kkkk vvvvvvvv"
+        );
     }
 
     Y_UNIT_TEST(Emoji) {

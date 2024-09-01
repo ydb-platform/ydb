@@ -31,6 +31,7 @@ namespace NYdb {
                 Color unknown;
 
                 static ColorSchema Monaco();
+                static ColorSchema Debug();
             };
 
         public:

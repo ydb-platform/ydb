@@ -6,7 +6,7 @@
 using namespace NYdb::NConsoleClient;
 
 Y_UNIT_TEST_SUITE(YqlHighlightTests) {
-    auto Coloring = YQLHighlight::ColorSchema::Monaco();
+    auto Coloring = YQLHighlight::ColorSchema::Debug();
 
     std::unordered_map<char, YQLHighlight::Color> colors = {
         {'k', Coloring.keyword},

@@ -74,6 +74,21 @@ namespace NYdb {
             };
         }
 
+        YQLHighlight::ColorSchema YQLHighlight::ColorSchema::Debug() {
+            return {
+                .keyword = Color::BLUE,
+                .operation = Color::GRAY,
+                .identifier = {
+                    .function = Color::MAGENTA,
+                    .variable = Color::RED,
+                    .quoted = Color::CYAN,
+                },
+                .string = Color::GREEN,
+                .number = Color::BRIGHTGREEN,
+                .unknown = Color::DEFAULT,
+            };
+        }
+
         YQLHighlight::YQLHighlight(ColorSchema color)
             : Coloring(color)
             , BuiltinFunctionRegex(builtinFunctionPattern, std::regex_constants::ECMAScript | std::regex_constants::icase)

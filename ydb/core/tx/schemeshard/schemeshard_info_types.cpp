@@ -594,14 +594,32 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 return nullptr;
             }
             break;
-        case NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_RESTORE_INCREMENTAL_BACKUP:
-            break;
         default:
             errStr = "Unknown replication mode";
             return nullptr;
         }
 
         alterData->TableDescriptionFull->MutableReplicationConfig()->CopyFrom(cfg);
+    }
+
+    if (op.HasIncrementalBackupConfig()) {
+        const auto& cfg = op.GetIncrementalBackupConfig();
+
+        switch (cfg.GetMode()) {
+        case NKikimrSchemeOp::TTableIncrementalBackupConfig::RESTORE_MODE_NONE:
+            if (cfg.HasConsistency() && cfg.GetConsistency() != NKikimrSchemeOp::TTableIncrementalBackupConfig::CONSISTENCY_UNKNOWN) {
+                errStr = "Cannot set incremental backup consistency";
+                return nullptr;
+            }
+            break;
+        case NKikimrSchemeOp::TTableIncrementalBackupConfig::RESTORE_MODE_INCREMENTAL_BACKUP:
+            break;
+        default:
+            errStr = "Unknown incrementalBackup mode";
+            return nullptr;
+        }
+
+        alterData->TableDescriptionFull->MutableIncrementalBackupConfig()->CopyFrom(cfg);
     }
 
     alterData->IsBackup = op.GetIsBackup();
@@ -1554,6 +1572,10 @@ void TTableInfo::FinishAlter() {
         MutableReplicationConfig().Swap(AlterData->TableDescriptionFull->MutableReplicationConfig());
     }
 
+    if (AlterData->TableDescriptionFull.Defined() && AlterData->TableDescriptionFull->HasIncrementalBackupConfig()) {
+        MutableIncrementalBackupConfig().Swap(AlterData->TableDescriptionFull->MutableIncrementalBackupConfig());
+    }
+
     // Force FillDescription to regenerate TableDescription
     ResetDescriptionCache();
 
@@ -1651,7 +1673,7 @@ void TTableInfo::UpdateShardStats(TShardIdx datashardIdx, const TPartitionStats&
     Stats.UpdateShardStats(datashardIdx, newStats);
 }
 
-void TAggregatedStats::UpdateShardStats(TShardIdx datashardIdx, const TPartitionStats& newStats) {
+void TTableAggregatedStats::UpdateShardStats(TShardIdx datashardIdx, const TPartitionStats& newStats) {
     // Ignore stats from unknown datashard (it could have been split)
     if (!PartitionStats.contains(datashardIdx))
         return;
@@ -1741,33 +1763,10 @@ void TAggregatedStats::UpdateShardStats(TShardIdx datashardIdx, const TPartition
     }
 }
 
-void TAggregatedStats::UpdateTableStats(const TPathId& pathId, const TPartitionStats& newStats) {
-    if (!TableStats.contains(pathId)) {
-        TableStats[pathId] = newStats;
-        return;
-    }
-
-    TPartitionStats& oldStats = TableStats[pathId];
-
-    if (newStats.SeqNo <= oldStats.SeqNo) {
-        // Ignore outdated message
-        return;
-    }
-
-    if (newStats.SeqNo.Generation > oldStats.SeqNo.Generation) {
-        // Reset incremental counter baselines if tablet has restarted
-        oldStats.ImmediateTxCompleted = 0;
-        oldStats.PlannedTxCompleted = 0;
-        oldStats.TxRejectedByOverload = 0;
-        oldStats.TxRejectedBySpace = 0;
-        oldStats.RowUpdates = 0;
-        oldStats.RowDeletes = 0;
-        oldStats.RowReads = 0;
-        oldStats.RangeReads = 0;
-        oldStats.RangeReadRows = 0;
-    }
-    TableStats[pathId].RowCount += (newStats.RowCount - oldStats.RowCount);
-    TableStats[pathId].DataSize += (newStats.DataSize - oldStats.DataSize);
+void TAggregatedStats::UpdateTableStats(TShardIdx shardIdx, const TPathId& pathId, const TPartitionStats& newStats) {
+    auto& tableStats = TableStats[pathId];
+    tableStats.PartitionStats[shardIdx]; // insert if none
+    tableStats.UpdateShardStats(shardIdx, newStats);
 }
 
 void TTableInfo::RegisterSplitMergeOp(TOperationId opId, const TTxState& txState) {
@@ -2128,26 +2127,30 @@ void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndex
     index.SetName(IndexName);
     index.SetType(IndexType);
 
-    for (const auto& x : IndexColumns) {
-        *index.AddKeyColumnNames() = x;
-    }
+    *index.MutableKeyColumnNames() = {
+        IndexColumns.begin(),
+        IndexColumns.end()
+    };
 
-    for (const auto& x : DataColumns) {
-        *index.AddDataColumnNames() = x;
-    }
+    *index.MutableDataColumnNames() = {
+        DataColumns.begin(),
+        DataColumns.end()
+    };
 
-    for (const auto& implTableDescription : ImplTableDescriptions) {
-        *index.AddIndexImplTableDescriptions() = implTableDescription;
-    }
+    *index.MutableIndexImplTableDescriptions() = {
+        ImplTableDescriptions.begin(),
+        ImplTableDescriptions.end()
+    };
 
     if (IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
         *index.MutableVectorIndexKmeansTreeDescription() = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(SpecializedIndexDescription);
     }
 }
 
-void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrIndexBuilder::TColumnBuildSettings* result) const {
-    Y_ABORT_UNLESS(IsBuildColumn());
-    result->SetTable(TPath::Init(TablePathId, ss).PathString());
+void TIndexBuildInfo::SerializeToProto([[maybe_unused]] TSchemeShard* ss, NKikimrIndexBuilder::TColumnBuildSettings* result) const {
+    Y_ABORT_UNLESS(IsBuildColumns());
+    Y_ASSERT(!TargetName.empty());
+    result->SetTable(TargetName);
     for(const auto& column : BuildColumns) {
         column.SerializeToProto(result->add_column());
     }

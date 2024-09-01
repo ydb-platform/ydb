@@ -2,6 +2,8 @@
 #include <ydb/library/folder_service/events.h>
 #include <ydb/library/actors/core/hfunc.h>
 
+static const TString MOCK_CLOUD_ID = "mock_cloud";
+
 namespace NKikimr::NFolderService {
 
 class TFolderServiceAdapterMock
@@ -15,7 +17,9 @@ class TFolderServiceAdapterMock
 public:
     TFolderServiceAdapterMock(TMaybe<TString> mockedCloudId)
         : TBase(&TThis::StateWork)
-        , MockedCloudId(mockedCloudId.GetOrElse("mock_cloud"))
+        , MockedCloudId(mockedCloudId.Empty()
+            ? MOCK_CLOUD_ID
+            : (mockedCloudId.Get()->empty() ? MOCK_CLOUD_ID : mockedCloudId.GetRef()))
     {
     }
 

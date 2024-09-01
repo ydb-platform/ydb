@@ -6,15 +6,15 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx_proxy/upload_rows.h>
+#include <ydb/core/protos/index_builder.pb.h>
 
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
 template <>
-inline void Out<NKikimrTxDataShard::TEvSampleKResponse::EStatus>(IOutputStream& o, NKikimrTxDataShard::TEvSampleKResponse::EStatus status)
-{
-    o << NKikimrTxDataShard::TEvSampleKResponse::EStatus_Name(status);
+inline void Out<NKikimrIndexBuilder::EBuildStatus>(IOutputStream& o, NKikimrIndexBuilder::EBuildStatus status) {
+    o << NKikimrIndexBuilder::EBuildStatus_Name(status);
 }
 
 namespace NKikimr {
@@ -62,6 +62,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
             rec.SetSnapshotTxId(snapshot.TxId);
             rec.SetSnapshotStep(snapshot.Step);
 
+            rec.SetMaxProbability(std::numeric_limits<uint64_t>::max());
             rec.SetSeed(1337);
             if (!rec.HasK()) {
                 rec.SetK(1);
@@ -71,7 +72,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
 
             TAutoPtr<IEventHandle> handle;
             auto reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvSampleKResponse>(handle);
-            UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), NKikimrTxDataShard::TEvSampleKResponse::BAD_REQUEST);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST);
         }
     }
 
@@ -104,6 +105,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
                 rec.SetSnapshotTxId(snapshot.TxId);
                 rec.SetSnapshotStep(snapshot.Step);
 
+                rec.SetMaxProbability(std::numeric_limits<uint64_t>::max());
                 rec.SetSeed(seed);
                 rec.SetK(k);
             };
@@ -115,7 +117,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
 
             TAutoPtr<IEventHandle> handle;
             auto reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvSampleKResponse>(handle);
-            UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), NKikimrTxDataShard::TEvSampleKResponse::DONE);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), NKikimrIndexBuilder::EBuildStatus::DONE);
 
             const auto& rows = reply->Record.GetRows();
             UNIT_ASSERT(!rows.empty());

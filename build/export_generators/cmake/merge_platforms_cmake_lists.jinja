@@ -1,6 +1,6 @@
-{%  include '[generator]/disclaimer.jinja' %}
+{%- include '[generator]/disclaimer.jinja' -%}
 
-{%  if platform_names|length -%}
+{%- if platform_names|length %}
 {%-     for platform_name in platform_names %}
 {%          if not loop.first %}else{% endif %}if ({{ platform_conditions[platform_name] }})
   include(CMakeLists.{{ platform_name }}.txt)

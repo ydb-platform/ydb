@@ -115,16 +115,16 @@ public:
         }));
     }
 
-    void SetPeers(std::vector<TString> addresses)
+    void SetPeers(std::vector<std::string> addresses)
     {
         SortUnique(addresses);
         Shuffle(addresses.begin(), addresses.end());
-        THashSet<TString> addressSet(addresses.begin(), addresses.end());
+        THashSet<std::string> addressSet(addresses.begin(), addresses.end());
 
         {
             auto guard = WriterGuard(SpinLock_);
 
-            std::vector<TString> addressesToRemove;
+            std::vector<std::string> addressesToRemove;
 
             for (const auto& address : ActiveAddresses_) {
                 if (!addressSet.contains(address)) {
@@ -205,10 +205,10 @@ private:
     TError PeerDiscoveryError_;
     TError LastGlobalDiscoveryError_;
 
-    THashSet<TString> ActiveAddresses_;
-    THashSet<TString> BannedAddresses_;
+    THashSet<std::string> ActiveAddresses_;
+    THashSet<std::string> BannedAddresses_;
 
-    THashMap<TString, TPeerPollerPtr> AddressToPoller_;
+    THashMap<std::string, TPeerPollerPtr> AddressToPoller_;
 
     IViablePeerRegistryPtr ViablePeerRegistry_;
 
@@ -218,9 +218,10 @@ private:
     struct TNoMorePeers { };
 
     using TPickPeerResult = std::variant<
-        TString,
+        std::string,
         TTooManyConcurrentRequests,
-        TNoMorePeers>;
+        TNoMorePeers
+    >;
 
     class TDiscoverySession
         : public TRefCounted
@@ -243,7 +244,7 @@ private:
             TDispatcher::Get()->GetLightInvoker()->Invoke(BIND_NO_PROPAGATE(&TDiscoverySession::DoRun, MakeStrong(this)));
         }
 
-        void OnPeerDiscovered(const TString& address)
+        void OnPeerDiscovered(const std::string& address)
         {
             AddViablePeer(address);
             Success_.store(true);
@@ -259,8 +260,8 @@ private:
         std::atomic<bool> Success_ = false;
 
         YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
-        THashSet<TString> RequestedAddresses_;
-        THashSet<TString> RequestingAddresses_;
+        THashSet<std::string> RequestedAddresses_;
+        THashSet<std::string> RequestingAddresses_;
 
         static constexpr int MaxDiscoveryErrorsToKeep = 100;
         std::deque<TError> PeerDiscoveryErrors_;
@@ -287,7 +288,7 @@ private:
                         }
                         mustBreak = true;
                     },
-                    [&] (const TString& address) {
+                    [&] (const std::string& address) {
                         QueryPeer(address);
                     });
 
@@ -297,7 +298,7 @@ private:
             }
         }
 
-        void QueryPeer(const TString& address)
+        void QueryPeer(const std::string& address)
         {
             auto owner = Owner_.Lock();
             if (!owner) {
@@ -324,7 +325,7 @@ private:
         }
 
         void OnResponse(
-            const TString& address,
+            const std::string& address,
             const TErrorOr<TPeerDiscoveryResponse> rspOrError)
         {
             auto owner = Owner_.Lock();
@@ -337,7 +338,7 @@ private:
             YT_LOG_DEBUG_IF(authError, "Peer has reported authentication error on discovery (Address: %v)",
                 address);
             if (rspOrError.IsOK() || authError) {
-                auto suggestedAddresses = authError ? std::vector<TString>() : rspOrError.Value().Addresses;
+                auto suggestedAddresses = authError ? std::vector<std::string>() : rspOrError.Value().Addresses;
                 bool up = authError ? true : rspOrError.Value().IsUp;
 
                 if (!suggestedAddresses.empty()) {
@@ -385,7 +386,7 @@ private:
             return owner->PickPeer(&RequestingAddresses_, &RequestedAddresses_);
         }
 
-        void OnPeerQueried(const TString& address)
+        void OnPeerQueried(const std::string& address)
         {
             auto guard = Guard(SpinLock_);
             YT_VERIFY(RequestingAddresses_.erase(address) == 1);
@@ -397,7 +398,7 @@ private:
             return !RequestingAddresses_.empty();
         }
 
-        void BanPeer(const TString& address, const TError& error, TDuration backoffTime)
+        void BanPeer(const std::string& address, const TError& error, TDuration backoffTime)
         {
             auto owner = Owner_.Lock();
             if (!owner) {
@@ -423,7 +424,7 @@ private:
             return {PeerDiscoveryErrors_.begin(), PeerDiscoveryErrors_.end()};
         }
 
-        void AddViablePeer(const TString& address)
+        void AddViablePeer(const std::string& address)
         {
             auto owner = Owner_.Lock();
             if (!owner) {
@@ -433,7 +434,7 @@ private:
             owner->AddViablePeer(address);
         }
 
-        void InvalidatePeer(const TString& address)
+        void InvalidatePeer(const std::string& address)
         {
             auto owner = Owner_.Lock();
             if (!owner) {
@@ -473,10 +474,10 @@ private:
         : public TRefCounted
     {
     public:
-        TPeerPoller(TImpl* owner, TString peerAddress)
+        TPeerPoller(TImpl* owner, const std::string& peerAddress)
             : Owner_(owner)
             , Logger(owner->Logger().WithTag("Address: %v", peerAddress))
-            , PeerAddress_(std::move(peerAddress))
+            , PeerAddress_(peerAddress)
         { }
 
         void Run()
@@ -495,7 +496,7 @@ private:
         const TWeakPtr<TImpl> Owner_;
         const NLogging::TLogger Logger;
 
-        const TString PeerAddress_;
+        const std::string PeerAddress_;
 
         std::atomic<bool> Stopped_ = false;
 
@@ -646,13 +647,13 @@ private:
         }
     }
 
-    TError MakePeerDownError(const TString& address)
+    TError MakePeerDownError(const std::string& address)
     {
         return TError("Peer %v is down", address)
             << *EndpointAttributes_;
     }
 
-    TError MakePeerDiscoveryFailedError(const TString& address, const TError& error)
+    TError MakePeerDiscoveryFailedError(const std::string& address, const TError& error)
     {
         return TError("Discovery request failed for peer %v", address)
             << *EndpointAttributes_
@@ -697,19 +698,19 @@ private:
         Y_UNUSED(RunDiscoverySession());
     }
 
-    void AddPeers(const std::vector<TString>& addresses)
+    void AddPeers(const std::vector<std::string>& addresses)
     {
         auto guard = WriterGuard(SpinLock_);
         DoAddPeers(addresses);
     }
 
-    void DoAddPeers(const std::vector<TString>& addresses)
+    void DoAddPeers(const std::vector<std::string>& addresses)
     {
         VERIFY_WRITER_SPINLOCK_AFFINITY(SpinLock_);
 
         PeerDiscoveryError_ = {};
 
-        std::vector<TString> newAddresses;
+        std::vector<std::string> newAddresses;
         for (const auto& address : addresses) {
             if (!BannedAddresses_.contains(address) && !ActiveAddresses_.contains(address)) {
                 newAddresses.push_back(address);
@@ -726,7 +727,7 @@ private:
         ViablePeerRegistry_->MaybeRotateRandomPeer();
     }
 
-    void AddPeer(const TString& address)
+    void AddPeer(const std::string& address)
     {
         VERIFY_WRITER_SPINLOCK_AFFINITY(SpinLock_);
 
@@ -741,7 +742,7 @@ private:
         YT_LOG_DEBUG("Peer added (Address: %v)", address);
     }
 
-    void RemovePeer(const TString& address)
+    void RemovePeer(const std::string& address)
     {
         VERIFY_WRITER_SPINLOCK_AFFINITY(SpinLock_);
 
@@ -762,8 +763,8 @@ private:
     }
 
     TPickPeerResult PickPeer(
-        THashSet<TString>* requestingAddresses,
-        THashSet<TString>* requestedAddresses)
+        THashSet<std::string>* requestingAddresses,
+        THashSet<std::string>* requestedAddresses)
     {
         auto guard = ReaderGuard(SpinLock_);
 
@@ -771,7 +772,7 @@ private:
             return TTooManyConcurrentRequests();
         }
 
-        std::vector<TString> candidates;
+        std::vector<std::string> candidates;
         candidates.reserve(ActiveAddresses_.size());
 
         for (const auto& address : ActiveAddresses_) {
@@ -792,7 +793,7 @@ private:
         return result;
     }
 
-    void BanPeer(const TString& address, TDuration backoffTime)
+    void BanPeer(const std::string& address, TDuration backoffTime)
     {
         {
             auto guard = WriterGuard(SpinLock_);
@@ -811,7 +812,7 @@ private:
             backoffTime);
     }
 
-    void UnbanPeer(const TString& address)
+    void UnbanPeer(const std::string& address)
     {
         auto guard = WriterGuard(SpinLock_);
         if (BannedAddresses_.erase(address) != 1) {
@@ -822,7 +823,7 @@ private:
         YT_LOG_DEBUG("Peer unbanned (Address: %v)", address);
     }
 
-    void OnPeerBanTimeout(const TString& address, bool aborted)
+    void OnPeerBanTimeout(const std::string& address, bool aborted)
     {
         if (aborted) {
             // If we are terminating -- do not unban anyone to prevent infinite retries.
@@ -832,7 +833,7 @@ private:
         UnbanPeer(address);
     }
 
-    void AddViablePeer(const TString& address)
+    void AddViablePeer(const std::string& address)
     {
         bool added = ViablePeerRegistry_->RegisterPeer(address);
 
@@ -841,7 +842,7 @@ private:
             added);
     }
 
-    void InvalidatePeer(const TString& address)
+    void InvalidatePeer(const std::string& address)
     {
         ViablePeerRegistry_->UnregisterPeer(address);
     }
@@ -858,7 +859,7 @@ private:
     }
 
     void OnChannelFailed(
-        const TString& address,
+        const std::string& address,
         const IChannelPtr& channel,
         const TError& error)
     {
@@ -877,7 +878,7 @@ private:
             evicted);
     }
 
-    IChannelPtr CreateChannel(const TString& address)
+    IChannelPtr CreateChannel(const std::string& address)
     {
         return CreateFailureDetectingChannel(
             ChannelFactory_->CreateChannel(address),
@@ -926,7 +927,7 @@ TFuture<IChannelPtr> TDynamicChannelPool::GetChannel(
     return Impl_->GetChannel(request, hedgingOptions);
 }
 
-void TDynamicChannelPool::SetPeers(const std::vector<TString>& addresses)
+void TDynamicChannelPool::SetPeers(const std::vector<std::string>& addresses)
 {
     Impl_->SetPeers(addresses);
 }

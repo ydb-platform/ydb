@@ -2928,4 +2928,26 @@ Y_UNIT_TEST_SUITE(DataStreams) {
 
     }
 
+    Y_UNIT_TEST(Test_Crreate_AutoPartitioning_Disabled) {
+        TInsecureDatastreamsTestServer testServer(true);
+        SET_YDS_LOCALS;
+
+        {
+            auto result = testServer.DataStreamsClient->CreateStream("test-topic",
+                NYDS_V1::TCreateStreamSettings()
+                    .ShardCount(3)
+                    .BeginConfigurePartitioningSettings()
+                        .BeginConfigureAutoPartitioningSettings()
+                            .Strategy(NYdb::NDataStreams::V1::EAutoPartitioningStrategy::Disabled)
+                        .EndConfigureAutoPartitioningSettings()
+                    .EndConfigurePartitioningSettings()
+                ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            if (result.GetStatus() != EStatus::SUCCESS) {
+                result.GetIssues().PrintTo(Cerr);
+            }
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    }
+
 }

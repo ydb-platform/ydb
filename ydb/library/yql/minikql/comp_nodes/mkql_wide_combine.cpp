@@ -456,8 +456,10 @@ public:
 
         if (bucket.BucketState == TSpilledBucket::EBucketState::InMemory) {
             std::copy_n(ViewForKeyAndState.data(), KeyWidth, static_cast<NUdf::TUnboxedValue*>(bucket.InMemoryProcessingState->Tongue));
+            
+            bool isNew = bucket.InMemoryProcessingState->TasteIt();
             Throat = bucket.InMemoryProcessingState->Throat;
-            return bucket.InMemoryProcessingState->TasteIt()? ETasteResult::Init : ETasteResult::Update;
+            return isNew ? ETasteResult::Init : ETasteResult::Update;
         }
         
         // Prepare space for raw data 
@@ -804,7 +806,7 @@ public:
     {}
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
-        if (!state.HasValue()) {
+        if (state.IsInvalid()) {
             MakeState(ctx, state);
         }
 
@@ -1233,7 +1235,7 @@ public:
     {}
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
-        if (!state.HasValue()) {
+        if (state.IsInvalid()) {
             MakeState(ctx, state);
         } 
 

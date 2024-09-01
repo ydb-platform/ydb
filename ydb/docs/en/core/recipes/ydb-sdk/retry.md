@@ -249,11 +249,11 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for 
 
 - Java
 
-   In the {{ ydb-short-name }} Java SDK, repeat queries are implemented by the `com.yandex.ydb.table.SessionRetryContext` helper class. This class is constructed with the `SessionRetryContext.create` method to which you pass the `SessionSupplier` interface implementation (usually an instance of the `TableClient` class).
+   In the {{ ydb-short-name }} Java SDK, repeat queries are implemented by the `SessionRetryContext` helper class. This class is constructed with the `SessionRetryContext.create` method to which you pass the `SessionSupplier` interface implementation (usually an instance of the `TableClient` class or the `QueryClient` class).
    Additionally, the user can specify some other options
    * `maxRetries(int maxRetries)`: The maximum number of operation retries, not counting the first execution. Default value: `10`
    * `retryNotFound(boolean retryNotFound)`: The option to retry operations that returned the `NOT_FOUND` status. Enabled by default.
-   * `idempotent(boolean idempotent)`: Indicates idempotency of operations. Idempotent operations will be retried for a broader range of errors. Disabled by default.
+   * `idempotent(boolean idempotent)`: Indicates idempotence of operations. Idempotent operations will be retried for a broader range of errors. Disabled by default.
 
    The `SessionRetryContext` class provides two methods to run operations with retries.
    * `CompletableFuture<Status> supplyStatus`: Executing the operation that returns the status. As an argument, it accepts the lambda `Function<Session, CompletableFuture<Status>> fn`

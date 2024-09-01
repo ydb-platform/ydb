@@ -11,7 +11,7 @@ static struct STLOG_PARAM_T {} STLOG_PARAM;
 
 namespace NKikimr::NStLog {
 
-    static constexpr bool OutputLogJson = false;
+    extern bool OutputLogJson;
 
     void ProtobufToJson(const NProtoBuf::Message& m, NJson::TJsonWriter& json);
 
@@ -51,10 +51,10 @@ namespace NKikimr::NStLog {
 #define STLOG_PARAMS_15(KV, ...) STLOG_PARAMS_1(KV) STLOG_EXPAND(STLOG_PARAMS_14(__VA_ARGS__))
 #define STLOG_PARAMS_16(KV, ...) STLOG_PARAMS_1(KV) STLOG_EXPAND(STLOG_PARAMS_15(__VA_ARGS__))
 
-#define STLOG_STREAM(NAME, JSON_OVERRIDE, MARKER, TEXT, ...) \
+#define STLOG_STREAM(NAME, MARKER, TEXT, ...) \
     struct MARKER {}; \
     TStringStream NAME; \
-    if constexpr (JSON_OVERRIDE ? JSON_OVERRIDE > 0 : ::NKikimr::NStLog::OutputLogJson) { \
+    if (::NKikimr::NStLog::OutputLogJson) { \
         NJson::TJsonWriter __json(&NAME, false); \
         ::NKikimr::NStLog::TMessage<MARKER>(__FILE__, __LINE__, #MARKER)STLOG_PARAMS(__VA_ARGS__).WriteToJson(__json) << TEXT; \
     } else { \
@@ -67,31 +67,18 @@ namespace NKikimr::NStLog {
         const auto priority = [&]{ using namespace NActors::NLog; return (PRIO); }(); \
         const auto component = [&]{ using namespace NKikimrServices; using namespace NActorsServices; return (COMP); }(); \
         if (IS_LOG_PRIORITY_ENABLED(priority, component)) { \
-            STLOG_STREAM(__stream, 0, __VA_ARGS__); \
-            ::NActors::MemLogAdapter(ctx, priority, component, __stream.Str()); \
+            STLOG_STREAM(__stream, __VA_ARGS__); \
+            ::NActors::MemLogAdapter(ctx, priority, component, __stream.Str(), ::NKikimr::NStLog::OutputLogJson); \
         }; \
     } while (false)
 
 #define STLOG(...) if (TActivationContext *ctxp = TlsActivationContext; !ctxp); else STLOGX(*ctxp, __VA_ARGS__)
 
-#define STLOGJX(CTX, PRIO, COMP, ...) \
-    do { \
-        auto& ctx = (CTX); \
-        const auto priority = [&]{ using namespace NActors::NLog; return (PRIO); }(); \
-        const auto component = [&]{ using namespace NKikimrServices; using namespace NActorsServices; return (COMP); }(); \
-        if (IS_LOG_PRIORITY_ENABLED(priority, component)) { \
-            STLOG_STREAM(__stream, 1, __VA_ARGS__); \
-            ::NActors::MemLogAdapter(ctx, priority, component, __stream.Str()); \
-        }; \
-    } while (false)
-
-#define STLOGJ(...) if (TActivationContext *ctxp = TlsActivationContext; !ctxp); else STLOGJX(*ctxp, __VA_ARGS__)
-
 #define STLOG_DEBUG_FAIL(COMP, ...) \
     do { \
         if (TActivationContext *ctxp = TlsActivationContext) { \
             const auto component = [&]{ using namespace NKikimrServices; using namespace NActorsServices; return (COMP); }(); \
-            STLOG_STREAM(__stream, 0, __VA_ARGS__); \
+            STLOG_STREAM(__stream, __VA_ARGS__); \
             const TString message = __stream.Str(); \
             Y_VERIFY_DEBUG_S(false, message); \
             LOG_LOG_S(*ctxp, NLog::PRI_CRIT, component, message); \
@@ -328,14 +315,14 @@ namespace NKikimr::NStLog {
             ~TJsonWriter() {
                 Json.OpenMap();
                 if (Self->Header()) {
-                    Json.WriteKey("Marker");
+                    Json.WriteKey("marker");
                     Json.Write(Self->Marker);
-                    Json.WriteKey("File");
+                    Json.WriteKey("file");
                     Json.Write(Self->GetFileName());
-                    Json.WriteKey("Line");
+                    Json.WriteKey("line");
                     Json.Write(Self->Line);
                 }
-                Json.WriteKey("Text");
+                Json.WriteKey("message");
                 Json.Write(Stream.Str());
                 Self->WriteParamsToJson(Json);
                 Json.CloseMap();

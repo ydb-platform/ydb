@@ -35,6 +35,7 @@ TEST_SRCS(
     test_push_down.py
     test_s3_0.py
     test_s3_1.py
+    test_streaming_join.py
     test_size_limit.py
     test_statistics.py
     test_test_connection.py

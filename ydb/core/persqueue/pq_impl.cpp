@@ -1746,9 +1746,7 @@ void TPersQueue::ProcessUpdateConfigRequest(TAutoPtr<TEvPersQueue::TEvUpdateConf
                 generation = curConfigVersion;
             }
             c.SetGeneration(generation);
-            if (ReadRuleCompatible()) {
-                cfg.AddReadRuleGenerations(generation);
-            }
+            cfg.AddReadRuleGenerations(generation);
         }
     }
 

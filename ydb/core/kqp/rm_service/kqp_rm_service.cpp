@@ -184,6 +184,14 @@ public:
         return Counters;
     }
 
+    TPlannerPlacingOptions GetPlacingOptions() override {
+        return TPlannerPlacingOptions{
+            .MaxNonParallelTasksExecutionLimit = MaxNonParallelTasksExecutionLimit.load(),
+            .MaxNonParallelTopStageExecutionLimit = MaxNonParallelTopStageExecutionLimit.load(),
+            .PreferLocalDatacenterExecution = PreferLocalDatacenterExecution.load(),
+        };
+    }
+
     void CreateResourceInfoExchanger(
             const NKikimrConfig::TTableServiceConfig::TResourceManager::TInfoExchangerSettings& settings) {
         ResourceSnapshotState = std::make_shared<TResourceSnapshotState>();
@@ -465,6 +473,9 @@ public:
         MaxTotalChannelBuffersSize.store(config.GetMaxTotalChannelBuffersSize());
         QueryMemoryLimit.store(config.GetQueryMemoryLimit());
         SpillingPercent.store(config.GetSpillingPercent());
+        MaxNonParallelTopStageExecutionLimit.store(config.GetMaxNonParallelTopStageExecutionLimit());
+        MaxNonParallelTasksExecutionLimit.store(config.GetMaxNonParallelTasksExecutionLimit());
+        PreferLocalDatacenterExecution.store(config.GetPreferLocalDatacenterExecution());
     }
 
     ui32 GetNodeId() override {
@@ -512,6 +523,9 @@ public:
     std::atomic<double> SpillingPercent;
     TIntrusivePtr<TMemoryResource> TotalMemoryResource;
     std::atomic<i64> ExternalDataQueryMemory = 0;
+    std::atomic<ui64> MaxNonParallelTopStageExecutionLimit = 1;
+    std::atomic<ui64> MaxNonParallelTasksExecutionLimit = 8;
+    std::atomic<bool> PreferLocalDatacenterExecution = true;
 
     // current state
     std::atomic<ui64> LastResourceBrokerTaskId = 0;
@@ -577,7 +591,7 @@ public:
              IEventHandle::FlagTrackDelivery);
 
         ToBroker(new TEvResourceBroker::TEvResourceBrokerRequest);
-        ToBroker(new TEvResourceBroker::TEvConfigRequest(NLocalDb::KqpResourceManagerQueue));
+        ToBroker(new TEvResourceBroker::TEvConfigRequest(NLocalDb::KqpResourceManagerQueue, /*subscribe=*/ true));
 
         if (auto* mon = AppData()->Mon) {
             NMonitoring::TIndexMonPage* actorsMonPage = mon->RegisterIndexPage("actors", "Actors");

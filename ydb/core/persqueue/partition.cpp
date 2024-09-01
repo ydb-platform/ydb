@@ -2229,6 +2229,7 @@ void TPartition::CommitWriteOperations(TTransaction& t)
             }, std::nullopt};
             msg.Internal = true;
 
+            WriteInflightSize += msg.Msg.Data.size();
             ExecRequest(msg, *Parameters, PersistRequest.Get());
 
             auto& info = TxSourceIdForPostPersist[blob.SourceId];

@@ -450,6 +450,7 @@ private:
     const size_t MaxBlockMessageCount = 1; //!< Max message count that can be packed into a single block. In block version 0 is equal to 1 for compatibility
     bool Connected = false;
     bool Started = false;
+    std::atomic<bool> SendImplScheduled = false;
     TAtomic Aborting = 0;
     bool SessionEstablished = false;
     ui32 PartitionId = 0;

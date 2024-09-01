@@ -149,7 +149,7 @@ public:
 
     // Used for deserialization only.
     TOriginAttributes* MutableOriginAttributes() const noexcept;
-    void SetAttributes(NYTree::IAttributeDictionaryPtr attributes) noexcept;
+    void SetAttributes(NYTree::IAttributeDictionaryPtr attributes);
 
     TError Truncate(
         int maxInnerErrorCount = 2,

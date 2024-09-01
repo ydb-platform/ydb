@@ -28,6 +28,13 @@ class ExecuteScriptRequest;
 
 }
 
+namespace Ydb::Tablet {
+
+class ExecuteTabletMiniKQLRequest;
+class ChangeTabletSchemaRequest;
+
+}
+
 namespace NKikimr::NGRpcService {
 
 class IAuditCtx;
@@ -79,5 +86,9 @@ template <> void AuditContextAppend(IAuditCtx* ctx, const Ydb::Query::ExecuteQue
 
 // ExecuteSrcipt
 template <> void AuditContextAppend(IAuditCtx* ctx, const Ydb::Query::ExecuteScriptRequest& request);
+
+// TabletService
+template <> void AuditContextAppend(IAuditCtx* ctx, const Ydb::Tablet::ExecuteTabletMiniKQLRequest& request);
+template <> void AuditContextAppend(IAuditCtx* ctx, const Ydb::Tablet::ChangeTabletSchemaRequest& request);
 
 } // namespace NKikimr::NGRpcService

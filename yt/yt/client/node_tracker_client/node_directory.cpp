@@ -39,7 +39,7 @@ static constexpr auto& Logger = NodeTrackerClientLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const TString& NullNodeAddress()
+const std::string& NullNodeAddress()
 {
     static const TString Result("<null>");
     return Result;
@@ -77,12 +77,12 @@ TNodeDescriptor::TNodeDescriptor()
     : DefaultAddress_(NullNodeAddress())
 { }
 
-TNodeDescriptor::TNodeDescriptor(const TString& defaultAddress)
+TNodeDescriptor::TNodeDescriptor(const std::string& defaultAddress)
     : Addresses_{std::pair(DefaultNetworkName, defaultAddress)}
     , DefaultAddress_(defaultAddress)
 { }
 
-TNodeDescriptor::TNodeDescriptor(const std::optional<TString>& defaultAddress)
+TNodeDescriptor::TNodeDescriptor(const std::optional<std::string>& defaultAddress)
 {
     if (defaultAddress) {
         *this = TNodeDescriptor(*defaultAddress);
@@ -91,9 +91,9 @@ TNodeDescriptor::TNodeDescriptor(const std::optional<TString>& defaultAddress)
 
 TNodeDescriptor::TNodeDescriptor(
     TAddressMap addresses,
-    std::optional<TString> host,
-    std::optional<TString> rack,
-    std::optional<TString> dc,
+    const std::optional<std::string>& host,
+    const std::optional<std::string>& rack,
+    const std::optional<std::string>& dc,
     const std::vector<TString>& tags,
     std::optional<TInstant> lastSeenTime)
     : Addresses_(std::move(addresses))
@@ -115,32 +115,32 @@ const TAddressMap& TNodeDescriptor::Addresses() const
     return Addresses_;
 }
 
-const TString& TNodeDescriptor::GetDefaultAddress() const
+const std::string& TNodeDescriptor::GetDefaultAddress() const
 {
     return DefaultAddress_;
 }
 
-const TString& TNodeDescriptor::GetAddressOrThrow(const TNetworkPreferenceList& networks) const
+const std::string& TNodeDescriptor::GetAddressOrThrow(const TNetworkPreferenceList& networks) const
 {
     return NNodeTrackerClient::GetAddressOrThrow(Addresses(), networks);
 }
 
-std::optional<TString> TNodeDescriptor::FindAddress(const TNetworkPreferenceList& networks) const
+std::optional<std::string> TNodeDescriptor::FindAddress(const TNetworkPreferenceList& networks) const
 {
     return NNodeTrackerClient::FindAddress(Addresses(), networks);
 }
 
-const std::optional<TString>& TNodeDescriptor::GetHost() const
+const std::optional<std::string>& TNodeDescriptor::GetHost() const
 {
     return Host_;
 }
 
-const std::optional<TString>& TNodeDescriptor::GetRack() const
+const std::optional<std::string>& TNodeDescriptor::GetRack() const
 {
     return Rack_;
 }
 
-const std::optional<TString>& TNodeDescriptor::GetDataCenter() const
+const std::optional<std::string>& TNodeDescriptor::GetDataCenter() const
 {
     return DataCenter_;
 }
@@ -234,7 +234,7 @@ void FormatValue(TStringBuilderBase* builder, const TNodeDescriptor& descriptor,
     }
 }
 
-std::optional<TString> FindDefaultAddress(const TAddressMap& addresses)
+std::optional<std::string> FindDefaultAddress(const TAddressMap& addresses)
 {
     if (addresses.empty()) {
         return NullNodeAddress();
@@ -246,7 +246,7 @@ std::optional<TString> FindDefaultAddress(const TAddressMap& addresses)
     return std::nullopt;
 }
 
-const TString& GetDefaultAddress(const TAddressMap& addresses)
+const std::string& GetDefaultAddress(const TAddressMap& addresses)
 {
     if (addresses.empty()) {
         return NullNodeAddress();
@@ -254,7 +254,7 @@ const TString& GetDefaultAddress(const TAddressMap& addresses)
     return GetOrCrash(addresses, DefaultNetworkName);
 }
 
-const TString& GetDefaultAddress(const NProto::TAddressMap& addresses)
+const std::string& GetDefaultAddress(const NProto::TAddressMap& addresses)
 {
     if (addresses.entries_size() == 0) {
         return NullNodeAddress();
@@ -303,8 +303,8 @@ void ToProto(NNodeTrackerClient::NProto::TAddressMap* protoAddresses, const NNod
 {
     for (const auto& [networkName, networkAddress] : addresses) {
         auto* entry = protoAddresses->add_entries();
-        entry->set_network(networkName);
-        entry->set_address(networkAddress);
+        entry->set_network(NYT::ToProto<TProtobufString>(networkName));
+        entry->set_address(NYT::ToProto<TProtobufString>(networkAddress));
     }
 }
 
@@ -345,19 +345,19 @@ void ToProto(NNodeTrackerClient::NProto::TNodeDescriptor* protoDescriptor, const
     ToProto(protoDescriptor->mutable_addresses(), descriptor.Addresses());
 
     if (auto host = descriptor.GetHost()) {
-        protoDescriptor->set_host(*host);
+        protoDescriptor->set_host(ToProto<TProtobufString>(*host));
     } else {
         protoDescriptor->clear_host();
     }
 
     if (auto rack = descriptor.GetRack()) {
-        protoDescriptor->set_rack(*rack);
+        protoDescriptor->set_rack(ToProto<TProtobufString>(*rack));
     } else {
         protoDescriptor->clear_rack();
     }
 
     if (auto dataCenter = descriptor.GetDataCenter()) {
-        protoDescriptor->set_data_center(*dataCenter);
+        protoDescriptor->set_data_center(ToProto<TProtobufString>(*dataCenter));
     } else {
         protoDescriptor->clear_data_center();
     }
@@ -656,14 +656,14 @@ std::vector<std::pair<TNodeId, TNodeDescriptor>> TNodeDirectory::GetAllDescripto
     return result;
 }
 
-const TNodeDescriptor* TNodeDirectory::FindDescriptor(const TString& address)
+const TNodeDescriptor* TNodeDirectory::FindDescriptor(const std::string& address)
 {
     auto guard = ReaderGuard(SpinLock_);
     auto it = AddressToDescriptor_.find(address);
     return it == AddressToDescriptor_.end() ? nullptr : it->second;
 }
 
-const TNodeDescriptor& TNodeDirectory::GetDescriptor(const TString& address)
+const TNodeDescriptor& TNodeDirectory::GetDescriptor(const std::string& address)
 {
     const auto* result = FindDescriptor(address);
     YT_VERIFY(result);
@@ -711,13 +711,13 @@ TAddressMap::const_iterator SelectAddress(const TAddressMap& addresses, const TN
 
 } // namespace
 
-std::optional<TString> FindAddress(const TAddressMap& addresses, const TNetworkPreferenceList& networks)
+std::optional<std::string> FindAddress(const TAddressMap& addresses, const TNetworkPreferenceList& networks)
 {
     const auto it = SelectAddress(addresses, networks);
     return it == addresses.cend() ? std::nullopt : std::make_optional(it->second);
 }
 
-const TString& GetAddressOrThrow(const TAddressMap& addresses, const TNetworkPreferenceList& networks)
+const std::string& GetAddressOrThrow(const TAddressMap& addresses, const TNetworkPreferenceList& networks)
 {
     const auto it = SelectAddress(addresses, networks);
     if (it != addresses.cend()) {

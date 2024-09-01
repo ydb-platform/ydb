@@ -71,7 +71,9 @@ namespace {
                         inputStats->Ncols, 
                         inputStats->ByteSize, 
                         inputStats->Cost, 
-                        inputStats->KeyColumns);
+                        inputStats->KeyColumns,
+                        inputStats->ColumnStatistics,
+                        inputStats->StorageType);
                     outputStats->Labels = inputStats->Labels;
                     return outputStats;
                 }
@@ -380,7 +382,16 @@ void InferStatisticsForFlatMap(const TExprNode::TPtr& input, TTypeAnnotationCont
 
         double selectivity = TPredicateSelectivityComputer(inputStats).Compute(flatmap.Lambda().Body());
 
-        auto outputStats = TOptimizerStatistics(inputStats->Type, inputStats->Nrows * selectivity, inputStats->Ncols, inputStats->ByteSize * selectivity, inputStats->Cost, inputStats->KeyColumns );
+        auto outputStats = TOptimizerStatistics(
+            inputStats->Type, 
+            inputStats->Nrows * selectivity, 
+            inputStats->Ncols, 
+            inputStats->ByteSize * selectivity, 
+            inputStats->Cost, 
+            inputStats->KeyColumns,
+            inputStats->ColumnStatistics,
+            inputStats->StorageType);
+
         outputStats.Labels = inputStats->Labels;
         outputStats.Selectivity *= selectivity;
 
@@ -424,7 +435,16 @@ void InferStatisticsForFilter(const TExprNode::TPtr& input, TTypeAnnotationConte
     auto filterBody = filter.Lambda().Body();
     double selectivity = TPredicateSelectivityComputer(inputStats).Compute(filterBody);
 
-    auto outputStats = TOptimizerStatistics(inputStats->Type, inputStats->Nrows * selectivity, inputStats->Ncols, inputStats->ByteSize * selectivity, inputStats->Cost, inputStats->KeyColumns);
+    auto outputStats = TOptimizerStatistics(
+        inputStats->Type, 
+        inputStats->Nrows * selectivity, 
+        inputStats->Ncols, 
+        inputStats->ByteSize * selectivity, 
+        inputStats->Cost, 
+        inputStats->KeyColumns,
+        inputStats->ColumnStatistics,
+        inputStats->StorageType);
+
     outputStats.Selectivity *= selectivity;
     outputStats.Labels = inputStats->Labels;
 

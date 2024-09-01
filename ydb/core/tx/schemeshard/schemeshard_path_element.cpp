@@ -423,6 +423,10 @@ void TPathElement::SetAsyncReplica() {
     IsAsyncReplica = true;
 }
 
+void TPathElement::SetRestoreTable() {
+    IsRestoreTable = true;
+}
+
 bool TPathElement::HasRuntimeAttrs() const {
     return (VolumeSpaceRaw.Allocated > 0 ||
             VolumeSpaceSSD.Allocated > 0 ||

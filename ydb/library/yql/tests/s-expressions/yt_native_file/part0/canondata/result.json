@@ -453,9 +453,9 @@
     ],
     "test.test[Epochs-AppendBySortedDesc-Debug]": [
         {
-            "checksum": "3a4fc5679555df907c9300a7a9660c43",
-            "size": 1346,
-            "uri": "https://{canondata_backend}/937458/89834cdbd820b215fc71a7c537837ccf68cb7e3c/resource.tar.gz#test.test_Epochs-AppendBySortedDesc-Debug_/opt.yql"
+            "checksum": "78e326438268ffb63992afffa62c16c8",
+            "size": 1178,
+            "uri": "https://{canondata_backend}/1923547/07c4cda45d7e2356ff56cb473dd16a9ee3dbe131/resource.tar.gz#test.test_Epochs-AppendBySortedDesc-Debug_/opt.yql"
         },
         {
             "checksum": "4899e40479902b81a08f6d180f90fa26",

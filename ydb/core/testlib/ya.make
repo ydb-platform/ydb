@@ -111,6 +111,7 @@ PEERDIR(
     ydb/services/replication
     ydb/services/monitoring
     ydb/services/metadata/ds_table
+    ydb/services/tablet
     ydb/services/ydb
 
     ydb/core/http_proxy

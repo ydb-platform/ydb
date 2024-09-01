@@ -1019,6 +1019,7 @@ class TInitialConfiguratorImpl
     TKikimrScopeId ScopeId;
     TString TenantName;
     TString ClusterName;
+    TString NodeName;
 
     TMap<TString, TString> Labels;
 
@@ -1262,7 +1263,7 @@ public:
 
         auto result = NodeBrokerClient.RegisterDynamicNode(cf.GrpcSslSettings, addrs, settings, Env, Logger);
 
-        result->Apply(AppConfig, NodeId, ScopeId);
+        result->Apply(AppConfig, NodeId, ScopeId, NodeName);
     }
 
     void ApplyConfigForNode(NKikimrConfig::TAppConfig &appConfig) {
@@ -1291,6 +1292,11 @@ public:
 
         Labels["node_id"] = ToString(NodeId);
         AddLabelToAppConfig("node_id", Labels["node_id"]);
+
+        if (!NodeName.Empty()) {
+            Labels["node_name"] = NodeName;
+            AddLabelToAppConfig("node_name", Labels["node_name"]);
+        }
 
         if (CommonAppOptions.IgnoreCmsConfigs) {
             return;

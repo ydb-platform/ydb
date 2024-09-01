@@ -421,7 +421,7 @@ private:
 
 class TSimpleSkiffConverter : public ISkiffConverter {
 public:
-    TString ConvertNodeToSkiff(const TDqStatePtr /*state*/, const IDataProvider::TFillSettings& /*fillSettings*/, const NYT::TNode& /*rowSpec*/, const NYT::TNode& /*item*/) override {
+    TString ConvertNodeToSkiff(const TDqStatePtr /*state*/, const IDataProvider::TFillSettings& /*fillSettings*/, const NYT::TNode& /*rowSpec*/, const NYT::TNode& /*item*/, const TVector<TString>& /*columns*/) override {
         Y_ABORT("not implemented");
     }
 
@@ -1137,7 +1137,7 @@ private:
                             break;
                         }
                         case IDataProvider::EResultFormat::Skiff: {
-                            writer.OnStringScalar(skiffConverter->ConvertNodeToSkiff(state, fillSettings, rowSpec, item));
+                            writer.OnStringScalar(skiffConverter->ConvertNodeToSkiff(state, fillSettings, rowSpec, item, columns));
                             break;
                         }
                         default: {
@@ -1179,7 +1179,7 @@ private:
                             break;
                         }
                         case IDataProvider::EResultFormat::Skiff: {
-                            writer.OnStringScalar(skiffConverter->ConvertNodeToSkiff(state, fillSettings, rowSpec, item));
+                            writer.OnStringScalar(skiffConverter->ConvertNodeToSkiff(state, fillSettings, rowSpec, item, columns));
                             break;
                         }
                         default: {
@@ -1588,7 +1588,7 @@ private:
                         break;
                     }
                     case IDataProvider::EResultFormat::Skiff: {
-                        writer.OnStringScalar(skiffConverter->ConvertNodeToSkiff(state, fillSettings, rowSpec, item));
+                        writer.OnStringScalar(skiffConverter->ConvertNodeToSkiff(state, fillSettings, rowSpec, item, columns));
                         break;
                     }
                     default: {
@@ -1615,7 +1615,7 @@ private:
                         break;
                     }
                     case IDataProvider::EResultFormat::Skiff: {
-                        writer.OnStringScalar(skiffConverter->ConvertNodeToSkiff(state, fillSettings, rowSpec, item));
+                        writer.OnStringScalar(skiffConverter->ConvertNodeToSkiff(state, fillSettings, rowSpec, item, columns));
                         break;
                     }
                     default: {

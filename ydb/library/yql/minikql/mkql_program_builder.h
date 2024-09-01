@@ -255,6 +255,8 @@ public:
     TRuntimeNode BlockFromPg(TRuntimeNode input, TType* returnType);
     TRuntimeNode BlockPgResolvedCall(const std::string_view& name, ui32 id,
         const TArrayRef<const TRuntimeNode>& args, TType* returnType);
+    TRuntimeNode BlockMapJoinCore(TRuntimeNode flow, TRuntimeNode dict,
+        EJoinKind joinKind, const TArrayRef<const ui32>& leftKeyColumns);
 
     //-- logical functions
     TRuntimeNode BlockNot(TRuntimeNode data);

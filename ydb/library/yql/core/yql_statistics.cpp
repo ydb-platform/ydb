@@ -22,6 +22,20 @@ static TString ConvertToStatisticsTypeString(EStatisticsType type) {
     return "";
 }
 
+static TString ConvertToStatisticsTypeString(EStorageType storageType) {
+    switch (storageType) {
+        case EStorageType::NA:
+            return "NA";
+        case EStorageType::RowStorage:
+            return "RowStorage";
+        case EStorageType::ColumnStorage:
+            return "ColumnStorage";
+        default:
+            Y_ENSURE(false,"Unknown Storage type");
+    }
+    return "";
+}
+
 TString TOptimizerStatistics::ToString() const {
     std::stringstream ss;
     ss << *this;
@@ -36,6 +50,7 @@ std::ostream& NYql::operator<<(std::ostream& os, const TOptimizerStatistics& s) 
             os << ", " << c;
         }
     }
+    os << ", Storage: " << ConvertToStatisticsTypeString(s.StorageType);
     return os;
 }
 
@@ -51,6 +66,7 @@ TOptimizerStatistics::TOptimizerStatistics(
     double cost,
     TIntrusivePtr<TKeyColumns> keyColumns,
     TIntrusivePtr<TColumnStatMap> columnMap,
+    EStorageType storageType,
     std::unique_ptr<IProviderStatistics> specific)
     : Type(type)
     , Nrows(nrows)
@@ -59,6 +75,7 @@ TOptimizerStatistics::TOptimizerStatistics(
     , Cost(cost)
     , KeyColumns(keyColumns)
     , ColumnStatistics(columnMap)
+    , StorageType(storageType)
     , Specific(std::move(specific))
 {
 }

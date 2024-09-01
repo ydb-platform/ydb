@@ -24,25 +24,21 @@
 {%-         endif -%}
 {%-     endif -%}
 {%-     if target_sources|length -%}
-{%-         for target_source in target_sources -%}
-{%-             if not (target_source.endswith('.h') or target_source.endswith('.hh') or target_source.endswith('.hpp') or target_source.endswith('.i') or target_source.endswith('.inc') or target_source.endswith('.inc.d')) -%}
-{#-                 Any non-header clear flag only_headers_like_sources_library -#}
-{%-                 set only_headers_like_sources_library = false -%}
-{%-             endif -%}
-{%-         endfor -%}
-{%-     else -%}
-{#-         Without target sources flag only_headers_like_sources_library -#}
-{%-         set only_headers_like_sources_library = false -%}
+{%-         set target_sources_non_headers = reject_by_ends(target_sources, ['.h', '.hh', '.hpp']) -%}
+{%-         if (target_sources_non_headers|length) -%}
+{#-             Any non-header clear flag only_headers_like_sources_library -#}
+{%-             set only_headers_like_sources_library = false -%}
+{%-         endif -%}
 {%-     endif -%}
 {%- else -%}
 {%-     set only_headers_like_sources_library = false -%}
 {%- endif -%}
 
-{%- set is_really_fake_module = (current_target.is_fake_module) and not(only_headers_like_sources_library) -%}
+{%- set is_really_fake_module = (current_target.is_fake_module) and (only_headers_like_sources_library) -%}
 
 {{ macro }}({{ name }}
 {%- if current_target.is_fake_module -%}
-{%-     if only_headers_like_sources_library %} STATIC{%- else %} INTERFACE{%- endif -%}
+{%-     if only_headers_like_sources_library %} INTERFACE{%- else %} STATIC{%- endif -%}
 {%- endif -%}
 {%- if macro_args|length > 0 -%}
 {%-     for arg in macro_args %}
@@ -50,7 +46,7 @@
 {%-     endfor -%}
 {%- endif -%}
 )
-{% if (current_target.is_fake_module) and (only_headers_like_sources_library) %}
+{% if (current_target.is_fake_module) and not(only_headers_like_sources_library) %}
 set_property(TARGET {{ name }} PROPERTY LINKER_LANGUAGE CXX)
 {%- endif -%}
 

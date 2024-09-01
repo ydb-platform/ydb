@@ -122,6 +122,7 @@
 #include <ydb/services/ydb/ydb_scripting.h>
 #include <ydb/services/ydb/ydb_table.h>
 #include <ydb/services/ydb/ydb_object_storage.h>
+#include <ydb/services/tablet/ydb_tablet.h>
 
 #include <ydb/core/fq/libs/init/init.h>
 
@@ -131,6 +132,7 @@
 #include <library/cpp/malloc/api/malloc.h>
 
 #include <ydb/core/util/sig.h>
+#include <ydb/core/util/stlog.h>
 
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/tablet/node_tablet_monitor.h>
@@ -597,6 +599,8 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         names["keyvalue"] = &hasKeyValue;
         TServiceCfg hasReplication = services.empty();
         names["replication"] = &hasReplication;
+        TServiceCfg hasTabletService = services.empty();
+        names["tablet_service"] = &hasTabletService;
 
         std::unordered_set<TString> enabled;
         for (const auto& name : services) {
@@ -653,6 +657,11 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
 
         if (hasTableService || hasYql) {
             hasQueryService = true;
+        }
+
+        if (hasLegacy) {
+            // Enable new public services when the legacy service is enabled
+            hasTabletService = true;
         }
 
         // Enable RL for all services if enabled list is empty
@@ -870,6 +879,11 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         if (hasReplication) {
             server.AddService(new NGRpcService::TGRpcReplicationService(ActorSystem.Get(), Counters,
                 grpcRequestProxies[0], hasReplication.IsRlAllowed()));
+        }
+
+        if (hasTabletService) {
+            server.AddService(new NGRpcService::TGRpcYdbTabletService(ActorSystem.Get(), Counters, grpcRequestProxies,
+                hasTabletService.IsRlAllowed(), grpcConfig.GetHandlersPerCompletionQueue()));
         }
 
         if (ModuleFactories) {
@@ -1130,6 +1144,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
         AppData->MemoryControllerConfig.CopyFrom(runConfig.AppConfig.GetMemoryControllerConfig());
     }
 
+    if (runConfig.AppConfig.HasReplicationConfig()) {
+        AppData->ReplicationConfig = runConfig.AppConfig.GetReplicationConfig();
+    }
+
     // setup resource profiles
     AppData->ResourceProfiles = new TResourceProfiles;
     if (runConfig.AppConfig.GetBootstrapConfig().ResourceProfilesSize())
@@ -1194,6 +1212,7 @@ void TKikimrRunner::InitializeLogSettings(const TKikimrRunConfig& runConfig)
         LogSettings->Format = NLog::TSettings::PLAIN_SHORT_FORMAT;
     } else if (logConfig.GetFormat() == "json") {
         LogSettings->Format = NLog::TSettings::JSON_FORMAT;
+        NKikimr::NStLog::OutputLogJson = true;
     } else {
         Y_ABORT("Unknown log format: \"%s\"", logConfig.GetFormat().data());
     }

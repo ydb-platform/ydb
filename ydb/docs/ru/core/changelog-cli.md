@@ -15,7 +15,7 @@
 * Добавлена поддержка типов big datetime: `Date32`, `Datetime64`, `Timestamp64`, `Interval64`.
 * Переработана команда `ydb workload`:
    * Добавлена опция `--clear` в подкоманде `init`, позволяющая удалить все существующие таблицы перед созданием новых.
-   * Добавлена команда `ydb workload * import` для заполнения таблиц начальным контентом перед началом нагрузки. 
+   * Добавлена команда `ydb workload * import` для заполнения таблиц начальным контентом перед началом нагрузки.
 
 **Изменения с потерей обратной совместимости:**
 * Переработана команда `ydb workload`:
@@ -73,7 +73,7 @@
 
 * Исправлена ошибка вывода таблиц в `pretty` формате с [Unicode](https://ru.wikipedia.org/wiki/Юникод) символами.
 
-* Исправлена ошибка подстановки неправильного первичного ключа в команде [ydb tools pg-convert](postgresql/pg-dump.md#pg-convert).
+* Исправлена ошибка подстановки неправильного первичного ключа в команде [ydb tools pg-convert](postgresql/import.md#pg-convert).
 
 ## Версия 2.7.0 {#2-7-0}
 
@@ -81,7 +81,7 @@
 
 **Функциональность:**
 
-* Добавлена команда [ydb tools pg-convert](postgresql/pg-dump.md#pg-convert), выполняющая подготовку дампа, полученного утилитой [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html), к загрузке в postgres-совместимую прослойку YDB.
+* Добавлена команда [ydb tools pg-convert](postgresql/import.md#pg-convert), выполняющая подготовку дампа, полученного утилитой [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html), к загрузке в postgres-совместимую прослойку YDB.
 
 * Добавлена команда нагрузочного тестирования `ydb workload query`, которая нагружает базу [запросами выполнения скрипта](reference/ydb-cli/yql.md) в несколько потоков.
 

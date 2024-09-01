@@ -42,24 +42,26 @@ Y_UNIT_TEST_SUITE(GroupedMemoryLimiter) {
         {
             auto alloc1 = std::make_shared<TAllocation>(50);
             manager->RegisterProcess(0, {});
-            manager->RegisterGroup(0, 1);
-            manager->RegisterAllocation(0, 1, alloc1, {});
+            manager->RegisterProcessScope(0, 0);
+            manager->RegisterGroup(0, 0, 1);
+            manager->RegisterAllocation(0, 0, 1, alloc1, {});
             AFL_VERIFY(alloc1->IsAllocated());
             auto alloc1_1 = std::make_shared<TAllocation>(50);
-            manager->RegisterAllocation(0, 1, alloc1_1, {});
+            manager->RegisterAllocation(0, 0, 1, alloc1_1, {});
             AFL_VERIFY(alloc1_1->IsAllocated());
 
-            manager->RegisterGroup(0, 2);
+            manager->RegisterGroup(0, 0, 2);
             auto alloc2 = std::make_shared<TAllocation>(50);
-            manager->RegisterAllocation(0, 2, alloc2, {});
+            manager->RegisterAllocation(0, 0, 2, alloc2, {});
             AFL_VERIFY(!alloc2->IsAllocated());
 
-            manager->UnregisterAllocation(0, alloc1->GetIdentifier());
+            manager->UnregisterAllocation(0, 0, alloc1->GetIdentifier());
             AFL_VERIFY(alloc2->IsAllocated());
-            manager->UnregisterAllocation(0, alloc2->GetIdentifier());
-            manager->UnregisterAllocation(0, alloc1_1->GetIdentifier());
-            manager->UnregisterGroup(0, 1);
-            manager->UnregisterGroup(0, 2);
+            manager->UnregisterAllocation(0, 0, alloc2->GetIdentifier());
+            manager->UnregisterAllocation(0, 0, alloc1_1->GetIdentifier());
+            manager->UnregisterGroup(0, 0, 1);
+            manager->UnregisterGroup(0, 0, 2);
+            manager->UnregisterProcessScope(0, 0);
             manager->UnregisterProcess(0);
         }
         AFL_VERIFY(!stage->GetUsage().Val());
@@ -80,36 +82,38 @@ Y_UNIT_TEST_SUITE(GroupedMemoryLimiter) {
         auto manager = std::make_shared<NOlap::NGroupedMemoryManager::TManager>(NActors::TActorId(), config, "test", counters, stage);
         {
             manager->RegisterProcess(0, {});
+            manager->RegisterProcessScope(0, 0);
             auto alloc1 = std::make_shared<TAllocation>(10);
-            manager->RegisterGroup(0, 1);
-            manager->RegisterAllocation(0, 1, alloc1, {});
+            manager->RegisterGroup(0, 0, 1);
+            manager->RegisterAllocation(0, 0, 1, alloc1, {});
             AFL_VERIFY(alloc1->IsAllocated());
             auto alloc2 = std::make_shared<TAllocation>(1000);
-            manager->RegisterGroup(0, 2);
-            manager->RegisterAllocation(0, 2, alloc2, {});
+            manager->RegisterGroup(0, 0, 2);
+            manager->RegisterAllocation(0, 0, 2, alloc2, {});
             AFL_VERIFY(!alloc2->IsAllocated());
             auto alloc3 = std::make_shared<TAllocation>(1000);
-            manager->RegisterGroup(0, 3);
-            manager->RegisterAllocation(0, 3, alloc3, {});
+            manager->RegisterGroup(0, 0, 3);
+            manager->RegisterAllocation(0, 0, 3, alloc3, {});
             AFL_VERIFY(alloc1->IsAllocated());
             AFL_VERIFY(!alloc2->IsAllocated());
             AFL_VERIFY(!alloc3->IsAllocated());
             auto alloc1_1 = std::make_shared<TAllocation>(1000);
-            manager->RegisterAllocation(0, 1, alloc1_1, {});
+            manager->RegisterAllocation(0, 0, 1, alloc1_1, {});
             AFL_VERIFY(alloc1_1->IsAllocated());
             AFL_VERIFY(!alloc2->IsAllocated());
-            manager->UnregisterAllocation(0, alloc1_1->GetIdentifier());
+            manager->UnregisterAllocation(0, 0, alloc1_1->GetIdentifier());
             AFL_VERIFY(!alloc2->IsAllocated());
-            manager->UnregisterGroup(0, 1);
+            manager->UnregisterGroup(0, 0, 1);
             AFL_VERIFY(alloc2->IsAllocated());
 
-            manager->UnregisterAllocation(0, alloc1->GetIdentifier());
+            manager->UnregisterAllocation(0, 0, alloc1->GetIdentifier());
             AFL_VERIFY(!alloc3->IsAllocated());
-            manager->UnregisterGroup(0, 2);
-            manager->UnregisterAllocation(0, alloc2->GetIdentifier());
+            manager->UnregisterGroup(0, 0, 2);
+            manager->UnregisterAllocation(0, 0, alloc2->GetIdentifier());
             AFL_VERIFY(alloc3->IsAllocated());
-            manager->UnregisterGroup(0, 3);
-            manager->UnregisterAllocation(0, alloc3->GetIdentifier());
+            manager->UnregisterGroup(0, 0, 3);
+            manager->UnregisterAllocation(0, 0, alloc3->GetIdentifier());
+            manager->UnregisterProcessScope(0, 0);
             manager->UnregisterProcess(0);
         }
         AFL_VERIFY(!stage->GetUsage().Val());
@@ -131,44 +135,45 @@ Y_UNIT_TEST_SUITE(GroupedMemoryLimiter) {
         auto manager = std::make_shared<NOlap::NGroupedMemoryManager::TManager>(NActors::TActorId(), config, "test", counters, stage);
         {
             manager->RegisterProcess(0, {});
-            manager->RegisterGroup(0, 1);
+            manager->RegisterProcessScope(0, 0);
+            manager->RegisterGroup(0, 0, 1);
             auto alloc0 = std::make_shared<TAllocation>(1000);
-            manager->RegisterAllocation(0, 1, alloc0, {});
+            manager->RegisterAllocation(0, 0, 1, alloc0, {});
             auto alloc1 = std::make_shared<TAllocation>(1000);
-            manager->RegisterAllocation(0, 1, alloc1, {});
+            manager->RegisterAllocation(0, 0, 1, alloc1, {});
             AFL_VERIFY(alloc0->IsAllocated());
             AFL_VERIFY(alloc1->IsAllocated());
 
-            manager->RegisterGroup(0, 2);
+            manager->RegisterGroup(0, 0, 2);
             auto alloc2 = std::make_shared<TAllocation>(1000);
-            manager->RegisterAllocation(0, 2, alloc0, {});
-            manager->RegisterAllocation(0, 2, alloc2, {});
+            manager->RegisterAllocation(0, 0, 2, alloc0, {});
+            manager->RegisterAllocation(0, 0, 2, alloc2, {});
             AFL_VERIFY(alloc0->IsAllocated());
             AFL_VERIFY(!alloc2->IsAllocated());
 
             auto alloc3 = std::make_shared<TAllocation>(1000);
-            manager->RegisterGroup(0, 3);
-            manager->RegisterAllocation(0, 3, alloc0, {});
-            manager->RegisterAllocation(0, 3, alloc3, {});
+            manager->RegisterGroup(0, 0, 3);
+            manager->RegisterAllocation(0, 0, 3, alloc0, {});
+            manager->RegisterAllocation(0, 0, 3, alloc3, {});
             AFL_VERIFY(alloc0->IsAllocated());
             AFL_VERIFY(alloc1->IsAllocated());
             AFL_VERIFY(!alloc2->IsAllocated());
             AFL_VERIFY(!alloc3->IsAllocated());
 
-            manager->UnregisterGroup(0, 1);
-            manager->UnregisterAllocation(0, alloc1->GetIdentifier());
+            manager->UnregisterGroup(0, 0, 1);
+            manager->UnregisterAllocation(0, 0, alloc1->GetIdentifier());
 
             AFL_VERIFY(alloc0->IsAllocated());
             AFL_VERIFY(alloc2->IsAllocated());
             AFL_VERIFY(!alloc3->IsAllocated());
-            manager->UnregisterGroup(0, 2);
-            manager->UnregisterAllocation(0, alloc2->GetIdentifier());
+            manager->UnregisterGroup(0, 0, 2);
+            manager->UnregisterAllocation(0, 0, alloc2->GetIdentifier());
             AFL_VERIFY(alloc0->IsAllocated());
             AFL_VERIFY(alloc3->IsAllocated());
 
-            manager->UnregisterGroup(0, 3);
-            manager->UnregisterAllocation(0, alloc3->GetIdentifier());
-            manager->UnregisterAllocation(0, alloc0->GetIdentifier());
+            manager->UnregisterGroup(0, 0, 3);
+            manager->UnregisterAllocation(0, 0, alloc3->GetIdentifier());
+            manager->UnregisterAllocation(0, 0, alloc0->GetIdentifier());
             manager->UnregisterProcess(0);
         }
         AFL_VERIFY(!stage->GetUsage().Val());
@@ -190,23 +195,24 @@ Y_UNIT_TEST_SUITE(GroupedMemoryLimiter) {
         auto manager = std::make_shared<NOlap::NGroupedMemoryManager::TManager>(NActors::TActorId(), config, "test", counters, stage);
         {
             manager->RegisterProcess(0, {});
+            manager->RegisterProcessScope(0, 0);
             auto alloc1 = std::make_shared<TAllocation>(1000);
-            manager->RegisterGroup(0, 1);
-            manager->RegisterAllocation(0, 1, alloc1, {});
+            manager->RegisterGroup(0, 0, 1);
+            manager->RegisterAllocation(0, 0, 1, alloc1, {});
             AFL_VERIFY(alloc1->IsAllocated());
             auto alloc2 = std::make_shared<TAllocation>(10);
-            manager->RegisterGroup(0, 3);
-            manager->RegisterAllocation(0, 3, alloc2, {});
+            manager->RegisterGroup(0, 0, 3);
+            manager->RegisterAllocation(0, 0, 3, alloc2, {});
             AFL_VERIFY(!alloc2->IsAllocated());
 
-            manager->UpdateAllocation(0, alloc1->GetIdentifier(), 10);
+            manager->UpdateAllocation(0, 0, alloc1->GetIdentifier(), 10);
             AFL_VERIFY(alloc2->IsAllocated());
 
-            manager->UnregisterGroup(0, 3);
-            manager->UnregisterAllocation(0, alloc2->GetIdentifier());
+            manager->UnregisterGroup(0, 0, 3);
+            manager->UnregisterAllocation(0, 0, alloc2->GetIdentifier());
 
-            manager->UnregisterGroup(0, 1);
-            manager->UnregisterAllocation(0, alloc1->GetIdentifier());
+            manager->UnregisterGroup(0, 0, 1);
+            manager->UnregisterAllocation(0, 0, alloc1->GetIdentifier());
             manager->UnregisterProcess(0);
         }
         AFL_VERIFY(!stage->GetUsage().Val());

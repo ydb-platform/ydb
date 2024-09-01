@@ -492,7 +492,7 @@ TOriginAttributes* TError::MutableOriginAttributes() const noexcept
     return Impl_->MutableOriginAttributes();
 }
 
-void TError::SetAttributes(NYTree::IAttributeDictionaryPtr attributes) noexcept
+void TError::SetAttributes(NYTree::IAttributeDictionaryPtr attributes)
 {
     if (!Impl_) {
         return;

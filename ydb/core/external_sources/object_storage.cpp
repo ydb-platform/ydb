@@ -3,8 +3,10 @@
 #include "validation_functions.h"
 #include "object_storage/s3_fetcher.h"
 
+#include <util/string/join.h>
 #include <ydb/core/external_sources/object_storage/inference/arrow_fetcher.h>
 #include <ydb/core/external_sources/object_storage/inference/arrow_inferencinator.h>
+#include <ydb/core/external_sources/object_storage/inference/infer_config.h>
 #include <ydb/core/kqp/gateway/actors/kqp_ic_gateway_actors.h>
 #include <ydb/core/protos/external_sources.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
@@ -20,6 +22,10 @@
 #include <ydb/public/sdk/cpp/client/ydb_value/value.h>
 
 #include <library/cpp/scheme/scheme.h>
+#include <library/cpp/json/json_reader.h>
+#include <arrow/buffer_builder.h>
+#include <arrow/buffer.h>
+#include <arrow/io/memory.h>
 
 #include <util/string/builder.h>
 
@@ -67,7 +73,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
             }
         }
 
-        if (auto issues = Validate(schema, objectStorage, PathsLimit)) {
+        if (auto issues = Validate(schema, objectStorage, PathsLimit, general.location())) {
             ythrow TExternalSourceException() << issues.ToString();
         }
 
@@ -136,11 +142,18 @@ struct TObjectStorageExternalSource : public IExternalSource {
     }
 
     template<typename TScheme, typename TObjectStorage>
-    static NYql::TIssues Validate(const TScheme& schema, const TObjectStorage& objectStorage, size_t pathsLimit) {
+    static NYql::TIssues Validate(const TScheme& schema, const TObjectStorage& objectStorage, size_t pathsLimit, const TString& location) {
         NYql::TIssues issues;
-        issues.AddIssues(ValidateFormatSetting(objectStorage.format(), objectStorage.format_setting()));
+        if (TString errorString = NYql::NS3::ValidateWildcards(location)) {
+            issues.AddIssue(MakeErrorIssue(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Location '" << location << "' contains invalid wildcard: " << errorString));
+        }
+        const bool hasPartitioning = objectStorage.projection_size() || objectStorage.partitioned_by_size();
+        issues.AddIssues(ValidateFormatSetting(objectStorage.format(), objectStorage.format_setting(), location, hasPartitioning));
         issues.AddIssues(ValidateRawFormat(objectStorage.format(), schema, objectStorage.partitioned_by()));
-        if (objectStorage.projection_size() || objectStorage.partitioned_by_size()) {
+        if (hasPartitioning) {
+            if (NYql::NS3::HasWildcards(location)) {
+                issues.AddIssue(MakeErrorIssue(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Location '" << location << "' contains wildcards"));
+            }
             try {
                 TVector<TString> partitionedBy{objectStorage.partitioned_by().begin(), objectStorage.partitioned_by().end()};
                 issues.AddIssues(ValidateProjectionColumns(schema, partitionedBy));
@@ -160,11 +173,17 @@ struct TObjectStorageExternalSource : public IExternalSource {
         return issues;
     }
 
-    static NYql::TIssues ValidateFormatSetting(const TString& format, const google::protobuf::Map<TString, TString>& formatSetting) {
+    static NYql::TIssues ValidateFormatSetting(const TString& format, const google::protobuf::Map<TString, TString>& formatSetting, const TString& location, bool hasPartitioning) {
         NYql::TIssues issues;
         issues.AddIssues(ValidateDateFormatSetting(formatSetting));
         for (const auto& [key, value]: formatSetting) {
             if (key == "file_pattern"sv) {
+                if (TString errorString = NYql::NS3::ValidateWildcards(value)) {
+                    issues.AddIssue(MakeErrorIssue(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "File pattern '" << value << "' contains invalid wildcard: " << errorString));
+                }
+                if (value && !hasPartitioning && !location.EndsWith("/")) {
+                    issues.AddIssue(MakeErrorIssue(Ydb::StatusIds::BAD_REQUEST, "Path pattern cannot be used with file_pattern"));
+                }
                 continue;
             }
 
@@ -279,7 +298,6 @@ struct TObjectStorageExternalSource : public IExternalSource {
     };
 
     virtual NThreading::TFuture<std::shared_ptr<TMetadata>> LoadDynamicMetadata(std::shared_ptr<TMetadata> meta) override {
-        Y_UNUSED(ActorSystem);
         auto format = meta->Attributes.FindPtr("format");
         if (!format || !meta->Attributes.contains("withinfer")) {
             return NThreading::MakeFuture(std::move(meta));
@@ -310,21 +328,29 @@ struct TObjectStorageExternalSource : public IExternalSource {
             structuredTokenBuilder.SetNoAuth();
         }
 
-        auto effectiveFilePattern = NYql::NS3::NormalizePath(meta->TableLocation);
-        if (meta->TableLocation.EndsWith('/')) {
-            effectiveFilePattern += '*';
-        } 
-
         const NYql::TS3Credentials credentials(CredentialsFactory, structuredTokenBuilder.ToJson());
+
+        const TString path = meta->TableLocation;
+        const TString filePattern = meta->Attributes.Value("filepattern", TString{});
+        const TVector<TString> partitionedBy = GetPartitionedByConfig(meta);
+        NYql::NS3Lister::TListingRequest request {
+            .Url = meta->DataSourceLocation,
+            .Credentials = credentials
+        };
+
+        auto error = NYql::NS3::BuildS3FilePattern(path, filePattern, partitionedBy, request);
+        if (error) {
+            throw yexception() << *error;
+        }
+
+        auto partByData = std::make_shared<TStringBuilder>();
+
         auto httpGateway = NYql::IHTTPGateway::Make();
         auto httpRetryPolicy = NYql::GetHTTPDefaultRetryPolicy(NYql::THttpRetryPolicyOptions{.RetriedCurlCodes = NYql::FqRetriedCurlCodes()});
-        auto s3Lister = NYql::NS3Lister::MakeS3Lister(httpGateway, httpRetryPolicy, NYql::NS3Lister::TListingRequest{
-            .Url = meta->DataSourceLocation,
-            .Credentials = credentials,
-            .Pattern = effectiveFilePattern,
-        }, Nothing(), AllowLocalFiles);
-        auto afterListing = s3Lister->Next().Apply([path = effectiveFilePattern](const NThreading::TFuture<NYql::NS3Lister::TListResult>& listResFut) {
+        auto s3Lister = NYql::NS3Lister::MakeS3Lister(httpGateway, httpRetryPolicy, request, Nothing(), AllowLocalFiles, ActorSystem);
+        auto afterListing = s3Lister->Next().Apply([partByData, partitionedBy, path = request.Pattern](const NThreading::TFuture<NYql::NS3Lister::TListResult>& listResFut) {
             auto& listRes = listResFut.GetValue();
+            auto& partByRef = *partByData;
             if (std::holds_alternative<NYql::NS3Lister::TListError>(listRes)) {
                 auto& error = std::get<NYql::NS3Lister::TListError>(listRes);
                 throw yexception() << error.Issues.ToString();
@@ -332,6 +358,12 @@ struct TObjectStorageExternalSource : public IExternalSource {
             auto& entries = std::get<NYql::NS3Lister::TListEntries>(listRes);
             if (entries.Objects.empty()) {
                 throw yexception() << "couldn't find files at " << path;
+            }
+
+            partByRef << JoinSeq(",", partitionedBy);
+            for (const auto& entry : entries.Objects) {
+                Y_ENSURE(entry.MatchedGlobs.size() == partitionedBy.size());
+                partByRef << Endl << JoinSeq(",", entry.MatchedGlobs);
             }
             for (const auto& entry : entries.Objects) {
                 if (entry.Size > 0) {
@@ -350,9 +382,8 @@ struct TObjectStorageExternalSource : public IExternalSource {
 
         meta->Attributes.erase("withinfer");
 
-        auto fileFormat = NObjectStorage::NInference::ConvertFileFormat(*format);
-        auto arrowFetcherId = ActorSystem->Register(NObjectStorage::NInference::CreateArrowFetchingActor(s3FetcherId, fileFormat, meta->Attributes));
-        auto arrowInferencinatorId = ActorSystem->Register(NObjectStorage::NInference::CreateArrowInferencinator(arrowFetcherId, fileFormat, meta->Attributes));
+        auto arrowFetcherId = ActorSystem->Register(NObjectStorage::NInference::CreateArrowFetchingActor(s3FetcherId, meta->Attributes));
+        auto arrowInferencinatorId = ActorSystem->Register(NObjectStorage::NInference::CreateArrowInferencinator(arrowFetcherId));
 
         return afterListing.Apply([arrowInferencinatorId, meta, actorSystem = ActorSystem](const NThreading::TFuture<NYql::NS3Lister::TObjectListEntry>& entryFut) {
             auto promise = NThreading::NewPromise<TMetadataResult>();
@@ -375,12 +406,19 @@ struct TObjectStorageExternalSource : public IExternalSource {
             auto [path, size, _] = entryFut.GetValue();
             actorSystem->Register(new NKqp::TActorRequestHandler<NObjectStorage::TEvInferFileSchema, NObjectStorage::TEvInferredFileSchema, TMetadataResult>(
                 arrowInferencinatorId,
-                new NObjectStorage::TEvInferFileSchema(TString{path}, size),
+                new NObjectStorage::TEvInferFileSchema(std::move(path), size),
                 promise,
                 std::move(schemaToMetadata)
             ));
 
             return promise.GetFuture();
+        }).Apply([arrowInferencinatorId, meta, partByData, partitionedBy, this](const NThreading::TFuture<TMetadataResult>& result) {
+            auto& value = result.GetValue();
+            if (!value.Success()) {
+                return result;
+            }
+
+            return InferPartitionedColumnsTypes(arrowInferencinatorId, partByData, partitionedBy, result);
         }).Apply([](const NThreading::TFuture<TMetadataResult>& result) {
             auto& value = result.GetValue();
             if (value.Success()) {
@@ -395,6 +433,88 @@ struct TObjectStorageExternalSource : public IExternalSource {
     }
 
 private:
+    NThreading::TFuture<TMetadataResult> InferPartitionedColumnsTypes(
+        NActors::TActorId arrowInferencinatorId,
+        std::shared_ptr<TStringBuilder> partByData,
+        const TVector<TString>& partitionedBy,
+        const NThreading::TFuture<TMetadataResult>& result) const {
+
+        auto& value = result.GetValue();
+        if (partitionedBy.empty()) {
+            return result;
+        }
+
+        auto meta = value.Metadata;
+        for (const auto& partitionName : partitionedBy) {
+            auto& destColumn = *meta->Schema.add_column();
+            destColumn.mutable_name()->assign(partitionName);
+            destColumn.mutable_type()->set_type_id(Ydb::Type::UTF8);
+        }
+
+        arrow::BufferBuilder builder;
+        auto partitionBuffer = std::make_shared<arrow::Buffer>(nullptr, 0);
+        auto buildStatus = builder.Append(partByData->data(), partByData->size());
+        auto finishStatus = builder.Finish(&partitionBuffer);
+
+        if (!buildStatus.ok() || !finishStatus.ok()) {
+            return result;
+        }
+
+        auto promise = NThreading::NewPromise<TMetadataResult>();
+        auto partitionsToMetadata = [meta](NThreading::TPromise<TMetadataResult> metaPromise, NObjectStorage::TEvInferredFileSchema&& response){
+            if (response.Status.IsSuccess()) {
+                THashMap<TString, Ydb::Type> inferredTypes;
+                for (const auto& column : response.Fields) {
+                    if (ValidateCommonProjectionType(column.type(), column.name()).Empty()) {
+                        inferredTypes[column.name()] = column.type();
+                    }
+                }
+                
+                for (auto& destColumn : *meta->Schema.mutable_column()) {
+                    if (auto type = inferredTypes.FindPtr(destColumn.name()); type) {
+                        destColumn.mutable_type()->set_type_id(type->type_id());
+                    }
+                }
+            }
+            TMetadataResult result;
+            result.SetSuccess();
+            result.Metadata = meta;
+            metaPromise.SetValue(std::move(result));
+        };
+
+        auto bufferReader = std::make_shared<arrow::io::BufferReader>(std::move(partitionBuffer));
+        auto file = std::dynamic_pointer_cast<arrow::io::RandomAccessFile>(bufferReader);
+        auto config = NObjectStorage::NInference::MakeFormatConfig({{ "format", "csv_with_names" }});
+        config->ShouldMakeOptional = false;
+        ActorSystem->Register(new NKqp::TActorRequestHandler<NObjectStorage::TEvArrowFile, NObjectStorage::TEvInferredFileSchema, TMetadataResult>(
+            arrowInferencinatorId,
+            new NObjectStorage::TEvArrowFile(config, std::move(file), ""),
+            promise,
+            std::move(partitionsToMetadata)
+        ));
+
+        return promise.GetFuture();
+    }
+
+    static TVector<TString> GetPartitionedByConfig(std::shared_ptr<TMetadata> meta) {
+        THashSet<TString> columns;
+        if (auto partitioned = meta->Attributes.FindPtr("partitionedby"); partitioned) {
+            NJson::TJsonValue values;
+            Y_ENSURE(NJson::ReadJsonTree(*partitioned, &values));
+            Y_ENSURE(values.GetType() == NJson::JSON_ARRAY);
+
+            for (const auto& value : values.GetArray()) {
+                Y_ENSURE(value.GetType() == NJson::JSON_STRING);
+                if (columns.contains(value.GetString())) {
+                    throw yexception() << "invalid partitioned_by parameter, column " << value.GetString() << "mentioned twice";
+                }
+                columns.insert(value.GetString());
+            }
+        }
+
+        return TVector<TString>{columns.begin(), columns.end()};
+    }
+
     static bool IsValidIntervalUnit(const TString& unit) {
         static constexpr std::array<std::string_view, 7> IntervalUnits = {
             "MICROSECONDS"sv,
@@ -631,8 +751,8 @@ IExternalSource::TPtr CreateObjectStorageExternalSource(const std::vector<TRegEx
     return MakeIntrusive<TObjectStorageExternalSource>(hostnamePatterns, actorSystem, pathsLimit, std::move(credentialsFactory), enableInfer, allowLocalFiles);
 }
 
-NYql::TIssues Validate(const FederatedQuery::Schema& schema, const FederatedQuery::ObjectStorageBinding::Subset& objectStorage, size_t pathsLimit) {
-    return TObjectStorageExternalSource::Validate(schema, objectStorage, pathsLimit);
+NYql::TIssues Validate(const FederatedQuery::Schema& schema, const FederatedQuery::ObjectStorageBinding::Subset& objectStorage, size_t pathsLimit, const TString& location) {
+    return TObjectStorageExternalSource::Validate(schema, objectStorage, pathsLimit, location);
 }
 
 NYql::TIssues ValidateDateFormatSetting(const google::protobuf::Map<TString, TString>& formatSetting, bool matchAllSettings) {

@@ -316,7 +316,7 @@ DEFINE_REFCOUNTED_TYPE(IWireProtocolRowsetWriter)
 
 IWireProtocolRowsetWriterPtr CreateWireProtocolRowsetWriter(
     NCompression::ECodec codecId,
-    size_t desiredUncompressedBlockSize,
+    i64 desiredUncompressedBlockSize,
     NTableClient::TTableSchemaPtr schema,
     bool isSchemaful,
     const NLogging::TLogger& logger);

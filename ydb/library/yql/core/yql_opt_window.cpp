@@ -3101,7 +3101,7 @@ TExprNode::TPtr RebuildCalcOverWindowGroup(TPositionHandle pos, const TExprNode:
                 auto columnName = kvTuple->ChildPtr(0);
 
                 auto traits = kvTuple->ChildPtr(1);
-                YQL_ENSURE(traits->IsCallable({"Lag", "Lead", "RowNumber", "Rank", "DenseRank", "WindowTraits"}));
+                YQL_ENSURE(traits->IsCallable({"Lag", "Lead", "RowNumber", "Rank", "DenseRank", "WindowTraits", "PercentRank", "CumeDist", "NTile"}));
                 if (traits->IsCallable("WindowTraits")) {
                     YQL_ENSURE(traits->Head().GetTypeAnn());
                     const TTypeAnnotationNode& oldItemType = *traits->Head().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
@@ -3115,19 +3115,11 @@ TExprNode::TPtr RebuildCalcOverWindowGroup(TPositionHandle pos, const TExprNode:
                             .Add(5, traits->Child(5)->IsLambda() ? ctx.DeepCopyLambda(*traits->Child(5)) : traits->ChildPtr(5))
                         .Seal()
                         .Build();
-                } else {
-                    TExprNodeList args;
-                    args.push_back(inputType);
-                    if (traits->ChildrenSize() > 1) {
-                        YQL_ENSURE(traits->Head().GetTypeAnn());
-                        const TTypeAnnotationNode& oldItemType = *traits->Head().GetTypeAnn()->Cast<TTypeExprType>()->GetType()
-                            ->Cast<TListExprType>()->GetItemType();
-                        args.push_back(ctx.DeepCopyLambda(*ReplaceFirstLambdaArgWithCastStruct(*traits->Child(1), oldItemType, ctx)));
-                    }
-                    if (traits->ChildrenSize() > 2) {
-                        args.push_back(traits->ChildPtr(2));
-                    }
-                    traits = ctx.NewCallable(traits->Pos(), traits->Content(), std::move(args));
+                } else if (traits->IsCallable({"Lag", "Lead", "Rank", "DenseRank", "PercentRank"})) {
+                    YQL_ENSURE(traits->Head().GetTypeAnn());
+                    const TTypeAnnotationNode& oldItemType = *traits->Head().GetTypeAnn()->Cast<TTypeExprType>()->GetType()
+                        ->Cast<TListExprType>()->GetItemType();
+                    traits = ctx.ChangeChild(*traits, 1, ctx.DeepCopyLambda(*ReplaceFirstLambdaArgWithCastStruct(*traits->Child(1), oldItemType, ctx)));
                 }
 
                 winOnArgs.push_back(ctx.NewList(kvTuple->Pos(), {columnName, traits}));

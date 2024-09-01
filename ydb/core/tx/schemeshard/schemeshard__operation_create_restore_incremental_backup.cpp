@@ -105,9 +105,9 @@ void DoCreateAlterTable(
 
     PathIdFromPathId(dstTablePath.Base()->PathId, desc.MutablePathId());
 
-    auto& replicationConfig = *desc.MutableReplicationConfig();
-    replicationConfig.SetMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_RESTORE_INCREMENTAL_BACKUP);
-    replicationConfig.SetConsistency(NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_WEAK);
+    auto& restoreConfig = *desc.MutableIncrementalBackupConfig();
+    restoreConfig.SetMode(NKikimrSchemeOp::TTableIncrementalBackupConfig::RESTORE_MODE_INCREMENTAL_BACKUP);
+    restoreConfig.SetConsistency(NKikimrSchemeOp::TTableIncrementalBackupConfig::CONSISTENCY_WEAK);
 
     result.push_back(CreateAlterTable(NextPartId(opId, result), outTx));
 }

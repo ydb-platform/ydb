@@ -1,5 +1,7 @@
 LIBRARY()
 
+VERSION(5.19)
+
 LICENSE(LGPL-2.1-or-later)
 
 

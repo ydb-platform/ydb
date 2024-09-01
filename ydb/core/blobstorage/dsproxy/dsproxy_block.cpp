@@ -38,7 +38,7 @@ class TBlobStorageGroupBlockRequest : public TBlobStorageGroupRequestActor {
         // You can't call GetActorId before calling IsValidId
         Y_ABORT_UNLESS(Info->IsValidId(shortId), "Invalid VDiskId VDiskId# %s", shortId.ToString().c_str());
 
-        A_LOG_LOG_S(false, PriorityForStatusInbound(status), "DSPB01", "Handle TEvVBlockResult"
+        DSP_LOG_LOG_S(PriorityForStatusInbound(status), "DSPB01", "Handle TEvVBlockResult"
             << " status# " << NKikimrProto::EReplyStatus_Name(status).data()
             << " From# " << vdisk.ToString()
             << " NodeId# " << Info->GetActorId(vdisk).NodeId());
@@ -98,7 +98,7 @@ class TBlobStorageGroupBlockRequest : public TBlobStorageGroupRequestActor {
     void ReplyAndDie(NKikimrProto::EReplyStatus status) override {
         std::unique_ptr<TEvBlobStorage::TEvBlockResult> result(new TEvBlobStorage::TEvBlockResult(status));
         result->ErrorReason = ErrorReason;
-        A_LOG_LOG_S(true, PriorityForStatusResult(status), "DSPB04", "Result# " << result->Print(false));
+        DSP_LOG_LOG_S(PriorityForStatusResult(status), "DSPB04", "Result# " << result->Print(false));
         Mon->CountBlockResponseTime(TActivationContext::Now() - StartTime);
         return SendResponseAndDie(std::move(result));
     }
@@ -106,7 +106,7 @@ class TBlobStorageGroupBlockRequest : public TBlobStorageGroupRequestActor {
     void SendBlockRequest(const TVDiskID& vdiskId) {
         const ui64 cookie = TVDiskIdShort(vdiskId).GetRaw();
 
-        A_LOG_DEBUG_S("DSPB03", "Sending TEvVBlock Tablet# " << TabletId
+        DSP_LOG_DEBUG_S("DSPB03", "Sending TEvVBlock Tablet# " << TabletId
             << " Generation# " << Generation
             << " vdiskId# " << vdiskId
             << " node# " << Info->GetActorId(vdiskId).NodeId());
@@ -143,7 +143,7 @@ public:
     {}
 
     void Bootstrap() override {
-        A_LOG_DEBUG_S("DSPB05", "bootstrap"
+        DSP_LOG_DEBUG_S("DSPB05", "bootstrap"
             << " ActorId# " << SelfId()
             << " Group# " << Info->GroupID
             << " TabletId# " << TabletId

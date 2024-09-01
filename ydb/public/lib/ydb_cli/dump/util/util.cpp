@@ -34,4 +34,10 @@ TStatus MakeDirectory(TSchemeClient& schemeClient, const TString& path, const TM
     });
 }
 
+TStatus ModifyPermissions(TSchemeClient& schemeClient, const TString& path, const TModifyPermissionsSettings& settings) {
+    return NConsoleClient::RetryFunction([&]() -> TStatus {
+        return schemeClient.ModifyPermissions(path, settings).ExtractValueSync();
+    });
+}
+
 }

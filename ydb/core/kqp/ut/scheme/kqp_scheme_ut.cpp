@@ -4213,6 +4213,22 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetRetentionPeriod(), TDuration::Hours(1));
         }
 
+        { // alter
+            auto query = R"(
+                --!syntax_v1
+                ALTER TOPIC `/Root/table/feed_2` SET (
+                    RETENTION_PERIOD = Interval("PT2H")
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto desc = pq.DescribeTopic("/Root/table/feed_2").ExtractValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetRetentionPeriod(), TDuration::Hours(2));
+        }
+
         { // non-positive (invalid)
             auto query = R"(
                 --!syntax_v1
@@ -5518,7 +5534,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 month Int64 NOT NULL
             ) WITH (
                 DATA_SOURCE=")" << externalDataSourceName << R"(",
-                LOCATION="/folder1/*",
+                LOCATION="/folder1/",
                 FORMAT="json_as_string",
                 `projection.enabled`="true",
                 `projection.year.type`="integer",
@@ -5543,7 +5559,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_ASSERT(externalTable.ExternalTableInfo);
         UNIT_ASSERT_VALUES_EQUAL(externalTable.ExternalTableInfo->Description.ColumnsSize(), 4);
         UNIT_ASSERT_VALUES_EQUAL(externalTable.ExternalTableInfo->Description.GetDataSourcePath(), externalDataSourceName);
-        UNIT_ASSERT_VALUES_EQUAL(externalTable.ExternalTableInfo->Description.GetLocation(), "/folder1/*");
+        UNIT_ASSERT_VALUES_EQUAL(externalTable.ExternalTableInfo->Description.GetLocation(), "/folder1/");
     }
 
     Y_UNIT_TEST(CreateExternalTableWithUpperCaseSettings) {
@@ -5566,7 +5582,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 Month Int64 NOT NULL
             ) WITH (
                 DATA_SOURCE=")" << externalDataSourceName << R"(",
-                LOCATION="/folder1/*",
+                LOCATION="/folder1/",
                 FORMAT="json_as_string",
                 `projection.enabled`="true",
                 `projection.Year.type`="integer",
@@ -5591,7 +5607,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_ASSERT(externalTable.ExternalTableInfo);
         UNIT_ASSERT_VALUES_EQUAL(externalTable.ExternalTableInfo->Description.ColumnsSize(), 4);
         UNIT_ASSERT_VALUES_EQUAL(externalTable.ExternalTableInfo->Description.GetDataSourcePath(), externalDataSourceName);
-        UNIT_ASSERT_VALUES_EQUAL(externalTable.ExternalTableInfo->Description.GetLocation(), "/folder1/*");
+        UNIT_ASSERT_VALUES_EQUAL(externalTable.ExternalTableInfo->Description.GetLocation(), "/folder1/");
     }
 
     Y_UNIT_TEST(DoubleCreateExternalTable) {

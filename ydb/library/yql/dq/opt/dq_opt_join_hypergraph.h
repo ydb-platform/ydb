@@ -2,6 +2,7 @@
 
 
 #include <numeric>
+#include <util/string/join.h>
 #include <util/string/printf.h>
 #include "bitset.h"
 
@@ -304,14 +305,8 @@ private:
             
             auto* maybeEdge = Graph_.FindEdgeBetween(lhs, rhs);
             if (maybeEdge == nullptr) {
-                auto str = [](const TVector<TString>& v) -> TString {
-                    TString s;
-                    for (auto& el : v) { s += (el + ", "); }
-                    return s.empty()? s: s.substr(0, s.length() - 2);
-                };
-
                 const char* errStr = "There is no edge between {%s}, {%s}. The graf: %s";
-                Y_ENSURE(false, Sprintf(errStr, str(lhsLabels).c_str(), str(rhsLabels).c_str(), Graph_.String().c_str()));            
+                Y_ENSURE(false, Sprintf(errStr, JoinSeq(", ", lhsLabels).c_str(), JoinSeq(", ", rhsLabels).c_str(), Graph_.String().c_str()));            
             }
 
             size_t revEdgeIdx = maybeEdge->ReversedEdgeId;

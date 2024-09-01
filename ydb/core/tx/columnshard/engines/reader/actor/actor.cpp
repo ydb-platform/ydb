@@ -240,7 +240,6 @@ bool TColumnShardScan::ProduceResults() noexcept {
         }
         TMemoryProfileGuard mGuard("SCAN_PROFILE::RESULT::TO_KQP", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
         Result->ArrowBatch = shardedBatch.GetRecordBatch();
-        ReadMetadataRange->OnReplyConstruction(TabletId, *Result);
         Rows += batch->num_rows();
         Bytes += NArrow::GetTableDataSize(Result->ArrowBatch);
         
@@ -376,6 +375,7 @@ bool TColumnShardScan::SendResult(bool pageFault, bool lastBatch) {
         Y_ABORT_UNLESS(AckReceivedInstant);
         ScanCountersPool.AckWaitingInfo(TMonotonic::Now() - *AckReceivedInstant);
     }
+    ReadMetadataRange->OnReplyConstruction(TabletId, *Result);
     AckReceivedInstant.reset();
 
     Send(ScanComputeActorId, Result.Release(), IEventHandle::FlagTrackDelivery); // TODO: FlagSubscribeOnSession ?

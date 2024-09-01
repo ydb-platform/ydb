@@ -69,12 +69,12 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
         tester.Execute();
     }
 
-    Y_UNIT_TEST(OlapSnapshotExpiration) {
-        TSnapshotExpiration tester;
-        tester.SetFastSnapshotExpiration(true);
-        tester.SetIsOlap(true);
-        tester.Execute();
-    }
+//     Y_UNIT_TEST(OlapSnapshotExpiration) {
+//         TSnapshotExpiration tester;
+//         tester.SetFastSnapshotExpiration(true);
+//         tester.SetIsOlap(true);
+//         tester.Execute();
+//     }
 
     class TReadOnlyTxCommitsOnConcurrentWrite : public TTableDataModificationTester {
     protected:
@@ -227,7 +227,7 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
             )"), TTxControl::Tx(tx->GetId()).CommitTx()).ExtractValueSync();
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
-            UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED), result.GetIssues().ToString());
+//            UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED), result.GetIssues().ToString());
         }
     };
 

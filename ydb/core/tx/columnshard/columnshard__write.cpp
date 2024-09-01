@@ -314,11 +314,6 @@ public:
             return TConclusionStatus::Fail("incorrect message type");
         }
         if (!ReceivingShards.size() || !SendingShards.size()) {
-            //if (ReceivingShards.size()) {
-            //    SendingShards = ReceivingShards;
-            //} else {
-            //    ReceivingShards = SendingShards;
-            //}
             ReceivingShards.clear();
             SendingShards.clear();
         } else {
@@ -434,7 +429,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     const auto source = ev->Sender;
     const auto cookie = ev->Cookie;
     const auto behaviour = TOperationsManager::GetBehaviour(*ev->Get());
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("ev_write", record.DebugString());
+//    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("ev_write", record.DebugString());
     if (behaviour == EOperationBehaviour::Undefined) {
         Counters.GetTabletCounters()->IncCounter(COUNTER_WRITE_FAIL);
         auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(

@@ -48,8 +48,8 @@ public:
     std::optional<TMessageSeqNo> SeqNo;
 
 public:
-    static TFullTxInfo BuildFake() {
-        return TFullTxInfo(NKikimrTxColumnShard::TX_KIND_NONE, 0, NActors::TActorId(), 0, {});
+    static TFullTxInfo BuildFake(const NKikimrTxColumnShard::ETransactionKind kind) {
+        return TFullTxInfo(kind, 0, NActors::TActorId(), 0, {});
     }
 
     bool operator==(const TFullTxInfo& item) const = default;

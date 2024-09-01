@@ -329,14 +329,14 @@ public:
         return TConclusionStatus::Success();
     }
 
-    std::unique_ptr<NColumnShard::TEvWriteCommitSyncTransactionOperator> CreateTxOperator() const {
+    std::unique_ptr<NColumnShard::TEvWriteCommitSyncTransactionOperator> CreateTxOperator(const NKikimrTxColumnShard::ETransactionKind kind) const {
         AFL_VERIFY(ReceivingShards.size());
         if (IsPrimary()) {
             return std::make_unique<NColumnShard::TEvWriteCommitPrimaryTransactionOperator>(
-                TFullTxInfo::BuildFake(), LockId, ReceivingShards, SendingShards);
+                TFullTxInfo::BuildFake(kind), LockId, ReceivingShards, SendingShards);
         } else {
             return std::make_unique<NColumnShard::TEvWriteCommitSecondaryTransactionOperator>(
-                TFullTxInfo::BuildFake(), LockId, *ReceivingShards.begin(), ReceivingShards.contains(TabletId));
+                TFullTxInfo::BuildFake(kind), LockId, *ReceivingShards.begin(), ReceivingShards.contains(TabletId));
         }
     }
 
@@ -370,7 +370,7 @@ public:
             } else {
                 kind = NKikimrTxColumnShard::TX_KIND_COMMIT_WRITE_SECONDARY;
             }
-            proto = WriteCommit->CreateTxOperator()->SerializeToProto();
+            proto = WriteCommit->CreateTxOperator(kind)->SerializeToProto();
         } else {
             kind = NKikimrTxColumnShard::TX_KIND_COMMIT_WRITE;
         }
@@ -434,7 +434,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     const auto source = ev->Sender;
     const auto cookie = ev->Cookie;
     const auto behaviour = TOperationsManager::GetBehaviour(*ev->Get());
-//    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("ev_write", record.DebugString());
+    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("ev_write", record.DebugString());
     if (behaviour == EOperationBehaviour::Undefined) {
         Counters.GetTabletCounters()->IncCounter(COUNTER_WRITE_FAIL);
         auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(

@@ -682,8 +682,10 @@ std::pair<NYT::EValueType, bool> RowSpecYqlTypeToYtType(const NYT::TNode& rowSpe
 
     const auto& yqlType = (*type)[1].AsString();
     NYT::EValueType ytType;
-    if (yqlType == TStringBuf("String") || yqlType == TStringBuf("Longint") || yqlType == TStringBuf("Uuid") || yqlType == TStringBuf("JsonDocument") || yqlType == TStringBuf("DyNumber")) {
+    if (yqlType == TStringBuf("String") || yqlType == TStringBuf("Longint") || yqlType == TStringBuf("JsonDocument") || yqlType == TStringBuf("DyNumber")) {
         ytType = NYT::VT_STRING;
+    } else if (yqlType == TStringBuf("Uuid")) {
+        ytType = NYT::VT_UUID;
     } else if (yqlType == TStringBuf("Json")) {
         ytType = (nativeYtTypeFlags & NTCF_JSON) ? NYT::VT_JSON : NYT::VT_STRING;
     } else if (yqlType == TStringBuf("Decimal")) {
@@ -986,7 +988,7 @@ NYT::TTableSchema RowSpecToYTSchema(const NYT::TNode& rowSpec, ui64 nativeTypeCo
         }
     }
     nativeYtTypeFlags &= nativeTypeCompatibility;
-    bool useNativeTypes = nativeYtTypeFlags & (NTCF_COMPLEX | NTCF_DECIMAL | NTCF_UUID);
+    bool useNativeTypes = nativeYtTypeFlags & (NTCF_COMPLEX | NTCF_DECIMAL);
 
     THashMap<TString, std::pair<NYT::EValueType, bool>> fieldTypes;
     THashMap<TString, NYT::TNode> fieldNativeTypes;

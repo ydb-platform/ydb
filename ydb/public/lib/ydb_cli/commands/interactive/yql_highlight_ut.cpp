@@ -62,6 +62,14 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
 
     Y_UNIT_TEST(Keyword) {
         YQLHighlight highlight(Coloring);
+        Check(highlight, "SELECT", "kkkkkk");
+        Check(highlight, "ALTER", "kkkkk");
+        Check(highlight, "GROUP BY", "kkkkk kk");
+        Check(highlight, "INSERT", "kkkkkk");
+    }
+
+    Y_UNIT_TEST(SQL) {
+        YQLHighlight highlight(Coloring);
         Check(
             highlight,
             "SELECT id, alias from users",

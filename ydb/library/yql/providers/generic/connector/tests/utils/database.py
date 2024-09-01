@@ -17,9 +17,18 @@ class Database:
                 self.name = name[:63].lower()
             case EDataSourceKind.CLICKHOUSE:
                 self.name = name[:255]
+            case EDataSourceKind.MS_SQL_SERVER:
+                # For this kind of database this name is provided by the external logic
+                self.name = name
             case EDataSourceKind.MYSQL:
-                self.name = name[:63]
+                # For this kind of database this name is provided by the external logic
+                self.name = name
+            case EDataSourceKind.ORACLE:
+                # Oracle is not sensitive for identifiers until they are inclosed in quota marks,
+                # therefore, we'd better use uppercase for ease of testing
+                self.name = name[:127].upper()  # TODO: is it needed? max length of Oracle table name is 128 bytes/chars
             case EDataSourceKind.YDB:
+                # For this kind of database this name is provided by the external logic
                 self.name = name
             case _:
                 raise Exception(f'invalid data source: {self.kind}')
@@ -48,8 +57,12 @@ class Database:
                 return f'database "{self.name}" does not exist'
             case EDataSourceKind.YDB:
                 raise Exception("Fix me first in YQ-3315")
+            case EDataSourceKind.MS_SQL_SERVER:
+                return 'Cannot open database'
             case EDataSourceKind.MYSQL:
                 return 'Unknown database'
+            case EDataSourceKind.ORACLE:
+                raise Exception("Fix me first in YQ-3413")
             case _:
                 raise Exception(f'invalid data source: {self.kind}')
 
@@ -61,7 +74,11 @@ class Database:
                 return 'table does not exist'
             case EDataSourceKind.YDB:
                 return 'issues = [{\'Path not found\'}])'
+            case EDataSourceKind.MS_SQL_SERVER:
+                return 'table does not exist'
             case EDataSourceKind.MYSQL:
+                return 'table does not exist'
+            case EDataSourceKind.ORACLE:
                 return 'table does not exist'
             case _:
                 raise Exception(f'invalid data source: {self.kind}')

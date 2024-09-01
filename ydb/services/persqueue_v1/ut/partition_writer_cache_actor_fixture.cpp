@@ -188,6 +188,9 @@ void TPartitionWriterCacheActorFixture::WaitForPartitionWriterOps(const TWaitFor
     };
 
     Ctx->Runtime->DispatchEvents(options);
+
+    // Tests rely on unrelated events processed after the condition is satisfied
+    Ctx->Runtime->DispatchEvents({}, TInstant::Zero());
 }
 
 void TPartitionWriterCacheActorFixture::AdvanceCurrentTime(TDuration d)

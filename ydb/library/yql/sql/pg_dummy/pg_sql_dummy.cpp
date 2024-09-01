@@ -25,6 +25,14 @@ std::unique_ptr<NYql::NPg::IExtensionSqlParser> CreateExtensionSqlParser() {
     throw yexception() << "CreateExtensionSqlParser: PG types are not supported";
 }
 
+std::unique_ptr<NYql::NPg::ISystemFunctionsParser> CreateSystemFunctionsParser() {
+    throw yexception() << "CreateSystemFunctionsParser: PG types are not supported";
+}
+
+std::unique_ptr<NYql::NPg::ISqlLanguageParser> CreateSqlLanguageParser() {
+    throw yexception() << "CreateSqlLanguageParser: PG types are not supported";
+}
+
 } // NSQLTranslationPG
 
 namespace NYql {

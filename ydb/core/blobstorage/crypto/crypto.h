@@ -10,7 +10,7 @@
 #define ChaChaVec ChaCha
 #define Poly1305Vec Poly1305
 #define CHACHA_BPI 1
-#elif __AVX512__
+#elif __AVX512F__
 #include <ydb/core/blobstorage/crypto/chacha_vec.h>
 #include <ydb/core/blobstorage/crypto/chacha_512.h>
 #include <ydb/core/blobstorage/crypto/poly1305_vec.h>

@@ -32,7 +32,7 @@ public:
         const std::vector<TString>& omittedInaccessibleColumns,
         TTableSchemaPtr schema,
         const NApi::NRpcProxy::NProto::TRowsetStatistics& statistics)
-        : Underlying_ (std::move(underlying))
+        : Underlying_(std::move(underlying))
         , StartRowIndex_(startRowIndex)
         , TableSchema_(std::move(schema))
         , OmittedInaccessibleColumns_(omittedInaccessibleColumns)
@@ -65,7 +65,7 @@ public:
         return dataStatistics;
     }
 
-    TFuture<void> GetReadyEvent() override
+    TFuture<void> GetReadyEvent() const override
     {
         return ReadyEvent_;
     }

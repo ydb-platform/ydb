@@ -16,7 +16,7 @@
 
 ```LIKE(`prefix`, `pattern`, `suffix`, `view`)``` и ```REGEXP(`prefix`, `pattern`, `suffix`, `view`)``` — аргумент pattern задается в формате, аналогичном одноименным бинарным операторам: [LIKE](../expressions.md#like) и [REGEXP](../expressions.md#regexp).
 
-```FILTER(`prefix`, `callable`, `suffix`, `view`)``` — аргумент callable должен являться вызываемым выражением с сигнатурой `(String)->Bool`, который будет вызван для каждой таблицы/подкаталога в каталоге prefix. В запросе будут участвовать только те таблицы, для которых вызываемое значение вернуло `true`. В качестве вызываемого значения удобнее всего использовать [лямбда функции](../.expressions.md#lambda){% if yql == true %}, либо UDF на [Python](../../../udf/python.md) или [JavaScript](../../../udf/javascript.md){% endif %}.
+```FILTER(`prefix`, `callable`, `suffix`, `view`)``` — аргумент callable должен являться вызываемым выражением с сигнатурой `(String)->Bool`, который будет вызван для каждой таблицы/подкаталога в каталоге prefix. В запросе будут участвовать только те таблицы, для которых вызываемое значение вернуло `true`. В качестве вызываемого значения удобнее всего использовать [лямбда функции](../expressions.md#lambda){% if yql == true %}, либо UDF на [Python](../../../udf/python.md) или [JavaScript](../../../udf/javascript.md){% endif %}.
 
 {% note warning %}
 

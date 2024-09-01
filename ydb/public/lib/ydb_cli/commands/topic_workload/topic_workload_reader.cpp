@@ -195,9 +195,9 @@ void TTopicWorkloadReader::TryCommitTableChanges(TTopicWorkloadReaderParams& par
 
     auto execTimes = txSupport->CommitTx(params.UseTableSelect, params.UseTableUpsert);
 
-    params.StatsCollector->AddSelectEvent(params.ReaderIdx, {execTimes.SelectTime.MilliSeconds()});
-    params.StatsCollector->AddUpsertEvent(params.ReaderIdx, {execTimes.UpsertTime.MilliSeconds()});
-    params.StatsCollector->AddCommitTxEvent(params.ReaderIdx, {execTimes.CommitTime.MilliSeconds()});
+    params.StatsCollector->AddReaderSelectEvent(params.ReaderIdx, {execTimes.SelectTime.MilliSeconds()});
+    params.StatsCollector->AddReaderUpsertEvent(params.ReaderIdx, {execTimes.UpsertTime.MilliSeconds()});
+    params.StatsCollector->AddReaderCommitTxEvent(params.ReaderIdx, {execTimes.CommitTime.MilliSeconds()});
 }
 
 void TTopicWorkloadReader::GracefullShutdown(TVector<NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent>& stopPartitionSessionEvents)

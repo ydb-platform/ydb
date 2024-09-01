@@ -180,7 +180,7 @@ private:
             return {};
         }
 
-        const TString& GetEndpointAddress() const override
+        const std::string& GetEndpointAddress() const override
         {
             static const TString EmptyAddress;
             return EmptyAddress;

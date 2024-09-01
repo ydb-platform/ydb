@@ -1196,7 +1196,7 @@ class TWireProtocolRowsetWriter
 public:
     TWireProtocolRowsetWriter(
         NCompression::ECodec codecId,
-        size_t desiredUncompressedBlockSize,
+        i64 desiredUncompressedBlockSize,
         TTableSchemaPtr schema,
         bool schemaful,
         const NLogging::TLogger& logger)
@@ -1296,7 +1296,7 @@ private:
 
 IWireProtocolRowsetWriterPtr CreateWireProtocolRowsetWriter(
     NCompression::ECodec codecId,
-    size_t desiredUncompressedBlockSize,
+    i64 desiredUncompressedBlockSize,
     TTableSchemaPtr schema,
     bool schemaful,
     const NLogging::TLogger& logger)

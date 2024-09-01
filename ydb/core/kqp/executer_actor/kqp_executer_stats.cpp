@@ -167,7 +167,7 @@ void TTableStats::Resize(ui32 taskCount) {
 
 void TStageExecutionStats::Resize(ui32 taskCount) {
     CpuTimeUs.Resize(taskCount);
-    SourceCpuTimeUs.Resize(taskCount);
+    SourceCpuTimeUs.resize(taskCount);
 
     InputRows.resize(taskCount);
     InputBytes.resize(taskCount);
@@ -187,6 +187,11 @@ void TStageExecutionStats::Resize(ui32 taskCount) {
     WaitInputTimeUs.resize(taskCount);
     WaitOutputTimeUs.resize(taskCount);
 
+    SpillingComputeBytes.Resize(taskCount);
+    SpillingChannelBytes.Resize(taskCount);
+    SpillingComputeTimeUs.Resize(taskCount);
+    SpillingChannelTimeUs.Resize(taskCount);
+
     for (auto& p : Ingress) p.second.Resize(taskCount);
     for (auto& p : Input)   p.second.Resize(taskCount);
     for (auto& p : Output)  p.second.Resize(taskCount);
@@ -198,16 +203,16 @@ void TStageExecutionStats::Resize(ui32 taskCount) {
 void TStageExecutionStats::SetHistorySampleCount(ui32 historySampleCount) {
     HistorySampleCount = historySampleCount;
     CpuTimeUs.HistorySampleCount = historySampleCount;
-    SourceCpuTimeUs.HistorySampleCount = historySampleCount;
     MaxMemoryUsage.HistorySampleCount = historySampleCount;
+    SpillingComputeBytes.HistorySampleCount = historySampleCount;
+    SpillingChannelBytes.HistorySampleCount = historySampleCount;
+    SpillingComputeTimeUs.HistorySampleCount = historySampleCount;
+    SpillingChannelTimeUs.HistorySampleCount = historySampleCount;
 }
 
 void TStageExecutionStats::ExportHistory(ui64 baseTimeMs, NYql::NDqProto::TDqStageStats& stageStats) {
     if (stageStats.HasCpuTimeUs()) {
         CpuTimeUs.ExportHistory(baseTimeMs, *stageStats.MutableCpuTimeUs());
-    }
-    if (stageStats.HasSourceCpuTimeUs()) {
-        SourceCpuTimeUs.ExportHistory(baseTimeMs, *stageStats.MutableSourceCpuTimeUs());
     }
     for (auto& p : *stageStats.MutableIngress()) {
         auto it = Ingress.find(p.first);
@@ -235,6 +240,18 @@ void TStageExecutionStats::ExportHistory(ui64 baseTimeMs, NYql::NDqProto::TDqSta
     }
     if (stageStats.HasMaxMemoryUsage()) {
         MaxMemoryUsage.ExportHistory(baseTimeMs, *stageStats.MutableMaxMemoryUsage());
+    }
+    if (stageStats.HasSpillingComputeBytes()) {
+        SpillingComputeBytes.ExportHistory(baseTimeMs, *stageStats.MutableSpillingComputeBytes());
+    }
+    if (stageStats.HasSpillingChannelBytes()) {
+        SpillingChannelBytes.ExportHistory(baseTimeMs, *stageStats.MutableSpillingChannelBytes());
+    }
+    if (stageStats.HasSpillingComputeTimeUs()) {
+        SpillingComputeTimeUs.ExportHistory(baseTimeMs, *stageStats.MutableSpillingComputeTimeUs());
+    }
+    if (stageStats.HasSpillingChannelTimeUs()) {
+        SpillingChannelTimeUs.ExportHistory(baseTimeMs, *stageStats.MutableSpillingChannelTimeUs());
     }
 }
 
@@ -295,7 +312,7 @@ ui64 TStageExecutionStats::UpdateStats(const NYql::NDqProto::TDqTaskStats& taskS
     }
 
     CpuTimeUs.SetNonZero(index, taskStats.GetCpuTimeUs());
-    SourceCpuTimeUs.SetNonZero(index, taskStats.GetSourceCpuTimeUs());
+    SetNonZero(SourceCpuTimeUs[index], taskStats.GetSourceCpuTimeUs());
 
     SetNonZero(InputRows[index], taskStats.GetInputRows());
     SetNonZero(InputBytes[index], taskStats.GetInputBytes());
@@ -320,6 +337,11 @@ ui64 TStageExecutionStats::UpdateStats(const NYql::NDqProto::TDqTaskStats& taskS
     SetNonZero(DurationUs[index], durationUs);
     SetNonZero(WaitInputTimeUs[index], taskStats.GetWaitInputTimeUs());
     SetNonZero(WaitOutputTimeUs[index], taskStats.GetWaitOutputTimeUs());
+
+    SpillingComputeBytes.SetNonZero(index, taskStats.GetSpillingComputeWriteBytes());
+    SpillingChannelBytes.SetNonZero(index, taskStats.GetSpillingChannelWriteBytes());
+    SpillingComputeTimeUs.SetNonZero(index, taskStats.GetSpillingComputeReadTimeUs() + taskStats.GetSpillingComputeWriteTimeUs());
+    SpillingChannelTimeUs.SetNonZero(index, taskStats.GetSpillingChannelReadTimeUs() + taskStats.GetSpillingChannelWriteTimeUs());
 
     for (auto& tableStat : taskStats.GetTables()) {
         auto tablePath = tableStat.GetTablePath();
@@ -594,6 +616,12 @@ void TQueryExecutionStats::AddComputeActorFullStatsByTask(
     UpdateAggr(stageStats->MutableDurationUs(), stats.GetDurationUs());
     UpdateAggr(stageStats->MutableWaitInputTimeUs(), task.GetWaitInputTimeUs());
     UpdateAggr(stageStats->MutableWaitOutputTimeUs(), task.GetWaitOutputTimeUs());
+
+    UpdateAggr(stageStats->MutableSpillingComputeBytes(), task.GetSpillingComputeWriteBytes());
+    UpdateAggr(stageStats->MutableSpillingChannelBytes(), task.GetSpillingChannelWriteBytes());
+    UpdateAggr(stageStats->MutableSpillingComputeTimeUs(), task.GetSpillingComputeReadTimeUs() + task.GetSpillingComputeWriteTimeUs());
+    UpdateAggr(stageStats->MutableSpillingChannelTimeUs(), task.GetSpillingChannelReadTimeUs() + task.GetSpillingChannelWriteTimeUs());
+
     FillStageDurationUs(*stageStats);
 
     for (auto& sourcesStat : task.GetSources()) {
@@ -964,7 +992,7 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
 
         stageStats.SetBaseTimeMs(BaseTimeMs);
         p.second.CpuTimeUs.ExportAggStats(BaseTimeMs, *stageStats.MutableCpuTimeUs());
-        p.second.SourceCpuTimeUs.ExportAggStats(BaseTimeMs, *stageStats.MutableSourceCpuTimeUs());
+        ExportAggStats(p.second.SourceCpuTimeUs, *stageStats.MutableSourceCpuTimeUs());
         p.second.MaxMemoryUsage.ExportAggStats(BaseTimeMs, *stageStats.MutableMaxMemoryUsage());
 
         ExportAggStats(p.second.InputRows, *stageStats.MutableInputRows());
@@ -984,6 +1012,12 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
         ExportAggStats(p.second.DurationUs, *stageStats.MutableDurationUs());
         ExportAggStats(p.second.WaitInputTimeUs, *stageStats.MutableWaitInputTimeUs());
         ExportAggStats(p.second.WaitOutputTimeUs, *stageStats.MutableWaitOutputTimeUs());
+
+        p.second.SpillingComputeBytes.ExportAggStats(BaseTimeMs, *stageStats.MutableSpillingComputeBytes());
+        p.second.SpillingChannelBytes.ExportAggStats(BaseTimeMs, *stageStats.MutableSpillingChannelBytes());
+        p.second.SpillingComputeTimeUs.ExportAggStats(BaseTimeMs, *stageStats.MutableSpillingComputeTimeUs());
+        p.second.SpillingChannelTimeUs.ExportAggStats(BaseTimeMs, *stageStats.MutableSpillingChannelTimeUs());
+
         FillStageDurationUs(stageStats);
 
         for (auto& p2 : p.second.Tables) {

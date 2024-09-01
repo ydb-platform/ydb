@@ -206,7 +206,7 @@ public:
     }
 
     // Custom methods.
-    const TString& GetEndpointAddress() const
+    const std::string& GetEndpointAddress() const
     {
         return EndpointAddress_;
     }
@@ -285,9 +285,11 @@ private:
                 NYT::Ref(Tracer_.Get());
             }
             InitialMetadataBuilder_.Add(RequestIdMetadataKey, ToString(Request_->GetRequestId()));
-            InitialMetadataBuilder_.Add(UserMetadataKey, Request_->GetUser());
-            if (Request_->GetUserTag()) {
-                InitialMetadataBuilder_.Add(UserTagMetadataKey, Request_->GetUserTag());
+            // TODO(babenko): switch to std::string
+            InitialMetadataBuilder_.Add(UserMetadataKey, TString(Request_->GetUser()));
+            if (!Request_->GetUserTag().empty()) {
+                // TODO(babenko): switch to std::string
+                InitialMetadataBuilder_.Add(UserTagMetadataKey, TString(Request_->GetUserTag()));
             }
 
             TProtocolVersion protocolVersion{
@@ -722,7 +724,7 @@ class TChannelFactory
     : public IChannelFactory
 {
 public:
-    IChannelPtr CreateChannel(const TString& address) override
+    IChannelPtr CreateChannel(const std::string& address) override
     {
         auto config = New<TChannelConfig>();
         config->Address = address;

@@ -76,7 +76,7 @@ public:
         }
 
         ui32 GetLocalIndex(const ui32 position) const {
-            AFL_VERIFY(Contains(position));
+            AFL_VERIFY(Contains(position))("pos", position)("start", GlobalStartPosition);
             return position - GlobalStartPosition;
         }
 

@@ -299,6 +299,7 @@ void RegisterGreaterOrEqual(TKernelFamilyMap& kernelFamilyMap) {
 
     AddNumericComparisonKernels<TGreaterOrEqualOp>(*family);
     AddDateComparisonKernels<TDiffDateGreaterOrEqualOp>(*family);
+    AddDecimalComparisonKernels<TDecimalGreaterOrEqual>(*family);
     RegisterStringKernelGreaterOrEqual(*family);
 
     kernelFamilyMap["GreaterOrEqual"] = std::move(family);

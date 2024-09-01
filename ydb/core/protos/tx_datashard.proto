@@ -1429,23 +1429,12 @@ message TEvBuildIndexProgressResponse {
     optional uint64 OwnerId = 3;
     optional uint64 PathId = 4;
 
-    enum EStatus {
-        INVALID = 0;
-        ACCEPTED = 1;
-        INPROGRESS = 2;
-        DONE = 3;
-
-        ABORTED = 4;
-        BUILD_ERROR = 5;
-        BAD_REQUEST = 6;
-    }
-
-    optional EStatus Status = 5;
+    optional NKikimrIndexBuilder.EBuildStatus Status = 5;
 
     optional Ydb.StatusIds.StatusCode UploadStatus = 6;
     repeated Ydb.Issue.IssueMessage Issues = 7;
 
-    optional NKikimrTx.TKeyRange RequestedKeyRange = 8;
+    reserved 8;
     optional bytes LastKeyAck = 9;
 
     optional uint64 RowsDelta = 10;
@@ -1462,16 +1451,20 @@ message TEvSampleKRequest {
     optional NKikimrProto.TPathID PathId = 3;
 
     optional uint64 K = 4;
+    // For now we use tablet id as seed value, but it's not convinient for tests
     optional uint64 Seed = 5;
+    // We want to sample small instead of large probabilites
+    // because size of message will be smaller (varint)
+    optional uint64 MaxProbability = 6;
 
-    repeated string Columns = 6;
-    optional NKikimrTx.TKeyRange KeyRange = 7;
+    repeated string Columns = 7;
+    optional NKikimrTx.TKeyRange KeyRange = 8;
 
-    optional uint64 SnapshotTxId = 8;
-    optional uint64 SnapshotStep = 9;
+    optional uint64 SnapshotTxId = 9;
+    optional uint64 SnapshotStep = 10;
 
-    optional uint64 SeqNoGeneration = 10;
-    optional uint64 SeqNoRound = 11;
+    optional uint64 SeqNoGeneration = 11;
+    optional uint64 SeqNoRound = 12;
 }
 
 message TEvSampleKResponse {
@@ -1480,24 +1473,17 @@ message TEvSampleKResponse {
     optional uint64 TabletId = 2;
     optional NKikimrProto.TPathID PathId = 3;
 
-    enum EStatus {
-        INVALID = 0;
-        DONE = 1;
-
-        ABORTED = 2;
-        BAD_REQUEST = 3;
-    }
-
-    optional EStatus Status = 4;
+    optional NKikimrIndexBuilder.EBuildStatus Status = 4;
     repeated Ydb.Issue.IssueMessage Issues = 5;
 
-    optional NKikimrTx.TKeyRange RequestedKeyRange = 6;
+    optional uint64 RowsDelta = 6;
+    optional uint64 BytesDelta = 7;
 
-    optional uint64 RequestSeqNoGeneration = 7;
-    optional uint64 RequestSeqNoRound = 8;
+    optional uint64 RequestSeqNoGeneration = 8;
+    optional uint64 RequestSeqNoRound = 9;
 
-    repeated uint64 Probabilities = 9;
-    repeated bytes Rows = 10;
+    repeated uint64 Probabilities = 10;
+    repeated bytes Rows = 11;
 }
 
 message TEvCdcStreamScanRequest {
@@ -1570,6 +1556,8 @@ message TEvKqpScan {
     optional bytes OlapProgram = 19;
     optional NKikimrSchemeOp.EOlapProgramType OlapProgramType = 20;
     optional TComputeShardingPolicy ComputeShardingPolicy = 23;
+    optional uint64 LockTxId = 24;
+    optional uint32 LockNodeId = 25;
 }
 
 message TEvCompactTable {

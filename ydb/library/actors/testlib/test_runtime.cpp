@@ -1166,6 +1166,26 @@ namespace NActors {
             tempEdgeEventsCaptor.Reset(new TTempEdgeEventsCaptor(*this));
         }
 
+        auto checkStopConditions = [&](bool perMessage = false) -> bool {
+            // Note: too many tests expect unrelated messages to be
+            // processed before simulation is stopped.
+            if (!perMessage) {
+                if (localContext.FinalEventFound) {
+                    return true;
+                }
+
+                if (!localContext.FoundNonEmptyMailboxes.empty()) {
+                    return true;
+                }
+            }
+
+            if (options.CustomFinalCondition && options.CustomFinalCondition()) {
+                return true;
+            }
+
+            return false;
+        };
+
         TEventMailBoxList& currentMailboxes = useRestrictedMailboxes ? restrictedMailboxes : Mailboxes;
         while (!currentMailboxes.empty()) {
             bool hasProgress = true;
@@ -1195,7 +1215,8 @@ namespace NActors {
                     isEmpty = true;
                     auto mboxIt = startWithMboxIt;
                     TDeque<TEventMailboxId> suspectedBoxes;
-                    while (true) {
+                    bool stopCondition = false;
+                    while (!stopCondition) {
                         auto& mbox = *mboxIt;
                         bool isIgnored = true;
                         if (!mbox.second->IsEmpty()) {
@@ -1264,6 +1285,9 @@ namespace NActors {
                                         case EEventAction::PROCESS:
                                             UpdateFinalEventsStatsForEachContext(*ev);
                                             SendInternal(ev.Release(), mbox.first.NodeId - FirstNodeId, false);
+                                            if (checkStopConditions(/* perMessage */ true)) {
+                                                stopCondition = true;
+                                            }
                                             break;
                                         case EEventAction::DROP:
                                             // do nothing
@@ -1305,18 +1329,16 @@ namespace NActors {
                             currentMailboxes.erase(it);
                         }
                     }
+
+                    if (stopCondition) {
+                        return true;
+                    }
                 }
             }
 
-            if (localContext.FinalEventFound) {
+            if (checkStopConditions()) {
                 return true;
             }
-
-            if (!localContext.FoundNonEmptyMailboxes.empty())
-                return true;
-
-            if (options.CustomFinalCondition && options.CustomFinalCondition())
-                return true;
 
             if (options.FinalEvents.empty()) {
                 for (auto& mbox : currentMailboxes) {

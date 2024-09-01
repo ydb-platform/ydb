@@ -110,6 +110,41 @@ TFuture<T> TBoundedNonblockingQueue<T>::Dequeue()
     }
 }
 
+template <class T>
+void TBoundedNonblockingQueue<T>::Drain(const TError& error)
+{
+    auto guard = Guard(SpinLock_);
+
+    std::vector<TPromise<T>> consumers;
+    consumers.reserve(ConsumerQueue_.size());
+
+    std::vector<TPromise<void>> producers;
+    producers.reserve(ProducerQueue_.size());
+
+    while (!ConsumerQueue_.empty()) {
+        auto promise = ConsumerQueue_.front();
+        ConsumerQueue_.pop();
+        consumers.push_back(std::move(promise));
+    }
+
+    while (!ProducerQueue_.empty()) {
+        auto promise = ProducerQueue_.front();
+        ProducerQueue_.pop();
+        producers.push_back(std::move(promise));
+    }
+
+    guard.Release();
+
+    auto resultError = TError("Queue was drained with error") << error;
+
+    for (const auto& consumer : consumers) {
+        consumer.Set(resultError);
+    }
+    for (const auto& producer : producers) {
+        producer.Set(resultError);
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NConcurrency

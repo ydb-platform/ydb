@@ -194,6 +194,11 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
         return false;
     }
 
+    // We need snapshot for stream lookup, besause it's used for dependent reads
+    if (hasStreamLookup) {
+        return true;
+    }
+
     // We need snapshot when there are multiple table read phases, most
     // likely it involves multiple tables and we would have to use a
     // distributed commit otherwise. Taking snapshot helps as avoid TLI

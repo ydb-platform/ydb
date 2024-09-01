@@ -15,13 +15,31 @@ class TReplicationCardCacheConfig
     , public NRpc::TBalancingChannelConfig
     , public NRpc::TRetryingChannelConfig
 {
+public:
+    bool EnableWatching;
+
     REGISTER_YSON_STRUCT(TReplicationCardCacheConfig);
 
-    static void Register(TRegistrar)
-    { }
+    static void Register(TRegistrar registrar);
 };
 
 DEFINE_REFCOUNTED_TYPE(TReplicationCardCacheConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TReplicationCardCacheDynamicConfig
+    : public virtual NYTree::TYsonStruct
+{
+public:
+    std::optional<bool> EnableWatching;
+
+    REGISTER_YSON_STRUCT(TReplicationCardCacheDynamicConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TReplicationCardCacheDynamicConfig)
+
 
 ////////////////////////////////////////////////////////////////////////////////
 

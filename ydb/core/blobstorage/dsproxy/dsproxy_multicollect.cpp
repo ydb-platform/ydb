@@ -40,7 +40,7 @@ class TBlobStorageGroupMultiCollectRequest : public TBlobStorageGroupRequestActo
 
     void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ev) {
         const TEvBlobStorage::TEvCollectGarbageResult &res = *ev->Get();
-        A_LOG_LOG_S(true, PriorityForStatusResult(res.Status), "BPMC1", "Handle TEvCollectGarbageResult"
+        DSP_LOG_LOG_S(PriorityForStatusResult(res.Status), "BPMC1", "Handle TEvCollectGarbageResult"
             << " status# " << NKikimrProto::EReplyStatus_Name(res.Status)
             << " FlagRequestsInFlight# " << FlagRequestsInFlight
             << " CollectRequestsInFlight " << CollectRequestsInFlight);
@@ -153,7 +153,7 @@ public:
             isCollect, CollectGeneration, CollectStep, keepPart.release(), doNotKeepPart.release(), Deadline, false,
             Hard));
         ev->Decommission = Decommission; // retain decommission flag
-        R_LOG_DEBUG_S("BPMC3", "SendRequest idx# " << idx
+        DSP_LOG_DEBUG_S("BPMC3", "SendRequest idx# " << idx
             << " withCollect# " << withCollect
             << " isCollect# " << isCollect
             << " ev# " << ev->ToString());
@@ -170,7 +170,7 @@ public:
     }
 
     void Bootstrap() override {
-        A_LOG_INFO_S("BPMC4", "bootstrap"
+        DSP_LOG_INFO_S("BPMC4", "bootstrap"
             << " ActorId# " << SelfId()
             << " Group# " << Info->GroupID
             << " TabletId# " << TabletId
@@ -184,11 +184,11 @@ public:
             << " Hard# " << (Hard ? "true" : "false"));
 
         for (const auto& item : Keep ? *Keep : TVector<TLogoBlobID>()) {
-            A_LOG_INFO_S("BPMC5", "Keep# " << item);
+            DSP_LOG_INFO_S("BPMC5", "Keep# " << item);
         }
 
         for (const auto& item : DoNotKeep ? *DoNotKeep : TVector<TLogoBlobID>()) {
-            A_LOG_INFO_S("BPMC6", "DoNotKeep# " << item);
+            DSP_LOG_INFO_S("BPMC6", "DoNotKeep# " << item);
         }
 
         for (ui64 idx = 0; idx < Iterations - (Collect ? 1 : 0); ++idx) {

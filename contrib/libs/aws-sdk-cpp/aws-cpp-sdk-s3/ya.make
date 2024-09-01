@@ -6,6 +6,8 @@ LICENSE(Apache-2.0)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
+VERSION(1.11.37)
+
 PEERDIR(
     contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core
     contrib/restricted/aws/aws-c-auth

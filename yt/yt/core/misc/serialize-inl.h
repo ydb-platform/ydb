@@ -7,6 +7,8 @@
 #include "collection_helpers.h"
 #include "maybe_inf.h"
 
+#include <yt/yt/core/phoenix/concepts.h>
+
 #include <yt/yt/core/yson/string.h>
 
 #include <library/cpp/yt/small_containers/compact_vector.h>
@@ -513,6 +515,7 @@ struct TValueBoundSerializer
     { };
 
     template <class T, class C>
+        requires (NPhoenix2::SupportsPhoenix2<T> || !NPhoenix2::SupportsPersist<T, C>)
     struct TSaver<
         T,
         C,
@@ -526,6 +529,7 @@ struct TValueBoundSerializer
     };
 
     template <class T, class C>
+        requires (NPhoenix2::SupportsPhoenix2<T> || !NPhoenix2::SupportsPersist<T, C>)
     struct TLoader<
         T,
         C,
@@ -538,6 +542,7 @@ struct TValueBoundSerializer
     };
 
     template <class T, class C>
+        requires (!NPhoenix2::SupportsPhoenix2<T>)
     struct TSaver<
         T,
         C,
@@ -550,6 +555,7 @@ struct TValueBoundSerializer
     };
 
     template <class T, class C>
+        requires (!NPhoenix2::SupportsPhoenix2<T>)
     struct TLoader<
         T,
         C,

@@ -48,6 +48,8 @@ public:
     // Dequeued futures could be set in arbitrary order.
     TFuture<T> Dequeue();
 
+    void Drain(const TError& error);
+
 private:
     const i64 SizeLimit_ = 0;
 

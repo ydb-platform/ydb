@@ -27,9 +27,13 @@ private:
     std::shared_ptr<arrow::Schema> GetArrowSchema() const;
     YDB_FLAG_ACCESSOR(WithJsonDocument, false);
     YDB_ACCESSOR(TString, OptionalStorageId, "__MEMORY");
+protected:
     TString ShardingMethod = "HASH_FUNCTION_CONSISTENCY_64";
+private:
     bool WithSomeNulls_ = false;
 protected:
+    void CreateSchemaOlapTableWithStore(const TString tableSchema, TString tableName = "olapTable", TString storeName = "olapStore",
+        ui32 storeShardsCount = 4, ui32 tableShardsCount = 3);
     void CreateOlapTableWithStore(TString tableName = "olapTable", TString storeName = "olapStore",
         ui32 storeShardsCount = 4, ui32 tableShardsCount = 3);
 public:

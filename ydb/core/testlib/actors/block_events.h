@@ -27,7 +27,7 @@ namespace NActors {
          * Unblocks up to count events at the front of the deque, allowing them
          * to be handled by the destination actor.
          */
-        TBlockEvents& Unblock(size_t count = -1) {
+        TBlockEvents& Unblock(size_t count = Max<size_t>()) {
             while (!this->empty() && count > 0) {
                 auto& ev = this->front();
                 if (!Stopped) {
@@ -36,6 +36,10 @@ namespace NActors {
                 }
                 ui32 nodeId = ev->GetRecipientRewrite().NodeId();
                 ui32 nodeIdx = nodeId - Runtime.GetFirstNodeId();
+                Cerr << "... unblocking " << (ev->HasEvent() ? TypeName(*ev->GetBase()) : TypeName<TEvType>())
+                    << " from " << Runtime.FindActorName(ev->Sender)
+                    << " to " << Runtime.FindActorName(ev->GetRecipientRewrite())
+                    << Endl;
                 Runtime.Send(ev.Release(), nodeIdx, /* viaActorSystem */ true);
                 this->pop_front();
                 --count;
@@ -67,6 +71,10 @@ namespace NActors {
                 return;
             }
 
+            Cerr << "... blocking " << (ev->HasEvent() ? TypeName(*ev->GetBase()) : TypeName<TEvType>())
+                << " from " << Runtime.FindActorName(ev->Sender)
+                << " to " << Runtime.FindActorName(ev->GetRecipientRewrite())
+                << Endl;
             this->emplace_back(std::move(ev));
         }
 

@@ -54,7 +54,7 @@ bool TTopicWorkloadWriterWorker::WaitForInitSeqNo()
     NThreading::TFuture<ui64> InitSeqNo = WriteSession->GetInitSeqNo();
     while (!*Params.ErrorFlag) {
         if (!InitSeqNo.HasValue() && !InitSeqNo.Wait(TDuration::Seconds(1))) {
-            WRITE_LOG(Params.Log, ELogPriority::TLOG_WARNING, "No initial sequence number.");
+            WRITE_LOG(Params.Log, ELogPriority::TLOG_WARNING, TStringBuilder() << "No initial sequence number for ProducerId " << Params.ProducerId << " PartitionId " << Params.PartitionId);
             Sleep(TDuration::Seconds(1));
             continue;
         }
@@ -80,10 +80,10 @@ bool TTopicWorkloadWriterWorker::WaitForInitSeqNo()
     return false;
 }
 
-void TTopicWorkloadWriterWorker::Process() {
+void TTopicWorkloadWriterWorker::Process(TInstant endTime) {
     Sleep(TDuration::Seconds((float)Params.WarmupSec * Params.WriterIdx / Params.ProducerThreadCount));
-
-    const TInstant endTime = TInstant::Now() + TDuration::Seconds(Params.TotalSec);
+    
+    TInstant commitTime = TInstant::Now() + TDuration::Seconds(Params.CommitPeriod);
 
     StartTimestamp = Now();
     WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder() << "StartTimestamp " << StartTimestamp);
@@ -127,7 +127,7 @@ void TTopicWorkloadWriterWorker::Process() {
                 WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder() << "Inflight size " << InflightMessages.size() << " writingAllowed " << writingAllowed);
             }
 
-            if (writingAllowed)
+            if (writingAllowed && !WaitForCommitTx)
             {
                 TString data = GetGeneratedMessage();
 
@@ -137,14 +137,39 @@ void TTopicWorkloadWriterWorker::Process() {
 
                 BytesWritten += Params.MessageSize;
 
-                WriteSession->Write(std::move(ContinuationToken.GetRef()), data, MessageId, createTimestamp);
+                if (TxSupport && !TxSupport->Transaction) {
+                    TxSupport->BeginTx();
+                }
+
+                NTopic::TWriteMessage writeMessage(data);
+                writeMessage.SeqNo(MessageId);
+                writeMessage.CreateTimestamp(createTimestamp);
+                if (TxSupport) {
+                    writeMessage.Tx(*TxSupport->Transaction);
+                }
+
+                WriteSession->Write(std::move(ContinuationToken.GetRef()), std::move(writeMessage));
+
+                if (TxSupport) {
+                    TxSupport->AppendRow("");
+                }
 
                 WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder() << "Written message " << MessageId << " CreateTimestamp " << createTimestamp << " delta from now " << (Params.ByteRate == 0 ? TDuration() : now - *createTimestamp.Get()));
                 ContinuationToken.Clear();
                 MessageId++;
+
+                if (TxSupport) {
+                    TryCommitTx(Params, commitTime);
+                }
             }
             else
+            {
+                if (TxSupport) {
+                    TryCommitTx(Params, commitTime);
+                }
+
                 Sleep(TDuration::MilliSeconds(1));
+            }
 
             if (events.empty())
                 break;
@@ -236,8 +261,24 @@ void TTopicWorkloadWriterWorker::CreateWorker() {
     WriteSession = NYdb::NTopic::TTopicClient(Params.Driver).CreateWriteSession(settings);
 }
 
-void TTopicWorkloadWriterWorker::WriterLoop(TTopicWorkloadWriterParams& params) {
+void TTopicWorkloadWriterWorker::RetryableWriterLoop(TTopicWorkloadWriterParams& params) {
+    const TInstant endTime = Now() + TDuration::Seconds(params.TotalSec + 3);
+
+    while (!*params.ErrorFlag && Now() < endTime) {
+        try {
+            WriterLoop(params, endTime);
+        } catch (const yexception& ex) {
+            WRITE_LOG(params.Log, ELogPriority::TLOG_WARNING, TStringBuilder() << ex);
+        }
+    }
+}
+
+void TTopicWorkloadWriterWorker::WriterLoop(TTopicWorkloadWriterParams& params, TInstant endTime) {
     TTopicWorkloadWriterWorker writer(std::move(params));
+
+    if (params.UseTransactions) {
+        writer.TxSupport.emplace(params.Driver, "", "");
+    }
 
     (*params.StartedCount)++;
 
@@ -246,7 +287,41 @@ void TTopicWorkloadWriterWorker::WriterLoop(TTopicWorkloadWriterParams& params) 
     if (!writer.WaitForInitSeqNo())
         return;
 
-    writer.Process();
+    writer.Process(endTime);
 
     WRITE_LOG(params.Log, ELogPriority::TLOG_INFO, TStringBuilder() << "Writer finished " << Now().ToStringUpToSeconds());
+}
+
+void TTopicWorkloadWriterWorker::TryCommitTx(TTopicWorkloadWriterParams& params,
+                                             TInstant& commitTime)
+{
+    Y_ABORT_UNLESS(TxSupport);
+
+    if ((commitTime > Now()) && (params.CommitMessages > TxSupport->Rows.size())) {
+        return;
+    }
+
+    if (!InflightMessages.empty()) {
+        WaitForCommitTx = true;
+        return;
+    }
+
+    TryCommitTableChanges(params);
+
+    commitTime += TDuration::Seconds(params.CommitPeriod);
+
+    WaitForCommitTx = false;
+}
+
+void TTopicWorkloadWriterWorker::TryCommitTableChanges(TTopicWorkloadWriterParams& params)
+{
+    if (TxSupport->Rows.empty()) {
+        return;
+    }
+
+    auto execTimes = TxSupport->CommitTx(params.UseTableSelect, params.UseTableUpsert);
+
+    params.StatsCollector->AddWriterSelectEvent(params.WriterIdx, {execTimes.SelectTime.MilliSeconds()});
+    params.StatsCollector->AddWriterUpsertEvent(params.WriterIdx, {execTimes.UpsertTime.MilliSeconds()});
+    params.StatsCollector->AddWriterCommitTxEvent(params.WriterIdx, {execTimes.CommitTime.MilliSeconds()});
 }

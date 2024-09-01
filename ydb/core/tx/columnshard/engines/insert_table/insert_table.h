@@ -82,6 +82,9 @@ public:
     TInsertionSummary::TCounters Commit(IDbWrapper& dbTable, ui64 planStep, ui64 txId,
                      const THashSet<TWriteId>& writeIds, std::function<bool(ui64)> pathExists);
     void Abort(IDbWrapper& dbTable, const THashSet<TWriteId>& writeIds);
+    void MarkAsNotAbortable(const TWriteId writeId) {
+        Summary.MarkAsNotAbortable(writeId);
+    }
     THashSet<TWriteId> OldWritesToAbort(const TInstant& now) const;
     THashSet<TWriteId> DropPath(IDbWrapper& dbTable, ui64 pathId);
 

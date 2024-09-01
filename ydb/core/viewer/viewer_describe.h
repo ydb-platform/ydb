@@ -248,11 +248,19 @@ public:
             }
         }
         if (DescribeResult != nullptr) {
-            if (ExpandSubElements) {
-                if (DescribeResult->HasPathDescription()) {
-                    auto& pathDescription = *DescribeResult->MutablePathDescription();
-                    if (pathDescription.HasTable()) {
-                        auto& table = *pathDescription.MutableTable();
+            if (DescribeResult->HasPathDescription()) {
+                auto& pathDescription = *DescribeResult->MutablePathDescription();
+                if (pathDescription.HasTable()) {
+                    auto& table = *pathDescription.MutableTable();
+                    for (auto& column : *table.MutableColumns()) {
+                        if (!column.HasFamily()) {
+                            column.SetFamily(0);
+                        }
+                        if (column.GetFamily() == 0 && !column.HasFamilyName()) {
+                            column.SetFamilyName("default");
+                        }
+                    }
+                    if (ExpandSubElements) {
                         for (auto& tableIndex : table.GetTableIndexes()) {
                             NKikimrSchemeOp::TDirEntry& child = *pathDescription.AddChildren();
                             child.SetName(tableIndex.GetName());

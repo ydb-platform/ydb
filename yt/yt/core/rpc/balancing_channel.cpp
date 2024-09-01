@@ -142,7 +142,7 @@ private:
     {
         const auto& endpointSets = endpointSetsOrError.ValueOrThrow();
 
-        std::vector<TString> allAddresses;
+        std::vector<std::string> allAddresses;
         std::vector<TError> errors;
         for (const auto& endpointSetOrError : endpointSets) {
             if (!endpointSetOrError.IsOK()) {

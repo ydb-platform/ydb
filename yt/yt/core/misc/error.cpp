@@ -1,40 +1,27 @@
 #include "error.h"
 #include "serialize.h"
+#include "origin_attributes.h"
 
-#include <yt/yt/core/concurrency/scheduler.h>
-
-#include <yt/yt_proto/yt/core/misc/proto/error.pb.h>
-
-#include <yt/yt/core/actions/callback.h>
-
-#include <yt/yt/core/misc/protobuf_helpers.h>
-#include <yt/yt/core/misc/string_helpers.h>
-#include <yt/yt/core/misc/proc.h>
+#include <yt/yt/core/concurrency/public.h>
 
 #include <yt/yt/core/net/local_address.h>
+
+#include <yt/yt/core/misc/protobuf_helpers.h>
 
 #include <yt/yt/core/tracing/trace_context.h>
 
 #include <yt/yt/core/yson/tokenizer.h>
 
 #include <yt/yt/core/ytree/attributes.h>
-#include <yt/yt/core/ytree/convert.h>
 #include <yt/yt/core/ytree/fluent.h>
 
-#include <yt/yt/core/net/address.h>
+#include <yt/yt_proto/yt/core/misc/proto/error.pb.h>
 
-#include <library/cpp/yt/exception/exception.h>
-
-#include <library/cpp/yt/misc/thread_name.h>
-#include <library/cpp/yt/misc/tls.h>
-
-#include <util/string/subst.h>
-
-#include <util/system/error.h>
-#include <util/system/thread.h>
+#include <library/cpp/yt/global/variable.h>
 
 namespace NYT {
 
+using namespace NTracing;
 using namespace NYTree;
 using namespace NYson;
 
@@ -45,1144 +32,258 @@ using NYT::ToProto;
 
 constexpr TStringBuf OriginalErrorDepthAttribute = "original_error_depth";
 
-constexpr TStringBuf ErrorMessageTruncatedSuffix = "...<message truncated>";
-
 ////////////////////////////////////////////////////////////////////////////////
 
-void TErrorCode::Save(TStreamSaveContext& context) const
-{
-    NYT::Save(context, Value_);
-}
-
-void TErrorCode::Load(TStreamLoadContext& context)
-{
-    NYT::Load(context, Value_);
-}
-
-void FormatValue(TStringBuilderBase* builder, TErrorCode code, TStringBuf spec)
-{
-    FormatValue(builder, static_cast<int>(code), spec);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-YT_DEFINE_THREAD_LOCAL(bool, ErrorSanitizerEnabled, false);
-YT_DEFINE_THREAD_LOCAL(TInstant, ErrorSanitizerDatetimeOverride);
-YT_DEFINE_THREAD_LOCAL(TSharedRef, ErrorSanitizerLocalHostNameOverride);
-
-TErrorSanitizerGuard::TErrorSanitizerGuard(TInstant datetimeOverride, TSharedRef localHostNameOverride)
-    : SavedEnabled_(ErrorSanitizerEnabled())
-    , SavedDatetimeOverride_(ErrorSanitizerDatetimeOverride())
-    , SavedLocalHostNameOverride_(ErrorSanitizerLocalHostNameOverride())
-{
-    ErrorSanitizerEnabled() = true;
-    ErrorSanitizerDatetimeOverride() = datetimeOverride;
-    ErrorSanitizerLocalHostNameOverride() = std::move(localHostNameOverride);
-}
-
-TErrorSanitizerGuard::~TErrorSanitizerGuard()
-{
-    YT_ASSERT(ErrorSanitizerEnabled());
-
-    ErrorSanitizerEnabled() = SavedEnabled_;
-    ErrorSanitizerDatetimeOverride() = SavedDatetimeOverride_;
-    ErrorSanitizerLocalHostNameOverride() = std::move(SavedLocalHostNameOverride_);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-class TError::TImpl
-{
-public:
-    TImpl()
-        : Code_(NYT::EErrorCode::OK)
-    { }
-
-    TImpl(const TError::TImpl& other)
-        : Code_(other.Code_)
-        , Message_(other.Message_)
-        , Host_(other.Host_)
-        , HostHolder_(other.HostHolder_)
-        , Datetime_(other.Datetime_)
-        , Pid_(other.Pid_)
-        , Tid_(other.Tid_)
-        , ThreadName_(other.ThreadName_)
-        , Fid_(other.Fid_)
-        , TraceId_(other.TraceId_)
-        , SpanId_(other.SpanId_)
-        , Attributes_(other.Attributes_ ? other.Attributes_->Clone() : nullptr)
-        , InnerErrors_(other.InnerErrors_)
-    { }
-
-    explicit TImpl(TString message)
-        : Code_(NYT::EErrorCode::Generic)
-        , Message_(std::move(message))
-    {
-        CaptureOriginAttributes();
-    }
-
-    TImpl(TErrorCode code, TString message)
-        : Code_(code)
-        , Message_(std::move(message))
-    {
-        if (!IsOK()) {
-            CaptureOriginAttributes();
-        }
-    }
-
-    TErrorCode GetCode() const
-    {
-        return Code_;
-    }
-
-    void SetCode(TErrorCode code)
-    {
-        Code_ = code;
-    }
-
-    const TString& GetMessage() const
-    {
-        return Message_;
-    }
-
-    void SetMessage(TString message)
-    {
-        Message_ = std::move(message);
-    }
-
-    TString* MutableMessage()
-    {
-        return &Message_;
-    }
-
-    bool HasHost() const
-    {
-        return Host_.operator bool();
-    }
-
-    TStringBuf GetHost() const
-    {
-        return Host_;
-    }
-
-    bool HasOriginAttributes() const
-    {
-        return ThreadName_.Length > 0;
-    }
-
-    bool HasDatetime() const
-    {
-        return Datetime_ != TInstant();
-    }
-
-    TInstant GetDatetime() const
-    {
-        return Datetime_;
-    }
-
-    void SetDatetime(TInstant datetime)
-    {
-        Datetime_ = datetime;
-    }
-
-    TProcessId GetPid() const
-    {
-        return Pid_;
-    }
-
-    NThreading::TThreadId GetTid() const
-    {
-        return Tid_;
-    }
-
-    TStringBuf GetThreadName() const
-    {
-        return ThreadName_.ToStringBuf();
-    }
-
-    NConcurrency::TFiberId GetFid() const
-    {
-        return Fid_;
-    }
-
-    bool HasTracingAttributes() const
-    {
-        return TraceId_ != NTracing::InvalidTraceId;
-    }
-
-    void SetTracingAttributes(NTracing::TTracingAttributes tracingAttributes)
-    {
-        YT_VERIFY(!HasTracingAttributes());
-
-        TraceId_ = tracingAttributes.TraceId;
-        SpanId_ = tracingAttributes.SpanId;
-    }
-
-    NTracing::TTraceId GetTraceId() const
-    {
-        return TraceId_;
-    }
-
-    NTracing::TSpanId GetSpanId() const
-    {
-        return SpanId_;
-    }
-
-    const IAttributeDictionary& Attributes() const
-    {
-        if (!Attributes_) {
-            return EmptyAttributes();
-        }
-        return *Attributes_;
-    }
-
-    IAttributeDictionary* MutableAttributes()
-    {
-        if (!Attributes_) {
-            Attributes_ = CreateEphemeralAttributes();
-        }
-        return Attributes_.Get();
-    }
-
-    bool HasAttributes() const
-    {
-        return Attributes_.operator bool();
-    }
-
-    void SetAttributes(NYTree::IAttributeDictionaryPtr attributes)
-    {
-        Attributes_ = std::move(attributes);
-        ExtractSystemAttributes();
-    }
-
-    const std::vector<TError>& InnerErrors() const
-    {
-        return InnerErrors_;
-    }
-
-    std::vector<TError>* MutableInnerErrors()
-    {
-        return &InnerErrors_;
-    }
-
-    bool IsOK() const
-    {
-        return Code_ == NYT::EErrorCode::OK;
-    }
-
-    void CopyBuiltinAttributesFrom(const TError::TImpl& other)
-    {
-        Host_ = other.Host_;
-        HostHolder_ = other.HostHolder_;
-        Datetime_ = other.Datetime_;
-        Pid_ = other.Pid_;
-        Tid_ = other.Tid_;
-        ThreadName_ = other.ThreadName_;
-        Fid_ = other.Fid_;
-        TraceId_ = other.TraceId_;
-        SpanId_ = other.SpanId_;
-    }
-
-private:
-    TErrorCode Code_;
-    TString Message_;
-    // Most errors are local; for these Host_ refers to a static buffer and HostHolder_ is not used.
-    // This saves one allocation on TError construction.
-    TStringBuf Host_;
-    // HostHolder_ optionally stores data of Host_, and this pointer connection survives move of containing object.
-    TSharedRef HostHolder_;
-    TInstant Datetime_;
-    TProcessId Pid_ = 0;
-    NThreading::TThreadId Tid_ = NThreading::InvalidThreadId;
-    TThreadName ThreadName_;
-    NConcurrency::TFiberId Fid_ = NConcurrency::InvalidFiberId;
-    NTracing::TTraceId TraceId_ = NTracing::InvalidTraceId;
-    NTracing::TSpanId SpanId_ = NTracing::InvalidSpanId;
-    NYTree::IAttributeDictionaryPtr Attributes_;
-    std::vector<TError> InnerErrors_;
-
-
-    void CaptureOriginAttributes()
-    {
-        if (ErrorSanitizerEnabled()) {
-            Datetime_ = ErrorSanitizerDatetimeOverride();
-            HostHolder_ = ErrorSanitizerLocalHostNameOverride();
-            Host_ = HostHolder_.empty() ? TStringBuf() : TStringBuf(HostHolder_.Begin(), HostHolder_.End());
-            return;
-        }
-
-        Host_ = NNet::ReadLocalHostName();
-        Datetime_ = TInstant::Now();
-        Pid_ = GetPID();
-        Tid_ = TThread::CurrentThreadId();
-        ThreadName_ = GetCurrentThreadName();
-        Fid_ = NConcurrency::GetCurrentFiberId();
-        if (const auto* traceContext = NTracing::TryGetCurrentTraceContext()) {
-            TraceId_ = traceContext->GetTraceId();
-            SpanId_ = traceContext->GetSpanId();
-        }
-    }
-
-    void ExtractSystemAttributes()
-    {
-        if (!Attributes_) {
-            return;
-        }
-
-        static const TString HostKey("host");
-        HostHolder_ = TSharedRef::FromString(Attributes_->GetAndRemove<TString>(HostKey, TString()));
-        Host_ = HostHolder_.empty() ? TStringBuf() : TStringBuf(HostHolder_.Begin(), HostHolder_.End());
-
-        static const TString DatetimeKey("datetime");
-        Datetime_ = Attributes_->GetAndRemove<TInstant>(DatetimeKey, TInstant());
-
-        static const TString PidKey("pid");
-        Pid_ = Attributes_->GetAndRemove<TProcessId>(PidKey, 0);
-
-        static const TString TidKey("tid");
-        Tid_ = Attributes_->GetAndRemove<NThreading::TThreadId>(TidKey, NThreading::InvalidThreadId);
-
-        static const TString ThreadNameKey("thread");
-        ThreadName_ = Attributes_->GetAndRemove<TString>(ThreadNameKey, TString());
-
-        static const TString FidKey("fid");
-        Fid_ = Attributes_->GetAndRemove<NConcurrency::TFiberId>(FidKey, NConcurrency::InvalidFiberId);
-
-        static const TString TraceIdKey("trace_id");
-        TraceId_ = Attributes_->GetAndRemove<NTracing::TTraceId>(TraceIdKey, NTracing::InvalidTraceId);
-
-        static const TString SpanIdKey("span_id");
-        SpanId_ = Attributes_->GetAndRemove<NTracing::TSpanId>(SpanIdKey, NTracing::InvalidSpanId);
-    }
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
-namespace  {
-
-bool IsWhitelisted(const TError& error, const THashSet<TStringBuf>& attributeWhitelist)
-{
-    for (const auto& key : error.Attributes().ListKeys()) {
-        if (attributeWhitelist.contains(key)) {
-            return true;
-        }
-    }
-
-    for (const auto& innerError : error.InnerErrors()) {
-        if (IsWhitelisted(innerError, attributeWhitelist)) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
-//! Returns vector which consists of objects from errors such that:
-//! if N is the number of objects in errors s.t. IsWhitelisted is true
-//! then first N objects of returned vector are the ones for which IsWhitelisted is true
-//! followed by std::max(0, maxInnerErrorCount - N - 1) remaining objects
-//! finally followed by errors.back().
-std::vector<TError>& ApplyWhitelist(std::vector<TError>& errors, const THashSet<TStringBuf>& attributeWhitelist, int maxInnerErrorCount)
-{
-    if (std::ssize(errors) < std::max(2, maxInnerErrorCount)) {
-        return errors;
-    }
-
-    auto firstNotWhitelisted = std::partition(
-        errors.begin(),
-        std::prev(errors.end()),
-        [&attributeWhitelist] (const TError& error) {
-            return IsWhitelisted(error, attributeWhitelist);
-        });
-
-    int lastErrorOffset = std::max<int>(firstNotWhitelisted - errors.begin(), maxInnerErrorCount - 1);
-
-    *(errors.begin() + lastErrorOffset) = std::move(errors.back());
-    errors.resize(lastErrorOffset + 1);
-
-    return errors;
-}
-
-} // namespace
-
-////////////////////////////////////////////////////////////////////////////////
-
-TError::TErrorOr() = default;
-
-TError::~TErrorOr() = default;
-
-TError::TErrorOr(const TError& other)
-{
-    if (!other.IsOK()) {
-        Impl_ = std::make_unique<TImpl>(*other.Impl_);
-    }
-}
-
-TError::TErrorOr(TError&& other) noexcept
-    : Impl_(std::move(other.Impl_))
-{ }
-
-TError::TErrorOr(const std::exception& ex)
-{
-    if (auto simpleException = dynamic_cast<const TSimpleException*>(&ex)) {
-        *this = TError(NYT::EErrorCode::Generic, TRuntimeFormat(simpleException->GetMessage()));
-        // NB: clang-14 is incapable of capturing structured binding variables
-        //  so we force materialize them via this function call.
-        auto addAttribute = [this] (const auto& key, const auto& value) {
-            std::visit([&] (const auto& actual) {
-                *this <<= TErrorAttribute(key, actual);
-            }, value);
-        };
-        for (const auto& [key, value] : simpleException->GetAttributes()) {
-            addAttribute(key, value);
-        }
-        try {
-            if (simpleException->GetInnerException()) {
-                std::rethrow_exception(simpleException->GetInnerException());
-            }
-        } catch (const std::exception& innerEx) {
-            *this <<= TError(innerEx);
-        }
-    } else if (const auto* errorEx = dynamic_cast<const TErrorException*>(&ex)) {
-        *this = errorEx->Error();
-    } else {
-        *this = TError(NYT::EErrorCode::Generic, TRuntimeFormat(ex.what()));
-    }
-    YT_VERIFY(!IsOK());
-}
-
-TError::TErrorOr(TString message, TDisableFormat)
-    : Impl_(std::make_unique<TImpl>(std::move(message)))
-{ }
-
-TError::TErrorOr(TErrorCode code, TString message, TDisableFormat)
-    : Impl_(std::make_unique<TImpl>(code, std::move(message)))
-{ }
-
-TError& TError::operator = (const TError& other)
-{
-    if (other.IsOK()) {
-        Impl_.reset();
-    } else {
-        Impl_ = std::make_unique<TImpl>(*other.Impl_);
-    }
-    return *this;
-}
-
-TError& TError::operator = (TError&& other) noexcept
-{
-    Impl_ = std::move(other.Impl_);
-    return *this;
-}
-
-TError TError::FromSystem()
-{
-    return FromSystem(LastSystemError());
-}
-
-TError TError::FromSystem(int error)
-{
-    return TError(TErrorCode(LinuxErrorCodeBase + error), TRuntimeFormat(LastSystemErrorText(error))) <<
-        TErrorAttribute("errno", error);
-}
-
-TError TError::FromSystem(const TSystemError& error)
-{
-    return FromSystem(error.Status());
-}
-
-TErrorCode TError::GetCode() const
-{
-    if (!Impl_) {
-        return NYT::EErrorCode::OK;
-    }
-    return Impl_->GetCode();
-}
-
-TError& TError::SetCode(TErrorCode code)
-{
-    MakeMutable();
-    Impl_->SetCode(code);
-    return *this;
-}
-
-TErrorCode TError::GetNonTrivialCode() const
-{
-    if (!Impl_) {
-        return NYT::EErrorCode::OK;
-    }
-
-    if (GetCode() != NYT::EErrorCode::Generic) {
-        return GetCode();
-    }
-
-    for (const auto& innerError : InnerErrors()) {
-        auto innerCode = innerError.GetNonTrivialCode();
-        if (innerCode != NYT::EErrorCode::Generic) {
-            return innerCode;
-        }
-    }
-
-    return GetCode();
-}
-
-THashSet<TErrorCode> TError::GetDistinctNonTrivialErrorCodes() const
-{
-    THashSet<TErrorCode> result;
-    TraverseError(*this, [&result] (const TError& error, int /*depth*/) {
-        if (auto errorCode = error.GetCode(); errorCode != NYT::EErrorCode::OK) {
-            result.insert(errorCode);
-        }
-    });
-    return result;
-}
-
-const TString& TError::GetMessage() const
-{
-    if (!Impl_) {
-        static const TString Result;
-        return Result;
-    }
-    return Impl_->GetMessage();
-}
-
-TError& TError::SetMessage(TString message)
-{
-    MakeMutable();
-    Impl_->SetMessage(std::move(message));
-    return *this;
-}
-
-bool TError::HasHost() const
-{
-    if (!Impl_) {
-        return false;
-    }
-    return Impl_->HasHost();
-}
-
-TStringBuf TError::GetHost() const
-{
-    if (!Impl_) {
-        return {};
-    }
-    return Impl_->GetHost();
-}
-
-bool TError::HasOriginAttributes() const
-{
-    if (!Impl_) {
-        return false;
-    }
-    return Impl_->HasOriginAttributes();
-}
-
-bool TError::HasDatetime() const
-{
-    if (!Impl_) {
-        return false;
-    }
-    return Impl_->HasDatetime();
-}
-
-TInstant TError::GetDatetime() const
-{
-    if (!Impl_) {
-        return {};
-    }
-    return Impl_->GetDatetime();
-}
-
-TProcessId TError::GetPid() const
-{
-    if (!Impl_) {
-        return 0;
-    }
-    return Impl_->GetPid();
-}
-
-NThreading::TThreadId TError::GetTid() const
-{
-    if (!Impl_) {
-        return NThreading::InvalidThreadId;
-    }
-    return Impl_->GetTid();
-}
-
-TStringBuf TError::GetThreadName() const
-{
-    if (!Impl_) {
-        static TString empty;
-        return empty;
-    }
-    return Impl_->GetThreadName();
-}
-
-NConcurrency::TFiberId TError::GetFid() const
-{
-    if (!Impl_) {
-        return NConcurrency::InvalidFiberId;
-    }
-    return Impl_->GetFid();
-}
-
-bool TError::HasTracingAttributes() const
-{
-    if (!Impl_) {
-        return false;
-    }
-    return Impl_->HasTracingAttributes();
-}
-
-void TError::SetTracingAttributes(NTracing::TTracingAttributes tracingAttributes)
-{
-    if (!Impl_) {
-        return;
-    }
-    Impl_->SetTracingAttributes(tracingAttributes);
-}
-
-NTracing::TTraceId TError::GetTraceId() const
-{
-    if (!Impl_) {
-        return NTracing::InvalidTraceId;
-    }
-    return Impl_->GetTraceId();
-}
-
-NTracing::TSpanId TError::GetSpanId() const
-{
-    if (!Impl_) {
-        return NTracing::InvalidSpanId;
-    }
-    return Impl_->GetSpanId();
-}
-
-const IAttributeDictionary& TError::Attributes() const
-{
-    if (!Impl_) {
-        return EmptyAttributes();
-    }
-    return Impl_->Attributes();
-}
-
-IAttributeDictionary* TError::MutableAttributes()
-{
-    MakeMutable();
-    return Impl_->MutableAttributes();
-}
-
-const std::vector<TError>& TError::InnerErrors() const
-{
-    if (!Impl_) {
-        static const std::vector<TError> Result;
-        return Result;
-    }
-    return Impl_->InnerErrors();
-}
-
-std::vector<TError>* TError::MutableInnerErrors()
-{
-    MakeMutable();
-    return Impl_->MutableInnerErrors();
-}
-
-const TString InnerErrorsTruncatedKey("inner_errors_truncated");
-
-TError TError::Truncate(
-    int maxInnerErrorCount,
-    i64 stringLimit,
-    const THashSet<TStringBuf>& attributeWhitelist) const &
-{
-    if (!Impl_) {
-        return TError();
-    }
-
-    auto truncateInnerError = [=, &attributeWhitelist] (const TError& innerError) {
-        return innerError.Truncate(maxInnerErrorCount, stringLimit, attributeWhitelist);
-    };
-
-    auto truncateAttributes = [stringLimit, &attributeWhitelist] (const IAttributeDictionary& attributes) {
-        auto truncatedAttributes = CreateEphemeralAttributes();
-        for (const auto& key : attributes.ListKeys()) {
-            const auto& value = attributes.FindYson(key);
-
-            if (std::ssize(value.AsStringBuf()) > stringLimit && !attributeWhitelist.contains(key)) {
-                truncatedAttributes->SetYson(
-                    key,
-                    BuildYsonStringFluently()
-                        .Value("...<attribute truncated>..."));
-            } else {
-                truncatedAttributes->SetYson(
-                    key,
-                    value);
-            }
-        }
-        return truncatedAttributes;
-    };
-
-    auto result = std::make_unique<TImpl>();
-    result->SetCode(GetCode());
-    result->SetMessage(TruncateString(GetMessage(), stringLimit, ErrorMessageTruncatedSuffix));
-    if (Impl_->HasAttributes()) {
-        result->SetAttributes(truncateAttributes(Impl_->Attributes()));
-    }
-    result->CopyBuiltinAttributesFrom(*Impl_);
-
-    const auto& innerErrors = InnerErrors();
-    auto& copiedInnerErrors = *result->MutableInnerErrors();
-
-    if (std::ssize(innerErrors) <= maxInnerErrorCount) {
-        for (const auto& innerError : innerErrors) {
-            copiedInnerErrors.push_back(truncateInnerError(innerError));
-        }
-    } else {
-        result->MutableAttributes()->Set(InnerErrorsTruncatedKey, true);
-
-        // NB(arkady-e1ppa): We want to always keep the last inner error,
-        // so we make room for it and do not check if it is whitelisted.
-        for (int idx = 0; idx < std::ssize(innerErrors) - 1; ++idx) {
-            const auto& innerError = innerErrors[idx];
-            if (
-                IsWhitelisted(innerError, attributeWhitelist) ||
-                std::ssize(copiedInnerErrors) < maxInnerErrorCount - 1)
-            {
-                copiedInnerErrors.push_back(truncateInnerError(innerError));
-            }
-        }
-        copiedInnerErrors.push_back(truncateInnerError(innerErrors.back()));
-    }
-
-    return TError(std::move(result));
-}
-
-TError TError::Truncate(
-    int maxInnerErrorCount,
-    i64 stringLimit,
-    const THashSet<TStringBuf>& attributeWhitelist) &&
-{
-    if (!Impl_) {
-        return TError();
-    }
-
-    auto truncateInnerError = [=, &attributeWhitelist] (TError& innerError) {
-        innerError = std::move(innerError).Truncate(maxInnerErrorCount, stringLimit, attributeWhitelist);
-    };
-
-    auto truncateAttributes = [stringLimit, &attributeWhitelist] (IAttributeDictionary* attributes) {
-        for (const auto& key : attributes->ListKeys()) {
-            if (std::ssize(attributes->FindYson(key).AsStringBuf()) > stringLimit && !attributeWhitelist.contains(key)) {
-                attributes->SetYson(
-                    key,
-                    BuildYsonStringFluently()
-                        .Value("...<attribute truncated>..."));
-            }
-        }
-    };
-
-    TruncateStringInplace(Impl_->MutableMessage(), stringLimit, ErrorMessageTruncatedSuffix);
-    if (Impl_->HasAttributes()) {
-        truncateAttributes(Impl_->MutableAttributes());
-    }
-    if (std::ssize(InnerErrors()) <= maxInnerErrorCount) {
-        for (auto& innerError : *MutableInnerErrors()) {
-            truncateInnerError(innerError);
-        }
-    } else {
-        auto& innerErrors = ApplyWhitelist(*MutableInnerErrors(), attributeWhitelist, maxInnerErrorCount);
-        MutableAttributes()->Set(InnerErrorsTruncatedKey, true);
-
-        for (auto& innerError : innerErrors) {
-            truncateInnerError(innerError);
-        }
-    }
-
-    return std::move(*this);
-}
-
-bool TError::IsOK() const
-{
-    if (!Impl_) {
-        return true;
-    }
-    return Impl_->IsOK();
-}
-
-TError TError::Wrap() const &
-{
-    return *this;
-}
-
-TError TError::Wrap() &&
-{
-    return std::move(*this);
-}
-
-Y_WEAK TString GetErrorSkeleton(const TError& /*error*/)
-{
-    // Proper implementation resides in yt/yt/library/error_skeleton/skeleton.cpp.
-    THROW_ERROR_EXCEPTION("Error skeleton implementation library is not linked; consider PEERDIR'ing yt/yt/library/error_skeleton");
-}
-
-TString TError::GetSkeleton() const
-{
-    return GetErrorSkeleton(*this);
-}
-
-void TError::Save(TStreamSaveContext& context) const
-{
-    using NYT::Save;
-
-    if (!Impl_) {
-        // Fast path.
-        Save(context, TErrorCode(NYT::EErrorCode::OK)); // code
-        Save(context, TStringBuf());                    // message
-        Save(context, IAttributeDictionaryPtr());       // attributes
-        Save(context, std::vector<TError>());           // inner errors
-        return;
-    }
-
-    Save(context, GetCode());
-    Save(context, GetMessage());
-
-    // Cf. TAttributeDictionaryValueSerializer.
-    auto attributePairs = Attributes().ListPairs();
-    size_t attributeCount = attributePairs.size();
-    if (HasOriginAttributes()) {
-        attributeCount += 5;
-    }
-    if (HasDatetime()) {
-        attributeCount += 1;
-    }
-    if (HasTracingAttributes()) {
-        attributeCount += 2;
-    }
-
-    if (attributeCount > 0) {
-        // Cf. TAttributeDictionaryRefSerializer.
-        Save(context, true);
-
-        TSizeSerializer::Save(context, attributeCount);
-
-        auto saveAttribute = [&] (const TString& key, const auto& value) {
-            Save(context, key);
-            Save(context, ConvertToYsonString(value));
-        };
-
-        if (HasOriginAttributes()) {
-            static const TString HostKey("host");
-            saveAttribute(HostKey, GetHost());
-
-            static const TString PidKey("pid");
-            saveAttribute(PidKey, GetPid());
-
-            static const TString TidKey("tid");
-            saveAttribute(TidKey, GetTid());
-
-            static const TString ThreadNameKey("thread");
-            saveAttribute(ThreadNameKey, GetThreadName());
-
-            static const TString FidKey("fid");
-            saveAttribute(FidKey, GetFid());
-        }
-
-        if (HasDatetime()) {
-            static const TString DatetimeKey("datetime");
-            saveAttribute(DatetimeKey, GetDatetime());
-        }
-
-        if (HasTracingAttributes()) {
-            static const TString TraceIdKey("trace_id");
-            saveAttribute(TraceIdKey, GetTraceId());
-
-            static const TString SpanIdKey("span_id");
-            saveAttribute(SpanIdKey, GetSpanId());
-        }
-
-        std::sort(attributePairs.begin(), attributePairs.end(), [] (const auto& lhs, const auto& rhs) {
-            return lhs.first < rhs.first;
-        });
-        for (const auto& [key, value] : attributePairs) {
-            Save(context, key);
-            Save(context, value);
-        }
-    } else {
-        Save(context, false);
-    }
-
-    Save(context, InnerErrors());
-}
-
-void TError::Load(TStreamLoadContext& context)
-{
-    Impl_.reset();
-
-    using NYT::Load;
-
-    auto code = Load<TErrorCode>(context);
-    auto message = Load<TString>(context);
-
-    IAttributeDictionaryPtr attributes;
-    if (Load<bool>(context)) {
-        attributes = CreateEphemeralAttributes();
-        TAttributeDictionarySerializer::LoadNonNull(context, attributes);
-    }
-
-    auto innerErrors = Load<std::vector<TError>>(context);
-
-    if (code == NYT::EErrorCode::OK) {
-        // Fast path.
-        // Note that there were no allocations above.
-        return;
-    }
-
-    auto impl = std::make_unique<TImpl>();
-    impl->SetCode(code);
-    impl->SetMessage(std::move(message));
-    impl->SetAttributes(std::move(attributes));
-    *impl->MutableInnerErrors() = std::move(innerErrors);
-    Impl_ = std::move(impl);
-}
-
-std::optional<TError> TError::FindMatching(TErrorCode code) const
-{
-    return FindMatching([&] (TErrorCode errorCode) {
-        return code == errorCode;
-    });
-}
-
-std::optional<TError> TError::FindMatching(const THashSet<TErrorCode>& codes) const
-{
-    return FindMatching([&] (TErrorCode code) {
-        return codes.contains(code);
-    });
-}
-
-TError::TErrorOr(std::unique_ptr<TImpl> impl)
-    : Impl_(std::move(impl))
-{ }
-
-void TError::MakeMutable()
-{
-    if (!Impl_) {
-        Impl_ = std::make_unique<TImpl>();
-    }
-}
-
-////////////////////////////////////////////////////////////////////////////////
+namespace NOrigin {
 
 namespace {
 
-void AppendIndent(TStringBuilderBase* builer, int indent)
+struct TExtensionData
 {
-    builer->AppendChar(' ', indent);
+    NConcurrency::TFiberId Fid = NConcurrency::InvalidFiberId;
+    const char* HostName = nullptr;
+    TTraceId TraceId = InvalidTraceId;
+    TSpanId SpanId = InvalidSpanId;
+};
+
+TOriginAttributes::TErasedExtensionData Encode(TExtensionData data)
+{
+    return TOriginAttributes::TErasedExtensionData{data};
 }
 
-void AppendAttribute(TStringBuilderBase* builder, const TString& key, const TString& value, int indent)
+TExtensionData Decode(const TOriginAttributes::TErasedExtensionData& storage)
 {
-    AppendIndent(builder, indent + 4);
-    if (!value.Contains('\n')) {
-        builder->AppendFormat("%-15s %s", key, value);
-    } else {
-        builder->AppendString(key);
-        TString indentedValue = "\n" + value;
-        SubstGlobal(indentedValue, "\n", "\n" + TString{static_cast<size_t>(indent + 8), ' '});
-        // Now first line in indentedValue is empty and every other line is indented by 8 spaces.
-        builder->AppendString(indentedValue);
-    }
-    builder->AppendChar('\n');
+    return storage.AsConcrete<TExtensionData>();
 }
 
-void AppendError(TStringBuilderBase* builder, const TError& error, int indent)
+void TryExtractHost(const TOriginAttributes& attributes)
 {
-    if (error.IsOK()) {
-        builder->AppendString("OK");
+    if (attributes.Host || !attributes.ExtensionData) {
         return;
     }
 
-    AppendIndent(builder, indent);
-    builder->AppendString(error.GetMessage());
-    builder->AppendChar('\n');
+    auto [
+        fid,
+        name,
+        traceId,
+        spanId
+    ] = Decode(*attributes.ExtensionData);
 
-    if (error.GetCode() != NYT::EErrorCode::Generic) {
-        AppendAttribute(builder, "code", ToString(static_cast<int>(error.GetCode())), indent);
-    }
-
-    // Pretty-print origin.
-    if (error.HasOriginAttributes()) {
-        AppendAttribute(
-            builder,
-            "origin",
-            Format("%v (pid %v, thread %v, fid %x)",
-                error.GetHost(),
-                error.GetPid(),
-                (!error.GetThreadName().empty() ? error.GetThreadName() : ToString(error.GetTid())),
-                error.GetFid()),
-            indent);
-    } else if (ErrorSanitizerEnabled() && error.HasHost()) {
-        AppendAttribute(
-            builder,
-            "host",
-            ToString(error.GetHost()),
-            indent);
-    }
-
-    if (error.HasDatetime()) {
-        AppendAttribute(
-            builder,
-            "datetime",
-            Format("%v", error.GetDatetime()),
-            indent);
-    }
-
-    for (const auto& [key, value] : error.Attributes().ListPairs()) {
-        TTokenizer tokenizer(value.AsStringBuf());
-        YT_VERIFY(tokenizer.ParseNext());
-        switch (tokenizer.GetCurrentType()) {
-            case ETokenType::String:
-                AppendAttribute(builder, key, TString(tokenizer.CurrentToken().GetStringValue()), indent);
-                break;
-            case ETokenType::Int64:
-                AppendAttribute(builder, key, ToString(tokenizer.CurrentToken().GetInt64Value()), indent);
-                break;
-            case ETokenType::Uint64:
-                AppendAttribute(builder, key, ToString(tokenizer.CurrentToken().GetUint64Value()), indent);
-                break;
-            case ETokenType::Double:
-                AppendAttribute(builder, key, ToString(tokenizer.CurrentToken().GetDoubleValue()), indent);
-                break;
-            case ETokenType::Boolean:
-                AppendAttribute(builder, key, TString(FormatBool(tokenizer.CurrentToken().GetBooleanValue())), indent);
-                break;
-            default:
-                AppendAttribute(builder, key, ConvertToYsonString(value, EYsonFormat::Text).ToString(), indent);
-                break;
-        }
-    }
-
-    for (const auto& innerError : error.InnerErrors()) {
-        builder->AppendChar('\n');
-        AppendError(builder, innerError, indent + 2);
-    }
+    attributes.Host = name;
 }
 
 } // namespace
 
-bool operator == (const TError& lhs, const TError& rhs)
+////////////////////////////////////////////////////////////////////////////////
+
+bool HasHost(const TOriginAttributes& attributes) noexcept
 {
-    if (!lhs.Impl_ && !rhs.Impl_) {
-        return true;
+    TryExtractHost(attributes);
+    return attributes.Host.operator bool();
+}
+
+TStringBuf GetHost(const TOriginAttributes& attributes) noexcept
+{
+    TryExtractHost(attributes);
+    return attributes.Host;
+}
+
+NConcurrency::TFiberId GetFid(const TOriginAttributes& attributes) noexcept
+{
+    if (attributes.ExtensionData.has_value()) {
+        return Decode(*attributes.ExtensionData).Fid;
     }
-    return
-        lhs.GetCode() == rhs.GetCode() &&
-        lhs.GetMessage() == rhs.GetMessage() &&
-        lhs.GetHost() == rhs.GetHost() &&
-        lhs.GetDatetime() == rhs.GetDatetime() &&
-        lhs.GetPid() == rhs.GetPid() &&
-        lhs.GetTid() == rhs.GetTid() &&
-        lhs.GetFid() == rhs.GetFid() &&
-        lhs.GetTraceId() == rhs.GetTraceId() &&
-        lhs.GetSpanId() == rhs.GetSpanId() &&
-        lhs.Attributes() == rhs.Attributes() &&
-        lhs.InnerErrors() == rhs.InnerErrors();
+    return NConcurrency::InvalidFiberId;
 }
 
-void FormatValue(TStringBuilderBase* builder, const TError& error, TStringBuf /*spec*/)
+NTracing::TTraceId GetTraceId(const TOriginAttributes& attributes) noexcept
 {
-    AppendError(builder, error, 0);
+    if (attributes.ExtensionData.has_value()) {
+        return Decode(*attributes.ExtensionData).TraceId;
+    }
+    return InvalidTraceId;
 }
 
-void ToProto(NYT::NProto::TError* protoError, const TError& error)
+NTracing::TSpanId GetSpanId(const TOriginAttributes& attributes) noexcept
 {
-    if (!error.Impl_) {
-        protoError->set_code(static_cast<int>(NYT::EErrorCode::OK));
-        protoError->clear_message();
+    if (attributes.ExtensionData.has_value()) {
+        return Decode(*attributes.ExtensionData).SpanId;
+    }
+    return InvalidSpanId;
+}
+
+bool HasTracingAttributes(const TOriginAttributes& attributes) noexcept
+{
+    return GetTraceId(attributes) != InvalidTraceId;
+}
+
+void UpdateTracingAttributes(TOriginAttributes* attributes, const NTracing::TTracingAttributes& tracingAttributes)
+{
+    if (attributes->ExtensionData.has_value()) {
+        auto ext = Decode(*attributes->ExtensionData);
+        attributes->ExtensionData.emplace(Encode(TExtensionData{
+            .Fid = ext.Fid,
+            .HostName = ext.HostName,
+            .TraceId = tracingAttributes.TraceId,
+            .SpanId = tracingAttributes.SpanId,
+        }));
+    }
+
+    attributes->ExtensionData.emplace(Encode(TExtensionData{
+        .TraceId = tracingAttributes.TraceId,
+        .SpanId = tracingAttributes.SpanId,
+    }));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TOriginAttributes::TErasedExtensionData GetExtensionDataOverride()
+{
+    TExtensionData result;
+    result.Fid = NConcurrency::GetCurrentFiberId();
+    result.HostName = NNet::ReadLocalHostName();
+
+    if (auto* traceContext = NTracing::TryGetCurrentTraceContext()) {
+        result.TraceId = traceContext->GetTraceId();
+        result.SpanId = traceContext->GetSpanId();
+    }
+
+    return TOriginAttributes::TErasedExtensionData{result};
+}
+
+TString FormatOriginOverride(const TOriginAttributes& attributes)
+{
+    TryExtractHost(attributes);
+    return Format("%v (pid %v, thread %v, fid %x)",
+        attributes.Host,
+        attributes.Pid,
+        MakeFormatterWrapper([&] (auto* builder) {
+            auto threadName = attributes.ThreadName.ToStringBuf();
+            if (threadName.empty()) {
+                FormatValue(builder, attributes.Tid, "v");
+                return;
+            }
+            FormatValue(builder, threadName, "v");
+        }),
+        GetFid(attributes));
+}
+
+TOriginAttributes ExtractFromDictionaryOverride(const NYTree::IAttributeDictionaryPtr& attributes)
+{
+    auto result = NYT::NDetail::ExtractFromDictionaryDefault(attributes);
+
+    TExtensionData ext;
+
+    static const TString FidKey("fid");
+    ext.Fid = attributes->GetAndRemove<NConcurrency::TFiberId>(FidKey, NConcurrency::InvalidFiberId);
+
+    static const TString TraceIdKey("trace_id");
+    ext.TraceId = attributes->GetAndRemove<NTracing::TTraceId>(TraceIdKey, NTracing::InvalidTraceId);
+
+    static const TString SpanIdKey("span_id");
+    ext.SpanId = attributes->GetAndRemove<NTracing::TSpanId>(SpanIdKey, NTracing::InvalidSpanId);
+
+    result.ExtensionData = Encode(ext);
+    return result;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void EnableOriginOverrides()
+{
+    static NGlobal::TVariable<std::byte> getExtensionDataOverride{
+        NYT::NDetail::GetExtensionDataTag,
+        +[] () noexcept {
+            return NGlobal::TErasedStorage{&GetExtensionDataOverride};
+        }};
+
+    static NGlobal::TVariable<std::byte> formatOriginOverride{
+        NYT::NDetail::FormatOriginTag,
+        +[] () noexcept {
+            return NGlobal::TErasedStorage{&FormatOriginOverride};
+        }};
+
+    static NGlobal::TVariable<std::byte> extractFromDictionaryOverride{
+        NYT::NDetail::ExtractFromDictionaryTag,
+        +[] () noexcept {
+            return NGlobal::TErasedStorage{&ExtractFromDictionaryOverride};
+        }};
+
+    getExtensionDataOverride.Get();
+    formatOriginOverride.Get();
+    extractFromDictionaryOverride.Get();
+}
+
+} // namespace NOrigin
+
+////////////////////////////////////////////////////////////////////////////////
+
+bool HasHost(const TError& error) noexcept
+{
+    if (auto* attributes = error.MutableOriginAttributes()) {
+        return NOrigin::HasHost(*attributes);
+    }
+    return false;
+}
+
+TStringBuf GetHost(const TError& error) noexcept
+{
+    if (auto* attributes = error.MutableOriginAttributes()) {
+        return NOrigin::GetHost(*attributes);
+    }
+    return {};
+}
+
+NConcurrency::TFiberId GetFid(const TError& error) noexcept
+{
+    if (auto* attributes = error.MutableOriginAttributes()) {
+        return NOrigin::GetFid(*attributes);
+    }
+    return NConcurrency::InvalidFiberId;
+}
+
+bool HasTracingAttributes(const TError& error) noexcept
+{
+    if (auto* attributes = error.MutableOriginAttributes()) {
+        return NOrigin::HasTracingAttributes(*attributes);
+    }
+    return false;
+}
+
+NTracing::TTraceId GetTraceId(const TError& error) noexcept
+{
+    if (auto* attributes = error.MutableOriginAttributes()) {
+        return NOrigin::GetTraceId(*attributes);
+    }
+    return NTracing::InvalidTraceId;
+}
+
+NTracing::TSpanId GetSpanId(const TError& error) noexcept
+{
+    if (auto* attributes = error.MutableOriginAttributes()) {
+        return NOrigin::GetSpanId(*attributes);
+    }
+    return NTracing::InvalidSpanId;
+}
+
+void SetTracingAttributes(TError* error, const NTracing::TTracingAttributes& attributes)
+{
+    auto* originAttributes = error->MutableOriginAttributes();
+
+    if (!originAttributes) {
         return;
     }
 
-    protoError->set_code(error.GetCode());
-    protoError->set_message(error.GetMessage());
-
-    protoError->clear_attributes();
-    if (error.Impl_->HasAttributes()) {
-        ToProto(protoError->mutable_attributes(), error.Attributes());
-    }
-
-    auto addAttribute = [&] (const TString& key, const auto& value) {
-        auto* protoItem = protoError->mutable_attributes()->add_attributes();
-        protoItem->set_key(key);
-        protoItem->set_value(ConvertToYsonString(value).ToString());
-    };
-
-    if (error.HasOriginAttributes()) {
-        static const TString HostKey("host");
-        addAttribute(HostKey, error.GetHost());
-
-        static const TString PidKey("pid");
-        addAttribute(PidKey, error.GetPid());
-
-        static const TString TidKey("tid");
-        addAttribute(TidKey, error.GetTid());
-
-        static const TString ThreadName("thread");
-        addAttribute(ThreadName, error.GetThreadName());
-
-        static const TString FidKey("fid");
-        addAttribute(FidKey, error.GetFid());
-    } else if (ErrorSanitizerEnabled() && error.HasHost()) {
-        static const TString HostKey("host");
-        addAttribute(HostKey, error.GetHost());
-    }
-
-    if (error.HasDatetime()) {
-        static const TString DatetimeKey("datetime");
-        addAttribute(DatetimeKey, error.GetDatetime());
-    }
-
-    if (error.HasTracingAttributes()) {
-        static const TString TraceIdKey("trace_id");
-        addAttribute(TraceIdKey, error.GetTraceId());
-
-        static const TString SpanIdKey("span_id");
-        addAttribute(SpanIdKey, error.GetSpanId());
-    }
-
-    protoError->clear_inner_errors();
-    for (const auto& innerError : error.InnerErrors()) {
-        ToProto(protoError->add_inner_errors(), innerError);
-    }
+    NOrigin::UpdateTracingAttributes(originAttributes, attributes);
 }
 
-void FromProto(TError* error, const NYT::NProto::TError& protoError)
-{
-    *error = {};
-
-    if (protoError.code() == static_cast<int>(NYT::EErrorCode::OK)) {
-        return;
-    }
-
-    error->SetCode(TErrorCode(protoError.code()));
-    error->SetMessage(FromProto<TString>(protoError.message()));
-    if (protoError.has_attributes()) {
-        error->Impl_->SetAttributes(FromProto(protoError.attributes()));
-    } else {
-        error->Impl_->SetAttributes(nullptr);
-    }
-    *error->MutableInnerErrors() = FromProto<std::vector<TError>>(protoError.inner_errors());
-}
-
-void TraverseError(const TError& error, const TErrorVisitor& visitor, int depth)
-{
-    visitor(error, depth);
-    for (const auto& inner : error.InnerErrors()) {
-        TraverseError(inner, visitor, depth + 1);
-    }
-}
+////////////////////////////////////////////////////////////////////////////////
 
 namespace {
 
 // Errors whose depth exceeds |ErrorSerializationDepthLimit| are serialized
 // as children of their ancestor on depth |ErrorSerializationDepthLimit - 1|.
+[[maybe_unused]]
 void SerializeInnerErrors(TFluentMap fluent, const TError& error, int depth)
 {
     if (depth >= ErrorSerializationDepthLimit) {
@@ -1215,13 +316,14 @@ void SerializeInnerErrors(TFluentMap fluent, const TError& error, int depth)
 
 } // namespace
 
+////////////////////////////////////////////////////////////////////////////////
+
 void Serialize(
     const TError& error,
     IYsonConsumer* consumer,
     const std::function<void(IYsonConsumer*)>* valueProducer,
     int depth)
 {
-    auto& errorSanitizerEnabled = ErrorSanitizerEnabled();
     BuildYsonFluently(consumer)
         .BeginMap()
             .Item("code").Value(error.GetCode())
@@ -1229,23 +331,23 @@ void Serialize(
             .Item("attributes").DoMap([&] (auto fluent) {
                 if (error.HasOriginAttributes()) {
                     fluent
-                        .Item("host").Value(error.GetHost())
+                        .Item("host").Value(GetHost(error))
                         .Item("pid").Value(error.GetPid())
                         .Item("tid").Value(error.GetTid())
                         .Item("thread").Value(error.GetThreadName())
-                        .Item("fid").Value(error.GetFid());
-                } else if (errorSanitizerEnabled && error.HasHost()) {
+                        .Item("fid").Value(GetFid(error));
+                } else if (IsErrorSanitizerEnabled() && HasHost(error)) {
                     fluent
-                        .Item("host").Value(error.GetHost());
+                        .Item("host").Value(GetHost(error));
                 }
                 if (error.HasDatetime()) {
                     fluent
                         .Item("datetime").Value(error.GetDatetime());
                 }
-                if (error.HasTracingAttributes()) {
+                if (HasTracingAttributes(error)) {
                     fluent
-                        .Item("trace_id").Value(error.GetTraceId())
-                        .Item("span_id").Value(error.GetSpanId());
+                        .Item("trace_id").Value(GetTraceId(error))
+                        .Item("span_id").Value(GetSpanId(error));
                 }
                 if (depth > ErrorSerializationDepthLimit && !error.Attributes().Contains(OriginalErrorDepthAttribute)) {
                     fluent
@@ -1269,7 +371,6 @@ void Serialize(
                 (*valueProducer)(consumer);
             })
         .EndMap();
-
 }
 
 void Deserialize(TError& error, const NYTree::INodePtr& node)
@@ -1284,23 +385,22 @@ void Deserialize(TError& error, const NYTree::INodePtr& node)
         return;
     }
 
-    auto result = std::make_unique<TError::TImpl>();
-    result->SetCode(code);
+    error.SetCode(code);
 
     static const TString MessageKey("message");
-    result->SetMessage(mapNode->GetChildValueOrThrow<TString>(MessageKey));
+    error.SetMessage(mapNode->GetChildValueOrThrow<TString>(MessageKey));
 
     static const TString AttributesKey("attributes");
-    result->SetAttributes(IAttributeDictionary::FromMap(mapNode->GetChildOrThrow(AttributesKey)->AsMap()));
+    auto attributes = IAttributeDictionary::FromMap(mapNode->GetChildOrThrow(AttributesKey)->AsMap());
+
+    error.SetAttributes(std::move(attributes));
 
     static const TString InnerErrorsKey("inner_errors");
     if (auto innerErrorsNode = mapNode->FindChild(InnerErrorsKey)) {
         for (const auto& innerErrorNode : innerErrorsNode->AsList()->GetChildren()) {
-            result->MutableInnerErrors()->push_back(ConvertTo<TError>(innerErrorNode));
+            error.MutableInnerErrors()->push_back(ConvertTo<TError>(innerErrorNode));
         }
     }
-
-    error = TError(std::move(result));
 }
 
 void Deserialize(TError& error, NYson::TYsonPullParserCursor* cursor)
@@ -1310,64 +410,211 @@ void Deserialize(TError& error, NYson::TYsonPullParserCursor* cursor)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TError& TError::operator <<= (const TErrorAttribute& attribute) &
+void ToProto(NYT::NProto::TError* protoError, const TError& error)
 {
-    MutableAttributes()->SetYson(attribute.Key, attribute.Value);
-    return *this;
-}
-
-TError& TError::operator <<= (const std::vector<TErrorAttribute>& attributes) &
-{
-    for (const auto& attribute : attributes) {
-        MutableAttributes()->SetYson(attribute.Key, attribute.Value);
+    if (error.IsOK()) {
+        protoError->set_code(static_cast<int>(NYT::EErrorCode::OK));
+        protoError->clear_message();
+        return;
     }
-    return *this;
+
+    protoError->set_code(error.GetCode());
+    protoError->set_message(error.GetMessage());
+
+    protoError->clear_attributes();
+    if (error.HasAttributes()) {
+        ToProto(protoError->mutable_attributes(), error.Attributes());
+    }
+
+    auto addAttribute = [&] (const TString& key, const auto& value) {
+        auto* protoItem = protoError->mutable_attributes()->add_attributes();
+        protoItem->set_key(key);
+        protoItem->set_value(ConvertToYsonString(value).ToString());
+    };
+
+    if (error.HasOriginAttributes()) {
+        static const TString HostKey("host");
+        addAttribute(HostKey, GetHost(error));
+
+        static const TString PidKey("pid");
+        addAttribute(PidKey, error.GetPid());
+
+        static const TString TidKey("tid");
+        addAttribute(TidKey, error.GetTid());
+
+        static const TString ThreadName("thread");
+        addAttribute(ThreadName, error.GetThreadName());
+
+        static const TString FidKey("fid");
+        addAttribute(FidKey, GetFid(error));
+    } else if (IsErrorSanitizerEnabled() && HasHost(error)) {
+        static const TString HostKey("host");
+        addAttribute(HostKey, GetHost(error));
+    }
+
+    if (error.HasDatetime()) {
+        static const TString DatetimeKey("datetime");
+        addAttribute(DatetimeKey, error.GetDatetime());
+    }
+
+    if (HasTracingAttributes(error)) {
+        static const TString TraceIdKey("trace_id");
+        addAttribute(TraceIdKey, GetTraceId(error));
+
+        static const TString SpanIdKey("span_id");
+        addAttribute(SpanIdKey, GetSpanId(error));
+    }
+
+    protoError->clear_inner_errors();
+    for (const auto& innerError : error.InnerErrors()) {
+        ToProto(protoError->add_inner_errors(), innerError);
+    }
 }
 
-TError& TError::operator <<= (const TError& innerError) &
+void FromProto(TError* error, const NYT::NProto::TError& protoError)
 {
-    MutableInnerErrors()->push_back(innerError);
-    return *this;
-}
+    *error = {};
 
-TError& TError::operator <<= (TError&& innerError) &
-{
-    MutableInnerErrors()->push_back(std::move(innerError));
-    return *this;
-}
+    if (protoError.code() == static_cast<int>(NYT::EErrorCode::OK)) {
+        return;
+    }
 
-TError& TError::operator <<= (const std::vector<TError>& innerErrors) &
-{
-    MutableInnerErrors()->insert(
-        MutableInnerErrors()->end(),
-        innerErrors.begin(),
-        innerErrors.end());
-    return *this;
-}
+    error->SetCode(TErrorCode(protoError.code()));
+    error->SetMessage(FromProto<TString>(protoError.message()));
+    if (protoError.has_attributes()) {
+        auto attributes = FromProto(protoError.attributes());
 
-TError& TError::operator <<= (std::vector<TError>&& innerErrors) &
-{
-    MutableInnerErrors()->insert(
-        MutableInnerErrors()->end(),
-        std::make_move_iterator(innerErrors.begin()),
-        std::make_move_iterator(innerErrors.end()));
-    return *this;
-}
-
-TError& TError::operator <<= (const NYTree::IAttributeDictionary& attributes) &
-{
-    MutableAttributes()->MergeFrom(attributes);
-    return *this;
+        error->SetAttributes(std::move(attributes));
+    }
+    *error->MutableInnerErrors() = FromProto<std::vector<TError>>(protoError.inner_errors());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const char* TErrorException::what() const noexcept
+void TErrorSerializer::Save(TStreamSaveContext& context, const TErrorCode& errorCode)
 {
-    if (CachedWhat_.empty()) {
-        CachedWhat_ = ToString(Error_);
+    NYT::Save(context, static_cast<int>(errorCode));
+}
+
+void TErrorSerializer::Load(TStreamLoadContext& context, TErrorCode& errorCode)
+{
+    int value = 0;
+    NYT::Load(context, value);
+    errorCode = TErrorCode{value};
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TErrorSerializer::Save(TStreamSaveContext& context, const TError& error)
+{
+    using NYT::Save;
+
+    if (error.IsOK()) {
+        // Fast path.
+        Save(context, TErrorCode(NYT::EErrorCode::OK)); // code
+        Save(context, TStringBuf());                    // message
+        Save(context, IAttributeDictionaryPtr());       // attributes
+        Save(context, std::vector<TError>());           // inner errors
+        return;
     }
-    return CachedWhat_.data();
+
+    Save(context, error.GetCode());
+    Save(context, error.GetMessage());
+
+    // Cf. TAttributeDictionaryValueSerializer.
+    auto attributePairs = error.Attributes().ListPairs();
+    size_t attributeCount = attributePairs.size();
+    if (error.HasOriginAttributes()) {
+        attributeCount += 5;
+    }
+    if (error.HasDatetime()) {
+        attributeCount += 1;
+    }
+    if (HasTracingAttributes(error)) {
+        attributeCount += 2;
+    }
+
+    if (attributeCount > 0) {
+        // Cf. TAttributeDictionaryRefSerializer.
+        Save(context, true);
+
+        TSizeSerializer::Save(context, attributeCount);
+
+        auto saveAttribute = [&] (const TString& key, const auto& value) {
+            Save(context, key);
+            Save(context, ConvertToYsonString(value));
+        };
+
+        if (error.HasOriginAttributes()) {
+            static const TString HostKey("host");
+            saveAttribute(HostKey, GetHost(error));
+
+            static const TString PidKey("pid");
+            saveAttribute(PidKey, error.GetPid());
+
+            static const TString TidKey("tid");
+            saveAttribute(TidKey, error.GetTid());
+
+            static const TString ThreadNameKey("thread");
+            saveAttribute(ThreadNameKey, error.GetThreadName());
+
+            static const TString FidKey("fid");
+            saveAttribute(FidKey, GetFid(error));
+        }
+
+        if (error.HasDatetime()) {
+            static const TString DatetimeKey("datetime");
+            saveAttribute(DatetimeKey, error.GetDatetime());
+        }
+
+        if (HasTracingAttributes(error)) {
+            static const TString TraceIdKey("trace_id");
+            saveAttribute(TraceIdKey, GetTraceId(error));
+
+            static const TString SpanIdKey("span_id");
+            saveAttribute(SpanIdKey, GetSpanId(error));
+        }
+
+        std::sort(attributePairs.begin(), attributePairs.end(), [] (const auto& lhs, const auto& rhs) {
+            return lhs.first < rhs.first;
+        });
+        for (const auto& [key, value] : attributePairs) {
+            Save(context, key);
+            Save(context, value);
+        }
+    } else {
+        Save(context, false);
+    }
+
+    Save(context, error.InnerErrors());
+}
+
+void TErrorSerializer::Load(TStreamLoadContext& context, TError& error)
+{
+    using NYT::Load;
+
+    error = {};
+
+    auto code = Load<TErrorCode>(context);
+    auto message = Load<TString>(context);
+
+    IAttributeDictionaryPtr attributes;
+    if (Load<bool>(context)) {
+        attributes = CreateEphemeralAttributes();
+        TAttributeDictionarySerializer::LoadNonNull(context, attributes);
+    }
+
+    auto innerErrors = Load<std::vector<TError>>(context);
+
+    if (code == NYT::EErrorCode::OK) {
+        // Fast path.
+        return;
+    }
+
+    error.SetCode(code);
+    error.SetMessage(std::move(message));
+    error.SetAttributes(std::move(attributes));
+    *error.MutableInnerErrors() = std::move(innerErrors);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

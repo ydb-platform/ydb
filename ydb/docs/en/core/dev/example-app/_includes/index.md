@@ -40,10 +40,6 @@ A test app performs the following steps:
 
 {% if oss %}[C++](../example-cpp.md#param-queries) | {% endif %} [C# (.NET)](../example-dotnet.md#param-queries) | [Go](../go/index.md#param-queries) | [Java](../java/index.md#param-queries) | Node.js | [PHP](../example-php.md#param-queries) | [Python](../python/index.md#param-queries)
 
-{% include [scan_query.md](steps/08_scan_query.md) %}
-
-{% if oss %}C++ | {% endif %} [C# (.NET)](../example-dotnet.md#scan-query) | [Go](../go/index.md#scan-query) | [Java](../java/index.md#scan-query) | [Node.js](../example-nodejs.md#scan-query) | PHP | [Python](../python/index.md#scan-query)
-
 {% include [multistep_transactions.md](steps/09_multistep_transactions.md) %}
 
 {% if oss %}[C++](../example-cpp.md#multistep-transactions) | {% endif %} C# (.NET) | Go | [Java](../java/index.md#multistep-transactions) | Node.js | PHP | Python

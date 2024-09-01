@@ -1,5 +1,6 @@
 #include "service_table.h"
 #include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/grpc_services/grpc_integrity_trails.h>
 
 #include "rpc_calls.h"
 #include "rpc_kqp_base.h"
@@ -46,6 +47,8 @@ private:
         const auto req = GetProtoRequest();
         const auto traceId = Request_->GetTraceId();
 
+        NDataIntegrity::LogIntegrityTrails(traceId, *req, ctx);
+
         TString sessionId;
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
         SetAuthToken(ev, *Request_);
@@ -74,6 +77,8 @@ private:
     }
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
+        NDataIntegrity::LogIntegrityTrails(Request_->GetTraceId(), *GetProtoRequest(), ev, ctx);
+
         const auto& record = ev->Get()->Record.GetRef();
         AddServerHintsIfAny(record);
 

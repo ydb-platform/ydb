@@ -181,11 +181,7 @@ template <class T>
     requires TEnumTraits<T>::IsEnum && (!TEnumTraits<T>::IsBitEnum)
 void FromProto(T* original, int serialized)
 {
-    if constexpr (TEnumHasDefaultValue<T>::value) {
-        *original = CheckedEnumCast<T>(serialized);
-    } else {
-        *original = static_cast<T>(serialized);
-    }
+    *original = static_cast<T>(serialized);
 }
 
 template <class T>
@@ -199,11 +195,7 @@ template <class T>
     requires TEnumTraits<T>::IsBitEnum
 void FromProto(T* original, ui64 serialized)
 {
-    if constexpr (TEnumHasDefaultValue<T>::value) {
-        *original = CheckedEnumCast<T>(serialized);
-    } else {
-        *original = static_cast<T>(serialized);
-    }
+    *original = static_cast<T>(serialized);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

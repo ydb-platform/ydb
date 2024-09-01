@@ -376,6 +376,7 @@ private:
 
         appConfig.MutableSqsConfig()->SetEnableSqs(true);
         appConfig.MutableSqsConfig()->SetYandexCloudMode(true);
+        appConfig.MutableSqsConfig()->SetEnableDeadLetterQueues(true);
 
         auto limit = appConfig.MutablePQConfig()->AddValidRetentionLimits();
         limit->SetMinPeriodSeconds(0);

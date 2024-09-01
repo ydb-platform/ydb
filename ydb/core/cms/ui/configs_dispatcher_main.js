@@ -1,4 +1,4 @@
-var createEditor;
+var createEditorPromise = new $.Deferred();
 
 var codeMirror;
 var codeMirrorResolved;
@@ -7,9 +7,12 @@ function replaceWithEditor(selector) {
     var container = $(selector);
     var value = container.text();
     container.text("");
-    var editor = createEditor(container.get(0), true, 1068)
-    editor.setValue(value);
-    return editor;
+    var editorPromise = createEditorPromise.then(function(createEditor) {
+        var editor = createEditor(container.get(0), true, 1068)
+        editor.setValue(value);
+        return editor;
+    });
+    return editorPromise;
 }
 
 function main() {
@@ -22,51 +25,53 @@ function main() {
         }
     });
 
-    codeMirror = replaceWithEditor("#yaml-config-item");
-    codeMirror.trigger('fold', 'editor.foldLevel2');
-
-    $("#fold-yaml-config").click(function() {
+    replaceWithEditor("#yaml-config-item").then(function(codeMirror) {
         codeMirror.trigger('fold', 'editor.foldLevel2');
+    
+        $("#fold-yaml-config").click(function() {
+            codeMirror.trigger('fold', 'editor.foldLevel2');
+        });
+    
+        $("#unfold-yaml-config").click(function() {
+            codeMirror.trigger('fold', 'editor.unfoldAll');
+        });
+    
+        $("#copy-yaml-config").click(function() {
+            copyToClipboard(codeMirror.getValue());
+        });
     });
 
-    $("#unfold-yaml-config").click(function() {
-        codeMirror.trigger('fold', 'editor.unfoldAll');
-    });
-
-    $("#copy-yaml-config").click(function() {
-        copyToClipboard(codeMirror.getValue());
-    });
-
-    codeMirrorResolved = replaceWithEditor("#resolved-yaml-config-item");
-    codeMirrorResolved.trigger('fold', 'editor.foldLevel1');
-
-    $("#fold-resolved-yaml-config").click(function() {
+    replaceWithEditor("#resolved-yaml-config-item").then(function(codeMirrorResolved) {
         codeMirrorResolved.trigger('fold', 'editor.foldLevel1');
-    });
-
-    $("#unfold-resolved-yaml-config").click(function() {
-        codeMirrorResolved.trigger('fold', 'editor.unfoldAll');
-    });
-
-    $("#copy-resolved-yaml-config").click(function() {
-        copyToClipboard(codeMirrorResolved.getValue());
+    
+        $("#fold-resolved-yaml-config").click(function() {
+            codeMirrorResolved.trigger('fold', 'editor.foldLevel1');
+        });
+    
+        $("#unfold-resolved-yaml-config").click(function() {
+            codeMirrorResolved.trigger('fold', 'editor.unfoldAll');
+        });
+    
+        $("#copy-resolved-yaml-config").click(function() {
+            copyToClipboard(codeMirrorResolved.getValue());
+        });
     });
 
     $("#host-ref").text("YDB Developer UI - " + window.location.hostname);
 
     $(".yaml-config-item").each(function() {
-        let editor = replaceWithEditor(this);
-
-        $(this).parent().find('.fold-yaml-config').click(function() {
-            editor.trigger('fold', 'editor.foldLevel2');
-        });
-
-        $(this).parent().find('.unfold-yaml-config').click(function() {
-            editor.trigger('fold', 'editor.unfoldAll');
-        });
-
-        $(this).parent().find('.copy-yaml-config').click(function() {
-            copyToClipboard(editor.getValue());
+        replaceWithEditor(this).then(function(editor) {
+            $(this).parent().find('.fold-yaml-config').click(function() {
+                editor.trigger('fold', 'editor.foldLevel2');
+            });
+    
+            $(this).parent().find('.unfold-yaml-config').click(function() {
+                editor.trigger('fold', 'editor.unfoldAll');
+            });
+    
+            $(this).parent().find('.copy-yaml-config').click(function() {
+                copyToClipboard(editor.getValue());
+            });
         });
     });
 }
@@ -74,11 +79,12 @@ function main() {
 let run = () => {
   require.config({
     urlArgs: "v=0.27.0.2",
-    paths: { vs: "../cms/ext/monaco-editor/vs" }
+    paths: { vs: "../cms/ext/monaco-editor/vs" },
+    waitSeconds: 60 // Since editor is quite large
   });
 
   require(["vs/editor/editor.main"], function () {
-    createEditor = (container, readOnly, width) => {
+    createEditorPromise.resolve((container, readOnly, width) => {
         var editor;
         container.style.border = '1px solid #eee';
         container.style.borderRadius = '8px';
@@ -112,7 +118,7 @@ let run = () => {
         editor.onDidContentSizeChange(updateHeight);
         updateHeight();
         return editor;
-    }
+    });
 
     $(document).ready(main);
   });

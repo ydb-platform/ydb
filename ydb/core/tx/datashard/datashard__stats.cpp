@@ -133,7 +133,6 @@ private:
 
         auto ev = MakeHolder<TDataShard::TEvPrivate::TEvAsyncTableStats>();
         ev->TableId = TableId;
-        ev->IndexSize = IndexSize;
         ev->StatsUpdateTime = StatsUpdateTime;
         ev->PartCount = Subset->Flatten.size() + Subset->ColdParts.size();
         ev->MemRowCount = MemRowCount;
@@ -272,17 +271,14 @@ public:
 
         const TUserTable& tableInfo = *Self->TableInfos[tableId];
 
-        auto indexSize = txc.DB.GetTableIndexSize(tableInfo.LocalTid);
+        // Fill stats with current mem table size:
         auto memSize = txc.DB.GetTableMemSize(tableInfo.LocalTid);
         auto memRowCount = txc.DB.GetTableMemRowCount(tableInfo.LocalTid);
-
         if (tableInfo.ShadowTid) {
-            indexSize += txc.DB.GetTableIndexSize(tableInfo.ShadowTid);
             memSize += txc.DB.GetTableMemSize(tableInfo.ShadowTid);
             memRowCount += txc.DB.GetTableMemRowCount(tableInfo.ShadowTid);
         }
 
-        Result->Record.MutableTableStats()->SetIndexSize(indexSize);
         Result->Record.MutableTableStats()->SetInMemSize(memSize);
         Result->Record.MutableTableStats()->SetLastAccessTime(tableInfo.Stats.AccessTime.MilliSeconds());
         Result->Record.MutableTableStats()->SetLastUpdateTime(tableInfo.Stats.UpdateTime.MilliSeconds());
@@ -291,18 +287,21 @@ public:
         tableInfo.Stats.RowCountResolution = Ev->Get()->Record.GetRowCountResolution();
         tableInfo.Stats.HistogramBucketsCount = Ev->Get()->Record.GetHistogramBucketsCount();
 
-        // Check if first stats update has been completed
+        // Check if first stats update has been completed:
         bool ready = (tableInfo.Stats.StatsUpdateTime != TInstant());
         Result->Record.SetFullStatsReady(ready);
-        if (!ready)
+        if (!ready) {
             return true;
+        }
 
         const TStats& stats = tableInfo.Stats.DataStats;
+        Result->Record.MutableTableStats()->SetIndexSize(stats.IndexSize.Size);
+        Result->Record.MutableTableStats()->SetByKeyFilterSize(stats.ByKeyFilterSize);
         Result->Record.MutableTableStats()->SetDataSize(stats.DataSize.Size + memSize);
         Result->Record.MutableTableStats()->SetRowCount(stats.RowCount + memRowCount);
         FillHistogram(stats.DataSizeHistogram, *Result->Record.MutableTableStats()->MutableDataSizeHistogram());
         FillHistogram(stats.RowCountHistogram, *Result->Record.MutableTableStats()->MutableRowCountHistogram());
-        // Fill key access sample if it was collected not too long ago
+        // Fill key access sample if it was collected not too long ago:
         if (Self->StopKeyAccessSamplingAt + TDuration::Seconds(30) >= AppData(ctx)->TimeProvider->Now()) {
             FillKeyAccessSample(tableInfo.Stats.AccessStats, *Result->Record.MutableTableStats()->MutableKeyAccessSample());
         }
@@ -317,7 +316,7 @@ public:
             Result->Record.AddUserTablePartOwners(pi);
         }
 
-        for (const auto& pi : Self->SysTablesPartOnwers) {
+        for (const auto& pi : Self->SysTablesPartOwners) {
             Result->Record.AddSysTablesPartOwners(pi);
         }
 
@@ -375,9 +374,10 @@ void TDataShard::Handle(TEvPrivate::TEvAsyncTableStats::TPtr& ev, const TActorCo
             LOG_ERROR(ctx, NKikimrServices::TX_DATASHARD,
                       "Unexpected async stats update at datashard %" PRIu64, TabletID());
         }
-        tableInfo.Stats.Update(std::move(ev->Get()->Stats), ev->Get()->IndexSize,
-            std::move(ev->Get()->PartOwners), ev->Get()->PartCount,
-            ev->Get()->StatsUpdateTime);
+        tableInfo.Stats.DataStats = std::move(ev->Get()->Stats);
+        tableInfo.Stats.PartOwners = std::move(ev->Get()->PartOwners);
+        tableInfo.Stats.PartCount = ev->Get()->PartCount;
+        tableInfo.Stats.StatsUpdateTime = ev->Get()->StatsUpdateTime;
         tableInfo.Stats.MemRowCount = ev->Get()->MemRowCount;
         tableInfo.Stats.MemDataSize = ev->Get()->MemDataSize;
 
@@ -565,12 +565,12 @@ public:
             Self->Actors.insert(actorId);
         }
 
-        Self->SysTablesPartOnwers.clear();
+        Self->SysTablesPartOwners.clear();
         for (ui32 sysTableId : Self->SysTablesToTransferAtSplit) {
             THashSet<ui64> sysPartOwners;
             auto subset = txc.DB.Subset(sysTableId, TEpoch::Max(), { }, { });
             GetPartOwners(*subset, sysPartOwners);
-            Self->SysTablesPartOnwers.insert(sysPartOwners.begin(), sysPartOwners.end());
+            Self->SysTablesPartOwners.insert(sysPartOwners.begin(), sysPartOwners.end());
         }
         return true;
     }

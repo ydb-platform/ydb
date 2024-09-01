@@ -482,6 +482,7 @@ private:
     NKikimrResourceBroker::TResourceBrokerConfig BootstrapConfig;
     ::NMonitoring::TDynamicCounterPtr BootstrapCounters;
     TIntrusivePtr<TResourceBroker> ResourceBroker;
+    THashMap<TString, THashSet<TActorId>> QueueSubscribers;
 };
 
 } // NResourceBroker

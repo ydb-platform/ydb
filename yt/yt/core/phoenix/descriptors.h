@@ -29,7 +29,6 @@ class TFieldDescriptor
 public:
     const TString& GetName() const;
     TFieldTag GetTag() const;
-    bool IsDeprecated() const;
 
     const TFieldSchemaPtr& GetSchema() const;
 
@@ -39,7 +38,6 @@ private:
 
     TString Name_;
     TFieldTag Tag_;
-    bool Deprecated_ = false;
     int MinVersion_ = std::numeric_limits<int>::min();
     int MaxVersion_ = std::numeric_limits<int>::max();
 
@@ -53,13 +51,11 @@ public:
     const TString& GetName() const;
     TTypeTag GetTag() const;
     const std::vector<std::unique_ptr<TFieldDescriptor>>& Fields() const;
-    const std::vector<const TTypeDescriptor*>& BaseTypes() const;
+    const std::vector<TTypeTag>& BaseTypeTags() const;
     bool IsTemplate() const;
 
     const TTypeSchemaPtr& GetSchema() const;
     const NYson::TYsonString& GetSchemaYson() const;
-
-    std::vector<TTypeTag> GetBaseTypeTags() const;
 
     template <class T>
     T* TryConstruct() const;
@@ -74,7 +70,7 @@ private:
     std::vector<const std::type_info*> TypeInfos_;
     TTypeTag Tag_;
     std::vector<std::unique_ptr<TFieldDescriptor>> Fields_;
-    std::vector<const TTypeDescriptor*> BaseTypes_;
+    std::vector<TTypeTag> BaseTypeTags_;
     bool Template_ = false;
     TPolymorphicConstructor PolymorphicConstructor_ = nullptr;
     TConcreteConstructor ConcreteConstructor_ = nullptr;
@@ -93,9 +89,11 @@ public:
     const NYson::TYsonString& GetSchemaYson() const;
 
     const TTypeDescriptor* FindTypeDescriptorByTag(TTypeTag tag) const ;
+    const TTypeDescriptor& GetTypeDescriptorByTag(TTypeTag tag) const;
     const TTypeDescriptor& GetTypeDescriptorByTagOrThrow(TTypeTag tag) const;
 
     const TTypeDescriptor* FindTypeDescriptorByTypeIndex(std::type_index typeIndex) const ;
+    const TTypeDescriptor& GetTypeDescriptorByTypeIndex(std::type_index typeIndex) const;
     const TTypeDescriptor& GetTypeDescriptorByTypeIndexOrThrow(std::type_index typeIndex) const;
 
 private:

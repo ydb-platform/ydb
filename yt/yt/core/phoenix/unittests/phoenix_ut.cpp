@@ -115,7 +115,6 @@ void TBaseStruct::RegisterMetadata(auto&& registrar)
     registrar.template Field<1, &TThis::A>("a")();
 }
 
-PHOENIX_DEFINE_TYPE(TBaseStruct);
 PHOENIX_DEFINE_YSON_DUMPABLE_TYPE_MIXIN(TBaseStruct);
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -137,8 +136,10 @@ void TDerivedStruct::RegisterMetadata(auto&& registrar)
     registrar.template Field<1, &TThis::B>("b")();
 }
 
-PHOENIX_DEFINE_TYPE(TDerivedStruct);
+PHOENIX_DEFINE_TYPE(TDerivedStruct); // <- TRegisterTypeDescriptor() for BaseStruct is not called yet
 PHOENIX_DEFINE_YSON_DUMPABLE_TYPE_MIXIN(TDerivedStruct);
+
+PHOENIX_DEFINE_TYPE(TBaseStruct);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -161,7 +162,7 @@ void TPair<T1, T2>::RegisterMetadata(auto&& registrar)
     registrar.template Field<2, &TThis::Second>("second")();
 }
 
-PHOENIX_DEFINE_TEMPLATE_TYPE(TPair, (<int, int>));
+PHOENIX_DEFINE_TEMPLATE_TYPE(TPair, (_, _));
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -205,6 +206,22 @@ void TConcreteStruct::RegisterMetadata(auto&& /*registrar*/)
 { }
 
 PHOENIX_DEFINE_TYPE(TConcreteStruct);
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TRefCountedAbstractStruct
+    : public TRefCounted
+    , public NPhoenix2::IPersistent
+{
+    virtual void Foo() = 0;
+
+    PHOENIX_DECLARE_POLYMORPHIC_TYPE(TRefCountedAbstractStruct, 0x7e16f830);
+};
+
+void TRefCountedAbstractStruct::RegisterMetadata(auto&& /*registrar*/)
+{ }
+
+PHOENIX_DEFINE_TYPE(TRefCountedAbstractStruct);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -672,7 +689,7 @@ TEST(TPhoenixTest, NativeLoadDerivedStructNoSchema)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-namespace NDeprecatedField {
+namespace NLoadOnlyVirtualField {
 
 struct S
 {
@@ -683,41 +700,61 @@ struct S
 
 void S::RegisterMetadata(auto&& registrar)
 {
-    registrar.template DeprecatedField<1>("a", [] (TThis* this_, auto& context) {
+    registrar.template VirtualField<1>("a", [] (TThis* this_, auto& context) {
         this_->A = Load<int>(context);
     })();
 }
 
 PHOENIX_DEFINE_TYPE(S);
 
-} // namespace NDeprecatedField
+} // namespace NLoadOnlyVirtualField
 
-TEST(TPhoenixTest, DeprecatedField)
+TEST(TPhoenixTest, LoadOnlyVirtualField)
 {
-    using namespace NDeprecatedField;
+    using namespace NLoadOnlyVirtualField;
 
     auto buffer = MakeBuffer([] (auto& context) {
         Save<int>(context, 123);
     });
 
-    auto loadSchema = ConvertTo<TUniverseSchemaPtr>(TYsonString(TString(R"""(
-        {
-            types = [
-                {
-                    name = S;
-                    tag = 1652735129u;
-                    fields = [
-                        {name = a; tag = 1u};
-                    ];
-                }
-            ];
-        }
-    )""")));
-    TLoadSessionGuard guard(loadSchema);
-    EXPECT_TRUE(NDetail::UniverseLoadState->Schedule);
-
     auto s = Deserialize<S>(buffer);
     EXPECT_EQ(s.A, 123);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NSaveLoadVirtualField {
+
+struct S
+{
+    int A = 0;
+
+    bool operator==(const S&) const = default;
+
+    PHOENIX_DECLARE_TYPE(S, 0x67bdf7f9);
+};
+
+void S::RegisterMetadata(auto&& registrar)
+{
+    registrar.template VirtualField<1>("a", [] (TThis* this_, auto& context) {
+        this_->A = Load<int>(context);
+    }, [] (const TThis* this_, auto& context) {
+        NYT::Save(context, this_->A);
+    })();
+}
+
+PHOENIX_DEFINE_TYPE(S);
+
+} // namespace NSaveLoadVirtualField
+
+TEST(TPhoenixTest, SaveLoadVirtualField)
+{
+    using namespace NSaveLoadVirtualField;
+
+    S s1;
+    s1.A = 123;
+    auto s2 = Deserialize<S>(Serialize(s1));
+    EXPECT_EQ(s1, s2);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1212,6 +1249,48 @@ TEST(TPhoenixTest, UniquePtr)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace NPolymorphicTemplate {
+
+struct TBase;
+
+template <class T>
+struct TDerived;
+
+struct TBase
+    : public IPersistent
+{
+    virtual void Foo() = 0;
+
+    PHOENIX_DECLARE_POLYMORPHIC_TYPE(TBase, 0x0f07ba7c);
+};
+
+void TBase::RegisterMetadata(auto&& /*registrar*/)
+{ }
+
+PHOENIX_DEFINE_TYPE(TBase);
+
+template <class T>
+struct TDerived
+    : public TBase
+{
+    void Foo() override
+    { }
+
+    PHOENIX_DECLARE_POLYMORPHIC_TEMPLATE_TYPE(TDerived, 0x8bf17dc9);
+};
+
+template <class T>
+void TDerived<T>::RegisterMetadata(auto&& registrar)
+{
+    registrar.template BaseType<TBase>();
+}
+
+PHOENIX_DEFINE_TEMPLATE_TYPE(TDerived, (_));
+
+} // namespace NPolymorphicTemplate
+
+////////////////////////////////////////////////////////////////////////////////
+
 namespace NPolymorphicRawPtr {
 
 struct TBase;
@@ -1496,6 +1575,39 @@ void TOuter::TInner::RegisterMetadata(auto&& registrar)
 TEST(TPhoenixTest, PrivateInner)
 {
     NPrivateInner::TOuter::Test();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NSeveralSpecializationsOfOneTemplate {
+
+struct TDerivedFromTemplate
+    : public TPair<double, double>
+{
+    bool operator==(const TDerivedFromTemplate&) const = default;
+
+    PHOENIX_DECLARE_TYPE(TDerivedFromTemplate, 0xf09c298f);
+};
+
+void TDerivedFromTemplate::RegisterMetadata(auto&& registrar)
+{
+    registrar.template BaseType<TPair<double, double>>();
+}
+
+PHOENIX_DEFINE_TYPE(TDerivedFromTemplate);
+
+} // namespace NSeveralSpecializationsOfOneTemplate
+
+TEST(TPhoenixTest, SeveralSpecializationsOfOneTemplate)
+{
+    using namespace NSeveralSpecializationsOfOneTemplate;
+
+    TDerivedFromTemplate tp1;
+    tp1.First = 1.1;
+    tp1.Second = 2.2;
+
+    auto tp2 = Deserialize<TDerivedFromTemplate>(Serialize(tp1));
+    EXPECT_EQ(tp1, tp2);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

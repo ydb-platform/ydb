@@ -8,6 +8,7 @@
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
+#include <ydb/core/external_sources/object_storage/inference/infer_config.h>
 #include <ydb/core/fq/libs/config/protos/issue_id.pb.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/status/status.h>
@@ -109,21 +110,28 @@ struct TEvS3RangeError : public NActors::TEventLocal<TEvS3RangeError, EvS3RangeE
 };
 
 struct TEvArrowFile : public NActors::TEventLocal<TEvArrowFile, EvArrowFile> {
-    TEvArrowFile(std::shared_ptr<arrow::io::RandomAccessFile> file, TString path)
-        : File{std::move(file)}
+    TEvArrowFile(
+        std::shared_ptr<NInference::FormatConfig> config,
+        std::shared_ptr<arrow::io::RandomAccessFile> file,
+        TString path)
+        : Config{std::move(config)}
+        , File{std::move(file)}
         , Path{std::move(path)}
     {}
 
+    std::shared_ptr<NInference::FormatConfig> Config;
     std::shared_ptr<arrow::io::RandomAccessFile> File;
     TString Path;
 };
 
 struct TEvInferFileSchema : public NActors::TEventLocal<TEvInferFileSchema, EvInferFileSchema> {
-    explicit TEvInferFileSchema(TString&& path)
+    explicit TEvInferFileSchema(TString&& path, ui64 size)
         : Path{std::move(path)}
+        , Size{size}
     {}
 
     TString Path;
+    ui64 Size = 0;
 };
 
 struct TEvInferredFileSchema : public NActors::TEventLocal<TEvInferredFileSchema, EvInferredFileSchema> {

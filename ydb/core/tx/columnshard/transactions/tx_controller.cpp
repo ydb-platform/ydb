@@ -46,18 +46,28 @@ bool TTxController::Load(NTabletFlatExecutor::TTransactionContext& txc) {
         return false;
     }
 
+    ui32 countWithDeadline = 0;
+    ui32 countOverrideDeadline = 0;
+    ui32 countNoDeadline = 0;
     while (!rowset.EndOfSet()) {
         const ui64 txId = rowset.GetValue<Schema::TxInfo::TxId>();
         const NKikimrTxColumnShard::ETransactionKind txKind = rowset.GetValue<Schema::TxInfo::TxKind>();
         ITransactionOperator::TPtr txOperator(ITransactionOperator::TFactory::Construct(txKind, TTxInfo(txKind, txId)));
-        Y_ABORT_UNLESS(!!txOperator);
+        AFL_VERIFY(!!txOperator)("kind", txKind);
         const TString txBody = rowset.GetValue<Schema::TxInfo::TxBody>();
-        Y_ABORT_UNLESS(txOperator->Parse(Owner, txBody, true));
+        AFL_VERIFY(txOperator->Parse(Owner, txBody, true));
 
         auto& txInfo = txOperator->MutableTxInfo();
         txInfo.MaxStep = rowset.GetValue<Schema::TxInfo::MaxStep>();
         if (txInfo.MaxStep != Max<ui64>()) {
             txInfo.MinStep = txInfo.MaxStep - MaxCommitTxDelay.MilliSeconds();
+            ++countWithDeadline;
+        } else if (txOperator->TxWithDeadline()) {
+            txInfo.MinStep = GetAllowedStep();
+            txInfo.MaxStep = txInfo.MinStep + MaxCommitTxDelay.MilliSeconds();
+            ++countOverrideDeadline;
+        } else {
+            ++countNoDeadline;
         }
         txInfo.PlanStep = rowset.GetValueOrDefault<Schema::TxInfo::PlanStep>(0);
         txInfo.Source = rowset.GetValue<Schema::TxInfo::Source>();
@@ -75,6 +85,8 @@ bool TTxController::Load(NTabletFlatExecutor::TTransactionContext& txc) {
             return false;
         }
     }
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("override", countOverrideDeadline)("no_dl", countNoDeadline)("dl", countWithDeadline)(
+        "operators", Operators.size())("plan", PlanQueue.size())("dl_queue", DeadlineQueue.size());
     return true;
 }
 

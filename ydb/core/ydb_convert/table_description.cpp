@@ -852,8 +852,8 @@ void FillGlobalIndexSettings(Ydb::Table::GlobalIndexSettings& settings,
         NKikimrMiniKQL::TType splitKeyType;
         Ydb::Table::DescribeTableResult unused;
         FillColumnDescription(unused, splitKeyType, indexImplTableDescription);
-        FillTableBoundaryImpl(
-            *settings.mutable_partition_at_keys(),
+        FillTableBoundaryImpl<Ydb::Table::GlobalIndexSettings>(
+            settings,
             indexImplTableDescription,
             splitKeyType
         );

@@ -16,6 +16,10 @@
 
 #include <yt/yt/core/tracing/trace_context.h>
 
+#include <library/cpp/yt/error/origin_attributes.h>
+
+#include <library/cpp/yt/global/variable.h>
+
 #include <library/cpp/yt/memory/memory_tag.h>
 
 #include <library/cpp/yt/memory/function_view.h>
@@ -1087,11 +1091,13 @@ YT_DEFINE_THREAD_LOCAL(TFiberId, CurrentFiberId);
 
 TFiberId GetCurrentFiberId()
 {
+    NYT::NOrigin::EnableOriginOverrides();
     return CurrentFiberId();
 }
 
 void SetCurrentFiberId(TFiberId id)
 {
+    NYT::NOrigin::EnableOriginOverrides();
     CurrentFiberId() = id;
 }
 

@@ -1,6 +1,16 @@
 # coding: utf-8
 import re
 
+TEST_BT_COLORS = {
+    "function_name": "[[alt1]]",
+    "function_arg": "[[good]]",
+    "stack_frame": "[[bad]]",
+    "thread_prefix": "[[alt3]]",
+    "thread_id": "[[bad]]",
+    "file_path": "[[warn]]",
+    "line_num": "[[alt2]]",
+    "address": "[[unimp]]",
+}
 
 RESTART_TEST_INDICATOR = '##restart-test##'
 INFRASTRUCTURE_ERROR_INDICATOR = '##infrastructure-error##'
@@ -386,6 +396,8 @@ class TestRunExitCode(Enum):
 
 class YaTestTags(Enum):
     AlwaysMinimize = "ya:always_minimize"
+    CopyData = "ya:copydata"
+    CopyDataRO = "ya:copydataro"
     Dirty = "ya:dirty"
     DumpNodeEnvironment = "ya:dump_node_env"
     DumpTestEnvironment = "ya:dump_test_env"
@@ -397,9 +409,11 @@ class YaTestTags(Enum):
     GoNoSubtestReport = "ya:go_no_subtest_report"
     GoTotalReport = "ya:go_total_report"
     HugeLogs = "ya:huge_logs"
+    JavaTmpInRamDisk = "ya:java_tmp_in_ram_disk"
     Manual = "ya:manual"
     MapRootUser = "ya:map_root_user"
     NoGracefulShutdown = "ya:no_graceful_shutdown"
+    NoPstreeTrim = "ya:no_pstree_trim"
     Norestart = "ya:norestart"
     Noretries = "ya:noretries"
     NotAutocheck = "ya:not_autocheck"
@@ -412,9 +426,6 @@ class YaTestTags(Enum):
     SequentialRun = "ya:sequential_run"
     TraceOutput = "ya:trace_output"
     YtRunner = "ya:yt"
-    CopyData = "ya:copydata"
-    CopyDataRO = "ya:copydataro"
-    NoPstreeTrim = "ya:no_pstree_trim"
 
 
 class ServiceTags(Enum):

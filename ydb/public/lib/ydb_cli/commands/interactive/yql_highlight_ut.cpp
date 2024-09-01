@@ -165,8 +165,8 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
         YQLHighlight highlight(Coloring);
         for (std::size_t size = 0; size < query.Size(); ++size) {
             const TStringBuf prefix(query, 0, size);
-            const auto colors = Apply(highlight, prefix);
-            Y_UNUSED(colors);
+            auto colors = Apply(highlight, prefix);
+            Y_DO_NOT_OPTIMIZE_AWAY(colors);
         }
     }
 }

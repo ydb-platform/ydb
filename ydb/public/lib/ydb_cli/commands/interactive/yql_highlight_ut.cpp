@@ -38,8 +38,9 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
     }
 
     TVector<YQLHighlight::Color> Apply(YQLHighlight& highlight,
-                                       const TString& query) {
-        TVector<YQLHighlight::Color> colors(query.Size(), YQLHighlight::Color::DEFAULT);
+                                       const TStringBuf& query) {
+        TVector<YQLHighlight::Color> colors(query.Size(),
+                                            YQLHighlight::Color::DEFAULT);
         highlight.Apply(query, colors);
         return colors;
     }
@@ -142,11 +143,8 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
             "FROM `local/test/space/table` JOIN test;",
             "kkkkkk nnnnnno sssssssssssssssso on o on o n o nooo fffovvvvvvvvvvo"
             "kkkk qqqqqqqqqqqqqqqqqqqqqqqq kkkk vvvvo");
-        Check(
-            highlight,
-            "SELECT Bool(phone) FROM customer",
-            "kkkkkk ttttovvvvvo kkkk vvvvvvvv"
-        );
+        Check(highlight, "SELECT Bool(phone) FROM customer",
+              "kkkkkk ttttovvvvvo kkkk vvvvvvvv");
     }
 
     Y_UNIT_TEST(Emoji) {
@@ -154,5 +152,21 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
         Check(highlight, "☺️", "uuuuuu");
         Check(highlight, "\"☺️\"", "ssssuuuu");
         Check(highlight, "`☺️`", "qqqquuuu");
+    }
+
+    Y_UNIT_TEST(Typing) {
+        const TString query =
+            "SELECT "
+            "  123467, \"Hello, {name}!\", "
+            "  (1 + (5 * 1 / 0)), MIN(identifier), "
+            "  Bool(field), Math::Sin(var) "
+            "FROM `local/test/space/table` JOIN test;";
+
+        YQLHighlight highlight(Coloring);
+        for (std::size_t size = 0; size < query.Size(); ++size) {
+            const TStringBuf prefix(query, 0, size);
+            const auto colors = Apply(highlight, prefix);
+            Y_UNUSED(colors);
+        }
     }
 }

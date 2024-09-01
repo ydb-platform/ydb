@@ -1,12 +1,17 @@
 #pragma once
+#include <ydb/core/tx/columnshard/engines/column_engine.h>
+#include <ydb/core/tx/columnshard/engines/insert_table/insert_table.h>
 #include <ydb/core/tx/columnshard/engines/reader/common/description.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/versioned_index.h>
-#include <ydb/core/tx/columnshard/engines/insert_table/insert_table.h>
-#include <ydb/core/tx/columnshard/engines/column_engine.h>
 
 namespace NKikimr::NOlap {
-    class TPortionInfo;
+class TPortionInfo;
 }
+
+namespace NKikimr::NKqp::NInternalImplementation {
+struct TEvScanData;
+}
+
 namespace NKikimr::NOlap::NReader {
 
 class TScanIteratorBase;
@@ -18,8 +23,7 @@ private:
     const std::unique_ptr<NOlap::IColumnEngine>& Index;
 
 public:
-    TDataStorageAccessor(const std::unique_ptr<TInsertTable>& insertTable,
-                                 const std::unique_ptr<IColumnEngine>& index);
+    TDataStorageAccessor(const std::unique_ptr<TInsertTable>& insertTable, const std::unique_ptr<IColumnEngine>& index);
     std::shared_ptr<NOlap::TSelectInfo> Select(const TReadDescription& readDescription) const;
     std::vector<NOlap::TCommittedBlob> GetCommitedBlobs(const TReadDescription& readDescription, const std::shared_ptr<arrow::Schema>& pkSchema,
         const std::optional<ui64> lockId, const TSnapshot& reqSnapshot) const;
@@ -33,8 +37,9 @@ public:
         ASC /* "ascending" */,
         DESC /* "descending" */,
     };
+
 private:
-    const ESorting Sorting = ESorting::ASC; // Sorting inside returned batches
+    const ESorting Sorting = ESorting::ASC;   // Sorting inside returned batches
     std::shared_ptr<TPKRangesFilter> PKRangesFilter;
     TProgramContainer Program;
     std::shared_ptr<TVersionedIndex> IndexVersionsPointer;
@@ -44,6 +49,8 @@ private:
     }
     virtual void DoOnBeforeStartReading(NColumnShard::TColumnShard& /*owner*/) const {
     }
+    virtual void DoOnReplyConstruction(const ui64 /*tabletId*/, NKqp::NInternalImplementation::TEvScanData& /*scanData*/) const {
+    }
 
 protected:
     std::shared_ptr<ISnapshotSchema> ResultIndexSchema;
@@ -52,6 +59,10 @@ protected:
 
 public:
     using TConstPtr = std::shared_ptr<const TReadMetadataBase>;
+
+    void OnReplyConstruction(const ui64 tabletId, NKqp::NInternalImplementation::TEvScanData& scanData) const {
+        DoOnReplyConstruction(tabletId, scanData);
+    }
 
     ui64 GetTxId() const {
         return TxId;
@@ -121,13 +132,13 @@ public:
         RequestShardingInfo = IndexVersionsPointer->GetShardingInfoOptional(pathId, RequestSnapshot);
     }
 
-    TReadMetadataBase(const std::shared_ptr<TVersionedIndex> index, const ESorting sorting, const TProgramContainer& ssaProgram, const std::shared_ptr<ISnapshotSchema>& schema, const TSnapshot& requestSnapshot)
+    TReadMetadataBase(const std::shared_ptr<TVersionedIndex> index, const ESorting sorting, const TProgramContainer& ssaProgram,
+        const std::shared_ptr<ISnapshotSchema>& schema, const TSnapshot& requestSnapshot)
         : Sorting(sorting)
         , Program(ssaProgram)
         , IndexVersionsPointer(index)
         , RequestSnapshot(requestSnapshot)
-        , ResultIndexSchema(schema)
-    {
+        , ResultIndexSchema(schema) {
     }
     virtual ~TReadMetadataBase() = default;
 
@@ -145,15 +156,21 @@ public:
         }
         return result;
     }
-    bool IsAscSorted() const { return Sorting == ESorting::ASC; }
-    bool IsDescSorted() const { return Sorting == ESorting::DESC; }
-    bool IsSorted() const { return IsAscSorted() || IsDescSorted(); }
+    bool IsAscSorted() const {
+        return Sorting == ESorting::ASC;
+    }
+    bool IsDescSorted() const {
+        return Sorting == ESorting::DESC;
+    }
+    bool IsSorted() const {
+        return IsAscSorted() || IsDescSorted();
+    }
 
     virtual std::unique_ptr<TScanIteratorBase> StartScan(const std::shared_ptr<TReadContext>& readContext) const = 0;
     virtual std::vector<TNameTypeInfo> GetKeyYqlSchema() const = 0;
 
     // TODO:  can this only be done for base class?
-    friend IOutputStream& operator << (IOutputStream& out, const TReadMetadataBase& meta) {
+    friend IOutputStream& operator<<(IOutputStream& out, const TReadMetadataBase& meta) {
         meta.Dump(out);
         return out;
     }
@@ -191,7 +208,6 @@ public:
         }
         return ResultIndexSchema->GetIndexInfo().GetIndexNameOptional(entityId);
     }
-
 };
 
-}
+}   // namespace NKikimr::NOlap::NReader

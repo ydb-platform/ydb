@@ -26,8 +26,8 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             CompareYson(R"([
-                [[1u];["One"]];
-                [[4000000001u];["BigOne"]]
+                [1u;["One"]];
+                [4000000001u;["BigOne"]]
             ])", FormatResultSetYson(result.GetResultSet(0)));
 
             auto tx = result.GetTransaction();
@@ -92,8 +92,8 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             CompareYson(R"([
-                [[1u];["One"]];
-                [[4000000001u];["BigOne"]]
+                [1u;["One"]];
+                [4000000001u;["BigOne"]]
             ])", FormatResultSetYson(result.GetResultSet(0)));
 
             result = session2.ExecuteQuery(Q_(R"(
@@ -108,7 +108,7 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             CompareYson(R"([
-                [[1u];["ChangedOne"]];
+                [1u;["ChangedOne"]];
             ])", FormatResultSetYson(result.GetResultSet(0)));
 
             result = session1.ExecuteQuery(Q_(R"(
@@ -117,7 +117,7 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             CompareYson(R"([
-                [[1u];["One"]];
+                [1u;["One"]];
             ])", FormatResultSetYson(result.GetResultSet(0)));
 
             result = session1.ExecuteQuery(Q_(R"(
@@ -126,8 +126,8 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
                 CompareYson(R"([
-                [[2u];["Two"]];
-                [[4000000002u];["BigTwo"]]
+                [2u;["Two"]];
+                [4000000002u;["BigTwo"]]
             ])", FormatResultSetYson(result.GetResultSet(0)));
         }
     };
@@ -160,8 +160,8 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             CompareYson(R"([
-                [[1u];["One"]];
-                [[4000000001u];["BigOne"]]
+                [1u;["One"]];
+                [4000000001u;["BigOne"]]
             ])", FormatResultSetYson(result.GetResultSet(0)));
 
             result = session2.ExecuteQuery(Q_(R"(
@@ -207,8 +207,8 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             CompareYson(R"([
-                [[1u];["One"]];
-                [[4000000001u];["BigOne"]]
+                [1u;["One"]];
+                [4000000001u;["BigOne"]]
             ])", FormatResultSetYson(result.GetResultSet(0)));
 
             // We need to sleep before the upsert below, otherwise writes
@@ -259,8 +259,8 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             CompareYson(R"([
-                [[1u];["One"]];
-                [[4000000001u];["BigOne"]]
+                [1u;["One"]];
+                [4000000001u;["BigOne"]]
             ])", FormatResultSetYson(result.GetResultSet(0)));
 
             result = session2.ExecuteQuery(Q_(R"(
@@ -275,8 +275,8 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
                 CompareYson(R"([
-                [[2u];["Two"]];
-                [[4000000002u];["BigTwo"]]
+                [2u;["Two"]];
+                [4000000002u;["BigTwo"]]
             ])", FormatResultSetYson(result.GetResultSet(0)));
 
             result = session1.ExecuteQuery(Q_(R"(

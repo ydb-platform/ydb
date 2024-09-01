@@ -409,11 +409,12 @@ private:
     virtual bool DoAddTxConflict() override {
         if (CommittedBlob.HasSnapshot()) {
             GetContext()->GetReadMetadata()->SetBrokenWithCommitted();
-            return false;
-        } else {
+            return true;
+        } else if (!GetContext()->GetReadMetadata()->IsMyUncommitted(CommittedBlob.GetWriteIdVerified())) {
             GetContext()->GetReadMetadata()->SetConflictedWriteId(CommittedBlob.GetWriteIdVerified());
             return true;
         }
+        return false;
     }
 
 public:

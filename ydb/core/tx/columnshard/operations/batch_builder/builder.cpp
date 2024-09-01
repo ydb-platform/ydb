@@ -10,25 +10,28 @@
 
 namespace NKikimr::NOlap {
 
-void TBuildBatchesTask::ReplyError(const TString& message) {
+void TBuildBatchesTask::ReplyError(const TString& message, const NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass errorClass) {
     AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", "cannot build batch for insert")("reason", message)("data", WriteData.GetWriteMeta().GetLongTxIdOptional());
     auto writeDataPtr = std::make_shared<NEvWrite::TWriteData>(std::move(WriteData));
     TWritingBuffer buffer(writeDataPtr->GetBlobsAction(), { std::make_shared<TWriteAggregation>(*writeDataPtr) });
-    auto result = NColumnShard::TEvPrivate::TEvWriteBlobsResult::Error(NKikimrProto::EReplyStatus::CORRUPTED, std::move(buffer), message);
+    auto result =
+        NColumnShard::TEvPrivate::TEvWriteBlobsResult::Error(NKikimrProto::EReplyStatus::CORRUPTED, std::move(buffer), message, errorClass);
     TActorContext::AsActorContext().Send(ParentActorId, result.release());
 }
 
 TConclusionStatus TBuildBatchesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
     TConclusion<std::shared_ptr<arrow::RecordBatch>> batchConclusion = WriteData.GetData()->ExtractBatch();
     if (batchConclusion.IsFail()) {
-        ReplyError("cannot extract incoming batch: " + batchConclusion.GetErrorMessage());
+        ReplyError(
+            "cannot extract incoming batch: " + batchConclusion.GetErrorMessage(), NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Internal);
         return TConclusionStatus::Fail("cannot extract incoming batch: " + batchConclusion.GetErrorMessage());
     }
 
     auto preparedConclusion =
         ActualSchema->PrepareForModification(batchConclusion.DetachResult(), WriteData.GetWriteMeta().GetModificationType());
     if (preparedConclusion.IsFail()) {
-        ReplyError("cannot prepare incoming batch: " + preparedConclusion.GetErrorMessage());
+        ReplyError("cannot prepare incoming batch: " + preparedConclusion.GetErrorMessage(),
+            NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Internal);
         return TConclusionStatus::Fail("cannot prepare incoming batch: " + preparedConclusion.GetErrorMessage());
     }
     auto batch = preparedConclusion.DetachResult();

@@ -145,8 +145,8 @@ void TTxWrite::Complete(const TActorContext& ctx) {
         if (!writeMeta.HasLongTxId()) {
             auto op = Self->GetOperationsManager().GetOperationVerified(NOlap::TWriteId(writeMeta.GetWriteId()));
             if (op->GetBehaviour() == EOperationBehaviour::WriteWithLock) {
-                auto evWrite = std::make_shared<NOlap::NTxInteractions::TEvWriteWriter>(
-                    writeMeta.GetTableId(), buffer.GetAggregations()[i]->GetRecordBatch());
+                auto evWrite = std::make_shared<NOlap::NTxInteractions::TEvWriteWriter>(writeMeta.GetTableId(),
+                    buffer.GetAggregations()[i]->GetRecordBatch(), Self->GetIndexOptional()->GetVersionedIndex().GetPrimaryKey());
                 Self->GetOperationsManager().AddEventForLock(*Self, op->GetLockId(), evWrite);
             }
         }

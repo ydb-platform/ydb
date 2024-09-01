@@ -58,8 +58,7 @@ struct Schema : NIceDb::Schema {
         ShardingInfoTableId,
         RepairsTableId,
         NormalizersTableId,
-        NormalizerEventsTableId,
-        LockFeaturesTableId
+        NormalizerEventsTableId
     };
 
     enum class ETierTables: ui32 {
@@ -551,15 +550,6 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<NormalizerId, EventId, Instant, EventType, Description>;
     };
 
-    struct LockFeatures: Table<LockFeaturesTableId> {
-        struct LockId: Column<1, NScheme::NTypeIds::Uint64> {};
-        struct Generation: Column<2, NScheme::NTypeIds::Uint64> {};
-        struct InternalGenerationCounter: Column<3, NScheme::NTypeIds::Uint64> {};
-
-        using TKey = TableKey<LockId>;
-        using TColumns = TableColumns<LockId, Generation, InternalGenerationCounter>;
-    };
-
     using TTables = SchemaTables<
         Value,
         TxInfo,
@@ -597,8 +587,7 @@ struct Schema : NIceDb::Schema {
         InFlightSnapshots,
         TxDependencies,
         TxStates,
-        TxEvents,
-        LockFeatures
+        TxEvents
         >;
 
     //

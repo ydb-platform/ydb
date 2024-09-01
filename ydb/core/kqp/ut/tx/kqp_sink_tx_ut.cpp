@@ -28,25 +28,25 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
             auto tx = result.GetTransaction();
 
             result = session.ExecuteQuery(Q_(R"(
-                SELECT * FROM `/Root/Test` WHERE Group = 1;
+                SELECT * FROM `/Root/Test` WHERE Group = 1 ORDER BY Name;
             )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             CompareYson(R"([
-                [[3500u];["None"];[1u];["Anna"]];
-                [[300u];["None"];[1u];["Paul"]]
+                [[3500u];["None"];1u;"Anna"];
+                [[300u];["None"];1u;"Paul"]
             ])", FormatResultSetYson(result.GetResultSet(0)));
 
             auto commitResult = tx->Commit().ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString());
 
             result = session.ExecuteQuery(Q_(R"(
-                SELECT * FROM `/Root/Test` WHERE Group = 1;
+                SELECT * FROM `/Root/Test` WHERE Group = 1 ORDER BY Name;
             )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             CompareYson(R"([
-                [[3500u];["None"];[1u];["Anna"]];
-                [[300u];["None"];[1u];["Paul"]];
-                [#;#;[1u];["Sergey"]]
+                [[3500u];["None"];1u;"Anna"];
+                [[300u];["None"];1u;"Paul"];
+                [#;#;1u;"Sergey"]
             ])", FormatResultSetYson(result.GetResultSet(0)));
         }
     };
@@ -92,7 +92,7 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
                 SELECT * FROM `/Root/KV` WHERE Value = "New";
             )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
-            CompareYson(R"([[[10u];["New"]]])", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(R"([[10u;["New"]]])", FormatResultSetYson(result.GetResultSet(0)));
 
             commitResult = tx.Commit().ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::NOT_FOUND, commitResult.GetIssues().ToString());
@@ -226,12 +226,12 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             result = session.ExecuteQuery(R"(
-                SELECT * FROM `/Root/KV` WHERE Key < 3
+                SELECT * FROM `/Root/KV` WHERE Key < 3 ORDER BY Key
             )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             CompareYson(R"([
-                [[1u];["New"]];
-                [[2u];["Two"]]
+                [1u;["New"]];
+                [2u;["Two"]]
                 ])", FormatResultSetYson(result.GetResultSet(0)));
         }
     };
@@ -259,7 +259,7 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
                 SELECT * FROM KV WHERE Key = 2;
             )"), TTxControl::BeginTx(TTxSettings::SnapshotRO()).CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            CompareYson(R"([[[2u];["Two"]]])", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(R"([[2u;["Two"]]])", FormatResultSetYson(result.GetResultSet(0)));
 
             // Read Distributed
             result = session.ExecuteQuery(Q1_(R"(
@@ -303,7 +303,7 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
             )");
 
             auto readResult = R"([
-                [[1u];["One"]]
+                [1u;["One"]]
             ])";
 
             auto result = session.ExecuteQuery(readQuery,

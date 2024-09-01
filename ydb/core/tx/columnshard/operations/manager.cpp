@@ -7,24 +7,6 @@ namespace NKikimr::NColumnShard {
 bool TOperationsManager::Load(NTabletFlatExecutor::TTransactionContext& txc) {
     NIceDb::TNiceDb db(txc.DB);
     {
-        auto rowset = db.Table<Schema::LockFeatures>().Select();
-        if (!rowset.IsReady()) {
-            return false;
-        }
-
-        while (!rowset.EndOfSet()) {
-            const ui64 lockId = rowset.GetValue<Schema::LockFeatures::LockId>();
-            const ui64 generation = rowset.GetValueOrDefault<Schema::LockFeatures::Generation>(0);
-            const ui64 counter = rowset.GetValueOrDefault<Schema::LockFeatures::InternalGenerationCounter>(0);
-
-            AFL_VERIFY(LockFeatures.emplace(lockId, TLockFeatures(lockId, generation, counter)).second);
-
-            if (!rowset.Next()) {
-                return false;
-            }
-        }
-    }
-    {
         auto rowset = db.Table<Schema::Operations>().Select();
         if (!rowset.IsReady()) {
             return false;
@@ -54,7 +36,7 @@ bool TOperationsManager::Load(NTabletFlatExecutor::TTransactionContext& txc) {
             AFL_VERIFY(Operations.emplace(operation->GetWriteId(), operation).second);
             auto it = LockFeatures.find(lockId);
             if (it == LockFeatures.end()) {
-                it = LockFeatures.emplace(lockId, lockId).first;
+                it = LockFeatures.emplace(lockId, TLockFeatures(lockId, 0)).first;
             }
             it->second.MutableWriteOperations().emplace_back(operation);
             LastWriteId = std::max(LastWriteId, operation->GetWriteId());
@@ -83,60 +65,77 @@ bool TOperationsManager::Load(NTabletFlatExecutor::TTransactionContext& txc) {
     return true;
 }
 
-bool TOperationsManager::CommitTransaction(
+void TOperationsManager::CommitTransactionOnExecute(
     TColumnShard& owner, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc, const NOlap::TSnapshot& snapshot) {
-    TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tx_id", txId));
-    auto lockId = GetLockForTx(txId);
-    if (!lockId) {
-        ACFL_ERROR("details", "unknown_transaction");
-        return true;
+    auto& lock = GetLockFeaturesForTxVerified(txId);
+    TLogContextGuard gLogging(
+        NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("commit_tx_id", txId)("commit_lock_id", lock.GetLockId()));
+    TVector<TWriteOperation::TPtr> commited;
+    for (auto&& opPtr : lock.GetWriteOperations()) {
+        opPtr->CommitOnExecute(owner, txc, snapshot);
+        commited.emplace_back(opPtr);
     }
-    auto tIt = LockFeatures.find(*lockId);
-    AFL_VERIFY(tIt != LockFeatures.end())("tx_id", txId)("lock_id", *lockId);
+    OnTransactionFinishOnExecute(commited, txId, txc);
+}
 
-    for (auto&& i : tIt->second.GetBrokeOnCommit()) {
-        if (auto lock = GetLockOptional(i)) {
-            for (auto&& brokenLockId : lock->GetBrokeOnCommit()) {
-                if (auto lockBroken = GetLockOptional(brokenLockId)) {
-                    lockBroken->SetBroken(true);
-                }
-            }
-            for (auto&& brokenLockId : lock->GetNotifyOnCommit()) {
-                if (auto lockBroken = GetLockOptional(brokenLockId)) {
-                    lockBroken->AddNotifyCommit(lock->GetLockId());
-                }
-            }
+void TOperationsManager::CommitTransactionOnComplete(
+    TColumnShard& owner, const ui64 txId, const NOlap::TSnapshot& snapshot) {
+    auto& lock = GetLockFeaturesForTxVerified(txId);
+    TLogContextGuard gLogging(
+        NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("commit_tx_id", txId)("commit_lock_id", lock.GetLockId()));
+    for (auto&& i : lock.GetBrokeOnCommit()) {
+        if (auto lockNotify = GetLockOptional(i)) {
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("broken_lock_id", i);
+            lockNotify->SetBroken();
+        }
+    }
+
+    for (auto&& i : lock.GetNotifyOnCommit()) {
+        if (auto lockNotify = GetLockOptional(i)) {
+            lockNotify->AddNotifyCommit(lock.GetLockId());
         }
     }
 
     TVector<TWriteOperation::TPtr> commited;
-    for (auto&& opPtr : tIt->second.GetWriteOperations()) {
-        opPtr->Commit(owner, txc, snapshot);
+    for (auto&& opPtr : lock.GetWriteOperations()) {
+        opPtr->CommitOnComplete(owner, snapshot);
         commited.emplace_back(opPtr);
     }
-    OnTransactionFinish(commited, txId, txc);
-    return true;
+    OnTransactionFinishOnComplete(commited, txId);
 }
 
-bool TOperationsManager::AbortTransaction(TColumnShard& owner, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc) {
-    TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tx_id", txId));
-
-    auto lockId = GetLockForTx(txId);
-    if (!lockId) {
-        ACFL_ERROR("details", "unknown_transaction");
-        return true;
+void TOperationsManager::AbortTransactionOnExecute(TColumnShard& owner, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc) {
+    auto* lock = GetLockFeaturesForTxOptional(txId);
+    if (!lock) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "abort")("tx_id", txId)("problem", "finished");
+        return;
     }
-    auto tIt = LockFeatures.find(*lockId);
-    AFL_VERIFY(tIt != LockFeatures.end())("tx_id", txId)("lock_id", *lockId);
+    TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tx_id", txId)("lock_id", lock->GetLockId()));
 
     TVector<TWriteOperation::TPtr> aborted;
-    for (auto&& opPtr : tIt->second.GetWriteOperations()) {
-        opPtr->Abort(owner, txc);
+    for (auto&& opPtr : lock->GetWriteOperations()) {
+        opPtr->AbortOnExecute(owner, txc);
         aborted.emplace_back(opPtr);
     }
 
-    OnTransactionFinish(aborted, txId, txc);
-    return true;
+    OnTransactionFinishOnExecute(aborted, txId, txc);
+}
+
+void TOperationsManager::AbortTransactionOnComplete(TColumnShard& owner, const ui64 txId) {
+    auto* lock = GetLockFeaturesForTxOptional(txId);
+    if (!lock) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "abort")("tx_id", txId)("problem", "finished");
+        return;
+    }
+    TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tx_id", txId)("lock_id", lock->GetLockId()));
+
+    TVector<TWriteOperation::TPtr> aborted;
+    for (auto&& opPtr : lock->GetWriteOperations()) {
+        opPtr->AbortOnComplete(owner);
+        aborted.emplace_back(opPtr);
+    }
+
+    OnTransactionFinishOnComplete(aborted, txId);
 }
 
 TWriteOperation::TPtr TOperationsManager::GetOperation(const TWriteId writeId) const {
@@ -147,8 +146,20 @@ TWriteOperation::TPtr TOperationsManager::GetOperation(const TWriteId writeId) c
     return it->second;
 }
 
-void TOperationsManager::OnTransactionFinish(
+void TOperationsManager::OnTransactionFinishOnExecute(
     const TVector<TWriteOperation::TPtr>& operations, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc) {
+    const ui64 lockId = GetLockForTxVerified(txId);
+    auto itLock = LockFeatures.find(lockId);
+    AFL_VERIFY(itLock != LockFeatures.end());
+    for (auto&& op : operations) {
+        RemoveOperationOnExecute(op, txc);
+    }
+    NIceDb::TNiceDb db(txc.DB);
+    db.Table<Schema::OperationTxIds>().Key(txId, lockId).Delete();
+}
+
+void TOperationsManager::OnTransactionFinishOnComplete(
+    const TVector<TWriteOperation::TPtr>& operations, const ui64 txId) {
     const ui64 lockId = GetLockForTxVerified(txId);
     auto itLock = LockFeatures.find(lockId);
     AFL_VERIFY(itLock != LockFeatures.end());
@@ -156,16 +167,17 @@ void TOperationsManager::OnTransactionFinish(
     LockFeatures.erase(lockId);
     Tx2Lock.erase(txId);
     for (auto&& op : operations) {
-        RemoveOperation(op, txc);
+        RemoveOperationOnComplete(op);
     }
-    NIceDb::TNiceDb db(txc.DB);
-    db.Table<Schema::OperationTxIds>().Key(txId, lockId).Delete();
 }
 
-void TOperationsManager::RemoveOperation(const TWriteOperation::TPtr& op, NTabletFlatExecutor::TTransactionContext& txc) {
-    Operations.erase(op->GetWriteId());
+void TOperationsManager::RemoveOperationOnExecute(const TWriteOperation::TPtr& op, NTabletFlatExecutor::TTransactionContext& txc) {
     NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::Operations>().Key((ui64)op->GetWriteId()).Delete();
+}
+
+void TOperationsManager::RemoveOperationOnComplete(const TWriteOperation::TPtr& op) {
+    Operations.erase(op->GetWriteId());
 }
 
 TWriteId TOperationsManager::BuildNextWriteId() {
@@ -180,10 +192,13 @@ std::optional<ui64> TOperationsManager::GetLockForTx(const ui64 txId) const {
     return std::nullopt;
 }
 
-void TOperationsManager::LinkTransaction(const ui64 lockId, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc) {
-    Tx2Lock[txId] = lockId;
+void TOperationsManager::LinkTransactionOnExecute(const ui64 lockId, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc) {
     NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::OperationTxIds>().Key(txId, lockId).Update();
+    Tx2Lock[txId] = lockId;
+}
+
+void TOperationsManager::LinkTransactionOnComplete(const ui64 /*lockId*/, const ui64 /*txId*/) {
 }
 
 TWriteOperation::TPtr TOperationsManager::RegisterOperation(
@@ -193,12 +208,21 @@ TWriteOperation::TPtr TOperationsManager::RegisterOperation(
         writeId, lockId, cookie, EOperationStatus::Draft, AppData()->TimeProvider->Now(), granuleShardingVersionId, mType);
     Y_ABORT_UNLESS(Operations.emplace(operation->GetWriteId(), operation).second);
     GetLockVerified(operation->GetLockId()).MutableWriteOperations().emplace_back(operation);
+    GetLockVerified(operation->GetLockId()).AddWrite();
     return operation;
 }
 
 EOperationBehaviour TOperationsManager::GetBehaviour(const NEvents::TDataEvents::TEvWrite& evWrite) {
-    if (evWrite.Record.HasTxId() && evWrite.Record.HasLocks() && evWrite.Record.GetLocks().GetOp() == NKikimrDataEvents::TKqpLocks::Commit) {
-        return EOperationBehaviour::CommitWriteLock;
+    if (evWrite.Record.HasTxId() && evWrite.Record.HasLocks()) {
+        if (evWrite.Record.GetLocks().GetLocks().size() != 1) {
+            return EOperationBehaviour::Undefined;
+        }
+        if (evWrite.Record.GetLocks().GetOp() == NKikimrDataEvents::TKqpLocks::Commit) {
+            return EOperationBehaviour::CommitWriteLock;
+        }
+        if (evWrite.Record.GetLocks().GetOp() == NKikimrDataEvents::TKqpLocks::Rollback) {
+            return EOperationBehaviour::AbortWriteLock;
+        }
     }
 
     if (evWrite.Record.HasLockTxId() && evWrite.Record.HasLockNodeId()) {
@@ -233,7 +257,7 @@ void TOperationsManager::AddEventForLock(
         if (auto lock = GetLockOptional(i.first)) {
             GetLockVerified(i.first).AddBrokeOnCommit(i.second);
         } else if (txLock.IsCommitted(i.first)) {
-            txLock.SetBroken(true);
+            txLock.SetBroken();
         }
     }
     for (auto&& i : txNotifications) {

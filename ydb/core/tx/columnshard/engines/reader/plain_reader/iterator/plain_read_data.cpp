@@ -22,11 +22,15 @@ TPlainReadData::TPlainReadData(const std::shared_ptr<TReadContext>& context)
         sources.emplace_back(std::make_shared<TPortionDataSource>(sourceIdx++, i, SpecialReadContext));
     }
     for (auto&& i : committed) {
-        if (!i.HasSnapshot()) {
-            if (GetReadMetadata()->GetPKRangesFilter().CheckPoint(i.GetFirstVerified()) ||
-                GetReadMetadata()->GetPKRangesFilter().CheckPoint(i.GetLastVerified())) {
-                GetReadMetadata()->SetConflictedWriteId(i.GetWriteIdVerified());
-            }
+        if (i.HasSnapshot()) {
+            continue;
+        }
+        if (GetReadMetadata()->IsMyUncommitted(i.GetWriteIdVerified())) {
+            continue;
+        }
+        if (GetReadMetadata()->GetPKRangesFilter().CheckPoint(i.GetFirstVerified()) ||
+            GetReadMetadata()->GetPKRangesFilter().CheckPoint(i.GetLastVerified())) {
+            GetReadMetadata()->SetConflictedWriteId(i.GetWriteIdVerified());
         }
     }
 

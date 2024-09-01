@@ -886,9 +886,9 @@ void TColumnShard::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev, const TAct
 }
 
 void TColumnShard::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorContext& ctx) {
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "read_set")("proto", ev->Get()->Record.DebugString());
     const ui64 txId = ev->Get()->Record.GetTxId();
     if (!GetProgressTxController().GetTxOperatorOptional(txId)) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "read_set_ignored")("proto", ev->Get()->Record.DebugString());
         Send(MakePipePerNodeCacheID(false),
             new TEvPipeCache::TEvForward(
                 new TEvTxProcessing::TEvReadSetAck(0, txId, TabletID(), ev->Get()->Record.GetTabletProducer(), TabletID(), 0),
@@ -897,6 +897,7 @@ void TColumnShard::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorCon
         return;
     }
     auto op = GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitSyncTransactionOperator>(txId);
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "read_set")("proto", ev->Get()->Record.DebugString())("lock_id", op->GetLockId());
     NKikimrTx::TReadSetData data;
     AFL_VERIFY(data.ParseFromArray(ev->Get()->Record.GetReadSet().data(), ev->Get()->Record.GetReadSet().size()));
     auto tx = op->CreateReceiveBrokenFlagTx(
@@ -905,8 +906,8 @@ void TColumnShard::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorCon
 }
 
 void TColumnShard::Handle(TEvTxProcessing::TEvReadSetAck::TPtr& ev, const TActorContext& ctx) {
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "read_set_ack")("proto", ev->Get()->Record.DebugString());
     auto op = GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitSyncTransactionOperator>(ev->Get()->Record.GetTxId());
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "read_set_ack")("proto", ev->Get()->Record.DebugString())("lock_id", op->GetLockId());
     auto tx = op->CreateReceiveResultAckTx(*this, ev->Get()->Record.GetTabletConsumer());
     Execute(tx.release(), ctx);
 }

@@ -76,6 +76,7 @@ private:
             auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitSecondaryTransactionOperator>(TxId);
             op->ReceiveAck = true;
             if (!op->NeedReceiveBroken) {
+                op->TxBroken = false;
                 Self->EnqueueProgressTx(ctx);
             }
         }
@@ -168,14 +169,14 @@ private:
             auto& lock = Self->GetOperationsManager().GetLockVerified(Self->GetOperationsManager().GetLockForTxVerified(TxId));
             auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitSecondaryTransactionOperator>(TxId);
             auto copy = *op;
-            copy.SelfBroken = lock.GetBroken();
+            copy.SelfBroken = lock.IsBroken();
             Self->GetProgressTxController().WriteTxOperatorInfo(txc, TxId, copy.SerializeToProto().SerializeAsString());
             return true;
         }
         virtual void DoComplete(const NActors::TActorContext& /*ctx*/) override {
             auto& lock = Self->GetOperationsManager().GetLockVerified(Self->GetOperationsManager().GetLockForTxVerified(TxId));
             auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitSecondaryTransactionOperator>(TxId);
-            op->SelfBroken = lock.GetBroken();
+            op->SelfBroken = lock.IsBroken();
             op->SendResult(*Self);
         }
 
@@ -187,10 +188,12 @@ private:
     };
 
     virtual std::unique_ptr<NTabletFlatExecutor::ITransaction> DoBuildTxPrepareForProgress(TColumnShard* owner) const override {
-        if (TxBroken) {
+        if (TxBroken || (!NeedReceiveBroken && ReceiveAck)) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip_prepare_for_progress")("lock_id", LockId);
             return nullptr;
         }
         AFL_VERIFY(ControlCounter.Inc() <= 1);
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "prepare_for_progress_started")("lock_id", LockId);
         return std::make_unique<TTxStartPreparation>(owner, GetTxId());
     }
 
@@ -200,6 +203,11 @@ private:
 
 public:
     using TBase::TBase;
+    virtual bool IsTxBroken() const override {
+        AFL_VERIFY(TxBroken);
+        return *TxBroken;
+    }
+
     TEvWriteCommitSecondaryTransactionOperator(
         const TFullTxInfo& txInfo, const ui64 lockId, const ui64 arbiterTabletId, const bool needReceiveBroken)
         : TBase(txInfo, lockId)

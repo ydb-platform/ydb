@@ -1,5 +1,6 @@
 #include "read_metadata.h"
 
+#include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/engines/reader/plain_reader/iterator/iterator.h>
 #include <ydb/core/tx/columnshard/engines/reader/plain_reader/iterator/plain_read_data.h>
@@ -18,6 +19,10 @@ TConclusionStatus TReadMetadata::Init(
     InitShardingInfo(readDescription.PathId);
     TxId = readDescription.TxId;
     LockId = readDescription.LockId;
+    if (LockId) {
+        owner->GetOperationsManager().RegisterLock(*LockId, owner->Generation());
+        LockSharingInfo = owner->GetOperationsManager().GetLockVerified(*LockId).GetSharingInfo();
+    }
 
     /// @note We could have column name changes between schema versions:
     /// Add '1:foo', Drop '1:foo', Add '2:foo'. Drop should hide '1:foo' from reads.
@@ -77,7 +82,7 @@ void TReadMetadata::DoOnReadFinished(NColumnShard::TColumnShard& owner) const {
     }
     const ui64 lock = *GetLockId();
     if (GetBrokenWithCommitted()) {
-        owner.GetOperationsManager().GetLockVerified(lock).SetBroken(true);
+        owner.GetOperationsManager().GetLockVerified(lock).SetBroken();
     } else {
         NOlap::NTxInteractions::TTxConflicts conflicts;
         for (auto&& i : GetConflictableLockIds()) {
@@ -92,11 +97,33 @@ void TReadMetadata::DoOnBeforeStartReading(NColumnShard::TColumnShard& owner) co
     if (!LockId) {
         return;
     }
-    if (owner.GetOperationsManager().GetLockOptional(*LockId)) {
-        auto evWriter = std::make_shared<NOlap::NTxInteractions::TEvReadStartWriter>(
-            PathId, GetResultSchema()->GetIndexInfo().GetPrimaryKey(), GetPKRangesFilterPtr(), GetConflictableLockIds());
-        owner.GetOperationsManager().AddEventForLock(owner, *LockId, evWriter);
+    auto evWriter = std::make_shared<NOlap::NTxInteractions::TEvReadStartWriter>(
+        PathId, GetResultSchema()->GetIndexInfo().GetPrimaryKey(), GetPKRangesFilterPtr(), GetConflictableLockIds());
+    owner.GetOperationsManager().AddEventForLock(owner, *LockId, evWriter);
+}
+
+void TReadMetadata::DoOnReplyConstruction(const ui64 tabletId, NKqp::NInternalImplementation::TEvScanData& scanData) const {
+    if (LockSharingInfo) {
+        NKikimrDataEvents::TLock lockInfo;
+        lockInfo.SetLockId(LockSharingInfo->GetLockId());
+        lockInfo.SetGeneration(LockSharingInfo->GetGeneration());
+        lockInfo.SetDataShard(tabletId);
+        lockInfo.SetCounter(LockSharingInfo->GetCounter());
+//        lockInfo.SetPathId(PathId);
+        lockInfo.SetHasWrites(LockSharingInfo->HasWrites());
+        if (LockSharingInfo->IsBroken()) {
+            scanData.LocksInfo.BrokenLocks.emplace_back(std::move(lockInfo));
+        } else {
+            scanData.LocksInfo.Locks.emplace_back(std::move(lockInfo));
+        }
     }
+}
+
+bool TReadMetadata::IsMyUncommitted(const TWriteId writeId) const {
+    AFL_VERIFY(LockSharingInfo);
+    auto it = ConflictedWriteIds.find(writeId);
+    AFL_VERIFY(it != ConflictedWriteIds.end());
+    return it->second.GetLockId() == LockSharingInfo->GetLockId();
 }
 
 }   // namespace NKikimr::NOlap::NReader::NPlain

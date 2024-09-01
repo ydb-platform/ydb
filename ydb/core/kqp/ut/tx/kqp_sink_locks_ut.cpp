@@ -52,7 +52,7 @@ Y_UNIT_TEST_SUITE(KqpSinkLocks) {
                 SELECT * FROM `/Root/Test` WHERE Name == "Paul" ORDER BY Group, Name;
             )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            CompareYson(R"([[[300u];["Changed"];[1u];["Paul"]]])", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(R"([[[300u];["Changed"];1u;"Paul"]])", FormatResultSetYson(result.GetResultSet(0)));
         }
     };
 
@@ -108,7 +108,7 @@ Y_UNIT_TEST_SUITE(KqpSinkLocks) {
                 SELECT * FROM `/Root/Test` WHERE Name == "Paul" ORDER BY Group, Name;
             )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            CompareYson(R"([[[300u];["Changed"];[1u];["Paul"]]])", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(R"([[[300u];["Changed"];1u;"Paul"]])", FormatResultSetYson(result.GetResultSet(0)));
         }
     };
 
@@ -313,7 +313,7 @@ Y_UNIT_TEST_SUITE(KqpSinkLocks) {
                     SELECT * FROM Test WHERE Group = 11;
                 )"), TTxControl::Tx(tx1->GetId())).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-                CompareYson(R"([[[2u];#;[11u];["TEST"]]])", FormatResultSetYson(result.GetResultSet(0)));
+                CompareYson(R"([[[2u];#;11u;"TEST"]])", FormatResultSetYson(result.GetResultSet(0)));
             }
         }
     };

@@ -132,8 +132,7 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActo
                 auto operation = OperationsManager->GetOperation((TWriteId)writeMeta.GetWriteId());
                 Y_ABORT_UNLESS(operation);
                 auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), operation->GetLockId(),
-                    NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR,
-                    ev->Get()->GetErrorMessage() ? ev->Get()->GetErrorMessage() : "put data fails");
+                    ev->Get()->GetWriteResultStatus(), ev->Get()->GetErrorMessage() ? ev->Get()->GetErrorMessage() : "put data fails");
                 ctx.Send(writeMeta.GetSource(), result.release(), 0, operation->GetCookie());
             }
             Counters.GetCSCounters().OnFailedWriteResponse(EWriteFailReason::PutBlob);
@@ -290,9 +289,7 @@ public:
     }
 
     TConclusionStatus Parse(const NEvents::TDataEvents::TEvWrite& evWrite) {
-        if (evWrite.Record.GetLocks().GetLocks().size() != 1) {
-            return TConclusionStatus::Fail("too many locks for commit (more than one)");
-        }
+        AFL_VERIFY(evWrite.Record.GetLocks().GetLocks().size() == 1);
         auto& locks = evWrite.Record.GetLocks();
         auto& lock = evWrite.Record.GetLocks().GetLocks()[0];
         SendingShards = std::set<ui64>(locks.GetSendingShards().begin(), locks.GetSendingShards().end());
@@ -397,6 +394,38 @@ private:
     std::shared_ptr<TTxController::ITransactionOperator> TxOperator;
 };
 
+class TAbortWriteTransaction: public NTabletFlatExecutor::TTransactionBase<TColumnShard> {
+private:
+    using TBase = NTabletFlatExecutor::TTransactionBase<TColumnShard>;
+
+public:
+    TAbortWriteTransaction(TColumnShard* self, const ui64 txId, const TActorId source, const ui64 cookie)
+        : TBase(self)
+        , TxId(txId)
+        , Source(source)
+        , Cookie(cookie) {
+    }
+
+    virtual bool Execute(TTransactionContext& txc, const TActorContext&) override {
+        Self->GetOperationsManager().AbortTransactionOnExecute(*Self, TxId, txc);
+        return true;
+    }
+
+    virtual void Complete(const TActorContext& ctx) override {
+        Self->GetOperationsManager().AbortTransactionOnComplete(*Self, TxId);
+        auto result = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(Self->TabletID(), TxId);
+        ctx.Send(Source, result.release(), 0, Cookie);
+    }
+    TTxType GetTxType() const override {
+        return TXTYPE_PROPOSE;
+    }
+
+private:
+    ui64 TxId;
+    TActorId Source;
+    ui64 Cookie;
+};
+
 void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActorContext& ctx) {
     NActors::TLogContextGuard gLogging =
         NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())("event", "TEvWrite");
@@ -405,7 +434,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     const auto source = ev->Sender;
     const auto cookie = ev->Cookie;
     const auto behaviour = TOperationsManager::GetBehaviour(*ev->Get());
-    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("ev_write", record.DebugString());
+//    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("ev_write", record.DebugString());
     if (behaviour == EOperationBehaviour::Undefined) {
         Counters.GetTabletCounters()->IncCounter(COUNTER_WRITE_FAIL);
         auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(
@@ -414,27 +443,37 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         return;
     }
 
+    if (behaviour == EOperationBehaviour::AbortWriteLock) {
+        Execute(new TAbortWriteTransaction(this, record.GetLocks().GetLocks()[0].GetLockId(), source, cookie), ctx);
+        return;
+    }
+
     if (behaviour == EOperationBehaviour::CommitWriteLock) {
         auto commitOperation = std::make_shared<TCommitOperation>(TabletID());
-        const auto sendError = [&](const TString& message) {
+        const auto sendError = [&](const TString& message, const NKikimrDataEvents::TEvWriteResult::EStatus status) {
             Counters.GetTabletCounters()->IncCounter(COUNTER_WRITE_FAIL);
             auto result =
-                NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, message);
+                NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), 0, status, message);
             ctx.Send(source, result.release(), 0, cookie);
         };
         auto conclusionParse = commitOperation->Parse(*ev->Get());
         if (conclusionParse.IsFail()) {
-            sendError(conclusionParse.GetErrorMessage());
+            sendError(conclusionParse.GetErrorMessage(), NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
         } else {
             if (commitOperation->NeedSyncLocks()) {
                 auto* lockInfo = OperationsManager->GetLockOptional(commitOperation->GetLockId());
                 if (!lockInfo) {
-                    sendError("haven't lock for commit: " + ::ToString(commitOperation->GetLockId()));
+                    sendError("haven't lock for commit: " + ::ToString(commitOperation->GetLockId()),
+                        NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED);
                 } else {
                     if (lockInfo->GetGeneration() != commitOperation->GetGeneration()) {
-                        sendError("tablet lock have another generation");
+                        sendError("tablet lock have another generation: " + ::ToString(lockInfo->GetGeneration()) +
+                                      " != " + ::ToString(commitOperation->GetGeneration()),
+                            NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED);
                     } else if (lockInfo->GetInternalGenerationCounter() != commitOperation->GetInternalGenerationCounter()) {
-                        sendError("tablet lock have another internal generation counter");
+                        sendError("tablet lock have another internal generation counter: " + ::ToString(lockInfo->GetInternalGenerationCounter()) +
+                                " != " + ::ToString(commitOperation->GetInternalGenerationCounter()),
+                            NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED);
                     } else {
                         Execute(new TProposeWriteTransaction(this, commitOperation, source, cookie), ctx);
                     }

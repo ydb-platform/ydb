@@ -38,7 +38,8 @@ enum class EOperationBehaviour : ui32 {
     Undefined = 1,
     InTxWrite = 2,
     WriteWithLock = 3,
-    CommitWriteLock = 4
+    CommitWriteLock = 4,
+    AbortWriteLock = 5
 };
 
 class TWriteOperation {
@@ -61,8 +62,10 @@ public:
     void Start(TColumnShard& owner, const ui64 tableId, const NEvWrite::IDataContainer::TPtr& data, const NActors::TActorId& source,
         const std::shared_ptr<NOlap::ISnapshotSchema>& schema, const TActorContext& ctx);
     void OnWriteFinish(NTabletFlatExecutor::TTransactionContext& txc, const TVector<TWriteId>& globalWriteIds);
-    void Commit(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc, const NOlap::TSnapshot& snapshot) const;
-    void Abort(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) const;
+    void CommitOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc, const NOlap::TSnapshot& snapshot) const;
+    void CommitOnComplete(TColumnShard& owner, const NOlap::TSnapshot& snapshot) const;
+    void AbortOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) const;
+    void AbortOnComplete(TColumnShard& owner) const;
 
     void Out(IOutputStream& out) const {
         out << "write_id=" << (ui64)WriteId << ";lock_id=" << LockId;

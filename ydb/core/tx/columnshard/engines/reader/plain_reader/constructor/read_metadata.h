@@ -5,6 +5,10 @@
 #include <ydb/core/tx/columnshard/engines/reader/common/stats.h>
 #include <ydb/core/formats/arrow/reader/position.h>
 
+namespace NKikimr::NColumnShard {
+class TLockSharingInfo;
+}
+
 namespace NKikimr::NOlap::NReader::NPlain {
 
 // Holds all metadata that is needed to perform read/scan
@@ -14,6 +18,7 @@ struct TReadMetadata : public TReadMetadataBase {
 private:
     const ui64 PathId;
     std::shared_ptr<TAtomicCounter> BrokenWithCommitted = std::make_shared<TAtomicCounter>();
+    std::shared_ptr<NColumnShard::TLockSharingInfo> LockSharingInfo;
 
     class TWriteIdInfo {
     private:
@@ -44,6 +49,7 @@ private:
 
     virtual void DoOnReadFinished(NColumnShard::TColumnShard& owner) const override;
     virtual void DoOnBeforeStartReading(NColumnShard::TColumnShard& owner) const override;
+    virtual void DoOnReplyConstruction(const ui64 tabletId, NKqp::NInternalImplementation::TEvScanData& scanData) const override;
 
 public:
     using TConstPtr = std::shared_ptr<const TReadMetadata>;
@@ -80,6 +86,8 @@ public:
         }
         AFL_VERIFY(ConflictedWriteIds.emplace(writeId, TWriteIdInfo(lockId, it->second)).second);
     }
+
+    [[nodiscard]] bool IsMyUncommitted(const TWriteId writeId) const;
 
     void SetConflictedWriteId(const TWriteId writeId) const {
         auto it = ConflictedWriteIds.find(writeId);

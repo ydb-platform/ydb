@@ -34,7 +34,10 @@ void TTxScan::Complete(const TActorContext& ctx) {
     TMemoryProfileGuard mpg("TTxScan::Complete");
     auto& request = Ev->Get()->Record;
     auto scanComputeActor = Ev->Sender;
-    const TSnapshot snapshot(request.GetSnapshot().GetStep(), request.GetSnapshot().GetTxId());
+    TSnapshot snapshot = TSnapshot(request.GetSnapshot().GetStep(), request.GetSnapshot().GetTxId());
+    if (snapshot.IsZero()) {
+        snapshot = Self->GetLastTxSnapshot();
+    }
     const auto scanId = request.GetScanId();
     const ui64 txId = request.GetTxId();
     const ui32 scanGen = request.GetGeneration();
@@ -53,7 +56,9 @@ void TTxScan::Complete(const TActorContext& ctx) {
 
         TReadDescription read(snapshot, request.GetReverse());
         read.TxId = txId;
-        read.LockId = Self->GetOperationsManager().GetLockForTxOptional(txId);
+        if (request.HasLockTxId()) {
+            read.LockId = request.GetLockTxId();
+        }
         read.PathId = request.GetLocalPathId();
         read.ReadNothing = !Self->TablesManager.HasTable(read.PathId);
         read.TableName = table;

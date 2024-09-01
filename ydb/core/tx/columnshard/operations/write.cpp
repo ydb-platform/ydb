@@ -40,7 +40,7 @@ void TWriteOperation::Start(TColumnShard& owner, const ui64 tableId, const NEvWr
     Status = EOperationStatus::Started;
 }
 
-void TWriteOperation::Commit(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc, const NOlap::TSnapshot& snapshot) const {
+void TWriteOperation::CommitOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc, const NOlap::TSnapshot& snapshot) const {
     Y_ABORT_UNLESS(Status == EOperationStatus::Prepared);
 
     TBlobGroupSelector dsGroupSelector(owner.Info());
@@ -54,6 +54,10 @@ void TWriteOperation::Commit(TColumnShard& owner, NTabletFlatExecutor::TTransact
         const auto counters = owner.InsertTable->Commit(dbTable, snapshot.GetPlanStep(), snapshot.GetTxId(), { gWriteId }, pathExists);
         owner.Counters.GetTabletCounters()->OnWriteCommitted(counters);
     }
+}
+
+void TWriteOperation::CommitOnComplete(TColumnShard& owner, const NOlap::TSnapshot& /*snapshot*/) const {
+    Y_ABORT_UNLESS(Status == EOperationStatus::Prepared);
     owner.UpdateInsertTableCounters();
 }
 
@@ -95,7 +99,7 @@ void TWriteOperation::FromProto(const NKikimrTxColumnShard::TInternalOperationDa
     }
 }
 
-void TWriteOperation::Abort(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) const {
+void TWriteOperation::AbortOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) const {
     Y_ABORT_UNLESS(Status == EOperationStatus::Prepared);
 
     TBlobGroupSelector dsGroupSelector(owner.Info());
@@ -104,6 +108,10 @@ void TWriteOperation::Abort(TColumnShard& owner, NTabletFlatExecutor::TTransacti
     THashSet<TWriteId> writeIds;
     writeIds.insert(GlobalWriteIds.begin(), GlobalWriteIds.end());
     owner.InsertTable->Abort(dbTable, writeIds);
+}
+
+void TWriteOperation::AbortOnComplete(TColumnShard& /*owner*/) const {
+    Y_ABORT_UNLESS(Status == EOperationStatus::Prepared);
 }
 
 }   // namespace NKikimr::NColumnShard

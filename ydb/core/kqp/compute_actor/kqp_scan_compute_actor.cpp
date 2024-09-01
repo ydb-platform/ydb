@@ -149,7 +149,7 @@ void TKqpScanComputeActor::Handle(TEvScanExchange::TEvSendData::TPtr& ev) {
     for (const auto& lock : msg.GetLocksInfo().Locks) {
         Locks.insert(lock);
     }
-    for (const auto& lock : msg.GetLocksInfo().Locks) {
+    for (const auto& lock : msg.GetLocksInfo().BrokenLocks) {
         BrokenLocks.insert(lock);
     }
 

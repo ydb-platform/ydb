@@ -892,8 +892,10 @@ int Main(int argc, const char *argv[])
                     auto node = NYT::NodeFromYsonString(str);
                     for (const auto& r : NResult::ParseResponse(node)) {
                         for (const auto& write : r.Writes) {
-                            NResult::TEmptyTypeVisitor visitor;
-                            NResult::ParseType(*write.Type, visitor);
+                            if (write.Type) {
+                                NResult::TEmptyTypeVisitor visitor;
+                                NResult::ParseType(*write.Type, visitor);
+                            }
                         }
                     }
                 }

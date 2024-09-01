@@ -521,6 +521,27 @@ Y_UNIT_TEST_SUITE(ParseResponse) {
         UNIT_ASSERT(!res.IsTruncated);
     }
 
+    Y_UNIT_TEST(WriteNoType) {
+        auto response = NYT::NodeFromYsonString(R"([
+            {
+                Write = [
+                    {
+                        Data = data;
+                        Truncated = %true;
+                    }
+                ]
+            };
+        ])");
+
+        auto resList = ParseResponse(response);
+        UNIT_ASSERT_VALUES_EQUAL(resList.size(), 1);
+        const auto& res = resList[0];
+        UNIT_ASSERT_VALUES_EQUAL(res.Writes.size(), 1);
+        const auto& write = res.Writes[0];
+        UNIT_ASSERT_VALUES_EQUAL(NYT::NodeToCanonicalYsonString(*write.Data), "\"data\"");
+        UNIT_ASSERT(!write.Type);
+    }
+
     Y_UNIT_TEST(RefsEmpty) {
         auto response = NYT::NodeFromYsonString(R"([
             {

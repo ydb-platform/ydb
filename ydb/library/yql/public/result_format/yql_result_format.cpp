@@ -760,8 +760,10 @@ TVector<TResult> ParseResponse(const NYT::TNode& responseNode) {
         for (const auto& writeNode : writeNodeList.AsList()) {
             CHECK(writeNode.IsMap());
             TWrite write;
-            CHECK(writeNode.HasKey("Type"));
-            write.Type = &writeNode["Type"];
+            if (writeNode.HasKey("Type")) {
+                write.Type = &writeNode["Type"];
+            }
+            
             CHECK(writeNode.HasKey("Data"));
             write.Data = &writeNode["Data"];
             if (writeNode.HasKey("Truncated")) {

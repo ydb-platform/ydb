@@ -440,8 +440,10 @@ int RunProgram(TProgramPtr program, const TRunOptions& options, const THashMap<T
                 auto node = NYT::NodeFromYsonString(str);
                 for (const auto& r : NResult::ParseResponse(node)) {
                     for (const auto& write : r.Writes) {
-                        NResult::TEmptyTypeVisitor visitor;
-                        NResult::ParseType(*write.Type, visitor);
+                        if (write.Type) {
+                            NResult::TEmptyTypeVisitor visitor;
+                            NResult::ParseType(*write.Type, visitor);
+                        }
                     }
                 }
             }

@@ -8,37 +8,32 @@ using namespace NYdb::NConsoleClient;
 Y_UNIT_TEST_SUITE(YqlHighlightTests) {
     auto Coloring = YQLHighlight::ColorSchema::Monaco();
 
-    YQLHighlight::Color ColorOf(char symbol) {
-        switch (symbol) {
-            case 'k':
-                return Coloring.keyword;
-            case 'o':
-                return Coloring.operation;
-            case 'f':
-                return Coloring.identifier.function;
-            case 'v':
-                return Coloring.identifier.variable;
-            case 'q':
-                return Coloring.identifier.quoted;
-            case 's':
-                return Coloring.string;
-            case 'n':
-                return Coloring.number;
-            case 'u':
-                return Coloring.unknown;
-            case ' ':
-                return YQLHighlight::Color::DEFAULT;
-            default:
-                Y_UNREACHABLE();
-        }
-    }
+    std::unordered_map<char, YQLHighlight::Color> colors = {
+        {'k', Coloring.keyword},
+        {'o', Coloring.operation},
+        {'f', Coloring.identifier.function},
+        {'v', Coloring.identifier.variable},
+        {'q', Coloring.identifier.quoted},
+        {'s', Coloring.string},
+        {'n', Coloring.number},
+        {'u', Coloring.unknown},
+        {' ', YQLHighlight::Color::DEFAULT},
+    };
 
-    TVector<YQLHighlight::Color> Pattern(const TString& symbols) {
-        TVector<YQLHighlight::Color> colors(symbols.Size());
-        for (std::size_t i = 0; i < symbols.Size(); ++i) {
-            colors[i] = ColorOf(symbols[i]);
+    std::unordered_map<YQLHighlight::Color, char> symbols = [] {
+        std::unordered_map<YQLHighlight::Color, char> symbols;
+        for (const auto& [symbol, color] : colors) {
+            symbols[color] = symbol;
         }
-        return colors;
+        return symbols;
+    }();
+
+    TVector<YQLHighlight::Color> ColorsFromPattern(const TString& symbols) {
+        TVector<YQLHighlight::Color> result(symbols.Size());
+        for (std::size_t i = 0; i < symbols.Size(); ++i) {
+            result[i] = colors.at(symbols[i]);
+        }
+        return result;
     }
 
     TVector<YQLHighlight::Color> Apply(YQLHighlight& highlight,
@@ -48,9 +43,19 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
         return colors;
     }
 
+    TString SymbolsFromColors(const TVector<YQLHighlight::Color>& colors) {
+        TString result(colors.size(), '-');
+        for (std::size_t i = 0; i < colors.size(); ++i) {
+            result[i] = symbols.at(colors[i]);
+        }
+        return result;
+    }
+
     void Check(YQLHighlight& highlight, const TString& query,
                const TString& pattern) {
-        UNIT_ASSERT_EQUAL(Apply(highlight, query), Pattern(pattern));
+        auto actual = Apply(highlight, query);
+        UNIT_ASSERT_EQUAL_C(Apply(highlight, query), ColorsFromPattern(pattern),
+                            SymbolsFromColors(actual));
     }
 
     Y_UNIT_TEST(Blank) {
@@ -63,20 +68,65 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
     Y_UNIT_TEST(Keyword) {
         YQLHighlight highlight(Coloring);
         Check(highlight, "SELECT", "kkkkkk");
+        Check(highlight, "select", "kkkkkk");
         Check(highlight, "ALTER", "kkkkk");
         Check(highlight, "GROUP BY", "kkkkk kk");
         Check(highlight, "INSERT", "kkkkkk");
     }
 
+    Y_UNIT_TEST(Operation) {
+        YQLHighlight highlight(Coloring);
+        Check(highlight, "(1 + 21 / 4)", "on o nn o no");
+        Check(highlight, "(1+21/4)", "ononnono");
+    }
+
+    Y_UNIT_TEST(FunctionIdentifier) {
+        YQLHighlight highlight(Coloring);
+
+        Check(highlight, "MIN", "fff");
+        Check(highlight, "min", "fff");
+        Check(highlight, "MIN(123, 65)", "fffonnno nno");
+        Check(highlight, "MIN", "fff");
+
+        Check(highlight, "minimum", "vvvvvvv");
+        Check(highlight, "MINimum", "vvvvvvv");
+
+        Check(highlight, "Math::Sin", "ffffoofff");
+        Check(highlight, "Math", "vvvv");
+        Check(highlight, "Math::", "ffffoo");
+        Check(highlight, "::Sin", "oofff");
+    }
+
+    Y_UNIT_TEST(VariableIdentifier) {
+        YQLHighlight highlight(Coloring);
+        Check(highlight, "test", "vvvv");
+    }
+
+    Y_UNIT_TEST(QuotedIdentifier) {
+        YQLHighlight highlight(Coloring);
+        Check(highlight, "`/cluster/database`", "qqqqqqqqqqqqqqqqqqq");
+    }
+
+    Y_UNIT_TEST(String) {
+        YQLHighlight highlight(Coloring);
+        Check(highlight, "\"\"", "ss");
+        Check(highlight, "\"test\"", "ssssss");
+        Check(highlight, "\"", "o");
+        Check(highlight, "\"\"\"", "sso");
+    }
+
+    Y_UNIT_TEST(Number) {
+        YQLHighlight highlight(Coloring);
+
+        Check(highlight, "1234", "nnnn");
+        Check(highlight, "-123", "onnn");
+    }
+
     Y_UNIT_TEST(SQL) {
         YQLHighlight highlight(Coloring);
-        Check(
-            highlight,
-            "SELECT id, alias from users",
-            "kkkkkk vvo vvvvv kkkk vvvvv");
-        Check(
-            highlight,
-            "INSERT INTO users (id, alias) VALUES (12, \"tester\")",
-            "kkkkkk kkkk vvvvv ovvo vvvvvo kkkkkk onno sssssssso");
+        Check(highlight, "SELECT id, alias from users",
+              "kkkkkk vvo vvvvv kkkk vvvvv");
+        Check(highlight, "INSERT INTO users (id, alias) VALUES (12, \"tester\")",
+              "kkkkkk kkkk vvvvv ovvo vvvvvo kkkkkk onno sssssssso");
     }
 }

@@ -220,11 +220,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             if (rule.HasBlock2()) { // OR REPLACE
                 replaceIfExists = true;
                 Y_DEBUG_ABORT_UNLESS(
-                    (UnifiedToken(rule.GetBlock2().GetToken1().GetId()) == ANTLR3_TOKEN(OR) && 
-                     UnifiedToken(rule.GetBlock2().GetToken2().GetId()) == ANTLR3_TOKEN(REPLACE))
-                    ||
-                    (UnifiedToken(rule.GetBlock2().GetToken1().GetId()) == ANTLR4_TOKEN(OR) && 
-                     UnifiedToken(rule.GetBlock2().GetToken2().GetId()) == ANTLR4_TOKEN(REPLACE))
+                    (CHECK_TOKEN(rule.GetBlock2().GetToken1().GetId(), OR) && 
+                     CHECK_TOKEN(rule.GetBlock2().GetToken2().GetId(), REPLACE))
                 );
             }
 
@@ -232,30 +229,26 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             const auto& block = rule.GetBlock3();
             ETableType tableType = ETableType::Table;
             bool temporary = false;
-            if (block.HasAlt2() && (
-                (UnifiedToken(block.GetAlt2().GetToken1().GetId()) == ANTLR3_TOKEN(TABLESTORE)) || 
-                (UnifiedToken(block.GetAlt2().GetToken1().GetId()) == ANTLR4_TOKEN(TABLESTORE))
-            )) {
+            if (block.HasAlt2() &&
+                CHECK_TOKEN(block.GetAlt2().GetToken1().GetId(), TABLESTORE)
+            ) {
                 tableType = ETableType::TableStore;
                 if (isCreateTableAs) {
                     Context().Error(GetPos(block.GetAlt2().GetToken1()))
                         << "CREATE TABLE AS is not supported for TABLESTORE";
                     return false;
                 }
-            } else if (block.HasAlt3() && (
-                       (UnifiedToken(block.GetAlt3().GetToken1().GetId()) == ANTLR3_TOKEN(EXTERNAL)) ||
-                       (UnifiedToken(block.GetAlt3().GetToken1().GetId()) == ANTLR4_TOKEN(EXTERNAL))
-                    )) {
+            } else if (block.HasAlt3() &&
+                       CHECK_TOKEN(block.GetAlt3().GetToken1().GetId(), EXTERNAL)
+                    ) {
                 tableType = ETableType::ExternalTable;
                 if (isCreateTableAs) {
                     Context().Error(GetPos(block.GetAlt3().GetToken1()))
                         << "CREATE TABLE AS is not supported for EXTERNAL TABLE";
                     return false;
                 }
-            } else if (block.HasAlt4() && ((UnifiedToken(block.GetAlt4().GetToken1().GetId()) == ANTLR3_TOKEN(TEMP)) || 
-                                           (UnifiedToken(block.GetAlt4().GetToken1().GetId()) == ANTLR4_TOKEN(TEMP))) ||
-                       block.HasAlt5() && ((UnifiedToken(block.GetAlt5().GetToken1().GetId()) == ANTLR3_TOKEN(TEMPORARY)) || 
-                                           (UnifiedToken(block.GetAlt5().GetToken1().GetId()) == ANTLR4_TOKEN(TEMPORARY)))) {
+            } else if (block.HasAlt4() && CHECK_TOKEN(block.GetAlt4().GetToken1().GetId(), TEMP) ||
+                       block.HasAlt5() && CHECK_TOKEN(block.GetAlt5().GetToken1().GetId(), TEMPORARY)) {
                 temporary = true;
             }
 
@@ -263,13 +256,9 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             if (rule.HasBlock4()) { // IF NOT EXISTS
                 existingOk = true;
                 Y_DEBUG_ABORT_UNLESS(
-                    (UnifiedToken(rule.GetBlock4().GetToken1().GetId()) == ANTLR3_TOKEN(IF) &&
-                     UnifiedToken(rule.GetBlock4().GetToken2().GetId()) == ANTLR3_TOKEN(NOT) &&
-                     UnifiedToken(rule.GetBlock4().GetToken3().GetId()) == ANTLR3_TOKEN(EXISTS))
-                    ||
-                    (UnifiedToken(rule.GetBlock4().GetToken1().GetId()) == ANTLR4_TOKEN(IF) &&
-                     UnifiedToken(rule.GetBlock4().GetToken2().GetId()) == ANTLR4_TOKEN(NOT) &&
-                     UnifiedToken(rule.GetBlock4().GetToken3().GetId()) == ANTLR4_TOKEN(EXISTS))
+                    CHECK_TOKEN(rule.GetBlock4().GetToken1().GetId(), IF) &&
+                    CHECK_TOKEN(rule.GetBlock4().GetToken2().GetId(), NOT) &&
+                    CHECK_TOKEN(rule.GetBlock4().GetToken3().GetId(), EXISTS)
                 );
             }
 
@@ -356,11 +345,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             if (rule.HasBlock3()) { // IF EXISTS
                 missingOk = true;
                 Y_DEBUG_ABORT_UNLESS(
-                    (UnifiedToken(rule.GetBlock3().GetToken1().GetId()) == ANTLR3_TOKEN(IF) &&
-                     UnifiedToken(rule.GetBlock3().GetToken2().GetId()) == ANTLR3_TOKEN(EXISTS))
-                    ||
-                    (UnifiedToken(rule.GetBlock3().GetToken1().GetId()) == ANTLR4_TOKEN(IF) &&
-                     UnifiedToken(rule.GetBlock3().GetToken2().GetId()) == ANTLR4_TOKEN(EXISTS))
+                    CHECK_TOKEN(rule.GetBlock3().GetToken1().GetId(), IF) &&
+                    CHECK_TOKEN(rule.GetBlock3().GetToken2().GetId(), EXISTS)
                 );
             }
 
@@ -451,7 +437,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
         case TRule_sql_stmt_core::kAltSqlStmtCore15: {
             Ctx.BodyPart();
             const auto& rule = core.GetAlt_sql_stmt_core15().GetRule_alter_table_stmt1();
-            const bool isTablestore = (UnifiedToken(rule.GetToken2().GetId()) == ANTLR3_TOKEN(TABLESTORE)) || (UnifiedToken(rule.GetToken2().GetId()) == ANTLR4_TOKEN(TABLESTORE));
+            const bool isTablestore = CHECK_TOKEN(rule.GetToken2().GetId(), TABLESTORE);
             TTableRef tr;
             if (!SimpleTableRefImpl(rule.GetRule_simple_table_ref3(), tr)) {
                 return false;
@@ -717,7 +703,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             switch (node.GetBlock4().Alt_case()) {
                 case TRule_alter_group_stmt_TBlock4::kAlt1: {
                     auto& addDropNode = node.GetBlock4().GetAlt1();
-                    const bool isDrop = (UnifiedToken(addDropNode.GetToken1().GetId()) == ANTLR3_TOKEN(DROP)) || (UnifiedToken(addDropNode.GetToken1().GetId()) == ANTLR4_TOKEN(DROP));
+                    const bool isDrop = CHECK_TOKEN(addDropNode.GetToken1().GetId(), DROP);
                     TVector<TDeferredAtom> roles;
                     bool allowSystemRoles = false;
                     roles.emplace_back();
@@ -766,16 +752,13 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 return false;
             }
 
-            const bool isUser = (UnifiedToken(node.GetToken2().GetId()) == ANTLR3_TOKEN(USER)) || (UnifiedToken(node.GetToken2().GetId()) == ANTLR4_TOKEN(USER));
+            const bool isUser = CHECK_TOKEN(node.GetToken2().GetId(), USER);
             bool missingOk = false;
             if (node.HasBlock3()) { // IF EXISTS
                 missingOk = true;
                 Y_DEBUG_ABORT_UNLESS(
-                    (UnifiedToken(node.GetBlock3().GetToken1().GetId()) == ANTLR3_TOKEN(IF) &&
-                     UnifiedToken(node.GetBlock3().GetToken2().GetId()) == ANTLR3_TOKEN(EXISTS))
-                    ||
-                    (UnifiedToken(node.GetBlock3().GetToken1().GetId()) == ANTLR4_TOKEN(IF) &&
-                     UnifiedToken(node.GetBlock3().GetToken2().GetId()) == ANTLR4_TOKEN(EXISTS))
+                    CHECK_TOKEN(node.GetBlock3().GetToken1().GetId(), IF) &&
+                    CHECK_TOKEN(node.GetBlock3().GetToken2().GetId(), EXISTS)
                 );
             }
 
@@ -811,13 +794,9 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             if (node.HasBlock3()) { // IF NOT EXISTS
                 existingOk = true;
                 Y_DEBUG_ABORT_UNLESS(
-                    (UnifiedToken(node.GetBlock3().GetToken1().GetId()) == ANTLR3_TOKEN(IF) &&
-                     UnifiedToken(node.GetBlock3().GetToken2().GetId()) == ANTLR3_TOKEN(NOT) &&
-                     UnifiedToken(node.GetBlock3().GetToken3().GetId()) == ANTLR3_TOKEN(EXISTS))
-                    ||
-                    (UnifiedToken(node.GetBlock3().GetToken1().GetId()) == ANTLR4_TOKEN(IF) &&
-                     UnifiedToken(node.GetBlock3().GetToken2().GetId()) == ANTLR4_TOKEN(NOT) &&
-                     UnifiedToken(node.GetBlock3().GetToken3().GetId()) == ANTLR4_TOKEN(EXISTS))
+                    CHECK_TOKEN(node.GetBlock3().GetToken1().GetId(), IF) &&
+                    CHECK_TOKEN(node.GetBlock3().GetToken2().GetId(), NOT) &&
+                    CHECK_TOKEN(node.GetBlock3().GetToken3().GetId(), EXISTS)
                 );
             }
 
@@ -869,11 +848,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             if (node.HasBlock3()) { // IF EXISTS
                 missingOk = true;
                 Y_DEBUG_ABORT_UNLESS(
-                    (UnifiedToken(node.GetBlock3().GetToken1().GetId()) == ANTLR3_TOKEN(IF) &&
-                     UnifiedToken(node.GetBlock3().GetToken2().GetId()) == ANTLR3_TOKEN(EXISTS))
-                    ||
-                    (UnifiedToken(node.GetBlock3().GetToken1().GetId()) == ANTLR4_TOKEN(IF) &&
-                     UnifiedToken(node.GetBlock3().GetToken2().GetId()) == ANTLR4_TOKEN(EXISTS))
+                    CHECK_TOKEN(node.GetBlock3().GetToken1().GetId(), IF) &&
+                    CHECK_TOKEN(node.GetBlock3().GetToken2().GetId(), EXISTS)
                 );
             }
 
@@ -904,11 +880,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             if (node.HasBlock2()) { // OR REPLACE
                 replaceIfExists = true;
                 Y_DEBUG_ABORT_UNLESS(
-                    (UnifiedToken(node.GetBlock2().GetToken1().GetId()) == ANTLR3_TOKEN(OR) &&
-                     UnifiedToken(node.GetBlock2().GetToken2().GetId()) == ANTLR3_TOKEN(REPLACE))
-                    ||
-                    (UnifiedToken(node.GetBlock2().GetToken1().GetId()) == ANTLR4_TOKEN(OR) &&
-                     UnifiedToken(node.GetBlock2().GetToken2().GetId()) == ANTLR4_TOKEN(REPLACE))
+                    CHECK_TOKEN(node.GetBlock2().GetToken1().GetId(), OR) &&
+                    CHECK_TOKEN(node.GetBlock2().GetToken2().GetId(), REPLACE)
                 );
             }
 
@@ -916,13 +889,9 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             if (node.HasBlock6()) { // IF NOT EXISTS
                 existingOk = true;
                 Y_DEBUG_ABORT_UNLESS(
-                    (UnifiedToken(node.GetBlock6().GetToken1().GetId()) == ANTLR3_TOKEN(IF) &&
-                     UnifiedToken(node.GetBlock6().GetToken2().GetId()) == ANTLR3_TOKEN(NOT) &&
-                     UnifiedToken(node.GetBlock6().GetToken3().GetId()) == ANTLR3_TOKEN(EXISTS))
-                    ||
-                    (UnifiedToken(node.GetBlock6().GetToken1().GetId()) == ANTLR4_TOKEN(IF) &&
-                     UnifiedToken(node.GetBlock6().GetToken2().GetId()) == ANTLR4_TOKEN(NOT) &&
-                     UnifiedToken(node.GetBlock6().GetToken3().GetId()) == ANTLR4_TOKEN(EXISTS))
+                    CHECK_TOKEN(node.GetBlock6().GetToken1().GetId(), IF) &&
+                    CHECK_TOKEN(node.GetBlock6().GetToken2().GetId(), NOT) &&
+                    CHECK_TOKEN(node.GetBlock6().GetToken3().GetId(), EXISTS)
                 );
             }
 
@@ -978,11 +947,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             if (node.HasBlock5()) { // IF EXISTS
                 missingOk = true;
                 Y_DEBUG_ABORT_UNLESS(
-                    (UnifiedToken(node.GetBlock5().GetToken1().GetId()) == ANTLR3_TOKEN(IF) &&
-                     UnifiedToken(node.GetBlock5().GetToken2().GetId()) == ANTLR3_TOKEN(EXISTS))
-                    ||
-                    (UnifiedToken(node.GetBlock5().GetToken1().GetId()) == ANTLR4_TOKEN(IF) &&
-                     UnifiedToken(node.GetBlock5().GetToken2().GetId()) == ANTLR4_TOKEN(EXISTS))
+                    CHECK_TOKEN(node.GetBlock5().GetToken1().GetId(), IF) &&
+                    CHECK_TOKEN(node.GetBlock5().GetToken2().GetId(), EXISTS)
                 );
             }
 

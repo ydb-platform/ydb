@@ -3647,13 +3647,11 @@ bool TSqlTranslation::SortSpecificationList(const TRule_sort_specification_list&
 
 bool TSqlTranslation::IsDistinctOptSet(const TRule_opt_set_quantifier& node) const {
     TPosition pos;
-    return node.HasBlock1() && ((UnifiedToken(node.GetBlock1().GetToken1().GetId()) == ANTLR3_TOKEN(DISTINCT)) || 
-                                (UnifiedToken(node.GetBlock1().GetToken1().GetId()) == ANTLR4_TOKEN(DISTINCT)));
+    return node.HasBlock1() && CHECK_TOKEN(node.GetBlock1().GetToken1().GetId(), DISTINCT);
 }
 
 bool TSqlTranslation::IsDistinctOptSet(const TRule_opt_set_quantifier& node, TPosition& distinctPos) const {
-    if (node.HasBlock1() && ((UnifiedToken(node.GetBlock1().GetToken1().GetId()) == ANTLR3_TOKEN(DISTINCT)) ||
-                             (UnifiedToken(node.GetBlock1().GetToken1().GetId()) == ANTLR4_TOKEN(DISTINCT)))) {
+    if (node.HasBlock1() && CHECK_TOKEN(node.GetBlock1().GetToken1().GetId(), DISTINCT)) {
         distinctPos = Ctx.TokenPosition(node.GetBlock1().GetToken1());
         return true;
     }

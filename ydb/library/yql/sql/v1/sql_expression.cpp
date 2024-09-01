@@ -1913,9 +1913,7 @@ TNodePtr TSqlExpression::SubExpr(const TRule_xor_subexpr& node, const TTrailingQ
             }
             case TRule_cond_expr::kAltCondExpr4: {
                 auto alt = cond.GetAlt_cond_expr4();
-                const bool symmetric = alt.HasBlock3() &&
-                    ((UnifiedToken(alt.GetBlock3().GetToken1().GetId()) == ANTLR3_TOKEN(SYMMETRIC)) ||
-                     (UnifiedToken(alt.GetBlock3().GetToken1().GetId()) == ANTLR4_TOKEN(SYMMETRIC)));
+                const bool symmetric = alt.HasBlock3() && CHECK_TOKEN(alt.GetBlock3().GetToken1().GetId(), SYMMETRIC);
                 const bool negation = alt.HasBlock1();
                 TNodePtr left = SubExpr(alt.GetRule_eq_subexpr4(), {});
                 TNodePtr right = SubExpr(alt.GetRule_eq_subexpr6(), tail);
@@ -2116,8 +2114,7 @@ TNodePtr TSqlExpression::BinOpList(const TRule_bit_subexpr& node, TGetNode getNo
             case TRule_neq_subexpr_TBlock2_TBlock1::kAlt1: {
                 Token(begin->GetBlock1().GetAlt1().GetToken1());
                 auto tokenId = begin->GetBlock1().GetAlt1().GetToken1().GetId();
-                if ((UnifiedToken(tokenId) != ANTLR3_TOKEN(SHIFT_LEFT)) &&
-                    (UnifiedToken(tokenId) != ANTLR4_TOKEN(SHIFT_LEFT))) {
+                if (!CHECK_TOKEN(tokenId, SHIFT_LEFT)) {
                     Error() << "Unsupported binary operation token: " << tokenId;
                     return {};
                 }
@@ -2133,8 +2130,7 @@ TNodePtr TSqlExpression::BinOpList(const TRule_bit_subexpr& node, TGetNode getNo
             case TRule_neq_subexpr_TBlock2_TBlock1::kAlt3: {
                 Token(begin->GetBlock1().GetAlt3().GetToken1());
                 auto tokenId = begin->GetBlock1().GetAlt3().GetToken1().GetId();
-                if ((UnifiedToken(tokenId) != ANTLR3_TOKEN(ROT_LEFT)) &&
-                    (UnifiedToken(tokenId) != ANTLR4_TOKEN(ROT_LEFT))) {
+                if (!CHECK_TOKEN(tokenId, ROT_LEFT)) {
                     Error() << "Unsupported binary operation token: " << tokenId;
                     return {};
                 }
@@ -2150,8 +2146,7 @@ TNodePtr TSqlExpression::BinOpList(const TRule_bit_subexpr& node, TGetNode getNo
             case TRule_neq_subexpr_TBlock2_TBlock1::kAlt5: {
                 Token(begin->GetBlock1().GetAlt5().GetToken1());
                 auto tokenId = begin->GetBlock1().GetAlt5().GetToken1().GetId();
-                if ((UnifiedToken(tokenId) != ANTLR3_TOKEN(AMPERSAND)) &&
-                    (UnifiedToken(tokenId) != ANTLR4_TOKEN(AMPERSAND))) {
+                if (!CHECK_TOKEN(tokenId, AMPERSAND)) {
                     Error() << "Unsupported binary operation token: " << tokenId;
                     return {};
                 }
@@ -2162,8 +2157,7 @@ TNodePtr TSqlExpression::BinOpList(const TRule_bit_subexpr& node, TGetNode getNo
             case TRule_neq_subexpr_TBlock2_TBlock1::kAlt6: {
                 Token(begin->GetBlock1().GetAlt6().GetToken1());
                 auto tokenId = begin->GetBlock1().GetAlt6().GetToken1().GetId();
-                if ((UnifiedToken(tokenId) != ANTLR3_TOKEN(PIPE)) &&
-                    (UnifiedToken(tokenId) != ANTLR4_TOKEN(PIPE))) {
+                if (!CHECK_TOKEN(tokenId, PIPE)) {
                     Error() << "Unsupported binary operation token: " << tokenId;
                     return {};
                 }
@@ -2174,8 +2168,7 @@ TNodePtr TSqlExpression::BinOpList(const TRule_bit_subexpr& node, TGetNode getNo
             case TRule_neq_subexpr_TBlock2_TBlock1::kAlt7: {
                 Token(begin->GetBlock1().GetAlt7().GetToken1());
                 auto tokenId = begin->GetBlock1().GetAlt7().GetToken1().GetId();
-                if ((UnifiedToken(tokenId) != ANTLR3_TOKEN(CARET)) &&
-                    (UnifiedToken(tokenId) != ANTLR4_TOKEN(CARET))) {
+                if (!CHECK_TOKEN(tokenId, CARET)) {
                     Error() << "Unsupported binary operation token: " << tokenId;
                     return {};
                 }
@@ -2205,8 +2198,7 @@ TNodePtr TSqlExpression::BinOpList(const TRule_eq_subexpr& node, TGetNode getNod
             case TRule_cond_expr::TAlt5::TBlock1::TBlock1::kAlt1: {
                 Token(begin->GetBlock1().GetAlt1().GetToken1());
                 auto tokenId = begin->GetBlock1().GetAlt1().GetToken1().GetId();
-                if ((UnifiedToken(tokenId) != ANTLR3_TOKEN(EQUALS)) &&
-                    (UnifiedToken(tokenId) != ANTLR4_TOKEN(EQUALS))) {
+                if (!CHECK_TOKEN(tokenId, EQUALS)) {
                     Error() << "Unsupported binary operation token: " << tokenId;
                     return {};
                 }
@@ -2217,8 +2209,7 @@ TNodePtr TSqlExpression::BinOpList(const TRule_eq_subexpr& node, TGetNode getNod
             case TRule_cond_expr::TAlt5::TBlock1::TBlock1::kAlt2: {
                 Token(begin->GetBlock1().GetAlt2().GetToken1());
                 auto tokenId = begin->GetBlock1().GetAlt2().GetToken1().GetId();
-                if ((UnifiedToken(tokenId) != ANTLR3_TOKEN(EQUALS2)) &&
-                    (UnifiedToken(tokenId) != ANTLR4_TOKEN(EQUALS2))) {
+                if (!CHECK_TOKEN(tokenId, EQUALS2)) {
                     Error() << "Unsupported binary operation token: " << tokenId;
                     return {};
                 }
@@ -2229,8 +2220,7 @@ TNodePtr TSqlExpression::BinOpList(const TRule_eq_subexpr& node, TGetNode getNod
             case TRule_cond_expr::TAlt5::TBlock1::TBlock1::kAlt3: {
                 Token(begin->GetBlock1().GetAlt3().GetToken1());
                 auto tokenId = begin->GetBlock1().GetAlt3().GetToken1().GetId();
-                if ((UnifiedToken(tokenId) != ANTLR3_TOKEN(NOT_EQUALS)) &&
-                    (UnifiedToken(tokenId) != ANTLR4_TOKEN(NOT_EQUALS))) {
+                if (!CHECK_TOKEN(tokenId, NOT_EQUALS)) {
                     Error() << "Unsupported binary operation token: " << tokenId;
                     return {};
                 }
@@ -2241,8 +2231,7 @@ TNodePtr TSqlExpression::BinOpList(const TRule_eq_subexpr& node, TGetNode getNod
             case TRule_cond_expr::TAlt5::TBlock1::TBlock1::kAlt4: {
                 Token(begin->GetBlock1().GetAlt4().GetToken1());
                 auto tokenId = begin->GetBlock1().GetAlt4().GetToken1().GetId();
-                if ((UnifiedToken(tokenId) != ANTLR3_TOKEN(NOT_EQUALS2)) &&
-                    (UnifiedToken(tokenId) != ANTLR4_TOKEN(NOT_EQUALS2))) {
+                if (!CHECK_TOKEN(tokenId, NOT_EQUALS2)) {
                     Error() << "Unsupported binary operation token: " << tokenId;
                     return {};
                 }

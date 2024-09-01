@@ -20,6 +20,7 @@
 
 #define ANTLR3_TOKEN(NAME) SQLv1LexerTokens::TOKEN_##NAME << 16
 #define ANTLR4_TOKEN(NAME) (SQLv1Antlr4Lexer::TOKEN_##NAME << 16) + 1
+#define CHECK_TOKEN(ID, NAME) (UnifiedToken(ID) == ANTLR3_TOKEN(NAME) || UnifiedToken(ID) == ANTLR4_TOKEN(NAME))
 
 namespace NSQLTranslationV1 {
     inline bool IsAnonymousName(const TString& name) {

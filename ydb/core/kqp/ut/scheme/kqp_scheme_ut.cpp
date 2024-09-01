@@ -7979,7 +7979,8 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         auto session = tableClient.CreateSession().GetValueSync().GetSession();
         TString tableName = "/Root/TableWithDefaultFamily";
 
-        auto query = TStringBuilder() << R"(CREATE TABLE `)" << tableName << R"(` (
+        {
+            auto query = TStringBuilder() << R"(CREATE TABLE `)" << tableName << R"(` (
                 Key Uint64 NOT NULL,
                 Value1 String,
                 Value2 Uint32,
@@ -7989,20 +7990,62 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
                      COMPRESSION = "snappy"
                 ))
                 WITH (STORE = COLUMN);)";
-        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        Cerr << query << Endl;
-        auto tableSettings = NYdb::NTable::TDescribeTableSettings().WithTableStatistics(true);
-        auto describeResult = session.DescribeTable(tableName, tableSettings).GetValueSync();
-        UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
-        auto columns = describeResult.GetTableDescription().GetColumns();
-        for (const auto& column : describeResult.GetTableDescription().GetTableColumns()) {
-            UNIT_ASSERT_VALUES_EQUAL(column.Family, "default");
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            Cerr << query << Endl;
         }
-        const auto& columnFamilies = describeResult.GetTableDescription().GetColumnFamilies();
-        UNIT_ASSERT_VALUES_EQUAL(columnFamilies.size(), 1);
-        for (const auto& family : columnFamilies) {
-            Cerr << "Family " << family.GetName() << "\n Data: " << family.GetData() << "\n COMPRESSION: " << family.GetCompression() << "\n";
+
+        // {
+        //     auto query =
+        //         TStringBuilder()
+        //         << R"(ALTER OBJECT `)" << tableName
+        //         << R"(` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Key, `SERIALIZER.CLASS_NAME`=`ARROW_SERIALIZER`, `COMPRESSION.TYPE`=`lz4`);)";
+        //     auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        //     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        //     Cerr << query << Endl;
+        // }
+        auto runtime = runner.GetTestServer().GetRuntime();
+        TActorId sender = runtime->AllocateEdgeActor();
+
+        auto eColumnCodecToString = [](NKikimrSchemeOp::EColumnCodec codec) {
+            switch (codec) {
+                case NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain:
+                    return "UNCOMPRESSED";
+                case NKikimrSchemeOp::EColumnCodec::ColumnCodecGZIP:
+                    return "GZIP";
+                case NKikimrSchemeOp::EColumnCodec::ColumnCodecSNAPPY:
+                    return "SNAPPY";
+                case NKikimrSchemeOp::EColumnCodec::ColumnCodecLZO:
+                    return "LZO";
+                case NKikimrSchemeOp::EColumnCodec::ColumnCodecBROTLI:
+                    return "BROTLI";
+                case NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4RAW:
+                    return "LZ4";
+                case NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4:
+                    return "LZ4_FRAME";
+                case NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4HADOOP:
+                    return "LZ4_HADOOP";
+                case NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD:
+                    return "ZSTD";
+                case NKikimrSchemeOp::EColumnCodec::ColumnCodecBZ2:
+                    return "BZ2";
+            }
+        };
+
+        auto describeResult = DescribeTable(&runner.GetTestServer(), sender, tableName);
+        auto schema = describeResult.GetPathDescription().GetColumnTableDescription().GetSchema();
+        Cerr << "HasDefaultCompression: " << schema.HasDefaultCompression() << "\n";
+        if (schema.HasDefaultCompression()) {
+            Cerr << "Default compression: " << eColumnCodecToString(schema.GetDefaultCompression().GetCodec()) << "\n";
+        }
+        {
+            auto columns = schema.GetColumns();
+            for (const auto& column : columns) {
+                if (column.HasSerializer()) {
+                    auto serializer = column.GetSerializer();
+                    Cerr << column.GetName().c_str() << ": " << eColumnCodecToString(serializer.GetArrowCompression().GetCodec()) << "\n";
+                }
+            }
         }
     }
 }

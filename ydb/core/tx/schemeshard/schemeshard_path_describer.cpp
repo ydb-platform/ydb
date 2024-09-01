@@ -550,6 +550,10 @@ void TPathDescriber::DescribeColumnTable(TPathId pathId, TPathElement::TPtr path
     const auto tableInfo = Self->ColumnTables.GetVerified(pathId);
     Y_UNUSED(pathEl);
 
+    if (tableInfo->Description.GetSchema().HasDefaultCompression()) {
+        Cerr << "TPathDescriber::DescribeColumnTable HasDefaultCompression\n";
+    }
+
     auto* pathDescription = Result->Record.MutablePathDescription();
     auto description = pathDescription->MutableColumnTableDescription();
     description->CopyFrom(tableInfo->Description);

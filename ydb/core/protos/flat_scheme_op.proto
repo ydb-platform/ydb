@@ -478,6 +478,8 @@ message TOlapColumnDescription {
     optional string StorageId = 11;
     optional NKikimrColumnShardColumnDefaults.TColumnDefault DefaultValue = 12;
     optional NKikimrArrowAccessorProto.TConstructor DataAccessorConstructor = 13;
+    optional uint32 Family = 14; // On default place column to default(0) family
+    optional string FamilyName = 15; // set Family by name (0 - "default") 
 }
 
 message TRequestedBloomFilter {
@@ -846,6 +848,8 @@ message TColumnTableDescription {
 
     // Channels for standalone column table
     optional TColumnStorageConfig StorageConfig = 13;
+
+    repeated TFamilyDescription ColumnFamilies = 14;
 }
 
 message TAlterColumnTable {

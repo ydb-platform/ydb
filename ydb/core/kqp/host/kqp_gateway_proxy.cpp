@@ -418,7 +418,6 @@ void FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const TK
     for (const auto& name : metadata.ColumnOrder) {
         auto columnIt = metadata.Columns.find(name);
         Y_ENSURE(columnIt != metadata.Columns.end());
-
         NKikimrSchemeOp::TOlapColumnDescription& columnDesc = *schema.AddColumns();
         columnDesc.SetName(columnIt->second.Name);
         columnDesc.SetType(columnIt->second.Type);
@@ -454,9 +453,23 @@ void FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const TK
 
     for (const auto& family : metadata.ColumnFamilies) {
         if (family.Name == "default") {
-            auto defaultFamily = schema.MutableDefaultCompression();
-            defaultFamily->SetCodec(getCodecFromString(family.Compression));
-            defaultFamily->SetLevel(family.CompressionLevel.Defined() ? family.CompressionLevel.GetRef() : 20);
+            Cerr << "Default family: " << family.Compression << "\n";
+            for (ui32 i = 0; i < schema.ColumnsSize(); i++) {
+                auto serializer = schema.MutableColumns(i)->MutableSerializer();
+                serializer->SetClassName("ARROW_SERIALIZER");
+                auto ArrowCompression = serializer->MutableArrowCompression();
+                ArrowCompression->SetCodec(getCodecFromString(family.Compression));
+                if (family.CompressionLevel.Defined()) {
+                    ArrowCompression->SetLevel(family.CompressionLevel.GetRef());
+                }
+            }
+            auto defaultCompression = schema.MutableDefaultCompression();
+            defaultCompression->SetCodec(getCodecFromString(family.Compression));
+            if (family.CompressionLevel.Defined()) {
+                defaultCompression->SetLevel(family.CompressionLevel.GetRef());
+            }
+            Cerr << "HasCode: " << defaultCompression->HasCodec() << "\n";
+            Cerr << "HasDefaultCompression: " << schema.HasDefaultCompression() << "\n";
         } else {
             Cerr << "TOlapIndexDescription\n";
         }

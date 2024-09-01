@@ -33,14 +33,14 @@ public:
 
     virtual ~ILock() = default;
 
-    std::optional<TString> IsLocked(const TPortionInfo& portion, const THashSet<TString>& excludedLocks = {}, const bool readOnly = false) const {
-        if (IsReadOnly() && readOnly) {
+    std::optional<TString> IsLocked(const TPortionInfo& portion, const THashSet<TString>& excludedLocks = {}) const {
+        if (IsReadOnly() && false) {
             return {};
         }
         return DoIsLocked(portion, excludedLocks);
     }
-    std::optional<TString> IsLocked(const TGranuleMeta& g, const THashSet<TString>& excludedLocks = {}, const bool readOnly = false) const {
-        if (IsReadOnly() && readOnly) {
+    std::optional<TString> IsLocked(const TGranuleMeta& g, const THashSet<TString>& excludedLocks = {}) const {
+        if (IsReadOnly() && false) {
             return {};
         }
         return DoIsLocked(g, excludedLocks);

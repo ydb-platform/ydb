@@ -8,7 +8,7 @@
     * [Скачать](https://cloud.yandex.ru/ru/docs/cli/quickstart) Yandex Cloud CLI.
     * [Создать](https://cloud.yandex.ru/ru/docs/cli/quickstart#initialize) профиль 
 3. [Создать](https://cloud.yandex.com/ru/docs/tutorials/infrastructure-management/terraform-quickstart#get-credentials) сервисный аккаунт с помощью CLI.
-4. [Сгенерировать](https://cloud.yandex.ru/ru/docs/cli/operations/authentication/service-account#auth-as-sa) SA ключ в JSON формате для подключения Terraform к облаку с помощью CLI: `yc iam key create --service-account-name <acc name> --output <file name> --folder-id <cloud folder id>`. Будет сгенерирован SA ключ, а в терминал будет выведена секретная информация:
+4. [Сгенерировать](https://cloud.yandex.ru/ru/docs/cli/operations/authentication/service-account#auth-as-sa) SA ключ в JSON формате для подключения Terraform к облаку с помощью CLI: `yc iam access-key create --service-account-name <acc name> --folder-id <cloud folder id>`. Будет сгенерирован SA ключ, а в терминал будет выведена секретная информация:
     ```
     access_key:
         id: ajenhnhaqgd3vp...

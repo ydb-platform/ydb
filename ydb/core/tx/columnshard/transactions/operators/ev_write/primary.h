@@ -98,7 +98,7 @@ private:
             AFL_VERIFY(op->WaitShardsBrokenFlags.erase(TabletId))("remove_tablet_id", TabletId);
             op->TxBroken = op->TxBroken.value_or(false) || BrokenFlag;
             op->SendBrokenFlagAck(*Self, TabletId);
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "remove_tablet_id")("wait", JoinSeq(",", op->WaitShardsBrokenFlags))(
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "remove_tablet_id")("wait", JoinSeq(",", op->WaitShardsBrokenFlags))(
                 "receive", TabletId);
             op->InitializeRequests(*Self);
         }
@@ -239,7 +239,7 @@ private:
                 if (op->WaitShardsBrokenFlags.empty()) {
                     AFL_VERIFY(op->WaitShardsResultAck.erase(Self->TabletID()));
                 }
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "remove_tablet_id")("wait", JoinSeq(",", op->WaitShardsBrokenFlags))(
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "remove_tablet_id")("wait", JoinSeq(",", op->WaitShardsBrokenFlags))(
                     "receive", Self->TabletID());
                 op->CheckFinished(*Self);
             }

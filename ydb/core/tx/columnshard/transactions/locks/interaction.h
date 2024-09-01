@@ -250,8 +250,13 @@ public:
             return false;
         } else if (PrimaryKey && !item.PrimaryKey) {
             return false;
+        } else if (IncludeState == item.IncludeState) {
+            if (PrimaryKey->Size() != item.PrimaryKey->Size()) {
+                return false;
+            }
+            return *PrimaryKey == *item.PrimaryKey;
         } else {
-            return IncludeState == item.IncludeState && *PrimaryKey == *item.PrimaryKey;
+            return false;
         }
     }
 
@@ -419,7 +424,7 @@ public:
             it->second.AddIntervalTx(txId);
         }
         itTo->second.AddFinish(txId, to.IsIncluded());
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "add_interval")("interactions_info", DebugJson().GetStringRobust());
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "add_interval")("interactions_info", DebugJson().GetStringRobust());
     }
 
     void RemoveInterval(const ui64 txId, const ui64 pathId, const TIntervalPoint& from, const TIntervalPoint& to) {
@@ -446,7 +451,7 @@ public:
         if (intervals.IsEmpty()) {
             ReadIntervalsByPathId.erase(itIntervals);
         }
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "remove_interval")("interactions_info", DebugJson().GetStringRobust());
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "remove_interval")("interactions_info", DebugJson().GetStringRobust());
     }
 };
 

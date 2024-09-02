@@ -223,12 +223,10 @@ struct TComputeScheduler::TImpl {
         }
     }
 
-    void CreateGroup(TString groupName, double maxShare, NMonotonic::TMonotonic now) {
+    void CreateGroup(TString groupName, double maxShare) {
         PoolId[groupName] = Records.size();
         auto group = std::make_unique<TSchedulerEntity::TGroupRecord>();
         group->Share = maxShare;
-        group->MutableStats.Next()->LastNowRecalc = now;
-        group->MutableStats.Next()->Weight = SumCores * maxShare;
         Records.push_back(std::move(group));
     }
 };
@@ -376,11 +374,12 @@ bool TComputeScheduler::Disable(TString group, TMonotonic now) {
 void TComputeScheduler::UpdateMaxShare(TString group, double share, TMonotonic now) {
     auto ptr = Impl->PoolId.FindPtr(group);
     if (!ptr) {
-        Impl->CreateGroup(group, share, now);
+        Impl->CreateGroup(group, share);
     } else {
         auto& record = Impl->Records[*ptr];
         record->Share = share;
     }
+    Impl->AssignWeights();
     AdvanceTime(now);
 }
 

@@ -30,9 +30,7 @@ class TestGreenplum:
             FROM {conn_name}.{table_name} ORDER BY number;
             """
 
-        query_id = fq_client.create_query(
-            query_name, sql, type=fq.QueryContent.QueryType.ANALYTICS
-        ).result.query_id
+        query_id = fq_client.create_query(query_name, sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         fq_client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
 
         data = fq_client.get_result_data(query_id)

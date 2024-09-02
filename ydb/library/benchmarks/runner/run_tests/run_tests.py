@@ -124,7 +124,7 @@ class Runner:
         print("Running runner...", file=stderr)
         subprocess.run(cmd)
 
-        print(self.result_dir)
+        print("Run results at: ", self.result_dir)
         return self.result_dir
 
 
@@ -139,8 +139,6 @@ def result_compare(args, to_compare):
 
 def main():
     args = parse_args()
-
-    print(args)
 
     results = []
     print("With spilling...", file=stderr)

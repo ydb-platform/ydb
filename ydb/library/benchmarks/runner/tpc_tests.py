@@ -67,16 +67,14 @@ def upload(result_path, s3_folder):
 
 def test_tpc():
     is_ci = os.environ.get("PUBLIC_DIR") is not None
-    print("is ci: ", is_ci, file=sys.stderr)
 
     runner = Runner()
-    runner.wrapped_run("h", 1, 1, r"q1\.sql")
+    runner.wrapped_run("h", 1, 1, None)
     result_path = runner.results_path.resolve()
-    print("results path:", result_path, file=sys.stderr)
+    print("Results path:", result_path, file=sys.stderr)
 
     if is_ci:
         s3_folder = pathlib.Path(os.environ["PUBLIC_DIR"]).resolve()
-        print(f"s3 folder: {s3_folder}", file=sys.stderr)
 
         upload(result_path, s3_folder)
     exit(1)

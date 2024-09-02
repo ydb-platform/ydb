@@ -87,13 +87,10 @@ def upload_results(result_path, s3_folder, test_start):
         datasize = int(datasize)
         tasks = int(tasks)
 
-        print(list(entry.iterdir()), file=sys.stderr)
-
         for file in entry.iterdir():
             if not file.is_file():
                 continue
             name = file.name
-            print(file, name, file=sys.stderr)
             if len(file.suffixes) > 0:
                 name = name.rsplit(file.suffixes[0])[0]
             if name[0] == "q":
@@ -107,8 +104,7 @@ def upload_results(result_path, s3_folder, test_start):
                     # copying files to folder that will be synced with s3
                     dst = (s3_folder / dst).resolve()
                     dst.parent.mkdir(parents=True, exist_ok=True)
-                    res = shutil.copy2(str(file.resolve()), str(dst))
-                    print(res, file=sys.stderr)
+                    _ = shutil.copy2(str(file.resolve()), str(dst))
                 # q<num>-stdout.txt
                 if file.stem == f"q{query_num}-stdout":
                     with open(file, "r") as stdout:
@@ -125,8 +121,6 @@ def upload_results(result_path, s3_folder, test_start):
         for key, value in this_result.items():
             params = RunParams(is_spilling, variant, datasize, tasks, key)
             results_map[params] = value
-
-    print(results_map, file=sys.stderr)
 
     with ydb.Driver(
         endpoint=DATABASE_ENDPOINT,
@@ -160,7 +154,6 @@ def upload_results(result_path, s3_folder, test_start):
                 sql = 'UPSERT INTO `perfomance/olap/dq_spilling_nightly_runs`\n\t({columns})\nVALUES\n\t({values})'.format(
                     columns=", ".join(map(str, mapping.keys())),
                     values=", ".join(map(pretty_print, mapping.values())))
-                print(sql, file=sys.stderr)
                 tx.execute(sql, commit_tx=True)
 
 

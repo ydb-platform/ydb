@@ -128,31 +128,6 @@ def upload_results(result_path, s3_folder, test_start):
 
     print(results_map, file=sys.stderr)
 
-    for params, results in results_map.items():
-        mapping = {
-            "BenchmarkType" : params.variant,
-            "Scale" : params.datasize,
-            "QueryNum" : params.query,
-            "WithSpilling" : params.is_spilling,
-            "Timestamp" : test_start,
-            "WasSpillingInAggregation" : None,
-            "WasSpillingInJoin" : None,
-            "WasSpillingInChannels" : None,
-            "MaxTasksPerStage" : params.tasks,
-            "PerfFileLink" : results.perf_file_path,
-            "ExitCode" : results.exitcode,
-            "ResultHash" : results.output_hash,
-            "SpilledBytes" : results.read_bytes,
-            "UserTime" : results.user_time,
-            "SystemTime" : results.system_time
-        }
-        sql = 'UPSERT INTO `perfomance/olap/dq_spilling_nightly_runs`\n\t({columns})\nVALUES\n\t({values})'.format(
-            columns=", ".join(map(str, mapping.keys())),
-            values=", ".join(map(pretty_print, mapping.values())))
-        print(sql, file=sys.stderr)
-
-    return
-
     with ydb.Driver(
         endpoint=DATABASE_ENDPOINT,
         database=DATABASE_PATH,
@@ -182,7 +157,7 @@ def upload_results(result_path, s3_folder, test_start):
                     "UserTime" : results.user_time,
                     "SystemTime" : results.system_time
                 }
-                sql = 'UPSERT INTO perfomance/olap/dq_spilling_nightly_runs ({columns}) VALUES ({values})'.format(
+                sql = 'UPSERT INTO `perfomance/olap/dq_spilling_nightly_runs`\n\t({columns})\nVALUES\n\t({values})'.format(
                     columns=", ".join(map(str, mapping.keys())),
                     values=", ".join(map(pretty_print, mapping.values())))
                 print(sql, file=sys.stderr)
@@ -199,9 +174,9 @@ def main():
 
     args = parser.parse_args()
 
-    # if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
-        # raise AttributeError("Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping uploading")
-    # os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = os.environ["CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"]
+    if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
+        raise AttributeError("Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping uploading")
+    os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = os.environ["CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"]
 
     upload_results(args.result_path, args.s3_folder, upload_time)
 

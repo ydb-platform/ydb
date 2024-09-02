@@ -413,7 +413,7 @@ public:
         return ReplyBus_->GetEndpointAttributes();
     }
 
-    const TString& GetEndpointDescription() const override
+    const std::string& GetEndpointDescription() const override
     {
         return ReplyBus_->GetEndpointDescription();
     }

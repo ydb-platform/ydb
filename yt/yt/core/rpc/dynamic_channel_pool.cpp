@@ -43,13 +43,13 @@ public:
     TImpl(
         TDynamicChannelPoolConfigPtr config,
         IChannelFactoryPtr channelFactory,
-        TString endpointDescription,
+        const std::string& endpointDescription,
         IAttributeDictionaryPtr endpointAttributes,
         std::string serviceName,
         IPeerDiscoveryPtr peerDiscovery)
         : Config_(std::move(config))
         , ChannelFactory_(std::move(channelFactory))
-        , EndpointDescription_(std::move(endpointDescription))
+        , EndpointDescription_(endpointDescription)
         , EndpointAttributes_(ConvertToAttributes(BuildYsonStringFluently()
             .BeginMap()
                 .Items(*endpointAttributes)
@@ -188,7 +188,7 @@ private:
 
     const TDynamicChannelPoolConfigPtr Config_;
     const IChannelFactoryPtr ChannelFactory_;
-    const TString EndpointDescription_;
+    const std::string EndpointDescription_;
     const IAttributeDictionaryPtr EndpointAttributes_;
     const std::string ServiceName_;
     IPeerDiscoveryPtr PeerDiscovery_;
@@ -900,14 +900,14 @@ private:
 TDynamicChannelPool::TDynamicChannelPool(
     TDynamicChannelPoolConfigPtr config,
     IChannelFactoryPtr channelFactory,
-    TString endpointDescription,
+    const std::string& endpointDescription,
     NYTree::IAttributeDictionaryPtr endpointAttributes,
     std::string serviceName,
     IPeerDiscoveryPtr peerDiscovery)
     : Impl_(New<TImpl>(
         std::move(config),
         std::move(channelFactory),
-        std::move(endpointDescription),
+        endpointDescription,
         std::move(endpointAttributes),
         std::move(serviceName),
         std::move(peerDiscovery)))

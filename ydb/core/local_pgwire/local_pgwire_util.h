@@ -8,7 +8,7 @@
 
 #include <ydb-cpp-sdk/client/draft/ydb_scripting.h>
 #define INCLUDE_YDB_INTERNAL_H
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/plain_status/status.h>
+#include <src/client/impl/ydb_internal/plain_status/status.h>
 #include <ydb-cpp-sdk/client/table/table.h>
 #include <ydb-cpp-sdk/client/types/operation/operation.h>
 #include <ydb-cpp-sdk/client/value/value.h>
@@ -111,7 +111,7 @@ struct TEvEvents {
     struct TEvAuthResponse : NActors::TEventLocal<TEvAuthResponse, EvAuthResponse> {
         TString SerializedToken;
         TString Ticket;
-        TString ErrorMessage;
+        std::string ErrorMessage;
         TActorId Sender;
 
         TEvAuthResponse(const TString& serializedToken, const TString& ticket, const TActorId& sender)
@@ -120,7 +120,7 @@ struct TEvEvents {
             , Sender(sender)
         {}
 
-        TEvAuthResponse(const TString& errorMessage, const TActorId& sender)
+        TEvAuthResponse(const std::string& errorMessage, const TActorId& sender)
             : ErrorMessage(errorMessage)
             , Sender(sender)
         {}

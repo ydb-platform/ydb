@@ -99,11 +99,11 @@ std::optional<ui32> TryDecodeYdbSessionId(const TString& sessionId) {
 }
 
 TString EncodeSessionId(ui32 nodeId, const TString& id) {
-    Ydb::TOperationId opId;
+    NOperationId::TOperationId opId;
     opId.SetKind(NOperationId::TOperationId::SESSION_YQL);
     NOperationId::AddOptionalValue(opId, "node_id", ToString(nodeId));
     NOperationId::AddOptionalValue(opId, "id", Base64Encode(id));
-    return NOperationId::ProtoToString(opId);
+    return opId.ToString();
 }
 
 class TKqpTempTablesAgentActor: public TActorBootstrapped<TKqpTempTablesAgentActor> {

@@ -1,8 +1,6 @@
 LIBRARY()
 
-ADDINCL(
-    ydb/public/sdk/cpp
-)
+INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/sdk_common.inc)
 
 SRCS(
     local_pgwire_auth_actor.cpp

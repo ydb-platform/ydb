@@ -229,7 +229,7 @@ public:
         PassAway();
     }
 
-    void ReplyErrorAndPassAway(const TString& status, const TString& message, const TString& error) {
+    void ReplyErrorAndPassAway(const TString& status, const TString& message, const std::string& error) {
         ALOG_ERROR(NActorsServices::HTTP, "Login: " << error);
         NHttp::THeadersBuilder headers;
         SetCORS(headers);

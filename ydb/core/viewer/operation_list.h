@@ -69,8 +69,8 @@ public:
                     504:
                         description: Gateway Timeout
             )___");
-        node["get"]["responses"]["200"]["content"]["application/json"]["schema"] = TProtoToYaml::ProtoToYamlSchema<Ydb::Operations::ListOperationsResponse>();
-        TProtoToYaml::FillEnum(node["get"]["parameters"][1]["enum"], NProtoBuf::GetEnumDescriptor<Ydb::TOperationId::EKind>(), {
+        node["get"]["responses"]["200"]["content"]["application/json"]["schema"] = TProtoToYaml::ProtoToYamlSchema<NOperationId::ListOperationsResponse>();
+        TProtoToYaml::FillEnum(node["get"]["parameters"][1]["enum"], NProtoBuf::GetEnumDescriptor<NOperationId::EKind>(), {
             .ConvertToLowerCase = true,
             .SkipDefaultValue = true
         });

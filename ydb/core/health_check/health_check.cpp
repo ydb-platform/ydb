@@ -3120,7 +3120,7 @@ public:
             }
             break;
         }
-        if (!config.Locator) {
+        if (config.Locator.empty()) {
             AddIssue(Ydb::Monitoring::StatusFlag::RED, "Couldn't find local gRPC endpoint");
             ReplyAndPassAway();
         }

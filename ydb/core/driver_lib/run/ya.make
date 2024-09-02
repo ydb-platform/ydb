@@ -10,6 +10,10 @@ ELSE()
     )
 ENDIF()
 
+ADDINCL(
+    ydb/public/sdk/cpp
+)
+
 SRCS(
     auto_config_initializer.cpp
     config.cpp

@@ -1333,7 +1333,7 @@ void TFixture::WaitForTheTabletToDeleteTheWriteInfo(const TActorId& actorId,
         for (size_t i = 0; i < info.TxWritesSize(); ++i) {
             auto& writeInfo = info.GetTxWrites(i);
             UNIT_ASSERT(writeInfo.HasWriteId());
-            if (NPQ::GetWriteId(writeInfo) == writeId) {
+            if ((NPQ::GetWriteId(writeInfo) == writeId) && writeInfo.HasOriginalPartitionId()) {
                 found = true;
                 break;
             }

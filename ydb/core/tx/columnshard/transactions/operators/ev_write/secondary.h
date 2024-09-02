@@ -77,7 +77,7 @@ private:
             op->ReceiveAck = true;
             if (!op->NeedReceiveBroken) {
                 op->TxBroken = false;
-                Self->EnqueueProgressTx(ctx);
+                Self->EnqueueProgressTx(ctx, TxId);
             }
         }
 
@@ -118,7 +118,7 @@ private:
             if (BrokenFlag) {
                 Self->GetProgressTxController().CompleteOnCancel(TxId, ctx);
             }
-            Self->EnqueueProgressTx(ctx);
+            Self->EnqueueProgressTx(ctx, TxId);
         }
 
     public:
@@ -154,7 +154,7 @@ private:
 
     virtual void DoOnTabletInit(TColumnShard& owner) override {
         if (TxBroken || (ReceiveAck && !NeedReceiveBroken)) {
-            owner.EnqueueProgressTx(NActors::TActivationContext::AsActorContext());
+            owner.EnqueueProgressTx(NActors::TActivationContext::AsActorContext(), GetTxId());
         } else if (!ReceiveAck) {
             SendResult(owner);
         }

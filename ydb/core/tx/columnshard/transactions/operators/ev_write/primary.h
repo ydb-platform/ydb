@@ -166,7 +166,7 @@ private:
     void CheckFinished(TColumnShard& owner) {
         if (WaitShardsResultAck.empty()) {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "finished");
-            owner.EnqueueProgressTx(NActors::TActivationContext::AsActorContext());
+            owner.EnqueueProgressTx(NActors::TActivationContext::AsActorContext(), GetTxId());
         }
     }
 

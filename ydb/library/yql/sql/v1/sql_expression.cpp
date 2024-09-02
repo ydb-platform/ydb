@@ -1635,13 +1635,13 @@ TNodePtr TSqlExpression::SubExpr(const TRule_con_subexpr& node, const TTrailingQ
             Token(token);
             TPosition pos(Ctx.Pos());
             auto tokenId = token.GetId();
-            if (CHECK_TOKEN(tokenId, NOT)) {
+            if (IS_TOKEN(tokenId, NOT)) {
                 opName = "Not";
-            } else if (CHECK_TOKEN(tokenId, PLUS)) {
+            } else if (IS_TOKEN(tokenId, PLUS)) {
                 opName = "Plus";
-            } else if (CHECK_TOKEN(tokenId, MINUS)) {
+            } else if (IS_TOKEN(tokenId, MINUS)) {
                 opName = Ctx.Scoped->PragmaCheckedOps ? "CheckedMinus" : "Minus";
-            } else if (CHECK_TOKEN(tokenId, TILDA)) {
+            } else if (IS_TOKEN(tokenId, TILDA)) {
                 opName = "BitNot";
             } else {
                 Ctx.IncrementMonCounter("sql_errors", "UnsupportedUnaryOperation");
@@ -1913,7 +1913,7 @@ TNodePtr TSqlExpression::SubExpr(const TRule_xor_subexpr& node, const TTrailingQ
             }
             case TRule_cond_expr::kAltCondExpr4: {
                 auto alt = cond.GetAlt_cond_expr4();
-                const bool symmetric = alt.HasBlock3() && CHECK_TOKEN(alt.GetBlock3().GetToken1().GetId(), SYMMETRIC);
+                const bool symmetric = alt.HasBlock3() && IS_TOKEN(alt.GetBlock3().GetToken1().GetId(), SYMMETRIC);
                 const bool negation = alt.HasBlock1();
                 TNodePtr left = SubExpr(alt.GetRule_eq_subexpr4(), {});
                 TNodePtr right = SubExpr(alt.GetRule_eq_subexpr6(), tail);
@@ -2039,28 +2039,28 @@ TNodePtr TSqlExpression::BinOpList(const TNode& node, TGetNode getNode, TIter be
         TPosition pos(Ctx.Pos());
         TString opName;
         auto tokenId = begin->GetToken1().GetId();
-        if (CHECK_TOKEN(tokenId, LESS)) {
+        if (IS_TOKEN(tokenId, LESS)) {
             opName = "<";
             Ctx.IncrementMonCounter("sql_binary_operations", "Less");
-        } else if (CHECK_TOKEN(tokenId, LESS_OR_EQ)) {
+        } else if (IS_TOKEN(tokenId, LESS_OR_EQ)) {
             opName = "<=";
             Ctx.IncrementMonCounter("sql_binary_operations", "LessOrEq");
-        } else if (CHECK_TOKEN(tokenId, GREATER)) {
+        } else if (IS_TOKEN(tokenId, GREATER)) {
             opName = ">";
             Ctx.IncrementMonCounter("sql_binary_operations", "Greater");
-        } else if (CHECK_TOKEN(tokenId, GREATER_OR_EQ)) {
+        } else if (IS_TOKEN(tokenId, GREATER_OR_EQ)) {
             opName = ">=";
             Ctx.IncrementMonCounter("sql_binary_operations", "GreaterOrEq");
-        } else if (CHECK_TOKEN(tokenId, PLUS)) {
+        } else if (IS_TOKEN(tokenId, PLUS)) {
             opName = Ctx.Scoped->PragmaCheckedOps ? "CheckedAdd" : "+MayWarn";
             Ctx.IncrementMonCounter("sql_binary_operations", "Plus");
-        } else if (CHECK_TOKEN(tokenId, MINUS)) {
+        } else if (IS_TOKEN(tokenId, MINUS)) {
             opName = Ctx.Scoped->PragmaCheckedOps ? "CheckedSub" : "-MayWarn";
             Ctx.IncrementMonCounter("sql_binary_operations", "Minus");
-        } else if (CHECK_TOKEN(tokenId, ASTERISK)) {
+        } else if (IS_TOKEN(tokenId, ASTERISK)) {
             opName = Ctx.Scoped->PragmaCheckedOps ? "CheckedMul" : "*MayWarn";
             Ctx.IncrementMonCounter("sql_binary_operations", "Multiply");
-        } else if (CHECK_TOKEN(tokenId, SLASH)) {
+        } else if (IS_TOKEN(tokenId, SLASH)) {
             opName = "/MayWarn";
             Ctx.IncrementMonCounter("sql_binary_operations", "Divide");
             if (!Ctx.Scoped->PragmaClassicDivision && partialResult) {
@@ -2068,7 +2068,7 @@ TNodePtr TSqlExpression::BinOpList(const TNode& node, TGetNode getNode, TIter be
             } else if (Ctx.Scoped->PragmaCheckedOps) {
                 opName = "CheckedDiv";
             }
-        } else if (CHECK_TOKEN(tokenId, PERCENT)) {
+        } else if (IS_TOKEN(tokenId, PERCENT)) {
             opName = Ctx.Scoped->PragmaCheckedOps ? "CheckedMod" : "%MayWarn";
             Ctx.IncrementMonCounter("sql_binary_operations", "Mod");
         } else {
@@ -2095,7 +2095,7 @@ TNodePtr TSqlExpression::BinOpList(const TRule_bit_subexpr& node, TGetNode getNo
             case TRule_neq_subexpr_TBlock2_TBlock1::kAlt1: {
                 Token(begin->GetBlock1().GetAlt1().GetToken1());
                 auto tokenId = begin->GetBlock1().GetAlt1().GetToken1().GetId();
-                if (!CHECK_TOKEN(tokenId, SHIFT_LEFT)) {
+                if (!IS_TOKEN(tokenId, SHIFT_LEFT)) {
                     Error() << "Unsupported binary operation token: " << tokenId;
                     return {};
                 }
@@ -2111,7 +2111,7 @@ TNodePtr TSqlExpression::BinOpList(const TRule_bit_subexpr& node, TGetNode getNo
             case TRule_neq_subexpr_TBlock2_TBlock1::kAlt3: {
                 Token(begin->GetBlock1().GetAlt3().GetToken1());
                 auto tokenId = begin->GetBlock1().GetAlt3().GetToken1().GetId();
-                if (!CHECK_TOKEN(tokenId, ROT_LEFT)) {
+                if (!IS_TOKEN(tokenId, ROT_LEFT)) {
                     Error() << "Unsupported binary operation token: " << tokenId;
                     return {};
                 }
@@ -2127,7 +2127,7 @@ TNodePtr TSqlExpression::BinOpList(const TRule_bit_subexpr& node, TGetNode getNo
             case TRule_neq_subexpr_TBlock2_TBlock1::kAlt5: {
                 Token(begin->GetBlock1().GetAlt5().GetToken1());
                 auto tokenId = begin->GetBlock1().GetAlt5().GetToken1().GetId();
-                if (!CHECK_TOKEN(tokenId, AMPERSAND)) {
+                if (!IS_TOKEN(tokenId, AMPERSAND)) {
                     Error() << "Unsupported binary operation token: " << tokenId;
                     return {};
                 }
@@ -2138,7 +2138,7 @@ TNodePtr TSqlExpression::BinOpList(const TRule_bit_subexpr& node, TGetNode getNo
             case TRule_neq_subexpr_TBlock2_TBlock1::kAlt6: {
                 Token(begin->GetBlock1().GetAlt6().GetToken1());
                 auto tokenId = begin->GetBlock1().GetAlt6().GetToken1().GetId();
-                if (!CHECK_TOKEN(tokenId, PIPE)) {
+                if (!IS_TOKEN(tokenId, PIPE)) {
                     Error() << "Unsupported binary operation token: " << tokenId;
                     return {};
                 }
@@ -2149,7 +2149,7 @@ TNodePtr TSqlExpression::BinOpList(const TRule_bit_subexpr& node, TGetNode getNo
             case TRule_neq_subexpr_TBlock2_TBlock1::kAlt7: {
                 Token(begin->GetBlock1().GetAlt7().GetToken1());
                 auto tokenId = begin->GetBlock1().GetAlt7().GetToken1().GetId();
-                if (!CHECK_TOKEN(tokenId, CARET)) {
+                if (!IS_TOKEN(tokenId, CARET)) {
                     Error() << "Unsupported binary operation token: " << tokenId;
                     return {};
                 }
@@ -2179,7 +2179,7 @@ TNodePtr TSqlExpression::BinOpList(const TRule_eq_subexpr& node, TGetNode getNod
             case TRule_cond_expr::TAlt5::TBlock1::TBlock1::kAlt1: {
                 Token(begin->GetBlock1().GetAlt1().GetToken1());
                 auto tokenId = begin->GetBlock1().GetAlt1().GetToken1().GetId();
-                if (!CHECK_TOKEN(tokenId, EQUALS)) {
+                if (!IS_TOKEN(tokenId, EQUALS)) {
                     Error() << "Unsupported binary operation token: " << tokenId;
                     return {};
                 }
@@ -2190,7 +2190,7 @@ TNodePtr TSqlExpression::BinOpList(const TRule_eq_subexpr& node, TGetNode getNod
             case TRule_cond_expr::TAlt5::TBlock1::TBlock1::kAlt2: {
                 Token(begin->GetBlock1().GetAlt2().GetToken1());
                 auto tokenId = begin->GetBlock1().GetAlt2().GetToken1().GetId();
-                if (!CHECK_TOKEN(tokenId, EQUALS2)) {
+                if (!IS_TOKEN(tokenId, EQUALS2)) {
                     Error() << "Unsupported binary operation token: " << tokenId;
                     return {};
                 }
@@ -2201,7 +2201,7 @@ TNodePtr TSqlExpression::BinOpList(const TRule_eq_subexpr& node, TGetNode getNod
             case TRule_cond_expr::TAlt5::TBlock1::TBlock1::kAlt3: {
                 Token(begin->GetBlock1().GetAlt3().GetToken1());
                 auto tokenId = begin->GetBlock1().GetAlt3().GetToken1().GetId();
-                if (!CHECK_TOKEN(tokenId, NOT_EQUALS)) {
+                if (!IS_TOKEN(tokenId, NOT_EQUALS)) {
                     Error() << "Unsupported binary operation token: " << tokenId;
                     return {};
                 }
@@ -2212,7 +2212,7 @@ TNodePtr TSqlExpression::BinOpList(const TRule_eq_subexpr& node, TGetNode getNod
             case TRule_cond_expr::TAlt5::TBlock1::TBlock1::kAlt4: {
                 Token(begin->GetBlock1().GetAlt4().GetToken1());
                 auto tokenId = begin->GetBlock1().GetAlt4().GetToken1().GetId();
-                if (!CHECK_TOKEN(tokenId, NOT_EQUALS2)) {
+                if (!IS_TOKEN(tokenId, NOT_EQUALS2)) {
                     Error() << "Unsupported binary operation token: " << tokenId;
                     return {};
                 }

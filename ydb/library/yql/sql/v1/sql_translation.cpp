@@ -1615,9 +1615,9 @@ bool TSqlTranslation::CreateTableEntry(const TRule_create_table_entry& node, TCr
 
                         auto& token = spec.GetBlock2().GetToken1();
                         auto tokenId = token.GetId();
-                        if (CHECK_TOKEN(tokenId, ASC)) {
+                        if (IS_TOKEN(tokenId, ASC)) {
                             return true;
-                        } else if (CHECK_TOKEN(tokenId, DESC)) {
+                        } else if (IS_TOKEN(tokenId, DESC)) {
                             desc = true;
                             return true;
                         } else {
@@ -3609,9 +3609,9 @@ bool TSqlTranslation::SortSpecification(const TRule_sort_specification& node, TV
         const auto& token = node.GetBlock2().GetToken1();
         Token(token);
         auto tokenId = token.GetId();
-        if (CHECK_TOKEN(tokenId, ASC)) {
+        if (IS_TOKEN(tokenId, ASC)) {
             Ctx.IncrementMonCounter("sql_features", "OrderByAsc");
-        } else if (CHECK_TOKEN(tokenId, DESC)) {
+        } else if (IS_TOKEN(tokenId, DESC)) {
             asc = false;
             Ctx.IncrementMonCounter("sql_features", "OrderByDesc");
         } else {
@@ -3641,11 +3641,11 @@ bool TSqlTranslation::SortSpecificationList(const TRule_sort_specification_list&
 
 bool TSqlTranslation::IsDistinctOptSet(const TRule_opt_set_quantifier& node) const {
     TPosition pos;
-    return node.HasBlock1() && CHECK_TOKEN(node.GetBlock1().GetToken1().GetId(), DISTINCT);
+    return node.HasBlock1() && IS_TOKEN(node.GetBlock1().GetToken1().GetId(), DISTINCT);
 }
 
 bool TSqlTranslation::IsDistinctOptSet(const TRule_opt_set_quantifier& node, TPosition& distinctPos) const {
-    if (node.HasBlock1() && CHECK_TOKEN(node.GetBlock1().GetToken1().GetId(), DISTINCT)) {
+    if (node.HasBlock1() && IS_TOKEN(node.GetBlock1().GetToken1().GetId(), DISTINCT)) {
         distinctPos = Ctx.TokenPosition(node.GetBlock1().GetToken1());
         return true;
     }

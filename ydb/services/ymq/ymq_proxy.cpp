@@ -799,6 +799,7 @@ namespace NKikimr::NYmq::V1 {
                 } else {
                     auto currentSuccessful = result.Addsuccessful();
                     currentSuccessful->Setid(entry.GetId());
+                    currentSuccessful->Setmd5_of_message_attributes(entry.GetMD5OfMessageAttributes());
                     currentSuccessful->Setmd5_of_message_body(entry.GetMD5OfMessageBody());
                     currentSuccessful->Setmessage_id(entry.GetMessageId());
                     currentSuccessful->Setsequence_number(std::to_string(entry.GetSequenceNumber()));

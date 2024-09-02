@@ -43,7 +43,13 @@ Examples for different build systems:
 
 ## Usage {#using}
 
-After importing all the necessary dependencies, the dialect is ready for use. Let's take a simple example.
+After importing all the necessary dependencies, the dialect is ready for use. Let's consider a simple example of a Spring Data JDBC application.
+
+```properties
+
+spring.datasource.driver-class-name=tech.ydb.jdbc.YdbDriver
+spring.datasource.url=jdbc:ydb:<grpc/grpcs>://<host>:<2135/2136>/path/to/database[?saFile=file:~/sa_key.json]
+```
 
 ```java
 
@@ -161,3 +167,5 @@ lateinit var uint64Column: Long
 ```
 
 Using the `@YdbType` annotation allows you to accurately specify data types supported by {{ ydb-short-name }}, ensuring proper interaction with the database.
+
+An example of a simple Spring Data JDBC repository can be found at the following [link](https://github.com/ydb-platform/ydb-java-examples/tree/master/jdbc/spring-data-jdbc).

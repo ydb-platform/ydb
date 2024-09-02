@@ -43,7 +43,13 @@ Spring Data JDBC является частью экосистемы [Spring Data
 
 ## Использование {#using}
 
-После импорта всех необходимых зависимостей, диалект готов к работе. Давайте рассмотрим простой пример.
+После импорта всех необходимых зависимостей диалект готов к использованию. Рассмотрим простой пример Spring Data JDBC приложения.
+
+```properties
+
+spring.datasource.driver-class-name=tech.ydb.jdbc.YdbDriver
+spring.datasource.url=jdbc:ydb:<grpc/grpcs>://<host>:<2135/2136>/path/to/database[?saFile=file:~/sa_key.json]
+```
 
 ```java
 
@@ -168,3 +174,5 @@ lateinit var uint64Column: Long
 ```
 
 Использование аннотации `@YdbType` позволяет точно указать типы данных, поддерживаемые {{ ydb-short-name }}, что обеспечивает корректное взаимодействие с базой данных.
+
+Пример простого приложения Spring Data JDBC можно найти по [ссылке](https://github.com/ydb-platform/ydb-java-examples/tree/master/jdbc/spring-data-jdbc).

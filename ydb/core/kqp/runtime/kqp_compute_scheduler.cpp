@@ -126,6 +126,8 @@ public:
         std::atomic<i64> DelayedSumBatches = 0;
         std::atomic<i64> DelayedCount = 0;
 
+        double Share;
+
         TMultithreadPublisher<TGroupMutableStats> MutableStats;
     };
 
@@ -215,7 +217,11 @@ struct TComputeScheduler::TImpl {
 
     TDuration MaxDelay = TDuration::Seconds(10);
 
-    void AssignWeights() { }
+    void AssignWeights() {
+        for (auto& record : Records) {
+            record->MutableStats.Next()->Weight = SumCores * record->Share;
+        }
+    }
 
     void CreateGroup(TString groupName, double maxShare, NMonotonic::TMonotonic now) {
         PoolId[groupName] = Records.size();
@@ -372,11 +378,14 @@ void TComputeScheduler::UpdateMaxShare(TString group, double share, TMonotonic n
         Impl->CreateGroup(group, share, now);
     } else {
         auto& record = Impl->Records[*ptr];
-        record->MutableStats.Next()->Weight = share;
+        record->Share = share;
     }
     AdvanceTime(now);
 }
 
+void TComputeScheduler::SetCapacity(ui64 cores) {
+    Impl->SumCores = cores;
+}
 
 ::NMonitoring::TDynamicCounters::TCounterPtr TComputeScheduler::GetGroupUsageCounter(TString group) const {
     return Impl->Counters
@@ -407,6 +416,7 @@ public:
         }
         Opts.Scheduler->SetForgetInterval(Opts.ForgetOverflowTimeout);
         Opts.Scheduler->ReportCounters(Opts.Counters);
+        SetCapacity();
     }
 
     void Bootstrap() {
@@ -418,6 +428,15 @@ public:
              IEventHandle::FlagTrackDelivery);
 
         Become(&TSchedulerActor::State);
+    }
+
+    void SetCapacity() {
+        NActors::TExecutorPoolStats poolStats;
+        TVector<NActors::TExecutorThreadStats> threadsStats;
+        TlsActivationContext->ActorSystem()->GetPoolStats(SelfId().PoolID(), poolStats, threadsStats);
+        Y_ENSURE(poolStats.MaxThreadCount > 0);
+        Opts.Counters->SchedulerCapacity->Set(poolStats.MaxThreadCount);
+        Opts.Scheduler->SetCapacity(poolStats.MaxThreadCount);
     }
 
     STATEFN(State) {
@@ -467,6 +486,7 @@ public:
     }
 
     void Handle(TEvents::TEvWakeup::TPtr&) {
+        SetCapacity();
         Opts.Scheduler->AdvanceTime(TlsActivationContext->Monotonic());
         Schedule(Opts.AdvanceTimeInterval, new TEvents::TEvWakeup());
     }

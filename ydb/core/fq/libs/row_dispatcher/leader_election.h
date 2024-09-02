@@ -5,8 +5,6 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/core/fq/libs/shared_resources/shared_resources.h>
 
-//#include <memory>
-
 namespace NFq {
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -92,7 +92,7 @@ public:
         Runtime.Send(new NActors::IEventHandle(Coordinator, readActorId, event));
     }
 
-    NFq::NRowDispatcherProto::TEvGetAddressResponse ExpectResult(NActors::TActorId readActorId/*, std::map<NActors::TActorId, std::set<ui64>> expectedResult*/) {
+    NFq::NRowDispatcherProto::TEvGetAddressResponse ExpectResult(NActors::TActorId readActorId) {
         auto eventPtr = Runtime.GrabEdgeEvent<NFq::TEvRowDispatcher::TEvCoordinatorResult>(readActorId, TDuration::Seconds(5));
         UNIT_ASSERT(eventPtr.Get() != nullptr);
         NFq::NRowDispatcherProto::TEvGetAddressResponse result;

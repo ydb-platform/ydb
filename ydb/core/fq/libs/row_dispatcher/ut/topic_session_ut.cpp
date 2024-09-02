@@ -39,6 +39,7 @@ public:
     void Init(ui64 maxSessionUsedMemory = std::numeric_limits<ui64>::max()) {
         Config.SetTimeoutBeforeStartSessionSec(TimeoutBeforeStartSessionSec);
         Config.SetMaxSessionUsedMemory(maxSessionUsedMemory);
+        Config.SetSendStatusPeriodSec(2);
 
         TopicSession = Runtime.Register(NewTopicSession(
             Config,

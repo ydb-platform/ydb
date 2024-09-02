@@ -190,7 +190,6 @@ struct TFakeCASetup {
         std::vector<std::variant<T, TInstant>> result;
         NThreading::TFuture<bool> nextDataFuture;
         Execute([&result, &parser, freeSpace, &nextDataFutureOut, this](TFakeActor& actor) {
-            NKikimr::NMiniKQL::TScopedAlloc guard(__LOCATION__);
             TMaybe<TInstant> watermark;
             NKikimr::NMiniKQL::TUnboxedValueBatch buffer;
             bool finished = false;

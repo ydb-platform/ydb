@@ -63,8 +63,6 @@ public:
         EdgeActor = Runtime.AllocateEdgeActor();
         ReadActorId1 = Runtime.AllocateEdgeActor();
         ReadActorId2 = Runtime.AllocateEdgeActor();
-
-
         TestActorFactory = MakeIntrusive<TTestActorFactory>(Runtime);
 
         RowDispatcher = Runtime.Register(NewRowDispatcher(

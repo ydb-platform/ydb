@@ -139,9 +139,7 @@ void TActorCoordinator::AddRowDispatcher(NActors::TActorId actorId) {
 
 void TActorCoordinator::Handle(NActors::TEvents::TEvPing::TPtr& ev) {
     LOG_ROW_DISPATCHER_TRACE("TEvPing received, " << ev->Sender);
-
     AddRowDispatcher(ev->Sender);
-
     PrintInternalState();
     LOG_ROW_DISPATCHER_TRACE("Send TEvPong to " << ev->Sender);
     Send(ev->Sender, new NActors::TEvents::TEvPong(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);

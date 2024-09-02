@@ -215,7 +215,7 @@ class TestPqRowDispatcher(TestYdsBase):
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
             SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
                 WITH (format=json_each_row, SCHEMA (time UInt64 NOT NULL, data String NOT NULL, event String NOT NULL))
-                WHERE time > 101UL or event = "event2";'''
+                WHERE time > 101UL or event = "event666";'''
 
         query_id = start_yds_query(kikimr, client, sql)
         wait_actor_count(kikimr, "YQ_ROW_DISPATCHER_SESSION", 1)
@@ -419,7 +419,59 @@ class TestPqRowDispatcher(TestYdsBase):
         expected = ['103', '104']
         assert self.read_stream(len(expected), topic_path=output_topic) == expected
 
-        stop_yds_query(client, query_id)  # TODO?
+        stop_yds_query(client, query_id)
+        wait_actor_count(kikimr, "YQ_ROW_DISPATCHER_SESSION", 0)
+
+    @yq_v1
+    def test_stop_start_with_filter(self, kikimr, client):
+        client.create_yds_connection(
+            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), use_row_dispatcher=True
+        )
+        self.init_topics("test_stop_start", create_output=False)
+
+        output_topic = "test_stop_start"
+        create_stream(output_topic, partitions_count=1)
+        create_read_rule(output_topic, self.consumer_name)
+
+        sql = Rf'''
+            INSERT INTO {YDS_CONNECTION}.`{output_topic}`
+            SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
+                WITH (format=json_each_row, SCHEMA (time UInt64 NOT NULL))
+                WHERE time > 200UL;'''
+
+        query_id = start_yds_query(kikimr, client, sql)
+        wait_actor_count(kikimr, "YQ_ROW_DISPATCHER_SESSION", 1)
+
+        data = ['{"time": 101}', '{"time": 102}']
+        self.write_stream(data)
+
+        kikimr.compute_plane.wait_completed_checkpoints(
+            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 4
+        )
+        stop_yds_query(client, query_id)
+        wait_actor_count(kikimr, "YQ_ROW_DISPATCHER_SESSION", 0)
+
+        sql = Rf'''
+            INSERT INTO {YDS_CONNECTION}.`{output_topic}`
+            SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
+                WITH (format=json_each_row, SCHEMA (time UInt64 NOT NULL));'''
+    
+        client.modify_query(
+            query_id,
+            "continue",
+            sql,
+            type=fq.QueryContent.QueryType.STREAMING,
+            state_load_mode=fq.StateLoadMode.EMPTY,
+            streaming_disposition=StreamingDisposition.from_last_checkpoint(),
+        )
+        client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
+
+        data = ['{"time": 203}', '{"time": 204}']
+        self.write_stream(data)
+        expected = ['203', '204']
+        assert self.read_stream(len(expected), topic_path=output_topic) == expected
+
+        stop_yds_query(client, query_id)
         wait_actor_count(kikimr, "YQ_ROW_DISPATCHER_SESSION", 0)
 
     @yq_v1

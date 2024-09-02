@@ -6,7 +6,6 @@
 #include <ydb/core/fq/libs/ydb/util.h>
 #include <ydb/core/fq/libs/events/events.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
-#include <ydb/library/actors/core/interconnect.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -344,11 +343,6 @@ void TLeaderElection::Handle(TEvPrivate::TEvAcquireSemaphoreResult::TPtr& ev) {
     }
     LOG_ROW_DISPATCHER_DEBUG("Semaphore successfully acquired");
 }
-
-// void TLeaderElection::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& /*ev*/) {
-//     LOG_ROW_DISPATCHER_DEBUG("TEvCoordinatorChanged ");
-//     //Send(ParentId, new NFq::TEvRowDispatcher::TEvCoordinatorChanged(ev->Get()->CoordinatorActorId));
-// }
 
 void TLeaderElection::PassAway() {
     LOG_ROW_DISPATCHER_DEBUG("PassAway");

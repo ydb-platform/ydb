@@ -189,6 +189,7 @@ public:
     void Handle(NFq::TEvRowDispatcher::TEvStartSessionAck::TPtr &ev);
     void Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr &ev);
     void Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr &ev);
+    void Handle(NFq::TEvRowDispatcher::TEvStatus::TPtr &ev);
 
     void HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev);
     void HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr &ev);
@@ -206,6 +207,7 @@ public:
         hFunc(NFq::TEvRowDispatcher::TEvMessageBatch, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvStartSessionAck, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvSessionError, Handle);
+        hFunc(NFq::TEvRowDispatcher::TEvStatus, Handle);
 
         hFunc(NActors::TEvents::TEvPong, Handle);
         hFunc(TEvInterconnect::TEvNodeConnected, HandleConnected);
@@ -487,7 +489,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvStartSessionAck::TPtr &e
 }
 
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr &ev) {
-    SRC_LOG_D("TEvSessionError " << ev->Sender);
+    SRC_LOG_D("TEvSessionError from " << ev->Sender);
 
     ui64 partitionId = ev->Get()->Record.GetPartitionId();
     auto sessionIt = Sessions.find(partitionId);
@@ -499,6 +501,14 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr &ev) 
         return;
     }
     Stop(ev->Get()->Record.GetMessage());
+}
+
+void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvStatus::TPtr &ev) {
+    SRC_LOG_D("TEvStatus from " << ev->Sender << ", offset " << ev->Get()->Record.GetNextMessageOffset());
+    if (ReadyBuffer.empty()) {
+        TPartitionKey partitionKey{TString{}, ev->Get()->Record.GetPartitionId()};
+        PartitionToOffset[partitionKey] = ev->Get()->Record.GetNextMessageOffset();
+    }
 }
 
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr &ev) {
@@ -666,11 +676,10 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr &ev) 
         SRC_LOG_T("Json: " << message.GetJson());    
         activeBatch.Data.emplace_back(message.GetJson());
         activeBatch.UsedSpace += message.GetJson().size();
-        activeBatch.NextOffset = message.GetOffset() + 1;
         sessionInfo.NextOffset = message.GetOffset() + 1;
         SRC_LOG_T("TEvMessageBatch NextOffset " << sessionInfo.NextOffset);
     }
-
+    activeBatch.NextOffset = ev->Get()->Record.GetNextMessageOffset();
     Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
 }
 

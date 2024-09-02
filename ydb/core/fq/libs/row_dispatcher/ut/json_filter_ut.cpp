@@ -6,7 +6,6 @@
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/testlib/basics/helpers.h>
 #include <ydb/core/testlib/actor_helpers.h>
-//#include <ydb/library/actors/testlib/test_runtime.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace {

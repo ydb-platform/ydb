@@ -132,6 +132,7 @@ public:
     void Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr &ev);
     void Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr &ev);
     void Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr &ev);
+    void Handle(NFq::TEvRowDispatcher::TEvStatus::TPtr &ev);
 
     void Handle(NActors::TEvents::TEvPing::TPtr &ev);
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr&);
@@ -155,6 +156,7 @@ public:
         hFunc(NFq::TEvRowDispatcher::TEvStartSession, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvStopSession, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvSessionError, Handle);
+        hFunc(NFq::TEvRowDispatcher::TEvStatus, Handle);
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle);
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvPing, Handle);
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvSessionClosed, Handle);
@@ -489,6 +491,18 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr &ev) {
     LOG_ROW_DISPATCHER_TRACE("Forward TEvSessionError to " << ev->Get()->ReadActorId);
     it->second->EventsQueue.Send(ev.Release()->Release().Release());
     DeleteConsumer(key);
+}
+
+void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStatus::TPtr &ev) {
+    LOG_ROW_DISPATCHER_TRACE("TEvStatus from " << ev->Sender);
+    ConsumerSessionKey key{ev->Get()->ReadActorId, ev->Get()->Record.GetPartitionId()};
+    auto it = Consumers.find(key);
+    if (it == Consumers.end()) {
+        LOG_ROW_DISPATCHER_WARN("Ignore TEvStatus, no such session");
+        return;
+    }
+    LOG_ROW_DISPATCHER_TRACE("Forward TEvStatus to " << ev->Get()->ReadActorId);
+    it->second->EventsQueue.Send(ev.Release()->Release().Release());
 }
 
 } // namespace

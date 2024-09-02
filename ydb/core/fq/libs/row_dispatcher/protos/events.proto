@@ -60,6 +60,13 @@ message TEvMessage {
 message TEvMessageBatch {
     repeated TEvMessage Messages = 1;
     uint32 PartitionId = 2;
+    uint64 NextMessageOffset = 3;
+    optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
+}
+
+message TEvStatus {
+    uint32 PartitionId = 1;
+    uint64 NextMessageOffset = 2;
     optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
 }
 

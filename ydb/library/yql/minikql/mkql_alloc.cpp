@@ -2,7 +2,6 @@
 #include <util/system/align.h>
 #include <ydb/library/yql/public/udf/udf_value.h>
 #include <tuple>
-#include <ydb/library/yql/utils/backtrace/backtrace.h>
 
 namespace NKikimr {
 
@@ -158,7 +157,6 @@ void TAllocState::UnlockObject(::NKikimr::NUdf::TUnboxedValuePod value) {
 }
 
 void TScopedAlloc::Acquire() {
-
     if (!AttachedCount_) {
         if (PrevState_) {
             PgReleaseThreadContext(PrevState_->MainContext);

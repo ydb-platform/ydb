@@ -129,6 +129,7 @@ struct TFixture : public TPqIoTestFixture {
                 event->Record.AddMessages()->CopyFrom(message);
             }
             event->Record.SetPartitionId(PartitionId);
+            event->Record.SetNextMessageOffset(offset);
             CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, rowDispatcherId, event));
         });
     }

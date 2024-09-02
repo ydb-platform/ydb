@@ -20,6 +20,7 @@ struct TEvRowDispatcher {
         EvNewDataArrived,
         EvGetNextBatch,
         EvMessageBatch,
+        EvStatus,
         EvStopSession,
         EvSessionError,
         EvCoordinatorChangesSubscribe,
@@ -97,7 +98,6 @@ struct TEvRowDispatcher {
         TEvGetNextBatch() = default;
     };
 
-
     struct TEvStopSession : public NActors::TEventPB<TEvStopSession,
         NFq::NRowDispatcherProto::TEvStopSession, EEv::EvStopSession> {
         TEvStopSession() = default;
@@ -106,6 +106,12 @@ struct TEvRowDispatcher {
     struct TEvMessageBatch : public NActors::TEventPB<TEvMessageBatch,
         NFq::NRowDispatcherProto::TEvMessageBatch, EEv::EvMessageBatch> {
         TEvMessageBatch() = default;
+        NActors::TActorId ReadActorId;
+    };
+
+    struct TEvStatus : public NActors::TEventPB<TEvStatus,
+        NFq::NRowDispatcherProto::TEvStatus, EEv::EvStatus> {
+        TEvStatus() = default;
         NActors::TActorId ReadActorId;
     };
 

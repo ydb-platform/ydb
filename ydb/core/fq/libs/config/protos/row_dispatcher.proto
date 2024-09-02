@@ -16,6 +16,7 @@ message TRowDispatcherCoordinatorConfig {
 message TRowDispatcherConfig {
     bool Enabled = 1;
     uint64 TimeoutBeforeStartSessionSec = 2;
-    uint64 MaxSessionUsedMemory = 3; 
-    TRowDispatcherCoordinatorConfig Coordinator = 4;
+    uint64 SendStatusPeriodSec = 3;
+    uint64 MaxSessionUsedMemory = 4; 
+    TRowDispatcherCoordinatorConfig Coordinator = 5;
 }

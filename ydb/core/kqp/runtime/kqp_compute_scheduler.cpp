@@ -434,9 +434,9 @@ public:
         NActors::TExecutorPoolStats poolStats;
         TVector<NActors::TExecutorThreadStats> threadsStats;
         TlsActivationContext->ActorSystem()->GetPoolStats(SelfId().PoolID(), poolStats, threadsStats);
-        Y_ENSURE(poolStats.MaxThreadCount > 0);
-        Opts.Counters->SchedulerCapacity->Set(poolStats.MaxThreadCount);
-        Opts.Scheduler->SetCapacity(poolStats.MaxThreadCount);
+        ui64 threads = Max<ui64>(poolStats.MaxThreadCount, 1);
+        Opts.Counters->SchedulerCapacity->Set(threads);
+        Opts.Scheduler->SetCapacity(threads);
     }
 
     STATEFN(State) {

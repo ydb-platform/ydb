@@ -66,6 +66,7 @@ Y_UNIT_TEST_SUITE(TEventSerialization) {
                 }
             }
             UNIT_ASSERT_EQUAL(bmSerialized, bmChunkedSerialized);
+            UNIT_ASSERT_EQUAL(42, 43);
         }
     }
 }

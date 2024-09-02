@@ -16,7 +16,7 @@ In addition to its own native protocol, {{ ydb-name }} has a compatibility layer
 | Embedded UI | [Instruction](../reference/embedded-ui/index.md) | |
 | [DBeaver](https://dbeaver.com)  |  [Instruction](ide/dbeaver.md) | By [JDBC-driver](https://github.com/ydb-platform/ydb-jdbc-driver/releases)|
 | JetBrains Database viewer |  —  | By [JDBC-driver](https://github.com/ydb-platform/ydb-jdbc-driver/releases)|
-| [JetBrains DataGrip](https://www.jetbrains.com/datagrip/) |  — | By [JDBC-driver](https://github.com/ydb-platform/ydb-jdbc-driver/releases)|
+| [JetBrains DataGrip](https://www.jetbrains.com/datagrip/) |  [Instruction](ide/datagrip.md) | By [JDBC-driver](https://github.com/ydb-platform/ydb-jdbc-driver/releases)|
 | Other JDBC-compatible IDEs | — | By [JDBC-driver](https://github.com/ydb-platform/ydb-jdbc-driver/releases)|
 
 
@@ -34,7 +34,7 @@ In addition to its own native protocol, {{ ydb-name }} has a compatibility layer
 | [FluentBit](https://fluentbit.io) | [Instruction](fluent-bit.md) |
 | [LogStash](https://www.elastic.co/logstash) | [Instruction](logstash.md) |
 | [Kafka Connect Sink](https://docs.confluent.io/platform/current/connect/index.html) | [Instruction](https://github.com/ydb-platform/ydb-kafka-sink-connector) |
-| Arbitrary [JDBC-источники данных](https://en.wikipedia.org/wiki/Java_Database_Connectivity) | [Instruction](import-jdbc.md) |
+| Arbitrary [JDBC data sources](https://en.wikipedia.org/wiki/Java_Database_Connectivity) | [Instruction](import-jdbc.md) |
 
 
 ### Streaming Data Ingestion {#streaming-ingestion}

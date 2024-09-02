@@ -12,7 +12,7 @@ This article describes the main operations with secondary indexes and gives refe
 
 ## Creating secondary indexes {#create}
 
-A secondary index is a data schema object that can be defined when creating a table with the [`CREATE TABLE` YQL command](../yql/reference/syntax/create_table.md) or added to it later with the [`ALTER TABLE` YQL command](../yql/reference/syntax/alter_table.md).
+A secondary index is a data schema object that can be defined when creating a table with the [`CREATE TABLE` YQL command](../yql/reference/syntax/create_table/index.md) or added to it later with the [`ALTER TABLE` YQL command](../yql/reference/syntax/alter_table.md).
 
 The [`table index add` command](../reference/ydb-cli/commands/secondary_index.md#add) is supported in the YDB CLI.
 

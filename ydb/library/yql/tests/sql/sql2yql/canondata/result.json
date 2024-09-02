@@ -2738,9 +2738,9 @@
     ],
     "test_sql2yql.test[bigdate-arithmetic]": [
         {
-            "checksum": "10d3641741062fdda397c48868d0bd18",
-            "size": 54577,
-            "uri": "https://{canondata_backend}/1784117/d56ae82ad9d30397a41490647be1bd2124718f98/resource.tar.gz#test_sql2yql.test_bigdate-arithmetic_/sql.yql"
+            "checksum": "dd71cf80379fd120f899f51a8d4185e0",
+            "size": 55200,
+            "uri": "https://{canondata_backend}/1784117/72de9d096244671bdc282e3e67e222f7d47084f5/resource.tar.gz#test_sql2yql.test_bigdate-arithmetic_/sql.yql"
         }
     ],
     "test_sql2yql.test[bigdate-bitcast_date32]": [
@@ -10590,6 +10590,13 @@
             "uri": "https://{canondata_backend}/1871002/ba7501739621731b8f5b85f57d8e4868dadf87e3/resource.tar.gz#test_sql2yql.test_lineage-group_by_asstruct_key_/sql.yql"
         }
     ],
+    "test_sql2yql.test[lineage-grouping_sets]": [
+        {
+            "checksum": "bc9f636e423a6c856a4ff05a6b5c3a82",
+            "size": 3196,
+            "uri": "https://{canondata_backend}/1781765/5483cde59b65341125b67709093030a3d2bd1b0e/resource.tar.gz#test_sql2yql.test_lineage-grouping_sets_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[lineage-if_struct]": [
         {
             "checksum": "aafa05e38853f6b86488a387b26f7ec0",
@@ -11029,6 +11036,13 @@
             "checksum": "01316f21e18f25d4f39dd1b0b507025a",
             "size": 5422,
             "uri": "https://{canondata_backend}/1784117/d56ae82ad9d30397a41490647be1bd2124718f98/resource.tar.gz#test_sql2yql.test_optimizers-passthrough_sortness_over_map_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[optimizers-pushdown_nonsep_over_aggregate]": [
+        {
+            "checksum": "9754c147d630a173aa594d1cc3495c1f",
+            "size": 2418,
+            "uri": "https://{canondata_backend}/1899731/407203c9a441603d4ce4780c1c3daab84de46096/resource.tar.gz#test_sql2yql.test_optimizers-pushdown_nonsep_over_aggregate_/sql.yql"
         }
     ],
     "test_sql2yql.test[optimizers-sort_by_nonstrict_const]": [
@@ -22289,9 +22303,9 @@
     ],
     "test_sql_format.test[bigdate-arithmetic]": [
         {
-            "checksum": "74aed1e3957af10f2b714b9961faaa61",
-            "size": 7211,
-            "uri": "https://{canondata_backend}/1775319/65663ceaccc952bb64364e6408bfc54197bb33e2/resource.tar.gz#test_sql_format.test_bigdate-arithmetic_/formatted.sql"
+            "checksum": "9733896aaffd0f29c69369ba53a83908",
+            "size": 7322,
+            "uri": "https://{canondata_backend}/1784117/72de9d096244671bdc282e3e67e222f7d47084f5/resource.tar.gz#test_sql_format.test_bigdate-arithmetic_/formatted.sql"
         }
     ],
     "test_sql_format.test[bigdate-bitcast_date32]": [
@@ -30141,6 +30155,13 @@
             "uri": "https://{canondata_backend}/1880306/64654158d6bfb1289c66c626a8162239289559d0/resource.tar.gz#test_sql_format.test_lineage-group_by_asstruct_key_/formatted.sql"
         }
     ],
+    "test_sql_format.test[lineage-grouping_sets]": [
+        {
+            "checksum": "7e57dcc9ca531cfa66e69bd7f1460ad2",
+            "size": 296,
+            "uri": "https://{canondata_backend}/1781765/5483cde59b65341125b67709093030a3d2bd1b0e/resource.tar.gz#test_sql_format.test_lineage-grouping_sets_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[lineage-if_struct]": [
         {
             "checksum": "36232c04d90172af80321e69783af38f",
@@ -30580,6 +30601,13 @@
             "checksum": "8c47651124d136709d3d8388a35aea20",
             "size": 418,
             "uri": "https://{canondata_backend}/1880306/64654158d6bfb1289c66c626a8162239289559d0/resource.tar.gz#test_sql_format.test_optimizers-passthrough_sortness_over_map_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[optimizers-pushdown_nonsep_over_aggregate]": [
+        {
+            "checksum": "59dcdde5e1a360b7a06ab4eb12d91f2e",
+            "size": 326,
+            "uri": "https://{canondata_backend}/1899731/407203c9a441603d4ce4780c1c3daab84de46096/resource.tar.gz#test_sql_format.test_optimizers-pushdown_nonsep_over_aggregate_/formatted.sql"
         }
     ],
     "test_sql_format.test[optimizers-sort_by_nonstrict_const]": [

@@ -285,9 +285,11 @@ private:
                 NYT::Ref(Tracer_.Get());
             }
             InitialMetadataBuilder_.Add(RequestIdMetadataKey, ToString(Request_->GetRequestId()));
-            InitialMetadataBuilder_.Add(UserMetadataKey, Request_->GetUser());
-            if (Request_->GetUserTag()) {
-                InitialMetadataBuilder_.Add(UserTagMetadataKey, Request_->GetUserTag());
+            // TODO(babenko): switch to std::string
+            InitialMetadataBuilder_.Add(UserMetadataKey, TString(Request_->GetUser()));
+            if (!Request_->GetUserTag().empty()) {
+                // TODO(babenko): switch to std::string
+                InitialMetadataBuilder_.Add(UserTagMetadataKey, TString(Request_->GetUserTag()));
             }
 
             TProtocolVersion protocolVersion{

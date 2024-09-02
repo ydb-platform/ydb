@@ -1,6 +1,7 @@
 # Импорт данных из PostgreSQL
 
 Данные из PostgreSQL в {{ydb-name}} можно импортировать различными способами:
+
 - С помощью [pg-dump](#pg-dump).
 - С помощью импорта данных [из файлов](#file-import).
 - С помощью утилиты [ydb-importer](../integrations/import-jdbc.md).
@@ -63,7 +64,7 @@
 
 {% endnote %}
 
-## Пример импорта дампа в YDB {#examples}
+## Пример импорта дампа в YDB {#file-import}
 
 В качестве примера будут загружены данные, сгенерированные [pgbench](https://www.postgresql.org/docs/current/pgbench.html).
 

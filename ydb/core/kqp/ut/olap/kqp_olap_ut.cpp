@@ -2054,6 +2054,36 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 */
 
+    // Unit test for https://github.com/ydb-platform/ydb/issues/7967
+    Y_UNIT_TEST(PredicatePushdownNulls) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+
+        TKikimrRunner kikimr(settings);
+
+        TStreamExecScanQuerySettings scanSettings;
+        scanSettings.Explain(true);
+
+        TLocalHelper(kikimr.GetTestServer()).CreateTestOlapTable();
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 10);
+
+        auto tableClient = kikimr.GetTableClient();
+
+        TString query = R"(
+                SELECT `timestamp` FROM `/Root/olapStore/olapTable` WHERE
+                    (case when level > 0
+	                    then level
+	                    else null
+	                end) > 0;
+        )";
+
+        auto it = tableClient.StreamExecuteScanQuery(query).GetValueSync();
+        // Check for successful execution
+        auto streamPart = it.ReadNext().GetValueSync();
+
+        UNIT_ASSERT(streamPart.IsSuccess());
+    }
+
     Y_UNIT_TEST(PredicatePushdownCastErrors) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);

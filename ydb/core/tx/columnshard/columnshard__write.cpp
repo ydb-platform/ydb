@@ -321,13 +321,22 @@ void TProposeWriteTransaction::Complete(const TActorContext& ctx) {
 }
 
 void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActorContext& ctx) {
-    ///???
     NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())("event", "TEvWrite");
 
     const auto& record = ev->Get()->Record;
     const auto source = ev->Sender;
     const auto cookie = ev->Cookie;
     const auto behaviour = TOperationsManager::GetBehaviour(*ev->Get());
+
+    for (const auto& operation: record.GetOperations()) {
+        const auto pathId = operation.GetTableId().GetTableId();
+        if (DataLocksManager->IsLocked(pathId, NOlap::NDataLocks::TLockFilter::Only({NOlap::NDataLocks::TManager::GetNewDataTxLockName(pathId)}))) {
+            Counters.GetTabletCounters()->IncCounter(COUNTER_WRITE_FAIL);
+            auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, "table is locked for new writes");
+            ctx.Send(source, result.release(), 0, cookie);
+            return;
+        }
+    }
 
     if (behaviour == EOperationBehaviour::Undefined) {
         Counters.GetTabletCounters()->IncCounter(COUNTER_WRITE_FAIL);

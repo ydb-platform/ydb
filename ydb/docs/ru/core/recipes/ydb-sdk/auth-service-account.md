@@ -151,7 +151,7 @@
           'temp_dir'       => './tmp', // Temp directory
           // 'root_cert_file' => './CA.pem', // Root CA file (uncomment for dedicated server)ы
       ],
-              
+
       'credentials' => new JwtWithJsonAuthentication('./jwtjson.json')
   ];
 
@@ -175,10 +175,10 @@
           // 'root_cert_file' => './CA.pem', // Root CA file (uncomment for dedicated server)
 
       ],
-      
+
       'credentials' => new JwtWithPrivateKeyAuthentication(
           "ajexxxxxxxxx","ajeyyyyyyyyy",'./private.key')
-          
+
   ];
 
   $ydb = new Ydb($config);

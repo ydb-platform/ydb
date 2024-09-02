@@ -51,7 +51,7 @@
       }
       required_version = ">= 0.13"
     }
-    
+
     provider "ydb" {
       token = "<TOKEN>"
       //OR for static credentials
@@ -459,7 +459,7 @@ resource "ydb_table" "ydb_table" {
 resource "ydb_table" "ydb_table" {
   # Путь до таблицы
   path = "path/to/table" # путь относительно корня базы
-  
+
   # ConnectionString до базы данных.
   connection_string = "grpc(s)://HOST:PORT/?database=/database/path" #пример подключения к БД
 

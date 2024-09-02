@@ -45,7 +45,7 @@
 Тип таблицы при создании задается параметром `STORE` в блоке `WITH`, где `ROW` означает [строковую таблицу](../../../../concepts/datamodel/table.md#row-oriented-tables), а `COLUMN` — [колоночную](../../../../concepts/datamodel/table.md#column-oriented-tables):
 ```sql
 CREATE <table_name> (
-  columns 
+  columns
   ...
 )
 
@@ -69,7 +69,7 @@ WITH (
     a Uint64,
     b Uint64,
     c Float,
-    d "List<List<Int32>>" 
+    d "List<List<Int32>>"
     PRIMARY KEY (a, b)
   );
   ```
@@ -83,7 +83,7 @@ WITH (
   );
   ```
 {% endif %}
-   
+
 
   {% if feature_column_container_type == true %}
   Для неключевых колонок допускаются любые типы данных, для ключевых - только [примитивные](../../types/primitive.md). При указании сложных типов (например, `List<String>`) тип заключается в двойные кавычки.
@@ -115,7 +115,7 @@ WITH (
   WITH (
     STORE = COLUMN
   );
-  ```  
+  ```
 
 {% endlist %}
 

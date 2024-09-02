@@ -17,7 +17,7 @@
 **Пример**
 
 ```sql
-DELETE FROM my_table 
+DELETE FROM my_table
 WHERE Key1 == 1 AND Key2 >= "One";
 ```
 

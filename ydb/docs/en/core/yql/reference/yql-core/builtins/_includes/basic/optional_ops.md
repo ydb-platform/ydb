@@ -2,7 +2,7 @@
 
 `Just()`: Change the value's data type to [optional](../../../types/optional.md) from the current data type (i.e.,`T` is converted to `T?`).
 
-The reverse operation is [Unwrap](#unwrap).
+The reverse operation is [Unwrap](#optional-ops).
 
 **Examples**
 
@@ -20,7 +20,7 @@ Arguments:
 1. Value to be converted.
 2. An optional string with a comment for the error text.
 
-Reverse operation is [Just](#just).
+Reverse operation is [Just](#optional-ops).
 
 **Examples**
 

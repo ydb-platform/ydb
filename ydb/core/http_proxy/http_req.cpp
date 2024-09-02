@@ -416,7 +416,7 @@ namespace NKikimr::NHttpProxy {
                             ctx,
                             get<1>(errorAndCode),
                             get<0>(errorAndCode),
-                            issues.begin()->GetMessage()
+                            TString{issues.begin()->GetMessage()}
                         );
                     }
                 }
@@ -1471,7 +1471,7 @@ namespace NKikimr::NHttpProxy {
         void HandleTicketParser(const TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev, const TActorContext& ctx) {
 
             if (ev->Get()->Error) {
-                return ReplyWithError(ctx, ev->Get()->Error.Retryable ? NYdb::EStatus::UNAVAILABLE : NYdb::EStatus::UNAUTHORIZED, ev->Get()->Error.Message);
+                return ReplyWithError(ctx, ev->Get()->Error.Retryable ? NYdb::EStatus::UNAVAILABLE : NYdb::EStatus::UNAUTHORIZED, TString{ev->Get()->Error.Message});
             }
             ctx.Send(Sender, new TEvServerlessProxy::TEvToken(ev->Get()->Token->GetUserSID(), "", ev->Get()->SerializedToken, {"", DatabaseId, DatabasePath, CloudId, FolderId}));
 

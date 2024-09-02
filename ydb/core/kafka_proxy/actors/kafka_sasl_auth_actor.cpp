@@ -49,7 +49,7 @@ void TKafkaSaslAuthActor::StartPlainAuth(const NActors::TActorContext& ctx) {
 
 void TKafkaSaslAuthActor::Handle(NKikimr::TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev, const NActors::TActorContext& ctx) {
     if (ev->Get()->Error) {
-        SendResponseAndDie(EKafkaErrors::SASL_AUTHENTICATION_FAILED, "", ev->Get()->Error.Message, ctx);
+        SendResponseAndDie(EKafkaErrors::SASL_AUTHENTICATION_FAILED, "", TString{ev->Get()->Error.Message}, ctx);
         return;
     }
     UserToken = ev->Get()->Token;
@@ -79,7 +79,7 @@ void TKafkaSaslAuthActor::Handle(TEvPrivate::TEvTokenReady::TPtr& ev, const NAct
     }));
 }
 
-void TKafkaSaslAuthActor::SendResponseAndDie(EKafkaErrors errorCode, const TString& errorMessage, const TString& details, const NActors::TActorContext& ctx) {
+void TKafkaSaslAuthActor::SendResponseAndDie(EKafkaErrors errorCode, const TString& errorMessage, const std::string& details, const NActors::TActorContext& ctx) {
     auto isFailed = errorCode != EKafkaErrors::NONE_ERROR;
 
     auto responseToClient = std::make_shared<TSaslAuthenticateResponseData>();

@@ -27,7 +27,7 @@ public:
             userToken,
             topicPath,
             databaseName,
-            [this](EKafkaErrors status, const TString& message) {
+            [this](EKafkaErrors status, const std::string& message) {
                 this->SendResult(status, message);
             })
         )

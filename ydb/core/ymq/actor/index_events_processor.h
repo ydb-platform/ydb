@@ -56,9 +56,9 @@ private:
     struct TQueueEvent {
         EQueueEventType Type;
         ui64 Timestamp;
-        TString CustomName;
-        TString CloudId;
-        TString FolderId;
+        std::string CustomName;
+        std::string CloudId;
+        std::string FolderId;
     };
     struct TQueueTableKey {
         TString Account;

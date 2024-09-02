@@ -42,18 +42,18 @@ public:
     }
 
     bool Pending(const TTenant::TPtr& tenant) {
-        Ydb::TOperationId id = Self->MakeOperationId(tenant, TTenant::CREATE);
+        TOperationId id = Self->MakeOperationId(tenant, TTenant::CREATE);
         auto &operation = *Response->Record.MutableResponse()->mutable_operation();
         operation.set_ready(false);
-        operation.set_id(ProtoToString(id));
+        operation.set_id(id.ToString());
         return true;
     }
 
     bool Pending(const TString &path, ui64 txId) {
-        Ydb::TOperationId id = Self->MakeOperationId(path, txId, TTenant::CREATE);
+        TOperationId id = Self->MakeOperationId(path, txId, TTenant::CREATE);
         auto &operation = *Response->Record.MutableResponse()->mutable_operation();
         operation.set_ready(false);
-        operation.set_id(ProtoToString(id));
+        operation.set_id(id.ToString());
         return true;
     }
 

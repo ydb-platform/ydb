@@ -1724,7 +1724,7 @@ bool TTenantsManager::CheckAccess(const TString &token,
 NKikimr::NOperationId::TOperationId TTenantsManager::MakeOperationId(const TString &path, ui64 txId, TTenant::EAction action)
 {
     NKikimr::NOperationId::TOperationId id;
-    id.GetMutableKind() = NKikimr::NOperationId::TOperationId::CMS_REQUEST;
+    id.SetKind(NKikimr::NOperationId::TOperationId::CMS_REQUEST);
     AddOptionalValue(id, "tenant", path);
     AddOptionalValue(id, "cmstid", ToString(Self.TabletID()));
     AddOptionalValue(id, "txid", ToString(txId));
@@ -1735,7 +1735,7 @@ NKikimr::NOperationId::TOperationId TTenantsManager::MakeOperationId(const TStri
 NKikimr::NOperationId::TOperationId TTenantsManager::MakeOperationId(TTenant::TPtr tenant, TTenant::EAction action)
 {
     NKikimr::NOperationId::TOperationId id;
-    id.GetMutableKind() = NKikimr::NOperationId::TOperationId::CMS_REQUEST;
+    id.SetKind(NKikimr::NOperationId::TOperationId::CMS_REQUEST);
     AddOptionalValue(id, "tenant", tenant->Path);
     AddOptionalValue(id, "cmstid", ToString(Self.TabletID()));
     AddOptionalValue(id, "txid", ToString(tenant->TxId));

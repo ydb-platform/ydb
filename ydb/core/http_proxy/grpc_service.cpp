@@ -112,7 +112,7 @@ private:
         auto deferred = resp->mutable_operation();
         deferred->set_ready(true);
         deferred->set_status(Ydb::StatusIds::StatusCode(status));
-        deferred->add_issues()->set_message(errorText);
+        deferred->add_issues()->set_message(TString{errorText});
         ReqCtx->Reply(resp, Ydb::StatusIds::StatusCode(status));
         TBase::Die(ctx);
     }

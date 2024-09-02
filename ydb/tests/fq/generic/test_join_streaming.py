@@ -280,7 +280,7 @@ TESTCASES = [
 ]
 
 
-class TestStreamingJoin(TestYdsBase):
+class TestJoinStreaming(TestYdsBase):
     @yq_v1
     @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": "tests-fq-generic-ydb:2136"}], indirect=True)
     @pytest.mark.parametrize("fq_client", [{"folder_id": "my_folder"}], indirect=True)

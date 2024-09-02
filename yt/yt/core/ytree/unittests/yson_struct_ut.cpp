@@ -2574,6 +2574,86 @@ TEST(TYsonStructTest, OuterYsonStructWithValidation)
     EXPECT_EQ(deserialized->Inner->MyInt, 42);
 }
 
+struct TWithYsonString
+    : public TYsonStructLite
+{
+    NYson::TYsonString MyString;
+
+    REGISTER_YSON_STRUCT_LITE(TWithYsonString);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("my_string", &TThis::MyString)
+            .Default();
+    }
+};
+
+TEST(TYsonStructTest, TYsonStringFieldSimple)
+{
+    TWithYsonString value;
+
+    {
+        auto node = BuildYsonNodeFluently()
+            .BeginMap()
+                .Item("my_string").Value(ConvertToYsonString(42))
+            .EndMap();
+
+        Deserialize(value, node->AsMap());
+        EXPECT_TRUE(value.MyString);
+        EXPECT_EQ(ConvertTo<i32>(value.MyString), 42);
+    }
+
+    {
+        std::string message{"Hi mom!"};
+
+        auto node = BuildYsonNodeFluently()
+            .BeginMap()
+                .Item("my_string").Value(ConvertToYsonString(message))
+            .EndMap();
+
+        Deserialize(value, node->AsMap());
+        EXPECT_TRUE(value.MyString);
+        EXPECT_EQ(ConvertTo<std::string>(value.MyString), message);
+    }
+
+    {
+        auto config = New<TTestConfig>();
+        config->MyString = "Hello, world!";
+
+        auto node = BuildYsonNodeFluently()
+            .BeginMap()
+                .Item("my_string").Value(ConvertToYsonString(config))
+            .EndMap();
+
+        Deserialize(value, node->AsMap());
+        EXPECT_TRUE(value.MyString);
+
+        auto extracted = ConvertTo<TTestConfigPtr>(value.MyString);
+        EXPECT_EQ(extracted->NullableInt, config->NullableInt);
+        EXPECT_EQ(extracted->MyString, extracted->MyString);
+    }
+}
+
+TEST(TYsonStructTest, TYsonStringFieldCompound)
+{
+    TWithYsonString value;
+
+    auto config = New<TTestConfig>();
+    config->MyString = "Hello, world!";
+
+    auto node = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("my_string").Value(ConvertToYsonString(config))
+        .EndMap();
+
+    Deserialize(value, node->AsMap());
+    EXPECT_TRUE(value.MyString);
+
+    auto extracted = ConvertTo<TTestConfigPtr>(value.MyString);
+    EXPECT_EQ(extracted->NullableInt, config->NullableInt);
+    EXPECT_EQ(extracted->MyString, extracted->MyString);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TPolyBase

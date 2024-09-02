@@ -18,7 +18,7 @@ resource "aws_instance" "ydb-vm" {
   key_name               = var.req_key_pair
   vpc_security_group_ids = [var.input_security_group_id]
   subnet_id              = element(var.input_subnet_ids, count.index % length(var.input_subnet_ids))
-  
+
   tags = {
     Name                 = "ydb-node-${count.index +1}"
     Username             = "ubuntu"

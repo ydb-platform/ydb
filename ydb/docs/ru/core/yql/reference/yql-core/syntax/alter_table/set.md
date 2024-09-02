@@ -11,9 +11,10 @@ ALTER TABLE table_name SET (key = value);
 ```key``` — имя параметра, ```value``` — его новое значение.
 
 Пример изменения параметра `TTL`, отвечающего за время жизни записей в таблицы:
-    ```sql
-    ALTER TABLE series SET (TTL = Interval("PT0S") ON expire_at);
-    ```
+
+```sql
+ALTER TABLE series SET (TTL = Interval("PT0S") ON expire_at);
+```
 
 ## Сброс дополнительных параметров таблицы {#additional-reset}
 

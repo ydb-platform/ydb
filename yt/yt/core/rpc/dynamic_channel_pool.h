@@ -39,7 +39,7 @@ public:
         const IClientRequestPtr& request,
         const std::optional<THedgingChannelOptions>& hedgingOptions = std::nullopt);
 
-    void SetPeers(const std::vector<TString>& addresses);
+    void SetPeers(const std::vector<std::string>& addresses);
     void SetPeerDiscoveryError(const TError& error);
 
     void Terminate(const TError& error);

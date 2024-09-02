@@ -17,7 +17,13 @@ namespace NYT::NPhoenix2 {
 //! Defines a Phoenix-enabled template type. One must provide some
 //! (arbitrary valid) sequence of type arguments (enclosed into parenthesis)
 //! to instantiate the template.
-#define PHOENIX_DEFINE_TEMPLATE_TYPE(type, parenthesizedTypeArgs)
+//!
+//! As a convention, the library provides an opaque type ``_`` to be used
+//! in this context as a placeholder.
+#define PHOENIX_DEFINE_TEMPLATE_TYPE(type, typeArgs)
+
+struct _
+{ };
 
 //! Defines a Phoenix-enabled opaque class.
 #define PHOENIX_DEFINE_OPAQUE_TYPE(type, typeTagValue)

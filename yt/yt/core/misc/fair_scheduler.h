@@ -11,9 +11,7 @@ struct IFairScheduler
     : public TRefCounted
 {
     virtual void Enqueue(TTask task, const std::string& user) = 0;
-    virtual TTask Dequeue() = 0;
-
-    virtual bool IsEmpty() const = 0;
+    virtual std::optional<TTask> TryDequeue() = 0;
 
     virtual void ChargeUser(const std::string& user, TDuration time) = 0;
 };

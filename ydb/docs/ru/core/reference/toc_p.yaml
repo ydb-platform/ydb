@@ -1,11 +1,10 @@
 items:
 - name: YQL
   href: ../yql/reference/index.md
-  include: 
+  include:
     mode: link
     path: ../yql/toc_p.yaml
 - name: Совместимость с PostgreSQL
-  href: ../postgresql/intro.md
   include:
     mode: link
     path: ../postgresql/toc_p.yaml

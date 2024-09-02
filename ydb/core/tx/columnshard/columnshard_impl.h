@@ -436,7 +436,7 @@ private:
     ui64 StatsReportRound = 0;
     TString OwnerPath;
 
-    TIntrusivePtr<TMediatorTimecastEntry> MediatorTimeCastEntry;
+    TMediatorTimecastEntry::TCPtr MediatorTimeCastEntry;
     bool MediatorTimeCastRegistered = false;
     TSet<ui64> MediatorTimeCastWaitingSteps;
     const TDuration PeriodicWakeupActivationPeriod;

@@ -185,7 +185,7 @@ std::shared_ptr<TExecutionStack> CreateExecutionStack(EExecutionStackKind kind)
     }
 }
 
-/////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 static std::atomic<int> SmallFiberStackPoolSize = {1024};
 static std::atomic<int> LargeFiberStackPoolSize = {1024};

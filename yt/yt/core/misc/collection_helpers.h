@@ -154,6 +154,9 @@ void AssignVectorAt(std::vector<T>& vector, ssize_t index, T&& value, const T& d
 template <class T>
 const T& VectorAtOr(const std::vector<T>& vector, ssize_t index, const T& defaultValue = T());
 
+template <class T>
+i64 GetVectorMemoryUsage(const std::vector<T>& vector);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT

@@ -1,5 +1,4 @@
 #include "cache.h"
-#include "client.h"
 #include "connection.h"
 
 #include <yt/yt/client/api/options.h>
@@ -32,7 +31,7 @@ public:
 protected:
     NApi::IClientPtr CreateClient(TStringBuf clusterUrl) override
     {
-        std::vector<TString> clusters;
+        std::vector<std::string> clusters;
         NYT::NApi::IClientPtr client;
         StringSplitter(clusterUrl).SplitByString(ClusterSeparator_).SkipEmpty().Collect(&clusters);
         switch (clusters.size()) {
@@ -46,9 +45,9 @@ protected:
     }
 
 private:
-    NApi::IClientPtr CreateFederatedClient(const std::vector<TString>& clusters)
+    NApi::IClientPtr CreateFederatedClient(const std::vector<std::string>& clusters)
     {
-        THashSet<TString> seenClusters;
+        THashSet<std::string> seenClusters;
         for (const auto& connectionConfig : FederationConfig_->RpcProxyConnections) {
             THROW_ERROR_EXCEPTION_UNLESS(
                 connectionConfig->ClusterUrl,

@@ -56,10 +56,10 @@ Y_UNIT_TEST_SUITE(RetryPolicy) {
         helper.Policy->Initialize();
         helper.Policy->ExpectFatalBreakDown();
         helper.EventLoop->AllowStop();
-        auto f1 = helper.Write(false);
         helper.Setup->KickTablets();
-        helper.Write(false);
+        helper.Setup->WaitForTabletsDown();
 
+        auto f1 = helper.Write(false);
         helper.EventLoop->WaitForStop();
         UNIT_ASSERT(!f1.HasValue());
         helper.Setup = nullptr;

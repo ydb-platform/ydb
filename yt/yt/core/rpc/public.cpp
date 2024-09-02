@@ -8,7 +8,7 @@ const TRequestId NullRequestId;
 const TRealmId NullRealmId;
 const TMutationId NullMutationId;
 
-const TString RootUserName("root");
+const std::string RootUserName("root");
 
 const TString RequestIdAnnotation("rpc.request_id");
 const TString EndpointAnnotation("rpc.endpoint");

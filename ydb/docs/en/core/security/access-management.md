@@ -41,7 +41,7 @@ ALTER GROUP `DATA-WRITERS` ADD USER myuser1;
 
 {% endnote %}
 
-## Managing users {#users} 
+## Managing users {#users}
 
 To create, update, or delete a user, use the YQL operators:
 

@@ -20,12 +20,24 @@ TGRpcPersQueueService::TGRpcPersQueueService(NActors::TActorSystem *system,
     , SchemeCache(schemeCache)
 { }
 
+void TGRpcPersQueueService::InitService(const std::vector<std::unique_ptr<grpc::ServerCompletionQueue>>& cqs, NYdbGrpc::TLoggerPtr logger, size_t index) {
+    CQS.reserve(cqs.size());
+    for (auto& cq: cqs) {
+        CQS.push_back(cq.get());
+    }
+
+    CQ = CQS[index % cqs.size()];
+
+    // note that we might call an overloaded InitService(), and not the one from this class
+    InitService(CQ, logger);
+}
+
 void TGRpcPersQueueService::InitService(grpc::ServerCompletionQueue *cq, NYdbGrpc::TLoggerPtr logger) {
     CQ = cq;
     if (ActorSystem->AppData<TAppData>()->PQConfig.GetEnabled()) {
-        WriteService.reset(new NGRpcProxy::TPQWriteService(GetService(), CQ, ActorSystem, SchemeCache, Counters, PersQueueWriteSessionsMaxCount));
+        WriteService.reset(new NGRpcProxy::TPQWriteService(GetService(), CQS, ActorSystem, SchemeCache, Counters, PersQueueWriteSessionsMaxCount));
         WriteService->InitClustersUpdater();
-        ReadService.reset(new NGRpcProxy::TPQReadService(this, CQ, ActorSystem, SchemeCache, Counters, PersQueueReadSessionsMaxCount));
+        ReadService.reset(new NGRpcProxy::TPQReadService(this, CQS, ActorSystem, SchemeCache, Counters, PersQueueReadSessionsMaxCount));
         SetupIncomingRequests(logger);
     }
 }

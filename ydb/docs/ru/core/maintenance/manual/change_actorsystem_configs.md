@@ -133,7 +133,7 @@ ConfigureRequest {
         Config {
           ActorSystemConfig {
             <конфиг актор-системы>
-          }  
+          }
         }
         MergeStrategy: 3
       }

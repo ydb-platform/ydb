@@ -433,6 +433,7 @@ std::shared_ptr<NKikimr::NOlap::IStoragesManager> CommonStoragesManager = Initia
 Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
     void WriteLoadRead(const std::vector<NArrow::NTest::TTestColumn>& ydbSchema,
                        const std::vector<NArrow::NTest::TTestColumn>& key) {
+        TTestBasicRuntime runtime;
         TTestDbWrapper db;
         TIndexInfo tableInfo = NColumnShard::BuildTableInfo(ydbSchema, key);
 
@@ -528,6 +529,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
     void ReadWithPredicates(const std::vector<NArrow::NTest::TTestColumn>& ydbSchema,
                             const std::vector<NArrow::NTest::TTestColumn>& key) {
+        TTestBasicRuntime runtime;
         TTestDbWrapper db;
         TIndexInfo tableInfo = NColumnShard::BuildTableInfo(ydbSchema, key);
 
@@ -624,6 +626,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
     }
 
     Y_UNIT_TEST(IndexWriteOverload) {
+        TTestBasicRuntime runtime;
         TTestDbWrapper db;
         auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
         TIndexInfo tableInfo = NColumnShard::BuildTableInfo(testColumns, testKey);;
@@ -696,10 +699,11 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
     }
 
     Y_UNIT_TEST(IndexTtl) {
+        TTestBasicRuntime runtime;
         TTestDbWrapper db;
         TIndexInfo tableInfo = NColumnShard::BuildTableInfo(testColumns, testKey);
         auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
-        csDefaultControllerGuard->SetTasksActualizationLag(TDuration::Zero());
+        csDefaultControllerGuard->SetOverrideTasksActualizationLag(TDuration::Zero());
 
         ui64 pathId = 1;
         ui32 step = 1000;

@@ -259,7 +259,7 @@ bool TCommandWithParameters::GetNextParams(THolder<TParamsBuilder>& paramBuilder
                 }
                 case EOutputFormat::Csv:
                 case EOutputFormat::Tsv: {
-                    CsvParser.GetParams(std::move(*data), *paramBuilder);
+                    CsvParser.GetParams(std::move(*data), *paramBuilder, TCsvParser::TParseMetadata{});
                     break;
                 }
                 default:
@@ -302,7 +302,7 @@ bool TCommandWithParameters::GetNextParams(THolder<TParamsBuilder>& paramBuilder
                     case EOutputFormat::Csv:
                     case EOutputFormat::Tsv: {
                         TValueBuilder valueBuilder;
-                        CsvParser.GetValue(std::move(*data), valueBuilder, type);
+                        CsvParser.GetValue(std::move(*data), valueBuilder, type, TCsvParser::TParseMetadata{});
                         paramBuilder->AddParam(fullname, valueBuilder.Build());
                         break;
                     }
@@ -381,7 +381,7 @@ bool TCommandWithParameters::GetNextParams(THolder<TParamsBuilder>& paramBuilder
                 case EOutputFormat::Csv:
                 case EOutputFormat::Tsv: {
                     valueBuilder.AddListItem();
-                    CsvParser.GetValue(std::move(*data), valueBuilder, type.GetProto().list_type().item());
+                    CsvParser.GetValue(std::move(*data), valueBuilder, type.GetProto().list_type().item(), TCsvParser::TParseMetadata{});
                     break;
                 }
                 default:

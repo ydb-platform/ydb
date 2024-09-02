@@ -547,7 +547,7 @@ void TBlobStorageController::OnWardenDisconnected(TNodeId nodeId, TActorId serve
             updates.push_back({
                 .VDiskId = it->second->GetVDiskId(),
                 .IsReady = it->second->IsReady,
-                .VDiskStatus = it->second->Status,
+                .VDiskStatus = it->second->GetStatus(),
             });
             ScrubState.UpdateVDiskState(&*it->second);
             SysViewChangedVSlots.insert(it->second->VSlotId);

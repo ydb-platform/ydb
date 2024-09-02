@@ -29,6 +29,10 @@ message TEvGranularWatch {
 
     // The list of tablets the client is currently tracking
     repeated fixed64 Tablets = 3 [packed = true];
+
+    // The maximum LatestStep observed in the past
+    // Mediator may avoid sending updates with LatestStep less than MinStep
+    optional uint64 MinStep = 4;
 }
 
 // sent from local timecast to mediator to change the list of tablets

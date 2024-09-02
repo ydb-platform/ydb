@@ -2877,6 +2877,15 @@ struct TPolyHolder
     }
 };
 
+TEST(TYsonStructTest, TestPolymorphicYsonStructSerializeEmpty)
+{
+    TPolyHolder holder;
+
+    auto node = ConvertToNode(holder);
+
+    Deserialize(holder, node->AsMap());
+}
+
 TEST(TYsonStructTest, TestPolymorphicYsonStructAsField)
 {
     TPolyHolder holder;

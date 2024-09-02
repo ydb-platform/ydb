@@ -7,7 +7,7 @@
 #include "vdisk_mongroups.h"
 #include "vdisk_performance_params.h"
 
-#include <library/cpp/bucket_quoter/bucket_quoter.h>
+#include <library/cpp/lockfree_bucket/lockfree_bucket.h>
 #include <util/system/compiler.h>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
@@ -315,12 +315,14 @@ private:
     TIntrusivePtr<::NMonitoring::TDynamicCounters> CostCounters;
     std::shared_ptr<NMonGroup::TCostTrackerGroup> MonGroup;
 
-    TAtomic BucketCapacity = 1'000'000'000;  // 10^9 nsec
-    TAtomic DiskTimeAvailable = 1'000'000'000;
-    TBucketQuoter<i64, TSpinLock, TAppDataTimerMs<TInstantTimerMs>> Bucket;
+    const double BucketRelativeMinimum = 2;
+    std::atomic<i64> BucketUpperLimit = 1'000'000'000;  // 10^9 nsec
+    std::atomic<i64> BucketLowerLimit = 1'000'000'000 * -BucketRelativeMinimum;
+    std::atomic<ui64> DiskTimeAvailable = 1'000'000'000;
+
+    TLockFreeBucket<TAppDataTimerMs<TInstantTimerMs>> Bucket;
     TLight BurstDetector;
     std::atomic<ui64> SeqnoBurstDetector = 0;
-    static constexpr ui32 ConcurrentHugeRequestsAllowed = 3;
 
     TMemorizableControlWrapper BurstThresholdNs;
     TMemorizableControlWrapper DiskTimeAvailableScale;
@@ -349,15 +351,16 @@ public:
     }
 
     void CountRequest(ui64 cost) {
-        AtomicSet(BucketCapacity, GetDiskTimeAvailableScale() * BurstThresholdNs.Update(TAppData::TimeProvider->Now()));
-        Bucket.UseAndFill(cost);
-        BurstDetector.Set(!Bucket.IsAvail(), SeqnoBurstDetector.fetch_add(1));
+        i64 bucketCapacity = GetDiskTimeAvailableScale() * BurstThresholdNs.Update(TAppData::TimeProvider->Now());
+        BucketUpperLimit.store(bucketCapacity);
+        BucketLowerLimit.store(bucketCapacity * -BucketRelativeMinimum);
+        Bucket.FillAndTake(cost);
+        BurstDetector.Set(Bucket.IsEmpty(), SeqnoBurstDetector.fetch_add(1));
     }
 
     void SetTimeAvailable(ui64 diskTimeAvailableNSec) {
         ui64 diskTimeAvailable = diskTimeAvailableNSec * GetDiskTimeAvailableScale();
-
-        AtomicSet(DiskTimeAvailable, diskTimeAvailable);
+        DiskTimeAvailable.store(diskTimeAvailable);
         MonGroup->DiskTimeAvailableCtr() = diskTimeAvailable;
     }
 
@@ -408,7 +411,7 @@ public:
     }
 
     void CountPDiskResponse() {
-        BurstDetector.Set(!Bucket.IsAvail(), SeqnoBurstDetector.fetch_add(1));
+        BurstDetector.Set(Bucket.IsEmpty(), SeqnoBurstDetector.fetch_add(1));
     }
 
 private:

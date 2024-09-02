@@ -826,6 +826,65 @@ Y_UNIT_TEST_SUITE(TActorTest) {
         UNIT_ASSERT_VALUES_EQUAL(values.at(1), 4);
         UNIT_ASSERT_VALUES_EQUAL(values.at(2), 7);
     }
+
+    Y_UNIT_TEST(TestWaitForSingleEvent) {
+        enum EEv {
+            EvTrigger = EventSpaceBegin(TEvents::ES_PRIVATE)
+        };
+
+        struct TEvTrigger : public TEventLocal<TEvTrigger, EvTrigger> {
+            int Value;
+
+            TEvTrigger(int value)
+                : Value(value)
+            {}
+        };
+
+        class TSourceActor : public TActorBootstrapped<TSourceActor> {
+        public:
+            TSourceActor(const TActorId& target)
+                : Target(target)
+            {}
+
+            void Bootstrap() {
+                Become(&TThis::StateWork);
+                Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup);
+            }
+
+        private:
+            STFUNC(StateWork) {
+                switch (ev->GetTypeRewrite()) {
+                    hFunc(TEvents::TEvWakeup, Handle);
+                }
+            }
+
+            void Handle(TEvents::TEvWakeup::TPtr&) {
+                Send(Target, new TEvTrigger(++Counter));
+                Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup);
+            }
+
+        private:
+            TActorId Target;
+            int Counter = 0;
+        };
+
+        TTestActorRuntime runtime;
+        runtime.Initialize(MakeEgg());
+
+        TActorId target = runtime.AllocateEdgeActor();
+
+        TActorId actorId = runtime.Register(new TSourceActor(target));
+        runtime.EnableScheduleForActor(actorId);
+
+        {
+            TWaitForSingleEvent<TEvTrigger> waiter(runtime);
+            waiter.Wait();
+        }
+        {
+            TWaitForSingleEvent<TEvTrigger> waiter(runtime, [](const TEvTrigger::TPtr& ev){ return ev->Get()->Value == 10; });
+            waiter.Wait();
+        }
+    }    
 }
 
 }

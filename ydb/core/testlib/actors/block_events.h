@@ -86,5 +86,44 @@ namespace NActors {
         bool Stopped = false;
     };
 
+    /**
+     * Easy wait for a single event under the test actor runtime
+     *
+     */
+    template<class TEvType>
+    class TWaitForSingleEvent {
+    public:
+        TWaitForSingleEvent(TTestActorRuntime& runtime, std::function<bool(const typename TEvType::TPtr&)> condition = {})
+            : Runtime(runtime)
+            , Condition(std::move(condition))
+            , Holder(Runtime.AddObserver<TEvType>(
+                [this](typename TEvType::TPtr& ev) {
+                    if (Condition && !Condition(ev)) {
+                        return;
+                    }
+                    EventSeen = true;
+                }))
+        {}
+
+        /**
+         * Wait for a single event
+         */
+        void Wait() {
+            Runtime.WaitFor(typeid(TEvType).name(), [&]{ return EventSeen; });
+        }
+
+        /**
+         * Stops waiting and remove event observer
+         */
+        void Stop() {
+            Holder.Remove();
+        }
+
+    private:
+        TTestActorRuntime& Runtime;
+        std::function<bool(const typename TEvType::TPtr&)> Condition;
+        TTestActorRuntime::TEventObserverHolder Holder;
+        bool EventSeen = false;
+    };
 
 } // namespace NActors

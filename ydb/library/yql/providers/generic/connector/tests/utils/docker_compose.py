@@ -38,7 +38,7 @@ class DockerComposeHelper:
         self.docker_compose_yml_path = docker_compose_yml_path
 
         with open(self.docker_compose_yml_path) as f:
-            self.docker_compose_yml_data = yaml.load(f)
+            self.docker_compose_yml_data = yaml.load(f, Loader=yaml.FullLoader)
 
     def get_external_port(self, service_name: str, internal_port: int) -> int:
         cmd = [

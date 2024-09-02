@@ -620,7 +620,7 @@ public:
         const TGetJobSpecOptions& options),
         (override));
 
-    MOCK_METHOD(TFuture<TSharedRef>, GetJobStderr, (
+    MOCK_METHOD(TFuture<TGetJobStderrResponse>, GetJobStderr, (
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
         NJobTrackerClient::TJobId jobId,
         const TGetJobStderrOptions& options),

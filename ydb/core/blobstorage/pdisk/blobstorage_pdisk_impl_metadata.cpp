@@ -176,7 +176,7 @@ namespace NKikimr::NPDisk {
                     }
                 }
                 if (WantEvent) {
-                    actorSystem->Send(PDisk->PDiskActor, new TEvPDiskMetadataLoaded(req->ErrorReason ? std::nullopt :
+                    actorSystem->Send(PDisk->PCtx->PDiskActor, new TEvPDiskMetadataLoaded(req->ErrorReason ? std::nullopt :
                         std::make_optional(req->Payload)));
                 }
                 PDisk->InputRequest(req.release());
@@ -464,7 +464,7 @@ namespace NKikimr::NPDisk {
             Meta.StoredMetadata.emplace<NMeta::TNoMetadata>();
             ProcessMetadataRequestQueue();
             if (request.WantEvent) {
-                PCtx->ActorSystem->Send(PDiskActor, new TEvPDiskMetadataLoaded(std::nullopt));
+                PCtx->ActorSystem->Send(PCtx->PDiskActor, new TEvPDiskMetadataLoaded(std::nullopt));
             }
         }
     }

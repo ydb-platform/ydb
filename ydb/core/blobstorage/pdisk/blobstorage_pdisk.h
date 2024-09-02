@@ -1578,8 +1578,5 @@ struct TPDiskCtx {
         } \
     } while (false)
 
-
-
 } // NPDisk
 } // NKikimr
-

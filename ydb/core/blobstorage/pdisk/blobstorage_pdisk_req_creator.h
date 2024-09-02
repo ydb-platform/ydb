@@ -20,8 +20,6 @@ class TReqCreator {
 private:
     // PDisk info
     std::shared_ptr<TPDiskCtx> PCtx;
-    // const ui32 PDiskId;
-    // TActorSystem *ActorSystem;
     TPDiskMon *Mon;
     TDriveModel *Model;
     TAtomic *EstimatedLogChunkIdx;

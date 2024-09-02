@@ -416,7 +416,7 @@ bool TSysLogReader::VerboseCheck(bool condition, const char *desctiption) {
 
 void TSysLogReader::DumpDebugInfo(TStringStream &str, bool isSingleLine) {
     const char *nl = (isSingleLine ? "; " : "\n(B) ");
-    str << "PDiskId# " << (ui32)PDisk->PDiskId;
+    str << "PDiskId# " << PCtx->PDiskId;
     str << " SysLog";
     str << " BeginSectorIdx# " << BeginSectorIdx;
     str << " EndSectorIdx# " << EndSectorIdx;

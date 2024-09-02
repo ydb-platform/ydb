@@ -9,6 +9,8 @@ from ydb.tests.fq.generic.utils.endpoint_determiner import EndpointDeterminer
 
 @dataclass
 class Settings:
+    # infrastructure services
+
     @dataclass
     class Connector:
         grpc_host: str
@@ -29,6 +31,8 @@ class Settings:
 
     token_accessor_mock: TokenAccessorMock
 
+    # databases
+
     @dataclass
     class ClickHouse:
         dbname: str
@@ -37,6 +41,14 @@ class Settings:
         protocol: str
 
     clickhouse: ClickHouse
+
+    @dataclass
+    class Greenplum:
+        dbname: str
+        username: str
+        password: str
+
+    greenplum: Greenplum
 
     @dataclass
     class PostgreSQL:
@@ -76,6 +88,11 @@ class Settings:
                 username='user',
                 password='password',
                 protocol='native',
+            ),
+            greenplum=cls.Greenplum(
+                dbname='template1',
+                username='gpadmin',
+                password='123456',
             ),
             postgresql=cls.PostgreSQL(
                 dbname='db',

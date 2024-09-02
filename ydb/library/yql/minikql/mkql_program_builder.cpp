@@ -5874,11 +5874,14 @@ TRuntimeNode TProgramBuilder::BlockMapJoinCore(TRuntimeNode flow, TRuntimeNode d
 
     auto returnJoinItems = ValidateBlockFlowType(flow.GetStaticType(), false);
     const auto payloadType = AS_TYPE(TDictType, dict.GetStaticType())->GetPayloadType();
+    const auto payloadItemType = payloadType->IsList()
+                               ? AS_TYPE(TListType, payloadType)->GetItemType()
+                               : payloadType;
     if (joinKind == EJoinKind::Inner || joinKind == EJoinKind::Left) {
         // XXX: This is the contract ensured by the expression compiler and
         // optimizers to ease the processing of the dict payload in wide context.
-        MKQL_ENSURE(payloadType->IsTuple(), "Dict payload has to be a Tuple");
-        const auto payloadItems = AS_TYPE(TTupleType, payloadType)->GetElements();
+        MKQL_ENSURE(payloadItemType->IsTuple(), "Dict payload has to be a Tuple");
+        const auto payloadItems = AS_TYPE(TTupleType, payloadItemType)->GetElements();
         TVector<TType*> dictBlockItems;
         dictBlockItems.reserve(payloadItems.size());
         for (const auto& payloadItem : payloadItems) {
@@ -5895,7 +5898,7 @@ TRuntimeNode TProgramBuilder::BlockMapJoinCore(TRuntimeNode flow, TRuntimeNode d
     } else {
         // XXX: This is the contract ensured by the expression compiler and
         // optimizers for join types that don't require the right (i.e. dict) part.
-        MKQL_ENSURE(payloadType->IsVoid(), "Dict payload has to be Void");
+        MKQL_ENSURE(payloadItemType->IsVoid(), "Dict payload has to be Void");
     }
     TType* returnJoinType = NewFlowType(NewMultiType(returnJoinItems));
 

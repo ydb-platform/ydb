@@ -147,7 +147,7 @@ def upload_results(result_path, s3_folder, test_start):
                     "UserTime" : results.user_time,
                     "SystemTime" : results.system_time
                 }
-                sql = 'UPSERT ({columns}) VALUES ({values})'.format(
+                sql = 'UPSERT INTO perfomance/olap/dq_spilling_nightly_runs ({columns}) VALUES ({values})'.format(
                     columns=", ".join(map(str, mapping.keys())),
                     values=", ".join(map(pretty_print, mapping.values())))
                 print(sql, file=sys.stderr)

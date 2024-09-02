@@ -21,8 +21,6 @@
 
 #include <yt/yt/core/rpc/dispatcher.h>
 
-#include <yt/yt_proto/yt/client/hedging/proto/config.pb.h>
-
 #include <util/datetime/base.h>
 
 #include <util/generic/va_args.h>
@@ -304,48 +302,6 @@ NApi::IClientPtr CreateHedgingClient(
 NApi::IClientPtr CreateHedgingClient(const THedgingClientOptionsPtr& config, const IClientsCachePtr& clientsCache)
 {
     return CreateHedgingClient(config, clientsCache, CreateDummyPenaltyProvider());
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-THedgingClientOptionsPtr GetHedgingClientConfig(const THedgingClientConfig& protoConfig)
-{
-    auto config = New<THedgingClientOptions>();
-    config->BanPenalty = TDuration::MilliSeconds(protoConfig.GetBanPenalty());
-    config->BanDuration = TDuration::MilliSeconds(protoConfig.GetBanDuration());
-
-    NProfiling::TTagSet counterTagSet;
-
-    for (const auto& [tagName, tagValue] : protoConfig.GetTags()) {
-        config->Tags.emplace(tagName, tagValue);
-    }
-
-    config->Connections.reserve(protoConfig.GetClients().size());
-    for (const auto& client : protoConfig.GetClients()) {
-        auto connectionConfig = ConvertTo<NYT::TIntrusivePtr<TConnectionWithPenaltyConfig>>(
-            GetConnectionConfig(client.GetClientConfig()));
-        connectionConfig->InitialPenalty = TDuration::MilliSeconds(client.GetInitialPenalty());
-        config->Connections.push_back(std::move(connectionConfig));
-    }
-    return config;
-}
-
-NApi::IClientPtr CreateHedgingClient(const THedgingClientConfig& config)
-{
-    return CreateHedgingClient(GetHedgingClientConfig(config));
-}
-
-NApi::IClientPtr CreateHedgingClient(const THedgingClientConfig& config, const IClientsCachePtr& clientsCache)
-{
-    return CreateHedgingClient(GetHedgingClientConfig(config), clientsCache);
-}
-
-NApi::IClientPtr CreateHedgingClient(
-    const THedgingClientConfig& config,
-    const IClientsCachePtr& clientsCache,
-    const IPenaltyProviderPtr& penaltyProvider)
-{
-    return CreateHedgingClient(GetHedgingClientConfig(config), clientsCache, penaltyProvider);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

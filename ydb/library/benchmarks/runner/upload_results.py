@@ -5,7 +5,7 @@ import json
 import pathlib
 import os
 import argparse
-import time
+import datetime
 
 
 DATABASE_ENDPOINT = "grpcs://lb.etnvsjbk7kh1jc6bbfi8.ydb.mdb.yandexcloud.net:2135"
@@ -32,7 +32,7 @@ class RunResults:
         self.exitcode = None
         self.read_bytes = None
         self.write_bytes = None
-        self.user_time = None
+        self.user_time_ms = None
         self.system_time = None
         self.rss = None
         self.output_hash = None
@@ -44,8 +44,8 @@ class RunResults:
         self.read_bytes = io_info["read_bytes"]
         self.write_bytes = io_info["write_bytes"]
         resourse_usage = json["rusage"]
-        self.user_time = resourse_usage["utime"]
-        self.system_time = resourse_usage["stime"]
+        self.user_time = datetime.timedelta(seconds=resourse_usage["utime"])
+        self.system_time = datetime.timedelta(seconds=resourse_usage["stime"])
         self.rss = resourse_usage["maxrss"]
 
     def __repr__(self):
@@ -57,11 +57,19 @@ class RunResults:
 
 def pretty_print(value):
     if value is None:
-        return "null"
+        return "NULL"
+    if type(value) == datetime.datetime:
+        delt = value - datetime.datetime(1970, 1, 1)
+        assert type(delt) == datetime.timedelta
+        return f"Unwrap(DateTime::FromSeconds({int(delt.total_seconds())}))"
+    if type(value) == datetime.timedelta:
+        return f"DateTime::IntervalFromMicroseconds({int(value / datetime.timedelta(microseconds=1))})"
     if type(value) == str:
         return f'\"{value}\"'
-    if type(value) in [int, float, bool]:
+    if type(value) in [int, float]:
         return str(value)
+    if type(value) == bool:
+        return "TRUE" if value else "FALSE"
 
     assert False, f"unrecognized type: {type(value)}"
 
@@ -76,6 +84,8 @@ def upload_results(result_path, s3_folder, test_start):
         # {no|with}-spilling/<variant>-<datasize>-<tasks>
         is_spilling = suffix.parts[0].split("-")[0] == "with"
         variant, datasize, tasks = suffix.parts[1].split("-")
+        datasize = int(datasize)
+        tasks = int(tasks)
 
         print(list(entry.iterdir()), file=sys.stderr)
 
@@ -102,7 +112,7 @@ def upload_results(result_path, s3_folder, test_start):
                 # q<num>-stdout.txt
                 if file.stem == f"q{query_num}-stdout":
                     with open(file, "r") as stdout:
-                        this_result[query_num].output_hash = hash(stdout.read().strip())
+                        this_result[query_num].output_hash = str(hash(stdout.read().strip()))
 
         summary_file = entry / "summary.json"
 
@@ -117,6 +127,31 @@ def upload_results(result_path, s3_folder, test_start):
             results_map[params] = value
 
     print(results_map, file=sys.stderr)
+
+    for params, results in results_map.items():
+        mapping = {
+            "BenchmarkType" : params.variant,
+            "Scale" : params.datasize,
+            "QueryNum" : params.query,
+            "WithSpilling" : params.is_spilling,
+            "Timestamp" : test_start,
+            "WasSpillingInAggregation" : None,
+            "WasSpillingInJoin" : None,
+            "WasSpillingInChannels" : None,
+            "MaxTasksPerStage" : params.tasks,
+            "PerfFileLink" : results.perf_file_path,
+            "ExitCode" : results.exitcode,
+            "ResultHash" : results.output_hash,
+            "SpilledBytes" : results.read_bytes,
+            "UserTime" : results.user_time,
+            "SystemTime" : results.system_time
+        }
+        sql = 'UPSERT INTO `perfomance/olap/dq_spilling_nightly_runs`\n\t({columns})\nVALUES\n\t({values})'.format(
+            columns=", ".join(map(str, mapping.keys())),
+            values=", ".join(map(pretty_print, mapping.values())))
+        print(sql, file=sys.stderr)
+
+    return
 
     with ydb.Driver(
         endpoint=DATABASE_ENDPOINT,
@@ -155,7 +190,7 @@ def upload_results(result_path, s3_folder, test_start):
 
 
 def main():
-    upload_time = time.time()
+    upload_time = datetime.datetime.now()
 
     parser = argparse.ArgumentParser()
 
@@ -164,9 +199,9 @@ def main():
 
     args = parser.parse_args()
 
-    if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
-        raise AttributeError("Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping uploading")
-    os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = os.environ["CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"]
+    # if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
+        # raise AttributeError("Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping uploading")
+    # os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = os.environ["CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"]
 
     upload_results(args.result_path, args.s3_folder, upload_time)
 

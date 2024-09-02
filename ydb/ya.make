@@ -9,4 +9,5 @@ RECURSE(
     tests
     tools
     yql_docs
+    junk
 )

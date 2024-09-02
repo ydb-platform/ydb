@@ -226,8 +226,9 @@ struct TComputeScheduler::TImpl {
     void CreateGroup(TString groupName, double maxShare, NMonotonic::TMonotonic now) {
         PoolId[groupName] = Records.size();
         auto group = std::make_unique<TSchedulerEntity::TGroupRecord>();
+        group->Share = maxShare;
         group->MutableStats.Next()->LastNowRecalc = now;
-        group->MutableStats.Next()->Weight = maxShare;
+        group->MutableStats.Next()->Weight = SumCores * maxShare;
         Records.push_back(std::move(group));
     }
 };

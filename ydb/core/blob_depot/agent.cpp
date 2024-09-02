@@ -22,6 +22,7 @@ namespace NKikimr::NBlobDepot {
                 OnAgentDisconnect(agentIt->second);
                 agentIt->second.Connection.reset();
                 agentIt->second.ExpirationTimestamp = TActivationContext::Now() + ExpirationTimeout;
+                
             }
         }
         PipeServers.erase(it);

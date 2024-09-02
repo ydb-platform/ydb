@@ -157,7 +157,7 @@ def main():
         raise AttributeError("Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping uploading")
     os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = os.environ["CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"]
 
-    upload_results(args.result_path, args.s3_fodler, upload_time)
+    upload_results(args.result_path, args.s3_folder, upload_time)
 
 
 if __name__ == "__main__":

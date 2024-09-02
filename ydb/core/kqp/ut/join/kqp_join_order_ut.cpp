@@ -377,6 +377,39 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         UNIT_ASSERT_VALUES_EQUAL(GetJoinOrder(plan).GetStringRobust(), R"([[["R","S"],["T","U"]],"V"])") ;
     }
 
+    void TraverseJoinTree(
+        const NJson::TJsonValue& tree, 
+        std::function<void(const NJson::TJsonValue&, const NJson::TJsonValue&)> joinVisitFunc
+    ) {
+        if (tree.IsArray()) {
+            auto join = tree.GetArray();
+            Y_ENSURE(join.size() == 2, Sprintf("Incorrect join tree piece, expected 2 children for join, got : %s", tree.GetStringRobust().c_str()));
+            joinVisitFunc(join[0], join[1]);
+            TraverseJoinTree(join[0], joinVisitFunc);
+            TraverseJoinTree(join[1], joinVisitFunc);
+        } else if (tree.IsString()) {
+        } else {
+            Y_ENSURE(false, Sprintf("Incorrect join tree piece: %s", tree.GetStringRobust().c_str()));
+        }
+    }
+
+    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TestJoinOrderHintsManyHintTrees, StreamLookupJoin, ColumnStore) {
+        auto plan = ExecuteJoinOrderTestDataQueryWithStats("queries/join_order_hints_many_hint_trees.sql", "stats/basic.json", StreamLookupJoin, ColumnStore); 
+        auto joinOrder = GetJoinOrder(plan);
+
+        THashSet<TString> expectedJoins = { "R, S", "T, U" };
+        TraverseJoinTree(
+            joinOrder, 
+            [&expectedJoins](const NJson::TJsonValue& joinLhs, const NJson::TJsonValue& joinRhs){ 
+                if (joinLhs.IsString() && joinRhs.IsString()) {
+                    expectedJoins.erase(Sprintf("%s, %s", joinLhs.GetString().c_str(), joinRhs.GetString().c_str()));
+                }
+            }
+        );
+
+        UNIT_ASSERT_C(expectedJoins.empty(), Sprintf("%s wasn't found in '%s' join order!", JoinSeq(", ", expectedJoins).c_str(), joinOrder.GetStringRobust().c_str()));
+    }
+
     void JoinOrderTestWithOverridenStats(const TString& queryPath, const TString& statsPath, TString correctJoinOrderPath, bool useStreamLookupJoin, bool useColumnStore
     ) {
         auto kikimr = GetKikimrWithJoinSettings(useStreamLookupJoin, GetStatic(statsPath));

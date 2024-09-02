@@ -331,9 +331,16 @@ std::shared_ptr<IBaseOptimizerNode> MakeJoinTreeFromJson(const NJson::TJsonValue
 }
 
 TJoinOrderHints::TJoinOrderHints(const TString& json) {
+    const static TString PARSING_FORMAT_ERROR = 
+        R"(Join order hints parsing failed. The example of the format: [ ["A", "B"], ["B", "C"] ])";
+
     NJson::TJsonValue jsonTree;
     NJson::ReadJsonTree(json, &jsonTree, true);
-    HintsTree = MakeJoinTreeFromJson(jsonTree);
+
+    Y_ENSURE(jsonTree.IsArray(), PARSING_FORMAT_ERROR);
+    for (const auto& hintTreeJson: jsonTree.GetArray()) {
+        HintTrees.push_back(MakeJoinTreeFromJson(hintTreeJson));
+    }
 }
 
 TJoinAlgoHints::TJoinAlgoHints(const TString& json) {

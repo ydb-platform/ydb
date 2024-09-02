@@ -4,6 +4,7 @@
 #include <util/generic/yexception.h>
 #include <vector>
 #include <span>
+#include <functional>
 
 #include <ydb/library/yql/utils/prefetch.h>
 
@@ -36,18 +37,20 @@ struct TRobinHoodBatchRequestItem {
     char* InitialIterator;
 };
 
-template <typename T>
-struct TRobinHoodGrowManager {
-    void IsGrowRequired(ui64 size, ui64 capacity) const {
-        static_cast<T*>(this)->IsGrowRequired(size, capacity);
+using TIsLowMemoryCallback = std::function<bool()>;
+
+template <bool GrowLessOnLowMemory>
+class TRobinHoodGrowManager {
+public:
+
+    explicit TRobinHoodGrowManager(TIsLowMemoryCallback isLowMemoryCallback = nullptr)
+        : IsLowMemoryCallback(isLowMemoryCallback)
+    {
+        if constexpr (GrowLessOnLowMemory) {
+            Y_ENSURE(isLowMemoryCallback);
+        }
     }
 
-    ui64 Grow(ui64 capacity) const {
-        static_cast<T*>(this)->Grow(capacity);
-    }
-};
-
-struct TRobinHoodDefaultGrowManager : public TRobinHoodGrowManager<TRobinHoodDefaultGrowManager> {
     bool IsGrowRequired(ui64 size, ui64 capacity) const {
         return size * 2 > capacity;
     }
@@ -63,12 +66,15 @@ struct TRobinHoodDefaultGrowManager : public TRobinHoodGrowManager<TRobinHoodDef
         }
         return capacity * growFactor;
     }
+
+private:
+    TIsLowMemoryCallback IsLowMemoryCallback = nullptr;
 };
 
 constexpr ui32 PrefetchBatchSize = 64;
 
 //TODO: only POD key & payloads are now supported
-template <typename TKey, typename TEqual, typename THash, typename TAllocator, typename TDeriv, bool CacheHash>
+template <typename TKey, typename TEqual, typename THash, typename TAllocator, typename TDeriv, bool CacheHash, bool GrowLessOnLowMemory=false>
 class TRobinHoodHashBase {
 public:
     using iterator = char*;
@@ -103,13 +109,14 @@ protected:
 
     using TPSLStorage = TPSLStorageImpl<CacheHash>;
 
-    explicit TRobinHoodHashBase(const ui64 initialCapacity, THash hash, TEqual equal)
+    explicit TRobinHoodHashBase(const ui64 initialCapacity, THash hash, TEqual equal, TIsLowMemoryCallback isLowMemoryCallback=nullptr)
         : HashLocal(std::move(hash))
         , EqualLocal(std::move(equal))
         , Capacity(initialCapacity)
         , CapacityShift(64 - MostSignificantBit(initialCapacity))
         , Allocator()
         , SelfHash(GetSelfHash(this))
+        , GrowManager(isLowMemoryCallback)
     {
         Y_ENSURE((Capacity & (Capacity - 1)) == 0);
     }
@@ -407,7 +414,7 @@ private:
     const ui64 SelfHash;
     char* Data = nullptr;
     char* DataEnd = nullptr;
-    TRobinHoodGrowManager GrowManager;
+    TRobinHoodGrowManager<GrowLessOnLowMemory> GrowManager;
 };
 
 template <typename TKey, typename TEqual = std::equal_to<TKey>, typename THash = std::hash<TKey>, typename TAllocator = std::allocator<char>, typename TSettings = TRobinHoodDefaultSettings<TKey>>

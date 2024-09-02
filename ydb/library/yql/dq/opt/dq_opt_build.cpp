@@ -33,7 +33,7 @@ TExprBase RewriteProgramResultToStream(const TExprBase& result, TExprContext& ct
     }
 
     if (const auto itemType = result.Ref().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType();
-        ETypeAnnotationKind::Struct == itemType->GetKind() && result.Ref().IsCallable({"PartitionsByKeys", "CombineByKey"})) {
+        ETypeAnnotationKind::Struct == itemType->GetKind() && result.Ref().IsCallable({"PartitionsByKeys", "CombineByKey", "CombineByKeyWithSpilling"})) {
         if (const auto structType = itemType->Cast<TStructExprType>(); structType->GetSize() > 0U) {
             return TCoFromFlow(ctx.Builder(result.Pos())
                 .Callable("FromFlow")

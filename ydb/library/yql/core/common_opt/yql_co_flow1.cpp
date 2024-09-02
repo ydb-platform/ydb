@@ -495,6 +495,25 @@ TExprNode::TPtr FuseFlatMapOverByKey(const TExprNode& node, TExprContext& ctx) {
     return ctx.ChangeChild(node.Head(), node.Head().ChildrenSize() - 1U, std::move(lambda));
 }
 
+TExprNode::TPtr FuseFlatMapOverByKeyWithSpilling(const TExprNode& node, TExprContext& ctx) {
+    YQL_CLOG(DEBUG, Core) << "Fuse " << node.Content() << " over " << node.Head().Content();
+    auto lambda =
+        ctx.Builder(node.Pos())
+            .Lambda()
+                .Param("key")
+                .Param("state")
+                .Callable(node.Content())
+                    .Apply(0, *node.Head().Child(5U))
+                        .With(0, "key")
+                        .With(1, "state")
+                    .Seal()
+                    .Add(1, node.TailPtr())
+                .Seal()
+            .Seal().Build();
+
+    return ctx.ChangeChild(node.Head(), 5U, std::move(lambda));
+}
+
 TExprNode::TPtr ExtractOneItemStructFromFold(const TExprNode& node, TExprContext& ctx) {
     YQL_CLOG(DEBUG, Core) << "Extract single item struct from " << node.Content();
     const auto structType = node.Child(1)->GetTypeAnn()->Cast<TStructExprType>();
@@ -1324,6 +1343,10 @@ TExprNode::TPtr OptimizeFlatMap(const TExprNode::TPtr& node, TExprContext& ctx, 
             return FuseFlatMapOverByKey<false>(*node, ctx);
         }
 
+        if (node->Head().IsCallable("CombineByKeyWithSpilling")) {
+            return FuseFlatMapOverByKeyWithSpilling(*node, ctx);
+        }
+
         if (node->Head().IsCallable({"PartitionByKey", "PartitionsByKeys", "ShuffleByKeys"})) {
             return FuseFlatMapOverByKey<true>(*node, ctx);
         }
@@ -1392,7 +1415,7 @@ TExprNode::TPtr OptimizeFlatMap(const TExprNode::TPtr& node, TExprContext& ctx, 
     {
         auto canPush = [&](const auto& child) {
             // we push FlatMap over Extend only if it can later be fused with child
-            return child->IsCallable({Ordered ? "OrderedFlatMap" : "FlatMap", "GroupByKey", "CombineByKey", "PartitionByKey", "PartitionsByKeys", "ShuffleByKeys",
+            return child->IsCallable({Ordered ? "OrderedFlatMap" : "FlatMap", "GroupByKey", "CombineByKey", "CombineByKeyWithSpilling", "PartitionByKey", "PartitionsByKeys", "ShuffleByKeys",
                                       "ListIf", "FlatListIf", "AsList", "ToList"}) && optCtx.IsSingleUsage(*child);
         };
         if (AllOf(node->Head().ChildrenList(), canPush)) {
@@ -1702,7 +1725,7 @@ void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
         return node;
     };
 
-    map["FinalizeByKey"] = map["CombineByKey"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+    map["FinalizeByKey"] = map["CombineByKey"] = map["FinalizeByKeyWithSpilling"] = map["CombineByKeyWithSpilling"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         if (!optCtx.IsSingleUsage(node->Head())) {
             return node;
         }

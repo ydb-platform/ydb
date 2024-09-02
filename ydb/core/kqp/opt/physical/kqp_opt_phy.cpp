@@ -52,8 +52,10 @@ public:
         AddHandler(0, &TCoFlatMapBase::Match, HNDL(BuildPureFlatmapStage));
         AddHandler(0, &TCoFlatMapBase::Match, HNDL(BuildFlatmapStage<false>));
         AddHandler(0, &TCoCombineByKey::Match, HNDL(PushCombineToStage<false>));
+        AddHandler(0, &TCoCombineByKeyWithSpilling::Match, HNDL(PushCombineWithSpillingToStage<false>));
         AddHandler(0, &TCoPartitionsByKeys::Match, HNDL(BuildPartitionsStage<false>));
         AddHandler(0, &TCoFinalizeByKey::Match, HNDL(BuildFinalizeByKeyStage<false>));
+        AddHandler(0, &TCoFinalizeByKeyWithSpilling::Match, HNDL(BuildFinalizeByKeyWithSpillingStage<false>));
         AddHandler(0, &TCoShuffleByKeys::Match, HNDL(BuildShuffleStage<false>));
         AddHandler(0, &TCoPartitionByKey::Match, HNDL(BuildPartitionStage<false>));
         AddHandler(0, &TCoTop::Match, HNDL(BuildTopStage<false>));
@@ -99,8 +101,10 @@ public:
         AddHandler(1, &TCoExtractMembers::Match, HNDL(PushExtractMembersToStage<true>));
         AddHandler(1, &TCoFlatMapBase::Match, HNDL(BuildFlatmapStage<true>));
         AddHandler(1, &TCoCombineByKey::Match, HNDL(PushCombineToStage<true>));
+        AddHandler(1, &TCoCombineByKeyWithSpilling::Match, HNDL(PushCombineWithSpillingToStage<true>));
         AddHandler(1, &TCoPartitionsByKeys::Match, HNDL(BuildPartitionsStage<true>));
         AddHandler(1, &TCoFinalizeByKey::Match, HNDL(BuildFinalizeByKeyStage<true>));
+        AddHandler(1, &TCoFinalizeByKeyWithSpilling::Match, HNDL(BuildFinalizeByKeyWithSpillingStage<true>));
         AddHandler(1, &TCoShuffleByKeys::Match, HNDL(BuildShuffleStage<true>));
         AddHandler(1, &TCoPartitionByKey::Match, HNDL(BuildPartitionStage<true>));
         AddHandler(1, &TCoTop::Match, HNDL(BuildTopStage<true>));
@@ -307,6 +311,15 @@ protected:
     }
 
     template <bool IsGlobal>
+    TMaybeNode<TExprBase> PushCombineWithSpillingToStage(TExprBase node, TExprContext& ctx,
+        IOptimizationContext& optCtx, const TGetParents& getParents)
+    {
+        TExprBase output = DqPushCombineWithSpillingToStage(node, ctx, optCtx, *getParents(), IsGlobal);
+        DumpAppliedRule("PushCombineWithSpillingToStage", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    template <bool IsGlobal>
     TMaybeNode<TExprBase> BuildShuffleStage(TExprBase node, TExprContext& ctx,
         IOptimizationContext& optCtx, const TGetParents& getParents)
     {
@@ -319,6 +332,13 @@ protected:
     TMaybeNode<TExprBase> BuildFinalizeByKeyStage(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
         TExprBase output = DqBuildFinalizeByKeyStage(node, ctx, *getParents(), IsGlobal);
         DumpAppliedRule("BuildFinalizeByKeyStage", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    template <bool IsGlobal>
+    TMaybeNode<TExprBase> BuildFinalizeByKeyWithSpillingStage(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
+        TExprBase output = DqBuildFinalizeByKeyWithSpillingStage(node, ctx, *getParents(), IsGlobal);
+        DumpAppliedRule("BuildFinalizeByKeyWithSpillingStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 

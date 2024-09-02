@@ -754,18 +754,49 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
             return MkqlBuildWideLambda(node.Tail(), ctx, keys);
         };
 
-        bool isStatePersistable = true;
-        // Traverse through childs skipping input and limit children
-        for (size_t i = 2U; i < node.ChildrenSize(); ++i) {
-            isStatePersistable = isStatePersistable && node.Child(i)->GetTypeAnn()->IsPersistable();
+        if (withLimit) {
+            return ctx.ProgramBuilder.WideCombiner(flow, memLimit, keyExtractor, init, update, finish);
         }
+
+        return ctx.ProgramBuilder.WideLastCombiner(flow, keyExtractor, init, update, finish);
+    });
+
+    AddCallable("WideCombinerWithSpilling", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        const auto flow = MkqlBuildExpr(node.Head(), ctx);
+        i64 memLimit = 0LL;
+        const bool withLimit = TryFromString<i64>(node.Child(1U)->Content(), memLimit);
+
+        const auto keyExtractor = [&](TRuntimeNode::TList items) {
+            return MkqlBuildWideLambda(*node.Child(2U), ctx, items);
+        };
+        const auto init = [&](TRuntimeNode::TList keys, TRuntimeNode::TList items) {
+            keys.insert(keys.cend(), items.cbegin(), items.cend());
+            return MkqlBuildWideLambda(*node.Child(3U), ctx, keys);
+        };
+        const auto update = [&](TRuntimeNode::TList keys, TRuntimeNode::TList items, TRuntimeNode::TList state) {
+            keys.insert(keys.cend(), items.cbegin(), items.cend());
+            keys.insert(keys.cend(), state.cbegin(), state.cend());
+            return MkqlBuildWideLambda(*node.Child(4U), ctx, keys);
+        };
+        const auto finish = [&](TRuntimeNode::TList keys, TRuntimeNode::TList state) {
+            keys.insert(keys.cend(), state.cbegin(), state.cend());
+            return MkqlBuildWideLambda(*node.Child(5U), ctx, keys);
+        };
+        const auto serialize = [&](TRuntimeNode::TList keys, TRuntimeNode::TList state) {
+            keys.insert(keys.cend(), state.cbegin(), state.cend());
+            return MkqlBuildWideLambda(*node.Child(6U), ctx, keys);
+        };
+        const auto deserialize = [&](TRuntimeNode::TList keys, TRuntimeNode::TList state) {
+            keys.insert(keys.cend(), state.cbegin(), state.cend());
+            return MkqlBuildWideLambda(*node.Child(7U), ctx, keys);
+        };
 
         if (withLimit) {
             return ctx.ProgramBuilder.WideCombiner(flow, memLimit, keyExtractor, init, update, finish);
         }
 
-        if (isStatePersistable && RuntimeVersion >= 49U) {
-            return ctx.ProgramBuilder.WideLastCombinerWithSpilling(flow, keyExtractor, init, update, finish);
+        if (RuntimeVersion >= 51U) {
+            return ctx.ProgramBuilder.WideLastCombinerWithSpilling(flow, keyExtractor, init, update, finish, serialize, deserialize);
         }
         return ctx.ProgramBuilder.WideLastCombiner(flow, keyExtractor, init, update, finish);
     });
@@ -1814,6 +1845,28 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return ctx.ProgramBuilder.CombineCore(stream, keyExtractor, init, update, finish, memLimit);
     });
 
+    AddCallable("CombineCoreWithSpilling", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        NNodes::TCoCombineCoreWithSpilling core(&node);
+
+        const auto stream = MkqlBuildExpr(core.Input().Ref(), ctx);
+        const auto memLimit = FromString<ui64>(core.MemLimit().Cast().Value());
+
+        const auto keyExtractor = [&](TRuntimeNode item) {
+            return MkqlBuildLambda(core.KeyExtractor().Ref(), ctx, {item});
+        };
+        const auto init = [&](TRuntimeNode key, TRuntimeNode item) {
+            return MkqlBuildLambda(core.InitHandler().Ref(), ctx, {key, item});
+        };
+        const auto update = [&](TRuntimeNode key, TRuntimeNode item, TRuntimeNode state) {
+            return MkqlBuildLambda(core.UpdateHandler().Ref(), ctx, {key, item, state});
+        };
+        const auto finish = [&](TRuntimeNode key, TRuntimeNode state) {
+            return MkqlBuildLambda(core.FinishHandler().Ref(), ctx, {key, state});
+        };
+
+        return ctx.ProgramBuilder.CombineCore(stream, keyExtractor, init, update, finish, memLimit);
+    });
+
     AddCallable("GroupingCore", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         NNodes::TCoGroupingCore core(&node);
 
@@ -2049,6 +2102,41 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
 
     AddCallable("CombineByKey", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         return CombineByKeyImpl(node, ctx);
+    });
+
+    AddCallable("CombineByKeyWithSpilling", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        NNodes::TCoCombineByKeyWithSpilling combine(&node);
+        const bool isStreamOrFlow = combine.Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Stream ||
+            combine.Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow;
+
+        YQL_ENSURE(!isStreamOrFlow);
+
+        const auto input = MkqlBuildExpr(combine.Input().Ref(), ctx);
+
+        TRuntimeNode preMapList = ctx.ProgramBuilder.FlatMap(input, [&](TRuntimeNode item) {
+            return MkqlBuildLambda(combine.PreMapLambda().Ref(), ctx, {item});
+        });
+
+        const auto dict = ctx.ProgramBuilder.ToHashedDict(preMapList, true, [&](TRuntimeNode item) {
+            return MkqlBuildLambda(combine.KeySelectorLambda().Ref(), ctx, {item});
+        }, [&](TRuntimeNode item) {
+            return item;
+        });
+
+        const auto values = ctx.ProgramBuilder.DictItems(dict);
+        return ctx.ProgramBuilder.FlatMap(values, [&](TRuntimeNode item) {
+            auto key = ctx.ProgramBuilder.Nth(item, 0);
+            auto payloadList = ctx.ProgramBuilder.Nth(item, 1);
+            auto fold1 = ctx.ProgramBuilder.Fold1(payloadList, [&](TRuntimeNode item2) {
+                return MkqlBuildLambda(combine.InitHandlerLambda().Ref(), ctx, {key, item2});
+            }, [&](TRuntimeNode item2, TRuntimeNode state) {
+                return MkqlBuildLambda(combine.UpdateHandlerLambda().Ref(), ctx, {key, item2, state});
+            });
+            auto res = ctx.ProgramBuilder.FlatMap(fold1, [&](TRuntimeNode state) {
+                return MkqlBuildLambda(combine.FinishHandlerLambda().Ref(), ctx, {key, state});
+            });
+            return res;
+        });
     });
 
     AddCallable("Enumerate", [](const TExprNode& node, TMkqlBuildContext& ctx) {

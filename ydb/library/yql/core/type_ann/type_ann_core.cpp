@@ -12312,6 +12312,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["GraceJoinCore"] = &GraceJoinCoreWrapper;
         Functions["GraceSelfJoinCore"] = &GraceSelfJoinCoreWrapper;
         Functions["CombineCore"] = &CombineCoreWrapper;
+        Functions["CombineCoreWithSpilling"] = &CombineCoreWithSpillingWrapper;
         Functions["GroupingCore"] = &GroupingCoreWrapper;
         Functions["HoppingTraits"] = &HoppingTraitsWrapper;
         Functions["HoppingCore"] = &HoppingCoreWrapper;
@@ -12334,7 +12335,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["CallableResultType"] = &TypeArgWrapper<ETypeArgument::CallableResult>;
         Functions["CallableArgumentType"] = &TypeArgWrapper<ETypeArgument::CallableArgument>;
         Functions["CombineByKey"] = &CombineByKeyWrapper;
+        Functions["CombineByKeyWithSpilling"] = &CombineByKeyWrapper;
         Functions["FinalizeByKey"] = &CombineByKeyWrapper;
+        Functions["FinalizeByKeyWithSpilling"] = &CombineByKeyWrapper;
         Functions["NewMTRand"] = &NewMTRandWrapper;
         Functions["NextMTRand"] = &NextMTRandWrapper;
         Functions["FormatType"] = &FormatTypeWrapper;
@@ -12563,6 +12566,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["WideSkipWhileInclusive"] = &WideWhileWrapper;
         Functions["WideCondense1"] = &WideCondense1Wrapper;
         Functions["WideCombiner"] = &WideCombinerWrapper;
+        Functions["WideCombinerWithSpilling"] = &WideCombinerWithSpillingWrapper;
         Functions["WideChopper"] = &WideChopperWrapper;
         Functions["WideChain1Map"] = &WideChain1MapWrapper;
         Functions["WideTop"] = &WideTopWrapper;

@@ -3,6 +3,7 @@
 #include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/api/protos/ydb_scripting.pb.h>
 #include <ydb/public/api/protos/ydb_query.pb.h>
+#include <ydb/public/api/protos/draft/ydb_tablet.pb.h>
 
 #include "base/base.h"
 
@@ -195,5 +196,25 @@ void AuditContextAppend(IAuditCtx* ctx, const Ydb::Query::ExecuteScriptRequest& 
     ctx->AddAuditLogPart("query_text", PrepareText(request.script_content().text()));
 }
 // log updated_row_count collected from ExecuteScriptMetadata.exec_stats?
+
+// TabletService, ExecuteTabletMiniKQL
+template <>
+void AuditContextAppend(IAuditCtx* ctx, const Ydb::Tablet::ExecuteTabletMiniKQLRequest& request) {
+    if (request.dry_run()) {
+        return;
+    }
+    ctx->AddAuditLogPart("tablet_id", TStringBuilder() << request.tablet_id());
+    ctx->AddAuditLogPart("program_text", PrepareText(request.program()));
+}
+
+// TabletService, ChangeTabletSchema
+template <>
+void AuditContextAppend(IAuditCtx* ctx, const Ydb::Tablet::ChangeTabletSchemaRequest& request) {
+    if (request.dry_run()) {
+        return;
+    }
+    ctx->AddAuditLogPart("tablet_id", TStringBuilder() << request.tablet_id());
+    ctx->AddAuditLogPart("schema_changes", PrepareText(request.schema_changes()));
+}
 
 } // namespace NKikimr::NGRpcService

@@ -71,7 +71,7 @@ class App(ConanFile):
         CMakeDeps(self).generate()
         CMakeToolchain(self).generate()
 {%-     for conan_generator in conan.generators %}
-            {{ conan_generator }}(self).generate()
+        {{ conan_generator }}(self).generate()
 {%-     endfor %}
 
         for dep in self.dependencies.values():
@@ -83,13 +83,13 @@ class App(ConanFile):
 {%-         if (has_conan_os_depends_imports) -%}
 {%-             for conan_os_depend in conan.os_depends|selectattr('imports') %}
 {%-                 if (conan_os_depend.imports|length) %}
-                if self.settings.os == "{{ conan_os_depend.os }}":
+            if self.settings.os == "{{ conan_os_depend.os }}":
 {%-                     set conan_imports = conan_os_depend.imports -%}
 {%-                     set shift = "    " -%}
 {%-                     include "[generator]/conan_imports.jinja" -%}
 {%-                 endif -%}
 {%-             endfor -%}
-{%-         endif -%}
+{%-         endif %}
 
     def layout(self):
         cmake_layout(self)

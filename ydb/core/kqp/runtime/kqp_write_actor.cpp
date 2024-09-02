@@ -447,6 +447,13 @@ private:
                 << " Ignored this error."
                 << getIssues().ToOneLineString());
             // TODO: support waiting
+            if (!InconsistentTx)  {
+                RuntimeError(
+                    TStringBuilder() << "Got OVERLOADED for table `"
+                        << SchemeEntry->TableId.PathId.ToString() << "`.",
+                    NYql::NDqProto::StatusIds::OVERLOADED,
+                    getIssues());
+            }
             return;
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_CANCELLED: {
@@ -518,7 +525,13 @@ private:
         OnMessageAcknowledged(ev->Get()->Record.GetOrigin(), ev->Cookie);
 
         for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
-            LocksInfo[ev->Get()->Record.GetOrigin()].AddAndCheckLock(lock);
+            if (!LocksInfo[ev->Get()->Record.GetOrigin()].AddAndCheckLock(lock)) {
+                RuntimeError(
+                    TStringBuilder() << "Got LOCKS BROKEN for table `"
+                        << SchemeEntry->TableId.PathId.ToString() << "`.",
+                    NYql::NDqProto::StatusIds::ABORTED,
+                    NYql::TIssues{});
+            }
         }
 
         ProcessBatches();

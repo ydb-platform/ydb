@@ -991,6 +991,7 @@ private:
         }
 
         bool isFill = false;
+        bool isYtDqProcessWrite = false;
         int lambdaIdx = -1;
         TExprNode::TPtr lambda;
         if (TYtMap::Match(&node)) {
@@ -1000,6 +1001,9 @@ private:
         } else if (TYtFill::Match(&node)) {
             lambdaIdx = TYtFill::idx_Content;
             isFill = true;
+        } else if (TYtDqProcessWrite::Match(&node)) {
+            lambdaIdx = TYtDqProcessWrite::idx_Input;
+            isYtDqProcessWrite = true;
         }
         if (-1 != lambdaIdx && !hasOtherSortedOuts) {
             if (isFill) {
@@ -1013,20 +1017,46 @@ private:
                         .Build()
                         .Done().Ptr();
                 }
+            } else if (isYtDqProcessWrite) {
+                TProcessedNodesSet processedNodes;
+                TNodeOnNodeOwnedMap remaps;
+                VisitExpr(node.ChildPtr(lambdaIdx), [&processedNodes, &remaps, &ctx](const TExprNode::TPtr& n) {
+                    if (TYtOutput::Match(n.Get())) {
+                        // Stop traversing dependent operations
+                        processedNodes.insert(n->UniqueId());
+                        return false;
+                    }
+                    if (TYtDqWrite::Match(n.Get())) {
+                        auto newInput = Build<TCoUnordered>(ctx, n->Pos())
+                            .Input(n->ChildPtr(TYtDqWrite::idx_Input))
+                            .Done();
+                        remaps[n.Get()] = ctx.ChangeChild(*n, TYtDqWrite::idx_Input, newInput.Ptr());
+                    }
+                    return true;
+                });
+                if (!remaps.empty()) {
+                    TOptimizeExprSettings settings{State_->Types};
+                    settings.ProcessedNodes = &processedNodes;
+                    auto status = RemapExpr(node.ChildPtr(lambdaIdx), lambda, remaps, ctx, settings);
+                    if (status.Level == IGraphTransformer::TStatus::Error) {
+                        return {};
+                    }
+                }
+
             } else {
                 TProcessedNodesSet processedNodes;
                 TNodeOnNodeOwnedMap remaps;
-                VisitExpr(node.ChildPtr(lambdaIdx), [&processedNodes, &remaps, &ctx](const TExprNode::TPtr& node) {
-                    if (TYtOutput::Match(node.Get())) {
+                VisitExpr(node.ChildPtr(lambdaIdx), [&processedNodes, &remaps, &ctx](const TExprNode::TPtr& n) {
+                    if (TYtOutput::Match(n.Get())) {
                         // Stop traversing dependent operations
-                        processedNodes.insert(node->UniqueId());
+                        processedNodes.insert(n->UniqueId());
                         return false;
                     }
-                    auto name = node->Content();
-                    if (node->IsCallable() && node->ChildrenSize() > 0 && name.SkipPrefix("Ordered")) {
-                        const auto inputKind = node->Child(0)->GetTypeAnn()->GetKind();
+                    auto name = n->Content();
+                    if (n->IsCallable() && n->ChildrenSize() > 0 && name.SkipPrefix("Ordered")) {
+                        const auto inputKind = n->Child(0)->GetTypeAnn()->GetKind();
                         if (inputKind == ETypeAnnotationKind::Stream || inputKind == ETypeAnnotationKind::Flow) {
-                            remaps[node.Get()] = ctx.RenameNode(*node, name);
+                            remaps[n.Get()] = ctx.RenameNode(*n, name);
                         }
                     }
                     return true;
@@ -1052,17 +1082,13 @@ private:
             }
 
             if (lambdaIdx != -1 && AnyOf(filterColumns, [](const TExprNode::TPtr& p) { return !!p; })) {
-                if (!lambda) {
-                    lambda = node.ChildPtr(lambdaIdx);
-                }
+
+                TExprNode::TPtr extractLambda;
                 if (op.Output().Size() == 1) {
-                    lambda = Build<TCoLambda>(ctx, lambda->Pos())
+                    extractLambda = Build<TCoLambda>(ctx, lambda->Pos())
                         .Args({"stream"})
                         .Body<TCoExtractMembers>()
-                            .Input<TExprApplier>()
-                                .Apply(TCoLambda(lambda))
-                                .With(0, "stream")
-                            .Build()
+                            .Input("stream")
                             .Members(filterColumns[0])
                         .Build()
                         .Done().Ptr();
@@ -1103,14 +1129,11 @@ private:
                         }
                     }
 
-                    lambda = Build<TCoLambda>(ctx, lambda->Pos())
+                    extractLambda = Build<TCoLambda>(ctx, lambda->Pos())
                         .Args({"stream"})
                         .Body<TCoFlatMapBase>()
                             .CallableName(hasOtherSortedOuts ? TCoOrderedFlatMap::CallableName() : TCoFlatMap::CallableName())
-                            .Input<TExprApplier>()
-                                .Apply(TCoLambda(lambda))
-                                .With(0, "stream")
-                            .Build()
+                            .Input("stream")
                             .Lambda()
                                 .Args({"var"})
                                 .Body<TCoJust>()
@@ -1124,6 +1147,44 @@ private:
                             .Build()
                         .Build()
                         .Done().Ptr();
+                }
+
+
+                if (!lambda) {
+                    lambda = node.ChildPtr(lambdaIdx);
+                }
+                if (isYtDqProcessWrite) {
+                    TProcessedNodesSet processedNodes;
+                    TNodeOnNodeOwnedMap remaps;
+                    VisitExpr(lambda, [&processedNodes, &remaps, extractLambda, &ctx](const TExprNode::TPtr& n) {
+                        if (TYtOutput::Match(n.Get())) {
+                            // Stop traversing dependent operations
+                            processedNodes.insert(n->UniqueId());
+                            return false;
+                        }
+                        if (auto dqWrite = TMaybeNode<TYtDqWrite>(n)) {
+                            auto newWrite =  Build<TYtDqWrite>(ctx, n->Pos())
+                                .InitFrom(dqWrite.Cast())
+                                .Input<TExprApplier>()
+                                    .Apply(TCoLambda(extractLambda))
+                                    .With(0, dqWrite.Cast().Input())
+                                .Build()
+                                .Done();
+                            remaps[n.Get()] = newWrite.Ptr();
+                        }
+                        return true;
+                    });
+                    if (!remaps.empty()) {
+                        TOptimizeExprSettings settings{State_->Types};
+                        settings.ProcessedNodes = &processedNodes;
+                        auto status = RemapExpr(lambda, lambda, remaps, ctx, settings);
+                        if (status.Level == IGraphTransformer::TStatus::Error) {
+                            return {};
+                        }
+                    }
+
+                } else {
+                    lambda = ctx.FuseLambdas(*extractLambda, *lambda);
                 }
             }
         }

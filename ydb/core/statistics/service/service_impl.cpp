@@ -678,10 +678,15 @@ private:
             for (const auto& req : request.StatRequests) {
                 auto& response = request.StatResponses.emplace_back();
                 response.Req = req;
+                if (!req.ColumnTag) {
+                    response.Success = false;
+                    ++reqIndex;
+                    continue;
+                }
                 ui64 loadCookie = NextLoadQueryCookie++;
                 LoadQueriesInFlight[loadCookie] = std::make_pair(requestId, reqIndex);
-                Register(CreateLoadStatisticsQuery(req.PathId, request.StatType,
-                    *req.ColumnTag, loadCookie));
+                Register(CreateLoadStatisticsQuery(SelfId(),
+                    req.PathId, request.StatType, *req.ColumnTag, loadCookie));
                 ++request.ReplyCounter;
                 ++reqIndex;
             }
@@ -1241,16 +1246,76 @@ private:
         TBase::PassAway();
     }
 
+    void PrintStatServiceState(TStringStream& str) {
+        HTML(str) {
+            PRE() {
+                str << "---- StatisticsService ----" << Endl << Endl;
+                str << "StatisticsAggregatorId: " << StatisticsAggregatorId << Endl;
+                str << "SAPipeClientId: " << SAPipeClientId << Endl;
+
+                str << "InFlight: " << InFlight.size();
+                {
+                    ui32 simple{ 0 };
+                    ui32 countMin{ 0 };
+                    for (auto it = InFlight.begin(); it != InFlight.end(); ++it) {
+                        if (it->second.StatType == EStatType::SIMPLE) {
+                            ++simple;
+                        } else if (it->second.StatType == EStatType::COUNT_MIN_SKETCH) {
+                            ++countMin;
+                        }
+                    }
+                    str << "[SIMPLE: " << simple << ", COUNT_MIN_SKETCH: " << countMin << "]" << Endl;
+                }
+                str << "NextRequestId: " << NextRequestId << Endl;
+
+                str << "LoadQueriesInFlight: " << LoadQueriesInFlight.size() << Endl;
+                str << "NextLoadQueryCookie: " << NextLoadQueryCookie << Endl;
+
+                str << "NeedSchemeShards: " << NeedSchemeShards.size() << Endl;
+                str << "Statistics: " << Statistics.size() << Endl;
+
+                str << "ResolveSAStage: ";
+                if (ResolveSAStage == RSA_INITIAL) {
+                    str << "RSA_INITIAL";
+                } else if (ResolveSAStage == RSA_IN_FLIGHT) {
+                    str << "RSA_IN_FLIGHT";
+                }
+                else {
+                    str << "RSA_FINISHED";
+                }
+                str << Endl;
+
+                str << "AggregateKeepAlivePeriod: " << Settings.AggregateKeepAlivePeriod << Endl;
+                str << "AggregateKeepAliveTimeout: " << Settings.AggregateKeepAliveTimeout << Endl;
+                str << "AggregateKeepAliveAckTimeout: " << Settings.AggregateKeepAliveAckTimeout << Endl;
+                str << "StatisticsRequestTimeout: " << Settings.StatisticsRequestTimeout << Endl;
+                str << "MaxInFlightTabletRequests: " << Settings.MaxInFlightTabletRequests << Endl;
+                str << "FanOutFactor: " << Settings.FanOutFactor << Endl;
+
+                str << "---- AggregationStatistics ----" << Endl;
+                str << "Round: " << AggregationStatistics.Round << Endl;
+                str << "Cookie: " << AggregationStatistics.Cookie << Endl;
+                str << "PathId: " << AggregationStatistics.PathId.ToString() << Endl;
+                str << "LastAckHeartbeat: " << AggregationStatistics.LastAckHeartbeat << Endl;
+                str << "ParentNode: " << AggregationStatistics.ParentNode << Endl;
+                str << "PprocessedNodes: " << AggregationStatistics.PprocessedNodes << Endl;
+                str << "TotalStatisticsResponse: " << AggregationStatistics.TotalStatisticsResponse << Endl;
+                str << "Nodes: " << AggregationStatistics.Nodes.size() << Endl;
+                str << "CountMinSketches: " << AggregationStatistics.CountMinSketches.size() << Endl;
+            }
+        }
+    }
+
     void Handle(NMon::TEvHttpInfo::TPtr& ev) {
         auto& request = ev->Get()->Request;
 
-        if (!EnableColumnStatistics) {
-            Send(ev->Sender, new NMon::TEvHttpInfoRes("Column statistics is disabled"));
-            return;
-        }
-
         auto method = request.GetMethod();
         if (method == HTTP_METHOD_POST) {
+            if (!EnableColumnStatistics) {
+                Send(ev->Sender, new NMon::TEvHttpInfoRes("Column statistics is disabled"));
+                return;
+            }
+
             auto& params = request.GetPostParams();
             auto itAction = params.find("action");
             if (itAction == params.end()) {
@@ -1271,6 +1336,18 @@ private:
 
         } else if (method == HTTP_METHOD_GET) {
             auto& params = request.GetParams();
+            if (params.empty()) {
+                TStringStream str;
+                PrintStatServiceState(str);
+                Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));
+                return;
+            }
+
+            if (!EnableColumnStatistics) {
+                Send(ev->Sender, new NMon::TEvHttpInfoRes("Column statistics is disabled"));
+                return;
+            }
+
             auto itAction = params.find("action");
             if (itAction == params.end()) {
                 Send(ev->Sender, new NMon::TEvHttpInfoRes("'action' parameter is required"));

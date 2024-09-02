@@ -14,7 +14,6 @@ struct TCacheCacheConfig : public TAtomicRefCount<TCacheCacheConfig> {
 
     enum ECacheGeneration {
         CacheGenNone,
-        CacheGenEvicted,
         CacheGenFresh,
         CacheGenStaging,
         CacheGenWarm,
@@ -49,28 +48,11 @@ struct TCacheCacheConfig : public TAtomicRefCount<TCacheCacheConfig> {
         StagingLimit = FreshLimit;
         WarmLimit = FreshLimit;
     }
-
-    template<typename TItem>
-    struct TDefaultWeight {
-        static ui64 Get(TItem *) {
-            return 1;
-        }
-    };
-
-    template<typename TItem>
-    struct TDefaultGeneration {
-        static ECacheGeneration Get(TItem *x) {
-            return static_cast<ECacheGeneration>(x->CacheGeneration);
-        }
-        static void Set(TItem *x, ECacheGeneration gen) {
-            x->CacheGeneration = gen;
-        }
-    };
 };
 
 template <typename TItem
-        , typename TWeight = TCacheCacheConfig::TDefaultWeight<TItem>
-        , typename TGeneration = TCacheCacheConfig::TDefaultGeneration<TItem>
+        , typename TWeight
+        , typename TGeneration
     >
 class TCacheCache : public ICacheCache<TItem> {
 public:
@@ -106,10 +88,9 @@ public:
         TIntrusiveList<TItem> evictedList;
         TIntrusiveListItem<TItem> *xitem = item;
 
-        const TCacheCacheConfig::ECacheGeneration cacheGen = GenerationOp.Get(item);
+        const auto cacheGen = static_cast<TCacheCacheConfig::ECacheGeneration>(GenerationOp.Get(item));
         switch (cacheGen) {
         case TCacheCacheConfig::CacheGenNone: // place in fresh
-        case TCacheCacheConfig::CacheGenEvicted: // corner case: was evicted from staging and touched in same update
             AddToFresh(item, evictedList);
 	    [[fallthrough]];
         case TCacheCacheConfig::CacheGenFresh: // just update inside fresh
@@ -135,7 +116,6 @@ public:
         const TCacheCacheConfig::ECacheGeneration cacheGen = GenerationOp.Get(item);
         switch (cacheGen) {
         case TCacheCacheConfig::CacheGenNone:
-        case TCacheCacheConfig::CacheGenEvicted:
             break;
         case TCacheCacheConfig::CacheGenFresh:
             Unlink(item, FreshWeight);
@@ -230,7 +210,7 @@ private:
             TItem *evicted = StagingList.PopBack();
             Y_ABORT_UNLESS(GenerationOp.Get(evicted) == TCacheCacheConfig::CacheGenStaging, "malformed entry in staging cache %" PRIu32, (ui32)GenerationOp.Get(evicted));
             Unlink(evicted, StagingWeight);
-            GenerationOp.Set(evicted, TCacheCacheConfig::CacheGenEvicted);
+            GenerationOp.Set(evicted, TCacheCacheConfig::CacheGenNone);
             evictedList.PushBack(evicted);
         }
     }
@@ -240,7 +220,7 @@ private:
 
         TItem *evicted = list.PopBack();
         Unlink(evicted, weight);
-        GenerationOp.Set(evicted, TCacheCacheConfig::CacheGenEvicted);
+        GenerationOp.Set(evicted, TCacheCacheConfig::CacheGenNone);
 
         return evicted;
     }

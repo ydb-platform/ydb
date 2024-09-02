@@ -32,7 +32,6 @@ class YdbCliHelper:
             self.ast = ast
             self.svg = svg
 
-
     class WorkloadRunResult:
         def __init__(
             self, stats: dict[str, dict[str, any]] = {}, query_out: str = None, stdout: str = None, stderr: str = None,

@@ -528,7 +528,7 @@ private:
     void AddCmdDeleteTx(NKikimrClient::TKeyValueRequest& request,
                         ui64 txId);
 
-    bool WriteIdIsDisabled(const TMaybe<TWriteId>& writeId) const;
+    bool AllSupportivePartitionsHaveBeenDeleted(const TMaybe<TWriteId>& writeId) const;
     void DeleteWriteId(const TMaybe<TWriteId>& writeId);
 };
 

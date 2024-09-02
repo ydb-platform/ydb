@@ -4382,8 +4382,8 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
 
     case NKikimrPQ::TTransaction::WAIT_RS_ACKS:
         PQ_LOG_D("HaveAllRecipientsReceive " << tx.HaveAllRecipientsReceive() <<
-                 ", WriteIdIsDisabled " << WriteIdIsDisabled(tx.WriteId));
-        if (tx.HaveAllRecipientsReceive() && WriteIdIsDisabled(tx.WriteId)) {
+                 ", AllSupportivePartitionsHaveBeenDeleted " << AllSupportivePartitionsHaveBeenDeleted(tx.WriteId));
+        if (tx.HaveAllRecipientsReceive() && AllSupportivePartitionsHaveBeenDeleted(tx.WriteId)) {
             DeleteTx(tx);
             // implicitly switch to the state DELETING
         }
@@ -4408,7 +4408,7 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
     }
 }
 
-bool TPersQueue::WriteIdIsDisabled(const TMaybe<TWriteId>& writeId) const
+bool TPersQueue::AllSupportivePartitionsHaveBeenDeleted(const TMaybe<TWriteId>& writeId) const
 {
     if (!writeId.Defined()) {
         return true;
@@ -4420,16 +4420,12 @@ bool TPersQueue::WriteIdIsDisabled(const TMaybe<TWriteId>& writeId) const
     const TTxWriteInfo& writeInfo = TxWrites.at(*writeId);
 
     PQ_LOG_D("WriteId " << *writeId <<
-             " LongTxSubscriptionStatus=" << NKikimrLongTxService::TEvLockStatus_EStatus_Name(writeInfo.LongTxSubscriptionStatus) <<
-             " Partitions=" << writeInfo.Partitions.size());
-    bool disabled =
-        //(writeInfo.LongTxSubscriptionStatus != NKikimrLongTxService::TEvLockStatus::STATUS_SUBSCRIBED) &&
+             " Partitions.size=" << writeInfo.Partitions.size());
+    bool deleted =
         writeInfo.Partitions.empty()
         ;
 
-    PQ_LOG_D("WriteId " << *writeId << " is " << (disabled ? "disabled" : "enabled"));
-
-    return disabled;
+    return deleted;
 }
 
 void TPersQueue::DeleteWriteId(const TMaybe<TWriteId>& writeId)

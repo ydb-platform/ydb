@@ -401,7 +401,6 @@ void FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
         columnDesc.SetName(columnIt->second.Name);
         columnDesc.SetType(columnIt->second.Type);
         columnDesc.SetNotNull(columnIt->second.NotNull);
-        // columnDesc.MutableSerializer()->set_allocated_arrowcompression();
     }
 
     for (const auto& keyColumn : metadata.KeyColumnNames) {
@@ -453,7 +452,7 @@ void FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const TK
 
     for (const auto& family : metadata.ColumnFamilies) {
         if (family.Name == "default") {
-            Cerr << "Default family: " << family.Compression << "\n";
+            // Cerr << "Default family: " << family.Compression << "\n";
             for (ui32 i = 0; i < schema.ColumnsSize(); i++) {
                 auto serializer = schema.MutableColumns(i)->MutableSerializer();
                 serializer->SetClassName("ARROW_SERIALIZER");
@@ -468,10 +467,10 @@ void FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const TK
             if (family.CompressionLevel.Defined()) {
                 defaultCompression->SetLevel(family.CompressionLevel.GetRef());
             }
-            Cerr << "HasCode: " << defaultCompression->HasCodec() << "\n";
-            Cerr << "HasDefaultCompression: " << schema.HasDefaultCompression() << "\n";
+            // Cerr << "HasCode: " << defaultCompression->HasCodec() << "\n";
+            // Cerr << "HasDefaultCompression: " << schema.HasDefaultCompression() << "\n";
         } else {
-            Cerr << "TOlapIndexDescription\n";
+            // Cerr << "TOlapIndexDescription\n";
         }
     }
 

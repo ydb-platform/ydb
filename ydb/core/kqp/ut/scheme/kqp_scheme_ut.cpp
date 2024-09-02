@@ -7992,18 +7992,8 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
                 WITH (STORE = COLUMN);)";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            Cerr << query << Endl;
         }
 
-        // {
-        //     auto query =
-        //         TStringBuilder()
-        //         << R"(ALTER OBJECT `)" << tableName
-        //         << R"(` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Key, `SERIALIZER.CLASS_NAME`=`ARROW_SERIALIZER`, `COMPRESSION.TYPE`=`lz4`);)";
-        //     auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-        //     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        //     Cerr << query << Endl;
-        // }
         auto runtime = runner.GetTestServer().GetRuntime();
         TActorId sender = runtime->AllocateEdgeActor();
 
@@ -8034,16 +8024,18 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
 
         auto describeResult = DescribeTable(&runner.GetTestServer(), sender, tableName);
         auto schema = describeResult.GetPathDescription().GetColumnTableDescription().GetSchema();
-        Cerr << "HasDefaultCompression: " << schema.HasDefaultCompression() << "\n";
-        if (schema.HasDefaultCompression()) {
-            Cerr << "Default compression: " << eColumnCodecToString(schema.GetDefaultCompression().GetCodec()) << "\n";
-        }
+        // Cerr << "HasDefaultCompression: " << schema.HasDefaultCompression() << "\n";
+        // if (schema.HasDefaultCompression()) {
+        //     Cerr << "Default compression: " << eColumnCodecToString(schema.GetDefaultCompression().GetCodec()) << "\n";
+        // }
         {
             auto columns = schema.GetColumns();
             for (const auto& column : columns) {
                 if (column.HasSerializer()) {
                     auto serializer = column.GetSerializer();
-                    Cerr << column.GetName().c_str() << ": " << eColumnCodecToString(serializer.GetArrowCompression().GetCodec()) << "\n";
+                    UNIT_ASSERT_VALUES_EQUAL_C(eColumnCodecToString(serializer.GetArrowCompression().GetCodec()),
+                        eColumnCodecToString(NKikimrSchemeOp::EColumnCodec::ColumnCodecSNAPPY),
+                        eColumnCodecToString(serializer.GetArrowCompression().GetCodec()));
                 }
             }
         }

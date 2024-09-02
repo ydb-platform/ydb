@@ -61,7 +61,7 @@ void TColumnShard::SwitchToWork(const TActorContext& ctx) {
         SignalTabletActive(ctx);
         AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "initialize_shard")("step", "SignalTabletActive");
         TryRegisterMediatorTimeCast();
-        EnqueueProgressTx(ctx);
+        EnqueueProgressTx(ctx, std::nullopt);
     }
     Counters.GetCSCounters().OnIndexMetadataLimit(NOlap::IColumnEngine::GetMetadataLimit());
     EnqueueBackgroundActivities();

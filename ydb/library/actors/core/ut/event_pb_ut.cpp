@@ -66,7 +66,8 @@ Y_UNIT_TEST_SUITE(TEventSerialization) {
                 }
             }
             UNIT_ASSERT_EQUAL(bmSerialized, bmChunkedSerialized);
-            UNIT_ASSERT_EQUAL(42, 43);
+            int value = rand();
+            UNIT_ASSERT_EQUAL(value, value + 42);
         }
     }
 }

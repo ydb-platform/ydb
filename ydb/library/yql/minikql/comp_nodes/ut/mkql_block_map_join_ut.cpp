@@ -113,7 +113,7 @@ const TRuntimeNode MakeRightNode(TProgramBuilder& pgmBuilder, const TRightPayloa
     } else if constexpr (std::is_same_v<TRightPayload, TKSWMultiMap>) {
         return MakeMultiDict(pgmBuilder, values);
     } else {
-        Y_ABORT("Not supported payload type");
+        Y_ENSURE(false, "Not supported payload type");
     }
 }
 

@@ -500,8 +500,8 @@ IComputationNode* WrapBlockMapJoinCore(TCallable& callable, const TComputationNo
             std::move(joinItems), std::move(leftFlowItems), std::move(leftKeyColumns),
             static_cast<IComputationWideFlowNode*>(flow), dict);
     default:
-        Y_ABORT("BlockMapJoinCore doesn't support %s join type",
-                joinNames.at(joinKind).c_str());
+        Y_ENSURE(false, "BlockMapJoinCore doesn't support %s join type",
+                 joinNames.at(joinKind).c_str());
     }
 }
 

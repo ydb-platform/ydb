@@ -333,6 +333,7 @@ void TIndexInfo::InitializeCaches(const std::shared_ptr<IStoragesManager>& opera
     }
     SchemaWithSpecials = IIndexInfo::AddSpecialFields(Schema);
     SchemaColumnIdsWithSpecials = IIndexInfo::AddSpecialFieldIds(SchemaColumnIds);
+    SchemaColumnIdsWithSpecialsSet = IIndexInfo::AddSpecialFieldIds(std::set<ui32>(SchemaColumnIds.begin(), SchemaColumnIds.end()));
 
     for (auto&& c : Columns) {
         AFL_VERIFY(ArrowColumnByColumnIdCache.emplace(c.first, GetColumnFieldVerified(c.first)).second);

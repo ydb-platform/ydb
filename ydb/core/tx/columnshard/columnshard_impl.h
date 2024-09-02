@@ -539,7 +539,7 @@ private:
 public:
     ui64 TabletTxCounter = 0;
 
-    void EnqueueProgressTx(const TActorContext& ctx);
+    void EnqueueProgressTx(const TActorContext& ctx, const std::optional<ui64> continueTxId = std::nullopt);
     NOlap::TSnapshot GetLastTxSnapshot() const {
         return NOlap::TSnapshot(LastPlannedStep, LastPlannedTxId);
     }

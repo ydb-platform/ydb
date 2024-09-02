@@ -77,7 +77,7 @@ private:
             op->ReceiveAck = true;
             if (!op->NeedReceiveBroken) {
                 op->TxBroken = false;
-                Self->EnqueueProgressTx(ctx);
+                Self->EnqueueProgressTx(ctx, TxId);
             }
         }
 
@@ -118,7 +118,7 @@ private:
             if (BrokenFlag) {
                 Self->GetProgressTxController().CompleteOnCancel(TxId, ctx);
             }
-            Self->EnqueueProgressTx(ctx);
+            Self->EnqueueProgressTx(ctx, TxId);
         }
 
     public:

@@ -48,7 +48,7 @@ public:
             TxOperator = Self->ProgressTxController->GetTxOperatorVerified(txId);
             if (auto txPrepare = TxOperator->BuildTxPrepareForProgress(Self)) {
                 AbortedThroughRemoveExpired = true;
-                Self->ProgressTxInFlight = false;
+                Self->ProgressTxInFlight = txId;
                 Self->Execute(txPrepare.release(), ctx);
                 return true;
             } else {
@@ -66,7 +66,7 @@ public:
             Self->ProgressTxController->FinishPlannedTx(txId, txc);
             Self->Counters.GetTabletCounters()->IncCounter(COUNTER_PLANNED_TX_COMPLETED);
         }
-        Self->ProgressTxInFlight = false;
+        Self->ProgressTxInFlight = std::nullopt;
         if (!!Self->ProgressTxController->GetPlannedTx()) {
             Self->EnqueueProgressTx(ctx);
         }
@@ -93,10 +93,13 @@ public:
     }
 };
 
-void TColumnShard::EnqueueProgressTx(const TActorContext& ctx) {
+void TColumnShard::EnqueueProgressTx(const TActorContext& ctx, const std::optional<ui64> continueTxId) {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "EnqueueProgressTx")("tablet_id", TabletID());
-    if (!ProgressTxInFlight) {
-        ProgressTxInFlight = true;
+    if (continueTxId) {
+        AFL_VERIFY(ProgressTxInFlight == continueTxId)("current", ProgressTxInFlight)("expected", continueTxId);
+    }
+    if (ProgressTxInFlight == continueTxId) {
+        ProgressTxInFlight = continueTxId.value_or(0);
         Execute(new TTxProgressTx(this), ctx);
     }
 }

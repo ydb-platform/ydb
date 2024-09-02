@@ -109,6 +109,23 @@ By default, if the `STORE` parameter is not specified, a row-oriented table is c
   Specifying a `PRIMARY KEY` with a non-empty list of columns is mandatory. These columns become part of the key in the order they are listed.
   {% endif %}
 
+  Example of creating a row-oriented table using partitioning options:
+  ```sql
+  CREATE TABLE <table_name> (
+    a Uint64,
+    b Uint64,
+    c Float,
+    PRIMARY KEY (a, b)
+  )
+  WITH (
+    AUTO_PARTITIONING_BY_SIZE = ENABLED,
+    AUTO_PARTITIONING_PARTITION_SIZE_MB = 512
+  );
+  ```
+
+  Such code will create a row-oriented table with automatic partitioning by partition size (`AUTO_PARTITIONING_BY_SIZE`) enabled, and with the preferred size of each partition (`AUTO_PARTITIONING_PARTITION_SIZE_MB`) set to 512 megabytes. The full list of string table partitioning options can be found in the section {#T}(../../../../concepts/datamodel/table.md#partitioning_row_table) of the article {#T}(../../../../concepts/datamodel/table.md).
+
+
 - Creating a column-oriented table
 
   ```sql
@@ -121,7 +138,23 @@ By default, if the `STORE` parameter is not specified, a row-oriented table is c
   WITH (
     STORE = COLUMN
   );
-  ```  
+  ```
+
+  Example of creating a column-oriented table with an option to specify the minimum physical number of partitions for storing data:
+  ```sql
+  CREATE TABLE table_name (
+    a Uint64 NOT NULL,
+    b Uint64 NOT NULL,
+    c Float,
+    PRIMARY KEY (a, b)
+  )
+  WITH (
+    STORE = COLUMN,
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10
+  );
+  ```
+
+  The full list of column-oriented table partitioning options can be found in the section [{#T}](../../../../concepts/datamodel/table.md#olap-tables-partitioning) of the article [{#T}](../../../../concepts/datamodel/table.md).
 
 {% endlist %}
 

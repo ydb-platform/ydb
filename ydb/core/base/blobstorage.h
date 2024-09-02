@@ -1320,11 +1320,8 @@ struct TEvBlobStorage {
                         str << "{DiskOrderNumber# " << item.DiskOrderNumber
                             << ", PartIdRequested# " << item.PartIdRequested
                             << ", RequestIndex# " << item.RequestIndex
-                            << ", ResponseIndex# " << item.ResponseIndex;
-                        if (isFull) {
-                            str << ", Data# " << item.Data.ConvertToString().Quote();
-                        }
-                        str << "}, ";
+                            << ", ResponseIndex# " << item.ResponseIndex
+                            << "}, ";
                     }
                     str << "]";
                 }

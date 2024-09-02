@@ -1855,9 +1855,9 @@
     ],
     "test.test[pg-select_agg_gs_grouping-default.txt-Debug]": [
         {
-            "checksum": "832d4dd2d85c6d36ecdbd4cb1c4c1f9f",
-            "size": 1995,
-            "uri": "https://{canondata_backend}/1937027/a54f6a3af16ada75b924eed32e24aaf0c11ba40f/resource.tar.gz#test.test_pg-select_agg_gs_grouping-default.txt-Debug_/opt.yql"
+            "checksum": "cc50a2cbcb62f3a2bbd85219f5879a1e",
+            "size": 1719,
+            "uri": "https://{canondata_backend}/1920236/ff1cfc2e3954cf4c652b84357d40b6337bd34c78/resource.tar.gz#test.test_pg-select_agg_gs_grouping-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[pg-select_agg_gs_grouping-default.txt-Plan]": [

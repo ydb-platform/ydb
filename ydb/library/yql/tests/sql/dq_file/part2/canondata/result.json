@@ -275,9 +275,9 @@
     ],
     "test.test[aggregate-group_by_ru_partition_by_grouping-default.txt-Debug]": [
         {
-            "checksum": "11d1fc2cfa24b26e10c896218e286158",
-            "size": 7968,
-            "uri": "https://{canondata_backend}/1903280/7cce39a9f54f953ff747437b2afbf4cd7340892a/resource.tar.gz#test.test_aggregate-group_by_ru_partition_by_grouping-default.txt-Debug_/opt.yql_patched"
+            "checksum": "e70fafc8f131842282831ca56eb2170b",
+            "size": 7988,
+            "uri": "https://{canondata_backend}/1900335/e1d65d264295642feda5f8ea8dd5531cef75bc40/resource.tar.gz#test.test_aggregate-group_by_ru_partition_by_grouping-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[aggregate-group_by_ru_partition_by_grouping-default.txt-Plan]": [
@@ -2119,9 +2119,9 @@
     ],
     "test.test[pg-select_join_full_one-default.txt-Debug]": [
         {
-            "checksum": "0edb3d6848a0d8e11676a46cbae712ff",
-            "size": 4568,
-            "uri": "https://{canondata_backend}/1925842/e57e96bc0849393d23e4c2749e610a2eea073ec0/resource.tar.gz#test.test_pg-select_join_full_one-default.txt-Debug_/opt.yql_patched"
+            "checksum": "1c2a86e055733a692270d98d0e31c3a4",
+            "size": 4084,
+            "uri": "https://{canondata_backend}/1871182/7949078f204bbdbafbcf0efaa8e1e8cbc661f9ab/resource.tar.gz#test.test_pg-select_join_full_one-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-select_join_full_one-default.txt-Plan]": [
@@ -2163,9 +2163,9 @@
     ],
     "test.test[pg-select_join_right_one-default.txt-Debug]": [
         {
-            "checksum": "f56f23502a7de47b607eae2b9a692509",
-            "size": 3553,
-            "uri": "https://{canondata_backend}/1925842/e57e96bc0849393d23e4c2749e610a2eea073ec0/resource.tar.gz#test.test_pg-select_join_right_one-default.txt-Debug_/opt.yql_patched"
+            "checksum": "c7aa79af4d7bfa800205f429fe96e928",
+            "size": 3141,
+            "uri": "https://{canondata_backend}/1871182/7949078f204bbdbafbcf0efaa8e1e8cbc661f9ab/resource.tar.gz#test.test_pg-select_join_right_one-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-select_join_right_one-default.txt-Plan]": [

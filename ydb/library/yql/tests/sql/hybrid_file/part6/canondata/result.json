@@ -2073,9 +2073,9 @@
     ],
     "test.test[pg-select_agg_gs_cube-default.txt-Debug]": [
         {
-            "checksum": "5940335d9352e1f0633ea3c27cf9d576",
-            "size": 1361,
-            "uri": "https://{canondata_backend}/1130705/3deff34d248db1fb5a54ca6f66a2bd921ca5f5fe/resource.tar.gz#test.test_pg-select_agg_gs_cube-default.txt-Debug_/opt.yql_patched"
+            "checksum": "5d0050336865bb82538c09c3115890ed",
+            "size": 1318,
+            "uri": "https://{canondata_backend}/1936947/1186d579cc7e3197ae0471c3293b328d56f77001/resource.tar.gz#test.test_pg-select_agg_gs_cube-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-select_agg_gs_cube-default.txt-Plan]": [
@@ -2087,9 +2087,9 @@
     ],
     "test.test[pg-select_agg_gs_sets-default.txt-Debug]": [
         {
-            "checksum": "4ddbff5fde90308a0f8beaae3764e4be",
-            "size": 1293,
-            "uri": "https://{canondata_backend}/1130705/3deff34d248db1fb5a54ca6f66a2bd921ca5f5fe/resource.tar.gz#test.test_pg-select_agg_gs_sets-default.txt-Debug_/opt.yql_patched"
+            "checksum": "f1b8f6bcdff3dffa5b21ed0f005c84b8",
+            "size": 1136,
+            "uri": "https://{canondata_backend}/1936947/1186d579cc7e3197ae0471c3293b328d56f77001/resource.tar.gz#test.test_pg-select_agg_gs_sets-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-select_agg_gs_sets-default.txt-Plan]": [
@@ -2185,9 +2185,9 @@
     ],
     "test.test[pg-select_join_left_one-default.txt-Debug]": [
         {
-            "checksum": "a6c52048c5a90646084c4ad483affc52",
-            "size": 3548,
-            "uri": "https://{canondata_backend}/1937150/6ed1231d0735e7ff4ac5f603831c10709457ac3b/resource.tar.gz#test.test_pg-select_join_left_one-default.txt-Debug_/opt.yql_patched"
+            "checksum": "8403aa385887ceced607b68998db257e",
+            "size": 3136,
+            "uri": "https://{canondata_backend}/1936947/1186d579cc7e3197ae0471c3293b328d56f77001/resource.tar.gz#test.test_pg-select_join_left_one-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-select_join_left_one-default.txt-Plan]": [

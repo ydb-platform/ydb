@@ -1,5 +1,6 @@
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/testlib/actors/wait_events.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/events.h>
@@ -827,7 +828,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
         UNIT_ASSERT_VALUES_EQUAL(values.at(2), 7);
     }
 
-    Y_UNIT_TEST(TestWaitForSingleEvent) {
+    Y_UNIT_TEST(TestWaitForFirstEvent) {
         enum EEv {
             EvTrigger = EventSpaceBegin(TEvents::ES_PRIVATE)
         };
@@ -877,11 +878,11 @@ Y_UNIT_TEST_SUITE(TActorTest) {
         runtime.EnableScheduleForActor(actorId);
 
         {
-            TWaitForSingleEvent<TEvTrigger> waiter(runtime);
+            TWaitForFirstEvent<TEvTrigger> waiter(runtime);
             waiter.Wait();
         }
         {
-            TWaitForSingleEvent<TEvTrigger> waiter(runtime, [](const TEvTrigger::TPtr& ev){ return ev->Get()->Value == 10; });
+            TWaitForFirstEvent<TEvTrigger> waiter(runtime, [](const TEvTrigger::TPtr& ev){ return ev->Get()->Value == 10; });
             waiter.Wait();
         }
     }    

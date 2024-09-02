@@ -39,14 +39,12 @@
 {% endif %}
 | [Grafana](https://grafana.com) | Полный| [Инструкция](grafana.md) |
 
-{% if ydb-airflow %}
 ## Оркестрация {#orchestration}
 
 | Среда | Инструкция |
 | --- | --- |
 | [{{ airflow-name }}](https://airflow.apache.org) | [Инструкция](airflow.md) |
 
-{% endif %}
 
 ## Поставка данных {#ingestion}
 

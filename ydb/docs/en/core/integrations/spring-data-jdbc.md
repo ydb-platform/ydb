@@ -59,7 +59,7 @@ public class User implements Persistable<Long> {
     @Transient
     private boolean isNew;
     
-    // Конструкторы, геттеры и сеттеры
+    // Constructors, getters and setters
     
     @Override
     public Long getId() {
@@ -101,12 +101,12 @@ public class UserRepositoryCommandLineRunner implements CommandLineRunner {
         user.setLogin("johndoe");
         user.setFirstname("John");
         user.setLastname("Doe");
-        user.setNew(true);  // Устанавливаем флаг новой сущности
+        user.setNew(true);  // Setting the flag for the new entity
       
-        // Сохранение пользователя
+        // Save user
         User savedUser = repository.save(user);
       
-        // Проверка сохранения пользователя
+        // Check saved user
         assertThat(repository.findById(savedUser.getId())).contains(savedUser);
       
         System.out.println("User saved with ID: " + savedUser.getId());

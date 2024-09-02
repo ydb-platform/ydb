@@ -1872,9 +1872,8 @@ protected:
     void PassAway() override {
         YQL_ENSURE(AlreadyReplied && ResponseEv);
         FillResponseStats();
-        this->Send(Target, ResponseEv.release());
-
         Request.Transactions.crop(0);
+        this->Send(Target, ResponseEv.release());
 
         for (auto channelPair: ResultChannelProxies) {
             LOG_D("terminate result channel " << channelPair.first << " proxy at " << channelPair.second->SelfId());

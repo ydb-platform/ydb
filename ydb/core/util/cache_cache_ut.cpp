@@ -1,7 +1,7 @@
 #include "cache_cache.h"
 #include <library/cpp/testing/unittest/registar.h>
 
-namespace NKikimr {
+namespace NKikimr::NCache {
 
 Y_UNIT_TEST_SUITE(TCacheCacheTest) {
 

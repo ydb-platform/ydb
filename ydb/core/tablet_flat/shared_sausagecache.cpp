@@ -40,6 +40,8 @@ TSharedPageCacheCounters::TSharedPageCacheCounters(const TIntrusivePtr<::NMonito
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
+using namespace NCache;
+
 static bool Satisfies(NLog::EPriority priority = NLog::PRI_DEBUG) {
     if (NLog::TSettings *settings = TlsActivationContext->LoggerSettings())
         return settings->Satisfies(priority, NKikimrServices::TABLET_SAUSAGECACHE);
@@ -215,7 +217,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     {
         ui32 State : 4;
         ui32 CacheGeneration : 3;
-        ui32 InMemory : 1;
 
         const ui32 PageId;
         const size_t Size;
@@ -225,7 +226,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         TPage(ui32 pageId, size_t size, TCollection* collection)
             : State(PageStateNo)
             , CacheGeneration(TCacheCacheConfig::CacheGenNone)
-            , InMemory(false)
             , PageId(pageId)
             , Size(size)
             , Collection(collection)
@@ -326,7 +326,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     TRequestQueue ScanRequests;
 
     THolder<TSharedPageCacheConfig> Config;
-    TCacheCache<TPage, TPage::TWeight, TCacheCacheConfig::TDefaultGeneration<TPage>> Cache;
+    THolder<ICacheCache<TPage>> Cache;
 
     TControlWrapper SizeOverride;
 
@@ -345,6 +345,11 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     ui64 MemLimitBytes = 0;
     ui64 ConfigLimitBytes;
 
+    void CreateCache() {
+        TCacheCacheConfig cacheCacheConfig(1, Config->Counters->FreshBytes, Config->Counters->StagingBytes, Config->Counters->WarmBytes);
+        Cache = MakeHolder<TCacheCache<TPage, TPage::TWeight, TCacheCacheConfig::TDefaultGeneration<TPage>>>(std::move(cacheCacheConfig));
+    }
+
     void ActualizeCacheSizeLimit() {
         if ((ui64)SizeOverride != Config->CacheConfig->Limit) {
             Config->CacheConfig->SetLimit(SizeOverride);
@@ -360,7 +365,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         // limit of cache depends only on config and mem because passive pages may go in and out arbitrary
         // we may have some passive bytes, so if we fully fill this Cache we may exceed the limit
         // because of that DoGC should be called to ensure limits
-        Cache.UpdateCacheSize(limit);
+        Cache->UpdateCacheSize(limit);
 
         if (Config->Counters) {
             Config->Counters->ConfigLimitBytes->Set(ConfigLimitBytes);
@@ -378,7 +383,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         THashSet<TCollection*> recheck;
         while (MemLimitBytes && GetStatAllBytes() > MemLimitBytes
                 || GetStatAllBytes() > ConfigLimitBytes && StatActiveBytes > configActiveReservedBytes) {
-            auto page = Cache.EvictNext();
+            auto page = Cache->EvictNext();
             if (!page) {
                 break;
             }
@@ -571,7 +576,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                     ++*Config->Counters->CacheHitPages;
                     *Config->Counters->CacheHitBytes += page->Size;
                 }
-                Evict(Cache.Touch(page));
+                Evict(Cache->Touch(page));
                 break;
             case PageStateNo:
                 ++pagesToLoad;
@@ -855,7 +860,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                     AddActivePage(page);
                     [[fallthrough]];
                 case PageStateLoaded:
-                    Evict(Cache.Touch(page));
+                    Evict(Cache->Touch(page));
                     break;
                 default:
                     Y_ABORT("unknown load state");
@@ -958,7 +963,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
                 page->Initialize(std::move(paged.Data));
                 BodyProvided(collection, paged.PageId, page);
-                Evict(Cache.Touch(page));
+                Evict(Cache->Touch(page));
             }
         }
 
@@ -1101,7 +1106,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         const TLogoBlobID &pageCollectionId = collectionIt->first;
 
         if (auto logl = Logger->Log(ELnLev::Debug))
-            logl << "droping pageCollection " << pageCollectionId;
+            logl << "dropping pageCollection " << pageCollectionId;
 
         for (auto &expe : collection.Expectants) {
             for (auto &xpair : expe.second.SourceRequests) {
@@ -1120,7 +1125,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         for (const auto &kv : collection.PageMap) {
             auto* page = kv.second.Get();
 
-            Cache.Evict(page);
+            Cache->Erase(page);
             page->CacheGeneration = TCacheCacheConfig::CacheGenNone;
 
             if (page->State == PageStateLoaded) {
@@ -1322,10 +1327,10 @@ public:
         : MemObserver(std::move(memObserver))
         , MemTableTracker(std::make_shared<TSharedPageCacheMemTableTracker>(config->Counters))
         , Config(std::move(config))
-        , Cache(*Config->CacheConfig)
         , SizeOverride(Config->CacheConfig->Limit, 1, Max<i64>())
         , ConfigLimitBytes(Config->CacheConfig->Limit)
     {
+        CreateCache();
         AsyncRequests.Limit = Config->TotalAsyncQueueInFlyLimit;
         ScanRequests.Limit = Config->TotalScanQueueInFlyLimit;
     }

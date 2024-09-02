@@ -33,6 +33,8 @@ public:
 
     using TDataList = std::vector<std::unique_ptr<TData>>;
 
+    static std::vector<std::string_view> GetKindNames();
+
     TOperationId();
     explicit TOperationId(const std::string& string, bool allowEmpty = false);
     

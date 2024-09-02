@@ -70,7 +70,7 @@ public:
                         description: Gateway Timeout
             )___");
         node["get"]["responses"]["200"]["content"]["application/json"]["schema"] = TProtoToYaml::ProtoToYamlSchema<Ydb::Operations::ListOperationsResponse>();
-        TProtoToYaml::FillEnum(node["get"]["parameters"][1]["enum"], NProtoBuf::GetEnumDescriptor<NOperationId::TOperationId::EKind>(), {
+        TProtoToYaml::FillEnum(node["get"]["parameters"][1]["enum"], NOperationId::TOperationId::GetKindNames(), {
             .ConvertToLowerCase = true,
             .SkipDefaultValue = true
         });

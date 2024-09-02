@@ -592,11 +592,10 @@ template <class TExternalBlobInfo>
 TPortionInfo::TPreparedBatchData PrepareForAssembleImpl(const TPortionInfo& portion, const ISnapshotSchema& dataSchema, const ISnapshotSchema& resultSchema,
     THashMap<TChunkAddress, TExternalBlobInfo>& blobsData) {
     std::vector<TPortionInfo::TColumnAssemblingInfo> columns;
-    auto arrowResultSchema = resultSchema.GetSchema();
-    columns.reserve(arrowResultSchema->num_fields());
+    columns.reserve(resultSchema.GetColumnIds().size());
     const ui32 rowsCount = portion.GetRecordsCount();
-    for (auto&& i : arrowResultSchema->fields()) {
-        columns.emplace_back(rowsCount, dataSchema.GetColumnLoaderOptional(i->name()), resultSchema.GetColumnLoaderVerified(i->name()));
+    for (auto&& i : resultSchema.GetColumnIds()) {
+        columns.emplace_back(rowsCount, dataSchema.GetColumnLoaderOptional(i), resultSchema.GetColumnLoaderVerified(i));
     }
     {
         int skipColumnId = -1;
@@ -628,7 +627,7 @@ TPortionInfo::TPreparedBatchData PrepareForAssembleImpl(const TPortionInfo& port
         preparedColumns.emplace_back(c.Compile());
     }
 
-    return TPortionInfo::TPreparedBatchData(std::move(preparedColumns), arrowResultSchema, rowsCount);
+    return TPortionInfo::TPreparedBatchData(std::move(preparedColumns), resultSchema.GetSchema(), rowsCount);
 }
 
 }

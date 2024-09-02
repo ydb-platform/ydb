@@ -5,8 +5,8 @@
 namespace NKikimr::NOlap {
 
 TFilteredSnapshotSchema::TFilteredSnapshotSchema(ISnapshotSchema::TPtr originalSnapshot, const std::vector<ui32>& columnIds)
-    : TFilteredSnapshotSchema(originalSnapshot, std::set(columnIds.begin(), columnIds.end()))
-{}
+    : TFilteredSnapshotSchema(originalSnapshot, std::set(columnIds.begin(), columnIds.end())) {
+}
 
 TFilteredSnapshotSchema::TFilteredSnapshotSchema(ISnapshotSchema::TPtr originalSnapshot, const std::set<ui32>& columnIds)
     : OriginalSnapshot(originalSnapshot)

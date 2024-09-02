@@ -670,7 +670,7 @@ public:
 
         result.TryNextRow();
 
-        const TMaybe<TString> runScriptActorId = result.ColumnParser("run_script_actor_id").GetOptionalUtf8();
+        const std::optional<TString> runScriptActorId = result.ColumnParser("run_script_actor_id").GetOptionalUtf8();
         if (!runScriptActorId) {
             Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected database response");
             return;
@@ -680,14 +680,14 @@ public:
             return;
         }
 
-        TMaybe<i32> operationStatus = result.ColumnParser("operation_status").GetOptionalInt32();
+        std::optional<i32> operationStatus = result.ColumnParser("operation_status").GetOptionalInt32();
 
-        const TMaybe<i32> finalizationStatus = result.ColumnParser("finalization_status").GetOptionalInt32();
+        const std::optional<i32> finalizationStatus = result.ColumnParser("finalization_status").GetOptionalInt32();
         if (finalizationStatus) {
             FinalizationStatus = static_cast<EFinalizationStatus>(*finalizationStatus);
         }
 
-        TMaybe<TInstant> leaseDeadline;
+        std::optional<TInstant> leaseDeadline;
 
         NYdb::TResultSetParser result2(ResultSets[1]);
 
@@ -706,11 +706,11 @@ public:
             }
         } else if (operationStatus) {
             OperationStatus = static_cast<Ydb::StatusIds::StatusCode>(*operationStatus);
-            TMaybe<i32> executionStatus = result.ColumnParser("execution_status").GetOptionalInt32();
+            std::optional<i32> executionStatus = result.ColumnParser("execution_status").GetOptionalInt32();
             if (executionStatus) {
                 ExecutionStatus = static_cast<Ydb::Query::ExecStatus>(*executionStatus);
             }
-            const TMaybe<TString> issuesSerialized = result.ColumnParser("issues").GetOptionalJsonDocument();
+            const std::optional<TString> issuesSerialized = result.ColumnParser("issues").GetOptionalJsonDocument();
             if (issuesSerialized) {
                 OperationIssues = DeserializeIssues(*issuesSerialized);
             }
@@ -898,14 +898,14 @@ public:
 
         result.TryNextRow();
 
-        TMaybe<i32> maxResultSetId = result.ColumnParser("max_result_set_id").GetOptionalInt32();
+        std::optional<i32> maxResultSetId = result.ColumnParser("max_result_set_id").GetOptionalInt32();
         if (!maxResultSetId) {
             Finish();
             return;
         }
         NumberRowsInBatch = std::max(MAX_NUMBER_ROWS_IN_BATCH / (*maxResultSetId + 1), 1);
 
-        TMaybe<i64> maxRowId = result.ColumnParser("max_row_id").GetOptionalInt64();
+        std::optional<i64> maxRowId = result.ColumnParser("max_row_id").GetOptionalInt64();
         if (!maxRowId) {
             Finish(Ydb::StatusIds::INTERNAL_ERROR, "Result set row id is not specified");
             return;
@@ -1121,54 +1121,54 @@ public:
 
         result.TryNextRow();
 
-        const TMaybe<i32> operationStatus = result.ColumnParser("operation_status").GetOptionalInt32();
+        const std::optional<i32> operationStatus = result.ColumnParser("operation_status").GetOptionalInt32();
         if (operationStatus) {
             OperationStatus = static_cast<Ydb::StatusIds::StatusCode>(*operationStatus);
         }
 
-        const TMaybe<i32> finalizationStatus = result.ColumnParser("finalization_status").GetOptionalInt32();
+        const std::optional<i32> finalizationStatus = result.ColumnParser("finalization_status").GetOptionalInt32();
         if (finalizationStatus) {
             FinalizationStatus = static_cast<EFinalizationStatus>(*finalizationStatus);
         }
 
         Metadata.set_execution_id(ExecutionId);
 
-        const TMaybe<i32> executionStatus = result.ColumnParser("execution_status").GetOptionalInt32();
+        const std::optional<i32> executionStatus = result.ColumnParser("execution_status").GetOptionalInt32();
         if (executionStatus) {
             Metadata.set_exec_status(static_cast<Ydb::Query::ExecStatus>(*executionStatus));
         }
 
-        const TMaybe<TString> sql = result.ColumnParser("query_text").GetOptionalUtf8();
+        const std::optional<TString> sql = result.ColumnParser("query_text").GetOptionalUtf8();
         if (sql) {
             Metadata.mutable_script_content()->set_text(*sql);
         }
 
-        const TMaybe<i32> syntax = result.ColumnParser("syntax").GetOptionalInt32();
+        const std::optional<i32> syntax = result.ColumnParser("syntax").GetOptionalInt32();
         if (syntax) {
             Metadata.mutable_script_content()->set_syntax(static_cast<Ydb::Query::Syntax>(*syntax));
         }
 
-        const TMaybe<i32> executionMode = result.ColumnParser("execution_mode").GetOptionalInt32();
+        const std::optional<i32> executionMode = result.ColumnParser("execution_mode").GetOptionalInt32();
         if (executionMode) {
             Metadata.set_exec_mode(static_cast<Ydb::Query::ExecMode>(*executionMode));
         }
 
-        const TMaybe<TString> serializedStats = result.ColumnParser("stats").GetOptionalJsonDocument();
+        const std::optional<TString> serializedStats = result.ColumnParser("stats").GetOptionalJsonDocument();
         if (serializedStats) {
             NJson::TJsonValue statsJson;
             NJson::ReadJsonTree(*serializedStats, &statsJson);
             NProtobufJson::Json2Proto(statsJson, *Metadata.mutable_exec_stats(), NProtobufJson::TJson2ProtoConfig());
         }
 
-        const TMaybe<TString> plan = result.ColumnParser("plan").GetOptionalJsonDocument();
+        const std::optional<TString> plan = result.ColumnParser("plan").GetOptionalJsonDocument();
         if (plan) {
             Metadata.mutable_exec_stats()->set_query_plan(*plan);
         }
 
-        TMaybe<TString> ast;
-        const TMaybe<TString> astCompressionMethod = result.ColumnParser("ast_compression_method").GetOptionalUtf8();
+        std::optional<TString> ast;
+        const std::optional<TString> astCompressionMethod = result.ColumnParser("ast_compression_method").GetOptionalUtf8();
         if (astCompressionMethod) {
-            const TMaybe<TString> astCompressed = result.ColumnParser("ast_compressed").GetOptionalString();
+            const std::optional<TString> astCompressed = result.ColumnParser("ast_compressed").GetOptionalString();
             if (astCompressed) {
                 const NFq::TCompressor compressor(*astCompressionMethod);
                 ast = compressor.Decompress(*astCompressed);
@@ -1180,12 +1180,12 @@ public:
             Metadata.mutable_exec_stats()->set_query_ast(*ast);
         }
 
-        const TMaybe<TString> issuesSerialized = result.ColumnParser("issues").GetOptionalJsonDocument();
+        const std::optional<TString> issuesSerialized = result.ColumnParser("issues").GetOptionalJsonDocument();
         if (issuesSerialized) {
             Issues = DeserializeIssues(*issuesSerialized);
         }
 
-        const TMaybe<TString> serializedMetas = result.ColumnParser("result_set_metas").GetOptionalJsonDocument();
+        const std::optional<TString> serializedMetas = result.ColumnParser("result_set_metas").GetOptionalJsonDocument();
         if (serializedMetas) {
             NJson::TJsonValue value;
             if (!NJson::ReadJsonTree(*serializedMetas, &value) || value.GetType() != NJson::JSON_ARRAY) {
@@ -1200,7 +1200,7 @@ public:
             }
         }
 
-        const TMaybe<TString> runScriptActorIdString = result.ColumnParser("run_script_actor_id").GetOptionalUtf8();
+        const std::optional<TString> runScriptActorIdString = result.ColumnParser("run_script_actor_id").GetOptionalUtf8();
         if (runScriptActorIdString) {
             ScriptExecutionRunnerActorIdFromString(*runScriptActorIdString, RunScriptActorId);
         }
@@ -1215,7 +1215,7 @@ public:
 
             deadlineResult.TryNextRow();
 
-            TMaybe<TInstant> leaseDeadline = deadlineResult.ColumnParser(0).GetOptionalTimestamp();
+            std::optional<TInstant> leaseDeadline = deadlineResult.ColumnParser(0).GetOptionalTimestamp();
             if (!leaseDeadline) {
                 Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected operation state");
                 return;
@@ -1430,13 +1430,13 @@ public:
         Operations.reserve(result.RowsCount());
 
         while (result.TryNextRow()) {
-            const TMaybe<TString> executionId = result.ColumnParser("execution_id").GetOptionalUtf8();
+            const std::optional<TString> executionId = result.ColumnParser("execution_id").GetOptionalUtf8();
             if (!executionId) {
                 Finish(Ydb::StatusIds::INTERNAL_ERROR, "NULL execution id");
                 return;
             }
 
-            const TMaybe<TInstant> creationTs = result.ColumnParser("start_ts").GetOptionalTimestamp();
+            const std::optional<TInstant> creationTs = result.ColumnParser("start_ts").GetOptionalTimestamp();
             if (!creationTs) {
                 Finish(Ydb::StatusIds::INTERNAL_ERROR, "NULL creation ts");
                 return;
@@ -1447,32 +1447,32 @@ public:
                 break;
             }
 
-            const TMaybe<i32> operationStatus = result.ColumnParser("operation_status").GetOptionalInt32();
+            const std::optional<i32> operationStatus = result.ColumnParser("operation_status").GetOptionalInt32();
 
             Ydb::Query::ExecuteScriptMetadata metadata;
             metadata.set_execution_id(*executionId);
 
-            const TMaybe<i32> executionStatus = result.ColumnParser("execution_status").GetOptionalInt32();
+            const std::optional<i32> executionStatus = result.ColumnParser("execution_status").GetOptionalInt32();
             if (executionStatus) {
                 metadata.set_exec_status(static_cast<Ydb::Query::ExecStatus>(*executionStatus));
             }
 
-            const TMaybe<TString> sql = result.ColumnParser("query_text").GetOptionalUtf8();
+            const std::optional<TString> sql = result.ColumnParser("query_text").GetOptionalUtf8();
             if (sql) {
                 metadata.mutable_script_content()->set_text(*sql);
             }
 
-            const TMaybe<i32> syntax = result.ColumnParser("syntax").GetOptionalInt32();
+            const std::optional<i32> syntax = result.ColumnParser("syntax").GetOptionalInt32();
             if (syntax) {
                 metadata.mutable_script_content()->set_syntax(static_cast<Ydb::Query::Syntax>(*syntax));
             }
 
-            const TMaybe<i32> executionMode = result.ColumnParser("execution_mode").GetOptionalInt32();
+            const std::optional<i32> executionMode = result.ColumnParser("execution_mode").GetOptionalInt32();
             if (executionMode) {
                 metadata.set_exec_mode(static_cast<Ydb::Query::ExecMode>(*executionMode));
             }
 
-            const TMaybe<TString> issuesSerialized = result.ColumnParser("issues").GetOptionalJsonDocument();
+            const std::optional<TString> issuesSerialized = result.ColumnParser("issues").GetOptionalJsonDocument();
             NYql::TIssues issues;
             if (issuesSerialized) {
                 issues = DeserializeIssues(*issuesSerialized);

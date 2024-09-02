@@ -55,7 +55,7 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
     }
 
     bool NeedAllocateTxId() const {
-        const Ydb::TOperationId::EKind kind = OperationId.GetKind();
+        const NOperationId::TOperationId::EKind kind = OperationId.GetKind();
         return kind == TOperationId::EXPORT
             || kind == TOperationId::IMPORT
             || kind == TOperationId::BUILD_INDEX;

@@ -142,7 +142,7 @@ public:
             userToken,
             topicPath,
             databaseName,
-            [this](const EKafkaErrors status, const TString& message) {
+            [this](const EKafkaErrors status, const std::string& message) {
                 this->SendResult(status, message);
             })
         )
@@ -153,7 +153,7 @@ public:
 
     ~TAlterTopicActor() = default;
 
-    void SendResult(const EKafkaErrors status, const TString& message) {
+    void SendResult(const EKafkaErrors status, const std::string& message) {
         THolder<TEvKafka::TEvTopicModificationResponse> response(new TEvKafka::TEvTopicModificationResponse());
         response->Status = status;
         response->TopicPath = TopicPath;
@@ -184,7 +184,7 @@ public:
             TIntrusiveConstPtr<NACLib::TUserToken> userToken,
             TString topicPath,
             TString databaseName,
-            const std::function<void(const EKafkaErrors, const TString&)> sendResultCallback)
+            const std::function<void(const EKafkaErrors, const std::string&)> sendResultCallback)
         : UserToken(userToken)
         , TopicPath(topicPath)
         , DatabaseName(databaseName)
@@ -370,7 +370,7 @@ private:
     const NKikimr::NGRpcService::TAuditLogParts DummyAuditLogParts;
     const TString TopicPath;
     const TString DatabaseName;
-    const std::function<void(const EKafkaErrors status, const TString& message)> SendResultCallback;
+    const std::function<void(const EKafkaErrors status, const std::string& message)> SendResultCallback;
     NYql::TIssue Issue;
 
     void ProcessYdbStatusCode(Ydb::StatusIds::StatusCode& status) {

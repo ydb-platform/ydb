@@ -102,8 +102,8 @@ public:
         if (!commandConfig.StaticCredentials.User.empty()) {
             Ydb::Auth::LoginRequest request;
             Ydb::Operations::Operation response;
-            request.set_user(commandConfig.StaticCredentials.User);
-            request.set_password(commandConfig.StaticCredentials.Password);
+            request.set_user(TString(commandConfig.StaticCredentials.User));
+            request.set_password(TString(commandConfig.StaticCredentials.Password));
             res = DoGRpcRequest<Ydb::Auth::V1::AuthService,
                                 Ydb::Auth::LoginRequest,
                                 Ydb::Auth::LoginResponse>(clientConfig, request, response, &Ydb::Auth::V1::AuthService::Stub::AsyncLogin, {});

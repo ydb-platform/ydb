@@ -438,13 +438,13 @@ private:
 
 class TDelayRequestQuery : public TQueryBase {
 public:
-    TDelayRequestQuery(const TString& databaseId, const TString& poolId, const TString& sessionId, TInstant startTime, TMaybe<TInstant> waitDeadline, TDuration leaseDuration, NMonitoring::TDynamicCounterPtr counters)
+    TDelayRequestQuery(const TString& databaseId, const TString& poolId, const TString& sessionId, TInstant startTime, std::optional<TInstant> waitDeadline, TDuration leaseDuration, NMonitoring::TDynamicCounterPtr counters)
         : TQueryBase(__func__, poolId, databaseId, sessionId, counters)
         , DatabaseId(databaseId)
         , PoolId(poolId)
         , SessionId(sessionId)
         , StartTime(startTime)
-        , WaitDeadline(waitDeadline ? std::optional<TInstant>(waitDeadline.GetRef()) : std::nullopt)
+        , WaitDeadline(waitDeadline ? std::optional<TInstant>(waitDeadline.value()) : std::nullopt)
         , LeaseDuration(leaseDuration)
     {}
 
@@ -855,8 +855,8 @@ IActor* CreateRefreshPoolStateActor(const TActorId& replyActorId, const TString&
     return new TQueryRetryActor<TRefreshPoolStateQuery, TEvPrivate::TEvRefreshPoolStateResponse, TString, TString, TDuration, NMonitoring::TDynamicCounterPtr>(replyActorId, databaseId, poolId, leaseDuration, counters);
 }
 
-IActor* CreateDelayRequestActor(const TActorId& replyActorId, const TString& databaseId, const TString& poolId, const TString& sessionId, TInstant startTime, TMaybe<TInstant> waitDeadline, TDuration leaseDuration, NMonitoring::TDynamicCounterPtr counters) {
-    return new TQueryRetryActor<TDelayRequestQuery, TEvPrivate::TEvDelayRequestResponse, TString, TString, TString, TInstant, TMaybe<TInstant>, TDuration, NMonitoring::TDynamicCounterPtr>(replyActorId, databaseId, poolId, sessionId, startTime, waitDeadline, leaseDuration, counters);
+IActor* CreateDelayRequestActor(const TActorId& replyActorId, const TString& databaseId, const TString& poolId, const TString& sessionId, TInstant startTime, std::optional<TInstant> waitDeadline, TDuration leaseDuration, NMonitoring::TDynamicCounterPtr counters) {
+    return new TQueryRetryActor<TDelayRequestQuery, TEvPrivate::TEvDelayRequestResponse, TString, TString, TString, TInstant, std::optional<TInstant>, TDuration, NMonitoring::TDynamicCounterPtr>(replyActorId, databaseId, poolId, sessionId, startTime, waitDeadline, leaseDuration, counters);
 }
 
 IActor* CreateStartRequestActor(const TActorId& replyActorId, const TString& databaseId, const TString& poolId, const std::optional<TString>& sessionId, TDuration leaseDuration, NMonitoring::TDynamicCounterPtr counters) {

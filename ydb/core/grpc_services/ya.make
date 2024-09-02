@@ -1,5 +1,7 @@
 LIBRARY()
 
+INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/sdk_common.inc)
+
 SRCS(
     audit_log.cpp
     audit_dml_operations.cpp

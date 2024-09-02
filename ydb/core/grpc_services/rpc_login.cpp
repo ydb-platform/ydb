@@ -80,7 +80,7 @@ public:
             TResponse loginResponse;
             Ydb::Operations::Operation& operation = *loginResponse.mutable_operation();
             Ydb::Issue::IssueMessage* issue = operation.add_issues();
-            issue->set_message(response->Error.Message);
+            issue->set_message(TString(response->Error.Message));
             Status = ConvertLdapStatus(response->Status);
             issue->set_issue_code(Status);
             operation.set_ready(true);

@@ -170,7 +170,7 @@ private:
         Send(NKikimr::MakeSchemeCacheID(), MakeHolder<NKikimr::TEvTxProxySchemeCache::TEvNavigateKeySet>(schemeCacheRequest.release()));
     }
 
-    void SendResponseAndDie(const TString& errorMessage = "") {
+    void SendResponseAndDie(const std::string& errorMessage = "") {
         std::unique_ptr<TEvEvents::TEvAuthResponse> authResponse;
         if (!errorMessage.empty()) {
             authResponse = std::make_unique<TEvEvents::TEvAuthResponse>(errorMessage, PgWireAuthData.Sender);

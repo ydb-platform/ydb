@@ -850,13 +850,13 @@ public:
     virtual int Run(TConfig& config) override {
         int res = 0;
 
-        if (!ClientConfig.Locator) {
+        if (ClientConfig.Locator.empty()) {
             Cerr << "GRPC call error: GRPC server is not specified (MBus protocol is not supported for this command)." << Endl;
             return -2;
         }
 
         NYdbGrpc::TCallMeta meta;
-        if (config.SecurityToken) {
+        if (config.SecurityToken.empty()) {
             meta.Aux.push_back({NYdb::YDB_AUTH_TICKET_HEADER, config.SecurityToken});
         }
 
@@ -950,7 +950,7 @@ public:
     }
 
     virtual int Run(TConfig& config) override {
-        if (!ClientConfig.Locator) {
+        if (ClientConfig.Locator.empty()) {
             Cerr << "GRPC call error: GRPC server is not specified (MBus protocol is not supported for this command)." << Endl;
             return -2;
         }

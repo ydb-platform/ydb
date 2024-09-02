@@ -1058,7 +1058,7 @@ private:
     };
 
     template <typename TTokenRecord>
-    void SetAccessServiceBulkAuthorizeError(const TString& key, TTokenRecord& record, const TString& errorMessage, bool isRetryableError) {
+    void SetAccessServiceBulkAuthorizeError(const TString& key, TTokenRecord& record, const std::string& errorMessage, bool isRetryableError) {
         for (auto& [permissionName, permissionRecord] : record.Permissions) {
             permissionRecord.Subject.clear();
             permissionRecord.Error = {.Message = errorMessage, .Retryable = isRetryableError};

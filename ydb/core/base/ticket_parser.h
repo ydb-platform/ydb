@@ -153,7 +153,7 @@ namespace NKikimr {
         };
 
         struct TError {
-            TString Message;
+            std::string Message;
             bool Retryable = true;
 
             bool empty() const {

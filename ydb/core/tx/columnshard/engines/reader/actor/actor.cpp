@@ -61,8 +61,7 @@ TColumnShardScan::TColumnShardScan(const TActorId& columnShardActorId, const TAc
     , Deadline(TInstant::Now() + (timeout ? timeout + SCAN_HARD_TIMEOUT_GAP : SCAN_HARD_TIMEOUT))
     , ScanCountersPool(scanCountersPool)
     , Stats(NTracing::TTraceClient::GetLocalClient("SHARD", ::ToString(TabletId)/*, "SCAN_TXID:" + ::ToString(TxId)*/))
-    , ComputeShardingPolicy(computeShardingPolicy)
-{
+    , ComputeShardingPolicy(computeShardingPolicy) {
     AFL_VERIFY(ReadMetadataRange);
     KeyYqlSchema = ReadMetadataRange->GetKeyYqlSchema();
 }
@@ -243,6 +242,7 @@ bool TColumnShardScan::ProduceResults() noexcept {
         Result->ArrowBatch = shardedBatch.GetRecordBatch();
         Rows += batch->num_rows();
         Bytes += NArrow::GetTableDataSize(Result->ArrowBatch);
+        
         ACFL_DEBUG("stage", "data_format")("batch_size", NArrow::GetTableDataSize(Result->ArrowBatch))("num_rows", numRows)("batch_columns", JoinSeq(",", batch->schema()->field_names()));
     }
     if (CurrentLastReadKey) {
@@ -375,6 +375,7 @@ bool TColumnShardScan::SendResult(bool pageFault, bool lastBatch) {
         Y_ABORT_UNLESS(AckReceivedInstant);
         ScanCountersPool.AckWaitingInfo(TMonotonic::Now() - *AckReceivedInstant);
     }
+    ReadMetadataRange->OnReplyConstruction(TabletId, *Result);
     AckReceivedInstant.reset();
 
     Send(ScanComputeActorId, Result.Release(), IEventHandle::FlagTrackDelivery); // TODO: FlagSubscribeOnSession ?

@@ -133,7 +133,9 @@ private:
         auto requester = ev->Sender;
 
         ui64 txId = msg.GetTxId();
-        ui64 lockTxId = msg.GetLockTxId();
+        TMaybe<ui64> lockTxId = msg.HasLockTxId()
+            ? TMaybe<ui64>(msg.GetLockTxId())
+            : Nothing();
         ui32 lockNodeId = msg.GetLockNodeId();
 
         YQL_ENSURE(msg.GetStartAllOrFail()); // todo: support partial start

@@ -69,6 +69,11 @@ public:
         return (Filter && Filter->IsTotalDenyFilter()) || (Table && !Table->num_rows());
     }
 
+    void Clear() {
+        Filter = std::make_shared<NArrow::TColumnFilter>(NArrow::TColumnFilter::BuildDenyFilter());
+        Table = nullptr;
+    }
+
     void AddFilter(const std::shared_ptr<NArrow::TColumnFilter>& filter) {
         if (!filter) {
             return;

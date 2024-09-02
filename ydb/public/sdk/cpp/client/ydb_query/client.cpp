@@ -591,12 +591,12 @@ TAsyncStatus TQueryClient::RetryQuery(TQueryWithoutSessionFunc&& queryFunc, TRet
     return ctx->Execute();
 }
 
-TStatus TQueryClient::RetryQuery(const TQuerySyncFunc& queryFunc, TRetryOperationSettings settings) {
+TStatus TQueryClient::RetryQuerySync(const TQuerySyncFunc& queryFunc, TRetryOperationSettings settings) {
     NRetry::Sync::TRetryWithSession ctx(*this, queryFunc, settings);
     return ctx.Execute();
 }
 
-TStatus TQueryClient::RetryQuery(const TQueryWithoutSessionSyncFunc& queryFunc, TRetryOperationSettings settings) {
+TStatus TQueryClient::RetryQuerySync(const TQueryWithoutSessionSyncFunc& queryFunc, TRetryOperationSettings settings) {
     NRetry::Sync::TRetryWithoutSession ctx(*this, queryFunc, settings);
     return ctx.Execute();
 }

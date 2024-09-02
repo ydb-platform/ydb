@@ -227,7 +227,7 @@ void InitViewerWhoAmIJsonHandler(TJsonHandlers& handlers) {
 }
 
 void InitViewerQueryJsonHandler(TJsonHandlers& handlers) {
-    handlers.AddHandler("/viewer/query", new TJsonHandler<TJsonQuery>(TJsonQuery::GetSwagger()), 2);
+    handlers.AddHandler("/viewer/query", new TJsonHandler<TJsonQuery>(TJsonQuery::GetSwagger()), 3);
 }
 
 void InitViewerNetInfoJsonHandler(TJsonHandlers& handlers) {
@@ -267,7 +267,7 @@ void InitViewerCheckAccessJsonHandler(TJsonHandlers& jsonHandlers) {
 }
 
 void InitViewerFeatureFlagsJsonHandler(TJsonHandlers& handlers) {
-    handlers.AddHandler("/viewer/feature_flags", new TJsonHandler<TJsonFeatureFlags>(TJsonFeatureFlags::GetSwagger()));
+    handlers.AddHandler("/viewer/feature_flags", new TJsonHandler<TJsonFeatureFlags>(TJsonFeatureFlags::GetSwagger()), 2);
 }
 
 void InitViewerJsonHandlers(TJsonHandlers& jsonHandlers) {

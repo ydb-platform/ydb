@@ -210,6 +210,8 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                 }
             }
 
+            Self->TabletCounters->Simple()[COUNTER_FORCE_TRAVERSALS_INFLIGHT_SIZE].Set(Self->ForceTraversals.size());
+
             SA_LOG_D("[" << Self->TabletID() << "] Loaded ForceTraversalOperations: "
                 << "table count# " << Self->ForceTraversals.size());
         }
@@ -234,6 +236,9 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                 if (status == TForceTraversalTable::EStatus::AnalyzeStarted) {
                     // Resent TEvAnalyzeTable to shards
                     status = TForceTraversalTable::EStatus::None;
+                } else if (status == TForceTraversalTable::EStatus::TraversalStarted) {
+                    // Reset traversal
+                    status = TForceTraversalTable::EStatus::AnalyzeFinished;
                 }
 
                 auto pathId = TPathId(ownerId, localPathId);
@@ -277,6 +282,7 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
             Self->Schedule(Self->TraversalPeriod, new TEvPrivate::TEvScheduleTraversal());
             Self->Schedule(Self->SendAnalyzePeriod, new TEvPrivate::TEvSendAnalyze());
             Self->Schedule(Self->AnalyzeDeliveryProblemPeriod, new TEvPrivate::TEvAnalyzeDeliveryProblem());
+            Self->Schedule(Self->AnalyzeDeadlinePeriod, new TEvPrivate::TEvAnalyzeDeadline());
         } else {
             SA_LOG_W("[" << Self->TabletID() << "] TTxInit::Complete. EnableColumnStatistics=false");
         }

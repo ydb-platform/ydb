@@ -4,7 +4,7 @@
 
 ## Скачивание SDK Examples и запуск примера {#download}
 
-Приведенный ниже сценарий запуска использует [git](https://git-scm.com/downloads) и [Maven](https://maven.apache.org/download.html). 
+Приведенный ниже сценарий запуска использует [git](https://git-scm.com/downloads) и [Maven](https://maven.apache.org/download.html).
 
 Создайте рабочую директорию и выполните в ней из командной строки команду клонирования репозитория с github.com:
 

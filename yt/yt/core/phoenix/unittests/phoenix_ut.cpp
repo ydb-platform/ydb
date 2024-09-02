@@ -115,7 +115,6 @@ void TBaseStruct::RegisterMetadata(auto&& registrar)
     registrar.template Field<1, &TThis::A>("a")();
 }
 
-PHOENIX_DEFINE_TYPE(TBaseStruct);
 PHOENIX_DEFINE_YSON_DUMPABLE_TYPE_MIXIN(TBaseStruct);
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -137,8 +136,10 @@ void TDerivedStruct::RegisterMetadata(auto&& registrar)
     registrar.template Field<1, &TThis::B>("b")();
 }
 
-PHOENIX_DEFINE_TYPE(TDerivedStruct);
+PHOENIX_DEFINE_TYPE(TDerivedStruct); // <- TRegisterTypeDescriptor() for BaseStruct is not called yet
 PHOENIX_DEFINE_YSON_DUMPABLE_TYPE_MIXIN(TDerivedStruct);
+
+PHOENIX_DEFINE_TYPE(TBaseStruct);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -161,7 +162,7 @@ void TPair<T1, T2>::RegisterMetadata(auto&& registrar)
     registrar.template Field<2, &TThis::Second>("second")();
 }
 
-PHOENIX_DEFINE_TEMPLATE_TYPE(TPair, (<int, int>));
+PHOENIX_DEFINE_TEMPLATE_TYPE(TPair, (_, _));
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -1284,7 +1285,7 @@ void TDerived<T>::RegisterMetadata(auto&& registrar)
     registrar.template BaseType<TBase>();
 }
 
-PHOENIX_DEFINE_TEMPLATE_TYPE(TDerived, <int>);
+PHOENIX_DEFINE_TEMPLATE_TYPE(TDerived, (_));
 
 } // namespace NPolymorphicTemplate
 

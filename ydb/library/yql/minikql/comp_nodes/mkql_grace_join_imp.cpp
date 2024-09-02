@@ -171,8 +171,6 @@ TTable::EAddTupleResult TTable::AddTuple(  ui64 * intColumns, char ** stringColu
 void TTable::ResetIterator() {
     CurrIterIndex = 0;
     CurrIterBucket = 0;
-    CurrJoinIdsIterIndex = 0;
-    Table2Initialized_ = false;
     if (IsTableJoined) {
         JoinTable1->ResetIterator();
         JoinTable2->ResetIterator();
@@ -216,15 +214,6 @@ bool TTable::NextTuple(TupleData & td){
         td.AllNulls = true;
         return false;
     }
-}
-
-
-inline bool HasBitSet( ui64 * buf, ui64 Nbits ) {
-    while(Nbits > sizeof(ui64)*8) {
-        if (*buf++) return true;
-        Nbits -= sizeof(ui64)*8;
-    }
-    return ((*buf) << (sizeof(ui64) * 8 - Nbits));
 }
 
 
@@ -354,17 +343,12 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
 
     MKQL_ENSURE(joinKind != EJoinKind::Cross, "Cross Join is not allowed in Grace Join");
 
-    if ( JoinKind == EJoinKind::Right || JoinKind == EJoinKind::RightOnly || JoinKind == EJoinKind::RightSemi ) {
-        std::swap(JoinTable1, JoinTable2);
-        std::swap(table1Batch, table2Batch);
-    }
+    const bool needCrossIds = JoinKind == EJoinKind::Inner || JoinKind == EJoinKind::Full || JoinKind == EJoinKind::Left || JoinKind == EJoinKind::Right;
 
     ui64 tuplesFound = 0;
 
-    std::vector<JoinTuplesIds, TMKQLAllocator<JoinTuplesIds, EMemorySubPool::Temporary>> joinResults;
-
-
     for (ui64 bucket = fromBucket; bucket < toBucket; bucket++) {
+        auto &joinResults = TableBuckets[bucket].JoinIds;
         joinResults.clear();
         TTableBucket * bucket1 = &JoinTable1->TableBuckets[bucket];
         TTableBucket * bucket2 = &JoinTable2->TableBuckets[bucket];
@@ -398,10 +382,27 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
             std::swap(tuplesNum1, tuplesNum2);
        }
 
-        if (tuplesNum2 == 0 || tuplesNum1 == 0)
+        auto &leftIds = bucket1->LeftIds;
+        leftIds.clear();
+
+        const bool selfJoinSameKeys = (JoinTable1 == JoinTable2);
+        const bool needLeftIds = ((swapTables ? (JoinKind == EJoinKind::Right || JoinKind == EJoinKind::RightOnly) : (JoinKind == EJoinKind::Left || JoinKind == EJoinKind::LeftOnly)) || JoinKind == EJoinKind::Full || JoinKind == EJoinKind::Exclusion) && !selfJoinSameKeys;
+        const bool isLeftSemi = swapTables ? JoinKind == EJoinKind::RightSemi : JoinKind == EJoinKind::LeftSemi;
+        //const bool isRightSemi = swapTables ? JoinKind == EJoinKind::LeftSemi : JoinKind == EJoinKind::RightSemi;
+        bucketStats2->HashtableMatches = ((swapTables ? (JoinKind == EJoinKind::Left || JoinKind == EJoinKind::LeftOnly || JoinKind == EJoinKind::LeftSemi) : (JoinKind == EJoinKind::Right || JoinKind == EJoinKind::RightOnly || JoinKind == EJoinKind::RightSemi)) || JoinKind == EJoinKind::Full || JoinKind == EJoinKind::Exclusion) && !selfJoinSameKeys;
+        // In this case, all keys except for NULLs have matched key on other side, and NULLs are handled by AddTuple
+
+        if (tuplesNum2 == 0) {
+            if (needLeftIds) {
+                for (ui32 leftId = 0; leftId != tuplesNum1; ++leftId)
+                    leftIds.push_back(leftId);
+            }
+            continue;
+        }
+        if (tuplesNum1 == 0 && (hasMoreRightTuples || hasMoreLeftTuples || !bucketStats2->HashtableMatches))
             continue;
 
-        ui64 slotSize = headerSize2 + 1;
+        ui64 slotSize = headerSize2 + 1; // Header [Short Strings] SlotIdx
 
         ui64 avgStringsSize = ( 3 * (bucket2->KeyIntVals.size() - tuplesNum2 * headerSize2) ) / ( 2 * tuplesNum2 + 1)  + 1;
 
@@ -414,11 +415,13 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
         auto &bloomFilter = bucketStats2->BloomFilter;
         bool initHashTable = false;
 
+        Y_DEBUG_ABORT_UNLESS(bucketStats2->SlotSize == 0 || bucketStats2->SlotSize == slotSize);
         if (!nSlots) {
             nSlots = (3 * tuplesNum2 + 1) | 1;
             joinSlots.resize(nSlots*slotSize, 0);
             bloomFilter.Resize(tuplesNum2);
             initHashTable = true;
+            bucketStats2->SlotSize = slotSize;
             ++InitHashTableCount_;
         }
 
@@ -443,9 +446,8 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
                 }
 
                 ui64 hash = *it2;
-                ui64 * nullsPtr = it2+1;
-                if (HasBitSet(nullsPtr, 1))
-                    continue;
+                // Note: if hashtable is re-created after being spilled
+                // (*(it2 + HashSize) & 1) may be true (even though key does NOT contain NULL)
 
                 bloomFilter.Add(hash);
 
@@ -495,15 +497,14 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
             }
 
             ui64 hash = *it1;
-            ui64 * nullsPtr = it1+1;
-            if (HasBitSet(nullsPtr, 1))
-            {
-                continue;
-            }
+
+            Y_DEBUG_ABORT_UNLESS((*(it1 + HashSize) & 1) == 0); // Keys with NULL never reaches Join
 
             if (initHashTable) {
                 bloomLookups++;
                 if (bloomFilter.IsMissing(hash)) {
+                    if (needLeftIds)
+                        leftIds.push_back(tuple1Idx);
                     bloomHits++;
                     continue;
                 }
@@ -561,20 +562,46 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
                         continue;
                 }
 
+                *(slotIt + HashSize) |= 1; // mark right slot as matched
                 tuplesFound++;
-                JoinTuplesIds joinIds;
-                joinIds.id1 = swapTables ? tuple2Idx : tuple1Idx;
-                joinIds.id2 = swapTables ? tuple1Idx : tuple2Idx;
-                joinResults.emplace_back(joinIds);
+                if (needCrossIds) {
+                    JoinTuplesIds joinIds;
+                    joinIds.id1 = swapTables ? tuple2Idx : tuple1Idx;
+                    joinIds.id2 = swapTables ? tuple1Idx : tuple2Idx;
+                    joinResults.emplace_back(joinIds);
+                }
             }
-            BloomFalsePositives_ += saveTuplesFound == tuplesFound;
+            if (saveTuplesFound == tuplesFound) {
+                ++BloomFalsePositives_;
+                if (needLeftIds)
+                    leftIds.push_back(tuple1Idx);
+            } else if (isLeftSemi) {
+                leftIds.push_back(tuple1Idx);
+            }
         }
 
         if (!hasMoreLeftTuples && !hasMoreRightTuples) {
+            bloomFilter.Shrink();
+
+            if (bucketStats2->HashtableMatches) {
+                auto slotIt = joinSlots.cbegin();
+                auto end = joinSlots.cend();
+                auto isSemi = JoinKind == EJoinKind::LeftSemi || JoinKind == EJoinKind::RightSemi;
+                auto &leftIds2 = bucket2->LeftIds;
+
+                for (; slotIt != end; slotIt += slotSize) {
+                    if ((*(slotIt + HashSize) & 1) == isSemi && *slotIt != 0) {
+                        auto id2 = *(slotIt + slotSize - 1);
+
+                        Y_DEBUG_ABORT_UNLESS(id2 < bucketStats2->TuplesNum);
+                        leftIds2.push_back(id2);
+                    }
+                }
+                std::sort(leftIds2.begin(), leftIds2.end());
+            }
             joinSlots.clear();
             joinSlots.shrink_to_fit();
             nSlots = 0;
-            bloomFilter.Shrink();
         }
 
         if (bloomHits < bloomLookups/8) {
@@ -584,62 +611,15 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
         BloomHits_ += bloomHits;
         BloomLookups_ += bloomLookups;
 
-        std::sort(joinResults.begin(), joinResults.end(), [](JoinTuplesIds a, JoinTuplesIds b)
-        {
-            if (a.id1 < b.id1) return true;
-            if (a.id1 == b.id1 && (a.id2 < b.id2)) return true;
-            return false;
-        });
-
-
-        TableBuckets[bucket].JoinIds.assign(joinResults.begin(), joinResults.end());
-
-        std::vector<ui32, TMKQLAllocator<ui32>> & rightIds = TableBuckets[bucket].RightIds;
-        std::vector<JoinTuplesIds, TMKQLAllocator<JoinTuplesIds>> & joinIds = TableBuckets[bucket].JoinIds;
-        std::set<ui32> & leftMatchedIds = TableBuckets[bucket].AllLeftMatchedIds;
-        std::set<ui32> & rightMatchedIds = TableBuckets[bucket].AllRightMatchedIds;
-
-        if ( JoinKind == EJoinKind::Full || JoinKind == EJoinKind::Exclusion ) {
-            rightIds.clear();
-            rightIds.reserve(joinIds.size());
-            for (const auto & id: joinIds) {
-                rightIds.emplace_back(id.id2);
-                if (LeftTableBatch_ || RightTableBatch_) {
-                    leftMatchedIds.insert(id.id1);
-                    rightMatchedIds.insert(id.id2);
-                }
-            }
-            std::sort(rightIds.begin(), rightIds.end());
-        }
-
-        if (JoinKind == EJoinKind::Left || JoinKind == EJoinKind::LeftOnly || JoinKind == EJoinKind::LeftSemi ) {
-            if (RightTableBatch_ ) {
-                for (auto & jid: joinIds ) {
-                    leftMatchedIds.insert(jid.id1);
-                }
-            }
-
-        }
-
-        if (JoinKind == EJoinKind::Right || JoinKind == EJoinKind::RightOnly || JoinKind == EJoinKind::RightSemi )  {
-            if (LeftTableBatch_) {
-                for (auto & jid: joinIds ) {
-                    leftMatchedIds.insert(jid.id1);
-                }
-            }
-
-        }
         YQL_LOG(GRACEJOIN_TRACE)
             << (const void *)this << '#'
             << bucket
             << " Table1 " << JoinTable1->TableBucketsStats[bucket].TuplesNum
             << " Table2 " << JoinTable2->TableBucketsStats[bucket].TuplesNum
             << " LeftTableBatch " << LeftTableBatch_
-            << " leftMatchedIds " << leftMatchedIds.size()
             << " RightTableBatch " << RightTableBatch_
-            << " rightMatchedIds " << rightMatchedIds.size()
-            << " rightIds " << rightIds.size()
-            << " joinIds " << joinIds.size()
+            << " leftIds " << leftIds.size()
+            << " joinIds " << joinResults.size()
             << " joinKind " << (int)JoinKind
             << " swapTables " << swapTables
             << " initHashTable " << initHashTable
@@ -693,7 +673,7 @@ inline void TTable::GetTupleData(ui32 bucketNum, ui32 tupleId, TupleData & td) {
         for (ui64 i = 0; i < NumberOfKeyStringColumns; ++i)
         {
             td.StrSizes[i] = tb.StringsOffsets[stringsOffsetsIdx + 2 + i];
-            Y_ENSURE(ReadUnaligned<ui32>(strPtr) == td.StrSizes[i]);
+            Y_DEBUG_ABORT_UNLESS(ReadUnaligned<ui32>(strPtr) == td.StrSizes[i]);
             strPtr += sizeof(ui32);
             td.StrColumns[i] = strPtr;
             strPtr += td.StrSizes[i];
@@ -701,7 +681,7 @@ inline void TTable::GetTupleData(ui32 bucketNum, ui32 tupleId, TupleData & td) {
 
         for ( ui64 i = 0; i < NumberOfKeyIColumns; i++) {
             ui32 currSize = tb.StringsOffsets[stringsOffsetsIdx + 2 + NumberOfKeyStringColumns + i];
-            Y_ENSURE(ReadUnaligned<ui32>(strPtr) == currSize);
+            Y_DEBUG_ABORT_UNLESS(ReadUnaligned<ui32>(strPtr) == currSize);
             strPtr += sizeof(ui32);
             *(td.IColumns + i) = (ColInterfaces + i)->Packer->Unpack(TStringBuf(strPtr, currSize), ColInterfaces->HolderFactory);
             strPtr += currSize;
@@ -738,28 +718,6 @@ inline void TTable::GetTupleData(ui32 bucketNum, ui32 tupleId, TupleData & td) {
 
 }
 
-inline bool TTable::HasJoinedTupleId(TTable *joinedTable, ui32 &tupleId2) {
-
-    if (joinedTable->CurrIterBucket != CurrIterBucket)
-    {
-        CurrIterBucket = joinedTable->CurrIterBucket;
-        CurrJoinIdsIterIndex = 0;
-    }
-    auto& jids = TableBuckets[CurrIterBucket].JoinIds;
-
-    if (CurrJoinIdsIterIndex < jids.size() && joinedTable->CurrIterIndex == jids[CurrJoinIdsIterIndex].id1)
-    {
-        tupleId2 = jids[CurrJoinIdsIterIndex].id2;
-        return true;
-    }
-    else
-    {
-       return false;
-    }
-}
-
-
-
 inline bool TTable::AddKeysToHashTable(KeysHashTable& t, ui64* keys, NYql::NUdf::TUnboxedValue * iColumns) {
 
     if (t.NSlots == 0) {
@@ -772,7 +730,7 @@ inline bool TTable::AddKeysToHashTable(KeysHashTable& t, ui64* keys, NYql::NUdf:
         ResizeHashTable(t, 2 * t.NSlots + 1);
     }
 
-    if ( HasBitSet(keys + HashSize, 1)) // Keys with null value
+    if ( (*(keys + HashSize) & 1) ) // Keys with null value
         return true;
 
     ui64 hash = *keys;
@@ -847,331 +805,44 @@ inline bool TTable::AddKeysToHashTable(KeysHashTable& t, ui64* keys, NYql::NUdf:
 
 }
 
-inline bool HasRightIdMatch(ui64 currId, ui64 & rightIdIter, const std::vector<ui32, TMKQLAllocator<ui32>> & rightIds) {
-
-    if (rightIdIter >= rightIds.size()) return false;
-
-    while ( rightIdIter < rightIds.size() && currId > rightIds[rightIdIter])  rightIdIter++;
-
-    if (rightIdIter >= rightIds.size()) return false;
-
-    return currId == rightIds[rightIdIter];
-}
-
-
 bool TTable::NextJoinedData( TupleData & td1, TupleData & td2, ui64 bucketLimit) {
-    if ( JoinKind == EJoinKind::Inner ) {
-        while(HasMoreTuples(JoinTable1->TableBucketsStats, JoinTable1->CurrIterBucket, JoinTable1->CurrIterIndex, bucketLimit)) {
-            ui32 tupleId2;
-            if (HasJoinedTupleId(JoinTable1, tupleId2))
-            {
+    while (CurrIterBucket < bucketLimit) {
+        if (auto &joinIds = TableBuckets[CurrIterBucket].JoinIds; CurrIterIndex != joinIds.size()) {
+            Y_DEBUG_ABORT_UNLESS(JoinKind == EJoinKind::Inner || JoinKind == EJoinKind::Left || JoinKind == EJoinKind::Right || JoinKind == EJoinKind::Full);
+            auto ids = joinIds[CurrIterIndex++];
 
-                JoinTable1->GetTupleData(CurrIterBucket, JoinTable1->CurrIterIndex, td1);
-                JoinTable2->GetTupleData(CurrIterBucket, tupleId2, td2);
-                CurrJoinIdsIterIndex++;
-                return true;
-            }
-            JoinTable1->CurrIterIndex++;
-        }
-        return false;
-    }
+            JoinTable1->GetTupleData(CurrIterBucket, ids.id1, td1);
+            JoinTable2->GetTupleData(CurrIterBucket, ids.id2, td2);
 
-    if ( JoinKind == EJoinKind::Left ) {
-        while (HasMoreTuples(JoinTable1->TableBucketsStats, JoinTable1->CurrIterBucket, JoinTable1->CurrIterIndex, bucketLimit)) {
-            ui32 tupleId2;
-            if (HasJoinedTupleId(JoinTable1, tupleId2))
-            {
-                JoinTable1->GetTupleData(CurrIterBucket, JoinTable1->CurrIterIndex, td1);
-                JoinTable2->GetTupleData(CurrIterBucket, tupleId2, td2);
-                CurrJoinIdsIterIndex++;
-                auto& jids = TableBuckets[CurrIterBucket].JoinIds;
-                if ( (CurrJoinIdsIterIndex == jids.size()) || ( JoinTable1->CurrIterIndex != jids[CurrJoinIdsIterIndex].id1) ) JoinTable1->CurrIterIndex++;
-
-                return true;
-            } else {
-                if (RightTableBatch_ && HasMoreRightTuples_ ) {
-                    JoinTable1->CurrIterIndex++;
-                    continue;
-                }
-
-                std::set<ui32> & leftMatchedIds = TableBuckets[JoinTable1->CurrIterBucket].AllLeftMatchedIds;
-                if ( leftMatchedIds.contains( (ui32) JoinTable1->CurrIterIndex)) {
-                    JoinTable1->CurrIterIndex++;
-                    continue;
-                }
-
-                JoinTable1->GetTupleData(CurrIterBucket, JoinTable1->CurrIterIndex, td1);
-                td2.AllNulls = true;
-            }
-            JoinTable1->CurrIterIndex++;
             return true;
         }
-        td1.AllNulls = true;
-        td2.AllNulls = true;
-        return false;
-    }
 
-    if (  JoinKind == EJoinKind::Right ) {
-        while(HasMoreTuples(JoinTable1->TableBucketsStats, JoinTable1->CurrIterBucket, JoinTable1->CurrIterIndex, bucketLimit)) {
-            ui32 tupleId2;
-            if (HasJoinedTupleId(JoinTable1, tupleId2))
-            {
-                JoinTable1->GetTupleData(CurrIterBucket, JoinTable1->CurrIterIndex, td2);
-                JoinTable2->GetTupleData(CurrIterBucket, tupleId2, td1);
-                CurrJoinIdsIterIndex++;
-                auto& jids = TableBuckets[CurrIterBucket].JoinIds;
-                if ( (CurrJoinIdsIterIndex == jids.size()) || ( JoinTable1->CurrIterIndex != jids[CurrJoinIdsIterIndex].id1) ) JoinTable1->CurrIterIndex++;
+        auto leftSide = [this](auto sideTable, auto &tdL, auto &tdR) {
+            const auto &bucket = sideTable->TableBuckets[CurrIterBucket];
+            auto &currIterIndex = sideTable->CurrIterIndex;
+            const auto &leftIds = bucket.LeftIds;
+
+            if (currIterIndex != leftIds.size()) {
+                auto id = leftIds[currIterIndex++];
+
+                sideTable->GetTupleData(CurrIterBucket, id, tdL);
+                tdR.AllNulls = true;
+
                 return true;
-            } else {
-                if (LeftTableBatch_ && HasMoreLeftTuples_ ) {
-                    JoinTable1->CurrIterIndex++;
-                    continue;
-                }
-
-                std::set<ui32> & leftMatchedIds = TableBuckets[JoinTable1->CurrIterBucket].AllLeftMatchedIds;
-                if ( leftMatchedIds.contains( (ui32) JoinTable1->CurrIterIndex)) {
-                    JoinTable1->CurrIterIndex++;
-                    continue;
-                }
-
-
-                JoinTable1->GetTupleData(CurrIterBucket, JoinTable1->CurrIterIndex, td2);
-                td1.AllNulls = true;
             }
-            JoinTable1->CurrIterIndex++;
-            return true;
-        }
-        td1.AllNulls = true;
-        td2.AllNulls = true;
-        return false;
-    }
 
-
-
-    if (JoinKind == EJoinKind::LeftOnly ) {
-
-        if ( RightTableBatch_ && HasMoreRightTuples_ )
             return false;
+        };
 
-        while(HasMoreTuples(JoinTable1->TableBucketsStats, JoinTable1->CurrIterBucket, JoinTable1->CurrIterIndex, bucketLimit)) {
-            ui32 tupleId2;
-
-            bool globalMatchedId = false;
-            if ( RightTableBatch_  ) {
-                std::set<ui32> & leftMatchedIds = TableBuckets[JoinTable1->CurrIterBucket].AllLeftMatchedIds;
-                globalMatchedId = leftMatchedIds.contains( (ui32) JoinTable1->CurrIterIndex);
-            }
-
-            if (!HasJoinedTupleId(JoinTable1, tupleId2) && !globalMatchedId )
-            {
-                JoinTable1->GetTupleData(CurrIterBucket, JoinTable1->CurrIterIndex, td1);
-                td2.AllNulls = true;
-                JoinTable1->CurrIterIndex++;
-                return true;
-            } else {
-                while (HasJoinedTupleId(JoinTable1, tupleId2)) {
-                    CurrJoinIdsIterIndex++;
-                }
-            }
-            JoinTable1->CurrIterIndex++;
-        }
-        return false;
-
-    }
-
-    if (JoinKind == EJoinKind::RightOnly ) {
-
-        if (LeftTableBatch_ && HasMoreLeftTuples_ )
-            return false;
-
-        while(HasMoreTuples(JoinTable1->TableBucketsStats, JoinTable1->CurrIterBucket, JoinTable1->CurrIterIndex, bucketLimit)) {
-            ui32 tupleId2;
-
-            bool globalMatchedId = false;
-            if ( LeftTableBatch_ ) {
-                std::set<ui32> & leftMatchedIds = TableBuckets[JoinTable1->CurrIterBucket].AllLeftMatchedIds;
-                globalMatchedId = leftMatchedIds.contains( (ui32) JoinTable1->CurrIterIndex);
-            }
-
-            if (!HasJoinedTupleId(JoinTable1, tupleId2) && !globalMatchedId )
-            {
-                JoinTable1->GetTupleData(CurrIterBucket, JoinTable1->CurrIterIndex, td2);
-                td1.AllNulls = true;
-                JoinTable1->CurrIterIndex++;
-                return true;
-            } else {
-                while (HasJoinedTupleId(JoinTable1, tupleId2)) {
-                    CurrJoinIdsIterIndex++;
-                }
-            }
-            JoinTable1->CurrIterIndex++;
-        }
-        return false;
-
-    }
-
-
-    if ( JoinKind == EJoinKind::LeftSemi) {
-
-        if (RightTableBatch_ && HasMoreRightTuples_ )
-            return false;
-
-        while(HasMoreTuples(JoinTable1->TableBucketsStats, JoinTable1->CurrIterBucket, JoinTable1->CurrIterIndex, bucketLimit)) {
-            ui32 tupleId2;
-
-            if ( !RightTableBatch_  && HasJoinedTupleId(JoinTable1, tupleId2))
-            {
-
-                JoinTable1->GetTupleData(CurrIterBucket, JoinTable1->CurrIterIndex, td1);
-                td2.AllNulls = true;
-                while( HasJoinedTupleId(JoinTable1, tupleId2) ) {
-                    CurrJoinIdsIterIndex++;
-                }
-                JoinTable1->CurrIterIndex++;
-                return true;
-            }
-
-
-            std::set<ui32> & leftMatchedIds = TableBuckets[JoinTable1->CurrIterBucket].AllLeftMatchedIds;
-            if ( RightTableBatch_ && leftMatchedIds.contains( (ui32) JoinTable1->CurrIterIndex) ) {
-                JoinTable1->GetTupleData(JoinTable1->CurrIterBucket, JoinTable1->CurrIterIndex, td1);
-                td2.AllNulls = true;
-                JoinTable1->CurrIterIndex++;
-                return true;
-            }
-
-            JoinTable1->CurrIterIndex++;
-        }
-        return false;
-    }
-
-    if ( JoinKind == EJoinKind::RightSemi ) {
-
-        if (LeftTableBatch_ && HasMoreLeftTuples_ )
-            return false;
-
-        while(HasMoreTuples(JoinTable1->TableBucketsStats, JoinTable1->CurrIterBucket, JoinTable1->CurrIterIndex, bucketLimit)) {
-            ui32 tupleId2;
-            if ( !LeftTableBatch_ && HasJoinedTupleId(JoinTable1, tupleId2))
-            {
-                JoinTable1->GetTupleData(CurrIterBucket, JoinTable1->CurrIterIndex, td2);
-                td1.AllNulls = true;
-                while( HasJoinedTupleId(JoinTable1, tupleId2) ) {
-                    CurrJoinIdsIterIndex++;
-                }
-                JoinTable1->CurrIterIndex++;
-                return true;
-            }
-
-            std::set<ui32> & leftMatchedIds = TableBuckets[JoinTable1->CurrIterBucket].AllLeftMatchedIds;
-            if ( LeftTableBatch_ && leftMatchedIds.contains( (ui32) JoinTable1->CurrIterIndex) ) {
-                JoinTable1->GetTupleData(JoinTable1->CurrIterBucket, JoinTable1->CurrIterIndex, td2);
-                td2.AllNulls = true;
-                JoinTable1->CurrIterIndex++;
-                return true;
-            }
-
-            JoinTable1->CurrIterIndex++;
-        }
-        return false;
-    }
-
-    if ( JoinKind == EJoinKind::Full ) {
-        if(HasMoreTuples(JoinTable1->TableBucketsStats, JoinTable1->CurrIterBucket, JoinTable1->CurrIterIndex, bucketLimit)) {
-            ui32 tupleId2;
-            if (HasJoinedTupleId(JoinTable1, tupleId2))
-            {
-                JoinTable1->GetTupleData(CurrIterBucket, JoinTable1->CurrIterIndex, td1);
-                JoinTable2->GetTupleData(CurrIterBucket, tupleId2, td2);
-                CurrJoinIdsIterIndex++;
-                auto& jids = TableBuckets[CurrIterBucket].JoinIds;
-                if ( (CurrJoinIdsIterIndex == jids.size()) || ( JoinTable1->CurrIterIndex != jids[CurrJoinIdsIterIndex].id1) ) JoinTable1->CurrIterIndex++;
-
-                return true;
-            } else {
-                JoinTable1->GetTupleData(CurrIterBucket, JoinTable1->CurrIterIndex, td1);
-                td2.AllNulls = true;
-            }
-            JoinTable1->CurrIterIndex++;
+        if (leftSide(JoinTable1, td1, td2))
             return true;
-        }
-        td1.AllNulls = true;
-
-        if (!Table2Initialized_) {
-            CurrIterBucket = 0;
-            CurrJoinIdsIterIndex = 0;
-            Table2Initialized_ = true;
-        }
-
-        while (HasMoreTuples(JoinTable2->TableBucketsStats, JoinTable2->CurrIterBucket, JoinTable2->CurrIterIndex, bucketLimit)) {
-
-            if (CurrIterBucket != JoinTable2->CurrIterBucket) {
-                CurrIterBucket = JoinTable2->CurrIterBucket;
-                CurrJoinIdsIterIndex = 0;
-            }
-            auto& rightIds = TableBuckets[CurrIterBucket].RightIds;
-             if (HasRightIdMatch(JoinTable2->CurrIterIndex, CurrJoinIdsIterIndex, rightIds)) {
-                JoinTable2->CurrIterIndex++;
-                continue;
-            }
-            JoinTable2->GetTupleData(JoinTable2->CurrIterBucket, JoinTable2->CurrIterIndex, td2);
-            JoinTable2->CurrIterIndex++;
+        if (leftSide(JoinTable2, td2, td1))
             return true;
 
-        }
-
-        td1.AllNulls = true;
-        td2.AllNulls = true;
-        return false;
-
-    }
-
-    if ( JoinKind == EJoinKind::Exclusion ) {
-        while (HasMoreTuples(JoinTable1->TableBucketsStats, JoinTable1->CurrIterBucket, JoinTable1->CurrIterIndex, bucketLimit)) {
-            ui32 tupleId2;
-            if (HasJoinedTupleId(JoinTable1, tupleId2))
-            {
-                CurrJoinIdsIterIndex++;
-                auto& jids = TableBuckets[CurrIterBucket].JoinIds;
-                if ( (CurrJoinIdsIterIndex == jids.size()) || ( JoinTable1->CurrIterIndex != jids[CurrJoinIdsIterIndex].id1) ) JoinTable1->CurrIterIndex++;
-                continue;
-            } else {
-                JoinTable1->GetTupleData(CurrIterBucket, JoinTable1->CurrIterIndex, td1);
-                td2.AllNulls = true;
-            }
-            JoinTable1->CurrIterIndex++;
-            return true;
-        }
-
-        td1.AllNulls = true;
-
-        if (!Table2Initialized_) {
-            CurrIterBucket = 0;
-            CurrJoinIdsIterIndex = 0;
-            Table2Initialized_ = true;
-        }
-
-        while (HasMoreTuples(JoinTable2->TableBucketsStats, JoinTable2->CurrIterBucket, JoinTable2->CurrIterIndex, bucketLimit)) {
-
-            if (CurrIterBucket != JoinTable2->CurrIterBucket) {
-                CurrIterBucket = JoinTable2->CurrIterBucket;
-                CurrJoinIdsIterIndex = 0;
-            }
-            auto& rightIds = TableBuckets[CurrIterBucket].RightIds;
-             if (HasRightIdMatch(JoinTable2->CurrIterIndex, CurrJoinIdsIterIndex, rightIds)) {
-                JoinTable2->CurrIterIndex++;
-                continue;
-            }
-            JoinTable2->GetTupleData(JoinTable2->CurrIterBucket, JoinTable2->CurrIterIndex, td2);
-            JoinTable2->CurrIterIndex++;
-            return true;
-
-        }
-
-        td1.AllNulls = true;
-        td2.AllNulls = true;
-        return false;
-
+        ++CurrIterBucket;
+        CurrIterIndex = 0;
+        JoinTable1->CurrIterIndex = 0;
+        JoinTable2->CurrIterIndex = 0;
     }
 
     return false;
@@ -1193,7 +864,7 @@ void TTable::ClearBucket(ui64 bucket) {
     tb.InterfaceValues.clear();
     tb.InterfaceOffsets.clear();
     tb.JoinIds.clear();
-    tb.RightIds.clear();
+    tb.LeftIds.clear();
     tb.JoinSlots.clear();
     tb.NSlots = 0;
 
@@ -1212,7 +883,7 @@ void TTable::ShrinkBucket(ui64 bucket) {
     tb.InterfaceValues.shrink_to_fit();
     tb.InterfaceOffsets.shrink_to_fit();
     tb.JoinIds.shrink_to_fit();
-    tb.RightIds.shrink_to_fit();
+    tb.LeftIds.shrink_to_fit();
     tb.JoinSlots.shrink_to_fit();
 }
 
@@ -1246,6 +917,35 @@ bool TTable::TryToReduceMemoryAndWait() {
     }
 
     if (largestBucketSize < SpillingSizeLimit/NumberOfBuckets) return false;
+    if (const auto &tbs = TableBucketsStats[largestBucketIndex]; tbs.HashtableMatches) {
+        auto &tb = TableBuckets[largestBucketIndex];
+
+        if (tb.JoinSlots.size()) {
+            const auto slotSize = tbs.SlotSize;
+            Y_DEBUG_ABORT_UNLESS(slotSize);
+            auto it = tb.JoinSlots.cbegin();
+            const auto end = tb.JoinSlots.cend();
+
+            for (; it != end; it += slotSize) {
+                // Note: we need not check if *it is 0
+                if ((*(it + HashSize) & 1)) {
+                    ui64 keyIntsOffset;
+                    auto tupleId = *(it + slotSize - 1);
+                    Y_DEBUG_ABORT_UNLESS(tupleId < tbs.TuplesNum);
+
+                    if (NumberOfKeyStringColumns != 0 || NumberOfKeyIColumns != 0) {
+                        ui64 stringsOffsetsIdx = tupleId * (NumberOfStringColumns + NumberOfIColumns + 2);
+                        keyIntsOffset = tb.StringsOffsets[stringsOffsetsIdx];
+                    } else {
+                        keyIntsOffset = HeaderSize * tupleId;
+                    }
+                    tb.KeyIntVals[keyIntsOffset + HashSize] |= 1;
+                }
+            }
+            tb.JoinSlots.clear();
+            tb.JoinSlots.shrink_to_fit();
+        }
+    }
     TableBucketsSpillers[largestBucketIndex].SpillBucket(std::move(TableBuckets[largestBucketIndex]));
     TableBuckets[largestBucketIndex] = TTableBucket{};
 

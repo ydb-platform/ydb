@@ -2,13 +2,15 @@
 
 **Список функций**
 
-* ```Re2::Grep(pattern:String, options:Struct<...>?) -> (string:String?) -> Bool```
-* ```Re2::Match(pattern:String, options:Struct<...>?) -> (string:String?) -> Bool```
-* ```Re2::Capture(pattern:String, options:Struct<...>?) -> (string:String?) -> Struct<_1:String?,foo:String?,...>```
-* ```Re2::FindAndConsume(pattern:String, options:Struct<...>?) -> (string:String?) -> List<String>```
-* ```Re2::Replace(pattern:String, options:Struct<...>?) -> (string:String?, replacement:String) -> String?```
-* ```Re2::Count(pattern:String, options:Struct<...>?) -> (string:String?) -> Uint32```
-* ```Re2::Options([CaseSensitive:Bool?,DotNl:Bool?,Literal:Bool?,LogErrors:Bool?,LongestMatch:Bool?,MaxMem:Uint64?,NeverCapture:Bool?,NeverNl:Bool?,OneLine:Bool?,PerlClasses:Bool?,PosixSyntax:Bool?,Utf8:Bool?,WordBoundary:Bool?]) -> Struct<CaseSensitive:Bool,DotNl:Bool,Literal:Bool,LogErrors:Bool,LongestMatch:Bool,MaxMem:Uint64,NeverCapture:Bool,NeverNl:Bool,OneLine:Bool,PerlClasses:Bool,PosixSyntax:Bool,Utf8:Bool,WordBoundary:Bool>```
+```
+Re2::Grep(pattern:String, options:Struct<...>?) -> (string:String?) -> Bool
+Re2::Match(pattern:String, options:Struct<...>?) -> (string:String?) -> Bool
+Re2::Capture(pattern:String, options:Struct<...>?) -> (string:String?) -> Struct<_1:String?,foo:String?,...>
+Re2::FindAndConsume(pattern:String, options:Struct<...>?) -> (string:String?) -> List<String>
+Re2::Replace(pattern:String, options:Struct<...>?) -> (string:String?, replacement:String) -> String?
+Re2::Count(pattern:String, options:Struct<...>?) -> (string:String?) -> Uint32
+Re2::Options([CaseSensitive:Bool?,DotNl:Bool?,Literal:Bool?,LogErrors:Bool?,LongestMatch:Bool?,MaxMem:Uint64?,NeverCapture:Bool?,NeverNl:Bool?,OneLine:Bool?,PerlClasses:Bool?,PosixSyntax:Bool?,Utf8:Bool?,WordBoundary:Bool?]) -> Struct<CaseSensitive:Bool,DotNl:Bool,Literal:Bool,LogErrors:Bool,LongestMatch:Bool,MaxMem:Uint64,NeverCapture:Bool,NeverNl:Bool,OneLine:Bool,PerlClasses:Bool,PosixSyntax:Bool,Utf8:Bool,WordBoundary:Bool>
+```
 
 Модуль Re2 реализует поддержку регулярных выражений на основе [google::RE2](https://github.com/google/re2), где предоставляется широкий ассортимент возможностей ([см. официальную документацию](https://github.com/google/re2/wiki/Syntax)).
 

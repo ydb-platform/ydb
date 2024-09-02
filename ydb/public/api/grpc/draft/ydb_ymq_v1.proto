@@ -20,4 +20,9 @@ service YmqService {
     rpc PurgeQueue(PurgeQueueRequest) returns (PurgeQueueResponse);
     rpc DeleteQueue(DeleteQueueRequest) returns (DeleteQueueResponse);
     rpc ChangeMessageVisibility(ChangeMessageVisibilityRequest) returns (ChangeMessageVisibilityResponse);
+    rpc SetQueueAttributes(SetQueueAttributesRequest) returns (SetQueueAttributesResponse);
+    rpc SendMessageBatch(SendMessageBatchRequest) returns (SendMessageBatchResponse);
+    rpc DeleteMessageBatch(DeleteMessageBatchRequest) returns (DeleteMessageBatchResponse);
+    rpc ChangeMessageVisibilityBatch(ChangeMessageVisibilityBatchRequest) returns (ChangeMessageVisibilityBatchResponse);
+    rpc ListDeadLetterSourceQueues(ListDeadLetterSourceQueuesRequest) returns (ListDeadLetterSourceQueuesResponse);
 }

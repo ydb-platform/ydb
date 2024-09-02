@@ -13,8 +13,6 @@ using TNavigate = NSchemeCache::TSchemeCacheNavigate;
 class TJsonAutocomplete : public TViewerPipeClient {
     using TThis = TJsonAutocomplete;
     using TBase = TViewerPipeClient;
-    IViewer* Viewer;
-    NMon::TEvHttpInfo::TPtr Event;
     TEvViewer::TEvViewerRequest::TPtr ViewerRequest;
     TJsonSettings JsonSettings;
     ui32 Timeout = 0;
@@ -47,9 +45,8 @@ class TJsonAutocomplete : public TViewerPipeClient {
     std::vector<TNodeId> TenantDynamicNodes;
     bool Direct = false;
 public:
-    TJsonAutocomplete(IViewer* viewer, NMon::TEvHttpInfo::TPtr &ev)
-        : Viewer(viewer)
-        , Event(ev)
+    TJsonAutocomplete(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
+        : TBase(viewer, ev)
     {
         const auto& params(Event->Get()->Request.GetParams());
         InitConfig(params);
@@ -165,7 +162,7 @@ public:
             // autocomplete database list via console request
             RequestConsoleListTenants();
         } else {
-            Direct |= !Event->Get()->Request.GetHeader("X-Forwarded-From-Node").empty(); // we're already forwarding
+            Direct |= !TBase::Event->Get()->Request.GetHeader("X-Forwarded-From-Node").empty(); // we're already forwarding
             Direct |= (Database == AppData()->TenantName) || Database.empty(); // we're already on the right node or don't use database filter
             if (Database && !Direct) {
                 // proxy request to a dynamic node of the specified database

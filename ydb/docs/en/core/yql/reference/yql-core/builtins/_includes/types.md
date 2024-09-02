@@ -167,9 +167,9 @@ SELECT FormatType(VoidType()); -- Void
 
 ## OptionalItemType, ListItemType and StreamItemType {#optionalitemtype}
 
-{% if feature_codegen %} If a type is passed to these functions, then they perform {% else %}Perform{% endif %} the action reverse to [OptionalType](#optionaltype), [ListType](#listtype), and [StreamType](#streamtype): return the item type based on its container type.
+{% if feature_codegen %} If a type is passed to these functions, then they perform {% else %}Perform{% endif %} the action reverse to [OptionalType](#optionaltype), [ListType](#listtype), and [StreamType](#listtype): return the item type based on its container type.
 {% if feature_codegen %}
-If a type handle is passed to these functions, then they perform the action reverse to [OptionalTypeHandle](#optionaltypehandle), [ListTypeHandle](#listtypehandle), and [StreamTypeHandle](#streamtypehandle): they return the handle of the element type based on the type handle of its container.{% endif %}
+If a type handle is passed to these functions, then they perform the action reverse to [OptionalTypeHandle](#optionaltypehandle), [ListTypeHandle](#list-stream-typehandle), and [StreamTypeHandle](#list-stream-typehandle): they return the handle of the element type based on the type handle of its container.{% endif %}
 
 **Examples**
 
@@ -274,11 +274,11 @@ FormatType(VariantUnderlyingType(
 
 {% if feature_codegen %}
 
-# Functions for data types during calculations
+## Functions for data types during calculations
 
 To work with data types during calculations, use handle types: these are [resources](../../types/special.md) that contain an opaque type definition. After constructing the type handle, you can revert to the regular type using the [EvaluateType](#evaluatetype) function. For debug purposes, you can convert a handle type to a string using the [FormatType](#formattype) function.
 
-## TypeHandle
+### TypeHandle
 
 Getting a type handle from the type passed to the argument.
 
@@ -288,7 +288,7 @@ Getting a type handle from the type passed to the argument.
 SELECT FormatType(TypeHandle(TypeOf("foo")));  -- String
 ```
 
-## EvaluateType
+### EvaluateType
 
 Getting the type from the type handle passed to the argument. The function is evaluated before the start of the main calculation, as well as [EvaluateExpr](../basic.md#evaluate_expr_atom).
 
@@ -298,7 +298,7 @@ Getting the type from the type handle passed to the argument. The function is ev
 SELECT FormatType(EvaluateType(TypeHandle(TypeOf("foo"))));  -- String
 ```
 
-## ParseTypeHandle
+### ParseTypeHandle
 
 Building a type handle from a string with description. [Documentation for its format](../../types/type_string.md).
 
@@ -308,7 +308,7 @@ Building a type handle from a string with description. [Documentation for its fo
 SELECT FormatType(ParseTypeHandle("List<Int32>"));  -- List<int32>
 ```
 
-## TypeKind
+### TypeKind
 
 Getting the top-level type name from the type handle passed to the argument.
 
@@ -319,7 +319,7 @@ SELECT TypeKind(TypeHandle(TypeOf("foo")));  -- Data
 SELECT TypeKind(ParseTypeHandle("List<Int32>"));  -- List
 ```
 
-## DataTypeComponents
+### DataTypeComponents
 
 Getting the name and parameters for a [primitive data type](../../types/primitive.md) from the primitive type handle passed to the argument. Reverse function: [DataTypeHandle](#datatypehandle).
 
@@ -330,7 +330,7 @@ SELECT DataTypeComponents(TypeHandle(TypeOf("foo")));  -- ["String"]
 SELECT DataTypeComponents(ParseTypeHandle("Decimal(4,1)"));  -- ["Decimal", "4", "1"]
 ```
 
-## DataTypeHandle
+### DataTypeHandle
 
 Constructing a handle for a [primitive data type](../../types/primitive.md) from its name and parameters passed to the argument as a list. Reverse function: [DataTypeComponents](#datatypecomponents).
 
@@ -346,7 +346,7 @@ SELECT FormatType(DataTypeHandle(
 )); -- Decimal(4,1)
 ```
 
-## OptionalTypeHandle
+### OptionalTypeHandle
 
 Adds the option to assign `NULL` to the passed type handle.
 
@@ -358,7 +358,7 @@ SELECT FormatType(OptionalTypeHandle(
 )); -- Bool?
 ```
 
-## PgTypeName
+### PgTypeName
 
 Getting the name of the PostgreSQL type from the type handle passed to the argument. Inverse function: [PgTypeHandle](#pgtypehandle).
 
@@ -367,7 +367,7 @@ Getting the name of the PostgreSQL type from the type handle passed to the argum
 SELECT PgTypeName(ParseTypeHandle("pgint4")); -- int4
 ```
 
-## PgTypeHandle
+### PgTypeHandle
 
 Builds a type handle based on the passed name of the PostgreSQL type. Inverse function: [PgTypeName](#pgtypename).
 
@@ -376,7 +376,7 @@ Builds a type handle based on the passed name of the PostgreSQL type. Inverse fu
 SELECT FormatType(PgTypeHandle("int4")); -- pgint4
 ```
 
-## ListTypeHandle and StreamTypeHandle {#list-stream-typehandle}
+### ListTypeHandle and StreamTypeHandle {#list-stream-typehandle}
 
 Builds a list type handle or stream type handle based on the passed element type handle.
 
@@ -388,7 +388,7 @@ SELECT FormatType(ListTypeHandle(
 )); -- List<Bool>
 ```
 
-## EmptyListTypeHandle and EmptyDictTypeHandle
+### EmptyListTypeHandle and EmptyDictTypeHandle
 
 Constructs a handle for an empty list or dictionary.
 
@@ -398,7 +398,7 @@ Constructs a handle for an empty list or dictionary.
 SELECT FormatType(EmptyListTypeHandle()); -- EmptyList
 ```
 
-## TupleTypeComponents
+### TupleTypeComponents
 
 Getting a list of element type handles from the tuple type handle passed to the argument. Inverse function: [TupleTypeHandle](#tupletypehandle).
 
@@ -415,7 +415,7 @@ SELECT ListMap(
 ); -- ["Int32", "String"]
 ```
 
-## TupleTypeHandle
+### TupleTypeHandle
 
 Building a tuple type handle from handles of element types passed as a list to the argument. Inverse function: [TupleTypeComponents](#tupletypecomponents).
 
@@ -432,7 +432,7 @@ SELECT FormatType(
 ); -- Tuple<Int32,String>
 ```
 
-## StructTypeComponents
+### StructTypeComponents
 
 Getting a list of element type handles and their names from the structure type handle passed to the argument. Inverse function: [StructTypeHandle](#structtypehandle).
 
@@ -452,7 +452,7 @@ SELECT ListMap(
 ); -- [("Int32","a"), ("String","b")]
 ```
 
-## StructTypeHandle
+### StructTypeHandle
 
 Building a structure type handle from handles of element types and names passed as a list to the argument. Inverse function: [StructTypeComponents](#structtypecomponents).
 
@@ -469,7 +469,7 @@ SELECT FormatType(
 ); -- Struct<'a':Int32,'b':String>
 ```
 
-## DictTypeComponents
+### DictTypeComponents
 
 Getting a key-type handle and a value-type handle from the dictionary-type handle passed to the argument. Inverse function: [DictTypeHandle](#dicttypehandle).
 
@@ -483,7 +483,7 @@ SELECT
     FormatType($d.Payload); -- String
 ```
 
-## DictTypeHandle
+### DictTypeHandle
 
 Building a dictionary-type handle from a key-type handle and a value-type handle passed to arguments. Inverse function: [DictTypeComponents](#dicttypecomponents).
 
@@ -498,7 +498,7 @@ SELECT FormatType(
 ); -- Dict<Int32, String>
 ```
 
-## ResourceTypeTag
+### ResourceTypeTag
 
 Getting the tag from the resource type handle passed to the argument. Inverse function: [ResourceTypeHandle](#resourcetypehandle).
 
@@ -508,7 +508,7 @@ Getting the tag from the resource type handle passed to the argument. Inverse fu
 SELECT ResourceTypeTag(ParseTypeHandle("Resource<foo>")); -- foo
 ```
 
-## ResourceTypeHandle
+### ResourceTypeHandle
 
 Building a resource-type handle from the tag value passed to the argument. Inverse function: [ResourceTypeTag](#resourcetypetag).
 
@@ -518,7 +518,7 @@ Building a resource-type handle from the tag value passed to the argument. Inver
 SELECT FormatType(ResourceTypeHandle("foo")); -- Resource<'foo'>
 ```
 
-## TaggedTypeComponents
+### TaggedTypeComponents
 
 Getting the tag and the basic type from the decorated type handle passed to the argument. Inverse function: [TaggedTypeHandle](#taggedtypehandle).
 
@@ -530,7 +530,7 @@ $t = TaggedTypeComponents(ParseTypeHandle("Tagged<Int32,foo>"));
 SELECT FormatType($t.Base), $t.Tag; -- Int32, foo
 ```
 
-## TaggedTypeHandle
+### TaggedTypeHandle
 
 Constructing a decorated type handle based on the base type handle and the tag name passed in arguments. Inverse function: [TaggedTypeComponents](#taggedtypecomponents).
 
@@ -542,7 +542,7 @@ SELECT FormatType(TaggedTypeHandle(
 )); -- Tagged<Int32, 'foo'>
 ```
 
-## VariantTypeHandle
+### VariantTypeHandle
 
 Building a variant-type handle from the handle of the underlying type passed to the argument. Inverse function: [VariantUnderlyingType](#variantunderlyingtype).
 
@@ -554,7 +554,7 @@ SELECT FormatType(VariantTypeHandle(
 )); -- Variant<Int32, String>
 ```
 
-## VoidTypeHandle and NullTypeHandle
+### VoidTypeHandle and NullTypeHandle
 
 Constructing a handle for Void and Null types, respectively.
 
@@ -565,7 +565,7 @@ SELECT FormatType(VoidTypeHandle()); -- Void
 SELECT FormatType(NullTypeHandle()); -- Null
 ```
 
-## CallableTypeComponents
+### CallableTypeComponents
 
 Getting the handle description for the type of callable value passed to the argument. Inverse function: [CallableTypeHandle](#callabletypehandle).
 
@@ -599,7 +599,7 @@ SELECT $formatCallable(
     -- ])
 ```
 
-## CallableArgument
+### CallableArgument
 
 Packing  the description of the argument of the callable value into the structure to be passed to the [CallableTypeHandle](#callabletypehandle) function with the following arguments:
 
@@ -607,7 +607,7 @@ Packing  the description of the argument of the callable value into the structur
 2. Optional argument name. The default value is an empty string.
 3. A list of strings with optional argument flags. The default value is an empty list. Supported flags are "AutoMap".
 
-## CallableTypeHandle
+### CallableTypeHandle
 
 Constructing the type handle of the called value using the following arguments:
 
@@ -633,7 +633,7 @@ SELECT FormatType(
 );  -- Callable<(Int32,['bar':Double?{Flags:AutoMap}])->String>
 ```
 
-## LambdaArgumentsCount
+### LambdaArgumentsCount
 
 Getting the number of arguments in a lambda function.
 

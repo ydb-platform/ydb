@@ -51,7 +51,7 @@
       }
       required_version = ">= 0.13"
     }
-    
+
     provider "ydb" {
       token = "<TOKEN>"
       //OR for static credentials
@@ -243,7 +243,7 @@ resource "ydb_topic" "test" {
 
 * `column` — (обязательный) свойства колонки (см. аргумент [column](#column)).
 * `family` — (необязательный) группа колонок (см. аргумент [family](#family)).
-* `primary_key` — (обязательный) [первичный ключ](../yql/reference/syntax/create_table.md#columns) строковой таблицы, содержит упорядоченный список имён колонок первичного ключа.
+* `primary_key` — (обязательный) [первичный ключ](../yql/reference/syntax/create_table/index.md) таблицы, содержит упорядоченный список имён колонок первичного ключа.
 * `ttl` — (необязательный) TTL (см. аргумент [ttl](#ttl)).
 * `partitioning_settings` — (необязательный) настройки партицирования (см. аргумент [partitioning_settings](#partitioning-settings)).
 * `key_bloom_filter` — (необязательный) (bool) использовать [фильтра Блума для первичного ключа](../concepts/datamodel/table.md#bloom-filter), значение по умолчанию - false.
@@ -251,7 +251,7 @@ resource "ydb_topic" "test" {
 
 #### column {#column}
 
-Аргумент `column` описывает [свойства колонки](../yql/reference/syntax/create_table.md#columns) строковой таблицы.
+Аргумент `column` описывает [свойства колонки](../yql/reference/syntax/create_table/index.md) таблицы.
 
 {% note warning %}
 
@@ -277,11 +277,11 @@ column {
 
 #### family {#family}
 
-Аргумент `family` описывает [свойства группы колонок](../yql/reference/syntax/create_table.md#column-family).
+Аргумент `family` описывает [свойства группы колонок](../yql/reference/syntax/create_table/family.md).
 
 * `name` — (обязательный) имя группы колонок.
-* `data` — (обязательный) [тип устройства хранения](../yql/reference/syntax/create_table#column-family) для данных колонок этой группы.
-* `compression` — (обязательный) [кодек сжатия данных](../yql/reference/syntax/create_table#column-family).
+* `data` — (обязательный) [тип устройства хранения](../yql/reference/syntax/create_table/family.md) для данных колонок этой группы.
+* `compression` — (обязательный) [кодек сжатия данных](../yql/reference/syntax/create_table/family.md).
 
 Пример:
 
@@ -364,7 +364,7 @@ resource "ydb_table_index" "ydb_table_index" {
 * `table_id` - terraform-идентификатор строковой таблицы. Указывается, если не задан `table_path` или `connection_string`.
 
 * `name` — (обязательный) имя индекса.
-* `type` — (обязательный) тип индекса [global_sync | global_async](../yql/reference/syntax/create_table.md#secondary_index).
+* `type` — (обязательный) тип индекса [global_sync | global_async](../yql/reference/syntax/create_table/secondary_index.md).
 * `columns` — (обязательный) упорядоченный список имён колонок, участвующий в индексе.
 * `cover` — (обязательный) список дополнительных колонок для покрывающего индекса.
 
@@ -457,7 +457,7 @@ resource "ydb_table" "ydb_table" {
 resource "ydb_table" "ydb_table" {
   # Путь до строковой таблицы
   path = "path/to/table" # путь относительно корня базы
-  
+
   # ConnectionString до базы данных.
   connection_string = "grpc(s)://HOST:PORT/?database=/database/path" #пример подключения к БД
 

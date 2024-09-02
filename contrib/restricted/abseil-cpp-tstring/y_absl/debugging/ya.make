@@ -19,6 +19,7 @@ ADDINCL(
 
 NO_COMPILER_WARNINGS()
 
+IF(NOT Y_ABSL_DONT_USE_DEBUG)
 SRCS(
     failure_signal_handler.cc
     internal/address_is_readable.cc
@@ -33,5 +34,6 @@ SRCS(
     stacktrace.cc
     symbolize.cc
 )
+ENDIF()
 
 END()

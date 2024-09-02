@@ -318,6 +318,11 @@ public:
         return capabilities;
     }
 
+    int GetCapabilityVersion(const TString& name) override {
+        std::lock_guard guard(JsonHandlersMutex);
+        return JsonHandlers.GetCapabilityVersion(name);
+    }
+
     void RegisterVirtualHandler(
             NKikimrViewer::EObjectType parentObjectType,
             TVirtualHandlerType handler) override {
@@ -475,36 +480,12 @@ private:
             if (type.empty()) {
                 type = "application/json";
             }
-            if (AllowOrigin) {
-                ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(
-                    "HTTP/1.1 204 No Content\r\n"
-                    "Access-Control-Allow-Origin: " + AllowOrigin + "\r\n"
-                    "Access-Control-Allow-Credentials: true\r\n"
-                    "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept,X-Trace-Verbosity,X-Want-Trace\r\n"
-                    "Access-Control-Allow-Methods: OPTIONS, GET, POST\r\n"
-                    "Allow: OPTIONS, GET, POST\r\n"
-                    "Content-Type: " + type + "\r\n"
-                    "Connection: Keep-Alive\r\n\r\n", 0, NMon::IEvHttpInfoRes::EContentType::Custom));
-            } else {
-                TString origin = TString(msg->Request.GetHeader("Origin"));
-                if (!origin.empty()) {
-                    ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(
-                        "HTTP/1.1 204 No Content\r\n"
-                        "Access-Control-Allow-Origin: " + origin + "\r\n"
-                        "Access-Control-Allow-Credentials: true\r\n"
-                        "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept,X-Trace-Verbosity,X-Want-Trace\r\n"
-                        "Access-Control-Allow-Methods: OPTIONS, GET, POST\r\n"
-                        "Allow: OPTIONS, GET, POST\r\n"
-                        "Content-Type: " + type + "\r\n"
-                        "Connection: Keep-Alive\r\n\r\n", 0, NMon::IEvHttpInfoRes::EContentType::Custom));
-                } else {
-                    ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(
-                        "HTTP/1.1 204 No Content\r\n"
-                        "Allow: OPTIONS, GET, POST\r\n"
-                        "Content-Type: " + type + "\r\n"
-                        "Connection: Keep-Alive\r\n\r\n", 0, NMon::IEvHttpInfoRes::EContentType::Custom));
-                }
-            }
+            TStringBuilder response;
+            response << "HTTP/1.1 204 No Content\r\n";
+            FillCORS(response, msg);
+            response << "Content-Type: " + type + "\r\n"
+                        "Connection: Keep-Alive\r\n\r\n";
+            Send(ev->Sender, new NMon::TEvHttpInfoRes(response, 0, NMon::IEvHttpInfoRes::EContentType::Custom));
             return;
         }
         TString path("/" + msg->Request.GetPage()->Path + msg->Request.GetPathInfo());
@@ -608,11 +589,16 @@ void TViewer::FillCORS(TStringBuilder& stream, const TRequestState& request) {
     } else if (request && request->Request.GetHeaders().HasHeader("Origin")) {
         origin = request->Request.GetHeader("Origin");
     }
+    if (origin.empty()) {
+        origin = "*";
+    }
     if (origin) {
         stream << "Access-Control-Allow-Origin: " << origin << "\r\n"
                << "Access-Control-Allow-Credentials: true\r\n"
-               << "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept,X-Trace-Verbosity,X-Want-Trace\r\n"
-               << "Access-Control-Allow-Methods: OPTIONS, GET, POST\r\n";
+               << "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept,X-Trace-Verbosity,X-Want-Trace,traceparent\r\n"
+               << "Access-Control-Expose-Headers: traceresponse,X-Worker-Name\r\n"
+               << "Access-Control-Allow-Methods: OPTIONS,GET,POST,PUT,DELETE\r\n"
+               << "Allow: OPTIONS, GET, POST, DELETE\r\n";
     }
 }
 

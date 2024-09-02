@@ -220,7 +220,8 @@ public:
         if (response->Status.StartsWith("2")) {
             TString url(Event->Get()->Request->URL.Before('?'));
             TString status(response->Status);
-            NMonitoring::THistogramPtr ResponseTimeHgram = NKikimr::GetServiceCounters(NKikimr::AppData()->Counters, "utils")
+            NMonitoring::THistogramPtr ResponseTimeHgram = NKikimr::GetServiceCounters(NKikimr::AppData()->Counters,
+                    ActorMonPage->MonServiceName)
                 ->GetSubgroup("subsystem", "mon")
                 ->GetSubgroup("url", url)
                 ->GetSubgroup("status", status)
@@ -246,9 +247,10 @@ public:
         response << "HTTP/1.1 204 No Content\r\n"
                     "Access-Control-Allow-Origin: " << origin << "\r\n"
                     "Access-Control-Allow-Credentials: true\r\n"
-                    "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept\r\n"
-                    "Access-Control-Allow-Methods: OPTIONS, GET, POST, PUT, DELETE\r\n"
-                    "Content-Type: " + type + "\r\n"
+                    "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept,X-Trace-Verbosity,X-Want-Trace,traceparent\r\n"
+                    "Access-Control-Expose-Headers: traceresponse,X-Worker-Name\r\n"
+                    "Access-Control-Allow-Methods: OPTIONS,GET,POST,PUT,DELETE\r\n"
+                    "Content-Type: " << type << "\r\n"
                     "Connection: keep-alive\r\n\r\n";
         ReplyWith(request->CreateResponseString(response));
         PassAway();
@@ -887,7 +889,8 @@ NMonitoring::IMonPage* TAsyncHttpMon::RegisterActorPage(TRegisterActorPageFields
         fields.ActorSystem,
         fields.ActorId,
         fields.AllowedSIDs ? fields.AllowedSIDs : Config.AllowedSIDs,
-        fields.UseAuth ? Config.Authorizer : TRequestAuthorizer());
+        fields.UseAuth ? Config.Authorizer : TRequestAuthorizer(),
+        fields.MonServiceName);
     if (fields.Index) {
         fields.Index->Register(page);
         if (fields.SortPages) {

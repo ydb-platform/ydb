@@ -86,7 +86,8 @@ namespace NKikimr {
 #define ENABLE_ALTERNATIVE_LOG_ACCUMULATION 1
 
 #if ENABLE_LOG_ACCUMULATION
-    #define A_LOG_LOG_S_IMPL(isRelease, accumulator, priority, component, stream) \
+    #error "this version is deprecated, isRelease is removed"
+    #define A_LOG_LOG_S_IMPL(accumulator, priority, component, stream) \
         do { \
             ::NActors::NLog::TSettings *mSettings = \
                 (::NActors::NLog::TSettings*)(TActivationContext::LoggerSettings()); \
@@ -112,9 +113,8 @@ namespace NKikimr {
             } \
         } while (0)
 #elif ENABLE_ALTERNATIVE_LOG_ACCUMULATION
-    #define A_LOG_LOG_S_IMPL(isRelease, accumulator, priority, component, stream) \
+    #define A_LOG_LOG_S_IMPL(accumulator, priority, component, stream) \
         do { \
-            Y_UNUSED(isRelease); \
             if ((accumulator).IsEnabled) { \
                 ::NActors::NLog::EPriority mPriorityAcc = (::NActors::NLog::EPriority)(priority); \
                 ::NActors::NLog::EComponent mComponentAcc = (::NActors::NLog::EComponent)(component); \
@@ -134,91 +134,57 @@ namespace NKikimr {
             } \
         } while (0)
 #else
-    #define A_LOG_LOG_S_IMPL(isRelease, accumulator, priority, component, stream) \
+    #define A_LOG_LOG_S_IMPL(accumulator, priority, component, stream) \
         do { \
             LOG_LOG_S(*TlsActivationContext, priority, component, stream); \
         } while (0)
 #endif
 
-#define A_LOG_LOG_SX(logCtx, isRelease, priority, marker, stream) \
+#define DSP_LOG_LOG_SX(logCtx, priority, marker, stream) \
     do { \
         auto& lc = (logCtx); \
         if (lc.SuppressLog) { \
             break; \
         } \
-        A_LOG_LOG_S_IMPL(isRelease, lc.LogAcc, priority, lc.LogComponent, \
+        A_LOG_LOG_S_IMPL(lc.LogAcc, priority, lc.LogComponent, \
             lc.RequestPrefix << " " << stream << " Marker# " << marker); \
     } while (false)
 
-#define A_LOG_LOG_S(isRelease, priority, marker, stream) \
-    A_LOG_LOG_SX(LogCtx, isRelease, priority, marker, stream)
+#define DSP_LOG_LOG_S(priority, marker, stream) \
+    DSP_LOG_LOG_SX(LogCtx, priority, marker, stream)
 
-#define A_LOG_EMERG_S(marker, stream)  \
-    A_LOG_LOG_S(false, NActors::NLog::PRI_EMERG, marker, stream)
-#define A_LOG_ALERT_S(marker, stream)  \
-    A_LOG_LOG_S(false, NActors::NLog::PRI_ALERT, marker, stream)
-#define A_LOG_CRIT_S(marker, stream)   \
-    A_LOG_LOG_S(false, NActors::NLog::PRI_CRIT, marker, stream)
-#define A_LOG_ERROR_S(marker, stream)  \
-    A_LOG_LOG_S(false, NActors::NLog::PRI_ERROR, marker, stream)
-#define A_LOG_WARN_S(marker, stream)   \
-    A_LOG_LOG_S(false, NActors::NLog::PRI_WARN, marker, stream)
-#define A_LOG_NOTICE_S(marker, stream) \
-    A_LOG_LOG_S(false, NActors::NLog::PRI_NOTICE, marker, stream)
-#define A_LOG_INFO_S(marker, stream)   \
-    A_LOG_LOG_S(false, NActors::NLog::PRI_INFO, marker, stream)
-#define A_LOG_DEBUG_S(marker, stream)  \
-    A_LOG_LOG_S(false, NActors::NLog::PRI_DEBUG, marker, stream)
+#define DSP_LOG_EMERG_S(marker, stream)  \
+    DSP_LOG_LOG_S(NActors::NLog::PRI_EMERG, marker, stream)
+#define DSP_LOG_ALERT_S(marker, stream)  \
+    DSP_LOG_LOG_S(NActors::NLog::PRI_ALERT, marker, stream)
+#define DSP_LOG_CRIT_S(marker, stream)   \
+    DSP_LOG_LOG_S(NActors::NLog::PRI_CRIT, marker, stream)
+#define DSP_LOG_ERROR_S(marker, stream)  \
+    DSP_LOG_LOG_S(NActors::NLog::PRI_ERROR, marker, stream)
+#define DSP_LOG_WARN_S(marker, stream)   \
+    DSP_LOG_LOG_S(NActors::NLog::PRI_WARN, marker, stream)
+#define DSP_LOG_NOTICE_S(marker, stream) \
+    DSP_LOG_LOG_S(NActors::NLog::PRI_NOTICE, marker, stream)
+#define DSP_LOG_INFO_S(marker, stream)   \
+    DSP_LOG_LOG_S(NActors::NLog::PRI_INFO, marker, stream)
+#define DSP_LOG_DEBUG_S(marker, stream)  \
+    DSP_LOG_LOG_S(NActors::NLog::PRI_DEBUG, marker, stream)
 
-#define R_LOG_EMERG_S(marker, stream)  \
-    A_LOG_LOG_S(true, NActors::NLog::PRI_EMERG, marker, stream)
-#define R_LOG_ALERT_S(marker, stream)  \
-    A_LOG_LOG_S(true, NActors::NLog::PRI_ALERT, marker, stream)
-#define R_LOG_CRIT_S(marker, stream)   \
-    A_LOG_LOG_S(true, NActors::NLog::PRI_CRIT, marker, stream)
-#define R_LOG_ERROR_S(marker, stream)  \
-    A_LOG_LOG_S(true, NActors::NLog::PRI_ERROR, marker, stream)
-#define R_LOG_WARN_S(marker, stream)   \
-    A_LOG_LOG_S(true, NActors::NLog::PRI_WARN, marker, stream)
-#define R_LOG_NOTICE_S(marker, stream) \
-    A_LOG_LOG_S(true, NActors::NLog::PRI_NOTICE, marker, stream)
-#define R_LOG_INFO_S(marker, stream)   \
-    A_LOG_LOG_S(true, NActors::NLog::PRI_INFO, marker, stream)
-#define R_LOG_DEBUG_S(marker, stream)  \
-    A_LOG_LOG_S(true, NActors::NLog::PRI_DEBUG, marker, stream)
-
-#define A_LOG_EMERG_SX(logCtx, marker, stream)  \
-    A_LOG_LOG_SX(logCtx, false, NActors::NLog::PRI_EMERG, marker, stream)
-#define A_LOG_ALERT_SX(logCtx, marker, stream)  \
-    A_LOG_LOG_SX(logCtx, false, NActors::NLog::PRI_ALERT, marker, stream)
-#define A_LOG_CRIT_SX(logCtx, marker, stream)   \
-    A_LOG_LOG_SX(logCtx, false, NActors::NLog::PRI_CRIT, marker, stream)
-#define A_LOG_ERROR_SX(logCtx, marker, stream)  \
-    A_LOG_LOG_SX(logCtx, false, NActors::NLog::PRI_ERROR, marker, stream)
-#define A_LOG_WARN_SX(logCtx, marker, stream)   \
-    A_LOG_LOG_SX(logCtx, false, NActors::NLog::PRI_WARN, marker, stream)
-#define A_LOG_NOTICE_SX(logCtx, marker, stream) \
-    A_LOG_LOG_SX(logCtx, false, NActors::NLog::PRI_NOTICE, marker, stream)
-#define A_LOG_INFO_SX(logCtx, marker, stream)   \
-    A_LOG_LOG_SX(logCtx, false, NActors::NLog::PRI_INFO, marker, stream)
-#define A_LOG_DEBUG_SX(logCtx, marker, stream)  \
-    A_LOG_LOG_SX(logCtx, false, NActors::NLog::PRI_DEBUG, marker, stream)
-
-#define R_LOG_EMERG_SX(logCtx, marker, stream)  \
-    A_LOG_LOG_SX(logCtx, true, NActors::NLog::PRI_EMERG, marker, stream)
-#define R_LOG_ALERT_SX(logCtx, marker, stream)  \
-    A_LOG_LOG_SX(logCtx, true, NActors::NLog::PRI_ALERT, marker, stream)
-#define R_LOG_CRIT_SX(logCtx, marker, stream)   \
-    A_LOG_LOG_SX(logCtx, true, NActors::NLog::PRI_CRIT, marker, stream)
-#define R_LOG_ERROR_SX(logCtx, marker, stream)  \
-    A_LOG_LOG_SX(logCtx, true, NActors::NLog::PRI_ERROR, marker, stream)
-#define R_LOG_WARN_SX(logCtx, marker, stream)   \
-    A_LOG_LOG_SX(logCtx, true, NActors::NLog::PRI_WARN, marker, stream)
-#define R_LOG_NOTICE_SX(logCtx, marker, stream) \
-    A_LOG_LOG_SX(logCtx, true, NActors::NLog::PRI_NOTICE, marker, stream)
-#define R_LOG_INFO_SX(logCtx, marker, stream)   \
-    A_LOG_LOG_SX(logCtx, true, NActors::NLog::PRI_INFO, marker, stream)
-#define R_LOG_DEBUG_SX(logCtx, marker, stream)  \
-    A_LOG_LOG_SX(logCtx, true, NActors::NLog::PRI_DEBUG, marker, stream)
+#define DSP_LOG_EMERG_SX(logCtx, marker, stream)  \
+    DSP_LOG_LOG_SX(logCtx, NActors::NLog::PRI_EMERG, marker, stream)
+#define DSP_LOG_ALERT_SX(logCtx, marker, stream)  \
+    DSP_LOG_LOG_SX(logCtx, NActors::NLog::PRI_ALERT, marker, stream)
+#define DSP_LOG_CRIT_SX(logCtx, marker, stream)   \
+    DSP_LOG_LOG_SX(logCtx, NActors::NLog::PRI_CRIT, marker, stream)
+#define DSP_LOG_ERROR_SX(logCtx, marker, stream)  \
+    DSP_LOG_LOG_SX(logCtx, NActors::NLog::PRI_ERROR, marker, stream)
+#define DSP_LOG_WARN_SX(logCtx, marker, stream)   \
+    DSP_LOG_LOG_SX(logCtx, NActors::NLog::PRI_WARN, marker, stream)
+#define DSP_LOG_NOTICE_SX(logCtx, marker, stream) \
+    DSP_LOG_LOG_SX(logCtx, NActors::NLog::PRI_NOTICE, marker, stream)
+#define DSP_LOG_INFO_SX(logCtx, marker, stream)   \
+    DSP_LOG_LOG_SX(logCtx, NActors::NLog::PRI_INFO, marker, stream)
+#define DSP_LOG_DEBUG_SX(logCtx, marker, stream)  \
+    DSP_LOG_LOG_SX(logCtx, NActors::NLog::PRI_DEBUG, marker, stream)
 
 } // NKikimr

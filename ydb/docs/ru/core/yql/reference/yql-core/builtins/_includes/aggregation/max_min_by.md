@@ -28,7 +28,7 @@ MIN_BY(T1, T2, limit:Uint64)->List<T1>?
 
 {% endnote %}
 
-При использовании [фабрики агрегационной функции](../../basic.md#aggregationfactory) в качестве первого аргумента [AGGREGATE_BY](#aggregateby) передается `Tuple` из значения и ключа.
+При использовании [фабрики агрегационной функции](../../basic.md#aggregationfactory) в качестве первого аргумента [AGGREGATE_BY](../../aggregation.md#aggregateby) передается `Tuple` из значения и ключа.
 
 **Примеры**
 ``` yql

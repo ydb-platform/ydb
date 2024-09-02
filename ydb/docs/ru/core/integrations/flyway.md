@@ -19,13 +19,13 @@
       <artifactId>flyway-core</artifactId>
       <version>${flyway.core.version}</version>
   </dependency>
-  
+
   <dependency>
       <groupId>tech.ydb.jdbc</groupId>
       <artifactId>ydb-jdbc-driver</artifactId>
       <version>${ydb.jdbc.version}</version>
   </dependency>
-  
+
   <dependency>
       <groupId>tech.ydb.dialects</groupId>
       <artifactId>flyway-ydb-dialect</artifactId>
@@ -46,7 +46,7 @@
 
 {% endlist %}
 
-Для работы с {{ ydb-short-name }} через Flyway CLI требуется установить `flyway` утилиту [любым из рекомендованных способов](https://documentation.red-gate.com/fd/command-line-184127404.html). 
+Для работы с {{ ydb-short-name }} через Flyway CLI требуется установить `flyway` утилиту [любым из рекомендованных способов](https://documentation.red-gate.com/fd/command-line-184127404.html).
 
 Затем утилита должна быть расширена с помощью диалекта {{ ydb-short-name }} и драйвера JDBC:
 
@@ -124,7 +124,7 @@ db/migration:
       PRIMARY KEY (series_id, season_id)
   );
   ```
-  
+
 - V3__create_episodes.sql
 
 ```sql
@@ -149,7 +149,7 @@ flyway -url=jdbc:ydb:grpc://localhost:2136/local -locations=db/migration -baseli
 
 {% note info %}
 
-Все примеры использует докер контейнер, для которого не требуется дополнительных параметров для аутентификации. 
+Все примеры использует докер контейнер, для которого не требуется дополнительных параметров для аутентификации.
 
 Как подключится к {{ ydb-short-name }} можно посмотреть в [следующем разделе](./liquibase.md#connect-to-ydb).
 
@@ -327,7 +327,7 @@ flyway -url=jdbc:ydb:grpc://localhost:2136/local -locations=db/migration migrate
 
 Команда [info](https://documentation.red-gate.com/flyway/flyway-cli-and-api/usage/command-line/command-line-info) печатает подробные сведения и информацию о состоянии всех миграций.
 
-Добавим еще одну миграцию, которая переименовывает раннее добавленный вторичный индекс: 
+Добавим еще одну миграцию, которая переименовывает раннее добавленный вторичный индекс:
 
 ```
 db/migration:
@@ -402,7 +402,7 @@ flyway -url=jdbc:ydb:grpc://localhost:2136/local -locations=db/migration repair
 
 ![_assets/flyway-repair-step-1.png](_assets/flyway-repair-step-1.png)
 
-После восстановления таблицы лога, валидация проходит успешно. 
+После восстановления таблицы лога, валидация проходит успешно.
 
 Также с помощью команды `repair` можно удалить не удавшийся DDL скрипт.
 

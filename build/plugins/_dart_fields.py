@@ -993,6 +993,7 @@ class TestFiles:
     @classmethod
     def test_srcs(cls, unit, flat_args, spec_args):
         test_files = get_values_list(unit, 'TEST_SRCS_VALUE')
+        test_files = _resolve_module_files(unit, unit.get("MODDIR"), test_files)
         return {cls.KEY: serialize_list(test_files)}
 
     @classmethod

@@ -136,7 +136,7 @@ NPG::TEvPGEvents::TRowValueField ColumnValueToRowValueField(NYdb::TValueParser& 
                     return {.Value = TString(pg.Content_)};
                 case EFormatBinary: {
                     // HACK(xenoxeno)
-                    NKikimr::NPg::TConvertResult result = NKikimr::NPg::PgNativeBinaryFromNativeText(pg.Content_, pg.PgType_.Oid);
+                    NKikimr::NPg::TConvertResult result = NKikimr::NPg::PgNativeBinaryFromNativeText(TString{pg.Content_}, pg.PgType_.Oid);
                     if (result.Error.Empty()) {
                         auto begin(reinterpret_cast<const uint8_t*>(result.Str.data()));
                         auto end(begin + result.Str.size());

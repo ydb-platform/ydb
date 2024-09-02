@@ -70,7 +70,7 @@ std::optional<TString> TryDecodeYdbSessionId(const TString& sessionId) {
             return std::nullopt;
         }
 
-        return *ids[0];
+        return TString{*ids[0]};
     } catch (...) {
         return std::nullopt;
     }

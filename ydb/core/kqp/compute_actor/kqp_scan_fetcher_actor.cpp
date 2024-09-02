@@ -23,7 +23,7 @@ static constexpr ui64 MAX_SHARD_RESOLVES = 3;
 
 
 TKqpScanFetcherActor::TKqpScanFetcherActor(const NKikimrKqp::TKqpSnapshot& snapshot,
-    const TComputeRuntimeSettings& settings, std::vector<NActors::TActorId>&& computeActors, const ui64 txId, const ui64 lockTxId, const ui32 lockNodeId,
+    const TComputeRuntimeSettings& settings, std::vector<NActors::TActorId>&& computeActors, const ui64 txId, const TMaybe<ui64> lockTxId, const ui32 lockNodeId,
     const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta, const TShardsScanningPolicy& shardsScanningPolicy,
     TIntrusivePtr<TKqpCounters> counters, NWilson::TTraceId traceId)
     : Meta(meta)
@@ -417,7 +417,9 @@ std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TKqpScanFetcherActor::BuildEv
     ev->Record.SetStatsMode(RuntimeSettings.StatsMode);
     ev->Record.SetScanId(scanId);
     ev->Record.SetTxId(std::get<ui64>(TxId));
-    ev->Record.SetLockTxId(LockTxId);
+    if (LockTxId) {
+        ev->Record.SetLockTxId(*LockTxId);
+    }
     ev->Record.SetLockNodeId(LockNodeId);
     ev->Record.SetTablePath(ScanDataMeta.TablePath);
     ev->Record.SetSchemaVersion(ScanDataMeta.TableId.SchemaVersion);
@@ -466,7 +468,8 @@ void TKqpScanFetcherActor::ProcessPendingScanDataItem(TEvKqpCompute::TEvScanData
 
     state->LastKey = std::move(msg.LastKey);
     const ui64 rowsCount = msg.GetRowsCount();
-    AFL_ENSURE(LockTxId == 0 || !msg.LocksInfo.Locks.empty() || !msg.LocksInfo.BrokenLocks.empty());
+    AFL_ENSURE(!LockTxId || !msg.LocksInfo.Locks.empty() || !msg.LocksInfo.BrokenLocks.empty());
+    AFL_ENSURE(LockTxId || (msg.LocksInfo.Locks.empty() && msg.LocksInfo.BrokenLocks.empty()));
     AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("action","got EvScanData")("rows", rowsCount)("finished", msg.Finished)("exceeded", msg.RequestedBytesLimitReached)
         ("scan", ScanId)("packs_to_send", InFlightComputes.GetPacksToSendCount())
         ("from", ev->Sender)("shards remain", PendingShards.size())

@@ -88,19 +88,25 @@ private:
         virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const NActors::TActorContext& /*ctx*/) override {
             auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitPrimaryTransactionOperator>(TxId);
             auto copy = *op;
-            AFL_VERIFY(copy.WaitShardsBrokenFlags.erase(TabletId))("remove_tablet_id", TabletId);
-            copy.TxBroken = copy.TxBroken.value_or(false) || BrokenFlag;
-            Self->GetProgressTxController().WriteTxOperatorInfo(txc, TxId, copy.SerializeToProto().SerializeAsString());
+            if (copy.WaitShardsBrokenFlags.erase(TabletId)) {
+                copy.TxBroken = copy.TxBroken.value_or(false) || BrokenFlag;
+                Self->GetProgressTxController().WriteTxOperatorInfo(txc, TxId, copy.SerializeToProto().SerializeAsString());
+            } else {
+                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "repeated shard broken_flag info")("shard_id", TabletId);
+            }
             return true;
         }
         virtual void DoComplete(const NActors::TActorContext& /*ctx*/) override {
             auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitPrimaryTransactionOperator>(TxId);
-            AFL_VERIFY(op->WaitShardsBrokenFlags.erase(TabletId))("remove_tablet_id", TabletId);
-            op->TxBroken = op->TxBroken.value_or(false) || BrokenFlag;
-            op->SendBrokenFlagAck(*Self, TabletId);
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "remove_tablet_id")("wait", JoinSeq(",", op->WaitShardsBrokenFlags))(
-                "receive", TabletId);
-            op->InitializeRequests(*Self);
+            if (op->WaitShardsBrokenFlags.erase(TabletId)) {
+                op->TxBroken = op->TxBroken.value_or(false) || BrokenFlag;
+                op->SendBrokenFlagAck(*Self, TabletId);
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "remove_tablet_id")("wait", JoinSeq(",", op->WaitShardsBrokenFlags))(
+                    "receive", TabletId);
+                op->InitializeRequests(*Self);
+            } else {
+                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "repeated shard broken_flag info")("shard_id", TabletId);
+            }
         }
 
     public:

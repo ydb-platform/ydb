@@ -1,6 +1,7 @@
 #pragma once
 
 #include "event_local.h"
+#include "event_simple_non_local.h"
 #include "event_pb.h"
 
 #include <util/system/unaligned_mem.h>

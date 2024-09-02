@@ -3,6 +3,7 @@
 #include <ydb/core/tablet/tablet_setup.h>
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/blobstorage.h>
+#include <ydb/library/actors/core/event_simple_non_local.h>
 
 namespace NKikimr {
 

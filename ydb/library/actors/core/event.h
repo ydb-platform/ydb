@@ -373,26 +373,4 @@ namespace NActors {
         typedef TEventHandle<TEventType> THandle;
         typedef TAutoPtr<THandle> TPtr;
     };
-
-
-    // Non-local event with empty serialization 
-    template <typename TEv, ui32 TEventType>
-    class TEventSimpleNonLocal: public TEventBase<TEv, TEventType> {
-    public:
-        TString ToStringHeader() const override {
-            return TypeName<TEv>();
-        }
-
-        bool SerializeToArcadiaStream(TChunkSerializer* /*serializer*/) const override {
-            return true;
-        }
-
-        bool IsSerializable() const override {
-            return true;
-        }
-
-        static IEventBase* Load(TEventSerializedData*) {
-            return new TEv();
-        }
-    };
 }

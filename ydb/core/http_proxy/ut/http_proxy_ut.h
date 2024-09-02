@@ -1885,6 +1885,15 @@ Y_UNIT_TEST_SUITE(TestHttpProxy) {
         message0["MessageBody"] = "MessageBody-0";
         message0["MessageDeduplicationId"] = "MessageDeduplicationId-0";
 
+        NJson::TJsonValue delaySeconds;
+        delaySeconds["StringValue"] = "1";
+        delaySeconds["DataType"] = "String";
+
+        NJson::TJsonValue attributes;
+        attributes["DelaySeconds"] = delaySeconds;
+
+        message0["MessageAttributes"] = attributes;
+
         NJson::TJsonValue message1;
         message1["Id"] = "Id-1";
         message1["MessageBody"] = "MessageBody-1";
@@ -1902,6 +1911,7 @@ Y_UNIT_TEST_SUITE(TestHttpProxy) {
         UNIT_ASSERT(json["Successful"].GetArray().size() == 2);
         auto succesful0 = json["Successful"][0];
         UNIT_ASSERT(succesful0["Id"] == "Id-0");
+        UNIT_ASSERT(!GetByPath<TString>(succesful0, "Md5OfMessageAttributes").empty());
         UNIT_ASSERT(!GetByPath<TString>(succesful0, "Md5OfMessageBody").empty());
         UNIT_ASSERT(!GetByPath<TString>(succesful0, "MessageId").empty());
     }

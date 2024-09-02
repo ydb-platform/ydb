@@ -77,4 +77,3 @@ def test_tpc():
         s3_folder = pathlib.Path(os.environ["PUBLIC_DIR"]).resolve()
 
         upload(result_path, s3_folder)
-    exit(1)

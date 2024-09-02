@@ -468,7 +468,7 @@ public:
 
                 THolder<NPDisk::TPDisk> pDisk(new NPDisk::TPDisk(cfg, counters));
 
-                pDisk->Initialize(std::move(pCtx));
+                pDisk->Initialize(pCtx);
 
                 if (!pDisk->BlockDevice->IsGood()) {
                     ythrow yexception() << "Failed to initialize temporal PDisk for format rewriting, info# " << pDisk->BlockDevice->DebugInfo();

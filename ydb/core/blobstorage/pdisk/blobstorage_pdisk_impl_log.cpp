@@ -110,8 +110,8 @@ void TPDisk::InitLogChunksInfo() {
                     it->CurrentUserCount--;
                     P_LOG(PRI_INFO, BPD01, "InitLogChunksInfo, chunk is dereferenced by owner", 
                         (ChunkIdx, it->ChunkIdx),
-                        //(LsnRange, TStringBuilder() << "[" << range.FirstLsn << ", " << range.LastLsn << "]"),
-                        //(PresentNonces, TStringBuilder() << "[" << it->FirstNonce << ", " << it->LastNonce << "]"),
+                        (LsnRange, TString(TStringBuilder() << "[" << range.FirstLsn << ", " << range.LastLsn << "]")),
+                        (PresentNonces, TString(TStringBuilder() << "[" << it->FirstNonce << ", " << it->LastNonce << "]")),
                         (OwnerId, ui32(owner)),
                         (CurrentFirstLsnToKeep, OwnerData[owner].CurrentFirstLsnToKeep),
                         (CurrentUserCount, it->CurrentUserCount));
@@ -695,7 +695,7 @@ void TPDisk::WriteSysLogRestorePoint(TCompletionAction *action, TReqId reqId, NW
 
     P_LOG(PRI_DEBUG, BPD69, "WriteSysLogRestorePoint",
             (FirstLogChunkToParseCommits, FirstLogChunkToParseCommits),
-            //(CommonLogger, (TStringBuilder() << (void*)CommonLogger.Get())),
+            (CommonLogger, TString(TStringBuilder() << (void*)CommonLogger.Get())),
             ("LogChunks.size()", LogChunks.size()),
             ("LogChunks.front().ChunkIdx", (LogChunks.empty() ? -1 : (i64)LogChunks.front().ChunkIdx)),
             (BeginSectorIdx, beginSectorIdx),
@@ -1242,7 +1242,7 @@ void TPDisk::OnLogCommitDone(TLogCommitDone &req) {
             //Y_ABORT_UNLESS(range.FirstLsn != range.LastLsn);
             P_LOG(PRI_INFO, BPD27, "Log chunk is dereferenced by owner",
                 (ChunkIdx, it->ChunkIdx),
-                //(LsnRange, (TStringBuilder() << "[" << range.FirstLsn << ", " << range.LastLsn << "]")),
+                (LsnRange, TString(TStringBuilder() << "[" << range.FirstLsn << ", " << range.LastLsn << "]")),
                 (ownerId, (ui32)req.OwnerId),
                 (CurrentLsnToKeep, currentFirstLsnToKeep),
                 (CausedbyLsn, req.Lsn),

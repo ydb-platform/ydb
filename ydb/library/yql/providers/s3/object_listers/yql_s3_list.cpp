@@ -133,10 +133,10 @@ TS3ListObjectV2Response ParseListObjectV2Response(
     if (const auto& root = xml.Root(); root.Name() == "Error") {
         const auto& code = root.Node("Code", true).Value<TString>();
         const auto& message = root.Node("Message", true).Value<TString>();
-        ythrow yexception() << message << ", error: code: " << code << ", request id: ["
+        throw yexception() << message << ", error: code: " << code << ", request id: ["
                             << requestId << "]";
     } else if (root.Name() != "ListBucketResult") {
-        ythrow yexception() << "Unexpected response '" << root.Name()
+        throw yexception() << "Unexpected response '" << root.Name()
                             << "' on discovery, request id: [" << requestId << "]";
     } else {
         const NXml::TNamespacesForXPath nss(
@@ -313,7 +313,7 @@ private:
 
         auto gateway = ctx.GatewayWeak.lock();
         if (!gateway) {
-            ythrow yexception() << "Gateway disappeared";
+            throw yexception() << "Gateway disappeared";
         }
 
         auto sharedCtx = ctx.SharedCtx;
@@ -360,7 +360,7 @@ private:
     static void OnDiscovery(TListingContext ctx, IHTTPGateway::TResult&& result) try {
         auto gateway = ctx.GatewayWeak.lock();
         if (!gateway) {
-            ythrow yexception() << "Gateway disappeared";
+            throw yexception() << "Gateway disappeared";
         }
         if (!result.Issues) {
             auto xmlString = result.Content.Extract();
@@ -539,7 +539,7 @@ IS3Lister::TPtr MakeS3Lister(
     }
 
     if (!allowLocalFiles) {
-        ythrow yexception() << "Using local files as DataSource isn't allowed, but trying access "
+        throw yexception() << "Using local files as DataSource isn't allowed, but trying access "
                             << listingRequest.Url;
     }
     return std::make_shared<TLocalS3Lister>(listingRequest, delimiter);

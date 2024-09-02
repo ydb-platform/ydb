@@ -397,7 +397,7 @@ private:
     }
 
     TIterator& GetIterator(NUdf::TUnboxedValue& iterator, TComputationContext& ctx) const {
-        if (!iterator.HasValue()) {
+        if (iterator.IsInvalid()) {
             MakeIterator(ctx, iterator);
         }
         return *static_cast<TIterator*>(iterator.AsBoxed().Get());

@@ -55,6 +55,17 @@ class RunResults:
         return "RunQueryData(" + ", ".join(result) + "})"
 
 
+def pretty_print(value):
+    if value is None:
+        return "None"
+    if type(value) == str:
+        return f'\"{value}\"'
+    if type(value) in [int, float, bool]:
+        return str(value)
+
+    assert False, f"unrecognized type: {type(value)}"
+
+
 def upload_results(result_path, s3_folder, test_start):
     results_map = {}
     for entry in result_path.glob("*/*"):
@@ -138,7 +149,7 @@ def upload_results(result_path, s3_folder, test_start):
                 }
                 sql = 'UPSERT INTO dq_spilling_nightly_runs ({columns}) VALUES ({values})'.format(
                     columns=", ".join(map(str, mapping.keys())),
-                    values=", ".join(map(str, mapping.values())))
+                    values=", ".join(map(pretty_print, mapping.values())))
                 print(sql, file=sys.stderr)
                 tx.execute(sql, commit_tx=True)
 

@@ -85,7 +85,7 @@ public:
         if (TxOperator->IsFail()) {
             TxOperator->SendReply(*Self, ctx);
         } else {
-            auto internalOp = Self->GetProgressTxController().GetVerifiedTxOperator(TxOperator->GetTxId());
+            auto internalOp = Self->GetProgressTxController().GetTxOperatorVerified(TxOperator->GetTxId());
             NActors::TLogContextGuard lGuardTx = NActors::TLogContextBuilder::Build()("int_op_tx", internalOp->GetTxInfo().DebugString());
             if (!TxOperator->CheckTxInfoForReply(*TxInfo)) {
                 AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "deprecated tx operator");

@@ -2526,7 +2526,7 @@ private:
         Planner = CreateKqpPlanner({
             .TasksGraph = TasksGraph,
             .TxId = TxId,
-            .LockTxId = lockTxId.GetOrElse(0),
+            .LockTxId = lockTxId,
             .LockNodeId = SelfId().NodeId(),
             .Executer = SelfId(),
             .Snapshot = GetSnapshot(),

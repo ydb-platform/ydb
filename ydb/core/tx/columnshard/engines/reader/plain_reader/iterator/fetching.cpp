@@ -121,6 +121,11 @@ TConclusion<bool> TPredicateFilter::DoExecuteInplace(const std::shared_ptr<IData
 TConclusion<bool> TSnapshotFilter::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
     auto filter = MakeSnapshotFilter(
         source->GetStageData().GetTable()->BuildTableVerified(), source->GetContext()->GetReadMetadata()->GetRequestSnapshot());
+    if (filter.GetFilteredCount().value_or(source->GetRecordsCount()) != source->GetRecordsCount()) {
+        if (source->AddTxConflict()) {
+            return true;
+        }
+    }
     source->MutableStageData().AddFilter(filter);
     return true;
 }

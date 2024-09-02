@@ -177,7 +177,9 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
     auto result = std::make_unique<TEvKqpNode::TEvStartKqpTasksRequest>(TasksGraph.GetMeta().GetArenaIntrusivePtr());
     auto& request = result->Record;
     request.SetTxId(TxId);
-    request.SetLockTxId(LockTxId);
+    if (LockTxId) {
+        request.SetLockTxId(*LockTxId);
+    }
     request.SetLockNodeId(LockNodeId);
     ActorIdToProto(ExecuterId, request.MutableExecuterActorId());
 

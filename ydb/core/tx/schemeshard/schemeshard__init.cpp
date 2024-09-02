@@ -1826,7 +1826,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     Y_ABORT_UNLESS(parseOk);
 
                     if (tableInfo->IsAsyncReplica()) {
-                        Self->PathsById.at(pathId)->SetAsyncReplica();
+                        Self->PathsById.at(pathId)->SetAsyncReplica(true);
                     }
                 }
 

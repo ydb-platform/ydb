@@ -137,8 +137,8 @@ def upload_results(result_path, s3_folder, test_start):
                     "SystemTime" : results.system_time
                 }
                 sql = 'UPSERT INTO dq_spilling_nightly_runs ({columns}) VALUES ({values})'.format(
-                    columns=", ".join(mapping.keys()),
-                    values=", ".join(mapping.values()))
+                    columns=", ".join(map(str, mapping.keys())),
+                    values=", ".join(map(str, mapping.values())))
                 print(sql, file=sys.stderr)
                 tx.execute(sql, commit_tx=True)
 

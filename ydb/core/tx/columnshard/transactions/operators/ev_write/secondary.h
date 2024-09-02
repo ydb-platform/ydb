@@ -154,7 +154,7 @@ private:
 
     virtual void DoOnTabletInit(TColumnShard& owner) override {
         if (TxBroken || (ReceiveAck && !NeedReceiveBroken)) {
-            owner.EnqueueProgressTx(NActors::TActivationContext::AsActorContext());
+            owner.EnqueueProgressTx(NActors::TActivationContext::AsActorContext(), GetTxId());
         } else if (!ReceiveAck) {
             SendResult(owner);
         }

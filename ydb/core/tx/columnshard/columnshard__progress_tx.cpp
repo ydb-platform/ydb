@@ -96,9 +96,9 @@ public:
 void TColumnShard::EnqueueProgressTx(const TActorContext& ctx, const std::optional<ui64> continueTxId) {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "EnqueueProgressTx")("tablet_id", TabletID());
     if (continueTxId) {
-        AFL_VERIFY(ProgressTxInFlight == continueTxId)("current", ProgressTxInFlight)("expected", continueTxId);
+        AFL_VERIFY(!ProgressTxInFlight || ProgressTxInFlight == continueTxId)("current", ProgressTxInFlight)("expected", continueTxId);
     }
-    if (ProgressTxInFlight == continueTxId) {
+    if (!ProgressTxInFlight || ProgressTxInFlight == continueTxId) {
         ProgressTxInFlight = continueTxId.value_or(0);
         Execute(new TTxProgressTx(this), ctx);
     }

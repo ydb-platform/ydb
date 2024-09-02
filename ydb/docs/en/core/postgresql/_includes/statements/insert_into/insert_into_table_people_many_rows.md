@@ -1,5 +1,5 @@
 ```sql
-INSERT INTO people (name, lastname, age, country, state, city, birthday, sex) 
+INSERT INTO people (name, lastname, age, country, state, city, birthday, sex)
 VALUES
     ('Jane', 'Smith', 25, 'Canada', 'Ontario', 'Toronto', CAST('1997-08-23' AS Date), 'Female'),
     ('Alice', 'Johnson', 28, 'UK', 'England', 'London', CAST('1994-05-05' AS Date), 'Female'),
@@ -19,4 +19,4 @@ VALUES
     ('Paul', 'Harris', 23, 'Canada', 'Saskatchewan', 'Saskatoon', CAST('1999-08-19' AS Date), 'Male'),
     ('Quinn', 'Lewis', 34, 'UK', 'England', 'Manchester', CAST('1988-07-25' AS DATE), 'Female'),
     ('Rachel', 'Young', 42, 'USA', 'Ohio', 'Cleveland', CAST('1980-02-03' AS Date), 'Female');
-``` 
+```

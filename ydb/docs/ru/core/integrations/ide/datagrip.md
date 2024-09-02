@@ -4,7 +4,7 @@
 
 DataGrip позволяет работать с {{ ydb-short-name }} по протоколу Java Database Connectivity ([JDBC](https://ru.wikipedia.org/wiki/Java_Database_Connectivity)). Данная статья демонстрирует, как настроить такую интеграцию.
 
-### Подключение JDBC-драйвера {{ ydb-name }} к DataGrip {#datagrip_ydb}
+## Подключение JDBC-драйвера {{ ydb-name }} к DataGrip {#datagrip_ydb}
 
 Для подключения к {{ ydb-name }} из DataGrip понадобится JDBC-драйвер. Для загрузки JDBC-драйвера выполните следующие шаги:
 1. Перейдите в [репозиторий ydb-jdbc-driver](https://github.com/ydb-platform/ydb-jdbc-driver/releases).
@@ -28,7 +28,7 @@ DataGrip позволяет работать с {{ ydb-short-name }} по про
 
 1. Нажмите кнопку **OK**.
 
-### Создание подключения к {{ ydb-name }} {#datagrip_ydb_connection}
+## Создание подключения к {{ ydb-name }} {#datagrip_ydb_connection}
 
 Для создания подключения необходимо выполнить следующие шаги:
 
@@ -60,7 +60,7 @@ DataGrip позволяет работать с {{ ydb-short-name }} по про
 
 1. Нажмите кнопку **OK** для сохранения соединения.
 
-### Работа с {{ ydb-name }} {#dbeaver_ydb_connection}
+## Работа с {{ ydb-name }} {#dbeaver_ydb_connection}
 
 С помощью DataGrip можно просматривать список и структуру таблиц:
 

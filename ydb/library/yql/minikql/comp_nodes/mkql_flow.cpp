@@ -296,7 +296,7 @@ public:
     {}
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
-        if (!state.HasValue()) {
+        if (state.IsInvalid()) {
             state = Stream->GetValue(ctx);
         }
 

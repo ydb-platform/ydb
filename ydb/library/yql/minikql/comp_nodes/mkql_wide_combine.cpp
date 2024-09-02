@@ -806,7 +806,7 @@ public:
     {}
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
-        if (!state.HasValue()) {
+        if (state.IsInvalid()) {
             MakeState(ctx, state);
         }
 
@@ -1235,7 +1235,7 @@ public:
     {}
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
-        if (!state.HasValue()) {
+        if (state.IsInvalid()) {
             MakeState(ctx, state);
         } 
 

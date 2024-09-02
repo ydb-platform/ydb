@@ -62,6 +62,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
             rec.SetSnapshotTxId(snapshot.TxId);
             rec.SetSnapshotStep(snapshot.Step);
 
+            rec.SetMaxProbability(std::numeric_limits<uint64_t>::max());
             rec.SetSeed(1337);
             if (!rec.HasK()) {
                 rec.SetK(1);
@@ -104,6 +105,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
                 rec.SetSnapshotTxId(snapshot.TxId);
                 rec.SetSnapshotStep(snapshot.Step);
 
+                rec.SetMaxProbability(std::numeric_limits<uint64_t>::max());
                 rec.SetSeed(seed);
                 rec.SetK(k);
             };

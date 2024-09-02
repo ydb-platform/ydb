@@ -109,7 +109,7 @@ struct TJoinAlgoHints {
 };
 
 struct TJoinOrderHints {
-    std::shared_ptr<IBaseOptimizerNode> HintsTree;
+    TVector<std::shared_ptr<IBaseOptimizerNode>> HintTrees;
 
     TJoinOrderHints() {}
     TJoinOrderHints(const TString& json);

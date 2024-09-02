@@ -64,11 +64,12 @@ ALTER TABLE <table_name> ALTER INDEX <index_name> SET (<partitioning_setting_nam
 * `<index_name>`: The name of the index to be modified.
 
 * `<partitioning_setting_name>`: The name of the setting to be modified, which should be one of the following:
-    * [AUTO_PARTITIONING_BY_SIZE]({{ concept_table }}#auto_partitioning_by_size)
-    * [AUTO_PARTITIONING_BY_LOAD]({{ concept_table }}#auto_partitioning_by_load)
-    * [AUTO_PARTITIONING_PARTITION_SIZE_MB]({{ concept_table }}#auto_partitioning_partition_size_mb)
-    * [AUTO_PARTITIONING_MIN_PARTITIONS_COUNT]({{ concept_table }}#auto_partitioning_min_partitions_count)
-    * [AUTO_PARTITIONING_MAX_PARTITIONS_COUNT]({{ concept_table }}#auto_partitioning_max_partitions_count)
+
+  * [AUTO_PARTITIONING_BY_SIZE]({{ concept_table }}#auto_partitioning_by_size)
+  * [AUTO_PARTITIONING_BY_LOAD]({{ concept_table }}#auto_partitioning_by_load)
+  * [AUTO_PARTITIONING_PARTITION_SIZE_MB]({{ concept_table }}#auto_partitioning_partition_size_mb)
+  * [AUTO_PARTITIONING_MIN_PARTITIONS_COUNT]({{ concept_table }}#auto_partitioning_min_partitions_count)
+  * [AUTO_PARTITIONING_MAX_PARTITIONS_COUNT]({{ concept_table }}#auto_partitioning_max_partitions_count)
 
 {% note info %}
 
@@ -77,8 +78,9 @@ These settings cannot be [reset](#additional-reset).
 {% endnote %}
 
 * `<value>`: The new value for the setting. Possible values include:
-    * `ENABLED` or `DISABLED` for the `AUTO_PARTITIONING_BY_SIZE` and `AUTO_PARTITIONING_BY_LOAD` settings
-    * An integer of `Uint64` type for the other settings
+
+  * `ENABLED` or `DISABLED` for the `AUTO_PARTITIONING_BY_SIZE` and `AUTO_PARTITIONING_BY_LOAD` settings
+  * An integer of `Uint64` type for the other settings
 
 #### Example
 
@@ -134,17 +136,21 @@ ALTER TABLE `series` RENAME INDEX `title_index` TO `title_index_new`;
 ### Changefeed options {#changefeed-options}
 
 * `MODE`: Operation mode. Specifies what to write to a changefeed each time table data is altered.
-   * `KEYS_ONLY`: Only the primary key components and change flag are written.
-   * `UPDATES`: Updated column values that result from updates are written.
-   * `NEW_IMAGE`: Any column values resulting from updates are written.
-   * `OLD_IMAGE`: Any column values before updates are written.
-   * `NEW_AND_OLD_IMAGES`: A combination of `NEW_IMAGE` and `OLD_IMAGE` modes. Any column values _prior to_ and _resulting from_ updates are written.
+
+  * `KEYS_ONLY`: Only the primary key components and change flag are written.
+  * `UPDATES`: Updated column values that result from updates are written.
+  * `NEW_IMAGE`: Any column values resulting from updates are written.
+  * `OLD_IMAGE`: Any column values before updates are written.
+  * `NEW_AND_OLD_IMAGES`: A combination of `NEW_IMAGE` and `OLD_IMAGE` modes. Any column values _prior to_ and _resulting from_ updates are written.
+
 * `FORMAT`: Data write format.
-   * `JSON`: Write data in [JSON](../../../../concepts/cdc.md#json-record-structure) format.
-   * `DEBEZIUM_JSON`: Write data in the [Debezium-like JSON format](../../../../concepts/cdc.md#debezium-json-record-structure).
+
+  * `JSON`: Write data in [JSON](../../../../concepts/cdc.md#json-record-structure) format.
+  * `DEBEZIUM_JSON`: Write data in the [Debezium-like JSON format](../../../../concepts/cdc.md#debezium-json-record-structure).
 {% if audience == "tech" %}
-   * `DYNAMODB_STREAMS_JSON`: Write data in the [JSON format compatible with Amazon DynamoDB Streams](../../../../concepts/cdc.md#dynamodb-streams-json-record-structure).
+  * `DYNAMODB_STREAMS_JSON`: Write data in the [JSON format compatible with Amazon DynamoDB Streams](../../../../concepts/cdc.md#dynamodb-streams-json-record-structure).
 {% endif %}
+
 * `VIRTUAL_TIMESTAMPS`: Enabling/disabling [virtual timestamps](../../../../concepts/cdc.md#virtual-timestamps). Disabled by default.
 * `RETENTION_PERIOD`: [Record retention period](../../../../concepts/cdc.md#retention-period). The value type is `Interval` and the default value is 24 hours (`Interval('PT24H')`).
 * `TOPIC_MIN_ACTIVE_PARTITIONS`: [The number of topic partitions](../../../../concepts/cdc.md#topic-partitions). By default, the number of topic partitions is equal to the number of table partitions.

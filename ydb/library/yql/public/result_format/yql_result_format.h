@@ -1,11 +1,36 @@
 #pragma once
 
+#include <ydb/library/yql/public/issue/yql_issue.h>
+
 #include <library/cpp/yson/node/node.h>
 #include <library/cpp/yson/node/node.h>
 
 namespace NYql::NResult {
 
 class TUnsupportedException : public yexception {};
+
+struct TFullResultRef {
+    TVector<TString> Reference;
+    TMaybe<TVector<TString>> Columns;
+    bool Remove = false;
+};
+
+struct TWrite {
+    const NYT::TNode* Type = nullptr;
+    const NYT::TNode* Data = nullptr;
+    bool IsTruncated = false;
+    TVector<TFullResultRef> Refs;
+};
+
+struct TResult {
+    TMaybe<TPosition> Position;
+    TMaybe<TString> Label;
+    TVector<TWrite> Writes;
+    bool IsUnordered = false;
+    bool IsTruncated = false;
+};
+
+TVector<TResult> ParseResponse(const NYT::TNode& responseNode);
 
 class ITypeVisitor {
 public:
@@ -69,7 +94,7 @@ public:
     virtual void OnPgType(TStringBuf name, TStringBuf category) = 0;
 };
 
-class TThrowingTypeVisitor : public ITypeVisitor {
+class TSameActionTypeVisitor : public ITypeVisitor {
 public:
     void OnVoid() override;
     void OnNull() override;
@@ -127,6 +152,19 @@ public:
     void OnBeginTagged(TStringBuf tag) override;
     void OnEndTagged() override;
     void OnPgType(TStringBuf name, TStringBuf category) override;
+
+public:
+    virtual void Do() = 0;
+};
+
+class TThrowingTypeVisitor : public TSameActionTypeVisitor {
+public:
+    void Do() final;
+};
+
+class TEmptyTypeVisitor : public TSameActionTypeVisitor {
+public:
+    void Do() final;
 };
 
 void ParseType(const NYT::TNode& typeNode, ITypeVisitor& visitor);
@@ -136,7 +174,6 @@ public:
     TTypeBuilder();
     const NYT::TNode& GetResult() const;
 
-private:
     void OnVoid() final;
     void OnNull() final;
     void OnEmptyList() final;

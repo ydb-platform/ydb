@@ -144,6 +144,8 @@ enum ETransactionKind {
     TX_KIND_COMMIT_WRITE = 5;
     TX_KIND_BACKUP = 6;
     TX_KIND_SHARING = 7;
+    TX_KIND_COMMIT_WRITE_PRIMARY = 8;
+    TX_KIND_COMMIT_WRITE_SECONDARY = 9;
 }
 
 enum ETransactionFlag {
@@ -204,6 +206,29 @@ message TBackupTxBody {
 
 message TCommitWriteTxBody {
     optional uint64 LockId = 1;
+
+    message TPrimary {
+        repeated uint64 SendingShards = 1;
+        repeated uint64 ReceivingShards = 2;
+        repeated uint64 WaitShardsBrokenFlags = 3;
+        repeated uint64 WaitShardsResultAck = 4;
+        optional bool TxBroken = 5;
+    }
+
+    message TSecondary {
+        optional uint64 ArbiterTabletId = 1;
+        optional bool NeedReceiveBroken = 2;
+        optional bool ReceiveAck = 3;
+        optional bool SelfBroken = 4;
+        optional bool TxBroken = 5;
+    }
+
+    oneof Implementation {
+        TPrimary PrimaryTabletData = 5;
+        TSecondary SecondaryTabletData = 6;
+    }
+
+    optional bool Broken = 4 [default = false];
 }
 
 message TSchemaPresetVersionInfo {

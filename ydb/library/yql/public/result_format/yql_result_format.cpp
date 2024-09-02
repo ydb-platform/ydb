@@ -486,234 +486,346 @@ void TTypeBuilder::Pop() {
     Stack.pop_back();
 }
 
-void TThrowingTypeVisitor::OnVoid() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnVoid() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnNull() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnNull() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnEmptyList() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnEmptyList() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnEmptyDict() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnEmptyDict() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnBool() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnBool() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnInt8() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnInt8() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnUint8() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnUint8() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnInt16() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnInt16() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnUint16() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnUint16() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnInt32() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnInt32() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnUint32() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnUint32() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnInt64() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnInt64() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnUint64() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnUint64() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnFloat() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnFloat() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnDouble() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnDouble() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnString() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnString() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnUtf8() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnUtf8() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnYson() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnYson() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnJson() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnJson() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnJsonDocument() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnJsonDocument() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnUuid() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnUuid() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnDyNumber() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnDyNumber() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnDate() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnDate() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnDatetime() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnDatetime() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnTimestamp() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnTimestamp() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnTzDate() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnTzDate() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnTzDatetime() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnTzDatetime() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnTzTimestamp() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnTzTimestamp() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnInterval() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnInterval() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnDate32() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnDate32() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnDatetime64() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnDatetime64() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnTimestamp64() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnTimestamp64() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnTzDate32() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnTzDate32() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnTzDatetime64() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnTzDatetime64() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnTzTimestamp64() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnTzTimestamp64() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnInterval64() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnInterval64() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnDecimal(ui32 precision, ui32 scale) {
+void TSameActionTypeVisitor::OnDecimal(ui32 precision, ui32 scale) {
     Y_UNUSED(precision);
     Y_UNUSED(scale);
-    UNEXPECTED;
+    Do();
 }
 
-void TThrowingTypeVisitor::OnBeginOptional() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnBeginOptional() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnEndOptional() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnEndOptional() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnBeginList() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnBeginList() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnEndList() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnEndList() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnBeginTuple() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnBeginTuple() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnTupleItem() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnTupleItem() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnEndTuple() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnEndTuple() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnBeginStruct() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnBeginStruct() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnStructItem(TStringBuf member) {
+void TSameActionTypeVisitor::OnStructItem(TStringBuf member) {
     Y_UNUSED(member);
-    UNEXPECTED;
+    Do();
 }
 
-void TThrowingTypeVisitor::OnEndStruct() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnEndStruct() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnBeginDict() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnBeginDict() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnDictKey() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnDictKey() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnDictPayload() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnDictPayload() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnEndDict() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnEndDict() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnBeginVariant() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnBeginVariant() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnEndVariant() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnEndVariant() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnBeginTagged(TStringBuf tag) {
+void TSameActionTypeVisitor::OnBeginTagged(TStringBuf tag) {
     Y_UNUSED(tag);
-    UNEXPECTED;
+    Do();
 }
 
-void TThrowingTypeVisitor::OnEndTagged() {
-    UNEXPECTED;
+void TSameActionTypeVisitor::OnEndTagged() {
+    Do();
 }
 
-void TThrowingTypeVisitor::OnPgType(TStringBuf name, TStringBuf category) {
+void TSameActionTypeVisitor::OnPgType(TStringBuf name, TStringBuf category) {
     Y_UNUSED(name);
     Y_UNUSED(category);
+    Do();
+}
+
+void TThrowingTypeVisitor::Do() {
     UNEXPECTED;
+}
+
+void TEmptyTypeVisitor::Do() {
+}
+
+TVector<TResult> ParseResponse(const NYT::TNode& responseNode) {
+    CHECK(responseNode.IsList());
+    TVector<TResult> v;
+    for (const auto& resultNode : responseNode.AsList()) {
+        TResult res;
+        CHECK(resultNode.IsMap());
+        if (resultNode.HasKey("Label")) {
+            const auto& labelNode = resultNode["Label"];
+            CHECK(labelNode.IsString());
+            res.Label = labelNode.AsString();
+        }
+
+        if (resultNode.HasKey("Position")) {
+            TPosition pos;
+            const auto& positionNode = resultNode["Position"];
+            CHECK(positionNode.IsMap());
+            CHECK(positionNode.HasKey("File"));
+            const auto& fileNode = positionNode["File"];
+            CHECK(fileNode.IsString());
+            pos.File = fileNode.AsString();
+            CHECK(positionNode.HasKey("Row"));
+            const auto& rowNode = positionNode["Row"];
+            CHECK(rowNode.IsInt64());
+            pos.Row = rowNode.AsInt64();
+            CHECK(positionNode.HasKey("Column"));
+            const auto& columnNode = positionNode["Column"];
+            CHECK(columnNode.IsInt64());
+            pos.Column = columnNode.AsInt64();
+            res.Position = pos;
+        }
+
+        CHECK(resultNode.HasKey("Write"));
+        const auto& writeNodeList = resultNode["Write"];
+        CHECK(writeNodeList.IsList());
+        for (const auto& writeNode : writeNodeList.AsList()) {
+            CHECK(writeNode.IsMap());
+            TWrite write;
+            if (writeNode.HasKey("Type")) {
+                write.Type = &writeNode["Type"];
+            }
+            
+            if (writeNode.HasKey("Data")) {
+                write.Data = &writeNode["Data"];
+            }
+            
+            if (writeNode.HasKey("Truncated")) {
+                const auto& truncatedNode = writeNode["Truncated"];
+                CHECK(truncatedNode.IsBool());
+                write.IsTruncated = truncatedNode.AsBool();
+            }
+
+            if (writeNode.HasKey("Refs")) {
+                const auto& refsNodeList = writeNode["Refs"];
+                CHECK(refsNodeList.IsList());
+                for (const auto& refNode : refsNodeList.AsList()) {
+                    CHECK(refNode.IsMap());
+                    CHECK(refNode.HasKey("Reference"));
+                    const auto& referenceNodeList = refNode["Reference"];
+                    CHECK(referenceNodeList.IsList());
+                    TFullResultRef ref;
+                    for (const auto& node : referenceNodeList.AsList()) {
+                        CHECK(node.IsString());
+                        ref.Reference.push_back(node.AsString());
+                    }
+
+                    if (refNode.HasKey("Columns")) {
+                        const auto& columnsNode = refNode["Columns"];
+                        CHECK(columnsNode.IsList());
+                        ref.Columns.ConstructInPlace();
+                        for (const auto& node : columnsNode.AsList()) {
+                            CHECK(node.IsString());
+                            ref.Columns->push_back(node.AsString());
+                        }
+                    }
+
+                    CHECK(refNode.HasKey("Remove"));
+                    const auto& removeNode = refNode["Remove"];
+                    CHECK(removeNode.IsBool());
+                    ref.Remove = removeNode.AsBool();
+
+                    write.Refs.push_back(ref);
+                }
+            }
+
+            res.Writes.push_back(write);
+        }
+
+        if (resultNode.HasKey("Truncated")) {
+            const auto& truncatedNode = resultNode["Truncated"];
+            CHECK(truncatedNode.IsBool());
+            res.IsTruncated = truncatedNode.AsBool();
+        }
+
+        if (resultNode.HasKey("Unordered")) {
+            const auto& unorderedNode = resultNode["Unordered"];
+            CHECK(unorderedNode.IsBool());
+            res.IsUnordered = unorderedNode.AsBool();
+        }
+
+        v.push_back(res);
+    }
+
+    return v;
 }
 
 }

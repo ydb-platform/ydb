@@ -24,7 +24,7 @@ Follow these steps to work with an external Greenplum database:
 1. {% include [!](_includes/connector_deployment.md) %}
 1. [Execute a query](#query) to the database.
 
-## Query syntax { #query }
+## Query syntax {#query}
 The following SQL query format is used to work with Greenplum:
 
 ```sql

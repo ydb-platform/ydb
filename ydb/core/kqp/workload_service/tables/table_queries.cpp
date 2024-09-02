@@ -444,7 +444,7 @@ public:
         , PoolId(poolId)
         , SessionId(sessionId)
         , StartTime(startTime)
-        , WaitDeadline(waitDeadline ? std::optional<TInstant>(waitDeadline.value()) : std::nullopt)
+        , WaitDeadline(waitDeadline ? waitDeadline : std::nullopt)
         , LeaseDuration(leaseDuration)
     {}
 

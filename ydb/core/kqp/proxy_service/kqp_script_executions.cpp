@@ -1480,7 +1480,7 @@ public:
 
             Ydb::Operations::Operation op;
             op.set_id(ScriptExecutionOperationFromExecutionId(*executionId));
-            op.set_ready(operationStatus.Defined());
+            op.set_ready(operationStatus.has_value());
             if (operationStatus) {
                 op.set_status(static_cast<Ydb::StatusIds::StatusCode>(*operationStatus));
             }
@@ -1751,7 +1751,7 @@ private:
 class TSaveScriptExecutionResultQuery : public TQueryBase {
 public:
     TSaveScriptExecutionResultQuery(const TString& database, const TString& executionId, i32 resultSetId,
-        TMaybe<TInstant> expireAt, i64 firstRow, i64 accumulatedSize, Ydb::ResultSet resultSet)
+        std::optional<TInstant> expireAt, i64 firstRow, i64 accumulatedSize, Ydb::ResultSet resultSet)
         : TQueryBase(__func__, executionId)
         , Database(database)
         , ExecutionId(executionId)
@@ -1836,7 +1836,7 @@ private:
     const TString Database;
     const TString ExecutionId;
     const i32 ResultSetId;
-    const TMaybe<TInstant> ExpireAt;
+    const std::optional<TInstant> ExpireAt;
     const i64 FirstRow;
     const i64 AccumulatedSize;
     const Ydb::ResultSet ResultSet;
@@ -1850,7 +1850,7 @@ class TSaveScriptExecutionResultActor : public TActorBootstrapped<TSaveScriptExe
 
 public:
     TSaveScriptExecutionResultActor(const NActors::TActorId& replyActorId, const TString& database,
-        const TString& executionId, i32 resultSetId, TMaybe<TInstant> expireAt,
+        const TString& executionId, i32 resultSetId, std::optional<TInstant> expireAt,
         i64 firstRow, i64 accumulatedSize, Ydb::ResultSet&& resultSet)
         : ReplyActorId(replyActorId)
         , Database(database)
@@ -1870,7 +1870,7 @@ public:
 
         i64 numberRows = ResultSets.back().rows_size();
         KQP_PROXY_LOG_D("[TSaveScriptExecutionResultActor] ExecutionId: " << ExecutionId << ", start saving rows range [" << FirstRow << "; " << FirstRow + numberRows << ")");
-        Register(new TQueryRetryActor<TSaveScriptExecutionResultQuery, TEvSaveScriptResultPartFinished, TString, TString, i32, TMaybe<TInstant>, i64, i64, Ydb::ResultSet>(SelfId(), Database, ExecutionId, ResultSetId, ExpireAt, FirstRow, AccumulatedSize, ResultSets.back()));
+        Register(new TQueryRetryActor<TSaveScriptExecutionResultQuery, TEvSaveScriptResultPartFinished, TString, TString, i32, std::optional<TInstant>, i64, i64, Ydb::ResultSet>(SelfId(), Database, ExecutionId, ResultSetId, ExpireAt, FirstRow, AccumulatedSize, ResultSets.back()));
 
         FirstRow += numberRows;
         ResultSets.pop_back();
@@ -1918,7 +1918,7 @@ private:
     const TString Database;
     const TString ExecutionId;
     const i32 ResultSetId;
-    const TMaybe<TInstant> ExpireAt;
+    const std::optional<TInstant> ExpireAt;
     i64 FirstRow;
     i64 AccumulatedSize;
     NFq::TRowsProtoSplitter RowsSplitter;
@@ -1986,7 +1986,7 @@ public:
             return;
         }
 
-        const TMaybe<i32> operationStatus = result.ColumnParser("operation_status").GetOptionalInt32();
+        const std::optional<i32> operationStatus = result.ColumnParser("operation_status").GetOptionalInt32();
         if (!operationStatus) {
             Finish(Ydb::StatusIds::BAD_REQUEST, "Results are not ready");
             return;
@@ -2004,7 +2004,7 @@ public:
             return;
         }
 
-        const auto ttl = GetTtlFromSerializedMeta(*serializedMeta);
+        const auto ttl = GetTtlFromSerializedMeta(TString{*serializedMeta});
         if (!ttl) {
             Finish(Ydb::StatusIds::INTERNAL_ERROR, "Metainformation is corrupted");
             return;
@@ -2017,7 +2017,7 @@ public:
 
         Ydb::StatusIds::StatusCode operationStatusCode = static_cast<Ydb::StatusIds::StatusCode>(*operationStatus);
         if (operationStatusCode != Ydb::StatusIds::SUCCESS) {
-            const TMaybe<TString> issuesSerialized = result.ColumnParser("issues").GetOptionalJsonDocument();
+            const std::optional<TString> issuesSerialized = result.ColumnParser("issues").GetOptionalJsonDocument();
             if (issuesSerialized) {
                 Finish(operationStatusCode, DeserializeIssues(*issuesSerialized));
             } else {
@@ -2026,7 +2026,7 @@ public:
             return;
         }
 
-        const TMaybe<TString> serializedMetas = result.ColumnParser("result_set_metas").GetOptionalJsonDocument();
+        const std::optional<std::string> serializedMetas = result.ColumnParser("result_set_metas").GetOptionalJsonDocument();
         if (!serializedMetas) {
             Finish(Ydb::StatusIds::INTERNAL_ERROR, "Result meta is empty");
             return;
@@ -2099,7 +2099,7 @@ public:
     void OnStreamResult(NYdb::TResultSet&& resultSet) override {
         NYdb::TResultSetParser result(resultSet);
         while (result.TryNextRow()) {
-            const TMaybe<TString> serializedRow = result.ColumnParser("result_set").GetOptionalString();
+            const std::optional<TString> serializedRow = result.ColumnParser("result_set").GetOptionalString();
             if (!serializedRow) {
                 Finish(Ydb::StatusIds::INTERNAL_ERROR, "Result set row is null");
                 return;
@@ -2361,7 +2361,7 @@ public:
 
         result.TryNextRow();
 
-        TMaybe<i32> finalizationStatus = result.ColumnParser("finalization_status").GetOptionalInt32();
+        std::optional<i32> finalizationStatus = result.ColumnParser("finalization_status").GetOptionalInt32();
         if (finalizationStatus) {
             if (Request.FinalizationStatus != *finalizationStatus) {
                 Finish(Ydb::StatusIds::PRECONDITION_FAILED, "Execution already have different finalization status");
@@ -2370,7 +2370,7 @@ public:
             Response->ApplicateScriptExternalEffectRequired = true;
         }
 
-        TMaybe<i32> operationStatus = result.ColumnParser("operation_status").GetOptionalInt32();
+        std::optional<i32> operationStatus = result.ColumnParser("operation_status").GetOptionalInt32();
 
         if (Request.LeaseGeneration && !operationStatus) {
             NYdb::TResultSetParser leaseResult(ResultSets[1]);
@@ -2381,7 +2381,7 @@ public:
 
             leaseResult.TryNextRow();
 
-            TMaybe<i64> leaseGenerationInDatabase = leaseResult.ColumnParser("lease_generation").GetOptionalInt64();
+            std::optional<i64> leaseGenerationInDatabase = leaseResult.ColumnParser("lease_generation").GetOptionalInt64();
             if (!leaseGenerationInDatabase) {
                 Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unknown lease generation");
                 return;
@@ -2393,12 +2393,12 @@ public:
             }
         }
 
-        TMaybe<TString> customerSuppliedId = result.ColumnParser("customer_supplied_id").GetOptionalUtf8();
+        std::optional<TString> customerSuppliedId = result.ColumnParser("customer_supplied_id").GetOptionalUtf8();
         if (customerSuppliedId) {
             Response->CustomerSuppliedId = *customerSuppliedId;
         }
 
-        TMaybe<TString> userToken = result.ColumnParser("user_token").GetOptionalUtf8();
+        std::optional<TString> userToken = result.ColumnParser("user_token").GetOptionalUtf8();
         if (userToken) {
             Response->UserToken = *userToken;
         }
@@ -2443,7 +2443,7 @@ public:
             return;
         }
 
-        const auto ttl = GetTtlFromSerializedMeta(*serializedMeta);
+        const auto ttl = GetTtlFromSerializedMeta(TString{*serializedMeta});
         if (!ttl) {
             Finish(Ydb::StatusIds::INTERNAL_ERROR, "Metainformation is corrupted");
             return;
@@ -2514,9 +2514,9 @@ public:
             serializedStats = NJson::WriteJson(statsJson);
         }
 
-        TMaybe<TString> ast;
-        TMaybe<TString> astCompressed;
-        TMaybe<TString> astCompressionMethod;
+        std::optional<TString> ast;
+        std::optional<TString> astCompressed;
+        std::optional<TString> astCompressionMethod;
         if (Request.QueryAst && Request.QueryAstCompressionMethod) {
             astCompressed = *Request.QueryAst;
             astCompressionMethod = *Request.QueryAstCompressionMethod;
@@ -2611,8 +2611,8 @@ private:
     bool FinalStatusAlreadySaved = false;
 
     TDuration OperationTtl;
-    TMaybe<TString> SerializedSinks;
-    TMaybe<TString> SerializedSecretNames;
+    std::optional<TString> SerializedSinks;
+    std::optional<TString> SerializedSecretNames;
 };
 
 class TScriptFinalizationFinisherActor : public TQueryBase {
@@ -2664,7 +2664,7 @@ public:
 
         result.TryNextRow();
 
-        TMaybe<i32> finalizationStatus = result.ColumnParser("finalization_status").GetOptionalInt32();
+        std::optional<i32> finalizationStatus = result.ColumnParser("finalization_status").GetOptionalInt32();
         if (!finalizationStatus) {
             Finish(Ydb::StatusIds::PRECONDITION_FAILED, "Already finished");
             return;
@@ -2851,7 +2851,7 @@ NActors::IActor* CreateSaveScriptExecutionResultMetaActor(const NActors::TActorI
     return new TQueryRetryActor<TSaveScriptExecutionResultMetaQuery, TEvSaveScriptResultMetaFinished, TString, TString, TString>(runScriptActorId, database, executionId, serializedMeta);
 }
 
-NActors::IActor* CreateSaveScriptExecutionResultActor(const NActors::TActorId& runScriptActorId, const TString& database, const TString& executionId, i32 resultSetId, TMaybe<TInstant> expireAt, i64 firstRow, i64 accumulatedSize, Ydb::ResultSet&& resultSet) {
+NActors::IActor* CreateSaveScriptExecutionResultActor(const NActors::TActorId& runScriptActorId, const TString& database, const TString& executionId, i32 resultSetId, std::optional<TInstant> expireAt, i64 firstRow, i64 accumulatedSize, Ydb::ResultSet&& resultSet) {
     return new TSaveScriptExecutionResultActor(runScriptActorId, database, executionId, resultSetId, expireAt, firstRow, accumulatedSize, std::move(resultSet));
 }
 

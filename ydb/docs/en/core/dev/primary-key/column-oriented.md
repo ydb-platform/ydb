@@ -1,4 +1,4 @@
-# Selecting a primary key for maximum column-oriented table performance
+# Choosing keys for maximum column-oriented table performance
 
 Unlike row-oriented {{ ydb-short-name }} tables, you can't partition column-oriented tables by primary keys but only by specially designated **partitioning keys**. Inside each partition, data is distributed by the table's primary key.
 

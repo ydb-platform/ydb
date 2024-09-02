@@ -416,7 +416,6 @@ public:
         }
         Opts.Scheduler->SetForgetInterval(Opts.ForgetOverflowTimeout);
         Opts.Scheduler->ReportCounters(Opts.Counters);
-        SetCapacity();
     }
 
     void Bootstrap() {
@@ -428,12 +427,13 @@ public:
              IEventHandle::FlagTrackDelivery);
 
         Become(&TSchedulerActor::State);
+        SetCapacity(SelfId().PoolID());
     }
 
-    void SetCapacity() {
+    void SetCapacity(ui32 pool) {
         NActors::TExecutorPoolStats poolStats;
         TVector<NActors::TExecutorThreadStats> threadsStats;
-        TlsActivationContext->ActorSystem()->GetPoolStats(SelfId().PoolID(), poolStats, threadsStats);
+        TlsActivationContext->ActorSystem()->GetPoolStats(pool, poolStats, threadsStats);
         ui64 threads = Max<ui64>(poolStats.MaxThreadCount, 1);
         Opts.Counters->SchedulerCapacity->Set(threads);
         Opts.Scheduler->SetCapacity(threads);
@@ -486,7 +486,7 @@ public:
     }
 
     void Handle(TEvents::TEvWakeup::TPtr&) {
-        SetCapacity();
+        SetCapacity(SelfId().PoolID());
         Opts.Scheduler->AdvanceTime(TlsActivationContext->Monotonic());
         Schedule(Opts.AdvanceTimeInterval, new TEvents::TEvWakeup());
     }

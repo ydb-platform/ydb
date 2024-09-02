@@ -143,7 +143,7 @@ public:
             topicPath,
             databaseName,
             [this](const EKafkaErrors status, const std::string& message) {
-                this->SendResult(status, message);
+                this->SendResult(status,TString{message});
             })
         )
         , TopicPath(topicPath)
@@ -153,7 +153,7 @@ public:
 
     ~TAlterTopicActor() = default;
 
-    void SendResult(const EKafkaErrors status, const std::string& message) {
+    void SendResult(const EKafkaErrors status, const TString& message) {
         THolder<TEvKafka::TEvTopicModificationResponse> response(new TEvKafka::TEvTopicModificationResponse());
         response->Status = status;
         response->TopicPath = TopicPath;

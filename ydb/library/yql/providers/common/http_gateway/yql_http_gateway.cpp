@@ -1086,7 +1086,7 @@ IHTTPGateway::Make(const THttpGatewayConfig* httpGatewaysCfg, ::NMonitoring::TDy
 
 IHTTPGateway::THeaders IHTTPGateway::MakeYcHeaders(
     const TString& requestId,
-    const std::string& token,
+    const TString& token,
     const TString& contentType,
     const TString& userPwd,
     const TString& awsSigV4) {

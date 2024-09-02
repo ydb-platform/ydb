@@ -1,6 +1,8 @@
 LIBRARY()
 
-INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/sdk_common.inc)
+ADDINCL(
+    ydb/public/sdk/cpp
+)
 
 SRCS(
     audit_log.cpp

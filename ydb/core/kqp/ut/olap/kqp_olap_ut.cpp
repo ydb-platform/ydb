@@ -1207,12 +1207,12 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto tableClient = kikimr.GetTableClient();
 
         std::vector< std::pair<TString, TString> > secondLvlFilters = {
-            { R"(`uid` LIKE "%30000%")", "TableFullScan" },
-            { R"(`uid` NOT LIKE "%30000%")", "TableFullScan" },
-            { R"(`uid` LIKE "uid%")", "TableFullScan" },
-            { R"(`uid` LIKE "%001")", "TableFullScan" },
+            { R"(`uid` LIKE "%30000%")", "Filter-TableFullScan" },
+            { R"(`uid` NOT LIKE "%30000%")", "Filter-TableFullScan" },
+            { R"(`uid` LIKE "uid%")", "Filter-TableFullScan" },
+            { R"(`uid` LIKE "%001")", "Filter-TableFullScan" },
 #if SSA_RUNTIME_VERSION >= 4U
-            { R"(`uid` LIKE "uid%001")", "TableFullScan" },
+            { R"(`uid` LIKE "uid%001")", "Filter-TableFullScan" },
 #else
             { R"(`uid` LIKE "uid%001")", "Filter-TableFullScan" }, // We have filter (Size >= 6)
 #endif
@@ -2209,7 +2209,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
                         auto result = CollectStreamResult(it);
                         auto ast = result.QueryStats->Getquery_ast();
-
+                        
                         pushdown = ast.find("KqpOlapFilter") != std::string::npos;
                     } else {
                         // Error means that predicate not pushed down

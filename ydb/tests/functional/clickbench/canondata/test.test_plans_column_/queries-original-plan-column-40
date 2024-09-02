@@ -89,17 +89,16 @@
                                                                         "PlanNodeType": "Connection",
                                                                         "Plans": [
                                                                             {
-                                                                                "Node Type": "Aggregate-TableRangeScan",
+                                                                                "Node Type": "Filter-TableRangeScan",
                                                                                 "Operators": [
                                                                                     {
-                                                                                        "Aggregation": "{_yql_agg_0: SUM(state._yql_agg_0,1)}",
-                                                                                        "GroupBy": "",
                                                                                         "Inputs": [
                                                                                             {
                                                                                                 "InternalOperatorId": 1
                                                                                             }
                                                                                         ],
-                                                                                        "Name": "Aggregate"
+                                                                                        "Name": "Filter",
+                                                                                        "Predicate": "IsRefresh == 0 And TraficSourceID == -1 Or TraficSourceID == 6 And RefererHash == 3594120000172545465"
                                                                                     },
                                                                                     {
                                                                                         "Inputs": [],

@@ -81,17 +81,28 @@
                                                                         "PlanNodeType": "Connection",
                                                                         "Plans": [
                                                                             {
+<<<<<<< HEAD
                                                                                 "Node Type": "Aggregate-TableFullScan",
                                                                                 "Operators": [
                                                                                     {
                                                                                         "Aggregation": "{_yql_agg_0: SUM(state._yql_agg_0,1),_yql_agg_2: MIN(item.URL,state._yql_agg_2),_yql_agg_3: MIN(item.Title,state._yql_agg_3)}",
                                                                                         "GroupBy": "item.SearchPhrase",
+=======
+                                                                                "Node Type": "Filter-TableFullScan",
+                                                                                "Operators": [
+                                                                                    {
+>>>>>>> 84523e84f9... [KQP] Make KqpOlapFilter be shown in a query plan (#8504)
                                                                                         "Inputs": [
                                                                                             {
                                                                                                 "InternalOperatorId": 1
                                                                                             }
                                                                                         ],
+<<<<<<< HEAD
                                                                                         "Name": "Aggregate"
+=======
+                                                                                        "Name": "Filter",
+                                                                                        "Predicate": "Not"
+>>>>>>> 84523e84f9... [KQP] Make KqpOlapFilter be shown in a query plan (#8504)
                                                                                     },
                                                                                     {
                                                                                         "Inputs": [],
@@ -279,7 +290,13 @@
                                                                                         "Table": "clickbench/plans/column/hits"
                                                                                     }
                                                                                 ],
+<<<<<<< HEAD
                                                                                 "PlanNodeId": 5,
+=======
+                                                                                "Parent Relationship": "InitPlan",
+                                                                                "PlanNodeId": 4,
+                                                                                "Subplan Name": "CTE Filter-TableFullScan_9",
+>>>>>>> 84523e84f9... [KQP] Make KqpOlapFilter be shown in a query plan (#8504)
                                                                                 "Tables": [
                                                                                     "clickbench/plans/column/hits"
                                                                                 ]
@@ -308,6 +325,10 @@
                                                                                 "PlanNodeId": 3,
                                                                                 "Plans": [
                                                                                     {
+<<<<<<< HEAD
+=======
+                                                                                        "CTE Name": "Filter-TableFullScan_9",
+>>>>>>> 84523e84f9... [KQP] Make KqpOlapFilter be shown in a query plan (#8504)
                                                                                         "KeyColumns": [
                                                                                             "SearchPhrase",
                                                                                             "UserID"

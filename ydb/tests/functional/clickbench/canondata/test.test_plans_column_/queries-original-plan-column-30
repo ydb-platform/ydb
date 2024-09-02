@@ -60,17 +60,16 @@
                                                         "PlanNodeType": "Connection",
                                                         "Plans": [
                                                             {
-                                                                "Node Type": "Aggregate-TableFullScan",
+                                                                "Node Type": "Filter-TableFullScan",
                                                                 "Operators": [
                                                                     {
-                                                                        "Aggregation": "{_yql_agg_1: SUM(state._yql_agg_1,1),_yql_agg_2: SUM(item.IsRefresh,state._yql_agg_2)}",
-                                                                        "GroupBy": "",
                                                                         "Inputs": [
                                                                             {
                                                                                 "InternalOperatorId": 1
                                                                             }
                                                                         ],
-                                                                        "Name": "Aggregate"
+                                                                        "Name": "Filter",
+                                                                        "Predicate": "SearchPhrase != "
                                                                     },
                                                                     {
                                                                         "Inputs": [],

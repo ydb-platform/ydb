@@ -44,6 +44,7 @@ namespace NKikimr {
         EStrategyOutcome Process(TLogContext& logCtx, TBlobState& state, const TBlobStorageGroupInfo& info,
                 TBlackboard& blackboard, TGroupDiskRequests& groupDiskRequests,
                 const TAccelerationParams& accelerationParams) override {
+            Y_UNUSED(logCtx);        
             Y_UNUSED(blackboard);
             Y_UNUSED(accelerationParams);
 
@@ -87,7 +88,6 @@ namespace NKikimr {
             } else if (requested) {
                 return EStrategyOutcome::IN_PROGRESS;
             } else if (!state.Whole.Needed.IsSubsetOf(state.Whole.Here())) {
-                R_LOG_WARN_SX(logCtx, "BPG48", "missing blob# " << state.Id.ToString() << " state# " << state.ToString());
                 state.WholeSituation = TBlobState::ESituation::Absent;
                 if (info.GetQuorumChecker().CheckQuorumForSubgroup(possiblyWritten)) {
                     for (const TBlobState::ESituation situation : situations) {

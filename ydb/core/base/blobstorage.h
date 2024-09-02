@@ -1314,17 +1314,22 @@ struct TEvBlobStorage {
                         str << " CorruptedPartIndex# " << response.CorruptedPartIndex;
                     }
                 }
-                if (isFull) {
-                    str << " Buffer# " << response.Buffer.ConvertToString().Quote();
+                if (response.PartMap.size()) {
                     str << " PartMap# [";
                     for (const auto &item : response.PartMap) {
-                        str << "{DiskOrderNumber: " << item.DiskOrderNumber
-                            << ", PartIdRequested: " << item.PartIdRequested
-                            << ", RequestIndex: " << item.RequestIndex
-                            << ", ResponseIndex: " << item.ResponseIndex
-                            << "}, ";
+                        str << "{DiskOrderNumber# " << item.DiskOrderNumber
+                            << ", PartIdRequested# " << item.PartIdRequested
+                            << ", RequestIndex# " << item.RequestIndex
+                            << ", ResponseIndex# " << item.ResponseIndex;
+                        if (isFull) {
+                            str << ", Data# " << item.Data.ConvertToString().Quote();
+                        }
+                        str << "}, ";
                     }
                     str << "]";
+                }
+                if (isFull) {
+                    str << " Buffer# " << response.Buffer.ConvertToString().Quote();
                 }
                 str << "}";
                 if (ErrorReason.size()) {

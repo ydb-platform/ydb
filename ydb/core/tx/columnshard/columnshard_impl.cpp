@@ -28,6 +28,7 @@
 #include "engines/changes/ttl.h"
 
 #include "resource_subscriber/counters.h"
+#include "transactions/operators/ev_write/sync.h"
 
 #include "bg_tasks/adapter/adapter.h"
 #include "bg_tasks/manager/manager.h"
@@ -882,6 +883,33 @@ void TColumnShard::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev, const TAct
             SharingSessionsManager->InitializeEventsExchange(*this, ev->Cookie);
             break;
     }
+}
+
+void TColumnShard::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorContext& ctx) {
+    const ui64 txId = ev->Get()->Record.GetTxId();
+    if (!GetProgressTxController().GetTxOperatorOptional(txId)) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "read_set_ignored")("proto", ev->Get()->Record.DebugString());
+        Send(MakePipePerNodeCacheID(false),
+            new TEvPipeCache::TEvForward(
+                new TEvTxProcessing::TEvReadSetAck(0, txId, TabletID(), ev->Get()->Record.GetTabletProducer(), TabletID(), 0),
+                ev->Get()->Record.GetTabletProducer(), true),
+            IEventHandle::FlagTrackDelivery, txId);
+        return;
+    }
+    auto op = GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitSyncTransactionOperator>(txId);
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "read_set")("proto", ev->Get()->Record.DebugString())("lock_id", op->GetLockId());
+    NKikimrTx::TReadSetData data;
+    AFL_VERIFY(data.ParseFromArray(ev->Get()->Record.GetReadSet().data(), ev->Get()->Record.GetReadSet().size()));
+    auto tx = op->CreateReceiveBrokenFlagTx(
+        *this, ev->Get()->Record.GetTabletProducer(), data.GetDecision() != NKikimrTx::TReadSetData::DECISION_COMMIT);
+    Execute(tx.release(), ctx);
+}
+
+void TColumnShard::Handle(TEvTxProcessing::TEvReadSetAck::TPtr& ev, const TActorContext& ctx) {
+    auto op = GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitSyncTransactionOperator>(ev->Get()->Record.GetTxId());
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "read_set_ack")("proto", ev->Get()->Record.DebugString())("lock_id", op->GetLockId());
+    auto tx = op->CreateReceiveResultAckTx(*this, ev->Get()->Record.GetTabletConsumer());
+    Execute(tx.release(), ctx);
 }
 
 void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvProposeFromInitiator::TPtr& ev, const TActorContext& ctx) {

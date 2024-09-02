@@ -51,6 +51,8 @@ private:
     void AddCommittedSize(const i64 size, const ui64 overloadLimit);
 
 public:
+    const THashMap<TWriteId, TInsertedData>& GetInserted() const;
+
     void AddInsertedSize(const i64 size, const ui64 overloadLimit);
 
     explicit TPathInfo(TInsertionSummary& summary, const ui64 pathId);

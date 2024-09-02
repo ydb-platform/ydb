@@ -69,14 +69,16 @@ namespace NBoot {
 
             Logic->Result().Loans->RestoreBorrowedInfo(label, proto);
 
-            auto& historyCutter = Logic->Result().GcLogic->HistoryCutter;
-            Cerr << "Apply loans ";
-            historyCutter.SeenBlob(LogoBlobIDFromLogoBlobID(proto.GetMetaId()));
-            for (const auto& x : proto.GetBorrowKeepList()) {
-                historyCutter.SeenBlob(LogoBlobIDFromLogoBlobID(x));
-            }
-            for (const auto& x : proto.GetLoanKeepList()) {
-                historyCutter.SeenBlob(LogoBlobIDFromLogoBlobID(x));
+            if (Logic->Result().GcLogic) {
+                auto& historyCutter = Logic->Result().GcLogic->HistoryCutter;
+                Cerr << "Apply loans ";
+                historyCutter.SeenBlob(LogoBlobIDFromLogoBlobID(proto.GetMetaId()));
+                for (const auto& x : proto.GetBorrowKeepList()) {
+                    historyCutter.SeenBlob(LogoBlobIDFromLogoBlobID(x));
+                }
+                for (const auto& x : proto.GetLoanKeepList()) {
+                    historyCutter.SeenBlob(LogoBlobIDFromLogoBlobID(x));
+                }
             }
         }
 

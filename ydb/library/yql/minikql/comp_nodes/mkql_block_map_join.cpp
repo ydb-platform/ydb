@@ -380,7 +380,7 @@ private:
             , Current_(NUdf::TUnboxedValue::Invalid())
         {}
 
-        inline explicit operator bool() const { return Iterator_.HasValue(); }
+        inline explicit operator bool() const { return !Iterator_.IsInvalid(); }
         void Reset(const NUdf::TUnboxedValue&& list) {
             List_ = std::move(list);
             Iterator_ = List_.GetListIterator();

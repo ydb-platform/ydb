@@ -36,6 +36,35 @@ struct TRobinHoodBatchRequestItem {
     char* InitialIterator;
 };
 
+template <typename T>
+struct TRobinHoodGrowManager {
+    void IsGrowRequired(ui64 size, ui64 capacity) const {
+        static_cast<T*>(this)->IsGrowRequired(size, capacity);
+    }
+
+    ui64 Grow(ui64 capacity) const {
+        static_cast<T*>(this)->Grow(capacity);
+    }
+};
+
+struct TRobinHoodDefaultGrowManager : public TRobinHoodGrowManager<TRobinHoodDefaultGrowManager> {
+    bool IsGrowRequired(ui64 size, ui64 capacity) const {
+        return size * 2 > capacity;
+    }
+
+    ui64 GetNewCapacity(ui64 capacity) const {
+        ui64 growFactor;
+        if (capacity < 100'000) {
+            growFactor = 8;
+        } else if (capacity < 1'000'000) {
+            growFactor = 4;
+        } else {
+            growFactor = 2;
+        }
+        return capacity * growFactor;
+    }
+};
+
 constexpr ui32 PrefetchBatchSize = 64;
 
 //TODO: only POD key & payloads are now supported
@@ -108,14 +137,14 @@ public:
 
     // should be called after Insert if isNew is true
     Y_FORCE_INLINE void CheckGrow() {
-        if (Size * 2 >= Capacity) {
+        if (GrowManager.IsGrowRequired(Size, Capacity)) {
             Grow();
         }
     }
 
     template <typename TSink>
     Y_NO_INLINE void BatchInsert(std::span<TRobinHoodBatchRequestItem<TKey>> batchRequest, TSink&& sink) {
-        while (2 * (Size + batchRequest.size()) >= Capacity) {
+        while (GrowManager.IsGrowRequired(Size + batchRequest.size(), Capacity)) {
             Grow();
         }
 
@@ -283,15 +312,7 @@ private:
     }
 
     Y_NO_INLINE void Grow() {
-        ui64 growFactor;
-        if (Capacity < 100'000) {
-            growFactor = 8;
-        } else if (Capacity < 1'000'000) {
-            growFactor = 4;
-        } else {
-            growFactor = 2;
-        }
-        auto newCapacity = Capacity * growFactor;
+        auto newCapacity = GrowManager.GetNewCapacity(Capacity);
         auto newCapacityShift = 64 - MostSignificantBit(newCapacity);
         char *newData, *newDataEnd;
         Allocate(newCapacity, newData, newDataEnd);
@@ -386,6 +407,7 @@ private:
     const ui64 SelfHash;
     char* Data = nullptr;
     char* DataEnd = nullptr;
+    TRobinHoodGrowManager GrowManager;
 };
 
 template <typename TKey, typename TEqual = std::equal_to<TKey>, typename THash = std::hash<TKey>, typename TAllocator = std::allocator<char>, typename TSettings = TRobinHoodDefaultSettings<TKey>>

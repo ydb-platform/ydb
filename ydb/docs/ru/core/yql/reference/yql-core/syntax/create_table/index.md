@@ -103,6 +103,22 @@ WITH (
   Обязательно указание `PRIMARY KEY` с непустым списком колонок. Эти колонки становятся частью ключа в порядке перечисления.
   {% endif %}
 
+  Пример создания строковой таблицы с использованием опций партиционирования строковых таблиц:
+  ```sql
+  CREATE TABLE <table_name> (
+    a Uint64,
+    b Uint64,
+    c Float,
+    PRIMARY KEY (a, b)
+  )
+  WITH (
+    AUTO_PARTITIONING_BY_SIZE = ENABLED,
+    AUTO_PARTITIONING_PARTITION_SIZE_MB = 512
+  );
+  ```
+
+  Такой код создаст таблицу с включенным автоматическим партиционированием по размеру партиции (`AUTO_PARTITIONING_BY_SIZE`) и предпочитаемым размером каждой партиции (`AUTO_PARTITIONING_PARTITION_SIZE_MB`) 512 мегабайт. Полный список опций партиционирования строковой таблицы находится в статье [{#T}](../../../../concepts/datamodel/table.md#partitioning_row_table).
+
 - Создание колоночной таблицы
 
   ```sql
@@ -139,15 +155,22 @@ WITH (
 Обязательно указание `PRIMARY KEY` с непустым списком колонок. Эти колонки становятся частью ключа в порядке перечисления.
 {% endif %}
 
-**Пример**:
+Пример создания колоночной таблицы с опцией определения минимального физического количества партиций для хранения данных:
 ```sql
-CREATE TABLE <table_name> (
-  a Uint64,
-  b Uint64,
+CREATE TABLE table_name (
+  a Uint64 NOT NULL,
+  b Uint64 NOT NULL,
   c Float,
   PRIMARY KEY (a, b)
+)
+WITH (
+  STORE = COLUMN,
+  AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10
 );
 ```
+
+С полным списком опций партиционирования колоночных таблиц можно ознакомиться в статье [{#T}](../../../../concepts/datamodel/table.md#olap-tables-partitioning).
+
 {% endif %}
 
 {% if backend_name == "YDB" %}

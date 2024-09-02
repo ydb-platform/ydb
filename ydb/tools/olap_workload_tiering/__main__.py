@@ -267,8 +267,8 @@ if __name__ == '__main__':
     parser.add_argument('--database', default=None, required=True, help='A database to connect')
     parser.add_argument('--duration', default=120, type=lambda x: int(x), help='A duration of workload in seconds')
     parser.add_argument('--s3-endpoint', default='http://storage.yandexcloud.net', help='S3 endpoint')
-    parser.add_argument('--s3-access_key', type=str, required=True, help='Access key for S3')
-    parser.add_argument('--s3-secret_key', type=str, required=True, help='Secret key for S3')
+    parser.add_argument('--s3-access-key', type=str, required=True, help='Access key for S3')
+    parser.add_argument('--s3-secret-key', type=str, required=True, help='Secret key for S3')
     parser.add_argument('--s3-buckets', type=str, nargs=2, help='S3 buckets for tiers')
     args = parser.parse_args()
     bucket_configs = [

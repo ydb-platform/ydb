@@ -46,6 +46,7 @@ class TestSetupForStability(object):
         yatest_common.binary_path('ydb/tests/tools/nemesis/driver/nemesis'),
         yatest_common.binary_path('ydb/tools/simple_queue/simple_queue'),
         yatest_common.binary_path('ydb/tools/olap_workload/olap_workload'),
+        yatest_common.binary_path('ydb/tools/olap_workload_tiering/olap_workload_tiering'),
     )
 
     @classmethod
@@ -126,10 +127,10 @@ class TestSetupForStability(object):
     def test_olap_workload(self):
         self._start_nemesis()
 
-        s3_endpoint = yatest_common.get_param('s3-endpoint')
-        s3_access_key = yatest_common.get_param('s3-access-key')
-        s3_secret_key = yatest_common.get_param('s3-secret-key')
-        s3_tier_buckets = yatest_common.get_param('s3-tier-buckets').split(',')
+        s3_endpoint = yatest_common.get_param('kikimr.ci.tiering.s3_endpoint')
+        s3_access_key = yatest_common.get_param('kikimr.ci.tiering.s3_access_key')
+        s3_secret_key = yatest_common.get_param('kikimr.ci.tiering.s3_secret_key')
+        s3_tier_buckets = yatest_common.get_param('kikimr.ci.tiering.s3_tier_buckets').split(',')
         enable_tiering_test = (
             s3_endpoint is not None
             and s3_access_key is not None
@@ -138,7 +139,8 @@ class TestSetupForStability(object):
         )
         if not enable_tiering_test:
             logger.warn('Olap tiering test is disabled because one of required parameters is not defined: '
-                        's3-endpoint, s3-access-key, s3-secret-key, s3-tier-buckets')
+                        ' kikimr.ci.tiering.s3_endpoint, kikimr.ci.tiering.s3_access_key,'
+                        ' kikimr.ci.tiering.s3_secret_key, kikimr.ci.tiering.s3_tier_buckets.')
 
         for node_id, node in enumerate(self.kikimr_cluster.nodes.values()):
             node.ssh_command(

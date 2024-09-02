@@ -68,7 +68,7 @@ public:
         }
         Self->ProgressTxInFlight = std::nullopt;
         if (!!Self->ProgressTxController->GetPlannedTx()) {
-            Self->EnqueueProgressTx(ctx);
+            Self->EnqueueProgressTx(ctx, std::nullopt);
         }
         return true;
     }

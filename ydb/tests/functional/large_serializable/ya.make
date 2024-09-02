@@ -14,6 +14,7 @@ REQUIREMENTS(
 
 TIMEOUT(1800)
 SIZE(LARGE)
+TAG(ya:fat)
 
 DEPENDS(
     ydb/tests/tools/ydb_serializable

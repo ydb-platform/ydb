@@ -439,7 +439,7 @@ class FederatedQueryClient(object):
 
     @retry.retry_intrusive
     def create_greenplum_connection(self, name, database_name, database_id, login, password,
-                                     secure=False, visibility=fq.Acl.Visibility.PRIVATE, auth_method=AuthMethod.service_account('sa'), check_issues=True):
+                                    secure=False, visibility=fq.Acl.Visibility.PRIVATE, auth_method=AuthMethod.service_account('sa'), check_issues=True):
         request = fq.CreateConnectionRequest()
         request.content.name = name
         gp = request.content.setting.greenplum_cluster

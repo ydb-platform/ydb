@@ -5,7 +5,7 @@
 namespace NActors {
 
     /**
-     * Easy wait for a single event under the test actor runtime
+     * Easy wait for a first event under the test actor runtime
      *
      */
     template<class TEvType>
@@ -25,7 +25,7 @@ namespace NActors {
         {}
 
         /**
-         * Wait for a single event
+         * Wait for a first event
          */
         void Wait() {
             Runtime.WaitFor(TypeName<TEvType>(), [&]{ return EventSeen; });

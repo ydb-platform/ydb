@@ -131,7 +131,23 @@ WITH (
   WITH (
     STORE = COLUMN
   );
-  ```  
+  ```
+
+  Пример создания колоночной таблицы с опцией определения минимального физического количества партиций для хранения данных:
+  ```sql
+  CREATE TABLE table_name (
+    a Uint64 NOT NULL,
+    b Uint64 NOT NULL,
+    c Float,
+    PRIMARY KEY (a, b)
+  )
+  WITH (
+    STORE = COLUMN,
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10
+  );
+  ```
+
+С полным списком опций партиционирования колоночных таблиц можно ознакомиться в разделе [{#T}](../../../../concepts/datamodel/table.md#olap-tables-partitioning) статьи [{#T}](../../../../concepts/datamodel/table.md).
 
 {% endlist %}
 
@@ -155,21 +171,7 @@ WITH (
 Обязательно указание `PRIMARY KEY` с непустым списком колонок. Эти колонки становятся частью ключа в порядке перечисления.
 {% endif %}
 
-Пример создания колоночной таблицы с опцией определения минимального физического количества партиций для хранения данных:
-```sql
-CREATE TABLE table_name (
-  a Uint64 NOT NULL,
-  b Uint64 NOT NULL,
-  c Float,
-  PRIMARY KEY (a, b)
-)
-WITH (
-  STORE = COLUMN,
-  AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10
-);
-```
 
-С полным списком опций партиционирования колоночных таблиц можно ознакомиться в разделе [{#T}](../../../../concepts/datamodel/table.md#olap-tables-partitioning) статьи [{#T}](../../../../concepts/datamodel/table.md).
 
 {% endif %}
 

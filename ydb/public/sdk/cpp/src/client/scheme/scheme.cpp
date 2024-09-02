@@ -17,10 +17,15 @@ namespace NScheme {
 using namespace NThreading;
 using namespace Ydb::Scheme;
 
+TPermissions::TPermissions(const ::Ydb::Scheme::Permissions& proto)
+    : Subject(proto.subject())
+    , PermissionNames(proto.permission_names().begin(), proto.permission_names().end())
+{}
+
 void TPermissions::SerializeTo(::Ydb::Scheme::Permissions& proto) const {
     proto.set_subject(TStringType{Subject});
     for (const auto& name : PermissionNames) {
-        *proto.mutable_permission_names()->Add() = name;
+        proto.add_permission_names(TStringType{name});
     }
 }
 
@@ -132,7 +137,28 @@ void TSchemeEntry::Out(IOutputStream& out) const {
 void TSchemeEntry::SerializeTo(::Ydb::Scheme::ModifyPermissionsRequest& request) const {
     request.mutable_actions()->Add()->set_change_owner(TStringType{Owner});
     for (const auto& permission : Permissions) {
-        permission.SerializeTo(*request.mutable_actions()->Add()->mutable_set());
+    permission.SerializeTo(*request.mutable_actions()->Add()->mutable_grant());
+    }
+}
+
+TModifyPermissionsSettings::TModifyPermissionsSettings(const ::Ydb::Scheme::ModifyPermissionsRequest& request) {
+    for (const auto& action : request.actions()) {
+        switch (action.GetActionCase()) {
+            case Ydb::Scheme::PermissionsAction::kGrant:
+                AddGrantPermissions(action.grant());
+                break;
+            case Ydb::Scheme::PermissionsAction::kRevoke:
+                AddRevokePermissions(action.revoke());
+                break;
+            case Ydb::Scheme::PermissionsAction::kSet:
+                AddSetPermissions(action.set());
+                break;
+            case Ydb::Scheme::PermissionsAction::kChangeOwner:
+                AddChangeOwner(action.change_owner());
+                break;
+            case Ydb::Scheme::PermissionsAction::ACTION_NOT_SET:
+                break;
+        }
     }
 }
 

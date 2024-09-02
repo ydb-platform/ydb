@@ -390,8 +390,7 @@ message TDqExecutionStats {
     uint64 FirstRowTimeMs = 13;    // first result row timestamp, milliseconds
 
     repeated TDqStageStats Stages = 14;
-    reserved 15; // repeated string TxPlansWithStats = 15;
-    map<uint32, string> TxPlansWithStats = 16;
+    repeated string TxPlansWithStats = 15;
 
     google.protobuf.Any Extra = 100;
 }

@@ -402,7 +402,7 @@ protected:
                 for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {
                     const auto& tx = Request.Transactions[txId].Body;
                     auto planWithStats = AddExecStatsToTxPlan(tx->GetPlan(), execStats);
-                    (*execStats.MutableTxPlansWithStats())[txId] = planWithStats;
+                    execStats.AddTxPlansWithStats(planWithStats);
                 }
                 this->Send(Target, progress.Release());
                 LastProgressStats = now;
@@ -1737,32 +1737,6 @@ protected:
         this->Shutdown();
     }
 
-    void FillResponseStats() {
-        auto& response = *ResponseEv->Record.MutableResponse();
-
-        YQL_ENSURE(Stats);
-
-        ReportEventElapsedTime();
-
-        Stats->FinishTs = TInstant::Now();
-        Stats->Finish();
-
-        if (Stats->CollectStatsByLongTasks || CollectFullStats(Request.StatsMode)) {
-            for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {
-                const auto& tx = Request.Transactions[txId].Body;
-                auto planWithStats = AddExecStatsToTxPlan(tx->GetPlan(), response.GetResult().GetStats());
-                (*response.MutableResult()->MutableStats()->MutableTxPlansWithStats())[txId] = planWithStats;
-            }
-        }
-
-        if (Stats->CollectStatsByLongTasks) {
-            const auto& txPlansWithStats = response.GetResult().GetStats().GetTxPlansWithStats();
-            if (!txPlansWithStats.empty()) {
-                LOG_N("Full stats: " << response.GetResult().GetStats());
-            }
-        }
-    }
-
     virtual void ReplyErrorAndDie(Ydb::StatusIds::StatusCode status,
         google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>* issues)
     {
@@ -1871,7 +1845,35 @@ protected:
 
     void PassAway() override {
         YQL_ENSURE(AlreadyReplied && ResponseEv);
-        FillResponseStats();
+
+        // Fill response stats
+        {
+            auto& response = *ResponseEv->Record.MutableResponse();
+
+            YQL_ENSURE(Stats);
+
+            ReportEventElapsedTime();
+
+            Stats->FinishTs = TInstant::Now();
+            Stats->Finish();
+
+            if (Stats->CollectStatsByLongTasks || CollectFullStats(Request.StatsMode)) {
+                response.MutableResult()->MutableStats()->ClearTxPlansWithStats();
+                for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {
+                    const auto& tx = Request.Transactions[txId].Body;
+                    auto planWithStats = AddExecStatsToTxPlan(tx->GetPlan(), response.GetResult().GetStats());
+                    response.MutableResult()->MutableStats()->AddTxPlansWithStats(planWithStats);
+                }
+            }
+
+            if (Stats->CollectStatsByLongTasks) {
+                const auto& txPlansWithStats = response.GetResult().GetStats().GetTxPlansWithStats();
+                if (!txPlansWithStats.empty()) {
+                    LOG_N("Full stats: " << response.GetResult().GetStats());
+                }
+            }
+        }
+
         Request.Transactions.crop(0);
         this->Send(Target, ResponseEv.release());
 

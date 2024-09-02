@@ -3297,7 +3297,6 @@ bool TPersQueue::CheckTxWriteOperations(const NKikimrPQ::TDataTransaction& txBod
     }
 
     const TWriteId writeId = GetWriteId(txBody);
-    PQ_LOG_D("Transaction TxId " << txBody << "writeId=" << writeId);
 
     for (auto& operation : txBody.GetOperations()) {
         auto isWrite = [](const NKikimrPQ::TPartitionOperation& o) {
@@ -3359,6 +3358,7 @@ void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransact
     if (txBody.HasWriteId()) {
         const TWriteId writeId = GetWriteId(txBody);
         if (!TxWrites.contains(writeId)) {
+            PQ_LOG_D("TxId " << event.GetTxId() << " unknown WriteId " << writeId);
             SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
                                         event.GetTxId(),
                                         NKikimrPQ::TError::BAD_REQUEST,
@@ -3379,7 +3379,7 @@ void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransact
         }
 
         writeInfo.TxId = event.GetTxId();
-        PQ_LOG_D("TxId " << event.GetTxId() << " WriteId " << writeId);
+        PQ_LOG_D("TxId " << event.GetTxId() << " has WriteId " << writeId);
     }
 
     TMaybe<TPartitionId> partitionId = FindPartitionId(txBody);
@@ -3597,6 +3597,7 @@ bool TPersQueue::CanProcessTxWrites() const
 void TPersQueue::SubscribeWriteId(const TWriteId& writeId,
                                   const TActorContext& ctx)
 {
+    PQ_LOG_D("send TEvSubscribeLock for WriteId " << writeId);
     ctx.Send(NLongTxService::MakeLongTxServiceID(writeId.NodeId),
              new NLongTxService::TEvLongTxService::TEvSubscribeLock(writeId.KeyId, writeId.NodeId));
 }
@@ -4418,8 +4419,11 @@ bool TPersQueue::WriteIdIsDisabled(const TMaybe<TWriteId>& writeId) const
                    TabletID(), writeId->NodeId, writeId->KeyId);
     const TTxWriteInfo& writeInfo = TxWrites.at(*writeId);
 
+    PQ_LOG_D("WriteId " << *writeId <<
+             " LongTxSubscriptionStatus=" << NKikimrLongTxService::TEvLockStatus_EStatus_Name(writeInfo.LongTxSubscriptionStatus) <<
+             " Partitions=" << writeInfo.Partitions.size());
     bool disabled =
-        (writeInfo.LongTxSubscriptionStatus != NKikimrLongTxService::TEvLockStatus::STATUS_SUBSCRIBED) &&
+        //(writeInfo.LongTxSubscriptionStatus != NKikimrLongTxService::TEvLockStatus::STATUS_SUBSCRIBED) &&
         writeInfo.Partitions.empty()
         ;
 

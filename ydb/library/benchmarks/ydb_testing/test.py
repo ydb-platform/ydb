@@ -1,16 +1,9 @@
-import ydb
 import sys
 
-driver_config = ydb.DriverConfig(
-    'grpcs://lb.etnvsjbk7kh1jc6bbfi8.ydb.mdb.yandexcloud.net:2135', '/ru-central1/b1ggceeul2pkher8vhb6/etnvsjbk7kh1jc6bbfi8',
-    credentials=ydb.credentials_from_env_variables(),
-    root_certificates=ydb.load_ydb_root_certificate(),
-)
-with ydb.Driver(driver_config) as driver:
-    try:
-        driver.wait(timeout=3)
-        print('SUCCESS!', file=sys.stderr)
-    except TimeoutError:
-        print("Connect failed to YDB")
-        print(driver.discovery_debug_details(), file=sys.stderr)
-        print('FAIL!', file=sys.stderr)
+from subprocess import Popen, PIPE
+
+command = ['python3', '/home/mfilitov/ydbwork/ydb/ydb/library/benchmarks/ydb_testing/uploader.py']
+process = Popen(command, stdout=PIPE, stderr=PIPE)
+output, err = process.communicate()
+print(output, file=sys.stderr)
+print(err, file=sys.stderr)

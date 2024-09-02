@@ -9,6 +9,7 @@ TEST_SRCS(
 PEERDIR(
     ydb/public/sdk/python
     contrib/python/requests
+    contrib/python/ydb/py3
 )
 
 END()

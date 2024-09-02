@@ -1614,17 +1614,15 @@ bool TSqlTranslation::CreateTableEntry(const TRule_create_table_entry& node, TCr
                         }
 
                         auto& token = spec.GetBlock2().GetToken1();
-                        switch (UnifiedToken(token.GetId())) {
-                            case ANTLR3_TOKEN(ASC):
-                            case ANTLR4_TOKEN(ASC):
-                                return true;
-                            case ANTLR3_TOKEN(DESC):
-                            case ANTLR4_TOKEN(DESC):
-                                desc = true;
-                                return true;
-                            default:
-                                Ctx.Error() << "Unsupported direction token: " << token.GetId();
-                                return false;
+                        auto tokenId = token.GetId();
+                        if (CHECK_TOKEN(tokenId, ASC)) {
+                            return true;
+                        } else if (CHECK_TOKEN(tokenId, DESC)) {
+                            desc = true;
+                            return true;
+                        } else {
+                            Ctx.Error() << "Unsupported direction token: " << token.GetId();
+                            return false;
                         }
                     };
 
@@ -3610,20 +3608,16 @@ bool TSqlTranslation::SortSpecification(const TRule_sort_specification& node, TV
     if (node.HasBlock2()) {
         const auto& token = node.GetBlock2().GetToken1();
         Token(token);
-        switch (UnifiedToken(token.GetId())) {
-            case ANTLR3_TOKEN(ASC):
-            case ANTLR4_TOKEN(ASC):
-                Ctx.IncrementMonCounter("sql_features", "OrderByAsc");
-                break;
-            case ANTLR3_TOKEN(DESC):
-            case ANTLR4_TOKEN(DESC):
-                asc = false;
-                Ctx.IncrementMonCounter("sql_features", "OrderByDesc");
-                break;
-            default:
-                Ctx.IncrementMonCounter("sql_errors", "UnknownOrderBy");
-                Error() << "Unsupported direction token: " << token.GetId();
-                return false;
+        auto tokenId = token.GetId();
+        if (CHECK_TOKEN(tokenId, ASC)) {
+            Ctx.IncrementMonCounter("sql_features", "OrderByAsc");
+        } else if (CHECK_TOKEN(tokenId, DESC)) {
+            asc = false;
+            Ctx.IncrementMonCounter("sql_features", "OrderByDesc");
+        } else {
+            Ctx.IncrementMonCounter("sql_errors", "UnknownOrderBy");
+            Error() << "Unsupported direction token: " << token.GetId();
+            return false;
         }
     } else {
         Ctx.IncrementMonCounter("sql_features", "OrderByDefault");

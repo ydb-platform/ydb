@@ -1634,19 +1634,19 @@ TNodePtr TSqlExpression::SubExpr(const TRule_con_subexpr& node, const TTrailingQ
             auto token = node.GetAlt_con_subexpr2().GetRule_unary_op1().GetToken1();
             Token(token);
             TPosition pos(Ctx.Pos());
-            switch (UnifiedToken(token.GetId())) {
-                case ANTLR3_TOKEN(NOT):
-                case ANTLR4_TOKEN(NOT): opName = "Not"; break;
-                case ANTLR3_TOKEN(PLUS):
-                case ANTLR4_TOKEN(PLUS): opName = "Plus"; break;
-                case ANTLR3_TOKEN(MINUS):
-                case ANTLR4_TOKEN(MINUS): opName = Ctx.Scoped->PragmaCheckedOps ? "CheckedMinus" : "Minus"; break;
-                case ANTLR3_TOKEN(TILDA):
-                case ANTLR4_TOKEN(TILDA): opName = "BitNot"; break;
-                default:
-                    Ctx.IncrementMonCounter("sql_errors", "UnsupportedUnaryOperation");
-                    Error() << "Unsupported unary operation: " << token.GetValue();
-                    return nullptr;
+            auto tokenId = token.GetId();
+            if (CHECK_TOKEN(tokenId, NOT)) {
+                opName = "Not";
+            } else if (CHECK_TOKEN(tokenId, PLUS)) {
+                opName = "Plus";
+            } else if (CHECK_TOKEN(tokenId, MINUS)) {
+                opName = Ctx.Scoped->PragmaCheckedOps ? "CheckedMinus" : "Minus";
+            } else if (CHECK_TOKEN(tokenId, TILDA)) {
+                opName = "BitNot";
+            } else {
+                Ctx.IncrementMonCounter("sql_errors", "UnsupportedUnaryOperation");
+                Error() << "Unsupported unary operation: " << token.GetValue();
+                return nullptr;
             }
             Ctx.IncrementMonCounter("sql_unary_operations", opName);
             auto expr = UnaryExpr(node.GetAlt_con_subexpr2().GetRule_unary_subexpr2(), tail);
@@ -2039,61 +2039,42 @@ TNodePtr TSqlExpression::BinOpList(const TNode& node, TGetNode getNode, TIter be
         TPosition pos(Ctx.Pos());
         TString opName;
         auto tokenId = begin->GetToken1().GetId();
-        switch (UnifiedToken(tokenId)) {
-            case ANTLR3_TOKEN(LESS):
-            case ANTLR4_TOKEN(LESS):
-                Ctx.IncrementMonCounter("sql_binary_operations", "Less");
-                opName = "<";
-                break;
-            case ANTLR3_TOKEN(LESS_OR_EQ):
-            case ANTLR4_TOKEN(LESS_OR_EQ):
-                opName = "<=";
-                Ctx.IncrementMonCounter("sql_binary_operations", "LessOrEq");
-                break;
-            case ANTLR3_TOKEN(GREATER):
-            case ANTLR4_TOKEN(GREATER):
-                opName = ">";
-                Ctx.IncrementMonCounter("sql_binary_operations", "Greater");
-                break;
-            case ANTLR3_TOKEN(GREATER_OR_EQ):
-            case ANTLR4_TOKEN(GREATER_OR_EQ):
-                opName = ">=";
-                Ctx.IncrementMonCounter("sql_binary_operations", "GreaterOrEq");
-                break;
-            case ANTLR3_TOKEN(PLUS):
-            case ANTLR4_TOKEN(PLUS):
-                opName = Ctx.Scoped->PragmaCheckedOps ? "CheckedAdd" : "+MayWarn";
-                Ctx.IncrementMonCounter("sql_binary_operations", "Plus");
-                break;
-            case ANTLR3_TOKEN(MINUS):
-            case ANTLR4_TOKEN(MINUS):
-                opName = Ctx.Scoped->PragmaCheckedOps ? "CheckedSub" : "-MayWarn";
-                Ctx.IncrementMonCounter("sql_binary_operations", "Minus");
-                break;
-            case ANTLR3_TOKEN(ASTERISK):
-            case ANTLR4_TOKEN(ASTERISK):
-                opName = Ctx.Scoped->PragmaCheckedOps ? "CheckedMul" : "*MayWarn";
-                Ctx.IncrementMonCounter("sql_binary_operations", "Multiply");
-                break;
-            case ANTLR3_TOKEN(SLASH):
-            case ANTLR4_TOKEN(SLASH):
-                opName = "/MayWarn";
-                Ctx.IncrementMonCounter("sql_binary_operations", "Divide");
-                if (!Ctx.Scoped->PragmaClassicDivision && partialResult) {
-                    partialResult = new TCallNodeImpl(pos, "SafeCast", {std::move(partialResult), BuildDataType(pos, "Double")});
-                } else if (Ctx.Scoped->PragmaCheckedOps) {
-                    opName = "CheckedDiv";
-                }
-                break;
-            case ANTLR3_TOKEN(PERCENT):
-            case ANTLR4_TOKEN(PERCENT):
-                opName = Ctx.Scoped->PragmaCheckedOps ? "CheckedMod" : "%MayWarn";
-                Ctx.IncrementMonCounter("sql_binary_operations", "Mod");
-                break;
-            default:
-                Ctx.IncrementMonCounter("sql_errors", "UnsupportedBinaryOperation");
-                Error() << "Unsupported binary operation token: " << tokenId;
-                return nullptr;
+        if (CHECK_TOKEN(tokenId, LESS)) {
+            opName = "<";
+            Ctx.IncrementMonCounter("sql_binary_operations", "Less");
+        } else if (CHECK_TOKEN(tokenId, LESS_OR_EQ)) {
+            opName = "<=";
+            Ctx.IncrementMonCounter("sql_binary_operations", "LessOrEq");
+        } else if (CHECK_TOKEN(tokenId, GREATER)) {
+            opName = ">";
+            Ctx.IncrementMonCounter("sql_binary_operations", "Greater");
+        } else if (CHECK_TOKEN(tokenId, GREATER_OR_EQ)) {
+            opName = ">=";
+            Ctx.IncrementMonCounter("sql_binary_operations", "GreaterOrEq");
+        } else if (CHECK_TOKEN(tokenId, PLUS)) {
+            opName = Ctx.Scoped->PragmaCheckedOps ? "CheckedAdd" : "+MayWarn";
+            Ctx.IncrementMonCounter("sql_binary_operations", "Plus");
+        } else if (CHECK_TOKEN(tokenId, MINUS)) {
+            opName = Ctx.Scoped->PragmaCheckedOps ? "CheckedSub" : "-MayWarn";
+            Ctx.IncrementMonCounter("sql_binary_operations", "Minus");
+        } else if (CHECK_TOKEN(tokenId, ASTERISK)) {
+            opName = Ctx.Scoped->PragmaCheckedOps ? "CheckedMul" : "*MayWarn";
+            Ctx.IncrementMonCounter("sql_binary_operations", "Multiply");
+        } else if (CHECK_TOKEN(tokenId, SLASH)) {
+            opName = "/MayWarn";
+            Ctx.IncrementMonCounter("sql_binary_operations", "Divide");
+            if (!Ctx.Scoped->PragmaClassicDivision && partialResult) {
+                partialResult = new TCallNodeImpl(pos, "SafeCast", {std::move(partialResult), BuildDataType(pos, "Double")});
+            } else if (Ctx.Scoped->PragmaCheckedOps) {
+                opName = "CheckedDiv";
+            }
+        } else if (CHECK_TOKEN(tokenId, PERCENT)) {
+            opName = Ctx.Scoped->PragmaCheckedOps ? "CheckedMod" : "%MayWarn";
+            Ctx.IncrementMonCounter("sql_binary_operations", "Mod");
+        } else {
+            Ctx.IncrementMonCounter("sql_errors", "UnsupportedBinaryOperation");
+            Error() << "Unsupported binary operation token: " << tokenId;
+            return nullptr;
         }
 
         partialResult = BuildBinaryOp(Ctx, pos, opName, partialResult, SubExpr(getNode(*begin), (begin + 1 == end) ? tail : TTrailingQuestions{}));

@@ -367,12 +367,23 @@ class TestJoinStreaming(TestYdsBase):
     @yq_v1
     @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": "tests-fq-generic-ydb:2136"}], indirect=True)
     @pytest.mark.parametrize("fq_client", [{"folder_id": "my_folder_slj"}], indirect=True)
+    @pytest.mark.parametrize("partitions_count", [1, 3])
     @pytest.mark.parametrize("streamlookup", [False, True])
     @pytest.mark.parametrize("testcase", [*range(len(TESTCASES))])
     def test_streamlookup(
-        self, kikimr, testcase, streamlookup, fq_client: FederatedQueryClient, settings: Settings, yq_version
+        self,
+        kikimr,
+        testcase,
+        streamlookup,
+        partitions_count,
+        fq_client: FederatedQueryClient,
+        settings: Settings,
+        yq_version,
     ):
-        self.init_topics(f"pq_yq_streaming_test_lookup_{streamlookup}{testcase}_{yq_version}")
+        self.init_topics(
+            f"pq_yq_str_lookup_{partitions_count}{streamlookup}{testcase}_{yq_version}",
+            partitions_count=partitions_count,
+        )
         fq_client.create_yds_connection("myyds", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
 
         table_name = 'join_table'
@@ -392,7 +403,7 @@ class TestJoinStreaming(TestYdsBase):
         )
 
         query_id = fq_client.create_query(
-            f"streamlookup_{streamlookup}{testcase}", sql, type=fq.QueryContent.QueryType.STREAMING
+            f"streamlookup_{partitions_count}{streamlookup}{testcase}", sql, type=fq.QueryContent.QueryType.STREAMING
         ).result.query_id
         fq_client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
         kikimr.compute_plane.wait_zero_checkpoint(query_id)

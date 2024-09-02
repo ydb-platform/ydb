@@ -247,6 +247,7 @@ TString MakeCreateExternalDataSourceQuery(
                 "schema"_a =  gpschema ? ", SCHEMA=" + EncloseAndEscapeString(gpschema, '"') : TString{});
 
         }
+        break;
         case FederatedQuery::ConnectionSetting::kMysqlCluster: {
             properties = fmt::format(
                 R"(

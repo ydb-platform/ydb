@@ -29,6 +29,24 @@ using namespace NYT::NApi;
 using namespace NActors;
 
 namespace NYql {
+    // This is compat function. YT changed returned type of IClient::GetJobStder.
+    // This function is used to be compatible both with new and old versions.
+    //
+    // Can be removed once arcadia and github both use new version of YT client.
+    template <typename T>
+    TFuture<NYT::TSharedRef> ToStderrDataFuture(const NYT::TFuture<T>& jobStderrResponse) {
+        if constexpr (std::is_same_v<T, NYT::TSharedRef>) {
+            return jobStderrResponse.Apply(BIND([] (const NYT::TSharedRef& rsp) {
+                return rsp;
+            }));
+        } else {
+            // T must be TGetJobStderrResponse
+            return jobStderrResponse.Apply(BIND([] (const T& rsp) {
+                return rsp.Data;
+            }));
+        }
+    }
+
     struct TRequest: public NYT::TRefCounted {
         const TActorId SelfId;
         const TActorId Sender;
@@ -624,8 +642,8 @@ namespace NYql {
                         for (const auto& job : result.Jobs) {
                             YQL_CLOG(DEBUG, ProviderDq) << "Printing stderr (" << ToString(operationId) << "," << ToString(job.Id) << ")";
 
-                            YT_UNUSED_FUTURE(cli->GetJobStderr(operationId, job.Id)
-                                .Apply(BIND([jobId = job.Id, operationId](const TSharedRef& data) {
+                            auto jobStderrData = ToStderrDataFuture(cli->GetJobStderr(operationId, job.Id));
+                            YT_UNUSED_FUTURE(jobStderrData.Apply(BIND([jobId = job.Id, operationId](const NYT::TSharedRef& data) {
                                     YQL_CLOG(DEBUG, ProviderDq)
                                         << "Stderr ("
                                         << ToString(operationId) << ","

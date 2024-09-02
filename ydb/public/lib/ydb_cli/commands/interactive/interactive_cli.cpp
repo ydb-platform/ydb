@@ -9,7 +9,7 @@
 #include <ydb/public/lib/ydb_cli/commands/interactive/line_reader.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_service_scheme.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_service_table.h>
-#include <ydb/public/lib/ydb_cli/commands/ydb_yql.h>
+#include <ydb/public/lib/ydb_cli/commands/ydb_sql.h>
 
 namespace NYdb {
 namespace NConsoleClient {
@@ -180,8 +180,11 @@ void TInteractiveCLI::Run() {
             }
 
             TString queryStatsMode(NTable::QueryStatsModeToString(interactiveCLIState.CollectStatsMode));
-            TCommandYql yqlCommand(TString(line), queryStatsMode);
-            yqlCommand.Run(Config);
+            TCommandSql sqlCommand;
+            sqlCommand.SetScript(TString(line));
+            sqlCommand.SetCollectStatsMode(std::move(queryStatsMode));
+            sqlCommand.SetSyntax("yql");
+            sqlCommand.Run(Config);
         } catch (TYdbErrorException &error) {
             Cerr << error;
         } catch (yexception & error) {

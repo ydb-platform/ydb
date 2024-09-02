@@ -764,8 +764,10 @@ TVector<TResult> ParseResponse(const NYT::TNode& responseNode) {
                 write.Type = &writeNode["Type"];
             }
             
-            CHECK(writeNode.HasKey("Data"));
-            write.Data = &writeNode["Data"];
+            if (writeNode.HasKey("Data")) {
+                write.Data = &writeNode["Data"];
+            }
+            
             if (writeNode.HasKey("Truncated")) {
                 const auto& truncatedNode = writeNode["Truncated"];
                 CHECK(truncatedNode.IsBool());

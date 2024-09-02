@@ -542,6 +542,27 @@ Y_UNIT_TEST_SUITE(ParseResponse) {
         UNIT_ASSERT(!write.Type);
     }
 
+    Y_UNIT_TEST(WriteNoData) {
+        auto response = NYT::NodeFromYsonString(R"([
+            {
+                Write = [
+                    {
+                        Type = type;
+                        Refs = [];
+                    }
+                ]
+            };
+        ])");
+
+        auto resList = ParseResponse(response);
+        UNIT_ASSERT_VALUES_EQUAL(resList.size(), 1);
+        const auto& res = resList[0];
+        UNIT_ASSERT_VALUES_EQUAL(res.Writes.size(), 1);
+        const auto& write = res.Writes[0];
+        UNIT_ASSERT_VALUES_EQUAL(NYT::NodeToCanonicalYsonString(*write.Type), "\"type\"");
+        UNIT_ASSERT(!write.Data);
+    }    
+
     Y_UNIT_TEST(RefsEmpty) {
         auto response = NYT::NodeFromYsonString(R"([
             {

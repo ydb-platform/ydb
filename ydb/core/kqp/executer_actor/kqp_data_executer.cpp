@@ -2167,7 +2167,7 @@ private:
 
     using TDatashardTxs = THashMap<ui64, NKikimrTxDataShard::TKqpTransaction*>;
     using TEvWriteTxs = THashMap<ui64, NKikimrDataEvents::TEvWrite*>;
-    using TTopicTabletTxs = THashMap<ui64, NKikimrPQ::TDataTransaction>;
+    using TTopicTabletTxs = NTopic::TTopicOperationTransactions;
 
     void ContinueExecute() {
         if (Stats) {
@@ -2424,10 +2424,10 @@ private:
                     }
                 }
 
-                for (auto& [_, tx] : topicTxs) {
-                    tx.SetOp(NKikimrPQ::TDataTransaction::Commit);
-                    *tx.MutableSendingShards() = sendingShards;
-                    *tx.MutableReceivingShards() = receivingShards;
+                for (auto& [_, t] : topicTxs) {
+                    t.tx.SetOp(NKikimrPQ::TDataTransaction::Commit);
+                    *t.tx.MutableSendingShards() = sendingShards;
+                    *t.tx.MutableReceivingShards() = receivingShards;
                     YQL_ENSURE(!arbiter);
                 }
             }
@@ -2589,13 +2589,12 @@ private:
             writeId = Request.TopicOperations.GetWriteId();
         }
 
-        for (auto& tx : topicTxs) {
-            auto tabletId = tx.first;
-            auto& transaction = tx.second;
+        for (auto& [tabletId, t] : topicTxs) {
+            auto& transaction = t.tx;
 
             auto ev = std::make_unique<TEvPersQueue::TEvProposeTransaction>();
 
-            if (writeId.Defined()) {
+            if (t.hasWrite && writeId.Defined()) {
                 auto* w = transaction.MutableWriteId();
                 w->SetNodeId(SelfId().NodeId());
                 w->SetKeyId(*writeId);

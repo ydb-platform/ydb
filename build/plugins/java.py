@@ -100,7 +100,6 @@ def onjava_module(unit, *args):
         'JDK_RESOURCE': 'JDK' + (unit.get('JDK_VERSION') or unit.get('JDK_REAL_VERSION') or '_DEFAULT'),
     }
     if unit.get('ENABLE_PREVIEW_VALUE') == 'yes' and (unit.get('JDK_VERSION') or unit.get('JDK_REAL_VERSION')) in (
-        '15',
         '17',
         '20',
         '21',
@@ -372,7 +371,6 @@ def on_jdk_version_macro_check(unit, *args):
     jdk_version = args[0]
     available_versions = (
         '11',
-        '15',
         '17',
         '20',
         '21',

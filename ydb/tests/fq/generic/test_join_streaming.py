@@ -2,6 +2,8 @@ import pytest
 import os
 import json
 import sys
+from collections import Counter
+from operator import itemgetter
 
 import ydb.public.api.protos.draft.fq_pb2 as fq
 from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
@@ -25,6 +27,15 @@ def ResequenceId(messages):
         res += [tuple(rpair)]
         i += 1
     return res
+
+
+def freeze(json):
+    t = type(json)
+    if t == dict:
+        return frozenset((k, freeze(v)) for k, v in json.items())
+    if t == list:
+        return tuple(map(freeze, json))
+    return json
 
 
 TESTCASES = [
@@ -397,10 +408,9 @@ class TestJoinStreaming(TestYdsBase):
             print(streamlookup, testcase, file=sys.stderr)
             print(sql, file=sys.stderr)
             print(*zip(messages, read_data), file=sys.stderr, sep="\n")
-        for r, exp in zip(read_data, messages):
-            r = json.loads(r)
-            exp = json.loads(exp[1])
-            assert r == exp
+        read_data_ctr = Counter(map(freeze, map(json.loads, read_data)))
+        messages_ctr = Counter(map(freeze, map(json.loads, map(itemgetter(1), messages))))
+        assert read_data_ctr == messages_ctr
 
         fq_client.abort_query(query_id)
         fq_client.wait_query(query_id)

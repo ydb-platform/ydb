@@ -7,7 +7,7 @@ SRCS(
     counter.cpp
     hedging.cpp
     hedging_executor.cpp
-    logger.cpp
+    private.cpp
     penalty_provider.cpp
 )
 
@@ -17,8 +17,6 @@ PEERDIR(
     yt/yt/client/cache
     yt/yt/library/profiling
     yt/yt_proto/yt/client/hedging
-
-    library/cpp/iterator
 )
 
 END()

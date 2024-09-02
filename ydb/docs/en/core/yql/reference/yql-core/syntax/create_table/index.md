@@ -112,16 +112,16 @@ By default, if the `STORE` parameter is not specified, a row-oriented table is c
 - Creating a column-oriented table
 
   ```sql
-    CREATE TABLE table_name (
-      a Uint64 NOT NULL,
-      b Uint64 NOT NULL,
-      c Float,
-      PRIMARY KEY (a, b)
-    )
-    WITH (
-      STORE = COLUMN
-    );
-    ```  
+  CREATE TABLE table_name (
+    a Uint64 NOT NULL,
+    b Uint64 NOT NULL,
+    c Float,
+    PRIMARY KEY (a, b)
+  )
+  WITH (
+    STORE = COLUMN
+  );
+  ```  
 
 {% endlist %}
 
@@ -153,12 +153,12 @@ Specifying a `PRIMARY KEY` with a non-empty list of columns is mandatory. These 
 
 **Example**:
 ```sql
-  CREATE TABLE <table_name> (
-    a Uint64,
-    b Uint64,
-    c Float,
-    PRIMARY KEY (a, b)
-  );
+CREATE TABLE <table_name> (
+  a Uint64,
+  b Uint64,
+  c Float,
+  PRIMARY KEY (a, b)
+);
 ```
 {% endif %}
 

@@ -46,10 +46,6 @@ struct TSelectInfo {
 
     std::vector<std::shared_ptr<TPortionInfo>> PortionsOrderedPK;
 
-    NColumnShard::TContainerAccessorWithDirection<std::vector<std::shared_ptr<TPortionInfo>>> GetPortionsOrdered(const bool reverse) const {
-        return NColumnShard::TContainerAccessorWithDirection<std::vector<std::shared_ptr<TPortionInfo>>>(PortionsOrderedPK, reverse);
-    }
-
     size_t NumChunks() const;
 
     TStats Stats() const;

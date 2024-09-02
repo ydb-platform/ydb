@@ -353,6 +353,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     TColumnOrderStorage::TPtr ColumnOrderStorage = new TColumnOrderStorage;
     THashSet<TString> OptimizerFlags;
     bool StreamLookupJoin = false;
+    ui32 MaxAggPushdownPredicates = 6; // algorithm complexity is O(2^N)
 
     TMaybe<TColumnOrder> LookupColumnOrder(const TExprNode& node) const;
     IGraphTransformer::TStatus SetColumnOrder(const TExprNode& node, const TColumnOrder& columnOrder, TExprContext& ctx);

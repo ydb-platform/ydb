@@ -97,7 +97,7 @@ This migration file structure helps keep the instructions that lead to the next 
 The migration file consists of two sections:
 
 1. `+goose Up` is an area where we can record the migration steps.
-2. `+goose Down` is an area where we can write queries to revert changes of the `+goose Up` steps. 
+2. `+goose Down` is an area where we can write queries to revert changes of the `+goose Up` steps.
 
 Goose carefully inserted placeholder queries:
 
@@ -367,7 +367,7 @@ The `goose` utility allows you to manage migrations via the command line:
 - `goose up-by-one` - apply exactly one “next” migration. For example, `goose ydb $YDB_CONNECTION_STRING up-by-one`.
 - `goose redo` - re-apply the latest migration. For example, `goose ydb $YDB_CONNECTION_STRING redo`.
 - `goose down` - rollback the last migration. For example, `goose ydb $YDB_CONNECTION_STRING down`.
-- `goose reset` - rollback all migrations. For example, `goose ydb $YDB_CONNECTION_STRING reset`. 
+- `goose reset` - rollback all migrations. For example, `goose ydb $YDB_CONNECTION_STRING reset`.
 
 {% note warning %}
 

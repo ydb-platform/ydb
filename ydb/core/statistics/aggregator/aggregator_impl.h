@@ -335,6 +335,8 @@ private:
         Traversal
     };
     ENavigateType NavigateType = Analyze;
+    TString GetNavigateTypeString() const;
+
     TString NavigateAnalyzeOperationId;
     TPathId NavigatePathId;
 
@@ -386,6 +388,8 @@ private: // stored in local db
             TraversalFinished,
         };
         EStatus Status = EStatus::None;
+
+        TString GetStatusString() const;
     };
     struct TForceTraversalOperation {
         TString OperationId;

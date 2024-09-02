@@ -570,7 +570,7 @@ void TPathDescriber::DescribeColumnTable(TPathId pathId, TPathElement::TPtr path
             description->MutableSchema()->SetVersion(description->GetSchema().GetVersion() + description->GetSchemaPresetVersionAdj());
         }
         if (tableInfo->GetStats().TableStats.contains(pathId)) {
-            FillTableStats(*pathDescription, tableInfo->GetStats().TableStats.at(pathId));
+            FillTableStats(*pathDescription, tableInfo->GetStats().TableStats.at(pathId).Aggregated);
         } else {
             FillTableStats(*pathDescription, TPartitionStats());
         }

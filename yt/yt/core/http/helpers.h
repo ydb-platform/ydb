@@ -40,6 +40,7 @@ inline const TString XContentTypeOptionsHeaderName("X-Content-Type-Options");
 inline const TString XRequestTimeoutHeaderName("X-Request-Timeout");
 
 inline const TString UserTicketHeaderName("X-Ya-User-Ticket");
+inline const TString ServiceTicketHeaderName("X-Ya-Service-Ticket");
 inline const TString XDnsPrefetchControlHeaderName("X-DNS-Prefetch-Control");
 inline const TString XForwardedForYHeaderName("X-Forwarded-For-Y");
 inline const TString XFrameOptionsHeaderName("X-Frame-Options");

@@ -4,7 +4,7 @@
 
 Currently, only building from source is available as an installation option. The pre-compiled executables will be available later.
 
-### Building from source
+## Building from source
 
 1. [Install Go](https://go.dev/doc/install). The minimal required Go version is 1.21.
 
@@ -19,7 +19,7 @@ Currently, only building from source is available as an installation option. The
     ```
     The `ydbops` executable will be available in the repository root folder.
 
-### Download the binary from releases page
+## Download the binary from releases page
 
 {% note warning %}
 

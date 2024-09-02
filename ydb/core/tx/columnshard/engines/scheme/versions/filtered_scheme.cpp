@@ -48,7 +48,14 @@ std::shared_ptr<TColumnLoader> TFilteredSnapshotSchema::GetColumnLoaderOptional(
 }
 
 std::optional<ui32> TFilteredSnapshotSchema::GetColumnIdOptional(const std::string& columnName) const {
-    return OriginalSnapshot->GetColumnIdOptional(columnName);
+    auto result = OriginalSnapshot->GetColumnIdOptional(columnName);
+    if (!result) {
+        return result;
+    }
+    if (!ColumnIds.contains(*result)) {
+        return std::nullopt;
+    }
+    return result;
 }
 
 int TFilteredSnapshotSchema::GetFieldIndex(const ui32 columnId) const {

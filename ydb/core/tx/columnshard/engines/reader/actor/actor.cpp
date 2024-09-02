@@ -274,9 +274,9 @@ void TColumnShardScan::ContinueProcessing() {
             if (ChunksLimiter.HasMore()) {
                 auto g = Stats->MakeGuard("Finish");
                 MakeResult();
+                Finish(NColumnShard::TScanCounters::EStatusFinish::Success);
                 SendResult(false, true);
                 ScanIterator.reset();
-                Finish(NColumnShard::TScanCounters::EStatusFinish::Success);
             }
         } else {
             while (true) {

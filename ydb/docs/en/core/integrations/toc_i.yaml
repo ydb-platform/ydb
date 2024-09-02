@@ -19,3 +19,5 @@ items:
   href: ide/dbeaver.md
 - name: DataGrip
   href: ide/datagrip.md
+- name: Using Spring Data JDBC
+  href: spring-data-jdbc.md

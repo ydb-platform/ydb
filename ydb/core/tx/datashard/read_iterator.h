@@ -212,7 +212,7 @@ public:
     ui64 LastAckSeqNo = 0;
     ui32 FirstUnprocessedQuery = 0;
     TString LastProcessedKey;
-    bool LastProcessedKeyErasedOrMissing = false;
+    bool LastProcessedKeyErased = false;
 
     // Orbit used for tracking progress
     NLWTrace::TOrbit Orbit;

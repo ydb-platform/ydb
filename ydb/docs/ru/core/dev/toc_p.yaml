@@ -34,3 +34,5 @@ items:
   href: terraform.md
 - name: Пользовательские атрибуты
   href: custom-attributes.md
+- name: Пулы ресурсов и классификаторы
+  href: resource-pools-and-classifiers.md

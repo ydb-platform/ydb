@@ -17,6 +17,7 @@
 - [{#T}](system-views.md)
 - [{#T}](cdc.md)
 - [{#T}](custom-attributes.md)
+- [{#T}](resource-pools-and-classifiers.md)
 - Справка:
   - [{#T}](../yql/reference/index.md)
   - [{#T}](../reference/ydb-sdk/index.md)

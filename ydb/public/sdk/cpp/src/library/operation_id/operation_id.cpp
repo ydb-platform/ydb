@@ -77,6 +77,11 @@ std::string TOperationId::ToString() const {
     return res.Str();
 }
 
+std::vector<std::string_view> TOperationId::GetKindNames() {
+    return {"UNUSED", "OPERATION_DDL", "OPERATION_DML", "SESSION_YQL", "PREPARED_QUERY_ID",
+            "CMS_REQUEST", "EXPORT", "BUILD_INDEX", "IMPORT", "SCRIPT_EXECUTION", "SS_BG_TASKS"};
+}
+
 TOperationId::TOperationId() {
     Kind = TOperationId::UNUSED;
 }

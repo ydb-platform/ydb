@@ -111,7 +111,7 @@ struct TEvEvents {
     struct TEvAuthResponse : NActors::TEventLocal<TEvAuthResponse, EvAuthResponse> {
         TString SerializedToken;
         TString Ticket;
-        std::string ErrorMessage;
+        TString ErrorMessage;
         TActorId Sender;
 
         TEvAuthResponse(const TString& serializedToken, const TString& ticket, const TActorId& sender)
@@ -120,7 +120,7 @@ struct TEvEvents {
             , Sender(sender)
         {}
 
-        TEvAuthResponse(const std::string& errorMessage, const TActorId& sender)
+        TEvAuthResponse(const TString& errorMessage, const TActorId& sender)
             : ErrorMessage(errorMessage)
             , Sender(sender)
         {}

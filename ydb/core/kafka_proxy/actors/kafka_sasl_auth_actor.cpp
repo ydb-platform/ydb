@@ -79,7 +79,7 @@ void TKafkaSaslAuthActor::Handle(TEvPrivate::TEvTokenReady::TPtr& ev, const NAct
     }));
 }
 
-void TKafkaSaslAuthActor::SendResponseAndDie(EKafkaErrors errorCode, const TString& errorMessage, const std::string& details, const NActors::TActorContext& ctx) {
+void TKafkaSaslAuthActor::SendResponseAndDie(EKafkaErrors errorCode, const TString& errorMessage, const TString& details, const NActors::TActorContext& ctx) {
     auto isFailed = errorCode != EKafkaErrors::NONE_ERROR;
 
     auto responseToClient = std::make_shared<TSaslAuthenticateResponseData>();

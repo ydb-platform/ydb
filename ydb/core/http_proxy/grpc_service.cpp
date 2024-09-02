@@ -107,7 +107,7 @@ private:
         ctx.Send(MakeDiscoveryProxyID(), new TEvServerlessProxy::TEvListEndpointsRequest(endpoint, database));
     }
 
-    void ReplyWithError(const TActorContext& ctx, NYdb::EStatus status, const std::string& errorText) {
+    void ReplyWithError(const TActorContext& ctx, NYdb::EStatus status, const TString& errorText) {
         Ydb::Discovery::ListEndpointsResponse * resp = CreateResponseMessage();
         auto deferred = resp->mutable_operation();
         deferred->set_ready(true);

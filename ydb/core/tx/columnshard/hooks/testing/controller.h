@@ -1,6 +1,7 @@
 #pragma once
 #include "ro_controller.h"
 #include <ydb/core/tx/columnshard/blobs_action/abstract/blob_set.h>
+#include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/common/tablet_id.h>
 #include <ydb/core/tx/columnshard/engines/writer/write_controller.h>
@@ -128,6 +129,7 @@ private:
     void CheckInvariants(const ::NKikimr::NColumnShard::TColumnShard& shard, TCheckContext& context) const;
 
     THashSet<TString> SharingIds;
+    NOlap::NDataLocks::TManager LockManager;
 protected:
     virtual ::NKikimr::NColumnShard::TBlobPutResult::TPtr OverrideBlobPutResultOnCompaction(const ::NKikimr::NColumnShard::TBlobPutResult::TPtr original, const NOlap::TWriteActionsCollection& actions) const override;
     virtual TDuration DoGetLagForCompactionBeforeTierings(const TDuration def) const override {
@@ -255,6 +257,14 @@ public:
     bool IsActiveTablet(const ui64 tabletId) const {
         TGuard<TMutex> g(ActiveTabletsMutex);
         return ActiveTablets.contains(tabletId);
+    }
+
+    const NOlap::NDataLocks::TManager* GetLockManager() const override {
+        return &LockManager;
+    }
+
+    NOlap::NDataLocks::TManager* GetLockManager() {
+        return &LockManager;
     }
 };
 

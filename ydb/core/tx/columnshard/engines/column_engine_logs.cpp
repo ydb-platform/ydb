@@ -342,14 +342,18 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
     ui32 portionsFromDrop = 0;
     bool limitExceeded = false;
     THashSet<TPortionAddress> uniquePortions;
-    for (ui64 pathId : pathsToDrop) {
+    using namespace NDataLocks;
+    for (const auto pathId : pathsToDrop) {
+        if (dataLocksManager->IsLocked(pathId, TLockFilter::Only({ELockCategory::Generic}))) {
+            continue;
+        }
         auto g = GranulesStorage->GetGranuleOptional(pathId);
         if (!g) {
             continue;
         }
 
-        for (auto& [portion, info] : g->GetPortions()) {
-            if (dataLocksManager->IsLocked(*info)) {
+        for (const auto& [portion, info] : g->GetPortions()) {
+            if (dataLocksManager->IsLocked(*info, TLockFilter::Only({ELockCategory::Generic}))) {
                 ++skipLocked;
                 continue;
             }
@@ -374,7 +378,8 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
             break;
         }
         for (ui32 i = 0; i < it->second.size();) {
-            if (dataLocksManager->IsLocked(it->second[i])) {
+            using namespace NDataLocks;
+            if (dataLocksManager->IsLocked(it->second[i], TLockFilter::Only({ELockCategory::Generic}))) {
                 ++skipLocked;
                 ++i;
                 continue;

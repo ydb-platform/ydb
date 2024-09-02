@@ -25,7 +25,8 @@ bool TCommonSession::TryStart(const NColumnShard::TColumnShard& shard) {
         auto& portionsVector = portionsByPath[i];
         const auto& g = index.GetGranuleVerified(i);
         for (auto&& p : g.GetPortionsOlderThenSnapshot(GetSnapshotBarrier())) {
-            if (shard.GetDataLocksManager()->IsLocked(*p.second, { "sharing_session:" + GetSessionId() })) {
+            using namespace NOlap::NDataLocks;
+            if (shard.GetDataLocksManager()->IsLocked(*p.second, TLockFilter::AllBut({ TManager::GetSharingSessionLockName(GetSessionId()) }))) {
                 return false;
             }
             portionsVector.emplace_back(p.second);
@@ -46,8 +47,9 @@ void TCommonSession::PrepareToStart(const NColumnShard::TColumnShard& shard) {
     AFL_VERIFY(State == EState::Created);
     State = EState::Prepared;
     AFL_VERIFY(!LockGuard);
-    LockGuard = shard.GetDataLocksManager()->RegisterLock<NDataLocks::TSnapshotLock>("sharing_session:" + GetSessionId(),
-        TransferContext.GetSnapshotBarrierVerified(), GetPathIdsForStart(), true);
+    using namespace NDataLocks;
+    LockGuard = shard.GetDataLocksManager()->RegisterLock<TSnapshotLock>(TManager::GetSharingSessionLockName(GetSessionId()),
+        TransferContext.GetSnapshotBarrierVerified(), GetPathIdsForStart(), ELockCategory::ReadOnly);
     shard.GetSharingSessionsManager()->StartSharingSession();
 }
 

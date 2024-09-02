@@ -19,9 +19,10 @@ std::shared_ptr<NKikimr::NOlap::TColumnEngineChanges> TPortionsBucket::BuildOpti
     auto context = Logic->BuildTask(TInstant::Now(), GetMemLimit(), *this);
     AFL_VERIFY(context.GetPortions().size() > 1)("size", context.GetPortions().size());
     ui64 size = 0;
+    using namespace NDataLocks;
     for (auto&& i : context.GetPortions()) {
         size += i->GetTotalBlobBytes();
-        AFL_VERIFY(!locksManager->IsLocked(*i));
+        AFL_VERIFY(!locksManager->IsLocked(*i, TLockFilter::Only({ELockCategory::Generic})));
     }
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("size", size)("next", Finish.DebugString())("count", context.GetPortions().size())("event", "start_optimization");
     TSaverContext saverContext(storagesManager);
@@ -34,8 +35,9 @@ std::shared_ptr<NKikimr::NOlap::TColumnEngineChanges> TPortionsBucket::BuildOpti
 }
 
 bool TPortionsBucket::IsLocked(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const {
+    using namespace NDataLocks;
     for (auto&& i : Portions) {
-        if (dataLocksManager->IsLocked(*i.second.GetPortionInfo())) {
+        if (dataLocksManager->IsLocked(*i.second.GetPortionInfo(), TLockFilter::Only({ELockCategory::Generic}))) {
             return true;
         }
     }

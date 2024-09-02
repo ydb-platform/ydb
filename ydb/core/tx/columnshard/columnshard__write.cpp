@@ -188,7 +188,14 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
     }
 
     if (!TablesManager.IsReadyForWrite(tableId)) {
-        LOG_S_NOTICE("Write (fail) into pathId:" << writeMeta.GetTableId() << (TablesManager.HasPrimaryIndex()? "": " no index")
+        LOG_S_NOTICE("Write (fail) into pathId:" << tableId << (TablesManager.HasPrimaryIndex()? "": " no index")
+            << " at tablet " << TabletID());
+
+        return returnFail(COUNTER_WRITE_FAIL, EWriteFailReason::NoTable);
+    }
+
+    if (DataLocksManager->IsLocked(tableId, NOlap::NDataLocks::TLockFilter::Only({NOlap::NDataLocks::TManager::GetNewDataTxLockName(tableId)}))) {
+        LOG_S_NOTICE("Write (fail) into locked pathId:" << tableId
             << " at tablet " << TabletID());
 
         return returnFail(COUNTER_WRITE_FAIL, EWriteFailReason::NoTable);
@@ -320,6 +327,16 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     const auto source = ev->Sender;
     const auto cookie = ev->Cookie;
     const auto behaviour = TOperationsManager::GetBehaviour(*ev->Get());
+
+    for (const auto& operation: record.GetOperations()) {
+        const auto pathId = operation.GetTableId().GetTableId();
+        if (DataLocksManager->IsLocked(pathId, NOlap::NDataLocks::TLockFilter::Only({NOlap::NDataLocks::TManager::GetNewDataTxLockName(pathId)}))) {
+            Counters.GetTabletCounters()->IncCounter(COUNTER_WRITE_FAIL);
+            auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, "table is locked for new writes");
+            ctx.Send(source, result.release(), 0, cookie);
+            return;
+        }
+    }
 
     if (behaviour == EOperationBehaviour::Undefined) {
         Counters.GetTabletCounters()->IncCounter(COUNTER_WRITE_FAIL);

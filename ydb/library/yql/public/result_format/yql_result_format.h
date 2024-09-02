@@ -94,7 +94,7 @@ public:
     virtual void OnPgType(TStringBuf name, TStringBuf category) = 0;
 };
 
-class TThrowingTypeVisitor : public ITypeVisitor {
+class TSameActionTypeVisitor : public ITypeVisitor {
 public:
     void OnVoid() override;
     void OnNull() override;
@@ -152,6 +152,19 @@ public:
     void OnBeginTagged(TStringBuf tag) override;
     void OnEndTagged() override;
     void OnPgType(TStringBuf name, TStringBuf category) override;
+
+public:
+    virtual void Do() = 0;
+};
+
+class TThrowingTypeVisitor : public TSameActionTypeVisitor {
+public:
+    void Do() final;
+};
+
+class TEmptyTypeVisitor : public TSameActionTypeVisitor {
+public:
+    void Do() final;
 };
 
 void ParseType(const NYT::TNode& typeNode, ITypeVisitor& visitor);

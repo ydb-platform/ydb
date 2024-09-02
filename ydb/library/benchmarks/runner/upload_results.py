@@ -134,7 +134,7 @@ def upload_results(result_path, s3_folder, test_start):
                     "ResultHash" : results.output_hash,
                     "SpilledBytes" : results.read_bytes,
                     "UserTime" : results.user_time,
-                    "SystemTime" : results.syste_time
+                    "SystemTime" : results.system_time
                 }
                 sql = 'UPSERT INTO dq_spilling_nightly_runs ({columns}) VALUES ({values})'.format(
                     columns=", ".join(mapping.keys()),

@@ -3,6 +3,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/library/actors/protos/unittests.pb.h>
 
+#include <iostream>
+
 Y_UNIT_TEST_SUITE(TEventSerialization) {
     struct TMockEvent: public NActors::IEventBase {
         TBigMessage* msg;
@@ -67,6 +69,7 @@ Y_UNIT_TEST_SUITE(TEventSerialization) {
             }
             UNIT_ASSERT_EQUAL(bmSerialized, bmChunkedSerialized);
             int value = rand();
+            std::cerr << calue << std::endl;
             UNIT_ASSERT_EQUAL(value, value + 42);
         }
     }

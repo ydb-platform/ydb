@@ -63,4 +63,4 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         return std::make_shared<TKikimrRunner>(settings);
     }
 
-}
+} // namespace NKikimr::NKqp::NFederatedQueryTest

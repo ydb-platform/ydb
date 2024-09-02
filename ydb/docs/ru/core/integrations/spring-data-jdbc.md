@@ -4,6 +4,7 @@
 
 Spring Data JDBC является частью экосистемы [Spring Data](https://spring.io/projects/spring-data), которая предоставляет упрощенный подход к взаимодействию с реляционными базами данных посредством использования SQL и простых Java объектов. В отличие от [Spring Data JPA](https://spring.io/projects/spring-data-jpa), который построен на базе JPA (Java Persistence API), Spring Data JDBC предлагает более прямолинейный способ работы с базами данных, исключающий сложности, связанные с ORM (Object-Relational Mapping).
 
+
 ## Установка диалекта {{ ydb-short-name }} {#install-dialect}
 
 Для интеграции {{ ydb-short-name }} с вашим проектом Spring Data JDBC потребуется добавить две зависимости: {{ ydb-short-name }} JDBC Driver и расширение Spring Data JDBC для {{ ydb-short-name }}.
@@ -46,6 +47,7 @@ Spring Data JDBC является частью экосистемы [Spring Data
 После импорта всех необходимых зависимостей, диалект готов к работе. Давайте рассмотрим простой пример. 
 
 ```java
+
 @Table(name = "Users")
 public class User implements Persistable<Long> {
     @Id

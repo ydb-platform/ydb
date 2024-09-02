@@ -46,6 +46,7 @@ Examples for different build systems:
 After importing all the necessary dependencies, the dialect is ready for use. Let's take a simple example.
 
 ```java
+
 @Table(name = "Users")
 public class User implements Persistable<Long> {
     @Id
@@ -79,13 +80,15 @@ public class User implements Persistable<Long> {
 For the `User` entity in the `Users` table, let's create a repository:
 
 ```java
+
 public interface SimpleUserRepository extends CrudRepository<User, Long> {
 }
 ```
 
 Let's save a new user and verify that they have been successfully saved:
 
-```Java
+```java
+
 @Component
 public class UserRepositoryCommandLineRunner implements CommandLineRunner {
     

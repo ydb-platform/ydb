@@ -16,9 +16,10 @@ namespace NActors {
             , Condition(std::move(condition))
             , Holder(Runtime.AddObserver<TEvType>(
                 [this](typename TEvType::TPtr& ev) {
-                    if (Condition && !Condition(ev)) {
+                    if (EventSeen)
                         return;
-                    }
+                    if (Condition && !Condition(ev))
+                        return;
                     EventSeen = true;
                 }))
         {}
@@ -27,7 +28,7 @@ namespace NActors {
          * Wait for a single event
          */
         void Wait() {
-            Runtime.WaitFor(typeid(TEvType).name(), [&]{ return EventSeen; });
+            Runtime.WaitFor(TypeName<TEvType>(), [&]{ return EventSeen; });
         }
 
         /**

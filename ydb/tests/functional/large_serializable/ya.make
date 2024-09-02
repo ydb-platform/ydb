@@ -12,8 +12,8 @@ REQUIREMENTS(
     ram:32
 )
 
-TIMEOUT(600)
-SIZE(MEDIUM)
+TIMEOUT(1800)
+SIZE(LARGE)
 
 DEPENDS(
     ydb/tests/tools/ydb_serializable

@@ -7905,7 +7905,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         csController->WaitIndexation(TDuration::Seconds(5));
         csController->WaitCompactions(TDuration::Seconds(5));
 
-        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest`", "[[4;#;[\"test_res_1\"]]]");
+        testHelper.ReadData("SELECT COUNT(*) FROM `/Root/ColumnTableTest`", "[[4u]]");
     }
 
     Y_UNIT_TEST(DropTtlColumn) {

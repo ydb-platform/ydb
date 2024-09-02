@@ -29,20 +29,6 @@ public:
         TakeTokens(tokens);
     }
 
-    void SetMaxTokens(i64 tokens) {
-        Y_DEBUG_ABORT_UNLESS(tokens > 0);
-        MaxTokens.store(tokens);
-    }
-
-    void SetMinTokens(i64 tokens) {
-        Y_DEBUG_ABORT_UNLESS(tokens < 0);
-        MinTokens.store(tokens);
-    }
-
-    void SetInflow(ui64 tokensPerSecond) {
-        Y_DEBUG_ABORT_UNLESS(tokensPerSecond >= 0);
-    }
-
 private:
     void FillBucket() {
         TTime prev;

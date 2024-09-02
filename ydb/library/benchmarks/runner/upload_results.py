@@ -57,7 +57,7 @@ class RunResults:
 
 def pretty_print(value):
     if value is None:
-        return "None"
+        return "null"
     if type(value) == str:
         return f'\"{value}\"'
     if type(value) in [int, float, bool]:

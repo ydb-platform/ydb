@@ -33,7 +33,6 @@ std::atomic<ui64> TTestTimerMs::Time = {};
 
 Y_UNIT_TEST_SUITE(TLockFreeBucket) {
     struct TTestContext {
-
         TTestContext() {
             MaxTokens.store(1'000'000);
             MinTokens.store(-1'000'000);
@@ -84,7 +83,6 @@ Y_UNIT_TEST_SUITE(TLockFreeBucket) {
 
         UNIT_ASSERT(!bucket.IsEmpty());
     }
-
 
     void TestUpperLimit(ui32 tokensTaken, bool isEmpty, ui32 threadCount) {
         TTestContext ctx;

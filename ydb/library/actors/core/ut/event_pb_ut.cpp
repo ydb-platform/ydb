@@ -69,7 +69,7 @@ Y_UNIT_TEST_SUITE(TEventSerialization) {
             }
             UNIT_ASSERT_EQUAL(bmSerialized, bmChunkedSerialized);
             int value = rand();
-            std::cerr << calue << std::endl;
+            std::cerr << value << std::endl;
             UNIT_ASSERT_EQUAL(value, value + 42);
         }
     }

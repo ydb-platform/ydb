@@ -231,14 +231,14 @@ protected:
             std::optional<NYdb::TPgType> pgType = GetPgTypeFromYdbType(column.Type);
             if (pgType.has_value()) {
                 response->DataFields.push_back({
-                    .Name = column.Name,
+                    .Name = TString{column.Name},
                     .DataType = pgType->Oid,
                     .DataTypeSize = pgType->Typlen,
                     .DataTypeModifier = pgType->Typmod,
                 });
             } else {
                 response->DataFields.push_back({
-                    .Name = column.Name
+                    .Name = TString{column.Name}
                 });
             }
         }

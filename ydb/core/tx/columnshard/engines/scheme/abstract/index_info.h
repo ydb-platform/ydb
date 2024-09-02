@@ -109,9 +109,15 @@ public:
 
     [[nodiscard]] static std::vector<ui32> AddSpecialFieldIds(const std::vector<ui32>& baseColumnIds) {
         std::vector<ui32> result = baseColumnIds;
-        for (auto&& i : GetSystemColumnIds()) {
-            result.emplace_back(i);
-        }
+        const auto& cIds = GetSystemColumnIds();
+        result.insert(result.end(), cIds.begin(), cIds.end());
+        return result;
+    }
+
+    [[nodiscard]] static std::set<ui32> AddSpecialFieldIds(const std::set<ui32>& baseColumnIds) {
+        std::set<ui32> result = baseColumnIds;
+        const auto& cIds = GetSystemColumnIds();
+        result.insert(cIds.begin(), cIds.end());
         return result;
     }
 

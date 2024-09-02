@@ -437,6 +437,75 @@ Pear|15|33|2024-05-06'''
         assert result_set.rows[2].items[5].int64_value == 10
         assert sum(kikimr.control_plane.get_metering(1)) == 10
 
+    @yq_v2
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_inference_timestamp(self, kikimr, s3, client):
+        unique_prefix = str(uuid.uuid4())
+        resource = boto3.resource(
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+        )
+
+        bucket = resource.Bucket("fbucket")
+        bucket.create(ACL='public-read')
+        bucket.objects.all().delete()
+
+        s3_client = boto3.client(
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+        )
+
+        csv_data = '''a,b,c
+2024-08-29,2024-08-29 10:20:30,2024-08-29T10:20:30.01
+2024-08-29,2024-08-29 10:20:30,2024-08-29T10:20:30.01
+2024-08-29,2024-08-29 10:20:30,2024-08-29T10:20:30.01'''
+        json_data = '''{ "a" : "2024-08-29", "b" : "2024-08-29 10:20:30", "c" : "2024-08-29T10:20:30.01" }
+{ "a" : "2024-08-29", "b" : "2024-08-29 10:20:30", "c" : "2024-08-29T10:20:30.01" }
+{ "a" : "2024-08-29", "b" : "2024-08-29 10:20:30", "c" : "2024-08-29T10:20:30.01" }'''
+        s3_client.put_object(Body=csv_data, Bucket='fbucket', Key='timestamp.csv', ContentType='text/plain')
+        s3_client.put_object(Body=json_data, Bucket='fbucket', Key='timestamp.json', ContentType='text/plain')
+        kikimr.control_plane.wait_bootstrap(1)
+        storage_connection_name = unique_prefix + "fruitbucket"
+        client.create_storage_connection(storage_connection_name, "fbucket")
+
+        sql = f'''
+            SELECT *
+            FROM `{storage_connection_name}`.`timestamp.csv`
+            WITH (format=csv_with_names, with_infer='true');
+            '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+
+        data = client.get_result_data(query_id)
+        result_set = data.result.result_set
+        logging.debug(str(result_set))
+        assert len(result_set.columns) == 3
+        assert result_set.columns[0].name == "a"
+        assert result_set.columns[0].type.optional_type.item.type_id == ydb.Type.DATE
+        assert result_set.columns[1].name == "b"
+        assert result_set.columns[1].type.optional_type.item.type_id == ydb.Type.TIMESTAMP
+        assert result_set.columns[2].name == "c"
+        assert result_set.columns[2].type.type_id == ydb.Type.UTF8
+
+        sql = f'''
+            SELECT *
+            FROM `{storage_connection_name}`.`timestamp.json`
+            WITH (format=json_each_row, with_infer='true');
+            '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+
+        data = client.get_result_data(query_id)
+        result_set = data.result.result_set
+        logging.debug(str(result_set))
+        assert len(result_set.columns) == 3
+        assert result_set.columns[0].name == "a"
+        assert result_set.columns[0].type.type_id == ydb.Type.UTF8
+        assert result_set.columns[1].name == "b"
+        assert result_set.columns[1].type.type_id == ydb.Type.UTF8
+        assert result_set.columns[2].name == "c"
+        assert result_set.columns[2].type.type_id == ydb.Type.UTF8
+
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_csv_with_hopping(self, kikimr, s3, client):

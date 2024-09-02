@@ -65,7 +65,7 @@ class LoadSuiteBase:
             allure.attach(result.stderr, 'Stderr', attachment_type=allure.attachment_type.TEXT)
         for p in ['Min', 'Max', 'Mean', 'Median']:
             if p in stats:
-                allure.dynamic.parameter(p, stats[p])
+                allure.dynamic.parameter(p, f'{int(stats[p])} ms')
         error_message = ''
         success = True
         if not result.success:

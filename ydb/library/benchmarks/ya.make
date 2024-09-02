@@ -4,4 +4,5 @@ RECURSE(
     template
     runner
     report
+    ydb_testing
 )

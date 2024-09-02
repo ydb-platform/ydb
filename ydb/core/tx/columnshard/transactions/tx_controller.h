@@ -47,7 +47,7 @@ public:
     TActorId Source;
     ui64 Cookie = 0;
     std::optional<TMessageSeqNo> SeqNo;
-
+    const THashSet<ui64> PathIds; 
 public:
     static TFullTxInfo BuildFake(const NKikimrTxColumnShard::ETransactionKind kind) {
         return TFullTxInfo(kind, 0, NActors::TActorId(), 0, {});
@@ -83,7 +83,9 @@ public:
     }
 
     TFullTxInfo(const NKikimrTxColumnShard::ETransactionKind& txKind, const ui64 txId)
-        : TBasicTxInfo(txKind, txId) {
+        : TBasicTxInfo(txKind, txId)
+        , PathIds({}) //TODO fixme
+    {
     }
 
     TFullTxInfo(const NKikimrTxColumnShard::ETransactionKind& txKind, const ui64 txId, const TActorId& source, const ui64 cookie,
@@ -91,7 +93,9 @@ public:
         : TBasicTxInfo(txKind, txId)
         , Source(source)
         , Cookie(cookie)
-        , SeqNo(seqNo) {
+        , SeqNo(seqNo)
+        , PathIds({}) //TODO fixme
+    {
     }
 };
 
@@ -458,6 +462,8 @@ public:
     std::optional<TTxInfo> PopFirstPlannedTx();
     void FinishPlannedTx(const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
     void CompleteRunningTx(const TPlanQueueItem& tx);
+    void PassAwayTx(const ui64 txId);
+    THashSet<ui64> GetTxsByPathId(const ui64 pathId) const;
 
     std::optional<TPlanQueueItem> GetPlannedTx() const;
     TPlanQueueItem GetFrontTx() const;

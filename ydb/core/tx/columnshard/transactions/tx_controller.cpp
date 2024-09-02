@@ -141,7 +141,7 @@ bool TTxController::AbortTx(const TPlanQueueItem planQueueItem, NTabletFlatExecu
     opIt->second->CompleteOnAbort(Owner, NActors::TActivationContext::AsActorContext());
     Counters.OnAbortTx(opIt->second->GetOpType());
 
-    AFL_VERIFY(Operators.erase(planQueueItem.TxId));
+    PassAwayTx(planQueueItem.TxId);
     AFL_VERIFY(DeadlineQueue.erase(planQueueItem));
     NIceDb::TNiceDb db(txc.DB);
     Schema::EraseTxInfo(db, planQueueItem.TxId);
@@ -162,7 +162,7 @@ bool TTxController::CompleteOnCancel(const ui64 txId, const TActorContext& ctx) 
     if (opIt->second->GetTxInfo().MaxStep != Max<ui64>()) {
         DeadlineQueue.erase(TPlanQueueItem(opIt->second->GetTxInfo().MaxStep, txId));
     }
-    Operators.erase(txId);
+    PassAwayTx(txId);
     return true;
 }
 
@@ -211,8 +211,24 @@ void TTxController::FinishPlannedTx(const ui64 txId, NTabletFlatExecutor::TTrans
 }
 
 void TTxController::CompleteRunningTx(const TPlanQueueItem& txItem) {
-    AFL_VERIFY(Operators.erase(txItem.TxId));
+    PassAwayTx(txItem.TxId);
     AFL_VERIFY(RunningQueue.erase(txItem))("info", txItem.DebugString());
+}
+
+void TTxController::PassAwayTx(const ui64 txId) {
+    AFL_VERIFY(Operators.erase(txId));
+    Owner.Subscribers->OnEvent(std::make_shared<NColumnShard::NSubscriber::TEventTransactionCompleted>(txId));
+}
+
+THashSet<ui64> TTxController::GetTxsByPathId(const ui64 pathId) const {
+    THashSet<ui64> result;
+    //TODO speed up this search
+    for (const auto& [txId, op]: Operators) {
+        if (op->GetTxInfo().PathIds.contains(pathId)) {
+            result.emplace(txId);
+        }
+    }
+    return result;
 }
 
 std::optional<TTxController::TPlanQueueItem> TTxController::GetPlannedTx() const {

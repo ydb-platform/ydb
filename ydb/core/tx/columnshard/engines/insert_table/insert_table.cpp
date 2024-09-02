@@ -3,8 +3,18 @@
 #include <ydb/core/protos/tx_columnshard.pb.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/engines/db_wrapper.h>
+#include <ydb/core/tx/columnshard/subscriber/abstract/manager/manager.h>
 
 namespace NKikimr::NOlap {
+
+TInsertTableAccessor::TInsertTableAccessor(std::shared_ptr<NColumnShard::NSubscriber::TManager> subscribers)
+    : Subscribers(subscribers)
+{}
+
+std::optional<NKikimr::NOlap::TInsertedData> TInsertTableAccessor::ExtractInserted(const TWriteId id) {
+    Subscribers->OnEvent(std::make_shared<NColumnShard::NSubscriber::TEventWritesCompleted>(id));
+    return Summary.ExtractInserted(id);
+}
 
 bool TInsertTable::Insert(IDbWrapper& dbTable, TInsertedData&& data) {
     if (auto* dataPtr = Summary.AddInserted(std::move(data))) {
@@ -56,7 +66,7 @@ void TInsertTable::Abort(IDbWrapper& dbTable, const THashSet<TWriteId>& writeIds
 
     for (auto writeId : writeIds) {
         // There could be inconsistency with txs and writes in case of bugs. So we could find no record for writeId.
-        if (std::optional<TInsertedData> data = Summary.ExtractInserted(writeId)) {
+        if (std::optional<TInsertedData> data = ExtractInserted(writeId)) {
             dbTable.EraseInserted(*data);
             dbTable.Abort(*data);
             Summary.AddAborted(std::move(*data));

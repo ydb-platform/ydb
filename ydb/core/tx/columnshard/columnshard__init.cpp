@@ -106,7 +106,7 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
     {
         ACFL_DEBUG("step", "TInsertTable::Load_Start");
         TMemoryProfileGuard g("TTxInit/InsertTable");
-        auto localInsertTable = std::make_unique<NOlap::TInsertTable>();
+        auto localInsertTable = std::make_unique<NOlap::TInsertTable>(std::shared_ptr<NColumnShard::NSubscriber::TManager>{});
         if (!localInsertTable->Load(dbTable, TAppData::TimeProvider->Now())) {
             ACFL_ERROR("step", "TInsertTable::Load_Fails");
             return false;

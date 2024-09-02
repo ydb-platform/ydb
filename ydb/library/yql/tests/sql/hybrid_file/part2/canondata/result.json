@@ -435,9 +435,9 @@
     ],
     "test.test[bigdate-table_int_cast-default.txt-Debug]": [
         {
-            "checksum": "1041a100c9cdb8f46d004a635dfdc1c1",
+            "checksum": "2255e5c0c361ed4e31289580bb6a402c",
             "size": 18588,
-            "uri": "https://{canondata_backend}/1809005/ad7c074711ee8d1675aebabbf8025a2c8bd317d8/resource.tar.gz#test.test_bigdate-table_int_cast-default.txt-Debug_/opt.yql_patched"
+            "uri": "https://{canondata_backend}/1775059/b57c9040709a7b012953cf170d04a292adc8d3d3/resource.tar.gz#test.test_bigdate-table_int_cast-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[bigdate-table_int_cast-default.txt-Plan]": [

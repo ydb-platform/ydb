@@ -32,6 +32,7 @@ class OneTimeWaiter:
         self.expected_tables = set(expected_tables)
 
     def wait(self):
+        pass
         if self.__launched:
             return
 

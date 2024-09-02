@@ -29,7 +29,7 @@
 Следующая команда перезапустит все узлы в кластере: сначала storage-узлы, а затем tenant-узлы.
 
 ```bash
-ydbops restart 
+ydbops restart
 ```
 
 ### Перезапуск только storage-узлов или tenant-узлов

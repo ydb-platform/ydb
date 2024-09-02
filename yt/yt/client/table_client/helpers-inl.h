@@ -59,6 +59,7 @@ XX(TDuration)
 
 XX(TString)
 XX(TStringBuf)
+XX(std::string)
 XX(TGuid)
 
 #undef XX

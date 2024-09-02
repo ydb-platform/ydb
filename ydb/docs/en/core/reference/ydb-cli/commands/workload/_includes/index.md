@@ -9,7 +9,7 @@ General format of the command:
 ```
 
 * `global options`: [Global options](../../../commands/global-options.md).
-* `subcommands`: The [subcommands](#subcomands).
+* `subcommands`: The [subcommands](#subcommands).
 
 See the description of the command to run the data load:
 

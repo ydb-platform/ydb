@@ -6,7 +6,7 @@ Goose – open-source инструмент, который помогает ве
 
 ## Установка goose
 
-Варианты установки goose описаны в [документации](https://github.com/pressly/goose/blob/master/README.md#install). 
+Варианты установки goose описаны в [документации](https://github.com/pressly/goose/blob/master/README.md#install).
 
 ## Аргументы запуска goose
 
@@ -18,7 +18,7 @@ $ goose <DB> <CONNECTION_STRING> <COMMAND> <COMMAND_ARGUMENTS>
 
 где:
 - `<DB>` - движок базы данных, в случае {{ ydb-short-name }} следует писать `goose ydb`
-- `<CONNECTION_STRING>` - строка подключения к базе данных. 
+- `<CONNECTION_STRING>` - строка подключения к базе данных.
 - `<COMMAND>` - команда, которую требуется выполнить. Полный перечень команд доступен во встроенной справке (`goose help`).
 - `<COMMAND_ARGUMENTS>` - аргументы команды.
 
@@ -106,7 +106,7 @@ SELECT 'up SQL query';
 SELECT 'down SQL query';
 ```
 
-Мы можем заменить эти выражения на необходимые нам SQL-команды создания таблицы `users` и удаления ее в случае отката миграции: 
+Мы можем заменить эти выражения на необходимые нам SQL-команды создания таблицы `users` и удаления ее в случае отката миграции:
 
 ```
 -- +goose Up
@@ -348,7 +348,7 @@ $ goose ydb $YDB_CONNECTION_STRING status
 ## "Горячий" список команд "goose"
 
 Утилита `goose` позволяет управлять миграциями через командную строку:
-- `goose status` - посмотреть статус применения миграций. Например, `goose ydb $YDB_CONNECTION_STRING status`.  
+- `goose status` - посмотреть статус применения миграций. Например, `goose ydb $YDB_CONNECTION_STRING status`.
 - `goose up` - применить все известные миграции. Например, `goose ydb $YDB_CONNECTION_STRING up`.
 - `goose up-by-one` - применить ровно одну "следующую" миграцию. Например, `goose ydb $YDB_CONNECTION_STRING up-by-one`.
 - `goose redo` - пере-применить последнюю миграцию. Например, `goose ydb $YDB_CONNECTION_STRING redo`.

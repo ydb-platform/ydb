@@ -24,7 +24,7 @@ ALTER ASYNC REPLICATION <name> SET (option = value [, ...])
 Следующий запрос принудительно завершит процесс асинхронной репликации:
 
 ```sql
-ALTER ASYNC REPLICATION `my_replication` SET (STATE = "DONE", FAILOVER_MODE = "FORCE");
+ALTER ASYNC REPLICATION my_replication SET (STATE = "DONE", FAILOVER_MODE = "FORCE");
 ```
 
 ## См. также

@@ -28,6 +28,14 @@ void TSchemeShard::Handle(TEvDataShard::TEvBuildIndexProgressResponse::TPtr& ev,
     Execute(CreateTxReply(ev), ctx);
 }
 
+void TSchemeShard::Handle(TEvDataShard::TEvSampleKResponse::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxReply(ev), ctx);
+}
+
+void TSchemeShard::Handle(TEvIndexBuilder::TEvUploadSampleKResponse::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxReply(ev), ctx);
+}
+
 void TSchemeShard::Handle(TEvPrivate::TEvIndexBuildingMakeABill::TPtr& ev, const TActorContext& ctx) {
     Execute(CreateTxBilling(ev), ctx);
 }

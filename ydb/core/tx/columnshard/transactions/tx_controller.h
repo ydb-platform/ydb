@@ -17,6 +17,7 @@ public:
     TBasicTxInfo(const NKikimrTxColumnShard::ETransactionKind& txKind, const ui64 txId)
         : TxKind(txKind)
         , TxId(txId) {
+        AFL_VERIFY(txKind != NKikimrTxColumnShard::TX_KIND_NONE);
     }
 
     bool operator==(const TBasicTxInfo& item) const = default;

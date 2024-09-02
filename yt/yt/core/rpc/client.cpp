@@ -220,22 +220,22 @@ void TClientRequest::RequireServerFeature(int featureId)
     Header_.add_required_server_feature_ids(featureId);
 }
 
-const TString& TClientRequest::GetUser() const
+const std::string& TClientRequest::GetUser() const
 {
     return User_;
 }
 
-void TClientRequest::SetUser(const TString& user)
+void TClientRequest::SetUser(const std::string& user)
 {
     User_ = user;
 }
 
-const TString& TClientRequest::GetUserTag() const
+const std::string& TClientRequest::GetUserTag() const
 {
     return UserTag_;
 }
 
-void TClientRequest::SetUserTag(const TString& tag)
+void TClientRequest::SetUserTag(const std::string& tag)
 {
     UserTag_ = tag;
 }

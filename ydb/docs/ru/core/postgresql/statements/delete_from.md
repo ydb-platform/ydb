@@ -4,7 +4,7 @@
 
 Синтаксис инструкции `DELETE FROM`:
  ```sql
- DELETE FROM <table name> 
+ DELETE FROM <table name>
  WHERE <column name><condition><value/range>;
  ```
 Для удаления строки из строковой таблицы по конкретному значению столбца используется конструкция `DELETE FROM <table name> WHERE <column name><condition><value/range>`. 

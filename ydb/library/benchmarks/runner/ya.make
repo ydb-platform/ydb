@@ -6,10 +6,6 @@ TEST_SRCS(
     tpc_tests.py
 )
 
-PEERDIR(
-    ydb/public/sdk/python
-)
-
 DEPENDS(
     ydb/library/benchmarks/runner/run_tests
     ydb/library/yql/tools/dqrun
@@ -39,6 +35,8 @@ DATA_FILES(
     ydb/library/benchmarks/runner/download_files_h_1.sh
     ydb/library/benchmarks/runner/download_files_h_10.sh
     ydb/library/benchmarks/runner/download_files_h_100.sh
+
+    ydb/library/benchmarks/runner/upload_results.py
 )
 
 END()

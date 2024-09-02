@@ -419,7 +419,7 @@ Pear|15|33|2024-05-06'''
         assert result_set.rows[2].items[4].int64_value == 5
         assert result_set.rows[2].items[5].int64_value == 10
         assert sum(kikimr.control_plane.get_metering(1)) == 10
-    
+
     @yq_v2
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_inference_timestamp(self, kikimr, s3, client, unique_prefix):

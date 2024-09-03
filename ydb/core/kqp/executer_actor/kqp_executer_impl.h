@@ -884,10 +884,15 @@ protected:
         if (intSink.GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
             NKikimrKqp::TKqpTableSinkSettings settings;
             YQL_ENSURE(intSink.GetSettings().UnpackTo(&settings), "Failed to unpack settings");
-            auto& lockTxId = TasksGraph.GetMeta().LockTxId;
+            const auto& lockTxId = TasksGraph.GetMeta().LockTxId;
             if (lockTxId) {
                 settings.SetLockTxId(*lockTxId);
                 settings.SetLockNodeId(SelfId().NodeId());
+            }
+            const auto& snapshot = TasksGraph.GetMeta().Snapshot;
+            if (snapshot.IsValid()) {
+                settings.MutableMvccSnapshot()->SetStep(snapshot.Step);
+                settings.MutableMvccSnapshot()->SetTxId(snapshot.TxId);
             }
             output.SinkSettings.ConstructInPlace();
             output.SinkSettings->PackFrom(settings);

@@ -723,6 +723,7 @@ message TKqpTableSinkSettings {
     optional bool InconsistentTx = 10; // Write each batch in it's own single immediate tx
     optional EType Type = 11;
     optional TKqpTableSinkLocks Locks = 12;
+    optional NKikimrDataEvents.TMvccSnapshot MvccSnapshot = 13;
 }
 
 message TKqpStreamLookupSettings {

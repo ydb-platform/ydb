@@ -9,20 +9,17 @@
 
 namespace NKikimr::NColumnShard {
 
-class TWaitEraseTablesTxSubscriber: public NSubscriber::TSubscriberBase<TWaitEraseTablesTxSubscriber> {
+class TWaitEraseTablesTxSubscriber: public NSubscriber::TSubscriberBase {
 private:
-    using TBase =  NSubscriber::TSubscriberBase<TWaitEraseTablesTxSubscriber>;
     THashSet<ui64> WaitTables;
 public:
     virtual std::set<NSubscriber::EEventType> GetEventTypes() const override {
         return { NSubscriber::EEventType::TablesErased };
     }
-    using TBase::DoOnEvent;
-    void DoOnEvent(const NSubscriber::TEventTablesErased& ev, TColumnShard&) {
+    void DoOnEvent(const NSubscriber::TEventTablesErased& ev) override {
         for(const auto& pathId: ev.GetPathIds()) {
             WaitTables.erase(pathId);
         }
-
         AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "on_event")("remained", JoinSeq(",", WaitTables));
     }
 
@@ -35,8 +32,7 @@ public:
     }
 };
 
-class TWaitWrites: public NSubscriber::TSubscriberBase<TWaitWrites> {
-    using TBase = NSubscriber::TSubscriberBase<TWaitWrites>;
+class TWaitWrites: public NSubscriber::TSubscriberBase {
     THashSet<TWriteId> WriteIds;
 public:
     TWaitWrites(THashSet<TWriteId>&& writeIds)
@@ -48,14 +44,12 @@ public:
     bool IsFinished() const override {
         return WriteIds.empty();
     }
-    using TBase::DoOnEvent;
-    void DoOnEvent(const NSubscriber::TEventWritesCompleted& ev, TColumnShard&) {
+    void DoOnEvent(const NSubscriber::TEventWritesCompleted& ev) override {
         WriteIds.erase(ev.GetWriteId());
     }
 };
 
-class TWaitTransactions: public NSubscriber::TSubscriberBase<TWaitTransactions> {
-    using TBase = NSubscriber::TSubscriberBase<TWaitTransactions>;
+class TWaitTransactions: public NSubscriber::TSubscriberBase {
     THashSet<ui64> TxIds;
 public:
     TWaitTransactions(THashSet<ui64>&& txIds)
@@ -67,8 +61,7 @@ public:
     bool IsFinished() const override {
         return TxIds.empty();
     }
-    using TBase::DoOnEvent;
-    void DoOnEvent(const NSubscriber::TEventTransactionCompleted& ev) {
+    void DoOnEvent(const NSubscriber::TEventTransactionCompleted& ev) override {
         TxIds.erase(ev.GetTxId());
     }
 };

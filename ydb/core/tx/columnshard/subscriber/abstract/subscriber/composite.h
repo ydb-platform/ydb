@@ -4,8 +4,7 @@
 
 namespace NKikimr::NColumnShard::NSubscriber {
 
-class TCompositeSubscriber: public TSubscriberBase<TCompositeSubscriber> {
-    using TBase = TSubscriberBase<TCompositeSubscriber>;
+class TCompositeSubscriber: public TSubscriberBase {
     std::vector<std::shared_ptr<NSubscriber::ISubscriber>> Subscribers;
 public:
     TCompositeSubscriber(std::initializer_list<std::shared_ptr< NSubscriber::ISubscriber>> subscribers)

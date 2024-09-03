@@ -8,9 +8,8 @@
 namespace NKikimr::NColumnShard::NSubscriber {
 
 class ISubscriber {
-protected:
 public:
-    virtual void OnEvent(const std::shared_ptr<ISubscriptionEvent>& ev);
+    virtual void OnEvent(const std::shared_ptr<ISubscriptionEvent>& ev) = 0;
 
     virtual std::set<EEventType> GetEventTypes() const = 0;
     virtual bool IsFinished() const = 0;
@@ -18,25 +17,24 @@ public:
     virtual ~ISubscriber() = default;
 };
 
-template<typename TDerived>
 class TSubscriberBase: public ISubscriber {
 protected:
-    template<typename TEvent> void DoOnEvent(const TEvent&) {
-    }
+    virtual void DoOnEvent(const NSubscriber::TEventTablesErased&) {};
+    virtual void DoOnEvent(const NSubscriber::TEventTransactionCompleted&) {};
+    virtual void DoOnEvent(const NSubscriber::TEventWritesCompleted&) {};
 public:
     void OnEvent(const std::shared_ptr<ISubscriptionEvent>& ev) override {
-        auto* derived = static_cast<TDerived*>(this);
         switch(ev->GetType()) {
             case EEventType::Undefined:
                 break;//AFL_VERIFY(false);
             case EEventType::TablesErased:
-                derived->DoOnEvent(static_cast<const NSubscriber::TEventTablesErased&>(*ev.get()));
+                DoOnEvent(static_cast<const NSubscriber::TEventTablesErased&>(*ev.get()));
                 break;
             case EEventType::TransactionCompleted:
-                derived->DoOnEvent(static_cast<const NSubscriber::TEventTransactionCompleted&>(*ev.get()));
+                DoOnEvent(static_cast<const NSubscriber::TEventTransactionCompleted&>(*ev.get()));
                 break;
             case EEventType::WritesCompleted:
-                derived->DoOnEvent(static_cast<const NSubscriber::TEventWritesCompleted&>(*ev.get()));
+                DoOnEvent(static_cast<const NSubscriber::TEventWritesCompleted&>(*ev.get()));
                 break;
         }
     }

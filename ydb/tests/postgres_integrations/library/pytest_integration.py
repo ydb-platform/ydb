@@ -137,6 +137,8 @@ def _prepare_docker_env(pgwire_port: str, test_names: List[str]) -> List[str]:
 def _docker_build(folder: str) -> str:
     image_name = 'ydb-pg-test-image'
 
+    logging.debug(f"rekby, docker folder: '{folder}'")
+
     client: docker.Client = docker.from_env()
     client.images.build(
         path=folder,

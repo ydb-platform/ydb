@@ -20,11 +20,12 @@ PEERDIR(
     ydb/library/actors/wilson/protos
     ydb/library/services
     ydb/library/ydb_issue/proto
+    ydb/library/yql/dq/actors/common
+    ydb/library/yql/dq/actors/spilling
     ydb/library/yql/dq/common
     ydb/library/yql/dq/proto
     ydb/library/yql/dq/runtime
     ydb/library/yql/dq/tasks
-    ydb/library/yql/dq/actors/spilling
     ydb/library/yql/minikql
     ydb/library/yql/minikql/comp_nodes
     ydb/library/yql/public/issue

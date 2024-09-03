@@ -102,7 +102,6 @@ class Runner:
                 "dq.EnableSpillingNodes=All",
             ] if self.enable_spilling else [])
         self.tpc_dir = pathlib.Path(f"{self.args.downloaders_dir}/tpc/{self.args.variant}/{self.args.datasize}")
-        print(self.tpc_dir, self.tpc_dir.exists(), file=stderr)
         if self.args.clean_old or not self.tpc_dir.exists():
             self.prepare_tpc_dir()
         if not pathlib.Path("./tpc").exists():

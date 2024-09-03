@@ -215,9 +215,7 @@ public:
                 YqlIssue({}, TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message));
         }
 
-        auto& response = *ResponseEv->Record.MutableResponse();
-
-        FillResponseStats(Ydb::StatusIds::SUCCESS);
+        ResponseEv->Record.MutableResponse()->SetStatus(Ydb::StatusIds::SUCCESS);
         Counters->TxProxyMon->ReportStatusOK->Inc();
 
         auto addLocks = [this](const auto& data) {
@@ -257,7 +255,7 @@ public:
             if (LockHandle) {
                 ResponseEv->LockHandle = std::move(LockHandle);
             }
-            BuildLocks(*response.MutableResult()->MutableLocks(), Locks);
+            BuildLocks(*ResponseEv->Record.MutableResponse()->MutableResult()->MutableLocks(), Locks);
         }
 
         auto resultSize = ResponseEv->GetByteSize();
@@ -283,7 +281,6 @@ public:
 
         ExecuterSpan.EndOk();
 
-        Request.Transactions.crop(0);
         AlreadyReplied = true;
         PassAway();
     }

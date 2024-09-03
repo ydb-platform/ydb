@@ -1,96 +1,8 @@
 # {{ airflow-name }}
 
-Для работы под управлением [{{ airflow-name }}](https://airflow.apache.org) {{ ydb-full-name }} предоставляет пакет [провайдера](https://airflow.apache.org/docs/apache-airflow-providers) [apache-airflow-providers-ydb](https://pypi.org/project/apache-airflow-providers-ydb/). [Задания {{ airflow-name }}](https://airflow.apache.org/docs/apache-airflow/stable/index.html) представляют собой приложения на языке Python, состоящие из набора [операторов {{ airflow-name }}](https://airflow.apache.org/docs/apache-airflow/stable/core-concepts/operators.html) и их [зависимостей](https://airflow.apache.org/docs/apache-airflow/stable/core-concepts/dags.html), определяющих порядок выполнения. Для выполнения запросов к {{ ydb-full-name }} в составе пакета содержится оператор {{ airflow-name }} [`YDBExecuteQueryOperator`](https://airflow.apache.org/docs/apache-airflow-providers-ydb/stable/_api/airflow/providers/ydb/operators/ydb/index.html) и хук [`YDBHook`](https://airflow.apache.org/docs/apache-airflow-providers-ydb/stable/_api/airflow/providers/ydb/hooks/ydb/index.html).
+Интеграция {{ airflow-name }} с {{ ydb-short-name }} позволяет автоматизировать сложные рабочие процессы и управлять ими. {{ airflow-name }} предоставляет возможности для планирования задач, мониторинга их выполнения и управления зависимостями между ними — оркестрацией. Использование Airflow для оркестрации задач, таких как загрузка данных в {{ydb-short-name}}, выполнение запросов и управление транзакциями, позволяет автоматизировать и оптимизировать операционные процессы. Это особенно важно для задач ETL, где данные больших объемов требуют регулярного извлечения, преобразования и загрузки.
 
-{% cut "Пример" %}
-
-В примере ниже создается задание `create_pet_table`, создающее таблицу в {{ ydb-full-name }}. После успешного создания таблицы вызывается задание `populate_pet_table`, заполняющее таблицу данными с помощью команд `UPSERT`, и задание `populate_pet_table_via_bulk_upsert`, заполняющее таблицу с помощью команд пакетной вставки данных [`bulk_upsert`](../recipes/ydb-sdk/bulk-upsert.md). После выполнения вставки данных выполняется операция чтения с помощью задания `get_all_pets` и задание для параметризованного чтения данных `get_birth_date`.
-
-```python
-from __future__ import annotations
-
-import datetime
-import os
-
-import ydb
-from airflow.operators.python import PythonOperator
-from airflow import DAG
-from airflow.decorators import task
-from airflow.providers.ydb.hooks.ydb import YDBHook
-from airflow.providers.ydb.operators.ydb import YDBExecuteQueryOperator
-
-@task
-def populate_pet_table_via_bulk_upsert():
-    hook = YDBHook(ydb_conn_id="test_ydb_connection")
-    column_types = (
-        ydb.BulkUpsertColumns()
-        .add_column("pet_id", ydb.OptionalType(ydb.PrimitiveType.Int32))
-        .add_column("name", ydb.PrimitiveType.Utf8)
-        .add_column("pet_type", ydb.PrimitiveType.Utf8)
-        .add_column("birth_date", ydb.PrimitiveType.Utf8)
-        .add_column("owner", ydb.PrimitiveType.Utf8)
-    )
-
-    rows = [
-        {"pet_id": 3, "name": "Lester", "pet_type": "Hamster", "birth_date": "2020-06-23", "owner": "Lily"},
-        {"pet_id": 4, "name": "Quincy", "pet_type": "Parrot", "birth_date": "2013-08-11", "owner": "Anne"},
-    ]
-    hook.bulk_upsert("pet", rows=rows, column_types=column_types)
-
-
-with DAG(
-    dag_id="ydb_operator_dag",
-    start_date=datetime.datetime(2020, 2, 2),
-    schedule="@once",
-    catchup=False,
-) as dag:
-    create_pet_table = YDBExecuteQueryOperator(
-        task_id="create_pet_table",
-        sql="""
-            CREATE TABLE pet (
-            pet_id INT,
-            name TEXT NOT NULL,
-            pet_type TEXT NOT NULL,
-            birth_date TEXT NOT NULL,
-            owner TEXT NOT NULL,
-            PRIMARY KEY (pet_id)
-            );
-          """,
-        is_ddl=True,  # must be specified for DDL queries
-        ydb_conn_id="test_ydb_connection"
-    )
-
-    populate_pet_table = YDBExecuteQueryOperator(
-        task_id="populate_pet_table",
-        sql="""
-              UPSERT INTO pet (pet_id, name, pet_type, birth_date, owner)
-              VALUES (1, 'Max', 'Dog', '2018-07-05', 'Jane');
-
-              UPSERT INTO pet (pet_id, name, pet_type, birth_date, owner)
-              VALUES (2, 'Susie', 'Cat', '2019-05-01', 'Phil');
-            """,
-        ydb_conn_id="test_ydb_connection"
-    )
-
-    get_all_pets = YDBExecuteQueryOperator(task_id="get_all_pets", sql="SELECT * FROM pet;", ydb_conn_id="test_ydb_connection")
-
-    get_birth_date = YDBExecuteQueryOperator(
-        task_id="get_birth_date",
-        sql="SELECT * FROM pet WHERE birth_date BETWEEN 'not_var{{params.begin_date}}' AND 'not_var{{params.end_date}}'",
-        params={"begin_date": "2020-01-01", "end_date": "2020-12-31"},
-        ydb_conn_id="test_ydb_connection"
-    )
-
-    (
-        create_pet_table
-        >> populate_pet_table
-        >> populate_pet_table_via_bulk_upsert()
-        >> get_all_pets
-        >> get_birth_date
-    )
-```
-
-{% endcut %}
+Для работы под управлением [{{ airflow-name }}](https://airflow.apache.org) {{ ydb-full-name }} предоставляет пакет [провайдера](https://airflow.apache.org/docs/apache-airflow-providers) [apache-airflow-providers-ydb](https://pypi.org/project/apache-airflow-providers-ydb/). [Задания {{ airflow-name }}](https://airflow.apache.org/docs/apache-airflow/stable/index.html) представляют собой приложения на языке Python, состоящие из набора [операторов {{ airflow-name }}](https://airflow.apache.org/docs/apache-airflow/stable/core-concepts/operators.html) и их [зависимостей](https://airflow.apache.org/docs/apache-airflow/stable/core-concepts/dags.html), определяющих порядок выполнения.
 
 ## Установка {#setup}
 
@@ -245,4 +157,92 @@ connection.close()
 | `EmptyList` | `[]` |
 | `EmptyDict` | `{}` |
 
+## Пример {#example}
 
+Для выполнения запросов к {{ ydb-full-name }} в составе пакета содержится оператор {{ airflow-name }} [`YDBExecuteQueryOperator`](https://airflow.apache.org/docs/apache-airflow-providers-ydb/stable/_api/airflow/providers/ydb/operators/ydb/index.html) и хук [`YDBHook`](https://airflow.apache.org/docs/apache-airflow-providers-ydb/stable/_api/airflow/providers/ydb/hooks/ydb/index.html).
+
+В примере ниже создается задание `create_pet_table`, создающее таблицу в {{ ydb-full-name }}. После успешного создания таблицы вызывается задание `populate_pet_table`, заполняющее таблицу данными с помощью команд `UPSERT`, и задание `populate_pet_table_via_bulk_upsert`, заполняющее таблицу с помощью команд пакетной вставки данных [`bulk_upsert`](../recipes/ydb-sdk/bulk-upsert.md). После выполнения вставки данных выполняется операция чтения с помощью задания `get_all_pets` и задание для параметризованного чтения данных `get_birth_date`.
+
+```python
+from __future__ import annotations
+
+import datetime
+import os
+
+import ydb
+from airflow.operators.python import PythonOperator
+from airflow import DAG
+from airflow.decorators import task
+from airflow.providers.ydb.hooks.ydb import YDBHook
+from airflow.providers.ydb.operators.ydb import YDBExecuteQueryOperator
+
+@task
+def populate_pet_table_via_bulk_upsert():
+    hook = YDBHook(ydb_conn_id="test_ydb_connection")
+    column_types = (
+        ydb.BulkUpsertColumns()
+        .add_column("pet_id", ydb.OptionalType(ydb.PrimitiveType.Int32))
+        .add_column("name", ydb.PrimitiveType.Utf8)
+        .add_column("pet_type", ydb.PrimitiveType.Utf8)
+        .add_column("birth_date", ydb.PrimitiveType.Utf8)
+        .add_column("owner", ydb.PrimitiveType.Utf8)
+    )
+
+    rows = [
+        {"pet_id": 3, "name": "Lester", "pet_type": "Hamster", "birth_date": "2020-06-23", "owner": "Lily"},
+        {"pet_id": 4, "name": "Quincy", "pet_type": "Parrot", "birth_date": "2013-08-11", "owner": "Anne"},
+    ]
+    hook.bulk_upsert("pet", rows=rows, column_types=column_types)
+
+
+with DAG(
+    dag_id="ydb_operator_dag",
+    start_date=datetime.datetime(2020, 2, 2),
+    schedule="@once",
+    catchup=False,
+) as dag:
+    create_pet_table = YDBExecuteQueryOperator(
+        task_id="create_pet_table",
+        sql="""
+            CREATE TABLE pet (
+            pet_id INT,
+            name TEXT NOT NULL,
+            pet_type TEXT NOT NULL,
+            birth_date TEXT NOT NULL,
+            owner TEXT NOT NULL,
+            PRIMARY KEY (pet_id)
+            );
+          """,
+        is_ddl=True,  # must be specified for DDL queries
+        ydb_conn_id="test_ydb_connection"
+    )
+
+    populate_pet_table = YDBExecuteQueryOperator(
+        task_id="populate_pet_table",
+        sql="""
+              UPSERT INTO pet (pet_id, name, pet_type, birth_date, owner)
+              VALUES (1, 'Max', 'Dog', '2018-07-05', 'Jane');
+
+              UPSERT INTO pet (pet_id, name, pet_type, birth_date, owner)
+              VALUES (2, 'Susie', 'Cat', '2019-05-01', 'Phil');
+            """,
+        ydb_conn_id="test_ydb_connection"
+    )
+
+    get_all_pets = YDBExecuteQueryOperator(task_id="get_all_pets", sql="SELECT * FROM pet;", ydb_conn_id="test_ydb_connection")
+
+    get_birth_date = YDBExecuteQueryOperator(
+        task_id="get_birth_date",
+        sql="SELECT * FROM pet WHERE birth_date BETWEEN 'not_var{{params.begin_date}}' AND 'not_var{{params.end_date}}'",
+        params={"begin_date": "2020-01-01", "end_date": "2020-12-31"},
+        ydb_conn_id="test_ydb_connection"
+    )
+
+    (
+        create_pet_table
+        >> populate_pet_table
+        >> populate_pet_table_via_bulk_upsert()
+        >> get_all_pets
+        >> get_birth_date
+    )
+```

@@ -100,6 +100,14 @@ void TInsertionSummary::OnEraseInserted(TPathInfo& pathInfo, const ui64 dataSize
     AFL_VERIFY(Counters.Inserted.GetDataSize() == (i64)StatsPrepared.Bytes);
 }
 
+// std::optional<ui64> TInsertionSummary::GetPathIdByWriteId(const TWriteId writeId) const {
+//     if(const auto p = Inserted.FindPtr(writeId)) {
+//         return p->PathId;
+//     } else {
+//         return std::nullopt;
+//     }
+// }
+
 THashSet<NKikimr::NOlap::TWriteId> TInsertionSummary::GetInsertedByPathId(const ui64 pathId) const {
     THashSet<TWriteId> result;
     for (auto& [writeId, data] : Inserted) {

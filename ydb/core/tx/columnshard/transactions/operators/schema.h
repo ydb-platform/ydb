@@ -114,7 +114,7 @@ public:
             result->Record.SetStep(TxInfo.PlanStep);
             ctx.Send(TxInfo.Source, result.release(), 0, TxInfo.Cookie);
         } else {
-            owner.EnqueueProgressTx(ctx);
+            owner.EnqueueProgressTx(ctx, std::nullopt);
         }
         return true;
     }

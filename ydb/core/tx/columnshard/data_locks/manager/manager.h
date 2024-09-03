@@ -41,8 +41,18 @@ public:
     [[nodiscard]] std::shared_ptr<TGuard> RegisterLock(Args&&... args) {
         return RegisterLock(std::make_shared<TLock>(args...));
     }
-    std::optional<TString> IsLocked(const TPortionInfo& portion, const THashSet<TString>& excludedLocks = {}) const;
-    std::optional<TString> IsLocked(const TGranuleMeta& granule, const THashSet<TString>& excludedLocks = {}) const;
+    template<IsLocable T>
+    std::optional<TString> IsLocked(const T& obj, const THashSet<TString>& excludedLocks = {}) const {
+        for (const auto& [name, lock]: ProcessLocks) {
+            if (excludedLocks.contains(name)) {
+                continue;
+            }
+            if (auto lockName = lock->IsLocked(obj, excludedLocks)) {
+                return lockName;
+            }
+        }
+        return {};
+    }
 
 };
 

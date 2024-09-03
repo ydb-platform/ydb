@@ -213,6 +213,10 @@ public:
         return !!PrimaryIndex;
     }
 
+    bool IsNewDataTxLocked(const ui64 pathId) const {
+        return PathToMove && PathToMove->first == pathId;
+    }
+
     NOlap::IColumnEngine& MutablePrimaryIndex() {
         Y_ABORT_UNLESS(!!PrimaryIndex);
         return *PrimaryIndex;

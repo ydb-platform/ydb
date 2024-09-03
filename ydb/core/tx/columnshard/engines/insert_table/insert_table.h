@@ -78,6 +78,9 @@ public:
     static constexpr const TDuration WaitCommitDelay = TDuration::Minutes(10);
     static constexpr ui64 CleanupPackageSize = 10000;
 
+    // std::optional<ui64> GetPathId(const TWriteId writeId) const {
+    //      return Summary.GetPathIdByWriteId(writeId);
+    // }
     bool Insert(IDbWrapper& dbTable, TInsertedData&& data);
     TInsertionSummary::TCounters Commit(IDbWrapper& dbTable, ui64 planStep, ui64 txId,
                      const THashSet<TWriteId>& writeIds, std::function<bool(ui64)> pathExists);

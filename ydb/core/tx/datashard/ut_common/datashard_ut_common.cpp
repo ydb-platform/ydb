@@ -1240,7 +1240,7 @@ std::tuple<TVector<ui64>, TTableId> CreateShardedTable(
         auto seq = tx.MutableCreateIndexedTable()->MutableSequenceDescription()->Add();
         seq->SetName(name);
     }
-    
+
     desc->SetUniformPartitionsCount(opts.Shards_);
 
     if (!opts.EnableOutOfOrder_)
@@ -1771,6 +1771,10 @@ ui64 AsyncAlterAddStream(
     if (streamDesc.AwsRegion) {
         desc.MutableStreamDescription()->SetAwsRegion(*streamDesc.AwsRegion);
     }
+    if (streamDesc.TopicAutoPartitioning) {
+        desc.SetTopicAutopartitioning(true);
+        desc.SetMaxPartitionCount(1000);
+    }
 
     return RunSchemeTx(*server->GetRuntime(), std::move(request));
 }
@@ -2008,7 +2012,7 @@ void AddValueToCells(ui64 value, const TString& columnType, TVector<TCell>& cell
         cells.emplace_back(TCell(stringValues.back().c_str(), stringValues.back().size()));
     } else {
         Y_ABORT("Unsupported column type");
-    }  
+    }
 }
 
 
@@ -2073,7 +2077,7 @@ NKikimrDataEvents::TEvWriteResult Write(TTestActorRuntime& runtime, TActorId sen
 
     auto ev = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(sender);
     auto resultRecord = ev->Get()->Record;
-    
+
     if (expectedStatus == NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED) {
         switch (txMode) {
             case NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE:
@@ -2224,7 +2228,7 @@ TTestActorRuntimeBase::TEventObserverHolderPair ReplaceEvProposeTransactionWithE
         auto status = NKikimr::NDataShard::NEvWrite::TConvertor::GetStatus(record.GetStatus());
 
         auto evResult = std::make_unique<TEvDataShard::TEvProposeTransactionResult>(NKikimrTxDataShard::TX_KIND_DATA, origin, txId, status);
-        
+
         if (status == NKikimrTxDataShard::TEvProposeTransactionResult::PREPARED) {
             evResult->SetPrepared(record.GetMinStep(), record.GetMaxStep(), {});
             evResult->Record.MutableDomainCoordinators()->CopyFrom(record.GetDomainCoordinators());

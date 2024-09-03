@@ -974,6 +974,11 @@ Y_UNIT_TEST_SUITE(Cdc) {
         return streamDesc;
     }
 
+    TCdcStream WithTopicAutoPartitioning(bool value, TCdcStream streamDesc) {
+        streamDesc.TopicAutoPartitioning = value;
+        return streamDesc;
+    }
+
     TCdcStream WithAwsRegion(const TString& awsRegion, TCdcStream streamDesc) {
         streamDesc.AwsRegion = awsRegion;
         return streamDesc;
@@ -2067,12 +2072,12 @@ Y_UNIT_TEST_SUITE(Cdc) {
             });
     }
 
-    Y_UNIT_TEST(AddColumn) {
+    void AddColumnTest(bool topicAutoPartitioning) {
         auto action = [](TServer::TPtr server) {
             return AsyncAlterAddExtraColumn(server, "/Root", "Table");
         };
 
-        ShouldDeliverChanges(SimpleTable(), Updates(NKikimrSchemeOp::ECdcStreamFormatJson), action, {
+        ShouldDeliverChanges(SimpleTable(), WithTopicAutoPartitioning(topicAutoPartitioning, Updates(NKikimrSchemeOp::ECdcStreamFormatJson)), action, {
             R"(UPSERT INTO `/Root/Table` (key, value) VALUES (1, 10);)",
         }, {
             R"(UPSERT INTO `/Root/Table` (key, value, extra) VALUES (2, 20, 200);)",
@@ -2080,6 +2085,14 @@ Y_UNIT_TEST_SUITE(Cdc) {
             R"({"update":{"value":10},"key":[1]})",
             R"({"update":{"extra":200,"value":20},"key":[2]})",
         });
+    }
+
+    Y_UNIT_TEST(AddColumn) {
+        AddColumnTest(false);
+    }
+
+    Y_UNIT_TEST(AddColumn_TopicAutoPartitioning) {
+        AddColumnTest(true);
     }
 
     Y_UNIT_TEST(DropColumn) {
@@ -2654,7 +2667,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         }
     }
 
-    Y_UNIT_TEST(InitialScan) {
+    void InitialScanTest(bool topicAutoPartitioning) {
         TPortManager portManager;
         TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
             .SetUseRealThreads(false)
@@ -2676,8 +2689,8 @@ Y_UNIT_TEST_SUITE(Cdc) {
             (3, 30);
         )");
 
-        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
-            WithInitialScan(Updates(NKikimrSchemeOp::ECdcStreamFormatJson))));
+        auto streamDescr = WithTopicAutoPartitioning(topicAutoPartitioning, WithInitialScan(Updates(NKikimrSchemeOp::ECdcStreamFormatJson)));
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table", streamDescr));
 
         WaitForContent(server, edgeActor, "/Root/Table/Stream", {
             R"({"update":{"value":10},"key":[1]})",
@@ -2700,6 +2713,14 @@ Y_UNIT_TEST_SUITE(Cdc) {
             R"({"update":{"value":200},"key":[2]})",
             R"({"update":{"value":300},"key":[3]})",
         });
+    }
+
+    Y_UNIT_TEST(InitialScan) {
+        InitialScanTest(false);
+    }
+
+    Y_UNIT_TEST(InitialScan_TopicAutoPartitioning) {
+        InitialScanTest(true);
     }
 
     Y_UNIT_TEST(InitialScanDebezium) {

@@ -422,7 +422,7 @@ struct TShardedTableOptions {
 
     static TVector<TColumn> DefaultColumns() {
         return {
-            {"key",   "Uint32", true,  false}, 
+            {"key",   "Uint32", true,  false},
             {"value", "Uint32", false, false}
         };
     }
@@ -448,6 +448,7 @@ struct TShardedTableOptions {
         bool VirtualTimestamps = false;
         TMaybe<TDuration> ResolvedTimestamps;
         TMaybe<TString> AwsRegion;
+        bool TopicAutoPartitioning = false;
     };
 
     struct TFamily {

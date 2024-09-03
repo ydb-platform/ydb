@@ -1,10 +1,6 @@
 PY3TEST()
 
-SIZE(LARGE)
-
-TAG(
-    ya:fat
-)
+SIZE(MEDIUM)
 
 TEST_SRCS(
     tpc_tests.py

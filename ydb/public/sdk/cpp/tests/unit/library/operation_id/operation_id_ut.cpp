@@ -1,4 +1,5 @@
 #include <ydb-cpp-sdk/library/operation_id/operation_id.h>
+#include <ydb/public/sdk/cpp/src/library/operation_id/protos/operation_id.pb.h>
 
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -10,17 +11,20 @@ Y_UNIT_TEST_SUITE(OperationIdTest) {
     const std::string PreparedQueryId = "9d629c27-2c3036b3-4b180476-64435bca";
 
     Y_UNIT_TEST(ConvertKindOnly) {
-        TOperationId id("ydb://operation/1");
-        UNIT_ASSERT_EQUAL(id.ToString(), "ydb://operation/1");
-        UNIT_ASSERT_EQUAL(id.GetKind(), TOperationId::OPERATION_DDL);
-        UNIT_ASSERT_EQUAL(id.GetData().size(), 0);
+        Ydb::TOperationId proto;
+        proto.set_kind(Ydb::TOperationId::OPERATION_DDL);
+        auto str = ProtoToString(proto);
+        UNIT_ASSERT_EQUAL(str, "ydb://operation/1");
+        auto newProto = TOperationId(str);
+        UNIT_ASSERT_EQUAL(newProto.GetProto().kind(), proto.kind());
+        UNIT_ASSERT_EQUAL(newProto.GetProto().data_size(), 0);
     }
 
     Y_UNIT_TEST(PreparedQueryIdCompatibleFormatter) {
-        TOperationId opId;
-        opId.SetKind(TOperationId::PREPARED_QUERY_ID);
+        Ydb::TOperationId opId;
+        opId.set_kind(Ydb::TOperationId::PREPARED_QUERY_ID);
         AddOptionalValue(opId, "id", PreparedQueryId);
-        auto result = opId.ToString();
+        auto result = ProtoToString(opId);
         UNIT_ASSERT_VALUES_EQUAL(FormatPreparedQueryIdCompat(PreparedQueryId), result);
     }
 
@@ -85,6 +89,35 @@ Y_UNIT_TEST_SUITE(OperationIdTest) {
         std::cerr << x << std::endl;
     }
 #endif
+    Y_UNIT_TEST(ConvertKindAndValues) {
+        Ydb::TOperationId proto;
+        proto.set_kind(Ydb::TOperationId::OPERATION_DDL);
+        {
+            auto data = proto.add_data();
+            data->set_key("key1");
+            data->set_value("value1");
+        }
+        {
+            auto data = proto.add_data();
+            data->set_key("txId");
+            data->set_value("42");
+        }
+        auto str = ProtoToString(proto);
+        UNIT_ASSERT_EQUAL(str, "ydb://operation/1?key1=value1&txId=42");
+        auto newProto = TOperationId(str);
+        UNIT_ASSERT_EQUAL(newProto.GetProto().kind(), proto.kind());
+        UNIT_ASSERT_EQUAL(newProto.GetProto().data_size(), 2);
+        {
+            auto data = newProto.GetProto().data(0);
+            UNIT_ASSERT_EQUAL(data.key(), "key1");
+            UNIT_ASSERT_EQUAL(data.value(), "value1");
+        }
+        {
+            auto data = newProto.GetProto().data(1);
+            UNIT_ASSERT_EQUAL(data.key(), "txId");
+            UNIT_ASSERT_EQUAL(data.value(), "42");
+        }
+    }
 }
 
 } // namespace NOperationId

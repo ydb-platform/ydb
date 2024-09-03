@@ -197,7 +197,7 @@ namespace {
             auto line = FindAuditLine(auditLines, "operation=EXPORT START");
             UNIT_ASSERT_STRING_CONTAINS(line, "component=schemeshard");
             UNIT_ASSERT_STRING_CONTAINS(line, "operation=EXPORT START");
-            UNIT_ASSERT_STRING_CONTAINS(line, Sprintf("tx_id=%lu", exportId));
+            UNIT_ASSERT_STRING_CONTAINS(line, Sprintf("id=%lu", exportId));
             UNIT_ASSERT_STRING_CONTAINS(line, "remote_address=");  // can't check the value
             UNIT_ASSERT_STRING_CONTAINS(line, "subject={none}");
             UNIT_ASSERT_STRING_CONTAINS(line, "database=/MyRoot");
@@ -228,7 +228,7 @@ namespace {
             auto line = FindAuditLine(auditLines, "operation=EXPORT END");
             UNIT_ASSERT_STRING_CONTAINS(line, "component=schemeshard");
             UNIT_ASSERT_STRING_CONTAINS(line, "operation=EXPORT END");
-            UNIT_ASSERT_STRING_CONTAINS(line, Sprintf("tx_id=%lu", exportId));
+            UNIT_ASSERT_STRING_CONTAINS(line, Sprintf("id=%lu", exportId));
             UNIT_ASSERT_STRING_CONTAINS(line, "remote_address=");  // can't check the value
             UNIT_ASSERT_STRING_CONTAINS(line, "subject={none}");
             UNIT_ASSERT_STRING_CONTAINS(line, "database=/MyRoot");
@@ -1960,13 +1960,19 @@ partitioning_settings {
         UNIT_ASSERT(s3Mock.Start());
 
         const auto request = Sprintf(R"(
-            ExportToS3Settings {
-            endpoint: "localhost:%d"
-            scheme: HTTP
-            items {
-                source_path: "/MyRoot/Table"
-                destination_prefix: ""
+            OperationParams {
+                labels {
+                    key: "uid"
+                    value: "foo"
+                }
             }
+            ExportToS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                items {
+                    source_path: "/MyRoot/Table"
+                    destination_prefix: ""
+                }
             }
         )", port);
         TestExport(runtime, ++txId, "/MyRoot", request, /*userSID*/ "user@builtin", /*peerName*/ "127.0.0.1:9876");
@@ -1976,7 +1982,8 @@ partitioning_settings {
             auto line = FindAuditLine(auditLines, "operation=EXPORT START");
             UNIT_ASSERT_STRING_CONTAINS(line, "component=schemeshard");
             UNIT_ASSERT_STRING_CONTAINS(line, "operation=EXPORT START");
-            UNIT_ASSERT_STRING_CONTAINS(line, Sprintf("tx_id=%lu", txId));
+            UNIT_ASSERT_STRING_CONTAINS(line, Sprintf("id=%lu", txId));
+            UNIT_ASSERT_STRING_CONTAINS(line, "uid=foo");
             UNIT_ASSERT_STRING_CONTAINS(line, "remote_address=127.0.0.1");
             UNIT_ASSERT_STRING_CONTAINS(line, "subject=user@builtin");
             UNIT_ASSERT_STRING_CONTAINS(line, "database=/MyRoot");
@@ -2006,7 +2013,7 @@ partitioning_settings {
             auto line = FindAuditLine(auditLines, "operation=EXPORT END");
             UNIT_ASSERT_STRING_CONTAINS(line, "component=schemeshard");
             UNIT_ASSERT_STRING_CONTAINS(line, "operation=EXPORT END");
-            UNIT_ASSERT_STRING_CONTAINS(line, Sprintf("tx_id=%lu", txId));
+            UNIT_ASSERT_STRING_CONTAINS(line, Sprintf("id=%lu", txId));
             UNIT_ASSERT_STRING_CONTAINS(line, "remote_address=127.0.0.1");
             UNIT_ASSERT_STRING_CONTAINS(line, "subject=user@builtin");
             UNIT_ASSERT_STRING_CONTAINS(line, "database=/MyRoot");
@@ -2065,6 +2072,12 @@ partitioning_settings {
         UNIT_ASSERT(s3Mock.Start());
 
         const auto request = Sprintf(R"(
+            OperationParams {
+                labels {
+                    key: "uid"
+                    value: "foo"
+                }
+            }
             ExportToS3Settings {
               endpoint: "localhost:%d"
               scheme: HTTP
@@ -2082,7 +2095,8 @@ partitioning_settings {
             auto line = FindAuditLine(auditLines, "operation=EXPORT START");
             UNIT_ASSERT_STRING_CONTAINS(line, "component=schemeshard");
             UNIT_ASSERT_STRING_CONTAINS(line, "operation=EXPORT START");
-            UNIT_ASSERT_STRING_CONTAINS(line, Sprintf("tx_id=%lu", exportId));
+            UNIT_ASSERT_STRING_CONTAINS(line, Sprintf("id=%lu", exportId));
+            UNIT_ASSERT_STRING_CONTAINS(line, "uid=foo");
             UNIT_ASSERT_STRING_CONTAINS(line, "remote_address=127.0.0.1");
             UNIT_ASSERT_STRING_CONTAINS(line, "subject=user@builtin");
             UNIT_ASSERT_STRING_CONTAINS(line, "database=/MyRoot");
@@ -2132,7 +2146,8 @@ partitioning_settings {
             auto line = FindAuditLine(auditLines, "operation=EXPORT END");
             UNIT_ASSERT_STRING_CONTAINS(line, "component=schemeshard");
             UNIT_ASSERT_STRING_CONTAINS(line, "operation=EXPORT END");
-            UNIT_ASSERT_STRING_CONTAINS(line, Sprintf("tx_id=%lu", exportId));
+            UNIT_ASSERT_STRING_CONTAINS(line, Sprintf("id=%lu", exportId));
+            UNIT_ASSERT_STRING_CONTAINS(line, "uid=foo");
             UNIT_ASSERT_STRING_CONTAINS(line, "remote_address=127.0.0.1");  // can't check the value
             UNIT_ASSERT_STRING_CONTAINS(line, "subject=user@builtin");
             UNIT_ASSERT_STRING_CONTAINS(line, "database=/MyRoot");

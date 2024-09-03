@@ -182,7 +182,7 @@ namespace {
 
 struct TXxportRecord {
     TString OperationName;
-    ui64 TxId;
+    ui64 Id;
     TString Uid;
     TString RemoteAddress;
     TString UserSID;
@@ -190,7 +190,6 @@ struct TXxportRecord {
     TString Status;
     Ydb::StatusIds::StatusCode DetailedStatus;
     TString Reason;
-    TVector<TString> Paths;
     TVector<std::pair<TString, TString>> AdditionalParts;
     TString StartTime;
     TString EndTime;
@@ -203,7 +202,8 @@ void AuditLogXxport(TXxportRecord&& record) {
     AUDIT_LOG(
         AUDIT_PART("component", SchemeshardComponentName)
 
-        AUDIT_PART("tx_id", std::to_string(record.TxId))
+        AUDIT_PART("id", std::to_string(record.Id))
+        AUDIT_PART("uid", record.Uid);
         AUDIT_PART("remote_address", (!record.RemoteAddress.empty() ? record.RemoteAddress : EmptyValue))
         AUDIT_PART("subject", (!record.UserSID.empty() ? record.UserSID : EmptyValue))
         AUDIT_PART("database", (!record.DatabasePath.empty() ? record.DatabasePath : EmptyValue))
@@ -212,17 +212,11 @@ void AuditLogXxport(TXxportRecord&& record) {
         AUDIT_PART("detailed_status", Ydb::StatusIds::StatusCode_Name(record.DetailedStatus))
         AUDIT_PART("reason", record.Reason)
 
-        AUDIT_PART("paths", RenderList(record.Paths), !record.Paths.empty())
-
-        AUDIT_PART("export_uid", record.Uid);
-
         // all parts are considered required, so all empty values are replaced with a special stub
         for (const auto& [name, value] : record.AdditionalParts) {
             AUDIT_PART(name, (!value.empty() ? value : EmptyValue))
         }
 
-        // AUDIT_PART("start_time", exportInfo.StartTime.ToString(), exportInfo.StartTime != TInstant::Zero())
-        // AUDIT_PART("end_time", exportInfo.EndTime.ToString(), exportInfo.EndTime != TInstant::Zero())
         AUDIT_PART("start_time", record.StartTime)
         AUDIT_PART("end_time", record.EndTime)
 
@@ -247,21 +241,22 @@ TParts ExportKindSpecificParts(const Proto& proto) {
             return {};
     }
 }
-template <> TParts ExportKindSpecificParts(const Ydb::Export::ExportToYtSettings& /*proto*/) {
+template <> TParts ExportKindSpecificParts(const Ydb::Export::ExportToYtSettings& proto) {
     return {
         {"export_type", "yt"},
-        //FIXME: add other parts
+        {"export_item_count", ToString(proto.items().size())},
+        {"export_yt_prefix", ((proto.items().size() > 0) ? proto.items(0).destination_path() : "")},
     };
 }
 template <> TParts ExportKindSpecificParts(const Ydb::Export::ExportToS3Settings& proto) {
-    return {{
+    return {
         {"export_type", "s3"},
         {"export_item_count", ToString(proto.items().size())},
         {"export_s3_bucket", proto.bucket()},
         //NOTE: take first item's destination_prefix as a "good enough approximation"
         // (each item has its own destination_prefix, but in practice they are all the same)
         {"export_s3_prefix", ((proto.items().size() > 0) ? proto.items(0).destination_prefix() : "")},
-    }};
+    };
 }
 
 template <class Proto>
@@ -276,14 +271,14 @@ TParts ImportKindSpecificParts(const Proto& proto) {
     }
 }
 template <> TParts ImportKindSpecificParts(const Ydb::Import::ImportFromS3Settings& proto) {
-    return {{
+    return {
         {"import_type", "s3"},
         {"export_item_count", ToString(proto.items().size())},
         {"import_s3_bucket", proto.bucket()},
         //NOTE: take first item's source_prefix as a "good enough approximation"
         // (each item has its own source_prefix, but in practice they are all the same)
         {"import_s3_prefix", ((proto.items().size() > 0) ? proto.items(0).source_prefix() : "")},
-    }};
+    };
 }
 
 }  // anonymous namespace
@@ -297,14 +292,15 @@ void _AuditLogXxportStart(const Request& request, const Response& response, cons
 
     AuditLogXxport({
         .OperationName = operationName,
-        .TxId = request.GetTxId(),
+        //NOTE: original request's tx-id is used as an operation id
+        .Id = request.GetTxId(),
         .Uid = GetUid(request.GetRequest().GetOperationParams()),
         .RemoteAddress = peerName,
         .UserSID = request.GetUserSID(),
         .DatabasePath = databasePath.PathString(),
         .Status = (entry.GetStatus() == Ydb::StatusIds::SUCCESS ? "SUCCESS" : "ERROR"),
         .DetailedStatus = entry.GetStatus(),
-        //NOTE: use main issue (on export itself), ignore issues on export items
+        //NOTE: use main issue (on {ex,im}port itself), ignore issues on individual items
         .Reason = ((entry.IssuesSize() > 0) ? entry.GetIssues(0).message() : ""),
 
         .AdditionalParts = std::move(additionalParts),
@@ -341,7 +337,7 @@ void _AuditLogXxportEnd(const Info& info, const TString& operationName, TParts&&
 
     AuditLogXxport({
         .OperationName = operationName,
-        .TxId = info.Id,
+        .Id = info.Id,
         .Uid = info.Uid,
         .RemoteAddress = peerName,
         .UserSID = userSID,

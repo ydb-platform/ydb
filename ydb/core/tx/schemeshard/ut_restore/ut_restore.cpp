@@ -3188,7 +3188,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             auto line = FindAuditLine(auditLines, "operation=IMPORT START");
             UNIT_ASSERT_STRING_CONTAINS(line, "component=schemeshard");
             UNIT_ASSERT_STRING_CONTAINS(line, "operation=IMPORT START");
-            UNIT_ASSERT_STRING_CONTAINS(line, Sprintf("tx_id=%lu", importId));
+            UNIT_ASSERT_STRING_CONTAINS(line, Sprintf("id=%lu", importId));
             UNIT_ASSERT_STRING_CONTAINS(line, "remote_address={none}");
             UNIT_ASSERT_STRING_CONTAINS(line, "subject={none}");
             UNIT_ASSERT_STRING_CONTAINS(line, "database=/MyRoot");
@@ -3211,7 +3211,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             auto line = FindAuditLine(auditLines, "operation=IMPORT END");
             UNIT_ASSERT_STRING_CONTAINS(line, "component=schemeshard");
             UNIT_ASSERT_STRING_CONTAINS(line, "operation=IMPORT END");
-            UNIT_ASSERT_STRING_CONTAINS(line, Sprintf("tx_id=%lu", importId));
+            UNIT_ASSERT_STRING_CONTAINS(line, Sprintf("id=%lu", importId));
             UNIT_ASSERT_STRING_CONTAINS(line, "remote_address={none}");
             UNIT_ASSERT_STRING_CONTAINS(line, "subject={none}");
             UNIT_ASSERT_STRING_CONTAINS(line, "database=/MyRoot");
@@ -3542,6 +3542,12 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         UNIT_ASSERT(s3Mock.Start());
 
         const auto request = Sprintf(R"(
+            OperationParams {
+              labels {
+                key: "uid"
+                value: "foo"
+              }
+            }
             ImportFromS3Settings {
               endpoint: "localhost:%d"
               scheme: HTTP
@@ -3558,7 +3564,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             auto line = FindAuditLine(auditLines, "operation=IMPORT START");
             UNIT_ASSERT_STRING_CONTAINS(line, "component=schemeshard");
             UNIT_ASSERT_STRING_CONTAINS(line, "operation=IMPORT START");
-            UNIT_ASSERT_STRING_CONTAINS(line, Sprintf("tx_id=%lu", txId));
+            UNIT_ASSERT_STRING_CONTAINS(line, Sprintf("id=%lu", txId));
+            UNIT_ASSERT_STRING_CONTAINS(line, "uid=foo");
             UNIT_ASSERT_STRING_CONTAINS(line, "remote_address=127.0.0.1");
             UNIT_ASSERT_STRING_CONTAINS(line, "subject=user@builtin");
             UNIT_ASSERT_STRING_CONTAINS(line, "database=/MyRoot");
@@ -3579,7 +3586,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             auto line = FindAuditLine(auditLines, "operation=IMPORT END");
             UNIT_ASSERT_STRING_CONTAINS(line, "component=schemeshard");
             UNIT_ASSERT_STRING_CONTAINS(line, "operation=IMPORT END");
-            UNIT_ASSERT_STRING_CONTAINS(line, Sprintf("tx_id=%lu", txId));
+            UNIT_ASSERT_STRING_CONTAINS(line, Sprintf("id=%lu", txId));
+            UNIT_ASSERT_STRING_CONTAINS(line, "uid=foo");
             UNIT_ASSERT_STRING_CONTAINS(line, "remote_address=127.0.0.1");
             UNIT_ASSERT_STRING_CONTAINS(line, "subject=user@builtin");
             UNIT_ASSERT_STRING_CONTAINS(line, "database=/MyRoot");
@@ -3640,6 +3648,12 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         auto prevObserver = SetDelayObserver(runtime, delayed, delayFunc);
 
         const auto request = Sprintf(R"(
+            OperationParams {
+              labels {
+                key: "uid"
+                value: "foo"
+              }
+            }
             ImportFromS3Settings {
               endpoint: "localhost:%d"
               scheme: HTTP
@@ -3657,7 +3671,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             auto line = FindAuditLine(auditLines, "operation=IMPORT START");
             UNIT_ASSERT_STRING_CONTAINS(line, "component=schemeshard");
             UNIT_ASSERT_STRING_CONTAINS(line, "operation=IMPORT START");
-            UNIT_ASSERT_STRING_CONTAINS(line, Sprintf("tx_id=%lu", importId));
+            UNIT_ASSERT_STRING_CONTAINS(line, Sprintf("id=%lu", importId));
+            UNIT_ASSERT_STRING_CONTAINS(line, "uid=foo");
             UNIT_ASSERT_STRING_CONTAINS(line, "remote_address=127.0.0.1");
             UNIT_ASSERT_STRING_CONTAINS(line, "subject=user@builtin");
             UNIT_ASSERT_STRING_CONTAINS(line, "database=/MyRoot");
@@ -3696,7 +3711,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             auto line = FindAuditLine(auditLines, "operation=IMPORT END");
             UNIT_ASSERT_STRING_CONTAINS(line, "component=schemeshard");
             UNIT_ASSERT_STRING_CONTAINS(line, "operation=IMPORT END");
-            UNIT_ASSERT_STRING_CONTAINS(line, Sprintf("tx_id=%lu", importId));
+            UNIT_ASSERT_STRING_CONTAINS(line, Sprintf("id=%lu", importId));
+            UNIT_ASSERT_STRING_CONTAINS(line, "uid=foo");
             UNIT_ASSERT_STRING_CONTAINS(line, "remote_address=127.0.0.1");
             UNIT_ASSERT_STRING_CONTAINS(line, "subject=user@builtin");
             UNIT_ASSERT_STRING_CONTAINS(line, "database=/MyRoot");

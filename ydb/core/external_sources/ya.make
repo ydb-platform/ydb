@@ -12,6 +12,7 @@ SRCS(
 )
 
 PEERDIR(
+    contrib/libs/apache/arrow
     ydb/library/actors/http
     ydb/core/external_sources/object_storage/inference
     library/cpp/regex/pcre

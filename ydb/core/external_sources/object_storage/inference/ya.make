@@ -6,9 +6,15 @@ ADDINCL(
     ydb/library/yql/udfs/common/clickhouse/client/src
 )
 
+# Added because of library header contrib/libs/apache/arrow/cpp/src/arrow/util/value_parsing.h
+CFLAGS(
+    -Wno-unused-parameter
+)
+
 SRCS(
     arrow_fetcher.cpp
     arrow_inferencinator.cpp
+    infer_config.cpp
 )
 
 PEERDIR(

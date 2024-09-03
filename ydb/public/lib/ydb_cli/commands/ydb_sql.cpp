@@ -351,7 +351,6 @@ void TCommandSql::SetSyntax(TString&& syntax) {
     Syntax = std::move(syntax);
 }
 
-
 TCommandSqlAsync::TCommandSqlAsync()
     : TClientCommandTree("sql-async", {}, "Async script execution operations")
 {

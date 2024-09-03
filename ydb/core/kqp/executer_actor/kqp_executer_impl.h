@@ -177,10 +177,10 @@ public:
     }
 
     void ReportEventElapsedTime() {
-        if (Stats) {
-            ui64 elapsedMicros = TlsActivationContext->GetCurrentEventTicksAsSeconds() * 1'000'000;
-            Stats->ExecuterCpuTime += TDuration::MicroSeconds(elapsedMicros);
-        }
+        YQL_ENSURE(Stats);
+
+        ui64 elapsedMicros = TlsActivationContext->GetCurrentEventTicksAsSeconds() * 1'000'000;
+        Stats->ExecuterCpuTime += TDuration::MicroSeconds(elapsedMicros);
     }
 
 protected:
@@ -330,11 +330,10 @@ protected:
         }
 
         YQL_ENSURE(channel.DstTask == 0);
+        YQL_ENSURE(Stats);
 
-        if (Stats) {
-            Stats->ResultBytes += batch.Size();
-            Stats->ResultRows += batch.RowCount();
-        }
+        Stats->ResultBytes += batch.Size();
+        Stats->ResultRows += batch.RowCount();
 
         LOG_T("Got result, channelId: " << channel.Id << ", shardId: " << task.Meta.ShardId
             << ", inputIndex: " << channel.DstInputIndex << ", from: " << ev->Sender
@@ -391,7 +390,9 @@ protected:
             << ", state: " << NYql::NDqProto::EComputeState_Name((NYql::NDqProto::EComputeState) state.GetState())
             << ", stats: " << state.GetStats());
 
-        if (Stats && state.HasStats() && Request.ProgressStatsPeriod) {
+        YQL_ENSURE(Stats);
+
+        if (state.HasStats() && Request.ProgressStatsPeriod) {
             Stats->UpdateTaskStats(taskId, state.GetStats());
             auto now = TInstant::Now();
             if (LastProgressStats + Request.ProgressStatsPeriod <= now) {
@@ -418,13 +419,11 @@ protected:
                 if (Planner->CompletedCA(taskId, computeActor)) {
                     ExtraData[computeActor].Swap(state.MutableExtraData());
 
-                    if (Stats) {
-                        Stats->AddComputeActorStats(
-                            computeActor.NodeId(),
-                            std::move(*state.MutableStats()),
-                            TDuration::MilliSeconds(AggregationSettings.GetCollectLongTasksStatsTimeoutMs())
-                        );
-                    }
+                    Stats->AddComputeActorStats(
+                        computeActor.NodeId(),
+                        std::move(*state.MutableStats()),
+                        TDuration::MilliSeconds(AggregationSettings.GetCollectLongTasksStatsTimeoutMs())
+                    );
 
                     LastTaskId = taskId;
                     LastComputeActorId = computeActor.ToString();
@@ -512,9 +511,9 @@ protected:
         auto now = TAppData::TimeProvider->Now();
         StartResolveTime = now;
 
-        if (Stats) {
-            Stats->StartTs = now;
-        }
+        YQL_ENSURE(Stats);
+
+        Stats->StartTs = now;
     }
 
     TMaybe<size_t> FindReadRangesSource(const NKqpProto::TKqpPhyStage& stage) {
@@ -1148,8 +1147,9 @@ protected:
                 : Nothing();
 
             YQL_ENSURE(!shardsResolved || nodeId);
+            YQL_ENSURE(Stats);
 
-            if (shardId && Stats) {
+            if (shardId) {
                 Stats->AffectedShards.insert(*shardId);
             }
 
@@ -1217,11 +1217,13 @@ protected:
 
         if (partitions.size() > 0 && source.GetSequentialInFlightShards() > 0 && partitions.size() > source.GetSequentialInFlightShards()) {
             auto [startShard, shardInfo] = MakeVirtualTablePartition(source, stageInfo, HolderFactory(), TypeEnv());
-            if (Stats) {
-                for (auto& [shardId, _] : partitions) {
-                    Stats->AffectedShards.insert(shardId);
-                }
+
+            YQL_ENSURE(Stats);
+
+            for (auto& [shardId, _] : partitions) {
+                Stats->AffectedShards.insert(shardId);
             }
+
             if (shardInfo.KeyReadRanges) {
                 addPartiton(startShard, {}, shardInfo, source.GetSequentialInFlightShards());
                 fillRangesForTasks();
@@ -1484,6 +1486,8 @@ protected:
         THashMap<ui64, ui64> assignedShardsCount;
         auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
+        YQL_ENSURE(Stats);
+
         const auto& tableInfo = stageInfo.Meta.TableConstInfo;
         const auto& keyTypes = tableInfo->KeyColumnTypes;
         ui32 metaId = 0;
@@ -1512,7 +1516,7 @@ protected:
                 nodeShards[nodeId].emplace_back(TShardInfoWithId(i.first, std::move(i.second)));
             }
 
-            if (Stats && CollectProfileStats(Request.StatsMode)) {
+            if (CollectProfileStats(Request.StatsMode)) {
                 for (auto&& i : nodeShards) {
                     Stats->AddNodeShardsCount(stageInfo.Id.StageId, i.first, i.second.size());
                 }
@@ -1697,7 +1701,7 @@ protected:
             ExecuterSpan.EndError(TStringBuilder() << NYql::NDqProto::StatusIds_StatusCode_Name(status));
         }
 
-        FillResponseStats(Ydb::StatusIds::TIMEOUT);
+        ResponseEv->Record.MutableResponse()->SetStatus(Ydb::StatusIds::TIMEOUT);
 
         // TEvAbortExecution can come from either ComputeActor or SessionActor (== Target).
         if (abortSender != Target) {
@@ -1707,36 +1711,7 @@ protected:
 
         LOG_E("Sending timeout response to: " << Target);
 
-        Request.Transactions.crop(0);
         this->Shutdown();
-    }
-
-    void FillResponseStats(Ydb::StatusIds::StatusCode status) {
-        auto& response = *ResponseEv->Record.MutableResponse();
-
-        response.SetStatus(status);
-
-        if (Stats) {
-            ReportEventElapsedTime();
-
-            Stats->FinishTs = TInstant::Now();
-            Stats->Finish();
-
-            if (Stats->CollectStatsByLongTasks || CollectFullStats(Request.StatsMode)) {
-                for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {
-                    const auto& tx = Request.Transactions[txId].Body;
-                    auto planWithStats = AddExecStatsToTxPlan(tx->GetPlan(), response.GetResult().GetStats());
-                    response.MutableResult()->MutableStats()->AddTxPlansWithStats(planWithStats);
-                }
-            }
-
-            if (Stats->CollectStatsByLongTasks) {
-                const auto& txPlansWithStats = response.GetResult().GetStats().GetTxPlansWithStats();
-                if (!txPlansWithStats.empty()) {
-                    LOG_N("Full stats: " << txPlansWithStats);
-                }
-            }
-        }
     }
 
     virtual void ReplyErrorAndDie(Ydb::StatusIds::StatusCode status,
@@ -1752,8 +1727,7 @@ protected:
         AlreadyReplied = true;
         auto& response = *ResponseEv->Record.MutableResponse();
 
-        FillResponseStats(status);
-
+        response.SetStatus(status);
         response.MutableIssues()->Swap(issues);
 
         LOG_T("ReplyErrorAndDie. Response: " << response.DebugString()
@@ -1772,7 +1746,6 @@ protected:
         ExecuterSpan.EndError(response.DebugString());
         ExecuterStateSpan.EndError(response.DebugString());
 
-        Request.Transactions.crop(0);
         this->Shutdown();
     }
 
@@ -1850,8 +1823,35 @@ protected:
     void PassAway() override {
         YQL_ENSURE(AlreadyReplied && ResponseEv);
 
-        // Actualize stats with the last stats from terminated CAs, but keep the status.
-        FillResponseStats(ResponseEv->Record.GetResponse().GetStatus());
+        // Fill response stats
+        {
+            auto& response = *ResponseEv->Record.MutableResponse();
+
+            YQL_ENSURE(Stats);
+
+            ReportEventElapsedTime();
+
+            Stats->FinishTs = TInstant::Now();
+            Stats->Finish();
+
+            if (Stats->CollectStatsByLongTasks || CollectFullStats(Request.StatsMode)) {
+                response.MutableResult()->MutableStats()->ClearTxPlansWithStats();
+                for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {
+                    const auto& tx = Request.Transactions[txId].Body;
+                    auto planWithStats = AddExecStatsToTxPlan(tx->GetPlan(), response.GetResult().GetStats());
+                    response.MutableResult()->MutableStats()->AddTxPlansWithStats(planWithStats);
+                }
+            }
+
+            if (Stats->CollectStatsByLongTasks) {
+                const auto& txPlansWithStats = response.GetResult().GetStats().GetTxPlansWithStats();
+                if (!txPlansWithStats.empty()) {
+                    LOG_N("Full stats: " << response.GetResult().GetStats());
+                }
+            }
+        }
+
+        Request.Transactions.crop(0);
         this->Send(Target, ResponseEv.release());
 
         for (auto channelPair: ResultChannelProxies) {

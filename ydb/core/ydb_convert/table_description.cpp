@@ -265,6 +265,22 @@ bool BuildAlterTableModifyScheme(const TString& path, const Ydb::Table::AlterTab
                 minActivePartitions = 1;
             }
             op->SetTopicPartitions(minActivePartitions);
+
+            if (add.topic_partitioning_settings().has_auto_partitioning_settings()) {
+                auto& partitioningSettings = add.topic_partitioning_settings().auto_partitioning_settings();
+                op->SetTopicAutopartitioning(partitioningSettings.strategy() == ::Ydb::Topic::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP_AND_DOWN);
+
+                i64 maxActivePartitions =
+                    add.topic_partitioning_settings().max_active_partitions();
+                if (maxActivePartitions < 0) {
+                    code = Ydb::StatusIds::BAD_REQUEST;
+                    error = "Topic max active partitions count must be positive";
+                    return false;
+                } else if (maxActivePartitions == 0) {
+                    maxActivePartitions = 50;
+                }
+                op->SetMaxPartitionCount(maxActivePartitions);
+            }
         }
 
         if (!FillChangefeedDescription(*op->MutableStreamDescription(), add, code, error)) {

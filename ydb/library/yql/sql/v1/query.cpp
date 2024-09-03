@@ -290,7 +290,7 @@ static INode::TPtr CreateVectorIndexSettings(const TVectorIndexSettings& vectorI
 
     settings = L(settings, Q(Y(Q("vector_type"), Q(ToString(*vectorIndexSettings.VectorType)))));
     settings = L(settings, Q(Y(Q("vector_dimension"), Q(ToString(*vectorIndexSettings.VectorDimension)))));
-    
+
     return settings;
 }
 
@@ -320,7 +320,7 @@ static INode::TPtr CreateIndexDesc(const TIndexDescription& index, ETableSetting
     }
     if (const auto* indexSettingsPtr = std::get_if<TVectorIndexSettings>(&index.IndexSettings)) {
         const auto& indexSettings = node.Q(node.Y(
-            node.Q("indexSettings"), 
+            node.Q("indexSettings"),
             node.Q(CreateVectorIndexSettings(*indexSettingsPtr, node))));
         indexNode = node.L(indexNode, indexSettings);
     }
@@ -358,6 +358,12 @@ static INode::TPtr CreateChangefeedDesc(const TChangefeedDescription& desc, cons
     }
     if (desc.Settings.RetentionPeriod) {
         settings = node.L(settings, node.Q(node.Y(node.Q("retention_period"), desc.Settings.RetentionPeriod)));
+    }
+    if (desc.Settings.TopicAutoPartitioning) {
+        settings = node.L(settings, node.Q(node.Y(node.Q("topic_auto_partitioning"), desc.Settings.TopicAutoPartitioning)));
+    }
+    if (desc.Settings.TopicMaxActivePartitions) {
+        settings = node.L(settings, node.Q(node.Y(node.Q("topic_max_active_partitions"), desc.Settings.TopicMaxActivePartitions)));
     }
     if (desc.Settings.TopicPartitions) {
         settings = node.L(settings, node.Q(node.Y(node.Q("topic_min_active_partitions"), desc.Settings.TopicPartitions)));

@@ -325,7 +325,7 @@ namespace {
         createSequenceSettings.Name = TString(createSequence.Sequence());
         createSequenceSettings.Temporary = TString(createSequence.Temporary()) == "true" ? true : false;
         createSequenceSettings.SequenceSettings = ParseSequenceSettings(createSequence.SequenceSettings());
-        createSequenceSettings.SequenceSettings.DataType = TString(createSequence.ValueType());  
+        createSequenceSettings.SequenceSettings.DataType = TString(createSequence.ValueType());
 
         return createSequenceSettings;
     }
@@ -1744,9 +1744,9 @@ public:
                                 ctx.AddError(
                                     YqlIssue(ctx.GetPosition(indexSetting.Name().Pos()),
                                         TIssuesIds::KIKIMR_SCHEME_ERROR,
-                                        TStringBuilder() << "Unknown index name: " << indexName));                                
+                                        TStringBuilder() << "Unknown index name: " << indexName));
                                 return SyncError();
-                            }                            
+                            }
                             auto indexTablePaths = NKikimr::NKqp::NSchemeHelpers::CreateIndexTablePath(table.Metadata->Name, indexIter->Type, indexName);
                             if (indexTablePaths.size() != 1) {
                                 ctx.AddError(
@@ -1876,6 +1876,37 @@ public:
                                     const auto duration = TDuration::FromValue(value);
                                     auto& retention = *add_changefeed->mutable_retention_period();
                                     retention.set_seconds(duration.Seconds());
+                                } else if (name == "topic_auto_partitioning") {
+                                    auto* settings = add_changefeed->mutable_topic_partitioning_settings()->mutable_auto_partitioning_settings();
+
+                                    auto val = to_lower(TString(
+                                        setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
+                                    ));
+                                    if (val == "enabled") {
+                                        settings->set_strategy(::Ydb::Topic::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP_AND_DOWN);
+                                    } else if (val == "disabled") {
+                                        settings->set_strategy(::Ydb::Topic::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_DISABLED);
+                                    } else {
+                                        ctx.AddError(
+                                            TIssue(ctx.GetPosition(setting.Name().Pos()),
+                                                TStringBuilder() << "Unknown changefeed topic autopartitioning '" << val << "'"
+                                            )
+                                        );
+                                        return SyncError();
+                                    }
+                                } else if (name == "topic_max_active_partitions") {
+                                    auto value = TString(
+                                        setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
+                                    );
+
+                                    i64 maxActivePartitions;
+                                    if (!TryFromString(value, maxActivePartitions) || maxActivePartitions <= 0) {
+                                        ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                                            TStringBuilder() << name << " must be greater than 0"));
+                                        return SyncError();
+                                    }
+
+                                    add_changefeed->mutable_topic_partitioning_settings()->set_max_active_partitions(maxActivePartitions);
                                 } else if (name == "topic_min_active_partitions") {
                                     auto value = TString(
                                         setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
@@ -2413,7 +2444,7 @@ public:
             TAnalyzeSettings analyzeSettings = ParseAnalyzeSettings(maybeAnalyze.Cast());
 
             auto future = Gateway->Analyze(cluster, analyzeSettings);
-            
+
             return WrapFuture(future,
                 [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
                 Y_UNUSED(res);

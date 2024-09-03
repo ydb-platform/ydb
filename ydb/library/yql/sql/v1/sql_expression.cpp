@@ -169,6 +169,18 @@ bool ChangefeedSettingsEntry(const TRule_changefeed_settings_entry& node, TSqlEx
             return false;
         }
         settings.RetentionPeriod = exprNode;
+    } else if (to_lower(id.Name) == "topic_auto_partitioning") {
+        auto v = to_lower(exprNode->GetLiteralValue());
+        if (v != "enabled" && v != "disabled") {
+            ctx.Context().Error() << "Literal of Interval type is expected for " << id.Name;
+        }
+        settings.TopicAutoPartitioning = exprNode;
+    } else if (to_lower(id.Name) == "topic_max_active_partitions") {
+        if (!exprNode->IsIntegerLiteral()) {
+            ctx.Context().Error() << "Literal of integer type is expected for " << id.Name;
+            return false;
+        }
+        settings.TopicMaxActivePartitions = exprNode;
     } else if (to_lower(id.Name) == "topic_min_active_partitions") {
         if (!exprNode->IsIntegerLiteral()) {
             ctx.Context().Error() << "Literal of integer type is expected for " << id.Name;
@@ -1944,9 +1956,9 @@ TNodePtr TSqlExpression::SubExpr(const TRule_xor_subexpr& node, const TTrailingQ
                 if (symmetric) {
                     Ctx.IncrementMonCounter("sql_features", negation? "NotBetweenSymmetric" : "BetweenSymmetric");
                     return BuildBinaryOpRaw(
-                        pos, 
-                        negation? "And" : "Or", 
-                        buildSubexpr(left, right), 
+                        pos,
+                        negation? "And" : "Or",
+                        buildSubexpr(left, right),
                         buildSubexpr(right, left)
                     );
                 } else {

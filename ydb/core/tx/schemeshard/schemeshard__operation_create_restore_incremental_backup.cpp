@@ -59,6 +59,14 @@ void DoCreatePqPart(
     partitionConfig.SetBurstSize(1_MB); // TODO: configurable burst
     partitionConfig.SetMaxCountInPartition(Max<i32>());
 
+    auto * ps = pqConfig.MutablePartitionStrategy();
+    ps->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE);
+    ps->SetMaxPartitionCount(desc.GetTotalGroupCount() * 4);
+    ps->SetMinPartitionCount(1);
+    ps->SetScaleThresholdSeconds(30);
+
+    Y_UNUSED(boundaries);
+/*
     for (const auto& tag : table->KeyColumnIds) {
         Y_ABORT_UNLESS(table->Columns.contains(tag));
         const auto& column = table->Columns.at(tag);
@@ -87,6 +95,7 @@ void DoCreatePqPart(
             Y_ABORT_UNLESS(ok, "Failed to build key tuple at position %" PRIu32 " error: %s", ki, errStr.data());
         }
     }
+*/
 
     auto& ir = *pqConfig.MutableOffloadConfig()->MutableIncrementalRestore();
     auto* pathId = ir.MutableDstPathId();

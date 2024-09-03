@@ -961,6 +961,10 @@ message TCreateCdcStream {
     optional TCdcStreamDescription StreamDescription = 2;
     optional uint64 RetentionPeriodSeconds = 3 [default = 86400]; // 1d by default
     optional uint32 TopicPartitions = 4;
+
+    // Topic autopartitioning settings
+    optional bool TopicAutopartitioning = 5 [default = false]; // we always can split and merge of topic partitions
+    optional uint32 MaxPartitionCount = 6;
 }
 
 message TAlterCdcStream {

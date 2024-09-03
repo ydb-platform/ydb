@@ -492,6 +492,10 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
              "ALTER TABLE user\n\tADD CHANGEFEED user WITH (resolved_timestamps = Interval(\"PT1S\"));\n"},
             {"alter table user add changefeed user with (topic_min_active_partitions = 1)",
              "ALTER TABLE user\n\tADD CHANGEFEED user WITH (topic_min_active_partitions = 1);\n"},
+            {"alter table user add changefeed user with (topic_auto_partitioning = DISABLED)",
+             "ALTER TABLE user\n\tADD CHANGEFEED user WITH (topic_auto_partitioning = DISABLED);\n"},
+            {"alter table user add changefeed user with (topic_auto_partitioning = ENABLED, topic_max_active_partitions = 10, topic_min_active_partitions = 1)",
+             "ALTER TABLE user\n\tADD CHANGEFEED user WITH (topic_auto_partitioning = ENABLED, topic_max_active_partitions = 10, topic_min_active_partitions = 1);\n"},
         };
 
         TSetup setup;

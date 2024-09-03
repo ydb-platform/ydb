@@ -2414,7 +2414,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 UNIT_ASSERT_VALUES_EQUAL(std::get<TVectorIndexSettings::ESimilarity>(vectorIndexSettings.Metric), TVectorIndexSettings::ESimilarity::InnerProduct);
                 UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorType, TVectorIndexSettings::EVectorType::Float);
                 UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorDimension, 1024);
-            }            
+            }
         }
     }
 
@@ -2469,7 +2469,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
             auto indexDesc = describe.GetTableDescription();
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetPartitioningSettings().GetPartitionSizeMb(), partitionSizeMb);
-        }        
+        }
     }
 
     Y_UNIT_TEST(AlterTableAlterVectorIndex) {
@@ -2486,8 +2486,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     Key Uint64,
                     Embedding String,
                     PRIMARY KEY (Key),
-                    INDEX vector_idx 
-                        GLOBAL USING vector_kmeans_tree 
+                    INDEX vector_idx
+                        GLOBAL USING vector_kmeans_tree
                         ON (Embedding)
                         WITH (similarity=cosine, vector_type=bit, vector_dimension=1)
                 );
@@ -2501,7 +2501,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto indexDesc = describe.GetTableDescription();
             constexpr int defaultPartitionSizeMb = 2048;
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetPartitioningSettings().GetPartitionSizeMb(), defaultPartitionSizeMb);
-        }        
+        }
         {
             auto result = session.ExecuteSchemeQuery(R"(
                         ALTER TABLE `/Root/TestTable` ALTER INDEX vector_idx SET AUTO_PARTITIONING_MIN_PARTITIONS_COUNT 1;
@@ -2509,13 +2509,13 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Only index with one impl table is supported" );
         }
-    }    
+    }
 
     Y_UNIT_TEST(AlterTableAlterMissedIndex) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
-        CreateSampleTablesWithIndex(session);      
+        CreateSampleTablesWithIndex(session);
         {
             auto result = session.ExecuteSchemeQuery(R"(
                         ALTER TABLE `/Root/SecondaryKeys` ALTER INDEX WrongIndexName SET AUTO_PARTITIONING_MIN_PARTITIONS_COUNT 1;
@@ -2523,7 +2523,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unknown index name: WrongIndexName");
         }
-    }    
+    }
 
     Y_UNIT_TEST(AlterIndexImplTable) {
         TKikimrRunner kikimr;
@@ -2742,13 +2742,13 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     Key Uint64,
                     Embedding String,
                     PRIMARY KEY (Key),
-                    INDEX vector_idx 
-                        GLOBAL USING vector_kmeans_tree 
+                    INDEX vector_idx
+                        GLOBAL USING vector_kmeans_tree
                         ON (Embedding)
                         WITH (similarity=inner_product, vector_type=float, vector_dimension=1024)
                 );
             )";
-            
+
             auto result = session.ExecuteSchemeQuery(create_index_query).ExtractValueSync();
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -2773,7 +2773,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_C(describeLevelTable.IsSuccess(), describeLevelTable.GetIssues().ToString());
             auto describePostingTable = session.DescribeTable("/Root/TestTable/vector_idx/indexImplPostingTable").GetValueSync();
             UNIT_ASSERT_C(describePostingTable.IsSuccess(), describePostingTable.GetIssues().ToString());
-        }   
+        }
     }
 
 
@@ -2792,8 +2792,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     Embedding String,
                     Covered String,
                     PRIMARY KEY (Key),
-                    INDEX vector_idx 
-                        GLOBAL USING vector_kmeans_tree 
+                    INDEX vector_idx
+                        GLOBAL USING vector_kmeans_tree
                         ON (Embedding)
                         COVER (Covered)
                         WITH (similarity=inner_product, vector_type=float, vector_dimension=1024)
@@ -2819,7 +2819,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetVectorIndexSettings()->VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Float);
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetVectorIndexSettings()->VectorDimension, 1024);
         }
-    } 
+    }
 
 
     Y_UNIT_TEST(CreateTableWithVectorIndexCaseIncentive) {
@@ -2836,15 +2836,15 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     Key Uint64,
                     Embedding String,
                     PRIMARY KEY (Key),
-                    INDEX vector_idx 
-                        GLOBAL USING vector_KMEANS_tree 
+                    INDEX vector_idx
+                        GLOBAL USING vector_KMEANS_tree
                         ON (Embedding)
                         WITH (similarity=COSINE, VECTOR_TYPE=float, vector_DIMENSION=1024)
                 );
             )";
             auto result = session.ExecuteSchemeQuery(create_index_query).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }    
+        }
     }
 
     Y_UNIT_TEST(CreateTableWithVectorIndexNoFeatureFlag) {
@@ -2859,8 +2859,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     Embedding String,
                     Covered String,
                     PRIMARY KEY (Key),
-                    INDEX vector_idx 
-                        GLOBAL USING vector_kmeans_tree 
+                    INDEX vector_idx
+                        GLOBAL USING vector_kmeans_tree
                         ON (Embedding)
                         WITH (similarity=inner_product, vector_type=float, vector_dimension=1024)
                 );
@@ -2869,8 +2869,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
         }
-    } 
-   
+    }
+
     Y_UNIT_TEST(CreateTableWithVectorIndexPublicApi) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableVectorIndex(true);
@@ -2884,8 +2884,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 .AddNullableColumn("Embedding", EPrimitiveType::String)
                 .SetPrimaryKeyColumn("Key")
                 .AddVectorKMeansTreeSecondaryIndex("vector_idx", {"Embedding"},
-                    { NYdb::NTable::TVectorIndexSettings::EDistance::Cosine, 
-                      NYdb::NTable::TVectorIndexSettings::EVectorType::Float, 
+                    { NYdb::NTable::TVectorIndexSettings::EDistance::Cosine,
+                      NYdb::NTable::TVectorIndexSettings::EVectorType::Float,
                       1024});
 
             auto result = session.CreateTable("/Root/TestTable", builder.Build()).ExtractValueSync();
@@ -2906,7 +2906,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetVectorIndexSettings()->VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Float);
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetVectorIndexSettings()->VectorDimension, 1024);
         }
-    } 
+    }
 
     Y_UNIT_TEST(CreateTableWithVectorIndexCoveredPublicApi) {
         NKikimrConfig::TFeatureFlags featureFlags;
@@ -2922,8 +2922,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 .AddNullableColumn("Covered", EPrimitiveType::String)
                 .SetPrimaryKeyColumn("Key")
                 .AddVectorKMeansTreeSecondaryIndex("vector_idx", {"Embedding"}, {"Covered"},
-                    { NYdb::NTable::TVectorIndexSettings::EDistance::Cosine, 
-                      NYdb::NTable::TVectorIndexSettings::EVectorType::Float, 
+                    { NYdb::NTable::TVectorIndexSettings::EDistance::Cosine,
+                      NYdb::NTable::TVectorIndexSettings::EVectorType::Float,
                       1024});
 
             auto result = session.CreateTable("/Root/TestTable", builder.Build()).ExtractValueSync();
@@ -2945,7 +2945,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetVectorIndexSettings()->VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Float);
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetVectorIndexSettings()->VectorDimension, 1024);
         }
-    }    
+    }
 
     Y_UNIT_TEST(AlterTableWithDecimalColumn) {
         TKikimrRunner kikimr;
@@ -4361,6 +4361,64 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(ChangefeedTopicAutoPartitioning) {
+        using namespace NTopic;
+
+        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        auto pq = TTopicClient(kikimr.GetDriver(), TTopicClientSettings().Database("/Root"));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        { // Uint64 key
+            auto query = R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/table_tap` (
+                    Key Uint64,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        { // default
+            auto query = R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/table_tap` ADD CHANGEFEED `feed_1` WITH (
+                    MODE = 'KEYS_ONLY', FORMAT = 'JSON', TOPIC_MIN_ACTIVE_PARTITIONS = 7,  TOPIC_MAX_ACTIVE_PARTITIONS = 777, TOPIC_AUTO_PARTITIONING = 'ENABLED'
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto desc = pq.DescribeTopic("/Root/table_tap/feed_1").ExtractValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetPartitions().size(), 7);
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetPartitioningSettings().GetMinActivePartitions(), 7);
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetPartitioningSettings().GetMaxActivePartitions(), 777);
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetPartitioningSettings().GetAutoPartitioningSettings().GetStrategy(), NYdb::NTopic::EAutoPartitioningStrategy::ScaleUpAndDown);
+        }
+
+        { // disabled
+            auto query = R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/table_tap` ADD CHANGEFEED `feed_1` WITH (
+                    MODE = 'KEYS_ONLY', FORMAT = 'JSON', TOPIC_AUTO_PARTITIONING='DISABLED'
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto desc = pq.DescribeTopic("/Root/table_tap/feed_2").ExtractValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetPartitioningSettings().GetAutoPartitioningSettings().GetStrategy(), NYdb::NTopic::EAutoPartitioningStrategy::Disabled);
         }
     }
 

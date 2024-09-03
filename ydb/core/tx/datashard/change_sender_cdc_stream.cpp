@@ -316,7 +316,7 @@ public:
 
     ui64 ResolvePartitionId(const typename TChangeRecord::TPtr& record) const override {
         auto* p = Chooser->GetPartition(record->GetPartitionKey());
-        return p->TabletId;
+        return p->PartitionId;
     }
 
 private:

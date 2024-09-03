@@ -199,13 +199,16 @@ NActors::TActorId TActorCoordinator::GetAndUpdateLocation(TPartitionKey key) {
 
     auto it = std::begin(RowDispatchers);
     std::advance(it, rand);
-
+    auto counter = RowDispatchers.size();
     while (true) {
         auto& info = it->second;
         if (!info.Connected) {
             it++;
             if (it == std::end(RowDispatchers)) {
                 it = std::begin(RowDispatchers);
+            }
+            if (!counter--) {
+                Y_ENSURE(false, "Infinite cycle");
             }
             continue;
         }
@@ -250,7 +253,7 @@ void TActorCoordinator::Handle(NFq::TEvRowDispatcher::TEvCoordinatorRequest::TPt
         }
     }
     
-    LOG_ROW_DISPATCHER_DEBUG("Send  TEvCoordinatorResult to " << ev->Sender);
+    LOG_ROW_DISPATCHER_DEBUG("Send TEvCoordinatorResult to " << ev->Sender);
     Send(ev->Sender, response.release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, ev->Cookie);
     PrintInternalState();
 }

@@ -124,30 +124,33 @@ WITH (
   ```sql
   CREATE TABLE table_name (
     a Uint64 NOT NULL,
-    b Uint64 NOT NULL,
+    b Timestamp NOT NULL,
     c Float,
     PRIMARY KEY (a, b)
   )
+  PARTITION BY HASH(a, b, ...)
   WITH (
     STORE = COLUMN
   );
   ```
 
-  Пример создания колоночной таблицы с опцией определения минимального физического количества партиций для хранения данных:
+  При создании колоночных таблиц обязательно нужно использовать конструкцию `PARTITION BY HASH` с указанием первичных ключей, которые имеют высококардинальный тип данных (например, `Timestamp`), так как колоночные таблицы партиционируют данные не по первичным ключам, а по специально выделенным ключам — ключам партицирования. Подробно про ключи партиционирования колоночных таблиц изложено в статье [{#T}](../../../../dev/primary-key/column-oriented.md).
+
+  В настоящий момент колоночные таблицы не поддерживают автоматического репартицирования, поэтому важно указывать правильное число партиций при создании таблицы с помощью параметра `AUTO_PARTITIONING_MIN_PARTITIONS_COUNT`:
   ```sql
   CREATE TABLE table_name (
     a Uint64 NOT NULL,
-    b Uint64 NOT NULL,
+    b Timestamp NOT NULL,
     c Float,
     PRIMARY KEY (a, b)
   )
+  PARTITION BY HASH(a, b, ...)
   WITH (
     STORE = COLUMN,
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10
   );
   ```
-
-  С полным списком опций партиционирования колоночных таблиц можно ознакомиться в разделе [{#T}](../../../../concepts/datamodel/table.md#olap-tables-partitioning) статьи [{#T}](../../../../concepts/datamodel/table.md).
+  Такой код создаст колоночную таблицу с 10-ю партициями. С полным списком опций партиционирования колоночных таблиц можно ознакомиться в разделе [{#T}](../../../../concepts/datamodel/table.md#olap-tables-partitioning) статьи [{#T}](../../../../concepts/datamodel/table.md).
 
 
 {% endlist %}

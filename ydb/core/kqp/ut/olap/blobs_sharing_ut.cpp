@@ -459,9 +459,9 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
         }
 
     private:
-        ui64 LastPathId{ 1000000 };
-        ui64 LastTs{ 300000000 };
-        ui64 NumRows{ 0 };
+        ui64 LastPathId = 1000000;
+        ui64 LastTs = 300000000;
+        ui64 NumRows = 0;
     };
 
     Y_UNIT_TEST(UpsertWhileSplitTest) {

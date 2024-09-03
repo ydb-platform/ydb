@@ -365,6 +365,10 @@ public:
         TTableInfo::TPtr table = context.SS->Tables.at(pathId);
         table->FinishAlter();
 
+        if (!table->IsAsyncReplica()) {
+            path->SetAsyncReplica(false);
+        }
+
         auto ttlIt = context.SS->TTLEnabledTables.find(pathId);
         if (table->IsTTLEnabled() && ttlIt == context.SS->TTLEnabledTables.end()) {
             context.SS->TTLEnabledTables[pathId] = table;

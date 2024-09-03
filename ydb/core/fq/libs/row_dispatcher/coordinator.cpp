@@ -124,7 +124,7 @@ void TActorCoordinator::AddRowDispatcher(NActors::TActorId actorId) {
             continue;
         }
 
-        LOG_ROW_DISPATCHER_TRACE(" Move all Locations from old actor " << oldActorId.ToString() << " to new " << actorId.ToString());
+        LOG_ROW_DISPATCHER_TRACE("Move all Locations from old actor " << oldActorId.ToString() << " to new " << actorId.ToString());
         for (auto& key : info.Locations) {
             PartitionLocations[key] = actorId;
         }
@@ -200,7 +200,7 @@ NActors::TActorId TActorCoordinator::GetAndUpdateLocation(TPartitionKey key) {
     auto it = std::begin(RowDispatchers);
     std::advance(it, rand);
 
-    while(true) {
+    while (true) {
         auto& info = it->second;
         if (!info.Connected) {
             it++;

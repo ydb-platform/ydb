@@ -5,7 +5,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/interconnect.h>
-#include <ydb/library/yql/dq/actors/compute/retry_queue.h>
+#include <ydb/library/yql/dq/actors/common/retry_queue.h>
 
 #include <ydb/core/fq/libs/actors/logging/log.h>
 #include <ydb/core/fq/libs/events/events.h>

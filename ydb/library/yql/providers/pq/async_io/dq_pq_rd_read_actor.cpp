@@ -7,7 +7,7 @@
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
 #include <ydb/library/yql/dq/actors/compute/dq_source_watermark_tracker.h>
-#include <ydb/library/yql/dq/actors/compute/retry_queue.h>
+#include <ydb/library/yql/dq/actors/common/retry_queue.h>
 
 #include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
 #include <ydb/library/yql/minikql/mkql_alloc.h>

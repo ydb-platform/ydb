@@ -5,7 +5,6 @@ SRCS(
     dq_compute_actor_async_input_helper_ut.cpp
     dq_compute_issues_buffer_ut.cpp
     dq_source_watermark_tracker_ut.cpp
-    #retry_events_queue_ut.cpp
 )
 
 PEERDIR(

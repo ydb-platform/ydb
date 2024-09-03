@@ -10,16 +10,16 @@ namespace NYql {
     using namespace NConnector::NApi;
 
     TString FormatColumn(const TString& value);
-    TString FormatValue(Ydb::TypedValue value) ;
-    TString FormatNull(TExpression_TNull);
-    TString FormatExpression(TExpression expression);
-    TString FormatArithmeticalExpression(TExpression_TArithmeticalExpression expression);
+    TString FormatValue(const Ydb::TypedValue& value) ;
+    TString FormatNull(const TExpression_TNull&);
+    TString FormatExpression(const TExpression& expression);
+    TString FormatArithmeticalExpression(const TExpression_TArithmeticalExpression& expression);
     TString FormatNegation(const TPredicate_TNegation& negation);
-    TString FormatComparison(TPredicate_TComparison comparison);
+    TString FormatComparison(const TPredicate_TComparison comparison);
     TString FormatConjunction(const TPredicate_TConjunction& conjunction, bool topLevel);
     TString FormatDisjunction(const TPredicate_TDisjunction& disjunction);
-    TString FormatIsNull(TPredicate_TIsNull isNull);
-    TString FormatIsNotNull(TPredicate_TIsNotNull isNotNull);
+    TString FormatIsNull(const TPredicate_TIsNull& isNull);
+    TString FormatIsNotNull(const TPredicate_TIsNotNull& isNotNull);
     TString FormatPredicate(const TPredicate& predicate, bool topLevel);
 
     namespace {
@@ -204,7 +204,7 @@ namespace NYql {
         return value;
     }
 
-    TString FormatValue(Ydb::TypedValue value) {
+    TString FormatValue(const Ydb::TypedValue& value) {
         switch (value.value().value_case()) {
         case  Ydb::Value::kBoolValue:
             return ToString(value.value().bool_value());
@@ -225,15 +225,15 @@ namespace NYql {
         case Ydb::Value::kTextValue:
             return "\"" + ToString(value.value().text_value()) + "\"";
         default:
-            ythrow yexception() << "ErrUnimplementedTypedValue";
+            ythrow yexception() << "ErrUnimplementedTypedValue, value case " << static_cast<ui64>(value.value().value_case());
         }
     }
 
-    TString FormatNull(TExpression_TNull) {
+    TString FormatNull(const TExpression_TNull&) {
         return "NULL";
     }
 
-    TString FormatExpression(TExpression expression) {
+    TString FormatExpression(const TExpression& expression) {
         switch (expression.payload_case()) {
         case TExpression::kColumn:
             return FormatColumn(expression.column());
@@ -244,11 +244,11 @@ namespace NYql {
         case TExpression::kNull:
             return FormatNull(expression.null());
         default:
-            ythrow yexception() << "UnimplementedExpression";
+            ythrow yexception() << "UnimplementedExpression, payload_case " << static_cast<ui64>(expression.payload_case());
         }
     }
 
-    TString FormatArithmeticalExpression(TExpression_TArithmeticalExpression expression) {
+    TString FormatArithmeticalExpression(const TExpression_TArithmeticalExpression& expression) {
         TString operation;
         switch (expression.operation()) {
         case TExpression_TArithmeticalExpression::MUL:
@@ -270,7 +270,7 @@ namespace NYql {
             operation = " ^ ";
             break;
         default:
-            ythrow yexception() << "ErrUnimplementedArithmeticalExpression";
+            ythrow yexception() << "ErrUnimplementedArithmeticalExpression, operation " << static_cast<ui64>(expression.operation());
         }
 
         auto left = FormatExpression(expression.left_value());
@@ -352,12 +352,12 @@ namespace NYql {
         return stream.Str();
     }
 
-    TString FormatIsNull(TPredicate_TIsNull isNull) {
+    TString FormatIsNull(const TPredicate_TIsNull& isNull) {
         auto statement = FormatExpression(isNull.value());
         return "(" + statement + " IS NULL)";
     }
 
-    TString FormatIsNotNull(TPredicate_TIsNotNull isNotNull) {
+    TString FormatIsNotNull(const TPredicate_TIsNotNull& isNotNull) {
         auto statement = FormatExpression(isNotNull.value());
         return "(" + statement + " IS NOT NULL)";
     }
@@ -385,7 +385,7 @@ namespace NYql {
             operation = " > ";
             break;
         default:
-            ythrow yexception() << "UnimplementedOperation";
+            ythrow yexception() << "UnimplementedOperation, operation " << static_cast<ui64>(comparison.operation());
         }
 
         auto left = FormatExpression(comparison.left_value());
@@ -413,7 +413,7 @@ namespace NYql {
             case TPredicate::kBoolExpression:
                 return FormatExpression(predicate.bool_expression().value());
             default:
-                ythrow yexception() << "UnimplementedPredicateType";
+                ythrow yexception() << "UnimplementedPredicateType, payload_case " << static_cast<ui64>(predicate.payload_case());
         }
     }
 

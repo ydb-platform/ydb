@@ -2,16 +2,17 @@
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/testlib/actor_helpers.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/yql/dq/actors/compute/retry_queue.h>
+#include <ydb/library/yql/dq/actors/common/retry_queue.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/library/actors/interconnect/interconnect_impl.h>
-//#include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <chrono>
 #include <thread>
 
 
 using namespace NActors;
+using namespace NYql::NDq;
 
 namespace {
 
@@ -22,11 +23,13 @@ struct TEvPrivate {
     enum EEv : ui32 {
         EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
         EvSend = EvBegin + 10,
+        EvData,
         EvDisconnect,
         EvEnd
     };
     static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE)");
     struct TEvSend : public TEventLocal<TEvSend, EvSend> {};
+    struct TEvData : public TEventLocal<TEvData, EvData> {};
     struct TEvDisconnect : public TEventLocal<TEvDisconnect, EvDisconnect> {};
 };
 
@@ -57,7 +60,7 @@ public:
     }    
 
     void Handle(const TEvPrivate::TEvSend::TPtr& ) {
-        EventsQueue.Send(new NFq::TEvRowDispatcher::TEvGetNextBatch());
+        EventsQueue.Send(new TEvDqCompute::TEvInjectCheckpoint());
     }
 
     void HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {
@@ -106,7 +109,7 @@ public:
         hFunc(TEvInterconnect::TEvNodeConnected, HandleConnected);
         hFunc(TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
         hFunc(NActors::TEvents::TEvUndelivered, Handle);
-        hFunc(NFq::TEvRowDispatcher::TEvGetNextBatch, Handle);
+        hFunc(TEvDqCompute::TEvInjectCheckpoint, Handle);
         hFunc(TEvents::TEvPoisonPill, Handle);
     )
 
@@ -118,8 +121,8 @@ public:
         EventsQueue.Retry();
     }
 
-    void Handle(const NFq::TEvRowDispatcher::TEvGetNextBatch::TPtr& /*ev*/) {
-        Send(ServerEdgeActorId, new NFq::TEvRowDispatcher::TEvGetNextBatch());
+    void Handle(const TEvDqCompute::TEvInjectCheckpoint::TPtr& /*ev*/) {
+        Send(ServerEdgeActorId, new TEvDqCompute::TEvInjectCheckpoint());
     }
 
     void HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {
@@ -175,7 +178,7 @@ Y_UNIT_TEST_SUITE(TRetryEventsQueueTest) {
             runtime.ClientEdgeActorId,
             new TEvPrivate::TEvSend()));
 
-        NFq::TEvRowDispatcher::TEvGetNextBatch::TPtr event = runtime.GrabEdgeEvent<NFq::TEvRowDispatcher::TEvGetNextBatch>(runtime.ServerEdgeActorId);
+        TEvDqCompute::TEvInjectCheckpoint::TPtr event = runtime.GrabEdgeEvent<TEvDqCompute::TEvInjectCheckpoint>(runtime.ServerEdgeActorId);
         UNIT_ASSERT(event);
 
         runtime.Send(runtime.ServerActorId, runtime.ServerEdgeActorId, new TEvents::TEvPoisonPill());

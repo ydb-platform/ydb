@@ -21,6 +21,7 @@ PEERDIR(
     ydb/core/fq/libs/row_dispatcher/events
     ydb/core/fq/libs/shared_resources
     ydb/library/security
+    ydb/library/yql/dq/actors/common
     ydb/library/yql/dq/actors/compute
     ydb/library/yql/dq/proto
     ydb/public/sdk/cpp/client/ydb_scheme

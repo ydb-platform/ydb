@@ -221,8 +221,6 @@ public:
                 ->GetSubgroup("media", to_lower(cfg->PDiskCategory.TypeStrShort())))
     {
         Y_ABORT_UNLESS(MainKey.IsInitialized);
-        PCtx = std::make_shared<TPDiskCtx>();
-        PCtx->PDiskId = cfg->PDiskId;
     }
 
     ~TPDiskActor() {
@@ -236,8 +234,8 @@ public:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Bootstrap state
     void Bootstrap(const TActorContext &ctx) {
-        PCtx->ActorSystem = ctx.ActorSystem();
-        PCtx->PDiskActor = SelfId();
+        PCtx = std::make_shared<TPDiskCtx>(ctx.ActorSystem(), Cfg->PDiskId, SelfId());
+
         auto mon = AppData()->Mon;
         if (mon && !Cfg->MetadataOnly) {
             NMonitoring::TIndexMonPage *actorsMonPage = mon->RegisterIndexPage("actors", "Actors");

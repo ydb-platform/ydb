@@ -1559,15 +1559,21 @@ struct TEvWriteMetadataResult : TEventLocal<TEvWriteMetadataResult, TEvBlobStora
 
 
 struct TPDiskCtx {
-    TActorSystem *ActorSystem = nullptr;
-    ui32 PDiskId = 0;
-    TActorId PDiskActor; 
+    TActorSystem * const ActorSystem = nullptr;
+    const ui32 PDiskId = 0;
+    const TActorId PDiskActor; 
     // TPDiskMon *Mon = nullptr; TODO implement it
 
     TPDiskCtx() = default;
 
     TPDiskCtx(TActorSystem *actorSystem)
         : ActorSystem(actorSystem)
+    {}
+
+    TPDiskCtx(TActorSystem *actorSystem, ui32 pdiskId, TActorId pdiskActor)
+        : ActorSystem(actorSystem)
+        , PDiskId(pdiskId)
+        , PDiskActor(pdiskActor)
     {}
 };
 

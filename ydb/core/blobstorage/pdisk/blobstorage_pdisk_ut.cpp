@@ -20,7 +20,6 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         const TIntrusivePtr<::NMonitoring::TDynamicCounters> counters(new ::NMonitoring::TDynamicCounters);
 
         auto pCtx = std::make_shared<NPDisk::TPDiskCtx>();
-        pCtx->PDiskId = cfg->PDiskId;
         THolder<NPDisk::IPDisk> pDisk = MakeHolder<NPDisk::TPDisk>(pCtx, cfg, counters);
         pDisk->Wakeup();
     }

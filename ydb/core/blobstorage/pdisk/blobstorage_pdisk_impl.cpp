@@ -51,9 +51,6 @@ TPDisk::TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig
     , ExpectedSlotCount(cfg->ExpectedSlotCount)
     , UseHugePages(cfg->UseSpdkNvmeDriver)
 {
-    Y_VERIFY_DEBUG_S(PCtx->PDiskId == cfg->PDiskId, PCtx->PDiskId << " " << cfg->PDiskId);
-    // PCtx->Mon = &Mon;
-
     SlowdownAddLatencyNs = TControlWrapper(0, 0, 100'000'000'000ll);
     EnableForsetiBinLog = TControlWrapper(0, 0, 1);
     ForsetiMinLogCostNsControl = TControlWrapper(ForsetiMinLogCostNs, 0, 100'000'000ull);

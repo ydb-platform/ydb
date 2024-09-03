@@ -1659,6 +1659,7 @@ Y_UNIT_TEST_SUITE(EvWrite) {
 
         auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(outdatedStep, txId), schema);
         UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(42, 0);
     }
 
     Y_UNIT_TEST(WriteWithSplit) {

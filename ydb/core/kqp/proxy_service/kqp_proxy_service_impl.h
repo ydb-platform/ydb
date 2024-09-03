@@ -148,7 +148,7 @@ struct TKqpSessionInfo {
 
 class TLocalSessionsRegistry {
     THashMap<TString, TKqpSessionInfo> LocalSessions;
-    std::map<TString, TKqpSessionInfo*> OrderedSessions;
+    std::map<std::pair<TString, TString>, TKqpSessionInfo*> OrderedSessions;
     THashMap<TActorId, TString> TargetIdIndex;
     THashSet<TString> ShutdownInFlightSessions;
     THashMap<TString, ui32> SessionsCountPerDatabase;
@@ -206,7 +206,7 @@ public:
         auto result = LocalSessions.emplace(sessionId,
             TKqpSessionInfo(sessionId, workerId, database, dbCounters, std::move(pos),
                 sessionStartedAt + idleDuration, IdleSessions.end(), pgWire, startedAt));
-        OrderedSessions.emplace(sessionId, &result.first->second);
+        OrderedSessions.emplace(std::make_pair(database, sessionId), &result.first->second);
         SessionsCountPerDatabase[database]++;
         Y_ABORT_UNLESS(result.second, "Duplicate session id!");
         TargetIdIndex.emplace(workerId, sessionId);
@@ -300,11 +300,11 @@ public:
         return ShutdownInFlightSessions.size();
     }
 
-    std::map<TString, TKqpSessionInfo*>::const_iterator GetOrderedLowerBound(const TString& continuation) const {
-        return OrderedSessions.lower_bound(continuation);
+    std::map<std::pair<TString, TString>, TKqpSessionInfo*>::const_iterator GetOrderedLowerBound(const TString& tenant, const TString& continuation) const {
+        return OrderedSessions.lower_bound(std::make_pair(tenant, continuation));
     }
 
-    std::map<TString, TKqpSessionInfo*>::const_iterator GetOrderedEnd() const {
+    std::map<std::pair<TString, TString>, TKqpSessionInfo*>::const_iterator GetOrderedEnd() const {
         return OrderedSessions.end();
     }
 
@@ -337,7 +337,7 @@ public:
                 }
             }
 
-            OrderedSessions.erase(sessionId);
+            OrderedSessions.erase(std::make_pair(it->second.Database, sessionId));
             LocalSessions.erase(it);
         }
 

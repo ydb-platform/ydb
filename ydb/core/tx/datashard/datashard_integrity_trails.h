@@ -102,7 +102,7 @@ inline void LogIntegrityTrailsKeys(const NActors::TActorContext& ctx, const ui64
                     }
                 }
 
-                LOG_DEBUG_S(ctx, NKikimrServices::DATA_INTEGRITY, ss.Str());
+                LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, ss.Str());
             }
         }
     }
@@ -123,7 +123,7 @@ inline void LogIntegrityTrailsFinish(const NActors::TActorContext& ctx, const ui
         return ss.Str();
     };
 
-    LOG_DEBUG_S(ctx, NKikimrServices::DATA_INTEGRITY, logFn());
+    LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, logFn());
 }
 
 }

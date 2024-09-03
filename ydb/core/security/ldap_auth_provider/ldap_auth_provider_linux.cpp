@@ -77,6 +77,10 @@ LDAPMessage* FirstEntry(LDAP* ld, LDAPMessage* chain) {
     return ldap_first_entry(ld, chain);
 }
 
+LDAPMessage* NextEntry(LDAP* ld, LDAPMessage* entry) {
+    return ldap_next_entry(ld, entry);
+}
+
 char* FirstAttribute(LDAP* ld, LDAPMessage* entry, BerElement** berout) {
     return ldap_first_attribute(ld, entry, berout);
 }

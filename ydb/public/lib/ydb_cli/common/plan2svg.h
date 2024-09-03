@@ -128,6 +128,8 @@ public:
     std::shared_ptr<TSingleMetric> OutputRows;
     std::shared_ptr<TSingleMetric> SpillingComputeTime;
     std::shared_ptr<TSingleMetric> SpillingComputeBytes;
+    std::shared_ptr<TSingleMetric> SpillingChannelTime;
+    std::shared_ptr<TSingleMetric> SpillingChannelBytes;
     std::vector<std::string> Info;
     ui64 BaseTime = 0;
     ui32 PlanNodeId = 0;
@@ -160,6 +162,7 @@ struct TColorPalette {
     TString ConnectionText;
     TString MinMaxLine;
     TString TextLight;
+    TString TextSummary;
     TString SpillingBytesDark;
     TString SpillingBytesMedium;
     TString SpillingBytesLight;
@@ -191,6 +194,8 @@ public:
         IngressRows = std::make_shared<TSummaryMetric>();
         SpillingComputeTime = std::make_shared<TSummaryMetric>();
         SpillingComputeBytes = std::make_shared<TSummaryMetric>();
+        SpillingChannelTime = std::make_shared<TSummaryMetric>();
+        SpillingChannelBytes = std::make_shared<TSummaryMetric>();
     }
 
     void Load(const NJson::TJsonValue& node);
@@ -203,6 +208,7 @@ public:
     void PrintWaitTime(TStringBuilder& canvas, std::shared_ptr<TSingleMetric> metric, ui32 x, ui32 y, ui32 w, ui32 h, const TString& fillColor);
     void PrintDeriv(TStringBuilder& canvas, TMetricHistory& history, ui32 x, ui32 y, ui32 w, ui32 h, const TString& title, const TString& lineColor, const TString& fillColor = "");
     void PrintValues(TStringBuilder& canvas, std::shared_ptr<TSingleMetric> metric, ui32 x, ui32 y, ui32 w, ui32 h, const TString& title, const TString& lineColor, const TString& fillColor = "");
+    void PrintStageSummary(TStringBuilder& background, TStringBuilder&, ui32 y0, std::shared_ptr<TSingleMetric> metric, const TString& mediumColor, const TString& lightColor, const TString& textSum, const TString& tooltip);
     void PrintSvg(ui64 maxTime, ui32& offsetY, TStringBuilder& background, TStringBuilder& canvas);
     TString NodeType;
     std::vector<std::shared_ptr<TStage>> Stages;
@@ -216,6 +222,8 @@ public:
     std::shared_ptr<TSummaryMetric> IngressRows;
     std::shared_ptr<TSummaryMetric> SpillingComputeTime;
     std::shared_ptr<TSummaryMetric> SpillingComputeBytes;
+    std::shared_ptr<TSummaryMetric> SpillingChannelTime;
+    std::shared_ptr<TSummaryMetric> SpillingChannelBytes;
     std::vector<ui64> TotalCpuTimes;
     std::vector<ui64> TotalCpuValues;
     TMetricHistory TotalCpuTime;

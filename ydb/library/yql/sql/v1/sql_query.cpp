@@ -1542,6 +1542,162 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             AddStatementToBlocks(blocks, BuildDropObjectOperation(Ctx.Pos(), objectId, "RESOURCE_POOL_CLASSIFIER", false, {}, context));
             break;
         }
+        case TRule_sql_stmt_core::kAltSqlStmtCore55: {
+            // create_tier_stmt: CREATE (OR REPLACE)? TIER (IF NOT EXISTS)? object_ref
+            auto& node = core.GetAlt_sql_stmt_core55().GetRule_create_tier_stmt1();
+            TObjectOperatorContext context(Ctx.Scoped);
+            if (node.GetRule_object_ref5().HasBlock1()) {
+                if (!ClusterExpr(node.GetRule_object_ref5().GetBlock1().GetRule_cluster_expr1(),
+                    false, context.ServiceId, context.Cluster)) {
+                    return false;
+                }
+            }
+
+            bool replaceIfExists = false;
+            if (node.HasBlock2()) { // OR REPLACE
+                replaceIfExists = true;
+                Y_DEBUG_ABORT_UNLESS(
+                    node.GetBlock2().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_OR &&
+                    node.GetBlock2().GetToken2().GetId() == SQLv1LexerTokens::TOKEN_REPLACE
+                );
+            }
+
+            bool existingOk = false;
+            if (node.HasBlock4()) { // IF NOT EXISTS
+                existingOk = true;
+                Y_DEBUG_ABORT_UNLESS(
+                    node.GetBlock4().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_IF &&
+                    node.GetBlock4().GetToken2().GetId() == SQLv1LexerTokens::TOKEN_NOT &&
+                    node.GetBlock4().GetToken3().GetId() == SQLv1LexerTokens::TOKEN_EXISTS
+                );
+            }
+
+            const TString& objectId = Id(node.GetRule_object_ref5().GetRule_id_or_at2(), *this).second;
+            std::map<TString, TDeferredAtom> kv;
+            if (!ParseTierSettings(kv, node.GetRule_with_table_settings6())) {
+                return false;
+            }
+
+            AddStatementToBlocks(blocks, BuildCreateObjectOperation(Ctx.Pos(), BuildTablePath(Ctx.GetPrefixPath(context.ServiceId, context.Cluster), objectId), "TIER", existingOk, replaceIfExists, std::move(kv), context));
+            break;
+        }
+        case TRule_sql_stmt_core::kAltSqlStmtCore56: {
+            // drop_tier_stmt: DROP TIER (IF EXISTS)? object_ref;
+            auto& node = core.GetAlt_sql_stmt_core56().GetRule_drop_tier_stmt1();
+            TObjectOperatorContext context(Ctx.Scoped);
+            if (node.GetRule_object_ref4().HasBlock1()) {
+                if (!ClusterExpr(node.GetRule_object_ref4().GetBlock1().GetRule_cluster_expr1(),
+                    false, context.ServiceId, context.Cluster)) {
+                    return false;
+                }
+            }
+
+            bool missingOk = false;
+            if (node.HasBlock3()) { // IF EXISTS
+                missingOk = true;
+                Y_DEBUG_ABORT_UNLESS(
+                    node.GetBlock3().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_IF &&
+                    node.GetBlock3().GetToken2().GetId() == SQLv1LexerTokens::TOKEN_EXISTS
+                );
+            }
+
+            const TString& objectId = Id(node.GetRule_object_ref4().GetRule_id_or_at2(), *this).second;
+            AddStatementToBlocks(blocks, BuildDropObjectOperation(Ctx.Pos(), BuildTablePath(Ctx.GetPrefixPath(context.ServiceId, context.Cluster), objectId), "TIER", missingOk, {}, context));
+            break;
+        }
+        case TRule_sql_stmt_core::kAltSqlStmtCore57: {
+            // create_tiering_policy_stmt: CREATE (OR REPLACE)? TIERING POLICY (IF NOT EXISTS)? object_ref ON an_id TIERS tiering_rules
+            auto& node = core.GetAlt_sql_stmt_core57().GetRule_create_tiering_policy_stmt1();
+            TObjectOperatorContext context(Ctx.Scoped);
+            if (node.GetRule_object_ref6().HasBlock1()) {
+                if (!ClusterExpr(node.GetRule_object_ref6().GetBlock1().GetRule_cluster_expr1(),
+                    false, context.ServiceId, context.Cluster)) {
+                    return false;
+                }
+            }
+
+            bool replaceIfExists = false;
+            if (node.HasBlock2()) { // OR REPLACE
+                replaceIfExists = true;
+                Y_DEBUG_ABORT_UNLESS(
+                    node.GetBlock2().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_OR &&
+                    node.GetBlock2().GetToken2().GetId() == SQLv1LexerTokens::TOKEN_REPLACE
+                );
+            }
+
+            bool existingOk = false;
+            if (node.HasBlock5()) { // IF NOT EXISTS
+                existingOk = true;
+                Y_DEBUG_ABORT_UNLESS(
+                    node.GetBlock5().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_IF &&
+                    node.GetBlock5().GetToken2().GetId() == SQLv1LexerTokens::TOKEN_NOT &&
+                    node.GetBlock5().GetToken3().GetId() == SQLv1LexerTokens::TOKEN_EXISTS
+                );
+            }
+
+            const TString& objectId = Id(node.GetRule_object_ref6().GetRule_id_or_at2(), *this).second;
+
+            std::map<TString, TDeferredAtom> kv;
+            if (!ParseTieringPolicyDefaultColumn(kv, node.GetRule_an_id8())) {
+                return false;
+            }
+            if (!ParseTieringPolicyTiers(kv, node.GetRule_tiering_rules10())) {
+                return false;
+            }
+
+            AddStatementToBlocks(blocks, BuildCreateObjectOperation(Ctx.Pos(), BuildTablePath(Ctx.GetPrefixPath(context.ServiceId, context.Cluster), objectId), "TIERING_RULE", existingOk, replaceIfExists, std::move(kv), context));
+            break;
+        }
+        case TRule_sql_stmt_core::kAltSqlStmtCore58: {
+            // alter_tiering_policy_stmt: ALTER TIERING POLICY object_ref alter_tiering_policy_action (COMMA alter_tiering_policy_action)*
+            Ctx.BodyPart();
+            const auto& node = core.GetAlt_sql_stmt_core58().GetRule_alter_tiering_policy_stmt1();
+            TObjectOperatorContext context(Ctx.Scoped);
+            if (node.GetRule_object_ref4().HasBlock1()) {
+                if (!ClusterExpr(node.GetRule_object_ref4().GetBlock1().GetRule_cluster_expr1(),
+                    false, context.ServiceId, context.Cluster)) {
+                    return false;
+                }
+            }
+
+            const TString& objectId = Id(node.GetRule_object_ref4().GetRule_id_or_at2(), *this).second;
+            std::map<TString, TDeferredAtom> kv;
+            if (!ParseTieringPolicySettings(kv, node.GetRule_alter_tiering_policy_action5())) {
+                return false;
+            }
+            for (const auto& action : node.GetBlock6()) {
+                if (!ParseTieringPolicySettings(kv, action.GetRule_alter_tiering_policy_action2())) {
+                    return false;
+                }
+            }
+
+            AddStatementToBlocks(blocks, BuildAlterObjectOperation(Ctx.Pos(), objectId, "TIERING_RULE", std::move(kv), {}, context));
+            break;
+        }
+        case TRule_sql_stmt_core::kAltSqlStmtCore59: {
+            // drop_tiering_policy_stmt: DROP TIERING POLICY (IF EXISTS)? object_ref;
+            auto& node = core.GetAlt_sql_stmt_core59().GetRule_drop_tiering_policy_stmt1();
+            TObjectOperatorContext context(Ctx.Scoped);
+            if (node.GetRule_object_ref5().HasBlock1()) {
+                if (!ClusterExpr(node.GetRule_object_ref5().GetBlock1().GetRule_cluster_expr1(),
+                    false, context.ServiceId, context.Cluster)) {
+                    return false;
+                }
+            }
+
+            bool missingOk = false;
+            if (node.HasBlock4()) { // IF EXISTS
+                missingOk = true;
+                Y_DEBUG_ABORT_UNLESS(
+                    node.GetBlock4().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_IF &&
+                    node.GetBlock4().GetToken2().GetId() == SQLv1LexerTokens::TOKEN_EXISTS
+                );
+            }
+
+            const TString& objectId = Id(node.GetRule_object_ref5().GetRule_id_or_at2(), *this).second;
+            AddStatementToBlocks(blocks, BuildDropObjectOperation(Ctx.Pos(), BuildTablePath(Ctx.GetPrefixPath(context.ServiceId, context.Cluster), objectId), "TIERING_RULE", missingOk, {}, context));
+            break;
+        }
         case TRule_sql_stmt_core::ALT_NOT_SET:
             Ctx.IncrementMonCounter("sql_errors", "UnknownStatement" + internalStatementName);
             AltNotImplemented("sql_stmt_core", core);

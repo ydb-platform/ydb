@@ -174,6 +174,11 @@ bool NeedUseForAllStatements(const TRule_sql_stmt_core::AltCase& subquery) {
         case TRule_sql_stmt_core::kAltSqlStmtCore52: // create resource pool classifier
         case TRule_sql_stmt_core::kAltSqlStmtCore53: // alter resource pool classifier
         case TRule_sql_stmt_core::kAltSqlStmtCore54: // drop resource pool classifier
+        case TRule_sql_stmt_core::kAltSqlStmtCore55: // create tier
+        case TRule_sql_stmt_core::kAltSqlStmtCore56: // alter tier
+        case TRule_sql_stmt_core::kAltSqlStmtCore57: // drop tier
+        case TRule_sql_stmt_core::kAltSqlStmtCore58: // create tiering policy
+        case TRule_sql_stmt_core::kAltSqlStmtCore59: // alter tiering policy
             return false;
     }
 }

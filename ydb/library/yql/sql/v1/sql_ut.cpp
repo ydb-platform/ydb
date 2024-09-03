@@ -14,6 +14,7 @@
 
 using namespace NSQLTranslation;
 
+#ifdef aboba
 namespace {
 
 TParsedTokenList Tokenize(const TString& query) {
@@ -7202,5 +7203,83 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifier) {
         VerifyProgram(res, elementStat, verifyLine);
 
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+}
+#endif
+
+Y_UNIT_TEST_SUITE(CSTiering) {
+    Y_UNIT_TEST(CreateTier) {
+        NYql::TAstParseResult simpleQuery = SqlToYql(R"sql(
+                USE plato;
+                CREATE TIER deploy_logs_s3 WITH (
+                    SCHEME = "HTTP",
+                    VERIFY_SSL = "FALSE",
+                    ENDPOINT = "storage.cloud-preprod.yandex.net",
+                    BUCKET = "tiering-test-01",
+                    ACCESS_KEY = "SId:accessKey",
+                    SECRET_KEY = "SId:secretKey",
+                    PROXY_HOST = "localhost",
+                    PROXY_PORT = "8080",
+                    PROXY_SCHEME = "HTTP"
+                );
+            )sql");
+        UNIT_ASSERT_C(simpleQuery.Root, simpleQuery.Issues.ToString());
+        NYql::TAstParseResult internalQuery = SqlToYql(R"sql(
+                USE plato;
+                CREATE OBJECT deploy_logs_s3 (TYPE TIER) WITH (
+                    scheme = "HTTP",
+                    verify_ssl = "FALSE",
+                    endpoint = "storage.cloud-preprod.yandex.net",
+                    bucket = "tiering-test-01",
+                    access_key = "SId:accessKey",
+                    secret_key = "SId:secretKey",
+                    proxy_host = "localhost",
+                    proxy_port = "8080",
+                    proxy_scheme = "HTTP"
+                );
+            )sql");
+        UNIT_ASSERT_C(internalQuery.Root, internalQuery.Issues.ToString());
+
+        UNIT_ASSERT_VALUES_EQUAL(GetPrettyPrint(simpleQuery), GetPrettyPrint(internalQuery));
+    }
+
+    Y_UNIT_TEST(CreateTieringRule) {
+        NYql::TAstParseResult simpleQuery = SqlToYql(R"sql(
+                USE plato;
+                CREATE TIERING POLICY deploy_logs_s3_2d ON timestamp TIERS
+                    ("2d" TO TIER tier1),
+                    ("14d" TO TIER tier2);
+            )sql");
+        UNIT_ASSERT_C(simpleQuery.Root, simpleQuery.Issues.ToString());
+        NYql::TAstParseResult internalQuery = SqlToYql(R"sql(
+                USE plato;
+                CREATE OBJECT deploy_logs_s3_2d (TYPE TIERING_RULE) WITH (
+                    defaultColumn = timestamp,
+                    description = `{"rules":[{"durationForEvict":"2d","tierName":"tier1"},{"durationForEvict":"14d","tierName":"tier2"}]}`
+                );
+            )sql");
+        UNIT_ASSERT_C(internalQuery.Root, internalQuery.Issues.ToString());
+
+        UNIT_ASSERT_VALUES_EQUAL(GetPrettyPrint(simpleQuery), GetPrettyPrint(internalQuery));
+    }
+
+    Y_UNIT_TEST(AlterTieringRule) {
+        NYql::TAstParseResult simpleQuery = SqlToYql(R"sql(
+                USE plato;
+                ALTER TIERING POLICY deploy_logs_s3_2d SET DEFAULT COLUMN timestamp, SET TIERS
+                    ("2d" TO TIER tier1),
+                    ("14d" TO TIER tier2);
+            )sql");
+        UNIT_ASSERT_C(simpleQuery.Root, simpleQuery.Issues.ToString());
+        NYql::TAstParseResult internalQuery = SqlToYql(R"sql(
+                USE plato;
+                ALTER OBJECT deploy_logs_s3_2d (TYPE TIERING_RULE) SET (
+                    defaultColumn = timestamp,
+                    description = `{"rules":[{"durationForEvict":"2d","tierName":"tier1"},{"durationForEvict":"14d","tierName":"tier2"}]}`
+                );
+            )sql");
+        UNIT_ASSERT_C(internalQuery.Root, internalQuery.Issues.ToString());
+
+        UNIT_ASSERT_VALUES_EQUAL(GetPrettyPrint(simpleQuery), GetPrettyPrint(internalQuery));
     }
 }

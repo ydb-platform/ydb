@@ -5039,4 +5039,109 @@ bool TSqlTranslation::ParseResourcePoolClassifierSettings(std::map<TString, TDef
     }
 }
 
+bool TSqlTranslation::StoreTierSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value, std::map<TString, TDeferredAtom>& result) {
+    YQL_ENSURE(value);
+
+    const TString key = to_lower(id.Name);
+    if (result.find(key) != result.end()) {
+        Ctx.Error() << to_upper(key) << " duplicate keys";
+        return false;
+    }
+
+    if (!StoreString(*value, result[key], Ctx, to_upper(key))) {
+        return false;
+    }
+
+    return true;
+}
+
+bool TSqlTranslation::StoreTierSettingsEntry(const TRule_alter_table_setting_entry& entry, std::map<TString, TDeferredAtom>& result) {
+    // TODO: remove if unused
+    const TIdentifier id = IdEx(entry.GetRule_an_id1(), *this);
+    return StoreDataSourceSettingsEntry(id, &entry.GetRule_table_setting_value3(), result);
+}
+
+bool TSqlTranslation::ParseTierSettings(std::map<TString, TDeferredAtom>& result, const TRule_with_table_settings& settingsNode) {
+    const auto& firstEntry = settingsNode.GetRule_table_settings_entry3();
+    if (!StoreTierSettingsEntry(IdEx(firstEntry.GetRule_an_id1(), *this), &firstEntry.GetRule_table_setting_value3(),
+            result)) {
+        return false;
+    }
+    for (auto& block : settingsNode.GetBlock4()) {
+        const auto& entry = block.GetRule_table_settings_entry2();
+        if (!StoreTierSettingsEntry(IdEx(entry.GetRule_an_id1(), *this), &entry.GetRule_table_setting_value3(), result)) {
+            return false;
+        }
+    }
+    // TODO: Consider adding validation
+    return true;
+}
+
+bool TSqlTranslation::ParseTieringPolicyDefaultColumn(std::map<TString, TDeferredAtom>& result, const TRule_an_id& settingsNode) {
+    static const TString KeyDefaultColumn = "defaultColumn";
+
+    const TString defaultColumn = Id(settingsNode, *this);
+    result[KeyDefaultColumn] = TDeferredAtom(Ctx.Pos(), defaultColumn);
+
+    return true;
+}
+
+bool TSqlTranslation::StoreTieringRulesEntry(const TRule_tiering_rules_entry& entry, std::vector<TTieringRule>& result) {
+    const TString& durationForEvict = Token(entry.GetRule_tiering_duration_for_evict2().GetToken1());
+    const auto unescaped = StringContent(Ctx, Ctx.Pos(), durationForEvict);
+    if (!unescaped) {
+        return false;
+    }
+    TString tierName = Id(entry.GetRule_an_id5(), *this);
+    result.emplace_back(std::move(tierName), std::move(unescaped->Content));
+    return true;
+}
+
+bool TSqlTranslation::ParseTieringPolicyTiers(std::map<TString, TDeferredAtom>& result, const TRule_tiering_rules& settingsNode) {
+    static const TString KeyDescription = "description";
+
+    const auto& firstEntry = settingsNode.GetRule_tiering_rules_entry1();
+
+    std::vector<TTieringRule> tieringRules;
+    if (!StoreTieringRulesEntry(firstEntry, tieringRules)) {
+        return false;
+    }
+    for (auto& block : settingsNode.GetBlock2()) {
+        const auto& entry = block.GetRule_tiering_rules_entry2();
+        if (!StoreTieringRulesEntry(entry, tieringRules)) {
+            return false;
+        }
+    }
+    
+    // TODO: consider avoiding serialization+deserialization (if possible with low effort)
+    const TString serializedConfig = SerializeTieringRules(tieringRules);
+    result[KeyDescription] = TDeferredAtom(Ctx.Pos(), serializedConfig);
+
+    // TODO: Consider adding validation
+
+    return true;
+}
+
+bool TSqlTranslation::ParseTieringPolicySettings(std::map<TString, TDeferredAtom>& result, const TRule_alter_tiering_policy_action& alterAction) {
+    bool StoreTieringRulesEntry(const TRule_tiering_rules_entry& entry, std::vector<TTieringRule>& result);
+    switch (alterAction.Alt_case()) {
+        case TRule_alter_tiering_policy_action::kAltAlterTieringPolicyAction1: {
+            const auto& defaultColumnNode = alterAction.GetAlt_alter_tiering_policy_action1().GetRule_an_id4();
+            if (!ParseTieringPolicyDefaultColumn(result, defaultColumnNode)) {
+                return false;
+            }
+            return true;
+        }
+        case TRule_alter_tiering_policy_action::kAltAlterTieringPolicyAction2: {
+            const auto& tiersNode = alterAction.GetAlt_alter_tiering_policy_action2().GetRule_tiering_rules3();
+            if (!ParseTieringPolicyTiers(result, tiersNode)) {
+                return false;
+            }
+            return true;
+        }
+        case TRule_alter_tiering_policy_action::ALT_NOT_SET:
+            Y_ABORT("You should change implementation according to grammar changes");
+    }
+}
+
 } // namespace NSQLTranslationV1

@@ -46,6 +46,7 @@ SRCS(
     sql_values.cpp
     query.cpp
     object_processing.cpp
+    tiering.cpp
 )
 
 YQL_LAST_ABI_VERSION()

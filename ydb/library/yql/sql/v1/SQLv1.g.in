@@ -73,6 +73,11 @@ sql_stmt_core:
   | create_resource_pool_classifier_stmt
   | alter_resource_pool_classifier_stmt
   | drop_resource_pool_classifier_stmt
+  | create_tier_stmt
+  | drop_tier_stmt
+  | create_tiering_policy_stmt
+  | alter_tiering_policy_stmt
+  | drop_tiering_policy_stmt
 ;
 
 expr:
@@ -860,6 +865,32 @@ alter_resource_pool_classifier_action:
 
 drop_resource_pool_classifier_stmt: DROP RESOURCE POOL CLASSIFIER object_ref;
 
+create_tier_stmt: CREATE (OR REPLACE)? TIER (IF NOT EXISTS)? object_ref
+    with_table_settings
+;
+
+drop_tier_stmt: DROP TIER (IF EXISTS)? object_ref;
+
+create_tiering_policy_stmt: CREATE (OR REPLACE)? TIERING POLICY (IF NOT EXISTS)? object_ref
+    ON an_id
+    TIERS tiering_rules
+;
+
+alter_tiering_policy_stmt: ALTER TIERING POLICY object_ref
+    alter_tiering_policy_action (COMMA alter_tiering_policy_action)*
+;
+alter_tiering_policy_action:
+    SET DEFAULT COLUMN an_id
+  | SET TIERS tiering_rules
+;
+
+tiering_rules: tiering_rules_entry (COMMA tiering_rules_entry)*;
+tiering_rules_entry: LPAREN tiering_duration_for_evict TO TIER an_id RPAREN;
+// TODO: support Interval("...") notation via expr
+tiering_duration_for_evict: STRING_VALUE;
+
+drop_tiering_policy_stmt: DROP TIERING POLICY (IF EXISTS)? object_ref;
+
 create_replication_stmt: CREATE ASYNC REPLICATION object_ref
     FOR replication_target (COMMA replication_target)*
     WITH LPAREN replication_settings RPAREN
@@ -1366,6 +1397,7 @@ keyword_as_compat:
   | PER
   | PERMUTE
   | PLAN
+  | POLICY
   | POOL
   | PRAGMA
   | PRECEDING
@@ -1415,6 +1447,9 @@ keyword_as_compat:
   | TEMP
   | TEMPORARY
   | THEN
+  | TIER
+  | TIERING
+  | TIERS
   | TIES
   | TO
   | TOPIC
@@ -1581,6 +1616,7 @@ keyword_compat: (
   | PER
   | PERMUTE
   | PLAN
+  | POLICY
   | POOL
   | PRAGMA
   | PRECEDING
@@ -1630,6 +1666,9 @@ keyword_compat: (
   | TEMP
   | TEMPORARY
   | THEN
+  | TIER
+  | TIERING
+  | TIERS
   | TIES
   | TO
   | TOPIC
@@ -1933,6 +1972,7 @@ PATTERN: P A T T E R N;
 PER: P E R;
 PERMUTE: P E R M U T E;
 PLAN: P L A N;
+POLICY: P O L I C Y;
 POOL: P O O L;
 PRAGMA: P R A G M A;
 PRECEDING: P R E C E D I N G;
@@ -1998,6 +2038,9 @@ TAGGED: T A G G E D;
 TEMP: T E M P;
 TEMPORARY: T E M P O R A R Y;
 THEN: T H E N;
+TIER: T I E R;
+TIERING: T I E R I N G;
+TIERS: T I E R S;
 TIES: T I E S;
 TO: T O;
 TOPIC: T O P I C;

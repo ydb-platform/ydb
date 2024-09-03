@@ -128,10 +128,14 @@ void FillGenericClusterConfigBase(
         case NYql::NConnector::NApi::CLICKHOUSE:
             clusterCfg.SetProtocol(common.GetUseNativeProtocolForClickHouse() ? NYql::NConnector::NApi::EProtocol::NATIVE : NYql::NConnector::NApi::EProtocol::HTTP);
             break;
-        case NYql::NConnector::NApi::POSTGRESQL:
+        case NYql::NConnector::NApi::GREENPLUM:
             clusterCfg.SetProtocol(NYql::NConnector::NApi::EProtocol::NATIVE);
             break;
-        case NYql::NConnector::NApi::GREENPLUM:
+        case NYql::NConnector::NApi::MYSQL:
+            clusterCfg.SetProtocol(NYql::NConnector::NApi::EProtocol::NATIVE);
+            break;
+        case NYql::NConnector::NApi::POSTGRESQL:
+            clusterCfg.SetProtocol(NYql::NConnector::NApi::EProtocol::NATIVE);
             break;
         default:
             ythrow yexception() << "Unexpected data source kind: '" 

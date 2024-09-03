@@ -52,10 +52,22 @@ public:
     }
 
     bool IsGrowRequired(ui64 size, ui64 capacity) const {
+        if constexpr(GrowLessOnLowMemory) {
+            if (IsLowMemoryCallback()) {
+                return IsGrowRequiredLowMemory(size, capacity);
+            }
+        }
+        
         return size * 2 > capacity;
     }
 
-    ui64 GetNewCapacity(ui64 capacity) const {
+    ui64 GetNextCapacity(ui64 capacity) const {
+        if constexpr(GrowLessOnLowMemory) {
+            if (IsLowMemoryCallback()) {
+                return GetNextCapacityLowMemory(capacity);
+            }
+        }
+
         ui64 growFactor;
         if (capacity < 100'000) {
             growFactor = 8;
@@ -65,6 +77,15 @@ public:
             growFactor = 2;
         }
         return capacity * growFactor;
+    }
+
+private:
+    bool IsGrowRequiredLowMemory(ui64 size, ui64 capacity) const {
+        return size > capacity / 4 * 3;
+    }
+
+    bool GetNextCapacityLowMemory(ui64 capacity) const {
+        return capacity + capacity / 4;
     }
 
 private:
@@ -417,8 +438,8 @@ private:
     TRobinHoodGrowManager<GrowLessOnLowMemory> GrowManager;
 };
 
-template <typename TKey, typename TEqual = std::equal_to<TKey>, typename THash = std::hash<TKey>, typename TAllocator = std::allocator<char>, typename TSettings = TRobinHoodDefaultSettings<TKey>>
-class TRobinHoodHashMap : public TRobinHoodHashBase<TKey, TEqual, THash, TAllocator, TRobinHoodHashMap<TKey, TEqual, THash, TAllocator, TSettings>, TSettings::CacheHash> {
+template <typename TKey, typename TEqual = std::equal_to<TKey>, typename THash = std::hash<TKey>, typename TAllocator = std::allocator<char>, typename TSettings = TRobinHoodDefaultSettings<TKey>, bool GrowLessOnLowMemory = false>
+class TRobinHoodHashMap : public TRobinHoodHashBase<TKey, TEqual, THash, TAllocator, TRobinHoodHashMap<TKey, TEqual, THash, TAllocator, TSettings>, TSettings::CacheHash, GrowLessOnLowMemory> {
 public:
     using TSelf = TRobinHoodHashMap<TKey, TEqual, THash, TAllocator, TSettings>;
     using TBase = TRobinHoodHashBase<TKey, TEqual, THash, TAllocator, TSelf, TSettings::CacheHash>;
@@ -484,8 +505,8 @@ private:
     TVec TmpPayload, TmpPayload2;
 };
 
-template <typename TKey, typename TPayload, typename TEqual = std::equal_to<TKey>, typename THash = std::hash<TKey>, typename TAllocator = std::allocator<char>, typename TSettings = TRobinHoodDefaultSettings<TKey>>
-class TRobinHoodHashFixedMap : public TRobinHoodHashBase<TKey, TEqual, THash, TAllocator, TRobinHoodHashFixedMap<TKey, TPayload, TEqual, THash, TAllocator, TSettings>, TSettings::CacheHash> {
+template <typename TKey, typename TPayload, typename TEqual = std::equal_to<TKey>, typename THash = std::hash<TKey>, typename TAllocator = std::allocator<char>, typename TSettings = TRobinHoodDefaultSettings<TKey>, bool GrowLessOnLowMemory = false>
+class TRobinHoodHashFixedMap : public TRobinHoodHashBase<TKey, TEqual, THash, TAllocator, TRobinHoodHashFixedMap<TKey, TPayload, TEqual, THash, TAllocator, TSettings>, TSettings::CacheHash, GrowLessOnLowMemory> {
 public:
     using TSelf = TRobinHoodHashFixedMap<TKey, TPayload, TEqual, THash, TAllocator, TSettings>;
     using TBase = TRobinHoodHashBase<TKey, TEqual, THash, TAllocator, TSelf, TSettings::CacheHash>;
@@ -533,8 +554,8 @@ public:
     }
 };
 
-template <typename TKey, typename TEqual = std::equal_to<TKey>, typename THash = std::hash<TKey>, typename TAllocator = std::allocator<char>, typename TSettings = TRobinHoodDefaultSettings<TKey>>
-class TRobinHoodHashSet : public TRobinHoodHashBase<TKey, TEqual, THash, TAllocator, TRobinHoodHashSet<TKey, TEqual, THash, TAllocator, TSettings>, TSettings::CacheHash> {
+template <typename TKey, typename TEqual = std::equal_to<TKey>, typename THash = std::hash<TKey>, typename TAllocator = std::allocator<char>, typename TSettings = TRobinHoodDefaultSettings<TKey>, bool GrowLessOnLowMemory = false>
+class TRobinHoodHashSet : public TRobinHoodHashBase<TKey, TEqual, THash, TAllocator, TRobinHoodHashSet<TKey, TEqual, THash, TAllocator, TSettings>, TSettings::CacheHash, GrowLessOnLowMemory> {
 public:
     using TSelf = TRobinHoodHashSet<TKey, TEqual, THash, TAllocator, TSettings>;
     using TBase = TRobinHoodHashBase<TKey, TEqual, THash, TAllocator, TSelf, TSettings::CacheHash>;

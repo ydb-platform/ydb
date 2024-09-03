@@ -52,7 +52,7 @@ struct TCacheCacheConfig : public TAtomicRefCount<TCacheCacheConfig> {
 
 template <typename TItem
         , typename TWeight
-        , typename TGeneration
+        , typename TCacheFlags
     >
 class TCacheCache : public ICacheCache<TItem> {
 public:
@@ -246,7 +246,7 @@ private:
     ui64 WarmWeight;
 
     TWeight WeightOp;
-    TGeneration GenerationOp;
+    TCacheFlags GenerationOp;
 };
 
 }

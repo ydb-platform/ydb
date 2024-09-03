@@ -124,7 +124,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             State = PageStateLoaded;
         }
 
-        void VerifyNoCacheFlags() {
+        void EnsureNoCacheFlags() {
             Y_VERIFY_S(CacheFlags == 0, "Unexpected " << CacheFlags << " page cache flags");
         }
 
@@ -138,8 +138,9 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             static ui32 Get(TPage *x) {
                 return x->CacheFlags;
             }
-            static void Set(TPage *x, ui32 gen) {
-                x->CacheFlags = gen;
+            static void Set(TPage *x, ui32 flags) {
+                Y_ABORT_UNLESS(flags < Max<ui16>());
+                x->CacheFlags = flags;
             }
         };
     };
@@ -232,7 +233,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         // now it will be fixed by ActualizeCacheSizeLimit call
 
         switch (Config->ReplacementPolicy) {
-            case NKikimrSharedCache::TSharedCacheConfig_TReplacementPolicy_ThreeLeveledLRU:
+            case NKikimrSharedCache::ThreeLeveledLRU:
             default: {
                 TCacheCacheConfig cacheCacheConfig(1, Config->Counters->FreshBytes, Config->Counters->StagingBytes, Config->Counters->WarmBytes);
                 return MakeHolder<TCacheCache<TPage, TPage::TWeight, TPage::TCacheFlags>>(std::move(cacheCacheConfig));
@@ -308,23 +309,25 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         if (auto logl = Logger->Log(ELnLev::Info)) {
             logl << "Replacement policy switch from " << Config->ReplacementPolicy << " to " << msg->ReplacementPolicy;
         }
-
         Config->Counters->ReplacementPolicy(Config->ReplacementPolicy)->Set(0);
+        
         Config->ReplacementPolicy = msg->ReplacementPolicy;
-        Config->Counters->ReplacementPolicy(Config->ReplacementPolicy)->Set(1);
-
         auto oldCache = CreateCache();
         Cache.Swap(oldCache);
         ActualizeCacheSizeLimit();
 
         while (auto page = oldCache->EvictNext()) {
-            page->VerifyNoCacheFlags();
+            page->EnsureNoCacheFlags();
             
-            // touch each page multiple times to make it hot
+            // touch each page multiple times to make it warm
             for (ui32 touchTimes = 0; touchTimes < 2; touchTimes++) {
                 Evict(Cache->Touch(page));
             }
         }
+
+        DoGC();
+
+        Config->Counters->ReplacementPolicy(Config->ReplacementPolicy)->Set(1);
     }
 
     void Registered(TActorSystem *sys, const TActorId &owner)
@@ -977,7 +980,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             auto* page = kv.second.Get();
 
             Cache->Erase(page);
-            page->VerifyNoCacheFlags();
+            page->EnsureNoCacheFlags();
 
             if (page->State == PageStateLoaded) {
                 page->State = PageStateEvicted;
@@ -1063,7 +1066,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         while (!pages.Empty()) {
             TPage* page = pages.PopFront();
 
-            page->VerifyNoCacheFlags();
+            page->EnsureNoCacheFlags();
 
             Y_VERIFY_S(page->State == PageStateLoaded, "unexpected " << page->State << " page state");
             page->State = PageStateEvicted;
@@ -1077,7 +1080,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     }
 
     void EvictNow(TPage* page, THashSet<TCollection*>& recheck) {
-        page->VerifyNoCacheFlags();
+        page->EnsureNoCacheFlags();
 
         Y_VERIFY_S(page->State == PageStateLoaded, "unexpected " << page->State << " page state");
         page->State = PageStateEvicted;

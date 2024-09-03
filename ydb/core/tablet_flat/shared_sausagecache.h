@@ -22,7 +22,7 @@ struct TEvSharedPageCache {
 
 struct TSharedPageCacheCounters final : public TAtomicRefCount<TSharedPageCacheCounters> {
     using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
-    using TReplacementPolicy = NKikimrSharedCache::TSharedCacheConfig::TReplacementPolicy;
+    using TReplacementPolicy = NKikimrSharedCache::TReplacementPolicy;
 
     const TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
 
@@ -53,7 +53,7 @@ struct TSharedPageCacheCounters final : public TAtomicRefCount<TSharedPageCacheC
 
 // TODO: use protobuf configs
 struct TSharedPageCacheConfig {
-    using TReplacementPolicy = NKikimrSharedCache::TSharedCacheConfig::TReplacementPolicy;
+    using TReplacementPolicy = NKikimrSharedCache::TReplacementPolicy;
 
     std::optional<ui64> LimitBytes;
     ui64 TotalScanQueueInFlyLimit = 512_MB;
@@ -61,7 +61,7 @@ struct TSharedPageCacheConfig {
     TIntrusivePtr<TSharedPageCacheCounters> Counters;
     ui32 ActivePagesReservationPercent = 50;
 
-    TReplacementPolicy ReplacementPolicy = TReplacementPolicy::TSharedCacheConfig_TReplacementPolicy_ThreeLeveledLRU;
+    TReplacementPolicy ReplacementPolicy = TReplacementPolicy::ThreeLeveledLRU;
 };
 
 IActor* CreateSharedPageCache(THolder<TSharedPageCacheConfig> config);

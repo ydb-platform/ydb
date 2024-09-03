@@ -21,7 +21,7 @@ using NProfiling::TWallTimer;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const NLogging::TLogger Logger("TableClientAdapters");
+YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "TableClientAdapters");
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -237,7 +237,7 @@ void PipeReaderToWriterByBatches(
     } catch (const std::exception& ex) {
         YT_LOG_ERROR(ex, "Failed to transfer batches from reader to writer");
 
-        THROW_ERROR_EXCEPTION(ex);
+        throw;
     }
 }
 

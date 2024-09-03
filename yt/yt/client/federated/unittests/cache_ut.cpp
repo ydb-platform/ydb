@@ -5,8 +5,6 @@
 
 #include <yt/yt/core/misc/error.h>
 
-#include <yt/yt_proto/yt/client/cache/proto/config.pb.h>
-
 #include <library/cpp/testing/gtest/gtest.h>
 
 #include <util/system/env.h>
@@ -14,6 +12,7 @@
 namespace NYT::NClient::NFederated {
 
 using namespace NYT::NApi;
+using namespace NYT::NClient::NCache;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -22,7 +21,7 @@ TEST(TFederatedClientsCacheTest, GetSameClient)
     SetEnv("YT_TOKEN", "AAAA-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
     auto ytClientsCache = CreateFederatedClientsCache(
         New<TConnectionConfig>(),
-        TClustersConfig{},
+        New<TClientsCacheConfig>(),
         NApi::GetClientOpsFromEnvStatic());
 
     auto client1 = ytClientsCache->GetClient("localhost");
@@ -41,7 +40,7 @@ TEST(TFederatedClientsCacheTest, GetFederatedWithEmptyConfig)
     SetEnv("YT_TOKEN", "AAAA-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
     auto ytClientsCache = CreateFederatedClientsCache(
         New<TConnectionConfig>(),
-        TClustersConfig{},
+        New<TClientsCacheConfig>(),
         NApi::GetClientOpsFromEnvStatic());
 
     EXPECT_THROW(
@@ -61,7 +60,7 @@ TEST(TFederatedClientsCacheTest, ConfigurationAndClusterUrlMismatch1)
 
     auto ytClientsCache = CreateFederatedClientsCache(
         connectionConfig,
-        TClustersConfig{},
+        New<TClientsCacheConfig>(),
         NApi::GetClientOpsFromEnvStatic());
 
     EXPECT_THROW(
@@ -83,7 +82,7 @@ TEST(TFederatedClientsCacheTest, ConfigurationAndClusterUrlMismatch2)
 
     auto ytClientsCache = CreateFederatedClientsCache(
         connectionConfig,
-        TClustersConfig{},
+        New<TClientsCacheConfig>(),
         NApi::GetClientOpsFromEnvStatic());
 
     EXPECT_THROW(
@@ -103,7 +102,7 @@ TEST(TFederatedClientsCacheTest, ConfigurationMissingCluster)
 
     auto ytClientsCache = CreateFederatedClientsCache(
         connectionConfig,
-        TClustersConfig{},
+        New<TClientsCacheConfig>(),
         NApi::GetClientOpsFromEnvStatic());
 
     EXPECT_THROW(

@@ -345,7 +345,7 @@ public:
             .EndMap()))
     { }
 
-    const TString& GetEndpointDescription() const override
+    const std::string& GetEndpointDescription() const override
     {
         return EndpointDescription_;
     }
@@ -403,7 +403,7 @@ private:
 
     const THedgingChannelOptions Options_;
 
-    const TString EndpointDescription_;
+    const std::string EndpointDescription_;
     const IAttributeDictionaryPtr EndpointAttributes_;
 };
 

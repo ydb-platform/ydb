@@ -10,6 +10,8 @@
 
 #include <yt/yt/core/yson/token_writer.h>
 
+#include <library/cpp/yt/yson_string/string.h>
+
 #include <library/cpp/yt/misc/wrapper_traits.h>
 
 namespace NYT::NYTree {
@@ -221,6 +223,24 @@ void LoadFromSource(
         Deserialize(parameter, TTraits::AsNode(source));
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Error reading parameter %v", path)
+            << ex;
+    }
+}
+
+// TYsonString
+template <CYsonStructSource TSource>
+void LoadFromSource(
+    ::NYT::NYson::TYsonString& parameter,
+    TSource source,
+    const NYPath::TYPath& path,
+    std::optional<EUnrecognizedStrategy> /*ignored*/)
+{
+    using TTraits = TYsonSourceTraits<TSource>;
+
+    try {
+        parameter = NYson::ConvertToYsonString(TTraits::AsNode(source));
+    } catch (const std::exception& ex) {
+        THROW_ERROR_EXCEPTION("Error loading parameter %v", path)
             << ex;
     }
 }

@@ -2467,10 +2467,14 @@ message TReqGetJobStderr
         string operation_alias = 3;
     }
     required NYT.NProto.TGuid job_id = 2;
+    optional int64 limit = 4;
+    optional int64 offset = 5;
 }
 
 message TRspGetJobStderr
 {
+    optional int64 end_offset = 1;
+    optional int64 total_size = 2;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

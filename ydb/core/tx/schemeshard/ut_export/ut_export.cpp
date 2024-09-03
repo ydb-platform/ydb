@@ -150,18 +150,6 @@ namespace {
         TestGetExport(runtime, schemeshardId, exportId, dbName, Ydb::StatusIds::NOT_FOUND);
     }
 
-    std::string FindAuditLine(const std::vector<std::string>& auditLines, const std::string& substr) {
-        Cerr << "AUDIT LOG buffer(" << auditLines.size() << "):" << Endl;
-        for (auto i : auditLines) {
-            Cerr << "    " << i << Endl;
-        }
-        auto found = std::find_if(auditLines.begin(), auditLines.end(), [&](auto i) { return i.contains(substr); });
-        UNIT_ASSERT_C(found != auditLines.end(), "No audit record with substring: '" + substr + "'");
-        auto line = *found;
-        Cerr << "AUDIT LOG checked line:" << Endl << "    " << line << Endl;
-        return line;
-    }
-
     using TDelayFunc = std::function<bool(TAutoPtr<IEventHandle>&)>;
 
     void Cancel(const TVector<TString>& tables, const TString& request, TDelayFunc delayFunc) {

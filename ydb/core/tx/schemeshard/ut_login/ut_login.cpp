@@ -81,10 +81,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         }
         UNIT_ASSERT_VALUES_EQUAL(lines.size(), 3);   // +user login
 
-        Cerr << "auditlog lines:\n" << JoinSeq('\n', lines) << Endl;
-        auto last = lines[lines.size() - 1];
-        Cerr << "auditlog last line:\n" << last << Endl;
-
+        auto last = FindAuditLine(lines, "operation=LOGIN");
         UNIT_ASSERT_STRING_CONTAINS(last, "component=schemeshard");
         UNIT_ASSERT_STRING_CONTAINS(last, "remote_address=");  // can't check the value
         UNIT_ASSERT_STRING_CONTAINS(last, "database=/MyRoot");
@@ -115,10 +112,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         }
         UNIT_ASSERT_VALUES_EQUAL(lines.size(), 3);   // +user login
 
-        Cerr << "auditlog lines:\n" << JoinSeq('\n', lines) << Endl;
-        auto last = lines[lines.size() - 1];
-        Cerr << "auditlog last line:\n" << last << Endl;
-
+        auto last = FindAuditLine(lines, "operation=LOGIN");
         UNIT_ASSERT_STRING_CONTAINS(last, "component=schemeshard");
         UNIT_ASSERT_STRING_CONTAINS(last, "remote_address=");  // can't check the value
         UNIT_ASSERT_STRING_CONTAINS(last, "database=/MyRoot");

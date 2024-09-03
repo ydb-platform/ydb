@@ -11,4 +11,6 @@ using namespace NKikimr;
 
 NAudit::TAuditLogBackends CreateTestAuditLogBackends(std::vector<std::string>& lineBuffer);
 
+std::string FindAuditLine(const std::vector<std::string>& auditLines, const std::string& substr);
+
 }  // namespace NSchemeShardUT_Private

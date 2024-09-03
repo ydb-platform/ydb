@@ -19,7 +19,9 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
                     TPDiskCategory(NPDisk::DEVICE_TYPE_ROT, 0).GetRaw());
         const TIntrusivePtr<::NMonitoring::TDynamicCounters> counters(new ::NMonitoring::TDynamicCounters);
 
-        THolder<NPDisk::IPDisk> pDisk = MakeHolder<NPDisk::TPDisk>(std::make_shared<NPDisk::TPDiskCtx>(), cfg, counters);
+        auto pCtx = std::make_shared<NPDisk::TPDiskCtx>();
+        pCtx->PDiskId = cfg->PDiskId;
+        THolder<NPDisk::IPDisk> pDisk = MakeHolder<NPDisk::TPDisk>(pCtx, cfg, counters);
         pDisk->Wakeup();
     }
 

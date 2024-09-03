@@ -4408,7 +4408,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         { // disabled
             auto query = R"(
                 --!syntax_v1
-                ALTER TABLE `/Root/table_tap` ADD CHANGEFEED `feed_1` WITH (
+                ALTER TABLE `/Root/table_tap` ADD CHANGEFEED `feed_2` WITH (
                     MODE = 'KEYS_ONLY', FORMAT = 'JSON', TOPIC_AUTO_PARTITIONING='DISABLED'
                 );
             )";

@@ -486,6 +486,20 @@ private:
             case NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED: {
                 YQL_ENSURE(false);
             }
+            case NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN: {
+                LOG_D("Broken locks: " << res->Record.DebugString());
+                YQL_ENSURE(shardState->State == TShardState::EState::Preparing);
+                Counters->TxProxyMon->TxResultAborted->Inc();
+                LocksBroken = true;
+
+                if (!res->Record.GetTxLocks().empty()) {
+                    ResponseEv->BrokenLockPathId = NYql::TKikimrPathId(
+                        res->Record.GetTxLocks(0).GetSchemeShard(),
+                        res->Record.GetTxLocks(0).GetPathId());
+                    return ReplyErrorAndDie(Ydb::StatusIds::ABORTED, {});
+                }
+                return CheckPrepareCompleted();
+            }
             default:
             {
                 return ShardError(res->Record);
@@ -833,6 +847,18 @@ private:
         }
     }
 
+    TMaybe<TString> TryGetLocksBrokenTableName(const NKikimr::NEvents::TDataEvents::TEvWriteResult& result) {
+        if (!result.Record.GetTxLocks().empty()) {
+            auto& lock = result.Record.GetTxLocks(0);
+            auto tableId = TTableId(lock.GetSchemeShard(), lock.GetPathId());
+            auto it = FindIf(TasksGraph.GetStagesInfo(), [&tableId](const auto& x){ return x.second.Meta.TableId.HasSamePath(tableId); });
+            if (it != TasksGraph.GetStagesInfo().end()) {
+                return it->second.Meta.TableConstInfo->Path;
+            }
+        }
+        return Nothing();
+    }
+
     void ShardError(const NKikimrDataEvents::TEvWriteResult& result) {
         NYql::TIssues issues;
         NYql::IssuesFromMessage(result.GetIssues(), issues);
@@ -923,6 +949,7 @@ private:
     }
 
     void ExecutePlanned() {
+        YQL_ENSURE(!LocksBroken);
         YQL_ENSURE(TxCoordinator);
         auto ev = MakeHolder<TEvTxProxy::TEvProposeTransaction>();
         ev->Record.SetCoordinatorID(TxCoordinator);

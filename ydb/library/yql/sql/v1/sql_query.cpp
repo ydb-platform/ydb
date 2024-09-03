@@ -1579,7 +1579,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 return false;
             }
 
-            AddStatementToBlocks(blocks, BuildCreateObjectOperation(Ctx.Pos(), BuildTablePath(Ctx.GetPrefixPath(context.ServiceId, context.Cluster), objectId), "TIER", existingOk, replaceIfExists, std::move(kv), context));
+            AddStatementToBlocks(blocks, BuildCreateObjectOperation(Ctx.Pos(), objectId, "TIER", existingOk, replaceIfExists, std::move(kv), context));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore56: {
@@ -1646,7 +1646,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 return false;
             }
 
-            AddStatementToBlocks(blocks, BuildCreateObjectOperation(Ctx.Pos(), BuildTablePath(Ctx.GetPrefixPath(context.ServiceId, context.Cluster), objectId), "TIERING_RULE", existingOk, replaceIfExists, std::move(kv), context));
+            AddStatementToBlocks(blocks, BuildCreateObjectOperation(Ctx.Pos(), objectId, "TIERING_RULE", existingOk, replaceIfExists, std::move(kv), context));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore58: {

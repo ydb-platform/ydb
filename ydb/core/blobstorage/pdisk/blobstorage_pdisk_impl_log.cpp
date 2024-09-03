@@ -483,7 +483,7 @@ void TPDisk::PrintChunksDebugInfo() {
         }
 
         TStringStream str;
-        str << "PDiskId# " << PCtx->PDiskId << " PrintChunksDebugInfo; ";
+        str << "PrintChunksDebugInfo; ";
         for (auto& [owner, chunks] : ownerToChunks) {
             std::sort(chunks.begin(), chunks.end());
             str << " Owner# " << owner;

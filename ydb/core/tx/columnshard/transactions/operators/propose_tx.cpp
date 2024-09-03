@@ -5,7 +5,7 @@ namespace NKikimr::NColumnShard {
 void IProposeTxOperator::DoSendReply(TColumnShard& owner, const TActorContext& ctx) {
     AFL_VERIFY(owner.CurrentSchemeShardId);
     ctx.Send(MakePipePerNodeCacheID(false),
-        new TEvPipeCache::TEvForward(BuildProposeResultEvent().release(), (ui64)owner.CurrentSchemeShardId, false));
+        new TEvPipeCache::TEvForward(BuildProposeResultEvent(owner).release(), (ui64)owner.CurrentSchemeShardId, false));
 }
 
 std::unique_ptr<NKikimr::TEvColumnShard::TEvProposeTransactionResult> IProposeTxOperator::BuildProposeResultEvent(const TColumnShard& owner) const {

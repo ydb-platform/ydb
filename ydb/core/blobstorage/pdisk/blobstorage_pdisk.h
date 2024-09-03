@@ -1558,11 +1558,17 @@ struct TEvWriteMetadataResult : TEventLocal<TEvWriteMetadataResult, TEvBlobStora
 };
 
 
+/*
+ * One common context in the PDisk's world.
+ * It should only contain things that are used in each of the PDisk's component.
+ * Since it is used from multiple threads it's build once
+ * in TPDiskActor::Boorstrap and never changed
+ */
 struct TPDiskCtx {
     TActorSystem * const ActorSystem = nullptr;
     const ui32 PDiskId = 0;
     const TActorId PDiskActor; 
-    // TPDiskMon *Mon = nullptr; TODO implement it
+    // TPDiskMon * const Mon = nullptr; TODO implement it
 
     TPDiskCtx() = default;
 

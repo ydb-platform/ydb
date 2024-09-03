@@ -3,6 +3,7 @@
 #include "transactions/tx_finish_async.h"
 
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
+#include <ydb/core/tx/columnshard/subscriber/events/transaction_completed/event.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -125,7 +126,7 @@ TTxController::TTxInfo TTxController::RegisterTxWithDeadline(const std::shared_p
     auto& txInfo = txOperator->MutableTxInfo();
     txInfo.MinStep = GetAllowedStep();
     txInfo.MaxStep = txInfo.MinStep + MaxCommitTxDelay.MilliSeconds();
-
+    
     AFL_VERIFY(Operators.emplace(txOperator->GetTxId(), txOperator).second);
 
     Schema::SaveTxInfo(db, txInfo, txBody);
@@ -142,7 +143,7 @@ bool TTxController::AbortTx(const TPlanQueueItem planQueueItem, NTabletFlatExecu
     opIt->second->CompleteOnAbort(Owner, NActors::TActivationContext::AsActorContext());
     Counters.OnAbortTx(opIt->second->GetOpType());
 
-    AFL_VERIFY(Operators.erase(planQueueItem.TxId));
+    PassAwayTx(planQueueItem.TxId);
     AFL_VERIFY(DeadlineQueue.erase(planQueueItem));
     NIceDb::TNiceDb db(txc.DB);
     Schema::EraseTxInfo(db, planQueueItem.TxId);
@@ -163,7 +164,7 @@ bool TTxController::CompleteOnCancel(const ui64 txId, const TActorContext& ctx) 
     if (opIt->second->GetTxInfo().MaxStep != Max<ui64>()) {
         DeadlineQueue.erase(TPlanQueueItem(opIt->second->GetTxInfo().MaxStep, txId));
     }
-    Operators.erase(txId);
+    PassAwayTx(txId);
     return true;
 }
 
@@ -214,8 +215,26 @@ void TTxController::ProgressOnExecute(const ui64 txId, NTabletFlatExecutor::TTra
     Schema::EraseTxInfo(db, txId);
 }
 
+<<<<<<< HEAD
 void TTxController::ProgressOnComplete(const TPlanQueueItem& txItem) {
+=======
+void TTxController::CompleteRunningTx(const TPlanQueueItem& txItem) {
+    PassAwayTx(txItem.TxId);
+>>>>>>> wait background
     AFL_VERIFY(RunningQueue.erase(txItem))("info", txItem.DebugString());
+}
+
+void TTxController::PassAwayTx(const ui64 txId) {
+    AFL_VERIFY(Operators.erase(txId));
+    Owner.Subscribers->OnEvent(std::make_shared<NColumnShard::NSubscriber::TEventTransactionCompleted>(txId));
+}
+
+THashSet<ui64> TTxController::GetTxs() const {
+    THashSet<ui64> result;
+    for (const auto& [txId, _]: Operators) {
+        result.emplace(txId);
+    }
+    return result;
 }
 
 std::optional<TTxController::TPlanQueueItem> TTxController::GetPlannedTx() const {

@@ -1,8 +1,16 @@
 #include "schema.h"
 #include <ydb/core/tx/columnshard/subscriber/abstract/subscriber/subscriber.h>
 #include <ydb/core/tx/columnshard/subscriber/events/tables_erased/event.h>
+#include <ydb/core/tx/columnshard/subscriber/events/write_completed/event.h>
+#include <ydb/core/tx/columnshard/subscriber/events/transaction_completed/event.h>
 #include <ydb/core/tx/columnshard/transactions/transactions/tx_finish_async.h>
 #include <util/string/join.h>
+#include <util/stream/output.h>
+
+static inline IOutputStream& operator<<(IOutputStream& o, NKikimr::NOlap::TWriteId writeId) {
+    o << static_cast<ui64>(writeId);
+    return o;
+}
 
 namespace NKikimr::NColumnShard {
 
@@ -51,6 +59,11 @@ TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecut
         return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_CHANGED, errorMessage);
     }
 
+
+
+
+NKikimr::NColumnShard::TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) {
+    AFL_VERIFY(!WaitOnPropose);
     switch (SchemaTxBody.TxBody_case()) {
         case NKikimrTxColumnShard::TSchemaTxBody::kInitShard:
         {
@@ -58,7 +71,7 @@ TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecut
             if (validationStatus.IsFail()) {
                 return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "Invalid schema: " + validationStatus.GetErrorMessage());
             }
-            WaitPathIdsToErase = GetNotErasedTableIds(owner, SchemaTxBody.GetInitShard().GetTables());
+            WaitOnPropose = std::make_shared<TWaitEraseTablesTxSubscriber>(GetNotErasedTableIds(owner, SchemaTxBody.GetInitShard().GetTables()), GetTxId());
         }
         break;
         case NKikimrTxColumnShard::TSchemaTxBody::kEnsureTables:
@@ -68,7 +81,7 @@ TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecut
             if (validationStatus.IsFail()) {
                 return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "Invalid schema: " + validationStatus.GetErrorMessage());
             }
-            WaitPathIdsToErase = GetNotErasedTableIds(owner, tables);
+            WaitOnPropose = std::make_shared<TWaitEraseTablesTxSubscriber>(GetNotErasedTableIds(owner, tables), GetTxId());
         }
         break;
         case NKikimrTxColumnShard::TSchemaTxBody::kAlterTable:
@@ -86,11 +99,12 @@ TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecut
             if (owner.TablesManager.HasTable(dstPathId)) {
                 return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "Rename to existing table");
             }
-            if (owner.TablesManager.HasTable(dstPathId, true)) {
-                AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("propose_tx", "move_table")("dst_table_not_cleaned", true);
-                WaitPathIdsToErase = {dstPathId};
-            }
-            WaitForEmptyPlanQueue = true;
+            WaitOnPropose = std::make_shared<TWaitMoveTablePrerequisites>(
+                GetTxId(), 
+                owner.TablesManager.HasTable(dstPathId, true) ? std::optional{dstPathId} : std::nullopt,
+                owner.GetProgressTxController().GetTxs(), //TODO GetTxsByPathId(srcPathId) #8650
+                owner.InsertTable->GetInsertedByPathId(srcPathId)
+            );
             break;
         }
         case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET:
@@ -182,7 +196,7 @@ NKikimr::TConclusionStatus TSchemaTransactionOperator::ValidateTables(::google::
 }
 
 void TSchemaTransactionOperator::DoOnTabletInit(TColumnShard& owner) {
-    AFL_VERIFY(WaitPathIdsToErase.empty());
+    AFL_VERIFY(!WaitOnPropose);
     switch (SchemaTxBody.TxBody_case()) {
         case NKikimrTxColumnShard::TSchemaTxBody::kInitShard:
             break;
@@ -190,10 +204,8 @@ void TSchemaTransactionOperator::DoOnTabletInit(TColumnShard& owner) {
         {
             for (auto&& i : SchemaTxBody.GetEnsureTables().GetTables()) {
                 AFL_VERIFY(!owner.TablesManager.HasTable(i.GetPathId()));
-                if (owner.TablesManager.HasTable(i.GetPathId(), true)) {
-                    WaitPathIdsToErase.emplace(i.GetPathId());
-                }
             }
+            WaitOnPropose = std::make_shared<TWaitEraseTablesTxSubscriber>(GetNotErasedTableIds(owner, SchemaTxBody.GetEnsureTables().GetTables()), GetTxId());
         }
         break;
         case NKikimrTxColumnShard::TSchemaTxBody::kAlterTable:
@@ -203,27 +215,25 @@ void TSchemaTransactionOperator::DoOnTabletInit(TColumnShard& owner) {
         case NKikimrTxColumnShard::TSchemaTxBody::kMoveTable:
         {
             const auto srcPathId = SchemaTxBody.GetMoveTable().GetSrcPathId();
-            AFL_VERIFY(owner.TablesManager.HasTable(srcPathId));
-        }
-            
+            const auto dstPathId = SchemaTxBody.GetMoveTable().GetDstPathId();
 
+            AFL_VERIFY(owner.TablesManager.HasTable(srcPathId));
+            //??? Are other Txs and WriteIds reconstructed?
+            WaitOnPropose = std::make_shared<TWaitMoveTablePrerequisites>(
+                GetTxId(),
+                owner.TablesManager.HasTable(dstPathId, true) ? std::optional{dstPathId} : std::nullopt,
+                owner.GetProgressTxController().GetTxs(), //TODO GetTxsByPathId(srcPathId) #8650
+                owner.InsertTable->GetInsertedByPathId(srcPathId)
+            );
+        }
         case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET:
             break;
-    }
-    if (WaitPathIdsToErase.size()) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "wait_remove_path_id")("pathes", JoinSeq(",", WaitPathIdsToErase))("tx_id", GetTxId());
-        owner.Subscribers->RegisterSubscriber(std::make_shared<TWaitEraseTablesTxSubscriber>(WaitPathIdsToErase, GetTxId()));
-    } else {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "remove_pathes_cleaned")("tx_id", GetTxId());
-        owner.Execute(new TTxFinishAsyncTransaction(owner, GetTxId()));
     }
 }
 
 void TSchemaTransactionOperator::DoStartProposeOnComplete(TColumnShard& owner, const TActorContext& /*ctx*/) {
-    if (!WaitPathIdsToErase.empty()) {
-        owner.Subscribers->RegisterSubscriber(std::make_shared<TWaitEraseTablesTxSubscriber>(WaitPathIdsToErase, GetTxId()));
-    } else {
-        owner.Subscribers->RegisterSubscriber(std::make_shared<TWaitPlanQueueEmptyTxSubscriber>());
+    if (WaitOnPropose && !WaitOnPropose->IsFinished()) {
+         owner.Subscribers->RegisterSubscriber(WaitOnPropose);
     }
 }
 

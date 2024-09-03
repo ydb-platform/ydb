@@ -159,6 +159,7 @@ class TColumnShard
     friend class TTxRemoveSharedBlobs;
     friend class TTxFinishAsyncTransaction;
     friend class TWaitEraseTablesTxSubscriber;
+    friend class TWaitMoveTablePrerequisites;
 
     friend class NOlap::TCleanupPortionsColumnEngineChanges;
     friend class NOlap::TCleanupTablesColumnEngineChanges;

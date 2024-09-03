@@ -7,6 +7,12 @@
 
 namespace NKikimr::NColumnShard {
 
+namespace NSubscriber {
+
+class ISubscriber;
+
+}
+
 class TSchemaTransactionOperator: public IProposeTxOperator, public TMonitoringObjectsCounter<TSchemaTransactionOperator> {
 private:
     using TBase = IProposeTxOperator;
@@ -16,8 +22,7 @@ private:
     std::unique_ptr<NTabletFlatExecutor::ITransaction> TxAddSharding;
     NKikimrTxColumnShard::TSchemaTxBody SchemaTxBody;
     THashSet<TActorId> NotifySubscribers;
-    THashSet<ui64> WaitPathIdsToErase;
-    bool WaitForEmptyPlanQueue = false;
+    std::shared_ptr<NSubscriber::ISubscriber> WaitOnPropose; 
     bool Completed = false;
 
     virtual void DoOnTabletInit(TColumnShard& owner) override;
@@ -64,7 +69,7 @@ private:
         }
     }
     virtual bool DoIsAsync() const override {
-        return !WaitPathIdsToErase.empty();
+        return !!WaitOnPropose && !WaitOnPropose->IsFinished();
     }
     virtual bool DoParse(TColumnShard& owner, const TString& data) override {
         if (!SchemaTxBody.ParseFromString(data)) {

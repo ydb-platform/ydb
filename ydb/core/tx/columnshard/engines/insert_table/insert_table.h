@@ -4,6 +4,10 @@
 #include "path_info.h"
 #include <ydb/core/tx/columnshard/counters/insert_table.h>
 
+namespace NKikimr::NColumnShard::NSubscriber {
+    class TManager;
+}
+
 namespace NKikimr::NOlap {
 
 class IDbWrapper;
@@ -13,6 +17,7 @@ class IDbWrapper;
 ///  Commited => {PlanStep, WriteTxId} are {PlanStep, TxId}
 
 class TInsertTableAccessor {
+    std::shared_ptr<NColumnShard::NSubscriber::TManager> Subscribers;;
 protected:
     TInsertionSummary Summary;
     THashMap<TUnifiedBlobId, ui32> BlobLinks;
@@ -23,7 +28,9 @@ protected:
 
     bool RemoveBlobLinkOnExecute(const TUnifiedBlobId& blobId, const std::shared_ptr<IBlobsDeclareRemovingAction>& blobsAction);
     bool RemoveBlobLinkOnComplete(const TUnifiedBlobId& blobId);
+    std::optional<NKikimr::NOlap::TInsertedData> ExtractInserted(const TWriteId id);
 public:
+    TInsertTableAccessor(std::shared_ptr<NColumnShard::NSubscriber::TManager> subscribers);
     const std::map<TPathInfoIndexPriority, std::set<const TPathInfo*>>& GetPathPriorities() const {
         return Summary.GetPathPriorities();
     }
@@ -69,12 +76,18 @@ public:
     bool IsOverloadedByCommitted(const ui64 pathId) const {
         return Summary.IsOverloaded(pathId);
     }
+    THashSet<TWriteId> GetInsertedByPathId(const ui64 pathId) const {
+        return Summary.GetInsertedByPathId(pathId);
+    }
 };
 
 class TInsertTable: public TInsertTableAccessor {
 private:
     bool Loaded = false;
 public:
+    TInsertTable(std::shared_ptr<NColumnShard::NSubscriber::TManager> subscribers)
+        : TInsertTableAccessor(subscribers)
+    {}
     static constexpr const TDuration WaitCommitDelay = TDuration::Minutes(10);
     static constexpr ui64 CleanupPackageSize = 10000;
 

@@ -373,18 +373,4 @@ namespace NActors {
         typedef TEventHandle<TEventType> THandle;
         typedef TAutoPtr<THandle> TPtr;
     };
-
-#define DEFINE_SIMPLE_NONLOCAL_EVENT(eventType, header)                 \
-    TString ToStringHeader() const override {                           \
-        return TString(header);                                         \
-    }                                                                   \
-    bool SerializeToArcadiaStream(NActors::TChunkSerializer*) const override { \
-        return true;                                                    \
-    }                                                                   \
-    static IEventBase* Load(NActors::TEventSerializedData*) {           \
-        return new eventType();                                         \
-    }                                                                   \
-    bool IsSerializable() const override {                              \
-        return true;                                                    \
-    }
 }

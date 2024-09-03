@@ -1,4 +1,4 @@
-`PRAGMA TablePathPrefix` adds a specified prefix to the paths of database tables. It uses standard file system path concatenation, meaning it supports parent folder referencing and does not require a trailing slash. For example:
+`PRAGMA TablePathPrefix` adds a specified prefix to the table paths. It uses standard filesystem path concatenation, meaning it supports parent folder referencing and does not require a trailing slash. For example:
 
 ```sql
 PRAGMA TablePathPrefix = "/cluster/database";

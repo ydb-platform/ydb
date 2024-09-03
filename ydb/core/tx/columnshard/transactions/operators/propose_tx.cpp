@@ -3,12 +3,20 @@
 namespace NKikimr::NColumnShard {
 
 void IProposeTxOperator::DoSendReply(TColumnShard& owner, const TActorContext& ctx) {
+    AFL_VERIFY(owner.CurrentSchemeShardId);
+    ctx.Send(MakePipePerNodeCacheID(false),
+        new TEvPipeCache::TEvForward(BuildProposeResultEvent().release(), (ui64)owner.CurrentSchemeShardId, false));
+}
+
+std::unique_ptr<NKikimr::TEvColumnShard::TEvProposeTransactionResult> IProposeTxOperator::BuildProposeResultEvent() const {
     const auto& txInfo = GetTxInfo();
-    std::unique_ptr<TEvColumnShard::TEvProposeTransactionResult> evResult = std::make_unique<TEvColumnShard::TEvProposeTransactionResult>(
-        owner.TabletID(), txInfo.TxKind, txInfo.TxId, GetProposeStartInfoVerified().GetStatus(), GetProposeStartInfoVerified().GetStatusMessage());
+    std::unique_ptr<TEvColumnShard::TEvProposeTransactionResult> evResult =
+        std::make_unique<TEvColumnShard::TEvProposeTransactionResult>(owner.TabletID(), txInfo.TxKind, txInfo.TxId,
+            GetProposeStartInfoVerified().GetStatus(), GetProposeStartInfoVerified().GetStatusMessage());
     if (IsFail()) {
         owner.Counters.GetTabletCounters()->IncCounter(COUNTER_PREPARE_ERROR);
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("message", GetProposeStartInfoVerified().GetStatusMessage())("tablet_id", owner.TabletID())("tx_id", txInfo.TxId);
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("message", GetProposeStartInfoVerified().GetStatusMessage())("tablet_id", owner.TabletID())(
+            "tx_id", txInfo.TxId);
     } else {
         evResult->Record.SetMinStep(txInfo.MinStep);
         evResult->Record.SetMaxStep(txInfo.MaxStep);
@@ -16,8 +24,10 @@ void IProposeTxOperator::DoSendReply(TColumnShard& owner, const TActorContext& c
             evResult->Record.MutableDomainCoordinators()->CopyFrom(owner.ProcessingParams->GetCoordinators());
         }
         owner.Counters.GetTabletCounters()->IncCounter(COUNTER_PREPARE_SUCCESS);
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("message", GetProposeStartInfoVerified().GetStatusMessage())("tablet_id", owner.TabletID())(
+            "tx_id", txInfo.TxId);
     }
-    ctx.Send(txInfo.Source, evResult.release());
+    return evResult;
 }
 
 }

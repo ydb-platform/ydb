@@ -4396,9 +4396,10 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
     }
 
-    Y_UNIT_TEST(TableSink_OlapRWQueries) {
+    Y_UNIT_TEST_TWIN(TableSink_UncommittedReads, isOlap) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
         auto settings = TKikimrSettings()
             .SetAppConfig(appConfig)
             .SetWithSampleTables(false);
@@ -4407,16 +4408,15 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
 
-        const TString query = R"(
+        const TString query = Sprintf(R"(
             CREATE TABLE `/Root/ColumnShard` (
                 Col1 Uint64 NOT NULL,
                 Col2 String,
                 Col3 Int32 NOT NULL,
                 PRIMARY KEY (Col1)
             )
-            PARTITION BY HASH(Col1)
-            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 3);
-        )";
+            WITH (STORE = %s, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 3);
+        )", isOlap ? "COLUMN" : "ROW");
 
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());

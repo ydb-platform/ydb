@@ -353,7 +353,7 @@ public:
 
 };
 
-NKikimrPQ::EConsumerScalingSupport DefaultScalingSupport();
+TString EncodeAnchor(const TString& value);
 
 }
 }

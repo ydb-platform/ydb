@@ -37,6 +37,7 @@ int Search(LDAP* ld,
 TString LdapError(LDAP* ld);
 TString ErrorToString(int err);
 LDAPMessage* FirstEntry(LDAP* ld, LDAPMessage* chain);
+LDAPMessage* NextEntry(LDAP* ld, LDAPMessage* entry);
 char* FirstAttribute(LDAP* ld, LDAPMessage* entry, BerElement** berout);
 void MemFree(char* p);
 void BerFree(BerElement* ber, int freebuf);

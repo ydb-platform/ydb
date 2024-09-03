@@ -871,7 +871,7 @@ multiple_column_assignment: set_target_list EQUALS LPAREN simple_values_source R
 set_target_list: LPAREN set_target (COMMA set_target)* RPAREN;
 
 // topics
-create_topic_stmt: CREATE TOPIC topic_ref create_topic_entries? with_topic_settings?;
+create_topic_stmt: CREATE TOPIC (IF NOT EXISTS)? topic_ref create_topic_entries? with_topic_settings?;
 
 create_topic_entries: LPAREN create_topic_entry (COMMA create_topic_entry)* RPAREN;
 create_topic_entry:
@@ -879,7 +879,7 @@ create_topic_entry:
 ;
 with_topic_settings: WITH LPAREN topic_settings RPAREN;
 
-alter_topic_stmt: ALTER TOPIC topic_ref alter_topic_action (COMMA alter_topic_action)*;
+alter_topic_stmt: ALTER TOPIC (IF EXISTS)? topic_ref alter_topic_action (COMMA alter_topic_action)*;
 alter_topic_action:
     alter_topic_add_consumer
   | alter_topic_alter_consumer
@@ -905,7 +905,7 @@ topic_alter_consumer_reset: RESET LPAREN an_id (COMMA an_id)* RPAREN;
 alter_topic_set_settings: SET LPAREN topic_settings RPAREN;
 alter_topic_reset_settings: RESET LPAREN an_id (COMMA an_id_pure)* RPAREN;
 
-drop_topic_stmt: DROP TOPIC topic_ref;
+drop_topic_stmt: DROP TOPIC (IF EXISTS)? topic_ref;
 
 topic_settings: topic_settings_entry (COMMA topic_settings_entry)*;
 topic_settings_entry: an_id EQUALS topic_setting_value;

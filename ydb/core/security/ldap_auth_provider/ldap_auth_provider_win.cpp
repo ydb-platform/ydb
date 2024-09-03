@@ -1,7 +1,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/core/base/ticket_parser.h>
-#include "ticket_parser_log.h"
+#include <ydb/core/security/ticket_parser_log.h>
 #include "ldap_auth_provider.h"
 
 #include <winldap.h>
@@ -64,6 +64,10 @@ TString ErrorToString(int err) {
 
 LDAPMessage* FirstEntry(LDAP* ld, LDAPMessage* chain) {
     return ldap_first_entry(ld, chain);
+}
+
+LDAPMessage* NextEntry(LDAP* ld, LDAPMessage* entry) {
+    return ldap_next_entry(ld, entry);
 }
 
 char* FirstAttribute(LDAP* ld, LDAPMessage* entry, BerElement** berout) {

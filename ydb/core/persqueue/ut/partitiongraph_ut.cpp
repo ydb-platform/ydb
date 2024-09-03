@@ -43,8 +43,7 @@ Y_UNIT_TEST_SUITE(TPartitionGraphTest) {
         p5->AddParentPartitionIds(3);
         p5->AddParentPartitionIds(4);
 
-        TPartitionGraph graph;
-        graph = std::move(MakePartitionGraph(config));
+        TPartitionGraph graph = MakePartitionGraph(config);
 
         const auto n0 = graph.GetPartition(0);
         const auto n1 = graph.GetPartition(1);
@@ -76,5 +75,45 @@ Y_UNIT_TEST_SUITE(TPartitionGraphTest) {
         UNIT_ASSERT(std::find(n5->HierarhicalParents.cbegin(),  n5->HierarhicalParents.cend(), n2) != n5->HierarhicalParents.end());
         UNIT_ASSERT(std::find(n5->HierarhicalParents.cbegin(),  n5->HierarhicalParents.cend(), n3) != n5->HierarhicalParents.end());
         UNIT_ASSERT(std::find(n5->HierarhicalParents.cbegin(),  n5->HierarhicalParents.cend(), n4) != n5->HierarhicalParents.end());
+
+        {
+            std::set<ui32> traversedNodes;
+            graph.Travers([&](ui32 id) {
+                traversedNodes.insert(id);
+                return true;
+            });
+            UNIT_ASSERT_VALUES_EQUAL(traversedNodes.size(), 6);
+        }
+
+        {
+            std::set<ui32> traversedNodes;
+            graph.Travers(0,[&](ui32 id) {
+                traversedNodes.insert(id);
+                return true;
+            });
+            UNIT_ASSERT_VALUES_EQUAL(traversedNodes.size(), 0);
+        }
+
+        {
+            std::set<ui32> traversedNodes;
+            graph.Travers(0,[&](ui32 id) {
+                traversedNodes.insert(id);
+                return true;
+            }, true);
+            UNIT_ASSERT_VALUES_EQUAL(traversedNodes.size(), 1);
+            UNIT_ASSERT(traversedNodes.contains(0));
+        }
+
+        {
+            std::set<ui32> traversedNodes;
+            graph.Travers(2,[&](ui32 id) {
+                traversedNodes.insert(id);
+                return true;
+            }, true);
+            UNIT_ASSERT_VALUES_EQUAL(traversedNodes.size(), 3);
+            UNIT_ASSERT(traversedNodes.contains(2));
+            UNIT_ASSERT(traversedNodes.contains(3));
+            UNIT_ASSERT(traversedNodes.contains(5));
+        }
     }
 }

@@ -75,13 +75,18 @@ struct TSchemeShard::TTxLogin : TSchemeShard::TRwTxBase {
             Self->PublishToSchemeBoard(TTxId(), {SubDomainPathId}, ctx);
         }
 
-        NLogin::TLoginProvider::TLoginUserResponse LoginResponse = Self->LoginProvider.LoginUser(GetLoginRequest());
         THolder<TEvSchemeShard::TEvLoginResult> result = MakeHolder<TEvSchemeShard::TEvLoginResult>();
-        if (LoginResponse.Error) {
-            result->Record.SetError(LoginResponse.Error);
-        }
-        if (LoginResponse.Token) {
-            result->Record.SetToken(LoginResponse.Token);
+        const auto& loginRequest = GetLoginRequest();
+        if (loginRequest.ExternalAuth || AppData(ctx)->AuthConfig.GetEnableLoginAuthentication()) {
+            NLogin::TLoginProvider::TLoginUserResponse LoginResponse = Self->LoginProvider.LoginUser(loginRequest);
+            if (LoginResponse.Error) {
+                result->Record.SetError(LoginResponse.Error);
+            }
+            if (LoginResponse.Token) {
+                result->Record.SetToken(LoginResponse.Token);
+            }
+        } else {
+            result->Record.SetError("Login authentication is disabled");
         }
 
         AuditLogLogin(Request->Get()->Record, result->Record, Self);

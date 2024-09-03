@@ -5,12 +5,14 @@
 #include <vector>
 #include <unordered_map>
 
+namespace Ydb {
+    class TOperationId;
+}
+
 namespace NKikimr {
 namespace NOperationId {
 
 class TOperationId {
-    static constexpr int kEKindMinValue = 0;
-    static constexpr int kEKindMaxValue = 10;
 public:
     enum EKind : int {
         UNUSED = 0,
@@ -31,42 +33,38 @@ public:
         std::string Value;
     };
 
-    using TDataList = std::vector<std::unique_ptr<TData>>;
-
-    static std::vector<std::string_view> GetKindNames();
-
     TOperationId();
     explicit TOperationId(const std::string& string, bool allowEmpty = false);
-    
+
     TOperationId(const TOperationId& other);
     TOperationId(TOperationId&& other) = default;
 
     TOperationId& operator=(const TOperationId& other);
     TOperationId& operator=(TOperationId&& other) = default;
 
-    ~TOperationId() = default;
+    ~TOperationId();
 
     EKind GetKind() const;
     void SetKind(const EKind& kind);
 
-    const TDataList& GetData() const;
-    TDataList& GetMutableData();
+    std::vector<TData> GetData() const;
 
+    void AddOptionalValue(const std::string& key, const std::string& value);
     const std::vector<const std::string*>& GetValue(const std::string& key) const;
+
     std::string GetSubKind() const;
     std::string ToString() const;
 
+    const Ydb::TOperationId& GetProto() const;
 private:
-    bool IsValidKind(int kind);
-    void CopyData(const TOperationId::TDataList& otherData);
-
-    EKind Kind;
-    TDataList Data;
-    std::unordered_map<std::string, std::vector<const std::string*>> Index;
+    class TImpl;
+    std::unique_ptr<TImpl> Impl;
 };
 
-void AddOptionalValue(TOperationId& operarionId, const std::string& key, const std::string& value);
-void AddOptionalValue(TOperationId& operarionId, const std::string& key, const char* value, size_t size);
+std::string ProtoToString(const Ydb::TOperationId& proto);
+
+void AddOptionalValue(Ydb::TOperationId& operarionId, const std::string& key, const std::string& value);
+
 TOperationId::EKind ParseKind(const std::string_view value);
 
 std::string FormatPreparedQueryIdCompat(const std::string& str);

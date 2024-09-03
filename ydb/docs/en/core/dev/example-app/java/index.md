@@ -1,4 +1,4 @@
-# App in Java
+# Example app in Java
 
 This page contains a detailed description of the code of a [test app](https://github.com/ydb-platform/ydb-java-examples/tree/master/query-example) that is available as part of the {{ ydb-short-name }} [Java SDK Examples](https://github.com/ydb-platform/ydb-java-examples).
 

@@ -31,6 +31,7 @@ void TGRpcCmsService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     ADD_REQUEST(ListDatabases, DoListTenantsRequest)
     ADD_REQUEST(RemoveDatabase, DoRemoveTenantRequest)
     ADD_REQUEST(DescribeDatabaseOptions, DoDescribeTenantOptionsRequest)
+    ADD_REQUEST(GetRecommendation, DoGetRecommendationRequest)
 
 #undef ADD_REQUEST
 }

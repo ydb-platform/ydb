@@ -589,3 +589,11 @@ message TEvResponseTabletDistribution {
     }
     repeated TNode Nodes = 1;
 }
+
+message TEvRequestRecommendation {
+    optional NKikimrSubDomains.TDomainKey DomainKey = 1;
+}
+
+message TEvResponseRecommendation {
+    optional uint32 RecommendedNodes = 1;
+}

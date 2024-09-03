@@ -14,6 +14,7 @@ void DoGetTenantStatusRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityP
 void DoListTenantsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
 void DoRemoveTenantRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
 void DoDescribeTenantOptionsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
+void DoGetRecommendationRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
 
 }
 }

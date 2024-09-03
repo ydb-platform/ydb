@@ -28,12 +28,16 @@ public:
             const TNodeSet& left,
             const TNodeSet& right,
             EJoinKind joinKind,
+            bool leftAny,
+            bool rightAny,
             bool isCommutative,
             const std::set<std::pair<TJoinColumn, TJoinColumn>>& joinConditions
         )
             : Left(left)
             , Right(right)
             , JoinKind(joinKind)
+            , LeftAny(leftAny)
+            , RightAny(rightAny)
             , IsCommutative(isCommutative)
             , JoinConditions(joinConditions)
             , IsReversed(false)
@@ -52,6 +56,7 @@ public:
         TNodeSet Left;
         TNodeSet Right;
         EJoinKind JoinKind;
+        bool LeftAny, RightAny;
         bool IsCommutative;
         std::set<std::pair<TJoinColumn, TJoinColumn>> JoinConditions;
         TVector<TString> LeftJoinKeys;
@@ -427,6 +432,8 @@ private:
         const auto& nodes = Graph_.GetNodes();
 
         EJoinKind groupJoinKind = edges[groupBegin].JoinKind;
+        bool leftAny = edges[groupBegin].LeftAny;
+        bool rightAny = edges[groupBegin].RightAny;
         bool isJoinCommutative = edges[groupBegin].IsCommutative;
 
         TVector<TString> groupConditionUsedAttributes;
@@ -463,7 +470,7 @@ private:
                         });
                     }
 
-                    auto e = THyperedge(lhs, rhs, groupJoinKind, isJoinCommutative, joinConditions);
+                    auto e = THyperedge(lhs, rhs, groupJoinKind, leftAny, rightAny, isJoinCommutative, joinConditions);
                     Graph_.AddEdge(std::move(e));
                 }
             }

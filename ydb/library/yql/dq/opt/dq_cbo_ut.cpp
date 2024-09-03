@@ -55,7 +55,9 @@ Y_UNIT_TEST(JoinSearch2Rels) {
         std::static_pointer_cast<IBaseOptimizerNode>(rel2),
         joinConditions,
         InnerJoin,
-        EJoinAlgoType::GraceJoin
+        EJoinAlgoType::GraceJoin,
+        true,
+        false
         );
 
     auto res = optimizer->JoinSearch(op);
@@ -93,8 +95,10 @@ Y_UNIT_TEST(JoinSearch3Rels) {
         std::static_pointer_cast<IBaseOptimizerNode>(rel2),
         joinConditions,
         InnerJoin,
-        EJoinAlgoType::GraceJoin
-        );
+        EJoinAlgoType::GraceJoin,
+        false,
+        false
+    );
 
     joinConditions.insert({
         NDq::TJoinColumn("a", "1"),
@@ -106,8 +110,10 @@ Y_UNIT_TEST(JoinSearch3Rels) {
         std::static_pointer_cast<IBaseOptimizerNode>(rel3),
         joinConditions,
         InnerJoin,
-        EJoinAlgoType::GraceJoin
-        );
+        EJoinAlgoType::GraceJoin,
+        true,
+        false
+    );
 
     auto res = optimizer->JoinSearch(op2);
     std::stringstream ss;
@@ -223,7 +229,7 @@ void _DqOptimizeEquiJoinWithCosts(const std::function<IOptimizerNew*()>& optFact
     UNIT_ASSERT(equiJoin.Maybe<TCoEquiJoin>());
     auto resStr = NCommon::ExprToPrettyString(ctx, *res.Ptr());
     auto expected = R"__((
-(let $1 '('"Inner" '"orders" '"customer" '('"orders" '"a") '('"customer" '"b") '('('"join_algo" '"MapJoin"))))
+(let $1 '('"Inner" '"orders" '"customer" '('"orders" '"a") '('"customer" '"b") '('('join_algo 'MapJoin))))
 (return (EquiJoin '('() '"orders") '('() '"customer") $1 '()))
 )
 )__";

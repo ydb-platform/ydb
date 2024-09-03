@@ -3,6 +3,7 @@
 #include "dq_opt_make_join_hypergraph.h"
 
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
+#include <ydb/library/yql/core/yql_join.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <ydb/library/yql/utils/log/log.h>
 
@@ -96,7 +97,9 @@ std::shared_ptr<TJoinOptimizerNode> ConvertToJoinTree(
             TJoinColumn(rightScope, rightColumn)));
     }
 
-    return std::make_shared<TJoinOptimizerNode>(left, right, joinConds, ConvertToJoinKind(joinTuple.Type().StringValue()), EJoinAlgoType::Undefined);
+    const auto linkSettings = GetEquiJoinLinkSettings(joinTuple.Options().Ref());
+    return std::make_shared<TJoinOptimizerNode>(left, right, joinConds, ConvertToJoinKind(joinTuple.Type().StringValue()), EJoinAlgoType::Undefined,
+        linkSettings.LeftHints.contains("any"), linkSettings.RightHints.contains("any"));
 }
 
 /**
@@ -142,14 +145,32 @@ TExprBase BuildTree(TExprContext& ctx, const TCoEquiJoin& equiJoin,
         rightJoinColumns.push_back(BuildAtom(pair.second.AttributeName, equiJoin.Pos(), ctx));
     }
 
-    auto optionsList = ctx.Builder(equiJoin.Pos())
-        .List()
-            .List(0)
-                .Atom(0, "join_algo")
-                .Atom(1, ToString(reorderResult->JoinAlgo))
+    TExprNode::TListType options(1U,
+        ctx.Builder(equiJoin.Pos())
+            .List()
+                .Atom(0, "join_algo", TNodeFlags::Default)
+                .Atom(1, ToString(reorderResult->JoinAlgo), TNodeFlags::Default)
             .Seal()
-        .Seal()
-        .Build();
+        .Build()
+    );
+
+    if (reorderResult->LeftAny) {
+        options.emplace_back(ctx.Builder(equiJoin.Pos())
+            .List()
+                .Atom(0, "left", TNodeFlags::Default)
+                .Atom(1, "any", TNodeFlags::Default)
+            .Seal()
+        .Build());
+    }
+
+    if (reorderResult->RightAny) {
+        options.emplace_back(ctx.Builder(equiJoin.Pos())
+            .List()
+                .Atom(0, "right", TNodeFlags::Default)
+                .Atom(1, "any", TNodeFlags::Default)
+            .Seal()
+        .Build());
+    }
 
     // Build the final output
     return Build<TCoEquiJoinTuple>(ctx,equiJoin.Pos())
@@ -162,7 +183,9 @@ TExprBase BuildTree(TExprContext& ctx, const TCoEquiJoin& equiJoin,
         .RightKeys()
             .Add(rightJoinColumns)
             .Build()
-        .Options(optionsList)
+        .Options()
+            .Add(std::move(options))
+            .Build()
         .Done();
 }
 

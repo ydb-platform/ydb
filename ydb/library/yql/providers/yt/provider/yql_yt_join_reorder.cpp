@@ -166,7 +166,10 @@ public:
         const EJoinKind joinType,
         const EJoinAlgoType joinAlgo,
         TYtJoinNodeOp* originalOp)
-        : TJoinOptimizerNode(left, right, joinConditions, joinType, joinAlgo, originalOp != nullptr)
+        : TJoinOptimizerNode(left, right, joinConditions, joinType, joinAlgo,
+            originalOp ? originalOp->LinkSettings.LeftHints.contains("any") : false,
+            originalOp ? originalOp->LinkSettings.RightHints.contains("any") : false,
+            originalOp != nullptr)
         , OriginalOp(originalOp)
     { }
 

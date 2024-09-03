@@ -57,7 +57,7 @@ typename TJoinHypergraph<TNodeSet>::TEdge MakeHyperedge(
     TNodeSet left = TES & subtreeNodes[joinNode->LeftArg];
     TNodeSet right = TES & subtreeNodes[joinNode->RightArg];
     
-    return typename TJoinHypergraph<TNodeSet>::TEdge(left, right, joinNode->JoinType, OperatorIsCommutative(joinNode->JoinType) && joinNode->IsReorderable, joinNode->JoinConditions);
+    return typename TJoinHypergraph<TNodeSet>::TEdge(left, right, joinNode->JoinType, joinNode->LeftAny, joinNode->RightAny, OperatorIsCommutative(joinNode->JoinType) && joinNode->IsReorderable, joinNode->JoinConditions);
 }
 
 template<typename TNodeSet>

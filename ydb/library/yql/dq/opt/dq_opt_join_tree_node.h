@@ -22,7 +22,9 @@ struct TJoinOptimizerNodeInternal : public IBaseOptimizerNode {
         const TVector<TString>& leftJoinKeys,
         const TVector<TString>& rightJoinKeys, 
         const EJoinKind joinType, 
-        const EJoinAlgoType joinAlgo
+        const EJoinAlgoType joinAlgo,
+        const bool leftAny,
+        const bool rightAny
     ) 
         : IBaseOptimizerNode(JoinNodeType)
         , LeftArg(left)
@@ -32,6 +34,8 @@ struct TJoinOptimizerNodeInternal : public IBaseOptimizerNode {
         , RightJoinKeys(rightJoinKeys)
         , JoinType(joinType)
         , JoinAlgo(joinAlgo)
+        , LeftAny(leftAny)
+        , RightAny(rightAny)
     {}
 
     virtual ~TJoinOptimizerNodeInternal() = default;
@@ -52,6 +56,8 @@ struct TJoinOptimizerNodeInternal : public IBaseOptimizerNode {
     const TVector<TString>& RightJoinKeys;
     EJoinKind JoinType;
     EJoinAlgoType JoinAlgo;
+    const bool LeftAny;
+    const bool RightAny;
 };
 
 /**
@@ -65,6 +71,8 @@ std::shared_ptr<TJoinOptimizerNodeInternal> MakeJoinInternal(
     const TVector<TString>& rightJoinKeys,
     EJoinKind joinKind,
     EJoinAlgoType joinAlgo,
+    bool leftAny,
+    bool rightAny,
     IProviderContext& ctx,
     TCardinalityHints::TCardinalityHint* maybeHint = nullptr
 );

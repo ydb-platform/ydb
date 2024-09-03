@@ -309,7 +309,9 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         if (auto logl = Logger->Log(ELnLev::Info)) {
             logl << "Replacement policy switch from " << Config->ReplacementPolicy << " to " << msg->ReplacementPolicy;
         }
-        Config->Counters->ReplacementPolicy(Config->ReplacementPolicy)->Set(0);
+        if (Config->Counters) {
+            Config->Counters->ReplacementPolicy(Config->ReplacementPolicy)->Set(0);
+        }
         
         Config->ReplacementPolicy = msg->ReplacementPolicy;
         auto oldCache = CreateCache();
@@ -327,7 +329,9 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         DoGC();
 
-        Config->Counters->ReplacementPolicy(Config->ReplacementPolicy)->Set(1);
+        if (Config->Counters) {
+            Config->Counters->ReplacementPolicy(Config->ReplacementPolicy)->Set(1);
+        }
     }
 
     void Registered(TActorSystem *sys, const TActorId &owner)
@@ -1183,7 +1187,9 @@ public:
         : Config(std::move(config))
         , Cache(CreateCache())
     {
-        Config->Counters->ReplacementPolicy(Config->ReplacementPolicy)->Set(1);
+        if (Config->Counters) {
+            Config->Counters->ReplacementPolicy(Config->ReplacementPolicy)->Set(1);
+        }
 
         AsyncRequests.Limit = Config->TotalAsyncQueueInFlyLimit;
         ScanRequests.Limit = Config->TotalScanQueueInFlyLimit;

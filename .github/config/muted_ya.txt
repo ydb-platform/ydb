@@ -15,6 +15,10 @@ ydb/core/kqp/ut/olap KqpOlapWrite.WriteDeleteCleanGC
 ydb/core/kqp/ut/pg KqpPg.CreateIndex
 ydb/core/kqp/ut/query KqpLimits.QueryReplySize
 ydb/core/kqp/ut/query KqpQuery.QueryTimeout
+ydb/core/kqp/ut/query KqpQuery.OlapCreateAsSelect_Complex
+ydb/core/kqp/ut/query KqpQuery.OlapCreateAsSelect_Simple
+ydb/core/kqp/ut/federated_query/s3 KqpFederatedQuery.CreateTableAsSelectFromExternalDataSource
+ydb/core/kqp/ut/federated_query/s3 KqpFederatedQuery.CreateTableAsSelectFromExternalTable
 ydb/core/kqp/ut/scan KqpRequestContext.TraceIdInErrorMessage
 ydb/core/kqp/ut/scheme KqpOlapScheme.TenThousandColumns
 ydb/core/kqp/ut/scheme KqpOlap.OlapRead_GenericQuerys

@@ -139,6 +139,7 @@ public:
     void CommitTransactionOnExecute(
         TColumnShard& owner, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc, const NOlap::TSnapshot& snapshot);
     void CommitTransactionOnComplete(
+        TColumnShard& owner, const ui64 txId, const NOlap::TSnapshot& snapshot);
     void AddTemporaryTxLink(const ui64 lockId) {
         AFL_VERIFY(Tx2Lock.emplace(lockId, lockId).second);
     }

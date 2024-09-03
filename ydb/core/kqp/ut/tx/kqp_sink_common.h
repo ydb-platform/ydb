@@ -23,7 +23,7 @@ protected:
 public:
     void Execute() {
         AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(false);
         AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(true);
         auto settings = TKikimrSettings().SetAppConfig(AppConfig).SetWithSampleTables(false);
         if (FastSnapshotExpiration) {

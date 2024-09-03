@@ -1,6 +1,7 @@
 default:
   lang: ru
   pub-cover-size: 700x400
+  yandex_docs: https://cloud.yandex/ru/docs
   team:
     babich:
       name: Михаил Бабич

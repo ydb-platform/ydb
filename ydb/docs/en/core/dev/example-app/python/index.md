@@ -1,4 +1,4 @@
-# App in Python
+# Example app in Python
 
 This page contains a detailed description of the code of a [test app](https://github.com/ydb-platform/ydb-python-sdk/tree/master/examples/basic_example_v2) that is available as part of the {{ ydb-short-name }} [Python SDK](https://github.com/ydb-platform/ydb-python-sdk).
 
@@ -13,7 +13,7 @@ git clone https://github.com/ydb-platform/ydb-python-sdk.git
 python3 -m pip install iso8601
 ```
 
-Next, from the same working directory, run the command to start the test app. The command will differ depending on the database to connect to.
+Next, from the same working directory, run the following command to start the test app:
 
 {% include [run_options.md](_includes/run_options.md) %}
 

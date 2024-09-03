@@ -301,39 +301,6 @@ As the result of executing the query, a list of `result_set` is returned, iterat
 series, Id: 1, title: IT Crowd, Release date: 2006-02-03
 ```
 
-{% include [param_prep_queries.md](../_includes/steps/07_param_prep_queries.md) %}
-
-```python
-def select_prepared(session, path, series_id, season_id, episode_id):
-    query = """
-    PRAGMA TablePathPrefix("{}");
-    DECLARE $seriesId AS Uint64;
-    DECLARE $seasonId AS Uint64;
-    DECLARE $episodeId AS Uint64;
-    $format = DateTime::Format("%Y-%m-%d");
-    SELECT
-        title,
-        $format(DateTime::FromSeconds(CAST(DateTime::ToSeconds(DateTime::IntervalFromDays(CAST(air_date AS Int16))) AS Uint32))) AS air_date
-    FROM episodes
-    WHERE series_id = $seriesId AND season_id = $seasonId AND episode_id = $episodeId;
-    """.format(path)
-
-    prepared_query = session.prepare(query)
-    result_sets = session.transaction(ydb.SerializableReadWrite()).execute(
-        prepared_query, {
-            '$seriesId': series_id,
-            '$seasonId': season_id,
-            '$episodeId': episode_id,
-        },
-        commit_tx=True
-    )
-    print("\n> select_prepared_transaction:")
-    for row in result_sets[0].rows:
-        print("episode title:", row.title, ", air date:", row.air_date)
-
-    return result_sets[0]
-```
-
 ## Parameterized queries {#param-queries}
 
 For parameterized query execution, `pool.execute_with_retries()` and `tx.execute()` behave similarly. To execute parameterized queries, you need to pass a dictionary with parameters to one of these functions, where each key is the parameter name, and the value can be one of the following:

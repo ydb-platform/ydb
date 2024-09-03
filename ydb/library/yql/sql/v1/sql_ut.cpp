@@ -7235,7 +7235,7 @@ ObjectStorage {
   SecretKey: "SId:secretKey"
   VerifySSL: false
   ProxyHost: "localhost"
-  ProxyPort: 4
+  ProxyPort: 8080
   ProxyScheme: HTTP
 }
 `);

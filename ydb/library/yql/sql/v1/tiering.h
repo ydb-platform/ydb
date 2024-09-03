@@ -136,7 +136,7 @@ private:
     static bool ParseUint32(const TString& str, ui32* result) {
         ui64 parsed;
         try {
-            std::stoull(str, &parsed);
+            parsed = std::stoull(str);
         } catch (const std::exception&) {
             return false;
         }

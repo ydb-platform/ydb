@@ -46,7 +46,8 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
         UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY DEBUG: Component: SessionActor"), LogEnabled ? 2 : 0);
         // check grpc logs
         UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY TRACE: Component: Grpc"), LogEnabled ? 2 : 0);
-        // TODO: check datashard logs
+        // check datashard logs
+        UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY DEBUG: Component: DataShard"), 2);
     }
 
     Y_UNIT_TEST(Ddl) {
@@ -75,7 +76,8 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
         UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY DEBUG: Component: SessionActor"), 0);
         // check grpc logs
         UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY TRACE: Component: Grpc"), 0);
-        // TODO: check datashard logs
+        // check datashard logs
+        UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY DEBUG: Component: DataShard"), 0);
     }
 
     Y_UNIT_TEST(Select) {
@@ -100,7 +102,8 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
         UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY DEBUG: Component: SessionActor"), 2);
         // check grpc logs
         UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY TRACE: Component: Grpc"), 2);
-        // TODO: check datashard logs
+        // check datashard logs
+        UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY DEBUG: Component: DataShard"), 0);
     }
 }
 

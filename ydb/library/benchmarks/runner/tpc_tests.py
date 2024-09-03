@@ -35,6 +35,12 @@ class Runner:
         self.results_path = self.output / "results"
         self.results_path.mkdir()
 
+        path = pathlib.Path(yatest.common.source_path("ydb/library/benchmarks/runner"))
+        print(path, file=sys.stderr)
+
+        for entry in path.iterdir():
+            print(entry, entry.is_file(), entry.is_dir(), entry.is_symlink(), file=sys.stderr)
+
         self.cmd = [str(self.deps["run_tests"]) + "/run_tests", "--is-test"]
         self.cmd += ["--dqrun", str(self.deps["dqrun"]) + "/dqrun"]
         self.cmd += ["--gen-queries", str(self.deps["gen-queries"]) + "/gen_queries"]
@@ -69,7 +75,7 @@ def test_tpc():
     is_ci = os.environ.get("PUBLIC_DIR") is not None
 
     runner = Runner()
-    runner.wrapped_run("h", 1, 1, None)
+    runner.wrapped_run("h", 1, 1, r"q1\.sql")
     result_path = runner.results_path.resolve()
     print("Results path: ", result_path, file=sys.stderr)
 
@@ -77,3 +83,5 @@ def test_tpc():
         s3_folder = pathlib.Path(os.environ["PUBLIC_DIR"]).resolve()
 
         upload(result_path, s3_folder)
+
+    exit(1)

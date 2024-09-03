@@ -122,7 +122,7 @@ void TPDisk::ProcessReadLogRecord(TLogRecordHeader &header, TString &data, NPDis
                     if (ownerData.VDiskId != TVDiskID::InvalidId) {
                         if (ownerData.CurrentFirstLsnToKeep < footer->FirstLsnToKeep) {
                             P_LOG(PRI_INFO, BPD01, "ProcessReadLogRecord set new FirstLsnToKeep for Owner caused by Lsn",
-                                    (Owner, (ui32)header.OwnerId),
+                                    (OwnerId, (ui32)header.OwnerId),
                                     (FirstLsnToKeep, footer->FirstLsnToKeep),
                                     (Lsn, header.OwnerLsn));
                             ownerData.CurrentFirstLsnToKeep = footer->FirstLsnToKeep;
@@ -1133,7 +1133,7 @@ void TLogReader::Reply() {
             PDisk->Format.Offset(ChunkIdx + 1, 0)
         );
     }
-    P_LOG(PRI_DEBUG, BPD01, "Reply to owner", (Owner, (ui32)Owner), (Result, Result->ToString()));
+    P_LOG(PRI_DEBUG, BPD01, "Reply to owner", (OwnerId, (ui32)Owner), (Result, Result->ToString()));
     PCtx->ActorSystem->Send(ReplyTo, Result.Release());
     if (!IsInitial) {
         PDisk->Mon.LogRead.CountResponse(ResultSize);

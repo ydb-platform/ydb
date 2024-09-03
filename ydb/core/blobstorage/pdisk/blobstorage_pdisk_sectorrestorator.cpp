@@ -100,7 +100,7 @@ void TSectorRestorator::Restore(ui8 *source, const ui64 offset, const ui64 magic
         if (!IsTrippleCopy && GoodSectorCount == ErasureDataParts) {
             if (PCtx) {
                 P_LOG(PRI_WARN, BPD01, "Restoring a sector",
-                        (Owner, owner),
+                        (OwnerId, owner),
                         (ErasureDataParts, ErasureDataParts),
                         (LastBadIdx, LastBadIdx),
                         (SectorOffset, offset + (ui64)LastBadIdx * (ui64)Format.SectorSize));

@@ -26,18 +26,24 @@ void EraseItems(std::vector<T>& container, const std::vector<ui32>& idxsToErase,
 
     auto itNextEraseIdx = idxsToErase.begin();
     ui64 writeIdx = idxsToErase.front();
-    for (ui64 readIdx = idxsToErase.front(); readIdx != container.size(); ++readIdx) {
-        if (itNextEraseIdx != idxsToErase.end() && readIdx == *itNextEraseIdx) {
-            policy.OnEraseItem(container[readIdx]);
-            ++itNextEraseIdx;
-            if (itNextEraseIdx != idxsToErase.end()) {
-                AFL_VERIFY(*itNextEraseIdx > *std::prev(itNextEraseIdx));
-                AFL_VERIFY(*itNextEraseIdx < container.size());
-            }
-        } else {
+    ui64 readIdx = idxsToErase.front();
+    while (readIdx != container.size()) {
+        AFL_VERIFY(itNextEraseIdx != idxsToErase.end() && readIdx == *itNextEraseIdx);
+
+        policy.OnEraseItem(container[readIdx]);
+        ++readIdx;
+        ++itNextEraseIdx;
+        if (itNextEraseIdx != idxsToErase.end()) {
+            AFL_VERIFY(*itNextEraseIdx > *std::prev(itNextEraseIdx));
+            AFL_VERIFY(*itNextEraseIdx < container.size());
+        }
+
+        const ui64 nextReadIdx = itNextEraseIdx == idxsToErase.end() ? container.size() : *itNextEraseIdx;
+        while (readIdx != nextReadIdx) {
             std::swap(container[writeIdx], container[readIdx]);
             policy.OnMoveItem(container[writeIdx], writeIdx);
             ++writeIdx;
+            ++readIdx;
         }
     }
 

@@ -771,8 +771,6 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
             // TODO(alexvru): pool?
             setup->LocalServices.emplace_back(NInterconnect::MakeLoadResponderActorId(NodeId),
                 TActorSetupCmd(NInterconnect::CreateLoadResponderActor(), TMailboxType::ReadAsFilled, systemPoolId));
-
-            //IC_Load::InitializeService(setup, appData, maxNode);
         }
     }
 

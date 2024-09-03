@@ -1231,7 +1231,7 @@ void TPDisk::OnLogCommitDone(TLogCommitDone &req) {
     if (req.Lsn <= ownerData.LastWrittenCommitLsn) {
         P_LOG(PRI_NOTICE, BPD01, "Got EvLog with lsn <= LastWrittenCommitLsn",
             (OwnerId, req.OwnerId),
-            (VDiskId, ownerData.VDiskId.ToString()),
+            (VDiskId, ownerData.VDiskId.ToStringWOGeneration()),
             (Lsn, req.Lsn),
             (LastWrittenCommitLsn, ownerData.LastWrittenCommitLsn));
     }

@@ -250,7 +250,7 @@ TString TPDisk::StartupOwnerInfo() {
         TOwnerData &data = OwnerData[owner];
         if (data.VDiskId != TVDiskID::InvalidId) {
             str << "{OwnerId: " << (ui32)owner;
-            str << " VDiskId: " << data.VDiskId.ToString();
+            str << " VDiskId: " << data.VDiskId.ToStringWOGeneration();
             str << " ChunkWrites: " << data.InFlight->ChunkWrites.load();
             str << " ChunkReads: " << data.InFlight->ChunkReads.load();
             str << " LogWrites: " << data.InFlight->LogWrites.load();
@@ -729,7 +729,7 @@ void TPDisk::AskVDisksToCutLogs(TOwner ownerFilter, bool doForce) {
                     } else {
                         P_LOG(PRI_INFO, BPD14, "Can't send CutLog", 
                             (OwnerId, ui32(chunkOwner)),
-                            (VDiskId, data.VDiskId.ToString()));
+                            (VDiskId, data.VDiskId.ToStringWOGeneration()));
                     }
                 }
             }
@@ -786,7 +786,7 @@ void TPDisk::AskVDisksToCutLogs(TOwner ownerFilter, bool doForce) {
                 } else {
                     P_LOG(PRI_INFO, BPD14, "Can't send CutLog", 
                         (OwnerId, ui32(ownerFilter)),
-                        (VDiskId, data.VDiskId.ToString()));
+                        (VDiskId, data.VDiskId.ToStringWOGeneration()));
                 }
             }
         }
@@ -1567,7 +1567,8 @@ void TPDisk::EventUndelivered(TUndelivered &req) {
     {
         for (ui32 i = OwnerBeginUser; i < OwnerEndUser; ++i) {
             if (OwnerData[i].CutLogId == req.Sender) {
-                P_LOG(PRI_CRIT, BPD24, "TEvCutLog was undelivered to vdisk", (VDiskId, OwnerData[i].VDiskId.ToString()));
+                P_LOG(PRI_CRIT, BPD24, "TEvCutLog was undelivered to vdisk",
+                    (VDiskId, OwnerData[i].VDiskId.ToStringWOGeneration()));
                 return;
             }
 
@@ -1928,7 +1929,7 @@ void TPDisk::YardInitFinish(TYardInit &evYardInit) {
 
         P_LOG(PRI_NOTICE, BPD02, "New owner is created",
                 (ownerId, owner),
-                (vDiskId, vDiskId.ToString()),
+                (vDiskId, vDiskId.ToStringWOGeneration()),
                 (FirstNonceToKeep, SysLogFirstNoncesToKeep.FirstNonceToKeep[owner]),
                 (CutLogId, ownerData.CutLogId),
                 (ownerRound, ownerData.OwnerRound));
@@ -2151,7 +2152,7 @@ void TPDisk::KillOwner(TOwner owner, TOwnerRound killOwnerRound, TCompletionEven
         VDiskOwners.erase(vDiskId);
 
         P_LOG(PRI_NOTICE, BPD12, "KillOwner", (ownerId, owner), (ownerRound, ownerRound),
-            (VDiskId, vDiskId.ToString()), (lastSeenLsn, lastSeenLsn));
+            (VDiskId, vDiskId.ToStringWOGeneration()), (lastSeenLsn, lastSeenLsn));
     }
 
     WriteSysLogRestorePoint(completionAction, TReqId(TReqId::KillOwnerSysLog, 0), {});

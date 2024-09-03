@@ -184,10 +184,11 @@ struct TCombinerNodes {
     }
 };
 
-class TState : public TComputationValue<TState> {
+template <bool GrowLessOnLowMemory = true>
+class TState : public TComputationValue<TState<GrowLessOnLowMemory>> {
     typedef TComputationValue<TState> TBase;
 private:
-    using TStates = TRobinHoodHashSet<NUdf::TUnboxedValuePod*, TEqualsFunc, THashFunc, TMKQLAllocator<char, EMemorySubPool::Temporary>>;
+    using TStates = TRobinHoodHashSet<NUdf::TUnboxedValuePod*, TEqualsFunc, THashFunc, TMKQLAllocator<char, EMemorySubPool::Temporary>, TRobinHoodGrowManager<GrowLessOnLowMemory>>;
     using TRow = std::vector<NUdf::TUnboxedValuePod, TMKQLAllocator<NUdf::TUnboxedValuePod>>;
     using TStorage = std::deque<TRow, TMKQLAllocator<TRow>>;
 
@@ -239,8 +240,8 @@ private:
         return KeyWidth + StateWidth;
     }
 public:
-    TState(TMemoryUsageInfo* memInfo, ui32 keyWidth, ui32 stateWidth, const THashFunc& hash, const TEqualsFunc& equal)
-        : TBase(memInfo), KeyWidth(keyWidth), StateWidth(stateWidth), States(hash, equal, CountRowsOnPage) {
+    TState(TMemoryUsageInfo* memInfo, ui32 keyWidth, ui32 stateWidth, const THashFunc& hash, const TEqualsFunc& equal, TIsLowMemoryCallback isLowMemoryCallback = nullptr)
+        : TBase(memInfo), KeyWidth(keyWidth), StateWidth(stateWidth), States(hash, equal, CountRowsOnPage, isLowMemoryCallback) {
         CurrentPage = &Storage.emplace_back(RowSize() * CountRowsOnPage, NUdf::TUnboxedValuePod());
         CurrentPosition = 0;
         Tongue = CurrentPage->data();

@@ -5,7 +5,6 @@
 #include "service_initializer.h"
 
 #include <ydb/core/actorlib_impl/destruct_actor.h>
-#include <ydb/core/actorlib_impl/load_network.h>
 
 #include "ydb/core/audit/audit_log_service.h"
 

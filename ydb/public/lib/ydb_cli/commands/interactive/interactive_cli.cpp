@@ -194,7 +194,7 @@ void TInteractiveCLI::Run() {
         }
     }
 
-    std::cout << "Bye" << '\n';
+    std::cout << std::endl << "Bye" << std::endl;
 }
 
 }

@@ -8,7 +8,7 @@ void IProposeTxOperator::DoSendReply(TColumnShard& owner, const TActorContext& c
         new TEvPipeCache::TEvForward(BuildProposeResultEvent().release(), (ui64)owner.CurrentSchemeShardId, false));
 }
 
-std::unique_ptr<NKikimr::TEvColumnShard::TEvProposeTransactionResult> IProposeTxOperator::BuildProposeResultEvent() const {
+std::unique_ptr<NKikimr::TEvColumnShard::TEvProposeTransactionResult> IProposeTxOperator::BuildProposeResultEvent(const TColumnShard& owner) const {
     const auto& txInfo = GetTxInfo();
     std::unique_ptr<TEvColumnShard::TEvProposeTransactionResult> evResult =
         std::make_unique<TEvColumnShard::TEvProposeTransactionResult>(owner.TabletID(), txInfo.TxKind, txInfo.TxId,

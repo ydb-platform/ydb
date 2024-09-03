@@ -21,9 +21,7 @@
 
 ## Оркестрация {#orchestration}
 
-| Среда | Инструкция |
-| --- | --- |
-| [{{ airflow-name }}](https://airflow.apache.org) | [Инструкция](airflow.md) |
+{% include notitle [Содержание](orchestration/_includes/toc-table.md) %}
 
 ## Поставка данных {#ingestion}
 

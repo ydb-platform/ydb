@@ -1,17 +1,18 @@
 # {{ airflow-name }}
 
-Интеграция {{ airflow-name }} с {{ ydb-short-name }} позволяет автоматизировать сложные рабочие процессы и управлять ими. {{ airflow-name }} предоставляет возможности для планирования задач, мониторинга их выполнения и управления зависимостями между ними — оркестрацией. Использование Airflow для оркестрации задач, таких как загрузка данных в {{ydb-short-name}}, выполнение запросов и управление транзакциями, позволяет автоматизировать и оптимизировать операционные процессы. Это особенно важно для задач ETL, где данные больших объемов требуют регулярного извлечения, преобразования и загрузки.
+Интеграция {{ ydb-short-name }} с [{{ airflow-name }}](https://airflow.apache.org) позволяет автоматизировать сложные рабочие процессы и управлять ими. {{ airflow-name }} предоставляет возможности для планирования задач, мониторинга их выполнения и управления зависимостями между ними — оркестрацией. Использование Airflow для оркестрации задач, таких как загрузка данных в {{ydb-short-name}}, выполнение запросов и управление транзакциями, позволяет автоматизировать и оптимизировать операционные процессы. Это особенно важно для задач ETL, где данные больших объемов требуют регулярного извлечения, преобразования и загрузки.
 
-Для работы под управлением [{{ airflow-name }}](https://airflow.apache.org) {{ ydb-full-name }} предоставляет пакет [провайдера](https://airflow.apache.org/docs/apache-airflow-providers) [apache-airflow-providers-ydb](https://pypi.org/project/apache-airflow-providers-ydb/). [Задания {{ airflow-name }}](https://airflow.apache.org/docs/apache-airflow/stable/index.html) представляют собой приложения на языке Python, состоящие из набора [операторов {{ airflow-name }}](https://airflow.apache.org/docs/apache-airflow/stable/core-concepts/operators.html) и их [зависимостей](https://airflow.apache.org/docs/apache-airflow/stable/core-concepts/dags.html), определяющих порядок выполнения.
+Для работы под управлением {{ airflow-name }} {{ ydb-full-name }} предоставляет пакет [провайдера](https://airflow.apache.org/docs/apache-airflow-providers) [apache-airflow-providers-ydb](https://pypi.org/project/apache-airflow-providers-ydb/). [Задания {{ airflow-name }}](https://airflow.apache.org/docs/apache-airflow/stable/index.html) представляют собой приложения на языке Python, состоящие из набора [операторов {{ airflow-name }}](https://airflow.apache.org/docs/apache-airflow/stable/core-concepts/operators.html) и их [зависимостей](https://airflow.apache.org/docs/apache-airflow/stable/core-concepts/dags.html), определяющих порядок выполнения.
 
 ## Установка {#setup}
 
 Для корректной работы пакета `apache-airflow-providers-ydb` необходимо на всех хостах {{ airflow-name }} выполнить следующие команды:
 
 ```shell
-pip install ydb
-pip install apache-airflow-providers-ydb
+pip install ydb apache-airflow-providers-ydb
 ```
+
+Для работы требуется Python версии не ниже, чем `3.8`.
 
 ## Объектная модель {#object_model}
 
@@ -24,7 +25,7 @@ pip install apache-airflow-providers-ydb
 Для выполнения запросов к {{ ydb-full-name }} используется {{ airflow-name }} оператор `YDBExecuteQueryOperator`.
 
 Обязательные аргументы:
-* `name` — название задания {{ airflow-name }}.
+* `task_id` — название задания {{ airflow-name }}.
 * `sql` — текст SQL-запроса, который необходимо выполнить в {{ ydb-full-name }}.
 
 Опциональные аргументы:
@@ -58,6 +59,7 @@ ydb_operator = YDBExecuteQueryOperator(task_id="ydb_operator", sql="SELECT 'Hell
 Выполняет [пакетную вставку данных](../recipes/ydb-sdk/bulk-upsert.md) в таблицы {{ ydb-full-name }}.
 
 Обязательные аргументы:
+* `table_name` — название таблицы {{ ydb-full-name }}, куда будет выполняться вставка данных.
 * `rows` — массив строк для вставки.
 * `column_types` — описание типов колонок.
 
@@ -111,7 +113,7 @@ connection.close()
 
 ## Соответствие YQL и Python-типов
 
-Ниже приведены правила преобразования YQL-типов в Python-результаты.
+Ниже приведены правила преобразования YQL-типов в Python-результаты. Типы, не указанные в списке ниже, не поддерживаются.
 
 ### Скалярные типы {#scalars-types}
 
@@ -119,35 +121,34 @@ connection.close()
 | --- | --- | --- |
 | `Int8`, `Int16`, `Int32`, `Uint8`, `Uint16`, `Uint32`, `Int64`, `Uint64` | `int` | `647713` |
 | `Bool` | `bool` | True |
-| `Float`, `Double` | `double`<br/>NaN и Inf представляются в виде `None` | `7.88731023`<br/>`None` |
+| `Float`, `float` | `float`<br/>NaN и Inf представляются в виде `None` | `7.88731023`<br/>`None` |
 | `Decimal` | `Decimal` | `45.23410083` |
 | `Utf8` | `str` | `Текст строки` |
-| `String` | `str` <br/> `bytes`  | `Текст строки` |
+| `String` | `str` | `Текст строки` |
 
 ### Сложные типы {#complex-types}
 
 | YQL-тип | Python-тип | Пример в Python |
 | --- | --- | --- |
 | `Json`, `JsonDocument` | `str` (весь узел вставляется как строка) | `{"a":[1,2,3]}` |
-| `Date`, `Datetime`, `Timestamp` | `datetime` | `2022-02-09` |
+| `Date` | `datetime.date` | `2022-02-09` |
+| `Datetime`, `Timestamp` | `datetime.datetime` | `2022-02-09 10:13:11` |
 
 ### Опциональные типы {#optional-types}
 
 | YQL-тип | Python-тип | Пример в Python |
 | --- | --- | --- |
-| `Optional` | Оригинальный тип или None | ```1``` |
+| `Optional` | Оригинальный тип или None | `1` |
 
 ### Контейнеры {#containers}
 
 | YQL-тип | Python-тип | Пример в Python |
 | --- | --- | --- |
 | `List<Type>` | `list` | `[1,2,3,4]` |
-| `Dict<KeyType, ValueType>` | `dict` | ```{key1: value1, key2: value2}``` |
-| `Set<KeyType>` | `set` | ```set(key_value1, key_value2)``` |
-| `Tuple<Type1, Type2>` | `tuple` | ```(element1, element2, ..)``` |
-| `Struct<Name:Utf8,Age:Int32>`| `dict` | `{ "Name": "John", "Age": 128 }` |
-| `Variant<Type1, Type2>` с tuple | `list` | ```list[64563, 1]``` |
-| `Variant<value:Int32,error:String>` со структурой | `dict` | ```{key1: value1, key2: value2}``` |
+| `Dict<KeyType, ValueType>` | `dict` | `{key1: "value1", key2: "value2"}` |
+| `Set<KeyType>` | `set` | `set(key_value1, key_value2)` |
+| `Tuple<Type1, Type2>` | `tuple` | `(element1, element2)` |
+| `Struct<Name:Utf8,Age:Int32>`| `dict` | `{ "Name": "value1", "Age": value2 }` |
 
 ### Специальные типы {#special-types}
 
@@ -163,14 +164,14 @@ connection.close()
 
 В примере ниже создается задание `create_pet_table`, создающее таблицу в {{ ydb-full-name }}. После успешного создания таблицы вызывается задание `populate_pet_table`, заполняющее таблицу данными с помощью команд `UPSERT`, и задание `populate_pet_table_via_bulk_upsert`, заполняющее таблицу с помощью команд пакетной вставки данных [`bulk_upsert`](../recipes/ydb-sdk/bulk-upsert.md). После выполнения вставки данных выполняется операция чтения с помощью задания `get_all_pets` и задание для параметризованного чтения данных `get_birth_date`.
 
+![](_assets/airflow_dag.png)
+
 ```python
 from __future__ import annotations
 
 import datetime
-import os
 
 import ydb
-from airflow.operators.python import PythonOperator
 from airflow import DAG
 from airflow.decorators import task
 from airflow.providers.ydb.hooks.ydb import YDBHook
@@ -196,7 +197,7 @@ def populate_pet_table_via_bulk_upsert():
 
 
 with DAG(
-    dag_id="ydb_operator_dag",
+    dag_id="ydb_demo_dag",
     start_date=datetime.datetime(2020, 2, 2),
     schedule="@once",
     catchup=False,

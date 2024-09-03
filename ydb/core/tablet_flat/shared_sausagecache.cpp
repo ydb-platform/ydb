@@ -12,26 +12,31 @@
 
 namespace NKikimr {
 
-TSharedPageCacheCounters::TSharedPageCacheCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters> &group)
-    : FreshBytes(group->GetCounter("fresh"))
-    , StagingBytes(group->GetCounter("staging"))
-    , WarmBytes(group->GetCounter("warm"))
-    , MemLimitBytes(group->GetCounter("MemLimitBytes"))
-    , ConfigLimitBytes(group->GetCounter("ConfigLimitBytes"))
-    , ActivePages(group->GetCounter("ActivePages"))
-    , ActiveBytes(group->GetCounter("ActiveBytes"))
-    , ActiveLimitBytes(group->GetCounter("ActiveLimitBytes"))
-    , PassivePages(group->GetCounter("PassivePages"))
-    , PassiveBytes(group->GetCounter("PassiveBytes"))
-    , RequestedPages(group->GetCounter("RequestedPages", true))
-    , RequestedBytes(group->GetCounter("RequestedBytes", true))
-    , CacheHitPages(group->GetCounter("CacheHitPages", true))
-    , CacheHitBytes(group->GetCounter("CacheHitBytes", true))
-    , CacheMissPages(group->GetCounter("CacheMissPages", true))
-    , CacheMissBytes(group->GetCounter("CacheMissBytes", true))
-    , LoadInFlyPages(group->GetCounter("LoadInFlyPages"))
-    , LoadInFlyBytes(group->GetCounter("LoadInFlyBytes"))
+TSharedPageCacheCounters::TSharedPageCacheCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters> &counters)
+    : Counters(counters)
+    , FreshBytes(counters->GetCounter("fresh"))
+    , StagingBytes(counters->GetCounter("staging"))
+    , WarmBytes(counters->GetCounter("warm"))
+    , MemLimitBytes(counters->GetCounter("MemLimitBytes"))
+    , ConfigLimitBytes(counters->GetCounter("ConfigLimitBytes"))
+    , ActivePages(counters->GetCounter("ActivePages"))
+    , ActiveBytes(counters->GetCounter("ActiveBytes"))
+    , ActiveLimitBytes(counters->GetCounter("ActiveLimitBytes"))
+    , PassivePages(counters->GetCounter("PassivePages"))
+    , PassiveBytes(counters->GetCounter("PassiveBytes"))
+    , RequestedPages(counters->GetCounter("RequestedPages", true))
+    , RequestedBytes(counters->GetCounter("RequestedBytes", true))
+    , CacheHitPages(counters->GetCounter("CacheHitPages", true))
+    , CacheHitBytes(counters->GetCounter("CacheHitBytes", true))
+    , CacheMissPages(counters->GetCounter("CacheMissPages", true))
+    , CacheMissBytes(counters->GetCounter("CacheMissBytes", true))
+    , LoadInFlyPages(counters->GetCounter("LoadInFlyPages"))
+    , LoadInFlyBytes(counters->GetCounter("LoadInFlyBytes"))
 { }
+
+TSharedPageCacheCounters::TCounterPtr TSharedPageCacheCounters::ReplacementPolicy(TReplacementPolicy policy) {
+    return Counters->GetCounter(TStringBuilder() << "ReplacementPolicy/" << policy);
+}
 
 }
 
@@ -304,17 +309,20 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             logl << "Replacement policy switch from " << Config->ReplacementPolicy << " to " << msg->ReplacementPolicy;
         }
 
+        Config->Counters->ReplacementPolicy(Config->ReplacementPolicy)->Set(0);
         Config->ReplacementPolicy = msg->ReplacementPolicy;
+        Config->Counters->ReplacementPolicy(Config->ReplacementPolicy)->Set(1);
 
-        auto newCache = CreateCache();
+        auto oldCache = CreateCache();
+        Cache.Swap(oldCache);
         ActualizeCacheSizeLimit();
 
-        while (auto page = Cache->EvictNext()) {
+        while (auto page = oldCache->EvictNext()) {
             page->VerifyNoCacheFlags();
             
             // touch each page multiple times to make it hot
             for (ui32 touchTimes = 0; touchTimes < 2; touchTimes++) {
-                Evict(newCache->Touch(page));
+                Evict(Cache->Touch(page));
             }
         }
     }
@@ -1172,6 +1180,8 @@ public:
         : Config(std::move(config))
         , Cache(CreateCache())
     {
+        Config->Counters->ReplacementPolicy(Config->ReplacementPolicy)->Set(1);
+
         AsyncRequests.Limit = Config->TotalAsyncQueueInFlyLimit;
         ScanRequests.Limit = Config->TotalScanQueueInFlyLimit;
     }

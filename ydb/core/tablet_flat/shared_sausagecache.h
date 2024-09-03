@@ -22,6 +22,9 @@ struct TEvSharedPageCache {
 
 struct TSharedPageCacheCounters final : public TAtomicRefCount<TSharedPageCacheCounters> {
     using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
+    using TReplacementPolicy = NKikimrSharedCache::TSharedCacheConfig::TReplacementPolicy;
+
+    const TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
 
     const TCounterPtr FreshBytes;
     const TCounterPtr StagingBytes;
@@ -44,6 +47,8 @@ struct TSharedPageCacheCounters final : public TAtomicRefCount<TSharedPageCacheC
     const TCounterPtr LoadInFlyBytes;
 
     explicit TSharedPageCacheCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters> &group);
+
+    TCounterPtr ReplacementPolicy(TReplacementPolicy policy);
 };
 
 // TODO: use protobuf configs
@@ -57,7 +62,6 @@ struct TSharedPageCacheConfig {
     ui32 ActivePagesReservationPercent = 50;
 
     TReplacementPolicy ReplacementPolicy = TReplacementPolicy::TSharedCacheConfig_TReplacementPolicy_ThreeLeveledLRU;
-    ui32 ReplacementPolicySwitchUniformDelaySeconds = 0;
 };
 
 IActor* CreateSharedPageCache(THolder<TSharedPageCacheConfig> config);

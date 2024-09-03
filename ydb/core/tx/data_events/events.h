@@ -116,7 +116,9 @@ struct TDataEvents {
             result->Record.SetOrigin(origin);
             result->Record.SetTxId(txId);
             result->Record.SetStatus(NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
-            *result->Record.AddTxLocks() = lock;
+            auto& lockResult = *result->Record.AddTxLocks();
+            lockResult = lock;
+            lockResult.SetHasWrites(true);
             return result;
         }
 

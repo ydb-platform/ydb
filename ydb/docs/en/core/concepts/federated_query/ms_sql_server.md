@@ -22,7 +22,7 @@ To work with an external Microsoft SQL Server database, you need to follow these
 1. {% include [!](_includes/connector_deployment.md) %}
 1. [Execute a query](#query) to the database.
 
-## Query syntax { #query }
+## Query syntax {#query}
 The following SQL query format is used to work with Microsoft SQL Server:
 
 ```sql

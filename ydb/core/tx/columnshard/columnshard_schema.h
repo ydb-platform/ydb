@@ -109,7 +109,10 @@ struct Schema : NIceDb::Schema {
         SmallBlobs = 12,
         OneToOneEvictedBlobs = 13,
         BlobsToDeleteWT = 14,
-        InFlightSnapshots = 15
+        InFlightSnapshots = 15,
+        TxDependencies = 16,
+        TxStates = 17,
+        TxEvents = 18
     };
 
     // Tablet tables
@@ -257,6 +260,32 @@ struct Schema : NIceDb::Schema {
 
         using TKey = TableKey<PlanStep, TxId>;
         using TColumns = TableColumns<PlanStep, TxId>;
+    };
+
+    struct TxDependencies: Table<(ui32)ECommonTables::TxDependencies> {
+        struct CommitTxId: Column<1, NScheme::NTypeIds::Uint64> {};
+        struct BrokenTxId: Column<2, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<CommitTxId, BrokenTxId>;
+        using TColumns = TableColumns<CommitTxId, BrokenTxId>;
+    };
+
+    struct TxStates: Table<(ui32)ECommonTables::TxStates> {
+        struct TxId: Column<1, NScheme::NTypeIds::Uint64> {};
+        struct Broken: Column<2, NScheme::NTypeIds::Bool> {};
+
+        using TKey = TableKey<TxId>;
+        using TColumns = TableColumns<TxId, Broken>;
+    };
+
+    struct TxEvents: Table<(ui32)ECommonTables::TxEvents> {
+        struct TxId: Column<1, NScheme::NTypeIds::Uint64> {};
+        struct GenerationId: Column<2, NScheme::NTypeIds::Uint64> {};
+        struct GenerationInternalId: Column<3, NScheme::NTypeIds::Uint64> {};
+        struct Data: Column<4, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<TxId, GenerationId, GenerationInternalId>;
+        using TColumns = TableColumns<TxId, GenerationId, GenerationInternalId, Data>;
     };
 
     // Index tables
@@ -555,7 +584,10 @@ struct Schema : NIceDb::Schema {
         ShardingInfo,
         Normalizers,
         NormalizerEvents,
-        InFlightSnapshots
+        InFlightSnapshots,
+        TxDependencies,
+        TxStates,
+        TxEvents
         >;
 
     //
@@ -671,8 +703,8 @@ struct Schema : NIceDb::Schema {
     static void SaveTxInfo(NIceDb::TNiceDb& db, const TFullTxInfo& txInfo,
                            const TString& txBody);
 
+    static void UpdateTxInfoBody(NIceDb::TNiceDb& db, const ui64 txId, const TString& txBody);
     static void UpdateTxInfoSource(NIceDb::TNiceDb& db, const TFullTxInfo& txInfo);
-
     static void UpdateTxInfoSource(NIceDb::TNiceDb& db, ui64 txId, const TActorId& source, ui64 cookie) {
         db.Table<TxInfo>().Key(txId).Update(
             NIceDb::TUpdate<TxInfo::Source>(source),

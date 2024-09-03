@@ -51,7 +51,7 @@ The provider will be installed in the Terraform plugins folder - `~/.terraform.d
       }
       required_version = ">= 0.13"
     }
-    
+
     provider "ydb" {
       token = "<TOKEN>"
       //OR for static credentials
@@ -459,7 +459,7 @@ resource "ydb_table" "ydb_table" {
 resource "ydb_table" "ydb_table" {
   # Path to the table
   path = "path/to/table" # path relative to the base root
-  
+
   # ConnectionString to the database.
   connection_string = "grpc(s)://HOST:PORT/?database=/database/path" #DB connection example
 

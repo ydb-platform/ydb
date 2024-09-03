@@ -2,6 +2,7 @@
 
 
 #include <numeric>
+#include <util/string/join.h>
 #include <util/string/printf.h>
 #include "bitset.h"
 
@@ -272,21 +273,23 @@ public:
     {}
 
     void Apply(const TJoinOrderHints& hints) {
-        auto labels = ApplyHintsToSubgraph(hints.HintsTree);
-        auto nodes = Graph_.GetNodesByRelNames(labels);
-        
-        for (size_t i = 0; i < Graph_.GetEdges().size(); ++i) {
-            TNodeSet newLeft = Graph_.GetEdge(i).Left;
-            if (Overlaps(Graph_.GetEdge(i).Left, nodes) && !IsSubset(Graph_.GetEdge(i).Right, nodes)) {
-                newLeft |= nodes;
-            }
+        for (const auto& hintTree: hints.HintTrees) {
+            auto labels = ApplyHintsToSubgraph(hintTree);
+            auto nodes = Graph_.GetNodesByRelNames(labels);
+            
+            for (size_t i = 0; i < Graph_.GetEdges().size(); ++i) {
+                TNodeSet newLeft = Graph_.GetEdge(i).Left;
+                if (Overlaps(Graph_.GetEdge(i).Left, nodes) && !IsSubset(Graph_.GetEdge(i).Right, nodes)) {
+                    newLeft |= nodes;
+                }
 
-            TNodeSet newRight = Graph_.GetEdge(i).Right;
-            if (Overlaps(Graph_.GetEdge(i).Right, nodes) && !IsSubset(Graph_.GetEdge(i).Left, nodes)) {
-                newRight |= nodes;
-            }
+                TNodeSet newRight = Graph_.GetEdge(i).Right;
+                if (Overlaps(Graph_.GetEdge(i).Right, nodes) && !IsSubset(Graph_.GetEdge(i).Left, nodes)) {
+                    newRight |= nodes;
+                }
 
-            Graph_.UpdateEdgeSides(i, newLeft, newRight);
+                Graph_.UpdateEdgeSides(i, newLeft, newRight);
+            }
         }
     }
 
@@ -302,14 +305,8 @@ private:
             
             auto* maybeEdge = Graph_.FindEdgeBetween(lhs, rhs);
             if (maybeEdge == nullptr) {
-                auto str = [](const TVector<TString>& v) -> TString {
-                    TString s;
-                    for (auto& el : v) { s += (el + ", "); }
-                    return s.empty()? s: s.substr(0, s.length() - 2);
-                };
-
                 const char* errStr = "There is no edge between {%s}, {%s}. The graf: %s";
-                Y_ENSURE(false, Sprintf(errStr, str(lhsLabels).c_str(), str(rhsLabels).c_str(), Graph_.String().c_str()));            
+                Y_ENSURE(false, Sprintf(errStr, JoinSeq(", ", lhsLabels).c_str(), JoinSeq(", ", rhsLabels).c_str(), Graph_.String().c_str()));            
             }
 
             size_t revEdgeIdx = maybeEdge->ReversedEdgeId;

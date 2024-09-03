@@ -11,9 +11,10 @@ General format of the command:
 * `global options`: [Global parameters](commands/global-options.md).
 * `options`: [Parameters of the subcommand](#options).
 * `kind`: The type of operation. Possible values:
-   * `buildindex`: The build index operations.
-   * `export/s3`: The export operations.
-   * `import/s3`: The import operations.
+
+  * `buildindex`: The build index operations.
+  * `export/s3`: The export operations.
+  * `import/s3`: The import operations.
 
 View a description of the command to get a list of long-running operations:
 

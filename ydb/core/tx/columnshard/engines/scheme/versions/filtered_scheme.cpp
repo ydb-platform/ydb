@@ -5,8 +5,8 @@
 namespace NKikimr::NOlap {
 
 TFilteredSnapshotSchema::TFilteredSnapshotSchema(ISnapshotSchema::TPtr originalSnapshot, const std::vector<ui32>& columnIds)
-    : TFilteredSnapshotSchema(originalSnapshot, std::set(columnIds.begin(), columnIds.end()))
-{}
+    : TFilteredSnapshotSchema(originalSnapshot, std::set(columnIds.begin(), columnIds.end())) {
+}
 
 TFilteredSnapshotSchema::TFilteredSnapshotSchema(ISnapshotSchema::TPtr originalSnapshot, const std::set<ui32>& columnIds)
     : OriginalSnapshot(originalSnapshot)
@@ -48,7 +48,14 @@ std::shared_ptr<TColumnLoader> TFilteredSnapshotSchema::GetColumnLoaderOptional(
 }
 
 std::optional<ui32> TFilteredSnapshotSchema::GetColumnIdOptional(const std::string& columnName) const {
-    return OriginalSnapshot->GetColumnIdOptional(columnName);
+    auto result = OriginalSnapshot->GetColumnIdOptional(columnName);
+    if (!result) {
+        return result;
+    }
+    if (!ColumnIds.contains(*result)) {
+        return std::nullopt;
+    }
+    return result;
 }
 
 int TFilteredSnapshotSchema::GetFieldIndex(const ui32 columnId) const {

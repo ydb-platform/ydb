@@ -14,7 +14,7 @@
 ```
 В этом случае число выражений должно совпадать с размером кортежа.
 
-У каждого именованного выражения есть область видимости. Она начинается сразу после определения именованного выражения и заканчивается в конце ближайшего охватывающего scope имен (например в конце запроса либо в конце тела [лямбда-функции](#lambda), [ACTION](../../action.md#define-action){% if feature_subquery %}, [SUBQUERY](../../subquery.md#define-subquery){% endif %}{% if feature_mapreduce %} или цикла [EVALUATE FOR](../../action.md#evaluate-for){% endif %}).
+У каждого именованного выражения есть область видимости. Она начинается сразу после определения именованного выражения и заканчивается в конце ближайшего охватывающего scope имен (например в конце запроса либо в конце тела [лямбда-функции](../../../syntax/expressions.md#lambda), [ACTION](../../action.md#define-action){% if feature_subquery %}, [SUBQUERY](../../subquery.md#define-subquery){% endif %}{% if feature_mapreduce %} или цикла [EVALUATE FOR](../../action.md#evaluate-for){% endif %}).
 Повторное определение именованного выражения с тем же именем приводит к сокрытию предыдущего выражения из текущей области видимости.
 
 Если именованное выражение ни разу не использовалось, то генерируется предупреждение. Для того, чтобы избавиться от такого предупреждения, достаточно использовать символ подчеркивания в качестве первого символа идентификатора (например `$_foo`).
@@ -37,7 +37,7 @@ export $_; --- ошибка: Can not export anonymous name $_
 import utils symbols $sqrt as $_; --- ошибка: Can not import anonymous name $_
 ```
 {% endif %}
-Анонимные имена аргументов поддерживаются также для [лямбда-функций](#lambda), [ACTION](../../action.md#define-action){% if feature_subquery %}, [SUBQUERY](../../subquery.md#define-subquery){% endif %}{% if feature_mapreduce %} и в [EVALUATE FOR](../../action.md#evaluate-for){% endif %}.
+Анонимные имена аргументов поддерживаются также для [лямбда-функций](../../../syntax/expressions.md#lambda), [ACTION](../../action.md#define-action){% if feature_subquery %}, [SUBQUERY](../../subquery.md#define-subquery){% endif %}{% if feature_mapreduce %} и в [EVALUATE FOR](../../action.md#evaluate-for){% endif %}.
 
 {% note info %}
 

@@ -8,6 +8,7 @@
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/minikql/mkql_node.h>
 
+#include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/event_pb.h>
 #include <ydb/library/actors/core/events.h>
 
@@ -116,9 +117,7 @@ namespace NYql::NDqs {
         explicit TEvFullResultWriterAck(NDqProto::TFullResultWriterAck& data);
     };
 
-    struct TEvMessageProcessed : NActors::TEventBase<TEvMessageProcessed, TDqDataEvents::ES_MESSAGE_PROCESSED> {
-        DEFINE_SIMPLE_LOCAL_EVENT(TEvMessageProcessed, "");
-
+    struct TEvMessageProcessed : NActors::TEventLocal<TEvMessageProcessed, TDqDataEvents::ES_MESSAGE_PROCESSED> {
         explicit TEvMessageProcessed(const TString& messageId);
 
         const TString MessageId;

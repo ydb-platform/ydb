@@ -1,4 +1,5 @@
 #include "tx_controller.h"
+
 #include "transactions/tx_finish_async.h"
 
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
@@ -53,9 +54,9 @@ bool TTxController::Load(NTabletFlatExecutor::TTransactionContext& txc) {
         const ui64 txId = rowset.GetValue<Schema::TxInfo::TxId>();
         const NKikimrTxColumnShard::ETransactionKind txKind = rowset.GetValue<Schema::TxInfo::TxKind>();
         ITransactionOperator::TPtr txOperator(ITransactionOperator::TFactory::Construct(txKind, TTxInfo(txKind, txId)));
-        Y_ABORT_UNLESS(!!txOperator);
+        AFL_VERIFY(!!txOperator)("kind", txKind);
         const TString txBody = rowset.GetValue<Schema::TxInfo::TxBody>();
-        Y_ABORT_UNLESS(txOperator->Parse(Owner, txBody, true));
+        AFL_VERIFY(txOperator->Parse(Owner, txBody, true));
 
         auto& txInfo = txOperator->MutableTxInfo();
         txInfo.MaxStep = rowset.GetValue<Schema::TxInfo::MaxStep>();
@@ -90,22 +91,9 @@ bool TTxController::Load(NTabletFlatExecutor::TTransactionContext& txc) {
     return true;
 }
 
-TTxController::ITransactionOperator::TPtr TTxController::GetTxOperator(const ui64 txId) const {
-    auto it = Operators.find(txId);
-    if (it == Operators.end()) {
-        return nullptr;
-    }
-    return it->second;
-}
-
-TTxController::ITransactionOperator::TPtr TTxController::GetVerifiedTxOperator(const ui64 txId) const {
-    auto it = Operators.find(txId);
-    AFL_VERIFY(it != Operators.end())("tx_id", txId);
-    return it->second;
-}
-
-std::shared_ptr<TTxController::ITransactionOperator> TTxController::UpdateTxSourceInfo(const TFullTxInfo& tx, NTabletFlatExecutor::TTransactionContext& txc) {
-    auto op = GetVerifiedTxOperator(tx.GetTxId());
+std::shared_ptr<TTxController::ITransactionOperator> TTxController::UpdateTxSourceInfo(
+    const TFullTxInfo& tx, NTabletFlatExecutor::TTransactionContext& txc) {
+    auto op = GetTxOperatorVerified(tx.GetTxId());
     op->ResetStatusOnUpdate();
     auto& txInfo = op->MutableTxInfo();
     txInfo.Source = tx.Source;
@@ -117,7 +105,8 @@ std::shared_ptr<TTxController::ITransactionOperator> TTxController::UpdateTxSour
     return op;
 }
 
-TTxController::TTxInfo TTxController::RegisterTx(const std::shared_ptr<TTxController::ITransactionOperator>& txOperator, const TString& txBody, NTabletFlatExecutor::TTransactionContext& txc) {
+TTxController::TTxInfo TTxController::RegisterTx(const std::shared_ptr<TTxController::ITransactionOperator>& txOperator, const TString& txBody,
+    NTabletFlatExecutor::TTransactionContext& txc) {
     NIceDb::TNiceDb db(txc.DB);
     auto& txInfo = txOperator->GetTxInfo();
     AFL_VERIFY(txInfo.MaxStep == Max<ui64>());
@@ -128,7 +117,8 @@ TTxController::TTxInfo TTxController::RegisterTx(const std::shared_ptr<TTxContro
     return txInfo;
 }
 
-TTxController::TTxInfo TTxController::RegisterTxWithDeadline(const std::shared_ptr<TTxController::ITransactionOperator>& txOperator, const TString& txBody, NTabletFlatExecutor::TTransactionContext& txc) {
+TTxController::TTxInfo TTxController::RegisterTxWithDeadline(const std::shared_ptr<TTxController::ITransactionOperator>& txOperator,
+    const TString& txBody, NTabletFlatExecutor::TTransactionContext& txc) {
     NIceDb::TNiceDb db(txc.DB);
 
     auto& txInfo = txOperator->MutableTxInfo();
@@ -193,7 +183,14 @@ bool TTxController::ExecuteOnCancel(const ui64 txId, NTabletFlatExecutor::TTrans
     return true;
 }
 
-std::optional<TTxController::TTxInfo> TTxController::StartPlannedTx() {
+std::optional<TTxController::TTxInfo> TTxController::GetFirstPlannedTx() const {
+    if (!PlanQueue.empty()) {
+        return GetTxInfoVerified(PlanQueue.begin()->TxId);
+    }
+    return std::nullopt;
+}
+
+std::optional<TTxController::TTxInfo> TTxController::PopFirstPlannedTx() {
     if (!PlanQueue.empty()) {
         auto node = PlanQueue.extract(PlanQueue.begin());
         auto& item = node.value();
@@ -310,7 +307,8 @@ std::shared_ptr<TTxController::ITransactionOperator> TTxController::StartPropose
     NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("method", "TTxController::StartProposeOnExecute")(
         "tx_info", txInfo.DebugString())("tx_info", txInfo.DebugString());
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "start");
-    std::shared_ptr<TTxController::ITransactionOperator> txOperator(TTxController::ITransactionOperator::TFactory::Construct(txInfo.TxKind, txInfo));
+    std::shared_ptr<TTxController::ITransactionOperator> txOperator(
+        TTxController::ITransactionOperator::TFactory::Construct(txInfo.TxKind, txInfo));
     AFL_VERIFY(!!txOperator);
     if (!txOperator->Parse(Owner, txBody)) {
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse txOperator");
@@ -322,8 +320,8 @@ std::shared_ptr<TTxController::ITransactionOperator> TTxController::StartPropose
     if (!!txInfoPtr) {
         if (!txOperator->CheckAllowUpdate(*txInfoPtr)) {
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", "incorrect duplication")("actual_tx", txInfoPtr->DebugString());
-            TTxController::TProposeResult proposeResult(
-                NKikimrTxColumnShard::EResultStatus::ERROR, TStringBuilder() << "Another commit TxId# " << txInfo.TxId << " has already been proposed");
+            TTxController::TProposeResult proposeResult(NKikimrTxColumnShard::EResultStatus::ERROR,
+                TStringBuilder() << "Another commit TxId# " << txInfo.TxId << " has already been proposed");
             txOperator->SetProposeStartInfo(proposeResult);
             return txOperator;
         } else {
@@ -348,31 +346,29 @@ std::shared_ptr<TTxController::ITransactionOperator> TTxController::StartPropose
 
 void TTxController::StartProposeOnComplete(const ui64 txId, const TActorContext& ctx) {
     NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("method", "TTxController::StartProposeOnComplete")("tx_id", txId);
-    auto txOperator = GetTxOperator(txId);
-    if (!txOperator) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", "cannot found txOperator in propose transaction base")("tx_id", txId);
-    } else {
+    if (auto txOperator = GetTxOperatorOptional(txId)) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "start");
         txOperator->StartProposeOnComplete(Owner, ctx);
         Counters.OnStartProposeOnComplete(txOperator->GetOpType());
+    } else {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", "cannot found txOperator in propose transaction base")("tx_id", txId);
     }
 }
 
 void TTxController::FinishProposeOnExecute(const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc) {
     NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("method", "TTxController::FinishProposeOnExecute")("tx_id", txId);
-    auto txOperator = GetTxOperator(txId);
-    if (!txOperator) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", "cannot found txOperator in propose transaction base")("tx_id", txId);
-    } else {
+    if (auto txOperator = GetTxOperatorOptional(txId)) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "start");
         txOperator->FinishProposeOnExecute(Owner, txc);
         Counters.OnFinishProposeOnExecute(txOperator->GetOpType());
+    } else {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", "cannot found txOperator in propose transaction base")("tx_id", txId);
     }
 }
 
 void TTxController::FinishProposeOnComplete(const ui64 txId, const TActorContext& ctx) {
     NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("method", "TTxController::FinishProposeOnComplete")("tx_id", txId);
-    auto txOperator = GetTxOperator(txId);
+    auto txOperator = GetTxOperatorOptional(txId);
     if (!txOperator) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", "cannot found txOperator in propose transaction finish")("tx_id", txId);
         return;
@@ -386,7 +382,8 @@ void TTxController::FinishProposeOnComplete(const ui64 txId, const TActorContext
 }
 
 void TTxController::ITransactionOperator::SwitchStateVerified(const EStatus from, const EStatus to) {
-    AFL_VERIFY(!Status || *Status == from)("error", "incorrect expected status")("real_state", *Status)("expected", from)("details", DebugString());
+    AFL_VERIFY(!Status || *Status == from)("error", "incorrect expected status")("real_state", *Status)("expected", from)(
+                              "details", DebugString());
     Status = to;
 }
 

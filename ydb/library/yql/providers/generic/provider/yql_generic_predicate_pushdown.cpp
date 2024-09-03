@@ -313,7 +313,6 @@ namespace NYql {
         } else {
             stream << ")";
         }
-
         return stream.Str();
     }
 

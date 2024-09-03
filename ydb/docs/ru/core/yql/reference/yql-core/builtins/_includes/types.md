@@ -6,7 +6,7 @@
 **Примеры**
 ``` yql
 $itemType = TypeOf($item);
-SELECT CAST($foo AS ListType($itemType));  -- каст $foo к типу List<$itemType> 
+SELECT CAST($foo AS ListType($itemType));  -- каст $foo к типу List<$itemType>
 ```
 
 ## FormatType {#formattype}
@@ -69,7 +69,7 @@ InstanceOf(Type)->объект типа Type
 ```
 
 Возвращает экземпляр объекта указанного типа. Полученный объект не имеет какого-то определенного значения.
-InstanceOf можно использовать только в том случае, если результат выражения в котором InstanceOf используется зависит от типа InstanceOf, но не от значения.   
+InstanceOf можно использовать только в том случае, если результат выражения в котором InstanceOf используется зависит от типа InstanceOf, но не от значения.
 В противном случае операция будет завершена с ошибкой.
 
 **Примеры**
@@ -78,7 +78,7 @@ SELECT InstanceOf(ParseType("Int32")) + 1.0; -- ошибка (Can't execute Inst
 SELECT FormatType(TypeOf(
     InstanceOf(ParseType("Int32")) +
     InstanceOf(ParseType("Double"))
-)); -- вернет Double, так как сложение Int32 и Double возвращает Double (InstanceOf используется в контексте, где важен только его тип, но не значение) 
+)); -- вернет Double, так как сложение Int32 и Double возвращает Double (InstanceOf используется в контексте, где важен только его тип, но не значение)
 ```
 
 ## DataType {#datatype}
@@ -250,9 +250,9 @@ ListItemType(ListType)->тип элемента списочного типа
 StreamItemType(StreamType)->тип элемента потокового типа
 ```
 
-{% if feature_codegen %} Если этим функциям передается тип, то они выполняют{% else %}Выполняют{% endif %} действие, обратное [OptionalType](#optionaltype), [ListType](#listtype) и [StreamType](#streamtype) — возвращают тип элемента по типу соответствующего контейнера.
+{% if feature_codegen %} Если этим функциям передается тип, то они выполняют{% else %}Выполняют{% endif %} действие, обратное [OptionalType](#optionaltype), [ListType](#listtype) и [StreamType](#listtype) — возвращают тип элемента по типу соответствующего контейнера.
 {% if feature_codegen %}
-Если этим функциям передается хендл типа, то выполняют действие, обратное [OptionalTypeHandle](#optionaltypehandle), [ListTypeHandle](#listtypehandle) и [StreamTypeHandle](#streamtypehandle) - возвращают хендл типа элемента по хендлу типа соответствующего контейнера.
+Если этим функциям передается хендл типа, то выполняют действие, обратное [OptionalTypeHandle](#optionaltypehandle), [ListTypeHandle](#list-stream-typehandle) и [StreamTypeHandle](#list-stream-typehandle) - возвращают хендл типа элемента по хендлу типа соответствующего контейнера.
 {% endif %}
 
 **Примеры**
@@ -368,11 +368,11 @@ FormatType(VariantUnderlyingType(
 {% endif %}
 
 {% if feature_codegen %}
-# Функции для работы с типами данных во время выполнения вычислений
+## Функции для работы с типами данных во время выполнения вычислений
 
 Для работы с типами данных во время выполнения вычислений используется механизм хендлов типов - [ресурс](../../types/special.md), содержащий непрозрачное описание типа. После конструирования хендла типа можно вернуться к обычному типу с помощью функции [EvaluateType](#evaluatetype). Для отладки сконвертировать хендл типа в строку можно с помощью функции [FormatType](#formattype).
 
-## TypeHandle
+### TypeHandle
 
 Получение хендла типа из типа, переданного в аргумент.
 
@@ -385,7 +385,7 @@ TypeHandle(Type)->хэндл типа
 ``` yql
 SELECT FormatType(TypeHandle(TypeOf("foo")));  -- String
 ```
-## EvaluateType
+### EvaluateType
 
 **Сигнатура**
 ```
@@ -398,7 +398,7 @@ EvaluateType(TypeHandle)->тип
 SELECT FormatType(EvaluateType(TypeHandle(TypeOf("foo"))));  -- String
 ```
 
-## ParseTypeHandle
+### ParseTypeHandle
 
 **Сигнатура**
 ```
@@ -411,7 +411,7 @@ ParseTypeHandle(String)->хэндл типа
 SELECT FormatType(ParseTypeHandle("List<Int32>"));  -- List<int32>
 ```
 
-## TypeKind
+### TypeKind
 
 **Сигнатура**
 ```
@@ -425,7 +425,7 @@ SELECT TypeKind(TypeHandle(TypeOf("foo")));  -- Data
 SELECT TypeKind(ParseTypeHandle("List<Int32>"));  -- List
 ```
 
-## DataTypeComponents
+### DataTypeComponents
 
 **Сигнатура**
 ```
@@ -439,7 +439,7 @@ SELECT DataTypeComponents(TypeHandle(TypeOf("foo")));  -- ["String"]
 SELECT DataTypeComponents(ParseTypeHandle("Decimal(4,1)"));  -- ["Decimal", "4", "1"]
 ```
 
-## DataTypeHandle
+### DataTypeHandle
 
 **Сигнатура**
 ```
@@ -458,7 +458,7 @@ SELECT FormatType(DataTypeHandle(
 )); -- Decimal(4,1)
 ```
 
-## OptionalTypeHandle
+### OptionalTypeHandle
 
 **Сигнатура**
 ```
@@ -473,7 +473,7 @@ SELECT FormatType(OptionalTypeHandle(
 )); -- Bool?
 ```
 
-## PgTypeName
+### PgTypeName
 
 **Сигнатура**
 ```
@@ -486,7 +486,7 @@ PgTypeName(PgTypeHandle)->String
 SELECT PgTypeName(ParseTypeHandle("pgint4")); -- int4
 ```
 
-## PgTypeHandle
+### PgTypeHandle
 
 **Сигнатура**
 ```
@@ -499,7 +499,7 @@ PgTypeHandle(String)->хендл типа
 SELECT FormatType(PgTypeHandle("int4")); -- pgint4
 ```
 
-## ListTypeHandle и StreamTypeHandle {#list-stream-typehandle}
+### ListTypeHandle и StreamTypeHandle {#list-stream-typehandle}
 
 **Сигнатура**
 ```
@@ -515,7 +515,7 @@ SELECT FormatType(ListTypeHandle(
 )); -- List<Bool>
 ```
 
-## EmptyListTypeHandle и EmptyDictTypeHandle
+### EmptyListTypeHandle и EmptyDictTypeHandle
 
 **Сигнатура**
 ```
@@ -529,7 +529,7 @@ EmptyDictTypeHandle()->хэндл типа пустого словаря
 SELECT FormatType(EmptyListTypeHandle()); -- EmptyList
 ```
 
-## TupleTypeComponents
+### TupleTypeComponents
 
 **Сигнатура**
 ```
@@ -549,7 +549,7 @@ SELECT ListMap(
 ); -- ["Int32", "String"]
 ```
 
-## TupleTypeHandle
+### TupleTypeHandle
 
 **Сигнатура**
 ```
@@ -569,7 +569,7 @@ SELECT FormatType(
 ); -- Tuple<Int32,String>
 ```
 
-## StructTypeComponents
+### StructTypeComponents
 
 **Сигнатура**
 ```
@@ -592,7 +592,7 @@ SELECT ListMap(
 ); -- [("Int32","a"), ("String","b")]
 ```
 
-## StructTypeHandle
+### StructTypeHandle
 
 **Сигнатура**
 ```
@@ -612,7 +612,7 @@ SELECT FormatType(
 ); -- Struct<'a':Int32,'b':String>
 ```
 
-## DictTypeComponents
+### DictTypeComponents
 
 **Сигнатура**
 ```
@@ -629,7 +629,7 @@ SELECT
     FormatType($d.Payload); -- String
 ```
 
-## DictTypeHandle
+### DictTypeHandle
 
 **Сигнатура**
 ```
@@ -647,7 +647,7 @@ SELECT FormatType(
 ); -- Dict<Int32, String>
 ```
 
-## ResourceTypeTag
+### ResourceTypeTag
 
 **Сигнатура**
 ```
@@ -660,11 +660,11 @@ ResourceTypeTag(ResourceTypeHandle)->String
 SELECT ResourceTypeTag(ParseTypeHandle("Resource<foo>")); -- foo
 ```
 
-## ResourceTypeHandle
+### ResourceTypeHandle
 
 **Сигнатура**
 ```
-ResourceTypeHandle(String)->хэндл типа ресурса  
+ResourceTypeHandle(String)->хэндл типа ресурса
 ```
 Построение хендла типа ресурса по значению тега, переданного в аргумент. Обратная функция - [ResourceTypeTag](#resourcetypetag).
 
@@ -673,7 +673,7 @@ ResourceTypeHandle(String)->хэндл типа ресурса
 SELECT FormatType(ResourceTypeHandle("foo")); -- Resource<'foo'>
 ```
 
-## TaggedTypeComponents
+### TaggedTypeComponents
 
 **Сигнатура**
 ```
@@ -688,11 +688,11 @@ $t = TaggedTypeComponents(ParseTypeHandle("Tagged<Int32,foo>"));
 SELECT FormatType($t.Base), $t.Tag; -- Int32, foo
 ```
 
-## TaggedTypeHandle
+### TaggedTypeHandle
 
 **Сигнатура**
 ```
-TaggedTypeHandle(TypeHandle, String)->хэндл декорированного типа  
+TaggedTypeHandle(TypeHandle, String)->хэндл декорированного типа
 ```
 Построение хендла декорированного типа по хендлу базового типа и имени тега, переданных в аргументах. Обратная функция - [TaggedTypeComponents](#taggedtypecomponents).
 
@@ -703,7 +703,7 @@ SELECT FormatType(TaggedTypeHandle(
 )); -- Tagged<Int32, 'foo'>
 ```
 
-## VariantTypeHandle
+### VariantTypeHandle
 
 **Сигнатура**
 ```
@@ -719,7 +719,7 @@ SELECT FormatType(VariantTypeHandle(
 )); -- Variant<Int32, String>
 ```
 
-## VoidTypeHandle и NullTypeHandle
+### VoidTypeHandle и NullTypeHandle
 
 **Сигнатура**
 ```
@@ -734,7 +734,7 @@ SELECT FormatType(VoidTypeHandle()); -- Void
 SELECT FormatType(NullTypeHandle()); -- Null
 ```
 
-## CallableTypeComponents
+### CallableTypeComponents
 
 **Сигнатура**
 ```
@@ -780,7 +780,7 @@ SELECT $formatCallable(
     -- ])
 ```
 
-## CallableArgument
+### CallableArgument
 
 **Сигнатура**
 ```
@@ -792,11 +792,11 @@ CallableArgument(TypeHandle, [String, [List<String>]])->Struct<Flags:List<String
 2. Необязательное имя аргумента. Значение по умолчанию - пустая строка.
 3. Необязательные флаги аргумента в виде списка строк. Значение по умолчанию - пустой список. Поддерживаемые флаги - "AutoMap".
 
-## CallableTypeHandle
+### CallableTypeHandle
 
 **Сигнатура**
 ```
-CallableTypeHandle(TypeHandle, List<Struct<Flags:List<String>,Name:String,Type:TypeHandle>>, [Uint32, [String]])->хэндл типа вызываемого значения 
+CallableTypeHandle(TypeHandle, List<Struct<Flags:List<String>,Name:String,Type:TypeHandle>>, [Uint32, [String]])->хэндл типа вызываемого значения
 ```
 Построение хендла типа вызываемого значения по следующим аргументам:
 
@@ -821,11 +821,11 @@ SELECT FormatType(
 );  -- Callable<(Int32,['bar':Double?{Flags:AutoMap}])->String>
 ```
 
-## LambdaArgumentsCount
+### LambdaArgumentsCount
 
 **Сигнатура**
 ```
-LambdaArgumentsCount(LambdaFunction)->Uint32 
+LambdaArgumentsCount(LambdaFunction)->Uint32
 ```
 Получение количества аргументов в лямбда-функции.
 
@@ -835,11 +835,11 @@ SELECT LambdaArgumentsCount(($x, $y)->($x+$y))
 ; -- 2
 ```
 
-## LambdaOptionalArgumentsCount
+### LambdaOptionalArgumentsCount
 
 **Сигнатура**
 ```
-LambdaOptionalArgumentsCount(LambdaFunction)->Uint32 
+LambdaOptionalArgumentsCount(LambdaFunction)->Uint32
 ```
 Получение количества опциональных аргументов в лямбда-функции.
 

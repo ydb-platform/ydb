@@ -200,7 +200,7 @@ async function selectPrepared(session: Session, data: ThreeIds[], logger: Logger
 ```ts
 async function executeScanQueryWithParams(session: Session, logger: Logger): Promise<void> {
     const query = `
-        ${SYNTAX_V1}        
+        ${SYNTAX_V1}
         DECLARE $value AS Utf8;
 
         SELECT key

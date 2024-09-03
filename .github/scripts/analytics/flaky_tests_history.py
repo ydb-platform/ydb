@@ -15,19 +15,17 @@ config = configparser.ConfigParser()
 config_file_path = f"{dir}/../../config/ydb_qa_db.ini"
 config.read(config_file_path)
 
-build_preset = os.environ.get("build_preset")
-branch = os.environ.get("branch_to_compare")
 
 DATABASE_ENDPOINT = config["QA_DB"]["DATABASE_ENDPOINT"]
 DATABASE_PATH = config["QA_DB"]["DATABASE_PATH"]
 
 
 def create_tables(pool,  table_path):
-    print(f"> create table: {table_path}")
+    print(f"> create table if not exists:'{table_path}'")
 
     def callee(session):
         session.execute_scheme(f"""
-            CREATE table `{table_path}` (
+            CREATE table IF NOT EXISTS `{table_path}` (
                 `test_name` Utf8 NOT NULL,
                 `suite_folder` Utf8 NOT NULL,
                 `full_name` Utf8 NOT NULL,
@@ -154,9 +152,9 @@ def main():
                     from  `test_results/test_runs_column`
                     where
                         status in ('failure','mute')
-                        and job_name in ('Nightly-run', 'Postcommit_relwithdebinfo')
-                        and build_type = 'relwithdebinfo' and
-                        run_timestamp >= Date('{last_date}') -{history_for_n_day}*Interval("P1D") 
+                        and job_name in ('Nightly-run', 'Postcommit_relwithdebinfo','Postcommit_asan')
+                        and branch = 'main'
+                        and run_timestamp >= Date('{last_date}') -{history_for_n_day}*Interval("P1D") 
                 ) as tests_with_fails
                 cross join (
                     select 
@@ -164,8 +162,8 @@ def main():
                     from  `test_results/test_runs_column`
                     where
                         status in ('failure','mute')
-                        and job_name in ('Nightly-run', 'Postcommit_relwithdebinfo')
-                        and build_type = 'relwithdebinfo'
+                        and job_name in ('Nightly-run', 'Postcommit_relwithdebinfo','Postcommit_asan')
+                        and branch = 'main'
                         and run_timestamp>= Date('{last_date}')
                     ) as date_list
                 ) as test_and_date

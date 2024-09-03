@@ -16,18 +16,15 @@ TCounter::TCounter(const NProfiling::TRegistry& registry)
     , EffectivePenalty(registry.TimeGauge("/effective_penalty"))
     , ExternalPenalty(registry.TimeGauge("/external_penalty"))
     , RequestDuration(registry.TimeHistogram("/request_duration", TDuration::MilliSeconds(1), TDuration::MilliSeconds(70)))
-{
-}
+{ }
 
 TCounter::TCounter(const TString& clusterName)
     : TCounter(HedgingClientProfiler.WithTag("yt_cluster", clusterName))
-{
-}
+{ }
 
 TCounter::TCounter(const NProfiling::TTagSet& tagSet)
     : TCounter(HedgingClientProfiler.WithTags(tagSet))
-{
-}
+{ }
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -43,8 +40,7 @@ TLagPenaltyProviderCounters::TLagPenaltyProviderCounters(const NProfiling::TRegi
 
 TLagPenaltyProviderCounters::TLagPenaltyProviderCounters(const TString& tablePath, const TVector<TString>& clusterNames)
     : TLagPenaltyProviderCounters(LagPenaltyProviderProfiler.WithTag("table", tablePath), clusterNames)
-{
-}
+{ }
 
 ////////////////////////////////////////////////////////////////////////////////
 

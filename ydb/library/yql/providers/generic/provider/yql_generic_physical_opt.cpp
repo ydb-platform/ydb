@@ -190,7 +190,7 @@ namespace NYql {
         private:
             const TGenericState::TPtr State_;
         };
-    }
+    } // namespace
 
     THolder<IGraphTransformer> CreateGenericPhysicalOptProposalTransformer(TGenericState::TPtr state) {
         return MakeHolder<TGenericPhysicalOptProposalTransformer>(state);

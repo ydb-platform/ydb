@@ -5039,6 +5039,18 @@ bool TSqlTranslation::ParseResourcePoolClassifierSettings(std::map<TString, TDef
     }
 }
 
+bool TSqlTranslation::StoreTierName(const TString& tierName, std::map<TString, TDeferredAtom>& result) {
+    static const TString KeyTierName = "tierName";
+
+    if (result.find(KeyTierName) != result.end()) {
+        Ctx.Error() << to_upper(KeyTierName) << " duplicate keys";
+        return false;
+    }
+    result[KeyTierName] = TDeferredAtom(Ctx.Pos(), tierName);
+
+    return true;
+}
+
 bool TSqlTranslation::StoreTierSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value, std::map<TString, TDeferredAtom>& result) {
     YQL_ENSURE(value);
 

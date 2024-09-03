@@ -7227,6 +7227,7 @@ Y_UNIT_TEST_SUITE(CSTiering) {
         NYql::TAstParseResult internalQuery = SqlToYql(R"sql(
                 USE plato;
                 CREATE OBJECT deploy_logs_s3 (TYPE TIER) WITH (
+                    tierName = "deploy_logs_s3 ",
                     scheme = "HTTP",
                     verify_ssl = "FALSE",
                     endpoint = "storage.cloud-preprod.yandex.net",

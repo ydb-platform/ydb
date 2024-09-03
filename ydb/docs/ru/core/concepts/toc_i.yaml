@@ -25,4 +25,5 @@ items:
     href: cluster/common_scheme_ydb.md
   - name: Дисковая подсистема кластера
     href: cluster/distributed_storage.md
--  { name: Оптимизатор запросов,    href: optimizer.md }
+- name: Оптимизатор запросов
+  href: optimizer.md

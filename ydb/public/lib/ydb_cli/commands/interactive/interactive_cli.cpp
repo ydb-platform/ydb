@@ -179,9 +179,16 @@ void TInteractiveCLI::Run() {
                 continue;
             }
 
+            TString query = TString(line);
+            TString queryLowerCase = to_lower(query);
+            if (queryLowerCase == "quit" || queryLowerCase == "exit") {
+                std::cout << "Bye" << std::endl;
+                return;
+            }
+
             TString queryStatsMode(NTable::QueryStatsModeToString(interactiveCLIState.CollectStatsMode));
             TCommandSql sqlCommand;
-            sqlCommand.SetScript(TString(line));
+            sqlCommand.SetScript(std::move(query));
             sqlCommand.SetCollectStatsMode(std::move(queryStatsMode));
             sqlCommand.SetSyntax("yql");
             sqlCommand.Run(Config);

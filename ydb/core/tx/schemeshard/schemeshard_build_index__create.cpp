@@ -1,4 +1,5 @@
 #include "schemeshard_build_index.h"
+#include "schemeshard_xxport__helpers.h"
 #include "schemeshard_build_index_helpers.h"
 #include "schemeshard_build_index_tx_base.h"
 #include "schemeshard_impl.h"
@@ -27,7 +28,7 @@ public:
                 << "Index build with id '" << id << "' already exists");
         }
 
-        const TString& uid = GetUid(request.GetOperationParams().labels());
+        const TString& uid = GetUid(request.GetOperationParams());
         if (uid && Self->IndexBuildsByUid.contains(uid)) {
             return Reply(Ydb::StatusIds::ALREADY_EXISTS, TStringBuilder()
                 << "Index build with uid '" << uid << "' already exists");
@@ -210,7 +211,7 @@ private:
 
         if (settings.has_index() && settings.has_column_build_operation()) {
             explain = "unable to build index and column in the single operation";
-            return false;   
+            return false;
         }
 
         if (settings.has_index()) {
@@ -234,15 +235,6 @@ private:
             buildInfo->DataColumns.assign(settings.index().data_columns().begin(), settings.index().data_columns().end());
         }
         return true;
-    }
-
-    static TString GetUid(const google::protobuf::Map<TString, TString>& labels) {
-        auto it = labels.find("uid");
-        if (it == labels.end()) {
-            return TString();
-        }
-
-        return it->second;
     }
 };
 

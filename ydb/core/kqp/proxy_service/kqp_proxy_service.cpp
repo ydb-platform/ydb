@@ -24,7 +24,7 @@
 #include <ydb/library/yql/dq/actors/spilling/spilling_file.h>
 #include <ydb/library/yql/dq/actors/spilling/spilling.h>
 #include <ydb/core/actorlib_impl/long_timer.h>
-#include <ydb-cpp-sdk/library/operation_id/operation_id.h>
+#include <ydb/public/sdk/cpp/src/library/operation_id/protos/operation_id.pb.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_actor.h>
@@ -99,11 +99,11 @@ std::optional<ui32> TryDecodeYdbSessionId(const TString& sessionId) {
 }
 
 TString EncodeSessionId(ui32 nodeId, const TString& id) {
-    NOperationId::TOperationId opId;
-    opId.SetKind(NOperationId::TOperationId::SESSION_YQL);
+    Ydb::TOperationId opId;
+    opId.SetKind(Ydb::TOperationId::SESSION_YQL);
     NOperationId::AddOptionalValue(opId, "node_id", ToString(nodeId));
     NOperationId::AddOptionalValue(opId, "id", Base64Encode(id));
-    return opId.ToString();
+    return NOperationId::ProtoToString(opId);
 }
 
 class TKqpTempTablesAgentActor: public TActorBootstrapped<TKqpTempTablesAgentActor> {

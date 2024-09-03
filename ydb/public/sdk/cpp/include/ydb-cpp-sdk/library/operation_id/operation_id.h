@@ -37,10 +37,10 @@ public:
     explicit TOperationId(const std::string& string, bool allowEmpty = false);
 
     TOperationId(const TOperationId& other);
-    TOperationId(TOperationId&& other) = default;
+    TOperationId(TOperationId&& other);
 
     TOperationId& operator=(const TOperationId& other);
-    TOperationId& operator=(TOperationId&& other) = default;
+    TOperationId& operator=(TOperationId&& other);
 
     ~TOperationId();
 

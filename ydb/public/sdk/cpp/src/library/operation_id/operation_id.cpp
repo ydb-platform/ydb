@@ -161,7 +161,7 @@ public:
     TImpl(TImpl&&) = default;
 
     TImpl& operator=(const TImpl&) = delete;
-    TImpl& operator=(TImpl&&) = default;
+    TImpl& operator=(TImpl&&) = delete;
 
     ~TImpl() = default;
 
@@ -221,8 +221,17 @@ TOperationId::TOperationId(const TOperationId& other) {
     Impl = std::make_unique<TOperationId::TImpl>(*other.Impl);
 }
 
+TOperationId::TOperationId(TOperationId&& other) {
+    Impl = std::make_unique<TOperationId::TImpl>(std::move(*other.Impl));
+}
+
 TOperationId& TOperationId::operator=(const TOperationId& other) {
     Impl = std::make_unique<TOperationId::TImpl>(*other.Impl);
+    return *this;
+}
+
+TOperationId& TOperationId::operator=(TOperationId&& other) {
+    Impl = std::make_unique<TOperationId::TImpl>(std::move(*other.Impl));
     return *this;
 }
 

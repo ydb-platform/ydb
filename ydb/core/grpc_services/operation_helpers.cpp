@@ -48,16 +48,16 @@ TActorId CreatePipeClient(ui64 id, const TActorContext& ctx) {
     return ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, id, clientConfig));
 }
 
-NOperationId::TOperationId ToOperationId(const NKikimrIndexBuilder::TIndexBuild& build) {
-    NOperationId::TOperationId operationId;
-    operationId.SetKind(NOperationId::TOperationId::BUILD_INDEX);
+Ydb::TOperationId ToOperationId(const NKikimrIndexBuilder::TIndexBuild& build) {
+    Ydb::TOperationId operationId;
+    operationId.SetKind(Ydb::TOperationId::BUILD_INDEX);
     NOperationId::AddOptionalValue(operationId, "id", ToString(build.GetId()));
 
     return operationId;
 }
 
 void ToOperation(const NKikimrIndexBuilder::TIndexBuild& build, Ydb::Operations::Operation* operation) {
-    operation->set_id(ToOperationId(build).ToString());
+    operation->set_id(NOperationId::ProtoToString(ToOperationId(build)));
     operation->mutable_issues()->CopyFrom(build.GetIssues());
 
     switch (build.GetState()) {

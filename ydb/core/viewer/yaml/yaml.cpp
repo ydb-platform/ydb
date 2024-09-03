@@ -33,27 +33,6 @@ void TProtoToYaml::FillEnum(YAML::Node property, const ::google::protobuf::EnumD
     }
 }
 
-void TProtoToYaml::FillEnum(YAML::Node property, const std::vector<std::string_view>& enumNames, const TEnumSettings& enumSettings) {
-    TString defaultValue;
-    auto enm = property["enum"];
-    for (auto name : enumNames) {
-        TString resultName{name};
-        if (enumSettings.ConvertToLowerCase) {
-            resultName = to_lower(resultName);
-        }
-        if (!defaultValue) {
-            defaultValue = resultName;
-            if (enumSettings.SkipDefaultValue) {
-                continue;
-            }
-        }
-        enm.push_back(resultName);
-    }
-    if (defaultValue && !enumSettings.SkipDefaultValue) {
-        property["default"] = defaultValue;
-    }
-}
-
 YAML::Node TProtoToYaml::ProtoToYamlSchema(const ::google::protobuf::Descriptor* descriptor, std::unordered_set<const ::google::protobuf::Descriptor*>& descriptors) {
     using namespace ::google::protobuf;
     if (descriptor == nullptr) {

@@ -3,6 +3,7 @@
 #include <ydb/core/grpc_services/rpc_calls.h>
 #include <ydb/core/viewer/yaml/yaml.h>
 #include <ydb/public/api/grpc/ydb_operation_v1.grpc.pb.h>
+#include <ydb/public/sdk/cpp/src/library/operation_id/protos/operation_id.pb.h>
 
 namespace NKikimr::NViewer {
 
@@ -70,7 +71,7 @@ public:
                         description: Gateway Timeout
             )___");
         node["get"]["responses"]["200"]["content"]["application/json"]["schema"] = TProtoToYaml::ProtoToYamlSchema<Ydb::Operations::ListOperationsResponse>();
-        TProtoToYaml::FillEnum(node["get"]["parameters"][1]["enum"], NOperationId::TOperationId::GetKindNames(), {
+        TProtoToYaml::FillEnum(node["get"]["parameters"][1]["enum"], NProtoBuf::GetEnumDescriptor<Ydb::TOperationId::EKind>(), {
             .ConvertToLowerCase = true,
             .SkipDefaultValue = true
         });

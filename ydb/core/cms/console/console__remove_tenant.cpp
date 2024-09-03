@@ -33,10 +33,10 @@ public:
     void FillTenantResponse()
     {
         Y_ABORT_UNLESS(Tenant);
-        NKikimr::NOperationId::TOperationId id = Self->MakeOperationId(Tenant, TTenant::REMOVE);
+        Ydb::TOperationId id = Self->MakeOperationId(Tenant, TTenant::REMOVE);
         auto &operation = *Response->Record.MutableResponse()->mutable_operation();
         operation.set_ready(false);
-        operation.set_id(id.ToString());
+        operation.set_id(ProtoToString(id));
     }
 
     bool Execute(TTransactionContext &txc, const TActorContext &executorCtx) override

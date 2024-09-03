@@ -52,6 +52,7 @@ class Runner:
         cmd += ["--variant", f"{variant}"]
         cmd += ["--datasize", f"{datasize}"]
         cmd += ["--tasks", f"{tasks}"]
+        cmd += ["--clean-old"]
         if query_filter:
             cmd += ["--query-filter", f"{query_filter}"]
         yatest.common.execute(cmd, stdout=sys.stdout, stderr=sys.stderr)

@@ -84,7 +84,7 @@ class Runner:
     def prepare_tpc_dir(self):
         print("Preparing tpc...", file=stderr)
         cmd = [f"./download_files_{self.args.variant}_{self.args.datasize}.sh"]
-        res = subprocess.run(cmd)
+        res = subprocess.run(cmd, cwd=self.args.downloaders_dir)
         if res.returncode != 0:
             raise OSError("Failed to prepare tpc")
 
@@ -102,13 +102,9 @@ class Runner:
                 "dq.EnableSpillingNodes=All",
             ] if self.enable_spilling else [])
         self.tpc_dir = pathlib.Path(f"{self.args.downloaders_dir}/tpc/{self.args.variant}/{self.args.datasize}")
-        print(self.tpc_dir, file=stderr)
+        print(self.tpc_dir, self.tpc_dir.exists(), file=stderr)
         if self.args.clean_old or not self.tpc_dir.exists():
-            path = os.getcwd()
-            os.chdir(self.args.downloaders_dir)
-            print(os.getcwd(), file=stderr)
             self.prepare_tpc_dir()
-            os.chdir(path)
 
         self.result_dir = pathlib.Path(f"{self.args.output}/{"with" if self.enable_spilling else "no"}-spilling/{args.variant}-{args.datasize}-{args.tasks}").resolve()
         self.result_dir.mkdir(parents=True, exist_ok=True)

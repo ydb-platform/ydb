@@ -1229,7 +1229,8 @@ private:
                 .SetIsEnablePgConstsToParams(SessionCtx->Config().EnablePgConstsToParams)
                 .SetQueryParameters(query.ParameterTypes)
                 .SetApplicationName(ApplicationName);
-            auto astRes = ParseQuery(query.Text, isSql, sqlVersion, TypesCtx->DeprecatedSQL, ctx, settingsBuilder, result.KeepInCache, result.CommandTagName);
+            bool enablePgSyntax = SessionCtx->Config().FeatureFlags.GetEnablePgSyntax();
+            auto astRes = ParseQuery(query.Text, isSql, sqlVersion, TypesCtx->DeprecatedSQL, ctx, settingsBuilder, result.KeepInCache, result.CommandTagName, enablePgSyntax);
             if (astRes.ActualSyntaxType == NYql::ESyntaxType::Pg) {
                 SessionCtx->Config().IndexAutoChooserMode = NKikimrConfig::TTableServiceConfig_EIndexAutoChooseMode::TTableServiceConfig_EIndexAutoChooseMode_MAX_USED_PREFIX;
             }

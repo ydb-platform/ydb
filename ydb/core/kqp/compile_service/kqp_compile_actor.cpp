@@ -148,7 +148,9 @@ private:
             .SetApplicationName(ApplicationName)
             .SetQueryParameters(QueryId.QueryParameterTypes);
 
-        return ParseStatements(QueryId.Text, QueryId.Settings.Syntax, QueryId.IsSql(), settingsBuilder, PerStatementResult);
+        bool enablePgSyntax = AppData(ctx)->FeatureFlags.GetEnablePgSyntax();
+
+        return ParseStatements(QueryId.Text, QueryId.Settings.Syntax, QueryId.IsSql(), settingsBuilder, PerStatementResult, enablePgSyntax);
     }
 
     void ReplySplitResult(const TActorContext &ctx, IKqpHost::TSplitResult&& result) {

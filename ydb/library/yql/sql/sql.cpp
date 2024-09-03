@@ -15,7 +15,7 @@
 namespace NSQLTranslation {
 
     NYql::TAstParseResult SqlToYql(const TString& query, const TTranslationSettings& settings,
-        NYql::TWarningRules* warningRules, NYql::TStmtParseInfo* stmtParseInfo)
+        NYql::TWarningRules* warningRules, NYql::TStmtParseInfo* stmtParseInfo, bool enablePgSyntax)
     {
         NYql::TAstParseResult result;
         TTranslationSettings parsedSettings(settings);
@@ -32,6 +32,11 @@ namespace NSQLTranslation {
             result.Issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
                 "Externally declared named expressions not supported in V0 syntax"));
             return result;
+        }
+
+        if (parsedSettings.PgParser && enablePgSyntax) {
+            result.Issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
+                "PG syntax is disabled"));
         }
 
         if (parsedSettings.PgParser) {
@@ -160,7 +165,7 @@ namespace NSQLTranslation {
     }
 
     TVector<NYql::TAstParseResult> SqlToAstStatements(const TString& query, const TTranslationSettings& settings,
-        NYql::TWarningRules* warningRules, ui16* actualSyntaxVersion, TVector<NYql::TStmtParseInfo>* stmtParseInfo)
+        NYql::TWarningRules* warningRules, ui16* actualSyntaxVersion, TVector<NYql::TStmtParseInfo>* stmtParseInfo, bool enablePgSyntax)
     {
         TVector<NYql::TAstParseResult> result;
         NYql::TIssues issues;
@@ -182,6 +187,11 @@ namespace NSQLTranslation {
             issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
                 "Externally declared named expressions not supported in V0 syntax"));
             return {};
+        }
+
+        if (parsedSettings.PgParser && enablePgSyntax) {
+            issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
+                "PG syntax is disabled"));
         }
 
         if (parsedSettings.PgParser) {

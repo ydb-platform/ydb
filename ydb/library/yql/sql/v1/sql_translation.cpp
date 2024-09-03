@@ -5039,52 +5039,47 @@ bool TSqlTranslation::ParseResourcePoolClassifierSettings(std::map<TString, TDef
     }
 }
 
-bool TSqlTranslation::StoreTierName(const TString& tierName, std::map<TString, TDeferredAtom>& result) {
-    static const TString KeyTierName = "tierName";
-
-    if (result.find(KeyTierName) != result.end()) {
-        Ctx.Error() << to_upper(KeyTierName) << " duplicate keys";
-        return false;
-    }
-    result[KeyTierName] = TDeferredAtom(Ctx.Pos(), tierName);
-
-    return true;
-}
-
-bool TSqlTranslation::StoreTierSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value, std::map<TString, TDeferredAtom>& result) {
+bool TSqlTranslation::StoreTierSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value, TTierSettings& result) {
     YQL_ENSURE(value);
 
-    const TString key = to_lower(id.Name);
-    if (result.find(key) != result.end()) {
-        Ctx.Error() << to_upper(key) << " duplicate keys";
+    switch (value->Alt_case()) {
+    case TRule_table_setting_value::kAltTableSettingValue2: {
+        // STRING_VALUE
+        const TString& settingValue = Token(value->GetAlt_table_setting_value2().GetToken1());
+        const auto unescaped = StringContent(Ctx, Ctx.Pos(), settingValue);
+        if (!unescaped) {
+            return false;
+        }
+        result.StoreSetting(id.Name, unescaped->Content);
+        return true;
+    }
+    default:
         return false;
     }
-
-    if (!StoreString(*value, result[key], Ctx, to_upper(key))) {
-        return false;
-    }
-
-    return true;
 }
 
-bool TSqlTranslation::StoreTierSettingsEntry(const TRule_alter_table_setting_entry& entry, std::map<TString, TDeferredAtom>& result) {
-    // TODO: remove if unused
-    const TIdentifier id = IdEx(entry.GetRule_an_id1(), *this);
-    return StoreDataSourceSettingsEntry(id, &entry.GetRule_table_setting_value3(), result);
-}
+bool TSqlTranslation::ParseTierSettings(std::map<TString, TDeferredAtom>& result, const TString& tierName, const TRule_with_table_settings& settingsNode) {
+    TTierSettings tierConfig(tierName);
 
-bool TSqlTranslation::ParseTierSettings(std::map<TString, TDeferredAtom>& result, const TRule_with_table_settings& settingsNode) {
     const auto& firstEntry = settingsNode.GetRule_table_settings_entry3();
     if (!StoreTierSettingsEntry(IdEx(firstEntry.GetRule_an_id1(), *this), &firstEntry.GetRule_table_setting_value3(),
-            result)) {
+            tierConfig)) {
         return false;
     }
     for (auto& block : settingsNode.GetBlock4()) {
         const auto& entry = block.GetRule_table_settings_entry2();
-        if (!StoreTierSettingsEntry(IdEx(entry.GetRule_an_id1(), *this), &entry.GetRule_table_setting_value3(), result)) {
+        if (!StoreTierSettingsEntry(IdEx(entry.GetRule_an_id1(), *this), &entry.GetRule_table_setting_value3(), tierConfig)) {
             return false;
         }
     }
+
+    static const TString KeyTierConfig = "tierConfig";
+    if (result.find(KeyTierConfig) != result.end()) {
+        Ctx.Error() << to_upper(KeyTierConfig) << " duplicate keys";
+        return false;
+    }
+    result[KeyTierConfig] = TDeferredAtom(Ctx.Pos(), tierConfig.Serialize());
+
     // TODO: Consider adding validation
     return true;
 }

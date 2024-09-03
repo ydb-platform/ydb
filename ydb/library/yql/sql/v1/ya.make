@@ -5,6 +5,7 @@ PEERDIR(
     library/cpp/enumbitset
     library/cpp/yson/node
     library/cpp/json
+    ydb/core/protos
     ydb/library/yql/minikql
     ydb/library/yql/public/udf
     ydb/library/yql/sql/settings

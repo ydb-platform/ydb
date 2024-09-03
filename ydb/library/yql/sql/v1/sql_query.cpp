@@ -1572,14 +1572,10 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 );
             }
 
-            std::map<TString, TDeferredAtom> kv;
-
             const TString& objectId = Id(node.GetRule_object_ref5().GetRule_id_or_at2(), *this).second;
-            if (!StoreTierName(objectId, kv)) {
-                return false;
-            }
 
-            if (!ParseTierSettings(kv, node.GetRule_with_table_settings6())) {
+            std::map<TString, TDeferredAtom> kv;
+            if (!ParseTierSettings(kv, objectId, node.GetRule_with_table_settings6())) {
                 return false;
             }
 

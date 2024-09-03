@@ -179,9 +179,6 @@ protected:
     bool StoreResourcePoolClassifierSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value, std::map<TString, TDeferredAtom>& result);
     bool StoreResourcePoolClassifierSettingsEntry(const TRule_alter_table_setting_entry& entry, std::map<TString, TDeferredAtom>& result);
     bool ResetTableSettingsEntry(const TIdentifier& id, TTableSettings& settings, ETableType tableType);
-    bool StoreTierName(const TString& tierName, std::map<TString, TDeferredAtom>& result);
-    bool StoreTierSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value, std::map<TString, TDeferredAtom>& result);
-    bool StoreTierSettingsEntry(const TRule_alter_table_setting_entry& entry, std::map<TString, TDeferredAtom>& result);
 
     bool CreateTableIndex(const TRule_table_index& node, TVector<TIndexDescription>& indexes);
     bool CreateIndexSettings(const TRule_with_index_settings& settingsNode, TIndexDescription::EType indexType, TIndexDescription::TIndexSettings& indexSettings);
@@ -206,6 +203,7 @@ protected:
     bool AlterTopicAction(const TRule_alter_topic_action& node, TAlterTopicParameters& params);
 
     bool StoreTieringRulesEntry(const TRule_tiering_rules_entry& entry, std::vector<TTieringRule>& result);
+    bool StoreTierSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value, TTierSettings& result);
 
     TNodePtr TypeSimple(const TRule_type_name_simple& node, bool onlyDataAllowed);
     TNodePtr TypeDecimal(const TRule_type_name_decimal& node);
@@ -255,7 +253,7 @@ protected:
     bool StoreStringSettingsEntry(const TRule_alter_table_setting_entry& entry, std::map<TString, TDeferredAtom>& result);
     bool ParseBackupCollectionSettings(std::map<TString, TDeferredAtom>& result, const TRule_backup_collection_settings& settings);
     bool ParseBackupCollectionSettings(std::map<TString, TDeferredAtom>& result, std::set<TString>& toReset, const TRule_alter_backup_collection_actions& actions);
-    bool ParseTierSettings(std::map<TString, TDeferredAtom>& result, const TRule_with_table_settings& settings);
+    bool ParseTierSettings(std::map<TString, TDeferredAtom>& result, const TString& tierName, const TRule_with_table_settings& settings);
     bool ParseTieringPolicyDefaultColumn(std::map<TString, TDeferredAtom>& result, const TRule_an_id& settings);
     bool ParseTieringPolicyTiers(std::map<TString, TDeferredAtom>& result, const TRule_tiering_rules& settings);
     bool ParseTieringPolicySettings(std::map<TString, TDeferredAtom>& result, const TRule_alter_tiering_policy_action& alterAction);

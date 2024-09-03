@@ -7226,18 +7226,19 @@ Y_UNIT_TEST_SUITE(CSTiering) {
         UNIT_ASSERT_C(simpleQuery.Root, simpleQuery.Issues.ToString());
         NYql::TAstParseResult internalQuery = SqlToYql(R"sql(
                 USE plato;
-                CREATE OBJECT deploy_logs_s3 (TYPE TIER) WITH (
-                    tierName = "deploy_logs_s3 ",
-                    scheme = "HTTP",
-                    verify_ssl = "FALSE",
-                    endpoint = "storage.cloud-preprod.yandex.net",
-                    bucket = "tiering-test-01",
-                    access_key = "SId:accessKey",
-                    secret_key = "SId:secretKey",
-                    proxy_host = "localhost",
-                    proxy_port = "8080",
-                    proxy_scheme = "HTTP"
-                );
+                CREATE OBJECT deploy_logs_s3 (TYPE TIER) WITH (tierConfig = `Name: "deploy_logs_s3"
+ObjectStorage {
+  Endpoint: "storage.cloud-preprod.yandex.net"
+  Scheme: HTTP
+  Bucket: "tiering-test-01"
+  AccessKey: "SId:accessKey"
+  SecretKey: "SId:secretKey"
+  VerifySSL: false
+  ProxyHost: "localhost"
+  ProxyPort: 4
+  ProxyScheme: HTTP
+}
+`);
             )sql");
         UNIT_ASSERT_C(internalQuery.Root, internalQuery.Issues.ToString());
 

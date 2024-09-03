@@ -1,4 +1,5 @@
 #include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/base/path.h>
 
 #include <ydb/core/kqp/workload_service/ut/common/kqp_workload_service_ut_common.h>
 
@@ -45,6 +46,56 @@ Y_UNIT_TEST_SUITE(KqpWorkloadService) {
             .Create();
 
         TSampleQueries::TSelect42::CheckResult(ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, TQueryRunnerSettings().PoolId("another_pool_id")));
+    }
+
+    Y_UNIT_TEST(WorkloadServiceDisabledByFeatureFlagOnServerless) {
+        auto ydb = TYdbSetupSettings()
+            .CreateSampleTennants(true)
+            .EnableResourcePoolsOnServerless(false)
+            .Create();
+
+        const TString& poolId = "another_pool_id";
+        auto settings = TQueryRunnerSettings().PoolId(poolId);
+
+        // Dedicated, enabled
+        TSampleQueries::CheckNotFound(ydb->ExecuteQuery(
+            TSampleQueries::TSelect42::Query,
+            settings.Database(ydb->GetSettings().GetDedicatedTennantName()).NodeIndex(1)
+        ), poolId);
+
+        // Shared, enabled
+        TSampleQueries::CheckNotFound(ydb->ExecuteQuery(
+            TSampleQueries::TSelect42::Query,
+            settings.Database(ydb->GetSettings().GetSharedTennantName()).NodeIndex(2)
+        ), poolId);
+
+        // Serverless, disabled
+        TSampleQueries::TSelect42::CheckResult(ydb->ExecuteQuery(
+            TSampleQueries::TSelect42::Query,
+            settings.Database(ydb->GetSettings().GetServerlessTennantName()).NodeIndex(2)
+        ));
+    }
+
+    Y_UNIT_TEST(WorkloadServiceDisabledByInvalidDatabasePath) {
+        auto ydb = TYdbSetupSettings().Create();
+
+        const TString& poolId = "another_pool_id";
+        auto settings = TQueryRunnerSettings().PoolId(poolId);
+
+        TSampleQueries::CheckNotFound(ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, settings), poolId);
+
+        const TString& tabmleName = "sub_path";
+        ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
+            CREATE TABLE )" << tabmleName << R"( (
+                Key Int32,
+                PRIMARY KEY (Key)
+            );
+        )");
+
+        TSampleQueries::TSelect42::CheckResult(ydb->ExecuteQuery(
+            TSampleQueries::TSelect42::Query,
+            settings.Database(TStringBuilder() << CanonizePath(ydb->GetSettings().DomainName_) << "/" << tabmleName)
+        ));
     }
 
     TQueryRunnerResultAsync StartQueueSizeCheckRequests(TIntrusivePtr<IYdbSetup> ydb, const TQueryRunnerSettings& settings) {

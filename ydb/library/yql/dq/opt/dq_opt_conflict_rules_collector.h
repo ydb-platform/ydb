@@ -11,6 +11,7 @@ namespace NYql::NDq {
 
 bool OperatorIsCommutative(EJoinKind);
 
+// TODO: Add predicate processing being "null rejectable"
 bool OperatorsAreAssociative(EJoinKind, EJoinKind);
 
 /* (e1 o12 e3) o13 e3 == (e1 o13 e3) o12 e2 */

@@ -33,11 +33,12 @@ bool OperatorsAreAssociative(EJoinKind lhs, EJoinKind rhs) {
     lhs = GetEquivalentJoinByAlgebraicProperties(lhs);
     rhs = GetEquivalentJoinByAlgebraicProperties(rhs);
 
+    // TODO : Left/Outer have some associative joins, but only if their predicates reject nulls (look at the table in the white paper)
     static THashMap<EJoinKind, THashSet<EJoinKind>> ASSOC_TABLE = {
         {EJoinKind::Cross, {EJoinKind::Cross, EJoinKind::InnerJoin, EJoinKind::LeftSemi, EJoinKind::LeftJoin}},
         {EJoinKind::InnerJoin, {EJoinKind::Cross, EJoinKind::InnerJoin, EJoinKind::LeftSemi, EJoinKind::LeftJoin}},
-        {EJoinKind::LeftJoin, {EJoinKind::LeftJoin}},
-        {EJoinKind::OuterJoin, {EJoinKind::LeftJoin, EJoinKind::OuterJoin}}
+        {EJoinKind::LeftJoin, {}},
+        {EJoinKind::OuterJoin, {}}
     };
 
     if (!(ASSOC_TABLE.contains(lhs))) {
@@ -51,12 +52,13 @@ bool OperatorsAreLeftAsscom(EJoinKind lhs, EJoinKind rhs) {
     lhs = GetEquivalentJoinByAlgebraicProperties(lhs);
     rhs = GetEquivalentJoinByAlgebraicProperties(rhs);
 
+    // TODO : Left/Outer have some associative joins, but only if their predicates reject nulls (look at the table in the white paper)
     static THashMap<EJoinKind, THashSet<EJoinKind>> LASSCOM_TABLE = {
         {EJoinKind::Cross, {EJoinKind::Cross, EJoinKind::InnerJoin, EJoinKind::LeftSemi, EJoinKind::LeftJoin}},
         {EJoinKind::InnerJoin, {EJoinKind::Cross, EJoinKind::InnerJoin, EJoinKind::LeftSemi, EJoinKind::LeftJoin}},
         {EJoinKind::LeftSemi, {EJoinKind::Cross, EJoinKind::InnerJoin, EJoinKind::LeftSemi, EJoinKind::LeftJoin}},
-        {EJoinKind::LeftJoin, {EJoinKind::Cross, EJoinKind::InnerJoin, EJoinKind::LeftSemi, EJoinKind::LeftJoin, EJoinKind::OuterJoin}},
-        {EJoinKind::OuterJoin, {EJoinKind::LeftJoin, EJoinKind::OuterJoin}}
+        {EJoinKind::LeftJoin, {EJoinKind::Cross, EJoinKind::InnerJoin, EJoinKind::LeftSemi, EJoinKind::LeftJoin}},
+        {EJoinKind::OuterJoin, {}}
     };
 
     if (!(LASSCOM_TABLE.contains(lhs))) {
@@ -70,10 +72,11 @@ bool OperatorsAreRightAsscom(EJoinKind lhs, EJoinKind rhs) {
     lhs = GetEquivalentJoinByAlgebraicProperties(lhs);
     rhs = GetEquivalentJoinByAlgebraicProperties(rhs);
 
+    // TODO : Outer have some associative joins, but only if their predicates reject nulls (look at the table in the white paper)
     static THashMap<EJoinKind, THashSet<EJoinKind>> RASSCOM_TABLE = {
         {EJoinKind::Cross, {EJoinKind::Cross, EJoinKind::InnerJoin}},
         {EJoinKind::InnerJoin, {EJoinKind::Cross, EJoinKind::InnerJoin}},
-        {EJoinKind::OuterJoin, {EJoinKind::OuterJoin}}
+        {EJoinKind::OuterJoin, {}}
     };
 
     if (!(RASSCOM_TABLE.contains(lhs))) {

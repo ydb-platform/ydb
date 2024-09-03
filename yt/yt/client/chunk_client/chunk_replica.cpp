@@ -8,12 +8,18 @@
 
 #include <yt/yt/core/misc/protobuf_helpers.h>
 
+#include <yt/yt/core/phoenix/type_def.h>
+
 #include <yt/yt_proto/yt/client/chunk_client/proto/confirm_chunk_replica_info.pb.h>
 
 namespace NYT::NChunkClient {
 
 using namespace NNodeTrackerClient;
 using namespace NObjectClient;
+
+////////////////////////////////////////////////////////////////////////////////
+
+PHOENIX_DEFINE_TYPE(TChunkReplica);
 
 ////////////////////////////////////////////////////////////////////////////////
 

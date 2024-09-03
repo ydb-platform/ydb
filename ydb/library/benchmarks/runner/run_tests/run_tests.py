@@ -105,6 +105,8 @@ class Runner:
         print(self.tpc_dir, self.tpc_dir.exists(), file=stderr)
         if self.args.clean_old or not self.tpc_dir.exists():
             self.prepare_tpc_dir()
+        if not pathlib.Path("./tpc").exists():
+            os.symlink(f"{self.args.downloaders_dir}/tpc", f"{pathlib.Path("./tpc")}", target_is_directory=True)
 
         self.result_dir = pathlib.Path(f"{self.args.output}/{"with" if self.enable_spilling else "no"}-spilling/{args.variant}-{args.datasize}-{args.tasks}").resolve()
         self.result_dir.mkdir(parents=True, exist_ok=True)

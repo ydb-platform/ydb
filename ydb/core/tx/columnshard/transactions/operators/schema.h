@@ -85,8 +85,8 @@ private:
 public:
     using TBase::TBase;
 
-    virtual bool ProgressOnExecute(
-        TColumnShard& owner, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) override {
+    virtual bool ProgressOnExecute(TColumnShard& owner, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) override {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("schema_tx_progress_execute", DoGetOpType());
         if (!!TxAddSharding) {
             auto* tx = dynamic_cast<TTxAddShardingInfo*>(TxAddSharding.get());
             AFL_VERIFY(tx);
@@ -104,6 +104,7 @@ public:
         if (!!TxAddSharding) {
             TxAddSharding->Complete(ctx);
         }
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("schema_tx_progress_complete", DoGetOpType())("completed", Completed);
         if (Completed) {
             for (TActorId subscriber : NotifySubscribers) {
                 auto event = MakeHolder<TEvColumnShard::TEvNotifyTxCompletionResult>(owner.TabletID(), GetTxId());

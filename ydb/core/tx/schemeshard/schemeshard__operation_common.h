@@ -69,16 +69,16 @@ public:
         const auto& evRecord = ev->Get()->Record;
 
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TEvSchemaChanged"
+                   DebugHint() << " HandleReply TEvProposeTransactionResult"
                                << " at tablet: " << ssId);
         LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    DebugHint() << " HandleReply TEvSchemaChanged"
+                    DebugHint() << " HandleReply TEvProposeTransactionResult"
                                 << " at tablet: " << ssId
                                 << " message: " << evRecord.ShortDebugString());
 
         if (!NTableState::CollectSchemaChanged(OperationId, ev, context)) {
             LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        DebugHint() << " HandleReply TEvSchemaChanged"
+                        DebugHint() << " HandleReply TEvProposeTransactionResult"
                                     << " CollectSchemaChanged: false");
             return false;
         }

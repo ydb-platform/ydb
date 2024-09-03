@@ -50,7 +50,6 @@ namespace NKikimr::NOlap {
 class TCleanupPortionsColumnEngineChanges;
 class TCleanupTablesColumnEngineChanges;
 class TTTLColumnEngineChanges;
-class TMoveTablesColumnEngineChanges;
 class TChangesWithAppend;
 class TCompactColumnEngineChanges;
 class TInsertColumnEngineChanges;
@@ -164,7 +163,6 @@ class TColumnShard
     friend class NOlap::TCleanupPortionsColumnEngineChanges;
     friend class NOlap::TCleanupTablesColumnEngineChanges;
     friend class NOlap::TTTLColumnEngineChanges;
-    friend class NOlap::TMoveTablesColumnEngineChanges;
     friend class NOlap::TChangesWithAppend;
     friend class NOlap::TCompactColumnEngineChanges;
     friend class NOlap::TInsertColumnEngineChanges;
@@ -527,7 +525,6 @@ private:
     bool SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls = {});
     void SetupCleanupPortions();
     void SetupCleanupTables();
-//    void SetupMoveTables();
     void SetupCleanupInsertTable();
     void SetupGC();
 

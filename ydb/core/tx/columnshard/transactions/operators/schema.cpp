@@ -78,14 +78,16 @@ TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecut
         case NKikimrTxColumnShard::TSchemaTxBody::kMoveTable:
         {
             const auto srcPathId = SchemaTxBody.GetMoveTable().GetSrcPathId();
+            const auto dstPathId = SchemaTxBody.GetMoveTable().GetDstPathId();
+            AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("propose_tx", "move_table")("src", srcPathId)("dst", dstPathId);
             if (!owner.TablesManager.HasTable(srcPathId)) {
                 return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "No such table");
             }
-            const auto dstPathId = SchemaTxBody.GetMoveTable().GetDstPathId();
             if (owner.TablesManager.HasTable(dstPathId)) {
                 return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "Rename to existing table");
             }
             if (owner.TablesManager.HasTable(dstPathId, true)) {
+                AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("propose_tx", "move_table")("dst_table_not_cleaned", true);
                 WaitPathIdsToErase = {dstPathId};
             }
             WaitForEmptyPlanQueue = true;
@@ -202,10 +204,6 @@ void TSchemaTransactionOperator::DoOnTabletInit(TColumnShard& owner) {
         {
             const auto srcPathId = SchemaTxBody.GetMoveTable().GetSrcPathId();
             AFL_VERIFY(owner.TablesManager.HasTable(srcPathId));
-           // const auto dstPathId = SchemaTxBody.GetMoveTable().GetDstPathId();
-            // if (owner.TablesManager.HasTable(dstPathId)) {
-            //     AFL_VERIFY(owner.TablesManager.Has)
-            // }
         }
             
 

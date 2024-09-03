@@ -86,11 +86,6 @@ TString TEvChangeExchange::TEvRemoveRecords::ToString() const {
 }
 
 // TEvRecords
-TEvChangeExchange::TEvRecords::TEvRecords(const TChangeRecordVector& records)
-    : Records(records)
-{
-}
-
 TEvChangeExchange::TEvRecords::TEvRecords(TChangeRecordVector&& records)
     : Records(std::move(records))
 {

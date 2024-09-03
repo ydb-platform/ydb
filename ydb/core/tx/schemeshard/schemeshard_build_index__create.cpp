@@ -208,20 +208,22 @@ public:
 private:
     bool Prepare(TIndexBuildInfo& buildInfo, const NKikimrIndexBuilder::TIndexBuildSettings& settings, TString& explain) {
         Y_ASSERT(settings.has_index());
-        buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildIndex;
         const auto& index = settings.index();
 
         switch (index.type_case()) {
         case Ydb::Table::TableIndex::TypeCase::kGlobalIndex:
+            buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildSecondaryIndex;
             buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobal;
             break;
         case Ydb::Table::TableIndex::TypeCase::kGlobalAsyncIndex:
+            buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildSecondaryIndex;
             buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync;
             break;
         case Ydb::Table::TableIndex::TypeCase::kGlobalUniqueIndex:
             explain = "unsupported index type to build";
             return false;
         case Ydb::Table::TableIndex::TypeCase::kGlobalVectorKmeansTreeIndex: {
+            buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildVectorIndex;
             buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree;
             NKikimrSchemeOp::TVectorIndexKmeansTreeDescription vectorIndexKmeansTreeDescription;
             *vectorIndexKmeansTreeDescription.MutableSettings() = index.global_vector_kmeans_tree_index().vector_settings();

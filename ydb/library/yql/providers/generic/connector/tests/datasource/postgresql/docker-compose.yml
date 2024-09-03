@@ -1,7 +1,7 @@
 services:
   fq-connector-go:
     container_name: fq-tests-pg-fq-connector-go
-    image: ghcr.io/ydb-platform/fq-connector-go:v0.5.6-rc.3@sha256:90bc6a1c26235b3fb20b2f3cda067bee738aea3f938edec2d6b358708beb431f
+    image: ghcr.io/ydb-platform/fq-connector-go:v0.5.7-rc.1@sha256:f12475f346105d7bc630e7b85f51dce980bf9833f6ce0625c6f1191b1a1de923
     ports:
     - 2130
     volumes:

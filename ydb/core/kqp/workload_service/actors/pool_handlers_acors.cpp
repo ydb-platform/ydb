@@ -66,12 +66,14 @@ class TPoolHandlerActorBase : public TActor<TDerived> {
             LoadCpuThreshold->Set(std::max(poolConfig.DatabaseLoadCpuThreshold, 0.0));
         }
 
-        void OnCleanup() {
+        void OnCleanup(bool resetConfigCounters) {
             ActivePoolHandlers->Dec();
 
-            InFlightLimit->Set(0);
-            QueueSizeLimit->Set(0);
-            LoadCpuThreshold->Set(0);
+            if (resetConfigCounters) {
+                InFlightLimit->Set(0);
+                QueueSizeLimit->Set(0);
+                LoadCpuThreshold->Set(0);
+            }
         }
 
     private:
@@ -136,7 +138,7 @@ public:
     STRICT_STFUNC(StateFuncBase,
         // Workload service events
         sFunc(TEvents::TEvPoison, HandlePoison);
-        sFunc(TEvPrivate::TEvStopPoolHandler, HandleStop);
+        hFunc(TEvPrivate::TEvStopPoolHandler, Handle);
         hFunc(TEvPrivate::TEvResolvePoolResponse, Handle);
         hFunc(TEvPrivate::TEvUpdatePoolSubscription, Handle);
 
@@ -160,7 +162,7 @@ public:
 
         SendPoolInfoUpdate(std::nullopt, std::nullopt, Subscribers);
 
-        Counters.OnCleanup();
+        Counters.OnCleanup(ResetCountersOnStrop);
 
         TBase::PassAway();
     }
@@ -171,8 +173,9 @@ private:
         this->PassAway();
     }
 
-    void HandleStop() {
+    void Handle(TEvPrivate::TEvStopPoolHandler::TPtr& ev) {
         LOG_I("Got stop pool handler request, waiting for " << LocalSessions.size() << " requests");
+        ResetCountersOnStrop = ev->Get()->ResetCounters;
         if (LocalSessions.empty()) {
             PassAway();
         } else {
@@ -332,7 +335,7 @@ public:
         if (!request->Started && request->State != TRequest::EState::Finishing) {
             if (request->State == TRequest::EState::Canceling && status == Ydb::StatusIds::SUCCESS) {
                 status = Ydb::StatusIds::CANCELLED;
-                issues.AddIssue(TStringBuilder() << "Delay deadline exceeded in pool " << PoolId);
+                issues.AddIssue(TStringBuilder() << "Request was delayed during " << TInstant::Now() - request->StartTime << ", that is larger than delay deadline " << PoolConfig.QueryCancelAfter << " in pool " << PoolId << ", request was canceled");
             }
             ReplyContinue(request, status, issues);
             return;
@@ -515,6 +518,7 @@ private:
     ui64 LocalInFlight = 0;
     std::unordered_map<TString, TRequest> LocalSessions;
     bool StopHandler = false;  // Stop than all requests finished
+    bool ResetCountersOnStrop = true;
 };
 
 
@@ -622,8 +626,13 @@ protected:
     }
 
     void OnScheduleRequest(TRequest* request) override {
-        if (PendingRequests.size() >= MAX_PENDING_REQUESTS || SaturationSub(GetLocalSessionsCount() - GetLocalInFlight(), InFlightLimit) > QueueSizeLimit) {
-            ReplyContinue(request, Ydb::StatusIds::OVERLOADED, TStringBuilder() << "Too many pending requests for pool " << PoolId);
+        if (PendingRequests.size() >= MAX_PENDING_REQUESTS) {
+            ReplyContinue(request, Ydb::StatusIds::OVERLOADED, TStringBuilder() << "Request was rejected, number of local pending requests is " << PendingRequests.size() << ", that is larger than allowed limit " << MAX_PENDING_REQUESTS);
+            return;
+        }
+
+        if (SaturationSub(GetLocalSessionsCount() - GetLocalInFlight(), InFlightLimit) > QueueSizeLimit) {
+            ReplyContinue(request, Ydb::StatusIds::OVERLOADED, TStringBuilder() << "Request was rejected, number of local pending/delayed requests is " << GetLocalSessionsCount() - GetLocalInFlight() << ", that is larger than allowed limit " << QueueSizeLimit << " (including concurrent query limit " << InFlightLimit << ") for pool " << PoolId);
             return;
         }
 
@@ -742,15 +751,15 @@ private:
 
         if (const ui64 delayedRequests = SaturationSub(GlobalState.AmountRequests() + PendingRequests.size(), InFlightLimit); delayedRequests > QueueSizeLimit) {
             RemoveBackRequests(PendingRequests, std::min(delayedRequests - QueueSizeLimit, PendingRequests.size()), [this](TRequest* request) {
-                ReplyContinue(request, Ydb::StatusIds::OVERLOADED, TStringBuilder() << "Too many pending requests for pool " << PoolId);
+                ReplyContinue(request, Ydb::StatusIds::OVERLOADED, TStringBuilder() << "Request was rejected, number of local pending requests is " << PendingRequests.size() << ", number of global delayed/running requests is " << GlobalState.AmountRequests() << ", sum of them is larger than allowed limit " << QueueSizeLimit << " (including concurrent query limit " << InFlightLimit << ") for pool " << PoolId);
             });
             FifoCounters.PendingRequestsCount->Set(PendingRequests.size());
         }
 
         if (PendingRequests.empty() && delayedRequestsCount > QueueSizeLimit) {
-            RemoveBackRequests(DelayedRequests, delayedRequestsCount - QueueSizeLimit, [this](TRequest* request) {
+            RemoveBackRequests(DelayedRequests, delayedRequestsCount - QueueSizeLimit, [this, delayedRequestsCount](TRequest* request) {
                 AddFinishedRequest(request->SessionId);
-                ReplyContinue(request, Ydb::StatusIds::OVERLOADED, TStringBuilder() << "Too many pending requests for pool " << PoolId);
+                ReplyContinue(request, Ydb::StatusIds::OVERLOADED, TStringBuilder() << "Request was rejected, number of local delayed requests is " << delayedRequestsCount << ", that is larger than allowed limit " << QueueSizeLimit << " for pool " << PoolId);
             });
         }
 
@@ -787,9 +796,10 @@ private:
         if (!ev->Get()->QuotaAccepted) {
             LOG_D("Skipped request start due to load cpu threshold");
             if (static_cast<EStartRequestCase>(ev->Cookie) == EStartRequestCase::Pending) {
-                ForEachUnfinished(DelayedRequests.begin(), DelayedRequests.end(), [this](TRequest* request) {
+                NYql::TIssues issues = GroupIssues(ev->Get()->Issues, TStringBuilder() << "Request was rejected, failed to request CPU quota for pool " << PoolId << ", current CPU threshold is " << 100.0 * ev->Get()->MaxClusterLoad << "%");
+                ForEachUnfinished(DelayedRequests.begin(), DelayedRequests.end(), [this, issues](TRequest* request) {
                     AddFinishedRequest(request->SessionId);
-                    ReplyContinue(request, Ydb::StatusIds::OVERLOADED, TStringBuilder() << "Too many pending requests for pool " << PoolId);
+                    ReplyContinue(request, Ydb::StatusIds::OVERLOADED, issues);
                 });
             }
             RefreshState();

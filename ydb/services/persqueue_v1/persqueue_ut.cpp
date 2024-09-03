@@ -5028,7 +5028,6 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
       MaxCountInPartition: 2147483647
       MaxSizeInPartition: 234
       LifetimeSeconds: 172800
-      ImportantClientId: "consumer"
       SourceIdLifetimeSeconds: 1382400
       WriteSpeedInBytesPerSecond: 123
       BurstSize: 1000
@@ -5078,22 +5077,6 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
     Ident: "acc"
     Topic: "topic3"
     DC: "dc1"
-    ReadRules: "first-consumer"
-    ReadRules: "consumer"
-    ReadFromTimestampsMs: 11223344000
-    ReadFromTimestampsMs: 111000
-    ConsumerFormatVersions: 0
-    ConsumerFormatVersions: 0
-    ConsumerCodecs {
-    }
-    ConsumerCodecs {
-      Ids: 2
-      Ids: 10004
-      Codecs: "lzop"
-      Codecs: "CUSTOM"
-    }
-    ReadRuleServiceTypes: "data-streams"
-    ReadRuleServiceTypes: "data-streams"
     FormatVersion: 0
     Codecs {
       Ids: 2
@@ -5101,8 +5084,6 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
       Codecs: "lzop"
       Codecs: "CUSTOM"
     }
-    ReadRuleVersions: 0
-    ReadRuleVersions: 567
     TopicPath: "/Root/PQ/rt3.dc1--acc--topic3"
     YdbDatabasePath: "/Root"
     Consumers {
@@ -5113,7 +5094,6 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
       }
       ServiceType: "data-streams"
       Version: 0
-      Important: false
     }
     Consumers {
       Name: "consumer"
@@ -6101,6 +6081,7 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
 
 
         auto checkDescribe = [&](const TString& topic, const TVector<std::pair<TString, TString>>& readRules) {
+            Cerr << ">>>>> Check topic: " << topic << Endl;
             DescribeTopicRequest request;
             DescribeTopicResponse response;
             request.set_path(topic);
@@ -6110,7 +6091,8 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
             UNIT_ASSERT(status.ok());
             DescribeTopicResult res;
             response.operation().result().UnpackTo(&res);
-            Cerr << response << "\n" << res << "\n";
+            Cerr << ">>>>> Response: " << response << Endl;
+            Cerr << ">>>>> Result:" << res << "\n";
             UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
 
             UNIT_ASSERT_VALUES_EQUAL(res.settings().read_rules().size(), readRules.size());

@@ -1,4 +1,4 @@
-# App in Java
+# Example app in Java
 
 This page contains a detailed description of the code of a [test app](https://github.com/ydb-platform/ydb-java-examples/tree/master/query-example) that is available as part of the {{ ydb-short-name }} [Java SDK Examples](https://github.com/ydb-platform/ydb-java-examples).
 
@@ -18,7 +18,7 @@ Then build the SDK Examples
 mvn package -f ./ydb-java-examples
 ```
 
-Next, from the same working directory, run the command to start the test app. The command will differ depending on the database to connect to.
+Next, from the same working directory, run the following command to start the test app:
 
 {% include [run_options.md](_includes/run_options.md) %}
 

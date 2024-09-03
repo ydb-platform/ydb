@@ -167,7 +167,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildIndexScan) {
 
         CreateShardedTableForIndex(server, sender, "/Root", "table-2", 1, false);
 
-        TBlockEvents<TEvDataShard::TEvCompactBorrowed> block(runtime, [&](TEvDataShard::TEvCompactBorrowed::TPtr& event) {
+        TBlockEvents<TEvDataShard::TEvCompactBorrowed> block(runtime, [&](const TEvDataShard::TEvCompactBorrowed::TPtr& event) {
             return runtime.FindActorName(event->Sender) == "FLAT_SCHEMESHARD_ACTOR";
         });
 

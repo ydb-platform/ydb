@@ -152,6 +152,7 @@ public:
         response->Status = status;
         response->Issues = std::move(issues);
         response->Success = (status == Ydb::StatusIds::SUCCESS);
+        response->PathId = PathId;
         Send(Owner, response.release());
     }
 };

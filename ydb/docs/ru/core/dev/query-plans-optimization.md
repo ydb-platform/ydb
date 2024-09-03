@@ -5,8 +5,8 @@
 Рассмотрим следующий запрос, выполняющий поиск серии по названию:
 
 ``` sql
-SELECT season_id, episode_id 
-  FROM episodes 
+SELECT season_id, episode_id
+  FROM episodes
   WHERE title = 'The Work Outing'
 ```
 
@@ -23,8 +23,8 @@ SELECT season_id, episode_id
   Получить план запроса через {{ ydb-short-name }} [CLI](../reference/ydb-cli/_includes/index.md) можно с помощью следующей команды:
   ```
   ydb -p <profile_name> table query explain \
-    -q "SELECT season_id, episode_id 
-    FROM episodes 
+    -q "SELECT season_id, episode_id
+    FROM episodes
     WHERE title = 'The Work Outing'"
   ```
 
@@ -72,11 +72,11 @@ ALTER TABLE episodes
   Команда:
   ```
   ydb -p <profile_name> table query explain \
-    -q "SELECT season_id, episode_id 
+    -q "SELECT season_id, episode_id
     FROM episodes VIEW title_index
     WHERE title = 'The Work Outing'"
   ```
-  
+
   Результат:
   ```
   Query Plan:
@@ -98,4 +98,4 @@ ALTER TABLE episodes
 
 {% endlist %}
 
-С использованием вторичного индекса запрос выполняется без полного сканирования основной таблицы. Вместо `TableFullScan` появился `TablePointLookup` - чтение индексной таблицы по ключу, а основную таблицу мы теперь совсем не читаем, так как все нужные нам колонки содержатся в индексной таблице. 
+С использованием вторичного индекса запрос выполняется без полного сканирования основной таблицы. Вместо `TableFullScan` появился `TablePointLookup` - чтение индексной таблицы по ключу, а основную таблицу мы теперь совсем не читаем, так как все нужные нам колонки содержатся в индексной таблице.

@@ -89,6 +89,13 @@ message TEvAnalyze {
 // SA -> KQP
 message TEvAnalyzeResponse {
     optional bytes OperationId = 1;
+
+    enum EStatus {
+        STATUS_UNSPECIFIED = 0;
+        STATUS_SUCCESS = 1;
+        STATUS_ERROR = 2;
+    }
+    optional EStatus Status = 2;    
 }
 
 // KQP -> SA

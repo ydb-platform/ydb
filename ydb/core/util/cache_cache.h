@@ -1,12 +1,13 @@
 #pragma once
 #include "defs.h"
+#include <ydb/core/util/cache_cache_iface.h>
 #include <ydb/core/util/queue_oneone_inplace.h>
 #include <library/cpp/monlib/counters/counters.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <util/generic/ptr.h>
 #include <util/generic/intrlist.h>
 
-namespace NKikimr {
+namespace NKikimr::NCache {
 
 struct TCacheCacheConfig : public TAtomicRefCount<TCacheCacheConfig> {
     using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
@@ -71,7 +72,7 @@ template <typename TItem
         , typename TWeight = TCacheCacheConfig::TDefaultWeight<TItem>
         , typename TGeneration = TCacheCacheConfig::TDefaultGeneration<TItem>
     >
-class TCacheCache {
+class TCacheCache : public ICacheCache<TItem> {
 public:
     TCacheCache(const TCacheCacheConfig &config)
         : Config(config)
@@ -80,7 +81,7 @@ public:
         , WarmWeight(0)
     {}
 
-    TItem* EvictNext() {
+    TItem* EvictNext() override {
         TItem* ret = nullptr;
 
         if (!StagingList.Empty()) {
@@ -101,7 +102,7 @@ public:
     }
 
     // returns evicted elements as list
-    TIntrusiveList<TItem> Touch(TItem *item) {
+    TIntrusiveList<TItem> Touch(TItem *item) override {
         TIntrusiveList<TItem> evictedList;
         TIntrusiveListItem<TItem> *xitem = item;
 
@@ -130,8 +131,7 @@ public:
         return evictedList;
     }
 
-    // evict and erase differs on Evicted handling
-    void Evict(TItem *item) {
+    void Erase(TItem *item) override {
         const TCacheCacheConfig::ECacheGeneration cacheGen = GenerationOp.Get(item);
         switch (cacheGen) {
         case TCacheCacheConfig::CacheGenNone:
@@ -153,43 +153,11 @@ public:
                 *Config.ReportedWarm = WarmWeight;
             break;
         default:
-            Y_DEBUG_ABORT("unknown cache generaton");
+            Y_DEBUG_ABORT("unknown cache generation");
         }
     }
 
-    void Erase(TItem *item) {
-        const TCacheCacheConfig::ECacheGeneration cacheGen = GenerationOp.Get(item);
-        switch (cacheGen) {
-        case TCacheCacheConfig::CacheGenNone:
-            break;
-        case TCacheCacheConfig::CacheGenEvicted:
-            item->Unlink();
-            GenerationOp.Set(item, TCacheCacheConfig::CacheGenNone);
-            break;
-        case TCacheCacheConfig::CacheGenFresh:
-            Unlink(item, FreshWeight);
-            if (Config.ReportedFresh)
-                *Config.ReportedFresh = FreshWeight;
-            break;
-        case TCacheCacheConfig::CacheGenStaging:
-            Unlink(item, StagingWeight);
-            if (Config.ReportedStaging)
-                *Config.ReportedStaging = StagingWeight;
-            break;
-        case TCacheCacheConfig::CacheGenWarm:
-            Unlink(item, WarmWeight);
-            if (Config.ReportedWarm)
-                *Config.ReportedWarm = WarmWeight;
-            break;
-        default:
-            Y_DEBUG_ABORT("unknown cache generaton");
-        }
-    }
-
-    void UpdateCacheSize(ui64 cacheSize) {
-        if (cacheSize == 0)
-            cacheSize = Max<ui64>();
-
+    void UpdateCacheSize(ui64 cacheSize) override {
         Config.SetLimit(cacheSize);
     }
 

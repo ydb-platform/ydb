@@ -357,13 +357,9 @@ void TBlockState::FillArrays() {
                 return;
             }
             MKQL_ENSURE(datum.is_arraylike(), "Unexpected block type (expecting array or chunked array)");
-            if (datum.is_array()) {
-                Deques[i].push_back(datum.array());
-            } else {
-                for (auto& chunk : datum.chunks()) {
-                    Deques[i].push_back(chunk->data());
-                }
-            }
+            ForEachArrayData(datum, [this, i](const auto& arrayData) {
+                Deques[i].push_back(arrayData);
+            });
         }
     }
 }

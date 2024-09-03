@@ -46,6 +46,8 @@ class LoadSuiteBase:
                 allure.attach(result.plan.table, 'Plan table', attachment_type=allure.attachment_type.TEXT)
             if result.plan.ast is not None:
                 allure.attach(result.plan.ast, 'Plan ast', attachment_type=allure.attachment_type.TEXT)
+            if result.plan.svg is not None:
+                allure.attach(result.plan.svg, 'Plan svg', attachment_type=allure.attachment_type.SVG)
 
         if result.stdout is not None:
             allure.attach(result.stdout, 'Stdout', attachment_type=allure.attachment_type.TEXT)
@@ -63,7 +65,7 @@ class LoadSuiteBase:
             allure.attach(result.stderr, 'Stderr', attachment_type=allure.attachment_type.TEXT)
         for p in ['Min', 'Max', 'Mean', 'Median']:
             if p in stats:
-                allure.dynamic.parameter(p, stats[p])
+                allure.dynamic.parameter(p, f'{int(stats[p])} ms')
         error_message = ''
         success = True
         if not result.success:

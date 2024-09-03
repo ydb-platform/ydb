@@ -122,6 +122,7 @@
 #include <ydb/services/ydb/ydb_scripting.h>
 #include <ydb/services/ydb/ydb_table.h>
 #include <ydb/services/ydb/ydb_object_storage.h>
+#include <ydb/services/tablet/ydb_tablet.h>
 
 #include <ydb/core/fq/libs/init/init.h>
 
@@ -598,6 +599,8 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         names["keyvalue"] = &hasKeyValue;
         TServiceCfg hasReplication = services.empty();
         names["replication"] = &hasReplication;
+        TServiceCfg hasTabletService = services.empty();
+        names["tablet_service"] = &hasTabletService;
 
         std::unordered_set<TString> enabled;
         for (const auto& name : services) {
@@ -654,6 +657,11 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
 
         if (hasTableService || hasYql) {
             hasQueryService = true;
+        }
+
+        if (hasLegacy) {
+            // Enable new public services when the legacy service is enabled
+            hasTabletService = true;
         }
 
         // Enable RL for all services if enabled list is empty
@@ -871,6 +879,11 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         if (hasReplication) {
             server.AddService(new NGRpcService::TGRpcReplicationService(ActorSystem.Get(), Counters,
                 grpcRequestProxies[0], hasReplication.IsRlAllowed()));
+        }
+
+        if (hasTabletService) {
+            server.AddService(new NGRpcService::TGRpcYdbTabletService(ActorSystem.Get(), Counters, grpcRequestProxies,
+                hasTabletService.IsRlAllowed(), grpcConfig.GetHandlersPerCompletionQueue()));
         }
 
         if (ModuleFactories) {

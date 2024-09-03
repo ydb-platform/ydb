@@ -6,6 +6,8 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 
+#include <ydb/core/testlib/actors/wait_events.h>
+
 // TODO remove SDK
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
@@ -408,7 +410,9 @@ void Analyze(TTestActorRuntime& runtime, ui64 saTabletId, const std::vector<TAna
     runtime.SendToPipe(saTabletId, sender, ev.release());
     auto evResponse = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
 
-    UNIT_ASSERT_VALUES_EQUAL(evResponse->Get()->Record.GetOperationId(), operationId);
+    const auto& record = evResponse->Get()->Record;
+    UNIT_ASSERT_VALUES_EQUAL(record.GetOperationId(), operationId);
+    UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS);
 }
 
 void AnalyzeTable(TTestActorRuntime& runtime, ui64 shardTabletId, const TAnalyzedTable& table) {
@@ -432,6 +436,15 @@ void AnalyzeStatus(TTestActorRuntime& runtime, TActorId sender, ui64 saTabletId,
     UNIT_ASSERT_VALUES_EQUAL(analyzeStatusResponse->Get()->Record.GetOperationId(), operationId);
     UNIT_ASSERT_VALUES_EQUAL(analyzeStatusResponse->Get()->Record.GetStatus(), expectedStatus);
 }
+
+void WaitForSavedStatistics(TTestActorRuntime& runtime, const TPathId& pathId) {
+    TWaitForFirstEvent<TEvStatistics::TEvSaveStatisticsQueryResponse> waiter(runtime, [pathId](const auto& ev){
+        return ev->Get()->PathId == pathId;
+    });
+
+    waiter.Wait();
+}
+
 
 
 } // NStat

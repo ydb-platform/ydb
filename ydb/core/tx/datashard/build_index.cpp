@@ -28,8 +28,8 @@ namespace NKikimr::NDataShard {
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
 
 using TColumnsTypes = THashMap<TString, NScheme::TTypeInfo>;
-using TTypes = TVector<std::pair<TString, Ydb::Type>>;
-using TRows = TVector<std::pair<TSerializedCellVec, TString>>;
+using TTypes = NTxProxy::TUploadTypes;
+using TRows = NTxProxy::TUploadRows;
 
 static TColumnsTypes GetAllTypes(const TUserTable& tableInfo) {
     TColumnsTypes result;
@@ -118,42 +118,6 @@ bool BuildExtraColumns(TVector<TCell>& cells, const NKikimrIndexBuilder::TColumn
 
     return true;
 }
-
-struct TStatus {
-    Ydb::StatusIds::StatusCode StatusCode = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
-    NYql::TIssues Issues;
-
-    bool IsNone() const {
-        return StatusCode == Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
-    }
-
-    bool IsSuccess() const {
-        return StatusCode == Ydb::StatusIds::SUCCESS;
-    }
-
-    bool IsRetriable() const {
-        return StatusCode == Ydb::StatusIds::UNAVAILABLE || StatusCode == Ydb::StatusIds::OVERLOADED;
-    }
-
-    TString ToString() const {
-        return TStringBuilder()
-               << "Status {"
-               << " Code: " << Ydb::StatusIds_StatusCode_Name(StatusCode)
-               << " Issues: " << Issues.ToString()
-               << " }";
-    }
-};
-
-struct TUploadLimits {
-    ui64 BatchRowsLimit = 500;
-    ui64 BatchBytesLimit = 1u << 23; // 8MB
-    ui32 MaxUploadRowsRetryCount = 50;
-    ui32 BackoffCeiling = 3;
-
-    TDuration GetTimeoutBackouff(ui32 retryNo) const {
-        return TDuration::Seconds(1u << Max(retryNo, BackoffCeiling));
-    }
-};
 
 class TBufferData: public IStatHolder, public TNonCopyable {
 public:
@@ -258,7 +222,7 @@ protected:
     ui64 RetryCount = 0;
 
     TUploadMonStats Stats = TUploadMonStats("tablets", "build_index_upload");
-    TStatus UploadStatus;
+    TUploadStatus UploadStatus;
 
     TBuildScanUpload(ui64 buildIndexId,
                      const TString& target,

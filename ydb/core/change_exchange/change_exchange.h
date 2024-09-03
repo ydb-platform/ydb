@@ -10,6 +10,9 @@
 #include <util/string/builder.h>
 #include <util/string/join.h>
 
+#include <memory>
+#include <variant>
+
 namespace NKikimr {
 
 namespace NDataShard {
@@ -50,12 +53,6 @@ struct TChangeRecordContainer {};
 }
 
 namespace NKikimr::NChangeExchange {
-
-using TChangeRecordVector = std::variant<
-    std::shared_ptr<TChangeRecordContainer<NDataShard::TChangeRecord>>,
-    std::shared_ptr<TChangeRecordContainer<NReplication::NService::TChangeRecord>>,
-    std::shared_ptr<TChangeRecordContainer<NBackup::NImpl::TChangeRecord>>
->;
 
 struct TEvChangeExchange {
     enum EEv {
@@ -120,11 +117,26 @@ struct TEvChangeExchange {
     };
 
     struct TEvRecords: public TEventLocal<TEvRecords, EvRecords> {
+        using TChangeRecordVector = std::variant<
+            std::shared_ptr<TChangeRecordContainer<NDataShard::TChangeRecord>>,
+            std::shared_ptr<TChangeRecordContainer<NReplication::NService::TChangeRecord>>,
+            std::shared_ptr<TChangeRecordContainer<NBackup::NImpl::TChangeRecord>>
+        >;
+
         TChangeRecordVector Records;
 
-        explicit TEvRecords(const TChangeRecordVector& records);
         explicit TEvRecords(TChangeRecordVector&& records);
         TString ToString() const override;
+
+        template <typename T>
+        static TEvRecords* New(TVector<typename T::TPtr>&& records) {
+            return new TEvRecords(std::make_shared<TChangeRecordContainer<T>>(std::move(records)));
+        }
+
+        template <typename T>
+        inline auto& GetRecords() {
+            return std::get<std::shared_ptr<TChangeRecordContainer<T>>>(Records)->Records;
+        }
     };
 
     struct TEvForgetRecords: public TEventLocal<TEvForgetRecords, EvForgetRecods> {

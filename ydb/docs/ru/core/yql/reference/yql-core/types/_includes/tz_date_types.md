@@ -10,7 +10,7 @@
 select --эти выражения всегда true для любых таймзон: таймзона не влияет на точку во времени.
     AddTimezone(CurrentUtcDate(), "Europe/Moscow") ==
         AddTimezone(CurrentUtcDate(), "America/New_York"),
-    AddTimezone(CurrentUtcDatetime(), "Europe/Moscow") == 
+    AddTimezone(CurrentUtcDatetime(), "Europe/Moscow") ==
         AddTimezone(CurrentUtcDatetime(), "America/New_York");
 ```
 Важно понимать, что при преобразованиях между `TzDate` и `TzDatetime` или `TzTimestamp` дате соответствует не полночь по локальному времени таймзоны, а полночь по UTC для даты в UTC.

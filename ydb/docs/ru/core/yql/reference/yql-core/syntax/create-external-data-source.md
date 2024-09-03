@@ -39,7 +39,7 @@ CREATE EXTERNAL DATA SOURCE TestDataSource WITH (
 )
 ```
 
-## Подключение к ClickHouse { #clickhouse }
+## Подключение к ClickHouse {#clickhouse}
 
 Для создания подключения к кластеру ClickHouse необходимо создать внешний источник данных `EXTERNAL DATA SOURCE`, указав:
 - В поле `SOURCE_TYPE` значение `ClickHouse`.
@@ -64,7 +64,7 @@ CREATE EXTERNAL DATA SOURCE TestDataSource WITH (
 )
 ```
 
-## Подключение к PostgreSQL { #postgresql }
+## Подключение к PostgreSQL {#postgresql}
 
 Для создания подключения к кластеру PostgreSQL необходимо создать объект `EXTERNAL DATA SOURCE`, указав в полях:
 - в поле `SOURCE_TYPE` значение `PostgreSQL`;
@@ -90,7 +90,7 @@ CREATE EXTERNAL DATA SOURCE TestDataSource WITH (
 )
 ```
 
-## Подключение к S3 ({{ objstorage-name }}) { #object_storage }
+## Подключение к S3 ({{ objstorage-name }}) {#object_storage}
 
 Для создания внешнего источника данных, ведущего на бакет с данными в S3 ({{ objstorage-name }}) необходимо создать объект `EXTERNAL DATA SOURCE`, указав в полях:
 - в поле `SOURCE_TYPE` значение `ObjectStorage`;

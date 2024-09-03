@@ -425,8 +425,8 @@ namespace {
                 request->mutable_partitioning_settings()->set_min_active_partitions(
                         FromString<ui32>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())
                 );
-            } else if (name == "setPartitionsLimit") {
-                request->mutable_partitioning_settings()->set_partition_count_limit(
+            } else if (name == "setMaxPartitions") {
+                request->mutable_partitioning_settings()->set_max_active_partitions(
                         FromString<ui32>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())
                 );
             } else if (name == "setRetentionPeriod") {
@@ -456,8 +456,29 @@ namespace {
                 );
                 auto* protoCodecs = request->mutable_supported_codecs();
                 for (auto codec : codecs) {
-                    protoCodecs->add_codecs(codec);
+                        protoCodecs->add_codecs(codec);
                 }
+            } else if (name == "setAutoPartitioningStabilizationWindow") {
+                auto microValue = FromString<ui64>(setting.Value().Cast<TCoInterval>().Literal().Value());
+                request->mutable_partitioning_settings()->mutable_auto_partitioning_settings()->mutable_partition_write_speed()->mutable_stabilization_window()->set_seconds(
+                        static_cast<ui64>(microValue / 1'000'000)
+                );
+            } else if (name == "setAutoPartitioningUpUtilizationPercent") {
+                request->mutable_partitioning_settings()->mutable_auto_partitioning_settings()->mutable_partition_write_speed()->set_up_utilization_percent(
+                        FromString<ui64>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())
+                );
+            } else if (name == "setAutoPartitioningDownUtilizationPercent") {
+                request->mutable_partitioning_settings()->mutable_auto_partitioning_settings()->mutable_partition_write_speed()->set_down_utilization_percent(
+                        FromString<ui64>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())
+                );
+            } else if (name == "setAutoPartitioningStrategy") {
+                Ydb::Topic::AutoPartitioningStrategy strategy;
+                auto result = GetTopicAutoPartitioningStrategyFromString(
+                        TString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()),
+                        strategy
+                );
+                YQL_ENSURE(result);
+                request->mutable_partitioning_settings()->mutable_auto_partitioning_settings()->set_strategy(strategy);
             }
         }
     }
@@ -470,7 +491,7 @@ namespace {
                 request->mutable_alter_partitioning_settings()->set_set_min_active_partitions(
                         FromString<ui32>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())
                 );
-            } else if (name == "setPartitionsLimit") {
+            } else if (name == "setMaxPartitions") {
                 request->mutable_alter_partitioning_settings()->set_set_partition_count_limit(
                         FromString<ui32>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())
                 );
@@ -503,6 +524,27 @@ namespace {
                 for (auto codec : codecs) {
                     protoCodecs->add_codecs(codec);
                 }
+            } else if (name == "setAutoPartitioningStabilizationWindow") {
+                auto microValue = FromString<ui64>(setting.Value().Cast<TCoInterval>().Literal().Value());
+                request->mutable_alter_partitioning_settings()->mutable_alter_auto_partitioning_settings()->mutable_set_partition_write_speed()->mutable_set_stabilization_window()->set_seconds(
+                        static_cast<ui64>(microValue / 1'000'000)
+                );
+            } else if (name == "setAutoPartitioningUpUtilizationPercent") {
+                request->mutable_alter_partitioning_settings()->mutable_alter_auto_partitioning_settings()->mutable_set_partition_write_speed()->set_set_up_utilization_percent(
+                        FromString<ui64>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())
+                );
+            } else if (name == "setAutoPartitioningDownUtilizationPercent") {
+                request->mutable_alter_partitioning_settings()->mutable_alter_auto_partitioning_settings()->mutable_set_partition_write_speed()->set_set_down_utilization_percent(
+                        FromString<ui64>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())
+                );
+            } else if (name == "setAutoPartitioningStrategy") {
+                Ydb::Topic::AutoPartitioningStrategy strategy;
+                auto result = GetTopicAutoPartitioningStrategyFromString(
+                        TString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()),
+                        strategy
+                );
+                YQL_ENSURE(result);
+                request->mutable_alter_partitioning_settings()->mutable_alter_auto_partitioning_settings()->set_set_strategy(strategy);
             }
         }
     }
@@ -1829,38 +1871,6 @@ public:
 
         }
 
-        if (auto maybeCreate = TMaybeNode<TKiCreateTopic>(input)) {
-            auto requireStatus = RequireChild(*input, 0);
-            if (requireStatus.Level != TStatus::Ok) {
-                return SyncStatus(requireStatus);
-            }
-            auto cluster = TString(maybeCreate.Cast().DataSink().Cluster());
-            TString topicName = TString(maybeCreate.Cast().Topic());
-            Ydb::Topic::CreateTopicRequest createReq;
-            createReq.set_path(topicName);
-            for (const auto& consumer : maybeCreate.Cast().Consumers()) {
-                auto error = AddConsumerToTopicRequest(createReq.add_consumers(), consumer);
-                if (!error.empty()) {
-                    ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << error << input->Content()));
-                    return SyncError();
-                }
-            }
-            AddTopicSettingsToRequest(&createReq,maybeCreate.Cast().TopicSettings());
-            bool prepareOnly = SessionCtx->Query().PrepareOnly;
-            // DEBUG
-            // Cerr << "Create topic request proto: " << createReq.DebugString() << Endl;
-            auto future = prepareOnly ? CreateDummySuccess() : (
-                    Gateway->CreateTopic(cluster, std::move(createReq))
-            );
-
-            return WrapFuture(future,
-                              [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
-                                  Y_UNUSED(res);
-                                  auto resultNode = ctx.NewWorld(input->Pos());
-                                  return resultNode;
-                              }, "Executing CREATE TOPIC");
-        }
-
         if (auto maybeCreateSequence = TMaybeNode<TKiCreateSequence>(input)) {
             auto requireStatus = RequireChild(*input, 0);
             if (requireStatus.Level != TStatus::Ok) {
@@ -1922,6 +1932,35 @@ public:
             }, "Executing CREATE SEQUENCE");
         }
 
+        if (auto maybeCreate = TMaybeNode<TKiCreateTopic>(input)) {
+            auto requireStatus = RequireChild(*input, 0);
+            if (requireStatus.Level != TStatus::Ok) {
+                return SyncStatus(requireStatus);
+            }
+            auto cluster = TString(maybeCreate.Cast().DataSink().Cluster());
+            TString topicName = TString(maybeCreate.Cast().Topic());
+            Ydb::Topic::CreateTopicRequest createReq;
+            createReq.set_path(topicName);
+            for (const auto& consumer : maybeCreate.Cast().Consumers()) {
+                auto error = AddConsumerToTopicRequest(createReq.add_consumers(), consumer);
+                if (!error.empty()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << error << input->Content()));
+                    return SyncError();
+                }
+            }
+            AddTopicSettingsToRequest(&createReq,maybeCreate.Cast().TopicSettings());
+            bool existingOk = (maybeCreate.ExistingOk().Cast().Value() == "1");
+
+            auto future = Gateway->CreateTopic(cluster, std::move(createReq), existingOk);
+
+            return WrapFuture(future,
+                              [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
+                                  Y_UNUSED(res);
+                                  auto resultNode = ctx.NewWorld(input->Pos());
+                                  return resultNode;
+                              }, "Executing CREATE TOPIC");
+        }
+
         if (auto maybeAlter = TMaybeNode<TKiAlterTopic>(input)) {
             auto requireStatus = RequireChild(*input, 0);
             if (requireStatus.Level != TStatus::Ok) {
@@ -1949,13 +1988,9 @@ public:
                 auto name = consumer.Cast<TCoAtom>().StringValue();
                 alterReq.add_drop_consumers(name);
             }
+            bool missingOk = (maybeAlter.MissingOk().Cast().Value() == "1");
             AddAlterTopicSettingsToRequest(&alterReq, maybeAlter.Cast().TopicSettings());
-            bool prepareOnly = SessionCtx->Query().PrepareOnly;
-	    // DEBUG
-            // Cerr << "Alter topic request proto:\n" << alterReq.DebugString() << Endl;
-            auto future = prepareOnly ? CreateDummySuccess() : (
-                    Gateway->AlterTopic(cluster, std::move(alterReq))
-            );
+            auto future = Gateway->AlterTopic(cluster, std::move(alterReq), missingOk);
 
             return WrapFuture(future,
                               [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
@@ -1966,21 +2001,15 @@ public:
         }
 
         if (auto maybeDrop = TMaybeNode<TKiDropTopic>(input)) {
-            if (!EnsureNotPrepare("DROP TOPIC", input->Pos(), SessionCtx->Query(), ctx)) {
-                return SyncError();
-            }
-
             auto requireStatus = RequireChild(*input, 0);
             if (requireStatus.Level != TStatus::Ok) {
                 return SyncStatus(requireStatus);
             }
             auto cluster = TString(maybeDrop.Cast().DataSink().Cluster());
             TString topicName = TString(maybeDrop.Cast().Topic());
+            bool missingOk = (maybeDrop.MissingOk().Cast().Value() == "1");
 
-            bool prepareOnly = SessionCtx->Query().PrepareOnly;
-            auto future = prepareOnly ? CreateDummySuccess() : (
-                    Gateway->DropTopic(cluster, topicName)
-            );
+            auto future = Gateway->DropTopic(cluster, topicName, missingOk);
 
             return WrapFuture(future,
                               [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {

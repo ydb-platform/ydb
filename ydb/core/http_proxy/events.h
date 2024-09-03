@@ -148,6 +148,40 @@ namespace NKikimr::NHttpProxy {
         };
     };
 
+    enum TEv {
+        EvYmqCloudAuthResponse
+    };
+
+    struct TEvYmqCloudAuthResponse: public TEventLocal<
+            TEvYmqCloudAuthResponse,
+            EvYmqCloudAuthResponse> {
+        struct TError {
+            TString ErrorCode;
+            ui32 HttpStatusCode;
+            TString Message;
+        };
+
+        bool IsSuccess;
+
+        TString CloudId;
+        TString FolderId;
+        TString Sid;
+
+        TMaybe<TError> Error;
+
+        TEvYmqCloudAuthResponse(const TString& cloudId, const TString& folderId, const TString& sid)
+            : IsSuccess(true)
+            , CloudId(cloudId)
+            , FolderId(folderId)
+            , Sid(sid)
+            , Error(Nothing())
+            {}
+
+        TEvYmqCloudAuthResponse(TError& error)
+            : IsSuccess(false)
+            , Error(error)
+            {}
+    };
 
     inline TActorId MakeAccessServiceID() {
         static const char x[12] = "accss_srvce";
@@ -181,6 +215,11 @@ namespace NKikimr::NHttpProxy {
 
     inline TActorId MakeHttpProxyID() {
         static const char x[12] = "http_proxy ";
+        return TActorId(0, TStringBuf(x, 12));
+    }
+
+    inline TActorId MakeFolderServiceID() {
+        static const char x[12] = "folder_svc";
         return TActorId(0, TStringBuf(x, 12));
     }
 

@@ -400,9 +400,9 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         }
 
 
-        writeSession1->Close(TDuration::Seconds(1));
-        writeSession2->Close(TDuration::Seconds(1));
-        writeSession3->Close(TDuration::Seconds(1));
+        writeSession1->Close(TDuration::Seconds(2));
+        writeSession2->Close(TDuration::Seconds(2));
+        writeSession3->Close(TDuration::Seconds(2));
         readSession.Close();
     }
 
@@ -741,6 +741,57 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             auto v = f.GetValueSync();
             UNIT_ASSERT_C(v.IsSuccess(),  "Error: " << v);
         }
+
+        {
+            auto describeAfterAlter = client.DescribeTopic(topicName).GetValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL(describeAfterAlter.GetTopicDescription().GetPartitioningSettings().GetAutoPartitioningSettings().GetStrategy(), EAutoPartitioningStrategy::Disabled);
+        }
+    }
+
+    Y_UNIT_TEST(ControlPlane_PauseAutoPartitioning) {
+        auto topicName = "autoscalit-topic";
+
+        TTopicSdkTestSetup setup = CreateSetup();
+        TTopicClient client = setup.MakeClient();
+
+        {
+            TCreateTopicSettings createSettings;
+            createSettings
+                .BeginConfigurePartitioningSettings()
+                    .MinActivePartitions(1)
+                    .MaxActivePartitions(100)
+                    .BeginConfigureAutoPartitioningSettings()
+                        .Strategy(EAutoPartitioningStrategy::ScaleUp)
+                    .EndConfigureAutoPartitioningSettings()
+                .EndConfigurePartitioningSettings();
+            client.CreateTopic(topicName, createSettings).Wait();
+        }
+
+        {
+            TAlterTopicSettings alterSettings;
+            alterSettings
+                .BeginAlterPartitioningSettings()
+                    .MinActivePartitions(3)
+                    .MaxActivePartitions(107)
+                    .BeginAlterAutoPartitioningSettings()
+                        .Strategy(EAutoPartitioningStrategy::Paused)
+                    .EndAlterAutoPartitioningSettings()
+                .EndAlterTopicPartitioningSettings();
+            auto f = client.AlterTopic(topicName, alterSettings);
+            f.Wait();
+
+            auto v = f.GetValueSync();
+            UNIT_ASSERT_C(v.IsSuccess(),  "Error: " << v);
+        }
+
+        {
+            auto describeAfterAlter = client.DescribeTopic(topicName).GetValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL(describeAfterAlter.GetTopicDescription().GetPartitioningSettings().GetMinActivePartitions(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(describeAfterAlter.GetTopicDescription().GetPartitioningSettings().GetMaxActivePartitions(), 107);
+            UNIT_ASSERT_VALUES_EQUAL(describeAfterAlter.GetTopicDescription().GetPartitioningSettings().GetAutoPartitioningSettings().GetStrategy(), EAutoPartitioningStrategy::Paused);
+        }
     }
 
     Y_UNIT_TEST(ControlPlane_AutoscalingWithStorageSizeRetention) {
@@ -785,7 +836,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
                 .BeginConfigureAutoPartitioningSettings()
                 .UpUtilizationPercent(2)
                 .DownUtilizationPercent(1)
-                .StabilizationWindow(TDuration::Seconds(1))
+                .StabilizationWindow(TDuration::Seconds(2))
                 .Strategy(EAutoPartitioningStrategy::ScaleUp)
                 .EndConfigureAutoPartitioningSettings()
             .EndConfigurePartitioningSettings();
@@ -793,19 +844,39 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
         auto msg = TString(1_MB, 'a');
 
-        auto writeSession = CreateWriteSession(client, "producer-1", 0, TEST_TOPIC, false);
-        UNIT_ASSERT(writeSession->Write(Msg(msg, 1)));
-        UNIT_ASSERT(writeSession->Write(Msg(msg, 2)));
-        Sleep(TDuration::Seconds(5));
-        auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
-        UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 3);
+        auto writeSession_1 = CreateWriteSession(client, "producer-1", 0, TEST_TOPIC, false);
+        auto writeSession_2 = CreateWriteSession(client, "producer-2", 0, TEST_TOPIC, false);
 
-        auto writeSession2 = CreateWriteSession(client, "producer-1", 1, TEST_TOPIC, false);
-        UNIT_ASSERT(writeSession2->Write(Msg(msg, 3)));
-        UNIT_ASSERT(writeSession2->Write(Msg(msg, 4)));
-        Sleep(TDuration::Seconds(5));
-        auto describe2 = client.DescribeTopic(TEST_TOPIC).GetValueSync();
-        UNIT_ASSERT_EQUAL(describe2.GetTopicDescription().GetPartitions().size(), 5);
+        {
+            UNIT_ASSERT(writeSession_1->Write(Msg(msg, 1)));
+            UNIT_ASSERT(writeSession_1->Write(Msg(msg, 2)));
+            Sleep(TDuration::Seconds(5));
+            auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+            UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 1);
+        }
+
+        {
+            UNIT_ASSERT(writeSession_1->Write(Msg(msg, 3)));
+            UNIT_ASSERT(writeSession_2->Write(Msg(msg, 4)));
+            UNIT_ASSERT(writeSession_1->Write(Msg(msg, 5)));
+            UNIT_ASSERT(writeSession_2->Write(Msg(msg, 6)));
+            Sleep(TDuration::Seconds(5));
+            auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+            UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 3);
+        }
+
+        auto writeSession2_1 = CreateWriteSession(client, "producer-1", 1, TEST_TOPIC, false);
+        auto writeSession2_2 = CreateWriteSession(client, "producer-2", 1, TEST_TOPIC, false);
+
+        {
+            UNIT_ASSERT(writeSession2_1->Write(Msg(msg, 7)));
+            UNIT_ASSERT(writeSession2_2->Write(Msg(msg, 8)));
+            UNIT_ASSERT(writeSession2_1->Write(Msg(msg, 9)));
+            UNIT_ASSERT(writeSession2_2->Write(Msg(msg, 10)));
+            Sleep(TDuration::Seconds(5));
+            auto describe2 = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+            UNIT_ASSERT_EQUAL(describe2.GetTopicDescription().GetPartitions().size(), 5);
+        }
     }
 
     Y_UNIT_TEST(MidOfRange) {

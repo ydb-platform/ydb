@@ -215,13 +215,13 @@ class TCreatePartitionsActor : public TAlterTopicActor<TCreatePartitionsActor, T
 public:
 
     TCreatePartitionsActor(
-            TActorId requester, 
+            TActorId requester,
             TIntrusiveConstPtr<NACLib::TUserToken> userToken,
             TString topicPath,
             TString databaseName,
             ui32 partitionsNumber)
         : TAlterTopicActor<TCreatePartitionsActor, TKafkaTopicModificationRequest>(
-            requester, 
+            requester,
             userToken,
             topicPath,
             databaseName)
@@ -234,12 +234,12 @@ public:
     };
 
     void ModifyPersqueueConfig(
-            const TActorContext& ctx,
+            NKikimr::TAppData* appData,
             NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
             const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
             const NKikimrSchemeOp::TDirEntry& selfInfo
-    ) {
-        Y_UNUSED(ctx);
+    ) override {
+        Y_UNUSED(appData);
         Y_UNUSED(pqGroupDescription);
         Y_UNUSED(selfInfo);
 
@@ -347,7 +347,7 @@ void TKafkaCreatePartitionsActor::Reply(const TActorContext& ctx) {
         response->Results.push_back(responseTopic);
 
         responseStatus = INVALID_REQUEST;
-    } 
+    }
     Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, response, responseStatus));
 
     Die(ctx);

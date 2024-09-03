@@ -1584,7 +1584,8 @@ public:
         }
 
         auto opts = Y();
-        opts = L(opts, Q(Y(Q("mode"), Q("create"))));
+        TString mode = Params.ExistingOk ? "create_if_not_exists" : "create";
+        opts = L(opts, Q(Y(Q("mode"), Q(mode))));
 
         for (const auto& consumer : Params.Consumers) {
             const auto& desc = CreateConsumerDesc(consumer, *this, false);
@@ -1603,13 +1604,17 @@ public:
         }                                                                                               \
     }
 
-            INSERT_TOPIC_SETTING(PartitionsLimit)
+            INSERT_TOPIC_SETTING(MaxPartitions)
             INSERT_TOPIC_SETTING(MinPartitions)
             INSERT_TOPIC_SETTING(RetentionPeriod)
             INSERT_TOPIC_SETTING(SupportedCodecs)
             INSERT_TOPIC_SETTING(PartitionWriteSpeed)
             INSERT_TOPIC_SETTING(PartitionWriteBurstSpeed)
             INSERT_TOPIC_SETTING(MeteringMode)
+            INSERT_TOPIC_SETTING(AutoPartitioningStabilizationWindow)
+            INSERT_TOPIC_SETTING(AutoPartitioningUpUtilizationPercent)
+            INSERT_TOPIC_SETTING(AutoPartitioningDownUtilizationPercent)
+            INSERT_TOPIC_SETTING(AutoPartitioningStrategy)
 
 #undef INSERT_TOPIC_SETTING
 
@@ -1691,7 +1696,8 @@ public:
         }
 
         auto opts = Y();
-        opts = L(opts, Q(Y(Q("mode"), Q("alter"))));
+        TString mode = Params.MissingOk ? "alter_if_exists" : "alter";
+        opts = L(opts, Q(Y(Q("mode"), Q(mode))));
 
         for (const auto& consumer : Params.AddConsumers) {
             const auto& desc = CreateConsumerDesc(consumer, *this, false);
@@ -1720,13 +1726,17 @@ public:
         }                                                                                               \
     }
 
-            INSERT_TOPIC_SETTING(PartitionsLimit)
+            INSERT_TOPIC_SETTING(MaxPartitions)
             INSERT_TOPIC_SETTING(MinPartitions)
             INSERT_TOPIC_SETTING(RetentionPeriod)
             INSERT_TOPIC_SETTING(SupportedCodecs)
             INSERT_TOPIC_SETTING(PartitionWriteSpeed)
             INSERT_TOPIC_SETTING(PartitionWriteBurstSpeed)
             INSERT_TOPIC_SETTING(MeteringMode)
+            INSERT_TOPIC_SETTING(AutoPartitioningStabilizationWindow)
+            INSERT_TOPIC_SETTING(AutoPartitioningUpUtilizationPercent)
+            INSERT_TOPIC_SETTING(AutoPartitioningDownUtilizationPercent)
+            INSERT_TOPIC_SETTING(AutoPartitioningStrategy)
 
 #undef INSERT_TOPIC_SETTING
 
@@ -1761,9 +1771,10 @@ TNodePtr BuildAlterTopic(
 
 class TDropTopicNode final: public TAstListNode {
 public:
-    TDropTopicNode(TPosition pos, const TTopicRef& tr, TScopedStatePtr scoped)
+    TDropTopicNode(TPosition pos, const TTopicRef& tr, const TDropTopicParameters& params, TScopedStatePtr scoped)
         : TAstListNode(pos)
         , Topic(tr)
+        , Params(params)
         , Scoped(scoped)
     {
         scoped->UseCluster(TString(KikimrProviderName), Topic.Cluster);
@@ -1778,7 +1789,8 @@ public:
 
         auto opts = Y();
 
-        opts = L(opts, Q(Y(Q("mode"), Q("drop"))));
+        TString mode = Params.MissingOk ? "drop_if_exists" : "drop";
+        opts = L(opts, Q(Y(Q("mode"), Q(mode))));
 
 
         Add("block", Q(Y(
@@ -1796,12 +1808,13 @@ public:
     }
 private:
     TTopicRef Topic;
+    TDropTopicParameters Params;
     TScopedStatePtr Scoped;
     TSourcePtr FakeSource;
 };
 
-TNodePtr BuildDropTopic(TPosition pos, const TTopicRef& tr, TScopedStatePtr scoped) {
-    return new TDropTopicNode(pos, tr, scoped);
+TNodePtr BuildDropTopic(TPosition pos, const TTopicRef& tr, const TDropTopicParameters& params, TScopedStatePtr scoped) {
+    return new TDropTopicNode(pos, tr, params, scoped);
 }
 
 class TCreateRole final: public TAstListNode {

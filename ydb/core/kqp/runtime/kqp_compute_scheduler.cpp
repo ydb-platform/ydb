@@ -126,6 +126,8 @@ public:
         std::atomic<i64> DelayedSumBatches = 0;
         std::atomic<i64> DelayedCount = 0;
 
+        double Share;
+
         TMultithreadPublisher<TGroupMutableStats> MutableStats;
     };
 
@@ -215,13 +217,16 @@ struct TComputeScheduler::TImpl {
 
     TDuration MaxDelay = TDuration::Seconds(10);
 
-    void AssignWeights() { }
+    void AssignWeights() {
+        for (auto& record : Records) {
+            record->MutableStats.Next()->Weight = SumCores * record->Share;
+        }
+    }
 
-    void CreateGroup(TString groupName, double maxShare, NMonotonic::TMonotonic now) {
+    void CreateGroup(TString groupName, double maxShare) {
         PoolId[groupName] = Records.size();
         auto group = std::make_unique<TSchedulerEntity::TGroupRecord>();
-        group->MutableStats.Next()->LastNowRecalc = now;
-        group->MutableStats.Next()->Weight = maxShare;
+        group->Share = maxShare;
         Records.push_back(std::move(group));
     }
 };
@@ -369,14 +374,18 @@ bool TComputeScheduler::Disable(TString group, TMonotonic now) {
 void TComputeScheduler::UpdateMaxShare(TString group, double share, TMonotonic now) {
     auto ptr = Impl->PoolId.FindPtr(group);
     if (!ptr) {
-        Impl->CreateGroup(group, share, now);
+        Impl->CreateGroup(group, share);
     } else {
         auto& record = Impl->Records[*ptr];
-        record->MutableStats.Next()->Weight = share;
+        record->Share = share;
     }
+    Impl->AssignWeights();
     AdvanceTime(now);
 }
 
+void TComputeScheduler::SetCapacity(ui64 cores) {
+    Impl->SumCores = cores;
+}
 
 ::NMonitoring::TDynamicCounters::TCounterPtr TComputeScheduler::GetGroupUsageCounter(TString group) const {
     return Impl->Counters
@@ -418,6 +427,16 @@ public:
              IEventHandle::FlagTrackDelivery);
 
         Become(&TSchedulerActor::State);
+        SetCapacity(SelfId().PoolID());
+    }
+
+    void SetCapacity(ui32 pool) {
+        NActors::TExecutorPoolStats poolStats;
+        TVector<NActors::TExecutorThreadStats> threadsStats;
+        TlsActivationContext->ActorSystem()->GetPoolStats(pool, poolStats, threadsStats);
+        ui64 threads = Max<ui64>(poolStats.MaxThreadCount, 1);
+        Opts.Counters->SchedulerCapacity->Set(threads);
+        Opts.Scheduler->SetCapacity(threads);
     }
 
     STATEFN(State) {
@@ -467,6 +486,7 @@ public:
     }
 
     void Handle(TEvents::TEvWakeup::TPtr&) {
+        SetCapacity(SelfId().PoolID());
         Opts.Scheduler->AdvanceTime(TlsActivationContext->Monotonic());
         Schedule(Opts.AdvanceTimeInterval, new TEvents::TEvWakeup());
     }

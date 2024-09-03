@@ -15,30 +15,6 @@ void TManager::UnregisterLock(const TString& processId) {
     AFL_VERIFY(ProcessLocks.erase(processId))("process_id", processId);
 }
 
-std::optional<TString> TManager::IsLocked(const TPortionInfo& portion, const THashSet<TString>& excludedLocks) const {
-    for (auto&& i : ProcessLocks) {
-        if (excludedLocks.contains(i.first)) {
-            continue;
-        }
-        if (auto lockName = i.second->IsLocked(portion, excludedLocks)) {
-            return lockName;
-        }
-    }
-    return {};
-}
-
-std::optional<TString> TManager::IsLocked(const TGranuleMeta& granule, const THashSet<TString>& excludedLocks) const {
-    for (auto&& i : ProcessLocks) {
-        if (excludedLocks.contains(i.first)) {
-            continue;
-        }
-        if (auto lockName = i.second->IsLocked(granule, excludedLocks)) {
-            return lockName;
-        }
-    }
-    return {};
-}
-
 void TManager::Stop() {
     AFL_VERIFY(StopFlag->Inc() == 1);
 }

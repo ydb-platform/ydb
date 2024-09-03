@@ -9,17 +9,21 @@ std::shared_ptr<NKikimr::NOlap::TGranuleMeta> TGranulesStorage::GetGranuleForCom
     ui32 countChecker = 0;
     std::optional<NStorageOptimizer::TOptimizationPriority> priorityChecker;
     const TDuration actualizationLag = NYDBTest::TControllers::GetColumnShardController()->GetCompactionActualizationLag();
-    for (auto&& i : Tables) {
-        NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("path_id", i.first);
-        i.second->ActualizeOptimizer(now, actualizationLag);
-        auto gPriority = i.second->GetCompactionPriority();
+    for (const auto& [pathId, granule]  : Tables) {
+        NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("path_id", pathId);
+        if (dataLocksManager->IsLocked(pathId)) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skipped_by_path_lock");
+            continue;
+        }
+        granule->ActualizeOptimizer(now, actualizationLag);
+        auto gPriority = granule->GetCompactionPriority();
         if (gPriority.IsZero() || (priorityChecker && gPriority < *priorityChecker)) {
             continue;
         }
-        granulesSorted.emplace(gPriority, i.second);
+        granulesSorted.emplace(gPriority, granule);
         if (++countChecker % 100 == 0) {
             for (auto&& it = granulesSorted.rbegin(); it != granulesSorted.rend(); ++it) {
-                if (!it->second->IsLockedOptimizer(dataLocksManager)) {
+                if (!granule->IsLockedOptimizer(dataLocksManager)) {
                     priorityChecker = it->first;
                     break;
                 }

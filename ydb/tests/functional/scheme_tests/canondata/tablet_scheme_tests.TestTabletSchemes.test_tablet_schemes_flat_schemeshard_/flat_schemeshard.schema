@@ -2952,6 +2952,11 @@
                 "ColumnId": 15,
                 "ColumnName": "EndTime",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 16,
+                "ColumnName": "PeerName",
+                "ColumnType": "Utf8"
             }
         ],
         "ColumnsDropped": [],
@@ -2972,7 +2977,8 @@
                     12,
                     13,
                     14,
-                    15
+                    15,
+                    16
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -5717,6 +5723,11 @@
                 "ColumnId": 12,
                 "ColumnName": "EndTime",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 13,
+                "ColumnName": "PeerName",
+                "ColumnType": "Utf8"
             }
         ],
         "ColumnsDropped": [],
@@ -5734,7 +5745,8 @@
                     9,
                     10,
                     11,
-                    12
+                    12,
+                    13
                 ],
                 "RoomID": 0,
                 "Codec": 0,

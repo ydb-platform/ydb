@@ -444,15 +444,34 @@ void TCommandSqlAsyncGet::Config(TConfig& config) {
     });
 }
 
+namespace {
+    IOutputStream& operator<<(IOutputStream& out, NQuery::ESyntax syntax) {
+        switch (syntax) {
+            case NQuery::ESyntax::Pg:
+                return out << "PostgresQL";
+            case NQuery::ESyntax::YqlV1:
+                return out << "YQL";
+            default:
+                return out << "Unknown";
+        }
+    }
+}
+
 int TCommandSqlAsyncGet::Run(TConfig& config) {
     NOperation::TOperationClient client(CreateDriver(config));
     NQuery::TScriptExecutionOperation operation = client
         .Get<NQuery::TScriptExecutionOperation>(OperationId)
         .GetValueSync();
     std::string quotedId = "\"" + ProtoToString(operation.Id()) + "\"";
+    auto printOperationInfo = [&]() {
+        PrintOperation(operation, OutputFormat);
+        const auto& metadata = operation.Metadata();
+        Cout << "Script syntax: " << metadata.ScriptContent.Syntax << Endl;
+        Cout << "Script text: \"" << metadata.ScriptContent.Text << "\"" << Endl;
+    };
     switch (operation.Status().GetStatus()) {
         case EStatus::SUCCESS:
-            PrintOperation(operation, OutputFormat);
+            printOperationInfo();
             if (operation.Ready()) {
                 Cerr << "To fetch results: ydb sql-async fetch " << quotedId << Endl;
             } else {
@@ -463,7 +482,7 @@ int TCommandSqlAsyncGet::Run(TConfig& config) {
             Cerr << "To forget operation: ydb sql-async forget " << quotedId << Endl;
             return EXIT_SUCCESS;
         case EStatus::CANCELLED:
-            PrintOperation(operation, OutputFormat);
+            printOperationInfo();
             Cerr << "To forget operation: ydb sql-async forget " << quotedId << Endl;
             return EXIT_FAILURE;
         default:

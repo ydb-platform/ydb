@@ -295,7 +295,7 @@ namespace {
         {
             auto table = MakeTable(operation);
             PrettyPrint(operation, table);
-            Cout << table << Endl;
+            Cout << table;
             break;
         }
 

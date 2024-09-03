@@ -71,7 +71,7 @@ def test_tpc():
     runner = Runner()
     runner.wrapped_run("h", 1, 1, None)
     result_path = runner.results_path.resolve()
-    print("Results path:", result_path, file=sys.stderr)
+    print("Results path: ", result_path, file=sys.stderr)
 
     if is_ci:
         s3_folder = pathlib.Path(os.environ["PUBLIC_DIR"]).resolve()

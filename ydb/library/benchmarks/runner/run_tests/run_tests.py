@@ -146,7 +146,8 @@ def main():
     print("No spilling...", file=stderr)
     results.append(Runner(args, False).run())
 
-    result_compare(args, results)
+    if not args.is_test:
+        result_compare(args, results)
 
 
 if __name__ == "__main__":

@@ -615,32 +615,29 @@ namespace {
                 case NTable::EColumnFamilyCompression::None:
                     compression = "None";
                     break;
-                case NTable::EColumnFamilyCompression::GZIP:
-                    compression = "GZIP";
-                    break;
                 case NTable::EColumnFamilyCompression::SNAPPY:
                     compression = "SNAPPY";
                     break;
-                case NTable::EColumnFamilyCompression::LZO:
-                    compression = "LZO";
+                case NTable::EColumnFamilyCompression::GZIP:
+                    compression = "GZIP";
                     break;
                 case NTable::EColumnFamilyCompression::BROTLI:
                     compression = "BROTLI";
                     break;
-                case NTable::EColumnFamilyCompression::LZ4_RAW:
-                    compression = "LZ4_RAW";
+                case NTable::EColumnFamilyCompression::ZSTD:
+                    compression = "ZSTD";
                     break;
                 case NTable::EColumnFamilyCompression::LZ4:
                     compression = "LZ4";
                     break;
-                case NTable::EColumnFamilyCompression::LZ4_HADOOP:
-                    compression = "LZ4_HADOOP";
-                    break;
-                case NTable::EColumnFamilyCompression::ZSTD:
-                    compression = "ZSTD";
+                case NTable::EColumnFamilyCompression::LZO:
+                    compression = "LZO";
                     break;
                 case NTable::EColumnFamilyCompression::BZ2:
                     compression = "BZ2";
+                    break;
+                case NTable::EColumnFamilyCompression::LZ4_HADOOP:
+                    compression = "LZ4_HADOOP";
                     break;
                 default:
                     compression = TStringBuilder() << "unknown(" << static_cast<size_t>(family.GetCompression().GetRef()) << ")";

@@ -46,16 +46,15 @@ message TDrop {
 
 enum EColumnCodec {
     ColumnCodecPlain = 0;
-    ColumnCodecGZIP = 1;
-    ColumnCodecSNAPPY = 2;
-    ColumnCodecLZO = 3;
-    ColumnCodecBROTLI = 4;
-    ColumnCodecLZ4RAW = 5;
+    ColumnCodecSNAPPY = 1;
+    ColumnCodecGZIP = 2;
+    ColumnCodecBROTLI = 3;
+    ColumnCodecZSTD = 4;
     // TODO: there're 3 variants of LZ4 in Arrow: Lz4Frame, Lz4HadoopRaw, Lz4Raw. ColumnCodecLZ4 points to Lz4Frame.
-    ColumnCodecLZ4 = 6; // lz4fast
-    ColumnCodecLZ4HADOOP = 7;
-    ColumnCodecZSTD = 8;
-    ColumnCodecBZ2 = 9;
+    ColumnCodecLZ4 = 5; // lz4fast
+    ColumnCodecLZO = 6;
+    ColumnCodecBZ2 = 7;
+    ColumnCodecLZ4HADOOP = 8;
 }
 
 enum EColumnCache {

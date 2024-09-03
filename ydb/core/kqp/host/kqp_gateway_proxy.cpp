@@ -136,8 +136,6 @@ bool ConvertCreateTableSettingsToProto(NYql::TKikimrTableMetadataPtr metadata, Y
                 familyProto->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZO);
             } else if (to_lower(family.Compression.GetRef()) == "brotli") {
                 familyProto->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_BROTLI);
-            } else if (to_lower(family.Compression.GetRef()) == "lz4raw") {
-                familyProto->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZ4_RAW);
             } else if (to_lower(family.Compression.GetRef()) == "lz4") {
                 familyProto->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZ4);
             } else if (to_lower(family.Compression.GetRef()) == "lz4hadoop") {
@@ -401,77 +399,11 @@ void FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
         columnDesc.SetName(columnIt->second.Name);
         columnDesc.SetType(columnIt->second.Type);
         columnDesc.SetNotNull(columnIt->second.NotNull);
-    }
-
-    for (const auto& keyColumn : metadata.KeyColumnNames) {
-        schema.AddKeyColumnNames(keyColumn);
-    }
-
-    schema.SetEngine(NKikimrSchemeOp::EColumnTableEngine::COLUMN_ENGINE_REPLACING_TIMESERIES);
-}
-
-template <>
-void FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const TKikimrTableMetadata& metadata)
-{
-    Y_ENSURE(metadata.ColumnOrder.size() == metadata.Columns.size());
-    for (const auto& name : metadata.ColumnOrder) {
-        auto columnIt = metadata.Columns.find(name);
-        Y_ENSURE(columnIt != metadata.Columns.end());
-        NKikimrSchemeOp::TOlapColumnDescription& columnDesc = *schema.AddColumns();
-        columnDesc.SetName(columnIt->second.Name);
-        columnDesc.SetType(columnIt->second.Type);
-        columnDesc.SetNotNull(columnIt->second.NotNull);
-    }
-
-    auto getCodecFromString = [](const TMaybe<TString>& codec) {
-        if (!codec.Defined()) {
-            return NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain;
-        }
-        auto codecName = to_lower(codec.GetRef());
-        if (codecName == "none") {
-            return NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain;
-        } else if (codecName == "gzip") {
-            return NKikimrSchemeOp::EColumnCodec::ColumnCodecGZIP;
-        } else if (codecName == "snappy") {
-            return NKikimrSchemeOp::EColumnCodec::ColumnCodecSNAPPY;
-        } else if (codecName == "brotli") {
-            return NKikimrSchemeOp::EColumnCodec::ColumnCodecBROTLI;
-        } else if (codecName == "lz4raw") {
-            return NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4RAW;
-        } else if (codecName == "lz4") {
-            return NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4;
-        } else if (codecName == "lz4hadoop") {
-            return NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4HADOOP;
-        } else if (codecName == "zstd") {
-            return NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD;
-        } else if (codecName == "bz2") {
-            return NKikimrSchemeOp::EColumnCodec::ColumnCodecBZ2;
-        }
-        return NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain;
-    };
-
-    for (const auto& family : metadata.ColumnFamilies) {
-        if (family.Name == "default") {
-            // Cerr << "Default family: " << family.Compression << "\n";
-            for (ui32 i = 0; i < schema.ColumnsSize(); i++) {
-                auto serializer = schema.MutableColumns(i)->MutableSerializer();
-                serializer->SetClassName("ARROW_SERIALIZER");
-                auto ArrowCompression = serializer->MutableArrowCompression();
-                ArrowCompression->SetCodec(getCodecFromString(family.Compression));
-                if (family.CompressionLevel.Defined()) {
-                    ArrowCompression->SetLevel(family.CompressionLevel.GetRef());
-                }
-            }
-            auto defaultCompression = schema.MutableDefaultCompression();
-            defaultCompression->SetCodec(getCodecFromString(family.Compression));
-            if (family.CompressionLevel.Defined()) {
-                defaultCompression->SetLevel(family.CompressionLevel.GetRef());
-            }
-            // Cerr << "HasCode: " << defaultCompression->HasCodec() << "\n";
-            // Cerr << "HasDefaultCompression: " << schema.HasDefaultCompression() << "\n";
-        } else {
-            // Cerr << "TOlapIndexDescription\n";
-        }
+        if (columnIt->second.Families) {
+            columnDesc.SetFamilyName(*columnIt->second.Families.begin());
+        }  // else {
+        //     columnDesc.SetFamilyName("default");
+        // }
     }
 
     for (const auto& keyColumn : metadata.KeyColumnNames) {
@@ -531,6 +463,75 @@ bool FillCreateColumnTableDesc(NYql::TKikimrTableMetadataPtr metadata,
         }
     }
 
+    auto getCodecFromString = [](const TMaybe<TString>& codec) -> TMaybe<NKikimrSchemeOp::EColumnCodec> {
+        auto codecName = to_lower(codec.GetRef());
+        if (codecName == "off") {
+            return NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain;
+        } else if (codecName == "gzip") {
+            return NKikimrSchemeOp::EColumnCodec::ColumnCodecGZIP;
+        } else if (codecName == "snappy") {
+            return NKikimrSchemeOp::EColumnCodec::ColumnCodecSNAPPY;
+        } else if (codecName == "lzo") {
+            return NKikimrSchemeOp::EColumnCodec::ColumnCodecLZO;
+        } else if (codecName == "brotli") {
+            return NKikimrSchemeOp::EColumnCodec::ColumnCodecBROTLI;
+        } else if (codecName == "lz4") {
+            return NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4;
+        } else if (codecName == "lz4hadoop") {
+            return NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4HADOOP;
+        } else if (codecName == "zstd") {
+            return NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD;
+        } else if (codecName == "bz2") {
+            return NKikimrSchemeOp::EColumnCodec::ColumnCodecBZ2;
+        }
+        return {};
+    };
+
+    THashMap<TString, TColumnFamily> families;
+    for (const auto& family : metadata->ColumnFamilies) {
+        families[family.Name] = family;
+        auto familyDescription = tableDesc.AddColumnFamilies();
+        familyDescription->SetName(family.Name);
+        if (family.Compression.Defined()) {
+            auto codec = getCodecFromString(family.Compression.GetRef());
+            if (!codec.Defined()) {
+                code = Ydb::StatusIds::BAD_REQUEST;
+                error = TStringBuilder() << "Unknown compression '" << family.Compression.GetRef() << "' for a column family";
+                return false;
+            }
+            familyDescription->set_columncodec(codec.GetRef());
+        }
+    }
+
+    if (families.size()) {
+        auto schema = tableDesc.MutableSchema();
+        auto defaultFamilyIt = families.find("default");
+        if (defaultFamilyIt.IsEnd()) {
+            code = Ydb::StatusIds::BAD_REQUEST;
+            error = TStringBuilder() << "Default family is not set";
+            return false;
+        }
+        NYql::TColumnFamily defaultFamily = defaultFamilyIt->second;
+        for (ui32 i = 0; i < schema->ColumnsSize(); i++) {
+            auto column = schema->MutableColumns(i);
+            auto familyIt = families.find(column->GetFamilyName());
+            NYql::TColumnFamily family;
+            if (familyIt.IsEnd()) {
+                family = defaultFamilyIt->second;
+            } else {
+                family = familyIt->second;
+            }
+            auto serializer = column->MutableSerializer();
+            serializer->SetClassName("ARROW_SERIALIZER");
+            auto codec = getCodecFromString(family.Compression.GetRef());
+            if (!codec.Defined()) {
+                code = Ydb::StatusIds::BAD_REQUEST;
+                error = TStringBuilder() << "Unknown compression '" << family.Compression.GetRef() << "' for a column family";
+                return false;
+            }
+            serializer->MutableArrowCompression()->SetCodec(codec.GetRef());
+        }
+    }
     return true;
 }
 

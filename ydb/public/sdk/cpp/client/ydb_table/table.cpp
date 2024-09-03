@@ -1096,32 +1096,29 @@ TColumnFamilyBuilder& TColumnFamilyBuilder::SetCompression(EColumnFamilyCompress
         case EColumnFamilyCompression::None:
             Impl_->Proto.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_NONE);
             break;
-        case EColumnFamilyCompression::GZIP:
-            Impl_->Proto.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_GZIP);
-            break;
         case EColumnFamilyCompression::SNAPPY:
             Impl_->Proto.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_SNAPPY);
             break;
-        case EColumnFamilyCompression::LZO:
-            Impl_->Proto.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZO);
+        case EColumnFamilyCompression::GZIP:
+            Impl_->Proto.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_GZIP);
             break;
         case EColumnFamilyCompression::BROTLI:
             Impl_->Proto.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_BROTLI);
             break;
-        case EColumnFamilyCompression::LZ4_RAW:
-            Impl_->Proto.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZ4_RAW);
+        case EColumnFamilyCompression::ZSTD:
+            Impl_->Proto.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_ZSTD);
             break;
         case EColumnFamilyCompression::LZ4:
             Impl_->Proto.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZ4);
             break;
-        case EColumnFamilyCompression::LZ4_HADOOP:
-            Impl_->Proto.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZ4_HADOOP);
-            break;
-        case EColumnFamilyCompression::ZSTD:
-            Impl_->Proto.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_ZSTD);
+        case EColumnFamilyCompression::LZO:
+            Impl_->Proto.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZO);
             break;
         case EColumnFamilyCompression::BZ2:
             Impl_->Proto.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_BZ2);
+            break;
+        case EColumnFamilyCompression::LZ4_HADOOP:
+            Impl_->Proto.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZ4_HADOOP);
             break;
     }
     return *this;

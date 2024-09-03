@@ -7971,6 +7971,30 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         testHelper.CreateTable(testTable, EStatus::SCHEME_ERROR);
     }
 
+    TString eColumnCodecToString(const NKikimrSchemeOp::EColumnCodec& codec) {
+        switch (codec) {
+            case NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain:
+                return "UNCOMPRESSED";
+            case NKikimrSchemeOp::EColumnCodec::ColumnCodecSNAPPY:
+                return "SNAPPY";
+            case NKikimrSchemeOp::EColumnCodec::ColumnCodecGZIP:
+                return "GZIP";
+            case NKikimrSchemeOp::EColumnCodec::ColumnCodecBROTLI:
+                return "BROTLI";
+            case NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD:
+                return "ZSTD";
+            case NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4:
+                return "LZ4";
+            case NKikimrSchemeOp::EColumnCodec::ColumnCodecLZO:
+                return "LZO";
+            case NKikimrSchemeOp::EColumnCodec::ColumnCodecBZ2:
+                return "BZ2";
+            case NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4HADOOP:
+                return "LZ4_HADOOP";
+        }
+        return "";
+    }
+
     Y_UNIT_TEST(CreateTableWithDefaultFamily) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
@@ -7979,65 +8003,94 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         auto session = tableClient.CreateSession().GetValueSync().GetSession();
         TString tableName = "/Root/TableWithDefaultFamily";
 
-        {
-            auto query = TStringBuilder() << R"(CREATE TABLE `)" << tableName << R"(` (
-                Key Uint64 NOT NULL,
+        auto query = TStringBuilder() << R"(CREATE TABLE `)" << tableName << R"(` (
+                Key Uint64 NOT NULL FAMILY family1,
                 Value1 String,
-                Value2 Uint32,
+                Value2 Uint32 FAMILY family1,
                 PRIMARY KEY (Key),
                 FAMILY default (
                      DATA = "test",
                      COMPRESSION = "snappy"
                 ))
                 WITH (STORE = COLUMN);)";
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         auto runtime = runner.GetTestServer().GetRuntime();
         TActorId sender = runtime->AllocateEdgeActor();
 
-        auto eColumnCodecToString = [](NKikimrSchemeOp::EColumnCodec codec) {
-            switch (codec) {
-                case NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain:
-                    return "UNCOMPRESSED";
-                case NKikimrSchemeOp::EColumnCodec::ColumnCodecGZIP:
-                    return "GZIP";
-                case NKikimrSchemeOp::EColumnCodec::ColumnCodecSNAPPY:
-                    return "SNAPPY";
-                case NKikimrSchemeOp::EColumnCodec::ColumnCodecLZO:
-                    return "LZO";
-                case NKikimrSchemeOp::EColumnCodec::ColumnCodecBROTLI:
-                    return "BROTLI";
-                case NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4RAW:
-                    return "LZ4";
-                case NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4:
-                    return "LZ4_FRAME";
-                case NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4HADOOP:
-                    return "LZ4_HADOOP";
-                case NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD:
-                    return "ZSTD";
-                case NKikimrSchemeOp::EColumnCodec::ColumnCodecBZ2:
-                    return "BZ2";
+        auto describeResult = DescribeTable(&runner.GetTestServer(), sender, tableName);
+        auto schema = describeResult.GetPathDescription().GetColumnTableDescription().GetSchema();
+        auto columns = schema.GetColumns();
+        for (const auto& column : columns) {
+            if (column.HasSerializer()) {
+                auto serializer = column.GetSerializer();
+                UNIT_ASSERT_VALUES_EQUAL_C(eColumnCodecToString(serializer.GetArrowCompression().GetCodec()),
+                    eColumnCodecToString(NKikimrSchemeOp::EColumnCodec::ColumnCodecSNAPPY),
+                    eColumnCodecToString(serializer.GetArrowCompression().GetCodec()));
+                UNIT_ASSERT_VALUES_EQUAL_C(
+                    column.GetFamilyName(), "", TStringBuilder() << "family for column " << column.GetName() << " is not default");
             }
-        };
+        }
+    }
+
+    Y_UNIT_TEST(CreateTableWithFamily) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TKikimrRunner runner(runnerSettings);
+        auto tableClient = runner.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        TString tableName = "/Root/TableWithFamily";
+
+        auto query = TStringBuilder() << R"(CREATE TABLE `)" << tableName << R"(` (
+                Key Uint64 NOT NULL,
+                Value1 String FAMILY family1,
+                Value2 Uint32 FAMILY family2,
+                PRIMARY KEY (Key),
+                FAMILY default (
+                     DATA = "test",
+                     COMPRESSION = "snappy"
+                ),
+                FAMILY family1 (
+                     DATA = "test",
+                     COMPRESSION = "zstd"
+                ),
+                FAMILY family2 (
+                     DATA = "test",
+                     COMPRESSION = "lz4"
+                ))
+                WITH (STORE = COLUMN);)";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto runtime = runner.GetTestServer().GetRuntime();
+        TActorId sender = runtime->AllocateEdgeActor();
 
         auto describeResult = DescribeTable(&runner.GetTestServer(), sender, tableName);
         auto schema = describeResult.GetPathDescription().GetColumnTableDescription().GetSchema();
-        // Cerr << "HasDefaultCompression: " << schema.HasDefaultCompression() << "\n";
-        // if (schema.HasDefaultCompression()) {
-        //     Cerr << "Default compression: " << eColumnCodecToString(schema.GetDefaultCompression().GetCodec()) << "\n";
-        // }
+        auto columns = schema.GetColumns();
         {
-            auto columns = schema.GetColumns();
-            for (const auto& column : columns) {
-                if (column.HasSerializer()) {
-                    auto serializer = column.GetSerializer();
-                    UNIT_ASSERT_VALUES_EQUAL_C(eColumnCodecToString(serializer.GetArrowCompression().GetCodec()),
-                        eColumnCodecToString(NKikimrSchemeOp::EColumnCodec::ColumnCodecSNAPPY),
-                        eColumnCodecToString(serializer.GetArrowCompression().GetCodec()));
-                }
-            }
+            auto codec = columns[0].GetSerializer().GetArrowCompression().GetCodec();
+            UNIT_ASSERT_VALUES_EQUAL_C(eColumnCodecToString(codec), eColumnCodecToString(NKikimrSchemeOp::EColumnCodec::ColumnCodecSNAPPY),
+                eColumnCodecToString(codec));
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                columns[0].GetFamilyName(), "", TStringBuilder() << "family for column " << columns[0].GetName() << " is not default");
+        }
+        {
+            auto codec = columns[1].GetSerializer().GetArrowCompression().GetCodec();
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                eColumnCodecToString(codec), eColumnCodecToString(NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD), eColumnCodecToString(codec));
+            UNIT_ASSERT_VALUES_EQUAL_C(columns[1].GetFamilyName(), "family1",
+                TStringBuilder() << "family for column " << columns[1].GetName() << " is not "
+                                 << "family1");
+        }
+        {
+            auto codec = columns[2].GetSerializer().GetArrowCompression().GetCodec();
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                eColumnCodecToString(codec), eColumnCodecToString(NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4), eColumnCodecToString(codec));
+            UNIT_ASSERT_VALUES_EQUAL_C(columns[2].GetFamilyName(), "family2",
+                TStringBuilder() << "family for column " << columns[2].GetName() << " is not "
+                                 << "family2");
         }
     }
 }

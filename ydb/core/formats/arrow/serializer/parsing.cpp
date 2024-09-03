@@ -28,8 +28,6 @@ NKikimrSchemeOp::EColumnCodec CompressionToProto(const arrow::Compression::type 
         case arrow::Compression::BROTLI:
             return NKikimrSchemeOp::EColumnCodec::ColumnCodecBROTLI;
         case arrow::Compression::LZ4_FRAME:
-            return NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4RAW;
-        case arrow::Compression::LZ4:
             return NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4;
         case arrow::Compression::LZ4_HADOOP:
             return NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4HADOOP;
@@ -54,8 +52,6 @@ std::optional<arrow::Compression::type> CompressionFromProto(const NKikimrScheme
             return arrow::Compression::LZO;
         case NKikimrSchemeOp::EColumnCodec::ColumnCodecBROTLI:
             return arrow::Compression::BROTLI;
-        case NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4RAW:
-            return arrow::Compression::LZ4;
         case NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4:
             return arrow::Compression::LZ4_FRAME;
         case NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4HADOOP:

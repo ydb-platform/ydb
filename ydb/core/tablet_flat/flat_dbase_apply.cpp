@@ -82,7 +82,7 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
 
         auto codec = delta.HasCodec() ? ECodec(delta.GetCodec()) : family.Codec;
 
-        Y_ABORT_UNLESS(ui32(codec) <= 9, "Invalid page encoding code value");
+        Y_ABORT_UNLESS(ui32(codec) <= 8, "Invalid page encoding code value");
 
         // FIXME: for now these changes will affect old parts on boot only (see RequestInMemPagesForPartStore)
         bool ever = delta.HasInMemory() && delta.GetInMemory();

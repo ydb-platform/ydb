@@ -161,32 +161,29 @@ namespace NKikimr {
                 case Ydb::Table::ColumnFamily::COMPRESSION_NONE:
                     family->SetColumnCodec(NKikimrSchemeOp::ColumnCodecPlain);
                     break;
-                case Ydb::Table::ColumnFamily::COMPRESSION_GZIP:
-                    family->SetColumnCodec(NKikimrSchemeOp::ColumnCodecGZIP);
-                    break;
                 case Ydb::Table::ColumnFamily::COMPRESSION_SNAPPY:
                     family->SetColumnCodec(NKikimrSchemeOp::ColumnCodecSNAPPY);
                     break;
-                case Ydb::Table::ColumnFamily::COMPRESSION_LZO:
-                    family->SetColumnCodec(NKikimrSchemeOp::ColumnCodecLZO);
+                case Ydb::Table::ColumnFamily::COMPRESSION_GZIP:
+                    family->SetColumnCodec(NKikimrSchemeOp::ColumnCodecGZIP);
                     break;
                 case Ydb::Table::ColumnFamily::COMPRESSION_BROTLI:
                     family->SetColumnCodec(NKikimrSchemeOp::ColumnCodecBROTLI);
                     break;
-                case Ydb::Table::ColumnFamily::COMPRESSION_LZ4_RAW:
-                    family->SetColumnCodec(NKikimrSchemeOp::ColumnCodecLZ4RAW);
+                case Ydb::Table::ColumnFamily::COMPRESSION_ZSTD:
+                    family->SetColumnCodec(NKikimrSchemeOp::ColumnCodecZSTD);
                     break;
                 case Ydb::Table::ColumnFamily::COMPRESSION_LZ4:
                     family->SetColumnCodec(NKikimrSchemeOp::ColumnCodecLZ4);
                     break;
-                case Ydb::Table::ColumnFamily::COMPRESSION_LZ4_HADOOP:
-                    family->SetColumnCodec(NKikimrSchemeOp::ColumnCodecLZ4HADOOP);
-                    break;
-                case Ydb::Table::ColumnFamily::COMPRESSION_ZSTD:
-                    family->SetColumnCodec(NKikimrSchemeOp::ColumnCodecZSTD);
+                case Ydb::Table::ColumnFamily::COMPRESSION_LZO:
+                    family->SetColumnCodec(NKikimrSchemeOp::ColumnCodecLZO);
                     break;
                 case Ydb::Table::ColumnFamily::COMPRESSION_BZ2:
                     family->SetColumnCodec(NKikimrSchemeOp::ColumnCodecBZ2);
+                    break;
+                case Ydb::Table::ColumnFamily::COMPRESSION_LZ4_HADOOP:
+                    family->SetColumnCodec(NKikimrSchemeOp::ColumnCodecLZ4HADOOP);
                     break;
                 default:
                     *code = Ydb::StatusIds::BAD_REQUEST;

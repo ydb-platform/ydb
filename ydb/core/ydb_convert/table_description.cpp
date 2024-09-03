@@ -386,7 +386,6 @@ bool BuildAlterTableModifyScheme(const Ydb::Table::AlterTableRequest* req, NKiki
 template <typename TColumn>
 static Ydb::Type* AddColumn(Ydb::Table::ColumnMeta* newColumn, const TColumn& column) {
     newColumn->set_name(column.GetName());
-
     Ydb::Type* columnType = nullptr;
     auto* typeDesc = NPg::TypeDescFromPgTypeName(column.GetType());
     if (typeDesc) {
@@ -1281,35 +1280,32 @@ void FillColumnFamiliesImpl(TYdbProto& out,
                 case NKikimrSchemeOp::ColumnCodecPlain:
                     r->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_NONE);
                     break;
-                case NKikimrSchemeOp::EColumnCodec::ColumnCodecGZIP:
-                    r->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_GZIP);
-                    break;
                 case NKikimrSchemeOp::EColumnCodec::ColumnCodecSNAPPY:
                     r->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_SNAPPY);
                     break;
-                case NKikimrSchemeOp::EColumnCodec::ColumnCodecLZO:
-                    r->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZO);
+                case NKikimrSchemeOp::EColumnCodec::ColumnCodecGZIP:
+                    r->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_GZIP);
                     break;
                 case NKikimrSchemeOp::EColumnCodec::ColumnCodecBROTLI:
                     r->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_BROTLI);
                     break;
-                case NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4RAW:
-                    r->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZ4_RAW);
+                case NKikimrSchemeOp::ColumnCodecZSTD:
+                    r->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_ZSTD);
                     break;
                 case NKikimrSchemeOp::ColumnCodecLZ4:
                     r->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZ4);
                     break;
-                case NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4HADOOP:
-                    r->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZ4_HADOOP);
-                    break;
-                case NKikimrSchemeOp::ColumnCodecZSTD:
-                    r->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_ZSTD);
+                case NKikimrSchemeOp::EColumnCodec::ColumnCodecLZO:
+                    r->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZO);
                     break;
                 case NKikimrSchemeOp::ColumnCodecBZ2:
                     r->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_BZ2);
                     break;
+                case NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4HADOOP:
+                    r->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZ4_HADOOP);
+                    break;
             }
-        } else if (family.GetCodec() == 1) {
+        } else if (family.GetCodec() == 5) {
             // Legacy setting, see datashard
             r->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZ4);
         } else {

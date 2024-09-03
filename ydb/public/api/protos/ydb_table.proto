@@ -513,15 +513,14 @@ message ColumnFamily {
     enum Compression {
         COMPRESSION_UNSPECIFIED = 0;
         COMPRESSION_NONE = 1;
-        COMPRESSION_GZIP = 2;
-        COMPRESSION_SNAPPY = 3;
-        COMPRESSION_LZO = 4;
-        COMPRESSION_BROTLI = 5;
-        COMPRESSION_LZ4_RAW = 6;
-        COMPRESSION_LZ4 = 7;
-        COMPRESSION_LZ4_HADOOP = 8;
-        COMPRESSION_ZSTD = 9;
-        COMPRESSION_BZ2 = 10;
+        COMPRESSION_SNAPPY = 2;
+        COMPRESSION_GZIP = 3;
+        COMPRESSION_BROTLI = 4;
+        COMPRESSION_ZSTD = 5;
+        COMPRESSION_LZ4 = 6;
+        COMPRESSION_LZO = 7;
+        COMPRESSION_BZ2 = 8;
+        COMPRESSION_LZ4_HADOOP = 9;
     }
 
     // Name of the column family, the name "default" must be used for the

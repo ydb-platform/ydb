@@ -585,11 +585,7 @@ private:
 
         auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(
             NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
-        
-        if (Settings.GetMvccSnapshot().GetStep() != 0 || Settings.GetMvccSnapshot().GetTxId() != 0) {
-            *evWrite->Record.MutableMvccSnapshot() = Settings.GetMvccSnapshot();
-        }
-        
+
         if (ImmediateTx && FinalTx && Finished && metadata->IsFinal) {
             // Last immediate write (only for datashard)
             if (LocksInfo[shardId].GetLock()) {
@@ -601,6 +597,9 @@ private:
                 *locks->AddLocks() = *LocksInfo.at(shardId).GetLock();
             }
         } else if (!InconsistentTx) {
+            if (Settings.GetMvccSnapshot().GetStep() != 0 || Settings.GetMvccSnapshot().GetTxId() != 0) {
+                *evWrite->Record.MutableMvccSnapshot() = Settings.GetMvccSnapshot();
+            }
             evWrite->SetLockId(Settings.GetLockTxId(), Settings.GetLockNodeId());
         }
 

@@ -1,7 +1,9 @@
 #include "schemeshard_xxport__tx_base.h"
+#include "schemeshard_xxport__helpers.h"
 #include "schemeshard_export_flow_proposals.h"
 #include "schemeshard_export_helpers.h"
 #include "schemeshard_export.h"
+#include "schemeshard_audit_log.h"
 #include "schemeshard_impl.h"
 
 #include <ydb/public/api/protos/ydb_export.pb.h>
@@ -50,7 +52,7 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
             );
         }
 
-        const TString& uid = GetUid(request.GetRequest().GetOperationParams().labels());
+        const TString& uid = GetUid(request.GetRequest().GetOperationParams());
         if (uid) {
             if (auto it = Self->ExportsByUid.find(uid); it != Self->ExportsByUid.end()) {
                 if (IsSameDomain(it->second, request.GetDatabaseName())) {
@@ -95,7 +97,7 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
         case NKikimrExport::TCreateExportRequest::kExportToYtSettings:
             {
                 const auto& settings = request.GetRequest().GetExportToYtSettings();
-                exportInfo = new TExportInfo(id, uid, TExportInfo::EKind::YT, settings, domainPath.Base()->PathId);
+                exportInfo = new TExportInfo(id, uid, TExportInfo::EKind::YT, settings, domainPath.Base()->PathId, request.GetPeerName());
 
                 TString explain;
                 if (!FillItems(exportInfo, settings, explain)) {
@@ -115,7 +117,7 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
                     settings.set_scheme(Ydb::Export::ExportToS3Settings::HTTPS);
                 }
 
-                exportInfo = new TExportInfo(id, uid, TExportInfo::EKind::S3, settings, domainPath.Base()->PathId);
+                exportInfo = new TExportInfo(id, uid, TExportInfo::EKind::S3, settings, domainPath.Base()->PathId, request.GetPeerName());
 
                 TString explain;
                 if (!FillItems(exportInfo, settings, explain)) {
@@ -166,15 +168,6 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
     }
 
 private:
-    static TString GetUid(const google::protobuf::Map<TString, TString>& labels) {
-        auto it = labels.find("uid");
-        if (it == labels.end()) {
-            return TString();
-        }
-
-        return it->second;
-    }
-
     bool Reply(
         THolder<TEvExport::TEvCreateExportResponse> response,
         const Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS,
@@ -190,6 +183,8 @@ private:
         if (errorMessage) {
             AddIssue(exprt, errorMessage);
         }
+
+        AuditLogExportStart(Request->Get()->Record, response->Record, Self);
 
         Send(Request->Sender, std::move(response), 0, Request->Cookie);
 
@@ -895,7 +890,7 @@ private:
             OnNotifyResult(txId, id, itemIdx, txc);
             Self->TxIdToExport.erase(txId);
         }
-        
+
         if (Self->TxIdToDependentExport.contains(txId)) {
             for (const auto id : Self->TxIdToDependentExport.at(txId)) {
                 OnNotifyResult(txId, id, Max<ui32>(), txc);
@@ -997,6 +992,10 @@ private:
 
         Self->PersistExportState(db, exportInfo);
         SendNotificationsIfFinished(exportInfo);
+
+        if (exportInfo->IsFinished()) {
+            AuditLogExportEnd(*exportInfo.Get(), Self);
+        }
     }
 
 }; // TTxProgress

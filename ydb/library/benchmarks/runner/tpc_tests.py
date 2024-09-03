@@ -17,7 +17,7 @@ class Runner:
         "fs-cfg" : "ydb/library/yql/tools/dqrun/examples/fs.conf",
         "gateways-cfg" : "ydb/library/benchmarks/runner/runner/test-gateways.conf",
         "flame-graph" : "contrib/tools/flame-graph",
-        "donwloaders-dir" : "ydb/library/benchmarks/runner",
+        "downloaders-dir" : "ydb/library/benchmarks/runner",
     }
 
     UDFS = [
@@ -28,24 +28,18 @@ class Runner:
     ]
 
     def __init__(self):
-        self.deps = {name : pathlib.Path(yatest.common.binary_path(path)).resolve() for name, path in self.DEPS.items()}
-        self.udfs = [pathlib.Path(yatest.common.binary_path(path)).resolve() for path in self.UDFS]
-        self.data = {name : pathlib.Path(yatest.common.source_path(path)).resolve() for name, path in self.DATA.items() if name}
-        self.output = pathlib.Path(yatest.common.output_path()).resolve()
+        self.deps = {name : pathlib.Path(yatest.common.binary_path(path)) for name, path in self.DEPS.items()}
+        self.udfs = [pathlib.Path(yatest.common.binary_path(path)) for path in self.UDFS]
+        self.data = {name : pathlib.Path(yatest.common.source_path(path)) for name, path in self.DATA.items() if name}
+        self.output = pathlib.Path(yatest.common.output_path())
         self.results_path = self.output / "results"
         self.results_path.mkdir()
-
-        path = pathlib.Path(yatest.common.source_path("ydb/library/benchmarks/runner"))
-        print(path, file=sys.stderr)
-
-        for entry in path.iterdir():
-            print(entry, entry.is_file(), entry.is_dir(), entry.is_symlink(), file=sys.stderr)
 
         self.cmd = [str(self.deps["run_tests"]) + "/run_tests", "--is-test"]
         self.cmd += ["--dqrun", str(self.deps["dqrun"]) + "/dqrun"]
         self.cmd += ["--gen-queries", str(self.deps["gen-queries"]) + "/gen_queries"]
         self.cmd += ["--result-compare", str(self.deps["result-compare"]) + "/result_compare"]
-        self.cmd += ["--downloaders-dir", str(self.data["donwloaders-dir"])]
+        self.cmd += ["--downloaders-dir", str(self.data["downloaders-dir"])]
         self.cmd += ["--runner", str(self.deps["runner"]) + "/runner"]
         self.cmd += ["--flame-graph", str(self.data["flame-graph"])]
         self.cmd += ["--udfs-dir", ";".join(map(str, self.udfs))]

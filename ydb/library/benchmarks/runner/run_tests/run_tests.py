@@ -77,18 +77,22 @@ class Runner:
         cmd += ["--dataset-size", f"{self.args.datasize}"]
         for it in custom_pragmas:
             cmd += ["--pragma", it]
-        subprocess.run(cmd)
+        res = subprocess.run(cmd)
+        if res.returncode != 0:
+            raise OSError("Failed to prepare queries")
 
     def prepare_tpc_dir(self):
         print("Preparing tpc...", file=stderr)
-        cmd = [f"{self.args.downloaders_dir}/download_files_{self.args.variant}_{self.args.datasize}.sh"]
-        subprocess.run(cmd)
+        cmd = [f"./download_files_{self.args.variant}_{self.args.datasize}.sh"]
+        res = subprocess.run(cmd)
+        if res.returncode != 0:
+            raise OSError("Failed to prepare tpc")
 
     def __init__(self, args, enable_spilling):
         self.args = args
         self.enable_spilling = enable_spilling
 
-        self.queries_dir = pathlib.Path(f"queries{"+" if self.enable_spilling else "-"}spilling-{args.datasize}-{args.tasks}").resolve()
+        self.queries_dir = pathlib.Path(f"queries{"+" if self.enable_spilling else "-"}spilling-{args.datasize}-{args.tasks}")
         if self.args.clean_old or not self.queries_dir.exists():
             self.prepare_queries_dir([
                 f"dq.MaxTasksPerStage={self.args.tasks}",
@@ -97,12 +101,14 @@ class Runner:
                 "dq.UseFinalizeByKey=true",
                 "dq.EnableSpillingNodes=All",
             ] if self.enable_spilling else [])
-
-        self.tpc_dir = pathlib.Path(f"{self.args.downloaders_dir}/tpc/{self.args.variant}/{self.args.datasize}").resolve()
+        self.tpc_dir = pathlib.Path(f"{self.args.downloaders_dir}/tpc/{self.args.variant}/{self.args.datasize}")
+        print(self.tpc_dir, file=stderr)
         if self.args.clean_old or not self.tpc_dir.exists():
+            path = os.getcwd()
+            os.chdir(self.args.downloaders_dir)
+            print(os.getcwd(), file=stderr)
             self.prepare_tpc_dir()
-        if not pathlib.Path("./tpc").exists():
-            os.symlink(f"{self.args.downloaders_dir}/tpc", f"{pathlib.Path("./tpc")}", target_is_directory=True)
+            os.chdir(path)
 
         self.result_dir = pathlib.Path(f"{self.args.output}/{"with" if self.enable_spilling else "no"}-spilling/{args.variant}-{args.datasize}-{args.tasks}").resolve()
         self.result_dir.mkdir(parents=True, exist_ok=True)
@@ -134,7 +140,9 @@ def result_compare(args, to_compare):
     cmd += ["-v"]
     cmd += to_compare
     with open(f"{args.output}/result-{args.variant}-{args.datasize}-{args.tasks}.htm", "w") as result_table:
-        subprocess.run(cmd, stdout=result_table)
+        res = subprocess.run(cmd, stdout=result_table)
+    if res.returncode != 0:
+        raise OSError("Failed to compare result")
 
 
 def main():

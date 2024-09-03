@@ -1732,7 +1732,11 @@ private:
         KQP_PROXY_LOG_D("incoming list sessions request " << ev->Get()->Record.ShortUtf8DebugString());
 
         auto result = std::make_unique<TEvKqp::TEvListSessionsResponse>();
-        auto startIt = LocalSessions->GetOrderedLowerBound(ev->Get()->Record.GetSessionIdStart());
+
+        const auto& tenant = ev->Get()->Record.GetTenantName();
+        bool checkTenant = (AppData()->TenantName != tenant);
+
+        auto startIt = LocalSessions->GetOrderedLowerBound(tenant, ev->Get()->Record.GetSessionIdStart());
         auto endIt = LocalSessions->GetOrderedEnd();
         i32 freeSpace = ev->Get()->Record.GetFreeSpace();
 
@@ -1743,6 +1747,10 @@ private:
 
         while(startIt != endIt && freeSpace > 0) {
             auto* sessionInfo = startIt->second;
+            if (checkTenant && sessionInfo->Database != ev->Get()->Record.GetTenantName()) {
+                finished = true;
+                break;
+            }
 
             if (!until.empty()) {
                 if (sessionInfo->SessionId > until) {
@@ -1770,7 +1778,8 @@ private:
         if (finished) {
             result->Record.SetFinished(true);
         } else {
-            result->Record.SetContinuationToken(startIt->first);
+            Y_ABORT_UNLESS(startIt != endIt);
+            result->Record.SetContinuationToken(startIt->first.second);
             result->Record.SetFinished(false);
         }
 

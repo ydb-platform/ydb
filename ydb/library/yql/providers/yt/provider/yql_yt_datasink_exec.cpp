@@ -253,26 +253,28 @@ private:
         }
 
         TSet<TString> addSecTags;
-        for (size_t pos = 0; pos < optimizedNode->ChildrenSize(); pos++) {
-            auto childPtr = optimizedNode->ChildPtr(pos);
-            if (childPtr->Type() == TExprNode::Lambda) {
-                VisitExpr(childPtr, [&addSecTags](const TExprNode::TPtr& node) -> bool {
-                    if (TYtTableContent::Match(node.Get())) {
-                        VisitExpr(node, [&addSecTags](const TExprNode::TPtr& node) -> bool {
-                            if (TYtTableBase::Match(node.Get())) {
-                                if (auto stat = TYtTableBaseInfo::GetStat(TExprBase(node))) {
-                                    for (const auto& tag : stat->SecurityTags) {
-                                        addSecTags.insert(tag);
+        if (settings->TableContentDeliveryMode.Get(cluster) == ETableContentDeliveryMode::File) {
+            for (size_t pos = 0; pos < optimizedNode->ChildrenSize(); pos++) {
+                auto childPtr = optimizedNode->ChildPtr(pos);
+                if (childPtr->Type() == TExprNode::Lambda) {
+                    VisitExpr(childPtr, [&addSecTags](const TExprNode::TPtr& node) -> bool {
+                        if (TYtTableContent::Match(node.Get())) {
+                            VisitExpr(node, [&addSecTags](const TExprNode::TPtr& node) -> bool {
+                                if (TYtTableBase::Match(node.Get())) {
+                                    if (auto stat = TYtTableBaseInfo::GetStat(TExprBase(node))) {
+                                        for (const auto& tag : stat->SecurityTags) {
+                                            addSecTags.insert(tag);
+                                        }
                                     }
+                                    return false;
                                 }
-                                return false;
-                            }
-                            return true;
-                        });
-                        return false;
-                    }
-                    return true;
-                });
+                                return true;
+                            });
+                            return false;
+                        }
+                        return true;
+                    });
+                }
             }
         }
 

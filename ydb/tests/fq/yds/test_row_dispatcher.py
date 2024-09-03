@@ -238,7 +238,7 @@ class TestPqRowDispatcher(TestYdsBase):
         wait_actor_count(kikimr, "YQ_ROW_DISPATCHER_SESSION", 0)
 
         issues = str(client.describe_query(query_id).result.query.transient_issue)
-        assert "Row dispatcher will use the predicate: WHERE (time > 101" in issues, "Incorrect Issues: " + issues
+        assert "Row dispatcher will use the predicate: WHERE (`time` > 101" in issues, "Incorrect Issues: " + issues
 
     @yq_v1
     def test_filter_with_mr(self, kikimr, client):
@@ -291,7 +291,7 @@ class TestPqRowDispatcher(TestYdsBase):
         stop_yds_query(client, query_id)
 
         issues = str(client.describe_query(query_id).result.query.transient_issue)
-        assert "Row dispatcher will use the predicate: WHERE event_class =" in issues, "Incorrect Issues: " + issues
+        assert "Row dispatcher will use the predicate: WHERE `event_class` =" in issues, "Incorrect Issues: " + issues
 
     @yq_v1
     def test_start_new_query(self, kikimr, client):

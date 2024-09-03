@@ -1,7 +1,7 @@
 #include "yql_generic_predicate_pushdown.h"
 
 #include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
-
+#include <ydb/core/fq/libs/common/util.h>
 #include <util/string/cast.h>
 
 namespace NYql {
@@ -201,7 +201,7 @@ namespace NYql {
     }
 
     TString FormatColumn(const TString& value) {
-        return value;
+        return NFq::EncloseAndEscapeString(value, '`');;
     }
 
     TString FormatValue(const Ydb::TypedValue& value) {
@@ -221,9 +221,9 @@ namespace NYql {
         case Ydb::Value::kDoubleValue:
             return ToString(value.value().double_value());
         case Ydb::Value::kBytesValue:
-            return "\"" + ToString(value.value().bytes_value()) + "\"";
+            return NFq::EncloseAndEscapeString(ToString(value.value().bytes_value()), '"');
         case Ydb::Value::kTextValue:
-            return "\"" + ToString(value.value().text_value()) + "\"";
+            return NFq::EncloseAndEscapeString(ToString(value.value().text_value()), '"');
         default:
             ythrow yexception() << "ErrUnimplementedTypedValue, value case " << static_cast<ui64>(value.value().value_case());
         }

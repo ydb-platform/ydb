@@ -13,7 +13,7 @@ git clone https://github.com/ydb-platform/ydb-python-sdk.git
 python3 -m pip install iso8601
 ```
 
-Next, from the same working directory, run the command to start the test app. The command will differ depending on the database to connect to.
+Next, from the same working directory, run the following command to start the test app:
 
 {% include [run_options.md](_includes/run_options.md) %}
 
@@ -66,7 +66,7 @@ The path parameter accepts the absolute path starting from the root:
 full_path = os.path.join(database, path)
 ```
 
-You can use the `session.describe_table()` method to output information about the table structure and make sure that it was properly created:
+Use the `session.describe_table()` method to output information about the table structure and make sure that it was properly created:
 
 ```python
 def describe_table(session, path, name):
@@ -76,7 +76,7 @@ def describe_table(session, path, name):
         print("column, name:", column.name, ",", str(column.type.item).strip())
 ```
 
-The given code snippet prints the following text to the console at startup:
+The code snippet above prints the following text to the console at startup:
 
 ```bash
 > describe table: series
@@ -105,10 +105,9 @@ def upsert_simple(session, path):
 
 {% include [steps/04_query_processing.md](../_includes/steps/04_query_processing.md) %}
 
-To execute YQL queries, use the `session.transaction().execute()` method.
-The SDK lets you explicitly control the execution of transactions and configure the transaction execution mode using the `TxControl` class.
+To execute YQL queries, use the `session.transaction().execute()` method. The SDK allows to explicitly control transaction execution and configure the transaction mode using the `TxControl` class.
 
-In the code snippet below, the transaction is executed using the `transaction().execute()` method. The transaction execution mode set is `ydb.SerializableReadWrite()`. When all the queries in the transaction are completed, the transaction is automatically committed by explicitly setting the flag `commit_tx=True`. The query body is described using YQL syntax and is passed to the `execute` method as a parameter.
+In the code snippet below, the transaction is executed using the `transaction().execute()` method. The transaction execution mode is set to `ydb.SerializableReadWrite()`. When all queries in the transaction are completed, the transaction is automatically committed by explicitly setting the flag `commit_tx=True`. The query body is written in YQL syntax and passed to the `execute` method as a parameter.
 
 ```python
 def select_simple(session, path):
@@ -132,7 +131,7 @@ def select_simple(session, path):
     return result_sets[0]
 ```
 
-When the query is executed, `result_set` is returned whose iteration outputs the following text to the console:
+When the query is executed, `result_set` is returned. Iterating over it outputs the following text to the console:
 
 ```bash
 > SelectSimple:
@@ -173,7 +172,7 @@ def select_prepared(session, path, series_id, season_id, episode_id):
     return result_sets[0]
 ```
 
-The given code snippet prints the following text to the console at startup:
+The code snippet above prints the following text to the console at startup:
 
 ```bash
 > select_prepared_transaction:

@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: Automat
-Version: 24.8.0
+Version: 24.8.1
 Summary: Self-service finite-state machines for the programmer on the go.
 Author-email: Glyph <code@glyph.im>
 License: Copyright (c) 2014
@@ -38,6 +38,7 @@ Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
+Requires-Python: >=3.8
 Description-Content-Type: text/markdown
 License-File: LICENSE
 Requires-Dist: typing-extensions; python_version < "3.10"

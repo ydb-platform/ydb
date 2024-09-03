@@ -6,6 +6,8 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 
+#include <ydb/core/testlib/actors/wait_events.h>
+
 // TODO remove SDK
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
@@ -436,13 +438,11 @@ void AnalyzeStatus(TTestActorRuntime& runtime, TActorId sender, ui64 saTabletId,
 }
 
 void WaitForSavedStatistics(TTestActorRuntime& runtime, const TPathId& pathId) {
-    bool eventSeen = false;
-    auto observer = runtime.AddObserver<TEvStatistics::TEvSaveStatisticsQueryResponse>([&](auto& ev){
-        if (ev->Get()->PathId == pathId)
-            eventSeen = true;
+    TWaitForFirstEvent<TEvStatistics::TEvSaveStatisticsQueryResponse> waiter(runtime, [pathId](const auto& ev){
+        return ev->Get()->PathId == pathId;
     });
 
-    runtime.WaitFor("TEvSaveStatisticsQueryResponse", [&]{ return eventSeen; });
+    waiter.Wait();
 }
 
 

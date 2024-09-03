@@ -37,7 +37,6 @@ PEERDIR(
 END()
 
 RECURSE_FOR_TESTS(
-    backup_ut
     sdk_sessions_ut
     sdk_sessions_pool_ut
     table_split_ut

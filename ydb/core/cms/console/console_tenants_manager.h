@@ -18,6 +18,7 @@
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb-cpp-sdk/library/operation_id/operation_id.h>
+#include <ydb/public/sdk/cpp/src/library/operation_id/protos/operation_id.pb.h>
 
 #include <ydb/public/sdk/cpp/src/library/yql_common/issue/protos/issue_severity.pb.h>
 #include <ydb/core/protos/blobstorage_config.pb.h>
@@ -784,8 +785,8 @@ public:
                      Ydb::StatusIds::StatusCode &code,
                      TString &error,
                      const TActorContext &ctx);
-    NKikimr::NOperationId::TOperationId MakeOperationId(const TString &path, ui64 txId, TTenant::EAction action);
-    NKikimr::NOperationId::TOperationId MakeOperationId(TTenant::TPtr tenant, TTenant::EAction action);
+    Ydb::TOperationId MakeOperationId(const TString &path, ui64 txId, TTenant::EAction action);
+    Ydb::TOperationId MakeOperationId(TTenant::TPtr tenant, TTenant::EAction action);
     TStoragePool::TPtr MakeStoragePool(TTenant::TPtr tenant, const TString &kind, ui64 size);
 
     void CreateSubDomain(TTenant::TPtr tenant, const TActorContext &ctx);

@@ -1,14 +1,14 @@
 #include "kqp_script_executions.h"
 
-#include <ydb-cpp-sdk/library/operation_id/operation_id.h>
+#include <ydb/public/sdk/cpp/src/library/operation_id/protos/operation_id.pb.h>
 
 namespace NKikimr::NKqp {
 
 TString ScriptExecutionOperationFromExecutionId(const TString& executionId) {
-    NOperationId::TOperationId operationId;
-    operationId.SetKind(NOperationId::TOperationId::SCRIPT_EXECUTION);
+    Ydb::TOperationId operationId;
+    operationId.SetKind(Ydb::TOperationId::SCRIPT_EXECUTION);
     NOperationId::AddOptionalValue(operationId, "id", executionId);
-    return operationId.ToString();
+    return NOperationId::ProtoToString(operationId);
 }
 
 TMaybe<TString> ScriptExecutionIdFromOperation(const TString& operationId) {
@@ -16,7 +16,7 @@ TMaybe<TString> ScriptExecutionIdFromOperation(const TString& operationId) {
     return ScriptExecutionIdFromOperation(operation);
 }
 
-TMaybe<std::string> ScriptExecutionIdFromOperation(const NOperationId::TOperationId& operationId) {
+TMaybe<TString> ScriptExecutionIdFromOperation(const NOperationId::TOperationId& operationId) {
     if (operationId.GetKind() != NOperationId::TOperationId::SCRIPT_EXECUTION) {
         return Nothing();
     }

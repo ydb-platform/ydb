@@ -369,7 +369,7 @@ private:
             } else {
                 auto op = response.GetIndexBuild();
                 Ydb::Operations::Operation operation;
-                operation.set_id(ToOperationId(op).ToString());
+                operation.set_id(NOperationId::ProtoToString(ToOperationId(op)));
                 operation.set_ready(false);
                 ReplyOperation(operation);
             }

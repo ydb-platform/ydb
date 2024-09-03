@@ -4,6 +4,7 @@
 #include <ydb/public/api/protos/ydb_operation.pb.h>
 #include <ydb/public/api/protos/ydb_import.pb.h>
 #include <ydb-cpp-sdk/library/operation_id/operation_id.h>
+#include <ydb/public/sdk/cpp/src/library/operation_id/protos/operation_id.pb.h>
 
 #include <util/string/cast.h>
 
@@ -11,9 +12,9 @@ namespace NKikimr {
 namespace NGRpcService {
 
 struct TImportConv {
-    static NKikimr::NOperationId::TOperationId MakeOperationId(const ui64 id, NKikimrImport::TImport::SettingsCase kind) {
-        NKikimr::NOperationId::TOperationId operationId;
-        operationId.SetKind(NKikimr::NOperationId::TOperationId::IMPORT);
+    static Ydb::TOperationId MakeOperationId(const ui64 id, NKikimrImport::TImport::SettingsCase kind) {
+        Ydb::TOperationId operationId;
+        operationId.SetKind(Ydb::TOperationId::IMPORT);
         NOperationId::AddOptionalValue(operationId, "id", ToString(id));
 
         switch (kind) {
@@ -31,7 +32,7 @@ struct TImportConv {
     static Ydb::Operations::Operation ToOperation(const NKikimrImport::TImport& import) {
         Ydb::Operations::Operation operation;
 
-        operation.set_id(MakeOperationId(import.GetId(), import.GetSettingsCase()).ToString());
+        operation.set_id(NOperationId::ProtoToString(MakeOperationId(import.GetId(), import.GetSettingsCase())));
         operation.set_status(import.GetStatus());
         if (operation.status() == Ydb::StatusIds::SUCCESS) {
             operation.set_ready(import.GetProgress() == Ydb::Import::ImportProgress::PROGRESS_DONE);

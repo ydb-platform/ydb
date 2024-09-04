@@ -235,6 +235,7 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
             auto batchSchema =
                 std::make_shared<arrow::Schema>(inserted.GetMeta().GetSchemaSubset().Apply(blobSchema->GetIndexInfo().ArrowSchema()->fields()));
             batch = std::make_shared<NArrow::TGeneralContainer>(NArrow::DeserializeBatch(blobData, batchSchema));
+            blobSchema->AdaptBatchToSchema(*batch, resultSchema);
         }
         IIndexInfo::AddSnapshotColumns(*batch, inserted.GetSnapshot());
 

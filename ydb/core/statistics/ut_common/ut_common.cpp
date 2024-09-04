@@ -155,14 +155,36 @@ TPathId ResolvePathId(TTestActorRuntime& runtime, const TString& path, TPathId* 
         *domainKey = resultEntry.DomainInfo->DomainKey;
     }
 
-    if (saTabletId && resultEntry.DomainInfo->Params.HasStatisticsAggregator()) {
-        *saTabletId = resultEntry.DomainInfo->Params.GetStatisticsAggregator();
+    if (saTabletId) {
+        if (resultEntry.DomainInfo->Params.HasStatisticsAggregator()) {
+            *saTabletId = resultEntry.DomainInfo->Params.GetStatisticsAggregator();
+        } else {
+            auto resourcesDomainKey = resultEntry.DomainInfo->ResourcesDomainKey;
+            auto request = std::make_unique<TNavigate>();
+            auto& entry = request->ResultSet.emplace_back();
+            entry.TableId = TTableId(resourcesDomainKey.OwnerId, resourcesDomainKey.LocalPathId);
+            entry.RequestType = TNavigate::TEntry::ERequestType::ByTableId;
+            entry.Operation = TNavigate::EOp::OpPath;
+            entry.RedirectRequired = false;
+            runtime.Send(MakeSchemeCacheID(), sender, new TEvRequest(request.release()));
+
+            auto ev = runtime.GrabEdgeEventRethrow<TEvResponse>(sender);
+            UNIT_ASSERT(ev);
+            UNIT_ASSERT(ev->Get());
+            std::unique_ptr<TNavigate> response(ev->Get()->Request.Release());
+            UNIT_ASSERT(response->ResultSet.size() == 1);
+            auto& secondResultEntry = response->ResultSet[0];
+
+            if (secondResultEntry.DomainInfo->Params.HasStatisticsAggregator()) {
+                *saTabletId = secondResultEntry.DomainInfo->Params.GetStatisticsAggregator();
+            }
+        }
     }
 
     return resultEntry.TableId.PathId;
 }
 
-NKikimrScheme::TEvDescribeSchemeResult DescribeTable(TTestActorRuntime& runtime, TActorId sender, const TString &path)
+NKikimrScheme::TEvDescribeSchemeResult DescribeTable(TTestActorRuntime& runtime, TActorId sender, const TString& path)
 {
     TAutoPtr<IEventHandle> handle;
 
@@ -175,7 +197,7 @@ NKikimrScheme::TEvDescribeSchemeResult DescribeTable(TTestActorRuntime& runtime,
     return *reply->MutableRecord();
 }
 
-TVector<ui64> GetTableShards(TTestActorRuntime& runtime, TActorId sender, const TString &path)
+TVector<ui64> GetTableShards(TTestActorRuntime& runtime, TActorId sender, const TString& path)
 {
     TVector<ui64> shards;
     auto lsResult = DescribeTable(runtime, sender, path);
@@ -185,7 +207,7 @@ TVector<ui64> GetTableShards(TTestActorRuntime& runtime, TActorId sender, const 
     return shards;
 }
 
-TVector<ui64> GetColumnTableShards(TTestActorRuntime& runtime, TActorId sender,const TString &path)
+TVector<ui64> GetColumnTableShards(TTestActorRuntime& runtime, TActorId sender, const TString& path)
 {
     TVector<ui64> shards;
     auto lsResult = DescribeTable(runtime, sender, path);
@@ -294,6 +316,42 @@ std::vector<TTableInfo> CreateDatabaseColumnTables(TTestEnv& env, ui8 tableCount
     for (ui8 tableId = 1; tableId <= tableCount; tableId++) {
         TTableInfo tableInfo;
         const TString path = Sprintf("/Root/Database/Table%u", tableId);
+        tableInfo.ShardIds = GetColumnTableShards(runtime, sender, path);
+        tableInfo.PathId = ResolvePathId(runtime, path, &tableInfo.DomainKey, &tableInfo.SaTabletId);
+        ret.emplace_back(tableInfo);
+    }
+    return ret;
+}
+
+std::vector<TTableInfo> CreateServerlessDatabaseColumnTables(TTestEnv& env, ui8 tableCount, ui8 shardCount) {
+    auto init = [&] () {
+        CreateDatabase(env, "Shared");
+    };
+    std::thread initThread(init);
+
+    auto& runtime = *env.GetServer().GetRuntime();
+    runtime.SimulateSleep(TDuration::Seconds(5));
+    initThread.join();
+
+    TPathId domainKey;
+    ResolvePathId(runtime, "/Root/Shared", &domainKey);
+
+    auto init2 = [&] () {
+        CreateServerlessDatabase(env, "Serverless", domainKey);
+        for (ui8 tableId = 1; tableId <= tableCount; tableId++) {
+            CreateColumnStoreTable(env, "Serverless", Sprintf("Table%u", tableId), shardCount);
+        }
+    };
+    std::thread init2Thread(init2);
+
+    runtime.SimulateSleep(TDuration::Seconds(5));
+    init2Thread.join();
+
+    auto sender = runtime.AllocateEdgeActor();
+    std::vector<TTableInfo> ret;
+    for (ui8 tableId = 1; tableId <= tableCount; tableId++) {
+        TTableInfo tableInfo;
+        const TString path = Sprintf("/Root/Serverless/Table%u", tableId);
         tableInfo.ShardIds = GetColumnTableShards(runtime, sender, path);
         tableInfo.PathId = ResolvePathId(runtime, path, &tableInfo.DomainKey, &tableInfo.SaTabletId);
         ret.emplace_back(tableInfo);

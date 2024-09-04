@@ -27,9 +27,9 @@ bool DqCollectJoinRelationsWithStats(
         auto input = equiJoin.Arg(i).Cast<TCoEquiJoinInput>();
         auto joinArg = input.List();
 
-        auto maybeStat = typesCtx.StatisticsMap.find(joinArg.Raw());
+        auto stats = typesCtx.GetStats(joinArg.Raw());
 
-        if (maybeStat == typesCtx.StatisticsMap.end()) {
+        if (!stats) {
             YQL_CLOG(TRACE, CoreDq) << "Didn't find statistics for scope " << input.Scope().Cast<TCoAtom>().StringValue() << "\n";
             return false;
         }
@@ -40,7 +40,6 @@ bool DqCollectJoinRelationsWithStats(
         }
 
         TStringBuf label = scope.Cast<TCoAtom>();
-        auto stats = maybeStat->second;
         collector(rels, label, joinArg.Ptr(), stats);
     }
     return true;
@@ -296,7 +295,7 @@ TExprBase DqOptimizeEquiJoinWithCosts(
     auto equiJoin = node.Cast<TCoEquiJoin>();
     YQL_ENSURE(equiJoin.ArgCount() >= 4);
 
-    if (typesCtx.StatisticsMap.contains(equiJoin.Raw())) {
+    if (typesCtx.GetStats(equiJoin.Raw())) {
         return node;
     }
 
@@ -348,7 +347,7 @@ TExprBase DqOptimizeEquiJoinWithCosts(
 
     // rewrite the join tree and record the output statistics
     TExprBase res = RearrangeEquiJoinTree(ctx, equiJoin, joinTree);
-    typesCtx.StatisticsMap[res.Raw()] = joinTree->Stats;
+    typesCtx.SetStats(res.Raw(), joinTree->Stats);
     return res;
 
 }

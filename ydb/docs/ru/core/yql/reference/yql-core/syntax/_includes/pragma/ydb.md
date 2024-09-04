@@ -1,6 +1,6 @@
 ## YDB
 
-### `ydb.CostBasedOptimizationLevel`
+### `ydb.CostBasedOptimizationLevel` {#costbasedoptimizationlevel}
 
 | Уровень | Поведение оптимизатора |
 | ------- | ---------------------- |

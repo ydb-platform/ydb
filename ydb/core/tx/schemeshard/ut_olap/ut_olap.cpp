@@ -561,7 +561,9 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
     Y_UNIT_TEST(AlterTtl) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnvOptions options;
+        options.EnableOlapTiering(true);
+        TTestEnv env(runtime, options);
         ui64 txId = 100;
 
         TString olapSchema = R"(

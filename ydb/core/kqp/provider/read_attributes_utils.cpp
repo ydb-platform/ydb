@@ -21,11 +21,6 @@ class TGatheringAttributesVisitor : public IAstAttributesVisitor {
 
     void VisitAttribute(TString key, TString value) override {
         Y_ABORT_UNLESS(CurrentSource, "cannot write %s: %s", key.c_str(), value.c_str());
-        if (key == "partitionedby") {
-            NJson::TJsonArray values({ value });
-            CurrentSource->second.try_emplace(key, NJson::WriteJson({ values }));
-            return;
-        }
         CurrentSource->second.try_emplace(key, value);
     };
 
@@ -126,9 +121,11 @@ public:
         auto nodeChildren = node->Children();
         if (!nodeChildren.empty() && nodeChildren[0]->IsAtom()) {
             TCoAtom attrName{nodeChildren[0]};
-            if (attrName.StringValue().equal("userschema")) {
+            if (attrName.StringValue() = "userschema") {
                 node = BuildSchemaFromMetadata(Read->Pos(), Ctx, Metadata->Columns);
                 ReplacedUserchema = true;
+            } else if (attrName.StringValue() == "partitionedby") {
+                NewAttributes.erase("partitionedby");
             }
         }
         Children.push_back(std::move(node));

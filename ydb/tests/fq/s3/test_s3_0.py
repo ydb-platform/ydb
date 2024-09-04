@@ -488,6 +488,80 @@ Pear|15|33|2024-05-06'''
         assert result_set.columns[2].name == "c"
         assert result_set.columns[2].type.type_id == ydb.Type.UTF8
 
+    @yq_v2
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_inference_projection(self, kikimr, s3, client, unique_prefix):
+        resource = boto3.resource(
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+        )
+
+        bucket = resource.Bucket("fbucket")
+        bucket.create(ACL='public-read')
+        bucket.objects.all().delete()
+
+        s3_client = boto3.client(
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+        )
+
+        fruits = '''Fruit,Price,Weight
+Banana,3,100
+Apple,2,22
+Pear,15,33'''
+        s3_client.put_object(Body=fruits, Bucket='fbucket', Key='year=2023/fruits.csv', ContentType='text/plain')
+
+        kikimr.control_plane.wait_bootstrap(1)
+        storage_connection_name = unique_prefix + "fruitbucket"
+        client.create_storage_connection(storage_connection_name, "fbucket")
+
+        sql = '''$projection = @@ {
+                "projection.enabled" : "true",
+                "storage.location.template" : "/${date}",
+                "projection.date.type" : "date",
+                "projection.date.min" : "2022-11-02",
+                "projection.date.max" : "2024-12-02",
+                "projection.date.interval" : "1",
+                "projection.date.format" : "/year=%Y",
+                "projection.date.unit" : "YEARS"
+            } @@;''' + f'''
+
+            SELECT *
+            FROM `{storage_connection_name}`.`/`
+            WITH (format=csv_with_names, 
+                with_infer='true',
+                partitioned_by=(`date`),
+                projection=$projection);
+            '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+
+        data = client.get_result_data(query_id)
+        result_set = data.result.result_set
+        logging.debug(str(result_set))
+        assert len(result_set.columns) == 4
+        assert result_set.columns[0].name == "Fruit"
+        assert result_set.columns[0].type.type_id == ydb.Type.UTF8
+        assert result_set.columns[1].name == "Price"
+        assert result_set.columns[1].type.optional_type.item.type_id == ydb.Type.INT64
+        assert result_set.columns[2].name == "Weight"
+        assert result_set.columns[2].type.optional_type.item.type_id == ydb.Type.INT64
+        assert result_set.columns[3].name == "date"
+        assert result_set.columns[3].type.type_id == ydb.Type.DATE
+        assert len(result_set.rows) == 3
+        assert result_set.rows[0].items[0].text_value == "Banana"
+        assert result_set.rows[0].items[1].int64_value == 3
+        assert result_set.rows[0].items[2].int64_value == 100
+        assert result_set.rows[0].items[3].uint32_value == 19663
+        assert result_set.rows[1].items[0].text_value == "Apple"
+        assert result_set.rows[1].items[1].int64_value == 2
+        assert result_set.rows[1].items[2].int64_value == 22
+        assert result_set.rows[1].items[3].uint32_value == 19663
+        assert result_set.rows[2].items[0].text_value == "Pear"
+        assert result_set.rows[2].items[1].int64_value == 15
+        assert result_set.rows[2].items[2].int64_value == 33
+        assert result_set.rows[2].items[3].uint32_value == 19663
+        assert sum(kikimr.control_plane.get_metering(1)) == 10
+
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_csv_with_hopping(self, kikimr, s3, client, unique_prefix):

@@ -3,6 +3,7 @@
 #include "flat_bio_events.h"
 #include "flat_bio_actor.h"
 #include "util_fmt_logger.h"
+#include <ydb/core/tablet_flat/shared_cache_s3fifo.h>
 #include <ydb/core/util/cache_cache.h>
 #include <ydb/core/util/page_map.h>
 #include <ydb/core/base/blobstorage.h>
@@ -92,7 +93,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         , public TIntrusiveListItem<TPage>
     {
         ui32 State : 4 = PageStateNo;
-        ui32 CacheFlags : 16 = 0;
+        ui32 CacheFlags1 : 4 = 0;
+        ui32 CacheFlags2 : 4 = 0;
 
         const ui32 PageId;
         const size_t Size;
@@ -125,22 +127,33 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         }
 
         void EnsureNoCacheFlags() {
-            Y_VERIFY_S(CacheFlags == 0, "Unexpected " << CacheFlags << " page cache flags");
+            Y_VERIFY_S(CacheFlags1 == 0, "Unexpected " << CacheFlags1 << " page cache flags 1");
+            Y_VERIFY_S(CacheFlags2 == 0, "Unexpected " << CacheFlags2 << " page cache flags 2");
         }
 
-        struct TWeight {
-            static ui64 Get(TPage *x) {
+        struct TSize {
+            static ui64 Get(const TPage *x) {
                 return sizeof(TPage) + (x->State == PageStateLoaded ? x->Size : 0);
             }
         };
 
-        struct TCacheFlags {
-            static ui32 Get(TPage *x) {
-                return x->CacheFlags;
+        struct TCacheFlags1 {
+            static ui32 Get(const TPage *x) {
+                return x->CacheFlags1;
             }
             static void Set(TPage *x, ui32 flags) {
-                Y_ABORT_UNLESS(flags < Max<ui16>());
-                x->CacheFlags = flags;
+                Y_ABORT_UNLESS(flags < (1 << 4));
+                x->CacheFlags1 = flags;
+            }
+        };
+
+        struct TCacheFlags2 {
+            static ui32 Get(const TPage *x) {
+                return x->CacheFlags2;
+            }
+            static void Set(TPage *x, ui32 flags) {
+                Y_ABORT_UNLESS(flags < (1 << 4));
+                x->CacheFlags2 = flags;
             }
         };
     };
@@ -233,10 +246,12 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         // now it will be fixed by ActualizeCacheSizeLimit call
 
         switch (Config->ReplacementPolicy) {
+            case NKikimrSharedCache::S3FIFO:
+                return MakeHolder<TS3FIFOCache<TPage, TPage::TSize, TPage::TCacheFlags1, TPage::TCacheFlags2>>(1);
             case NKikimrSharedCache::ThreeLeveledLRU:
             default: {
                 TCacheCacheConfig cacheCacheConfig(1, Config->Counters->FreshBytes, Config->Counters->StagingBytes, Config->Counters->WarmBytes);
-                return MakeHolder<TCacheCache<TPage, TPage::TWeight, TPage::TCacheFlags>>(std::move(cacheCacheConfig));
+                return MakeHolder<TCacheCache<TPage, TPage::TSize, TPage::TCacheFlags1>>(std::move(cacheCacheConfig));
             }
         }
     }
@@ -247,7 +262,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         // limit of cache depends only on config and mem because passive pages may go in and out arbitrary
         // we may have some passive bytes, so if we fully fill this Cache we may exceed the limit
         // because of that DoGC should be called to ensure limits
-        Cache->UpdateCacheSize(limitBytes);
+        Cache->UpdateLimit(limitBytes);
 
         if (Config->Counters) {
             Config->Counters->ConfigLimitBytes->Set(Config->LimitBytes.value_or(0));

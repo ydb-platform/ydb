@@ -52,7 +52,7 @@ struct TCacheCacheConfig : public TAtomicRefCount<TCacheCacheConfig> {
 
 template <typename TItem
         , typename TWeight
-        , typename TCacheFlags
+        , typename TGeneration
     >
 class TCacheCache : public ICacheCache<TItem> {
 public:
@@ -138,8 +138,8 @@ public:
         SetGeneration(item, TCacheCacheConfig::CacheGenNone);
     }
 
-    void UpdateCacheSize(ui64 cacheSize) override {
-        Config.SetLimit(cacheSize);
+    void UpdateLimit(ui64 limit) override {
+        Config.SetLimit(limit);
     }
 
 private:
@@ -246,7 +246,7 @@ private:
     ui64 WarmWeight;
 
     TWeight WeightOp;
-    TCacheFlags GenerationOp;
+    TGeneration GenerationOp;
 };
 
 }

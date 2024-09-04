@@ -24,6 +24,7 @@ private:
     };
 
     std::shared_ptr<TBlobStorageGuard> BlobDataGuard;
+    YDB_READONLY(bool, Remove, false);
 
 public:
     ui64 PlanStep = 0;
@@ -36,6 +37,11 @@ private:
     YDB_READONLY_FLAG(NotAbortable, false);
 
 public:
+    void SetRemove() {
+        AFL_VERIFY(!Remove);
+        Remove = true;
+    }
+
     void MarkAsNotAbortable() {
         NotAbortableFlag = true;
     }

@@ -441,7 +441,7 @@ public:
     }
 
     void OnBeginTuple() final {
-        IsVariant.push_back(IsVariant.back());
+        IsVariant.push_back(false);
         Args.push_back(0);
     }
 
@@ -452,7 +452,7 @@ public:
     void OnEndTuple() final {
         const ui32 width = Args.back();
         auto inners = Pop(width);
-        if (!IsVariant.back()) {
+        if (!IsVariant[IsVariant.size() - 2]) {
             Stack.push_back(std::make_unique<TTupleProcessor>(std::move(inners)));
         } else {
             Stack.push_back(std::make_unique<TVariantProcessor>(std::move(inners)));
@@ -463,7 +463,7 @@ public:
     }
 
     void OnBeginStruct() final {
-        IsVariant.push_back(IsVariant.back());
+        IsVariant.push_back(false);
         Args.push_back(0);
     }
 
@@ -475,7 +475,7 @@ public:
     void OnEndStruct() final {
         const ui32 width = Args.back();
         auto inners = Pop(width);
-        if (!IsVariant.back()) {
+        if (!IsVariant[IsVariant.size() - 2]) {
             Stack.push_back(std::make_unique<TStructProcessor>(std::move(inners)));
         } else {
             Stack.push_back(std::make_unique<TVariantProcessor>(std::move(inners)));

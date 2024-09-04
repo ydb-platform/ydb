@@ -42,6 +42,7 @@
 #include <ydb/services/metadata/service.h>
 #include <ydb/core/tx/tiering/manager.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
+#include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -65,7 +66,7 @@ NTabletPipe::TClientConfig GetPipeClientConfig() {
 
 TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     : TActor(&TThis::StateInit)
-    , TTabletExecutedFlat(info, tablet, nullptr)
+    , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
     , TabletCountersHolder(new TProtobufTabletCounters<ESimpleCounters_descriptor, ECumulativeCounters_descriptor,
           EPercentileCounters_descriptor, ETxTypes_descriptor>())
     , Counters(*TabletCountersHolder)

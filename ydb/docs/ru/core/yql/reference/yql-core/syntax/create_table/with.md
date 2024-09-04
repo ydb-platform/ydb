@@ -31,7 +31,7 @@ WITH (
 
 {% if backend_name == "YDB" %}
 
-Колоночная таблица создаётся путём включения блока `PARTITION BY HASH` в запрос и указанием параметра `STORE = COLUMN` в блоке `WITH` :
+Колоночная таблица создаётся путём указанием параметра `STORE = COLUMN` в блоке `WITH`:
 
 ```sql
  CREATE TABLE table_name (

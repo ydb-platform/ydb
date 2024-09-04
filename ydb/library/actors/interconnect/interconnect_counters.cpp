@@ -237,7 +237,7 @@ namespace {
         }
 
         void SetPeerInfo(const TString& name, const TString& dataCenterId) override {
-            if (HasSessionCounters && name != std::exchange(HumanFriendlyPeerHostName, name)) {
+            if (name != std::exchange(HumanFriendlyPeerHostName, name)) {
                 PerSessionCounters.Reset();
             }
             VALGRIND_MAKE_READABLE(&DataCenterId, sizeof(DataCenterId));

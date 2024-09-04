@@ -282,7 +282,7 @@ void TDqPqRdReadActor::ProcessState() {
             return;
         }
         if (!CoordinatorActorId) {
-            SRC_LOG_D("Send TEvCoordinatorChangesSubscribe");
+            SRC_LOG_D("Send TEvCoordinatorChangesSubscribe to local row dispatcher");
             Send(LocalRowDispatcherActorId, new NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscribe());
         }
         State = EState::WAIT_COORDINATOR_ID; 
@@ -291,7 +291,7 @@ void TDqPqRdReadActor::ProcessState() {
         if (!CoordinatorActorId)
             return;
         State = EState::WAIT_PARTITIONS_ADDRES;
-        SRC_LOG_D("Send TEvCoordinatorRequest to " << CoordinatorActorId->ToString());
+        SRC_LOG_D("Send TEvCoordinatorRequest to coordinator " << CoordinatorActorId->ToString());
         Send(
             *CoordinatorActorId,
             new NFq::TEvRowDispatcher::TEvCoordinatorRequest(SourceParams, GetPartitionsToRead()),

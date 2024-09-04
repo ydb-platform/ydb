@@ -61,14 +61,15 @@ def wait_actor_count(kikimr, activity, expected_count):
         time.sleep(1)
     pass
 
-def wait_row_dispatcher_sensor_value(kikimr, sensor, expected_count, exact_match = True):
+
+def wait_row_dispatcher_sensor_value(kikimr, sensor, expected_count, exact_match=True):
     deadline = time.time() + 60
     while True:
         count = 0
         for node_index in kikimr.compute_plane.kikimr_cluster.nodes:
             value = kikimr.compute_plane.get_sensors(node_index, "yq").find_sensor(
-               {"subsystem": "row_dispatcher", "sensor": sensor})
-            count += value if value is not None else 0 
+                {"subsystem": "row_dispatcher", "sensor": sensor})
+            count += value if value is not None else 0
         if count == expected_count:
             break
         if not exact_match and count > expected_count:
@@ -76,6 +77,7 @@ def wait_row_dispatcher_sensor_value(kikimr, sensor, expected_count, exact_match
         assert time.time() < deadline, f"Waiting sensor {sensor} value failed, current count {count}"
         time.sleep(1)
     pass
+
 
 class TestPqRowDispatcher(TestYdsBase):
 
@@ -252,21 +254,21 @@ class TestPqRowDispatcher(TestYdsBase):
             pragma config.flags("TimeOrderRecoverDelay", "-10");
             pragma config.flags("TimeOrderRecoverAhead", "10");
 
-            $data = 
+            $data =
                 SELECT * FROM {YDS_CONNECTION}.`{self.input_topic}`
                     WITH (format=json_each_row, SCHEMA (time UInt64 NOT NULL, event_class String NOT NULL, event_type UInt64 NOT NULL))
                     WHERE event_class = "event_class2";
-          
+
             $match =
                 SELECT * FROM $data
                 MATCH_RECOGNIZE(
                     ORDER BY CAST(time as Timestamp)
-                    MEASURES 
+                    MEASURES
                         LAST(M1.event_type) as event_type
                     ONE ROW PER MATCH
                     PATTERN ( M1 )
                     DEFINE
-                        M1 as 
+                        M1 as
                             M1.event_class = "event_class2"
                 );
 
@@ -455,7 +457,7 @@ class TestPqRowDispatcher(TestYdsBase):
             INSERT INTO {YDS_CONNECTION}.`{output_topic}`
             SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
                 WITH (format=json_each_row, SCHEMA (time UInt64 NOT NULL));'''
-    
+
         client.modify_query(
             query_id,
             "continue",
@@ -660,7 +662,7 @@ class TestPqRowDispatcher(TestYdsBase):
                 WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL));'''
 
         query_id = start_yds_query(kikimr, client, sql)
-        
+
         self.write_stream(['{"time": 101}'])
         assert self.read_stream(1, topic_path=self.output_topic) == ['101']
 

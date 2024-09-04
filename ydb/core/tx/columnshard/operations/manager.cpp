@@ -75,7 +75,7 @@ void TOperationsManager::CommitTransactionOnExecute(
         opPtr->CommitOnExecute(owner, txc, snapshot);
         commited.emplace_back(opPtr);
     }
-    OnTransactionFinishOnExecute(commited, txId, txc);
+    OnTransactionFinishOnExecute(commited, lock, txId, txc);
 }
 
 void TOperationsManager::CommitTransactionOnComplete(
@@ -101,7 +101,7 @@ void TOperationsManager::CommitTransactionOnComplete(
         opPtr->CommitOnComplete(owner, snapshot);
         commited.emplace_back(opPtr);
     }
-    OnTransactionFinishOnComplete(commited, txId);
+    OnTransactionFinishOnComplete(commited, lock, txId);
 }
 
 void TOperationsManager::AbortTransactionOnExecute(TColumnShard& owner, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc) {
@@ -118,7 +118,7 @@ void TOperationsManager::AbortTransactionOnExecute(TColumnShard& owner, const ui
         aborted.emplace_back(opPtr);
     }
 
-    OnTransactionFinishOnExecute(aborted, txId, txc);
+    OnTransactionFinishOnExecute(aborted, *lock, txId, txc);
 }
 
 void TOperationsManager::AbortTransactionOnComplete(TColumnShard& owner, const ui64 txId) {
@@ -135,7 +135,7 @@ void TOperationsManager::AbortTransactionOnComplete(TColumnShard& owner, const u
         aborted.emplace_back(opPtr);
     }
 
-    OnTransactionFinishOnComplete(aborted, txId);
+    OnTransactionFinishOnComplete(aborted, *lock, txId);
 }
 
 TWriteOperation::TPtr TOperationsManager::GetOperation(const TWriteId writeId) const {
@@ -147,24 +147,20 @@ TWriteOperation::TPtr TOperationsManager::GetOperation(const TWriteId writeId) c
 }
 
 void TOperationsManager::OnTransactionFinishOnExecute(
-    const TVector<TWriteOperation::TPtr>& operations, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc) {
-    const ui64 lockId = GetLockForTxVerified(txId);
-    auto itLock = LockFeatures.find(lockId);
-    AFL_VERIFY(itLock != LockFeatures.end());
+    const TVector<TWriteOperation::TPtr>& operations, const TLockFeatures& lock, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc) {
     for (auto&& op : operations) {
         RemoveOperationOnExecute(op, txc);
     }
     NIceDb::TNiceDb db(txc.DB);
-    db.Table<Schema::OperationTxIds>().Key(txId, lockId).Delete();
+    db.Table<Schema::OperationTxIds>().Key(txId, lock.GetLockId()).Delete();
 }
 
 void TOperationsManager::OnTransactionFinishOnComplete(
-    const TVector<TWriteOperation::TPtr>& operations, const ui64 txId) {
-    const ui64 lockId = GetLockForTxVerified(txId);
-    auto itLock = LockFeatures.find(lockId);
-    AFL_VERIFY(itLock != LockFeatures.end());
-    itLock->second.RemoveInteractions(InteractionsContext);
-    LockFeatures.erase(lockId);
+    const TVector<TWriteOperation::TPtr>& operations, const TLockFeatures& lock, const ui64 txId) {
+    {
+        lock.RemoveInteractions(InteractionsContext);
+        LockFeatures.erase(lock.GetLockId());
+    }
     Tx2Lock.erase(txId);
     for (auto&& op : operations) {
         RemoveOperationOnComplete(op);
@@ -231,6 +227,11 @@ EOperationBehaviour TOperationsManager::GetBehaviour(const NEvents::TDataEvents:
         }
 
         return EOperationBehaviour::Undefined;
+    }
+
+    if (!evWrite.Record.HasLockTxId() && !evWrite.Record.HasLockNodeId() &&
+        evWrite.Record.GetTxMode() == NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE) {
+        return EOperationBehaviour::NoTxWrite;
     }
 
     if (evWrite.Record.HasTxId() && evWrite.Record.GetTxMode() == NKikimrDataEvents::TEvWrite::MODE_PREPARE) {

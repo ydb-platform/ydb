@@ -61,10 +61,14 @@ void TWriteOperation::CommitOnComplete(TColumnShard& owner, const NOlap::TSnapsh
     owner.UpdateInsertTableCounters();
 }
 
-void TWriteOperation::OnWriteFinish(NTabletFlatExecutor::TTransactionContext& txc, const TVector<TWriteId>& globalWriteIds) {
+void TWriteOperation::OnWriteFinish(NTabletFlatExecutor::TTransactionContext& txc, const TVector<TWriteId>& globalWriteIds, const bool ephemeralFlag) {
     Y_ABORT_UNLESS(Status == EOperationStatus::Started);
     Status = EOperationStatus::Prepared;
     GlobalWriteIds = globalWriteIds;
+
+    if (ephemeralFlag) {
+        return;
+    }
 
     NIceDb::TNiceDb db(txc.DB);
     NKikimrTxColumnShard::TInternalOperationData proto;

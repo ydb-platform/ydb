@@ -1,11 +1,17 @@
 #include "schema.h"
 
+#include <ydb/core/base/feature_flags.h>
+#include <ydb/core/base/appdata_fwd.h>
+
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 
 TConclusionStatus TOlapTTL::Update(const TOlapTTLUpdate& update) {
     const ui64 currentTtlVersion = Proto.GetVersion();
     const auto& ttlUpdate = update.GetPatch();
     if (ttlUpdate.HasUseTiering()) {
+        if (HasAppData() && !AppDataVerified().FeatureFlags.GetEnableOlapTiering()) {
+            return TConclusionStatus::Fail("Tiering functionality is disabled for OLAP tables.");
+        }
         Proto.SetUseTiering(ttlUpdate.GetUseTiering());
     }
     if (ttlUpdate.HasEnabled()) {

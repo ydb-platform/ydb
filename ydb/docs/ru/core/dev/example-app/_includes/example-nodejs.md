@@ -241,10 +241,8 @@ async function selectWithParametrs(driver: Driver, data: ThreeIds[], logger: Log
   await driver.queryClient.do({
       fn: async (session) => {
           for (const [seriesId, seasonId, episodeId] of data) {
-              const episode = new Episode({seriesId, seasonId, episodeId, title: '', airDate: new Date()});
 
-              // Note: In query service execute() there is no "prepared query" option.
-              //       This behaviour applied by YDB according to an internal rule
+              const episode = new Episode({seriesId, seasonId, episodeId, title: '', airDate: new Date()});
 
               const {resultSets, opFinished} = await session.execute({
                   parameters: {
@@ -313,7 +311,7 @@ async function selectWithParametrs(driver: Driver, data: ThreeIds[], logger: Log
           }
       });
   }
-```
+  ```
 
 - doTx()
 

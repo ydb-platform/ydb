@@ -115,6 +115,8 @@ ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generate
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestConnectorWithNotificationHandler_Simple]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestContextCancelBegin]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestContextCancelQuery]
+ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestContextCancelExec]
+ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestQueryCancelRace]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestCopyFromError]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestCopyInBinaryError]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestCopyInMultipleValues]

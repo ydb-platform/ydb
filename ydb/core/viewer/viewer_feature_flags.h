@@ -49,7 +49,7 @@ public:
         Direct |= !TBase::Event->Get()->Request.GetHeader("X-Forwarded-From-Node").empty(); // we're already forwarding
         Direct |= (FilterDatabase == AppData()->TenantName); // we're already on the right node
         if (FilterDatabase && !Direct) {
-            RequestStateStorageEndpointsLookup(FilterDatabase); // to find some dynamic node and redirect there
+            return RedirectToDatabase(FilterDatabase); // to find some dynamic node and redirect query there
         } else if (!FilterDatabase) {
             MakeNodeConfigRequest(DomainPath);
             TenantsResponse = MakeRequestConsoleListTenants();
@@ -60,13 +60,8 @@ public:
         Become(&TThis::StateWork, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
     }
 
-    void HandleReply(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
-        TBase::ReplyAndPassAway(MakeForward(GetNodesFromBoardReply(ev)));
-    }
-
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvStateStorage::TEvBoardInfo, HandleReply);
             hFunc(NConsole::TEvConsole::TEvListTenantsResponse, Handle);
             hFunc(NConsole::TEvConsole::TEvGetNodeConfigResponse, Handle);
             hFunc(TEvTabletPipe::TEvClientConnected, TBase::Handle);

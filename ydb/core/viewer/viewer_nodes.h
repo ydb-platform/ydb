@@ -8,13 +8,6 @@
 #include "wb_group.h"
 #include <library/cpp/protobuf/json/proto2json.h>
 
-template<>
-struct std::hash<NKikimr::TSubDomainKey> {
-    std::size_t operator ()(const NKikimr::TSubDomainKey& s) const {
-        return s.Hash();
-    }
-};
-
 namespace NKikimr::NViewer {
 
 using namespace NProtobufJson;

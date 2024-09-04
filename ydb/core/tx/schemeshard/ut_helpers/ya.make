@@ -34,6 +34,8 @@ SRCS(
     test_env.cpp
     test_env.h
     test_with_reboots.h
+    topic_helpers.cpp
+    topic_helpers.h
 )
 
 YQL_LAST_ABI_VERSION()

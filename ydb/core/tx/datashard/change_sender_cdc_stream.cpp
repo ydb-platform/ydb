@@ -42,8 +42,8 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
 
     void Init() {
         auto opts = TPartitionWriterOpts()
-            .WithCheckState(true)
-            .WithAutoRegister(true)
+            .WithCheckState(!TopicAutoPartitioning)
+            .WithAutoRegister(!TopicAutoPartitioning)
             .WithSourceId(SourceId);
         Writer = RegisterWithSameMailbox(CreatePartitionWriter(SelfId(), ShardId, PartitionId, opts));
         Become(&TThis::StateInit);
@@ -247,12 +247,14 @@ public:
             const TDataShardId& dataShard,
             ui32 partitionId,
             ui64 shardId,
-            const TUserTable::TCdcStream& stream)
+            const TUserTable::TCdcStream& stream,
+            bool topicAutoPartitioning)
         : Parent(parent)
         , DataShard(dataShard)
         , PartitionId(partitionId)
         , ShardId(shardId)
         , SourceId(ToString(DataShard.TabletId))
+        , TopicAutoPartitioning(topicAutoPartitioning)
         , Serializer(CreateChangeRecordSerializer({
             .StreamFormat = stream.Format,
             .StreamMode = stream.Mode,
@@ -282,6 +284,7 @@ private:
     const ui32 PartitionId;
     const ui64 ShardId;
     const TString SourceId;
+    const bool TopicAutoPartitioning;
     THolder<IChangeRecordSerializer> Serializer;
     mutable TMaybe<TString> LogPrefix;
 
@@ -699,7 +702,7 @@ class TCdcChangeSenderMain
     IActor* CreateSender(ui64 partitionId) const override {
         Y_ABORT_UNLESS(PartitionToShard.contains(partitionId));
         const auto shardId = PartitionToShard.at(partitionId);
-        return new TCdcChangeSenderPartition(SelfId(), DataShard, partitionId, shardId, Stream);
+        return new TCdcChangeSenderPartition(SelfId(), DataShard, partitionId, shardId, Stream, false);
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TPtr& ev) {

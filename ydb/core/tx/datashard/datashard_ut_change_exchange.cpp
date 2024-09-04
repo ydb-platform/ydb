@@ -5,6 +5,7 @@
 #include <ydb/core/change_exchange/change_sender_common_ops.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/user_info.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/topic_helpers.h>
 #include <ydb/core/persqueue/write_meta.h>
 #include <ydb/core/tx/scheme_board/events.h>
 #include <ydb/core/tx/scheme_board/events_internal.h>
@@ -2093,6 +2094,23 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
     Y_UNIT_TEST(AddColumn_TopicAutoPartitioning) {
         AddColumnTest(true);
+    }
+
+    Y_UNIT_TEST(SplitTopicPartition_TopicAutoPartitioning) {
+        auto streamDesc = WithTopicAutoPartitioning(true, Updates(NKikimrSchemeOp::ECdcStreamFormatJson));
+        auto action = [&](TServer::TPtr server) {
+            ui64 txId = 133;
+            return NSchemeShardUT_Private::SplitPartition(*server->GetRuntime(), txId, TStringBuilder() << "Table/" << streamDesc.Name, 0, "a");
+        };
+
+        ShouldDeliverChanges(SimpleTable(), streamDesc, action, {
+            R"(UPSERT INTO `/Root/Table` (key, value) VALUES (1, 10);)",
+        }, {
+            R"(UPSERT INTO `/Root/Table` (key, value, extra) VALUES (2, 20, 200);)",
+        }, {
+            R"({"update":{"value":10},"key":[1]})",
+            R"({"update":{"extra":200,"value":20},"key":[2]})",
+        });
     }
 
     Y_UNIT_TEST(DropColumn) {

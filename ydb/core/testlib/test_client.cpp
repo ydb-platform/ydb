@@ -427,7 +427,6 @@ namespace Tests {
         GRpcServer->AddService(new NGRpcService::TGRpcYdbObjectStorageService(system, counters, grpcRequestProxies[0], true));
         GRpcServer->AddService(new NQuoter::TRateLimiterGRpcService(system, counters, grpcRequestProxies[0]));
         GRpcServer->AddService(new NGRpcService::TGRpcDataStreamsService(system, counters, grpcRequestProxies[0], true));
-        GRpcServer->AddService(new NGRpcService::TGRpcYmqService(system, counters, grpcRequestProxies[0], true));
         GRpcServer->AddService(new NGRpcService::TGRpcMonitoringService(system, counters, grpcRequestProxies[0], true));
         GRpcServer->AddService(new NGRpcService::TGRpcYdbQueryService(system, counters, grpcRequestProxies, true, 1));
         GRpcServer->AddService(new NGRpcService::TGRpcYdbTabletService(system, counters, grpcRequestProxies, true, 1));

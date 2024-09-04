@@ -125,6 +125,25 @@ void TKqpScanFetcherActor::HandleExecute(TEvKqpCompute::TEvScanData::TPtr& ev) {
     }
     AFL_ENSURE(state->State == EShardState::Running)("state", state->State)("actor_id", state->ActorId)("ev_sender", ev->Sender);
 
+    AFL_DEBUG(NKikimrServices::KQP_COMPUTE)
+        ("Recv TEvScanData from ShardID=", ev->Sender)
+        ("ScanId", ev->Get()->ScanId)
+        ("Finished", ev->Get()->Finished)
+        ("Lock", [&]() {
+            TStringBuilder builder;
+            for (const auto& lock : ev->Get()->LocksInfo.Locks) {
+                builder << lock.ShortDebugString();
+            }
+            return builder;
+        }())
+        ("BrokenLocks", [&]() {
+            TStringBuilder builder;
+            for (const auto& lock : ev->Get()->LocksInfo.BrokenLocks) {
+                builder << lock.ShortDebugString();
+            }
+            return builder;
+        }());
+
     TInstant startTime = TActivationContext::Now();
     if (ev->Get()->Finished) {
         state->State = EShardState::PostRunning;

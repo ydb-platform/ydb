@@ -124,6 +124,7 @@ class TOperationsManager {
     TWriteId LastWriteId = TWriteId(0);
 
 public:
+
     bool Load(NTabletFlatExecutor::TTransactionContext& txc);
     void AddEventForTx(TColumnShard& owner, const ui64 txId, const std::shared_ptr<NOlap::NTxInteractions::ITxEventWriter>& writer);
     void AddEventForLock(TColumnShard& owner, const ui64 lockId, const std::shared_ptr<NOlap::NTxInteractions::ITxEventWriter>& writer);
@@ -139,6 +140,9 @@ public:
         TColumnShard& owner, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc, const NOlap::TSnapshot& snapshot);
     void CommitTransactionOnComplete(
         TColumnShard& owner, const ui64 txId, const NOlap::TSnapshot& snapshot);
+    void AddTemporaryTxLink(const ui64 lockId) {
+        AFL_VERIFY(Tx2Lock.emplace(lockId, lockId).second);
+    }
     void LinkTransactionOnExecute(const ui64 lockId, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
     void LinkTransactionOnComplete(const ui64 lockId, const ui64 txId);
     void AbortTransactionOnExecute(TColumnShard& owner, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
@@ -198,7 +202,8 @@ private:
     TWriteId BuildNextWriteId();
     void RemoveOperationOnExecute(const TWriteOperation::TPtr& op, NTabletFlatExecutor::TTransactionContext& txc);
     void RemoveOperationOnComplete(const TWriteOperation::TPtr& op);
-    void OnTransactionFinishOnExecute(const TVector<TWriteOperation::TPtr>& operations, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
-    void OnTransactionFinishOnComplete(const TVector<TWriteOperation::TPtr>& operations, const ui64 txId);
+    void OnTransactionFinishOnExecute(const TVector<TWriteOperation::TPtr>& operations, const TLockFeatures& lock, const ui64 txId,
+        NTabletFlatExecutor::TTransactionContext& txc);
+    void OnTransactionFinishOnComplete(const TVector<TWriteOperation::TPtr>& operations, const TLockFeatures& lock, const ui64 txId);
 };
 }   // namespace NKikimr::NColumnShard

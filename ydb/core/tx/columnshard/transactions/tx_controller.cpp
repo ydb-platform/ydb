@@ -372,6 +372,15 @@ void TTxController::FinishProposeOnComplete(const ITransactionOperator& txOperat
     Counters.OnFinishProposeOnComplete(txOperator.GetOpType());
 }
 
+void TTxController::FinishProposeOnComplete(const ui64 txId, const TActorContext& ctx) {
+    auto txOperator = GetTxOperatorOptional(txId);
+    if (!txOperator) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", "cannot found txOperator in propose transaction finish")("tx_id", txId);
+        return;
+    }
+    return FinishProposeOnComplete(*txOperator, ctx);
+}
+
 void TTxController::ITransactionOperator::SwitchStateVerified(const EStatus from, const EStatus to) {
     AFL_VERIFY(!Status || *Status == from)("error", "incorrect expected status")("real_state", *Status)("expected", from)(
                               "details", DebugString());

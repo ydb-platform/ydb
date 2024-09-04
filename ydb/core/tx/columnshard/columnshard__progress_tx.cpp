@@ -63,7 +63,7 @@ public:
             }
 
             AFL_VERIFY(TxOperator->ProgressOnExecute(*Self, NOlap::TSnapshot(step, txId), txc));
-            Self->ProgressTxController->FinishPlannedTx(txId, txc);
+            Self->ProgressTxController->ProgressOnExecute(txId, txc);
             Self->Counters.GetTabletCounters()->IncCounter(COUNTER_PLANNED_TX_COMPLETED);
         }
         Self->ProgressTxInFlight = std::nullopt;
@@ -84,7 +84,7 @@ public:
             Self->RescheduleWaitingReads();
         }
         if (PlannedQueueItem) {
-            Self->GetProgressTxController().CompleteRunningTx(*PlannedQueueItem);
+            Self->GetProgressTxController().ProgressOnComplete(*PlannedQueueItem);
         }
         if (LastCompletedTx) {
             Self->LastCompletedTx = std::max(*LastCompletedTx, Self->LastCompletedTx);

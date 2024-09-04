@@ -53,6 +53,11 @@ std::shared_ptr<FormatConfig> MakeFormatConfig(const THashMap<TString, TString>&
         }
     }
 
+    if (params.FindPtr("data.timestamp.formatname") || params.FindPtr("data.timestamp.format") ||
+        params.FindPtr("data.datetime.formatname") || params.FindPtr("data.datetime.format")) {
+        throw yexception() << "datetime and timestamp parameters are not supported with type inferring";
+    }
+
     std::shared_ptr<FormatConfig> config;
     switch (format) {
     case EFileFormat::CsvWithNames:

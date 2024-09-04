@@ -568,6 +568,7 @@ PEERDIR(
     ydb/core/viewer/yaml
     ydb/core/viewer/protos
     ydb/library/persqueue/topic_parser
+    ydb/library/yaml_config
     ydb/public/api/protos
     ydb/public/lib/deprecated/kicli
     ydb/public/lib/json_value

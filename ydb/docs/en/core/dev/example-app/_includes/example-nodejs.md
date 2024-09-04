@@ -133,33 +133,33 @@ Depending on the rowMode parameter, the data can be retrieved in javascript form
 
 {% list tabs %}
 
-- rowMode: RowType.Native
+  - rowMode: RowType.Native
 
-  ```ts
-  async function selectNativeSimple(driver: Driver, logger: Logger): Promise<void> {
-      logger.info('Making a simple native select...');
-      const result = await driver.queryClient.do({
-          fn: async (session) => {
-              const {resultSets} =
-                  await session.execute({
-                      // rowMode: RowType.Native, // Result set cols and rows returned as native javascript values. It's default behaviour
-                      text: `
-                          SELECT series_id,
-                                 title,
-                                 release_date
-                          FROM ${SERIES_TABLE}
-                          WHERE series_id = 1;`,
-                  });
-              const {value: resultSet1} = await resultSets.next();
-              const rows: any[][] = []
-              for await (const row of resultSet1.rows) rows.push(row);
-              return {cols: resultSet1.columns, rows};
-          }
-      });
-      logger.info(`selectNativeSimple cols: ${JSON.stringify(result.cols, null, 2)}`);
-      logger.info(`selectNativeSimple rows: ${JSON.stringify(result.rows, null, 2)}`);
-  }
-  ```
+    ```ts
+    async function selectNativeSimple(driver: Driver, logger: Logger): Promise<void> {
+        logger.info('Making a simple native select...');
+        const result = await driver.queryClient.do({
+            fn: async (session) => {
+                const {resultSets} =
+                    await session.execute({
+                        // rowMode: RowType.Native, // Result set cols and rows returned as native javascript values. It's default behaviour
+                        text: `
+                            SELECT series_id,
+                                   title,
+                                   release_date
+                            FROM ${SERIES_TABLE}
+                            WHERE series_id = 1;`,
+                    });
+                const {value: resultSet1} = await resultSets.next();
+                const rows: any[][] = []
+                for await (const row of resultSet1.rows) rows.push(row);
+                return {cols: resultSet1.columns, rows};
+            }
+        });
+        logger.info(`selectNativeSimple cols: ${JSON.stringify(result.cols, null, 2)}`);
+        logger.info(`selectNativeSimple rows: ${JSON.stringify(result.rows, null, 2)}`);
+    }
+    ```
 
   - rowMode: RowType.Ydb
 

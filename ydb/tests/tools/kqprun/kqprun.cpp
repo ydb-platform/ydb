@@ -564,15 +564,15 @@ protected:
             .DefaultValue(RunnerOptions.YdbSettings.DomainName)
             .StoreResult(&RunnerOptions.YdbSettings.DomainName);
 
-        options.AddLongOption("dedicated", "Dedicated tennant path, relative inside domain")
+        options.AddLongOption("dedicated", "Dedicated tenant path, relative inside domain")
             .RequiredArgument("path")
             .InsertTo(&RunnerOptions.YdbSettings.DedicatedTennats);
 
-        options.AddLongOption("shared", "Shared tennant path, relative inside domain")
+        options.AddLongOption("shared", "Shared tenant path, relative inside domain")
             .RequiredArgument("path")
             .InsertTo(&RunnerOptions.YdbSettings.SharedTennats);
 
-        options.AddLongOption("serverless", "Serverless tennant path, relative inside domain (use string serverless-name@shared-name to specify shared database)")
+        options.AddLongOption("serverless", "Serverless tenant path, relative inside domain (use string serverless-name@shared-name to specify shared database)")
             .RequiredArgument("path")
             .InsertTo(&RunnerOptions.YdbSettings.ServerlessTennats);
 

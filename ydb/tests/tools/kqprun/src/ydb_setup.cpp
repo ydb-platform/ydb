@@ -160,21 +160,21 @@ private:
 
         if (!Settings_.SharedTennats.empty() || !Settings_.DedicatedTennats.empty()) {
             serverSettings.SetDynamicNodeCount(Settings_.SharedTennats.size() + Settings_.DedicatedTennats.size());
-            for (const TString& dedicatedTennant : Settings_.DedicatedTennats) {
-                serverSettings.AddStoragePoolType(dedicatedTennant);
+            for (const TString& dedicatedTenant : Settings_.DedicatedTennats) {
+                serverSettings.AddStoragePoolType(dedicatedTenant);
             }
-            for (const auto& sharedTennant : Settings_.SharedTennats) {
-                serverSettings.AddStoragePoolType(sharedTennant);
+            for (const auto& sharedTenant : Settings_.SharedTennats) {
+                serverSettings.AddStoragePoolType(sharedTenant);
             }
         }
 
         return serverSettings;
     }
 
-    void CreateTennant(Ydb::Cms::CreateDatabaseRequest&& request, const TString& type) const {
+    void CreateTenant(Ydb::Cms::CreateDatabaseRequest&& request, const TString& type) const {
         const auto path = request.path();
-        Cout << CoutColors_.Yellow() << TInstant::Now().ToIsoStringLocal() << " Creating " << type << " tennant " << path << "..." << CoutColors_.Default() << Endl;
-        Tenants_->CreateTennant(std::move(request));
+        Cout << CoutColors_.Yellow() << TInstant::Now().ToIsoStringLocal() << " Creating " << type << " tenant " << path << "..." << CoutColors_.Default() << Endl;
+        Tenants_->CreateTenant(std::move(request));
 
         if (Settings_.MonitoringEnabled) {
             ui32 nodeIndex = GetNodeIndexForDatabase(path);
@@ -183,45 +183,45 @@ private:
         }
     }
 
-    static void AddTennantStoragePool(Ydb::Cms::StorageUnits* storage, const TString& name) {
+    static void AddTenantStoragePool(Ydb::Cms::StorageUnits* storage, const TString& name) {
         storage->set_unit_kind(name);
         storage->set_count(1);
     }
 
-    void CreateTennants() {
-        for (const TString& dedicatedTennant : Settings_.DedicatedTennats) {
+    void CreateTenants() {
+        for (const TString& dedicatedTenant : Settings_.DedicatedTennats) {
             Ydb::Cms::CreateDatabaseRequest request;
-            request.set_path(GetTannantPath(dedicatedTennant));
-            AddTennantStoragePool(request.mutable_resources()->add_storage_units(), dedicatedTennant);
-            CreateTennant(std::move(request), "dedicated");
+            request.set_path(GetTannantPath(dedicatedTenant));
+            AddTenantStoragePool(request.mutable_resources()->add_storage_units(), dedicatedTenant);
+            CreateTenant(std::move(request), "dedicated");
         }
 
-        for (const TString& sharedTennant : Settings_.SharedTennats) {
+        for (const TString& sharedTenant : Settings_.SharedTennats) {
             Ydb::Cms::CreateDatabaseRequest request;
-            request.set_path(GetTannantPath(sharedTennant));
-            AddTennantStoragePool(request.mutable_shared_resources()->add_storage_units(), sharedTennant);
-            CreateTennant(std::move(request), "shared");
+            request.set_path(GetTannantPath(sharedTenant));
+            AddTenantStoragePool(request.mutable_shared_resources()->add_storage_units(), sharedTenant);
+            CreateTenant(std::move(request), "shared");
         }
 
         ServerlessToShared_.reserve(Settings_.ServerlessTennats.size());
-        for (const TString& serverlessTennant : Settings_.ServerlessTennats) {
+        for (const TString& serverlessTenant : Settings_.ServerlessTennats) {
             Ydb::Cms::CreateDatabaseRequest request;
-            if (serverlessTennant.Contains('@')) {
+            if (serverlessTenant.Contains('@')) {
                 TStringBuf serverless;
                 TStringBuf shared;
-                TStringBuf(serverlessTennant).Split('@', serverless, shared);
+                TStringBuf(serverlessTenant).Split('@', serverless, shared);
 
                 request.set_path(GetTannantPath(TString(serverless)));
                 request.mutable_serverless_resources()->set_shared_database_path(GetTannantPath(TString(shared)));
             } else if (!Settings_.SharedTennats.empty()) {
-                request.set_path(GetTannantPath(serverlessTennant));
+                request.set_path(GetTannantPath(serverlessTenant));
                 request.mutable_serverless_resources()->set_shared_database_path(GetTannantPath(*Settings_.SharedTennats.begin()));
             } else {
-                ythrow yexception() << "Can not create serverless tennant " << serverlessTennant << ", there is no shared tennants";
+                ythrow yexception() << "Can not create serverless tenant " << serverlessTenant << ", there is no shared tenants";
             }
             ServerlessToShared_[request.path()] = request.serverless_resources().shared_database_path();
 
-            CreateTennant(std::move(request), "serverless");
+            CreateTenant(std::move(request), "serverless");
         }
     }
 
@@ -239,7 +239,7 @@ private:
         Client_->InitRootScheme();
 
         Tenants_ = MakeHolder<NKikimr::Tests::TTenants>(Server_);
-        CreateTennants();
+        CreateTenants();
     }
 
     void InitializeYqlLogger() {
@@ -453,8 +453,8 @@ private:
         };
     }
 
-    TString GetTannantPath(const TString& tennantName) const {
-        return TStringBuilder() << NKikimr::CanonizePath(Settings_.DomainName) << NKikimr::CanonizePath(tennantName);
+    TString GetTannantPath(const TString& tenantName) const {
+        return TStringBuilder() << NKikimr::CanonizePath(Settings_.DomainName) << NKikimr::CanonizePath(tenantName);
     }
 
     TString GetDatabasePath(const TString& database) const {
@@ -471,11 +471,11 @@ private:
             canonizedPath = it->second;
         }
 
-        if (const ui32 tennantSize = Tenants_->Size(canonizedPath)) {
-            return Tenants_->List(canonizedPath)[RandomNumber(tennantSize)];
+        if (const ui32 tenantSize = Tenants_->Size(canonizedPath)) {
+            return Tenants_->List(canonizedPath)[RandomNumber(tenantSize)];
         }
 
-        ythrow yexception() << "Unknown tennant '" << canonizedPath << "'";
+        ythrow yexception() << "Unknown tenant '" << canonizedPath << "'";
     }
 
 private:

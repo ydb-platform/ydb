@@ -83,7 +83,7 @@ public class User implements Persistable<Long> {
 }
 ```
 
-For the `User` entity in the `Users` table, let's create a repository:
+Creating a repository for the `User` entity in the `Users` table:
 
 ```java
 

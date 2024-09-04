@@ -11,17 +11,19 @@
 Шаги развертывания:
 
 1. По [инструкции](./initial-deployment.md) подготовьте сервера, Ansible окружение, загрузите [репозиторий с шаблонами конфигурации](https://github.com/ydb-platform/ydb-ansible-examples).
-1. Выберите один из шаблонов: `3-nodes-mirror-3-dc-fq`, `8-nodes-block-4-2-fq` или `9-nodes-mirror-3-dc-fq`. Конфигурационные файлы в этих шаблонах адаптированы под использование функции Federated Query.
 1. Выполните [шаги по подготовке шаблона конфигурации](./initial-deployment.md#erasure-setup), но пока **НЕ** запускайте команду `ansible-playbook ydb_platform.ydb.initial_setup`.
 1. Внесите дополнительные изменения в разделе `vars` инвентори-файла `files/50-inventory.yaml`:
+    1. Включите установку fq-connector-go, установив `ydb_install_fq_connector: true`
     1. Выберите один из доступных вариантов развёртывания исполняемых файлов fq-connector-go:
         1. `ydb_fq_connector_archive`: локальный путь к архиву с дистрибутивом fq-connector-go, [загруженному](https://github.com/ydb-platform/fq-connector-go/releases) или подготовленному заранее.
         1. `ydb_fq_connector_binary`: локальный путь к исполняемому файлу fq-connector-go, [загруженному](https://github.com/ydb-platform/fq-connector-go/releases) или подготовленному заранее.
-    1. Если необходимо, отредактируйте конфигурационный файл fq-connector-go `files/fq_config.yaml` ([документация по конфигурации](../../deploy/manual/connector.md#fq-connector-go-config)):
+    1. Если необходимо, отредактируйте конфигурационный файл fq-connector-go `files/fq-connector-go/config.yaml` ([документация по конфигурации](../../deploy/manual/connector.md#fq-connector-go-config)):
         1. `ydb_fq_connector_config`: укажите локальный путь до конфигурационного файла fq-connector-go.
     1. `ydb_fq_connector_dir`: укажите директорию, в которую fq-connector-go будет установлен на сервере.
-1. Если необходимо, отредактируйте конфигурационный файл {{ ydb-short-name }} `files/config.yaml`
-1. Если необходимо, [включите функцию multislot развертывания](#multislot) (функция работоспособна только для {{ ydb-short-name }} версии 24.3.3 или старше).
+1. Отредактируйте конфигурационный файл {{ ydb-short-name }} `files/config.yaml`:
+    1. Раскомментируйте секцию `query_service_config.generic`. Если необходимо, отредактируйте настройки подключения к коннектору.
+    1. Раскомментируйте `feature_flags` `enable_external_data_sources` и `enable_script_execution_operations`
+1. Опционально: [включите функцию multislot развертывания](#multislot) (доступно только для {{ ydb-short-name }} версии 24.3.3 или старше).
 1. Выполните команду `ansible-playbook ydb_platform.ydb.initial_setup`, находясь в директории клонированного шаблона.
 
 В результате выполнения плейбука будет создан кластер {{ ydb-short-name }}, на котором развернута тестовая база данных – `database`, создан `root` пользователь с максимальными правами доступа и запущен Embedded UI на порту 8765. Для подключения к Embedded UI можно настроить SSH-туннелирование. Для этого на локальной машине выполните команду `ssh -L 8765:localhost:8765 -i <ssh private key> <user>@<first ydb static node ip>`. После успешного установления соединения можно перейти по URL [localhost:8765](http://localhost:8765):
@@ -50,7 +52,7 @@
         1. `ydb_fq_connector_config`: укажите локальный путь до конфигурационного файла fq-connector-go.
     1. `ydb_fq_connector_dir`: укажите директорию, в которую fq-connector-go будет установлен на сервере.
 1. Отредактируйте конфигурационный файл {{ ydb-short-name }} `files/config.yaml` в соответствии с [инструкцией](../../deploy/manual/deploy-ydb-federated-query.md#guide)
-1. Если необходимо, [включите функцию multislot развертывания](#multislot) (функция работоспособна только для {{ ydb-short-name }} версии 24.3.3 или старше).
+1. Опционально: [включите функцию multislot развертывания](#multislot) (доступно только для {{ ydb-short-name }} версии 24.3.3 или старше).
 1. Установите fq-connector-go командой `ansible-playbook ydb_platform.ydb.install_connector`.
 1. Обновите конфигурацию {{ ydb-short-name }} по [инструкции](./update-config.md).
 

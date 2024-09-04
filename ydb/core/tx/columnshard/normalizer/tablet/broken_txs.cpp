@@ -17,6 +17,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TBrokenTxsNormalizer::DoInit(
     while (!rowset.EndOfSet()) {
         const ui64 txId = rowset.GetValue<Schema::TxInfo::TxId>();
         if (!rowset.HaveValue<Schema::TxInfo::TxKind>()) {
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("tx_id", txId)("event", "removed_by_normalizer")("condition", "no_kind");
             Schema::EraseTxInfo(db, txId);
         }
 

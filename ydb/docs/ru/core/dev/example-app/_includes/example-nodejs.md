@@ -10,31 +10,31 @@
 
 {% list tabs %}
 
-- Используя connectionString
-  
-  ```ts
-  const authService = getCredentialsFromEnv();
-  logger.debug('Driver initializing...');
-  const driver = new Driver({connectionString, authService});
-  const timeout = 10000;
-  if (!await driver.ready(timeout)) {
-      logger.fatal(`Driver has not become ready in ${timeout}ms!`);
-      process.exit(1);
-  }
-  ```
+  - Используя connectionString
+    
+    ```ts
+    const authService = getCredentialsFromEnv();
+    logger.debug('Driver initializing...');
+    const driver = new Driver({connectionString, authService});
+    const timeout = 10000;
+    if (!await driver.ready(timeout)) {
+        logger.fatal(`Driver has not become ready in ${timeout}ms!`);
+        process.exit(1);
+    }
+    ```
 
-- Используя endpoint и database
+  - Используя endpoint и database
 
-  ```ts
-  const authService = getCredentialsFromEnv();
-  logger.debug('Driver initializing...');
-  const driver = new Driver({endpoint, database, authService});
-  const timeout = 10000;
-  if (!await driver.ready(timeout)) {
-      logger.fatal(`Driver has not become ready in ${timeout}ms!`);
-      process.exit(1);
-  }
-  ```
+    ```ts
+    const authService = getCredentialsFromEnv();
+    logger.debug('Driver initializing...');
+    const driver = new Driver({endpoint, database, authService});
+    const timeout = 10000;
+    if (!await driver.ready(timeout)) {
+        logger.fatal(`Driver has not become ready in ${timeout}ms!`);
+        process.exit(1);
+    }
+    ```
 
 {% endlist %}
 
@@ -127,50 +127,22 @@ async function upsertSimple(driver: Driver, logger: Logger): Promise<void> {
 
 {% include [steps/04_query_processing.md](steps/04_query_processing.md) %}
 
-{% list tabs %}
-
 Для выполнения YQL-запросов используется метод `QuerySession.execute()`.
 
 В зависимости оп параметра rowMode данные можно получить в javascript форме или как YDB структуры.
 
-- rowMode: RowType.Native
+{% list tabs %}
 
-  ```ts
-  async function selectNativeSimple(driver: Driver, logger: Logger): Promise<void> {
-      logger.info('Making a simple native select...');
-      const result = await driver.queryClient.do({
-          fn: async (session) => {
-              const {resultSets} =
-                  await session.execute({
-                      // rowMode: RowType.Native, // Result set cols and rows returned as native javascript values. It's default behaviour
-                      text: `
-                          SELECT series_id,
-                                 title,
-                                 release_date
-                          FROM ${SERIES_TABLE}
-                          WHERE series_id = 1;`,
-                  });
-              const {value: resultSet1} = await resultSets.next();
-              const rows: any[][] = []
-              for await (const row of resultSet1.rows) rows.push(row);
-              return {cols: resultSet1.columns, rows};
-          }
-      });
-      logger.info(`selectNativeSimple cols: ${JSON.stringify(result.cols, null, 2)}`);
-      logger.info(`selectNativeSimple rows: ${JSON.stringify(result.rows, null, 2)}`);
-  }
-  ```
-
-- rowMode: RowType.Ydb
-
+  - rowMode: RowType.Native
+  
     ```ts
-    async function selectTypedSimple(driver: Driver, logger: Logger): Promise<void> {
-        logger.info('Making a simple typed select...');
+    async function selectNativeSimple(driver: Driver, logger: Logger): Promise<void> {
+        logger.info('Making a simple native select...');
         const result = await driver.queryClient.do({
             fn: async (session) => {
                 const {resultSets} =
                     await session.execute({
-                        rowMode: RowType.Ydb, // enables typedRows() on result sets
+                        // rowMode: RowType.Native, // Result set cols and rows returned as native javascript values. It's default behaviour
                         text: `
                             SELECT series_id,
                                    title,
@@ -179,16 +151,44 @@ async function upsertSimple(driver: Driver, logger: Logger): Promise<void> {
                             WHERE series_id = 1;`,
                     });
                 const {value: resultSet1} = await resultSets.next();
-                const rows: Series[] = [];
-                // Note: resultSet1.rows will iterate YDB IValue structures
-                for await (const row of resultSet1.typedRows(Series)) rows.push(row);
+                const rows: any[][] = []
+                for await (const row of resultSet1.rows) rows.push(row);
                 return {cols: resultSet1.columns, rows};
             }
         });
-        logger.info(`selectTypedSimple cols: ${JSON.stringify(result.cols, null, 2)}`);
-        logger.info(`selectTypedSimple rows: ${JSON.stringify(result.rows, null, 2)}`);
+        logger.info(`selectNativeSimple cols: ${JSON.stringify(result.cols, null, 2)}`);
+        logger.info(`selectNativeSimple rows: ${JSON.stringify(result.rows, null, 2)}`);
     }
     ```
+
+  - rowMode: RowType.Ydb
+
+      ```ts
+      async function selectTypedSimple(driver: Driver, logger: Logger): Promise<void> {
+          logger.info('Making a simple typed select...');
+          const result = await driver.queryClient.do({
+              fn: async (session) => {
+                  const {resultSets} =
+                      await session.execute({
+                          rowMode: RowType.Ydb, // enables typedRows() on result sets
+                          text: `
+                              SELECT series_id,
+                                     title,
+                                     release_date
+                              FROM ${SERIES_TABLE}
+                              WHERE series_id = 1;`,
+                      });
+                  const {value: resultSet1} = await resultSets.next();
+                  const rows: Series[] = [];
+                  // Note: resultSet1.rows will iterate YDB IValue structures
+                  for await (const row of resultSet1.typedRows(Series)) rows.push(row);
+                  return {cols: resultSet1.columns, rows};
+              }
+          });
+          logger.info(`selectTypedSimple cols: ${JSON.stringify(result.cols, null, 2)}`);
+          logger.info(`selectTypedSimple rows: ${JSON.stringify(result.rows, null, 2)}`);
+      }
+      ```
 
 {% endlist %}
 
@@ -278,73 +278,73 @@ async function selectWithParametrs(driver: Driver, data: ThreeIds[], logger: Log
 
 {% list tabs %}
 
-- do()
+  - do()
+  
+    ```ts
+    async function explicitTcl(driver: Driver, ids: ThreeIds, logger: Logger) {
+        logger.info('Running prepared query with explicit transaction control...');
+        await driver.queryClient.do({
+            fn: async (session) => {
+                await session.beginTransaction({serializableReadWrite: {}});
+                const [seriesId, seasonId, episodeId] = ids;
+                const episode = new Episode({seriesId, seasonId, episodeId, title: '', airDate: new Date()});
+                await session.execute({
+                    parameters: {
+                        '$seriesId': episode.getTypedValue('seriesId'),
+                        '$seasonId': episode.getTypedValue('seasonId'),
+                        '$episodeId': episode.getTypedValue('episodeId')
+                    },
+                    text: `
+                        DECLARE $seriesId AS Uint64;
+                        DECLARE $seasonId AS Uint64;
+                        DECLARE $episodeId AS Uint64;
+      
+                        UPDATE episodes
+                        SET air_date = CurrentUtcDate()
+                        WHERE series_id = $seriesId
+                          AND season_id = $seasonId
+                          AND episode_id = $episodeId;`
+                })
+                const txId = session.txId;
+                await session.commitTransaction();
+                logger.info(`TxId ${txId} committed.`);
+            }
+        });
+    }
+    ```
 
-  ```ts
-  async function explicitTcl(driver: Driver, ids: ThreeIds, logger: Logger) {
-      logger.info('Running prepared query with explicit transaction control...');
-      await driver.queryClient.do({
-          fn: async (session) => {
-              await session.beginTransaction({serializableReadWrite: {}});
-              const [seriesId, seasonId, episodeId] = ids;
-              const episode = new Episode({seriesId, seasonId, episodeId, title: '', airDate: new Date()});
-              await session.execute({
-                  parameters: {
-                      '$seriesId': episode.getTypedValue('seriesId'),
-                      '$seasonId': episode.getTypedValue('seasonId'),
-                      '$episodeId': episode.getTypedValue('episodeId')
-                  },
-                  text: `
-                      DECLARE $seriesId AS Uint64;
-                      DECLARE $seasonId AS Uint64;
-                      DECLARE $episodeId AS Uint64;
-    
-                      UPDATE episodes
-                      SET air_date = CurrentUtcDate()
-                      WHERE series_id = $seriesId
-                        AND season_id = $seasonId
-                        AND episode_id = $episodeId;`
-              })
-              const txId = session.txId;
-              await session.commitTransaction();
-              logger.info(`TxId ${txId} committed.`);
-          }
-      });
-  }
-  ```
+  - doTx()
 
-- doTx()
+    ```ts
+    async function transactionPerWholeDo(driver: Driver, ids: ThreeIds, logger: Logger) {
+        logger.info('Running query with one transaction per whole doTx()...');
+        await driver.queryClient.doTx({
+            txSettings: {serializableReadWrite: {}},
+            fn: async (session) => {
+                const [seriesId, seasonId, episodeId] = ids;
+                const episode = new Episode({seriesId, seasonId, episodeId, title: '', airDate: new Date()});
+                await session.execute({
+                    parameters: {
+                        '$seriesId': episode.getTypedValue('seriesId'),
+                        '$seasonId': episode.getTypedValue('seasonId'),
+                        '$episodeId': episode.getTypedValue('episodeId')
+                    },
+                    text: `
+                        DECLARE $seriesId AS Uint64;
+                        DECLARE $seasonId AS Uint64;
+                        DECLARE $episodeId AS Uint64;
 
-  ```ts
-  async function transactionPerWholeDo(driver: Driver, ids: ThreeIds, logger: Logger) {
-      logger.info('Running query with one transaction per whole doTx()...');
-      await driver.queryClient.doTx({
-          txSettings: {serializableReadWrite: {}},
-          fn: async (session) => {
-              const [seriesId, seasonId, episodeId] = ids;
-              const episode = new Episode({seriesId, seasonId, episodeId, title: '', airDate: new Date()});
-              await session.execute({
-                  parameters: {
-                      '$seriesId': episode.getTypedValue('seriesId'),
-                      '$seasonId': episode.getTypedValue('seasonId'),
-                      '$episodeId': episode.getTypedValue('episodeId')
-                  },
-                  text: `
-                      DECLARE $seriesId AS Uint64;
-                      DECLARE $seasonId AS Uint64;
-                      DECLARE $episodeId AS Uint64;
-
-                      UPDATE episodes
-                      SET air_date = CurrentUtcDate()
-                      WHERE series_id = $seriesId
-                        AND season_id = $seasonId
-                        AND episode_id = $episodeId;`
-              })
-              logger.info(`TxId ${session.txId} will be committed by doTx().`);
-          }
-      });
-  }
-  ```
+                        UPDATE episodes
+                        SET air_date = CurrentUtcDate()
+                        WHERE series_id = $seriesId
+                          AND season_id = $seasonId
+                          AND episode_id = $episodeId;`
+                })
+                logger.info(`TxId ${session.txId} will be committed by doTx().`);
+            }
+        });
+    }
+    ```
 
 {% endlist %}
 

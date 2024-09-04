@@ -41,7 +41,7 @@ inline NYql::TAstParseResult SqlToYqlWithMode(const TString& query, NSQLTranslat
     settings.Mode = mode;
     settings.Arena = &arena;
     settings.AnsiLexer = ansiLexer;
-    settings.Antlr4Parser = false;
+    settings.Antlr4Parser = true;
     settings.SyntaxVersion = 1;
     auto res = SqlToYql(query, settings);
     if (debug == EDebugOutput::ToCerr) {
@@ -54,8 +54,7 @@ inline NYql::TAstParseResult SqlToYql(const TString& query, size_t maxErrors = 1
     return SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, maxErrors, provider, debug);
 }
 
-inline NYql::TAstParseResult 
-SqlToYqlWithSettings(const TString& query, const NSQLTranslation::TTranslationSettings& settings) {
+inline NYql::TAstParseResult SqlToYqlWithSettings(const TString& query, const NSQLTranslation::TTranslationSettings& settings) {
     return SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, false, settings);
 }
 

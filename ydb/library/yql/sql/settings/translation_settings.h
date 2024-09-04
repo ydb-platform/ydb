@@ -101,6 +101,7 @@ namespace NSQLTranslation {
         bool EnableGenericUdfs;
         ui16 SyntaxVersion;
         bool AnsiLexer;
+        bool Antlr4Parser;
         bool PgParser;
         bool InferSyntaxVersion;
         EV0Behavior V0Behavior;

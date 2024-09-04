@@ -8,6 +8,10 @@ NMetadata::NModifications::TOperationParsingResult TTiersManager::DoBuildPatchFr
     const NYql::TObjectSettingsImpl& settings,
     TInternalModificationContext& context) const
 {
+    if (HasAppData() && !AppDataVerified().FeatureFlags.GetEnableOlapTiering()) {
+        return TConclusionStatus::Fail("Tiering functionality is disabled for OLAP tables.");
+    }
+
     NMetadata::NInternal::TTableRecord result;
     result.SetColumn(TTierConfig::TDecoder::TierName, NMetadata::NInternal::TYDBValue::Utf8(settings.GetObjectId()));
     if (settings.GetObjectId().StartsWith("$") || settings.GetObjectId().StartsWith("_")) {

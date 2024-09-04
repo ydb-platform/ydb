@@ -13,6 +13,10 @@ void TTieringRulesManager::DoPrepareObjectsBeforeModification(std::vector<TTieri
 NMetadata::NModifications::TOperationParsingResult TTieringRulesManager::DoBuildPatchFromSettings(
     const NYql::TObjectSettingsImpl& settings,
     TInternalModificationContext& /*context*/) const {
+    if (HasAppData() && !AppDataVerified().FeatureFlags.GetEnableOlapTiering()) {
+        return TConclusionStatus::Fail("Tiering functionality is disabled for OLAP tables.");
+    }
+
     NMetadata::NInternal::TTableRecord result;
     result.SetColumn(TTieringRule::TDecoder::TieringRuleId, NMetadata::NInternal::TYDBValue::Utf8(settings.GetObjectId()));
     if (settings.GetObjectId().StartsWith("$") || settings.GetObjectId().StartsWith("_")) {

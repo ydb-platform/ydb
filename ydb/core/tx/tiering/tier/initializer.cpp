@@ -30,10 +30,6 @@ TVector<NKikimr::NMetadata::NInitializer::ITableModifier::TPtr> TTiersInitialize
 }
 
 void TTiersInitializer::DoPrepare(NMetadata::NInitializer::IInitializerInput::TPtr controller) const {
-    if (HasAppData() && !AppDataVerified().FeatureFlags.GetEnableOlapTiering()) {
-        controller->OnPreparationProblem("Tiering functionality is disabled for OLAP tables.");
-        return;
-    }
     controller->OnPreparationFinished(BuildModifiers());
 }
 

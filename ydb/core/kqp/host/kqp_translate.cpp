@@ -86,6 +86,7 @@ NSQLTranslation::TTranslationSettings TKqpTranslationSettingsBuilder::Build(NYql
         settings.SaveWorldDependencies = true;
     }
 
+    settings.PGDisable = !IsEnablePgSyntax;
     settings.InferSyntaxVersion = true;
     settings.V0ForceDisable = false;
     settings.WarnOnV0 = false;
@@ -153,13 +154,13 @@ NSQLTranslation::TTranslationSettings TKqpTranslationSettingsBuilder::Build(NYql
 }
 
 NYql::TAstParseResult ParseQuery(const TString& queryText, bool isSql, TMaybe<ui16>& sqlVersion, bool& deprecatedSQL,
-        NYql::TExprContext& ctx, TKqpTranslationSettingsBuilder& settingsBuilder, bool& keepInCache, TMaybe<TString>& commandTagName, bool enablePgSyntax) {
+        NYql::TExprContext& ctx, TKqpTranslationSettingsBuilder& settingsBuilder, bool& keepInCache, TMaybe<TString>& commandTagName) {
     NYql::TAstParseResult astRes;
     settingsBuilder.SetSqlVersion(sqlVersion);
     if (isSql) {
         auto settings = settingsBuilder.Build(ctx);
         NYql::TStmtParseInfo stmtParseInfo;
-        auto ast = NSQLTranslation::SqlToYql(queryText, settings, nullptr, &stmtParseInfo, enablePgSyntax);
+        auto ast = NSQLTranslation::SqlToYql(queryText, settings, nullptr, &stmtParseInfo);
         deprecatedSQL = (ast.ActualSyntaxType == NYql::ESyntaxType::YQLv0);
         sqlVersion = ast.ActualSyntaxType == NYql::ESyntaxType::YQLv1 ? 1 : 0;
         keepInCache = stmtParseInfo.KeepInCache;
@@ -175,7 +176,7 @@ NYql::TAstParseResult ParseQuery(const TString& queryText, bool isSql, TMaybe<ui
     }
 }
 
-TQueryAst ParseQuery(const TString& queryText, const TMaybe<Ydb::Query::Syntax>& syntax, bool isSql, TKqpTranslationSettingsBuilder& settingsBuilder, bool enablePgSyntax) {
+TQueryAst ParseQuery(const TString& queryText, const TMaybe<Ydb::Query::Syntax>& syntax, bool isSql, TKqpTranslationSettingsBuilder& settingsBuilder) {
     bool deprecatedSQL;
     bool keepInCache;
     TMaybe<TString> commandTagName;
@@ -185,19 +186,19 @@ TQueryAst ParseQuery(const TString& queryText, const TMaybe<Ydb::Query::Syntax>&
     }
 
     NYql::TExprContext ctx;
-    auto astRes = ParseQuery(queryText, isSql, sqlVersion, deprecatedSQL, ctx, settingsBuilder, keepInCache, commandTagName, enablePgSyntax);
+    auto astRes = ParseQuery(queryText, isSql, sqlVersion, deprecatedSQL, ctx, settingsBuilder, keepInCache, commandTagName);
     return TQueryAst(std::make_shared<NYql::TAstParseResult>(std::move(astRes)), sqlVersion, deprecatedSQL, keepInCache, commandTagName);
 }
 
 TVector<TQueryAst> ParseStatements(const TString& queryText, bool isSql, TMaybe<ui16>& sqlVersion, bool& deprecatedSQL,
-        NYql::TExprContext& ctx, TKqpTranslationSettingsBuilder& settingsBuilder, bool enablePgSyntax) {
+        NYql::TExprContext& ctx, TKqpTranslationSettingsBuilder& settingsBuilder) {
     TVector<TQueryAst> result;
     settingsBuilder.SetSqlVersion(sqlVersion);
     if (isSql) {
         auto settings = settingsBuilder.Build(ctx);
         ui16 actualSyntaxVersion = 0;
         TVector<NYql::TStmtParseInfo> stmtParseInfo;
-        auto astStatements = NSQLTranslation::SqlToAstStatements(queryText, settings, nullptr, &actualSyntaxVersion, &stmtParseInfo, enablePgSyntax);
+        auto astStatements = NSQLTranslation::SqlToAstStatements(queryText, settings, nullptr, &actualSyntaxVersion, &stmtParseInfo);
         deprecatedSQL = (actualSyntaxVersion == 0);
         sqlVersion = actualSyntaxVersion;
         YQL_ENSURE(astStatements.size() == stmtParseInfo.size());
@@ -211,9 +212,9 @@ TVector<TQueryAst> ParseStatements(const TString& queryText, bool isSql, TMaybe<
     }
 }
 
-TVector<TQueryAst> ParseStatements(const TString& queryText, const TMaybe<Ydb::Query::Syntax>& syntax, bool isSql, TKqpTranslationSettingsBuilder& settingsBuilder, bool perStatementExecution, bool enablePgSyntax) {
+TVector<TQueryAst> ParseStatements(const TString& queryText, const TMaybe<Ydb::Query::Syntax>& syntax, bool isSql, TKqpTranslationSettingsBuilder& settingsBuilder, bool perStatementExecution) {
     if (!perStatementExecution) {
-        return {ParseQuery(queryText, syntax, isSql, settingsBuilder, enablePgSyntax)};
+        return {ParseQuery(queryText, syntax, isSql, settingsBuilder)};
     }
     bool deprecatedSQL;
     TMaybe<ui16> sqlVersion;
@@ -222,7 +223,7 @@ TVector<TQueryAst> ParseStatements(const TString& queryText, const TMaybe<Ydb::Q
     }
 
     NYql::TExprContext ctx;
-    return ParseStatements(queryText, isSql, sqlVersion, deprecatedSQL, ctx, settingsBuilder, enablePgSyntax);
+    return ParseStatements(queryText, isSql, sqlVersion, deprecatedSQL, ctx, settingsBuilder);
 }
 
 } // namespace NKqp

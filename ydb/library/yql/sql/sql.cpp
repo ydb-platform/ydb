@@ -15,7 +15,7 @@
 namespace NSQLTranslation {
 
     NYql::TAstParseResult SqlToYql(const TString& query, const TTranslationSettings& settings,
-        NYql::TWarningRules* warningRules, NYql::TStmtParseInfo* stmtParseInfo, bool enablePgSyntax)
+        NYql::TWarningRules* warningRules, NYql::TStmtParseInfo* stmtParseInfo)
     {
         NYql::TAstParseResult result;
         TTranslationSettings parsedSettings(settings);
@@ -34,7 +34,7 @@ namespace NSQLTranslation {
             return result;
         }
 
-        if (parsedSettings.PgParser && !enablePgSyntax) {
+        if (parsedSettings.PgParser && parsedSettings.PGDisable) {
             result.Issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
                 "PG syntax is disabled"));
             return result;
@@ -166,7 +166,7 @@ namespace NSQLTranslation {
     }
 
     TVector<NYql::TAstParseResult> SqlToAstStatements(const TString& query, const TTranslationSettings& settings,
-        NYql::TWarningRules* warningRules, ui16* actualSyntaxVersion, TVector<NYql::TStmtParseInfo>* stmtParseInfo, bool enablePgSyntax)
+        NYql::TWarningRules* warningRules, ui16* actualSyntaxVersion, TVector<NYql::TStmtParseInfo>* stmtParseInfo)
     {
         TVector<NYql::TAstParseResult> result;
         NYql::TIssues issues;
@@ -190,7 +190,7 @@ namespace NSQLTranslation {
             return {};
         }
 
-        if (parsedSettings.PgParser && !enablePgSyntax) {
+        if (parsedSettings.PgParser && parsedSettings.PGDisable) {
             issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
                 "PG syntax is disabled"));
             return result;

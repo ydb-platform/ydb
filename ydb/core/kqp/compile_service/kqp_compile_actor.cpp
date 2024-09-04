@@ -146,11 +146,10 @@ private:
             .SetIsEnableExternalDataSources(AppData(ctx)->FeatureFlags.GetEnableExternalDataSources())
             .SetIsEnablePgConstsToParams(Config->EnablePgConstsToParams)
             .SetApplicationName(ApplicationName)
-            .SetQueryParameters(QueryId.QueryParameterTypes);
+            .SetQueryParameters(QueryId.QueryParameterTypes)
+            .SetIsEnablePgSyntax(AppData(ctx)->FeatureFlags.GetEnablePgSyntax());
 
-        bool enablePgSyntax = AppData(ctx)->FeatureFlags.GetEnablePgSyntax();
-
-        return ParseStatements(QueryId.Text, QueryId.Settings.Syntax, QueryId.IsSql(), settingsBuilder, PerStatementResult, enablePgSyntax);
+        return ParseStatements(QueryId.Text, QueryId.Settings.Syntax, QueryId.IsSql(), settingsBuilder, PerStatementResult);
     }
 
     void ReplySplitResult(const TActorContext &ctx, IKqpHost::TSplitResult&& result) {

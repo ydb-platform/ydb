@@ -495,11 +495,12 @@ private:
 
     bool AllOriginalPartitionsInited() const;
 
-    void Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& ev, const TActorContext& ctx);
+    void Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& ev);
     void Handle(TEvPQ::TEvDeletePartitionDone::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvTransactionCompleted::TPtr& ev, const TActorContext& ctx);
 
     void BeginDeletePartitions(TTxWriteInfo& writeInfo);
+    void BeginDeletePartitions(const TDistributedTransaction& tx);
 
     bool CheckTxWriteOperation(const NKikimrPQ::TPartitionOperation& operation,
                                const TWriteId& writeId) const;
@@ -527,7 +528,7 @@ private:
     void AddCmdDeleteTx(NKikimrClient::TKeyValueRequest& request,
                         ui64 txId);
 
-    bool WriteIdIsDisabled(const TMaybe<TWriteId>& writeId) const;
+    bool AllSupportivePartitionsHaveBeenDeleted(const TMaybe<TWriteId>& writeId) const;
     void DeleteWriteId(const TMaybe<TWriteId>& writeId);
 };
 

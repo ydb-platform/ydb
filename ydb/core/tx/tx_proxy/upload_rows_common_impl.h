@@ -82,9 +82,9 @@ public:
         }
 
         void OnCommitFinished() {
-            ReplyFinished = TMonotonic::Now();
-            AFL_VERIFY(CommitFinished);
-            Owner.CommitDuration->Collect((*ReplyFinished - Start).MilliSeconds());
+            CommitFinished = TMonotonic::Now();
+            AFL_VERIFY(CommitStarted);
+            Owner.CommitDuration->Collect((*CommitFinished - *CommitStarted).MilliSeconds());
         }
 
         void OnReply(const ::Ydb::StatusIds::StatusCode code) {

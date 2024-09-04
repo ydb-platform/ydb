@@ -14,6 +14,8 @@ namespace NYT::NClient::NCache {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// TODO(ignat): move these tests to yt/yt/client/api/options.h
+
 TEST(TClientOptionsTest, TokenFromFile)
 {
     TTempDir tmpDir;

@@ -3,7 +3,6 @@
 #include <yt/yt/client/hedging/cache.h>
 #include <yt/yt/client/hedging/counter.h>
 #include <yt/yt/client/hedging/hedging.h>
-#include <yt/yt_proto/yt/client/hedging/proto/config.pb.h>
 
 #include <yt/yt/client/transaction_client/helpers.h>
 
@@ -65,15 +64,15 @@ IPenaltyProviderPtr CreateReplicationLagPenaltyProvider(
     const bool clearPenaltiesOnErrors = false,
     const TDuration checkPeriod = CheckPeriod)
 {
-    TReplicationLagPenaltyProviderConfig config;
+    auto config = New<TReplicationLagPenaltyProviderOptions>();
 
-    config.SetTablePath(path);
-    config.AddReplicaClusters(TProtobufString(cluster));
-    config.SetMaxTabletsWithLagFraction(0.5);
-    config.SetMaxTabletLag(maxTabletLag.Seconds());
-    config.SetCheckPeriod(checkPeriod.Seconds());
-    config.SetLagPenalty(lagPenalty.MilliSeconds());
-    config.SetClearPenaltiesOnErrors(clearPenaltiesOnErrors);
+    config->TablePath = path;
+    config->ReplicaClusters.push_back(TString(cluster));
+    config->MaxTabletsWithLagFraction = 0.5;
+    config->MaxTabletLag = maxTabletLag;
+    config->CheckPeriod = checkPeriod;
+    config->LagPenalty = lagPenalty;
+    config->ClearPenaltiesOnErrors = clearPenaltiesOnErrors;
 
     return CreateReplicationLagPenaltyProvider(config, client);
 }
@@ -442,12 +441,15 @@ TEST(THedgingClientTest, CreatingHedgingClientWithPreinitializedClients)
     auto mockClientsCache = New<StrictMock<TMockClientsCache>>();
     EXPECT_CALL(*mockClientsCache, GetClient(clusterName)).WillOnce(Return(mockClient));
 
-    THedgingClientConfig hedgingClientConfig;
-    hedgingClientConfig.SetBanDuration(100);
-    hedgingClientConfig.SetBanPenalty(200);
-    auto clientOptions = hedgingClientConfig.AddClients();
-    clientOptions->SetInitialPenalty(0);
-    clientOptions->MutableClientConfig()->SetClusterName(clusterName);
+    auto hedgingClientConfig = New<THedgingClientOptions>();
+    hedgingClientConfig->BanDuration = TDuration::MilliSeconds(100);
+    hedgingClientConfig->BanPenalty = TDuration::MilliSeconds(200);
+
+    auto connectionConfig = New<TConnectionWithPenaltyConfig>();
+    connectionConfig->InitialPenalty = TDuration();
+    connectionConfig->ClusterUrl = clusterName;
+
+    hedgingClientConfig->Connections.push_back(connectionConfig);
 
     auto hedgingClient = CreateHedgingClient(hedgingClientConfig, mockClientsCache);
 

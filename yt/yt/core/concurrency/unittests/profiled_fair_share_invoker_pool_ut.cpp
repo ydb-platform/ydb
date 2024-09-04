@@ -14,6 +14,8 @@
 
 #include <yt/yt/library/profiling/solomon/exporter.h>
 
+#include <library/cpp/json/yson/json2yson.h>
+
 #include <util/datetime/base.h>
 
 #include <algorithm>
@@ -666,15 +668,7 @@ public:
 
     auto GetSensors(TString json)
     {
-        for (auto& c : json) {
-            if (c == ':') {
-                c = '=';
-            } else if (c == ',') {
-                c = ';';
-            }
-        }
-
-        auto yson = NYson::TYsonString(json);
+        auto yson = NYson::TYsonString(NJson2Yson::SerializeJsonValueAsYson(NJson::ReadJsonFastTree(json)));
 
         auto list = NYTree::ConvertToNode(yson)->AsMap()->FindChild("sensors");
 
@@ -730,7 +724,7 @@ public:
 
         THashMap<TString, int> invokerNameToDequeued = invokerNameToEnqueued;
 
-        for (const auto& entry : GetSensors(json)) {
+        for (const auto& entry : GetSensors(std::move(json))) {
             auto mapEntry = entry->AsMap();
             auto labels = mapEntry->FindChild("labels")->AsMap();
 

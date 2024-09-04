@@ -75,7 +75,7 @@ def onjava_module(unit, *args):
         'ANNOTATION_PROCESSOR': extract_macro_calls(unit, 'ANNOTATION_PROCESSOR_VALUE', args_delim),
         'EXTERNAL_JAR': extract_macro_calls(unit, 'EXTERNAL_JAR_VALUE', args_delim),
         'RUN_JAVA_PROGRAM': [],
-        'RUN_JAVA_PROGRAM_MANAGED': '${RUN_JAVA_PROGRAM_MANAGED}',
+        'RUN_JAVA_PROGRAM_MANAGED': '',
         'MAVEN_GROUP_ID': extract_macro_calls(unit, 'MAVEN_GROUP_ID_VALUE', args_delim),
         'JAR_INCLUDE_FILTER': extract_macro_calls(unit, 'JAR_INCLUDE_FILTER_VALUE', args_delim),
         'JAR_EXCLUDE_FILTER': extract_macro_calls(unit, 'JAR_EXCLUDE_FILTER_VALUE', args_delim),
@@ -100,7 +100,6 @@ def onjava_module(unit, *args):
         'JDK_RESOURCE': 'JDK' + (unit.get('JDK_VERSION') or unit.get('JDK_REAL_VERSION') or '_DEFAULT'),
     }
     if unit.get('ENABLE_PREVIEW_VALUE') == 'yes' and (unit.get('JDK_VERSION') or unit.get('JDK_REAL_VERSION')) in (
-        '15',
         '17',
         '20',
         '21',
@@ -372,7 +371,6 @@ def on_jdk_version_macro_check(unit, *args):
     jdk_version = args[0]
     available_versions = (
         '11',
-        '15',
         '17',
         '20',
         '21',

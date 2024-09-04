@@ -122,11 +122,12 @@ public class UserRepositoryCommandLineRunner implements CommandLineRunner {
 
 ### View Index {#viewIndex}
 
-To generate `VIEW INDEX` statements from repository methods, you need to use the `@ViewIndex` annotation. The `@ViewIndex` annotation has two fields:
-- `indexName` - the name of the index.
-- `tableName` - the name of the table to which `VIEW INDEX` is bound, especially useful when using the @MappedCollection annotations.
+To generate `VIEW INDEX` statements from repository methods, use the `@ViewIndex` annotation. The `@ViewIndex` annotation has two fields:
 
-Let's consider a simple example with an index on the Users table by the `login` field:
+- `indexName`: The index name.
+- `tableName`: The table name to which the `VIEW INDEX` is bound, which is particularly useful when using the `@MappedCollection` annotation.
+
+Here is an example of an index on the Users table by the `login` field:
 
 ```Java
 public interface SimpleUserRepository extends CrudRepository<User, Long> {

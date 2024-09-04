@@ -131,8 +131,9 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         const ui32 rowsCount = 800000;
         const ui32 groupsCount = 512;
         {
-            auto settings = TKikimrSettings()
-                .SetWithSampleTables(false);
+            NKikimrConfig::TFeatureFlags featureFlags;
+            featureFlags.SetEnableCompression(true);
+            auto settings = TKikimrSettings().SetWithSampleTables(false).SetFeatureFlags(featureFlags);
             TKikimrRunner kikimr(settings);
             Tests::NCommon::TLoggerInit(kikimr).Initialize();
             TTypedLocalHelper helper("Utf8", kikimr);
@@ -186,8 +187,9 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         ui64 rawBytesPK1;
         ui64 bytesPK1;
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableCompression(true);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
         TTypedLocalHelper helper("", kikimr, "olapTable", "olapStore");

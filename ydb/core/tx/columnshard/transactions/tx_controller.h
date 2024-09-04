@@ -441,9 +441,9 @@ public:
 
     [[nodiscard]] std::shared_ptr<TTxController::ITransactionOperator> StartProposeOnExecute(
         const TTxController::TTxInfo& txInfo, const TString& txBody, NTabletFlatExecutor::TTransactionContext& txc);
-    void StartProposeOnComplete(const ITransactionOperator& txOperator, const TActorContext& ctx);
+    void StartProposeOnComplete(ITransactionOperator& txOperator, const TActorContext& ctx);
     void FinishProposeOnExecute(const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
-    void FinishProposeOnComplete(const ITransactionOperator& txOperator, const TActorContext& ctx);
+    void FinishProposeOnComplete(ITransactionOperator& txOperator, const TActorContext& ctx);
     void FinishProposeOnComplete(const ui64 txId, const TActorContext& ctx);
 
     void WriteTxOperatorInfo(NTabletFlatExecutor::TTransactionContext& txc, const ui64 txId, const TString& data) {

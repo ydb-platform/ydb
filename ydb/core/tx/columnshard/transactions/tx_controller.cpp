@@ -345,7 +345,7 @@ std::shared_ptr<TTxController::ITransactionOperator> TTxController::StartPropose
     }
 }
 
-void TTxController::StartProposeOnComplete(const ITransactionOperator& txOperator, const TActorContext& ctx) {
+void TTxController::StartProposeOnComplete(ITransactionOperator& txOperator, const TActorContext& ctx) {
     NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("method", "TTxController::StartProposeOnComplete")("tx_id", txId);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "start");
     txOperator.StartProposeOnComplete(Owner, ctx);
@@ -363,7 +363,7 @@ void TTxController::FinishProposeOnExecute(const ui64 txId, NTabletFlatExecutor:
     }
 }
 
-void TTxController::FinishProposeOnComplete(const ITransactionOperator& txOperator, const TActorContext& ctx) {
+void TTxController::FinishProposeOnComplete(ITransactionOperator& txOperator, const TActorContext& ctx) {
     NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("method", "TTxController::FinishProposeOnComplete")("tx_id", txId);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "start")("tx_info", txOperator.GetTxInfo().DebugString());
     TTxController::TProposeResult proposeResult = txOperator.GetProposeStartInfoVerified();

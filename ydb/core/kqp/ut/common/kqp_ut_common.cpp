@@ -132,7 +132,7 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     ServerSettings->SetEnableMoveIndex(true);
     ServerSettings->SetUseRealThreads(settings.UseRealThreads);
     ServerSettings->SetEnableTablePgTypes(true);
-    ServerSettings->SetEnablePgSyntax(false);
+    ServerSettings->SetEnablePgSyntax(true);
     ServerSettings->S3ActorsFactory = settings.S3ActorsFactory;
 
     if (settings.Storage) {

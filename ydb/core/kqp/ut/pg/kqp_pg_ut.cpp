@@ -4801,7 +4801,8 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         ui16 mbusport = tp.GetPort(2134);
         auto settings = Tests::TServerSettings(mbusport)
             .SetDomainName("Root")
-            .SetUseRealThreads(false);
+            .SetUseRealThreads(false)
+            .SetEnablePgSyntax(true);
 
         Tests::TServer::TPtr server = new Tests::TServer(settings);
 

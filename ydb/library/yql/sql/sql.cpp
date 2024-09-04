@@ -34,9 +34,10 @@ namespace NSQLTranslation {
             return result;
         }
 
-        if (parsedSettings.PgParser && enablePgSyntax) {
+        if (parsedSettings.PgParser && !enablePgSyntax) {
             result.Issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
                 "PG syntax is disabled"));
+            return result;
         }
 
         if (parsedSettings.PgParser) {
@@ -189,9 +190,10 @@ namespace NSQLTranslation {
             return {};
         }
 
-        if (parsedSettings.PgParser && enablePgSyntax) {
+        if (parsedSettings.PgParser && !enablePgSyntax) {
             issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
                 "PG syntax is disabled"));
+            return result;
         }
 
         if (parsedSettings.PgParser) {

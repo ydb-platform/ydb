@@ -166,6 +166,8 @@ connection.close()
 
 ![](_assets/airflow_dag.png)
 
+Для выполнения запросов к базе данных {{ ydb-short-name }} используется предварительно созданное соединение c {{ ydb-short-name }} типа [`YDB Connection`](https://airflow.apache.org/docs/apache-airflow-providers-ydb/stable/connections/ydb.html) c именем `test_ydb_connection`.
+
 ```python
 from __future__ import annotations
 

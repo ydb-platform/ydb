@@ -2451,7 +2451,7 @@ class Cuda(object):
 
         if self.cuda_version.value in ('11.4', '11.8', '12.1', '12.2'):
             return True
-        elif self.cuda_version.value in ('10.2',) and target.is_linux_armv8:
+        elif self.cuda_version.value in ('10.2', '11.4.19') and target.is_linux_armv8:
             return True
         else:
             raise ConfigureError('CUDA version {} is not supported in Arcadia'.format(self.cuda_version.value))

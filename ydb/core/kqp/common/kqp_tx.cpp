@@ -49,7 +49,6 @@ std::pair<bool, std::vector<TIssue>> MergeLocks(const NKikimrMiniKQL::TType& typ
     res.first = true;
     for (auto& lockValue : value.GetList()) {
         TKqpTxLock txLock(lockValue);
-        Cerr << "LOCK " << txLock.GetDataShard() << " : " << txLock.GetCounter() << " " << txLock.GetGeneration() << Endl;
         if (auto counter = txLock.GetCounter(); counter >= NKikimr::TSysTables::TLocksTable::TLock::ErrorMin) {
             switch (counter) {
                 case NKikimr::TSysTables::TLocksTable::TLock::ErrorAlreadyBroken:

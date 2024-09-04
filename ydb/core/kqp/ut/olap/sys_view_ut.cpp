@@ -132,7 +132,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         const ui32 groupsCount = 512;
         {
             NKikimrConfig::TFeatureFlags featureFlags;
-            featureFlags.SetEnableCompression(true);
+            featureFlags.SetEnableOlapCompression(true);
             auto settings = TKikimrSettings().SetWithSampleTables(false).SetFeatureFlags(featureFlags);
             TKikimrRunner kikimr(settings);
             Tests::NCommon::TLoggerInit(kikimr).Initialize();
@@ -188,7 +188,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         ui64 bytesPK1;
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
         NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableCompression(true);
+        featureFlags.SetEnableOlapCompression(true);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();

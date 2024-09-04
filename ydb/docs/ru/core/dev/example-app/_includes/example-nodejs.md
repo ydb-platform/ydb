@@ -9,7 +9,7 @@
 Фрагмент кода приложения для инициализации драйвера:
 
 {% list tabs %}
- 
+
 - Используя connectionString
   
   ```ts
@@ -35,7 +35,7 @@
       process.exit(1);
   }
   ```
-    
+
 {% endlist %}
 
 Фрагмент кода приложения для создания сессии:
@@ -48,7 +48,7 @@
       }
   });
   ```
- 
+
 {% include [create_table.md](steps/02_create_table.md) %}
 
   ```ts
@@ -67,7 +67,7 @@
             } catch (err) { // Ignore if tables are missing
                 if (err instanceof SchemeError) throw err;
             }
-  
+
             await session.execute({
                 text: `
                     CREATE TABLE ${SERIES_TABLE}
@@ -133,8 +133,8 @@ async function upsertSimple(driver: Driver, logger: Logger): Promise<void> {
 
 В зависимости оп параметра rowMode данные можно получить в javascript форме или как YDB структуры.
 
-- rowMode: RowType.Native  
-  
+- rowMode: RowType.Native
+
   ```ts
   async function selectNativeSimple(driver: Driver, logger: Logger): Promise<void> {
       logger.info('Making a simple native select...');
@@ -160,9 +160,9 @@ async function upsertSimple(driver: Driver, logger: Logger): Promise<void> {
       logger.info(`selectNativeSimple rows: ${JSON.stringify(result.rows, null, 2)}`);
   }
   ```
-  
+
 - rowMode: RowType.Ydb
-  
+
     ```ts
     async function selectTypedSimple(driver: Driver, logger: Logger): Promise<void> {
         logger.info('Making a simple typed select...');
@@ -189,7 +189,7 @@ async function upsertSimple(driver: Driver, logger: Logger): Promise<void> {
         logger.info(`selectTypedSimple rows: ${JSON.stringify(result.rows, null, 2)}`);
     }
     ```
-  
+
 {% endlist %}
 
 {% include [param_queries.md](steps/06_param_queries.md) %}
@@ -198,7 +198,7 @@ async function upsertSimple(driver: Driver, logger: Logger): Promise<void> {
 
 ```ts
 async function selectWithParameters(driver: Driver, data: ThreeIds[], logger: Logger): Promise<void> {
-   
+
   await driver.queryClient.do({
       fn: async (session) => {
           for (const [seriesId, seasonId, episodeId] of data) {
@@ -335,7 +335,7 @@ async function selectWithParametrs(driver: Driver, data: ThreeIds[], logger: Log
                       DECLARE $seriesId AS Uint64;
                       DECLARE $seasonId AS Uint64;
                       DECLARE $episodeId AS Uint64;
-    
+
                       UPDATE episodes
                       SET air_date = CurrentUtcDate()
                       WHERE series_id = $seriesId

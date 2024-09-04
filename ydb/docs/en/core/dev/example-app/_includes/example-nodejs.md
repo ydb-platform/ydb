@@ -67,7 +67,7 @@ App code snippet for creating a session:
             } catch (err) { // Ignore if tables are missing
                 if (err instanceof SchemeError) throw err;
             }
-  
+
             await session.execute({
                 text: `
                     CREATE TABLE ${SERIES_TABLE}
@@ -78,7 +78,7 @@ App code snippet for creating a session:
                         release_date DATE,
                         PRIMARY KEY (series_id)
                     );
-  
+
                     CREATE TABLE ${SEASONS_TABLE}
                     (
                         series_id   UInt64,
@@ -88,7 +88,7 @@ App code snippet for creating a session:
                         last_aired DATE,
                         PRIMARY KEY (series_id, season_id)
                     );
-  
+
                     CREATE TABLE ${EPISODES_TABLE}
                     (
                         series_id  UInt64,

@@ -203,12 +203,13 @@ std::optional<TTxController::TTxInfo> TTxController::PopFirstPlannedTx() {
 
 void TTxController::FinishPlannedTx(const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc) {
     NIceDb::TNiceDb db(txc.DB);
-    AFL_VERIFY(Operators.erase(txItem.TxId));
     auto opIt = Operators.find(txId);
     if (opIt != Operators.end()) {
         Counters.OnFinishPlannedTx(opIt->second->GetOpType());
+    } else {
+        AFL_VERIFY(Operators.erase(txId));
+        Schema::EraseTxInfo(db, txId);
     }
-    Schema::EraseTxInfo(db, txId);
 }
 
 void TTxController::CompleteRunningTx(const TPlanQueueItem& txItem) {

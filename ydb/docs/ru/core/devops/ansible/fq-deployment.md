@@ -42,14 +42,14 @@
 Шаги, по добавлению fq-connector-go в такой кластер:
 
 1. Перейдите в ту же директорию, которая использовалась для [первоначального развёртывания](./initial-deployment.md) кластера.
-1. Добавьте дополнительные настройки в разделе `vars` инвентори-файла `files/50-inventory.yaml`:
+1. Добавьте дополнительные настройки в раздел `vars` инвентори-файла `files/50-inventory.yaml`:
     1. Выберите один из доступных вариантов развёртывания исполняемых файлов fq-connector-go:
         1. `ydb_fq_connector_archive`: локальный путь к архиву с дистрибутивом fq-connector-go, [загруженному](https://github.com/ydb-platform/fq-connector-go/releases) или подготовленному заранее.
         1. `ydb_fq_connector_binary`: локальный путь к исполняемому файлу fq-connector-go, [загруженному](https://github.com/ydb-platform/fq-connector-go/releases) или подготовленному заранее.
     1. Составьте конфигурационный файл fq-connector-go ([документация по конфигурации](../../deploy/manual/connector.md#fq-connector-go-config)):
         1. `ydb_fq_connector_config`: укажите локальный путь до конфигурационного файла fq-connector-go.
     1. `ydb_fq_connector_dir`: укажите директорию, в которую fq-connector-go будет установлен на сервере.
-1. Отредактируйте конфигурационный файл {{ ydb-short-name }} `files/config.yaml` по аналогии c п.3 и п.4 [инструкциии](../../deploy/manual/deploy-ydb-federated-query.md#guide)
+1. Отредактируйте конфигурационный файл {{ ydb-short-name }} `files/config.yaml` в соответствии с [инструкцией](../../deploy/manual/deploy-ydb-federated-query.md#guide)
 1. Если необходимо, [включите функцию multislot развертывания](#multislot) (функция работоспособна только для {{ ydb-short-name }} версии 24.3.3 или старше).
 1. Установите fq-connector-go командой `ansible-playbook ydb_platform.ydb.install_connector`.
 1. Обновите конфигурацию {{ ydb-short-name }} по [инструкции](./update-config.md).
@@ -58,9 +58,9 @@
 
 ## Multislot развертывание {#multislot}
 
-По умолчанию, плейбуки разворачивают по одному экземпляру fq-connector-go на каждом хосте с динамическими нодами. Благодаря этому, для каждой динамической ноды существует экземпляр коннектора, доступный по адресу `localhost`.
+По умолчанию плейбуки разворачивают по одному экземпляру fq-connector-go на каждом хосте с динамическими нодами. Благодаря этому, для каждой динамической ноды существует экземпляр коннектора, доступный по адресу `localhost`.
 
-В простейшем случае, {{ ydb-short-name }} кластер с коннектором описывается схемой:
+В простейшем случае {{ ydb-short-name }} кластер с коннектором описывается схемой:
 
 ![Инсталляция {{ ydb-short-name }} FQ](../../deploy/manual/_images/ydb_fq_onprem.png "Инсталляция {{ ydb-short-name }} FQ" =1024x)
 
@@ -92,7 +92,7 @@
 
 {% note info %}
 
-На момент написания этой инструкции, версия {{ ydb-short-name }} 24.3.3 была недоступна для [загрузки в предсобранном виде](../../downloads/index.md#ydb-server). Вы можете прибегнуть к установке {{ ydb-short-name }} из исходного кода. Для этого в разделе `vars` инвентори-файла `files/50-inventory.yaml`:
+На момент написания этой инструкции версия {{ ydb-short-name }} 24.3.3 была недоступна для [загрузки в предсобранном виде](../../downloads/index.md#ydb-server). Вы можете прибегнуть к установке {{ ydb-short-name }} из исходного кода. Для этого в разделе `vars` инвентори-файла `files/50-inventory.yaml`:
   * Удалите/закомментируйте строки `ydb_version`, `ydb_archive`, `ydbd_binary`, `ydb_cli_binary`
   * Используйте `ydb_git_version: 24.3.3`
 
@@ -100,7 +100,7 @@
 
 Шаги, для включения функции multislot развертывания:
 
-1. Внесите дополнительные изменения в разделе `vars` инвентори-файла `files/50-inventory.yaml`:
+1. Внесите дополнительные изменения в раздел `vars` инвентори-файла `files/50-inventory.yaml`:
     1. `ydb_fq_connector_multislot`: установите в `true`
 1. Отредактируйте конфигурационный файл {{ ydb-short-name }} `files/config.yaml`:
     1. отредактируйте `query_service_config.generic.connector` по образцу:

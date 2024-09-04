@@ -216,7 +216,7 @@ void BuildStreamLookupChannels(TGraph& graph, const NNodes::TDqPhyStage& stage, 
     auto& originStageInfo = graph.GetStageInfo(cnStreamLookup.Output().Stage());
     auto outputIndex = FromString<ui32>(cnStreamLookup.Output().Index().Value());
 
-    BuildMapChannels(graph, stageInfo, inputIndex, originStageInfo, outputIndex, false /*spilling*/, logFunc);
+    BuildUnionAllChannels(graph, stageInfo, inputIndex, originStageInfo, outputIndex, false /*spilling*/, logFunc);
 }
 
 template <typename TGraph>

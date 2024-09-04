@@ -1,6 +1,6 @@
 # Приложение на Node.js
 
-На этой странице подробно разбирается код тестового приложения 
+На этой странице подробно разбирается код тестового приложения
 [basic-example-v2-with-query-service](https://github.com/ydb-platform/ydb-nodejs-sdk/tree/master/examples/basic-example-v2-with-query-service),
 доступого в составе [Node.js SDK](https://github.com/ydb-platform/ydb-nodejs-sdk) {{ ydb-short-name }}.
 
@@ -11,7 +11,7 @@
 {% list tabs %}
  
 - Используя connectionString
-
+  
   ```ts
   const authService = getCredentialsFromEnv();
   logger.debug('Driver initializing...');
@@ -40,70 +40,70 @@
 
 Фрагмент кода приложения для создания сессии:
 
-```ts
-const result = await driver.queryClient.do({
-    ...
-    fn: async (session) => {
-        ...
-    }
-});
-```
+  ```ts
+  const result = await driver.queryClient.do({
+      ...
+      fn: async (session) => {
+          ...
+      }
+  });
+  ```
  
 {% include [create_table.md](steps/02_create_table.md) %}
 
-```ts
-async function createTables(driver: Driver, logger: Logger) {
-    logger.info('Dropping old tables and create new ones...');
-    await driver.queryClient.do({
-        fn: async (session) => {
-
-          try {
-              await session.execute({
-                  text: `
-                      DROP TABLE ${SERIES_TABLE};
-                      DROP TABLE ${EPISODES_TABLE};
-                      DROP TABLE ${SEASONS_TABLE};`,
-              });
-          } catch (err) { // Ignore if tables are missing
-              if (err instanceof SchemeError) throw err;
-          }
-
-          await session.execute({
-              text: `
-                  CREATE TABLE ${SERIES_TABLE}
-                  (
-                      series_id    UInt64,
-                      title        Utf8,
-                      series_info  Utf8,
-                      release_date DATE,
-                      PRIMARY KEY (series_id)
-                  );
-
-                  CREATE TABLE ${SEASONS_TABLE}
-                  (
-                      series_id   UInt64,
-                      season_id   UInt64,
-                      title UTF8,
-                      first_aired DATE,
-                      last_aired DATE,
-                      PRIMARY KEY (series_id, season_id)
-                  );
-
-                  CREATE TABLE ${EPISODES_TABLE}
-                  (
-                      series_id  UInt64,
-                      season_id  UInt64,
-                      episode_id UInt64,
-                      title      UTf8,
-                      air_date   DATE,
-                      PRIMARY KEY (series_id, season_id, episode_id),
-                      INDEX      episodes_index GLOBAL ASYNC ON (air_date)
-                  );`,
-          });
-        },
-    });
-}
-```
+  ```ts
+  async function createTables(driver: Driver, logger: Logger) {
+      logger.info('Dropping old tables and create new ones...');
+      await driver.queryClient.do({
+          fn: async (session) => {
+  
+            try {
+                await session.execute({
+                    text: `
+                        DROP TABLE ${SERIES_TABLE};
+                        DROP TABLE ${EPISODES_TABLE};
+                        DROP TABLE ${SEASONS_TABLE};`,
+                });
+            } catch (err) { // Ignore if tables are missing
+                if (err instanceof SchemeError) throw err;
+            }
+  
+            await session.execute({
+                text: `
+                    CREATE TABLE ${SERIES_TABLE}
+                    (
+                        series_id    UInt64,
+                        title        Utf8,
+                        series_info  Utf8,
+                        release_date DATE,
+                        PRIMARY KEY (series_id)
+                    );
+  
+                    CREATE TABLE ${SEASONS_TABLE}
+                    (
+                        series_id   UInt64,
+                        season_id   UInt64,
+                        title UTF8,
+                        first_aired DATE,
+                        last_aired DATE,
+                        PRIMARY KEY (series_id, season_id)
+                    );
+  
+                    CREATE TABLE ${EPISODES_TABLE}
+                    (
+                        series_id  UInt64,
+                        season_id  UInt64,
+                        episode_id UInt64,
+                        title      UTf8,
+                        air_date   DATE,
+                        PRIMARY KEY (series_id, season_id, episode_id),
+                        INDEX      episodes_index GLOBAL ASYNC ON (air_date)
+                    );`,
+            });
+          },
+      });
+  }
+  ```
 
 {% include [steps/03_write_queries.md](steps/03_write_queries.md) %}
 

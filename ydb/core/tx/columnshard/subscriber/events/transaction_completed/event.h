@@ -13,7 +13,7 @@ private:
     }
 public:
     TEventTransactionCompleted(const ui64 txId)
-        : TBase(EEventType::TablesErased)
+        : TBase(EEventType::TransactionCompleted)
         , TxId(txId)
     {
     }

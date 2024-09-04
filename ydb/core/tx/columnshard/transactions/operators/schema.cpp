@@ -219,7 +219,7 @@ NKikimr::NColumnShard::TTxController::TProposeResult TSchemaTransactionOperator:
             if (validationStatus.IsFail()) {
                 return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "Invalid schema: " + validationStatus.GetErrorMessage());
             }
-            WaitOnPropose = std::make_shared<TWaitEraseTablesTxSubscriber>(GetNotErasedTableIds(owner, SchemaTxBody.GetInitShard().GetTables()), GetTxId());
+            //WaitOnPropose = std::make_shared<TWaitEraseTablesTxSubscriber>(GetNotErasedTableIds(owner, SchemaTxBody.GetInitShard().GetTables()), GetTxId());
         }
         break;
         case NKikimrTxColumnShard::TSchemaTxBody::kEnsureTables:
@@ -229,7 +229,7 @@ NKikimr::NColumnShard::TTxController::TProposeResult TSchemaTransactionOperator:
             if (validationStatus.IsFail()) {
                 return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "Invalid schema: " + validationStatus.GetErrorMessage());
             }
-            WaitOnPropose = std::make_shared<TWaitEraseTablesTxSubscriber>(GetNotErasedTableIds(owner, tables), GetTxId());
+            //WaitOnPropose = std::make_shared<TWaitEraseTablesTxSubscriber>(GetNotErasedTableIds(owner, tables), GetTxId());
         }
         break;
         case NKikimrTxColumnShard::TSchemaTxBody::kAlterTable:

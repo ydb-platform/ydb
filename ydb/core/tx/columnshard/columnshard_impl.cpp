@@ -515,15 +515,17 @@ bool TColumnShard::ProgressMoveTable(const NKikimrTxColumnShard::TMoveTable& pro
     const ui64 srcPathId = proto.GetSrcPathId();
     const ui64 dstPathId = proto.GetDstPathId();
     if (!TablesManager.HasTable(dstPathId)) {
-        AFL_VERIFY(!MoveTableDataLock);
-        MoveTableDataLock = DataLocksManager->RegisterLock(std::make_shared<NOlap::NDataLocks::TListTablesLock>(TString("MOVE_TABLE::") + ToString(srcPathId), THashSet<ui64>{srcPathId}));
         TablesManager.CloneTable(srcPathId, dstPathId, version, db, Tiers);
+    }
+    if (!MoveTableDataLock) {
+        MoveTableDataLock = DataLocksManager->RegisterLock(std::make_shared<NOlap::NDataLocks::TListTablesLock>(TString("MOVE_TABLE::") + ToString(srcPathId), THashSet<ui64>{srcPathId}));
     }
     if (!TablesManager.GetPrimaryIndex()->ProgressMoveTableData(srcPathId, dstPathId, txc.DB)) {
         return false;
     }
     TablesManager.DropTable(srcPathId, version, db);
     TablesManager.FinishMovingTable();
+    MoveTableDataLock->Release(*DataLocksManager);
     MoveTableDataLock.reset();
     TBlobGroupSelector dsGroupSelector(Info());
     NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);

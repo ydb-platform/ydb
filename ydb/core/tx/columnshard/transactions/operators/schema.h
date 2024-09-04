@@ -69,7 +69,7 @@ private:
         }
     }
     virtual bool DoIsAsync() const override {
-        return !!WaitOnPropose && !WaitOnPropose->IsFinished();
+        return !!WaitOnPropose;
     }
     virtual bool DoParse(TColumnShard& owner, const TString& data) override {
         if (!SchemaTxBody.ParseFromString(data)) {

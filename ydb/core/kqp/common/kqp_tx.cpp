@@ -7,24 +7,18 @@ namespace NKqp {
 
 using namespace NYql;
 
-TIssue GetLocksInvalidatedIssue(const TKqpTransactionContext& txCtx, const TMaybe<TKqpTxLock>& invalidatedLock) {
+NYql::TIssue GetLocksInvalidatedIssue(const TKqpTransactionContext& txCtx, const NKikimr::TLocalPathId& pathId) {
     TStringBuilder message;
     message << "Transaction locks invalidated.";
 
     TMaybe<TString> tableName;
-    if (invalidatedLock) {
-        TKikimrPathId id(invalidatedLock->GetSchemeShard(), invalidatedLock->GetPathId());
-        auto table = txCtx.TableByIdMap.FindPtr(id);
-        if (table) {
-            tableName = *table;
-        }
-    }
+    auto table = txCtx.TableByIdMap.FindPtr(pathId);
+    YQL_ENSURE(table);
+    return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message << " Table: " << *table);
+}
 
-    if (tableName) {
-        message << " Table: " << *tableName;
-    }
-
-    return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message);
+TIssue GetLocksInvalidatedIssue(const TKqpTransactionContext& txCtx, const TKqpTxLock& invalidatedLock) {
+    return GetLocksInvalidatedIssue(txCtx, invalidatedLock.GetPathId());
 }
 
 std::pair<bool, std::vector<TIssue>> MergeLocks(const NKikimrMiniKQL::TType& type, const NKikimrMiniKQL::TValue& value,
@@ -55,6 +49,7 @@ std::pair<bool, std::vector<TIssue>> MergeLocks(const NKikimrMiniKQL::TType& typ
     res.first = true;
     for (auto& lockValue : value.GetList()) {
         TKqpTxLock txLock(lockValue);
+        Cerr << "LOCK " << txLock.GetDataShard() << " : " << txLock.GetCounter() << " " << txLock.GetGeneration() << Endl;
         if (auto counter = txLock.GetCounter(); counter >= NKikimr::TSysTables::TLocksTable::TLock::ErrorMin) {
             switch (counter) {
                 case NKikimr::TSysTables::TLocksTable::TLock::ErrorAlreadyBroken:

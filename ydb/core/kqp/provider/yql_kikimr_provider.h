@@ -325,9 +325,7 @@ public:
 
         for (const auto& info : tableInfos) {
             tableInfoMap.emplace(info.GetTableName(), &info);
-
-            TKikimrPathId pathId(info.GetTableId().GetOwnerId(), info.GetTableId().GetTableId());
-            TableByIdMap.emplace(pathId, info.GetTableName());
+            TableByIdMap.emplace(info.GetTableId().GetTableId(), info.GetTableName());
         }
 
         for (const auto& op : operations) {
@@ -429,7 +427,7 @@ public:
 public:
     bool HasUncommittedChangesRead = false;
     THashMap<TString, TYdbOperations> TableOperations;
-    THashMap<TKikimrPathId, TString> TableByIdMap;
+    THashMap<NKikimr::TLocalPathId, TString> TableByIdMap;
     TMaybe<NKikimrKqp::EIsolationLevel> EffectiveIsolationLevel;
     NKikimr::NKqp::TKqpTempTablesState::TConstPtr TempTablesState;
     bool Readonly = false;

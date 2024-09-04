@@ -432,6 +432,7 @@ public:
     }
 };
 
+NYql::TIssue GetLocksInvalidatedIssue(const TKqpTransactionContext& txCtx, const NKikimr::TLocalPathId& pathId);
 std::pair<bool, std::vector<NYql::TIssue>> MergeLocks(const NKikimrMiniKQL::TType& type,
     const NKikimrMiniKQL::TValue& value, TKqpTransactionContext& txCtx);
 

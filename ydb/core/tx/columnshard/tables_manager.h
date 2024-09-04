@@ -160,23 +160,22 @@ public:
         if (rowset.template HaveValue<Schema::TableInfo::DropStep>() && rowset.template HaveValue<Schema::TableInfo::DropTxId>()) {
             DropVersion.emplace(rowset.template GetValue<Schema::TableInfo::DropStep>(), rowset.template GetValue<Schema::TableInfo::DropTxId>());
         }
-        if (rowset.template HaveValue<Schema::TableInfo::MovedTo>()) {
-            MovedToPathId = rowset.template GetValue<Schema::TableInfo::DropStep>();
-            AFL_VERIFY(!!DropVersion)("reason", "moved_no_snapshot")("path_id", PathId)("moved_to", *MovedToPathId);
-        }
+        // if (rowset.template HaveValue<Schema::TableInfo::MovedTo>()) {
+        //     MovedToPathId = rowset.template GetValue<Schema::TableInfo::DropStep>();
+        //     AFL_VERIFY(!!DropVersion)("reason", "moved_no_snapshot")("path_id", PathId)("moved_to", *MovedToPathId);
+        // }
         return true;
     }
 };
 
 class TTablesManager {
-
 private:
     THashMap<ui64, TTableInfo> Tables;
     THashSet<ui32> SchemaPresetsIds;
     THashSet<ui64> PathsToDrop;
     std::optional<std::pair<ui64, ui64>> PathToMove; //{src, dst} Only one table move at a time is supported
     TTtl Ttl;
-    std::unique_ptr<NOlap::IColumnEngine> PrimaryIndex; //
+    std::unique_ptr<NOlap::IColumnEngine> PrimaryIndex;
     std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
     ui64 TabletId = 0;
 public:
@@ -197,10 +196,6 @@ public:
         return PathsToDrop;
     }
 
-    const std::optional<std::pair<ui64, ui64>>& GetPathToMove() const {
-        return PathToMove;
-    }
-
     const THashMap<ui64, TTableInfo>& GetTables() const {
         return Tables;
     }
@@ -211,6 +206,16 @@ public:
 
     bool HasPrimaryIndex() const {
         return !!PrimaryIndex;
+    }
+
+    void StartMovingTable(const ui64 srcPathId, const ui64 dstPathId) {
+        AFL_VERIFY(!PathToMove);
+        PathToMove = {srcPathId, dstPathId};
+    }
+
+    void FinishMovingTable() {
+        AFL_VERIFY(PathToMove);
+        PathToMove.reset();
     }
 
     bool IsNewDataTxLocked(const ui64 pathId) const {
@@ -224,7 +229,7 @@ public:
 
     const NOlap::TIndexInfo& GetIndexInfo(const NOlap::TSnapshot& version) const {
         Y_ABORT_UNLESS(!!PrimaryIndex);
-        return PrimaryIndex->GetVersionedIndex().GetSchema(version)->GetIndexInfo(); //<<--
+        return PrimaryIndex->GetVersionedIndex().GetSchema(version)->GetIndexInfo();
     }
 
     const std::unique_ptr<NOlap::IColumnEngine>& GetPrimaryIndex() const {

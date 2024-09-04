@@ -480,6 +480,7 @@ private:
     TLimits Limits;
     NOlap::TNormalizationController NormalizerController;
     NDataShard::TSysLocks SysLocks;
+    std::shared_ptr<NOlap::NDataLocks::TManager::TGuard> MoveTableDataLock;
     static TDuration GetMaxReadStaleness();
 
     void TryRegisterMediatorTimeCast();

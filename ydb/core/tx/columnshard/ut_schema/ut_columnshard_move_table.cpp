@@ -89,17 +89,36 @@ Y_UNIT_TEST_SUITE(MoveTable) {
         ui64 txId = 10;
         ui64 planStep = 10;
         int writeId = 10;
-        std::vector<ui64> writeIds;
-        bool ok = WriteData(runtime, sender, writeId++, srcPathId, MakeTestBlob({0, 100}, testTabe.Schema), testTabe.Schema, true, &writeIds);
-        UNIT_ASSERT(ok);
-        ProposeCommit(runtime, sender, ++txId, writeIds);
-        PlanCommit(runtime, sender, ++planStep, txId);
-        csDefaultControllerGuard->WaitIndexation(TDuration::Seconds(3));
+        std::vector<ui64> writeIdsToCommit;
+        UNIT_ASSERT(WriteData(runtime, sender, writeId++, srcPathId, MakeTestBlob({0, 100}, testTabe.Schema), testTabe.Schema, true, &writeIdsToCommit));
+        //Write overlapped data (subject for compaction)
+        UNIT_ASSERT(WriteData(runtime, sender, writeId++, srcPathId, MakeTestBlob({50, 150}, testTabe.Schema), testTabe.Schema, true, &writeIdsToCommit));
+
+
+        std::vector<ui64> writeIdsToReject;
+        UNIT_ASSERT(WriteData(runtime, sender, writeId++, srcPathId, MakeTestBlob({100, 150}, testTabe.Schema), testTabe.Schema, true, &writeIdsToReject));
+        const auto writeDataTxId = ++txId;
+        ProposeCommit(runtime, sender, writeDataTxId, writeIdsToCommit, true);
 
         const ui64 dstPathId = 2;
         TMessageSeqNo seqNo;
-        UNIT_ASSERT(ProposeSchemaTx(runtime, sender, TTestSchema::MoveTableTxBody(srcPathId, dstPathId, ++seqNo), ++txId));
-        PlanSchemaTx(runtime, sender, {++planStep, txId});
+        const auto moveTableTxId = ++txId;
+        auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(
+            NKikimrTxColumnShard::TX_KIND_SCHEMA, 0, sender, moveTableTxId, TTestSchema::MoveTableTxBody(srcPathId, dstPathId, ++seqNo));
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, event.release());
+        
+        ProposeCommit(runtime, sender, ++txId, writeIdsToReject, false);
+
+        PlanCommit(runtime, sender, ++planStep, writeDataTxId);
+
+        auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender);
+        const auto& res = ev->Get()->Record;
+        UNIT_ASSERT_EQUAL(res.GetTxId(), moveTableTxId);
+        UNIT_ASSERT_EQUAL(res.GetTxKind(), NKikimrTxColumnShard::TX_KIND_SCHEMA);
+        UNIT_ASSERT_EQUAL(res.GetStatus(), NKikimrTxColumnShard::PREPARED);
+
+        PlanCommit(runtime, sender, ++planStep, moveTableTxId);
+
 
         {
             TShardReader reader(runtime, TTestTxConfig::TxTablet0, dstPathId, NOlap::TSnapshot(planStep, txId));

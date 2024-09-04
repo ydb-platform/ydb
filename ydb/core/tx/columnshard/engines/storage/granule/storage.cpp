@@ -11,10 +11,6 @@ std::shared_ptr<NKikimr::NOlap::TGranuleMeta> TGranulesStorage::GetGranuleForCom
     const TDuration actualizationLag = NYDBTest::TControllers::GetColumnShardController()->GetCompactionActualizationLag();
     for (const auto& [pathId, granule]  : Tables) {
         NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("path_id", pathId);
-        if (dataLocksManager->IsLocked(pathId)) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skipped_by_lock");
-            continue;
-        }
         granule->ActualizeOptimizer(now, actualizationLag);
         auto gPriority = granule->GetCompactionPriority();
         if (gPriority.IsZero() || (priorityChecker && gPriority < *priorityChecker)) {

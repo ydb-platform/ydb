@@ -67,6 +67,15 @@ public:
     }
     const THashMap<TWriteId, TInsertedData>& GetAborted() const { return Summary.GetAborted(); }
     const THashMap<TWriteId, TInsertedData>& GetInserted() const { return Summary.GetInserted(); }
+    THashSet<TWriteId> GetCommittedByPathId(const ui64 pathId) const {
+        THashSet<TWriteId> writeIds;
+        for(const auto& [writeId, data]: GetInserted()) {
+            if (data.PathId == pathId && data.PlanStep != 0) {
+                writeIds.insert(writeId);
+            }
+        }
+        return writeIds;
+    }
     const TInsertionSummary::TCounters& GetCountersPrepared() const {
         return Summary.GetCountersPrepared();
     }
@@ -75,9 +84,6 @@ public:
     }
     bool IsOverloadedByCommitted(const ui64 pathId) const {
         return Summary.IsOverloaded(pathId);
-    }
-    THashSet<TWriteId> GetInsertedByPathId(const ui64 pathId) const {
-        return Summary.GetInsertedByPathId(pathId);
     }
 };
 
@@ -91,9 +97,6 @@ public:
     static constexpr const TDuration WaitCommitDelay = TDuration::Minutes(10);
     static constexpr ui64 CleanupPackageSize = 10000;
 
-    // std::optional<ui64> GetPathId(const TWriteId writeId) const {
-    //      return Summary.GetPathIdByWriteId(writeId);
-    // }
     bool Insert(IDbWrapper& dbTable, TInsertedData&& data);
     TInsertionSummary::TCounters Commit(IDbWrapper& dbTable, ui64 planStep, ui64 txId,
                      const THashSet<TWriteId>& writeIds, std::function<bool(ui64)> pathExists);

@@ -1085,10 +1085,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
-        Cerr << "1---\n\n\n\n";
-        Sleep(TDuration::Seconds(2));
-        Cerr << "+++\n\n\n\n";
-
         {
             auto query = TStringBuilder() << R"(
             --!syntax_v1
@@ -1102,11 +1098,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
         }
 
-        Cerr << "2---\n\n\n\n";
-        Sleep(TDuration::Seconds(2));
-        Cerr << "+++\n\n\n\n";
-
-
         {
             auto query = TStringBuilder() << R"(
             --!syntax_v1
@@ -1119,10 +1110,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto describeResult = session.DescribeTable("/Root/table").GetValueSync();
             UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
         }
-
-        Cerr << "3---\n\n\n\n";
-        Sleep(TDuration::Seconds(2));
-        Cerr << "+++\n\n\n\n";
 
         {
             auto query = TStringBuilder() << R"(

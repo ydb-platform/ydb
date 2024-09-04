@@ -23,9 +23,6 @@ protected:
         }
         return {};
     }
-    virtual std::optional<TString> DoIsLocked(const ui64 /*pathId*/, const THashSet<TString>& /*excludedLocks*/) const override {
-        return {};
-    }
     bool DoIsEmpty() const override {
         return Portions.empty();
     }
@@ -73,14 +70,14 @@ private:
     using TBase = ILock;
     THashSet<ui64> Tables;
 protected:
-    virtual std::optional<TString> DoIsLocked(const TPortionInfo& portion, const THashSet<TString>& excludedLocks) const override {
-        return DoIsLocked(portion.GetPathId(), excludedLocks);
+    virtual std::optional<TString> DoIsLocked(const TPortionInfo& portion, const THashSet<TString>& /*excludedLocks*/) const override {
+        if (Tables.contains(portion.GetPathId())) {
+            return GetLockName();
+        }
+        return {};
     }
-    virtual std::optional<TString> DoIsLocked(const TGranuleMeta& granule, const THashSet<TString>& excludedLocks) const override {
-        return DoIsLocked(granule.GetPathId(), excludedLocks);
-    }
-    virtual std::optional<TString> DoIsLocked(const ui64 pathId, const THashSet<TString>& /*excludedLocks*/) const override {
-        if (Tables.contains(pathId)) {
+    virtual std::optional<TString> DoIsLocked(const TGranuleMeta& granule, const THashSet<TString>& /*excludedLocks*/) const override {
+        if (Tables.contains(granule.GetPathId())) {
             return GetLockName();
         }
         return {};

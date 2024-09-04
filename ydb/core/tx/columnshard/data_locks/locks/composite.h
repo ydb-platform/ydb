@@ -7,28 +7,28 @@ class TCompositeLock: public ILock {
 private:
     using TBase = ILock;
     std::vector<std::shared_ptr<ILock>> Locks;
-private:
-    template <IsLocable T>
-    std::optional<TString> DoIsLockedImpl(const T& obj, const THashSet<TString>& excludedLocks) const {
+protected:
+    virtual std::optional<TString> DoIsLocked(const TPortionInfo& portion, const THashSet<TString>& excludedLocks) const override {
         for (auto&& i : Locks) {
             if (excludedLocks.contains(i->GetLockName())) {
                 continue;
             }
-            if (auto lockName = i->IsLocked(obj)) {
+            if (auto lockName = i->IsLocked(portion)) {
                 return lockName;
             }
         }
         return {};
     }
-protected:
-    virtual std::optional<TString> DoIsLocked(const TPortionInfo& portion, const THashSet<TString>& excludedLocks) const override {
-        return DoIsLockedImpl(portion, excludedLocks);
-    }
     virtual std::optional<TString> DoIsLocked(const TGranuleMeta& granule, const THashSet<TString>& excludedLocks) const override {
-        return DoIsLockedImpl(granule, excludedLocks);
-    }
-    virtual std::optional<TString> DoIsLocked(const ui64 pathId, const THashSet<TString>& excludedLocks) const override {
-        return DoIsLockedImpl(pathId, excludedLocks);
+        for (auto&& i : Locks) {
+            if (excludedLocks.contains(i->GetLockName())) {
+                continue;
+            }
+            if (auto lockName = i->IsLocked(granule)) {
+                return lockName;
+            }
+        }
+        return {};
     }
     bool DoIsEmpty() const override {
         return Locks.empty();

@@ -15,13 +15,6 @@ class TGranuleMeta;
 
 namespace NKikimr::NOlap::NDataLocks {
 
-template<typename T>
-concept IsLocable = 
-    std::same_as<T, TPortionInfo> || 
-    std::same_as<T, TGranuleMeta> ||
-    std::same_as<T, ui64>; //table pathId
-
-
 class ILock {
 private:
     YDB_READONLY_DEF(TString, LockName);
@@ -29,7 +22,6 @@ private:
 protected:
     virtual std::optional<TString> DoIsLocked(const TPortionInfo& portion, const THashSet<TString>& excludedLocks = {}) const = 0;
     virtual std::optional<TString> DoIsLocked(const TGranuleMeta& granule, const THashSet<TString>& excludedLocks = {}) const = 0;
-    virtual std::optional<TString> DoIsLocked(const ui64 pathId, const THashSet<TString>& excludedLocks = {}) const = 0;
     virtual bool DoIsEmpty() const = 0;
 public:
     ILock(const TString& lockName, const bool isReadOnly = false)
@@ -41,12 +33,17 @@ public:
 
     virtual ~ILock() = default;
 
-    template <IsLocable T>
-    std::optional<TString> IsLocked(const T& obj, const THashSet<TString>& excludedLocks = {}, const bool readOnly = false) const {
-    if (IsReadOnly() && readOnly) {
+    std::optional<TString> IsLocked(const TPortionInfo& portion, const THashSet<TString>& excludedLocks = {}, const bool readOnly = false) const {
+        if (IsReadOnly() && readOnly) {
             return {};
         }
-        return DoIsLocked(obj, excludedLocks);
+        return DoIsLocked(portion, excludedLocks);
+    }
+    std::optional<TString> IsLocked(const TGranuleMeta& g, const THashSet<TString>& excludedLocks = {}, const bool readOnly = false) const {
+        if (IsReadOnly() && readOnly) {
+            return {};
+        }
+        return DoIsLocked(g, excludedLocks);
     }
     bool IsEmpty() const {
         return DoIsEmpty();

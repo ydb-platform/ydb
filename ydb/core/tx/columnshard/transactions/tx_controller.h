@@ -466,7 +466,6 @@ public:
     void CompleteRunningTx(const TPlanQueueItem& tx);
     void PassAwayTx(const ui64 txId);
     THashSet<ui64> GetTxs() const;
-    //THashSet<ui64> GetTxsByPathId(const ui64 pathId) const; TODO #8650
 
 >>>>>>> wait background
 

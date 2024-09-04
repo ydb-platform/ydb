@@ -26,13 +26,6 @@ protected:
         }
         return {};
     }
-    virtual std::optional<TString> DoIsLocked(const ui64 pathId, const THashSet<TString>& /*excludedLocks*/) const override {
-        if (PathIds.contains(pathId)) {
-            return GetLockName();
-        }
-        return {};
-    }
-
 public:
     TSnapshotLock(const TString& lockName, const TSnapshot& snapshotBarrier, const THashSet<ui64>& pathIds, const bool readOnly = false)
         : TBase(lockName, readOnly)

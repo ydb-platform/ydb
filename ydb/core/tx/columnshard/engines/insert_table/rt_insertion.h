@@ -42,8 +42,6 @@ public:
         it->second.MarkAsNotAbortable();
     }
 
-    std::optional<ui64> GetPathIdByWriteId(const TWriteId writeId) const;
-
     THashSet<TWriteId> GetInsertedByPathId(const ui64 pathId) const;
 
     THashSet<TWriteId> GetExpiredInsertions(const TInstant timeBorder, const ui64 limit) const;

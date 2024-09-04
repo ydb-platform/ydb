@@ -86,14 +86,16 @@ public:
             Self->RescheduleWaitingReads();
         }
         if (PlannedQueueItem) {
+            AFL_VERIFY(TxOperator);
+            Self->GetProgressTxController().GetCounters().OnTxProgressLag(
+                TxOperator->GetOpType(), TMonotonic::Now() - TMonotonic::MilliSeconds(PlannedQueueItem->Step));
             Self->GetProgressTxController().ProgressOnComplete(*PlannedQueueItem);
-            Self->Counters.CSCounters.TxProgress.OnTxProgressLag(TMonotonic::Now() - TMonotonic::MilliSeconds(PlannedQueueItem->Step));
         }
         if (LastCompletedTx) {
             Self->LastCompletedTx = std::max(*LastCompletedTx, Self->LastCompletedTx);
         }
         if (StartExecution) {
-            Self->Counters.CSCounters.TxProgress.OnTxProgressDuration(TxOperator->GetOpType(), TMonotonic::Now() - *StartExecution);
+            Self->GetProgressTxController().GetCounters().OnTxProgressDuration(TxOperator->GetOpType(), TMonotonic::Now() - *StartExecution);
         }
         Self->SetupIndexation();
     }

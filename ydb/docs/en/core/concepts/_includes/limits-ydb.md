@@ -50,6 +50,8 @@ The table below lists the limits that apply to query execution.
 
 {% cut "Legacy limits" %}
 
+In previous versions of {{ ydb-short-name }}, queries were typically executed using an API called "Table Service". This API had the following limitations, which have been addressed by replacing it with a new API called "Query Service".
+
 | Parameter | Default | Explanation | Status<br/>in case of<br/>a violation<br/>of the limit |
 | :--- | :--- | :--- | :---: |
 | Maximum number of rows in query results | 1,000 | The complete results of some queries executed using the `ExecuteDataQuery` method may contain more rows than allowed. In such cases, the query will return the maximum number of rows allowed, and the result will have the `truncated` flag set. | SUCCESS |

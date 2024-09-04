@@ -96,7 +96,7 @@ public:
 
             const TString name = ::Ydb::StatusIds::StatusCode_Name(code);
             auto it = Owner.CodesCount.find(name);
-            Y_ABORT_UNLESS(it != CodesCount.end());
+            Y_ABORT_UNLESS(it != Owner.CodesCount.end());
             it->second->Add(1);
         }
     };

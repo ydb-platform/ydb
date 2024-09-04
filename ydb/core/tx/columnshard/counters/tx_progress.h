@@ -37,19 +37,19 @@ private:
             , FinishProposeOnComplete(TBase::GetDeriviative("FinishProposeOnComplete"))
             , FinishPlannedTx(TBase::GetDeriviative("FinishPlannedTx"))
             , AbortTx(TBase::GetDeriviative("AbortTx"))
-            , HistogramTxProgressDuration(TBase::GetHistogram("TxProgressDurationMs", NMonitoring::ExponentialHistogram(18, 2, 5)))
-            , HistogramTxProgressLag(TBase::GetHistogram("TxProgressLagMs", NMonitoring::ExponentialHistogram(18, 2, 5))) {
+            , HistogramTxProgressDuration(TBase::GetHistogram("TxProgress/Execution/DurationMs", NMonitoring::ExponentialHistogram(18, 2, 5)))
+            , HistogramTxProgressLag(TBase::GetHistogram("TxProgress/LagOnComplete/DurationMs", NMonitoring::ExponentialHistogram(18, 2, 5))) {
         }
     };
 
     THashMap<TOpType, TProgressCounters> CountersByOpType;
 
 public:
-    void OnTxProgressDuration(const TString& txType, const TDuration d) const {
+    void OnTxProgressDuration(const TString& opType, const TDuration d) const {
         GetSubGroup(opType).HistogramTxProgressDuration->Collect(d.MilliSeconds());
     }
 
-    void OnTxProgressLag(const TString& txType, const TDuration d) const {
+    void OnTxProgressLag(const TString& opType, const TDuration d) const {
         GetSubGroup(opType).HistogramTxProgressLag->Collect(d.MilliSeconds());
     }
 

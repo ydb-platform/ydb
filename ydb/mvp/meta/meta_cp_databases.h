@@ -207,6 +207,15 @@ public:
         TStringBuf status = event->Get()->Response->Status;
         if (event->Get()->Error.empty() && status == "200") {
             NJson::ReadJsonTree(event->Get()->Response->Body, &JsonReaderConfig, &TenantInfo);
+        } else {
+            if (status.size() == 3) {
+                ctx.Send(Request.Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(event->Get()->Response->Reverse(Request.Request)));
+            } else if (!event->Get()->Error.empty()) {
+                ctx.Send(Request.Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(Request.Request->CreateResponseServiceUnavailable(event->Get()->Error, "text/plain")));
+            } else {
+                ctx.Send(Request.Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(Request.Request->CreateResponseServiceUnavailable("Endpoint returned unknown status", "text/plain")));
+            }
+            Die(ctx);
         }
         if (--Requests == 0) {
             ReplyAndDie(ctx);

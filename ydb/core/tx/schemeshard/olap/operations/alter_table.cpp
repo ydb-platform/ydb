@@ -270,6 +270,15 @@ public:
             result->SetError(NKikimrScheme::StatusPreconditionFailed, "Alter sharding is disabled for OLAP tables");
             return result;
         }
+        
+        if (HasAppData() && !AppDataVerified().FeatureFlags.GetEnableOlapCompression()) {
+            for (const auto& alterColumn : Transaction.GetAlterColumnTable().GetAlterSchema().GetAlterColumns()) {
+                if (alterColumn.HasSerializer()) {
+                    result->SetError(NKikimrScheme::StatusPreconditionFailed, "Compression is disabled for OLAP tables");
+                    return result;
+                }
+            }
+        }
 
         const bool hasTiering = Transaction.HasAlterColumnTable() && Transaction.GetAlterColumnTable().HasAlterTtlSettings() &&
                                 Transaction.GetAlterColumnTable().GetAlterTtlSettings().HasUseTiering();

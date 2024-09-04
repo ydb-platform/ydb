@@ -271,11 +271,6 @@ namespace NKikimr::NSchemeShard {
 
         TSet<TString> alterColumnNames;
         for (auto& columnSchemaDiff : alterRequest.GetAlterColumns()) {
-            if (HasAppData() && !AppDataVerified().FeatureFlags.GetEnableOlapCompression() && columnSchemaDiff.HasSerializer()) {
-                errors.AddError(NKikimrScheme::StatusPreconditionFailed, "Compression is disabled for OLAP tables");
-                return false;
-            }
-
             TOlapColumnDiff columnDiff;
             if (!columnDiff.ParseFromRequest(columnSchemaDiff, errors)) {
                 return false;

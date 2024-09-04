@@ -9,6 +9,13 @@
 
 namespace NKikimr::NSchemeShard {
 
+namespace {
+    const TString SchemeshardComponentName = "schemeshard";
+
+    //NOTE: EmptyValue couldn't be an empty string as AUDIT_PART() skips parts with an empty values
+    const TString EmptyValue = "{none}";
+}
+
 TString GeneralStatus(NKikimrScheme::EStatus actualStatus) {
     switch(actualStatus) {
         case NKikimrScheme::EStatus::StatusAlreadyExists:
@@ -62,11 +69,6 @@ TPath DatabasePathFromWorkingDir(TSchemeShard* SS, const TString &opWorkingDir) 
 }
 
 void AuditLogModifySchemeTransaction(const NKikimrScheme::TEvModifySchemeTransaction& request, const NKikimrScheme::TEvModifySchemeTransactionResult& response, TSchemeShard* SS, const TString& userSID) {
-    static const TString SchemeshardComponentName = "schemeshard";
-
-    //NOTE: EmptyValue couldn't be an empty string as AUDIT_PART() skips parts with an empty values
-    static const TString EmptyValue = "{none}";
-
     // Each TEvModifySchemeTransaction.Transaction is a self sufficient operation and should be logged independently
     // (even if it was packed into a single TxProxy transaction with some other operations).
     for (const auto& operation : request.GetTransaction()) {
@@ -79,7 +81,7 @@ void AuditLogModifySchemeTransaction(const NKikimrScheme::TEvModifySchemeTransac
         AUDIT_LOG(
             AUDIT_PART("component", SchemeshardComponentName)
             AUDIT_PART("tx_id", std::to_string(request.GetTxId()))
-            AUDIT_PART("remote_address", (!peerName.empty() ? peerName : EmptyValue) )
+            AUDIT_PART("remote_address", (!peerName.empty() ? peerName : EmptyValue))
             AUDIT_PART("subject", (!userSID.empty() ? userSID : EmptyValue))
             AUDIT_PART("database", (!databasePath.IsEmpty() ? databasePath.GetDomainPathString() : EmptyValue))
             AUDIT_PART("operation", logEntry.Operation)
@@ -163,6 +165,26 @@ void AuditLogModifySchemeTransactionDeprecated(const NKikimrScheme::TEvModifySch
 
         LOG_NOTICE_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD, "AUDIT: " <<  entry);
     }
+}
+
+void AuditLogLogin(const NKikimrScheme::TEvLogin& request, const NKikimrScheme::TEvLoginResult& response, TSchemeShard* SS) {
+    static const TString LoginOperationName = "LOGIN";
+
+    TPath databasePath = TPath::Root(SS);
+    auto peerName = NKikimr::NAddressClassifier::ExtractAddress(request.GetPeerName());
+
+    AUDIT_LOG(
+        AUDIT_PART("component", SchemeshardComponentName)
+        AUDIT_PART("remote_address", (!peerName.empty() ? peerName : EmptyValue))
+        AUDIT_PART("database", (!databasePath.PathString().empty() ? databasePath.PathString() : EmptyValue))
+        AUDIT_PART("operation", LoginOperationName)
+        AUDIT_PART("status", TString(response.GetError().empty() ? "SUCCESS" : "ERROR"))
+        AUDIT_PART("reason", response.GetError(), response.HasError())
+
+        // Login
+        AUDIT_PART("login_user", (request.HasUser() ? request.GetUser() : EmptyValue))
+        AUDIT_PART("login_auth_domain", (!request.GetExternalAuth().empty() ? request.GetExternalAuth() : EmptyValue))
+    );
 }
 
 }

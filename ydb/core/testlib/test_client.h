@@ -640,7 +640,7 @@ namespace Tests {
         ui32 Availabe() const;
         ui32 Capacity() const;
 
-        void CreateTennant(Ydb::Cms::CreateDatabaseRequest request, ui32 nodes = 1, TDuration timeout = TDuration::Seconds(30));
+        void CreateTenant(Ydb::Cms::CreateDatabaseRequest request, ui32 nodes = 1, TDuration timeout = TDuration::Seconds(30));
 
     private:
         TVector<ui32>& Nodes(const TString &name);

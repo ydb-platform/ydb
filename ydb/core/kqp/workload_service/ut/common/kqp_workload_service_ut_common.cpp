@@ -256,11 +256,11 @@ private:
             .SetAppConfig(appConfig)
             .SetFeatureFlags(appConfig.GetFeatureFlags());
 
-        if (Settings_.CreateSampleTennants_) {
+        if (Settings_.CreateSampleTenants_) {
             serverSettings
                 .SetDynamicNodeCount(2)
-                .AddStoragePoolType(Settings_.GetDedicatedTennantName())
-                .AddStoragePoolType(Settings_.GetSharedTennantName());
+                .AddStoragePoolType(Settings_.GetDedicatedTenantName())
+                .AddStoragePoolType(Settings_.GetSharedTenantName());
         }
 
         SetLoggerSettings(serverSettings);
@@ -268,30 +268,30 @@ private:
         return serverSettings;
     }
 
-    void SetupResourcesTennant(Ydb::Cms::CreateDatabaseRequest& request, Ydb::Cms::StorageUnits* storage, const TString& name) {
+    void SetupResourcesTenant(Ydb::Cms::CreateDatabaseRequest& request, Ydb::Cms::StorageUnits* storage, const TString& name) {
         request.set_path(name);
         storage->set_unit_kind(name);
         storage->set_count(1);
     }
 
-    void CreateTennants() {
+    void CreateTenants() {
         {  // Dedicated
             Ydb::Cms::CreateDatabaseRequest request;
-            SetupResourcesTennant(request, request.mutable_resources()->add_storage_units(), Settings_.GetDedicatedTennantName());
-            Tenants_->CreateTennant(std::move(request));
+            SetupResourcesTenant(request, request.mutable_resources()->add_storage_units(), Settings_.GetDedicatedTenantName());
+            Tenants_->CreateTenant(std::move(request));
         }
 
         {  // Shared
             Ydb::Cms::CreateDatabaseRequest request;
-            SetupResourcesTennant(request, request.mutable_shared_resources()->add_storage_units(), Settings_.GetSharedTennantName());
-            Tenants_->CreateTennant(std::move(request));
+            SetupResourcesTenant(request, request.mutable_shared_resources()->add_storage_units(), Settings_.GetSharedTenantName());
+            Tenants_->CreateTenant(std::move(request));
         }
 
         {  // Serverless
             Ydb::Cms::CreateDatabaseRequest request;
-            request.set_path(Settings_.GetServerlessTennantName());
-            request.mutable_serverless_resources()->set_shared_database_path(Settings_.GetSharedTennantName());
-            Tenants_->CreateTennant(std::move(request));
+            request.set_path(Settings_.GetServerlessTenantName());
+            request.mutable_serverless_resources()->set_shared_database_path(Settings_.GetSharedTenantName());
+            Tenants_->CreateTenant(std::move(request));
         }
     }
 
@@ -314,13 +314,13 @@ private:
         TableClientSession_ = std::make_unique<NYdb::NTable::TSession>(TableClient_->CreateSession().GetValueSync().GetSession());
 
         Tenants_ = std::make_unique<TTenants>(Server_);
-        if (Settings_.CreateSampleTennants_) {
-            CreateTennants();
+        if (Settings_.CreateSampleTenants_) {
+            CreateTenants();
         }
     }
 
     void CreateSamplePool() const {
-        if (!Settings_.EnableResourcePools_ || Settings_.CreateSampleTennants_) {
+        if (!Settings_.EnableResourcePools_ || Settings_.CreateSampleTenants_) {
             return;
         }
 
@@ -627,15 +627,15 @@ TIntrusivePtr<IYdbSetup> TYdbSetupSettings::Create() const {
     return MakeIntrusive<TWorkloadServiceYdbSetup>(*this);
 }
 
-TString TYdbSetupSettings::GetDedicatedTennantName() const {
+TString TYdbSetupSettings::GetDedicatedTenantName() const {
     return TStringBuilder() << CanonizePath(DomainName_) << "/test-dedicated";
 }
 
-TString TYdbSetupSettings::GetSharedTennantName() const {
+TString TYdbSetupSettings::GetSharedTenantName() const {
     return TStringBuilder() << CanonizePath(DomainName_) << "/test-shared";
 }
 
-TString TYdbSetupSettings::GetServerlessTennantName() const {
+TString TYdbSetupSettings::GetServerlessTenantName() const {
     return TStringBuilder() << CanonizePath(DomainName_) << "/test-serverless";
 }
 

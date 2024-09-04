@@ -50,7 +50,7 @@ Y_UNIT_TEST_SUITE(KqpWorkloadService) {
 
     Y_UNIT_TEST(WorkloadServiceDisabledByFeatureFlagOnServerless) {
         auto ydb = TYdbSetupSettings()
-            .CreateSampleTennants(true)
+            .CreateSampleTenants(true)
             .EnableResourcePoolsOnServerless(false)
             .Create();
 
@@ -60,19 +60,19 @@ Y_UNIT_TEST_SUITE(KqpWorkloadService) {
         // Dedicated, enabled
         TSampleQueries::CheckNotFound(ydb->ExecuteQuery(
             TSampleQueries::TSelect42::Query,
-            settings.Database(ydb->GetSettings().GetDedicatedTennantName()).NodeIndex(1)
+            settings.Database(ydb->GetSettings().GetDedicatedTenantName()).NodeIndex(1)
         ), poolId);
 
         // Shared, enabled
         TSampleQueries::CheckNotFound(ydb->ExecuteQuery(
             TSampleQueries::TSelect42::Query,
-            settings.Database(ydb->GetSettings().GetSharedTennantName()).NodeIndex(2)
+            settings.Database(ydb->GetSettings().GetSharedTenantName()).NodeIndex(2)
         ), poolId);
 
         // Serverless, disabled
         TSampleQueries::TSelect42::CheckResult(ydb->ExecuteQuery(
             TSampleQueries::TSelect42::Query,
-            settings.Database(ydb->GetSettings().GetServerlessTennantName()).NodeIndex(2)
+            settings.Database(ydb->GetSettings().GetServerlessTenantName()).NodeIndex(2)
         ));
     }
 

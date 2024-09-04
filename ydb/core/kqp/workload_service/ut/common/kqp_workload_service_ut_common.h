@@ -67,7 +67,7 @@ struct TYdbSetupSettings {
     // Cluster settings
     FLUENT_SETTING_DEFAULT(ui32, NodeCount, 1);
     FLUENT_SETTING_DEFAULT(TString, DomainName, "Root");
-    FLUENT_SETTING_DEFAULT(bool, CreateSampleTennants, false);
+    FLUENT_SETTING_DEFAULT(bool, CreateSampleTenants, false);
     FLUENT_SETTING_DEFAULT(bool, EnableResourcePools, true);
     FLUENT_SETTING_DEFAULT(bool, EnableResourcePoolsOnServerless, false);
 
@@ -82,9 +82,9 @@ struct TYdbSetupSettings {
     NResourcePool::TPoolSettings GetDefaultPoolSettings() const;
     TIntrusivePtr<IYdbSetup> Create() const;
 
-    TString GetDedicatedTennantName() const;
-    TString GetSharedTennantName() const;
-    TString GetServerlessTennantName() const;
+    TString GetDedicatedTenantName() const;
+    TString GetSharedTenantName() const;
+    TString GetServerlessTenantName() const;
 };
 
 class IYdbSetup : public TThrRefBase {

@@ -6554,7 +6554,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(DisableResourcePoolsOnServerless) {
         auto ydb = NWorkload::TYdbSetupSettings()
-            .CreateSampleTennants(true)
+            .CreateSampleTenants(true)
             .EnableResourcePoolsOnServerless(false)
             .Create();
 
@@ -6585,19 +6585,19 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto settings = NWorkload::TQueryRunnerSettings().PoolId("");
 
         // Dedicated, enabled
-        settings.Database(ydb->GetSettings().GetDedicatedTennantName()).NodeIndex(1);
+        settings.Database(ydb->GetSettings().GetDedicatedTenantName()).NodeIndex(1);
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(alterSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSql, settings));
 
         // Shared, enabled
-        settings.Database(ydb->GetSettings().GetSharedTennantName()).NodeIndex(2);
+        settings.Database(ydb->GetSettings().GetSharedTenantName()).NodeIndex(2);
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(alterSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSql, settings));
 
         // Serverless, disabled
-        settings.Database(ydb->GetSettings().GetServerlessTennantName()).NodeIndex(2);
+        settings.Database(ydb->GetSettings().GetServerlessTenantName()).NodeIndex(2);
         checkDisabled(ydb->ExecuteQuery(createSql, settings));
         checkNotFound(ydb->ExecuteQuery(alterSql, settings));
         checkNotFound(ydb->ExecuteQuery(dropSql, settings));
@@ -6874,7 +6874,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(DisableResourcePoolClassifiersOnServerless) {
         auto ydb = NWorkload::TYdbSetupSettings()
-            .CreateSampleTennants(true)
+            .CreateSampleTenants(true)
             .EnableResourcePoolsOnServerless(false)
             .Create();
 
@@ -6905,19 +6905,19 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto settings = NWorkload::TQueryRunnerSettings().PoolId("");
 
         // Dedicated, enabled
-        settings.Database(ydb->GetSettings().GetDedicatedTennantName()).NodeIndex(1);
+        settings.Database(ydb->GetSettings().GetDedicatedTenantName()).NodeIndex(1);
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(alterSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSql, settings));
 
         // Shared, enabled
-        settings.Database(ydb->GetSettings().GetSharedTennantName()).NodeIndex(2);
+        settings.Database(ydb->GetSettings().GetSharedTenantName()).NodeIndex(2);
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(alterSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSql, settings));
 
         // Serverless, disabled
-        settings.Database(ydb->GetSettings().GetServerlessTennantName()).NodeIndex(2);
+        settings.Database(ydb->GetSettings().GetServerlessTenantName()).NodeIndex(2);
         checkDisabled(ydb->ExecuteQuery(createSql, settings));
         checkDisabled(ydb->ExecuteQuery(alterSql, settings));
         checkNotFound(ydb->ExecuteQuery(dropSql, settings));

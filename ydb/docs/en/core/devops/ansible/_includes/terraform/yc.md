@@ -30,9 +30,3 @@ Now, being in the `yandex_cloud` subdirectory, you can run the following sequenc
 1. `terraform init` – create resources in the cloud.
 
 Next, use the commands `terraform plan`, `terraform init`, and `terraform destroy` (destruction of the created infrastructure) to apply further changes as necessary.
-
-{% note info %}
-
-Using the Yandex Cloud provider, you can not only create infrastructure for further deployment of a {{ ydb-short-name }} cluster using [Ansible](../../initial-deployment.md), but also manage the [serverless or dedicated](https://cloud.yandex.ru/ru/services/ydb) version of {{ ydb-short-name }} directly from Terraform. Learn about the possibilities of working with {{ ydb-short-name }} in Yandex Cloud in the section Working with YDB via [Terraform]({{ yandex_docs }}/ydb/terraform/intro) of the Yandex Cloud documentation.
-
-{% endnote %}

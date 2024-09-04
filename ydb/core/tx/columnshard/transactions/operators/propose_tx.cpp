@@ -3,9 +3,14 @@
 namespace NKikimr::NColumnShard {
 
 void IProposeTxOperator::DoSendReply(TColumnShard& owner, const TActorContext& ctx) {
+    if (owner.CurrentSchemeShardId) {
     AFL_VERIFY(owner.CurrentSchemeShardId);
     ctx.Send(MakePipePerNodeCacheID(false),
         new TEvPipeCache::TEvForward(BuildProposeResultEvent(owner).release(), (ui64)owner.CurrentSchemeShardId, false));
+    } else {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "scheme_shard_tablet_not_initialized")("source", GetTxInfo().Source);
+        ctx.Send(GetTxInfo().Source, BuildProposeResultEvent(owner).release());
+    }
 }
 
 std::unique_ptr<NKikimr::TEvColumnShard::TEvProposeTransactionResult> IProposeTxOperator::BuildProposeResultEvent(const TColumnShard& owner) const {

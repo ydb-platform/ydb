@@ -1727,9 +1727,7 @@ protected:
         }
 
         ResponseEv->Record.MutableResponse()->SetStatus(Ydb::StatusIds::TIMEOUT);
-        for (const auto& issue : issues) {
-            NYql::IssueToMessage(issue, ResponseEv->Record.MutableResponse()->AddIssues());
-        }
+        NYql::IssuesToMessage(issues, ResponseEv->Record.MutableResponse()->MutableIssues());
 
         // TEvAbortExecution can come from either ComputeActor or SessionActor (== Target).
         if (abortSender != Target) {

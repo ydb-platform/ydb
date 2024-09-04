@@ -3,6 +3,7 @@
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/kqp.h>
+#include <ydb/core/kqp/common/kqp_timeouts.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
 #include <ydb/core/kqp/proxy_service/proto/result_set_meta.pb.h>
@@ -219,6 +220,7 @@ private:
             if (RunState == ERunState::Cancelling) {
                 NYql::TIssue cancelIssue("Request was canceled by user");
                 cancelIssue.SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_INFO);
+                Issues.AddIssue(std::move(cancelIssue));
             }
 
             auto scriptFinalizeRequest = std::make_unique<TEvScriptFinalizeRequest>(
@@ -428,6 +430,13 @@ private:
 
         const auto& issueMessage = record.GetResponse().GetQueryIssues();
         NYql::IssuesFromMessage(issueMessage, Issues);
+
+        if (record.GetYdbStatus() == Ydb::StatusIds::TIMEOUT) {
+            const TDuration timeout = GetQueryTimeout(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT, Request.GetRequest().GetTimeoutMs(), {}, QueryServiceConfig);
+            NYql::TIssue timeoutIssue(TStringBuilder() << "Current request timeout is " << timeout.MilliSeconds() << "ms");
+            timeoutIssue.SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_INFO);
+            Issues.AddIssue(std::move(timeoutIssue));
+        }
 
         if (record.GetResponse().HasQueryPlan()) {
             QueryPlan = record.GetResponse().GetQueryPlan();

@@ -1286,8 +1286,8 @@ public:
         const TKqpSessionInfo* info = LocalSessions->FindPtr(reqInfo->SessionId);
         if (msg->Round == 0 && info) {
             TString message = msg->Status == NYql::NDqProto::StatusIds::TIMEOUT
-                ? (TStringBuilder() <<  "Request's timeout " << msg->Timeout.MilliSeconds() << "ms exceeded")
-                : (TStringBuilder() <<  "Request's canceled after " << msg->Timeout.MilliSeconds() << "ms");
+                ? (TStringBuilder() << "Request timeout " << msg->Timeout.MilliSeconds() << "ms exceeded")
+                : (TStringBuilder() << "Request canceled after " << msg->Timeout.MilliSeconds() << "ms");
 
             Send(info->WorkerId, new TEvKqp::TEvAbortExecution(msg->Status, message));
 

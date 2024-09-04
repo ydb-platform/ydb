@@ -24,6 +24,8 @@ namespace NKikimr::NColumnShard {
         virtual void DoStartProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) override {
 
         }
+        virtual void DoSendReply(TColumnShard& owner, const TActorContext& ctx) override;
+
         virtual void DoFinishProposeOnExecute(TColumnShard& /*owner*/, NTabletFlatExecutor::TTransactionContext& /*txc*/) override {
         }
         virtual void DoFinishProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) override {

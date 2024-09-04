@@ -278,7 +278,10 @@ TDuration TTxController::GetTxCompleteLag(ui64 timecastStep) const {
 TTxController::EPlanResult TTxController::PlanTx(const ui64 planStep, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc) {
     auto it = Operators.find(txId);
     if (it == Operators.end()) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_plan_tx")("tx_id", txId);
         return EPlanResult::Skipped;
+    } else {
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "plan_tx")("tx_id", txId)("plan_step", it->second->MutableTxInfo().PlanStep);
     }
     auto& txInfo = it->second->MutableTxInfo();
     if (txInfo.PlanStep == 0) {
@@ -304,8 +307,8 @@ void TTxController::OnTabletInit() {
 
 std::shared_ptr<TTxController::ITransactionOperator> TTxController::StartProposeOnExecute(
     const TTxController::TTxInfo& txInfo, const TString& txBody, NTabletFlatExecutor::TTransactionContext& txc) {
-    NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("method", "TTxController::StartProposeOnExecute")(
-        "tx_info", txInfo.DebugString())("tx_info", txInfo.DebugString());
+    NActors::TLogContextGuard lGuard =
+        NActors::TLogContextBuilder::Build()("method", "TTxController::StartProposeOnExecute")("tx_info", txInfo.DebugString());
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "start");
     std::shared_ptr<TTxController::ITransactionOperator> txOperator(
         TTxController::ITransactionOperator::TFactory::Construct(txInfo.TxKind, txInfo));

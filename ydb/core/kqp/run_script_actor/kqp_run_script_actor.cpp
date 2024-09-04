@@ -216,6 +216,11 @@ private:
             WaitFinalizationRequest = true;
             RunState = IsExecuting() ? ERunState::Finishing : RunState;
 
+            if (RunState == ERunState::Cancelling) {
+                NYql::TIssue cancelIssue("Request was canceled by user");
+                cancelIssue.SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_INFO);
+            }
+
             auto scriptFinalizeRequest = std::make_unique<TEvScriptFinalizeRequest>(
                 GetFinalizationStatusFromRunState(), ExecutionId, Database, Status, GetExecStatusFromStatusCode(Status),
                 Issues, std::move(QueryStats), std::move(QueryPlan), std::move(QueryAst), LeaseGeneration

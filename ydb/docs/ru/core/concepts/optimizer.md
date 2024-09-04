@@ -56,7 +56,7 @@ GROUP BY
 | Звезда | 18 |
 | Клика | 15 |
 
-YDB использует модифиуацию алгоритма [DPHyp](https://www.researchgate.net/publication/47862092_Dynamic_Programming_Strikes_Back) для перебора порядка соединений.
+{{ ydb-short-name }} использует модификацию алгоритма [DPHyp](https://www.researchgate.net/publication/47862092_Dynamic_Programming_Strikes_Back) для перебора порядка соединений.
 
 ### Оценка стоимости планов
 

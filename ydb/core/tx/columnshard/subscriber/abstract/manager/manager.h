@@ -10,34 +10,8 @@ namespace NKikimr::NColumnShard::NSubscriber {
 
 class TManager {
 private:
-    class TSharedPtrHashContainer {
-    private:
-        std::shared_ptr<ISubscriber> Object;
-    public:
-        TSharedPtrHashContainer(const std::shared_ptr<ISubscriber>& obj)
-            : Object(obj)
-        {
-
-        }
-
-        TSharedPtrHashContainer() {
-            AFL_VERIFY(!!Object);
-        }
-
-        ISubscriber* operator->() const {
-            return Object.get();
-        }
-
-        explicit operator size_t() const {
-            return (size_t)Object.get();
-        }
-
-        bool operator==(const TSharedPtrHashContainer& object) const {
-            return Object == object.Object;
-        }
-    };
     TColumnShard& Owner;
-    THashMap<EEventType, THashSet<TSharedPtrHashContainer>> Subscribers;
+    THashMap<EEventType, std::unordered_set<std::shared_ptr<ISubscriber>>> Subscribers;
 public:
     TManager(TColumnShard& owner)
         : Owner(owner)
@@ -59,7 +33,7 @@ public:
         } else {
             AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "on_event_subscriber")("event", ev->GetType())("details", ev->DebugString());
         }
-        std::vector<TSharedPtrHashContainer> toRemove;
+        std::vector<std::shared_ptr<ISubscriber>> toRemove;
         for (auto&& i : it->second) {
             i->OnEvent(ev, Owner);
             if (i->IsFinished()) {

@@ -162,13 +162,6 @@ public:
     bool Scan(TIterator& it) {
         for (;;) {
             auto streamPart = it.ReadNext().GetValueSync();
-            if (!streamPart.IsSuccess()) {
-                if (!streamPart.EOS()) {
-                    OnError(streamPart.GetIssues().ToString());
-                    return false;
-                }
-                break;
-            }
 
             if constexpr (std::is_same_v<TIterator, NTable::TScanQueryPartIterator>) {
                 if (streamPart.HasQueryStats()) {
@@ -183,6 +176,14 @@ public:
                     QueryPlan = stats->GetPlan().GetOrElse("");
                     PlanAst = stats->GetAst().GetOrElse("");
                 }
+            }
+
+            if (!streamPart.IsSuccess()) {
+                if (!streamPart.EOS()) {
+                    OnError(streamPart.GetIssues().ToString());
+                    return false;
+                }
+                break;
             }
 
             if (streamPart.HasResultSet()) {
@@ -302,7 +303,8 @@ TQueryBenchmarkResult Execute(const TString& query, NTable::TTableClient& client
     composite.AddScanner(scannerYson);
     composite.AddScanner(scannerCSV);
     if (!composite.Scan(it)) {
-        return TQueryBenchmarkResult::Error(composite.GetErrorInfo());
+        return TQueryBenchmarkResult::Error(
+            composite.GetErrorInfo(), composite.GetQueryPlan(), composite.GetPlanAst());
     } else {
         return TQueryBenchmarkResult::Result(
             scannerYson->GetResult(),
@@ -329,7 +331,8 @@ TQueryBenchmarkResult Execute(const TString& query, NQuery::TQueryClient& client
     composite.AddScanner(scannerYson);
     composite.AddScanner(scannerCSV);
     if (!composite.Scan(it)) {
-        return TQueryBenchmarkResult::Error(composite.GetErrorInfo());
+        return TQueryBenchmarkResult::Error(
+            composite.GetErrorInfo(), composite.GetQueryPlan(), composite.GetPlanAst());
     } else {
         return TQueryBenchmarkResult::Result(
             scannerYson->GetResult(),

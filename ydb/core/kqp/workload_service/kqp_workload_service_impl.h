@@ -22,6 +22,7 @@ struct TDatabaseState {
     std::unordered_map<TString, std::unordered_set<TActorId>> PendingSubscriptions = {};
     bool HasDefaultPool = false;
     bool Serverless = false;
+    bool DatabaseUnsupported = false;
 
     TInstant LastUpdateTime = TInstant::Zero();
 
@@ -41,8 +42,10 @@ struct TDatabaseState {
 
         if (!EnabledResourcePoolsOnServerless && (TInstant::Now() - LastUpdateTime) > IDLE_DURATION) {
             ActorContext.Register(CreateDatabaseFetcherActor(ActorContext.SelfID, database));
-        } else {
+        } else if (!DatabaseUnsupported) {
             StartPendingRequests();
+        } else {
+            ReplyContinueError(Ydb::StatusIds::UNSUPPORTED, {NYql::TIssue(TStringBuilder() << "Unsupported database: " << database)});
         }
     }
 
@@ -65,6 +68,7 @@ struct TDatabaseState {
     }
 
     void UpdateDatabaseInfo(const TEvPrivate::TEvFetchDatabaseResponse::TPtr& ev) {
+        DatabaseUnsupported = ev->Get()->Status == Ydb::StatusIds::UNSUPPORTED;
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
             ReplyContinueError(ev->Get()->Status, GroupIssues(ev->Get()->Issues, "Failed to fetch database info"));
             return;
@@ -117,7 +121,7 @@ struct TPoolState {
             return;
         }
 
-        ActorContext.Send(PoolHandler, new TEvPrivate::TEvStopPoolHandler());
+        ActorContext.Send(PoolHandler, new TEvPrivate::TEvStopPoolHandler(false));
         PoolHandler = *NewPoolHandler;
         NewPoolHandler = std::nullopt;
         InFlightRequests = 0;
@@ -156,7 +160,7 @@ struct TCpuQuotaManagerState {
         auto response = CpuQuotaManager.RequestCpuQuota(0.0, maxClusterLoad);
 
         bool quotaAccepted = response.Status == NYdb::EStatus::SUCCESS;
-        ActorContext.Send(poolHandler, new TEvPrivate::TEvCpuQuotaResponse(quotaAccepted), 0, coockie);
+        ActorContext.Send(poolHandler, new TEvPrivate::TEvCpuQuotaResponse(quotaAccepted, maxClusterLoad, std::move(response.Issues)), 0, coockie);
 
         // Schedule notification
         if (!quotaAccepted) {

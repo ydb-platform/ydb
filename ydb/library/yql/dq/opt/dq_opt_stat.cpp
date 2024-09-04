@@ -24,7 +24,7 @@ namespace {
 
 
     TString RemoveAliases(TString attributeName) {
-        if (auto idx = attributeName.find_last_of('.') != TString::npos) {
+        if (auto idx = attributeName.find_last_of('.'); idx != TString::npos) {
             return attributeName.substr(idx+1);
         }
         return attributeName;
@@ -71,7 +71,9 @@ namespace {
                         inputStats->Ncols, 
                         inputStats->ByteSize, 
                         inputStats->Cost, 
-                        inputStats->KeyColumns);
+                        inputStats->KeyColumns,
+                        inputStats->ColumnStatistics,
+                        inputStats->StorageType);
                     outputStats->Labels = inputStats->Labels;
                     return outputStats;
                 }
@@ -378,9 +380,18 @@ void InferStatisticsForFlatMap(const TExprNode::TPtr& input, TTypeAnnotationCont
         // Currently we just set the number to 10% before we have statistics and parse
         // the predicate
 
-        double selectivity = ComputePredicateSelectivity(flatmap.Lambda().Body(), inputStats);
+        double selectivity = TPredicateSelectivityComputer(inputStats).Compute(flatmap.Lambda().Body());
 
-        auto outputStats = TOptimizerStatistics(inputStats->Type, inputStats->Nrows * selectivity, inputStats->Ncols, inputStats->ByteSize * selectivity, inputStats->Cost, inputStats->KeyColumns );
+        auto outputStats = TOptimizerStatistics(
+            inputStats->Type, 
+            inputStats->Nrows * selectivity, 
+            inputStats->Ncols, 
+            inputStats->ByteSize * selectivity, 
+            inputStats->Cost, 
+            inputStats->KeyColumns,
+            inputStats->ColumnStatistics,
+            inputStats->StorageType);
+
         outputStats.Labels = inputStats->Labels;
         outputStats.Selectivity *= selectivity;
 
@@ -422,10 +433,18 @@ void InferStatisticsForFilter(const TExprNode::TPtr& input, TTypeAnnotationConte
     // Currently we just set the number to 10% before we have statistics and parse
     // the predicate
     auto filterBody = filter.Lambda().Body();
-    
-    double selectivity = ComputePredicateSelectivity(filterBody, inputStats);
+    double selectivity = TPredicateSelectivityComputer(inputStats).Compute(filterBody);
 
-    auto outputStats = TOptimizerStatistics(inputStats->Type, inputStats->Nrows * selectivity, inputStats->Ncols, inputStats->ByteSize * selectivity, inputStats->Cost, inputStats->KeyColumns);
+    auto outputStats = TOptimizerStatistics(
+        inputStats->Type, 
+        inputStats->Nrows * selectivity, 
+        inputStats->Ncols, 
+        inputStats->ByteSize * selectivity, 
+        inputStats->Cost, 
+        inputStats->KeyColumns,
+        inputStats->ColumnStatistics,
+        inputStats->StorageType);
+
     outputStats.Selectivity *= selectivity;
     outputStats.Labels = inputStats->Labels;
 

@@ -274,10 +274,12 @@ void TTopicOperationsScenario::StartProducerThreads(std::vector<std::future<void
             .Direct = Direct,
             .Codec = Codec,
             .UseTransactions = UseTransactions,
-            .UseAutoPartitioning = useAutoPartitioning
+            .UseAutoPartitioning = useAutoPartitioning,
+            .CommitPeriod = CommitPeriod,
+            .CommitMessages = CommitMessages
         };
 
-        threads.push_back(std::async([writerParams = std::move(writerParams)]() mutable { TTopicWorkloadWriterWorker::WriterLoop(writerParams); }));
+        threads.push_back(std::async([writerParams = std::move(writerParams)]() mutable { TTopicWorkloadWriterWorker::RetryableWriterLoop(writerParams); }));
     }
 
     while (*count != ProducerThreadCount) {

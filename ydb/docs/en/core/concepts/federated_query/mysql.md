@@ -22,7 +22,7 @@ To work with an external MySQL database, you need to follow these steps:
 1. {% include [!](_includes/connector_deployment.md) %}
 1. [Execute a query](#query) to the database.
 
-## Query syntax { #query }
+## Query syntax {#query}
 The following SQL query format is used to work with MySQL:
 
 ```sql
@@ -43,7 +43,7 @@ When working with MySQL clusters, there are a number of limitations:
 
 ## Supported data types
 
-In the MySQL database, the optionality of column values (whether the column can contain `NULL` values or not) is not a part of the data type system. The `NOT NULL` constraint for any column of any table is stored within the `IS_NULLABLE` column the [INFORMATION_SCHEMA.COLUMNS](https://dev.mysql.com/doc/refman/8.4/en/information-schema-columns-table.html) system table, i.e., at the table metadata level. Therefore, all basic MySQL types can contain `NULL` values by default, and in the {{ ydb-full-name }} type system they should be mapped to [optional](https://ydb.tech/docs/ru/yql/reference/types/optional).
+In the MySQL database, the optionality of column values (whether the column can contain `NULL` values or not) is not a part of the data type system. The `NOT NULL` constraint for any column of any table is stored within the `IS_NULLABLE` column the [INFORMATION_SCHEMA.COLUMNS](https://dev.mysql.com/doc/refman/8.4/en/information-schema-columns-table.html) system table, i.e., at the table metadata level. Therefore, all basic MySQL types can contain `NULL` values by default, and in the {{ ydb-full-name }} type system they should be mapped to [optional](../../yql/reference/types/optional.md).
 
 Below is a correspondence table between MySQL types and {{ ydb-short-name }} types. All other data types, except those listed, are not supported.
 

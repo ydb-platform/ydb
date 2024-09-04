@@ -40,6 +40,7 @@
 #include <ydb/library/yql/public/udf/udf_validate.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/comp_factory.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/parser.h>
+#include <ydb/library/yql/public/result_format/yql_result_format.h>
 
 #include <ydb/core/util/pb.h>
 
@@ -482,6 +483,7 @@ int Main(int argc, const char *argv[])
     opts.AddLongOption("show-kernels", "show all Arrow kernel families").NoArgument();
     opts.AddLongOption("pg-ext", "pg extensions config file").StoreResult(&pgExtConfig);
     opts.AddLongOption("with-final-issues", "Include some final messages (like statistic) in issues").NoArgument();
+    opts.AddLongOption("validate-result-format", "Check that result-format can parse Result").NoArgument();
 
     opts.SetFreeArgsMax(0);
     TOptsParseResult res(&opts, argc, argv);
@@ -500,6 +502,8 @@ int Main(int argc, const char *argv[])
         return 0;
     }
 
+    NPg::SetSqlLanguageParser(NSQLTranslationPG::CreateSqlLanguageParser());
+    NPg::LoadSystemFunctions(*NSQLTranslationPG::CreateSystemFunctionsParser());
     if (!pgExtConfig.empty()) {
         NProto::TPgExtensions config;
         Y_ABORT_UNLESS(NKikimr::ParsePBFromFile(pgExtConfig, &config));
@@ -509,6 +513,8 @@ int Main(int argc, const char *argv[])
             *NSQLTranslationPG::CreateExtensionSqlParser(),
             NKikimr::NMiniKQL::CreateExtensionLoader().get());
     }
+
+    NPg::GetSqlLanguageParser()->Freeze();
 
     const bool parseOnly = res.Has("parse-only");
     const bool compileOnly = res.Has("compile-only");
@@ -601,6 +607,7 @@ int Main(int argc, const char *argv[])
     }
 
     TExprContext ctx;
+    ctx.NextUniqueId = NPg::GetSqlLanguageParser()->GetContext().NextUniqueId;
     IModuleResolver::TPtr moduleResolver;
     if (!mountConfig.empty()) {
         TModulesTable modules;
@@ -877,7 +884,26 @@ int Main(int argc, const char *argv[])
         } else if (res.Has("lineage")) {
             program->LineageOut(*resultOut);
         } else {
-            program->ResultsOut(*resultOut);
+            if (res.Has("validate-result-format")) {
+                TString str;
+                TStringOutput out(str);
+                program->ResultsOut(out);
+                if (!str.empty()) {
+                    auto node = NYT::NodeFromYsonString(str);
+                    for (const auto& r : NResult::ParseResponse(node)) {
+                        for (const auto& write : r.Writes) {
+                            if (write.Type) {
+                                NResult::TEmptyTypeVisitor visitor;
+                                NResult::ParseType(*write.Type, visitor);
+                            }
+                        }
+                    }
+                }
+
+                resultOut->Write(str.Data(), str.Size());
+            } else {
+                program->ResultsOut(*resultOut);
+            }
         }
     }
 
@@ -938,7 +964,8 @@ int RunUI(int argc, const char* argv[])
     }
 
     NMiniKQL::FindUdfsInDir(udfsDir, &udfsPaths);
-
+    NPg::SetSqlLanguageParser(NSQLTranslationPG::CreateSqlLanguageParser());
+    NPg::LoadSystemFunctions(*NSQLTranslationPG::CreateSystemFunctionsParser());
     if (!pgExtConfig.empty()) {
         NProto::TPgExtensions config;
         Y_ABORT_UNLESS(NKikimr::ParsePBFromFile(pgExtConfig, &config));
@@ -948,6 +975,8 @@ int RunUI(int argc, const char* argv[])
             *NSQLTranslationPG::CreateExtensionSqlParser(),
             NKikimr::NMiniKQL::CreateExtensionLoader().get());
     }
+
+    NPg::GetSqlLanguageParser()->Freeze();
 
     THolder<TGatewaysConfig> gatewaysConfig;
     if (!gatewaysCfgFile.empty()) {
@@ -976,6 +1005,7 @@ int RunUI(int argc, const char* argv[])
     CommonInit(res, udfResolverPath, udfResolverFilterSyscalls, udfsPaths, fileStorage, udfResolver, funcRegistry, udfIndex);
 
     TExprContext ctx;
+    ctx.NextUniqueId = NPg::GetSqlLanguageParser()->GetContext().NextUniqueId;
     IModuleResolver::TPtr moduleResolver;
     if (!mountConfig.empty()) {
         TModulesTable modules;

@@ -83,11 +83,33 @@ runs:
         mkdir -p $PUBLIC_DIR
 
         echo "LAST_JUNIT_REPORT_XML=$PUBLIC_DIR/last_junit.xml" >> $GITHUB_ENV
-        echo "TESTMO_URL=${{ inputs.testman_url }}" >> $GITHUB_ENV
+        export TESTMO_URL=${{ inputs.testman_url }}
+        echo "TESTMO_URL=$TESTMO_URL" >> $GITHUB_ENV
         echo "SUMMARY_LINKS=$PUBLIC_DIR/summary_links.txt" >> $GITHUB_ENV
         echo "BUILD_PRESET=${{ inputs.build_preset }}" >> $GITHUB_ENV
 
         python3 -m pip install ydb ydb[yc] codeowners
+
+        if [ ${{ inputs.testman_token }} ]; then
+          TESTMO_PROXY_ADDR=127.0.0.1:8888
+          openssl req -x509 -newkey rsa:2048 \
+            -keyout $TMP_DIR/key.pem -out $TMP_DIR/cert.pem \
+            -sha256 -days 1 -nodes -subj "/CN=127.0.0.1"
+          
+          TESTMO_TOKEN=${{ inputs.testman_token }} ./ydb/ci/testmo-proxy/testmo-proxy.py -l $TESTMO_PROXY_ADDR \
+            --cert-file "$TMP_DIR/cert.pem" \
+            --cert-key "$TMP_DIR/key.pem" \
+            --target-timeout 3,60 \
+            --max-request-time 200 \
+            "$TESTMO_URL" > $PUBLIC_DIR/testmo_proxy.log 2>&1 &
+            
+          TESTMO_PROXY_PID=$!
+          echo "TESTMO_PROXY_ADDR=$TESTMO_PROXY_ADDR" >> $GITHUB_ENV
+          echo "TESTMO_PROXY_PID=$TESTMO_PROXY_PID" >> $GITHUB_ENV
+
+          # testmo rejects self-signed cert without this setting
+          echo "NODE_TLS_REJECT_UNAUTHORIZED=0" >> $GITHUB_ENV
+        fi
 
     - name: ya build and test
       id: build
@@ -178,6 +200,7 @@ runs:
 
         if [ true = ${{ inputs.run_tests }} ]; then
           params+=(-A)
+          params+=(--retest)
         fi
 
         params+=(
@@ -253,14 +276,18 @@ runs:
             IS_RETRY=0
           fi
 
+          CURRENT_PUBLIC_DIR_RELATIVE=try_$RETRY
+          CURRENT_PUBLIC_DIR=$PUBLIC_DIR/$CURRENT_PUBLIC_DIR_RELATIVE
+          mkdir $CURRENT_PUBLIC_DIR
+
           if [ ${{ inputs.testman_token }} ]; then
             # inititalize testmo session
             TESTMO_RUN_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-            TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:resources:add-link --name build --url "$TESTMO_RUN_URL" --resources testmo.json
-            TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:resources:add-field --name git-sha --type string --value "${GITHUB_SHA:0:7}" --resources testmo.json
+            TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:resources:add-link --name build --url "$TESTMO_RUN_URL" --resources $CURRENT_PUBLIC_DIR/testmo.json
+            TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:resources:add-field --name git-sha --type string --value "${GITHUB_SHA:0:7}" --resources $CURRENT_PUBLIC_DIR/testmo.json
             TESTMO_RUN_ID=$(
-              TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:run:create --instance "$TESTMO_URL" --project-id ${{ inputs.testman_project_id }} \
-                --name "$TESTMO_RUN_NAME" --source "$TESTMO_SOURCE" --resources testmo.json \
+              TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:run:create --instance "https://$TESTMO_PROXY_ADDR" --project-id ${{ inputs.testman_project_id }} \
+                --name "$TESTMO_RUN_NAME" --source "$TESTMO_SOURCE" --resources $CURRENT_PUBLIC_DIR/testmo.json \
                 --tags "$TESTMO_BRANCH_TAG" --tags "$TESTMO_EXTRA_TAG"
             )
             echo "runid=${TESTMO_RUN_ID}" >> $GITHUB_OUTPUT
@@ -272,20 +299,16 @@ runs:
             echo "10 [Test history](${TESTMO_HISTORY_URL})" >> $SUMMARY_LINKS
           fi
 
-          CURRENT_MESSAGE="**{platform_name}-${BUILD_PRESET}** is running..." 
+          CURRENT_MESSAGE="ya make is running..." 
           if [ $IS_RETRY = 0 ]; then
-            CURRENT_MESSAGE="Check $CURRENT_MESSAGE"
+            CURRENT_MESSAGE="$CURRENT_MESSAGE"
             RERUN_FAILED_OPT=""
           else
-            CURRENT_MESSAGE="Failed tests rerun (try $RETRY) $CURRENT_MESSAGE"
+            CURRENT_MESSAGE="$CURRENT_MESSAGE (failed tests rerun, try $RETRY)"
             RERUN_FAILED_OPT="-X"
           fi
 
           echo $CURRENT_MESSAGE | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
-
-          CURRENT_PUBLIC_DIR_RELATIVE=try_$RETRY
-          CURRENT_PUBLIC_DIR=$PUBLIC_DIR/$CURRENT_PUBLIC_DIR_RELATIVE
-          mkdir $CURRENT_PUBLIC_DIR
 
           CURRENT_JUNIT_XML_PATH=$CURRENT_PUBLIC_DIR/junit.xml
           set +ex
@@ -333,12 +356,10 @@ runs:
             IS_LAST_RETRY=1
           fi
 
-          s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-check-md5 "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"
-
           if [ $FAILED_TESTS_COUNT -gt 500 ]; then 
             IS_LAST_RETRY=1
             TOO_MANY_FAILED="Too many tests failed, NOT going to retry"
-            echo $TOO_MANY_FAILED | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --fail
+            echo $TOO_MANY_FAILED | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color red
           fi
 
           if [ "${{ inputs.run_tests }}" = "true" ]; then
@@ -350,12 +371,20 @@ runs:
               --status_report_file statusrep.txt \
               --is_retry $IS_RETRY \
               --is_last_retry $IS_LAST_RETRY \
+              --comment_color_file summary_color.txt \
+              --comment_text_file summary_text.txt \
               "Tests" $CURRENT_PUBLIC_DIR/ya-test.html "$CURRENT_JUNIT_XML_PATH"
           fi
-            
+
+          s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-check-md5 "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"
+
+          if [ "${{ inputs.run_tests }}" = "true" ]; then
+            cat summary_text.txt | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color `cat summary_color.txt`
+          fi
+          
           # upload tests results to YDB
           ydb_upload_run_name="${TESTMO_RUN_NAME// /"_"}"
-          result=`.github/scripts/upload_tests_results.py --test-results-file ${CURRENT_JUNIT_XML_PATH} --run-timestamp $(date +%s) --commit $(git rev-parse HEAD) --build-type ${BUILD_PRESET} --pull $ydb_upload_run_name --job-name "${{ github.workflow }}" --job-id "${{ github.run_id }}" --branch ${GITHUB_REF_NAME}`
+          result=`.github/scripts/analytics/upload_tests_results.py --test-results-file ${CURRENT_JUNIT_XML_PATH} --run-timestamp $(date +%s) --commit $(git rev-parse HEAD) --build-type ${BUILD_PRESET} --pull $ydb_upload_run_name --job-name "${{ github.workflow }}" --job-id "${{ github.run_id }}" --branch ${GITHUB_REF_NAME}`
 
           if [ ${{ inputs.testman_token }} ]; then
             # finish testme session
@@ -366,29 +395,12 @@ runs:
             .github/scripts/tests/split-junit.py -o "$TESTMO_JUNIT_REPORT_PARTS" "$CURRENT_JUNIT_XML_PATH"
             # archive unitest reports (transformed)
             tar -C $TESTMO_JUNIT_REPORT_PARTS/.. -czf $PUBLIC_DIR/junit_parts.xml.tar.gz $(basename $TESTMO_JUNIT_REPORT_PARTS)
-
-            TESTMO_PROXY_ADDR=127.0.0.1:8888
-
-            openssl req -x509 -newkey rsa:2048 \
-              -keyout $TMP_DIR/key.pem -out $TMP_DIR/cert.pem \
-              -sha256 -days 1 -nodes -subj "/CN=127.0.0.1"
             
-            TESTMO_TOKEN=${{ inputs.testman_token }} ./ydb/ci/testmo-proxy/testmo-proxy.py -l $TESTMO_PROXY_ADDR \
-              --cert-file "$TMP_DIR/cert.pem" \
-              --cert-key "$TMP_DIR/key.pem" \
-              --target-timeout 3,10 \
-              --max-request-time 55 \
-              "$TESTMO_URL" &
-            
-            testmo_proxy_pid=$!
-            
-            TESTMO_TOKEN=${{ inputs.testman_token }} NODE_TLS_REJECT_UNAUTHORIZED=0 testmo automation:run:submit-thread \
+            TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:run:submit-thread \
               --instance "https://$TESTMO_PROXY_ADDR" --run-id "$TESTMO_RUN_ID" \
               --results "$TESTMO_JUNIT_REPORT_PARTS/*.xml"
-            
-            kill $testmo_proxy_pid
 
-            TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:run:complete --instance "$TESTMO_URL" --run-id $TESTMO_RUN_ID
+            TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:run:complete --instance "https://$TESTMO_PROXY_ADDR" --run-id $TESTMO_RUN_ID || true
             echo "runid=" >> $GITHUB_OUTPUT
           fi
 
@@ -414,12 +426,12 @@ runs:
           curl -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
             https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
             -d '{"state":"failure","description":"The check has been failed","context":"build_${{inputs.build_preset}}"}'
-          echo "Build failed. see the [logs]($YA_MAKE_OUTPUT_URL)." | .github/scripts/tests/comment-pr.py --fail
+          echo "Build failed. see the [logs]($YA_MAKE_OUTPUT_URL)." | .github/scripts/tests/comment-pr.py --color red
         else
           curl -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
             https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
             -d '{"state":"success","description":"The check has been completed successfully","context":"build_${{inputs.build_preset}}"}'
-          echo "Build successful." | .github/scripts/tests/comment-pr.py --ok
+          echo "Build successful." | .github/scripts/tests/comment-pr.py --color green
         fi
     
 
@@ -428,7 +440,10 @@ runs:
       shell: bash
       run: |
         if [ ${{ steps.build.outputs.runid }} ]; then
-          TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:run:complete --instance "$TESTMO_URL" --run-id ${{ steps.build.outputs.runid }}
+          TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:run:complete --instance "https://$TESTMO_PROXY_ADDR" --run-id ${{ steps.build.outputs.runid }} || true
+        fi
+        if [ ${{ inputs.testman_token }} ]; then
+          kill $TESTMO_PROXY_PID
         fi
     - name: analyze tests results
       shell: bash

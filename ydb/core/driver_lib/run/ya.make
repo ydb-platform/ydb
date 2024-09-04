@@ -21,7 +21,6 @@ SRCS(
 )
 
 PEERDIR(
-    contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core
     contrib/libs/protobuf
     ydb/library/actors/core
     ydb/library/actors/dnsresolver
@@ -165,6 +164,7 @@ PEERDIR(
     ydb/services/persqueue_v1
     ydb/services/rate_limiter
     ydb/services/replication
+    ydb/services/tablet
     ydb/services/ydb
 )
 

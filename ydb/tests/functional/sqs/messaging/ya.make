@@ -8,10 +8,6 @@ TEST_SRCS(
     test_polling.py
 )
 
-IF (SANITIZER_TYPE)
-    REQUIREMENTS(ram:16)
-ENDIF()
-
 IF (SANITIZER_TYPE == "thread")
     TIMEOUT(2400)
     SIZE(LARGE)

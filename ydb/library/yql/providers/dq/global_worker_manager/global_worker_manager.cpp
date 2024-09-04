@@ -781,7 +781,15 @@ private:
     }
 
     void TryResume() {
-        if (Workers.FreeSlots() >= ScheduleWaitCount) {
+        if (!Workers.Capacity() && ScheduleWaitCount > 0U) {
+            Scheduler->ProcessAll([&] (const auto& item) {
+                Send(item.Sender, new TEvAllocateWorkersResponse("All workers shutted down", NYql::NDqProto::StatusIds::OVERLOADED));
+                return true;
+            });
+
+            ScheduleWaitCount = 0U;
+            DeadOperations.clear();
+        } else if (Workers.FreeSlots() >= ScheduleWaitCount) {
             Scheduler->Process(Workers.Capacity(), Workers.FreeSlots(), [&] (const auto& item) {
                 auto maybeDead = DeadOperations.find(item.Request.GetResourceId());
                 if (maybeDead != DeadOperations.end()) {
@@ -808,6 +816,11 @@ private:
 
         const auto count = ev->Get()->Record.GetCount();
         Y_ASSERT(count != 0);
+
+        if (!Workers.Capacity()) {
+            Send(ev->Sender, new TEvAllocateWorkersResponse("Empty workers capacity", NYql::NDqProto::StatusIds::OVERLOADED));
+            return;
+        }
 
         if (!Scheduler->Suspend(NDq::IScheduler::TWaitInfo(ev->Get()->Record, ev->Sender))) {
             Send(ev->Sender, new TEvAllocateWorkersResponse("Too many dq operations", NYql::NDqProto::StatusIds::OVERLOADED));

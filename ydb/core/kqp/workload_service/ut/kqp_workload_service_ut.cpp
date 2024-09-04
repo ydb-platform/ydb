@@ -58,7 +58,10 @@ Y_UNIT_TEST_SUITE(KqpWorkloadService) {
         }
         UNIT_ASSERT_C(firstRequest.HasValue(), "One of two requests shoud be rejected");
         UNIT_ASSERT_C(!secondRequest.HasValue(), "One of two requests shoud be placed in pool");
-        TSampleQueries::CheckOverloaded(firstRequest.GetResult(), ydb->GetSettings().PoolId_);
+
+        auto result = firstRequest.GetResult();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::OVERLOADED, result.GetIssues().ToOneLineString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), TStringBuilder() << "Request was rejected, number of local pending requests is 2, number of global delayed/running requests is 1, sum of them is larger than allowed limit 1 (including concurrent query limit 1) for pool " << ydb->GetSettings().PoolId_);
 
         return secondRequest;
     }
@@ -114,10 +117,9 @@ Y_UNIT_TEST_SUITE(KqpWorkloadService) {
         auto hangingRequest = ydb->ExecuteQueryAsync(TSampleQueries::TSelect42::Query, TQueryRunnerSettings().HangUpDuringExecution(true));
         ydb->WaitQueryExecution(hangingRequest);
 
-        TSampleQueries::CheckOverloaded(
-            ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, TQueryRunnerSettings().ExecutionExpected(false)),
-            ydb->GetSettings().PoolId_
-        );
+        auto result = ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, TQueryRunnerSettings().ExecutionExpected(false));
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::OVERLOADED, result.GetIssues().ToOneLineString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), TStringBuilder() << "Request was rejected, number of local pending requests is 1, number of global delayed/running requests is 1, sum of them is larger than allowed limit 0 (including concurrent query limit 1) for pool " << ydb->GetSettings().PoolId_);
 
         ydb->ContinueQueryExecution(hangingRequest);
         TSampleQueries::TSelect42::CheckResult(hangingRequest.GetResult());
@@ -142,10 +144,9 @@ Y_UNIT_TEST_SUITE(KqpWorkloadService) {
             ydb->WaitQueryExecution(asyncResult);
         }
 
-        TSampleQueries::CheckOverloaded(
-            ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, TQueryRunnerSettings().ExecutionExpected(false)),
-            ydb->GetSettings().PoolId_
-        );
+        auto result = ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, TQueryRunnerSettings().ExecutionExpected(false));
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::OVERLOADED, result.GetIssues().ToOneLineString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), TStringBuilder() << "Request was rejected, number of local pending requests is 1, number of global delayed/running requests is " << inFlight << ", sum of them is larger than allowed limit 0 (including concurrent query limit " << inFlight << ") for pool " << ydb->GetSettings().PoolId_);
 
         for (const auto& asyncResult : asyncResults) {
             ydb->ContinueQueryExecution(asyncResult);
@@ -230,7 +231,8 @@ Y_UNIT_TEST_SUITE(KqpWorkloadService) {
 
         auto result = ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, TQueryRunnerSettings().ExecutionExpected(false));
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::CANCELLED, result.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), TStringBuilder() << "Delay deadline exceeded in pool " << ydb->GetSettings().PoolId_);
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), TStringBuilder() << "Request was delayed during");
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), TStringBuilder() << ", that is larger than delay deadline 10.000000s in pool " << ydb->GetSettings().PoolId_ << ", request was canceled");
     }
 
     Y_UNIT_TEST(TestCpuLoadThresholdRefresh) {
@@ -289,7 +291,9 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceDistributed) {
         ydb->WaitPoolState({.DelayedRequests = 1, .RunningRequests = 1});
 
         // Check distributed queue size
-        TSampleQueries::CheckOverloaded(ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, TQueryRunnerSettings().NodeIndex(0)), ydb->GetSettings().PoolId_);
+        auto result = ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, TQueryRunnerSettings().NodeIndex(0));
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::OVERLOADED, result.GetIssues().ToOneLineString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), TStringBuilder() << "Request was rejected, number of local pending requests is 1, number of global delayed/running requests is 2, sum of them is larger than allowed limit 1 (including concurrent query limit 1) for pool " << ydb->GetSettings().PoolId_);
 
         ydb->ContinueQueryExecution(delayedRequest);
         ydb->ContinueQueryExecution(hangingRequest);
@@ -359,7 +363,9 @@ Y_UNIT_TEST_SUITE(ResourcePoolsDdl) {
         );
         ydb->WaitQueryExecution(hangingRequest);
 
-        TSampleQueries::CheckOverloaded(ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, TQueryRunnerSettings().PoolId(poolId)), poolId);
+        auto result = ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, TQueryRunnerSettings().PoolId(poolId));
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::OVERLOADED, result.GetIssues().ToOneLineString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), TStringBuilder() << "Request was rejected, number of local pending requests is 1, number of global delayed/running requests is 1, sum of them is larger than allowed limit 0 (including concurrent query limit 1) for pool " << poolId);
 
         ydb->ContinueQueryExecution(hangingRequest);
         TSampleQueries::TSelect42::CheckResult(hangingRequest.GetResult());
@@ -401,7 +407,10 @@ Y_UNIT_TEST_SUITE(ResourcePoolsDdl) {
                 QUEUE_SIZE=0
             );
         )");
-        TSampleQueries::CheckOverloaded(delayedRequest.GetResult(), ydb->GetSettings().PoolId_);
+
+        auto result = delayedRequest.GetResult();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::OVERLOADED, result.GetIssues().ToOneLineString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), TStringBuilder() << "Request was rejected, number of local delayed requests is 1, that is larger than allowed limit 0 for pool " << ydb->GetSettings().PoolId_);
 
         ydb->ContinueQueryExecution(hangingRequest);
         TSampleQueries::TSelect42::CheckResult(hangingRequest.GetResult());
@@ -480,7 +489,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolsDdl) {
         );
 
         IYdbSetup::WaitFor(FUTURE_WAIT_TIMEOUT, "pool drop", [ydb, poolId](TString& errorString) {
-            auto kind = ydb->Navigate(TStringBuilder() << ".resource_pools/" << poolId)->ResultSet.at(0).Kind;
+            auto kind = ydb->Navigate(TStringBuilder() << ".metadata/workload_manager/pools/" << poolId)->ResultSet.at(0).Kind;
 
             errorString = TStringBuilder() << "kind = " << kind;
             return kind == NSchemeCache::TSchemeCacheNavigate::EKind::KindUnknown;
@@ -500,7 +509,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolsDdl) {
             CREATE RESOURCE POOL )" << poolId << R"( WITH (
                 CONCURRENT_QUERY_LIMIT=1
             );
-            GRANT DESCRIBE SCHEMA ON `/Root/.resource_pools/)" << poolId << "` TO `" << userSID << "`;"
+            GRANT DESCRIBE SCHEMA ON `/Root/.metadata/workload_manager/pools/)" << poolId << "` TO `" << userSID << "`;"
         );
         ydb->WaitPoolAccess(userSID, NACLib::EAccessRights::DescribeSchema, poolId);
 
@@ -510,7 +519,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolsDdl) {
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), TStringBuilder() << "You don't have access permissions for resource pool " << poolId);
 
         ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
-            GRANT SELECT ROW ON `/Root/.resource_pools/)" << poolId << "` TO `" << userSID << "`;"
+            GRANT SELECT ROW ON `/Root/.metadata/workload_manager/pools/)" << poolId << "` TO `" << userSID << "`;"
         );
         ydb->WaitPoolAccess(userSID, NACLib::EAccessRights::SelectRow, poolId);
         TSampleQueries::TSelect42::CheckResult(ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, settings));
@@ -524,7 +533,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
         const TString& userSID = "user@test";
         ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
             GRANT DESCRIBE SCHEMA ON `/Root` TO `)" << userSID << R"(`;
-            GRANT DESCRIBE SCHEMA, SELECT ROW ON `/Root/.resource_pools/)" << ydb->GetSettings().PoolId_ << "` TO `" << userSID << "`;"
+            GRANT DESCRIBE SCHEMA, SELECT ROW ON `/Root/.metadata/workload_manager/pools/)" << ydb->GetSettings().PoolId_ << "` TO `" << userSID << "`;"
         );
         ydb->WaitPoolAccess(userSID, NACLib::EAccessRights::DescribeSchema | NACLib::EAccessRights::SelectRow);
 

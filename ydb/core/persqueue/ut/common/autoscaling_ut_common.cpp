@@ -1,12 +1,6 @@
 #include <ydb/core/persqueue/ut/common/autoscaling_ut_common.h>
 
-
-static inline IOutputStream& operator<<(IOutputStream& o, const std::set<size_t> t) {
-    o << "[" << JoinRange(", ", t.begin(), t.end()) << "]";
-
-    return o;
-}
-namespace NKikimr {
+namespace NKikimr::NPQ::NTest {
 
 using namespace NYdb::NTopic;
 using namespace NYdb::NTopic::NTests;
@@ -131,22 +125,116 @@ std::shared_ptr<ISimpleBlockingWriteSession> CreateWriteSession(TTopicClient& cl
     return client.CreateSimpleBlockingWriteSession(writeSettings);
 }
 
+template<SdkVersion Sdk>
+struct TTestReadSession : public ITestReadSession {
 
-TTestReadSession::TTestReadSession(const TString& name, TTopicClient& client, size_t expectedMessagesCount, bool autoCommit, std::set<ui32> partitions, bool autoPartitioningSupport) {
-    Impl = std::make_shared<TImpl>(name, autoCommit);
+    using TSdkReadSession = typename std::conditional_t<Sdk == SdkVersion::Topic,
+        NYdb::NTopic::IReadSession,
+        NYdb::NPersQueue::IReadSession>;
 
+    static constexpr size_t SemCount = 1;
+
+    TTestReadSession(TestReadSessionSettings settings);
+    ~TTestReadSession() = default;
+
+    void WaitAllMessages() override;
+
+    void Assert(const std::set<size_t>& expected, NThreading::TFuture<std::unordered_map<TString, std::set<size_t>>> f, const TString& message) override;
+    void Assert(const std::unordered_map<TString, std::set<size_t>>& expected, NThreading::TFuture<std::unordered_map<TString, std::set<size_t>>> f, const TString& message) override;
+    void WaitAndAssertPartitions(std::set<size_t> partitions, const TString& message) override;
+    void WaitAndAssert(std::unordered_map<TString, std::set<size_t>> partitions, const TString& message) override;
+
+    void Run() override;
+    void Commit() override;
+    void SetAutoCommit(bool value) override { Impl->AutoCommit = value; }
+
+    void Close() override;
+
+    std::set<size_t> GetPartitions() override;
+    std::unordered_map<TString, std::set<size_t>> GetPartitionsA() override;
+    std::vector<MsgInfo> GetReceivedMessages() override;
+    std::vector<EvEndMsg> GetEndedPartitionEvents() override;
+
+    void SetOffset(ui32 partitionId, std::optional<ui64> offset) override;
+
+    struct TImpl {
+
+        TImpl(const TString& name, bool autoCommit)
+            : Name(name)
+            , AutoCommit(autoCommit)
+            , Semaphore((TStringBuilder() << name << "::" << RandomNumber<size_t>()).c_str(), SemCount) {}
+
+        TString Name;
+        std::unordered_map<ui32, ui64> Offsets;
+
+        bool AutoCommit;
+
+        NThreading::TPromise<std::vector<MsgInfo>> DataPromise = NThreading::NewPromise<std::vector<MsgInfo>>();
+        NThreading::TPromise<std::unordered_map<TString, std::set<size_t>>> PartitionsPromise = NThreading::NewPromise<std::unordered_map<TString, std::set<size_t>>>();
+
+        std::vector<MsgInfo> ReceivedMessages;
+        std::unordered_map<TString, std::set<size_t>> Partitions;
+        std::optional<std::unordered_map<TString, std::set<size_t>>> ExpectedPartitions;
+
+        std::set<size_t> EndedPartitions;
+        std::vector<TReadSessionEvent::TEndPartitionSessionEvent> EndedPartitionEvents;
+
+        TMutex Lock;
+        TSemaphore Semaphore;
+
+        std::optional<ui64> GetOffset(ui32 partitionId) const;
+        void Modify(std::function<void (std::unordered_map<TString, std::set<size_t>>&)> modifier);
+
+        void Acquire();
+        void Release();
+
+        NThreading::TFuture<std::unordered_map<TString, std::set<size_t>>> Wait(std::unordered_map<TString, std::set<size_t>> partitions, const TString& message);
+    };
+
+    std::shared_ptr<TSdkReadSession> Create(const TestReadSessionSettings& settings);
+
+    std::shared_ptr<TSdkReadSession> Session;
+    std::shared_ptr<TImpl> Impl;
+};
+
+
+template<SdkVersion Sdk>
+TTestReadSession<Sdk>::TTestReadSession(TestReadSessionSettings settings) {
+    Impl = std::make_shared<TImpl>(settings.Name, settings.AutoCommit);
     Impl->Acquire();
 
+    Session = Create(settings);
+}
+
+
+template<>
+std::shared_ptr<TTestReadSession<SdkVersion::Topic>::TSdkReadSession> TTestReadSession<SdkVersion::Topic>::Create(const TestReadSessionSettings& settings) {
     auto readSettings = TReadSessionSettings()
         .ConsumerName(TEST_CONSUMER)
-        .AppendTopics(TEST_TOPIC)
-        .AutoPartitioningSupport(autoPartitioningSupport);
-    for (auto partitionId : partitions) {
+        .AutoPartitioningSupport(settings.AutoPartitioningSupport);
+    for (auto& topic : settings.Topics) {
+        readSettings.AppendTopics(topic);
+    }
+    for (auto partitionId : settings.Partitions) {
         readSettings.Topics_[0].AppendPartitionIds(partitionId);
     }
 
+    struct MsgWrapper : public IMessage {
+
+        MsgWrapper(NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage msg)
+            : Msg(msg) {
+        }
+        ~MsgWrapper() = default;
+
+        NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage Msg;
+
+        void Commit() override {
+            Msg.Commit();
+        };
+    };
+
     readSettings.EventHandlers_.SimpleDataHandlers(
-        [impl=Impl, expectedMessagesCount]
+        [impl=Impl, expectedMessagesCount=settings.ExpectedMessagesCount]
         (TReadSessionEvent::TDataReceivedEvent& ev) mutable {
         auto& messages = ev.GetMessages();
         for (size_t i = 0u; i < messages.size(); ++i) {
@@ -157,12 +245,15 @@ TTestReadSession::TTestReadSession(const TString& name, TTopicClient& client, si
                     << ", seqNo=" << message.GetSeqNo()
                     << ", offset=" << message.GetOffset()
                     << Endl << Flush;
-            impl->ReceivedMessages.push_back({message.GetPartitionSession()->GetPartitionId(),
+
+            auto msg = MsgInfo(message.GetPartitionSession()->GetPartitionId(),
                                         message.GetSeqNo(),
                                         message.GetOffset(),
                                         message.GetData(),
-                                        message,
-                                        impl->AutoCommit});
+                                        impl->AutoCommit)
+                                    .WithMsg(new MsgWrapper(message));
+
+            impl->ReceivedMessages.push_back(msg);
 
             if (impl->AutoCommit) {
                 message.Commit();
@@ -179,8 +270,9 @@ TTestReadSession::TTestReadSession(const TString& name, TTopicClient& client, si
             (TReadSessionEvent::TStartPartitionSessionEvent& ev) mutable {
                 Cerr << ">>>>> " << impl->Name << " Received TStartPartitionSessionEvent message " << ev.DebugString() << Endl << Flush;
                 auto partitionId = ev.GetPartitionSession()->GetPartitionId();
+                auto topic = ev.GetPartitionSession()->GetTopicPath();
                 auto offset = impl->GetOffset(partitionId);
-                impl->Modify([&](std::set<size_t>& s) { s.insert(partitionId); });
+                impl->Modify([&](std::unordered_map<TString, std::set<size_t>>& s) { s[topic].insert(partitionId); });
                 if (offset) {
                     Cerr << ">>>>> " << impl->Name << " Start reading partition " << partitionId << " from offset " << offset.value() << Endl << Flush;
                     ev.Confirm(offset.value(), TMaybe<ui64>());
@@ -195,7 +287,8 @@ TTestReadSession::TTestReadSession(const TString& name, TTopicClient& client, si
             (TReadSessionEvent::TStopPartitionSessionEvent& ev) mutable {
                 Cerr << ">>>>> " << impl->Name << " Received TStopPartitionSessionEvent message " << ev.DebugString() << Endl << Flush;
                 auto partitionId = ev.GetPartitionSession()->GetPartitionId();
-                impl->Modify([&](std::set<size_t>& s) { s.erase(partitionId); });
+                auto topic = ev.GetPartitionSession()->GetTopicPath();
+                impl->Modify([&](std::unordered_map<TString, std::set<size_t>>& s) { s[topic].erase(partitionId); });
                 Cerr << ">>>>> " << impl->Name << " Stop reading partition " << partitionId << Endl << Flush;
                 ev.Confirm();
     });
@@ -205,7 +298,8 @@ TTestReadSession::TTestReadSession(const TString& name, TTopicClient& client, si
             (TReadSessionEvent::TPartitionSessionClosedEvent& ev) mutable {
                 Cerr << ">>>>> " << impl->Name << " Received TPartitionSessionClosedEvent message " << ev.DebugString() << Endl << Flush;
                 auto partitionId = ev.GetPartitionSession()->GetPartitionId();
-                impl->Modify([&](std::set<size_t>& s) { s.erase(partitionId); });
+                auto topic = ev.GetPartitionSession()->GetTopicPath();
+                impl->Modify([&](std::unordered_map<TString, std::set<size_t>>& s) { s[topic].erase(partitionId); });
                 Cerr << ">>>>> " << impl->Name << " Stop (closed) reading partition " << partitionId << Endl << Flush;
     });
 
@@ -227,43 +321,154 @@ TTestReadSession::TTestReadSession(const TString& name, TTopicClient& client, si
     });
 
 
-    Session = client.CreateReadSession(readSettings);
-    Cerr << ">>>>> " << Impl->Name << " ReadSession was created" << Endl << Flush;
+    return settings.Setup.MakeClient().CreateReadSession(readSettings);
 }
 
-void TTestReadSession::WaitAllMessages() {
+template<>
+std::shared_ptr<TTestReadSession<SdkVersion::PQv1>::TSdkReadSession> TTestReadSession<SdkVersion::PQv1>::Create(const TestReadSessionSettings& settings) {
+
+    NYdb::NPersQueue::TReadSessionSettings readSettings;
+    readSettings
+        .ConsumerName(TEST_CONSUMER);
+    for (auto& topic : settings.Topics) {
+        readSettings.AppendTopics(topic);
+    }
+    for (auto partitionId : settings.Partitions) {
+        readSettings.Topics_[0].PartitionGroupIds_.push_back(partitionId + 1);
+    }
+
+    struct MsgWrapper : public IMessage {
+
+        MsgWrapper(NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent::TMessage msg)
+            : Msg(msg) {
+        }
+        ~MsgWrapper() = default;
+
+        NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent::TMessage Msg;
+
+        void Commit() override {
+            Msg.Commit();
+        };
+    };
+
+    readSettings.EventHandlers_.SimpleDataHandlers(
+        [impl=Impl, expectedMessagesCount=settings.ExpectedMessagesCount]
+        (NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent& ev) mutable {
+        auto& messages = ev.GetMessages();
+        for (size_t i = 0u; i < messages.size(); ++i) {
+            auto& message = messages[i];
+
+            Cerr << ">>>>> " << impl->Name << " Received TDataReceivedEvent message partitionId=" << message.GetPartitionStream()->GetPartitionId()
+                    << ", message=" << message.GetData()
+                    << ", seqNo=" << message.GetSeqNo()
+                    << ", offset=" << message.GetOffset()
+                    << Endl << Flush;
+
+            auto msg = MsgInfo(message.GetPartitionStream()->GetPartitionId(),
+                                        message.GetSeqNo(),
+                                        message.GetOffset(),
+                                        message.GetData(),
+                                        impl->AutoCommit)
+                                    .WithMsg(new MsgWrapper(message));
+
+            impl->ReceivedMessages.push_back(msg);
+
+            if (impl->AutoCommit) {
+                message.Commit();
+            }
+        }
+
+        if (impl->ReceivedMessages.size() == expectedMessagesCount) {
+            impl->DataPromise.SetValue(impl->ReceivedMessages);
+        }
+    });
+
+    readSettings.EventHandlers_.CreatePartitionStreamHandler(
+            [impl=Impl]
+            (NYdb::NPersQueue::TReadSessionEvent::TCreatePartitionStreamEvent& ev) mutable {
+                Cerr << ">>>>> " << impl->Name << " Received TCreatePartitionStreamEvent message " << ev.DebugString() << Endl << Flush;
+                auto partitionId = ev.GetPartitionStream()->GetPartitionId();
+                auto topic = ev.GetPartitionStream()->GetTopicPath();
+                auto offset = impl->GetOffset(partitionId);
+                impl->Modify([&](std::unordered_map<TString, std::set<size_t>>& s) { s[topic].insert(partitionId); });
+                if (offset) {
+                    Cerr << ">>>>> " << impl->Name << " Start reading partition " << partitionId << " from offset " << offset.value() << Endl << Flush;
+                    ev.Confirm(offset.value(), TMaybe<ui64>());
+                } else {
+                    Cerr << ">>>>> " << impl->Name << " Start reading partition " << partitionId << " without offset" << Endl << Flush;
+                    ev.Confirm();
+                }
+    });
+
+    readSettings.EventHandlers_.DestroyPartitionStreamHandler(
+            [impl=Impl]
+            (NYdb::NPersQueue::TReadSessionEvent::TDestroyPartitionStreamEvent& ev) mutable {
+                Cerr << ">>>>> " << impl->Name << " Received TDestroyPartitionStreamEvent message " << ev.DebugString() << Endl << Flush;
+                auto partitionId = ev.GetPartitionStream()->GetPartitionId();
+                auto topic = ev.GetPartitionStream()->GetTopicPath();
+                impl->Modify([&](std::unordered_map<TString, std::set<size_t>>& s) { s[topic].erase(partitionId); });
+                Cerr << ">>>>> " << impl->Name << " Stop reading partition " << partitionId << Endl << Flush;
+                ev.Confirm();
+    });
+
+    readSettings.EventHandlers_.PartitionStreamClosedHandler(
+            [impl=Impl]
+            (NYdb::NPersQueue::TReadSessionEvent::TReadSessionEvent::TPartitionStreamClosedEvent& ev) mutable {
+                Cerr << ">>>>> " << impl->Name << " Received TPartitionSessionClosedEvent message " << ev.DebugString() << Endl << Flush;
+                auto partitionId = ev.GetPartitionStream()->GetPartitionId();
+                auto topic = ev.GetPartitionStream()->GetTopicPath();
+                impl->Modify([&](std::unordered_map<TString, std::set<size_t>>& s) { s[topic].erase(partitionId); });
+                Cerr << ">>>>> " << impl->Name << " Stop (closed) reading partition " << partitionId << Endl << Flush;
+    });
+
+    readSettings.EventHandlers_.SessionClosedHandler(
+                    [impl=Impl]
+            (const TSessionClosedEvent& ev) mutable {
+                Cerr << ">>>>> " << impl->Name << " Received TSessionClosedEvent message " << ev.DebugString() << Endl << Flush;
+    });
+
+
+    auto client = NYdb::NPersQueue::TPersQueueClient(*(settings.Setup.GetServer().AnnoyingClient->GetDriver()));
+    return client.CreateReadSession(readSettings);
+}
+
+template<SdkVersion Sdk>
+void TTestReadSession<Sdk>::WaitAllMessages() {
     Cerr << ">>>>> " << Impl->Name << " WaitAllMessages " << Endl << Flush;
     Impl->DataPromise.GetFuture().GetValue(TDuration::Seconds(5));
 }
 
-void TTestReadSession::Commit() {
+template<SdkVersion Sdk>
+void TTestReadSession<Sdk>::Commit() {
     Cerr << ">>>>> " << Impl->Name << " Commit all received messages" << Endl << Flush;
     for (auto& m : Impl->ReceivedMessages) {
         if (!m.Commited) {
-            m.Msg.Commit();
+            m.Msg->Commit();
             m.Commited = true;
         }
     }
 }
 
-void TTestReadSession::TImpl::Acquire() {
+template<SdkVersion Sdk>
+void TTestReadSession<Sdk>::TImpl::Acquire() {
     Cerr << ">>>>> " << Name << " Acquire()" << Endl << Flush;
     Semaphore.Acquire();
     Cerr << ">>>>> " << Name << " Acquired" << Endl << Flush;
 }
 
-void TTestReadSession::TImpl::Release() {
+template<SdkVersion Sdk>
+void TTestReadSession<Sdk>::TImpl::Release() {
     Cerr << ">>>>> " << Name << " Release()" << Endl << Flush;
     Semaphore.Release();
-    Cerr << ">>>>> " << Name << " Releaseed" << Endl << Flush;
 }
 
-NThreading::TFuture<std::set<size_t>> TTestReadSession::TImpl::Wait(std::set<size_t> partitions, const TString& message) {
+template<SdkVersion Sdk>
+NThreading::TFuture<std::unordered_map<TString, std::set<size_t>>> TTestReadSession<Sdk>::TImpl::Wait(std::unordered_map<TString, std::set<size_t>> partitions, const TString& message) {
     Cerr << ">>>>> " << Name << " Wait partitions " << partitions << " " << message << Endl << Flush;
 
     with_lock (Lock) {
         ExpectedPartitions = partitions;
-        PartitionsPromise = NThreading::NewPromise<std::set<size_t>>();
+        PartitionsPromise = NThreading::NewPromise<std::unordered_map<TString, std::set<size_t>>>();
 
         if (Partitions == ExpectedPartitions.value()) {
             PartitionsPromise.SetValue(ExpectedPartitions.value());
@@ -273,39 +478,78 @@ NThreading::TFuture<std::set<size_t>> TTestReadSession::TImpl::Wait(std::set<siz
     return PartitionsPromise.GetFuture();
 }
 
-void TTestReadSession::Assert(const std::set<size_t>& expected, NThreading::TFuture<std::set<size_t>> f, const TString& message) {
-    auto actual = f.HasValue() ? f.GetValueSync() : GetPartitions();
+template<SdkVersion Sdk>
+void TTestReadSession<Sdk>::Assert(const std::set<size_t>& expected, NThreading::TFuture<std::unordered_map<TString, std::set<size_t>>> f, const TString& message) {
+    Assert(std::unordered_map<TString, std::set<size_t>>{{TEST_TOPIC, expected}}, f, message);
+}
+
+template<SdkVersion Sdk>
+void TTestReadSession<Sdk>::Assert(const std::unordered_map<TString, std::set<size_t>>& expected, NThreading::TFuture<std::unordered_map<TString, std::set<size_t>>> f, const TString& message) {
+    auto actual = f.HasValue() ? f.GetValueSync() : GetPartitionsA();
     Cerr << ">>>>> " << Impl->Name << " Partitions " << actual << " received #2" << Endl << Flush;
     UNIT_ASSERT_VALUES_EQUAL_C(expected, actual, message);
     Impl->Release();
 }
 
-void TTestReadSession::WaitAndAssertPartitions(std::set<size_t> partitions, const TString& message) {
+template<SdkVersion Sdk>
+void TTestReadSession<Sdk>::WaitAndAssertPartitions(std::set<size_t> partitions, const TString& message) {
+    WaitAndAssert(std::unordered_map<TString, std::set<size_t>>{{TEST_TOPIC, partitions}}, message);
+}
+
+template<SdkVersion Sdk>
+void TTestReadSession<Sdk>::WaitAndAssert(std::unordered_map<TString, std::set<size_t>> partitions, const TString& message) {
     auto f = Impl->Wait(partitions, message);
     f.Wait(TDuration::Seconds(60));
     Assert(partitions, f, message);
 }
 
-void TTestReadSession::Run() {
+template<SdkVersion Sdk>
+void TTestReadSession<Sdk>::Run() {
     Impl->ExpectedPartitions = std::nullopt;
     Impl->Semaphore.TryAcquire();
     Impl->Release();
 }
 
-void TTestReadSession::Close() {
+template<SdkVersion Sdk>
+void TTestReadSession<Sdk>::Close() {
     Run();
     Cerr << ">>>>> " << Impl->Name << " Closing reading session " << Endl << Flush;
     Session->Close();
     Session.reset();
 }
 
-std::set<size_t> TTestReadSession::GetPartitions() {
+template<SdkVersion Sdk>
+std::set<size_t> TTestReadSession<Sdk>::GetPartitions() {
+    return GetPartitionsA()[TEST_TOPIC];
+}
+
+template<SdkVersion Sdk>
+std::unordered_map<TString, std::set<size_t>> TTestReadSession<Sdk>::GetPartitionsA() {
     with_lock (Impl->Lock) {
         return Impl->Partitions;
     }
 }
 
-void TTestReadSession::TImpl::Modify(std::function<void (std::set<size_t>&)> modifier) {
+template<SdkVersion Sdk>
+std::vector<EvEndMsg> TTestReadSession<Sdk>::GetEndedPartitionEvents() {
+    with_lock(Impl->Lock) {
+        std::vector<EvEndMsg> result;
+        for (auto& e : Impl->EndedPartitionEvents) {
+            result.push_back({e.GetAdjacentPartitionIds(), e.GetChildPartitionIds()});
+        }
+        return result;
+    }
+}
+
+template<SdkVersion Sdk>
+std::vector<MsgInfo> TTestReadSession<Sdk>::GetReceivedMessages() {
+    with_lock(Impl->Lock) {
+        return Impl->ReceivedMessages;
+    }
+};
+
+template<SdkVersion Sdk>
+void TTestReadSession<Sdk>::TImpl::Modify(std::function<void (std::unordered_map<TString, std::set<size_t>>&)> modifier) {
     bool found = false;
 
     with_lock (Lock) {
@@ -323,7 +567,8 @@ void TTestReadSession::TImpl::Modify(std::function<void (std::set<size_t>&)> mod
     }
 }
 
-std::optional<ui64> TTestReadSession::TImpl::GetOffset(ui32 partitionId) const {
+template<SdkVersion Sdk>
+std::optional<ui64> TTestReadSession<Sdk>::TImpl::GetOffset(ui32 partitionId) const {
     with_lock (Lock) {
         auto it = Offsets.find(partitionId);
         if (it == Offsets.end()) {
@@ -333,13 +578,25 @@ std::optional<ui64> TTestReadSession::TImpl::GetOffset(ui32 partitionId) const {
     }
 }
 
-void TTestReadSession::SetOffset(ui32 partitionId, std::optional<ui64> offset) {
+template<SdkVersion Sdk>
+void TTestReadSession<Sdk>::SetOffset(ui32 partitionId, std::optional<ui64> offset) {
     with_lock (Impl->Lock) {
         if (offset) {
             Impl->Offsets[partitionId] = offset.value();
         } else {
             Impl->Offsets.erase(partitionId);
         }
+    }
+}
+
+template struct TTestReadSession<SdkVersion::Topic>;
+template struct TTestReadSession<SdkVersion::PQv1>;
+
+std::shared_ptr<ITestReadSession> CreateTestReadSession(TestReadSessionSettings settings) {
+    if (settings.Sdk == SdkVersion::Topic) {
+        return std::make_shared<TTestReadSession<SdkVersion::Topic>>(settings);
+    } else {
+        return std::make_shared<TTestReadSession<SdkVersion::PQv1>>(settings);
     }
 }
 

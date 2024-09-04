@@ -1,5 +1,6 @@
 #include "dq_tasks_runner.h"
 
+#include <ydb/library/yql/dq/actors/spilling/spilling_counters.h>
 #include <ydb/library/yql/minikql/comp_nodes/mkql_multihopping.h>
 
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
@@ -269,7 +270,7 @@ public:
     }
 
     void SetSpillerFactory(std::shared_ptr<ISpillerFactory> spillerFactory) override {
-        AllocatedHolder->ProgramParsed.CompGraph->GetContext().SpillerFactory = std::move(spillerFactory);
+        SpillerFactory = spillerFactory;
     }
 
     bool UseSeparatePatternAlloc(const TDqTaskSettings& taskSettings) const {
@@ -512,6 +513,12 @@ public:
 
         auto& typeEnv = TypeEnv();
 
+        SpillingTaskCounters = execCtx.GetSpillingTaskCounters();
+        if (SpillerFactory) {
+            SpillerFactory->SetTaskCounters(SpillingTaskCounters);
+        }
+        AllocatedHolder->ProgramParsed.CompGraph->GetContext().SpillerFactory = std::move(SpillerFactory);
+
         for (ui32 i = 0; i < task.InputsSize(); ++i) {
             auto& inputDesc = task.GetInputs(i);
             auto& inputStats = BillingStats.AddInputs();
@@ -716,6 +723,15 @@ public:
         auto runStatus = FetchAndDispatch();
 
         if (Y_UNLIKELY(CollectFull())) {
+            if (SpillingTaskCounters) {
+                Stats->SpillingComputeWriteBytes = SpillingTaskCounters->ComputeWriteBytes.load();
+                Stats->SpillingChannelWriteBytes = SpillingTaskCounters->ChannelWriteBytes.load();
+                Stats->SpillingComputeReadTime = TDuration::MilliSeconds(SpillingTaskCounters->ComputeReadTime.load());
+                Stats->SpillingComputeWriteTime = TDuration::MilliSeconds(SpillingTaskCounters->ComputeWriteTime.load());
+                Stats->SpillingChannelReadTime = TDuration::MilliSeconds(SpillingTaskCounters->ChannelReadTime.load());
+                Stats->SpillingChannelWriteTime = TDuration::MilliSeconds(SpillingTaskCounters->ChannelWriteTime.load());
+            }
+
             Stats->ComputeCpuTimeByRun->Collect(RunComputeTime.MilliSeconds());
 
             if (AllocatedHolder->ProgramParsed.StatsRegistry) {
@@ -928,6 +944,9 @@ private:
     }
 
 private:
+    std::shared_ptr<ISpillerFactory> SpillerFactory;
+    TIntrusivePtr<TSpillingTaskCounters> SpillingTaskCounters;
+
     ui64 TaskId = 0;
     TDqTaskRunnerContext Context;
     TDqTaskRunnerSettings Settings;

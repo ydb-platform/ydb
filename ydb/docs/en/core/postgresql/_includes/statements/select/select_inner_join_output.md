@@ -1,5 +1,5 @@
 ```
- name   | lastname | social_card_number 
+ name   | lastname | social_card_number
 ---------+----------+--------------------
 John    | Doe      |          123456789
 Jane    | Smith    |          223456789

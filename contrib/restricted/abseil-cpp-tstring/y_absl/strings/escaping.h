@@ -27,7 +27,9 @@
 #include <util/generic/string.h>
 #include <vector>
 
+#include "y_absl/base/attributes.h"
 #include "y_absl/base/macros.h"
+#include "y_absl/base/nullability.h"
 #include "y_absl/strings/ascii.h"
 #include "y_absl/strings/str_join.h"
 #include "y_absl/strings/string_view.h"
@@ -65,14 +67,16 @@ Y_ABSL_NAMESPACE_BEGIN
 //
 //   TString s = "foo\\rbar\\nbaz\\t";
 //   TString unescaped_s;
-//   if (!y_absl::CUnescape(s, &unescaped_s) {
+//   if (!y_absl::CUnescape(s, &unescaped_s)) {
 //     ...
 //   }
 //   EXPECT_EQ(unescaped_s, "foo\rbar\nbaz\t");
-bool CUnescape(y_absl::string_view source, TString* dest, TString* error);
+bool CUnescape(y_absl::string_view source, y_absl::Nonnull<TString*> dest,
+               y_absl::Nullable<TString*> error);
 
 // Overload of `CUnescape()` with no error reporting.
-inline bool CUnescape(y_absl::string_view source, TString* dest) {
+inline bool CUnescape(y_absl::string_view source,
+                      y_absl::Nonnull<TString*> dest) {
   return CUnescape(source, dest, nullptr);
 }
 
@@ -122,7 +126,7 @@ TString Utf8SafeCHexEscape(y_absl::string_view src);
 // Encodes a `src` string into a base64-encoded 'dest' string with padding
 // characters. This function conforms with RFC 4648 section 4 (base64) and RFC
 // 2045.
-void Base64Escape(y_absl::string_view src, TString* dest);
+void Base64Escape(y_absl::string_view src, y_absl::Nonnull<TString*> dest);
 TString Base64Escape(y_absl::string_view src);
 
 // WebSafeBase64Escape()
@@ -130,7 +134,8 @@ TString Base64Escape(y_absl::string_view src);
 // Encodes a `src` string into a base64 string, like Base64Escape() does, but
 // outputs '-' instead of '+' and '_' instead of '/', and does not pad 'dest'.
 // This function conforms with RFC 4648 section 5 (base64url).
-void WebSafeBase64Escape(y_absl::string_view src, TString* dest);
+void WebSafeBase64Escape(y_absl::string_view src,
+                         y_absl::Nonnull<TString*> dest);
 TString WebSafeBase64Escape(y_absl::string_view src);
 
 // Base64Unescape()
@@ -140,7 +145,7 @@ TString WebSafeBase64Escape(y_absl::string_view src);
 // `src` contains invalid characters, `dest` is cleared and returns `false`.
 // If padding is included (note that `Base64Escape()` does produce it), it must
 // be correct. In the padding, '=' and '.' are treated identically.
-bool Base64Unescape(y_absl::string_view src, TString* dest);
+bool Base64Unescape(y_absl::string_view src, y_absl::Nonnull<TString*> dest);
 
 // WebSafeBase64Unescape()
 //
@@ -149,12 +154,24 @@ bool Base64Unescape(y_absl::string_view src, TString* dest);
 // invalid characters, `dest` is cleared and returns `false`. If padding is
 // included (note that `WebSafeBase64Escape()` does not produce it), it must be
 // correct. In the padding, '=' and '.' are treated identically.
-bool WebSafeBase64Unescape(y_absl::string_view src, TString* dest);
+bool WebSafeBase64Unescape(y_absl::string_view src,
+                           y_absl::Nonnull<TString*> dest);
+
+// HexStringToBytes()
+//
+// Converts the hexadecimal encoded data in `hex` into raw bytes in the `bytes`
+// output string.  If `hex` does not consist of valid hexadecimal data, this
+// function returns false and leaves `bytes` in an unspecified state. Returns
+// true on success.
+Y_ABSL_MUST_USE_RESULT bool HexStringToBytes(y_absl::string_view hex,
+                                           y_absl::Nonnull<TString*> bytes);
 
 // HexStringToBytes()
 //
 // Converts an ASCII hex string into bytes, returning binary data of length
-// `from.size()/2`.
+// `from.size()/2`. The input must be valid hexadecimal data, otherwise the
+// return value is unspecified.
+Y_ABSL_DEPRECATED("Use the HexStringToBytes() that returns a bool")
 TString HexStringToBytes(y_absl::string_view from);
 
 // BytesToHexString()

@@ -32,6 +32,11 @@ TMaybe<TOptimizerStatistics> TDqIntegrationBase::ReadStatistics(const TExprNode:
     return Nothing();
 }
 
+TExprNode::TPtr TDqIntegrationBase::RecaptureWrite(const TExprNode::TPtr& write, TExprContext& ctx) {
+    Y_UNUSED(ctx);
+    return write;
+}
+
 TMaybe<bool> TDqIntegrationBase::CanWrite(const TExprNode&, TExprContext&) {
     return Nothing();
 }

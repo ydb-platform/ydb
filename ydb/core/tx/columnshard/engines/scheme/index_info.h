@@ -28,6 +28,10 @@ namespace NIndexes::NMax {
 class TIndexMeta;
 }
 
+namespace NIndexes::NCountMinSketch {
+class TIndexMeta;
+}
+
 namespace NStorageOptimizer {
 class IOptimizerPlannerConstructor;
 }
@@ -224,7 +228,8 @@ public:
         return result;
     }
 
-    std::shared_ptr<NIndexes::NMax::TIndexMeta> GetIndexMax(const ui32 columnId) const;
+    std::shared_ptr<NIndexes::NMax::TIndexMeta> GetIndexMetaMax(const ui32 columnId) const;
+    std::shared_ptr<NIndexes::NCountMinSketch::TIndexMeta> GetIndexMetaCountMinSketch(const std::set<ui32>& columnIds) const;
 
     [[nodiscard]] TConclusionStatus AppendIndex(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& originalData, const ui32 indexId,
         const std::shared_ptr<IStoragesManager>& operators, TSecondaryData& result) const;
@@ -250,6 +255,9 @@ public:
     std::vector<TString> GetColumnNames(const std::vector<ui32>& ids) const;
     std::vector<std::string> GetColumnSTLNames(const std::vector<ui32>& ids) const;
     const std::vector<ui32>& GetColumnIds(const bool withSpecial = true) const;
+    const std::set<ui32>& GetColumnIdsSet() const {
+        return SchemaColumnIdsWithSpecialsSet;
+    }
     const std::vector<ui32>& GetPKColumnIds() const {
         AFL_VERIFY(PKColumnIds.size());
         return PKColumnIds;
@@ -319,6 +327,7 @@ private:
     TString Name;
     std::vector<ui32> SchemaColumnIds;
     std::vector<ui32> SchemaColumnIdsWithSpecials;
+    std::set<ui32> SchemaColumnIdsWithSpecialsSet;
     std::vector<ui32> PKColumnIds;
     std::shared_ptr<arrow::Schema> Schema;
     std::shared_ptr<arrow::Schema> SchemaWithSpecials;

@@ -87,6 +87,7 @@ YT_DEFINE_ERROR_ENUM(
     ((LockFileIsFound)                       (758))
     ((DiskHealthCheckFailed)                 (759))
     ((TooManyChunksToFetch)                  (760))
+    ((TotalMemoryLimitExceeded)              (761))
 );
 
 using TChunkId = NObjectClient::TObjectId;

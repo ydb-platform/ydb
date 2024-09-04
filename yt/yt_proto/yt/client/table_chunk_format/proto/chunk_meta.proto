@@ -245,6 +245,12 @@ message TColumnGroupInfosExt
     repeated int32 column_to_group = 3;
 }
 
+message TLargeColumnarStatisticsExt
+{
+    // Digests for all columns, potentially compressed, in one byte string.
+    optional bytes column_hyperloglog_digests = 1;
+}
+
 message TColumnarStatisticsExt
 {
     repeated int64 column_data_weights = 1;
@@ -263,6 +269,7 @@ message TColumnarStatisticsExt
 
     // Total number of rows in a chunk.
     optional int64 chunk_row_count = 7;
+
     // This field is reserved for consistency with TColumnarStatistics message. It has never been used.
     reserved 8;
 }

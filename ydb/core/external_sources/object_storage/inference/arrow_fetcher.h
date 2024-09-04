@@ -5,5 +5,5 @@
 
 namespace NKikimr::NExternalSource::NObjectStorage::NInference {
 
-NActors::IActor* CreateArrowFetchingActor(NActors::TActorId s3FetcherId, EFileFormat format, const THashMap<TString, TString>& params);
+NActors::IActor* CreateArrowFetchingActor(NActors::TActorId s3FetcherId, const THashMap<TString, TString>& params);
 } // namespace NKikimr::NExternalSource::NObjectStorage::NInference

@@ -274,13 +274,14 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
             "/Root",
             "IncrBackupImpl",
             SimpleTable()
+                .AllowSystemColumnNames(true)
                 .Columns({
                     {"key", "Uint32", true, false},
                     {"value", "Uint32", false, false},
-                    {"__incrBackupImpl_deleted", "Bool", false, false}}));
+                    {"__ydb_incrBackupImpl_deleted", "Bool", false, false}}));
 
         ExecSQL(server, edgeActor, R"(
-            UPSERT INTO `/Root/IncrBackupImpl` (key, value, __incrBackupImpl_deleted) VALUES
+            UPSERT INTO `/Root/IncrBackupImpl` (key, value, __ydb_incrBackupImpl_deleted) VALUES
             (1, 10, NULL),
             (2, NULL, true),
             (3, 30, NULL),

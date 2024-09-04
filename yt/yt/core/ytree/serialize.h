@@ -75,6 +75,9 @@ void Serialize(unsigned long long value, NYson::IYsonConsumer* consumer);
 // double
 void Serialize(double value, NYson::IYsonConsumer* consumer);
 
+// std::string
+void Serialize(const std::string& value, NYson::IYsonConsumer* consumer);
+
 // TString
 void Serialize(const TString& value, NYson::IYsonConsumer* consumer);
 
@@ -189,6 +192,9 @@ void Deserialize(unsigned long long& value, INodePtr node);
 
 // double
 void Deserialize(double& value, INodePtr node);
+
+// std::string
+void Deserialize(std::string& value, INodePtr node);
 
 // TString
 void Deserialize(TString& value, INodePtr node);

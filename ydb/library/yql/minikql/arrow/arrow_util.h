@@ -173,6 +173,7 @@ struct TPrimitiveDataType<NYql::NUdf::TUtf8> {
 
 template<>
 struct TPrimitiveDataType<NYql::NDecimal::TInt128> {
+    using TLayout = NYql::NDecimal::TInt128;
     using TArithmetic = NYql::NDecimal::TDecimal;
 
     class TResult: public arrow::FixedSizeBinaryType

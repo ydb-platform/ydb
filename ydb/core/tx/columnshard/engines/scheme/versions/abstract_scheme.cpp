@@ -53,7 +53,8 @@ TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> ISnapshotSchema::Normali
             }
         }
         if (restoreColumnIds.contains(columnId)) {
-            AFL_VERIFY(!!GetExternalDefaultValueVerified(columnId) || GetIndexInfo().IsNullableVerified(columnId));
+            AFL_VERIFY(!!GetExternalDefaultValueVerified(columnId) || GetIndexInfo().IsNullableVerified(columnId))("column_name",
+                                                                          GetIndexInfo().GetColumnName(columnId, false))("id", columnId);
             result->AddField(resultField, GetColumnLoaderVerified(columnId)->BuildDefaultAccessor(batch->num_rows())).Validate();
         }
     }
@@ -114,6 +115,7 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModi
     Y_DEBUG_ABORT_UNLESS(NArrow::IsSortedAndUnique(batch, GetIndexInfo().GetPrimaryKey()));
 
     switch (mType) {
+        case NEvWrite::EModificationType::Replace:
         case NEvWrite::EModificationType::Upsert: {
             AFL_VERIFY(batch->num_columns() <= dstSchema->num_fields());
             if (batch->num_columns() < dstSchema->num_fields()) {
@@ -132,10 +134,25 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModi
             return batch;
         }
         case NEvWrite::EModificationType::Delete:
-        case NEvWrite::EModificationType::Replace:
         case NEvWrite::EModificationType::Insert:
         case NEvWrite::EModificationType::Update:
             return batch;
+    }
+}
+
+void ISnapshotSchema::AdaptBatchToSchema(NArrow::TGeneralContainer& batch, const ISnapshotSchema::TPtr& targetSchema) const {
+    if (targetSchema->GetVersion() != GetVersion()) {
+        std::vector<ui32> columnIdxToDelete;
+        for (size_t columnIdx = 0; columnIdx < batch.GetSchema()->GetFields().size(); ++columnIdx) {
+            const std::optional<ui32> targetColumnId = targetSchema->GetColumnIdOptional(batch.GetSchema()->field(columnIdx)->name());
+            const ui32 batchColumnId = GetColumnIdVerified(GetFieldByIndex(columnIdx)->name());
+            if (!targetColumnId || *targetColumnId != batchColumnId) {
+                columnIdxToDelete.emplace_back(columnIdx);
+            }
+        }
+        if (!columnIdxToDelete.empty()) {
+            batch.DeleteFieldsByIndex(columnIdxToDelete);
+        }
     }
 }
 

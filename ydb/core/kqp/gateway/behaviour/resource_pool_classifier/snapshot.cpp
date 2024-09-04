@@ -22,4 +22,16 @@ TString TResourcePoolClassifierSnapshot::DoSerializeToString() const {
     return result.GetStringRobust();
 }
 
+std::optional<TResourcePoolClassifierConfig> TResourcePoolClassifierSnapshot::GetClassifierConfig(const TString& database, const TString& name) const {
+    const auto databaseIt = ResourcePoolClassifierConfigs.find(database);
+    if (databaseIt == ResourcePoolClassifierConfigs.end()) {
+        return std::nullopt;
+    }
+    const auto configIt = databaseIt->second.find(name);
+    if (configIt == databaseIt->second.end()) {
+        return std::nullopt;
+    }
+    return configIt->second;
+}
+
 }  // namespace NKikimr::NKqp

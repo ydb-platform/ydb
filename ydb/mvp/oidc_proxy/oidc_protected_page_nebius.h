@@ -121,6 +121,13 @@ private:
         THandlerSessionServiceCheck::ForwardUserRequest(authHeader, ctx, secure);
         Become(&THandlerSessionServiceCheckNebius::StateWork);
     }
+
+    bool NeedSendSecureHttpRequest(const NHttp::THttpIncomingResponsePtr& response) const override {
+        if ((response->Status == "400" || response->Status.empty()) && RequestedPageScheme.empty()) {
+            return !response->GetRequest()->Secure;
+        }
+        return false;
+    }
 };
 
 }  // NMVP

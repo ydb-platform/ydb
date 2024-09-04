@@ -61,7 +61,7 @@ protected:
     bool IsReadyFlag = false;
 
     virtual bool DoStartFetchingColumns(
-        const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TColumnsSet>& columns) = 0;
+        const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) = 0;
     virtual bool DoStartFetchingIndexes(
         const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TIndexesSet>& indexes) = 0;
     virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns) = 0;
@@ -71,8 +71,20 @@ protected:
     virtual NJson::TJsonValue DoDebugJsonForMemory() const {
         return NJson::JSON_MAP;
     }
+    virtual bool DoAddTxConflict() = 0;
 
 public:
+    bool AddTxConflict() {
+        if (!Context->GetCommonContext()->HasLock()) {
+            return false;
+        }
+        if (DoAddTxConflict()) {
+            StageData->Clear();
+            return true;
+        }
+        return false;
+    }
+
     ui64 GetResourceGuardsMemory() const {
         ui64 result = 0;
         for (auto&& i : ResourceGuards) {
@@ -139,9 +151,7 @@ public:
         DoAssembleColumns(columns);
     }
 
-    bool StartFetchingColumns(
-        const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TColumnsSet>& columns) {
-        AFL_VERIFY(columns);
+    bool StartFetchingColumns(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) {
         return DoStartFetchingColumns(sourcePtr, step, columns);
     }
 
@@ -162,7 +172,6 @@ public:
     virtual ui64 GetColumnRawBytes(const std::set<ui32>& columnIds) const = 0;
     virtual ui64 GetIndexRawBytes(const std::set<ui32>& indexIds) const = 0;
     virtual ui64 GetColumnBlobBytes(const std::set<ui32>& columnsIds) const = 0;
-
 
     bool IsMergingStarted() const {
         return MergingStartedFlag;
@@ -261,7 +270,7 @@ private:
 
     virtual void DoApplyIndex(const NIndexes::TIndexCheckerContainer& indexChecker) override;
     virtual bool DoStartFetchingColumns(
-        const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TColumnsSet>& columns) override;
+        const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) override;
     virtual bool DoStartFetchingIndexes(
         const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TIndexesSet>& indexes) override;
     virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns) override;
@@ -300,6 +309,11 @@ private:
     }
 
 public:
+    virtual bool DoAddTxConflict() override {
+        GetContext()->GetReadMetadata()->SetBrokenWithCommitted();
+        return false;
+    }
+
     virtual bool HasIndexes(const std::set<ui32>& indexIds) const override {
         return Portion->HasIndexes(indexIds);
     }
@@ -351,10 +365,9 @@ public:
         return Portion;
     }
 
-    TPortionDataSource(const ui32 sourceIdx, const std::shared_ptr<TPortionInfo>& portion, const std::shared_ptr<TSpecialReadContext>& context,
-        const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& finish)
-        : TBase(sourceIdx, context, start, finish, portion->RecordSnapshotMin(), portion->RecordSnapshotMax(), portion->GetRecordsCount(),
-              portion->GetShardingVersionOptional(), portion->GetMeta().GetDeletionsCount())
+    TPortionDataSource(const ui32 sourceIdx, const std::shared_ptr<TPortionInfo>& portion, const std::shared_ptr<TSpecialReadContext>& context)
+        : TBase(sourceIdx, context, portion->IndexKeyStart(), portion->IndexKeyEnd(), portion->RecordSnapshotMin(), portion->RecordSnapshotMax(),
+              portion->GetRecordsCount(), portion->GetShardingVersionOptional(), portion->GetMeta().GetDeletionsCount())
         , Portion(portion)
         , Schema(GetContext()->GetReadMetadata()->GetLoadSchemaVerified(*Portion)) {
     }
@@ -370,7 +383,7 @@ private:
     }
 
     virtual bool DoStartFetchingColumns(
-        const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TColumnsSet>& columns) override;
+        const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) override;
     virtual bool DoStartFetchingIndexes(const std::shared_ptr<IDataSource>& /*sourcePtr*/, const TFetchingScriptCursor& /*step*/,
         const std::shared_ptr<TIndexesSet>& /*indexes*/) override {
         return false;
@@ -390,6 +403,17 @@ private:
         return 0;
     }
     virtual bool DoAddSequentialEntityIds(const ui32 /*entityId*/) override {
+        return false;
+    }
+
+    virtual bool DoAddTxConflict() override {
+        if (CommittedBlob.HasSnapshot()) {
+            GetContext()->GetReadMetadata()->SetBrokenWithCommitted();
+            return true;
+        } else if (!GetContext()->GetReadMetadata()->IsMyUncommitted(CommittedBlob.GetWriteIdVerified())) {
+            GetContext()->GetReadMetadata()->SetConflictedWriteId(CommittedBlob.GetWriteIdVerified());
+            return true;
+        }
         return false;
     }
 
@@ -429,10 +453,10 @@ public:
         return CommittedBlob;
     }
 
-    TCommittedDataSource(const ui32 sourceIdx, const TCommittedBlob& committed, const std::shared_ptr<TSpecialReadContext>& context,
-        const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& finish)
-        : TBase(sourceIdx, context, start, finish, committed.GetSnapshot(), committed.GetSnapshot(), committed.GetRecordsCount(), {},
-              committed.GetIsDelete())
+    TCommittedDataSource(const ui32 sourceIdx, const TCommittedBlob& committed, const std::shared_ptr<TSpecialReadContext>& context)
+        : TBase(sourceIdx, context, committed.GetFirstVerified(), committed.GetLastVerified(), committed.GetSnapshotDef(TSnapshot::Zero()),
+              committed.GetSnapshotDef(TSnapshot::Zero()),
+              committed.GetRecordsCount(), {}, committed.GetIsDelete())
         , CommittedBlob(committed) {
     }
 };

@@ -12,9 +12,13 @@ struct TStatisticsAggregator::TTxFinishTraversal : public TTxBase {
     TTxFinishTraversal(TSelf* self)
         : TTxBase(self)
         , OperationId(self->ForceTraversalOperationId)
-        , PathId(self->TraversalTableId.PathId)
-        , ReplyToActorId(self->ForceTraversalReplyToActorId)
-    {}
+        , PathId(self->TraversalPathId)
+    {
+        auto forceTraversal = Self->CurrentForceTraversalOperation();
+        if (forceTraversal) {
+            ReplyToActorId = forceTraversal->ReplyToActorId;
+        }
+    }
 
     TTxType GetTxType() const override { return TXTYPE_FINISH_TRAVERSAL; }
 
@@ -36,10 +40,9 @@ struct TStatisticsAggregator::TTxFinishTraversal : public TTxBase {
             return;
         }
 
-        bool operationsRemain = std::any_of(Self->ForceTraversals.begin(), Self->ForceTraversals.end(), 
-            [this](const TForceTraversal& elem) { return elem.OperationId == OperationId;});        
+        auto forceTraversalRemained = Self->ForceTraversalOperation(OperationId);       
         
-        if (operationsRemain) {
+        if (forceTraversalRemained) {
             SA_LOG_D("[" << Self->TabletID() << "] TTxFinishTraversal::Complete. Don't send TEvAnalyzeResponse. " <<
                 "There are pending operations, OperationId " << OperationId << " , ActorId=" << ReplyToActorId);
         } else {
@@ -47,6 +50,7 @@ struct TStatisticsAggregator::TTxFinishTraversal : public TTxBase {
                 "Send TEvAnalyzeResponse, OperationId=" << OperationId << ", ActorId=" << ReplyToActorId);
             auto response = std::make_unique<TEvStatistics::TEvAnalyzeResponse>();
             response->Record.SetOperationId(OperationId);
+            response->Record.SetStatus(NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS);
             ctx.Send(ReplyToActorId, response.release());
         }
     }

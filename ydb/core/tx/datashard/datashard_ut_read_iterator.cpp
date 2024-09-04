@@ -4,6 +4,7 @@
 #include "read_iterator.h"
 
 #include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/converter.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
@@ -2886,6 +2887,9 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
 
         TTestHelper helper(serverSettings);
 
+        // Don't allow granular timecast side-stepping mediator time hacks in this test
+        TBlockEvents<TEvMediatorTimecast::TEvGranularUpdate> blockGranularUpdate(*helper.Server->GetRuntime());
+
         auto waitFor = [&](const auto& condition, const TString& description) {
             if (!condition()) {
                 Cerr << "... waiting for " << description << Endl;
@@ -3016,6 +3020,9 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
             .SetUseRealThreads(false);
 
         TTestHelper helper(serverSettings);
+
+        // Don't allow granular timecast side-stepping mediator time hacks in this test
+        TBlockEvents<TEvMediatorTimecast::TEvGranularUpdate> blockGranularUpdate(*helper.Server->GetRuntime());
 
         auto waitFor = [&](const auto& condition, const TString& description) {
             if (!condition()) {
@@ -4626,58 +4633,6 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorConsistency) {
             "result1: " << result1 << ", "
             "result2: " << result2);
     }
-
-    template<class TEvType>
-    class TBlockEvents : public std::deque<typename TEvType::TPtr> {
-    public:
-        TBlockEvents(TTestActorRuntime& runtime, std::function<bool(typename TEvType::TPtr&)> condition = {})
-            : Runtime(runtime)
-            , Condition(std::move(condition))
-            , Holder(Runtime.AddObserver<TEvType>(
-                [this](typename TEvType::TPtr& ev) {
-                    this->Process(ev);
-                }))
-        {}
-
-        TBlockEvents& Unblock(size_t count = -1) {
-            while (!this->empty() && count > 0) {
-                auto& ev = this->front();
-                IEventHandle* ptr = ev.Get();
-                UnblockedOnce.insert(ptr);
-                Runtime.Send(ev.Release(), 0, /* viaActorSystem */ true);
-                this->pop_front();
-                --count;
-            }
-            return *this;
-        }
-
-        void Stop() {
-            UnblockedOnce.clear();
-            Holder.Remove();
-        }
-
-    private:
-        void Process(typename TEvType::TPtr& ev) {
-            IEventHandle* ptr = ev.Get();
-            auto it = UnblockedOnce.find(ptr);
-            if (it != UnblockedOnce.end()) {
-                UnblockedOnce.erase(it);
-                return;
-            }
-
-            if (Condition && !Condition(ev)) {
-                return;
-            }
-
-            this->emplace_back(std::move(ev));
-        }
-
-    private:
-        TTestActorRuntime& Runtime;
-        std::function<bool(typename TEvType::TPtr&)> Condition;
-        TTestActorRuntime::TEventObserverHolder Holder;
-        THashSet<IEventHandle*> UnblockedOnce;
-    };
 
     Y_UNIT_TEST(Bug_7674_IteratorDuplicateRows) {
         TPortManager pm;

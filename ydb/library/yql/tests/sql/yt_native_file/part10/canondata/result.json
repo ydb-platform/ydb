@@ -507,6 +507,34 @@
             "uri": "https://{canondata_backend}/1775059/f7233eab470e14ecb29d15fd37372b772f337134/resource.tar.gz#test.test_blocks-complex_scalars--Results_/results.txt"
         }
     ],
+    "test.test[blocks-decimal_op_decimal_scalar--Debug]": [
+        {
+            "checksum": "7ab03080f37134e8ac44adf0535447e4",
+            "size": 2649,
+            "uri": "https://{canondata_backend}/1925842/b4ba828fa1381ceb904718b3893838f55fa7ae74/resource.tar.gz#test.test_blocks-decimal_op_decimal_scalar--Debug_/opt.yql"
+        }
+    ],
+    "test.test[blocks-decimal_op_decimal_scalar--Peephole]": [
+        {
+            "checksum": "7b521ba23685f70f19441403c16518e5",
+            "size": 2355,
+            "uri": "https://{canondata_backend}/1925842/b4ba828fa1381ceb904718b3893838f55fa7ae74/resource.tar.gz#test.test_blocks-decimal_op_decimal_scalar--Peephole_/opt.yql"
+        }
+    ],
+    "test.test[blocks-decimal_op_decimal_scalar--Plan]": [
+        {
+            "checksum": "9927995c7376075836fdc6f7d6e7ac46",
+            "size": 4278,
+            "uri": "https://{canondata_backend}/1925842/b4ba828fa1381ceb904718b3893838f55fa7ae74/resource.tar.gz#test.test_blocks-decimal_op_decimal_scalar--Plan_/plan.txt"
+        }
+    ],
+    "test.test[blocks-decimal_op_decimal_scalar--Results]": [
+        {
+            "checksum": "4e84ae929fdb8539ace517e09f953118",
+            "size": 12764,
+            "uri": "https://{canondata_backend}/1925842/b4ba828fa1381ceb904718b3893838f55fa7ae74/resource.tar.gz#test.test_blocks-decimal_op_decimal_scalar--Results_/results.txt"
+        }
+    ],
     "test.test[blocks-interval_add_date_scalar--Debug]": [
         {
             "checksum": "f14bab10ca73965043abe5a326708cf8",
@@ -1901,9 +1929,9 @@
     ],
     "test.test[pg-select_agg_gs_rollup-default.txt-Debug]": [
         {
-            "checksum": "46779e5f2de47d59567e13b78365ef4d",
-            "size": 1105,
-            "uri": "https://{canondata_backend}/1881367/d537ea7c5b68ae21c70dc78516e15e81a7c35343/resource.tar.gz#test.test_pg-select_agg_gs_rollup-default.txt-Debug_/opt.yql"
+            "checksum": "230c57b2c2e7ce8c412c10e70e28c51a",
+            "size": 1071,
+            "uri": "https://{canondata_backend}/1936947/6608c3a43f4eef4ec1cc4d5f5eaa332de6feef70/resource.tar.gz#test.test_pg-select_agg_gs_rollup-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[pg-select_agg_gs_rollup-default.txt-Plan]": [

@@ -91,24 +91,10 @@ public:
     [[nodiscard]] std::unique_ptr<NTabletFlatExecutor::ITransaction> Ping(TColumnShard* self, const TDuration critDuration, const TInstant now);
 
     // Returns a unique cookie associated with this request
-    [[nodiscard]] TConclusion<ui64> AddInFlightRequest(
-        NOlap::NReader::TReadMetadataBase::TConstPtr readMeta, const NOlap::TVersionedIndex* index) {
-        const ui64 cookie = NextCookie++;
-        auto it = SnapshotsLive.find(readMeta->GetRequestSnapshot());
-        if (it == SnapshotsLive.end()) {
-            it =
-                SnapshotsLive.emplace(readMeta->GetRequestSnapshot(), TSnapshotLiveInfo::BuildFromRequest(readMeta->GetRequestSnapshot())).first;
-            Counters->OnSnapshotsInfo(SnapshotsLive.size(), GetSnapshotToClean());
-        }
-        it->second.AddRequest(cookie);
-        auto status = AddToInFlightRequest(cookie, readMeta, index);
-        if (!status) {
-            return status;
-        }
-        return cookie;
-    }
+    [[nodiscard]] ui64 AddInFlightRequest(
+        NOlap::NReader::TReadMetadataBase::TConstPtr readMeta, const NOlap::TVersionedIndex* index);
 
-    void RemoveInFlightRequest(ui64 cookie, const NOlap::TVersionedIndex* index, const TInstant now);
+    [[nodiscard]] NOlap::NReader::TReadMetadataBase::TConstPtr ExtractInFlightRequest(ui64 cookie, const NOlap::TVersionedIndex* index, const TInstant now);
 
     NOlap::TSelectInfo::TStats GetSelectStatsDelta() {
         auto delta = SelectStatsDelta;
@@ -122,13 +108,13 @@ public:
     }
 
 private:
-    [[nodiscard]] TConclusionStatus AddToInFlightRequest(
+    void AddToInFlightRequest(
         const ui64 cookie, NOlap::NReader::TReadMetadataBase::TConstPtr readMetaBase, const NOlap::TVersionedIndex* index);
 
 private:
     std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
     ui64 NextCookie = 1;
-    THashMap<ui64, TList<NOlap::NReader::TReadMetadataBase::TConstPtr>> RequestsMeta;
+    THashMap<ui64, NOlap::NReader::TReadMetadataBase::TConstPtr> RequestsMeta;
     NOlap::TSelectInfo::TStats SelectStatsDelta;
 };
 

@@ -395,10 +395,12 @@ TRuntimeNode BuildDqYtInputCall(
         // All sections have the same sampling settings
         if (samplingSpec.IsUndefined()) {
             if (auto sampling = GetSampleParams(section.Settings().Ref())) {
-                YQL_ENSURE(sampling->Mode != EYtSampleMode::System);
                 samplingSpec["sampling_rate"] = sampling->Percentage / 100.;
                 if (sampling->Repeat) {
                     samplingSpec["sampling_seed"] = static_cast<i64>(sampling->Repeat);
+                }
+                if (sampling->Mode == EYtSampleMode::System) {
+                    samplingSpec["sampling_mode"] = "block";
                 }
             }
         }

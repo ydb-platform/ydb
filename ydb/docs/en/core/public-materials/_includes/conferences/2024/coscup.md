@@ -1,4 +1,4 @@
-### YDB: extending a Distributed SQL DBMS with PostgreSQL compatibility {#2024-coscup}
+## YDB: extending a Distributed SQL DBMS with PostgreSQL compatibility {#2024-coscup}
 
 {% include notitle [internals_tag](../../tags.md#database_internals) %}
 

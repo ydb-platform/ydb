@@ -218,3 +218,78 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
         UNIT_ASSERT_VALUES_EQUAL(stDev1, stDev2);
     }
 }
+
+Y_UNIT_TEST_SUITE(TCutHistoryRestrictions) {
+    class TTestHive : public THive {
+    public:
+        TTestHive(TTabletStorageInfo *info, const TActorId &tablet) : THive(info, tablet) {}
+
+        template<typename F>
+        void UpdateConfig(F func) {
+            func(ClusterConfig);
+            BuildCurrentConfig();
+        }
+    };
+
+    Y_UNIT_TEST(BasicTest) {
+        TIntrusivePtr<TTabletStorageInfo> hiveStorage = new TTabletStorageInfo;
+        hiveStorage->TabletType = TTabletTypes::Hive;
+        TTestHive hive(hiveStorage.Get(), TActorId());
+        hive.UpdateConfig([](NKikimrConfig::THiveConfig& config) {
+            config.SetCutHistoryAllowList("DataShard,Coordinator");
+            config.SetCutHistoryDenyList("GraphShard");
+        });
+        UNIT_ASSERT(hive.IsCutHistoryAllowed(TTabletTypes::DataShard));
+        UNIT_ASSERT(!hive.IsCutHistoryAllowed(TTabletTypes::GraphShard));
+        UNIT_ASSERT(!hive.IsCutHistoryAllowed(TTabletTypes::Hive));
+    }
+
+    Y_UNIT_TEST(EmptyAllowList) {
+        TIntrusivePtr<TTabletStorageInfo> hiveStorage = new TTabletStorageInfo;
+        hiveStorage->TabletType = TTabletTypes::Hive;
+        TTestHive hive(hiveStorage.Get(), TActorId());
+        hive.UpdateConfig([](NKikimrConfig::THiveConfig& config) {
+            config.SetCutHistoryAllowList("");
+            config.SetCutHistoryDenyList("GraphShard");
+        });
+        UNIT_ASSERT(!hive.IsCutHistoryAllowed(TTabletTypes::GraphShard));
+        UNIT_ASSERT(hive.IsCutHistoryAllowed(TTabletTypes::Hive));
+    }
+
+    Y_UNIT_TEST(EmptyDenyList) {
+        TIntrusivePtr<TTabletStorageInfo> hiveStorage = new TTabletStorageInfo;
+        hiveStorage->TabletType = TTabletTypes::Hive;
+        TTestHive hive(hiveStorage.Get(), TActorId());
+        hive.UpdateConfig([](NKikimrConfig::THiveConfig& config) {
+            config.SetCutHistoryAllowList("DataShard,Coordinator");
+            config.SetCutHistoryDenyList("");
+        });
+        UNIT_ASSERT(hive.IsCutHistoryAllowed(TTabletTypes::DataShard));
+        UNIT_ASSERT(!hive.IsCutHistoryAllowed(TTabletTypes::GraphShard));
+    }
+
+    Y_UNIT_TEST(SameTabletInBothLists) {
+        TIntrusivePtr<TTabletStorageInfo> hiveStorage = new TTabletStorageInfo;
+        hiveStorage->TabletType = TTabletTypes::Hive;
+        TTestHive hive(hiveStorage.Get(), TActorId());
+        hive.UpdateConfig([](NKikimrConfig::THiveConfig& config) {
+            config.SetCutHistoryAllowList("DataShard,Coordinator");
+            config.SetCutHistoryDenyList("SchemeShard,DataShard");
+        });
+        UNIT_ASSERT(!hive.IsCutHistoryAllowed(TTabletTypes::DataShard));
+        UNIT_ASSERT(!hive.IsCutHistoryAllowed(TTabletTypes::SchemeShard));
+        UNIT_ASSERT(!hive.IsCutHistoryAllowed(TTabletTypes::Hive));
+        UNIT_ASSERT(hive.IsCutHistoryAllowed(TTabletTypes::Coordinator));
+    }
+
+    Y_UNIT_TEST(BothListsEmpty) {
+        TIntrusivePtr<TTabletStorageInfo> hiveStorage = new TTabletStorageInfo;
+        hiveStorage->TabletType = TTabletTypes::Hive;
+        TTestHive hive(hiveStorage.Get(), TActorId());
+        hive.UpdateConfig([](NKikimrConfig::THiveConfig& config) {
+            config.SetCutHistoryAllowList("");
+            config.SetCutHistoryDenyList("");
+        });
+        UNIT_ASSERT(hive.IsCutHistoryAllowed(TTabletTypes::DataShard));
+    }
+}

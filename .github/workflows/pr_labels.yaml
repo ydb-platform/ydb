@@ -15,7 +15,7 @@ jobs:
     steps:
       - name: Update PR labels
         id: update-pr-labels
-        uses: actions/github-script@v6
+        uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
@@ -47,6 +47,7 @@ jobs:
               }
             }
             // add first encountered label
+            if (!description) return;
             for (let pair of mapping) {
               if (!description.includes(pair[0])) continue;
               // add label

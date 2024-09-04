@@ -32,7 +32,7 @@ public:
         const std::vector<TString>& omittedInaccessibleColumns,
         TTableSchemaPtr schema,
         const NApi::NRpcProxy::NProto::TRowsetStatistics& statistics)
-        : Underlying_ (std::move(underlying))
+        : Underlying_(std::move(underlying))
         , StartRowIndex_(startRowIndex)
         , TableSchema_(std::move(schema))
         , OmittedInaccessibleColumns_(omittedInaccessibleColumns)
@@ -65,7 +65,7 @@ public:
         return dataStatistics;
     }
 
-    TFuture<void> GetReadyEvent() override
+    TFuture<void> GetReadyEvent() const override
     {
         return ReadyEvent_;
     }
@@ -228,28 +228,25 @@ private:
     }
 };
 
-TFuture<ITableReaderPtr> CreateTableReader(TApiServiceProxy::TReqReadTablePtr request)
+TFuture<ITableReaderPtr> CreateTableReader(IAsyncZeroCopyInputStreamPtr inputStream)
 {
-    return NRpc::CreateRpcClientInputStream(std::move(request))
-        .Apply(BIND([=] (const IAsyncZeroCopyInputStreamPtr& inputStream) {
-            return inputStream->Read().Apply(BIND([=] (const TSharedRef& metaRef) {
-                NApi::NRpcProxy::NProto::TRspReadTableMeta meta;
-                if (!TryDeserializeProto(&meta, metaRef)) {
-                    THROW_ERROR_EXCEPTION("Failed to deserialize table reader meta information");
-                }
+    return inputStream->Read().Apply(BIND([=] (const TSharedRef& metaRef) {
+        NApi::NRpcProxy::NProto::TRspReadTableMeta meta;
+        if (!TryDeserializeProto(&meta, metaRef)) {
+            THROW_ERROR_EXCEPTION("Failed to deserialize table reader meta information");
+        }
 
-                i64 startRowIndex = meta.start_row_index();
-                auto omittedInaccessibleColumns = FromProto<std::vector<TString>>(
-                    meta.omitted_inaccessible_columns());
-                auto schema = NYT::FromProto<TTableSchemaPtr>(meta.schema());
-                return New<TTableReader>(
-                    inputStream,
-                    startRowIndex,
-                    std::move(omittedInaccessibleColumns),
-                    std::move(schema),
-                    meta.statistics());
-            })).As<ITableReaderPtr>();
-        }));
+        i64 startRowIndex = meta.start_row_index();
+        auto omittedInaccessibleColumns = FromProto<std::vector<TString>>(
+            meta.omitted_inaccessible_columns());
+        auto schema = NYT::FromProto<TTableSchemaPtr>(meta.schema());
+        return New<TTableReader>(
+            inputStream,
+            startRowIndex,
+            std::move(omittedInaccessibleColumns),
+            std::move(schema),
+            meta.statistics());
+    })).As<ITableReaderPtr>();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

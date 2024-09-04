@@ -26,6 +26,7 @@ app_main_class="str"
 jar_source_set="list"
 enable_preview="flag"
 annotation_processors="list"
+use_annotation_processor="str"
 
 publish="flag"
 publish_group="str"

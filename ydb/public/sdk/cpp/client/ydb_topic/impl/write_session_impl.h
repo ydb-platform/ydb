@@ -5,7 +5,6 @@
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/topic_impl.h>
 
 #include <util/generic/buffer.h>
-#include <util/thread/lfqueue.h>
 
 
 namespace NYdb::NTopic {
@@ -386,8 +385,7 @@ private:
     ui64 GetNextIdImpl(const TMaybe<ui64>& seqNo);
     ui64 GetSeqNoImpl(ui64 id);
     ui64 GetIdImpl(ui64 seqNo);
-    void FormGrpcMessagesImpl();
-    void SendGrpcMessages();
+    void SendImpl();
     void AbortImpl();
     void CloseImpl(EStatus statusCode, NYql::TIssues&& issues);
     void CloseImpl(EStatus statusCode, const TString& message);
@@ -412,10 +410,7 @@ private:
     TWriteSessionSettings Settings;
     std::shared_ptr<TTopicClient::TImpl> Client;
     std::shared_ptr<TGRpcConnectionsImpl> Connections;
-    TString TargetCluster;
-    TString InitialCluster;
-    TString CurrentCluster;
-    TString PreferredClusterByCDS;
+
     std::shared_ptr<IWriteSessionConnectionProcessorFactory> ConnectionFactory;
     TDbDriverStatePtr DbDriverState;
     TStringType PrevToken;
@@ -435,7 +430,6 @@ private:
     std::shared_ptr<TServerMessage> ServerMessage; // Server message to write server response to.
 
     TString SessionId;
-    IExecutor::TPtr Executor;
     IExecutor::TPtr CompressionExecutor;
     size_t MemoryUsage = 0; //!< Estimated amount of memory used
     bool FirstTokenSent = false;
@@ -448,22 +442,18 @@ private:
     std::queue<TOriginalMessage> SentOriginalMessages;
     std::queue<TBlock> SentPackedMessage;
 
-    TLockFreeQueue<TClientMessage> GrpcMessagesToSend;
-    TAdaptiveLock ProcessorLock;
-
     const size_t MaxBlockSize = std::numeric_limits<size_t>::max();
     const size_t MaxBlockMessageCount = 1; //!< Max message count that can be packed into a single block. In block version 0 is equal to 1 for compatibility
     bool Connected = false;
     bool Started = false;
+    std::atomic<bool> SendImplScheduled = false;
     TAtomic Aborting = 0;
     bool SessionEstablished = false;
     ui32 PartitionId = 0;
     TPartitionLocation PreferredPartitionLocation = {};
     ui64 NextId = 0;
-    ui64 MinUnsentId = 1;
     TMaybe<ui64> InitSeqNo;
     TMaybe<bool> AutoSeqNoMode;
-    bool ValidateSeqNoMode = false;
 
     NThreading::TPromise<ui64> InitSeqNoPromise;
     bool InitSeqNoSetDone = false;

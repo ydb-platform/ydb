@@ -1381,7 +1381,7 @@ TExprNode::TPtr OptimizeFlatMap(const TExprNode::TPtr& node, TExprContext& ctx, 
         }
     }
 
-    if (node->Head().IsCallable(Ordered ? "OrderedExtend" : "Extend") &&
+    if (node->Head().IsCallable({"OrderedExtend", "Extend", "Merge"}) &&
         // constraints below can not be derived for (Ordered)Extend
         !node->GetConstraint<TSortedConstraintNode>() &&
         !node->GetConstraint<TPartOfSortedConstraintNode>() &&
@@ -1391,9 +1391,9 @@ TExprNode::TPtr OptimizeFlatMap(const TExprNode::TPtr& node, TExprContext& ctx, 
         !node->GetConstraint<TPartOfDistinctConstraintNode>())
     {
         auto canPush = [&](const auto& child) {
-            // we push FlatMap over Extend only if it can later be fused with child
-            return child->IsCallable({Ordered ? "OrderedFlatMap" : "FlatMap", "GroupByKey", "CombineByKey", "PartitionByKey", "PartitionsByKeys", "ShuffleByKeys",
-                                      "ListIf", "FlatListIf", "AsList", "ToList"}) && optCtx.IsSingleUsage(*child);
+            // we push FlatMap over Extend only if it can later be fused with or pushed down through child
+            return child->IsCallable({"OrderedFlatMap", "FlatMap", "GroupByKey", "CombineByKey", "PartitionByKey", "PartitionsByKeys", "ShuffleByKeys",
+                                      "Aggregate", "EquiJoin", "ListIf", "FlatListIf", "AsList", "ToList"});
         };
         if (AllOf(node->Head().ChildrenList(), canPush)) {
             TExprNodeList newChildren;

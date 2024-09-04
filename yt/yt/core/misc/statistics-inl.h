@@ -38,22 +38,22 @@ std::pair<EStatisticPathConflictType, typename TSummaryMap::iterator> IsCompatib
     TSummaryMap& existingStatistics,
     const NYPath::TYPath& path)
 {
-    auto hint = existingStatistics.lower_bound(path);
-    if (hint != existingStatistics.end()) {
-        if (hint->first == path) {
-            return {EStatisticPathConflictType::Exists, hint};
+    auto it = existingStatistics.lower_bound(path);
+    if (it != existingStatistics.end()) {
+        if (it->first == path) {
+            return {EStatisticPathConflictType::Exists, it};
         }
-        if (NYPath::HasPrefix(hint->first, path)) {
-            return {EStatisticPathConflictType::IsPrefix, hint};
+        if (NYPath::HasPrefix(it->first, path)) {
+            return {EStatisticPathConflictType::IsPrefix, it};
         }
     }
-    if (hint != existingStatistics.begin()) {
-        auto prev = std::prev(hint);
+    if (it != existingStatistics.begin()) {
+        auto prev = std::prev(it);
         if (NYPath::HasPrefix(path, prev->first)) {
             return {EStatisticPathConflictType::HasPrefix, prev};
         }
     }
-    return {EStatisticPathConflictType::None, hint};
+    return {EStatisticPathConflictType::None, it};
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -65,12 +65,12 @@ std::pair<typename TSummaryMap::iterator, bool> CheckedEmplaceStatistic(
     const NYPath::TYPath& path,
     Ts&&... args)
 {
-    auto [conflictType, hint] = IsCompatibleStatistic(existingStatistics, path);
+    auto [conflictType, hintIt] = IsCompatibleStatistic(existingStatistics, path);
     if (conflictType == EStatisticPathConflictType::Exists) {
-        return {hint, false};
+        return {hintIt, false};
     }
     if (conflictType != EStatisticPathConflictType::None) {
-        auto prefixPath = hint->first;
+        auto prefixPath = hintIt->first;
         auto conflictPath = path;
 
         if (conflictType == EStatisticPathConflictType::IsPrefix) {
@@ -81,8 +81,8 @@ std::pair<typename TSummaryMap::iterator, bool> CheckedEmplaceStatistic(
             << TErrorAttribute("prefix_path", prefixPath)
             << TErrorAttribute("contained_in_path", conflictPath);
     }
-    auto emplacedIterator = existingStatistics.emplace_hint(hint, path, std::forward<Ts>(args)...);
-    return {emplacedIterator, true};
+    auto emplacedIt = existingStatistics.emplace_hint(hintIt, path, std::forward<Ts>(args)...);
+    return {emplacedIt, true};
 }
 
 ////////////////////////////////////////////////////////////////////////////////

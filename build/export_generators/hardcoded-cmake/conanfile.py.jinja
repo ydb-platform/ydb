@@ -19,15 +19,27 @@ class App(ConanFile):
 {%- endfor -%}
 }
 
-    requires =
-{%- for conan_require in conan_packages %} "{{ conan_require }}"
-{%-     if not loop.last -%},{%- endif -%}
-{%- endfor %}
+{%- if (conan_tool_packages|length) %}
 
     tool_requires =
-{%- for conan_tool_require in conan_tool_packages %} "{{ conan_tool_require }}"
-{%-     if not loop.last -%},{%- endif -%}
-{%- endfor %}
+{%-     for conan_tool_require in conan_tool_packages %} "{{ conan_tool_require }}"
+{%-         if not loop.last -%},{%- endif -%}
+{%-     endfor -%}
+{%- endif -%}
+
+{%- if (conan_packages|length) %}
+
+    def requirements(self):
+        requires = [
+{%-     for conan_require in conan_packages %} "{{ conan_require }}"
+{%-         if not loop.last -%},{%- endif -%}
+{%-     endfor %} ]
+        for require in requires:
+            if ("linux-headers" in require) and (self.settings.os != "Linux"):
+                continue
+            self.requires(require)
+
+{%- endif -%}
 
 {%- if use_conan2 %}
 
@@ -50,7 +62,7 @@ class App(ConanFile):
     def layout(self):
         cmake_layout(self)
 
-{%- else -%}
+{%- else %}
 
     generators = "cmake_find_package", "cmake_paths"
 

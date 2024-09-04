@@ -33,7 +33,7 @@ class TestS3Compressions:
         assert result_set.rows[0].items[0].bytes_value == b"yq"
         assert result_set.rows[0].items[1].int32_value == 0
         assert result_set.rows[0].items[2].bytes_value == b"abc"
-    
+
     def validate_result_csv(self, result_set):
         logging.debug(str(result_set))
         assert len(result_set.columns) == 3
@@ -106,7 +106,7 @@ class TestS3Compressions:
         self.create_bucket_and_upload_file(filename, s3, kikimr)
         storage_connection_name = unique_prefix + "fruitbucket"
         client.create_storage_connection(storage_connection_name, "fbucket")
-        
+
         sql = '''
             SELECT *
             FROM `{}`.`{}`
@@ -204,7 +204,7 @@ Pear,15,33'''
         assert (
             "Unknown compression: some_compression. Use one of: gzip, zstd, lz4, brotli, bzip2, xz" in describe_string
         )
-    
+
     @yq_v2
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_invalid_compression_inference(self, kikimr, s3, client, unique_prefix):

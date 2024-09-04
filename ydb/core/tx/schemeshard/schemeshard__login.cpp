@@ -1,6 +1,8 @@
-#include "schemeshard_impl.h"
 #include <ydb/library/security/util.h>
 #include <ydb/core/protos/auth.pb.h>
+
+#include "schemeshard_audit_log.h"
+#include "schemeshard_impl.h"
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -86,6 +88,8 @@ struct TSchemeShard::TTxLogin : TSchemeShard::TRwTxBase {
         } else {
             result->Record.SetError("Login authentication is disabled");
         }
+
+        AuditLogLogin(Request->Get()->Record, result->Record, Self);
 
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "TTxLogin DoComplete"

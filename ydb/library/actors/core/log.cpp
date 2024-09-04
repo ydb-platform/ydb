@@ -573,9 +573,6 @@ namespace NActors {
 
         void ReopenLog() override {
         }
-
-    private:
-        const TString Indent;
     };
 
     class TLineFileLogBackend: public TFileLogBackend {

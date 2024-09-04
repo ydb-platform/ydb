@@ -191,7 +191,7 @@ message TSchemeLimits {
     optional uint64 MaxExports = 16;
     optional uint64 MaxImports = 17;
 
-    optional uint64 MaxOlapTableColumns = 18;
+    optional uint64 MaxColumnTableColumns = 18;
 }
 
 message TEvInitTenantSchemeShard {

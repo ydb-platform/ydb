@@ -690,11 +690,11 @@ public:
             needUpdateObject = tableConstructor.GetNeedUpdateObject();
         } else {
             ui64 columnCount = createDescription.schema().columns().size();
-            if (columnCount > limits.MaxOlapTableColumns) {
+            if (columnCount > limits.MaxColumnTableColumns) {
                 TString errStr = TStringBuilder()
                     << "Too many columns"
                     << ". new: " << columnCount
-                    << ". Limit: " << limits.MaxOlapTableColumns;
+                    << ". Limit: " << limits.MaxColumnTableColumns;
                 result->SetError(NKikimrScheme::StatusSchemeError, errStr);
                 return result;
             }

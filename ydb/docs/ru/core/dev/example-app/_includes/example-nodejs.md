@@ -281,7 +281,7 @@ async function selectWithParametrs(driver: Driver, data: ThreeIds[], logger: Log
 {% list tabs %}
 
 - do()
-      
+
   ```ts
   async function explicitTcl(driver: Driver, ids: ThreeIds, logger: Logger) {
       logger.info('Running prepared query with explicit transaction control...');
@@ -313,10 +313,10 @@ async function selectWithParametrs(driver: Driver, data: ThreeIds[], logger: Log
           }
       });
   }
-  ```
-  
+```
+
 - doTx()
-  
+
   ```ts
   async function transactionPerWholeDo(driver: Driver, ids: ThreeIds, logger: Logger) {
       logger.info('Running query with one transaction per whole doTx()...');

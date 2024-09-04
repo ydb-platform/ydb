@@ -462,7 +462,7 @@ private:
         NYql::TIssues issues;
         NYql::IssuesFromMessage(res->Record.GetIssues(), issues);
 
-        LOG_D("Recv EvWriteResult from ShardID=" << shardId
+        LOG_D("Recv EvWriteResult (prepare) from ShardID=" << shardId
             << ", Status=" << NKikimrDataEvents::TEvWriteResult::EStatus_Name(ev->Get()->GetStatus())
             << ", TxId=" << ev->Get()->Record.GetTxId()
             << ", LocksCount= " << ev->Get()->Record.GetTxLocks().size()
@@ -889,6 +889,7 @@ private:
                 return ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, issues);
             }
             case NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN: {
+                issues.AddIssue(NYql::YqlIssue({}, TIssuesIds::KIKIMR_LOCKS_INVALIDATED, "Transaction locks invalidated."));
                 return ReplyErrorAndDie(Ydb::StatusIds::ABORTED, issues);
             }
         }
@@ -1160,7 +1161,7 @@ private:
         NYql::TIssues issues;
         NYql::IssuesFromMessage(res->Record.GetIssues(), issues);
 
-        LOG_D("Recv EvWriteResult from ShardID=" << shardId
+        LOG_D("Recv EvWriteResult (execute) from ShardID=" << shardId
             << ", Status=" << NKikimrDataEvents::TEvWriteResult::EStatus_Name(ev->Get()->GetStatus())
             << ", TxId=" << ev->Get()->Record.GetTxId()
             << ", LocksCount= " << ev->Get()->Record.GetTxLocks().size()

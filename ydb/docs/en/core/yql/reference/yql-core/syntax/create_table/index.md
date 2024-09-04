@@ -131,10 +131,11 @@ By default, if the `STORE` parameter is not specified, a row-oriented table is c
   ```sql
   CREATE TABLE table_name (
     a Uint64 NOT NULL,
-    b Uint64 NOT NULL,
+    b Timestamp NOT NULL,
     c Float,
     PRIMARY KEY (a, b)
   )
+  PARTITION BY HASH(b)
   WITH (
     STORE = COLUMN
   );
@@ -144,10 +145,11 @@ By default, if the `STORE` parameter is not specified, a row-oriented table is c
   ```sql
   CREATE TABLE table_name (
     a Uint64 NOT NULL,
-    b Uint64 NOT NULL,
+    b Timestamp NOT NULL,
     c Float,
     PRIMARY KEY (a, b)
   )
+  PARTITION BY HASH(b)
   WITH (
     STORE = COLUMN,
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10

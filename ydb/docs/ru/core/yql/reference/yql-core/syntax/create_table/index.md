@@ -128,7 +128,7 @@ WITH (
     c Float,
     PRIMARY KEY (a, b)
   )
-  PARTITION BY HASH(a, b, ...)
+  PARTITION BY HASH(b)
   WITH (
     STORE = COLUMN
   );
@@ -144,7 +144,7 @@ WITH (
     c Float,
     PRIMARY KEY (a, b)
   )
-  PARTITION BY HASH(a, b, ...)
+  PARTITION BY HASH(b)
   WITH (
     STORE = COLUMN,
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10

@@ -25,9 +25,9 @@
 
 ```sql
 SELECT
-	P.Brand,
-	S.Country AS Countries,
-	SUM(F.Units_Sold)
+    P.Brand,
+    S.Country AS Countries,
+    SUM(F.Units_Sold)
 
 FROM Fact_Sales F
 INNER JOIN Dim_Date D    ON (F.Date_Id = D.Id)
@@ -37,8 +37,8 @@ INNER JOIN Dim_Product P ON (F.Product_Id = P.Id)
 WHERE D.Year = 1997 AND  P.Product_Category = 'tv'
 
 GROUP BY
-	P.Brand,
-	S.Country
+    P.Brand,
+    S.Country
 ```
 
 В графе этого запроса все таблицы `Dim...` соединяются c таблицей фактов `Fact_Sales`:
@@ -56,7 +56,7 @@ GROUP BY
 | Звезда | 18 |
 | Клика | 15 |
 
-{{ ydb-short-name }} использует модификацию алгоритма [DPHyp](https://www.researchgate.net/publication/47862092_Dynamic_Programming_Strikes_Back) для перебора порядка соединений.
+{{ ydb-short-name }} использует модификацию алгоритма [DPHyp](https://www.researchgate.net/publication/47862092_Dynamic_Programming_Strikes_Back) для перебора порядка соединений. Это - самый современный алгоритм динамического программирования для оптимизации запросов. C помощью построения гиперграфов запросов он избегает перебора лишних альтернатив и позволяет оптимизировать планы с операторамы JOIN, сложными предикатами и даже операторами GROUP BY и ORDER BY.
 
 ### Оценка стоимости планов
 

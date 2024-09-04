@@ -39,7 +39,7 @@
 {% endlist %}
 
 Фрагмент кода приложения для создания сессии:
-   
+
 ```ts
 const result = await driver.queryClient.do({
     ...

@@ -1,0 +1,9 @@
+<tmp_path>/program.sql:<main>: Fatal: Execution
+
+    <tmp_path>/program.sql:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT
+	^
+        <tmp_path>/program.sql:<main>:2:5: Fatal: (yexception) ydb/library/yql/minikql/datetime/datetime.h:xxx: Error in MakeDatetime
+[MakeTzDate]
+        	    CAST(AddTimezone(
+	    ^

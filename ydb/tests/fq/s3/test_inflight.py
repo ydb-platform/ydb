@@ -18,20 +18,14 @@ class TestS3:
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_inflight(self, kikimr, s3, client, unique_prefix):
         resource = boto3.resource(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         bucket = resource.Bucket("bbucket")
         bucket.create(ACL='public-read')
 
         s3_client = boto3.client(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         fruits = R'''Fruit,Price,Weight
@@ -60,17 +54,18 @@ Pear,15,33'''
         deadline = start + 60
         while True:
             inflight = kikimr.compute_plane.get_sensors(1, "yq").find_sensor(
-                {"subcomponent": "http_gateway", "sensor": "InFlightStreams"})
+                {"subcomponent": "http_gateway", "sensor": "InFlightStreams"}
+            )
             if inflight is None:
                 inflight = 0
-            assert inflight <= kikimr.inflight, "Inflight {} must not exceed limit of {}".format(inflight, kikimr.inflight)
+            assert inflight <= kikimr.inflight, "Inflight {} must not exceed limit of {}".format(
+                inflight, kikimr.inflight
+            )
             status = client.describe_query(query_id).result.query.meta.status
             if status == fq.QueryMeta.COMPLETED:
                 break
             assert time.time() < deadline, "Query {} is not completed for {}s. Query status: {}.".format(
-                query_id,
-                time.time() - start,
-                fq.QueryMeta.ComputeStatus.Name(status)
+                query_id, time.time() - start, fq.QueryMeta.ComputeStatus.Name(status)
             )
 
         data = client.get_result_data(query_id)
@@ -96,17 +91,18 @@ Pear,15,33'''
         deadline = start + 60
         while True:
             inflight = kikimr.compute_plane.get_sensors(1, "yq").find_sensor(
-                {"subcomponent": "http_gateway", "sensor": "InFlight"})
+                {"subcomponent": "http_gateway", "sensor": "InFlight"}
+            )
             if inflight is None:
                 inflight = 0
-            assert inflight <= kikimr.inflight, "Inflight {} must not exceed limit of {}".format(inflight, kikimr.inflight)
+            assert inflight <= kikimr.inflight, "Inflight {} must not exceed limit of {}".format(
+                inflight, kikimr.inflight
+            )
             status = client.describe_query(query_id).result.query.meta.status
             if status == fq.QueryMeta.COMPLETED:
                 break
             assert time.time() < deadline, "Query {} is not completed for {}s. Query status: {}.".format(
-                query_id,
-                time.time() - start,
-                fq.QueryMeta.ComputeStatus.Name(status)
+                query_id, time.time() - start, fq.QueryMeta.ComputeStatus.Name(status)
             )
 
         data = client.get_result_data(query_id)
@@ -123,20 +119,14 @@ Pear,15,33'''
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_data_inflight(self, kikimr, s3, client, unique_prefix):
         resource = boto3.resource(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         bucket = resource.Bucket("sbucket")
         bucket.create(ACL='public-read')
 
         s3_client = boto3.client(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         fruits = R'''Fruit,Price,Weight
@@ -165,7 +155,8 @@ Pear,15,33'''
         deadline = start + 60
         while True:
             inflight = kikimr.compute_plane.get_sensors(1, "yq").find_sensor(
-                {"subcomponent": "http_gateway", "sensor": "InFlightStreams"})
+                {"subcomponent": "http_gateway", "sensor": "InFlightStreams"}
+            )
             if inflight is None:
                 inflight = 0
             assert inflight <= 1, "Inflight {} must not exceed 1 with mem back pressure".format(inflight)
@@ -173,9 +164,7 @@ Pear,15,33'''
             if status == fq.QueryMeta.COMPLETED:
                 break
             assert time.time() < deadline, "Query {} is not completed for {}s. Query status: {}.".format(
-                query_id,
-                time.time() - start,
-                fq.QueryMeta.ComputeStatus.Name(status)
+                query_id, time.time() - start, fq.QueryMeta.ComputeStatus.Name(status)
             )
 
         data = client.get_result_data(query_id)

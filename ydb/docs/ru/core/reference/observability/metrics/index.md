@@ -40,8 +40,10 @@
 `grpc.topic.stream_read.partition_session.stopping_count`<br/>`RATE`, штуки | Количество останавливаемых сессий.<br/>Метки:<br/>- _topic_ – название топика.<br/>- _consumer_ – имя читателя.
 `grpc.topic.stream_read.partition_session.count`<br/>`RATE`, штуки | Количество partition_session.<br/>Метки:<br/>- _topic_ – название топика.<br/>- _consumer_ – имя читателя.
 `grpc.topic.stream_write.bytes`<br/>`RATE`, байты | Количество байт, записанных методом `Ydb::TopicService::StreamWrite`.<br/>Метки:<br/>- _topic_ – название топика.
+`grpc.topic.stream_write.uncommitted_bytes`<br/>`RATE`, байты | Количество байт, записанных методом `Ydb::TopicService::StreamWrite` в рамках ещё не закомиченных транзакций.<br/>Метки:<br/>- _topic_ – название топика.
 `grpc.topic.stream_write.errors`<br/>`RATE`, штуки | Количество ошибок при вызове метода  `Ydb::TopicService::StreamWrite`.<br/>Метки:<br/>- _topic_ – название топика.
 `grpc.topic.stream_write.messages`<br/>`RATE`, штуки | Количество сообщений, записанных методом   `Ydb::TopicService::StreamWrite`.<br/>Метки:<br/>- _topic_ – название топика.
+`grpc.topic.stream_write.uncommitted_messages`<br/>`RATE`, штуки | Количество сообщений, записанных методом   `Ydb::TopicService::StreamWrite` в рамках ещё не закомиченных транзакций.<br/>Метки:<br/>- _topic_ – название топика.
 `grpc.topic.stream_write.partition_throttled_milliseconds`<br/>`HIST_RATE`, штуки | Гистограммный счетчик. Интервалы заданы в миллисекундах. Показывает количество сообщений, ожидавших на квоте.<br/>Метки:<br/>- _topic_ – название топика.
 `grpc.topic.stream_write.sessions_active_count`<br/>`GAUGE`, штуки | Количество открытых сессий записи.<br/>Метки:<br/>- _topic_ – название топика.
 `grpc.topic.stream_write.sessions_created`<br/>`RATE`, штуки | Количество созданных сессий записи.<br/>Метки:<br/>- _topic_ – название топика.
@@ -166,7 +168,7 @@
 `topic.partition.init_duration_milliseconds_max`<br/>`GAUGE`, миллисекунды | Максимальная задержка инициализации партиции.<br/>Метки:<br/>- _topic_ – название топика.
 `topic.partition.producers_count_max`<br/>`GAUGE`, штуки | Максимальное количество источников в партиции.<br/>Метки:<br/>- _topic_ – название топика.
 `topic.partition.storage_bytes_max`<br/>`GAUGE`, байты | Максимальный размер партиции в байтах.<br/>Метки:<br/>- _topic_ – название топика.
-`topic.partition.uptime_milliseconds_min`<br/>`GAUGE`, штуки | Минимальное время работы партиции после рестарта.<br>В норме во время rolling restart-а `topic.partition.uptime_milliseconds_min` близко к 0, после окончания rolling restart-а значение `topic.partition.uptime_milliseconds_min` должно увеличиваться до бесконечности.<br/>Метки:<br/>- _topic_ – название топика.
+`topic.partition.uptime_milliseconds_min`<br/>`GAUGE`, штуки | Минимальное время работы партиции после рестарта.<br/>В норме во время rolling restart-а `topic.partition.uptime_milliseconds_min` близко к 0, после окончания rolling restart-а значение `topic.partition.uptime_milliseconds_min` должно увеличиваться до бесконечности.<br/>Метки:<br/>- _topic_ – название топика.
 `topic.partition.total_count`<br/>`GAUGE`, штуки | Общее количество партиций в топике.<br/>Метки:<br/>- _topic_ – название топика.
 `topic.partition.alive_count`<br/>`GAUGE`, штуки | Количество партиций, отправляющих свои метрики.<br/>Метки:<br/>- _topic_ – название топика.
 `topic.partition.committed_end_to_end_lag_milliseconds_max`<br/>`GAUGE`, миллисекунды | Максимальная (по всем партициям) разница между текущим временем и временем создания последнего закомиченного сообщения.<br/>Метки:<br/>- _topic_ – название топика.<br/>- _consumer_ – имя читателя.

@@ -1,55 +1,138 @@
 #include "distconf.h"
 #include <google/protobuf/util/json_util.h>
 
-
 namespace NKikimr::NStorage {
 
-    void TDistributedConfigKeeper::ReadConfig(TActorSystem *actorSystem, TActorId selfId,
-            const std::vector<TString>& drives, const TIntrusivePtr<TNodeWardenConfig>& cfg, ui64 cookie) {
-        auto ev = std::make_unique<TEvPrivate::TEvStorageConfigLoaded>();
-        for (const TString& path : drives) {
-            TRcBuf metadata;
-            std::optional<ui64> guid;
-            switch (auto status = ReadPDiskMetadata(path, cfg->PDiskKey, metadata, &guid)) {
-                case NPDisk::EPDiskMetadataOutcome::OK:
-                    if (NKikimrBlobStorage::TPDiskMetadataRecord m; m.ParseFromString(metadata.ExtractUnderlyingContainerOrCopy<TString>())) {
-                        auto& [p, config, g] = ev->MetadataPerPath.emplace_back();
-                        p = path;
-                        config.Swap(&m);
-                        g = guid;
-                    }
-                    break;
+    void TDistributedConfigKeeper::ReadConfig(ui64 cookie) {
+        class TReaderActor : public TActorBootstrapped<TReaderActor> {
+            const std::vector<TString> Paths;
+            const ui64 Cookie;
+            ui32 RepliesPending = 0;
+            std::unique_ptr<TEvPrivate::TEvStorageConfigLoaded> Response = std::make_unique<TEvPrivate::TEvStorageConfigLoaded>();
+            TActorId ParentId;
 
-                default:
-                    STLOGX(*actorSystem, PRI_INFO, BS_NODE, NWDC40, "ReadConfig failed to read metadata", (Path, path),
-                        (Status, (int)status), (Cookie, cookie));
-                    break;
+        public:
+            TReaderActor(std::vector<TString> paths, ui64 cookie)
+                : Paths(std::move(paths))
+                , Cookie(cookie)
+            {}
+
+            void Bootstrap(TActorId parentId) {
+                ParentId = parentId;
+
+                STLOG(PRI_DEBUG, BS_NODE, NWDC40, "TReaderActor bootstrap", (Paths, Paths));
+
+                const TActorId nodeWardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
+                for (size_t index = 0; index < Paths.size(); ++index) {
+                    Send(nodeWardenId, new TEvNodeWardenReadMetadata(Paths[index]), 0, index);
+                    ++RepliesPending;
+                }
+
+                Become(&TThis::StateFunc);
+                CheckIfDone();
             }
-        }
-        actorSystem->Send(new IEventHandle(selfId, {}, ev.release(), 0, cookie));
+
+            void Handle(TEvNodeWardenReadMetadataResult::TPtr ev) {
+                auto *msg = ev->Get();
+                const size_t index = ev->Cookie;
+                Y_ABORT_UNLESS(index < Paths.size());
+                const TString& path = Paths[index];
+                auto& record = msg->Record;
+
+                STLOG(PRI_DEBUG, BS_NODE, NWDC50, "TReaderActor result", (Path, path), (Outcome, msg->Outcome),
+                    (Guid, msg->Guid), (Record, record));
+
+                switch (msg->Outcome) {
+                    case NPDisk::EPDiskMetadataOutcome::OK:
+                        if (record.HasProposedStorageConfig() && !CheckFingerprint(record.GetProposedStorageConfig())) {
+                            Y_DEBUG_ABORT("ProposedStorageConfig metadata fingerprint incorrect");
+                            Response->Errors.push_back(path);
+                        } else if (record.HasCommittedStorageConfig() && !CheckFingerprint(record.GetCommittedStorageConfig())) {
+                            Y_DEBUG_ABORT("CommittedStorageConfig metadata fingerprint incorrect");
+                            Response->Errors.push_back(path);
+                        } else {
+                            Response->MetadataPerPath.emplace_back(path, std::move(record), msg->Guid);
+                        }
+                        break;
+
+                    case NPDisk::EPDiskMetadataOutcome::NO_METADATA:
+                        Response->NoMetadata.emplace_back(path, msg->Guid);
+                        break;
+
+                    case NPDisk::EPDiskMetadataOutcome::ERROR:
+                        Response->Errors.push_back(path);
+                        break;
+                }
+                --RepliesPending;
+                CheckIfDone();
+            }
+
+            void CheckIfDone() {
+                if (!RepliesPending) {
+                    Send(ParentId, Response.release(), 0, Cookie);
+                    PassAway();
+                }
+            }
+
+            STRICT_STFUNC(StateFunc,
+                hFunc(TEvNodeWardenReadMetadataResult, Handle);
+            )
+        };
+        Register(new TReaderActor(DrivesToRead, cookie));
     }
 
-    void TDistributedConfigKeeper::WriteConfig(TActorSystem *actorSystem, TActorId selfId,
-            const std::vector<TString>& drives, const TIntrusivePtr<TNodeWardenConfig>& cfg,
-            const NKikimrBlobStorage::TPDiskMetadataRecord& record) {
-        THPTimer timer;
-        auto ev = std::make_unique<TEvPrivate::TEvStorageConfigStored>();
-        for (const TString& path : drives) {
-            TString data;
-            const bool success = record.SerializeToString(&data);
-            Y_ABORT_UNLESS(success);
-            std::optional<ui64> guid;
-            switch (WritePDiskMetadata(path, cfg->PDiskKey, TRcBuf(std::move(data)), &guid)) {
-                case NPDisk::EPDiskMetadataOutcome::OK:
-                    ev->StatusPerPath.emplace_back(path, true, guid);
-                    break;
+    void TDistributedConfigKeeper::WriteConfig(std::vector<TString> drives, NKikimrBlobStorage::TPDiskMetadataRecord record) {
+        class TWriterActor : public TActorBootstrapped<TWriterActor> {
+            const std::vector<TString> Drives;
+            const NKikimrBlobStorage::TPDiskMetadataRecord Record;
+            ui32 RepliesPending = 0;
+            std::unique_ptr<TEvPrivate::TEvStorageConfigStored> Response = std::make_unique<TEvPrivate::TEvStorageConfigStored>();
+            TActorId ParentId;
 
-                default:
-                    ev->StatusPerPath.emplace_back(path, false, std::nullopt);
-                    break;
+        public:
+            TWriterActor(std::vector<TString> drives, NKikimrBlobStorage::TPDiskMetadataRecord record)
+                : Drives(std::move(drives))
+                , Record(std::move(record))
+            {}
+
+            void Bootstrap(TActorId parentId) {
+                ParentId = parentId;
+
+                STLOG(PRI_DEBUG, BS_NODE, NWDC51, "TWriterActor bootstrap", (Drives, Drives), (Record, Record));
+
+                const TActorId nodeWardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
+                for (size_t index = 0; index < Drives.size(); ++index) {
+                    Send(nodeWardenId, new TEvNodeWardenWriteMetadata(Drives[index], Record), 0, index);
+                    ++RepliesPending;
+                }
+
+                Become(&TThis::StateFunc);
+                CheckIfDone();
             }
-        }
-        actorSystem->Send(new IEventHandle(selfId, {}, ev.release()));
+
+            void Handle(TEvNodeWardenWriteMetadataResult::TPtr ev) {
+                const size_t index = ev->Cookie;
+                Y_ABORT_UNLESS(index < Drives.size());
+                const TString& path = Drives[index];
+                STLOG(PRI_DEBUG, BS_NODE, NWDC52, "TWriterActor result", (Path, path), (Outcome, ev->Get()->Outcome),
+                    (Guid, ev->Get()->Guid));
+                Response->StatusPerPath.emplace_back(path, ev->Get()->Outcome == NPDisk::EPDiskMetadataOutcome::OK, ev->Get()->Guid);
+                --RepliesPending;
+                CheckIfDone();
+            }
+
+            void CheckIfDone() {
+                if (!RepliesPending) {
+                    Send(ParentId, Response.release());
+                    PassAway();
+                }
+            }
+
+            STRICT_STFUNC(StateFunc,
+                hFunc(TEvNodeWardenWriteMetadataResult, Handle);
+            )
+        };
+        Register(new TWriterActor(std::move(drives), std::move(record)));
     }
 
     TString TDistributedConfigKeeper::CalculateFingerprint(const NKikimrBlobStorage::TStorageConfig& config) {
@@ -102,8 +185,7 @@ namespace NKikimr::NStorage {
         item.Callback = std::move(callback);
 
         if (PersistQ.size() == 1) {
-            auto query = std::bind(&TThis::WriteConfig, TActivationContext::ActorSystem(), SelfId(), item.Drives, Cfg, item.Record);
-            Send(MakeIoDispatcherActorId(), new TEvInvokeQuery(std::move(query)));
+            WriteConfig(item.Drives, item.Record);
         }
     }
 
@@ -127,9 +209,7 @@ namespace NKikimr::NStorage {
 
         if (!PersistQ.empty()) {
             auto& front = PersistQ.front();
-            auto query = std::bind(&TThis::WriteConfig, TActivationContext::ActorSystem(), SelfId(), front.Drives, Cfg,
-                front.Record);
-            Send(MakeIoDispatcherActorId(), new TEvInvokeQuery(std::move(query)));
+            WriteConfig(front.Drives, front.Record);
         }
     }
 
@@ -145,12 +225,8 @@ namespace NKikimr::NStorage {
                 THashMap<TStorageConfigMeta, TEvGather::TCollectConfigs::TPersistentConfig*> proposed;
 
                 auto *res = task.Response.MutableCollectConfigs();
-                for (auto& item : *res->MutableCommittedConfigs()) {
-                    committed.try_emplace(item.GetConfig(), &item);
-                }
-                for (auto& item : *res->MutableProposedConfigs()) {
-                    proposed.try_emplace(item.GetConfig(), &item);
-                }
+                Y_ABORT_UNLESS(!res->CommittedConfigsSize());
+                Y_ABORT_UNLESS(!res->ProposedConfigsSize());
 
                 for (const auto& [path, m, guid] : msg.MetadataPerPath) {
                     auto addConfig = [&, path = path, guid = guid](const auto& config, auto func, auto& set) {
@@ -173,6 +249,21 @@ namespace NKikimr::NStorage {
                     if (m.HasProposedStorageConfig()) {
                         addConfig(m.GetProposedStorageConfig(), &TEvGather::TCollectConfigs::AddProposedConfigs, proposed);
                     }
+                }
+
+                for (const auto& [path, guid] : msg.NoMetadata) {
+                    auto *disk = res->AddNoMetadata();
+                    SelfNode.Serialize(disk->MutableNodeId());
+                    disk->SetPath(path);
+                    if (guid) {
+                        disk->SetGuid(*guid);
+                    }
+                }
+
+                for (const auto& path : msg.Errors) {
+                    auto *disk = res->AddErrors();
+                    SelfNode.Serialize(disk->MutableNodeId());
+                    disk->SetPath(path);
                 }
 
                 FinishAsyncOperation(it->first);
@@ -206,8 +297,7 @@ namespace NKikimr::NStorage {
             std::sort(drivesToRead.begin(), drivesToRead.end());
 
             if (DrivesToRead != drivesToRead) { // re-read configuration as it may cover additional drives
-                auto query = std::bind(&TThis::ReadConfig, TActivationContext::ActorSystem(), SelfId(), DrivesToRead, Cfg, 0);
-                Send(MakeIoDispatcherActorId(), new TEvInvokeQuery(std::move(query)));
+                ReadConfig();
             } else {
                 ApplyStorageConfig(InitialConfig);
                 Y_ABORT_UNLESS(DirectBoundNodes.empty()); // ensure we don't have to spread this config
@@ -218,150 +308,3 @@ namespace NKikimr::NStorage {
     }
 
 } // NKikimr::NStorage
-
-namespace NKikimr {
-
-    static const TString VaultLockFile = "/Berkanavt/kikimr/state/storage.lock";
-    static const TString VaultPath = "/Berkanavt/kikimr/state/storage.txt";
-    static TMutex VaultMutex;
-
-    static bool ReadVault(NKikimrBlobStorage::TStorageFileContent& vault) {
-        if (TFileHandle fh(VaultPath, OpenExisting | RdOnly); !fh.IsOpen()) {
-            return true;
-        } else if (TString buffer = TString::Uninitialized(fh.GetLength())) {
-            return fh.Read(buffer.Detach(), buffer.size()) == (i32)buffer.size() &&
-                google::protobuf::util::JsonStringToMessage(buffer, &vault).ok();
-        } else {
-            return true;
-        }
-    }
-
-    static bool WriteVault(NKikimrBlobStorage::TStorageFileContent& vault) {
-        TString buffer;
-        const bool success = google::protobuf::util::MessageToJsonString(vault, &buffer).ok();
-        Y_ABORT_UNLESS(success);
-
-        const TString tempPath = VaultPath + ".tmp";
-        if (TFileHandle fh(tempPath, CreateAlways | WrOnly); !fh.IsOpen()) {
-            return false;
-        } else if (fh.Flock(LOCK_EX | LOCK_NB)) {
-            Y_DEBUG_ABORT("unexpected lock race");
-            return false;
-        } else if (fh.Write(buffer.data(), buffer.size()) != (i32)buffer.size()) {
-            return false;
-        } else if (!NFs::Rename(tempPath, VaultPath)) {
-            return false;
-        }
-        return true;
-    }
-
-    NPDisk::EPDiskMetadataOutcome ReadPDiskMetadata(const TString& path, const NPDisk::TMainKey& key, TRcBuf& metadata,
-            std::optional<ui64> *pdiskGuid) {
-        TGuard<TMutex> guard(VaultMutex);
-        TFileHandle lock(VaultLockFile, OpenAlways);
-        if (!lock.IsOpen() || lock.Flock(LOCK_EX)) {
-            return NPDisk::EPDiskMetadataOutcome::ERROR;
-        }
-
-        NKikimrBlobStorage::TStorageFileContent vault;
-        if (!ReadVault(vault)) {
-            return NPDisk::EPDiskMetadataOutcome::ERROR;
-        }
-
-        NKikimrBlobStorage::TStorageFileContent::TRecord *it = nullptr;
-        for (NKikimrBlobStorage::TStorageFileContent::TRecord& item : *vault.MutableRecord()) {
-            if (item.GetPath() == path) {
-                it = &item;
-                break;
-            }
-        }
-
-        if (!it) {
-            // no metadata for this disk at all
-            return NPDisk::EPDiskMetadataOutcome::NO_METADATA;
-        } else if (std::find(key.Keys.begin(), key.Keys.end(), it->GetKey()) == key.Keys.end()) {
-            // incorrect key provided, <pretend> to unreadable format
-            return NPDisk::EPDiskMetadataOutcome::ERROR;
-        }
-
-        TPDiskInfo info;
-        const bool pdiskSuccess = ReadPDiskFormatInfo(path, key, info, false);
-
-        if (pdiskSuccess) {
-            pdiskGuid->emplace(info.DiskGuid);
-        } else {
-            pdiskGuid->reset();
-        }
-
-        if (it->GetUnformatted() && pdiskSuccess) {
-            it->SetPDiskGuid(info.DiskGuid);
-            it->SetTimestamp(info.Timestamp.GetValue());
-            it->ClearUnformatted();
-            if (!WriteVault(vault)) {
-                return NPDisk::EPDiskMetadataOutcome::ERROR;
-            }
-        }
-
-        const bool match = pdiskSuccess
-            ? it->GetPDiskGuid() == info.DiskGuid && TInstant::FromValue(it->GetTimestamp()) == info.Timestamp && !it->GetUnformatted()
-            : it->GetUnformatted();
-
-        if (match) {
-            TString s;
-            const bool success = it->GetMeta().SerializeToString(&s);
-            Y_ABORT_UNLESS(success);
-            metadata = TRcBuf(std::move(s));
-            return NPDisk::EPDiskMetadataOutcome::OK;
-        }
-
-        return NPDisk::EPDiskMetadataOutcome::NO_METADATA;
-    }
-
-    NPDisk::EPDiskMetadataOutcome WritePDiskMetadata(const TString& path, const NPDisk::TMainKey& key, TRcBuf&& metadata,
-            std::optional<ui64> *pdiskGuid) {
-        TGuard<TMutex> guard(VaultMutex);
-        TFileHandle lock(VaultLockFile, OpenAlways);
-        if (!lock.IsOpen() || lock.Flock(LOCK_EX)) {
-            return NPDisk::EPDiskMetadataOutcome::ERROR;
-        }
-
-        NKikimrBlobStorage::TStorageFileContent vault;
-        if (!ReadVault(vault)) {
-            return NPDisk::EPDiskMetadataOutcome::ERROR;
-        }
-
-        NKikimrBlobStorage::TStorageFileContent::TRecord *it = nullptr;
-        for (NKikimrBlobStorage::TStorageFileContent::TRecord& item : *vault.MutableRecord()) {
-            if (item.GetPath() == path) {
-                it = &item;
-                break;
-            }
-        }
-
-        if (!it) {
-            it = vault.AddRecord();
-            it->SetPath(path);
-        }
-
-        TPDiskInfo info;
-        const bool pdiskSuccess = ReadPDiskFormatInfo(path, key, info, false);
-
-        if (pdiskSuccess) {
-            it->SetPDiskGuid(info.DiskGuid);
-            it->SetTimestamp(info.Timestamp.GetValue());
-            it->ClearUnformatted();
-            pdiskGuid->emplace(info.DiskGuid);
-        } else {
-            it->SetUnformatted(true);
-            pdiskGuid->reset();
-        }
-        it->SetKey(key.Keys.back());
-        const bool success = it->MutableMeta()->ParseFromString(metadata.ExtractUnderlyingContainerOrCopy<TString>());
-        Y_ABORT_UNLESS(success);
-
-        return WriteVault(vault)
-            ? NPDisk::EPDiskMetadataOutcome::OK
-            : NPDisk::EPDiskMetadataOutcome::ERROR;
-    }
-
-}

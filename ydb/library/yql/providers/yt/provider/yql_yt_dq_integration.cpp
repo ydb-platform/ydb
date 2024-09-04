@@ -8,6 +8,7 @@
 #include <ydb/library/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
 #include <ydb/library/yql/providers/yt/common/yql_configuration.h>
 #include <ydb/library/yql/providers/yt/lib/yson_helpers/yson_helpers.h>
+#include <ydb/library/yql/providers/yt/proto/source.pb.h>
 
 #include <ydb/library/yql/providers/common/dq/yql_dq_integration_impl.h>
 #include <ydb/library/yql/providers/common/codec/yql_codec_type_flags.h>
@@ -220,7 +221,7 @@ public:
         }
 
         if (auto maxChunks = State_->Configuration->MaxChunksForDqRead.Get().GetOrElse(DEFAULT_MAX_CHUNKS_FOR_DQ_READ); canFallback && chunksCount > maxChunks) {
-            throw TFallbackError() << DqFallbackErrorMessageWrap("table with too many chunks");
+            throw TFallbackError() << DqFallbackErrorMessageWrap( TStringBuilder() << "table with too many chunks: " << chunksCount << " > " << maxChunks);
         }
 
         if (hasErasure) {
@@ -425,11 +426,6 @@ public:
                     AddMessage(ctx, info, skipIssues, State_->PassiveExecution);
                     return false;
                 }
-                auto sampleSetting = GetSetting(section.Settings().Ref(), EYtSettingType::Sample);
-                if (sampleSetting && sampleSetting->Child(1)->Child(0)->Content() == "system") {
-                    AddMessage(ctx, "system sampling", skipIssues, State_->PassiveExecution);
-                    return false;
-                }
                 for (auto path: section.Paths()) {
                     if (!path.Table().Maybe<TYtTable>()) {
                         AddMessage(ctx, "non-table path", skipIssues, State_->PassiveExecution);
@@ -469,7 +465,7 @@ public:
                 }
             }
             if (auto maxChunks = State_->Configuration->MaxChunksForDqRead.Get().GetOrElse(DEFAULT_MAX_CHUNKS_FOR_DQ_READ); chunksCount > maxChunks) {
-                AddMessage(ctx, "table with too many chunks", skipIssues, State_->PassiveExecution);
+                AddMessage(ctx,  TStringBuilder() << "table with too many chunks: " << chunksCount << " > " << maxChunks, skipIssues, State_->PassiveExecution);
                 return false;
             }
             return true;
@@ -488,7 +484,7 @@ public:
         if (!State_->Configuration->UseRPCReaderInDQ.Get(maybeRead.Cast().DataSource().Cluster().StringValue()).GetOrElse(DEFAULT_USE_RPC_READER_IN_DQ)) {
             return false;
         }
-    
+
         auto supportedTypes = State_->Configuration->BlockReaderSupportedTypes.Get(maybeRead.Cast().DataSource().Cluster().StringValue()).GetOrElse(DEFAULT_BLOCK_READER_SUPPORTED_TYPES);
         auto supportedDataTypes = State_->Configuration->BlockReaderSupportedDataTypes.Get(maybeRead.Cast().DataSource().Cluster().StringValue()).GetOrElse(DEFAULT_BLOCK_READER_SUPPORTED_DATA_TYPES);
         const auto structType = GetSeqItemType(maybeRead.Raw()->GetTypeAnn()->Cast<TTupleExprType>()->GetItems().back())->Cast<TStructExprType>();
@@ -514,6 +510,14 @@ public:
         const TYtSectionList& sectionList = wrap.Input().Cast<TYtReadTable>().Input();
         for (size_t i = 0; i < sectionList.Size(); ++i) {
             auto section = sectionList.Item(i);
+            auto paths = section.Paths();
+            for (const auto& path : section.Paths()) {
+                auto meta = TYtTableBaseInfo::GetMeta(path.Table());
+                if (meta->Attrs.contains("schema_mode") && meta->Attrs["schema_mode"] == "weak") {
+                    BlockReaderAddInfo(ctx, ctx.GetPosition(node.Pos()), "can't use block reader on tables with weak schema");
+                    return false;
+                }
+            }
             if (!NYql::GetSettingAsColumnList(section.Settings().Ref(), EYtSettingType::SysColumns).empty()) {
                 BlockReaderAddInfo(ctx, ctx.GetPosition(node.Pos()), "system column");
                 return false;
@@ -585,14 +589,14 @@ public:
                             }
                             if (tableInfo->Stat) {
                                 chunksCount += tableInfo->Stat->ChunkCount;
+                                if (chunksCount > maxChunks) {
+                                    AddErrorWrap(ctx, node_->Pos(),  TStringBuilder() << "table with too many chunks: " << chunksCount << " > " << maxChunks);
+                                    return Nothing();
+                                }
                             }
                         }
                         groupIdPathInfo.back().emplace_back(pathInfo);
                     }
-                }
-                if (chunksCount > maxChunks) {
-                    AddErrorWrap(ctx, node_->Pos(), "table with too many chunks");
-                    return Nothing();
                 }
                 clusterToNodesAndErasure[cluster].push_back({node_, hasErasure});
             } else {
@@ -645,6 +649,28 @@ public:
         }
         return read;
     }
+
+    void FillLookupSourceSettings(const TExprNode& node, ::google::protobuf::Any& settings, TString& sourceType) override {
+        const TDqLookupSourceWrap wrap(&node);
+        auto table = wrap.Input().Cast<TYtTable>();
+        TYtTableBaseInfo::TPtr tableInfo{TYtTableBaseInfo::Parse(table)};
+        auto codecSpec = tableInfo->GetCodecSpecNode({});
+        TString rowSpec = NodeToYsonString(codecSpec, NYT::NYson::EYsonFormat::Text);
+
+        NYt::NSource::TLookupSource source;
+        source.SetCluster(table.Cluster().StringValue());
+        source.SetTable(table.Name().StringValue());
+        source.SetRowSpec(rowSpec);
+        YQL_CLOG(INFO, ProviderYt)
+            << "Filling lookup source settings"
+            << ": cluster: " << source.cluster()
+            << ", table: " << source.table()
+            << ", RowSpec: " << rowSpec
+        ;
+        settings.PackFrom(source);
+        sourceType = "yt";
+    }
+
 
     TMaybe<bool> CanWrite(const TExprNode& node, TExprContext& ctx) override {
         if (auto maybeWrite = TMaybeNode<TYtWriteTable>(&node)) {

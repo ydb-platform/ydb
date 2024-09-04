@@ -339,6 +339,21 @@ NUdf::TUnboxedValue UnpackFromChunkedBuffer(const TType* type, TChunkedInputBuff
             ret.SetTimezoneId(UnpackData<Fast, ui16>(buf));
             return ret;
         }
+        case NUdf::EDataSlot::TzDate32: {
+            auto ret = NUdf::TUnboxedValuePod(UnpackData<Fast, i32>(buf));
+            ret.SetTimezoneId(UnpackData<Fast, ui16>(buf));
+            return ret;
+        }
+        case NUdf::EDataSlot::TzDatetime64: {
+            auto ret = NUdf::TUnboxedValuePod(UnpackData<Fast, i64>(buf));
+            ret.SetTimezoneId(UnpackData<Fast, ui16>(buf));
+            return ret;
+        }
+        case NUdf::EDataSlot::TzTimestamp64: {
+            auto ret = NUdf::TUnboxedValuePod(UnpackData<Fast, i64>(buf));
+            ret.SetTimezoneId(UnpackData<Fast, ui16>(buf));
+            return ret;
+        }        
         case NUdf::EDataSlot::Uuid: {
             return UnpackString(buf, 16);
         }
@@ -669,6 +684,21 @@ void PackImpl(const TType* type, TBuf& buffer, const NUdf::TUnboxedValuePod& val
         }
         case NUdf::EDataSlot::TzTimestamp: {
             PackData<Fast>(value.Get<ui64>(), buffer);
+            PackData<Fast>(value.GetTimezoneId(), buffer);
+            break;
+        }
+        case NUdf::EDataSlot::TzDate32: {
+            PackData<Fast>(value.Get<i32>(), buffer);
+            PackData<Fast>(value.GetTimezoneId(), buffer);
+            break;
+        }
+        case NUdf::EDataSlot::TzDatetime64: {
+            PackData<Fast>(value.Get<i64>(), buffer);
+            PackData<Fast>(value.GetTimezoneId(), buffer);
+            break;
+        }
+        case NUdf::EDataSlot::TzTimestamp64: {
+            PackData<Fast>(value.Get<i64>(), buffer);
             PackData<Fast>(value.GetTimezoneId(), buffer);
             break;
         }

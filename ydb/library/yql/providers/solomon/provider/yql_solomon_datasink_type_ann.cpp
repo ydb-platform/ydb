@@ -115,7 +115,7 @@ private:
     TStatus HandleSoShard(TExprBase input, TExprContext& ctx) {
         YQL_ENSURE(!State_->IsRtmrMode(), "SoShard can't be used in rtmr mode");
 
-        if (!EnsureMinArgsCount(input.Ref(), 4, ctx) || !EnsureMaxArgsCount(input.Ref(), 5, ctx)) {
+        if (!EnsureMinMaxArgsCount(input.Ref(), 5, 6, ctx)) {
             return TStatus::Error;
         }
 
@@ -134,6 +134,10 @@ private:
         }
 
         if (!EnsureAtom(shard.Service().Ref(), ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!EnsureType(shard.RowType().Ref(), ctx)) {
             return TStatus::Error;
         }
 

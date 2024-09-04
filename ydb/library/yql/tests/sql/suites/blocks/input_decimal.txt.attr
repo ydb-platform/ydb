@@ -1,0 +1,7 @@
+{"_yql_row_spec"={
+    "Type"=["StructType";[
+        ["cs_ext_list_price";["OptionalType";["DataType";"Decimal";"7";"2"]]];
+        ["cs_ext_tax";["OptionalType";["DataType";"Decimal";"7";"2"]]];
+        ["cs_sales_price";["OptionalType";["DataType";"Decimal";"7";"2"]]];
+    ]];
+}}

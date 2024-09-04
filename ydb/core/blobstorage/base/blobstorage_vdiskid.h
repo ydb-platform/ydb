@@ -1,8 +1,8 @@
 #pragma once
 
 #include "defs.h"
-
 #include <util/str_stl.h>
+#include <ydb/core/base/blobstorage_common.h>
 #include <util/digest/numeric.h>
 
 namespace NKikimrBlobStorage {
@@ -19,7 +19,7 @@ struct TVDiskIdShort;
 ////////////////////////////////////////////////////////////////////////////
 #pragma pack(push, 4)
 struct TVDiskID {
-    ui32 GroupID = 0;
+    TGroupId GroupID = TGroupId::Zero();
     ui32 GroupGeneration = 0;
     ui8 FailRealm = 0;
     ui8 FailDomain = 0;
@@ -27,11 +27,19 @@ struct TVDiskID {
     ui8 Padding = 0;
 
     TVDiskID() = default;
+    TVDiskID(TGroupId groupId, ui32 groupGen, TVDiskIdShort vdiskIdShort);
     TVDiskID(ui32 groupId, ui32 groupGen, TVDiskIdShort vdiskIdShort);
     TVDiskID(IInputStream &str);
 
-    TVDiskID(ui32 groupId, ui32 groupGen, ui8 failRealm, ui8 failDomain, ui8 vdisk)
+    TVDiskID(TGroupId groupId, ui32 groupGen, ui8 failRealm, ui8 failDomain, ui8 vdisk)
         : GroupID(groupId)
+        , GroupGeneration(groupGen)
+        , FailRealm(failRealm)
+        , FailDomain(failDomain)
+        , VDisk(vdisk)
+    {}
+    TVDiskID(ui32 groupId, ui32 groupGen, ui8 failRealm, ui8 failDomain, ui8 vdisk)
+        : GroupID(TGroupId::FromValue(groupId))
         , GroupGeneration(groupGen)
         , FailRealm(failRealm)
         , FailDomain(failDomain)
@@ -69,7 +77,7 @@ struct TVDiskID {
 
     ui64 Hash() const {
         ui32 x = (((ui32(FailRealm) << 8) | ui32(FailDomain)) << 8) | ui32(VDisk);
-        ui64 y = GroupID;
+        ui64 y = GroupID.GetRawId();
         y = y << 32ull;
         y |= GroupGeneration;
         return CombineHashes(IntHash<ui64>(y), IntHash<ui64>(x));

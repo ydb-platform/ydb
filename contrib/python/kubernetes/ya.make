@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(29.0.0)
+VERSION(30.1.0)
 
 LICENSE(Apache-2.0)
 
@@ -83,6 +83,8 @@ PY_SRCS(
     kubernetes/client/api/storage_api.py
     kubernetes/client/api/storage_v1_api.py
     kubernetes/client/api/storage_v1alpha1_api.py
+    kubernetes/client/api/storagemigration_api.py
+    kubernetes/client/api/storagemigration_v1alpha1_api.py
     kubernetes/client/api/version_api.py
     kubernetes/client/api/well_known_api.py
     kubernetes/client/api_client.py
@@ -119,7 +121,9 @@ PY_SRCS(
     kubernetes/client/models/v1_api_service_spec.py
     kubernetes/client/models/v1_api_service_status.py
     kubernetes/client/models/v1_api_versions.py
+    kubernetes/client/models/v1_app_armor_profile.py
     kubernetes/client/models/v1_attached_volume.py
+    kubernetes/client/models/v1_audit_annotation.py
     kubernetes/client/models/v1_aws_elastic_block_store_volume_source.py
     kubernetes/client/models/v1_azure_disk_volume_source.py
     kubernetes/client/models/v1_azure_file_persistent_volume_source.py
@@ -229,6 +233,7 @@ PY_SRCS(
     kubernetes/client/models/v1_eviction.py
     kubernetes/client/models/v1_exec_action.py
     kubernetes/client/models/v1_exempt_priority_level_configuration.py
+    kubernetes/client/models/v1_expression_warning.py
     kubernetes/client/models/v1_external_documentation.py
     kubernetes/client/models/v1_fc_volume_source.py
     kubernetes/client/models/v1_flex_persistent_volume_source.py
@@ -306,10 +311,12 @@ PY_SRCS(
     kubernetes/client/models/v1_local_volume_source.py
     kubernetes/client/models/v1_managed_fields_entry.py
     kubernetes/client/models/v1_match_condition.py
+    kubernetes/client/models/v1_match_resources.py
     kubernetes/client/models/v1_modify_volume_status.py
     kubernetes/client/models/v1_mutating_webhook.py
     kubernetes/client/models/v1_mutating_webhook_configuration.py
     kubernetes/client/models/v1_mutating_webhook_configuration_list.py
+    kubernetes/client/models/v1_named_rule_with_operations.py
     kubernetes/client/models/v1_namespace.py
     kubernetes/client/models/v1_namespace_condition.py
     kubernetes/client/models/v1_namespace_list.py
@@ -331,6 +338,8 @@ PY_SRCS(
     kubernetes/client/models/v1_node_config_status.py
     kubernetes/client/models/v1_node_daemon_endpoints.py
     kubernetes/client/models/v1_node_list.py
+    kubernetes/client/models/v1_node_runtime_handler.py
+    kubernetes/client/models/v1_node_runtime_handler_features.py
     kubernetes/client/models/v1_node_selector.py
     kubernetes/client/models/v1_node_selector_requirement.py
     kubernetes/client/models/v1_node_selector_term.py
@@ -345,6 +354,8 @@ PY_SRCS(
     kubernetes/client/models/v1_object_reference.py
     kubernetes/client/models/v1_overhead.py
     kubernetes/client/models/v1_owner_reference.py
+    kubernetes/client/models/v1_param_kind.py
+    kubernetes/client/models/v1_param_ref.py
     kubernetes/client/models/v1_persistent_volume.py
     kubernetes/client/models/v1_persistent_volume_claim.py
     kubernetes/client/models/v1_persistent_volume_claim_condition.py
@@ -454,6 +465,7 @@ PY_SRCS(
     kubernetes/client/models/v1_secret_reference.py
     kubernetes/client/models/v1_secret_volume_source.py
     kubernetes/client/models/v1_security_context.py
+    kubernetes/client/models/v1_selectable_field.py
     kubernetes/client/models/v1_self_subject_access_review.py
     kubernetes/client/models/v1_self_subject_access_review_spec.py
     kubernetes/client/models/v1_self_subject_review.py
@@ -492,6 +504,8 @@ PY_SRCS(
     kubernetes/client/models/v1_subject_access_review_spec.py
     kubernetes/client/models/v1_subject_access_review_status.py
     kubernetes/client/models/v1_subject_rules_review_status.py
+    kubernetes/client/models/v1_success_policy.py
+    kubernetes/client/models/v1_success_policy_rule.py
     kubernetes/client/models/v1_sysctl.py
     kubernetes/client/models/v1_taint.py
     kubernetes/client/models/v1_tcp_socket_action.py
@@ -504,15 +518,25 @@ PY_SRCS(
     kubernetes/client/models/v1_topology_selector_label_requirement.py
     kubernetes/client/models/v1_topology_selector_term.py
     kubernetes/client/models/v1_topology_spread_constraint.py
+    kubernetes/client/models/v1_type_checking.py
     kubernetes/client/models/v1_typed_local_object_reference.py
     kubernetes/client/models/v1_typed_object_reference.py
     kubernetes/client/models/v1_uncounted_terminated_pods.py
     kubernetes/client/models/v1_user_info.py
     kubernetes/client/models/v1_user_subject.py
+    kubernetes/client/models/v1_validating_admission_policy.py
+    kubernetes/client/models/v1_validating_admission_policy_binding.py
+    kubernetes/client/models/v1_validating_admission_policy_binding_list.py
+    kubernetes/client/models/v1_validating_admission_policy_binding_spec.py
+    kubernetes/client/models/v1_validating_admission_policy_list.py
+    kubernetes/client/models/v1_validating_admission_policy_spec.py
+    kubernetes/client/models/v1_validating_admission_policy_status.py
     kubernetes/client/models/v1_validating_webhook.py
     kubernetes/client/models/v1_validating_webhook_configuration.py
     kubernetes/client/models/v1_validating_webhook_configuration_list.py
+    kubernetes/client/models/v1_validation.py
     kubernetes/client/models/v1_validation_rule.py
+    kubernetes/client/models/v1_variable.py
     kubernetes/client/models/v1_volume.py
     kubernetes/client/models/v1_volume_attachment.py
     kubernetes/client/models/v1_volume_attachment_list.py
@@ -522,6 +546,7 @@ PY_SRCS(
     kubernetes/client/models/v1_volume_device.py
     kubernetes/client/models/v1_volume_error.py
     kubernetes/client/models/v1_volume_mount.py
+    kubernetes/client/models/v1_volume_mount_status.py
     kubernetes/client/models/v1_volume_node_affinity.py
     kubernetes/client/models/v1_volume_node_resources.py
     kubernetes/client/models/v1_volume_projection.py
@@ -536,11 +561,13 @@ PY_SRCS(
     kubernetes/client/models/v1alpha1_cluster_trust_bundle_list.py
     kubernetes/client/models/v1alpha1_cluster_trust_bundle_spec.py
     kubernetes/client/models/v1alpha1_expression_warning.py
+    kubernetes/client/models/v1alpha1_group_version_resource.py
     kubernetes/client/models/v1alpha1_ip_address.py
     kubernetes/client/models/v1alpha1_ip_address_list.py
     kubernetes/client/models/v1alpha1_ip_address_spec.py
     kubernetes/client/models/v1alpha1_match_condition.py
     kubernetes/client/models/v1alpha1_match_resources.py
+    kubernetes/client/models/v1alpha1_migration_condition.py
     kubernetes/client/models/v1alpha1_named_rule_with_operations.py
     kubernetes/client/models/v1alpha1_param_kind.py
     kubernetes/client/models/v1alpha1_param_ref.py
@@ -555,6 +582,10 @@ PY_SRCS(
     kubernetes/client/models/v1alpha1_storage_version.py
     kubernetes/client/models/v1alpha1_storage_version_condition.py
     kubernetes/client/models/v1alpha1_storage_version_list.py
+    kubernetes/client/models/v1alpha1_storage_version_migration.py
+    kubernetes/client/models/v1alpha1_storage_version_migration_list.py
+    kubernetes/client/models/v1alpha1_storage_version_migration_spec.py
+    kubernetes/client/models/v1alpha1_storage_version_migration_status.py
     kubernetes/client/models/v1alpha1_storage_version_status.py
     kubernetes/client/models/v1alpha1_type_checking.py
     kubernetes/client/models/v1alpha1_validating_admission_policy.py
@@ -569,6 +600,16 @@ PY_SRCS(
     kubernetes/client/models/v1alpha1_volume_attributes_class.py
     kubernetes/client/models/v1alpha1_volume_attributes_class_list.py
     kubernetes/client/models/v1alpha2_allocation_result.py
+    kubernetes/client/models/v1alpha2_driver_allocation_result.py
+    kubernetes/client/models/v1alpha2_driver_requests.py
+    kubernetes/client/models/v1alpha2_named_resources_allocation_result.py
+    kubernetes/client/models/v1alpha2_named_resources_attribute.py
+    kubernetes/client/models/v1alpha2_named_resources_filter.py
+    kubernetes/client/models/v1alpha2_named_resources_instance.py
+    kubernetes/client/models/v1alpha2_named_resources_int_slice.py
+    kubernetes/client/models/v1alpha2_named_resources_request.py
+    kubernetes/client/models/v1alpha2_named_resources_resources.py
+    kubernetes/client/models/v1alpha2_named_resources_string_slice.py
     kubernetes/client/models/v1alpha2_pod_scheduling_context.py
     kubernetes/client/models/v1alpha2_pod_scheduling_context_list.py
     kubernetes/client/models/v1alpha2_pod_scheduling_context_spec.py
@@ -576,6 +617,8 @@ PY_SRCS(
     kubernetes/client/models/v1alpha2_resource_claim.py
     kubernetes/client/models/v1alpha2_resource_claim_consumer_reference.py
     kubernetes/client/models/v1alpha2_resource_claim_list.py
+    kubernetes/client/models/v1alpha2_resource_claim_parameters.py
+    kubernetes/client/models/v1alpha2_resource_claim_parameters_list.py
     kubernetes/client/models/v1alpha2_resource_claim_parameters_reference.py
     kubernetes/client/models/v1alpha2_resource_claim_scheduling_status.py
     kubernetes/client/models/v1alpha2_resource_claim_spec.py
@@ -585,8 +628,16 @@ PY_SRCS(
     kubernetes/client/models/v1alpha2_resource_claim_template_spec.py
     kubernetes/client/models/v1alpha2_resource_class.py
     kubernetes/client/models/v1alpha2_resource_class_list.py
+    kubernetes/client/models/v1alpha2_resource_class_parameters.py
+    kubernetes/client/models/v1alpha2_resource_class_parameters_list.py
     kubernetes/client/models/v1alpha2_resource_class_parameters_reference.py
+    kubernetes/client/models/v1alpha2_resource_filter.py
     kubernetes/client/models/v1alpha2_resource_handle.py
+    kubernetes/client/models/v1alpha2_resource_request.py
+    kubernetes/client/models/v1alpha2_resource_slice.py
+    kubernetes/client/models/v1alpha2_resource_slice_list.py
+    kubernetes/client/models/v1alpha2_structured_resource_handle.py
+    kubernetes/client/models/v1alpha2_vendor_parameters.py
     kubernetes/client/models/v1beta1_audit_annotation.py
     kubernetes/client/models/v1beta1_expression_warning.py
     kubernetes/client/models/v1beta1_match_condition.py

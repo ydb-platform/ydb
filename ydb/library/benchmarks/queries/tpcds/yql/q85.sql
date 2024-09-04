@@ -33,7 +33,7 @@ select  substring(cast(reason.r_reason_desc as string),0,20) bla
      and
      cd1.cd_education_status = cd2.cd_education_status
      and
-     ws_sales_price between 100.00 and 150.00
+     ws_sales_price between 100 and 150
     )
    or
     (
@@ -45,7 +45,7 @@ select  substring(cast(reason.r_reason_desc as string),0,20) bla
      and
      cd1.cd_education_status = cd2.cd_education_status
      and
-     ws_sales_price between 50.00 and 100.00
+     ws_sales_price between 50 and 100
     )
    or
     (
@@ -57,7 +57,7 @@ select  substring(cast(reason.r_reason_desc as string),0,20) bla
      and
      cd1.cd_education_status = cd2.cd_education_status
      and
-     ws_sales_price between 150.00 and 200.00
+     ws_sales_price between 150 and 200
     )
    )
    and

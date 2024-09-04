@@ -46,9 +46,9 @@ private:
     void OnWakeup(const TActorContext &ctx) override {
         MiniKQLPoolStats.Update();
 
-        TVector<std::tuple<TString, double, ui32>> pools;
+        TVector<std::tuple<TString, double, ui32, ui32>> pools;
         for (const auto& pool : PoolCounters) {
-            pools.emplace_back(pool.Name, pool.Usage, pool.Threads);
+            pools.emplace_back(pool.Name, pool.Usage, pool.Threads, pool.LimitThreads);
         }
 
         ctx.Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(ctx.SelfID.NodeId()), new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateUpdate(pools));

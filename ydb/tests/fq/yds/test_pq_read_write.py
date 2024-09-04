@@ -32,11 +32,7 @@ def stop_yds_query(client, query_id):
 class TestPqReadWrite(TestYdsBase):
     @yq_v1
     @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
-    @pytest.mark.parametrize(
-        "with_checkpoints",
-        [True, False],
-        ids=["with_checkpoints", "without_checkpoints"]
-    )
+    @pytest.mark.parametrize("with_checkpoints", [True, False], ids=["with_checkpoints", "without_checkpoints"])
     def test_pq_read_write(self, kikimr, client, with_checkpoints):
         client.create_yds_connection(name=YDS_CONNECTION, database_id="FakeDatabaseId")
         self.init_topics(Rf"pq_test_pq_read_write_{with_checkpoints}")
@@ -111,11 +107,7 @@ class TestPqReadWrite(TestYdsBase):
         assert len(read_rules) == 0, read_rules
 
     @yq_v1
-    @pytest.mark.parametrize(
-        "with_checkpoints",
-        [True, False],
-        ids=["with_checkpoints", "without_checkpoints"]
-    )
+    @pytest.mark.parametrize("with_checkpoints", [True, False], ids=["with_checkpoints", "without_checkpoints"])
     @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
     def test_pq_read_schema_metadata(self, kikimr, client, with_checkpoints):
         client.create_yds_connection(name=YDS_CONNECTION, database_id="FakeDatabaseId")
@@ -146,10 +138,7 @@ class TestPqReadWrite(TestYdsBase):
         ]
         self.write_stream(data1)
 
-        expected = [
-            '{"field1":"value1","field2":105,"field3":0}',
-            '{"field1":"value2","field2":106,"field3":1}'
-        ]
+        expected = ['{"field1":"value1","field2":105,"field3":0}', '{"field1":"value2","field2":106,"field3":1}']
 
         assert self.read_stream(len(expected)) == expected
 

@@ -17,7 +17,7 @@ void TFetcherCheckUserTieringPermissions::DoProcess(NSchemeShard::TSchemeShard& 
     } else {
         bool denied = false;
         for (auto&& i : TieringRuleIds) {
-            const std::set<TPathId>& pathIds = schemeShard.ColumnTables.GetTablesWithTiering(i);
+            const auto& pathIds = schemeShard.ColumnTables.GetTablesWithTiering(i);
             for (auto&& pathId : pathIds) {
                 auto path = NSchemeShard::TPath::Init(pathId, &schemeShard);
                 if (!path.IsResolved() || path.IsUnderDeleting() || path.IsDeleted()) {

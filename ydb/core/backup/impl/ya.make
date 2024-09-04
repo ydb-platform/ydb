@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     local_partition_reader.cpp
+    table_writer.cpp
 )
 
 PEERDIR(
@@ -14,4 +15,5 @@ END()
 
 RECURSE_FOR_TESTS(
     ut_local_partition_reader
+    ut_table_writer
 )

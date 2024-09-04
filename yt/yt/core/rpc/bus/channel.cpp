@@ -21,6 +21,8 @@
 #include <yt/yt/core/misc/finally.h>
 #include <yt/yt/core/misc/atomic_object.h>
 
+#include <yt/yt/core/tracing/public.h>
+
 #include <yt/yt_proto/yt/core/rpc/proto/rpc.pb.h>
 
 #include <library/cpp/yt/threading/rw_spin_lock.h>
@@ -33,10 +35,11 @@
 namespace NYT::NRpc::NBus {
 
 using namespace NYT::NBus;
+using namespace NConcurrency;
+using namespace NTracing;
 using namespace NYPath;
 using namespace NYTree;
 using namespace NYson;
-using namespace NConcurrency;
 
 using NYT::FromProto;
 using NYT::ToProto;
@@ -61,7 +64,7 @@ public:
         YT_VERIFY(MemoryUsageTracker_);
     }
 
-    const TString& GetEndpointDescription() const override
+    const std::string& GetEndpointDescription() const override
     {
         return Client_->GetEndpointDescription();
     }
@@ -145,6 +148,11 @@ public:
         }
 
         return requestCount;
+    }
+
+    const IMemoryUsageTrackerPtr& GetChannelMemoryTracker() override
+    {
+        return MemoryUsageTracker_;
     }
 
 private:
@@ -369,10 +377,11 @@ private:
             }
 
             if (auto readyFuture = GetBusReadyFuture()) {
-                YT_LOG_DEBUG("Waiting for bus to become ready (RequestId: %v, Method: %v.%v)",
+                YT_LOG_DEBUG("Waiting for bus to become ready (RequestId: %v, Method: %v.%v, Endpoint: %v)",
                     requestControl->GetRequestId(),
                     requestControl->GetService(),
-                    requestControl->GetMethod());
+                    requestControl->GetMethod(),
+                    Bus_->GetEndpointDescription());
 
                 readyFuture.Subscribe(BIND(
                     [
@@ -549,9 +558,9 @@ private:
                 requestControl,
                 responseHandler,
                 TStringBuf("Request timed out"),
-                TError(NYT::EErrorCode::Timeout, aborted
+                TError(NYT::EErrorCode::Timeout, TRuntimeFormat(aborted
                     ? "Request timed out or timer was aborted"
-                    : "Request timed out"));
+                    : "Request timed out")));
         }
 
         void HandleAcknowledgementTimeout(const TClientRequestControlPtr& requestControl, bool aborted)
@@ -915,7 +924,7 @@ private:
                     message = TrackMemory(MemoryUsageTracker_, std::move(message));
                     if (MemoryUsageTracker_->IsExceeded()) {
                         auto error = TError(
-                            NRpc::EErrorCode::MemoryOverflow,
+                            NRpc::EErrorCode::MemoryPressure,
                             "Response is dropped due to high memory pressure");
                         requestControl->ProfileError(error);
                         NotifyError(
@@ -947,7 +956,7 @@ private:
         void OnStreamingPayloadMessage(TSharedRefArray message)
         {
             NProto::TStreamingPayloadHeader header;
-            if (!ParseStreamingPayloadHeader(message, &header)) {
+            if (!TryParseStreamingPayloadHeader(message, &header)) {
                 YT_LOG_ERROR("Error parsing streaming payload header");
                 return;
             }
@@ -1002,7 +1011,7 @@ private:
         void OnStreamingFeedbackMessage(TSharedRefArray message)
         {
             NProto::TStreamingFeedbackHeader header;
-            if (!ParseStreamingFeedbackHeader(message, &header)) {
+            if (!TryParseStreamingFeedbackHeader(message, &header)) {
                 YT_LOG_ERROR("Error parsing streaming feedback header");
                 return;
             }
@@ -1092,6 +1101,12 @@ private:
             if (requestControl->GetTimeout()) {
                 detailedError = detailedError
                     << TErrorAttribute("timeout", *requestControl->GetTimeout());
+            }
+
+            if (!HasTracingAttributes(detailedError)) {
+                if (auto tracingAttributes = requestControl->GetTracingAttributes()) {
+                    SetTracingAttributes(&detailedError, *tracingAttributes);
+                }
             }
 
             YT_LOG_DEBUG(detailedError, "%v (RequestId: %v)",
@@ -1187,6 +1202,11 @@ private:
         NTracing::TCurrentTraceContextGuard GetTraceContextGuard() const
         {
             return TraceContext_.MakeTraceContextGuard();
+        }
+
+        std::optional<TTracingAttributes> GetTracingAttributes() const
+        {
+            return TraceContext_.GetTracingAttributes();
         }
 
         template <typename TLock>
@@ -1288,7 +1308,7 @@ public:
         YT_VERIFY(MemoryUsageTracker_);
     }
 
-    IChannelPtr CreateChannel(const TString& address) override
+    IChannelPtr CreateChannel(const std::string& address) override
     {
         auto config = TBusClientConfig::CreateTcp(address);
         config->Load(Config_, /*postprocess*/ true, /*setDefaults*/ false);
@@ -1330,7 +1350,7 @@ public:
         YT_VERIFY(MemoryUsageTracker_);
     }
 
-    IChannelPtr CreateChannel(const TString& address) override
+    IChannelPtr CreateChannel(const std::string& address) override
     {
         auto config = TBusClientConfig::CreateUds(address);
         config->Load(Config_, /*postprocess*/ true, /*setDefaults*/ false);

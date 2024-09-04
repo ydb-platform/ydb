@@ -14,7 +14,7 @@ Below are examples of the code for authentication using a token in different {{ 
     import (
       "context"
       "os"
-      
+
       "github.com/ydb-platform/ydb-go-sdk/v3"
     )
 
@@ -118,15 +118,15 @@ Below are examples of the code for authentication using a token in different {{ 
 
 - Node.js
 
-  {% include [auth-access-token](../../../_includes/nodejs/auth-access-token.md) %}
+  {% include [auth-access-token](../../_includes/nodejs/auth-access-token.md) %}
 
 - Python
 
-  {% include [auth-access-token](../../../_includes/python/auth-access-token.md) %}
+  {% include [auth-access-token](../../_includes/python/auth-access-token.md) %}
 
 - Python (asyncio)
 
-  {% include [auth-access-token](../../../_includes/python/async/auth-access-token.md) %}
+  {% include [auth-access-token](../../_includes/python/async/auth-access-token.md) %}
 
 - C# (.NET)
 
@@ -171,7 +171,7 @@ Below are examples of the code for authentication using a token in different {{ 
           'insecure' => true,
           // 'root_cert_file' => './CA.pem', // Root CA file (uncomment for dedicated server)
       ],
-      
+
       'credentials' => new AccessTokenAuthentication('AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA')
   ];
 

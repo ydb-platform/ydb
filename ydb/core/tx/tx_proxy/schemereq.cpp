@@ -126,12 +126,6 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpCreatePersQueueGroup:
             return *modifyScheme.MutableCreatePersQueueGroup()->MutableName();
 
-        case NKikimrSchemeOp::ESchemeOpAllocatePersQueueGroup:
-            return *modifyScheme.MutableAllocatePersQueueGroup()->MutableName();
-
-        case NKikimrSchemeOp::ESchemeOpDeallocatePersQueueGroup:
-            return *modifyScheme.MutableDeallocatePersQueueGroup()->MutableName();
-
         case NKikimrSchemeOp::ESchemeOpDropTable:
         case NKikimrSchemeOp::ESchemeOpDropPersQueueGroup:
         case NKikimrSchemeOp::ESchemeOpRmDir:
@@ -153,6 +147,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropExternalTable:
         case NKikimrSchemeOp::ESchemeOpDropExternalDataSource:
         case NKikimrSchemeOp::ESchemeOpDropView:
+        case NKikimrSchemeOp::ESchemeOpDropResourcePool:
             return *modifyScheme.MutableDrop()->MutableName();
 
         case NKikimrSchemeOp::ESchemeOpAlterTable:
@@ -355,6 +350,15 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
         case NKikimrSchemeOp::ESchemeOpDropContinuousBackup:
             return *modifyScheme.MutableDropContinuousBackup()->MutableTableName();
+
+        case NKikimrSchemeOp::ESchemeOpCreateResourcePool:
+            return *modifyScheme.MutableCreateResourcePool()->MutableName();
+
+        case NKikimrSchemeOp::ESchemeOpAlterResourcePool:
+            return *modifyScheme.MutableCreateResourcePool()->MutableName();
+
+        case NKikimrSchemeOp::ESchemeOpRestoreIncrementalBackup:
+            return *modifyScheme.MutableRestoreIncrementalBackup()->MutableSrcTableName();
         }
     }
 
@@ -377,6 +381,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpCreateExternalTable:
         case NKikimrSchemeOp::ESchemeOpCreateExternalDataSource:
         case NKikimrSchemeOp::ESchemeOpCreateView:
+        case NKikimrSchemeOp::ESchemeOpCreateResourcePool:
             return true;
         default:
             return false;
@@ -612,6 +617,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpCreateContinuousBackup:
         case NKikimrSchemeOp::ESchemeOpAlterContinuousBackup:
         case NKikimrSchemeOp::ESchemeOpDropContinuousBackup:
+        case NKikimrSchemeOp::ESchemeOpAlterResourcePool:
+        case NKikimrSchemeOp::ESchemeOpRestoreIncrementalBackup:
         {
             auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
             toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
@@ -624,7 +631,6 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropFileStore:
         case NKikimrSchemeOp::ESchemeOpDropKesus:
         case NKikimrSchemeOp::ESchemeOpDropPersQueueGroup:
-        case NKikimrSchemeOp::ESchemeOpDeallocatePersQueueGroup:
         case NKikimrSchemeOp::ESchemeOpDropTable:
         case NKikimrSchemeOp::ESchemeOpDropSolomonVolume:
         case NKikimrSchemeOp::ESchemeOpDropColumnStore:
@@ -636,6 +642,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropExternalTable:
         case NKikimrSchemeOp::ESchemeOpDropExternalDataSource:
         case NKikimrSchemeOp::ESchemeOpDropView:
+        case NKikimrSchemeOp::ESchemeOpDropResourcePool:
         {
             auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
             toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
@@ -697,6 +704,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpCreateExternalTable:
         case NKikimrSchemeOp::ESchemeOpCreateExternalDataSource:
         case NKikimrSchemeOp::ESchemeOpCreateView:
+        case NKikimrSchemeOp::ESchemeOpCreateResourcePool:
         {
             auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
             toResolve.Path = workingDir;
@@ -758,7 +766,6 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             break;
         }
         case NKikimrSchemeOp::ESchemeOpCreatePersQueueGroup:
-        case NKikimrSchemeOp::ESchemeOpAllocatePersQueueGroup:
         {
             auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
             toResolve.Path = workingDir;

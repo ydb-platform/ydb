@@ -872,8 +872,6 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(AlterPQGroup, NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup, &NKikimrSchemeOp::TModifyScheme::MutableAlterPersQueueGroup)
     GENERIC_HELPERS(DropPQGroup, NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
     DROP_BY_PATH_ID_HELPERS(DropPQGroup, NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup)
-    GENERIC_HELPERS(AllocatePQ, NKikimrSchemeOp::EOperationType::ESchemeOpAllocatePersQueueGroup, &NKikimrSchemeOp::TModifyScheme::MutableAllocatePersQueueGroup)
-    GENERIC_HELPERS(DeallocatePQ, NKikimrSchemeOp::EOperationType::ESchemeOpDeallocatePersQueueGroup, &NKikimrSchemeOp::TModifyScheme::MutableDeallocatePersQueueGroup)
 
     // rtmr
     GENERIC_HELPERS(CreateRtmrVolume, NKikimrSchemeOp::EOperationType::ESchemeOpCreateRtmrVolume, &NKikimrSchemeOp::TModifyScheme::MutableCreateRtmrVolume)
@@ -914,6 +912,12 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(CreateView, NKikimrSchemeOp::EOperationType::ESchemeOpCreateView, &NKikimrSchemeOp::TModifyScheme::MutableCreateView)
     GENERIC_HELPERS(DropView, NKikimrSchemeOp::EOperationType::ESchemeOpDropView, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
     DROP_BY_PATH_ID_HELPERS(DropView, NKikimrSchemeOp::EOperationType::ESchemeOpDropView)
+
+    // resource pool
+    GENERIC_HELPERS(CreateResourcePool, NKikimrSchemeOp::EOperationType::ESchemeOpCreateResourcePool, &NKikimrSchemeOp::TModifyScheme::MutableCreateResourcePool)
+    GENERIC_HELPERS(AlterResourcePool, NKikimrSchemeOp::EOperationType::ESchemeOpAlterResourcePool, &NKikimrSchemeOp::TModifyScheme::MutableCreateResourcePool)
+    GENERIC_HELPERS(DropResourcePool, NKikimrSchemeOp::EOperationType::ESchemeOpDropResourcePool, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
+    DROP_BY_PATH_ID_HELPERS(DropResourcePool, NKikimrSchemeOp::EOperationType::ESchemeOpDropResourcePool)
 
     #undef DROP_BY_PATH_ID_HELPERS
     #undef GENERIC_WITH_ATTRS_HELPERS
@@ -1022,7 +1026,7 @@ namespace NSchemeShardUT_Private {
         return result;
     }
 
-    void AsyncExport(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 id, const TString& dbName, const TString& requestStr, const TString& userSID) {
+    void AsyncExport(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 id, const TString& dbName, const TString& requestStr, const TString& userSID, const TString& peerName) {
         NKikimrExport::TCreateExportRequest request;
         UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(requestStr, &request));
 
@@ -1040,26 +1044,29 @@ namespace NSchemeShardUT_Private {
         if (userSID) {
             ev->Record.SetUserSID(userSID);
         }
+        if (peerName) {
+            ev->Record.SetPeerName(peerName);
+        }
 
         AsyncSend(runtime, schemeshardId, ev.Release());
     }
 
-    void AsyncExport(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& requestStr, const TString& userSID) {
-        AsyncExport(runtime, TTestTxConfig::SchemeShard, id, dbName, requestStr, userSID);
+    void AsyncExport(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& requestStr, const TString& userSID, const TString& peerName) {
+        AsyncExport(runtime, TTestTxConfig::SchemeShard, id, dbName, requestStr, userSID, peerName);
     }
 
-    void TestExport(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 id, const TString& dbName, const TString& requestStr, const TString& userSID,
+    void TestExport(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 id, const TString& dbName, const TString& requestStr, const TString& userSID, const TString& peerName,
             Ydb::StatusIds::StatusCode expectedStatus) {
-        AsyncExport(runtime, schemeshardId, id, dbName, requestStr, userSID);
+        AsyncExport(runtime, schemeshardId, id, dbName, requestStr, userSID, peerName);
 
         TAutoPtr<IEventHandle> handle;
         auto ev = runtime.GrabEdgeEvent<TEvExport::TEvCreateExportResponse>(handle);
         UNIT_ASSERT_EQUAL(ev->Record.GetResponse().GetEntry().GetStatus(), expectedStatus);
     }
 
-    void TestExport(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& requestStr, const TString& userSID,
+    void TestExport(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& requestStr, const TString& userSID, const TString& peerName,
             Ydb::StatusIds::StatusCode expectedStatus) {
-        TestExport(runtime, TTestTxConfig::SchemeShard, id, dbName, requestStr, userSID, expectedStatus);
+        TestExport(runtime, TTestTxConfig::SchemeShard, id, dbName, requestStr, userSID, peerName, expectedStatus);
     }
 
     NKikimrExport::TEvGetExportResponse TestGetExport(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 id, const TString& dbName,
@@ -1148,7 +1155,7 @@ namespace NSchemeShardUT_Private {
         return TestForgetExport(runtime, TTestTxConfig::SchemeShard, txId, dbName, exportId, expectedStatus);
     }
 
-    void AsyncImport(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 id, const TString& dbName, const TString& requestStr, const TString& userSID) {
+    void AsyncImport(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 id, const TString& dbName, const TString& requestStr, const TString& userSID, const TString& peerName) {
         NKikimrImport::TCreateImportRequest request;
         UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(requestStr, &request));
 
@@ -1156,26 +1163,29 @@ namespace NSchemeShardUT_Private {
         if (userSID) {
             ev->Record.SetUserSID(userSID);
         }
+        if (peerName) {
+            ev->Record.SetPeerName(peerName);
+        }
 
         AsyncSend(runtime, schemeshardId, ev.Release());
     }
 
-    void AsyncImport(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& requestStr, const TString& userSID) {
-        AsyncImport(runtime, TTestTxConfig::SchemeShard, id, dbName, requestStr, userSID);
+    void AsyncImport(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& requestStr, const TString& userSID, const TString& peerName) {
+        AsyncImport(runtime, TTestTxConfig::SchemeShard, id, dbName, requestStr, userSID, peerName);
     }
 
-    void TestImport(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 id, const TString& dbName, const TString& requestStr, const TString& userSID,
+    void TestImport(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 id, const TString& dbName, const TString& requestStr, const TString& userSID, const TString& peerName,
             Ydb::StatusIds::StatusCode expectedStatus) {
-        AsyncImport(runtime, schemeshardId, id, dbName, requestStr, userSID);
+        AsyncImport(runtime, schemeshardId, id, dbName, requestStr, userSID, peerName);
 
         TAutoPtr<IEventHandle> handle;
         auto ev = runtime.GrabEdgeEvent<TEvImport::TEvCreateImportResponse>(handle);
         UNIT_ASSERT_EQUAL(ev->Record.GetResponse().GetEntry().GetStatus(), expectedStatus);
     }
 
-    void TestImport(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& requestStr, const TString& userSID,
+    void TestImport(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& requestStr, const TString& userSID, const TString& peerName,
             Ydb::StatusIds::StatusCode expectedStatus) {
-        TestImport(runtime, TTestTxConfig::SchemeShard, id, dbName, requestStr, userSID, expectedStatus);
+        TestImport(runtime, TTestTxConfig::SchemeShard, id, dbName, requestStr, userSID, peerName, expectedStatus);
     }
 
     NKikimrImport::TEvGetImportResponse TestGetImport(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 id, const TString& dbName,
@@ -1674,6 +1684,14 @@ namespace NSchemeShardUT_Private {
         case NKikimrSchemeOp::EIndexTypeGlobalAsync:
             *index.mutable_global_async_index() = Ydb::Table::GlobalAsyncIndex();
             break;
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
+            auto& settings = *index.mutable_global_vector_kmeans_tree_index();
+            settings = Ydb::Table::GlobalVectorKMeansTreeIndex();
+            // some random valid settings
+            settings.mutable_vector_settings()->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+            settings.mutable_vector_settings()->set_vector_dimension(42);
+            settings.mutable_vector_settings()->set_distance(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+        } break;
         default:
             UNIT_ASSERT_C(false, "Unknown index type: " << static_cast<ui32>(cfg.IndexType));
         }
@@ -1756,6 +1774,15 @@ namespace NSchemeShardUT_Private {
     {
         TestBuildIndex(runtime, id, schemeShard, dbName, src, TBuildIndexConfig{
             name, NKikimrSchemeOp::EIndexTypeGlobal, columns, {}
+        }, expectedStatus);
+    }
+
+    void TestBuildVectorIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName,
+                              const TString &src, const TString &name, TString column,
+                              Ydb::StatusIds::StatusCode expectedStatus)
+    {
+        TestBuildIndex(runtime, id, schemeShard, dbName, src, TBuildIndexConfig{
+            name, NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {column}, {}
         }, expectedStatus);
     }
 
@@ -2312,7 +2339,7 @@ namespace NSchemeShardUT_Private {
         UNIT_ASSERT_VALUES_EQUAL(error, "");
     }
 
-    void UploadRows(TTestActorRuntime& runtime, const TString& tablePath, int partitionIdx, const TVector<ui32>& keyTags, const TVector<ui32>& valueTags, const TVector<ui32>& recordIds)
+    void UploadRow(TTestActorRuntime& runtime, const TString& tablePath, int partitionIdx, const TVector<ui32>& keyTags, const TVector<ui32>& valueTags, const TVector<TCell>& keys, const TVector<TCell>& values)
     {
         auto tableDesc = DescribePath(runtime, tablePath, true, true);
         const auto& tablePartitions = tableDesc.GetPathDescription().GetTablePartitions();
@@ -2330,15 +2357,9 @@ namespace NSchemeShardUT_Private {
             scheme.AddValueColumnIds(tag);
         }
 
-        for (ui32 i : recordIds) {
-            auto key = TVector<TCell>{TCell::Make(i)};
-            auto value = TVector<TCell>{TCell::Make(i)};
-            Cerr << value[0].AsBuf().Size() << Endl;
-
-            auto& row = *ev->Record.AddRows();
-            row.SetKeyColumns(TSerializedCellVec::Serialize(key));
-            row.SetValueColumns(TSerializedCellVec::Serialize(value));
-        }
+        auto& row = *ev->Record.AddRows();
+        row.SetKeyColumns(TSerializedCellVec::Serialize(keys));
+        row.SetValueColumns(TSerializedCellVec::Serialize(values));
 
         const auto& sender = runtime.AllocateEdgeActor();
         ForwardToTablet(runtime, datashardTabletId, sender, ev.Release());

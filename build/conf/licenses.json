@@ -95,8 +95,10 @@
             "LicenseRef-scancode-gary-s-brown",
             "LicenseRef-scancode-generic-cla",
             "LicenseRef-scancode-generic-exception",
+            "LicenseRef-scancode-hdf4",
             "LicenseRef-scancode-intel-osl-1993",
             "LicenseRef-scancode-jdom",
+            "LicenseRef-scancode-llnl",
             "LicenseRef-scancode-mit-xfig",
             "LicenseRef-scancode-newlib-historical",
             "LicenseRef-scancode-nilsson-historical",
@@ -313,6 +315,7 @@
             "SSLeay",
             "Sunpro",
             "Unicode",
+            "Unicode-3.0",
             "Unicode-DFS-2016",
             "Unicode-Icu-58",
             "Unicode-Mappings",
@@ -362,7 +365,6 @@
         "default": [
             "Service-Default-License",
             "Service-Dll-Harness",
-            "Service-Prebuilt-Tool",
             "Service-Py23-Proxy",
             "Service-Unknown-License-Java"
         ]

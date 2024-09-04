@@ -8,38 +8,43 @@ TPlainReadData::TPlainReadData(const std::shared_ptr<TReadContext>& context)
 {
     ui32 sourceIdx = 0;
     std::deque<std::shared_ptr<IDataSource>> sources;
-    const auto& portionsOrdered = GetReadMetadata()->SelectInfo->GetPortionsOrdered(GetReadMetadata()->IsDescSorted());
+    const auto& portions = GetReadMetadata()->SelectInfo->PortionsOrderedPK;
     const auto& committed = GetReadMetadata()->CommittedBlobs;
-    auto itCommitted = committed.begin();
-    auto itPortion = portionsOrdered.begin();
-    ui64 committedPortionsBytes = 0;
-    ui64 insertedPortionsBytes = 0;
     ui64 compactedPortionsBytes = 0;
-    while (itCommitted != committed.end() || itPortion != portionsOrdered.end()) {
-        bool movePortion = false;
-        if (itCommitted == committed.end()) {
-            movePortion = true;
-        } else if (itPortion == portionsOrdered.end()) {
-            movePortion = false;
-        } else if (itCommitted->GetFirstVerified() < (*itPortion)->IndexKeyStart()) {
-            movePortion = false;
+    ui64 insertedPortionsBytes = 0;
+    ui64 committedPortionsBytes = 0;
+    for (auto&& i : portions) {
+        if (i->GetMeta().GetProduced() == NPortion::EProduced::COMPACTED || i->GetMeta().GetProduced() == NPortion::EProduced::SPLIT_COMPACTED) {
+            compactedPortionsBytes += i->GetTotalBlobBytes();
         } else {
-            movePortion = true;
+            insertedPortionsBytes += i->GetTotalBlobBytes();
         }
+        sources.emplace_back(std::make_shared<TPortionDataSource>(sourceIdx++, i, SpecialReadContext));
+    }
+    for (auto&& i : committed) {
+        if (i.HasSnapshot()) {
+            continue;
+        }
+        if (GetReadMetadata()->IsMyUncommitted(i.GetWriteIdVerified())) {
+            continue;
+        }
+        if (GetReadMetadata()->GetPKRangesFilter().CheckPoint(i.GetFirstVerified()) ||
+            GetReadMetadata()->GetPKRangesFilter().CheckPoint(i.GetLastVerified())) {
+            GetReadMetadata()->SetConflictedWriteId(i.GetWriteIdVerified());
+        }
+    }
 
-        if (movePortion) {
-            if ((*itPortion)->GetMeta().GetProduced() == NPortion::EProduced::COMPACTED || (*itPortion)->GetMeta().GetProduced() == NPortion::EProduced::SPLIT_COMPACTED) {
-                compactedPortionsBytes += (*itPortion)->GetTotalBlobBytes();
-            } else {
-                insertedPortionsBytes += (*itPortion)->GetTotalBlobBytes();
+    for (auto&& i : committed) {
+        if (!i.HasSnapshot()) {
+            if (GetReadMetadata()->IsWriteConflictable(i.GetWriteIdVerified())) {
+                continue;
             }
-            sources.emplace_back(std::make_shared<TPortionDataSource>(sourceIdx++, *itPortion, SpecialReadContext, (*itPortion)->IndexKeyStart(), (*itPortion)->IndexKeyEnd()));
-            ++itPortion;
-        } else {
-            sources.emplace_back(std::make_shared<TCommittedDataSource>(sourceIdx++, *itCommitted, SpecialReadContext, itCommitted->GetFirstVerified(), itCommitted->GetLastVerified()));
-            committedPortionsBytes += itCommitted->GetSize();
-            ++itCommitted;
+        } else if (GetReadMetadata()->GetPKRangesFilter().IsPortionInPartialUsage(i.GetFirstVerified(), i.GetLastVerified()) ==
+                   TPKRangeFilter::EUsageClass::DontUsage) {
+            continue;
         }
+        sources.emplace_back(std::make_shared<TCommittedDataSource>(sourceIdx++, i, SpecialReadContext));
+        committedPortionsBytes += i.GetSize();
     }
     Scanner = std::make_shared<TScanHead>(std::move(sources), SpecialReadContext);
 
@@ -54,16 +59,16 @@ TPlainReadData::TPlainReadData(const std::shared_ptr<TReadContext>& context)
 
 }
 
-std::vector<TPartialReadResult> TPlainReadData::DoExtractReadyResults(const int64_t maxRowsInBatch) {
-    auto result = TPartialReadResult::SplitResults(std::move(PartialResults), maxRowsInBatch);
+std::vector<std::shared_ptr<TPartialReadResult>> TPlainReadData::DoExtractReadyResults(const int64_t /*maxRowsInBatch*/) {
+    auto result = std::move(PartialResults);
+    PartialResults.clear();
+//    auto result = TPartialReadResult::SplitResults(std::move(PartialResults), maxRowsInBatch);
     ui32 count = 0;
     for (auto&& r: result) {
-        count += r.GetRecordsCount();
+        count += r->GetRecordsCount();
     }
     AFL_VERIFY(count == ReadyResultsCount);
-
     ReadyResultsCount = 0;
-    PartialResults.clear();
 
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoExtractReadyResults")("result", result.size())("count", count)("finished", Scanner->IsFinished());
     return result;
@@ -76,7 +81,7 @@ TConclusion<bool> TPlainReadData::DoReadNextInterval() {
 void TPlainReadData::OnIntervalResult(const std::shared_ptr<TPartialReadResult>& result) {
 //    result->GetResourcesGuardOnly()->Update(result->GetMemorySize());
     ReadyResultsCount += result->GetRecordsCount();
-    PartialResults.emplace_back(std::move(*result));
+    PartialResults.emplace_back(result);
 }
 
 }

@@ -5,6 +5,7 @@
 #include <yt/cpp/mapreduce/interface/config.h>
 #include <yt/cpp/mapreduce/interface/error_codes.h>
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
+#include <yt/cpp/mapreduce/interface/tvm.h>
 
 #include <yt/cpp/mapreduce/common/wait_proxy.h>
 #include <yt/cpp/mapreduce/common/retry_lib.h>
@@ -70,8 +71,10 @@ void PingTx(NHttp::IClientPtr httpClient, const TPingableTransaction& tx)
     headers->Add("Host", url);
     headers->Add("User-Agent", TProcessState::Get()->ClientVersion);
 
-    const auto& token = tx.GetContext().Token;
-    if (!token.empty()) {
+    if (const auto& serviceTicketAuth = tx.GetContext().ServiceTicketAuth) {
+        const auto serviceTicket = serviceTicketAuth->Ptr->IssueServiceTicket();
+        headers->Add("X-Ya-Service-Ticket", serviceTicket);
+    } else if (const auto& token = tx.GetContext().Token; !token.empty()) {
         headers->Add("Authorization", "OAuth " + token);
     }
 

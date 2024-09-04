@@ -63,7 +63,7 @@ std::vector<TFiberIntrospectionInfo> IntrospectFibers()
                 YT_LOG_DEBUG("Waiting fiber is successfully locked for introspection (FiberId: %x)",
                     fiberId);
 
-                const auto& propagatingStorage = NConcurrency::GetPropagatingStorage(*fiber->GetFls());
+                const auto& propagatingStorage = *NConcurrency::TryGetPropagatingStorage(*fiber->GetFls());
                 const auto* traceContext = TryGetTraceContextFromPropagatingStorage(propagatingStorage);
 
                 TFiberIntrospectionInfo info{
@@ -162,7 +162,7 @@ void FormatBacktrace(TStringBuilder* builder, const std::vector<const void*>& ba
     if (!backtrace.empty()) {
         builder->AppendString("Backtrace:\n");
         SymbolizeBacktrace(
-            MakeRange(backtrace),
+            TRange(backtrace),
             [&] (TStringBuf str) {
                 builder->AppendFormat("  %v", str);
             });

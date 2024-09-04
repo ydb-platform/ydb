@@ -35,6 +35,12 @@ namespace NKikimr {
             }
         }
 
+        template <class THeap>
+        void PutToHeap(THeap& heap) {
+            Iter1.PutToHeap(heap);
+            Iter2.PutToHeap(heap);
+        }
+
         bool Valid() const {
             return Iter1.Valid() || Iter2.Valid();
         }
@@ -118,6 +124,12 @@ namespace NKikimr {
                 Iter1.PutToMerger(merger);
                 Iter2.PutToMerger(merger);
             }
+        }
+
+        template <class THeap>
+        void PutToHeap(THeap& heap) {
+            Iter1.PutToHeap(heap);
+            Iter2.PutToHeap(heap);
         }
 
         bool Valid() const {
@@ -317,6 +329,13 @@ namespace NKikimr {
             NHullPrivate::PutToMerger<TKey, TIter, TRecordMerger, TPQueue>(merger, PQueue);
         }
 
+        template <class THeap>
+        void PutToHeap(THeap& heap) {
+            for (auto &x : Iters) {
+                x->PutToHeap(heap);
+            }
+        }
+
         TString ToString() const {
             return NHullPrivate::ToString<TKey, TIter, TPQueue>(PQueue);
         }
@@ -412,6 +431,13 @@ namespace NKikimr {
         template <class TRecordMerger>
         void PutToMerger(TRecordMerger *merger) {
             NHullPrivate::PutToMerger<TKey, TIter, TRecordMerger, TPQueue>(merger, PQueue);
+        }
+
+        template <class THeap>
+        void PutToHeap(THeap& heap) {
+            for (auto &x : Iters) {
+                x->PutToHeap(heap);
+            }
         }
 
         TString ToString() const {

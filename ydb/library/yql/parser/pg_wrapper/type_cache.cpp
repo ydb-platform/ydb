@@ -7,6 +7,7 @@
 
 extern "C" {
 #include "postgres.h"
+#include "varatt.h"
 #include "catalog/pg_operator_d.h"
 #include "access/hash.h"
 #include "access/toast_compression.h"
@@ -20,7 +21,10 @@ extern "C" {
 #include "utils/syscache.h"
 }
 
+#undef Max
+
 #include "type_cache.h"
+#include "utils.h"
 
 namespace NYql {
 
@@ -434,33 +438,29 @@ lookup_type_cache(Oid type_id, int flags) {
     {
         ui32 eq_opr_func = get_opcode(typentry->eq_opr);
         if (eq_opr_func != InvalidOid)
-            fmgr_info_cxt(eq_opr_func, &typentry->eq_opr_finfo,
-                          CacheMemoryContext);
+            GetPgFuncAddr(eq_opr_func, typentry->eq_opr_finfo);
     }
 
     if ((flags & TYPECACHE_CMP_PROC_FINFO) &&
         typentry->cmp_proc_finfo.fn_oid == InvalidOid &&
         typentry->cmp_proc != InvalidOid)
     {
-        fmgr_info_cxt(typentry->cmp_proc, &typentry->cmp_proc_finfo,
-                      CacheMemoryContext);
+        GetPgFuncAddr(typentry->cmp_proc, typentry->cmp_proc_finfo);
     }
 
     if ((flags & TYPECACHE_HASH_PROC_FINFO) &&
         typentry->hash_proc_finfo.fn_oid == InvalidOid &&
         typentry->hash_proc != InvalidOid)
     {
-        fmgr_info_cxt(typentry->hash_proc, &typentry->hash_proc_finfo,
-                      CacheMemoryContext);
+        GetPgFuncAddr(typentry->hash_proc, typentry->hash_proc_finfo);
     }
 
     if ((flags & TYPECACHE_HASH_EXTENDED_PROC_FINFO) &&
         typentry->hash_extended_proc_finfo.fn_oid == InvalidOid &&
         typentry->hash_extended_proc != InvalidOid)
     {
-        fmgr_info_cxt(typentry->hash_extended_proc,
-                      &typentry->hash_extended_proc_finfo,
-                      CacheMemoryContext);
+        GetPgFuncAddr(typentry->hash_extended_proc,
+                      typentry->hash_extended_proc_finfo);
     }
 
     return typentry;
@@ -519,9 +519,9 @@ TupleDescInitEntry(TupleDesc desc,
     /*
      * sanity checks
      */
-    AssertArg(PointerIsValid(desc));
-    AssertArg(attributeNumber >= 1);
-    AssertArg(attributeNumber <= desc->natts);
+    //AssertArg(PointerIsValid(desc));
+    //AssertArg(attributeNumber >= 1);
+    //AssertArg(attributeNumber <= desc->natts);
 
     /*
      * initialize the attribute fields

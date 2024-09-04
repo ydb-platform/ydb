@@ -7,7 +7,7 @@
 namespace NKikimr {
 namespace NKqp {
 
-TVector<NYql::TExprNode::TPtr> RewriteExpression(
+std::pair<TVector<NYql::TExprNode::TPtr>, NYql::TIssues> RewriteExpression(
     const NYql::TExprNode::TPtr& root,
     NYql::TExprContext& ctx,
     NYql::TTypeAnnotationContext& typeCtx,

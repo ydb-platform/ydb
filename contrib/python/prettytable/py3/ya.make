@@ -2,9 +2,7 @@
 
 PY3_LIBRARY()
 
-SUBSCRIBER(manushkin g:python-contrib)
-
-VERSION(3.10.0)
+VERSION(3.11.0)
 
 LICENSE(BSD-3-Clause)
 

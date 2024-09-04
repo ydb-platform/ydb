@@ -20,6 +20,8 @@
 
 #include <library/cpp/yt/memory/ref.h>
 
+#include <library/cpp/yt/string/guid.h>
+
 namespace NYT::NRpc {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -57,7 +59,7 @@ struct IServiceContext
     virtual const NYTree::IAttributeDictionary& GetEndpointAttributes() const = 0;
 
     //! Returns the description of the connected endpoint.
-    virtual const TString& GetEndpointDescription() const = 0;
+    virtual const std::string& GetEndpointDescription() const = 0;
 
     //! Returns the instant when the current retry of request was issued by the client, if known.
     virtual std::optional<TInstant> GetStartTime() const = 0;
@@ -248,16 +250,16 @@ struct IServiceContext
     void SetResponseInfo();
 
     template <class... TArgs>
-    void SetRequestInfo(const char* format, TArgs&&... args);
+    void SetRequestInfo(TFormatString<TArgs...> format, TArgs&&... args);
 
     template <class... TArgs>
-    void SetIncrementalRequestInfo(const char* format, TArgs&&... args);
+    void SetIncrementalRequestInfo(TFormatString<TArgs...> format, TArgs&&... args);
 
     template <class... TArgs>
-    void SetResponseInfo(const char* format, TArgs&&... args);
+    void SetResponseInfo(TFormatString<TArgs...> format, TArgs&&... args);
 
     template <class... TArgs>
-    void SetIncrementalResponseInfo(const char* format, TArgs&&... args);
+    void SetIncrementalResponseInfo(TFormatString<TArgs...> format, TArgs&&... args);
 
     //! Replies with a given message when the latter is set.
     void ReplyFrom(TFuture<TSharedRefArray> asyncMessage);
@@ -289,7 +291,7 @@ struct TServiceId
     TRealmId RealmId;
 };
 
-TString ToString(const TServiceId& serviceId);
+void FormatValue(TStringBuilderBase* builder, const TServiceId& id, TStringBuf spec);
 
 ////////////////////////////////////////////////////////////////////////////////
 

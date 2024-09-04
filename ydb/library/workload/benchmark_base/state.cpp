@@ -3,7 +3,6 @@
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/json/json_reader.h>
 #include <util/stream/file.h>
-#include <thread>
 
 namespace NYdbWorkload {
 
@@ -25,48 +24,28 @@ TGeneratorStateProcessor::TGeneratorStateProcessor(const TFsPath& path, bool cle
     }
 }
 
-void TGeneratorStateProcessor::AddPortion(const TString& source, ui64 from, ui64 size) {
-    InProcess.Get().emplace_back(TInProcessPortion{source, from, size});
-}
-
-void TGeneratorStateProcessor::FinishPortions() {
-    bool needSave = false;
+void TGeneratorStateProcessor::FinishPortion(const TString& source, ui64 from, ui64 size) {
     auto g = Guard(Lock);
-    for (const auto& p: InProcess.Get()) {
-        needSave |= StateImpl[p.Source].FinishPortion(p.From, p.Size, State[p.Source].Position);
-    }
-    InProcess.Get().clear();
+    bool needSave = StateImpl[source].FinishPortion(from, size, State[source].Position);
     if (needSave) {
         Save();
     }
 }
 
 bool TGeneratorStateProcessor::TSourceStateImpl::FinishPortion(ui64 from, ui64 size, ui64& position) {
-    const ui64 threadId = std::hash<std::thread::id>()(std::this_thread::get_id());
-    ThreadsState[threadId].FinishedPortions.emplace_back(TSourcePortion{from, size});
-    TVector<TThreadSourceState::TFinishedPortions*> portions;
-    for (auto& [t, ss]: ThreadsState) {
-        while (!ss.FinishedPortions.empty() && ss.FinishedPortions.front().first < position) {
-            ss.FinishedPortions.pop_front();
-        }
-        if (!ss.FinishedPortions.empty()) {
-            portions.push_back(&ss.FinishedPortions);
-        }
+    auto i = FinishedPortions.begin();
+    while (i != FinishedPortions.end() && i->first < from) {
+         ++i;
     }
-    Y_VERIFY(!portions.empty());
-    auto portionsCmp = [](auto l, auto r) {return l->front().first > r->front().first;};
-    std::make_heap(portions.begin(), portions.end(), portionsCmp);
+    FinishedPortions.emplace(i, TSourcePortion{from, size});
     bool result = false;
-    while (!portions.empty() && portions.front()->front().first == position) {
+    while (!FinishedPortions.empty() && FinishedPortions.front().first < position) {
+        FinishedPortions.pop_front();
+    }
+    while (!FinishedPortions.empty() && FinishedPortions.front().first == position) {
         result = true;
-        position += portions.front()->front().second;
-        std::pop_heap(portions.begin(), portions.end(), portionsCmp);
-        portions.back()->pop_front();
-        if (portions.back()->empty()) {
-            portions.pop_back();
-        } else {
-            std::push_heap(portions.begin(), portions.end(), portionsCmp);
-        }
+        position += FinishedPortions.front().second;
+        FinishedPortions.pop_front();
     }
     return result;
 }

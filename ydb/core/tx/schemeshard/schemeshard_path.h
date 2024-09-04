@@ -5,6 +5,8 @@
 
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 
+#include <util/generic/maybe.h>
+
 namespace NKikimr::NSchemeShard {
 
 class TSchemeShard;
@@ -97,6 +99,8 @@ public:
         // Check there are no uncles or cousins with same name
         const TChecker& IsNameUniqGrandParentLevel(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsView(EStatus status = EStatus::StatusNameConflict) const;
+        const TChecker& FailOnRestrictedCreateInTempZone(bool allowCreateInTemporaryDir = false, EStatus status = EStatus::StatusPreconditionFailed) const;
+        const TChecker& IsResourcePool(EStatus status = EStatus::StatusNameConflict) const;
     };
 
 public:
@@ -157,7 +161,7 @@ public:
     bool AtLocalSchemeShardPath() const;
     bool IsInsideTableIndexPath() const;
     bool IsInsideCdcStreamPath() const;
-    bool IsTableIndex() const;
+    bool IsTableIndex(const TMaybe<NKikimrSchemeOp::EIndexType>& type = {}) const;
     bool IsBackupTable() const;
     bool IsAsyncReplicaTable() const;
     bool IsCdcStream() const;

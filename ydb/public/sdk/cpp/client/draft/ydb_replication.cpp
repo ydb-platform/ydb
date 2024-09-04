@@ -10,6 +10,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_common_client/impl/client.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 
+#include <google/protobuf/util/time_util.h>
 #include <google/protobuf/repeated_field.h>
 
 namespace NYdb {
@@ -18,6 +19,7 @@ namespace NReplication {
 TConnectionParams::TConnectionParams(const Ydb::Replication::ConnectionParams& params) {
     DiscoveryEndpoint(params.endpoint());
     Database(params.database());
+    SslCredentials(params.enable_ssl());
 
     switch (params.credentials_case()) {
     case Ydb::Replication::ConnectionParams::kStaticCredentials:
@@ -46,6 +48,10 @@ const TString& TConnectionParams::GetDatabase() const {
     return *Database_;
 }
 
+bool TConnectionParams::GetEnableSsl() const {
+    return SslCredentials_->IsEnabled;
+}
+
 TConnectionParams::ECredentials TConnectionParams::GetCredentials() const {
     return static_cast<ECredentials>(Credentials_.index());
 }
@@ -56,6 +62,33 @@ const TStaticCredentials& TConnectionParams::GetStaticCredentials() const {
 
 const TOAuthCredentials& TConnectionParams::GetOAuthCredentials() const {
     return std::get<TOAuthCredentials>(Credentials_);
+}
+
+static TDuration DurationToDuration(const google::protobuf::Duration& value) {
+    return TDuration::MilliSeconds(google::protobuf::util::TimeUtil::DurationToMilliseconds(value));
+}
+
+TStats::TStats(const Ydb::Replication::DescribeReplicationResult_Stats& stats)
+    : Lag_(stats.has_lag() ? std::make_optional(DurationToDuration(stats.lag())) : std::nullopt)
+    , InitialScanProgress_(stats.has_initial_scan_progress() ? std::make_optional(stats.initial_scan_progress()) : std::nullopt)
+{
+}
+
+const std::optional<TDuration>& TStats::GetLag() const {
+    return Lag_;
+}
+
+const std::optional<float>& TStats::GetInitialScanProgress() const {
+    return InitialScanProgress_;
+}
+
+TRunningState::TRunningState(const TStats& stats)
+    : Stats_(stats)
+{
+}
+
+const TStats& TRunningState::GetStats() const {
+    return Stats_;
 }
 
 class TErrorState::TImpl {
@@ -93,6 +126,7 @@ TReplicationDescription::TReplicationDescription(const Ydb::Replication::Describ
             .Id = item.id(),
             .SrcPath = item.source_path(),
             .DstPath = item.destination_path(),
+            .Stats = TStats(item.stats()),
             .SrcChangefeedName = item.has_source_changefeed_name()
                 ? std::make_optional(item.source_changefeed_name()) : std::nullopt,
         });
@@ -100,7 +134,7 @@ TReplicationDescription::TReplicationDescription(const Ydb::Replication::Describ
 
     switch (desc.state_case()) {
     case Ydb::Replication::DescribeReplicationResult::kRunning:
-        State_ = TRunningState();
+        State_ = TRunningState(desc.running().stats());
         break;
 
     case Ydb::Replication::DescribeReplicationResult::kError:
@@ -168,6 +202,7 @@ public:
 
         auto request = MakeOperationRequest<DescribeReplicationRequest>(settings);
         request.set_path(path);
+        request.set_include_stats(settings.IncludeStats_);
 
         auto promise = NThreading::NewPromise<TDescribeReplicationResult>();
 

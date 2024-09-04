@@ -4,7 +4,7 @@
  *		Internal definitions for parser
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/parser/parse_node.h
@@ -55,6 +55,7 @@ typedef enum ParseExprKind
 	EXPR_KIND_INSERT_TARGET,	/* INSERT target list item */
 	EXPR_KIND_UPDATE_SOURCE,	/* UPDATE assignment source item */
 	EXPR_KIND_UPDATE_TARGET,	/* UPDATE assignment target item */
+	EXPR_KIND_MERGE_WHEN,		/* MERGE WHEN [NOT] MATCHED condition */
 	EXPR_KIND_GROUP_BY,			/* GROUP BY */
 	EXPR_KIND_ORDER_BY,			/* ORDER BY */
 	EXPR_KIND_DISTINCT_ON,		/* DISTINCT ON */
@@ -110,9 +111,19 @@ typedef Node *(*CoerceParamHook) (ParseState *pstate, Param *param,
  * Note that neither relname nor refname of these entries are necessarily
  * unique; searching the rtable by name is a bad idea.
  *
+ * p_rteperminfos: list of RTEPermissionInfo containing an entry corresponding
+ * to each RTE_RELATION entry in p_rtable.
+ *
  * p_joinexprs: list of JoinExpr nodes associated with p_rtable entries.
  * This is one-for-one with p_rtable, but contains NULLs for non-join
  * RTEs, and may be shorter than p_rtable if the last RTE(s) aren't joins.
+ *
+ * p_nullingrels: list of Bitmapsets associated with p_rtable entries, each
+ * containing the set of outer-join RTE indexes that can null that relation
+ * at the current point in the parse tree.  This is one-for-one with p_rtable,
+ * but may be shorter than p_rtable, in which case the missing entries are
+ * implicitly empty (NULL).  That rule allows us to save work when the query
+ * contains no outer joins.
  *
  * p_joinlist: list of join items (RangeTblRef and JoinExpr nodes) that
  * will become the fromlist of the query's top-level FromExpr node.
@@ -135,7 +146,7 @@ typedef Node *(*CoerceParamHook) (ParseState *pstate, Param *param,
  * p_parent_cte: CommonTableExpr that immediately contains the current query,
  * if any.
  *
- * p_target_relation: target relation, if query is INSERT, UPDATE, or DELETE.
+ * p_target_relation: target relation, if query is INSERT/UPDATE/DELETE/MERGE
  *
  * p_target_nsitem: target relation's ParseNamespaceItem.
  *
@@ -180,7 +191,10 @@ struct ParseState
 	ParseState *parentParseState;	/* stack link */
 	const char *p_sourcetext;	/* source text, or NULL if not available */
 	List	   *p_rtable;		/* range table so far */
+	List	   *p_rteperminfos; /* list of RTEPermissionInfo nodes for each
+								 * RTE_RELATION entry in rtable */
 	List	   *p_joinexprs;	/* JoinExprs for RTE_JOIN p_rtable entries */
+	List	   *p_nullingrels;	/* Bitmapsets showing nulling outer joins */
 	List	   *p_joinlist;		/* join items so far (will become FromExpr
 								 * node's fromlist) */
 	List	   *p_namespace;	/* currently-referenceable RTEs (List of
@@ -189,7 +203,7 @@ struct ParseState
 	List	   *p_ctenamespace; /* current namespace for common table exprs */
 	List	   *p_future_ctes;	/* common table exprs not yet in namespace */
 	CommonTableExpr *p_parent_cte;	/* this query's containing CTE */
-	Relation	p_target_relation;	/* INSERT/UPDATE/DELETE target rel */
+	Relation	p_target_relation;	/* INSERT/UPDATE/DELETE/MERGE target rel */
 	ParseNamespaceItem *p_target_nsitem;	/* target rel's NSItem, or NULL */
 	bool		p_is_insert;	/* process assignment like INSERT not UPDATE */
 	List	   *p_windowdefs;	/* raw representations of window clauses */
@@ -233,7 +247,8 @@ struct ParseState
  * join's first N columns, the net effect is just that we expose only those
  * join columns via this nsitem.)
  *
- * p_rte and p_rtindex link to the underlying rangetable entry.
+ * p_rte and p_rtindex link to the underlying rangetable entry, and
+ * p_perminfo to the entry in rteperminfos.
  *
  * The p_nscolumns array contains info showing how to construct Vars
  * referencing the names appearing in the p_names->colnames list.
@@ -245,8 +260,11 @@ struct ParseState
  * visible for qualified references) but it does hide their columns
  * (unqualified references to the columns refer to the JOIN, not the member
  * tables, so we must not complain that such a reference is ambiguous).
- * Various special RTEs such as NEW/OLD for rules may also appear with only
- * one flag set.
+ * Conversely, a subquery without an alias does not hide the columns selected
+ * by the subquery, but it does hide the auto-generated relation name (so the
+ * subquery columns are visible for unqualified references only).  Various
+ * special RTEs such as NEW/OLD for rules may also appear with only one flag
+ * set.
  *
  * While processing the FROM clause, namespace items may appear with
  * p_lateral_only set, meaning they are visible only to LATERAL
@@ -267,6 +285,7 @@ struct ParseNamespaceItem
 	Alias	   *p_names;		/* Table and column names */
 	RangeTblEntry *p_rte;		/* The relation's rangetable entry */
 	int			p_rtindex;		/* The relation's index in the rangetable */
+	RTEPermissionInfo *p_perminfo;	/* The relation's rteperminfos entry */
 	/* array of same length as p_names->colnames: */
 	ParseNamespaceColumn *p_nscolumns;	/* per-column data */
 	bool		p_rel_visible;	/* Relation name is visible? */
@@ -333,7 +352,6 @@ extern SubscriptingRef *transformContainerSubscripts(ParseState *pstate,
 													 int32 containerTypMod,
 													 List *indirection,
 													 bool isAssignment);
-
-extern Const *make_const(ParseState *pstate, Value *value, int location);
+extern Const *make_const(ParseState *pstate, A_Const *aconst);
 
 #endif							/* PARSE_NODE_H */

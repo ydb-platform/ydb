@@ -23,7 +23,7 @@ The `topic write` command writes messages to a topic from a file or `stdin`:
 
    | Name | Description |
    ---|---
-   | `single-message`<br>(default) | The entire input stream is treated as a single message to be written to the topic. |
+   | `single-message`<br/>(default) | The entire input stream is treated as a single message to be written to the topic. |
    | `newline-delimited` | A stream at the input contains multiple messages delimited with the `0x0A` newline character. |
 
 `--transform VAL`: Method for transforming messages.

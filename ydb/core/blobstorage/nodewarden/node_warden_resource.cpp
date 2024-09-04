@@ -188,7 +188,7 @@ void TNodeWarden::ApplyStateStorageConfig(const NKikimrBlobStorage::TStorageConf
         for (const auto& ring : info->Rings) {
             for (ui32 index = 0; index < ring.Replicas.size(); ++index) {
                 if (const TActorId& replicaId = ring.Replicas[index]; replicaId.NodeId() == LocalNodeId) {
-                    if (const auto [it, inserted] = localActorIds.insert(replicaId); inserted) {
+                    if (!localActorIds.erase(replicaId)) {
                         STLOG(PRI_INFO, BS_NODE, NW08, "starting new state storage replica",
                             (Component, comp), (ReplicaId, replicaId), (Index, index), (Config, *info));
                         as->RegisterLocalService(replicaId, as->Register(factory(info, index), TMailboxType::ReadAsFilled,

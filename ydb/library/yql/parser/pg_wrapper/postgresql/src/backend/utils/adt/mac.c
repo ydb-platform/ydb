@@ -3,7 +3,7 @@
  * mac.c
  *	  PostgreSQL type definitions for 6 byte, EUI-48, MAC addresses.
  *
- * Portions Copyright (c) 1998-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1998-2023, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *		  src/backend/utils/adt/mac.c
@@ -44,7 +44,6 @@ typedef struct
 
 static int	macaddr_cmp_internal(macaddr *a1, macaddr *a2);
 static int	macaddr_fast_cmp(Datum x, Datum y, SortSupport ssup);
-static int	macaddr_cmp_abbrev(Datum x, Datum y, SortSupport ssup);
 static bool macaddr_abbrev_abort(int memtupcount, SortSupport ssup);
 static Datum macaddr_abbrev_convert(Datum original, SortSupport ssup);
 
@@ -56,6 +55,7 @@ Datum
 macaddr_in(PG_FUNCTION_ARGS)
 {
 	char	   *str = PG_GETARG_CSTRING(0);
+	Node	   *escontext = fcinfo->context;
 	macaddr    *result;
 	int			a,
 				b,
@@ -89,7 +89,7 @@ macaddr_in(PG_FUNCTION_ARGS)
 		count = sscanf(str, "%2x%2x%2x%2x%2x%2x%1s",
 					   &a, &b, &c, &d, &e, &f, junk);
 	if (count != 6)
-		ereport(ERROR,
+		ereturn(escontext, (Datum) 0,
 				(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
 				 errmsg("invalid input syntax for type %s: \"%s\"", "macaddr",
 						str)));
@@ -97,7 +97,7 @@ macaddr_in(PG_FUNCTION_ARGS)
 	if ((a < 0) || (a > 255) || (b < 0) || (b > 255) ||
 		(c < 0) || (c > 255) || (d < 0) || (d > 255) ||
 		(e < 0) || (e > 255) || (f < 0) || (f > 255))
-		ereport(ERROR,
+		ereturn(escontext, (Datum) 0,
 				(errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),
 				 errmsg("invalid octet value in \"macaddr\" value: \"%s\"", str)));
 
@@ -381,7 +381,7 @@ macaddr_sortsupport(PG_FUNCTION_ARGS)
 
 		ssup->ssup_extra = uss;
 
-		ssup->comparator = macaddr_cmp_abbrev;
+		ssup->comparator = ssup_datum_unsigned_cmp;
 		ssup->abbrev_converter = macaddr_abbrev_convert;
 		ssup->abbrev_abort = macaddr_abbrev_abort;
 		ssup->abbrev_full_comparator = macaddr_fast_cmp;
@@ -403,22 +403,6 @@ macaddr_fast_cmp(Datum x, Datum y, SortSupport ssup)
 	macaddr    *arg2 = DatumGetMacaddrP(y);
 
 	return macaddr_cmp_internal(arg1, arg2);
-}
-
-/*
- * SortSupport abbreviated key comparison function. Compares two MAC addresses
- * quickly by treating them like integers, and without having to go to the
- * heap.
- */
-static int
-macaddr_cmp_abbrev(Datum x, Datum y, SortSupport ssup)
-{
-	if (x > y)
-		return 1;
-	else if (x == y)
-		return 0;
-	else
-		return -1;
 }
 
 /*
@@ -537,8 +521,8 @@ macaddr_abbrev_convert(Datum original, SortSupport ssup)
 	/*
 	 * Byteswap on little-endian machines.
 	 *
-	 * This is needed so that macaddr_cmp_abbrev() (an unsigned integer 3-way
-	 * comparator) works correctly on all platforms. Without this, the
+	 * This is needed so that ssup_datum_unsigned_cmp() (an unsigned integer
+	 * 3-way comparator) works correctly on all platforms. Without this, the
 	 * comparator would have to call memcmp() with a pair of pointers to the
 	 * first byte of each abbreviated key, which is slower.
 	 */

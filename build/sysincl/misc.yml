@@ -49,7 +49,6 @@
   includes:
     - error.h:       contrib/tools/bison/lib/error.h
     - obstack.h:     contrib/tools/bison/lib/obstack.h
-    - system.h
     # ucrt headers are included by bison/lib in a very specific way
     - ../ucrt/fcntl.h
     - ../ucrt/locale.h
@@ -87,11 +86,6 @@
 - source_filter: "^contrib/libs/llvm"
   includes:
     - plugin-api.h # GNU linker plugin API.
-
-- source_filter: "^contrib/libs/musl"
-  includes:
-    - atomic.h:      contrib/libs/musl/src/internal/atomic.h
-    - bits/fenv.h:   contrib/libs/musl/arch/x86_64/bits/fenv.h
 
 - source_filter: "^contrib/libs/zbar"
   includes:
@@ -155,10 +149,22 @@
   includes:
     - mkl.h:         contrib/libs/intel/mkl/include/mkl.h
 
-# deprecated contrib with ADDINCL to libintl
-- source_filter: "^contrib/(deprecated/glib/glib|libs/gdk-pixbuf)"
+# Use gettext-stub which has a permissive license
+- source_filter: "^contrib/libs/gdk-pixbuf"
   includes:
-    - libintl.h:     contrib/deprecated/libintl/libintl.h
+    - libintl.h: contrib/restricted/gettext-stub/libintl.h
+
+- source_filter: "^contrib/restricted/glib"
+  includes:
+    - libintl.h: contrib/restricted/gettext-stub/libintl.h
+
+- source_filter: "^contrib/restricted/gst-plugins-base"
+  includes:
+    - libintl.h: contrib/restricted/gettext-stub/libintl.h
+
+- source_filter: "^contrib/restricted/gstreamer"
+  includes:
+    - libintl.h: contrib/restricted/gettext-stub/libintl.h
 
 - source_filter: "^contrib/libs/poco/Data/ODBC"
   includes:
@@ -503,6 +509,10 @@
     - tls.h: contrib/libs/glibcasm/glibc/sysdeps/x86_64/nptl/tls.h
     - unistd.h: contrib/libs/glibcasm/glibc/include/unistd.h
     - unwind.h: contrib/libs/glibcasm/glibc/sysdeps/generic/unwind.h
+    # These are stubs for actual resolving into system
+    - stdc-predef.h: contrib/libs/glibcasm/glibc/include/stdc-predef.h
+    - gnu/stubs.h: contrib/libs/glibcasm/glibc/include/gnu/stubs.h
+
 
 - source_filter: "^contrib/libs/libunwind/include/unwind.h"
   includes:
@@ -516,9 +526,25 @@
         - contrib/libs/glibcasm/glibc/include/stdint.h
         - contrib/libs/cxxsupp/libcxx/include/stdint.h
 
+# protoc uses raw string literals with #include statements, which drive our include parser crazy
+- source_filter: "^contrib/libs/protoc"
+  includes:
+    - "$base$google/protobuf/$path$"
+    - "google/protobuf/$path$"
+    - "$fwd_to$.$fwd_to_suffix$.h"
+    - "$fwd_to$.proto.h"
+    - "$name$.proto.h"
+    - "$path$"
+    - "$h_include$"
+
 - source_filter: "^contrib/tools/bison/data"
   includes:
-    - position.hh
+    - "]b4_location_include["
+
+- source_filter: "^contrib/libs/libheif"
+  includes:
+    - error.h:  contrib/libs/libheif/libheif/error.h
+    - file.h:   contrib/libs/libheif/libheif/file.h
 
 - source_filter: "^vendor/github.com/NVIDIA"
   includes:

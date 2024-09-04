@@ -6,13 +6,15 @@ option java_multiple_files = true;
 
 option go_package = "a.yandex-team.ru/yt/go/proto/client/api/rpc_proxy";
 
-import "yt_proto/yt/core/misc/proto/guid.proto";
 import "yt_proto/yt/core/misc/proto/error.proto";
+import "yt_proto/yt/core/misc/proto/guid.proto";
+import "yt_proto/yt/core/misc/proto/hyperloglog.proto";
 import "yt_proto/yt/core/ytree/proto/attributes.proto";
 import "yt_proto/yt/core/ytree/proto/request_complexity_limits.proto";
 import "yt_proto/yt/client/chunk_client/proto/data_statistics.proto";
 import "yt_proto/yt/client/chaos_client/proto/replication_card.proto";
 import "yt_proto/yt/client/hive/proto/timestamp_map.proto";
+import "yt_proto/yt/client/table_client/proto/versioned_io_options.proto";
 import "yt_proto/yt/client/tablet_client/proto/lock_mask.proto";
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -502,6 +504,7 @@ message TReqLookupRows
 message TRspLookupRows
 {
     required TRowsetDescriptor rowset_descriptor = 200;
+    repeated int32 unavailable_key_indexes = 201;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -542,6 +545,7 @@ message TReqVersionedLookupRows
 message TRspVersionedLookupRows
 {
     required TRowsetDescriptor rowset_descriptor = 200;
+    repeated int32 unavailable_key_indexes = 201;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -577,8 +581,8 @@ message TRspMultiLookup
     message TSubresponse
     {
         required TRowsetDescriptor rowset_descriptor = 1;
-
         required int32 attachment_count = 2;
+        repeated int32 unavailable_key_indexes = 3;
     }
 
     repeated TSubresponse subresponses = 1;
@@ -632,8 +636,11 @@ message TReqSelectRows
     optional bool merge_versioned_rows = 21;
     optional int32 syntax_version = 22 [default = 1];
     optional int32 execution_backend = 23; // EExecutionBackend
+    optional NYT.NTableClient.NProto.TVersionedReadOptions versioned_read_options = 25;
 
     optional TSuppressableAccessTrackingOptions suppressable_access_tracking_options = 104;
+
+    reserved 24;
 }
 
 message TRspSelectRows
@@ -644,7 +651,7 @@ message TRspSelectRows
 
 ////////////////////////////////////////////////////////////////////////////////
 
-message TReqAdvanceConsumer
+message TReqAdvanceQueueConsumer
 {
     optional NYT.NProto.TGuid transaction_id = 1;
     optional string consumer_path = 2;
@@ -654,9 +661,32 @@ message TReqAdvanceConsumer
     optional int64 new_offset = 6;
 }
 
-message TRspAdvanceConsumer
+message TRspAdvanceQueueConsumer
 {
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqPushQueueProducer
+{
+    optional NYT.NProto.TGuid transaction_id = 1;
+    optional string producer_path = 2;
+    optional string queue_path = 3;
+    optional string session_id = 4;
+    optional int64 epoch = 5;
+    optional bytes user_meta = 6; // YSON
+    optional int64 sequence_number = 7;
+
+    required TRowsetDescriptor rowset_descriptor = 200;
+}
+
+message TRspPushQueueProducer
+{
+    optional int64 last_sequence_number = 1;
+    optional int64 skipped_row_count = 2;
+}
+
+////////////////////////////////////////////////////////////////////////////////
 
 message TRowBatchReadOptions
 {
@@ -770,8 +800,8 @@ message TReqCreateQueueProducerSession
 
 message TRspCreateQueueProducerSession
 {
-    optional uint64 sequence_number = 1;
-    optional uint64 epoch = 2;
+    optional int64 sequence_number = 1;
+    optional int64 epoch = 2;
     optional bytes user_meta = 3; // YSON
 }
 
@@ -1971,6 +2001,7 @@ message TReqAlterReplicationCard
     optional bytes replicated_table_options = 2; // YSON
     optional bool enable_replicated_table_tracker = 3;
     optional NYT.NProto.TGuid replication_card_collocation_id = 4;
+    optional bytes collocation_options = 5; // NTabletClient::TReplicationCollocationOptions
 
     optional TMutatingOptions mutating_options = 100;
 }
@@ -2027,6 +2058,9 @@ message TColumnarStatistics
     optional int64 chunk_row_count = 12;
     // Total number of rows in legacy chunks whose meta misses columnar statistics.
     optional int64 legacy_chunk_row_count = 13;
+
+    // Per-column hyperloglog digest to approximate number of unique values
+    repeated NYT.NProto.THyperLogLog column_hyperloglog_digests = 14;
 }
 
 message TRspGetColumnarStatistics
@@ -2433,10 +2467,14 @@ message TReqGetJobStderr
         string operation_alias = 3;
     }
     required NYT.NProto.TGuid job_id = 2;
+    optional int64 limit = 4;
+    optional int64 offset = 5;
 }
 
 message TRspGetJobStderr
 {
+    optional int64 end_offset = 1;
+    optional int64 total_size = 2;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2500,6 +2538,19 @@ message TReqAbortJob
 }
 
 message TRspAbortJob
+{
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqDumpJobProxyLog
+{
+    required NYT.NProto.TGuid job_id = 1;
+    required NYT.NProto.TGuid operation_id = 2;
+    required string path = 3; // YPath
+}
+
+message TRspDumpJobProxyLog
 {
 }
 
@@ -2886,12 +2937,12 @@ message TRspStopPipeline
 
 ////////////////////////////////////////////////////////////////////////////////
 
-message TReqGetPipelineStatus
+message TReqGetPipelineState
 {
     required string pipeline_path = 1;
 }
 
-message TRspGetPipelineStatus
+message TRspGetPipelineState
 {
     // TODO(babenko): provide native proto enum
     required int32 state = 1; // EPipelineState
@@ -2948,6 +2999,7 @@ message TOperation
     optional bytes events = 18; // YSON
     optional bytes result = 19; // YSON
 
+    optional bytes scheduling_attributes_per_pool_tree = 28; // YSON
     optional bytes slot_index_per_pool_tree = 20; // YSON
 
     optional bytes task_names = 21; // YSON
@@ -3057,6 +3109,8 @@ message TJob
     optional NYT.NProto.TGuid probing_job_competition_id = 25;
     optional bool has_probing_competitors = 26;
     optional uint64 job_cookie = 27;
+    optional bytes archive_features = 29; // YSON
+    optional string monitoring_descriptor = 30;
 }
 
 message TListJobsStatistics
@@ -3145,6 +3199,11 @@ message TReqStartQuery
         required EContentType type = 3;
     }
 
+    message TAccessControlObjects
+    {
+        repeated string items = 1;
+    }
+
     required string query_tracker_stage = 1;
     required EQueryEngine engine = 2;
     required string query = 3;
@@ -3152,7 +3211,8 @@ message TReqStartQuery
     optional bool draft = 5;
     optional bytes annotations = 6; // YSON
     repeated TQueryFile files = 7;
-    optional string access_control_object = 8;
+    optional string access_control_object = 8; // COMPAT(mpereskokova)
+    optional TAccessControlObjects access_control_objects = 9;
 }
 
 message TRspStartQuery
@@ -3226,13 +3286,14 @@ message TQuery
     optional uint64 finish_time = 6; // TInstant
     optional bytes settings = 7; // YSON
     optional string user = 8;
-    optional string access_control_object = 9;
+    optional string access_control_object = 9; // COMPAT(mpereskokova)
     optional EQueryState state = 10;
     optional int64 result_count = 11;
     optional bytes progress = 12; // YSON
     optional NYT.NProto.TError error = 13;
     optional bytes annotations = 14; // YSON
     optional NYT.NYTree.NProto.TAttributeDictionary other_attributes = 15;
+    optional bytes access_control_objects = 16; // YSON
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3278,10 +3339,16 @@ message TRspListQueries
 
 message TReqAlterQuery
 {
+    message TAccessControlObjects
+    {
+        repeated string items = 1;
+    }
+
     required string query_tracker_stage = 1;
     required NYT.NProto.TGuid query_id = 2;
     optional bytes annotations = 3; // YSON
-    optional string access_control_object = 4;
+    optional string access_control_object = 4; // COMPAT(mpereskokova)
+    optional TAccessControlObjects access_control_objects = 5;
 }
 
 message TRspAlterQuery
@@ -3301,4 +3368,48 @@ message TRspGetQueryTrackerInfo
     required string cluster_name = 1;
     required bytes supported_features = 2; // YSON
     repeated string access_control_objects = 3;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// NB(arkady-e1ppa): Under construction.
+// Distributed table client
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqStartDistributedWriteSession
+{
+    optional string path = 1;
+    
+    // TDistributedWriteSessionStartOptions contents...
+}
+
+message TRspStartDistributedWriteSession
+{
+    required bytes session = 1; // YSON-serialized TDistributedWriteSession
+}
+
+message TReqFinishDistributedWriteSession
+{
+    required bytes session = 2; // YSON-serialized TDistributedWriteSession
+
+    // TDistributedWriteSessionFinishOptions contents...
+}
+
+message TRspFinishDistributedWriteSession
+{
+}
+
+message TReqParticipantWriteTable
+{
+    optional bytes config = 1; // YSON-serialized TTableWriterConfig
+
+    optional bytes format = 2; // YSON-serialized TFormat
+
+    required bytes cookie = 3; // YSON-serialized TDistributedWriteCookie
+
+    // TParticipantTableWriterOptions contents...
+}
+
+message TRspParticipantWriteTable
+{
+    required bytes cookie = 1; // YSON-serialized TDistributedWriteCookie
 }

@@ -1,0 +1,9 @@
+<tmp_path>/program.sql:<main>: Error: Execution
+
+    <tmp_path>/program.sql:<main>:1:1: Warning: Gateway Error
+    	SELECT * FROM local_solomon.broken_json WITH (
+	^
+    <tmp_path>/program.sql:<main>: Error: Fatal Error
+
+    
+        <tmp_path>/program.sql:<main>: Error: Failed to parse response from monitoring: library/cpp/json/json_reader.cpp:xxx: Offset: 2, Code: 4, Error: Missing a name for object member. (appeared 1 time at ISOTIME)

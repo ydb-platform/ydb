@@ -4,7 +4,7 @@
  *	  Routines to support inter-object dependencies.
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/catalog/dependency.h
@@ -36,8 +36,7 @@ typedef enum DependencyType
 	DEPENDENCY_PARTITION_PRI = 'P',
 	DEPENDENCY_PARTITION_SEC = 'S',
 	DEPENDENCY_EXTENSION = 'e',
-	DEPENDENCY_AUTO_EXTENSION = 'x',
-	DEPENDENCY_PIN = 'p'
+	DEPENDENCY_AUTO_EXTENSION = 'x'
 } DependencyType;
 
 /*
@@ -47,27 +46,21 @@ typedef enum DependencyType
  * unless the dependent object is dropped at the same time.  There are some
  * additional rules however:
  *
- * (a) For a SHARED_DEPENDENCY_PIN entry, there is no dependent object --
- * rather, the referenced object is an essential part of the system.  This
- * applies to the initdb-created superuser.  Entries of this type are only
- * created by initdb; objects in this category don't need further pg_shdepend
- * entries if more objects come to depend on them.
- *
- * (b) a SHARED_DEPENDENCY_OWNER entry means that the referenced object is
+ * (a) a SHARED_DEPENDENCY_OWNER entry means that the referenced object is
  * the role owning the dependent object.  The referenced object must be
  * a pg_authid entry.
  *
- * (c) a SHARED_DEPENDENCY_ACL entry means that the referenced object is
+ * (b) a SHARED_DEPENDENCY_ACL entry means that the referenced object is
  * a role mentioned in the ACL field of the dependent object.  The referenced
  * object must be a pg_authid entry.  (SHARED_DEPENDENCY_ACL entries are not
  * created for the owner of an object; hence two objects may be linked by
  * one or the other, but not both, of these dependency types.)
  *
- * (d) a SHARED_DEPENDENCY_POLICY entry means that the referenced object is
+ * (c) a SHARED_DEPENDENCY_POLICY entry means that the referenced object is
  * a role mentioned in a policy object.  The referenced object must be a
  * pg_authid entry.
  *
- * (e) a SHARED_DEPENDENCY_TABLESPACE entry means that the referenced
+ * (d) a SHARED_DEPENDENCY_TABLESPACE entry means that the referenced
  * object is a tablespace mentioned in a relation without storage.  The
  * referenced object must be a pg_tablespace entry.  (Relations that have
  * storage don't need this: they are protected by the existence of a physical
@@ -78,7 +71,6 @@ typedef enum DependencyType
  */
 typedef enum SharedDependencyType
 {
-	SHARED_DEPENDENCY_PIN = 'p',
 	SHARED_DEPENDENCY_OWNER = 'o',
 	SHARED_DEPENDENCY_ACL = 'a',
 	SHARED_DEPENDENCY_POLICY = 'r',
@@ -120,6 +112,7 @@ typedef enum ObjectClass
 	OCLASS_TSTEMPLATE,			/* pg_ts_template */
 	OCLASS_TSCONFIG,			/* pg_ts_config */
 	OCLASS_ROLE,				/* pg_authid */
+	OCLASS_ROLE_MEMBERSHIP,		/* pg_auth_members */
 	OCLASS_DATABASE,			/* pg_database */
 	OCLASS_TBLSPACE,			/* pg_tablespace */
 	OCLASS_FDW,					/* pg_foreign_data_wrapper */
@@ -128,8 +121,10 @@ typedef enum ObjectClass
 	OCLASS_DEFACL,				/* pg_default_acl */
 	OCLASS_EXTENSION,			/* pg_extension */
 	OCLASS_EVENT_TRIGGER,		/* pg_event_trigger */
+	OCLASS_PARAMETER_ACL,		/* pg_parameter_acl */
 	OCLASS_POLICY,				/* pg_policy */
 	OCLASS_PUBLICATION,			/* pg_publication */
+	OCLASS_PUBLICATION_NAMESPACE,	/* pg_publication_namespace */
 	OCLASS_PUBLICATION_REL,		/* pg_publication_rel */
 	OCLASS_SUBSCRIPTION,		/* pg_subscription */
 	OCLASS_TRANSFORM			/* pg_transform */
@@ -201,6 +196,8 @@ extern void recordMultipleDependencies(const ObjectAddress *depender,
 extern void recordDependencyOnCurrentExtension(const ObjectAddress *object,
 											   bool isReplace);
 
+extern void checkMembershipInCurrentExtension(const ObjectAddress *object);
+
 extern long deleteDependencyRecordsFor(Oid classId, Oid objectId,
 									   bool skipExtensionDeps);
 
@@ -252,7 +249,7 @@ extern void recordDependencyOnTablespace(Oid classId, Oid objectId,
 extern void changeDependencyOnTablespace(Oid classId, Oid objectId,
 										 Oid newTablespaceId);
 
-extern void updateAclDependencies(Oid classId, Oid objectId, int32 objectSubId,
+extern void updateAclDependencies(Oid classId, Oid objectId, int32 objsubId,
 								  Oid ownerId,
 								  int noldmembers, Oid *oldmembers,
 								  int nnewmembers, Oid *newmembers);
@@ -266,8 +263,8 @@ extern void copyTemplateDependencies(Oid templateDbId, Oid newDbId);
 
 extern void dropDatabaseDependencies(Oid databaseId);
 
-extern void shdepDropOwned(List *relids, DropBehavior behavior);
+extern void shdepDropOwned(List *roleids, DropBehavior behavior);
 
-extern void shdepReassignOwned(List *relids, Oid newrole);
+extern void shdepReassignOwned(List *roleids, Oid newrole);
 
 #endif							/* DEPENDENCY_H */

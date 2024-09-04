@@ -3,8 +3,10 @@
 #include "yql_kikimr_gateway.h"
 #include "yql_kikimr_settings.h"
 
-#include <ydb/core/kqp/common/simple/temp_tables.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/external_sources/external_source_factory.h>
+#include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/common/simple/temp_tables.h>
 #include <ydb/core/kqp/query_data/kqp_query_data.h>
 #include <ydb/library/yql/ast/yql_gc_nodes.h>
 #include <ydb/library/yql/core/yql_type_annotation.h>
@@ -239,6 +241,7 @@ enum class TYdbOperation : ui32 {
     CreateReplication    = 1 << 24,
     AlterReplication     = 1 << 25,
     DropReplication      = 1 << 26,
+    Analyze              = 1 << 27,
 };
 
 Y_DECLARE_FLAGS(TYdbOperations, TYdbOperation);
@@ -254,8 +257,8 @@ bool AddDmlIssue(const TIssue& issue, TExprContext& ctx);
 
 class TKikimrTransactionContextBase : public TThrRefBase {
 public:
-    explicit TKikimrTransactionContextBase(bool enableImmediateEffects) : EnableImmediateEffects(enableImmediateEffects) {
-    }
+    explicit TKikimrTransactionContextBase()
+    {}
 
     bool HasStarted() const {
         return EffectiveIsolationLevel.Defined();
@@ -334,7 +337,7 @@ public:
             if (TempTablesState) {
                 auto tempTableInfoIt = TempTablesState->FindInfo(table, false);
                 if (tempTableInfoIt != TempTablesState->TempTables.end()) {
-                    table = tempTableInfoIt->first + TempTablesState->SessionId;
+                    table = NKikimr::NKqp::GetTempTablePath(TempTablesState->Database, TempTablesState->SessionId, tempTableInfoIt->first);
                 }
             }
 
@@ -407,28 +410,10 @@ public:
             const bool currentModify = currentOps & KikimrModifyOps();
             if (currentModify) {
                 if (KikimrReadOps() & newOp) {
-                    if (!EnableImmediateEffects) {
-                        TString message = TStringBuilder() << "Data modifications previously made to table '" << table
-                            << "' in current transaction won't be seen by operation: '"
-                            << newOp << "'";
-                        const TPosition pos(op.GetPosition().GetColumn(), op.GetPosition().GetRow());
-                        auto newIssue = AddDmlIssue(YqlIssue(pos, TIssuesIds::KIKIMR_READ_MODIFIED_TABLE, message));
-                        issues.AddIssue(newIssue);
-                        return {false, issues};
-                    }
-
                     HasUncommittedChangesRead = true;
                 }
 
                 if ((*info)->GetHasIndexTables()) {
-                    if (!EnableImmediateEffects) {
-                        TString message = TStringBuilder()
-                            << "Multiple modification of table with secondary indexes is not supported yet";
-                        const TPosition pos(op.GetPosition().GetColumn(), op.GetPosition().GetRow());
-                        issues.AddIssue(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_OPERATION, message));
-                        return {false, issues};
-                    }
-
                     HasUncommittedChangesRead = true;
                 }
             }
@@ -443,7 +428,6 @@ public:
 
 public:
     bool HasUncommittedChangesRead = false;
-    const bool EnableImmediateEffects;
     THashMap<TString, TYdbOperations> TableOperations;
     THashMap<TKikimrPathId, TString> TableByIdMap;
     TMaybe<NKikimrKqp::EIsolationLevel> EffectiveIsolationLevel;
@@ -460,12 +444,14 @@ public:
         TIntrusivePtr<ITimeProvider> timeProvider,
         TIntrusivePtr<IRandomProvider> randomProvider,
         const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
-        TIntrusivePtr<TKikimrTransactionContextBase> txCtx = nullptr)
+        TIntrusivePtr<TKikimrTransactionContextBase> txCtx = nullptr,
+        const TIntrusivePtr<NKikimr::NKqp::TUserRequestContext>& userRequestContext = nullptr)
         : Configuration(config)
         , TablesData(MakeIntrusive<TKikimrTablesData>())
         , QueryCtx(MakeIntrusive<TKikimrQueryContext>(functionRegistry, timeProvider, randomProvider))
         , TxCtx(txCtx)
         , UserToken(userToken)
+        , UserRequestContext(userRequestContext)
     {}
 
     TKikimrSessionContext(const TKikimrSessionContext&) = delete;
@@ -505,12 +491,20 @@ public:
         return Database;
     }
 
+    const TString& GetSessionId() const {
+        return SessionId;
+    }
+
     void SetCluster(const TString& cluster) {
         Cluster = cluster;
     }
 
     void SetDatabase(const TString& database) {
         Database = database;
+    }
+
+    void SetSessionId(const TString& sessionId) {
+        SessionId = sessionId;
     }
 
     NKikimr::NKqp::TKqpTempTablesState::TConstPtr GetTempTablesState() const {
@@ -539,16 +533,22 @@ public:
         return UserToken;
     }
 
+    const TIntrusivePtr<NKikimr::NKqp::TUserRequestContext>& GetUserRequestContext() const {
+        return UserRequestContext;
+    }
+
 private:
     TString UserName;
     TString Cluster;
     TString Database;
+    TString SessionId;
     TKikimrConfiguration::TPtr Configuration;
     TIntrusivePtr<TKikimrTablesData> TablesData;
     TIntrusivePtr<TKikimrQueryContext> QueryCtx;
     TIntrusivePtr<TKikimrTransactionContextBase> TxCtx;
     NKikimr::NKqp::TKqpTempTablesState::TConstPtr TempTablesState;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    TIntrusivePtr<NKikimr::NKqp::TUserRequestContext> UserRequestContext;
 };
 
 TIntrusivePtr<IDataProvider> CreateKikimrDataSource(
@@ -557,7 +557,8 @@ TIntrusivePtr<IDataProvider> CreateKikimrDataSource(
     TIntrusivePtr<IKikimrGateway> gateway,
     TIntrusivePtr<TKikimrSessionContext> sessionCtx,
     const NKikimr::NExternalSource::IExternalSourceFactory::TPtr& sourceFactory,
-    bool isInternalCall);
+    bool isInternalCall,
+    TGUCSettings::TPtr gucSettings);
 
 TIntrusivePtr<IDataProvider> CreateKikimrDataSink(
     const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,

@@ -2,6 +2,9 @@
 #include "yql_statistics.h"
 
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/string_utils/base64/base64.h>
+
+#include <sstream>
 
 using namespace NYql;
 
@@ -19,6 +22,26 @@ static TString ConvertToStatisticsTypeString(EStatisticsType type) {
     return "";
 }
 
+static TString ConvertToStatisticsTypeString(EStorageType storageType) {
+    switch (storageType) {
+        case EStorageType::NA:
+            return "NA";
+        case EStorageType::RowStorage:
+            return "RowStorage";
+        case EStorageType::ColumnStorage:
+            return "ColumnStorage";
+        default:
+            Y_ENSURE(false,"Unknown Storage type");
+    }
+    return "";
+}
+
+TString TOptimizerStatistics::ToString() const {
+    std::stringstream ss;
+    ss << *this;
+    return ss.str();
+}
+
 std::ostream& NYql::operator<<(std::ostream& os, const TOptimizerStatistics& s) {
     os << "Type: " << ConvertToStatisticsTypeString(s.Type) << ", Nrows: " << s.Nrows
         << ", Ncols: " << s.Ncols << ", ByteSize: " << s.ByteSize << ", Cost: " << s.Cost;
@@ -27,6 +50,7 @@ std::ostream& NYql::operator<<(std::ostream& os, const TOptimizerStatistics& s) 
             os << ", " << c;
         }
     }
+    os << ", Storage: " << ConvertToStatisticsTypeString(s.StorageType);
     return os;
 }
 
@@ -42,6 +66,7 @@ TOptimizerStatistics::TOptimizerStatistics(
     double cost,
     TIntrusivePtr<TKeyColumns> keyColumns,
     TIntrusivePtr<TColumnStatMap> columnMap,
+    EStorageType storageType,
     std::unique_ptr<IProviderStatistics> specific)
     : Type(type)
     , Nrows(nrows)
@@ -50,6 +75,7 @@ TOptimizerStatistics::TOptimizerStatistics(
     , Cost(cost)
     , KeyColumns(keyColumns)
     , ColumnStatistics(columnMap)
+    , StorageType(storageType)
     , Specific(std::move(specific))
 {
 }
@@ -62,12 +88,10 @@ TOptimizerStatistics& TOptimizerStatistics::operator+=(const TOptimizerStatistic
     return *this;
 }
 
-std::shared_ptr<TOptimizerStatistics> NYql::OverrideStatistics(const NYql::TOptimizerStatistics& s, const TStringBuf& tablePath, const TString& statHints) {
+std::shared_ptr<TOptimizerStatistics> NYql::OverrideStatistics(const NYql::TOptimizerStatistics& s, const TStringBuf& tablePath, const std::shared_ptr<NJson::TJsonValue>& stats) {
     auto res = std::make_shared<TOptimizerStatistics>(s.Type, s.Nrows, s.Ncols, s.ByteSize, s.Cost, s.KeyColumns, s.ColumnStatistics);
 
-    NJson::TJsonValue root;
-    NJson::ReadJsonTree(statHints, &root, true);
-    auto dbStats = root.GetMapSafe();
+    auto dbStats = stats->GetMapSafe();
 
     if (!dbStats.contains(tablePath)){
         return res;
@@ -103,16 +127,24 @@ std::shared_ptr<TOptimizerStatistics> NYql::OverrideStatistics(const NYql::TOpti
 
             TColumnStatistics cStat;
 
-            auto column_name = colMap.at("name").GetStringSafe();
+            auto columnName = colMap.at("name").GetStringSafe();
 
             if (auto numUniqueVals = colMap.find("n_unique_vals"); numUniqueVals != colMap.end()) {
-                cStat.NumUniqueVals = numUniqueVals->second.GetDoubleSafe();
+                cStat.NumUniqueVals = numUniqueVals->second.IsNull()? 0.0: numUniqueVals->second.GetDoubleSafe();
             }
             if (auto hll = colMap.find("hyperloglog"); hll != colMap.end()) {
-                cStat.HyperLogLog = hll->second.GetDoubleSafe();
+                cStat.HyperLogLog = hll->second.IsNull()? 0.0: hll->second.GetDoubleSafe();
+            }
+            if (auto countMinSketch = colMap.find("count-min"); countMinSketch != colMap.end()) {
+                TString countMinBase64 = countMinSketch->second.GetStringSafe();
+
+                TString countMinRaw{};
+                Base64StrictDecode(countMinBase64, countMinRaw);
+                
+                cStat.CountMinSketch.reset(NKikimr::TCountMinSketch::FromString(countMinRaw.Data(), countMinRaw.Size()));
             }
 
-            res->ColumnStatistics->Data[column_name] = cStat;
+            res->ColumnStatistics->Data[columnName] = cStat;
         }
     }
 

@@ -403,7 +403,8 @@ def _tp_cache(func=None, /, *, typed=False):
 
     return decorator
 
-def _eval_type(t, globalns, localns, recursive_guard=frozenset()):
+
+def _eval_type(t, globalns, localns, type_params=None, *, recursive_guard=frozenset()):
     """Evaluate all forward references in the given type t.
 
     For use of globalns and localns see the docstring for get_type_hints().
@@ -411,7 +412,7 @@ def _eval_type(t, globalns, localns, recursive_guard=frozenset()):
     ForwardRef.
     """
     if isinstance(t, ForwardRef):
-        return t._evaluate(globalns, localns, recursive_guard)
+        return t._evaluate(globalns, localns, type_params, recursive_guard=recursive_guard)
     if isinstance(t, (_GenericAlias, GenericAlias, types.UnionType)):
         if isinstance(t, GenericAlias):
             args = tuple(
@@ -425,7 +426,13 @@ def _eval_type(t, globalns, localns, recursive_guard=frozenset()):
                 t = t.__origin__[args]
             if is_unpacked:
                 t = Unpack[t]
-        ev_args = tuple(_eval_type(a, globalns, localns, recursive_guard) for a in t.__args__)
+
+        ev_args = tuple(
+            _eval_type(
+                a, globalns, localns, type_params, recursive_guard=recursive_guard
+            )
+            for a in t.__args__
+        )
         if ev_args == t.__args__:
             return t
         if isinstance(t, GenericAlias):
@@ -906,7 +913,7 @@ class ForwardRef(_Final, _root=True):
         self.__forward_is_class__ = is_class
         self.__forward_module__ = module
 
-    def _evaluate(self, globalns, localns, recursive_guard):
+    def _evaluate(self, globalns, localns, type_params=None, *, recursive_guard):
         if self.__forward_arg__ in recursive_guard:
             return self
         if not self.__forward_evaluated__ or localns is not globalns:
@@ -920,6 +927,22 @@ class ForwardRef(_Final, _root=True):
                 globalns = getattr(
                     sys.modules.get(self.__forward_module__, None), '__dict__', globalns
                 )
+
+            # type parameters require some special handling,
+            # as they exist in their own scope
+            # but `eval()` does not have a dedicated parameter for that scope.
+            # For classes, names in type parameter scopes should override
+            # names in the global scope (which here are called `localns`!),
+            # but should in turn be overridden by names in the class scope
+            # (which here are called `globalns`!)
+            if type_params:
+                globalns, localns = dict(globalns), dict(localns)
+                for param in type_params:
+                    param_name = param.__name__
+                    if not self.__forward_is_class__ or param_name not in globalns:
+                        globalns[param_name] = param
+                        localns.pop(param_name, None)
+
             type_ = _type_check(
                 eval(self.__forward_code__, globalns, localns),
                 "Forward references must evaluate to types.",
@@ -927,7 +950,11 @@ class ForwardRef(_Final, _root=True):
                 allow_special_forms=self.__forward_is_class__,
             )
             self.__forward_value__ = _eval_type(
-                type_, globalns, localns, recursive_guard | {self.__forward_arg__}
+                type_,
+                globalns,
+                localns,
+                type_params,
+                recursive_guard=(recursive_guard | {self.__forward_arg__}),
             )
             self.__forward_evaluated__ = True
         return self.__forward_value__
@@ -1686,8 +1713,9 @@ class _UnpackGenericAlias(_GenericAlias, _root=True):
         assert self.__origin__ is Unpack
         assert len(self.__args__) == 1
         arg, = self.__args__
-        if isinstance(arg, _GenericAlias):
-            assert arg.__origin__ is tuple
+        if isinstance(arg, (_GenericAlias, types.GenericAlias)):
+            if arg.__origin__ is not tuple:
+                raise TypeError("Unpack[...] must be used with a tuple type")
             return arg.__args__
         return None
 
@@ -2241,7 +2269,7 @@ def get_type_hints(obj, globalns=None, localns=None, include_extras=False):
                     value = type(None)
                 if isinstance(value, str):
                     value = ForwardRef(value, is_argument=False, is_class=True)
-                value = _eval_type(value, base_globals, base_locals)
+                value = _eval_type(value, base_globals, base_locals, base.__type_params__)
                 hints[name] = value
         return hints if include_extras else {k: _strip_annotations(t) for k, t in hints.items()}
 
@@ -2267,6 +2295,7 @@ def get_type_hints(obj, globalns=None, localns=None, include_extras=False):
             raise TypeError('{!r} is not a module, class, method, '
                             'or function.'.format(obj))
     hints = dict(hints)
+    type_params = getattr(obj, "__type_params__", ())
     for name, value in hints.items():
         if value is None:
             value = type(None)
@@ -2278,7 +2307,7 @@ def get_type_hints(obj, globalns=None, localns=None, include_extras=False):
                 is_argument=not isinstance(obj, types.ModuleType),
                 is_class=False,
             )
-        hints[name] = _eval_type(value, globalns, localns)
+        hints[name] = _eval_type(value, globalns, localns, type_params)
     return hints if include_extras else {k: _strip_annotations(t) for k, t in hints.items()}
 
 

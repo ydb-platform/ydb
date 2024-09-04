@@ -194,7 +194,7 @@ namespace NKikimr::NStorage {
                            out << "ErrorReason: " << ErrorReason << "<br/>";
                         }
                         out << "Quorum: " << (HasQuorum() ? "yes" : "no") << "<br/>";
-                        out << "Scepter: " << (Scepter ? ToString(Scepter->Id) : "null");
+                        out << "Scepter: " << (Scepter ? ToString(Scepter->Id) : "null") << "<br/>";
                     }
                 }
 

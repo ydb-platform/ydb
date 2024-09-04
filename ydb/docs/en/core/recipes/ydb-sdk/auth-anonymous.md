@@ -15,7 +15,7 @@ Below are examples of the code for anonymous authentication in different {{ ydb-
 
   import (
     "context"
-      
+
     "github.com/ydb-platform/ydb-go-sdk/v3"
   )
 
@@ -45,7 +45,7 @@ Below are examples of the code for anonymous authentication in different {{ ydb-
     "context"
     "database/sql"
     "os"
-    
+
     "github.com/ydb-platform/ydb-go-sdk/v3"
   )
 
@@ -59,7 +59,7 @@ Below are examples of the code for anonymous authentication in different {{ ydb-
     if err != nil {
       panic(err)
     }
-    defer nativeDriver.Close(ctx) 
+    defer nativeDriver.Close(ctx)
     connector, err := ydb.Connector(nativeDriver)
     if err != nil {
       panic(err)
@@ -91,15 +91,15 @@ Below are examples of the code for anonymous authentication in different {{ ydb-
 
 - Node.js
 
-  {% include [auth-anonymous](../../../_includes/nodejs/auth-anonymous.md) %}
+  {% include [auth-anonymous](../../_includes/nodejs/auth-anonymous.md) %}
 
 - Python
 
-  {% include [auth-anonymous](../../../_includes/python/auth-anonymous.md) %}
+  {% include [auth-anonymous](../../_includes/python/auth-anonymous.md) %}
 
 - Python (asyncio)
 
-  {% include [auth-anonymous](../../../_includes/python/async/auth-anonymous.md) %}
+  {% include [auth-anonymous](../../_includes/python/async/auth-anonymous.md) %}
 
 - C# (.NET)
 
@@ -143,7 +143,7 @@ Below are examples of the code for anonymous authentication in different {{ ydb-
           'insecure' => true,
           // 'root_cert_file' => './CA.pem', // Root CA file (uncomment for dedicated server)
       ],
-      
+
       'credentials' => new AnonymousAuthentication()
   ];
 

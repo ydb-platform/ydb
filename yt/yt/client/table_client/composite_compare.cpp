@@ -12,13 +12,15 @@
 
 #include <util/stream/mem.h>
 
+#include <cmath>
+
 namespace NYT::NTableClient {
 
 using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const auto Logger = NLogging::TLogger{"YsonCompositeCompare"};
+YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "YsonCompositeCompare");
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -212,6 +214,25 @@ i64 GetMinResultingSize(const TYsonItem& item, bool isInsideList)
 }
 
 } // namespace
+
+int CompareDoubleValues(double lhs, double rhs)
+{
+    if (lhs < rhs) {
+        return -1;
+    } else if (lhs > rhs) {
+        return +1;
+    } else if (std::isnan(lhs)) {
+        if (std::isnan(rhs)) {
+            return 0;
+        } else {
+            return 1;
+        }
+    } else if (std::isnan(rhs)) {
+        return -1;
+    }
+
+    return 0;
+}
 
 int CompareYsonValues(TYsonStringBuf lhs, TYsonStringBuf rhs)
 {

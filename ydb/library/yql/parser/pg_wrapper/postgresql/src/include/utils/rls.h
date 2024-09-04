@@ -4,7 +4,7 @@
  *	  Header file for Row Level Security (RLS) utility commands to be used
  *	  with the rowsecurity feature.
  *
- * Copyright (c) 2007-2021, PostgreSQL Global Development Group
+ * Copyright (c) 2007-2023, PostgreSQL Global Development Group
  *
  * src/include/utils/rls.h
  *
@@ -14,7 +14,7 @@
 #define RLS_H
 
 /* GUC variable */
-extern __thread bool row_security;
+extern __thread PGDLLIMPORT bool row_security;
 
 /*
  * Used by callers of check_enable_rls.

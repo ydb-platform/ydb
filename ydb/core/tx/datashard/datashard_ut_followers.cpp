@@ -27,7 +27,6 @@ Y_UNIT_TEST_SUITE(DataShardFollowers) {
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
-        runtime.GetAppData().AllowReadTableImmediate = true;
 
         InitRoot(server, sender);
 
@@ -177,13 +176,20 @@ Y_UNIT_TEST_SUITE(DataShardFollowers) {
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NLog::PRI_DEBUG);
 
         InitRoot(server, sender);
+
+        TIntrusivePtr<NLocalDb::TCompactionPolicy> policy = new NLocalDb::TCompactionPolicy();
+        policy->MinDataPageSize = 1;
+        policy->MinBTreeIndexNodeSize = 1;
 
         CreateShardedTable(server, sender, "/Root", "table-1",
             TShardedTableOptions()
                 .Shards(2)
-                .Followers(1));
+                .Followers(1)
+                .Policy(policy.Get()));
 
         const auto shards = GetTableShards(server, sender, "/Root/table-1");
         UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2u);
@@ -191,7 +197,7 @@ Y_UNIT_TEST_SUITE(DataShardFollowers) {
         ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 11), (2, 22), (3, 33);");
 
         // Wait for leader to promote the follower read edge (and stop writing to the Sys table)
-        Cerr << "... sleeping" << Endl;
+        Cerr << "... sleeping after upsert" << Endl;
         runtime.SimulateSleep(TDuration::Seconds(1));
 
         UNIT_ASSERT_VALUES_EQUAL(
@@ -219,7 +225,7 @@ Y_UNIT_TEST_SUITE(DataShardFollowers) {
         }
 
         // Allow table to finish compaction
-        Cerr << "... sleeping" << Endl;
+        Cerr << "... sleeping after compaction" << Endl;
         runtime.SimulateSleep(TDuration::Seconds(1));
 
         // Reboot follower
@@ -229,11 +235,11 @@ Y_UNIT_TEST_SUITE(DataShardFollowers) {
             { .Follower = true });
 
         // Allow it to boot properly
-        Cerr << "... sleeping" << Endl;
+        Cerr << "... sleeping after restart" << Endl;
         runtime.SimulateSleep(TDuration::Seconds(1));
 
         // Read from follower must succeed
-        Cerr << "... checking" << Endl;
+        Cerr << "... checking after restart" << Endl;
         UNIT_ASSERT_VALUES_EQUAL(
             KqpSimpleStaleRoExec(runtime,
                 "SELECT key, value FROM `/Root/table-1` WHERE key >= 1 AND key <= 3",
@@ -248,7 +254,7 @@ Y_UNIT_TEST_SUITE(DataShardFollowers) {
         runtime.SimulateSleep(TDuration::Seconds(1));
 
         // Read from follower must see updated values
-        Cerr << "... checking" << Endl;
+        Cerr << "... checking after update" << Endl;
         UNIT_ASSERT_VALUES_EQUAL(
             KqpSimpleStaleRoExec(runtime,
                 "SELECT key, value FROM `/Root/table-1` WHERE key >= 1 AND key <= 3",
@@ -256,6 +262,462 @@ Y_UNIT_TEST_SUITE(DataShardFollowers) {
             "{ items { uint32_value: 1 } items { uint32_value: 44 } }, "
             "{ items { uint32_value: 2 } items { uint32_value: 55 } }, "
             "{ items { uint32_value: 3 } items { uint32_value: 66 } }");
+    }
+
+    Y_UNIT_TEST(FollowerAfterSysCompaction) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableForceFollowers(true);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NLog::PRI_DEBUG);
+
+        InitRoot(server, sender);
+
+        TIntrusivePtr<NLocalDb::TCompactionPolicy> policy = new NLocalDb::TCompactionPolicy();
+        policy->MinDataPageSize = 1;
+        policy->MinBTreeIndexNodeSize = 1;
+
+        CreateShardedTable(server, sender, "/Root", "table-1",
+            TShardedTableOptions()
+                .Shards(2)
+                .Followers(1)
+                .Policy(policy.Get()));
+
+        const auto shards = GetTableShards(server, sender, "/Root/table-1");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2u);
+
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 11), (2, 22), (3, 33);");
+
+        // Wait for leader to promote the follower read edge (and stop writing to the Sys table)
+        Cerr << "... sleeping after upsert" << Endl;
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleStaleRoExec(runtime,
+                "SELECT key, value FROM `/Root/table-1` WHERE key >= 1 AND key <= 3",
+                "/Root"),
+            "{ items { uint32_value: 1 } items { uint32_value: 11 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 22 } }, "
+            "{ items { uint32_value: 3 } items { uint32_value: 33 } }");
+
+        // Now we ask the leader to compact the Sys table
+        {
+            NActorsProto::TRemoteHttpInfo pb;
+            pb.SetMethod(HTTP_METHOD_GET);
+            pb.SetPath("/executorInternals");
+            auto* p1 = pb.AddQueryParams();
+            p1->SetKey("force_compaction");
+            p1->SetValue("1");
+            SendViaPipeCache(runtime, shards.at(0), sender,
+                std::make_unique<NMon::TEvRemoteHttpInfo>(std::move(pb)));
+            auto ev = runtime.GrabEdgeEventRethrow<NMon::TEvRemoteHttpInfoRes>(sender);
+            UNIT_ASSERT_C(
+                ev->Get()->Html.Contains("Table will be compacted in the near future"),
+                ev->Get()->Html);
+        }
+
+        // Allow table to finish compaction
+        Cerr << "... sleeping after compaction" << Endl;
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        // Read from follower must succeed
+        Cerr << "... checking after compaction" << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleStaleRoExec(runtime,
+                "SELECT key, value FROM `/Root/table-1` WHERE key >= 1 AND key <= 3",
+                "/Root"),
+            "{ items { uint32_value: 1 } items { uint32_value: 11 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 22 } }, "
+            "{ items { uint32_value: 3 } items { uint32_value: 33 } }");
+
+        // Update row values and sleep
+        Cerr << "... updating rows" << Endl;
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 44), (2, 55), (3, 66);");
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        // Read from follower must see updated values
+        Cerr << "... checking after update" << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleStaleRoExec(runtime,
+                "SELECT key, value FROM `/Root/table-1` WHERE key >= 1 AND key <= 3",
+                "/Root"),
+            "{ items { uint32_value: 1 } items { uint32_value: 44 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 55 } }, "
+            "{ items { uint32_value: 3 } items { uint32_value: 66 } }");
+    }
+
+    Y_UNIT_TEST(FollowerAfterDataCompaction) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableForceFollowers(true);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NLog::PRI_DEBUG);
+
+        InitRoot(server, sender);
+
+        TIntrusivePtr<NLocalDb::TCompactionPolicy> policy = new NLocalDb::TCompactionPolicy();
+        policy->MinDataPageSize = 1;
+        policy->MinBTreeIndexNodeSize = 1;
+
+        CreateShardedTable(server, sender, "/Root", "table-1",
+            TShardedTableOptions()
+                .Shards(2)
+                .Followers(1)
+                .Policy(policy.Get()));
+
+        const auto shards = GetTableShards(server, sender, "/Root/table-1");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2u);
+
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 11), (2, 22), (3, 33);");
+
+        // Wait for leader to promote the follower read edge (and stop writing to the Sys table)
+        Cerr << "... sleeping after upsert" << Endl;
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleStaleRoExec(runtime,
+                "SELECT key, value FROM `/Root/table-1` WHERE key >= 1 AND key <= 3",
+                "/Root"),
+            "{ items { uint32_value: 1 } items { uint32_value: 11 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 22 } }, "
+            "{ items { uint32_value: 3 } items { uint32_value: 33 } }");
+
+        // Now we ask the leader to compact the table
+        {
+            NActorsProto::TRemoteHttpInfo pb;
+            pb.SetMethod(HTTP_METHOD_GET);
+            pb.SetPath("/executorInternals");
+            auto* p1 = pb.AddQueryParams();
+            p1->SetKey("force_compaction");
+            p1->SetValue("1001");
+            SendViaPipeCache(runtime, shards.at(0), sender,
+                std::make_unique<NMon::TEvRemoteHttpInfo>(std::move(pb)));
+            auto ev = runtime.GrabEdgeEventRethrow<NMon::TEvRemoteHttpInfoRes>(sender);
+            UNIT_ASSERT_C(
+                ev->Get()->Html.Contains("Table will be compacted in the near future"),
+                ev->Get()->Html);
+        }
+
+        // Allow table to finish compaction
+        Cerr << "... sleeping after compaction" << Endl;
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        auto observer = runtime.AddObserver<NSharedCache::TEvRequest>([&](NSharedCache::TEvRequest::TPtr& ev) {
+            NSharedCache::TEvRequest *msg = ev->Get();
+            Cerr << "Captured pages request" << Endl;
+            for (auto pageId : msg->Fetch->Pages) {
+                auto type = NTable::NPage::EPage(msg->Fetch->PageCollection->Page(pageId).Type);
+                UNIT_ASSERT_C(type != NTable::EPage::BTreeIndex && type != NTable::EPage::FlatIndex, "Index pages should be preload during a part switch");
+            }
+        });
+
+        // Read from follower must succeed
+        Cerr << "... checking after compaction" << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleStaleRoExec(runtime,
+                "SELECT key, value FROM `/Root/table-1` WHERE key >= 1 AND key <= 3",
+                "/Root"),
+            "{ items { uint32_value: 1 } items { uint32_value: 11 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 22 } }, "
+            "{ items { uint32_value: 3 } items { uint32_value: 33 } }");
+
+        // Update row values and sleep
+        Cerr << "... updating rows" << Endl;
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 44), (2, 55), (3, 66);");
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        // Read from follower must see updated values
+        Cerr << "... checking after update" << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleStaleRoExec(runtime,
+                "SELECT key, value FROM `/Root/table-1` WHERE key >= 1 AND key <= 3",
+                "/Root"),
+            "{ items { uint32_value: 1 } items { uint32_value: 44 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 55 } }, "
+            "{ items { uint32_value: 3 } items { uint32_value: 66 } }");
+    }
+
+    Y_UNIT_TEST(FollowerDuringSysPartSwitch) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableForceFollowers(true);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NLog::PRI_DEBUG);
+
+        InitRoot(server, sender);
+
+        TIntrusivePtr<NLocalDb::TCompactionPolicy> policy = new NLocalDb::TCompactionPolicy();
+        policy->MinDataPageSize = 1;
+        policy->MinBTreeIndexNodeSize = 1;
+
+        CreateShardedTable(server, sender, "/Root", "table-1",
+            TShardedTableOptions()
+                .Followers(1)
+                .Policy(policy.Get()));
+
+        const auto shards = GetTableShards(server, sender, "/Root/table-1");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+        
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 11), (2, 22), (3, 33);");
+
+        // Wait for leader to promote the follower read edge (and stop writing to the Sys table)
+        Cerr << "... sleeping after upsert" << Endl;
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleStaleRoExec(runtime,
+                "SELECT key, value FROM `/Root/table-1` WHERE key >= 1 AND key <= 3",
+                "/Root"),
+            "{ items { uint32_value: 1 } items { uint32_value: 11 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 22 } }, "
+            "{ items { uint32_value: 3 } items { uint32_value: 33 } }");
+
+        TVector<THolder<IEventHandle>> blockedReads;
+        auto observer = runtime.AddObserver<NSharedCache::TEvRequest>([&](NSharedCache::TEvRequest::TPtr& ev) {
+            NSharedCache::TEvRequest *msg = ev->Get();
+            for (auto pageId : msg->Fetch->Pages) {
+                auto type = NTable::NPage::EPage(msg->Fetch->PageCollection->Page(pageId).Type);
+                if (type == NTable::NPage::EPage::Schem2) {
+                    Cerr << "... blocking part load read" << Endl;
+                    blockedReads.emplace_back(ev.Release());
+                }
+            }
+        });
+
+        // Now we ask the leader to compact the table
+        Cerr << "... compacting" << Endl;
+        {
+            NActorsProto::TRemoteHttpInfo pb;
+            pb.SetMethod(HTTP_METHOD_GET);
+            pb.SetPath("/executorInternals");
+            auto* p1 = pb.AddQueryParams();
+            p1->SetKey("force_compaction");
+            p1->SetValue("1");
+            SendViaPipeCache(runtime, shards.at(0), sender,
+                std::make_unique<NMon::TEvRemoteHttpInfo>(std::move(pb)));
+            auto ev = runtime.GrabEdgeEventRethrow<NMon::TEvRemoteHttpInfoRes>(sender);
+            UNIT_ASSERT_C(
+                ev->Get()->Html.Contains("Table will be compacted in the near future"),
+                ev->Get()->Html);
+        }
+
+        WaitFor(runtime, [&]{ return blockedReads.size(); }, "blocked read");
+
+        Cerr << "... checking after compaction" << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleStaleRoExec(runtime,
+                "SELECT key, value FROM `/Root/table-1` WHERE key >= 1 AND key <= 3",
+                "/Root"),
+            "{ items { uint32_value: 1 } items { uint32_value: 11 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 22 } }, "
+            "{ items { uint32_value: 3 } items { uint32_value: 33 } }");
+
+        Cerr << "... unblocking read" << Endl;
+        observer.Remove();
+        ui32 readDataPages = 0;
+        observer = runtime.AddObserver<NSharedCache::TEvRequest>([&](NSharedCache::TEvRequest::TPtr& ev) {
+            NSharedCache::TEvRequest *msg = ev->Get();
+            for (auto pageId : msg->Fetch->Pages) {
+                auto type = NTable::NPage::EPage(msg->Fetch->PageCollection->Page(pageId).Type);
+                readDataPages += type == NTable::NPage::EPage::DataPage;
+            }
+        });
+        for (auto& ev : blockedReads) {
+            runtime.Send(ev.Release(), 0, true);
+        }
+        blockedReads.clear();
+
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL_C(readDataPages, 1, "Sys data should have been preloaded");
+
+        Cerr << "... checking after part switch" << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleStaleRoExec(runtime,
+                "SELECT key, value FROM `/Root/table-1` WHERE key >= 1 AND key <= 3",
+                "/Root"),
+            "{ items { uint32_value: 1 } items { uint32_value: 11 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 22 } }, "
+            "{ items { uint32_value: 3 } items { uint32_value: 33 } }");
+        UNIT_ASSERT_VALUES_EQUAL(readDataPages, 1);
+
+        // Update row values and sleep
+        Cerr << "... updating rows" << Endl;
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 44), (2, 55), (3, 66);");
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        // Read from follower must see updated values
+        Cerr << "... checking after update" << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleStaleRoExec(runtime,
+                "SELECT key, value FROM `/Root/table-1` WHERE key >= 1 AND key <= 3",
+                "/Root"),
+            "{ items { uint32_value: 1 } items { uint32_value: 44 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 55 } }, "
+            "{ items { uint32_value: 3 } items { uint32_value: 66 } }");
+        UNIT_ASSERT_VALUES_EQUAL(readDataPages, 1);
+    }
+
+    Y_UNIT_TEST(FollowerDuringDataPartSwitch) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableForceFollowers(true);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NLog::PRI_DEBUG);
+
+        InitRoot(server, sender);
+
+        TIntrusivePtr<NLocalDb::TCompactionPolicy> policy = new NLocalDb::TCompactionPolicy();
+        policy->MinDataPageSize = 1;
+        policy->MinBTreeIndexNodeSize = 1;
+
+        CreateShardedTable(server, sender, "/Root", "table-1",
+            TShardedTableOptions()
+                .Followers(1)
+                .Policy(policy.Get()));
+
+        const auto shards = GetTableShards(server, sender, "/Root/table-1");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+        
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 11), (2, 22), (3, 33);");
+
+        // Wait for leader to promote the follower read edge (and stop writing to the Sys table)
+        Cerr << "... sleeping after upsert" << Endl;
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleStaleRoExec(runtime,
+                "SELECT key, value FROM `/Root/table-1` WHERE key >= 1 AND key <= 3",
+                "/Root"),
+            "{ items { uint32_value: 1 } items { uint32_value: 11 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 22 } }, "
+            "{ items { uint32_value: 3 } items { uint32_value: 33 } }");
+
+        TVector<THolder<IEventHandle>> blockedReads;
+        auto observer = runtime.AddObserver<NSharedCache::TEvRequest>([&](NSharedCache::TEvRequest::TPtr& ev) {
+            NSharedCache::TEvRequest *msg = ev->Get();
+            for (auto pageId : msg->Fetch->Pages) {
+                auto type = NTable::NPage::EPage(msg->Fetch->PageCollection->Page(pageId).Type);
+                if (type == NTable::NPage::EPage::Schem2) {
+                    Cerr << "... blocking part load read" << Endl;
+                    blockedReads.emplace_back(ev.Release());
+                }
+            }
+        });
+
+        // Now we ask the leader to compact the table
+        {
+            NActorsProto::TRemoteHttpInfo pb;
+            pb.SetMethod(HTTP_METHOD_GET);
+            pb.SetPath("/executorInternals");
+            auto* p1 = pb.AddQueryParams();
+            p1->SetKey("force_compaction");
+            p1->SetValue("1001");
+            SendViaPipeCache(runtime, shards.at(0), sender,
+                std::make_unique<NMon::TEvRemoteHttpInfo>(std::move(pb)));
+            auto ev = runtime.GrabEdgeEventRethrow<NMon::TEvRemoteHttpInfoRes>(sender);
+            UNIT_ASSERT_C(
+                ev->Get()->Html.Contains("Table will be compacted in the near future"),
+                ev->Get()->Html);
+        }
+
+        WaitFor(runtime, [&]{ return blockedReads.size(); }, "blocked read");
+
+        Cerr << "... checking after compaction" << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleStaleRoExec(runtime,
+                "SELECT key, value FROM `/Root/table-1` WHERE key >= 1 AND key <= 3",
+                "/Root"),
+            "{ items { uint32_value: 1 } items { uint32_value: 11 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 22 } }, "
+            "{ items { uint32_value: 3 } items { uint32_value: 33 } }");
+
+        Cerr << "... unblocking read" << Endl;
+        observer.Remove();
+        ui32 readDataPages = 0;
+        observer = runtime.AddObserver<NSharedCache::TEvRequest>([&](NSharedCache::TEvRequest::TPtr& ev) {
+            NSharedCache::TEvRequest *msg = ev->Get();
+            for (auto pageId : msg->Fetch->Pages) {
+                auto type = NTable::NPage::EPage(msg->Fetch->PageCollection->Page(pageId).Type);
+                readDataPages += type == NTable::NPage::EPage::DataPage;
+            }
+        });
+        for (auto& ev : blockedReads) {
+            runtime.Send(ev.Release(), 0, true);
+        }
+        blockedReads.clear();
+
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL_C(readDataPages, 0, "Shouldn't have preload data");
+
+        Cerr << "... checking after part switch" << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleStaleRoExec(runtime,
+                "SELECT key, value FROM `/Root/table-1` WHERE key >= 1 AND key <= 3",
+                "/Root"),
+            "{ items { uint32_value: 1 } items { uint32_value: 11 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 22 } }, "
+            "{ items { uint32_value: 3 } items { uint32_value: 33 } }");
+        UNIT_ASSERT_EQUAL(readDataPages, 3);
+        
+        // Update row values and sleep
+        Cerr << "... updating rows" << Endl;
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 44), (2, 55), (3, 66);");
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        observer = runtime.AddObserver<NSharedCache::TEvRequest>([&](NSharedCache::TEvRequest::TPtr& ev) {
+            NSharedCache::TEvRequest *msg = ev->Get();
+            for (auto pageId : msg->Fetch->Pages) {
+                auto type = NTable::NPage::EPage(msg->Fetch->PageCollection->Page(pageId).Type);
+                UNIT_ASSERT_C(type != NTable::NPage::EPage::DataPage, "Shouldn't read any data");
+            }
+        });
+
+        // Read from follower must see updated values
+        Cerr << "... checking after update" << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleStaleRoExec(runtime,
+                "SELECT key, value FROM `/Root/table-1` WHERE key >= 1 AND key <= 3",
+                "/Root"),
+            "{ items { uint32_value: 1 } items { uint32_value: 44 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 55 } }, "
+            "{ items { uint32_value: 3 } items { uint32_value: 66 } }");
+        UNIT_ASSERT_EQUAL(readDataPages, 3);
     }
 
 } // Y_UNIT_TEST_SUITE(DataShardFollowers)

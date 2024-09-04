@@ -16,6 +16,7 @@ PEERDIR(
 
 PEERDIR(
     ydb/library/yql/udfs/common/datetime2
+    ydb/library/yql/udfs/common/re2
     ydb/library/yql/udfs/common/string
     ydb/library/yql/udfs/common/yson2
 )

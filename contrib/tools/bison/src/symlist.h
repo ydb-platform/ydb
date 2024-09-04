@@ -1,7 +1,7 @@
 /* Lists of symbols for Bison
 
-   Copyright (C) 2002, 2005-2007, 2009-2013 Free Software Foundation,
-   Inc.
+   Copyright (C) 2002, 2005-2007, 2009-2015, 2018-2021 Free Software
+   Foundation, Inc.
 
    This file is part of Bison, the GNU Compiler Compiler.
 
@@ -16,7 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+   along with this program.  If not, see <https://www.gnu.org/licenses/>.  */
 
 #ifndef SYMLIST_H_
 # define SYMLIST_H_
@@ -26,7 +26,9 @@
 # include "symtab.h"
 # include "named-ref.h"
 
-/* A list of symbols, used during the parsing to store the rules.  */
+/* A list of symbols, used during the parsing for many different
+   purposes: rules, symbol declarations or properties (such as
+   %destructor, etc.)...  */
 typedef struct symbol_list
 {
   /**
@@ -48,7 +50,6 @@ typedef struct symbol_list
      */
     semantic_type *sem_type;
   } content;
-  location location;
 
   /* Named reference. */
   named_ref *named_ref;
@@ -67,9 +68,13 @@ typedef struct symbol_list
   struct symbol_list *midrule_parent_rule;
   int midrule_parent_rhs_index;
 
-  /* ---------------------------------------------- */
-  /* Apply to the rule (attached to the LHS only).  */
-  /* ---------------------------------------------- */
+  /*--------------------------------------------------------------.
+  | Used for rules only (attached to the "LHS", one per rule even |
+  | when several RHSs are bound to a single lhs via "|").         |
+  `--------------------------------------------------------------*/
+
+  /* Location of the RHS. */
+  location rhs_loc;
 
   /* Precedence/associativity.  */
   symbol *ruleprec;
@@ -79,13 +84,18 @@ typedef struct symbol_list
   code_props action_props;
 
   /* The location of the first %empty for this rule, or \a
-     empty_location.  */
+     empty_loc.  */
   location percent_empty_loc;
 
   int dprec;
-  location dprec_location;
+  location dprec_loc;
   int merger;
-  location merger_declaration_location;
+  location merger_declaration_loc;
+
+  /* Counts of the number of expected conflicts for this rule, or -1 if none
+     given. */
+  int expected_sr_conflicts;
+  int expected_rr_conflicts;
 
   /* The list.  */
   struct symbol_list *next;
@@ -97,6 +107,10 @@ symbol_list *symbol_list_sym_new (symbol *sym, location loc);
 
 /** Create a list containing \c type_name at \c loc.  */
 symbol_list *symbol_list_type_new (uniqstr type_name, location loc);
+
+/** Assign the type \c type_name to all the members of \c syms.
+ ** \returns \c syms */
+symbol_list *symbol_list_type_set (symbol_list *syms, uniqstr type_name);
 
 /** Print this list.
 
@@ -116,12 +130,15 @@ void symbol_list_free (symbol_list *list);
 /** Return the length of \c l. */
 int symbol_list_length (symbol_list const *l);
 
-/** Get item \c n in symbol list \c l.  */
+/** Get item \c n in symbol list \c l.
+ ** \pre  0 <= n
+ ** \post res != NULL
+ **/
 symbol_list *symbol_list_n_get (symbol_list *l, int n);
 
 /* Get the data type (alternative in the union) of the value for
    symbol N in rule RULE.  */
-uniqstr symbol_list_n_type_name_get (symbol_list *l, location loc, int n);
+uniqstr symbol_list_n_type_name_get (symbol_list *l, int n);
 
 /* Check whether the node is a border element of a rule. */
 bool symbol_list_null (symbol_list *node);

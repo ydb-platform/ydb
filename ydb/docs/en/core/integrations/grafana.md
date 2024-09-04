@@ -12,7 +12,7 @@ Follow the Grafana's [plugin installation docs](https://grafana.com/docs/grafana
 
 ### {{ ydb-short-name }} user for the data source
 
-Set up an {{ ydb-short-name }} user account with **read-only** permissions [(more about permissions)](../security/access-management.md) and access to databases and tables you want to query. 
+Set up an {{ ydb-short-name }} user account with **read-only** permissions [(more about permissions)](../security/access-management.md) and access to databases and tables you want to query.
 
 {% note warning %}
 
@@ -63,7 +63,7 @@ Here are fields that are supported in connection configuration:
 | dbLocation | Database location  | `string` |
 | user | User name  | `string` |
 | serviceAccAuthAccessKey | Service account access key  | `string` (secured) |
-| accessToken | OAuth access token  | `string` (secured) |
+| accessToken | Access token  | `string` (secured) |
 | password | User password  | `string` (secured) |
 | certificate | If self-signed certificates are used on your {{ ydb-short-name }} cluster nodes, specify the [Certificate Authority](https://en.wikipedia.org/wiki/Certificate_authority) certificate used to issue them  | `string` (secured) |
 
@@ -84,7 +84,7 @@ To create a multi-line time series, the query must return at least 3 fields:
 
 - field with `Date`, `Datetime` or `Timestamp` type (for now, working with time is supported only in UTC timezone)
 - metric - field with `Int64`, `Int32`, `Int16`, `Int8`, `Uint64`, `Uint32`, `Uint16`, `Uint8`, `Double` or `Float` type
-- either metric or field with `String` or `Utf8` type - the value for splitting metrics into separate series. 
+- either metric or field with `String` or `Utf8` type - the value for splitting metrics into separate series.
 
 For example:
 
@@ -116,7 +116,7 @@ Only the first text field will be represented as a log line by default. This beh
 ### Macros
 
 The query can contain macros, which simplify syntax and allow for dynamic parts, like date range filters.
-There are two kinds of macros - [Grafana-level](#macros) and {{ ydb-short-name }}-level. The plugin will parse query text and, before sending it to {{ ydb-short-name }}, substitute variables and Grafana-level macros with particular values. After that {{ ydb-short-name }}-level macroses will be treated by {{ ydb-short-name }} server-side. 
+There are two kinds of macros - [Grafana-level](#macros) and {{ ydb-short-name }}-level. The plugin will parse query text and, before sending it to {{ ydb-short-name }}, substitute variables and Grafana-level macros with particular values. After that {{ ydb-short-name }}-level macroses will be treated by {{ ydb-short-name }} server-side.
 
 Here is an example of a query with a macro that will use Grafana's time filter:
 

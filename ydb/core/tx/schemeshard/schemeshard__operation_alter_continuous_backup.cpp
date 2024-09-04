@@ -1,8 +1,7 @@
-#include "schemeshard__operation_part.h"
-#include "schemeshard__operation_common.h"
-#include "schemeshard_impl.h"
-
 #include "schemeshard__operation_alter_cdc_stream.h"
+#include "schemeshard__operation_common.h"
+#include "schemeshard__operation_part.h"
+#include "schemeshard_impl.h"
 
 #include <ydb/core/tx/schemeshard/backup/constants.h>
 
@@ -36,7 +35,7 @@ void DoAlterPqPart(const TOperationId& opId, const TPath& tablePath, const TPath
     result.push_back(CreateAlterPQ(NextPartId(opId, result), outTx));
 }
 
-void DoCreateIncBackupTable(const TOperationId& opId, const TPath& dst, NKikimrSchemeOp::TTableDescription tableDesc, TVector<ISubOperation::TPtr>& result) {
+void DoCreateIncrBackupTable(const TOperationId& opId, const TPath& dst, NKikimrSchemeOp::TTableDescription tableDesc, TVector<ISubOperation::TPtr>& result) {
     auto outTx = TransactionTemplate(dst.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);
     // outTx.SetFailOnExist(!acceptExisted);
 
@@ -45,6 +44,13 @@ void DoCreateIncBackupTable(const TOperationId& opId, const TPath& dst, NKikimrS
     auto& desc = *outTx.MutableCreateTable();
     desc.CopyFrom(tableDesc);
     desc.SetName(dst.LeafName());
+    desc.SetSystemColumnNamesAllowed(true);
+
+    auto& attrsDesc = *outTx.MutableAlterUserAttributes();
+    attrsDesc.SetPathName(dst.LeafName());
+    auto& attr = *attrsDesc.AddUserAttributes();
+    attr.SetKey(TString(ATTR_INCREMENTAL_BACKUP));
+    attr.SetValue("{}");
 
     auto& replicationConfig = *desc.MutableReplicationConfig();
     replicationConfig.SetMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
@@ -54,7 +60,7 @@ void DoCreateIncBackupTable(const TOperationId& opId, const TPath& dst, NKikimrS
     // TODO: cleanup all sequences
 
     auto* col = desc.AddColumns();
-    col->SetName("__incrBackupImpl_deleted");
+    col->SetName("__ydb_incrBackupImpl_deleted");
     col->SetType("Bool");
 
     result.push_back(CreateNewTable(NextPartId(opId, result), outTx));
@@ -78,12 +84,12 @@ TVector<ISubOperation::TPtr> CreateAlterContinuousBackup(TOperationId opId, cons
     const auto topicPath = streamPath.Child("streamImpl");
     TTopicInfo::TPtr topic = context.SS->Topics.at(topicPath.Base()->PathId);
 
-    const auto backupTablePath = tablePath.Child("incBackupImpl");
+    const auto backupTablePath = workingDirPath.Child(cbOp.GetTakeIncrementalBackup().GetDstPath());
 
     const NScheme::TTypeRegistry* typeRegistry = AppData(context.Ctx)->TypeRegistry;
 
     NKikimrSchemeOp::TTableDescription schema;
-    context.SS->DescribeTable(table, typeRegistry, true, false, &schema);
+    context.SS->DescribeTable(*table, typeRegistry, true, &schema);
     schema.MutablePartitionConfig()->CopyFrom(table->TableDescription.GetPartitionConfig());
 
     TString errStr;
@@ -111,10 +117,10 @@ TVector<ISubOperation::TPtr> CreateAlterContinuousBackup(TOperationId opId, cons
 
     TVector<ISubOperation::TPtr> result;
 
-    NCdc::DoAlterStream(alterCdcStreamOp, opId, workingDirPath, tablePath, result);
+    NCdc::DoAlterStream(result, alterCdcStreamOp, opId, workingDirPath, tablePath);
 
     if (cbOp.GetActionCase() == NKikimrSchemeOp::TAlterContinuousBackup::kTakeIncrementalBackup) {
-        DoCreateIncBackupTable(opId, backupTablePath, schema, result);
+        DoCreateIncrBackupTable(opId, backupTablePath, schema, result);
         DoAlterPqPart(opId, backupTablePath, topicPath, topic, result);
     }
 

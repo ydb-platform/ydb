@@ -22,7 +22,7 @@ namespace NKqp {
                 }
                 SecretableSecretKey: {
                     Value: {
-                        Data: "secretSecretKey"
+                        Data: "fakeSecret"
                     }
                 }
             }
@@ -127,6 +127,14 @@ namespace NKqp {
         for (auto shard : shards) {
             Kikimr.GetTestServer().GetRuntime()->Send(MakePipePerNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(
                     new TEvents::TEvPoisonPill(), shard, false));
+        }
+    }
+
+    void TTestHelper::WaitTabletDeletionInHive(ui64 tabletId, TDuration duration) {
+        auto deadline = TInstant::Now() + duration;
+        while (GetKikimr().GetTestClient().TabletExistsInHive(&GetRuntime(), tabletId) && TInstant::Now() <= deadline) {
+            Cerr << "WaitTabletDeletionInHive: wait until " << tabletId << " is deleted" << Endl;
+            Sleep(TDuration::Seconds(1));
         }
     }
 

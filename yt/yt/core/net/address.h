@@ -128,7 +128,6 @@ private:
 };
 
 void FormatValue(TStringBuilderBase* builder, const TIP6Address& address, TStringBuf spec);
-TString ToString(const TIP6Address& address);
 
 bool operator == (const TIP6Address& lhs, const TIP6Address& rhs);
 
@@ -168,7 +167,6 @@ private:
 };
 
 void FormatValue(TStringBuilderBase* builder, const TIP6Network& network, TStringBuf spec);
-TString ToString(const TIP6Network& network);
 
 void Deserialize(TIP6Network& value, NYTree::INodePtr node);
 void Deserialize(TIP6Network& value, NYson::TYsonPullParserCursor* cursor);
@@ -188,7 +186,7 @@ public:
      *  Calls |getaddrinfo| and returns the first entry belonging to |AF_INET| or |AF_INET6| family.
      *  Caches successful resolutions.
      */
-    TFuture<TNetworkAddress> Resolve(const TString& address);
+    TFuture<TNetworkAddress> Resolve(const std::string& address);
 
     //! Returns the currently installed global DNS resolver.
     NDns::IDnsResolverPtr GetDnsResolver();

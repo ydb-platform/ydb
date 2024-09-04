@@ -27,6 +27,8 @@ struct TPullRowsOptions
     NChaosClient::TReplicationProgress ReplicationProgress;
     NTransactionClient::TTimestamp UpperTimestamp = NTransactionClient::NullTimestamp;
     NTableClient::TTableSchemaPtr TableSchema;
+    i64 MaxDataWeight = 1_GB;
+    IReservingMemoryUsageTrackerPtr MemoryTracker;
 };
 
 struct TPullRowsResult
@@ -75,13 +77,15 @@ struct TListQueueConsumerRegistrationsResult
 
 struct TCreateQueueProducerSessionOptions
     : public TTimeoutOptions
-{ };
+{
+    NYTree::INodePtr UserMeta;
+};
 
 struct TCreateQueueProducerSessionResult
 {
-    ui64 SequenceNumber;
-    ui64 Epoch;
-    std::optional<NYson::TYsonString> UserMeta;
+    NQueueClient::TQueueProducerSequenceNumber SequenceNumber;
+    NQueueClient::TQueueProducerEpoch Epoch;
+    NYTree::INodePtr UserMeta;
 };
 
 struct TRemoveQueueProducerSessionOptions
@@ -144,14 +148,13 @@ struct IQueueClient
     virtual TFuture<TCreateQueueProducerSessionResult> CreateQueueProducerSession(
         const NYPath::TRichYPath& producerPath,
         const NYPath::TRichYPath& queuePath,
-        const TString& sessionId,
-        const std::optional<NYson::TYsonString>& userMeta,
+        const NQueueClient::TQueueProducerSessionId& sessionId,
         const TCreateQueueProducerSessionOptions& options = {}) = 0;
 
     virtual TFuture<void> RemoveQueueProducerSession(
         const NYPath::TRichYPath& producerPath,
         const NYPath::TRichYPath& queuePath,
-        const TString& sessionId,
+        const NQueueClient::TQueueProducerSessionId& sessionId,
         const TRemoveQueueProducerSessionOptions& options = {}) = 0;
 };
 

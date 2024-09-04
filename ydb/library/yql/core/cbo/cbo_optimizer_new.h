@@ -41,6 +41,85 @@ struct IBaseOptimizerNode {
     virtual void Print(std::stringstream& stream, int ntabs=0)=0;
 };
 
+enum EJoinKind: ui32
+{
+    InnerJoin,
+    LeftJoin,
+    RightJoin,
+    OuterJoin,
+    LeftOnly,
+    RightOnly,
+    LeftSemi,
+    RightSemi,
+    Cross,
+    Exclusion
+};
+
+EJoinKind ConvertToJoinKind(const TString& joinString);
+TString ConvertToJoinString(const EJoinKind kind);
+
+struct TCardinalityHints {
+    enum ECardOperation : ui32 {
+        Add,
+        Subtract,
+        Multiply,
+        Divide,
+        Replace
+    };
+
+    struct TCardinalityHint {
+        TVector<TString> JoinLabels;
+        ECardOperation Operation;
+        double Value;
+
+        double ApplyHint(double originalValue) {
+            switch (Operation) {
+                case Add:
+                    return originalValue + Value;
+                case Subtract:
+                    return originalValue - Value;
+                case Multiply:
+                    return originalValue * Value;
+                case Divide:
+                    return originalValue / Value;
+                case Replace:
+                    return Value;
+
+            }
+        }
+    };
+
+    TVector<TCardinalityHint> Hints;
+
+    TCardinalityHints() {}
+    TCardinalityHints(const TString& json);
+};
+
+struct TJoinAlgoHints {
+
+    struct TJoinAlgoHint {
+        TVector<TString> JoinLabels;
+        EJoinAlgoType JoinHint;
+    };
+
+    TVector<TJoinAlgoHint> Hints;
+
+    TJoinAlgoHints() {}
+    TJoinAlgoHints(const TString& json);
+};
+
+struct TJoinOrderHints {
+    TVector<std::shared_ptr<IBaseOptimizerNode>> HintTrees;
+
+    TJoinOrderHints() {}
+    TJoinOrderHints(const TString& json);
+};
+
+struct TOptimizerHints {
+    TCardinalityHints CardinalityHints;
+    TJoinAlgoHints JoinAlgoHints;
+    TJoinOrderHints JoinOrderHints;
+};
 
 /**
  * This is a temporary structure for KQP provider
@@ -55,21 +134,27 @@ struct IProviderContext {
     virtual TOptimizerStatistics ComputeJoinStats(
         const TOptimizerStatistics& leftStats,
         const TOptimizerStatistics& rightStats,
-        const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions, EJoinAlgoType joinAlgo) const = 0;
+        const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions, 
+        EJoinAlgoType joinAlgo,
+        EJoinKind joinKind,
+        TCardinalityHints::TCardinalityHint* maybeHint = nullptr) const = 0;
 
     virtual TOptimizerStatistics ComputeJoinStats(
         const TOptimizerStatistics& leftStats,
         const TOptimizerStatistics& rightStats,
         const TVector<TString>& leftJoinKeys,
         const TVector<TString>& rightJoinKeys,
-        EJoinAlgoType joinAlgo) const = 0;
+        EJoinAlgoType joinAlgo,
+        EJoinKind joinKind,
+        TCardinalityHints::TCardinalityHint* maybeHint = nullptr) const = 0;
 
     virtual bool IsJoinApplicable(const std::shared_ptr<IBaseOptimizerNode>& left,
         const std::shared_ptr<IBaseOptimizerNode>& right,
         const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions,
         const TVector<TString>& leftJoinKeys,
         const TVector<TString>& rightJoinKeys,
-        EJoinAlgoType joinAlgo) = 0;
+        EJoinAlgoType joinAlgo,
+        EJoinKind joinKind) = 0;
 };
 
 /**
@@ -86,20 +171,25 @@ struct TBaseProviderContext : public IProviderContext {
         const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions,
         const TVector<TString>& leftJoinKeys,
         const TVector<TString>& rightJoinKeys,
-        EJoinAlgoType joinAlgo) override;
+        EJoinAlgoType joinAlgo,
+        EJoinKind joinKind) override;
 
     virtual TOptimizerStatistics ComputeJoinStats(
         const TOptimizerStatistics& leftStats,
         const TOptimizerStatistics& rightStats,
         const TVector<TString>& leftJoinKeys,
         const TVector<TString>& rightJoinKeys,
-        EJoinAlgoType joinAlgo) const override;
+        EJoinAlgoType joinAlgo,
+        EJoinKind joinKind,
+        TCardinalityHints::TCardinalityHint* maybeHint = nullptr) const override;
 
     virtual TOptimizerStatistics ComputeJoinStats(
         const TOptimizerStatistics& leftStats,
         const TOptimizerStatistics& rightStats,
         const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions,
-        EJoinAlgoType joinAlgo) const override;
+        EJoinAlgoType joinAlgo,
+        EJoinKind joinKind,
+        TCardinalityHints::TCardinalityHint* maybeHint = nullptr) const override;
 
     static const TBaseProviderContext& Instance();
 };
@@ -123,23 +213,6 @@ struct TRelOptimizerNode : public IBaseOptimizerNode {
     virtual TVector<TString> Labels();
     virtual void Print(std::stringstream& stream, int ntabs=0);
 };
-
-enum EJoinKind: ui32
-{
-    InnerJoin,
-    LeftJoin,
-    RightJoin,
-    OuterJoin,
-    LeftOnly,
-    RightOnly,
-    LeftSemi,
-    RightSemi,
-    Cross,
-    Exclusion
-};
-
-EJoinKind ConvertToJoinKind(const TString& joinString);
-TString ConvertToJoinString(const EJoinKind kind);
 
 /**
  * JoinOptimizerNode records the left and right arguments of the join
@@ -173,7 +246,10 @@ struct IOptimizerNew {
 
     IOptimizerNew(IProviderContext& ctx) : Pctx(ctx) {}
     virtual ~IOptimizerNew() = default;
-    virtual std::shared_ptr<TJoinOptimizerNode> JoinSearch(const std::shared_ptr<TJoinOptimizerNode>& joinTree) = 0;
+    virtual std::shared_ptr<TJoinOptimizerNode> JoinSearch(
+        const std::shared_ptr<TJoinOptimizerNode>& joinTree, 
+        const TOptimizerHints& hints = {}
+    ) = 0;
 };
 
 } // namespace NYql

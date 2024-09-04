@@ -315,7 +315,7 @@ public:
                     context.SS->TabletID(),
                     context.Ctx.SelfID,
                     ui64(OperationId.GetTxId()),
-                    columnShardTxBody,
+                    columnShardTxBody, seqNo,
                     context.SS->SelectProcessingParams(txState->TargetPathId));
 
                 context.OnComplete.BindMsgToPipe(OperationId, tabletId, shard.Idx, event.release());
@@ -582,12 +582,10 @@ public:
         TEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
         auto result = MakeHolder<TProposeResponse>(status, ui64(opTxId), ui64(ssId));
 
-        if (context.SS->IsServerlessDomain(TPath::Init(context.SS->RootPathId(), context.SS))) {
-            if (AppData()->ColumnShardConfig.GetDisabledOnSchemeShard()) {
-                result->SetError(NKikimrScheme::StatusPreconditionFailed,
-                    "OLAP schema operations are not supported");
-                return result;
-            }
+        if (AppData()->ColumnShardConfig.GetDisabledOnSchemeShard() && context.SS->ColumnTables.empty()) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                "OLAP schema operations are not supported");
+            return result;
         }
 
         if (createDescription.GetSharding().GetColumnShards().size()) {

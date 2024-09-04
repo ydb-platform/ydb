@@ -407,7 +407,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
         if (allow) {
             if (!isSafe && !flags.Test(NConvertFlags::AllowUnsafeConvert)) {
                 auto castResult = NKikimr::NUdf::GetCastResult(from, to);
-                if (!castResult || *castResult & NKikimr::NUdf::Impossible) {
+                if (*castResult & NKikimr::NUdf::Impossible) {
                     return IGraphTransformer::TStatus::Error;
                 }
 
@@ -3126,12 +3126,20 @@ bool IsWideSequenceBlockType(const TTypeAnnotationNode& type) {
     return IsWideBlockType(*itemType);
 }
 
-bool IsSupportedAsBlockType(TPositionHandle pos, const TTypeAnnotationNode& type, TExprContext& ctx, TTypeAnnotationContext& types) {
+bool IsSupportedAsBlockType(TPositionHandle pos, const TTypeAnnotationNode& type, TExprContext& ctx, TTypeAnnotationContext& types,
+    bool reportUnspported)
+{
     if (!types.ArrowResolver) {
         return false;
     }
 
-    auto resolveStatus = types.ArrowResolver->AreTypesSupported(ctx.GetPosition(pos), { &type }, ctx);
+    IArrowResolver::TUnsupportedTypeCallback onUnsupportedType;
+    if (reportUnspported) {
+        onUnsupportedType  = [&types](const auto& typeKindOrSlot) {
+            std::visit([&types](const auto& value) { types.IncNoBlockType(value); }, typeKindOrSlot);
+        };
+    }
+    auto resolveStatus = types.ArrowResolver->AreTypesSupported(ctx.GetPosition(pos), { &type }, ctx, onUnsupportedType);
     YQL_ENSURE(resolveStatus != IArrowResolver::ERROR);
     return resolveStatus == IArrowResolver::OK;
 }
@@ -4252,6 +4260,18 @@ EDataSlot WithTzDate(EDataSlot dataSlot) {
         return EDataSlot::TzTimestamp;
     }
 
+    if (dataSlot == EDataSlot::Date32) {
+        return EDataSlot::TzDate32;
+    }
+
+    if (dataSlot == EDataSlot::Datetime64) {
+        return EDataSlot::TzDatetime64;
+    }
+
+    if (dataSlot == EDataSlot::Timestamp64) {
+        return EDataSlot::TzTimestamp64;
+    }
+
     return dataSlot;
 }
 
@@ -4266,6 +4286,18 @@ EDataSlot WithoutTzDate(EDataSlot dataSlot) {
 
     if (dataSlot == EDataSlot::TzTimestamp) {
         return EDataSlot::Timestamp;
+    }
+
+    if (dataSlot == EDataSlot::TzDate32) {
+        return EDataSlot::Date32;
+    }
+
+    if (dataSlot == EDataSlot::TzDatetime64) {
+        return EDataSlot::Datetime64;
+    }
+
+    if (dataSlot == EDataSlot::TzTimestamp64) {
+        return EDataSlot::Timestamp64;
     }
 
     return dataSlot;
@@ -6847,7 +6879,7 @@ void CheckExpectedTypeAndColumnOrder(const TExprNode& node, TExprContext& ctx, T
             auto status = typesCtx.SetColumnOrder(node, oldColumnOrder, ctx);
             YQL_ENSURE(status == IGraphTransformer::TStatus::Ok);
         } else {
-            YQL_ENSURE(newColumnOrder == oldColumnOrder,
+            YQL_ENSURE(newColumnOrder && *newColumnOrder == oldColumnOrder,
                 "Rewrite error, column order should be: "
                 << FormatColumnOrder(oldColumnOrder) << ", but it is: "
                 << FormatColumnOrder(newColumnOrder) << " for node "

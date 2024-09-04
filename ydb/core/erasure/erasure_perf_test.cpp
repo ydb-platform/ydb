@@ -1,5 +1,4 @@
 #include "erasure.h"
-#include "erasure_rope.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/ymath.h>

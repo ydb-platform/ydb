@@ -1,6 +1,7 @@
 #pragma once
 
 #include "change_exchange.h"
+#include "change_sender_partitioner.h"
 #include "change_sender_resolver.h"
 
 #include <ydb/core/change_exchange/change_sender_monitoring.h>
@@ -16,8 +17,6 @@
 #include <util/generic/map.h>
 #include <util/generic/set.h>
 #include <util/string/builder.h>
-
-#include <concepts>
 
 namespace NKikimr::NChangeExchange {
 
@@ -71,11 +70,11 @@ public:
     virtual IActor* CreateSender(ui64 partitionId) const = 0;
 };
 
-template <class TChangeRecord>
+template <typename TChangeRecord>
 class TBaseChangeSender {
     using TIncompleteRecord = TEvChangeExchange::TEvRequestRecords::TRecordInfo;
     // we need this to safely cast and call Out on a container
-    static_assert(std::derived_from<TChangeRecordContainer<TChangeRecord>, TBaseChangeRecordContainer>);
+    static_assert(std::derived_from<TChangeRecordContainer<TChangeRecord>, IChangeRecordContainer>);
 
     struct TEnqueuedRecord: TIncompleteRecord {
         bool ReEnqueued = false;
@@ -217,7 +216,7 @@ class TBaseChangeSender {
             }
 
             if (!it->second->IsBroadcast()) {
-                const ui64 partitionId = it->second->ResolvePartitionId(Resolver);
+                const ui64 partitionId = Partitioner->ResolvePartitionId(it->second);
                 if (!Senders.contains(partitionId)) {
                     needToResolve = true;
                     ++it;
@@ -290,7 +289,7 @@ class TBaseChangeSender {
         }
 
         Y_ABORT_UNLESS(sender.ActorId);
-        ActorOps->Send(sender.ActorId, new TEvChangeExchange::TEvRecords(std::make_shared<TChangeRecordContainer<TChangeRecord>>(std::exchange(sender.Prepared, {}))));
+        ActorOps->Send(sender.ActorId, TEvChangeExchange::TEvRecords::New<TChangeRecord>(std::exchange(sender.Prepared, {})));
     }
 
     void ReEnqueueRecords(const TSender& sender) {
@@ -336,7 +335,7 @@ class TBaseChangeSender {
         Y_ABORT_UNLESS(it != Broadcasting.end());
 
         auto& broadcast = it->second;
-        if (broadcast.Partitions.contains(partitionId)) {
+        if (broadcast.CompletedPartitions.contains(partitionId)) {
             return false;
         }
 
@@ -758,10 +757,16 @@ protected:
         ActorOps->Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes(html.Str()));
     }
 
+    void SetPartitioner(IChangeSenderPartitioner<TChangeRecord>* partitioner) {
+        Partitioner.Reset(partitioner);
+    }
+
 private:
     IActorOps* const ActorOps;
     IChangeSenderResolver* const Resolver;
     ISenderFactory* const SenderFactory;
+    THolder<IChangeSenderPartitioner<TChangeRecord>> Partitioner;
+
 protected:
     TActorId ChangeServer;
     const TPathId PathId;
@@ -777,6 +782,7 @@ private:
     THashMap<ui64, TBroadcast> Broadcasting; // ui64 is order
 
     TVector<ui64> GonePartitions;
+
 }; // TBaseChangeSender
 
 }

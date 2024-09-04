@@ -3,7 +3,7 @@
  * postmaster.h
  *	  Exports from postmaster/postmaster.c.
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/postmaster/postmaster.h
@@ -14,27 +14,30 @@
 #define _POSTMASTER_H
 
 /* GUC options */
-extern __thread bool EnableSSL;
-extern __thread int	ReservedBackends;
+extern __thread PGDLLIMPORT bool EnableSSL;
+extern __thread PGDLLIMPORT int SuperuserReservedConnections;
+extern __thread PGDLLIMPORT int ReservedConnections;
 extern __thread PGDLLIMPORT int PostPortNumber;
-extern __thread int	Unix_socket_permissions;
-extern __thread char *Unix_socket_group;
-extern __thread char *Unix_socket_directories;
-extern __thread char *ListenAddresses;
-extern __thread bool ClientAuthInProgress;
-extern __thread int	PreAuthDelay;
-extern __thread int	AuthenticationTimeout;
-extern __thread bool Log_connections;
-extern __thread bool log_hostname;
-extern __thread bool enable_bonjour;
-extern __thread char *bonjour_name;
-extern __thread bool restart_after_crash;
-extern __thread bool remove_temp_files_after_crash;
+extern __thread PGDLLIMPORT int Unix_socket_permissions;
+extern __thread PGDLLIMPORT char *Unix_socket_group;
+extern __thread PGDLLIMPORT char *Unix_socket_directories;
+extern __thread PGDLLIMPORT char *ListenAddresses;
+extern __thread PGDLLIMPORT bool ClientAuthInProgress;
+extern __thread PGDLLIMPORT int PreAuthDelay;
+extern __thread PGDLLIMPORT int AuthenticationTimeout;
+extern __thread PGDLLIMPORT bool Log_connections;
+extern __thread PGDLLIMPORT bool log_hostname;
+extern __thread PGDLLIMPORT bool enable_bonjour;
+extern __thread PGDLLIMPORT char *bonjour_name;
+extern __thread PGDLLIMPORT bool restart_after_crash;
+extern __thread PGDLLIMPORT bool remove_temp_files_after_crash;
+extern __thread PGDLLIMPORT bool send_abort_for_crash;
+extern __thread PGDLLIMPORT bool send_abort_for_kill;
 
 #ifdef WIN32
-extern HANDLE PostmasterHandle;
+extern PGDLLIMPORT HANDLE PostmasterHandle;
 #else
-extern __thread int	postmaster_alive_fds[2];
+extern __thread PGDLLIMPORT int postmaster_alive_fds[2];
 
 /*
  * Constants that represent which of postmaster_alive_fds is held by

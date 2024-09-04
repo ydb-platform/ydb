@@ -9,6 +9,10 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/public/api/protos/draft/ydb_replication.pb.h>
 
+#include <google/protobuf/util/time_util.h>
+
+#include <util/string/builder.h>
+
 namespace NKikimr::NGRpcService {
 
 using namespace Ydb;
@@ -100,6 +104,7 @@ private:
 
         auto ev = std::make_unique<NReplication::TEvController::TEvDescribeReplication>();
         PathIdFromPathId(pathId, ev->Record.MutablePathId());
+        ev->Record.SetIncludeStats(GetProtoRequest()->include_stats());
 
         NTabletPipe::SendData(SelfId(), ControllerPipeClient, ev.release());
         Become(&TDescribeReplicationRPC::StateDescribeReplication);
@@ -135,9 +140,18 @@ private:
         return ReplyWithResult(Ydb::StatusIds::SUCCESS, Result, ctx);
     }
 
+    static TString BuildConnectionString(const NKikimrReplication::TConnectionParams& params) {
+        return TStringBuilder()
+            << (params.GetEnableSsl() ? "grpcs://" : "grpc://")
+            << params.GetEndpoint()
+            << "/?database=" << params.GetDatabase();
+    }
+
     static void ConvertConnectionParams(const NKikimrReplication::TConnectionParams& from, Ydb::Replication::ConnectionParams& to) {
         to.set_endpoint(from.GetEndpoint());
         to.set_database(from.GetDatabase());
+        to.set_enable_ssl(from.GetEnableSsl());
+        to.set_connection_string(BuildConnectionString(from));
 
         switch (from.GetCredentialsCase()) {
         case NKikimrReplication::TConnectionParams::kStaticCredentials:
@@ -165,12 +179,26 @@ private:
         if (from.HasSrcStreamName()) {
             to.set_source_changefeed_name(from.GetSrcStreamName());
         }
+        if (from.HasLagMilliSeconds()) {
+            *to.mutable_stats()->mutable_lag() = google::protobuf::util::TimeUtil::MillisecondsToDuration(
+                from.GetLagMilliSeconds());
+        }
+        if (from.HasInitialScanProgress()) {
+            to.mutable_stats()->set_initial_scan_progress(from.GetInitialScanProgress());
+        }
     }
 
     static void ConvertState(NKikimrReplication::TReplicationState& from, Ydb::Replication::DescribeReplicationResult& to) {
         switch (from.GetStateCase()) {
         case NKikimrReplication::TReplicationState::kStandBy:
             to.mutable_running();
+            if (from.GetStandBy().HasLagMilliSeconds()) {
+                *to.mutable_running()->mutable_stats()->mutable_lag() = google::protobuf::util::TimeUtil::MillisecondsToDuration(
+                    from.GetStandBy().GetLagMilliSeconds());
+            }
+            if (from.GetStandBy().HasInitialScanProgress()) {
+                to.mutable_running()->mutable_stats()->set_initial_scan_progress(from.GetStandBy().GetInitialScanProgress());
+            }
             break;
         case NKikimrReplication::TReplicationState::kError:
             *to.mutable_error()->mutable_issues() = std::move(*from.MutableError()->MutableIssues());

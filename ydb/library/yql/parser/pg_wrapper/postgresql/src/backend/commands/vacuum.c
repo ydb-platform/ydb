@@ -3,13 +3,16 @@
  * vacuum.c
  *	  The postgres vacuum cleaner.
  *
- * This file now includes only control and dispatch code for VACUUM and
- * ANALYZE commands.  Regular VACUUM is implemented in vacuumlazy.c,
- * ANALYZE in analyze.c, and VACUUM FULL is a variant of CLUSTER, handled
- * in cluster.c.
+ * This file includes (a) control and dispatch code for VACUUM and ANALYZE
+ * commands, (b) code to compute various vacuum thresholds, and (c) index
+ * vacuum code.
+ *
+ * VACUUM for heap AM is implemented in vacuumlazy.c, parallel vacuum in
+ * vacuumparallel.c, ANALYZE in analyze.c, and VACUUM FULL is a variant of
+ * CLUSTER, handled in cluster.c.
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -32,6 +35,7 @@
 #include "access/transam.h"
 #include "access/xact.h"
 #include "catalog/namespace.h"
+#include "catalog/index.h"
 #include "catalog/pg_database.h"
 #include "catalog/pg_inherits.h"
 #include "catalog/pg_namespace.h"
@@ -43,14 +47,18 @@
 #include "pgstat.h"
 #include "postmaster/autovacuum.h"
 #include "postmaster/bgworker_internals.h"
+#include "postmaster/interrupt.h"
 #include "storage/bufmgr.h"
 #include "storage/lmgr.h"
+#include "storage/pmsignal.h"
 #include "storage/proc.h"
 #include "storage/procarray.h"
 #include "utils/acl.h"
 #include "utils/fmgroids.h"
 #include "utils/guc.h"
+#include "utils/guc_hooks.h"
 #include "utils/memutils.h"
+#include "utils/pg_rusage.h"
 #include "utils/snapmgr.h"
 #include "utils/syscache.h"
 
@@ -65,11 +73,29 @@ __thread int			vacuum_multixact_freeze_table_age;
 __thread int			vacuum_failsafe_age;
 __thread int			vacuum_multixact_failsafe_age;
 
+/*
+ * Variables for cost-based vacuum delay. The defaults differ between
+ * autovacuum and vacuum. They should be set with the appropriate GUC value in
+ * vacuum code. They are initialized here to the defaults for client backends
+ * executing VACUUM or ANALYZE.
+ */
+__thread double		vacuum_cost_delay = 0;
+__thread int			vacuum_cost_limit = 200;
 
-/* A few variables that don't seem worth passing around as parameters */
-static __thread MemoryContext vac_context = NULL;
-static __thread BufferAccessStrategy vac_strategy;
-
+/*
+ * VacuumFailsafeActive is a defined as a global so that we can determine
+ * whether or not to re-enable cost-based vacuum delay when vacuuming a table.
+ * If failsafe mode has been engaged, we will not re-enable cost-based delay
+ * for the table until after vacuuming has completed, regardless of other
+ * settings.
+ *
+ * Only VACUUM code should inspect this variable and only table access methods
+ * should set it to true. In Table AM-agnostic VACUUM code, this variable is
+ * inspected to determine whether or not to allow cost-based delays. Table AMs
+ * are free to set it if they desire this behavior, but it is false by default
+ * and reset to false in between vacuuming each relation.
+ */
+__thread bool		VacuumFailsafeActive = false;
 
 /*
  * Variables for cost-based parallel vacuum.  See comments atop
@@ -80,15 +106,39 @@ __thread pg_atomic_uint32 *VacuumActiveNWorkers = NULL;
 __thread int			VacuumCostBalanceLocal = 0;
 
 /* non-export function prototypes */
-static List *expand_vacuum_rel(VacuumRelation *vrel, int options);
-static List *get_all_vacuum_rels(int options);
+static List *expand_vacuum_rel(VacuumRelation *vrel,
+							   MemoryContext vac_context, int options);
+static List *get_all_vacuum_rels(MemoryContext vac_context, int options);
 static void vac_truncate_clog(TransactionId frozenXID,
 							  MultiXactId minMulti,
 							  TransactionId lastSaneFrozenXid,
 							  MultiXactId lastSaneMinMulti);
-static bool vacuum_rel(Oid relid, RangeVar *relation, VacuumParams *params);
+static bool vacuum_rel(Oid relid, RangeVar *relation, VacuumParams *params,
+					   BufferAccessStrategy bstrategy);
 static double compute_parallel_delay(void);
 static VacOptValue get_vacoptval_from_boolean(DefElem *def);
+static bool vac_tid_reaped(ItemPointer itemptr, void *state);
+static int	vac_cmp_itemptr(const void *left, const void *right);
+
+/*
+ * GUC check function to ensure GUC value specified is within the allowable
+ * range.
+ */
+bool
+check_vacuum_buffer_usage_limit(int *newval, void **extra,
+								GucSource source)
+{
+	/* Value upper and lower hard limits are inclusive */
+	if (*newval == 0 || (*newval >= MIN_BAS_VAC_RING_SIZE_KB &&
+						 *newval <= MAX_BAS_VAC_RING_SIZE_KB))
+		return true;
+
+	/* Value does not fall within any allowable range */
+	GUC_check_errdetail("\"vacuum_buffer_usage_limit\" must be 0 or between %d kB and %d kB",
+						MIN_BAS_VAC_RING_SIZE_KB, MAX_BAS_VAC_RING_SIZE_KB);
+
+	return false;
+}
 
 /*
  * Primary entry point for manual VACUUM and ANALYZE commands
@@ -100,13 +150,19 @@ void
 ExecVacuum(ParseState *pstate, VacuumStmt *vacstmt, bool isTopLevel)
 {
 	VacuumParams params;
+	BufferAccessStrategy bstrategy = NULL;
 	bool		verbose = false;
 	bool		skip_locked = false;
 	bool		analyze = false;
 	bool		freeze = false;
 	bool		full = false;
 	bool		disable_page_skipping = false;
+	bool		process_main = true;
 	bool		process_toast = true;
+	int			ring_size;
+	bool		skip_database_stats = false;
+	bool		only_database_stats = false;
+	MemoryContext vac_context;
 	ListCell   *lc;
 
 	/* index_cleanup and truncate values unspecified for now */
@@ -115,6 +171,12 @@ ExecVacuum(ParseState *pstate, VacuumStmt *vacstmt, bool isTopLevel)
 
 	/* By default parallel vacuum is enabled */
 	params.nworkers = 0;
+
+	/*
+	 * Set this to an invalid value so it is clear whether or not a
+	 * BUFFER_USAGE_LIMIT was specified when making the access strategy.
+	 */
+	ring_size = -1;
 
 	/* Parse options list */
 	foreach(lc, vacstmt->options)
@@ -126,6 +188,31 @@ ExecVacuum(ParseState *pstate, VacuumStmt *vacstmt, bool isTopLevel)
 			verbose = defGetBoolean(opt);
 		else if (strcmp(opt->defname, "skip_locked") == 0)
 			skip_locked = defGetBoolean(opt);
+		else if (strcmp(opt->defname, "buffer_usage_limit") == 0)
+		{
+			const char *hintmsg;
+			int			result;
+			char	   *vac_buffer_size;
+
+			vac_buffer_size = defGetString(opt);
+
+			/*
+			 * Check that the specified value is valid and the size falls
+			 * within the hard upper and lower limits if it is not 0.
+			 */
+			if (!parse_int(vac_buffer_size, &result, GUC_UNIT_KB, &hintmsg) ||
+				(result != 0 &&
+				 (result < MIN_BAS_VAC_RING_SIZE_KB || result > MAX_BAS_VAC_RING_SIZE_KB)))
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+						 errmsg("BUFFER_USAGE_LIMIT option must be 0 or between %d kB and %d kB",
+								MIN_BAS_VAC_RING_SIZE_KB, MAX_BAS_VAC_RING_SIZE_KB),
+						 hintmsg ? errhint("%s", _(hintmsg)) : 0));
+			}
+
+			ring_size = result;
+		}
 		else if (!vacstmt->is_vacuumcmd)
 			ereport(ERROR,
 					(errcode(ERRCODE_SYNTAX_ERROR),
@@ -157,6 +244,8 @@ ExecVacuum(ParseState *pstate, VacuumStmt *vacstmt, bool isTopLevel)
 					params.index_cleanup = get_vacoptval_from_boolean(opt);
 			}
 		}
+		else if (strcmp(opt->defname, "process_main") == 0)
+			process_main = defGetBoolean(opt);
 		else if (strcmp(opt->defname, "process_toast") == 0)
 			process_toast = defGetBoolean(opt);
 		else if (strcmp(opt->defname, "truncate") == 0)
@@ -193,6 +282,10 @@ ExecVacuum(ParseState *pstate, VacuumStmt *vacstmt, bool isTopLevel)
 					params.nworkers = nworkers;
 			}
 		}
+		else if (strcmp(opt->defname, "skip_database_stats") == 0)
+			skip_database_stats = defGetBoolean(opt);
+		else if (strcmp(opt->defname, "only_database_stats") == 0)
+			only_database_stats = defGetBoolean(opt);
 		else
 			ereport(ERROR,
 					(errcode(ERRCODE_SYNTAX_ERROR),
@@ -209,7 +302,10 @@ ExecVacuum(ParseState *pstate, VacuumStmt *vacstmt, bool isTopLevel)
 		(freeze ? VACOPT_FREEZE : 0) |
 		(full ? VACOPT_FULL : 0) |
 		(disable_page_skipping ? VACOPT_DISABLE_PAGE_SKIPPING : 0) |
-		(process_toast ? VACOPT_PROCESS_TOAST : 0);
+		(process_main ? VACOPT_PROCESS_MAIN : 0) |
+		(process_toast ? VACOPT_PROCESS_TOAST : 0) |
+		(skip_database_stats ? VACOPT_SKIP_DATABASE_STATS : 0) |
+		(only_database_stats ? VACOPT_ONLY_DATABASE_STATS : 0);
 
 	/* sanity checks on options */
 	Assert(params.options & (VACOPT_VACUUM | VACOPT_ANALYZE));
@@ -222,12 +318,21 @@ ExecVacuum(ParseState *pstate, VacuumStmt *vacstmt, bool isTopLevel)
 				 errmsg("VACUUM FULL cannot be performed in parallel")));
 
 	/*
+	 * BUFFER_USAGE_LIMIT does nothing for VACUUM (FULL) so just raise an
+	 * ERROR for that case.  VACUUM (FULL, ANALYZE) does make use of it, so
+	 * we'll permit that.
+	 */
+	if (ring_size != -1 && (params.options & VACOPT_FULL) &&
+		!(params.options & VACOPT_ANALYZE))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("BUFFER_USAGE_LIMIT cannot be specified for VACUUM FULL")));
+
+	/*
 	 * Make sure VACOPT_ANALYZE is specified if any column lists are present.
 	 */
 	if (!(params.options & VACOPT_ANALYZE))
 	{
-		ListCell   *lc;
-
 		foreach(lc, vacstmt->rels)
 		{
 			VacuumRelation *vrel = lfirst_node(VacuumRelation, lc);
@@ -237,6 +342,42 @@ ExecVacuum(ParseState *pstate, VacuumStmt *vacstmt, bool isTopLevel)
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("ANALYZE option must be specified when a column list is provided")));
 		}
+	}
+
+
+	/*
+	 * Sanity check DISABLE_PAGE_SKIPPING option.
+	 */
+	if ((params.options & VACOPT_FULL) != 0 &&
+		(params.options & VACOPT_DISABLE_PAGE_SKIPPING) != 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("VACUUM option DISABLE_PAGE_SKIPPING cannot be used with FULL")));
+
+	/* sanity check for PROCESS_TOAST */
+	if ((params.options & VACOPT_FULL) != 0 &&
+		(params.options & VACOPT_PROCESS_TOAST) == 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("PROCESS_TOAST required with VACUUM FULL")));
+
+	/* sanity check for ONLY_DATABASE_STATS */
+	if (params.options & VACOPT_ONLY_DATABASE_STATS)
+	{
+		Assert(params.options & VACOPT_VACUUM);
+		if (vacstmt->rels != NIL)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("ONLY_DATABASE_STATS cannot be specified with a list of tables")));
+		/* don't require people to turn off PROCESS_TOAST/MAIN explicitly */
+		if (params.options & ~(VACOPT_VACUUM |
+							   VACOPT_VERBOSE |
+							   VACOPT_PROCESS_MAIN |
+							   VACOPT_PROCESS_TOAST |
+							   VACOPT_ONLY_DATABASE_STATS))
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("ONLY_DATABASE_STATS cannot be specified with other VACUUM options")));
 	}
 
 	/*
@@ -261,15 +402,58 @@ ExecVacuum(ParseState *pstate, VacuumStmt *vacstmt, bool isTopLevel)
 	/* user-invoked vacuum is never "for wraparound" */
 	params.is_wraparound = false;
 
-	/* user-invoked vacuum never uses this parameter */
+	/* user-invoked vacuum uses VACOPT_VERBOSE instead of log_min_duration */
 	params.log_min_duration = -1;
 
+	/*
+	 * Create special memory context for cross-transaction storage.
+	 *
+	 * Since it is a child of PortalContext, it will go away eventually even
+	 * if we suffer an error; there's no need for special abort cleanup logic.
+	 */
+	vac_context = AllocSetContextCreate(PortalContext,
+										"Vacuum",
+										ALLOCSET_DEFAULT_SIZES);
+
+	/*
+	 * Make a buffer strategy object in the cross-transaction memory context.
+	 * We needn't bother making this for VACUUM (FULL) or VACUUM
+	 * (ONLY_DATABASE_STATS) as they'll not make use of it.  VACUUM (FULL,
+	 * ANALYZE) is possible, so we'd better ensure that we make a strategy
+	 * when we see ANALYZE.
+	 */
+	if ((params.options & (VACOPT_ONLY_DATABASE_STATS |
+						   VACOPT_FULL)) == 0 ||
+		(params.options & VACOPT_ANALYZE) != 0)
+	{
+
+		MemoryContext old_context = MemoryContextSwitchTo(vac_context);
+
+		Assert(ring_size >= -1);
+
+		/*
+		 * If BUFFER_USAGE_LIMIT was specified by the VACUUM or ANALYZE
+		 * command, it overrides the value of VacuumBufferUsageLimit.  Either
+		 * value may be 0, in which case GetAccessStrategyWithSize() will
+		 * return NULL, effectively allowing full use of shared buffers.
+		 */
+		if (ring_size == -1)
+			ring_size = VacuumBufferUsageLimit;
+
+		bstrategy = GetAccessStrategyWithSize(BAS_VACUUM, ring_size);
+
+		MemoryContextSwitchTo(old_context);
+	}
+
 	/* Now go through the common routine */
-	vacuum(vacstmt->rels, &params, NULL, isTopLevel);
+	vacuum(vacstmt->rels, &params, bstrategy, vac_context, isTopLevel);
+
+	/* Finally, clean up the vacuum memory context */
+	MemoryContextDelete(vac_context);
 }
 
 /*
- * Internal entry point for VACUUM and ANALYZE commands.
+ * Internal entry point for autovacuum and the VACUUM / ANALYZE commands.
  *
  * relations, if not NIL, is a list of VacuumRelation to process; otherwise,
  * we process all relevant tables in the database.  For each VacuumRelation,
@@ -279,8 +463,11 @@ ExecVacuum(ParseState *pstate, VacuumStmt *vacstmt, bool isTopLevel)
  * params contains a set of parameters that can be used to customize the
  * behavior.
  *
- * bstrategy is normally given as NULL, but in autovacuum it can be passed
- * in to use the same buffer strategy object across multiple vacuum() calls.
+ * bstrategy may be passed in as NULL when the caller does not want to
+ * restrict the number of shared_buffers that VACUUM / ANALYZE can use,
+ * otherwise, the caller must build a BufferAccessStrategy with the number of
+ * shared_buffers that VACUUM / ANALYZE should try to limit themselves to
+ * using.
  *
  * isTopLevel should be passed down from ProcessUtility.
  *
@@ -288,8 +475,8 @@ ExecVacuum(ParseState *pstate, VacuumStmt *vacstmt, bool isTopLevel)
  * memory context that will not disappear at transaction commit.
  */
 void
-vacuum(List *relations, VacuumParams *params,
-	   BufferAccessStrategy bstrategy, bool isTopLevel)
+vacuum(List *relations, VacuumParams *params, BufferAccessStrategy bstrategy,
+	   MemoryContext vac_context, bool isTopLevel)
 {
 	static __thread bool in_vacuum = false;
 
@@ -318,9 +505,9 @@ vacuum(List *relations, VacuumParams *params,
 		in_outer_xact = IsInTransactionBlock(isTopLevel);
 
 	/*
-	 * Due to static variables vac_context, anl_context and vac_strategy,
-	 * vacuum() is not reentrant.  This matters when VACUUM FULL or ANALYZE
-	 * calls a hostile index expression that itself calls ANALYZE.
+	 * Check for and disallow recursive calls.  This could happen when VACUUM
+	 * FULL or ANALYZE calls a hostile index expression that itself calls
+	 * ANALYZE.
 	 */
 	if (in_vacuum)
 		ereport(ERROR,
@@ -329,56 +516,15 @@ vacuum(List *relations, VacuumParams *params,
 						stmttype)));
 
 	/*
-	 * Sanity check DISABLE_PAGE_SKIPPING option.
-	 */
-	if ((params->options & VACOPT_FULL) != 0 &&
-		(params->options & VACOPT_DISABLE_PAGE_SKIPPING) != 0)
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("VACUUM option DISABLE_PAGE_SKIPPING cannot be used with FULL")));
-
-	/* sanity check for PROCESS_TOAST */
-	if ((params->options & VACOPT_FULL) != 0 &&
-		(params->options & VACOPT_PROCESS_TOAST) == 0)
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("PROCESS_TOAST required with VACUUM FULL")));
-
-	/*
-	 * Send info about dead objects to the statistics collector, unless we are
-	 * in autovacuum --- autovacuum.c does this for itself.
-	 */
-	if ((params->options & VACOPT_VACUUM) && !IsAutoVacuumWorkerProcess())
-		pgstat_vacuum_stat();
-
-	/*
-	 * Create special memory context for cross-transaction storage.
-	 *
-	 * Since it is a child of PortalContext, it will go away eventually even
-	 * if we suffer an error; there's no need for special abort cleanup logic.
-	 */
-	vac_context = AllocSetContextCreate(PortalContext,
-										"Vacuum",
-										ALLOCSET_DEFAULT_SIZES);
-
-	/*
-	 * If caller didn't give us a buffer strategy object, make one in the
-	 * cross-transaction memory context.
-	 */
-	if (bstrategy == NULL)
-	{
-		MemoryContext old_context = MemoryContextSwitchTo(vac_context);
-
-		bstrategy = GetAccessStrategy(BAS_VACUUM);
-		MemoryContextSwitchTo(old_context);
-	}
-	vac_strategy = bstrategy;
-
-	/*
 	 * Build list of relation(s) to process, putting any new data in
 	 * vac_context for safekeeping.
 	 */
-	if (relations != NIL)
+	if (params->options & VACOPT_ONLY_DATABASE_STATS)
+	{
+		/* We don't process any tables in this case */
+		Assert(relations == NIL);
+	}
+	else if (relations != NIL)
 	{
 		List	   *newrels = NIL;
 		ListCell   *lc;
@@ -389,7 +535,7 @@ vacuum(List *relations, VacuumParams *params,
 			List	   *sublist;
 			MemoryContext old_context;
 
-			sublist = expand_vacuum_rel(vrel, params->options);
+			sublist = expand_vacuum_rel(vrel, vac_context, params->options);
 			old_context = MemoryContextSwitchTo(vac_context);
 			newrels = list_concat(newrels, sublist);
 			MemoryContextSwitchTo(old_context);
@@ -397,7 +543,7 @@ vacuum(List *relations, VacuumParams *params,
 		relations = newrels;
 	}
 	else
-		relations = get_all_vacuum_rels(params->options);
+		relations = get_all_vacuum_rels(vac_context, params->options);
 
 	/*
 	 * Decide whether we need to start/commit our own transactions.
@@ -454,7 +600,8 @@ vacuum(List *relations, VacuumParams *params,
 		ListCell   *cur;
 
 		in_vacuum = true;
-		VacuumCostActive = (VacuumCostDelay > 0);
+		VacuumFailsafeActive = false;
+		VacuumUpdateCosts();
 		VacuumCostBalance = 0;
 		VacuumPageHit = 0;
 		VacuumPageMiss = 0;
@@ -472,7 +619,7 @@ vacuum(List *relations, VacuumParams *params,
 
 			if (params->options & VACOPT_VACUUM)
 			{
-				if (!vacuum_rel(vrel->oid, vrel->relation, params))
+				if (!vacuum_rel(vrel->oid, vrel->relation, params, bstrategy))
 					continue;
 			}
 
@@ -490,7 +637,7 @@ vacuum(List *relations, VacuumParams *params,
 				}
 
 				analyze_rel(vrel->oid, vrel->relation, params,
-							vrel->va_cols, in_outer_xact, vac_strategy);
+							vrel->va_cols, in_outer_xact, bstrategy);
 
 				if (use_own_xacts)
 				{
@@ -507,12 +654,20 @@ vacuum(List *relations, VacuumParams *params,
 					CommandCounterIncrement();
 				}
 			}
+
+			/*
+			 * Ensure VacuumFailsafeActive has been reset before vacuuming the
+			 * next relation.
+			 */
+			VacuumFailsafeActive = false;
 		}
 	}
 	PG_FINALLY();
 	{
 		in_vacuum = false;
 		VacuumCostActive = false;
+		VacuumFailsafeActive = false;
+		VacuumCostBalance = 0;
 	}
 	PG_END_TRY();
 
@@ -530,22 +685,15 @@ vacuum(List *relations, VacuumParams *params,
 		StartTransactionCommand();
 	}
 
-	if ((params->options & VACOPT_VACUUM) && !IsAutoVacuumWorkerProcess())
+	if ((params->options & VACOPT_VACUUM) &&
+		!(params->options & VACOPT_SKIP_DATABASE_STATS))
 	{
 		/*
 		 * Update pg_database.datfrozenxid, and truncate pg_xact if possible.
-		 * (autovacuum.c does this for itself.)
 		 */
 		vac_update_datfrozenxid();
 	}
 
-	/*
-	 * Clean up working storage --- note we must do this after
-	 * StartTransactionCommand, else we might be trying to delete the active
-	 * context!
-	 */
-	MemoryContextDelete(vac_context);
-	vac_context = NULL;
 }
 
 /*
@@ -567,32 +715,23 @@ vacuum_is_relation_owner(Oid relid, Form_pg_class reltuple, bits32 options)
 	 *
 	 * We allow the user to vacuum or analyze a table if he is superuser, the
 	 * table owner, or the database owner (but in the latter case, only if
-	 * it's not a shared relation).  pg_class_ownercheck includes the
-	 * superuser case.
+	 * it's not a shared relation).  object_ownercheck includes the superuser
+	 * case.
 	 *
 	 * Note we choose to treat permissions failure as a WARNING and keep
 	 * trying to vacuum or analyze the rest of the DB --- is this appropriate?
 	 */
-	if (pg_class_ownercheck(relid, GetUserId()) ||
-		(pg_database_ownercheck(MyDatabaseId, GetUserId()) && !reltuple->relisshared))
+	if (object_ownercheck(RelationRelationId, relid, GetUserId()) ||
+		(object_ownercheck(DatabaseRelationId, MyDatabaseId, GetUserId()) && !reltuple->relisshared))
 		return true;
 
 	relname = NameStr(reltuple->relname);
 
 	if ((options & VACOPT_VACUUM) != 0)
 	{
-		if (reltuple->relisshared)
-			ereport(WARNING,
-					(errmsg("skipping \"%s\" --- only superuser can vacuum it",
-							relname)));
-		else if (reltuple->relnamespace == PG_CATALOG_NAMESPACE)
-			ereport(WARNING,
-					(errmsg("skipping \"%s\" --- only superuser or database owner can vacuum it",
-							relname)));
-		else
-			ereport(WARNING,
-					(errmsg("skipping \"%s\" --- only table or database owner can vacuum it",
-							relname)));
+		ereport(WARNING,
+				(errmsg("permission denied to vacuum \"%s\", skipping it",
+						relname)));
 
 		/*
 		 * For VACUUM ANALYZE, both logs could show up, but just generate
@@ -603,20 +742,9 @@ vacuum_is_relation_owner(Oid relid, Form_pg_class reltuple, bits32 options)
 	}
 
 	if ((options & VACOPT_ANALYZE) != 0)
-	{
-		if (reltuple->relisshared)
-			ereport(WARNING,
-					(errmsg("skipping \"%s\" --- only superuser can analyze it",
-							relname)));
-		else if (reltuple->relnamespace == PG_CATALOG_NAMESPACE)
-			ereport(WARNING,
-					(errmsg("skipping \"%s\" --- only superuser or database owner can analyze it",
-							relname)));
-		else
-			ereport(WARNING,
-					(errmsg("skipping \"%s\" --- only table or database owner can analyze it",
-							relname)));
-	}
+		ereport(WARNING,
+				(errmsg("permission denied to analyze \"%s\", skipping it",
+						relname)));
 
 	return false;
 }
@@ -742,7 +870,8 @@ vacuum_open_relation(Oid relid, RangeVar *relation, bits32 options,
  * are made in vac_context.
  */
 static List *
-expand_vacuum_rel(VacuumRelation *vrel, int options)
+expand_vacuum_rel(VacuumRelation *vrel, MemoryContext vac_context,
+				  int options)
 {
 	List	   *vacrels = NIL;
 	MemoryContext oldcontext;
@@ -881,7 +1010,7 @@ expand_vacuum_rel(VacuumRelation *vrel, int options)
  * the current database.  The list is built in vac_context.
  */
 static List *
-get_all_vacuum_rels(int options)
+get_all_vacuum_rels(MemoryContext vac_context, int options)
 {
 	List	   *vacrels = NIL;
 	Relation	pgclass;
@@ -898,10 +1027,6 @@ get_all_vacuum_rels(int options)
 		MemoryContext oldcontext;
 		Oid			relid = classForm->oid;
 
-		/* check permissions of relation */
-		if (!vacuum_is_relation_owner(relid, classForm, options))
-			continue;
-
 		/*
 		 * We include partitioned tables here; depending on which operation is
 		 * to be performed, caller will decide whether to process or ignore
@@ -910,6 +1035,10 @@ get_all_vacuum_rels(int options)
 		if (classForm->relkind != RELKIND_RELATION &&
 			classForm->relkind != RELKIND_MATVIEW &&
 			classForm->relkind != RELKIND_PARTITIONED_TABLE)
+			continue;
+
+		/* check permissions of relation */
+		if (!vacuum_is_relation_owner(relid, classForm, options))
 			continue;
 
 		/*
@@ -931,50 +1060,46 @@ get_all_vacuum_rels(int options)
 }
 
 /*
- * vacuum_set_xid_limits() -- compute oldestXmin and freeze cutoff points
+ * vacuum_get_cutoffs() -- compute OldestXmin and freeze cutoff points
  *
- * Input parameters are the target relation, applicable freeze age settings.
+ * The target relation and VACUUM parameters are our inputs.
  *
- * The output parameters are:
- * - oldestXmin is the cutoff value used to distinguish whether tuples are
- *	 DEAD or RECENTLY_DEAD (see HeapTupleSatisfiesVacuum).
- * - freezeLimit is the Xid below which all Xids are replaced by
- *	 FrozenTransactionId during vacuum.
- * - xidFullScanLimit (computed from freeze_table_age parameter)
- *	 represents a minimum Xid value; a table whose relfrozenxid is older than
- *	 this will have a full-table vacuum applied to it, to freeze tuples across
- *	 the whole table.  Vacuuming a table younger than this value can use a
- *	 partial scan.
- * - multiXactCutoff is the value below which all MultiXactIds are removed from
- *	 Xmax.
- * - mxactFullScanLimit is a value against which a table's relminmxid value is
- *	 compared to produce a full-table vacuum, as with xidFullScanLimit.
+ * Output parameters are the cutoffs that VACUUM caller should use.
  *
- * xidFullScanLimit and mxactFullScanLimit can be passed as NULL if caller is
- * not interested.
+ * Return value indicates if vacuumlazy.c caller should make its VACUUM
+ * operation aggressive.  An aggressive VACUUM must advance relfrozenxid up to
+ * FreezeLimit (at a minimum), and relminmxid up to MultiXactCutoff (at a
+ * minimum).
  */
-void
-vacuum_set_xid_limits(Relation rel,
-					  int freeze_min_age,
-					  int freeze_table_age,
-					  int multixact_freeze_min_age,
-					  int multixact_freeze_table_age,
-					  TransactionId *oldestXmin,
-					  TransactionId *freezeLimit,
-					  TransactionId *xidFullScanLimit,
-					  MultiXactId *multiXactCutoff,
-					  MultiXactId *mxactFullScanLimit)
+bool
+vacuum_get_cutoffs(Relation rel, const VacuumParams *params,
+				   struct VacuumCutoffs *cutoffs)
 {
-	int			freezemin;
-	int			mxid_freezemin;
-	int			effective_multixact_freeze_max_age;
-	TransactionId limit;
-	TransactionId safeLimit;
-	MultiXactId oldestMxact;
-	MultiXactId mxactLimit;
-	MultiXactId safeMxactLimit;
+	int			freeze_min_age,
+				multixact_freeze_min_age,
+				freeze_table_age,
+				multixact_freeze_table_age,
+				effective_multixact_freeze_max_age;
+	TransactionId nextXID,
+				safeOldestXmin,
+				aggressiveXIDCutoff;
+	MultiXactId nextMXID,
+				safeOldestMxact,
+				aggressiveMXIDCutoff;
+
+	/* Use mutable copies of freeze age parameters */
+	freeze_min_age = params->freeze_min_age;
+	multixact_freeze_min_age = params->multixact_freeze_min_age;
+	freeze_table_age = params->freeze_table_age;
+	multixact_freeze_table_age = params->multixact_freeze_table_age;
+
+	/* Set pg_class fields in cutoffs */
+	cutoffs->relfrozenxid = rel->rd_rel->relfrozenxid;
+	cutoffs->relminmxid = rel->rd_rel->relminmxid;
 
 	/*
+	 * Acquire OldestXmin.
+	 *
 	 * We can always ignore processes running lazy vacuum.  This is because we
 	 * use these values only for deciding which tuples we must keep in the
 	 * tables.  Since lazy vacuum doesn't write its XID anywhere (usually no
@@ -983,14 +1108,14 @@ vacuum_set_xid_limits(Relation rel,
 	 * that only one vacuum process can be working on a particular table at
 	 * any time, and that each vacuum is always an independent transaction.
 	 */
-	*oldestXmin = GetOldestNonRemovableTransactionId(rel);
+	cutoffs->OldestXmin = GetOldestNonRemovableTransactionId(rel);
 
 	if (OldSnapshotThresholdActive())
 	{
 		TransactionId limit_xmin;
 		TimestampTz limit_ts;
 
-		if (TransactionIdLimitedForOldSnapshots(*oldestXmin, rel,
+		if (TransactionIdLimitedForOldSnapshots(cutoffs->OldestXmin, rel,
 												&limit_xmin, &limit_ts))
 		{
 			/*
@@ -1000,11 +1125,47 @@ vacuum_set_xid_limits(Relation rel,
 			 * frequency), but would still be a significant improvement.
 			 */
 			SetOldSnapshotThresholdTimestamp(limit_ts, limit_xmin);
-			*oldestXmin = limit_xmin;
+			cutoffs->OldestXmin = limit_xmin;
 		}
 	}
 
-	Assert(TransactionIdIsNormal(*oldestXmin));
+	Assert(TransactionIdIsNormal(cutoffs->OldestXmin));
+
+	/* Acquire OldestMxact */
+	cutoffs->OldestMxact = GetOldestMultiXactId();
+	Assert(MultiXactIdIsValid(cutoffs->OldestMxact));
+
+	/* Acquire next XID/next MXID values used to apply age-based settings */
+	nextXID = ReadNextTransactionId();
+	nextMXID = ReadNextMultiXactId();
+
+	/*
+	 * Also compute the multixact age for which freezing is urgent.  This is
+	 * normally autovacuum_multixact_freeze_max_age, but may be less if we are
+	 * short of multixact member space.
+	 */
+	effective_multixact_freeze_max_age = MultiXactMemberFreezeThreshold();
+
+	/*
+	 * Almost ready to set freeze output parameters; check if OldestXmin or
+	 * OldestMxact are held back to an unsafe degree before we start on that
+	 */
+	safeOldestXmin = nextXID - autovacuum_freeze_max_age;
+	if (!TransactionIdIsNormal(safeOldestXmin))
+		safeOldestXmin = FirstNormalTransactionId;
+	safeOldestMxact = nextMXID - effective_multixact_freeze_max_age;
+	if (safeOldestMxact < FirstMultiXactId)
+		safeOldestMxact = FirstMultiXactId;
+	if (TransactionIdPrecedes(cutoffs->OldestXmin, safeOldestXmin))
+		ereport(WARNING,
+				(errmsg("cutoff for removing and freezing tuples is far in the past"),
+				 errhint("Close open transactions soon to avoid wraparound problems.\n"
+						 "You might also need to commit or roll back old prepared transactions, or drop stale replication slots.")));
+	if (MultiXactIdPrecedes(cutoffs->OldestMxact, safeOldestMxact))
+		ereport(WARNING,
+				(errmsg("cutoff for freezing multixacts is far in the past"),
+				 errhint("Close open transactions soon to avoid wraparound problems.\n"
+						 "You might also need to commit or roll back old prepared transactions, or drop stale replication slots.")));
 
 	/*
 	 * Determine the minimum freeze age to use: as specified by the caller, or
@@ -1012,45 +1173,18 @@ vacuum_set_xid_limits(Relation rel,
 	 * autovacuum_freeze_max_age, so that autovacuums to prevent XID
 	 * wraparound won't occur too frequently.
 	 */
-	freezemin = freeze_min_age;
-	if (freezemin < 0)
-		freezemin = vacuum_freeze_min_age;
-	freezemin = Min(freezemin, autovacuum_freeze_max_age / 2);
-	Assert(freezemin >= 0);
+	if (freeze_min_age < 0)
+		freeze_min_age = vacuum_freeze_min_age;
+	freeze_min_age = Min(freeze_min_age, autovacuum_freeze_max_age / 2);
+	Assert(freeze_min_age >= 0);
 
-	/*
-	 * Compute the cutoff XID, being careful not to generate a "permanent" XID
-	 */
-	limit = *oldestXmin - freezemin;
-	if (!TransactionIdIsNormal(limit))
-		limit = FirstNormalTransactionId;
-
-	/*
-	 * If oldestXmin is very far back (in practice, more than
-	 * autovacuum_freeze_max_age / 2 XIDs old), complain and force a minimum
-	 * freeze age of zero.
-	 */
-	safeLimit = ReadNextTransactionId() - autovacuum_freeze_max_age;
-	if (!TransactionIdIsNormal(safeLimit))
-		safeLimit = FirstNormalTransactionId;
-
-	if (TransactionIdPrecedes(limit, safeLimit))
-	{
-		ereport(WARNING,
-				(errmsg("oldest xmin is far in the past"),
-				 errhint("Close open transactions soon to avoid wraparound problems.\n"
-						 "You might also need to commit or roll back old prepared transactions, or drop stale replication slots.")));
-		limit = *oldestXmin;
-	}
-
-	*freezeLimit = limit;
-
-	/*
-	 * Compute the multixact age for which freezing is urgent.  This is
-	 * normally autovacuum_multixact_freeze_max_age, but may be less if we are
-	 * short of multixact member space.
-	 */
-	effective_multixact_freeze_max_age = MultiXactMemberFreezeThreshold();
+	/* Compute FreezeLimit, being careful to generate a normal XID */
+	cutoffs->FreezeLimit = nextXID - freeze_min_age;
+	if (!TransactionIdIsNormal(cutoffs->FreezeLimit))
+		cutoffs->FreezeLimit = FirstNormalTransactionId;
+	/* FreezeLimit must always be <= OldestXmin */
+	if (TransactionIdPrecedes(cutoffs->OldestXmin, cutoffs->FreezeLimit))
+		cutoffs->FreezeLimit = cutoffs->OldestXmin;
 
 	/*
 	 * Determine the minimum multixact freeze age to use: as specified by
@@ -1058,96 +1192,63 @@ vacuum_set_xid_limits(Relation rel,
 	 * than half effective_multixact_freeze_max_age, so that autovacuums to
 	 * prevent MultiXact wraparound won't occur too frequently.
 	 */
-	mxid_freezemin = multixact_freeze_min_age;
-	if (mxid_freezemin < 0)
-		mxid_freezemin = vacuum_multixact_freeze_min_age;
-	mxid_freezemin = Min(mxid_freezemin,
-						 effective_multixact_freeze_max_age / 2);
-	Assert(mxid_freezemin >= 0);
+	if (multixact_freeze_min_age < 0)
+		multixact_freeze_min_age = vacuum_multixact_freeze_min_age;
+	multixact_freeze_min_age = Min(multixact_freeze_min_age,
+								   effective_multixact_freeze_max_age / 2);
+	Assert(multixact_freeze_min_age >= 0);
 
-	/* compute the cutoff multi, being careful to generate a valid value */
-	oldestMxact = GetOldestMultiXactId();
-	mxactLimit = oldestMxact - mxid_freezemin;
-	if (mxactLimit < FirstMultiXactId)
-		mxactLimit = FirstMultiXactId;
+	/* Compute MultiXactCutoff, being careful to generate a valid value */
+	cutoffs->MultiXactCutoff = nextMXID - multixact_freeze_min_age;
+	if (cutoffs->MultiXactCutoff < FirstMultiXactId)
+		cutoffs->MultiXactCutoff = FirstMultiXactId;
+	/* MultiXactCutoff must always be <= OldestMxact */
+	if (MultiXactIdPrecedes(cutoffs->OldestMxact, cutoffs->MultiXactCutoff))
+		cutoffs->MultiXactCutoff = cutoffs->OldestMxact;
 
-	safeMxactLimit =
-		ReadNextMultiXactId() - effective_multixact_freeze_max_age;
-	if (safeMxactLimit < FirstMultiXactId)
-		safeMxactLimit = FirstMultiXactId;
+	/*
+	 * Finally, figure out if caller needs to do an aggressive VACUUM or not.
+	 *
+	 * Determine the table freeze age to use: as specified by the caller, or
+	 * the value of the vacuum_freeze_table_age GUC, but in any case not more
+	 * than autovacuum_freeze_max_age * 0.95, so that if you have e.g nightly
+	 * VACUUM schedule, the nightly VACUUM gets a chance to freeze XIDs before
+	 * anti-wraparound autovacuum is launched.
+	 */
+	if (freeze_table_age < 0)
+		freeze_table_age = vacuum_freeze_table_age;
+	freeze_table_age = Min(freeze_table_age, autovacuum_freeze_max_age * 0.95);
+	Assert(freeze_table_age >= 0);
+	aggressiveXIDCutoff = nextXID - freeze_table_age;
+	if (!TransactionIdIsNormal(aggressiveXIDCutoff))
+		aggressiveXIDCutoff = FirstNormalTransactionId;
+	if (TransactionIdPrecedesOrEquals(rel->rd_rel->relfrozenxid,
+									  aggressiveXIDCutoff))
+		return true;
 
-	if (MultiXactIdPrecedes(mxactLimit, safeMxactLimit))
-	{
-		ereport(WARNING,
-				(errmsg("oldest multixact is far in the past"),
-				 errhint("Close open transactions with multixacts soon to avoid wraparound problems.")));
-		/* Use the safe limit, unless an older mxact is still running */
-		if (MultiXactIdPrecedes(oldestMxact, safeMxactLimit))
-			mxactLimit = oldestMxact;
-		else
-			mxactLimit = safeMxactLimit;
-	}
+	/*
+	 * Similar to the above, determine the table freeze age to use for
+	 * multixacts: as specified by the caller, or the value of the
+	 * vacuum_multixact_freeze_table_age GUC, but in any case not more than
+	 * effective_multixact_freeze_max_age * 0.95, so that if you have e.g.
+	 * nightly VACUUM schedule, the nightly VACUUM gets a chance to freeze
+	 * multixacts before anti-wraparound autovacuum is launched.
+	 */
+	if (multixact_freeze_table_age < 0)
+		multixact_freeze_table_age = vacuum_multixact_freeze_table_age;
+	multixact_freeze_table_age =
+		Min(multixact_freeze_table_age,
+			effective_multixact_freeze_max_age * 0.95);
+	Assert(multixact_freeze_table_age >= 0);
+	aggressiveMXIDCutoff = nextMXID - multixact_freeze_table_age;
+	if (aggressiveMXIDCutoff < FirstMultiXactId)
+		aggressiveMXIDCutoff = FirstMultiXactId;
+	if (MultiXactIdPrecedesOrEquals(rel->rd_rel->relminmxid,
+									aggressiveMXIDCutoff))
+		return true;
 
-	*multiXactCutoff = mxactLimit;
-
-	if (xidFullScanLimit != NULL)
-	{
-		int			freezetable;
-
-		Assert(mxactFullScanLimit != NULL);
-
-		/*
-		 * Determine the table freeze age to use: as specified by the caller,
-		 * or vacuum_freeze_table_age, but in any case not more than
-		 * autovacuum_freeze_max_age * 0.95, so that if you have e.g nightly
-		 * VACUUM schedule, the nightly VACUUM gets a chance to freeze tuples
-		 * before anti-wraparound autovacuum is launched.
-		 */
-		freezetable = freeze_table_age;
-		if (freezetable < 0)
-			freezetable = vacuum_freeze_table_age;
-		freezetable = Min(freezetable, autovacuum_freeze_max_age * 0.95);
-		Assert(freezetable >= 0);
-
-		/*
-		 * Compute XID limit causing a full-table vacuum, being careful not to
-		 * generate a "permanent" XID.
-		 */
-		limit = ReadNextTransactionId() - freezetable;
-		if (!TransactionIdIsNormal(limit))
-			limit = FirstNormalTransactionId;
-
-		*xidFullScanLimit = limit;
-
-		/*
-		 * Similar to the above, determine the table freeze age to use for
-		 * multixacts: as specified by the caller, or
-		 * vacuum_multixact_freeze_table_age, but in any case not more than
-		 * autovacuum_multixact_freeze_table_age * 0.95, so that if you have
-		 * e.g. nightly VACUUM schedule, the nightly VACUUM gets a chance to
-		 * freeze multixacts before anti-wraparound autovacuum is launched.
-		 */
-		freezetable = multixact_freeze_table_age;
-		if (freezetable < 0)
-			freezetable = vacuum_multixact_freeze_table_age;
-		freezetable = Min(freezetable,
-						  effective_multixact_freeze_max_age * 0.95);
-		Assert(freezetable >= 0);
-
-		/*
-		 * Compute MultiXact limit causing a full-table vacuum, being careful
-		 * to generate a valid MultiXact value.
-		 */
-		mxactLimit = ReadNextMultiXactId() - freezetable;
-		if (mxactLimit < FirstMultiXactId)
-			mxactLimit = FirstMultiXactId;
-
-		*mxactFullScanLimit = mxactLimit;
-	}
-	else
-	{
-		Assert(mxactFullScanLimit == NULL);
-	}
+	/* Non-aggressive VACUUM */
+	return false;
 }
 
 /*
@@ -1155,13 +1256,13 @@ vacuum_set_xid_limits(Relation rel,
  * mechanism to determine if its table's relfrozenxid and relminmxid are now
  * dangerously far in the past.
  *
- * Input parameters are the target relation's relfrozenxid and relminmxid.
- *
  * When we return true, VACUUM caller triggers the failsafe.
  */
 bool
-vacuum_xid_failsafe_check(TransactionId relfrozenxid, MultiXactId relminmxid)
+vacuum_xid_failsafe_check(const struct VacuumCutoffs *cutoffs)
 {
+	TransactionId relfrozenxid = cutoffs->relfrozenxid;
+	MultiXactId relminmxid = cutoffs->relminmxid;
 	TransactionId xid_skip_limit;
 	MultiXactId multi_skip_limit;
 	int			skip_index_vacuum;
@@ -1236,10 +1337,23 @@ vac_estimate_reltuples(Relation relation,
 		return scanned_tuples;
 
 	/*
-	 * If scanned_pages is zero but total_pages isn't, keep the existing value
-	 * of reltuples.  (Note: we might be returning -1 in this case.)
+	 * When successive VACUUM commands scan the same few pages again and
+	 * again, without anything from the table really changing, there is a risk
+	 * that our beliefs about tuple density will gradually become distorted.
+	 * This might be caused by vacuumlazy.c implementation details, such as
+	 * its tendency to always scan the last heap page.  Handle that here.
+	 *
+	 * If the relation is _exactly_ the same size according to the existing
+	 * pg_class entry, and only a few of its pages (less than 2%) were
+	 * scanned, keep the existing value of reltuples.  Also keep the existing
+	 * value when only a subset of rel's pages <= a single page were scanned.
+	 *
+	 * (Note: we might be returning -1 here.)
 	 */
-	if (scanned_pages == 0)
+	if (old_rel_pages == total_pages &&
+		scanned_pages < (double) total_pages * 0.02)
+		return old_rel_tuples;
+	if (scanned_pages <= 1)
 		return old_rel_tuples;
 
 	/*
@@ -1308,13 +1422,18 @@ vac_update_relstats(Relation relation,
 					BlockNumber num_all_visible_pages,
 					bool hasindex, TransactionId frozenxid,
 					MultiXactId minmulti,
+					bool *frozenxid_updated, bool *minmulti_updated,
 					bool in_outer_xact)
 {
 	Oid			relid = RelationGetRelid(relation);
 	Relation	rd;
 	HeapTuple	ctup;
 	Form_pg_class pgcform;
-	bool		dirty;
+	bool		dirty,
+				futurexid,
+				futuremxid;
+	TransactionId oldfrozenxid;
+	MultiXactId oldminmulti;
 
 	rd = table_open(RelationRelationId, RowExclusiveLock);
 
@@ -1374,33 +1493,55 @@ vac_update_relstats(Relation relation,
 	 * Update relfrozenxid, unless caller passed InvalidTransactionId
 	 * indicating it has no new data.
 	 *
-	 * Ordinarily, we don't let relfrozenxid go backwards: if things are
-	 * working correctly, the only way the new frozenxid could be older would
-	 * be if a previous VACUUM was done with a tighter freeze_min_age, in
-	 * which case we don't want to forget the work it already did.  However,
-	 * if the stored relfrozenxid is "in the future", then it must be corrupt
-	 * and it seems best to overwrite it with the cutoff we used this time.
+	 * Ordinarily, we don't let relfrozenxid go backwards.  However, if the
+	 * stored relfrozenxid is "in the future" then it seems best to assume
+	 * it's corrupt, and overwrite with the oldest remaining XID in the table.
 	 * This should match vac_update_datfrozenxid() concerning what we consider
 	 * to be "in the future".
 	 */
-	if (TransactionIdIsNormal(frozenxid) &&
-		pgcform->relfrozenxid != frozenxid &&
-		(TransactionIdPrecedes(pgcform->relfrozenxid, frozenxid) ||
-		 TransactionIdPrecedes(ReadNextTransactionId(),
-							   pgcform->relfrozenxid)))
+	oldfrozenxid = pgcform->relfrozenxid;
+	futurexid = false;
+	if (frozenxid_updated)
+		*frozenxid_updated = false;
+	if (TransactionIdIsNormal(frozenxid) && oldfrozenxid != frozenxid)
 	{
-		pgcform->relfrozenxid = frozenxid;
-		dirty = true;
+		bool		update = false;
+
+		if (TransactionIdPrecedes(oldfrozenxid, frozenxid))
+			update = true;
+		else if (TransactionIdPrecedes(ReadNextTransactionId(), oldfrozenxid))
+			futurexid = update = true;
+
+		if (update)
+		{
+			pgcform->relfrozenxid = frozenxid;
+			dirty = true;
+			if (frozenxid_updated)
+				*frozenxid_updated = true;
+		}
 	}
 
 	/* Similarly for relminmxid */
-	if (MultiXactIdIsValid(minmulti) &&
-		pgcform->relminmxid != minmulti &&
-		(MultiXactIdPrecedes(pgcform->relminmxid, minmulti) ||
-		 MultiXactIdPrecedes(ReadNextMultiXactId(), pgcform->relminmxid)))
+	oldminmulti = pgcform->relminmxid;
+	futuremxid = false;
+	if (minmulti_updated)
+		*minmulti_updated = false;
+	if (MultiXactIdIsValid(minmulti) && oldminmulti != minmulti)
 	{
-		pgcform->relminmxid = minmulti;
-		dirty = true;
+		bool		update = false;
+
+		if (MultiXactIdPrecedes(oldminmulti, minmulti))
+			update = true;
+		else if (MultiXactIdPrecedes(ReadNextMultiXactId(), oldminmulti))
+			futuremxid = update = true;
+
+		if (update)
+		{
+			pgcform->relminmxid = minmulti;
+			dirty = true;
+			if (minmulti_updated)
+				*minmulti_updated = true;
+		}
 	}
 
 	/* If anything changed, write out the tuple. */
@@ -1408,6 +1549,19 @@ vac_update_relstats(Relation relation,
 		heap_inplace_update(rd, ctup);
 
 	table_close(rd, RowExclusiveLock);
+
+	if (futurexid)
+		ereport(WARNING,
+				(errcode(ERRCODE_DATA_CORRUPTED),
+				 errmsg_internal("overwrote invalid relfrozenxid value %u with new value %u for table \"%s\"",
+								 oldfrozenxid, frozenxid,
+								 RelationGetRelationName(relation))));
+	if (futuremxid)
+		ereport(WARNING,
+				(errcode(ERRCODE_DATA_CORRUPTED),
+				 errmsg_internal("overwrote invalid relminmxid value %u with new value %u for table \"%s\"",
+								 oldminmulti, minmulti,
+								 RelationGetRelationName(relation))));
 }
 
 
@@ -1479,6 +1633,8 @@ vac_update_datfrozenxid(void)
 	/*
 	 * We must seqscan pg_class to find the minimum Xid, because there is no
 	 * index that can help us here.
+	 *
+	 * See vac_truncate_clog() for the race condition to prevent.
 	 */
 	relation = table_open(RelationRelationId, AccessShareLock);
 
@@ -1487,7 +1643,9 @@ vac_update_datfrozenxid(void)
 
 	while ((classTup = systable_getnext(scan)) != NULL)
 	{
-		Form_pg_class classForm = (Form_pg_class) GETSTRUCT(classTup);
+		volatile FormData_pg_class *classForm = (Form_pg_class) GETSTRUCT(classTup);
+		TransactionId relfrozenxid = classForm->relfrozenxid;
+		TransactionId relminmxid = classForm->relminmxid;
 
 		/*
 		 * Only consider relations able to hold unfrozen XIDs (anything else
@@ -1497,8 +1655,8 @@ vac_update_datfrozenxid(void)
 			classForm->relkind != RELKIND_MATVIEW &&
 			classForm->relkind != RELKIND_TOASTVALUE)
 		{
-			Assert(!TransactionIdIsValid(classForm->relfrozenxid));
-			Assert(!MultiXactIdIsValid(classForm->relminmxid));
+			Assert(!TransactionIdIsValid(relfrozenxid));
+			Assert(!MultiXactIdIsValid(relminmxid));
 			continue;
 		}
 
@@ -1517,34 +1675,34 @@ vac_update_datfrozenxid(void)
 		 * before those relations have been scanned and cleaned up.
 		 */
 
-		if (TransactionIdIsValid(classForm->relfrozenxid))
+		if (TransactionIdIsValid(relfrozenxid))
 		{
-			Assert(TransactionIdIsNormal(classForm->relfrozenxid));
+			Assert(TransactionIdIsNormal(relfrozenxid));
 
 			/* check for values in the future */
-			if (TransactionIdPrecedes(lastSaneFrozenXid, classForm->relfrozenxid))
+			if (TransactionIdPrecedes(lastSaneFrozenXid, relfrozenxid))
 			{
 				bogus = true;
 				break;
 			}
 
 			/* determine new horizon */
-			if (TransactionIdPrecedes(classForm->relfrozenxid, newFrozenXid))
-				newFrozenXid = classForm->relfrozenxid;
+			if (TransactionIdPrecedes(relfrozenxid, newFrozenXid))
+				newFrozenXid = relfrozenxid;
 		}
 
-		if (MultiXactIdIsValid(classForm->relminmxid))
+		if (MultiXactIdIsValid(relminmxid))
 		{
 			/* check for values in the future */
-			if (MultiXactIdPrecedes(lastSaneMinMulti, classForm->relminmxid))
+			if (MultiXactIdPrecedes(lastSaneMinMulti, relminmxid))
 			{
 				bogus = true;
 				break;
 			}
 
 			/* determine new horizon */
-			if (MultiXactIdPrecedes(classForm->relminmxid, newMinMulti))
-				newMinMulti = classForm->relminmxid;
+			if (MultiXactIdPrecedes(relminmxid, newMinMulti))
+				newMinMulti = relminmxid;
 		}
 	}
 
@@ -1697,6 +1855,20 @@ vac_truncate_clog(TransactionId frozenXID,
 		Assert(MultiXactIdIsValid(datminmxid));
 
 		/*
+		 * If database is in the process of getting dropped, or has been
+		 * interrupted while doing so, no connections to it are possible
+		 * anymore. Therefore we don't need to take it into account here.
+		 * Which is good, because it can't be processed by autovacuum either.
+		 */
+		if (database_is_invalid_form((Form_pg_database) dbform))
+		{
+			elog(DEBUG2,
+				 "skipping invalid database \"%s\" while computing relfrozenxid",
+				 NameStr(dbform->datname));
+			continue;
+		}
+
+		/*
 		 * If things are working properly, no database should have a
 		 * datfrozenxid or datminmxid that is "in the future".  However, such
 		 * cases have been known to arise due to bugs in pg_upgrade.  If we
@@ -1739,12 +1911,16 @@ vac_truncate_clog(TransactionId frozenXID,
 		ereport(WARNING,
 				(errmsg("some databases have not been vacuumed in over 2 billion transactions"),
 				 errdetail("You might have already suffered transaction-wraparound data loss.")));
+		LWLockRelease(WrapLimitsVacuumLock);
 		return;
 	}
 
 	/* chicken out if data is bogus in any other way */
 	if (bogus)
+	{
+		LWLockRelease(WrapLimitsVacuumLock);
 		return;
+	}
 
 	/*
 	 * Advance the oldest value for commit timestamps before truncating, so
@@ -1795,7 +1971,8 @@ vac_truncate_clog(TransactionId frozenXID,
  *		At entry and exit, we are not inside a transaction.
  */
 static bool
-vacuum_rel(Oid relid, RangeVar *relation, VacuumParams *params)
+vacuum_rel(Oid relid, RangeVar *relation, VacuumParams *params,
+		   BufferAccessStrategy bstrategy)
 {
 	LOCKMODE	lmode;
 	Relation	rel;
@@ -1994,10 +2171,12 @@ vacuum_rel(Oid relid, RangeVar *relation, VacuumParams *params)
 	/*
 	 * Remember the relation's TOAST relation for later, if the caller asked
 	 * us to process it.  In VACUUM FULL, though, the toast table is
-	 * automatically rebuilt by cluster_rel so we shouldn't recurse to it.
+	 * automatically rebuilt by cluster_rel so we shouldn't recurse to it,
+	 * unless PROCESS_MAIN is disabled.
 	 */
 	if ((params->options & VACOPT_PROCESS_TOAST) != 0 &&
-		(params->options & VACOPT_FULL) == 0)
+		((params->options & VACOPT_FULL) == 0 ||
+		 (params->options & VACOPT_PROCESS_MAIN) == 0))
 		toast_relid = rel->rd_rel->reltoastrelid;
 	else
 		toast_relid = InvalidOid;
@@ -2014,24 +2193,33 @@ vacuum_rel(Oid relid, RangeVar *relation, VacuumParams *params)
 	save_nestlevel = NewGUCNestLevel();
 
 	/*
-	 * Do the actual work --- either FULL or "lazy" vacuum
+	 * If PROCESS_MAIN is set (the default), it's time to vacuum the main
+	 * relation.  Otherwise, we can skip this part.  If processing the TOAST
+	 * table is required (e.g., PROCESS_TOAST is set), we force PROCESS_MAIN
+	 * to be set when we recurse to the TOAST table.
 	 */
-	if (params->options & VACOPT_FULL)
+	if (params->options & VACOPT_PROCESS_MAIN)
 	{
-		ClusterParams cluster_params = {0};
+		/*
+		 * Do the actual work --- either FULL or "lazy" vacuum
+		 */
+		if (params->options & VACOPT_FULL)
+		{
+			ClusterParams cluster_params = {0};
 
-		/* close relation before vacuuming, but hold lock until commit */
-		relation_close(rel, NoLock);
-		rel = NULL;
+			/* close relation before vacuuming, but hold lock until commit */
+			relation_close(rel, NoLock);
+			rel = NULL;
 
-		if ((params->options & VACOPT_VERBOSE) != 0)
-			cluster_params.options |= CLUOPT_VERBOSE;
+			if ((params->options & VACOPT_VERBOSE) != 0)
+				cluster_params.options |= CLUOPT_VERBOSE;
 
-		/* VACUUM FULL is now a variant of CLUSTER; see cluster.c */
-		cluster_rel(relid, InvalidOid, &cluster_params);
+			/* VACUUM FULL is now a variant of CLUSTER; see cluster.c */
+			cluster_rel(relid, InvalidOid, &cluster_params);
+		}
+		else
+			table_relation_vacuum(rel, params, bstrategy);
 	}
-	else
-		table_relation_vacuum(rel, params, vac_strategy);
 
 	/* Roll back any GUC changes executed by index functions */
 	AtEOXact_GUC(false, save_nestlevel);
@@ -2057,7 +2245,15 @@ vacuum_rel(Oid relid, RangeVar *relation, VacuumParams *params)
 	 * totally unimportant for toast relations.
 	 */
 	if (toast_relid != InvalidOid)
-		vacuum_rel(toast_relid, NULL, params);
+	{
+		VacuumParams toast_vacuum_params;
+
+		/* force VACOPT_PROCESS_MAIN so vacuum_rel() processes it */
+		memcpy(&toast_vacuum_params, params, sizeof(VacuumParams));
+		toast_vacuum_params.options |= VACOPT_PROCESS_MAIN;
+
+		vacuum_rel(toast_relid, NULL, &toast_vacuum_params, bstrategy);
+	}
 
 	/*
 	 * Now release the session-level lock on the main table.
@@ -2153,7 +2349,28 @@ vacuum_delay_point(void)
 	/* Always check for interrupts */
 	CHECK_FOR_INTERRUPTS();
 
-	if (!VacuumCostActive || InterruptPending)
+	if (InterruptPending ||
+		(!VacuumCostActive && !ConfigReloadPending))
+		return;
+
+	/*
+	 * Autovacuum workers should reload the configuration file if requested.
+	 * This allows changes to [autovacuum_]vacuum_cost_limit and
+	 * [autovacuum_]vacuum_cost_delay to take effect while a table is being
+	 * vacuumed or analyzed.
+	 */
+	if (ConfigReloadPending && IsAutoVacuumWorkerProcess())
+	{
+		ConfigReloadPending = false;
+		ProcessConfigFile(PGC_SIGHUP);
+		VacuumUpdateCosts();
+	}
+
+	/*
+	 * If we disabled cost-based delays after reloading the config file,
+	 * return.
+	 */
+	if (!VacuumCostActive)
 		return;
 
 	/*
@@ -2162,25 +2379,39 @@ vacuum_delay_point(void)
 	 */
 	if (VacuumSharedCostBalance != NULL)
 		msec = compute_parallel_delay();
-	else if (VacuumCostBalance >= VacuumCostLimit)
-		msec = VacuumCostDelay * VacuumCostBalance / VacuumCostLimit;
+	else if (VacuumCostBalance >= vacuum_cost_limit)
+		msec = vacuum_cost_delay * VacuumCostBalance / vacuum_cost_limit;
 
 	/* Nap if appropriate */
 	if (msec > 0)
 	{
-		if (msec > VacuumCostDelay * 4)
-			msec = VacuumCostDelay * 4;
+		if (msec > vacuum_cost_delay * 4)
+			msec = vacuum_cost_delay * 4;
 
-		(void) WaitLatch(MyLatch,
-						 WL_LATCH_SET | WL_TIMEOUT | WL_EXIT_ON_PM_DEATH,
-						 msec,
-						 WAIT_EVENT_VACUUM_DELAY);
-		ResetLatch(MyLatch);
+		pgstat_report_wait_start(WAIT_EVENT_VACUUM_DELAY);
+		pg_usleep(msec * 1000);
+		pgstat_report_wait_end();
+
+		/*
+		 * We don't want to ignore postmaster death during very long vacuums
+		 * with vacuum_cost_delay configured.  We can't use the usual
+		 * WaitLatch() approach here because we want microsecond-based sleep
+		 * durations above.
+		 */
+		if (IsUnderPostmaster && !PostmasterIsAlive())
+			exit(1);
 
 		VacuumCostBalance = 0;
 
-		/* update balance values for workers */
-		AutoVacuumUpdateDelay();
+		/*
+		 * Balance and update limit values for autovacuum workers. We must do
+		 * this periodically, as the number of workers across which we are
+		 * balancing the limit may have changed.
+		 *
+		 * TODO: There may be better criteria for determining when to do this
+		 * besides "check after napping".
+		 */
+		AutoVacuumUpdateCostLimit();
 
 		/* Might have gotten an interrupt while sleeping */
 		CHECK_FOR_INTERRUPTS();
@@ -2230,11 +2461,11 @@ compute_parallel_delay(void)
 	/* Compute the total local balance for the current worker */
 	VacuumCostBalanceLocal += VacuumCostBalance;
 
-	if ((shared_balance >= VacuumCostLimit) &&
-		(VacuumCostBalanceLocal > 0.5 * ((double) VacuumCostLimit / nworkers)))
+	if ((shared_balance >= vacuum_cost_limit) &&
+		(VacuumCostBalanceLocal > 0.5 * ((double) vacuum_cost_limit / nworkers)))
 	{
 		/* Compute sleep time based on the local cost balance */
-		msec = VacuumCostDelay * VacuumCostBalanceLocal / VacuumCostLimit;
+		msec = vacuum_cost_delay * VacuumCostBalanceLocal / vacuum_cost_limit;
 		pg_atomic_sub_fetch_u32(VacuumSharedCostBalance, VacuumCostBalanceLocal);
 		VacuumCostBalanceLocal = 0;
 	}
@@ -2257,4 +2488,131 @@ static VacOptValue
 get_vacoptval_from_boolean(DefElem *def)
 {
 	return defGetBoolean(def) ? VACOPTVALUE_ENABLED : VACOPTVALUE_DISABLED;
+}
+
+/*
+ *	vac_bulkdel_one_index() -- bulk-deletion for index relation.
+ *
+ * Returns bulk delete stats derived from input stats
+ */
+IndexBulkDeleteResult *
+vac_bulkdel_one_index(IndexVacuumInfo *ivinfo, IndexBulkDeleteResult *istat,
+					  VacDeadItems *dead_items)
+{
+	/* Do bulk deletion */
+	istat = index_bulk_delete(ivinfo, istat, vac_tid_reaped,
+							  (void *) dead_items);
+
+	ereport(ivinfo->message_level,
+			(errmsg("scanned index \"%s\" to remove %d row versions",
+					RelationGetRelationName(ivinfo->index),
+					dead_items->num_items)));
+
+	return istat;
+}
+
+/*
+ *	vac_cleanup_one_index() -- do post-vacuum cleanup for index relation.
+ *
+ * Returns bulk delete stats derived from input stats
+ */
+IndexBulkDeleteResult *
+vac_cleanup_one_index(IndexVacuumInfo *ivinfo, IndexBulkDeleteResult *istat)
+{
+	istat = index_vacuum_cleanup(ivinfo, istat);
+
+	if (istat)
+		ereport(ivinfo->message_level,
+				(errmsg("index \"%s\" now contains %.0f row versions in %u pages",
+						RelationGetRelationName(ivinfo->index),
+						istat->num_index_tuples,
+						istat->num_pages),
+				 errdetail("%.0f index row versions were removed.\n"
+						   "%u index pages were newly deleted.\n"
+						   "%u index pages are currently deleted, of which %u are currently reusable.",
+						   istat->tuples_removed,
+						   istat->pages_newly_deleted,
+						   istat->pages_deleted, istat->pages_free)));
+
+	return istat;
+}
+
+/*
+ * Returns the total required space for VACUUM's dead_items array given a
+ * max_items value.
+ */
+Size
+vac_max_items_to_alloc_size(int max_items)
+{
+	Assert(max_items <= MAXDEADITEMS(MaxAllocSize));
+
+	return offsetof(VacDeadItems, items) + sizeof(ItemPointerData) * max_items;
+}
+
+/*
+ *	vac_tid_reaped() -- is a particular tid deletable?
+ *
+ *		This has the right signature to be an IndexBulkDeleteCallback.
+ *
+ *		Assumes dead_items array is sorted (in ascending TID order).
+ */
+static bool
+vac_tid_reaped(ItemPointer itemptr, void *state)
+{
+	VacDeadItems *dead_items = (VacDeadItems *) state;
+	int64		litem,
+				ritem,
+				item;
+	ItemPointer res;
+
+	litem = itemptr_encode(&dead_items->items[0]);
+	ritem = itemptr_encode(&dead_items->items[dead_items->num_items - 1]);
+	item = itemptr_encode(itemptr);
+
+	/*
+	 * Doing a simple bound check before bsearch() is useful to avoid the
+	 * extra cost of bsearch(), especially if dead items on the heap are
+	 * concentrated in a certain range.  Since this function is called for
+	 * every index tuple, it pays to be really fast.
+	 */
+	if (item < litem || item > ritem)
+		return false;
+
+	res = (ItemPointer) bsearch(itemptr,
+								dead_items->items,
+								dead_items->num_items,
+								sizeof(ItemPointerData),
+								vac_cmp_itemptr);
+
+	return (res != NULL);
+}
+
+/*
+ * Comparator routines for use with qsort() and bsearch().
+ */
+static int
+vac_cmp_itemptr(const void *left, const void *right)
+{
+	BlockNumber lblk,
+				rblk;
+	OffsetNumber loff,
+				roff;
+
+	lblk = ItemPointerGetBlockNumber((ItemPointer) left);
+	rblk = ItemPointerGetBlockNumber((ItemPointer) right);
+
+	if (lblk < rblk)
+		return -1;
+	if (lblk > rblk)
+		return 1;
+
+	loff = ItemPointerGetOffsetNumber((ItemPointer) left);
+	roff = ItemPointerGetOffsetNumber((ItemPointer) right);
+
+	if (loff < roff)
+		return -1;
+	if (loff > roff)
+		return 1;
+
+	return 0;
 }

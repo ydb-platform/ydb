@@ -1,9 +1,9 @@
 #include "auto_config_initializer.h"
 #include "run.h"
-#include "cert_auth_props.h"
 #include "service_initializer.h"
 #include "kikimr_services_initializers.h"
 
+#include <ydb/core/memory_controller/memory_controller.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/event_local.h>
@@ -24,7 +24,6 @@
 #include <ydb/library/actors/interconnect/interconnect_tcp_proxy.h>
 #include <ydb/library/actors/interconnect/interconnect_tcp_server.h>
 #include <ydb/library/actors/interconnect/interconnect_mon.h>
-#include <ydb/core/actorlib_impl/mad_squirrel.h>
 #include <ydb/core/config/init/dummy.h>
 
 #include <ydb/core/control/immediate_control_board_actor.h>
@@ -123,6 +122,7 @@
 #include <ydb/services/ydb/ydb_scripting.h>
 #include <ydb/services/ydb/ydb_table.h>
 #include <ydb/services/ydb/ydb_object_storage.h>
+#include <ydb/services/tablet/ydb_tablet.h>
 
 #include <ydb/core/fq/libs/init/init.h>
 
@@ -132,6 +132,7 @@
 #include <library/cpp/malloc/api/malloc.h>
 
 #include <ydb/core/util/sig.h>
+#include <ydb/core/util/stlog.h>
 
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/tablet/node_tablet_monitor.h>
@@ -227,6 +228,11 @@ public:
             if (allUsersGroup) {
                 appData->AllAuthenticatedUsers = allUsersGroup;
             }
+        }
+        if (securityConfig.RegisterDynamicNodeAllowedSIDsSize() > 0) {
+            const auto& allowedSids = securityConfig.GetRegisterDynamicNodeAllowedSIDs();
+            TVector<TString> registerDynamicNodeAllowedSIDs(allowedSids.cbegin(), allowedSids.cend());
+            appData->RegisterDynamicNodeAllowedSIDs = std::move(registerDynamicNodeAllowedSIDs);
         }
 
         appData->FeatureFlags = Config.GetFeatureFlags();
@@ -395,8 +401,8 @@ public:
 TKikimrRunner::TKikimrRunner(std::shared_ptr<TModuleFactories> factories)
     : ModuleFactories(std::move(factories))
     , Counters(MakeIntrusive<::NMonitoring::TDynamicCounters>())
-    , PollerThreads(new NInterconnect::TPollerThreads)
-    , MemObserver(MakeIntrusive<TMemObserver>())
+    , PollerThreads(MakeIntrusive<NInterconnect::TPollerThreads>())
+    , ProcessMemoryInfoProvider(MakeIntrusive<NMemory::TProcessMemoryInfoProvider>())
 {
 }
 
@@ -593,6 +599,8 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         names["keyvalue"] = &hasKeyValue;
         TServiceCfg hasReplication = services.empty();
         names["replication"] = &hasReplication;
+        TServiceCfg hasTabletService = services.empty();
+        names["tablet_service"] = &hasTabletService;
 
         std::unordered_set<TString> enabled;
         for (const auto& name : services) {
@@ -651,6 +659,11 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
             hasQueryService = true;
         }
 
+        if (hasLegacy) {
+            // Enable new public services when the legacy service is enabled
+            hasTabletService = true;
+        }
+
         // Enable RL for all services if enabled list is empty
         if (rlServicesEnabled.empty()) {
             for (auto& [name, cfg] : names) {
@@ -699,9 +712,6 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         if (hasLegacy) {
             // start legacy service
             auto grpcService = new NGRpcProxy::TGRpcService();
-            if (!opts.SslData.Empty()) {
-                grpcService->SetDynamicNodeAuthParams(GetDynamicNodeAuthorizationParams(appConfig.GetClientCertificateAuthorization()));
-            }
             auto future = grpcService->Prepare(ActorSystem.Get(), NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), NMsgBusProxy::CreateMsgBusProxyId(), Counters);
             auto startCb = [grpcService](NThreading::TFuture<void> result) {
                 if (result.HasException()) {
@@ -813,19 +823,11 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         }
 
         if (hasDiscovery) {
-            auto discoveryService = new NGRpcService::TGRpcDiscoveryService(ActorSystem.Get(), Counters,grpcRequestProxies[0], hasDiscovery.IsRlAllowed());
-            if (!opts.SslData.Empty()) {
-                discoveryService->SetDynamicNodeAuthParams(GetDynamicNodeAuthorizationParams(appConfig.GetClientCertificateAuthorization()));
-            }
-            server.AddService(discoveryService);
+            server.AddService(new NGRpcService::TGRpcDiscoveryService(ActorSystem.Get(), Counters,grpcRequestProxies[0], hasDiscovery.IsRlAllowed()));
         }
 
         if (hasLocalDiscovery) {
-            auto localDiscoveryService = new NGRpcService::TGRpcLocalDiscoveryService(grpcConfig, ActorSystem.Get(), Counters, grpcRequestProxies[0]);
-            if (!opts.SslData.Empty()) {
-                localDiscoveryService->SetDynamicNodeAuthParams(GetDynamicNodeAuthorizationParams(appConfig.GetClientCertificateAuthorization()));
-            }
-            server.AddService(localDiscoveryService);
+            server.AddService(new NGRpcService::TGRpcLocalDiscoveryService(grpcConfig, ActorSystem.Get(), Counters, grpcRequestProxies[0]));
         }
 
         if (hasRateLimiter) {
@@ -877,6 +879,11 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         if (hasReplication) {
             server.AddService(new NGRpcService::TGRpcReplicationService(ActorSystem.Get(), Counters,
                 grpcRequestProxies[0], hasReplication.IsRlAllowed()));
+        }
+
+        if (hasTabletService) {
+            server.AddService(new NGRpcService::TGRpcYdbTabletService(ActorSystem.Get(), Counters, grpcRequestProxies,
+                hasTabletService.IsRlAllowed(), grpcConfig.GetHandlersPerCompletionQueue()));
         }
 
         if (ModuleFactories) {
@@ -935,7 +942,7 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
             sslData.Root = ReadFile(pathToCaFile);
             sslData.Cert = ReadFile(pathToCertificateFile);
             sslData.Key = ReadFile(pathToPrivateKeyFile);
-            sslData.DoRequestClientCertificate = appConfig.GetFeatureFlags().GetEnableDynamicNodeAuthorization() && appConfig.GetClientCertificateAuthorization().HasDynamicNodeAuthorization();
+            sslData.DoRequestClientCertificate = appConfig.GetClientCertificateAuthorization().GetRequestClientCertificate();
             sslOpts.SetSslData(sslData);
 
             GRpcServers.push_back({ "grpcs", new NYdbGrpc::TGRpcServer(sslOpts) });
@@ -1133,6 +1140,14 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
         AppData->MetadataCacheConfig.CopyFrom(runConfig.AppConfig.GetMetadataCacheConfig());
     }
 
+    if (runConfig.AppConfig.HasMemoryControllerConfig()) {
+        AppData->MemoryControllerConfig.CopyFrom(runConfig.AppConfig.GetMemoryControllerConfig());
+    }
+
+    if (runConfig.AppConfig.HasReplicationConfig()) {
+        AppData->ReplicationConfig = runConfig.AppConfig.GetReplicationConfig();
+    }
+
     // setup resource profiles
     AppData->ResourceProfiles = new TResourceProfiles;
     if (runConfig.AppConfig.GetBootstrapConfig().ResourceProfilesSize())
@@ -1197,6 +1212,7 @@ void TKikimrRunner::InitializeLogSettings(const TKikimrRunConfig& runConfig)
         LogSettings->Format = NLog::TSettings::PLAIN_SHORT_FORMAT;
     } else if (logConfig.GetFormat() == "json") {
         LogSettings->Format = NLog::TSettings::JSON_FORMAT;
+        NKikimr::NStLog::OutputLogJson = true;
     } else {
         Y_ABORT("Unknown log format: \"%s\"", logConfig.GetFormat().data());
     }
@@ -1432,7 +1448,7 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TLocalServiceInitializer(runConfig));
     }
     if (serviceMask.EnableSharedCache) {
-        sil->AddServiceInitializer(new TSharedCacheInitializer(runConfig, MemObserver));
+        sil->AddServiceInitializer(new TSharedCacheInitializer(runConfig));
     }
     if (serviceMask.EnableBlobCache) {
         sil->AddServiceInitializer(new TBlobCacheInitializer(runConfig));
@@ -1533,13 +1549,15 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TNetClassifierInitializer(runConfig));
     }
 
-    sil->AddServiceInitializer(new TMemProfMonitorInitializer(runConfig, MemObserver));
+    sil->AddServiceInitializer(new TMemProfMonitorInitializer(runConfig, ProcessMemoryInfoProvider));
 
 #if defined(ENABLE_MEMORY_TRACKING)
     if (serviceMask.EnableMemoryTracker) {
         sil->AddServiceInitializer(new TMemoryTrackerInitializer(runConfig));
     }
 #endif
+
+    sil->AddServiceInitializer(new TMemoryControllerInitializer(runConfig, ProcessMemoryInfoProvider));
 
     if (serviceMask.EnableKqp) {
         sil->AddServiceInitializer(new TKqpServiceInitializer(runConfig, ModuleFactories, *this));
@@ -1555,6 +1573,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
 
     if (serviceMask.EnableCompDiskLimiter) {
         sil->AddServiceInitializer(new TCompDiskLimiterInitializer(runConfig));
+    }
+
+    if (serviceMask.EnableGroupedMemoryLimiter) {
+        sil->AddServiceInitializer(new TGroupedMemoryLimiterInitializer(runConfig));
     }
 
     if (serviceMask.EnableScanConveyor) {
@@ -1729,8 +1751,8 @@ void TKikimrRunner::KikimrStop(bool graceful) {
         }
 
         auto stillOnline = drainProgress->GetOnlineTabletsEstimate();
-        if (stillOnline) {
-            Cerr << "Drain completed, but " << stillOnline << " tablet(s) are online." << Endl;
+        if (stillOnline > 0) {
+            Cerr << "Drain completed, but " << *stillOnline << " tablet(s) are online." << Endl;
         }
     }
 

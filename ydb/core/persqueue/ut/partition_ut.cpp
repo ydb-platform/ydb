@@ -1028,7 +1028,7 @@ void CompareVectors(const TVector<ui64>& expected, const TIterable& actual) {
 }
 
 void TPartitionFixture::ShadowPartitionCountersTest(bool isFirstClass) {
-    const TPartitionId partition{0, 1111, 123};
+    const TPartitionId partition{0, TWriteId{0, 1111}, 123};
     const ui64 begin = 0;
     const ui64 end = 10;
     const TString session = "session";
@@ -2320,7 +2320,7 @@ Y_UNIT_TEST_F(GetPartitionWriteInfoSuccess, TPartitionFixture) {
     Ctx->Runtime->GetAppData().PQConfig.MutableQuotingConfig()->SetEnableQuoting(false);
 
     CreatePartition({
-                    .Partition=TPartitionId{2, 10, 100'001},
+                    .Partition=TPartitionId{2, TWriteId{0, 10}, 100'001},
                     //
                     // partition configuration
                     //
@@ -2389,7 +2389,7 @@ Y_UNIT_TEST_F(GetPartitionWriteInfoSuccess, TPartitionFixture) {
 
 Y_UNIT_TEST_F(GetPartitionWriteInfoError, TPartitionFixture) {
     CreatePartition({
-                    .Partition=TPartitionId{2, 10, 100'001},
+                    .Partition=TPartitionId{2, TWriteId{0, 10}, 100'001},
                     .Begin=0, .End=10,
                     //
                     // partition configuration
@@ -2444,7 +2444,7 @@ Y_UNIT_TEST_F(ShadowPartitionCountersFirstClass, TPartitionFixture) {
 }
 
 Y_UNIT_TEST_F(ShadowPartitionCountersRestore, TPartitionFixture) {
-    const TPartitionId partitionId{0, 1111, 123};
+    const TPartitionId partitionId{0, TWriteId{0, 1111}, 123};
     const ui64 begin = 0;
     const ui64 end = 10;
     const TString session = "session";
@@ -3126,7 +3126,7 @@ Y_UNIT_TEST_F(TestBatchingWithProposeConfig, TPartitionTxTestHelper) {
 
 Y_UNIT_TEST_F(GetUsedStorage, TPartitionFixture) {
     auto* actor = CreatePartition({
-                    .Partition=TPartitionId{2, 10, 100'001},
+                    .Partition=TPartitionId{2, TWriteId{0, 10}, 100'001},
                     .Begin=0, .End=10,
                     //
                     // partition configuration

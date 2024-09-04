@@ -31,7 +31,7 @@ bool TGCTask::DoOnCompleteTxBeforeCleaning(NColumnShard::TColumnShard& /*self*/,
     return true;
 }
 
-TGCTask::TGCTask(const TString& storageId, TGCListsByGroup&& listsByGroupId, const TGenStep& collectGenStepInFlight, std::deque<TUnifiedBlobId>&& keepsToErase,
+TGCTask::TGCTask(const TString& storageId, TGCListsByGroup&& listsByGroupId, const std::optional<TGenStep>& collectGenStepInFlight, std::deque<TUnifiedBlobId>&& keepsToErase,
     const std::shared_ptr<TBlobManager>& manager, TBlobsCategories&& blobsToRemove, const std::shared_ptr<TRemoveGCCounters>& counters,
     const ui64 tabletId, const ui64 currentGen)
     : TBase(storageId, std::move(blobsToRemove), counters)
@@ -65,8 +65,8 @@ std::unique_ptr<TEvBlobStorage::TEvCollectGarbage> TGCTask::BuildRequest(const T
         ("count", it->second.RequestsCount);
     auto result = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(
         TabletId, CurrentGen, PerGenerationCounter.Val(),
-        address.GetChannelId(), true,
-        CollectGenStepInFlight.Generation(), CollectGenStepInFlight.Step(),
+        address.GetChannelId(), !!CollectGenStepInFlight,
+        CollectGenStepInFlight ? CollectGenStepInFlight->Generation() : 0, CollectGenStepInFlight ? CollectGenStepInFlight->Step() : 0,
         new TVector<TLogoBlobID>(it->second.KeepList.begin(), it->second.KeepList.end()),
         new TVector<TLogoBlobID>(it->second.DontKeepList.begin(), it->second.DontKeepList.end()),
         TInstant::Max(), true);

@@ -1,28 +1,16 @@
 LLVM_BC(
+    postgresql/src/backend/catalog/pg_publication.c
     postgresql/src/backend/replication/logical/logicalfuncs.c
     postgresql/src/backend/utils/adt/date.c
-    postgresql/src/backend/utils/adt/jsonb_gin.c
-    postgresql/src/backend/utils/adt/lockfuncs.c
-    postgresql/src/backend/utils/adt/network_spgist.c
-    postgresql/src/backend/utils/adt/pg_upgrade_support.c
+    postgresql/src/backend/utils/adt/rangetypes_gist.c
+    postgresql/src/backend/utils/adt/rangetypes_typanalyze.c
     postgresql/src/backend/utils/adt/tsginidx.c
+    postgresql/src/backend/utils/adt/windowfuncs.c
     pg_kernels.1.cpp
 
     NAME PgFuncs1
 
     SYMBOLS
-    arrow_binary_upgrade_create_empty_extension
-    arrow_binary_upgrade_set_missing_value
-    arrow_binary_upgrade_set_next_array_pg_type_oid
-    arrow_binary_upgrade_set_next_heap_pg_class_oid
-    arrow_binary_upgrade_set_next_index_pg_class_oid
-    arrow_binary_upgrade_set_next_multirange_array_pg_type_oid
-    arrow_binary_upgrade_set_next_multirange_pg_type_oid
-    arrow_binary_upgrade_set_next_pg_authid_oid
-    arrow_binary_upgrade_set_next_pg_enum_oid
-    arrow_binary_upgrade_set_next_pg_type_oid
-    arrow_binary_upgrade_set_next_toast_pg_class_oid
-    arrow_binary_upgrade_set_record_init_privs
     arrow_date_cmp
     arrow_date_cmp_timestamp
     arrow_date_cmp_timestamptz
@@ -66,20 +54,11 @@ LLVM_BC(
     arrow_extract_timetz
     arrow_gin_cmp_prefix
     arrow_gin_cmp_tslexeme
-    arrow_gin_compare_jsonb
-    arrow_gin_consistent_jsonb
-    arrow_gin_consistent_jsonb_path
-    arrow_gin_extract_jsonb
-    arrow_gin_extract_jsonb_path
-    arrow_gin_extract_jsonb_query
-    arrow_gin_extract_jsonb_query_path
     arrow_gin_extract_tsquery
     arrow_gin_extract_tsquery_5args
     arrow_gin_extract_tsquery_oldsig
     arrow_gin_extract_tsvector
     arrow_gin_extract_tsvector_2args
-    arrow_gin_triconsistent_jsonb
-    arrow_gin_triconsistent_jsonb_path
     arrow_gin_tsquery_consistent
     arrow_gin_tsquery_consistent_6args
     arrow_gin_tsquery_consistent_oldsig
@@ -87,42 +66,23 @@ LLVM_BC(
     arrow_in_range_date_interval
     arrow_in_range_time_interval
     arrow_in_range_timetz_interval
-    arrow_inet_spg_choose
-    arrow_inet_spg_config
-    arrow_inet_spg_inner_consistent
-    arrow_inet_spg_leaf_consistent
-    arrow_inet_spg_picksplit
     arrow_interval_time
     arrow_make_date
     arrow_make_time
+    arrow_multirange_gist_compress
+    arrow_multirange_gist_consistent
+    arrow_multirange_typanalyze
     arrow_overlaps_time
     arrow_overlaps_timetz
-    arrow_pg_advisory_lock_int4
-    arrow_pg_advisory_lock_int8
-    arrow_pg_advisory_lock_shared_int4
-    arrow_pg_advisory_lock_shared_int8
-    arrow_pg_advisory_unlock_all
-    arrow_pg_advisory_unlock_int4
-    arrow_pg_advisory_unlock_int8
-    arrow_pg_advisory_unlock_shared_int4
-    arrow_pg_advisory_unlock_shared_int8
-    arrow_pg_advisory_xact_lock_int4
-    arrow_pg_advisory_xact_lock_int8
-    arrow_pg_advisory_xact_lock_shared_int4
-    arrow_pg_advisory_xact_lock_shared_int8
-    arrow_pg_blocking_pids
-    arrow_pg_isolation_test_session_is_blocked
     arrow_pg_logical_emit_message_bytea
     arrow_pg_logical_emit_message_text
-    arrow_pg_safe_snapshot_blocking_pids
-    arrow_pg_try_advisory_lock_int4
-    arrow_pg_try_advisory_lock_int8
-    arrow_pg_try_advisory_lock_shared_int4
-    arrow_pg_try_advisory_lock_shared_int8
-    arrow_pg_try_advisory_xact_lock_int4
-    arrow_pg_try_advisory_xact_lock_int8
-    arrow_pg_try_advisory_xact_lock_shared_int4
-    arrow_pg_try_advisory_xact_lock_shared_int8
+    arrow_pg_relation_is_publishable
+    arrow_range_gist_consistent
+    arrow_range_gist_penalty
+    arrow_range_gist_picksplit
+    arrow_range_gist_same
+    arrow_range_gist_union
+    arrow_range_typanalyze
     arrow_time_cmp
     arrow_time_eq
     arrow_time_ge
@@ -191,4 +151,10 @@ LLVM_BC(
     arrow_timetz_zone
     arrow_timetztypmodin
     arrow_timetztypmodout
+    arrow_window_cume_dist_support
+    arrow_window_dense_rank_support
+    arrow_window_ntile_support
+    arrow_window_percent_rank_support
+    arrow_window_rank_support
+    arrow_window_row_number_support
 )

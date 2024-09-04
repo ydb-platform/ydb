@@ -76,10 +76,6 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "ALTER PERSISTENT QUEUE";
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup:
         return "DROP PERSISTENT QUEUE";
-    case NKikimrSchemeOp::EOperationType::ESchemeOpAllocatePersQueueGroup:
-        return "ALLOCATE PERSISTENT QUEUE";
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDeallocatePersQueueGroup:
-        return "DEALLOCATE PERSISTENT QUEUE";
     // database
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSubDomain:
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExtSubDomain:
@@ -239,6 +235,16 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "ALTER TABLE ALTER CONTINUOUS BACKUP";
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropContinuousBackup:
         return "ALTER TABLE DROP CONTINUOUS BACKUP";
+    // resource pool
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateResourcePool:
+        return "CREATE RESOURCE POOL";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropResourcePool:
+        return "DROP RESOURCE POOL";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterResourcePool:
+        return "ALTER RESOURCE POOL";
+    // incremental backup
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackup:
+        return "RESTORE";
     }
     Y_ABORT("switch should cover all operation types");
 }
@@ -256,17 +262,11 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetCreatePersQueueGroup().GetName()}));
         break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpAllocatePersQueueGroup:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetAllocatePersQueueGroup().GetName()}));
-        break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropTable:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDrop().GetName()}));
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDrop().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDeallocatePersQueueGroup:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDeallocatePersQueueGroup().GetName()}));
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetAlterTable().GetName()}));
@@ -538,6 +538,19 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropContinuousBackup:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDropContinuousBackup().GetTableName()}));
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateResourcePool:
+        result.emplace_back(tx.GetCreateResourcePool().GetName());
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropResourcePool:
+        result.emplace_back(tx.GetDrop().GetName());
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterResourcePool:
+        result.emplace_back(tx.GetCreateResourcePool().GetName());
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackup:
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetRestoreIncrementalBackup().GetSrcTableName()}));
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetRestoreIncrementalBackup().GetDstTableName()}));
         break;
     }
 

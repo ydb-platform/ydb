@@ -308,7 +308,7 @@ std::optional<std::pair<void*, void*>> GetExecutableRange(dl_phdr_info* info)
 }
 
 #if defined(_msan_enabled_)
-extern "C" void __msan_unpoison_string(const volatile void* a);
+extern "C" void __msan_unpoison_string(const volatile char* a);
 #endif
 
 class TSymbolIndex
@@ -441,7 +441,7 @@ private:
             */
 
             size_t symCnt = 0;
-            for (const auto * it = dynBegin; it->d_tag != DT_NULL; ++it) {
+            for (const auto* it = dynBegin; it->d_tag != DT_NULL; ++it) {
                 if (it->d_tag == DT_GNU_HASH) {
                     /// This code based on Musl-libc.
 

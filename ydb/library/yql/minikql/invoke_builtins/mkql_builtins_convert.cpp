@@ -1439,6 +1439,14 @@ void RegisterTzDateimeConvert(IBuiltinFunctionRegistry& registry) {
     RegisterTzDateimeOpt<NUdf::TDataType<NUdf::TTzDate>, NUdf::TDataType<NUdf::TDate>, true>(registry);
     RegisterTzDateimeOpt<NUdf::TDataType<NUdf::TTzDatetime>, NUdf::TDataType<NUdf::TDatetime>, true>(registry);
     RegisterTzDateimeOpt<NUdf::TDataType<NUdf::TTzTimestamp>, NUdf::TDataType<NUdf::TTimestamp>, true>(registry);
+
+    RegisterTzDateimeOpt<NUdf::TDataType<NUdf::TDate32>, NUdf::TDataType<NUdf::TTzDate32>>(registry);
+    RegisterTzDateimeOpt<NUdf::TDataType<NUdf::TDatetime64>, NUdf::TDataType<NUdf::TTzDatetime64>>(registry);
+    RegisterTzDateimeOpt<NUdf::TDataType<NUdf::TTimestamp64>, NUdf::TDataType<NUdf::TTzTimestamp64>>(registry);
+
+    RegisterTzDateimeOpt<NUdf::TDataType<NUdf::TTzDate32>, NUdf::TDataType<NUdf::TDate32>, true>(registry);
+    RegisterTzDateimeOpt<NUdf::TDataType<NUdf::TTzDatetime64>, NUdf::TDataType<NUdf::TDatetime64>, true>(registry);
+    RegisterTzDateimeOpt<NUdf::TDataType<NUdf::TTzTimestamp64>, NUdf::TDataType<NUdf::TTimestamp64>, true>(registry);
 }
 
 void RegisterJsonDocumentConvert(IBuiltinFunctionRegistry& registry) {

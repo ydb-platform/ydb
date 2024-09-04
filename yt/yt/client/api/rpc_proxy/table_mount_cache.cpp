@@ -19,7 +19,7 @@ using namespace NYPath;
 
 using NYT::FromProto;
 
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 class TTableMountCache
     : public TTableMountCacheBase
@@ -57,6 +57,7 @@ private:
                 auto primarySchema = NYT::FromProto<NTableClient::TTableSchemaPtr>(rsp->schema());
                 tableInfo->Schemas[ETableSchemaKind::Primary] = primarySchema;
                 tableInfo->Schemas[ETableSchemaKind::Write] = primarySchema->ToWrite();
+                tableInfo->Schemas[ETableSchemaKind::WriteViaQueueProducer] = primarySchema->ToWriteViaQueueProducer();
                 tableInfo->Schemas[ETableSchemaKind::VersionedWrite] = primarySchema->ToVersionedWrite();
                 tableInfo->Schemas[ETableSchemaKind::Delete] = primarySchema->ToDelete();
                 tableInfo->Schemas[ETableSchemaKind::Query] = primarySchema->ToQuery();
@@ -79,9 +80,8 @@ private:
                     FromProto(tabletInfo.Get(), protoTabletInfo);
                     tabletInfo->TableId = tableId;
                     tabletInfo->UpdateTime = Now();
-                    tabletInfo->Owners.push_back(MakeWeak(tableInfo));
 
-                    tabletInfo = TabletInfoCache_.Insert(std::move(tabletInfo));
+                    TabletInfoOwnerCache_.Insert(tabletInfo->TabletId, MakeWeak(tableInfo));
                     tableInfo->Tablets.push_back(tabletInfo);
                     if (tabletInfo->State == ETabletState::Mounted) {
                         tableInfo->MountedTablets.push_back(tabletInfo);

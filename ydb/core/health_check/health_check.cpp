@@ -56,6 +56,7 @@ struct hash<NKikimrBlobStorage::TVSlotId> {
 }
 
 #define BLOG_CRIT(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::HEALTH, stream)
+#define BLOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HEALTH, stream)
 
 namespace NKikimr {
 
@@ -186,6 +187,7 @@ public:
                     State = ETabletState::Stopped;
                 } else if (!settings.IsHiveSynchronizationPeriod
                             && info.volatilestate() != NKikimrHive::TABLET_VOLATILE_STATE_RUNNING
+                            && info.has_lastalivetimestamp()
                             && TInstant::MilliSeconds(info.lastalivetimestamp()) < settings.AliveBarrier
                             && info.tabletbootmode() == NKikimrHive::TABLET_BOOT_MODE_DEFAULT) {
                     State = ETabletState::Dead;
@@ -242,12 +244,14 @@ public:
         ui64 StorageQuota = 0;
         ui64 StorageUsage = 0;
         TMaybeServerlessComputeResourcesMode ServerlessComputeResourcesMode;
+        TNodeId MaxTimeDifferenceNodeId = 0;
         TString Path;
     };
 
     struct TGroupState {
         TString ErasureSpecies;
         std::vector<const NKikimrSysView::TVSlotEntry*> VSlots;
+        ui32 Generation;
     };
 
     struct TSelfCheckResult {
@@ -566,20 +570,6 @@ public:
         return FilterDatabase && FilterDatabase != DomainPath;
     }
 
-    bool IsTimeDifferenceCheckNode(const TNodeId nodeId) const {
-        if (!IsSpecificDatabaseFilter()) {
-            return true;
-        }
-
-        auto it = DatabaseState.find(FilterDatabase);
-        if (it == DatabaseState.end()) {
-            return false;
-        }
-        auto& computeNodeIds = it->second.ComputeNodeIds;
-
-        return std::find(computeNodeIds.begin(), computeNodeIds.end(), nodeId) != computeNodeIds.end();
-    }
-
     void Bootstrap() {
         FilterDatabase = Request->Database;
         if (Request->Request.operation_params().has_operation_timeout()) {
@@ -643,7 +633,7 @@ public:
     }
 
     bool NeedWhiteboardInfoForGroup(TGroupId groupId) {
-        return !HaveAllBSControllerInfo() && IsStaticGroup(groupId);
+        return UnknownStaticGroups.contains(groupId) || (!HaveAllBSControllerInfo() && IsStaticGroup(groupId));
     }
 
     void Handle(TEvNodeWardenStorageConfig::TPtr ev) {
@@ -678,6 +668,7 @@ public:
 
                     auto groupId = vDisk.GetVDiskID().GetGroupID();
                     if (NeedWhiteboardInfoForGroup(groupId)) {
+                        BLOG_D("Requesting whiteboard for group " << groupId);
                         RequestStorageNode(vDisk.GetVDiskLocation().GetNodeID());
                     }
                 }
@@ -1202,10 +1193,10 @@ public:
 
     void AggregateHiveInfo() {
         TNodeTabletState::TTabletStateSettings settings;
-        settings.AliveBarrier = TInstant::Now() - TDuration::Minutes(5);
         for (const auto& [hiveId, hiveResponse] : HiveInfo) {
             if (hiveResponse) {
                 settings.IsHiveSynchronizationPeriod = IsHiveSynchronizationPeriod(hiveResponse->Record);
+                settings.AliveBarrier = TInstant::MilliSeconds(hiveResponse->Record.GetResponseTimestamp()) - TDuration::Minutes(5);
                 for (const NKikimrHive::TTabletInfo& hiveTablet : hiveResponse->Record.GetTablets()) {
                     TSubDomainKey tenantId = TSubDomainKey(hiveTablet.GetObjectDomain());
                     auto itDomain = FilterDomainKey.find(tenantId);
@@ -1286,12 +1277,17 @@ public:
         for (const auto& group : Groups->GetEntries()) {
             auto groupId = group.GetKey().GetGroupId();
             auto poolId = group.GetInfo().GetStoragePoolId();
-            GroupState[groupId].ErasureSpecies = group.GetInfo().GetErasureSpeciesV2();
+            auto& groupState = GroupState[groupId];
+            groupState.ErasureSpecies = group.GetInfo().GetErasureSpeciesV2();
+            groupState.Generation = group.GetInfo().GetGeneration();
             StoragePoolState[poolId].Groups.emplace(groupId);
         }
         for (const auto& vSlot : VSlots->GetEntries()) {
             auto vSlotId = GetVSlotId(vSlot.GetKey());
-            GroupState[vSlot.GetInfo().GetGroupId()].VSlots.push_back(&vSlot);
+            auto groupStateIt = GroupState.find(vSlot.GetInfo().GetGroupId());
+            if (groupStateIt != GroupState.end() && vSlot.GetInfo().GetGroupGeneration() == groupStateIt->second.Generation) {
+                groupStateIt->second.VSlots.push_back(&vSlot);
+            }
         }
         for (const auto& pool : StoragePools->GetEntries()) { // there is no specific pool for static group here
             ui64 poolId = pool.GetKey().GetStoragePoolId();
@@ -1308,6 +1304,7 @@ public:
         // it should not be trusted
         Ydb::Monitoring::StorageGroupStatus staticGroupStatus;
         FillGroupStatus(0, staticGroupStatus, {nullptr});
+        BLOG_D("Static group status is " << staticGroupStatus.overall());
         if (staticGroupStatus.overall() != Ydb::Monitoring::StatusFlag::GREEN) {
             UnknownStaticGroups.emplace(0);
             RequestStorageConfig();
@@ -1488,6 +1485,32 @@ public:
                 }
                 loadAverageStatus.set_overall(laContext.GetOverallStatus());
             }
+
+            if (nodeSystemState.HasMaxClockSkewPeerId()) {
+                TNodeId peerId = nodeSystemState.GetMaxClockSkewPeerId();
+                long timeDifferenceUs = nodeSystemState.GetMaxClockSkewWithPeerUs();
+                TDuration timeDifferenceDuration = TDuration::MicroSeconds(abs(timeDifferenceUs));
+                Ydb::Monitoring::StatusFlag::Status status;
+                if (timeDifferenceDuration > MAX_CLOCKSKEW_ORANGE_ISSUE_TIME) {
+                    status = Ydb::Monitoring::StatusFlag::ORANGE;
+                } else if (timeDifferenceDuration > MAX_CLOCKSKEW_YELLOW_ISSUE_TIME) {
+                    status = Ydb::Monitoring::StatusFlag::YELLOW;
+                } else {
+                    status = Ydb::Monitoring::StatusFlag::GREEN;
+                }
+
+                if (databaseState.MaxTimeDifferenceNodeId == nodeId) {
+                    TSelfCheckContext tdContext(&context, "NODES_TIME_DIFFERENCE");
+                    if (status == Ydb::Monitoring::StatusFlag::GREEN) {
+                        tdContext.ReportStatus(status);
+                    } else {
+                        tdContext.ReportStatus(status, TStringBuilder() << "Node is  "
+                                                                        << timeDifferenceDuration.MilliSeconds() << " ms "
+                                                                        << (timeDifferenceUs > 0 ? "behind " : "ahead of ")
+                                                                        << "peer [" << peerId << "]", ETags::SyncState);
+                    }
+                }
+            }
         } else {
             // context.ReportStatus(Ydb::Monitoring::StatusFlag::RED,
             //                      TStringBuilder() << "Compute node is not available",
@@ -1552,6 +1575,17 @@ public:
             if (systemStatus != Ydb::Monitoring::StatusFlag::GREEN && systemStatus != Ydb::Monitoring::StatusFlag::GREY) {
                 context.ReportStatus(systemStatus, "Compute has issues with system tablets", ETags::ComputeState, {ETags::SystemTabletState});
             }
+            long maxTimeDifferenceUs = 0;
+            for (TNodeId nodeId : *computeNodeIds) {
+                auto itNodeSystemState = MergedNodeSystemState.find(nodeId);
+                if (itNodeSystemState != MergedNodeSystemState.end()) {
+                    if (std::count(computeNodeIds->begin(), computeNodeIds->end(), itNodeSystemState->second->GetMaxClockSkewPeerId()) > 0
+                            && abs(itNodeSystemState->second->GetMaxClockSkewWithPeerUs()) > maxTimeDifferenceUs) {
+                        maxTimeDifferenceUs = abs(itNodeSystemState->second->GetMaxClockSkewWithPeerUs());
+                        databaseState.MaxTimeDifferenceNodeId = nodeId;
+                    }
+                }
+            }
             for (TNodeId nodeId : *computeNodeIds) {
                 auto& computeNode = *computeStatus.add_nodes();
                 FillComputeNodeStatus(databaseState, nodeId, computeNode, {&context, "COMPUTE_NODE"});
@@ -1560,6 +1594,7 @@ public:
             context.ReportWithMaxChildStatus("Some nodes are restarting too often", ETags::ComputeState, {ETags::Uptime});
             context.ReportWithMaxChildStatus("Compute is overloaded", ETags::ComputeState, {ETags::OverloadState});
             context.ReportWithMaxChildStatus("Compute quota usage", ETags::ComputeState, {ETags::QuotaUsage});
+            context.ReportWithMaxChildStatus("Database has time difference between nodes", ETags::ComputeState, {ETags::SyncState});
             Ydb::Monitoring::StatusFlag::Status tabletsStatus = Ydb::Monitoring::StatusFlag::GREEN;
             computeNodeIds->push_back(0); // for tablets without node
             for (TNodeId nodeId : *computeNodeIds) {
@@ -1671,12 +1706,9 @@ public:
                                  ETags::PDiskState);
         }
         switch (status->number()) {
-            case NKikimrBlobStorage::ACTIVE: {
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
-                break;
-            }
+            case NKikimrBlobStorage::ACTIVE:
             case NKikimrBlobStorage::INACTIVE: {
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "PDisk is inactive", ETags::PDiskState);
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
                 break;
             }
             case NKikimrBlobStorage::FAULTY:
@@ -1756,6 +1788,13 @@ public:
 
         storageVDiskStatus.set_id(GetVSlotId(vSlot->GetKey()));
 
+        if (!vSlot->GetInfo().HasStatusV2()) {
+            // this should mean that BSC recently restarted and does not have accurate data yet - we should not report to avoid false positives
+            context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
+            storageVDiskStatus.set_overall(context.GetOverallStatus());
+            return;
+        }
+
         const auto *descriptor = NKikimrBlobStorage::EVDiskStatus_descriptor();
         auto status = descriptor->FindValueByName(vSlot->GetInfo().GetStatusV2());
         if (!status) { // this case is not expected because becouse bsc assignes status according EVDiskStatus enum
@@ -1775,16 +1814,12 @@ public:
                 storageVDiskStatus.set_overall(context.GetOverallStatus());
                 return;
             }
-            case NKikimrBlobStorage::INIT_PENDING: { // initialization in process
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, TStringBuilder() << "VDisk is being initialized", ETags::VDiskState);
-                storageVDiskStatus.set_overall(context.GetOverallStatus());
-                return;
-            }
             case NKikimrBlobStorage::REPLICATING: { // the disk accepts queries, but not all the data was replicated
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::BLUE, TStringBuilder() << "Replication in progress", ETags::VDiskState);
                 storageVDiskStatus.set_overall(context.GetOverallStatus());
                 return;
             }
+            case NKikimrBlobStorage::INIT_PENDING:
             case NKikimrBlobStorage::READY: { // the disk is fully operational and does not affect group fault tolerance
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
             }
@@ -1958,9 +1993,9 @@ public:
 
         switch (vDiskInfo.GetVDiskState()) {
             case NKikimrWhiteboard::EVDiskState::OK:
+            case NKikimrWhiteboard::EVDiskState::Initial:
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
                 break;
-            case NKikimrWhiteboard::EVDiskState::Initial:
             case NKikimrWhiteboard::EVDiskState::SyncGuidRecovery:
                 context.IssueRecords.clear();
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW,
@@ -2128,7 +2163,7 @@ public:
         context.OverallStatus = MinStatus(context.OverallStatus, Ydb::Monitoring::StatusFlag::YELLOW);
         checker.ReportStatus(context);
 
-
+        BLOG_D("Group " << groupId << " has status " << context.GetOverallStatus());
         storageGroupStatus.set_overall(context.GetOverallStatus());
     }
 
@@ -2599,40 +2634,6 @@ public:
     const TDuration MAX_CLOCKSKEW_ORANGE_ISSUE_TIME = TDuration::MicroSeconds(25000);
     const TDuration MAX_CLOCKSKEW_YELLOW_ISSUE_TIME = TDuration::MicroSeconds(5000);
 
-    void FillNodesSyncStatus(TOverallStateContext& context) {
-        long maxClockSkewUs = 0;
-        TNodeId maxClockSkewPeerId = 0;
-        TNodeId maxClockSkewNodeId = 0;
-        for (auto& [nodeId, nodeSystemState] : MergedNodeSystemState) {
-            if (IsTimeDifferenceCheckNode(nodeId) && IsTimeDifferenceCheckNode(nodeSystemState->GetMaxClockSkewPeerId())
-                    && abs(nodeSystemState->GetMaxClockSkewWithPeerUs()) > maxClockSkewUs) {
-                maxClockSkewUs = abs(nodeSystemState->GetMaxClockSkewWithPeerUs());
-                maxClockSkewPeerId = nodeSystemState->GetMaxClockSkewPeerId();
-                maxClockSkewNodeId = nodeId;
-            }
-        }
-        if (!maxClockSkewNodeId) {
-            return;
-        }
-
-        TSelfCheckResult syncContext;
-        syncContext.Type = "NODES_TIME_DIFFERENCE";
-        FillNodeInfo(maxClockSkewNodeId, syncContext.Location.mutable_node());
-        FillNodeInfo(maxClockSkewPeerId, syncContext.Location.mutable_peer());
-
-        TDuration maxClockSkewTime = TDuration::MicroSeconds(maxClockSkewUs);
-        if (maxClockSkewTime > MAX_CLOCKSKEW_ORANGE_ISSUE_TIME) {
-            syncContext.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, TStringBuilder() << "The nodes have a time difference of " << maxClockSkewTime.MilliSeconds() << " ms", ETags::SyncState);
-        } else if (maxClockSkewTime > MAX_CLOCKSKEW_YELLOW_ISSUE_TIME) {
-            syncContext.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, TStringBuilder() << "The nodes have a time difference of " << maxClockSkewTime.MilliSeconds() << " ms", ETags::SyncState);
-        } else {
-            syncContext.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
-        }
-
-        context.UpdateMaxStatus(syncContext.GetOverallStatus());
-        context.AddIssues(syncContext.IssueRecords);
-    }
-
     void FillResult(TOverallStateContext context) {
         if (IsSpecificDatabaseFilter()) {
             FillDatabaseResult(context, FilterDatabase, DatabaseState[FilterDatabase]);
@@ -2641,7 +2642,6 @@ public:
                 FillDatabaseResult(context, path, state);
             }
         }
-        FillNodesSyncStatus(context);
         if (DatabaseState.empty()) {
             Ydb::Monitoring::DatabaseStatus& databaseStatus(*context.Result->add_database_status());
             TSelfCheckResult tabletContext;

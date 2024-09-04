@@ -10,7 +10,7 @@ namespace NYT {
 
 #ifdef __cpp_lib_source_location
 
-void FormatValue(TStringBuilderBase* builder, const std::source_location& location, TStringBuf /*format*/)
+void FormatValue(TStringBuilderBase* builder, const std::source_location& location, TStringBuf /*spec*/)
 {
     if (location.file_name() != nullptr) {
         builder->AppendFormat(
@@ -21,11 +21,6 @@ void FormatValue(TStringBuilderBase* builder, const std::source_location& locati
     } else {
         builder->AppendString("<unknown>");
     }
-}
-
-TString ToString(const std::source_location& location)
-{
-    return ToStringViaBuilder(location);
 }
 
 #endif // __cpp_lib_source_location
@@ -73,6 +68,18 @@ bool TSourceLocation::operator==(const TSourceLocation& other) const
     return
         strcmp(fileName, otherFileName) == 0 &&
         Line_ == other.Line_;
+}
+
+void FormatValue(TStringBuilderBase* builder, const TSourceLocation& location, TStringBuf /*spec*/)
+{
+    if (location.GetFileName() != nullptr) {
+        builder->AppendFormat(
+            "%v:%v",
+            location.GetFileName(),
+            location.GetLine());
+    } else {
+        builder->AppendString("<unknown>");
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

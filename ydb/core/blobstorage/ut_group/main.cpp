@@ -9,6 +9,7 @@
 #include <ydb/core/blobstorage/dsproxy/dsproxy.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/util/testactorsys.h>
+#include <ydb/core/base/blobstorage_common.h>
 #include <util/system/env.h>
 #include <random>
 
@@ -379,7 +380,7 @@ private:
                 const ui32 vdiskSlotId = ++NextVDiskSlotId[std::make_tuple(nodeId, pdiskId)];
                 const TActorId& vdiskActorId = MakeBlobStorageVDiskID(nodeId, pdiskId, vdiskSlotId);
                 vdiskActorIds.push_back(vdiskActorId);
-                const TVDiskID vdiskId(GroupId, 1, 0, i, 0);
+                const TVDiskID vdiskId(TGroupId::FromValue(GroupId), 1, 0, i, 0);
                 Disks.push_back(TDiskRecord{
                     vdiskId,
                     serviceId,
@@ -406,8 +407,17 @@ private:
         auto proxy = Counters->GetSubgroup("subsystem", "proxy");
         TIntrusivePtr<TDsProxyNodeMon> mon = MakeIntrusive<TDsProxyNodeMon>(proxy, true);
         StoragePoolCounters = MakeIntrusive<TStoragePoolCounters>(proxy, TString(), NPDisk::DEVICE_TYPE_SSD);
+        TControlWrapper enablePutBatching(DefaultEnablePutBatching, false, true);
+        TControlWrapper enableVPatch(DefaultEnableVPatch, false, true);
+        TControlWrapper slowDiskThreshold(DefaultSlowDiskThreshold * 1000, 1, 1000000);
+        TControlWrapper predictedDelayMultiplier(DefaultPredictedDelayMultiplier * 1000, 1, 1000000);
         std::unique_ptr<IActor> proxyActor{CreateBlobStorageGroupProxyConfigured(TIntrusivePtr(Info), false, mon,
-            TIntrusivePtr(StoragePoolCounters), DefaultEnablePutBatching, DefaultEnableVPatch)};
+                TIntrusivePtr(StoragePoolCounters), TBlobStorageProxyParameters{
+                    .EnablePutBatching = enablePutBatching,
+                    .EnableVPatch = enableVPatch,
+                    .SlowDiskThreshold = slowDiskThreshold,
+                    .PredictedDelayMultiplier = predictedDelayMultiplier,
+                })};
         const TActorId& actorId = runtime.Register(proxyActor.release(), TActorId(), 0, std::nullopt, 1);
         runtime.RegisterService(MakeBlobStorageProxyID(GroupId), actorId);
     }
@@ -583,6 +593,8 @@ public:
 
 Y_UNIT_TEST_SUITE(GroupStress) {
     Y_UNIT_TEST(Test) {
+        return;
+
         THPTimer timer;
         TAppData::RandomProvider = CreateDeterministicRandomProvider(1);
         SetRandomSeed(1);

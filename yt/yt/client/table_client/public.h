@@ -9,6 +9,7 @@
 #include <yt/yt/client/transaction_client/public.h>
 
 #include <yt/yt/core/misc/range.h>
+#include <yt/yt/core/misc/protobuf_helpers.h>
 
 #include <library/cpp/yt/misc/enum.h>
 #include <library/cpp/yt/misc/strong_typedef.h>
@@ -45,6 +46,7 @@ class THunkChunkRef;
 class TColumnMetaExt;
 class TVersionedRowDigestExt;
 class TCompressionDictionaryExt;
+class TVersionedReadOptions;
 
 } // namespace NProto
 
@@ -116,6 +118,9 @@ constexpr int MaxColumnId = 32 * 1024;
 constexpr int MaxSchemaTotalTypeComplexity = MaxColumnId;
 constexpr int MaxSchemaDepth = 32;
 
+
+extern const TString PrimaryLockName;
+
 extern const TString SystemColumnNamePrefix;
 extern const TString TableIndexColumnName;
 extern const TString RowIndexColumnName;
@@ -123,9 +128,10 @@ extern const TString RangeIndexColumnName;
 extern const TString TabletIndexColumnName;
 extern const TString TimestampColumnName;
 extern const TString TtlColumnName;
+extern const TString TimestampColumnPrefix;
 extern const TString CumulativeDataWeightColumnName;
 extern const TString EmptyValueColumnName;
-extern const TString PrimaryLockName;
+extern const TString SequenceNumberColumnName;
 
 constexpr int TypicalHunkColumnCount = 8;
 
@@ -372,6 +378,8 @@ DECLARE_REFCOUNTED_CLASS(TVersionedRowDigestConfig)
 
 DECLARE_REFCOUNTED_CLASS(TSchemalessBufferedDynamicTableWriterConfig)
 
+DECLARE_REFCOUNTED_CLASS(TSchemafulPipe)
+
 class TSaveContext;
 class TLoadContext;
 using TPersistenceContext = TCustomPersistenceContext<TSaveContext, TLoadContext>;
@@ -433,6 +441,8 @@ static_assert(sizeof(TDynamicTableKeyMask) * 8 == MaxKeyColumnCountInDynamicTabl
 
 // Function that compares two TUnversionedValue values.
 using TUUComparerSignature = int(const TUnversionedValue*, const TUnversionedValue*, int);
+
+struct TVersionedReadOptions;
 
 ////////////////////////////////////////////////////////////////////////////////
 

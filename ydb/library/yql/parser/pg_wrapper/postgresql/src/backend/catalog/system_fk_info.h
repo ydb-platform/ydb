@@ -3,7 +3,7 @@
  * system_fk_info.h
  *    Data about the foreign-key relationships in the system catalogs
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * NOTES
@@ -169,7 +169,7 @@ static const SysFKRelationship sys_fk_relationships[] = {
 	{ /* pg_conversion */ 2607, /* pg_namespace */ 2615, "{connamespace}", "{oid}", false, false},
 	{ /* pg_conversion */ 2607, /* pg_authid */ 1260, "{conowner}", "{oid}", false, false},
 	{ /* pg_conversion */ 2607, /* pg_proc */ 1255, "{conproc}", "{oid}", false, false},
-	{ /* pg_depend */ 2608, /* pg_class */ 1259, "{classid}", "{oid}", false, true},
+	{ /* pg_depend */ 2608, /* pg_class */ 1259, "{classid}", "{oid}", false, false},
 	{ /* pg_depend */ 2608, /* pg_class */ 1259, "{refclassid}", "{oid}", false, false},
 	{ /* pg_database */ 1262, /* pg_authid */ 1260, "{datdba}", "{oid}", false, false},
 	{ /* pg_database */ 1262, /* pg_tablespace */ 1213, "{dattablespace}", "{oid}", false, false},
@@ -180,7 +180,7 @@ static const SysFKRelationship sys_fk_relationships[] = {
 	{ /* pg_auth_members */ 1261, /* pg_authid */ 1260, "{member}", "{oid}", false, false},
 	{ /* pg_auth_members */ 1261, /* pg_authid */ 1260, "{grantor}", "{oid}", false, false},
 	{ /* pg_shdepend */ 1214, /* pg_database */ 1262, "{dbid}", "{oid}", false, true},
-	{ /* pg_shdepend */ 1214, /* pg_class */ 1259, "{classid}", "{oid}", false, true},
+	{ /* pg_shdepend */ 1214, /* pg_class */ 1259, "{classid}", "{oid}", false, false},
 	{ /* pg_shdepend */ 1214, /* pg_class */ 1259, "{refclassid}", "{oid}", false, false},
 	{ /* pg_shdescription */ 2396, /* pg_class */ 1259, "{classoid}", "{oid}", false, false},
 	{ /* pg_ts_config */ 3602, /* pg_namespace */ 2615, "{cfgnamespace}", "{oid}", false, false},
@@ -240,6 +240,8 @@ static const SysFKRelationship sys_fk_relationships[] = {
 	{ /* pg_sequence */ 2224, /* pg_class */ 1259, "{seqrelid}", "{oid}", false, false},
 	{ /* pg_sequence */ 2224, /* pg_type */ 1247, "{seqtypid}", "{oid}", false, false},
 	{ /* pg_publication */ 6104, /* pg_authid */ 1260, "{pubowner}", "{oid}", false, false},
+	{ /* pg_publication_namespace */ 6237, /* pg_publication */ 6104, "{pnpubid}", "{oid}", false, false},
+	{ /* pg_publication_namespace */ 6237, /* pg_namespace */ 2615, "{pnnspid}", "{oid}", false, false},
 	{ /* pg_publication_rel */ 6106, /* pg_publication */ 6104, "{prpubid}", "{oid}", false, false},
 	{ /* pg_publication_rel */ 6106, /* pg_class */ 1259, "{prrelid}", "{oid}", false, false},
 	{ /* pg_subscription */ 6100, /* pg_database */ 1262, "{subdbid}", "{oid}", false, false},

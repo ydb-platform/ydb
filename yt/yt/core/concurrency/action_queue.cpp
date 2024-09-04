@@ -15,6 +15,8 @@
 #include <yt/yt/core/misc/ring_queue.h>
 #include <yt/yt/core/misc/shutdown.h>
 
+#include <yt/yt/core/profiling/timing.h>
+
 #include <library/cpp/yt/misc/tls.h>
 
 #include <util/thread/lfqueue.h>
@@ -674,6 +676,53 @@ private:
 IInvokerPtr CreateCodicilGuardedInvoker(IInvokerPtr underlyingInvoker, TString codicil)
 {
     return New<TCodicilGuardedInvoker>(std::move(underlyingInvoker), std::move(codicil));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TWatchdogInvoker
+    : public TInvokerWrapper
+{
+public:
+    TWatchdogInvoker(
+        IInvokerPtr invoker,
+        const NLogging::TLogger& logger,
+        TDuration threshold)
+        : TInvokerWrapper(std::move(invoker))
+        , Logger(logger)
+        , Threshold_(DurationToCpuDuration(threshold))
+    { }
+
+    void Invoke(TClosure callback) override
+    {
+        UnderlyingInvoker_->Invoke(BIND_NO_PROPAGATE(
+            &TWatchdogInvoker::RunCallback,
+            MakeStrong(this),
+            Passed(std::move(callback))));
+    }
+
+private:
+    NLogging::TLogger Logger;
+    TCpuDuration Threshold_;
+
+    void RunCallback(TClosure callback)
+    {
+        TCurrentInvokerGuard currentInvokerGuard(this);
+        TFiberSliceTimer fiberSliceTimer(Threshold_, [&, this] (TCpuDuration execution) {
+            YT_LOG_WARNING("Callback executed for too long without interruptions (Callback: %v, Execution: %v)",
+                callback.GetHandle(),
+                CpuDurationToDuration(execution));
+        });
+        callback();
+    }
+};
+
+IInvokerPtr CreateWatchdogInvoker(
+    IInvokerPtr underlyingInvoker,
+    const NLogging::TLogger& logger,
+    TDuration threshold)
+{
+    return New<TWatchdogInvoker>(std::move(underlyingInvoker), logger, threshold);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

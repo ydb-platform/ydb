@@ -1670,7 +1670,7 @@ static bool art_node_iterator_lower_bound(const art_node_t *node,
 }
 
 art_iterator_t art_init_iterator(const art_t *art, bool first) {
-    art_iterator_t iterator = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    art_iterator_t iterator = CROARING_ZERO_INITIALIZER;
     if (art->root == NULL) {
         return iterator;
     }
@@ -1693,8 +1693,11 @@ bool art_iterator_lower_bound(art_iterator_t *iterator,
         // a valid key. Start from the root.
         iterator->frame = 0;
         iterator->depth = 0;
-        return art_node_iterator_lower_bound(art_iterator_node(iterator),
-                                             iterator, key);
+        art_node_t *root = art_iterator_node(iterator);
+        if (root == NULL) {
+            return false;
+        }
+        return art_node_iterator_lower_bound(root, iterator, key);
     }
     int compare_result =
         art_compare_prefix(iterator->key, 0, key, 0, ART_KEY_BYTES);
@@ -1727,7 +1730,7 @@ bool art_iterator_lower_bound(art_iterator_t *iterator,
 }
 
 art_iterator_t art_lower_bound(const art_t *art, const art_key_chunk_t *key) {
-    art_iterator_t iterator = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    art_iterator_t iterator = CROARING_ZERO_INITIALIZER;
     if (art->root != NULL) {
         art_node_iterator_lower_bound(art->root, &iterator, key);
     }
@@ -1735,7 +1738,7 @@ art_iterator_t art_lower_bound(const art_t *art, const art_key_chunk_t *key) {
 }
 
 art_iterator_t art_upper_bound(const art_t *art, const art_key_chunk_t *key) {
-    art_iterator_t iterator = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    art_iterator_t iterator = CROARING_ZERO_INITIALIZER;
     if (art->root != NULL) {
         if (art_node_iterator_lower_bound(art->root, &iterator, key) &&
             art_compare_keys(iterator.key, key) == 0) {

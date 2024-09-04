@@ -2,8 +2,6 @@
 
 PY2_LIBRARY()
 
-SUBSCRIBER(manushkin g:python-contrib)
-
 VERSION(1.0.1)
 
 LICENSE(BSD-3-Clause)

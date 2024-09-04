@@ -19,36 +19,66 @@ class BaseTestCase:
 
     @property
     def name(self) -> str:
-        return f'{self.name_}_{EProtocol.Name(self.protocol)}'
+        match self.data_source_kind:
+            case EDataSourceKind.CLICKHOUSE:
+                # ClickHouse has two kinds of network protocols: NATIVE and HTTP,
+                # so we append protocol name to the test case name
+                return f'{self.name_}_{EProtocol.Name(self.protocol)}'
+            case EDataSourceKind.MS_SQL_SERVER:
+                return self.name_
+            case EDataSourceKind.MYSQL:
+                return self.name_
+            case EDataSourceKind.ORACLE:
+                return self.name_
+            case EDataSourceKind.POSTGRESQL:
+                return self.name_
+            case EDataSourceKind.YDB:
+                return self.name_
+            case _:
+                raise Exception(f'invalid data source: {self.data_source_kind}')
 
     @property
     def database(self) -> Database:
         '''
-        We want to create a distinct database on every test case
+        For PG/CH we create a distinct database on every test case.
+        For YDB/MySQL/Microsoft SQL Server we use single predefined database.
         '''
-        return Database(self.name, self.data_source_kind)
+        # FIXME: do not hardcode databases here
+        match self.data_source_kind:
+            case EDataSourceKind.CLICKHOUSE:
+                return Database(self.name, self.data_source_kind)
+            case EDataSourceKind.MS_SQL_SERVER:
+                return Database("master", self.data_source_kind)
+            case EDataSourceKind.MYSQL:
+                return Database("db", self.data_source_kind)
+            case EDataSourceKind.ORACLE:
+                return Database(self.name, self.data_source_kind)
+            case EDataSourceKind.POSTGRESQL:
+                return Database(self.name, self.data_source_kind)
+            case EDataSourceKind.YDB:
+                return Database("local", self.data_source_kind)
 
     @functools.cached_property
-    def _table_name(self) -> str:
+    def table_name(self) -> str:
         '''
-        In general, we cannot use test case name as table name because of special symbols,
-        so we provide a random table name instead.
+        For some kinds of RDBMS we cannot use test case name as table name because of special symbols,
+        so we provide a random table name instead where necessary.
         '''
         match self.data_source_kind:
-            case EDataSourceKind.POSTGRESQL:
-                return 't' + hashlib.sha256(str(random.randint(0, 65536)).encode('ascii')).hexdigest()[:8]
             case EDataSourceKind.CLICKHOUSE:
-                return 't' + hashlib.sha256(str(random.randint(0, 65536)).encode('ascii')).hexdigest()[:8]
+                return 't' + make_random_string(8)
+            case EDataSourceKind.MS_SQL_SERVER:
+                return self.name
+            case EDataSourceKind.MYSQL:
+                return self.name
+            case EDataSourceKind.ORACLE:
+                return self.name
+            case EDataSourceKind.POSTGRESQL:
+                return 't' + make_random_string(8)
             case EDataSourceKind.YDB:
                 return self.name
-
-    @property
-    def sql_table_name(self) -> str:
-        return self._table_name
-
-    @property
-    def qualified_table_name(self) -> str:
-        return self._table_name
+            case _:
+                raise Exception(f'invalid data source: {self.data_source_kind}')
 
     @property
     def pragmas_sql_string(self) -> str:
@@ -66,13 +96,25 @@ class BaseTestCase:
                     clickhouse_clusters=[
                         GenericSettings.ClickHouseCluster(database=self.database.name, protocol=EProtocol.NATIVE)
                     ],
-                    postgresql_clusters=[],
                 )
-
+            case EDataSourceKind.MS_SQL_SERVER:
+                return GenericSettings(
+                    date_time_format=EDateTimeFormat.YQL_FORMAT,
+                    ms_sql_server_clusters=[GenericSettings.MsSQLServerCluster(database=self.database.name)],
+                )
+            case EDataSourceKind.MYSQL:
+                return GenericSettings(
+                    date_time_format=EDateTimeFormat.YQL_FORMAT,
+                    mysql_clusters=[GenericSettings.MySQLCluster(database=self.database.name)],
+                )
+            case EDataSourceKind.ORACLE:
+                return GenericSettings(
+                    date_time_format=EDateTimeFormat.YQL_FORMAT,
+                    oracle_clusters=[GenericSettings.OracleCluster(database=self.database.name, service_name=None)],
+                )
             case EDataSourceKind.POSTGRESQL:
                 return GenericSettings(
                     date_time_format=EDateTimeFormat.YQL_FORMAT,
-                    clickhouse_clusters=[],
                     postgresql_clusters=[GenericSettings.PostgreSQLCluster(database=self.database.name, schema=None)],
                 )
             case EDataSourceKind.YDB:
@@ -82,3 +124,7 @@ class BaseTestCase:
                 )
             case _:
                 raise Exception(f'invalid data source: {self.data_source_kind}')
+
+
+def make_random_string(length: int) -> str:
+    return hashlib.sha256(str(random.randint(0, 65536)).encode('ascii')).hexdigest()[:length]

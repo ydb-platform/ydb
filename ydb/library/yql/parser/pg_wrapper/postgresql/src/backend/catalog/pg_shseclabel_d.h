@@ -3,7 +3,7 @@
  * pg_shseclabel_d.h
  *    Macro definitions for pg_shseclabel
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * NOTES
@@ -20,6 +20,9 @@
 
 #define SharedSecLabelRelationId 3592
 #define SharedSecLabelRelation_Rowtype_Id 4066
+#define PgShseclabelToastTable 4060
+#define PgShseclabelToastIndex 4061
+#define SharedSecLabelObjectIndexId 3593
 
 #define Anum_pg_shseclabel_objoid 1
 #define Anum_pg_shseclabel_classoid 2

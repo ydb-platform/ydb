@@ -17,9 +17,4 @@ TWriteData::TWriteData(const TWriteMeta& writeMeta, IDataContainer::TPtr data, c
     Y_ABORT_UNLESS(BlobsAction);
 }
 
-const NKikimr::NEvWrite::IDataContainer& TWriteData::GetDataVerified() const {
-    AFL_VERIFY(Data);
-    return *Data;
-}
-
 }

@@ -9,6 +9,7 @@ namespace NDq {
 void FillAsyncStats(NDqProto::TDqAsyncBufferStats& proto, TDqAsyncStats stats) {
     if (stats.CollectBasic()) {
         proto.SetBytes(stats.Bytes);
+        proto.SetDecompressedBytes(stats.DecompressedBytes);
         proto.SetRows(stats.Rows);
         proto.SetChunks(stats.Chunks);
         proto.SetSplits(stats.Splits);
@@ -60,6 +61,14 @@ void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TTaskRunnerStatsBase& 
 
     protoTask->SetWaitInputTimeUs(taskStats.WaitInputTime.MicroSeconds());
     protoTask->SetWaitOutputTimeUs(taskStats.WaitOutputTime.MicroSeconds());
+
+    protoTask->SetSpillingComputeWriteBytes(taskStats.SpillingComputeWriteBytes);
+    protoTask->SetSpillingChannelWriteBytes(taskStats.SpillingChannelWriteBytes);
+
+    protoTask->SetSpillingComputeReadTimeUs(taskStats.SpillingComputeReadTime.MicroSeconds());
+    protoTask->SetSpillingComputeWriteTimeUs(taskStats.SpillingComputeWriteTime.MicroSeconds());
+    protoTask->SetSpillingChannelReadTimeUs(taskStats.SpillingChannelReadTime.MicroSeconds());
+    protoTask->SetSpillingChannelWriteTimeUs(taskStats.SpillingChannelWriteTime.MicroSeconds());
 
     if (StatsLevelCollectProfile(level)) {
         if (taskStats.ComputeCpuTimeByRun) {

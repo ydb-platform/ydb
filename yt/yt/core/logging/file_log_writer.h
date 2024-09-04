@@ -1,6 +1,6 @@
 #pragma once
 
-#include "private.h"
+#include "public.h"
 
 namespace NYT::NLogging {
 
@@ -8,6 +8,7 @@ namespace NYT::NLogging {
 
 IFileLogWriterPtr CreateFileLogWriter(
     std::unique_ptr<ILogFormatter> formatter,
+    std::unique_ptr<ISystemLogEventProvider> systemEventProvider,
     TString name,
     TFileLogWriterConfigPtr config,
     ILogWriterHost* host);

@@ -799,7 +799,7 @@ bool TLogReader::ProcessSectorSet(TSectorData *sector) {
     const ui64 magic = format.MagicLogChunk;
     TSectorRestorator restorator(false, LogErasureDataParts, false, format,
         PDisk->ActorSystem, PDisk->PDiskActor, PDisk->PDiskId, &PDisk->Mon, PDisk->BufferPool.Get());
-    restorator.Restore(sector->GetData(), sector->Offset, magic, LastNonce, PDisk->Cfg->UseT1ha0HashInFooter, Owner);
+    restorator.Restore(sector->GetData(), sector->Offset, magic, LastNonce, Owner);
 
     if (!restorator.GoodSectorFlags) {
         if (IsInitial) {
@@ -1117,7 +1117,7 @@ bool TLogReader::ProcessSectorSet(TSectorData *sector) {
 
 void TLogReader::ReplyOk() {
     {
-        TPDiskHashCalculator hasher(PDisk->Cfg->UseT1ha0HashInFooter);
+        TPDiskHashCalculator hasher;
         TGuard<TMutex> guard(PDisk->StateMutex);
         if (!IsInitial) {
             TOwnerData &ownerData = PDisk->OwnerData[Owner];
@@ -1188,7 +1188,7 @@ bool TLogReader::ProcessNextChunkReference(TSectorData& sector) {
             PDisk->Format, PDisk->ActorSystem, PDisk->PDiskActor, PDisk->PDiskId, &PDisk->Mon,
             PDisk->BufferPool.Get());
     restorator.Restore(sector.GetData(), sector.Offset, format.MagicNextLogChunkReference, LastNonce,
-            PDisk->Cfg->UseT1ha0HashInFooter, Owner);
+            Owner);
     LOG_DEBUG_S(*PDisk->ActorSystem, NKikimrServices::BS_PDISK, SelfInfo() << " ProcessNextChunkReference");
 
     if (restorator.LastGoodIdx < ReplicationFactor) {

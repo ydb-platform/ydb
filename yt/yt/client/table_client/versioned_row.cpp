@@ -231,7 +231,7 @@ void ValidateDuplicateAndRequiredValueColumns(
 
     auto columnSeenFlags = GetTlsScratchBuffer<bool>(schema.GetColumnCount());
 
-    for (const auto *valueGroupBeginIt = row.BeginValues(), *valueGroupEndIt = valueGroupBeginIt;
+    for (const auto* valueGroupBeginIt = row.BeginValues(), *valueGroupEndIt = valueGroupBeginIt;
         valueGroupBeginIt != row.EndValues();
         valueGroupBeginIt = valueGroupEndIt)
     {
@@ -443,7 +443,7 @@ void FormatValue(TStringBuilderBase* builder, const TVersionedValue& value, TStr
         value.Timestamp);
 }
 
-void FormatValue(TStringBuilderBase* builder, TVersionedRow row, TStringBuf /*format*/)
+void FormatValue(TStringBuilderBase* builder, const TVersionedRow& row, TStringBuf /*format*/)
 {
     if (!row) {
         builder->AppendString("<null>");
@@ -479,34 +479,14 @@ void FormatValue(TStringBuilderBase* builder, TVersionedRow row, TStringBuf /*fo
     builder->AppendChar(']');
 }
 
-void FormatValue(TStringBuilderBase* builder, TMutableVersionedRow row, TStringBuf /*format*/)
+void FormatValue(TStringBuilderBase* builder, const TMutableVersionedRow& row, TStringBuf /*spec*/)
 {
-    FormatValue(builder, TVersionedRow(row), {});
+    FormatValue(builder, TVersionedRow(row), TStringBuf{"v"});
 }
 
-void FormatValue(TStringBuilderBase* builder, TVersionedOwningRow row, TStringBuf /*format*/)
+void FormatValue(TStringBuilderBase* builder, const TVersionedOwningRow& row, TStringBuf /*spec*/)
 {
-    FormatValue(builder, TVersionedRow(row), {});
-}
-
-TString ToString(const TVersionedValue& value)
-{
-    return ToStringViaBuilder(value);
-}
-
-TString ToString(TVersionedRow row)
-{
-    return ToStringViaBuilder(row);
-}
-
-TString ToString(TMutableVersionedRow row)
-{
-    return ToString(TVersionedRow(row));
-}
-
-TString ToString(const TVersionedOwningRow& row)
-{
-    return ToString(row.Get());
+    FormatValue(builder, TVersionedRow(row), TStringBuf{"v"});
 }
 
 ////////////////////////////////////////////////////////////////////////////////

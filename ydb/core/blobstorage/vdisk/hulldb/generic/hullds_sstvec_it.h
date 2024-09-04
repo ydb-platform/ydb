@@ -118,6 +118,11 @@ namespace NKikimr {
             CurSegIt.template PutToMerger<TRecordMerger>(merger);
         }
 
+        template <class THeap>
+        void PutToHeap(THeap& heap) {
+            heap.Add(this);
+        }
+
         const TLevelSegment *GetCurSstPtr() const {
             return CurSegIt.GetSstPtr();
         }

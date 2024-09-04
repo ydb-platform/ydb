@@ -3,7 +3,7 @@
  * seclabel.c
  *	  routines to support security label feature.
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * -------------------------------------------------------------------------
@@ -78,7 +78,9 @@ SecLabelSupportsObjectType(ObjectType objtype)
 		case OBJECT_OPCLASS:
 		case OBJECT_OPERATOR:
 		case OBJECT_OPFAMILY:
+		case OBJECT_PARAMETER_ACL:
 		case OBJECT_POLICY:
+		case OBJECT_PUBLICATION_NAMESPACE:
 		case OBJECT_PUBLICATION_REL:
 		case OBJECT_RULE:
 		case OBJECT_STATISTIC_EXT:
@@ -188,8 +190,9 @@ ExecSecLabelStmt(SecLabelStmt *stmt)
 				relation->rd_rel->relkind != RELKIND_PARTITIONED_TABLE)
 				ereport(ERROR,
 						(errcode(ERRCODE_WRONG_OBJECT_TYPE),
-						 errmsg("\"%s\" is not a table, view, materialized view, composite type, or foreign table",
-								RelationGetRelationName(relation))));
+						 errmsg("cannot set security label on relation \"%s\"",
+								RelationGetRelationName(relation)),
+						 errdetail_relkind_not_supported(relation->rd_rel->relkind)));
 			break;
 		default:
 			break;

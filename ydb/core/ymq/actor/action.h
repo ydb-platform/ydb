@@ -362,12 +362,9 @@ protected:
             #undef RESPONSE_CASE
         }
     }
-    
-    template <class TResponse>
-    void AuditLogEntry(const TResponse& response, const TString& requestId, const TError* error = nullptr) {
-        if (!error && response.HasError()) {
-            error = &response.GetError();
-        }
+
+private:
+    void AuditLogEntryImpl(const TString& requestId, const TError* error = nullptr) {
         static const TString EmptyValue = "{none}";
         AUDIT_LOG(
             AUDIT_PART("component", TString("ymq"))
@@ -383,6 +380,15 @@ protected:
             AUDIT_PART("reason", error->GetMessage(), error)
             AUDIT_PART("detailed_status", error->GetErrorCode(), error)
         );
+    }
+
+protected: 
+    template <class TResponse>
+    void AuditLogEntry(const TResponse& response, const TString& requestId, const TError* error = nullptr) {
+        if (!error && response.HasError()) {
+            error = &response.GetError();
+        }
+        AuditLogEntryImpl(requestId, error);
     }
 
     void PassAway() {

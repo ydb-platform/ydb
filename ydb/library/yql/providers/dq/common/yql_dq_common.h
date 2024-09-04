@@ -10,6 +10,13 @@
 namespace NYql {
 namespace NCommon {
 
+struct TResultFormatSettings {
+    TString ResultType;
+    TVector<TString> Columns;
+    TMaybe<ui64> SizeLimit;
+    TMaybe<ui64> RowsLimit;
+};
+
 TMaybe<TString> SqlToSExpr(const TString& query);
 
 TString GetSerializedTypeAnnotation(const NYql::TTypeAnnotationNode* typeAnn);

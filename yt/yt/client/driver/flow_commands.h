@@ -169,12 +169,12 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TGetPipelineStatusCommand
-    : public TTypedCommand<NApi::TGetPipelineStatusOptions>
+class TGetPipelineStateCommand
+    : public TTypedCommand<NApi::TGetPipelineStateOptions>
     , public TPipelineCommandBase
 {
 public:
-    REGISTER_YSON_STRUCT_LITE(TGetPipelineStatusCommand);
+    REGISTER_YSON_STRUCT_LITE(TGetPipelineStateCommand);
 
     static void Register(TRegistrar registrar);
 

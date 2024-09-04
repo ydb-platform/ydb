@@ -1,3 +1,4 @@
+#include "pg_compat.h"
 #include "arrow.h"
 #include "arrow_impl.h"
 #include <ydb/library/yql/minikql/defs.h>

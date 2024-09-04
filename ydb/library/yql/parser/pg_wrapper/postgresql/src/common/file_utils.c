@@ -5,7 +5,7 @@
  * Assorted utility functions to work on files.
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/common/file_utils.c
@@ -28,6 +28,7 @@
 #ifdef FRONTEND
 #error #include "common/logging.h"
 #endif
+#include "port/pg_iovec.h"
 
 #ifdef FRONTEND
 
@@ -79,7 +80,6 @@ fsync_pgdata(const char *pg_data,
 	 */
 	xlog_is_symlink = false;
 
-#ifndef WIN32
 	{
 		struct stat st;
 
@@ -88,10 +88,6 @@ fsync_pgdata(const char *pg_data,
 		else if (S_ISLNK(st.st_mode))
 			xlog_is_symlink = true;
 	}
-#else
-	if (pgwin32_is_junction(pg_wal))
-		xlog_is_symlink = true;
-#endif
 
 	/*
 	 * If possible, hint to the kernel that we're soon going to fsync the data
@@ -300,7 +296,7 @@ fsync_fname(const char *fname, bool isdir)
 	 */
 	if (returncode != 0 && !(isdir && (errno == EBADF || errno == EINVAL)))
 	{
-		pg_log_fatal("could not fsync file \"%s\": %m", fname);
+		pg_log_error("could not fsync file \"%s\": %m", fname);
 		(void) close(fd);
 		exit(EXIT_FAILURE);
 	}
@@ -370,7 +366,7 @@ durable_rename(const char *oldfile, const char *newfile)
 	{
 		if (fsync(fd) != 0)
 		{
-			pg_log_fatal("could not fsync file \"%s\": %m", newfile);
+			pg_log_error("could not fsync file \"%s\": %m", newfile);
 			close(fd);
 			exit(EXIT_FAILURE);
 		}
@@ -448,7 +444,7 @@ get_dirent_type(const char *path,
 		{
 			result = PGFILETYPE_ERROR;
 #ifdef FRONTEND
-			pg_log_generic(elevel, "could not stat file \"%s\": %m", path);
+			pg_log_generic(elevel, PG_LOG_PRIMARY, "could not stat file \"%s\": %m", path);
 #else
 			ereport(elevel,
 					(errcode_for_file_access(),
@@ -459,11 +455,128 @@ get_dirent_type(const char *path,
 			result = PGFILETYPE_REG;
 		else if (S_ISDIR(fst.st_mode))
 			result = PGFILETYPE_DIR;
-#ifdef S_ISLNK
 		else if (S_ISLNK(fst.st_mode))
 			result = PGFILETYPE_LNK;
-#endif
 	}
 
 	return result;
+}
+
+/*
+ * pg_pwritev_with_retry
+ *
+ * Convenience wrapper for pg_pwritev() that retries on partial write.  If an
+ * error is returned, it is unspecified how much has been written.
+ */
+ssize_t
+pg_pwritev_with_retry(int fd, const struct iovec *iov, int iovcnt, off_t offset)
+{
+	struct iovec iov_copy[PG_IOV_MAX];
+	ssize_t		sum = 0;
+	ssize_t		part;
+
+	/* We'd better have space to make a copy, in case we need to retry. */
+	if (iovcnt > PG_IOV_MAX)
+	{
+		errno = EINVAL;
+		return -1;
+	}
+
+	for (;;)
+	{
+		/* Write as much as we can. */
+		part = pg_pwritev(fd, iov, iovcnt, offset);
+		if (part < 0)
+			return -1;
+
+#ifdef SIMULATE_SHORT_WRITE
+		part = Min(part, 4096);
+#endif
+
+		/* Count our progress. */
+		sum += part;
+		offset += part;
+
+		/* Step over iovecs that are done. */
+		while (iovcnt > 0 && iov->iov_len <= part)
+		{
+			part -= iov->iov_len;
+			++iov;
+			--iovcnt;
+		}
+
+		/* Are they all done? */
+		if (iovcnt == 0)
+		{
+			/* We don't expect the kernel to write more than requested. */
+			Assert(part == 0);
+			break;
+		}
+
+		/*
+		 * Move whatever's left to the front of our mutable copy and adjust
+		 * the leading iovec.
+		 */
+		Assert(iovcnt > 0);
+		memmove(iov_copy, iov, sizeof(*iov) * iovcnt);
+		Assert(iov->iov_len > part);
+		iov_copy[0].iov_base = (char *) iov_copy[0].iov_base + part;
+		iov_copy[0].iov_len -= part;
+		iov = iov_copy;
+	}
+
+	return sum;
+}
+
+/*
+ * pg_pwrite_zeros
+ *
+ * Writes zeros to file worth "size" bytes at "offset" (from the start of the
+ * file), using vectored I/O.
+ *
+ * Returns the total amount of data written.  On failure, a negative value
+ * is returned with errno set.
+ */
+ssize_t
+pg_pwrite_zeros(int fd, size_t size, off_t offset)
+{
+	static const PGIOAlignedBlock zbuffer = {{0}};	/* worth BLCKSZ */
+	void	   *zerobuf_addr = unconstify(PGIOAlignedBlock *, &zbuffer)->data;
+	struct iovec iov[PG_IOV_MAX];
+	size_t		remaining_size = size;
+	ssize_t		total_written = 0;
+
+	/* Loop, writing as many blocks as we can for each system call. */
+	while (remaining_size > 0)
+	{
+		int			iovcnt = 0;
+		ssize_t		written;
+
+		for (; iovcnt < PG_IOV_MAX && remaining_size > 0; iovcnt++)
+		{
+			size_t		this_iov_size;
+
+			iov[iovcnt].iov_base = zerobuf_addr;
+
+			if (remaining_size < BLCKSZ)
+				this_iov_size = remaining_size;
+			else
+				this_iov_size = BLCKSZ;
+
+			iov[iovcnt].iov_len = this_iov_size;
+			remaining_size -= this_iov_size;
+		}
+
+		written = pg_pwritev_with_retry(fd, iov, iovcnt, offset);
+
+		if (written < 0)
+			return written;
+
+		offset += written;
+		total_written += written;
+	}
+
+	Assert(total_written == size);
+
+	return total_written;
 }

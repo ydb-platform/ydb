@@ -59,7 +59,7 @@ TReadSessionActor<UseMigrationProtocol>::TReadSessionActor(
     , ReadsInfly(0)
     , TopicsHandler(topicsHandler)
     , DirectRead(false)
-    , AutoscalingSupport(false)
+    , AutoPartitioningSupport(false)
 {
     Y_ASSERT(Request);
 }
@@ -758,7 +758,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename TEvReadInit::TPtr&
         if (init.reader_name()) {
             PeerName = init.reader_name();
         }
-        AutoscalingSupport = init.autoscaling_support();
+        AutoPartitioningSupport = init.auto_partitioning_support();
     }
 
     if (MaxTimeLagMs < 0) {
@@ -1410,8 +1410,6 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPersQueue::TEvReleasePar
     Y_ABORT_UNLESS(record.GetSession() == Session);
     Y_ABORT_UNLESS(record.GetClientId() == ClientId);
 
-    const ui32 group = record.HasGroup() ? record.GetGroup() : 0;
-
     auto pathIter = FullPathToConverter.find(NPersQueue::NormalizeFullPath(record.GetPath()));
     Y_ABORT_UNLESS(pathIter != FullPathToConverter.end());
 
@@ -1445,61 +1443,29 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPersQueue::TEvReleasePar
         }
     };
 
-    if (!group) {
-        // Release partitions by count
-        for (ui32 c = 0; c < record.GetCount(); ++c) {
-            if (Partitions.empty()) {
-                return CloseSession(PersQueue::ErrorCode::ErrorCode::ERROR,
-                                    TStringBuilder() << "internal error: can`t release partition #01",
-                                    ctx);
+    ui32 partitionId = record.GetGroup() - 1;
+    bool found = false;
+
+    // Release partitions by partition id
+    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " gone release"
+        << ": partition# " << partitionId);
+
+    for (auto it = Partitions.begin(); it != Partitions.end(); ++it) {
+        auto& partitionInfo = it->second;
+        if (partitionInfo.Topic->GetInternalName() == converter->GetInternalName() && partitionId == partitionInfo.Partition.Partition) {
+            if (!partitionInfo.Releasing) {
+                doRelease(it);
             }
 
-            auto jt = Partitions.end();
-            ui32 i = 0;
-
-            for (auto it = Partitions.begin(); it != Partitions.end(); ++it) {
-                auto& partitionInfo = it->second;
-                if (!partitionInfo.Releasing && partitionInfo.Topic->GetInternalName() == converter->GetInternalName()) {
-                    ++i;
-                    if (rand() % i == 0) { // will lead to 1/n probability for each of n partitions
-                        jt = it;
-                    }
-                }
-            }
-
-            if (jt == Partitions.end()) {
-                return CloseSession(PersQueue::ErrorCode::ErrorCode::ERROR,
-                                    TStringBuilder() << "internal error: can`t release partition #02",
-                                    ctx);
-            }
-
-            doRelease(jt);
+            found = true;
+            break;
         }
-    } else {
-        ui32 partitionId = group - 1;
-        bool found = false;
+    }
 
-        // Release partitions by partition id
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " gone release"
-            << ": partition# " << partitionId);
-
-        for (auto it = Partitions.begin(); it != Partitions.end(); ++it) {
-            auto& partitionInfo = it->second;
-            if (partitionInfo.Topic->GetInternalName() == converter->GetInternalName() && partitionId == partitionInfo.Partition.Partition) {
-                if (!partitionInfo.Releasing) {
-                    doRelease(it);
-                }
-
-                found = true;
-                break;
-            }
-        }
-
-        if (!found) {
-            return CloseSession(PersQueue::ErrorCode::ErrorCode::ERROR,
-                                TStringBuilder() << "internal error: releasing unknown partition " << partitionId,
-                                ctx);
-        }
+    if (!found) {
+        return CloseSession(PersQueue::ErrorCode::ErrorCode::ERROR,
+                            TStringBuilder() << "internal error: releasing unknown partition " << partitionId,
+                            ctx);
     }
 }
 
@@ -2327,10 +2293,10 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvReadingFinis
     }
 
     auto& topic = it->second;
-    NTabletPipe::SendData(ctx, topic.PipeClient, new TEvPersQueue::TEvReadingPartitionFinishedRequest(ClientId, msg->PartitionId, AutoscalingSupport, msg->FirstMessage));
+    NTabletPipe::SendData(ctx, topic.PipeClient, new TEvPersQueue::TEvReadingPartitionFinishedRequest(ClientId, msg->PartitionId, AutoPartitioningSupport, msg->FirstMessage));
 
     if constexpr (!UseMigrationProtocol) {
-        if (AutoscalingSupport) {
+        if (AutoPartitioningSupport) {
             TPartitionActorInfo* partitionInfo = nullptr;
             for (auto& [_, p] : Partitions) {
                 if (p.Partition.Partition == msg->PartitionId) {

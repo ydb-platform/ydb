@@ -225,9 +225,13 @@ void TMVP::TryGetOidcOptionsFromConfig(const YAML::Node& config) {
     }
 
     SecretName = oidc["secret_name"].as<std::string>("");
+    OpenIdConnectSettings.ClientId = oidc["client_id"].as<std::string>(OpenIdConnectSettings.DEFAULT_CLIENT_ID);
     OpenIdConnectSettings.SessionServiceEndpoint = oidc["session_service_endpoint"].as<std::string>("");
     OpenIdConnectSettings.SessionServiceTokenName = oidc["session_service_token_name"].as<std::string>("");
     OpenIdConnectSettings.AuthorizationServerAddress = oidc["authorization_server_address"].as<std::string>("");
+    OpenIdConnectSettings.AuthUrlPath = oidc["auth_url_path"].as<std::string>(OpenIdConnectSettings.DEFAULT_AUTH_URL_PATH);
+    OpenIdConnectSettings.TokenUrlPath = oidc["token_url_path"].as<std::string>(OpenIdConnectSettings.DEFAULT_TOKEN_URL_PATH);
+    OpenIdConnectSettings.ExchangeUrlPath = oidc["exchange_url_path"].as<std::string>(OpenIdConnectSettings.DEFAULT_EXCHANGE_URL_PATH);
     Cout << "Started processing allowed_proxy_hosts..." << Endl;
     for (const std::string& host : oidc["allowed_proxy_hosts"].as<std::vector<std::string>>()) {
         Cout << host << " added to allowed_proxy_hosts" << Endl;
@@ -264,9 +268,6 @@ void TMVP::TryGetGenericOptionsFromConfig(
 
     if (generic["auth"]) {
         auto auth = generic["auth"];
-        if (TYdbLocation::UserToken.empty()) {
-            TYdbLocation::UserToken = auth["token"].as<std::string>("");
-        }
         ydbTokenFile = auth["token_file"].as<std::string>("");
     }
 
@@ -281,6 +282,13 @@ void TMVP::TryGetGenericOptionsFromConfig(
 
         if (opts.FindLongOptParseResult("https-port") == nullptr) {
             HttpsPort = server["https_port"].as<ui16>(0);
+        }
+    }
+
+    if (generic["access_service_type"]) {
+        auto accessServiceTypeStr = TString(generic["access_service_type"].as<std::string>(""));
+        if (!NMvp::EAccessServiceType_Parse(to_lower(accessServiceTypeStr), &OpenIdConnectSettings.AccessServiceType)) {
+            ythrow yexception() << "Unknown access_service_type value: " << accessServiceTypeStr;
         }
     }
 }
@@ -349,6 +357,9 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup(int argc, char**
                 TYdbLocation::UserToken = tokens.GetStaffApiUserTokenInfo().GetToken();
             } else if (tokens.HasStaffApiUserToken()) {
                 TYdbLocation::UserToken = tokens.GetStaffApiUserToken();
+            }
+            if (!tokens.HasAccessServiceType()) {
+                tokens.SetAccessServiceType(OpenIdConnectSettings.AccessServiceType);
             }
             TokensConfig = tokens;
         } else {

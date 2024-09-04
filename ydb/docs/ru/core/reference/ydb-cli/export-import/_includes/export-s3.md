@@ -29,9 +29,9 @@
 Параметр | Описание
 --- | ---
 `--description STRING` | Текстовое описание операции, сохраняемое в истории операций.
-`--retries NUM` | Количество повторных попыток выгрузки, которые будет предпринимать сервер.</br>Значение по умолчанию: `10`.
-`--compression STRING` | Сжимать выгружаемые данные.</br>При уровне сжатия по умолчанию для алгоритма [Zstandard](https://ru.wikipedia.org/wiki/Zstandard) данные могут быть сжаты в 5-10 раз. Сжатие данных использует ресурс CPU и может повлиять на скорость выполнения других операций с БД.</br>Допустимые значения:</br><ul><li>`zstd` — сжатие алгоритмом Zstandard c уровнем сжатия по умолчанию (`3`);</li><li>`zstd-N` — сжатие алгоритмом Zstandard, `N` — уровень сжатия (`1` — `22`).</li></ul>
-`--format STRING` | Формат вывода результата.</br>Допустимые значения:</br><ul><li>`pretty` — человекопонятный формат (по умолчанию);</li><li>`proto-json-base64` — [Protocol Buffers](https://ru.wikipedia.org/wiki/Protocol_Buffers) в формате [JSON](https://ru.wikipedia.org/wiki/JSON), бинарные строки закодированы в [Base64](https://ru.wikipedia.org/wiki/Base64).</li></ul>
+`--retries NUM` | Количество повторных попыток выгрузки, которые будет предпринимать сервер.<br/>Значение по умолчанию: `10`.
+`--compression STRING` | Сжимать выгружаемые данные.<br/>При уровне сжатия по умолчанию для алгоритма [Zstandard](https://ru.wikipedia.org/wiki/Zstandard) данные могут быть сжаты в 5-10 раз. Сжатие данных использует ресурс CPU и может повлиять на скорость выполнения других операций с БД.<br/>Допустимые значения:<br/><ul><li>`zstd` — сжатие алгоритмом Zstandard c уровнем сжатия по умолчанию (`3`);</li><li>`zstd-N` — сжатие алгоритмом Zstandard, `N` — уровень сжатия (`1` — `22`).</li></ul>
+`--format STRING` | Формат вывода результата.<br/>Допустимые значения:<br/><ul><li>`pretty` — человекопонятный формат (по умолчанию);</li><li>`proto-json-base64` — [Protocol Buffers](https://ru.wikipedia.org/wiki/Protocol_Buffers) в формате [JSON](https://ru.wikipedia.org/wiki/JSON), бинарные строки закодированы в [Base64](https://ru.wikipedia.org/wiki/Base64).</li></ul>
 
 ## Выполнение выгрузки {#exec}
 
@@ -47,9 +47,9 @@
   ├───────────────────────────────────────────┼───────┼─────...
   | ydb://export/6?id=281474976788395&kind=s3 | true  | SUCC...
   ├╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴┴╴╴╴╴╴╴╴┴╴╴╴╴╴...
-  | StorageClass: NOT_SET                                      
+  | StorageClass: NOT_SET
   | Items:
-  ...                                                   
+  ...
   ```
 
 - В режиме вывода proto-json-base64 идентификатор находится в атрибуте "id":
@@ -155,4 +155,3 @@ ydb://export/6?id=281474976788779&kind=s3
 ``` bash
 {{ ydb-cli }} -p quickstart operation list export/s3 --format proto-json-base64 | jq -r ".operations[].id" | while read line; do {{ ydb-cli }} -p quickstart operation forget $line;done
 ```
-

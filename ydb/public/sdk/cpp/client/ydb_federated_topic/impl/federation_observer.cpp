@@ -146,25 +146,29 @@ void TFederatedDbObserverImpl::OnFederationDiscovery(TStatus&& status, Ydb::Fede
             db->set_weight(100);
             FederatedDbState->DbInfos.emplace_back(std::move(db));
         } else {
-            if (!status.IsSuccess()) {
+            if (status.IsSuccess()) {
+                ScheduleFederationDiscoveryImpl(REDISCOVERY_DELAY);
+            } else {
+                LOG_LAZY(DbDriverState_->Log, TLOG_ERR, TStringBuilder()
+                    << "OnFederationDiscovery: Got error. Status: " << status.GetStatus()
+                    << ". Description: " << status.GetIssues().ToOneLineString());
+
                 if (!FederationDiscoveryRetryState) {
                     FederationDiscoveryRetryState = FederationDiscoveryRetryPolicy->CreateRetryState();
                 }
-                TMaybe<TDuration> retryDelay = FederationDiscoveryRetryState->GetNextRetryDelay(status.GetStatus());
-                if (retryDelay) {
-                    ScheduleFederationDiscoveryImpl(*retryDelay);
+
+                if (auto d = FederationDiscoveryRetryState->GetNextRetryDelay(status.GetStatus())) {
+                    ScheduleFederationDiscoveryImpl(*d);
                     return;
                 }
-                // If retryDelay is Nothing, meaning there won't be another retry,
-                // we replace FederatedDbState with the unsuccessful one and then set the PromiseToInitState if needed,
-                // and the observer becomes stale (see IsStale method).
-            } else {
-                ScheduleFederationDiscoveryImpl(REDISCOVERY_DELAY);
+
+                // If there won't be another retry, we replace FederatedDbState with the unsuccessful one
+                // and set the PromiseToInitState to make the observer stale (see IsStale method).
             }
 
             // TODO validate new state and check if differs from previous
-
             auto newInfo = std::make_shared<TFederatedDbState>(std::move(result), std::move(status));
+
             // TODO update only if new state differs
             std::swap(FederatedDbState, newInfo);
         }

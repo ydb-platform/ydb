@@ -1,21 +1,16 @@
 #pragma once
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/mon.h>
-#include <ydb/core/base/domain.h>
-#include <ydb/core/base/hive.h>
-#include <ydb/core/base/tablet.h>
-#include <ydb/core/base/tablet_pipe.h>
-#include <ydb/library/services/services.pb.h>
-#include <ydb/core/tx/schemeshard/schemeshard.h>
-#include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/core/viewer/protos/viewer.pb.h>
-#include <ydb/core/viewer/json/json.h>
 #include "browse_events.h"
 #include "viewer.h"
 #include "wb_aggregate.h"
+#include <ydb/core/base/hive.h>
+#include <ydb/core/base/tablet.h>
+#include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 
-namespace NKikimr {
-namespace NViewer {
+namespace NKikimr::NViewer {
 
 using namespace NActors;
 
@@ -99,6 +94,8 @@ public:
             return NKikimrViewer::EObjectType::ExternalDataSource;
         case NKikimrSchemeOp::EPathType::EPathTypeView:
             return NKikimrViewer::EObjectType::View;
+        case NKikimrSchemeOp::EPathType::EPathTypeResourcePool:
+            return NKikimrViewer::EObjectType::ResourcePool;
         case NKikimrSchemeOp::EPathType::EPathTypeExtSubDomain:
         case NKikimrSchemeOp::EPathType::EPathTypeTableIndex:
         case NKikimrSchemeOp::EPathType::EPathTypeInvalid:
@@ -643,5 +640,4 @@ public:
     virtual void ReplyAndDie(const TActorContext &ctx) = 0;
 };
 
-}
 }

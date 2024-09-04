@@ -1,8 +1,3 @@
----
-title: "Overview of the code recipe for bulk upsert of data in {{ ydb-short-name }}"
-description: "The article describes the code examples showing the {{ ydb-short-name }} SDK built-in tools for bulk upsert."
----
-
 # Bulk upsert of data
 
 {% include [work in progress message](_includes/addition.md) %}

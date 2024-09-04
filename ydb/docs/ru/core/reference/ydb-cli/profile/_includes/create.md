@@ -149,7 +149,7 @@ ydb config profile create quickstart --endpoint grpc://localhost:2136 --database
   2. Если существующих профилей нет, или выбран вариант `1` на предыдущем шаге, то запрашивается имя профиля для создания:
 
      ``` text
-     Please enter name for a new profile: 
+     Please enter name for a new profile:
      ```
 
   3. Если ввести в этот момент имя существующего профиля, то {{ ydb-short-name }} CLI переходит к шагам изменения его параметров, как если бы сразу была выбрана опция с именем этого профиля.
@@ -185,7 +185,7 @@ ydb config profile create quickstart --endpoint grpc://localhost:2136 --database
     Pick desired action to configure endpoint:
      [1] Set a new endpoint value
      [2] Don't save endpoint for profile "mydb1"
-    Please enter your numeric choice: 
+    Please enter your numeric choice:
     ```
 
 1. Введите [имя базы данных](../../../../concepts/connect.md#database) или не сохраняйте этот параметр для профиля:
@@ -194,7 +194,7 @@ ydb config profile create quickstart --endpoint grpc://localhost:2136 --database
     Pick desired action to configure database:
      [1] Set a new database value
      [2] Don't save database for profile "mydb1"
-    Please enter your numeric choice: 
+    Please enter your numeric choice:
     ```
 
 1. Выберите режим аутентификации или не сохраняйте этот параметр для профиля:
@@ -206,7 +206,7 @@ ydb config profile create quickstart --endpoint grpc://localhost:2136 --database
       [3] Use OAuth token of a Yandex Passport user (yc-token). Doesn't work with federative accounts. cloud.yandex.ru/docs/iam/concepts/authorization/oauth-token
       [4] Use metadata service on a virtual machine (use-metadata-credentials) cloud.yandex.ru/docs/compute/operations/vm-connect/auth-inside-vm
       [5] Use service account key file (sa-key-file) cloud.yandex.ru/docs/iam/operations/iam-token/create-for-sa
-      [6] Set new OAuth token (ydb-token)
+      [6] Set new access token (ydb-token)
       [7] Don't save authentication data for profile "mydb1"
     Please enter your numeric choice:
     ```
@@ -216,7 +216,7 @@ ydb config profile create quickstart --endpoint grpc://localhost:2136 --database
     Если выбранный вами метод подразумевает указание дополнительного параметра, вам будет предложено его ввести. Например, если вы выбрали `4` (Use service account key file):
 
     ```text
-    Please enter Path to service account key file (sa-key-file): 
+    Please enter Path to service account key file (sa-key-file):
     ```
 
 1. На последнем шаге вам будет предложено активировать созданный профиль для использования по умолчанию. Ответьте 'n' (Нет), пока вы не прочитали статью про [Активацию профиля и применение активированного профиля](../activate.md):

@@ -18,11 +18,12 @@
 
 namespace NYT::NFormats {
 
-using namespace NTableClient;
-using namespace NConcurrency;
-using namespace NYson;
-using namespace NYTree;
 using namespace NComplexTypes;
+using namespace NConcurrency;
+using namespace NCrypto;
+using namespace NTableClient;
+using namespace NYTree;
+using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -37,10 +38,10 @@ TSchemalessFormatWriterBase::TSchemalessFormatWriterBase(
     bool enableContextSaving,
     TControlAttributesConfigPtr controlAttributesConfig,
     int keyColumnCount)
-    : NameTable_(nameTable)
-    , Output_(output)
+    : NameTable_(std::move(nameTable))
+    , Output_(std::move(output))
     , EnableContextSaving_(enableContextSaving)
-    , ControlAttributesConfig_(controlAttributesConfig)
+    , ControlAttributesConfig_(std::move(controlAttributesConfig))
     , KeyColumnCount_(keyColumnCount)
     , NameTableReader_(std::make_unique<TNameTableReader>(NameTable_))
 {
@@ -253,7 +254,7 @@ void TSchemalessFormatWriterBase::WriteControlAttributes(TUnversionedRow row)
     std::optional<i64> rowIndex;
     std::optional<i64> tabletIndex;
 
-    for (auto* it = row.Begin(); it != row.End(); ++it) {
+    for (const auto* it = row.Begin(); it != row.End(); ++it) {
         if (it->Id == TableIndexId_) {
             tableIndex = it->Data.Int64;
         } else if (it->Id == RowIndexId_) {
@@ -335,6 +336,10 @@ TFuture<void> TSchemalessFormatWriterBase::Flush()
     return MakeFuture(Error_);
 }
 
+std::optional<TMD5Hash> TSchemalessFormatWriterBase::GetDigest() const {
+    return std::nullopt;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TSchemalessWriterAdapter::TSchemalessWriterAdapter(
@@ -344,10 +349,10 @@ TSchemalessWriterAdapter::TSchemalessWriterAdapter(
     TControlAttributesConfigPtr controlAttributesConfig,
     int keyColumnCount)
     : TSchemalessFormatWriterBase(
-        nameTable,
+        std::move(nameTable),
         std::move(output),
         enableContextSaving,
-        controlAttributesConfig,
+        std::move(controlAttributesConfig),
         keyColumnCount)
 { }
 
@@ -441,8 +446,8 @@ void TSchemalessWriterAdapter::ConsumeRow(TUnversionedRow row)
 
     Consumer_->OnListItem();
     Consumer_->OnBeginMap();
-    for (auto* it = row.Begin(); it != row.End(); ++it) {
-        auto& value = *it;
+    for (const auto* it = row.Begin(); it != row.End(); ++it) {
+        const auto& value = *it;
 
         if (IsSystemColumnId(value.Id)) {
             continue;

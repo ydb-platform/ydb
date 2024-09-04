@@ -52,7 +52,7 @@ Creating an index is an asynchronous operation. If the client-server connection 
 
 A secondary index can be:
 
-- Created when creating a table with the YQL [`CREATE TABLE`](../../yql/reference/syntax/create_table.md) statement.
+- Created when creating a table with the YQL [`CREATE TABLE`](../../yql/reference/syntax/create_table/index.md) statement.
 - Added to an existing table with the YQL [`ALTER TABLE`](../../yql/reference/syntax/alter_table.md) statement or the YDB CLI [`table index add`](../../reference/ydb-cli/commands/secondary_index.md#add) command.
 - Deleted from an existing table with the YQL [`ALTER TABLE`](../../yql/reference/syntax/alter_table.md) statement or the YDB CLI [`table index drop`](../../reference/ydb-cli/commands/secondary_index.md#drop) command.
 - Deleted together with the table using the YQL [`DROP TABLE`](../../yql/reference/syntax/drop_table.md) statement or the YDB CLI `table drop` command.

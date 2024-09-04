@@ -677,18 +677,19 @@ namespace NYdb::NTopic::NTests {
                                 .MessageGroupId(TEST_MESSAGE_GROUP_ID)
                                 .DirectWriteToPartition(true);
             auto writeSession = client.CreateSimpleBlockingWriteSession(writeSettings);
-            TTestReadSession ReadSession("Session-0", client, 2);
+            auto ReadSession = NPQ::NTest::CreateTestReadSession({ .Name="Session-0", .Setup=setup, .Sdk = NPQ::NTest::SdkVersion::Topic, .ExpectedMessagesCount = 2 });
 
-            UNIT_ASSERT(writeSession->Write(Msg("message_1.1", 2)));
+
+            UNIT_ASSERT(writeSession->Write(NPQ::NTest::Msg("message_1.1", 2)));
 
             ui64 txId = 1006;
-            SplitPartition(setup, ++txId, 0, "a");
+            NPQ::NTest::SplitPartition(setup, ++txId, 0, "a");
 
-            UNIT_ASSERT(writeSession->Write(Msg("message_1.2", 3)));
+            UNIT_ASSERT(writeSession->Write(NPQ::NTest::Msg("message_1.2", 3)));
 
-            ReadSession.WaitAllMessages();
+            ReadSession->WaitAllMessages();
 
-            for (const auto& info : ReadSession.Impl->ReceivedMessages) {
+            for (const auto& info : ReadSession->GetReceivedMessages()) {
                 if (info.Data == "message_1.1") {
                     UNIT_ASSERT_EQUAL(0, info.PartitionId);
                     UNIT_ASSERT_EQUAL(2, info.SeqNo);
@@ -724,7 +725,7 @@ namespace NYdb::NTopic::NTests {
             auto const events = tracingBackend->GetEvents();
             UNIT_ASSERT(expected.Matches(events));
 
-            ReadSession.Close();
+            ReadSession->Close();
         }
     }
 }

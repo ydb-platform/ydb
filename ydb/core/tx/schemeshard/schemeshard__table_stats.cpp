@@ -64,6 +64,7 @@ auto TSchemeShard::BuildStatsForCollector(TPathId pathId, TShardIdx shardIdx, TT
     sysStats.SetDataSize(stats.DataSize);
     sysStats.SetRowCount(stats.RowCount);
     sysStats.SetIndexSize(stats.IndexSize);
+    sysStats.SetByKeyFilterSize(stats.ByKeyFilterSize);
     sysStats.SetCPUCores(std::min(stats.GetCurrentRawCpuUsage() / 1000000., 1.0));
     sysStats.SetTabletId(ui64(datashardId));
     sysStats.SetAccessTime(stats.LastAccessTime.MilliSeconds());
@@ -164,6 +165,7 @@ TPartitionStats TTxStoreTableStats::PrepareStats(const TActorContext& ctx,
     newStats.RowCount = tableStats.GetRowCount();
     newStats.DataSize = tableStats.GetDataSize();
     newStats.IndexSize = tableStats.GetIndexSize();
+    newStats.ByKeyFilterSize = tableStats.GetByKeyFilterSize();
     newStats.LastAccessTime = TInstant::MilliSeconds(tableStats.GetLastAccessTime());
     newStats.LastUpdateTime = TInstant::MilliSeconds(tableStats.GetLastUpdateTime());
     for (const auto& channelStats : tableStats.GetChannels()) {
@@ -325,7 +327,7 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
                             "add stats for exists table with pathId=" << tablePathId);
 
                 auto columnTable = Self->ColumnTables.TakeVerified(tablePathId);
-                columnTable->UpdateTableStats(tablePathId, newTableStats);
+                columnTable->UpdateTableStats(shardIdx, tablePathId, newTableStats);
             } else {
                 LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                            "failed add stats for table with pathId=" << tablePathId);
@@ -433,8 +435,6 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         return true;
     }
 
-    ui64 dataSizeResolution = 0; // Datashard will use default resolution
-    ui64 rowCountResolution = 0; // Datashard will use default resolution
     bool collectKeySample = false;
     if (table->ShouldSplitBySize(dataSize, forceShardSplitSettings)) {
         // We would like to split by size and do this no matter how many partitions there are
@@ -475,13 +475,9 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
     // Request histograms from the datashard
     LOG_DEBUG(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
              "Requesting full stats from datashard %" PRIu64, rec.GetDatashardId());
-    PendingMessages.emplace_back(
-        item.Ev->Sender,
-        new TEvDataShard::TEvGetTableStats(
-            pathId.LocalPathId,
-            dataSizeResolution,
-            rowCountResolution,
-            collectKeySample));
+    auto request = new TEvDataShard::TEvGetTableStats(pathId.LocalPathId);
+    request->Record.SetCollectKeySample(collectKeySample);
+    PendingMessages.emplace_back(item.Ev->Sender, request);
 
     return true;
 }

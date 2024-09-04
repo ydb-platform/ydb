@@ -17,6 +17,8 @@ using namespace NTableClient;
 using namespace NTabletClient;
 using namespace NTransactionClient;
 
+////////////////////////////////////////////////////////////////////////////////
+
 namespace NDetail {
 
 void FormatProgressWithProjection(
@@ -266,11 +268,20 @@ TReplicaInfo* TReplicationCard::GetReplicaOrThrow(TReplicaId replicaId, TReplica
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool IsReplicaSync(ETableReplicaMode mode, const TReplicaHistoryItem& lastReplicaHistoryItem)
+bool IsReplicaSync(ETableReplicaMode mode, const std::vector<TReplicaHistoryItem>& replicaHistory)
 {
     // Check actual replica state to avoid merging transition states (e.g. AsyncToSync -> SyncToAsync)
-    return mode == ETableReplicaMode::Sync ||
-        (mode == ETableReplicaMode::SyncToAsync && lastReplicaHistoryItem.IsSync());
+    if (mode == ETableReplicaMode::Sync) {
+        return true;
+    }
+
+    if (mode != ETableReplicaMode::SyncToAsync) {
+        return false;
+    }
+
+    // Replica in transient state MUST have previous non-transient state
+    YT_VERIFY(!replicaHistory.empty());
+    return replicaHistory.back().IsSync();
 }
 
 bool IsReplicaAsync(ETableReplicaMode mode)
@@ -291,9 +302,9 @@ bool IsReplicaDisabled(ETableReplicaState state)
 bool IsReplicaReallySync(
     ETableReplicaMode mode,
     ETableReplicaState state,
-    const TReplicaHistoryItem& lastReplicaHistoryItem)
+    const std::vector<TReplicaHistoryItem>& replicaHistory)
 {
-    return IsReplicaSync(mode, lastReplicaHistoryItem) && IsReplicaEnabled(state);
+    return IsReplicaSync(mode, replicaHistory) && IsReplicaEnabled(state);
 }
 
 ETableReplicaMode GetTargetReplicaMode(ETableReplicaMode mode)
@@ -693,7 +704,7 @@ std::vector<TReplicationProgress> ScatterReplicationProgress(
 bool IsReplicaLocationValid(
     const TReplicaInfo* replica,
     const NYPath::TYPath& tablePath,
-    const TString& clusterName)
+    const std::string& clusterName)
 {
     return replica->ReplicaPath == tablePath && replica->ClusterName == clusterName;
 }
@@ -854,7 +865,7 @@ THashMap<TReplicaId, TDuration> ComputeReplicasLag(const THashMap<TReplicaId, TR
 {
     TReplicationProgress syncProgress;
     for (const auto& [replicaId, replicaInfo] : replicas) {
-        if (IsReplicaReallySync(replicaInfo.Mode, replicaInfo.State, replicaInfo.History.back())) {
+        if (IsReplicaReallySync(replicaInfo.Mode, replicaInfo.State, replicaInfo.History)) {
             if (syncProgress.Segments.empty()) {
                 syncProgress = replicaInfo.ReplicationProgress;
             } else {
@@ -865,7 +876,7 @@ THashMap<TReplicaId, TDuration> ComputeReplicasLag(const THashMap<TReplicaId, TR
 
     THashMap<TReplicaId, TDuration> result;
     for (const auto& [replicaId, replicaInfo] : replicas) {
-        if (IsReplicaReallySync(replicaInfo.Mode, replicaInfo.State, replicaInfo.History.back())) {
+        if (IsReplicaReallySync(replicaInfo.Mode, replicaInfo.State, replicaInfo.History)) {
             result.emplace(replicaId, TDuration::Zero());
         } else {
             result.emplace(

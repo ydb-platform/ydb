@@ -6,12 +6,16 @@ ENDIF()
 
 SRCS(
     main.cpp
+
+    probes.cpp
+    queue_tracer.cpp
 )
 
 PEERDIR(
-    ydb/library/actors/queues
+    ydb/library/actors/queues/observer
     library/cpp/getopt
     library/cpp/lwtrace
+    library/cpp/lwtrace/mon
 )
 
 END()

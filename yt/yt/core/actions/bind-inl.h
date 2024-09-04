@@ -5,6 +5,7 @@
 #endif
 #undef BIND_INL_H_
 
+#include <yt/yt/core/actions/invoker.h>
 #include <yt/yt/core/concurrency/propagating_storage.h>
 
 namespace NYT {
@@ -521,23 +522,45 @@ template <>
 class TPropagateMixin<true>
 {
 public:
-    TPropagateMixin()
+    TPropagateMixin(
+#ifdef YT_ENABLE_BIND_LOCATION_TRACKING
+        TSourceLocation location
+#endif
+    )
         : Storage_(NConcurrency::GetCurrentPropagatingStorage())
+#ifdef YT_ENABLE_BIND_LOCATION_TRACKING
+        , Location_(location)
+#endif
     { }
 
     NConcurrency::TPropagatingStorageGuard MakePropagatingStorageGuard()
     {
-        return NConcurrency::TPropagatingStorageGuard(Storage_);
+        return NConcurrency::TPropagatingStorageGuard(Storage_
+#ifdef YT_ENABLE_BIND_LOCATION_TRACKING
+        , Location_
+#endif
+    );
     }
 
 private:
     const NConcurrency::TPropagatingStorage Storage_;
+
+#ifdef YT_ENABLE_BIND_LOCATION_TRACKING
+    const TSourceLocation Location_;
+#endif
 };
 
 template <>
 class TPropagateMixin<false>
 {
 public:
+    TPropagateMixin(
+#ifdef YT_ENABLE_BIND_LOCATION_TRACKING
+        TSourceLocation /*location*/
+#endif
+    )
+    { }
+
     std::monostate MakePropagatingStorageGuard()
     {
         return {};
@@ -563,6 +586,11 @@ public:
         XFunctor&& functor,
         XBs&&... boundArgs)
         : TBindStateBase(
+#ifdef YT_ENABLE_BIND_LOCATION_TRACKING
+            location
+#endif
+        )
+        , TPropagateMixin<Propagate>(
 #ifdef YT_ENABLE_BIND_LOCATION_TRACKING
             location
 #endif
@@ -656,6 +684,8 @@ auto Bind(
         THelper::template GetInvokeFunction<TState>()};
 }
 
+// NB: This specialization doesn't act proper to `Propagate` flag,
+// it just copies propagating policy from given callback.
 template <
     bool Propagate,
 #ifdef YT_ENABLE_BIND_LOCATION_TRACKING
@@ -674,6 +704,34 @@ auto Bind(
     Y_UNUSED(location);
 #endif
     return TExtendedCallback<T>(callback);
+}
+
+template <class R, class... TArgs>
+TExtendedCallback<R(TArgs...)>
+TExtendedCallback<R(TArgs...)>::Via(IInvokerPtr invoker) const &
+{
+    return ViaImpl(*this, std::move(invoker));
+}
+
+template <class R, class... TArgs>
+TExtendedCallback<R(TArgs...)>
+TExtendedCallback<R(TArgs...)>::Via(IInvokerPtr invoker) &&
+{
+    return ViaImpl(std::move(*this), std::move(invoker));
+}
+
+template <class R, class... TArgs>
+TExtendedCallback<R(TArgs...)>
+TExtendedCallback<R(TArgs...)>::ViaImpl(TExtendedCallback<R(TArgs...)> callback, TIntrusivePtr<IInvoker> invoker)
+{
+    static_assert(
+        std::is_void_v<R>,
+        "Via() can only be used with void return type.");
+    YT_ASSERT(invoker);
+
+    return BIND_NO_PROPAGATE([callback = std::move(callback), invoker = std::move(invoker)] (TArgs... args) {
+        invoker->Invoke(BIND_NO_PROPAGATE(callback, WrapToPassed(std::forward<TArgs>(args))...));
+    });
 }
 
 ////////////////////////////////////////////////////////////////////////////////

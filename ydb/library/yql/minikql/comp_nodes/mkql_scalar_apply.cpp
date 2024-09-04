@@ -44,17 +44,20 @@ public:
     struct TKernelState : public arrow::compute::KernelState {
         TKernelState(const TVector<TType*>& argsTypes, TType* returnType, const TComputationContext& originalContext)
             : Alloc(__LOCATION__)
+            , TypeEnv(Alloc)
             , MemInfo("ScalarApply")
-            , HolderFactory(Alloc.Ref(), MemInfo)
+            , FunctionRegistry(originalContext.HolderFactory.GetFunctionRegistry()->Clone())
+            , HolderFactory(Alloc.Ref(), MemInfo, FunctionRegistry.Get())
             , ValueBuilder(HolderFactory, NUdf::EValidatePolicy::Exception)
             , PgBuilder(NYql::CreatePgBuilder())
             , Accessors(argsTypes, returnType, *PgBuilder)
             , RandomProvider(CreateDefaultRandomProvider())
             , TimeProvider(CreateDefaultTimeProvider())
             , Ctx(HolderFactory, &ValueBuilder, TComputationOptsFull(
-                nullptr, Alloc.Ref(), *RandomProvider, *TimeProvider, NUdf::EValidatePolicy::Exception, nullptr),
+                nullptr, Alloc.Ref(), TypeEnv, *RandomProvider, *TimeProvider, NUdf::EValidatePolicy::Exception, originalContext.SecureParamsProvider, originalContext.CountersProvider),
                 originalContext.Mutables, *NYql::NUdf::GetYqlMemoryPool())
         {
+            Alloc.Ref().EnableArrowTracking = false;
             Alloc.Release();
         }
 
@@ -64,7 +67,9 @@ public:
         }
 
         TScopedAlloc Alloc;
+        TTypeEnvironment TypeEnv;
         TMemoryUsageInfo MemInfo;
+        const IFunctionRegistry::TPtr FunctionRegistry;
         THolderFactory HolderFactory;
         TDefaultValueBuilder ValueBuilder;
         std::unique_ptr<NUdf::IPgBuilder> PgBuilder;

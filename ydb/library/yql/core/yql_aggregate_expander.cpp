@@ -10,9 +10,20 @@
 
 namespace NYql {
 
-TExprNode::TPtr TAggregateExpander::ExpandAggregate()
-{
+TExprNode::TPtr TAggregateExpander::ExpandAggregate() {
     YQL_CLOG(DEBUG, Core) << "Expand " << Node->Content();
+    auto result = ExpandAggregateWithFullOutput();
+    if (result) {
+        auto outputColumns = GetSetting(*Node->Child(NNodes::TCoAggregate::idx_Settings), "output_columns");
+        if (outputColumns) {
+            result = Ctx.NewCallable(result->Pos(), "ExtractMembers", { result, outputColumns->ChildPtr(1) });
+        }
+    }
+    return result;
+}
+
+TExprNode::TPtr TAggregateExpander::ExpandAggregateWithFullOutput()
+{
     Suffix = Node->Content();
     YQL_ENSURE(Suffix.SkipPrefix("Aggregate"));
     AggList = Node->HeadPtr();
@@ -25,7 +36,7 @@ TExprNode::TPtr TAggregateExpander::ExpandAggregate()
 
     HaveDistinct = AnyOf(AggregatedColumns->ChildrenList(),
         [](const auto& child) { return child->ChildrenSize() == 3; });
-    EffectiveCompact = (HaveDistinct && CompactForDistinct && !TypesCtx.IsBlockEngineEnabled()) || ForceCompact || HasSetting(*settings, "compact");
+    EffectiveCompact = (HaveDistinct && CompactForDistinct && !UseBlocks) || ForceCompact || HasSetting(*settings, "compact");
     for (const auto& trait : Traits) {
         auto mergeLambda = trait->Child(5);
         if (mergeLambda->Tail().IsCallable("Void")) {
@@ -56,7 +67,7 @@ TExprNode::TPtr TAggregateExpander::ExpandAggregate()
         return GeneratePhases();
     }
 
-    if (TypesCtx.IsBlockEngineEnabled()) {
+    if (UseBlocks) {
         if (Suffix == "Combine") {
             auto ret = TryGenerateBlockCombine();
             if (ret) {
@@ -2453,6 +2464,7 @@ TExprNode::TPtr TAggregateExpander::SerializeIdxSet(const TIdxSet& indicies) {
 }
 
 TExprNode::TPtr TAggregateExpander::GeneratePhases() {
+    const TExprNode::TPtr cleanOutputSettings = RemoveSetting(*Node->Child(3), "output_columns", Ctx);
     const bool many = HaveDistinct;
     YQL_CLOG(DEBUG, Core) << "Aggregate: generate " << (many ? "phases with distinct" : "simple phases");
     TExprNode::TListType mergeTraits;
@@ -2568,7 +2580,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
                 .Add(0, AggList)
                 .Add(1, KeyColumns)
                 .Add(2, Ctx.NewList(Node->Pos(), std::move(combineColumns)))
-                .Add(3, Node->ChildPtr(3))
+                .Add(3, cleanOutputSettings)
             .Seal()
             .Build();
 
@@ -2577,7 +2589,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
                 .Add(0, combine)
                 .Add(1, KeyColumns)
                 .Add(2, Ctx.NewList(Node->Pos(), std::move(finalizeColumns)))
-                .Add(3, Node->ChildPtr(3))
+                .Add(3, cleanOutputSettings)
             .Seal()
             .Build();
 
@@ -2611,7 +2623,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
                 .Add(0, AggList)
                 .Add(1, KeyColumns)
                 .Add(2, Ctx.NewList(Node->Pos(), std::move(combineColumns)))
-                .Add(3, Node->ChildPtr(3))
+                .Add(3, cleanOutputSettings)
             .Seal()
             .Build();
 
@@ -2631,7 +2643,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
                 .Add(1, Ctx.NewList(Node->Pos(), std::move(allKeyColumns)))
                 .List(2)
                 .Seal()
-                .Add(3, Node->ChildPtr(3))
+                .Add(3, cleanOutputSettings)
             .Seal()
             .Build();
 
@@ -2765,7 +2777,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
                 .Add(0, distinct)
                 .Add(1, KeyColumns)
                 .Add(2, Ctx.NewList(Node->Pos(), std::move(combineColumns)))
-                .Add(3, Node->ChildPtr(3))
+                .Add(3, cleanOutputSettings)
             .Seal()
             .Build();
 
@@ -2773,7 +2785,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
         streams.push_back(SerializeIdxSet(indicies));
     }
 
-    if (TypesCtx.IsBlockEngineEnabled()) {
+    if (UseBlocks) {
         for (ui32 i = 0; i < unionAllInputs.size(); ++i) {
             unionAllInputs[i] = Ctx.Builder(Node->Pos())
                 .Callable("Map")
@@ -2793,8 +2805,8 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
         }
     }
 
-    auto settings = Node->ChildPtr(3);
-    if (TypesCtx.IsBlockEngineEnabled()) {
+    auto settings = cleanOutputSettings;
+    if (UseBlocks) {
         settings = AddSetting(*settings, Node->Pos(), "many_streams", Ctx.NewList(Node->Pos(), std::move(streams)), Ctx);
     }
 
@@ -2827,7 +2839,7 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockCombine() {
 }
 
 TExprNode::TPtr TAggregateExpander::TryGenerateBlockMergeFinalize() {
-    if (UsePartitionsByKeys || !TypesCtx.IsBlockEngineEnabled()) {
+    if (UsePartitionsByKeys || !UseBlocks) {
         return nullptr;
     }
 
@@ -2922,7 +2934,7 @@ TExprNode::TPtr ExpandAggregatePeephole(const TExprNode::TPtr& node, TExprContex
             return ret;
         }
     }
-    return ExpandAggregatePeepholeImpl(node, ctx, typesCtx, false, typesCtx.IsBlockEngineEnabled());
+    return ExpandAggregatePeepholeImpl(node, ctx, typesCtx, false, typesCtx.IsBlockEngineEnabled(), false);
 }
 
 } // namespace NYql

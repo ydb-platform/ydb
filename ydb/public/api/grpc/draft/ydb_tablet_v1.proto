@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+package Ydb.Tablet.V1;
+option java_package = "com.yandex.ydb.tablet.v1";
+
+import "ydb/public/api/protos/draft/ydb_tablet.proto";
+
+// This service has low-level APIs that are not intended for normal operation,
+// sometimes allowing system administrators to repair broken databases or
+// perform reconfiguration that is not directly supported. These may break the
+// system completely however, so use with caution and make sure you really know
+// what you're doing.
+service TabletService {
+
+    // Execute a minikql script at the specified tablet.
+    // This may be used to side-step intended tablet APIs and work with their
+    // local database directly, e.g. to repair tablets in an unexpected state.
+    // Note the modified tablet usually needs to be restarted to pick up any
+    // changes, since its logical in-memory state is not updated and diverges
+    // from the new persistent state.
+    rpc ExecuteTabletMiniKQL(ExecuteTabletMiniKQLRequest) returns (ExecuteTabletMiniKQLResponse);
+
+    // Change schema of the specified tablet and get the resulting schema.
+    // This may be used to side-step intended tablet APIs and repair tablets
+    // in an unexpected state. Empty changes are useful to dump current tablet
+    // schema.
+    rpc ChangeTabletSchema(ChangeTabletSchemaRequest) returns (ChangeTabletSchemaResponse);
+
+    // Restart the specified tablet.
+    // This may help when tablets (or their clients) are running in an
+    // unexpected state, sometimes allowing them to get unstuck.
+    rpc RestartTablet(RestartTabletRequest) returns (RestartTabletResponse);
+
+}

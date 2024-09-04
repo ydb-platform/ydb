@@ -8,6 +8,7 @@
 #include <util/generic/hash.h>
 #include <util/generic/map.h>
 #include <util/generic/set.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 
 namespace NKikimr {
 namespace NTable {
@@ -119,19 +120,19 @@ namespace NTable {
             return tags;
         }
 
-        void CheckCompatability(const TRowScheme &scheme) const
+        void CheckCompatibility(const TString& tableName, const TRowScheme &scheme) const
         {
             for (auto &col: Cols) {
                 auto *other = scheme.ColInfo(col.Tag);
 
                 if (other == nullptr && col.IsKey()) {
-                    Y_ABORT("Key column dropping ins't supported");
+                    Y_ABORT_S("Table " << tableName << " key column " << col.Tag << " cannot be dropped");
                 } else if (other == nullptr) {
                     /* It is ok to drop non-key columns */
                 } else if (col.TypeInfo != other->TypeInfo) {
-                    Y_ABORT("Column type alteration is not supproted");
+                    Y_ABORT_S("Table " << tableName << " column " << col.Tag << " cannot be altered with type " << col.TypeInfo.GetTypeId() << " -> " << other->TypeInfo.GetTypeId());
                 } else if (col.Key != other->Key) {
-                    Y_ABORT("Cannot alter keys order or move col to keys");
+                    Y_ABORT_S("Table " << tableName << " column " << col.Tag << " cannot be added to key or reordered " << col.Key << " -> " << other->Key);
 
                     /* Existing string columns can't be altered to keys as
                         they may hold external blobs references which is not
@@ -143,7 +144,7 @@ namespace NTable {
                 } else {
                     auto &null = (*scheme.RowCellDefaults)[other->Pos];
                     if (CompareTypedCells(null, (*RowCellDefaults)[col.Pos], col.TypeInfo))
-                        Y_ABORT("Cannot alter existing columnt default value");
+                        Y_ABORT_S("Table " << tableName << " column " << col.Tag << " existing default value cannot be altered");
                 }
             }
         }

@@ -179,6 +179,9 @@ void TNodeWarden::Bootstrap() {
         icb->RegisterSharedControl(EnableSyncLogChunkCompressionSSD, "VDiskControls.EnableSyncLogChunkCompressionSSD");
         icb->RegisterSharedControl(MaxSyncLogChunksInFlightHDD, "VDiskControls.MaxSyncLogChunksInFlightHDD");
         icb->RegisterSharedControl(MaxSyncLogChunksInFlightSSD, "VDiskControls.MaxSyncLogChunksInFlightSSD");
+        icb->RegisterSharedControl(DefaultHugeGarbagePerMille, "VDiskControls.DefaultHugeGarbagePerMille");
+        icb->RegisterSharedControl(MaxCommonLogChunksHDD, "PDiskControls.MaxCommonLogChunksHDD");
+        icb->RegisterSharedControl(MaxCommonLogChunksSSD, "PDiskControls.MaxCommonLogChunksSSD");
 
         icb->RegisterSharedControl(CostMetricsParametersByMedia[NPDisk::DEVICE_TYPE_ROT].BurstThresholdNs,
                 "VDiskControls.BurstThresholdNsHDD");
@@ -192,6 +195,9 @@ void TNodeWarden::Bootstrap() {
                 "VDiskControls.DiskTimeAvailableScaleSSD");
         icb->RegisterSharedControl(CostMetricsParametersByMedia[NPDisk::DEVICE_TYPE_NVME].DiskTimeAvailableScale,
                 "VDiskControls.DiskTimeAvailableScaleNVME");
+
+        icb->RegisterSharedControl(SlowDiskThreshold, "DSProxyControls.SlowDiskThreshold");
+        icb->RegisterSharedControl(PredictedDelayMultiplier, "DSProxyControls.PredictedDelayMultiplier");
     }
 
     // start replication broker
@@ -253,6 +259,8 @@ void TNodeWarden::Bootstrap() {
     StartInvalidGroupProxy();
 
     StartDistributedConfigKeeper();
+
+    HandleGroupPendingQueueTick();
 }
 
 void TNodeWarden::HandleReadCache() {
@@ -335,8 +343,7 @@ void TNodeWarden::Handle(NPDisk::TEvSlayResult::TPtr ev) {
             } else {
                 SendVDiskReport(vslotId, msg.VDiskId, NKikimrBlobStorage::TEvControllerNodeReport::WIPED);
                 TVDiskRecord& vdisk = vdiskIt->second;
-                StartLocalVDiskActor(vdisk, TDuration::Zero()); // restart actor after successful wiping
-                SendDiskMetrics(false);
+                StartLocalVDiskActor(vdisk); // restart actor after successful wiping
             }
             break;
 
@@ -538,6 +545,8 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatus::TPtr ev)
 
     auto& record = ev->Get()->Record;
 
+    std::unique_ptr<TEvBlobStorage::TEvControllerUpdateDiskStatus> updateDiskStatus;
+
     for (const NKikimrBlobStorage::TVDiskMetrics& m : record.GetVDisksMetrics()) {
         Y_ABORT_UNLESS(m.HasVSlotId());
         const TVSlotId vslotId(m.GetVSlotId());
@@ -552,8 +561,11 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatus::TPtr ev)
                     VDisksWithUnreportedMetrics.PushBack(&vdisk);
                 }
             } else {
+                if (!updateDiskStatus) {
+                    updateDiskStatus.reset(new TEvBlobStorage::TEvControllerUpdateDiskStatus);
+                }
+                updateDiskStatus->Record.AddVDisksMetrics()->CopyFrom(m);
                 vdisk.VDiskMetrics.emplace(m);
-                VDisksWithUnreportedMetrics.PushBack(&vdisk);
             }
         }
     }
@@ -569,10 +581,17 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatus::TPtr ev)
                     PDisksWithUnreportedMetrics.PushBack(&pdisk);
                 }
             } else {
+                if (!updateDiskStatus) {
+                    updateDiskStatus.reset(new TEvBlobStorage::TEvControllerUpdateDiskStatus);
+                }
+                updateDiskStatus->Record.AddPDisksMetrics()->CopyFrom(m);
                 pdisk.PDiskMetrics.emplace(m);
-                PDisksWithUnreportedMetrics.PushBack(&pdisk);
             }
         }
+    }
+
+    if (updateDiskStatus) {
+        SendToController(std::move(updateDiskStatus));
     }
 }
 
@@ -635,7 +654,7 @@ void TNodeWarden::Handle(TEvStatusUpdate::TPtr ev) {
         auto& vdisk = it->second;
         vdisk.Status = msg->Status;
         vdisk.OnlyPhantomsRemain = msg->OnlyPhantomsRemain;
-        SendDiskMetrics(false);
+        VDiskStatusChanged = true;
 
         if (msg->Status == NKikimrBlobStorage::EVDiskStatus::READY && vdisk.WhiteboardVDiskId) {
             Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvVDiskDropDonors(*vdisk.WhiteboardVDiskId,
@@ -646,12 +665,12 @@ void TNodeWarden::Handle(TEvStatusUpdate::TPtr ev) {
             const auto& r = vdisk.RuntimeData;
             const auto& info = r->GroupInfo;
 
-            if (const ui32 groupId = info->GroupID; TGroupID(groupId).ConfigurationType() == EGroupConfigurationType::Static) {
+            if (const ui32 groupId = info->GroupID.GetRawId(); TGroupID(groupId).ConfigurationType() == EGroupConfigurationType::Static) {
                 for (const auto& item : StorageConfig.GetBlobStorageConfig().GetServiceSet().GetVDisks()) {
                     const TVDiskID vdiskId = VDiskIDFromVDiskID(item.GetVDiskID());
-                    if (vdiskId.GroupID == groupId && info->GetTopology().GetOrderNumber(vdiskId) == r->OrderNumber &&
+                    if (vdiskId.GroupID.GetRawId() == groupId && info->GetTopology().GetOrderNumber(vdiskId) == r->OrderNumber &&
                             item.HasDonorMode() && item.GetEntityStatus() != NKikimrBlobStorage::EEntityStatus::DESTROY) {
-                        SendDropDonorQuery(vslotId.NodeId, vslotId.PDiskId, vslotId.VDiskSlotId, TVDiskID(groupId, 0,
+                        SendDropDonorQuery(vslotId.NodeId, vslotId.PDiskId, vslotId.VDiskSlotId, TVDiskID(TGroupId::FromValue(groupId), 0,
                             info->GetVDiskId(r->OrderNumber)));
                         break;
                     }

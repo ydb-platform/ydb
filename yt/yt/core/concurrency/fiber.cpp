@@ -31,22 +31,6 @@ static constexpr auto& Logger = ConcurrencyLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-#ifdef NDEBUG
-    #define ATOMIC_EXCHANGE_WITH_VERIFY(Atomic, NewValue, ExpectedValue, MemoryOrder) \
-        YT_VERIFY(Atomic.load(std::memory_order::relaxed) == ExpectedValue); \
-        Atomic.store(NewValue, MemoryOrder); \
-        static_assert(true)
-#else
-    #define ATOMIC_EXCHANGE_WITH_VERIFY(Atomic, NewValue, ExpectedValue, MemoryOrder) \
-        { \
-            auto observed = Atomic.exchange(NewValue, MemoryOrder); \
-            YT_VERIFY(observed == ExpectedValue); \
-        } \
-        static_assert(true)
-#endif
-
-////////////////////////////////////////////////////////////////////////////////
-
 class TFiberProfiler
     : public ISensorProducer
 {
@@ -167,7 +151,7 @@ private:
                 auto guard = Guard(Lock_);
                 while(GuardedProcessQueues());
             }),
-            /*priority*/std::numeric_limits<int>::min());
+            /*priority*/ std::numeric_limits<int>::min());
     }
 
 #endif
@@ -278,11 +262,8 @@ bool TFiberIntrospectionBase::TryLockForIntrospection(EFiberState* state, TFunct
 
     auto guard = Finally([&] {
         // Release lock held by introspector.
-        ATOMIC_EXCHANGE_WITH_VERIFY(
-            State_,
-            EFiberState::Waiting,
-            EFiberState::Introspecting,
-            std::memory_order::release);
+        YT_VERIFY(State_.load(std::memory_order::relaxed) == EFiberState::Introspecting);
+        State_.store(EFiberState::Waiting, std::memory_order::release);
     });
 
     successHandler();
@@ -332,11 +313,8 @@ void TFiberIntrospectionBase::SetWaiting()
     WaitingSince_ = CpuInstantToInstant(GetApproximateCpuInstant());
 
     // Release lock that should be acquired by running fiber.
-    ATOMIC_EXCHANGE_WITH_VERIFY(
-        State_,
-        EFiberState::Waiting,
-        EFiberState::Running,
-        std::memory_order::release);
+    YT_VERIFY(State_.load(std::memory_order::relaxed) == EFiberState::Running);
+    State_.store(EFiberState::Waiting, std::memory_order::release);
 }
 
 void TFiberIntrospectionBase::SetIdle()
@@ -344,11 +322,8 @@ void TFiberIntrospectionBase::SetIdle()
     // 1) Locked by running fiber.
     // 2) Reading this doesn't cause anything to happen.
     // This state is never checked for, so just relaxed.
-    ATOMIC_EXCHANGE_WITH_VERIFY(
-        State_,
-        EFiberState::Idle,
-        EFiberState::Running,
-        std::memory_order::relaxed);
+    YT_VERIFY(State_.load(std::memory_order::relaxed) == EFiberState::Running);
+    State_.store(EFiberState::Idle, std::memory_order::relaxed);
 }
 
 std::optional<TDuration> TFiberIntrospectionBase::SetRunning()
@@ -400,11 +375,8 @@ void TFiberIntrospectionBase::SetFinished()
     // the last modification and if this function
     // is called twice regardless of situation
     // one of the calls will crash as it should.
-    ATOMIC_EXCHANGE_WITH_VERIFY(
-        State_,
-        EFiberState::Finished,
-        EFiberState::Running,
-        std::memory_order::relaxed);
+    YT_VERIFY(State_.load(std::memory_order::relaxed) == EFiberState::Running);
+    State_.store(EFiberState::Finished, std::memory_order::relaxed);
 }
 
 EFiberState TFiberIntrospectionBase::GetState() const

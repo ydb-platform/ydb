@@ -89,24 +89,40 @@ void TTargetBase::SetIssue(const TString& value) {
 }
 
 void TTargetBase::AddWorker(ui64 id) {
-    Workers.insert(id);
+    Workers.emplace(id, TWorker{});
+    TLagProvider::AddPendingLag(id);
 }
 
 void TTargetBase::RemoveWorker(ui64 id) {
     Workers.erase(id);
 }
 
-const THashSet<ui64>& TTargetBase::GetWorkers() const {
+const THashMap<ui64, TTargetBase::TWorker>& TTargetBase::GetWorkers() const {
     return Workers;
 }
 
 void TTargetBase::RemoveWorkers(const TActorContext& ctx) {
     if (!PendingRemoveWorkers) {
         PendingRemoveWorkers = true;
-        for (const auto& id : Workers) {
+        for (const auto& [id, _] : Workers) {
             ctx.Send(ctx.SelfID, new TEvPrivate::TEvRemoveWorker(Replication->GetId(), Id, id));
         }
     }
+}
+
+void TTargetBase::UpdateLag(ui64 workerId, TDuration lag) {
+    auto it = Workers.find(workerId);
+    if (it == Workers.end()) {
+        return;
+    }
+
+    if (TLagProvider::UpdateLag(it->second, workerId, lag)) {
+        Replication->UpdateLag(GetId(), TLagProvider::GetLag().GetRef());
+    }
+}
+
+const TMaybe<TDuration> TTargetBase::GetLag() const {
+    return TLagProvider::GetLag();
 }
 
 void TTargetBase::Progress(const TActorContext& ctx) {

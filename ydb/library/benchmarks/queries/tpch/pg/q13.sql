@@ -5,7 +5,7 @@
 -- using 1680793381 as a seed to the RNG
 
 select
-    coalesce(c_count, 0::int8) as c_count,
+    coalesce(c_count, 0) as c_count,
     count(*) as custdist
 from
     (

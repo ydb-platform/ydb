@@ -2,6 +2,10 @@ default:
   lang: en
   pub-cover-size: 700x400
   team:
+      blinkov:
+        name: Ivan Blinkov
+        position: VP, Product and Open Source
+        profile: https://www.linkedin.com/in/ivanblinkov/
       bondar:
         name: Oleg Bondar
         position: CPO YDB

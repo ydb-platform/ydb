@@ -6,7 +6,7 @@
 
 Для работы плагина понадобится [Grafana](https://grafana.com/grafana/download?pg=get&plcmt=selfmanaged-box1-cta1) версии не ниже `9.2`.
 
-Следуйте [документации Grafana](https://grafana.com/docs/grafana/latest/plugins/installation/), чтобы установить плагин под названием `ydb-grafana-datasource-plugin`. 
+Следуйте [документации Grafana](https://grafana.com/docs/grafana/latest/plugins/installation/), чтобы установить плагин под названием `ydb-grafana-datasource-plugin`.
 
 ## Конфигурация
 
@@ -64,7 +64,7 @@ datasources:
 | dbLocation | Путь к базе  | `string` |
 | user | Имя пользователя  | `string` |
 | serviceAccAuthAccessKey | Ключ доступа для сервисного аккаунта  | `string` (защищенное поле) |
-| accessToken | OAuth-токен  | `string` (защищенное поле) |
+| accessToken | Access токен  | `string` (защищенное поле) |
 | password | Пароль  | `string` (защищенное поле) |
 | certificate | Если на вашем кластере {{ ydb-short-name }} используются самоподписанные сертификаты TLS, то для соединения с {{ ydb-short-name }} необходимо указать сертификат [сертификационного центра](https://en.wikipedia.org/wiki/Certificate_authority), через который они были выпущены | `string` (защищенное поле) |
 
@@ -105,7 +105,7 @@ ORDER BY `timestamp`
 
 ![Table](../_assets/grafana/table.png)
 
-### Визуализация логов 
+### Визуализация логов
 
 Для визуализации данных в виде логов запрос должен возвращать поле с типом данных `Date`, `Datetime` или `Timestamp` и прое с типом `String`. Выбрать тип визуализации можно с помощью настроек. По умолчанию только первое встреченное текстовое поле трактуется как строка лога, но это поведение может быть изменено с помощью конструктора запросов.
 
@@ -115,7 +115,7 @@ ORDER BY `timestamp`
 
 Чтобы упростить синтаксис и получить возможность динамически изменять параметры (например, значение временного диапазона), запрос может содержать в себе макросы.
 
-В запросе могут содержаться два вида макросов - [уровня Grafana](#macros) и уровня YQL. Перед отправкой запроса в {{ ydb-short-name }}, плагин проанализирует текст запроса и заменит макросы уровня Grafana на конкретные значения. После этого макросы уровня YQL будут обработаны на сервере {{ ydb-short-name }}.
+В запросе могут содержаться два вида макросов - уровня Grafana и уровня YQL. Перед отправкой запроса в {{ ydb-short-name }}, плагин проанализирует текст запроса и заменит макросы уровня Grafana на конкретные значения. После этого макросы уровня YQL будут обработаны на сервере {{ ydb-short-name }}.
 
 Пример запроса с макросом, который позволяет использовать временной фильтр Grafana.
 
@@ -145,7 +145,7 @@ WHERE $__timeFilter(`timeCol` + Interval("PT24H"))
 После создания переменная может быть использована в запросе к {{ ydb-short-name }} с помощью [специального синтаксиса](https://grafana.com/docs/grafana/latest/variables/syntax/).
 Для более подробной информации о переменных, см. [документацию Grafana](https://grafana.com/docs/grafana/latest/variables/).
 
-## Дополнительная информация 
+## Дополнительная информация
 
 * Добавить [Аннотации](https://grafana.com/docs/grafana/latest/dashboards/annotations/).
 * Настроить и использовать [Шаблоны и переменные](https://grafana.com/docs/grafana/latest/variables/).

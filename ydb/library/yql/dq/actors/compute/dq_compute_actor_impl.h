@@ -147,10 +147,7 @@ public:
 
             static_cast<TDerived*>(this)->DoBootstrap();
         } catch (const NKikimr::TMemoryLimitExceededException& e) {
-            InternalError(NYql::NDqProto::StatusIds::OVERLOADED, TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder()
-                << "Mkql memory limit exceeded, limit: " << GetMkqlMemoryLimit()
-                << ", host: " << HostName()
-                << ", canAllocateExtraMemory: " << CanAllocateExtraMemory);
+            OnMemoryLimitExceptionHandler();
         } catch (const std::exception& e) {
             InternalError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TIssuesIds::UNEXPECTED, e.what());
         }
@@ -161,6 +158,7 @@ public:
 protected:
     TDqComputeActorBase(const NActors::TActorId& executerId, const TTxId& txId, NDqProto::TDqTask* task,
         IDqAsyncIoFactory::TPtr asyncIoFactory,
+        const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
         bool ownMemoryQuota = true, bool passExceptions = false,
         const ::NMonitoring::TDynamicCounterPtr& taskCounters = nullptr,
@@ -174,6 +172,7 @@ protected:
         , MemoryLimits(memoryLimits)
         , CanAllocateExtraMemory(RuntimeSettings.ExtraMemoryAllocationPool != 0)
         , AsyncIoFactory(std::move(asyncIoFactory))
+        , FunctionRegistry(functionRegistry)
         , CheckpointingMode(GetTaskCheckpointingMode(Task))
         , State(Task.GetCreateSuspended() ? NDqProto::COMPUTE_STATE_UNKNOWN : NDqProto::COMPUTE_STATE_EXECUTING)
         , WatermarksTracker(this->SelfId(), TxId, Task.GetId())
@@ -223,10 +222,7 @@ protected:
             TComputeActorClass* self = static_cast<TComputeActorClass*>(this);
             (self->*FuncBody)(ev);
         } catch (const NKikimr::TMemoryLimitExceededException& e) {
-            InternalError(NYql::NDqProto::StatusIds::OVERLOADED, TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder()
-                << "Mkql memory limit exceeded, limit: " << GetMkqlMemoryLimit()
-                << ", host: " << HostName()
-                << ", canAllocateExtraMemory: " << CanAllocateExtraMemory);
+            OnMemoryLimitExceptionHandler();
         } catch (const std::exception& e) {
             if (PassExceptions) {
                 throw;
@@ -313,6 +309,20 @@ protected:
     virtual void DoTerminateImpl() {}
 
     virtual bool DoHandleChannelsAfterFinishImpl() = 0;
+
+    void OnMemoryLimitExceptionHandler() {
+        TString memoryConsumptionDetails = MemoryLimits.MemoryQuotaManager->MemoryConsumptionDetails();
+        TStringBuilder failureReason = TStringBuilder()
+            << "Mkql memory limit exceeded, allocated by task " << Task.GetId() << ": " << GetMkqlMemoryLimit()
+            << ", host: " << HostName()
+            << ", canAllocateExtraMemory: " << CanAllocateExtraMemory;
+
+        if (!memoryConsumptionDetails.empty()) {
+            failureReason << ", memory manager details for current node: " << memoryConsumptionDetails;
+        }
+
+        InternalError(NYql::NDqProto::StatusIds::OVERLOADED, TIssuesIds::KIKIMR_PRECONDITION_FAILED, failureReason);
+    }
 
     void ProcessOutputsImpl(ERunStatus status) {
         ProcessOutputsState.LastRunStatus = status;
@@ -513,6 +523,10 @@ protected:
         Terminate(success, TIssues({TIssue(message)}));
     }
 
+    virtual TMaybe<google::protobuf::Any> ExtraData() {
+        return Nothing();
+    }
+
     void FillExtraData(NDqProto::TEvComputeActorState& state) {
         auto* extraData = state.MutableExtraData();
         for (auto& [index, input] : SourcesMap) {
@@ -542,9 +556,14 @@ protected:
                 }
             }
         }
+
+        if (auto data = static_cast<TDerived*>(this)->ExtraData()) {
+            auto* entry = extraData->MutableComputeExtraData();
+            entry->MutableData()->CopyFrom(*data);
+        }
     }
 
-    void ReportStateAndMaybeDie(NYql::NDqProto::StatusIds::StatusCode statusCode, const TIssues& issues)
+    void ReportStateAndMaybeDie(NYql::NDqProto::StatusIds::StatusCode statusCode, const TIssues& issues, bool forceTerminate = false)
     {
         auto execEv = MakeHolder<TEvDqCompute::TEvState>();
         auto& record = execEv->Record;
@@ -565,7 +584,7 @@ protected:
 
         this->Send(ExecuterId, execEv.Release());
 
-        if (Checkpoints && State == NDqProto::COMPUTE_STATE_FINISHED) {
+        if (!forceTerminate && Checkpoints && State == NDqProto::COMPUTE_STATE_FINISHED) {
             // checkpointed CAs must not self-destroy
             return;
         }
@@ -619,6 +638,10 @@ protected:
         }
     }
 
+    void SendError(const TString& error) {
+        this->Send(this->SelfId(), TEvDq::TEvAbortExecution::InternalError(error));
+    }
+
 protected: //TDqComputeActorChannels::ICallbacks
     //i64 GetInputChannelFreeSpace(ui64 channelId) is pure and must be overridded in derived class
 
@@ -650,7 +673,7 @@ protected:
         OutputTransformsMap.at(outputIndex).FinishIsAcknowledged = true;
         ContinueExecute(EResumeSource::CATransformFinished);
     }
-    
+
 protected: //TDqComputeActorCheckpoints::ICallbacks
     //bool ReadyToCheckpoint() is pure and must be overriden in a derived class
 
@@ -1018,10 +1041,6 @@ protected:
         auto tag = (EEvWakeupTag) ev->Get()->Tag;
         switch (tag) {
             case EEvWakeupTag::TimeoutTag: {
-                auto abortEv = MakeHolder<TEvDq::TEvAbortExecution>(NYql::NDqProto::StatusIds::TIMEOUT, TStringBuilder()
-                    << "Timeout event from compute actor " << this->SelfId()
-                    << ", TxId: " << TxId << ", task: " << Task.GetId());
-
                 if (ComputeActorSpan) {
                     ComputeActorSpan.EndError(
                         TStringBuilder()
@@ -1030,10 +1049,8 @@ protected:
                     );
                 }
 
-                this->Send(ExecuterId, abortEv.Release());
-
-                TerminateSources("timeout exceeded", false);
-                Terminate(false, "timeout exceeded");
+                State = NDqProto::COMPUTE_STATE_FAILURE;
+                ReportStateAndMaybeDie(NYql::NDqProto::StatusIds::TIMEOUT, {TIssue("timeout exceeded")}, true);
                 break;
             }
             case EEvWakeupTag::PeriodicStatsTag: {
@@ -1057,8 +1074,9 @@ protected:
         switch (lostEventType) {
             case TEvDqCompute::TEvState::EventType: {
                 CA_LOG_E("Handle undelivered TEvState event, abort execution");
-                this->TerminateSources("executer lost", false);
-                Terminate(false, "executer lost");
+
+                TerminateSources("executer lost", false);
+                Terminate(false, "executer lost"); // Executer lost - no need to report state
                 break;
             }
             default: {
@@ -1104,14 +1122,17 @@ protected:
             InternalError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, *ev->Get()->GetIssues().begin());
             return;
         }
+
         TIssues issues = ev->Get()->GetIssues();
         CA_LOG_E("Handle abort execution event from: " << ev->Sender
             << ", status: " << NYql::NDqProto::StatusIds_StatusCode_Name(ev->Get()->Record.GetStatusCode())
             << ", reason: " << issues.ToOneLineString());
 
-        bool success = ev->Get()->Record.GetStatusCode() == NYql::NDqProto::StatusIds::SUCCESS;
-
-        this->TerminateSources(issues, success);
+        if (ev->Get()->Record.GetStatusCode() == NYql::NDqProto::StatusIds::SUCCESS) {
+            State = NDqProto::COMPUTE_STATE_FINISHED;
+        } else {
+            State = NDqProto::COMPUTE_STATE_FAILURE;
+        }
 
         if (ev->Sender != ExecuterId) {
             if (ComputeActorSpan) {
@@ -1121,7 +1142,7 @@ protected:
             NActors::TActivationContext::Send(ev->Forward(ExecuterId));
         }
 
-        Terminate(success, issues);
+        ReportStateAndMaybeDie(ev->Get()->Record.GetStatusCode(), issues, true);
     }
 
     void HandleExecuteBase(NActors::TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
@@ -1256,6 +1277,7 @@ protected:
             const auto& inputDesc = Task.GetInputs(inputIndex);
             Y_ABORT_UNLESS(inputDesc.HasSource());
             source.Type = inputDesc.GetSource().GetType();
+            source.ProgramBuilder.ConstructInPlace(typeEnv, *FunctionRegistry);
             const auto& settings = Task.GetSourceSettings();
             Y_ABORT_UNLESS(settings.empty() || inputIndex < settings.size());
             CA_LOG_D("Create source for input " << inputIndex << " " << inputDesc);
@@ -1273,6 +1295,7 @@ protected:
                         .ComputeActorId = this->SelfId(),
                         .TypeEnv = typeEnv,
                         .HolderFactory = holderFactory,
+                        .ProgramBuilder = *source.ProgramBuilder,
                         .TaskCounters = TaskCounters,
                         .Alloc = Alloc,
                         .MemoryQuotaManager = MemoryLimits.MemoryQuotaManager,
@@ -1292,6 +1315,7 @@ protected:
             transform.ValueType = static_cast<NKikimr::NMiniKQL::TType*>(typeNode);
             CA_LOG_D("Create transform for input " << inputIndex << " " << inputDesc.ShortDebugString());
             try {
+                auto guard = BindAllocator();
                 std::tie(transform.AsyncInput, transform.Actor) = AsyncIoFactory->CreateDqInputTransform(
                     IDqAsyncIoFactory::TInputTransformArguments {
                         .InputDesc = inputDesc,
@@ -1354,6 +1378,7 @@ protected:
                         .TaskParams = taskParams,
                         .TypeEnv = typeEnv,
                         .HolderFactory = holderFactory,
+                        .Alloc = Alloc,
                         .RandomProvider = randomProvider
                     });
             } catch (const std::exception& ex) {
@@ -1485,7 +1510,7 @@ protected:
             if (inputDesc.HasSource()) {
                 const auto watermarksMode = inputDesc.GetSource().GetWatermarksMode();
                 auto result = SourcesMap.emplace(
-                    i, 
+                    i,
                     static_cast<TDerived*>(this)->CreateInputHelper(LogPrefix, i, watermarksMode)
                 );
                 YQL_ENSURE(result.second);
@@ -1595,7 +1620,7 @@ public:
             ReportEventElapsedTime();
         }
 
-        dst->SetCpuTimeUs(CpuTime.MicroSeconds());
+        dst->SetCpuTimeUs(CpuTime.MicroSeconds() + SourceCpuTime.MicroSeconds());
         dst->SetMaxMemoryUsage(MemoryLimits.MemoryQuotaManager->GetMaxMemorySize());
 
         if (auto memProfileStats = GetMemoryProfileStats(); memProfileStats) {
@@ -1628,14 +1653,18 @@ public:
             }
             FillTaskRunnerStats(Task.GetId(), Task.GetStageId(), *taskStats, protoTask, RuntimeSettings.GetCollectStatsLevel());
 
-            // More accurate cpu time counter:
+            auto cpuTimeUs = taskStats->ComputeCpuTime.MicroSeconds() + taskStats->BuildCpuTime.MicroSeconds();
             if (TDerived::HasAsyncTaskRunner) {
-                protoTask->SetCpuTimeUs(CpuTime.MicroSeconds() + taskStats->ComputeCpuTime.MicroSeconds() + taskStats->BuildCpuTime.MicroSeconds());
+                // Async TR is another actor, summarize CPU usage
+                cpuTimeUs += CpuTime.MicroSeconds();
             }
+            // CpuTimeUs does include SourceCpuTime
+            protoTask->SetCpuTimeUs(cpuTimeUs + SourceCpuTime.MicroSeconds());
             protoTask->SetSourceCpuTimeUs(SourceCpuTime.MicroSeconds());
 
             ui64 ingressBytes = 0;
             ui64 ingressRows = 0;
+            ui64 ingressDecompressedBytes = 0;
             auto startTimeMs = protoTask->GetStartTimeMs();
 
             if (RuntimeSettings.CollectFull()) {
@@ -1650,6 +1679,7 @@ public:
                         ingressBytes += ingressStats.Bytes;
                         // ingress rows are usually not reported, so we count rows in task runner input
                         ingressRows += ingressStats.Rows ? ingressStats.Rows : taskStats->Sources.at(inputIndex)->GetPopStats().Rows;
+                        ingressDecompressedBytes += ingressStats.DecompressedBytes;
                         if (ingressStats.FirstMessageTs) {
                             auto firstMessageMs = ingressStats.FirstMessageTs.MilliSeconds();
                             if (!startTimeMs || startTimeMs > firstMessageMs) {
@@ -1661,10 +1691,14 @@ public:
             } else {
                 // in basic mode enum sources directly
                 for (auto& [inputIndex, sourceInfo] : SourcesMap) {
+                    if (!sourceInfo.AsyncInput)
+                        continue;
+
                     const auto& ingressStats = sourceInfo.AsyncInput->GetIngressStats();
                     ingressBytes += ingressStats.Bytes;
                     // ingress rows are usually not reported, so we count rows in task runner input
                     ingressRows += ingressStats.Rows ? ingressStats.Rows : taskStats->Sources.at(inputIndex)->GetPopStats().Rows;
+                    ingressDecompressedBytes += ingressStats.DecompressedBytes;
                 }
             }
 
@@ -1674,6 +1708,7 @@ public:
             protoTask->SetStartTimeMs(startTimeMs);
             protoTask->SetIngressBytes(ingressBytes);
             protoTask->SetIngressRows(ingressRows);
+            protoTask->SetIngressDecompressedBytes(ingressDecompressedBytes);
 
             ui64 egressBytes = 0;
             ui64 egressRows = 0;
@@ -1681,6 +1716,9 @@ public:
 
             for (auto& [outputIndex, sinkInfo] : SinksMap) {
                 if (auto* sink = GetSink(outputIndex, sinkInfo)) {
+                    if (!sinkInfo.AsyncOutput)
+                        continue;
+
                     const auto& egressStats = sinkInfo.AsyncOutput->GetEgressStats();
                     const auto& pushStats = sink->GetPushStats();
                     if (RuntimeSettings.CollectFull()) {
@@ -1787,6 +1825,8 @@ public:
                     }
                 }
             }
+        } else {
+            // TODO: what should happen in this case?
         }
 
         static_cast<TDerived*>(this)->FillExtraStats(dst, last);
@@ -1855,6 +1895,7 @@ protected:
     TComputeMemoryLimits MemoryLimits;
     const bool CanAllocateExtraMemory = false;
     const IDqAsyncIoFactory::TPtr AsyncIoFactory;
+    const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
     const NDqProto::ECheckpointingMode CheckpointingMode;
     TDqComputeActorChannels* Channels = nullptr;
     TDqComputeActorCheckpoints* Checkpoints = nullptr;

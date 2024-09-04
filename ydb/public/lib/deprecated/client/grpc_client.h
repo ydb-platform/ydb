@@ -109,18 +109,8 @@ namespace NKikimr {
             /////////////////////////////////////////////////////////////////////////////////////////////////
             void TabletStateRequest(const NKikimrClient::TTabletStateRequest& request, TResponseCallback callback);
 
-            /////////////////////////////////////////////////////////////////////////////////////////////////
-            // HTTP INTERFACE
-            /////////////////////////////////////////////////////////////////////////////////////////////////
-            void DbSchema(const NKikimrClient::TJSON& request, TJSONCallback callback);
-            void DbOperation(const NKikimrClient::TJSON& request, TJSONCallback callback);
-            void DbBatch(const NKikimrClient::TJSON& request, TJSONCallback callback);
-
-            void WhoAmI(const NKikimrClient::TWhoAmI& request, TResponseCallback callback);
             void FillNode(const NKikimrClient::TFillNodeRequest& request, TResponseCallback callback);
             void DrainNode(const NKikimrClient::TDrainNodeRequest& request, TResponseCallback callback);
-
-            void LoginRequest(const NKikimrClient::TLoginRequest& request, TResponseCallback callback);
         };
 
     } // NGRpcProxy

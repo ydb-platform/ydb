@@ -20,10 +20,8 @@ namespace NKikimr {
             BarriersEssence = BarriersSnap.CreateEssence(HullCtx);
         }
 
-        bool Check(const TKeyLogoBlob &key,
-                   const TMemRecLogoBlob &memRec,
-                   bool allowKeepFlags) const {
-            return BarriersEssence->Keep(key, memRec, {}, allowKeepFlags, false /*allowGarbageCollection*/).KeepData;
+        bool Check(const TKeyLogoBlob &key, const TMemRecLogoBlob &memRec, bool allowKeepFlags) const {
+            return BarriersEssence->Keep(key, memRec, {}, allowKeepFlags, true).KeepData;
         }
 
         TIntrusivePtr<THullCtx> HullCtx;

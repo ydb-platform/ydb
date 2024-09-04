@@ -2,6 +2,7 @@
 
 #include <yt/yt/client/api/connection.h>
 #include <yt/yt/client/api/client.h>
+#include <yt/yt/client/api/distributed_table_sessions.h>
 #include <yt/yt/client/api/file_writer.h>
 #include <yt/yt/client/api/journal_reader.h>
 #include <yt/yt/client/api/journal_writer.h>
@@ -105,15 +106,14 @@ public:
     MOCK_METHOD(TFuture<TCreateQueueProducerSessionResult>, CreateQueueProducerSession, (
         const NYPath::TRichYPath& producerPath,
         const NYPath::TRichYPath& queuePath,
-        const TString& sessionId,
-        const std::optional<NYson::TYsonString>& userMeta,
+        const NQueueClient::TQueueProducerSessionId& sessionId,
         const TCreateQueueProducerSessionOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<void>, RemoveQueueProducerSession, (
         const NYPath::TRichYPath& producerPath,
         const NYPath::TRichYPath& queuePath,
-        const TString& sessionId,
+        const NQueueClient::TQueueProducerSessionId& sessionId,
         const TRemoveQueueProducerSessionOptions& options),
         (override));
 
@@ -273,7 +273,7 @@ public:
 
     MOCK_METHOD(TFuture<void>, SwitchLeader, (
         NHydra::TCellId cellId,
-        const TString& newLeaderAddress,
+        const std::string& newLeaderAddress,
         const TSwitchLeaderOptions& options),
         (override));
 
@@ -287,17 +287,17 @@ public:
         (override));
 
     MOCK_METHOD(TFuture<void>, KillProcess, (
-        const TString& address,
+        const std::string& address,
         const TKillProcessOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<TString>, WriteCoreDump, (
-        const TString& address,
+        const std::string& address,
         const TWriteCoreDumpOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<TGuid>, WriteLogBarrier, (
-        const TString& address,
+        const std::string& address,
         const TWriteLogBarrierOptions& options),
         (override));
 
@@ -307,7 +307,7 @@ public:
         (override));
 
     MOCK_METHOD(TFuture<void>, HealExecNode, (
-        const TString& address,
+        const std::string& address,
         const THealExecNodeOptions& options),
         (override));
 
@@ -348,7 +348,7 @@ public:
 
     MOCK_METHOD(TFuture<TMaintenanceIdPerTarget>, AddMaintenance, (
         EMaintenanceComponent component,
-        const TString& address,
+        const std::string& address,
         EMaintenanceType type,
         const TString& comment,
         const TAddMaintenanceOptions& options),
@@ -356,7 +356,7 @@ public:
 
     MOCK_METHOD(TFuture<TMaintenanceCountsPerTarget>, RemoveMaintenance, (
         EMaintenanceComponent component,
-        const TString& address,
+        const std::string& address,
         const TMaintenanceFilter& filter,
         const TRemoveMaintenanceOptions& options),
         (override));
@@ -534,14 +534,14 @@ public:
         (override));
 
     MOCK_METHOD(TFuture<TCheckPermissionResponse>, CheckPermission, (
-        const TString& user,
+        const std::string& user,
         const NYPath::TYPath& path,
         NYTree::EPermission permission,
         const TCheckPermissionOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<TCheckPermissionByAclResult>, CheckPermissionByAcl, (
-        const std::optional<TString>& user,
+        const std::optional<std::string>& user,
         NYTree::EPermission permission,
         NYTree::INodePtr acl,
         const TCheckPermissionByAclOptions& options),
@@ -620,7 +620,7 @@ public:
         const TGetJobSpecOptions& options),
         (override));
 
-    MOCK_METHOD(TFuture<TSharedRef>, GetJobStderr, (
+    MOCK_METHOD(TFuture<TGetJobStderrResponse>, GetJobStderr, (
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
         NJobTrackerClient::TJobId jobId,
         const TGetJobStderrOptions& options),
@@ -664,6 +664,13 @@ public:
         const TAbortJobOptions& options),
         (override));
 
+    MOCK_METHOD(TFuture<void>, DumpJobProxyLog, (
+        NJobTrackerClient::TJobId jobId,
+        NJobTrackerClient::TOperationId operationId,
+        const NYPath::TYPath& path,
+        const TDumpJobProxyLogOptions& options),
+        (override));
+
     MOCK_METHOD(TFuture<TClusterMeta>, GetClusterMeta, (
         const TGetClusterMetaOptions& options),
         (override));
@@ -673,51 +680,51 @@ public:
         (override));
 
     MOCK_METHOD(TFuture<TDisableChunkLocationsResult>, DisableChunkLocations, (
-        const TString& nodeAddress,
+        const std::string& nodeAddress,
         const std::vector<TGuid>& locationUuids,
         const TDisableChunkLocationsOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<TDestroyChunkLocationsResult>, DestroyChunkLocations, (
-        const TString& nodeAddress,
+        const std::string& nodeAddress,
         bool recoverUnlinkedDisks,
         const std::vector<TGuid>& locationUuids,
         const TDestroyChunkLocationsOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<TResurrectChunkLocationsResult>, ResurrectChunkLocations, (
-        const TString& nodeAddress,
+        const std::string& nodeAddress,
         const std::vector<TGuid>& locationUuids,
         const TResurrectChunkLocationsOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<TRequestRestartResult>, RequestRestart, (
-        const TString& nodeAddress,
+        const std::string& nodeAddress,
         const TRequestRestartOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<void>, SetUserPassword, (
-        const TString& user,
+        const std::string& user,
         const TString& currentPasswordSha256,
         const TString& newPasswordSha256,
         const TSetUserPasswordOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<TIssueTokenResult>, IssueToken, (
-        const TString& user,
+        const std::string& user,
         const TString& passwordSha256,
         const TIssueTokenOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<void>, RevokeToken, (
-        const TString& user,
+        const std::string& user,
         const TString& passwordSha256,
         const TString& tokenSha256,
         const TRevokeTokenOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<TListUserTokensResult>, ListUserTokens, (
-        const TString& user,
+        const std::string& user,
         const TString& passwordSha256,
         const TListUserTokensOptions& options),
         (override));
@@ -808,15 +815,30 @@ public:
         const TPausePipelineOptions& options),
         (override));
 
-    MOCK_METHOD(TFuture<TPipelineStatus>, GetPipelineStatus, (
+    MOCK_METHOD(TFuture<TPipelineState>, GetPipelineState, (
         const NYPath::TYPath& pipelinePath,
-        const TGetPipelineStatusOptions& options),
+        const TGetPipelineStateOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<TGetFlowViewResult>, GetFlowView, (
         const NYPath::TYPath& pipelinePath,
         const NYPath::TYPath& viewPath,
         const TGetFlowViewOptions& options),
+        (override));
+
+    MOCK_METHOD(TFuture<TDistributedWriteSessionPtr>, StartDistributedWriteSession, (
+        const NYPath::TRichYPath& path,
+        const TDistributedWriteSessionStartOptions& options),
+        (override));
+
+    MOCK_METHOD(TFuture<void>, FinishDistributedWriteSession, (
+        TDistributedWriteSessionPtr session,
+        const TDistributedWriteSessionFinishOptions& options),
+        (override));
+
+    MOCK_METHOD(TFuture<ITableWriterPtr>, CreateParticipantTableWriter, (
+        const TDistributedWriteCookiePtr& cookie,
+        const TParticipantTableWriterOptions& options),
         (override));
 
 private:

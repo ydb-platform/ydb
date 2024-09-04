@@ -203,7 +203,7 @@ static bool MaybeReject(TDataShard* self, TEvRequest& ev, const TActorContext& c
             Reject<TEvResponse, TEvRequest>(self, ev, txDesc, rejectReasons, rejectDescription, &OutOfSpace, ctx, logThrottlerType);
             return true;
         } else if (self->IsSubDomainOutOfSpace()) {
-            self->IncCounter(COUNTER_PREPARE_OUT_OF_SPACE);
+            self->IncCounter(COUNTER_PREPARE_DISK_SPACE_EXHAUSTED);
             rejectReasons = ERejectReasons::DiskSpace;
             rejectDescription = "Cannot perform writes: database is out of disk space";
             Reject<TEvResponse, TEvRequest>(self, ev, txDesc, rejectReasons, rejectDescription, &DiskSpaceExhausted, ctx, logThrottlerType);

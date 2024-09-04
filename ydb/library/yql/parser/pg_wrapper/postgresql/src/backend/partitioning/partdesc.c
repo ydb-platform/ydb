@@ -3,7 +3,7 @@
  * partdesc.c
  *		Support routines for manipulating partition descriptors
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -55,7 +55,7 @@ static PartitionDesc RelationBuildPartitionDesc(Relation rel,
  * RelationGetPartitionDesc -- get partition descriptor, if relation is partitioned
  *
  * We keep two partdescs in relcache: rd_partdesc includes all partitions
- * (even those being concurrently marked detached), while rd_partdesc_nodetach
+ * (even those being concurrently marked detached), while rd_partdesc_nodetached
  * omits (some of) those.  We store the pg_inherits.xmin value for the latter,
  * to determine whether it can be validly reused in each case, since that
  * depends on the active snapshot.
@@ -91,8 +91,8 @@ RelationGetPartitionDesc(Relation rel, bool omit_detached)
 	 * cached descriptor too.  We determine that based on the pg_inherits.xmin
 	 * that was saved alongside that descriptor: if the xmin that was not in
 	 * progress for that active snapshot is also not in progress for the
-	 * current active snapshot, then we can use use it.  Otherwise build one
-	 * from scratch.
+	 * current active snapshot, then we can use it.  Otherwise build one from
+	 * scratch.
 	 */
 	if (omit_detached &&
 		rel->rd_partdesc_nodetached &&
@@ -290,6 +290,12 @@ RelationBuildPartitionDesc(Relation rel, bool omit_detached)
 	{
 		oldcxt = MemoryContextSwitchTo(new_pdcxt);
 		partdesc->boundinfo = partition_bounds_copy(boundinfo, key);
+
+		/* Initialize caching fields for speeding up ExecFindPartition */
+		partdesc->last_found_datum_index = -1;
+		partdesc->last_found_part_index = -1;
+		partdesc->last_found_count = 0;
+
 		partdesc->oids = (Oid *) palloc(nparts * sizeof(Oid));
 		partdesc->is_leaf = (bool *) palloc(nparts * sizeof(bool));
 

@@ -53,19 +53,19 @@ void TSideEffects::UnbindMsgFromPipe(TOperationId opId, TTabletId dst, TPipeMess
     BindedMessageAcks.push_back(TBindMsgAck(opId, dst, cookie));
 }
 
-void  TSideEffects::UpdateTempTablesToCreateState(const TActorId& ownerActorId, const TPathId& pathId) {
-    auto it = TempTablesToCreateState.find(ownerActorId);
-    if (it == TempTablesToCreateState.end()) {
-        TempTablesToCreateState[ownerActorId] = { pathId };
+void  TSideEffects::UpdateTempDirsToMakeState(const TActorId& ownerActorId, const TPathId& pathId) {
+    auto it = TempDirsToMakeState.find(ownerActorId);
+    if (it == TempDirsToMakeState.end()) {
+        TempDirsToMakeState[ownerActorId] = { pathId };
     } else {
         it->second.push_back(pathId);
     }
 }
 
-void  TSideEffects::UpdateTempTablesToDropState(const TActorId& ownerActorId, const TPathId& pathId) {
-    auto it = TempTablesToDropState.find(ownerActorId);
-    if (it == TempTablesToDropState.end()) {
-        TempTablesToDropState[ownerActorId] = { pathId };
+void  TSideEffects::UpdateTempDirsToRemoveState(const TActorId& ownerActorId, const TPathId& pathId) {
+    auto it = TempDirsToRemoveState.find(ownerActorId);
+    if (it == TempDirsToRemoveState.end()) {
+        TempDirsToRemoveState[ownerActorId] = { pathId };
     } else {
         it->second.push_back(pathId);
     }
@@ -211,8 +211,8 @@ void TSideEffects::ApplyOnComplete(TSchemeShard* ss, const TActorContext& ctx) {
     DoWaitPublication(ss, ctx);
     DoPublishToSchemeBoard(ss, ctx);
 
-    DoUpdateTempTablesToCreateState(ss, ctx);
-    DoUpdateTempTablesToDropState(ss, ctx);
+    DoUpdateTempDirsToMakeState(ss, ctx);
+    DoUpdateTempDirsToRemoveState(ss, ctx);
 
     DoSend(ss, ctx);
     DoBindMsg(ss, ctx);
@@ -776,17 +776,17 @@ void TSideEffects::DoPersistDeleteShards(TSchemeShard *ss, NTabletFlatExecutor::
     ss->PersistShardsToDelete(db, ToDeleteShards);
 }
 
-void TSideEffects::DoUpdateTempTablesToCreateState(TSchemeShard* ss, const TActorContext &ctx) {
-    for (auto& [ownerActorId, tempTables]: TempTablesToCreateState) {
+void TSideEffects::DoUpdateTempDirsToMakeState(TSchemeShard* ss, const TActorContext &ctx) {
+    for (auto& [ownerActorId, tempDirs]: TempDirsToMakeState) {
 
-        auto& tempTablesByOwner = ss->TempTablesState.TempTablesByOwner;
-        auto& nodeStates = ss->TempTablesState.NodeStates;
+        auto& TempDirsByOwner = ss->TempDirsState.TempDirsByOwner;
+        auto& nodeStates = ss->TempDirsState.NodeStates;
 
-        auto it = tempTablesByOwner.find(ownerActorId);
+        const auto it = TempDirsByOwner.find(ownerActorId);
 
-        auto nodeId = ownerActorId.NodeId();
+        const auto nodeId = ownerActorId.NodeId();
 
-        auto itNodeStates = nodeStates.find(nodeId);
+        const auto itNodeStates = nodeStates.find(nodeId);
         if (itNodeStates == nodeStates.end()) {
             auto& nodeState = nodeStates[nodeId];
             nodeState.Owners.insert(ownerActorId);
@@ -796,53 +796,52 @@ void TSideEffects::DoUpdateTempTablesToCreateState(TSchemeShard* ss, const TActo
             itNodeStates->second.Owners.insert(ownerActorId);
         }
 
-        if (it == tempTablesByOwner.end()) {
+        if (it == TempDirsByOwner.end()) {
             ctx.Send(new IEventHandle(ownerActorId, ss->SelfId(),
                 new TEvSchemeShard::TEvOwnerActorAck(),
                 IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession));
 
-            auto& currentTempTables = tempTablesByOwner[ownerActorId];
+            auto& currentDirsTables = TempDirsByOwner[ownerActorId];
 
-            for (auto& pathId : tempTables) {
-                currentTempTables.insert(std::move(pathId));
+            for (auto& pathId : tempDirs) {
+                currentDirsTables.insert(std::move(pathId));
             }
             continue;
         }
 
-        for (auto& pathId : tempTables) {
+        for (auto& pathId : tempDirs) {
             it->second.insert(std::move(pathId));
         }
     }
 }
 
-void TSideEffects::DoUpdateTempTablesToDropState(TSchemeShard* ss, const TActorContext& ctx) {
-    for (auto& [ownerActorId, tempTables]: TempTablesToDropState) {
-        auto& tempTablesByOwner = ss->TempTablesState.TempTablesByOwner;
-
-        auto it = tempTablesByOwner.find(ownerActorId);
-        if (it == tempTablesByOwner.end()) {
+void TSideEffects::DoUpdateTempDirsToRemoveState(TSchemeShard* ss, const TActorContext& ctx) {
+    for (auto& [ownerActorId, tempDirs]: TempDirsToRemoveState) {
+        auto& TempDirsByOwner = ss->TempDirsState.TempDirsByOwner;
+        const auto it = TempDirsByOwner.find(ownerActorId);
+        if (it == TempDirsByOwner.end()) {
             continue;
         }
 
-        for (auto& pathId : tempTables) {
-            auto tempTableIt = it->second.find(std::move(pathId));
-            if (tempTableIt == it->second.end()) {
+        for (auto& pathId : tempDirs) {
+            const auto tempDirIt = it->second.find(pathId);
+            if (tempDirIt == it->second.end()) {
                 continue;
             }
 
-            it->second.erase(tempTableIt);
+            it->second.erase(tempDirIt);
             ss->RemoveBackgroundCleaning(pathId);
         }
 
         if (it->second.empty()) {
-            tempTablesByOwner.erase(it);
+            TempDirsByOwner.erase(it);
 
-            auto& nodeStates = ss->TempTablesState.NodeStates;
+            auto& nodeStates = ss->TempDirsState.NodeStates;
 
-            auto nodeId = ownerActorId.NodeId();
+            const auto nodeId = ownerActorId.NodeId();
             auto itStates = nodeStates.find(nodeId);
             if (itStates != nodeStates.end()) {
-                auto itOwner = itStates->second.Owners.find(ownerActorId);
+                const auto itOwner = itStates->second.Owners.find(ownerActorId);
                 if (itOwner != itStates->second.Owners.end()) {
                     itStates->second.Owners.erase(itOwner);
                 }

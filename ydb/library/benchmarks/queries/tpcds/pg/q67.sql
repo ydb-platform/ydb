@@ -19,7 +19,7 @@ from (select i_category
                   ,d_qoy
                   ,d_moy
                   ,s_store_id
-                  ,sum(coalesce(ss_sales_price*ss_quantity::numeric,0::numeric)) sumsales
+                  ,sum(coalesce(ss_sales_price*ss_quantity,0)) sumsales
             from {{store_sales}}
                 ,{{date_dim}}
                 ,{{store}}

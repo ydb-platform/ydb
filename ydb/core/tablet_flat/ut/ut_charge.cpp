@@ -333,10 +333,10 @@ namespace {
             }
 
             for (auto &x : pages.BTreeGroups) {
-                result.insert({mainGroupId, x.PageId});
+                result.insert({mainGroupId, x.GetPageId()});
             }
             for (auto &x : pages.BTreeHistoric) {
-                result.insert({mainGroupId, x.PageId});
+                result.insert({mainGroupId, x.GetPageId()});
             }
 
             return result;

@@ -8,6 +8,6 @@
 #define YT_DEFINE_GLOBAL(type, name, ...) \
     inline type& name() \
     { \
-        static type result(__VA_ARGS__); \
+        static type result{__VA_ARGS__}; \
         return result;  \
     }

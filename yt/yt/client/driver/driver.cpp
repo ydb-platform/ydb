@@ -1,23 +1,24 @@
 #include "driver.h"
 
-#include "authentication_commands.h"
 #include "admin_commands.h"
+#include "authentication_commands.h"
 #include "bundle_controller_commands.h"
 #include "chaos_commands.h"
 #include "command.h"
 #include "config.h"
 #include "cypress_commands.h"
+#include "distributed_table_commands.h"
 #include "etc_commands.h"
 #include "file_commands.h"
+#include "flow_commands.h"
+#include "internal_commands.h"
 #include "journal_commands.h"
+#include "proxy_discovery_cache.h"
+#include "query_commands.h"
 #include "queue_commands.h"
 #include "scheduler_commands.h"
 #include "table_commands.h"
 #include "transaction_commands.h"
-#include "internal_commands.h"
-#include "proxy_discovery_cache.h"
-#include "query_commands.h"
-#include "flow_commands.h"
 
 #include <yt/yt/client/api/client_cache.h>
 #include <yt/yt/client/api/connection.h>
@@ -306,6 +307,7 @@ public:
         REGISTER    (TDumpJobContextCommand,               "dump_job_context",                Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TAbandonJobCommand,                   "abandon_job",                     Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TAbortJobCommand,                     "abort_job",                       Null,       Structured, true,  false, ApiVersion4);
+        REGISTER    (TDumpJobProxyLogCommand,              "dump_job_proxy_log",              Null,       Structured, true,  false, ApiVersion4);
 
         REGISTER_ALL(TGetVersionCommand,                   "get_version",                     Null,       Structured, false, false);
         REGISTER_ALL(TGetSupportedFeaturesCommand,         "get_supported_features",          Null,       Structured, false, false);
@@ -349,11 +351,15 @@ public:
         REGISTER    (TUnregisterQueueConsumerCommand,      "unregister_queue_consumer",       Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TListQueueConsumerRegistrationsCommand, "list_queue_consumer_registrations", Null,   Structured, false, false, ApiVersion4);
         REGISTER    (TPullQueueCommand,                    "pull_queue",                      Null,       Tabular,    false, true , ApiVersion4);
+        // COMPAT(nadya73): for compatibility with old versions of clients.
         REGISTER    (TPullQueueConsumerCommand,            "pull_consumer",                   Null,       Tabular,    false, true , ApiVersion4);
         REGISTER    (TPullQueueConsumerCommand,            "pull_queue_consumer",             Null,       Tabular,    false, true , ApiVersion4);
-        REGISTER    (TAdvanceConsumerCommand,              "advance_consumer",                Null,       Structured, true,  false, ApiVersion4);
+        // COMPAT(nadya73): for compatibility with old versions of clients.
+        REGISTER    (TAdvanceQueueConsumerCommand,         "advance_consumer",                Null,       Structured, true,  false, ApiVersion4);
+        REGISTER    (TAdvanceQueueConsumerCommand,         "advance_queue_consumer",          Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TCreateQueueProducerSessionCommand,   "create_queue_producer_session",   Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TRemoveQueueProducerSessionCommand,   "remove_queue_producer_session",   Null,       Structured, true,  false, ApiVersion4);
+        REGISTER    (TPushQueueProducerCommand,            "push_queue_producer",             Null,       Structured, true,  false, ApiVersion4);
 
         REGISTER    (TStartQueryCommand,                   "start_query",                     Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TAbortQueryCommand,                   "abort_query",                     Null,       Structured, true,  false, ApiVersion4);
@@ -376,7 +382,7 @@ public:
         REGISTER    (TStartPipelineCommand,                "start_pipeline",                  Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TStopPipelineCommand,                 "stop_pipeline",                   Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TPausePipelineCommand,                "pause_pipeline",                  Null,       Structured, true,  false, ApiVersion4);
-        REGISTER    (TGetPipelineStatusCommand,            "get_pipeline_status",             Null,       Structured, false, false, ApiVersion4);
+        REGISTER    (TGetPipelineStateCommand,             "get_pipeline_state",              Null,       Structured, false, false, ApiVersion4);
         REGISTER    (TGetFlowViewCommand,                  "get_flow_view",                   Null,       Structured, false, false, ApiVersion4);
 
         if (Config_->EnableInternalCommands) {
@@ -389,6 +395,9 @@ public:
             REGISTER_ALL(TRevokeLeaseCommand,              "revoke_lease",                    Null,       Structured, true,  false);
             REGISTER_ALL(TReferenceLeaseCommand,           "reference_lease",                 Null,       Structured, true,  false);
             REGISTER_ALL(TUnreferenceLeaseCommand,         "unreference_lease",               Null,       Structured, true,  false);
+            REGISTER_ALL(TStartDistributedWriteSessionCommand,    "start_distributed_write_session",    Null,    Structured, true, false);
+            REGISTER_ALL(TFinishDistributedWriteSessionCommand,   "finish_distributed_write_session",   Null,    Null,       true, false);
+            REGISTER_ALL(TParticipantWriteTableCommand,           "participant_write_table",            Tabular, Structured, true, true );
         }
 
 #undef REGISTER
@@ -539,7 +548,8 @@ private:
 
         NTracing::TChildTraceContextGuard commandSpan(ConcatToString(TStringBuf("Driver:"), request.CommandName));
         NTracing::AnnotateTraceContext([&] (const auto& traceContext) {
-            traceContext->AddTag("user", request.AuthenticatedUser);
+            // TODO(babenko): switch to std::string
+            traceContext->AddTag("user", TString(request.AuthenticatedUser));
             traceContext->AddTag("request_id", request.Id);
         });
 

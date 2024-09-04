@@ -164,7 +164,7 @@ public:
     }
 
     TFuture<TNetworkAddress> Resolve(
-        const TString& hostName,
+        const std::string& hostName,
         const TDnsResolveOptions& options) override
     {
         EnsureRunning();
@@ -191,7 +191,7 @@ private:
         TAresDnsResolver* Owner;
         TGuid RequestId;
         TPromise<TNetworkAddress> Promise;
-        TString HostName;
+        std::string HostName;
         TDnsResolveOptions Options;
         NProfiling::TWallTimer Timer;
         TDelayedExecutorCookie TimeoutCookie;
@@ -457,11 +457,12 @@ private:
     #endif
     }
 
-    static void OnRequestTimeout(TPromise<TNetworkAddress> promise, TGuid requestId)
+    void OnRequestTimeout(TPromise<TNetworkAddress> promise, TGuid requestId)
     {
         auto timeoutError
             = TError(NNet::EErrorCode::ResolveTimedOut, "Ares DNS resolve timed out");
         if (promise.TrySet(std::move(timeoutError))) {
+            TimeoutCounter_.Increment();
             YT_LOG_WARNING(
                 "Ares DNS resolve timed out (RequestId: %v)",
                 requestId);
@@ -593,7 +594,7 @@ private:
     }
 
     std::unique_ptr<TResolveRequest> PrepareRequest(
-        const TString& hostName,
+        const std::string& hostName,
         const TDnsResolveOptions& options)
     {
         auto requestId = TGuid::Create();
@@ -601,7 +602,7 @@ private:
         auto promise = NewPromise<TNetworkAddress>();
 
         auto timeoutCookie = TDelayedExecutor::Submit(
-            BIND(&TAresDnsResolver::OnRequestTimeout, promise, requestId),
+            BIND(&TAresDnsResolver::OnRequestTimeout, MakeStrong(this), promise, requestId),
             Config_->MaxResolveTimeout);
 
         return std::make_unique<TResolveRequest>(TResolveRequest{
@@ -736,7 +737,7 @@ private:
             request->HostName)
             << TErrorAttribute("enable_ipv4", request->Options.EnableIPv4)
             << TErrorAttribute("enable_ipv6", request->Options.EnableIPv6)
-            << TError(ares_strerror(status));
+            << TError(TRuntimeFormat(ares_strerror(status)));
     }
 
     void FailRequest(

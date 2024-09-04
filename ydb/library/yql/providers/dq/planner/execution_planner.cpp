@@ -26,7 +26,6 @@
 #include <ydb/library/yql/core/services/yql_transform_pipeline.h>
 #include <ydb/library/yql/minikql/aligned_page_pool.h>
 #include <ydb/library/yql/minikql/mkql_node_serialization.h>
-
 #include <ydb/library/actors/core/event_pb.h>
 
 #include <stack>
@@ -40,6 +39,15 @@ using namespace NYql::NNodes;
 using namespace NKikimr::NMiniKQL;
 
 using namespace Yql::DqsProto;
+
+namespace {
+    TString RemoveAliases(TString attributeName) {
+        if (auto idx = attributeName.find_last_of('.'); idx != TString::npos) {
+            return attributeName.substr(idx+1);
+        }
+        return attributeName;
+    }
+}
 
 namespace NYql::NDqs {
     namespace {
@@ -434,7 +442,7 @@ namespace NYql::NDqs {
 
             bool enableSpilling = false;
             if (task.Outputs.size() > 1) {
-                enableSpilling = Settings->IsSpillingEnabled();
+                enableSpilling = Settings->IsSpillingInChannelsEnabled();
             }
             for (auto& output : task.Outputs) {
                 FillOutputDesc(*taskDesc.AddOutputs(), output, enableSpilling);
@@ -449,7 +457,7 @@ namespace NYql::NDqs {
             taskMeta.SetStageId(publicId);
             taskDesc.MutableMeta()->PackFrom(taskMeta);
             taskDesc.SetStageId(stageId);
-            taskDesc.SetEnableSpilling(Settings->IsSpillingEnabled());
+            taskDesc.SetEnableSpilling(Settings->GetEnabledSpillingNodes());
 
             if (Settings->DisableLLVMForBlockStages.Get().GetOrElse(true)) {
                 auto& stage = TasksGraph.GetStageInfo(task.StageId).Meta.Stage;
@@ -570,27 +578,34 @@ namespace NYql::NDqs {
         {TDqCnMerge::CallableName(), &BuildMergeChannels},
     };
 
-    NDqProto::TDqStreamLookupSource FillLookupSource(const NNodes::TExprBase& node) {
-        NDqProto::TDqStreamLookupSource result;
-        //TODO use provider to fill DataSource, see FillSourcePlanProperties
-        auto rowType = node.Raw()->GetTypeAnn();
-        result.SetSerializedRowType(NYql::NCommon::GetSerializedTypeAnnotation(rowType));
-        return result;
-    }
-
     void TDqsExecutionPlanner::ConfigureInputTransformStreamLookup(const NNodes::TDqCnStreamLookup& streamLookup, const NNodes::TDqPhyStage& stage, ui32 inputIndex) {
-        //TODO use provider, see FillSourcePlanProperties
-        auto rightSource = FillLookupSource(streamLookup.RightInputRowType());
+        auto rightInput = streamLookup.RightInput().Cast<TDqLookupSourceWrap>();
+        auto dataSourceName = rightInput.DataSource().Category().StringValue();
+        auto dataSource = TypeContext->DataSourceMap.FindPtr(dataSourceName);
+        YQL_ENSURE(dataSource);
+        auto dqIntegration = (*dataSource)->GetDqIntegration();
+        YQL_ENSURE(dqIntegration);
+        
+        google::protobuf::Any providerSpecificLookupSourceSettings;
+        TString sourceType;
+        dqIntegration->FillLookupSourceSettings(*rightInput.Raw(), providerSpecificLookupSourceSettings, sourceType);
+        YQL_ENSURE(!providerSpecificLookupSourceSettings.type_url().empty(), "Data source provider \"" << dataSourceName << "\" did't fill dq source settings for its dq source node");
+        YQL_ENSURE(sourceType, "Data source provider \"" << dataSourceName << "\" did't fill dq source settings type for its dq source node");
+
+        NDqProto::TDqStreamLookupSource streamLookupSource;
+        streamLookupSource.SetProviderName(sourceType);
+        *streamLookupSource.MutableLookupSource() = providerSpecificLookupSourceSettings;
+        streamLookupSource.SetSerializedRowType(NYql::NCommon::GetSerializedTypeAnnotation(rightInput.RowType().Raw()->GetTypeAnn()));
         NDqProto::TDqInputTransformLookupSettings settings;
         settings.SetLeftLabel(streamLookup.LeftLabel().Cast<NNodes::TCoAtom>().StringValue());
-        *settings.MutableRightSource() = rightSource;
+        *settings.MutableRightSource() = streamLookupSource;
         settings.SetRightLabel(streamLookup.RightLabel().StringValue());
         settings.SetJoinType(streamLookup.JoinType().StringValue());
         for (const auto& k: streamLookup.LeftJoinKeyNames()) {
-            *settings.AddLeftJoinKeyNames() = k.StringValue();
+            *settings.AddLeftJoinKeyNames() = RemoveAliases(k.StringValue());
         }
         for (const auto& k: streamLookup.RightJoinKeyNames()) {
-            *settings.AddRightJoinKeyNames() = k.StringValue();
+            *settings.AddRightJoinKeyNames() = RemoveAliases(k.StringValue());
         }
         const auto narrowInputRowType = GetSeqItemType(streamLookup.Output().Ptr()->GetTypeAnn());
         Y_ABORT_UNLESS(narrowInputRowType->GetKind() == ETypeAnnotationKind::Struct);
@@ -670,10 +685,11 @@ namespace NYql::NDqs {
                 Y_ABORT_UNLESS(false);
             }
 */
+            TSpillingSettings spillingSettings{Settings->GetEnabledSpillingNodes()};
             StagePrograms[stageInfo.first] = std::make_tuple(
                 NDq::BuildProgram(
                     stage.Program(), *paramsType, compiler, typeEnv, *FunctionRegistry,
-                    ExprContext, fakeReads),
+                    ExprContext, fakeReads, spillingSettings),
                 stageId, publicId);
         }
     }

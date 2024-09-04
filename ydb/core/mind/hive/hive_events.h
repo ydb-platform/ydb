@@ -32,6 +32,8 @@ struct TEvPrivate {
         EvProcessStorageBalancer,
         EvStorageBalancerOut,
         EvDeleteNode,
+        EvCanMoveTablets,
+        EvUpdateDataCenterFollowers,
         EvEnd
     };
 
@@ -116,6 +118,14 @@ struct TEvPrivate {
         TNodeId NodeId;
 
         TEvDeleteNode(TNodeId nodeId) : NodeId(nodeId) {}
+    };
+
+    struct TEvCanMoveTablets : TEventLocal<TEvCanMoveTablets, EvCanMoveTablets> {};
+
+    struct TEvUpdateDataCenterFollowers : TEventLocal<TEvUpdateDataCenterFollowers, EvUpdateDataCenterFollowers> {
+        TDataCenterId DataCenter;
+
+        TEvUpdateDataCenterFollowers(TDataCenterId dataCenter) : DataCenter(dataCenter) {};
     };
 };
 

@@ -4,6 +4,7 @@
 
 #include <ydb/library/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
 #include <ydb/library/yql/providers/common/dq/yql_dq_optimization_impl.h>
+#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/utils/log/log.h>
 
@@ -19,80 +20,99 @@ public:
     {
     }
 
-    TExprNode::TPtr RewriteRead(const TExprNode::TPtr& reader, TExprContext& ctx) override {
+    TExprNode::TPtr RewriteRead(const TExprNode::TPtr& read, TExprContext& ctx) override {
         if (auto disabledOpts = State_->Configuration->DisableOptimizers.Get(); disabledOpts && disabledOpts->contains(TStringBuilder() << "YtDqOptimizers-" << __FUNCTION__)) {
-            return reader;
+            return read;
         }
-        auto ytReader = TYtReadTable(reader);
+        auto ytReadTable = TYtReadTable(read);
 
-        TYtDSource dataSource = GetDataSource(ytReader, ctx);
+        TYtDSource dataSource = GetDataSource(ytReadTable, ctx);
         if (!State_->Configuration->_EnableYtPartitioning.Get(dataSource.Cluster().StringValue()).GetOrElse(false)) {
-            return reader;
+            return read;
         }
 
         TSyncMap syncList;
-        auto ret = OptimizeReadWithSettings(reader, false, false, syncList, State_, ctx);
+        auto ret = OptimizeReadWithSettings(read, false, false, syncList, State_, ctx);
         YQL_ENSURE(syncList.empty());
-        if (ret && ret != reader) {
+        if (ret && ret != read) {
             YQL_CLOG(DEBUG, ProviderYt) << __FUNCTION__;
         }
         return ret;
     }
 
-    TExprNode::TPtr ApplyExtractMembers(const TExprNode::TPtr& reader, const TExprNode::TPtr& members, TExprContext& ctx) override {
+    TExprNode::TPtr RewriteLookupRead(const TExprNode::TPtr& read, TExprContext& ctx) override {
+        const auto ytReadTable = TYtReadTable(read);
+        //Presume that there is the only table for read
+        const auto ytSections = ytReadTable.Input();
+        YQL_ENSURE(ytSections.Size() == 1);
+        const auto ytPaths =  ytSections.Item(0).Paths();
+        YQL_ENSURE(ytPaths.Size() == 1);
+        const auto ytTable = ytPaths.Item(0).Table().Maybe<TYtTable>();
+        YQL_ENSURE(ytTable);
+        //read is of type: Tuple<World, InputSeq>
+        const auto inputSeqType = read->GetTypeAnn()->Cast<TTupleExprType>()->GetItems().at(1);
+        return Build<TDqLookupSourceWrap>(ctx, read->Pos())
+            .Input(ytTable.Cast())
+            .DataSource(ytReadTable.DataSource().Ptr())
+            .RowType(ExpandType(read->Pos(), *GetSeqItemType(inputSeqType), ctx))
+            .Settings(ytTable.Cast().Settings())
+        .Done().Ptr();
+    }
+
+    TExprNode::TPtr ApplyExtractMembers(const TExprNode::TPtr& read, const TExprNode::TPtr& members, TExprContext& ctx) override {
         if (auto disabledOpts = State_->Configuration->DisableOptimizers.Get(); disabledOpts && disabledOpts->contains(TStringBuilder() << "YtDqOptimizers-" << __FUNCTION__)) {
-            return reader;
+            return read;
         }
-        auto ytReader = TYtReadTable(reader);
+        auto ytReadTable = TYtReadTable(read);
 
         TVector<TYtSection> sections;
-        for (auto section: ytReader.Input()) {
+        for (auto section: ytReadTable.Input()) {
             sections.push_back(UpdateInputFields(section, TExprBase(members), ctx));
         }
         YQL_CLOG(DEBUG, ProviderYt) << __FUNCTION__;
-        return Build<TYtReadTable>(ctx, ytReader.Pos())
-            .InitFrom(ytReader)
+        return Build<TYtReadTable>(ctx, ytReadTable.Pos())
+            .InitFrom(ytReadTable)
             .Input()
                 .Add(sections)
             .Build()
             .Done().Ptr();
     }
 
-    TExprNode::TPtr ApplyTakeOrSkip(const TExprNode::TPtr& reader, const TExprNode::TPtr& countBase, TExprContext& ctx) override {
+    TExprNode::TPtr ApplyTakeOrSkip(const TExprNode::TPtr& read, const TExprNode::TPtr& countBase, TExprContext& ctx) override {
         if (auto disabledOpts = State_->Configuration->DisableOptimizers.Get(); disabledOpts && disabledOpts->contains(TStringBuilder() << "YtDqOptimizers-" << __FUNCTION__)) {
-            return reader;
+            return read;
         }
-        auto ytReader = TYtReadTable(reader);
+        auto ytReadTable = TYtReadTable(read);
         auto count = TCoCountBase(countBase);
 
-        if (ytReader.Input().Size() != 1) {
-            return reader;
+        if (ytReadTable.Input().Size() != 1) {
+            return read;
         }
 
-        TYtDSource dataSource = GetDataSource(ytReader, ctx);
+        TYtDSource dataSource = GetDataSource(ytReadTable, ctx);
         TString cluster = dataSource.Cluster().StringValue();
 
         if (!State_->Configuration->_EnableYtPartitioning.Get(cluster).GetOrElse(false)) {
-            return reader;
+            return read;
         }
 
         TSyncMap syncList;
-        if (!IsYtCompleteIsolatedLambda(count.Count().Ref(), syncList, cluster, true, false)) {
-            return reader;
+        if (!IsYtCompleteIsolatedLambda(count.Count().Ref(), syncList, cluster, false)) {
+            return read;
         }
 
-        TYtSection section = ytReader.Input().Item(0);
+        TYtSection section = ytReadTable.Input().Item(0);
         if (NYql::HasSetting(section.Settings().Ref(), EYtSettingType::Sample)) {
-            return reader;
+            return read;
         }
         if (AnyOf(section.Paths(), [](const auto& path) { TYtPathInfo pathInfo(path); return (pathInfo.Table->Meta && pathInfo.Table->Meta->IsDynamic) || pathInfo.Ranges; })) {
-            return reader;
+            return read;
         }
 
         YQL_CLOG(DEBUG, ProviderYt) << __FUNCTION__;
         EYtSettingType settingType = count.Maybe<TCoSkip>() ? EYtSettingType::Skip : EYtSettingType::Take;
-        return Build<TYtReadTable>(ctx, ytReader.Pos())
-            .InitFrom(ytReader)
+        return Build<TYtReadTable>(ctx, ytReadTable.Pos())
+            .InitFrom(ytReadTable)
             .Input()
                     .Add()
                         .InitFrom(section)
@@ -102,53 +122,53 @@ public:
             .Done().Ptr();
     }
 
-    TExprNode::TPtr ApplyUnordered(const TExprNode::TPtr& reader, TExprContext& ctx) override {
+    TExprNode::TPtr ApplyUnordered(const TExprNode::TPtr& read, TExprContext& ctx) override {
         if (auto disabledOpts = State_->Configuration->DisableOptimizers.Get(); disabledOpts && disabledOpts->contains(TStringBuilder() << "YtDqOptimizers-" << __FUNCTION__)) {
-            return reader;
+            return read;
         }
-        auto ytReader = TYtReadTable(reader);
+        auto ytReadTable = TYtReadTable(read);
 
-        TExprNode::TListType sections(ytReader.Input().Size());
+        TExprNode::TListType sections(ytReadTable.Input().Size());
         for (auto i = 0U; i < sections.size(); ++i) {
-            sections[i] = MakeUnorderedSection<true>(ytReader.Input().Item(i), ctx).Ptr();
+            sections[i] = MakeUnorderedSection<true>(ytReadTable.Input().Item(i), ctx).Ptr();
         }
 
         YQL_CLOG(DEBUG, ProviderYt) << __FUNCTION__;
-        return Build<TYtReadTable>(ctx, ytReader.Pos())
-            .InitFrom(ytReader)
+        return Build<TYtReadTable>(ctx, ytReadTable.Pos())
+            .InitFrom(ytReadTable)
             .Input()
                 .Add(std::move(sections))
             .Build()
             .Done().Ptr();
     }
 
-    TExprNode::TListType ApplyExtend(const TExprNode::TListType& listOfReader, bool /*ordered*/, TExprContext& ctx) override {
+    TExprNode::TListType ApplyExtend(const TExprNode::TListType& listOfRead, bool /*ordered*/, TExprContext& ctx) override {
         if (auto disabledOpts = State_->Configuration->DisableOptimizers.Get(); disabledOpts && disabledOpts->contains(TStringBuilder() << "YtDqOptimizers-" << __FUNCTION__)) {
-            return listOfReader;
+            return listOfRead;
         }
 
         // Group readres by cluster/settings
-        THashMap<std::pair<TStringBuf, TExprNode::TPtr>, std::vector<std::pair<size_t, TYtReadTable>>> readers;
-        for (size_t i = 0; i < listOfReader.size(); ++i) {
-            const auto child = listOfReader[i];
-            auto ytRead = TYtReadTable(child);
-            if (ytRead.Input().Size() != 1) {
+        THashMap<std::pair<TStringBuf, TExprNode::TPtr>, std::vector<std::pair<size_t, TYtReadTable>>> reads;
+        for (size_t i = 0; i < listOfRead.size(); ++i) {
+            const auto child = listOfRead[i];
+            auto ytReadTable = TYtReadTable(child);
+            if (ytReadTable.Input().Size() != 1) {
                 continue;
             }
-            if (NYql::HasAnySetting(ytRead.Input().Item(0).Settings().Ref(), EYtSettingType::Take | EYtSettingType::Skip)) {
+            if (NYql::HasAnySetting(ytReadTable.Input().Item(0).Settings().Ref(), EYtSettingType::Take | EYtSettingType::Skip)) {
                 continue;
             }
-            readers[std::make_pair(ytRead.DataSource().Cluster().Value(), ytRead.Input().Item(0).Settings().Ptr())].emplace_back(i, ytRead);
+            reads[std::make_pair(ytReadTable.DataSource().Cluster().Value(), ytReadTable.Input().Item(0).Settings().Ptr())].emplace_back(i, ytReadTable);
         }
 
-        if (readers.empty() || AllOf(readers, [](const auto& item) { return item.second.size() < 2; })) {
-            return listOfReader;
+        if (reads.empty() || AllOf(reads, [](const auto& item) { return item.second.size() < 2; })) {
+            return listOfRead;
         }
 
         YQL_CLOG(DEBUG, ProviderYt) << __FUNCTION__;
 
-        TExprNode::TListType newListOfReader = listOfReader;
-        for (auto& item: readers) {
+        TExprNode::TListType newListOfRead = listOfRead;
+        for (auto& item: reads) {
             if (item.second.size() > 1) {
                 TSyncMap syncList;
                 TVector<TYtPath> paths;
@@ -159,30 +179,30 @@ public:
                     paths.insert(paths.end(), r.second.Input().Item(0).Paths().begin(), r.second.Input().Item(0).Paths().end());
                 }
                 const auto ndx = item.second.front().first;
-                const auto& firstYtReader = item.second.front().second;
-                newListOfReader[ndx] = Build<TYtReadTable>(ctx, firstYtReader.Pos())
-                    .InitFrom(firstYtReader)
-                    .World(ApplySyncListToWorld(ctx.NewWorld(firstYtReader.Pos()), syncList, ctx))
+                const auto& firstYtRead = item.second.front().second;
+                newListOfRead[ndx] = Build<TYtReadTable>(ctx, firstYtRead.Pos())
+                    .InitFrom(firstYtRead)
+                    .World(ApplySyncListToWorld(ctx.NewWorld(firstYtRead.Pos()), syncList, ctx))
                     .Input()
                         .Add()
                             .Paths()
                                 .Add(paths)
                             .Build()
-                            .Settings(firstYtReader.Input().Item(0).Settings())
+                            .Settings(firstYtRead.Input().Item(0).Settings())
                         .Build()
                     .Build()
                     .Done().Ptr();
 
                 for (size_t i = 1; i < item.second.size(); ++i) {
-                    newListOfReader[item.second[i].first] = nullptr;
+                    newListOfRead[item.second[i].first] = nullptr;
                 }
             }
         }
 
-        newListOfReader.erase(std::remove(newListOfReader.begin(), newListOfReader.end(), TExprNode::TPtr{}), newListOfReader.end());
-        YQL_ENSURE(!newListOfReader.empty());
+        newListOfRead.erase(std::remove(newListOfRead.begin(), newListOfRead.end(), TExprNode::TPtr{}), newListOfRead.end());
+        YQL_ENSURE(!newListOfRead.empty());
 
-        return newListOfReader;
+        return newListOfRead;
     }
 
 private:

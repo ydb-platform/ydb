@@ -17,6 +17,7 @@ namespace {
     struct TCreateTableAsResult {
         NYql::TExprNode::TPtr CreateTable = nullptr;
         NYql::TExprNode::TPtr ReplaceInto = nullptr;
+        NYql::TExprNode::TPtr MoveTable = nullptr;
     };
 
     bool IsOlap(const NYql::NNodes::TMaybeNode<NYql::NNodes::TCoNameValueTupleList>& tableSettings) {
@@ -70,6 +71,9 @@ namespace {
         if (key.Ptr()->Child(0)->Child(0)->Content() != "tablescheme") {
             return std::nullopt;
         }
+
+        auto tableNameNode = key.Ptr()->Child(0)->Child(1)->Child(0);
+        const TString tableName(tableNameNode->Content());
 
         auto maybeList = writeArgs.Get(4).Maybe<NYql::NNodes::TExprList>();
         if (!maybeList) {
@@ -167,7 +171,39 @@ namespace {
             }));
         }
 
+        const bool isTemporary = settings.Temporary.IsValid() && settings.Temporary.Cast().Value() == "true";
+        if (isTemporary) {
+            exprCtx.AddError(NYql::TIssue(exprCtx.GetPosition(pos), "CREATE TEMPORARY TABLE AS is not supported at current time"));
+            return std::nullopt;
+        }
+
+        const bool isAtomicOperation = !isOlap;
+
+        const TString tmpTableName = TStringBuilder()
+            << tableName
+            << "_cas_"
+            << TAppData::RandomProvider->GenRand();
+
+        const TString createTableName = !isAtomicOperation
+            ? tableName
+            : (TStringBuilder()
+                << CanonizePath(AppData()->TenantName)
+                << "/.tmp/sessions/"
+                << sessionCtx->GetSessionId()
+                << CanonizePath(tmpTableName));
+
         create = exprCtx.ReplaceNode(std::move(create), *columns, exprCtx.NewList(pos, std::move(columnNodes)));
+
+        if (isAtomicOperation) {
+            std::vector<NYql::TExprNodePtr> settingsNodes;
+            for (size_t index = 0; index < create->Child(4)->ChildrenSize(); ++index) {
+                settingsNodes.push_back(create->Child(4)->ChildPtr(index));
+            }
+            settingsNodes.push_back(
+                exprCtx.NewList(pos, {exprCtx.NewAtom(pos, "temporary")}));
+            create = exprCtx.ReplaceNode(std::move(create), *create->Child(4), exprCtx.NewList(pos, std::move(settingsNodes)));
+            create = exprCtx.ReplaceNode(std::move(create), *tableNameNode, exprCtx.NewAtom(pos, tmpTableName));
+        }
 
         const auto topLevelRead = NYql::FindTopLevelRead(insertData.Ptr());
 
@@ -177,12 +213,10 @@ namespace {
                 exprCtx.NewAtom(pos, "mode"),
                 exprCtx.NewAtom(pos, "replace"),
             }));
-        if (!isOlap) {
-            insertSettings.push_back(
-                exprCtx.NewList(pos, {
-                    exprCtx.NewAtom(pos, "AllowInconsistentWrites"),
-                }));
-        }
+        insertSettings.push_back(
+            exprCtx.NewList(pos, {
+                exprCtx.NewAtom(pos, "AllowInconsistentWrites"),
+            }));
 
         const auto insert = exprCtx.NewCallable(pos, "Write!", {
             topLevelRead == nullptr ? exprCtx.NewWorld(pos) : exprCtx.NewCallable(pos, "Left!", {topLevelRead.Get()}),
@@ -194,7 +228,7 @@ namespace {
                 exprCtx.NewList(pos, {
                     exprCtx.NewAtom(pos, "table"),
                     exprCtx.NewCallable(pos, "String", {
-                        exprCtx.NewAtom(pos, key.Ptr()->Child(0)->Child(1)->Child(0)->Content()),
+                        exprCtx.NewAtom(pos, createTableName),
                     }),
                 }),
             }),
@@ -218,35 +252,81 @@ namespace {
             }),
         });
 
+        if (isAtomicOperation) {
+            result.MoveTable = exprCtx.NewCallable(pos, "Write!", {
+                exprCtx.NewWorld(pos),
+                exprCtx.NewCallable(pos, "DataSink", {
+                    exprCtx.NewAtom(pos, "kikimr"),
+                    exprCtx.NewAtom(pos, "db"),
+                }),
+                exprCtx.NewCallable(pos, "Key", {
+                    exprCtx.NewList(pos, {
+                        exprCtx.NewAtom(pos, "tablescheme"),
+                        exprCtx.NewCallable(pos, "String", {
+                            exprCtx.NewAtom(pos, createTableName),
+                        }),
+                    }),
+                }),
+                exprCtx.NewCallable(pos, "Void", {}),
+                exprCtx.NewList(pos, {
+                    exprCtx.NewList(pos, {
+                        exprCtx.NewAtom(pos, "mode"),
+                        exprCtx.NewAtom(pos, "alter"),
+                    }),
+                    exprCtx.NewList(pos, {
+                        exprCtx.NewAtom(pos, "actions"),
+                        exprCtx.NewList(pos, {
+                            exprCtx.NewList(pos, {
+                                exprCtx.NewAtom(pos, "renameTo"),
+                                exprCtx.NewAtom(pos, tableName),
+                            }),
+                        }),
+                    }),
+                }),
+            });
+        }
+
         return result;
     }
 }
 
-TVector<NYql::TExprNode::TPtr> RewriteExpression(
+std::pair<TVector<NYql::TExprNode::TPtr>, NYql::TIssues> RewriteExpression(
         const NYql::TExprNode::TPtr& root,
         NYql::TExprContext& exprCtx,
         NYql::TTypeAnnotationContext& typeCtx,
         const TIntrusivePtr<NYql::TKikimrSessionContext>& sessionCtx,
         const TString& cluster) {
+    NYql::TIssues issues;
     // CREATE TABLE AS statement can be used only with perstatement execution.
     // Thus we assume that there is only one such statement.
+    ui64 actionsCount = 0;
     TVector<NYql::TExprNode::TPtr> result;
     VisitExpr(root, [&](const NYql::TExprNode::TPtr& node) {
         if (NYql::NNodes::TCoWrite::Match(node.Get())) {
+            ++actionsCount;
             const auto rewriteResult = RewriteCreateTableAs(node, exprCtx, typeCtx, sessionCtx, cluster);
             if (rewriteResult) {
-                YQL_ENSURE(result.empty());
+                if (!result.empty()) {
+                    issues.AddIssue("Several CTAS statement can't be used without per-statement mode.");
+                }
                 result.push_back(rewriteResult->CreateTable);
                 result.push_back(rewriteResult->ReplaceInto);
+                if (rewriteResult->MoveTable) {
+                    result.push_back(rewriteResult->MoveTable);
+                }
             }
         }
         return true;
     });
 
+    if (!result.empty() && actionsCount > 1) {
+        issues.AddIssue("CTAS statement can't be used with other statements without per-statement mode.");
+    }
+
     if (result.empty()) {
         result.push_back(root);
     }
-    return result;
+    return {result, issues};
 }
 
 }

@@ -1,4 +1,5 @@
-#include <assert.h>
+#include <algorithm>
+#include <cassert>
 #include <iterator>
 #include <sstream>
 
@@ -12,15 +13,24 @@
 
 namespace YAML {
 namespace detail {
+YAML_CPP_API std::atomic<size_t> node::m_amount{0};
 
-std::string node_data::empty_scalar;
+const std::string& node_data::empty_scalar() {
+  static const std::string svalue;
+  return svalue;
+}
 
 node_data::node_data()
     : m_isDefined(false),
       m_mark(Mark::null_mark()),
       m_type(NodeType::Null),
+      m_tag{},
       m_style(EmitterStyle::Default),
-      m_seqSize(0) {}
+      m_scalar{},
+      m_sequence{},
+      m_seqSize(0),
+      m_map{},
+      m_undefinedPairs{} {}
 
 void node_data::mark_defined() {
   if (m_type == NodeType::Undefined)
@@ -100,9 +110,9 @@ void node_data::compute_seq_size() const {
 }
 
 void node_data::compute_map_size() const {
-  kv_pairs::iterator it = m_undefinedPairs.begin();
+  auto it = m_undefinedPairs.begin();
   while (it != m_undefinedPairs.end()) {
-    kv_pairs::iterator jt = std::next(it);
+    auto jt = std::next(it);
     if (it->first->is_defined() && it->second->is_defined())
       m_undefinedPairs.erase(it);
     it = jt;
@@ -111,7 +121,7 @@ void node_data::compute_map_size() const {
 
 const_node_iterator node_data::begin() const {
   if (!m_isDefined)
-    return const_node_iterator();
+    return {};
 
   switch (m_type) {
     case NodeType::Sequence:
@@ -119,13 +129,13 @@ const_node_iterator node_data::begin() const {
     case NodeType::Map:
       return const_node_iterator(m_map.begin(), m_map.end());
     default:
-      return const_node_iterator();
+      return {};
   }
 }
 
 node_iterator node_data::begin() {
   if (!m_isDefined)
-    return node_iterator();
+    return {};
 
   switch (m_type) {
     case NodeType::Sequence:
@@ -133,13 +143,13 @@ node_iterator node_data::begin() {
     case NodeType::Map:
       return node_iterator(m_map.begin(), m_map.end());
     default:
-      return node_iterator();
+      return {};
   }
 }
 
 const_node_iterator node_data::end() const {
   if (!m_isDefined)
-    return const_node_iterator();
+    return {};
 
   switch (m_type) {
     case NodeType::Sequence:
@@ -147,13 +157,13 @@ const_node_iterator node_data::end() const {
     case NodeType::Map:
       return const_node_iterator(m_map.end(), m_map.end());
     default:
-      return const_node_iterator();
+      return {};
   }
 }
 
 node_iterator node_data::end() {
   if (!m_isDefined)
-    return node_iterator();
+    return {};
 
   switch (m_type) {
     case NodeType::Sequence:
@@ -161,12 +171,13 @@ node_iterator node_data::end() {
     case NodeType::Map:
       return node_iterator(m_map.end(), m_map.end());
     default:
-      return node_iterator();
+      return {};
   }
 }
 
 // sequence
-void node_data::push_back(node& node, shared_memory_holder /* pMemory */) {
+void node_data::push_back(node& node,
+                          const shared_memory_holder& /* pMemory */) {
   if (m_type == NodeType::Undefined || m_type == NodeType::Null) {
     m_type = NodeType::Sequence;
     reset_sequence();
@@ -178,7 +189,8 @@ void node_data::push_back(node& node, shared_memory_holder /* pMemory */) {
   m_sequence.push_back(&node);
 }
 
-void node_data::insert(node& key, node& value, shared_memory_holder pMemory) {
+void node_data::insert(node& key, node& value,
+                       const shared_memory_holder& pMemory) {
   switch (m_type) {
     case NodeType::Map:
       break;
@@ -188,27 +200,28 @@ void node_data::insert(node& key, node& value, shared_memory_holder pMemory) {
       convert_to_map(pMemory);
       break;
     case NodeType::Scalar:
-      throw BadSubscript();
+      throw BadSubscript(m_mark, key);
   }
 
   insert_map_pair(key, value);
 }
 
 // indexing
-node* node_data::get(node& key, shared_memory_holder /* pMemory */) const {
+node* node_data::get(node& key,
+                     const shared_memory_holder& /* pMemory */) const {
   if (m_type != NodeType::Map) {
-    return NULL;
+    return nullptr;
   }
 
-  for (node_map::const_iterator it = m_map.begin(); it != m_map.end(); ++it) {
-    if (it->first->is(key))
-      return it->second;
+  for (const auto& it : m_map) {
+    if (it.first->is(key))
+      return it.second;
   }
 
-  return NULL;
+  return nullptr;
 }
 
-node& node_data::get(node& key, shared_memory_holder pMemory) {
+node& node_data::get(node& key, const shared_memory_holder& pMemory) {
   switch (m_type) {
     case NodeType::Map:
       break;
@@ -218,12 +231,12 @@ node& node_data::get(node& key, shared_memory_holder pMemory) {
       convert_to_map(pMemory);
       break;
     case NodeType::Scalar:
-      throw BadSubscript();
+      throw BadSubscript(m_mark, key);
   }
 
-  for (node_map::const_iterator it = m_map.begin(); it != m_map.end(); ++it) {
-    if (it->first->is(key))
-      return *it->second;
+  for (const auto& it : m_map) {
+    if (it.first->is(key))
+      return *it.second;
   }
 
   node& value = pMemory->create_node();
@@ -231,15 +244,26 @@ node& node_data::get(node& key, shared_memory_holder pMemory) {
   return value;
 }
 
-bool node_data::remove(node& key, shared_memory_holder /* pMemory */) {
+bool node_data::remove(node& key, const shared_memory_holder& /* pMemory */) {
   if (m_type != NodeType::Map)
     return false;
 
-  for (node_map::iterator it = m_map.begin(); it != m_map.end(); ++it) {
-    if (it->first->is(key)) {
-      m_map.erase(it);
-      return true;
-    }
+  for (auto it = m_undefinedPairs.begin(); it != m_undefinedPairs.end();) {
+    auto jt = std::next(it);
+    if (it->first->is(key))
+      m_undefinedPairs.erase(it);
+    it = jt;
+  }
+
+  auto it =
+      std::find_if(m_map.begin(), m_map.end(),
+                   [&](std::pair<YAML::detail::node*, YAML::detail::node*> j) {
+                     return (j.first->is(key));
+                   });
+
+  if (it != m_map.end()) {
+    m_map.erase(it);
+    return true;
   }
 
   return false;
@@ -262,7 +286,7 @@ void node_data::insert_map_pair(node& key, node& value) {
     m_undefinedPairs.emplace_back(&key, &value);
 }
 
-void node_data::convert_to_map(shared_memory_holder pMemory) {
+void node_data::convert_to_map(const shared_memory_holder& pMemory) {
   switch (m_type) {
     case NodeType::Undefined:
     case NodeType::Null:
@@ -280,7 +304,7 @@ void node_data::convert_to_map(shared_memory_holder pMemory) {
   }
 }
 
-void node_data::convert_sequence_to_map(shared_memory_holder pMemory) {
+void node_data::convert_sequence_to_map(const shared_memory_holder& pMemory) {
   assert(m_type == NodeType::Sequence);
 
   reset_map();
@@ -296,5 +320,5 @@ void node_data::convert_sequence_to_map(shared_memory_holder pMemory) {
   reset_sequence();
   m_type = NodeType::Map;
 }
-}
-}
+}  // namespace detail
+}  // namespace YAML

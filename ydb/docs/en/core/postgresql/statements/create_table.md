@@ -11,7 +11,7 @@ The `CREATE TABLE` statement is used to create an empty table in the current dat
 
 
 When creating a table, you can specify:
-1. **Table Type**: {% include [temp-table-description.md](../../_includes/temp-table-description.md) %}
+1. **Table Type**: `TEMPORARY` / `TEMP` – a temporary table that is automatically deleted at the end of the session. If this parameter is not set (left empty), a permanent table is created. Any indexes created on a temporary table will also be deleted at the end of the session, which means that they are temporary as well. A temporary table and a permanent table with the same name are allowed, in which case a temporary table will be selected.
 2. **Table Name**: `<table name>` – you can use English letters in lowercase, numbers, underscores and dollar signs ($). For example, the table name "People" will be stored as "people". For more information, see [Identifiers and Key Words](https://www.postgresql.org/docs/current/sql-syntax-lexical.html#SQL-SYNTAX-IDENTIFIERS).
 3. **Column Name**: `<column name>` – the same naming rules apply as for table names.
 4. **Data Type**: `<column data type>` – [standard PostgreSQL data types](https://www.postgresql.org/docs/14/datatype.html) are specified.

@@ -8,7 +8,7 @@
  *	  This file contains only the public interface routines.
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -22,6 +22,7 @@
 #include "access/nbtxlog.h"
 #include "access/relscan.h"
 #include "access/xlog.h"
+#include "access/xloginsert.h"
 #include "commands/progress.h"
 #include "commands/vacuum.h"
 #include "miscadmin.h"
@@ -113,6 +114,7 @@ bthandler(PG_FUNCTION_ARGS)
 	amroutine->amcanparallel = true;
 	amroutine->amcaninclude = true;
 	amroutine->amusemaintenanceworkmem = false;
+	amroutine->amsummarizing = false;
 	amroutine->amparallelvacuumoptions =
 		VACUUM_OPTION_PARALLEL_BULKDEL | VACUUM_OPTION_PARALLEL_COND_CLEANUP;
 	amroutine->amkeytype = InvalidOid;
@@ -149,31 +151,33 @@ bthandler(PG_FUNCTION_ARGS)
 void
 btbuildempty(Relation index)
 {
+	bool		allequalimage = _bt_allequalimage(index, false);
+	Buffer		metabuf;
 	Page		metapage;
 
-	/* Construct metapage. */
-	metapage = (Page) palloc(BLCKSZ);
-	_bt_initmetapage(metapage, P_NONE, 0, _bt_allequalimage(index, false));
-
 	/*
-	 * Write the page and log it.  It might seem that an immediate sync would
-	 * be sufficient to guarantee that the file exists on disk, but recovery
-	 * itself might remove it while replaying, for example, an
-	 * XLOG_DBASE_CREATE or XLOG_TBLSPC_CREATE record.  Therefore, we need
-	 * this even when wal_level=minimal.
+	 * Initalize the metapage.
+	 *
+	 * Regular index build bypasses the buffer manager and uses smgr functions
+	 * directly, with an smgrimmedsync() call at the end.  That makes sense
+	 * when the index is large, but for an empty index, it's better to use the
+	 * buffer cache to avoid the smgrimmedsync().
 	 */
-	PageSetChecksumInplace(metapage, BTREE_METAPAGE);
-	smgrwrite(index->rd_smgr, INIT_FORKNUM, BTREE_METAPAGE,
-			  (char *) metapage, true);
-	log_newpage(&index->rd_smgr->smgr_rnode.node, INIT_FORKNUM,
-				BTREE_METAPAGE, metapage, true);
+	metabuf = ReadBufferExtended(index, INIT_FORKNUM, P_NEW, RBM_NORMAL, NULL);
+	Assert(BufferGetBlockNumber(metabuf) == BTREE_METAPAGE);
+	_bt_lockbuf(index, metabuf, BT_WRITE);
 
-	/*
-	 * An immediate sync is required even if we xlog'd the page, because the
-	 * write did not go through shared_buffers and therefore a concurrent
-	 * checkpoint may have moved the redo pointer past our xlog record.
-	 */
-	smgrimmedsync(index->rd_smgr, INIT_FORKNUM);
+	START_CRIT_SECTION();
+
+	metapage = BufferGetPage(metabuf);
+	_bt_initmetapage(metapage, P_NONE, 0, allequalimage);
+	MarkBufferDirty(metabuf);
+	log_newpage_buffer(metabuf, true);
+
+	END_CRIT_SECTION();
+
+	_bt_unlockbuf(index, metabuf);
+	ReleaseBuffer(metabuf);
 }
 
 /*
@@ -360,6 +364,7 @@ btbeginscan(Relation rel, int nkeys, int norderbys)
 		so->keyData = NULL;
 
 	so->arrayKeyData = NULL;	/* assume no array keys for now */
+	so->arraysStarted = false;
 	so->numArrayKeys = 0;
 	so->arrayKeys = NULL;
 	so->arrayContext = NULL;
@@ -963,11 +968,13 @@ btvacuumscan(IndexVacuumInfo *info, IndexBulkDeleteResult *stats,
 	 * recycled.  Taking the lock synchronizes things enough to prevent a
 	 * problem: either num_pages won't include the new page, or _bt_getbuf
 	 * already has write lock on the buffer and it will be fully initialized
-	 * before we can examine it.  (See also vacuumlazy.c, which has the same
-	 * issue.)	Also, we need not worry if a page is added immediately after
-	 * we look; the page splitting code already has write-lock on the left
-	 * page before it adds a right page, so we must already have processed any
-	 * tuples due to be moved into such a page.
+	 * before we can examine it.  Also, we need not worry if a page is added
+	 * immediately after we look; the page splitting code already has
+	 * write-lock on the left page before it adds a right page, so we must
+	 * already have processed any tuples due to be moved into such a page.
+	 *
+	 * XXX: Now that new pages are locked with RBM_ZERO_AND_LOCK, I don't
+	 * think the use of the extension lock is still required.
 	 *
 	 * We can skip locking for new or temp relations, however, since no one
 	 * else could be accessing them.
@@ -1038,6 +1045,7 @@ btvacuumpage(BTVacState *vstate, BlockNumber scanblkno)
 	IndexBulkDeleteCallback callback = vstate->callback;
 	void	   *callback_state = vstate->callback_state;
 	Relation	rel = info->index;
+	Relation	heaprel = info->heaprel;
 	bool		attempt_pagedel;
 	BlockNumber blkno,
 				backtrack_to;
@@ -1069,7 +1077,7 @@ backtrack:
 	if (!PageIsNew(page))
 	{
 		_bt_checkpage(rel, buf);
-		opaque = (BTPageOpaque) PageGetSpecialPointer(page);
+		opaque = BTPageGetOpaque(page);
 	}
 
 	Assert(blkno <= scanblkno);
@@ -1088,8 +1096,7 @@ backtrack:
 		 * can't be half-dead because only an interrupted VACUUM process can
 		 * leave pages in that state, so we'd definitely have dealt with it
 		 * back when the page was the scanblkno page (half-dead pages are
-		 * always marked fully deleted by _bt_pagedel()).  This assumes that
-		 * there can be only one vacuum process running at a time.
+		 * always marked fully deleted by _bt_pagedel(), barring corruption).
 		 */
 		if (!opaque || !P_ISLEAF(opaque) || P_ISHALFDEAD(opaque))
 		{
@@ -1123,7 +1130,7 @@ backtrack:
 		}
 	}
 
-	if (!opaque || BTPageIsRecyclable(page))
+	if (!opaque || BTPageIsRecyclable(page, heaprel))
 	{
 		/* Okay to recycle this page (which could be leaf or internal) */
 		RecordFreeIndexPage(rel, blkno);
@@ -1161,9 +1168,9 @@ backtrack:
 					nhtidslive;
 
 		/*
-		 * Trade in the initial read lock for a super-exclusive write lock on
-		 * this page.  We must get such a lock on every leaf page over the
-		 * course of the vacuum scan, whether or not it actually contains any
+		 * Trade in the initial read lock for a full cleanup lock on this
+		 * page.  We must get such a lock on every leaf page over the course
+		 * of the vacuum scan, whether or not it actually contains any
 		 * deletable tuples --- see nbtree/README.
 		 */
 		_bt_upgradelockbufcleanup(rel, buf);
@@ -1184,12 +1191,6 @@ backtrack:
 			opaque->btpo_next < scanblkno)
 			backtrack_to = opaque->btpo_next;
 
-		/*
-		 * When each VACUUM begins, it determines an OldestXmin cutoff value.
-		 * Tuples before the cutoff are removed by VACUUM.  Scan over all
-		 * items to see which ones need to be deleted according to cutoff
-		 * point using callback.
-		 */
 		ndeletable = 0;
 		nupdatable = 0;
 		minoff = P_FIRSTDATAKEY(opaque);
@@ -1198,6 +1199,7 @@ backtrack:
 		nhtidslive = 0;
 		if (callback)
 		{
+			/* btbulkdelete callback tells us what to delete (or update) */
 			for (offnum = minoff;
 				 offnum <= maxoff;
 				 offnum = OffsetNumberNext(offnum))
@@ -1207,26 +1209,6 @@ backtrack:
 				itup = (IndexTuple) PageGetItem(page,
 												PageGetItemId(page, offnum));
 
-				/*
-				 * Hot Standby assumes that it's okay that XLOG_BTREE_VACUUM
-				 * records do not produce their own conflicts.  This is safe
-				 * as long as the callback function only considers whether the
-				 * index tuple refers to pre-cutoff heap tuples that were
-				 * certainly already pruned away during VACUUM's initial heap
-				 * scan by the time we get here. (heapam's XLOG_HEAP2_PRUNE
-				 * records produce conflicts using a latestRemovedXid value
-				 * for the pointed-to heap tuples, so there is no need to
-				 * produce our own conflict now.)
-				 *
-				 * Backends with snapshots acquired after a VACUUM starts but
-				 * before it finishes could have visibility cutoff with a
-				 * later xid than VACUUM's OldestXmin cutoff.  These backends
-				 * might happen to opportunistically mark some index tuples
-				 * LP_DEAD before we reach them, even though they may be after
-				 * our cutoff.  We don't try to kill these "extra" index
-				 * tuples in _bt_delitems_vacuum().  This keep things simple,
-				 * and allows us to always avoid generating our own conflicts.
-				 */
 				Assert(!BTreeTupleIsPivot(itup));
 				if (!BTreeTupleIsPosting(itup))
 				{

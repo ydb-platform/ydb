@@ -16,7 +16,6 @@ enum class ECompileActorAction {
 
 IActor* CreateKqpCompileService(const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
     const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
-    const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig,
     const TKqpSettings::TConstPtr& kqpSettings, TIntrusivePtr<TModuleResolverState> moduleResolverState,
     TIntrusivePtr<TKqpCounters> counters, std::shared_ptr<IQueryReplayBackendFactory> queryReplayFactory,
     std::optional<TKqpFederatedQuerySetup> federatedQuerySetup
@@ -28,7 +27,6 @@ IActor* CreateKqpCompileComputationPatternService(const NKikimrConfig::TTableSer
 IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstPtr& kqpSettings,
     const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
     const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
-    const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig,
     TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
     const TString& uid, const TKqpQueryId& query,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,

@@ -49,6 +49,20 @@ public:
         bucket.Map[key] = value;
     }
 
+    bool Swap(const K& key, const V& value, V& out_prev_value) {
+        TBucket& bucket = GetBucketForKey(key);
+        TWriteGuard guard(bucket.RWLock);
+
+        typename TActualMap::iterator it = bucket.Map.find(key);
+        if (it != bucket.Map.end()) {
+            out_prev_value = it->second;
+            it->second = value;
+            return true;
+        }
+        bucket.Map.insert(std::make_pair(key, value));
+        return false;
+    }
+
     V& InsertIfAbsent(const K& key, const V& value) {
         TBucket& bucket = GetBucketForKey(key);
         TWriteGuard guard(bucket.RWLock);

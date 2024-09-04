@@ -1,7 +1,7 @@
 #include "keyvalue_storage_read_request.h"
 
 #include <ydb/core/util/testactorsys.h>
-
+#include <ydb/core/base/blobstorage_common.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr {
@@ -37,7 +37,7 @@ struct TBlobStorageMockState {
             groupId = *group.GroupId;
         }
         std::unique_ptr<TEvBlobStorage::TEvGetResult> getResult = std::make_unique<TEvBlobStorage::TEvGetResult>(
-                group.Status, get->QuerySize, groupId);
+                group.Status, get->QuerySize, TGroupId::FromValue(groupId));
         getResult->Responses.Reset(new TEvBlobStorage::TEvGetResult::TResponse[get->QuerySize]);
         for (ui32 queryIdx = 0; queryIdx < get->QuerySize; ++queryIdx) {
             auto &query = get->Queries[queryIdx];

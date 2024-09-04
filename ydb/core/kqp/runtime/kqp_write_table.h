@@ -10,54 +10,6 @@
 namespace NKikimr {
 namespace NKqp {
 
-class IPayloadSerializer : public TThrRefBase {
-public:
-    class IBatch : public TThrRefBase {
-    public:
-        virtual TString SerializeToString() const = 0;
-        virtual i64 GetMemory() const = 0;
-        bool IsEmpty() const;
-    };
-
-    using IBatchPtr = TIntrusivePtr<IBatch>;
-
-    virtual void AddData(NMiniKQL::TUnboxedValueBatch&& data) = 0;
-    virtual void AddBatch(const IBatchPtr& batch) = 0;
-
-    virtual void Close() = 0;
-
-    virtual bool IsClosed() = 0;
-    virtual bool IsEmpty() = 0;
-    virtual bool IsFinished() = 0;
-
-    virtual NKikimrDataEvents::EDataFormat GetDataFormat() = 0;
-    virtual std::vector<ui32> GetWriteColumnIds() = 0;
-
-    using TBatches = THashMap<ui64, std::deque<IBatchPtr>>;
-
-    virtual TBatches FlushBatchesForce() = 0;
-
-    virtual IBatchPtr FlushBatch(ui64 shardId) = 0;
-    virtual const THashSet<ui64>& GetShardIds() const = 0;
-
-    virtual i64 GetMemory() = 0;
-};
-
-using IPayloadSerializerPtr = TIntrusivePtr<IPayloadSerializer>;
-
-
-IPayloadSerializerPtr CreateColumnShardPayloadSerializer(
-    const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry,
-    const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
-    const NMiniKQL::TTypeEnvironment& typeEnv);
-
-IPayloadSerializerPtr CreateDataShardPayloadSerializer(
-    const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry,
-    NSchemeCache::TSchemeCacheRequest::TEntry&& partitionsEntry,
-    const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
-    const NMiniKQL::TTypeEnvironment& typeEnv);
-
-
 class IShardedWriteController : public TThrRefBase {
 public:
     virtual void OnPartitioningChanged(const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry) = 0;
@@ -112,7 +64,8 @@ struct TShardedWriteControllerSettings {
 IShardedWriteControllerPtr CreateShardedWriteController(
     const TShardedWriteControllerSettings& settings,
     TVector<NKikimrKqp::TKqpColumnMetadataProto>&& inputColumns,
-    const NMiniKQL::TTypeEnvironment& typeEnv);
+    const NMiniKQL::TTypeEnvironment& typeEnv,
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc);
 
 }
 }

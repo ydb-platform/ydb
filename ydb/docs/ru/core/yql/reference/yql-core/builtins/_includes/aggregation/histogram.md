@@ -39,7 +39,7 @@ BlockWardHistogram
 
 По умолчанию `HISTOGRAM` является синонимом к `AdaptiveWardHistogram`. Обе функции эквивалентны и взаимозаменимы во всех контекстах.
 
-Алгоритмы Distance, Weight и Ward отличаются формулами объединения двух точек в одну: 
+Алгоритмы Distance, Weight и Ward отличаются формулами объединения двух точек в одну:
 
 ``` c++
     TWeightedValue CalcDistanceQuality(const TWeightedValue& left, const TWeightedValue& right) {
@@ -70,10 +70,10 @@ While FastGreedyShrink is used most of the time, SlowShrink is mostly used for h
 
 ### Если нужна точная гистограмма
 
-1. Можно воспользоваться описанными ниже агрегатными функциями с фиксированными сетками корзин: [LinearHistogram](#linearhistogram) или [LogarithmicHistogram](#logarithmichistogram).
+1. Можно воспользоваться описанными ниже агрегатными функциями с фиксированными сетками корзин: [LinearHistogram](#linearhistogram) или [LogarithmicHistogram](#linearhistogram).
 2. Можно самостоятельно вычислить номер корзины для каждой строки и сделать по нему [GROUP BY](../../../syntax/group_by.md).
 
-При использовании [фабрики агрегационной функции](../../basic.md#aggregationfactory) в качестве первого аргумента [AGGREGATE_BY](#aggregateby) передается `Tuple` из значения и веса.
+При использовании [фабрики агрегационной функции](../../basic.md#aggregationfactory) в качестве первого аргумента [AGGREGATE_BY](../../aggregation.md#aggregateby) передается `Tuple` из значения и веса.
 
 **Примеры**
 ``` yql

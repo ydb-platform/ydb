@@ -1,4 +1,5 @@
 #include "abstract.h"
+#include <ydb/core/formats/arrow/accessor/abstract/request.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/core/formats/arrow/dictionary/diff.h>
 
@@ -17,6 +18,8 @@ private:
 
     NArrow::NSerialization::TSerializerContainer Serializer;
     NArrow::NDictionary::TEncodingDiff DictionaryEncodingDiff;
+    std::optional<TString> DefaultValue;
+    NArrow::NAccessor::TRequestedConstructorContainer AccessorConstructor;
 public:
     TConclusionStatus DoDeserialize(NYql::TObjectSettingsImpl::TFeaturesExtractor& features) override;
 

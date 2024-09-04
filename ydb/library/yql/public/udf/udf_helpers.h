@@ -7,6 +7,7 @@
 #include "udf_type_builder.h"
 #include "udf_type_inspection.h"
 #include "udf_version.h"
+#include "udf_type_printer.h"
 
 #include <util/generic/yexception.h>
 #include <util/generic/string.h>
@@ -230,7 +231,7 @@ namespace NUdf {
 namespace NYql {
 namespace NUdf {
 
-template<bool CheckOptional, const char* TFuncName, template<class> class TFunc, typename... TUserTypes>
+template<bool CheckOptional, bool CheckBlock, const char* TFuncName, template<class> class TFunc, typename... TUserTypes>
 class TUserDataTypeFuncFactory : public ::NYql::NUdf::TBoxedValue {
 public:
     typedef bool TTypeAwareMarker;
@@ -241,8 +242,29 @@ public:
         return name;
     }
 
+    static const TType* ExtractArgFromUserType(::NYql::NUdf::TType const* userType, ::NYql::NUdf::IFunctionTypeInfoBuilder& builder) {
+        if constexpr (CheckBlock) {
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 26)
+            TBlockTypeInspector block(*builder.TypeInfoHelper(), userType);
+            if (block) {
+                userType = block.GetItemType();
+            }
+#endif
+        }
+
+        if constexpr (CheckOptional) {
+            TOptionalTypeInspector optionalTypeInspector(*builder.TypeInfoHelper(), userType);
+            if (optionalTypeInspector) {
+                userType = optionalTypeInspector.GetItemType();
+            }
+        }
+        return userType;
+    }
+
+
     template<typename TUserType>
     static bool DeclareSignatureImpl(
+        const ::NYql::NUdf::TStringRef& name,
         TDataTypeId typeId,
         ::NYql::NUdf::TType* userType,
         ::NYql::NUdf::IFunctionTypeInfoBuilder& builder,
@@ -251,21 +273,22 @@ public:
         if (TDataType<TUserType>::Id != typeId) {
             return false;
         }
-        TFunc<TUserType>::DeclareSignature(userType, builder, typesOnly);
+        TFunc<TUserType>::DeclareSignature(name, userType, builder, typesOnly);
         return true;
     }
 
     template<typename TUserType, typename THead, typename... TTail>
     static bool DeclareSignatureImpl(
+        const ::NYql::NUdf::TStringRef& name,
         TDataTypeId typeId,
         ::NYql::NUdf::TType* userType,
         ::NYql::NUdf::IFunctionTypeInfoBuilder& builder,
         bool typesOnly)
     {
-        if (DeclareSignatureImpl<TUserType>(typeId, userType, builder, typesOnly)) {
+        if (DeclareSignatureImpl<TUserType>(name, typeId, userType, builder, typesOnly)) {
             return true;
         }
-        return DeclareSignatureImpl<THead, TTail...>(typeId, userType, builder, typesOnly);
+        return DeclareSignatureImpl<THead, TTail...>(name, typeId, userType, builder, typesOnly);
     }
 
     static bool DeclareSignature(
@@ -297,24 +320,20 @@ public:
             return true;
         }
 
-        auto argType = argsTypeInspector.GetElementType(0);
-        if (CheckOptional) {
-            TOptionalTypeInspector optionalTypeInspector(*typeHelper, argType);
-            if (optionalTypeInspector) {
-                argType = optionalTypeInspector.GetItemType();
-            }
-        }
-
+        auto argType = ExtractArgFromUserType(argsTypeInspector.GetElementType(0), builder);
         TDataTypeInspector dataTypeInspector(*typeHelper, argType);
         if (!dataTypeInspector) {
-            builder.SetError("User type must be a data type");
+            TStringStream ss;
+            NUdf::TTypePrinter p(*typeHelper, argType);
+            p.Out(ss);
+            builder.SetError("User type must be a data type. Got: " + ss.Str());
             return true;
         }
 
         builder.UserType(userType);
 
         auto typeId = dataTypeInspector.GetTypeId();
-        if (!DeclareSignatureImpl<TUserTypes...>(typeId, userType, builder, typesOnly)) {
+        if (!DeclareSignatureImpl<TUserTypes...>(name, typeId, userType, builder, typesOnly)) {
             TStringBuilder sb;
             sb << "User type " << NYql::NUdf::GetDataTypeInfo(NYql::NUdf::GetDataSlot(typeId)).Name << " is not supported";
             builder.SetError(sb);

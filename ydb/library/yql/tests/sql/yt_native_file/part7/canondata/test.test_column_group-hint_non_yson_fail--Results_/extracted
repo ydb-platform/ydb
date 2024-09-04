@@ -1,0 +1,8 @@
+<tmp_path>/program.sql:<main>: Error: Type annotation
+
+    <tmp_path>/program.sql:<main>:6:20: Error: At function: YtWriteTable!, Setting column_groups
+    	with column_groups="!"
+	                   ^
+        <tmp_path>/program.sql:<main>:6:20: Error: Failed to parse Yson: library/cpp/yson/parser_detail.h:174: Unexpected '!' while parsing node
+        	with column_groups="!"
+	                   ^

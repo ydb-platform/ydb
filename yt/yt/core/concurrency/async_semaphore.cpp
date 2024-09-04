@@ -159,7 +159,7 @@ TFuture<void> TAsyncSemaphore::GetReadyEvent()
         ReadyEvent_ = NewPromise<void>();
     }
 
-    return ReadyEvent_;
+    return ReadyEvent_.ToFuture().ToUncancelable();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -46,11 +46,21 @@ def read_scan_rows(it) -> typing.List[ydb_pb.Value]:
 
 
 def make_columns(columns: typing.List[typing.Tuple[str, str]]) -> typing.List[ydb_pb.Column]:
-    return [ydb_pb.Column(name=name, type=ydb_pb.Type(type_id=ydb_pb.Type.PrimitiveTypeId.Value(type))) for name, type in columns]
+    return [
+        ydb_pb.Column(name=name, type=ydb_pb.Type(type_id=ydb_pb.Type.PrimitiveTypeId.Value(type)))
+        for name, type in columns
+    ]
 
 
 class TestYdbOverFq(TestYdsBase):
-    def make_binding(self, client: FederatedQueryClient, name: str, path: str, connection_id: str, columns: typing.List[typing.Tuple[str, str]]):
+    def make_binding(
+        self,
+        client: FederatedQueryClient,
+        name: str,
+        path: str,
+        connection_id: str,
+        columns: typing.List[typing.Tuple[str, str]],
+    ):
         columns = make_columns(columns)
         client.create_object_storage_binding(name, path, "csv_with_names", connection_id, columns=columns)
 
@@ -60,28 +70,22 @@ class TestYdbOverFq(TestYdsBase):
         try:
             driver.wait(5)
         except TimeoutError:
-            logging.error("Failed to create driver for FQ CP. Last reported errors by discovery: "
-                          + driver.discovery_debug_details())
+            logging.error(
+                "Failed to create driver for FQ CP. Last reported errors by discovery: "
+                + driver.discovery_debug_details()
+            )
         return driver
 
     def make_s3_client(self, s3):
         resource = boto3.resource(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         bucket = resource.Bucket("fbucket")
         bucket.create(ACL='public-read')
         bucket.objects.all().delete()
 
-        return boto3.client(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
-        )
+        return boto3.client("s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key")
 
     def put_s3_object(self, client, rows: typing.List[typing.Dict[str, typing.Any]], path: str):
         client.put_object(Body=to_csv(rows), Bucket="fbucket", Key=path, ContentType="text/plain")
@@ -91,6 +95,7 @@ class TestYdbOverFq(TestYdsBase):
         we want to run each instance (v1/v2) in a separate yq folder. Folders should also
         be separate by yq version
     """
+
     def list_directory_test_body(self, kikimr, s3, client):
         kikimr.control_plane.wait_bootstrap()
 
@@ -140,16 +145,20 @@ class TestYdbOverFq(TestYdsBase):
     def test_list_without_streams(self, kikimr, s3, client, yq_version):
         self.init_topics(f"topic_to_not_list_{yq_version}")
 
-        connection_response = client.create_yds_connection("yds_conn", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
+        connection_response = client.create_yds_connection(
+            "yds_conn", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT")
+        )
 
         logging.debug("connection_response: " + str(connection_response.result))
         assert not connection_response.issues, str(connection_response.issues)
 
-        binding_response = client.create_yds_binding(name="yds_bind",
-                                                     stream=self.input_topic,
-                                                     format="json_each_row",
-                                                     connection_id=connection_response.result.connection_id,
-                                                     columns=make_columns([("Data", "STRING")]))
+        binding_response = client.create_yds_binding(
+            name="yds_bind",
+            stream=self.input_topic,
+            format="json_each_row",
+            connection_id=connection_response.result.connection_id,
+            columns=make_columns([("Data", "STRING")]),
+        )
 
         logging.debug("binding_response: " + str(binding_response.result))
         assert not binding_response.issues, str(binding_response.issues)
@@ -175,7 +184,13 @@ class TestYdbOverFq(TestYdsBase):
         kikimr.control_plane.wait_bootstrap()
         connection_id = client.create_storage_connection(unique_prefix + "fruitbucket", "fbucket").result.connection_id
         bind_name = unique_prefix + "fruits_bind"
-        self.make_binding(client, bind_name, "fruits.csv", connection_id, [("Fruit", "STRING"), ("Price", "INT32"), ("Weight", "INT32")])
+        self.make_binding(
+            client,
+            bind_name,
+            "fruits.csv",
+            connection_id,
+            [("Fruit", "STRING"), ("Price", "INT32"), ("Weight", "INT32")],
+        )
 
         driver = self.make_yq_driver(kikimr.endpoint(), client.folder_id, "root@builtin")
         session = driver.table_client.session().create()
@@ -199,7 +214,13 @@ class TestYdbOverFq(TestYdsBase):
         kikimr.control_plane.wait_bootstrap()
         connection_id = client.create_storage_connection(unique_prefix + "fruitbucket", "fbucket").result.connection_id
         bind_name = unique_prefix + "fruits_bind"
-        self.make_binding(client, bind_name, "fruits.csv", connection_id, [("Fruit", "STRING"), ("Price", "INT32"), ("Weight", "INT32")])
+        self.make_binding(
+            client,
+            bind_name,
+            "fruits.csv",
+            connection_id,
+            [("Fruit", "STRING"), ("Price", "INT32"), ("Weight", "INT32")],
+        )
 
         driver = self.make_yq_driver(kikimr.endpoint(), client.folder_id, "root@builtin")
 
@@ -212,14 +233,18 @@ class TestYdbOverFq(TestYdsBase):
 
         it = driver.table_client.scan_query("select 42; select 4, 2;")
         assert_that(
-            calling(next).with_args(it),
-            raises(ydb.issues.BadRequest, "Scan query should have a single result set")
+            calling(next).with_args(it), raises(ydb.issues.BadRequest, "Scan query should have a single result set")
         )
         scanned_rows = read_scan_rows(it)
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_execute_data_query_results(self, kikimr, s3, client,):
+    def test_execute_data_query_results(
+        self,
+        kikimr,
+        s3,
+        client,
+    ):
         kikimr.control_plane.wait_bootstrap()
 
         driver = self.make_yq_driver(kikimr.endpoint(), client.folder_id, "root@builtin")
@@ -249,7 +274,13 @@ class TestYdbOverFq(TestYdsBase):
 
         connection_id = client.create_storage_connection(unique_prefix + "fruitbucket", "fbucket").result.connection_id
         bind_name = unique_prefix + "fruits_bind"
-        self.make_binding(client, bind_name, "fruits.csv", connection_id, [("Fruit", "STRING"), ("Price", "INT32"), ("Weight", "INT32")])
+        self.make_binding(
+            client,
+            bind_name,
+            "fruits.csv",
+            connection_id,
+            [("Fruit", "STRING"), ("Price", "INT32"), ("Weight", "INT32")],
+        )
 
         driver = self.make_yq_driver(kikimr.endpoint(), client.folder_id, "root@builtin")
         session = driver.table_client.session().create()
@@ -317,7 +348,7 @@ class TestYdbOverFq(TestYdsBase):
         assert_that(
             calling(session.describe_table).with_args("BAD_PATH"),
             # didn't manage to make it find "couldn\'t"
-            raises(ydb.issues.NotFound, " find binding with matching name for BAD_PATH")
+            raises(ydb.issues.NotFound, " find binding with matching name for BAD_PATH"),
         )
 
         for path in [bind_name, "/path/to/" + bind_name]:
@@ -331,3 +362,31 @@ class TestYdbOverFq(TestYdsBase):
                     assert column.type == ydb.PrimitiveType.Int32
                 else:
                     assert False
+
+    @yq_all
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_insert_data_query(self, kikimr, s3, client, unique_prefix, yq_version):
+        kikimr.control_plane.wait_bootstrap()
+        connection_id = client.create_storage_connection(unique_prefix + "fruitbucket", "fbucket").result.connection_id
+        bind_name = unique_prefix + "fruits_bind"
+        self.make_binding(
+            client,
+            bind_name,
+            "/sub/",
+            connection_id,
+            [("Fruit", "STRING"), ("Price", "INT32"), ("Weight", "INT32")],
+        )
+        driver = self.make_yq_driver(kikimr.endpoint(), client.folder_id, "root@builtin")
+        session = driver.table_client.session().create()
+        with session.transaction() as tx:
+            query = '''
+                insert into {}{}
+                select
+                    'Banana' as `Fruit`,
+                    3 as Price,
+                    100 as Weight
+            '''.format(
+                "bindings." if yq_version == "v1" else "", bind_name
+            )
+            result = tx.execute(query)
+            assert len(result) == 0, str(result)

@@ -1,12 +1,19 @@
-{%  for property in current_target.properties -%}
+{%- if (current_target.target_properties is defined) and (current_target.target_properties|length) -%}
+{#-    Deduplicate target property names -#}
+{%-    set property_names = current_target.target_properties|map(attribute='name')|unique -%}
+{%-    for property_name in property_names -%}
+{%-         set properties = current_target.target_properties|selectattr('name', 'eq', property_name) -%}
+{#-         Apply only first property by name -#}
+{%-         set property = properties|first %}
 set_property(TARGET {{ name }} PROPERTY {{ property.name }}
-{%-     for value in property.value %}
+{%-         for value in property.value %}
   {{ value }}
-{%-     endfor %}
+{%-         endfor %}
 )
-{%  endfor -%}
+{%      endfor -%}
+{%- endif -%}
 
-{%- if (current_target.protoc_extra_outs is defined) and (current_target.protoc_extra_outs|length) -%}
+{%- if (current_target.protoc_extra_outs is defined) and (current_target.protoc_extra_outs|length) %}
 set_property(TARGET {{ name }} PROPERTY PROTOC_EXTRA_OUTS
 {%-     for protoc_extra_out in current_target.protoc_extra_outs %}
   {{ protoc_extra_out }}

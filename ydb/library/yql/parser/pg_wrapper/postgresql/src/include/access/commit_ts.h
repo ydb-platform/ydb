@@ -3,7 +3,7 @@
  *
  * PostgreSQL commit timestamp manager
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/access/commit_ts.h
@@ -15,13 +15,9 @@
 #include "datatype/timestamp.h"
 #include "replication/origin.h"
 #include "storage/sync.h"
-#include "utils/guc.h"
 
 
 extern __thread PGDLLIMPORT bool track_commit_timestamp;
-
-extern bool check_track_commit_timestamp(bool *newval, void **extra,
-										 GucSource source);
 
 extern void TransactionTreeSetCommitTsData(TransactionId xid, int nsubxids,
 										   TransactionId *subxids, TimestampTz timestamp,

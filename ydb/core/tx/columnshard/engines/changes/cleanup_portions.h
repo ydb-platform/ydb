@@ -42,7 +42,7 @@ public:
     virtual ui32 GetWritePortionsCount() const override {
         return 0;
     }
-    virtual TWritePortionInfoWithBlobs* GetWritePortionInfo(const ui32 /*index*/) override {
+    virtual TWritePortionInfoWithBlobsResult* GetWritePortionInfo(const ui32 /*index*/) override {
         return nullptr;
     }
     virtual bool NeedWritePortion(const ui32 /*index*/) const override {

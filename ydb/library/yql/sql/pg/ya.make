@@ -8,6 +8,7 @@ PEERDIR(
     ydb/library/yql/ast
     ydb/library/yql/core
     ydb/library/yql/parser/pg_catalog
+    ydb/library/yql/minikql
     ydb/library/yql/sql/settings
     ydb/public/api/protos
 )

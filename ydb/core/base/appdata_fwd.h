@@ -63,6 +63,11 @@ namespace NKikimrConfig {
     class TBackgroundCleaningConfig;
     class TGraphConfig;
     class TMetadataCacheConfig;
+    class TMemoryControllerConfig;
+}
+
+namespace NKikimrReplication {
+    class TReplicationDefaults;
 }
 
 namespace NKikimrNetClassifier {
@@ -213,6 +218,8 @@ struct TAppData {
     NKikimrConfig::TGraphConfig& GraphConfig;
     NKikimrSharedCache::TSharedCacheConfig& SharedCacheConfig;
     NKikimrConfig::TMetadataCacheConfig& MetadataCacheConfig;
+    NKikimrConfig::TMemoryControllerConfig& MemoryControllerConfig;
+    NKikimrReplication::TReplicationDefaults& ReplicationConfig;
     bool EnforceUserTokenRequirement = false;
     bool EnforceUserTokenCheckRequirement = false; // check token if it was specified
     bool AllowHugeKeyValueDeletes = true; // delete when all clients limit deletes per request
@@ -224,6 +231,7 @@ struct TAppData {
     TVector<TString> AdministrationAllowedSIDs; // users/groups which allowed to perform administrative tasks
     TVector<TString> DefaultUserSIDs;
     TString AllAuthenticatedUsers = "all-users@well-known";
+    TVector<TString> RegisterDynamicNodeAllowedSIDs;
     TString TenantName;
     TString NodeName;
 
@@ -233,11 +241,7 @@ struct TAppData {
     bool EnableIntrospection = true;
 
     // Used to allow column families for testing
-    bool AllowColumnFamiliesForTest = false;
     bool AllowPrivateTableDescribeForTest = false;
-
-    // Used to allow immediate ReadTable in tests
-    bool AllowReadTableImmediate = false;
 
     // Used to disable object deletion in schemeshard for cleanup tests
     bool DisableSchemeShardCleanupOnDropForTest = false;

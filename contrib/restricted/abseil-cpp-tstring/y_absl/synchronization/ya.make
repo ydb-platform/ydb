@@ -6,6 +6,8 @@ LICENSE(Apache-2.0)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
+VERSION(20240722.0)
+
 PEERDIR(
     contrib/restricted/abseil-cpp-tstring/y_absl/base
     contrib/restricted/abseil-cpp-tstring/y_absl/debugging
@@ -17,6 +19,10 @@ PEERDIR(
 ADDINCL(
     GLOBAL contrib/restricted/abseil-cpp-tstring
 )
+
+IF(Y_ABSL_DONT_USE_DEBUG)
+    CFLAGS(-DY_ABSL_DONT_USE_DEBUG_LIBRARY=1)
+ENDIF()
 
 NO_COMPILER_WARNINGS()
 

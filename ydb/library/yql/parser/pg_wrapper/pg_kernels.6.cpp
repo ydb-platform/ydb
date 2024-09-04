@@ -20,6 +20,7 @@ extern "C" {
 #undef fopen
 #undef bind
 #undef locale_t
+#undef strtou64
 }
 
 #include "arrow.h"

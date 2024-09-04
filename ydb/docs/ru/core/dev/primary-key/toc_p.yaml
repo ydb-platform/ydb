@@ -1,6 +1,4 @@
 items:
-- name: Обзор
-  href: index.md
 - name: Строковые
   href: row-oriented.md
 - name: Колоночные

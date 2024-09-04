@@ -6,7 +6,6 @@
 
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/dq/opt/dq_opt_log.h>
-#include <ydb/library/yql/providers/common/provider/yql_table_lookup.h>
 
 namespace NKikimr::NKqp::NOpt {
 

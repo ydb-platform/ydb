@@ -137,6 +137,12 @@ class TValueConverter {
             return TValue(Parser.GetDatetime().GetValue());
         case EPrimitiveType::Timestamp:
             return TValue(Parser.GetTimestamp().GetValue());
+        case EPrimitiveType::Date32:
+            return TValue(Parser.GetDate32());
+        case EPrimitiveType::Datetime64:
+            return TValue(Parser.GetDatetime64());
+        case EPrimitiveType::Timestamp64:
+            return TValue(Parser.GetTimestamp64());
         case EPrimitiveType::String:
             return TValue(Parser.GetString());
         case EPrimitiveType::Utf8:
@@ -260,6 +266,18 @@ public:
 
     TInstant GetTimestamp() const {
         return TInstant::ParseIso8601(Value);
+    }
+
+    i32 GetDate32() const {
+        return FromString<i32>(Value);
+    }
+
+    i64 GetDatetime64() const {
+        return FromString<i64>(Value);
+    }
+
+    i64 GetTimestamp64() const {
+        return FromString<i64>(Value);
     }
 
     TString GetString() const {

@@ -198,7 +198,9 @@ void Init(
     if (protoConfig.GetPrivateApi().GetEnabled()) {
         const auto& s3readConfig = protoConfig.GetReadActorsFactoryConfig().GetS3ReadActorFactoryConfig();
         auto s3HttpRetryPolicy = NYql::GetHTTPDefaultRetryPolicy(NYql::THttpRetryPolicyOptions{.MaxTime = TDuration::Max(), .RetriedCurlCodes = NYql::FqRetriedCurlCodes()});
-        NYql::NDq::TS3ReadActorFactoryConfig readActorFactoryCfg;
+        NYql::NDq::TS3ReadActorFactoryConfig readActorFactoryCfg = NYql::NDq::CreateReadActorFactoryConfig(protoConfig.GetGateways().GetS3());
+
+        // These fillings were left for the backward compatibility. TODO: remove this part after migration to TS3GatewayConfig
         if (const ui64 rowsInBatch = s3readConfig.GetRowsInBatch()) {
             readActorFactoryCfg.RowsInBatch = rowsInBatch;
         }
@@ -208,26 +210,13 @@ void Init(
         if (const ui64 dataInflight = s3readConfig.GetDataInflight()) {
             readActorFactoryCfg.DataInflight = dataInflight;
         }
-        for (auto& formatSizeLimit: protoConfig.GetGateways().GetS3().GetFormatSizeLimit()) {
-            if (formatSizeLimit.GetName()) { // ignore unnamed limits
-                readActorFactoryCfg.FormatSizeLimits.emplace(
-                    formatSizeLimit.GetName(), formatSizeLimit.GetFileSizeLimit());
-            }
-        }
-        if (protoConfig.GetGateways().GetS3().HasFileSizeLimit()) {
-            readActorFactoryCfg.FileSizeLimit =
-                protoConfig.GetGateways().GetS3().GetFileSizeLimit();
-        }
-        if (protoConfig.GetGateways().GetS3().HasBlockFileSizeLimit()) {
-            readActorFactoryCfg.BlockFileSizeLimit =
-                protoConfig.GetGateways().GetS3().GetBlockFileSizeLimit();
-        }
+
         RegisterDqInputTransformLookupActorFactory(*asyncIoFactory);
-        RegisterDqPqReadActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory);
+        RegisterDqPqReadActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory, yqCounters->GetSubgroup("subsystem", "DqSourceTracker"));
         RegisterYdbReadActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory);
 
         s3ActorsFactory->RegisterS3ReadActorFactory(*asyncIoFactory, credentialsFactory, httpGateway, s3HttpRetryPolicy, readActorFactoryCfg,
-            yqCounters->GetSubgroup("subsystem", "S3ReadActor"));
+            yqCounters->GetSubgroup("subsystem", "S3ReadActor"), protoConfig.GetGateways().GetS3().GetAllowLocalFiles());
         s3ActorsFactory->RegisterS3WriteActorFactory(*asyncIoFactory, credentialsFactory,
             httpGateway, s3HttpRetryPolicy);
 

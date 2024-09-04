@@ -68,7 +68,7 @@ TDataStatistics& operator += (TDataStatistics& lhs, const TDataStatistics& rhs)
     return lhs;
 }
 
-TDataStatistics operator +  (const TDataStatistics& lhs, const TDataStatistics& rhs)
+TDataStatistics operator + (const TDataStatistics& lhs, const TDataStatistics& rhs)
 {
     auto result = lhs;
     result += rhs;
@@ -163,11 +163,6 @@ void FormatValue(TStringBuilderBase* builder, const TDataStatistics* statistics,
     } else {
         FormatValue(builder, std::nullopt, spec);
     }
-}
-
-TString ToString(const TDataStatistics& statistics)
-{
-    return ToStringViaBuilder(statistics);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

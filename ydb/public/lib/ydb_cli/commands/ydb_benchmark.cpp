@@ -1,14 +1,17 @@
 #include "ydb_benchmark.h"
 #include "benchmark_utils.h"
+#include <ydb/public/lib/ydb_cli/common/format.h>
+#include <ydb/public/lib/ydb_cli/common/plan2svg.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <library/cpp/json/json_writer.h>
 #include <util/string/printf.h>
+#include <util/folder/path.h>
 
 namespace NYdb::NConsoleClient {
     TWorkloadCommandBenchmark::TWorkloadCommandBenchmark(NYdbWorkload::TWorkloadParams& params, const NYdbWorkload::IWorkloadQueryGenerator::TWorkloadType& workload)
         : TWorkloadCommandBase(workload.CommandName, params, NYdbWorkload::TWorkloadParams::ECommandType::Run, workload.Description, workload.Type)
     {
-        
+
     }
 
 
@@ -25,9 +28,15 @@ void TWorkloadCommandBenchmark::Config(TConfig& config) {
     config.Opts->AddLongOption("json", "Path to file to save json report to.\nJson report includes some metrics of queries, min and max time, stddev, etc. Has Solomon sensor format.")
         .DefaultValue("")
         .StoreResult(&JsonReportFileName);
+    config.Opts->AddLongOption("csv", "Path to file to save csv version of summary table.")
+        .DefaultValue("")
+        .StoreResult(&CsvReportFileName);
     config.Opts->AddLongOption("ministat", "Ministat report file name")
         .DefaultValue("")
         .StoreResult(&MiniStatFileName);
+    config.Opts->AddLongOption("plan", "Query plans report file name")
+        .DefaultValue("")
+        .StoreResult(&PlanFileName);
     config.Opts->AddLongOption("query-settings", "Query settings.\nEvery setting is a line that will be added to the beginning of each query. For multiple settings lines use this option several times.")
         .DefaultValue("")
         .AppendTo(&QuerySettings);
@@ -72,7 +81,8 @@ void TWorkloadCommandBenchmark::Config(TConfig& config) {
             " Options: scan, generic\n"
             "scan - use scan queries;\n"
             "generic - use generic queries.")
-        .DefaultValue("scan").StoreResult(&QueryExecuterType);
+        .DefaultValue("generic").StoreResult(&QueryExecuterType);
+    config.Opts->AddLongOption('v', "verbose", "Verbose output").NoArgument().StoreValue(&VerboseLevel, 1);
 }
 
 TString TWorkloadCommandBenchmark::PatchQuery(const TStringBuf& original) const {
@@ -84,7 +94,7 @@ TString TWorkloadCommandBenchmark::PatchQuery(const TStringBuf& original) const 
 
     std::vector<TStringBuf> lines;
     for (auto& line : StringSplitter(result).Split('\n').SkipEmpty()) {
-        if (line.StartsWith("--")) {
+        if (line.StartsWith("--") && !line.StartsWith("--!")) {
             continue;
         }
 
@@ -104,29 +114,193 @@ bool TWorkloadCommandBenchmark::NeedRun(ui32 queryIdx) const {
     return true;
 }
 
+namespace {
+
+TVector<TString> ColumnNames {
+    "Query #",
+    "ColdTime",
+    "Min",
+    "Max",
+    "Mean",
+    "Median",
+    "UnixBench",
+    "Std",
+    "RttMin",
+    "RttMax",
+    "RttAvg",
+    "SuccessCount",
+    "FailsCount",
+    "DiffsCount"
+};
+
+struct TTestInfoProduct {
+    double ColdTime = 1;
+    double Min = 1;
+    double Max = 1;
+    double RttMin = 1;
+    double RttMax = 1;
+    double RttMean = 1;
+    double Mean = 1;
+    double Median = 1;
+    double UnixBench = 1;
+    double Std = 0;
+    void operator *=(const BenchmarkUtils::TTestInfo& other) {
+        ColdTime *= other.ColdTime.MillisecondsFloat();
+        Min *= other.Min.MillisecondsFloat();
+        Max *= other.Max.MillisecondsFloat();
+        RttMin *= other.RttMin.MillisecondsFloat();
+        RttMax *= other.RttMax.MillisecondsFloat();
+        Mean *= other.Mean;
+        Median *= other.Median;
+        UnixBench *= other.UnixBench.MillisecondsFloat();
+    }
+    void operator ^= (ui32 count) {
+        ColdTime = pow(ColdTime, 1./count);
+        Min = pow(Min, 1./count);
+        Max = pow(Max, 1./count);
+        RttMin = pow(RttMin, 1./count);
+        RttMax = pow(RttMax, 1./count);
+        RttMean = pow(RttMean, 1./count);
+        Mean = pow(Mean, 1./count);
+        Median = pow(Median, 1./count);
+        UnixBench = pow(UnixBench, 1./count);
+    }
+};
+
+template<class T>
+double DurationToDouble(const T& value) {
+    return value;
+}
+
+template<>
+double DurationToDouble<TDuration>(const TDuration& value) {
+    return value.MillisecondsFloat();
+}
+
+template<class T, bool isDuration>
+struct TValueToTable {
+    static void Do(TPrettyTable::TRow& tableRow, ui32 index, const T& value) {
+        if (value) {
+            tableRow.Column(index, value);
+        }
+    }
+};
+
+template<class T>
+struct TValueToTable<T, true>{
+    static void Do(TPrettyTable::TRow& tableRow, ui32 index, const T& value) {
+        tableRow.Column(index, Sprintf("%7.3f", 0.001 * DurationToDouble(value)));
+    }
+};
+
+template<class T, bool isDuration>
+struct TValueToCsv {
+    static void Do(IOutputStream& csv, const T& value) {
+        if (value) {
+            csv << value;
+        }
+    }
+};
+
+template<class T>
+struct TValueToCsv<T, true> {
+    static void Do(IOutputStream& csv, const T& value) {
+        if (value) {
+            csv << 0.001 * DurationToDouble(value);
+        }
+    }
+};
+
+template<class T, bool isDuration, bool is_arr = std::is_arithmetic<T>::value>
+struct TValueToJson {
+    static void Do(NJson::TJsonValue& json, ui32 index, ui32 queryN, const T& value) {
+        Y_UNUSED(json);
+        Y_UNUSED(index);
+        Y_UNUSED(queryN);
+        Y_UNUSED(value);
+    }
+};
+
+template<class T, bool is_arr>
+struct TValueToJson<T, true, is_arr> {
+    static void Do(NJson::TJsonValue& json, ui32 index, ui32 queryN, const T& value) {
+        json.AppendValue(BenchmarkUtils::GetSensorValue(ColumnNames[index], DurationToDouble(value), queryN));
+    }
+};
+
+template<class T>
+struct TValueToJson<T, false, true> {
+    static void Do(NJson::TJsonValue& json, ui32 index, ui32 queryN, const T& value) {
+        json.AppendValue(BenchmarkUtils::GetSensorValue(ColumnNames[index], value, queryN));
+    }
+};
+
+
+template <bool isDuration = false, class T>
+void CollectField(TPrettyTable::TRow& tableRow, ui32 index, IOutputStream* csv, NJson::TJsonValue* json, TStringBuf rowName, const T& value) {
+    TValueToTable<T, isDuration>::Do(tableRow, index, value);
+    if (csv) {
+        if (index) {
+            *csv << ",";
+        }
+        TValueToCsv<T, isDuration>::Do(*csv, value);
+    }
+    auto queryN = rowName;
+    if(json && queryN.SkipPrefix("Query")) {
+        TValueToJson<T, isDuration>::Do(*json, index, FromString<ui32>(queryN), value);
+    }
+}
+
+template<class T>
+void CollectStats(TPrettyTable& table, IOutputStream* csv, NJson::TJsonValue* json, const TString& name, ui32 sCount, ui32 fCount, ui32 dCount, const T& testInfo) {
+    auto& row = table.AddRow();
+    ui32 index = 0;
+    CollectField(row, index++, csv, json, name, name);
+    CollectField<true>(row, index++, csv, json, name, testInfo.ColdTime);
+    CollectField<true>(row, index++, csv, json, name, testInfo.Min);
+    CollectField<true>(row, index++, csv, json, name, testInfo.Max);
+    CollectField<true>(row, index++, csv, json, name, testInfo.Mean);
+    CollectField<true>(row, index++, csv, json, name, testInfo.Median);
+    CollectField<true>(row, index++, csv, json, name, testInfo.UnixBench);
+    CollectField<true>(row, index++, csv, json, name, testInfo.Std);
+    CollectField<true>(row, index++, csv, json, name, testInfo.RttMin);
+    CollectField<true>(row, index++, csv, json, name, testInfo.RttMax);
+    CollectField<true>(row, index++, csv, json, name, testInfo.RttMean);
+    CollectField(row, index++, csv, json, name, sCount);
+    CollectField(row, index++, csv, json, name, fCount);
+    CollectField(row, index++, csv, json, name, dCount);
+    if (csv) {
+        *csv << Endl;
+    }
+}
+
+}
+
 template <typename TClient>
 bool TWorkloadCommandBenchmark::RunBench(TClient& client, NYdbWorkload::IWorkloadQueryGenerator& workloadGen) {
     using namespace BenchmarkUtils;
     TOFStream outFStream{OutFilePath};
-    TPrettyTable statTable({
-        "Query #",
-        "ColdTime",
-        "Min",
-        "Max",
-        "Mean",
-        "Median",
-        "Std",
-        "RttMin",
-        "RttMax",
-        "RttAvg"
-    });
+    TPrettyTable statTable(ColumnNames);
     TStringStream report;
     report << "Results for " << IterationsCount << " iterations" << Endl;
 
-    NJson::TJsonValue jsonReport(NJson::JSON_ARRAY);
-    const bool collectJsonSensors = !JsonReportFileName.empty();
+    THolder<NJson::TJsonValue> jsonReport;
+    if (JsonReportFileName) {
+        jsonReport = MakeHolder<NJson::TJsonValue>(NJson::JSON_ARRAY);
+    }
     const auto qtokens = workloadGen.GetWorkload(Type);
-    bool allOkay = true;
+    ui32 allSuccessQueries = 0;
+    ui32 someFailQueries = 0;
+    ui32 withDiffCount = 0;
+    THolder<TOFStream> plansReport;
+    THolder<TOFStream> csvReport;
+    if (CsvReportFileName) {
+        csvReport = MakeHolder<TOFStream>(CsvReportFileName);
+        *csvReport << JoinSeq(",", ColumnNames) << Endl;
+    }
+
+    TTestInfo sumInfo({}, {});
+    TTestInfoProduct productInfo;
 
     std::map<ui32, TTestInfo> queryRuns;
     auto qIter = qtokens.cbegin();
@@ -148,25 +322,28 @@ bool TWorkloadCommandBenchmark::RunBench(TClient& client, NYdbWorkload::IWorkloa
         serverTimings.reserve(IterationsCount);
 
         Cout << Sprintf("Query%02u", queryN) << ":" << Endl;
-        Cerr << "Query text:\n" << Endl;
-        Cerr << query << Endl << Endl;
+        if (VerboseLevel > 0) {
+            Cout << "Query text:" << Endl;
+            Cout << query << Endl << Endl;
+        }
 
         ui32 successIteration = 0;
         ui32 failsCount = 0;
         ui32 diffsCount = 0;
         std::optional<TString> prevResult;
-        for (ui32 i = 0; i < IterationsCount * 10 && successIteration < IterationsCount; ++i) {
+        bool planSaved = false;
+        for (ui32 i = 0; i < IterationsCount; ++i) {
             auto t1 = TInstant::Now();
-            TQueryBenchmarkResult res = TQueryBenchmarkResult::Error("undefined");
+            TQueryBenchmarkResult res = TQueryBenchmarkResult::Error("undefined", "undefined", "undefined");
             try {
                 res = Execute(query, client);
             } catch (...) {
-                res = TQueryBenchmarkResult::Error(CurrentExceptionMessage());
+                res = TQueryBenchmarkResult::Error(CurrentExceptionMessage(), "", "");
             }
             auto duration = TInstant::Now() - t1;
 
             Cout << "\titeration " << i << ":\t";
-            if (!!res) {
+            if (res) {
                 Cout << "ok\t" << duration << " seconds" << Endl;
                 clientTimings.emplace_back(duration);
                 serverTimings.emplace_back(res.GetServerTiming());
@@ -188,45 +365,60 @@ bool TWorkloadCommandBenchmark::RunBench(TClient& client, NYdbWorkload::IWorkloa
             } else {
                 ++failsCount;
                 Cout << "failed\t" << duration << " seconds" << Endl;
-                Cerr << queryN << ": " << query << Endl
+                Cerr << queryN << ": " << Endl
                     << res.GetErrorInfo() << Endl;
+                Cerr << "Query text:" << Endl;
+                Cerr << query << Endl << Endl;
                 Sleep(TDuration::Seconds(1));
             }
-        }
-
-        if (successIteration != IterationsCount) {
-            allOkay = false;
+            if (!planSaved && PlanFileName) {
+                TFsPath(PlanFileName).Parent().MkDirs();
+                {
+                    TFileOutput out(PlanFileName + ".table");
+                    TQueryPlanPrinter queryPlanPrinter(EOutputFormat::PrettyTable, true, out, 120);
+                    queryPlanPrinter.Print(res.GetQueryPlan());
+                }
+                {
+                    TFileOutput out(PlanFileName + ".json");
+                    TQueryPlanPrinter queryPlanPrinter(EOutputFormat::JsonBase64, true, out, 120);
+                    queryPlanPrinter.Print(res.GetQueryPlan());
+                }
+                {
+                    TFileOutput out(PlanFileName + ".ast");
+                    out << res.GetPlanAst();
+                }
+                {
+                    TPlanVisualizer pv;
+                    pv.LoadPlans(res.GetQueryPlan());
+                    TFileOutput out(PlanFileName + ".svg");
+                    out << pv.PrintSvgSafe();
+                }
+                planSaved = true;
+            }
         }
 
         auto [inserted, success] = queryRuns.emplace(queryN, TTestInfo(std::move(clientTimings), std::move(serverTimings)));
         Y_ABORT_UNLESS(success);
         auto& testInfo = inserted->second;
-        statTable.AddRow()
-            .Column(0, Sprintf("Query%02u", queryN))
-            .Column(1, Sprintf("%8.3f", 0.001 * testInfo.ColdTime.MilliSeconds()))
-            .Column(2, Sprintf("%7.3f", 0.001 * testInfo.Min.MilliSeconds()))
-            .Column(3, Sprintf("%7.3f", 0.001 * testInfo.Max.MilliSeconds()))
-            .Column(4, Sprintf("%8.3f", 0.001 * testInfo.Mean))
-            .Column(5, Sprintf("%8.3f", 0.001 * testInfo.Median))
-            .Column(6, Sprintf("%7.3f", 0.001 * testInfo.Std))
-            .Column(7, Sprintf("%7.3f", 0.001 * testInfo.RttMin.MilliSeconds()))
-            .Column(8, Sprintf("%7.3f", 0.001 * testInfo.RttMax.MilliSeconds()))
-            .Column(9, Sprintf("%7.3f", 0.001 * testInfo.RttMean));
-
-        if (collectJsonSensors) {
-            jsonReport.AppendValue(GetSensorValue("ColdTime", testInfo.ColdTime, queryN));
-            jsonReport.AppendValue(GetSensorValue("Min", testInfo.Min, queryN));
-            jsonReport.AppendValue(GetSensorValue("Max", testInfo.Max, queryN));
-            jsonReport.AppendValue(GetSensorValue("Mean", testInfo.Mean, queryN));
-            jsonReport.AppendValue(GetSensorValue("Median", testInfo.Median, queryN));
-            jsonReport.AppendValue(GetSensorValue("Std", testInfo.Std, queryN));
-            jsonReport.AppendValue(GetSensorValue("RttMin", testInfo.RttMin, queryN));
-            jsonReport.AppendValue(GetSensorValue("RttMax", testInfo.RttMax, queryN));
-            jsonReport.AppendValue(GetSensorValue("RttMean", testInfo.RttMean, queryN));
-            jsonReport.AppendValue(GetSensorValue("DiffsCount", diffsCount, queryN));
-            jsonReport.AppendValue(GetSensorValue("FailsCount", failsCount, queryN));
-            jsonReport.AppendValue(GetSensorValue("SuccessCount", successIteration, queryN));
+        CollectStats(statTable, csvReport.Get(), jsonReport.Get(), Sprintf("Query%02u", queryN), successIteration, failsCount, diffsCount, testInfo);
+        if (successIteration != IterationsCount) {
+            ++someFailQueries;
+        } else {
+            ++allSuccessQueries;
+            sumInfo += testInfo;
+            productInfo *= testInfo;
         }
+        if (diffsCount) {
+            ++withDiffCount;
+        }
+    }
+
+    if (allSuccessQueries) {
+        CollectStats(statTable, csvReport.Get(), jsonReport.Get(), "Sum", allSuccessQueries, someFailQueries, withDiffCount, sumInfo);
+        sumInfo /= allSuccessQueries;
+        CollectStats(statTable, csvReport.Get(), jsonReport.Get(), "Avg", allSuccessQueries, someFailQueries, withDiffCount, sumInfo);
+        productInfo ^= allSuccessQueries;
+        CollectStats(statTable, csvReport.Get(), jsonReport.Get(), "GAvg", allSuccessQueries, someFailQueries, withDiffCount, productInfo);
     }
 
     statTable.Print(report);
@@ -254,14 +446,19 @@ bool TWorkloadCommandBenchmark::RunBench(TClient& client, NYdbWorkload::IWorkloa
         jStream.Finish();
     }
 
-    if (collectJsonSensors) {
+    if (jsonReport) {
         TOFStream jStream{JsonReportFileName};
-        NJson::WriteJson(&jStream, &jsonReport, /*formatOutput*/ true);
+        NJson::WriteJson(&jStream, jsonReport.Get(), /*formatOutput*/ true);
         jStream.Finish();
-        Cout << "Report saved to " << JsonReportFileName << Endl;
+        Cout << "Json report saved to " << JsonReportFileName << Endl;
     }
 
-    return allOkay;
+    if (csvReport) {
+        csvReport.Reset();
+        Cout << "Summary table saved in CSV format to " << CsvReportFileName << Endl;
+    }
+
+    return !someFailQueries;
 }
 
 int TWorkloadCommandBenchmark::DoRun(NYdbWorkload::IWorkloadQueryGenerator& workloadGen, TConfig& /*config*/) {

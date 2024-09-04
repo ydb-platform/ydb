@@ -30,12 +30,14 @@ inline size_t CalcBlockLen(size_t maxBlockItemSize) {
     return MaxBlockSizeInBytes / std::max<size_t>(maxBlockItemSize, 1);
 }
 
-bool ConvertArrowType(TType* itemType, std::shared_ptr<arrow::DataType>& type);
+using TArrowConvertFailedCallback = std::function<void(TType*)>;
+bool ConvertArrowType(TType* itemType, std::shared_ptr<arrow::DataType>& type, const TArrowConvertFailedCallback& = {});
 bool ConvertArrowType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>& type);
 
 template<NUdf::EDataSlot slot>
 std::shared_ptr<arrow::DataType> MakeTzLayoutArrowType() {
-    static_assert(slot == NUdf::EDataSlot::TzDate || slot == NUdf::EDataSlot::TzDatetime || slot == NUdf::EDataSlot::TzTimestamp, 
+    static_assert(slot == NUdf::EDataSlot::TzDate || slot == NUdf::EDataSlot::TzDatetime || slot == NUdf::EDataSlot::TzTimestamp
+        || slot == NUdf::EDataSlot::TzDate32 || slot == NUdf::EDataSlot::TzDatetime64 || slot == NUdf::EDataSlot::TzTimestamp64,
         "Expected tz date type slot");
 
     if constexpr (slot == NUdf::EDataSlot::TzDate) {
@@ -46,6 +48,15 @@ std::shared_ptr<arrow::DataType> MakeTzLayoutArrowType() {
     }
     if constexpr (slot == NUdf::EDataSlot::TzTimestamp) {
         return arrow::uint64();
+    }
+    if constexpr (slot == NUdf::EDataSlot::TzDate32) {
+        return arrow::int32();
+    }
+    if constexpr (slot == NUdf::EDataSlot::TzDatetime64) {
+        return arrow::int64();
+    }
+    if constexpr (slot == NUdf::EDataSlot::TzTimestamp64) {
+        return arrow::int64();
     }
 }
 
@@ -314,6 +325,7 @@ protected:
     bool UseNullType = true;
 };
 
+void RebuildTypeIndex();
 
 } // namespace NMiniKQL
 } // namespace Nkikimr

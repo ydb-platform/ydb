@@ -83,7 +83,7 @@ The `dropTable` changeset - delete a table. For example: `<dropTable tableName="
       }
     ]
   ```
-  
+
 - yaml
 
   ```yaml
@@ -155,7 +155,7 @@ Asynchronous indexes should be created using [native SQL migrations](https://doc
 
 {% endnote %}
 
-`dropIndex` - drop a secondary index. For example: 
+`dropIndex` - drop a secondary index. For example:
 
 {% list tabs %}
 
@@ -197,7 +197,7 @@ Asynchronous indexes should be created using [native SQL migrations](https://doc
 
 {% list tabs %}
 
-- xml 
+- xml
 
   ```xml
   <insert tableName="episodes">
@@ -210,7 +210,7 @@ Asynchronous indexes should be created using [native SQL migrations](https://doc
   ```
 
 - json
-  
+
   ```json
   "changes": [
     {
@@ -332,7 +332,7 @@ There are two ways:
   ```bash
   # $(which liquibase)
   cd ./internal/lib/
-  
+
   # you may need to sudo
   # set actual versions of .jar files
   curl -L -o ydb-jdbc-driver.jar https://repo.maven.apache.org/maven2/tech/ydb/jdbc/ydb-jdbc-driver-shaded/2.0.7/ydb-jdbc-driver-shaded-2.0.7.jar
@@ -535,7 +535,7 @@ The contents of the generated changelog.xml:
 Then you need to synchronize the generated changelog.xml the file, this is done by the command:
 
 ```bash
-liquibase changelog-sync --changelog-file=changelog.xml 
+liquibase changelog-sync --changelog-file=changelog.xml
 ```
 
 The result will be liquibase synchronization in your project:
@@ -548,10 +548,10 @@ In the examples above, a Docker container was used, which didn't require any add
 
 List of different authentication options through URL parameters:
 
-* Local or remote Docker (anonymous authentication):<br>`jdbc:ydb:grpc://localhost:2136/local`
-* Self-hosted cluster:<br>`jdbc:ydb:grpcs://<host>:2135/Root/testdb?secureConnectionCertificate=file:~/myca.cer`
-* Connect with token to the cloud instance:<br>`jdbc:ydb:grpcs://<host>:2135/path/to/database?token=file:~/my_token`
-* Connect with service account to the cloud instance:<br>`jdbc:ydb:grpcs://<host>:2135/path/to/database?saFile=file:~/sa_key.json`
+* Local or remote Docker (anonymous authentication):<br/>`jdbc:ydb:grpc://localhost:2136/local`
+* Self-hosted cluster:<br/>`jdbc:ydb:grpcs://<host>:2135/Root/testdb?secureConnectionCertificate=file:~/myca.cer`
+* Connect with token to the cloud instance:<br/>`jdbc:ydb:grpcs://<host>:2135/path/to/database?token=file:~/my_token`
+* Connect with service account to the cloud instance:<br/>`jdbc:ydb:grpcs://<host>:2135/path/to/database?saFile=file:~/sa_key.json`
 
 Also, if your cluster is configured using username and password, authentication is done through Liquibase parameters.
 

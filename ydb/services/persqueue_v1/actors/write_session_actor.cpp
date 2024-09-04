@@ -280,8 +280,10 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename IContext::TEvWrit
 
 template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::Die(const TActorContext& ctx) {
-    if (State == ES_DYING)
+    if (State == ES_DYING) {
+        LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " is already DEAD");
         return;
+    }
 
     if (SessionsActive) {
         SessionsActive.Dec();
@@ -926,14 +928,16 @@ void TWriteSessionActor<UseMigrationProtocol>::ProcessWriteResponse(
     };
 
     auto addAck = [this](const TPersQueuePartitionResponse::TCmdWriteResult& res,
-                     Topic::StreamWriteMessage::WriteResponse* writeResponse,
-                     Topic::StreamWriteMessage::WriteResponse::WriteStatistics* stat) {
+                         Topic::StreamWriteMessage::WriteResponse* writeResponse,
+                         Topic::StreamWriteMessage::WriteResponse::WriteStatistics* stat) {
         auto ack = writeResponse->add_acks();
         // TODO (ildar-khisam@): validate res before filling ack fields
         ack->set_seq_no(res.GetSeqNo());
         if (res.GetAlreadyWritten()) {
             Y_ABORT_UNLESS(UseDeduplication);
             ack->mutable_skipped()->set_reason(Topic::StreamWriteMessage::WriteResponse::WriteAck::Skipped::REASON_ALREADY_WRITTEN);
+        } else if (res.HasWrittenInTx() && res.GetWrittenInTx()) {
+            ack->mutable_written_in_tx();
         } else {
             ack->mutable_written()->set_offset(res.GetOffset());
         }
@@ -1034,10 +1038,6 @@ void TWriteSessionActor<UseMigrationProtocol>::ProcessWriteResponse(
 
 template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::Handle(NPQ::TEvPartitionWriter::TEvWriteResponse::TPtr& ev, const TActorContext& ctx) {
-    if (State != ES_INITED) {
-        return CloseSession("got write response but not wait for it", PersQueue::ErrorCode::ERROR, ctx);
-    }
-
     const auto& result = *ev->Get();
     if (!result.IsSuccess()) {
         const auto& record = result.Record;
@@ -1048,9 +1048,12 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(NPQ::TEvPartitionWriter::T
         }
     }
 
+    if (State != ES_INITED) {
+        return CloseSession(TStringBuilder() << "got write response but not wait for it (" << static_cast<int>(State) << ")", PersQueue::ErrorCode::ERROR, ctx);
+    }
+
     if (AcceptedRequests.empty()) {
-        CloseSession("got too many replies from server, internal error", PersQueue::ErrorCode::ERROR, ctx);
-        return;
+        return CloseSession("got too many replies from server, internal error", PersQueue::ErrorCode::ERROR, ctx);
     }
 
     const auto& writeRequest = AcceptedRequests.front();
@@ -1064,8 +1067,9 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(NPQ::TEvPartitionWriter::T
 }
 
 template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::Handle(NPQ::TEvPartitionWriter::TEvDisconnected::TPtr&, const TActorContext& ctx) {
-    CloseSession("pipe to partition's tablet is dead", PersQueue::ErrorCode::TABLET_PIPE_DISCONNECTED, ctx);
+void TWriteSessionActor<UseMigrationProtocol>::Handle(NPQ::TEvPartitionWriter::TEvDisconnected::TPtr& ev, const TActorContext& ctx) {
+    CloseSession(TStringBuilder() << "pipe to partition's " << Partition << " tablet is dead #" << static_cast<int>(ev->Get()->ErrorCode),
+             PersQueue::ErrorCode::TABLET_PIPE_DISCONNECTED, ctx);
 }
 
 template<bool UseMigrationProtocol>

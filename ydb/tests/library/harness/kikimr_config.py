@@ -9,7 +9,7 @@ import tempfile
 import six
 import yaml
 from google.protobuf.text_format import Parse
-from pkg_resources import resource_string
+from importlib_resources import read_binary
 
 import ydb.tests.library.common.yatest_common as yatest_common
 from ydb.core.protos import config_pb2
@@ -62,7 +62,7 @@ def get_grpc_host():
 
 
 def load_default_yaml(default_tablet_node_ids, ydb_domain_name, static_erasure, log_configs):
-    data = resource_string(__name__, "resources/default_yaml.yml")
+    data = read_binary(__name__, "resources/default_yaml.yml")
     if isinstance(data, bytes):
         data = data.decode('utf-8')
     data = data.format(
@@ -83,6 +83,8 @@ def load_default_yaml(default_tablet_node_ids, ydb_domain_name, static_erasure, 
     yaml_dict["log_config"]["entry"] = []
     for log, level in six.iteritems(log_configs):
         yaml_dict["log_config"]["entry"].append({"component": log, "level": int(level)})
+    if os.getenv("YDB_ENABLE_COLUMN_TABLES", "") == "true":
+        yaml_dict |= {"column_shard_config": {"disabled_on_scheme_shard": False}}
     return yaml_dict
 
 
@@ -163,7 +165,6 @@ class KikimrConfigGenerator(object):
             default_user_sid=None,
             pg_compatible_expirement=False,
             generic_connector_config=None,  # typing.Optional[TGenericConnectorConfig]
-            pgwire_port=None,
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -260,13 +261,8 @@ class KikimrConfigGenerator(object):
             self.yaml_config["local_pg_wire_config"] = {}
             self.yaml_config["local_pg_wire_config"]["listening_port"] = os.getenv('PGWIRE_LISTENING_PORT')
 
-        if pgwire_port:
-            self.yaml_config["local_pg_wire_config"] = {}
-            self.yaml_config["local_pg_wire_config"]["listening_port"] = pgwire_port
-
         if disable_iterator_reads:
             self.yaml_config["table_service_config"]["enable_kqp_scan_query_source_read"] = False
-            self.yaml_config["table_service_config"]["enable_kqp_data_query_source_read"] = False
 
         if disable_iterator_lookups:
             self.yaml_config["table_service_config"]["enable_kqp_scan_query_stream_lookup"] = False
@@ -389,13 +385,24 @@ class KikimrConfigGenerator(object):
         if default_user_sid:
             self.yaml_config["domains_config"]["security_config"]["default_user_sids"] = [default_user_sid]
 
+        if os.getenv("YDB_HARD_MEMORY_LIMIT_BYTES"):
+            self.yaml_config["memory_controller_config"] = {"hard_limit_bytes": int(os.getenv("YDB_HARD_MEMORY_LIMIT_BYTES"))}
+
         if pg_compatible_expirement:
             self.yaml_config["table_service_config"]["enable_prepared_ddl"] = True
             self.yaml_config["table_service_config"]["enable_ast_cache"] = True
-            self.yaml_config["table_service_config"]["enable_pg_consts_to_params"] = True
             self.yaml_config["table_service_config"]["index_auto_choose_mode"] = 'max_used_prefix'
             self.yaml_config["feature_flags"]['enable_temp_tables'] = True
             self.yaml_config["feature_flags"]['enable_table_pg_types'] = True
+            self.yaml_config['feature_flags']['enable_uniq_constraint'] = True
+            if "local_pg_wire_config" not in self.yaml_config:
+                self.yaml_config["local_pg_wire_config"] = {}
+
+            ydb_pgwire_port = self.port_allocator.get_node_port_allocator(node_id).pgwire_port
+            self.yaml_config['local_pg_wire_config']['listening_port'] = ydb_pgwire_port
+
+            # https://github.com/ydb-platform/ydb/issues/5152
+            # self.yaml_config["table_service_config"]["enable_pg_consts_to_params"] = True
 
         if generic_connector_config:
             if "query_service_config" not in self.yaml_config:
@@ -463,7 +470,7 @@ class KikimrConfigGenerator(object):
     @property
     def domains_txt(self):
         app_config = config_pb2.TAppConfig()
-        Parse(resource_string(__name__, "resources/default_domains.txt"), app_config.DomainsConfig)
+        Parse(read_binary(__name__, "resources/default_domains.txt"), app_config.DomainsConfig)
         return app_config.DomainsConfig
 
     @property

@@ -1,6 +1,4 @@
 items:
-- name: Обзор
-  href: index.md
 - name: C++
   href: example-cpp.md
 - name: C# (.NET)

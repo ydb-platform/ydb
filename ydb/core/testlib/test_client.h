@@ -25,6 +25,7 @@
 #include <ydb/core/kesus/tablet/events.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/core/security/ticket_parser.h>
+#include <ydb/core/security/ticket_parser_settings.h>
 #include <ydb/core/base/grpc_service_factory.h>
 #include <ydb/core/persqueue/actor_persqueue_client_iface.h>
 #include <ydb/core/fq/libs/shared_resources/interface/shared_resources.h>
@@ -106,6 +107,9 @@ namespace Tests {
         ui16 Port;
         ui16 GrpcPort = 0;
         int GrpcMaxMessageSize = 0;  // 0 - default (4_MB), -1 - no limit
+        ui16 MonitoringPortOffset = 0;
+        bool MonitoringTypeAsync = false;
+        bool NeedStatsCollectors = false;
         NKikimrProto::TAuthConfig AuthConfig;
         NKikimrPQ::TPQConfig PQConfig;
         NKikimrPQ::TPQClusterDiscoveryConfig PQClusterDiscoveryConfig;
@@ -141,6 +145,7 @@ namespace Tests {
         NKikimrConfig::TCompactionConfig CompactionConfig;
         TMap<ui32, TString> NodeKeys;
         ui64 DomainPlanResolution = 0;
+        ui32 DomainTimecastBuckets = 0;
         std::shared_ptr<NKikimr::NMsgBusProxy::IPersQueueGetReadSessionsInfoWorkerFactory> PersQueueGetReadSessionsInfoWorkerFactory;
         std::shared_ptr<NKikimr::NHttpProxy::IAuthFactory> DataStreamsAuthFactory;
         std::shared_ptr<NKikimr::NPQ::TPersQueueMirrorReaderFactory> PersQueueMirrorReaderFactory = std::make_shared<NKikimr::NPQ::TPersQueueMirrorReaderFactory>();
@@ -152,13 +157,18 @@ namespace Tests {
         NMiniKQL::TComputationNodeFactory ComputationFactory;
         NYql::IYtGateway::TPtr YtGateway;
         bool InitializeFederatedQuerySetupFactory = false;
+        TString ServerCertFilePath;
+        bool Verbose = true;
+        bool UseSectorMap = false;
 
-        std::function<IActor*(const NKikimrProto::TAuthConfig&)> CreateTicketParser = NKikimr::CreateTicketParser;
+        std::function<IActor*(const TTicketParserSettings&)> CreateTicketParser = NKikimr::CreateTicketParser;
         std::shared_ptr<TGrpcServiceFactory> GrpcServiceFactory;
         std::shared_ptr<NYql::NDq::IS3ActorsFactory> S3ActorsFactory = NYql::NDq::CreateDefaultS3ActorsFactory();
 
         TServerSettings& SetGrpcPort(ui16 value) { GrpcPort = value; return *this; }
         TServerSettings& SetGrpcMaxMessageSize(int value) { GrpcMaxMessageSize = value; return *this; }
+        TServerSettings& SetMonitoringPortOffset(ui16 value, bool monitoringTypeAsync = false) { MonitoringPortOffset = value; MonitoringTypeAsync = monitoringTypeAsync; return *this; }
+        TServerSettings& SetNeedStatsCollectors(bool value) { NeedStatsCollectors = value; return *this; }
         TServerSettings& SetSupportsRedirect(bool value) { SupportsRedirect = value; return *this; }
         TServerSettings& SetTracePath(const TString& value) { TracePath = value; return *this; }
         TServerSettings& SetDomain(ui32 value) { Domain = value; return *this; }
@@ -185,6 +195,7 @@ namespace Tests {
         TServerSettings& SetEnableKqpSpilling(bool value) { EnableKqpSpilling = value; return *this; }
         TServerSettings& SetEnableForceFollowers(bool value) { EnableForceFollowers = value; return *this; }
         TServerSettings& SetDomainPlanResolution(ui64 resolution) { DomainPlanResolution = resolution; return *this; }
+        TServerSettings& SetDomainTimecastBuckets(ui32 buckets) { DomainTimecastBuckets = buckets; return *this; }
         TServerSettings& SetFeatureFlags(const NKikimrConfig::TFeatureFlags& value) { FeatureFlags = value; return *this; }
         TServerSettings& SetCompactionConfig(const NKikimrConfig::TCompactionConfig& value) { CompactionConfig = value; return *this; }
         TServerSettings& SetEnableDbCounters(bool value) { FeatureFlags.SetEnableDbCounters(value); return *this; }
@@ -200,6 +211,8 @@ namespace Tests {
         TServerSettings& SetComputationFactory(NMiniKQL::TComputationNodeFactory computationFactory) { ComputationFactory = std::move(computationFactory); return *this; }
         TServerSettings& SetYtGateway(NYql::IYtGateway::TPtr ytGateway) { YtGateway = std::move(ytGateway); return *this; }
         TServerSettings& SetInitializeFederatedQuerySetupFactory(bool value) { InitializeFederatedQuerySetupFactory = value; return *this; }
+        TServerSettings& SetVerbose(bool value) { Verbose = value; return *this; }
+        TServerSettings& SetUseSectorMap(bool value) { UseSectorMap = value; return *this; }
         TServerSettings& SetPersQueueGetReadSessionsInfoWorkerFactory(
             std::shared_ptr<NKikimr::NMsgBusProxy::IPersQueueGetReadSessionsInfoWorkerFactory> factory
         ) {
@@ -256,6 +269,7 @@ namespace Tests {
     protected:
         void SetupStorage();
 
+        void SetupActorSystemConfig();
         void SetupMessageBus(ui16 port);
         void SetupDomains(TAppPrepare&);
         void CreateBootstrapTablets();
@@ -473,11 +487,6 @@ namespace Tests {
         ui32 FlatQueryRaw(const TString &query, TFlatQueryOptions& opts, NKikimrClient::TResponse& response, int retryCnt = 10);
 
         bool Compile(const TString &mkql, TString &compiled);
-        bool LocalQuery(ui64 tabletId, const TString &pgmText, NKikimrMiniKQL::TResult& result);
-        bool LocalSchemeTx(const ui64 tabletId, const NTabletFlatScheme::TSchemeChanges& schemeChanges, bool dryRun,
-                           NTabletFlatScheme::TSchemeChanges& scheme, TString& err);
-        bool LocalSchemeTx(const ui64 tabletId, const TString& schemeChanges, bool dryRun,
-                           NTabletFlatScheme::TSchemeChanges& scheme, TString& err);
         void SetSecurityToken(const TString& token) { SecurityToken = token; }
         void ModifyOwner(const TString& parent, const TString& name, const TString& owner);
         void ModifyACL(const TString& parent, const TString& name, const TString& acl);
@@ -587,6 +596,7 @@ namespace Tests {
         const TString DomainName;
         const bool SupportsRedirect;
         const TStoragePoolKinds StoragePoolTypes;
+        const bool Verbose;
         NScheme::TKikimrTypeRegistry TypeRegistry;
         TIntrusivePtr<NMiniKQL::IFunctionRegistry> FunctionRegistry;
         NMsgBusProxy::TMsgBusClientConfig ClientConfig;

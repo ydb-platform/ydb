@@ -1,6 +1,12 @@
-## VIEW (INDEX) {#secondary_index}
+# VIEW (INDEX)
 
-Чтобы сделать запрос `SELECT` по вторичному индексу, используйте конструкцию:
+{% if oss == true and backend_name == "YDB" %}
+
+{% include [olap_warning_note](../../../../../_includes/not_allow_for_olap_note.md) %}
+
+{% endif %}
+
+Чтобы сделать запрос `SELECT` по вторичному индексу строковой таблицы, используйте конструкцию:
 
 ``` yql
 SELECT *
@@ -10,7 +16,7 @@ SELECT *
 
 **Примеры**
 
-* Выбрать все поля из таблицы `series` по индексу `views_index` с условием `views >= someValue`:
+* Выбрать все поля из строковой таблицы `series` по индексу `views_index` с условием `views >= someValue`:
 
   ``` yql
   SELECT series_id, title, info, release_date, views, uploaded_user_id
@@ -18,7 +24,7 @@ SELECT *
       WHERE views >= someValue
   ```
 
-* Сделать [`JOIN`](../../join.md) таблиц `series` и `users` c заданным полем `userName` по индексам `users_index` и `name_index` соответственно:
+* Сделать [`JOIN`](../../join.md) строковых таблиц `series` и `users` c заданным полем `userName` по индексам `users_index` и `name_index` соответственно:
 
   ``` yql
   SELECT t1.series_id, t1.title

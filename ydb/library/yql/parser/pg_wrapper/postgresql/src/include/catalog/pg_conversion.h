@@ -3,7 +3,7 @@
  * pg_conversion.h
  *	  definition of the "conversion" system catalog (pg_conversion)
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/catalog/pg_conversion.h
@@ -60,19 +60,16 @@ CATALOG(pg_conversion,2607,ConversionRelationId)
  */
 typedef FormData_pg_conversion *Form_pg_conversion;
 
-DECLARE_UNIQUE_INDEX(pg_conversion_default_index, 2668, on pg_conversion using btree(connamespace oid_ops, conforencoding int4_ops, contoencoding int4_ops, oid oid_ops));
-#define ConversionDefaultIndexId  2668
-DECLARE_UNIQUE_INDEX(pg_conversion_name_nsp_index, 2669, on pg_conversion using btree(conname name_ops, connamespace oid_ops));
-#define ConversionNameNspIndexId  2669
-DECLARE_UNIQUE_INDEX_PKEY(pg_conversion_oid_index, 2670, on pg_conversion using btree(oid oid_ops));
-#define ConversionOidIndexId  2670
+DECLARE_UNIQUE_INDEX(pg_conversion_default_index, 2668, ConversionDefaultIndexId, on pg_conversion using btree(connamespace oid_ops, conforencoding int4_ops, contoencoding int4_ops, oid oid_ops));
+DECLARE_UNIQUE_INDEX(pg_conversion_name_nsp_index, 2669, ConversionNameNspIndexId, on pg_conversion using btree(conname name_ops, connamespace oid_ops));
+DECLARE_UNIQUE_INDEX_PKEY(pg_conversion_oid_index, 2670, ConversionOidIndexId, on pg_conversion using btree(oid oid_ops));
 
 
 extern ObjectAddress ConversionCreate(const char *conname, Oid connamespace,
 									  Oid conowner,
 									  int32 conforencoding, int32 contoencoding,
 									  Oid conproc, bool def);
-extern Oid	FindDefaultConversion(Oid connamespace, int32 for_encoding,
+extern Oid	FindDefaultConversion(Oid name_space, int32 for_encoding,
 								  int32 to_encoding);
 
 #endif							/* PG_CONVERSION_H */

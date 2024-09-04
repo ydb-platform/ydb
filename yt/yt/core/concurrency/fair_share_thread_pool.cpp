@@ -233,11 +233,18 @@ public:
     void Shutdown()
     {
         auto guard = Guard(SpinLock_);
-        // Setting under spinlock because this way
-        // we have atomicity of two actions:
-        // 1) Write/read flag and 2) Drain/Enqueue callback.
-        // See two_level_fair_share_thread_pool Queue
-        // for more detailed explanation.
+        // We want to make sure that calls to
+        // Shutdown and Invoke are "atomic" with respect
+        // to each other. We need this so that
+        // there are no tasks left in the queue after
+        // the first call to Shutdown has finished.
+        // Here we achieve that by accessing
+        // both buckets and Stopping flag under
+        // SpinLock in either method.
+        // See two_level_fair_share_thread_pool.cpp
+        // for lock-free version with a more detailed
+        // explanation why Stopping flag logic provides
+        // the desired guarantee.
         Stopping_ = true;
         for (const auto& item : Heap_) {
             item.Bucket->Drain();

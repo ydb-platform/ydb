@@ -335,15 +335,10 @@ namespace NKikimr {
         IMPL_REQUEST(TabletKillRequest, TTabletKillRequest, TResponse)
         IMPL_REQUEST(InterconnectDebug, TInterconnectDebug, TResponse)
         IMPL_REQUEST(TabletStateRequest, TTabletStateRequest, TResponse)
-        IMPL_REQUEST(DbSchema, TJSON, TJSON)
-        IMPL_REQUEST(DbOperation, TJSON, TJSON)
-        IMPL_REQUEST(DbBatch, TJSON, TJSON)
         IMPL_REQUEST(ChooseProxy, TChooseProxyRequest, TResponse)
         IMPL_REQUEST(ConsoleRequest, TConsoleRequest, TConsoleResponse)
-        IMPL_REQUEST(WhoAmI, TWhoAmI, TResponse)
         IMPL_REQUEST(FillNode, TFillNodeRequest, TResponse)
         IMPL_REQUEST(DrainNode, TDrainNodeRequest, TResponse)
-        IMPL_REQUEST(LoginRequest, TLoginRequest, TResponse)
 
         } // NGRpcProxy
 } // NKikimr

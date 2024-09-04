@@ -9,7 +9,10 @@
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/json/json_reader.h>
 #include <ydb/mvp/core/protos/mvp.pb.h>
+#include <ydb/mvp/core/core_ydb.h>
 #include <ydb/public/api/client/yc_private/iam/iam_token_service.grpc.pb.h>
+#include <ydb/public/api/client/nc_private/iam/token_service.grpc.pb.h>
+#include <ydb/public/api/client/nc_private/iam/token_exchange_service.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_auth.pb.h>
 #include "grpc_log.h"
 
@@ -32,8 +35,9 @@ protected:
     struct TEvPrivate {
         enum EEv {
             EvRefreshToken = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
-            EvUpdateIamToken,
+            EvUpdateIamTokenYandex,
             EvUpdateStaticCredentialsToken,
+            EvUpdateIamTokenNebius,
             EvEnd
         };
 
@@ -50,17 +54,20 @@ protected:
         template <ui32 TEventType, typename TResponse>
         struct TEvUpdateToken : NActors::TEventLocal<TEvUpdateToken<TEventType, TResponse>, TEventType> {
             TString Name;
+            TString Subject;
             NYdbGrpc::TGrpcStatus Status;
             TResponse Response;
 
-            TEvUpdateToken(const TString& name, NYdbGrpc::TGrpcStatus&& status, TResponse&& response)
+            TEvUpdateToken(const TString& name, const TString& subject, NYdbGrpc::TGrpcStatus&& status, TResponse&& response)
                 : Name(name)
+                , Subject(subject)
                 , Status(status)
                 , Response(response)
             {}
         };
 
-        using TEvUpdateIamToken = TEvUpdateToken<EvUpdateIamToken, yandex::cloud::priv::iam::v1::CreateIamTokenResponse>;
+        using TEvUpdateIamTokenYandex = TEvUpdateToken<EvUpdateIamTokenYandex, yandex::cloud::priv::iam::v1::CreateIamTokenResponse>;
+        using TEvUpdateIamTokenNebius = TEvUpdateToken<EvUpdateIamTokenNebius, nebius::iam::v1::CreateTokenResponse>;
         using TEvUpdateStaticCredentialsToken = TEvUpdateToken<EvUpdateStaticCredentialsToken, Ydb::Auth::LoginResponse>;
     };
 
@@ -68,14 +75,16 @@ protected:
     void Bootstrap();
     void HandlePeriodic();
     void Handle(TEvPrivate::TEvRefreshToken::TPtr event);
-    void Handle(TEvPrivate::TEvUpdateIamToken::TPtr event);
+    void Handle(TEvPrivate::TEvUpdateIamTokenYandex::TPtr event);
+    void Handle(TEvPrivate::TEvUpdateIamTokenNebius::TPtr event);
     void Handle(TEvPrivate::TEvUpdateStaticCredentialsToken::TPtr event);
     void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event);
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPrivate::TEvRefreshToken, Handle);
-            hFunc(TEvPrivate::TEvUpdateIamToken, Handle);
+            hFunc(TEvPrivate::TEvUpdateIamTokenYandex, Handle);
+            hFunc(TEvPrivate::TEvUpdateIamTokenNebius, Handle);
             hFunc(TEvPrivate::TEvUpdateStaticCredentialsToken, Handle);
             hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, Handle);
             cFunc(NActors::TEvents::TSystem::Wakeup, HandlePeriodic);
@@ -96,6 +105,7 @@ protected:
         THashMap<TString, NMvp::TJwtInfo> JwtTokenConfigs;
         THashMap<TString, NMvp::TOAuthInfo> OauthTokenConfigs;
         THashMap<TString, NMvp::TStaticCredentialsInfo> StaticCredentialsConfigs;
+        NMvp::EAccessServiceType AccessServiceType;
 
         const NMvp::TMetadataTokenInfo* GetMetadataTokenConfig(const TString& name);
         const NMvp::TJwtInfo* GetJwtTokenConfig(const TString& name);
@@ -134,15 +144,15 @@ protected:
     }
 
     template <typename TGrpcService, typename TRequest, typename TResponse, typename TUpdateToken>
-    void RequestCreateToken(const TString& name, const TString& endpoint, TRequest& request, typename NYdbGrpc::TSimpleRequestProcessor<typename TGrpcService::Stub, TRequest, TResponse>::TAsyncRequest asyncRequest) {
+    void RequestCreateToken(const TString& name, const TString& endpoint, TRequest& request, typename NYdbGrpc::TSimpleRequestProcessor<typename TGrpcService::Stub, TRequest, TResponse>::TAsyncRequest asyncRequest, const TString& subject = "") {
         NActors::TActorId actorId = SelfId();
         NActors::TActorSystem* actorSystem = NActors::TActivationContext::ActorSystem();
         NYdbGrpc::TCallMeta meta;
         meta.Timeout = RPC_TIMEOUT;
         auto connection = CreateGRpcServiceConnection<TGrpcService>(endpoint);
         NYdbGrpc::TResponseCallback<TResponse> cb =
-            [actorId, actorSystem, name](NYdbGrpc::TGrpcStatus&& status, TResponse&& response) -> void {
-                actorSystem->Send(actorId, new TUpdateToken(name, std::move(status), std::move(response)));
+            [actorId, actorSystem, name, subject](NYdbGrpc::TGrpcStatus&& status, TResponse&& response) -> void {
+                actorSystem->Send(actorId, new TUpdateToken(name, subject, std::move(status), std::move(response)));
         };
         connection->DoRequest(request, std::move(cb), asyncRequest, meta);
     }

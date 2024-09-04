@@ -60,7 +60,7 @@ TBaseConfig::TVSlot MakeVSlotConfig(ui32 nodeId, const TVDiskID &id, ui32 pdisk,
     vdisk.MutableVSlotId()->SetNodeId(nodeId);
     vdisk.MutableVSlotId()->SetPDiskId(pdisk);
     vdisk.MutableVSlotId()->SetVSlotId(slot);
-    vdisk.SetGroupId(id.GroupID);
+    vdisk.SetGroupId(id.GroupID.GetRawId());
     vdisk.SetGroupGeneration(id.GroupGeneration);
     vdisk.SetFailRealmIdx(id.FailRealm);
     vdisk.SetFailDomainIdx(id.FailDomain);

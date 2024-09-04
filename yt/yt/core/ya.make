@@ -45,6 +45,7 @@ SRCS(
 
     concurrency/action_queue.cpp
     concurrency/async_barrier.cpp
+    concurrency/async_looper.cpp
     concurrency/async_rw_lock.cpp
     concurrency/async_semaphore.cpp
     concurrency/async_stream_pipe.cpp
@@ -103,6 +104,7 @@ SRCS(
     logging/log_writer_detail.cpp
     logging/file_log_writer.cpp
     logging/stream_log_writer.cpp
+    logging/system_log_event_provider.cpp
     logging/random_access_gzip.cpp
     logging/zstd_compression.cpp
 
@@ -121,7 +123,6 @@ SRCS(
     misc/digest.cpp
     misc/error.cpp
     misc/error_code.cpp
-    misc/ema_counter.cpp
     misc/fs.cpp
     # NB: it is necessary to prevent linker optimization of
     # REGISTER_INTERMEDIATE_PROTO_INTEROP_REPRESENTATION macros for TGuid.
@@ -134,6 +135,7 @@ SRCS(
     misc/linear_probe.cpp
     misc/memory_usage_tracker.cpp
     misc/relaxed_mpsc_queue.cpp
+    misc/origin_attributes.cpp
     misc/parser_helpers.cpp
     misc/pattern_formatter.cpp
     misc/phoenix.cpp
@@ -151,8 +153,10 @@ SRCS(
     misc/shutdown.cpp
     misc/signal_registry.cpp
     misc/slab_allocator.cpp
+    misc/statistic_path.cpp
     misc/statistics.cpp
     misc/string_helpers.cpp
+    misc/stripped_error.cpp
     misc/cache_config.cpp
     misc/utf8_decoder.cpp
     misc/zerocopy_output_writer.cpp
@@ -251,6 +255,7 @@ SRCS(
     yson/pull_parser_deserialize.cpp
     yson/stream.cpp
     yson/string.cpp
+    yson/string_builder_stream.cpp
     yson/string_filter.cpp
     yson/syntax_checker.cpp
     yson/token.cpp
@@ -325,6 +330,8 @@ PEERDIR(
     library/cpp/streams/brotli
     library/cpp/yt/assert
     library/cpp/yt/containers
+    library/cpp/yt/global
+    library/cpp/yt/error
     library/cpp/yt/logging
     library/cpp/yt/logging/plain_text_formatter
     library/cpp/yt/misc

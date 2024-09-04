@@ -41,7 +41,7 @@ void PackStatisticsToProtobuf(google::protobuf::RepeatedPtrField<FederatedQuery:
                               std::string_view statsStr,
                               TDuration executionTime);
 
-using StatsValuesList = std::vector<std::pair<TString, ui64>>;
+using StatsValuesList = std::vector<std::pair<TString, i64>>;
 
 StatsValuesList ExtractStatisticsFromProtobuf(const google::protobuf::RepeatedPtrField<FederatedQuery::Internal::StatisticsNamedValue>& statsProto);
 

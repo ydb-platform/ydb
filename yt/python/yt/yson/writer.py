@@ -291,7 +291,7 @@ class Dumper(object):
                 else:
                     result = b"%-inf"
             else:
-                if type(obj) == yson_types.YsonDouble:
+                if type(obj) is yson_types.YsonDouble:
                     obj_str = str(float(obj))
                 else:
                     obj_str = str(obj)

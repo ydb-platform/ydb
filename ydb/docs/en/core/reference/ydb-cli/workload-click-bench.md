@@ -33,7 +33,7 @@ Upload data to the table. To do this, download and unzip the data archive, then 
 
 ```bash
 wget https://datasets.clickhouse.com/hits_compatible/hits.csv.gz
-unzip hits.csv.gz
+gzip -d hits.csv.gz
 {{ ydb-cli }} import file csv --path clickbench/hits --input-file hits.csv
 ```
 

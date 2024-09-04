@@ -84,6 +84,7 @@ namespace NKikimr {
 namespace NSchemeShard {
 
 class TSchemeShard;
+class TPath;
 
 struct TOperationContext {
 public:
@@ -337,7 +338,7 @@ ISubOperation::TPtr CreateAlterUserAttrs(TOperationId id, TTxState::ETxState sta
 ISubOperation::TPtr CreateForceDropUnsafe(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateForceDropUnsafe(TOperationId id, TTxState::ETxState state);
 
-ISubOperation::TPtr CreateNewTable(TOperationId id, const TTxTransaction& tx, const THashSet<TString>& localSequences = { });
+ISubOperation::TPtr CreateNewTable(TOperationId id, const TTxTransaction& tx, const THashSet<TString>& localSequences = {});
 ISubOperation::TPtr CreateNewTable(TOperationId id, TTxState::ETxState state);
 
 ISubOperation::TPtr CreateCopyTable(TOperationId id, const TTxTransaction& tx,
@@ -608,6 +609,22 @@ ISubOperation::TPtr CreateAlterBlobDepot(TOperationId id, const TTxTransaction& 
 ISubOperation::TPtr CreateAlterBlobDepot(TOperationId id, TTxState::ETxState state);
 ISubOperation::TPtr CreateDropBlobDepot(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateDropBlobDepot(TOperationId id, TTxState::ETxState state);
+
+// Resource Pool
+// Create
+ISubOperation::TPtr CreateNewResourcePool(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateNewResourcePool(TOperationId id, TTxState::ETxState state);
+// Alter
+ISubOperation::TPtr CreateAlterResourcePool(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateAlterResourcePool(TOperationId id, TTxState::ETxState state);
+// Drop
+ISubOperation::TPtr CreateDropResourcePool(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateDropResourcePool(TOperationId id, TTxState::ETxState state);
+
+// returns Reject in case of error, nullptr otherwise
+ISubOperation::TPtr CascadeDropTableChildren(TVector<ISubOperation::TPtr>& result, const TOperationId& id, const TPath& table);
+
+TVector<ISubOperation::TPtr> CreateRestoreIncrementalBackup(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
 
 }
 }

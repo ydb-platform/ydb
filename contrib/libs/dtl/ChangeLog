@@ -1,3 +1,9 @@
+2024-07-11 Tatsuhiko Kubo <cubicdaiya@gmail.com>
+
+	* bugfix: fix compilation error in C++14 (#18). Thanks to @ZaychukAleksey
+
+	* 1.21 released
+
 2022-04-11 Tatsuhiko Kubo <cubicdaiya@gmail.com>
 
 	* bugfix: fixed invalid offset in unified format difference when difference is too large.

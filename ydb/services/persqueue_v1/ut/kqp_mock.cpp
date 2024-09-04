@@ -1,4 +1,5 @@
 #include "kqp_mock.h"
+#include <ydb/core/persqueue/write_id.h>
 
 namespace NKikimr::NPersQueueTests {
 
@@ -24,7 +25,8 @@ void TKqpProxyServiceMock::Handle(NKqp::TEvKqp::TEvQueryRequest::TPtr& ev, const
     auto queryResponse = std::make_unique<NKqp::TEvKqp::TEvQueryResponse>();
     auto* response = queryResponse->Record.GetRef().MutableResponse();
 
-    response->MutableTopicOperations()->SetWriteId(NextWriteId++);
+    NPQ::TWriteId writeId(0, NextWriteId++);
+    NPQ::SetWriteId(*response->MutableTopicOperations(), writeId);
 
     ctx.Send(ev->Sender, std::move(queryResponse));
 }

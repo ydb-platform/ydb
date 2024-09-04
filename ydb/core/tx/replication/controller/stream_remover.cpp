@@ -13,6 +13,7 @@ class TStreamRemover: public TActorBootstrapped<TStreamRemover> {
     void DropStream() {
         switch (Kind) {
         case TReplication::ETargetKind::Table:
+        case TReplication::ETargetKind::IndexTable:
             Send(YdbProxy, new TEvYdbProxy::TEvAlterTableRequest(SrcPath, NYdb::NTable::TAlterTableSettings()
                 .AppendDropChangefeeds(StreamName)));
             break;

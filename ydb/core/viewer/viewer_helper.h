@@ -1,5 +1,4 @@
 #pragma once
-
 #include <util/generic/algorithm.h>
 
 namespace NKikimr::NViewer {

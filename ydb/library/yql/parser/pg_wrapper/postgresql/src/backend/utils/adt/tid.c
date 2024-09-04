@@ -3,7 +3,7 @@
  * tid.c
  *	  Functions for the built-in type tuple id
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -37,11 +37,6 @@
 #include "utils/varlena.h"
 
 
-#define DatumGetItemPointer(X)	 ((ItemPointer) DatumGetPointer(X))
-#define ItemPointerGetDatum(X)	 PointerGetDatum(X)
-#define PG_GETARG_ITEMPOINTER(n) DatumGetItemPointer(PG_GETARG_DATUM(n))
-#define PG_RETURN_ITEMPOINTER(x) return ItemPointerGetDatum(x)
-
 #define LDELIM			'('
 #define RDELIM			')'
 #define DELIM			','
@@ -57,6 +52,7 @@ Datum
 tidin(PG_FUNCTION_ARGS)
 {
 	char	   *str = PG_GETARG_CSTRING(0);
+	Node	   *escontext = fcinfo->context;
 	char	   *p,
 			   *coord[NTIDARGS];
 	int			i;
@@ -64,35 +60,49 @@ tidin(PG_FUNCTION_ARGS)
 	BlockNumber blockNumber;
 	OffsetNumber offsetNumber;
 	char	   *badp;
-	int			hold_offset;
+	unsigned long cvt;
 
 	for (i = 0, p = str; *p && i < NTIDARGS && *p != RDELIM; p++)
-		if (*p == DELIM || (*p == LDELIM && !i))
+		if (*p == DELIM || (*p == LDELIM && i == 0))
 			coord[i++] = p + 1;
 
 	if (i < NTIDARGS)
-		ereport(ERROR,
+		ereturn(escontext, (Datum) 0,
 				(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
 				 errmsg("invalid input syntax for type %s: \"%s\"",
 						"tid", str)));
 
 	errno = 0;
-	blockNumber = strtoul(coord[0], &badp, 10);
+	cvt = strtoul(coord[0], &badp, 10);
 	if (errno || *badp != DELIM)
-		ereport(ERROR,
+		ereturn(escontext, (Datum) 0,
 				(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
 				 errmsg("invalid input syntax for type %s: \"%s\"",
 						"tid", str)));
+	blockNumber = (BlockNumber) cvt;
 
-	hold_offset = strtol(coord[1], &badp, 10);
+	/*
+	 * Cope with possibility that unsigned long is wider than BlockNumber, in
+	 * which case strtoul will not raise an error for some values that are out
+	 * of the range of BlockNumber.  (See similar code in oidin().)
+	 */
+#if SIZEOF_LONG > 4
+	if (cvt != (unsigned long) blockNumber &&
+		cvt != (unsigned long) ((int32) blockNumber))
+		ereturn(escontext, (Datum) 0,
+				(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
+				 errmsg("invalid input syntax for type %s: \"%s\"",
+						"tid", str)));
+#endif
+
+	cvt = strtoul(coord[1], &badp, 10);
 	if (errno || *badp != RDELIM ||
-		hold_offset > USHRT_MAX || hold_offset < 0)
-		ereport(ERROR,
+		cvt > USHRT_MAX)
+		ereturn(escontext, (Datum) 0,
 				(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
 				 errmsg("invalid input syntax for type %s: \"%s\"",
 						"tid", str)));
-
-	offsetNumber = hold_offset;
+	offsetNumber = (OffsetNumber) cvt;
 
 	result = (ItemPointer) palloc(sizeof(ItemPointerData));
 

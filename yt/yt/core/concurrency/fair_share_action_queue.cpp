@@ -105,7 +105,7 @@ public:
 
     void Shutdown(bool graceful)
     {
-        // Syncrhonization done via Queue_->Shutdown().
+        // Synchronization done via Queue_->Shutdown().
         if (Stopped_.exchange(true, std::memory_order::relaxed)) {
             return;
         }

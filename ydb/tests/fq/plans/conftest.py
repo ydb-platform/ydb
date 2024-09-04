@@ -35,12 +35,7 @@ def s3(request) -> S3:
     s3_port = port_manager.get_port()
     s3_url = "http://localhost:{port}".format(port=s3_port)
 
-    command = [
-        yatest.common.binary_path(MOTO_SERVER_PATH),
-        "s3",
-        "--host", "::1",
-        "--port", str(s3_port)
-    ]
+    command = [yatest.common.binary_path(MOTO_SERVER_PATH), "s3", "--host", "::1", "--port", str(s3_port)]
 
     def is_s3_ready():
         try:
@@ -52,10 +47,7 @@ def s3(request) -> S3:
             return False
 
     recipes_common.start_daemon(
-        command=command,
-        environment=None,
-        is_alive_check=is_s3_ready,
-        pid_file_name=S3_PID_FILE
+        command=command, environment=None, is_alive_check=is_s3_ready, pid_file_name=S3_PID_FILE
     )
 
     try:
@@ -68,21 +60,22 @@ def s3(request) -> S3:
 
 @pytest.fixture
 def kikimr(request: pytest.FixtureRequest, s3: S3, yq_version: str, stats_mode: str):
-    kikimr_extensions = [AddInflightExtension(),
-                         AddDataInflightExtension(),
-                         AddFormatSizeLimitExtension(),
-                         DefaultConfigExtension(s3.s3_url),
-                         YQv2Extension(yq_version),
-                         ComputeExtension(),
-                         StatsModeExtension(stats_mode)]
+    kikimr_extensions = [
+        AddInflightExtension(),
+        AddDataInflightExtension(),
+        AddFormatSizeLimitExtension(),
+        DefaultConfigExtension(s3.s3_url),
+        YQv2Extension(yq_version),
+        ComputeExtension(),
+        StatsModeExtension(stats_mode),
+    ]
     with start_kikimr(request, kikimr_extensions) as kikimr:
         yield kikimr
 
 
 @pytest.fixture
 def client(kikimr, request=None):
-    client = FederatedQueryClient(request.param["folder_id"]
-                                  if request is not None
-                                  else "my_folder",
-                                  streaming_over_kikimr=kikimr)
+    client = FederatedQueryClient(
+        request.param["folder_id"] if request is not None else "my_folder", streaming_over_kikimr=kikimr
+    )
     return client

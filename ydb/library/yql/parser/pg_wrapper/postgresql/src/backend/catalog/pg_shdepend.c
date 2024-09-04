@@ -3,7 +3,7 @@
  * pg_shdepend.c
  *	  routines to support manipulation of the pg_shdepend relation
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -22,6 +22,7 @@
 #include "catalog/dependency.h"
 #include "catalog/indexing.h"
 #include "catalog/pg_authid.h"
+#include "catalog/pg_auth_members.h"
 #include "catalog/pg_collation.h"
 #include "catalog/pg_conversion.h"
 #include "catalog/pg_database.h"
@@ -102,7 +103,6 @@ static void storeObjectDescription(StringInfo descs,
 								   ObjectAddress *object,
 								   SharedDependencyType deptype,
 								   int count);
-static bool isSharedObjectPinned(Oid classId, Oid objectId, Relation sdepRel);
 
 
 /*
@@ -141,8 +141,7 @@ recordSharedDependencyOn(ObjectAddress *depender,
 	sdepRel = table_open(SharedDependRelationId, RowExclusiveLock);
 
 	/* If the referenced object is pinned, do nothing. */
-	if (!isSharedObjectPinned(referenced->classId, referenced->objectId,
-							  sdepRel))
+	if (!IsPinnedObject(referenced->classId, referenced->objectId))
 	{
 		shdepAddDependency(sdepRel, depender->classId, depender->objectId,
 						   depender->objectSubId,
@@ -256,7 +255,7 @@ shdepChangeDep(Relation sdepRel,
 
 	systable_endscan(scan);
 
-	if (isSharedObjectPinned(refclassid, refobjid, sdepRel))
+	if (IsPinnedObject(refclassid, refobjid))
 	{
 		/* No new entry needed, so just delete existing entry if any */
 		if (oldtup)
@@ -514,7 +513,7 @@ updateAclDependencies(Oid classId, Oid objectId, int32 objsubId,
 				continue;
 
 			/* Skip pinned roles; they don't need dependency entries */
-			if (isSharedObjectPinned(AuthIdRelationId, roleid, sdepRel))
+			if (IsPinnedObject(AuthIdRelationId, roleid))
 				continue;
 
 			shdepAddDependency(sdepRel, classId, objectId, objsubId,
@@ -532,7 +531,7 @@ updateAclDependencies(Oid classId, Oid objectId, int32 objsubId,
 				continue;
 
 			/* Skip pinned roles */
-			if (isSharedObjectPinned(AuthIdRelationId, roleid, sdepRel))
+			if (IsPinnedObject(AuthIdRelationId, roleid))
 				continue;
 
 			shdepDropDependency(sdepRel, classId, objectId, objsubId,
@@ -627,8 +626,6 @@ shared_dependency_comparator(const void *a, const void *b)
  * on objects local to other databases.  We can (and do) provide descriptions
  * of the two former kinds of objects, but we can't do that for "remote"
  * objects, so we just provide a count of them.
- *
- * If we find a SHARED_DEPENDENCY_PIN entry, we can error out early.
  */
 bool
 checkSharedDependencies(Oid classId, Oid objectId,
@@ -649,6 +646,18 @@ checkSharedDependencies(Oid classId, Oid objectId,
 	int			allocedobjects;
 	StringInfoData descs;
 	StringInfoData alldescs;
+
+	/* This case can be dispatched quickly */
+	if (IsPinnedObject(classId, objectId))
+	{
+		object.classId = classId;
+		object.objectId = objectId;
+		object.objectSubId = 0;
+		ereport(ERROR,
+				(errcode(ERRCODE_DEPENDENT_OBJECTS_STILL_EXIST),
+				 errmsg("cannot drop %s because it is required by the database system",
+						getObjectDescription(&object, false))));
+	}
 
 	/*
 	 * We limit the number of dependencies reported to the client to
@@ -685,18 +694,6 @@ checkSharedDependencies(Oid classId, Oid objectId,
 	while (HeapTupleIsValid(tup = systable_getnext(scan)))
 	{
 		Form_pg_shdepend sdepForm = (Form_pg_shdepend) GETSTRUCT(tup);
-
-		/* This case can be dispatched quickly */
-		if (sdepForm->deptype == SHARED_DEPENDENCY_PIN)
-		{
-			object.classId = classId;
-			object.objectId = objectId;
-			object.objectSubId = 0;
-			ereport(ERROR,
-					(errcode(ERRCODE_DEPENDENT_OBJECTS_STILL_EXIST),
-					 errmsg("cannot drop %s because it is required by the database system",
-							getObjectDescription(&object, false))));
-		}
 
 		object.classId = sdepForm->classid;
 		object.objectId = sdepForm->objid;
@@ -765,7 +762,7 @@ checkSharedDependencies(Oid classId, Oid objectId,
 	 * Sort and report local and shared objects.
 	 */
 	if (numobjects > 1)
-		qsort((void *) objects, numobjects,
+		qsort(objects, numobjects,
 			  sizeof(ShDependObjectInfo), shared_dependency_comparator);
 
 	for (int i = 0; i < numobjects; i++)
@@ -1283,53 +1280,6 @@ storeObjectDescription(StringInfo descs,
 
 
 /*
- * isSharedObjectPinned
- *		Return whether a given shared object has a SHARED_DEPENDENCY_PIN entry.
- *
- * sdepRel must be the pg_shdepend relation, already opened and suitably
- * locked.
- */
-static bool
-isSharedObjectPinned(Oid classId, Oid objectId, Relation sdepRel)
-{
-	bool		result = false;
-	ScanKeyData key[2];
-	SysScanDesc scan;
-	HeapTuple	tup;
-
-	ScanKeyInit(&key[0],
-				Anum_pg_shdepend_refclassid,
-				BTEqualStrategyNumber, F_OIDEQ,
-				ObjectIdGetDatum(classId));
-	ScanKeyInit(&key[1],
-				Anum_pg_shdepend_refobjid,
-				BTEqualStrategyNumber, F_OIDEQ,
-				ObjectIdGetDatum(objectId));
-
-	scan = systable_beginscan(sdepRel, SharedDependReferenceIndexId, true,
-							  NULL, 2, key);
-
-	/*
-	 * Since we won't generate additional pg_shdepend entries for pinned
-	 * objects, there can be at most one entry referencing a pinned object.
-	 * Hence, it's sufficient to look at the first returned tuple; we don't
-	 * need to loop.
-	 */
-	tup = systable_getnext(scan);
-	if (HeapTupleIsValid(tup))
-	{
-		Form_pg_shdepend shdepForm = (Form_pg_shdepend) GETSTRUCT(tup);
-
-		if (shdepForm->deptype == SHARED_DEPENDENCY_PIN)
-			result = true;
-	}
-
-	systable_endscan(scan);
-
-	return result;
-}
-
-/*
  * shdepDropOwned
  *
  * Drop the objects owned by any one of the given RoleIds.  If a role has
@@ -1369,7 +1319,7 @@ shdepDropOwned(List *roleids, DropBehavior behavior)
 		HeapTuple	tuple;
 
 		/* Doesn't work for pinned objects */
-		if (isSharedObjectPinned(AuthIdRelationId, roleid, sdepRel))
+		if (IsPinnedObject(AuthIdRelationId, roleid))
 		{
 			ObjectAddress obj;
 
@@ -1412,14 +1362,8 @@ shdepDropOwned(List *roleids, DropBehavior behavior)
 			switch (sdepForm->deptype)
 			{
 					/* Shouldn't happen */
-				case SHARED_DEPENDENCY_PIN:
 				case SHARED_DEPENDENCY_INVALID:
 					elog(ERROR, "unexpected dependency type");
-					break;
-				case SHARED_DEPENDENCY_ACL:
-					RemoveRoleFromObjectACL(roleid,
-											sdepForm->classid,
-											sdepForm->objid);
 					break;
 				case SHARED_DEPENDENCY_POLICY:
 
@@ -1450,9 +1394,34 @@ shdepDropOwned(List *roleids, DropBehavior behavior)
 						add_exact_object_address(&obj, deleteobjs);
 					}
 					break;
+				case SHARED_DEPENDENCY_ACL:
+
+					/*
+					 * Dependencies on role grants are recorded using
+					 * SHARED_DEPENDENCY_ACL, but unlike a regular ACL list
+					 * which stores all permissions for a particular object in
+					 * a single ACL array, there's a separate catalog row for
+					 * each grant - so removing the grant just means removing
+					 * the entire row.
+					 */
+					if (sdepForm->classid != AuthMemRelationId)
+					{
+						RemoveRoleFromObjectACL(roleid,
+												sdepForm->classid,
+												sdepForm->objid);
+						break;
+					}
+					/* FALLTHROUGH */
+
 				case SHARED_DEPENDENCY_OWNER:
-					/* If a local object, save it for deletion below */
-					if (sdepForm->dbid == MyDatabaseId)
+
+					/*
+					 * Save it for deletion below, if it's a local object or a
+					 * role grant. Other shared objects, such as databases,
+					 * should not be removed here.
+					 */
+					if (sdepForm->dbid == MyDatabaseId ||
+						sdepForm->classid == AuthMemRelationId)
 					{
 						obj.classId = sdepForm->classid;
 						obj.objectId = sdepForm->objid;
@@ -1516,7 +1485,7 @@ shdepReassignOwned(List *roleids, Oid newrole)
 		Oid			roleid = lfirst_oid(cell);
 
 		/* Refuse to work on pinned roles */
-		if (isSharedObjectPinned(AuthIdRelationId, roleid, sdepRel))
+		if (IsPinnedObject(AuthIdRelationId, roleid))
 		{
 			ObjectAddress obj;
 
@@ -1560,10 +1529,6 @@ shdepReassignOwned(List *roleids, Oid newrole)
 			if (sdepForm->dbid != MyDatabaseId &&
 				sdepForm->dbid != InvalidOid)
 				continue;
-
-			/* Unexpected because we checked for pins above */
-			if (sdepForm->deptype == SHARED_DEPENDENCY_PIN)
-				elog(ERROR, "unexpected shared pin");
 
 			/* We leave non-owner dependencies alone */
 			if (sdepForm->deptype != SHARED_DEPENDENCY_OWNER)
@@ -1653,6 +1618,10 @@ shdepReassignOwned(List *roleids, Oid newrole)
 						Oid			classId = sdepForm->classid;
 						Relation	catalog;
 
+						/*
+						 * For large objects, the catalog to modify is
+						 * pg_largeobject_metadata
+						 */
 						if (classId == LargeObjectRelationId)
 							classId = LargeObjectMetadataRelationId;
 

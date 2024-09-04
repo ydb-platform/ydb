@@ -33,7 +33,7 @@ SELECT
 
 ## Yson UDF
 
-This approach typically combines multiple functions and expressions, so a query might leverage different specific strategies. 
+This approach typically combines multiple functions and expressions, so a query might leverage different specific strategies.
 
 ### Convert the whole JSON to YQL containers
 
@@ -60,7 +60,7 @@ $has_name = ListAny(
 $get_age = $containers.friends[0].age;
 $get_first_friend = Yson::SerializeJson(Yson::From($containers.friends[0]));
 
-SELECT 
+SELECT
     $has_name, -- True
     $get_age, -- 35
     $get_first_friend; -- {"name": "James Holden", "age": 35}
@@ -92,7 +92,7 @@ $has_name = ListAny(
 $get_age = Yson::ConvertToInt64($json.friends[0].age);
 $get_first_friend = Yson::SerializeJson($json.friends[0]);
 
-SELECT 
+SELECT
     $has_name, -- True
     $get_age, -- 35
     $get_first_friend; -- {"name": "James Holden", "age": 35}

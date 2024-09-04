@@ -67,7 +67,7 @@ NKikimr::NOlap::NStorageOptimizer::NSBuckets::TCompactionTaskResult TTimeSliceLo
 
 NKikimr::NOlap::NStorageOptimizer::NSBuckets::TCalcWeightResult TTimeSliceLogic::DoCalcWeight(const TInstant /*now*/, const TBucketInfo& bucket) const {
     ui64 size = 0;
-    ui32 count = 0;
+    ui64 count = 0;
     for (auto&& [maxInstant, portions] : bucket.GetSnapshotPortions()) {
         for (auto&& [_, p] : portions) {
             if (p.GetTotalBlobBytes() > compactedDetector) {

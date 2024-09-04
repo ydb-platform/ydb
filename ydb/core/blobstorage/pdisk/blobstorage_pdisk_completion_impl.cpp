@@ -53,7 +53,8 @@ void TCompletionLogWrite::Exec(TActorSystem *actorSystem) {
                 HPMilliSecondsFloat(now - evLog.CreationTime),
                 HPMilliSecondsFloat(evLog.InputTime - evLog.CreationTime),
                 HPMilliSecondsFloat(evLog.ScheduleTime - evLog.InputTime),
-                HPMilliSecondsFloat(now - evLog.ScheduleTime));
+                HPMilliSecondsFloat(now - evLog.ScheduleTime),
+                HPMilliSecondsFloat(GetTime - SubmitTime));
         if (evLog.Result->Results) {
             evLog.Result->Results.front().Orbit = std::move(evLog.Orbit);
         }
@@ -116,7 +117,7 @@ void TCompletionLogWrite::Release(TActorSystem *actorSystem) {
 
 TCompletionChunkReadPart::TCompletionChunkReadPart(TPDisk *pDisk, TIntrusivePtr<TChunkRead> &read, ui64 rawReadSize,
         ui64 payloadReadSize, ui64 commonBufferOffset, TCompletionChunkRead *cumulativeCompletion, bool isTheLastPart,
-        const TControlWrapper& useT1ha0Hasher, NWilson::TSpan&& span)
+        NWilson::TSpan&& span)
     : TCompletionAction()
     , PDisk(pDisk)
     , Read(read)
@@ -126,7 +127,6 @@ TCompletionChunkReadPart::TCompletionChunkReadPart(TPDisk *pDisk, TIntrusivePtr<
     , CumulativeCompletion(cumulativeCompletion)
     , Buffer(PDisk->BufferPool->Pop())
     , IsTheLastPart(isTheLastPart)
-    , UseT1ha0Hasher(useT1ha0Hasher)
     , Span(std::move(span))
 {
     if (!IsTheLastPart) {
@@ -192,7 +192,7 @@ void TCompletionChunkReadPart::Exec(TActorSystem *actorSystem) {
             format, actorSystem, PDisk->PDiskActor, PDisk->PDiskId, &PDisk->Mon, PDisk->BufferPool.Get());
         ui64 lastNonce = Min((ui64)0, chunkNonce - 1);
         restorator.Restore(source, format.Offset(Read->ChunkIdx, sectorIdx), format.MagicDataChunk, lastNonce,
-                UseT1ha0Hasher, Read->Owner);
+                Read->Owner);
 
         const ui32 sectorCount = 1;
         if (restorator.GoodSectorCount != sectorCount) {
@@ -275,7 +275,9 @@ void TCompletionChunkReadPart::Exec(TActorSystem *actorSystem) {
         endBadUserOffset = 0xffffffff;
     }
 
-    LWTRACK(PDiskChunkReadPieceComplete, Read->Orbit, PDisk->PDiskId, RawReadSize, CommonBufferOffset);
+    double deviceTimeMs = HPMilliSecondsFloat(GetTime - SubmitTime);
+    LWTRACK(PDiskChunkReadPieceComplete, Orbit, PDisk->PDiskId, RawReadSize, CommonBufferOffset, deviceTimeMs);
+    Read->Orbit.Join(Orbit);
     CumulativeCompletion->PartReadComplete(actorSystem);
     CumulativeCompletion = nullptr;
 

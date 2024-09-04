@@ -234,6 +234,32 @@ private:
 };
 
 using TReplaceKey = TReplaceKeyTemplate<std::shared_ptr<TArrayVec>>;
+
+class TReplaceKeyInterval {
+private:
+    NArrow::TReplaceKey Start;
+    NArrow::TReplaceKey Finish;
+public:
+    TReplaceKeyInterval(const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& finish)
+        : Start(start)
+        , Finish(finish)
+    {
+
+    }
+
+    const NArrow::TReplaceKey& GetStart() const {
+        return Start;
+    }
+
+    const NArrow::TReplaceKey& GetFinish() const {
+        return Finish;
+    }
+
+    void SetFinish(const NArrow::TReplaceKey& key) {
+        Finish = key;
+    }
+};
+
 using TRawReplaceKey = TReplaceKeyTemplate<const TArrayVec*>;
 
 class TStoreReplaceKey: public TReplaceKey {

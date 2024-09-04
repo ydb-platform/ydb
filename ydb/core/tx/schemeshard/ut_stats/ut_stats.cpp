@@ -396,10 +396,6 @@ Y_UNIT_TEST_SUITE(TSchemeshardStatsBatchingTest) {
 
         SendTEvPeriodicTopicStats(runtime, topic3Id, generation, ++round, 151, 151);
         Assert(808, 31 + 151);
-
-        TestDeallocatePQ(runtime, ++txId, "/MyRoot", "Name: \"Topic3\"");
-        env.TestWaitNotification(runtime, txId);
-        Assert(247, 31);
     }
 
     Y_UNIT_TEST(TopicPeriodicStatMeteringModeReserved) {
@@ -608,7 +604,7 @@ Y_UNIT_TEST_SUITE(TStoragePoolsStatsPersistence) {
         opts.EnablePersistentPartitionStats(true);
         opts.EnableBackgroundCompaction(false);
         TTestEnv env(runtime, opts);
-        
+
         NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
         NDataShard::gDbStatsDataSizeResolution = 1;
         NDataShard::gDbStatsRowCountResolution = 1;

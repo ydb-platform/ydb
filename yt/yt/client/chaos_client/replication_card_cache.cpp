@@ -7,7 +7,7 @@
 
 namespace NYT::NChaosClient {
 
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 TReplicationCardCacheKey::operator size_t() const
 {
@@ -26,11 +26,6 @@ void FormatValue(TStringBuilderBase* builder, const TReplicationCardCacheKey& ke
     builder->AppendFormat("{CardId: %v, FetchOptions: %v}",
         key.CardId,
         key.FetchOptions);
-}
-
-TString ToString(const TReplicationCardCacheKey& key)
-{
-    return ToStringViaBuilder(key);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

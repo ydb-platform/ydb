@@ -34,5 +34,13 @@ std::shared_ptr<arrow::Array> TThreadSimpleArraysCache::GetConst(const std::shar
     return SimpleArraysCache.GetConstImpl(type, scalar, recordsCount);
 }
 
+std::shared_ptr<arrow::Array> TThreadSimpleArraysCache::Get(const std::shared_ptr<arrow::DataType>& type, const std::shared_ptr<arrow::Scalar>& scalar, const ui32 recordsCount) {
+    if (scalar) {
+        return GetConst(type, scalar, recordsCount);
+    } else {
+        return GetNull(type, recordsCount);
+    }
+}
+
 }
 

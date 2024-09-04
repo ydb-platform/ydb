@@ -17,6 +17,9 @@ public:
     TFilteredSnapshotSchema(ISnapshotSchema::TPtr originalSnapshot, const std::set<ui32>& columnIds);
     TFilteredSnapshotSchema(ISnapshotSchema::TPtr originalSnapshot, const std::set<std::string>& columnNames);
 
+    virtual const std::set<ui32>& GetColumnIds() const override {
+        return ColumnIds;
+    }
     TColumnSaver GetColumnSaver(const ui32 columnId) const override;
     std::shared_ptr<TColumnLoader> GetColumnLoaderOptional(const ui32 columnId) const override;
     std::optional<ui32> GetColumnIdOptional(const std::string& columnName) const override;

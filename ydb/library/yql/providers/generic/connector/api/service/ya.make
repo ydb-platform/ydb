@@ -7,7 +7,11 @@ SRCS(
 )
 
 # Go is excluded because it's excluded in YDB protofiles
-ONLY_TAGS(CPP_PROTO PY_PROTO PY3_PROTO)
+ONLY_TAGS(
+    CPP_PROTO
+    PY_PROTO
+    PY3_PROTO
+)
 
 PEERDIR(
     ydb/library/yql/providers/generic/connector/api/service/protos

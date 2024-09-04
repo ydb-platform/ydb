@@ -34,8 +34,7 @@ struct TSectorRestorator {
             const bool isErasureEncode, const TDiskFormat &format);
 
 
-    void Restore(ui8 *source, const ui64 offset, const ui64 magic, const ui64 lastNonce, const bool useT1ha0Hash,
-            TOwner owner);
+    void Restore(ui8 *source, const ui64 offset, const ui64 magic, const ui64 lastNonce, TOwner owner);
 
     void WriteSector(ui8 *sectorData, ui64 writeOffset);
 };

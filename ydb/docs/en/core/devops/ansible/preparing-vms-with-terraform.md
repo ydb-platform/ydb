@@ -1,6 +1,6 @@
 # Deploy infrastructure for {{ ydb-short-name }} cluster using Terraform
 
-You can deploy a {{ ydb-short-name }} cluster for production use in three recommended ways: using [Ansible](./initial-deployment.md), [Kubernetes](../kubernetes/index.md) or [manually](../../deploy/index.md). While the Kubernetes option is almost self-sufficient, the Ansible and manual options require SSH access to properly configured servers or virtual machines.
+You can deploy a {{ ydb-short-name }} cluster for production use in three recommended ways: using [Ansible](./initial-deployment.md), [Kubernetes](../kubernetes/index.md) or [manually](../../devops/manual/index.md). While the Kubernetes option is almost self-sufficient, the Ansible and manual options require SSH access to properly configured servers or virtual machines.
 
 This article describes how to create and configure the necessary set of virtual machines in various cloud providers for a {{ ydb-short-name }} cluster, using Terraform.
 
@@ -18,7 +18,7 @@ resource "aws_instance" "ydb-vm" {
   key_name               = var.req_key_pair
   vpc_security_group_ids = [var.input_security_group_id]
   subnet_id              = element(var.input_subnet_ids, count.index % length(var.input_subnet_ids))
-  
+
   tags = {
     Name                 = "ydb-node-${count.index +1}"
     Username             = "ubuntu"
@@ -122,7 +122,7 @@ Most cluster parameters are adjustable (number of VMs, size and type of connecte
 
 ## Create infrastructure in AWS to deploy {{ ydb-short-name }} cluster {#aws-cluster}
 
-{% include [aws](./_includes/terraform/aws.md) %} 
+{% include [aws](./_includes/terraform/aws.md) %}
 
 ## Create infrastructure in Azure to deploy {{ ydb-short-name }} cluster {#azure-cluster}
 

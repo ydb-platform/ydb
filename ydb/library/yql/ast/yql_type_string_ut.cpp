@@ -678,4 +678,9 @@ Y_UNIT_TEST_SUITE(TTypeString)
         TestFormat("((Pg int4))", "pgint4");
         TestFormat("((Pg _int4))", "_pgint4");
     }
+
+    Y_UNIT_TEST(FormatOptionalPg) {
+        TestFormat("((Optional (Pg int4)))", "Optional<pgint4>");
+        TestFormat("((Optional (Pg _int4)))", "Optional<_pgint4>");
+    }
 }

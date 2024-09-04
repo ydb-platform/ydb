@@ -36,7 +36,8 @@ NYson::TYsonProducer ConvertToProducer(T&& value);
 template <class T>
 INodePtr ConvertToNode(
     const T& value,
-    INodeFactory* factory = GetEphemeralNodeFactory());
+    INodeFactory* factory = GetEphemeralNodeFactory(),
+    int treeSizeLimit = std::numeric_limits<int>::max());
 
 template <class T>
 IAttributeDictionaryPtr ConvertToAttributes(const T& value);

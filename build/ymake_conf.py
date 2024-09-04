@@ -7,7 +7,6 @@ import base64
 import itertools
 import json
 import logging
-import ntpath
 import optparse
 import os
 import posixpath
@@ -42,7 +41,7 @@ class WindowsVersion(object):
 ANDROID_API_DEFAULT = 21
 
 # This is default Linux SDK unless `-DOS_SDK` is specified in cmdline
-LINUX_SDK_DEFAULT = "ubuntu-14"
+LINUX_SDK_DEFAULT = "ubuntu-16"
 
 MACOS_VERSION_MIN = "11.0"
 MACOS_VERSION_MIN_AS_INT = "110000"
@@ -119,7 +118,9 @@ class Platform(object):
         self.is_nds32 = self.arch in ('nds32le_elf_mculib_v5f',)
         self.is_tc32 = self.arch in ('tc32_elf',)
 
-        self.is_xtensa = self.arch in ('xtensa_hifi5',)
+        self.is_xtensa_hifi4 = self.arch == 'xtensa_hifi4'
+        self.is_xtensa_hifi5 = self.arch == 'xtensa_hifi5'
+        self.is_xtensa = self.is_xtensa_hifi4 or self.is_xtensa_hifi5
 
         self.armv7_float_abi = None
         if self.is_armv7:
@@ -224,6 +225,8 @@ class Platform(object):
             (self.is_power8le, 'ARCH_POWER8LE'),
             (self.is_power9le, 'ARCH_POWER9LE'),
             (self.is_riscv32, 'ARCH_RISCV32'),
+            (self.is_xtensa_hifi4, 'ARCH_XTENSA_HIFI4'),
+            (self.is_xtensa_hifi5, 'ARCH_XTENSA_HIFI5'),
             (self.is_xtensa, 'ARCH_XTENSA'),
             (self.is_nds32, 'ARCH_NDS32'),
             (self.is_tc32, 'ARCH_TC32'),
@@ -266,10 +269,7 @@ class Platform(object):
             return os
 
     def exe(self, *paths):
-        if self.is_windows:
-            return ntpath.join(*itertools.chain(paths[:-1], (paths[-1] + '.exe',)))
-        else:
-            return posixpath.join(*paths)
+        return posixpath.join(*paths)
 
     def __str__(self):
         return '{name}-{os}-{arch}'.format(name=self.name, os=self.os, arch=self.arch)
@@ -609,9 +609,6 @@ class Build(object):
         if self.is_size_optimized:
             emit('_BUILD_SIZE_OPTIMIZED', 'yes')
 
-        if self.with_ndebug:
-            emit('_BUILD_WITH_NDEBUG', 'yes')
-
         toolchain_type, compiler_type, linker_type = Compilers[self.tc.type]
         toolchain = toolchain_type(self.tc, self)
         compiler = compiler_type(self.tc, self)
@@ -662,10 +659,6 @@ class Build(object):
     def is_sanitized(self):
         sanitizer = preset('SANITIZER_TYPE')
         return bool(sanitizer) and not is_negative_str(sanitizer)
-
-    @property
-    def with_ndebug(self):
-        return self.build_type in ('release', 'minsizerel', 'valgrind-release', 'profile', 'gprof', 'debugnoasserts')
 
     @property
     def is_valgrind(self):
@@ -1352,10 +1345,10 @@ class GnuToolchain(Toolchain):
             self.setup_apple_local_sdk(target)
 
     def setup_apple_arcadia_sdk(self, target):
-        if target.is_ios:
+        if target.is_ios and not is_positive('DISABLE_YMAKE_CONF_CUSTOMIZATION'):
             self.setup_xcode_sdk(project='build/internal/platform/ios_sdk', var='${IOS_SDK_ROOT_RESOURCE_GLOBAL}')
             self.platform_projects.append('build/internal/platform/macos_system_stl')
-        if target.is_macos:
+        if target.is_macos and not is_positive('DISABLE_YMAKE_CONF_CUSTOMIZATION'):
             self.setup_xcode_sdk(project='build/internal/platform/macos_sdk', var='${MACOS_SDK_RESOURCE_GLOBAL}')
 
     def setup_apple_local_sdk(self, target):
@@ -1597,11 +1590,6 @@ class GnuCompiler(Compiler):
                     self.c_foptions.extend(['-faddrsig'])
             else:
                 self.optimize = '-O3'
-
-        if self.build.with_ndebug:
-            self.c_defines.append('-DNDEBUG')
-        else:
-            self.c_defines.append('-UNDEBUG')
 
         if self.build.profiler_type in (Profiler.Generic, Profiler.GProf):
             self.c_foptions.append('-fno-omit-frame-pointer')
@@ -1925,9 +1913,9 @@ class MSVCToolchain(MSVC, Toolchain):
         MSVC.__init__(self, tc, build)
 
         if self.tc.from_arcadia and not self.tc.ide_msvs:
-            self.platform_projects.append('build/internal/platform/msvc')
-            if tc.under_wine_compiler or tc.under_wine_tools:
-                self.platform_projects.append('build/platform/wine')
+            if not is_positive('DISABLE_YMAKE_CONF_CUSTOMIZATION'):
+                self.platform_projects.append('build/internal/platform/msvc')
+            self.platform_projects.append('build/platform/wine')
 
     def print_toolchain(self):
         super(MSVCToolchain, self).print_toolchain()
@@ -2435,10 +2423,12 @@ class Cuda(object):
 
     def print_macros(self):
         mtime = ' '
+        custom_pid = ' '
         if self.build.host_target[1].is_linux:
             mtime = ' --mtime ${tool:"tools/mtime0"} '
+            custom_pid = '--custom-pid ${tool:"tools/custom_pid"} '
         if not self.cuda_use_clang.value:
-            cmd = '$YMAKE_PYTHON ${input:"build/scripts/compile_cuda.py"}' + mtime + '$NVCC_OLD $NVCC_STD $NVCC_FLAGS -c ${input:SRC} -o ${output;suf=${OBJ_SUF}${NVCC_OBJ_EXT}:SRC} ${pre=-I:_C__INCLUDE} --cflags $C_FLAGS_PLATFORM $CXXFLAGS $NVCC_STD $NVCC_CFLAGS $SRCFLAGS ${input;hide:"build/platform/cuda/cuda_runtime_include.h"} $NVCC_ENV $CUDA_HOST_COMPILER_ENV ${kv;hide:"p CC"} ${kv;hide:"pc light-green"}'  # noqa E501
+            cmd = '$YMAKE_PYTHON ${input:"build/scripts/compile_cuda.py"}' + mtime + custom_pid + '$NVCC_OLD $NVCC_STD $NVCC_FLAGS -c ${input:SRC} -o ${output;suf=${OBJ_SUF}${NVCC_OBJ_EXT}:SRC} ${pre=-I:_C__INCLUDE} --cflags $C_FLAGS_PLATFORM $CXXFLAGS $NVCC_STD $NVCC_CFLAGS $SRCFLAGS ${input;hide:"build/platform/cuda/cuda_runtime_include.h"} $NVCC_ENV $CUDA_HOST_COMPILER_ENV ${kv;hide:"p CC"} ${kv;hide:"pc light-green"}'  # noqa E501
         else:
             cmd = '$CXX_COMPILER_OLD --cuda-path=$CUDA_ROOT $C_FLAGS_PLATFORM -c ${input:SRC} -o ${output;suf=${OBJ_SUF}${NVCC_OBJ_EXT}:SRC} ${pre=-I:_C__INCLUDE} $CXXFLAGS $SRCFLAGS $TOOLCHAIN_ENV ${kv;hide:"p CU"} ${kv;hide:"pc green"}'  # noqa E501
 
@@ -2553,7 +2543,7 @@ class Cuda(object):
             'Y_SDK_Root': '$WINDOWS_KITS_RESOURCE_GLOBAL',
         }
 
-        if not self.build.tc.ide_msvs:
+        if not self.build.tc.ide_msvs and not is_positive('DISABLE_YMAKE_CONF_CUSTOMIZATION'):
             self.peerdirs.append('build/internal/platform/msvc')
         self.cuda_host_compiler_env.value = format_env(env)
         self.cuda_host_msvc_version.value = vc_version

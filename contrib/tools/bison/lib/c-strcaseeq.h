@@ -1,5 +1,5 @@
 /* Optimized case-insensitive string comparison in C locale.
-   Copyright (C) 2001-2002, 2007, 2009-2013 Free Software Foundation, Inc.
+   Copyright (C) 2001-2002, 2007, 2009-2020 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published
@@ -12,7 +12,7 @@
    General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+   along with this program.  If not, see <https://www.gnu.org/licenses/>.  */
 
 /* Written by Bruno Haible <bruno@clisp.org>.  */
 
@@ -27,15 +27,12 @@
 
 /* Help GCC to generate good code for string comparisons with
    immediate strings. */
-#if defined (__GNUC__) && defined (__OPTIMIZE__)
+#if (defined __GNUC__ || defined __clang__) && defined __OPTIMIZE__
 
 /* Case insensitive comparison of ASCII characters.  */
 # if C_CTYPE_ASCII
 #  define CASEEQ(other,upper) \
      (c_isupper (upper) ? ((other) & ~0x20) == (upper) : (other) == (upper))
-# elif C_CTYPE_CONSECUTIVE_UPPERCASE && C_CTYPE_CONSECUTIVE_LOWERCASE
-#  define CASEEQ(other,upper) \
-     (c_isupper (upper) ? (other) == (upper) || (other) == (upper) - 'A' + 'a' : (other) == (upper))
 # else
 #  define CASEEQ(other,upper) \
      (c_toupper (other) == (upper))

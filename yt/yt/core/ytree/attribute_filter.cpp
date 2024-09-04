@@ -484,18 +484,13 @@ void Deserialize(TAttributeFilter& attributeFilter, TYsonPullParserCursor* curso
 void FormatValue(
     TStringBuilderBase* builder,
     const TAttributeFilter& attributeFilter,
-    TStringBuf /*format*/)
+    TStringBuf /*spec*/)
 {
     if (attributeFilter) {
         builder->AppendFormat("{Keys: %v, Paths: %v}", attributeFilter.Keys, attributeFilter.Paths);
     } else {
         builder->AppendString("(universal)");
     }
-}
-
-TString ToString(const TAttributeFilter& attributeFilter)
-{
-    return ToStringViaBuilder(attributeFilter);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

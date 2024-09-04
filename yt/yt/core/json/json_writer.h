@@ -1,6 +1,5 @@
 #pragma once
 
-#include "public.h"
 #include "config.h"
 
 #include <yt/yt/core/yson/public.h>

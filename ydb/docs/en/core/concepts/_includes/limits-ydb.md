@@ -7,7 +7,7 @@ This section describes the parameters of limits set in {{ ydb-short-name }}.
 The table below shows the limits that apply to schema objects: tables, databases, and columns. The _Object_ column specifies the type of schema object that the limit applies to.
 The _Error type_ column shows the status that the query ends with if an error occurs. For more information about statuses, see [Error handling in the API](../../reference/ydb-sdk/error_handling.md).
 
-| Objects | Limit | Value | Explanation | Internal<br>name | Error<br>type |
+| Objects | Limit | Value | Explanation | Internal<br/>name | Error<br/>type |
 | :--- | :--- | :--- | :--- | :---: | :---: |
 | Database | Maximum path depth | 32 | Maximum number of nested path elements (directories, tables). | MaxDepth | SCHEME_ERROR |
 | Database | Maximum number of paths (schema objects) | 10,000 | Maximum number of path elements (directories, tables) in a database. | MaxPaths | GENERIC_ERROR |
@@ -41,7 +41,7 @@ The _Error type_ column shows the status that the query ends with if an error oc
 
 The table below lists the limits that apply to query execution. The _Call_ column specifies the public API call that will end with the error status specified in the _Status_ column.
 
-| Parameter | Value | Call | Explanation | Status<br>in case of<br>a violation<br>of the limit |
+| Parameter | Value | Call | Explanation | Status<br/>in case of<br/>a violation<br/>of the limit |
 | :--- | :--- | :--- | :--- | :---: |
 | Maximum number of rows in query results | 1,000 | ExecuteDataQuery | Complete results of some queries executed using the `ExecuteDataQuery` method may contain more rows than allowed. In this case, a query will return the maximum number of rows allowed, and the result will have the `truncated` flag set. | SUCCESS |
 | Maximum query result size | 50 MB | ExecuteDataQuery | Complete results of some queries may exceed the set limit. In this case, a query will fail returning no data. | PRECONDITION_FAILED |

@@ -96,6 +96,7 @@ PEERDIR(
     contrib/python/PyHamcrest
     contrib/python/PyYAML
     contrib/python/cryptography
+    contrib/python/importlib-resources
     contrib/python/protobuf
     contrib/python/pytest
     contrib/python/setuptools

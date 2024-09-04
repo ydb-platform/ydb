@@ -1,15 +1,27 @@
 #include "credentials.h"
+#include "from_file.h"
+#include <ydb/public/sdk/cpp/client/ydb_types/credentials/oauth2_token_exchange/ut/jwt_check_helper.h>
 
 #include <library/cpp/cgiparam/cgiparam.h>
 #include <library/cpp/http/misc/parsed_request.h>
 #include <library/cpp/http/server/http.h>
 #include <library/cpp/http/server/response.h>
+#include <library/cpp/json/json_writer.h>
+#include <library/cpp/string_utils/base64/base64.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 
+#include <util/stream/file.h>
 #include <util/string/builder.h>
+#include <util/system/tempfile.h>
 
 using namespace NYdb;
+
+extern const TString TestRSAPrivateKeyContent;
+extern const TString TestRSAPublicKeyContent;
+extern const TString TestECPrivateKeyContent;
+extern const TString TestECPublicKeyContent;
+extern const TString TestHMACSecretKeyBase64Content;
 
 class TTestTokenExchangeServer: public THttpServer::ICallBack {
 public:
@@ -21,11 +33,36 @@ public:
         TString Response;
         TString ExpectedErrorPart;
         TString Error;
+        TMaybe<TJwtCheck> SubjectJwtCheck;
+        TMaybe<TJwtCheck> ActorJwtCheck;
 
         void Check() {
-            UNIT_ASSERT(InputParams || !ExpectRequest);
+            UNIT_ASSERT_C(InputParams || !ExpectRequest, "Request error: " << Error);
             if (InputParams) {
-                UNIT_ASSERT_VALUES_EQUAL(ExpectedInputParams.Print(), InputParams->Print());
+                if (SubjectJwtCheck || ActorJwtCheck) {
+                    TCgiParameters inputParamsCopy = *InputParams;
+                    if (SubjectJwtCheck) {
+                        TString subjectJwt;
+                        UNIT_ASSERT(inputParamsCopy.Has("subject_token"));
+                        UNIT_ASSERT(inputParamsCopy.Has("subject_token_type", "urn:ietf:params:oauth:token-type:jwt"));
+                        subjectJwt = inputParamsCopy.Get("subject_token");
+                        inputParamsCopy.Erase("subject_token");
+                        inputParamsCopy.Erase("subject_token_type");
+                        SubjectJwtCheck->Check(subjectJwt);
+                    }
+                    if (ActorJwtCheck) {
+                        TString actorJwt;
+                        UNIT_ASSERT(inputParamsCopy.Has("actor_token"));
+                        UNIT_ASSERT(inputParamsCopy.Has("actor_token_type", "urn:ietf:params:oauth:token-type:jwt"));
+                        actorJwt = inputParamsCopy.Get("actor_token");
+                        inputParamsCopy.Erase("actor_token");
+                        inputParamsCopy.Erase("actor_token_type");
+                        ActorJwtCheck->Check(actorJwt);
+                    }
+                    UNIT_ASSERT_VALUES_EQUAL(ExpectedInputParams.Print(), inputParamsCopy.Print());
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(ExpectedInputParams.Print(), InputParams->Print());
+                }
             }
 
             if (ExpectedErrorPart) {
@@ -109,6 +146,21 @@ public:
         }
     }
 
+    void RunFromConfig(const TString& fileName, const TString& expectedToken = {}, bool checkExpectations = true, const TString& explicitTokenEndpoint = {}) {
+        TString token;
+        Run([&]() {
+            auto factory = CreateOauth2TokenExchangeFileCredentialsProviderFactory(fileName, explicitTokenEndpoint);
+            if (expectedToken) {
+                token = factory->CreateProvider()->GetAuthInfo();
+            }
+        },
+        checkExpectations);
+
+        if (expectedToken) {
+            UNIT_ASSERT_VALUES_EQUAL(expectedToken, token);
+        }
+    }
+
     void CheckExpectations() {
         with_lock (Lock) {
             Check.Check();
@@ -129,8 +181,95 @@ public:
     TCheck Check;
 };
 
+template <class TParent>
+struct TJsonFillerArray {
+    TJsonFillerArray(TParent* parent, NJson::TJsonWriter* writer)
+        : Parent(parent)
+        , Writer(writer)
+    {
+        Writer->OpenArray();
+    }
+
+    TJsonFillerArray& Value(const TStringBuf& value) {
+        Writer->Write(value);
+        return *this;
+    }
+
+    TParent& Build() {
+        Writer->CloseArray();
+        return *Parent;
+    }
+
+    TParent* Parent = nullptr;
+    NJson::TJsonWriter* Writer = nullptr;
+};
+
+template <class TDerived>
+struct TJsonFiller {
+    TJsonFiller(NJson::TJsonWriter* writer)
+        : Writer(writer)
+    {}
+
+    TDerived& Field(const TStringBuf& key, const TStringBuf& value) {
+        Writer->WriteKey(key);
+        Writer->Write(value);
+        return *static_cast<TDerived*>(this);
+    }
+
+    TJsonFillerArray<TDerived> Array(const TStringBuf& key) {
+        Writer->WriteKey(key);
+        return TJsonFillerArray(static_cast<TDerived*>(this), Writer);
+    }
+
+    NJson::TJsonWriter* Writer = nullptr;
+};
+
+struct TTestConfigFile : public TJsonFiller<TTestConfigFile> {
+    struct TSubMap : public TJsonFiller<TSubMap> {
+        TSubMap(TTestConfigFile* parent, NJson::TJsonWriter* writer)
+            : TJsonFiller<TSubMap>(writer)
+            , Parent(parent)
+        {
+            Writer->OpenMap();
+        }
+
+        TTestConfigFile& Build() {
+            Writer->CloseMap();
+            return *Parent;
+        }
+
+        TTestConfigFile* Parent = nullptr;
+    };
+
+    TTestConfigFile()
+        : TJsonFiller<TTestConfigFile>(&Writer)
+        , Writer(&Result.Out, true)
+        , TmpFile(MakeTempName(nullptr, "oauth2_cfg"))
+    {
+        Writer.OpenMap();
+    }
+
+    TSubMap SubMap(const TStringBuf& key) {
+        Writer.WriteKey(key);
+        return TSubMap(this, &Writer);
+    }
+
+    TString Build() {
+        Writer.CloseMap();
+        Writer.Flush();
+
+        TUnbufferedFileOutput(TmpFile.Name()).Write(Result);
+
+        return TmpFile.Name();
+    }
+
+    TStringBuilder Result;
+    NJson::TJsonWriter Writer;
+    TTempFile TmpFile;
+};
+
 Y_UNIT_TEST_SUITE(TestTokenExchange) {
-    Y_UNIT_TEST(Exchanges) {
+    void Exchanges(bool fromConfig) {
         TTestTokenExchangeServer server;
         server.Check.ExpectedInputParams.emplace("grant_type", "urn:ietf:params:oauth:grant-type:token-exchange");
         server.Check.ExpectedInputParams.emplace("requested_token_type", "urn:ietf:params:oauth:token-type:access_token");
@@ -139,77 +278,197 @@ Y_UNIT_TEST_SUITE(TestTokenExchange) {
         server.Check.ExpectedInputParams.emplace("audience", "test_aud");
         server.Check.ExpectedInputParams.emplace("scope", "s1 s2");
         server.Check.Response = R"({"access_token": "hello_token", "token_type": "bEareR", "expires_in": 42})";
-        server.Run(
-            TOauth2TokenExchangeParams()
-                .TokenEndpoint(server.GetEndpoint())
-                .Audience("test_aud")
-                .AppendScope("s1")
-                .AppendScope("s2")
-                .SubjectTokenSource(CreateFixedTokenSource("test_token", "test_token_type")),
-            "Bearer hello_token"
-        );
+        if (fromConfig) {
+            server.RunFromConfig(
+                TTestConfigFile()
+                    .Field("token-endpoint", server.GetEndpoint())
+                    .Field("aud", "test_aud")
+                    .Array("scope")
+                        .Value("s1")
+                        .Value("s2")
+                        .Build()
+                    .SubMap("subject-credentials")
+                        .Field("type", "Fixed")
+                        .Field("token", "test_token")
+                        .Field("token-type", "test_token_type")
+                        .Build()
+                    .Build(),
+                "Bearer hello_token"
+            );
+        } else {
+            server.Run(
+                TOauth2TokenExchangeParams()
+                    .TokenEndpoint(server.GetEndpoint())
+                    .Audience("test_aud")
+                    .AppendScope("s1")
+                    .AppendScope("s2")
+                    .SubjectTokenSource(CreateFixedTokenSource("test_token", "test_token_type")),
+                "Bearer hello_token"
+            );
+        }
 
         server.Check.ExpectedInputParams.emplace("audience", "test_aud_2");
-        server.Run(
-            TOauth2TokenExchangeParams()
-                .TokenEndpoint(server.GetEndpoint())
-                .AppendAudience("test_aud")
-                .AppendAudience("test_aud_2")
-                .AppendScope("s1")
-                .AppendScope("s2")
-                .SubjectTokenSource(CreateFixedTokenSource("test_token", "test_token_type")),
-            "Bearer hello_token"
-        );
+        if (fromConfig) {
+            server.RunFromConfig(
+                TTestConfigFile()
+                    .Field("token-endpoint", server.GetEndpoint())
+                    .Array("aud")
+                        .Value("test_aud")
+                        .Value("test_aud_2")
+                        .Build()
+                    .Array("scope")
+                        .Value("s1")
+                        .Value("s2")
+                        .Build()
+                    .SubMap("subject-credentials")
+                        .Field("type", "Fixed")
+                        .Field("token", "test_token")
+                        .Field("token-type", "test_token_type")
+                        .Build()
+                    .Build(),
+                "Bearer hello_token"
+            );
+        } else {
+            server.Run(
+                TOauth2TokenExchangeParams()
+                    .TokenEndpoint(server.GetEndpoint())
+                    .AppendAudience("test_aud")
+                    .AppendAudience("test_aud_2")
+                    .AppendScope("s1")
+                    .AppendScope("s2")
+                    .SubjectTokenSource(CreateFixedTokenSource("test_token", "test_token_type")),
+                "Bearer hello_token"
+            );
+        }
 
         server.Check.ExpectedInputParams.erase("scope");
         server.Check.ExpectedInputParams.emplace("resource", "test_res");
         server.Check.ExpectedInputParams.emplace("actor_token", "act_token");
         server.Check.ExpectedInputParams.emplace("actor_token_type", "act_token_type");
-        server.Run(
-            TOauth2TokenExchangeParams()
-                .TokenEndpoint(server.GetEndpoint())
-                .AppendAudience("test_aud")
-                .AppendAudience("test_aud_2")
-                .Resource("test_res")
-                .SubjectTokenSource(CreateFixedTokenSource("test_token", "test_token_type"))
-                .ActorTokenSource(CreateFixedTokenSource("act_token", "act_token_type")),
-            "Bearer hello_token"
-        );
+        if (fromConfig) {
+            server.RunFromConfig(
+                TTestConfigFile()
+                    .Field("token-endpoint", server.GetEndpoint())
+                    .Array("aud")
+                        .Value("test_aud")
+                        .Value("test_aud_2")
+                        .Build()
+                    .Field("res", "test_res")
+                    .SubMap("subject-credentials")
+                        .Field("type", "Fixed")
+                        .Field("token", "test_token")
+                        .Field("token-type", "test_token_type")
+                        .Build()
+                    .SubMap("actor-credentials")
+                        .Field("type", "Fixed")
+                        .Field("token", "act_token")
+                        .Field("token-type", "act_token_type")
+                        .Build()
+                    .Build(),
+                "Bearer hello_token"
+            );
+        } else {
+            server.Run(
+                TOauth2TokenExchangeParams()
+                    .TokenEndpoint(server.GetEndpoint())
+                    .AppendAudience("test_aud")
+                    .AppendAudience("test_aud_2")
+                    .Resource("test_res")
+                    .SubjectTokenSource(CreateFixedTokenSource("test_token", "test_token_type"))
+                    .ActorTokenSource(CreateFixedTokenSource("act_token", "act_token_type")),
+                "Bearer hello_token"
+            );
+        }
     }
 
-    Y_UNIT_TEST(BadParams) {
+    Y_UNIT_TEST(Exchanges) {
+        Exchanges(false);
+    }
+
+    Y_UNIT_TEST(ExchangesFromConfig) {
+        Exchanges(true);
+    }
+
+    void BadParams(bool fromConfig) {
         TTestTokenExchangeServer server;
         server.Check.ExpectRequest = false;
 
         server.Check.ExpectedErrorPart = "no token endpoint";
-        server.Run(
-            TOauth2TokenExchangeParams()
-        );
+        if (fromConfig) {
+            server.RunFromConfig(
+                TTestConfigFile()
+                    .Build()
+            );
+        } else {
+            server.Run(
+                TOauth2TokenExchangeParams()
+            );
+        }
 
         server.Check.ExpectedErrorPart = "empty audience";
-        server.Run(
-            TOauth2TokenExchangeParams()
-                .TokenEndpoint(server.GetEndpoint())
-                .AppendAudience("a")
-                .AppendAudience("")
-        );
+        if (fromConfig) {
+            server.RunFromConfig(
+                TTestConfigFile()
+                    .Field("token-endpoint", server.GetEndpoint())
+                    .Array("aud")
+                        .Value("a")
+                        .Value("")
+                        .Build()
+                    .Build()
+            );
+        } else {
+            server.Run(
+                TOauth2TokenExchangeParams()
+                    .TokenEndpoint(server.GetEndpoint())
+                    .AppendAudience("a")
+                    .AppendAudience("")
+            );
+        }
 
         server.Check.ExpectedErrorPart = "empty scope";
-        server.Run(
-            TOauth2TokenExchangeParams()
-                .TokenEndpoint(server.GetEndpoint())
-                .AppendScope("s")
-                .AppendScope("")
-        );
+        if (fromConfig) {
+            server.RunFromConfig(
+                TTestConfigFile()
+                    .Field("token-endpoint", server.GetEndpoint())
+                    .Array("scope")
+                        .Value("s")
+                        .Value("")
+                        .Build()
+                    .Build()
+            );
+        } else {
+            server.Run(
+                TOauth2TokenExchangeParams()
+                    .TokenEndpoint(server.GetEndpoint())
+                    .AppendScope("s")
+                    .AppendScope("")
+            );
+        }
 
         server.Check.ExpectedErrorPart = "failed to parse url";
-        server.Run(
-            TOauth2TokenExchangeParams()
-                .TokenEndpoint("not an url")
-        );
+        if (fromConfig) {
+            server.RunFromConfig(
+                TTestConfigFile()
+                    .Field("token-endpoint", "not an url")
+                    .Build()
+            );
+        } else {
+            server.Run(
+                TOauth2TokenExchangeParams()
+                    .TokenEndpoint("not an url")
+            );
+        }
     }
 
-    Y_UNIT_TEST(BadResponse) {
+    Y_UNIT_TEST(BadParams) {
+        BadParams(false);
+    }
+
+    Y_UNIT_TEST(BadParamsFromConfig) {
+        BadParams(true);
+    }
+
+    void BadResponse(bool fromConfig) {
         TTestTokenExchangeServer server;
         server.Check.ExpectedInputParams.emplace("grant_type", "urn:ietf:params:oauth:grant-type:token-exchange");
         server.Check.ExpectedInputParams.emplace("requested_token_type", "urn:ietf:params:oauth:token-type:access_token");
@@ -217,92 +476,147 @@ Y_UNIT_TEST_SUITE(TestTokenExchange) {
         server.Check.ExpectedInputParams.emplace("subject_token_type", "test_token_type");
 
         TOauth2TokenExchangeParams params;
-        params
-            .TokenEndpoint(server.GetEndpoint())
-            .SubjectTokenSource(CreateFixedTokenSource("test_token", "test_token_type"));
+        TTestConfigFile cfg;
+        if (fromConfig) {
+            cfg
+                .Field("token-endpoint", server.GetEndpoint())
+                .SubMap("subject-credentials")
+                        .Field("type", "Fixed")
+                        .Field("token", "test_token")
+                        .Field("token-type", "test_token_type")
+                        .Build()
+                .Build();
+        } else {
+            params
+                .TokenEndpoint(server.GetEndpoint())
+                .SubjectTokenSource(CreateFixedTokenSource("test_token", "test_token_type"));
+        }
+
+        auto run = [&]() {
+            if (fromConfig) {
+                server.RunFromConfig(cfg.TmpFile.Name());
+            } else {
+                server.Run(params);
+            }
+        };
 
         server.Check.Response = R"(})";
         server.Check.ExpectedErrorPart = "json parsing error";
-        server.Run(params);
+        run();
 
         server.Check.Response = R"({"access_token": "hello_token", "token_type1": "bearer", "expires_in": 42})";
         server.Check.ExpectedErrorPart = "no field \"token_type\" in response";
-        server.Run(params);
+        run();
 
         server.Check.Response = R"({"access_token1": "hello_token", "token_type": "bearer", "expires_in": 42})";
         server.Check.ExpectedErrorPart = "no field \"access_token\" in response";
-        server.Run(params);
+        run();
 
         server.Check.Response = R"({"access_token": "hello_token", "token_type": "bearer", "expires_in1": 42})";
         server.Check.ExpectedErrorPart = "no field \"expires_in\" in response";
-        server.Run(params);
+        run();
 
         server.Check.Response = R"({"access_token": "hello_token", "token_type": "abc", "expires_in": 42})";
         server.Check.ExpectedErrorPart = "unsupported token type: \"abc\"";
-        server.Run(params);
+        run();
 
         server.Check.Response = R"({"access_token": "hello_token", "token_type": "bearer", "expires_in": 0})";
         server.Check.ExpectedErrorPart = "incorrect expiration time: 0";
-        server.Run(params);
+        run();
 
         server.Check.Response = R"({"access_token": "hello_token", "token_type": "bearer", "expires_in": "hello"})";
         server.Check.ExpectedErrorPart = "incorrect expiration time: 0";
-        server.Run(params);
+        run();
 
         server.Check.Response = R"({"access_token": "hello_token", "token_type": "bearer", "expires_in": -1})";
         server.Check.ExpectedErrorPart = "incorrect expiration time: -1";
-        server.Run(params);
+        run();
 
         server.Check.Response = R"({"access_token": "hello_token", "token_type": "bearer", "expires_in": 1, "scope": "s"})";
         server.Check.ExpectedErrorPart = "different scope. Expected \"\", but got \"s\"";
-        server.Run(params);
+        run();
 
         server.Check.Response = R"({"access_token": "", "token_type": "bearer", "expires_in": 1})";
         server.Check.ExpectedErrorPart = "got empty token";
-        server.Run(params);
+        run();
 
         server.Check.Response = R"({"access_token": "hello_token", "token_type": "bearer", "expires_in": 1, "scope": "s a"})";
         server.Check.ExpectedErrorPart = "different scope. Expected \"a\", but got \"s a\"";
         server.Check.ExpectedInputParams.emplace("scope", "a");
-        server.Run(
-            TOauth2TokenExchangeParams()
-                .TokenEndpoint(server.GetEndpoint())
-                .SubjectTokenSource(CreateFixedTokenSource("test_token", "test_token_type"))
-                .Scope("a")
-        );
+        if (fromConfig) {
+            server.RunFromConfig(
+                TTestConfigFile()
+                    .Field("token-endpoint", server.GetEndpoint())
+                    .SubMap("subject-credentials")
+                        .Field("type", "Fixed")
+                        .Field("token", "test_token")
+                        .Field("token-type", "test_token_type")
+                        .Build()
+                    .Field("scope", "a")
+                    .Build()
+            );
+        } else {
+            server.Run(
+                TOauth2TokenExchangeParams()
+                    .TokenEndpoint(server.GetEndpoint())
+                    .SubjectTokenSource(CreateFixedTokenSource("test_token", "test_token_type"))
+                    .Scope("a")
+            );
+        }
         server.Check.ExpectedInputParams.erase("scope");
 
 
         server.Check.ExpectedErrorPart = "can not connect to";
         server.Check.ExpectRequest = false;
-        server.Run(
-            TOauth2TokenExchangeParams()
-                .TokenEndpoint("https://localhost:42/aaa")
-                .SubjectTokenSource(CreateFixedTokenSource("test_token", "test_token_type"))
-        );
+        if (fromConfig) {
+            server.RunFromConfig(
+                TTestConfigFile()
+                    .Field("token-endpoint", "https://localhost:42/aaa")
+                    .SubMap("subject-credentials")
+                        .Field("type", "Fixed")
+                        .Field("token", "test_token")
+                        .Field("token-type", "test_token_type")
+                        .Build()
+                    .Build()
+            );
+        } else {
+            server.Run(
+                TOauth2TokenExchangeParams()
+                    .TokenEndpoint("https://localhost:42/aaa")
+                    .SubjectTokenSource(CreateFixedTokenSource("test_token", "test_token_type"))
+            );
+        }
         server.Check.ExpectRequest = true;
 
         // parsing response
         server.Check.StatusCode = HTTP_FORBIDDEN;
         server.Check.Response = R"(not json)";
         server.Check.ExpectedErrorPart = "Exchange token error in Oauth 2 token exchange credentials provider: 403 Forbidden, could not parse response: ";
-        server.Run(params);
+        run();
 
         server.Check.Response = R"({"error": "smth"})";
         server.Check.ExpectedErrorPart = "Exchange token error in Oauth 2 token exchange credentials provider: 403 Forbidden, error: smth";
-        server.Run(params);
+        run();
 
         server.Check.Response = R"({"error": "smth", "error_description": "something terrible happened"})";
         server.Check.ExpectedErrorPart = "Exchange token error in Oauth 2 token exchange credentials provider: 403 Forbidden, error: smth, description: something terrible happened";
-        server.Run(params);
+        run();
 
         server.Check.StatusCode = HTTP_BAD_REQUEST;
         server.Check.Response = R"({"error_uri": "my_uri", "error_description": "something terrible happened"})";
         server.Check.ExpectedErrorPart = "Exchange token error in Oauth 2 token exchange credentials provider: 400 Bad request, description: something terrible happened, error_uri: my_uri";
-        server.Run(params);
+        run();
     }
 
-    Y_UNIT_TEST(UpdatesToken) {
+    Y_UNIT_TEST(BadResponse) {
+        BadResponse(false);
+    }
+
+    Y_UNIT_TEST(BadResponseFromConfig) {
+        BadResponse(true);
+    }
+
+    void UpdatesToken(bool fromConfig) {
         TCredentialsProviderFactoryPtr factory;
 
         TTestTokenExchangeServer server;
@@ -313,10 +627,22 @@ Y_UNIT_TEST_SUITE(TestTokenExchange) {
         server.Check.Response = R"({"access_token": "token_1", "token_type": "bearer", "expires_in": 1})";
         server.Run(
             [&]() {
-                factory = CreateOauth2TokenExchangeCredentialsProviderFactory(
-                    TOauth2TokenExchangeParams()
-                        .TokenEndpoint(server.GetEndpoint())
-                        .SubjectTokenSource(CreateFixedTokenSource("test_token", "test_token_type")));
+                if (fromConfig) {
+                    factory = CreateOauth2TokenExchangeFileCredentialsProviderFactory(
+                        TTestConfigFile()
+                            .Field("token-endpoint", server.GetEndpoint())
+                            .SubMap("subject-credentials")
+                                .Field("type", "Fixed")
+                                .Field("token", "test_token")
+                                .Field("token-type", "test_token_type")
+                                .Build()
+                            .Build());
+                } else {
+                    factory = CreateOauth2TokenExchangeCredentialsProviderFactory(
+                        TOauth2TokenExchangeParams()
+                            .TokenEndpoint(server.GetEndpoint())
+                            .SubjectTokenSource(CreateFixedTokenSource("test_token", "test_token_type")));
+                }
                 UNIT_ASSERT_VALUES_EQUAL(factory->CreateProvider()->GetAuthInfo(), "Bearer token_1");
             }
         );
@@ -333,6 +659,14 @@ Y_UNIT_TEST_SUITE(TestTokenExchange) {
                 UNIT_ASSERT_VALUES_EQUAL(factory->CreateProvider()->GetAuthInfo(), "Bearer token_2");
             }
         );
+    }
+
+    Y_UNIT_TEST(UpdatesToken) {
+        UpdatesToken(false);
+    }
+
+    Y_UNIT_TEST(UpdatesTokenFromConfig) {
+        UpdatesToken(true);
     }
 
     Y_UNIT_TEST(UsesCachedToken) {
@@ -560,5 +894,336 @@ Y_UNIT_TEST_SUITE(TestTokenExchange) {
         factory = nullptr;
         const TInstant shutdownStop = TInstant::Now();
         Cerr << "Shutdown: " << (shutdownStop - shutdownStart) << Endl;
+    }
+
+    Y_UNIT_TEST(ExchangesFromFileConfig) {
+        TTestTokenExchangeServer server;
+        server.Check.ExpectedInputParams.emplace("grant_type", "urn:ietf:params:oauth:grant-type:token-exchange");
+        server.Check.ExpectedInputParams.emplace("requested_token_type", "urn:ietf:params:oauth:token-type:access_token");
+        server.Check.ExpectedInputParams.emplace("subject_token", "test_token");
+        server.Check.ExpectedInputParams.emplace("subject_token_type", "test_token_type");
+        server.Check.ExpectedInputParams.emplace("audience", "test_aud");
+        server.Check.ExpectedInputParams.emplace("scope", "s1 s2");
+        server.Check.Response = R"({"access_token": "hello_token", "token_type": "bEareR", "expires_in": 42})";
+        server.Run(
+            TOauth2TokenExchangeParams()
+                .TokenEndpoint(server.GetEndpoint())
+                .Audience("test_aud")
+                .AppendScope("s1")
+                .AppendScope("s2")
+                .SubjectTokenSource(CreateFixedTokenSource("test_token", "test_token_type")),
+            "Bearer hello_token"
+        );
+
+        server.Check.ExpectedInputParams.emplace("audience", "test_aud_2");
+        server.Run(
+            TOauth2TokenExchangeParams()
+                .TokenEndpoint(server.GetEndpoint())
+                .AppendAudience("test_aud")
+                .AppendAudience("test_aud_2")
+                .AppendScope("s1")
+                .AppendScope("s2")
+                .SubjectTokenSource(CreateFixedTokenSource("test_token", "test_token_type")),
+            "Bearer hello_token"
+        );
+
+        server.Check.ExpectedInputParams.erase("scope");
+        server.Check.ExpectedInputParams.emplace("resource", "test_res");
+        server.Check.ExpectedInputParams.emplace("resource", "test_res_2");
+        server.Check.ExpectedInputParams.emplace("actor_token", "act_token");
+        server.Check.ExpectedInputParams.emplace("actor_token_type", "act_token_type");
+        server.Run(
+            TOauth2TokenExchangeParams()
+                .TokenEndpoint(server.GetEndpoint())
+                .AppendAudience("test_aud")
+                .AppendAudience("test_aud_2")
+                .AppendResource("test_res")
+                .AppendResource("test_res_2")
+                .SubjectTokenSource(CreateFixedTokenSource("test_token", "test_token_type"))
+                .ActorTokenSource(CreateFixedTokenSource("act_token", "act_token_type")),
+            "Bearer hello_token"
+        );
+    }
+
+    Y_UNIT_TEST(SkipsUnknownFieldsInConfig) {
+        TTestTokenExchangeServer server;
+        server.Check.ExpectedInputParams.emplace("grant_type", "test_grant_type");
+        server.Check.ExpectedInputParams.emplace("requested_token_type", "test_requested_token_type");
+        server.Check.ExpectedInputParams.emplace("subject_token", "test_token");
+        server.Check.ExpectedInputParams.emplace("subject_token_type", "test_token_type");
+        server.Check.ExpectedInputParams.emplace("resource", "r1");
+        server.Check.ExpectedInputParams.emplace("resource", "r2");
+        server.Check.Response = R"({"access_token": "received_token", "token_type": "bEareR", "expires_in": 42})";
+        server.RunFromConfig(
+            TTestConfigFile()
+                .Field("token-endpoint", "bla-bla-bla") // use explicit endpoint via param
+                .Field("unknown", "unknown value")
+                .Field("grant-type", "test_grant_type")
+                .Field("requested-token-type", "test_requested_token_type")
+                .Array("res")
+                    .Value("r1")
+                    .Value("r2")
+                    .Build()
+                .SubMap("subject-credentials")
+                    .Field("type", "Fixed")
+                    .Field("token", "test_token")
+                    .Field("token-type", "test_token_type")
+                    .Field("unknown", "unknown value")
+                    .Build()
+                .Build(),
+            "Bearer received_token",
+            true,
+            server.GetEndpoint()
+        );
+    }
+
+    Y_UNIT_TEST(JwtTokenSourceInConfig) {
+        TTestTokenExchangeServer server;
+        server.Check.ExpectedInputParams.emplace("grant_type", "urn:ietf:params:oauth:grant-type:token-exchange");
+        server.Check.ExpectedInputParams.emplace("requested_token_type", "urn:ietf:params:oauth:token-type:access_token");
+        server.Check.SubjectJwtCheck.ConstructInPlace()
+            .TokenTtl(TDuration::Hours(24))
+            .KeyId("test_key_id")
+            .Issuer("test_iss")
+            .Subject("test_sub")
+            .Audience("test_aud")
+            .Id("test_jti")
+            .Alg<jwt::algorithm::rs384>(TestRSAPublicKeyContent);
+        server.Check.ActorJwtCheck.ConstructInPlace()
+            .AppendAudience("a1")
+            .AppendAudience("a2");
+        server.Check.Response = R"({"access_token": "received_token", "token_type": "bEareR", "expires_in": 42})";
+        server.RunFromConfig(
+            TTestConfigFile()
+                .Field("token-endpoint", server.GetEndpoint())
+                .SubMap("subject-credentials")
+                    .Field("type", "jwt")
+                    .Field("ttl", "24h")
+                    .Field("kid", "test_key_id")
+                    .Field("iss", "test_iss")
+                    .Field("sub", "test_sub")
+                    .Field("aud", "test_aud")
+                    .Field("jti", "test_jti")
+                    .Field("alg", "rs384")
+                    .Field("private-key", TestRSAPrivateKeyContent)
+                    .Field("unknown", "unknown value")
+                    .Build()
+                .SubMap("actor-credentials")
+                    .Field("type", "JWT")
+                    .Array("aud")
+                        .Value("a1")
+                        .Value("a2")
+                        .Build()
+                    .Field("alg", "RS256")
+                    .Field("private-key", TestRSAPrivateKeyContent)
+                    .Build()
+                .Build(),
+            "Bearer received_token"
+        );
+
+        // Other signing methods
+        server.Check.SubjectJwtCheck.ConstructInPlace()
+            .Id("jti")
+            .Alg<jwt::algorithm::hs384>(Base64Decode(TestHMACSecretKeyBase64Content));
+        server.Check.ActorJwtCheck.ConstructInPlace()
+            .Alg<jwt::algorithm::es256>(TestECPublicKeyContent)
+            .Issuer("iss");
+        server.RunFromConfig(
+            TTestConfigFile()
+                .Field("token-endpoint", server.GetEndpoint())
+                .SubMap("subject-credentials")
+                    .Field("type", "jwt")
+                    .Field("jti", "jti")
+                    .Field("alg", "HS384")
+                    .Field("private-key", TestHMACSecretKeyBase64Content)
+                    .Build()
+                .SubMap("actor-credentials")
+                    .Field("type", "JWT")
+                    .Field("alg", "ES256")
+                    .Field("private-key", TestECPrivateKeyContent)
+                    .Field("iss", "iss")
+                    .Build()
+                .Build(),
+            "Bearer received_token"
+        );
+    }
+
+    Y_UNIT_TEST(BadConfigParams) {
+        TTestTokenExchangeServer server;
+        server.Check.ExpectRequest = false;
+
+        // wrong format
+        TTempFile cfg(MakeTempName(nullptr, "oauth2_cfg"));
+        TUnbufferedFileOutput(cfg.Name()).Write(""); // empty
+        server.Check.ExpectedErrorPart = "Failed to parse config file";
+        server.RunFromConfig(cfg.Name());
+
+        TUnbufferedFileOutput(cfg.Name()).Write("not a json");
+        server.Check.ExpectedErrorPart = "Failed to parse config file";
+        server.RunFromConfig(cfg.Name());
+
+        TUnbufferedFileOutput(cfg.Name()).Write("[\"not a map\"]");
+        server.Check.ExpectedErrorPart = "Not a map";
+        server.RunFromConfig(cfg.Name());
+
+        server.Check.ExpectedErrorPart = "No \"type\" parameter";
+        server.RunFromConfig(
+            TTestConfigFile()
+                .Field("token-endpoint", server.GetEndpoint())
+                .SubMap("subject-credentials")
+                    .Field("type1", "unknown")
+                    .Build()
+                .Build()
+        );
+
+        server.Check.ExpectedErrorPart = "Incorrect \"type\" parameter";
+        server.RunFromConfig(
+            TTestConfigFile()
+                .Field("token-endpoint", server.GetEndpoint())
+                .SubMap("subject-credentials")
+                    .Field("type", "unknown")
+                    .Build()
+                .Build()
+        );
+
+        server.Check.ExpectedErrorPart = "Failed to parse \"iss\""; // must be string
+        server.RunFromConfig(
+            TTestConfigFile()
+                .Field("token-endpoint", server.GetEndpoint())
+                .SubMap("subject-credentials")
+                    .Field("type", "jwt")
+                    .Array("iss")
+                        .Value("1")
+                        .Build()
+                    .Build()
+                .Build()
+        );
+
+        server.Check.ExpectedErrorPart = "No \"token\" parameter";
+        server.RunFromConfig(
+            TTestConfigFile()
+                .Field("token-endpoint", server.GetEndpoint())
+                .SubMap("subject-credentials")
+                    .Field("type", "fixed")
+                    .Field("token-type", "test_token_type")
+                    .Build()
+                .Build()
+        );
+
+        server.Check.ExpectedErrorPart = "No \"token-type\" parameter";
+        server.RunFromConfig(
+            TTestConfigFile()
+                .Field("token-endpoint", server.GetEndpoint())
+                .SubMap("subject-credentials")
+                    .Field("type", "fixed")
+                    .Field("token", "test_token")
+                    .Build()
+                .Build()
+        );
+
+        server.Check.ExpectedErrorPart = "No \"alg\" parameter";
+        server.RunFromConfig(
+            TTestConfigFile()
+                .Field("token-endpoint", server.GetEndpoint())
+                .SubMap("subject-credentials")
+                    .Field("type", "jwt")
+                    .Field("private-key", TestRSAPrivateKeyContent)
+                    .Build()
+                .Build()
+        );
+
+        server.Check.ExpectedErrorPart = "No \"private-key\" parameter";
+        server.RunFromConfig(
+            TTestConfigFile()
+                .Field("token-endpoint", server.GetEndpoint())
+                .SubMap("subject-credentials")
+                    .Field("type", "jwt")
+                    .Field("alg", "rs256")
+                    .Build()
+                .Build()
+        );
+
+        server.Check.ExpectedErrorPart = "Failed to parse \"ttl\"";
+        server.RunFromConfig(
+            TTestConfigFile()
+                .Field("token-endpoint", server.GetEndpoint())
+                .SubMap("subject-credentials")
+                    .Field("type", "jwt")
+                    .Field("alg", "rs256")
+                    .Field("private-key", TestRSAPrivateKeyContent)
+                    .Field("ttl", "-1s")
+                    .Build()
+                .Build()
+        );
+
+        server.Check.ExpectedErrorPart = "Algorithm \"algorithm\" is not supported. Supported algorithms are: ";
+        server.RunFromConfig(
+            TTestConfigFile()
+                .Field("token-endpoint", server.GetEndpoint())
+                .SubMap("subject-credentials")
+                    .Field("type", "jwt")
+                    .Field("alg", "algorithm")
+                    .Field("private-key", TestRSAPrivateKeyContent)
+                    .Build()
+                .Build()
+        );
+
+        server.Check.ExpectedErrorPart = "failed to load private key";
+        server.RunFromConfig(
+            TTestConfigFile()
+                .Field("token-endpoint", server.GetEndpoint())
+                .SubMap("subject-credentials")
+                    .Field("type", "jwt")
+                    .Field("alg", "rs256")
+                    .Field("private-key", "not a key")
+                    .Build()
+                .Build()
+        );
+
+        server.Check.ExpectedErrorPart = "failed to decode HMAC secret from Base64";
+        server.RunFromConfig(
+            TTestConfigFile()
+                .Field("token-endpoint", server.GetEndpoint())
+                .SubMap("subject-credentials")
+                    .Field("type", "jwt")
+                    .Field("alg", "hs256")
+                    .Field("private-key", "\n<not a base64>\n")
+                    .Build()
+                .Build()
+        );
+
+        server.Check.ExpectedErrorPart = "failed to load private key";
+        server.RunFromConfig(
+            TTestConfigFile()
+                .Field("token-endpoint", server.GetEndpoint())
+                .SubMap("subject-credentials")
+                    .Field("type", "jwt")
+                    .Field("alg", "es256")
+                    .Field("private-key", TestRSAPrivateKeyContent) // Need EC key
+                    .Build()
+                .Build()
+        );
+
+        server.Check.ExpectedErrorPart = "failed to load private key";
+        server.RunFromConfig(
+            TTestConfigFile()
+                .Field("token-endpoint", server.GetEndpoint())
+                .SubMap("subject-credentials")
+                    .Field("type", "jwt")
+                    .Field("alg", "ps512")
+                    .Field("private-key", TestHMACSecretKeyBase64Content) // Need RSA key
+                    .Build()
+                .Build()
+        );
+
+        server.Check.ExpectedErrorPart = "Not a map";
+        server.RunFromConfig(
+            TTestConfigFile()
+                .Field("token-endpoint", server.GetEndpoint())
+                .Array("subject-credentials")
+                    .Value("42")
+                    .Build()
+                .Build()
+        );
     }
 }

@@ -5,6 +5,8 @@
 #include <yt/yt/core/concurrency/scheduler.h>
 #include <yt/yt/core/concurrency/thread_pool.h>
 
+#include <yt/yt/core/misc/finally.h>
+
 namespace NYT {
 namespace {
 
@@ -12,7 +14,7 @@ using namespace NConcurrency;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TCancelableRunWithBoundedConcurrencyTest, TestSimple)
+TEST(TCancelableRunWithBoundedConcurrencyTest, Simple)
 {
     int x = 0;
 
@@ -30,7 +32,7 @@ TEST(TCancelableRunWithBoundedConcurrencyTest, TestSimple)
     EXPECT_EQ(x, 1);
 }
 
-TEST(TCancelableRunWithBoundedConcurrencyTest, TestManyCallbacks)
+TEST(TCancelableRunWithBoundedConcurrencyTest, ManyCallbacks)
 {
     auto threadPool = CreateThreadPool(4, "ThreadPool");
 
@@ -55,7 +57,7 @@ TEST(TCancelableRunWithBoundedConcurrencyTest, TestManyCallbacks)
     EXPECT_EQ(x, callbackCount);
 }
 
-TEST(TCancelableRunWithBoundedConcurrencyTest, TestCancelation)
+TEST(TCancelableRunWithBoundedConcurrencyTest, Cancelation)
 {
     auto threadPool = CreateThreadPool(4, "ThreadPool");
 
@@ -92,47 +94,34 @@ TEST(TCancelableRunWithBoundedConcurrencyTest, TestCancelation)
     EXPECT_EQ(canceledCount, 4);
 }
 
-TEST(TestAllSucceededBoundedConcurrency, TestAllSucceededFail)
+TEST(TAllSucceededBoundedConcurrencyTest, CancelOthers)
 {
     using TCounter = std::atomic<int>;
 
-    auto threadPool = CreateThreadPool(4, "ThreadPool");
+    auto pool = CreateThreadPool(5, "ThreadPool");
 
-    auto x = std::make_shared<TCounter>(0);
-    auto startingSleepCount = std::make_shared<TCounter>(0);
-    auto finishedSleepCount = std::make_shared<TCounter>(0);
+    auto numDone = std::make_shared<TCounter>(0);
 
     std::vector<TCallback<TFuture<void>()>> callbacks;
+
     for (int i = 0; i < 9; ++i) {
-        callbacks.emplace_back(BIND([x, startingSleepCount, finishedSleepCount]() mutable {
-            int cur_x = (*x)++;
-            if (cur_x < 5) {
-                return;
-            } else if (cur_x == 5) {
-                //Make sure other callbacks have a chance to start first
-                Sleep(TDuration::MilliSeconds(5));
-                THROW_ERROR_EXCEPTION("My Error");
+        callbacks.push_back(BIND([numDone] {
+            if (numDone->fetch_add(1) == 3) {
+                THROW_ERROR_EXCEPTION("Testing");
             }
 
-            (*startingSleepCount)++;
-            Sleep(TDuration::MilliSeconds(50));
-            (*finishedSleepCount)++;
-        })
-        .AsyncVia(threadPool->GetInvoker()));
+            while (true) {
+                Yield();
+            }
+        }).AsyncVia(pool->GetInvoker()));
     }
 
-    auto future = RunWithAllSucceededBoundedConcurrency<void>(
-        std::move(callbacks),
-        /*concurrencyLimit*/ 5);
+    auto error = WaitFor(RunWithAllSucceededBoundedConcurrency(std::move(callbacks), 4));
 
-    auto result = WaitFor(future);
-    EXPECT_EQ(result.IsOK(), false);
-    EXPECT_EQ(result.GetCode(), NYT::EErrorCode::Generic);
-    EXPECT_EQ(result.GetMessage(), "My Error");
+    EXPECT_FALSE(error.IsOK());
+    EXPECT_EQ(error.GetMessage(), TString("Testing"));
 
-    EXPECT_EQ(x->load(), 9);
-    EXPECT_EQ(startingSleepCount->load(), 3);
-    EXPECT_EQ(finishedSleepCount->load(), 0);
+    EXPECT_EQ(numDone->load(), 4);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

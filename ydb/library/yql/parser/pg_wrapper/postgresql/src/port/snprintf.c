@@ -2,7 +2,7 @@
  * Copyright (c) 1983, 1995, 1996 Eric P. Allman
  * Copyright (c) 1988, 1993
  *	The Regents of the University of California.  All rights reserved.
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -108,16 +108,6 @@
 #undef	fprintf
 #undef	vprintf
 #undef	printf
-
-/*
- * We use the platform's native snprintf() for some machine-dependent cases.
- * While that's required by C99, Microsoft Visual Studio lacks it before
- * VS2015.  Fortunately, we don't really need the length check in practice,
- * so just fall back to native sprintf() on that platform.
- */
-#if defined(_MSC_VER) && _MSC_VER < 1900	/* pre-VS2015 */
-#define snprintf(str,size,...) sprintf(str,__VA_ARGS__)
-#endif
 
 /*
  * Info about where the formatted output is going.
@@ -766,12 +756,8 @@ find_arguments(const char *format, va_list args,
 	int			longflag;
 	int			fmtpos;
 	int			i;
-	int			last_dollar;
-	PrintfArgType argtypes[PG_NL_ARGMAX + 1];
-
-	/* Initialize to "no dollar arguments known" */
-	last_dollar = 0;
-	MemSet(argtypes, 0, sizeof(argtypes));
+	int			last_dollar = 0;	/* Init to "no dollar arguments known" */
+	PrintfArgType argtypes[PG_NL_ARGMAX + 1] = {0};
 
 	/*
 	 * This loop must accept the same format strings as the one in dopr().

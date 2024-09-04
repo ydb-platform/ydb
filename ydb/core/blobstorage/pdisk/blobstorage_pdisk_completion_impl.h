@@ -111,6 +111,7 @@ public:
             Mon->IncrementResponseTime(PriorityClass, responseTimeMs, SizeBytes);
         }
         LWTRACK(PDiskChunkResponseTime, Orbit, PDiskId, ReqId.Id, PriorityClass, responseTimeMs, SizeBytes);
+        Event->Orbit = std::move(Orbit);
         actorSystem->Send(Recipient, Event.Release());
         if (Mon) {
             Mon->GetWriteCounter(PriorityClass)->CountResponse();
@@ -224,12 +225,11 @@ class TCompletionChunkReadPart : public TCompletionAction {
     TCompletionChunkRead *CumulativeCompletion;
     TBuffer::TPtr Buffer;
     bool IsTheLastPart;
-    TControlWrapper UseT1ha0Hasher;
     NWilson::TSpan Span;
 public:
     TCompletionChunkReadPart(TPDisk *pDisk, TIntrusivePtr<TChunkRead> &read, ui64 rawReadSize, ui64 payloadReadSize,
-            ui64 commonBufferOffset, TCompletionChunkRead *cumulativeCompletion, bool isTheLastPart,
-            const TControlWrapper& useT1ha0Hasher, NWilson::TSpan&& span);
+            ui64 commonBufferOffset, TCompletionChunkRead *cumulativeCompletion, bool isTheLastPart, 
+            NWilson::TSpan&& span);
 
 
     bool CanHandleResult() const override {

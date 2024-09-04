@@ -10,15 +10,6 @@ void TFieldSchema::Register(TRegistrar registrar)
 {
     registrar.Parameter("name", &TThis::Name);
     registrar.Parameter("tag", &TThis::Tag);
-    registrar.Parameter("min_version", &TThis::MinVersion)
-        .Default(std::numeric_limits<int>::min())
-        .DontSerializeDefault();
-    registrar.Parameter("max_version", &TThis::MaxVersion)
-        .Default(std::numeric_limits<int>::max())
-        .DontSerializeDefault();
-    registrar.Parameter("deprecated", &TThis::Deprecated)
-        .Default(false)
-        .DontSerializeDefault();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

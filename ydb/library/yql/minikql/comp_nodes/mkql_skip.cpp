@@ -118,8 +118,8 @@ private:
     IComputationNode* const Count;
 };
 
-class TWideSkipWrapper : public TSimpleStatefulWideFlowCodegeneratorNode<TWideSkipWrapper> {
-using TBaseComputation = TSimpleStatefulWideFlowCodegeneratorNode<TWideSkipWrapper>;
+class TWideSkipWrapper : public TSimpleStatefulWideFlowCodegeneratorNode<TWideSkipWrapper, ui64> {
+using TBaseComputation = TSimpleStatefulWideFlowCodegeneratorNode<TWideSkipWrapper, ui64>;
 public:
      TWideSkipWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, IComputationNode* count, ui32 size)
         : TBaseComputation(mutables, flow, size, size)

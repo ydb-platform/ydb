@@ -25,7 +25,7 @@ struct IKafkaProtocolReader
     virtual i64 ReadVarLong() = 0;
     virtual ui32 ReadUnsignedVarInt() = 0;
 
-    virtual TGUID ReadUuid() = 0;
+    virtual TGuid ReadUuid() = 0;
 
     virtual TString ReadString() = 0;
     virtual TString ReadCompactString() = 0;
@@ -70,7 +70,7 @@ struct IKafkaProtocolWriter
     virtual void WriteVarLong(i64 value) = 0;
     virtual void WriteUnsignedVarInt(ui32 value) = 0;
 
-    virtual void WriteUuid(TGUID value) = 0;
+    virtual void WriteUuid(TGuid value) = 0;
 
     virtual void WriteErrorCode(EErrorCode value) = 0;
 

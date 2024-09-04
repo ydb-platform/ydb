@@ -90,7 +90,7 @@ public:
 
         const TVSlotId VSlotId;
         TIndirectReferable<TPDiskInfo>::TPtr PDisk; // PDisk this slot resides on
-        TGroupId GroupId = 0;
+        TGroupId GroupId = TGroupId::Zero();
         Table::GroupGeneration::Type GroupPrevGeneration = 0;
         Table::GroupGeneration::Type GroupGeneration = 0;
         Table::Category::Type Kind = NKikimrBlobStorage::TVDiskKind::Default;
@@ -124,16 +124,17 @@ public:
         TVSlotReadyTimestampQ::iterator VSlotReadyTimestampIter;
 
     public:
-        NKikimrBlobStorage::EVDiskStatus Status = NKikimrBlobStorage::EVDiskStatus::ERROR;
+        std::optional<NKikimrBlobStorage::EVDiskStatus> VDiskStatus;
+        NHPTimer::STime VDiskStatusTimestamp = GetCycleCountFast();
         bool IsReady = false;
         bool OnlyPhantomsRemain = false;
 
     public:
         void SetStatus(NKikimrBlobStorage::EVDiskStatus status, TMonotonic now, TInstant instant, bool onlyPhantomsRemain) {
-            if (status != Status) {
+            if (status != VDiskStatus) {
                 if (status == NKikimrBlobStorage::EVDiskStatus::REPLICATING) { // became "replicating"
                     LastGotReplicating = instant;
-                } else if (Status == NKikimrBlobStorage::EVDiskStatus::REPLICATING) { // was "replicating"
+                } else if (VDiskStatus == NKikimrBlobStorage::EVDiskStatus::REPLICATING) { // was "replicating"
                     Y_DEBUG_ABORT_UNLESS(LastGotReplicating != TInstant::Zero());
                     ReplicationTime += instant - LastGotReplicating;
                     LastGotReplicating = {};
@@ -145,7 +146,7 @@ public:
                     LastSeenReady = instant;
                 }
 
-                Status = status;
+                VDiskStatus = status;
                 IsReady = false;
                 if (status == NKikimrBlobStorage::EVDiskStatus::READY) {
                     PutInVSlotReadyTimestampQ(now);
@@ -157,6 +158,10 @@ public:
             if (status == NKikimrBlobStorage::EVDiskStatus::REPLICATING) {
                 OnlyPhantomsRemain = onlyPhantomsRemain;
             }
+        }
+
+        NKikimrBlobStorage::EVDiskStatus GetStatus() const {
+            return VDiskStatus.value_or(NKikimrBlobStorage::EVDiskStatus::ERROR);
         }
 
         void PutInVSlotReadyTimestampQ(TMonotonic now) {
@@ -291,15 +296,16 @@ public:
 
         TString GetStatusString() const {
             TStringStream s;
-            s << NKikimrBlobStorage::EVDiskStatus_Name(Status);
-            if (Status == NKikimrBlobStorage::REPLICATING && OnlyPhantomsRemain) {
+            const auto status = GetStatus();
+            s << NKikimrBlobStorage::EVDiskStatus_Name(status);
+            if (status == NKikimrBlobStorage::REPLICATING && OnlyPhantomsRemain) {
                 s << "/p";
             }
             return s.Str();
         }
 
         bool IsOperational() const {
-            return Status >= NKikimrBlobStorage::REPLICATING;
+            return GetStatus() >= NKikimrBlobStorage::REPLICATING;
         }
 
         void OnCommit();
@@ -1476,8 +1482,8 @@ private:
     THashMap<TGroupId, TGroupInfo*> GroupLookup;
     TMap<TGroupSpecies, TVector<TGroupId>> IndexGroupSpeciesToGroup;
     TMap<TNodeId, TNodeInfo> Nodes;
-    Schema::Group::ID::Type NextGroupID = 0;
-    Schema::Group::ID::Type NextVirtualGroupId = 0;
+    Schema::Group::ID::Type NextGroupID = Schema::Group::ID::Type::Zero();
+    Schema::Group::ID::Type NextVirtualGroupId = Schema::Group::ID::Type::Zero();
     Schema::State::NextStoragePoolId::Type NextStoragePoolId = 0;
     ui32 DefaultMaxSlots = 0;
     ui32 PDiskSpaceMarginPromille = 0;
@@ -2205,7 +2211,7 @@ public:
     void CommitVirtualGroupUpdates(TConfigState& state);
 
     void StartVirtualGroupSetupMachine(TGroupInfo *group);
-    void StartVirtualGroupDeleteMachine(ui32 groupId, TBlobDepotDeleteQueueInfo& info);
+    void StartVirtualGroupDeleteMachine(TGroupId groupId, TBlobDepotDeleteQueueInfo& info);
 
     void Handle(TEvBlobStorage::TEvControllerGroupDecommittedNotify::TPtr ev);
 
@@ -2276,7 +2282,7 @@ public:
                 histo.IncrementFor(passed.Seconds());
 
                 TDuration timeBeingReplicating = slot->ReplicationTime;
-                if (slot->Status == NKikimrBlobStorage::EVDiskStatus::REPLICATING) {
+                if (slot->GetStatus() == NKikimrBlobStorage::EVDiskStatus::REPLICATING) {
                     timeBeingReplicating += now - slot->LastGotReplicating;
                 }
 
@@ -2301,7 +2307,8 @@ public:
         const NKikimrBlobStorage::TVDiskKind::EVDiskKind VDiskKind;
 
         std::optional<NKikimrBlobStorage::TVDiskMetrics> VDiskMetrics;
-        NKikimrBlobStorage::EVDiskStatus VDiskStatus = NKikimrBlobStorage::EVDiskStatus::ERROR;
+        std::optional<NKikimrBlobStorage::EVDiskStatus> VDiskStatus;
+        NHPTimer::STime VDiskStatusTimestamp = GetCycleCountFast();
         TMonotonic ReadySince = TMonotonic::Max(); // when IsReady becomes true for this disk; Max() in non-READY state
 
         TStaticVSlotInfo(const NKikimrBlobStorage::TNodeWardenServiceSet::TVDisk& vdisk,
@@ -2315,6 +2322,7 @@ public:
                 TStaticVSlotInfo& item = it->second;
                 VDiskMetrics = std::move(item.VDiskMetrics);
                 VDiskStatus = item.VDiskStatus;
+                VDiskStatusTimestamp = item.VDiskStatusTimestamp;
                 ReadySince = item.ReadySince;
             }
         }

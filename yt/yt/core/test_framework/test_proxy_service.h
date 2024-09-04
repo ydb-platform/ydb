@@ -2,17 +2,11 @@
 
 #include "public.h"
 
-#include <yt/yt/library/query/base/public.h>
-
-#include <yt/yt/core/bus/public.h>
 #include <yt/yt/core/bus/bus.h>
 
 #include <yt/yt/core/net/address.h>
 
-#include <yt/yt/core/rpc/public.h>
 #include <yt/yt/core/rpc/channel.h>
-
-#include <yt/yt/core/rpc/bus/channel.h>
 
 #include <yt/yt/core/logging/log.h>
 
@@ -31,13 +25,13 @@ class TTestChannelFactory
 {
 public:
     TTestChannelFactory(
-        THashMap<TString, TRealmIdServiceMap> addressToServices,
+        THashMap<std::string, TRealmIdServiceMap> addressToServices,
         TRealmIdServiceMap defaultServices);
 
-    IChannelPtr CreateChannel(const TString& address) override;
+    IChannelPtr CreateChannel(const std::string& address) override;
 
 private:
-    const THashMap<TString, TRealmIdServiceMap> AddressToServices_;
+    const THashMap<std::string, TRealmIdServiceMap> AddressToServices_;
     const TRealmIdServiceMap DefaultServices_;
 };
 
@@ -49,13 +43,13 @@ class TTestBus
     : public ::NYT::NBus::IBus
 {
 public:
-    explicit TTestBus(TString address);
+    explicit TTestBus(const std::string& address);
 
-    const TString& GetEndpointDescription() const override;
+    const std::string& GetEndpointDescription() const override;
 
     const NYTree::IAttributeDictionary& GetEndpointAttributes() const override;
 
-    const TString& GetEndpointAddress() const override;
+    const std::string& GetEndpointAddress() const override;
 
     const NNet::TNetworkAddress& GetEndpointNetworkAddress() const override;
 
@@ -80,7 +74,8 @@ public:
     DECLARE_SIGNAL_OVERRIDE(void(const TError&), Terminated);
 
 private:
-    const TString Address_;
+    const std::string Address_;
+    const std::string EndpointDescription_;
     const NYTree::IAttributeDictionaryPtr Attributes_;
     const NNet::TNetworkAddress NetworkAddress_;
 
@@ -101,9 +96,9 @@ public:
     TTestChannel(
         TRealmIdServiceMap services,
         TRealmIdServiceMap defaultServices,
-        TString address);
+        const std::string& address);
 
-    const TString& GetEndpointDescription() const override;
+    const std::string& GetEndpointDescription() const override;
 
     const NYTree::IAttributeDictionary& GetEndpointAttributes() const override;
 
@@ -116,6 +111,8 @@ public:
 
     int GetInflightRequestCount() override;
 
+    const IMemoryUsageTrackerPtr& GetChannelMemoryTracker() override;
+
     void SubscribeTerminated(const TCallback<void(const TError&)>& callback) override;
 
     void UnsubscribeTerminated(const TCallback<void(const TError&)>& callback) override;
@@ -125,6 +122,7 @@ private:
     const TRealmIdServiceMap DefaultServices_;
     const TString Address_;
     const NYTree::IAttributeDictionaryPtr Attributes_;
+    const IMemoryUsageTrackerPtr MemoryUsageTracker_ = GetNullMemoryUsageTracker();
 
     TSingleShotCallbackList<void(const TError&)> Terminated_;
 
@@ -134,7 +132,7 @@ private:
     THashMap<std::pair<TString, TGuid>, TTestBusPtr> RequestToBus_;
 
     void HandleRequestResult(
-        TString address,
+        const std::string& address,
         TGuid requestId,
         IClientResponseHandlerPtr responseHandler,
         const TError& error);
@@ -169,7 +167,7 @@ DEFINE_REFCOUNTED_TYPE(TTestClientRequestControl);
 
 template <class TAddressContainer, class TDefaultContainer>
 IChannelFactoryPtr CreateTestChannelFactory(
-    const THashMap<TString, TAddressContainer>& addressToServices,
+    const THashMap<std::string, TAddressContainer>& addressToServices,
     const TDefaultContainer& defaultServices = {});
 
 template <class TDefaultContainer>

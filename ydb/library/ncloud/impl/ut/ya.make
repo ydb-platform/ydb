@@ -19,6 +19,8 @@ SRCS(
     access_service_ut.cpp
 )
 
-REQUIREMENTS(ram:10)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(ram:10)
+ENDIF()
 
 END()

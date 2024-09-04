@@ -261,6 +261,7 @@ bool Append(arrow::ArrayBuilder& builder, const std::vector<typename T::c_type>&
 
 template <typename T>
 [[nodiscard]] bool Append(T& builder, const arrow::Array& array, int position, ui64* recordSize = nullptr) {
+    Y_DEBUG_ABORT_UNLESS(builder.type()->id() == array.type_id());
     return SwitchType(array.type_id(), [&](const auto& type) {
         using TWrap = std::decay_t<decltype(type)>;
         using TArray = typename arrow::TypeTraits<typename TWrap::T>::ArrayType;

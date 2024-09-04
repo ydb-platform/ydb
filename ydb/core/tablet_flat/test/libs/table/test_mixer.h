@@ -45,7 +45,7 @@ namespace NTest {
             if (CurrentBucketRemainingRows-- == 0) { // start next bucket with CurrentBucketRemainingRows rows
                 ui64 one = (Skip && Skip > Random.Uniform(Buckets) ? 1 : 0);
 
-                CurrentBucketRemainingRows = RowsPerBucket + one, Skip -= one, CurrentBucket++;
+                CurrentBucketRemainingRows = RowsPerBucket + one - 1, Skip -= one, CurrentBucket++;
             }
 
             return Min(CurrentBucket, Buckets - 1);

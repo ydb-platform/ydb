@@ -212,8 +212,25 @@ public:
 
 }; // TListClusterNodes
 
+class TCompositeActionGroupHandler {
+protected:
+    template <typename TResult>
+    Ydb::Maintenance::ActionGroupStates* GetActionGroupState(TResult& result) const {
+        if (HasSingleCompositeActionGroup && !result.action_group_states().empty()) {
+            return result.mutable_action_group_states(0);
+        }
+        return result.add_action_group_states();
+    }
+
+protected:
+    bool HasSingleCompositeActionGroup = false;
+};
+
 template <typename TDerived, typename TEvRequest>
-class TPermissionResponseProcessor: public TAdapterActor<TDerived, TEvRequest, TEvCms::TEvMaintenanceTaskResponse> {
+class TPermissionResponseProcessor  
+    : public TAdapterActor<TDerived, TEvRequest, TEvCms::TEvMaintenanceTaskResponse>  
+    , public TCompositeActionGroupHandler
+{
 protected:
     using TBase = TPermissionResponseProcessor<TDerived, TEvRequest>;
 
@@ -232,11 +249,11 @@ public:
         switch (record.GetStatus().GetCode()) {
         case NKikimrCms::TStatus::ALLOW:
         case NKikimrCms::TStatus::ALLOW_PARTIAL:
-        case NKikimrCms::TStatus::DISALLOW:
         case NKikimrCms::TStatus::DISALLOW_TEMP:
             break;
         case NKikimrCms::TStatus::ERROR_TEMP:
             return this->Reply(Ydb::StatusIds::UNAVAILABLE, record.GetStatus().GetReason());
+        case NKikimrCms::TStatus::DISALLOW:
         case NKikimrCms::TStatus::WRONG_REQUEST:
         case NKikimrCms::TStatus::ERROR:
         case NKikimrCms::TStatus::NO_SUCH_HOST:
@@ -266,7 +283,7 @@ public:
         // performed actions: new permissions
         for (const auto& permission : record.GetPermissions()) {
             permissionsSeen.insert(permission.GetId());
-            ConvertPermission(taskUid, permission, *result.add_action_group_states()->add_action_states());
+            ConvertPermission(taskUid, permission, *GetActionGroupState(result)->add_action_states());
         }
 
         auto cmsState = this->GetCmsState();
@@ -279,7 +296,7 @@ public:
                 }
 
                 ConvertPermission(taskUid, cmsState->Permissions.at(id),
-                    *result.add_action_group_states()->add_action_states());
+                    *GetActionGroupState(result)->add_action_states());
             }
         }
 
@@ -287,7 +304,7 @@ public:
         if (cmsState->ScheduledRequests.contains(record.GetRequestId())) {
             const auto& request = cmsState->ScheduledRequests.at(record.GetRequestId());
             for (const auto& action : request.Request.GetActions()) {
-                ConvertAction(action, *result.add_action_group_states()->add_action_states());
+                ConvertAction(action, *GetActionGroupState(result)->add_action_states());
             }
         }
 
@@ -336,8 +353,17 @@ class TCreateMaintenanceTask: public TPermissionResponseProcessor<
             if (group.actions().size() < 1) {
                 Reply(Ydb::StatusIds::BAD_REQUEST, "Empty actions");
                 return false;
-            } else if (group.actions().size() > 1) {
-                Reply(Ydb::StatusIds::UNSUPPORTED, "Composite action groups are not supported");
+            } 
+            
+            if (!GetCmsState()->EnableSingleCompositeActionGroup && group.actions().size() > 1) {
+                Reply(Ydb::StatusIds::UNSUPPORTED, "Feature flag EnableSingleCompositeActionGroup is off");
+                return false;
+            } 
+
+            if (request.action_groups().size() > 1 && group.actions().size() > 1) {
+                Reply(Ydb::StatusIds::UNSUPPORTED, TStringBuilder()
+                    << "A task can have either a single composite action group or many action groups"
+                    << " with only one action");
                 return false;
             }
 
@@ -368,7 +394,7 @@ class TCreateMaintenanceTask: public TPermissionResponseProcessor<
         }
     }
 
-    static void ConvertRequest(const TString& user, const Ydb::Maintenance::CreateMaintenanceTaskRequest& request,
+    void ConvertRequest(const TString& user, const Ydb::Maintenance::CreateMaintenanceTaskRequest& request,
             NKikimrCms::TPermissionRequest& cmsRequest)
     {
         const auto& opts = request.task_options();
@@ -378,12 +404,19 @@ class TCreateMaintenanceTask: public TPermissionResponseProcessor<
         cmsRequest.SetDryRun(opts.dry_run());
         cmsRequest.SetReason(opts.description());
         cmsRequest.SetAvailabilityMode(ConvertAvailabilityMode(opts.availability_mode()));
-        cmsRequest.SetPartialPermissionAllowed(true);
         cmsRequest.SetSchedule(true);
-        cmsRequest.SetPriority(opts.priority());
+
+        i32 priority = opts.priority();
+        if (priority != 0) {
+            cmsRequest.SetPriority(priority);
+        }
+
+        HasSingleCompositeActionGroup = request.action_groups().size() == 1 
+                                        && request.action_groups(0).actions().size() > 1;
+        cmsRequest.SetPartialPermissionAllowed(!HasSingleCompositeActionGroup);
 
         for (const auto& group : request.action_groups()) {
-            Y_ABORT_UNLESS(group.actions().size() == 1);
+            Y_ABORT_UNLESS(HasSingleCompositeActionGroup || group.actions().size() == 1);
             for (const auto& action : group.actions()) {
                 if (action.has_lock_action()) {
                     ConvertAction(action.lock_action(), *cmsRequest.AddActions());
@@ -437,6 +470,7 @@ public:
         }
 
         const auto& task = tit->second;
+        HasSingleCompositeActionGroup = task.HasSingleCompositeActionGroup;
 
         auto rit = cmsState->ScheduledRequests.find(task.RequestId);
         if (rit == cmsState->ScheduledRequests.end()) {
@@ -453,7 +487,7 @@ public:
                 }
 
                 ConvertPermission(taskUid, cmsState->Permissions.at(id),
-                    *result.add_action_group_states()->add_action_states());
+                    *GetActionGroupState(result)->add_action_states());
             }
 
             if (result.action_group_states().empty()) {
@@ -482,10 +516,12 @@ public:
 
 }; // TRefreshMaintenanceTask
 
-class TGetMaintenanceTask: public TAdapterActor<
-        TGetMaintenanceTask,
-        TEvCms::TEvGetMaintenanceTaskRequest,
-        TEvCms::TEvGetMaintenanceTaskResponse>
+class TGetMaintenanceTask  
+    : public TAdapterActor<  
+        TGetMaintenanceTask,  
+        TEvCms::TEvGetMaintenanceTaskRequest,  
+        TEvCms::TEvGetMaintenanceTaskResponse>  
+    , public TCompositeActionGroupHandler 
 {
 public:
     using TBase::TBase;
@@ -500,6 +536,7 @@ public:
         }
 
         const auto& task = it->second;
+        HasSingleCompositeActionGroup = task.HasSingleCompositeActionGroup;
 
         if (!cmsState->ScheduledRequests.contains(task.RequestId)) {
             auto response = MakeHolder<TEvCms::TEvGetMaintenanceTaskResponse>();
@@ -515,7 +552,7 @@ public:
                 }
 
                 ConvertPermission(taskUid, cmsState->Permissions.at(id),
-                    *result.add_action_group_states()->add_action_states());
+                    *GetActionGroupState(result)->add_action_states());
             }
 
             return Reply(std::move(response));
@@ -566,7 +603,7 @@ public:
 
             // pending actions
             for (const auto& action : request.GetActions()) {
-                ConvertAction(action, *result.add_action_group_states()->add_action_states());
+                ConvertAction(action, *GetActionGroupState(result)->add_action_states());
             }
         }
 
@@ -580,7 +617,7 @@ public:
                 }
 
                 ConvertPermission(taskUid, cmsState->Permissions.at(id),
-                    *result.add_action_group_states()->add_action_states());
+                    *GetActionGroupState(result)->add_action_states());
             }
         }
 

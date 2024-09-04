@@ -9,7 +9,7 @@ TProcessExitProfiler::TProcessExitProfiler(
     const TString& prefix)
     : Profiler_(parent.WithPrefix(prefix))
     , ExitDelayTimer_(Profiler_.Timer("/exit_delay"))
-    , ExitOkCounter_(Profiler_.Counter("/zero_exit_code"))
+    , ExitOKCounter_(Profiler_.Counter("/zero_exit_code"))
     , ExitUnknownCounter_(Profiler_.Counter("/unknown"))
 { }
 
@@ -22,7 +22,7 @@ void TProcessExitProfiler::OnProcessExit(
     }
 
     if (error.IsOK()) {
-        ExitOkCounter_.Increment();
+        ExitOKCounter_.Increment();
         return;
     }
 
@@ -73,11 +73,11 @@ NProfiling::TCounter& TProcessExitProfiler::GetOrCreateSignalExitCounter(int sig
 NProfiling::TCounter TProcessExitProfiler::MakeSignalExitCounter(int signal)
 {
     return Profiler_
-        .WithTag("terminated_by_signal", SignalName(signal))
+        .WithTag("terminated_by_signal", GetSignalName(signal))
         .Counter("/count");
 }
 
-TString TProcessExitProfiler::SignalName(int signal)
+TString TProcessExitProfiler::GetSignalName(int signal)
 {
 #ifdef _unix_
     auto result = TString(strsignal(signal));

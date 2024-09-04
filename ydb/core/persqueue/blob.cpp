@@ -24,7 +24,7 @@ TBlobIterator::TBlobIterator(const TKey& key, const TString& blob)
 void TBlobIterator::ParseBatch() {
     Y_ABORT_UNLESS(Data < End);
     Header = ExtractHeader(Data, End - Data);
-    Y_ABORT_UNLESS(Header.GetOffset() == Offset);
+    //Y_ABORT_UNLESS(Header.GetOffset() == Offset);
     Count += Header.GetCount();
     Offset += Header.GetCount();
     InternalPartsCount += Header.GetInternalPartsCount();
@@ -686,6 +686,13 @@ ui32 THead::FindPos(const ui64 offset, const ui16 partNo) const {
     return i - 1;
 }
 
+TPartitionedBlob::TRenameFormedBlobInfo::TRenameFormedBlobInfo(const TKey& oldKey, const TKey& newKey, ui32 size) :
+    OldKey(oldKey),
+    NewKey(newKey),
+    Size(size)
+{
+}
+
 TPartitionedBlob& TPartitionedBlob::operator=(const TPartitionedBlob& x)
 {
     Partition = x.Partition;
@@ -737,7 +744,8 @@ TPartitionedBlob::TPartitionedBlob(const TPartitionedBlob& x)
 {}
 
 TPartitionedBlob::TPartitionedBlob(const TPartitionId& partition, const ui64 offset, const TString& sourceId, const ui64 seqNo, const ui16 totalParts,
-                                    const ui32 totalSize, THead& head, THead& newHead, bool headCleared, bool needCompactHead, const ui32 maxBlobSize)
+                                    const ui32 totalSize, THead& head, THead& newHead, bool headCleared, bool needCompactHead, const ui32 maxBlobSize,
+                                    const ui16 nextPartNo)
     : Partition(partition)
     , Offset(offset)
     , InternalPartsCount(0)
@@ -747,7 +755,7 @@ TPartitionedBlob::TPartitionedBlob(const TPartitionId& partition, const ui64 off
     , SeqNo(seqNo)
     , TotalParts(totalParts)
     , TotalSize(totalSize)
-    , NextPartNo(0)
+    , NextPartNo(nextPartNo)
     , HeadPartNo(0)
     , BlobsSize(0)
     , Head(head)
@@ -773,7 +781,7 @@ TPartitionedBlob::TPartitionedBlob(const TPartitionId& partition, const ui64 off
     if (HeadSize == 0) {
         StartOffset = offset;
         NewHead.Offset = offset;
-        Y_ABORT_UNLESS(StartPartNo == 0);
+        //Y_ABORT_UNLESS(StartPartNo == 0);
     }
 }
 
@@ -804,58 +812,93 @@ TString TPartitionedBlob::CompactHead(bool glueHead, THead& head, bool glueNewHe
     return valueD;
 }
 
-std::optional<std::pair<TKey, TString>> TPartitionedBlob::Add(TClientBlob&& blob)
+auto TPartitionedBlob::CreateFormedBlob(ui32 size, bool useRename) -> std::optional<TFormedBlobInfo>
+{
+    HeadPartNo = NextPartNo;
+    ui32 count = (GlueHead ? Head.GetCount() : 0) + (GlueNewHead ? NewHead.GetCount() : 0);
+
+    Y_ABORT_UNLESS(Offset >= (GlueHead ? Head.Offset : NewHead.Offset));
+
+    Y_ABORT_UNLESS(NewHead.GetNextOffset() >= (GlueHead ? Head.Offset : NewHead.Offset));
+
+    TKey tmpKey(TKeyPrefix::TypeTmpData, Partition, StartOffset, StartPartNo, count, InternalPartsCount, false);
+    TKey dataKey(TKeyPrefix::TypeData, Partition, StartOffset, StartPartNo, count, InternalPartsCount, false);
+
+    StartOffset = Offset;
+    StartPartNo = NextPartNo;
+    InternalPartsCount = 0;
+
+    TString valueD = CompactHead(GlueHead, Head, GlueNewHead, NewHead, HeadSize + BlobsSize + (BlobsSize > 0 ? GetMaxHeaderSize() : 0));
+
+    GlueHead = GlueNewHead = false;
+    if (!Blobs.empty()) {
+        TBatch batch{Offset, Blobs.front().GetPartNo(), std::move(Blobs)};
+        Blobs.clear();
+        batch.Pack();
+        Y_ABORT_UNLESS(batch.Packed);
+        batch.SerializeTo(valueD);
+    }
+
+    Y_ABORT_UNLESS(valueD.size() <= MaxBlobSize && (valueD.size() + size + 1_MB > MaxBlobSize || HeadSize + BlobsSize + size + GetMaxHeaderSize() <= MaxBlobSize));
+    HeadSize = 0;
+    BlobsSize = 0;
+    TClientBlob::CheckBlob(tmpKey, valueD);
+    if (useRename) {
+        FormedBlobs.emplace_back(tmpKey, dataKey, valueD.size());
+    }
+    Blobs.clear();
+
+    return {{useRename ? tmpKey : dataKey, valueD}};
+}
+
+auto TPartitionedBlob::Add(TClientBlob&& blob) -> std::optional<TFormedBlobInfo>
 {
     Y_ABORT_UNLESS(NewHead.Offset >= Head.Offset);
     ui32 size = blob.GetBlobSize();
     Y_ABORT_UNLESS(InternalPartsCount < 1000); //just check for future packing
-    if (HeadSize + BlobsSize + size + GetMaxHeaderSize() > MaxBlobSize)
+    if (HeadSize + BlobsSize + size + GetMaxHeaderSize() > MaxBlobSize) {
         NeedCompactHead = true;
+    }
     if (HeadSize + BlobsSize == 0) { //if nothing to compact at all
         NeedCompactHead = false;
     }
 
-    std::optional<std::pair<TKey, TString>> res;
+    std::optional<TFormedBlobInfo> res;
     if (NeedCompactHead) { // need form blob without last chunk, on start or in case of big head
         NeedCompactHead = false;
-        HeadPartNo = NextPartNo;
-        ui32 count = (GlueHead ? Head.GetCount() : 0) + (GlueNewHead ? NewHead.GetCount() : 0);
-
-        Y_ABORT_UNLESS(Offset >= (GlueHead ? Head.Offset : NewHead.Offset));
-
-        Y_ABORT_UNLESS(NewHead.GetNextOffset() >= (GlueHead ? Head.Offset : NewHead.Offset));
-
-        TKey key(TKeyPrefix::TypeTmpData, Partition, StartOffset, StartPartNo, count, InternalPartsCount, false);
-
-        StartOffset = Offset;
-        StartPartNo = NextPartNo;
-        InternalPartsCount = 0;
-
-        TString valueD = CompactHead(GlueHead, Head, GlueNewHead, NewHead, HeadSize + BlobsSize + (BlobsSize > 0 ? GetMaxHeaderSize() : 0));
-
-        GlueHead = GlueNewHead = false;
-        if (!Blobs.empty()) {
-            TBatch batch{Offset, Blobs.front().GetPartNo(), std::move(Blobs)};
-            Blobs.clear();
-            batch.Pack();
-            Y_ABORT_UNLESS(batch.Packed);
-            batch.SerializeTo(valueD);
-        }
-
-        Y_ABORT_UNLESS(valueD.size() <= MaxBlobSize && (valueD.size() + size + 1_MB > MaxBlobSize || HeadSize + BlobsSize + size + GetMaxHeaderSize() <= MaxBlobSize));
-        HeadSize = 0;
-        BlobsSize = 0;
-        TClientBlob::CheckBlob(key, valueD);
-        FormedBlobs.emplace_back(key, valueD.size());
-        Blobs.clear();
-
-        res = {key, valueD};
+        res = CreateFormedBlob(size, true);
     }
     BlobsSize += size + GetMaxHeaderSize();
     ++NextPartNo;
     Blobs.push_back(blob);
-    if (!IsComplete())
+    if (!IsComplete()) {
         ++InternalPartsCount;
+    }
+    return res;
+}
+
+auto TPartitionedBlob::Add(const TKey& oldKey, ui32 size) -> std::optional<TFormedBlobInfo>
+{
+    std::optional<TFormedBlobInfo> res;
+    if (NeedCompactHead) {
+        NeedCompactHead = false;
+        GlueNewHead = false;
+        res = CreateFormedBlob(0, false);
+    }
+
+    TKey newKey(TKeyPrefix::TypeData,
+                Partition,
+                NewHead.Offset + oldKey.GetOffset(),
+                oldKey.GetPartNo(),
+                oldKey.GetCount(),
+                oldKey.GetInternalPartsCount(),
+                oldKey.IsHead());
+
+    FormedBlobs.emplace_back(oldKey, newKey, size);
+
+    StartOffset += oldKey.GetCount();
+    //NewHead.Offset += oldKey.GetOffset() + oldKey.GetCount();
+
     return res;
 }
 

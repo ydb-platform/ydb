@@ -3,7 +3,9 @@
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/dq/api/grpc/api.grpc.pb.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_common.h>
+#include <ydb/library/yql/providers/dq/actors/proto_builder.h>
 #include <ydb/library/yql/utils/backtrace/backtrace.h>
+#include <ydb/library/yql/utils/failure_injector/failure_injector.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/providers/dq/config/config.pb.h>
 #include <ydb/library/yql/utils/log/log.h>
@@ -24,6 +26,96 @@
 namespace NYql {
 
 using namespace NThreading;
+
+class TPlanPrinter {
+public:
+    TStringBuilder b;
+
+    void DescribeChannel(const auto& ch, bool spilling) {
+        if (spilling) {
+            b << "Ch" << ch.GetId() << " [shape=diamond, label=\"Ch" << ch.GetId() << "\", color=\"red\"];";
+        } else {
+            b << "Ch" << ch.GetId() << " [shape=diamond, label=\"Ch" << ch.GetId() << "\"];";
+        }
+    }
+
+    void PrintInputChannel(const auto& ch, const auto& type) {
+        b << "Ch" << ch.GetId() << " -> T" << ch.GetDstTaskId() << " [label=" << "\"" << type << "\"];\n";
+    }
+
+    void PrintOutputChannel(const auto& ch, const auto& type) {
+        b << "T" << ch.GetSrcTaskId() << " -> Ch" << ch.GetId() << " [label=" << "\"" << type << "\"];\n";
+    }
+
+    void PrintSource(auto taskId, auto sourceIndex) {
+        b << "S" << taskId << "_" << sourceIndex << " -> T" << taskId << " [label=" << "\"S" << sourceIndex << "\"];\n";
+    }
+
+    void DescribeSource(auto taskId, auto sourceIndex) {
+        b << "S" << taskId << "_" << sourceIndex << " ";
+        b << "[shape=square, label=\"" << taskId << "/" << sourceIndex << "\"];\n";
+    }
+
+    void PrintTask(const auto& task) {
+        int index = 0;
+        for (const auto& input : task.GetInputs()) {
+            TString inputName = "Unknown";
+            bool isSource = false;
+            if (input.HasUnionAll()) { inputName = "UnionAll"; }
+            else if (input.HasMerge()) { inputName = "Merge"; }
+            else if (input.HasSource()) { inputName = "Source"; isSource = true; }
+            if (isSource) {
+                PrintSource(task.GetId(), index);
+            } else {
+                for (const auto& ch : input.GetChannels()) {
+                    PrintInputChannel(ch, inputName);
+                }
+            }
+            index ++;
+        }
+        for (const auto& output : task.GetOutputs()) {
+            TString outputName = "Unknown";
+            if (output.HasMap()) { outputName = "Map"; }
+            else if (output.HasRangePartition()) { outputName = "Range"; }
+            else if (output.HasHashPartition()) { outputName = "Hash"; }
+            else if (output.HasBroadcast()) { outputName = "Broadcast"; }
+            // TODO: effects, sink
+            for (const auto& ch : output.GetChannels()) {
+                PrintOutputChannel(ch, outputName);
+            }
+        }
+    }
+
+    void DescribeTask(const auto& task) {
+        b << "T" << task.GetId() << " [shape=circle, label=\"" << task.GetId() << "/" << task.GetStageId() << "\"];\n";
+        int index = 0;
+        for (const auto& input : task.GetInputs()) {
+            if (input.HasSource()) {
+                DescribeSource(task.GetId(), index);
+            }
+            index ++;
+        }
+        for (const auto& output : task.GetOutputs()) {
+            for (const auto& ch : output.GetChannels()) {
+                DescribeChannel(ch, task.GetEnableSpilling());
+            }
+        }
+    }
+ 
+    TString Print(const NDqs::TPlan& plan) {
+        b.clear();
+        b << "digraph G {\n";
+        for (const auto& task : plan.Tasks) {
+            DescribeTask(task);
+        }
+        b << "\n";
+        for (const auto& task : plan.Tasks) {
+            PrintTask(task);
+        }
+        b << "}\n";
+        return b;
+    }
+};
 
 class TDqTaskScheduler : public TTaskScheduler {
 private:
@@ -76,7 +168,7 @@ public:
     }
 
     template<typename RespType>
-    void OnResponse(TPromise<TResult> promise, NYdbGrpc::TGrpcStatus&& status, RespType&& resp, const THashMap<TString, TString>& modulesMapping, bool alwaysFallback = false) {
+    void OnResponse(TPromise<TResult> promise, NYdbGrpc::TGrpcStatus&& status, RespType&& resp, const NCommon::TResultFormatSettings& resultFormatSettings, const THashMap<TString, TString>& modulesMapping, bool alwaysFallback = false) {
         YQL_LOG_CTX_ROOT_SESSION_SCOPE(SessionId);
         YQL_CLOG(TRACE, ProviderDq) << "TDqGateway::callback";
 
@@ -137,9 +229,20 @@ public:
             if (!error) {
                 Yql::DqsProto::ExecuteQueryResult queryResult;
                 resp.operation().result().UnpackTo(&queryResult);
-                result.Data = queryResult.yson().empty()
-                    ? NYdb::FormatResultSetYson(queryResult.result(), NYson::EYsonFormat::Binary)
-                    : queryResult.yson();
+                TVector<NDq::TDqSerializedBatch> rows;
+                for (const auto& s : queryResult.Getsample()) {
+                    NDq::TDqSerializedBatch batch;
+                    batch.Proto = s;
+                    rows.emplace_back(std::move(batch));
+                }
+
+                NYql::NDqs::TProtoBuilder protoBuilder(resultFormatSettings.ResultType, resultFormatSettings.Columns);
+
+                bool ysonTruncated = false;
+                result.Data = protoBuilder.BuildYson(std::move(rows), resultFormatSettings.SizeLimit.GetOrElse(Max<ui64>()),
+                    resultFormatSettings.RowsLimit.GetOrElse(Max<ui64>()), &ysonTruncated);
+
+                result.Truncated = result.Truncated || ysonTruncated;
                 result.AddIssues(issues);
                 result.SetSuccess();
             } else {
@@ -186,6 +289,7 @@ public:
         TStub stub,
         int retry,
         const TDqSettings::TPtr& settings,
+        const NCommon::TResultFormatSettings& resultFormatSettings,
         const THashMap<TString, TString>& modulesMapping,
         const TDqProgressWriter& progressWriter
     ) {
@@ -194,7 +298,8 @@ public:
         const auto fallbackPolicy = settings->FallbackPolicy.Get().GetOrElse(EFallbackPolicy::Default);
         const auto alwaysFallback = EFallbackPolicy::Always == fallbackPolicy;
         auto self = weak_from_this();
-        auto callback = [self, promise, sessionId = SessionId, alwaysFallback, modulesMapping](NYdbGrpc::TGrpcStatus&& status, TResponse&& resp) mutable {
+        auto callback = [self, promise, sessionId = SessionId, alwaysFallback, resultFormatSettings, modulesMapping](
+            NYdbGrpc::TGrpcStatus&& status, TResponse&& resp) mutable {
             auto this_ = self.lock();
             if (!this_) {
                 YQL_CLOG(DEBUG, ProviderDq) << "Session was closed: " << sessionId;
@@ -202,7 +307,8 @@ public:
                 return;
             }
 
-            this_->OnResponse(std::move(promise), std::move(status), std::move(resp), modulesMapping, alwaysFallback);
+            this_->OnResponse(std::move(promise), std::move(status), std::move(resp), resultFormatSettings,
+                modulesMapping, alwaysFallback);
         };
 
         Service.DoRequest<TRequest, TResponse>(queryPB, callback, stub);
@@ -232,7 +338,8 @@ public:
                     } catch (...) {
                         return MakeErrorFuture<TResult>(std::current_exception());
                     }
-                    return this_->WithRetry<TResponse>(queryPB, stub, retry - 1, settings, modulesMapping, progressWriter);
+                    return this_->WithRetry<TResponse>(queryPB, stub, retry - 1, settings, resultFormatSettings,
+                        modulesMapping, progressWriter);
                 });
         });
     }
@@ -267,6 +374,14 @@ public:
         }
         settings->Save(queryPB);
 
+        NCommon::TResultFormatSettings resultFormatSettings;
+        resultFormatSettings.Columns = columns;
+        resultFormatSettings.ResultType = plan.ResultType;
+        resultFormatSettings.SizeLimit = settings->_AllResultsBytesLimit.Get();
+        resultFormatSettings.RowsLimit = settings->_RowsLimitPerWrite.Get();
+
+        YQL_CLOG(TRACE, ProviderDq) << TPlanPrinter().Print(plan);
+
         {
             auto& secParams = *queryPB.MutableSecureParams();
             for (const auto&[k, v] : secureParams) {
@@ -289,7 +404,8 @@ public:
         YQL_CLOG(DEBUG, ProviderDq) << "Send query of size " << queryPB.ByteSizeLong();
 
         auto self = weak_from_this();
-        return OpenSessionFuture.Apply([self, sessionId = SessionId, queryPB, retry, settings, modulesMapping, progressWriter](const TFuture<void>& f) {
+        return OpenSessionFuture.Apply([self, sessionId = SessionId, queryPB, retry, settings, resultFormatSettings, modulesMapping,
+            progressWriter](const TFuture<void>& f) {
             f.TryRethrow();
             auto this_ = self.lock();
             if (!this_) {
@@ -302,6 +418,7 @@ public:
                 &Yql::DqsProto::DqService::Stub::AsyncExecuteGraph,
                 retry,
                 settings,
+                resultFormatSettings,
                 modulesMapping,
                 progressWriter);
         });
@@ -329,11 +446,11 @@ public:
         return promise.GetFuture();
     }
 
-    void OnRequestQueryStatus(const TDqProgressWriter& progressWriter, const TString& status, const std::unordered_map<ui64, IDqGateway::TStageStats>& stats, bool ok, uint64_t querySeqNo) {
+    void OnRequestQueryStatus(const TDqProgressWriter& progressWriter, IDqGateway::TProgressWriterState state, bool ok, uint64_t querySeqNo) {
         if (ok) {
             ScheduleQueryStatusRequest(progressWriter, querySeqNo);
-            if (!status.empty()) {
-                progressWriter(status, stats);
+            if (!state.empty()) {
+                progressWriter(std::move(state));
             }
         }
     }
@@ -353,7 +470,11 @@ public:
             if (maybeStage == labels.end()) {
                 continue;
             }
-            auto& stage = ret[atoi(maybeStage->second.data())];
+            auto stageId = atoi(maybeStage->second.data());
+            if (!stageId) {
+                continue;
+            }
+            auto& stage = ret[stageId];
 
             if (name == "OutputRows") {
                 stage.OutputRows += metric.GetSum();
@@ -382,7 +503,7 @@ public:
                 return;
             }
 
-            this_->OnRequestQueryStatus(progressWriter, resp.GetStatus(), ExtractStats(resp), status.Ok(), querySeqNo);
+            this_->OnRequestQueryStatus(progressWriter, std::move(IDqGateway::TProgressWriterState{resp.GetStatus(), std::move(ExtractStats(resp))}), status.Ok(), querySeqNo);
         };
 
         Service.DoRequest<Yql::DqsProto::QueryStatusRequest, Yql::DqsProto::QueryStatusResponse>(
@@ -568,9 +689,13 @@ public:
                 session = it->second;
             }
         }
+        TFailureInjector::Reach("dq_session_was_closed", [&] { session = nullptr; });
         if (!session) {
             YQL_CLOG(ERROR, ProviderDq) << "Session was closed: " << sessionId;
-            return MakeFuture(NCommon::ResultFromException<TResult>(yexception() << "Session was closed"));
+            auto res = NCommon::ResultFromException<TResult>(yexception() << "Session was closed");
+            res.Fallback = true;
+            res.SetSuccess();
+            return MakeFuture(res);
         }
         return session->ExecutePlan(std::move(plan), columns, secureParams, graphParams, settings, progressWriter, modulesMapping, discard, executionTimeout)
             .Apply([](const TFuture<TResult>& f) {

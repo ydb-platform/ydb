@@ -38,6 +38,7 @@ from google.auth import environment_vars
 from google.auth import exceptions
 from google.auth import transport
 import google.auth.transport._mtls_helper
+from google.auth.transport._requests_base import _BaseAuthorizedSession
 from google.oauth2 import service_account
 
 _LOGGER = logging.getLogger(__name__)
@@ -262,18 +263,14 @@ class _MutualTlsOffloadAdapter(requests.adapters.HTTPAdapter):
 
     def __init__(self, enterprise_cert_file_path):
         import certifi
-        import urllib3.contrib.pyopenssl
-
         from google.auth.transport import _custom_tls_signer
-
-        # Call inject_into_urllib3 to activate certificate checking. See the
-        # following links for more info:
-        # (1) doc: https://github.com/urllib3/urllib3/blob/cb9ebf8aac5d75f64c8551820d760b72b619beff/src/urllib3/contrib/pyopenssl.py#L31-L32
-        # (2) mTLS example: https://github.com/urllib3/urllib3/issues/474#issuecomment-253168415
-        urllib3.contrib.pyopenssl.inject_into_urllib3()
 
         self.signer = _custom_tls_signer.CustomTlsSigner(enterprise_cert_file_path)
         self.signer.load_libraries()
+
+        import urllib3.contrib.pyopenssl
+
+        urllib3.contrib.pyopenssl.inject_into_urllib3()
 
         poolmanager = create_urllib3_context()
         poolmanager.load_verify_locations(cafile=certifi.where())
@@ -296,7 +293,7 @@ class _MutualTlsOffloadAdapter(requests.adapters.HTTPAdapter):
         return super(_MutualTlsOffloadAdapter, self).proxy_manager_for(*args, **kwargs)
 
 
-class AuthorizedSession(requests.Session):
+class AuthorizedSession(requests.Session, _BaseAuthorizedSession):
     """A Requests Session class with credentials.
 
     This class is used to perform requests to API endpoints that require
@@ -393,7 +390,7 @@ class AuthorizedSession(requests.Session):
         default_host=None,
     ):
         super(AuthorizedSession, self).__init__()
-        self.credentials = credentials
+        _BaseAuthorizedSession.__init__(self, credentials)
         self._refresh_status_codes = refresh_status_codes
         self._max_refresh_attempts = max_refresh_attempts
         self._refresh_timeout = refresh_timeout

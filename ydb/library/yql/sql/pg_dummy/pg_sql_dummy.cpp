@@ -21,7 +21,19 @@ TVector<NYql::TAstParseResult> PGToYqlStatements(const TString& query, const NSQ
     return {};
 }
 
-}  // NSQLTranslationPG
+std::unique_ptr<NYql::NPg::IExtensionSqlParser> CreateExtensionSqlParser() {
+    throw yexception() << "CreateExtensionSqlParser: PG types are not supported";
+}
+
+std::unique_ptr<NYql::NPg::ISystemFunctionsParser> CreateSystemFunctionsParser() {
+    throw yexception() << "CreateSystemFunctionsParser: PG types are not supported";
+}
+
+std::unique_ptr<NYql::NPg::ISqlLanguageParser> CreateSqlLanguageParser() {
+    throw yexception() << "CreateSqlLanguageParser: PG types are not supported";
+}
+
+} // NSQLTranslationPG
 
 namespace NYql {
 namespace NCommon {
@@ -79,10 +91,11 @@ void WriteYsonValuePg(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod& v
     throw yexception() << "WriteYsonValuePg: PG types are not supported";
 }
 
-void WriteYsonValueInTableFormatPg(TOutputBuf& buf, NKikimr::NMiniKQL::TPgType* type, const NKikimr::NUdf::TUnboxedValuePod& value) {
+void WriteYsonValueInTableFormatPg(TOutputBuf& buf, NKikimr::NMiniKQL::TPgType* type, const NKikimr::NUdf::TUnboxedValuePod& value, bool topLevel) {
     Y_UNUSED(buf);
     Y_UNUSED(type);
     Y_UNUSED(value);
+    Y_UNUSED(topLevel);
     throw yexception() << "WriteYsonValueInTableFormatPg: PG types are not supported";
 }
 
@@ -158,6 +171,10 @@ void PgReleaseThreadContext(void* ctx) {
 void PgSetGUCSettings(void* ctx, const TGUCSettings::TPtr& GUCSettings) {
     Y_UNUSED(ctx);
     Y_UNUSED(GUCSettings);
+}
+
+std::unique_ptr<NYql::NPg::IExtensionLoader> CreateExtensionLoader() {
+    throw yexception() << "PG types are not supported";
 }
 
 std::optional<std::string> PGGetGUCSetting(const std::string& key) {

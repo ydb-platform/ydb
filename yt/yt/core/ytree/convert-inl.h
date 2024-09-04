@@ -101,11 +101,12 @@ NYson::TYsonProducer ConvertToProducer(T&& value)
 template <class T>
 INodePtr ConvertToNode(
     const T& value,
-    INodeFactory* factory)
+    INodeFactory* factory,
+    int treeSizeLimit)
 {
     auto type = GetYsonType(value);
 
-    auto builder = CreateBuilderFromFactory(factory);
+    auto builder = CreateBuilderFromFactory(factory, treeSizeLimit);
     builder->BeginTree();
 
     switch (type) {

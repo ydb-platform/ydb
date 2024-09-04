@@ -2,14 +2,54 @@
 {%- set name = current_target.name -%}
 {%- set macro_args = current_target.macro_args -%}
 
+{%- if macro == 'add_library' -%}
+{%-     set only_headers_like_sources_library = true -%}
+{%-     set target_sources = [] -%}
+{%-     if current_target.target_options.interfaces is defined -%}
+{%-         set interfaces_target_sources = current_target.target_options.interfaces|selectattr('option', 'eq', 'target_sources') -%}
+{%-         if interfaces_target_sources|length -%}
+{%-             set target_sources = target_sources + interfaces_target_sources|map(attribute='args')|sum -%}
+{%-         endif -%}
+{%-     endif -%}
+{%-     if current_target.target_options.publics is defined -%}
+{%-         set publics_target_sources = current_target.target_options.publics|selectattr('option', 'eq', 'target_sources') -%}
+{%-         if publics_target_sources|length -%}
+{%-             set target_sources = target_sources + publics_target_sources|map(attribute='args')|sum -%}
+{%-         endif -%}
+{%-     endif -%}
+{%-     if current_target.target_options.privates is defined -%}
+{%-         set privates_target_sources = current_target.target_options.privates|selectattr('option', 'eq', 'target_sources') -%}
+{%-         if privates_target_sources|length -%}
+{%-             set target_sources = target_sources + privates_target_sources|map(attribute='args')|sum -%}
+{%-         endif -%}
+{%-     endif -%}
+{%-     if target_sources|length -%}
+{%-         set target_sources_non_headers = reject_by_ends(target_sources, ['.h', '.hh', '.hpp']) -%}
+{%-         if (target_sources_non_headers|length) -%}
+{#-             Any non-header clear flag only_headers_like_sources_library -#}
+{%-             set only_headers_like_sources_library = false -%}
+{%-         endif -%}
+{%-     endif -%}
+{%- else -%}
+{%-     set only_headers_like_sources_library = false -%}
+{%- endif -%}
+
+{%- set is_really_fake_module = (current_target.is_fake_module) and (only_headers_like_sources_library) -%}
+
 {{ macro }}({{ name }}
-{%- if current_target.is_fake_module %} INTERFACE{%- endif -%}
-{%- if macro_args|length > 0 %}
+{%- if current_target.is_fake_module -%}
+{%-     if only_headers_like_sources_library %} INTERFACE{%- else %} STATIC{%- endif -%}
+{%- endif -%}
+{%- if macro_args|length > 0 -%}
 {%-     for arg in macro_args %}
   {{ arg }}
-{%      endfor -%}
+{%-     endfor -%}
 {%- endif -%}
 )
+{% if (current_target.is_fake_module) and not(only_headers_like_sources_library) %}
+set_property(TARGET {{ name }} PROPERTY LINKER_LANGUAGE CXX)
+{%- endif -%}
+
 {%  include "[generator]/target_properties.jinja" -%}
 {%- include "[generator]/target_options.jinja" -%}
 {%- include "[generator]/target_commands.jinja" -%}

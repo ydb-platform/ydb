@@ -7,7 +7,7 @@
 $border = Date("1993-01-01");
 $threshold = (
 select
-    0.5 * sum(l_quantity) as threshold,
+    $z0_5_35 * sum(l_quantity) as threshold,
     l_partkey as l_partkey,
     l_suppkey as l_suppkey
 from

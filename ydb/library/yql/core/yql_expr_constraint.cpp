@@ -7,6 +7,8 @@
 #include <ydb/library/yql/core/yql_join.h>
 #include <ydb/library/yql/utils/log/profile.h>
 
+#include <library/cpp/yson/node/node_io.h>
+
 #include <util/generic/scope.h>
 #include <util/generic/utility.h>
 #include <util/generic/algorithm.h>
@@ -85,6 +87,7 @@ public:
         Functions["AssumeDistinct"] = &TCallableConstraintTransformer::AssumeUniqueWrap<true, true>;
         Functions["AssumeUniqueHint"] = &TCallableConstraintTransformer::AssumeUniqueWrap<false, false>;
         Functions["AssumeDistinctHint"] = &TCallableConstraintTransformer::AssumeUniqueWrap<true, false>;
+        Functions["AssumeConstraints"] = &TCallableConstraintTransformer::AssumeConstraintsWrap;
         Functions["AssumeChopped"] = &TCallableConstraintTransformer::AssumeChoppedWrap;
         Functions["AssumeColumnOrder"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["AssumeAllMembersNullableAtOnce"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
@@ -385,6 +388,31 @@ private:
         }
 
         return FromFirst<TEmptyConstraintNode, TUniqueConstraintNode, TDistinctConstraintNode, TVarIndexConstraintNode>(input, output, ctx);
+    }
+
+    TStatus AssumeConstraintsWrap(const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& ctx) const {
+        TConstraintSet set;
+        try {
+            set = ctx.MakeConstraintSet(NYT::NodeFromYsonString(input->Tail().Content()));
+        } catch (...) {
+            ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() <<
+                "Bad constraints yson-value: " << CurrentExceptionMessage()));
+            return IGraphTransformer::TStatus::Error;
+        }
+        for (auto constraint: set.GetAllConstraints()) {
+            if (!constraint->IsApplicableToType(*input->GetTypeAnn())) {
+                ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << *constraint
+                    << " is not applicable to " << *input->GetTypeAnn()));
+                return IGraphTransformer::TStatus::Error;
+            }
+        }
+        for (auto constr: input->Head().GetAllConstraints()) {
+            if (!constr->GetName().starts_with("PartOf") && !set.GetConstraint(constr->GetName())) {
+                set.AddConstraint(constr);
+            }
+        }
+        input->SetConstraints(set);
+        return IGraphTransformer::TStatus::Ok;
     }
 
     template<bool Distinct, bool Strict>
@@ -2829,18 +2857,31 @@ private:
 
     template <bool Final>
     TStatus AggregateWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
-        if (HasSetting(input->Tail(), "session"))
+        if (HasSetting(input->Tail(), "session")) {
+            // TODO: support sessions
             return TStatus::Ok;
+        }
 
         if (const auto size = input->Child(1)->ChildrenSize()) {
             if constexpr (Final) {
-                std::vector<std::string_view> columns;
-                columns.reserve(size);
-                for (const auto& child: input->Child(1)->Children()) {
-                    columns.emplace_back(child->Content());
+                bool allKeysInOutput = true;
+                if (auto outputColumnsSetting = GetSetting(input->Tail(), "output_columns")) {
+                    THashSet<TStringBuf> outputColumns;
+                    for (auto& col : outputColumnsSetting->Child(1)->Children()) {
+                        YQL_ENSURE(col->IsAtom());
+                        outputColumns.insert(col->Content());
+                    }
+                    allKeysInOutput = AllOf(input->Child(1)->Children(), [&](const auto& key) { return outputColumns.contains(key->Content()); });
                 }
-                input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(columns));
-                input->AddConstraint(ctx.MakeConstraint<TDistinctConstraintNode>(columns));
+                if (allKeysInOutput) {
+                    std::vector<std::string_view> columns;
+                    columns.reserve(size);
+                    for (const auto& child: input->Child(1)->Children()) {
+                        columns.emplace_back(child->Content());
+                    }
+                    input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(columns));
+                    input->AddConstraint(ctx.MakeConstraint<TDistinctConstraintNode>(columns));
+                }
             }
             return FromFirst<TEmptyConstraintNode>(input, output, ctx);
         }

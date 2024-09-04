@@ -1,5 +1,6 @@
 #pragma once
 
+#include "util/string/builder.h"
 #include <library/cpp/threading/future/future.h>
 #include <ydb/public/api/grpc/ydb_federation_discovery_v1.grpc.pb.h>
 
@@ -137,6 +138,36 @@ public:
         return {response, grpc::Status::OK};
     }
 
+    TGrpcResult ComposeOkResultWithUnavailableDatabase(int unavailableDb) {
+        Ydb::FederationDiscovery::ListFederationDatabasesResponse okResponse;
+
+        auto op = okResponse.mutable_operation();
+        op->set_status(Ydb::StatusIds::SUCCESS);
+        okResponse.mutable_operation()->set_ready(true);
+        okResponse.mutable_operation()->set_id("12345");
+
+        Ydb::FederationDiscovery::ListFederationDatabasesResult mockResult;
+        mockResult.set_control_plane_endpoint("cp.logbroker-federation:2135");
+        mockResult.set_self_location("fancy_datacenter");
+        for (int i = 1; i <= 3; ++i) {
+            auto c1 = mockResult.add_federation_databases();
+            c1->set_name(TStringBuilder() << "dc" << i);
+            c1->set_path("/Root");
+            c1->set_id(TStringBuilder() << "account-dc" << i);
+            c1->set_endpoint("localhost:" + ToString(Port));
+            c1->set_location(TStringBuilder() << "dc" << i);
+            if (i == unavailableDb) {
+                c1->set_status(::Ydb::FederationDiscovery::DatabaseInfo::Status::DatabaseInfo_Status_UNAVAILABLE);
+            } else {
+                c1->set_status(::Ydb::FederationDiscovery::DatabaseInfo::Status::DatabaseInfo_Status_AVAILABLE);
+            }
+            c1->set_weight(i == 0 ? 1000 : 500);
+        }
+
+        op->mutable_result()->PackFrom(mockResult);
+
+        return {okResponse, grpc::Status::OK};
+    }
 
 public:
     ui16 Port;

@@ -2,6 +2,7 @@ from __future__ import annotations
 import json
 import ydb
 import os
+import logging
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.utils import external_param_is_true, get_external_param
 from time import time_ns
@@ -15,9 +16,14 @@ class ResultsProcessor:
             self._table = table
 
         def send_data(self, data):
-            self._driver.table_client.bulk_upsert(
-                os.path.join(self._db, self._table), [data], ResultsProcessor._columns_types
-            )
+            try:
+                ydb.retry_operation_sync(
+                    lambda: self._driver.table_client.bulk_upsert(
+                        os.path.join(self._db, self._table), [data], ResultsProcessor._columns_types
+                    )
+                )
+            except BaseException as e:
+                logging.error(f'Exception while send results: {e}')
 
     _endpoints : list[ResultsProcessor.Endpoint] = None
     _run_id : int = None
@@ -69,7 +75,8 @@ class ResultsProcessor:
 
     @staticmethod
     def get_cluster_id():
-        return os.path.join(YdbCluster.ydb_endpoint, YdbCluster.ydb_database, YdbCluster.tables_path)
+        run_id = get_external_param('run-id', YdbCluster.tables_path)
+        return os.path.join(YdbCluster.ydb_endpoint, YdbCluster.ydb_database, run_id)
 
     @classmethod
     def upload_results(
@@ -98,9 +105,15 @@ class ResultsProcessor:
             return None
 
         info = {'cluster': YdbCluster.get_cluster_info()}
-        sandbox_task_id = get_external_param('SANDBOX_TASK_ID', None)
-        if sandbox_task_id is not None:
-            info['report_url'] = f'https://sandbox.yandex-team.ru/task/{sandbox_task_id}/allure_report'
+
+        report_url = os.getenv('ALLURE_RESOURCE_URL', None)
+        if report_url is None:
+            sandbox_task_id = get_external_param('SANDBOX_TASK_ID', None)
+            if sandbox_task_id is not None:
+                report_url = f'https://sandbox.yandex-team.ru/task/{sandbox_task_id}/allure_report'
+        if report_url is not None:
+            info['report_url'] = report_url
+
         data = {
             'Db': cls.get_cluster_id(),
             'Kind': kind,

@@ -11,38 +11,38 @@ namespace NYT::NRpc {
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class... TArgs>
-void IServiceContext::SetRequestInfo(const char* format, TArgs&&... args)
+void IServiceContext::SetRequestInfo(TFormatString<TArgs...> format, TArgs&&... args)
 {
     if (IsLoggingEnabled()) {
-        SetRawRequestInfo(Format(TRuntimeFormat{format}, std::forward<TArgs>(args)...), /*incremental*/ false);
+        SetRawRequestInfo(Format(format, std::forward<TArgs>(args)...), /*incremental*/ false);
     } else {
         SuppressMissingRequestInfoCheck();
     }
 }
 
 template <class... TArgs>
-void IServiceContext::SetIncrementalRequestInfo(const char* format, TArgs&&... args)
+void IServiceContext::SetIncrementalRequestInfo(TFormatString<TArgs...> format, TArgs&&... args)
 {
     if (IsLoggingEnabled()) {
-        SetRawRequestInfo(Format(TRuntimeFormat{format}, std::forward<TArgs>(args)...), /*incremental*/ true);
+        SetRawRequestInfo(Format(format, std::forward<TArgs>(args)...), /*incremental*/ true);
     } else {
         SuppressMissingRequestInfoCheck();
     }
 }
 
 template <class... TArgs>
-void IServiceContext::SetResponseInfo(const char* format, TArgs&&... args)
+void IServiceContext::SetResponseInfo(TFormatString<TArgs...> format, TArgs&&... args)
 {
     if (IsLoggingEnabled()) {
-        SetRawResponseInfo(Format(TRuntimeFormat{format}, std::forward<TArgs>(args)...), /*incremental*/ false);
+        SetRawResponseInfo(Format(format, std::forward<TArgs>(args)...), /*incremental*/ false);
     }
 }
 
 template <class... TArgs>
-void IServiceContext::SetIncrementalResponseInfo(const char* format, TArgs&&... args)
+void IServiceContext::SetIncrementalResponseInfo(TFormatString<TArgs...> format, TArgs&&... args)
 {
     if (IsLoggingEnabled()) {
-        SetRawResponseInfo(Format(TRuntimeFormat{format}, std::forward<TArgs>(args)...), /*incremental*/ true);
+        SetRawResponseInfo(Format(format, std::forward<TArgs>(args)...), /*incremental*/ true);
     }
 }
 

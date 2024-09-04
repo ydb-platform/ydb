@@ -692,6 +692,10 @@ void ToProto(NProto::TOperation* protoOperation, const NApi::TOperation& operati
         protoOperation->set_slot_index_per_pool_tree(operation.SlotIndexPerPoolTree.ToString());
     }
 
+    if (operation.SchedulingAttributesPerPoolTree) {
+        protoOperation->set_scheduling_attributes_per_pool_tree(operation.SchedulingAttributesPerPoolTree.ToString());
+    }
+
     if (operation.TaskNames) {
         protoOperation->set_task_names(operation.TaskNames.ToString());
     }
@@ -824,6 +828,12 @@ void FromProto(NApi::TOperation* operation, const NProto::TOperation& protoOpera
         operation->SlotIndexPerPoolTree = TYsonString();
     }
 
+    if (protoOperation.has_scheduling_attributes_per_pool_tree()) {
+        operation->SchedulingAttributesPerPoolTree = TYsonString(protoOperation.scheduling_attributes_per_pool_tree());
+    } else {
+        operation->SchedulingAttributesPerPoolTree = TYsonString();
+    }
+
     if (protoOperation.has_task_names()) {
         operation->TaskNames = TYsonString(protoOperation.task_names());
     } else {
@@ -946,6 +956,12 @@ void ToProto(NProto::TJob* protoJob, const NApi::TJob& job)
     }
     if (job.JobCookie) {
         protoJob->set_job_cookie(*job.JobCookie);
+    }
+    if (job.ArchiveFeatures) {
+        protoJob->set_archive_features(job.ArchiveFeatures.ToString());
+    }
+    if (job.MonitoringDescriptor) {
+        protoJob->set_monitoring_descriptor(*job.MonitoringDescriptor);
     }
 }
 
@@ -1086,6 +1102,16 @@ void FromProto(NApi::TJob* job, const NProto::TJob& protoJob)
     } else {
         job->JobCookie.reset();
     }
+    if (protoJob.has_archive_features()) {
+        job->ArchiveFeatures = TYsonString(protoJob.archive_features());
+    } else {
+        job->ArchiveFeatures = TYsonString();
+    }
+    if (protoJob.has_monitoring_descriptor()) {
+        job->MonitoringDescriptor = protoJob.monitoring_descriptor();
+    } else {
+        job->MonitoringDescriptor.reset();
+    }
 }
 
 void ToProto(
@@ -1191,6 +1217,8 @@ void ToProto(
     if (statistics.LegacyChunkRowCount) {
         protoStatistics->set_legacy_chunk_row_count(*statistics.LegacyChunkRowCount);
     }
+
+    ToProto(protoStatistics->mutable_column_hyperloglog_digests(), statistics.LargeStatistics.ColumnHyperLogLogDigests);
 }
 
 void FromProto(
@@ -1219,6 +1247,8 @@ void FromProto(
     } else {
         statistics->LegacyChunkRowCount.reset();
     }
+
+    FromProto(&statistics->LargeStatistics.ColumnHyperLogLogDigests, protoStatistics.column_hyperloglog_digests());
 }
 
 void ToProto(
@@ -1355,7 +1385,7 @@ void ToProto(
         protoQuery->set_start_time(NYT::ToProto<i64>(*query.StartTime));
     }
     if (query.FinishTime) {
-        protoQuery->set_start_time(NYT::ToProto<i64>(*query.FinishTime));
+        protoQuery->set_finish_time(NYT::ToProto<i64>(*query.FinishTime));
     }
     if (query.Settings) {
         protoQuery->set_settings(query.Settings.ToString());
@@ -1366,6 +1396,8 @@ void ToProto(
     if (query.AccessControlObject) {
         protoQuery->set_access_control_object(*query.AccessControlObject);
     }
+    protoQuery->set_access_control_objects(query.AccessControlObjects->ToString());
+
     if (query.State) {
         protoQuery->set_state(ConvertQueryStateToProto(*query.State));
     }
@@ -1431,6 +1463,11 @@ void FromProto(
         query->AccessControlObject = protoQuery.access_control_object();
     } else {
         query->AccessControlObject.reset();
+    }
+    if (protoQuery.has_access_control_objects()) {
+        query->AccessControlObjects = TYsonString(protoQuery.access_control_objects());
+    } else {
+        query->AccessControlObjects.reset();
     }
     if (protoQuery.has_state()) {
         query->State = ConvertQueryStateFromProto(protoQuery.state());
@@ -1870,6 +1907,92 @@ NQueryTrackerClient::EQueryState ConvertQueryStateFromProto(
             THROW_ERROR_EXCEPTION("Protobuf contains unknown value for query state");
     }
     YT_ABORT();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void FillRequest(
+    TReqStartDistributedWriteSession* req,
+    const NYPath::TRichYPath& path,
+    const TDistributedWriteSessionStartOptions& options)
+{
+    Y_UNUSED(req, path, options);
+}
+
+void FromProto(
+    TDistributedWriteSessionStartOptions* mutableOptions,
+    const TReqStartDistributedWriteSession& req)
+{
+    Y_UNUSED(req, mutableOptions);
+}
+
+void FromProto(
+    TDistributedWriteSession* mutableSession,
+    TRspStartDistributedWriteSession&& rsp)
+{
+    Y_UNUSED(mutableSession, rsp);
+}
+
+void ToProto(
+    TRspStartDistributedWriteSession* rsp,
+    const TDistributedWriteSessionPtr& session)
+{
+    Y_UNUSED(rsp, session);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void FillRequest(
+    TReqFinishDistributedWriteSession* req,
+    TDistributedWriteSessionPtr session,
+    const TDistributedWriteSessionFinishOptions& options)
+{
+    Y_UNUSED(req, session, options);
+}
+
+void FromProto(
+    TDistributedWriteSessionFinishOptions* mutableOptions,
+    const TReqFinishDistributedWriteSession& req)
+{
+    Y_UNUSED(req, mutableOptions);
+}
+
+void FromProto(
+    TDistributedWriteSession* mutableSession,
+    const TReqFinishDistributedWriteSession& req)
+{
+    Y_UNUSED(mutableSession, req);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void FillRequest(
+    TReqParticipantWriteTable* req,
+    const TDistributedWriteCookiePtr& cookie,
+    const TParticipantTableWriterOptions& options)
+{
+    Y_UNUSED(req, cookie, options);
+}
+
+void FromProto(
+    TParticipantTableWriterOptions* mutableOptions,
+    const TReqParticipantWriteTable& req)
+{
+    Y_UNUSED(req, mutableOptions);
+}
+
+void FromProto(
+    TDistributedWriteCookie* cookie,
+    const TReqParticipantWriteTable& req)
+{
+    Y_UNUSED(cookie, req);
+}
+
+void ToProto(
+    TRspParticipantWriteTable* rsp,
+    const TDistributedWriteCookiePtr& cookie)
+{
+    Y_UNUSED(rsp, cookie);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

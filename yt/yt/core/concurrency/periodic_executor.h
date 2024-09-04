@@ -45,8 +45,6 @@ public:
     void Reset();
 };
 
-////////////////////////////////////////////////////////////////////////////////
-
 } // namespace NDetail
 
 //! Helps to perform certain actions periodically.
@@ -54,7 +52,7 @@ class TPeriodicExecutor
     : public NDetail::TPeriodicExecutorBase<NDetail::TDefaultInvocationTimePolicy>
 {
 public:
-    //! Initializes an instance.
+    //! Initializes the instance.
     /*!
      *  \note
      *  We must call #Start to activate the instance.

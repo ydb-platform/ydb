@@ -112,7 +112,7 @@ CREATE {external} TABLE `{path}`
 )
 {partition_by}(CounterID, EventDate, UserID, EventTime, WatchID)
 WITH (
-    {store}"{s3_prefix}/hits",
-    AUTO_PARTITIONING_BY_SIZE = ENABLED,
+--    AUTO_PARTITIONING_BY_SIZE = "ENABLED",
+    {store}"{s3_prefix}/hits"
     {partitioning} = 128
 );

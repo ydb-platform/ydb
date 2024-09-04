@@ -135,12 +135,15 @@ Y_UNIT_TEST_SUITE(Scheme) {
                                  0);
 
         TSerializedCellVec vec3;
+        UNIT_ASSERT(!vec3);
         UNIT_ASSERT(vec3.GetCells().empty());
         UNIT_ASSERT(vec3.GetBuffer().empty());
 
         TString buf = vec.GetBuffer();
         UNIT_ASSERT(buf.size() > cells.size()*2);
         vec3.Parse(buf);
+        UNIT_ASSERT(vec3);
+
 
         UNIT_ASSERT_VALUES_EQUAL(CompareTypedCellVectors(vec3.GetCells().data(), cells.data(),
                                                          types.data(),
@@ -506,5 +509,38 @@ Y_UNIT_TEST_SUITE(Scheme) {
                 UNIT_ASSERT_EQUAL(std::clamp(cmp, -1, 1), (i == j ? 0 : (i < j ? -1 : +1)));
             }
         }
+    }
+
+    Y_UNIT_TEST(UnsafeAppend) {
+        TString appended = TSerializedCellVec::Serialize({});
+
+        UNIT_ASSERT(TSerializedCellVec::UnsafeAppendCells({}, appended));
+
+        UNIT_ASSERT_EQUAL(appended.size(), 0);
+
+        ui64 intVal = 42;
+        char bigStrVal[] = "This is a large string value that shouldn't be inlined";
+
+        TVector<TCell> cells;
+        cells.emplace_back(TCell::Make(intVal));
+        cells.emplace_back(bigStrVal, sizeof(bigStrVal));
+
+        UNIT_ASSERT(TSerializedCellVec::UnsafeAppendCells(cells, appended));
+        TString serialized = TSerializedCellVec::Serialize(cells);
+
+        UNIT_ASSERT_VALUES_EQUAL(appended, serialized);
+
+        UNIT_ASSERT(TSerializedCellVec::UnsafeAppendCells(cells, appended));
+
+        cells.emplace_back(TCell::Make(intVal));
+        cells.emplace_back(bigStrVal, sizeof(bigStrVal));
+
+        serialized = TSerializedCellVec::Serialize(cells);
+
+        UNIT_ASSERT_VALUES_EQUAL(appended, serialized);
+
+        appended.resize(1);
+
+        UNIT_ASSERT(!TSerializedCellVec::UnsafeAppendCells(cells, appended));
     }
 }

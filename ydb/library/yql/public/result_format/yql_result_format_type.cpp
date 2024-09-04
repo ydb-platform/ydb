@@ -1,21 +1,13 @@
-#include "yql_result_format.h"
+#include "yql_result_format_type.h"
+#include "yql_result_format_impl.h"
 
 namespace NYql::NResult {
 
 namespace {
-    void Check(bool value, const TSourceLocation& location) {
-        if (!value) {
-            throw location + TUnsupportedException();
-        }
-    }
-
     NYT::TNode MakeDataType(const TString& name) {
         return NYT::TNode().Add("DataType").Add(name);
     }
 }
-
-#define CHECK(value) Check(value, __LOCATION__)
-#define UNEXPECTED ythrow TUnsupportedException() << "Unhandled case"
 
 void ParseType(const NYT::TNode& typeNode, ITypeVisitor& visitor) {
     CHECK(typeNode.IsList());
@@ -203,7 +195,7 @@ void ParseType(const NYT::TNode& typeNode, ITypeVisitor& visitor) {
         CHECK(typeNode.AsList().size() == 3);
         CHECK(typeNode.AsList()[1].IsString());
         CHECK(typeNode.AsList()[2].IsString());
-        visitor.OnPgType(typeNode.AsList()[1].AsString(), typeNode.AsList()[2].AsString());
+        visitor.OnPg(typeNode.AsList()[1].AsString(), typeNode.AsList()[2].AsString());
      } else {
         ythrow TUnsupportedException() << "Unexpected type name: " << name;
     }
@@ -473,7 +465,7 @@ void TTypeBuilder::OnEndTagged() {
     Pop();
 }
 
-void TTypeBuilder::OnPgType(TStringBuf name, TStringBuf category) {
+void TTypeBuilder::OnPg(TStringBuf name, TStringBuf category) {
     Top() = NYT::TNode().Add("PgType").Add(name).Add(category);
 }
 
@@ -710,7 +702,7 @@ void TSameActionTypeVisitor::OnEndTagged() {
     Do();
 }
 
-void TSameActionTypeVisitor::OnPgType(TStringBuf name, TStringBuf category) {
+void TSameActionTypeVisitor::OnPg(TStringBuf name, TStringBuf category) {
     Y_UNUSED(name);
     Y_UNUSED(category);
     Do();
@@ -721,111 +713,6 @@ void TThrowingTypeVisitor::Do() {
 }
 
 void TEmptyTypeVisitor::Do() {
-}
-
-TVector<TResult> ParseResponse(const NYT::TNode& responseNode) {
-    CHECK(responseNode.IsList());
-    TVector<TResult> v;
-    for (const auto& resultNode : responseNode.AsList()) {
-        TResult res;
-        CHECK(resultNode.IsMap());
-        if (resultNode.HasKey("Label")) {
-            const auto& labelNode = resultNode["Label"];
-            CHECK(labelNode.IsString());
-            res.Label = labelNode.AsString();
-        }
-
-        if (resultNode.HasKey("Position")) {
-            TPosition pos;
-            const auto& positionNode = resultNode["Position"];
-            CHECK(positionNode.IsMap());
-            CHECK(positionNode.HasKey("File"));
-            const auto& fileNode = positionNode["File"];
-            CHECK(fileNode.IsString());
-            pos.File = fileNode.AsString();
-            CHECK(positionNode.HasKey("Row"));
-            const auto& rowNode = positionNode["Row"];
-            CHECK(rowNode.IsInt64());
-            pos.Row = rowNode.AsInt64();
-            CHECK(positionNode.HasKey("Column"));
-            const auto& columnNode = positionNode["Column"];
-            CHECK(columnNode.IsInt64());
-            pos.Column = columnNode.AsInt64();
-            res.Position = pos;
-        }
-
-        CHECK(resultNode.HasKey("Write"));
-        const auto& writeNodeList = resultNode["Write"];
-        CHECK(writeNodeList.IsList());
-        for (const auto& writeNode : writeNodeList.AsList()) {
-            CHECK(writeNode.IsMap());
-            TWrite write;
-            if (writeNode.HasKey("Type")) {
-                write.Type = &writeNode["Type"];
-            }
-            
-            if (writeNode.HasKey("Data")) {
-                write.Data = &writeNode["Data"];
-            }
-            
-            if (writeNode.HasKey("Truncated")) {
-                const auto& truncatedNode = writeNode["Truncated"];
-                CHECK(truncatedNode.IsBool());
-                write.IsTruncated = truncatedNode.AsBool();
-            }
-
-            if (writeNode.HasKey("Refs")) {
-                const auto& refsNodeList = writeNode["Refs"];
-                CHECK(refsNodeList.IsList());
-                for (const auto& refNode : refsNodeList.AsList()) {
-                    CHECK(refNode.IsMap());
-                    CHECK(refNode.HasKey("Reference"));
-                    const auto& referenceNodeList = refNode["Reference"];
-                    CHECK(referenceNodeList.IsList());
-                    TFullResultRef ref;
-                    for (const auto& node : referenceNodeList.AsList()) {
-                        CHECK(node.IsString());
-                        ref.Reference.push_back(node.AsString());
-                    }
-
-                    if (refNode.HasKey("Columns")) {
-                        const auto& columnsNode = refNode["Columns"];
-                        CHECK(columnsNode.IsList());
-                        ref.Columns.ConstructInPlace();
-                        for (const auto& node : columnsNode.AsList()) {
-                            CHECK(node.IsString());
-                            ref.Columns->push_back(node.AsString());
-                        }
-                    }
-
-                    CHECK(refNode.HasKey("Remove"));
-                    const auto& removeNode = refNode["Remove"];
-                    CHECK(removeNode.IsBool());
-                    ref.Remove = removeNode.AsBool();
-
-                    write.Refs.push_back(ref);
-                }
-            }
-
-            res.Writes.push_back(write);
-        }
-
-        if (resultNode.HasKey("Truncated")) {
-            const auto& truncatedNode = resultNode["Truncated"];
-            CHECK(truncatedNode.IsBool());
-            res.IsTruncated = truncatedNode.AsBool();
-        }
-
-        if (resultNode.HasKey("Unordered")) {
-            const auto& unorderedNode = resultNode["Unordered"];
-            CHECK(unorderedNode.IsBool());
-            res.IsUnordered = unorderedNode.AsBool();
-        }
-
-        v.push_back(res);
-    }
-
-    return v;
 }
 
 }

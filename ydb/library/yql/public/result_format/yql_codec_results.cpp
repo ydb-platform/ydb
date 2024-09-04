@@ -5,7 +5,7 @@
 #include <ydb/library/yql/utils/utf8.h>
 
 namespace NYql {
-namespace NCommon {
+namespace NResult {
 
 constexpr TStringBuf TYsonResultWriter::VoidString;
 

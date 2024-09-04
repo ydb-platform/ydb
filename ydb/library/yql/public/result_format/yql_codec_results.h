@@ -5,7 +5,7 @@
 #include <util/string/cast.h>
 
 namespace NYql {
-namespace NCommon {
+namespace NResult {
 
 // we should not write numbers as numbers ever
 // write numbers as strings except Yson value where we use restricted dialect

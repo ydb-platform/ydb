@@ -13,7 +13,7 @@
 #include <util/generic/stack.h>
 
 namespace NYql {
-namespace NCommon {
+namespace NResult {
 
 namespace {
 class TRestrictedYsonFormatter : public NYson::TYsonConsumerBase {
@@ -314,12 +314,15 @@ TString EncodeRestrictedYson(const NYT::TNode& node, NYson::EYsonFormat format) 
     return stream.Str();
 }
 
-TString DecodeRestrictedYson(const TStringBuf& yson, NYson::EYsonFormat format) {
+TString DecodeRestrictedYson(const NYT::TNode& node, NYson::EYsonFormat format) {
     TStringStream stream;
     NYson::TYsonWriter writer(&stream, format);
-    auto node = NYT::NodeFromYsonString(yson);
     DecodeRestrictedYson(node, writer);
     return stream.Str();
+}
+
+TString DecodeRestrictedYson(const TStringBuf& yson, NYson::EYsonFormat format) {
+    return DecodeRestrictedYson(NYT::NodeFromYsonString(yson), format);
 }
 
 }

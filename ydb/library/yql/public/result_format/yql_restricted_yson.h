@@ -10,7 +10,7 @@ namespace NYT {
 }
 
 namespace NYql {
-namespace NCommon {
+namespace NResult {
 
 void EncodeRestrictedYson(
     TYsonResultWriter& writer,
@@ -22,6 +22,10 @@ TString EncodeRestrictedYson(
 
 TString DecodeRestrictedYson(
     const TStringBuf& yson,
+    NYson::EYsonFormat format = NYson::EYsonFormat::Binary);
+
+TString DecodeRestrictedYson(
+    const NYT::TNode& node,
     NYson::EYsonFormat format = NYson::EYsonFormat::Binary);
 
 }

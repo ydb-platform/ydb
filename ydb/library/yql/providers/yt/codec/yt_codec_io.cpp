@@ -1,6 +1,6 @@
 #include "yt_codec_io.h"
 
-#include <ydb/library/yql/providers/common/codec/yql_restricted_yson.h>
+#include <ydb/library/yql/public/result_format/yql_restricted_yson.h>
 #include <ydb/library/yql/providers/common/codec/yql_codec_type_flags.h>
 #include <ydb/library/yql/providers/common/codec/yql_codec.h>
 #include <ydb/library/yql/providers/yt/common/yql_names.h>
@@ -2225,7 +2225,7 @@ void DecodeToYson(TMkqlIOCache& specsCache, size_t tableIndex, const NYT::TNode&
             }
             if (res.GetType() != NYT::TNode::Undefined) {
                 if (dataType->GetKind() == TType::EKind::Data && static_cast<TDataType*>(dataType)->GetSchemeType() == NUdf::TDataType<NUdf::TYson>::Id) {
-                    items[field->StructIndex] = NCommon::EncodeRestrictedYson(res, NYT::NYson::EYsonFormat::Binary);
+                    items[field->StructIndex] = NResult::EncodeRestrictedYson(res, NYT::NYson::EYsonFormat::Binary);
                 } else {
                     items[field->StructIndex] = NYT::NodeToYsonString(res, NYT::NYson::EYsonFormat::Binary);
                 }

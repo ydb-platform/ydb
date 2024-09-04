@@ -40,7 +40,9 @@
 #include <ydb/library/yql/public/udf/udf_validate.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/comp_factory.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/parser.h>
-#include <ydb/library/yql/public/result_format/yql_result_format.h>
+#include <ydb/library/yql/public/result_format/yql_result_format_response.h>
+#include <ydb/library/yql/public/result_format/yql_result_format_type.h>
+#include <ydb/library/yql/public/result_format/yql_result_format_data.h>
 
 #include <ydb/core/util/pb.h>
 
@@ -895,6 +897,11 @@ int Main(int argc, const char *argv[])
                             if (write.Type) {
                                 NResult::TEmptyTypeVisitor visitor;
                                 NResult::ParseType(*write.Type, visitor);
+                            }
+
+                            if (write.Type && write.Data) {
+                                NResult::TEmptyDataVisitor visitor;
+                                NResult::ParseData(*write.Type, *write.Data, visitor);
                             }
                         }
                     }

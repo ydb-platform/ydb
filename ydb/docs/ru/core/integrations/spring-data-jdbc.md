@@ -129,7 +129,7 @@ public class UserRepositoryCommandLineRunner implements CommandLineRunner {
 
 Рассмотрим простой пример с индексом таблицы Users по полю `login`:
 
-```Java
+```java
 public interface SimpleUserRepository extends CrudRepository<User, Long> {
 
     @ViewIndex(indexName = "login_index")
@@ -153,24 +153,19 @@ WHERE `Users`.`login` = ?
 Для указания конкретного типа данных в {{ ydb-short-name }} можно использовать аннотацию `@YdbType` над полем сущности.
 Пример использования:
 
-```kotlin
-@YdbType("Json")
-lateinit var jsonColumn: String
-
-@YdbType("JsonDocument")
-lateinit var jsonDocumentColumn: String
-
-@YdbType("Uint8")
-lateinit var uint8Column: Byte
-
-@YdbType("Uint16")
-lateinit var uint16Column: Short
-
-@YdbType("Uint32")
-lateinit var uint32Column: Int
-
-@YdbType("Uint64")
-lateinit var uint64Column: Long
+```java
+    @YdbType("Json")
+    private String jsonColumn;
+    @YdbType("JsonDocument")
+    private String jsonDocumentColumn;
+    @YdbType("Uint8")
+    private byte uint8Column;
+    @YdbType("Uint16")
+    private short uint16Column;
+    @YdbType("Uint32")
+    private int uint32Column;
+    @YdbType("Uint64")
+    private long uint64Column;
 ```
 
 Использование аннотации `@YdbType` позволяет точно указать типы данных, поддерживаемые {{ ydb-short-name }}, что обеспечивает корректное взаимодействие с базой данных.

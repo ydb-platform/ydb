@@ -129,7 +129,7 @@ To generate `VIEW INDEX` statements from repository methods, use the `@ViewIndex
 
 Here is an example of an index on the Users table by the `login` field:
 
-```Java
+```java
 public interface SimpleUserRepository extends CrudRepository<User, Long> {
 
     @ViewIndex(indexName = "login_index")
@@ -152,19 +152,19 @@ FROM `Users` VIEW login_index AS `Users` WHERE `Users`.`login` = ?
 
 The `@YdbType` annotation allows you to declare a specific {{ ydb-short-name }} data type for an entity field. Here is an example of its usage:
 
-```kotlin
-@YdbType("Json")
-lateinit var jsonColumn: String
-@YdbType("JsonDocument")
-lateinit var jsonDocumentColumn: String
-@YdbType("Uint8")
-lateinit var uint8Column: Byte
-@YdbType("Uint16")
-lateinit var uint16Column: Short
-@YdbType("Uint32")
-lateinit var uint32Column: Int
-@YdbType("Uint64")
-lateinit var uint64Column: Long
+```java
+    @YdbType("Json")
+    private String jsonColumn;
+    @YdbType("JsonDocument")
+    private String jsonDocumentColumn;
+    @YdbType("Uint8")
+    private byte uint8Column;
+    @YdbType("Uint16")
+    private short uint16Column;
+    @YdbType("Uint32")
+    private int uint32Column;
+    @YdbType("Uint64")
+    private long uint64Column;
 ```
 
 Using the `@YdbType` annotation allows you to accurately specify the data types supported by {{ ydb-short-name }}, ensuring proper interaction with the database.

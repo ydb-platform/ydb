@@ -49,6 +49,7 @@ public:
     std::vector<std::string> GetPKColumnNames() const;
 
     virtual std::optional<ui32> GetColumnIdOptional(const std::string& columnName) const = 0;
+    virtual ui32 GetColumnIdVerified(const std::string& columnName) const = 0;
     virtual int GetFieldIndex(const ui32 columnId) const = 0;
     bool HasColumnId(const ui32 columnId) const {
         return GetFieldIndex(columnId) >= 0;
@@ -76,6 +77,7 @@ public:
         const ISnapshotSchema& dataSchema, const std::shared_ptr<NArrow::TGeneralContainer>& batch, const std::set<ui32>& restoreColumnIds) const;
     [[nodiscard]] TConclusion<std::shared_ptr<arrow::RecordBatch>> PrepareForModification(
         const std::shared_ptr<arrow::RecordBatch>& incomingBatch, const NEvWrite::EModificationType mType) const;
+    void AdaptBatchToSchema(NArrow::TGeneralContainer& batch, const ISnapshotSchema::TPtr& targetSchema) const;
 };
 
 } // namespace NKikimr::NOlap

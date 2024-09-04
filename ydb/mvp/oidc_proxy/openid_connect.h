@@ -1,52 +1,17 @@
 #pragma once
-
+#include <util/generic/string.h>
+#include <util/generic/ptr.h>
 #include <ydb/public/api/client/yc_private/oauth/session_service.grpc.pb.h>
-#include <ydb/mvp/core/core_ydb.h>
-#include <ydb/mvp/core/protos/mvp.pb.h>
-#include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/http/http.h>
 #include <ydb/library/grpc/client/grpc_client_low.h>
-#include <library/cpp/string_utils/base64/base64.h>
 
-struct TOpenIdConnectSettings {
-    static const inline TString YDB_OIDC_COOKIE = "ydb_oidc_cookie";
-    static const inline TString SESSION_COOKIE = "session_cookie";
 
-    static const inline TString DEFAULT_CLIENT_ID = "yc.oauth.ydb-viewer";
-    static const inline TString DEFAULT_AUTH_URL_PATH = "/oauth/authorize";
-    static const inline TString DEFAULT_TOKEN_URL_PATH = "/oauth/token";
-    static const inline TString DEFAULT_EXCHANGE_URL_PATH = "/oauth2/session/exchange";
+namespace NMVP {
+namespace NOIDC {
 
-    TString ClientId = DEFAULT_CLIENT_ID;
-    TString SessionServiceEndpoint;
-    TString SessionServiceTokenName;
-    TString AuthorizationServerAddress;
-    TString ClientSecret;
-    std::vector<TString> AllowedProxyHosts;
-
-    NMvp::EAccessServiceType AccessServiceType = NMvp::yandex_v2;
-    TString AuthUrlPath = DEFAULT_AUTH_URL_PATH;
-    TString TokenUrlPath = DEFAULT_TOKEN_URL_PATH;
-    TString ExchangeUrlPath = DEFAULT_EXCHANGE_URL_PATH;
-
-    TString GetAuthorizationString() const {
-        return "Basic " + Base64Encode(ClientId + ":" + ClientSecret);
-    }
-
-    TString GetAuthEndpointURL() const {
-        return AuthorizationServerAddress + AuthUrlPath;
-    }
-
-    TString GetTokenEndpointURL() const {
-        return AuthorizationServerAddress + TokenUrlPath;
-    }
-
-    TString GetExchangeEndpointURL() const {
-        return AuthorizationServerAddress + ExchangeUrlPath;
-    }
-};
+struct TOpenIdConnectSettings;
 
 TString HmacSHA256(TStringBuf key, TStringBuf data);
 void SetHeader(NYdbGrpc::TCallMeta& meta, const TString& name, const TString& value);
@@ -150,3 +115,6 @@ struct TEvPrivate {
         }
     };
 };
+
+}  // NOIDC
+}  // NMVP

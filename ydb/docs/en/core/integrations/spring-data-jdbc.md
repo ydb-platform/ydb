@@ -43,7 +43,7 @@ Examples for different build systems:
 
 ## Usage {#using}
 
-After importing all the necessary dependencies, the dialect is ready for use. Let's consider a simple example of a Spring Data JDBC application.
+After importing all the necessary dependencies, the dialect is ready for use. Below is a simple example of a Spring Data JDBC application.
 
 ```properties
 

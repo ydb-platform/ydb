@@ -123,17 +123,17 @@ message IssueLog {
 
 #### Issues hierarchy {#issues-hierarchy}
 
-Issues can be arranged hierarchically with `id` and `reason` fields, which help to visualize how issues in a separate module affect the state of the system as a whole. All issues are arranged in a hierarchy where higher levels can depend on nested levels:
+Issues can be arranged hierarchically using the `id` and `reason` fields, which help visualize how issues in different modules affect the overall system state. All issues are arranged in a hierarchy where higher levels can depend on nested levels:
 
 ![cards_hierarchy](./_assets/hc_cards_hierarchy.png)
 
-Each issue has a nesting `level`. The higher the `level`, the deeper the issue is in the hierarchy. Issues with the same `type` always have the same `level`, and they can be represented as a hierarchy.
+Each issue has a nesting `level`. The higher the `level`, the deeper the issue is within the hierarchy. Issues with the same `type` always have the same `level`, and they can be represented hierarchically.
 
 ![issues_hierarchy](./_assets/hc_types_hierarchy.png)
 
 #### Database check result {#selfcheck-result}
 
-The most general statuses of the database, which can have the following values:
+The most general status of the database. It can have the following values:
 
 | Value | Description |
 |:----|:----|
@@ -144,14 +144,14 @@ The most general statuses of the database, which can have the following values:
 
 #### Issue status {#issue-status}
 
-Status (severity) of the current issue:
+The status (severity) of the current issue:
 
 | Value | Description |
 |:----|:----|
-| `GREY` | Failed to determine the status (an issue with the self-diagnostic subsystem). |
-| `GREEN` | No issues were detected. |
-| `BLUE` | Temporary minor degradation that does not affect database availability; the system is expected to switch to `GREEN`. |
-| `YELLOW` | A minor issue, no risks to availability. It is recommended to continue monitoring the issue. |
+| `GREY` | Unable to determine the status (an issue with the self-diagnostic subsystem). |
+| `GREEN` | No issues detected. |
+| `BLUE` | Temporary minor degradation that does not affect database availability; the system is expected to return to `GREEN`. |
+| `YELLOW` | A minor issue with no risks to availability. It is recommended to continue monitoring the issue. |
 | `ORANGE` | A serious issue, a step away from losing availability. Maintenance may be required. |
 | `RED` | A component is faulty or unavailable. |
 
@@ -161,13 +161,13 @@ Status (severity) of the current issue:
 
 #### Database has multiple issues, Database has compute issues, Database has storage issues
 
-**Description:** These issues depend solely on the underlying `COMPUTE` and `STORAGE` layers. This is the most general status of a database.
+**Description:** These issues depend solely on the underlying `COMPUTE` and `STORAGE` layers. This represents the most general status of a database.
 
 ### STORAGE
 
 #### There are no storage pools
 
-**Description:** Information about storage pools is unavailable. Most likely, storage pools aren't configured.
+**Description:** Information about storage pools is unavailable. Most likely, the storage pools are not configured.
 
 #### Storage degraded, Storage has no redundancy, Storage failed
 
@@ -175,7 +175,7 @@ Status (severity) of the current issue:
 
 #### System tablet BSC didn't provide information
 
-**Description:** Storage diagnostics will be generated alternatively.
+**Description:** Storage diagnostics will be generated using an alternative method.
 
 #### Storage usage over 75%, Storage usage over 85%, Storage usage over 90%
 
@@ -191,46 +191,57 @@ Status (severity) of the current issue:
 
 #### Group has no vslots
 
-**Description:** This case is not expected; it is an internal issue.
+**Description:** This situation is not expected; it is an internal issue.
 
 #### Group degraded
 
-**Description:** A number of disks allowed in the group are not available.operations.
+**Description:** A number of disks allowed in the group are not available.
+
 **Logic of work:** `HealthCheck` checks various parameters (fault tolerance mode, number of failed disks, disk status, etc.) and sets the appropriate status for the group accordingly.
-**Actions:** In [YDB Embedded UI](../embedded-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, set the `Groups` and `Degraded` filters, and use the known group `id` to check the availability of nodes and disks on the nodes.
+
+**Actions:** In [Embedded UI](../embedded-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, apply the `Groups` and `Degraded` filters, and use the known group `id` to check the availability of nodes and disks on the nodes.
 
 #### Group has no redundancy
 
-**Description:** A storage group lost its redundancy. Another failure of vdisk may lead to the loss of the group.operations.
-**Logic of work:** `HealthCheck` checks various parameters (fault tolerance mode, number of failed disks, disk status, etc.) and sets the appropriate status for the group accordingly.
-**Actions:** In [YDB Embedded UI](../embedded-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, set the `Groups` and `Degraded` filters, and use the known group `id` to check the availability of nodes and disks on the nodes.
+**Description:** A storage group has lost its redundancy. Another VDisk failure could result in the loss of the group.
+
+**Logic of work:** `HealthCheck` monitors various parameters (fault tolerance mode, number of failed disks, disk status, etc.) and sets the appropriate status for the group based on these parameters.
+
+**Actions:** In [Embedded UI](../embedded-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, apply the `Groups` and `Degraded` filters, and use the known group `id` to check the availability of nodes and disks on those nodes.
 
 #### Group failed
 
-**Description:** A storage group lost its integrity. Data is not available. `HealthCheck` checks various parameters (fault tolerance mode, number of failed disks, disk status, etc.) and, depending on them, sets the appropriate status and displays a message.operations.
-**Logic of work:** `HealthCheck` checks various parameters (fault tolerance mode, number of failed disks, disk status, etc.) and sets the appropriate status for the group accordingly.
-**Actions:** In [YDB Embedded UI](../embedded-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, set the `Groups` and `Degraded` filters, and use the known group `id` to check the availability of nodes and disks on the nodes.
+**Description:** A storage group has lost its integrity, and data is no longer available. `HealthCheck` evaluates various parameters (fault tolerance mode, number of failed disks, disk status, etc.) and determines the appropriate status, displaying a message accordingly.
+
+**Logic of work:** `HealthCheck` monitors various parameters (fault tolerance mode, number of failed disks, disk status, etc.) and sets the appropriate status for the group accordingly.
+
+**Actions:** In [Embedded UI](../embedded-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, apply the `Groups` and `Degraded` filters, and use the known group `id` to check the availability of nodes and disks on those nodes.```
 
 ### VDISK
 
-#### System tablet BSC didn't provide known status
+#### System tablet BSC did not provide known status
 
-**Description:** This case is not expected; it is an internal issue.
+**Description:** This situation is not expected; it is an internal issue.
 
 #### VDisk is not available
 
-**Description:** The disk is not operational at all.
-**Actions:** In [YDB Embedded UI](../embedded-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, and set the `Groups` and `Degraded` filters. The group `id` can be found through the related `STORAGE_GROUP` issue. Hover over the relevant `vdisk` to identify the node with the problem. Check the availability of nodes and disks on the nodes.
+**Description:** The disk is not operational.
+
+**Actions:** In [YDB Embedded UI](../embedded-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, and apply the `Groups` and `Degraded` filters. The group `id` can be found through the related `STORAGE_GROUP` issue. Hover over the relevant VDisk to identify the node with the problem and check the availability of nodes and disks on those nodes.
 
 #### VDisk is being initialized
 
-**Description:** Initialization in process.
-**Actions:** In [YDB Embedded UI](../embedded-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, and set the `Groups` and `Degraded` filters. The group `id` can be found through the related `STORAGE_GROUP` issue. Hover over the relevant `vdisk` to identify the node with the problem. Check the availability of nodes and disks on the nodes.
+**Description:** The disk is in the process of initialization.
+
+**Actions:** In [Embedded UI](../embedded-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, and apply the `Groups` and `Degraded` filters. The group `id` can be found through the related `STORAGE_GROUP` issue. Hover over the relevant VDisk to identify the node with the problem and check the availability of nodes and disks on those nodes.
 
 #### Replication in progress
 
-**Description:** The disk accepts queries, but not all the data was replicated.
-**Actions:** In [YDB Embedded UI](../embedded-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, and set the `Groups` and `Degraded` filters. The group `id` can be found through the related `STORAGE_GROUP` issue. Hover over the relevant `vdisk` to identify the node with the problem. Check the availability of nodes and disks on the nodes.
+#### Replication in progress
+
+**Description:** The disk is accepting queries, but not all data has been replicated.
+
+**Actions:** In [Embedded UI](../embedded-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, and apply the `Groups` and `Degraded` filters. The group `id` can be found through the related `STORAGE_GROUP` issue. Hover over the relevant VDisk to identify the node with the problem and check the availability of nodes and disks on those nodes.
 
 #### VDisk have space issue
 
@@ -245,27 +256,31 @@ Status (severity) of the current issue:
 #### PDisk state is ...
 
 **Description:** Indicates state of physical disk.
-**Actions:** In [YDB Embedded UI](../embedded-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, set the `Nodes` and `Degraded` filters, and use the known node `id` and `pdisk` to check the availability of nodes and disks on the nodes.
+
+**Actions:** In [Embedded UI](../embedded-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, set the `Nodes` and `Degraded` filters, and use the known node id and PDisk to check the availability of nodes and disks on the nodes.
 
 #### Available size is less than 12%, Available size is less than 9%, Available size is less than 6%
 
 **Description:** Free space on the physical disk is running out.
-**Actions:** In [YDB Embedded UI](../embedded-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, set the `Nodes` and `Out of Space` filters, and use the known node `id` and `pdisk` to check the available space.
+**Actions:** In [Embedded UI](../embedded-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, set the `Nodes` and `Out of Space` filters, and use the known node and PDisk identifiers to check the available space.
 
 #### PDisk is not available
 
 **Description:** A physical disk is not available.
-**Actions:** In [YDB Embedded UI](../embedded-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, set the `Nodes` and `Degraded` filters, and use the known node `id` and `pdisk` to check the availability of nodes and disks on the nodes.
+
+**Actions:** In [Embedded UI](../embedded-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, set the `Nodes` and `Degraded` filters, and use the known node and PDisk identifiers to check the availability of nodes and disks on the nodes.
 
 ### STORAGE_NODE
+
 #### Storage node is not available
+
 **Description:** A storage node is not available.
 
 ### COMPUTE
 
 #### There are no compute nodes
 
-**Description:** The database has no nodes to start the tablets. Unable to determine `COMPUTE_NODE` issues below.
+**Description:** The database has no nodes available to start the tablets. Unable to determine `COMPUTE_NODE` issues below.
 
 #### Compute has issues with system tablets
 
@@ -291,41 +306,56 @@ Status (severity) of the current issue:
 
 #### Paths quota usage is over than 90%, Paths quota usage is over than 99%, Paths quota exhausted, Shards quota usage is over than 90%, Shards quota usage is over than 99%, Shards quota exhausted
 
-**Description:** Quotas exhausted.
+**Description:** Quotas are exhausted.
+
 **Actions:** Check the number of objects (tables, topics) in the database and delete any unnecessary ones.
 
 ### SYSTEM_TABLET
 
 #### System tablet is unresponsive, System tablet response time over 1000ms, System tablet response time over 5000ms
 
-**Description:** The system tablet is not responding or takes too long to respond.
-**Actions:** In [YDB Embedded UI](../embedded-ui/ydb-monitoring.md), go to the `Storage` tab and set the `Nodes` filter. Check the `Uptime` and status of the nodes. If the `Uptime` is short, review the logs to determine the reasons for the node restarts.
+**Description:** The system tablet is either not responding or takes too long to respond.
+
+**Actions:** In [Embedded UI](../embedded-ui/ydb-monitoring.md), navigate to the `Storage` tab and apply the `Nodes` filter. Check the `Uptime` and the nodes' statuses. If the `Uptime` is short, review the logs to determine the reasons for the node restarts.
 
 ### TABLET
 
 #### Tablets are restarting too often
 
-**Description:** Tablets are restarting too often.
-**Actions:** In [YDB Embedded UI](../embedded-ui/ydb-monitoring.md), go to the `Nodes` tab. Check the `Uptime` and status of the nodes. If the `Uptime` is short, review the logs to determine the reasons for the node restarts.
+**Description:** Tablets are restarting too frequently.
+
+**Actions:** In [Embedded UI](../embedded-ui/ydb-monitoring.md), navigate to the `Nodes` tab. Check the `Uptime` and the nodes' statuses. If the `Uptime` is short, review the logs to determine the reasons for the node restarts.
 
 #### Tablets/Followers are dead
 
-**Description:** Tablets are not running (probably cannot be started).
-**Actions:** In [YDB Embedded UI](../embedded-ui/ydb-monitoring.md), go to the `Nodes` tab. Check the `Uptime` and status of the nodes. If the `Uptime` is short, review the logs to determine the reasons for the node restarts.
+**Description:** Tablets are not running (likely cannot be started).
+
+**Actions:** In [Embedded UI](../embedded-ui/ydb-monitoring.md), navigate to the `Nodes` tab. Check the `Uptime` and the nodes' statuses. If the `Uptime` is short, review the logs to determine the reasons for the node restarts.
 
 ### LOAD_AVERAGE
 
 #### LoadAverage above 100%
 
-**Description:** ([Load](https://en.wikipedia.org/wiki/Load_(computing)).) A physical host is overloaded. This indicates that the system is working at or beyond its capacity, potentially due to a high number of processes waiting for I/O operations.
+### LOAD_AVERAGE
+
+#### LoadAverage above 100%
+
+**Description:** A physical host is overloaded, meaning the system is operating at or beyond its capacity, potentially due to a high number of processes waiting for I/O operations. For more information on load, see [Load (computing)](https://en.wikipedia.org/wiki/Load_(computing)).
+
 **Logic of work:**
-Load Information:
-  Source: `/proc/loadavg`
-We use the first number of the three — the average load over the last 1 minute.
-Logical Cores Information:
-  Primary Source: `/sys/fs/cgroup/cpu.max`
-  Fallback Source: `/sys/fs/cgroup/cpu/cpu.cfs_quota_us`, `/sys/fs/cgroup/cpu/cpu.cfs_period_us`.
-The number of cores is calculated by dividing the quota by the period (quota / period).
+
+- Load Information:
+
+  - Source: `/proc/loadavg`
+  - The first number of the three represents the average load over the last 1 minute.
+
+- Logical Cores Information:
+
+  - Primary Source: `/sys/fs/cgroup/cpu.max`
+  - Fallback Sources: `/sys/fs/cgroup/cpu/cpu.cfs_quota_us`, `/sys/fs/cgroup/cpu/cpu.cfs_period_us`
+-
+ The number of cores is calculated by dividing the quota by the period (quota / period).
+
 **Actions:** Check the CPU load on the nodes.
 
 ### COMPUTE_POOL
@@ -333,30 +363,35 @@ The number of cores is calculated by dividing the quota by the period (quota / p
 #### Pool usage is over than 90%, Pool usage is over than 95%, Pool usage is over than 99%
 
 **Description:** One of the pools' CPUs is overloaded.
+
 **Actions:** Add cores to the configuration of the actor system for the corresponding CPU pool.
 
 ### NODE_UPTIME
 
 #### The number of node restarts has increased
 
-**Description:** The number of node restarts has exceeded the threshold. By default, 10 restarts per hour.
-**Actions:** Check the logs to determine the reasons for the process restart.
+**Description:** The number of node restarts has exceeded the threshold. By default, this is set to 10 restarts per hour.
+
+**Actions:** Check the logs to determine the reasons for the process restarts.
 
 #### Node is restarting too often
 
-**Description:** The number of node restarts has exceeded the threshold. By default, 30 restarts per hour.
-**Actions:** Check the logs to determine the reasons for the process restart.
+**Description:** The number of node restarts has exceeded the threshold. By default, this is set to 30 restarts per hour.
+
+**Actions:** Check the logs to determine the reasons for the process restarts.
 
 ### NODES_TIME_DIFFERENCE
 
 #### Node is ... ms behind peer [id], Node is ... ms ahead of peer [id]
 
-**Description:** Time drift on nodes might lead to potential issues with coordinating distributed transactions. This issue starts to appear from 5 ms.
+**Description:** Time drift on nodes might lead to potential issues with coordinating distributed transactions. This issue starts to appear when the time difference is 5 ms or more.
+
 **Actions:** Check for discrepancies in system time between the nodes listed in the alert, and verify the operation of the time synchronization process.
 
 ## Examples {#examples}
 
-The shortest `HealthCheck` response looks like this. It is returned if there is nothing wrong with the database
+The shortest `HealthCheck` response looks like this. It is returned if there is nothing wrong with the database:
+
 ```json
 {
   "self_check_result": "GOOD"
@@ -366,6 +401,7 @@ The shortest `HealthCheck` response looks like this. It is returned if there is 
 #### Verbose example {#example-verbose}
 
 `GOOD` response with `verbose` parameter:
+
 ```json
 {
     "self_check_result": "GOOD",
@@ -615,6 +651,7 @@ The shortest `HealthCheck` response looks like this. It is returned if there is 
 #### Emergency example {#example-emergency}
 
 Response with `EMERGENCY` status:
+
 ```json
 {
   "self_check_result": "EMERGENCY",

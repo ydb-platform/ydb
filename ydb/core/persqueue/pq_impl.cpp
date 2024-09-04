@@ -691,7 +691,7 @@ void TPersQueue::ApplyNewConfigAndReply(const TActorContext& ctx)
     ClearNewConfig();
 
     for (auto& p : Partitions) { //change config for already created partitions
-        ctx.Send(p.second.Actor, new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config));
+        ctx.Send(p.second.Actor, new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config, BootstrapConfigTx ? *BootstrapConfigTx : NKikimrPQ::TBootstrapConfig()));
     }
     ChangePartitionConfigInflight += Partitions.size();
 
@@ -4543,6 +4543,7 @@ void TPersQueue::SendEvProposePartitionConfig(const TActorContext& ctx,
 
         event->TopicConverter = tx.TopicConverter;
         event->Config = tx.TabletConfig;
+        event->BootstrapConfig = tx.BootstrapConfig;
 
         ctx.Send(partition.Actor, std::move(event));
     }

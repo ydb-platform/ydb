@@ -6,7 +6,7 @@ void IProposeTxOperator::DoSendReply(TColumnShard& owner, const TActorContext& c
     if (owner.CurrentSchemeShardId) {
         AFL_VERIFY(owner.CurrentSchemeShardId);
         ctx.Send(MakePipePerNodeCacheID(false),
-            new TEvPipeCache::TEvForward(BuildProposeResultEvent(owner).release(), (ui64)owner.CurrentSchemeShardId, false));
+            new TEvPipeCache::TEvForward(BuildProposeResultEvent(owner).release(), (ui64)owner.CurrentSchemeShardId, true));
     } else {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "scheme_shard_tablet_not_initialized")("source", GetTxInfo().Source);
         ctx.Send(GetTxInfo().Source, BuildProposeResultEvent(owner).release());
@@ -29,7 +29,7 @@ std::unique_ptr<NKikimr::TEvColumnShard::TEvProposeTransactionResult> IProposeTx
             evResult->Record.MutableDomainCoordinators()->CopyFrom(owner.ProcessingParams->GetCoordinators());
         }
         owner.Counters.GetTabletCounters()->IncCounter(COUNTER_PREPARE_SUCCESS);
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("message", GetProposeStartInfoVerified().GetStatusMessage())("tablet_id", owner.TabletID())(
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("message", GetProposeStartInfoVerified().GetStatusMessage())("tablet_id", owner.TabletID())(
             "tx_id", txInfo.TxId);
     }
     return evResult;

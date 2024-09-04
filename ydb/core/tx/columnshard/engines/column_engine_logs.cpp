@@ -285,7 +285,10 @@ std::shared_ptr<TInsertColumnEngineChanges> TColumnEngineForLogs::StartInsert(st
         if (changes->PathToGranule.contains(pathId)) {
             continue;
         }
-        AFL_VERIFY(changes->PathToGranule.emplace(pathId, GetGranulePtrVerified(pathId)->GetBucketPositions()).second);
+        if (!data.GetRemove()) {
+            AFL_VERIFY(changes->PathToGranule.emplace(pathId, GetGranulePtrVerified(pathId)->GetBucketPositions()).second);
+        }
+        
     }
 
     return changes;

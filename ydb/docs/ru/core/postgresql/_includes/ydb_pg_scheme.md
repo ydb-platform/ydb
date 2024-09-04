@@ -1,3 +1,4 @@
+```mermaid
 flowchart TD
     classDef default fill: none, stroke: black, font-size: 26
     classDef arrowText font-size: 26
@@ -21,3 +22,4 @@ flowchart TD
         end
         many_nodes[Обработка запроса может распараллеливаться на много узлов]
     end
+```

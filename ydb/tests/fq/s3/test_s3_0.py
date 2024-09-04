@@ -526,7 +526,7 @@ Pear,15,33'''
 
             SELECT *
             FROM `{storage_connection_name}`.`/`
-            WITH (format=csv_with_names, 
+            WITH (format=csv_with_names,
                 with_infer='true',
                 partitioned_by=(`date`),
                 projection=$projection);

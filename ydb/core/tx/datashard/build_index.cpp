@@ -2,6 +2,7 @@
 #include "range_ops.h"
 #include "scan_common.h"
 #include "upload_stats.h"
+#include "buffer_data.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
@@ -26,31 +27,6 @@ namespace NKikimr::NDataShard {
 #define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
 #define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
-
-using TColumnsTypes = THashMap<TString, NScheme::TTypeInfo>;
-using TTypes = NTxProxy::TUploadTypes;
-using TRows = NTxProxy::TUploadRows;
-
-static TColumnsTypes GetAllTypes(const TUserTable& tableInfo) {
-    TColumnsTypes result;
-
-    for (const auto& it : tableInfo.Columns) {
-        result[it.second.Name] = it.second.Type;
-    }
-
-    return result;
-}
-
-static void ProtoYdbTypeFromTypeInfo(Ydb::Type* type, const NScheme::TTypeInfo typeInfo) {
-    if (typeInfo.GetTypeId() == NScheme::NTypeIds::Pg) {
-        auto* typeDesc = typeInfo.GetTypeDesc();
-        auto* pg = type->mutable_pg_type();
-        pg->set_type_name(NPg::PgTypeNameFromTypeDesc(typeDesc));
-        pg->set_oid(NPg::PgTypeIdFromTypeDesc(typeDesc));
-    } else {
-        type->set_type_id((Ydb::Type::PrimitiveTypeId)typeInfo.GetTypeId());
-    }
-}
 
 static std::shared_ptr<TTypes> BuildTypes(const TUserTable& tableInfo, const NKikimrIndexBuilder::TColumnBuildSettings& buildSettings) {
     auto types = GetAllTypes(tableInfo);
@@ -118,74 +94,6 @@ bool BuildExtraColumns(TVector<TCell>& cells, const NKikimrIndexBuilder::TColumn
 
     return true;
 }
-
-class TBufferData: public IStatHolder, public TNonCopyable {
-public:
-    TBufferData()
-        : Rows(new TRows)
-    {
-    }
-
-    ui64 GetRows() const override final {
-        return Rows->size();
-    }
-
-    std::shared_ptr<TRows> GetRowsData() const {
-        return Rows;
-    }
-
-    ui64 GetBytes() const override final {
-        return ByteSize;
-    }
-
-    void FlushTo(TBufferData& other) {
-        if (this == &other) {
-            return;
-        }
-
-        Y_ABORT_UNLESS(other.Rows);
-        Y_ABORT_UNLESS(other.IsEmpty());
-
-        other.Rows.swap(Rows);
-        other.ByteSize = ByteSize;
-        other.LastKey = std::move(LastKey);
-
-        Clear();
-    }
-
-    void Clear() {
-        Rows->clear();
-        ByteSize = 0;
-        LastKey = {};
-    }
-
-    void AddRow(TSerializedCellVec&& key, TSerializedCellVec&& targetPk, TString&& targetValue) {
-        Rows->emplace_back(std::move(targetPk), std::move(targetValue));
-        ByteSize += Rows->back().first.GetBuffer().size() + Rows->back().second.size();
-        LastKey = std::move(key);
-    }
-
-    bool IsEmpty() const {
-        return Rows->empty();
-    }
-
-    bool IsReachLimits(const TUploadLimits& Limits) {
-        return Rows->size() >= Limits.BatchRowsLimit || ByteSize > Limits.BatchBytesLimit;
-    }
-
-    void ExtractLastKey(TSerializedCellVec& out) {
-        out = std::move(LastKey);
-    }
-
-    const TSerializedCellVec& GetLastKey() const {
-        return LastKey;
-    }
-
-private:
-    std::shared_ptr<TRows> Rows;
-    ui64 ByteSize = 0;
-    TSerializedCellVec LastKey;
-};
 
 template <NKikimrServices::TActivity::EType Activity>
 class TBuildScanUpload: public TActor<TBuildScanUpload<Activity>>, public NTable::IScan {
@@ -382,11 +290,7 @@ public:
               << " WriteBuf empty: " << WriteBuf.IsEmpty()
               << " " << Debug());
 
-        if (ReadBuf.IsEmpty()) {
-            return EScan::Feed;
-        }
-
-        if (WriteBuf.IsEmpty()) {
+        if (!ReadBuf.IsEmpty() && WriteBuf.IsEmpty()) {
             ReadBuf.FlushTo(WriteBuf);
             Upload();
         }
@@ -433,7 +337,7 @@ private:
 
         if (UploadStatus.IsSuccess()) {
             Stats.Aggr(&WriteBuf);
-            WriteBuf.ExtractLastKey(LastUploadedKey);
+            LastUploadedKey = WriteBuf.ExtractLastKey();
 
             //send progress
             TAutoPtr<TEvDataShard::TEvBuildIndexProgressResponse> progress = new TEvDataShard::TEvBuildIndexProgressResponse;

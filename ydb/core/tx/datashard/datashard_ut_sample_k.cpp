@@ -12,11 +12,6 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-template <>
-inline void Out<NKikimrIndexBuilder::EBuildStatus>(IOutputStream& o, NKikimrIndexBuilder::EBuildStatus status) {
-    o << NKikimrIndexBuilder::EBuildStatus_Name(status);
-}
-
 namespace NKikimr {
 
 static ui64 sId = 1;

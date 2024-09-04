@@ -25,7 +25,7 @@ To initiate the check, call the `SelfCheck` method from `NYdb::NMonitoring` name
 
 ## Call parameters {#call-parameters}
 
-`SelfCheck` method provides information in the form of a [set of issues](#emergency-example) which could look like this:
+`SelfCheck` method provides information in the form of a [set of issues](#example-emergency) which could look like this:
 
 ```json
 {
@@ -102,7 +102,7 @@ message IssueLog {
 ```
 
 
-#### Description of fields in the response {#fields-description}
+### Description of fields in the response {#fields-description}
 
 | Field | Description |
 |:----|:----|
@@ -117,7 +117,7 @@ message IssueLog {
 | `database_status` | If the settings include `ReturnVerboseStatus` parameter, the `database_status` field will be populated. <br/>This field offers a comprehensive summary of the overall health of the database. <br/>It is designed to provide a quick overview of the database's condition, helping to assess its health and identify any major issuehs at a high level. [Example](#example-verbose). For the full response structure, see the [ydb_monitoring.proto](https://github.com/ydb-platform/ydb/public/api/protos/ydb_monitoring.proto) file in the {{ ydb-short-name }} Git repository. |
 | `location` | Contains information about the host, where the `HealthCheck` service was called |
 
-#### Issues hierarchy {#issues-hierarchy}
+### Issues hierarchy {#issues-hierarchy}
 
 Issues can be arranged hierarchically using the `id` and `reason` fields, which help visualize how issues in different modules affect the overall system state. All issues are arranged in a hierarchy where higher levels can depend on nested levels:
 
@@ -394,7 +394,7 @@ The shortest `HealthCheck` response looks like this. It is returned if there is 
 }
 ```
 
-#### Verbose example {#example-verbose}
+### Verbose example {#example-verbose}
 
 `GOOD` response with `verbose` parameter:
 
@@ -644,7 +644,7 @@ The shortest `HealthCheck` response looks like this. It is returned if there is 
 }
 ```
 
-#### Emergency example {#example-emergency}
+### Emergency example {#example-emergency}
 
 Response with `EMERGENCY` status:
 

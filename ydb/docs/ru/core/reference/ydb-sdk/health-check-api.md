@@ -25,7 +25,7 @@
 
 ## Параметры вызова {#call-parameters}
 
-`SelfCheck` возвращает информацию в форме [списка проблем](#emergency-example), каждая из которых может выглядеть так:
+`SelfCheck` возвращает информацию в форме [списка проблем](#example-emergency), каждая из которых может выглядеть так:
 
 ```json
 {
@@ -318,13 +318,13 @@ message IssueLog {
 **Логика работы:**  
 Информация о нагрузке:
 
-  - Источник: `/proc/loadavg`  
-  - Информация о логических ядрах:  
+- Источник: `/proc/loadavg`  
+- Информация о логических ядрах:  
 
-    - Основной источник: `/sys/fs/cgroup/cpu.max`  
-    - Дополнительный источник: `/sys/fs/cgroup/cpu/cpu.cfs_quota_us`, `/sys/fs/cgroup/cpu/cpu.cfs_period_us`
+  - Основной источник: `/sys/fs/cgroup/cpu.max`  
+  - Дополнительный источник: `/sys/fs/cgroup/cpu/cpu.cfs_quota_us`, `/sys/fs/cgroup/cpu/cpu.cfs_period_us`
 
-  - Количество ядер вычисляется путём деления квоты на период (`quota / period`).  
+- Количество ядер вычисляется путём деления квоты на период (`quota / period`).  
 
 **Действия при срабатывании:** Проверить загруженность нод по CPU.
 
@@ -364,7 +364,7 @@ message IssueLog {
 }
 ```
 
-#### Пример verbose {#example-verbose}
+### Пример verbose {#example-verbose}
 
 Ответ `GOOD` при использовании параметра `verbose`:
 
@@ -614,9 +614,9 @@ message IssueLog {
 }
 ```
 
-#### пример EMERGENCY: {#example-emergency}
+### Пример EMERGENCY {#example-emergency}
 
-Ответ в случаи проблем может выглядеть так
+Ответ в случаи проблем может выглядеть так:
 
 ```json
 {

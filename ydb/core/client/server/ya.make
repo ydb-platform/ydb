@@ -26,8 +26,6 @@ SRCS(
     msgbus_server_resolve_node.cpp
     msgbus_server_ic_debug.cpp
     msgbus_server_local_enumerate_tablets.cpp
-    msgbus_server_local_minikql.cpp
-    msgbus_server_local_scheme_tx.cpp
     msgbus_server_node_registration.cpp
     msgbus_server_proxy.cpp
     msgbus_server_proxy.h
@@ -37,7 +35,6 @@ SRCS(
     msgbus_server_scheme_request.cpp
     msgbus_server_sqs.cpp
     msgbus_server_tablet_counters.cpp
-    msgbus_server_tablet_kill.cpp
     msgbus_server_tablet_state.cpp
     msgbus_server_test_shard_request.cpp
     msgbus_server_tx_request.cpp

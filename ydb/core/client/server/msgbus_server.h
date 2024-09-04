@@ -272,8 +272,6 @@ IActor* CreateMessageBusServerProxy(TMessageBusServer *server);
 
 //IActor* CreateMessageBusDatashardSetConfig(TBusMessageContext &msg);
 IActor* CreateMessageBusTabletCountersRequest(TBusMessageContext &msg);
-IActor* CreateMessageBusLocalMKQL(TBusMessageContext &msg);
-IActor* CreateMessageBusLocalSchemeTx(TBusMessageContext &msg);
 IActor* CreateMessageBusSchemeInitRoot(TBusMessageContext &msg);
 IActor* CreateMessageBusGetTypes(TBusMessageContext &msg);
 IActor* CreateMessageBusHiveCreateTablet(TBusMessageContext &msg);
@@ -282,7 +280,6 @@ IActor* CreateMessageBusKeyValue(TBusMessageContext &msg);
 IActor* CreateMessageBusPersQueue(TBusMessageContext &msg);
 IActor* CreateMessageBusChooseProxy(TBusMessageContext &msg);
 IActor* CreateMessageBusTabletStateRequest(TBusMessageContext &msg);
-IActor* CreateMessageBusTabletKillRequest(TBusMessageContext &msg);
 IActor* CreateMessageBusSchemeOperationStatus(TBusMessageContext &msg);
 IActor* CreateMessageBusBlobStorageLoadRequest(TBusMessageContext &msg);
 IActor* CreateMessageBusBlobStorageGetRequest(TBusMessageContext &msg);

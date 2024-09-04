@@ -102,11 +102,8 @@ public:
             MTYPE(TBusOldKeyValue)
             MTYPE(TBusKeyValueResponse)
             MTYPE(TBusPersQueue)
-            MTYPE(TBusTabletKillRequest)
             MTYPE(TBusTabletStateRequest)
             MTYPE(TBusTabletCountersRequest)
-            MTYPE(TBusTabletLocalMKQL)
-            MTYPE(TBusTabletLocalSchemeTx)
             MTYPE(TBusSchemeOperation)
             MTYPE(TBusSchemeOperationStatus)
             MTYPE(TBusSchemeDescribe)
@@ -511,12 +508,6 @@ void TMessageBusServer::OnMessage(TBusMessageContext &msg) {
         return ClientActorRequest(CreateMessageBusTabletStateRequest, msg);
     case MTYPE_CLIENT_TABLET_COUNTERS_REQUEST:
         return ClientActorRequest(CreateMessageBusTabletCountersRequest, msg);
-    case MTYPE_CLIENT_LOCAL_MINIKQL:
-        return ClientActorRequest(CreateMessageBusLocalMKQL, msg);
-    case MTYPE_CLIENT_LOCAL_SCHEME_TX:
-        return ClientActorRequest(CreateMessageBusLocalSchemeTx, msg);
-    case MTYPE_CLIENT_TABLET_KILL_REQUEST:
-        return ClientActorRequest(CreateMessageBusTabletKillRequest, msg);
     case MTYPE_CLIENT_FLAT_TX_REQUEST:
         return ClientProxyRequest<TEvBusProxy::TEvFlatTxRequest>(msg);
     case MTYPE_CLIENT_FLAT_TX_STATUS_REQUEST:

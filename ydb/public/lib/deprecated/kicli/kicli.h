@@ -866,18 +866,6 @@ protected:
         }
     }
 
-    void PrepareRequest(NKikimrClient::TLocalMKQL& request) const {
-        if (!SecurityToken.empty()) {
-            request.SetSecurityToken(SecurityToken);
-        }
-    }
-
-    void PrepareRequest(NKikimrClient::TLocalSchemeTx& request) const {
-        if (!SecurityToken.empty()) {
-            request.SetSecurityToken(SecurityToken);
-        }
-    }
-
     TString SecurityToken;
     THolder<TImpl> Impl;
 };

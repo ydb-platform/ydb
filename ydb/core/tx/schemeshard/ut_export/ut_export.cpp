@@ -19,7 +19,7 @@ namespace {
 
     void Run(TTestBasicRuntime& runtime, TTestEnv& env, const TVector<TString>& tables, const TString& request,
             Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS,
-            const TString& dbName = "/MyRoot", bool serverless = false, const TString& userSID = "") {
+            const TString& dbName = "/MyRoot", bool serverless = false, const TString& userSID = "", const TString& peerName = "") {
 
         ui64 txId = 100;
 

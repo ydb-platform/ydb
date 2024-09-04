@@ -7,11 +7,6 @@
 #include <util/string/join.h>
 #include <util/stream/output.h>
 
-// static inline IOutputStream& operator<<(IOutputStream& o, NKikimr::NOlap::TWriteId writeId) {
-//     o << static_cast<ui64>(writeId);
-//     return o;
-// }
-
 namespace NKikimr::NColumnShard {
 
 class TWaitEraseTablesTxSubscriber: public NSubscriber::ISubscriber {
@@ -131,74 +126,10 @@ public:
 };
 
 
-// //TODO decompose and use TCompositeSubscriber
-// class TWaitMoveTablePrerequisites: public NSubscriber::ISubscriber {
-//     const ui64 TxId;
-//     std::optional<ui64> TableToErase;
-//     THashSet<ui64> TxIdsToWait; 
-//     THashSet<TWriteId> WriteIdsToWait;
-// public:
-//     TWaitMoveTablePrerequisites(const ui64 txId, const std::optional<ui64> tableToErase, THashSet<ui64>&& txIdsToWait, THashSet<TWriteId>&& writeIdsToWait)
-//         : TxId(txId)
-//         , TableToErase(tableToErase)
-//         , TxIdsToWait(std::move(txIdsToWait))
-//         , WriteIdsToWait(std::move(writeIdsToWait))
-//     {
-//         AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "waiting_move_table_prerequisites")
-//             ("table_to_erase", TableToErase ? std::to_string(*TableToErase) : "none");
-//             // ("tx_ids")(JoinSeq(",", TxIds))
-//             // ("write_ids")((JoinSeq(",", WriteIds)));
-//     }
-//     std::set<NSubscriber::EEventType> GetEventTypes() const override {
-//         return { NSubscriber::EEventType::WriteCompleted };
-//     }
-//     bool IsFinished() const override {
-//         return !TableToErase.has_value() && TxIdsToWait.empty() && WriteIdsToWait.empty();
-//     }
-//     virtual bool DoOnEvent(const std::shared_ptr<NSubscriber::ISubscriptionEvent>& ev, TColumnShard& shard) override {
-//         AFL_VERIFY(!IsFinished());
-//         switch(ev->GetType()) {
-//             case NSubscriber::EEventType::Undefined:
-//                 break;
-//             case NSubscriber::EEventType::TablesErased: {
-//                 const auto* evErased = static_cast<const NSubscriber::TEventTablesErased*>(ev.get());
-//                 if (TableToErase && evErased->GetPathIds().contains(*TableToErase)) {
-//                     TableToErase.reset();
-//                     AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "on_table_erased")("status", "completed")("path_ids", JoinSeq(",", evErased->GetPathIds()));
-//                 } else {
-//                     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "on_table_erased")("path_ids", JoinSeq(",", evErased->GetPathIds()));
-//                 }
-//                 break;
-//             }
-//             case NSubscriber::EEventType::TransactionCompleted: {
-//                 const auto* evCompleted = static_cast<const NSubscriber::TEventTransactionCompleted*>(ev.get());
-//                 if (TxIdsToWait.erase(evCompleted->GetTxId())) {
-//                     AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "on_tx_completed")("completed", evCompleted->GetTxId())("remained", JoinSeq(",", TxIdsToWait));
-//                 } else {
-//                     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "on_tx_completed")("completed", evCompleted->GetTxId())("remained", JoinSeq(",", TxIdsToWait));
-//                 }
-//                 break;
-//             }
-//             case NSubscriber::EEventType::WriteCompleted: {
-//                 const auto* evCompleted = static_cast<const NSubscriber::TEventWriteCompleted*>(ev.get());
-//                 if (WriteIdsToWait.erase(evCompleted->GetWriteId())) {
-//                     AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "on_write_completed")("completed",  evCompleted->GetWriteId())("remained", JoinSeq(",", WriteIdsToWait));
-//                 } else {
-//                     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "on_write_completed")("completed",  evCompleted->GetWriteId())("remained", JoinSeq(",", WriteIdsToWait));
-//                 }
-//                 break;
-//             }
-//         }
-//         if(IsFinished()) {
-//             AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "move_tables_prerequisite_satisfied");
-//             shard.Execute(new TTxFinishAsyncTransaction(shard, TxId));
-//         }
-//         return true;
-//     }
-    
-// };
-
 TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) {
+    AFL_VERIFY(!WaitOnPropose);
+    std::shared_ptr<NSubscriber::ISubscriber> waitOnPropose;
+
     auto seqNo = SeqNoFromProto(SchemaTxBody.GetSeqNo());
     auto lastSeqNo = owner.LastSchemaSeqNo;
 
@@ -209,10 +140,6 @@ TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecut
         return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_CHANGED, errorMessage);
     }
 
-
-
-NKikimr::NColumnShard::TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) {
-    AFL_VERIFY(!WaitOnPropose);
     switch (SchemaTxBody.TxBody_case()) {
         case NKikimrTxColumnShard::TSchemaTxBody::kInitShard:
         {
@@ -220,7 +147,10 @@ NKikimr::NColumnShard::TTxController::TProposeResult TSchemaTransactionOperator:
             if (validationStatus.IsFail()) {
                 return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "Invalid schema: " + validationStatus.GetErrorMessage());
             }
-            //WaitOnPropose = std::make_shared<TWaitEraseTablesTxSubscriber>(GetNotErasedTableIds(owner, SchemaTxBody.GetInitShard().GetTables()), GetTxId());
+            auto pathIdsToErase = GetNotErasedTableIds(owner, SchemaTxBody.GetInitShard().GetTables());
+            if (!pathIdsToErase.empty()) {
+                waitOnPropose = std::make_shared<TWaitEraseTablesTxSubscriber>(pathIdsToErase, GetTxId());
+            }
         }
         break;
         case NKikimrTxColumnShard::TSchemaTxBody::kEnsureTables:
@@ -230,7 +160,10 @@ NKikimr::NColumnShard::TTxController::TProposeResult TSchemaTransactionOperator:
             if (validationStatus.IsFail()) {
                 return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "Invalid schema: " + validationStatus.GetErrorMessage());
             }
-            //WaitOnPropose = std::make_shared<TWaitEraseTablesTxSubscriber>(GetNotErasedTableIds(owner, tables), GetTxId());
+            auto waitPathIdsToErase = GetNotErasedTableIds(owner, SchemaTxBody.GetEnsureTables().GetTables());
+            if (!waitPathIdsToErase.empty()) {
+                waitOnPropose = std::make_shared<TWaitEraseTablesTxSubscriber>(waitPathIdsToErase, GetTxId());
+            }
         }
         break;
         case NKikimrTxColumnShard::TSchemaTxBody::kAlterTable:
@@ -253,7 +186,7 @@ NKikimr::NColumnShard::TTxController::TProposeResult TSchemaTransactionOperator:
             }
             auto txIds = owner.GetProgressTxController().GetTxs();  //TODO GetTxsByPathId(srcPathId) #8650
             AFL_VERIFY(!txIds.contains(GetTxId()))("tx_id", GetTxId())("tx_ids", JoinSeq(",", txIds));
-            WaitOnPropose = std::make_shared<TWaitTransactions>(
+            waitOnPropose = std::make_shared<TWaitTransactions>(
                 std::move(txIds),
                 [srcPathId, this, &owner](){
                     auto txIds = owner.GetProgressTxController().GetTxs();
@@ -273,6 +206,9 @@ NKikimr::NColumnShard::TTxController::TProposeResult TSchemaTransactionOperator:
         }
         case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET:
             break;
+    }
+    if (waitOnPropose && !waitOnPropose->IsFinished()) {
+        WaitOnPropose = std::move(waitOnPropose);
     }
 
     owner.UpdateSchemaSeqNo(seqNo, txc);
@@ -360,16 +296,23 @@ NKikimr::TConclusionStatus TSchemaTransactionOperator::ValidateTables(::google::
 }
 
 void TSchemaTransactionOperator::DoOnTabletInit(TColumnShard& owner) {
-    AFL_VERIFY(!WaitOnPropose);
+   AFL_VERIFY(!WaitOnPropose);
+    std::shared_ptr<NSubscriber::ISubscriber> waitOnPropose;
     switch (SchemaTxBody.TxBody_case()) {
         case NKikimrTxColumnShard::TSchemaTxBody::kInitShard:
             break;
         case NKikimrTxColumnShard::TSchemaTxBody::kEnsureTables:
         {
+            THashSet<ui64> waitPathIdsToErase;
             for (auto&& i : SchemaTxBody.GetEnsureTables().GetTables()) {
                 AFL_VERIFY(!owner.TablesManager.HasTable(i.GetPathId()));
+                if (owner.TablesManager.HasTable(i.GetPathId(), true)) {
+                    waitPathIdsToErase.emplace(i.GetPathId());
+                }
             }
-            WaitOnPropose = std::make_shared<TWaitEraseTablesTxSubscriber>(GetNotErasedTableIds(owner, SchemaTxBody.GetEnsureTables().GetTables()), GetTxId());
+            if (!waitPathIdsToErase.empty()) {
+                waitOnPropose = std::make_shared<TWaitEraseTablesTxSubscriber>(waitPathIdsToErase, GetTxId());
+            }
         }
         break;
         case NKikimrTxColumnShard::TSchemaTxBody::kAlterTable:
@@ -383,6 +326,7 @@ void TSchemaTransactionOperator::DoOnTabletInit(TColumnShard& owner) {
 
             AFL_VERIFY(owner.TablesManager.HasTable(srcPathId));
             AFL_VERIFY(!owner.TablesManager.HasTable(dstPathId));
+            // TODO
             // WaitOnPropose = std::make_shared<TWaitTransactions>(
             //     std::move(txIds),
             //     [&](){
@@ -407,12 +351,21 @@ void TSchemaTransactionOperator::DoOnTabletInit(TColumnShard& owner) {
         case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET:
             break;
     }
+    if (waitOnPropose && !waitOnPropose->IsFinished()) {
+        WaitOnPropose = waitOnPropose;
+    }
+    if (WaitOnPropose) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "wait_on_propose")("tx_id", GetTxId());
+        owner.Subscribers->RegisterSubscriber(WaitOnPropose);
+    } else {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "remove_pathes_cleaned")("tx_id", GetTxId());
+        owner.Execute(new TTxFinishAsyncTransaction(owner, GetTxId()));
+    }
 }
 
 void TSchemaTransactionOperator::DoStartProposeOnComplete(TColumnShard& owner, const TActorContext& /*ctx*/) {
-    if (WaitOnPropose) {
-         owner.Subscribers->RegisterSubscriber(WaitOnPropose);
-    }
+    AFL_VERIFY(!!WaitOnPropose);
+    owner.Subscribers->RegisterSubscriber(WaitOnPropose);
 }
 
 }

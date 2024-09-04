@@ -198,9 +198,6 @@ std::optional<TTxController::TTxInfo> TTxController::PopFirstPlannedTx() {
         auto& item = node.value();
         TPlanQueueItem tx(item.Step, item.TxId);
         RunningQueue.emplace(std::move(item));
-        if (PlanQueue.empty()) {
-            
-        }
         return GetTxInfoVerified(item.TxId);
     }
     return std::nullopt;
@@ -211,16 +208,12 @@ void TTxController::ProgressOnExecute(const ui64 txId, NTabletFlatExecutor::TTra
     auto opIt = Operators.find(txId);
     AFL_VERIFY(opIt != Operators.end())("tx_id", txId);
     Counters.OnFinishPlannedTx(opIt->second->GetOpType());
-    AFL_VERIFY(Operators.erase(txId));
+    PassAwayTx(txId);
     Schema::EraseTxInfo(db, txId);
 }
 
-<<<<<<< HEAD
 void TTxController::ProgressOnComplete(const TPlanQueueItem& txItem) {
-=======
-void TTxController::CompleteRunningTx(const TPlanQueueItem& txItem) {
-    PassAwayTx(txItem.TxId);
->>>>>>> wait background
+    //PassAwayTx(txItem.TxId);
     AFL_VERIFY(RunningQueue.erase(txItem))("info", txItem.DebugString());
 }
 

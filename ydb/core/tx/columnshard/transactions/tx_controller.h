@@ -458,16 +458,14 @@ public:
 
     std::optional<TTxInfo> GetFirstPlannedTx() const;
     std::optional<TTxInfo> PopFirstPlannedTx();
-<<<<<<< HEAD
     void ProgressOnExecute(const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
     void ProgressOnComplete(const TPlanQueueItem& tx);
-=======
-    void FinishPlannedTx(const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
-    void CompleteRunningTx(const TPlanQueueItem& tx);
+    // void FinishPlannedTx(const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
+    // void CompleteRunningTx(const TPlanQueueItem& tx);
     void PassAwayTx(const ui64 txId);
     THashSet<ui64> GetTxs() const;
+    //THashSet<ui64> GetTxsByPathId(const ui64 pathId) const; TODO #8650
 
->>>>>>> wait background
 
     std::optional<TPlanQueueItem> GetPlannedTx() const;
     TPlanQueueItem GetFrontTx() const;

@@ -36,19 +36,18 @@ private:
             return Object == object.Object;
         }
     };
-    TColumnShard& Owner;
     THashMap<EEventType, THashSet<TSharedPtrHashContainer>> Subscribers;
+    THashMap<TSharedPtrHashContainer, std::function<void()>> Actions;
 public:
-    TManager(TColumnShard& owner)
-        : Owner(owner)
+    TManager()
     {
-
     }
 
-    void RegisterSubscriber(const std::shared_ptr<ISubscriber>& s) {
+    void RegisterSubscriber(const std::shared_ptr<ISubscriber>& s, std::function<void()>&& action) {
         for (auto&& et : s->GetEventTypes()) {
             AFL_VERIFY(Subscribers[et].emplace(s).second);
         }
+        AFL_VERIFY(Actions.emplace(s, std::move(action)).second);
     }
 
     void OnEvent(const std::shared_ptr<ISubscriptionEvent>& ev) {
@@ -61,7 +60,7 @@ public:
         }
         std::vector<TSharedPtrHashContainer> toRemove;
         for (auto&& i : it->second) {
-            i->OnEvent(ev, Owner);
+            i->OnEvent(ev);
             if (i->IsFinished()) {
                 toRemove.emplace_back(i);
             }
@@ -75,6 +74,10 @@ public:
                     Subscribers.erase(it);
                 }
             }
+            auto action = Actions.find(i);
+            AFL_VERIFY(action != Actions.end());
+            action->second();
+            Actions.erase(action);
         }
     }
 };

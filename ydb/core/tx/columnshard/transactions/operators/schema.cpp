@@ -1,42 +1,68 @@
 #include "schema.h"
 #include <ydb/core/tx/columnshard/subscriber/abstract/subscriber/subscriber.h>
+#include <ydb/core/tx/columnshard/subscriber/abstract/subscriber/composite.h>
 #include <ydb/core/tx/columnshard/subscriber/events/tables_erased/event.h>
+#include <ydb/core/tx/columnshard/subscriber/events/writes_completed/event.h>
+#include <ydb/core/tx/columnshard/subscriber/events/transaction_completed/event.h>
 #include <ydb/core/tx/columnshard/transactions/transactions/tx_finish_async.h>
 #include <util/string/join.h>
 
 namespace NKikimr::NColumnShard {
 
-class TWaitEraseTablesTxSubscriber: public NSubscriber::ISubscriber {
+class TWaitEraseTablesTxSubscriber: public NSubscriber::TSubscriberBase {
 private:
     THashSet<ui64> WaitTables;
-    const ui64 TxId;
 public:
     virtual std::set<NSubscriber::EEventType> GetEventTypes() const override {
         return { NSubscriber::EEventType::TablesErased };
     }
-
-    virtual bool DoOnEvent(const std::shared_ptr<NSubscriber::ISubscriptionEvent>& ev, TColumnShard& shard) override {
-        AFL_VERIFY(ev->GetType() == NSubscriber::EEventType::TablesErased);
-        auto* evErased = static_cast<const NSubscriber::TEventTablesErased*>(ev.get());
-        bool result = false;
-        for (auto&& i : evErased->GetPathIds()) {
-            result |= WaitTables.erase(i);
+    void DoOnEvent(const NSubscriber::TEventTablesErased& ev) override {
+        for(const auto& pathId: ev.GetPathIds()) {
+            WaitTables.erase(pathId);
         }
         AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "on_event")("remained", JoinSeq(",", WaitTables));
-        if (WaitTables.empty()) {
-            shard.Execute(new TTxFinishAsyncTransaction(shard, TxId));
-        }
-        return result;
     }
 
     virtual bool IsFinished() const override {
         return WaitTables.empty();
     }
 
-    TWaitEraseTablesTxSubscriber(const THashSet<ui64>& waitTables, const ui64 txId)
-        : WaitTables(waitTables)
-        , TxId(txId) {
+    TWaitEraseTablesTxSubscriber(const THashSet<ui64>& waitTables)
+        : WaitTables(waitTables) {
+    }
+};
 
+class TWaitWrites: public NSubscriber::TSubscriberBase {
+    THashSet<TWriteId> WriteIds;
+public:
+    TWaitWrites(THashSet<TWriteId>&& writeIds)
+        : WriteIds(writeIds)
+    {}
+    std::set<NSubscriber::EEventType> GetEventTypes() const override {
+        return { NSubscriber::EEventType::WritesCompleted };
+    }
+    bool IsFinished() const override {
+        return WriteIds.empty();
+    }
+    void DoOnEvent(const NSubscriber::TEventWritesCompleted& ev) override {
+        WriteIds.erase(ev.GetWriteId());
+    }
+};
+
+class TWaitTransactions: public NSubscriber::TSubscriberBase {
+    THashSet<ui64> TxIds;
+public:
+    TWaitTransactions(THashSet<ui64>&& txIds)
+        : TxIds(std::move(txIds))
+    {}
+    std::set<NSubscriber::EEventType> GetEventTypes() const override {
+        return { NSubscriber::EEventType::TransactionCompleted };
+    }
+    bool IsFinished() const override {
+        return TxIds.empty();
+    }
+    void DoOnEvent(const NSubscriber::TEventTransactionCompleted& ev) override {
+        TxIds.erase(ev.GetTxId());
     }
 };
 
@@ -189,16 +215,38 @@ void TSchemaTransactionOperator::DoOnTabletInit(TColumnShard& owner) {
     }
     if (WaitPathIdsToErase.size()) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "wait_remove_path_id")("pathes", JoinSeq(",", WaitPathIdsToErase))("tx_id", GetTxId());
-        owner.Subscribers->RegisterSubscriber(std::make_shared<TWaitEraseTablesTxSubscriber>(WaitPathIdsToErase, GetTxId()));
+        owner.Subscribers->RegisterSubscriber(
+            std::make_shared<TWaitEraseTablesTxSubscriber>(WaitPathIdsToErase),
+            [&](){owner.Execute(new TTxFinishAsyncTransaction(owner, GetTxId()));}
+        );
     } else {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "remove_pathes_cleaned")("tx_id", GetTxId());
         owner.Execute(new TTxFinishAsyncTransaction(owner, GetTxId()));
     }
+
+
+
+    //TCompositeSubscriber usage demo
+    const ui64 srcPathId = 3;
+    const ui64 dstPathId = 30;
+    owner.Subscribers->RegisterSubscriber(
+        std::make_shared<NSubscriber::TCompositeSubscriber>(std::initializer_list<std::shared_ptr< NSubscriber::ISubscriber>>{
+                std::make_shared<TWaitEraseTablesTxSubscriber>(THashSet<ui64>{dstPathId}),
+                std::make_shared<TWaitTransactions>(owner.GetProgressTxController().GetTxsByPathId(srcPathId)),
+                std::make_shared<TWaitWrites>(owner.InsertTable->GetInsertedByPathId(srcPathId))
+        }),
+        [&](){owner.Execute(new TTxFinishAsyncTransaction(owner, GetTxId()));}
+    );
+
+
 }
 
 void TSchemaTransactionOperator::DoStartProposeOnComplete(TColumnShard& owner, const TActorContext& /*ctx*/) {
     AFL_VERIFY(WaitPathIdsToErase.size());
-    owner.Subscribers->RegisterSubscriber(std::make_shared<TWaitEraseTablesTxSubscriber>(WaitPathIdsToErase, GetTxId()));
+    owner.Subscribers->RegisterSubscriber(
+        std::make_shared<TWaitEraseTablesTxSubscriber>(WaitPathIdsToErase),
+        [&](){owner.Execute(new TTxFinishAsyncTransaction(owner, GetTxId()));}
+    );
 }
 
 }

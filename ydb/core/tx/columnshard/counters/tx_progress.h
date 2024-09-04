@@ -45,11 +45,11 @@ private:
     THashMap<TOpType, TProgressCounters> CountersByOpType;
 
 public:
-    void OnTxProgressDuration(const TString& opType, const TDuration d) const {
+    void OnTxProgressDuration(const TString& opType, const TDuration d) {
         GetSubGroup(opType).HistogramTxProgressDuration->Collect(d.MilliSeconds());
     }
 
-    void OnTxProgressLag(const TString& opType, const TDuration d) const {
+    void OnTxProgressLag(const TString& opType, const TDuration d) {
         GetSubGroup(opType).HistogramTxProgressLag->Collect(d.MilliSeconds());
     }
 

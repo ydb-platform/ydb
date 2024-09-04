@@ -273,9 +273,9 @@ public:
         , LeaderPipeCache(MakePipePerNodeCacheID(false))
         , Timeout((timeout && timeout <= DEFAULT_TIMEOUT) ? timeout : DEFAULT_TIMEOUT)
         , Status(Ydb::StatusIds::SUCCESS)
+        , UploadCountersGuard(UploadCounters.BuildGuard(TMonotonic::Now()))
         , DiskQuotaExceeded(diskQuotaExceeded)
         , Span(std::move(span))
-        , UploadCountersGuard(UploadCounters.BuildGuard(TMonotonic::Now()))
     {}
 
     void Bootstrap(const NActors::TActorContext& ctx) {

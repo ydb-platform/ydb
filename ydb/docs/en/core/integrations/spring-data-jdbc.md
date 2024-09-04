@@ -91,7 +91,7 @@ public interface SimpleUserRepository extends CrudRepository<User, Long> {
 }
 ```
 
-Let's save a new user and verify that they have been successfully saved:
+Saving a new user and verifying that it has been successfully saved:
 
 ```java
 

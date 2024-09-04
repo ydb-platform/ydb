@@ -2443,7 +2443,8 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
             keyRange = TPartitionKeyRange::Parse(mg.GetKeyRange());
         }
 
-        SourceIdStorage.RegisterSourceIdInfo(mg.GetId(), TSourceIdInfo(0, 0, ctx.Now(), std::move(keyRange)), true);
+        TSourceIdInfo sourceId(0, 0, ctx.Now(), std::move(keyRange), false);
+        SourceIdStorage.RegisterSourceIdInfo(mg.GetId(), std::move(sourceId), true);
     }
 
     TopicConverter = topicConverter;

@@ -1805,7 +1805,7 @@ void TPersQueue::AddCmdWriteConfig(TEvKeyValue::TEvRequest* request,
             keyRange = TPartitionKeyRange::Parse(mg.GetKeyRange());
         }
 
-        sourceIdWriter.RegisterSourceId(mg.GetId(), 0, 0, ctx.Now(), std::move(keyRange));
+        sourceIdWriter.RegisterSourceId(mg.GetId(), 0, 0, ctx.Now(), std::move(keyRange), false);
     }
 
     for (const auto& partition : cfg.GetPartitions()) {

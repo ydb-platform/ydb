@@ -154,7 +154,7 @@ By default, if the `STORE` parameter is not specified, a row-oriented table is c
   );
   ```
 
-  The full list of column-oriented table partitioning options can be found in the section [{#T}](../../../../concepts/datamodel/table.md#olap-tables-partitioning) of the article [{#T}](../../../../concepts/datamodel/table.md).
+  The full list of column-oriented table partitioning options can be found in the [{#T}](../../../../concepts/datamodel/table.md#olap-tables-partitioning) section.
 
 {% endlist %}
 

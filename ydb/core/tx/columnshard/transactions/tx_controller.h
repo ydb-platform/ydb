@@ -381,6 +381,9 @@ public:
             DoOnTabletInit(owner);
         }
     };
+    TTxProgressCounters& GetCounters() {
+        return Counters;
+    }
 
 private:
     const TDuration MaxCommitTxDelay = TDuration::Seconds(30);

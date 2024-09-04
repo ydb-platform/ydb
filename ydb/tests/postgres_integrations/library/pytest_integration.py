@@ -139,8 +139,8 @@ def _docker_build(folder: str) -> str:
     logging.debug(f"rekby, docker folder: '{folder}'")
 
     import glob
-    files_list = glob.glob(folder + "/")
-    logging.debug(f"rekby, dir contents: {files_list}")
+    files_list = glob.glob(folder + "/data/*")
+    logging.debug(f"rekby, {folder}/data/ contents: {files_list}")
 
     client: docker.Client = docker.from_env()
     client.images.build(

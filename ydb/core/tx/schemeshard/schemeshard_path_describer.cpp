@@ -550,14 +550,12 @@ void TPathDescriber::DescribeColumnTable(TPathId pathId, TPathElement::TPtr path
     const auto tableInfo = Self->ColumnTables.GetVerified(pathId);
     Y_UNUSED(pathEl);
 
-    if (tableInfo->Description.GetSchema().HasDefaultCompression()) {
-        Cerr << "TPathDescriber::DescribeColumnTable HasDefaultCompression\n";
-    }
-
     auto* pathDescription = Result->Record.MutablePathDescription();
     auto description = pathDescription->MutableColumnTableDescription();
     description->CopyFrom(tableInfo->Description);
     description->MutableSharding()->CopyFrom(tableInfo->Description.GetSharding());
+
+    Cerr << "ColumnFamiliesSize: " << tableInfo->Description.GetSchema().ColumnFamiliesSize() << Endl;
 
     if (tableInfo->IsStandalone()) {
         FillAggregatedStats(*pathDescription, tableInfo->GetStats());

@@ -488,9 +488,10 @@ bool FillCreateColumnTableDesc(NYql::TKikimrTableMetadataPtr metadata,
     };
 
     THashMap<TString, TColumnFamily> families;
+    auto schema = tableDesc.MutableSchema();
     for (const auto& family : metadata->ColumnFamilies) {
         families[family.Name] = family;
-        auto familyDescription = tableDesc.AddColumnFamilies();
+        auto familyDescription = schema->AddColumnFamilies();
         familyDescription->SetName(family.Name);
         if (family.Compression.Defined()) {
             auto codec = getCodecFromString(family.Compression.GetRef());
@@ -504,7 +505,6 @@ bool FillCreateColumnTableDesc(NYql::TKikimrTableMetadataPtr metadata,
     }
 
     if (families.size()) {
-        auto schema = tableDesc.MutableSchema();
         auto defaultFamilyIt = families.find("default");
         if (defaultFamilyIt.IsEnd()) {
             code = Ydb::StatusIds::BAD_REQUEST;
@@ -532,6 +532,8 @@ bool FillCreateColumnTableDesc(NYql::TKikimrTableMetadataPtr metadata,
             serializer->MutableArrowCompression()->SetCodec(codec.GetRef());
         }
     }
+
+    Cerr << "Gateway ColumnFamiliesSize: " << tableDesc.GetSchema().ColumnFamiliesSize() << Endl;
     return true;
 }
 

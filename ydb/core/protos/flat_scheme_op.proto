@@ -600,6 +600,7 @@ message TColumnTableSchema {
     optional bool CompositeMarksDeprecated = 9 [ default = false ];
     repeated TOlapIndexDescription Indexes = 10;
     optional TColumnTableSchemeOptions Options = 12;
+    repeated TFamilyDescription ColumnFamilies = 13;
 }
 
 message TColumnTableRequestedOptions {
@@ -847,8 +848,6 @@ message TColumnTableDescription {
 
     // Channels for standalone column table
     optional TColumnStorageConfig StorageConfig = 13;
-
-    repeated TFamilyDescription ColumnFamilies = 14;
 }
 
 message TAlterColumnTable {

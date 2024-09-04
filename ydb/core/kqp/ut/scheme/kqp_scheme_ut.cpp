@@ -8018,12 +8018,10 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
 
         auto runtime = runner.GetTestServer().GetRuntime();
         TActorId sender = runtime->AllocateEdgeActor();
-
         auto describeResult = DescribeTable(&runner.GetTestServer(), sender, tableName);
-        auto tableDescription = describeResult.GetPathDescription().GetColumnTableDescription();
-        // UNIT_ASSERT_EQUAL(tableDescription.ColumnFamiliesSize(), 1);
-        // UNIT_ASSERT_EQUAL(tableDescription.GetColumnFamilies()[0].GetName(), "");
-        auto schema = tableDescription.GetSchema();
+        auto schema = describeResult.GetPathDescription().GetColumnTableDescription().GetSchema();
+        // UNIT_ASSERT_EQUAL(schema.ColumnFamiliesSize(), 1);
+        UNIT_ASSERT_EQUAL(schema.GetColumnFamilies()[0].GetName(), "");
         auto columns = schema.GetColumns();
         for (const auto& column : columns) {
             if (column.HasSerializer()) {
@@ -8031,8 +8029,8 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
                 UNIT_ASSERT_VALUES_EQUAL_C(eColumnCodecToString(serializer.GetArrowCompression().GetCodec()),
                     eColumnCodecToString(NKikimrSchemeOp::EColumnCodec::ColumnCodecSNAPPY),
                     eColumnCodecToString(serializer.GetArrowCompression().GetCodec()));
-                // UNIT_ASSERT_VALUES_EQUAL_C(
-                //     column.GetFamilyName(), "", TStringBuilder() << "family for column " << column.GetName() << " is not default");
+                UNIT_ASSERT_VALUES_EQUAL_C(
+                    column.GetFamilyName(), "", TStringBuilder() << "family for column " << column.GetName() << " is not default");
             }
         }
     }
@@ -8069,37 +8067,37 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         auto runtime = runner.GetTestServer().GetRuntime();
         TActorId sender = runtime->AllocateEdgeActor();
 
+        Cerr << "GET DescribeTable\n";
         auto describeResult = DescribeTable(&runner.GetTestServer(), sender, tableName);
-        auto tableDescription = describeResult.GetPathDescription().GetColumnTableDescription();
-        // UNIT_ASSERT_EQUAL(tableDescription.ColumnFamiliesSize(), 3);
-        // UNIT_ASSERT_EQUAL(tableDescription.GetColumnFamilies()[0].GetName(), "default");
-        // UNIT_ASSERT_EQUAL(tableDescription.GetColumnFamilies()[1].GetName(), "family1");
-        // UNIT_ASSERT_EQUAL(tableDescription.GetColumnFamilies()[2].GetName(), "family2");
-        auto schema = tableDescription.GetSchema();
+        auto schema = describeResult.GetPathDescription().GetColumnTableDescription().GetSchema();
+        // UNIT_ASSERT_EQUAL(schema.ColumnFamiliesSize(), 3);
+        // UNIT_ASSERT_EQUAL(schema.GetColumnFamilies()[0].GetName(), "default");
+        // UNIT_ASSERT_EQUAL(schema.GetColumnFamilies()[1].GetName(), "family1");
+        // UNIT_ASSERT_EQUAL(schema.GetColumnFamilies()[2].GetName(), "family2");
 
         auto columns = schema.GetColumns();
         {
             auto codec = columns[0].GetSerializer().GetArrowCompression().GetCodec();
             UNIT_ASSERT_VALUES_EQUAL_C(eColumnCodecToString(codec), eColumnCodecToString(NKikimrSchemeOp::EColumnCodec::ColumnCodecSNAPPY),
                 eColumnCodecToString(codec));
-            // UNIT_ASSERT_VALUES_EQUAL_C(
-            //     columns[0].GetFamilyName(), "", TStringBuilder() << "family for column " << columns[0].GetName() << " is not default");
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                columns[0].GetFamilyName(), "", TStringBuilder() << "family for column " << columns[0].GetName() << " is not default");
         }
         {
             auto codec = columns[1].GetSerializer().GetArrowCompression().GetCodec();
             UNIT_ASSERT_VALUES_EQUAL_C(
                 eColumnCodecToString(codec), eColumnCodecToString(NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD), eColumnCodecToString(codec));
-            // UNIT_ASSERT_VALUES_EQUAL_C(columns[1].GetFamilyName(), "family1",
-            //     TStringBuilder() << "family for column " << columns[1].GetName() << " is not "
-            //                      << "family1");
+            UNIT_ASSERT_VALUES_EQUAL_C(columns[1].GetFamilyName(), "family1",
+                TStringBuilder() << "family for column " << columns[1].GetName() << " is not "
+                                 << "family1");
         }
         {
             auto codec = columns[2].GetSerializer().GetArrowCompression().GetCodec();
             UNIT_ASSERT_VALUES_EQUAL_C(
                 eColumnCodecToString(codec), eColumnCodecToString(NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4), eColumnCodecToString(codec));
-            // UNIT_ASSERT_VALUES_EQUAL_C(columns[2].GetFamilyName(), "family2",
-            //     TStringBuilder() << "family for column " << columns[2].GetName() << " is not "
-            //                      << "family2");
+            UNIT_ASSERT_VALUES_EQUAL_C(columns[2].GetFamilyName(), "family2",
+                TStringBuilder() << "family for column " << columns[2].GetName() << " is not "
+                                 << "family2");
         }
     }
 }

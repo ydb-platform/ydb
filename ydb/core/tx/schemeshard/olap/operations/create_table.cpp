@@ -177,6 +177,7 @@ class TOlapTableConstructor : public TTableConstructorBase {
     ui32 ChannelsCount = 64;
 private:
     bool DoDeserialize(const NKikimrSchemeOp::TColumnTableDescription& description, IErrorCollector& errors) override {
+        Cerr << "TOlapTableConstructor::DoDeserialize ColumnFamiliesSize: " << description.GetSchema().ColumnFamiliesSize() << Endl;
         if (description.HasSchemaPresetName() || description.HasSchemaPresetId()) {
             errors.AddError("Schema presets are not supported for standalone column tables");
             return false;

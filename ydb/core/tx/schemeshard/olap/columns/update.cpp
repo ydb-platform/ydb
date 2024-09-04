@@ -88,6 +88,11 @@ namespace NKikimr::NSchemeShard {
                 return false;
             }
         }
+
+        if (columnSchema.HasFamilyName()) {
+            FamilyName = columnSchema.GetFamilyName();
+        }
+
         return true;
     }
 
@@ -134,6 +139,10 @@ namespace NKikimr::NSchemeShard {
         } else {
             NotNullFlag = false;
         }
+
+        if (columnSchema.HasFamilyName()) {
+            FamilyName = columnSchema.GetFamilyName();
+        }
     }
 
     void TOlapColumnAdd::Serialize(NKikimrSchemeOp::TOlapColumnDescription& columnSchema) const {
@@ -157,6 +166,7 @@ namespace NKikimr::NSchemeShard {
         if (columnType.TypeInfo) {
             *columnSchema.MutableTypeInfo() = *columnType.TypeInfo;
         }
+        columnSchema.SetFamilyName(FamilyName);
     }
 
     bool TOlapColumnAdd::ApplyDiff(const TOlapColumnDiff& diffColumn, IErrorCollector& errors) {

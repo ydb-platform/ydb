@@ -24,12 +24,4 @@ namespace NKikimr {
         }
     }
 
-    void TUploadCounters::OnReply(const TDuration d, const ::Ydb::StatusIds::StatusCode code) const {
-        const TString name = ::Ydb::StatusIds::StatusCode_Name(code);
-        auto it = CodesCount.find(name);
-        Y_ABORT_UNLESS(it != CodesCount.end());
-        it->second->Add(1);
-        ReplyDuration->Collect(d.MilliSeconds());
-    }
-
 }

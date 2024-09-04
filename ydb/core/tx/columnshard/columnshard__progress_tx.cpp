@@ -14,6 +14,7 @@ private:
     const ui32 TabletTxNo;
     std::optional<NOlap::TSnapshot> LastCompletedTx;
     std::optional<TTxController::TPlanQueueItem> PlannedQueueItem;
+    std::optional<TMonotonic> StartExecution;
 
 public:
     TTxProgressTx(TColumnShard* self)
@@ -54,6 +55,7 @@ public:
             } else {
                 Self->ProgressTxController->PopFirstPlannedTx();
             }
+            StartExecution = TMonotonic::Now();
 
             LastCompletedTx = NOlap::TSnapshot(step, txId);
             if (LastCompletedTx > Self->LastCompletedTx) {
@@ -85,9 +87,13 @@ public:
         }
         if (PlannedQueueItem) {
             Self->GetProgressTxController().ProgressOnComplete(*PlannedQueueItem);
+            Self->Counters.CSCounters.TxProgress.OnTxProgressLag(TMonotonic::Now() - TMonotonic::MilliSeconds(PlannedQueueItem->Step));
         }
         if (LastCompletedTx) {
             Self->LastCompletedTx = std::max(*LastCompletedTx, Self->LastCompletedTx);
+        }
+        if (StartExecution) {
+            Self->Counters.CSCounters.TxProgress.OnTxProgressDuration(TxOperator->GetOpType(), TMonotonic::Now() - *StartExecution);
         }
         Self->SetupIndexation();
     }

@@ -1,9 +1,9 @@
-#include "ut_common.h"
+#include <ydb/core/statistics/ut_common/ut_common.h>
 
 #include <ydb/library/actors/testlib/test_runtime.h>
 
 #include <ydb/core/statistics/events.h>
-#include <ydb/core/statistics/stat_service.h>
+#include <ydb/core/statistics/service/service.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
@@ -82,7 +82,7 @@ void ValidateRowCount(TTestActorRuntime& runtime, ui32 nodeIndex, TPathId pathId
 
 } // namespace
 
-Y_UNIT_TEST_SUITE(Statistics) {
+Y_UNIT_TEST_SUITE(BasicStatistics) {
 
     Y_UNIT_TEST(Simple) {
         TTestEnv env(1, 1);

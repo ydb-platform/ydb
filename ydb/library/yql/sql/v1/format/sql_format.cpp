@@ -937,6 +937,12 @@ private:
         VisitAllFields(TRule_drop_table_stmt::GetDescriptor(), msg);
     }
 
+    void VisitAnalyze(const TRule_analyze_stmt& msg) {
+        PosFromToken(msg.GetToken1());
+        NewLine();
+        VisitAllFields(TRule_analyze_stmt::GetDescriptor(), msg);
+    }
+
     void VisitUse(const TRule_use_stmt& msg) {
         PosFromToken(msg.GetToken1());
         NewLine();
@@ -2745,7 +2751,8 @@ TStaticData::TStaticData()
         {TRule_drop_view_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropView)},
         {TRule_create_resource_pool_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateResourcePool)},
         {TRule_alter_resource_pool_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterResourcePool)},
-        {TRule_drop_resource_pool_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropResourcePool)}
+        {TRule_drop_resource_pool_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropResourcePool)},
+        {TRule_analyze_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAnalyze)}
         })
     , ObfuscatingVisitDispatch({
         {TToken::GetDescriptor(), MakeObfuscatingFunctor(&TObfuscatingVisitor::VisitToken)},

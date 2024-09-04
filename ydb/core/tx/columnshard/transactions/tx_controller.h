@@ -455,8 +455,8 @@ public:
 
     std::optional<TTxInfo> GetFirstPlannedTx() const;
     std::optional<TTxInfo> PopFirstPlannedTx();
-    void FinishPlannedTx(const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
-    void CompleteRunningTx(const TPlanQueueItem& tx);
+    void ProgressOnExecute(const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
+    void ProgressOnComplete(const TPlanQueueItem& tx);
 
     std::optional<TPlanQueueItem> GetPlannedTx() const;
     TPlanQueueItem GetFrontTx() const;

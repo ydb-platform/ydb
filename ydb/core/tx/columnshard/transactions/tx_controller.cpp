@@ -201,18 +201,16 @@ std::optional<TTxController::TTxInfo> TTxController::PopFirstPlannedTx() {
     return std::nullopt;
 }
 
-void TTxController::FinishPlannedTx(const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc) {
+void TTxController::ProgressOnExecute(const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc) {
     NIceDb::TNiceDb db(txc.DB);
     auto opIt = Operators.find(txId);
-    if (opIt != Operators.end()) {
-        Counters.OnFinishPlannedTx(opIt->second->GetOpType());
-    } else {
-        AFL_VERIFY(Operators.erase(txId));
-        Schema::EraseTxInfo(db, txId);
-    }
+    AFL_VERIFY(opIt != Operators.end())("tx_id", txId);
+    Counters.OnFinishPlannedTx(opIt->second->GetOpType());
+    AFL_VERIFY(Operators.erase(txId));
+    Schema::EraseTxInfo(db, txId);
 }
 
-void TTxController::CompleteRunningTx(const TPlanQueueItem& txItem) {
+void TTxController::ProgressOnComplete(const TPlanQueueItem& txItem) {
     AFL_VERIFY(RunningQueue.erase(txItem))("info", txItem.DebugString());
 }
 

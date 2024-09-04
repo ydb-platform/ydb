@@ -2,7 +2,6 @@
 
 #include <ydb/core/tablet_flat/flat_database.h>
 #include <ydb/core/util/tuples.h>
-#include <ydb/core/util/templates.h>
 #include <ydb/core/base/blobstorage_common.h>
 
 #include <util/system/type_name.h>
@@ -646,6 +645,18 @@ enum class EMaterializationMode {
     Existing,
     NonExisting,
 };
+
+namespace NDetail {
+    namespace SFINAE {
+        template <typename>
+        struct type_check {
+            using type = int;
+        };
+
+        struct general {};
+        struct special : general {};
+    }
+}
 
 struct Schema {
     template <typename T>
@@ -1437,7 +1448,7 @@ struct Schema {
                 }
 
                 template <typename ColumnType>
-                auto GetValueOrDefault(typename ColumnType::Type defaultValue = GetDefaultValue<ColumnType>(SFINAE::special())) const {
+                auto GetValueOrDefault(typename ColumnType::Type defaultValue = GetDefaultValue<ColumnType>(NDetail::SFINAE::special())) const {
                     Y_DEBUG_ABORT_UNLESS(IsReady(), "Rowset is not ready");
                     Y_DEBUG_ABORT_UNLESS(IsValid(), "Rowset is not valid");
                     typename ColumnType::Type value(HaveValue<ColumnType>() ? GetColumnValue<ColumnType>() : defaultValue);
@@ -1462,23 +1473,23 @@ struct Schema {
                     return DbgPrintTuple(Iterator.GetKey(), typeRegistry) + " -> " + DbgPrintTuple(Iterator.GetValues(), typeRegistry);
                 }
 
-                template <typename ColumnType, typename SFINAE::type_check<decltype(ColumnType::Default)>::type = 0>
-                static decltype(ColumnType::Default) GetNullValue(SFINAE::special) {
+                template <typename ColumnType, typename NDetail::SFINAE::type_check<decltype(ColumnType::Default)>::type = 0>
+                static decltype(ColumnType::Default) GetNullValue(NDetail::SFINAE::special) {
                     return ColumnType::Default;
                 }
 
                 template <typename ColumnType>
-                static typename ColumnType::Type GetNullValue(SFINAE::general) {
+                static typename ColumnType::Type GetNullValue(NDetail::SFINAE::general) {
                     return typename ColumnType::Type();
                 }
 
-                template <typename ColumnType, typename SFINAE::type_check<decltype(ColumnType::Default)>::type = 0>
-                static decltype(ColumnType::Default) GetDefaultValue(SFINAE::special) {
+                template <typename ColumnType, typename NDetail::SFINAE::type_check<decltype(ColumnType::Default)>::type = 0>
+                static decltype(ColumnType::Default) GetDefaultValue(NDetail::SFINAE::special) {
                     return ColumnType::Default;
                 }
 
                 template <typename ColumnType>
-                static typename ColumnType::Type GetDefaultValue(SFINAE::general) {
+                static typename ColumnType::Type GetDefaultValue(NDetail::SFINAE::general) {
                     return typename ColumnType::Type();
                 }
 
@@ -1499,7 +1510,7 @@ struct Schema {
                     auto& cell = tuple.Columns[index];
                     auto type = tuple.Types[index];
                     if (cell.IsNull())
-                        return GetNullValue<ColumnType>(SFINAE::special());
+                        return GetNullValue<ColumnType>(NDetail::SFINAE::special());
                     return TConvert<ColumnType, typename ColumnType::Type>::Convert(TRawTypeValue(cell.Data(), cell.Size(), type));
                 }
 

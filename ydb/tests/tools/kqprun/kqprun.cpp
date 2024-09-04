@@ -40,6 +40,7 @@ struct TExecutionOptions {
     bool ForgetExecution = false;
     std::vector<EExecutionCase> ExecutionCases;
     std::vector<NKikimrKqp::EQueryAction> ScriptQueryActions;
+    std::vector<TString> Databases;
     std::vector<TString> TraceIds;
     std::vector<TString> PoolIds;
     std::vector<TString> UserSIDs;
@@ -81,7 +82,8 @@ struct TExecutionOptions {
             .Action = NKikimrKqp::EQueryAction::QUERY_ACTION_EXECUTE,
             .TraceId = DefaultTraceId,
             .PoolId = "",
-            .UserSID = BUILTIN_ACL_ROOT
+            .UserSID = BUILTIN_ACL_ROOT,
+            .Database = ""
         };
     }
 
@@ -99,7 +101,8 @@ struct TExecutionOptions {
             .Action = GetScriptQueryAction(index),
             .TraceId = TStringBuilder() << GetValue(index, TraceIds, DefaultTraceId) << "-" << startTime.ToString(),
             .PoolId = GetValue(index, PoolIds, TString()),
-            .UserSID = GetValue(index, UserSIDs, TString(BUILTIN_ACL_ROOT))
+            .UserSID = GetValue(index, UserSIDs, TString(BUILTIN_ACL_ROOT)),
+            .Database = GetValue(index, Databases, TString())
         };
     }
 
@@ -510,6 +513,10 @@ protected:
             .DefaultValue(1000)
             .StoreMappedResultT<ui64>(&ExecutionOptions.LoopDelay, &TDuration::MilliSeconds<ui64>);
 
+        options.AddLongOption('D', "database", "Database path for -p queries")
+            .RequiredArgument("path")
+            .EmplaceTo(&ExecutionOptions.Databases);
+
         options.AddLongOption('U', "user", "User SID for -p queries")
             .RequiredArgument("user-SID")
             .EmplaceTo(&ExecutionOptions.UserSIDs);
@@ -551,6 +558,23 @@ protected:
         options.AddLongOption('E', "emulate-yt", "Emulate YT tables (use file gateway instead of native gateway)")
             .NoArgument()
             .SetFlag(&EmulateYt);
+
+        options.AddLongOption("domain", "Test cluster domain name")
+            .RequiredArgument("name")
+            .DefaultValue(RunnerOptions.YdbSettings.DomainName)
+            .StoreResult(&RunnerOptions.YdbSettings.DomainName);
+
+        options.AddLongOption("dedicated", "Dedicated tennant path, relative inside domain")
+            .RequiredArgument("path")
+            .InsertTo(&RunnerOptions.YdbSettings.DedicatedTennats);
+
+        options.AddLongOption("shared", "Shared tennant path, relative inside domain")
+            .RequiredArgument("path")
+            .InsertTo(&RunnerOptions.YdbSettings.SharedTennats);
+
+        options.AddLongOption("serverless", "Serverless tennant path, relative inside domain (use string serverless-name@shared-name to specify shared database)")
+            .RequiredArgument("path")
+            .InsertTo(&RunnerOptions.YdbSettings.ServerlessTennats);
 
         TChoices<std::function<void()>> backtrace({
             {"heavy", &NKikimr::EnableYDBBacktraceFormat},

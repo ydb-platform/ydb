@@ -128,6 +128,9 @@ public:
             return false;
         }
 
+        ExecutionMeta_ = TExecutionMeta();
+        ExecutionMeta_.Database = script.Database;
+
         return WaitScriptExecutionOperation();
     }
 
@@ -183,7 +186,7 @@ public:
         ResultSets_.clear();
         ResultSets_.resize(ExecutionMeta_.ResultSetsCount);
         for (i32 resultSetId = 0; resultSetId < ExecutionMeta_.ResultSetsCount; ++resultSetId) {
-            TRequestResult status = YdbSetup_.FetchScriptExecutionResultsRequest(ExecutionOperation_, resultSetId, ResultSets_[resultSetId]);
+            TRequestResult status = YdbSetup_.FetchScriptExecutionResultsRequest(ExecutionMeta_.Database, ExecutionOperation_, resultSetId, ResultSets_[resultSetId]);
 
             if (!status.IsSuccess()) {
                 Cerr << CerrColors_.Red() << "Failed to fetch result set with id " << resultSetId << ", reason:" << CerrColors_.Default() << Endl << status.ToString() << Endl;
@@ -197,7 +200,7 @@ public:
     bool ForgetExecutionOperation() {
         TYdbSetup::StopTraceOpt();
 
-        TRequestResult status = YdbSetup_.ForgetScriptExecutionOperationRequest(ExecutionOperation_);
+        TRequestResult status = YdbSetup_.ForgetScriptExecutionOperationRequest(ExecutionMeta_.Database, ExecutionOperation_);
 
         if (!status.IsSuccess()) {
             Cerr << CerrColors_.Red() << "Failed to forget script execution operation, reason:" << CerrColors_.Default() << Endl << status.ToString() << Endl;
@@ -226,7 +229,6 @@ public:
 private:
     bool WaitScriptExecutionOperation() {
         StartTime_ = TInstant::Now();
-        ExecutionMeta_ = TExecutionMeta();
 
         TDuration getOperationPeriod = TDuration::Seconds(1);
         if (auto progressStatsPeriodMs = Options_.YdbSettings.AppConfig.GetQueryServiceConfig().GetProgressStatsPeriodMs()) {
@@ -235,7 +237,7 @@ private:
 
         TRequestResult status;
         while (true) {
-            status = YdbSetup_.GetScriptExecutionOperationRequest(ExecutionOperation_, ExecutionMeta_);
+            status = YdbSetup_.GetScriptExecutionOperationRequest(ExecutionMeta_.Database, ExecutionOperation_, ExecutionMeta_);
             PrintScriptProgress(ExecutionMeta_.Plan);
 
             if (ExecutionMeta_.Ready) {

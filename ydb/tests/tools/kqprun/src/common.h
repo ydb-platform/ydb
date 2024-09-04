@@ -27,6 +27,9 @@ struct TAsyncQueriesSettings {
 struct TYdbSetupSettings {
     ui32 NodeCount = 1;
     TString DomainName = "Root";
+    std::unordered_set<TString> DedicatedTennats;
+    std::unordered_set<TString> SharedTennats;
+    std::unordered_set<TString> ServerlessTennats;
     TDuration InitializationTimeout = TDuration::Seconds(10);
 
     bool MonitoringEnabled = false;
@@ -83,6 +86,7 @@ struct TRequestOptions {
     TString TraceId;
     TString PoolId;
     TString UserSID;
+    TString Database;
 };
 
 }  // namespace NKqpRun

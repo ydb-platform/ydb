@@ -7192,7 +7192,11 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=1", "[[1;#;[\"test_res_1\"]]]");
     }
 
-    Y_UNIT_TEST(DropThenAddColumn) {
+    void TestDropThenAddColumn(bool enableIndexation, bool enableCompaction) {
+        if (enableCompaction) {
+            Y_ABORT_UNLESS(enableIndexation);
+        }
+
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
         csController->DisableBackground(NYDBTest::ICSController::EBackground::Indexation);
         csController->DisableBackground(NYDBTest::ICSController::EBackground::Compaction);
@@ -7217,12 +7221,14 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             testHelper.BulkUpsert(testTable, tableInserter);
         }
 
-        csController->EnableBackground(NYDBTest::ICSController::EBackground::Indexation);
-        csController->EnableBackground(NYDBTest::ICSController::EBackground::Compaction);
-        csController->WaitIndexation(TDuration::Seconds(5));
-        csController->WaitCompactions(TDuration::Seconds(5));
-        csController->DisableBackground(NYDBTest::ICSController::EBackground::Indexation);
-        csController->DisableBackground(NYDBTest::ICSController::EBackground::Compaction);
+        if (enableCompaction) {
+            csController->EnableBackground(NYDBTest::ICSController::EBackground::Indexation);
+            csController->EnableBackground(NYDBTest::ICSController::EBackground::Compaction);
+            csController->WaitIndexation(TDuration::Seconds(5));
+            csController->WaitCompactions(TDuration::Seconds(5));
+            csController->DisableBackground(NYDBTest::ICSController::EBackground::Indexation);
+            csController->DisableBackground(NYDBTest::ICSController::EBackground::Compaction);
+        }
 
         {
             auto alterQuery = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() << "` DROP COLUMN value;";
@@ -7243,12 +7249,28 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             testHelper.BulkUpsert(testTable, tableInserter);
         }
 
-        csController->EnableBackground(NYDBTest::ICSController::EBackground::Indexation);
-        csController->EnableBackground(NYDBTest::ICSController::EBackground::Compaction);
-        csController->WaitIndexation(TDuration::Seconds(5));
-        csController->WaitCompactions(TDuration::Seconds(5));
+        if (enableIndexation) {
+            csController->EnableBackground(NYDBTest::ICSController::EBackground::Indexation);
+            csController->WaitIndexation(TDuration::Seconds(5));
+        }
+        if (enableCompaction) {
+            csController->EnableBackground(NYDBTest::ICSController::EBackground::Compaction);
+            csController->WaitCompactions(TDuration::Seconds(5));
+        }
 
-        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest`", "[[4;#;[\"test_res_1\"]]]");
+        testHelper.ReadData("SELECT value FROM `/Root/ColumnTableTest`", "[[#];[#];[[42u]];[[43u]]]");
+    }
+
+    Y_UNIT_TEST(DropThenAddColumn) {
+        TestDropThenAddColumn(false, false);
+    }
+
+    Y_UNIT_TEST(DropThenAddColumnIndexation) {
+        TestDropThenAddColumn(true, true);
+    }
+
+    Y_UNIT_TEST(DropThenAddColumnCompaction) {
+        TestDropThenAddColumn(true, true);
     }
 
     Y_UNIT_TEST(DropTtlColumn) {

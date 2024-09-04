@@ -621,10 +621,11 @@ private:
                 state.State = TShardState::EState::Finished;
 
                 YQL_ENSURE(state.DatashardState.Defined());
-                YQL_ENSURE(!state.DatashardState->Follower);
-
-                Send(MakePipePerNodeCacheID(/* allowFollowers */ false), new TEvPipeCache::TEvForward(
-                    new TEvDataShard::TEvCancelTransactionProposal(TxId), shardId, /* subscribe */ false));
+                //nothing to cancel on follower
+                if (!state.DatashardState->Follower) {
+                    Send(MakePipePerNodeCacheID(/* allowFollowers */ false), new TEvPipeCache::TEvForward(
+                        new TEvDataShard::TEvCancelTransactionProposal(TxId), shardId, /* subscribe */ false));
+                }
             }
         }
     }

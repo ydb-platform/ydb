@@ -150,7 +150,7 @@ FROM `Users` VIEW login_index AS `Users` WHERE `Users`.`login` = ?
 
 ### YdbType {#ydbType}
 
-To declare a specific data type in {{ ydb-short-name }} you can use the `@YdbType` annotation on the entity field. Example usage:
+The `@YdbType` annotation allows you to declare a specific {{ ydb-short-name }} data type for an entity field. Here is an example of its usage:
 
 ```kotlin
 @YdbType("Json")

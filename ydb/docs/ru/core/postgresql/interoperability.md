@@ -8,7 +8,8 @@
 3. После обработки запросов результаты собираются и отправляются обратно в программу, отправившую запрос, по сетевому протоколу PostgreSQL. При обработке запроса он может распараллеливаться и исполняться на произвольном количестве узлов {{ydb-name}}.
 
 Графически работу PostgreSQL совместимости можно представить так:
-![Схема работы PostgreSQL совместимости](./_includes/ydb_pg_scheme.png)
+
+{% include [scheme](./_includes/ydb_pg_scheme.md)%}
 
 Такая архитектура интеграции с PostgreSQL позволяет выполнять запросы на PostgreSQL над {{ydb-name}} типами данных и наоборот, выполнять YQL-запросы над типами данных PostgreSQL, обеспечивая интероперабельность работы с данными.
 
@@ -92,29 +93,7 @@
 
 Правила преобразования типов PostgreSQL в типы YQL приведены в таблице:
 
-|PostgreSQL | YQL|
-|---|---|
-| `bool` |`pgbool` |
-| `int2` |`pgint2` |
-| `int4` |`pgint4` |
-| `int8` |`pgint8` |
-|`numeric` |`pgnumeric` |
-| `float4` |`pgfloat4` |
-| `float8` |`pgfloat8` |
-| `bytea` |`pgbytea` |
-| `text` |`pgtext` |
-| `bytea` |`pgbytea` |
-| `json` |`pgjson` |
-| `uuid` |`pguuid` |
-| `jsonb` |`pgjsonb` |
-| `date` |`pgdate` |
-| `timestamp` |`pgtimestamp` |
-| `interval` | `pginterval` |
-| `text` |`pgtext` |
-| `date` | `pgdate`|
-| `timestamp` |`pgtimestamp` |
-| `interval` |`pginterval` |
-| `numeric` |`pgnumeric` |
+{% include [types_conversion](./_includes/psql_ydb_types_conv.md) %}
 
 Встроенные функции YQL ориентированы на работу с собственными типами данных, например, `Ip::FromString` получает на вход типы данных `Utf8` или `String`. Поэтому встроенные функции YQL не могут работать с типами данных PostgreSQL. Для решения задачи конвертации типов существует функция [`FromPg`](../yql/reference/udf/list/postgres.md#frompg), выполняющая преобразование данных из типов PostgreSQL в типы YQL.
 

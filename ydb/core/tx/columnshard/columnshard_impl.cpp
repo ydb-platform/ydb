@@ -638,6 +638,9 @@ void TColumnShard::StartIndexTask(std::vector<const NOlap::TInsertedData*>&& dat
     data.reserve(dataToIndex.size());
     for (auto& ptr : dataToIndex) {
         data.push_back(*ptr);
+        if (!TablesManager.HasTable(data.back().PathId)) {
+            data.back().SetRemove();
+        }
     }
 
     Y_ABORT_UNLESS(data.size());

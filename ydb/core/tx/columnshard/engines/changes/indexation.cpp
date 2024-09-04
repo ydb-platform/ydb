@@ -220,6 +220,9 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
 
     TPathesData pathBatches(resultSchema);
     for (auto& inserted : DataToIndex) {
+        if (inserted.GetRemove()) {
+            continue;
+        }
         pathBatches.AddChunkInfo(inserted, context);
     }
 
@@ -227,6 +230,10 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
 
     for (auto& inserted : DataToIndex) {
         const TBlobRange& blobRange = inserted.GetBlobRange();
+        if (inserted.GetRemove()) {
+            Blobs.Extract(IStoragesManager::DefaultStorageId, blobRange);
+            continue;
+        }
         auto blobSchema = context.SchemaVersions.GetSchemaVerified(inserted.GetSchemaVersion());
 
         std::shared_ptr<NArrow::TGeneralContainer> batch;
@@ -261,7 +268,7 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
         filters.resize(batches.size());
 
         auto itGranule = PathToGranule.find(pathId);
-        AFL_VERIFY(itGranule != PathToGranule.end());
+        AFL_VERIFY(itGranule != PathToGranule.end())("path_id", pathId);
         NCompaction::TMerger merger(context, SaverContext, std::move(batches), std::move(filters));
         merger.SetOptimizationWritingPackMode(true);
         auto localAppended = merger.Execute(stats, itGranule->second, filteredSnapshot, pathId, shardingVersion);

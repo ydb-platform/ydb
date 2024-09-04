@@ -637,6 +637,9 @@ void TColumnShard::StartIndexTask(std::vector<const NOlap::TInsertedData*>&& dat
     data.reserve(dataToIndex.size());
     for (auto& ptr : dataToIndex) {
         data.push_back(*ptr);
+        if (!TablesManager.HasTable(data.back().PathId)) {
+            data.back().SetRemove();
+        }
     }
 
     Y_ABORT_UNLESS(data.size());
@@ -691,9 +694,6 @@ void TColumnShard::SetupIndexation() {
     dataToIndex.reserve(TLimits::MIN_SMALL_BLOBS_TO_INSERT);
     for (auto it = InsertTable->GetPathPriorities().rbegin(); it != InsertTable->GetPathPriorities().rend(); ++it) {
         for (auto* pathInfo : it->second) {
-            if (!TablesManager.HasTable(pathInfo->GetPathId())) {
-                continue;
-            }
             for (auto& data : pathInfo->GetCommitted()) {
                 Y_ABORT_UNLESS(data.BlobSize());
                 bytesToIndex += data.BlobSize();

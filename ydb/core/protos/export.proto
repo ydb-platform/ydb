@@ -3,6 +3,8 @@ import "ydb/public/api/protos/ydb_issue_message.proto";
 import "ydb/public/api/protos/ydb_operation.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
 
+import "google/protobuf/timestamp.proto";
+
 package NKikimrExport;
 option java_package = "ru.yandex.kikimr.proto";
 
@@ -11,11 +13,14 @@ message TExport {
     optional Ydb.StatusIds.StatusCode Status = 2;
     repeated Ydb.Issue.IssueMessage Issues = 3;
     optional Ydb.Export.ExportProgress.Progress Progress = 4;
+    optional google.protobuf.Timestamp StartTime = 8;
+    optional google.protobuf.Timestamp EndTime = 9;
     repeated Ydb.Export.ExportItemProgress ItemsProgress = 7;
     oneof Settings {
         Ydb.Export.ExportToYtSettings ExportToYtSettings = 5;
         Ydb.Export.ExportToS3Settings ExportToS3Settings = 6;
     }
+    optional string UserSID = 10;
 }
 
 message TCreateExportRequest {

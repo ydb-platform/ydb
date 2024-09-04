@@ -44,6 +44,17 @@ struct TExportConv {
             operation.mutable_issues()->CopyFrom(exprt.GetIssues());
         }
 
+        if (exprt.HasStartTime()) {
+            *operation.mutable_create_time() = exprt.GetStartTime();
+        }
+        if (exprt.HasEndTime()) {
+            *operation.mutable_end_time() = exprt.GetEndTime();
+        }
+
+        if (exprt.HasUserSID()) {
+            operation.set_created_by(exprt.GetUserSID());
+        }
+
         using namespace Ydb::Export;
         switch (exprt.GetSettingsCase()) {
         case NKikimrExport::TExport::kExportToYtSettings:

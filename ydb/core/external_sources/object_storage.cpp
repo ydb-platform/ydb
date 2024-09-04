@@ -375,19 +375,19 @@ struct TObjectStorageExternalSource : public IExternalSource {
             *partByData << JoinSeq(",", partitionedBy);
         }
 
-        auto futures = std::make_shared<TVector<NThreading::TFuture<NYql::NS3Lister::TListResult>>>();
+        TVector<NThreading::TFuture<NYql::NS3Lister::TListResult>> futures;
         auto httpGateway = NYql::IHTTPGateway::Make();
         auto httpRetryPolicy = NYql::GetHTTPDefaultRetryPolicy(NYql::THttpRetryPolicyOptions{.RetriedCurlCodes = NYql::FqRetriedCurlCodes()});
         for (const auto& req : requests) {
             auto s3Lister = NYql::NS3Lister::MakeS3Lister(httpGateway, httpRetryPolicy, req, Nothing(), AllowLocalFiles, ActorSystem);
-            futures->push_back(s3Lister->Next());
+            futures.push_back(s3Lister->Next());
         }
 
-        auto allFuture = NThreading::WaitExceptionOrAll(*futures);
-        auto afterListing = allFuture.Apply([partByData, shouldInferPartitions, ignoreEmptyListings, futures, requests](const NThreading::TFuture<void>& result) {
+        auto allFuture = NThreading::WaitExceptionOrAll(futures);
+        auto afterListing = allFuture.Apply([partByData, shouldInferPartitions, ignoreEmptyListings, futures = std::move(futures), requests = std::move(requests)](const NThreading::TFuture<void>& result) {
             result.GetValue();
-            for (size_t i = 0; i < futures->size(); ++i) {
-                auto& listRes = (*futures)[i].GetValue();
+            for (size_t i = 0; i < futures.size(); ++i) {
+                auto& listRes = futures[i].GetValue();
                 if (std::holds_alternative<NYql::NS3Lister::TListError>(listRes)) {
                     auto& error = std::get<NYql::NS3Lister::TListError>(listRes);
                     throw yexception() << error.Issues.ToString();

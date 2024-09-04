@@ -2818,6 +2818,8 @@ bool CompareExprTreeParts(const TExprNode& one, const TExprNode& two, const TNod
 void GatherParents(const TExprNode& node, TParentsMap& parentsMap, bool withLeaves = false);
 void GatherParentsMulti(const TExprNode& node, TParentsMultiMap& parentsMap, bool withLeaves = false);
 
+TString MakeCacheKey(const TExprNode& root);
+
 struct TConvertToAstSettings {
     ui32 AnnotationFlags = 0;
     bool RefAtoms = false;

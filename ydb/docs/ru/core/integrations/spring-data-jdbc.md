@@ -46,13 +46,11 @@ Spring Data JDBC является частью экосистемы [Spring Data
 После импорта всех необходимых зависимостей диалект готов к использованию. Рассмотрим простой пример Spring Data JDBC приложения.
 
 ```properties
-
 spring.datasource.driver-class-name=tech.ydb.jdbc.YdbDriver
 spring.datasource.url=jdbc:ydb:<grpc/grpcs>://<host>:<2135/2136>/path/to/database[?saFile=file:~/sa_key.json]
 ```
 
 ```java
-
 @Table(name = "Users")
 public class User implements Persistable<Long> {
     @Id
@@ -92,8 +90,7 @@ public interface SimpleUserRepository extends CrudRepository<User, Long> {
 
 Давайте сохраним нового пользователя и проверим, что он был успешно сохранен:
 
-```Java
-
+```java
 @Component
 public class UserRepositoryCommandLineRunner implements CommandLineRunner {
 

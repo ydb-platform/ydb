@@ -46,13 +46,11 @@ Examples for different build systems:
 After importing all the necessary dependencies, the dialect is ready for use. Below is a simple example of a Spring Data JDBC application.
 
 ```properties
-
 spring.datasource.driver-class-name=tech.ydb.jdbc.YdbDriver
 spring.datasource.url=jdbc:ydb:<grpc/grpcs>://<host>:<2135/2136>/path/to/database[?saFile=file:~/sa_key.json]
 ```
 
 ```java
-
 @Table(name = "Users")
 public class User implements Persistable<Long> {
     @Id
@@ -86,7 +84,6 @@ public class User implements Persistable<Long> {
 Creating a repository for the `User` entity in the `Users` table:
 
 ```java
-
 public interface SimpleUserRepository extends CrudRepository<User, Long> {
 }
 ```
@@ -94,7 +91,6 @@ public interface SimpleUserRepository extends CrudRepository<User, Long> {
 Saving a new user and verifying that it has been successfully saved:
 
 ```java
-
 @Component
 public class UserRepositoryCommandLineRunner implements CommandLineRunner {
     

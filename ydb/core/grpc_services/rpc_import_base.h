@@ -43,10 +43,14 @@ struct TImportConv {
         }
 
         if (import.HasStartTime()) {
-            *operation.mutable_start_time() = import.GetStartTime();
+            *operation.mutable_create_time() = import.GetStartTime();
         }
         if (import.HasEndTime()) {
             *operation.mutable_end_time() = import.GetEndTime();
+        }
+
+        if (import.HasUserSID()) {
+            operation.set_created_by(import.GetUserSID());
         }
 
         using namespace Ydb::Import;

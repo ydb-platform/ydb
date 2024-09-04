@@ -514,6 +514,7 @@ bool TColumnShard::ProgressMoveTable(const NKikimrTxColumnShard::TMoveTable& pro
 
     const ui64 srcPathId = proto.GetSrcPathId();
     const ui64 dstPathId = proto.GetDstPathId();
+    AFL_VERIFY(!InsertTable->HasCommittedByPathId(srcPathId));
     if (!TablesManager.HasTable(dstPathId)) {
         TablesManager.CloneTable(srcPathId, dstPathId, version, db, Tiers);
     }
@@ -529,7 +530,6 @@ bool TColumnShard::ProgressMoveTable(const NKikimrTxColumnShard::TMoveTable& pro
     MoveTableDataLock.reset();
     TBlobGroupSelector dsGroupSelector(Info());
     NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
-    AFL_VERIFY(InsertTable->GetCommittedByPathId(srcPathId).empty());
     THashSet<TWriteId> writesToAbort = InsertTable->DropPath(dbTable, srcPathId);
 
     TryAbortWrites(db, dbTable, std::move(writesToAbort));

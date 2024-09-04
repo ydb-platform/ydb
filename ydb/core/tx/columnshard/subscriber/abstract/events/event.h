@@ -8,7 +8,7 @@ enum class EEventType {
     Undefined,
     TablesErased,
     TransactionCompleted,
-    WriteCompleted,
+    IndexationCompleted,
 };
 
 class ISubscriptionEvent {

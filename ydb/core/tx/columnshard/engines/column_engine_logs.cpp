@@ -111,7 +111,7 @@ void TColumnEngineForLogs::UpdatePortionStats(TColumnEngineStats& engineStats, c
     if (isErase) { // PortionsToDrop
         engineStats.ColumnRecords -= columnRecords;
 
-        stats -= deltaStats;
+        //???stats -= deltaStats;
     } else if (isAdd) { // Load || AppendedPortions
         engineStats.ColumnRecords += columnRecords;
 
@@ -589,20 +589,23 @@ bool TColumnEngineForLogs::ProgressMoveTableData(const ui64 srcPathId, const ui6
     const size_t ChangeAtOnceLimit = 10000; //To fit max local db transaction change limit
     size_t count = 0;
     TDbWrapper dbWrapper(db, nullptr);
+    std::vector<ui64> ids;
     for (auto& [id, portionInfo]: srcPortions) {
-        if (portionInfo->GetPathId() == dstPathId) { //already moved TODO fix me
-            continue;            
-        }
         AFL_VERIFY(portionInfo->GetPathId() == srcPathId);
         portionInfo->SetPathId(dstPathId);
         auto schemaPtr = GetVersionedIndex().GetLastSchema();
         portionInfo->SaveToDatabase(dbWrapper, schemaPtr->GetIndexInfo().GetPKFirstColumnId(), true);
         dstGranule->UpsertPortion(*portionInfo);
+        ids.push_back(id);
         ++count;
         if (count == ChangeAtOnceLimit) {
             return false;
         } 
     }
+    for (const auto& id: ids) {
+        srcGranule->ErasePortion(id);
+    }
+
     return true;
 }
 

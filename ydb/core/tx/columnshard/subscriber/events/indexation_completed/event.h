@@ -5,18 +5,18 @@
 
 namespace NKikimr::NColumnShard::NSubscriber {
 
-class TEventWriteCompleted: public ISubscriptionEvent {
+class TEventIndexationCompleted: public ISubscriptionEvent {
 private:
     using TBase = ISubscriptionEvent;
-    YDB_READONLY_DEF(NOlap::TWriteId, WriteId);
+    YDB_READONLY_DEF(ui64, PathId);
 public:
-    TEventWriteCompleted(const NOlap::TWriteId writeId)
-        : TBase(EEventType::WriteCompleted)
-        , WriteId(writeId)
+    TEventIndexationCompleted(const ui64 pathId)
+        : TBase(EEventType::IndexationCompleted)
+        , PathId(pathId)
     {
     }
     TString DoDebugString() const override {
-        return "write_id=" + std::to_string(static_cast<ui64>(WriteId));
+        return "path_id=" + std::to_string(static_cast<ui64>(PathId));
     }
 };
 

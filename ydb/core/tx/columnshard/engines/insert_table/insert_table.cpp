@@ -4,20 +4,12 @@
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/engines/db_wrapper.h>
 #include <ydb/core/tx/columnshard/subscriber/abstract/manager/manager.h>
-#include <ydb/core/tx/columnshard/subscriber/events/write_completed/event.h>
+#include <ydb/core/tx/columnshard/subscriber/events/indexation_completed/event.h>
 
 
 namespace NKikimr::NOlap {
 
-TInsertTableAccessor::TInsertTableAccessor(std::shared_ptr<NColumnShard::NSubscriber::TManager> subscribers)
-    : Subscribers(subscribers)
-{}
-
-std::optional<NKikimr::NOlap::TInsertedData> TInsertTableAccessor::ExtractInserted(const TWriteId id) {
-    Subscribers->OnEvent(std::make_shared<NColumnShard::NSubscriber::TEventWriteCompleted>(id));
-    return Summary.ExtractInserted(id);
-}
-
+    //
 bool TInsertTable::Insert(IDbWrapper& dbTable, TInsertedData&& data) {
     if (auto* dataPtr = Summary.AddInserted(std::move(data))) {
         AddBlobLink(dataPtr->GetBlobRange().BlobId);
@@ -68,7 +60,7 @@ void TInsertTable::Abort(IDbWrapper& dbTable, const THashSet<TWriteId>& writeIds
 
     for (auto writeId : writeIds) {
         // There could be inconsistency with txs and writes in case of bugs. So we could find no record for writeId.
-        if (std::optional<TInsertedData> data = ExtractInserted(writeId)) {
+        if (std::optional<TInsertedData> data = Summary.ExtractInserted(writeId)) {
             dbTable.EraseInserted(*data);
             dbTable.Abort(*data);
             Summary.AddAborted(std::move(*data));
@@ -107,10 +99,15 @@ void TInsertTable::EraseCommittedOnComplete(const TInsertedData& data) {
     if (Summary.EraseCommitted(data)) {
         RemoveBlobLinkOnComplete(data.GetBlobRange().BlobId);
     }
+    //TODO improve me
+    if (!HasCommittedByPathId(data.PathId)) {
+        Subscribers->OnEvent(std::make_shared<NColumnShard::NSubscriber::TEventIndexationCompleted>(data.PathId));
+    }
 }
 
 void TInsertTable::EraseAbortedOnExecute(
     IDbWrapper& dbTable, const TInsertedData& data, const std::shared_ptr<IBlobsDeclareRemovingAction>& blobsAction) {
+    ///?
     if (Summary.HasAborted((TWriteId)data.WriteTxId)) {
         dbTable.EraseAborted(data);
         RemoveBlobLinkOnExecute(data.GetBlobRange().BlobId, blobsAction);
@@ -118,6 +115,7 @@ void TInsertTable::EraseAbortedOnExecute(
 }
 
 void TInsertTable::EraseAbortedOnComplete(const TInsertedData& data) {
+    ///?
     if (Summary.EraseAborted((TWriteId)data.WriteTxId)) {
         RemoveBlobLinkOnComplete(data.GetBlobRange().BlobId);
     }

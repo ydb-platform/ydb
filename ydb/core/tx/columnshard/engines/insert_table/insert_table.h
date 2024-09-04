@@ -12,12 +12,7 @@ namespace NKikimr::NOlap {
 
 class IDbWrapper;
 
-/// Use one table for inserted and committed blobs:
-/// !Commited => {PlanStep, WriteTxId} are {0, WriteId}
-///  Commited => {PlanStep, WriteTxId} are {PlanStep, TxId}
-
 class TInsertTableAccessor {
-    std::shared_ptr<NColumnShard::NSubscriber::TManager> Subscribers;;
 protected:
     TInsertionSummary Summary;
     THashMap<TUnifiedBlobId, ui32> BlobLinks;
@@ -28,9 +23,7 @@ protected:
 
     bool RemoveBlobLinkOnExecute(const TUnifiedBlobId& blobId, const std::shared_ptr<IBlobsDeclareRemovingAction>& blobsAction);
     bool RemoveBlobLinkOnComplete(const TUnifiedBlobId& blobId);
-    std::optional<NKikimr::NOlap::TInsertedData> ExtractInserted(const TWriteId id);
 public:
-    TInsertTableAccessor(std::shared_ptr<NColumnShard::NSubscriber::TManager> subscribers);
     const std::map<TPathInfoIndexPriority, std::set<const TPathInfo*>>& GetPathPriorities() const {
         return Summary.GetPathPriorities();
     }
@@ -67,14 +60,8 @@ public:
     }
     const THashMap<TWriteId, TInsertedData>& GetAborted() const { return Summary.GetAborted(); }
     const THashMap<TWriteId, TInsertedData>& GetInserted() const { return Summary.GetInserted(); }
-    THashSet<TWriteId> GetCommittedByPathId(const ui64 pathId) const {
-        THashSet<TWriteId> writeIds;
-        for(const auto& [writeId, data]: GetInserted()) {
-            if (data.PathId == pathId && data.PlanStep != 0) {
-                writeIds.insert(writeId);
-            }
-        }
-        return writeIds;
+    bool HasCommittedByPathId(const ui64 pathId) {
+        return !Summary.GetPathInfo(pathId).GetCommitted().empty();
     }
     const TInsertionSummary::TCounters& GetCountersPrepared() const {
         return Summary.GetCountersPrepared();
@@ -89,10 +76,11 @@ public:
 
 class TInsertTable: public TInsertTableAccessor {
 private:
+    std::shared_ptr<NColumnShard::NSubscriber::TManager> Subscribers;;
     bool Loaded = false;
 public:
     TInsertTable(std::shared_ptr<NColumnShard::NSubscriber::TManager> subscribers)
-        : TInsertTableAccessor(subscribers)
+        : Subscribers(subscribers)
     {}
     static constexpr const TDuration WaitCommitDelay = TDuration::Minutes(10);
     static constexpr ui64 CleanupPackageSize = 10000;

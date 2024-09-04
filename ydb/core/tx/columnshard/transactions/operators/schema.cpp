@@ -1,16 +1,16 @@
 #include "schema.h"
 #include <ydb/core/tx/columnshard/subscriber/abstract/subscriber/subscriber.h>
 #include <ydb/core/tx/columnshard/subscriber/events/tables_erased/event.h>
-#include <ydb/core/tx/columnshard/subscriber/events/write_completed/event.h>
+#include <ydb/core/tx/columnshard/subscriber/events/indexation_completed/event.h>
 #include <ydb/core/tx/columnshard/subscriber/events/transaction_completed/event.h>
 #include <ydb/core/tx/columnshard/transactions/transactions/tx_finish_async.h>
 #include <util/string/join.h>
 #include <util/stream/output.h>
 
-static inline IOutputStream& operator<<(IOutputStream& o, NKikimr::NOlap::TWriteId writeId) {
-    o << static_cast<ui64>(writeId);
-    return o;
-}
+// static inline IOutputStream& operator<<(IOutputStream& o, NKikimr::NOlap::TWriteId writeId) {
+//     o << static_cast<ui64>(writeId);
+//     return o;
+// }
 
 namespace NKikimr::NColumnShard {
 
@@ -88,39 +88,40 @@ public:
     }
 };
 
-class TWaitWrites: public NSubscriber::ISubscriber {
-    THashSet<TWriteId> WriteIdsToWait;
+class TWaitIndexation: public NSubscriber::ISubscriber {
+    std::optional<ui64> PathIdToWait;
     std::function<void()> OnFinish;
      void Finish() {
-        AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "waiting_writes_finished");
+        AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "waiting_indexation_finished");
         OnFinish();
     }   
 public:
-    TWaitWrites(THashSet<TWriteId>&& writeIdsToWait, std::function<void()> onFinish)
-        : WriteIdsToWait(std::move(writeIdsToWait))
+    TWaitIndexation(const std::optional<ui64> pathIdToWait, std::function<void()> onFinish)
+        : PathIdToWait(pathIdToWait)
         , OnFinish(onFinish)
     {
-        AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "waiting_writes")("write_ids", JoinSeq(",", WriteIdsToWait));
+        AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "waiting_indexation")("path_id", PathIdToWait ? std::to_string(*PathIdToWait) : "none");
         if(IsFinished()) {
             Finish();
         }
 
     }
     std::set<NSubscriber::EEventType> GetEventTypes() const override {
-        return { NSubscriber::EEventType::WriteCompleted };
+        return { NSubscriber::EEventType::IndexationCompleted };
     }
     bool IsFinished() const override {
-        return WriteIdsToWait.empty();
+        return !PathIdToWait.has_value();
     }
     virtual bool DoOnEvent(const std::shared_ptr<NSubscriber::ISubscriptionEvent>& ev, TColumnShard&) override {
         AFL_VERIFY(!IsFinished());
-        AFL_VERIFY(ev->GetType() == NSubscriber::EEventType::WriteCompleted);
-        const auto* evCompleted = static_cast<const NSubscriber::TEventWriteCompleted*>(ev.get());
-        const auto writeId = evCompleted->GetWriteId();
-        if (WriteIdsToWait.erase(writeId)) {
-            AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "on_write_completed")("completed", writeId)("remained", JoinSeq(",", WriteIdsToWait));
+        AFL_VERIFY(ev->GetType() == NSubscriber::EEventType::IndexationCompleted);
+        const auto* evCompleted = static_cast<const NSubscriber::TEventIndexationCompleted*>(ev.get());
+        const auto pathId = evCompleted->GetPathId();
+        if (pathId == PathIdToWait) {
+            PathIdToWait.reset();
+            AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "on_indexation_completed")("path_id", pathId)("finished", true);
         } else {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "on_write_completed")("completed", writeId)("remained", JoinSeq(",", WriteIdsToWait));
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "on_write_completed")("path_id", pathId)("finished", false);
         }
         if(IsFinished()) {
             Finish();
@@ -256,10 +257,11 @@ NKikimr::NColumnShard::TTxController::TProposeResult TSchemaTransactionOperator:
                 std::move(txIds),
                 [srcPathId, this, &owner](){
                     auto txIds = owner.GetProgressTxController().GetTxs();
-                    AFL_VERIFY(txIds.size() == 1 && txIds.contains(GetTxId()))("tx_id", GetTxId())("tx_ids", JoinSeq(",", txIds));
-                    THashSet<TWriteId> writeIds = owner.InsertTable->GetCommittedByPathId(srcPathId);
-                    owner.Subscribers->RegisterSubscriber(std::make_shared<TWaitWrites>(
-                        std::move(writeIds),
+                    AFL_VERIFY(txIds.empty() || (txIds.size() == 1 && txIds.contains(GetTxId())))("tx_id", GetTxId())("tx_ids", JoinSeq(",", txIds));
+                    THashSet<TWriteId> writeIds{TWriteId{199}};
+                    auto hasDataToIndex = owner.InsertTable->HasCommittedByPathId(srcPathId);
+                    owner.Subscribers->RegisterSubscriber(std::make_shared<TWaitIndexation>(
+                        hasDataToIndex ? std::optional{srcPathId} : std::nullopt,
                         [this, &owner]() {
                             owner.Execute(new TTxFinishAsyncTransaction(owner, GetTxId()));
                         }

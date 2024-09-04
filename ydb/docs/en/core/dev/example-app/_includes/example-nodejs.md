@@ -11,7 +11,7 @@ App code snippet for driver initialization:
 {% list tabs %}
 
   - Using connectionString
-  
+
     ```ts
     const authService = getCredentialsFromEnv();
     logger.debug('Driver initializing...');
@@ -56,7 +56,7 @@ App code snippet for creating a session:
       logger.info('Dropping old tables and create new ones...');
       await driver.queryClient.do({
           fn: async (session) => {
-  
+
             try {
                 await session.execute({
                     text: `
@@ -134,7 +134,7 @@ Depending on the rowMode parameter, the data can be retrieved in javascript form
 {% list tabs %}
 
   - rowMode: RowType.Native
-  
+
     ```ts
     async function selectNativeSimple(driver: Driver, logger: Logger): Promise<void> {
         logger.info('Making a simple native select...');
@@ -199,7 +199,7 @@ itself.
 
 ```ts
 async function selectWithParameters(driver: Driver, data: ThreeIds[], logger: Logger): Promise<void> {
-     
+
     await driver.queryClient.do({
         fn: async (session) => {
             for (const [seriesId, seasonId, episodeId] of data) {
@@ -335,7 +335,7 @@ and `Session.сommitTransaction()` calls to create and terminate a transaction:
                         DECLARE $seriesId AS Uint64;
                         DECLARE $seasonId AS Uint64;
                         DECLARE $episodeId AS Uint64;
-    
+
                         UPDATE episodes
                         SET air_date = CurrentUtcDate()
                         WHERE series_id = $seriesId

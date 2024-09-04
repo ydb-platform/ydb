@@ -11,7 +11,7 @@
 {% list tabs %}
 
   - Используя connectionString
-    
+
     ```ts
     const authService = getCredentialsFromEnv();
     logger.debug('Driver initializing...');
@@ -56,7 +56,7 @@
       logger.info('Dropping old tables and create new ones...');
       await driver.queryClient.do({
           fn: async (session) => {
-  
+
             try {
                 await session.execute({
                     text: `
@@ -78,7 +78,7 @@
                         release_date DATE,
                         PRIMARY KEY (series_id)
                     );
-  
+
                     CREATE TABLE ${SEASONS_TABLE}
                     (
                         series_id   UInt64,
@@ -88,7 +88,7 @@
                         last_aired DATE,
                         PRIMARY KEY (series_id, season_id)
                     );
-  
+
                     CREATE TABLE ${EPISODES_TABLE}
                     (
                         series_id  UInt64,
@@ -134,7 +134,7 @@ async function upsertSimple(driver: Driver, logger: Logger): Promise<void> {
 {% list tabs %}
 
   - rowMode: RowType.Native
-  
+
     ```ts
     async function selectNativeSimple(driver: Driver, logger: Logger): Promise<void> {
         logger.info('Making a simple native select...');

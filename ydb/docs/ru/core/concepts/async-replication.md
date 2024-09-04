@@ -8,8 +8,8 @@
 
 ```mermaid
 sequenceDiagram
-  participant src as Источник
   participant dst as Приёмник
+  participant src as Источник
 
   dst-->src: Инициализация
   dst->>dst: Создание экземпляра асинхронной репликации

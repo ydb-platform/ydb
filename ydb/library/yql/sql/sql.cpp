@@ -38,6 +38,12 @@ namespace NSQLTranslation {
             return result;
         }
 
+        if (parsedSettings.PgParser && parsedSettings.PGDisable) {
+            result.Issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
+                "PG syntax is disabled"));
+            return result;
+        }
+
         if (parsedSettings.PgParser) {
             return NSQLTranslationPG::PGToYql(query, parsedSettings);
         }

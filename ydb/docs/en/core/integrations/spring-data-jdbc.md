@@ -4,9 +4,9 @@ This guide is intended for use with [Spring Data JDBC](https://spring.io/project
 
 Spring Data JDBC is part of the [Spring Data](https://spring.io/projects/spring-data) ecosystem, providing a simplified way to interact with relational databases using SQL and Java objects. Unlike Spring JPA, which relies on JPA (Java Persistence API), Spring Data offers a direct approach to working with databases, bypassing complex ORM (Object-Relational Mapping) for simpler methods.
 
-## Installing the {{ ydb-short-name }} Dialect {#install-dialect}
+## Installing the {{ ydb-short-name }} dialect {#install-dialect}
 
-To integrate {{ ydb-short-name }} with your Spring Data JDBC project, you will need to add two dependencies: the {{ ydb-short-name }} JDBC Driver and the Spring Data JDBC extension for {{ ydb-short-name }}.
+To integrate {{ ydb-short-name }} with a Spring Data JDBC project, it needs two dependencies: the [{{ ydb-short-name }} JDBC driver](https://github.com/ydb-platform/ydb-jdbc-driver/) and the Spring Data JDBC extension for {{ ydb-short-name }}.
 
 Examples for different build systems:
 

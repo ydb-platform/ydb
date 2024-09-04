@@ -167,6 +167,6 @@ lateinit var uint32Column: Int
 lateinit var uint64Column: Long
 ```
 
-Using the `@YdbType` annotation allows you to accurately specify data types supported by {{ ydb-short-name }}, ensuring proper interaction with the database.
+Using the `@YdbType` annotation allows you to accurately specify the data types supported by {{ ydb-short-name }}, ensuring proper interaction with the database.
 
-An example of a simple Spring Data JDBC repository can be found at the following [link](https://github.com/ydb-platform/ydb-java-examples/tree/master/jdbc/spring-data-jdbc).
+A complete example of a simple Spring Data JDBC repository is available [on GitHub](https://github.com/ydb-platform/ydb-java-examples/tree/master/jdbc/spring-data-jdbc).

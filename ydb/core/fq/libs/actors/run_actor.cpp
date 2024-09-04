@@ -1966,7 +1966,7 @@ private:
         }
 
         {
-           dataProvidersInit.push_back(GetS3DataProviderInitializer(Params.S3Gateway, Params.CredentialsFactory, Params.Config.GetGateways().GetS3().GetAllowLocalFiles(), NActors::TActivationContext::ActorSystem()));
+           dataProvidersInit.push_back(GetS3DataProviderInitializer(Params.S3Gateway, Params.CredentialsFactory, NActors::TActivationContext::ActorSystem()));
         }
 
         {

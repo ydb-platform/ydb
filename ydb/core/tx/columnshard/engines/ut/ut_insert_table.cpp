@@ -79,7 +79,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestInsertTable) {
         TUnifiedBlobId blobId1(2222, 1, 1, 100, 2, 0, 1);
 
         TTestInsertTableDB dbTable;
-        TInsertTable insertTable;
+        TInsertTable insertTable{std::shared_ptr<NColumnShard::NSubscriber::TManager>{}};
         ui64 indexSnapshot = 0;
 
         // insert, not commited

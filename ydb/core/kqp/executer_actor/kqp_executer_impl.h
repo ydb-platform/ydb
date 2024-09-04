@@ -684,7 +684,7 @@ protected:
         if (statusCode == Ydb::StatusIds::INTERNAL_ERROR) {
             InternalError(issues);
         } else if (statusCode == Ydb::StatusIds::TIMEOUT) {
-            TimeoutError(ev->Sender);
+            TimeoutError(ev->Sender, issues);
         } else {
             RuntimeError(NYql::NDq::DqStatusToYdbStatus(msg.GetStatusCode()), issues);
         }
@@ -1706,29 +1706,34 @@ protected:
         ReplyErrorAndDie(status, &issues);
     }
 
-    void TimeoutError(TActorId abortSender) {
+    void TimeoutError(TActorId abortSender, NYql::TIssues issues) {
         if (AlreadyReplied) {
             LOG_E("Timeout when we already replied - not good" << Endl << TBackTrace().PrintToString() << Endl);
             return;
         }
 
         const auto status = NYql::NDqProto::StatusIds::TIMEOUT;
-        const TString message = "Request timeout exceeded";
+        if (issues.Empty()) {
+            issues.AddIssue("Request timeout exceeded");
+        }
 
-        TerminateComputeActors(Ydb::StatusIds::TIMEOUT, message);
+        TerminateComputeActors(Ydb::StatusIds::TIMEOUT, issues);
 
         AlreadyReplied = true;
 
-        LOG_E("Abort execution: " << NYql::NDqProto::StatusIds_StatusCode_Name(status) << "," << message);
+        LOG_E("Abort execution: " << NYql::NDqProto::StatusIds_StatusCode_Name(status) << ", " << issues.ToOneLineString());
         if (ExecuterSpan) {
             ExecuterSpan.EndError(TStringBuilder() << NYql::NDqProto::StatusIds_StatusCode_Name(status));
         }
 
         ResponseEv->Record.MutableResponse()->SetStatus(Ydb::StatusIds::TIMEOUT);
+        for (const auto& issue : issues) {
+            NYql::IssueToMessage(issue, ResponseEv->Record.MutableResponse()->AddIssues());
+        }
 
         // TEvAbortExecution can come from either ComputeActor or SessionActor (== Target).
         if (abortSender != Target) {
-            auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(status, message);
+            auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(status, issues);
             this->Send(Target, abortEv.Release());
         }
 

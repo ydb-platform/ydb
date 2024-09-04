@@ -121,7 +121,7 @@ public:
         auto nodeChildren = node->Children();
         if (!nodeChildren.empty() && nodeChildren[0]->IsAtom()) {
             TCoAtom attrName{nodeChildren[0]};
-            if (attrName.StringValue() = "userschema") {
+            if (attrName.StringValue() == "userschema") {
                 node = BuildSchemaFromMetadata(Read->Pos(), Ctx, Metadata->Columns);
                 ReplacedUserchema = true;
             } else if (attrName.StringValue() == "partitionedby") {

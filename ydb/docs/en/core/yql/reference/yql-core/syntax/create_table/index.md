@@ -123,7 +123,7 @@ By default, if the `STORE` parameter is not specified, a row-oriented table is c
   );
   ```
 
-  Such code will create a row-oriented table with automatic partitioning by partition size (`AUTO_PARTITIONING_BY_SIZE`) enabled, and with the preferred size of each partition (`AUTO_PARTITIONING_PARTITION_SIZE_MB`) set to 512 megabytes. The full list of string table partitioning options can be found in the section [{#T}](../../../../concepts/datamodel/table.md#partitioning) of the article [{#T}](../../../../concepts/datamodel/table.md).
+  Such code will create a row-oriented table with automatic partitioning by partition size (`AUTO_PARTITIONING_BY_SIZE`) enabled, and with the preferred size of each partition (`AUTO_PARTITIONING_PARTITION_SIZE_MB`) set to 512 megabytes. The full list of row-oriented table partitioning options can be found in the [{#T}](../../../../concepts/datamodel/table.md#partitioning) section.
 
 
 - Creating a column-oriented table

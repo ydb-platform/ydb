@@ -4210,9 +4210,7 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
 
         tx.WriteInProgress = false;
 
-        //
-        // запланированные события будут отправлены в EndWriteTxs
-        //
+        // scheduled events will be sent to EndWriteTxs
 
         tx.State = NKikimrPQ::TTransaction::PREPARED;
         PQ_LOG_D("TxId " << tx.TxId <<
@@ -4240,9 +4238,7 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
 
         tx.WriteInProgress = false;
 
-        //
-        // запланированные события будут отправлены в EndWriteTxs
-        //
+        // scheduled events will be sent to EndWriteTxs
 
         tx.State = NKikimrPQ::TTransaction::PLANNED;
         PQ_LOG_D("TxId " << tx.TxId <<

@@ -484,6 +484,7 @@ int Main(int argc, const char *argv[])
     opts.AddLongOption("pg-ext", "pg extensions config file").StoreResult(&pgExtConfig);
     opts.AddLongOption("with-final-issues", "Include some final messages (like statistic) in issues").NoArgument();
     opts.AddLongOption("validate-result-format", "Check that result-format can parse Result").NoArgument();
+    opts.AddLongOption("test-antlr4", "check antlr4 parser").NoArgument();
 
     opts.SetFreeArgsMax(0);
     TOptsParseResult res(&opts, argc, argv);
@@ -737,6 +738,7 @@ int Main(int argc, const char *argv[])
         settings.Flags = sqlFlags;
         settings.SyntaxVersion = syntaxVersion;
         settings.AnsiLexer = res.Has("ansi-lexer");
+        settings.TestAntlr4 = res.Has("test-antlr4");
         settings.V0Behavior = NSQLTranslation::EV0Behavior::Report;
         settings.AssumeYdbOnClusterWithSlash = res.Has("assume-ydb-on-slash");
         if (res.Has("discover")) {

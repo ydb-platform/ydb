@@ -59,7 +59,14 @@ public:
         return Summary.GetPathInfo(pathId).AddCommitted(std::move(data), load);
     }
     const THashMap<TWriteId, TInsertedData>& GetAborted() const { return Summary.GetAborted(); }
-    const THashMap<TWriteId, TInsertedData>& GetInserted() const { return Summary.GetInserted(); }
+    const THashMap<TWriteId, TInsertedData>& GetInserted() const {
+        return Summary.GetInserted();
+    }
+    const TInsertedData& GetInsertedVerified(const TWriteId id) const {
+        auto it = Summary.GetInserted().find(id);
+        AFL_VERIFY(it != Summary.GetInserted().end());
+        return it->second;
+    }
     const TInsertionSummary::TCounters& GetCountersPrepared() const {
         return Summary.GetCountersPrepared();
     }

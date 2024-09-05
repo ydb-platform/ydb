@@ -205,9 +205,3 @@ SELECT
   456s AS `Int16`,
   1.2345f AS `Float`;
 ```
-
-## Литералы PostgreSQL {#pgliterals}
-
-Строковые и числовые литералы Pg типов можно создавать с помощью специальных суффиксов (аналогично простым [строковым](#string-literals) и [числовым](#literal-numbers) литералам).
-
-{% include [pgliterals](../../udf/list/_includes/pgliterals.md) %}

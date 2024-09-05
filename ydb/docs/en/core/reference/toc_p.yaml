@@ -1,7 +1,7 @@
 items:
 - name: YQL
   href: ../yql/reference/index.md
-  include:
+  include: 
     mode: link
     path: ../yql/toc_p.yaml
 - name: Compatibility with PostgreSQL
@@ -15,8 +15,7 @@ items:
     mode: link
     path: embedded-ui/toc_p.yaml
 - name: Integrations
-  href: ../integrations/index.md
-  include:
+  include: 
     mode: link
     path: ../integrations/toc_p.yaml
 - name: YDB CLI

@@ -1,1 +1,0 @@
-## Streaming reading {#async-requests}

@@ -1,19 +1,19 @@
-## How to Mute a Test
+## [How to Mute a Test](#how-to)
 
-### Through a PR Report
+- Through a PR Report
+  - Open report in PR ![screen](https://storage.yandexcloud.net/ydb-public-images/report_mute.png)
+  - In context menu of test select `Crete mute issue`
 
-- {% cut "Through the [Test history](https://datalens.yandex/4un3zdm0zcnyr?tab=A4) dashboard" %}
+ - Through the [Test history](https://datalens.yandex/4un3zdm0zcnyr?tab=A4) dashboard
   
-  - Enter the test name or path in the `full_name contain` field, click **Apply** - the search is done by the occurrence.  ![image.png](/kikimr/ydb-qa/mute-autotests/.files/image-5.png =800x)
+    - Enter the test name or path in the `full_name contain` field, click **Apply** - the search is done by the occurrence.  ![image.png](https://storage.yandexcloud.net/ydb-public-images/mute_candidate.png)
 
-  - Click the `Mute` link, which will create a draft issue in GitHub.
-
-  {% endcut %}
+   - Click the `Mute` link, which will create a draft issue in GitHub.
 
 
 * Add the issue to the [Mute and Un-mute](https://github.com/orgs/ydb-platform/projects/45) project.
-* Set the `status` to {red}(`Mute`).
-* Set the `owner` field to the team name (see the issue for the owner's name). ![image.png](/kikimr/ydb-qa/mute-autotests/.files/image-3.png =750x)
+* Set the `status` to `Mute`
+* Set the `owner` field to the team name (see the issue for the owner's name). ![image.png](https://storage.yandexcloud.net/ydb-public-images/create_issue.png)
 * Open [muted_ya.txt](https://github.com/ydb-platform/ydb/blob/main/.github/config/muted_ya.txt) in a new tab and edit it.
 * Copy the line under `Add line to muted_ya.txt` (for example, like in the screenshot, `ydb/core/kqp/ut/query KqpStats.SysViewClientLost`) and add it to [muted_ya.txt](https://github.com/ydb-platform/ydb/blob/main/.github/config/muted_ya.txt).
 * Edit the branch for merging, for example, replace `{username}-patch-1` with `{username}/mute`.
@@ -26,12 +26,12 @@
 
 ### Who and When Monitors Flaky Tests
 
-The CI on-call engineer checks flaky tests once a day (on working days). 
+The CI duty engineer checks flaky tests once a day (only working days). 
 
 - Open the [Flaky](https://datalens.yandex/4un3zdm0zcnyr) dashboard.
-- Perform the sections **[Mute Flaky Test](https://wiki.yandex-team.ru/kikimr/ydb-qa/mute-autotests/#myutim-flapayushie-testy)** and **[Test Flaps More - Need to Unmute](https://wiki.yandex-team.ru/kikimr/ydb-qa/mute-autotests/#test-bolshe-ne-flapaet-nado-razmyutit)**.
+- Perform the sections **[Mute Flaky Test](#mute-flaky)** and **[Test Flaps More - Need to Unmute](#unmute)**.
 
-### Mute Flaky Tests
+### [Mute Flaky Tests](#mute-flaky)
 
 Open the [Flaky](https://datalens.yandex/4un3zdm0zcnyr) dashboard.
 
@@ -54,16 +54,15 @@ Open the [Flaky](https://datalens.yandex/4un3zdm0zcnyr) dashboard.
   * Create a PR, merge.
   * You are awesome!
 
-### Test Flaps More - Need to Unmute
+### [Test Flaps More - Need to Unmute](#unmute)
 
 - Open the [Flaky](https://datalens.yandex/4un3zdm0zcnyr) dashboard.
 - Look at the tests in the UNMute candidate table.
 
-![image.png](/kikimr/ydb-qa/mute-autotests/.files/image.png =800x)
+![image.png](https://storage.yandexcloud.net/ydb-public-images/unmute.png)
 
 - If the `summary:` column shows `mute <= 3` and `success rate >= 98%` - **it's time to enable the test**.
 - Open [mute_ya.txt](https://github.com/ydb-platform/ydb/blob/main/.github/config/muted_ya.txt).
 - Delete the paths from the file that correspond to our tests.
 - Create a PR and merge into main.
 
-{% toc %} 

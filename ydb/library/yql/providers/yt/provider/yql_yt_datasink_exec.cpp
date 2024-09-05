@@ -253,23 +253,26 @@ private:
         }
 
         TSet<TString> addSecTags;
-        if (settings->TableContentDeliveryMode.Get(cluster) == ETableContentDeliveryMode::File) {
+        if (settings->TableContentDeliveryMode.Get(cluster) == ETableContentDeliveryMode::File || TYtFill::Match(input.Get())) {
             for (size_t pos = 0; pos < optimizedNode->ChildrenSize(); pos++) {
                 auto childPtr = optimizedNode->ChildPtr(pos);
                 if (childPtr->Type() == TExprNode::Lambda) {
-                    VisitExpr(childPtr, [&addSecTags](const TExprNode::TPtr& node) -> bool {
+                    VisitExpr(childPtr->TailPtr(), [&addSecTags](const TExprNode::TPtr& node) -> bool {
                         if (TYtTableContent::Match(node.Get())) {
-                            VisitExpr(node, [&addSecTags](const TExprNode::TPtr& node) -> bool {
-                                if (TYtTableBase::Match(node.Get())) {
-                                    if (auto stat = TYtTableBaseInfo::GetStat(TExprBase(node))) {
-                                        for (const auto& tag : stat->SecurityTags) {
-                                            addSecTags.insert(tag);
+                            auto tableContent = TYtTableContent(node.Get());
+                            if (auto readTable = tableContent.Input().Maybe<TYtReadTable>()) {
+                                for (auto section : readTable.Cast().Input()) {
+                                    for (auto path : section.Paths()) {
+                                        if (auto tableBase = path.Table().Maybe<TYtTableBase>()) {
+                                            if (auto stat = TYtTableBaseInfo::GetStat(tableBase.Cast())) {
+                                                for (const auto& tag : stat->SecurityTags) {
+                                                    addSecTags.insert(tag);
+                                                }
+                                            }
                                         }
                                     }
-                                    return false;
                                 }
-                                return true;
-                            });
+                            }
                             return false;
                         }
                         return true;

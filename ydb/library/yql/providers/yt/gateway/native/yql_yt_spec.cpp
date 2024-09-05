@@ -515,10 +515,11 @@ void FillSpec(NYT::TNode& spec,
     }
 
     if (!addSecTags.empty()) {
-        spec["additional_security_tags"] = NYT::TNode::CreateList();
+        auto secTagsNode = NYT::TNode::CreateList();
         for (const auto& tag : addSecTags) {
-            spec["additional_security_tags"].Add(NYT::TNode(tag));
+            secTagsNode.Add(tag);
         }
+        spec["additional_security_tags"] = std::move(secTagsNode);
     }
 }
 

@@ -92,7 +92,8 @@ struct TDataEvents {
     public:
         TEvWriteResult() = default;
 
-        static std::unique_ptr<TEvWriteResult> BuildError(const ui64 origin, const ui64 txId, const NKikimrDataEvents::TEvWriteResult::EStatus& status, const TString& errorMsg) {
+        static std::unique_ptr<TEvWriteResult> BuildError(const ui64 origin, const ui64 txId,
+            const NKikimrDataEvents::TEvWriteResult::EStatus& status, const TString& errorMsg, const NKikimrDataEvents::TLock& lock = {}) {
             auto result = std::make_unique<TEvWriteResult>();
             ACFL_ERROR("event", "ev_write_error")("status", NKikimrDataEvents::TEvWriteResult::EStatus_Name(status))("details", errorMsg)("tx_id", txId);
             result->Record.SetOrigin(origin);
@@ -100,6 +101,13 @@ struct TDataEvents {
             result->Record.SetStatus(status);
             auto issue = result->Record.AddIssues();
             issue->set_message(errorMsg);
+
+            if (lock) {
+                auto& lockResult = *result->Record.AddTxLocks();
+                lockResult = *lock;
+                lockResult.SetHasWrites(true);
+            }
+
             return result;
         }
 

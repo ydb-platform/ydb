@@ -443,12 +443,23 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         return;
     }
 
+    if (record.GetOperations().size() != 1) {
+        Counters.GetTabletCounters()->IncCounter(COUNTER_WRITE_FAIL);
+        auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(
+            TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, "only single operation is supported");
+        ctx.Send(source, result.release(), 0, cookie);
+        return;
+    }
+
+    const auto& operation = record.GetOperations()[0];
+    const auto tableId = operation.GetTableId().GetTableId();
     if (behaviour == EOperationBehaviour::CommitWriteLock) {
         auto commitOperation = std::make_shared<TCommitOperation>(TabletID());
-        const auto sendError = [&](const TString& message, const NKikimrDataEvents::TEvWriteResult::EStatus status) {
+        const auto sendError = [&](const TString& message, const NKikimrDataEvents::TEvWriteResult::EStatus status,
+                                   const std::optional<NKikimrDataEvents::TLock>& lock = {}) {
             Counters.GetTabletCounters()->IncCounter(COUNTER_WRITE_FAIL);
             auto result =
-                NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), 0, status, message);
+                NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), 0, status, message, lock);
             ctx.Send(source, result.release(), 0, cookie);
         };
         auto conclusionParse = commitOperation->Parse(*ev->Get());
@@ -462,9 +473,15 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
                         NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED);
                 } else {
                     if (lockInfo->GetGeneration() != commitOperation->GetGeneration()) {
+                        NKikimrDataEvents::TLock lock;
+                        lock.SetLockId(commitOperation->GetLockId());
+                        lock.SetDataShard(TabletID());
+                        lock.SetGeneration(lockInfo->GetGeneration());
+                        lock.SetCounter(lockInfo->GetInternalGenerationCounter());
+                        lock.SetPathId(tableId);
                         sendError("tablet lock have another generation: " + ::ToString(lockInfo->GetGeneration()) +
                                       " != " + ::ToString(commitOperation->GetGeneration()),
-                            NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED);
+                            NKikimrDataEvents::TEvWriteResult::STATUS_BROKEN_LOCKS, lock);
                     } else if (lockInfo->GetInternalGenerationCounter() != commitOperation->GetInternalGenerationCounter()) {
                         sendError("tablet lock have another internal generation counter: " + ::ToString(lockInfo->GetInternalGenerationCounter()) +
                                 " != " + ::ToString(commitOperation->GetInternalGenerationCounter()),
@@ -490,7 +507,6 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         return;
     }
 
-    const auto& operation = record.GetOperations()[0];
     const std::optional<NEvWrite::EModificationType> mType =
         TEnumOperator<NEvWrite::EModificationType>::DeserializeFromProto(operation.GetType());
     if (!mType) {
@@ -517,8 +533,6 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         ctx.Send(source, result.release(), 0, cookie);
         return;
     }
-
-    const auto tableId = operation.GetTableId().GetTableId();
 
     if (!TablesManager.IsReadyForWrite(tableId)) {
         Counters.GetTabletCounters()->IncCounter(COUNTER_WRITE_FAIL);

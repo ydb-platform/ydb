@@ -44,20 +44,6 @@ NKikimr::NOlap::TPathInfo& TInsertionSummary::GetPathInfo(const ui64 pathId) {
     return it->second;
 }
 
-std::optional<NKikimr::NOlap::TPathInfo> TInsertionSummary::ExtractPathInfo(const ui64 pathId) {
-    auto it = PathInfo.find(pathId);
-    if (it == PathInfo.end()) {
-        return {};
-    }
-    RemovePriority(it->second);
-    std::optional<TPathInfo> result = std::move(it->second);
-    PathInfo.erase(it);
-    for (auto&& i : result->GetCommitted()) {
-        OnEraseCommitted(*result, i.BlobSize());
-    }
-    return result;
-}
-
 NKikimr::NOlap::TPathInfo* TInsertionSummary::GetPathInfoOptional(const ui64 pathId) {
     auto it = PathInfo.find(pathId);
     if (it == PathInfo.end()) {

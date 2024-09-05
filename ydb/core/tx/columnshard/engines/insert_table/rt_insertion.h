@@ -34,6 +34,23 @@ private:
     void OnEraseInserted(TPathInfo& pathInfo, const ui64 dataSize) noexcept;
     static TAtomicCounter CriticalInserted;
 public:
+    bool HasPathIdData(const ui64 pathId) const {
+        auto it = PathInfo.find(pathId);
+        if (it == PathInfo.end()) {
+            return false;
+        }
+        return !it->second.IsEmpty();
+    }
+
+    void ErasePath(const ui64 pathId) {
+        auto it = PathInfo.find(pathId);
+        if (it == PathInfo.end()) {
+            return;
+        }
+        AFL_VERIFY(it->second.IsEmpty());
+        PathInfo.erase(it);
+    }
+
     void MarkAsNotAbortable(const TWriteId writeId) {
         auto it = Inserted.find(writeId);
         if (it == Inserted.end()) {
@@ -69,7 +86,6 @@ public:
         return Counters;
     }
     NKikimr::NOlap::TPathInfo& GetPathInfo(const ui64 pathId);
-    std::optional<TPathInfo> ExtractPathInfo(const ui64 pathId);
     TPathInfo* GetPathInfoOptional(const ui64 pathId);
     const TPathInfo* GetPathInfoOptional(const ui64 pathId) const;
 

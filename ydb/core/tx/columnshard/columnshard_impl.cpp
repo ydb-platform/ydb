@@ -818,7 +818,15 @@ void TColumnShard::SetupCleanupTables() {
         return;
     }
 
-    auto changes = TablesManager.MutablePrimaryIndex().StartCleanupTables(TablesManager.MutablePathsToDrop());
+    THashSet<ui64> pathIdsEmptyInInsertTable;
+    for (auto&& i : TablesManager.GetPathsToDrop()) {
+        if (InsertTable->HasPathIdData(i)) {
+            continue;
+        }
+        pathIdsEmptyInInsertTable.emplace(i);
+    }
+
+    auto changes = TablesManager.MutablePrimaryIndex().StartCleanupTables(pathIdsEmptyInInsertTable);
     if (!changes) {
         ACFL_DEBUG("background", "cleanup")("skip_reason", "no_changes");
         return;

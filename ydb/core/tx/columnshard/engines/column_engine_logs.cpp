@@ -489,9 +489,8 @@ void TColumnEngineForLogs::UpsertPortion(const TPortionInfo& portionInfo, const 
 bool TColumnEngineForLogs::ErasePortion(const TPortionInfo& portionInfo, bool updateStats) {
     Y_ABORT_UNLESS(!portionInfo.Empty());
     const ui64 portion = portionInfo.GetPortion();
-    auto spg = GetGranulePtrVerified(portionInfo.GetPathId());
-    Y_ABORT_UNLESS(spg);
-    auto p = spg->GetPortionOptional(portion);
+    auto& spg = GetGranuleVerified(portionInfo.GetPathId());
+    auto p = spg.GetPortionOptional(portion);
 
     if (!p) {
         LOG_S_WARN("Portion erased already " << portionInfo << " at tablet " << TabletId);
@@ -500,7 +499,7 @@ bool TColumnEngineForLogs::ErasePortion(const TPortionInfo& portionInfo, bool up
         if (updateStats) {
             UpdatePortionStats(*p, EStatsUpdateType::ERASE);
         }
-        Y_ABORT_UNLESS(spg->ErasePortion(portion));
+        Y_ABORT_UNLESS(spg.ErasePortion(portion));
         return true;
     }
 }

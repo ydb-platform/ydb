@@ -24,6 +24,12 @@ protected:
     bool RemoveBlobLinkOnExecute(const TUnifiedBlobId& blobId, const std::shared_ptr<IBlobsDeclareRemovingAction>& blobsAction);
     bool RemoveBlobLinkOnComplete(const TUnifiedBlobId& blobId);
 public:
+    void ErasePath(const ui64 pathId) {
+        Summary.ErasePath(pathId);
+    }
+    bool HasDataInPathId(const ui64 pathId) const {
+        return Summary.HasPathIdData(pathId);
+    }
     const std::map<TPathInfoIndexPriority, std::set<const TPathInfo*>>& GetPathPriorities() const {
         return Summary.GetPathPriorities();
     }

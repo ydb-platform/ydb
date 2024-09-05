@@ -34,7 +34,7 @@ TPath::TChecker IsParentPathValid(const TPath& parentPath) {
 }
 
 bool IsParentPathValid(const THolder<TProposeResponse>& result, const TPath& parentPath) {
-    const TString& resourcePoolsDir = JoinPath({parentPath.GetDomainPathString(), ".resource_pools"});
+    const TString& resourcePoolsDir = JoinPath({parentPath.GetDomainPathString(), ".metadata/workload_manager/pools"});
     if (parentPath.PathString() != resourcePoolsDir) {
         result->SetError(NKikimrScheme::EStatus::StatusSchemeError, TStringBuilder() << "Resource pools shoud be placed in " << resourcePoolsDir);
         return false;

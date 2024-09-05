@@ -44,7 +44,7 @@ void PhyQuerySetTxPlans(NKqpProto::TKqpPhyQuery& queryProto, const NYql::NNodes:
  */
 TString AddExecStatsToTxPlan(const TString& txPlan, const NYql::NDqProto::TDqExecutionStats& stats);
 
-TString SerializeAnalyzePlan(const NKqpProto::TKqpStatsQuery& queryStats);
+TString SerializeAnalyzePlan(const NKqpProto::TKqpStatsQuery& queryStats, const TString& poolId = "");
 
 TString SerializeScriptPlan(const TVector<const TString>& queryPlans);
 

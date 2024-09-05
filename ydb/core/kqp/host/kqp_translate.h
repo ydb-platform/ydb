@@ -62,6 +62,11 @@ public:
         return *this;
     }
 
+    TKqpTranslationSettingsBuilder& SetIsEnablePgSyntax(bool value) {
+        IsEnablePgSyntax = value;
+        return *this;
+    }
+
 private:
     const NYql::EKikimrQueryType QueryType;
     const ui16 KqpYqlSyntaxVersion;
@@ -73,6 +78,7 @@ private:
     TString KqpTablePathPrefix = {};
     bool IsEnableExternalDataSources = false;
     bool IsEnablePgConstsToParams = false;
+    bool IsEnablePgSyntax = false;
     TMaybe<bool> SqlAutoCommit = {};
     TGUCSettings::TPtr GUCSettings;
     TMaybe<TString> ApplicationName = {};

@@ -65,7 +65,7 @@ In order to compare plans, we need to estimate their costs. Cost Function estima
 
 ### Statistics for the Cost Based Optimizer
 
-Cost Based Optimizer uses tables statistics and individual column statistics. {{ ydb-short-name }} collects and maintains statistics in the background. You can force statistics collection using the [ANALYZE](../yql/reference/syntax/analyze.md) command.
+Cost Based Optimizer uses tables statistics and individual column statistics. {{ ydb-short-name }} collects and maintains statistics in the background. You can force statistics collection using the [ANALYZE](../yql/reference/yql-core/syntax/analyze.md) command.
 
 Current set of table statistics:
 

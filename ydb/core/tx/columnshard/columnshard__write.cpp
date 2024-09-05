@@ -464,11 +464,11 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
                     if (lockInfo->GetGeneration() != commitOperation->GetGeneration()) {
                         sendError("tablet lock have another generation: " + ::ToString(lockInfo->GetGeneration()) +
                                       " != " + ::ToString(commitOperation->GetGeneration()),
-                            NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED);
+                            NKikimrDataEvents::TEvWriteResult::STATUS_BROKEN_LOCKS);
                     } else if (lockInfo->GetInternalGenerationCounter() != commitOperation->GetInternalGenerationCounter()) {
                         sendError("tablet lock have another internal generation counter: " + ::ToString(lockInfo->GetInternalGenerationCounter()) +
                                 " != " + ::ToString(commitOperation->GetInternalGenerationCounter()),
-                            NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED);
+                            NKikimrDataEvents::TEvWriteResult::STATUS_BROKEN_LOCKS);
                     } else {
                         Execute(new TProposeWriteTransaction(this, commitOperation, source, cookie), ctx);
                     }

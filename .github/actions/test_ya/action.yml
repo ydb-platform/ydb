@@ -36,6 +36,10 @@ inputs:
   testman_project_id:
     required: false
     description: "test manager project id"
+  increment:
+    type: boolean
+    required: true
+    description: If true, compares build graphs between the current and previous commits to find a list of test suites to run. Otherwise, runs all tests.
   put_build_results_to_cache:
     required: false
     default: "true"
@@ -111,6 +115,24 @@ runs:
           echo "NODE_TLS_REJECT_UNAUTHORIZED=0" >> $GITHUB_ENV
         fi
 
+    - name: Generate ya.make with affected test suites and modules list
+      if: inputs.increment == 'true'
+      shell: bash
+      run: |
+        ORIGINAL_HEAD=$(git rev-parse HEAD)
+        ./.github/scripts/graph_compare.sh $ORIGINAL_HEAD~1 $ORIGINAL_HEAD
+        git checkout $ORIGINAL_HEAD
+ 
+    - name: Change target in case of incremental
+      id: target_choice
+      shell: bash
+      run: |
+        if [ "${{ inputs.increment }}" == "true" ]; then
+          echo "target=." >> $GITHUB_OUTPUT
+        else
+          echo "target=${{ inputs.build_target }}" >> $GITHUB_OUTPUT
+        fi
+  
     - name: ya build and test
       id: build
       shell: bash
@@ -312,7 +334,7 @@ runs:
 
           CURRENT_JUNIT_XML_PATH=$CURRENT_PUBLIC_DIR/junit.xml
           set +ex
-          (./ya make ${{ inputs.build_target }} "${params[@]}" \
+          (./ya make ${{ steps.target_choice.outputs.target }} "${params[@]}" \
             $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.log"  \
             --evlog-file "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" \
             --junit "$CURRENT_JUNIT_XML_PATH" --output "$YA_MAKE_OUT_DIR"; echo $? > exit_code) |& cat >> $YA_MAKE_OUTPUT

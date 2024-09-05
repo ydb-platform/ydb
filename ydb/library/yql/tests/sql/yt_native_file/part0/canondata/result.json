@@ -1624,6 +1624,13 @@
             "uri": "https://{canondata_backend}/1600758/27e4f42b960f1f056b80a59edfceebd7f0dc0293/resource.tar.gz#test.test_limit-insert_with_limit--Results_/Output.yqlrun.txt.attr"
         }
     ],
+    "test.test[lineage-error_type--Debug]": [],
+    "test.test[lineage-error_type--Plan]": [],
+    "test.test[lineage-error_type--Results]": [
+        {
+            "uri": "file://test.test_lineage-error_type--Results_/extracted"
+        }
+    ],
     "test.test[lineage-select_field-default.txt-Debug]": [
         {
             "checksum": "f9af6961ea0708b2b1d85d5b7f2f42c2",

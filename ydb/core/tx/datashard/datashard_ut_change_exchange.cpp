@@ -2734,12 +2734,13 @@ Y_UNIT_TEST_SUITE(Cdc) {
         }
     }
 
-    Y_UNIT_TEST(InitialScan) {
+    void InitialScanTest(bool withTopicSchemeTx) {
         TPortManager portManager;
         TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
             .SetUseRealThreads(false)
             .SetDomainName("Root")
             .SetEnableChangefeedInitialScan(true)
+            .SetEnablePQConfigTransactionsAtSchemeShard(withTopicSchemeTx)
         );
 
         auto& runtime = *server->GetRuntime();
@@ -2780,6 +2781,14 @@ Y_UNIT_TEST_SUITE(Cdc) {
             R"({"update":{"value":200},"key":[2]})",
             R"({"update":{"value":300},"key":[3]})",
         });
+    }
+
+    Y_UNIT_TEST(InitialScan) {
+        InitialScanTest(false);
+    }
+
+    Y_UNIT_TEST(InitialScan_WithTopicSchemeTx) {
+        InitialScanTest(true);
     }
 
     Y_UNIT_TEST(InitialScanDebezium) {

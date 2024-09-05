@@ -26,7 +26,7 @@ struct TEvKqpExecuter {
 
         NLWTrace::TOrbit Orbit;
         IKqpGateway::TKqpSnapshot Snapshot;
-        std::optional<NKikimr::TLocalPathId> BrokenLockPathId;
+        std::optional<NYql::TKikimrPathId> BrokenLockPathId;
         ui64 ResultRowsCount = 0;
         ui64 ResultRowsBytes = 0;
 

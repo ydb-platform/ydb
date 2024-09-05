@@ -7,7 +7,7 @@ namespace NKqp {
 
 using namespace NYql;
 
-NYql::TIssue GetLocksInvalidatedIssue(const TKqpTransactionContext& txCtx, const NKikimr::TLocalPathId& pathId) {
+NYql::TIssue GetLocksInvalidatedIssue(const TKqpTransactionContext& txCtx, const TKikimrPathId& pathId) {
     TStringBuilder message;
     message << "Transaction locks invalidated.";
 
@@ -18,7 +18,11 @@ NYql::TIssue GetLocksInvalidatedIssue(const TKqpTransactionContext& txCtx, const
 }
 
 TIssue GetLocksInvalidatedIssue(const TKqpTransactionContext& txCtx, const TKqpTxLock& invalidatedLock) {
-    return GetLocksInvalidatedIssue(txCtx, invalidatedLock.GetPathId());
+    return GetLocksInvalidatedIssue(
+        txCtx,
+        TKikimrPathId(
+            invalidatedLock.GetSchemeShard(),
+            invalidatedLock.GetPathId()));
 }
 
 std::pair<bool, std::vector<TIssue>> MergeLocks(const NKikimrMiniKQL::TType& type, const NKikimrMiniKQL::TValue& value,

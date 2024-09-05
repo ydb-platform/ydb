@@ -1480,17 +1480,17 @@ struct Schema {
                 }
 
                 template <typename ColumnType>
-                static ColumnType::Type GetDefaultValue(std::true_type) {
+                static typename ColumnType::Type GetDefaultValue(std::true_type) {
                     return ColumnType::Default;
                 }
 
                 template <typename ColumnType>
-                static ColumnType::Type GetDefaultValue(std::false_type) {
+                static typename ColumnType::Type GetDefaultValue(std::false_type) {
                     return typename ColumnType::Type();
                 }
 
                 template <typename ColumnType>
-                static ColumnType::Type GetDefaultValue() {
+                static typename ColumnType::Type GetDefaultValue() {
                     return GetDefaultValue<ColumnType>(typename NDetail::HasDefault<ColumnType>::type());
                 }
 

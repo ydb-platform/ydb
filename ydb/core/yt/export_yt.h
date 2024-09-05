@@ -2,7 +2,7 @@
 
 #ifndef KIKIMR_DISABLE_YT
 
-#include <contrib/ydb/core/tx/datashard/export_iface.h>
+#include <ydb/core/tx/datashard/export_iface.h>
 
 namespace NKikimr {
 namespace NYndx {

@@ -1439,6 +1439,12 @@ public:
 
             // Invalidate query cache on scheme/internal errors
             switch (status) {
+                case Ydb::StatusIds::ABORTED: {
+                    if (ev->BrokenLockPathId) {
+                        issues.AddIssue(GetLocksInvalidatedIssue(*QueryState->TxCtx, *ev->BrokenLockPathId));
+                    }
+                    break;
+                }
                 case Ydb::StatusIds::SCHEME_ERROR:
                 case Ydb::StatusIds::INTERNAL_ERROR:
                     InvalidateQuery();

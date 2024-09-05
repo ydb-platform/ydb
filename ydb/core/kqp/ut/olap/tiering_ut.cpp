@@ -156,6 +156,47 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
             UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
         }
     }
+
+    Y_UNIT_TEST(TieringInvalidColumn) {
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(runnerSettings);
+        TLocalHelper localHelper(testHelper.GetKikimr());
+        NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
+        Tests::NCommon::TLoggerInit(testHelper.GetKikimr()).Initialize();
+        Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->SetSecretKey("fakeSecret");
+
+        localHelper.CreateTestOlapTable();
+        testHelper.CreateTier("tier1");
+
+        {
+            const TString query = R"(
+                ALTER TABLE `olapStore/olapTable` ADD COLUMN utfColumn Utf8 NOT NULL;
+                ALTER TABLE `olapStore/olapTable` ADD COLUMN nullableColumn Timestamp;
+                ALTER TABLE `olapStore/olapTable` ADD COLUMN tempColumn Timestamp NOT NULL;
+            )";
+            auto result = testHelper.GetSession().ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+        }
+
+        const TString ruleWithUnknownColumn = testHelper.CreateTieringRule("tier1", "XXXwrongColumnXXX");
+        const TString ruleWithUtfColumn = testHelper.CreateTieringRule("tier1", "utfColumn");
+        const TString ruleWithNullableColumn = testHelper.CreateTieringRule("tier1", "nullableColumn");
+        const TString ruleWithTempColumn = testHelper.CreateTieringRule("tier1", "tempColumn");
+        
+        testHelper.SetTiering("olapStore/olapTable", ruleWithUnknownColumn, NYdb::EStatus::GENERIC_ERROR);
+        testHelper.SetTiering("olapStore/olapTable", ruleWithUtfColumn, NYdb::EStatus::GENERIC_ERROR);
+        testHelper.SetTiering("olapStore/olapTable", ruleWithNullableColumn, NYdb::EStatus::GENERIC_ERROR);
+        testHelper.SetTiering("olapStore/olapTable", ruleWithTempColumn, NYdb::EStatus::SUCCESS);
+
+        {
+            const TString query = "ALTER TABLE `olapStore/olapTable` DROP COLUMN tempColumn";
+            auto result = testHelper.GetSession().ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+        }
+    }
 }
 
 }   // namespace NKikimr::NKqp

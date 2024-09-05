@@ -60,7 +60,7 @@ namespace NKqp {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
-    TString TTestHelper::CreateTieringRule(const TString& tierName, const TString& columnName) {
+    TString TTestHelper::CreateTieringRule(const TString& tierName, const TString& columnName, const EStatus expectedStatus) {
         const TString ruleName = tierName + "_" + columnName;
         const TString configTieringStr = TStringBuilder() <<  R"({
             "rules" : [
@@ -71,14 +71,14 @@ namespace NKqp {
             ]
         })";
         auto result = Session.ExecuteSchemeQuery("CREATE OBJECT IF NOT EXISTS " + ruleName + " (TYPE TIERING_RULE) WITH (defaultColumn = " + columnName + ", description = `" + configTieringStr + "`)").GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expectedStatus, result.GetIssues().ToString());
         return ruleName;
     }
 
-    void TTestHelper::SetTiering(const TString& tableName, const TString& ruleName) {
+    void TTestHelper::SetTiering(const TString& tableName, const TString& ruleName, const EStatus expectedStatus) {
         auto alterQuery = TStringBuilder() << "ALTER TABLE `" << tableName <<  "` SET (TIERING = '" << ruleName << "')";
         auto result = Session.ExecuteSchemeQuery(alterQuery).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expectedStatus, result.GetIssues().ToString());
     }
 
     void TTestHelper::ResetTiering(const TString& tableName) {

@@ -108,7 +108,7 @@ void TCompleteOperationUnit::CompleteOperation(TOperation::TPtr op,
         }
 
         if (!op->IsImmediate() && !op->IsReadOnly() && op->IsKqpDataTransaction()) {
-            NDataIntegrity::LogIntegrityTrailsFinish(ctx, DataShard.TabletID(), op->GetGlobalTxId(), status);
+            NDataIntegrity::LogIntegrityTrailsFinish<NKikimrTxDataShard::TEvProposeTransactionResult>(ctx, DataShard.TabletID(), op->GetGlobalTxId(), status);
         }
     }
 

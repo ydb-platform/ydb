@@ -53,10 +53,9 @@ inline void WriteTableRange(const NKikimr::TTableRange &range, TStringStream& ou
 }
 
 inline void LogIntegrityTrailsKeys(const NActors::TActorContext& ctx, const ui64 tabletId, const ui64 txId, const NMiniKQL::IEngineFlat::TValidationInfo& keys) {
-    if (keys.HasWrites()) {
-        const int batchSize = 10;
-
-        if (IS_DEBUG_LOG_ENABLED(NKikimrServices::DATA_INTEGRITY)) {
+    if (IS_DEBUG_LOG_ENABLED(NKikimrServices::DATA_INTEGRITY)) {
+        if (keys.HasWrites()) {
+            const int batchSize = 10;
             for (size_t offset = 0; offset < keys.Keys.size(); offset += batchSize) {
                 TStringStream ss;
 
@@ -108,9 +107,10 @@ inline void LogIntegrityTrailsKeys(const NActors::TActorContext& ctx, const ui64
     }
 }
 
-inline void LogIntegrityTrailsFinish(const NActors::TActorContext& ctx, const ui64 tabletId, const ui64 txId, const NKikimrTxDataShard::TEvProposeTransactionResult::EStatus status) {
+template <typename TxResult>
+inline void LogIntegrityTrailsFinish(const NActors::TActorContext& ctx, const ui64 tabletId, const ui64 txId, const typename TxResult::EStatus status) {
     auto logFn = [&]() {
-        TString statusString = NKikimrTxDataShard::TEvProposeTransactionResult::EStatus_descriptor()->FindValueByNumber(status)->name();
+        TString statusString = TxResult::EStatus_descriptor()->FindValueByNumber(status)->name();
 
         TStringStream ss;
 

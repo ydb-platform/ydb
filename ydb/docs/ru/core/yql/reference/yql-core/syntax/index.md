@@ -10,11 +10,10 @@
 {% if select_command == "SELECT STREAM" %}
 * [SELECT STREAM](select_stream.md)
 {% endif %}
-* [CREATE TABLE](create_table/index.md)
+* [CREATE TABLE](create_table.md)
 * [DROP TABLE](drop_table.md)
 * [INSERT](insert_into.md)
 {% if feature_map_tables %}
-* [ALTER TABLE](alter_table/index.md)
 * [UPDATE](update.md)
 * [DELETE](delete.md)
 {% endif %}
@@ -60,9 +59,4 @@
 * [CREATE TOPIC](create-topic.md)
 * [ALTER TOPIC](alter-topic.md)
 * [DROP TOPIC](drop-topic.md)
-{% endif %}
-{% if feature_async_replication %}
-* [CREATE ASYNC REPLICATION](create-async-replication.md)
-* [ALTER ASYNC REPLICATION](alter-async-replication.md)
-* [DROP ASYNC REPLICATION](drop-async-replication.md)
 {% endif %}

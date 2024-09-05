@@ -1,26 +1,8 @@
-title: YDB OSS docs
-service: kikimr
-
-arcanum:
-  review:
-    min_approvers_count: 1
-    ignore_self_ship: true
-    disable_sticky_ships: true
-    auto_assign: false
-    groups:
-    - name: kikimr
-      roles:
-      - "kikimr:@scope=development"
-      - "kikimr:@scope=administration"
-      - "kikimr:@scope=projects_management"
-      - "edition_90_ydb_cs:@scope=content"
-    rules:
-    - reviewers:
-        name: kikimr
-        ship: 1
+title: YDB docs in Yandex
+service: ydb_github
 
 ci:
-  secret: sec-01g3rbfrx24zvmxgqq6yb0ye1b # id секрета, созданного на шаге 1
+  secret: sec-01g3rbfrx24zvmxgqq6yb0ye1b
   runtime:
     # Sandbox-группа (https://sandbox.yandex-team.ru/admin/groups),
     # в которую должен входить ваш робот
@@ -41,6 +23,24 @@ ci:
       flow: deploy-pr-docs
       triggers:
         - on: pr
+  releases:
+    release-docs:
+      title: Release YDB internal, tech and corp docs
+      flow: release-docs
+      auto: true
+      filters:
+      - sub-paths: ['**']
+      - abs-paths: [kikimr/docs/**, kikimr/docs-corp/**]
+
+      stages:
+      - id: build
+        title: Build
+        displace: true
+      - id: testing
+        title: Testing
+        displace: true
+      - id: stable
+        title: Stable
 
   flows:
     deploy-pr-docs:
@@ -49,7 +49,34 @@ ci:
           title: Deploy docs
           task: common/docs/deploy
           input:
-            targets: ydb/docs
+            targets: kikimr/docs/ru/docs_oss;kikimr/docs/ru/docs_tech;kikimr/docs/ru/docs_yfm;kikimr/docs-corp # путь до вашего проекта от корня Аркадии
             arcanum_review_id: ${context.launch_pull_request_info.pull_request.id}
             notify: true # отставлять комментарий к ПР с ссылкой на выложенную документацию
 
+    release-docs:
+      jobs:
+        deploy:
+          title: Deploy docs
+          task: common/docs/deploy
+          stage: build
+          input:
+            targets: kikimr/docs/ru/docs_tech;kikimr/docs/ru/docs_yfm # путь до вашего проекта от корня Аркадии
+
+        release-to-testing:
+          title: Release docs to testing
+          task: common/docs/release
+          needs: deploy
+          stage: testing
+          input:
+            projects: ${tasks.deploy.output_params.projects}
+            environments: testing
+
+        release-to-stable:
+          title: Release docs to stable
+          task: common/docs/release
+          needs: release-to-testing
+          manual: false
+          stage: stable
+          input:
+            projects: ${tasks.deploy.output_params.projects}
+            environments: production

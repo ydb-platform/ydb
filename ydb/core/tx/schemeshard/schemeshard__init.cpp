@@ -4199,8 +4199,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     TString settings = rowset.GetValue<Schema::Exports::Settings>();
                     auto domainPathId = TPathId(rowset.GetValueOrDefault<Schema::Exports::DomainPathOwnerId>(selfId),
                                                 rowset.GetValue<Schema::Exports::DomainPathId>());
+                    TString peerName = rowset.GetValueOrDefault<Schema::Exports::PeerName>();
 
-                    TExportInfo::TPtr exportInfo = new TExportInfo(id, uid, kind, settings, domainPathId);
+                    TExportInfo::TPtr exportInfo = new TExportInfo(id, uid, kind, settings, domainPathId, peerName);
 
                     if (rowset.HaveValue<Schema::Exports::UserSID>()) {
                         exportInfo->UserSID = rowset.GetValue<Schema::Exports::UserSID>();
@@ -4297,11 +4298,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     TImportInfo::EKind kind = static_cast<TImportInfo::EKind>(rowset.GetValue<Schema::Imports::Kind>());
                     auto domainPathId = TPathId(rowset.GetValue<Schema::Imports::DomainPathOwnerId>(),
                                                 rowset.GetValue<Schema::Imports::DomainPathLocalId>());
+                    TString peerName = rowset.GetValueOrDefault<Schema::Imports::PeerName>();
 
                     Ydb::Import::ImportFromS3Settings settings;
                     Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(settings, rowset.GetValue<Schema::Imports::Settings>()));
 
-                    TImportInfo::TPtr importInfo = new TImportInfo(id, uid, kind, settings, domainPathId);
+                    TImportInfo::TPtr importInfo = new TImportInfo(id, uid, kind, settings, domainPathId, peerName);
 
                     if (rowset.HaveValue<Schema::Imports::UserSID>()) {
                         importInfo->UserSID = rowset.GetValue<Schema::Imports::UserSID>();

@@ -13,16 +13,16 @@ NYql::EKikimrQueryType ConvertType(NKikimrKqp::EQueryType type);
 NSQLTranslation::TTranslationSettings GetTranslationSettings(NYql::EKikimrQueryType queryType, const TMaybe<bool>& usePgParser, bool sqlAutoCommit,
     const TString& queryText, std::shared_ptr<std::map<TString, Ydb::Type>> queryParameters, TMaybe<ui16>& sqlVersion, TString cluster,
     TString kqpTablePathPrefix, ui16 kqpYqlSyntaxVersion, NSQLTranslation::EBindingsMode bindingsMode, bool isEnableExternalDataSources, NYql::TExprContext& ctx,
-    bool isEnablePgConstsToParams);
+    bool isEnablePgConstsToParams, bool isEnablePgSyntax);
 
 NYql::TAstParseResult ParseQuery(NYql::EKikimrQueryType queryType, const TMaybe<bool>& usePgParser, const TString& queryText,
     std::shared_ptr<std::map<TString, Ydb::Type>> queryParameters, bool isSql, bool sqlAutoCommit, TMaybe<ui16>& sqlVersion,
     bool& deprecatedSQL, TString cluster, TString kqpTablePathPrefix, ui16 kqpYqlSyntaxVersion, NSQLTranslation::EBindingsMode bindingsMode,
-    bool isEnableExternalDataSources, NYql::TExprContext& ctx, bool isEnablePgConstsToParams);
+    bool isEnableExternalDataSources, NYql::TExprContext& ctx, bool isEnablePgConstsToParams, bool isEnablePgSyntax);
 
 TQueryAst ParseQuery(NYql::EKikimrQueryType queryType, const TMaybe<Ydb::Query::Syntax>& syntax, const TString& queryText,
     std::shared_ptr<std::map<TString, Ydb::Type>> queryParameters, bool isSql, TString cluster, TString kqpTablePathPrefix,
-    ui16 kqpYqlSyntaxVersion, NSQLTranslation::EBindingsMode bindingsMode, bool isEnableExternalDataSources, bool isEnablePgConstsToParams);
+    ui16 kqpYqlSyntaxVersion, NSQLTranslation::EBindingsMode bindingsMode, bool isEnableExternalDataSources, bool isEnablePgConstsToParams, bool isEnablePgSyntax);
 
 } // namespace NKqp
 } // namespace NKikimr

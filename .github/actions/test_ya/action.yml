@@ -117,7 +117,11 @@ runs:
 
     - name: Generate ya.make with affected test suites and modules list
       if: inputs.increment == 'true'
-      uses: ./.github/actions/graph_compare
+      shell: bash
+      run: |
+        ORIGINAL_HEAD=$(git rev-parse HEAD)
+        ./.github/scripts/graph_compare.sh $ORIGINAL_HEAD~1 $ORIGINAL_HEAD
+        git checkout $ORIGINAL_HEAD
  
     - name: Change target in case of incremental
       id: target_choice

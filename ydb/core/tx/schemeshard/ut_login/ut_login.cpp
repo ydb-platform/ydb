@@ -1,6 +1,7 @@
 #include <util/string/join.h>
 
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/auditlog_helpers.h>
 #include <ydb/library/login/login.h>
 #include <ydb/core/protos/auth.pb.h>
 
@@ -22,26 +23,6 @@ void TestCreateAlterLoginCreateUser(TTestActorRuntime& runtime, ui64 txId, const
 }
 
 }  // namespace NSchemeShardUT_Private
-
-namespace {
-
-class TMemoryLogBackend: public TLogBackend {
-public:
-    std::vector<std::string>& Buffer;
-
-    TMemoryLogBackend(std::vector<std::string>& buffer)
-        : Buffer(buffer)
-    {}
-
-    virtual void WriteData(const TLogRecord& rec) override {
-        Buffer.emplace_back(rec.Data, rec.Len);
-    }
-
-    virtual void ReopenLog() override {
-    }
-};
-
-}  // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
     Y_UNIT_TEST(BasicLogin) {
@@ -83,12 +64,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         UNIT_ASSERT(describe.GetPathDescription().GetDomainDescription().GetSecurityState().PublicKeysSize() > 0);
     }
 
-    NAudit::TAuditLogBackends CreateTestAuditLogBackends(std::vector<std::string>& buffer) {
-        NAudit::TAuditLogBackends logBackends;
-        logBackends[NKikimrConfig::TAuditConfig::TXT].emplace_back(new TMemoryLogBackend(buffer));
-        return logBackends;
-    }
-
     Y_UNIT_TEST(AuditLogLoginSuccess) {
         TTestBasicRuntime runtime;
         std::vector<std::string> lines;
@@ -109,10 +84,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         }
         UNIT_ASSERT_VALUES_EQUAL(lines.size(), 3);   // +user login
 
-        Cerr << "auditlog lines:\n" << JoinSeq('\n', lines) << Endl;
-        auto last = lines[lines.size() - 1];
-        Cerr << "auditlog last line:\n" << last << Endl;
-
+        auto last = FindAuditLine(lines, "operation=LOGIN");
         UNIT_ASSERT_STRING_CONTAINS(last, "component=schemeshard");
         UNIT_ASSERT_STRING_CONTAINS(last, "remote_address=");  // can't check the value
         UNIT_ASSERT_STRING_CONTAINS(last, "database=/MyRoot");
@@ -143,10 +115,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         }
         UNIT_ASSERT_VALUES_EQUAL(lines.size(), 3);   // +user login
 
-        Cerr << "auditlog lines:\n" << JoinSeq('\n', lines) << Endl;
-        auto last = lines[lines.size() - 1];
-        Cerr << "auditlog last line:\n" << last << Endl;
-
+        auto last = FindAuditLine(lines, "operation=LOGIN");
         UNIT_ASSERT_STRING_CONTAINS(last, "component=schemeshard");
         UNIT_ASSERT_STRING_CONTAINS(last, "remote_address=");  // can't check the value
         UNIT_ASSERT_STRING_CONTAINS(last, "database=/MyRoot");

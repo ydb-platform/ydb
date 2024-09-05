@@ -187,7 +187,7 @@ struct TCombinerNodes {
 class TState : public TComputationValue<TState> {
     typedef TComputationValue<TState> TBase;
 private:
-    using TStates = TRobinHoodHashSet<NUdf::TUnboxedValuePod*, TEqualsFunc, THashFunc, TMKQLAllocator<char, EMemorySubPool::Temporary>>;
+    using TStates = std::unordered_set<NUdf::TUnboxedValuePod*, TEqualsFunc, THashFunc, TMKQLAllocator<char, EMemorySubPool::Temporary>>;
     using TRow = std::vector<NUdf::TUnboxedValuePod, TMKQLAllocator<NUdf::TUnboxedValuePod>>;
     using TStorage = std::deque<TRow, TMKQLAllocator<TRow>>;
 
@@ -322,6 +322,14 @@ public:
         }
         NUdf::TUnboxedValuePod* result = ExtractIt->GetValuePtr();
         return result;
+    }
+
+    ui64 GetNumberOfStoredKeys() const {
+        return States.GetSize();
+    }
+
+    ui64 GetStoredKeysCapacity() const {
+        return States.GetCapacity();
     }
 
     EFetchResult InputStatus = EFetchResult::One;
@@ -710,7 +718,7 @@ private:
     }
 
     bool IsSwitchToSpillingModeCondition() const {
-        return !HasMemoryForProcessing();
+        return TlsAllocState->GetMaximumLimitValueReached();
     }
 
 public:

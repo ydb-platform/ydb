@@ -99,6 +99,55 @@
             fill: #0366d6;
             fill-rule: evenodd;
         }
+
+        .button-group {
+            display: inline-flex;
+            float: right;
+            align-items: center;
+            position: relative; /* Added for positioning the dropdown */
+        }
+
+        .button-group > button {
+            margin-left: 5px;
+            padding: 4px 8px;
+            border: none;
+            background: none;
+            cursor: pointer;
+        }
+
+        .button-group > button svg {
+            fill: #4b535c;
+            fill-rule: evenodd;
+         }
+
+        .button-group > button svg:hover {
+            fill: #0366d6;
+            fill-rule: evenodd;
+        }
+
+        .button-group .dropdown {
+            display: none; /* Hide the dropdown by default */
+            position: absolute;
+            top: 100%;
+            right: 0;
+            background-color: white;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            padding: 8px;
+            z-index: 10; /* Ensure the dropdown is above other content */
+        }
+
+        .button-group .dropdown.show {
+            display: block; /* Show the dropdown when active */
+        }
+
+        .button-group .dropdown > button {
+            display: block; /* Make each button in the dropdown take up full width */
+            margin-bottom: 5px; /* Add spacing between dropdown buttons */
+            width: 100%; /* Full width of the dropdown */
+        }
+
         .tooltip {
             visibility: hidden;
             max-width: 340px;
@@ -308,6 +357,30 @@
     }
 
     document.addEventListener("DOMContentLoaded", function() {
+        let openDropdown = null; // Track the currently open dropdown
+
+        const buttonGroups = document.querySelectorAll(".button-group");
+        buttonGroups.forEach(buttonGroup => {
+            const dropdown = buttonGroup.querySelector('.dropdown');
+            const toggleButton = buttonGroup.querySelector('button:first-child'); // The "..." button
+
+            toggleButton.addEventListener('click', function() {
+                // Close any previously open dropdown
+                if (openDropdown && openDropdown !== dropdown) {
+                    openDropdown.classList.remove('show');
+                }
+                dropdown.classList.toggle('show');
+                openDropdown = dropdown.classList.contains('show') ? dropdown : null;
+            });
+            
+            // Close the dropdown when clicking outside of it
+            document.addEventListener('click', function(event) {
+                if (!event.target.closest('.button-group')) {
+                    dropdown.classList.remove('show');
+                    openDropdown = null;
+                }
+            });
+        });
 
         document.addEventListener('keydown', function(event) {
             if ((event.ctrlKey && event.keyCode == 70) || (event.metaKey && event.keyCode == 70)) { 
@@ -328,14 +401,14 @@
         copyButtons.forEach(button => {
             button.addEventListener('click', function(event) {
                 event.preventDefault();
-                copyTestNameToClipboard(event.target.closest('.copy').parentNode.getElementsByTagName('span')[0].textContent);
+                copyTestNameToClipboard(findParentBySelector(event.target,'tr').querySelector('.test_name').innerText);
             });
         });
         const muteButtons = document.querySelectorAll(".mute");
         muteButtons.forEach(button => {
             button.addEventListener('click', function(event) {
                 event.preventDefault();
-                copyTestNameForMuteToClipboard(event.target.closest('.mute').parentNode.getElementsByTagName('span')[0].textContent);
+                copyTestNameForMuteToClipboard(findParentBySelector(event.target,'tr').querySelector('.test_name').innerText);
             });
         });
         const createIssueButton = document.querySelectorAll(".create_issue");
@@ -411,29 +484,38 @@
         {% endif %}
             <span>{{ t.full_name }}</span>
             {% if status.is_error %} 
-            <button class="button copy" title="Copy test filter to clipboard" >
-                <svg  class="copy_svg"  xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="14" height="14" stroke="none" aria-hidden="true" viewBox="0 0 16 16">
-                    <path  d="M12 2.5H8A1.5 1.5 0 0 0 6.5 4v1H8a3 3 0 0 1 3 3v1.5h1A1.5 1.5 0 0 0 13.5 8V4A1.5 1.5 0 0 0 12 2.5M11 11h1a3 3 0 0 0 3-3V4a3 3 0 0 0-3-3H8a3 3 0 0 0-3 3v1H4a3 3 0 0 0-3 3v4a3 3 0 0 0 3 3h4a3 3 0 0 0 3-3zM4 6.5h4A1.5 1.5 0 0 1 9.5 8v4A1.5 1.5 0 0 1 8 13.5H4A1.5 1.5 0 0 1 2.5 12V8A1.5 1.5 0 0 1 4 6.5" clip-rule="evenodd"></path>
-                </svg>
-            </button>
-            {% if status.name == "FAIL" %} 
-            <button class="button mute" title="Copy mute string to clipboard" >
-                <svg  class="mute_svg"  xmlns="http://www.w3.org/2000/svg" width="32" height="14" position="left" stroke="none" viewBox="2 0 30 17">
-                    <!-- First icon: copied squares -->
-                    <path transform="translate(20, 0)" d="M12 2.5H8A1.5 1.5 0 0 0 6.5 4v1H8a3 3 0 0 1 3 3v1.5h1A1.5 1.5 0 0 0 13.5 8V4A1.5 1.5 0 0 0 12 2.5M11 11h1a3 3 0 0 0 3-3V4a3 3 0 0 0-3-3H8a3 3 0 0 0-3 3v1H4a3 3 0 0 0-3 3v4a3 3 0 0 0 3 3h4a3 3 0 0 0 3-3zM4 6.5h4A1.5 1.5 0 0 1 9.5 8v4A1.5 1.5 0 0 1 8 13.5H4A1.5 1.5 0 0 1 2.5 12V8A1.5 1.5 0 0 1 4 6.5"  />
-                    <!-- Second icon: microphone -->
-                    <path transform="translate(0, 0)" d="M5.06 9.94A1.5 1.5 0 0 0 4 9.5H2a.5.5 0 0 1-.5-.5V7a.5.5 0 0 1 .5-.5h2a1.5 1.5 0 0 0 1.06-.44l2.483-2.482a.268.268 0 0 1 .457.19v8.464a.268.268 0 0 1-.457.19zM2 5h2l2.482-2.482A1.768 1.768 0 0 1 9.5 3.768v8.464a1.768 1.768 0 0 1-3.018 1.25L4 11H2a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2m10.28.72a.75.75 0 1 0-1.06 1.06L12.44 8l-1.22 1.22a.75.75 0 1 0 1.06 1.06l1.22-1.22 1.22 1.22a.75.75 0 1 0 1.06-1.06L14.56 8l1.22-1.22a.75.75 0 0 0-1.06-1.06L13.5 6.94z"  />
-                </svg>
-            </button>
-            <button class="button create_issue" title="Create issue">
-                <svg class="issue_svg" xmlns="http://www.w3.org/2000/svg" width="32" height="14" position="left"  stroke="none" viewBox="2 0 30 17">
-                    <!-- First icon: plus -->
-                    <path transform="translate(20, 0)" d="M13.5 8a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0M15 8A7 7 0 1 1 1 8a7 7 0 0 1 14 0M8.75 5.5a.75.75 0 0 0-1.5 0v1.75H5.5a.75.75 0 0 0 0 1.5h1.75v1.75a.75.75 0 0 0 1.5 0V8.75h1.75a.75.75 0 0 0 0-1.5H8.75z"  />
-                    <!-- Second icon: microphone -->
-                    <path transform="translate(0, 0)" d="M5.06 9.94A1.5 1.5 0 0 0 4 9.5H2a.5.5 0 0 1-.5-.5V7a.5.5 0 0 1 .5-.5h2a1.5 1.5 0 0 0 1.06-.44l2.483-2.482a.268.268 0 0 1 .457.19v8.464a.268.268 0 0 1-.457.19zM2 5h2l2.482-2.482A1.768 1.768 0 0 1 9.5 3.768v8.464a1.768 1.768 0 0 1-3.018 1.25L4 11H2a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2m10.28.72a.75.75 0 1 0-1.06 1.06L12.44 8l-1.22 1.22a.75.75 0 1 0 1.06 1.06l1.22-1.22 1.22 1.22a.75.75 0 1 0 1.06-1.06L14.56 8l1.22-1.22a.75.75 0 0 0-1.06-1.06L13.5 6.94z"  />
-                </svg>
-            </button>
+            <div class="button-group">
+                <button class="button" title="Show options">
+                    <svg  class="more"  xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="14" height="14" stroke="none" aria-hidden="true" viewBox="0 0 448 512">
+                        <path  d="M8 256a56 56 0 1 1 112 0A56 56 0 1 1 8 256zm160 0a56 56 0 1 1 112 0 56 56 0 1 1 -112 0zm216-56a56 56 0 1 1 0 112 56 56 0 1 1 0-112z" clip-rule="evenodd"></path>
+                    </svg>
+                </button>
+                <div class="dropdown">
+                    <button class="button copy" title="Copy test filter to clipboard" >
+                        <svg  class="copy_svg"  xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="14" height="14" stroke="none" aria-hidden="true" viewBox="0 0 16 16">
+                            <path  d="M12 2.5H8A1.5 1.5 0 0 0 6.5 4v1H8a3 3 0 0 1 3 3v1.5h1A1.5 1.5 0 0 0 13.5 8V4A1.5 1.5 0 0 0 12 2.5M11 11h1a3 3 0 0 0 3-3V4a3 3 0 0 0-3-3H8a3 3 0 0 0-3 3v1H4a3 3 0 0 0-3 3v4a3 3 0 0 0 3 3h4a3 3 0 0 0 3-3zM4 6.5h4A1.5 1.5 0 0 1 9.5 8v4A1.5 1.5 0 0 1 8 13.5H4A1.5 1.5 0 0 1 2.5 12V8A1.5 1.5 0 0 1 4 6.5" clip-rule="evenodd"></path>
+                        </svg>
+                    </button>
+                    {% if status.name == "FAIL" %} 
+                    <button class="button mute" title="Copy mute string to clipboard" >
+                        <svg  class="mute_svg"  xmlns="http://www.w3.org/2000/svg" width="32" height="14" position="left" stroke="none" viewBox="2 0 30 17">
+                            <!-- First icon: copied squares -->
+                            <path transform="translate(20, 0)" d="M12 2.5H8A1.5 1.5 0 0 0 6.5 4v1H8a3 3 0 0 1 3 3v1.5h1A1.5 1.5 0 0 0 13.5 8V4A1.5 1.5 0 0 0 12 2.5M11 11h1a3 3 0 0 0 3-3V4a3 3 0 0 0-3-3H8a3 3 0 0 0-3 3v1H4a3 3 0 0 0-3 3v4a3 3 0 0 0 3 3h4a3 3 0 0 0 3-3zM4 6.5h4A1.5 1.5 0 0 1 9.5 8v4A1.5 1.5 0 0 1 8 13.5H4A1.5 1.5 0 0 1 2.5 12V8A1.5 1.5 0 0 1 4 6.5"  />
+                            <!-- Second icon: microphone -->
+                            <path transform="translate(0, 0)" d="M5.06 9.94A1.5 1.5 0 0 0 4 9.5H2a.5.5 0 0 1-.5-.5V7a.5.5 0 0 1 .5-.5h2a1.5 1.5 0 0 0 1.06-.44l2.483-2.482a.268.268 0 0 1 .457.19v8.464a.268.268 0 0 1-.457.19zM2 5h2l2.482-2.482A1.768 1.768 0 0 1 9.5 3.768v8.464a1.768 1.768 0 0 1-3.018 1.25L4 11H2a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2m10.28.72a.75.75 0 1 0-1.06 1.06L12.44 8l-1.22 1.22a.75.75 0 1 0 1.06 1.06l1.22-1.22 1.22 1.22a.75.75 0 1 0 1.06-1.06L14.56 8l1.22-1.22a.75.75 0 0 0-1.06-1.06L13.5 6.94z"  />
+                        </svg>
+                    </button>
+                    <button class="button create_issue" title="Create issue">
+                        <svg class="issue_svg" xmlns="http://www.w3.org/2000/svg" width="32" height="14" position="left"  stroke="none" viewBox="2 0 30 17">
+                            <!-- First icon: plus -->
+                            <path transform="translate(20, 0)" d="M13.5 8a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0M15 8A7 7 0 1 1 1 8a7 7 0 0 1 14 0M8.75 5.5a.75.75 0 0 0-1.5 0v1.75H5.5a.75.75 0 0 0 0 1.5h1.75v1.75a.75.75 0 0 0 1.5 0V8.75h1.75a.75.75 0 0 0 0-1.5H8.75z"  />
+                            <!-- Second icon: microphone -->
+                            <path transform="translate(0, 0)" d="M5.06 9.94A1.5 1.5 0 0 0 4 9.5H2a.5.5 0 0 1-.5-.5V7a.5.5 0 0 1 .5-.5h2a1.5 1.5 0 0 0 1.06-.44l2.483-2.482a.268.268 0 0 1 .457.19v8.464a.268.268 0 0 1-.457.19zM2 5h2l2.482-2.482A1.768 1.768 0 0 1 9.5 3.768v8.464a1.768 1.768 0 0 1-3.018 1.25L4 11H2a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2m10.28.72a.75.75 0 1 0-1.06 1.06L12.44 8l-1.22 1.22a.75.75 0 1 0 1.06 1.06l1.22-1.22 1.22 1.22a.75.75 0 1 0 1.06-1.06L14.56 8l1.22-1.22a.75.75 0 0 0-1.06-1.06L13.5 6.94z"  />
+                        </svg>
+                    </button>
             {% endif %}
+                </div>
+            </div>
             {% endif %}
         </td>
         {% if (status.is_error and t.full_name in history) %}

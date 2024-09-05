@@ -27,9 +27,9 @@ struct TAsyncQueriesSettings {
 struct TYdbSetupSettings {
     ui32 NodeCount = 1;
     TString DomainName = "Root";
-    std::unordered_set<TString> DedicatedTennats;
-    std::unordered_set<TString> SharedTennats;
-    std::unordered_set<TString> ServerlessTennats;
+    std::unordered_set<TString> DedicatedTenants;
+    std::unordered_set<TString> SharedTenants;
+    std::unordered_set<TString> ServerlessTenants;
     TDuration InitializationTimeout = TDuration::Seconds(10);
 
     bool MonitoringEnabled = false;

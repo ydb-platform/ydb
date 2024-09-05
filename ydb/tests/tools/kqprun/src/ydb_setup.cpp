@@ -158,12 +158,12 @@ private:
             serverSettings.SetGrpcPort(grpcPort);
         }
 
-        if (!Settings_.SharedTennats.empty() || !Settings_.DedicatedTennats.empty()) {
-            serverSettings.SetDynamicNodeCount(Settings_.SharedTennats.size() + Settings_.DedicatedTennats.size());
-            for (const TString& dedicatedTenant : Settings_.DedicatedTennats) {
+        if (!Settings_.SharedTenants.empty() || !Settings_.DedicatedTenants.empty()) {
+            serverSettings.SetDynamicNodeCount(Settings_.SharedTenants.size() + Settings_.DedicatedTenants.size());
+            for (const TString& dedicatedTenant : Settings_.DedicatedTenants) {
                 serverSettings.AddStoragePoolType(dedicatedTenant);
             }
-            for (const auto& sharedTenant : Settings_.SharedTennats) {
+            for (const auto& sharedTenant : Settings_.SharedTenants) {
                 serverSettings.AddStoragePoolType(sharedTenant);
             }
         }
@@ -189,22 +189,22 @@ private:
     }
 
     void CreateTenants() {
-        for (const TString& dedicatedTenant : Settings_.DedicatedTennats) {
+        for (const TString& dedicatedTenant : Settings_.DedicatedTenants) {
             Ydb::Cms::CreateDatabaseRequest request;
             request.set_path(GetTannantPath(dedicatedTenant));
             AddTenantStoragePool(request.mutable_resources()->add_storage_units(), dedicatedTenant);
             CreateTenant(std::move(request), "dedicated");
         }
 
-        for (const TString& sharedTenant : Settings_.SharedTennats) {
+        for (const TString& sharedTenant : Settings_.SharedTenants) {
             Ydb::Cms::CreateDatabaseRequest request;
             request.set_path(GetTannantPath(sharedTenant));
             AddTenantStoragePool(request.mutable_shared_resources()->add_storage_units(), sharedTenant);
             CreateTenant(std::move(request), "shared");
         }
 
-        ServerlessToShared_.reserve(Settings_.ServerlessTennats.size());
-        for (const TString& serverlessTenant : Settings_.ServerlessTennats) {
+        ServerlessToShared_.reserve(Settings_.ServerlessTenants.size());
+        for (const TString& serverlessTenant : Settings_.ServerlessTenants) {
             Ydb::Cms::CreateDatabaseRequest request;
             if (serverlessTenant.Contains('@')) {
                 TStringBuf serverless;
@@ -213,9 +213,9 @@ private:
 
                 request.set_path(GetTannantPath(TString(serverless)));
                 request.mutable_serverless_resources()->set_shared_database_path(GetTannantPath(TString(shared)));
-            } else if (!Settings_.SharedTennats.empty()) {
+            } else if (!Settings_.SharedTenants.empty()) {
                 request.set_path(GetTannantPath(serverlessTenant));
-                request.mutable_serverless_resources()->set_shared_database_path(GetTannantPath(*Settings_.SharedTennats.begin()));
+                request.mutable_serverless_resources()->set_shared_database_path(GetTannantPath(*Settings_.SharedTenants.begin()));
             } else {
                 ythrow yexception() << "Can not create serverless tenant " << serverlessTenant << ", there is no shared tenants";
             }

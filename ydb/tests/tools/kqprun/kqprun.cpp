@@ -566,15 +566,15 @@ protected:
 
         options.AddLongOption("dedicated", "Dedicated tenant path, relative inside domain")
             .RequiredArgument("path")
-            .InsertTo(&RunnerOptions.YdbSettings.DedicatedTennats);
+            .InsertTo(&RunnerOptions.YdbSettings.DedicatedTenants);
 
         options.AddLongOption("shared", "Shared tenant path, relative inside domain")
             .RequiredArgument("path")
-            .InsertTo(&RunnerOptions.YdbSettings.SharedTennats);
+            .InsertTo(&RunnerOptions.YdbSettings.SharedTenants);
 
         options.AddLongOption("serverless", "Serverless tenant path, relative inside domain (use string serverless-name@shared-name to specify shared database)")
             .RequiredArgument("path")
-            .InsertTo(&RunnerOptions.YdbSettings.ServerlessTennats);
+            .InsertTo(&RunnerOptions.YdbSettings.ServerlessTenants);
 
         TChoices<std::function<void()>> backtrace({
             {"heavy", &NKikimr::EnableYDBBacktraceFormat},

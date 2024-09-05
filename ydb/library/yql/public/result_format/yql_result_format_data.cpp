@@ -254,11 +254,14 @@ private:
 class TPgProcessor : public IDataProcessor {
 public:
     void Process(const NYT::TNode& dataNode, IDataVisitor& visitor) final {
-        CHECK(dataNode.IsEntity() || dataNode.IsString());
+        CHECK(dataNode.IsEntity() || dataNode.IsString() ||
+            dataNode.IsList() && dataNode.AsList().size() == 1 && dataNode.AsList()[0].IsString());
         if (dataNode.IsEntity()) {
-            visitor.OnPg(Nothing());
+            visitor.OnPg(Nothing(), true);
+        } else if (dataNode.IsString()) {
+            visitor.OnPg(dataNode.AsString(), true);
         } else {
-            visitor.OnPg(dataNode.AsString());
+            visitor.OnPg(Base64Decode(dataNode.AsList()[0].AsString()), false);
         }
     }
 };
@@ -829,11 +832,13 @@ void TDataBuilder::OnEndVariant() {
     Pop();
 }
 
-void TDataBuilder::OnPg(TMaybe<TStringBuf> value) {
-    if (value.Defined()) {
+void TDataBuilder::OnPg(TMaybe<TStringBuf> value, bool isUtf8) {
+    if (!value.Defined()) {
+        Top() = NYT::TNode::CreateEntity();
+    } else if (isUtf8) {
         Top() = *value;
     } else {
-        Top() = NYT::TNode::CreateEntity();
+        Top() = NYT::TNode().Add(Base64Encode(*value));
     }
 }
 
@@ -1143,8 +1148,9 @@ void TSameActionDataVisitor::OnEndVariant() {
     Do();
 }
 
-void TSameActionDataVisitor::OnPg(TMaybe<TStringBuf> value) {
+void TSameActionDataVisitor::OnPg(TMaybe<TStringBuf> value, bool isUtf8) {
     Y_UNUSED(value);
+    Y_UNUSED(isUtf8);
     Do();
 }
 

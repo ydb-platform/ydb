@@ -74,7 +74,7 @@ public:
     virtual void OnEndDict() = 0;
     virtual void OnBeginVariant(ui32 index) = 0;
     virtual void OnEndVariant() = 0;
-    virtual void OnPg(TMaybe<TStringBuf> value) = 0;
+    virtual void OnPg(TMaybe<TStringBuf> value, bool isUtf8) = 0;
 };
 
 class TSameActionDataVisitor : public IDataVisitor {
@@ -143,7 +143,7 @@ public:
     void OnEndDict() override;
     void OnBeginVariant(ui32 index) override;
     void OnEndVariant() override;
-    void OnPg(TMaybe<TStringBuf> value) override;
+    void OnPg(TMaybe<TStringBuf> value, bool isUtf8) override;
 
 public:
     virtual void Do() = 0;
@@ -230,7 +230,7 @@ public:
     void OnEndDict() final;
     void OnBeginVariant(ui32 index) final;
     void OnEndVariant() final;
-    void OnPg(TMaybe<TStringBuf> value) final;
+    void OnPg(TMaybe<TStringBuf> value, bool isUtf8) final;
 
 private:
     NYT::TNode& Top();

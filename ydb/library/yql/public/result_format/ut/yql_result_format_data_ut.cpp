@@ -88,7 +88,7 @@ Y_UNIT_TEST_SUITE(ParseData) {
         v.OnEndDict();
         v.OnBeginVariant(0);
         v.OnEndVariant();
-        v.OnPg("foo");
+        v.OnPg("foo",true);
     }
 
     Y_UNIT_TEST(ThrowingVisitor) {
@@ -157,7 +157,7 @@ Y_UNIT_TEST_SUITE(ParseData) {
         UNIT_ASSERT_EXCEPTION(v.OnEndDict(), TUnsupportedException);
         UNIT_ASSERT_EXCEPTION(v.OnBeginVariant(0), TUnsupportedException);
         UNIT_ASSERT_EXCEPTION(v.OnEndVariant(), TUnsupportedException);
-        UNIT_ASSERT_EXCEPTION(v.OnPg("foo"), TUnsupportedException);
+        UNIT_ASSERT_EXCEPTION(v.OnPg("foo",true), TUnsupportedException);
     }
 
     Y_UNIT_TEST(Void) {
@@ -387,8 +387,9 @@ Y_UNIT_TEST_SUITE(ParseData) {
     }
 
     Y_UNIT_TEST(Pg) {
-        Test("[PgType;\"text\";\"S\"]","\"foo\"");
         Test("[PgType;\"text\";\"S\"]","#");
+        Test("[PgType;\"text\";\"S\"]","\"foo\"");
+        Test("[PgType;\"bytea\";\"U\"]","[\"EjRWeJoAvN4=\"]");
     }
 }
 

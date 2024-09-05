@@ -4268,6 +4268,8 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
             switch (tx.Kind) {
             case NKikimrPQ::TTransaction::KIND_DATA:
             case NKikimrPQ::TTransaction::KIND_CONFIG:
+                WriteTx(tx, NKikimrPQ::TTransaction::CALCULATED);
+
                 tx.State = NKikimrPQ::TTransaction::CALCULATED;
                 PQ_LOG_D("TxId " << tx.TxId <<
                          ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
@@ -4277,14 +4279,12 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
             case NKikimrPQ::TTransaction::KIND_UNKNOWN:
                 Y_ABORT_UNLESS(false);
             }
-        } else {
-            break;
         }
 
-        [[fallthrough]];
+        break;
 
     case NKikimrPQ::TTransaction::CALCULATED:
-        Y_ABORT_UNLESS(!tx.WriteInProgress,
+        Y_ABORT_UNLESS(tx.WriteInProgress,
                        "PQ %" PRIu64 ", TxId %" PRIu64,
                        TabletID(), tx.TxId);
 

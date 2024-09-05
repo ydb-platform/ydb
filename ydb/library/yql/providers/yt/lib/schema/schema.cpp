@@ -25,6 +25,7 @@ static TString ConvertYtDataType(const TString& ytType, ui64& nativeYtTypeFlags)
         yqlType = "String";
     }
     else if (ytType == "uuid") {
+        nativeYtTypeFlags |= NTCF_UUID;
         yqlType = "Uuid";
     }
     else if (ytType == "utf8") {
@@ -125,10 +126,6 @@ static NYT::TNode ConvertNativeYtType(const NYT::TNode& raw, bool root, bool& ha
         if (raw.AsString() == "void") {
             nativeYtTypeFlags |= NTCF_VOID;
             return NYT::TNode().Add("VoidType");
-        }
-
-        if (raw.AsString() == "uuid") {
-            nativeYtTypeFlags |= NTCF_UUID;
         }
 
         hasYson = hasYson || "yson" == raw.AsString();
@@ -283,7 +280,7 @@ static std::pair<TString, NYT::TNode> ExtractYtType(const NYT::TNode& entry, boo
     }
 
     NYT::TNode typeNode;
-    if (fieldType && fieldType != "null" && fieldType != "void" && fieldType != "decimal" && fieldType != "uuid") {
+    if (fieldType && fieldType != "null" && fieldType != "void" && fieldType != "decimal") {
         TString yqlType = ConvertYtDataType(*fieldType, nativeYtTypeFlags);
         auto dataTypeNode = NYT::TNode()
             .Add("DataType")
@@ -685,7 +682,7 @@ std::pair<NYT::EValueType, bool> RowSpecYqlTypeToYtType(const NYT::TNode& rowSpe
     if (yqlType == TStringBuf("String") || yqlType == TStringBuf("Longint") || yqlType == TStringBuf("JsonDocument") || yqlType == TStringBuf("DyNumber")) {
         ytType = NYT::VT_STRING;
     } else if (yqlType == TStringBuf("Uuid")) {
-        ytType = NYT::VT_UUID;
+        ytType = (nativeYtTypeFlags & NTCF_UUID) ? NYT::VT_UUID : NYT::VT_STRING;
     } else if (yqlType == TStringBuf("Json")) {
         ytType = (nativeYtTypeFlags & NTCF_JSON) ? NYT::VT_JSON : NYT::VT_STRING;
     } else if (yqlType == TStringBuf("Decimal")) {

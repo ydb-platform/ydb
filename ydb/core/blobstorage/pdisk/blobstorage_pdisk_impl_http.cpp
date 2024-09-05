@@ -330,7 +330,7 @@ void TPDisk::OutputHtmlLogChunksDetails(TStringStream &str) {
 
 void TPDisk::OutputHtmlChunkLockUnlockInfo(TStringStream &str) {
     using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
-    bool chunkLockingEnabled = NKikimr::AppData(ActorSystem)->FeatureFlags.GetEnableChunkLocking();
+    bool chunkLockingEnabled = NKikimr::AppData(PCtx->ActorSystem)->FeatureFlags.GetEnableChunkLocking();
 
     auto commonParams = [&] (TStringStream &str, TString requestName) {
         for (TEvChunkLock::ELockFrom from : { TEvChunkLock::ELockFrom::LOG, TEvChunkLock::ELockFrom::PERSONAL_QUOTA } ) {
@@ -481,7 +481,7 @@ void TPDisk::HttpInfo(THttpInfo &httpInfo) {
         TGuard<TMutex> guard(StateMutex);
         ForsetiScheduler.OutputLog(out);
         reportResult->HttpInfoRes = new NMon::TEvHttpInfoRes(out.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom);
-        ActorSystem->Send(httpInfo.Sender, reportResult);
+        PCtx->ActorSystem->Send(httpInfo.Sender, reportResult);
     } else {
         TStringStream str = httpInfo.OutputString;
         TGuard<TMutex> guard(StateMutex);
@@ -536,7 +536,7 @@ void TPDisk::HttpInfo(THttpInfo &httpInfo) {
 
         }
         reportResult->HttpInfoRes = new NMon::TEvHttpInfoRes(str.Str());
-        ActorSystem->Send(httpInfo.Sender, reportResult);
+        PCtx->ActorSystem->Send(httpInfo.Sender, reportResult);
     }
 }
 

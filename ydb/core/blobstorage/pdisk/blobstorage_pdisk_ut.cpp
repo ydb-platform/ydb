@@ -19,7 +19,8 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
                     TPDiskCategory(NPDisk::DEVICE_TYPE_ROT, 0).GetRaw());
         const TIntrusivePtr<::NMonitoring::TDynamicCounters> counters(new ::NMonitoring::TDynamicCounters);
 
-        THolder<NPDisk::IPDisk> pDisk = MakeHolder<NPDisk::TPDisk>(cfg, counters);
+        auto pCtx = std::make_shared<NPDisk::TPDiskCtx>();
+        THolder<NPDisk::IPDisk> pDisk = MakeHolder<NPDisk::TPDisk>(pCtx, cfg, counters);
         pDisk->Wakeup();
     }
 
@@ -963,7 +964,7 @@ Y_UNIT_TEST_SUITE(PDiskCompatibilityInfo) {
         TVDiskMock vdisk(&testCtx);
         vdisk.InitFull();
         vdisk.SendEvLogSync();
-        auto pdiskId = testCtx.GetPDisk()->PDiskId;
+        auto pdiskId = testCtx.GetPDisk()->PCtx->PDiskId;
 
         const auto evInitRes = RestartPDisk(testCtx, pdiskId, vdisk, &newInfo);
         if (isCompatible) {
@@ -984,7 +985,7 @@ Y_UNIT_TEST_SUITE(PDiskCompatibilityInfo) {
         TVDiskMock vdisk(&testCtx);
         vdisk.InitFull();
         vdisk.SendEvLogSync();
-        auto pdiskId = testCtx.GetPDisk()->PDiskId;
+        auto pdiskId = testCtx.GetPDisk()->PCtx->PDiskId;
 
         {
             const auto evInitRes = RestartPDisk(testCtx, pdiskId, vdisk, &intermediateInfo);

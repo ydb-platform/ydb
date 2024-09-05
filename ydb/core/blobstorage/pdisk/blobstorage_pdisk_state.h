@@ -159,7 +159,7 @@ struct TOwnerData {
     TString ToString() const {
         TStringStream str;
         str << "TOwnerData {";
-        str << "VDiskId# " << VDiskId.ToString();
+        str << "VDiskId# " << VDiskId.ToStringWOGeneration();
         str << " Status# " << RenderStatus(Status);
         str << " CurrentFirstLsnToKeep# " << CurrentFirstLsnToKeep;
         str << " LastWrittenCommitLsn# " << LastWrittenCommitLsn;

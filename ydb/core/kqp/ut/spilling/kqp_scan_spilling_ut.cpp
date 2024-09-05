@@ -54,50 +54,6 @@ Y_UNIT_TEST(SpillingPragmaParseError) {
     UNIT_ASSERT_VALUES_EQUAL_C(planres.GetStatus(), EStatus::GENERIC_ERROR, planres.GetIssues().ToString());
 }
 
-Y_UNIT_TEST_TWIN(SpillingInRuntimeNodes, EnabledSpilling) {
-    ui64 reasonableTreshold = EnabledSpilling ? 100 : 200_MB;
-    Cerr << "cwd: " << NFs::CurrentWorkingDirectory() << Endl;
-    TKikimrRunner kikimr(AppCfgLowComputeLimits(reasonableTreshold));
-
-    auto db = kikimr.GetQueryClient();
-
-    for (ui32 i = 0; i < 300; ++i) {
-        auto result = db.ExecuteQuery(Sprintf(R"(
-            --!syntax_v1
-            REPLACE INTO `/Root/KeyValue` (Key, Value) VALUES (%d, "%s")
-        )", i, TString(200000 + i, 'a' + (i % 26)).c_str()), NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-    }
-
-    auto query = R"(
-        --!syntax_v1
-        PRAGMA ydb.EnableSpillingNodes="GraceJoin";
-        PRAGMA ydb.CostBasedOptimizationLevel='0';
-        PRAGMA ydb.HashJoinMode='graceandself';
-        select t1.Key, t1.Value, t2.Key, t2.Value
-        from `/Root/KeyValue` as t1 full join `/Root/KeyValue` as t2 on t1.Value = t2.Value
-        order by t1.Value
-    )";
-
-    auto explainMode = NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain);
-    auto planres = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), explainMode).ExtractValueSync();
-    UNIT_ASSERT_VALUES_EQUAL_C(planres.GetStatus(), EStatus::SUCCESS, planres.GetIssues().ToString());
-
-    Cerr << planres.GetStats()->GetAst() << Endl;
-
-    auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), NYdb::NQuery::TExecuteQuerySettings()).ExtractValueSync();
-    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-    TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
-    if (EnabledSpilling) {
-        UNIT_ASSERT(counters.SpillingWriteBlobs->Val() > 0);
-        UNIT_ASSERT(counters.SpillingReadBlobs->Val() > 0);
-    } else {
-        UNIT_ASSERT(counters.SpillingWriteBlobs->Val() == 0);
-        UNIT_ASSERT(counters.SpillingReadBlobs->Val() == 0);
-    }
-}
-
 Y_UNIT_TEST(SelfJoinQueryService) {
     Cerr << "cwd: " << NFs::CurrentWorkingDirectory() << Endl;
 

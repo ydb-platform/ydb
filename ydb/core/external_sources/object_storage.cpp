@@ -339,7 +339,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
         NYql::NPathGenerator::TPathGeneratorPtr pathGenerator;
         
         bool shouldInferPartitions = !partitionedBy.empty() && !projection;
-        bool ignoreEmptyListings = !!projection;
+        bool ignoreEmptyListings = !projection.empty();
 
         NYql::NS3Lister::TListingRequest request {
             .Url = meta->DataSourceLocation,

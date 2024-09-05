@@ -1636,6 +1636,28 @@
       }
   ```
 
+- Go
+
+  [Пример на Github](https://github.com/ydb-platform/ydb-go-sdk/blob/master/examples/topic/topicreader/topic_reader_transaction.go)
+
+  Для чтение сообщений внутри транзакции нужно воспользоваться методом [Reader.PopBatchTx](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3@v3.79.0/topic/topicreader#Reader.PopBatchTx). Он прочитает пакет сообщений и добавит их их коммит в транзакцию, отдельно коммитить эти сообщения не нужно.
+
+  ```go
+  err := db.Query().DoTx(ctx, func(ctx context.Context, tx query.TxActor) error {
+    batch, err := reader.PopBatchTx(ctx, tx)
+    if err != nil {
+				return err
+		}
+
+    batchResult, err := processBatch(batch.Context(), batch)
+    if err != nil {
+				return err
+		}
+
+    return nil
+  }
+  ```
+
 - Java (sync)
 
   [Пример на GitHub](https://github.com/ydb-platform/ydb-java-examples/blob/develop/ydb-cookbook/src/main/java/tech/ydb/examples/topic/transactions/TransactionReadSync.java)

@@ -116,7 +116,7 @@ IClientsCachePtr CreateClientsCache(
 
 IClientsCachePtr CreateClientsCache(const TConnectionConfigPtr& config)
 {
-    return CreateClientsCache(config, NApi::GetClientOpsFromEnvStatic());
+    return CreateClientsCache(config, NApi::GetClientOptionsFromEnvStatic());
 }
 
 IClientsCachePtr CreateClientsCache(const NApi::TClientOptions& options)
@@ -128,7 +128,7 @@ IClientsCachePtr CreateClientsCache(const NApi::TClientOptions& options)
 
 IClientsCachePtr CreateClientsCache()
 {
-    return CreateClientsCache(NApi::GetClientOpsFromEnvStatic());
+    return CreateClientsCache(NApi::GetClientOptionsFromEnvStatic());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

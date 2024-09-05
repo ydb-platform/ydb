@@ -261,8 +261,8 @@ bool TSensorOptions::IsCompatibleWith(const TSensorOptions& other) const
 
 TProfiler::TProfiler(
     const IRegistryImplPtr& impl,
-    const TString& prefix,
-    const TString& _namespace)
+    const std::string& prefix,
+    const std::string& _namespace)
     : Enabled_(true)
     , Prefix_(prefix)
     , Namespace_(_namespace)
@@ -270,8 +270,8 @@ TProfiler::TProfiler(
 { }
 
 TProfiler::TProfiler(
-    const TString& prefix,
-    const TString& _namespace,
+    const std::string& prefix,
+    const std::string& _namespace,
     const TTagSet& tags,
     const IRegistryImplPtr& impl,
     TSensorOptions options)
@@ -283,7 +283,7 @@ TProfiler::TProfiler(
     , Impl_(impl ? impl : GetGlobalRegistry())
 { }
 
-TProfiler TProfiler::WithPrefix(const TString& prefix) const
+TProfiler TProfiler::WithPrefix(const std::string& prefix) const
 {
     if (!Enabled_) {
         return {};
@@ -292,7 +292,7 @@ TProfiler TProfiler::WithPrefix(const TString& prefix) const
     return TProfiler(Prefix_ + prefix, Namespace_, Tags_, Impl_, Options_);
 }
 
-TProfiler TProfiler::WithTag(const TString& name, const TString& value, int parent) const
+TProfiler TProfiler::WithTag(const std::string& name, const std::string& value, int parent) const
 {
     if (!Enabled_) {
         return {};
@@ -303,7 +303,7 @@ TProfiler TProfiler::WithTag(const TString& name, const TString& value, int pare
     return TProfiler(Prefix_, Namespace_, allTags, Impl_, Options_);
 }
 
-void TProfiler::RenameDynamicTag(const TDynamicTagPtr& tag, const TString& name, const TString& value) const
+void TProfiler::RenameDynamicTag(const TDynamicTagPtr& tag, const std::string& name, const std::string& value) const
 {
     if (!Impl_) {
         return;
@@ -312,7 +312,7 @@ void TProfiler::RenameDynamicTag(const TDynamicTagPtr& tag, const TString& name,
     Impl_->RenameDynamicTag(tag, name, value);
 }
 
-TProfiler TProfiler::WithRequiredTag(const TString& name, const TString& value, int parent) const
+TProfiler TProfiler::WithRequiredTag(const std::string& name, const std::string& value, int parent) const
 {
     if (!Enabled_) {
         return {};
@@ -323,7 +323,7 @@ TProfiler TProfiler::WithRequiredTag(const TString& name, const TString& value, 
     return TProfiler(Prefix_, Namespace_, allTags, Impl_, Options_);
 }
 
-TProfiler TProfiler::WithExcludedTag(const TString& name, const TString& value, int parent) const
+TProfiler TProfiler::WithExcludedTag(const std::string& name, const std::string& value, int parent) const
 {
     if (!Enabled_) {
         return {};
@@ -334,7 +334,7 @@ TProfiler TProfiler::WithExcludedTag(const TString& name, const TString& value, 
     return TProfiler(Prefix_, Namespace_, allTags, Impl_, Options_);
 }
 
-TProfiler TProfiler::WithAlternativeTag(const TString& name, const TString& value, int alternativeTo, int parent) const
+TProfiler TProfiler::WithAlternativeTag(const std::string& name, const std::string& value, int alternativeTo, int parent) const
 {
     if (!Enabled_) {
         return {};
@@ -346,7 +346,7 @@ TProfiler TProfiler::WithAlternativeTag(const TString& name, const TString& valu
     return TProfiler(Prefix_, Namespace_, allTags, Impl_, Options_);
 }
 
-TProfiler TProfiler::WithExtensionTag(const TString& name, const TString& value, int extensionOf) const
+TProfiler TProfiler::WithExtensionTag(const std::string& name, const std::string& value, int extensionOf) const
 {
     if (!Enabled_) {
         return {};
@@ -461,7 +461,7 @@ TProfiler TProfiler::WithHot(bool value) const
     return TProfiler(Prefix_, Namespace_, Tags_, Impl_, opts);
 }
 
-TCounter TProfiler::Counter(const TString& name) const
+TCounter TProfiler::Counter(const std::string& name) const
 {
     if (!Impl_) {
         return {};
@@ -472,7 +472,7 @@ TCounter TProfiler::Counter(const TString& name) const
     return counter;
 }
 
-TTimeCounter TProfiler::TimeCounter(const TString& name) const
+TTimeCounter TProfiler::TimeCounter(const std::string& name) const
 {
     if (!Impl_) {
         return {};
@@ -483,7 +483,7 @@ TTimeCounter TProfiler::TimeCounter(const TString& name) const
     return counter;
 }
 
-TGauge TProfiler::Gauge(const TString& name) const
+TGauge TProfiler::Gauge(const std::string& name) const
 {
     if (!Impl_) {
         return TGauge();
@@ -494,7 +494,7 @@ TGauge TProfiler::Gauge(const TString& name) const
     return gauge;
 }
 
-TTimeGauge TProfiler::TimeGauge(const TString& name) const
+TTimeGauge TProfiler::TimeGauge(const std::string& name) const
 {
     if (!Impl_) {
         return TTimeGauge();
@@ -505,7 +505,7 @@ TTimeGauge TProfiler::TimeGauge(const TString& name) const
     return gauge;
 }
 
-TSummary TProfiler::Summary(const TString& name, ESummaryPolicy summaryPolicy) const
+TSummary TProfiler::Summary(const std::string& name, ESummaryPolicy summaryPolicy) const
 {
     if (!Impl_) {
         return {};
@@ -519,7 +519,7 @@ TSummary TProfiler::Summary(const TString& name, ESummaryPolicy summaryPolicy) c
     return summary;
 }
 
-TGauge TProfiler::GaugeSummary(const TString& name, ESummaryPolicy summaryPolicy) const
+TGauge TProfiler::GaugeSummary(const std::string& name, ESummaryPolicy summaryPolicy) const
 {
     if (!Impl_) {
         return {};
@@ -533,7 +533,7 @@ TGauge TProfiler::GaugeSummary(const TString& name, ESummaryPolicy summaryPolicy
     return gauge;
 }
 
-TTimeGauge TProfiler::TimeGaugeSummary(const TString& name, ESummaryPolicy summaryPolicy) const
+TTimeGauge TProfiler::TimeGaugeSummary(const std::string& name, ESummaryPolicy summaryPolicy) const
 {
     if (!Impl_) {
         return {};
@@ -547,7 +547,7 @@ TTimeGauge TProfiler::TimeGaugeSummary(const TString& name, ESummaryPolicy summa
     return gauge;
 }
 
-TEventTimer TProfiler::Timer(const TString& name) const
+TEventTimer TProfiler::Timer(const std::string& name) const
 {
     if (!Impl_) {
         return {};
@@ -558,7 +558,7 @@ TEventTimer TProfiler::Timer(const TString& name) const
     return timer;
 }
 
-TEventTimer TProfiler::TimeHistogram(const TString& name, TDuration min, TDuration max) const
+TEventTimer TProfiler::TimeHistogram(const std::string& name, TDuration min, TDuration max) const
 {
     if (!Impl_) {
         return {};
@@ -573,7 +573,7 @@ TEventTimer TProfiler::TimeHistogram(const TString& name, TDuration min, TDurati
     return timer;
 }
 
-TEventTimer TProfiler::TimeHistogram(const TString& name, std::vector<TDuration> bounds) const
+TEventTimer TProfiler::TimeHistogram(const std::string& name, std::vector<TDuration> bounds) const
 {
     if (!Impl_) {
         return {};
@@ -586,7 +586,7 @@ TEventTimer TProfiler::TimeHistogram(const TString& name, std::vector<TDuration>
     return timer;
 }
 
-TGaugeHistogram TProfiler::GaugeHistogram(const TString& name, std::vector<double> buckets) const
+TGaugeHistogram TProfiler::GaugeHistogram(const std::string& name, std::vector<double> buckets) const
 {
     if (!Impl_) {
         return {};
@@ -599,7 +599,7 @@ TGaugeHistogram TProfiler::GaugeHistogram(const TString& name, std::vector<doubl
     return histogram;
 }
 
-TRateHistogram TProfiler::RateHistogram(const TString& name, std::vector<double> buckets) const
+TRateHistogram TProfiler::RateHistogram(const std::string& name, std::vector<double> buckets) const
 {
     if (!Impl_) {
         return {};
@@ -613,7 +613,7 @@ TRateHistogram TProfiler::RateHistogram(const TString& name, std::vector<double>
 }
 
 void TProfiler::AddFuncCounter(
-    const TString& name,
+    const std::string& name,
     const TRefCountedPtr& owner,
     std::function<i64()> reader) const
 {
@@ -625,7 +625,7 @@ void TProfiler::AddFuncCounter(
 }
 
 void TProfiler::AddFuncGauge(
-    const TString& name,
+    const std::string& name,
     const TRefCountedPtr& owner,
     std::function<double()> reader) const
 {
@@ -637,7 +637,7 @@ void TProfiler::AddFuncGauge(
 }
 
 void TProfiler::AddProducer(
-    const TString& prefix,
+    const std::string& prefix,
     const ISensorProducerPtr& producer) const
 {
     if (!Impl_) {

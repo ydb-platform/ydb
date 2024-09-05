@@ -26,7 +26,7 @@ namespace NYT::NProfiling {
 struct TShardConfig
     : public NYTree::TYsonStruct
 {
-    std::vector<TString> Filter;
+    std::vector<std::string> Filter;
 
     std::optional<TDuration> GridStep;
 
@@ -78,17 +78,17 @@ struct TSolomonExporterConfig
 
     TDuration ReadDelay;
 
-    std::optional<TString> Host;
+    std::optional<std::string> Host;
 
-    THashMap<TString, TString> InstanceTags;
+    THashMap<std::string, std::string> InstanceTags;
 
-    THashMap<TString, TShardConfigPtr> Shards;
+    THashMap<std::string, TShardConfigPtr> Shards;
 
     TDuration UpdateSensorServiceTreePeriod;
 
     int ProducerCollectionBatchSize;
 
-    TShardConfigPtr MatchShard(const TString& sensorName);
+    TShardConfigPtr MatchShard(const std::string& sensorName);
 
     ESummaryPolicy GetSummaryPolicy() const;
 
@@ -109,19 +109,19 @@ public:
         TSolomonExporterConfigPtr config,
         TSolomonRegistryPtr registry = nullptr);
 
-    void Register(const TString& prefix, const NYT::NHttp::IServerPtr& server);
-    void Register(const TString& prefix, const NYT::NHttp::IRequestPathMatcherPtr& handlers);
+    void Register(const std::string& prefix, const NYT::NHttp::IServerPtr& server);
+    void Register(const std::string& prefix, const NYT::NHttp::IRequestPathMatcherPtr& handlers);
 
     //! Attempts to read registered sensors in JSON format.
     //! Returns null if exporter is not ready.
-    std::optional<TString> ReadJson(const TReadOptions& options = {}, std::optional<TString> shard = {});
+    std::optional<std::string> ReadJson(const TReadOptions& options = {}, std::optional<std::string> shard = {});
 
-    std::optional<TString> ReadSpack(const TReadOptions& options = {}, std::optional<TString> shard = {});
+    std::optional<std::string> ReadSpack(const TReadOptions& options = {}, std::optional<std::string> shard = {});
 
     bool ReadSensors(
         ::NMonitoring::IMetricEncoderPtr encoder,
         const TReadOptions& options,
-        std::optional<TString> shard);
+        std::optional<std::string> shard);
 
     void AttachRemoteProcess(TCallback<TFuture<TSharedRef>()> dumpSensors);
 
@@ -150,11 +150,11 @@ private:
 
     TSpinLock StatusLock_;
     std::optional<TInstant> LastFetch_;
-    THashMap<TString, std::optional<TInstant>> LastShardFetch_;
+    THashMap<std::string, std::optional<TInstant>> LastShardFetch_;
 
     struct TCacheKey
     {
-        std::optional<TString> Shard;
+        std::optional<std::string> Shard;
         ::NMonitoring::EFormat Format;
         ::NMonitoring::ECompression Compression;
 
@@ -192,19 +192,19 @@ private:
     void DoCollect();
     void TransferSensors();
 
-    void HandleIndex(const TString& prefix, const NHttp::IRequestPtr& req, const NHttp::IResponseWriterPtr& rsp);
+    void HandleIndex(const std::string& prefix, const NHttp::IRequestPtr& req, const NHttp::IResponseWriterPtr& rsp);
     void HandleStatus(const NHttp::IRequestPtr& req, const NHttp::IResponseWriterPtr& rsp);
 
     void HandleDebugSensors(const NHttp::IRequestPtr& req, const NHttp::IResponseWriterPtr& rsp);
     void HandleDebugTags(const NHttp::IRequestPtr& req, const NHttp::IResponseWriterPtr& rsp);
 
     void HandleShard(
-        const std::optional<TString>& name,
+        const std::optional<std::string>& name,
         const NHttp::IRequestPtr& req,
         const NHttp::IResponseWriterPtr& rsp);
 
     void DoHandleShard(
-        const std::optional<TString>& name,
+        const std::optional<std::string>& name,
         const NHttp::IRequestPtr& req,
         const NHttp::IResponseWriterPtr& rsp);
 
@@ -214,7 +214,7 @@ private:
 
     void CleanResponseCache();
 
-    bool FilterDefaultGrid(const TString& sensorName);
+    bool FilterDefaultGrid(const std::string& sensorName);
 
     static void ValidateSummaryPolicy(ESummaryPolicy policy);
 

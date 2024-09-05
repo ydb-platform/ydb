@@ -355,11 +355,11 @@ public:
         return RunKqpProxyRequest<NKikimr::NKqp::TEvForgetScriptExecutionOperation, NKikimr::NKqp::TEvForgetScriptExecutionOperationResponse>(std::move(event), database);
     }
 
-    NKikimr::NKqp::TEvCancelScriptExecutionOperationResponse::TPtr CancelScriptExecutionOperationRequest(const TString& operation) const {
+    NKikimr::NKqp::TEvCancelScriptExecutionOperationResponse::TPtr CancelScriptExecutionOperationRequest(const TString& database, const TString& operation) const {
         NKikimr::NOperationId::TOperationId operationId(operation);
-        auto event = MakeHolder<NKikimr::NKqp::TEvCancelScriptExecutionOperation>(Settings_.DomainName, operationId);
+        auto event = MakeHolder<NKikimr::NKqp::TEvCancelScriptExecutionOperation>(GetDatabasePath(database), operationId);
 
-        return RunKqpProxyRequest<NKikimr::NKqp::TEvCancelScriptExecutionOperation, NKikimr::NKqp::TEvCancelScriptExecutionOperationResponse>(std::move(event));
+        return RunKqpProxyRequest<NKikimr::NKqp::TEvCancelScriptExecutionOperation, NKikimr::NKqp::TEvCancelScriptExecutionOperationResponse>(std::move(event), database);
     }
 
     void QueryRequestAsync(const TRequestOptions& query) {
@@ -607,8 +607,8 @@ TRequestResult TYdbSetup::ForgetScriptExecutionOperationRequest(const TString& d
     return TRequestResult(forgetScriptExecutionOperationResponse->Get()->Status, forgetScriptExecutionOperationResponse->Get()->Issues);
 }
 
-TRequestResult TYdbSetup::CancelScriptExecutionOperationRequest(const TString& operation) const {
-    auto cancelScriptExecutionOperationResponse = Impl_->CancelScriptExecutionOperationRequest(operation);
+TRequestResult TYdbSetup::CancelScriptExecutionOperationRequest(const TString& database, const TString& operation) const {
+    auto cancelScriptExecutionOperationResponse = Impl_->CancelScriptExecutionOperationRequest(database, operation);
 
     return TRequestResult(cancelScriptExecutionOperationResponse->Get()->Status, cancelScriptExecutionOperationResponse->Get()->Issues);
 }

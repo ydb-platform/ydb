@@ -28,7 +28,6 @@ TTestInfo::TTestInfo(std::vector<TDuration>&& clientTimings, std::vector<TDurati
 
     if (ClientTimings.empty()) {
         return;
-        
     }
 
     Y_ABORT_UNLESS(ClientTimings.size() == ServerTimings.size());

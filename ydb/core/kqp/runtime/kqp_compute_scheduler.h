@@ -62,6 +62,8 @@ public:
     void ReportCounters(TIntrusivePtr<TKqpCounters>);
 
     void UpdateMaxShare(TString, double, TMonotonic now);
+    
+    void SetCapacity(ui64 cores);
 
     void SetMaxDeviation(TDuration);
     void SetForgetInterval(TDuration);

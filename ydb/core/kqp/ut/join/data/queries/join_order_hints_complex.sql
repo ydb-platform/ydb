@@ -1,6 +1,10 @@
 PRAGMA TablePathPrefix='/Root';
 
-PRAGMA ydb.OptJoinOrderHints='[ ["R", "S"], ["T", "U"] ]';
+PRAGMA ydb.OptJoinOrderHints=
+    '[ 
+        [["R", "S"], ["T", "U"]]
+    ]';
+
 PRAGMA ydb.OptCardinalityHints = 
     '[
         {"labels":["R"], "op":"#", "value":10e8},

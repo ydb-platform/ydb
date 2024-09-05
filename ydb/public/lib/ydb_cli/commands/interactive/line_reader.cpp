@@ -105,6 +105,7 @@ TLineReader::TLineReader(std::string prompt, std::string historyFilePath, Sugges
     Rx.set_word_break_characters(WordBreakCharacters.data());
     Rx.bind_key(replxx::Replxx::KEY::control('N'), [&](char32_t code) { return Rx.invoke(replxx::Replxx::ACTION::HISTORY_NEXT, code); });
     Rx.bind_key(replxx::Replxx::KEY::control('P'), [&](char32_t code) { return Rx.invoke(replxx::Replxx::ACTION::HISTORY_PREVIOUS, code); });
+    Rx.bind_key(replxx::Replxx::KEY::control('D'), [](char32_t) { return replxx::Replxx::ACTION_RESULT::BAIL; });
     auto commit_action = [&](char32_t code) {
         return Rx.invoke(replxx::Replxx::ACTION::COMMIT_LINE, code);
     };

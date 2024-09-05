@@ -50,7 +50,8 @@ IGraphTransformer::TStatus MultiUsageFlatMapOverJoin(const TExprNode::TPtr& node
 bool IsFilterMultiusageEnabled(const TOptimizeContext& optCtx) {
     YQL_ENSURE(optCtx.Types);
     static const TString multiUsageFlags = to_lower(TString("FilterPushdownEnableMultiusage"));
-    return optCtx.Types->OptimizerFlags.contains(multiUsageFlags);
+    static const TString noMultiUsageFlags = to_lower(TString("FilterPushdownDisableMultiusage"));
+    return optCtx.Types->OptimizerFlags.contains(multiUsageFlags) && !optCtx.Types->OptimizerFlags.contains(noMultiUsageFlags);
 }
 
 void FilterPushdownWithMultiusage(const TExprNode::TPtr& node, TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx, TOptimizeContext& optCtx) {

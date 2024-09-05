@@ -16,8 +16,8 @@ A stage can contatin the following operations:
 #### TableFullScan
 Full table scan. This operation's resource consumption is proportional to the table size, so it should be avoided whenever possible.
 
-Attribute | Description 
---- | --- 
+Attribute | Description
+--- | ---
 Table | table name
 ReadColumns | read columns list
 ReadLimit | read rows limit
@@ -27,7 +27,7 @@ Reverse | flag indicating the order in which the rows will be read, by default t
 Reading a table by a specific primary key range.
 
 Attribute | Description
---- | --- 
+--- | ---
 Table | table name
 ReadColumns | read columns list
 ReadRange | key range
@@ -68,7 +68,7 @@ Attribute | Description
 Predicate | filtering condition
 Limit | rows limit
 
-#### Aggregate 
+#### Aggregate
 Grouping rows by the values of the specified columns or expressions.
 
 Attribute | Description

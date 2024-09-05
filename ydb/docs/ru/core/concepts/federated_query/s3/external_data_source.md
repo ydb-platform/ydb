@@ -41,13 +41,13 @@ WHERE
 
 Где:
 
-* `object_storage_connection_name` — название [внешнего источника данных](#create_connection), ведущего на бакет  с S3 ({{ objstorage-full-name }}).
+* `object_storage_connection_name` — название внешнего источника данных, ведущего на бакет с S3 ({{ objstorage-full-name }}).
 * `file_path` — путь к файлу или файлам внутри бакета. Поддерживаются wildcards `*`, подробнее [в разделе](#path_format).
 * `file_format` — [формат данных](formats.md#formats) в файлах.
 * `schema_definition` — [описание схемы хранимых данных](#schema) в файлах.
 * `compression` — [формат сжатия](formats.md#compression_formats) файлов.
 
-### Описание схемы данных { #schema }
+### Описание схемы данных {#schema}
 
 Описание схемы данных состоит из набора полей:
 - Названия поля.

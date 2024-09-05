@@ -1,4 +1,5 @@
 #include "schemeshard_build_index.h"
+#include "schemeshard_xxport__helpers.h"
 #include "schemeshard_build_index_helpers.h"
 #include "schemeshard_build_index_tx_base.h"
 #include "schemeshard_impl.h"
@@ -29,7 +30,7 @@ public:
                 << "Index build with id '" << id << "' already exists");
         }
 
-        const TString& uid = GetUid(request.GetOperationParams().labels());
+        const TString& uid = GetUid(request.GetOperationParams());
         if (uid && Self->IndexBuildsByUid.contains(uid)) {
             return Reply(Ydb::StatusIds::ALREADY_EXISTS, TStringBuilder()
                 << "Index build with uid '" << uid << "' already exists");
@@ -208,20 +209,22 @@ public:
 private:
     bool Prepare(TIndexBuildInfo& buildInfo, const NKikimrIndexBuilder::TIndexBuildSettings& settings, TString& explain) {
         Y_ASSERT(settings.has_index());
-        buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildIndex;
         const auto& index = settings.index();
 
         switch (index.type_case()) {
         case Ydb::Table::TableIndex::TypeCase::kGlobalIndex:
+            buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildSecondaryIndex;
             buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobal;
             break;
         case Ydb::Table::TableIndex::TypeCase::kGlobalAsyncIndex:
+            buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildSecondaryIndex;
             buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync;
             break;
         case Ydb::Table::TableIndex::TypeCase::kGlobalUniqueIndex:
             explain = "unsupported index type to build";
             return false;
         case Ydb::Table::TableIndex::TypeCase::kGlobalVectorKmeansTreeIndex: {
+            buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildVectorIndex;
             buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree;
             NKikimrSchemeOp::TVectorIndexKmeansTreeDescription vectorIndexKmeansTreeDescription;
             *vectorIndexKmeansTreeDescription.MutableSettings() = index.global_vector_kmeans_tree_index().vector_settings();
@@ -240,17 +243,8 @@ private:
         Ydb::StatusIds::StatusCode status;
         if (!FillIndexTablePartitioning(buildInfo.ImplTableDescriptions, index, status, explain)) {
             return false;
-        } 
-        return true;
-    }
-
-    static TString GetUid(const google::protobuf::Map<TString, TString>& labels) {
-        auto it = labels.find("uid");
-        if (it == labels.end()) {
-            return TString();
         }
-
-        return it->second;
+        return true;
     }
 };
 

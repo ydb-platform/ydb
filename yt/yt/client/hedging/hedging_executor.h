@@ -1,107 +1,115 @@
 #pragma once
 
-#include "config.h"
 #include "counter.h"
 #include "penalty_provider.h"
 #include "public.h"
 
 #include <yt/yt/client/api/client.h>
 
-#include <yt/yt/core/profiling/timing.h>
-
 #include <yt/yt/core/rpc/dispatcher.h>
 
-#include <library/cpp/iterator/enumerate.h>
+#include <library/cpp/yt/threading/spin_lock.h>
 
 #include <util/datetime/base.h>
 
 #include <util/generic/string.h>
-#include <util/generic/vector.h>
 
-#include <util/system/spinlock.h>
+#include <vector>
 
 
 namespace NYT::NClient::NHedging::NRpc {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DECLARE_REFCOUNTED_CLASS(THedgingExecutor)
-
 class THedgingExecutor final
 {
 public:
-    THedgingExecutor(const THedgingClientOptions& options, const IPenaltyProviderPtr& penaltyProvider);
+    struct TNode
+    {
+        NApi::IClientPtr Client;
+        TCounterPtr Counter;
+        std::string ClusterName;
+        TDuration InitialPenalty;
+    };
 
-    NApi::IConnectionPtr GetConnection();
+    THedgingExecutor(
+        const std::vector<TNode>& nodes,
+        TDuration banPenalty,
+        TDuration banDuration,
+        const IPenaltyProviderPtr& penaltyProvider);
+
+    NApi::IClientPtr GetClient(int index);
 
     template <typename T>
     TFuture<T> DoWithHedging(TCallback<TFuture<T>(NApi::IClientPtr)> callback)
     {
-        auto now = NProfiling::GetCpuInstant();
-        auto clients = [&] {
+        auto now = TInstant::Now();
+        auto nodes = [&] {
             TGuard guard(SpinLock_);
-            for (auto& client : Clients_) {
-                if (client.BanUntil < now) {
-                    client.AdaptivePenalty = 0;
+            for (auto& node : Nodes_) {
+                if (node.BanUntil < now) {
+                    node.AdaptivePenalty = TDuration::Zero();
                 }
             }
-
-            return Clients_;
+            return Nodes_;
         }();
 
-        NProfiling::TCpuDuration minInitialPenalty = Max<i64>();
-        for (auto& client : clients) {
-            client.ExternalPenalty = PenaltyProvider_->Get(client.ClusterName);
-            NProfiling::TCpuDuration currentInitialPenalty = client.InitialPenalty + client.AdaptivePenalty + client.ExternalPenalty;
-            minInitialPenalty = Min(minInitialPenalty, currentInitialPenalty);
+        auto minInitialPenalty = TDuration::Max();
+        for (auto& node : nodes) {
+            node.ExternalPenalty = PenaltyProvider_->Get(node.ClusterName);
+            auto currentInitialPenalty = node.InitialPenalty + node.AdaptivePenalty + node.ExternalPenalty;
+            minInitialPenalty = std::min(minInitialPenalty, currentInitialPenalty);
         }
 
-        TVector<TFuture<T>> futures(Reserve(clients.size()));
-        for (auto [i, client] : Enumerate(clients)) {
-            TDuration effectivePenalty = NProfiling::CpuDurationToDuration(client.InitialPenalty + client.AdaptivePenalty + client.ExternalPenalty - minInitialPenalty);
-            if (effectivePenalty) {
-                auto delayedFuture = NConcurrency::TDelayedExecutor::MakeDelayed(effectivePenalty, NYT::NRpc::TDispatcher::Get()->GetHeavyInvoker());
-                futures.push_back(delayedFuture.Apply(BIND(callback, client.Client)));
+        std::vector<TFuture<T>> futures;
+        futures.reserve(nodes.size());
+        for (int i = 0; i != std::ssize(nodes); ++i) {
+            const auto& node = nodes[i];
+            auto penalty = node.InitialPenalty + node.AdaptivePenalty + node.ExternalPenalty - minInitialPenalty;
+            if (penalty) {
+                auto delayedFuture = NConcurrency::TDelayedExecutor::MakeDelayed(
+                    penalty,
+                    NYT::NRpc::TDispatcher::Get()->GetHeavyInvoker());
+                futures.push_back(delayedFuture.Apply(BIND(callback, node.Client)));
             } else {
-                futures.push_back(callback(client.Client));
+                futures.push_back(callback(node.Client));
             }
-            futures.back().Subscribe(BIND(&THedgingExecutor::OnFinishRequest, MakeWeak(this), i, effectivePenalty, client.AdaptivePenalty, client.ExternalPenalty, now));
+            futures.back().Subscribe(BIND(
+                &THedgingExecutor::OnFinishRequest,
+                MakeWeak(this),
+                i,
+                penalty,
+                node.AdaptivePenalty,
+                node.ExternalPenalty,
+                now));
         }
 
         return AnySucceeded(std::move(futures));
     }
 
 private:
-    void OnFinishRequest(
-        size_t clientIndex,
-        TDuration effectivePenalty,
-        NProfiling::TCpuDuration adaptivePenalty,
-        NProfiling::TCpuDuration externalPenalty,
-        NProfiling::TCpuInstant start,
-        const TError& r);
-
-    struct TEntry
+    struct TNodeExtended
+        : TNode
     {
-        TEntry(
-            NApi::IClientPtr client,
-            NProfiling::TCpuDuration initialPenalty,
-            TCounterPtr counter,
-            const std::string& clusterName);
-
-        NApi::IClientPtr Client;
-        std::string ClusterName;
-        NProfiling::TCpuDuration AdaptivePenalty;
-        NProfiling::TCpuDuration InitialPenalty;
-        NProfiling::TCpuDuration ExternalPenalty;
-        NProfiling::TCpuInstant BanUntil;
-        TCounterPtr Counter;
+        TDuration AdaptivePenalty = TDuration::Zero();
+        TDuration ExternalPenalty = TDuration::Zero();
+        TInstant BanUntil = TInstant::Max();
     };
 
-    TVector<TEntry> Clients_;
-    NProfiling::TCpuDuration BanPenalty_;
-    NProfiling::TCpuDuration BanDuration_;
+    std::vector<TNodeExtended> Nodes_;
+    TDuration BanPenalty_;
+    TDuration BanDuration_;
     IPenaltyProviderPtr PenaltyProvider_;
-    TSpinLock SpinLock_;
+
+    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+
+    void OnFinishRequest(
+        int index,
+        TDuration effectivePenalty,
+        TDuration adaptivePenalty,
+        TDuration externalPenalty,
+        TInstant start,
+        const TError& error);
 };
 
 DEFINE_REFCOUNTED_TYPE(THedgingExecutor)

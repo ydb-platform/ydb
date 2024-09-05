@@ -659,6 +659,11 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
             hasQueryService = true;
         }
 
+        if (hasLegacy) {
+            // Enable new public services when the legacy service is enabled
+            hasTabletService = true;
+        }
+
         // Enable RL for all services if enabled list is empty
         if (rlServicesEnabled.empty()) {
             for (auto& [name, cfg] : names) {
@@ -1670,8 +1675,6 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     if (serviceMask.EnableGraphService) {
         sil->AddServiceInitializer(new TGraphServiceInitializer(runConfig));
     }
-
-    sil->AddServiceInitializer(new TAwsApiInitializer(*this));
 
     return sil;
 }

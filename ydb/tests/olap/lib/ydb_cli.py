@@ -26,10 +26,11 @@ class YdbCliHelper:
             return [cli]
 
     class QueuePlan:
-        def __init__(self, plan: dict | None = None, table: str | None = None, ast: str | None = None) -> None:
+        def __init__(self, plan: dict | None = None, table: str | None = None, ast: str | None = None, svg: str | None = None) -> None:
             self.plan = plan
             self.table = table
             self.ast = ast
+            self.svg = svg
 
     class WorkloadRunResult:
         def __init__(
@@ -60,8 +61,9 @@ class YdbCliHelper:
             return stderr[begin_pos:end_pos].strip()
 
         try:
-            if not YdbCluster.wait_ydb_alive(300, path):
-                return YdbCliHelper.WorkloadRunResult(error_message='Ydb cluster is dead')
+            wait_error = YdbCluster.wait_ydb_alive(300, path)
+            if wait_error is not None:
+                return YdbCliHelper.WorkloadRunResult(error_message=f'Ydb cluster is dead: {wait_error}')
 
             json_path = yatest.common.work_path(f'q{query_num}.json')
             qout_path = yatest.common.work_path(f'q{query_num}.out')
@@ -115,6 +117,9 @@ class YdbCliHelper:
             if (os.path.exists(plan_path + '.ast')):
                 with open(plan_path + '.ast') as f:
                     plan.ast = f.read()
+            if (os.path.exists(plan_path + '.svg')):
+                with open(plan_path + '.svg') as f:
+                    plan.svg = f.read()
 
             return YdbCliHelper.WorkloadRunResult(
                 stats=stats,

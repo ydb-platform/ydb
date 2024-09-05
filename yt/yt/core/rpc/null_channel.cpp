@@ -21,7 +21,7 @@ public:
         : Address_(address)
     { }
 
-    const TString& GetEndpointDescription() const override
+    const std::string& GetEndpointDescription() const override
     {
         return Address_;
     }

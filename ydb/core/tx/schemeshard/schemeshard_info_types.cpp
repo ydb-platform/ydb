@@ -565,7 +565,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
         for (const auto& indexDescription : op.GetTableIndexes()) {
             if (indexDescription.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
                 errStr = "Table with vector indexes doesn't support TTL";
-                return nullptr;                
+                return nullptr;
             }
         }
 
@@ -1673,7 +1673,7 @@ void TTableInfo::UpdateShardStats(TShardIdx datashardIdx, const TPartitionStats&
     Stats.UpdateShardStats(datashardIdx, newStats);
 }
 
-void TAggregatedStats::UpdateShardStats(TShardIdx datashardIdx, const TPartitionStats& newStats) {
+void TTableAggregatedStats::UpdateShardStats(TShardIdx datashardIdx, const TPartitionStats& newStats) {
     // Ignore stats from unknown datashard (it could have been split)
     if (!PartitionStats.contains(datashardIdx))
         return;
@@ -1763,33 +1763,10 @@ void TAggregatedStats::UpdateShardStats(TShardIdx datashardIdx, const TPartition
     }
 }
 
-void TAggregatedStats::UpdateTableStats(const TPathId& pathId, const TPartitionStats& newStats) {
-    if (!TableStats.contains(pathId)) {
-        TableStats[pathId] = newStats;
-        return;
-    }
-
-    TPartitionStats& oldStats = TableStats[pathId];
-
-    if (newStats.SeqNo <= oldStats.SeqNo) {
-        // Ignore outdated message
-        return;
-    }
-
-    if (newStats.SeqNo.Generation > oldStats.SeqNo.Generation) {
-        // Reset incremental counter baselines if tablet has restarted
-        oldStats.ImmediateTxCompleted = 0;
-        oldStats.PlannedTxCompleted = 0;
-        oldStats.TxRejectedByOverload = 0;
-        oldStats.TxRejectedBySpace = 0;
-        oldStats.RowUpdates = 0;
-        oldStats.RowDeletes = 0;
-        oldStats.RowReads = 0;
-        oldStats.RangeReads = 0;
-        oldStats.RangeReadRows = 0;
-    }
-    TableStats[pathId].RowCount += (newStats.RowCount - oldStats.RowCount);
-    TableStats[pathId].DataSize += (newStats.DataSize - oldStats.DataSize);
+void TAggregatedStats::UpdateTableStats(TShardIdx shardIdx, const TPathId& pathId, const TPartitionStats& newStats) {
+    auto& tableStats = TableStats[pathId];
+    tableStats.PartitionStats[shardIdx]; // insert if none
+    tableStats.UpdateShardStats(shardIdx, newStats);
 }
 
 void TTableInfo::RegisterSplitMergeOp(TOperationId opId, const TTxState& txState) {
@@ -2061,6 +2038,7 @@ TString TExportInfo::ToString() const {
         << " DomainPathId: " << DomainPathId
         << " ExportPathId: " << ExportPathId
         << " UserSID: '" << UserSID << "'"
+        << " PeerName: '" << PeerName << "'"
         << " State: " << State
         << " WaitTxId: " << WaitTxId
         << " Issue: '" << Issue << "'"
@@ -2489,7 +2467,7 @@ bool TSequenceInfo::ValidateCreate(const NKikimrSchemeOp::TSequenceDescription& 
 }
 
 // validate type of the sequence
-std::optional<std::pair<i64, i64>> ValidateSequenceType(const TString& sequenceName, const TString& dataType, 
+std::optional<std::pair<i64, i64>> ValidateSequenceType(const TString& sequenceName, const TString& dataType,
         const NScheme::TTypeRegistry& typeRegistry, bool pgTypesEnabled, TString& errStr) {
 
     i64 dataTypeMaxValue, dataTypeMinValue;
@@ -2521,7 +2499,7 @@ std::optional<std::pair<i64, i64>> ValidateSequenceType(const TString& sequenceN
                 errStr = Sprintf("Type '%s' specified for sequence '%s' is not supported", dataType.data(), sequenceName.c_str());
                 return std::nullopt;
             }
-        }                    
+        }
     } else {
         auto* typeDesc = NPg::TypeDescFromPgTypeName(typeName);
         if (!typeDesc) {

@@ -116,7 +116,7 @@ The `RESET (option[, option2, ...])` action enables you to reset the topic setti
 ```sql
 ALTER TOPIC `my_topic` RESET (
     min_active_partitions,
-    partition_count_limit    
+    partition_count_limit
 );
 ```
 

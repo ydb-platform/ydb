@@ -314,8 +314,11 @@ enum EFlag {
 }
 
 message TClusterInfo {
-    string Name = 1;
-    EFlag Overall = 2;
+    uint32 Version = 1;
+    string Name = 2;
+    string Domain = 3;
+    EFlag Overall = 5;
+    repeated string Problems = 9;
     uint32 NodesTotal = 10;
     uint32 NodesAlive = 11;
     uint32 NumberOfCpus = 20;
@@ -324,13 +327,17 @@ message TClusterInfo {
     uint64 MemoryUsed = 31;
     uint64 StorageTotal = 40;
     uint64 StorageUsed = 41;
-    repeated string DataCenters = 42;
-    repeated string Versions = 43;
-    repeated NKikimrWhiteboard.TTabletStateInfo SystemTablets = 16;
-    uint64 Hosts = 44;
-    uint64 Tenants = 45;
-    uint64 Tablets = 46;
-    string Domain = 47;
+    map<string, uint64> MapStorageTotal = 42;
+    map<string, uint64> MapStorageUsed = 43;
+    repeated string DataCenters = 44;
+    map<string, uint32> MapDataCenters = 45;
+    repeated string Versions = 46;
+    map<string, uint32> MapVersions = 47;
+    map<string, uint32> MapNodeStates = 48;
+    repeated NKikimrWhiteboard.TTabletStateInfo SystemTablets = 50;
+    repeated NKikimrSysView.TStorageStatsEntry StorageStats = 51;
+    uint64 Hosts = 60;
+    uint64 Tenants = 61;
 }
 
 enum ETenantType {
@@ -748,8 +755,8 @@ message TPDiskInfo {
 message TFeatureFlagsConfig {
     message TFeatureFlag {
         string Name = 1;
-        bool Current = 2;
-        bool Default = 3;
+        optional bool Current = 2;
+        optional bool Default = 3;
     }
 
     message TDatabase {

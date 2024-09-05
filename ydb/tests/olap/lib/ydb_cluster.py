@@ -157,27 +157,52 @@ class YdbCluster:
     @classmethod
     @allure.step('Check if YDB alive')
     def check_if_ydb_alive(cls, timeout=10, balanced_paths=None):
-        try:
-            nodes, node_count = cls._get_cluster_nodes()
-            if node_count == 0:
-                return False
-            if len(nodes) < node_count:
-                LOGGER.error(f"{node_count - len(nodes)} nodes from {node_count} don't live")
-                return False
-            for n in nodes:
+        def _check_node(n):
+            name = 'UnknownNode'
+            error = None
+            role = 'Unknown'
+            try:
                 ss = n.get('SystemState', {})
                 name = ss.get("Host")
                 start_time = int(ss.get('StartTime', int(time()) * 1000)) / 1000
                 uptime = int(time()) - start_time
+                r = ss.get('Roles', [])
+                role = r[0] if len(r) > 0 else role
                 if uptime < 15:
-                    LOGGER.error(f'Node {name} too yong: {uptime}')
-                    return False
-                if 'MemoryUsed' in ss and 'MemoryLimit' in ss:
-                    used = int(ss['MemoryUsed'])
-                    limit = int(ss['MemoryLimit'])
-                    if used > 0.9 * limit:
-                        LOGGER.error(f'Node {name} use too many rss: {used} from {limit}')
-                        return False
+                    error = f'Node {name} too yong: {uptime}'
+            except BaseException as ex:
+                error = f"Error while process node {name}: {ex}"
+            if error:
+                LOGGER.error(error)
+            return error, role
+
+        errors = []
+        try:
+            nodes, node_count = cls._get_cluster_nodes()
+            if node_count == 0:
+                errors.append('nodes_count == 0')
+            if len(nodes) < node_count:
+                errors.append(f"{node_count - len(nodes)} nodes from {node_count} don't live")
+            ok_by_role = {'Tenant': 0, 'Storage': 0, 'Unknown': 0}
+            nodes_by_role = deepcopy(ok_by_role)
+            node_errors = {'Tenant': [], 'Storage': [], 'Unknown': []}
+            for n in nodes:
+                error, role = _check_node(n)
+                if error:
+                    node_errors[role].append(error)
+                else:
+                    ok_by_role[role] += 1
+                nodes_by_role[role] += 1
+            dynnodes_count = nodes_by_role['Tenant']
+            ok_dynnodes_count = ok_by_role['Tenant']
+            if ok_dynnodes_count < dynnodes_count:
+                dynnodes_errors = ','.join(node_errors['Tenant'])
+                errors.append(f'Only {ok_dynnodes_count} from {dynnodes_count} dynnodes are ok: {dynnodes_errors}')
+            storage_nodes_count = nodes_by_role['Storage']
+            ok_storage_nodes_count = ok_by_role['Storage']
+            if ok_storage_nodes_count < dynnodes_count:
+                storage_nodes_errors = ','.join(node_errors['Tenant'])
+                errors.append(f'Only {ok_storage_nodes_count} from {storage_nodes_count} storage nodes are ok, but {dynnodes_count} need. {storage_nodes_errors}')
             paths_to_balance = []
             if isinstance(balanced_paths, str):
                 paths_to_balance += cls._get_tables(balanced_paths)
@@ -198,22 +223,26 @@ class YdbCluster:
                     if max is None or tablet_count > max:
                         max = tablet_count
                 if min is not None and max - min > 1:
-                    LOGGER.error(f'Table {p} is not balanced: {min}-{max} shards.')
-                    return False
+                    errors.append(f'Table {p} is not balanced: {min}-{max} shards.')
                 LOGGER.info(f'Table {p} is balanced: {min}-{max} shards.')
 
             cls.execute_single_result_query("select 1", timeout)
-            return True
         except BaseException as ex:
-            LOGGER.error(f"Cannot connect to YDB {ex}")
-            return False
+            errors.append(f"Cannot connect to YDB: {ex}")
+        if len(errors) == 0:
+            return None
+        error = ', '.join(errors)
+        LOGGER.error(error)
+        return error
 
     @classmethod
     @allure.step('Wait YDB alive')
     def wait_ydb_alive(cls, timeout=10, balanced_paths=None):
         deadline = time() + timeout
+        error = None
         while time() < deadline:
-            if cls.check_if_ydb_alive(deadline - time(), balanced_paths=balanced_paths):
-                return True
+            error = cls.check_if_ydb_alive(deadline - time(), balanced_paths=balanced_paths)
+            if error is None:
+                break
             sleep(1)
-        return False
+        return error

@@ -567,6 +567,8 @@ public:
 
     static TString Serialize(TConstArrayRef<TCell> cells);
 
+    static size_t SerializedSize(TConstArrayRef<TCell> cells);
+
     const TString &GetBuffer() const { return Buf; }
 
     TString ReleaseBuffer() {

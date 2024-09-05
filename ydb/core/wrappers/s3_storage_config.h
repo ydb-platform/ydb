@@ -17,7 +17,14 @@
 
 namespace NKikimr::NWrappers::NExternalStorage {
 
-class TS3ExternalStorageConfig: public IExternalStorageConfig {
+struct TS3User {
+    TS3User();
+    TS3User(const TS3User& baseObject);
+    TS3User(TS3User& baseObject);
+    ~TS3User();
+};
+
+class TS3ExternalStorageConfig: public IExternalStorageConfig, TS3User {
 private:
     YDB_READONLY_DEF(TString, Bucket);
     Aws::Client::ClientConfiguration Config;

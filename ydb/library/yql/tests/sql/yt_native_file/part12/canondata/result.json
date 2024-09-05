@@ -2569,9 +2569,9 @@
     ],
     "test.test[pg-select_join_left_equi_and_one-default.txt-Debug]": [
         {
-            "checksum": "49f69d76ce08d91a87f27652b00225f2",
-            "size": 2199,
-            "uri": "https://{canondata_backend}/1847551/fde7e719755ff419b98445a700ce39d6df7549ef/resource.tar.gz#test.test_pg-select_join_left_equi_and_one-default.txt-Debug_/opt.yql"
+            "checksum": "c55f65e209daf17214fc2d4af902ad87",
+            "size": 1731,
+            "uri": "https://{canondata_backend}/1903280/258f1b62d1cfc07300580b876759901845edb4df/resource.tar.gz#test.test_pg-select_join_left_equi_and_one-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[pg-select_join_left_equi_and_one-default.txt-Plan]": [
@@ -2590,9 +2590,9 @@
     ],
     "test.test[pg-select_join_right_equi_and_one-default.txt-Debug]": [
         {
-            "checksum": "f317c2be67e6549058619fa42b1f1c08",
-            "size": 2200,
-            "uri": "https://{canondata_backend}/1847551/fde7e719755ff419b98445a700ce39d6df7549ef/resource.tar.gz#test.test_pg-select_join_right_equi_and_one-default.txt-Debug_/opt.yql"
+            "checksum": "79560edb0f83a5c2cce0387ad62ad69a",
+            "size": 1732,
+            "uri": "https://{canondata_backend}/1903280/258f1b62d1cfc07300580b876759901845edb4df/resource.tar.gz#test.test_pg-select_join_right_equi_and_one-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[pg-select_join_right_equi_and_one-default.txt-Plan]": [
@@ -2961,9 +2961,9 @@
     ],
     "test.test[pg_catalog-pg_description_pg_syntax-default.txt-Results]": [
         {
-            "checksum": "c409b6d485074ebf17560f4723affc3d",
+            "checksum": "ab8e21760da4bf353ac12f633213227b",
             "size": 2768,
-            "uri": "https://{canondata_backend}/1773845/589814889e9fb4d6d34f5e6d53336daf3a27b51e/resource.tar.gz#test.test_pg_catalog-pg_description_pg_syntax-default.txt-Results_/results.txt"
+            "uri": "https://{canondata_backend}/1924537/24cc2a34d7ebf1958abe0cd6c74c6af03994cd3e/resource.tar.gz#test.test_pg_catalog-pg_description_pg_syntax-default.txt-Results_/results.txt"
         }
     ],
     "test.test[pg_catalog-pg_timezone_abbrevs-default.txt-Debug]": [

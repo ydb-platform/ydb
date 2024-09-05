@@ -54,9 +54,9 @@ using namespace NChaosClient;
 using namespace NChunkClient;
 using namespace NConcurrency;
 using namespace NObjectClient;
+using namespace NQueueClient;
 using namespace NRpc;
 using namespace NScheduler;
-using namespace NQueueClient;
 using namespace NTableClient;
 using namespace NTabletClient;
 using namespace NTransactionClient;
@@ -737,6 +737,9 @@ TFuture<void> TClient::AlterReplicationCard(
     if (options.ReplicationCardCollocationId) {
         ToProto(req->mutable_replication_card_collocation_id(), *options.ReplicationCardCollocationId);
     }
+    if (options.CollocationOptions) {
+        req->set_collocation_options(ConvertToYsonString(options.CollocationOptions).ToString());
+    }
 
     return req->Invoke().As<void>();
 }
@@ -989,7 +992,7 @@ TFuture<void> TClient::RemoveMember(
 }
 
 TFuture<TCheckPermissionResponse> TClient::CheckPermission(
-    const TString& user,
+    const std::string& user,
     const TYPath& path,
     EPermission permission,
     const TCheckPermissionOptions& options)
@@ -999,7 +1002,7 @@ TFuture<TCheckPermissionResponse> TClient::CheckPermission(
     auto req = proxy.CheckPermission();
     SetTimeoutOptions(*req, options);
 
-    req->set_user(user);
+    req->set_user(ToProto<TProtobufString>(user));
     req->set_path(path);
     req->set_permission(static_cast<int>(permission));
     if (options.Columns) {
@@ -1025,7 +1028,7 @@ TFuture<TCheckPermissionResponse> TClient::CheckPermission(
 }
 
 TFuture<TCheckPermissionByAclResult> TClient::CheckPermissionByAcl(
-    const std::optional<TString>& user,
+    const std::optional<std::string>& user,
     EPermission permission,
     INodePtr acl,
     const TCheckPermissionByAclOptions& options)
@@ -1036,7 +1039,7 @@ TFuture<TCheckPermissionByAclResult> TClient::CheckPermissionByAcl(
     SetTimeoutOptions(*req, options);
 
     if (user) {
-        req->set_user(*user);
+        req->set_user(ToProto<TProtobufString>(*user));
     }
     req->set_permission(static_cast<int>(permission));
     req->set_acl(ConvertToYsonString(acl).ToString());
@@ -1291,7 +1294,7 @@ TFuture<TYsonString> TClient::GetJobSpec(
     }));
 }
 
-TFuture<TSharedRef> TClient::GetJobStderr(
+TFuture<TGetJobStderrResponse> TClient::GetJobStderr(
     const TOperationIdOrAlias& operationIdOrAlias,
     NJobTrackerClient::TJobId jobId,
     const TGetJobStderrOptions& options)
@@ -1303,10 +1306,17 @@ TFuture<TSharedRef> TClient::GetJobStderr(
 
     NScheduler::ToProto(req, operationIdOrAlias);
     ToProto(req->mutable_job_id(), jobId);
+    if (options.Limit) {
+        req->set_limit(*options.Limit);
+    }
+    if (options.Offset) {
+        req->set_offset(*options.Offset);
+    }
 
-    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetJobStderrPtr& rsp) {
+    return req->Invoke().Apply(BIND([req = req](const TApiServiceProxy::TRspGetJobStderrPtr& rsp) {
         YT_VERIFY(rsp->Attachments().size() == 1);
-        return rsp->Attachments().front();
+        TGetJobStderrOptions options{.Limit = req->limit(), .Offset = req->offset()};
+        return TGetJobStderrResponse::MakeJobStderr(rsp->Attachments().front(), options);
     }));
 }
 
@@ -1996,8 +2006,8 @@ TFuture<TMaintenanceCountsPerTarget> TClient::RemoveMaintenance(
         [&] (TByUser::TMine) {
             req->set_mine(true);
         },
-        [&] (const TString& user) {
-            req->set_user(user);
+        [&] (const std::string& user) {
+            req->set_user(ToProto<TProtobufString>(user));
         });
 
     req->set_supports_per_target_response(true);
@@ -2419,7 +2429,7 @@ TFuture<void> TClient::SetBundleConfig(
 }
 
 TFuture<void> TClient::SetUserPassword(
-    const TString& /*user*/,
+    const std::string& /*user*/,
     const TString& /*currentPasswordSha256*/,
     const TString& /*newPasswordSha256*/,
     const TSetUserPasswordOptions& /*options*/)
@@ -2428,7 +2438,7 @@ TFuture<void> TClient::SetUserPassword(
 }
 
 TFuture<TIssueTokenResult> TClient::IssueToken(
-    const TString& /*user*/,
+    const std::string& /*user*/,
     const TString& /*passwordSha256*/,
     const TIssueTokenOptions& /*options*/)
 {
@@ -2436,7 +2446,7 @@ TFuture<TIssueTokenResult> TClient::IssueToken(
 }
 
 TFuture<void> TClient::RevokeToken(
-    const TString& /*user*/,
+    const std::string& /*user*/,
     const TString& /*passwordSha256*/,
     const TString& /*tokenSha256*/,
     const TRevokeTokenOptions& /*options*/)
@@ -2445,7 +2455,7 @@ TFuture<void> TClient::RevokeToken(
 }
 
 TFuture<TListUserTokensResult> TClient::ListUserTokens(
-    const TString& /*user*/,
+    const std::string& /*user*/,
     const TString& /*passwordSha256*/,
     const TListUserTokensOptions& /*options*/)
 {

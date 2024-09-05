@@ -30,11 +30,11 @@ ALTER TABLE series_with_families ALTER COLUMN release_date SET FAMILY family_sma
 
 ```sql
 ALTER TABLE series_with_families
-	ADD FAMILY family_small (
-    	DATA = "ssd",
-    	COMPRESSION = "off"
-	),
-	ALTER COLUMN release_date SET FAMILY family_small;
+  ADD FAMILY family_small (
+      DATA = "ssd",
+      COMPRESSION = "off"
+  ),
+  ALTER COLUMN release_date SET FAMILY family_small;
 ```
 
 При помощи команды ```ALTER FAMILY``` можно изменить параметры группы колонок. Приведенный ниже код для группы колонок ```default``` в таблице ```series_with_families``` сменит тип хранилища на ```hdd```:

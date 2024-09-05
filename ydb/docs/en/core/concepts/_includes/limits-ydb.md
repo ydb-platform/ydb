@@ -39,15 +39,25 @@ The _Error type_ column shows the status that the query ends with if an error oc
 
 ## Limits on query execution {#query}
 
-The table below lists the limits that apply to query execution. The _Call_ column specifies the public API call that will end with the error status specified in the _Status_ column.
+The table below lists the limits that apply to query execution.
 
-| Parameter | Value | Call | Explanation | Status<br/>in case of<br/>a violation<br/>of the limit |
-| :--- | :--- | :--- | :--- | :---: |
-| Maximum number of rows in query results | 1,000 | ExecuteDataQuery | Complete results of some queries executed using the `ExecuteDataQuery` method may contain more rows than allowed. In this case, a query will return the maximum number of rows allowed, and the result will have the `truncated` flag set. | SUCCESS |
-| Maximum query result size | 50 MB | ExecuteDataQuery | Complete results of some queries may exceed the set limit. In this case, a query will fail returning no data. | PRECONDITION_FAILED |
-| Maximum number of sessions per cluster node | 1,000 | CreateSession | Using the library for working with {{ ydb-short-name }}, an application can create sessions within a connection. Sessions are linked to a node. You can create a limited number of sessions with a single node. | OVERLOADED |
-| Maximum query text length | 10 KB | ExecuteDataQuery | Limit on the length of YQL query text. | BAD_REQUEST |
-| Maximum size of parameter values | 50 MB | ExecuteDataQuery | Limit on the total size of the parameters passed when executing a previously prepared query. | BAD_REQUEST |
+| Parameter | Default | Explanation | Status<br/>in case of<br/>a violation<br/>of the limit |
+| :--- | :--- | :--- | :---: |
+| Query duration | 1800 seconds (30 minutes) | The maximum amount of time allowed for a single query to execute. | TIMEOUT |
+| Maximum number of sessions per cluster node | 1,000 | The limit on the number of sessions that clients can create with each {{ ydb-short-name }} node. | OVERLOADED |
+| Maximum query text length | 10 KB | The maximum allowable length of YQL query text. | BAD_REQUEST |
+| Maximum size of parameter values | 50 MB | The maximum total size of parameters passed when executing a previously prepared query. | BAD_REQUEST |
+
+{% cut "Legacy limits" %}
+
+In previous versions of {{ ydb-short-name }}, queries were typically executed using an API called "Table Service". This API had the following limitations, which have been addressed by replacing it with a new API called "Query Service".
+
+| Parameter | Default | Explanation | Status<br/>in case of<br/>a violation<br/>of the limit |
+| :--- | :--- | :--- | :---: |
+| Maximum number of rows in query results | 1,000 | The complete results of some queries executed using the `ExecuteDataQuery` method may contain more rows than allowed. In such cases, the query will return the maximum number of rows allowed, and the result will have the `truncated` flag set. | SUCCESS |
+| Maximum query result size | 50 MB | The complete results of some queries may exceed the set limit. If this occurs, the query will fail and return no data. | PRECONDITION_FAILED |
+
+{% endcut %}
 
 ## Topic limits {#topic}
 

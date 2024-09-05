@@ -8,7 +8,7 @@ It lets you create a table from specified values. For example, this statement cr
 VALUES (expr_11, expr_12, ..., expr_1k),
        (expr_21, expr_22, ..., expr_2k),
        ....
-       (expr_n1, expr_n2, ..., expr_nk); 
+       (expr_n1, expr_n2, ..., expr_nk);
 ```
 
 This statement is totally equivalent to the following one:
@@ -17,7 +17,7 @@ This statement is totally equivalent to the following one:
 SELECT expr_11, expr_12, ..., expr_1k UNION ALL
 SELECT expr_21, expr_22, ..., expr_2k UNION ALL
 ....
-SELECT expr_n1, expr_n2, ..., expr_nk; 
+SELECT expr_n1, expr_n2, ..., expr_nk;
 ```
 
 **Example:**

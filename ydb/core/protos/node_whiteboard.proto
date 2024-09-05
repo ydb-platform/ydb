@@ -2,6 +2,7 @@ import "ydb/library/actors/protos/interconnect.proto";
 import "ydb/core/protos/tablet.proto";
 import "ydb/core/protos/subdomains.proto";
 import "ydb/core/protos/blobstorage_disk.proto";
+import "ydb/core/protos/memory_stats.proto";
 import "google/protobuf/descriptor.proto";
 import "ydb/core/protos/tracing.proto";
 
@@ -339,6 +340,7 @@ message TSystemStateInfo {
     optional TNodeSharedCache SharedCacheStats = 35; // TODO: use memory stats
     optional uint32 TotalSessions = 36 [(DefaultField) = true];
     optional string NodeName = 37 [(DefaultField) = true];
+    optional NKikimrMemory.TMemoryStats MemoryStats = 38;
 }
 
 message TEvSystemStateRequest {

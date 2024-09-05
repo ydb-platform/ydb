@@ -17,4 +17,7 @@ items:
   href: import-jdbc.md
 - name: DBeaver
   href: ide/dbeaver.md
-
+- name: DataGrip
+  href: ide/datagrip.md
+- name: Spring Data JDBC
+  href: spring-data-jdbc.md

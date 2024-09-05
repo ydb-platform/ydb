@@ -315,7 +315,11 @@ public:
     }
 
     NThreading::TFuture<TTableRangeResult> GetTableRange(TTableRangeOptions&& options) final {
-        auto key = MakeGetTableRangeKey(options);
+        TString key;
+        if (QContext_) {
+            key = MakeGetTableRangeKey(options);
+        }
+
         if (QContext_.CanRead()) {
             TTableRangeResult res;
             res.SetSuccess();

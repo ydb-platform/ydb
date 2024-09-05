@@ -34,6 +34,7 @@ ENDIF()
 
 
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+ENV(YDB_ALLOCATE_PGWIRE_PORT="true")
 DEPENDS(
     ydb/apps/ydbd
 )

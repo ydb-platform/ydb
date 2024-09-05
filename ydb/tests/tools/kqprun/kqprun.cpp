@@ -493,6 +493,10 @@ protected:
                 ExecutionOptions.ScriptQueryActions.emplace_back(scriptAction(choice));
             });
 
+        options.AddLongOption("cancel-after", "Cancel script execution operation after specified delay in milliseconds")
+            .RequiredArgument("uint")
+            .StoreMappedResultT<ui64>(&RunnerOptions.ScriptCancelAfter, &TDuration::MilliSeconds<ui64>);
+
         options.AddLongOption('F', "forget", "Forget script execution operation after fetching results")
             .NoArgument()
             .SetFlag(&ExecutionOptions.ForgetExecution);

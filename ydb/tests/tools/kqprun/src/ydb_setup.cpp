@@ -287,6 +287,13 @@ public:
         return RunKqpProxyRequest<NKikimr::NKqp::TEvForgetScriptExecutionOperation, NKikimr::NKqp::TEvForgetScriptExecutionOperationResponse>(std::move(event));
     }
 
+    NKikimr::NKqp::TEvCancelScriptExecutionOperationResponse::TPtr CancelScriptExecutionOperationRequest(const TString& operation) const {
+        NKikimr::NOperationId::TOperationId operationId(operation);
+        auto event = MakeHolder<NKikimr::NKqp::TEvCancelScriptExecutionOperation>(Settings_.DomainName, operationId);
+
+        return RunKqpProxyRequest<NKikimr::NKqp::TEvCancelScriptExecutionOperation, NKikimr::NKqp::TEvCancelScriptExecutionOperationResponse>(std::move(event));
+    }
+
     void QueryRequestAsync(const TRequestOptions& query) {
         if (!AsyncQueryRunnerActorId_) {
             AsyncQueryRunnerActorId_ = GetRuntime()->Register(CreateAsyncQueryRunnerActor(Settings_.AsyncQueriesSettings), 0, GetRuntime()->GetAppData().UserPoolId);
@@ -503,6 +510,12 @@ TRequestResult TYdbSetup::ForgetScriptExecutionOperationRequest(const TString& o
     auto forgetScriptExecutionOperationResponse = Impl_->ForgetScriptExecutionOperationRequest(operation);
 
     return TRequestResult(forgetScriptExecutionOperationResponse->Get()->Status, forgetScriptExecutionOperationResponse->Get()->Issues);
+}
+
+TRequestResult TYdbSetup::CancelScriptExecutionOperationRequest(const TString& operation) const {
+    auto cancelScriptExecutionOperationResponse = Impl_->CancelScriptExecutionOperationRequest(operation);
+
+    return TRequestResult(cancelScriptExecutionOperationResponse->Get()->Status, cancelScriptExecutionOperationResponse->Get()->Issues);
 }
 
 void TYdbSetup::QueryRequestAsync(const TRequestOptions& query) const {

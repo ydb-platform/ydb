@@ -62,6 +62,8 @@ public:
 
     TRequestResult ForgetScriptExecutionOperationRequest(const TString& operation) const;
 
+    TRequestResult CancelScriptExecutionOperationRequest(const TString& operation) const;
+
     void QueryRequestAsync(const TRequestOptions& query) const;
 
     void WaitAsyncQueries() const;

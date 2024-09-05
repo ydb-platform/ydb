@@ -247,6 +247,15 @@ private:
                 return false;
             }
 
+            if (Options_.ScriptCancelAfter && TInstant::Now() - StartTime_ > Options_.ScriptCancelAfter) {
+                Cout << CoutColors_.Yellow() << TInstant::Now().ToIsoStringLocal() << " Cancelling script execution..." << CoutColors_.Default() << Endl;
+                TRequestResult cancelStatus = YdbSetup_.CancelScriptExecutionOperationRequest(ExecutionOperation_);
+                if (!cancelStatus.IsSuccess()) {
+                    Cerr << CerrColors_.Red() << "Failed to cancel script execution operation, reason:" << CerrColors_.Default() << Endl << cancelStatus.ToString() << Endl;
+                    return false;
+                }
+            }
+
             Sleep(getOperationPeriod);
         }
 

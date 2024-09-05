@@ -137,7 +137,7 @@ runs:
             echo "graph_compare.sh returned $RC, build failed"
             echo "status=failed" >> $GITHUB_OUTPUT
             BUILD_FAILED=1
-            echo "Graph compare failed, see the [logs]($GRAPH_COMPARE_OUTPUT_URL)." | .github/scripts/tests/comment-pr.py --color red
+            echo "Graph compare failed, see the [logs]($GRAPH_COMPARE_OUTPUT_URL)." | GITHUB_TOKEN="${{ github.token }}"  .github/scripts/tests/comment-pr.py --color red
             exit $RC
           fi
           
@@ -358,7 +358,7 @@ runs:
             echo "ya make returned $RC, build failed"
             echo "status=failed" >> $GITHUB_OUTPUT
             BUILD_FAILED=1
-            echo "Build failed, see the [logs]($YA_MAKE_OUTPUT_URL)." | .github/scripts/tests/comment-pr.py --color red
+            echo "Build failed, see the [logs]($YA_MAKE_OUTPUT_URL)." | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color red
             break
           fi
 
@@ -442,7 +442,7 @@ runs:
 
         if [ $BUILD_FAILED = 0 ]; then
           echo "status=true" >> $GITHUB_OUTPUT
-          echo "Build successful." | .github/scripts/tests/comment-pr.py --color green
+          echo "Build successful." |  GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color green
         fi
 
     - name: comment-build-status

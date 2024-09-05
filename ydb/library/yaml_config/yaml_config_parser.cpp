@@ -13,6 +13,7 @@
 #include <ydb/core/protos/blobstorage_base3.pb.h>
 #include <ydb/core/protos/blobstorage_config.pb.h>
 #include <ydb/core/protos/tablet.pb.h>
+#include <ydb/public/api/protos/ydb_bsconfig.pb.h>
 
 #include <library/cpp/json/writer/json.h>
 #include <library/cpp/protobuf/json/util.h>
@@ -562,7 +563,7 @@ namespace NKikimr::NYaml {
             }
         }
 
-        // Patch disk types
+        // Patch disk types and expected slot size
         if (ephemeralConfig.HostConfigsSize()) {
             for(auto& hostConfig : *ephemeralConfig.MutableHostConfigs()) {
                 int sectorMapIndex = 0;
@@ -575,6 +576,9 @@ namespace NKikimr::NYaml {
                         ++sectorMapIndex;
                         drive.SetPath(Sprintf("SectorMap:%d:64", sectorMapIndex));
                         drive.SetType("SSD");
+                    }
+                    if (drive.HasExpectedSlotCount()) {
+                        drive.MutablePDiskConfig()->SetExpectedSlotCount(drive.GetExpectedSlotCount());
                     }
                 }
             }
@@ -602,14 +606,7 @@ namespace NKikimr::NYaml {
             }
         }
 
-        ui32 nodeID = 0;
         for(auto& host : *ephemeralConfig.MutableHosts()) {
-            nodeID++;
-
-            if (!host.HasNodeId()) {
-                host.SetNodeId(nodeID);
-            }
-
             if (!host.HasPort()) {
                 host.SetPort(DEFAULT_INTERCONNECT_PORT);
             }
@@ -1408,6 +1405,7 @@ namespace NKikimr::NYaml {
         for(const auto& hostConfig : ephemeralConfig.GetHostConfigs()) {
             auto *hostConfigProto = result.AddCommand()->MutableDefineHostConfig();
             hostConfig.CopyToTDefineHostConfig(*hostConfigProto);
+        
             // KIKIMR-16712
             // Avoid checking the version number for "host_config" configuration items.
             // This allows to add new host configuration items after the initial cluster setup.
@@ -1428,6 +1426,57 @@ namespace NKikimr::NYaml {
         }
 
         return result;
+    }
+
+    NKikimrBlobStorage::TConfigRequest BuildReplaceProtoConfig(const TString& data) {
+        auto yamlNode = YAML::Load(data);
+        NJson::TJsonValue json = Yaml2Json(yamlNode, true);
+
+        NJson::TJsonValue ephemeralJsonNode = json;
+        for (const auto& field : ListNonEphemeralFields()) {
+            ephemeralJsonNode.EraseValue(field);
+        }
+        NKikimrConfig::TEphemeralInputFields ephemeralConfig;
+        NProtobufJson::MergeJson2Proto(ephemeralJsonNode, ephemeralConfig, GetJsonToProtoConfig());
+
+        NKikimrConfig::TAppConfig config;
+        PrepareHosts(ephemeralConfig);
+        PrepareNameserviceConfig(config, ephemeralConfig);
+
+        NKikimrBlobStorage::TConfigRequest result;
+
+        const auto itemConfigGeneration = ephemeralConfig.HasStorageConfigGeneration() ?
+            ephemeralConfig.GetStorageConfigGeneration() : 0;
+
+        for(const auto& hostConfig : ephemeralConfig.GetHostConfigs()) {
+            auto *hostConfigProto = result.AddCommand()->MutableDefineHostConfig();
+            hostConfig.CopyToTDefineHostConfig(*hostConfigProto);
+            // KIKIMR-16712
+            // Avoid checking the version number for "host_config" configuration items.
+            // This allows to add new host configuration items after the initial cluster setup.
+            hostConfigProto->SetItemConfigGeneration(Max<ui64>());
+        }
+
+        auto *defineBox = result.AddCommand()->MutableDefineBox();
+        defineBox->SetBoxId(1);
+        defineBox->SetItemConfigGeneration(itemConfigGeneration);
+
+        for(const auto& host : ephemeralConfig.GetHosts()) {
+            auto* dbHost = defineBox->AddHost();
+            auto* hostKey = dbHost->MutableKey();
+            hostKey->SetNodeId(host.GetNodeId());
+            hostKey->SetFqdn(host.GetHost());
+            hostKey->SetIcPort(host.GetPort());
+            dbHost->SetHostConfigId(host.GetHostConfigId());
+        }
+
+        return result;
+    }
+
+    Ydb::BSConfig::ReplaceStorageConfigRequest BuildReplaceDistributedStorageCommand(const TString& data) {
+        Ydb::BSConfig::ReplaceStorageConfigRequest replaceRequest;
+        replaceRequest.set_yaml_config(data);
+        return replaceRequest;
     }
 
     void Parse(const NJson::TJsonValue& json, NProtobufJson::TJson2ProtoConfig convertConfig, NKikimrConfig::TAppConfig& config, bool transform, bool relaxed) {

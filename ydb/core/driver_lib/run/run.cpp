@@ -92,6 +92,7 @@
 #include <ydb/library/grpc/server/actors/logger.h>
 
 #include <ydb/services/auth/grpc_service.h>
+#include <ydb/services/bsconfig/grpc_service.h>
 #include <ydb/services/cms/grpc_service.h>
 #include <ydb/services/dynamic_config/grpc_service.h>
 #include <ydb/services/datastreams/grpc_service.h>
@@ -599,6 +600,8 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         names["keyvalue"] = &hasKeyValue;
         TServiceCfg hasReplication = services.empty();
         names["replication"] = &hasReplication;
+        TServiceCfg hasBSConfig = services.empty();
+        names["bsconfig"] = &hasBSConfig;
         TServiceCfg hasTabletService = services.empty();
         names["tablet_service"] = &hasTabletService;
 
@@ -880,6 +883,10 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
             server.AddService(new NGRpcService::TGRpcReplicationService(ActorSystem.Get(), Counters,
                 grpcRequestProxies[0], hasReplication.IsRlAllowed()));
         }
+
+        if (hasBSConfig) {
+            server.AddService(new NGRpcService::TBSConfigGRpcService(ActorSystem.Get(), Counters,
+                grpcRequestProxies[0]));
 
         if (hasTabletService) {
             server.AddService(new NGRpcService::TGRpcYdbTabletService(ActorSystem.Get(), Counters, grpcRequestProxies,

@@ -63,9 +63,9 @@ The topology greatly influences the number of alternative plans that the optimiz
 
 In order to compare plans, we need to estimate their costs. Cost Function estimates the time and resources it takes to execute an operation in {{ ydb-short-name }}. The main parameters of the cost function are estimates of the input data size for each operator and the size of its result. These estimates are made based on statistics collected from {{ ydb-short-name }} tables, as well as an analysis of the plan itself.
 
-### Statistics for the Cost Based Optimizer
+### Statistics for the Cost Based Optimizer {#statistics}
 
-Cost Based Optimizer uses tables statistics and individual column statistics. {{ ydb-short-name }} collects and maintains statistics in the background. You can force statistics collection using the [ANALYZE](../yql/reference/yql-core/syntax/analyze.md) command.
+Cost Based Optimizer uses tables statistics and individual column statistics. {{ ydb-short-name }} collects and maintains statistics in the background. You can force statistics collection using the [ANALYZE](../yql/reference/syntax/analyze.md) command.
 
 Current set of table statistics:
 

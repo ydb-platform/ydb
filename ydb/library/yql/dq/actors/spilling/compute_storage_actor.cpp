@@ -224,7 +224,7 @@ private:
 
     void HandleWork(TEvDqSpilling::TEvError::TPtr& ev) {
         auto& msg = *ev->Get();
-        FailWithError(TStringBuilder() << "[Spilling][TEvError] " << msg.Message);
+        FailWithError(TStringBuilder() << "[TEvError] " << msg.Message);
     }
 
     bool HandleDelete(TKey blobId, ui64 size) {

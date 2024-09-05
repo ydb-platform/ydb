@@ -104,4 +104,5 @@ ydb/tests/functional/ydb_cli test_ydb_impex.py.TestImpex.test_big_dataset*
 ydb/tests/tools/pq_read/test test_timeout.py.TestTimeout.test_timeout
 ydb/core/kqp/ut/query KqpStats.SysViewClientLost
 ydb/core/kqp/ut/olap KqpOlap.ManyColumnShards
+ydb/public/sdk/cpp/client/ydb_topic/ut TxUsage.WriteToTopic_Invalid_Session
 

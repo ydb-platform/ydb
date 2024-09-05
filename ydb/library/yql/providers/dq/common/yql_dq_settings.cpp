@@ -98,6 +98,7 @@ TDqConfiguration::TDqConfiguration() {
 
     REGISTER_SETTING(*this, _MaxAttachmentsSize);
     REGISTER_SETTING(*this, DisableCheckpoints);
+    REGISTER_SETTING(*this, Scheduler);
 }
 
 } // namespace NYql

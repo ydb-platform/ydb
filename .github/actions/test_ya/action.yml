@@ -126,11 +126,10 @@ runs:
         if [ "${{ inputs.increment }}" = "true" ]; then
           GRAPH_COMPARE_OUTPUT="$PUBLIC_DIR/graph_compare.log"
           GRAPH_COMPARE_OUTPUT_URL="$PUBLIC_DIR_URL/graph_compare.log"
-          echo "05 [Graph compare output]($GRAPH_COMPARE_OUTPUT_URL)" >> $SUMMARY_LINKS
 
           set +ex
-          ./.github/scripts/graph_compare.sh $ORIGINAL_HEAD~1 $ORIGINAL_HEAD >$GRAPH_COMPARE_OUTPUT 2>&1
-          RC=$?
+          ./.github/scripts/graph_compare.sh $ORIGINAL_HEAD~1 $ORIGINAL_HEAD |& tee $GRAPH_COMPARE_OUTPUT
+          RC=$PIPESTATUS[0]
           set -ex
 
           if [ $RC -ne 0 ]; then

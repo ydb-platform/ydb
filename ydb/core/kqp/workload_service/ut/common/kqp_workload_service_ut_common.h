@@ -131,7 +131,7 @@ struct TSampleQueries {
     template <typename TResult>
     static void CheckCancelled(const TResult& result) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::CANCELLED, result.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Request timeout exceeded, cancelling after");
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Request was canceled");
     }
 
     template <typename TResult>

@@ -92,8 +92,10 @@ public:
         auto internalOp = Self->GetProgressTxController().GetTxOperatorOptional(txId);
         if (!internalOp) {
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "removed tx operator");
+            return;
         }
-        NActors::TLogContextGuard lGuardTx = NActors::TLogContextBuilder::Build()("int_op_tx", internalOp->GetTxInfo().DebugString());
+        NActors::TLogContextGuard lGuardTx =
+            NActors::TLogContextBuilder::Build()("int_op_tx", internalOp->GetTxInfo().DebugString())("int_this", (ui64)internalOp.get());
         if (!internalOp->CheckTxInfoForReply(*TxInfo)) {
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "deprecated tx operator");
             return;

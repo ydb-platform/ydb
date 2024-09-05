@@ -1367,7 +1367,9 @@ public:
             for (TTabletId hiveId : HivesToAsk) {
                 auto request = std::make_unique<TEvHive::TEvRequestHiveNodeStats>();
                 request->Record.SetReturnMetrics(true);
-                request->Record.SetReturnExtendedTabletInfo(true);
+                if (Database) { // it's better to ask hive about tablets only if we're filtering by database
+                    request->Record.SetReturnExtendedTabletInfo(true);
+                }
                 if (AskHiveAboutPaths) {
                     request->Record.SetFilterTabletsBySchemeShardId(FilterPathId.OwnerId);
                     request->Record.SetFilterTabletsByPathId(FilterPathId.LocalPathId);

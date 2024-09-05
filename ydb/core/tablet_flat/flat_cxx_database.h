@@ -655,7 +655,7 @@ namespace NDetail {
         template <typename C> static std::true_type test(decltype(C::Default)) ;
         template <typename C> static std::false_type test(...);
     public:
-        typedef decltype(test<T>(0)) type;
+        static constexpr bool value = decltype(test<T>(0))::value;
     };
 }
 
@@ -1480,18 +1480,13 @@ struct Schema {
                 }
 
                 template <typename ColumnType>
-                static typename ColumnType::Type GetDefaultValue(std::true_type) {
-                    return ColumnType::Default;
-                }
-
-                template <typename ColumnType>
-                static typename ColumnType::Type GetDefaultValue(std::false_type) {
-                    return typename ColumnType::Type();
-                }
-
-                template <typename ColumnType>
                 static typename ColumnType::Type GetDefaultValue() {
-                    return GetDefaultValue<ColumnType>(typename NDetail::HasDefault<ColumnType>::type());
+                    if constexpr (NDetail::HasDefault<ColumnType>::value) {
+                        return ColumnType::Default;
+                    }
+                    else {
+                        return typename ColumnType::Type();
+                    }
                 }
 
                 NTable::TIteratorStats* Stats() const {

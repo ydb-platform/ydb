@@ -442,10 +442,10 @@ protected:
         options.AddLongOption("script-statistics", "File with script inprogress statistics")
             .RequiredArgument("file")
             .StoreResult(&RunnerOptions.InProgressStatisticsOutputFile);
-        TChoices<NYdb::NConsoleClient::EOutputFormat> planFormat({
-            {"pretty", NYdb::NConsoleClient::EOutputFormat::Pretty},
-            {"table", NYdb::NConsoleClient::EOutputFormat::PrettyTable},
-            {"json", NYdb::NConsoleClient::EOutputFormat::JsonUnicode},
+        TChoices<NYdb::NConsoleClient::EDataFormat> planFormat({
+            {"pretty", NYdb::NConsoleClient::EDataFormat::Pretty},
+            {"table", NYdb::NConsoleClient::EDataFormat::PrettyTable},
+            {"json", NYdb::NConsoleClient::EDataFormat::JsonUnicode},
         });
         options.AddLongOption('P', "plan-format", "Script query plan format")
             .RequiredArgument("plan-format")

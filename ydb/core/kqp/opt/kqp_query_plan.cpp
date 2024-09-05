@@ -2101,9 +2101,9 @@ NJson::TJsonValue ReconstructQueryPlanRec(const NJson::TJsonValue& plan,
 
         newPlans.AppendValue(ReconstructQueryPlanRec(
             plan.GetMapSafe().at("Plans").GetArraySafe()[0],
-            0, 
-            planIndex, 
-            precomputes, 
+            0,
+            planIndex,
+            precomputes,
             nodeCounter));
 
         newPlans.AppendValue(lookupPlan);

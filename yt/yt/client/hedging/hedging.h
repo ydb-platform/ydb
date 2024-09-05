@@ -33,10 +33,8 @@ namespace NYT::NClient::NHedging::NRpc {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+//TODO(ignat): drop this using
 using NCache::IClientsCachePtr;
-
-// from config.proto
-class THedgingClientConfig;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -57,20 +55,6 @@ NApi::IClientPtr CreateHedgingClient(
     const THedgingClientOptionsPtr& config,
     const IClientsCachePtr& clientsCache,
     const IPenaltyProviderPtr& penaltyProvider);
-
-// The following methods should be moved to `ads/bsyeti/libs/ytex/client`.
-
-//! Method for creating HedgingClient options from given config and preinitialized clients.
-THedgingClientOptionsPtr GetHedgingClientConfig(const THedgingClientConfig& config);
-
-//! Method for creating HedgingClient with given rpc clients config.
-NApi::IClientPtr CreateHedgingClient(const THedgingClientConfig& config);
-
-//! Method for creating HedgingClient with given rpc clients config and preinitialized clients.
-NApi::IClientPtr CreateHedgingClient(const THedgingClientConfig& config, const IClientsCachePtr& clientsCache);
-
-//! Method for creating HedgingClient with given rpc clients config, preinitialized clients and PenaltyProvider.
-NApi::IClientPtr CreateHedgingClient(const THedgingClientConfig& config, const IClientsCachePtr& clientsCache, const IPenaltyProviderPtr& penaltyProvider);
 
 ////////////////////////////////////////////////////////////////////////////////
 

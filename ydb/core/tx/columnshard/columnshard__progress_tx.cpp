@@ -14,6 +14,7 @@ private:
     const ui32 TabletTxNo;
     std::optional<NOlap::TSnapshot> LastCompletedTx;
     std::optional<TTxController::TPlanQueueItem> PlannedQueueItem;
+    std::optional<TMonotonic> StartExecution;
 
 public:
     TTxProgressTx(TColumnShard* self)
@@ -54,6 +55,7 @@ public:
             } else {
                 Self->ProgressTxController->PopFirstPlannedTx();
             }
+            StartExecution = TMonotonic::Now();
 
             LastCompletedTx = NOlap::TSnapshot(step, txId);
             if (LastCompletedTx > Self->LastCompletedTx) {
@@ -63,7 +65,7 @@ public:
             }
 
             AFL_VERIFY(TxOperator->ProgressOnExecute(*Self, NOlap::TSnapshot(step, txId), txc));
-            Self->ProgressTxController->FinishPlannedTx(txId, txc);
+            Self->ProgressTxController->ProgressOnExecute(txId, txc);
             Self->Counters.GetTabletCounters()->IncCounter(COUNTER_PLANNED_TX_COMPLETED);
         }
         Self->ProgressTxInFlight = std::nullopt;
@@ -84,10 +86,16 @@ public:
             Self->RescheduleWaitingReads();
         }
         if (PlannedQueueItem) {
-            Self->GetProgressTxController().CompleteRunningTx(*PlannedQueueItem);
+            AFL_VERIFY(TxOperator);
+            Self->GetProgressTxController().GetCounters().OnTxProgressLag(
+                TxOperator->GetOpType(), TMonotonic::Now() - TMonotonic::MilliSeconds(PlannedQueueItem->Step));
+            Self->GetProgressTxController().ProgressOnComplete(*PlannedQueueItem);
         }
         if (LastCompletedTx) {
             Self->LastCompletedTx = std::max(*LastCompletedTx, Self->LastCompletedTx);
+        }
+        if (StartExecution) {
+            Self->GetProgressTxController().GetCounters().OnTxProgressDuration(TxOperator->GetOpType(), TMonotonic::Now() - *StartExecution);
         }
         Self->SetupIndexation();
     }

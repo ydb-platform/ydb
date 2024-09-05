@@ -2034,7 +2034,8 @@ bool TPartition::ExecUserActionOrTransaction(TSimpleSharedPtr<TTransaction>& t, 
     } else if (t->ProposeConfig) {
         Y_ABORT_UNLESS(ChangingConfig);
         ChangeConfig = MakeSimpleShared<TEvPQ::TEvChangePartitionConfig>(TopicConverter,
-                                                                         t->ProposeConfig->Config);
+                                                                         t->ProposeConfig->Config,
+                                                                         t->ProposeConfig->BootstrapConfig);
         PendingPartitionConfig = GetPartitionConfig(ChangeConfig->Config);
         SendChangeConfigReply = false;
     }
@@ -2120,7 +2121,8 @@ bool TPartition::BeginTransaction(const TEvPQ::TEvProposePartitionConfig& event)
 {
     ChangeConfig =
         MakeSimpleShared<TEvPQ::TEvChangePartitionConfig>(TopicConverter,
-                                                          event.Config);
+                                                          event.Config,
+                                                          event.BootstrapConfig);
     PendingPartitionConfig = GetPartitionConfig(ChangeConfig->Config);
 
     SendChangeConfigReply = false;
@@ -2357,6 +2359,7 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
 
     if (ChangeConfig) {
         EndChangePartitionConfig(std::move(ChangeConfig->Config),
+                                 std::move(ChangeConfig->BootstrapConfig),
                                  ChangeConfig->TopicConverter,
                                  ctx);
     }
@@ -2423,12 +2426,24 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
 }
 
 void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
+                                          NKikimrPQ::TBootstrapConfig&& bootstrapConfig,
                                           NPersQueue::TTopicConverterPtr topicConverter,
                                           const TActorContext& ctx)
 {
     Config = std::move(config);
     PartitionConfig = GetPartitionConfig(Config);
     PartitionGraph = MakePartitionGraph(Config);
+
+    for (const auto& mg : bootstrapConfig.GetExplicitMessageGroups()) {
+        TMaybe<TPartitionKeyRange> keyRange;
+        if (mg.HasKeyRange()) {
+            keyRange = TPartitionKeyRange::Parse(mg.GetKeyRange());
+        }
+
+        TSourceIdInfo sourceId(0, 0, ctx.Now(), std::move(keyRange), false);
+        SourceIdStorage.RegisterSourceIdInfo(mg.GetId(), std::move(sourceId), true);
+    }
+
     TopicConverter = topicConverter;
     NewPartition = false;
 
@@ -2438,14 +2453,15 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
         InitSplitMergeSlidingWindow();
     }
 
-    Send(ReadQuotaTrackerActor, new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config));
-    Send(WriteQuotaTrackerActor, new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config));
+    Send(ReadQuotaTrackerActor, new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config, bootstrapConfig));
+    Send(WriteQuotaTrackerActor, new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config, bootstrapConfig));
     TotalPartitionWriteSpeed = config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond();
 
     if (Config.GetPartitionConfig().HasMirrorFrom()) {
         if (Mirrorer) {
             ctx.Send(Mirrorer->Actor, new TEvPQ::TEvChangePartitionConfig(TopicConverter,
-                                                                          Config));
+                                                                          Config,
+                                                                          bootstrapConfig));
         } else {
             CreateMirrorerActor();
         }

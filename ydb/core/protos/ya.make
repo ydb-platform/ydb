@@ -150,6 +150,7 @@ SRCS(
 
 GENERATE_ENUM_SERIALIZATION(blobstorage_pdisk_config.pb.h)
 GENERATE_ENUM_SERIALIZATION(datashard_load.pb.h)
+GENERATE_ENUM_SERIALIZATION(shared_cache.pb.h)
 
 PEERDIR(
     ydb/library/actors/protos

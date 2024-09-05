@@ -39,7 +39,8 @@ enum class EOperationBehaviour : ui32 {
     InTxWrite = 2,
     WriteWithLock = 3,
     CommitWriteLock = 4,
-    AbortWriteLock = 5
+    AbortWriteLock = 5,
+    NoTxWrite = 6
 };
 
 class TWriteOperation {
@@ -61,7 +62,7 @@ public:
 
     void Start(TColumnShard& owner, const ui64 tableId, const NEvWrite::IDataContainer::TPtr& data, const NActors::TActorId& source,
         const std::shared_ptr<NOlap::ISnapshotSchema>& schema, const TActorContext& ctx);
-    void OnWriteFinish(NTabletFlatExecutor::TTransactionContext& txc, const TVector<TWriteId>& globalWriteIds);
+    void OnWriteFinish(NTabletFlatExecutor::TTransactionContext& txc, const TVector<TWriteId>& globalWriteIds, const bool ephemeralFlag);
     void CommitOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc, const NOlap::TSnapshot& snapshot) const;
     void CommitOnComplete(TColumnShard& owner, const NOlap::TSnapshot& snapshot) const;
     void AbortOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) const;

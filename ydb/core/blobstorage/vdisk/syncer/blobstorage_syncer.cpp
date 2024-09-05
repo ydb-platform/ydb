@@ -577,7 +577,6 @@ namespace NKikimr {
             GInfo = msg->NewInfo;
 
             // reconfigure guid recovery actor
-            Y_ABORT_UNLESS(RecoverLostDataId != TActorId());
             ctx.Send(RecoverLostDataId, msg->Clone());
         }
 

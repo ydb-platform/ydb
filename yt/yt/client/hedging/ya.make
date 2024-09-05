@@ -16,7 +16,6 @@ PEERDIR(
     yt/yt/client
     yt/yt/client/cache
     yt/yt/library/profiling
-    yt/yt_proto/yt/client/hedging
 )
 
 END()

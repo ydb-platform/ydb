@@ -5,7 +5,6 @@
 #include "service_initializer.h"
 
 #include <ydb/core/actorlib_impl/destruct_actor.h>
-#include <ydb/core/actorlib_impl/load_network.h>
 
 #include "ydb/core/audit/audit_log_service.h"
 
@@ -244,25 +243,6 @@
 #include <util/generic/size_literals.h>
 
 #include <util/system/hostname.h>
-
-#include <aws/core/Aws.h>
-
-namespace {
-
-struct TAwsApiGuard {
-    TAwsApiGuard() {
-        Aws::InitAPI(Options);
-    }
-
-    ~TAwsApiGuard() {
-        Aws::ShutdownAPI(Options);
-    }
-
-private:
-    Aws::SDKOptions Options;
-};
-
-}
 
 namespace NKikimr {
 
@@ -771,8 +751,6 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
             // TODO(alexvru): pool?
             setup->LocalServices.emplace_back(NInterconnect::MakeLoadResponderActorId(NodeId),
                 TActorSetupCmd(NInterconnect::CreateLoadResponderActor(), TMailboxType::ReadAsFilled, systemPoolId));
-
-            //IC_Load::InitializeService(setup, appData, maxNode);
         }
     }
 
@@ -1091,6 +1069,7 @@ void TSharedCacheInitializer::InitializeServices(
     }
     config->TotalAsyncQueueInFlyLimit = cfg.GetAsyncQueueInFlyLimit();
     config->TotalScanQueueInFlyLimit = cfg.GetScanQueueInFlyLimit();
+    config->ReplacementPolicy = cfg.GetReplacementPolicy();
 
     if (cfg.HasActivePagesReservationPercent()) {
         config->ActivePagesReservationPercent = cfg.GetActivePagesReservationPercent();
@@ -2782,17 +2761,6 @@ void TGraphServiceInitializer::InitializeServices(NActors::TActorSystemSetup* se
     setup->LocalServices.emplace_back(
         NGraph::MakeGraphServiceId(),
         TActorSetupCmd(NGraph::CreateGraphService(appData->TenantName), TMailboxType::HTSwap, appData->UserPoolId));
-}
-
-TAwsApiInitializer::TAwsApiInitializer(IGlobalObjectStorage& globalObjects)
-    : GlobalObjects(globalObjects)
-{
-}
-
-void TAwsApiInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
-    Y_UNUSED(setup);
-    Y_UNUSED(appData);
-    GlobalObjects.AddGlobalObject(std::make_shared<TAwsApiGuard>());
 }
 
 } // namespace NKikimrServicesInitializers

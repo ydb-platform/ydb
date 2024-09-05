@@ -394,6 +394,7 @@ class KikimrConfigGenerator(object):
             self.yaml_config["table_service_config"]["index_auto_choose_mode"] = 'max_used_prefix'
             self.yaml_config["feature_flags"]['enable_temp_tables'] = True
             self.yaml_config["feature_flags"]['enable_table_pg_types'] = True
+            self.yaml_config['feature_flags']['enable_pg_syntax'] = True
             self.yaml_config['feature_flags']['enable_uniq_constraint'] = True
             if "local_pg_wire_config" not in self.yaml_config:
                 self.yaml_config["local_pg_wire_config"] = {}

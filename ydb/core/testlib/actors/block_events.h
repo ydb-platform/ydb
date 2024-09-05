@@ -14,7 +14,7 @@ namespace NActors {
     template<class TEvType>
     class TBlockEvents : public std::deque<typename TEvType::TPtr> {
     public:
-        TBlockEvents(TTestActorRuntime& runtime, std::function<bool(typename TEvType::TPtr&)> condition = {})
+        TBlockEvents(TTestActorRuntime& runtime, std::function<bool(const typename TEvType::TPtr&)> condition = {})
             : Runtime(runtime)
             , Condition(std::move(condition))
             , Holder(Runtime.AddObserver<TEvType>(

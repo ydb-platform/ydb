@@ -58,6 +58,12 @@ std::optional<ui32> TFilteredSnapshotSchema::GetColumnIdOptional(const std::stri
     return result;
 }
 
+ui32 TFilteredSnapshotSchema::GetColumnIdVerified(const std::string& columnName) const {
+    auto result = OriginalSnapshot->GetColumnIdVerified(columnName);
+    AFL_VERIFY(ColumnIds.contains(result));
+    return result;
+}
+
 int TFilteredSnapshotSchema::GetFieldIndex(const ui32 columnId) const {
     if (!ColumnIds.contains(columnId)) {
         return -1;

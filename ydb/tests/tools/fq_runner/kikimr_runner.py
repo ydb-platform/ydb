@@ -514,7 +514,7 @@ class YqTenant(BaseTenant):
         self.fill_gateways_cfg(fq_config['gateways'])
         self.fill_storage_config(fq_config['checkpoint_coordinator']['storage'],
                                  "CheckpointCoordinatorStorage_" + self.uuid)
-        
+
         fq_config['row_dispatcher'] = {
             'enabled': True,
             'timeout_before_start_session_sec': 2,

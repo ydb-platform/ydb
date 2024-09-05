@@ -1,8 +1,5 @@
 #include "schema.h"
 
-#include <ydb/core/base/feature_flags.h>
-#include <ydb/core/base/appdata_fwd.h>
-
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 
 TConclusionStatus TOlapTTL::Update(const TOlapTTLUpdate& update) {

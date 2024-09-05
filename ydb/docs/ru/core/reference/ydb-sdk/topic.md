@@ -1646,17 +1646,23 @@
   err := db.Query().DoTx(ctx, func(ctx context.Context, tx query.TxActor) error {
     batch, err := reader.PopBatchTx(ctx, tx)
     if err != nil {
-				return err
-		}
+      return err
+    }
 
     batchResult, err := processBatch(batch.Context(), batch)
     if err != nil {
-				return err
-		}
+        return err
+    }
 
     return nil
   }
   ```
+
+  {% note info %}
+
+  В Go SDK имеет смысл читать сообщения в самом начале транзации до других операций, т.к. транзакции query-сервиса сделаны "ленивыми" и серверная сущность не создаётся до первого обращения в транзакцию. Читатель учитывает эту особенность и не открывает реальную транзакцию до получения сообщений. Особенно это имеет смысл при маленьком потоке сообщений когда очередного сообщения SDK может ждать долго.
+
+  {% endnote %}
 
 - Java (sync)
 

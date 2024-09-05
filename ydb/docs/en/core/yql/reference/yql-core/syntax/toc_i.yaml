@@ -9,7 +9,7 @@ items:
 - { name: ALTER TOPIC,                  href: alter_topic.md,                when: feature_topic_control_plane }
 - { name: ALTER USER,                   href: alter-user.md,                 when: feature_user_and_group }
 - { name: CREATE GROUP,                 href: create-group.md,               when: feature_user_and_group }
-- { name: CREATE TABLE,                 href: create_table.md }
+- { name: CREATE TABLE,                 include: { mode: link,               path: create_table/toc_p.yaml } }
 - { name: CREATE VIEW,                  href: create-view.md,                when: feature_view }
 - { name: CREATE TOPIC,                 href: create_topic.md,               when: feature_topic_control_plane }
 - { name: CREATE USER,                  href: create-user.md,                when: feature_user_and_group }

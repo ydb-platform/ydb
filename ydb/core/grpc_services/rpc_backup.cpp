@@ -42,7 +42,7 @@ public:
 
         auto ev = MakeHolder<typename NSchemeShard::TEvBackup::TEvApiMapping<TIn>::TEv>();
         ev->Record.SetTxId(this->TxId);
-        ev->Record.SetDatabaseName(this->DatabaseName);
+        ev->Record.SetDatabaseName(this->GetDatabaseName());
         if (this->UserToken) {
             ev->Record.SetUserSID(this->UserToken->GetUserSID());
         }

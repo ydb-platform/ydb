@@ -78,6 +78,7 @@ union TBasicKikimrServicesMask {
         bool EnableDatabaseMetadataCache:1;
         bool EnableGraphService:1;
         bool EnableCompDiskLimiter:1;
+        bool EnableGroupedMemoryLimiter:1;
     };
 
     struct {

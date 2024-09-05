@@ -15,7 +15,7 @@ except ImportError:  # pragma: no cover
     ssl = SSLContext = None  # type: ignore[assignment]
 
 
-if TYPE_CHECKING:  # pragma: no cover
+if TYPE_CHECKING:
     from .client_reqrep import ClientResponse, ConnectionKey, Fingerprint, RequestInfo
 else:
     RequestInfo = ClientResponse = ConnectionKey = None
@@ -47,9 +47,13 @@ class ClientError(Exception):
 
 
 class ClientResponseError(ClientError):
-    """Connection error during reading response.
+    """Base class for exceptions that occur after getting a response.
 
-    request_info: instance of RequestInfo
+    request_info: An instance of RequestInfo.
+    history: A sequence of responses, if redirects occurred.
+    status: HTTP status code.
+    message: Error message.
+    headers: Response headers.
     """
 
     def __init__(
@@ -154,7 +158,7 @@ class ClientConnectorError(ClientOSError):
     """Client connector error.
 
     Raised in :class:`aiohttp.connector.TCPConnector` if
-        connection to proxy can not be established.
+        a connection can not be established.
     """
 
     def __init__(self, connection_key: ConnectionKey, os_error: OSError) -> None:
@@ -176,12 +180,12 @@ class ClientConnectorError(ClientOSError):
         return self._conn_key.port
 
     @property
-    def ssl(self) -> Union[SSLContext, None, bool, "Fingerprint"]:
+    def ssl(self) -> Union[SSLContext, bool, "Fingerprint"]:
         return self._conn_key.ssl
 
     def __str__(self) -> str:
         return "Cannot connect to host {0.host}:{0.port} ssl:{1} [{2}]".format(
-            self, self.ssl if self.ssl is not None else "default", self.strerror
+            self, "default" if self.ssl is True else self.ssl, self.strerror
         )
 
     # OSError.__reduce__ does too much black magick
@@ -215,7 +219,7 @@ class UnixClientConnectorError(ClientConnectorError):
 
     def __str__(self) -> str:
         return "Cannot connect to unix socket {0.path} ssl:{1} [{2}]".format(
-            self, self.ssl if self.ssl is not None else "default", self.strerror
+            self, "default" if self.ssl is True else self.ssl, self.strerror
         )
 
 

@@ -43,7 +43,7 @@ During the operation of the program, two types of work streams are simulated:
 * Input stream: messages are written to the topic in the non-transaction mode. The user can control the writing speed, the message size, the number of producers.
 * Processing flow: messages are read from the topic and written to the table using the {{ ydb-short-name }} transaction.
 
-The following actions are performed in the processing flow within a single transaction: 
+The following actions are performed in the processing flow within a single transaction:
 * messages from the topic are being read until the `--commit-period` period has expired;
 * one `UPSERT` command and a `COMMIT` command are executed on the table to commit the transaction after the period expires.
 

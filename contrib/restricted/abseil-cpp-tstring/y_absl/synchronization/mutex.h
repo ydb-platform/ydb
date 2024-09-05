@@ -148,7 +148,7 @@ struct SynchWaitParams;
 //
 // See also `MutexLock`, below, for scoped `Mutex` acquisition.
 
-class Y_ABSL_LOCKABLE Mutex {
+class Y_ABSL_LOCKABLE Y_ABSL_ATTRIBUTE_WARN_UNUSED Mutex {
  public:
   // Creates a `Mutex` that is not held by anyone. This constructor is
   // typically used for Mutexes allocated on the heap or the stack.
@@ -190,7 +190,7 @@ class Y_ABSL_LOCKABLE Mutex {
   // If the mutex can be acquired without blocking, does so exclusively and
   // returns `true`. Otherwise, returns `false`. Returns `true` with high
   // probability if the `Mutex` was free.
-  bool TryLock() Y_ABSL_EXCLUSIVE_TRYLOCK_FUNCTION(true);
+  Y_ABSL_MUST_USE_RESULT bool TryLock() Y_ABSL_EXCLUSIVE_TRYLOCK_FUNCTION(true);
 
   // Mutex::AssertHeld()
   //
@@ -255,7 +255,7 @@ class Y_ABSL_LOCKABLE Mutex {
   // If the mutex can be acquired without blocking, acquires this mutex for
   // shared access and returns `true`. Otherwise, returns `false`. Returns
   // `true` with high probability if the `Mutex` was free or shared.
-  bool ReaderTryLock() Y_ABSL_SHARED_TRYLOCK_FUNCTION(true);
+  Y_ABSL_MUST_USE_RESULT bool ReaderTryLock() Y_ABSL_SHARED_TRYLOCK_FUNCTION(true);
 
   // Mutex::AssertReaderHeld()
   //
@@ -281,7 +281,8 @@ class Y_ABSL_LOCKABLE Mutex {
 
   void WriterUnlock() Y_ABSL_UNLOCK_FUNCTION() { this->Unlock(); }
 
-  bool WriterTryLock() Y_ABSL_EXCLUSIVE_TRYLOCK_FUNCTION(true) {
+  Y_ABSL_MUST_USE_RESULT bool WriterTryLock()
+      Y_ABSL_EXCLUSIVE_TRYLOCK_FUNCTION(true) {
     return this->TryLock();
   }
 

@@ -7,6 +7,7 @@ IF (PROFILE_MEMORY_ALLOCATIONS)
 ENDIF()
 
 SRCS(
+    memory_info.cpp
     monitor.cpp
     profiler.cpp
     stats.cpp

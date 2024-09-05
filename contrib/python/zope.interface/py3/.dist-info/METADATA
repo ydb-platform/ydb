@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: zope.interface
-Version: 6.4.post2
+Version: 7.0.3
 Summary: Interfaces for Python
 Home-page: https://github.com/zopefoundation/zope.interface
 Author: Zope Foundation and Contributors
@@ -13,7 +13,6 @@ Classifier: License :: OSI Approved :: Zope Public License
 Classifier: Operating System :: OS Independent
 Classifier: Programming Language :: Python
 Classifier: Programming Language :: Python :: 3
-Classifier: Programming Language :: Python :: 3.7
 Classifier: Programming Language :: Python :: 3.8
 Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
@@ -23,21 +22,21 @@ Classifier: Programming Language :: Python :: Implementation :: CPython
 Classifier: Programming Language :: Python :: Implementation :: PyPy
 Classifier: Framework :: Zope :: 3
 Classifier: Topic :: Software Development :: Libraries :: Python Modules
-Requires-Python: >=3.7
+Requires-Python: >=3.8
 License-File: LICENSE.txt
 Requires-Dist: setuptools
 Provides-Extra: docs
-Requires-Dist: Sphinx ; extra == 'docs'
-Requires-Dist: repoze.sphinx.autointerface ; extra == 'docs'
-Requires-Dist: sphinx-rtd-theme ; extra == 'docs'
+Requires-Dist: Sphinx; extra == "docs"
+Requires-Dist: repoze.sphinx.autointerface; extra == "docs"
+Requires-Dist: sphinx-rtd-theme; extra == "docs"
 Provides-Extra: test
-Requires-Dist: coverage >=5.0.3 ; extra == 'test'
-Requires-Dist: zope.event ; extra == 'test'
-Requires-Dist: zope.testing ; extra == 'test'
+Requires-Dist: coverage>=5.0.3; extra == "test"
+Requires-Dist: zope.event; extra == "test"
+Requires-Dist: zope.testing; extra == "test"
 Provides-Extra: testing
-Requires-Dist: coverage >=5.0.3 ; extra == 'testing'
-Requires-Dist: zope.event ; extra == 'testing'
-Requires-Dist: zope.testing ; extra == 'testing'
+Requires-Dist: coverage>=5.0.3; extra == "testing"
+Requires-Dist: zope.event; extra == "testing"
+Requires-Dist: zope.testing; extra == "testing"
 
 ====================
  ``zope.interface``
@@ -75,7 +74,38 @@ For detailed documentation, please see https://zopeinterface.readthedocs.io/en/l
  Changes
 =========
 
-6.4.post2 (unreleased)
+7.0.3 (2024-08-27)
+==================
+
+- Fix `Assertion 'memb->type == T_PYSSIZET' failed.` for Python < 3.12.
+  (`#319 <https://github.com/zopefoundation/zope.interface/issues/319>`_)
+
+
+7.0.2 (2024-08-26)
+==================
+
+- Fix reference-counting bug in C module initialization (broken in 7.0).
+  (`#316 <https://github.com/zopefoundation/zope.interface/issues/316>`_)
+
+
+7.0.1 (2024-08-06)
+==================
+
+- Fix subclassability of ``ObjectSpecificationDescriptor`` (broken in 7.0).
+  (`#312 <https://github.com/zopefoundation/zope.interface/issues/312>`_)
+
+
+7.0 (2024-08-06)
+================
+
+- Enable heap-based types (PEP 384) for Python >= 3.11.
+
+- Adopt multi-phase module initialization (PEP 489).
+
+- Drop support for Python 3.7.
+
+
+6.4.post2 (2024-05-24)
 ======================
 
 - Publish missing Windows wheels, second attempt.

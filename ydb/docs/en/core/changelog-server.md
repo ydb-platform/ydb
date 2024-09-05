@@ -1,5 +1,25 @@
 # {{ ydb-short-name }} Server changelog
 
+## Version 23.4 {#23-4}
+
+Release date: May 14, 2024.
+
+**Performance:**
+
+* [Fixed](https://github.com/ydb-platform/ydb/pull/3638) an issue of increased CPU consumption by a topic actor `PERSQUEUE_PARTITION_ACTOR`.
+* [Optimized](https://github.com/ydb-platform/ydb/pull/2083) resource usage by SchemeBoard replicas. The greatest effect is noticeable when modifying the metadata of tables with a large number of partitions.
+
+**Bug fixes:**
+
+* [Fixed a bug](https://github.com/ydb-platform/ydb/pull/2169) of possible partial commit of accumulated changes when using persistent distributed transactions. This error occurs in an extremely rare combination of events, including restarting tablets that service the table partitions involved in the transaction.
+* [Fixed a bug](https://github.com/ydb-platform/ydb/pull/3165) involving a race condition between the table merge and garbage collection processes, which could result in garbage collection ending with an invariant violation error, leading to an abnormal termination of the `ydbd` server process.
+* [Fixed a bug](https://github.com/ydb-platform/ydb/pull/2696) in Blob Storage, where information about changes to the composition of a storage group might not be received in a timely manner by individual cluster nodes. As a result, reads and writes of data stored in the affected group could become blocked in rare cases, requiring manual intervention.
+* [Fixed a bug](https://github.com/ydb-platform/ydb/pull/3002) in Blob Storage, where data storage nodes might not start despite the correct configuration. The error occurred on systems with the experimental "blob depot" feature explicitly enabled (this feature is disabled by default).
+* [Fixed a bug](https://github.com/ydb-platform/ydb/pull/2475) that sometimes occurred when writing to a topic with an empty `producer_id` with turned off deduplication. It could lead to abnormal termination of the `ydbd` server process.
+* [Fixed a bug](https://github.com/ydb-platform/ydb/pull/2651) that caused the `ydbd` process to crash due to an incorrect session state when writing to a topic.
+* [Fixed a bug](https://github.com/ydb-platform/ydb/pull/3587) in displaying the metric of number of partitions in a topic, where it previously displayed an incorrect value.
+* [Fixed a bug](https://github.com/ydb-platform/ydb/pull/2126) causing memory leaks that appeared when copying topic data between clusters. These could cause `ydbd` server processes to terminate due to out-of-memory issues.
+
 ## Version 23.3 {#23-3}
 
 Release date: October 12, 2023.
@@ -199,32 +219,37 @@ Release date: October 12, 2022. To update to version **22.4**, select the [Downl
 **What's new:**
 
 * {{ ydb-short-name }} Topics and Change Data Capture (CDC):
-   * Introduced the new Topic API. {{ ydb-short-name }} [Topic](concepts/topic.md) is an entity for storing unstructured messages and delivering them to various subscribers.
-   * Added support for the Topic API to the [{{ ydb-short-name }} CLI](reference/ydb-cli/topic-overview.md) and [SDK](reference/ydb-sdk/topic.md). The Topic API provides methods for message streaming writes and reads as well as topic management.
-   * Added the ability to [capture table updates](concepts/cdc.md) and send change messages to a topic.
+
+  * Introduced the new Topic API. {{ ydb-short-name }} [Topic](concepts/topic.md) is an entity for storing unstructured messages and delivering them to various subscribers.
+  * Added support for the Topic API to the [{{ ydb-short-name }} CLI](reference/ydb-cli/topic-overview.md) and [SDK](reference/ydb-sdk/topic.md). The Topic API provides methods for message streaming writes and reads as well as topic management.
+  * Added the ability to [capture table updates](concepts/cdc.md) and send change messages to a topic.
 
 * SDK:
-   * Added the ability to handle topics in the {{ ydb-short-name }} SDK.
-   * Added official support for the database/sql driver for working with {{ ydb-short-name }} in Golang.
+
+  * Added the ability to handle topics in the {{ ydb-short-name }} SDK.
+  * Added official support for the database/sql driver for working with {{ ydb-short-name }} in Golang.
 
 * Embedded UI:
-   * The CDC changefeed and the secondary indexes are now displayed in the database schema hierarchy as separate objects.
-   * Improved the visualization of query explain plan graphics.
-   * Problem storage groups have more visibility now.
-   * Various improvements based on UX research.
+
+  * The CDC changefeed and the secondary indexes are now displayed in the database schema hierarchy as separate objects.
+  * Improved the visualization of query explain plan graphics.
+  * Problem storage groups have more visibility now.
+  * Various improvements based on UX research.
 
 * Query Processing:
-   * Added Query Processor 2.0, a new subsystem to execute OLTP queries with significant improvements compared to the previous version.
-   * Improved write performance by up to 60%, and by up to 10% for reads.
-   * Added the ability to include a NOT NULL restriction for YDB primary keys when creating tables.
-   * Added support for renaming a secondary index online without shutting the service down.
-   * Improved the query explain view that now also includes fields for the physical operators.
+
+  * Added Query Processor 2.0, a new subsystem to execute OLTP queries with significant improvements compared to the previous version.
+  * Improved write performance by up to 60%, and by up to 10% for reads.
+  * Added the ability to include a NOT NULL restriction for YDB primary keys when creating tables.
+  * Added support for renaming a secondary index online without shutting the service down.
+  * Improved the query explain view that now also includes fields for the physical operators.
 
 * Core:
-   * For read only transactions, added consistent snapshot support that does not conflict with write transactions.
-   * Added BulkUpsert support for tables with asynchronous secondary indexes.
-   * Added TTL support for tables with asynchronous secondary indexes.
-   * Added compression support for data export to S3.
-   * Added an audit log for DDL statements.
-   * Added support for authentication with static credentials.
-   * Added system tables for query performance troubleshooting.
+
+  * For read only transactions, added consistent snapshot support that does not conflict with write transactions.
+  * Added BulkUpsert support for tables with asynchronous secondary indexes.
+  * Added TTL support for tables with asynchronous secondary indexes.
+  * Added compression support for data export to S3.
+  * Added an audit log for DDL statements.
+  * Added support for authentication with static credentials.
+  * Added system tables for query performance troubleshooting.

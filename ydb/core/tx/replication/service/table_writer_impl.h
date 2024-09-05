@@ -22,7 +22,7 @@
 
 namespace NKikimr::NReplication::NService {
 
-template <class TChangeRecord>
+template <typename TChangeRecord>
 class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter<TChangeRecord>> {
     using TBase = TActorBootstrapped<TTablePartitionWriter<TChangeRecord>>;
     using TThis = TTablePartitionWriter;
@@ -83,9 +83,7 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter<TCh
 
         TString source;
 
-        auto& records = std::get<std::shared_ptr<TChangeRecordContainer<TChangeRecord>>>(ev->Get()->Records)->Records;
-
-        for (auto recordPtr : records) {
+        for (auto recordPtr : ev->Get()->GetRecords<TChangeRecord>()) {
             const auto& record = *recordPtr;
             record.Serialize(*event->Record.AddChanges(), BuilderContext);
 
@@ -213,7 +211,7 @@ private:
 
 }; // TTablePartitionWriter
 
-template <class TChangeRecord>
+template <typename TChangeRecord>
 class TLocalTableWriter
     : public TActor<TLocalTableWriter<TChangeRecord>>
     , public NChangeExchange::TBaseChangeSender<TChangeRecord>
@@ -382,6 +380,8 @@ class TLocalTableWriter
             TVector<TKeyDesc::TColumnOp>()
         );
 
+        TBaseSender::SetPartitioner(NChangeExchange::CreateSchemaBoundaryPartitioner<TChangeRecord>(*KeyDesc.Get()));
+
         ResolveKeys();
     }
 
@@ -440,10 +440,6 @@ class TLocalTableWriter
             TTableId(this->PathId, Schema->Version),
             BuilderContext);
     }
-
-    const TVector<TKeyDesc::TPartitionInfo>& GetPartitions() const override { return KeyDesc->GetPartitions(); }
-    const TVector<NScheme::TTypeInfo>& GetSchema() const override { return KeyDesc->KeyColumnTypes; }
-    NKikimrSchemeOp::ECdcStreamFormat GetStreamFormat() const override { return TChangeRecord::StreamType; }
 
     void Handle(TEvWorker::TEvData::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());

@@ -28,13 +28,13 @@ public:
     TNodeDescriptor();
     TNodeDescriptor(const TNodeDescriptor& other) = default;
     TNodeDescriptor(TNodeDescriptor&& other) = default;
-    explicit TNodeDescriptor(const TString& defaultAddress);
-    explicit TNodeDescriptor(const std::optional<TString>& defaultAddress);
+    explicit TNodeDescriptor(const std::string& defaultAddress);
+    explicit TNodeDescriptor(const std::optional<std::string>& defaultAddress);
     explicit TNodeDescriptor(
         TAddressMap addresses,
-        std::optional<TString> host = std::nullopt,
-        std::optional<TString> rack = std::nullopt,
-        std::optional<TString> dc = std::nullopt,
+        const std::optional<std::string>& host = {},
+        const std::optional<std::string>& rack = {},
+        const std::optional<std::string>& dc = {},
         const std::vector<TString>& tags = {},
         std::optional<TInstant> lastSeenTime = {});
 
@@ -45,15 +45,15 @@ public:
 
     const TAddressMap& Addresses() const;
 
-    const TString& GetDefaultAddress() const;
+    const std::string& GetDefaultAddress() const;
 
-    const TString& GetAddressOrThrow(const TNetworkPreferenceList& networks) const;
+    const std::string& GetAddressOrThrow(const TNetworkPreferenceList& networks) const;
 
-    std::optional<TString> FindAddress(const TNetworkPreferenceList& networks) const;
+    std::optional<std::string> FindAddress(const TNetworkPreferenceList& networks) const;
 
-    const std::optional<TString>& GetHost() const;
-    const std::optional<TString>& GetRack() const;
-    const std::optional<TString>& GetDataCenter() const;
+    const std::optional<std::string>& GetHost() const;
+    const std::optional<std::string>& GetRack() const;
+    const std::optional<std::string>& GetDataCenter() const;
 
     const std::vector<TString>& GetTags() const;
 
@@ -67,19 +67,22 @@ public:
 
     void Persist(const TStreamPersistenceContext& context);
 
+    friend void SerializeFragment(const TNodeDescriptor& descriptor, NYson::IYsonConsumer* consumer);
+    friend void DeserializeFragment(TNodeDescriptor& descriptor, NYTree::INodePtr node);
+
 private:
     TAddressMap Addresses_;
-    TString DefaultAddress_;
-    std::optional<TString> Host_;
-    std::optional<TString> Rack_;
-    std::optional<TString> DataCenter_;
+    std::string DefaultAddress_;
+    std::optional<std::string> Host_;
+    std::optional<std::string> Rack_;
+    std::optional<std::string> DataCenter_;
     std::vector<TString> Tags_;
 
     // Not persisted.
     mutable TCopyableAtomic<TCpuInstant> LastSeenTime_;
 };
 
-const TString& NullNodeAddress();
+const std::string& NullNodeAddress();
 const TNodeDescriptor& NullNodeDescriptor();
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -90,12 +93,12 @@ bool operator == (const TNodeDescriptor& lhs, const NProto::TNodeDescriptor& rhs
 void FormatValue(TStringBuilderBase* builder, const TNodeDescriptor& descriptor, TStringBuf spec);
 
 // Accessors for some well-known addresses.
-std::optional<TString> FindDefaultAddress(const TAddressMap& addresses);
-const TString& GetDefaultAddress(const TAddressMap& addresses);
-const TString& GetDefaultAddress(const NProto::TAddressMap& addresses);
+std::optional<std::string> FindDefaultAddress(const TAddressMap& addresses);
+const std::string& GetDefaultAddress(const TAddressMap& addresses);
+const std::string& GetDefaultAddress(const NProto::TAddressMap& addresses);
 
-const TString& GetAddressOrThrow(const TAddressMap& addresses, const TNetworkPreferenceList& networks);
-std::optional<TString> FindAddress(const TAddressMap& addresses, const TNetworkPreferenceList& networks);
+const std::string& GetAddressOrThrow(const TAddressMap& addresses, const TNetworkPreferenceList& networks);
+std::optional<std::string> FindAddress(const TAddressMap& addresses, const TNetworkPreferenceList& networks);
 
 const TAddressMap& GetAddressesOrThrow(const TNodeAddressMap& nodeAddresses, EAddressType type);
 
@@ -159,8 +162,8 @@ public:
     std::vector<TNodeDescriptor> GetDescriptors(const NChunkClient::TChunkReplicaList& replicas) const;
     std::vector<std::pair<NNodeTrackerClient::TNodeId, TNodeDescriptor>> GetAllDescriptors() const;
 
-    const TNodeDescriptor* FindDescriptor(const TString& address);
-    const TNodeDescriptor& GetDescriptor(const TString& address);
+    const TNodeDescriptor* FindDescriptor(const std::string& address);
+    const TNodeDescriptor& GetDescriptor(const std::string& address);
 
     void Save(TStreamSaveContext& context) const;
     void Load(TStreamLoadContext& context);

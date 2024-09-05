@@ -204,6 +204,12 @@ public:
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, AlterQuery);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetQueryTrackerInfo);
 
+    // Distributed table client
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, StartDistributedWriteSession);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, FinishDistributedWriteSession);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, ParticipantWriteTable,
+        .SetStreamingEnabled(true));
+
     // Misc
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, CheckClusterLiveness);
 };

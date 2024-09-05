@@ -29,12 +29,12 @@ public:
         return IndexGranules.empty();
     }
 
-    virtual TConclusion<std::optional<TPartialReadResult>> GetBatch() override {
+    virtual TConclusion<std::shared_ptr<TPartialReadResult>> GetBatch() override {
         while (!Finished()) {
             auto batchOpt = ExtractStatsBatch();
             if (!batchOpt) {
                 AFL_VERIFY(Finished());
-                return std::nullopt;
+                return std::shared_ptr<TPartialReadResult>();
             }
             auto originalBatch = *batchOpt;
             if (originalBatch->num_rows() == 0) {
@@ -55,10 +55,9 @@ public:
                 continue;
             }
             auto table = NArrow::TStatusValidator::GetValid(arrow::Table::FromRecordBatches({resultBatch}));
-            TPartialReadResult out(table, lastKey, std::nullopt);
-            return std::move(out);
+            return std::make_shared<TPartialReadResult>(table, lastKey, std::nullopt);
         }
-        return std::nullopt;
+        return std::shared_ptr<TPartialReadResult>();
     }
 
     std::optional<std::shared_ptr<arrow::RecordBatch>> ExtractStatsBatch() {

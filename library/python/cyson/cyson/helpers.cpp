@@ -125,7 +125,7 @@ namespace NCYson {
         }
 
 #if PY_MAJOR_VERSION >= 3
-        PyObject* tmp = _PyLong_Format(obj, 10);
+        PyObject* tmp = PyNumber_ToBase(obj, 10);
         if (!tmp) {
             return nullptr;
         }
@@ -161,7 +161,11 @@ namespace NCYson {
         }
 
         TPyObjectPtr::~TPyObjectPtr() {
-#if PY_MAJOR_VERSION >= 3 && PY_MINOR_VERSION >= 7
+#if PY_MAJOR_VERSION >= 3 && PY_MINOR_VERSION >= 13
+            if (Py_IsFinalizing()) {
+                return;
+            }
+#elif PY_MAJOR_VERSION >= 3 && PY_MINOR_VERSION >= 7
             if (_Py_IsFinalizing()) {
                 return;
             }

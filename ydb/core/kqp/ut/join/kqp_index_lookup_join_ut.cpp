@@ -1016,7 +1016,7 @@ Y_UNIT_TEST_TWIN(JoinWithComplexCondition, StreamLookupJoin) {
     TVector<NKikimrKqp::TKqpSetting> settings;
 
     NKikimrKqp::TKqpSetting setting;
-    setting.SetName("OverrideStatistics");
+    setting.SetName("OptOverrideStatistics");
     setting.SetValue(stats);
     settings.push_back(setting);
 

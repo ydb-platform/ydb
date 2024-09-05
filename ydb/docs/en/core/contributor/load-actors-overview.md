@@ -22,7 +22,7 @@ For example, you can generate a [load on Distributed Storage](load-actors-storag
 ## Actor types {#load-actor-type}
 
 | Type | Description |
---- | ---
+| --- | --- |
 | [KqpLoad](load-actors-kqp.md) | Generates a load on the Query Processor layer and loads all cluster components. |
 | [KeyValueLoad](load-actors-key-value.md) | Loads a key-value tablet. |
 | [StorageLoad](load-actors-storage.md) | Loads Distributed Storage without using tablet and Query Processor layers. |
@@ -46,90 +46,89 @@ The use case described below shows how to create and run the KqpLoad actor. The 
 
 - Embedded UI
 
-   1. Open the page for managing load actors on the desired node (for example, `http://<address>:8765/actors/load`, where `address` is the address of the cluster node to run the load on).
-   1. Paste the actor configuration into the input/output field:
+  1. Open the page for managing load actors on the desired node (for example, `http://<address>:8765/actors/load`, where `address` is the address of the cluster node to run the load on).
+  2. Paste the actor configuration into the input/output field:
 
-      ```proto
-      KqpLoad: {
-          DurationSeconds: 30
-          WindowDuration: 1
-          WorkingDir: "/slice/db"
-          NumOfSessions: 64
-          UniformPartitionsCount: 1000
-          DeleteTableOnFinish: 1
-          WorkloadType: 0
-          Kv: {
-              InitRowCount: 1000
-              PartitionsByLoad: true
-              MaxFirstKey: 18446744073709551615
-              StringLen: 8
-              ColumnsCnt: 2
-              RowsCnt: 1
-          }
+    ```proto
+    KqpLoad: {
+      DurationSeconds: 30
+      WindowDuration: 1
+      WorkingDir: "/slice/db"
+      NumOfSessions: 64
+      UniformPartitionsCount: 1000
+      DeleteTableOnFinish: 1
+      WorkloadType: 0
+      Kv: {
+        InitRowCount: 1000
+        PartitionsByLoad: true
+        MaxFirstKey: 18446744073709551615
+        StringLen: 8
+        ColumnsCnt: 2
+        RowsCnt: 1
       }
-      ```
+    }
+    ```
 
-   1. To create and run the actor, click:
-      * **Start new load on current node**: Runs the load on the current node.
-      * **Start new load on all tenant nodes**: Runs the load on all the tenant nodes at once.
+  3. To create and run the actor, click:
 
-   You'll see the following message in the input/output field:
+  * **Start new load on current node**: Runs the load on the current node.
+  * **Start new load on all tenant nodes**: Runs the load on all the tenant nodes at once.
 
-   ```text
-   {"status":"OK","tag":1}
-   ```
+  You'll see the following message in the input/output field:
 
-   * `status`: Load run status.
-   * `tag`: Tag assigned to the load.
+  ```text
+  {"status":"OK","tag":1}
+  ```
+
+  * `status`: Load run status.
+  * `tag`: Tag assigned to the load.
 
 - CLI
 
-   1. Create an actor configuration file:
+  1. Create an actor configuration file:
 
-      ```proto
-      NodeId: 1
-      Event: {
-          KqpLoad: {
-              DurationSeconds: 30
-              WindowDuration: 1
-              WorkingDir: "/slice/db"
-              NumOfSessions: 64
-              UniformPartitionsCount: 1000
-              DeleteTableOnFinish: 1
-              WorkloadType: 0
-              Kv: {
-                  InitRowCount: 1000
-                  PartitionsByLoad: true
-                  MaxFirstKey: 18446744073709551615
-                  StringLen: 8
-                  ColumnsCnt: 2
-                  RowsCnt: 1
-              }
-          }
+    ```proto
+    NodeId: 1
+    Event: {
+      KqpLoad: {
+        DurationSeconds: 30
+        WindowDuration: 1
+        WorkingDir: "/slice/db"
+        NumOfSessions: 64
+        UniformPartitionsCount: 1000
+        DeleteTableOnFinish: 1
+        WorkloadType: 0
+        Kv: {
+          InitRowCount: 1000
+          PartitionsByLoad: true
+          MaxFirstKey: 18446744073709551615
+          StringLen: 8
+          ColumnsCnt: 2
+          RowsCnt: 1
+        }
       }
-      ```
+    }
+    ```
 
-      * `NodeId`: ID of the node to start the actor on. To specify multiple nodes, list them in separate lines:
+    `NodeId`: ID of the node to start the actor on. To specify multiple nodes, list them in separate lines:
+    ```proto
+    NodeId: 1
+    NodeId: 2
+    ...
+    NodeId: N
+    Event: {
+    ...
+    ```
+    `Event`: Actor configuration.
 
-         ```proto
-         NodeId: 1
-         NodeId: 2
-         ...
-         NodeId: N
-         Event: {
-         ...
-         ```
+  2. Start the actor:
 
-      * `Event`: Actor configuration.
+    ```bash
+    ydbd load-test --server <endpoint> --protobuf "$(cat <proto_file>)"
+    ```
 
-   1. Start the actor:
-
-      ```bash
-      ydbd load-test --server <endpoint> --protobuf "$(cat <proto_file>)"
-      ```
-
-      * `endpoint`: Node gRPC endpoint (for example, `grpc://<address>:<port>`, where `address` is the node address and `port` is the node gRPC port).
-      * `proto_file`: Path to the actor configuration file.
+    `endpoint`: Node gRPC endpoint (for example, `grpc://<address>:<port>`, where `address` is the node address and `port` is the node gRPC port).
+    `proto_file`: Path to the actor configuration file.
 
 {% endlist %}
 
@@ -141,11 +140,11 @@ You can view the test results using the Embedded UI. For a description of output
 
 - Embedded UI
 
-   1. Open the page for managing load actors on the desired node (for example, `http://<address>:<port>/actors/load`, where `address` is the node address and `port` is the HTTP port used for monitoring the node under load).
-   1. Click **Results**.
+  1. Open the page for managing load actors on the desired node (for example, `http://<address>:<port>/actors/load`, where `address` is the node address and `port` is the HTTP port used for monitoring the node under load).
+  2. Click **Results**.
 
-      This shows the results of completed tests. Find the results with the appropriate tag.
+  This shows the results of completed tests. Find the results with the appropriate tag.
 
-      ![load-actors-finished-tests](../_assets/load-actors-finished-tests.png)
+  ![load-actors-finished-tests](../_assets/load-actors-finished-tests.png)
 
 {% endlist %}

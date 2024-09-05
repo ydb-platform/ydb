@@ -8,6 +8,7 @@ PEERDIR(
     ydb/core/tablet_flat
     ydb/core/tx/replication/common
     ydb/core/tx/replication/ydb_proxy
+    ydb/core/tx/scheme_board
     ydb/core/util
     ydb/core/ydb_convert
     ydb/services/metadata

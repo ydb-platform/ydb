@@ -21,6 +21,10 @@ std::optional<ui32> TSnapshotSchema::GetColumnIdOptional(const std::string& colu
     return IndexInfo.GetColumnIdOptional(columnName);
 }
 
+ui32 TSnapshotSchema::GetColumnIdVerified(const std::string& columnName) const {
+    return IndexInfo.GetColumnIdVerified(columnName);
+}
+
 int TSnapshotSchema::GetFieldIndex(const ui32 columnId) const {
     const TString& columnName = IndexInfo.GetColumnName(columnId, false);
     if (!columnName) {

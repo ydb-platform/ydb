@@ -1,8 +1,3 @@
----
-title: "Instructions for initializing the driver in {{ ydb-short-name }}"
-description: "The article describes the examples of the code for connecting to {{ ydb-short-name }} (driver creation) in different {{ ydb-short-name }} SDKs."
----
-
 # Initialize the driver
 
 {% include [work in progress message](_includes/addition.md) %}
@@ -144,7 +139,7 @@ Below are examples of the code for connecting to {{ ydb-short-name }} (driver cr
       'iam_config'  => [
           // 'root_cert_file' => './CA.pem', // Root CA file (uncomment for dedicated server)
       ],
-      
+
       'credentials' => new \YdbPlatform\Ydb\Auth\Implement\AccessTokenAuthentication('AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA') // use from reference/ydb-sdk/auth
   ];
 

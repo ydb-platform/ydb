@@ -27,6 +27,7 @@ struct IReplicationCardCache
     virtual TFuture<TReplicationCardPtr> GetReplicationCard(const TReplicationCardCacheKey& key) = 0;
     virtual void ForceRefresh(const TReplicationCardCacheKey& key, const TReplicationCardPtr& replicationCard) = 0;
     virtual void Clear() = 0;
+    virtual void Reconfigure(const TReplicationCardCacheDynamicConfigPtr& config) = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(IReplicationCardCache)

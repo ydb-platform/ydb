@@ -18,6 +18,7 @@
 #include <type_traits>
 #include <utility>
 
+#include "y_absl/base/config.h"
 #include "y_absl/strings/string_view.h"
 
 namespace y_absl {

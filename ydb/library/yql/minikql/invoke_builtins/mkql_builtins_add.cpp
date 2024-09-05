@@ -348,6 +348,7 @@ void RegisterAdd(TKernelFamilyMap& kernelFamilyMap) {
 
     AddBinaryIntegralKernels<TAdd>(*family);
     AddBinaryRealKernels<TAdd>(*family);
+    AddBinaryDecimalKernels<TDecimalAdd>(*family);
 
     RegisterDateAddInterval<false, false, false>(*family);
     RegisterDateAddInterval<true, false, false>(*family);

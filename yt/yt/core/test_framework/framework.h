@@ -51,11 +51,16 @@ struct TWaitForPredicateOptions
     int IterationCount = 300;
     TDuration Period = TDuration::MilliSeconds(100);
     bool IgnoreExceptions = false;
+    TString Message = "<no-message>";
 };
 
 void WaitForPredicate(
     std::function<bool()> predicate,
     TWaitForPredicateOptions options);
+
+void WaitForPredicate(
+    std::function<bool()> predicate,
+    const TString& message);
 
 void WaitForPredicate(
     std::function<bool()> predicate,
@@ -192,7 +197,7 @@ public:\
 private:\
   virtual void TestBody();\
   void TestInnerBody();\
-  static ::testing::TestInfo* const test_info_ GTEST_ATTRIBUTE_UNUSED_;\
+  [[maybe_unused]] static ::testing::TestInfo* const test_info_;\
 };\
 \
 ::testing::TestInfo* const GTEST_TEST_CLASS_NAME_(test_case_name, test_name)\

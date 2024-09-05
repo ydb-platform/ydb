@@ -81,7 +81,8 @@ namespace NActors {
             fields.ActorSystem,
             fields.ActorId,
             fields.AllowedSIDs ? fields.AllowedSIDs : Config.AllowedSIDs,
-            fields.UseAuth ? Config.Authorizer : TRequestAuthorizer());
+            fields.UseAuth ? Config.Authorizer : TRequestAuthorizer(),
+            fields.MonServiceName);
         if (fields.Index) {
             fields.Index->Register(page);
             if (fields.SortPages) {

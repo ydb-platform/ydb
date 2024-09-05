@@ -1,8 +1,3 @@
----
-title: "Instructions for setting the session pool size in {{ ydb-short-name }}"
-description: "The article will tell you how to set the session pool size in different {{ ydb-short-name }} SDKs."
----
-
 # Setting the session pool size
 
 {% include [work in progress message](_includes/addition.md) %}

@@ -401,7 +401,7 @@ public:
             }
         }
 
-        if constexpr (std::is_integral_v<T>) {
+        if constexpr (std::is_integral_v<T> && !std::is_same_v<T, NYql::NDecimal::TInt128>) {
             if constexpr (std::is_signed_v<T>) {
                 YQL_ENSURE(buf.Current() == Int64Marker);
                 buf.Next();
@@ -411,11 +411,13 @@ public:
                 buf.Next();
                 return NUdf::TBlockItem(T(buf.ReadVarUI64()));
             }
+        } else if constexpr (std::is_floating_point_v<T>) {
+            YQL_ENSURE(buf.Current() == DoubleMarker);
+            buf.Next();                
+            return NUdf::TBlockItem(T(buf.NextDouble()));
+        } else {
+            static_assert(std::is_floating_point_v<T>);
         }
-
-        YQL_ENSURE(buf.Current() == DoubleMarker);
-        buf.Next();
-        return NUdf::TBlockItem(T(buf.NextDouble()));
     }
 };
 
@@ -460,7 +462,8 @@ struct TYsonBlockReaderTraits {
     using TResult = IYsonBlockReader;
     template <bool Nullable>
     using TTuple = TYsonTupleBlockReader<Nullable, Native>;
-    template <typename T, bool Nullable>
+    // TODO: Implement reader for decimals
+    template <typename T, bool Nullable, typename = std::enable_if_t<!std::is_same_v<T, NYql::NDecimal::TInt128> && (std::is_integral_v<T> || std::is_floating_point_v<T>)>>
     using TFixedSize = TYsonFixedSizeBlockReader<T, Nullable, Native>;
     template <typename TStringType, bool Nullable, NKikimr::NUdf::EDataSlot OriginalT>
     using TStrings = TYsonStringBlockReader<TStringType, Nullable, OriginalT, Native>;
@@ -616,8 +619,15 @@ public:
 
     arrow::Datum Convert(std::shared_ptr<arrow::ArrayData> block) override {
         if (arrow::Type::DICTIONARY == block->type->id()) {
-            if (static_cast<const arrow::DictionaryType&>(*block->type).value_type()->Equals(Settings_.ArrowType)) {
+            auto valType = static_cast<const arrow::DictionaryType&>(*block->type).value_type();
+            if (valType->Equals(Settings_.ArrowType)) {
+                // just unpack
                 return DictPrimitiveConverter_.Convert(block);
+            }  else if (arrow::Type::UINT8 == Settings_.ArrowType->id() && arrow::Type::BOOL == valType->id()) {
+                // unpack an cast
+                auto result = arrow::compute::Cast(DictPrimitiveConverter_.Convert(block), Settings_.ArrowType);
+                YQL_ENSURE(result.ok());
+                return *result;
             } else {
                 return DictYsonConverter_.Convert(block);
             }
@@ -628,7 +638,7 @@ public:
                 return block;
             } else if (arrow::Type::UINT8 == Settings_.ArrowType->id() && arrow::Type::BOOL == blockType->id()) {
                 auto result = arrow::compute::Cast(arrow::Datum(*block), Settings_.ArrowType);
-                Y_ENSURE(result.ok());
+                YQL_ENSURE(result.ok());
                 return *result;
             } else {
                 YQL_ENSURE(arrow::Type::BINARY == blockType->id());

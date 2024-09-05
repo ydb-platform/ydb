@@ -16,6 +16,11 @@ TKeyBound TTabletInfo::GetLowerKeyBound() const
     return TKeyBound::FromRow() >= PivotKey;
 }
 
+TTabletInfoPtr TTabletInfo::Clone() const
+{
+    return New<TTabletInfo>(*this);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 bool TTableMountInfo::IsSorted() const
@@ -174,6 +179,11 @@ void TTableMountInfo::ValidateReplicationLog() const
     if (!IsReplicationLog()) {
         THROW_ERROR_EXCEPTION("Table %v is not replication log", Path);
     }
+}
+
+TTableMountInfoPtr TTableMountInfo::Clone() const
+{
+    return New<TTableMountInfo>(*this);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

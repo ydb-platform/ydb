@@ -4,6 +4,10 @@ FORK_SUBTESTS()
 
 SPLIT_FACTOR(30)
 
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(ram:10)
+ENDIF()
+
 IF (WITH_VALGRIND)
     SIZE(LARGE)
     TAG(ya:fat)
@@ -31,7 +35,5 @@ PEERDIR(
 SRCS(
     dsproxy_ut.cpp
 )
-
-REQUIREMENTS(ram:10)
 
 END()

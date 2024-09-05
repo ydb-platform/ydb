@@ -170,6 +170,7 @@ def add_python_lint_checks(unit, py_ver, files):
             "market/report/lite/",  # MARKETOUT-38662, deadline: 2021-08-12
             "passport/backend/oauth/",  # PASSP-35982
             "sdg/sdc/contrib/",  # SDC contrib
+            "sdg/sdc/third_party/",  # SDC contrib
             "testenv/",  # CI-3229
             "yt/yt/",  # YT-20053
             "yt/python/",  # YT-20053
@@ -261,6 +262,7 @@ def py_program(unit, py3):
         if unit.get('PYTHON_SQLITE3') != 'no':
             peers.append('contrib/tools/python/src/Modules/_sqlite')
     unit.onpeerdir(peers)
+    unit.onwindows_long_path_manifest()
     if unit.get('MODULE_TYPE') == 'PROGRAM':  # can not check DLL
         unit.onadd_check_py_imports()
 

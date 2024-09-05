@@ -2,6 +2,7 @@
 #include <ydb/core/base/table_vector_index.h>
 #include <ydb/core/change_exchange/change_exchange.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
+#include <ydb/core/tx/schemeshard/schemeshard_utils.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
 #include <ydb/core/testlib/tablet_helpers.h>
@@ -154,27 +155,54 @@ Y_UNIT_TEST_SUITE(TVectorIndexTests) {
               NLs::CheckColumns(PostingTable, {PostingTable_ParentIdColumn, "id1", "id2", "covered1", "covered2"}, {}, {PostingTable_ParentIdColumn, "id1", "id2"}, true) });
     } 
 
+    Y_UNIT_TEST(VectorKmeansTreePostingImplTable) {
+      // partition
+      NKikimrSchemeOp::TPartitionConfig baseTablePartitionConfig;
+      NKikimrSchemeOp::TTableDescription indexTableDesc;
+      // columns
+      NKikimrSchemeOp::TTableDescription baseTableDescr;
+      {
+        auto* embedding = baseTableDescr.AddColumns();
+        *embedding->MutableName() = "embedding";
+      }
+      {
+        auto* data1 = baseTableDescr.AddColumns();
+        *data1->MutableName() = "data1";
+      }
+      {
+        auto* data2 = baseTableDescr.AddColumns();
+        *data2->MutableName() = "data2";
+
+      }
+      NTableIndex::TTableColumns implTableColumns = {{"data2", "data1"}, {}};
+      auto desc = CalcVectorKmeansTreePostingImplTableDesc(baseTableDescr, baseTablePartitionConfig, implTableColumns, indexTableDesc, "something");
+      std::string_view expected[] = {NTableIndex::NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn, "data1", "data2"};
+      for (size_t i = 0; auto& column : desc.GetColumns()) {
+        UNIT_ASSERT_STRINGS_EQUAL(column.GetName(), expected[i]);
+        ++i;
+      }
+    }
 
     Y_UNIT_TEST(CreateTableWithError) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        // base table column should not contains reserved name '-parent'
-        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+        // base table column should not contains reserved name ParentIdColumn
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
             TableDescription {
               Name: "vectors"
               Columns { Name: "id" Type: "Uint64" }
-              Columns { Name: "-parent" Type: "String" }
+              Columns { Name: "%s" Type: "String" }
               KeyColumnNames: ["id"]
             }
             IndexDescription {
               Name: "idx_vector"
-              KeyColumnNames: ["-parent"]
+              KeyColumnNames: ["%s"]
               Type: EIndexTypeGlobalVectorKmeansTree
               VectorIndexKmeansTreeDescription: { Settings : { distance: DISTANCE_COSINE, vector_type: VECTOR_TYPE_FLOAT, vector_dimension: 1024 } }
             }
-        )", {NKikimrScheme::StatusInvalidParameter});
+        )", NTableIndex::NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn, NTableIndex::NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn), {NKikimrScheme::StatusInvalidParameter});
 
         // pk should not be covered
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(

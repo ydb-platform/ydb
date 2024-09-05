@@ -212,7 +212,7 @@ namespace NYql {
             input->SetTypeAnn(ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{
                 input->Child(TGenReadTable::idx_World)->GetTypeAnn(), ctx.MakeType<TListExprType>(itemType)}));
 
-            return State_->Types->SetColumnOrder(*input, columnOrder, ctx);
+            return State_->Types->SetColumnOrder(*input, TColumnOrder(columnOrder), ctx);
         }
 
         TString ColumnOrderToString(const TVector<TString>& columns) {

@@ -4,6 +4,8 @@
 
 #include <yt/yt/core/misc/singleton.h>
 
+#include <library/cpp/yt/misc/global.h>
+
 #include <util/string/split.h>
 
 #include <util/system/type_name.h>
@@ -13,11 +15,7 @@ namespace NYT {
 ////////////////////////////////////////////////////////////////////////////////
 
 // TODO(achulkov2): Remove this once we find all duplicate error codes.
-static NLogging::TLogger GetLogger()
-{
-    static NLogging::TLogger logger("ErrorCode");
-    return logger;
-}
+YT_DEFINE_GLOBAL(NLogging::TLogger, Logger, "ErrorCode")
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -66,7 +64,6 @@ void TErrorCodeRegistry::RegisterErrorCode(int code, const TErrorCodeInfo& error
         if (code == 119) {
             return;
         }
-        auto Logger = GetLogger();
         YT_LOG_FATAL(
             "Duplicate error code (Code: %v, StoredCodeInfo: %v, NewCodeInfo: %v)",
             code,
@@ -95,7 +92,6 @@ void TErrorCodeRegistry::RegisterErrorCodeRange(int from, int to, TString namesp
     YT_VERIFY(from <= to);
 
     TErrorCodeRangeInfo newRange{from, to, std::move(namespaceName), std::move(formatter)};
-    auto Logger = GetLogger();
     for (const auto& range : ErrorCodeRanges_) {
         YT_LOG_FATAL_IF(
             range.Intersects(newRange),
@@ -109,7 +105,6 @@ void TErrorCodeRegistry::RegisterErrorCodeRange(int from, int to, TString namesp
 
 void TErrorCodeRegistry::CheckCodesAgainstRanges() const
 {
-    auto Logger = GetLogger();
     for (const auto& [code, info] : CodeToInfo_) {
         for (const auto& range : ErrorCodeRanges_) {
             YT_LOG_FATAL_IF(

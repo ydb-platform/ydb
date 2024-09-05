@@ -13,6 +13,7 @@ SRCS(
     parameter_stream.cpp
     parameters.cpp
     pg_dump_parser.cpp
+    plan2svg.cpp
     pretty_table.cpp
     print_operation.cpp
     print_utils.cpp

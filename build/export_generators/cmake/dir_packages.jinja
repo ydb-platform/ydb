@@ -15,7 +15,7 @@
 {%-         endif -%}
 {%-     endif -%}
 {%-     if packages|length -%}
-{%-         for package in packages -%}
+{%-         for package in packages %}
 find_package({{ package.name }} REQUIRED
 {%-             if package.components|length %} COMPONENTS
 {%-                 for component in package.components %}
@@ -30,7 +30,7 @@ find_package({{ package.name }} REQUIRED
 {%- if target is defined -%}
 {{ RenderPackages(target) }}
 {%- endif -%}
-{%- if extra_targets is defined -%}
+{%- if extra_targets|length -%}
 {%-     for extra_target in extra_targets -%}
 {{ RenderPackages(extra_target) }}
 {%-     endfor -%}

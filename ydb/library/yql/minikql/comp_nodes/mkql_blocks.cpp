@@ -355,7 +355,7 @@ private:
     }
 
     TState& GetState(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
-        if (!state.HasValue())
+        if (state.IsInvalid())
             MakeState(ctx, state);
         return *static_cast<TState*>(state.AsBoxed().Get());
     }
@@ -506,7 +506,7 @@ private:
     }
 
     TState& GetState(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
-        if (!state.HasValue())
+        if (state.IsInvalid())
             MakeState(ctx, state);
         return *static_cast<TState*>(state.AsBoxed().Get());
     }
@@ -786,7 +786,7 @@ private:
     }
 
     TState& GetState(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
-        if (!state.HasValue()) {
+        if (state.IsInvalid()) {
             MakeState(ctx, state);
 
             const auto s = static_cast<TState*>(state.AsBoxed().Get());
@@ -1132,7 +1132,7 @@ private:
     }
 
     TBlockState& GetState(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
-        if (!state.HasValue()) {
+        if (state.IsInvalid()) {
             MakeState(ctx, state);
 
             auto& s = *static_cast<TBlockState*>(state.AsBoxed().Get());

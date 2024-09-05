@@ -13,9 +13,10 @@ IExternalSource::TPtr CreateObjectStorageExternalSource(const std::vector<TRegEx
                                                         NActors::TActorSystem* actorSystem,
                                                         size_t pathsLimit,
                                                         std::shared_ptr<NYql::ISecuredServiceAccountCredentialsFactory> credentialsFactory,
-                                                        bool enableInfer);
+                                                        bool enableInfer,
+                                                        bool allowLocalFiles);
 
-NYql::TIssues Validate(const FederatedQuery::Schema& schema, const FederatedQuery::ObjectStorageBinding::Subset& objectStorage, size_t pathsLimit);
+NYql::TIssues Validate(const FederatedQuery::Schema& schema, const FederatedQuery::ObjectStorageBinding::Subset& objectStorage, size_t pathsLimit, const TString& location);
 
 NYql::TIssues ValidateDateFormatSetting(const google::protobuf::Map<TString, TString>& formatSetting, bool matchAllSettings = false);
 

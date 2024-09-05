@@ -14,7 +14,7 @@ Below are examples of the code for authentication using a token in different {{ 
     import (
       "context"
       "os"
-      
+
       "github.com/ydb-platform/ydb-go-sdk/v3"
     )
 
@@ -171,7 +171,7 @@ Below are examples of the code for authentication using a token in different {{ 
           'insecure' => true,
           // 'root_cert_file' => './CA.pem', // Root CA file (uncomment for dedicated server)
       ],
-      
+
       'credentials' => new AccessTokenAuthentication('AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA')
   ];
 

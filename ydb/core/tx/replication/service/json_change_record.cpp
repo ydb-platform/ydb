@@ -107,11 +107,6 @@ void TChangeRecord::Serialize(NKikimrTxDataShard::TEvApplyReplicationChanges_TCh
     }
 }
 
-void TChangeRecord::Serialize(NKikimrTxDataShard::TEvApplyReplicationChanges_TChange& record) const {
-    TSerializationContext ctx;
-    Serialize(record, ctx);
-}
-
 TConstArrayRef<TCell> TChangeRecord::GetKey(TMemoryPool& pool) const {
     if (!Key) {
         TString error;

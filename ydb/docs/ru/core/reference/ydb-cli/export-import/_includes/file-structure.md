@@ -39,7 +39,7 @@
 
 Содержимое файла `series/scheme.pb`:
 
-``` 
+```
 columns {
   name: "series_id"
   type {

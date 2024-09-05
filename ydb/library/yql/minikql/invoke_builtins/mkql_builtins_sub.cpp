@@ -481,6 +481,7 @@ void RegisterSub(TKernelFamilyMap& kernelFamilyMap) {
 
     AddBinaryIntegralKernels<TSub>(*family);
     AddBinaryRealKernels<TSub>(*family);
+    AddBinaryDecimalKernels<TDecimalSub>(*family);
 
     RegisterDateSub<false, false, false, false>(*family);
     RegisterDateSub<false, true,  false, false>(*family);

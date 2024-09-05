@@ -12,7 +12,7 @@ namespace NYql::NDq {
     class TGenericTokenProvider {
     public:
         using TPtr = std::unique_ptr<TGenericTokenProvider>;
-        TGenericTokenProvider() = default; //No auth required
+        TGenericTokenProvider() = default; // No auth required
         TGenericTokenProvider(const TString& staticIamToken);
         TGenericTokenProvider(
             const TString& serviceAccountId,
@@ -31,4 +31,4 @@ namespace NYql::NDq {
         const TString& staticIamToken,
         const TString& serviceAccountId, const TString& ServiceAccountIdSignature,
         const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory);
-} //namespace NYql::NDq
+} // namespace NYql::NDq

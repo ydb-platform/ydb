@@ -2,6 +2,8 @@
 
 LIBRARY()
 
+VERSION(1.2.2)
+
 LICENSE(BSD-3-Clause WITH Google-Patent-License-Webm)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)

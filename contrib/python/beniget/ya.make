@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(0.4.1)
+VERSION(0.4.2.post1)
 
 LICENSE(BSD-3-Clause)
 
@@ -15,7 +15,10 @@ NO_LINT()
 PY_SRCS(
     TOP_LEVEL
     beniget/__init__.py
+    beniget/__main__.py
     beniget/beniget.py
+    beniget/ordered_set.py
+    beniget/version.py
 )
 
 RESOURCE_FILES(

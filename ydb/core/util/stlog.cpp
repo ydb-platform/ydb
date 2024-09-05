@@ -4,6 +4,8 @@
 
 namespace NKikimr::NStLog {
 
+    bool OutputLogJson = false;
+
     void ProtobufToJson(const NProtoBuf::Message& m, NJson::TJsonWriter& json) {
         TString s;
         google::protobuf::util::MessageToJsonString(m, &s);

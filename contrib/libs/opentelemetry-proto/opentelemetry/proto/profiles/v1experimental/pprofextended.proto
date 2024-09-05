@@ -59,6 +59,8 @@ package opentelemetry.proto.profiles.v1experimental;
 import "opentelemetry/proto/common/v1/common.proto";
 
 option csharp_namespace = "OpenTelemetry.Proto.Profiles.V1Experimental";
+option java_multiple_files = true;
+option java_package = "io.opentelemetry.proto.profiles.v1experimental";
 option go_package = "go.opentelemetry.io/proto/otlp/profiles/v1experimental";
 
 // Represents a complete profile, including sample types, samples,
@@ -203,7 +205,7 @@ enum AggregationTemporality {
   11. A request is received, the system measures 1 request.
   12. The 1 second collection cycle ends. A metric is exported for the
       number of requests received over the interval of time t_1 to
-      t_0+1 with a value of 1.
+      t_1+1 with a value of 1.
 
   Note: Even though, when reporting changes since last report time, using
   CUMULATIVE is valid, it is not recommended. */

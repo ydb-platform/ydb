@@ -114,7 +114,7 @@ protected:
 
         TString usedCluster;
         TSyncMap syncList;
-        if (!IsYtIsolatedLambda(data.Ref(), syncList, usedCluster, true, false)) {
+        if (!IsYtIsolatedLambda(data.Ref(), syncList, usedCluster, false)) {
             ctx.AddError(TIssue(ctx.GetPosition(data.Pos()), TStringBuilder() << "Failed to execute node due to bad graph: " << input->Content()));
             return SyncError();
         }

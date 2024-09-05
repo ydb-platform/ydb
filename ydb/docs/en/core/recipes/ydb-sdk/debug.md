@@ -1,8 +1,3 @@
----
-title: "Instructions for troubleshooting issues with {{ ydb-short-name }}"
-description: "The section contains code recipes for enabling diagnostics tools in different {{ ydb-short-name }} SDKs."
----
-
 # Troubleshooting
 
 {% include [work in progress message](_includes/addition.md) %}

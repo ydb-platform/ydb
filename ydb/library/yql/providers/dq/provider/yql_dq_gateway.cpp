@@ -3,6 +3,7 @@
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/dq/api/grpc/api.grpc.pb.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_common.h>
+#include <ydb/library/yql/providers/dq/actors/proto_builder.h>
 #include <ydb/library/yql/utils/backtrace/backtrace.h>
 #include <ydb/library/yql/utils/failure_injector/failure_injector.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
@@ -167,7 +168,7 @@ public:
     }
 
     template<typename RespType>
-    void OnResponse(TPromise<TResult> promise, NYdbGrpc::TGrpcStatus&& status, RespType&& resp, const THashMap<TString, TString>& modulesMapping, bool alwaysFallback = false) {
+    void OnResponse(TPromise<TResult> promise, NYdbGrpc::TGrpcStatus&& status, RespType&& resp, const NCommon::TResultFormatSettings& resultFormatSettings, const THashMap<TString, TString>& modulesMapping, bool alwaysFallback = false) {
         YQL_LOG_CTX_ROOT_SESSION_SCOPE(SessionId);
         YQL_CLOG(TRACE, ProviderDq) << "TDqGateway::callback";
 
@@ -228,9 +229,20 @@ public:
             if (!error) {
                 Yql::DqsProto::ExecuteQueryResult queryResult;
                 resp.operation().result().UnpackTo(&queryResult);
-                result.Data = queryResult.yson().empty()
-                    ? NYdb::FormatResultSetYson(queryResult.result(), NYson::EYsonFormat::Binary)
-                    : queryResult.yson();
+                TVector<NDq::TDqSerializedBatch> rows;
+                for (const auto& s : queryResult.Getsample()) {
+                    NDq::TDqSerializedBatch batch;
+                    batch.Proto = s;
+                    rows.emplace_back(std::move(batch));
+                }
+
+                NYql::NDqs::TProtoBuilder protoBuilder(resultFormatSettings.ResultType, resultFormatSettings.Columns);
+
+                bool ysonTruncated = false;
+                result.Data = protoBuilder.BuildYson(std::move(rows), resultFormatSettings.SizeLimit.GetOrElse(Max<ui64>()),
+                    resultFormatSettings.RowsLimit.GetOrElse(Max<ui64>()), &ysonTruncated);
+
+                result.Truncated = result.Truncated || ysonTruncated;
                 result.AddIssues(issues);
                 result.SetSuccess();
             } else {
@@ -277,6 +289,7 @@ public:
         TStub stub,
         int retry,
         const TDqSettings::TPtr& settings,
+        const NCommon::TResultFormatSettings& resultFormatSettings,
         const THashMap<TString, TString>& modulesMapping,
         const TDqProgressWriter& progressWriter
     ) {
@@ -285,7 +298,8 @@ public:
         const auto fallbackPolicy = settings->FallbackPolicy.Get().GetOrElse(EFallbackPolicy::Default);
         const auto alwaysFallback = EFallbackPolicy::Always == fallbackPolicy;
         auto self = weak_from_this();
-        auto callback = [self, promise, sessionId = SessionId, alwaysFallback, modulesMapping](NYdbGrpc::TGrpcStatus&& status, TResponse&& resp) mutable {
+        auto callback = [self, promise, sessionId = SessionId, alwaysFallback, resultFormatSettings, modulesMapping](
+            NYdbGrpc::TGrpcStatus&& status, TResponse&& resp) mutable {
             auto this_ = self.lock();
             if (!this_) {
                 YQL_CLOG(DEBUG, ProviderDq) << "Session was closed: " << sessionId;
@@ -293,7 +307,8 @@ public:
                 return;
             }
 
-            this_->OnResponse(std::move(promise), std::move(status), std::move(resp), modulesMapping, alwaysFallback);
+            this_->OnResponse(std::move(promise), std::move(status), std::move(resp), resultFormatSettings,
+                modulesMapping, alwaysFallback);
         };
 
         Service.DoRequest<TRequest, TResponse>(queryPB, callback, stub);
@@ -323,7 +338,8 @@ public:
                     } catch (...) {
                         return MakeErrorFuture<TResult>(std::current_exception());
                     }
-                    return this_->WithRetry<TResponse>(queryPB, stub, retry - 1, settings, modulesMapping, progressWriter);
+                    return this_->WithRetry<TResponse>(queryPB, stub, retry - 1, settings, resultFormatSettings,
+                        modulesMapping, progressWriter);
                 });
         });
     }
@@ -358,6 +374,12 @@ public:
         }
         settings->Save(queryPB);
 
+        NCommon::TResultFormatSettings resultFormatSettings;
+        resultFormatSettings.Columns = columns;
+        resultFormatSettings.ResultType = plan.ResultType;
+        resultFormatSettings.SizeLimit = settings->_AllResultsBytesLimit.Get();
+        resultFormatSettings.RowsLimit = settings->_RowsLimitPerWrite.Get();
+
         YQL_CLOG(TRACE, ProviderDq) << TPlanPrinter().Print(plan);
 
         {
@@ -382,7 +404,8 @@ public:
         YQL_CLOG(DEBUG, ProviderDq) << "Send query of size " << queryPB.ByteSizeLong();
 
         auto self = weak_from_this();
-        return OpenSessionFuture.Apply([self, sessionId = SessionId, queryPB, retry, settings, modulesMapping, progressWriter](const TFuture<void>& f) {
+        return OpenSessionFuture.Apply([self, sessionId = SessionId, queryPB, retry, settings, resultFormatSettings, modulesMapping,
+            progressWriter](const TFuture<void>& f) {
             f.TryRethrow();
             auto this_ = self.lock();
             if (!this_) {
@@ -395,6 +418,7 @@ public:
                 &Yql::DqsProto::DqService::Stub::AsyncExecuteGraph,
                 retry,
                 settings,
+                resultFormatSettings,
                 modulesMapping,
                 progressWriter);
         });

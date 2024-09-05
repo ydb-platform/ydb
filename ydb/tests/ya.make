@@ -6,6 +6,7 @@ RECURSE(
     olap
     oss
     perf
+    stability
     supp
     tools
 )

@@ -37,35 +37,6 @@ public:
         }
     }
 
-    void HandleProxy(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event, const NActors::TActorContext& ctx) {
-        NHttp::THttpOutgoingResponsePtr httpResponse;
-        if (event->Get()->Response != nullptr) {
-            NHttp::THttpIncomingResponsePtr response = event->Get()->Response;
-            LOG_DEBUG_S(ctx, EService::MVP, "Incoming response for protected resource: " << response->Status);
-            if ((response->Status == "400" || response->Status.empty()) && RequestedPageScheme.empty()) {
-                NHttp::THttpOutgoingRequestPtr request = response->GetRequest();
-                if (!request->Secure) {
-                    LOG_DEBUG_S(ctx, EService::MVP, "Try to send request to HTTPS port");
-                    NHttp::THeadersBuilder headers {request->Headers};
-                    ForwardUserRequest(headers.Get(AUTH_HEADER_NAME), ctx, true);
-                    return;
-                }
-            }
-            NHttp::THeadersBuilder headers = GetResponseHeaders(response);
-            TStringBuf contentType = headers.Get("Content-Type").NextTok(';');
-            if (contentType == "text/html") {
-                TString newBody = FixReferenceInHtml(response->Body, response->GetRequest()->Host);
-                httpResponse = Request->CreateResponse( response->Status, response->Message, headers, newBody);
-            } else {
-                httpResponse = Request->CreateResponse( response->Status, response->Message, headers, response->Body);
-            }
-        } else {
-            httpResponse = Request->CreateResponseNotFound(NOT_FOUND_HTML_PAGE, "text/html");
-        }
-        ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse));
-        Die(ctx);
-    }
-
     void HandleExchange(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event, const NActors::TActorContext& ctx) {
         if (!event->Get()->Response) {
             LOG_DEBUG_S(ctx, EService::MVP, "Getting access token: Bad Request");
@@ -149,6 +120,13 @@ private:
     void ForwardUserRequest(TStringBuf authHeader, const NActors::TActorContext& ctx, bool secure = false) override {
         THandlerSessionServiceCheck::ForwardUserRequest(authHeader, ctx, secure);
         Become(&THandlerSessionServiceCheckNebius::StateWork);
+    }
+
+    bool NeedSendSecureHttpRequest(const NHttp::THttpIncomingResponsePtr& response) const override {
+        if ((response->Status == "400" || response->Status.empty()) && RequestedPageScheme.empty()) {
+            return !response->GetRequest()->Secure;
+        }
+        return false;
     }
 };
 

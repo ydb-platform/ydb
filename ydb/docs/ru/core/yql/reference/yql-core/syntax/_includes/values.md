@@ -2,12 +2,12 @@
 
 ## VALUES как оператор верхнего уровня
 
-Позволяет сформировать таблицу из указанных значений. Например, данное выражение формирует таблицу из k колонок и n строк: 
+Позволяет сформировать таблицу из указанных значений. Например, данное выражение формирует таблицу из k колонок и n строк:
 ``` yql
 VALUES (expr_11, expr_12, ..., expr_1k),
        (expr_21, expr_22, ..., expr_2k),
        ....
-       (expr_n1, expr_n2, ..., expr_nk); 
+       (expr_n1, expr_n2, ..., expr_nk);
 
 ```
 
@@ -17,7 +17,7 @@ VALUES (expr_11, expr_12, ..., expr_1k),
 SELECT expr_11, expr_12, ..., expr_1k UNION ALL
 SELECT expr_21, expr_22, ..., expr_2k UNION ALL
 ....
-SELECT expr_n1, expr_n2, ..., expr_nk; 
+SELECT expr_n1, expr_n2, ..., expr_nk;
 
 ```
 

@@ -78,7 +78,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor {
         Y_ABORT_UNLESS(record.HasVDiskID());
         const TVDiskID vdisk = VDiskIDFromVDiskID(record.GetVDiskID());
 
-        A_LOG_DEBUG_S("DSR01", "received"
+        DSP_LOG_DEBUG_S("DSR01", "received"
             << " VDiskId# " << vdisk
             << " TEvVGetResult# " << ev->Get()->ToString());
 
@@ -99,7 +99,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor {
             case NKikimrProto::OK:
                 if (record.ResultSize() == 0 && record.GetIsRangeOverflow()) {
                     isOk = false;
-                    A_LOG_CRIT_S("DSR09", "Don't know how to interpret an empty range with IsRangeOverflow set." <<
+                    DSP_LOG_CRIT_S("DSR09", "Don't know how to interpret an empty range with IsRangeOverflow set." <<
                             " TEvVGetResult# " << ev->Get()->ToString());
                     FailedDisks |= TBlobStorageGroupInfo::TGroupVDisks(&Info->GetTopology(), vdisk);
                     if (!Info->GetQuorumChecker().CheckFailModelForGroup(FailedDisks)) {
@@ -190,7 +190,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor {
                 bool requiredToBePresent = false;
                 switch (tracker.GetBlobState(Info.Get(), &lostByIngress)) {
                     case TBlobStorageGroupInfo::EBS_DISINTEGRATED:
-                        R_LOG_ERROR_S("DSR02", "disintegrated");
+                        DSP_LOG_ERROR_S("DSR02", "disintegrated");
                         ErrorReason = "BS disintegrated";
                         return ReplyAndDie(NKikimrProto::ERROR);
 
@@ -247,7 +247,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor {
         get->IsInternal = true;
         get->Decommission = Decommission;
 
-        A_LOG_DEBUG_S("DSR08", "sending TEvGet# " << get->ToString());
+        DSP_LOG_DEBUG_S("DSR08", "sending TEvGet# " << get->ToString());
 
         SendToProxy(std::move(get), 0, Span.GetTraceId());
 
@@ -270,7 +270,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor {
         TEvBlobStorage::TEvGetResult &getResult = *ev->Get();
         NKikimrProto::EReplyStatus status = getResult.Status;
         if (status != NKikimrProto::OK) {
-            R_LOG_ERROR_S("DSR03", "Handle TEvGetResult status# " << NKikimrProto::EReplyStatus_Name(status).data());
+            DSP_LOG_ERROR_S("DSR03", "Handle TEvGetResult status# " << NKikimrProto::EReplyStatus_Name(status).data());
             ErrorReason = getResult.ErrorReason;
             ReplyAndDie(status);
             return;
@@ -289,7 +289,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor {
             } else if (getResult.Responses[i].Status != NKikimrProto::NODATA || BlobsToGet[i].RequiredToBePresent) {
                 // it's okay to get NODATA if blob wasn't confirmed -- this blob is simply thrown out of resulting
                 // set; otherwise we return error about lost data
-                R_LOG_ERROR_S("DSR04", "Handle TEvGetResult status# " << NKikimrProto::EReplyStatus_Name(status)
+                DSP_LOG_ERROR_S("DSR04", "Handle TEvGetResult status# " << NKikimrProto::EReplyStatus_Name(status)
                     << " Response[" << i << "]# " << NKikimrProto::EReplyStatus_Name(response.Status)
                     << " BlobsToGet# " << DumpBlobsToGet()
                     << " TEvGetResult# " << ev->Get()->ToString());
@@ -301,7 +301,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor {
         if (To < From) {
             std::reverse(result->Responses.begin(), result->Responses.end());
         }
-        A_LOG_LOG_S(true, NLog::PRI_INFO, "DSR05", "Result# " << result->Print(false));
+        DSP_LOG_LOG_S(NLog::PRI_INFO, "DSR05", "Result# " << result->Print(false));
         SendReply(result);
     }
 
@@ -309,7 +309,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor {
         std::unique_ptr<TEvBlobStorage::TEvRangeResult> result(new TEvBlobStorage::TEvRangeResult(
                     status, From, To, Info->GroupID));
         result->ErrorReason = ErrorReason;
-        A_LOG_LOG_S(true, NLog::PRI_NOTICE, "DSR06", "Result# " << result->Print(false));
+        DSP_LOG_LOG_S(NLog::PRI_NOTICE, "DSR06", "Result# " << result->Print(false));
         SendReply(result);
     }
 
@@ -331,29 +331,22 @@ public:
         return ERequestType::Range;
     }
 
-    TBlobStorageGroupRangeRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
-            const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
-            const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvRange *ev,
-            ui64 cookie, NWilson::TTraceId&& traceId, TInstant now,
-            TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters)
-        : TBlobStorageGroupRequestActor(info, state, mon, source, cookie,
-                NKikimrServices::BS_PROXY_RANGE, false, {}, now, storagePoolCounters,
-                ev->RestartCounter, std::move(traceId), "DSProxy.Range", ev, std::move(ev->ExecutionRelay),
-                NKikimrServices::TActivity::BS_GROUP_RANGE)
-        , TabletId(ev->TabletId)
-        , From(ev->From)
-        , To(ev->To)
-        , Deadline(ev->Deadline)
-        , MustRestoreFirst(ev->MustRestoreFirst)
-        , IsIndexOnly(ev->IsIndexOnly)
-        , ForceBlockedGeneration(ev->ForceBlockedGeneration)
-        , Decommission(ev->Decommission)
-        , StartTime(now)
+    TBlobStorageGroupRangeRequest(TBlobStorageGroupRangeParameters& params)
+        : TBlobStorageGroupRequestActor(params)
+        , TabletId(params.Common.Event->TabletId)
+        , From(params.Common.Event->From)
+        , To(params.Common.Event->To)
+        , Deadline(params.Common.Event->Deadline)
+        , MustRestoreFirst(params.Common.Event->MustRestoreFirst)
+        , IsIndexOnly(params.Common.Event->IsIndexOnly)
+        , ForceBlockedGeneration(params.Common.Event->ForceBlockedGeneration)
+        , Decommission(params.Common.Event->Decommission)
+        , StartTime(params.Common.Now)
         , FailedDisks(&Info->GetTopology())
     {}
 
     void Bootstrap() override {
-        A_LOG_INFO_S("DSR07", "bootstrap"
+        DSP_LOG_INFO_S("DSR07", "bootstrap"
             << " ActorId# " << SelfId()
             << " Group# " << Info->GroupID
             << " From# " << From.ToString()
@@ -395,13 +388,8 @@ public:
     }
 };
 
-IActor* CreateBlobStorageGroupRangeRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
-        const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
-        const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvRange *ev,
-        ui64 cookie, NWilson::TTraceId traceId, TInstant now,
-        TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters) {
-    return new TBlobStorageGroupRangeRequest(info, state, source, mon, ev, cookie, std::move(traceId), now,
-            storagePoolCounters);
+IActor* CreateBlobStorageGroupRangeRequest(TBlobStorageGroupRangeParameters params) {
+    return new TBlobStorageGroupRangeRequest(params);
 }
 
 };//NKikimr

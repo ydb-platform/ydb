@@ -1372,4 +1372,18 @@ typedef intptr_t sigjmp_buf[5];
 /* /port compatibility functions */
 #include "port.h"
 
+#ifndef BUILD_PG_EXTENSION
+
+#define DECLARE_THREAD_VAR(type, name) \
+    extern __thread PGDLLIMPORT type name; \
+    static inline type* CppConcat(Ptr,name)(void) { return &name; }
+
+#else
+
+#define DECLARE_THREAD_VAR(type, name) \
+    type* CppConcat(ImplPtr,name)(void); \
+    static inline type* CppConcat(Ptr,name)(void) { return CppConcat(ImplPtr,name)(); }
+
+#endif
+
 #endif							/* C_H */

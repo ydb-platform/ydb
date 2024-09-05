@@ -1,6 +1,4 @@
 #pragma once
-#include "abstract/loader.h"
-#include "abstract/saver.h"
 #include "column/info.h"
 
 #include <ydb/core/formats/arrow/dictionary/object.h>
@@ -10,6 +8,7 @@
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/splitter/abstract/chunks.h>
 #include <ydb/core/formats/arrow/common/validation.h>
+#include <ydb/core/tx/columnshard/engines/scheme/abstract/index_info.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>

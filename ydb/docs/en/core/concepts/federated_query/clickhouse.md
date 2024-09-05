@@ -10,8 +10,8 @@ To work with the external ClickHouse database, the following steps must be compl
 1. Create an [external data source](../datamodel/external_data_source.md) describing the target database inside the ClickHouse cluster. To connect to ClickHouse, you can use either the [native TCP protocol](https://clickhouse.com/docs/en/interfaces/tcp) (`PROTOCOL="NATIVE"`) or the [HTTP protocol](https://clickhouse.com/docs/en/interfaces/http) (`PROTOCOL="HTTP"`). To enable encryption for connections to the external database, use the `USE_TLS="TRUE"` parameter.
     ```sql
     CREATE EXTERNAL DATA SOURCE clickhouse_datasource WITH (
-        SOURCE_TYPE="ClickHouse", 
-        LOCATION="<host>:<port>", 
+        SOURCE_TYPE="ClickHouse",
+        LOCATION="<host>:<port>",
         DATABASE_NAME="<database>",
         AUTH_METHOD="BASIC",
         LOGIN="<login>",

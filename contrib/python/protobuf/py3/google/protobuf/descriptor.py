@@ -40,11 +40,15 @@ import warnings
 from google.protobuf.internal import api_implementation
 
 _USE_C_DESCRIPTORS = False
-if api_implementation.Type() == 'cpp':
+if api_implementation.Type() != 'python':
   # Used by MakeDescriptor in cpp mode
   import binascii
   import os
-  from google.protobuf.pyext import _message
+  # pylint: disable=protected-access
+  _message = api_implementation._c_module
+  # TODO(jieluo): Remove this import after fix api_implementation
+  if _message is None:
+    from google.protobuf.pyext import _message
   _USE_C_DESCRIPTORS = True
 
 
@@ -62,6 +66,7 @@ if _USE_C_DESCRIPTORS:
   # and make it return True when the descriptor is an instance of the extension
   # type written in C++.
   class DescriptorMetaclass(type):
+
     def __instancecheck__(cls, obj):
       if super(DescriptorMetaclass, cls).__instancecheck__(obj):
         return True
@@ -598,13 +603,13 @@ class FieldDescriptor(DescriptorBase):
     self.is_extension = is_extension
     self.extension_scope = extension_scope
     self.containing_oneof = containing_oneof
-    if api_implementation.Type() == 'cpp':
+    if api_implementation.Type() == 'python':
+      self._cdescriptor = None
+    else:
       if is_extension:
         self._cdescriptor = _message.default_pool.FindExtensionByName(full_name)
       else:
         self._cdescriptor = _message.default_pool.FindFieldByName(full_name)
-    else:
-      self._cdescriptor = None
 
   @property
   def camelcase_name(self):
@@ -629,13 +634,29 @@ class FieldDescriptor(DescriptorBase):
     if (self.cpp_type == FieldDescriptor.CPPTYPE_MESSAGE or
         self.containing_oneof):
       return True
-    if hasattr(self.file, 'syntax'):
-      return self.file.syntax == 'proto2'
-    if hasattr(self.message_type, 'syntax'):
-      return self.message_type.syntax == 'proto2'
-    raise RuntimeError(
-        'has_presence is not ready to use because field %s is not'
-        ' linked with message type nor file' % self.full_name)
+    # self.containing_type is used here instead of self.file for legacy
+    # compatibility. FieldDescriptor.file was added in cl/153110619
+    # Some old/generated code didn't link file to FieldDescriptor.
+    # TODO(jieluo): remove syntax usage b/240619313
+    return self.containing_type.syntax == 'proto2'
+
+  @property
+  def is_packed(self):
+    """Returns if the field is packed."""
+    if self.label != FieldDescriptor.LABEL_REPEATED:
+      return False
+    field_type = self.type
+    if (field_type == FieldDescriptor.TYPE_STRING or
+        field_type == FieldDescriptor.TYPE_GROUP or
+        field_type == FieldDescriptor.TYPE_MESSAGE or
+        field_type == FieldDescriptor.TYPE_BYTES):
+      return False
+    if self.containing_type.syntax == 'proto2':
+      return self.has_options and self.GetOptions().packed
+    else:
+      return (not self.has_options or
+              not self.GetOptions().HasField('packed') or
+              self.GetOptions().packed)
 
   @staticmethod
   def ProtoTypeToCppProtoType(proto_type):
@@ -715,6 +736,30 @@ class EnumDescriptor(_NestedDescriptorBase):
     self.values_by_name = dict((v.name, v) for v in values)
     # Values are reversed to ensure that the first alias is retained.
     self.values_by_number = dict((v.number, v) for v in reversed(values))
+
+  @property
+  def is_closed(self):
+    """Returns true whether this is a "closed" enum.
+
+    This means that it:
+    - Has a fixed set of values, rather than being equivalent to an int32.
+    - Encountering values not in this set causes them to be treated as unknown
+      fields.
+    - The first value (i.e., the default) may be nonzero.
+
+    WARNING: Some runtimes currently have a quirk where non-closed enums are
+    treated as closed when used as the type of fields defined in a
+    `syntax = proto2;` file. This quirk is not present in all runtimes; as of
+    writing, we know that:
+
+    - C++, Java, and C++-based Python share this quirk.
+    - UPB and UPB-based Python do not.
+    - PHP and Ruby treat all enums as open regardless of declaration.
+
+    Care should be taken when using this function to respect the target
+    runtime's enum handling quirks.
+    """
+    return self.file.syntax == 'proto2'
 
   def CopyToProto(self, proto):
     """Copies this to a descriptor_pb2.EnumDescriptorProto.
@@ -869,11 +914,14 @@ class ServiceDescriptor(_NestedDescriptorBase):
 
     Args:
       name (str): Name of the method.
+
     Returns:
-      MethodDescriptor or None: the descriptor for the requested method, if
-      found.
+      MethodDescriptor: The descriptor for the requested method.
+
+    Raises:
+      KeyError: if the method cannot be found in the service.
     """
-    return self.methods_by_name.get(name, None)
+    return self.methods_by_name[name]
 
   def CopyToProto(self, proto):
     """Copies this to a descriptor_pb2.ServiceDescriptorProto.
@@ -1014,13 +1062,7 @@ class FileDescriptor(DescriptorBase):
       # FileDescriptor() is called from various places, not only from generated
       # files, to register dynamic proto files and messages.
       # pylint: disable=g-explicit-bool-comparison
-      if serialized_pb == b'':
-        # Cpp generated code must be linked in if serialized_pb is ''
-        try:
-          return _message.default_pool.FindFileByName(name)
-        except KeyError:
-          raise RuntimeError('Please link in cpp generated lib for %s' % (name))
-      elif serialized_pb:
+      if serialized_pb:
         return _message.default_pool.AddSerializedFile(serialized_pb)
       else:
         return super(FileDescriptor, cls).__new__(cls)
@@ -1135,7 +1177,7 @@ def MakeDescriptor(desc_proto, package='', build_file_if_cpp=True,
   Returns:
     A Descriptor for protobuf messages.
   """
-  if api_implementation.Type() == 'cpp' and build_file_if_cpp:
+  if api_implementation.Type() != 'python' and build_file_if_cpp:
     # The C++ implementation requires all descriptors to be backed by the same
     # definition in the C++ descriptor pool. To do this, we build a
     # FileDescriptorProto with the same definition as this descriptor and build

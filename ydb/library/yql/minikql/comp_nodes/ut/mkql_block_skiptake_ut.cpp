@@ -59,7 +59,7 @@ public:
 #endif
 private:
     EFetchResult DoCalculateImpl(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue& val1, NUdf::TUnboxedValue& val2, NUdf::TUnboxedValue& val3) const {
-        if (!state.HasValue()) {
+        if (state.IsInvalid()) {
             state = NUdf::TUnboxedValue::Zero();
         }
 

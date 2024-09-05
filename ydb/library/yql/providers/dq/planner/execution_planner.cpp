@@ -40,6 +40,15 @@ using namespace NKikimr::NMiniKQL;
 
 using namespace Yql::DqsProto;
 
+namespace {
+    TString RemoveAliases(TString attributeName) {
+        if (auto idx = attributeName.find_last_of('.'); idx != TString::npos) {
+            return attributeName.substr(idx+1);
+        }
+        return attributeName;
+    }
+}
+
 namespace NYql::NDqs {
     namespace {
         TVector<TDqPhyStage> GetStages(const TExprNode::TPtr& exprRoot) {
@@ -593,10 +602,10 @@ namespace NYql::NDqs {
         settings.SetRightLabel(streamLookup.RightLabel().StringValue());
         settings.SetJoinType(streamLookup.JoinType().StringValue());
         for (const auto& k: streamLookup.LeftJoinKeyNames()) {
-            *settings.AddLeftJoinKeyNames() = k.StringValue();
+            *settings.AddLeftJoinKeyNames() = RemoveAliases(k.StringValue());
         }
         for (const auto& k: streamLookup.RightJoinKeyNames()) {
-            *settings.AddRightJoinKeyNames() = k.StringValue();
+            *settings.AddRightJoinKeyNames() = RemoveAliases(k.StringValue());
         }
         const auto narrowInputRowType = GetSeqItemType(streamLookup.Output().Ptr()->GetTypeAnn());
         Y_ABORT_UNLESS(narrowInputRowType->GetKind() == ETypeAnnotationKind::Struct);

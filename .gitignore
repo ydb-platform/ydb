@@ -26,6 +26,9 @@ __pycache__/
 *.pb.h
 *.pb.cc
 
+# Other generated
+*.fbs.h
+
 # MacOS specific
 .DS_Store
 
@@ -40,6 +43,7 @@ __pycache__/
 .idea/
 .vscode/
 .clangd
+.antlr/
 
 # KDevelop IDE
 *.kdev4
@@ -79,3 +83,6 @@ list_result.log
 bin/config.json
 
 .vs/
+
+# handy for local junk, which is not intended to appear in the repo
+junk/

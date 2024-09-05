@@ -5,7 +5,7 @@
         "Plans": [
             {
                 "Node Type": "ResultSet",
-                "PlanNodeId": 10,
+                "PlanNodeId": 11,
                 "PlanNodeType": "ResultSet",
                 "Plans": [
                     {
@@ -14,18 +14,18 @@
                             {
                                 "Inputs": [
                                     {
-                                        "ExternalPlanNodeId": 8
+                                        "ExternalPlanNodeId": 9
                                     }
                                 ],
                                 "Limit": "1001",
                                 "Name": "Limit"
                             }
                         ],
-                        "PlanNodeId": 9,
+                        "PlanNodeId": 10,
                         "Plans": [
                             {
                                 "Node Type": "UnionAll",
-                                "PlanNodeId": 8,
+                                "PlanNodeId": 9,
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
@@ -34,18 +34,18 @@
                                             {
                                                 "Inputs": [
                                                     {
-                                                        "ExternalPlanNodeId": 6
+                                                        "ExternalPlanNodeId": 7
                                                     }
                                                 ],
                                                 "Limit": "1001",
                                                 "Name": "Limit"
                                             }
                                         ],
-                                        "PlanNodeId": 7,
+                                        "PlanNodeId": 8,
                                         "Plans": [
                                             {
                                                 "Node Type": "Merge",
-                                                "PlanNodeId": 6,
+                                                "PlanNodeId": 7,
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
@@ -63,17 +63,17 @@
                                                             {
                                                                 "Inputs": [
                                                                     {
-                                                                        "ExternalPlanNodeId": 4
+                                                                        "ExternalPlanNodeId": 5
                                                                     }
                                                                 ],
                                                                 "Name": "Union"
                                                             }
                                                         ],
-                                                        "PlanNodeId": 5,
+                                                        "PlanNodeId": 6,
                                                         "Plans": [
                                                             {
                                                                 "Node Type": "UnionAll",
-                                                                "PlanNodeId": 4,
+                                                                "PlanNodeId": 5,
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
                                                                     {
@@ -82,7 +82,7 @@
                                                                             {
                                                                                 "Inputs": [
                                                                                     {
-                                                                                        "ExternalPlanNodeId": 2
+                                                                                        "ExternalPlanNodeId": 3
                                                                                     }
                                                                                 ],
                                                                                 "Limit": "1001",
@@ -90,44 +90,56 @@
                                                                                 "TopBy": ""
                                                                             }
                                                                         ],
-                                                                        "PlanNodeId": 3,
+                                                                        "PlanNodeId": 4,
                                                                         "Plans": [
                                                                             {
                                                                                 "Node Type": "UnionAll",
-                                                                                "PlanNodeId": 2,
+                                                                                "PlanNodeId": 3,
                                                                                 "PlanNodeType": "Connection",
                                                                                 "Plans": [
                                                                                     {
-                                                                                        "Node Type": "Top-TableFullScan",
+                                                                                        "Node Type": "Top",
                                                                                         "Operators": [
                                                                                             {
                                                                                                 "Inputs": [
                                                                                                     {
-                                                                                                        "InternalOperatorId": 1
+                                                                                                        "ExternalPlanNodeId": 1
+                                                                                                    },
+                                                                                                    {
+                                                                                                        "ExternalPlanNodeId": 1
                                                                                                     }
                                                                                                 ],
                                                                                                 "Limit": "1001",
                                                                                                 "Name": "Top",
                                                                                                 "TopBy": ""
-                                                                                            },
-                                                                                            {
-                                                                                                "Inputs": [],
-                                                                                                "Name": "TableFullScan",
-                                                                                                "ReadColumns": [
-                                                                                                    "q1",
-                                                                                                    "q2"
-                                                                                                ],
-                                                                                                "ReadRanges": [
-                                                                                                    "q1 (-\u221e, +\u221e)",
-                                                                                                    "q2 (-\u221e, +\u221e)"
-                                                                                                ],
-                                                                                                "Scan": "Parallel",
-                                                                                                "Table": "postgres_select.test_plan/int8_tbl"
                                                                                             }
                                                                                         ],
-                                                                                        "PlanNodeId": 1,
-                                                                                        "Tables": [
-                                                                                            "postgres_select.test_plan/int8_tbl"
+                                                                                        "PlanNodeId": 2,
+                                                                                        "Plans": [
+                                                                                            {
+                                                                                                "Node Type": "TableFullScan",
+                                                                                                "Operators": [
+                                                                                                    {
+                                                                                                        "Inputs": [],
+                                                                                                        "Name": "TableFullScan",
+                                                                                                        "ReadColumns": [
+                                                                                                            "q1",
+                                                                                                            "q2"
+                                                                                                        ],
+                                                                                                        "ReadRanges": [
+                                                                                                            "q1 (-\u221e, +\u221e)",
+                                                                                                            "q2 (-\u221e, +\u221e)"
+                                                                                                        ],
+                                                                                                        "ReadRangesPointPrefixLen": "0",
+                                                                                                        "Scan": "Parallel",
+                                                                                                        "Table": "postgres_select.test_plan/int8_tbl"
+                                                                                                    }
+                                                                                                ],
+                                                                                                "PlanNodeId": 1,
+                                                                                                "Tables": [
+                                                                                                    "postgres_select.test_plan/int8_tbl"
+                                                                                                ]
+                                                                                            }
                                                                                         ]
                                                                                     }
                                                                                 ]
@@ -152,7 +164,10 @@
                     }
                 ]
             }
-        ]
+        ],
+        "Stats": {
+            "ResourcePoolId": "default"
+        }
     },
     "meta": {
         "type": "query",

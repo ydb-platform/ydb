@@ -46,7 +46,7 @@ class TBlobStorageGroupMultiGetRequest : public TBlobStorageGroupRequestActor {
 
         const TEvBlobStorage::TEvGetResult &res = *ev->Get();
         if (res.Status != NKikimrProto::OK) {
-            R_LOG_ERROR_S("BPMG1", "Handle TEvGetResult status# " << NKikimrProto::EReplyStatus_Name(res.Status));
+            DSP_LOG_ERROR_S("BPMG1", "Handle TEvGetResult status# " << NKikimrProto::EReplyStatus_Name(res.Status));
             ReplyAndDie(res.Status);
             return;
         }
@@ -94,26 +94,19 @@ public:
         return ERequestType::Get;
     }
 
-    TBlobStorageGroupMultiGetRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
-            const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
-            const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvGet *ev, ui64 cookie,
-            NWilson::TTraceId&& traceId, TMaybe<TGroupStat::EKind> latencyQueueKind, TInstant now,
-            TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters)
-        : TBlobStorageGroupRequestActor(info, state, mon, source, cookie,
-                NKikimrServices::BS_PROXY_MULTIGET, false, latencyQueueKind, now, storagePoolCounters, 0,
-                std::move(traceId), "DSProxy.MultiGet", ev, std::move(ev->ExecutionRelay),
-                NKikimrServices::TActivity::BS_PROXY_MULTIGET_ACTOR)
-        , QuerySize(ev->QuerySize)
-        , Queries(ev->Queries.Release())
-        , Deadline(ev->Deadline)
-        , IsInternal(ev->IsInternal)
-        , PhantomCheck(ev->PhantomCheck)
-        , Decommission(ev->Decommission)
+    TBlobStorageGroupMultiGetRequest(TBlobStorageGroupMultiGetParameters& params)
+        : TBlobStorageGroupRequestActor(params)
+        , QuerySize(params.Common.Event->QuerySize)
+        , Queries(params.Common.Event->Queries.Release())
+        , Deadline(params.Common.Event->Deadline)
+        , IsInternal(params.Common.Event->IsInternal)
+        , PhantomCheck(params.Common.Event->PhantomCheck)
+        , Decommission(params.Common.Event->Decommission)
         , Responses(new TEvBlobStorage::TEvGetResult::TResponse[QuerySize])
-        , StartTime(now)
-        , MustRestoreFirst(ev->MustRestoreFirst)
-        , GetHandleClass(ev->GetHandleClass)
-        , ForceBlockTabletData(ev->ForceBlockTabletData)
+        , StartTime(params.Common.Now)
+        , MustRestoreFirst(params.Common.Event->MustRestoreFirst)
+        , GetHandleClass(params.Common.Event->GetHandleClass)
+        , ForceBlockTabletData(params.Common.Event->ForceBlockTabletData)
     {}
 
     void PrepareRequest(ui32 beginIdx, ui32 endIdx) {
@@ -163,7 +156,7 @@ public:
             str << "}";
             return str.Str();
         };
-        A_LOG_INFO_S("BPMG3", "bootstrap"
+        DSP_LOG_INFO_S("BPMG3", "bootstrap"
             << " ActorId# " << SelfId()
             << " Group# " << Info->GroupID
             << " Query# " << dumpQuery()
@@ -208,13 +201,8 @@ public:
     }
 };
 
-IActor* CreateBlobStorageGroupMultiGetRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
-        const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
-        const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvGet *ev,
-        ui64 cookie, NWilson::TTraceId traceId, TMaybe<TGroupStat::EKind> latencyQueueKind,
-        TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters) {
-    return new TBlobStorageGroupMultiGetRequest(info, state, source, mon, ev, cookie, std::move(traceId),
-        latencyQueueKind, now, storagePoolCounters);
+IActor* CreateBlobStorageGroupMultiGetRequest(TBlobStorageGroupMultiGetParameters params) {
+    return new TBlobStorageGroupMultiGetRequest(params);
 }
 
 }//NKikimr

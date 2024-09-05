@@ -1,6 +1,6 @@
 /* IELR's inadequacy list.
 
-   Copyright (C) 2009-2015, 2018-2019 Free Software Foundation, Inc.
+   Copyright (C) 2009-2015, 2018-2021 Free Software Foundation, Inc.
 
    This file is part of Bison, the GNU Compiler Compiler.
 
@@ -15,12 +15,14 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+   along with this program.  If not, see <https://www.gnu.org/licenses/>.  */
 
 #include <config.h>
 #include "system.h"
 
 #include "InadequacyList.h"
+
+#include <intprops.h>
 
 ContributionIndex const ContributionIndex__none = -1;
 ContributionIndex const ContributionIndex__error_action = -2;
@@ -31,8 +33,11 @@ InadequacyList__new_conflict (state *manifesting_state, symbol *token,
                               InadequacyListNodeCount *node_count)
 {
   InadequacyList *result = xmalloc (sizeof *result);
-  result->id = (*node_count)++;
-  aver (*node_count != 0);
+  result->id = *node_count;
+  IGNORE_TYPE_LIMITS_BEGIN
+  if (INT_ADD_WRAPV (*node_count, 1, node_count))
+    aver (false);
+  IGNORE_TYPE_LIMITS_END
   result->next = NULL;
   result->manifestingState = manifesting_state;
   result->contributionCount = bitset_count (actions);

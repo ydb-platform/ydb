@@ -42,5 +42,5 @@ To move State Storage from the `node_id:1` host to the `node_id:10` host:
    ```
 
 1. Update the `config.yaml` configuration files for all the cluster nodes, including dynamic nodes.
-1. Use the [rolling-restart](../../maintenance/manual/node_restarting.md) procedure to restart all the cluster nodes (including dynamic nodes but excluding static nodes on the hosts with `node_id:1` and  `node_id:10`).
+1. Use the [rolling-restart](../../maintenance/manual/node_restarting.md) procedure to restart all the cluster nodes (including dynamic nodes but excluding static nodes on the hosts with `node_id:1` and  `node_id:10`). Please note that there must be at least a 15 second delay between host restarts.
 1. Stop static cluster nodes on the hosts with `node_id:1` and `node_id:10`.

@@ -23,7 +23,7 @@ To connect to an external {{ ydb-short-name }} database from another {{ ydb-shor
 1. {% include [!](_includes/connector_deployment.md) %}
 1. [Execute a query](#query) to the external data source.
 
-## Query syntax { #query }
+## Query syntax {#query}
 To retrieve data from tables of the external {{ ydb-short-name }} database, the following form of SQL query is used:
 
 ```sql

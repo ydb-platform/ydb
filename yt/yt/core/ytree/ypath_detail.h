@@ -245,7 +245,8 @@ protected:
     virtual void ValidatePermission(
         EPermissionCheckScope scope,
         EPermission permission,
-        const TString& user = {});
+        // TODO(babenko): replace with optional
+        const std::string& user = {});
 
     class TCachingPermissionValidator
     {
@@ -254,7 +255,7 @@ protected:
             TSupportsPermissions* owner,
             EPermissionCheckScope scope);
 
-        void Validate(EPermission permission, const TString& user = {});
+        void Validate(EPermission permission, const std::string& user = {});
 
     private:
         TSupportsPermissions* const Owner_;

@@ -126,6 +126,7 @@ message TEvWriteResult {
         STATUS_BAD_REQUEST = 7;
         STATUS_SCHEME_CHANGED = 8;
         STATUS_LOCKS_BROKEN = 9;
+        STATUS_DISK_SPACE_EXHAUSTED = 10;
     }
 
     // Status

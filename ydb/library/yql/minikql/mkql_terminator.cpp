@@ -32,6 +32,16 @@ void TThrowingBindTerminator::Terminate(const char* message) const {
     ythrow yexception() << fullMessage;
 }
 
+TOnlyThrowingBindTerminator::TOnlyThrowingBindTerminator()
+    : TBindTerminator(this)
+{
+}
+
+void TOnlyThrowingBindTerminator::Terminate(const char* message) const {
+    ythrow yexception() << message;
+}
+
+
 [[noreturn]] void MKQLTerminate(const char* message) {
     if (const auto t = TBindTerminator::Terminator)
         t->Terminate(message);

@@ -65,7 +65,7 @@ ALTER TOPIC topic_path RESET (option[, option2, ...]);
 ```sql
 ALTER TOPIC `my_topic` RESET (
     min_active_partitions,
-    partition_count_limit    
+    partition_count_limit
 );
 ```
 

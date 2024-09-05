@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from prettytable import PrettyTable
-from prettytable.colortable import RESET_CODE, ColorTable, Theme
+from prettytable.colortable import RESET_CODE, ColorTable, Theme, Themes
 
 
 @pytest.fixture
@@ -94,3 +94,64 @@ class TestFormatCode:
     def test_multiple(self) -> None:
         assert Theme.format_code("30;42") == "\x1b[30;42m"
         assert Theme.format_code("\x1b[30;42m") == "\x1b[30;42m"
+
+
+class TestColorTableRendering:
+    """Tests for the rendering of the color table
+
+    Methods
+    -------
+    test_color_table_rendering
+        Tests the color table rendering using the default alignment (`'c'`)
+    """
+
+    def test_color_table_rendering(self) -> None:
+        """Tests the color table rendering using the default alignment (`'c'`)"""
+        chars = {
+            "+": "\x1b[36m+\x1b[0m\x1b[96m",
+            "-": "\x1b[34m-\x1b[0m\x1b[96m",
+            "|": "\x1b[34m|\x1b[0m\x1b[96m",
+            " ": " ",
+        }
+
+        plus = chars.get("+")
+        minus = chars.get("-")
+        pipe = chars.get("|")
+        space = chars.get(" ")
+
+        # +-----------------------+
+        # |        Efforts        |
+        # +---+---+---+---+---+---+
+        # | A | B | C | D | E | f |
+        # +---+---+---+---+---+---+
+        # | 1 | 2 | 3 | 4 | 5 | 6 |
+        # +---+---+---+---+---+---+
+
+        header = (
+            plus + minus * 23 + plus,
+            pipe + space * 8 + "Efforts" + space * 8 + pipe,
+            (plus + minus * 3) * 6 + plus,
+        )
+
+        body = (
+            "".join(pipe + space + char + space for char in "ABCDEF") + pipe,
+            (plus + minus * 3) * 6 + plus,
+            "".join(pipe + space + char + space for char in "123456") + pipe,
+            (plus + minus * 3) * 6 + plus,
+        )
+
+        header_str = str("\n".join(header))
+        body_str = str("\n".join(body))
+
+        table = ColorTable(
+            ("A", "B", "C", "D", "E", "F"),
+            theme=Themes.OCEAN,
+        )
+
+        table.title = "Efforts"
+        table.add_row([1, 2, 3, 4, 5, 6])
+
+        expected = header_str + "\n" + body_str + "\x1b[0m"
+        result = str(table)
+
+        assert expected == result

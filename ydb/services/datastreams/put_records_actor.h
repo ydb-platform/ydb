@@ -282,7 +282,7 @@ namespace NKikimr::NDataStreams::V1 {
         if (!error.empty()) {
             return this->ReplyWithError(Ydb::StatusIds::BAD_REQUEST,
                                         Ydb::PersQueue::ErrorCode::BAD_REQUEST,
-                                        error, ctx);
+                                        error);
         }
 
         if (this->Request_->GetSerializedToken().empty()) {
@@ -291,7 +291,7 @@ namespace NKikimr::NDataStreams::V1 {
                                             Ydb::PersQueue::ErrorCode::ACCESS_DENIED,
                                             TStringBuilder() << "Access to stream "
                                             << this->GetProtoRequest()->stream_name()
-                                            << " is denied", ctx);
+                                            << " is denied");
             }
         }
         NACLib::TUserToken token(this->Request_->GetSerializedToken());
@@ -332,7 +332,7 @@ namespace NKikimr::NDataStreams::V1 {
                                             TStringBuilder() << "Access for stream "
                                             << this->GetProtoRequest()->stream_name()
                                             << " is denied for subject "
-                                            << token.GetUserSID(), this->ActorContext());
+                                            << token.GetUserSID());
             }
         }
 
@@ -346,7 +346,7 @@ namespace NKikimr::NDataStreams::V1 {
                                         Ydb::PersQueue::ErrorCode::BAD_REQUEST,
                                         TStringBuilder() << "write to mirrored stream "
                                         << this->GetProtoRequest()->stream_name()
-                                        << " is forbidden", this->ActorContext());
+                                        << " is forbidden");
         }
 
 
@@ -526,10 +526,10 @@ namespace NKikimr::NDataStreams::V1 {
             if (putRecordsResult.records(0).error_code() == "ProvisionedThroughputExceededException"
                 || putRecordsResult.records(0).error_code() == "ThrottlingException")
             {
-                return ReplyWithError(Ydb::StatusIds::OVERLOADED, Ydb::PersQueue::ErrorCode::OVERLOAD, putRecordsResult.records(0).error_message(), ctx);
+                return ReplyWithError(Ydb::StatusIds::OVERLOADED, Ydb::PersQueue::ErrorCode::OVERLOAD, putRecordsResult.records(0).error_message());
             }
             //TODO: other codes - access denied and so on
-            return ReplyWithError(Ydb::StatusIds::INTERNAL_ERROR, Ydb::PersQueue::ErrorCode::ERROR, putRecordsResult.records(0).error_message(), ctx);
+            return ReplyWithError(Ydb::StatusIds::INTERNAL_ERROR, Ydb::PersQueue::ErrorCode::ERROR, putRecordsResult.records(0).error_message());
 
         }
     }

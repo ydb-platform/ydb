@@ -84,6 +84,93 @@ Y_UNIT_TEST_SUITE(KqpPragma) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
     }
+
+    Y_UNIT_TEST(MatchRecognizeWithTimeOrderRecoverer) {
+        TKikimrSettings settings;
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableQueryServiceConfig()->SetEnableMatchRecognize(true);
+        settings.SetAppConfig(appConfig);
+
+        TKikimrRunner kikimr(settings);
+        NYdb::NScripting::TScriptingClient client(kikimr.GetDriver());
+
+        auto result = client.ExecuteYqlScript(R"(
+            PRAGMA FeatureR010="prototype";
+
+            CREATE TABLE `/Root/NewTable` (
+                dt Uint64,
+                value String,
+                PRIMARY KEY (dt)
+            );
+            COMMIT;
+
+            INSERT INTO `/Root/NewTable` (dt, value) VALUES 
+                (1, 'value1'), (2, 'value2'), (3, 'value3'), (4, 'value4');
+            COMMIT;
+            
+            SELECT * FROM (SELECT dt, value FROM `/Root/NewTable`)
+                MATCH_RECOGNIZE(
+                    ORDER BY CAST(dt as Timestamp)
+                    MEASURES
+                        LAST(V1.dt) as v1,
+                        LAST(V4.dt) as v4
+                    ONE ROW PER MATCH
+                    PATTERN (V1 V* V4)
+                    DEFINE 
+                        V1 as V1.value = "value1",
+                        V as True,
+                        V4 as V4.value = "value4" 
+                );
+        )").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([
+            [[1u];[4u]];
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    Y_UNIT_TEST(MatchRecognizeWithoutTimeOrderRecoverer) {
+        TKikimrSettings settings;
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableQueryServiceConfig()->SetEnableMatchRecognize(true);
+        settings.SetAppConfig(appConfig);
+
+        TKikimrRunner kikimr(settings);
+        NYdb::NScripting::TScriptingClient client(kikimr.GetDriver());
+
+        auto result = client.ExecuteYqlScript(R"(
+            PRAGMA FeatureR010="prototype";
+            PRAGMA config.flags("MatchRecognizeStream", "disable");
+
+            CREATE TABLE `/Root/NewTable` (
+                dt Uint64,
+                value String,
+                PRIMARY KEY (dt)
+            );
+            COMMIT;
+
+            INSERT INTO `/Root/NewTable` (dt, value) VALUES 
+                (1, 'value1'), (2, 'value2'), (3, 'value3'), (4, 'value4');
+            COMMIT;
+
+            SELECT * FROM (SELECT dt, value FROM `/Root/NewTable`)
+                MATCH_RECOGNIZE(
+                    ORDER BY CAST(dt as Timestamp)
+                    MEASURES
+                        LAST(V1.dt) as v1,
+                        LAST(V4.dt) as v4
+                    ONE ROW PER MATCH
+                    PATTERN (V1 V* V4)
+                    DEFINE 
+                        V1 as V1.value = "value1",
+                        V as True,
+                        V4 as V4.value = "value4" 
+                );
+        )").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([
+            [[1u];[4u]];
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+    }
 }
 
 } // namspace NKqp

@@ -1,6 +1,6 @@
 ## AsTuple, AsStruct, AsList, AsDict, AsSet, AsListStrict, AsDictStrict и AsSetStrict {#as-container}
 
-Создает контейнеры соответствующих типов. Также доступна [операторная запись](#containerliteral) литералов контейнеров.
+Создает контейнеры соответствующих типов. Также доступна [операторная запись](../../basic.md#containerliteral) литералов контейнеров.
 
 Особенности:
 

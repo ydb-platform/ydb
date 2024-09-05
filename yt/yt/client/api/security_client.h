@@ -33,7 +33,7 @@ struct TCheckPermissionOptions
 struct TCheckPermissionResult
 {
     TError ToError(
-        const TString& user,
+        const std::string& user,
         NYTree::EPermission permission,
         const std::optional<TString>& columns = {}) const;
 
@@ -60,7 +60,7 @@ struct TCheckPermissionByAclOptions
 
 struct TCheckPermissionByAclResult
 {
-    TError ToError(const TString& user, NYTree::EPermission permission) const;
+    TError ToError(const std::string& user, NYTree::EPermission permission) const;
 
     NSecurityClient::ESecurityAction Action;
     NSecurityClient::TSubjectId SubjectId;
@@ -129,13 +129,13 @@ struct ISecurityClient
         const TRemoveMemberOptions& options = {}) = 0;
 
     virtual TFuture<TCheckPermissionResponse> CheckPermission(
-        const TString& user,
+        const std::string& user,
         const NYPath::TYPath& path,
         NYTree::EPermission permission,
         const TCheckPermissionOptions& options = {}) = 0;
 
     virtual TFuture<TCheckPermissionByAclResult> CheckPermissionByAcl(
-        const std::optional<TString>& user,
+        const std::optional<std::string>& user,
         NYTree::EPermission permission,
         NYTree::INodePtr acl,
         const TCheckPermissionByAclOptions& options = {}) = 0;
@@ -143,24 +143,24 @@ struct ISecurityClient
     // Methods below correspond to simple authentication scheme
     // and are intended to be used on clusters without third-party tokens (e.g. Yandex blackbox).
     virtual TFuture<void> SetUserPassword(
-        const TString& user,
+        const std::string& user,
         const TString& currentPasswordSha256,
         const TString& newPasswordSha256,
         const TSetUserPasswordOptions& options) = 0;
 
     virtual TFuture<TIssueTokenResult> IssueToken(
-        const TString& user,
+        const std::string& user,
         const TString& passwordSha256,
         const TIssueTokenOptions& options) = 0;
 
     virtual TFuture<void> RevokeToken(
-        const TString& user,
+        const std::string& user,
         const TString& passwordSha256,
         const TString& tokenSha256,
         const TRevokeTokenOptions& options) = 0;
 
     virtual TFuture<TListUserTokensResult> ListUserTokens(
-        const TString& user,
+        const std::string& user,
         const TString& passwordSha256,
         const TListUserTokensOptions& options) = 0;
 };

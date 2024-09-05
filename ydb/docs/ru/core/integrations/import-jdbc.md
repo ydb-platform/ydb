@@ -153,7 +153,7 @@ ALTER DATABASE dbname SET lo_compat_privileges TO on;
     </source>
     <!-- Параметры подключения к БД-получателю. -->
     <target type="ydb">
-        <!-- Выгрузить скрипт создания таблиц для YDB в указанный файл. 
+        <!-- Выгрузить скрипт создания таблиц для YDB в указанный файл.
              Может использоваться в том числе при отсутствии указания
              connection-string для генерации схемы без фактического создания
              таблиц.  -->
@@ -164,7 +164,7 @@ ALTER DATABASE dbname SET lo_compat_privileges TO on;
             grpc://localhost:2136?database=/Root/testdb
          -->
         <connection-string>ydb-connection-string</connection-string>
-        <!-- Режим аутентификации: 
+        <!-- Режим аутентификации:
             ENV      использование переменных окружения для настройки аутентификации
             NONE     анонимное подключение к БД - не для продуктивных систем
             STATIC   аутентификация по логину и паролю
@@ -172,7 +172,7 @@ ALTER DATABASE dbname SET lo_compat_privileges TO on;
             METADATA Аутентификация по метаданным виртуальной машины облака (управляемый сервис YDB)
         -->
         <auth-mode>ENV</auth-mode>
-        <!-- 
+        <!--
             В режиме ENV данные аутентификации необходимо установить в переменных окружения,
             как описано в документации: https://ydb.tech/ru/docs/reference/ydb-sdk/auth#env
             Если аутентификация по ключу сервисного аккаунта (явно либо через указание переменной
@@ -231,7 +231,7 @@ ALTER DATABASE dbname SET lo_compat_privileges TO on;
         <include-schemas regexp="true">.*</include-schemas>
         <!-- Исключаемые схемы -->
         <exclude-schemas>SOMESCHEMA</exclude-schemas>
-        <!-- Также могут присутствовать include-tables и exclude-tables, 
+        <!-- Также могут присутствовать include-tables и exclude-tables,
              для явного указания фильтра по именам таблиц
              и/или регулярным выражениям над именами таблиц. -->
     </table-map>

@@ -9,8 +9,9 @@ Redefinition of settings.
 * `x`: (optional) The category of the setting.
 * `y`: The name of the setting.
 * `z`: (optional for flags) The value of the setting. The following suffixes are acceptable:
-    * `Kb`, `Mb`, `Gb`:  For the data amounts.
-    * `sec`, `min`, `h`, `d`: For the time values.
+
+  * `Kb`, `Mb`, `Gb`:  For the data amounts.
+  * `sec`, `min`, `h`, `d`: For the time values.
 
 **Examples**
 
@@ -28,7 +29,7 @@ PRAGMA Warning("disable", "1101");
 
 With some exceptions, you can return the settings values to their default states using `PRAGMA my_pragma = default;`.
 
-For the full list of available settings, [see the table below](#pragmas).
+For the full list of available settings, [see the table below](../../pragma.md#pragmas).
 
 ### Scope {#pragmascope}
 

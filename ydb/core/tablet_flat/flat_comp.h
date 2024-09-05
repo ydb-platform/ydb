@@ -6,6 +6,7 @@
 #include "flat_row_versions.h"
 #include "flat_table_subset.h"
 #include "flat_dbase_scheme.h"
+#include <ydb/core/base/memory_controller_iface.h>
 
 namespace NKikimr {
 namespace NTable {
@@ -378,6 +379,14 @@ namespace NTable {
         virtual void OutputHtml(IOutputStream& out) = 0;
     protected:
         float OverloadFactor = 0.0;
+    };
+
+    class IMemTableMemoryConsumersCollection {
+    public:
+        virtual void Register(ui32 table) = 0;
+        virtual void Unregister(ui32 table) = 0;
+        virtual void CompactionComplete(TIntrusivePtr<NMemory::IMemoryConsumer> consumer) = 0;
+        virtual ~IMemTableMemoryConsumersCollection() = default;
     };
 
 }

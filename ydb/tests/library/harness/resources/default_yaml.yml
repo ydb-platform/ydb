@@ -134,6 +134,7 @@ grpc_config:
   host: "{ydb_grpc_host}"
   services:
   - "legacy"
+  - "tablet_service"
   - "yql"
   - "discovery"
   - "cms"

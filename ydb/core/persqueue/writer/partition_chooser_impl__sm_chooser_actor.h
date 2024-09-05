@@ -71,7 +71,7 @@ public:
 
         const auto* node = Graph.GetPartition(TThis::TableHelper.PartitionId().value());
         if (!node) {
-            // The partition where the writting was performed earlier has already been deleted. 
+            // The partition where the writting was performed earlier has already been deleted.
             // We can write without taking into account the hierarchy of the partition.
             TThis::Partition = BoundaryPartition;
             return OnPartitionChosen(ctx);
@@ -109,7 +109,7 @@ private:
     void GetOwnershipFast(const TActorContext &ctx) {
         TThis::Become(&TThis::StateOwnershipFast);
         if (!BoundaryPartition) {
-            return TThis::ReplyError(ErrorCode::INITIALIZING, "A partition not choosed", ctx);
+            return TThis::ReplyError(TThis::PreferedPartition ? ErrorCode::WRITE_ERROR_PARTITION_INACTIVE : ErrorCode::INITIALIZING, "A partition not choosed", ctx);
         }
 
         DEBUG("GetOwnershipFast Partition=" << BoundaryPartition->PartitionId << " TabletId=" << BoundaryPartition->TabletId);
@@ -120,7 +120,7 @@ private:
 
     void HandleFast(NKikimr::TEvPQ::TEvCheckPartitionStatusResponse::TPtr& ev, const NActors::TActorContext& ctx) {
         TThis::PartitionHelper.Close(ctx);
-        if (NKikimrPQ::ETopicPartitionStatus::Active == ev->Get()->Record.GetStatus() 
+        if (NKikimrPQ::ETopicPartitionStatus::Active == ev->Get()->Record.GetStatus()
                 && ev->Get()->Record.HasSeqNo()
                 && ev->Get()->Record.GetSeqNo() > 0) {
             // Fast path: the partition ative and already written

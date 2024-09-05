@@ -5,9 +5,10 @@
 #include "util.h"
 
 #include <ydb/public/api/protos/ydb_table.pb.h>
+#include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
+#include <ydb/public/lib/ydb_cli/dump/util/util.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <library/cpp/string_utils/quote/quote.h>
@@ -30,6 +31,7 @@ namespace NYdb::NBackup {
 
 
 static constexpr const char *SCHEME_FILE_NAME = "scheme.pb";
+static constexpr const char *PERMISSIONS_FILE_NAME = "permissions.pb";
 static constexpr const char *INCOMPLETE_DATA_FILE_NAME = "incomplete.csv";
 static constexpr const char *INCOMPLETE_FILE_NAME = "incomplete";
 static constexpr const char *EMPTY_FILE_NAME = "empty_dir";
@@ -429,6 +431,16 @@ Ydb::Table::CreateTableRequest ProtoFromTableDescription(const NTable::TTableDes
     return proto;
 }
 
+NScheme::TSchemeEntry DescribePath(TDriver driver, const TString& fullPath) {
+    NScheme::TSchemeClient client(driver);
+    
+    auto status = NDump::DescribePath(client, fullPath);
+    VerifyStatus(status);
+    LOG_DEBUG("Path is described, fullPath: " << fullPath);
+
+    return status.GetEntry();
+}
+
 TAsyncStatus CopyTableAsyncStart(TDriver driver, const TString& src, const TString& dst) {
     NTable::TTableClient client(driver);
 
@@ -480,6 +492,19 @@ void DropTable(TDriver driver, const TString& path) {
     LOG_DEBUG("Table is dropped, path: " << path.Quote());
 }
 
+void BackupPermissions(TDriver driver, const TString& dbPrefix, const TString& path, const TFsPath& folderPath) {
+    auto entry = DescribePath(driver, JoinDatabasePath(dbPrefix, path));
+    Ydb::Scheme::ModifyPermissionsRequest proto;
+    entry.SerializeTo(proto);
+
+    TString permissionsStr;
+    google::protobuf::TextFormat::PrintToString(proto, &permissionsStr);
+    LOG_DEBUG("ModifyPermissionsRequest.proto: " << permissionsStr);
+
+    TFile outFile(folderPath.Child(PERMISSIONS_FILE_NAME), CreateAlways | WrOnly);
+    outFile.Write(permissionsStr.data(), permissionsStr.size());
+}
+
 void BackupTable(TDriver driver, const TString& dbPrefix, const TString& backupPrefix, const TString& path,
         const TFsPath& folderPath, bool schemaOnly, bool preservePoolKinds, bool ordered) {
     Y_ENSURE(!path.empty());
@@ -496,6 +521,8 @@ void BackupTable(TDriver driver, const TString& dbPrefix, const TString& backupP
     LOG_DEBUG("CreateTableRequest.proto: " << schemaStr);
     TFile outFile(folderPath.Child(SCHEME_FILE_NAME), CreateAlways | WrOnly);
     outFile.Write(schemaStr.data(), schemaStr.size());
+
+    BackupPermissions(driver, dbPrefix, path, folderPath);
 
     if (!schemaOnly) {
         const TString pathToTemporal = JoinDatabasePath(backupPrefix, path);
@@ -533,6 +560,14 @@ static bool IsExcluded(const TString& path, const TVector<TRegExMatch>& exclusio
     }
 
     return false;
+}
+
+static void MaybeCreateEmptyFile(const TFsPath& folderPath) {
+    TVector<TString> children;
+    folderPath.ListNames(children);
+    if (children.empty() || (children.size() == 1 && children[0] == INCOMPLETE_FILE_NAME)) {
+        TFile(folderPath.Child(EMPTY_FILE_NAME), CreateAlways);
+    }
 }
 
 void BackupFolderImpl(TDriver driver, const TString& dbPrefix, const TString& backupPrefix, TString path,
@@ -594,13 +629,8 @@ void BackupFolderImpl(TDriver driver, const TString& dbPrefix, const TString& ba
                 // so control flow can't reach this line. Check it just to be sure
                 Y_ENSURE(!childFolderPath.Child(INCOMPLETE_FILE_NAME).Exists());
             } else if (dbIt.IsDir()) {
-                childFolderPath.Child(INCOMPLETE_FILE_NAME).DeleteIfExists();
-
-                TVector<TString> children;
-                childFolderPath.ListNames(children);
-                if (children.empty()) {
-                    TFile(childFolderPath.Child(EMPTY_FILE_NAME), CreateAlways);
-                }
+                MaybeCreateEmptyFile(childFolderPath);
+                BackupPermissions(driver, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath);
             }
 
             childFolderPath.Child(INCOMPLETE_FILE_NAME).DeleteIfExists();
@@ -639,14 +669,8 @@ void BackupFolderImpl(TDriver driver, const TString& dbPrefix, const TString& ba
                     DropTable(driver, tmpTablePath);
                 }
             } else if (dbIt.IsDir()) {
-                childFolderPath.Child(INCOMPLETE_FILE_NAME).DeleteIfExists();
-
-                TVector<TString> children;
-                childFolderPath.ListNames(children);
-                if (children.empty()) {
-                    TFile(childFolderPath.Child(EMPTY_FILE_NAME), CreateAlways);
-                }
-
+                MaybeCreateEmptyFile(childFolderPath);
+                BackupPermissions(driver, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath);
                 if (!avoidCopy) {
                     RemoveClusterDirectory(driver, tmpTablePath);
                 }

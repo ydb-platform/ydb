@@ -10,6 +10,8 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
+VERSION(1.11.37)
+
 PEERDIR(
     contrib/libs/curl
     contrib/libs/openssl

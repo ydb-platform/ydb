@@ -72,4 +72,8 @@ NKikimr::NOlap::TPathInfoIndexPriority TPathInfo::GetIndexationPriority() const 
     }
 }
 
+const THashMap<TWriteId, TInsertedData>& TPathInfo::GetInserted() const {
+    return Summary->GetInserted();
+}
+
 }

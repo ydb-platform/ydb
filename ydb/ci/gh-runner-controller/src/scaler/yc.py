@@ -107,9 +107,11 @@ class YandexCloudProvider:
 
         request = CreateInstanceRequest(
             name=instance_name,
+            hostname=f'{instance_name}.auto.internal',
             folder_id=self.cfg.yc_folder_id,
             zone_id=zone_id,
             platform_id=preset['platform_id'],
+            service_account_id=self.cfg.service_account_id,
             resources_spec=ResourcesSpec(
                 cores=int(preset["cpu_cores"]),
                 memory=int(preset["memory_gb"] * 1024 * 1024 * 1024),

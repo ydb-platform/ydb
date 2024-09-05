@@ -395,23 +395,7 @@ int CompareRowValues(const TUnversionedValue& lhs, const TUnversionedValue& rhs)
         }
 
         case EValueType::Double: {
-            double lhsValue = lhs.Data.Double;
-            double rhsValue = rhs.Data.Double;
-            if (lhsValue < rhsValue) {
-                return -1;
-            } else if (lhsValue > rhsValue) {
-                return +1;
-            } else if (std::isnan(lhsValue)) {
-                if (std::isnan(rhsValue)) {
-                    return 0;
-                } else {
-                    return 1;
-                }
-            } else if (std::isnan(rhsValue)) {
-                return -1;
-            } else {
-                return 0;
-            }
+            return CompareDoubleValues(lhs.Data.Double, rhs.Data.Double);
         }
 
         case EValueType::Boolean: {
@@ -1502,34 +1486,34 @@ const TLegacyOwningKey& ChooseMaxKey(const TLegacyOwningKey& a, const TLegacyOwn
     return result >= 0 ? a : b;
 }
 
-void ToProto(TProtoStringType* protoRow, TUnversionedRow row)
+void ToProto(TProtobufString* protoRow, TUnversionedRow row)
 {
     *protoRow = SerializeToString(row);
 }
 
-void ToProto(TProtoStringType* protoRow, const TUnversionedOwningRow& row)
+void ToProto(TProtobufString* protoRow, const TUnversionedOwningRow& row)
 {
     ToProto(protoRow, row.Get());
 }
 
-void ToProto(TProtoStringType* protoRow, TUnversionedValueRange range)
+void ToProto(TProtobufString* protoRow, TUnversionedValueRange range)
 {
     *protoRow = SerializeToString(range);
 }
 
-void ToProto(TProtoStringType* protoRow, const TRange<TUnversionedOwningValue>& values)
+void ToProto(TProtobufString* protoRow, const TRange<TUnversionedOwningValue>& values)
 {
     std::vector<TUnversionedValue> notOwningValues(values.size());
     std::copy(values.begin(), values.end(), notOwningValues.begin());
     ToProto(protoRow, notOwningValues);
 }
 
-void FromProto(TUnversionedOwningRow* row, const TProtoStringType& protoRow, std::optional<int> nullPaddingWidth)
+void FromProto(TUnversionedOwningRow* row, const TProtobufString& protoRow, std::optional<int> nullPaddingWidth)
 {
     *row = DeserializeFromString(TString{protoRow}, nullPaddingWidth);
 }
 
-void FromProto(TUnversionedRow* row, const TProtoStringType& protoRow, const TRowBufferPtr& rowBuffer)
+void FromProto(TUnversionedRow* row, const TProtobufString& protoRow, const TRowBufferPtr& rowBuffer)
 {
     if (protoRow == SerializedNullRow) {
         *row = TUnversionedRow();
@@ -1555,7 +1539,7 @@ void FromProto(TUnversionedRow* row, const TProtoStringType& protoRow, const TRo
     }
 }
 
-void FromProto(std::vector<TUnversionedOwningValue>* values, const TProtoStringType& protoRow)
+void FromProto(std::vector<TUnversionedOwningValue>* values, const TProtobufString& protoRow)
 {
     TUnversionedOwningRow row;
     FromProto(&row, protoRow);
@@ -1649,7 +1633,7 @@ std::pair<TSharedRange<TUnversionedRow>, i64> CaptureRowsImpl(
 
     return {
         MakeSharedRange(
-            MakeRange(capturedRows, rows.Size()),
+            TRange(capturedRows, rows.Size()),
             std::move(buffer.ReleaseHolder())),
         bufferSize
     };
@@ -2099,18 +2083,23 @@ TUnversionedValueRange ToKeyRef(TUnversionedRow row, int prefixLength)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void FormatValue(TStringBuilderBase* builder, TUnversionedValueRange values, TStringBuf format)
+{
+    builder->AppendChar('[');
+    JoinToString(
+        builder,
+        values.Begin(),
+        values.End(),
+        [&] (TStringBuilderBase* builder, const TUnversionedValue& value) {
+            FormatValue(builder, value, format);
+        });
+    builder->AppendChar(']');
+}
+
 void FormatValue(TStringBuilderBase* builder, TUnversionedRow row, TStringBuf format)
 {
     if (row) {
-        builder->AppendChar('[');
-        JoinToString(
-            builder,
-            row.Begin(),
-            row.End(),
-            [&] (TStringBuilderBase* builder, const TUnversionedValue& value) {
-                FormatValue(builder, value, format);
-            });
-        builder->AppendChar(']');
+        FormatValue(builder, row.Elements(), format);
     } else {
         builder->AppendString("<null>");
     }

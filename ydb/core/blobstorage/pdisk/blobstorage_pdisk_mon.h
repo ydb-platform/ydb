@@ -302,6 +302,7 @@ struct TPDiskMon {
     THistogram DeviceReadDuration;
     THistogram DeviceWriteDuration;
     THistogram DeviceTrimDuration;
+    THistogram DeviceFlushDuration;
 
     // <BASE_BITS, EXP_BITS, FRAME_COUNT>
     using TDurationTracker = NMonitoring::TPercentileTrackerLg<5, 4, 15>;

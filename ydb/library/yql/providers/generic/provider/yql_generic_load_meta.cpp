@@ -378,38 +378,8 @@ namespace NYql {
 
         void FillTablePath(NConnector::NApi::TDescribeTableRequest& request, const TGenericClusterConfig& clusterConfig,
                            const TString& tablePath) {
-            // for backward compability full path can be used (cluster_name.`db_name.table`)
-            // TODO: simplify during https://st.yandex-team.ru/YQ-2494
-            const auto dataSourceKind = clusterConfig.GetKind();
-            const auto& dbNameFromConfig = clusterConfig.GetDatabaseName();
-            TStringBuf dbNameTarget, tableName;
-            auto isFullPath = TStringBuf(tablePath).TrySplit('.', dbNameTarget, tableName);
-
-            if (!dbNameFromConfig.empty()) {
-                dbNameTarget = dbNameFromConfig;
-                if (!isFullPath) {
-                    tableName = tablePath;
-                }
-            } else if (!isFullPath) {
-                tableName = tablePath;
-                switch (dataSourceKind) {
-                    case NYql::NConnector::NApi::CLICKHOUSE:
-                        dbNameTarget = "default";
-                        break;
-                    case NYql::NConnector::NApi::POSTGRESQL:
-                        dbNameTarget = "postgres";
-                        break;
-                    case NYql::NConnector::NApi::MS_SQL_SERVER:
-                        dbNameTarget = "mssqlserver";
-                        break;
-                    default:
-                        ythrow yexception() << "You must provide database name explicitly for data source kind: '"
-                                            << NYql::NConnector::NApi::EDataSourceKind_Name(dataSourceKind) << "'";
-                }
-            } // else take database name from table path
-
-            request.mutable_data_source_instance()->set_database(TString(dbNameTarget));
-            request.set_table(TString(tableName));
+            request.mutable_data_source_instance()->set_database(clusterConfig.GetDatabaseName());
+            request.set_table(tablePath);
         }
 
     private:

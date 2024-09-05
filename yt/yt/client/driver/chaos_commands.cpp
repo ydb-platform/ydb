@@ -64,6 +64,12 @@ void TAlterReplicationCardCommand::Register(TRegistrar registrar)
             return command->Options.ReplicationCardCollocationId;
         })
         .Optional(/*init*/ false);
+    registrar.ParameterWithUniversalAccessor<NTabletClient::TReplicationCollocationOptionsPtr>(
+        "collocation_options",
+        [] (TThis* command) -> auto& {
+            return command->Options.CollocationOptions;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TAlterReplicationCardCommand::DoExecute(ICommandContextPtr context)

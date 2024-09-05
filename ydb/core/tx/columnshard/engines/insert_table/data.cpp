@@ -35,16 +35,14 @@ TInsertedData::~TInsertedData() {
 }
 
 TInsertedData::TInsertedData(ui64 planStep, ui64 writeTxId, ui64 pathId, TString dedupId, const TBlobRange& blobRange,
-    const NKikimrTxColumnShard::TLogicalMetadata& proto, const ui64 schemaVersion,
-    const std::optional<TString>& blobData /*= {}*/)
+    const NKikimrTxColumnShard::TLogicalMetadata& proto, const ui64 schemaVersion, const std::optional<TString>& blobData)
     : Meta(proto)
     , BlobRange(blobRange)
     , PlanStep(planStep)
     , WriteTxId(writeTxId)
     , PathId(pathId)
     , DedupId(dedupId)
-    , SchemaVersion(schemaVersion)
-{
+    , SchemaVersion(schemaVersion) {
     if (blobData) {
         AFL_VERIFY(blobData->size() == BlobRange.Size);
         if (Singleton<TInsertTableCacheController>()->Take(blobData->size())) {

@@ -60,15 +60,15 @@ struct TYqlRowSpecInfo: public TThrRefBase {
     // Includes aux columns
     const TStructExprType* GetExtendedType(TExprContext& ctx) const;
     // Returns true if sortness is changed
-    bool CopySortness(const TYqlRowSpecInfo& from, ECopySort mode = ECopySort::Pure);
+    bool CopySortness(TExprContext& ctx, const TYqlRowSpecInfo& from, ECopySort mode = ECopySort::Pure);
     // Returns true if sortness is changed
-    bool MakeCommonSortness(const TYqlRowSpecInfo& from);
+    bool MakeCommonSortness(TExprContext& ctx, const TYqlRowSpecInfo& from);
     bool CompareSortness(const TYqlRowSpecInfo& with, bool checkUniqueFlag = true) const;
     // Returns true if sortness is changed
-    bool ClearSortness(size_t fromMember = 0);
+    bool ClearSortness(TExprContext& ctx, size_t fromMember = 0);
     // Returns true if sortness is changed
-    bool KeepPureSortOnly();
-    bool ClearNativeDescendingSort();
+    bool KeepPureSortOnly(TExprContext& ctx);
+    bool ClearNativeDescendingSort(TExprContext& ctx);
     const TSortedConstraintNode* MakeSortConstraint(TExprContext& ctx) const;
     const TDistinctConstraintNode* MakeDistinctConstraint(TExprContext& ctx) const;
     void CopyConstraints(const TYqlRowSpecInfo& from);

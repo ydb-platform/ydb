@@ -19,8 +19,8 @@ using namespace NNet;
 ////////////////////////////////////////////////////////////////////////////////
 
 TConnectionConfigPtr TConnectionConfig::CreateFromClusterUrl(
-    TString clusterUrl,
-    std::optional<TString> proxyRole)
+    const std::string& clusterUrl,
+    const std::optional<std::string>& proxyRole)
 {
     auto config = New<TConnectionConfig>();
     config->ClusterUrl = std::move(clusterUrl);

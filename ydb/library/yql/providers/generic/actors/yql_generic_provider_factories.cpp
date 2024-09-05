@@ -38,4 +38,4 @@ namespace NYql::NDq {
         }
     }
 
-}
+} // namespace NYql::NDq

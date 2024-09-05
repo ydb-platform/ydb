@@ -170,6 +170,7 @@ Y_UNIT_TEST_SUITE(KqpDatetime64ColumnShard) {
         runnerSettings.WithSampleTables = false;
 
         TTestHelper testHelper(runnerSettings);
+        Tests::NCommon::TLoggerInit(testHelper.GetKikimr()).SetComponents({ NKikimrServices::GROUPED_MEMORY_LIMITER }, "CS").Initialize();
 
         TVector<TTestHelper::TColumnSchema> schema = {
             TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int64).SetNullable(false),

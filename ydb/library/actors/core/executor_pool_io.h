@@ -26,7 +26,7 @@ namespace NActors {
         const TString PoolName;
         const ui32 ActorSystemIndex = NActors::TActorTypeOperator::GetActorSystemIndex();
     public:
-        TIOExecutorPool(ui32 poolId, ui32 threads, const TString& poolName = "", TAffinity* affinity = nullptr);
+        TIOExecutorPool(ui32 poolId, ui32 threads, const TString& poolName = "", TAffinity* affinity = nullptr, bool useRingQueue = false);
         explicit TIOExecutorPool(const TIOExecutorPoolConfig& cfg, IHarmonizer *harmonizer = nullptr);
         ~TIOExecutorPool();
 

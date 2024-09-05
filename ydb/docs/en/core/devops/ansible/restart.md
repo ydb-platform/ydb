@@ -19,7 +19,7 @@ ansible-playbook ydb_platform.ydb.restart
 
 ### Filter by node type
 
-Tasks in the `ydb_platform.ydb.restart` playbook are tagged with node types, so you can use Ansible's tags functionality to filter nodes by their kind. 
+Tasks in the `ydb_platform.ydb.restart` playbook are tagged with node types, so you can use Ansible's tags functionality to filter nodes by their kind.
 
 These two commands are equivalent and will restart all storage nodes:
 
@@ -34,7 +34,7 @@ ansible-playbook ydb_platform.ydb.restart --tags database
 ansible-playbook ydb_platform.ydb.restart --tags dynamic
 ```
 
-### Filter by hostname 
+### Filter by hostname
 
 To restart a specific host or subset of hosts, use the `--limit` argument:
 

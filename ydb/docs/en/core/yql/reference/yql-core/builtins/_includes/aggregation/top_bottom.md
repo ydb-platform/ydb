@@ -25,7 +25,7 @@ FROM my_table;
 
 Return a list of values of the first argument for the rows containing the maximum/minimum values of the second argument. The third argument limits the number of items in the list.
 
-When you use [aggregation factories](../../basic.md#aggregationfactory), a `Tuple` containing a value and a key is passed as the first [AGGREGATE_BY](#aggregateby) argument. In this case, the limit for the number of items is passed by the second argument at factory creation.
+When you use [aggregation factories](../../basic.md#aggregationfactory), a `Tuple` containing a value and a key is passed as the first [AGGREGATE_BY](../../aggregation.md#aggregateby) argument. In this case, the limit for the number of items is passed by the second argument at factory creation.
 
 **Examples**
 

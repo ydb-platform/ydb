@@ -157,6 +157,8 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
 
         if (!MetadataUploaded) {
             UploadMetadata();
+        } else if (!PermissionsUploaded) {
+            UploadPermissions();
         } else if (!SchemeUploaded) {
             UploadScheme();
         } else {
@@ -185,6 +187,23 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
         this->Send(Client, new TEvExternalStorage::TEvPutObjectRequest(request, std::move(Buffer)));
 
         this->Become(&TThis::StateUploadScheme);
+    }
+
+    void UploadPermissions() {
+        Y_ABORT_UNLESS(!PermissionsUploaded);
+
+        if (!Permissions) {
+            return Finish(false, "Cannot infer permissions");
+        }
+
+        google::protobuf::TextFormat::PrintToString(Permissions.GetRef(), &Buffer);
+
+        auto request = Aws::S3::Model::PutObjectRequest()
+            .WithKey(Settings.GetPermissionsKey())
+            .WithStorageClass(Settings.GetStorageClass());
+        this->Send(Client, new TEvExternalStorage::TEvPutObjectRequest(request, std::move(Buffer)));
+
+        this->Become(&TThis::StateUploadPermissions);
     }
 
     void UploadMetadata() {
@@ -220,6 +239,22 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
         this->Become(&TThis::StateUploadData);
     }
 
+    void HandlePermissions(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
+        const auto& result = ev->Get()->Result;
+
+        EXPORT_LOG_D("HandleMetadata TEvExternalStorage::TEvPutObjectResponse"
+            << ": self# " << this->SelfId()
+            << ", result# " << result);
+
+        if (!CheckResult(result, TStringBuf("PutObject (permissions)"))) {
+            return;
+        }
+
+        PermissionsUploaded = true;
+
+        UploadScheme();
+    }
+
     void HandleMetadata(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
@@ -233,7 +268,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
 
         MetadataUploaded = true;
 
-        UploadScheme();
+        UploadPermissions();
     }
 
     void Handle(TEvExportScan::TEvReady::TPtr& ev) {
@@ -247,7 +282,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
             return PassAway();
         }
 
-        if (ProxyResolved && SchemeUploaded && MetadataUploaded) {
+        if (ProxyResolved && SchemeUploaded && MetadataUploaded && PermissionsUploaded) {
             this->Send(Scanner, new TEvExportScan::TEvFeed());
         }
     }
@@ -542,6 +577,7 @@ public:
             const TActorId& dataShard, ui64 txId,
             const NKikimrSchemeOp::TBackupTask& task,
             TMaybe<Ydb::Table::CreateTableRequest>&& scheme,
+            TMaybe<Ydb::Scheme::ModifyPermissionsRequest>&& permissions,
             TString&& metadata)
         : ExternalStorageConfig(new TS3ExternalStorageConfig(task.GetS3Settings()))
         , Settings(TS3Settings::FromBackupTask(task))
@@ -552,11 +588,13 @@ public:
         , TxId(txId)
         , Scheme(std::move(scheme))
         , Metadata(std::move(metadata))
+        , Permissions(std::move(permissions))
         , Retries(task.GetNumberOfRetries())
         , Attempt(0)
         , Delay(TDuration::Minutes(1))
         , SchemeUploaded(task.GetShardNum() == 0 ? false : true)
         , MetadataUploaded(task.GetShardNum() == 0 ? false : true)
+        , PermissionsUploaded(task.GetShardNum() == 0 ? false : true)
     {
     }
 
@@ -593,6 +631,14 @@ public:
     STATEFN(StateUploadScheme) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExternalStorage::TEvPutObjectResponse, HandleScheme);
+        default:
+            return StateBase(ev);
+        }
+    }
+
+    STATEFN(StateUploadPermissions) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvExternalStorage::TEvPutObjectResponse, HandlePermissions);
         default:
             return StateBase(ev);
         }
@@ -635,6 +681,7 @@ private:
     const ui64 TxId;
     const TMaybe<Ydb::Table::CreateTableRequest> Scheme;
     const TString Metadata;
+    const TMaybe<Ydb::Scheme::ModifyPermissionsRequest> Permissions;
 
     const ui32 Retries;
     ui32 Attempt;
@@ -645,6 +692,7 @@ private:
     TActorId Client;
     bool SchemeUploaded;
     bool MetadataUploaded;
+    bool PermissionsUploaded;
     bool MultiPart;
     bool Last;
 
@@ -662,6 +710,10 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
         ? GenYdbScheme(Columns, Task.GetTable())
         : Nothing();
 
+    auto permissions = (Task.GetShardNum() == 0)
+        ? GenYdbPermissions(Task.GetTable())
+        : Nothing();
+
     NBackupRestore::TMetadata metadata;
 
     NBackupRestore::TFullBackupMetadata::TPtr backup = new NBackupRestore::TFullBackupMetadata{
@@ -672,7 +724,7 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
     metadata.AddFullBackup(backup);
 
     return new TS3Uploader(
-        dataShard, txId, Task, std::move(scheme), metadata.Serialize());
+        dataShard, txId, Task, std::move(scheme), std::move(permissions), metadata.Serialize());
 }
 
 } // NDataShard

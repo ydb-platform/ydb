@@ -1,6 +1,6 @@
 ## IS \[NOT\] DISTINCT FROM {#is-distinct-from}
 
-Comparing of two values. Unlike the regular [comparison operators](#comparison-operators), NULLs are treated as equal to each other.
+Comparing of two values. Unlike the regular [comparison operators](../../../syntax/expressions.md#comparison-operators), NULLs are treated as equal to each other.
 More precisely, the comparison is carried out according to the following rules:
 
 1) The operators `IS DISTINCT FROM`/`IS NOT DISTINCT FROM` are defined for those and only for those arguments for which the operators `!=` and `=` are defined.

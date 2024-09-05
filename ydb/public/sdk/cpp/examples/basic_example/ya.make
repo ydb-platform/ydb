@@ -8,7 +8,9 @@ SRCS(
 
 PEERDIR(
     library/cpp/getopt
-    ydb/public/sdk/cpp/client/ydb_table
+    ydb/public/sdk/cpp/client/ydb_query
+    ydb/public/sdk/cpp/client/ydb_params
+    ydb/public/sdk/cpp/client/ydb_driver
 )
 
 END()

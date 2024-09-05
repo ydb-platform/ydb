@@ -58,7 +58,8 @@ TRunActorParams::TRunActorParams(
     const NFq::NConfig::TYdbStorageConfig& computeConnection,
     TDuration resultTtl,
     std::map<TString, Ydb::TypedValue>&& queryParameters,
-    std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory
+    std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory,
+    const ::NFq::NConfig::TWorkloadManagerConfig& workloadManager
     )
     : YqSharedResources(yqSharedResources)
     , CredentialsProviderFactory(credentialsProviderFactory)
@@ -113,6 +114,7 @@ TRunActorParams::TRunActorParams(
     , ResultTtl(resultTtl)
     , QueryParameters(std::move(queryParameters))
     , S3ActorsFactory(std::move(s3ActorsFactory))
+    , WorkloadManager(workloadManager)
     {
     }
 
@@ -139,6 +141,7 @@ IOutputStream& operator<<(IOutputStream& out, const TRunActorParams& params) {
                 << " ComputeConnection: " << params.ComputeConnection.ShortDebugString()
                 << " ResultTtl: " << params.ResultTtl
                 << " QueryParameters: " << params.QueryParameters.size()
+                << " WorkloadManager: " << params.WorkloadManager.ShortDebugString()
                 << "}";
 }
 

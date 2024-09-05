@@ -19,7 +19,7 @@ DECLARE $named-node AS data_type;
 Допустимы только сериализуемые типы данных:
 
 * [Примитивные типы](../../../types/primitive.md).
-* [Опциональные типы](../../../types/optional.md). 
+* [Опциональные типы](../../../types/optional.md).
 * [Контейнеры](../../../types/containers.md) за исключением `Stream<Type>`.
 * `Void` и `Null`— поддерживаемые [специальные типы](../../../types/special.md).
 

@@ -14,7 +14,7 @@ Y_UNIT_TEST_SUITE(TableWriter) {
                     .Tag = 1,
                     .Type = NScheme::TTypeInfo{NScheme::NTypeIds::Uint64},
                 });
-        schema->ValueColumns.emplace("__incrBackupImpl_deleted", TLightweightSchema::TColumn{
+        schema->ValueColumns.emplace("__ydb_incrBackupImpl_deleted", TLightweightSchema::TColumn{
                     .Tag = 123,
                     .Type = NScheme::TTypeInfo{NScheme::NTypeIds::Bool},
                 });
@@ -59,10 +59,10 @@ Y_UNIT_TEST_SUITE(TableWriter) {
             TString out = TSerializedCellVec::Serialize(outCells);
 
             UNIT_ASSERT_VALUES_EQUAL(TSerializedCellVec::Serialize(keyCells), result.GetKey());
-            UNIT_ASSERT_VALUES_EQUAL(out, result.GetUpsert().GetData());
             UNIT_ASSERT(result.GetUpsert().TagsSize() == 2);
             UNIT_ASSERT(result.GetUpsert().GetTags(0) == 1);
             UNIT_ASSERT(result.GetUpsert().GetTags(1) == 123);
+            UNIT_ASSERT_VALUES_EQUAL(out, result.GetUpsert().GetData());
         }
 
         {
@@ -93,17 +93,17 @@ Y_UNIT_TEST_SUITE(TableWriter) {
             record->Serialize(result, ctx);
 
             TVector<TCell> outCells{
-                TCell::Make<bool>(true),
                 TCell(),
+                TCell::Make<bool>(true),
             };
 
             TString out = TSerializedCellVec::Serialize(outCells);
 
             UNIT_ASSERT_VALUES_EQUAL(TSerializedCellVec::Serialize(keyCells), result.GetKey());
-            UNIT_ASSERT_VALUES_EQUAL(out, result.GetUpsert().GetData());
             UNIT_ASSERT(result.GetUpsert().TagsSize() == 2);
-            UNIT_ASSERT(result.GetUpsert().GetTags(0) == 123);
-            UNIT_ASSERT(result.GetUpsert().GetTags(1) == 1);
+            UNIT_ASSERT(result.GetUpsert().GetTags(1) == 123);
+            UNIT_ASSERT(result.GetUpsert().GetTags(0) == 1);
+            UNIT_ASSERT_VALUES_EQUAL(out, result.GetUpsert().GetData());
         }
     }
 
@@ -148,9 +148,9 @@ Y_UNIT_TEST_SUITE(TableWriter) {
             record->Serialize(result, ctx);
 
             UNIT_ASSERT_VALUES_EQUAL(TSerializedCellVec::Serialize(keyCells), result.GetKey());
-            UNIT_ASSERT_VALUES_EQUAL(upsert.GetData(), result.GetUpsert().GetData());
             UNIT_ASSERT(result.GetUpsert().TagsSize() == 1);
             UNIT_ASSERT(result.GetUpsert().GetTags(0) == 1);
+            UNIT_ASSERT_VALUES_EQUAL(upsert.GetData(), result.GetUpsert().GetData());
         }
 
     }

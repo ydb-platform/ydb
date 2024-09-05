@@ -64,6 +64,7 @@ message Entry {
         EXTERNAL_TABLE = 18;
         EXTERNAL_DATA_SOURCE = 19;
         VIEW = 20;
+        RESOURCE_POOL = 21;
     }
 
     // Name of scheme entry (dir2 of /dir1/dir2)

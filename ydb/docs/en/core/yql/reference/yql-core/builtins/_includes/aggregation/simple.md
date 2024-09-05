@@ -98,7 +98,7 @@ SELECT
 FROM my_table;
 ```
 
-When you use [aggregation factories](../../basic.md#aggregationfactory), a `Tuple` containing a value and a predicate is passed as the first [AGGREGATE_BY](#aggregateby) argument.
+When you use [aggregation factories](../../basic.md#aggregationfactory), a `Tuple` containing a value and a predicate is passed as the first [AGGREGATE_BY](../../aggregation.md#aggregateby) argument.
 
 **Examples**
 
@@ -116,7 +116,7 @@ FROM my_table;
 
 Get the value for an expression specified as an argument, for one of the table rows. Gives no guarantee of which row is used. It's similar to the [any()]{% if lang == "en" %}(https://clickhouse.tech/docs/en/sql-reference/aggregate-functions/reference/any/){% else %}(https://clickhouse.tech/docs/ru/sql-reference/aggregate-functions/reference/any/){% endif %} function in ClickHouse.
 
-Because of no guarantee, `SOME` is computationally cheaper than [MIN](#min)/[MAX](#max) often used in similar situations.
+Because of no guarantee, `SOME` is computationally cheaper than [MIN / MAX](#min-max) often used in similar situations.
 
 **Examples**
 

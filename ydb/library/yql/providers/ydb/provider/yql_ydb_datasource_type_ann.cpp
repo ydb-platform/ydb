@@ -124,7 +124,7 @@ public:
             ctx.MakeType<TListExprType>(itemType)
         }));
 
-        return State_->Types->SetColumnOrder(*input, columnOrder, ctx);
+        return State_->Types->SetColumnOrder(*input, TColumnOrder(columnOrder), ctx);
     }
 
     TStatus HandleReadTableScheme(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {

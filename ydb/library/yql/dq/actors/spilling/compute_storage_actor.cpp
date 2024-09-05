@@ -33,17 +33,27 @@ class TDqComputeStorageActor : public NActors::TActorBootstrapped<TDqComputeStor
                                public IDqComputeStorageActor
 {
     using TBase = TActorBootstrapped<TDqComputeStorageActor>;
-    // size + promise with key
-    using TWritingBlobInfo = std::pair<ui64, NThreading::TPromise<IDqComputeStorageActor::TKey>>;
-    // remove after read + promise with blob
-    using TLoadingBlobInfo = std::pair<bool, NThreading::TPromise<std::optional<TRope>>>;
+    struct TWritingBlobInfo {
+        ui64 Size;
+        NThreading::TPromise<IDqComputeStorageActor::TKey> BlobIdPromise;
+        TInstant OpBegin;
+    };
+
+    struct TLoadingBlobInfo {
+        bool RemoveAfterRead;
+        NThreading::TPromise<std::optional<TRope>> BlobPromise;
+        TInstant OpBegin;
+    };
     // void promise that completes when block is removed
     using TDeletingBlobInfo = NThreading::TPromise<void>;
 public:
-    TDqComputeStorageActor(TTxId txId, const TString& spillerName, std::function<void()> wakeupCallback)
+    TDqComputeStorageActor(TTxId txId, const TString& spillerName, TWakeUpCallback wakeupCallback, TErrorCallback errorCallback,
+        TIntrusivePtr<TSpillingTaskCounters> spillingTaskCounters)
         : TxId_(txId),
         SpillerName_(spillerName),
-        WakeupCallback_(wakeupCallback)
+        WakeupCallback_(wakeupCallback),
+        ErrorCallback_(errorCallback),
+        SpillingTaskCounters_(spillingTaskCounters)
     {
     }
 
@@ -63,18 +73,16 @@ public:
 protected:
 
     void FailWithError(const TString& error) {
+        if (!ErrorCallback_) Y_ABORT("Error: %s", error.c_str());
+
         LOG_E("Error: " << error);
+        ErrorCallback_(error);
         SendInternal(SpillingActorId_, new TEvents::TEvPoison);
         PassAway();
-
-        // Currently there is no better way to handle the error.
-        // Since the message was not sent from the actor system, there is no one to send the error message to.
-        Y_ABORT("Error: %s", error.c_str());
     }
 
     void SendInternal(const TActorId& recipient, IEventBase* ev, TEventFlags flags = IEventHandle::FlagTrackDelivery) {
-        bool isSent = Send(recipient, ev, flags);
-        Y_ABORT_UNLESS(isSent, "Event was not sent");
+        if (!Send(recipient, ev, flags)) FailWithError("Event was not sent");
     }
 
 private:
@@ -102,10 +110,12 @@ private:
     void HandleWork(TEvPut::TPtr& ev) {
         auto& msg = *ev->Get();
         ui64 size = msg.Blob_.size();
+        auto opBegin = TInstant::Now();
 
         SendInternal(SpillingActorId_, new TEvDqSpilling::TEvWrite(NextBlobId, std::move(msg.Blob_)));
 
-        WritingBlobs_.emplace(NextBlobId, std::make_pair(size, std::move(msg.Promise_)));
+        auto writingBlobInfo = TWritingBlobInfo{size, std::move(msg.Promise_), opBegin};
+        WritingBlobs_.emplace(NextBlobId, writingBlobInfo);
         WritingBlobsSize_ += size;
 
         ++NextBlobId;
@@ -113,6 +123,7 @@ private:
 
     void HandleWork(TEvGet::TPtr& ev) {
         auto& msg = *ev->Get();
+        auto opBegin = TInstant::Now();
 
         if (!StoredBlobs_.contains(msg.Key_)) {
             msg.Promise_.SetValue(std::nullopt);
@@ -121,7 +132,7 @@ private:
 
         bool removeBlobAfterRead = msg.RemoveBlobAfterRead_;
 
-        TLoadingBlobInfo loadingBlobInfo = std::make_pair(removeBlobAfterRead, std::move(msg.Promise_));
+        auto loadingBlobInfo = TLoadingBlobInfo{removeBlobAfterRead, std::move(msg.Promise_), opBegin};
         LoadingBlobs_.emplace(msg.Key_, std::move(loadingBlobInfo));
 
         SendInternal(SpillingActorId_, new TEvDqSpilling::TEvRead(msg.Key_, removeBlobAfterRead));
@@ -151,14 +162,20 @@ private:
             return;
         }
 
-        auto& [size, promise] = it->second;
+        auto& blobInfo = it->second;
 
-        WritingBlobsSize_ -= size;
+        WritingBlobsSize_ -= blobInfo.Size;
 
         StoredBlobsCount_++;
-        StoredBlobsSize_ += size;
+        StoredBlobsSize_ += blobInfo.Size;
 
+        if (SpillingTaskCounters_) {
+            SpillingTaskCounters_->ComputeWriteBytes += blobInfo.Size;
+            auto opDuration = TInstant::Now() - blobInfo.OpBegin;
+            SpillingTaskCounters_->ComputeWriteTime += opDuration.MilliSeconds();
+        }
         // complete future and wake up waiting compute node
+        auto& promise = blobInfo.BlobIdPromise;
         promise.SetValue(msg.BlobId);
 
         StoredBlobs_.emplace(msg.BlobId);
@@ -184,14 +201,20 @@ private:
             return;
         }
 
-        bool removedAfterRead = it->second.first;
-        if (removedAfterRead) {
+        auto& blobInfo = it->second;
+
+        if (SpillingTaskCounters_) {
+            auto opDuration = TInstant::Now() - blobInfo.OpBegin;
+            SpillingTaskCounters_->ComputeReadTime += opDuration.MilliSeconds();
+        }
+
+        if (blobInfo.RemoveAfterRead) {
             UpdateStatsAfterBlobDeletion(msg.Blob.Size(), msg.BlobId);
         }
 
         TRope res(TString(reinterpret_cast<const char*>(msg.Blob.Data()), msg.Blob.Size()));
 
-        auto& promise = it->second.second;
+        auto& promise = blobInfo.BlobPromise;
         promise.SetValue(std::move(res));
 
         LoadingBlobs_.erase(it);
@@ -224,7 +247,7 @@ private:
         StoredBlobs_.erase(blobId);
     }
 
-    protected:
+protected:
     const TTxId TxId_;
     TActorId SpillingActorId_;
 
@@ -243,16 +266,18 @@ private:
     TString SpillerName_;
 
     bool IsInitialized_ = false;
-
-    std::function<void()> WakeupCallback_;
+    TWakeUpCallback WakeupCallback_;
+    TErrorCallback ErrorCallback_;
+    TIntrusivePtr<TSpillingTaskCounters> SpillingTaskCounters_;
 
     TSet<TKey> StoredBlobs_;
 };
 
 } // anonymous namespace
 
-IDqComputeStorageActor* CreateDqComputeStorageActor(TTxId txId, const TString& spillerName, std::function<void()> wakeupCallback) {
-    return new TDqComputeStorageActor(txId, spillerName, wakeupCallback);
+IDqComputeStorageActor* CreateDqComputeStorageActor(TTxId txId, const TString& spillerName, TWakeUpCallback wakeupCallback, 
+    TErrorCallback errorCallback, TIntrusivePtr<TSpillingTaskCounters> spillingTaskCounters) {
+    return new TDqComputeStorageActor(txId, spillerName, wakeupCallback, errorCallback, spillingTaskCounters);
 }
 
 } // namespace NYql::NDq 

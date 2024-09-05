@@ -434,9 +434,14 @@ static SynchEvent* GetSynchEvent(const void* addr) {
 // if event recording is on
 static void PostSynchEvent(void* obj, int ev) {
   SynchEvent* e = GetSynchEvent(obj);
+#ifdef Y_ABSL_DONT_USE_DEBUG_LIBRARY
+  constexpr bool DONT_COLLECT_STACK_TRACE = 1;
+#else
+  constexpr bool DONT_COLLECT_STACK_TRACE = 0;
+#endif
   // logging is on if event recording is on and either there's no event struct,
   // or it explicitly says to log
-  if (e == nullptr || e->log) {
+  if ((e == nullptr || e->log) && !DONT_COLLECT_STACK_TRACE) {
     void* pcs[40];
     int n = y_absl::GetStackTrace(pcs, Y_ABSL_ARRAYSIZE(pcs), 1);
     // A buffer with enough space for the ASCII for all the PCs, even on a

@@ -1,12 +1,27 @@
 import asyncio
 import collections
 import warnings
-from typing import Awaitable, Callable, Deque, Generic, List, Optional, Tuple, TypeVar
+from typing import (
+    Awaitable,
+    Callable,
+    Deque,
+    Final,
+    Generic,
+    List,
+    Optional,
+    Tuple,
+    TypeVar,
+)
 
 from .base_protocol import BaseProtocol
-from .helpers import BaseTimerContext, set_exception, set_result
+from .helpers import (
+    _EXC_SENTINEL,
+    BaseTimerContext,
+    TimerNoop,
+    set_exception,
+    set_result,
+)
 from .log import internal_logger
-from .typedefs import Final
 
 __all__ = (
     "EMPTY_PAYLOAD",
@@ -59,19 +74,11 @@ class AsyncStreamReaderMixin:
         return AsyncStreamIterator(self.readline)  # type: ignore[attr-defined]
 
     def iter_chunked(self, n: int) -> AsyncStreamIterator[bytes]:
-        """Returns an asynchronous iterator that yields chunks of size n.
-
-        Python-3.5 available for Python 3.5+ only
-        """
-        return AsyncStreamIterator(
-            lambda: self.read(n)  # type: ignore[attr-defined,no-any-return]
-        )
+        """Returns an asynchronous iterator that yields chunks of size n."""
+        return AsyncStreamIterator(lambda: self.read(n))  # type: ignore[attr-defined]
 
     def iter_any(self) -> AsyncStreamIterator[bytes]:
-        """Yield all available data as soon as it is received.
-
-        Python-3.5 available for Python 3.5+ only
-        """
+        """Yield all available data as soon as it is received."""
         return AsyncStreamIterator(self.readany)  # type: ignore[attr-defined]
 
     def iter_chunks(self) -> ChunkTupleAsyncStreamIterator:
@@ -79,8 +86,6 @@ class AsyncStreamReaderMixin:
 
         The yielded objects are tuples
         of (bytes, bool) as returned by the StreamReader.readchunk method.
-
-        Python-3.5 available for Python 3.5+ only
         """
         return ChunkTupleAsyncStreamIterator(self)  # type: ignore[arg-type]
 
@@ -117,15 +122,15 @@ class StreamReader(AsyncStreamReaderMixin):
         self._loop = loop
         self._size = 0
         self._cursor = 0
-        self._http_chunk_splits = None  # type: Optional[List[int]]
-        self._buffer = collections.deque()  # type: Deque[bytes]
+        self._http_chunk_splits: Optional[List[int]] = None
+        self._buffer: Deque[bytes] = collections.deque()
         self._buffer_offset = 0
         self._eof = False
-        self._waiter = None  # type: Optional[asyncio.Future[None]]
-        self._eof_waiter = None  # type: Optional[asyncio.Future[None]]
-        self._exception = None  # type: Optional[BaseException]
-        self._timer = timer
-        self._eof_callbacks = []  # type: List[Callable[[], None]]
+        self._waiter: Optional[asyncio.Future[None]] = None
+        self._eof_waiter: Optional[asyncio.Future[None]] = None
+        self._exception: Optional[BaseException] = None
+        self._timer = TimerNoop() if timer is None else timer
+        self._eof_callbacks: List[Callable[[], None]] = []
 
     def __repr__(self) -> str:
         info = [self.__class__.__name__]
@@ -133,7 +138,7 @@ class StreamReader(AsyncStreamReaderMixin):
             info.append("%d bytes" % self._size)
         if self._eof:
             info.append("eof")
-        if self._low_water != 2 ** 16:  # default limit
+        if self._low_water != 2**16:  # default limit
             info.append("low=%d high=%d" % (self._low_water, self._high_water))
         if self._waiter:
             info.append("w=%r" % self._waiter)
@@ -147,19 +152,23 @@ class StreamReader(AsyncStreamReaderMixin):
     def exception(self) -> Optional[BaseException]:
         return self._exception
 
-    def set_exception(self, exc: BaseException) -> None:
+    def set_exception(
+        self,
+        exc: BaseException,
+        exc_cause: BaseException = _EXC_SENTINEL,
+    ) -> None:
         self._exception = exc
         self._eof_callbacks.clear()
 
         waiter = self._waiter
         if waiter is not None:
             self._waiter = None
-            set_exception(waiter, exc)
+            set_exception(waiter, exc, exc_cause)
 
         waiter = self._eof_waiter
         if waiter is not None:
             self._eof_waiter = None
-            set_exception(waiter, exc)
+            set_exception(waiter, exc, exc_cause)
 
     def on_eof(self, callback: Callable[[], None]) -> None:
         if self._eof:
@@ -266,7 +275,7 @@ class StreamReader(AsyncStreamReaderMixin):
         # self._http_chunk_splits contains logical byte offsets from start of
         # the body transfer. Each offset is the offset of the end of a chunk.
         # "Logical" means bytes, accessible for a user.
-        # If no chunks containig logical data were received, current position
+        # If no chunks containing logical data were received, current position
         # is difinitely zero.
         pos = self._http_chunk_splits[-1] if self._http_chunk_splits else 0
 
@@ -299,10 +308,7 @@ class StreamReader(AsyncStreamReaderMixin):
 
         waiter = self._waiter = self._loop.create_future()
         try:
-            if self._timer:
-                with self._timer:
-                    await waiter
-            else:
+            with self._timer:
                 await waiter
         finally:
             self._waiter = None
@@ -327,7 +333,9 @@ class StreamReader(AsyncStreamReaderMixin):
                 offset = self._buffer_offset
                 ichar = self._buffer[0].find(separator, offset) + 1
                 # Read from current offset to found separator or to the end.
-                data = self._read_nowait_chunk(ichar - offset if ichar else -1)
+                data = self._read_nowait_chunk(
+                    ichar - offset + seplen - 1 if ichar else -1
+                )
                 chunk += data
                 chunk_size += len(data)
                 if ichar:
@@ -436,7 +444,7 @@ class StreamReader(AsyncStreamReaderMixin):
         if self._exception is not None:
             raise self._exception
 
-        blocks = []  # type: List[bytes]
+        blocks: List[bytes] = []
         while n > 0:
             block = await self.read(n)
             if not block:
@@ -491,8 +499,9 @@ class StreamReader(AsyncStreamReaderMixin):
 
     def _read_nowait(self, n: int) -> bytes:
         """Read not more than n bytes, or whole buffer if n == -1"""
-        chunks = []
+        self._timer.assert_timeout()
 
+        chunks = []
         while self._buffer:
             chunk = self._read_nowait_chunk(n)
             chunks.append(chunk)
@@ -506,12 +515,19 @@ class StreamReader(AsyncStreamReaderMixin):
 
 class EmptyStreamReader(StreamReader):  # lgtm [py/missing-call-to-init]
     def __init__(self) -> None:
-        pass
+        self._read_eof_chunk = False
+
+    def __repr__(self) -> str:
+        return "<%s>" % self.__class__.__name__
 
     def exception(self) -> Optional[BaseException]:
         return None
 
-    def set_exception(self, exc: BaseException) -> None:
+    def set_exception(
+        self,
+        exc: BaseException,
+        exc_cause: BaseException = _EXC_SENTINEL,
+    ) -> None:
         pass
 
     def on_eof(self, callback: Callable[[], None]) -> None:
@@ -547,6 +563,10 @@ class EmptyStreamReader(StreamReader):  # lgtm [py/missing-call-to-init]
         return b""
 
     async def readchunk(self) -> Tuple[bytes, bool]:
+        if not self._read_eof_chunk:
+            self._read_eof_chunk = True
+            return (b"", False)
+
         return (b"", True)
 
     async def readexactly(self, n: int) -> bytes:
@@ -565,10 +585,10 @@ class DataQueue(Generic[_T]):
     def __init__(self, loop: asyncio.AbstractEventLoop) -> None:
         self._loop = loop
         self._eof = False
-        self._waiter = None  # type: Optional[asyncio.Future[None]]
-        self._exception = None  # type: Optional[BaseException]
+        self._waiter: Optional[asyncio.Future[None]] = None
+        self._exception: Optional[BaseException] = None
         self._size = 0
-        self._buffer = collections.deque()  # type: Deque[Tuple[_T, int]]
+        self._buffer: Deque[Tuple[_T, int]] = collections.deque()
 
     def __len__(self) -> int:
         return len(self._buffer)
@@ -582,14 +602,18 @@ class DataQueue(Generic[_T]):
     def exception(self) -> Optional[BaseException]:
         return self._exception
 
-    def set_exception(self, exc: BaseException) -> None:
+    def set_exception(
+        self,
+        exc: BaseException,
+        exc_cause: BaseException = _EXC_SENTINEL,
+    ) -> None:
         self._eof = True
         self._exception = exc
 
         waiter = self._waiter
         if waiter is not None:
             self._waiter = None
-            set_exception(waiter, exc)
+            set_exception(waiter, exc, exc_cause)
 
     def feed_data(self, data: _T, size: int = 0) -> None:
         self._size += size

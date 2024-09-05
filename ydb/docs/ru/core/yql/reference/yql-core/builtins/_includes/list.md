@@ -361,7 +361,7 @@ ListIndexOf(List<T>?, T)->Uint64?
 2. Функции для обработки элементов, например:
     * [Лямбда функция](../../syntax/expressions.md#lambda);
     * `Module::Function` - С++ UDF;
-{% if feature_udf_noncpp %} 
+{% if feature_udf_noncpp and oss != true %}
     * [Python UDF](../../udf/python.md), [JavaScript UDF](../../udf/javascript.md) или любое другое вызываемое значение;
 {% endif %}
 

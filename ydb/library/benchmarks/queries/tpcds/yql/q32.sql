@@ -11,7 +11,9 @@ $avg_discount_by_item = (
            cross join {{item}} as item
          where cast (d_date as date) between cast('2002-03-29' as date) and
                              (cast('2002-03-29' as date) + DateTime::IntervalFromDays(90))
+          and i_item_sk = cs_item_sk
           and d_date_sk = cs_sold_date_sk
+          and i_manufact_id = 66
           group by item.i_item_sk
       );
 
@@ -29,7 +31,7 @@ and cast (d_date as date) between cast('2002-03-29' as date) and
         (cast('2002-03-29' as date) + DateTime::IntervalFromDays(90))
 and d_date_sk = cs_sold_date_sk
 and cs_ext_discount_amt
-     > 1.3 * adi.avg_discout
+     > $z1_3 * adi.avg_discout
 limit 100;
 
 -- end query 1 in stream 0 using template query32.tpl

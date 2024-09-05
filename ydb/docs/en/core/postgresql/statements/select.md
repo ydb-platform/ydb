@@ -48,7 +48,7 @@ Thus, the first 5 rows from the query will be printed out. With `OFFSET`, you ca
 
 {% include [select_few_col_where_limit_offset](../_includes/statements/select/select_few_col_where_limit_offset.md) %}
 
-When specifying `OFFSET 3`, the first 3 rows of the resulting selection from the `people` table will be skipped. 
+When specifying `OFFSET 3`, the first 3 rows of the resulting selection from the `people` table will be skipped.
 
 
 ## Sorting the results of a query using ORDER BY {#select_from_where_order_by}
@@ -66,7 +66,7 @@ Sorting is applied to the results returned by the `SELECT` clause, not to the or
 
 Example of grouping data from the "people" table by gender ("sex") and age ("age") with a selection limit (`WHERE`) based on age:
 
-{% include [select_few_col_where_group_by_few_cond](../_includes/statements/select/select_few_col_where_group_by_few_cond.md) %} 
+{% include [select_few_col_where_group_by_few_cond](../_includes/statements/select/select_few_col_where_group_by_few_cond.md) %}
 
 In the previous example, we used `WHERE` – an optional parameter for filtering the result, which filters individual rows before applying `GROUP BY`. In the next example, we use `HAVING` to exclude from the result the rows of groups that do not meet the condition. `HAVING` filters the rows of groups created by `GROUP BY`. When using `HAVING`, the query becomes grouped, even if `GROUP BY` is absent. All selected rows are considered to form one group, and in the `SELECT` list and `HAVING` clause, one can refer to the table columns only from aggregate functions. Such a query will yield a single row if the result of the `HAVING` condition is true, and zero rows otherwise.
 
@@ -74,10 +74,10 @@ In the previous example, we used `WHERE` – an optional parameter for filtering
 
 #|
 || **HAVING + GROUP BY** | **HAVING + WHERE + GROUP BY** ||
-|| 
-{% include [select_having_group_by](../_includes/statements/select/select_having_group_by.md) %} 
-| 
-{% include [select_having_where_group_by](../_includes/statements/select/select_having_where_group_by.md) %} 
+||
+{% include [select_having_group_by](../_includes/statements/select/select_having_group_by.md) %}
+|
+{% include [select_having_where_group_by](../_includes/statements/select/select_having_where_group_by.md) %}
 ||
 |#
 
@@ -89,7 +89,7 @@ In the previous example, we used `WHERE` – an optional parameter for filtering
 ### Joining tables using LEFT JOIN, RIGHT JOIN, or INNER JOIN {#select_from_left_right__inner_join_on}
 The syntax for `SELECT` using `LEFT JOIN`, `RIGHT JOIN`, `INNER JOIN`, `FULL JOIN` is the same:
 
-{% include [select_join_syntax](../_includes/statements/select/select_join_syntax.md) %} 
+{% include [select_join_syntax](../_includes/statements/select/select_join_syntax.md) %}
 
 All `JOIN` modes, except `CROSS JOIN`, use the keyword `ON` for joining tables. In the case of `CROSS JOIN`, its usage syntax will be as follows: `CROSS JOIN <table name> AS <table name alias>;`. Let's consider an example of using each `JOIN` mode separately.
 

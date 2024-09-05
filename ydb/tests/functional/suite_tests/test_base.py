@@ -249,6 +249,7 @@ class BaseSuiteRunner(object):
                 use_in_memory_pdisks=True,
                 disable_iterator_reads=True,
                 disable_iterator_lookups=True,
+                extra_feature_flags=["enable_resource_pools"],
                 # additional_log_configs={'KQP_YQL': 7}
             )
         )

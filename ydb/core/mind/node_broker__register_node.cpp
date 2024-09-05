@@ -2,6 +2,7 @@
 #include "node_broker__scheme.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/protos/counters_node_broker.pb.h>
 
 namespace NKikimr {
 namespace NNodeBroker {
@@ -20,6 +21,8 @@ public:
         , FixNodeId(false)
     {
     }
+
+    TTxType GetTxType() const override { return TXTYPE_REGISTER_NODE; }
 
     bool Error(TStatus::ECode code,
                const TString &reason,

@@ -3,6 +3,7 @@
 #include <library/cpp/cache/cache.h>
 #include <library/cpp/threading/future/future.h>
 #include <util/thread/pool.h>
+#include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 #include <ydb/library/yql/providers/s3/credentials/credentials.h>
 
@@ -150,7 +151,7 @@ using TListResult = std::variant<TListEntries, TListError>;
 
 struct TListingRequest {
     TString Url;
-    TS3Credentials::TAuthInfo AuthInfo;
+    TS3Credentials Credentials;
     TString Pattern;
     ES3PatternType PatternType = ES3PatternType::Wildcard;
     TString Prefix;
@@ -169,6 +170,7 @@ IS3Lister::TPtr MakeS3Lister(
     const TListingRequest& listingRequest,
     const TMaybe<TString>& delimiter,
     bool allowLocalFiles,
+    NActors::TActorSystem* actorSystem,
     TSharedListingContextPtr sharedCtx = nullptr);
 
 class IS3ListerFactory {
@@ -189,7 +191,8 @@ IS3ListerFactory::TPtr MakeS3ListerFactory(
     size_t maxParallelOps,
     size_t callbackThreadCount,
     size_t callbackPerThreadQueueSize,
-    size_t regexpCacheSize);
+    size_t regexpCacheSize,
+    NActors::TActorSystem* actorSystem);
 
 } // namespace NS3Lister
 } // namespace NYql

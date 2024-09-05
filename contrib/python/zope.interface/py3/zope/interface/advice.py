@@ -52,7 +52,7 @@ def getFrameInfo(frame):
     hasName = '__name__' in f_globals
 
     sameName = hasModule and hasName
-    sameName = sameName and f_globals['__name__']==f_locals['__module__']
+    sameName = sameName and f_globals['__name__'] == f_locals['__module__']
 
     module = hasName and sys.modules.get(f_globals['__name__']) or None
 
@@ -67,35 +67,36 @@ def getFrameInfo(frame):
         kind = "class"
     elif not sameNamespace:
         kind = "function call"
-    else: # pragma: no cover
-        # How can you have f_locals is f_globals, and have '__module__' set?
-        # This is probably module-level code, but with a '__module__' variable.
+    else:  # pragma: no cover
+        # How can you have f_locals is f_globals, and have '__module__'
+        # set?  # This is probably module-level code, but with a
+        # '__module__' variable.
         kind = "unknown"
     return kind, module, f_locals, f_globals
 
 
 def isClassAdvisor(ob):
     """True if 'ob' is a class advisor function"""
-    return isinstance(ob,FunctionType) and hasattr(ob,'previousMetaclass')
+    return isinstance(ob, FunctionType) and hasattr(ob, 'previousMetaclass')
 
 
 def determineMetaclass(bases, explicit_mc=None):
     """Determine metaclass from 1+ bases and optional explicit __metaclass__"""
 
-    meta = [getattr(b,'__class__',type(b)) for b in bases]
+    meta = [getattr(b, '__class__', type(b)) for b in bases]
 
     if explicit_mc is not None:
         # The explicit metaclass needs to be verified for compatibility
         # as well, and allowed to resolve the incompatible bases, if any
         meta.append(explicit_mc)
 
-    if len(meta)==1:
+    if len(meta) == 1:
         # easy case
         return meta[0]
 
-    candidates = minimalBases(meta) # minimal set of metaclasses
+    candidates = minimalBases(meta)  # minimal set of metaclasses
 
-    if len(candidates)>1:
+    if len(candidates) > 1:
         # We could auto-combine, but for now we won't...
         raise TypeError("Incompatible metatypes", bases)
 
@@ -109,7 +110,7 @@ def minimalBases(classes):
 
     for m in classes:
         for n in classes:
-            if issubclass(n,m) and m is not n:
+            if issubclass(n, m) and m is not n:
                 break
         else:
             # m has no subclasses in 'classes'

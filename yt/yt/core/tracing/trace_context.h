@@ -85,7 +85,8 @@ public:
     /*!
      *  Safe to call multiple times from arbitrary threads; only the first call matters.
      */
-    void Finish();
+    void Finish(
+        std::optional<NProfiling::TCpuInstant> finishTime = {});
 
     //! Returns the flag indicating that this trace may be sent to tracer.
     /*!
@@ -205,7 +206,9 @@ public:
         std::optional<TString> endpoint = {},
         NYson::TYsonString baggage = NYson::TYsonString());
 
-    TTraceContextPtr CreateChild(TString spanName);
+    TTraceContextPtr CreateChild(
+        TString spanName,
+        std::optional<NProfiling::TCpuInstant> startTime = {});
 
     void AddProfilingTag(const TString& name, const TString& value);
     void AddProfilingTag(const TString& name, i64 value);
@@ -251,7 +254,8 @@ private:
     TTraceContext(
         TSpanContext parentSpanContext,
         TString spanName,
-        TTraceContextPtr parentTraceContext = nullptr);
+        TTraceContextPtr parentTraceContext = nullptr,
+        std::optional<NProfiling::TCpuInstant> startTime = {});
     DECLARE_NEW_FRIEND()
 
     void DoSetAllocationTags(TAllocationTags::TTags&& tags);
@@ -347,7 +351,8 @@ public:
     TTraceContextFinishGuard& operator=(const TTraceContextFinishGuard&) = delete;
     TTraceContextFinishGuard& operator=(TTraceContextFinishGuard&&);
 
-    void Release();
+    void Release(
+        std::optional<NProfiling::TCpuInstant> finishTime = {});
 private:
     TTraceContextPtr TraceContext_;
 };
@@ -361,6 +366,9 @@ class TTraceContextGuard
 public:
     explicit TTraceContextGuard(TTraceContextPtr traceContext);
     TTraceContextGuard(TTraceContextGuard&& other) = default;
+
+    void Release(
+        std::optional<NProfiling::TCpuInstant> finishTime = {});
 
 private:
     TCurrentTraceContextGuard TraceContextGuard_;
@@ -376,10 +384,15 @@ class TChildTraceContextGuard
 public:
     TChildTraceContextGuard(
         const TTraceContextPtr& traceContext,
-        TString spanName);
+        TString spanName,
+        std::optional<NProfiling::TCpuInstant> startTime = {});
     explicit TChildTraceContextGuard(
-        TString spanName);
+        TString spanName,
+        std::optional<NProfiling::TCpuInstant> startTime = {});
     TChildTraceContextGuard(TChildTraceContextGuard&& other) = default;
+
+    void Finish(
+        std::optional<NProfiling::TCpuInstant> finishTime = {});
 
 private:
     TCurrentTraceContextGuard TraceContextGuard_;

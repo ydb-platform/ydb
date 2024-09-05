@@ -535,6 +535,21 @@ TStringBuf TDecimal::WriteBinary128(int precision, TValue128 value, char* buffer
     return TStringBuf{buffer, sizeof(TValue128)};
 }
 
+TStringBuf TDecimal::WriteBinaryVariadic(int precision, TValue128 value, char* buffer, size_t bufferLength)
+{
+    const size_t resultLength = GetValueBinarySize(precision);
+    switch (resultLength) {
+        case 4:
+            return WriteBinary32(precision, static_cast<i32>(value.Low), buffer, bufferLength);
+        case 8:
+            return WriteBinary64(precision, static_cast<i64>(value.Low), buffer, bufferLength);
+        case 16:
+            return WriteBinary128(precision, value, buffer, bufferLength);
+        default:
+            THROW_ERROR_EXCEPTION("Invalid precision %v", precision);
+    }
+}
+
 template <typename T>
 Y_FORCE_INLINE void CheckBufferLength(int precision, size_t bufferLength)
 {

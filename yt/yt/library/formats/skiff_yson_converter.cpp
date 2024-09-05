@@ -134,12 +134,15 @@ struct TOptionalTypesMatch
         << ex;
 }
 
-template <typename... Args>
-[[noreturn]] void ThrowYsonToSkiffConversionError(const TComplexTypeFieldDescriptor& descriptor, const Args&... args)
+template <typename... TArgs>
+[[noreturn]] void ThrowYsonToSkiffConversionError(
+    const TComplexTypeFieldDescriptor& descriptor,
+    TFormatString<TArgs...> format,
+    TArgs&&... args)
 {
     THROW_ERROR_EXCEPTION("Yson to Skiff conversion error while converting %Qv field",
         descriptor.GetDescription())
-        << TError(args...);
+        << TError(format, std::forward<TArgs>(args)...);
 }
 
 [[noreturn]] void ThrowBadYsonToken(
@@ -168,12 +171,15 @@ template <typename... Args>
         actual);
 }
 
-template <typename... Args>
-[[noreturn]] void ThrowSkiffToYsonConversionError(const TComplexTypeFieldDescriptor& descriptor, const Args&... args)
+template <typename... TArgs>
+[[noreturn]] void ThrowSkiffToYsonConversionError(
+    const TComplexTypeFieldDescriptor& descriptor,
+    TFormatString<TArgs...> format,
+    TArgs&&... args)
 {
     THROW_ERROR_EXCEPTION("Skiff to Yson conversion error while converting %Qv field",
         descriptor.GetDescription())
-        << TError(args...);
+        << TError(format, std::forward<TArgs>(args)...);
 }
 
 TOptionalTypesMatch MatchOptionalTypes(

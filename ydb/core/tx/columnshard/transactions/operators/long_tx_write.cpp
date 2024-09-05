@@ -48,4 +48,9 @@ bool TLongTxTransactionOperator::DoParse(TColumnShard& /*owner*/, const TString&
     return true;
 }
 
+void TLongTxTransactionOperator::DoSendReply(TColumnShard& owner, const TActorContext& ctx) {
+    const auto& txInfo = GetTxInfo();
+    ctx.Send(txInfo.Source, BuildProposeResultEvent(owner).release());
+}
+
 }

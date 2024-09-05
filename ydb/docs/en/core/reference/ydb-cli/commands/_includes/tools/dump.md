@@ -72,4 +72,3 @@ data_00.csv  scheme.pb
 /home/user/dump/series:
 data_00.csv  scheme.pb
 ```
-

@@ -16,7 +16,7 @@ class TCreateTopicActor : public NKikimr::NGRpcProxy::V1::TPQGrpcSchemaBase<TCre
 public:
 
     TCreateTopicActor(
-            TActorId requester, 
+            TActorId requester,
             TIntrusiveConstPtr<NACLib::TUserToken> userToken,
             TString topicPath,
             TString databaseName,
@@ -78,13 +78,13 @@ public:
                 name,
                 topicRequest,
                 modifyScheme,
-                ctx,
+                NKikimr::AppData(ctx),
                 error,
                 workingDir,
                 proposal.Record.GetDatabaseName()
         );
         if (codes.YdbCode != Ydb::StatusIds::SUCCESS) {
-            return ReplyWithError(codes.YdbCode, codes.PQCode, error, ctx);
+            return ReplyWithError(codes.YdbCode, codes.PQCode, error);
         }
     };
 
@@ -192,7 +192,7 @@ void TKafkaCreateTopicsActor::Bootstrap(const NActors::TActorContext& ctx) {
 
         TopicNamesToRetentions[topicName] = std::pair<std::optional<ui64>, std::optional<ui64>>(
             convertedRetentions.Ms,
-            convertedRetentions.Bytes 
+            convertedRetentions.Bytes
         );
 
         ctx.Register(new TCreateTopicActor(
@@ -202,7 +202,7 @@ void TKafkaCreateTopicsActor::Bootstrap(const NActors::TActorContext& ctx) {
             Context->DatabasePath,
             topic.NumPartitions,
             convertedRetentions.Ms,
-            convertedRetentions.Bytes 
+            convertedRetentions.Bytes
         ));
 
         InflyTopics++;
@@ -243,7 +243,7 @@ void TKafkaCreateTopicsActor::Reply(const TActorContext& ctx) {
             responseTopic.ErrorMessage = TopicNamesToResponses[topicName]->Message;
         }
 
-        auto addConfigIfRequired = [this, &topicName, &responseTopic](std::optional<ui64> configValue, TString configName) { 
+        auto addConfigIfRequired = [this, &topicName, &responseTopic](std::optional<ui64> configValue, TString configName) {
             if (configValue.has_value()) {
                 TCreateTopicsResponseData::TCreatableTopicResult::TCreatableTopicConfigs config;
                 config.Name = configName;
@@ -271,7 +271,7 @@ void TKafkaCreateTopicsActor::Reply(const TActorContext& ctx) {
         responseTopic.ErrorMessage = "Duplicate topic in request.";
         response->Topics.push_back(responseTopic);
         responseStatus = INVALID_REQUEST;
-    } 
+    }
 
     Send(Context->ConnectionId,
         new TEvKafka::TEvResponse(CorrelationId, response, responseStatus));

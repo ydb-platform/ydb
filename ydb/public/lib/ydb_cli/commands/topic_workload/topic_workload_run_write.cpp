@@ -61,6 +61,17 @@ void TCommandWorkloadTopicRunWrite::Config(TConfig& config)
 
     config.Opts->MutuallyExclusive("message-rate", "byte-rate");
 
+    config.Opts->AddLongOption("use-tx", "Use transactions.")
+        .Optional()
+        .DefaultValue(false)
+        .StoreTrue(&Scenario.UseTransactions);
+    config.Opts->AddLongOption("commit-period", "Waiting time between commit.")
+        .DefaultValue(10)
+        .StoreResult(&Scenario.CommitPeriod);
+    config.Opts->AddLongOption("commit-messages", "Number of messages per transaction")
+        .DefaultValue(1'000'000)
+        .StoreResult(&Scenario.CommitMessages);
+
     config.IsNetworkIntensive = true;
 }
 

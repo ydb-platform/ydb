@@ -19,7 +19,7 @@ using namespace NYql::NNodes;
 
 bool UseSource(const TKqpOptimizeContext& kqpCtx, const NYql::TKikimrTableDescription& tableDesc) {
     bool useSource = kqpCtx.Config->EnableKqpScanQuerySourceRead && kqpCtx.IsScanQuery();
-    useSource = useSource || (kqpCtx.Config->EnableKqpDataQuerySourceRead && kqpCtx.IsDataQuery());
+    useSource = useSource || kqpCtx.IsDataQuery();
     useSource = useSource || kqpCtx.IsGenericQuery();
     useSource = useSource &&
         tableDesc.Metadata->Kind != EKikimrTableKind::SysView &&

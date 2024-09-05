@@ -16,8 +16,8 @@ class TRefCountedTrackerProfiler
 public:
     TRefCountedTrackerProfiler()
     {
-        TProfiler registry{"/ref_counted_tracker"};
-        registry.AddProducer("/total", MakeStrong(this));
+        TProfiler profiler{"/ref_counted_tracker"};
+        profiler.AddProducer("/total", MakeStrong(this));
     }
 
     void CollectSensors(ISensorWriter* writer) override

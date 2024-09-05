@@ -35,6 +35,7 @@ PEERDIR(
     ydb/library/yql/providers/common/schema/expr
     ydb/library/yql/parser/pg_catalog
     ydb/library/yql/parser/pg_wrapper/interface
+    library/cpp/yson/node
 )
 
 YQL_LAST_ABI_VERSION()

@@ -49,7 +49,7 @@ Encode a UTF-8 string to the urlencoded format (`Url::Encode`) and back (`Url::D
 **Examples**
 
 ```sql
-SELECT Url::Decode("http://ydb.tech/%D1%81%D1%82%D1%80%D0%B0%D0%BD%D0%B8%D1%86%D0%B0"); 
+SELECT Url::Decode("http://ydb.tech/%D1%81%D1%82%D1%80%D0%B0%D0%BD%D0%B8%D1%86%D0%B0");
   -- "http://ydb.tech/page"
 SELECT Url::Encode("http://ydb.tech/page");
   -- "http://ydb.tech/%D1%81%D1%82%D1%80%D0%B0%D0%BD%D0%B8%D1%86%D0%B0"
@@ -59,7 +59,9 @@ SELECT Url::Encode("http://ydb.tech/page");
 
 Parses the URL into parts.
 
-* ```Url::Parse(Parse{Flags:AutoMap}) -> Struct< Frag: String?, Host: String?, ParseError: String?, Pass: String?, Path: String?, Port: String?, Query: String?, Scheme: String?, User: String? >```
+```
+Url::Parse(Parse{Flags:AutoMap}) -> Struct< Frag: String?, Host: String?, ParseError: String?, Pass: String?, Path: String?, Port: String?, Query: String?, Scheme: String?, User: String? >
+```
 
 **Examples**
 

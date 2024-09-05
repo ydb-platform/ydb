@@ -24,19 +24,19 @@ struct TRedirectUrlParameters {
     TStringBuf State;
     TStringBuf Scheme;
     TStringBuf Host;
-    NMVP::EAuthProfile AuthProfile;
-    TStringBuf AuthEndpoint;
+    NMvp::EAccessServiceType AccessServiceType;
+    TStringBuf AuthUrlPath;
 };
 
 bool TryAppendAuthEndpointFromDetailsYandexProfile(const TRedirectUrlParameters& parameters, TStringBuilder& locationHeaderValue) {
-    if (parameters.AuthProfile != NMVP::EAuthProfile::Yandex) {
+    if (parameters.AccessServiceType != NMvp::yandex_v2) {
         return false;
     }
     const auto& eventDetails = parameters.SessionServerCheckDetails;
-    size_t posAuthUrl = eventDetails.find(parameters.AuthEndpoint);
+    size_t posAuthUrl = eventDetails.find(parameters.AuthUrlPath);
     if (posAuthUrl != TStringBuf::npos) {
         size_t pos = eventDetails.rfind("https://", posAuthUrl);
-        locationHeaderValue << eventDetails.substr(pos, posAuthUrl - pos) << parameters.AuthEndpoint;
+        locationHeaderValue << eventDetails.substr(pos, posAuthUrl - pos) << parameters.AuthUrlPath;
         return true;
     }
     return false;
@@ -53,17 +53,6 @@ TString CreateRedirectUrl(const TRedirectUrlParameters& parameters) {
                         << "&client_id=" << parameters.OidcSettings.ClientId
                         << "&redirect_uri=" << parameters.Scheme << parameters.Host << parameters.CallbackUrl;
     return locationHeaderValue;
-}
-
-void SetCORS(const NHttp::THttpIncomingRequestPtr& request, NHttp::THeadersBuilder* const headers) {
-    TString origin = TString(NHttp::THeaders(request->Headers)["Origin"]);
-    if (origin.empty()) {
-        origin = "*";
-    }
-    headers->Set("Access-Control-Allow-Origin", origin);
-    headers->Set("Access-Control-Allow-Credentials", "true");
-    headers->Set("Access-Control-Allow-Headers", "Content-Type,Authorization,Origin,Accept");
-    headers->Set("Access-Control-Allow-Methods", "OPTIONS, GET, POST");
 }
 
 NHttp::THttpOutgoingResponsePtr CreateResponseForAjaxRequest(const NHttp::THttpIncomingRequestPtr& request, NHttp::THeadersBuilder& headers, const TString& redirectUrl) {
@@ -83,6 +72,17 @@ TStringBuf GetRequestedUrl(const NHttp::THttpIncomingRequestPtr& request, bool i
 }
 
 } // namespace
+
+void SetCORS(const NHttp::THttpIncomingRequestPtr& request, NHttp::THeadersBuilder* const headers) {
+    TString origin = TString(NHttp::THeaders(request->Headers)["Origin"]);
+    if (origin.empty()) {
+        origin = "*";
+    }
+    headers->Set("Access-Control-Allow-Origin", origin);
+    headers->Set("Access-Control-Allow-Credentials", "true");
+    headers->Set("Access-Control-Allow-Headers", "Content-Type,Authorization,Origin,Accept");
+    headers->Set("Access-Control-Allow-Methods", "OPTIONS, GET, POST");
+}
 
 TString HmacSHA256(TStringBuf key, TStringBuf data) {
     unsigned char hash[SHA256_DIGEST_LENGTH];
@@ -124,8 +124,8 @@ NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(TStringBuf eventDetai
                                                     .State = state,
                                                     .Scheme = (request->Endpoint->Secure ? "https://" : "http://"),
                                                     .Host = request->Host,
-                                                    .AuthProfile = settings.AuthProfile,
-                                                    .AuthEndpoint = settings.AuthEndpoint});
+                                                    .AccessServiceType = settings.AccessServiceType,
+                                                    .AuthUrlPath = settings.AuthUrlPath});
     const size_t cookieMaxAgeSec = 420;
     TStringBuilder setCookieBuilder;
     setCookieBuilder << CreateNameYdbOidcCookie(settings.ClientSecret, state) << "=" << GenerateCookie(state, GetRequestedUrl(request, isAjaxRequest), settings.ClientSecret, isAjaxRequest)
@@ -172,6 +172,6 @@ const TString& GetAuthCallbackUrl() {
 TString CreateSecureCookie(const TString& key, const TString& value) {
     TStringBuilder cookieBuilder;
     cookieBuilder << CreateNameSessionCookie(key) << "=" << Base64Encode(value)
-            << "; Path=/; Secure; HttpOnly; SameSite=Lax";
+            << "; Path=/; Secure; HttpOnly; SameSite=None; Partitioned";
     return cookieBuilder;
 }

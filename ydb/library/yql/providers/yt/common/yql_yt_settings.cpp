@@ -219,25 +219,9 @@ TYtConfiguration::TYtConfiguration()
         .NonEmpty()
         .ValueSetter([this] (const TString& cluster, TSet<TString> trees) {
             HybridDqExecution = false;
-            if (ALL_CLUSTERS == cluster) {
-                PoolTrees.UpdateAll([&trees] (const TString&, TSet<TString>& val) {
-                    val.insert(trees.begin(), trees.end());
-                });
-            } else {
-                PoolTrees[cluster].insert(trees.begin(), trees.end());
-            }
+            PoolTrees[cluster] = trees;
         });
-    REGISTER_SETTING(*this, TentativePoolTrees)
-        .NonEmpty()
-        .ValueSetter([this] (const TString& cluster, TSet<TString> trees) {
-            if (ALL_CLUSTERS == cluster) {
-                TentativePoolTrees.UpdateAll([&trees] (const TString&, TSet<TString>& val) {
-                    val.insert(trees.begin(), trees.end());
-                });
-            } else {
-                TentativePoolTrees[cluster].insert(trees.begin(), trees.end());
-            }
-        });
+    REGISTER_SETTING(*this, TentativePoolTrees).NonEmpty();
     REGISTER_SETTING(*this, TentativeTreeEligibilitySampleJobCount);
     REGISTER_SETTING(*this, TentativeTreeEligibilityMaxJobDurationRatio);
     REGISTER_SETTING(*this, TentativeTreeEligibilityMinJobDuration);

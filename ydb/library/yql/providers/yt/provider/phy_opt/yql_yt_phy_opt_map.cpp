@@ -62,7 +62,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FlatMap(TExprBase node,
 
     auto cluster = TString{GetClusterName(input)};
     TSyncMap syncList;
-    if (!IsYtCompleteIsolatedLambda(flatMap.Lambda().Ref(), syncList, cluster, true, false)) {
+    if (!IsYtCompleteIsolatedLambda(flatMap.Lambda().Ref(), syncList, cluster, false)) {
         return node;
     }
 
@@ -150,7 +150,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::LMap(TExprBase node, TE
 
     auto cluster = TString{GetClusterName(lmap.Input())};
     TSyncMap syncList;
-    if (!IsYtCompleteIsolatedLambda(lmap.Lambda().Ref(), syncList, cluster, true, false)) {
+    if (!IsYtCompleteIsolatedLambda(lmap.Lambda().Ref(), syncList, cluster, false)) {
         return node;
     }
 
@@ -228,19 +228,19 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::CombineByKey(TExprBase 
 
     auto cluster = TString{GetClusterName(input)};
     TSyncMap syncList;
-    if (!IsYtCompleteIsolatedLambda(combineByKey.PreMapLambda().Ref(), syncList, cluster, true, false)) {
+    if (!IsYtCompleteIsolatedLambda(combineByKey.PreMapLambda().Ref(), syncList, cluster, false)) {
         return node;
     }
-    if (!IsYtCompleteIsolatedLambda(combineByKey.KeySelectorLambda().Ref(), syncList, cluster, true, false)) {
+    if (!IsYtCompleteIsolatedLambda(combineByKey.KeySelectorLambda().Ref(), syncList, cluster, false)) {
         return node;
     }
-    if (!IsYtCompleteIsolatedLambda(combineByKey.InitHandlerLambda().Ref(), syncList, cluster, true, false)) {
+    if (!IsYtCompleteIsolatedLambda(combineByKey.InitHandlerLambda().Ref(), syncList, cluster, false)) {
         return node;
     }
-    if (!IsYtCompleteIsolatedLambda(combineByKey.UpdateHandlerLambda().Ref(), syncList, cluster, true, false)) {
+    if (!IsYtCompleteIsolatedLambda(combineByKey.UpdateHandlerLambda().Ref(), syncList, cluster, false)) {
         return node;
     }
-    if (!IsYtCompleteIsolatedLambda(combineByKey.FinishHandlerLambda().Ref(), syncList, cluster, true, false)) {
+    if (!IsYtCompleteIsolatedLambda(combineByKey.FinishHandlerLambda().Ref(), syncList, cluster, false)) {
         return node;
     }
 

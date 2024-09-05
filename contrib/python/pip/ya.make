@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(24.1)
+VERSION(24.2)
 
 LICENSE(MIT)
 
@@ -10,6 +10,7 @@ NO_LINT()
 
 NO_CHECK_IMPORTS(
     pip.__pip-runner__
+    pip._internal.locations._distutils
     pip._vendor.*
 )
 
@@ -151,6 +152,7 @@ PY_SRCS(
     pip/_internal/utils/logging.py
     pip/_internal/utils/misc.py
     pip/_internal/utils/packaging.py
+    pip/_internal/utils/retry.py
     pip/_internal/utils/setuptools_build.py
     pip/_internal/utils/subprocess.py
     pip/_internal/utils/temp_dir.py
@@ -375,17 +377,6 @@ PY_SRCS(
     pip/_vendor/rich/themes.py
     pip/_vendor/rich/traceback.py
     pip/_vendor/rich/tree.py
-    pip/_vendor/tenacity/__init__.py
-    pip/_vendor/tenacity/_asyncio.py
-    pip/_vendor/tenacity/_utils.py
-    pip/_vendor/tenacity/after.py
-    pip/_vendor/tenacity/before.py
-    pip/_vendor/tenacity/before_sleep.py
-    pip/_vendor/tenacity/nap.py
-    pip/_vendor/tenacity/retry.py
-    pip/_vendor/tenacity/stop.py
-    pip/_vendor/tenacity/tornadoweb.py
-    pip/_vendor/tenacity/wait.py
     pip/_vendor/tomli/__init__.py
     pip/_vendor/tomli/_parser.py
     pip/_vendor/tomli/_re.py
@@ -452,7 +443,6 @@ RESOURCE_FILES(
     pip/_vendor/platformdirs/py.typed
     pip/_vendor/resolvelib/py.typed
     pip/_vendor/rich/py.typed
-    pip/_vendor/tenacity/py.typed
     pip/_vendor/tomli/py.typed
     pip/_vendor/truststore/py.typed
     pip/_vendor/vendor.txt

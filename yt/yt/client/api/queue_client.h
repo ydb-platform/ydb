@@ -27,6 +27,8 @@ struct TPullRowsOptions
     NChaosClient::TReplicationProgress ReplicationProgress;
     NTransactionClient::TTimestamp UpperTimestamp = NTransactionClient::NullTimestamp;
     NTableClient::TTableSchemaPtr TableSchema;
+    i64 MaxDataWeight = 1_GB;
+    IReservingMemoryUsageTrackerPtr MemoryTracker;
 };
 
 struct TPullRowsResult

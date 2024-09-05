@@ -159,7 +159,7 @@ void TRemoteRegistry::Detach()
     DoDetach(Sensors_);
 }
 
-void TRemoteRegistry::DoDetach(const THashMap<TString, TRemoteSensorSet>& sensors)
+void TRemoteRegistry::DoDetach(const THashMap<std::string, TRemoteSensorSet>& sensors)
 {
     for (const auto& [name, usedTags] : sensors) {
         auto& sensorSet = Registry_->Sensors_.find(name)->second;

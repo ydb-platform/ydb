@@ -56,7 +56,7 @@ ydb_storage {
 
 ### Конфигурация плагина
 
-Для настройки плагина необходимо добавить секцию `ydb_storage` в раздел `output` файла конфигурации [Logstash](https://www.elastic.co/guide/en/logstash/current/configuration.html). Плагин поддерживает стандартный набор опций для [подключения плагинов {{ ydb-short-name }}](#konfiguraciya-podklyucheniya-plaginov-k-ydb), плюс несколько специфичных для него опций:
+Для настройки плагина необходимо добавить секцию `ydb_storage` в раздел `output` файла конфигурации [Logstash](https://www.elastic.co/guide/en/logstash/current/configuration.html). Плагин поддерживает стандартный набор опций для [подключения плагинов {{ ydb-short-name }}](#plugin-config), плюс несколько специфичных для него опций:
 
 * `table_name` — обязательный параметр с именем таблицы, в которую будут записываться события Logstash
 * `uuid_column` — необязательный параметр с именем колонки, в которую плагин будет записывать случайно сгенерированный идентификатор
@@ -77,8 +77,8 @@ ydb_storage {
 CREATE TABLE `logstash_demo` (
     `uuid`     Text NOT NULL,      -- Уникальный идентификатор
     `ts`       Timestamp NOT NULL, -- Время создания сообщения
-    `message`  Text,           
-    `user`     Text,           
+    `message`  Text,
+    `user`     Text,
     `level`    Int32,
 
     PRIMARY KEY (
@@ -119,7 +119,7 @@ curl -H "content-type: application/json" -XPUT 'http://127.0.0.1:9876/http/ping'
 ```
 Все команды должны вернуть `ok` в случае успешного выполнения.
 
-#### Проверка наличия записанных сообщений в {{ ydb-short-name }} 
+#### Проверка наличия записанных сообщений в {{ ydb-short-name }}
 Теперь можно убедиться что все отправленные сообщения записаны в таблице. Выполним запрос (не забывая что чтение из колоночной таблицы возможно только в [режиме ScanQuery](../reference/ydb-cli/commands/scan-query.md)):
 ```sql
 SELECT * FROM `logstash_demo`;
@@ -142,7 +142,7 @@ SELECT * FROM `logstash_demo`;
 
 ### Конфигурация плагина
 
-Для настройки плагина мы должны добавить секцию `ydb_topic` в раздел `input` файла конфигурации [Logstash](https://www.elastic.co/guide/en/logstash/current/configuration.html). Плагин поддерживает стандартный набор опций для [подключения плагинов {{ ydb-short-name }}](#konfiguraciya-podklyucheniya-plaginov-k-ydb), плюс несколько специфичных для него опций:
+Для настройки плагина мы должны добавить секцию `ydb_topic` в раздел `input` файла конфигурации [Logstash](https://www.elastic.co/guide/en/logstash/current/configuration.html). Плагин поддерживает стандартный набор опций для [подключения плагинов {{ ydb-short-name }}](#plugin-config), плюс несколько специфичных для него опций:
 
 * `topic_path` — обязательный параметр с полным путем топика для чтения;
 * `consumer_name` — обязательный параметр с именем [читателя](../concepts/topic.md#consumer) топика;
@@ -158,7 +158,7 @@ ydb -e grpc://localhost:2136 -d /local topic create /local/logstash_demo_topic
 ydb -e grpc://localhost:2136 -d /local topic consumer add --consumer logstash-consumer /local/logstash_demo_topic
 ```
 
-#### Настройка плагина в Logstash
+#### Настройка плагина в Logstash {#plugin-config}
 
 Добавим секцию плагина `ydb_topic` в раздел `input` файла конфигурации [Logstash](https://www.elastic.co/guide/en/logstash/current/configuration.html). Дополнительно для проверки работоспособности также добавим плагин `stdout` в секцию `output`, что позволит отслеживать все события в логе выполнения `Logstash`:
 
@@ -210,7 +210,7 @@ echo '{"user":123}' | ydb -e grpc://localhost:2136 -d /local topic write /local/
 
 ### Конфигурация плагина
 
-Для настройки плагина мы должны добавить секцию `ydb_topic` в раздел `output` файла конфигурации [Logstash](https://www.elastic.co/guide/en/logstash/current/configuration.html). Плагин поддерживает стандартный набор опций для [подключения плагинов {{ ydb-short-name }}](#konfiguraciya-podklyucheniya-plaginov-k-ydb), плюс дополнительные опции:
+Для настройки плагина мы должны добавить секцию `ydb_topic` в раздел `output` файла конфигурации [Logstash](https://www.elastic.co/guide/en/logstash/current/configuration.html). Плагин поддерживает стандартный набор опций для [подключения плагинов {{ ydb-short-name }}](#plugin-config), плюс дополнительные опции:
 
 * `topic_path` — обязательный параметр с полным путем топика для записи.
 

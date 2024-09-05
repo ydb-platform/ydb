@@ -66,7 +66,6 @@ struct TTransaction {
     explicit TTransaction(TSimpleSharedPtr<TEvPQ::TEvProposePartitionConfig> proposeConfig)
         : ProposeConfig(proposeConfig)
     {
-
         Y_ABORT_UNLESS(ProposeConfig);
     }
 
@@ -148,7 +147,7 @@ private:
     bool CanWrite() const;
     bool CanEnqueue() const;
 
-    bool LastOffsetHasBeenCommited(const TUserInfo& userInfo) const;
+    bool LastOffsetHasBeenCommited(const TUserInfoBase& userInfo) const;
 
     void ReplyError(const TActorContext& ctx, const ui64 dst, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error);
     void ReplyPropose(const TActorContext& ctx, const NKikimrPQ::TEvProposeTransaction& event, NKikimrPQ::TEvProposeTransactionResult::EStatus statusCode,
@@ -391,6 +390,7 @@ private:
     void OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx);
 
     void EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
+                                  NKikimrPQ::TBootstrapConfig&& bootstrapConfig,
                                   NPersQueue::TTopicConverterPtr topicConverter,
                                   const TActorContext& ctx);
     TString GetKeyConfig() const;
@@ -458,7 +458,9 @@ public:
     }
 
     // The size of the data realy was persisted in the storage by the partition
-    ui64 MeteringDataSize() const;
+    ui64 UserDataSize() const;
+    // The size of the data was metered to user
+    ui64 MeteringDataSize(TInstant now) const;
     // The size of the storage that was reserved by the partition
     ui64 ReserveSize() const;
     // The size of the storage that usud by the partition. That included combination of the reserver and realy persisted data.
@@ -915,6 +917,8 @@ private:
     TDeque<std::unique_ptr<IEventBase>> PendingEvents;
     TRowVersion LastEmittedHeartbeat;
 
+    TLastCounter SourceIdCounter;
+
     const NKikimrPQ::TPQTabletConfig::TPartition* GetPartitionConfig(const NKikimrPQ::TPQTabletConfig& config);
 
     bool ClosedInternalPartition = false;
@@ -952,4 +956,3 @@ private:
 };
 
 } // namespace NKikimr::NPQ
-

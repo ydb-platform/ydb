@@ -2,6 +2,8 @@ ENABLE(PYBUILD_NO_PYC)
 
 PY3_LIBRARY()
 
+VERSION(Service-proxy-version)
+
 LICENSE(Python-2.0)
 
 NO_PYTHON_INCLUDES()

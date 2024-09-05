@@ -4,12 +4,12 @@
 
 Синтаксис инструкции `UPDATE`:
 ```sql
-UPDATE <table name> 
+UPDATE <table name>
 SET <column name> = [<new value>, CASE ... END]
-WHERE <search column name> = [<search value>, IN] 
+WHERE <search column name> = [<search value>, IN]
 ```
 
-Конструкция `UPDATE ... SET ... WHERE` работает так: 
+Конструкция `UPDATE ... SET ... WHERE` работает так:
 1. **Задаётся название таблицы** – `UPDATE`` `<table name>`, в которой будет произведено обновление данных;
 2. **Указывается название столбца** –  `SET` `<column name>`, где следует обновить данные. Может применяться конструкция для указания набора данных `CASE ... END`;
 3. **Задаётся новое значение** – `<new value>`;
@@ -19,13 +19,13 @@ WHERE <search column name> = [<search value>, IN]
 
 #|
 || **Обновление без условий** | **Обновление с условиями** ||
-|| 
+||
 ```sql
 UPDATE people
 SET name = 'Alexander'
 WHERE lastname = 'Doe';
-``` 
-| 
+```
+|
 ```sql
 UPDATE people
 SET age = 31
@@ -38,20 +38,20 @@ WHERE country = 'USA' AND city = 'Los Angeles';
 ```sql
 ...
 WHERE country = 'USA' AND city = 'Los Angeles' OR city = 'Florida';
-```   
+```
 
 ## Обновление одной записи в таблице с использованием выражений или функций {#update_set_func_where}
-Часто при обновление данные нужно произвести с ними математические действия видоизменить с помощью функции. 
+Часто при обновление данные нужно произвести с ними математические действия видоизменить с помощью функции.
 
 #|
 || **Обновление с применением выражений** | **Обновление с применением функций** ||
-|| 
+||
 ```sql
 UPDATE people
 SET age = age + 1
 WHERE country = 'Canada';
-``` 
-| 
+```
+|
 ```sql
 UPDATE people
 SET name = UPPER(name)
@@ -72,7 +72,7 @@ WHERE lastname = 'Smith';
 ## Обновление нескольких строк в таблицы с применением конструкции CASE ... END {#update_set_case_end_where}
 Для одновременного обновления разных значений в разных строках можно использовать инструкцию `CASE ... END`, с вложенными условиями выборки данных `WHEN <column name> <condition> (=,>,<) THEN <new value>`. Далее следует конструкция `WHERE <column name> IN (<column value>, ...)`, которая позволяет задать список значений, по которым будет выполнено условие.
 
-Пример, где изменяется возраст (`age`) людей (`people`) в зависимости от их имен: 
+Пример, где изменяется возраст (`age`) людей (`people`) в зависимости от их имен:
 
 ```sql
 UPDATE people

@@ -32,6 +32,7 @@ public:
 
     enum class ETargetKind: ui8 {
         Table,
+        IndexTable,
     };
 
     enum class EDstState: ui8 {

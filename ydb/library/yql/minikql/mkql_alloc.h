@@ -77,6 +77,7 @@ struct TAllocState : public TAlignedPagePool
     TListEntry GlobalPAllocList;
     TListEntry* CurrentPAllocList;
     TListEntry ArrowBlocksRoot;
+    std::unordered_set<const void*> ArrowBuffers;
     bool EnableArrowTracking = true;
 
     void* MainContext = nullptr;

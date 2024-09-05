@@ -38,7 +38,9 @@ TWorkerGraph::TWorkerGraph(
     const TUserDataTable& userData,
     const TVector<const TStructExprType*>& inputTypes,
     const TVector<const TStructExprType*>& originalInputTypes,
+    const TVector<const TStructExprType*>& rawInputTypes,
     const TTypeAnnotationNode* outputType,
+    const TTypeAnnotationNode* rawOutputType,
     const TString& LLVMSettings,
     NKikimr::NUdf::ICountersProvider* countersProvider,
     ui64 nativeYtTypeFlags,
@@ -79,6 +81,7 @@ TWorkerGraph::TWorkerGraph(
     for (ui32 i = 0; i < inputsCount; ++i) {
         const auto* type = static_cast<NKikimr::NMiniKQL::TStructType*>(NCommon::BuildType(TPositionHandle(), *inputTypes[i], pgmBuilder));
         const auto* originalType = type;
+        const auto* rawType = static_cast<NKikimr::NMiniKQL::TStructType*>(NCommon::BuildType(TPositionHandle(), *rawInputTypes[i], pgmBuilder));
         if (inputTypes[i] != originalInputTypes[i]) {
             YQL_ENSURE(inputTypes[i]->GetSize() >= originalInputTypes[i]->GetSize());
             originalType = static_cast<NKikimr::NMiniKQL::TStructType*>(NCommon::BuildType(TPositionHandle(), *originalInputTypes[i], pgmBuilder));
@@ -86,11 +89,16 @@ TWorkerGraph::TWorkerGraph(
 
         InputTypes_.push_back(type);
         OriginalInputTypes_.push_back(originalType);
+        RawInputTypes_.push_back(rawType);
     }
 
     if (outputType) {
         OutputType_ = NCommon::BuildType(TPositionHandle(), *outputType, pgmBuilder);
     }
+    if (rawOutputType) {
+        RawOutputType_ = NCommon::BuildType(TPositionHandle(), *rawOutputType, pgmBuilder);
+    }
+
     if (!exprRoot) {
         auto outMkqlType = rootNode.GetStaticType();
         if (outMkqlType->GetKind() == NKikimr::NMiniKQL::TType::EKind::List) {
@@ -106,12 +114,16 @@ TWorkerGraph::TWorkerGraph(
             }
         } else {
             OutputType_ = outMkqlType;
+            RawOutputType_ = outMkqlType;
         }
     }
 
     // Compile computation pattern
 
-    auto selfCallableName = Env_.InternName(PurecalcInputCallableName);
+    const THashSet<NKikimr::NMiniKQL::TInternName> selfCallableNames = {
+        Env_.InternName(PurecalcInputCallableName),
+        Env_.InternName(PurecalcBlockInputCallableName)
+    };
 
     NKikimr::NMiniKQL::TExploringNodeVisitor explorer;
     explorer.Walk(rootNode.GetNode(), Env_);
@@ -123,7 +135,7 @@ TWorkerGraph::TWorkerGraph(
     auto nodeFactory = [&](
         NKikimr::NMiniKQL::TCallable& callable, const NKikimr::NMiniKQL::TComputationNodeFactoryContext& ctx
         ) -> NKikimr::NMiniKQL::IComputationNode* {
-        if (callable.GetType()->GetNameStr() == selfCallableName) {
+        if (selfCallableNames.contains(callable.GetType()->GetNameStr())) {
             YQL_ENSURE(callable.GetInputsCount() == 1, "Self takes exactly 1 argument");
             const auto inputIndex = AS_VALUE(NKikimr::NMiniKQL::TDataLiteral, callable.GetInput(0))->AsValue().Get<ui32>();
             YQL_ENSURE(inputIndex < inputsCount, "Self index is out of range");
@@ -178,15 +190,18 @@ TWorker<TBase>::TWorker(
     const TUserDataTable& userData,
     const TVector<const TStructExprType*>& inputTypes,
     const TVector<const TStructExprType*>& originalInputTypes,
+    const TVector<const TStructExprType*>& rawInputTypes,
     const TTypeAnnotationNode* outputType,
+    const TTypeAnnotationNode* rawOutputType,
     const TString& LLVMSettings,
     NKikimr::NUdf::ICountersProvider* countersProvider,
     ui64 nativeYtTypeFlags,
     TMaybe<ui64> deterministicTimeProviderSeed
 )
     : WorkerFactory_(std::move(factory))
-    , Graph_(exprRoot, exprCtx, serializedProgram, funcRegistry, userData, inputTypes, originalInputTypes, outputType, LLVMSettings,
-        countersProvider, nativeYtTypeFlags, deterministicTimeProviderSeed)
+    , Graph_(exprRoot, exprCtx, serializedProgram, funcRegistry, userData,
+         inputTypes, originalInputTypes, rawInputTypes, outputType, rawOutputType,
+         LLVMSettings, countersProvider, nativeYtTypeFlags, deterministicTimeProviderSeed)
 {
 }
 
@@ -214,8 +229,27 @@ inline const NKikimr::NMiniKQL::TStructType* TWorker<TBase>::GetInputType(bool o
 }
 
 template <typename TBase>
+inline const NKikimr::NMiniKQL::TStructType* TWorker<TBase>::GetRawInputType(ui32 inputIndex) const {
+    const auto& container = Graph_.RawInputTypes_;
+    YQL_ENSURE(inputIndex < container.size(), "invalid input index (" << inputIndex << ") in GetInputType call");
+    return container[inputIndex];
+}
+
+template <typename TBase>
+inline const NKikimr::NMiniKQL::TStructType* TWorker<TBase>::GetRawInputType() const {
+    const auto& container = Graph_.RawInputTypes_;
+    YQL_ENSURE(container.size() == 1, "GetInputType() can be used only for single-input programs");
+    return container[0];
+}
+
+template <typename TBase>
 inline const NKikimr::NMiniKQL::TType* TWorker<TBase>::GetOutputType() const {
     return Graph_.OutputType_;
+}
+
+template <typename TBase>
+inline const NKikimr::NMiniKQL::TType* TWorker<TBase>::GetRawOutputType() const {
+    return Graph_.RawOutputType_;
 }
 
 template <typename TBase>

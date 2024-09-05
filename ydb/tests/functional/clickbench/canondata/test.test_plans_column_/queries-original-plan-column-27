@@ -74,7 +74,7 @@
                                                         "PlanNodeType": "Connection",
                                                         "Plans": [
                                                             {
-                                                                "Node Type": "Aggregate-TableFullScan",
+                                                                "Node Type": "Aggregate-Filter-TableFullScan",
                                                                 "Operators": [
                                                                     {
                                                                         "Aggregation": "{_yql_agg_1: SUM(state._yql_agg_1,1)}",
@@ -85,6 +85,15 @@
                                                                             }
                                                                         ],
                                                                         "Name": "Aggregate"
+                                                                    },
+                                                                    {
+                                                                        "Inputs": [
+                                                                            {
+                                                                                "InternalOperatorId": 2
+                                                                            }
+                                                                        ],
+                                                                        "Name": "Filter",
+                                                                        "Predicate": "URL != "
                                                                     },
                                                                     {
                                                                         "Inputs": [],
@@ -176,7 +185,10 @@
                             }
                         ]
                     }
-                ]
+                ],
+                "Stats": {
+                    "ResourcePoolId": "default"
+                }
             },
             "tables": [
                 {

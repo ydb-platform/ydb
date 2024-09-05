@@ -207,7 +207,12 @@ public:
                 channel->History.back().GroupID = group->GetGroupID(); // we overwrite history item when generation is the same as previous one (so the tablet didn't run yet)
                 channel->History.back().Timestamp = timestamp;
             } else {
+                auto& histogram = Self->TabletCounters->Percentile()[NHive::COUNTER_TABLET_CHANNEL_HISTORY_SIZE];
+                if (channel->History.size() > 0) {
+                    histogram.DecrementFor(channel->History.size());
+                }
                 channel->History.emplace_back(fromGeneration, group->GetGroupID(), timestamp);
+                histogram.IncrementFor(channel->History.size());
             }
             if (channel->History.size() > 1) {
                 // now we block storage for every change of a group's history

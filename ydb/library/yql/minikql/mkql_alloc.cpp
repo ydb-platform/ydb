@@ -256,6 +256,7 @@ void* MKQLArrowAllocate(ui64 size) {
     auto header = (TMkqlArrowHeader*)ptr;
     if (state->EnableArrowTracking) {
         header->Entry.Link(&state->ArrowBlocksRoot);
+        Y_ENSURE(state->ArrowBuffers.insert(header + 1).second);
     } else {
         header->Entry.Clear();
     }
@@ -279,6 +280,9 @@ void MKQLArrowFree(const void* mem, ui64 size) {
         Y_ENSURE(state);
         state->OffloadFree(fullSize);
         header->Entry.Unlink();
+        auto it = state->ArrowBuffers.find(mem);
+        Y_ENSURE(it != state->ArrowBuffers.end());
+        state->ArrowBuffers.erase(it);
     }
 
     Y_ENSURE(size == header->Size);
@@ -288,11 +292,21 @@ void MKQLArrowFree(const void* mem, ui64 size) {
 void MKQLArrowUntrack(const void* mem) {
     TAllocState* state = TlsAllocState;
     Y_ENSURE(state);
+    if (!state->EnableArrowTracking) {
+        return;
+    }
+
+    auto it = state->ArrowBuffers.find(mem);
+    if (it == state->ArrowBuffers.end()) {
+        return;
+    }
+
     auto header = ((TMkqlArrowHeader*)mem) - 1;
     if (!header->Entry.IsUnlinked()) {
         header->Entry.Unlink();
         auto fullSize = header->Size + sizeof(TMkqlArrowHeader);
         state->OffloadFree(fullSize);
+        state->ArrowBuffers.erase(it);
     }
 }
 

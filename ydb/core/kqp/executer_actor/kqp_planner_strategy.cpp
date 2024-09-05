@@ -90,16 +90,16 @@ public:
         return result;
     }
 
-    TNodesManager(const TVector<NKikimrKqp::TKqpNodeResources>& nodeResources) {
+    TNodesManager(const TVector<const NKikimrKqp::TKqpNodeResources*>& nodeResources) {
         for (auto& node : nodeResources) {
-            if (!node.GetAvailableComputeActors()) {
+            if (!node->GetAvailableComputeActors()) {
                 continue;
             }
             Nodes.emplace_back(TNodeDesc{
-                node.GetNodeId(),
-                ActorIdFromProto(node.GetResourceManagerActorId()),
-                node.GetTotalMemory() - node.GetUsedMemory(),
-                node.GetAvailableComputeActors(),
+                node->GetNodeId(),
+                ActorIdFromProto(node->GetResourceManagerActorId()),
+                node->GetTotalMemory() - node->GetUsedMemory(),
+                node->GetAvailableComputeActors(),
                 {}
                 });
         }
@@ -111,7 +111,7 @@ class TKqpGreedyPlanner : public IKqpPlannerStrategy {
 public:
     ~TKqpGreedyPlanner() override {}
 
-    TVector<TResult> Plan(const TVector<NKikimrKqp::TKqpNodeResources>& nodeResources,
+    TVector<TResult> Plan(const TVector<const NKikimrKqp::TKqpNodeResources*>& nodeResources,
         const TVector<TTaskResourceEstimation>& tasks) override
     {
         TVector<TResult> result;
@@ -161,7 +161,7 @@ class TKqpMockEmptyPlanner : public IKqpPlannerStrategy {
 public:
     ~TKqpMockEmptyPlanner() override {}
 
-    TVector<TResult> Plan(const TVector<NKikimrKqp::TKqpNodeResources>&,
+    TVector<TResult> Plan(const TVector<const NKikimrKqp::TKqpNodeResources*>&,
         const TVector<TTaskResourceEstimation>&) override
     {
         return {};

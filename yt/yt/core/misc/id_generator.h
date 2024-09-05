@@ -10,6 +10,9 @@ namespace NYT {
 class TIdGenerator
 {
 public:
+    //! For persistence only.
+    TIdGenerator& operator=(const TIdGenerator& other);
+
     ui64 Next();
     void Reset();
 

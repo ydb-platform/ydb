@@ -124,7 +124,7 @@ public:
         : Provider_(std::move(provider))
     { }
 
-    const TString& GetEndpointDescription() const override
+    const std::string& GetEndpointDescription() const override
     {
         return Provider_->GetEndpointDescription();
     }
@@ -183,8 +183,14 @@ public:
         return 0;
     }
 
+    const IMemoryUsageTrackerPtr& GetChannelMemoryTracker() override
+    {
+        return MemoryUsageTracker_;
+    }
+
 private:
     const IRoamingChannelProviderPtr Provider_;
+    const IMemoryUsageTrackerPtr MemoryUsageTracker_ = GetNullMemoryUsageTracker();
 };
 
 IChannelPtr CreateRoamingChannel(IRoamingChannelProviderPtr provider)

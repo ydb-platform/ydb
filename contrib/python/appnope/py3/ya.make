@@ -8,6 +8,10 @@ LICENSE(BSD-2-Clause)
 
 NO_LINT()
 
+NO_CHECK_IMPORTS(
+    appnope._nope
+)
+
 PY_SRCS(
     TOP_LEVEL
     appnope/__init__.py

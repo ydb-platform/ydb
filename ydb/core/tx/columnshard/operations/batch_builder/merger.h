@@ -79,8 +79,12 @@ private:
     std::vector<std::optional<ui32>> IncomingColumnRemap;
     std::vector<std::shared_ptr<arrow::BooleanArray>> HasIncomingDataFlags;
     const std::optional<NArrow::NMerger::TSortableBatchPosition> DefaultExists;
+    const TString InsertDenyReason;
     virtual TConclusionStatus OnEqualKeys(const NArrow::NMerger::TSortableBatchPosition& exists, const NArrow::NMerger::TSortableBatchPosition& incoming) override;
     virtual TConclusionStatus OnIncomingOnly(const NArrow::NMerger::TSortableBatchPosition& incoming) override {
+        if (!!InsertDenyReason) {
+            return TConclusionStatus::Fail("insertion is impossible: " + InsertDenyReason);
+        }
         if (!DefaultExists) {
             return TConclusionStatus::Success();
         } else {
@@ -93,7 +97,7 @@ public:
     }
 
     TUpdateMerger(const std::shared_ptr<arrow::RecordBatch>& incoming, const std::shared_ptr<ISnapshotSchema>& actualSchema,
-        const std::optional<NArrow::NMerger::TSortableBatchPosition>& defaultExists = {});
+        const TString& insertDenyReason, const std::optional<NArrow::NMerger::TSortableBatchPosition>& defaultExists = {});
 };
 
 }

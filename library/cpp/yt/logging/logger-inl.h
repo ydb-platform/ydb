@@ -181,12 +181,6 @@ struct TLogMessage
     TStringBuf Anchor;
 };
 
-template <class T>
-concept CLiteralLogFormat =
-    requires (T& t) {
-        [] (const char*) { } (t);
-    };
-
 template <class... TArgs>
 TLogMessage BuildLogMessage(
     const TLoggingContext& loggingContext,
@@ -200,7 +194,7 @@ TLogMessage BuildLogMessage(
 }
 
 template <CFormattable T>
-    requires (!CLiteralLogFormat<std::remove_cvref_t<T>>)
+    requires (!CStringLiteral<std::remove_cvref_t<T>>)
 TLogMessage BuildLogMessage(
     const TLoggingContext& loggingContext,
     const TLogger& logger,

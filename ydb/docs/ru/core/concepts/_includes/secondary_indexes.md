@@ -42,7 +42,11 @@
 * Может наблюдаться увеличение задержек из-за того, что транзакции становятся распределенными (при создании синхронного индекса).
 * Возможен повышенный фон ошибок `OVERLOADED` из-за того, что во время записи данных активно работает автоматическое разделение шардов индексной таблицы.
 
-Скорость записи данных выбрана таким образом, чтобы минимизировать влияние процесса записи на пользовательские транзакции. Для быстрого завершения операции рекомендуется запускать онлайн-создание вторичного индекса во время минимальной пользовательской нагрузки.
+{% note info %}
+
+Скорость записи данных выбрана таким образом, чтобы минимизировать влияние процесса записи на пользовательские транзакции. Для управления скоростью настройте лимиты для соответствующей очереди [брокера ресурсов](../../deploy/configuration/config.md#resource-broker-config).
+
+{% endnote %}
 
 Создание индекса — асинхронная операция. Если после запуска операции произойдет разрыв клиент-серверной связности, то построение индекса будет продолжено. Управлять асинхронной операцией можно через {{ ydb-short-name }} CLI.
 
@@ -50,9 +54,9 @@
 
 Вторичный индекс может быть:
 
-- Создан при создании таблицы командой YQL [CREATE TABLE](../../yql/reference/syntax/create_table.md).
-- Добавлен к существующей таблице командой YQL [ALTER TABLE](../../yql/reference/syntax/alter_table.md) или командой YDB CLI [table index add](../../reference/ydb-cli/commands/secondary_index.md#add)
-- Удален у существующей таблицы командой YQL [ALTER TABLE](../../yql/reference/syntax/alter_table.md) или командой YDB CLI [table index drop](../../reference/ydb-cli/commands/secondary_index.md#drop).
+- Создан при создании таблицы командой YQL [CREATE TABLE](../../yql/reference/syntax/create_table/index.md).
+- Добавлен к существующей таблице командой YQL [ALTER TABLE](../../yql/reference/syntax/alter_table/index.md) или командой YDB CLI [table index add](../../reference/ydb-cli/commands/secondary_index.md#add)
+- Удален у существующей таблицы командой YQL [ALTER TABLE](../../yql/reference/syntax/alter_table/index.md) или командой YDB CLI [table index drop](../../reference/ydb-cli/commands/secondary_index.md#drop).
 - Удален вместе с таблицей командой YQL [DROP TABLE](../../yql/reference/syntax/drop_table.md) или командой YDB CLI `table drop`.
 
 ## Назначение и применение вторичных индексов {#best_practices}

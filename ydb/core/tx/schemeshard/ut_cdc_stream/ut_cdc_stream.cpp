@@ -1200,9 +1200,38 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         }
     }
 
+    Y_UNIT_TEST(StreamOnIndexTableNegative) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableChangefeedsOnIndexTables(false));
+        ui64 txId = 100;
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+              Name: "Table"
+              Columns { Name: "key" Type: "Uint64" }
+              Columns { Name: "indexed" Type: "Uint64" }
+              KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+              Name: "Index"
+              KeyColumnNames: ["indexed"]
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot/Table/Index", R"(
+            TableName: "indexImplTable"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+            }
+        )", {NKikimrScheme::StatusPreconditionFailed});
+    }
+
     Y_UNIT_TEST(StreamOnIndexTable) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableProtoSourceIdInfo(true));
+        TTestEnv env(runtime, TTestEnvOptions().EnableChangefeedsOnIndexTables(true));
         ui64 txId = 100;
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
@@ -1223,6 +1252,9 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             }
         )");
         env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/SyncIndex"), {NLs::PathVersionEqual(2)});
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/SyncIndex/indexImplTable"), {NLs::PathVersionEqual(3)});
 
         TestCreateCdcStream(runtime, ++txId, "/MyRoot/Table/UnknownIndex", R"(
             TableName: "indexImplTable"
@@ -1252,12 +1284,10 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/SyncIndex/indexImplTable/Stream"), {
-            NLs::PathExist,
-        });
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/SyncIndex/indexImplTable/Stream/streamImpl"), {
-            NLs::PathExist,
-        });
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/SyncIndex"), {NLs::PathVersionEqual(3)});
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/SyncIndex/indexImplTable"), {NLs::PathVersionEqual(4)});
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/SyncIndex/indexImplTable/Stream"), {NLs::PathExist});
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/SyncIndex/indexImplTable/Stream/streamImpl"), {NLs::PathExist});
 
         TestAlterCdcStream(runtime, ++txId, "/MyRoot/Table/UnknownIndex", R"(
             TableName: "indexImplTable"
@@ -1272,6 +1302,8 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/SyncIndex"), {NLs::PathVersionEqual(4)});
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/SyncIndex/indexImplTable"), {NLs::PathVersionEqual(5)});
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/SyncIndex/indexImplTable/Stream"), {
             NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateDisabled),
         });
@@ -1287,17 +1319,67 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/SyncIndex/indexImplTable/Stream"), {
-            NLs::PathNotExist,
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/SyncIndex"), {NLs::PathVersionEqual(5)});
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/SyncIndex/indexImplTable"), {NLs::PathVersionEqual(6)});
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/SyncIndex/indexImplTable/Stream"), {NLs::PathNotExist});
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/SyncIndex/indexImplTable/Stream/streamImpl"), {NLs::PathNotExist});
+    }
+
+    Y_UNIT_TEST(StreamOnBuildingIndexTable) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableChangefeedsOnIndexTables(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "indexed" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        THolder<IEventHandle> blockedBuildIndexRequest;
+        auto blockBuildIndexRequest = runtime.AddObserver<TEvDataShard::TEvBuildIndexCreateRequest>([&](auto& ev) {
+            blockedBuildIndexRequest.Reset(ev.Release());
         });
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/SyncIndex/indexImplTable/Stream/streamImpl"), {
-            NLs::PathNotExist,
-        });
+
+        AsyncBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "Index", {"indexed"});
+        const auto buildIndexId = txId;
+        {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&blockedBuildIndexRequest](IEventHandle&) {
+                return bool(blockedBuildIndexRequest);
+            });
+            runtime.DispatchEvents(opts);
+        }
+        blockBuildIndexRequest.Remove();
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot/Table/Index", R"(
+            TableName: "indexImplTable"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+            }
+        )", {NKikimrScheme::StatusMultipleModifications});
+
+        runtime.Send(blockedBuildIndexRequest.Release(), 0, true);
+        env.TestWaitNotification(runtime, buildIndexId);
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot/Table/Index", R"(
+            TableName: "indexImplTable"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
     }
 
     Y_UNIT_TEST(DropIndexWithStream) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableProtoSourceIdInfo(true));
+        TTestEnv env(runtime, TTestEnvOptions().EnableChangefeedsOnIndexTables(true));
         ui64 txId = 100;
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
@@ -1340,7 +1422,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
 
     Y_UNIT_TEST(DropTableWithIndexWithStream) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableProtoSourceIdInfo(true));
+        TTestEnv env(runtime, TTestEnvOptions().EnableChangefeedsOnIndexTables(true));
         ui64 txId = 100;
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(

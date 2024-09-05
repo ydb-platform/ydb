@@ -4,7 +4,9 @@
 #include "target_with_stream.h"
 #include "util.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -16,9 +18,12 @@
 namespace NKikimr::NReplication::NController {
 
 class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
-    static NYdb::NTable::TChangefeedDescription MakeChangefeed(const TString& name, const NJson::TJsonMap& attrs) {
+    static NYdb::NTable::TChangefeedDescription MakeChangefeed(
+            const TString& name, const TDuration& retentionPeriod, const NJson::TJsonMap& attrs)
+    {
         using namespace NYdb::NTable;
         return TChangefeedDescription(name, EChangefeedMode::Updates, EChangefeedFormat::Json)
+            .WithRetentionPeriod(retentionPeriod)
             .WithInitialScan()
             .AddAttribute("__async_replication", NJson::WriteJson(attrs, false));
     }
@@ -26,6 +31,7 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
     void CreateStream() {
         switch (Kind) {
         case TReplication::ETargetKind::Table:
+        case TReplication::ETargetKind::IndexTable:
             Send(YdbProxy, new TEvYdbProxy::TEvAlterTableRequest(SrcPath, NYdb::NTable::TAlterTableSettings()
                 .AppendAddChangefeeds(Changefeed)));
             break;
@@ -64,8 +70,17 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
         }
     }
 
+    TString BuildStreamPath() const {
+        switch (Kind) {
+        case TReplication::ETargetKind::Table:
+            return CanonizePath(ChildPath(SplitPath(SrcPath), Changefeed.GetName()));
+        case TReplication::ETargetKind::IndexTable:
+            return CanonizePath(ChildPath(SplitPath(SrcPath), {"indexImplTable", Changefeed.GetName()}));
+        }
+    }
+
     void CreateConsumer() {
-        const auto streamPath = CanonizePath(ChildPath(SplitPath(SrcPath), Changefeed.GetName()));
+        const auto streamPath = BuildStreamPath();
         const auto settings = NYdb::NTopic::TAlterTopicSettings()
             .BeginAddConsumer()
                 .ConsumerName(ReplicationConsumerName)
@@ -123,14 +138,15 @@ public:
             TReplication::ETargetKind kind,
             const TString& srcPath,
             const TString& dstPath,
-            const TString& streamName)
+            const TString& streamName,
+            const TDuration& streamRetentionPeriod)
         : Parent(parent)
         , YdbProxy(proxy)
         , ReplicationId(rid)
         , TargetId(tid)
         , Kind(kind)
         , SrcPath(srcPath)
-        , Changefeed(MakeChangefeed(streamName, NJson::TJsonMap{
+        , Changefeed(MakeChangefeed(streamName, streamRetentionPeriod, NJson::TJsonMap{
             {"path", dstPath},
             {"id", ToString(rid)},
         }))
@@ -165,13 +181,15 @@ IActor* CreateStreamCreator(TReplication* replication, ui64 targetId, const TAct
     Y_ABORT_UNLESS(target);
     return CreateStreamCreator(ctx.SelfID, replication->GetYdbProxy(),
         replication->GetId(), target->GetId(), target->GetKind(),
-        target->GetSrcPath(), target->GetDstPath(), target->GetStreamName());
+        target->GetSrcPath(), target->GetDstPath(), target->GetStreamName(),
+        TDuration::Seconds(AppData()->ReplicationConfig.GetRetentionPeriodSeconds()));
 }
 
 IActor* CreateStreamCreator(const TActorId& parent, const TActorId& proxy, ui64 rid, ui64 tid,
-        TReplication::ETargetKind kind, const TString& srcPath, const TString& dstPath, const TString& streamName)
+        TReplication::ETargetKind kind, const TString& srcPath, const TString& dstPath,
+        const TString& streamName, const TDuration& streamRetentionPeriod)
 {
-    return new TStreamCreator(parent, proxy, rid, tid, kind, srcPath, dstPath, streamName);
+    return new TStreamCreator(parent, proxy, rid, tid, kind, srcPath, dstPath, streamName, streamRetentionPeriod);
 }
 
 }

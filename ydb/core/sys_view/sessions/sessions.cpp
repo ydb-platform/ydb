@@ -178,6 +178,7 @@ private:
             const auto& nodeId = PendingNodes.front();
             auto kqpProxyId = NKqp::MakeKqpProxyID(nodeId);
             auto req = std::make_unique<NKikimr::NKqp::TEvKqp::TEvListSessionsRequest>();
+            req->Record.SetTenantName(TenantName);
             if (!ContinuationToken.empty()) {
                 req->Record.SetSessionIdStart(ContinuationToken);
                 req->Record.SetSessionIdStartInclusive(true);

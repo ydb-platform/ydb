@@ -57,20 +57,41 @@ private:
         }
     }
 
-    EStatus AreTypesSupported(const TPosition& pos, const TVector<const TTypeAnnotationNode*>& types, TExprContext& ctx) const override {
+    EStatus AreTypesSupported(const TPosition& pos, const TVector<const TTypeAnnotationNode*>& types, TExprContext& ctx,
+        const TUnsupportedTypeCallback& onUnsupported = {}) const override
+    {
         try {
             TScopedAlloc alloc(__LOCATION__);
             TTypeEnvironment env(alloc);
             TTypeBuilder typeBuilder(env);
+
+	    bool allOk = true;
+            TArrowConvertFailedCallback cb;
+            if (onUnsupported) {
+                cb = [&](TType* failed) {
+                    if (failed->IsData()) {
+                        auto slot = static_cast<TDataType*>(failed)->GetDataSlot();
+                        YQL_ENSURE(slot);
+                        onUnsupported(*slot);
+                    } else {
+                        onUnsupported(NYql::NCommon::ConvertMiniKQLTypeKind(failed));
+                    }
+                };
+            }
+
             for (const auto& type : types) {
+                YQL_ENSURE(type);
                 TNullOutput null;
                 auto mkqlType = NCommon::BuildType(*type, typeBuilder, null);
                 std::shared_ptr<arrow::DataType> arrowType;
-                if (!ConvertArrowType(mkqlType, arrowType)) {
-                    return EStatus::NOT_FOUND;
+                if (!ConvertArrowType(mkqlType, arrowType, cb)) {
+                    allOk = false;
+                    if (!cb) {
+                        break;
+                    }
                 }
             }
-            return EStatus::OK;
+            return allOk ? EStatus::OK : EStatus::NOT_FOUND;
         } catch (const std::exception& e) {
             ctx.AddError(TIssue(pos, e.what()));
             return EStatus::ERROR;

@@ -10,151 +10,148 @@
                             [
                                 "date_hour";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Uint8"
-                                    ]
+                                    "DataType";
+                                    "Uint8"
                                 ]
                             ];
                             [
                                 "date_minute";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Uint8"
-                                    ]
+                                    "DataType";
+                                    "Uint8"
                                 ]
                             ];
                             [
                                 "date_second";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Uint8"
-                                    ]
+                                    "DataType";
+                                    "Uint8"
                                 ]
                             ];
                             [
-                                "date_milli";
+                                "date_msec";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Uint32"
-                                    ]
+                                    "DataType";
+                                    "Uint32"
                                 ]
                             ];
                             [
-                                "date_micro";
+                                "date_usec";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Uint32"
-                                    ]
+                                    "DataType";
+                                    "Uint32"
+                                ]
+                            ];
+                            [
+                                "date_tz";
+                                [
+                                    "DataType";
+                                    "Uint16"
+                                ]
+                            ];
+                            [
+                                "date_tzname";
+                                [
+                                    "DataType";
+                                    "String"
                                 ]
                             ];
                             [
                                 "datetime_hour";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Uint8"
-                                    ]
+                                    "DataType";
+                                    "Uint8"
                                 ]
                             ];
                             [
                                 "datetime_minute";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Uint8"
-                                    ]
+                                    "DataType";
+                                    "Uint8"
                                 ]
                             ];
                             [
                                 "datetime_second";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Uint8"
-                                    ]
+                                    "DataType";
+                                    "Uint8"
                                 ]
                             ];
                             [
-                                "datetime_milli";
+                                "datetime_msec";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Uint32"
-                                    ]
+                                    "DataType";
+                                    "Uint32"
                                 ]
                             ];
                             [
-                                "datetime_micro";
+                                "datetime_usec";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Uint32"
-                                    ]
+                                    "DataType";
+                                    "Uint32"
+                                ]
+                            ];
+                            [
+                                "datetime_tz";
+                                [
+                                    "DataType";
+                                    "Uint16"
+                                ]
+                            ];
+                            [
+                                "datetime_tzname";
+                                [
+                                    "DataType";
+                                    "String"
                                 ]
                             ];
                             [
                                 "timestamp_hour";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Uint8"
-                                    ]
+                                    "DataType";
+                                    "Uint8"
                                 ]
                             ];
                             [
                                 "timestamp_minute";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Uint8"
-                                    ]
+                                    "DataType";
+                                    "Uint8"
                                 ]
                             ];
                             [
                                 "timestamp_second";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Uint8"
-                                    ]
+                                    "DataType";
+                                    "Uint8"
                                 ]
                             ];
                             [
-                                "timestamp_milli";
+                                "timestamp_msec";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Uint32"
-                                    ]
+                                    "DataType";
+                                    "Uint32"
                                 ]
                             ];
                             [
-                                "timestamp_micro";
+                                "timestamp_usec";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Uint32"
-                                    ]
+                                    "DataType";
+                                    "Uint32"
+                                ]
+                            ];
+                            [
+                                "timestamp_tz";
+                                [
+                                    "DataType";
+                                    "Uint16"
+                                ]
+                            ];
+                            [
+                                "timestamp_tzname";
+                                [
+                                    "DataType";
+                                    "String"
                                 ]
                             ]
                         ]
@@ -162,51 +159,27 @@
                 ];
                 "Data" = [
                     [
-                        [
-                            "0"
-                        ];
-                        [
-                            "0"
-                        ];
-                        [
-                            "0"
-                        ];
-                        [
-                            "0"
-                        ];
-                        [
-                            "0"
-                        ];
-                        [
-                            "21"
-                        ];
-                        [
-                            "20"
-                        ];
-                        [
-                            "19"
-                        ];
-                        [
-                            "0"
-                        ];
-                        [
-                            "0"
-                        ];
-                        [
-                            "21"
-                        ];
-                        [
-                            "20"
-                        ];
-                        [
-                            "19"
-                        ];
-                        [
-                            "345"
-                        ];
-                        [
-                            "345678"
-                        ]
+                        "0";
+                        "0";
+                        "0";
+                        "0";
+                        "0";
+                        "0";
+                        "GMT";
+                        "21";
+                        "20";
+                        "19";
+                        "0";
+                        "0";
+                        "0";
+                        "GMT";
+                        "21";
+                        "20";
+                        "19";
+                        "345";
+                        "345678";
+                        "0";
+                        "GMT"
                     ]
                 ]
             }

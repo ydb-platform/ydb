@@ -56,11 +56,11 @@ class TGetOperationRPC : public TRpcOperationRequestActor<TGetOperationRPC, TEvG
     IEventBase* MakeRequest() override {
         switch (OperationId_.GetKind()) {
         case TOperationId::EXPORT:
-            return new NSchemeShard::TEvExport::TEvGetExportRequest(DatabaseName, RawOperationId_);
+            return new NSchemeShard::TEvExport::TEvGetExportRequest(GetDatabaseName(), RawOperationId_);
         case TOperationId::IMPORT:
-            return new NSchemeShard::TEvImport::TEvGetImportRequest(DatabaseName, RawOperationId_);
+            return new NSchemeShard::TEvImport::TEvGetImportRequest(GetDatabaseName(), RawOperationId_);
         case TOperationId::BUILD_INDEX:
-            return new NSchemeShard::TEvIndexBuilder::TEvGetRequest(DatabaseName, RawOperationId_);
+            return new NSchemeShard::TEvIndexBuilder::TEvGetRequest(GetDatabaseName(), RawOperationId_);
         default:
             Y_ABORT("unreachable");
         }
@@ -199,7 +199,7 @@ private:
     }
 
     void SendGetScriptExecutionOperation() {
-        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKqp::TEvGetScriptExecutionOperation(DatabaseName, OperationId_));
+        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKqp::TEvGetScriptExecutionOperation(GetDatabaseName(), OperationId_));
     }
 
     void Handle(NSchemeShard::TEvExport::TEvGetExportResponse::TPtr& ev, const TActorContext& ctx) {

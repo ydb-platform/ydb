@@ -2,6 +2,8 @@ LIBRARY()
 
 PROVIDES(python)
 
+VERSION(2.7.18)
+
 LICENSE(PSF-2.0)
 
 INCLUDE(${ARCADIA_ROOT}/contrib/tools/python/pyconfig.inc)

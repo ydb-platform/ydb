@@ -57,7 +57,8 @@ namespace NYql::NDqs {
                     TExprBase node{inputExpr};
                     PERFORM_RULE(DqPeepholeRewriteCrossJoin, node, ctx);
                     PERFORM_RULE(DqPeepholeRewriteJoinDict, node, ctx);
-                    PERFORM_RULE(DqPeepholeRewriteMapJoin, node, ctx);
+                    PERFORM_RULE(DqPeepholeRewriteMapJoinWithGraceCore, node, ctx);
+                    PERFORM_RULE(DqPeepholeRewriteMapJoinWithMapCore, node, ctx);
                     PERFORM_RULE(DqPeepholeRewritePureJoin, node, ctx);
                     PERFORM_RULE(DqPeepholeRewriteReplicate, node, ctx);
                     PERFORM_RULE(DqPeepholeDropUnusedInputs, node, ctx);

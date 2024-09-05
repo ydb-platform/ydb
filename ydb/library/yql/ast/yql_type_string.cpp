@@ -186,7 +186,6 @@ public:
 
 private:
     TAstNode* ParseType() {
-        bool isPgType = false;
         TAstNode* type = nullptr;
 
         switch (Token) {
@@ -324,13 +323,11 @@ private:
             if (id.SkipPrefix("pg")) {
                 if (NPg::HasType(TString(id))) {
                     type = MakePgType(id);
-                    isPgType = true;
                     GetNextToken();
                 }
             } else if (id.SkipPrefix("_pg")) {
                 if (NPg::HasType(TString(id)) && !id.StartsWith('_')) {
                     type = MakePgType(TString("_") + id);
-                    isPgType = true;
                     GetNextToken();
                 }
             }
@@ -342,10 +339,6 @@ private:
 
         if (type) {
             while (Token == '?') {
-                if (isPgType) {
-                    return AddError(TString("PG type can't be wrapped into Optional type"));
-                }
-
                 type = MakeOptionalType(type);
                 GetNextToken();
             }

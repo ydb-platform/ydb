@@ -30,6 +30,8 @@ struct TKeeperParams {
     // Number of chunks actually used by the common log at the moment
     i64 CommonLogSize = 0;
 
+    i64 MaxCommonLogChunks = 200;
+
     // Should be true for disks that have one or more static group
     bool HasStaticGroups = false;
 
@@ -40,6 +42,9 @@ struct TKeeperParams {
 
     // Small disk
     bool SeparateCommonLog = true;
+
+    // Free chunk permille that triggers Cyan color (e.g. 100 is 10%). Between 130 (default) and 13.
+    ui32 ChunkBaseLimit = 130;
 };
 
 } // NPDisk

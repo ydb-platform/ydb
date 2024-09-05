@@ -3,9 +3,9 @@ UNITTEST_FOR(ydb/core/kqp)
 FORK_SUBTESTS()
 SPLIT_FACTOR(50)
 
-REQUIREMENTS(
-    ram:32
-)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(ram:32)
+ENDIF()
 
 IF (WITH_VALGRIND)
     TIMEOUT(3600)
@@ -17,6 +17,7 @@ ELSE()
 ENDIF()
 
 SRCS(
+    kqp_analyze_ut.cpp
     kqp_explain_ut.cpp
     kqp_limits_ut.cpp
     kqp_params_ut.cpp
@@ -26,6 +27,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/statistics/ut_common
     ydb/public/sdk/cpp/client/ydb_proto
     ydb/core/kqp
     ydb/core/kqp/ut/common

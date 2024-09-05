@@ -15,6 +15,7 @@ inline bool Overlaps(const TNodeSet& lhs, const TNodeSet& rhs) {
     return (lhs & rhs) != 0;
 }
 
+/* checks if lhs subset of rhs */
 template <typename TNodeSet>
 inline bool IsSubset(const TNodeSet& lhs, const TNodeSet& rhs) {
     return (lhs & rhs) == lhs;

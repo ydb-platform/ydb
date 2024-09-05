@@ -65,10 +65,10 @@ While FastGreedyShrink is used most of the time, SlowShrink is mostly used for h
 
 ### If you need an accurate histogram
 
-1. You can use the aggregate functions described below with fixed bucket grids: [LinearHistogram](#linearhistogram) or [LogarithmicHistogram](#logarithmichistogram).
+1. You can use the aggregate functions described below with fixed bucket grids: [LinearHistogram](#linearhistogram) or [LogarithmicHistogram](#linearhistogram).
 2. You can calculate the bucket number for each row and apply to it [GROUP BY](../../../syntax/group_by.md).
 
-When you use [aggregation factories](../../basic.md#aggregationfactory), a `Tuple` containing a value and a weight is passed as the first [AGGREGATE_BY](#aggregateby) argument.
+When you use [aggregation factories](../../basic.md#aggregationfactory), a `Tuple` containing a value and a weight is passed as the first [AGGREGATE_BY](../../aggregation.md#aggregateby) argument.
 
 **Examples**
 

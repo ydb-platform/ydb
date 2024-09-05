@@ -41,7 +41,7 @@ WHERE
 
 Where:
 
-* `object_storage_connection_name` — the name of the [external data source](#create_connection) leading to the S3 bucket ({{ objstorage-full-name }}).
+* `object_storage_connection_name` — the name of the external data source leading to the S3 bucket ({{ objstorage-full-name }}).
 * `file_path` — the path to the file or files inside the bucket. Wildcards `*` are supported; more details [in the section](#path_format).
 * `file_format` — the [data format](formats.md#formats) in the files.
 * `schema_definition` — the [schema definition](#schema) of the data stored in the files.

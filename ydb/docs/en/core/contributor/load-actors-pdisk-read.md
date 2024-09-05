@@ -16,9 +16,9 @@ You can generate two types of load:
 | `PDiskId` | ID of the Pdisk being loaded on the node. |
 | `PDiskGuid` | Globally unique ID of the PDisk being loaded. |
 | `VDiskId` | The load is generated on behalf of a VDisk with the following parameters:<ul><li>`GroupID`: Group ID.</li><li>`GroupGeneration`: Group generation.</li><li>`Ring`: Group ring ID.</li><li>`Domain`: Ring fail domain ID.</li><li>`VDisk`: Index of the VDisk in the fail domain.</li></ul> |
-| `Chunks` | Chunk parameters.<br>`Slots`: Number of slots per chunk, determines the write size.<br>You can specify multiple `Chunks`, in which case a specific chunk to read data from is selected based on its `Weight`. |
+| `Chunks` | Chunk parameters.<br/>`Slots`: Number of slots per chunk, determines the write size.<br/>You can specify multiple `Chunks`, in which case a specific chunk to read data from is selected based on its `Weight`. |
 | `DurationSeconds` | Load duration in seconds. |
-| `IntervalMsMin`,<br>`IntervalMsMax` | Minimum and maximum intervals between requests under interval load, in milliseconds. The interval value is selected randomly from the specified range. |
+| `IntervalMsMin`,<br/>`IntervalMsMax` | Minimum and maximum intervals between requests under interval load, in milliseconds. The interval value is selected randomly from the specified range. |
 | `InFlightReads` | Number of simultaneously processed read requests. |
 | `Sequential` | Type of reads.<ul><li>`True`: Sequential.</li><li>`False`: Random.</li></ul> |
 | `IsWardenlessTest` | Set it to `False` in case the PDiskReadLoad actor is run on the cluster; otherwise, e.g. when it is run during unit tests, set it to `True`. |

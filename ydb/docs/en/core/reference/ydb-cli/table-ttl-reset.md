@@ -5,11 +5,10 @@ Use the `table ttl reset` subcommand to reset [TTL](../../concepts/ttl.md) for t
 General format of the command:
 
 ```bash
-{{ ydb-cli }} [global options...] table ttl reset [options...] <table path>
+{{ ydb-cli }} [global options...] table ttl reset <table path>
 ```
 
 * `global options`: [Global parameters](commands/global-options.md).
-* `options`: [Parameters of the subcommand](#options).
 * `table path`: The table path.
 
 View the description of the TTL reset command:

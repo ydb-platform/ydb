@@ -168,7 +168,7 @@
 `topic.partition.init_duration_milliseconds_max`<br/>`GAUGE`, миллисекунды | Максимальная задержка инициализации партиции.<br/>Метки:<br/>- _topic_ – название топика.
 `topic.partition.producers_count_max`<br/>`GAUGE`, штуки | Максимальное количество источников в партиции.<br/>Метки:<br/>- _topic_ – название топика.
 `topic.partition.storage_bytes_max`<br/>`GAUGE`, байты | Максимальный размер партиции в байтах.<br/>Метки:<br/>- _topic_ – название топика.
-`topic.partition.uptime_milliseconds_min`<br/>`GAUGE`, штуки | Минимальное время работы партиции после рестарта.<br>В норме во время rolling restart-а `topic.partition.uptime_milliseconds_min` близко к 0, после окончания rolling restart-а значение `topic.partition.uptime_milliseconds_min` должно увеличиваться до бесконечности.<br/>Метки:<br/>- _topic_ – название топика.
+`topic.partition.uptime_milliseconds_min`<br/>`GAUGE`, штуки | Минимальное время работы партиции после рестарта.<br/>В норме во время rolling restart-а `topic.partition.uptime_milliseconds_min` близко к 0, после окончания rolling restart-а значение `topic.partition.uptime_milliseconds_min` должно увеличиваться до бесконечности.<br/>Метки:<br/>- _topic_ – название топика.
 `topic.partition.total_count`<br/>`GAUGE`, штуки | Общее количество партиций в топике.<br/>Метки:<br/>- _topic_ – название топика.
 `topic.partition.alive_count`<br/>`GAUGE`, штуки | Количество партиций, отправляющих свои метрики.<br/>Метки:<br/>- _topic_ – название топика.
 `topic.partition.committed_end_to_end_lag_milliseconds_max`<br/>`GAUGE`, миллисекунды | Максимальная (по всем партициям) разница между текущим временем и временем создания последнего закомиченного сообщения.<br/>Метки:<br/>- _topic_ – название топика.<br/>- _consumer_ – имя читателя.

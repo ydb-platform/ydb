@@ -16,11 +16,6 @@ public:
         : THandlerSessionCreate(sender, request, httpProxyId, settings)
         {}
 
-    void RemoveAppliedCookie(const TString& cookieName) override {
-        ResponseHeaders.Set("Set-Cookie", TStringBuilder() << cookieName << "=; Path=" << GetAuthCallbackUrl() << "; Max-Age=0");
-        ResponseHeaders.Set("Set-Cookie", TStringBuilder() << CreateNameSessionCookie(Settings.ClientId) << "=; Max-Age=0");
-    }
-
     void RequestSessionToken(const TString& code, const NActors::TActorContext& ctx) override {
         TStringBuilder body;
         TStringBuf host = Request->Host;

@@ -862,8 +862,7 @@ template <class T, class D>
 TFuture<T> ApplyTimeoutHelper(
     TFutureBase<T> this_,
     D timeoutOrDeadline,
-    TFutureTimeoutOptions options,
-    IInvokerPtr invoker)
+    TFutureTimeoutOptions options)
 {
     auto promise = NewPromise<T>();
 
@@ -888,7 +887,7 @@ TFuture<T> ApplyTimeoutHelper(
             cancelable.Cancel(error);
         }),
         timeoutOrDeadline,
-        std::move(invoker));
+        options.Invoker);
 
     this_.Subscribe(BIND_NO_PROPAGATE([=] (const NYT::TErrorOr<T>& value) {
         NConcurrency::TDelayedExecutor::Cancel(cookie);
@@ -1133,8 +1132,7 @@ TFuture<T> TFutureBase<T>::ToImmediatelyCancelable() const
 template <class T>
 TFuture<T> TFutureBase<T>::WithDeadline(
     TInstant deadline,
-    TFutureTimeoutOptions options,
-    IInvokerPtr invoker) const
+    TFutureTimeoutOptions options) const
 {
     YT_ASSERT(Impl_);
 
@@ -1142,14 +1140,13 @@ TFuture<T> TFutureBase<T>::WithDeadline(
         return TFuture<T>(Impl_);
     }
 
-    return NYT::NDetail::ApplyTimeoutHelper(*this, deadline, std::move(options), std::move(invoker));
+    return NYT::NDetail::ApplyTimeoutHelper(*this, deadline, std::move(options));
 }
 
 template <class T>
 TFuture<T> TFutureBase<T>::WithTimeout(
     TDuration timeout,
-    TFutureTimeoutOptions options,
-    IInvokerPtr invoker) const
+    TFutureTimeoutOptions options) const
 {
     YT_ASSERT(Impl_);
 
@@ -1157,16 +1154,15 @@ TFuture<T> TFutureBase<T>::WithTimeout(
         return TFuture<T>(Impl_);
     }
 
-    return NYT::NDetail::ApplyTimeoutHelper(*this, timeout, std::move(options), std::move(invoker));
+    return NYT::NDetail::ApplyTimeoutHelper(*this, timeout, std::move(options));
 }
 
 template <class T>
 TFuture<T> TFutureBase<T>::WithTimeout(
     std::optional<TDuration> timeout,
-    TFutureTimeoutOptions options,
-    IInvokerPtr invoker) const
+    TFutureTimeoutOptions options) const
 {
-    return timeout ? WithTimeout(*timeout, std::move(options), std::move(invoker)) : TFuture<T>(Impl_);
+    return timeout ? WithTimeout(*timeout, std::move(options)) : TFuture<T>(Impl_);
 }
 
 template <class T>

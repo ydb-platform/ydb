@@ -16,10 +16,6 @@ public:
         : THandlerSessionCreate(sender, request, httpProxyId, settings)
         {}
 
-    void RemoveAppliedCookie(const TString& cookieName) override {
-        ResponseHeaders.Set("Set-Cookie", TStringBuilder() << cookieName << "=; Path=" << GetAuthCallbackUrl() << "; Max-Age=0");
-    }
-
     void RequestSessionToken(const TString& code, const NActors::TActorContext& ctx) override {
         NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestPost(Settings.GetTokenEndpointURL());
         httpRequest->Set<&NHttp::THttpRequest::ContentType>("application/x-www-form-urlencoded");

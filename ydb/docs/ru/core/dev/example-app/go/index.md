@@ -227,13 +227,13 @@ err = c.Do(ctx,
         return err
       }
       for res.NextRow() {
-        // named.OptionalOrDefault позволяет "развернуть" опциональные
+        // named.OptionalWithDefault позволяет "развернуть" опциональные
         // результаты или использовать дефолтное значение типа go
         err = res.ScanNamed(
           named.Required("series_id", &seriesID),
-          named.OptionalOrDefault("season_id", &seasonID),
-          named.OptionalOrDefault("title", &title),
-          named.OptionalOrDefault("first_aired", &date),
+          named.OptionalWithDefault("season_id", &seasonID),
+          named.OptionalWithDefault("title", &title),
+          named.OptionalWithDefault("first_aired", &date),
         )
         if err != nil {
           return err

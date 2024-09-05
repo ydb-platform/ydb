@@ -1,12 +1,3 @@
----
-title: What is YQL? YDB Query Language overview
-description: YQL (YDB Query Language) is a universal declarative query language for data storage and processing systems, a dialect of SQL. You can get started with YQL in the web interface after you create a database.
-keywords:
-  - yql
-  - what is yql
-  - YDB Query Language
----
-
 # YQL - Overview
 
 *YQL* (YDB Query Language) is a universal declarative query language for YDB, a dialect of SQL. YQL has been natively designed for large distributed databases, and therefore has a number of differences from the SQL standard.

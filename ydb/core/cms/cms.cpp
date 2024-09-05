@@ -2272,8 +2272,13 @@ void TCms::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
 {
     const auto& appConfig = ev->Get()->Record.GetConfig();
     if (appConfig.HasFeatureFlags()) {
-        State->EnableCMSRequestPriorities = appConfig.GetFeatureFlags().GetEnableCMSRequestPriorities();
-        State->EnableSingleCompositeActionGroup = appConfig.GetFeatureFlags().GetEnableSingleCompositeActionGroup();
+        const auto& featureFlags = appConfig.GetFeatureFlags();
+        if (featureFlags.HasEnableCMSRequestPriorities()) {
+            State->EnableCMSRequestPriorities = featureFlags.GetEnableCMSRequestPriorities();
+        }
+        if (featureFlags.HasEnableSingleCompositeActionGroup()) {
+            State->EnableSingleCompositeActionGroup = featureFlags.GetEnableSingleCompositeActionGroup();
+        }
     }
 
     if (ev->Get()->Record.HasLocal() && ev->Get()->Record.GetLocal()) {

@@ -21,13 +21,6 @@ TCommandSql::TCommandSql()
     : TYdbCommand("sql", {}, "Execute SQL query")
 {}
 
-TCommandSql::TCommandSql(TString query, TString collectStatsMode)
-    : TYdbCommand("sql", {}, "Execute SQL query")
-{
-    Query = std::move(query);
-    CollectStatsMode = std::move(collectStatsMode);
-}
-
 void TCommandSql::Config(TConfig& config) {
     TYdbCommand::Config(config);
     config.Opts->AddLongOption('s', "script", "Script (query) text to execute").RequiredArgument("[String]")
@@ -176,6 +169,18 @@ int TCommandSql::PrintResponse(NQuery::TExecuteQueryIterator& result) {
         return EXIT_FAILURE;
     }
     return EXIT_SUCCESS;
+}
+
+void TCommandSql::SetScript(TString&& script) {
+    Query = std::move(script);
+}
+
+void TCommandSql::SetCollectStatsMode(TString&& collectStatsMode) {
+    CollectStatsMode = std::move(collectStatsMode);
+}
+
+void TCommandSql::SetSyntax(TString&& syntax) {
+    Syntax = std::move(syntax);
 }
 
 }

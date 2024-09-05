@@ -50,6 +50,9 @@ public:
     static TStringBuf WriteBinary64(int precision, i64 value, char* buffer, size_t bufferLength);
     static TStringBuf WriteBinary128(int precision, TValue128 value, char* buffer, size_t bufferLength);
 
+    // Writes either 32-bit, 64-bit or 128-bit binary value depending on precision, provided a TValue128.
+    static TStringBuf WriteBinaryVariadic(int precision, TValue128 value, char* buffer, size_t bufferLength);
+
     static i32 ParseBinary32(int precision, TStringBuf buffer);
     static i64 ParseBinary64(int precision, TStringBuf buffer);
     static TValue128 ParseBinary128(int precision, TStringBuf buffer);

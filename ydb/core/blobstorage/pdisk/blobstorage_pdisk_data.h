@@ -24,6 +24,7 @@ const ui64 MagicSysLogChunkId = 0x5957095957095957;
 const ui64 MagicFormatChunkId = 0xF088A7F088A7F088;
 constexpr ui64 MagicIncompleteFormat = 0x5b48add808b31984;
 constexpr ui64 MagicIncompleteFormatSize = 512; // Bytes
+constexpr ui64 MagicMetadataFormatSector = 0xb5bf641dbca863d2;
 
 const ui64 Canary = 0x0123456789abcdef;
 constexpr ui32 CanarySize = 8;
@@ -397,6 +398,54 @@ struct TSysLogFirstNoncesToKeep {
         return str.Str();
     }
 };
+
+struct TMetadataHeader {
+    ui64 Nonce;
+    ui64 SequenceNumber; // of stored metadata
+    ui16 RecordIndex; // index of current record
+    ui16 TotalRecords; // total number of records for the this SequenceNumber
+    ui32 Length; // length of stored data, in bytes
+    THash DataHash; // of data only, not including header at all
+    THash HeaderHash; // of header only, not including HeaderHash
+
+    void Encrypt(TPDiskStreamCypher& cypher) {
+        cypher.StartMessage(Nonce);
+        cypher.InplaceEncrypt(&SequenceNumber, sizeof(TMetadataHeader) - sizeof(ui64));
+    }
+
+    void EncryptData(TPDiskStreamCypher& cypher) {
+        TMetadataHeader header = *this;
+        cypher.StartMessage(Nonce);
+        cypher.InplaceEncrypt(&SequenceNumber, sizeof(TMetadataHeader) - sizeof(ui64) + Length);
+        *this = header;
+    }
+
+    bool CheckHash() const {
+        TPDiskHashCalculator hasher;
+        hasher.Hash(this, sizeof(TMetadataHeader) - sizeof(THash));
+        return hasher.GetHashResult() == HeaderHash;
+    }
+
+    void SetHash() {
+        TPDiskHashCalculator hasher;
+        hasher.Hash(this, sizeof(TMetadataHeader) - sizeof(THash));
+        HeaderHash = hasher.GetHashResult();
+    }
+
+    bool CheckDataHash() const {
+        TPDiskHashCalculator hasher;
+        hasher.Hash(this + 1, Length);
+        return hasher.GetHashResult() == DataHash;
+    }
+};
+
+struct TMetadataFormatSector {
+    ui64 Magic; // MagicMetadataFormatSector
+    TKey DataKey; // data is encrypted with this key
+    ui64 Offset; // direct offset of latest stored metadata in this block device
+    ui64 Length; // length of stored metadata, including header
+    ui64 SequenceNumber; // sequence number of stored record
+};
 #pragma pack(pop)
 
 struct TChunkInfo {
@@ -683,6 +732,11 @@ struct TDiskFormat {
             return size;
         }
         return DiskFormatSize;
+    }
+
+    ui64 RoundUpToSectorSize(ui64 size) const { // assuming SectorSize is a power of 2
+        Y_DEBUG_ABORT_UNLESS(IsPowerOf2(SectorSize));
+        return (size + SectorSize - 1) & ~ui64(SectorSize - 1);
     }
 
     bool IsHashOk(ui64 bufferSize) const {

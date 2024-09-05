@@ -285,7 +285,7 @@ protected:
                 if (attempt == Config_->BindRetryCount) {
                     CloseServerSocket();
 
-                    THROW_ERROR_EXCEPTION(NRpc::EErrorCode::TransportError, errorMessage)
+                    THROW_ERROR_EXCEPTION(NRpc::EErrorCode::TransportError, TRuntimeFormat(errorMessage))
                         << ex;
                 } else {
                     YT_LOG_WARNING(ex, "Error binding socket, starting %v retry", attempt + 1);
@@ -372,7 +372,8 @@ private:
             TNetworkAddress netAddress;
             if (Config_->UnixDomainSocketPath) {
                 // NB(gritukan): Unix domain socket path cannot be longer than 108 symbols, so let's try to shorten it.
-                netAddress = TNetworkAddress::CreateUnixDomainSocketAddress(NFS::GetShortestPath(*Config_->UnixDomainSocketPath));
+                // TODO(babenko): switch to std::string
+                netAddress = TNetworkAddress::CreateUnixDomainSocketAddress(NFS::GetShortestPath(TString(*Config_->UnixDomainSocketPath)));
             } else {
                 netAddress = GetLocalBusAddress(*Config_->Port);
             }

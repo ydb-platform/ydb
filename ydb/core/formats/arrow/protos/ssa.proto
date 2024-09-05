@@ -45,6 +45,9 @@ message TProgram {
         repeated uint64 HashValues = 1;
     }
 
+    message TCountMinSketchChecker {
+    }
+
     message TOlapIndexChecker {
         optional uint32 IndexId = 1;
         optional string ClassName = 2;
@@ -56,6 +59,7 @@ message TProgram {
         oneof Implementation {
             TBloomFilterChecker BloomFilter = 40;
             TCompositeChecker Composite = 41;
+            TCountMinSketchChecker CountMinSketch = 42;
         }
     }
 

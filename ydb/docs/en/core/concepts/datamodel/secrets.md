@@ -8,7 +8,7 @@ The current syntax for working with secrets is temporary and will be changed in 
 
 {% endnote %}
 
-## Creating secrets { #create_secret }
+## Creating secrets {#create_secret}
 
 Secrets are created using an SQL query:
 
@@ -16,7 +16,7 @@ Secrets are created using an SQL query:
 CREATE OBJECT `MySecretName` (TYPE SECRET) WITH value=`MySecretData`;
 ```
 
-## Access management { #secret_access }
+## Access management {#secret_access}
 
 All rights to use the secret belong to its creator. The creator can grant another user read access to the secret through [access management](#secret_access) for secrets.
 

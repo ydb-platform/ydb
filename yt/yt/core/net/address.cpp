@@ -966,7 +966,7 @@ void Serialize(const TIP6Network& value, IYsonConsumer* consumer)
 //! Performs asynchronous host name resolution.
 class TAddressResolver::TImpl
     : public virtual TRefCounted
-    , private TAsyncExpiringCache<TString, TNetworkAddress>
+    , private TAsyncExpiringCache<std::string, TNetworkAddress>
 {
 public:
     explicit TImpl(TAddressResolverConfigPtr config)
@@ -978,7 +978,7 @@ public:
         Configure(std::move(config));
     }
 
-    TFuture<TNetworkAddress> Resolve(const TString& hostName)
+    TFuture<TNetworkAddress> Resolve(const std::string& hostName)
     {
         // Check if |address| parses into a valid IPv4 or IPv6 address.
         if (auto result = TNetworkAddress::TryParse(hostName); result.IsOK()) {
@@ -1053,7 +1053,7 @@ private:
 
     TAtomicIntrusivePtr<IDnsResolver> DnsResolver_;
 
-    TFuture<TNetworkAddress> DoGet(const TString& hostName, bool /*isPeriodicUpdate*/) noexcept override
+    TFuture<TNetworkAddress> DoGet(const std::string& hostName, bool /*isPeriodicUpdate*/) noexcept override
     {
         TDnsResolveOptions options{
             .EnableIPv4 = Config_->EnableIPv4,
@@ -1102,7 +1102,7 @@ TAddressResolver* TAddressResolver::Get()
     return LeakySingleton<TAddressResolver>();
 }
 
-TFuture<TNetworkAddress> TAddressResolver::Resolve(const TString& address)
+TFuture<TNetworkAddress> TAddressResolver::Resolve(const std::string& address)
 {
     return Impl_->Resolve(address);
 }

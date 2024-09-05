@@ -30,7 +30,7 @@ blob_storage_config:
 ...
 ```
 
-To replace `node_id:1`, we [added](../../maintenance/manual/cluster_expansion.md#add-host) to the cluster a new host with `node_id:10` and [deployed ](../../maintenance/manual/cluster_expansion.md#add-static-node) a static node in it.
+To replace `node_id:1`, we [added](../../maintenance/manual/cluster_expansion.md#add-host) to the cluster a new host with `node_id:10` and [deployed](../../maintenance/manual/cluster_expansion.md#add-static-node) a static node in it.
 
 To move a part of the static group from the `node_id:1` host to the `node_id:10` host:
 

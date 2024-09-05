@@ -487,6 +487,7 @@ struct TShardedTableOptions {
     TABLE_OPTION(std::optional<EReplicationConsistency>, ReplicationConsistency, std::nullopt);
     TABLE_OPTION(TAttributes, Attributes, {});
     TABLE_OPTION(bool, Sequences, false);
+    TABLE_OPTION(bool, AllowSystemColumnNames, false);
 
 #undef TABLE_OPTION
 #undef TABLE_OPTION_IMPL
@@ -536,9 +537,13 @@ NKikimrTxDataShard::TEvCompactBorrowedResult CompactBorrowed(
     TTestActorRuntime& runtime, ui64 shardId, const TTableId& tableId);
 
 using TTableInfoMap = THashMap<TString, NKikimrTxDataShard::TEvGetInfoResponse::TUserTable>;
+using TTableInfoByPathIdMap = THashMap<TPathId, NKikimrTxDataShard::TEvGetInfoResponse::TUserTable>;
 
 std::pair<TTableInfoMap, ui64> GetTables(Tests::TServer::TPtr server,
                                          ui64 tabletId);
+
+std::pair<TTableInfoByPathIdMap, ui64> GetTablesByPathId(Tests::TServer::TPtr server,
+                                                         ui64 tabletId);
 
 TTableId ResolveTableId(
         Tests::TServer::TPtr server,
@@ -683,7 +688,14 @@ ui64 AsyncCreateContinuousBackup(
 ui64 AsyncAlterTakeIncrementalBackup(
         Tests::TServer::TPtr server,
         const TString& workingDir,
-        const TString& tableName);
+        const TString& srcTableName,
+        const TString& dstTableName);
+
+ui64 AsyncAlterRestoreIncrementalBackup(
+        Tests::TServer::TPtr server,
+        const TString& workingDir,
+        const TString& srcTableName,
+        const TString& dstTableName);
 
 struct TReadShardedTableState {
     TActorId Sender;
@@ -862,5 +874,74 @@ void SendViaPipeCache(
     ui64 tabletId, const TActorId& sender,
     std::unique_ptr<IEventBase> msg,
     const TSendViaPipeCacheOptions& options = {});
+
+template <typename TKeyType>
+TVector<TCell> ToCells(const std::vector<TKeyType>& keys) {
+    TVector<TCell> cells;
+    for (auto& key: keys) {
+        cells.emplace_back(TCell::Make(key));
+    }
+    return cells;
+}
+
+void AddKeyQuery(
+    TEvDataShard::TEvRead& request,
+    const std::vector<ui32>& keys);
+
+template <typename TCellType>
+void AddRangeQuery(
+    TEvDataShard::TEvRead& request,
+    std::vector<TCellType> from,
+    bool fromInclusive,
+    std::vector<TCellType> to,
+    bool toInclusive)
+{
+    auto fromCells = ToCells(from);
+    auto toCells = ToCells(to);
+
+    // convertion is ugly, but for tests is OK
+    auto fromBuf = TSerializedCellVec::Serialize(fromCells);
+    auto toBuf = TSerializedCellVec::Serialize(toCells);
+
+    request.Ranges.emplace_back(fromBuf, toBuf, fromInclusive, toInclusive);
+}
+
+void AddFullRangeQuery(TEvDataShard::TEvRead& request);
+
+std::unique_ptr<TEvDataShard::TEvRead> GetBaseReadRequest(
+    const TTableId& tableId,
+    const NKikimrSchemeOp::TTableDescription& description,
+    ui64 readId,
+    NKikimrDataEvents::EDataFormat format = NKikimrDataEvents::FORMAT_ARROW,
+    const TRowVersion& readVersion = {});
+
+std::unique_ptr<TEvDataShard::TEvReadResult> WaitReadResult(
+    Tests::TServer::TPtr server,
+    TDuration timeout = TDuration::Max());
+
+void SendReadAsync(
+    Tests::TServer::TPtr server,
+    ui64 tabletId,
+    TEvDataShard::TEvRead* request,
+    TActorId sender,
+    ui32 node = 0,
+    const NTabletPipe::TClientConfig& clientConfig = GetPipeConfigWithRetries(),
+    TActorId clientId = {});
+
+std::unique_ptr<TEvDataShard::TEvReadResult> SendRead(
+    Tests::TServer::TPtr server,
+    ui64 tabletId,
+    TEvDataShard::TEvRead* request,
+    TActorId sender,
+    ui32 node = 0,
+    const NTabletPipe::TClientConfig& clientConfig = GetPipeConfigWithRetries(),
+    TActorId clientId = {},
+    TDuration timeout = TDuration::Max());
+
+TString ReadTable(
+    Tests::TServer::TPtr server,
+    std::span<const ui64> tabletIds,
+    const TTableId& tableId,
+    ui64 startReadId = 1000);
 
 }

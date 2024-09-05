@@ -524,7 +524,7 @@ namespace NKikimr {
                         // also we have to find replicating VSlots on this PDisk and assume they consume up to
                         // max(vslotSize for every slot in group), not their actual AllocatedSize
                         for (const auto& [id, slot] : info.VSlotsOnPDisk) {
-                            if (slot->Group && slot->Status != NKikimrBlobStorage::EVDiskStatus::READY) {
+                            if (slot->Group && slot->GetStatus() != NKikimrBlobStorage::EVDiskStatus::READY) {
                                 ui64 maxGroupSlotSize = 0;
                                 for (const TVSlotInfo *peer : slot->Group->VDisksInGroup) {
                                     maxGroupSlotSize = Max(maxGroupSlotSize, peer->Metrics.GetAllocatedSize());

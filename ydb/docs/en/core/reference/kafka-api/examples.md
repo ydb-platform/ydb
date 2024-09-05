@@ -8,12 +8,12 @@ Before executing the examples, [create a topic](../ydb-cli/topic-create.md) and 
 
 The examples use:
 
- * `ydb:9093` — host name and port.
- * `/Root/Database` — database name.
- * `/Root/Database/Topic-1` — topic name. It is allowed to specify either the full name (along with the database) or just the topic name.
- * `user@/Root/Database` — username. The username includes the database name, which is specified after `@`.
- * `*****` — user password.
- * `consumer-1` — consumer name.
+* `ydb:9093` — host name and port.
+* `/Root/Database` — database name.
+* `/Root/Database/Topic-1` — topic name. It is allowed to specify either the full name (along with the database) or just the topic name.
+* `user@/Root/Database` — username. The username includes the database name, which is specified after `@`.
+* `*****` — user password.
+* `consumer-1` — consumer name.
 
 
 ## Writing data to a topic

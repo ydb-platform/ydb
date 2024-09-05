@@ -54,7 +54,7 @@ SELECT ListHasItems(list_column) FROM my_table;
 
 ## ListCollect {#listcollect}
 
-Convert a lazy list (it can be built by such functions as [ListFilter](#listfilter), [ListMap](#listmap), [ListFlatMap](#listflatmap)) to an eager list. In contrast to a lazy list, where each new pass re-calculates the list contents, in an eager list the content is built at once by consuming more memory.
+Convert a lazy list (it can be built by such functions as [ListFilter](#listmap), [ListMap](#listmap), [ListFlatMap](#listmap)) to an eager list. In contrast to a lazy list, where each new pass re-calculates the list contents, in an eager list the content is built at once by consuming more memory.
 
 **Examples**
 {% if feature_column_container_type %}

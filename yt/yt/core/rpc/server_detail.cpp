@@ -56,7 +56,7 @@ TServiceContextBase::TServiceContextBase(
     , Logger(std::move(logger))
     , LogLevel_(logLevel)
 {
-    YT_VERIFY(ParseRequestHeader(RequestMessage_, RequestHeader_.get()));
+    YT_VERIFY(TryParseRequestHeader(RequestMessage_, RequestHeader_.get()));
     Initialize();
 }
 
@@ -328,7 +328,7 @@ const IAttributeDictionary& TServiceContextBase::GetEndpointAttributes() const
     return EmptyAttributes();
 }
 
-const TString& TServiceContextBase::GetEndpointDescription() const
+const std::string& TServiceContextBase::GetEndpointDescription() const
 {
     static const TString EmptyEndpointDescription;
     return EmptyEndpointDescription;
@@ -530,7 +530,7 @@ const NYTree::IAttributeDictionary& TServiceContextWrapper::GetEndpointAttribute
     return UnderlyingContext_->GetEndpointAttributes();
 }
 
-const TString& TServiceContextWrapper::GetEndpointDescription() const
+const std::string& TServiceContextWrapper::GetEndpointDescription() const
 {
     return UnderlyingContext_->GetEndpointDescription();
 }
@@ -913,9 +913,9 @@ void TServerBase::ApplyConfig()
     VERIFY_SPINLOCK_AFFINITY(ServicesLock_);
 
     auto newAppliedConfig = New<TServerConfig>();
-    newAppliedConfig->EnableErrorCodeCounting = DynamicConfig_->EnableErrorCodeCounting.value_or(StaticConfig_->EnableErrorCodeCounting);
+    newAppliedConfig->EnableErrorCodeCounter = DynamicConfig_->EnableErrorCodeCounter.value_or(StaticConfig_->EnableErrorCodeCounter);
     newAppliedConfig->EnablePerUserProfiling = DynamicConfig_->EnablePerUserProfiling.value_or(StaticConfig_->EnablePerUserProfiling);
-    newAppliedConfig->HistogramTimerProfiling = DynamicConfig_->HistogramTimerProfiling.value_or(StaticConfig_->HistogramTimerProfiling);
+    newAppliedConfig->TimeHistogram = DynamicConfig_->TimeHistogram.value_or(StaticConfig_->TimeHistogram);
     newAppliedConfig->TracingMode = DynamicConfig_->TracingMode.value_or(StaticConfig_->TracingMode);
     newAppliedConfig->Services = StaticConfig_->Services;
 

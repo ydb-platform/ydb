@@ -51,4 +51,8 @@ TStatus MakeDirectory(
     const TString& path,
     const NScheme::TMakeDirectorySettings& settings = {});
 
+TStatus ModifyPermissions(
+    NScheme::TSchemeClient& schemeClient,
+    const TString& path,
+    const NScheme::TModifyPermissionsSettings& settings = {});
 }

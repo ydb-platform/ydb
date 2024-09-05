@@ -1,6 +1,6 @@
 # Создание таблицы
 
-Создайте таблицы и задайте для них схемы данных с помощью конструкции [CREATE TABLE](../../yql/reference/syntax/create_table.md).
+Создайте таблицы и задайте для них схемы данных с помощью конструкции [CREATE TABLE](../../yql/reference/syntax/create_table/index.md).
 
 {% note info %}
 

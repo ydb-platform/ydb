@@ -11,6 +11,7 @@
 
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/executor_pool_io.h>
+#include <ydb/library/actors/core/scheduler_basic.h>
 #include <ydb/library/actors/interconnect/interconnect_impl.h>
 
 #include <ydb/core/protos/datashard_config.pb.h>
@@ -24,10 +25,11 @@
 namespace NActors {
 
     void TTestActorRuntime::TNodeData::Stop() {
-        TNodeDataBase::Stop();
         if (Mon) {
             Mon->Stop();
+            GetAppData<NKikimr::TAppData>()->Mon = nullptr;
         }
+        TNodeDataBase::Stop();
     }
 
     TTestActorRuntime::TNodeData::~TNodeData() {
@@ -46,6 +48,11 @@ namespace NActors {
 
     void TTestActorRuntime::SetupStatsCollectors() {
         NeedStatsCollectors = true;
+    }
+
+    void TTestActorRuntime::SetupActorSystemConfig(const TActorSystemSetupConfig& config, const TActorSystemPools& pools) {
+        ActorSystemSetupConfig = config;
+        ActorSystemPools = pools;
     }
 
     TTestActorRuntime::TTestActorRuntime(THeSingleSystemEnv d)
@@ -130,7 +137,7 @@ namespace NActors {
                 node->ActorSystem = MakeActorSystem(nodeIndex, node);
                 node->ExecutorThread.Reset(new TExecutorThread(0, 0, node->ActorSystem.Get(), node->SchedulerPool.Get(), node->MailboxTable.Get(), "TestExecutor"));
             } else {
-                node->AppData0.reset(new NKikimr::TAppData(0, 1, 2, 3, { }, app0->TypeRegistry, app0->FunctionRegistry, app0->FormatFactory, nullptr));
+                node->AppData0.reset(new NKikimr::TAppData(ActorSystemPools.SystemPoolId, ActorSystemPools.UserPoolId, ActorSystemPools.IOPoolId, ActorSystemPools.BatchPoolId, ActorSystemPools.ServicePools, app0->TypeRegistry, app0->FunctionRegistry, app0->FormatFactory, nullptr));
                 node->ActorSystem = MakeActorSystem(nodeIndex, node);
             }
             node->LogSettings->MessagePrefix = " node " + ToString(nodeId);
@@ -218,6 +225,18 @@ namespace NActors {
     }
 
     void TTestActorRuntime::InitActorSystemSetup(TActorSystemSetup& setup, TNodeDataBase* node) {
+        if (ActorSystemSetupConfig) {
+            setup.Executors.Reset();
+            setup.ExecutorsCount = 0;
+
+            setup.CpuManager = ActorSystemSetupConfig->CpuManagerConfig;
+            setup.MonitorStuckActors = ActorSystemSetupConfig->MonitorStuckActors;
+
+            auto schedulerConfig = ActorSystemSetupConfig->SchedulerConfig;
+            schedulerConfig.MonCounters = NKikimr::GetServiceCounters(node->DynamicCounters, "utils");
+            setup.Scheduler.Reset(CreateSchedulerThread(schedulerConfig));
+        }
+
         if (NeedMonitoring && NeedStatsCollectors) {
             NActors::IActor* statsCollector = NKikimr::CreateStatsCollector(1, setup, node->DynamicCounters);
             setup.LocalServices.push_back({

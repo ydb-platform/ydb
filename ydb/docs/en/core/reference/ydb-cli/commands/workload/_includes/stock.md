@@ -5,11 +5,12 @@ Simulates a warehouse of an online store: creates multi-product orders, gets a l
 ## Types of load {#workload_types}
 
 This load test runs 5 types of load:
-* [user-hist](#getCustomerHistory): Reads the specified number of orders made by the customer with id = 10000. This creates a workload to read the same rows from different threads.
-* [rand-user-hist](#getRandomCustomerHistory): Reads the specified number of orders made by a randomly selected customer. A load that reads data from different threads is created.
-* [add-rand-order](#insertRandomOrder): Generates an order at random. For example, a customer has created an order of 2 products, but hasn't yet paid for it, hence the quantities in stock aren't decreased for the products. The database writes the data about the order and products. The read/write load is created (the INSERT checks for an existing entry before inserting the data).
-* [put-rand-order](#submitRandomOrder): Generates an order at random and processes it. For example, a customer has created and paid an order of 2 products. The data about the order and products is written to the database, product availability is checked and quantities in stock are decreased. A mixed data load is created.
-* [put-same-order](#submitSameOrder): Creates orders with the same set of products. For example, all customers buy the same set of products (a newly released phone and a charger). This creates a workload of competing updates of the same rows in the table.
+
+* [user-hist](#get-customer-history): Reads the specified number of orders made by the customer with id = 10000. This creates a workload to read the same rows from different threads.
+* [rand-user-hist](#get-random-customer-history): Reads the specified number of orders made by a randomly selected customer. A load that reads data from different threads is created.
+* [add-rand-order](#insert-random-order): Generates an order at random. For example, a customer has created an order of 2 products, but hasn't yet paid for it, hence the quantities in stock aren't decreased for the products. The database writes the data about the order and products. The read/write load is created (the INSERT checks for an existing entry before inserting the data).
+* [put-rand-order](#submit-random-order): Generates an order at random and processes it. For example, a customer has created and paid an order of 2 products. The data about the order and products is written to the database, product availability is checked and quantities in stock are decreased. A mixed data load is created.
+* [put-same-order](#submit-same-order): Creates orders with the same set of products. For example, all customers buy the same set of products (a newly released phone and a charger). This creates a workload of competing updates of the same rows in the table.
 
 ## Load test initialization {#init}
 
@@ -89,7 +90,7 @@ See the description of the command to run the data load:
 | `--window` | - | Statistics collection window in seconds. Default: 1. |
 
 
-## The user-hist workload {#getCustomerHistory}
+## The user-hist workload {#get-customer-history}
 
 This type of load reads the specified number of orders for the customer with id = 10000.
 
@@ -117,7 +118,7 @@ To run this type of load, execute the command:
 ---|---|---
 | `--limit <value>` | `-l <value>` | The required number of orders. Default: 10. |
 
-## The rand-user-hist workload {#getRandomCustomerHistory}
+## The rand-user-hist workload {#get-random-customer-history}
 
 This type of load reads the specified number of orders from randomly selected customers.
 
@@ -145,7 +146,7 @@ To run this type of load, execute the command:
 ---|---|---
 | `--limit <value>` | `-l <value>` | The required number of orders. Default: 10. |
 
-## The add-rand-order workload {#insertRandomOrder}
+## The add-rand-order workload {#insert-random-order}
 
 This type of load creates a randomly generated order. The order includes several different products, 1 item per product. The number of products in the order is generated randomly based on an exponential distribution.
 
@@ -175,7 +176,7 @@ To run this type of load, execute the command:
 ---|---|---
 | `--products <value>` | `-p <value>` | Number of products in the test. Default: 100. |
 
-## The put-rand-order workload {#submitRandomOrder}
+## The put-rand-order workload {#submit-random-order}
 
 This type of load creates a randomly generated order and processes it. The order includes several different products, 1 item per product. The number of products in the order is generated randomly based on an exponential distribution. Order processing consists in decreasing the number of ordered products in stock.
 
@@ -229,7 +230,7 @@ To run this type of load, execute the command:
 ---|---|---
 | `--products <value>` | `-p <value>` | Number of products in the test. Default: 100. |
 
-## The put-same-order workload {#submitSameOrder}
+## The put-same-order workload {#submit-same-order}
 
 This type of load creates an order with the same set of products and processes it. Order processing consists in decreasing the number of ordered products in stock.
 

@@ -43,7 +43,7 @@ SELECT 3 > 0 AND false;
 
 Bitwise operations on numbers:
 
-* `&`, `|`, `^`: AND, OR, and XOR, respectively. Don't confuse bitwise operations with the related keywords. The keywords `AND`, `OR`, and `XOR` are used * for Boolean values only*, but not for numbers.
+* `&`, `|`, `^`: AND, OR, and XOR, respectively. Don't confuse bitwise operations with the related keywords. The keywords `AND`, `OR`, and `XOR` are used *for Boolean values only*, but not for numbers.
 * ` ~ `: A negation.
 * `<`, `>`: Left or right shifts.
 * `|<`, `>|`: Circular left or right shifts.
@@ -73,7 +73,7 @@ The operators in the table are listed in descending order of precedence.
 | --- | --- | --- | --- |
 | 1 | <code>a[], a.foo, a()</code> | Accessing a container item, calling a function | Left |
 | 2 | <code>+a, -a, ~a, NOT a</code> | Unary operators: plus, minus, bitwise and logical negation | Right |
-| 3 | <code>a &#124;&#124; b</code> | [String concatenation](#concatenation) | Left |
+| 3 | <code>a &#124;&#124; b</code> | [String concatenation](../../../syntax/expressions.md#concatenation) | Left |
 | 4 | <code>a*b, a/b, a%b</code> | Multiplication, division, remainder of division | Left |
 | 5 | <code>a+b, a-b</code> | Addition/Subtraction | Left |
 | 6 | <code>a ?? b</code> | Operator notation for [NVL/COALESCE](../../../builtins/basic.md#coalesce) | Right |

@@ -1,6 +1,6 @@
 /* Type definitions for the finite state machine for Bison.
 
-   Copyright (C) 1984, 1989, 2000-2004, 2007, 2009-2015, 2018-2019 Free
+   Copyright (C) 1984, 1989, 2000-2004, 2007, 2009-2015, 2018-2021 Free
    Software Foundation, Inc.
 
    This file is part of Bison, the GNU Compiler Compiler.
@@ -16,7 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+   along with this program.  If not, see <https://www.gnu.org/licenses/>.  */
 
 
 /* These type definitions are used to represent a nondeterministic
@@ -51,23 +51,26 @@
    lookahead token alone).  When the states are generated, these
    actions are represented in two other lists.
 
-   Each transition structure describes the possible transitions out
-   of one state, the state whose number is in the number field.  Each
-   contains a vector of numbers of the states that transitions can go
-   to.  The accessing_symbol fields of those states' cores say what
-   kind of input leads to them.
+   Each transition structure describes the possible transitions out of
+   one state (there are NUM of them).  Each contains a vector of
+   numbers of the states that transitions can go to.  The
+   accessing_symbol fields of those states' cores say what kind of
+   input leads to them.
 
    A transition to state zero should be ignored: conflict resolution
    deletes transitions by having them point to zero.
 
    Each reductions structure describes the possible reductions at the
    state whose number is in the number field.  rules is an array of
-   num rules.  lookahead_tokens is an array of bitsets, one per rule.
+   num rules.  lookaheads is an array of bitsets, one per rule.
 
    Conflict resolution can decide that certain tokens in certain
    states should explicitly be errors (for implementing %nonassoc).
    For each state, the tokens that are errors for this reason are
-   recorded in an errs structure, which holds the token numbers.
+   recorded in an errs structure.  The generated parser does not
+   depend on this errs structure, it is used only in the reports
+   (*.output, etc.) to describe conflicted actions that have been
+   discarded.
 
    There is at least one goto transition present in state zero.  It
    leads to a next-to-final state whose accessing_symbol is the
@@ -112,7 +115,7 @@ typedef struct state state;
 
 typedef struct
 {
-  int num;
+  int num;            /** Size of destination STATES.  */
   state *states[1];
 } transitions;
 
@@ -159,9 +162,9 @@ typedef struct
     if (!TRANSITION_IS_DISABLED (Transitions, Iter))
 
 
-/* Return the state such SHIFTS contain a shift/goto to it on SYM.
-   Abort if none found.  */
-struct state *transitions_to (transitions *shifts, symbol_number sym);
+/* The destination of the transition (shift/goto) from state S on
+   label SYM (term or nterm).  Abort if none found.  */
+struct state *transitions_to (state *s, symbol_number sym);
 
 
 /*-------.
@@ -184,7 +187,7 @@ errs *errs_new (int num, symbol **tokens);
 typedef struct
 {
   int num;
-  bitset *lookahead_tokens;
+  bitset *lookaheads;
   /* Sorted ascendingly on rule number.  */
   rule *rules[1];
 } reductions;
@@ -222,7 +225,7 @@ struct state
   /* Its items.  Must be last, since ITEMS can be arbitrarily large.  Sorted
      ascendingly on item index in RITEM, which is sorted on rule number.  */
   size_t nitems;
-  item_number items[1];
+  item_index items[1];
 };
 
 extern state_number nstates;
@@ -230,25 +233,30 @@ extern state *final_state;
 
 /* Create a new state with ACCESSING_SYMBOL for those items.  */
 state *state_new (symbol_number accessing_symbol,
-                  size_t core_size, item_number *core);
+                  size_t core_size, item_index *core);
 state *state_new_isocore (state const *s);
 
-/* Set the transitions of STATE.  */
-void state_transitions_set (state *s, int num, state **trans);
+/* Record that from S we can reach all the DST states (NUM of them).  */
+void state_transitions_set (state *s, int num, state **dst);
+
+/* Print the transitions of state s for debug.  */
+void state_transitions_print (const state *s, FILE *out);
 
 /* Set the reductions of STATE.  */
 void state_reductions_set (state *s, int num, rule **reds);
 
-int state_reduction_find (state *s, rule *r);
+/* The index of the reduction of state S that corresponds to rule R.
+   Aborts if there is no reduction of R in S.  */
+int state_reduction_find (state const *s, rule const *r);
 
 /* Set the errs of STATE.  */
 void state_errs_set (state *s, int num, symbol **errors);
 
 /* Print on OUT all the lookahead tokens such that this STATE wants to
    reduce R.  */
-void state_rule_lookahead_tokens_print (state *s, rule *r, FILE *out);
-void state_rule_lookahead_tokens_print_xml (state *s, rule *r,
-                                            FILE *out, int level);
+void state_rule_lookaheads_print (state const *s, rule const *r, FILE *out);
+void state_rule_lookaheads_print_xml (state const *s, rule const *r,
+                                      FILE *out, int level);
 
 /* Create/destroy the states hash table.  */
 void state_hash_new (void);
@@ -256,7 +264,7 @@ void state_hash_free (void);
 
 /* Find the state associated to the CORE, and return it.  If it does
    not exist yet, return NULL.  */
-state *state_hash_lookup (size_t core_size, item_number *core);
+state *state_hash_lookup (size_t core_size, const item_index *core);
 
 /* Insert STATE in the state hash table.  */
 void state_hash_insert (state *s);

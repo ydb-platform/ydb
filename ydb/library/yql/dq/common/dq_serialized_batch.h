@@ -50,6 +50,8 @@ struct TDqSerializedBatch {
         Clear();
         return result;
     }
+
+    void ConvertToNoOOB();
 };
 
 TRope SaveForSpilling(TDqSerializedBatch&& batch);

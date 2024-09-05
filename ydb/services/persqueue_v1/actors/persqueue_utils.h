@@ -97,4 +97,6 @@ static inline TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry>  GetTicketPar
     return {};
 }
 
+Ydb::PersQueue::ErrorCode::ErrorCode ConvertNavigateStatus(NSchemeCache::TSchemeCacheNavigate::EStatus status);
+
 } //namespace NKikimr::NGRpcProxy::V1

@@ -1,0 +1,6 @@
+items:
+- name: Обзор
+  href: index.md
+- include:
+    mode: root_merge
+    path: ydb/docs/ru/core/yql/reference/toc_p.yaml

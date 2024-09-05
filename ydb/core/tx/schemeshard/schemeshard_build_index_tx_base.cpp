@@ -19,10 +19,11 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyState(NTabletFlatExecutor::TTran
         TIndexBuildInfo::EState state;
         std::tie(buildId, state) = rec;
 
-        Y_VERIFY_S(Self->IndexBuilds.contains(buildId), "IndexBuilds has no " << buildId);
-        auto buildInfo = Self->IndexBuilds.at(buildId);
-        LOG_I("Change state from " << buildInfo->State << " to " << state);
-        buildInfo->State = state;
+        const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(buildId);
+        Y_VERIFY_S(buildInfoPtr, "IndexBuilds has no " << buildId);
+        auto& buildInfo = *buildInfoPtr->Get();
+        LOG_I("Change state from " << buildInfo.State << " to " << state);
+        buildInfo.State = state;
 
         NIceDb::TNiceDb db(txc.DB);
         Self->PersistBuildIndexState(db, buildInfo);
@@ -89,15 +90,16 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyBill(NTabletFlatExecutor::TTrans
 
         RoundPeriod(startPeriod, endPeriod);
 
-        Y_VERIFY_S(Self->IndexBuilds.contains(buildId), "IndexBuilds has no " << buildId);
-        auto buildInfo = Self->IndexBuilds.at(buildId);
+        const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(buildId);
+        Y_VERIFY_S(buildInfoPtr, "IndexBuilds has no " << buildId);
+        auto& buildInfo = *buildInfoPtr->Get();
 
-        TBillingStats toBill = buildInfo->Processed - buildInfo->Billed;
+        TBillingStats toBill = buildInfo.Processed - buildInfo.Billed;
         if (!toBill) {
             continue;
         }
 
-        TPath domain = TPath::Init(buildInfo->DomainPathId, Self);
+        TPath domain = TPath::Init(buildInfo.DomainPathId, Self);
         TPathElement::TPtr pathEl = domain.Base();
 
         TString cloud_id;
@@ -117,8 +119,8 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyBill(NTabletFlatExecutor::TTrans
             LOG_N("ApplyBill: unable to make a bill, neither cloud_id and nor folder_id nor database_id have found in user attributes at the domain"
                   << ", build index operation: " << buildId
                   << ", domain: " << domain.PathString()
-                  << ", domainId: " << buildInfo->DomainPathId
-                  << ", tableId: " << buildInfo->TablePathId
+                  << ", domainId: " << buildInfo.DomainPathId
+                  << ", tableId: " << buildInfo.TablePathId
                   << ", not billed usage: " << toBill);
             continue;
         }
@@ -127,7 +129,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyBill(NTabletFlatExecutor::TTrans
             LOG_N("ApplyBill: unable to make a bill, domain is not a serverless db"
                   << ", build index operation: " << buildId
                   << ", domain: " << domain.PathString()
-                  << ", domainId: " << buildInfo->DomainPathId
+                  << ", domainId: " << buildInfo.DomainPathId
                   << ", IsDomainSchemeShard: " << Self->IsDomainSchemeShard
                   << ", ParentDomainId: " << Self->ParentDomainId
                   << ", ResourcesDomainId: " << domain.DomainInfo()->GetResourcesDomainId()
@@ -137,16 +139,16 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyBill(NTabletFlatExecutor::TTrans
 
         NIceDb::TNiceDb db(txc.DB);
 
-        buildInfo->Billed += toBill;
+        buildInfo.Billed += toBill;
         Self->PersistBuildIndexBilling(db, buildInfo);
 
         ui64 requestUnits = RequestUnits(toBill);
 
         TString id = TStringBuilder()
             << buildId << "-"
-            << buildInfo->TablePathId.OwnerId << "-" << buildInfo->TablePathId.LocalPathId << "-"
-            << buildInfo->Billed.GetRows() << "-" << buildInfo->Billed.GetBytes() << "-"
-            << buildInfo->Processed.GetRows() << "-" << buildInfo->Processed.GetBytes();
+            << buildInfo.TablePathId.OwnerId << "-" << buildInfo.TablePathId.LocalPathId << "-"
+            << buildInfo.Billed.GetRows() << "-" << buildInfo.Billed.GetBytes() << "-"
+            << buildInfo.Processed.GetRows() << "-" << buildInfo.Processed.GetBytes();
 
         const TString billRecord = TBillRecord()
             .Id(id)
@@ -158,7 +160,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyBill(NTabletFlatExecutor::TTrans
             .ToString();
 
         LOG_D("ApplyBill: made a bill"
-              << ", buildInfo: " << *buildInfo
+              << ", buildInfo: " << buildInfo
               << ", record: '" << billRecord << "'");
 
         auto request = MakeHolder<NMetering::TEvMetering::TEvWriteMeteringJson>(std::move(billRecord));
@@ -179,17 +181,17 @@ void TSchemeShard::TIndexBuilder::TTxBase::Progress(TIndexBuildId id) {
     SideEffects.ToProgress(id);
 }
 
-void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild& index, const TIndexBuildInfo::TPtr indexInfo) {
-    index.SetId(ui64(indexInfo->Id));
-    if (indexInfo->Issue) {
-        AddIssue(index.MutableIssues(), indexInfo->Issue);
+void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild& index, const TIndexBuildInfo& indexInfo) {
+    index.SetId(ui64(indexInfo.Id));
+    if (indexInfo.Issue) {
+        AddIssue(index.MutableIssues(), indexInfo.Issue);
     }
 
-    for (const auto& item: indexInfo->Shards) {
+    for (const auto& item: indexInfo.Shards) {
         const TShardIdx& shardIdx = item.first;
         const TIndexBuildInfo::TShardStatus& status = item.second;
 
-        if (status.Status != NKikimrTxDataShard::TEvBuildIndexProgressResponse::INPROGRESS) {
+        if (status.Status != NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS) {
             if (status.UploadStatus != Ydb::StatusIds::SUCCESS) {
                 if (status.DebugMessage) {
                     AddIssue(index.MutableIssues(), status.ToString(shardIdx));
@@ -198,7 +200,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
         }
     }
 
-    switch (indexInfo->State) {
+    switch (indexInfo.State) {
     case TIndexBuildInfo::EState::AlterMainTable:
     case TIndexBuildInfo::EState::Locking:
     case TIndexBuildInfo::EState::GatheringStatistics:
@@ -208,7 +210,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
         break;
     case TIndexBuildInfo::EState::Filling:
         index.SetState(Ydb::Table::IndexBuildState::STATE_TRANSFERING_DATA);
-        index.SetProgress(indexInfo->CalcProgressPercent());
+        index.SetProgress(indexInfo.CalcProgressPercent());
         break;
     case TIndexBuildInfo::EState::Applying:
     case TIndexBuildInfo::EState::Unlocking:
@@ -248,25 +250,25 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
     Fill(*index.MutableSettings(), indexInfo);
 }
 
-void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuildSettings& settings, const TIndexBuildInfo::TPtr info) {
-    TPath table = TPath::Init(info->TablePathId, Self);
+void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuildSettings& settings, const TIndexBuildInfo& info) {
+    TPath table = TPath::Init(info.TablePathId, Self);
     settings.set_source_path(table.PathString());
 
-    if (info->IsBuildIndex()) {
+    if (info.IsBuildIndex()) {
         Ydb::Table::TableIndex& index = *settings.mutable_index();
-        index.set_name(info->IndexName);
+        index.set_name(info.IndexName);
 
         *index.mutable_index_columns() = {
-            info->IndexColumns.begin(),
-            info->IndexColumns.end()
+            info.IndexColumns.begin(),
+            info.IndexColumns.end()
         };
 
         *index.mutable_data_columns() = {
-            info->DataColumns.begin(),
-            info->DataColumns.end()
+            info.DataColumns.begin(),
+            info.DataColumns.end()
         };
 
-        switch (info->IndexType) {
+        switch (info.IndexType) {
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobal:
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique:
             *index.mutable_global_index() = Ydb::Table::GlobalIndex();
@@ -280,18 +282,18 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
         default:
             Y_ABORT("Unreachable");
         }
-    } else if (info->IsBuildColumn()) {
-        for(const auto& column : info->BuildColumns) {
+    } else if (info.IsBuildColumns()) {
+        for(const auto& column : info.BuildColumns) {
             auto* columnProto = settings.mutable_column_build_operation()->add_column();
             columnProto->SetColumnName(column.ColumnName);
             columnProto->mutable_default_from_literal()->CopyFrom(column.DefaultFromLiteral);
         }
     }
 
-    settings.set_max_batch_bytes(info->Limits.MaxBatchBytes);
-    settings.set_max_batch_rows(info->Limits.MaxBatchRows);
-    settings.set_max_shards_in_flight(info->Limits.MaxShards);
-    settings.set_max_retries_upload_batch(info->Limits.MaxRetries);
+    settings.set_max_batch_bytes(info.Limits.MaxBatchBytes);
+    settings.set_max_batch_rows(info.Limits.MaxBatchRows);
+    settings.set_max_shards_in_flight(info.Limits.MaxShards);
+    settings.set_max_retries_upload_batch(info.Limits.MaxRetries);
 }
 
 void TSchemeShard::TIndexBuilder::TTxBase::AddIssue(::google::protobuf::RepeatedPtrField<::Ydb::Issue::IssueMessage>* issues,
@@ -303,31 +305,31 @@ void TSchemeShard::TIndexBuilder::TTxBase::AddIssue(::google::protobuf::Repeated
     issue.set_message(message);
 }
 
-void TSchemeShard::TIndexBuilder::TTxBase::SendNotificationsIfFinished(TIndexBuildInfo::TPtr indexInfo) {
-    if (!indexInfo->IsFinished()) {
+void TSchemeShard::TIndexBuilder::TTxBase::SendNotificationsIfFinished(TIndexBuildInfo& indexInfo) {
+    if (!indexInfo.IsFinished()) {
         return;
     }
 
     LOG_T("TIndexBuildInfo SendNotifications: "
-          << ": id# " << indexInfo->Id
-          << ", subscribers count# " << indexInfo->Subscribers.size());
+          << ": id# " << indexInfo.Id
+          << ", subscribers count# " << indexInfo.Subscribers.size());
 
     TSet<TActorId> toAnswer;
-    toAnswer.swap(indexInfo->Subscribers);
+    toAnswer.swap(indexInfo.Subscribers);
     for (auto& actorId: toAnswer) {
-        Send(actorId, MakeHolder<TEvSchemeShard::TEvNotifyTxCompletionResult>(ui64(indexInfo->Id)));
+        Send(actorId, MakeHolder<TEvSchemeShard::TEvNotifyTxCompletionResult>(ui64(indexInfo.Id)));
     }
 }
 
-void TSchemeShard::TIndexBuilder::TTxBase::EraseBuildInfo(const TIndexBuildInfo::TPtr indexBuildInfo) {
-    Self->IndexBuilds.erase(indexBuildInfo->Id);
-    Self->IndexBuildsByUid.erase(indexBuildInfo->Uid);
+void TSchemeShard::TIndexBuilder::TTxBase::EraseBuildInfo(const TIndexBuildInfo& indexBuildInfo) {
+    Self->TxIdToIndexBuilds.erase(indexBuildInfo.LockTxId);
+    Self->TxIdToIndexBuilds.erase(indexBuildInfo.InitiateTxId);
+    Self->TxIdToIndexBuilds.erase(indexBuildInfo.ApplyTxId);
+    Self->TxIdToIndexBuilds.erase(indexBuildInfo.UnlockTxId);
+    Self->TxIdToIndexBuilds.erase(indexBuildInfo.AlterMainTableTxId);
 
-    Self->TxIdToIndexBuilds.erase(indexBuildInfo->LockTxId);
-    Self->TxIdToIndexBuilds.erase(indexBuildInfo->InitiateTxId);
-    Self->TxIdToIndexBuilds.erase(indexBuildInfo->ApplyTxId);
-    Self->TxIdToIndexBuilds.erase(indexBuildInfo->UnlockTxId);
-    Self->TxIdToIndexBuilds.erase(indexBuildInfo->AlterMainTableTxId);
+    Self->IndexBuildsByUid.erase(indexBuildInfo.Uid);
+    Self->IndexBuilds.erase(indexBuildInfo.Id);
 }
 
 Ydb::StatusIds::StatusCode TSchemeShard::TIndexBuilder::TTxBase::TranslateStatusCode(NKikimrScheme::EStatus status) {
@@ -367,36 +369,36 @@ Ydb::StatusIds::StatusCode TSchemeShard::TIndexBuilder::TTxBase::TranslateStatus
     return Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
 }
 
-void TSchemeShard::TIndexBuilder::TTxBase::Bill(const TIndexBuildInfo::TPtr& indexBuildInfo,
+void TSchemeShard::TIndexBuilder::TTxBase::Bill(const TIndexBuildInfo& indexBuildInfo,
     TInstant startPeriod, TInstant endPeriod)
 {
-    ToBill.push_back(TToBill(indexBuildInfo->Id, std::move(startPeriod), std::move(endPeriod)));
+    ToBill.push_back(TToBill(indexBuildInfo.Id, std::move(startPeriod), std::move(endPeriod)));
 }
 
-void TSchemeShard::TIndexBuilder::TTxBase::AskToScheduleBilling(const TIndexBuildInfo::TPtr& indexBuildInfo) {
-    if (indexBuildInfo->BillingEventIsScheduled) {
+void TSchemeShard::TIndexBuilder::TTxBase::AskToScheduleBilling(TIndexBuildInfo& indexBuildInfo) {
+    if (indexBuildInfo.BillingEventIsScheduled) {
         return;
     }
 
-    if (indexBuildInfo->State != TIndexBuildInfo::EState::Filling) {
+    if (indexBuildInfo.State != TIndexBuildInfo::EState::Filling) {
         return;
     }
 
-    indexBuildInfo->BillingEventIsScheduled = true;
+    indexBuildInfo.BillingEventIsScheduled = true;
 
-    ToScheduleBilling.push_back(TBillingEventSchedule(indexBuildInfo->Id, indexBuildInfo->ReBillPeriod));
+    ToScheduleBilling.push_back(TBillingEventSchedule(indexBuildInfo.Id, indexBuildInfo.ReBillPeriod));
 }
 
-bool TSchemeShard::TIndexBuilder::TTxBase::GotScheduledBilling(const TIndexBuildInfo::TPtr& indexBuildInfo) {
-    if (!indexBuildInfo->BillingEventIsScheduled) {
+bool TSchemeShard::TIndexBuilder::TTxBase::GotScheduledBilling(TIndexBuildInfo& indexBuildInfo) {
+    if (!indexBuildInfo.BillingEventIsScheduled) {
         return false;
     }
 
-    if (indexBuildInfo->State != TIndexBuildInfo::EState::Filling) {
+    if (indexBuildInfo.State != TIndexBuildInfo::EState::Filling) {
         return false;
     }
 
-    indexBuildInfo->BillingEventIsScheduled = false;
+    indexBuildInfo.BillingEventIsScheduled = false;
 
     return true;
 }

@@ -35,6 +35,19 @@ Examples:
 * `/ru-central1/b1g8skpblkos03malf3s/etn01q5ko6sh271beftr` is a {{ yandex-cloud }} database with `etn01q3ko8sh271beftr` as ID deployed in the `b1g8skpbljhs03malf3s` cloud in the `ru-central1` region.
 * `/local` is the default database for custom deployment [using Docker](../quickstart.md).
 
+## Connection string {#connection_string}
+
+A connection string is a URL-formatted string that specifies the endpoint and path to a database using the following syntax:
+
+`<endpoint>?database=<database>`
+
+Examples:
+
+- `grpc://localhost:7135?database=/local`
+- `grpcs://ydb.serverless.yandexcloud.net:2135?database=/ru-central1/b1g8skpblkos03malf3s/etn01q5ko6sh271beftr`
+
+Using a connection string is an alternative to specifying the endpoint and database path separately and can be used in tools that support this method.
+
 ## A root certificate for TLS {#tls-cert}
 
 When using an encrypted protocol ([gRPC over TLS](https://grpc.io/docs/guides/auth/), or gRPCS), a network connection can only be continued if the client is sure that it receives a response from the genuine server that it is trying to connect to, rather than someone in-between intercepting its request on the network. This is assured by verifications through a [chain of trust]{% if lang == "en" %}(https://en.wikipedia.org/wiki/Chain_of_trust){% endif %}{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Цепочка_доверия){% endif %}, for which you need to install a root certificate on your client.

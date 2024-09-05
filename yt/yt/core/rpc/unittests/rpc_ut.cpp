@@ -813,7 +813,7 @@ TYPED_TEST(TRpcTest, RequestQueueSizeLimit)
     EXPECT_TRUE(AllSucceeded(std::move(futures)).Get().IsOK());
 }
 
-TYPED_TEST(TNotGrpcTest, RequestMemoryOverflowException)
+TYPED_TEST(TNotGrpcTest, RequesMemoryPressureException)
 {
     auto memoryUsageTracker = this->GetMemoryUsageTracker();
     memoryUsageTracker->ClearTotalUsage();
@@ -828,7 +828,7 @@ TYPED_TEST(TNotGrpcTest, RequestMemoryOverflowException)
     auto result = WaitFor(req->Invoke().AsVoid());
 
     // Limit of memory is 32 MB.
-    EXPECT_EQ(NRpc::EErrorCode::MemoryOverflow, req->Invoke().Get().GetCode());
+    EXPECT_EQ(NRpc::EErrorCode::MemoryPressure, req->Invoke().Get().GetCode());
 }
 
 TYPED_TEST(TNotGrpcTest, MemoryTracking)
@@ -1553,7 +1553,7 @@ TEST(TCachingChannelFactoryTest, IdleChannels)
         : public IChannelFactory
     {
     public:
-        IChannelPtr CreateChannel(const TString& /*address*/) override
+        IChannelPtr CreateChannel(const std::string& /*address*/) override
         {
             return CreateLocalChannel(Server_);
         }

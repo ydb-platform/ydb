@@ -15,10 +15,6 @@ IF (NOT OS_WINDOWS)
         ut_helpers.cpp
     )
 
-    # reserve cpu for speed test
-
-    REQUIREMENTS(cpu:4)
-
     IF (WITH_VALGRIND)
         SIZE(LARGE)
         TIMEOUT(2400)

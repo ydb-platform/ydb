@@ -369,9 +369,9 @@ TExprNode::TPtr KeepColumnOrder(const TColumnOrder& order, const TExprNode::TPtr
             .List(1)
                 .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                     size_t index = 0;
-                    for (auto& col : order) {
+                    for (auto& [col, gen_col] : order) {
                         parent
-                            .Atom(index++, col);
+                            .Atom(index++, gen_col);
                     }
                     return parent;
                 })

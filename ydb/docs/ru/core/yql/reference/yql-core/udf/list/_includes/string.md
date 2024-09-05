@@ -106,9 +106,9 @@ SELECT String::SplitToList("1,2,3,4,5,6,7", ",", 3 as Limit); -- ["1", "2", "3",
 
   Заменяют все/первое/последнее вхождения(е) строки ```find``` в ```input``` на ```replacement```.
 
-* ```String::RemoveAll(input:String{Flags:AutoMap}, symbols:String) -> String ```
-* ```String::RemoveFirst(input:String{Flags:AutoMap}, symbols:String) -> String ```
-* ```String::RemoveLast(input:String{Flags:AutoMap}, symbols:String) -> String ```
+* ```String::RemoveAll(input:String{Flags:AutoMap}, symbols:String) -> String```
+* ```String::RemoveFirst(input:String{Flags:AutoMap}, symbols:String) -> String```
+* ```String::RemoveLast(input:String{Flags:AutoMap}, symbols:String) -> String```
 
   Удаляют все/первое/последнее вхождения(е) символа в наборе ```symbols``` из ```input```. Второй аргумент интерпретируется как неупорядоченный набор символов для удаления.
 
@@ -143,7 +143,7 @@ SELECT String::SplitToList("1,2,3,4,5,6,7", ",", 3 as Limit); -- ["1", "2", "3",
 * ```String::HumanReadableDuration(value:Uint64{Flags:AutoMap}) -> String```
 * ```String::HumanReadableQuantity(value:Uint64{Flags:AutoMap}) -> String```
 * ```String::HumanReadableBytes(value:Uint64{Flags:AutoMap}) -> String```
-* ```String::Prec(Double{Flags:AutoMap}, digits:Uint64) -> String ```
+* ```String::Prec(Double{Flags:AutoMap}, digits:Uint64) -> String```
 
   Распечатывает значение указанным образом.
 

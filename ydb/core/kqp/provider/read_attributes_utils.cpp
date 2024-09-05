@@ -4,6 +4,7 @@
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 #include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
 #include <ydb/public/sdk/cpp/client/ydb_value/value.h>
+#include <library/cpp/json/writer/json.h>
 
 namespace NYql {
 
@@ -20,10 +21,35 @@ class TGatheringAttributesVisitor : public IAstAttributesVisitor {
 
     void VisitAttribute(TString key, TString value) override {
         Y_ABORT_UNLESS(CurrentSource, "cannot write %s: %s", key.c_str(), value.c_str());
+        if (key == "partitionedby") {
+            NJson::TJsonArray values({ value });
+            CurrentSource->second.try_emplace(key, NJson::WriteJson({ values }));
+            return;
+        }
         CurrentSource->second.try_emplace(key, value);
     };
 
-    void VisitNonAttribute(TExprNode::TPtr) override {}
+    void VisitNonAttribute(TExprNode::TPtr node) override {
+        if (!CurrentSource) {
+            return;
+        }
+        
+        auto nodeChildren = node->Children();
+        if (nodeChildren.size() > 2 && nodeChildren[0]->IsAtom()) {
+            TCoAtom attrName{nodeChildren[0]};
+            if (attrName.StringValue() == "partitionedby") {
+                NJson::TJsonArray values;
+
+                for (size_t i = 1; i < nodeChildren.size(); ++i) {
+                    Y_ABORT_UNLESS(nodeChildren[i]->IsAtom());
+                    TCoAtom attrValue{nodeChildren[i]};
+                    values.AppendValue(attrValue.StringValue());
+                }
+
+                CurrentSource->second.try_emplace(attrName.StringValue(), NJson::WriteJson(values));
+            }
+        }
+    }
 
 public:
     THashMap<std::pair<TString, TString>, THashMap<TString, TString>> Result;
@@ -203,7 +229,19 @@ static Ydb::Type CreateYdbType(const NKikimr::NScheme::TTypeInfo& typeInfo, bool
         auto& item = notNull
             ? ydbType
             : *ydbType.mutable_optional_type()->mutable_item();
-        item.set_type_id((Ydb::Type::PrimitiveTypeId)typeInfo.GetTypeId());
+        //
+        // DECIMAL is PrimitiveType with (22,9) defaults in Scheme
+        // and separate (non-primitive) type everywhere else
+        //
+        // NKikimr::NScheme::NTypeIds::Decimal is omitted in public API intentionally
+        //
+        if (typeInfo.GetTypeId() == NKikimr::NScheme::NTypeIds::Decimal) {
+            auto* decimal = item.mutable_decimal_type();
+            decimal->set_precision(NKikimr::NScheme::DECIMAL_PRECISION);
+            decimal->set_scale(NKikimr::NScheme::DECIMAL_SCALE);
+        } else {
+            item.set_type_id((Ydb::Type::PrimitiveTypeId)typeInfo.GetTypeId());
+        }
     }
     return ydbType;
 }

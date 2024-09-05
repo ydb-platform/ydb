@@ -107,8 +107,10 @@ public:
 
             auto settings = soReadObject.Object().Settings();
             auto& settingsRef = settings.Ref();
-            TString from;
-            TString to;
+            const auto now = TInstant::Now();
+            const auto now1h = now - TDuration::Hours(1);
+            TString from = now1h.ToStringUpToSeconds();
+            TString to = now.ToStringUpToSeconds();
             TString program;
             bool downsamplingDisabled = false;
             TString downsamplingAggregation = "AVG";

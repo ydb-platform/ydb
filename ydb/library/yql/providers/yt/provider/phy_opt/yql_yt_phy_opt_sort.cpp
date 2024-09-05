@@ -29,7 +29,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::YtSortOverAlreadySorted
     TYqlRowSpecInfo commonSorted = outRowSpec;
     auto section = sort.Input().Item(0);
     for (auto path: section.Paths()) {
-        commonSorted.MakeCommonSortness(*TYtTableBaseInfo::GetRowSpec(path.Table()));
+        commonSorted.MakeCommonSortness(ctx, *TYtTableBaseInfo::GetRowSpec(path.Table()));
     }
 
     if (outRowSpec.CompareSortness(commonSorted)) {
@@ -73,7 +73,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Sort(TExprBase node, TE
     auto keySelectorLambda = sort.KeySelectorLambda();
     auto cluster = TString{GetClusterName(sort.Input())};
     TSyncMap syncList;
-    if (!IsYtCompleteIsolatedLambda(keySelectorLambda.Ref(), syncList, cluster, true, false)) {
+    if (!IsYtCompleteIsolatedLambda(keySelectorLambda.Ref(), syncList, cluster, false)) {
         return node;
     }
 
@@ -198,7 +198,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Sort(TExprBase node, TE
     if (canUseMerge) {
         TYqlRowSpecInfo commonSorted = *sortOut.RowSpec;
         for (auto& pathInfo: inputInfos) {
-            commonSorted.MakeCommonSortness(*pathInfo->Table->RowSpec);
+            commonSorted.MakeCommonSortness(ctx, *pathInfo->Table->RowSpec);
         }
         // input is sorted at least as strictly as output
         if (!sortOut.RowSpec->CompareSortness(commonSorted)) {
@@ -533,8 +533,8 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::AssumeSorted(TExprBase 
                 && firstNativeType == path->GetNativeYtType();
         });
         if (canMerge) {
-            outTable.RowSpec->CopySortness(*inputPaths.front()->Table->RowSpec, TYqlRowSpecInfo::ECopySort::WithDesc);
-            outTable.RowSpec->ClearSortness(sorted->GetContent().size());
+            outTable.RowSpec->CopySortness(ctx, *inputPaths.front()->Table->RowSpec, TYqlRowSpecInfo::ECopySort::WithDesc);
+            outTable.RowSpec->ClearSortness(ctx, sorted->GetContent().size());
             outTable.SetUnique(assume.Ref().GetConstraint<TDistinctConstraintNode>(), assume.Pos(), ctx);
             if (firstNativeType) {
                 outTable.RowSpec->CopyTypeOrders(*firstNativeType);

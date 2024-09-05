@@ -89,9 +89,9 @@ void TestSerializationDeserializationNode(const TOriginal& original)
 }
 
 template <typename TOriginal, typename TResult = TOriginal>
-void TestSerializationDeserialization(const TOriginal& original, EYsonType /*ysonType*/ = EYsonType::Node)
+void TestSerializationDeserialization(const TOriginal& original, EYsonType ysonType = EYsonType::Node)
 {
-    //TestSerializationDeserializationPullParser<TOriginal, TResult>(original, ysonType);
+    TestSerializationDeserializationPullParser<TOriginal, TResult>(original, ysonType);
     TestSerializationDeserializationNode<TOriginal, TResult>(original);
 }
 
@@ -249,7 +249,6 @@ TEST(TSerializationTest, Simple)
         TestSerializationDeserialization(value);
     }
 }
-
 
 TEST(TSerializationTest, PackRefs)
 {

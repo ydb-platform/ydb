@@ -11,6 +11,8 @@
 
 #include <ydb/library/yql/parser/pg_catalog/catalog.h>
 
+#include <library/cpp/yson/node/node_io.h>
+
 #include <util/generic/algorithm.h>
 #include <util/string/join.h>
 
@@ -1432,10 +1434,10 @@ namespace {
     }
 
     IGraphTransformer::TStatus ListTopSortWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        if (!EnsureMinMaxArgsCount(*input, 2, 3, ctx.Expr)) { 
+        if (!EnsureMinMaxArgsCount(*input, 2, 3, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
-        
+
         TStringBuf newName = input->Content();
         newName.Skip(4);
         bool desc = false;
@@ -1457,7 +1459,7 @@ namespace {
                 .Seal()
             .Build();
         }
-        
+
         return OptListWrapperImpl<4U, 4U>(ctx.Expr.Builder(input->Pos())
             .Callable(newName)
                 .Add(0, input->ChildPtr(0))
@@ -2755,8 +2757,8 @@ namespace {
 
             TTypeAnnotationNode::TListType childTypes;
             const auto structType = itemType->Cast<TStructExprType>();
-            for (const auto& col : *childColumnOrder) {
-                auto itemIdx = structType->FindItem(col);
+            for (const auto& [col, gen_col] : *childColumnOrder) {
+                auto itemIdx = structType->FindItem(gen_col);
                 YQL_ENSURE(itemIdx);
                 childTypes.push_back(structType->GetItems()[*itemIdx]->GetItemType());
             }
@@ -2781,10 +2783,10 @@ namespace {
             idx++;
         }
 
-        YQL_ENSURE(resultColumnOrder.size() == resultTypes.size());
+        YQL_ENSURE(resultColumnOrder.Size() == resultTypes.size());
         TVector<const TItemExprType*> structItems;
         for (size_t i = 0; i < resultTypes.size(); ++i) {
-            structItems.push_back(ctx.Expr.MakeType<TItemExprType>(resultColumnOrder[i], resultTypes[i]));
+            structItems.push_back(ctx.Expr.MakeType<TItemExprType>(resultColumnOrder[i].PhysicalName, resultTypes[i]));
         }
 
         resultStructType = ctx.Expr.MakeType<TStructExprType>(structItems);
@@ -4412,6 +4414,37 @@ namespace {
     template IGraphTransformer::TStatus AssumeConstraintWrapper<true>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
     template IGraphTransformer::TStatus AssumeConstraintWrapper<false>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
 
+    IGraphTransformer::TStatus AssumeConstraintsWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TContext& ctx) {
+        if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureAnySeqType(input->Head(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureAtom(input->Tail(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        NYT::TNode node;
+        try {
+            node = NYT::NodeFromYsonString(input->Tail().Content());
+        } catch (...) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() <<
+                "Bad constraints yson-value: " << CurrentExceptionMessage()));
+            return IGraphTransformer::TStatus::Error;
+        }
+        if (!node.IsMap()) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() <<
+                "Expected yson-map as serialized constraints value, actual " << node.GetType()));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        input->SetTypeAnn(input->Head().GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     IGraphTransformer::TStatus AssumeColumnOrderWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -4454,13 +4487,16 @@ namespace {
         auto inputColumns = GetColumnsOfStructOrSequenceOfStruct(*input->Head().GetTypeAnn());
         auto columnOrder = input->Tail().ChildrenList();
 
+        TColumnOrder order;
+
         for (auto& column : columnOrder) {
             YQL_ENSURE(column->IsAtom());
-            auto pos = FindOrReportMissingMember(column->Content(), input->Head().Pos(), *structType, ctx.Expr);
+            auto colName = TString(column->Content());
+            auto pos = FindOrReportMissingMember(colName, input->Head().Pos(), *structType, ctx.Expr);
             if (!pos) {
                 return IGraphTransformer::TStatus::Error;
             }
-            inputColumns.erase(inputColumns.find(column->Content()));
+            inputColumns.erase(inputColumns.find(order.AddColumn(colName)));
         }
 
         if (input->IsCallable("AssumeColumnOrderPartial")) {
@@ -6500,7 +6536,7 @@ namespace {
             return IGraphTransformer::TStatus::Repeat;
         }
 
-        const TTypeAnnotationNode* outputType = ctx.Expr.MakeType<TDataExprType>(input->IsCallable("PercentRank") ? 
+        const TTypeAnnotationNode* outputType = ctx.Expr.MakeType<TDataExprType>(input->IsCallable("PercentRank") ?
             EDataSlot::Double : EDataSlot::Uint64);
         if (!isAnsi && keyType->GetKind() == ETypeAnnotationKind::Optional) {
             outputType = ctx.Expr.MakeType<TOptionalExprType>(outputType);

@@ -20,8 +20,8 @@
 
 ``` text
 Status: SUCCESS
-Issues: 
-<main>: Error: dst path fail checks, path: /<database>/<path>: path exist, request accepts it, 
+Issues:
+<main>: Error: dst path fail checks, path: /<database>/<path>: path exist, request accepts it,
 pathId: [OwnerId: <some>, LocalPathId: <some>], path type: EPathTypeDir, path state: EPathStateNoChanges
 ```
 
@@ -67,15 +67,15 @@ pathId: [OwnerId: <some>, LocalPathId: <some>], path type: EPathTypeDir, path st
 `-f`, `--force` | Не запрашивать никаких подтверждений.
 `-i` | Запрашивать подтверждение на удаление каждого объекта.
 `-I` | Однократно запросить подтверждение.
-`--timeout <значение>` | Таймаут операции, мс. 
+`--timeout <значение>` | Таймаут операции, мс.
 
 При попытке удалить непустую директорию без указания параметра `-r` или `--recursive` команда не будет выполнена с выдачей ошибки:
 
 ``` text
 Status: SCHEME_ERROR
-Issues: 
-<main>: Error: path table fail checks, path: /<database>/<path>: path has children, request 
-doesn't accept it, pathId: [OwnerId: <some>, LocalPathId: <some>], path type: 
+Issues:
+<main>: Error: path table fail checks, path: /<database>/<path>: path has children, request
+doesn't accept it, pathId: [OwnerId: <some>, LocalPathId: <some>], path type:
 EPathTypeDir, path state: EPathStateNoChanges, alive children: <count>
 ```
 

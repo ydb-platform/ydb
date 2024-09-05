@@ -88,9 +88,9 @@ EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
                             // Updates are not allowed when database is out of space
                             TString err = "Cannot perform writes: database is out of disk space";
 
-                            DataShard.IncCounter(COUNTER_WRITE_OUT_OF_SPACE);
+                            DataShard.IncCounter(COUNTER_WRITE_DISK_SPACE_EXHAUSTED);
 
-                            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED, err);
+                            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_DISK_SPACE_EXHAUSTED, err);
                             op->Abort(EExecutionUnitKind::FinishProposeWrite);
 
                             DataShard.SetOverloadSubscribed(writeOp->GetWriteTx()->GetOverloadSubscribe(), writeOp->GetRecipient(), op->GetTarget(), ERejectReasons::YellowChannels, writeOp->GetWriteResult()->Record);

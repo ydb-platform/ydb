@@ -162,7 +162,7 @@ Y_UNIT_TEST_SUITE(TCreateAndDropViewTest) {
             )",
             path
         );
-        
+
         DisableViewsFeatureFlag(kikimr);
         const auto creationResult = session.ExecuteSchemeQuery(creationQuery).ExtractValueSync();
         UNIT_ASSERT(!creationResult.IsSuccess());
@@ -325,6 +325,32 @@ Y_UNIT_TEST_SUITE(TCreateAndDropViewTest) {
         }
     }
 
+    Y_UNIT_TEST(DropViewInFolder) {
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        EnableViewsFeatureFlag(kikimr);
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        constexpr const char* path = "/Root/some/path/to/TheView";
+        constexpr const char* queryInView = "SELECT 1";
+
+        const TString creationQuery = std::format(R"(
+                CREATE VIEW `{}` WITH (security_invoker = true) AS {};
+            )",
+            path,
+            queryInView
+        );
+        ExecuteDataDefinitionQuery(session, creationQuery);
+
+        const TString dropQuery = std::format(R"(
+                DROP VIEW `{}`;
+            )",
+            path
+        );
+        ExecuteDataDefinitionQuery(session, dropQuery);
+        ExpectUnknownEntry(runtime, path);
+    }
+
     Y_UNIT_TEST(ContextPollution) {
         TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
         EnableViewsFeatureFlag(kikimr);
@@ -336,7 +362,7 @@ Y_UNIT_TEST_SUITE(TCreateAndDropViewTest) {
         ExecuteDataDefinitionQuery(session, R"(
             CREATE VIEW OuterView WITH (security_invoker = TRUE) AS SELECT * FROM InnerView;
         )");
-        
+
         ExecuteDataDefinitionQuery(session, R"(
             DROP VIEW OuterView;
             CREATE VIEW OuterView WITH (security_invoker = TRUE) AS SELECT * FROM InnerView;

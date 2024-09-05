@@ -376,7 +376,7 @@ void TAsyncExpiringCache<TKey, TValue>::Set(const TKey& key, TErrorOr<TValue> va
         entry->UpdateDeadline = updateDeadline;
         entry->Promise = MakePromise(std::move(valueOrError));
         entry->Future = entry->Promise.ToFuture();
-        YT_VERIFY(Map_.emplace(key, std::move(entry)).second);
+        YT_VERIFY(Map_.emplace(key, entry).second);
         OnAdded(key);
 
         if (isValueOK && !Config()->BatchUpdate) {

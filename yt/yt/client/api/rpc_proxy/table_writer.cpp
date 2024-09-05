@@ -82,23 +82,11 @@ private:
     bool Closed_ = false;
 };
 
-TFuture<ITableWriterPtr> CreateTableWriter(
-    TApiServiceProxy::TReqWriteTablePtr request)
+ITableWriterPtr CreateTableWriter(
+    IAsyncZeroCopyOutputStreamPtr outputStream,
+    TTableSchemaPtr schema)
 {
-    auto schema = New<TTableSchema>();
-    return NRpc::CreateRpcClientOutputStream(
-        std::move(request),
-        BIND ([=] (const TSharedRef& metaRef) {
-            NApi::NRpcProxy::NProto::TWriteTableMeta meta;
-            if (!TryDeserializeProto(&meta, metaRef)) {
-                THROW_ERROR_EXCEPTION("Failed to deserialize schema for table writer");
-            }
-
-            FromProto(schema.Get(), meta.schema());
-        }))
-        .Apply(BIND([=] (const IAsyncZeroCopyOutputStreamPtr& outputStream) {
-            return New<TTableWriter>(outputStream, std::move(schema));
-        })).As<ITableWriterPtr>();
+    return New<TTableWriter>(std::move(outputStream), std::move(schema));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

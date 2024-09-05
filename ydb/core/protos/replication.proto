@@ -5,6 +5,10 @@ import "ydb/public/api/protos/ydb_issue_message.proto";
 package NKikimrReplication;
 option java_package = "ru.yandex.kikimr.proto";
 
+message TReplicationDefaults {
+    optional int32 RetentionPeriodSeconds = 1 [default = 86400]; // 1d
+}
+
 message TStaticCredentials {
     optional string User = 1;
     optional string Password = 2 [(Ydb.sensitive) = true];
@@ -19,6 +23,7 @@ message TOAuthToken {
 message TConnectionParams {
     optional string Endpoint = 1;
     optional string Database = 2;
+    optional bool EnableSsl = 5;
     // credentials
     oneof Credentials {
         TStaticCredentials StaticCredentials = 3;

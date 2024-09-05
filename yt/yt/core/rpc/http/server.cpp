@@ -54,7 +54,7 @@ public:
         , Logger(logger)
     { }
 
-    const TString& GetEndpointDescription() const override
+    const std::string& GetEndpointDescription() const override
     {
         return EndpointAddress_;
     }
@@ -64,7 +64,7 @@ public:
         return *EndpointAttributes_;
     }
 
-    const TString& GetEndpointAddress() const override
+    const std::string& GetEndpointAddress() const override
     {
         return EndpointAddress_;
     }

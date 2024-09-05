@@ -52,10 +52,12 @@ private:
     using TSelf = TSimpleArrayConstructor<TFiller>;
     using TBuilder = typename arrow::TypeTraits<typename TFiller::TValue>::BuilderType;
     const TFiller Filler;
+    ui32 ShiftValue = 0;
 
-    TSimpleArrayConstructor(const TString& fieldName, bool nullable, const TFiller& filler)
+    TSimpleArrayConstructor(const TString& fieldName, bool nullable, const TFiller& filler, ui32 shiftValue = 0)
         : TBase(fieldName, nullable)
         , Filler(filler)
+        , ShiftValue(shiftValue)
     {
     }
 protected:
@@ -63,16 +65,17 @@ protected:
         TBuilder fBuilder = TFillerBuilderConstructor<typename TFiller::TValue>::Construct();
         Y_ABORT_UNLESS(fBuilder.Reserve(recordsCount).ok());
         for (ui32 i = 0; i < recordsCount; ++i) {
-            Y_ABORT_UNLESS(fBuilder.Append(Filler.GetValue(i)).ok());
+            Y_ABORT_UNLESS(fBuilder.Append(Filler.GetValue(i + ShiftValue)).ok());
         }
         return *fBuilder.Finish();
     }
 
-    
+
 public:
-    TSimpleArrayConstructor(const TString& fieldName, const TFiller& filler = TFiller())
+    TSimpleArrayConstructor(const TString& fieldName, const TFiller& filler = TFiller(), ui32 shiftValue = 0)
         : TBase(fieldName)
         , Filler(filler)
+        , ShiftValue(shiftValue)
     {
     }
 

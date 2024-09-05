@@ -146,7 +146,12 @@ class TSkiffConverter
     : public ISkiffConverter
 {
 public:
-    TString ConvertNodeToSkiff(const TDqStatePtr state, const IDataProvider::TFillSettings& fillSettings, const NYT::TNode& rowSpec, const NYT::TNode& item) override
+    TString ConvertNodeToSkiff(
+        const TDqStatePtr state,
+        const IDataProvider::TFillSettings& fillSettings,
+        const NYT::TNode& rowSpec,
+        const NYT::TNode& item,
+        const TVector<TString>& columns) override
     {
         TMemoryUsageInfo memInfo("DqResOrPull");
         TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), state->FunctionRegistry->SupportsSizedAllocators());
@@ -154,7 +159,7 @@ public:
         TTypeEnvironment env(alloc);
         NYql::NCommon::TCodecContext codecCtx(env, *state->FunctionRegistry, &holderFactory);
 
-        auto skiffBuilder = MakeHolder<TSkiffExecuteResOrPull>(fillSettings.RowsLimitPerWrite, fillSettings.AllResultsBytesLimit, codecCtx, holderFactory, rowSpec, state->TypeCtx->OptLLVM.GetOrElse("OFF"));
+        auto skiffBuilder = MakeHolder<TSkiffExecuteResOrPull>(fillSettings.RowsLimitPerWrite, fillSettings.AllResultsBytesLimit, codecCtx, holderFactory, rowSpec, state->TypeCtx->OptLLVM.GetOrElse("OFF"), columns);
         if (item.IsList()) {
             skiffBuilder->SetListResult();
             for (auto& node : item.AsList()) {
@@ -351,7 +356,9 @@ public:
             ProgramFactory_->SetFileStorage(FileStorage_);
             ProgramFactory_->SetUrlPreprocessing(MakeIntrusive<NYql::TUrlPreprocessing>(GatewaysConfig_));
         } catch (const std::exception& ex) {
-            YQL_LOG(FATAL) << "Unexpected exception while initializing YQL plugin: " << ex.what();
+            // NB: YQL_LOG may be not initialized yet (for example, during singletons config parse),
+            // so we use std::cerr instead of it.
+            std::cerr << "Unexpected exception while initializing YQL plugin: " << ex.what() << std::endl;
             exit(1);
         }
         YQL_LOG(INFO) << "YQL plugin initialized";

@@ -198,6 +198,7 @@ message StreamWriteMessage {
             oneof message_write_status {
                 Written written = 2;
                 Skipped skipped = 3;
+                WrittenInTx written_in_tx = 4;
             }
 
             message Written {
@@ -212,6 +213,9 @@ message StreamWriteMessage {
                     REASON_UNSPECIFIED = 0;
                     REASON_ALREADY_WRITTEN = 1;
                 }
+            }
+
+            message WrittenInTx {
             }
         }
 
@@ -842,6 +846,8 @@ enum AutoPartitioningStrategy {
     AUTO_PARTITIONING_STRATEGY_SCALE_UP = 2;
     // The auto partitioning algorithm will both increase and decrease partitions count depending on the load characteristics.
     AUTO_PARTITIONING_STRATEGY_SCALE_UP_AND_DOWN = 3;
+    // The auto partitioning is paused.
+    AUTO_PARTITIONING_STRATEGY_PAUSED = 4;
 }
 
 // Partitioning settings for topic.
@@ -1019,6 +1025,13 @@ message DescribeTopicResponse {
     Ydb.Operations.Operation operation = 1;
 }
 
+message PartitionKeyRange {
+    // Inclusive left border. Emptiness means -inf.
+    optional bytes from_bound = 1;
+    // Exclusive right border. Emptiness means +inf.
+    optional bytes to_bound = 2;
+}
+
 // Describe topic result message that will be inside DescribeTopicResponse.operation.
 message DescribeTopicResult {
     // Description of scheme object.
@@ -1087,6 +1100,8 @@ message DescribeTopicResult {
 
         // Partition location, filled only when include_location in request is true.
         PartitionLocation partition_location = 6;
+
+        PartitionKeyRange key_range = 7;
     }
 
     message TopicStats {

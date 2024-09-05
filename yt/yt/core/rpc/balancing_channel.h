@@ -16,14 +16,14 @@ namespace NYT::NRpc {
 IChannelPtr CreateBalancingChannel(
     TBalancingChannelConfigPtr config,
     IChannelFactoryPtr channelFactory,
-    TString endpointDescription,
+    const std::string& endpointDescription,
     NYTree::IAttributeDictionaryPtr endpointAttributes,
     IPeerDiscoveryPtr peerDiscovery = CreateDefaultPeerDiscovery());
 
 IRoamingChannelProviderPtr CreateBalancingChannelProvider(
     TBalancingChannelConfigPtr config,
     IChannelFactoryPtr channelFactory,
-    TString endpointDescription,
+    const std::string& endpointDescription,
     NYTree::IAttributeDictionaryPtr endpointAttributes,
     IPeerDiscoveryPtr peerDiscovery = CreateDefaultPeerDiscovery());
 

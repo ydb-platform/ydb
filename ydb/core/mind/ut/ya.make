@@ -2,23 +2,22 @@ UNITTEST_FOR(ydb/core/mind)
 
 FORK_SUBTESTS()
 
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(ram:16)
+ENDIF()
+
 IF (SANITIZER_TYPE  == "thread" OR WITH_VALGRIND)
     TIMEOUT(3600)
     SIZE(LARGE)
     TAG(ya:fat)
     SPLIT_FACTOR(80)
     REQUIREMENTS(
-        cpu:4
         ram:32
     )
 ELSE()
     SPLIT_FACTOR(80)
     TIMEOUT(600)
     SIZE(MEDIUM)
-    REQUIREMENTS(
-        cpu:4
-        ram:16
-    )
 ENDIF()
 
 PEERDIR(

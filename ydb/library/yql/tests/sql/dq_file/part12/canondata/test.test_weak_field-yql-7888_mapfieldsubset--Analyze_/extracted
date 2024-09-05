@@ -3,13 +3,13 @@
     <tmp_path>/program.sql:<main>:26:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: SqlProject
     	select count(distinct strongest_id) as native_users from $native_show_and_clicks($input);
 	^
-        <tmp_path>/program.sql:<main>:26:82: Warning: At function: AssumeColumnOrderPartial, At function: Aggregate, At function: OrderedMap, At function: UnorderedSubquery
+        <tmp_path>/program.sql:<main>:26:82: Warning: At function: AssumeColumnOrderPartial, At function: Aggregate, At function: UnorderedSubquery
         	select count(distinct strongest_id) as native_users from $native_show_and_clicks($input);
 	                                                                                 ^
             <tmp_path>/program.sql:<main>:19:5: Warning: At function: PersistableRepr, At function: OrderedSqlProject
             	    select 
 	    ^
-                <tmp_path>/program.sql:<main>:21:14: Warning: At function: OrderedFilter, At function: OrderedMap, At function: UnorderedSubquery
+                <tmp_path>/program.sql:<main>:21:14: Warning: At function: OrderedFilter, At function: UnorderedSubquery
                 	        from $input()
 	             ^
                     <tmp_path>/program.sql:<main>:6:5: Warning: At function: PersistableRepr, At function: OrderedSqlProject

@@ -293,8 +293,9 @@ NKikimrDataEvents::TEvWriteResult::EStatus NEvWrite::TConvertor::ConvertErrCode(
         case NKikimrTxDataShard::TError_EKind_SCHEME_CHANGED:
             return NKikimrDataEvents::TEvWriteResult::STATUS_SCHEME_CHANGED;
         case NKikimrTxDataShard::TError_EKind_OUT_OF_SPACE:
-        case NKikimrTxDataShard::TError_EKind_DISK_SPACE_EXHAUSTED:
             return NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED;
+        case NKikimrTxDataShard::TError_EKind_DISK_SPACE_EXHAUSTED:
+            return NKikimrDataEvents::TEvWriteResult::STATUS_DISK_SPACE_EXHAUSTED;
         default:
             return NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR;
     }

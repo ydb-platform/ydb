@@ -20,7 +20,7 @@ WHERE sa.series_id = 1
 ORDER BY                         -- Sorting of the results.
     sr.series_id,
     sa.season_id                 -- ORDER BY sorts the values by one column
-;                                -- or multiple columns. 
+;                                -- or multiple columns.
                                  -- Columns are separated by commas.
 
 COMMIT;

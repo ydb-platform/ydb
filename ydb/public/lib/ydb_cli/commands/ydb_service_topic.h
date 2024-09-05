@@ -122,6 +122,7 @@ namespace NYdb::NConsoleClient {
 
     private:
         TString ConsumerName_;
+        bool IsImportant_;
         TMaybe<ui64> StartingMessageTimestamp_;
     };
 
@@ -134,6 +135,21 @@ namespace NYdb::NConsoleClient {
 
     private:
         TString ConsumerName_;
+    };
+
+    class TCommandTopicConsumerDescribe: public TYdbCommand, public TCommandWithFormat, public TCommandWithTopicName {
+    public:
+        TCommandTopicConsumerDescribe();
+        void Config(TConfig& config) override;
+        void Parse(TConfig& config) override;
+        int Run(TConfig& config) override;
+
+    private:
+        int PrintPrettyResult(const NYdb::NTopic::TConsumerDescription& description) const;
+
+    private:
+        TString ConsumerName_;
+        bool ShowPartitionStats_ = false;
     };
 
     class TCommandTopicConsumerCommitOffset: public TYdbCommand, public TCommandWithTopicName {

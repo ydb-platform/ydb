@@ -13,7 +13,6 @@ struct TFieldSchema
 {
     TString Name;
     TFieldTag Tag;
-    bool Deprecated;
 
     REGISTER_YSON_STRUCT(TFieldSchema);
     static void Register(TRegistrar registrar);

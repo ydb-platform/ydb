@@ -154,6 +154,8 @@ public:
 
     double SampleRate;
 
+    bool EnableLargeColumnarStatistics;
+
     TChunkIndexesWriterConfigPtr ChunkIndexes;
 
     TSlimVersionedWriterConfigPtr Slim;
@@ -308,7 +310,7 @@ public:
 
 DEFINE_REFCOUNTED_TYPE(TBatchHunkReaderConfig)
 
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 class TTableReaderConfig
     : public virtual NChunkClient::TMultiChunkReaderConfig
@@ -425,6 +427,7 @@ public:
     bool EnableColumnarValueStatistics;
     bool EnableRowCountInColumnarStatistics;
     bool EnableSegmentMetaInBlocks;
+    bool EnableColumnMetaInChunkMeta;
 
     NYTree::INodePtr CastAnyToCompositeNode;
 
@@ -462,7 +465,7 @@ public:
 
 DEFINE_REFCOUNTED_TYPE(TVersionedRowDigestConfig)
 
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 struct TRowBatchReadOptions
 {

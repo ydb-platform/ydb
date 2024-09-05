@@ -113,6 +113,14 @@ std::pair<TExternalTableInfo::TPtr, TMaybe<TString>> CreateExternalTable(
         }
 
         auto typeName = NMiniKQL::AdaptLegacyYqlType(col.GetType());
+        if (typeName == "Decimal(22,9)"sv) {
+            //
+            // typename is reformatted as above
+            // should discard (SCALE,PRECISION)
+            // they are validated to be (22,9)
+            //
+            typeName = "Decimal"sv;
+        }
         const NScheme::IType* type = typeRegistry->GetType(typeName);
 
         NScheme::TTypeInfo typeInfo;

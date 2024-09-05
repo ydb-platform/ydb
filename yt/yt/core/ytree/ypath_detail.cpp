@@ -253,7 +253,7 @@ void TSupportsMultisetAttributes::SetAttributes(
 void TSupportsPermissions::ValidatePermission(
     EPermissionCheckScope /*scope*/,
     EPermission /*permission*/,
-    const TString& /*user*/)
+    const std::string& /*user*/)
 { }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -265,7 +265,7 @@ TSupportsPermissions::TCachingPermissionValidator::TCachingPermissionValidator(
     , Scope_(scope)
 { }
 
-void TSupportsPermissions::TCachingPermissionValidator::Validate(EPermission permission, const TString& user)
+void TSupportsPermissions::TCachingPermissionValidator::Validate(EPermission permission, const std::string& user)
 {
     auto& validatedPermissions = ValidatedPermissions_[user];
     if (None(validatedPermissions & permission)) {

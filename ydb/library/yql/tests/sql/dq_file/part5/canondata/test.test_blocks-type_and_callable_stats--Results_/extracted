@@ -1,0 +1,3 @@
+<tmp_path>/program.sql:<main>: Info: Most frequent types which do not support block mode: Dict, DyNumber, List, Void
+
+<tmp_path>/program.sql:<main>: Info: Most frequent callables which do not support block mode: Re2.Grep, Re2.Match, SafeCast

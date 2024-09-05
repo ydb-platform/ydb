@@ -50,11 +50,11 @@ using TRackId = NObjectClient::TObjectId;
 using TDataCenterId = NObjectClient::TObjectId;
 
 // Only domain names, without port number.
-using TNetworkAddressList = std::vector<std::pair<TString, TString>>;
-using TNetworkPreferenceList = std::vector<TString>;
+using TNetworkAddressList = std::vector<std::pair<std::string, std::string>>;
+using TNetworkPreferenceList = std::vector<std::string>;
 
 // Network -> host:port.
-using TAddressMap = THashMap<TString, TString>;
+using TAddressMap = THashMap<std::string, std::string>;
 
 // Address type (e.g. RPC, HTTP) -> network -> host:port.
 using TNodeAddressMap = THashMap<EAddressType, TAddressMap>;
@@ -62,7 +62,7 @@ using TNodeAddressMap = THashMap<EAddressType, TAddressMap>;
 DECLARE_REFCOUNTED_CLASS(TNodeDirectory)
 class TNodeDescriptor;
 
-extern const TString DefaultNetworkName;
+extern const std::string DefaultNetworkName;
 extern const TNetworkPreferenceList DefaultNetworkPreferences;
 
 ////////////////////////////////////////////////////////////////////////////////

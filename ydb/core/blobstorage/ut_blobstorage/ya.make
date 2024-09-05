@@ -2,6 +2,10 @@ UNITTEST()
 
 FORK_SUBTESTS()
 
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(ram:32)
+ENDIF()
+
 IF (SANITIZER_TYPE OR WITH_VALGRIND)
     TIMEOUT(3600)
     SIZE(LARGE)
@@ -51,8 +55,6 @@ PEERDIR(
     ydb/core/blobstorage/vdisk/common
     ydb/core/blobstorage/vdisk/scrub
 )
-
-REQUIREMENTS(ram:32)
 
 END()
 

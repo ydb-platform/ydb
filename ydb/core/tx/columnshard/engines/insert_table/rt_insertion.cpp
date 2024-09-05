@@ -120,6 +120,9 @@ THashSet<NKikimr::NOlap::TWriteId> TInsertionSummary::GetExpiredInsertions(const
     TInstant newMin = TInstant::Max();
     for (auto& [writeId, data] : Inserted) {
         const TInstant dataInsertTs = data.GetMeta().GetDirtyWriteTime();
+        if (data.IsNotAbortable()) {
+            continue;
+        }
         if (dataInsertTs < timeBorder && toAbort.size() < limit) {
             toAbort.insert(writeId);
         } else {

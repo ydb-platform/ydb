@@ -419,20 +419,21 @@ class TYdbProxy: public TBaseProxyActor<TYdbProxy> {
         Call<TEvYdbProxy::TEvCommitOffsetResponse>(ev, &TTopicClient::CommitOffset);
     }
 
-    static TCommonClientSettings MakeSettings(const TString& endpoint, const TString& database) {
+    static TCommonClientSettings MakeSettings(const TString& endpoint, const TString& database, bool ssl) {
         return TCommonClientSettings()
             .DiscoveryEndpoint(endpoint)
             .DiscoveryMode(EDiscoveryMode::Async)
-            .Database(database);
+            .Database(database)
+            .SslCredentials(ssl);
     }
 
-    static TCommonClientSettings MakeSettings(const TString& endpoint, const TString& database, const TString& token) {
-        return MakeSettings(endpoint, database)
+    static TCommonClientSettings MakeSettings(const TString& endpoint, const TString& database, bool ssl, const TString& token) {
+        return MakeSettings(endpoint, database, ssl)
             .AuthToken(token);
     }
 
-    static TCommonClientSettings MakeSettings(const TString& endpoint, const TString& database, const TStaticCredentials& credentials) {
-        return MakeSettings(endpoint, database)
+    static TCommonClientSettings MakeSettings(const TString& endpoint, const TString& database, bool ssl, const TStaticCredentials& credentials) {
+        return MakeSettings(endpoint, database, ssl)
             .CredentialsProviderFactory(CreateLoginCredentialsProviderFactory({
                 .User = credentials.GetUser(),
                 .Password = credentials.GetPassword(),
@@ -485,16 +486,16 @@ private:
 
 }; // TYdbProxy
 
-IActor* CreateYdbProxy(const TString& endpoint, const TString& database) {
-    return new TYdbProxy(endpoint, database);
+IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl) {
+    return new TYdbProxy(endpoint, database, ssl);
 }
 
-IActor* CreateYdbProxy(const TString& endpoint, const TString& database, const TString& token) {
-    return new TYdbProxy(endpoint, database, token);
+IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl, const TString& token) {
+    return new TYdbProxy(endpoint, database, ssl, token);
 }
 
-IActor* CreateYdbProxy(const TString& endpoint, const TString& database, const TStaticCredentials& credentials) {
-    return new TYdbProxy(endpoint, database, credentials);
+IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl, const TStaticCredentials& credentials) {
+    return new TYdbProxy(endpoint, database, ssl, credentials);
 }
 
 }

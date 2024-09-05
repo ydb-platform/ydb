@@ -402,8 +402,15 @@ public:
 
             TString path = Sprintf("blobstorageproxy%09" PRIu32, (ui32)GroupId);
             TString name = Sprintf("BlobStorageProxy%09" PRIu32, (ui32)GroupId);
-            mon->RegisterActorPage(proxiesMonPage, path, name, false, TlsActivationContext->ExecutorThread.ActorSystem,
-                SelfId());
+            mon->RegisterActorPage(TMon::TRegisterActorPageFields{
+                .Title = name,
+                .RelPath = path,
+                .ActorSystem = TlsActivationContext->ExecutorThread.ActorSystem,
+                .Index = proxiesMonPage, 
+                .PreTag = false, 
+                .ActorId = SelfId(),
+                .MonServiceName = "dsproxy_mon"
+            });
         }
 
         Become(&TThis::StateOnline);

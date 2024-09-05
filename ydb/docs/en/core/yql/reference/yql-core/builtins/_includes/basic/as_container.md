@@ -1,6 +1,6 @@
 ## AsTuple, AsStruct, AsList, AsDict, AsSet, AsListStrict, AsDictStrict and AsSetStrict {#as-container}
 
-Creates containers of the applicable types. For container literals, [operator notation](#containerliteral) is also supported.
+Creates containers of the applicable types. For container literals, [operator notation](../../basic.md#containerliteral) is also supported.
 
 Specifics:
 

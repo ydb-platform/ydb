@@ -5,6 +5,7 @@
 #include "helpers/get_value.h"
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/core/tx/columnshard/engines/scheme/abstract/index_info.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
 
@@ -229,7 +230,9 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         helper.CreateTestOlapTable();
         NArrow::NConstruction::TStringPoolFiller sPool(3, 52);
         helper.FillTable(sPool, 0, 800000);
-        csController->WaitCompactions(TDuration::Seconds(10));
+        csController->WaitCompactions(TDuration::Seconds(5));
+        helper.FillTable(sPool, 0.5, 800000);
+        csController->WaitCompactions(TDuration::Seconds(5));
 
         helper.GetVolumes(rawBytes1, bytes1, false, {"new_column_ui64"});
         AFL_VERIFY(rawBytes1 == 0);
@@ -241,9 +244,9 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             csController->WaitActualization(TDuration::Seconds(10));
             ui64 rawBytes2;
             ui64 bytes2;
-            helper.GetVolumes(rawBytes2, bytes2, false, {"new_column_ui64"});
-            AFL_VERIFY(rawBytes2 == 6500041)("real", rawBytes2);
-            AFL_VERIFY(bytes2 == 45360)("b", bytes2);
+            helper.GetVolumes(rawBytes2, bytes2, false, { "new_column_ui64", NOlap::IIndexInfo::SPEC_COL_DELETE_FLAG });
+            AFL_VERIFY(rawBytes2 == 0)("real", rawBytes2);
+            AFL_VERIFY(bytes2 == 0)("b", bytes2);
         }
     }
 
@@ -450,7 +453,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
                 SELECT PathId, Kind, TabletId
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
                 WHERE
-                    PathId == UInt64("3") AND Activity = true
+                    PathId == UInt64("3") AND Activity == 1
                 GROUP BY TabletId, PathId, Kind
                 ORDER BY TabletId, Kind
             )");

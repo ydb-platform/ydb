@@ -464,7 +464,7 @@ A common way to provide access to the {{ ydb-short-name }} built-in web interfac
 {% endnote %}
 
 
-# Installing {{ ydb-short-name }} in the unprotected mode
+## Installing {{ ydb-short-name }} in the unprotected mode
 
 {% note warning %}
 

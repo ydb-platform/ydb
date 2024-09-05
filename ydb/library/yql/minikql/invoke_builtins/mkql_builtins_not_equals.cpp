@@ -302,6 +302,7 @@ void RegisterNotEquals(TKernelFamilyMap& kernelFamilyMap) {
 
     AddNumericComparisonKernels<TNotEqualsOp>(*family);
     AddDateComparisonKernels<TDiffDateNotEqualsOp>(*family);
+    AddDecimalComparisonKernels<TDecimalNotEquals>(*family);
     RegisterStringKernelNotEquals(*family);
 
     kernelFamilyMap["NotEquals"] = std::move(family);

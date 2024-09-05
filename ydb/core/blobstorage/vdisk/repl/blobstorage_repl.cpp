@@ -208,7 +208,7 @@ namespace NKikimr {
             CreateQueuesForVDisks(*QueueActorMapPtr, SelfId(), ReplCtx->GInfo, ReplCtx->VCtx,
                     ReplCtx->GInfo->GetVDisks(), ReplCtx->MonGroup.GetGroup(),
                     replQueueClientId, NKikimrBlobStorage::EVDiskQueueId::GetAsyncRead,
-                    "PeerRepl", replInterconnectChannel);
+                    "PeerRepl", replInterconnectChannel, false);
 
             for (const auto& [vdiskId, vdiskActorId] : ReplCtx->VDiskCfg->BaseInfo.DonorDiskIds) {
                 TIntrusivePtr<NBackpressure::TFlowRecord> flowRecord(new NBackpressure::TFlowRecord);

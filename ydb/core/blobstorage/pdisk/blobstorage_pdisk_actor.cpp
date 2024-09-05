@@ -39,15 +39,13 @@ namespace NPDisk {
 
 LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 
-void CreatePDiskActor(
-        TGenericExecutorThread& executorThread,
+void CreatePDiskActor(TGenericExecutorThread& executorThread,
         const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
         const TIntrusivePtr<TPDiskConfig> &cfg,
         const NPDisk::TMainKey &mainKey,
-        ui32 pDiskID, ui32 poolId, ui32 nodeId
-) {
-
-    TActorId actorId = executorThread.RegisterActor(CreatePDisk(cfg, mainKey, counters), TMailboxType::ReadAsFilled, poolId);
+        ui32 pDiskID, ui32 poolId, ui32 nodeId) {
+    TActorId actorId = executorThread.RegisterActor(CreatePDisk(cfg, mainKey, cfg->MetadataOnly
+        ? MakeIntrusive<NMonitoring::TDynamicCounters>() : counters), TMailboxType::ReadAsFilled, poolId);
 
     TActorId pDiskServiceId = MakeBlobStoragePDiskID(nodeId, pDiskID);
 
@@ -235,7 +233,7 @@ public:
     // Bootstrap state
     void Bootstrap(const TActorContext &ctx) {
         auto mon = AppData()->Mon;
-        if (mon) {
+        if (mon && !Cfg->MetadataOnly) {
             NMonitoring::TIndexMonPage *actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
             NMonitoring::TIndexMonPage *pdisksMonPage = actorsMonPage->RegisterIndexPage("pdisks", "PDisks");
 
@@ -244,7 +242,9 @@ public:
             mon->RegisterActorPage(pdisksMonPage, path, name, false, ctx.ExecutorThread.ActorSystem,
                 SelfId());
         }
-        NodeWhiteboardServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId());
+        NodeWhiteboardServiceId = Cfg->MetadataOnly
+            ? TActorId()
+            : NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId());
         NodeWardenServiceId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
 
         Schedule(TDuration::MilliSeconds(Cfg->StatisticsUpdateIntervalMs), new TEvents::TEvWakeup());
@@ -285,7 +285,7 @@ public:
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Init state
-    void InitError(const TString &errorReason) {
+    void InitError(const TString &errorReason, bool allowMetadataHandling = false) {
         Become(&TThis::StateError);
         for (TList<TInitQueueItem>::iterator it = InitQueue.begin(); it != InitQueue.end(); ++it) {
             Send(it->Sender, new NPDisk::TEvYardInitResult(NKikimrProto::CORRUPTED, errorReason));
@@ -299,8 +299,11 @@ public:
         StateErrorReason = str.Str();
         if (PDisk) {
             PDisk->ErrorStr = StateErrorReason;
-            auto* request = PDisk->ReqCreator.CreateFromArgs<TStopDevice>();
-            PDisk->InputRequest(request);
+            if (allowMetadataHandling) {
+                NeedToStopOnPoison = true;
+            } else {
+                PDisk->InputRequest(PDisk->ReqCreator.CreateFromArgs<TStopDevice>());
+            }
         }
 
         if (ControledStartResult) {
@@ -309,6 +312,8 @@ public:
             ev->ErrorReason = StateErrorReason;
             TlsActivationContext->Send(ControledStartResult.Release());
         }
+
+        StartHandlingMetadata(!allowMetadataHandling);
     }
 
     void InitHandle(NMon::TEvHttpInfo::TPtr &ev) {
@@ -332,6 +337,7 @@ public:
         FormattingThread->Join();
         IsFormattingNow = false;
         if (ev->Get()->IsSucceed) {
+            PDiskGuid.emplace(Cfg->PDiskGuid);
             StartPDiskThread();
             LOG_WARN_S(*TlsActivationContext, NKikimrServices::BS_PDISK,
                     "PDiskId# " << PDisk->PDiskId << " device formatting done");
@@ -356,58 +362,19 @@ public:
     }
 
     void CheckMagicSector(ui8 *magicData, ui32 magicDataSize) {
-        bool isFormatMagicValid = PDisk->IsFormatMagicValid(magicData, magicDataSize);
+        bool isFormatMagicValid = PDisk->IsFormatMagicValid(magicData, magicDataSize, MainKey);
         if (isFormatMagicValid) {
-            IsMagicAlreadyChecked = true;
-            IsFormattingNow = true;
-            // Stop PDiskThread but use PDisk object for creation of http pages
-            PDisk->Stop();
-            *PDisk->Mon.PDiskDetailedState = TPDiskMon::TPDisk::BootingDeviceFormattingAndTrimming;
-            PDisk->ErrorStr = "Magic sector is present on disk, now going to format device";
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::BS_PDISK, "PDiskId# " << PDisk->PDiskId << PDisk->ErrorStr);
-
-            // Is used to pass parameters into formatting thread, because TThread can pass only void*
-            using TCookieType = std::tuple<TPDiskActor*, TActorSystem*, TActorId>;
-            FormattingThread.Reset(new TThread(
-                    [] (void *cookie) -> void* {
-                        auto params = static_cast<TCookieType*>(cookie);
-                        TPDiskActor *actor = std::get<0>(*params);
-                        TActorSystem *actorSystem = std::get<1>(*params);
-                        TActorId pDiskActor = std::get<2>(*params);
-                        delete params;
-
-                        NPDisk::TKey chunkKey;
-                        NPDisk::TKey logKey;
-                        NPDisk::TKey sysLogKey;
-                        EntropyPool().Read(&chunkKey, sizeof(NKikimr::NPDisk::TKey));
-                        EntropyPool().Read(&logKey, sizeof(NKikimr::NPDisk::TKey));
-                        EntropyPool().Read(&sysLogKey, sizeof(NKikimr::NPDisk::TKey));
-                        TPDiskConfig *cfg = actor->Cfg.Get();
-
-                        try {
-                            try {
-                                FormatPDisk(cfg->GetDevicePath(), 0, cfg->SectorSize, cfg->ChunkSize,
-                                    cfg->PDiskGuid, chunkKey, logKey, sysLogKey, actor->MainKey.Keys.back(), TString(), false,
-                                    cfg->FeatureFlags.GetTrimEntireDeviceOnStartup(), cfg->SectorMap,
-                                    cfg->FeatureFlags.GetEnableSmallDiskOptimization());
-                            } catch (NPDisk::TPDiskFormatBigChunkException) {
-                                FormatPDisk(cfg->GetDevicePath(), 0, cfg->SectorSize, NPDisk::SmallDiskMaximumChunkSize,
-                                    cfg->PDiskGuid, chunkKey, logKey, sysLogKey, actor->MainKey.Keys.back(), TString(), false,
-                                    cfg->FeatureFlags.GetTrimEntireDeviceOnStartup(), cfg->SectorMap,
-                                    cfg->FeatureFlags.GetEnableSmallDiskOptimization());
-                            }
-                            actorSystem->Send(pDiskActor, new TEvPDiskFormattingFinished(true, ""));
-                        } catch (yexception ex) {
-                            LOG_ERROR_S(*actorSystem, NKikimrServices::BS_PDISK, "Formatting error, what#" << ex.what());
-                            actorSystem->Send(pDiskActor, new TEvPDiskFormattingFinished(false, ex.what()));
-                        }
-                        return nullptr;
-                    },
-                    new TCookieType(this, TlsActivationContext->ActorSystem(), SelfId())));
-
-            FormattingThread->Start();
+            auto format = PDisk->CheckMetadataFormatSector(magicData, magicDataSize, MainKey);
+            PDisk->InputRequest(PDisk->ReqCreator.CreateFromArgs<TPushUnformattedMetadataSector>(format,
+                !Cfg->MetadataOnly));
+            if (Cfg->MetadataOnly) {
+                InitError("MetadataOnly is set to true, not formatting PDisk", true);
+            } else {
+                IsMagicAlreadyChecked = true;
+                IsFormattingNow = true;
+            }
         } else {
-            SecureWipeBuffer((ui8*)MainKey.Keys.data(), sizeof(NPDisk::TKey) * MainKey.Keys.size());
+            SecureWipeBuffer(reinterpret_cast<ui8*>(MainKey.Keys.data()), sizeof(NPDisk::TKey) * MainKey.Keys.size());
             *PDisk->Mon.PDiskState = NKikimrBlobStorage::TPDiskState::InitialFormatReadError;
             *PDisk->Mon.PDiskBriefState = TPDiskMon::TPDisk::Error;
             *PDisk->Mon.PDiskDetailedState = TPDiskMon::TPDisk::ErrorPDiskCannotBeInitialised;
@@ -426,6 +393,53 @@ public:
             str << " Config: " << Cfg->ToString();
             LOG_CRIT_S(*TlsActivationContext, NKikimrServices::BS_PDISK, str.Str());
         }
+    }
+
+    void InitHandle(TEvPDiskMetadataLoaded::TPtr ev) {
+        // Stop PDiskThread but use PDisk object for creation of http pages
+        PDisk->Stop();
+        *PDisk->Mon.PDiskDetailedState = TPDiskMon::TPDisk::BootingDeviceFormattingAndTrimming;
+        PDisk->ErrorStr = "Magic sector is present on disk, now going to format device";
+        LOG_WARN_S(*TlsActivationContext, NKikimrServices::BS_PDISK, "PDiskId# " << PDisk->PDiskId << ' ' << PDisk->ErrorStr);
+
+        // Is used to pass parameters into formatting thread, because TThread can pass only void*
+        using TCookieType = std::tuple<TPDiskActor*, TActorSystem*, TActorId, std::optional<TRcBuf>>;
+        FormattingThread.Reset(new TThread(
+                [] (void *cookie) -> void* {
+                    auto params = static_cast<TCookieType*>(cookie);
+                    auto [actor, actorSystem, pDiskActor, metadata] = *params;
+                    delete params;
+
+                    NPDisk::TKey chunkKey;
+                    NPDisk::TKey logKey;
+                    NPDisk::TKey sysLogKey;
+                    EntropyPool().Read(&chunkKey, sizeof(NKikimr::NPDisk::TKey));
+                    EntropyPool().Read(&logKey, sizeof(NKikimr::NPDisk::TKey));
+                    EntropyPool().Read(&sysLogKey, sizeof(NKikimr::NPDisk::TKey));
+                    TPDiskConfig *cfg = actor->Cfg.Get();
+
+                    try {
+                        try {
+                            FormatPDisk(cfg->GetDevicePath(), 0, cfg->SectorSize, cfg->ChunkSize,
+                                cfg->PDiskGuid, chunkKey, logKey, sysLogKey, actor->MainKey.Keys.back(), TString(), false,
+                                cfg->FeatureFlags.GetTrimEntireDeviceOnStartup(), cfg->SectorMap,
+                                cfg->FeatureFlags.GetEnableSmallDiskOptimization(), metadata);
+                        } catch (NPDisk::TPDiskFormatBigChunkException) {
+                            FormatPDisk(cfg->GetDevicePath(), 0, cfg->SectorSize, NPDisk::SmallDiskMaximumChunkSize,
+                                cfg->PDiskGuid, chunkKey, logKey, sysLogKey, actor->MainKey.Keys.back(), TString(), false,
+                                cfg->FeatureFlags.GetTrimEntireDeviceOnStartup(), cfg->SectorMap,
+                                cfg->FeatureFlags.GetEnableSmallDiskOptimization(), metadata);
+                        }
+                        actorSystem->Send(pDiskActor, new TEvPDiskFormattingFinished(true, ""));
+                    } catch (yexception ex) {
+                        LOG_ERROR_S(*actorSystem, NKikimrServices::BS_PDISK, "Formatting error, what#" << ex.what());
+                        actorSystem->Send(pDiskActor, new TEvPDiskFormattingFinished(false, ex.what()));
+                    }
+                    return nullptr;
+                },
+                new TCookieType(this, TlsActivationContext->ActorSystem(), SelfId(), std::move(ev->Get()->Metadata))));
+
+        FormattingThread->Start();
     }
 
     void ReencryptDiskFormat(const TDiskFormat& format, const NPDisk::TKey& newMainKey) {
@@ -507,6 +521,7 @@ public:
             PDisk->ErrorStr = "Format chunks are not present on disk or corrupted, now checking for proper magic sector on disk";
             CheckMagicSector(formatSectors, formatSectorsSize);
         } else {
+            PDiskGuid.emplace(PDisk->Format.Guid);
             if (res.IsReencryptionRequired) {
                 // Format reencryption required
                 ReencryptDiskFormat(PDisk->Format, MainKey.Keys.back());
@@ -580,6 +595,7 @@ public:
         if (ControledStartResult) {
             TlsActivationContext->Send(ControledStartResult.Release());
         }
+        StartHandlingMetadata(false);
     }
 
     void InitHandle(NPDisk::TEvYardInit::TPtr &ev) {
@@ -772,7 +788,6 @@ public:
         Y_UNUSED(ev);
     }
 
-
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Online state
 
@@ -904,11 +919,83 @@ public:
         PDisk->InputRequest(request);
     }
 
+    std::optional<ui64> PDiskGuid;
+    std::deque<TAutoPtr<IEventHandle>> PendingMetadata;
+    enum class EMetadataHandlingState {
+        WAITING_FOR_STARTUP,
+        PROCESSING,
+        ERROR,
+    } MetadataHandlingState = EMetadataHandlingState::WAITING_FOR_STARTUP;
+    bool NeedToStopOnPoison = false;
+
+    void DropMetadata() {
+        for (auto& ev : std::exchange(PendingMetadata, {})) {
+            switch (ev->GetTypeRewrite()) {
+                case TEvReadMetadata::EventType:
+                    Send(ev->Sender, new TEvReadMetadataResult(EPDiskMetadataOutcome::ERROR, std::nullopt));
+                    break;
+
+                case TEvWriteMetadata::EventType:
+                    Send(ev->Sender, new TEvWriteMetadataResult(EPDiskMetadataOutcome::ERROR, std::nullopt));
+                    break;
+            }
+        }
+    }
+
+    void StartHandlingMetadata(bool error) {
+        MetadataHandlingState = error
+            ? EMetadataHandlingState::ERROR
+            : EMetadataHandlingState::PROCESSING;
+        for (auto& ev : std::exchange(PendingMetadata, {})) {
+            Receive(ev);
+        }
+    }
+
+    void Handle(TEvReadMetadata::TPtr& ev) {
+        switch (MetadataHandlingState) {
+            case EMetadataHandlingState::WAITING_FOR_STARTUP:
+                PendingMetadata.emplace_back(ev.Release());
+                break;
+
+            case EMetadataHandlingState::PROCESSING:
+                PDisk->InputRequest(PDisk->ReqCreator.CreateFromArgs<TReadMetadata>(ev->Sender, MainKey));
+                break;
+
+            case EMetadataHandlingState::ERROR:
+                Send(ev->Sender, new TEvReadMetadataResult(EPDiskMetadataOutcome::ERROR, PDiskGuid), 0, ev->Cookie);
+                break;
+        }
+    }
+
+    void Handle(TEvWriteMetadata::TPtr& ev) {
+        switch (MetadataHandlingState) {
+            case EMetadataHandlingState::WAITING_FOR_STARTUP:
+                PendingMetadata.emplace_back(ev.Release());
+                break;
+
+            case EMetadataHandlingState::PROCESSING:
+                PDisk->InputRequest(PDisk->ReqCreator.CreateFromArgs<TWriteMetadata>(ev->Sender,
+                    std::move(ev->Get()->Metadata), MainKey));
+                break;
+
+            case EMetadataHandlingState::ERROR:
+                Send(ev->Sender, new TEvWriteMetadataResult(EPDiskMetadataOutcome::ERROR, PDiskGuid), 0, ev->Cookie);
+                break;
+        }
+    }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // All states
 
+    void PassAway() override {
+        DropMetadata();
+        TActorBootstrapped::PassAway();
+    }
+
     void HandlePoison() {
+        if (NeedToStopOnPoison && PDisk) {
+            PDisk->InputRequest(PDisk->ReqCreator.CreateFromArgs<TStopDevice>());
+        }
         ui32 pdiskId = PDisk->PDiskId;
         PDisk.Reset();
         PassAway();
@@ -1244,6 +1331,7 @@ public:
             hFunc(NPDisk::TEvLogInitResult, InitHandle);
             hFunc(TEvents::TEvUndelivered, Handle);
             hFunc(NPDisk::TEvPDiskFormattingFinished, InitHandle);
+            hFunc(NPDisk::TEvPDiskMetadataLoaded, InitHandle);
             hFunc(TEvReadFormatResult, InitHandle);
             hFunc(NPDisk::TEvReadLogResult, InitHandle);
             cFunc(NActors::TEvents::TSystem::PoisonPill, HandlePoison);
@@ -1252,6 +1340,9 @@ public:
             hFunc(NPDisk::TEvDeviceError, Handle);
             hFunc(TEvBlobStorage::TEvAskWardenRestartPDiskResult, Handle);
             hFunc(NPDisk::TEvFormatReencryptionFinish, InitHandle);
+
+            hFunc(TEvReadMetadata, Handle);
+            hFunc(TEvWriteMetadata, Handle);
     )
 
     STRICT_STFUNC(StateOnline,
@@ -1282,6 +1373,9 @@ public:
             cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             hFunc(NPDisk::TEvDeviceError, Handle);
             hFunc(TEvBlobStorage::TEvAskWardenRestartPDiskResult, Handle);
+
+            hFunc(TEvReadMetadata, Handle);
+            hFunc(TEvWriteMetadata, Handle);
     )
 
     STRICT_STFUNC(StateError,
@@ -1309,6 +1403,9 @@ public:
             cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             hFunc(NPDisk::TEvDeviceError, Handle);
             hFunc(TEvBlobStorage::TEvAskWardenRestartPDiskResult, Handle);
+
+            hFunc(TEvReadMetadata, Handle);
+            hFunc(TEvWriteMetadata, Handle);
     )
 };
 

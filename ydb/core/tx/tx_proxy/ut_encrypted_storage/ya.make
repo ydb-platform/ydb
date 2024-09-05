@@ -2,19 +2,18 @@ UNITTEST_FOR(ydb/core/tx/tx_proxy)
 
 FORK_SUBTESTS()
 
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(ram:16)
+ENDIF()
+
 IF (WITH_VALGRIND)
     TIMEOUT(3600)
     SIZE(LARGE)
     TAG(ya:fat)
     REQUIREMENTS(
-        cpu:4
         ram:32
     )
 ELSE()
-    REQUIREMENTS(
-        cpu:4
-        ram:16
-    )
     TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()

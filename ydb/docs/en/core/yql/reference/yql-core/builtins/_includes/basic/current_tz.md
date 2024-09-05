@@ -2,7 +2,7 @@
 
 `CurrentTzDate()`, `CurrentTzDatetime()`, and `CurrentTzTimestamp()`: Get the current date and/or time in the [IANA time zone](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones) specified in the first argument. The result data type is specified at the end of the function name.
 
-The arguments that follow are optional and work same as [RANDOM](#random).
+The arguments that follow are optional and work same as [RANDOM](../../basic.md#random).
 
 **Examples**
 

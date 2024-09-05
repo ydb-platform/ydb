@@ -3092,6 +3092,9 @@ void TKeyValueState::RegisterRequestActor(const TActorContext &ctx, THolder<TInt
         ui32 newRefCount = ++RefCounts[patch.PatchedBlobId];
         Y_ABORT_UNLESS(newRefCount == 1);
         intermediate->RefCountsIncr.emplace_back(patch.PatchedBlobId, true);
+
+        LOG_INFO_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
+            << " PatchedKey# " << patch.PatchedKey << " BlobId# " << patch.PatchedBlobId);
     };
 
     for (auto& write : intermediate->Writes) {

@@ -1,0 +1,559 @@
+ConfigureRequest {
+Actions {
+  RemoveConfigItems {
+    CookieFilter {
+      Cookies: "ydb-ru-base-table-profile"
+    }
+  }
+}
+
+Actions {
+AddConfigItem {
+ConfigItem {
+Cookie: "test-profile"
+Config {
+TableProfilesConfig {
+  CompactionPolicies {
+    Name: "default"
+    CompactionPolicy {
+      InMemSizeToSnapshot: 4194304
+      InMemStepsToSnapshot: 300
+      InMemForceStepsToSnapshot: 500
+      InMemForceSizeToSnapshot: 16777216
+      InMemResourceBrokerTask: "compaction_gen0"
+      SnapshotResourceBrokerTask: "compaction_gen0"
+      BackupResourceBrokerTask: "scan"
+      ReadAheadHiThreshold: 67108864
+      ReadAheadLoThreshold: 16777216
+      DroppedRowsPercentToCompact: 50
+      MinDataPageSize: 7168
+      DefaultTaskPriority: 5
+      BackgroundSnapshotPolicy {
+        Threshold: 101
+        PriorityBase: 100
+        TimeFactor: 1
+        ResourceBrokerTask: "background_compaction"
+      }
+      Generation {
+        GenerationId: 0
+        SizeToCompact: 0
+        CountToCompact: 8
+        ForceCountToCompact: 8
+        ForceSizeToCompact: 134217728
+        KeepInCache: true
+        BackgroundCompactionPolicy {
+          Threshold: 101
+          PriorityBase: 100
+          TimeFactor: 1
+          ResourceBrokerTask: "background_compaction"
+        }
+        ResourceBrokerTask: "compaction_gen1"
+      }
+      Generation {
+        GenerationId: 1
+        SizeToCompact: 41943040
+        CountToCompact: 5
+        ForceCountToCompact: 16
+        ForceSizeToCompact: 536870912
+        KeepInCache: false
+        BackgroundCompactionPolicy {
+          Threshold: 101
+          PriorityBase: 100
+          TimeFactor: 1
+          ResourceBrokerTask: "background_compaction"
+        }
+        ResourceBrokerTask: "compaction_gen2"
+      }
+      Generation {
+        GenerationId: 2
+        SizeToCompact: 419430400
+        CountToCompact: 5
+        ForceCountToCompact: 16
+        ForceSizeToCompact: 17179869184
+        KeepInCache: false
+        BackgroundCompactionPolicy {
+          Threshold: 101
+          PriorityBase: 100
+          TimeFactor: 1
+          ResourceBrokerTask: "background_compaction"
+        }
+        ResourceBrokerTask: "compaction_gen3"
+      }
+    }
+  }
+  CompactionPolicies {
+    Name: "dropped_to_compact_10"
+    CompactionPolicy {
+      InMemSizeToSnapshot: 4194304
+      InMemStepsToSnapshot: 300
+      InMemForceStepsToSnapshot: 500
+      InMemForceSizeToSnapshot: 16777216
+      InMemResourceBrokerTask: "compaction_gen0"
+      SnapshotResourceBrokerTask: "compaction_gen0"
+      BackupResourceBrokerTask: "scan"
+      ReadAheadHiThreshold: 67108864
+      ReadAheadLoThreshold: 16777216
+      DroppedRowsPercentToCompact: 50
+      MinDataPageSize: 7168
+      DefaultTaskPriority: 5
+      BackgroundSnapshotPolicy {
+        Threshold: 101
+        PriorityBase: 100
+        TimeFactor: 1
+        ResourceBrokerTask: "background_compaction"
+      }
+      Generation {
+        GenerationId: 0
+        SizeToCompact: 0
+        CountToCompact: 8
+        ForceCountToCompact: 8
+        ForceSizeToCompact: 134217728
+        KeepInCache: true
+        BackgroundCompactionPolicy {
+          Threshold: 101
+          PriorityBase: 100
+          TimeFactor: 1
+          ResourceBrokerTask: "background_compaction"
+        }
+        ResourceBrokerTask: "compaction_gen1"
+      }
+      Generation {
+        GenerationId: 1
+        SizeToCompact: 41943040
+        CountToCompact: 5
+        ForceCountToCompact: 16
+        ForceSizeToCompact: 536870912
+        KeepInCache: false
+        BackgroundCompactionPolicy {
+          Threshold: 101
+          PriorityBase: 100
+          TimeFactor: 1
+          ResourceBrokerTask: "background_compaction"
+        }
+        ResourceBrokerTask: "compaction_gen2"
+      }
+      Generation {
+        GenerationId: 2
+        SizeToCompact: 419430400
+        CountToCompact: 5
+        ForceCountToCompact: 16
+        ForceSizeToCompact: 17179869184
+        KeepInCache: false
+        BackgroundCompactionPolicy {
+          Threshold: 101
+          PriorityBase: 100
+          TimeFactor: 1
+          ResourceBrokerTask: "background_compaction"
+        }
+        ResourceBrokerTask: "compaction_gen3"
+      }
+    }
+  }
+  CompactionPolicies {
+    Name: "big_part"
+    CompactionPolicy {
+      InMemSizeToSnapshot: 16777216
+      InMemStepsToSnapshot: 300
+      InMemForceStepsToSnapshot: 500
+      InMemForceSizeToSnapshot: 16777216
+      InMemResourceBrokerTask: "compaction_gen0"
+      SnapshotResourceBrokerTask: "compaction_gen0"
+      BackupResourceBrokerTask: "scan"
+      ReadAheadHiThreshold: 67108864
+      ReadAheadLoThreshold: 16777216
+      DroppedRowsPercentToCompact: 50
+      MinDataPageSize: 7168
+      DefaultTaskPriority: 5
+      BackgroundSnapshotPolicy {
+        Threshold: 101
+        PriorityBase: 100
+        TimeFactor: 1
+        ResourceBrokerTask: "background_compaction"
+      }
+      Generation {
+        GenerationId: 0
+        SizeToCompact: 0
+        CountToCompact: 16
+        ForceCountToCompact: 16
+        ForceSizeToCompact: 536870912
+        KeepInCache: false
+        BackgroundCompactionPolicy {
+          Threshold: 101
+          PriorityBase: 100
+          TimeFactor: 1
+          ResourceBrokerTask: "background_compaction"
+        }
+        ResourceBrokerTask: "compaction_gen1"
+      }
+      Generation {
+        GenerationId: 1
+        SizeToCompact: 4294967296
+        CountToCompact: 16
+        ForceCountToCompact: 16
+        ForceSizeToCompact: 4294967296
+        KeepInCache: false
+        BackgroundCompactionPolicy {
+          Threshold: 101
+          PriorityBase: 100
+          TimeFactor: 1
+          ResourceBrokerTask: "background_compaction"
+        }
+        ResourceBrokerTask: "compaction_gen2"
+      }
+      Generation {
+        GenerationId: 2
+        SizeToCompact: 0
+        CountToCompact: 5
+        ForceCountToCompact: 5
+        ForceSizeToCompact: 17179869184
+        KeepInCache: false
+        BackgroundCompactionPolicy {
+          Threshold: 101
+          PriorityBase: 100
+          TimeFactor: 1
+          ResourceBrokerTask: "background_compaction"
+        }
+        ResourceBrokerTask: "compaction_gen3"
+      }
+    }
+  }
+  ExecutionPolicies {
+    Name: "default"
+    TxReadSizeLimit: 5368709120
+    PipelineConfig {
+      NumActiveTx: 8
+      DataTxCacheSize: 20
+      EnableOutOfOrder: true
+      DisableImmediate: false
+      EnableSoftUpdates: false
+    }
+  }
+  ExecutionPolicies {
+    Name: "filter_by_key"
+    EnableFilterByKey: true
+    TxReadSizeLimit: 5368709120
+    PipelineConfig {
+      NumActiveTx: 8
+      DataTxCacheSize: 20
+      EnableOutOfOrder: true
+      DisableImmediate: false
+      EnableSoftUpdates: false
+    }
+  }
+  ExecutionPolicies {
+    Name: "filter_by_key_and_erase_cache"
+    EnableFilterByKey: true
+    EnableEraseCache: true
+    TxReadSizeLimit: 5368709120
+    PipelineConfig {
+      NumActiveTx: 8
+      DataTxCacheSize: 20
+      EnableOutOfOrder: true
+      DisableImmediate: false
+      EnableSoftUpdates: false
+    }
+  }
+  PartitioningPolicies {
+    Name: "default"
+    AutoSplit: true
+    AutoMerge: false
+    SizeToSplit: 2147483648
+  }
+  PartitioningPolicies {
+    Name: "auto_split_50_mb"
+    AutoSplit: true
+    AutoMerge: true
+    SizeToSplit: 52428800
+  }
+  PartitioningPolicies {
+    Name: "big_parts"
+    AutoSplit: true
+    AutoMerge: false
+    SizeToSplit: 10737418240
+  }
+  StoragePolicies {
+    Name: "default"
+    ColumnFamilies {
+      StorageConfig {
+        SysLog {
+          PreferredPoolKind: "ssd"
+        }
+        Log {
+          PreferredPoolKind: "ssd"
+        }
+        Data {
+          PreferredPoolKind: "ssd"
+        }
+      }
+    }
+  }
+  ReplicationPolicies {
+    Name: "disabled"
+  }
+  ReplicationPolicies {
+    Name: "single"
+    FollowerCount: 1
+    CrossDataCenter: false
+    AllowFollowerPromotion: true
+  }
+  ReplicationPolicies {
+    Name: "single_per_zone"
+    FollowerCount: 1
+    CrossDataCenter: true
+    AllowFollowerPromotion: true
+  }
+  CachingPolicies {
+    Name: "default"
+    ExecutorCacheSize: 4194304
+  }
+  CachingPolicies {
+    Name: "small"
+    ExecutorCacheSize: 2097152
+  }
+  CachingPolicies {
+    Name: "big"
+    ExecutorCacheSize: 33554432
+  }
+  TableProfiles {
+    Name: "default"
+    CompactionPolicy: "default"
+    ExecutionPolicy: "default"
+    PartitioningPolicy: "default"
+    StoragePolicy: "default"
+    ReplicationPolicy: "default"
+    CachingPolicy: "default"
+  }
+
+  ###############################
+  ### Profiles for log tables ###
+  ###############################
+  CompactionPolicies {
+    Name: "log"
+    CompactionPolicy {
+      InMemSizeToSnapshot: 1048576
+      InMemStepsToSnapshot: 100000
+      InMemForceStepsToSnapshot: 100000
+      InMemForceSizeToSnapshot: 4194304
+      InMemResourceBrokerTask: "compaction_gen0"
+      SnapshotResourceBrokerTask: "compaction_gen0"
+      BackupResourceBrokerTask: "scan"
+      ReadAheadHiThreshold: 67108864
+      ReadAheadLoThreshold: 16777216
+      DroppedRowsPercentToCompact: 50
+      MinDataPageSize: 64512
+      DefaultTaskPriority: 5
+      BackgroundSnapshotPolicy {
+        Threshold: 101
+        PriorityBase: 100
+        TimeFactor: 1
+        ResourceBrokerTask: "background_compaction"
+      }
+      Generation {
+        GenerationId: 0
+        SizeToCompact: 104857600
+        CountToCompact: 40
+        ForceCountToCompact: 60
+        ForceSizeToCompact: 146800640
+        KeepInCache: true
+        BackgroundCompactionPolicy {
+          Threshold: 101
+          PriorityBase: 100
+          TimeFactor: 1
+          ResourceBrokerTask: "background_compaction"
+        }
+        ResourceBrokerTask: "compaction_gen1"
+      }
+      Generation {
+        GenerationId: 1
+        SizeToCompact: 1073741824
+        CountToCompact: 40
+        ForceCountToCompact: 60
+        ForceSizeToCompact: 2147483648
+        KeepInCache: false
+        BackgroundCompactionPolicy {
+          Threshold: 101
+          PriorityBase: 100
+          TimeFactor: 1
+          ResourceBrokerTask: "background_compaction"
+        }
+        ResourceBrokerTask: "compaction_gen2"
+      }
+      Generation {
+        GenerationId: 2
+        SizeToCompact: 1073741824000
+        CountToCompact: 40
+        ForceCountToCompact: 60
+        ForceSizeToCompact: 2147483648000
+        KeepInCache: false
+        BackgroundCompactionPolicy {
+          Threshold: 101
+          PriorityBase: 100
+          TimeFactor: 1
+          ResourceBrokerTask: "background_compaction"
+        }
+        ResourceBrokerTask: "compaction_gen3"
+      }
+    }
+  }
+  CompactionPolicies {
+    Name: "log_lz4"
+    CompactionPolicy {
+      InMemSizeToSnapshot: 1048576
+      InMemStepsToSnapshot: 100000
+      InMemForceStepsToSnapshot: 100000
+      InMemForceSizeToSnapshot: 4194304
+      InMemResourceBrokerTask: "compaction_gen0"
+      SnapshotResourceBrokerTask: "compaction_gen0"
+      BackupResourceBrokerTask: "scan"
+      ReadAheadHiThreshold: 67108864
+      ReadAheadLoThreshold: 16777216
+      DroppedRowsPercentToCompact: 50
+      MinDataPageSize: 262144
+      DefaultTaskPriority: 5
+      BackgroundSnapshotPolicy {
+        Threshold: 101
+        PriorityBase: 100
+        TimeFactor: 1
+        ResourceBrokerTask: "background_compaction"
+      }
+      Generation {
+        GenerationId: 0
+        SizeToCompact: 104857600
+        CountToCompact: 40
+        ForceCountToCompact: 60
+        ForceSizeToCompact: 146800640
+        KeepInCache: true
+        BackgroundCompactionPolicy {
+          Threshold: 101
+          PriorityBase: 100
+          TimeFactor: 1
+          ResourceBrokerTask: "background_compaction"
+        }
+        ResourceBrokerTask: "compaction_gen1"
+      }
+      Generation {
+        GenerationId: 1
+        SizeToCompact: 1073741824
+        CountToCompact: 40
+        ForceCountToCompact: 60
+        ForceSizeToCompact: 2147483648
+        KeepInCache: false
+        BackgroundCompactionPolicy {
+          Threshold: 101
+          PriorityBase: 100
+          TimeFactor: 1
+          ResourceBrokerTask: "background_compaction"
+        }
+        ResourceBrokerTask: "compaction_gen2"
+      }
+      Generation {
+        GenerationId: 2
+        SizeToCompact: 1073741824000
+        CountToCompact: 40
+        ForceCountToCompact: 60
+        ForceSizeToCompact: 2147483648000
+        KeepInCache: false
+        BackgroundCompactionPolicy {
+          Threshold: 101
+          PriorityBase: 100
+          TimeFactor: 1
+          ResourceBrokerTask: "background_compaction"
+        }
+        ResourceBrokerTask: "compaction_gen3"
+      }
+    }
+  }
+
+  ExecutionPolicies {
+    Name: "log"
+    TxReadSizeLimit: 10737418240
+    ExecutorFastLogPolicy: false
+    PipelineConfig {
+      NumActiveTx: 8
+      DataTxCacheSize: 20
+      EnableOutOfOrder: true
+      DisableImmediate: false
+      EnableSoftUpdates: false
+    }
+  }
+
+  CachingPolicies {
+    Name: "log"
+    ExecutorCacheSize: 3145728
+  }
+
+  PartitioningPolicies {
+    Name: "log"
+    AutoSplit: true
+    AutoMerge: false
+    SizeToSplit: 2147483648
+  }
+
+  PartitioningPolicies {
+    Name: "log_lz4"
+    AutoSplit: true
+    AutoMerge: false
+    SizeToSplit: 536870912
+  }
+
+  StoragePolicies {
+    Name: "log"
+    ColumnFamilies {
+      StorageConfig {
+        SysLog {
+          PreferredPoolKind: "ssd"
+        }
+        Log {
+          PreferredPoolKind: "ssd"
+        }
+        Data {
+          PreferredPoolKind: "ssd"
+        }
+      }
+    }
+  }
+
+  StoragePolicies {
+    Name: "log_lz4"
+    ColumnFamilies {
+      ColumnCodec: ColumnCodecLZ4
+      StorageConfig {
+        SysLog {
+          PreferredPoolKind: "ssd"
+        }
+        Log {
+          PreferredPoolKind: "ssd"
+        }
+        Data {
+          PreferredPoolKind: "ssd"
+        }
+      }
+    }
+  }
+
+  TableProfiles {
+    Name: "log"
+    CompactionPolicy: "log"
+    ExecutionPolicy: "log"
+    PartitioningPolicy: "log"
+    StoragePolicy: "log"
+    ReplicationPolicy: "disabled"
+    CachingPolicy: "log"
+  }
+  TableProfiles {
+    Name: "log_lz4"
+    CompactionPolicy: "log_lz4"
+    ExecutionPolicy: "log"
+    PartitioningPolicy: "log_lz4"
+    StoragePolicy: "log_lz4"
+    ReplicationPolicy: "disabled"
+    CachingPolicy: "log"
+  }
+
+     }
+    }
+   }
+  }
+ }
+}
+

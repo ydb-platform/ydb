@@ -155,6 +155,13 @@ public:
                                                    static_cast<ui64>(OperationId.GetTxId()),
                                                    static_cast<ui64>(context.SS->SelfTabletId()));
 
+        if (context.SS->IsServerlessDomain(TPath::Init(context.SS->RootPathId(), context.SS))) {
+            if (!context.SS->EnableResourcePoolsOnServerless) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed, "Resource pools are disabled for serverless domains. Please contact your system administrator to enable it");
+                return result;
+            }
+        }
+
         const TPath& parentPath = TPath::Resolve(parentPathStr, context.SS);
         RETURN_RESULT_UNLESS(NResourcePool::IsParentPathValid(result, parentPath));
 

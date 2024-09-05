@@ -7,19 +7,18 @@ TEST_SRCS(
     test.py
 )
 
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(ram:16)
+ENDIF()
+
 IF (SANITIZER_TYPE == "thread")
     TIMEOUT(2400)
     SIZE(LARGE)
     TAG(ya:fat)
     REQUIREMENTS(
-        cpu:4
         ram:32
     )
 ELSE()
-    REQUIREMENTS(
-        cpu:2
-        ram:16
-    )
     TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()

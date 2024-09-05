@@ -341,16 +341,11 @@ private:
     TSchedulerCookieHolder EpochTimerCookieHolder;
     TString EpochCache;
 
+    TTabletCountersBase* TabletCounters;
+    TAutoPtr<TTabletCountersBase> TabletCountersPtr;
+
 public:
-    TNodeBroker(const TActorId &tablet, TTabletStorageInfo *info)
-        : TActor(&TThis::StateInit)
-        , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
-        , EpochDuration(TDuration::Hours(1))
-        , ConfigSubscriptionId(0)
-        , StableNodeNamePrefix("slot-")
-        , TxProcessor(new TTxProcessor(*this, "root", NKikimrServices::NODE_BROKER))
-    {
-    }
+    TNodeBroker(const TActorId &tablet, TTabletStorageInfo *info);
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType()
     {

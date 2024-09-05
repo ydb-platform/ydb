@@ -5,6 +5,7 @@ SRCS(
     kqp_effects.cpp
     kqp_output_stream.cpp
     kqp_program_builder.cpp
+    kqp_compute_scheduler.cpp
     kqp_read_actor.cpp
     kqp_read_iterator_common.cpp
     kqp_read_table.cpp

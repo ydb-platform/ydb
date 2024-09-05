@@ -95,8 +95,8 @@ UPSERT INTO episodes (series_id, season_id, episode_id, title, air_date) VALUES
 
 ```bash
 {{ ydb-cli }} -p quickstart table query execute -q '
-    SELECT season_id, episode_id, title 
-    FROM episodes 
+    SELECT season_id, episode_id, title
+    FROM episodes
     WHERE series_id = 1
   '
 ```

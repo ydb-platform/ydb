@@ -10,6 +10,9 @@
 
 namespace NKikimr::NReplication::NTestHelpers {
 
+class TFeatureFlags: public TTestFeatureFlagsHolder<TFeatureFlags> {
+};
+
 template <bool UseDatabase = true>
 class TEnv {
     static constexpr char DomainName[] = "Root";
@@ -32,7 +35,7 @@ class TEnv {
         Database = "/" + ToString(DomainName);
 
         YdbProxy = Server.GetRuntime()->Register(CreateYdbProxy(
-            Endpoint, UseDatabase ? Database : "", std::forward<Args>(args)...));
+            Endpoint, UseDatabase ? Database : "", false /* ssl */, std::forward<Args>(args)...));
         Sender = Server.GetRuntime()->AllocateEdgeActor();
     }
 
@@ -63,7 +66,7 @@ public:
     TEnv(const TFeatureFlags& featureFlags, bool init = true)
         : Settings(Tests::TServerSettings(PortManager.GetPort(), {}, MakePqConfig())
             .SetDomainName(DomainName)
-            .SetFeatureFlags(featureFlags)
+            .SetFeatureFlags(featureFlags.FeatureFlags)
         )
         , Server(Settings)
         , Client(Settings)

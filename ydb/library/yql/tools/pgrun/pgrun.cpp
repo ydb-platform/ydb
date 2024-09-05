@@ -957,7 +957,7 @@ void CreateYtFileTable(const TFsPath& dataDir, const TString tableName, const TE
     auto rowSpec = MakeIntrusive<TYqlRowSpecInfo>();
 
     TColumnOrder columnOrder;
-    columnOrder.reserve(columnsNode->ChildrenSize());
+    columnOrder.Reserve(columnsNode->ChildrenSize());
 
     TStringBuilder ysonType;
     ysonType << "[\"StructType\";[";
@@ -966,7 +966,7 @@ void CreateYtFileTable(const TFsPath& dataDir, const TString tableName, const TE
       const auto &colName = columnNode->Child(0)->Content();
       const auto &colTypeNode = columnNode->Child(1);
 
-      columnOrder.emplace_back(colName);
+      columnOrder.AddColumn(TString(colName));
 
       ysonType << fmt::format("[\"{0}\";[\"{1}\";\"{2}\";];];",
                           colName, colTypeNode->Content(),

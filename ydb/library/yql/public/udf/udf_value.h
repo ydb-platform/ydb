@@ -808,7 +808,7 @@ public:
     inline bool IsEmbedded() const { return EMarkers::Embedded == Raw.GetMarkers(); }
 
     // Data accessors
-    template <typename T, typename = std::enable_if_t<TPrimitiveDataType<T>::Result>>
+    template <typename T, typename = std::enable_if_t<TPrimitiveDataType<T>::Result || std::is_same_v<T, NYql::NDecimal::TInt128>>>
     inline T Get() const;
     template <typename T, typename = std::enable_if_t<TPrimitiveDataType<T>::Result>>
     inline T GetOrDefault(T ifEmpty) const;
@@ -827,6 +827,8 @@ public:
 
     inline TStringValue AsStringValue() const;
     inline IBoxedValuePtr AsBoxed() const;
+    inline TStringValue::TData* AsRawStringValue() const;
+    inline IBoxedValue* AsRawBoxed() const;
     inline bool UniqueBoxed() const;
 
     // special values

@@ -9,4 +9,4 @@ namespace NYql {
 
     THolder<IDqIntegration> CreateGenericDqIntegration(TGenericState::TPtr state);
 
-}
+} // namespace NYql

@@ -36,6 +36,11 @@ void PrintValue(IOutputStream& out, const NYdb::TValue& v) {
             out << value.GetInt64();
             break;
         }
+        case NYdb::EPrimitiveType::Uint8:
+        {
+            out << value.GetUint8();
+            break;
+        }
         case NYdb::EPrimitiveType::Utf8:
         {
             out << value.GetUtf8();

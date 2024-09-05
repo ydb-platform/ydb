@@ -1,6 +1,4 @@
 items:
-- name: Обзор
-  href: index.md
 - name: Управление доступом
   href: access-management.md
 - name: Аудитный лог 

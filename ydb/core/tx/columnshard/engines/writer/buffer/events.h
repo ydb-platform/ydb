@@ -11,11 +11,15 @@ namespace NKikimr::NColumnShard::NWriting {
 class TEvAddInsertedDataToBuffer: public NActors::TEventLocal<TEvAddInsertedDataToBuffer, NColumnShard::TEvPrivate::EEv::EvWritingAddDataToBuffer> {
 private:
     YDB_READONLY_DEF(std::shared_ptr<NEvWrite::TWriteData>, WriteData);
+    YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, RecordBatch);
     YDB_ACCESSOR_DEF(std::vector<NArrow::TSerializedBatch>, BlobsToWrite);
+
 public:
 
-    explicit TEvAddInsertedDataToBuffer(const std::shared_ptr<NEvWrite::TWriteData>& writeData, std::vector<NArrow::TSerializedBatch>&& blobs)
+    explicit TEvAddInsertedDataToBuffer(const std::shared_ptr<NEvWrite::TWriteData>& writeData, std::vector<NArrow::TSerializedBatch>&& blobs,
+        const std::shared_ptr<arrow::RecordBatch>& recordBatch)
         : WriteData(writeData)
+        , RecordBatch(recordBatch)
         , BlobsToWrite(blobs) {
     }
 

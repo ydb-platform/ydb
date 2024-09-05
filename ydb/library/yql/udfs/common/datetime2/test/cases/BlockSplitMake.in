@@ -1,0 +1,16 @@
+{
+    "fdate"="2018-12-15";
+    "fdatetime"="2018-12-15T01:02:03Z";
+    "ftimestamp"="2018-12-15T01:02:03.456789Z";
+    "ftzdate"="2018-12-15,Europe/Moscow";
+    "ftzdatetime"="2018-12-15T01:02:03,Europe/Moscow";
+    "ftztimestamp"="2018-12-15T01:02:03.456789,Europe/Moscow"
+};
+{
+    "fdate"="2005-12-31";
+    "fdatetime"="2005-12-31T23:59:59Z";
+    "ftimestamp"="2005-12-31T23:59:59.999999Z";
+    "ftzdate"="2005-12-31,Canada/Central";
+    "ftzdatetime"="2005-12-31T16:00:00,Canada/Central";
+    "ftztimestamp"="2005-12-31T23:00:00.000000,Canada/Central"
+};

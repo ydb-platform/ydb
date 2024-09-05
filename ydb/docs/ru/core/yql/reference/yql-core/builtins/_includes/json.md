@@ -1155,7 +1155,7 @@ SELECT
     JSON_QUERY($json, "$.friends.name" WITH CONDITIONAL WRAPPER); -- ["James Holden", "Naomi Nagata"]
 ```
 
-{% if oss %}
+{% if oss and ya_make != true %}
 
 ## Смотрите также
 

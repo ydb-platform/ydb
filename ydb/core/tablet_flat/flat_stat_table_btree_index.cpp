@@ -200,6 +200,7 @@ bool BuildStatsBTreeIndex(const TSubset& subset, TStats& stats, ui32 histogramBu
     bool ready = true;
     for (const auto& part : subset.Flatten) {
         stats.IndexSize.Add(part->IndexesRawSize, part->Label.Channel());
+        stats.ByKeyFilterSize += part->ByKey ? part->ByKey->Raw.size() : 0;
         ready &= AddDataSize(part, stats, env, yieldHandler);
     }
 

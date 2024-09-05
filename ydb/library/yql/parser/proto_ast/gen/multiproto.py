@@ -73,7 +73,7 @@ def main(argv):
                         if type_name in current_types:
                             out_file.write(line)
                         continue
-                    if line.startswith("static ") or (line.startswith("const ") and ("[]" in line or "=" in line)) or line.startswith("PROTOBUF_ATTRIBUTE_WEAK"):
+                    if line.startswith("static ") or (line.startswith("const ") and ("[]" in line or "=" in line)) or line.startswith("PROTOBUF_ATTRIBUTE_WEAK") or line.startswith("PROTOBUF_ATTRIBUTE_INIT_PRIORITY2"):
                         is_data_stmt = True
                         extern_data = "file_level_metadata" in line or ("descriptor_table" in line and "once" in line)
                         extern_code = line.startswith("PROTOBUF_ATTRIBUTE_WEAK")

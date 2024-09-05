@@ -186,7 +186,7 @@ struct TRetryStuff {
         const TString& requestId,
         const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy
     ) : Gateway(std::move(gateway))
-      , Url(UrlEscapeRet(url, true))
+      , Url(NS3Util::UrlEscapeRet(url))
       , Headers(headers)
       , Offset(0U)
       , SizeLimit(sizeLimit)
@@ -941,10 +941,13 @@ public:
     }
 
     void Handle(TEvS3Provider::TEvDecompressDataResult::TPtr& ev) {
+        CpuTime += ev->Get()->CpuTime;
         DeferredDecompressedDataParts.push(std::move(ev->Release()));
+        
     }
 
     void Handle(TEvS3Provider::TEvDecompressDataFinish::TPtr& ev) {
+        CpuTime += ev->Get()->CpuTime;
         DecompressedInputFinished = true;
     }
 
@@ -1268,7 +1271,7 @@ public:
         IHTTPGateway::TPtr gateway,
         const THolderFactory& holderFactory,
         const TString& url,
-        const TS3Credentials::TAuthInfo& authInfo,
+        const TS3Credentials& credentials,
         const TString& pattern,
         ES3PatternVariant patternVariant,
         TPathList&& paths,
@@ -1289,7 +1292,8 @@ public:
         ui64 fileQueueBatchObjectCountLimit,
         ui64 fileQueueConsumersCountDelta,
         bool asyncDecoding,
-        bool asyncDecompressing
+        bool asyncDecompressing,
+        bool allowLocalFiles
     )   : ReadActorFactoryCfg(readActorFactoryCfg)
         , Gateway(std::move(gateway))
         , HolderFactory(holderFactory)
@@ -1298,7 +1302,7 @@ public:
         , ComputeActorId(computeActorId)
         , RetryPolicy(retryPolicy)
         , Url(url)
-        , AuthInfo(authInfo)
+        , Credentials(credentials)
         , Pattern(pattern)
         , PatternVariant(patternVariant)
         , Paths(std::move(paths))
@@ -1316,7 +1320,8 @@ public:
         , FileQueueBatchObjectCountLimit(fileQueueBatchObjectCountLimit)
         , FileQueueConsumersCountDelta(fileQueueConsumersCountDelta)
         , AsyncDecoding(asyncDecoding)
-        , AsyncDecompressing(asyncDecompressing) {
+        , AsyncDecompressing(asyncDecompressing)
+        , AllowLocalFiles(allowLocalFiles) {
         if (Counters) {
             QueueDataSize = Counters->GetCounter("QueueDataSize");
             QueueDataLimit = Counters->GetCounter("QueueDataLimit");
@@ -1349,7 +1354,7 @@ public:
         // After exact mem control implementation, this allocation should be deleted
         if (!MemoryQuotaManager->AllocateQuota(ReadActorFactoryCfg.DataInflight)) {
             TIssues issues;
-            issues.AddIssue(TIssue{TStringBuilder() << "OutOfMemory - can't allocate read buffer"});
+            issues.AddIssue(TIssue{TStringBuilder() << "OutOfMemory - can't allocate " << ReadActorFactoryCfg.DataInflight << "b read buffer"});
             Send(ComputeActorId, new TEvAsyncInputError(InputIndex, std::move(issues), NYql::NDqProto::StatusIds::OVERLOADED));
             return;
         }
@@ -1390,10 +1395,11 @@ public:
                 Gateway,
                 RetryPolicy,
                 Url,
-                AuthInfo,
+                Credentials,
                 Pattern,
                 PatternVariant,
-                ES3PatternType::Wildcard));
+                ES3PatternType::Wildcard,
+                AllowLocalFiles));
         }
         FileQueueEvents.Init(TxId, SelfId(), SelfId());
         FileQueueEvents.OnNewRecipientId(FileQueueActor);
@@ -1454,10 +1460,11 @@ public:
                                       << pathIndex);
 
         TActorId actorId;
+        const auto& authInfo = Credentials.GetAuthInfo();
         auto stuff = std::make_shared<TRetryStuff>(
             Gateway,
             Url + object.GetPath(),
-            IHTTPGateway::MakeYcHeaders(requestId, AuthInfo.GetToken(), {}, AuthInfo.GetAwsUserPwd(), AuthInfo.GetAwsSigV4()),
+            IHTTPGateway::MakeYcHeaders(requestId, authInfo.GetToken(), {}, authInfo.GetAwsUserPwd(), authInfo.GetAwsSigV4()),
             object.GetSize(),
             TxId,
             requestId,
@@ -1856,7 +1863,7 @@ private:
     const IHTTPGateway::TRetryPolicy::TPtr RetryPolicy;
 
     const TString Url;
-    const TS3Credentials::TAuthInfo AuthInfo;
+    const TS3Credentials Credentials;
     const TString Pattern;
     const ES3PatternVariant PatternVariant;
     TPathList Paths;
@@ -1900,6 +1907,7 @@ private:
     ui64 FileQueueConsumersCountDelta;
     const bool AsyncDecoding;
     const bool AsyncDecompressing;
+    const bool AllowLocalFiles;
     bool IsCurrentBatchEmpty = false;
     bool IsFileQueueEmpty = false;
     bool IsWaitingFileQueueResponse = false;
@@ -2063,15 +2071,16 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
     const TS3ReadActorFactoryConfig& cfg,
     ::NMonitoring::TDynamicCounterPtr counters,
     ::NMonitoring::TDynamicCounterPtr taskCounters,
-    IMemoryQuotaManager::TPtr memoryQuotaManager)
+    IMemoryQuotaManager::TPtr memoryQuotaManager,
+    bool allowLocalFiles)
 {
     const IFunctionRegistry& functionRegistry = *holderFactory.GetFunctionRegistry();
 
     TPathList paths;
-    ReadPathsList(params, taskParams, readRanges, paths);
+    ReadPathsList(taskParams, readRanges, paths);
 
     const auto token = secureParams.Value(params.GetToken(), TString{});
-    const auto authInfo = GetAuthInfo(credentialsFactory, token);
+    const TS3Credentials credentials(credentialsFactory, token);
 
     const auto& settings = params.GetSettings();
     TString pathPattern = "*";
@@ -2249,11 +2258,11 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
             sizeLimit = FromString<ui64>(it->second);
         }
 
-        const auto actor = new TS3StreamReadActor(inputIndex, statsLevel, txId, std::move(gateway), holderFactory, params.GetUrl(), authInfo, pathPattern, pathPatternVariant,
+        const auto actor = new TS3StreamReadActor(inputIndex, statsLevel, txId, std::move(gateway), holderFactory, params.GetUrl(), credentials, pathPattern, pathPatternVariant,
                                                   std::move(paths), addPathIndex, readSpec, computeActorId, retryPolicy,
                                                   cfg, counters, taskCounters, fileSizeLimit, sizeLimit, rowsLimitHint, memoryQuotaManager,
                                                   params.GetUseRuntimeListing(), fileQueueActor, fileQueueBatchSizeLimit, fileQueueBatchObjectCountLimit, fileQueueConsumersCountDelta,
-                                                  params.GetAsyncDecoding(), params.GetAsyncDecompressing());
+                                                  params.GetAsyncDecoding(), params.GetAsyncDecompressing(), allowLocalFiles);
 
         return {actor, actor};
     } else {
@@ -2261,10 +2270,10 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
         if (const auto it = settings.find("sizeLimit"); settings.cend() != it)
             sizeLimit = FromString<ui64>(it->second);
 
-        return CreateRawReadActor(inputIndex, statsLevel, txId, std::move(gateway), holderFactory, params.GetUrl(), authInfo, pathPattern, pathPatternVariant,
+        return CreateRawReadActor(inputIndex, statsLevel, txId, std::move(gateway), holderFactory, params.GetUrl(), credentials, pathPattern, pathPatternVariant,
                                             std::move(paths), addPathIndex, computeActorId, sizeLimit, retryPolicy,
                                             cfg, counters, taskCounters, fileSizeLimit, rowsLimitHint,
-                                            params.GetUseRuntimeListing(), fileQueueActor, fileQueueBatchSizeLimit, fileQueueBatchObjectCountLimit, fileQueueConsumersCountDelta);
+                                            params.GetUseRuntimeListing(), fileQueueActor, fileQueueBatchSizeLimit, fileQueueBatchObjectCountLimit, fileQueueConsumersCountDelta, allowLocalFiles);
     }
 }
 

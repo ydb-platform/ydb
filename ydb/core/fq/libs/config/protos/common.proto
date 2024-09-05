@@ -29,4 +29,5 @@ message TCommonConfig {
     bool KeepInternalErrors = 13;
     bool UseNativeProtocolForClickHouse = 14;
     bool DisableSslForGenericDataSources = 15;
+    bool ShowQueryTimeline = 16;
 }

@@ -33,7 +33,7 @@ EACH uses [TablePathPrefix](#table-path-prefix) for each list item.
 
 | Value type | Default |
 | --- | --- |
-| 1. Action<br>2. Warning code or "*" | — |
+| 1. Action<br/>2. Warning code or "*" | — |
 
 Action:
 
@@ -97,7 +97,7 @@ Controls implicit Coalesce for the key `JOIN` columns in the SimpleColumns mode.
 
 If the flag is set, then [JOIN](../../join.md) will require strict matching of key types.
 By default, JOIN preconverts keys to a shared type, which might result in performance degradation.
-StrictJoinKeyTypes is a [scoped](#pragmascope) setting.
+StrictJoinKeyTypes is a [scoped](../../pragma.md#pragmascope) setting.
 
 {% endif %}
 
@@ -181,7 +181,7 @@ Use Re2 UDF instead of Pcre to execute SQL the `REGEX`,`MATCH`,`RLIKE` statement
 
 In the classical version, the result of integer division remains integer (by default).
 If disabled, the result is always Double.
-ClassicDivision is a [scoped](#pragmascope) setting.
+ClassicDivision is a [scoped](../../pragma.md#pragmascope) setting.
 
 ### UnicodeLiterals
 
@@ -192,7 +192,7 @@ ClassicDivision is a [scoped](#pragmascope) setting.
 | Flag | false |
 
 When this mode is enabled, string literals without suffixes like "foo"/'bar'/@@multiline@@ will be of type `Utf8`, when disabled - `String`.
-UnicodeLiterals is a [scoped](#pragmascope) setting.
+UnicodeLiterals is a [scoped](../../pragma.md#pragmascope) setting.
 
 ### WarnUntypedStringLiterals
 
@@ -203,7 +203,7 @@ UnicodeLiterals is a [scoped](#pragmascope) setting.
 | Flag | false |
 
 When this mode is enabled, a warning will be generated for string literals without suffixes like "foo"/'bar'/@@multiline@@. It can be suppressed by explicitly choosing the suffix `s` for the `String` type, or `u` for the `Utf8` type.
-WarnUntypedStringLiterals is a [scoped](#pragmascope) setting.
+WarnUntypedStringLiterals is a [scoped](../../pragma.md#pragmascope) setting.
 
 ### AllowDotInAlias
 
@@ -242,4 +242,3 @@ Increasing the limit on the number of dimensions in [GROUP BY](../../group_by.md
 Use this option with care, because the computational complexity of the query grows exponentially with the number of dimensions.
 
 {% endif %}
-

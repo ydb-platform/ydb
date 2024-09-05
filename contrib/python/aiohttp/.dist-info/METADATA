@@ -1,19 +1,19 @@
 Metadata-Version: 2.1
 Name: aiohttp
-Version: 3.8.1
+Version: 3.9.5
 Summary: Async http client/server framework (asyncio)
 Home-page: https://github.com/aio-libs/aiohttp
 Maintainer: aiohttp team <team@aiohttp.org>
 Maintainer-email: team@aiohttp.org
 License: Apache 2
-Project-URL: Chat: Gitter, https://gitter.im/aio-libs/Lobby
+Project-URL: Chat: Matrix, https://matrix.to/#/#aio-libs:matrix.org
+Project-URL: Chat: Matrix Space, https://matrix.to/#/#aio-libs-space:matrix.org
 Project-URL: CI: GitHub Actions, https://github.com/aio-libs/aiohttp/actions?query=workflow%3ACI
 Project-URL: Coverage: codecov, https://codecov.io/github/aio-libs/aiohttp
 Project-URL: Docs: Changelog, https://docs.aiohttp.org/en/stable/changes.html
 Project-URL: Docs: RTD, https://docs.aiohttp.org
 Project-URL: GitHub: issues, https://github.com/aio-libs/aiohttp/issues
 Project-URL: GitHub: repo, https://github.com/aio-libs/aiohttp
-Platform: UNKNOWN
 Classifier: Development Status :: 5 - Production/Stable
 Classifier: Framework :: AsyncIO
 Classifier: Intended Audience :: Developers
@@ -23,29 +23,25 @@ Classifier: Operating System :: MacOS :: MacOS X
 Classifier: Operating System :: Microsoft :: Windows
 Classifier: Programming Language :: Python
 Classifier: Programming Language :: Python :: 3
-Classifier: Programming Language :: Python :: 3.6
-Classifier: Programming Language :: Python :: 3.7
 Classifier: Programming Language :: Python :: 3.8
 Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
 Classifier: Topic :: Internet :: WWW/HTTP
-Requires-Python: >=3.6
+Requires-Python: >=3.8
 Description-Content-Type: text/x-rst
 License-File: LICENSE.txt
-Requires-Dist: attrs (>=17.3.0)
-Requires-Dist: charset-normalizer (<3.0,>=2.0)
-Requires-Dist: multidict (<7.0,>=4.5)
-Requires-Dist: async-timeout (<5.0,>=4.0.0a3)
-Requires-Dist: yarl (<2.0,>=1.0)
-Requires-Dist: frozenlist (>=1.1.1)
-Requires-Dist: aiosignal (>=1.1.2)
-Requires-Dist: idna-ssl (>=1.0) ; python_version < "3.7"
-Requires-Dist: asynctest (==0.13.0) ; python_version < "3.8"
-Requires-Dist: typing-extensions (>=3.7.4) ; python_version < "3.8"
+Requires-Dist: aiosignal >=1.1.2
+Requires-Dist: attrs >=17.3.0
+Requires-Dist: frozenlist >=1.1.1
+Requires-Dist: multidict <7.0,>=4.5
+Requires-Dist: yarl <2.0,>=1.0
+Requires-Dist: async-timeout <5.0,>=4.0 ; python_version < "3.11"
 Provides-Extra: speedups
-Requires-Dist: aiodns ; extra == 'speedups'
-Requires-Dist: Brotli ; extra == 'speedups'
-Requires-Dist: cchardet ; extra == 'speedups'
+Requires-Dist: brotlicffi ; (platform_python_implementation != "CPython") and extra == 'speedups'
+Requires-Dist: Brotli ; (platform_python_implementation == "CPython") and extra == 'speedups'
+Requires-Dist: aiodns ; (sys_platform == "linux" or sys_platform == "darwin") and extra == 'speedups'
 
 ==================================
 Async http client/server framework
@@ -74,13 +70,13 @@ Async http client/server framework
    :target: https://docs.aiohttp.org/
    :alt: Latest Read The Docs
 
-.. image:: https://img.shields.io/discourse/status?server=https%3A%2F%2Faio-libs.discourse.group
-   :target: https://aio-libs.discourse.group
-   :alt: Discourse status
+.. image:: https://img.shields.io/matrix/aio-libs:matrix.org?label=Discuss%20on%20Matrix%20at%20%23aio-libs%3Amatrix.org&logo=matrix&server_fqdn=matrix.org&style=flat
+   :target: https://matrix.to/#/%23aio-libs:matrix.org
+   :alt: Matrix Room — #aio-libs:matrix.org
 
-.. image:: https://badges.gitter.im/Join%20Chat.svg
-   :target: https://gitter.im/aio-libs/Lobby
-   :alt: Chat on Gitter
+.. image:: https://img.shields.io/matrix/aio-libs-space:matrix.org?label=Discuss%20on%20Matrix%20at%20%23aio-libs-space%3Amatrix.org&logo=matrix&server_fqdn=matrix.org&style=flat
+   :target: https://matrix.to/#/%23aio-libs-space:matrix.org
+   :alt: Matrix Space — #aio-libs-space:matrix.org
 
 
 Key Features
@@ -89,7 +85,7 @@ Key Features
 - Supports both client and server side of HTTP protocol.
 - Supports both client and server Web-Sockets out-of-the-box and avoids
   Callback Hell.
-- Provides Web-server with middlewares and plugable routing.
+- Provides Web-server with middleware and pluggable routing.
 
 
 Getting started
@@ -116,8 +112,7 @@ To get something from the web:
               html = await response.text()
               print("Body:", html[:15], "...")
 
-  loop = asyncio.get_event_loop()
-  loop.run_until_complete(main())
+  asyncio.run(main())
 
 This prints:
 
@@ -196,7 +191,7 @@ Feel free to make a Pull Request for adding your link to these pages!
 Communication channels
 ======================
 
-*aio-libs discourse group*: https://aio-libs.discourse.group
+*aio-libs Discussions*: https://github.com/aio-libs/aiohttp/discussions
 
 *gitter chat* https://gitter.im/aio-libs/Lobby
 
@@ -207,23 +202,20 @@ Please add *aiohttp* tag to your question there.
 Requirements
 ============
 
-- Python >= 3.6
 - async-timeout_
 - attrs_
-- charset-normalizer_
 - multidict_
 - yarl_
+- frozenlist_
 
-Optionally you may install the cChardet_ and aiodns_ libraries (highly
-recommended for sake of speed).
+Optionally you may install the aiodns_ library (highly recommended for sake of speed).
 
-.. _charset-normalizer: https://pypi.org/project/charset-normalizer
 .. _aiodns: https://pypi.python.org/pypi/aiodns
 .. _attrs: https://github.com/python-attrs/attrs
 .. _multidict: https://pypi.python.org/pypi/multidict
+.. _frozenlist: https://pypi.org/project/frozenlist/
 .. _yarl: https://pypi.python.org/pypi/yarl
 .. _async-timeout: https://pypi.python.org/pypi/async_timeout
-.. _cChardet: https://pypi.python.org/pypi/cchardet
 
 License
 =======
@@ -251,5 +243,3 @@ Benchmarks
 If you are interested in efficiency, the AsyncIO community maintains a
 list of benchmarks on the official wiki:
 https://github.com/python/asyncio/wiki/Benchmarks
-
-

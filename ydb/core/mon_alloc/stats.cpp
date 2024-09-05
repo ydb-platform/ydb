@@ -144,21 +144,27 @@ namespace NKikimr {
         };
 
         struct TLfAllocState: public IAllocState {
-            ui64 GetAllocatedMemoryEstimate() const override {
-                ui64 result = 0;
-                result += NAllocDbg::GetAllocationCounterFast(NAllocDbg::CT_SYSTEM_ALLOC);
-                result -= NAllocDbg::GetAllocationCounterFast(NAllocDbg::CT_SYSTEM_FREE);
-                result += NAllocDbg::GetAllocationCounterFast(NAllocDbg::CT_SMALL_ALLOC);
-                result -= NAllocDbg::GetAllocationCounterFast(NAllocDbg::CT_SMALL_FREE);
-                result += NAllocDbg::GetAllocationCounterFast(NAllocDbg::CT_LARGE_ALLOC);
-                result -= NAllocDbg::GetAllocationCounterFast(NAllocDbg::CT_LARGE_FREE);
-                return result;
+            TState Get() const override {
+                const ui64 total = 
+                    NAllocDbg::GetAllocationCounterFast(NAllocDbg::CT_SYSTEM_ALLOC) +
+                    NAllocDbg::GetAllocationCounterFast(NAllocDbg::CT_SMALL_ALLOC) +
+                    NAllocDbg::GetAllocationCounterFast(NAllocDbg::CT_LARGE_ALLOC);
+
+                const ui64 free =
+                    NAllocDbg::GetAllocationCounterFast(NAllocDbg::CT_SYSTEM_FREE) +
+                    NAllocDbg::GetAllocationCounterFast(NAllocDbg::CT_SMALL_FREE) +
+                    NAllocDbg::GetAllocationCounterFast(NAllocDbg::CT_LARGE_FREE);
+
+                return {
+                    total - Min(total, free),
+                    free
+                };
             }
         };
 
         struct TFakeAllocState: public IAllocState {
-            ui64 GetAllocatedMemoryEstimate() const override {
-                return 0;
+            TState Get() const override {
+                return {0, 0};
             }
         };
 
@@ -185,18 +191,8 @@ namespace NKikimr {
 
     std::unique_ptr<IAllocState> TAllocState::AllocState = CreateAllocState();
 
-    ui64 TAllocState::GetAllocatedMemoryEstimate() {
-        return AllocState->GetAllocatedMemoryEstimate();
+    IAllocState::TState TAllocState::Get() {
+        return AllocState->Get();
     }
 
-    std::optional<TMemoryUsage> TAllocState::TryGetMemoryUsage() {
-        NActors::TProcStat procStat;
-        if (!procStat.Fill(getpid())) {
-            return { };
-        }
-        return TMemoryUsage {
-            .AnonRss = procStat.AnonRss,
-            .CGroupLimit = procStat.CGroupMemLim
-        };
-    }
 }

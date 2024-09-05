@@ -30,5 +30,6 @@ RECURSE(
     suite_tests
     tenants
     ttl
+    wardens
     ydb_cli
 )

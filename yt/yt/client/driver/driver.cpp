@@ -1,23 +1,24 @@
 #include "driver.h"
 
-#include "authentication_commands.h"
 #include "admin_commands.h"
+#include "authentication_commands.h"
 #include "bundle_controller_commands.h"
 #include "chaos_commands.h"
 #include "command.h"
 #include "config.h"
 #include "cypress_commands.h"
+#include "distributed_table_commands.h"
 #include "etc_commands.h"
 #include "file_commands.h"
+#include "flow_commands.h"
+#include "internal_commands.h"
 #include "journal_commands.h"
+#include "proxy_discovery_cache.h"
+#include "query_commands.h"
 #include "queue_commands.h"
 #include "scheduler_commands.h"
 #include "table_commands.h"
 #include "transaction_commands.h"
-#include "internal_commands.h"
-#include "proxy_discovery_cache.h"
-#include "query_commands.h"
-#include "flow_commands.h"
 
 #include <yt/yt/client/api/client_cache.h>
 #include <yt/yt/client/api/connection.h>
@@ -394,6 +395,9 @@ public:
             REGISTER_ALL(TRevokeLeaseCommand,              "revoke_lease",                    Null,       Structured, true,  false);
             REGISTER_ALL(TReferenceLeaseCommand,           "reference_lease",                 Null,       Structured, true,  false);
             REGISTER_ALL(TUnreferenceLeaseCommand,         "unreference_lease",               Null,       Structured, true,  false);
+            REGISTER_ALL(TStartDistributedWriteSessionCommand,    "start_distributed_write_session",    Null,    Structured, true, false);
+            REGISTER_ALL(TFinishDistributedWriteSessionCommand,   "finish_distributed_write_session",   Null,    Null,       true, false);
+            REGISTER_ALL(TParticipantWriteTableCommand,           "participant_write_table",            Tabular, Structured, true, true );
         }
 
 #undef REGISTER
@@ -544,7 +548,8 @@ private:
 
         NTracing::TChildTraceContextGuard commandSpan(ConcatToString(TStringBuf("Driver:"), request.CommandName));
         NTracing::AnnotateTraceContext([&] (const auto& traceContext) {
-            traceContext->AddTag("user", request.AuthenticatedUser);
+            // TODO(babenko): switch to std::string
+            traceContext->AddTag("user", TString(request.AuthenticatedUser));
             traceContext->AddTag("request_id", request.Id);
         });
 

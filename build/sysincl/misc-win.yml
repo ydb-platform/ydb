@@ -86,8 +86,10 @@
   - sched.h:       contrib/tools/bison/lib/platform/win64/sched.h
   - signal.h:      contrib/tools/bison/lib/platform/win64/signal.h
   - spawn.h:       contrib/tools/bison/lib/platform/win64/spawn.h
+  - sys/ioctl.h:   contrib/tools/bison/lib/platform/win64/sys/ioctl.h
   - sys/stat.h:    contrib/tools/bison/lib/platform/win64/sys/stat.h
   - sys/wait.h:    contrib/tools/bison/lib/platform/win64/sys/wait.h
+  - termios.h:     contrib/tools/bison/lib/platform/win64/termios.h
   - unistd.h:      contrib/tools/bison/lib/platform/win64/unistd.h
 
 - source_filter: "^contrib/tools/m4/"

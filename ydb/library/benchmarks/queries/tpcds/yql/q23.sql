@@ -33,7 +33,7 @@ $best_ss_customer =
       cross join {{customer}} as customer
   where ss_customer_sk = c_customer_sk
   group by customer.c_customer_sk
-  having sum(ss_quantity*ss_sales_price) > (95/100.0) * $max_store_sales);
+  having sum(ss_quantity*ss_sales_price) > $z0_95_35 * $max_store_sales);
 
 -- start query 1 in stream 0 using template query23.tpl and seed 2031708268
 select  sum(sales)

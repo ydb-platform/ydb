@@ -16,6 +16,7 @@ TString TDriveData::ToString(bool isMultiline) const {
         << " SerialNumber# " << SerialNumber.Quote() << x
         << " FirmwareRevision# " << FirmwareRevision.Quote() << x
         << " DeviceType# " << NPDisk::DeviceTypeStr(DeviceType, true) << x
+        << " Size# " << Size << x
         << "}" << x;
     return str.Str();
 }

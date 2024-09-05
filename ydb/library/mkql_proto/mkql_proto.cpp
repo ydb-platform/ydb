@@ -1813,7 +1813,7 @@ NUdf::TUnboxedValue TProtoImporter::ImportValueFromProto(const TType* type, cons
                 return NYql::NCommon::PgValueFromNativeBinary(value.GetBytes(), pgType->GetTypeId());
             }
             if (value.HasText()) {
-                return NYql::NCommon::PgValueFromNativeText(value.GetBytes(), pgType->GetTypeId());
+                return NYql::NCommon::PgValueFromNativeText(value.GetText(), pgType->GetTypeId());
             }
             MKQL_ENSURE(false, "malformed pg value");
         }

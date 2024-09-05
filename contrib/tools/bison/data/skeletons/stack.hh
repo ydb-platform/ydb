@@ -1,6 +1,6 @@
 # C++ skeleton for Bison
 
-# Copyright (C) 2002-2015, 2018-2019 Free Software Foundation, Inc.
+# Copyright (C) 2002-2015, 2018-2021 Free Software Foundation, Inc.
 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -13,13 +13,13 @@
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 
 # b4_stack_file
 # -------------
 # Name of the file containing the stack class, if we want this file.
-b4_defines_if([b4_required_version_if([302], [],
+b4_defines_if([b4_required_version_if([30200], [],
                                       [m4_define([b4_stack_file], [stack.hh])])])
 
 
@@ -32,48 +32,38 @@ m4_define([b4_stack_define],
     {
     public:
       // Hide our reversed order.
-      typedef typename S::reverse_iterator iterator;
-      typedef typename S::const_reverse_iterator const_iterator;
+      typedef typename S::iterator iterator;
+      typedef typename S::const_iterator const_iterator;
       typedef typename S::size_type size_type;
+      typedef typename std::ptrdiff_t index_type;
 
       stack (size_type n = 200)
         : seq_ (n)
       {}
 
-      /// Random access.
-      ///
-      /// Index 0 returns the topmost element.
-      T&
-      operator[] (size_type i)
-      {
-        return seq_[size () - 1 - i];
-      }
-
-      /// Random access.
-      ///
-      /// Index 0 returns the topmost element.
-      T&
-      operator[] (int i)
-      {
-        return operator[] (size_type (i));
-      }
+#if 201103L <= YY_CPLUSPLUS
+      /// Non copyable.
+      stack (const stack&) = delete;
+      /// Non copyable.
+      stack& operator= (const stack&) = delete;
+#endif
 
       /// Random access.
       ///
       /// Index 0 returns the topmost element.
       const T&
-      operator[] (size_type i) const
+      operator[] (index_type i) const
       {
-        return seq_[size () - 1 - i];
+        return seq_[size_type (size () - 1 - i)];
       }
 
       /// Random access.
       ///
       /// Index 0 returns the topmost element.
-      const T&
-      operator[] (int i) const
+      T&
+      operator[] (index_type i)
       {
-        return operator[] (size_type (i));
+        return seq_[size_type (size () - 1 - i)];
       }
 
       /// Steal the contents of \a t.
@@ -88,7 +78,7 @@ m4_define([b4_stack_define],
 
       /// Pop elements from the stack.
       void
-      pop (int n = 1) YY_NOEXCEPT
+      pop (std::ptrdiff_t n = 1) YY_NOEXCEPT
       {
         for (; 0 < n; --n)
           seq_.pop_back ();
@@ -102,49 +92,53 @@ m4_define([b4_stack_define],
       }
 
       /// Number of elements on the stack.
-      size_type
+      index_type
       size () const YY_NOEXCEPT
       {
-        return seq_.size ();
+        return index_type (seq_.size ());
       }
 
       /// Iterator on top of the stack (going downwards).
       const_iterator
       begin () const YY_NOEXCEPT
       {
-        return seq_.rbegin ();
+        return seq_.begin ();
       }
 
       /// Bottom of the stack.
       const_iterator
       end () const YY_NOEXCEPT
       {
-        return seq_.rend ();
+        return seq_.end ();
       }
 
       /// Present a slice of the top of a stack.
       class slice
       {
       public:
-        slice (const stack& stack, int range)
+        slice (const stack& stack, index_type range)
           : stack_ (stack)
           , range_ (range)
         {}
 
         const T&
-        operator[] (int i) const
+        operator[] (index_type i) const
         {
           return stack_[range_ - i];
         }
 
       private:
         const stack& stack_;
-        int range_;
+        index_type range_;
       };
 
     private:
+#if YY_CPLUSPLUS < 201103L
+      /// Non copyable.
       stack (const stack&);
+      /// Non copyable.
       stack& operator= (const stack&);
+#endif
       /// The wrapped container.
       S seq_;
     };
@@ -157,7 +151,7 @@ m4_ifdef([b4_stack_file],
 // used to define is now defined with the parser itself.
 //
 // To get rid of this file:
-// 1. add 'require "3.2"' (or newer) to your grammar file
+// 1. add '%require "3.2"' (or newer) to your grammar file
 // 2. remove references to this file from your build system.
 ]b4_output_end[
 ]])

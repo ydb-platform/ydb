@@ -65,4 +65,4 @@ namespace NYql::NDq {
         }
         return std::make_unique<TGenericTokenProvider>();
     }
-} //namespace NYql::NDq
+} // namespace NYql::NDq

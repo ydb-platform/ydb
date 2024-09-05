@@ -38,7 +38,9 @@ protected:
     bool IsAjaxRequest = false;
     NHttp::THeadersBuilder ResponseHeaders;
 
-    virtual void RemoveAppliedCookie(const TString& cookieName) = 0;
+    void RemoveAppliedCookie(const TString& cookieName) {
+        ResponseHeaders.Set("Set-Cookie", TStringBuilder() << cookieName << "=; Path=" << GetAuthCallbackUrl() << "; Max-Age=0");
+    }
 
     bool IsStateValid(const TString& state, const NHttp::TCookies& cookies, const NActors::TActorContext& ctx) {
         const TString cookieName {CreateNameYdbOidcCookie(Settings.ClientSecret, state)};

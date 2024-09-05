@@ -206,10 +206,10 @@ git push
   ```
   ...
   remote: Resolving deltas: 100% (1/1), completed with 1 local object.
-  remote: 
+  remote:
   remote: Create a pull request for '{branch_name}' on GitHub by visiting:
   remote:      https://github.com/{your_github_user_name}/test/pull/new/{branch_name}
-  ... 
+  ...
   ```
 
 - GitHub CLI

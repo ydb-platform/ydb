@@ -4,6 +4,7 @@
 
 #include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb/public/lib/ydb_cli/common/recursive_list.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
 #include <ydb/public/lib/ydb_cli/common/retry_func.h>
 #include <ydb/public/lib/ydb_cli/dump/util/util.h>
@@ -19,6 +20,7 @@
 namespace NYdb {
 namespace NDump {
 
+using namespace NConsoleClient;
 using namespace NImport;
 using namespace NOperation;
 using namespace NScheme;
@@ -41,6 +43,12 @@ Ydb::Table::CreateTableRequest ReadTableScheme(const TString& fsPath) {
 
 TTableDescription TableDescriptionFromProto(const Ydb::Table::CreateTableRequest& proto) {
     return TProtoAccessor::FromProto(proto);
+}
+
+Ydb::Scheme::ModifyPermissionsRequest ReadPermissions(const TString& fsPath) {
+    Ydb::Scheme::ModifyPermissionsRequest proto;
+    Y_ENSURE(google::protobuf::TextFormat::ParseFromString(TFileInput(fsPath).ReadAll(), &proto));
+    return proto;
 }
 
 bool HasRunningIndexBuilds(TOperationClient& client, const TString& dbPath) {
@@ -131,34 +139,34 @@ TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbP
         dbBasePath = dbBasePath.Parent();
     }
 
-    auto oldDirectoryList = SchemeClient.ListDirectory(dbBasePath).GetValueSync();
-    if (!oldDirectoryList.IsSuccess()) {
+    auto oldDirectoryList = RecursiveList(SchemeClient, dbBasePath);
+    if (!oldDirectoryList.Status.IsSuccess()) {
         return Result<TRestoreResult>(EStatus::SCHEME_ERROR, "Can not list existing directory");
     }
 
     THashSet<TString> oldEntries;
-    for (const auto& entry : oldDirectoryList.GetChildren()) {
+    for (const auto& entry : oldDirectoryList.Entries) {
         oldEntries.insert(entry.Name);
     }
 
     // restore
-    auto restoreResult = RestoreFolder(fsPath, dbPath, settings);
+    auto restoreResult = RestoreFolder(fsPath, dbPath, settings, oldEntries);
     if (restoreResult.IsSuccess() || settings.SavePartialResult_) {
         return restoreResult;
     }
 
     // cleanup
-    auto newDirectoryList = SchemeClient.ListDirectory(dbBasePath).GetValueSync();
-    if (!newDirectoryList.IsSuccess()) {
+    auto newDirectoryList = RecursiveList(SchemeClient, dbBasePath);
+    if (!newDirectoryList.Status.IsSuccess()) {
         return restoreResult;
     }
 
-    for (const auto& entry : newDirectoryList.GetChildren()) {
+    for (const auto& entry : newDirectoryList.Entries) {
         if (oldEntries.contains(entry.Name)) {
             continue;
         }
 
-        auto fullPath = dbBasePath.Child(entry.Name);
+        const auto& fullPath = entry.Name; // RecursiveList returns full path instead of entry's name
 
         switch (entry.Type) {
             case ESchemeEntryType::Directory: {
@@ -185,7 +193,9 @@ TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbP
     return restoreResult;
 }
 
-TRestoreResult TRestoreClient::RestoreFolder(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings) {
+TRestoreResult TRestoreClient::RestoreFolder(const TFsPath& fsPath, const TString& dbPath,
+    const TRestoreSettings& settings, const THashSet<TString>& oldEntries)
+{   
     if (!fsPath) {
         return Result<TRestoreResult>(EStatus::BAD_REQUEST, "Folder is not specified");
     }
@@ -206,11 +216,11 @@ TRestoreResult TRestoreClient::RestoreFolder(const TFsPath& fsPath, const TStrin
     }
 
     if (IsFileExists(fsPath.Child(SCHEME_FILE_NAME))) {
-        return RestoreTable(fsPath, Join('/', dbPath, fsPath.GetName()), settings);
+        return RestoreTable(fsPath, Join('/', dbPath, fsPath.GetName()), settings, oldEntries);
     }
 
     if (IsFileExists(fsPath.Child(EMPTY_FILE_NAME))) {
-        return MakeDirectory(SchemeClient, Join('/', dbPath, fsPath.GetName()));
+        return RestoreEmptyDir(fsPath, Join('/', dbPath, fsPath.GetName()), settings, oldEntries);
     }
 
     TMaybe<TRestoreResult> result;
@@ -219,26 +229,24 @@ TRestoreResult TRestoreClient::RestoreFolder(const TFsPath& fsPath, const TStrin
     fsPath.List(children);
     for (const auto& child : children) {
         if (IsFileExists(child.Child(SCHEME_FILE_NAME))) {
-            result = RestoreTable(child, Join('/', dbPath, child.GetName()), settings);
+            result = RestoreTable(child, Join('/', dbPath, child.GetName()), settings, oldEntries);
         } else if (IsFileExists(child.Child(EMPTY_FILE_NAME))) {
-            result = MakeDirectory(SchemeClient, Join('/', dbPath, child.GetName()));
-        } else {
-            result = RestoreFolder(child, Join('/', dbPath, child.GetName()), settings);
+            result = RestoreEmptyDir(child, Join('/', dbPath, child.GetName()), settings, oldEntries);
+        } else if (child.IsDirectory()) {
+            result = RestoreFolder(child, Join('/', dbPath, child.GetName()), settings, oldEntries);
         }
 
-        if (!result->IsSuccess()) {
+        if (result.Defined() && !result->IsSuccess()) {
             return *result;
         }
     }
-
-    if (!result) {
-        return Result<TRestoreResult>();
-    }
-
-    return *result;
+   
+    return RestorePermissions(fsPath, dbPath, settings, oldEntries);
 }
 
-TRestoreResult TRestoreClient::RestoreTable(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings) {
+TRestoreResult TRestoreClient::RestoreTable(const TFsPath& fsPath, const TString& dbPath,
+    const TRestoreSettings& settings, const THashSet<TString>& oldEntries)
+{
     if (fsPath.Child(INCOMPLETE_FILE_NAME).Exists()) {
         return Result<TRestoreResult>(EStatus::BAD_REQUEST,
             TStringBuilder() << "There is incomplete file in folder: " << fsPath.GetPath());
@@ -268,7 +276,7 @@ TRestoreResult TRestoreClient::RestoreTable(const TFsPath& fsPath, const TString
         }
     }
 
-    return Result<TRestoreResult>();
+    return RestorePermissions(fsPath, dbPath, settings, oldEntries);
 }
 
 TRestoreResult TRestoreClient::CheckSchema(const TString& dbPath, const TTableDescription& desc) {
@@ -442,6 +450,46 @@ TRestoreResult TRestoreClient::RestoreIndexes(const TString& dbPath, const TTabl
     }
 
     return Result<TRestoreResult>();
+}
+
+TRestoreResult TRestoreClient::RestorePermissions(const TFsPath& fsPath, const TString& dbPath,
+    const TRestoreSettings& settings, const THashSet<TString>& oldEntries)
+{   
+    if (fsPath.Child(INCOMPLETE_FILE_NAME).Exists()) {
+        return Result<TRestoreResult>(EStatus::BAD_REQUEST,
+            TStringBuilder() << "There is incomplete file in folder: " << fsPath.GetPath());
+    }
+
+    if (!settings.RestoreACL_) {
+        return Result<TRestoreResult>();
+    }
+
+    if (oldEntries.contains(dbPath)) {
+        return Result<TRestoreResult>();
+    }
+
+    if (!fsPath.Child(PERMISSIONS_FILE_NAME).Exists()) {
+        return Result<TRestoreResult>();
+    }
+
+    auto permissions = ReadPermissions(fsPath.Child(PERMISSIONS_FILE_NAME));
+    return ModifyPermissions(SchemeClient, dbPath, TModifyPermissionsSettings(permissions));
+}
+
+TRestoreResult TRestoreClient::RestoreEmptyDir(const TFsPath& fsPath, const TString &dbPath,
+    const TRestoreSettings& settings, const THashSet<TString>& oldEntries)
+{
+    if (fsPath.Child(INCOMPLETE_FILE_NAME).Exists()) {
+        return Result<TRestoreResult>(EStatus::BAD_REQUEST,
+            TStringBuilder() << "There is incomplete file in folder: " << fsPath.GetPath());
+    }
+
+    auto result = MakeDirectory(SchemeClient, dbPath);
+    if (!result.IsSuccess()) {
+        return result;
+    }
+
+    return RestorePermissions(fsPath, dbPath, settings, oldEntries);
 }
 
 } // NDump

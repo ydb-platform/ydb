@@ -288,7 +288,8 @@ public:
     }
 
     EStrategyOutcome Process(TLogContext &logCtx, TBlobState &state, const TBlobStorageGroupInfo &info,
-            TBlackboard& blackboard, TGroupDiskRequests &groupDiskRequests) override {
+            TBlackboard& blackboard, TGroupDiskRequests &groupDiskRequests,
+            const TAccelerationParams& accelerationParams) override {
         if (auto res = RestoreWholeFromDataParts(logCtx, state, info)) {
             return *res;
         } else if (auto res = RestoreWholeWithErasure(logCtx, state, info)) {
@@ -311,7 +312,8 @@ public:
         // Try excluding the slow disk
         bool isDone = false;
         // TODO: Mark disk that does not answer when accelerating requests
-        ui32 slowDiskSubgroupMask = MakeSlowSubgroupDiskMask(state, info, blackboard, false);
+        ui32 slowDiskSubgroupMask = MakeSlowSubgroupDiskMask(state, info, blackboard, false,
+                accelerationParams);
         if (slowDiskSubgroupMask >= 0) {
             TBlobStorageGroupInfo::EBlobState fastPessimisticState = TBlobStorageGroupInfo::EBS_DISINTEGRATED;
             TBlobStorageGroupInfo::EBlobState fastOptimisticState = TBlobStorageGroupInfo::EBS_DISINTEGRATED;

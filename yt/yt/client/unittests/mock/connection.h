@@ -19,7 +19,7 @@ public:
     MOCK_METHOD(TClusterTag, GetClusterTag, (), (const, override));
     MOCK_METHOD(const TString&, GetLoggingTag, (), (const, override));
     MOCK_METHOD(const TString&, GetClusterId, (), (const, override));
-    MOCK_METHOD(const std::optional<TString>&, GetClusterName, (), (const, override));
+    MOCK_METHOD(const std::optional<std::string>&, GetClusterName, (), (const, override));
 
     MOCK_METHOD(IInvokerPtr, GetInvoker, (), (override));
 

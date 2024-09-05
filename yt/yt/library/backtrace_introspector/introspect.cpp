@@ -162,7 +162,7 @@ void FormatBacktrace(TStringBuilder* builder, const std::vector<const void*>& ba
     if (!backtrace.empty()) {
         builder->AppendString("Backtrace:\n");
         SymbolizeBacktrace(
-            MakeRange(backtrace),
+            TRange(backtrace),
             [&] (TStringBuf str) {
                 builder->AppendFormat("  %v", str);
             });

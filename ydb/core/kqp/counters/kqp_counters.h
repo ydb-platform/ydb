@@ -350,7 +350,7 @@ public:
     ::NMonitoring::TDynamicCounterPtr WorkloadManagerGroup;
 
     ::NMonitoring::TDynamicCounters::TCounterPtr FullScansExecuted;
-    
+
     // Lease updates counters
     ::NMonitoring::THistogramPtr LeaseUpdateLatency;
     ::NMonitoring::THistogramPtr RunActorLeaseUpdateBacklog;
@@ -377,6 +377,9 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr RmNotEnoughMemory;
     ::NMonitoring::TDynamicCounters::TCounterPtr RmNotEnoughComputeActors;
     ::NMonitoring::TDynamicCounters::TCounterPtr RmExtraMemAllocs;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RmOnStartAllocs;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RmExtraMemFree;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RmOnCompleteFree;
     ::NMonitoring::TDynamicCounters::TCounterPtr RmInternalError;
     NMonitoring::THistogramPtr RmSnapshotLatency;
     NMonitoring::THistogramPtr NodeServiceStartEventDelivery;
@@ -406,6 +409,14 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr DataShardIteratorMessages;
     ::NMonitoring::TDynamicCounters::TCounterPtr IteratorDeliveryProblems;
 
+    // Scheduler signals
+    ::NMonitoring::TDynamicCounters::TCounterPtr SchedulerThrottled;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SchedulerCapacity;
+    NMonitoring::THistogramPtr ComputeActorExecutions;
+    NMonitoring::THistogramPtr ComputeActorDelays;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ThrottledActorsSpuriousActivations;
+    NMonitoring::THistogramPtr SchedulerDelays;
+
     // Sequences counters
     ::NMonitoring::TDynamicCounters::TCounterPtr SequencerActorsCount;
     ::NMonitoring::TDynamicCounters::TCounterPtr SequencerErrors;
@@ -415,6 +426,8 @@ public:
     NMonitoring::THistogramPtr LiteralTxTotalTimeHistogram;
     NMonitoring::THistogramPtr DataTxTotalTimeHistogram;
     NMonitoring::THistogramPtr ScanTxTotalTimeHistogram;
+
+    NMonitoring::TDynamicCounters::TCounterPtr RowsDuplicationsFound;
 
     TAlignedPagePoolCounters AllocCounters;
 

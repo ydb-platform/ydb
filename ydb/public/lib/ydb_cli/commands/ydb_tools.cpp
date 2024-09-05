@@ -54,7 +54,7 @@ void TCommandDump::Config(TConfig& config) {
     config.Opts->AddLongOption('o', "output", "[Required] Path in a local filesystem to a directory to place dump into."
             " Directory should either not exist or be empty.")
         .StoreResult(&FilePath);
-    config.Opts->AddLongOption("scheme-only", "Dump only scheme")
+    config.Opts->AddLongOption("scheme-only", "Dump only scheme including ACL and owner")
         .StoreTrue(&IsSchemeOnly);
     config.Opts->AddLongOption("avoid-copy", "Avoid copying."
             " By default, YDB makes a copy of a table before dumping it to reduce impact on workload and ensure consistency.\n"
@@ -142,6 +142,9 @@ void TCommandRestore::Config(TConfig& config) {
 
     config.Opts->AddLongOption("restore-indexes", "Whether to restore indexes or not")
         .DefaultValue(defaults.RestoreIndexes_).StoreResult(&RestoreIndexes);
+    
+    config.Opts->AddLongOption("restore-acl", "Whether to restore ACL and owner or not")
+        .DefaultValue(defaults.RestoreACL_).StoreResult(&RestoreACL);
 
     config.Opts->AddLongOption("skip-document-tables", TStringBuilder()
             << "Document API tables cannot be restored for now. "
@@ -197,6 +200,7 @@ int TCommandRestore::Run(TConfig& config) {
         .DryRun(IsDryRun)
         .RestoreData(RestoreData)
         .RestoreIndexes(RestoreIndexes)
+        .RestoreACL(RestoreACL)
         .SkipDocumentTables(SkipDocumentTables)
         .SavePartialResult(SavePartialResult)
         .RowsPerRequest(NYdb::SizeFromString(RowsPerRequest))

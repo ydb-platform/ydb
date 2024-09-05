@@ -120,9 +120,15 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseReduce(TExprBase no
         !NYql::HasSetting(innerReduce.Settings().Ref(), EYtSettingType::ReduceBy)) {
         return node;
     }
-
     if (NYql::HasSetting(outerReduce.Settings().Ref(), EYtSettingType::SortBy)) {
-        return node;
+        auto innerSortBy = NYql::GetSettingAsColumnList(innerReduce.Settings().Ref(), EYtSettingType::SortBy);
+        auto outerSortBy = NYql::GetSettingAsColumnList(outerReduce.Settings().Ref(), EYtSettingType::SortBy);
+        if (outerSortBy.size() > innerSortBy.size()) {
+            return node;
+        }
+        if (!std::equal(outerSortBy.cbegin(), outerSortBy.cend(), innerSortBy.cbegin())) {
+            return node;
+        }
     }
 
     if (NYql::HasSettingsExcept(innerReduce.Settings().Ref(), EYtSettingType::ReduceBy |
@@ -130,6 +136,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseReduce(TExprBase no
                                                              EYtSettingType::Flow |
                                                              EYtSettingType::FirstAsPrimary |
                                                              EYtSettingType::SortBy |
+                                                             EYtSettingType::KeepSorted |
                                                              EYtSettingType::NoDq)) {
         return node;
     }
@@ -225,6 +232,11 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseReduce(TExprBase no
     if (NYql::HasSetting(outerReduce.Settings().Ref(), EYtSettingType::NoDq) &&
        !NYql::HasSetting(innerReduce.Settings().Ref(), EYtSettingType::NoDq)) {
         newSettings = NYql::AddSetting(*newSettings, EYtSettingType::NoDq, {}, ctx);
+    }
+
+    if (NYql::HasSetting(outerReduce.Settings().Ref(), EYtSettingType::KeepSorted) &&
+       !NYql::HasSetting(innerReduce.Settings().Ref(), EYtSettingType::KeepSorted)) {
+        newSettings = NYql::AddSetting(*newSettings, EYtSettingType::KeepSorted, {}, ctx);
     }
 
     return Build<TYtReduce>(ctx, node.Pos())

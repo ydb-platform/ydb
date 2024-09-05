@@ -193,6 +193,7 @@ void TConfig::Reset()
     Prefix = GetEnv("YT_PREFIX");
     ApiVersion = GetEnv("YT_VERSION", "v3");
     LogLevel = GetEnv("YT_LOG_LEVEL", "error");
+    LogPath = GetEnv("YT_LOG_PATH");
 
     ContentEncoding = GetEncoding("YT_CONTENT_ENCODING");
     AcceptEncoding = GetEncoding("YT_ACCEPT_ENCODING");
@@ -224,6 +225,7 @@ void TConfig::Reset()
         "//tmp/yt_wrapper/table_storage");
     RemoteTempTablesDirectory = GetEnv("YT_TEMP_DIR",
         RemoteTempTablesDirectory);
+    KeepTempTables = GetBool("YT_KEEP_TEMP_TABLES");
 
     InferTableSchema = false;
 

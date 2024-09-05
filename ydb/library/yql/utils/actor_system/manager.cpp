@@ -91,4 +91,4 @@ namespace NYql {
     ui32 TActorSystemManager::ObtainNextActorNodeId() {
         return ActorNodeIDCounter_++;
     }
-}
+} // namespace NYql

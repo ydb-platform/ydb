@@ -124,12 +124,14 @@ vim dynconfig.yaml
 Часть настроек системы обновляется без перезапуска узлов. Для их изменения достаточно загрузить новую конфигурацию и дождаться её распространения по кластеру.
 
 Список динамически обновляемых настроек:
-* `log_config`;
+
 * `immediate_controls_config`;
-* `table_service_config`;
+* `log_config`;
+* `memory_controller_config`;
 * `monitoring_config`;
-* `tracing_config.sampling`;
-* `tracing_config.external_throttling`.
+* `table_service_config`;
+* `tracing_config.external_throttling`;
+* `tracing_config.sampling`.
 
 В будущем список может быть расширен.
 

@@ -5,6 +5,7 @@
 #include <ydb/core/grpc_services/audit_dml_operations.h>
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/cancelation/cancelation_event.h>
+#include <ydb/core/grpc_services/grpc_integrity_trails.h>
 #include <ydb/core/grpc_services/rpc_kqp_base.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
@@ -264,6 +265,7 @@ private:
         }
 
         AuditContextAppend(Request_.get(), *req);
+        NDataIntegrity::LogIntegrityTrails(traceId, *req, ctx);
 
         auto queryType = req->concurrent_result_sets()
             ? NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY
@@ -384,7 +386,9 @@ private:
         ctx.Send(channel.ActorId, resp.Release());
     }
 
-    void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext&) {
+    void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
+        NDataIntegrity::LogIntegrityTrails(Request_->GetTraceId(), *Request_->GetProtoRequest(), ev, ctx);
+
         auto& record = ev->Get()->Record.GetRef();
 
         const auto& issueMessage = record.GetResponse().GetQueryIssues();
@@ -392,7 +396,7 @@ private:
         bool hasTrailingMessage = false;
 
         auto& kqpResponse = record.GetResponse();
-        if (kqpResponse.GetYdbResults().size() > 1) {
+        if (kqpResponse.GetYdbResults().size() > 1 && QueryAction != NKikimrKqp::QUERY_ACTION_EXPLAIN) {
             auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
                 "Unexpected trailing message with multiple result sets.");
             ReplyFinishStream(Ydb::StatusIds::INTERNAL_ERROR, issue);

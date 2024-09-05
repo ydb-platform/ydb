@@ -17,8 +17,6 @@
 #include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/string_utils/base64/base64.h>
 
-#include <openssl/sha.h>
-
 #include <util/string/builder.h>
 
 namespace NYql {
@@ -44,23 +42,6 @@ static THashSet<TStringBuf> SubqueryExpandFuncs = {
     TStringBuf("SubqueryOrderBy"),
     TStringBuf("SubqueryAssumeOrderBy")
 };
-
-TString MakeCacheKey(const TExprNode& root, TExprContext& ctx) {
-    TConvertToAstSettings settings;
-    settings.NormalizeAtomFlags = true;
-    settings.AllowFreeArgs = false;
-    settings.RefAtoms = true;
-    settings.NoInlineFunc = [](const TExprNode&) { return true; };
-    auto ast = ConvertToAst(root, ctx, settings);
-    YQL_ENSURE(ast.Root);
-    auto str = ast.Root->ToString();
-    SHA256_CTX sha;
-    SHA256_Init(&sha);
-    SHA256_Update(&sha, str.Data(), str.Size());
-    unsigned char hash[SHA256_DIGEST_LENGTH];
-    SHA256_Final(hash, &sha);
-    return TString((const char*)hash, sizeof(hash));
-}
 
 bool CheckPendingArgs(const TExprNode& root, TNodeSet& visited, TNodeMap<const TExprNode*>& activeArgs, const TNodeMap<ui32>& externalWorlds, TExprContext& ctx,
     bool underTypeOf, bool& hasUnresolvedTypes) {
@@ -999,7 +980,10 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
             fullTransformer->Rewind();
             auto prevSteps = ctx.Step;
             TEvalScope scope(types);
-            ctx.Step = TExprStep();
+            ctx.Step.Reset();
+            if (prevSteps.IsDone(TExprStep::Recapture)) {
+                ctx.Step.Done(TExprStep::Recapture);
+            }
             status = SyncTransform(*fullTransformer, clonedArg, ctx);
             ctx.Step = prevSteps;
             if (status.Level == IGraphTransformer::TStatus::Error) {
@@ -1050,7 +1034,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
             TString yson;
             TString key;
             if (types.QContext) {
-                key = MakeCacheKey(*clonedArg, ctx);
+                key = MakeCacheKey(*clonedArg);
             }
 
             if (types.QContext.CanRead()) {

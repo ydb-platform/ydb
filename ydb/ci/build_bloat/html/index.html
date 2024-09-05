@@ -12,9 +12,9 @@
             <div class="note">Click on a box to zoom in.  Click on the outermost box to zoom out.</div>
             <legend>
                 <div>Legend:</div>
-                <div class="webtreemap-node webtreemap-type-dir">Dir</div>
-                <div class="webtreemap-node webtreemap-type-cpp">Cpp</div>
-                <div class="webtreemap-node webtreemap-type-h">Header</div>
+                {% for id_, name, color in types %}
+                <div class="webtreemap-node webtreemap-type-{{ id_ }}">{{ name }}</div>
+                {% endfor %}
             </legend>
         </div>
         <div id='map'></div>

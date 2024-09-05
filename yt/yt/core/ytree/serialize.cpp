@@ -113,6 +113,12 @@ void Serialize(double value, IYsonConsumer* consumer)
     consumer->OnDoubleScalar(value);
 }
 
+// std::string
+void Serialize(const std::string& value, IYsonConsumer* consumer)
+{
+    consumer->OnStringScalar(value);
+}
+
 // TString
 void Serialize(const TString& value, IYsonConsumer* consumer)
 {
@@ -165,6 +171,12 @@ void Serialize(TGuid value, IYsonConsumer* consumer)
 void Serialize(IInputStream& input, IYsonConsumer* consumer)
 {
     Serialize(TYsonInput(&input), consumer);
+}
+
+// TStatisticPath.
+void Serialize(const NStatisticPath::TStatisticPath& path, IYsonConsumer* consumer)
+{
+    consumer->OnStringScalar(path.Path());
 }
 
 // Subtypes of google::protobuf::Message
@@ -224,6 +236,12 @@ void Deserialize(double& value, INodePtr node)
     } else {
         value = node->AsDouble()->GetValue();
     }
+}
+
+// std::string
+void Deserialize(std::string& value, INodePtr node)
+{
+    value = node->AsString()->GetValue();
 }
 
 // TString
@@ -340,6 +358,12 @@ void Deserialize(TInstant& value, INodePtr node)
 void Deserialize(TGuid& value, INodePtr node)
 {
     value = TGuid::FromString(node->AsString()->GetValue());
+}
+
+// TStatisticPath.
+void Deserialize(NStatisticPath::TStatisticPath& value, INodePtr node)
+{
+    value = NStatisticPath::ParseStatisticPath(node->AsString()->GetValue()).ValueOrThrow();
 }
 
 // Subtypes of google::protobuf::Message

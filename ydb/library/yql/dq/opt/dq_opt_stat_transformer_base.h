@@ -8,7 +8,7 @@ namespace NYql::NDq {
 
 class TDqStatisticsTransformerBase : public TSyncTransformerBase {
 public:
-    TDqStatisticsTransformerBase(TTypeAnnotationContext* typeCtx, const IProviderContext& ctx);
+    TDqStatisticsTransformerBase(TTypeAnnotationContext* typeCtx, const IProviderContext& ctx, TCardinalityHints hints = {});
 
     IGraphTransformer::TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override;
     void Rewind() override;
@@ -23,6 +23,7 @@ protected:
 
     TTypeAnnotationContext* TypeCtx;
     const IProviderContext& Pctx;
+    TCardinalityHints CardinalityHints = {};
 };
 
 } // namespace NYql::NDq

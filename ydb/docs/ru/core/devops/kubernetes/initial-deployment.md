@@ -14,14 +14,14 @@
 
 ### Создание {{ k8s }} кластера
 
-Пропустите этот раздел, если у вас уже имеется подходящий {{ k8s }} 
+Пропустите этот раздел, если у вас уже имеется подходящий {{ k8s }}
 
 {% list tabs %}
 
 - AWS EKS
 
   1. Настройте утилиты `awscli` и `eksctl` для работы с ресурсами AWS по [документации](https://docs.aws.amazon.com/eks/latest/userguide/getting-started-eksctl.html).
-  
+
   2. Настройте `kubectl` для работы с кластером {{ k8s }}.
 
   3. Выполните следующую команду:
@@ -121,27 +121,25 @@ Helm-чарт устанавливает [YDB Kubernetes Operator](https://githu
 
 ### Установите {{ ydb-short-name }} {{ k8s }} оператор
 
-Разверните {{ ydb-short-name }} {{ k8s }} оператор на кластере с помощью `helm`:
+Разверните {{ ydb-short-name }} {{ k8s }} оператор на кластере с помощью `helm`, выполните команду:
 
-  Выполните команду:
+```bash
+helm install ydb-operator ydb/ydb-operator
+```
 
-  ```bash
-  helm install ydb-operator ydb/ydb-operator
-  ```
+* `ydb-operator` — имя установки;
+* `ydb/ydb-operator` — название чарта в добавленном ранее репозитории.
 
-  * `ydb-operator` — имя установки;
-  * `ydb/ydb-operator` — название чарта в добавленном ранее репозитории.
+Результат выполнения:
 
-  Результат выполнения:
-
-  ```text
-  NAME: ydb-operator
-  LAST DEPLOYED: Thu Aug 12 19:32:28 2021
-  NAMESPACE: default
-  STATUS: deployed
-  REVISION: 1
-  TEST SUITE: None
-  ```
+```text
+NAME: ydb-operator
+LAST DEPLOYED: Thu Aug 12 19:32:28 2021
+NAMESPACE: default
+STATUS: deployed
+REVISION: 1
+TEST SUITE: None
+```
 
 
 ### Разверните узлы хранения

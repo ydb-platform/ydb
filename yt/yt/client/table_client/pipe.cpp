@@ -10,6 +10,7 @@
 namespace NYT::NTableClient {
 
 using NChunkClient::NProto::TDataStatistics;
+using NCrypto::TMD5Hash;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -223,6 +224,11 @@ public:
         auto guard = Guard(Data_->SpinLock);
         YT_VERIFY(Data_->Failed);
         return Data_->WriterReadyEvent;
+    }
+
+    std::optional<TMD5Hash> GetDigest() const override
+    {
+        return std::nullopt;
     }
 
 private:

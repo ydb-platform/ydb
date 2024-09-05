@@ -115,7 +115,7 @@ private:
     size_t FragmentRemaining_ = 0;
 
     TChunkedMemoryAllocator Allocator_;
-    constexpr static i64 PacketDecoderChunkSize = 16_KB;
+    static constexpr i64 PacketDecoderChunkSize = 16_KB;
 
     TSharedRef Message_;
 

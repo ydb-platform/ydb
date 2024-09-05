@@ -136,6 +136,7 @@ struct TEvTxMediator {
         EvStepPlanComplete,
         EvOoOTabletStep,
         EvWatchBucket,
+        EvServerDisconnected,
 
         EvEnd
     };
@@ -241,9 +242,11 @@ struct TEvTxMediator {
 
     struct TEvWatchBucket : public TEventLocal<TEvWatchBucket, EvWatchBucket> {
         const TActorId Source;
+        const TActorId ServerId;
 
-        TEvWatchBucket(const TActorId &source)
+        TEvWatchBucket(const TActorId &source, const TActorId &serverId)
             : Source(source)
+            , ServerId(serverId)
         {}
 
         TString ToString() const {
@@ -252,6 +255,14 @@ struct TEvTxMediator {
             str << "}";
             return str.Str();
         }
+    };
+
+    struct TEvServerDisconnected : public TEventLocal<TEvServerDisconnected, EvServerDisconnected> {
+        const TActorId ServerId;
+
+        TEvServerDisconnected(const TActorId &serverId)
+            : ServerId(serverId)
+        {}
     };
 };
 
@@ -320,7 +331,9 @@ class TTxMediator : public TActor<TTxMediator>, public NTabletFlatExecutor::TTab
     TActorId ExecQueue;
 
     THashMap<TActorId, NKikimrTx::TEvCoordinatorSync> CoordinatorsSyncEnqueued;
-    TVector<TEvMediatorTimecast::TEvWatch::TPtr> WatchEnqueued;
+    TVector<TAutoPtr<IEventHandle>> EnqueuedWatch;
+
+    THashSet<TActorId> ConnectedServers;
 
     void Die(const TActorContext &ctx) override;
     void OnActivateExecutor(const TActorContext &ctx) override;
@@ -330,17 +343,20 @@ class TTxMediator : public TActor<TTxMediator>, public NTabletFlatExecutor::TTab
 
     void Handle(TEvSubDomain::TEvConfigure::TPtr &ev, const TActorContext &ctx);
     void HandleEnqueue(TEvTxCoordinator::TEvCoordinatorSync::TPtr &ev, const TActorContext &ctx);
-    void HandleEnqueue(TEvMediatorTimecast::TEvWatch::TPtr &ev, const TActorContext &ctx);
+    void HandleEnqueueWatch(TAutoPtr<IEventHandle> &ev, const TActorContext &ctx);
     void Handle(TEvTxCoordinator::TEvCoordinatorSync::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTxCoordinator::TEvCoordinatorStep::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvMediatorTimecast::TEvWatch::TPtr &ev, const TActorContext &ctx);
+    void HandleForwardWatch(TAutoPtr<IEventHandle> &ev, const TActorContext &ctx);
+
+    void Handle(TEvTabletPipe::TEvServerConnected::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr &ev, const TActorContext &ctx);
 
     void DoConfigure(const TEvSubDomain::TEvConfigure &ev, const TActorContext &ctx, const TActorId &ackTo = TActorId());
 
     static ui64 SubjectiveTime();
     void InitSelfState(const TActorContext &ctx);
     void ReplyEnqueuedSyncs(const TActorContext &ctx);
-    void ReplyEnqueuedWatch(const TActorContext &ctx);
+    void ProcessEnqueuedWatch(const TActorContext &ctx);
 
 
     void ReplySync(const TActorId &sender, const NKikimrTx::TEvCoordinatorSync &record, const TActorContext &ctx);
@@ -372,7 +388,7 @@ public:
         struct DomainConfiguration : Table<2> {
             struct Version : Column<1, NScheme::NTypeIds::Uint64> {};
             struct Coordinators : Column<2, NScheme::NTypeIds::String> { using Type = TVector<TCoordinatorId>; };
-            struct TimeCastBuckets : Column<3, NScheme::NTypeIds::Uint32> { static constexpr ui32 Default = TDomainsInfo::TDomain::TimecastBucketsPerMediator; };
+            struct TimeCastBuckets : Column<3, NScheme::NTypeIds::Uint32> { static constexpr ui32 Default = TDomainsInfo::TDomain::DefaultTimecastBucketsPerMediator; };
 
             using TKey = TableKey<Version>;
             using TColumns = TableColumns<Version, Coordinators, TimeCastBuckets>;
@@ -393,18 +409,22 @@ public:
     STFUNC_TABLET_DEF(StateSync,
                      HFunc(TEvTxCoordinator::TEvCoordinatorSync, HandleEnqueue)
                      HFunc(TEvSubDomain::TEvConfigure, Handle)
-                     HFunc(TEvMediatorTimecast::TEvWatch, HandleEnqueue)
-                     IgnoreFunc(TEvTabletPipe::TEvServerConnected)
-                     IgnoreFunc(TEvTabletPipe::TEvServerDisconnected))
+                     FFunc(TEvMediatorTimecast::TEvWatch::EventType, HandleEnqueueWatch)
+                     FFunc(TEvMediatorTimecast::TEvGranularWatch::EventType, HandleEnqueueWatch)
+                     FFunc(TEvMediatorTimecast::TEvGranularWatchModify::EventType, HandleEnqueueWatch)
+                     HFunc(TEvTabletPipe::TEvServerConnected, Handle)
+                     HFunc(TEvTabletPipe::TEvServerDisconnected, Handle))
 
     STFUNC_TABLET_DEF(StateWork,
                      HFunc(TEvSubDomain::TEvConfigure, Handle)
                      HFunc(TEvTxCoordinator::TEvCoordinatorStep, Handle)
                      HFunc(TEvTxCoordinator::TEvCoordinatorSync, Handle)
-                     HFunc(TEvMediatorTimecast::TEvWatch, Handle)
+                     FFunc(TEvMediatorTimecast::TEvWatch::EventType, HandleForwardWatch)
+                     FFunc(TEvMediatorTimecast::TEvGranularWatch::EventType, HandleForwardWatch)
+                     FFunc(TEvMediatorTimecast::TEvGranularWatchModify::EventType, HandleForwardWatch)
                      HFunc(NMon::TEvRemoteHttpInfo, RenderHtmlPage)
-                     IgnoreFunc(TEvTabletPipe::TEvServerConnected)
-                     IgnoreFunc(TEvTabletPipe::TEvServerDisconnected))
+                     HFunc(TEvTabletPipe::TEvServerConnected, Handle)
+                     HFunc(TEvTabletPipe::TEvServerDisconnected, Handle))
 
     STFUNC_TABLET_IGN(StateBroken,)
 };

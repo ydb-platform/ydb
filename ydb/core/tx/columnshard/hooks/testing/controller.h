@@ -12,20 +12,21 @@ namespace NKikimr::NYDBTest::NColumnShard {
 class TController: public TReadOnlyController {
 private:
     using TBase = TReadOnlyController;
-    YDB_ACCESSOR_DEF(std::optional<TDuration>, LagForCompactionBeforeTierings);
-    YDB_ACCESSOR(std::optional<TDuration>, GuaranteeIndexationInterval, TDuration::Zero());
-    YDB_ACCESSOR(std::optional<TDuration>, PeriodicWakeupActivationPeriod, std::nullopt);
-    YDB_ACCESSOR(std::optional<TDuration>, StatsReportInterval, std::nullopt);
-    YDB_ACCESSOR(std::optional<ui64>, GuaranteeIndexationStartBytesLimit, 0);
-    YDB_ACCESSOR(std::optional<TDuration>, OptimizerFreshnessCheckDuration, TDuration::Zero());
-    YDB_ACCESSOR_DEF(std::optional<TDuration>, CompactionActualizationLag);
-    YDB_ACCESSOR_DEF(std::optional<TDuration>, TasksActualizationLag);
+    YDB_ACCESSOR_DEF(std::optional<TDuration>, OverrideRequestsTracePingCheckPeriod);
+    YDB_ACCESSOR_DEF(std::optional<TDuration>, OverrideLagForCompactionBeforeTierings);
+    YDB_ACCESSOR(std::optional<TDuration>, OverrideGuaranteeIndexationInterval, TDuration::Zero());
+    YDB_ACCESSOR(std::optional<TDuration>, OverridePeriodicWakeupActivationPeriod, std::nullopt);
+    YDB_ACCESSOR(std::optional<TDuration>, OverrideStatsReportInterval, std::nullopt);
+    YDB_ACCESSOR(std::optional<ui64>, OverrideGuaranteeIndexationStartBytesLimit, 0);
+    YDB_ACCESSOR(std::optional<TDuration>, OverrideOptimizerFreshnessCheckDuration, TDuration::Zero());
+    YDB_ACCESSOR_DEF(std::optional<TDuration>, OverrideCompactionActualizationLag);
+    YDB_ACCESSOR_DEF(std::optional<TDuration>, OverrideTasksActualizationLag);
+    YDB_ACCESSOR_DEF(std::optional<TDuration>, OverrideReadTimeoutClean);
     EOptimizerCompactionWeightControl CompactionControl = EOptimizerCompactionWeightControl::Force;
 
     YDB_ACCESSOR(std::optional<ui64>, OverrideReduceMemoryIntervalLimit, 1024);
     YDB_ACCESSOR_DEF(std::optional<ui64>, OverrideRejectMemoryIntervalLimit);
 
-    std::optional<TDuration> ReadTimeoutClean;
     std::optional<ui32> ExpectedShardsCount;
 
     THashMap<ui64, const ::NKikimr::NColumnShard::TColumnShard*> ShardActuals;
@@ -129,12 +130,16 @@ private:
     THashSet<TString> SharingIds;
 protected:
     virtual ::NKikimr::NColumnShard::TBlobPutResult::TPtr OverrideBlobPutResultOnCompaction(const ::NKikimr::NColumnShard::TBlobPutResult::TPtr original, const NOlap::TWriteActionsCollection& actions) const override;
-    virtual TDuration GetLagForCompactionBeforeTierings(const TDuration def) const override {
-        return LagForCompactionBeforeTierings.value_or(def);
+    virtual TDuration DoGetLagForCompactionBeforeTierings(const TDuration def) const override {
+        return OverrideLagForCompactionBeforeTierings.value_or(def);
     }
 
-    virtual TDuration GetCompactionActualizationLag(const TDuration def) const override {
-        return CompactionActualizationLag.value_or(def);
+    virtual TDuration DoGetPingCheckPeriod(const TDuration def) const override {
+        return OverrideRequestsTracePingCheckPeriod.value_or(def);
+    }
+
+    virtual TDuration DoGetCompactionActualizationLag(const TDuration def) const override {
+        return OverrideCompactionActualizationLag.value_or(def);
     }
 
 
@@ -143,8 +148,8 @@ protected:
         return !DisabledBackgrounds.contains(id);
     }
 
-    virtual TDuration GetActualizationTasksLag(const TDuration d) const override {
-        return TasksActualizationLag.value_or(d);
+    virtual TDuration DoGetActualizationTasksLag(const TDuration d) const override {
+        return OverrideTasksActualizationLag.value_or(d);
     }
 
     virtual void DoOnTabletInitCompleted(const ::NKikimr::NColumnShard::TColumnShard& shard) override;
@@ -152,23 +157,29 @@ protected:
     virtual void DoOnAfterGCAction(const ::NKikimr::NColumnShard::TColumnShard& shard, const NOlap::IBlobsGCAction& action) override;
 
     virtual bool DoOnWriteIndexComplete(const NOlap::TColumnEngineChanges& changes, const ::NKikimr::NColumnShard::TColumnShard& shard) override;
-    virtual TDuration GetGuaranteeIndexationInterval(const TDuration defaultValue) const override {
-        return GuaranteeIndexationInterval.value_or(defaultValue);
+    virtual TDuration DoGetGuaranteeIndexationInterval(const TDuration defaultValue) const override {
+        return OverrideGuaranteeIndexationInterval.value_or(defaultValue);
     }
-    TDuration GetPeriodicWakeupActivationPeriod(const TDuration defaultValue) const override {
-        return PeriodicWakeupActivationPeriod.value_or(defaultValue);
+    virtual TDuration DoGetPeriodicWakeupActivationPeriod(const TDuration defaultValue) const override {
+        return OverridePeriodicWakeupActivationPeriod.value_or(defaultValue);
     }
-    TDuration GetStatsReportInterval(const TDuration defaultValue) const override {
-        return StatsReportInterval.value_or(defaultValue);
+    virtual TDuration DoGetStatsReportInterval(const TDuration defaultValue) const override {
+        return OverrideStatsReportInterval.value_or(defaultValue);
     }
-    virtual ui64 GetGuaranteeIndexationStartBytesLimit(const ui64 defaultValue) const override {
-        return GuaranteeIndexationStartBytesLimit.value_or(defaultValue);
+    virtual ui64 DoGetGuaranteeIndexationStartBytesLimit(const ui64 defaultValue) const override {
+        return OverrideGuaranteeIndexationStartBytesLimit.value_or(defaultValue);
     }
-    virtual TDuration GetOptimizerFreshnessCheckDuration(const TDuration defaultValue) const override {
-        return OptimizerFreshnessCheckDuration.value_or(defaultValue);
+    virtual TDuration DoGetOptimizerFreshnessCheckDuration(const TDuration defaultValue) const override {
+        return OverrideOptimizerFreshnessCheckDuration.value_or(defaultValue);
     }
-    virtual TDuration GetReadTimeoutClean(const TDuration def) override {
-        return ReadTimeoutClean.value_or(def);
+    virtual TDuration DoGetReadTimeoutClean(const TDuration def) const override {
+        return OverrideReadTimeoutClean.value_or(def);
+    }
+    virtual ui64 DoGetReduceMemoryIntervalLimit(const ui64 def) const override {
+        return OverrideReduceMemoryIntervalLimit.value_or(def);
+    }
+    virtual ui64 DoGetRejectMemoryIntervalLimit(const ui64 def) const override {
+        return OverrideRejectMemoryIntervalLimit.value_or(def);
     }
     virtual EOptimizerCompactionWeightControl GetCompactionControl() const override {
         return CompactionControl;
@@ -185,17 +196,8 @@ protected:
     }
 
 public:
-    virtual TDuration GetRemovedPortionLivetime(const TDuration /*def*/) const override {
-        return TDuration::Zero();
-    }
     const TAtomicCounter& GetIndexWriteControllerBrokeCount() const {
         return IndexWriteControllerBrokeCount;
-    }
-    virtual ui64 GetReduceMemoryIntervalLimit(const ui64 def) const override {
-        return OverrideReduceMemoryIntervalLimit.value_or(def);
-    }
-    virtual ui64 GetRejectMemoryIntervalLimit(const ui64 def) const override {
-        return OverrideRejectMemoryIntervalLimit.value_or(def);
     }
     bool IsTrivialLinks() const;
     TCheckContext CheckInvariants() const;
@@ -231,9 +233,6 @@ public:
     }
     void SetCompactionControl(const EOptimizerCompactionWeightControl value) {
         CompactionControl = value;
-    }
-    void SetReadTimeoutClean(const TDuration d) {
-        ReadTimeoutClean = d;
     }
 
     bool HasPKSortingOnly() const;

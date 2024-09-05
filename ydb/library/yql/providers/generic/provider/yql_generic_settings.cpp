@@ -104,4 +104,4 @@ namespace NYql {
         return ValidClusters.contains(cluster);
     }
 
-}
+} // namespace NYql

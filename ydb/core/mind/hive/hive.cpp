@@ -82,11 +82,11 @@ NMetrics::EResource GetDominantResourceType(const TResourceNormalizedValues& nor
 }
 
 TNodeFilter::TNodeFilter(const THive& hive)
-    : Hive(hive)
+    : Hive(&hive)
 {}
 
 TArrayRef<const TSubDomainKey> TNodeFilter::GetEffectiveAllowedDomains() const {
-    const auto* objectDomainInfo = Hive.FindDomain(ObjectDomain);
+    const auto* objectDomainInfo = Hive->FindDomain(ObjectDomain);
 
     if (!objectDomainInfo) {
         return {AllowedDomains.begin(), AllowedDomains.end()};
@@ -98,6 +98,13 @@ TArrayRef<const TSubDomainKey> TNodeFilter::GetEffectiveAllowedDomains() const {
         case ENodeSelectionPolicy::PreferObjectDomain:
             return {&ObjectDomain, 1};
     }
+}
+
+bool TNodeFilter::IsAllowedDataCenter(TDataCenterId dc) const {
+    if (AllowedDataCenters.empty()) {
+        return true;
+    }
+    return std::find(AllowedDataCenters.begin(), AllowedDataCenters.end(), dc) != AllowedDataCenters.end();
 }
 
 template <typename K, typename V>

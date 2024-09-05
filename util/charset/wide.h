@@ -341,7 +341,7 @@ inline size_t UTF8ToWideImpl(const char* text, size_t len, TCharType* dest, size
     const unsigned char* cur = reinterpret_cast<const unsigned char*>(text);
     const unsigned char* last = cur + len;
     TCharType* p = dest;
-#ifdef _sse_ //can't check for sse4, as we build most of arcadia without sse4 support even on platforms that support it
+#ifdef _sse_ // can't check for sse4, as we build most of arcadia without sse4 support even on platforms that support it
     if (cur + 16 <= last && NX86::CachedHaveSSE41()) {
         ::NDetail::UTF8ToWideImplSSE41(cur, last, p);
     }
@@ -464,6 +464,16 @@ inline TString WideToUTF8(const wchar16* text, size_t len) {
     s.remove(written);
     return s;
 }
+
+#if defined(_win_)
+inline TString WideToUTF8(const wchar_t* text, size_t len) {
+    return WideToUTF8(reinterpret_cast<const wchar16*>(text), len);
+}
+
+inline std::string WideToUTF8(std::wstring_view text) {
+    return WideToUTF8(text.data(), text.size()).ConstRef();
+}
+#endif
 
 inline TString WideToUTF8(const wchar32* text, size_t len) {
     TString s = TString::Uninitialized(WideToUTF8BufferSize(len));
@@ -596,7 +606,7 @@ namespace NDetail {
 
 #ifdef _sse2_
     inline bool DoIsStringASCIISSE(const unsigned char* first, const unsigned char* last) {
-        //scalar version for short strings
+        // scalar version for short strings
         if (first + 8 > last) {
             return ::NDetail::DoIsStringASCIISlow(first, last);
         }
@@ -627,7 +637,7 @@ namespace NDetail {
 
         return ::NDetail::DoIsStringASCIISlow(first, last);
     }
-#endif //_sse2_
+#endif // _sse2_
 
 }
 

@@ -1,7 +1,6 @@
 #pragma once
 
 #include <library/cpp/yt/memory/ref_counted.h>
-#include <library/cpp/yt/memory/intrusive_ptr.h>
 
 #include <library/cpp/yt/misc/strong_typedef.h>
 
@@ -9,13 +8,16 @@ namespace NYT::NPhoenix2 {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-using TConstructor = void* (*)();
-
-////////////////////////////////////////////////////////////////////////////////
-
 class TFieldDescriptor;
 class TTypeDescriptor;
 class TUniverseDescriptor;
+
+struct TPolymorphicBase;
+
+////////////////////////////////////////////////////////////////////////////////
+
+using TPolymorphicConstructor = TPolymorphicBase* (*)();
+using TConcreteConstructor = void* (*)();
 
 ////////////////////////////////////////////////////////////////////////////////
 

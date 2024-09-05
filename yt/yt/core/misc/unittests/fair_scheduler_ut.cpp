@@ -13,7 +13,7 @@ class TFairSchedulerTest
     : public ::testing::Test
 {
 protected:
-    IFairSchedulerPtr<TString> Scheduler_ = CreateFairScheduler<TString>();
+    const IFairSchedulerPtr<TString> Scheduler_ = CreateFairScheduler<TString>();
 };
 
 TEST_F(TFairSchedulerTest, Simple)
@@ -21,11 +21,9 @@ TEST_F(TFairSchedulerTest, Simple)
     Scheduler_->Enqueue("T1", "John");
     Scheduler_->Enqueue("T2", "John");
 
-    EXPECT_FALSE(Scheduler_->IsEmpty());
-    EXPECT_EQ(Scheduler_->Dequeue(), "T1");
-    EXPECT_FALSE(Scheduler_->IsEmpty());
-    EXPECT_EQ(Scheduler_->Dequeue(), "T2");
-    EXPECT_TRUE(Scheduler_->IsEmpty());
+    EXPECT_EQ(Scheduler_->TryDequeue(), "T1");
+    EXPECT_EQ(Scheduler_->TryDequeue(), "T2");
+    EXPECT_EQ(Scheduler_->TryDequeue(), std::nullopt);
 }
 
 TEST_F(TFairSchedulerTest, Fairness1)
@@ -36,19 +34,15 @@ TEST_F(TFairSchedulerTest, Fairness1)
     Scheduler_->Enqueue("B1", "Bob");
     Scheduler_->Enqueue("B2", "Bob");
 
-    EXPECT_FALSE(Scheduler_->IsEmpty());
-    EXPECT_EQ(Scheduler_->Dequeue(), "A1");
+    EXPECT_EQ(Scheduler_->TryDequeue(), "A1");
     Scheduler_->ChargeUser("Alice", TDuration::Seconds(2));
-    EXPECT_FALSE(Scheduler_->IsEmpty());
-    EXPECT_EQ(Scheduler_->Dequeue(), "B1");
+    EXPECT_EQ(Scheduler_->TryDequeue(), "B1");
     Scheduler_->ChargeUser("Bob", TDuration::Seconds(2));
-    EXPECT_FALSE(Scheduler_->IsEmpty());
-    EXPECT_EQ(Scheduler_->Dequeue(), "A2");
+    EXPECT_EQ(Scheduler_->TryDequeue(), "A2");
     Scheduler_->ChargeUser("Alice", TDuration::Seconds(2));
-    EXPECT_FALSE(Scheduler_->IsEmpty());
-    EXPECT_EQ(Scheduler_->Dequeue(), "B2");
+    EXPECT_EQ(Scheduler_->TryDequeue(), "B2");
     Scheduler_->ChargeUser("Bob", TDuration::Seconds(2));
-    EXPECT_TRUE(Scheduler_->IsEmpty());
+    EXPECT_EQ(Scheduler_->TryDequeue(), std::nullopt);
 }
 
 TEST_F(TFairSchedulerTest, Fairness2)
@@ -59,16 +53,16 @@ TEST_F(TFairSchedulerTest, Fairness2)
         Scheduler_->Enqueue(Format("B%v", index), "Bob");
     }
 
-    EXPECT_EQ(Scheduler_->Dequeue(), "A1");
+    EXPECT_EQ(Scheduler_->TryDequeue(), "A1");
     Scheduler_->ChargeUser("Alice", TDuration::Seconds(100500));
 
     for (int index = 1; index <= 10; ++index) {
-        EXPECT_EQ(Scheduler_->Dequeue(), Format("B%v", index));
+        EXPECT_EQ(Scheduler_->TryDequeue(), Format("B%v", index));
         Scheduler_->ChargeUser("Bob", TDuration::Seconds(1));
     }
 
     for (int index = 2; index <= 10; ++index) {
-        EXPECT_EQ(Scheduler_->Dequeue(), Format("A%v", index));
+        EXPECT_EQ(Scheduler_->TryDequeue(), Format("A%v", index));
     }
 }
 

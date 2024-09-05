@@ -78,26 +78,26 @@ Information about the node is presented in the following sections:
 
 * **Pools**: CPU utilization broken down by the internal stream pools, with roughly the following pool functions:
 
-   * **System**: The tasks of critical system components.
-   * **User**: User tasks, queries executed by tablets.
-   * **Batch**: Long-running background tasks.
-   * **IO**: Blocking I/O operations.
-   * **IC**: Networking operations.
+  * **System**: The tasks of critical system components.
+  * **User**: User tasks, queries executed by tablets.
+  * **Batch**: Long-running background tasks.
+  * **IO**: Blocking I/O operations.
+  * **IC**: Networking operations.
 
-   High pool utilization might degrade performance and increase the system response time.
+  High pool utilization might degrade performance and increase the system response time.
 
 * **Common info**: Basic information about the node:
 
-   * **Version**: The {{ ydb-short-name }} version.
-   * **Uptime**: The node uptime.
-   * **DC**: The availability zone where the node resides.
-   * **Rack**: The ID of the rack where the node resides.
+  * **Version**: The {{ ydb-short-name }} version.
+  * **Uptime**: The node uptime.
+  * **DC**: The availability zone where the node resides.
+  * **Rack**: The ID of the rack where the node resides.
 
 * **Load average**: Average host CPU utilization for different time intervals:
 
-   * 1 minute.
-   * 5 minutes.
-   * 15 minutes.
+  * 1 minute.
+  * 5 minutes.
+  * 15 minutes.
 
 The node page has the Storage and Tablets tabs with a [list of storage groups](#node_storage_page) and a [list of tablets](#node_tablets_page), respectively.
 
@@ -152,6 +152,7 @@ In the `Tenant Info` section, you can see the following information:
 * **Pools**: Total CPU utilization by the tenant nodes broken down by internal stream pools (for more information about pools, see the [tenant page](#tenant_page)).
 
 * **Metrics**: Data about tablet utilization for this tenant:
+
   * **Memory**: The RAM utilized by tablets.
   * **CPU**: CPU utilized by tablets.
   * **Storage**: The amount of data stored by tablets.

@@ -175,8 +175,8 @@ public:
     }
 
     static IChannelPtr CreateChannel(
-        const TString& address,
-        const TString& serverAddress,
+        const std::string& address,
+        const std::string& serverAddress,
         THashMap<TString, NYTree::INodePtr> grpcArguments)
     {
         return TImpl::CreateChannel(address, serverAddress, std::move(grpcArguments));
@@ -195,8 +195,8 @@ class TRpcOverBusImpl
 {
 public:
     static IChannelPtr CreateChannel(
-        const TString& address,
-        const TString& /*serverAddress*/,
+        const std::string& address,
+        const std::string& /*serverAddress*/,
         THashMap<TString, NYTree::INodePtr> /*grpcArguments*/)
     {
         auto client = CreateBusClient(NYT::NBus::TBusClientConfig::CreateTcp(address));
@@ -363,8 +363,8 @@ public:
     static constexpr bool Secure = EnableSsl;
 
     static IChannelPtr CreateChannel(
-        const TString& address,
-        const TString& /*serverAddress*/,
+        const std::string& address,
+        const std::string& /*serverAddress*/,
         THashMap<TString, NYTree::INodePtr> grpcArguments)
     {
         auto channelConfig = New<NGrpc::TChannelConfig>();
@@ -441,8 +441,8 @@ public:
     }
 
     static IChannelPtr CreateChannel(
-        const TString& address,
-        const TString& serverAddress,
+        const std::string& address,
+        const std::string& serverAddress,
         THashMap<TString, NYTree::INodePtr> /*grpcArguments*/)
     {
         auto clientConfig = NYT::NBus::TBusClientConfig::CreateUds(
@@ -452,7 +452,7 @@ public:
     }
 
 private:
-    static TString SocketPath_;
+    static inline std::string SocketPath_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -468,8 +468,8 @@ public:
     static constexpr bool Secure = false;
 
     static IChannelPtr CreateChannel(
-        const TString& address,
-        const TString& /*serverAddress*/,
+        const std::string& address,
+        const std::string& /*serverAddress*/,
         THashMap<TString, NYTree::INodePtr> /*grpcArguments*/)
     {
         static auto poller = NConcurrency::CreateThreadPoolPoller(4, "HttpChannelTest");

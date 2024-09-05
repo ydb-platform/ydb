@@ -218,6 +218,69 @@ class DropColumn(AlterTableAction):
         return f'drop column `{self._column}`'
 
 
+class SetSetting(AlterTableAction):
+    """Set a setting value for a table-like object.
+
+     Table-like objects are Tables and TableStore.
+     See {AlterTableLikeObject}.
+
+    Example:
+        sth = ScenarioTestHelper(ctx)
+        sth.execute_scheme_query(
+            AlterTable('testTable').action(SetSetting('TIERING', 'tiering1))
+        )
+    """
+
+    def __init__(self, setting: str, value_literal: str) -> None:
+        """Constructor.
+
+        Args:
+            column: Name of the column to be deleted."""
+
+        super().__init__()
+        self._setting = setting
+        self._value = value_literal
+
+    @override
+    def to_yql(self) -> str:
+        return f'SET {self._setting} {self._value}'
+
+    @override
+    def title(self) -> str:
+        return f'set {self._setting} = {self._value}'
+
+
+class ResetSetting(AlterTableAction):
+    """Reset value of a setting for a table-like object.
+
+     Table-like objects are Tables and TableStore.
+     See {AlterTableLikeObject}.
+
+    Example:
+        sth = ScenarioTestHelper(ctx)
+        sth.execute_scheme_query(
+            AlterTable('testTable').action(ResetSetting('TIERING'))
+        )
+    """
+
+    def __init__(self, setting: str) -> None:
+        """Constructor.
+
+        Args:
+            setting: Name of altered setting."""
+
+        super().__init__()
+        self._setting = setting
+
+    @override
+    def to_yql(self) -> str:
+        return f'RESET ({self._setting})'
+
+    @override
+    def title(self) -> str:
+        return f'reset {self._setting}'
+
+
 class AlterTableLikeObject(ScenarioTestHelper.IYqlble):
     """The base class for all requests to change table-like objects.
 
@@ -276,6 +339,42 @@ class AlterTableLikeObject(ScenarioTestHelper.IYqlble):
             self."""
 
         return self(DropColumn(column))
+
+    def set_tiering(self, tiering_rule: str) -> AlterTableLikeObject:
+        """Set a tiering policy.
+
+        The method is similar to calling {AlterTableLikeObject.action} with a {SetSetting} instance.
+
+        Args:
+            tiering_rule: Name of a TIERING_RULE object.
+
+        Returns:
+            self."""
+
+        return self(SetSetting('TIERING', f'"{tiering_rule}"'))
+
+    def reset_tiering(self) -> AlterTableLikeObject:
+        """Remove a tiering policy.
+
+        The method is similar to calling {AlterTableLikeObject.action} with a {SetSetting} instance.
+
+        Returns:
+            self."""
+
+        return self(ResetSetting('TIERING'))
+
+    def set_ttl(self, interval: str, column: str) -> AlterTableLikeObject:
+        """Set TTL for rows.
+
+        The method is similar to calling {AlterTableLikeObject.action} with a {SetSetting} instance.
+
+        Args:
+            tiering_rule: Name of a TIERING_RULE object.
+
+        Returns:
+            self."""
+
+        return self(SetSetting('TTL', f'Interval("{interval}") ON `{column}`'))
 
     @override
     def params(self) -> Dict[str, str]:

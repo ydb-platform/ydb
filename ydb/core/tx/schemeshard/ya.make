@@ -123,6 +123,7 @@ SRCS(
     schemeshard__operation_create_replication.cpp
     schemeshard__operation_create_resource_pool.cpp
     schemeshard__operation_create_restore.cpp
+    schemeshard__operation_create_restore_incremental_backup.cpp
     schemeshard__operation_create_rtmr.cpp
     schemeshard__operation_create_sequence.cpp
     schemeshard__operation_create_solomon.cpp
@@ -207,6 +208,7 @@ SRCS(
     schemeshard_utils.cpp
     schemeshard_utils.h
     schemeshard_bg_tasks__list.cpp
+    schemeshard_xxport__helpers.cpp
     schemeshard_export__cancel.cpp
     schemeshard_export__create.cpp
     schemeshard_export__forget.cpp

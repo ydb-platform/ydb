@@ -15,7 +15,7 @@ namespace NKikimr::NKqp {
         TString CurrentExecutionId;
         TString CustomerSuppliedId;
         TString PoolId;
-        NResourcePool::TPoolSettings PoolConfig;
+        std::optional<NResourcePool::TPoolSettings> PoolConfig;
 
         TUserRequestContext() = default;
 

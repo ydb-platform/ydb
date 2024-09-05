@@ -208,8 +208,8 @@ struct TGetOffsetsRequest : public NKikimr::NGRpcProxy::V1::TLocalRequestBase {
     TVector<ui32> PartitionIds;
 };
 
-struct TEvTopicOffsetsResponse : public NActors::TEventLocal<TEvTopicOffsetsResponse, EvTopicOffsetsResponse> 
-                           , public NKikimr::NGRpcProxy::V1::TEvPQProxy::TLocalResponseBase
+struct TEvTopicOffsetsResponse : public NActors::TEventLocal<TEvTopicOffsetsResponse, EvTopicOffsetsResponse>
+                               , public NKikimr::NGRpcProxy::V1::TLocalResponseBase
 {
     TEvTopicOffsetsResponse()
     {}
@@ -217,8 +217,8 @@ struct TEvTopicOffsetsResponse : public NActors::TEventLocal<TEvTopicOffsetsResp
     TVector<TPartitionOffsetsInfo> Partitions;
 };
 
-struct TEvCommitedOffsetsResponse : public NActors::TEventLocal<TEvCommitedOffsetsResponse, EvTopicOffsetsResponse> 
-                           , public NKikimr::NGRpcProxy::V1::TEvPQProxy::TLocalResponseBase
+struct TEvCommitedOffsetsResponse : public NActors::TEventLocal<TEvCommitedOffsetsResponse, EvTopicOffsetsResponse>
+                                  , public NKikimr::NGRpcProxy::V1::TLocalResponseBase
 {
     TEvCommitedOffsetsResponse()
     {}
@@ -228,8 +228,8 @@ struct TEvCommitedOffsetsResponse : public NActors::TEventLocal<TEvCommitedOffse
     std::shared_ptr<std::unordered_map<ui32, std::unordered_map<TString, ui32>>> PartitionIdToOffsets;
 };
 
-struct TEvTopicModificationResponse : public NActors::TEventLocal<TEvTopicModificationResponse, EvCreateTopicsResponse> 
-                           , public NKikimr::NGRpcProxy::V1::TEvPQProxy::TLocalResponseBase
+struct TEvTopicModificationResponse : public NActors::TEventLocal<TEvTopicModificationResponse, EvCreateTopicsResponse>
+                                    , public NKikimr::NGRpcProxy::V1::TLocalResponseBase
 {
     enum EStatus {
         OK,

@@ -35,12 +35,12 @@ void TStrategyBase::EvaluateCurrentLayout(TLogContext &logCtx, TBlobState &state
         for (ui32 partIdx = beginPartIdx; partIdx < endPartIdx; ++partIdx) {
             TBlobState::ESituation partSituation = disk.DiskParts[partIdx].Situation;
             if (partSituation == TBlobState::ESituation::Error) {
-                R_LOG_DEBUG_SX(logCtx, "BPG41", "Id# " << state.Id.ToString()
+                DSP_LOG_DEBUG_SX(logCtx, "BPG41", "Id# " << state.Id.ToString()
                         << " Restore Disk# " << diskIdx << " Part# " << partIdx << " Error");
                 diskEvaluation = EDE_ERROR;
             }
             if (partSituation == TBlobState::ESituation::Lost) {
-                R_LOG_DEBUG_SX(logCtx, "BPG65", "Id# " << state.Id.ToString()
+                DSP_LOG_DEBUG_SX(logCtx, "BPG65", "Id# " << state.Id.ToString()
                         << " Restore Disk# " << diskIdx << " Part# " << partIdx << " Lost");
                 if (diskEvaluation != EDE_ERROR) {
                     diskEvaluation = EDE_LOST;
@@ -59,7 +59,7 @@ void TStrategyBase::EvaluateCurrentLayout(TLogContext &logCtx, TBlobState &state
             for (ui32 partIdx = beginPartIdx; partIdx < endPartIdx; ++partIdx) {
                 TBlobState::ESituation partSituation = disk.DiskParts[partIdx].Situation;
                 if (partSituation == TBlobState::ESituation::Present) {
-                    R_LOG_DEBUG_SX(logCtx, "BPG42", "Request# "
+                    DSP_LOG_DEBUG_SX(logCtx, "BPG42", "Request# "
                         << " Id# " << state.Id.ToString()
                         << " Disk# " << diskIdx << " Part# " << partIdx << " Present");
                     presentLayout.AddItem(diskIdx, partIdx, info.Type);
@@ -68,7 +68,7 @@ void TStrategyBase::EvaluateCurrentLayout(TLogContext &logCtx, TBlobState &state
                     diskEvaluation = EDE_NORMAL;
                 } else if (partSituation == TBlobState::ESituation::Unknown
                         || partSituation == TBlobState::ESituation::Sent) {
-                    R_LOG_DEBUG_SX(logCtx, "BPG43", "Id# " << state.Id.ToString()
+                    DSP_LOG_DEBUG_SX(logCtx, "BPG43", "Id# " << state.Id.ToString()
                         << " Disk# " << diskIdx << " Part# " << partIdx << " Unknown");
                     optimisticLayout.AddItem(diskIdx, partIdx, info.Type);
                     altruisticLayout.AddItem(diskIdx, partIdx, info.Type);
@@ -99,7 +99,7 @@ void TStrategyBase::EvaluateCurrentLayout(TLogContext &logCtx, TBlobState &state
     *optimisticState = info.BlobState(optimisticReplicas, errorDisks + lostDisks);
     *altruisticState = info.BlobState(altruisticReplicas, lostDisks);
 
-    R_LOG_DEBUG_SX(logCtx, "BPG44", "Id# " << state.Id.ToString()
+    DSP_LOG_DEBUG_SX(logCtx, "BPG44", "Id# " << state.Id.ToString()
         << " pessimisticReplicas# " << pessimisticReplicas
         << " altruisticState# " << TBlobStorageGroupInfo::BlobStateToString(*altruisticState)
         << " optimisticReplicas# " << optimisticReplicas
@@ -186,7 +186,7 @@ std::optional<EStrategyOutcome> TStrategyBase::ProcessPessimistic(const TBlobSto
 void TStrategyBase::AddGetRequest(TLogContext &logCtx, TGroupDiskRequests &groupDiskRequests, TLogoBlobID &fullId,
         ui32 partIdx, TBlobState::TDisk &disk, TIntervalSet<i32> &intervalSet, const char *logMarker) {
     TLogoBlobID id(fullId, partIdx + 1);
-    R_LOG_DEBUG_SX(logCtx, logMarker, "AddGet disk# " << disk.OrderNumber
+    DSP_LOG_DEBUG_SX(logCtx, logMarker, "AddGet disk# " << disk.OrderNumber
             << " Id# " << id.ToString()
             << " Intervals# " << intervalSet.ToString());
     groupDiskRequests.AddGet(disk.OrderNumber, id, intervalSet);
@@ -296,7 +296,7 @@ void TStrategyBase::PreparePutsForPartPlacement(TLogContext &logCtx, TBlobState 
         // send record.PartIdx to record.VDiskIdx if needed
         TBlobState::TDisk &disk = state.Disks[record.VDiskIdx];
         TBlobState::ESituation partSituation = disk.DiskParts[record.PartIdx].Situation;
-        A_LOG_DEBUG_SX(logCtx, "BPG33 ", "partPlacement record partSituation# " << TBlobState::SituationToString(partSituation)
+        DSP_LOG_DEBUG_SX(logCtx, "BPG33 ", "partPlacement record partSituation# " << TBlobState::SituationToString(partSituation)
                 << " to# " << (ui32)record.VDiskIdx
                 << " blob Id# " << TLogoBlobID(state.Id, record.PartIdx + 1).ToString());
         bool isNeeded = false;
@@ -317,7 +317,7 @@ void TStrategyBase::PreparePutsForPartPlacement(TLogContext &logCtx, TBlobState 
 
         if (isNeeded) {
             TLogoBlobID partId(state.Id, record.PartIdx + 1);
-            A_LOG_DEBUG_SX(logCtx, "BPG32", "Sending missing VPut part# " << (ui32)record.PartIdx
+            DSP_LOG_DEBUG_SX(logCtx, "BPG32", "Sending missing VPut part# " << (ui32)record.PartIdx
                     << " to# " << (ui32)record.VDiskIdx
                     << " blob Id# " << partId.ToString());
             Y_ABORT_UNLESS(state.Parts[record.PartIdx].Data.IsMonolith());
@@ -389,7 +389,7 @@ void TStrategyBase::Prepare3dcPartPlacement(const TBlobState &state,
 }
 
 ui32 TStrategyBase::MakeSlowSubgroupDiskMask(TBlobState &state, const TBlobStorageGroupInfo &info, TBlackboard &blackboard,
-        bool isPut) {
+        bool isPut, const TAccelerationParams& accelerationParams) {
     if (info.GetTotalVDisksNum() == 1) {
         // when there is only one disk, we consider it not slow
         return 0;
@@ -400,12 +400,13 @@ ui32 TStrategyBase::MakeSlowSubgroupDiskMask(TBlobState &state, const TBlobStora
             TDiskDelayPredictions worstDisks;
             state.GetWorstPredictedDelaysNs(info, *blackboard.GroupQueues,
                     (isPut ? HandleClassToQueueId(blackboard.PutHandleClass) :
-                            HandleClassToQueueId(blackboard.GetHandleClass)), 1,
-                    &worstDisks);
+                            HandleClassToQueueId(blackboard.GetHandleClass)),
+                    &worstDisks, accelerationParams.PredictedDelayMultiplier);
 
             // Check if the slowest disk exceptionally slow, or just not very fast
             ui32 slowDiskSubgroupMask = 0;
-            if (worstDisks[1].PredictedNs > 0 && worstDisks[0].PredictedNs > worstDisks[1].PredictedNs * 2) {
+            if (worstDisks[1].PredictedNs > 0 && worstDisks[0].PredictedNs > worstDisks[1].PredictedNs *
+                    accelerationParams.SlowDiskThreshold) {
                 slowDiskSubgroupMask = 1 << worstDisks[0].DiskIdx;
             }
 

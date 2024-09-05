@@ -3,6 +3,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/public/api/protos/draft/ydb_object_storage.pb.h>
 #include <ydb/public/api/grpc/draft/ydb_object_storage_v1.grpc.pb.h>
+#include <ydb/core/tablet_flat/shared_sausagecache.h>
 #include <grpc++/client_context.h>
 #include <grpc++/create_channel.h>
 
@@ -775,10 +776,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
         cleverServer.EnableGRpc(GRPC_PORT);
 
         // Disable shared cache to trigger restarts
-        TAtomic unused = 42;
-        cleverServer.GetRuntime()->GetAppData().Icb->SetValue("SharedPageCache_Size", 10, unused);
-        cleverServer.GetRuntime()->GetAppData().Icb->SetValue("SharedPageCache_Size", 10, unused);
-        UNIT_ASSERT_VALUES_EQUAL(unused, 10);
+        cleverServer.GetRuntime()->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(0));
 
         TFlatMsgBusClient annoyingClient(port);
 

@@ -14,7 +14,7 @@ class TChannelWrapper
 public:
     explicit TChannelWrapper(IChannelPtr underlyingChannel);
 
-    const TString& GetEndpointDescription() const override;
+    const std::string& GetEndpointDescription() const override;
     const NYTree::IAttributeDictionary& GetEndpointAttributes() const override;
 
     IClientRequestControlPtr Send(
@@ -28,6 +28,8 @@ public:
     void UnsubscribeTerminated(const TCallback<void(const TError&)>& callback) override;
 
     int GetInflightRequestCount() override;
+
+    const IMemoryUsageTrackerPtr& GetChannelMemoryTracker() override;
 
 protected:
     const IChannelPtr UnderlyingChannel_;

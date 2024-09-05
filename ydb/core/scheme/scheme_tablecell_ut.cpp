@@ -135,12 +135,15 @@ Y_UNIT_TEST_SUITE(Scheme) {
                                  0);
 
         TSerializedCellVec vec3;
+        UNIT_ASSERT(!vec3);
         UNIT_ASSERT(vec3.GetCells().empty());
         UNIT_ASSERT(vec3.GetBuffer().empty());
 
         TString buf = vec.GetBuffer();
         UNIT_ASSERT(buf.size() > cells.size()*2);
         vec3.Parse(buf);
+        UNIT_ASSERT(vec3);
+
 
         UNIT_ASSERT_VALUES_EQUAL(CompareTypedCellVectors(vec3.GetCells().data(), cells.data(),
                                                          types.data(),

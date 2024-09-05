@@ -10,6 +10,7 @@ SRCS(
     future_action.h
     hash.cpp
     hash.h
+    limiting_allocator.cpp
     md5_stream.cpp
     md5_stream.h
     method_index.cpp

@@ -31,6 +31,13 @@ struct TThrowingBindTerminator : public TBindTerminator, public ITerminator {
     void Terminate(const char* message) const final;
 };
 
+struct TOnlyThrowingBindTerminator : public TBindTerminator, public ITerminator {
+    TOnlyThrowingBindTerminator();
+    void Terminate(const char* message) const final;
+};
+
+
+
 [[noreturn]] void MKQLTerminate(const char* message);
 
 }

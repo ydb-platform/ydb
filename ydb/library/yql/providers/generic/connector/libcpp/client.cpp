@@ -141,4 +141,4 @@ namespace NYql::NConnector {
     IClient::TPtr MakeClientGRPC(const NYql::TGenericConnectorConfig& cfg) {
         return std::make_shared<TClientGRPC>(cfg);
     }
-}
+} // namespace NYql::NConnector

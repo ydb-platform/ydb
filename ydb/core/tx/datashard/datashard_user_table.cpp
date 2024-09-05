@@ -231,6 +231,10 @@ bool TUserTable::IsReplicated() const {
     }
 }
 
+bool TUserTable::IsIncrementalRestore() const {
+    return IncrementalBackupConfig.Mode == NKikimrSchemeOp::TTableIncrementalBackupConfig::RESTORE_MODE_INCREMENTAL_BACKUP;
+}
+
 void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
 {
     // We expect schemeshard to send us full list of storage rooms
@@ -311,6 +315,7 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
     TableSchemaVersion = descr.GetTableSchemaVersion();
     IsBackup = descr.GetIsBackup();
     ReplicationConfig = TReplicationConfig(descr.GetReplicationConfig());
+    IncrementalBackupConfig = TIncrementalBackupConfig(descr.GetIncrementalBackupConfig());
 
     CheckSpecialColumns();
 
@@ -393,6 +398,7 @@ void TUserTable::AlterSchema() {
     schema.SetPartitionRangeEndIsInclusive(Range.ToInclusive);
 
     ReplicationConfig.Serialize(*schema.MutableReplicationConfig());
+    IncrementalBackupConfig.Serialize(*schema.MutableIncrementalBackupConfig());
 
     schema.SetName(Name);
     schema.SetPath(Path);

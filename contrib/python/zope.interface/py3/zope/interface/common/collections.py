@@ -13,10 +13,10 @@
 Interface definitions paralleling the abstract base classes defined in
 :mod:`collections.abc`.
 
-After this module is imported, the standard library types will declare
-that they implement the appropriate interface. While most standard
-library types will properly implement that interface (that
-is, ``verifyObject(ISequence, list()))`` will pass, for example), a few might not:
+After this module is imported, the standard library types will declare that
+they implement the appropriate interface. While most standard library types
+will properly implement that interface (that is, ``verifyObject(ISequence,
+list()))`` will pass, for example), a few might not:
 
     - `memoryview` doesn't feature all the defined methods of
       ``ISequence`` such as ``count``; it is still declared to provide
@@ -67,6 +67,7 @@ def _new_in_ver(name, ver,
 
     return missing
 
+
 __all__ = [
     'IAsyncGenerator',
     'IAsyncIterable',
@@ -93,6 +94,7 @@ __all__ = [
     'IValuesView',
 ]
 
+
 class IContainer(ABCInterface):
     abc = abc.Container
 
@@ -104,8 +106,10 @@ class IContainer(ABCInterface):
         to implement ``in``.
         """
 
+
 class IHashable(ABCInterface):
     abc = abc.Hashable
+
 
 class IIterable(ABCInterface):
     abc = abc.Iterable
@@ -117,8 +121,10 @@ class IIterable(ABCInterface):
         implement `iter` using the old ``__getitem__`` protocol.
         """
 
+
 class IIterator(IIterable):
     abc = abc.Iterator
+
 
 class IReversible(IIterable):
     abc = _new_in_ver('Reversible', True, (IIterable.getABC(),))
@@ -131,6 +137,7 @@ class IReversible(IIterable):
         `reversed` builtin.
         """
 
+
 class IGenerator(IIterator):
     # New in Python 3.5
     abc = _new_in_ver('Generator', True, (IIterator.getABC(),))
@@ -142,21 +149,25 @@ class ISized(ABCInterface):
 
 # ICallable is not defined because there's no standard signature.
 
+
 class ICollection(ISized,
                   IIterable,
                   IContainer):
-    abc = _new_in_ver('Collection', True,
-                      (ISized.getABC(), IIterable.getABC(), IContainer.getABC()))
+    abc = _new_in_ver(
+        'Collection',
+        True,
+        (ISized.getABC(), IIterable.getABC(), IContainer.getABC())
+    )
 
 
 class ISequence(IReversible,
                 ICollection):
     abc = abc.Sequence
     extra_classes = (UserString,)
-    # On Python 2, basestring is registered as an ISequence, and
+    # On Python 2, basestring was registered as an ISequence, and
     # its subclass str is an IByteString. If we also register str as
     # an ISequence, that tends to lead to inconsistent resolution order.
-    ignored_classes = (basestring,) if str is bytes else () # pylint:disable=undefined-variable
+    ignored_classes = ()
 
     @optional
     def __reversed__():
@@ -173,6 +184,7 @@ class ISequence(IReversible,
         implement `iter` using the old ``__getitem__`` protocol.
         """
 
+
 class IMutableSequence(ISequence):
     abc = abc.MutableSequence
     extra_classes = (UserList,)
@@ -182,9 +194,9 @@ class IByteString(ISequence):
     """
     This unifies `bytes` and `bytearray`.
     """
-    abc = _new_in_ver('ByteString', True,
-                      (ISequence.getABC(),),
-                      (bytes, bytearray))
+    abc = _new_in_ver(
+        'ByteString', True, (ISequence.getABC(),), (bytes, bytearray),
+    )
 
 
 class ISet(ICollection):
@@ -210,6 +222,7 @@ class IMutableMapping(IMapping):
     extra_classes = (dict, UserDict,)
     ignored_classes = (OrderedDict,)
 
+
 class IMappingView(ISized):
     abc = abc.MappingView
 
@@ -232,6 +245,7 @@ class IValuesView(IMappingView, ICollection):
         ``__iter__`` or the old ``__len__`` and ``__getitem__`` protocol
         to implement ``in``.
         """
+
 
 class IAwaitable(ABCInterface):
     abc = _new_in_ver('Awaitable', True)

@@ -29,6 +29,23 @@ class CreateTopicRequestParams:
     metering_mode: Optional["PublicMeteringMode"]
 
 
+@dataclass
+class AlterTopicRequestParams:
+    path: str
+    set_min_active_partitions: Optional[int]
+    set_partition_count_limit: Optional[int]
+    add_consumers: Optional[List[Union["PublicConsumer", str]]]
+    alter_consumers: Optional[List[Union["PublicAlterConsumer", str]]]
+    drop_consumers: Optional[List[str]]
+    alter_attributes: Optional[Dict[str, str]]
+    set_metering_mode: Optional["PublicMeteringMode"]
+    set_partition_write_speed_bytes_per_second: Optional[int]
+    set_partition_write_burst_bytes: Optional[int]
+    set_retention_period: Optional[datetime.timedelta]
+    set_retention_storage_mb: Optional[int]
+    set_supported_codecs: Optional[List[Union["PublicCodec", int]]]
+
+
 class PublicCodec(int):
     """
     Codec value may contain any int number.
@@ -69,6 +86,28 @@ class PublicConsumer:
     """
 
     attributes: Dict[str, str] = field(default_factory=lambda: dict())
+    "Attributes of consumer"
+
+
+@dataclass
+class PublicAlterConsumer:
+    name: str
+    set_important: Optional[bool] = None
+    """
+    Consumer may be marked as 'important'. It means messages for this consumer will never expire due to retention.
+    User should take care that such consumer never stalls, to prevent running out of disk space.
+    """
+
+    set_read_from: Optional[datetime.datetime] = None
+    "All messages with smaller server written_at timestamp will be skipped."
+
+    set_supported_codecs: Optional[List[PublicCodec]] = None
+    """
+    List of supported codecs by this consumer.
+    supported_codecs on topic must be contained inside this list.
+    """
+
+    alter_attributes: Optional[Dict[str, str]] = None
     "Attributes of consumer"
 
 

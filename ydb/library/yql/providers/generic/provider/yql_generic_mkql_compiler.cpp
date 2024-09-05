@@ -27,4 +27,4 @@ namespace NYql {
                                    return TRuntimeNode();
                                });
     }
-}
+} // namespace NYql

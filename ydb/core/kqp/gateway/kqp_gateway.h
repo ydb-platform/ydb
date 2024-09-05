@@ -163,6 +163,7 @@ public:
 
         NLWTrace::TOrbit Orbit;
         NWilson::TTraceId TraceId;
+        TString UserTraceId;
 
         NTopic::TTopicOperations TopicOperations;
 

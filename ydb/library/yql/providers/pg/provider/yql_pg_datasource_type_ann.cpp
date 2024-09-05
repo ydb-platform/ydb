@@ -149,7 +149,7 @@ public:
         }
 
         input->SetTypeAnn(resType);
-        return State_->Types->SetColumnOrder(*input, columnOrder, ctx);
+        return State_->Types->SetColumnOrder(*input, TColumnOrder(columnOrder), ctx);
     }
 
 private:

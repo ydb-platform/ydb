@@ -27,11 +27,11 @@ std::optional<std::vector<NKikimr::NArrow::TSerializedBatch>> TBuildSlicesTask::
     return result;
 }
 
-void TBuildSlicesTask::ReplyError(const TString& message) {
+void TBuildSlicesTask::ReplyError(const TString& message, const NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass errorClass) {
     auto writeDataPtr = std::make_shared<NEvWrite::TWriteData>(std::move(WriteData));
     TWritingBuffer buffer(writeDataPtr->GetBlobsAction(), { std::make_shared<TWriteAggregation>(*writeDataPtr) });
     auto result = NColumnShard::TEvPrivate::TEvWriteBlobsResult::Error(
-        NKikimrProto::EReplyStatus::CORRUPTED, std::move(buffer), message);
+        NKikimrProto::EReplyStatus::CORRUPTED, std::move(buffer), message, errorClass);
     TActorContext::AsActorContext().Send(ParentActorId, result.release());
 }
 
@@ -39,34 +39,42 @@ TConclusionStatus TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*ta
     NActors::TLogContextGuard g(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletId)("parent_id", ParentActorId));
     if (!OriginalBatch) {
         AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "ev_write_bad_data")("write_id", WriteData.GetWriteMeta().GetWriteId())("table_id", WriteData.GetWriteMeta().GetTableId());
-        ReplyError("no data in batch");
+        ReplyError("no data in batch", NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Internal);
         return TConclusionStatus::Fail("no data in batch");
     }
     const auto& indexSchema = ActualSchema->GetIndexInfo().ArrowSchema();
-    auto reorderConclusion = NArrow::TColumnOperator().Reorder(OriginalBatch, indexSchema->field_names());
+    NArrow::TSchemaSubset subset;
+    auto reorderConclusion = NArrow::TColumnOperator().Adapt(OriginalBatch, indexSchema, &subset);
     if (reorderConclusion.IsFail()) {
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "unadaptable schemas")("index", indexSchema->ToString())("problem", reorderConclusion.GetErrorMessage());
-        ReplyError("cannot reorder schema: " + reorderConclusion.GetErrorMessage());
+        ReplyError("cannot reorder schema: " + reorderConclusion.GetErrorMessage(),
+            NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Internal);
         return TConclusionStatus::Fail("cannot reorder schema: " + reorderConclusion.GetErrorMessage());
     } else {
         OriginalBatch = reorderConclusion.DetachResult();
     }
-    if (!OriginalBatch->schema()->Equals(indexSchema)) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "unequal schemas")("batch", OriginalBatch->schema()->ToString())
-            ("index", indexSchema->ToString());
-        ReplyError("unequal schemas");
-        return TConclusionStatus::Fail("unequal schemas");
+    if (OriginalBatch->num_columns() != indexSchema->num_fields()) {
+        AFL_VERIFY(OriginalBatch->num_columns() < indexSchema->num_fields())("original", OriginalBatch->num_columns())(
+                                                      "index", indexSchema->num_fields());
+        if (HasAppData() && !AppDataVerified().FeatureFlags.GetEnableOptionalColumnsInColumnShard()) {
+            subset = NArrow::TSchemaSubset::AllFieldsAccepted();
+            const std::vector<ui32>& columnIdsVector = ActualSchema->GetIndexInfo().GetColumnIds(false);
+            const std::set<ui32> columnIdsSet(columnIdsVector.begin(), columnIdsVector.end());
+            auto normalized =
+                ActualSchema->NormalizeBatch(*ActualSchema, std::make_shared<NArrow::TGeneralContainer>(OriginalBatch), columnIdsSet).DetachResult();
+            OriginalBatch = NArrow::ToBatch(normalized->BuildTableVerified(), true);
+        }
     }
-
     WriteData.MutableWriteMeta().SetWriteMiddle2StartInstant(TMonotonic::Now());
     auto batches = BuildSlices();
     WriteData.MutableWriteMeta().SetWriteMiddle3StartInstant(TMonotonic::Now());
     if (batches) {
         auto writeDataPtr = std::make_shared<NEvWrite::TWriteData>(std::move(WriteData));
-        auto result = std::make_unique<NColumnShard::NWriting::TEvAddInsertedDataToBuffer>(writeDataPtr, std::move(*batches));
+        writeDataPtr->SetSchemaSubset(std::move(subset));
+        auto result = std::make_unique<NColumnShard::NWriting::TEvAddInsertedDataToBuffer>(writeDataPtr, std::move(*batches), OriginalBatch);
         TActorContext::AsActorContext().Send(BufferActorId, result.release());
     } else {
-        ReplyError("Cannot slice input to batches");
+        ReplyError("Cannot slice input to batches", NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Internal);
         return TConclusionStatus::Fail("Cannot slice input to batches");
     }
 

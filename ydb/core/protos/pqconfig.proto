@@ -311,8 +311,13 @@ message TOffloadConfig {
         optional NKikimrProto.TPathID DstPathId = 2;
     }
 
+    message TIncrementalRestore {
+        optional NKikimrProto.TPathID DstPathId = 1;
+    }
+
     oneof Strategy {
         TIncrementalBackup IncrementalBackup = 1;
+        TIncrementalRestore IncrementalRestore = 2;
     }
 }
 
@@ -404,6 +409,7 @@ message TPQTabletConfig {
         CAN_SPLIT = 1;
         // The autoscaling algorithm will both increase and decrease partitions count depending on the load characteristics.
         CAN_SPLIT_AND_MERGE = 2;
+        PAUSED = 3;
     }
 
     // Strategy for automatically changing the number of topic partitions depending on the load
@@ -643,7 +649,7 @@ message TReleasePartition {
     optional uint64 Generation = 2;
     optional string Session = 3;
     optional string ClientId = 4;
-    optional uint32 Count = 5 [deprecated = true]; // Remove at 2025-1
+    reserved 5; // optional uint32 Count = 5;
     optional NActorsProto.TActorId PipeClient = 6;
     optional uint32 Group = 7;
     optional string Path = 8;
@@ -1091,7 +1097,8 @@ message TTransaction {
         CALCULATED = 6;
         WAIT_RS = 7;      // persist
         EXECUTING = 8;
-        EXECUTED = 9;
+        EXECUTED = 9;     // persist
+        WAIT_RS_ACKS = 11;
         DELETING = 10;
     };
 

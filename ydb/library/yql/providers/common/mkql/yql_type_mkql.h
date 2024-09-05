@@ -22,6 +22,7 @@ NKikimr::NMiniKQL::TType* BuildType(TPositionHandle pos, const TTypeAnnotationNo
 NKikimr::NMiniKQL::TType* BuildType(const TExprNode& owner, const TTypeAnnotationNode& annotation, NKikimr::NMiniKQL::TTypeBuilder& typeBuilder);
 
 const TTypeAnnotationNode* ConvertMiniKQLType(TPosition position, NKikimr::NMiniKQL::TType* type, TExprContext& ctx);
+ETypeAnnotationKind ConvertMiniKQLTypeKind(NKikimr::NMiniKQL::TType* type);
 
 } // namespace NCommon
 } // namespace NYql

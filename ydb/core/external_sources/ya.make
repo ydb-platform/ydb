@@ -12,6 +12,7 @@ SRCS(
 )
 
 PEERDIR(
+    contrib/libs/apache/arrow
     ydb/core/external_sources/object_storage/inference
     ydb/library/actors/http
     ydb/library/yql/providers/common/gateway

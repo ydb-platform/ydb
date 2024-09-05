@@ -2,13 +2,13 @@ import asyncio
 import mimetypes
 import os
 import pathlib
-import sys
 from typing import (  # noqa
     IO,
     TYPE_CHECKING,
     Any,
     Awaitable,
     Callable,
+    Final,
     Iterator,
     List,
     Optional,
@@ -19,8 +19,8 @@ from typing import (  # noqa
 
 from . import hdrs
 from .abc import AbstractStreamWriter
-from .helpers import ETAG_ANY, ETag
-from .typedefs import Final, LooseHeaders
+from .helpers import ETAG_ANY, ETag, must_be_empty_body
+from .typedefs import LooseHeaders, PathLike
 from .web_exceptions import (
     HTTPNotModified,
     HTTPPartialContent,
@@ -31,7 +31,7 @@ from .web_response import StreamResponse
 
 __all__ = ("FileResponse",)
 
-if TYPE_CHECKING:  # pragma: no cover
+if TYPE_CHECKING:
     from .web_request import BaseRequest
 
 
@@ -46,7 +46,7 @@ class FileResponse(StreamResponse):
 
     def __init__(
         self,
-        path: Union[str, pathlib.Path],
+        path: PathLike,
         chunk_size: int = 256 * 1024,
         status: int = 200,
         reason: Optional[str] = None,
@@ -54,10 +54,7 @@ class FileResponse(StreamResponse):
     ) -> None:
         super().__init__(status=status, reason=reason, headers=headers)
 
-        if isinstance(path, str):
-            path = pathlib.Path(path)
-
-        self._path = path
+        self._path = pathlib.Path(path)
         self._chunk_size = chunk_size
 
     async def _sendfile_fallback(
@@ -88,7 +85,7 @@ class FileResponse(StreamResponse):
         writer = await super().prepare(request)
         assert writer is not None
 
-        if NOSENDFILE or sys.version_info < (3, 7) or self.compression:
+        if NOSENDFILE or self.compression:
             return await self._sendfile_fallback(writer, fobj, offset, count)
 
         loop = request._loop
@@ -127,19 +124,35 @@ class FileResponse(StreamResponse):
         self.content_length = 0
         return await super().prepare(request)
 
-    async def prepare(self, request: "BaseRequest") -> Optional[AbstractStreamWriter]:
+    def _get_file_path_stat_and_gzip(
+        self, check_for_gzipped_file: bool
+    ) -> Tuple[pathlib.Path, os.stat_result, bool]:
+        """Return the file path, stat result, and gzip status.
+
+        This method should be called from a thread executor
+        since it calls os.stat which may block.
+        """
         filepath = self._path
-
-        gzip = False
-        if "gzip" in request.headers.get(hdrs.ACCEPT_ENCODING, ""):
+        if check_for_gzipped_file:
             gzip_path = filepath.with_name(filepath.name + ".gz")
+            try:
+                return gzip_path, gzip_path.stat(), True
+            except OSError:
+                # Fall through and try the non-gzipped file
+                pass
 
-            if gzip_path.is_file():
-                filepath = gzip_path
-                gzip = True
+        return filepath, filepath.stat(), False
 
+    async def prepare(self, request: "BaseRequest") -> Optional[AbstractStreamWriter]:
         loop = asyncio.get_event_loop()
-        st: os.stat_result = await loop.run_in_executor(None, filepath.stat)
+        # Encoding comparisons should be case-insensitive
+        # https://www.rfc-editor.org/rfc/rfc9110#section-8.4.1
+        check_for_gzipped_file = (
+            "gzip" in request.headers.get(hdrs.ACCEPT_ENCODING, "").lower()
+        )
+        filepath, st, gzip = await loop.run_in_executor(
+            None, self._get_file_path_stat_and_gzip, check_for_gzipped_file
+        )
 
         etag_value = f"{st.st_mtime_ns:x}-{st.st_size:x}"
         last_modified = st.st_mtime
@@ -258,6 +271,10 @@ class FileResponse(StreamResponse):
             self.headers[hdrs.CONTENT_ENCODING] = encoding
         if gzip:
             self.headers[hdrs.VARY] = hdrs.ACCEPT_ENCODING
+            # Disable compression if we are already sending
+            # a compressed file since we don't want to double
+            # compress.
+            self._compression = False
 
         self.etag = etag_value  # type: ignore[assignment]
         self.last_modified = st.st_mtime  # type: ignore[assignment]
@@ -273,7 +290,7 @@ class FileResponse(StreamResponse):
             )
 
         # If we are sending 0 bytes calling sendfile() will throw a ValueError
-        if count == 0 or request.method == hdrs.METH_HEAD or self.status in [204, 304]:
+        if count == 0 or must_be_empty_body(request.method, self.status):
             return await super().prepare(request)
 
         fobj = await loop.run_in_executor(None, filepath.open, "rb")
@@ -285,4 +302,4 @@ class FileResponse(StreamResponse):
         try:
             return await self._sendfile(request, fobj, offset, count)
         finally:
-            await loop.run_in_executor(None, fobj.close)
+            await asyncio.shield(loop.run_in_executor(None, fobj.close))

@@ -31,7 +31,7 @@ public:
         return {};
     }
     virtual bool Finished() const = 0;
-    virtual TConclusion<std::optional<TPartialReadResult>> GetBatch() = 0;
+    virtual TConclusion<std::shared_ptr<TPartialReadResult>> GetBatch() = 0;
     virtual void PrepareResults() {
 
     }

@@ -162,7 +162,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PushDownKeyExtract(TExp
 
             TSyncMap syncList;
             for (auto filter: keyFilters) {
-                if (!IsYtCompleteIsolatedLambda(*filter, syncList, true, false)) {
+                if (!IsYtCompleteIsolatedLambda(*filter, syncList, false)) {
                     return node;
                 }
             }

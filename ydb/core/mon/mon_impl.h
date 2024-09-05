@@ -360,7 +360,7 @@ class TActorMonPage: public IMonPage {
 public:
     TActorMonPage(const TString &path, const TString &title, const TString &host, bool preTag,
                     TActorSystem *actorSystem, const TActorId &actorId, const TVector<TString> &sids,
-                    TMon::TRequestAuthorizer authorizer)
+                    TMon::TRequestAuthorizer authorizer, TString monServiceName = "utils")
         : IMonPage(path, title)
         , Host(host)
         , PreTag(preTag)
@@ -368,6 +368,7 @@ public:
         , TargetActorId(actorId)
         , AllowedSIDs(sids)
         , Authorizer(std::move(authorizer))
+        , MonServiceName(monServiceName)
     {
     }
 
@@ -405,6 +406,7 @@ public:
     TActorId TargetActorId;
     const TVector<TString> AllowedSIDs;
     TMon::TRequestAuthorizer Authorizer;
+    TString MonServiceName;
 };
 
 inline TString GetPageFullPath(const NMonitoring::IMonPage* page) {

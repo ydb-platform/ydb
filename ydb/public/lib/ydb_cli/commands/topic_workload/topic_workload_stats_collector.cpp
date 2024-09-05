@@ -27,14 +27,17 @@ TTopicWorkloadStatsCollector::TTopicWorkloadStatsCollector(
 {
     for (size_t writerIdx = 0; writerIdx < writerCount; writerIdx++) {
         AddQueue(WriterEventQueues);
+        AddQueue(WriterSelectEventQueues);
+        AddQueue(WriterUpsertEventQueues);
+        AddQueue(WriterCommitTxEventQueues);
     }
 
     for (size_t readerIdx = 0; readerIdx < readerCount; readerIdx++) {
         AddQueue(ReaderEventQueues);
         AddQueue(LagEventQueues);
-        AddQueue(SelectEventQueues);
-        AddQueue(UpsertEventQueues);
-        AddQueue(CommitTxEventQueues);
+        AddQueue(ReaderSelectEventQueues);
+        AddQueue(ReaderUpsertEventQueues);
+        AddQueue(ReaderCommitTxEventQueues);
     }
 }
 
@@ -158,9 +161,12 @@ void TTopicWorkloadStatsCollector::CollectThreadEvents()
     CollectThreadEvents(WriterEventQueues);
     CollectThreadEvents(ReaderEventQueues);
     CollectThreadEvents(LagEventQueues);
-    CollectThreadEvents(SelectEventQueues);
-    CollectThreadEvents(UpsertEventQueues);
-    CollectThreadEvents(CommitTxEventQueues);
+    CollectThreadEvents(ReaderSelectEventQueues);
+    CollectThreadEvents(ReaderUpsertEventQueues);
+    CollectThreadEvents(ReaderCommitTxEventQueues);
+    CollectThreadEvents(WriterSelectEventQueues);
+    CollectThreadEvents(WriterUpsertEventQueues);
+    CollectThreadEvents(WriterCommitTxEventQueues);
 }
 
 template<class T>
@@ -205,19 +211,34 @@ void TTopicWorkloadStatsCollector::AddLagEvent(size_t readerIdx, const TTopicWor
     AddEvent(readerIdx, LagEventQueues, event);
 }
 
-void TTopicWorkloadStatsCollector::AddSelectEvent(size_t readerIdx, const TTopicWorkloadStats::SelectEvent& event)
+void TTopicWorkloadStatsCollector::AddReaderSelectEvent(size_t readerIdx, const TTopicWorkloadStats::SelectEvent& event)
 {
-    AddEvent(readerIdx, SelectEventQueues, event);
+    AddEvent(readerIdx, ReaderSelectEventQueues, event);
 }
 
-void TTopicWorkloadStatsCollector::AddUpsertEvent(size_t readerIdx, const TTopicWorkloadStats::UpsertEvent& event)
+void TTopicWorkloadStatsCollector::AddReaderUpsertEvent(size_t readerIdx, const TTopicWorkloadStats::UpsertEvent& event)
 {
-    AddEvent(readerIdx, UpsertEventQueues, event);
+    AddEvent(readerIdx, ReaderUpsertEventQueues, event);
 }
 
-void TTopicWorkloadStatsCollector::AddCommitTxEvent(size_t readerIdx, const TTopicWorkloadStats::CommitTxEvent& event)
+void TTopicWorkloadStatsCollector::AddReaderCommitTxEvent(size_t readerIdx, const TTopicWorkloadStats::CommitTxEvent& event)
 {
-    AddEvent(readerIdx, CommitTxEventQueues, event);
+    AddEvent(readerIdx, ReaderCommitTxEventQueues, event);
+}
+
+void TTopicWorkloadStatsCollector::AddWriterSelectEvent(size_t writerIdx, const TTopicWorkloadStats::SelectEvent& event)
+{
+    AddEvent(writerIdx, WriterSelectEventQueues, event);
+}
+
+void TTopicWorkloadStatsCollector::AddWriterUpsertEvent(size_t writerIdx, const TTopicWorkloadStats::UpsertEvent& event)
+{
+    AddEvent(writerIdx, WriterUpsertEventQueues, event);
+}
+
+void TTopicWorkloadStatsCollector::AddWriterCommitTxEvent(size_t writerIdx, const TTopicWorkloadStats::CommitTxEvent& event)
+{
+    AddEvent(writerIdx, WriterCommitTxEventQueues, event);
 }
 
 template<class T>

@@ -310,6 +310,7 @@ public:
         YQL_ENSURE(batch);
         MKQL_ADD_STAT(JobStats_, BlockCount, 1);
         std::vector<arrow::Datum> result;
+        YQL_ENSURE((size_t)batch->num_columns() == ColumnConverters_.size());
         result.resize(ColumnConverters_.size());
         size_t matchedColumns = 0;
         for (size_t i = 0; i < ColumnConverters_.size(); ++i) {

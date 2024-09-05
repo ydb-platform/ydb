@@ -4,6 +4,7 @@
 #include "accounting_client.h"
 #include "admin_client.h"
 #include "cypress_client.h"
+#include "distributed_table_client.h"
 #include "etc_client.h"
 #include "file_client.h"
 #include "journal_client.h"
@@ -37,6 +38,7 @@ struct IClientBase
     , public IJournalClientBase
     , public IQueueClientBase
     , public IEtcClientBase
+    , public IDistributedTableClientBase
 {
     virtual IConnectionPtr GetConnection() = 0;
 };
@@ -70,6 +72,7 @@ struct IClient
     , public IEtcClient
     , public NBundleControllerClient::IBundleControllerClient
     , public IFlowClient
+    , public IDistributedTableClient
 {
     //! Terminates all channels.
     //! Aborts all pending uncommitted transactions.

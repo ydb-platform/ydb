@@ -34,7 +34,7 @@ check_dependency "python3" "Python3" "https://www.python.org/downloads/"
 echo "Starting YFM builder"
 echo "Output directory: $DIR"
 
-if ! yfm -i . -o $DIR --allowHTML; then
+if ! yfm -i . -o $DIR --allowHTML  --apply-presets; then
   echo
   echo "================================"
   echo "YFM build completed with ERRORS!"

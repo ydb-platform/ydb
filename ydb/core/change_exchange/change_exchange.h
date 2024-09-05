@@ -7,6 +7,11 @@
 #include <ydb/core/scheme/scheme_pathid.h>
 
 #include <util/generic/vector.h>
+#include <util/string/builder.h>
+#include <util/string/join.h>
+
+#include <memory>
+#include <variant>
 
 namespace NKikimr {
 
@@ -22,23 +27,32 @@ namespace NBackup::NImpl {
     class TChangeRecord;
 }
 
-struct TBaseChangeRecordContainer {
-    virtual ~TBaseChangeRecordContainer() = default;
-    virtual TString Out() = 0;
+struct IChangeRecordContainer {
+    virtual ~IChangeRecordContainer() = default;
+    virtual TString Out() const = 0;
 };
 
-template <class T>
+template <typename T>
+struct TBaseChangeRecordContainer: public IChangeRecordContainer {
+    TVector<typename T::TPtr> Records;
+
+    TBaseChangeRecordContainer() = default;
+
+    explicit TBaseChangeRecordContainer(TVector<typename T::TPtr>&& records)
+        : Records(std::move(records))
+    {}
+
+    TString Out() const override {
+        return TStringBuilder() << "[" << JoinSeq(",", Records) << "]";
+    }
+};
+
+template <typename T>
 struct TChangeRecordContainer {};
 
 }
 
 namespace NKikimr::NChangeExchange {
-
-using TChangeRecordVector = std::variant<
-    std::shared_ptr<TChangeRecordContainer<NDataShard::TChangeRecord>>,
-    std::shared_ptr<TChangeRecordContainer<NReplication::NService::TChangeRecord>>,
-    std::shared_ptr<TChangeRecordContainer<NBackup::NImpl::TChangeRecord>>
->;
 
 struct TEvChangeExchange {
     enum EEv {
@@ -103,11 +117,26 @@ struct TEvChangeExchange {
     };
 
     struct TEvRecords: public TEventLocal<TEvRecords, EvRecords> {
+        using TChangeRecordVector = std::variant<
+            std::shared_ptr<TChangeRecordContainer<NDataShard::TChangeRecord>>,
+            std::shared_ptr<TChangeRecordContainer<NReplication::NService::TChangeRecord>>,
+            std::shared_ptr<TChangeRecordContainer<NBackup::NImpl::TChangeRecord>>
+        >;
+
         TChangeRecordVector Records;
 
-        explicit TEvRecords(const TChangeRecordVector& records);
         explicit TEvRecords(TChangeRecordVector&& records);
         TString ToString() const override;
+
+        template <typename T>
+        static TEvRecords* New(TVector<typename T::TPtr>&& records) {
+            return new TEvRecords(std::make_shared<TChangeRecordContainer<T>>(std::move(records)));
+        }
+
+        template <typename T>
+        inline auto& GetRecords() {
+            return std::get<std::shared_ptr<TChangeRecordContainer<T>>>(Records)->Records;
+        }
     };
 
     struct TEvForgetRecords: public TEventLocal<TEvForgetRecords, EvForgetRecods> {

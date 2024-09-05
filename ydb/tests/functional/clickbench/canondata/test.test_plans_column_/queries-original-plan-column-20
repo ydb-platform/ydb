@@ -63,8 +63,17 @@
                                         "PlanNodeType": "Connection",
                                         "Plans": [
                                             {
-                                                "Node Type": "TableFullScan",
+                                                "Node Type": "Filter-TableFullScan",
                                                 "Operators": [
+                                                    {
+                                                        "Inputs": [
+                                                            {
+                                                                "InternalOperatorId": 1
+                                                            }
+                                                        ],
+                                                        "Name": "Filter",
+                                                        "Predicate": ""
+                                                    },
                                                     {
                                                         "Inputs": [],
                                                         "Name": "TableFullScan",
@@ -159,7 +168,10 @@
                         ],
                         "Subplan Name": "CTE precompute_0_0"
                     }
-                ]
+                ],
+                "Stats": {
+                    "ResourcePoolId": "default"
+                }
             },
             "tables": [
                 {

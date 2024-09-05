@@ -119,7 +119,10 @@ void TMemoryCgroupTracker::CollectSensors(ISensorWriter* writer)
                     writer->AddGauge("/dirty", stat.Dirty);
                     writer->AddGauge("/writeback", stat.Writeback);
 
-                    TotalMemoryLimit.store(stat.HierarchicalMemoryLimit);
+                    TotalMemoryLimit_.store(stat.HierarchicalMemoryLimit);
+                    AnonymousMemoryLimit_.store(SafeGetAnonymousMemoryLimit(
+                        group.Path,
+                        stat.HierarchicalMemoryLimit));
 
                     return;
                 }
@@ -133,9 +136,31 @@ void TMemoryCgroupTracker::CollectSensors(ISensorWriter* writer)
     }
 }
 
-i64 TMemoryCgroupTracker::GetTotalMemoryLimit()
+i64 TMemoryCgroupTracker::SafeGetAnonymousMemoryLimit(const TString& cgroupPath, i64 totalMemoryLimit)
 {
-    return TotalMemoryLimit.load();
+    try {
+        auto anonymousLimit = GetCgroupAnonymousMemoryLimit(cgroupPath);
+        auto result = anonymousLimit.value_or(totalMemoryLimit);
+        result = std::min(result, totalMemoryLimit);
+        return result != 0 ? result : totalMemoryLimit;
+    } catch (const std::exception& ex) {
+        if (!AnonymousLimitErrorLogged_) {
+            YT_LOG_INFO(ex, "Failed to collect cgroup anonymous memory limit");
+            AnonymousLimitErrorLogged_ = true;
+        }
+    }
+
+    return totalMemoryLimit;
+}
+
+i64 TMemoryCgroupTracker::GetTotalMemoryLimit() const
+{
+    return TotalMemoryLimit_.load();
+}
+
+i64 TMemoryCgroupTracker::GetAnonymousMemoryLimit() const
+{
+    return AnonymousMemoryLimit_.load();
 }
 
 TResourceTracker::TTimings TResourceTracker::TTimings::operator-(const TResourceTracker::TTimings& other) const
@@ -422,6 +447,11 @@ double TResourceTracker::GetCpuWait()
 i64 TResourceTracker::GetTotalMemoryLimit()
 {
     return MemoryCgroupTracker_->GetTotalMemoryLimit();
+}
+
+i64 TResourceTracker::GetAnonymousMemoryLimit()
+{
+    return MemoryCgroupTracker_->GetAnonymousMemoryLimit();
 }
 
 TResourceTrackerPtr GetResourceTracker()

@@ -187,8 +187,31 @@ void FillSpec(NYT::TNode& spec,
         }
     }
 
+    NYT::TNode annotations;
     if (auto val = settings->Annotations.Get(cluster)) {
-        spec["annotations"] = *val;
+        annotations = NYT::TNode::CreateMap(val.Get()->AsMap());
+    } else {
+        annotations = NYT::TNode::CreateMap();
+    }
+
+    // merge annotations from attributes
+    if (auto attrs = execCtx.Session_->OperationOptions_.AttrsYson.GetOrElse(TString())) {
+        NYT::TNode node = NYT::NodeFromYsonString(attrs);
+        if (auto attrAnnotations = node.AsMap().FindPtr("yt_annotations")) {
+            if (!attrAnnotations->IsMap()) {
+                throw yexception() << "Operation attribute \"yt_annotations\" should be a map";
+            }
+            for (const auto& [k, v] : attrAnnotations->AsMap()) {
+                auto it = annotations.AsMap().find(k);
+                if (it == annotations.AsMap().end()) {
+                    annotations[k] = v;
+                }
+            }
+        }
+    }
+
+    if (!annotations.Empty()) {
+        spec["annotations"] = std::move(annotations);
     }
 
     if (auto val = settings->StartedBy.Get(cluster)) {

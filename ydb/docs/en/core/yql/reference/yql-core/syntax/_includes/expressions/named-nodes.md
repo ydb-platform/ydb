@@ -18,7 +18,7 @@ If the expression on the right is a tuple, you can automatically unpack it by sp
 
 In this case, the number of expressions must match the tuple size.
 
-Each named expression has a scope. It starts immediately after the definition of a named expression and ends at the end of the nearest enclosed namescope (for example, at the end of the query or at the end of the body of the [lambda function](#lambda), [ACTION](../../action.md#define-action){% if feature_subquery %}, [SUBQUERY](../../subquery.md#define-subquery){% endif %}{% if feature_mapreduce %}, or the cycle [EVALUATE FOR](../../action.md#evaluate-for){% endif %}).
+Each named expression has a scope. It starts immediately after the definition of a named expression and ends at the end of the nearest enclosed namescope (for example, at the end of the query or at the end of the body of the [lambda function](../../../syntax/expressions.md#lambda), [ACTION](../../action.md#define-action){% if feature_subquery %}, [SUBQUERY](../../subquery.md#define-subquery){% endif %}{% if feature_mapreduce %}, or the cycle [EVALUATE FOR](../../action.md#evaluate-for){% endif %}).
 Redefining a named expression with the same name hides the previous expression from the current scope.
 
 If the named expression has never been used, a warning is issued. To avoid such a warning, use the underscore as the first character in the ID (for example, `$_foo`).
@@ -46,7 +46,7 @@ import utils symbols $sqrt as $_; --- error: Can not import anonymous name $_
 ```
 
 {% endif %}
-Anonymous argument names are also supported for [lambda functions](#lambda), [ACTION](../../action.md#define-action){% if feature_subquery %}, [SUBQUERY](../../subquery.md#define-subquery){% endif %}{% if feature_mapreduce %}, and in [EVALUATE FOR](../../action.md#evaluate-for){% endif %}.
+Anonymous argument names are also supported for [lambda functions](../../../syntax/expressions.md#lambda), [ACTION](../../action.md#define-action){% if feature_subquery %}, [SUBQUERY](../../subquery.md#define-subquery){% endif %}{% if feature_mapreduce %}, and in [EVALUATE FOR](../../action.md#evaluate-for){% endif %}.
 
 {% note info %}
 

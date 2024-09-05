@@ -2,15 +2,13 @@
 
 PY3_LIBRARY()
 
-VERSION(3.8.1)
+VERSION(3.9.5)
 
 LICENSE(Apache-2.0)
 
 PEERDIR(
     contrib/python/aiosignal
-    contrib/python/async-timeout
     contrib/python/attrs
-    contrib/python/charset-normalizer
     contrib/python/frozenlist
     contrib/python/multidict
     contrib/python/yarl
@@ -47,6 +45,7 @@ PY_SRCS(
     aiohttp/client_proto.py
     aiohttp/client_reqrep.py
     aiohttp/client_ws.py
+    aiohttp/compression_utils.py
     aiohttp/connector.py
     aiohttp/cookiejar.py
     aiohttp/formdata.py

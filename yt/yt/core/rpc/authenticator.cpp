@@ -70,9 +70,9 @@ public:
         static const auto Realm = TString("noop");
         static const auto UserTicket = TString();
         TAuthenticationResult result{
-            context.Header->has_user() ? FromProto<TString>(context.Header->user()) : RootUserName,
+            context.Header->has_user() ? FromProto<std::string>(context.Header->user()) : RootUserName,
             Realm,
-            UserTicket
+            UserTicket,
         };
         return MakeFuture<TAuthenticationResult>(result);
     }

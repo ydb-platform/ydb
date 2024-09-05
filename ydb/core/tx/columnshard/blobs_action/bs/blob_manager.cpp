@@ -309,7 +309,7 @@ std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTas
         return nullptr;
     }
 
-    if (AppData()->TimeProvider->Now() - PreviousGCTime < NYDBTest::TControllers::GetColumnShardController()->GetOverridenGCPeriod(TDuration::Seconds(GC_INTERVAL_SECONDS))) {
+    if (AppData()->TimeProvider->Now() - PreviousGCTime < NYDBTest::TControllers::GetColumnShardController()->GetOverridenGCPeriod()) {
         ACFL_DEBUG("event", "TBlobManager::BuildGCTask skip")("current_gen", CurrentGen)("current_step", CurrentStep)("reason", "too_often");
         BlobsManagerCounters.GCCounters.SkipCollectionThrottling->Add(1);
         return nullptr;

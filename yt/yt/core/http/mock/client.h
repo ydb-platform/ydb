@@ -32,11 +32,14 @@ public:
     TFuture<IActiveRequestPtr> StartPatch(const TString& url, const THeadersPtr& headers) override;
     TFuture<IActiveRequestPtr> StartPut(const TString& url, const THeadersPtr& headers) override;
 
+    TFuture<IResponsePtr> Request(EMethod method, const TString& url, const std::optional<TSharedRef>& body, const THeadersPtr& headers) override;
+
     MOCK_METHOD(TMockResponse, Get, (const TString& url, const TMockHeaders& headers));
     MOCK_METHOD(TMockResponse, Post, (const TString& url, const TString& body, const TMockHeaders& headers));
     MOCK_METHOD(TMockResponse, Patch, (const TString& url, const TString& body, const TMockHeaders& headers));
     MOCK_METHOD(TMockResponse, Put, (const TString& url, const TString& body, const TMockHeaders& headers));
     MOCK_METHOD(TMockResponse, Delete, (const TString& url, const TMockHeaders& headers));
+    MOCK_METHOD(TMockResponse, Request, (EMethod method, const TString& url, const std::optional<TString>& body, const TMockHeaders& headers));
 };
 
 DECLARE_REFCOUNTED_CLASS(TMockClient)

@@ -2,9 +2,13 @@
 
 #include "ydb_service_topic.h"
 #include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
+#include <ydb/public/lib/ydb_cli/commands/ydb_service_scheme.h>
 #include <ydb/public/lib/ydb_cli/common/command.h>
+#include <ydb/public/lib/ydb_cli/common/pretty_table.h>
+#include <ydb/public/lib/ydb_cli/common/print_utils.h>
 #include <ydb/public/lib/ydb_cli/topic/topic_read.h>
 #include <ydb/public/lib/ydb_cli/topic/topic_write.h>
+#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 
 #include <util/generic/set.h>
 #include <util/stream/str.h>
@@ -42,12 +46,14 @@ namespace NYdb::NConsoleClient {
             std::pair<TString, NTopic::EAutoPartitioningStrategy>("disabled", NTopic::EAutoPartitioningStrategy::Disabled),
             std::pair<TString, NTopic::EAutoPartitioningStrategy>("up", NTopic::EAutoPartitioningStrategy::ScaleUp),
             std::pair<TString, NTopic::EAutoPartitioningStrategy>("up-and-down", NTopic::EAutoPartitioningStrategy::ScaleUpAndDown),
+            std::pair<TString, NTopic::EAutoPartitioningStrategy>("puased", NTopic::EAutoPartitioningStrategy::Paused),
         };
 
         THashMap<NTopic::EAutoPartitioningStrategy, TString> AutoscaleStrategiesDescriptions = {
             std::pair<NTopic::EAutoPartitioningStrategy, TString>(NTopic::EAutoPartitioningStrategy::Disabled, "Automatic scaling of the number of partitions is disabled"),
             std::pair<NTopic::EAutoPartitioningStrategy, TString>(NTopic::EAutoPartitioningStrategy::ScaleUp, "The number of partitions can increase under high load, but cannot decrease"),
             std::pair<NTopic::EAutoPartitioningStrategy, TString>(NTopic::EAutoPartitioningStrategy::ScaleUpAndDown, "The number of partitions can increase under high load and decrease under low load"),
+            std::pair<NTopic::EAutoPartitioningStrategy, TString>(NTopic::EAutoPartitioningStrategy::Paused, "Automatic scaling of the number of partitions is paused"),
         };
 
         THashMap<ETopicMetadataField, TString> TopicMetadataFieldsDescriptions = {
@@ -486,6 +492,7 @@ namespace {
         : TClientCommandTree("consumer", {}, "Consumer operations") {
         AddCommand(std::make_unique<TCommandTopicConsumerAdd>());
         AddCommand(std::make_unique<TCommandTopicConsumerDrop>());
+        AddCommand(std::make_unique<TCommandTopicConsumerDescribe>());
         AddCommand(std::make_unique<TCommandTopicConsumerOffset>());
     }
 
@@ -507,6 +514,10 @@ namespace {
         config.Opts->AddLongOption("starting-message-timestamp", "Unix timestamp starting from '1970-01-01 00:00:00' from which read is allowed")
             .Optional()
             .StoreResult(&StartingMessageTimestamp_);
+        config.Opts->AddLongOption("important", "Is consumer important")
+            .Optional()
+            .DefaultValue(false)
+            .StoreResult(&IsImportant_);
         config.Opts->SetFreeArgsNum(1);
         SetFreeArgTitle(0, "<topic-path>", "Topic path");
         AddAllowedCodecs(config, AllowedCodecs);
@@ -537,6 +548,7 @@ namespace {
             codecs.push_back(NTopic::ECodec::RAW);
         }
         consumerSettings.SetSupportedCodecs(codecs);
+        consumerSettings.SetImportant(IsImportant_);
 
         readRuleSettings.AppendAddConsumers(consumerSettings);
 
@@ -585,6 +597,41 @@ namespace {
         return EXIT_SUCCESS;
     }
 
+    TCommandTopicConsumerDescribe::TCommandTopicConsumerDescribe()
+        : TYdbCommand("describe", {}, "Consumer describe operation") {
+    }
+
+    void TCommandTopicConsumerDescribe::Config(TConfig& config) {
+        TYdbCommand::Config(config);
+        config.Opts->AddLongOption("consumer", "Consumer to describe")
+            .Required()
+            .StoreResult(&ConsumerName_);
+        config.Opts->AddLongOption("partition-stats", "Show partition statistics")
+            .StoreTrue(&ShowPartitionStats_);
+        config.Opts->SetFreeArgsNum(1);
+        AddFormats(config, { EOutputFormat::Pretty, EOutputFormat::ProtoJsonBase64 });
+        SetFreeArgTitle(0, "<topic-path>", "Topic path");
+    }
+
+    void TCommandTopicConsumerDescribe::Parse(TConfig& config) {
+        TYdbCommand::Parse(config);
+        ParseFormats();
+        ParseTopicName(config, 0);
+    }
+
+    int TCommandTopicConsumerDescribe::Run(TConfig& config) {
+        TDriver driver = CreateDriver(config);
+        NYdb::NTopic::TTopicClient topicClient(driver);
+
+        auto consumerDescription = topicClient.DescribeConsumer(TopicName, ConsumerName_, NYdb::NTopic::TDescribeConsumerSettings().IncludeStats(ShowPartitionStats_)).GetValueSync();
+        ThrowOnError(consumerDescription);
+
+        return PrintDescription(this, OutputFormat, consumerDescription.GetConsumerDescription(), &TCommandTopicConsumerDescribe::PrintPrettyResult);
+    }
+
+    int TCommandTopicConsumerDescribe::PrintPrettyResult(const NYdb::NTopic::TConsumerDescription& description) const {
+        return PrintPrettyDescribeConsumerResult(description, ShowPartitionStats_);
+    }
 
     TCommandTopicConsumerCommitOffset::TCommandTopicConsumerCommitOffset()
         : TYdbCommand("commit", {}, "Commit offset for consumer") {

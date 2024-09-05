@@ -247,9 +247,17 @@ TString StrJoin(const Range& range, y_absl::string_view separator,
   return strings_internal::JoinRange(range, separator, fmt);
 }
 
-template <typename T, typename Formatter>
+template <typename T, typename Formatter,
+          typename = typename std::enable_if<
+              !std::is_convertible<T, y_absl::string_view>::value>::type>
 TString StrJoin(std::initializer_list<T> il, y_absl::string_view separator,
                     Formatter&& fmt) {
+  return strings_internal::JoinRange(il, separator, fmt);
+}
+
+template <typename Formatter>
+inline TString StrJoin(std::initializer_list<y_absl::string_view> il,
+                           y_absl::string_view separator, Formatter&& fmt) {
   return strings_internal::JoinRange(il, separator, fmt);
 }
 
@@ -269,16 +277,22 @@ TString StrJoin(const Range& range, y_absl::string_view separator) {
   return strings_internal::JoinRange(range, separator);
 }
 
-template <typename T>
-TString StrJoin(std::initializer_list<T> il,
-                    y_absl::string_view separator) {
+template <typename T, typename = typename std::enable_if<!std::is_convertible<
+                          T, y_absl::string_view>::value>::type>
+TString StrJoin(std::initializer_list<T> il, y_absl::string_view separator) {
+  return strings_internal::JoinRange(il, separator);
+}
+
+inline TString StrJoin(std::initializer_list<y_absl::string_view> il,
+                           y_absl::string_view separator) {
   return strings_internal::JoinRange(il, separator);
 }
 
 template <typename... T>
 TString StrJoin(const std::tuple<T...>& value,
                     y_absl::string_view separator) {
-  return strings_internal::JoinAlgorithm(value, separator, AlphaNumFormatter());
+  return strings_internal::JoinTuple(value, separator,
+                                     std::index_sequence_for<T...>{});
 }
 
 Y_ABSL_NAMESPACE_END

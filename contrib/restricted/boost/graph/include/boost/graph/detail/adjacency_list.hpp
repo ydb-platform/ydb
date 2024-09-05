@@ -2189,8 +2189,12 @@ public:
         }
         // Copy the edges by adding each edge and copying its
         // property object.
+#ifdef BOOST_NO_CXX17_STRUCTURED_BINDINGS
         edge_iterator ei, ei_end;
         for (boost::tie(ei, ei_end) = edges(x); ei != ei_end; ++ei)
+#else // Silences -Wmaybe-uninitialized in adj_list_edge_iterator::operator++().
+        for (auto [ei, ei_end] = edges(x); ei != ei_end; ++ei)
+#endif
         {
             edge_descriptor e;
             bool inserted;

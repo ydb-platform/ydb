@@ -11,7 +11,7 @@ Some containers support operator notation for their literal values:
 In every case, you can use an insignificant trailing comma. For a tuple with one element, this comma is required: ```(value1,)```.
 For field names in the structure literal, you can use an expression that can be calculated at evaluation time, for example, string literals or identifiers (including those enclosed in backticks).
 
-For nested lists, use [AsList](#aslist), for nested dictionaries, use [AsDict](#asdict), for nested sets, use [AsSet](#asset), for nested tuples, use [AsTuple](#astuple), for nested structures, use [AsStruct](#asstruct).
+For nested lists, use [AsList](../../basic.md#as-container), for nested dictionaries, use [AsDict](../../basic.md#as-container), for nested sets, use [AsSet](../../basic.md#as-container), for nested tuples, use [AsTuple](../../basic.md#as-container), for nested structures, use [AsStruct](../../basic.md#as-container).
 
 **Examples**
 

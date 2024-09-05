@@ -10,6 +10,7 @@ static const THashSet<TString> DATABASE_SERVICES
     = {{ TString("compile"),
          TString("coordinator"),
          TString("dsproxy"),
+         TString("dsproxy_mon"),
          TString("dsproxynode"),
          TString("dsproxy_overview"),
          TString("dsproxy_percentile"),

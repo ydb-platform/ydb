@@ -288,6 +288,9 @@ protected:
         TCodegenContext ctx(codegen);
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
+        DISubprogramAnnotator annotator(ctx, ctx.Func);
+        
+
         auto args = ctx.Func->arg_begin();
 
         ctx.Ctx = &*args;
@@ -493,6 +496,9 @@ protected:
 
         TCodegenContext ctx(codegen);
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
+
+        DISubprogramAnnotator annotator(ctx, ctx.Func);
+        
 
         auto args = ctx.Func->arg_begin();
 

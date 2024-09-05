@@ -2,6 +2,7 @@
 #include <ydb/library/yql/minikql/mkql_runtime_version.h>
 #include <ydb/library/yql/minikql/comp_nodes/mkql_grace_join_imp.h>
 
+#include <ydb/library/yql/minikql/computation/mock_spiller_factory_ut.h>
 
 #include <chrono>
 #include <iostream>
@@ -827,10 +828,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceSelfJoinTest) {
 #if !defined(MKQL_RUNTIME_VERSION) || MKQL_RUNTIME_VERSION >= 40u
 Y_UNIT_TEST_SUITE(TMiniKQLSelfJoinTest) {
 
-    Y_UNIT_TEST_LLVM(TestInner1) {
+    Y_UNIT_TEST_LLVM_SPILLING(TestInner1) {
+        if (SPILLING && RuntimeVersion < 50) return;
 
         for (ui32 pass = 0; pass < 1; ++pass) {
-            TSetup<LLVM> setup;
+            TSetup<LLVM, SPILLING> setup;
             TProgramBuilder& pb = *setup.PgmBuilder;
 
             const auto key1 = pb.NewDataLiteral<ui32>(1);
@@ -867,8 +869,14 @@ Y_UNIT_TEST_SUITE(TMiniKQLSelfJoinTest) {
                 EJoinKind::Inner, {0U}, {0U}, {1U, 0U}, {1U, 1U}, resultType),
                 [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); })
             );
+            if (SPILLING) {
+                setup.RenameCallable(pgmReturn, "GraceSelfJoin", "GraceSelfJoinWithSpilling");
+            }
 
             const auto graph = setup.BuildGraph(pgmReturn);
+            if (SPILLING) {
+                graph->GetContext().SpillerFactory = std::make_shared<TMockSpillerFactory>();
+            }
 
             const auto iterator = graph->GetValue().GetListIterator();
 
@@ -896,10 +904,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLSelfJoinTest) {
 
     }
 
-    Y_UNIT_TEST_LLVM(TestDiffKeys) {
+    Y_UNIT_TEST_LLVM_SPILLING(TestDiffKeys) {
+        if (SPILLING && RuntimeVersion < 50) return;
 
         for (ui32 pass = 0; pass < 1; ++pass) {
-            TSetup<LLVM> setup;
+            TSetup<LLVM, SPILLING> setup;
             TProgramBuilder& pb = *setup.PgmBuilder;
 
             const auto key1 = pb.NewDataLiteral<ui32>(1);
@@ -941,8 +950,14 @@ Y_UNIT_TEST_SUITE(TMiniKQLSelfJoinTest) {
                 EJoinKind::Inner, {0U}, {1U}, {2U, 0U}, {2U, 1U}, resultType),
                 [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); })
             );
+            if (SPILLING) {
+                setup.RenameCallable(pgmReturn, "GraceSelfJoin", "GraceSelfJoinWithSpilling");
+            }
 
             const auto graph = setup.BuildGraph(pgmReturn);
+            if (SPILLING) {
+                graph->GetContext().SpillerFactory = std::make_shared<TMockSpillerFactory>();
+            }
 
             const auto iterator = graph->GetValue().GetListIterator();
 
@@ -972,10 +987,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLSelfJoinTest) {
 
 Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
 
-    Y_UNIT_TEST_LLVM(TestInner1) {
+    Y_UNIT_TEST_LLVM_SPILLING(TestInner1) {
+        if (SPILLING && RuntimeVersion < 50) return;
 
         for (ui32 pass = 0; pass < 1; ++pass) {
-            TSetup<LLVM> setup;
+            TSetup<LLVM, SPILLING> setup;
             TProgramBuilder& pb = *setup.PgmBuilder;
 
             const auto key1 = pb.NewDataLiteral<ui32>(1);
@@ -1018,8 +1034,14 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
                 EJoinKind::Inner, {0U}, {0U}, {1U, 0U}, {1U, 1U}, resultType),
                 [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); })
             );
+            if (SPILLING) {
+                setup.RenameCallable(pgmReturn, "GraceJoin", "GraceJoinWithSpilling");
+            }
 
             const auto graph = setup.BuildGraph(pgmReturn);
+            if (SPILLING) {
+                graph->GetContext().SpillerFactory = std::make_shared<TMockSpillerFactory>();
+            }
 
             const auto iterator = graph->GetValue().GetListIterator();
 
@@ -1043,10 +1065,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
 
     }
 
-    Y_UNIT_TEST_LLVM(TestInnerDoubleCondition1) {
+    Y_UNIT_TEST_LLVM_SPILLING(TestInnerDoubleCondition1) {
+        if (SPILLING && RuntimeVersion < 50) return;
 
         for (ui32 pass = 0; pass < 1; ++pass) {
-            TSetup<LLVM> setup;
+            TSetup<LLVM, SPILLING> setup;
             TProgramBuilder& pb = *setup.PgmBuilder;
 
             const auto key1 = pb.NewDataLiteral<ui32>(1);
@@ -1096,8 +1119,14 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
                 EJoinKind::Inner, {0U, 0U}, {0U, 1U}, {1U, 0U}, {2U, 1U}, resultType),
                 [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); })
             );
+            if (SPILLING) {
+                setup.RenameCallable(pgmReturn, "GraceJoin", "GraceJoinWithSpilling");
+            }
 
             const auto graph = setup.BuildGraph(pgmReturn);
+            if (SPILLING) {
+                graph->GetContext().SpillerFactory = std::make_shared<TMockSpillerFactory>();
+            }
 
             const auto iterator = graph->GetValue().GetListIterator();
 
@@ -1120,10 +1149,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
 
     }
 
-    Y_UNIT_TEST_LLVM(TestInnerManyKeyStrings) {
+    Y_UNIT_TEST_LLVM_SPILLING(TestInnerManyKeyStrings) {
+        if (SPILLING && RuntimeVersion < 50) return;
 
         for (ui32 pass = 0; pass < 1; ++pass) {
-            TSetup<LLVM> setup;
+            TSetup<LLVM, SPILLING> setup;
             TProgramBuilder& pb = *setup.PgmBuilder;
 
             const auto key1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("A1");
@@ -1178,8 +1208,14 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
                 EJoinKind::Inner, {0U, 1U}, {1U, 0U}, {1U, 0U}, {2U, 1U}, resultType),
                 [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); })
             );
+            if (SPILLING) {
+                setup.RenameCallable(pgmReturn, "GraceJoin", "GraceJoinWithSpilling");
+            }
 
             const auto graph = setup.BuildGraph(pgmReturn);
+            if (SPILLING) {
+                graph->GetContext().SpillerFactory = std::make_shared<TMockSpillerFactory>();
+            }
 
             const auto iterator = graph->GetValue().GetListIterator();
 
@@ -1203,10 +1239,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
 
     }
 
-    Y_UNIT_TEST_LLVM(TestInnerManyKeyUuid) {
+    Y_UNIT_TEST_LLVM_SPILLING(TestInnerManyKeyUuid) {
+        if (SPILLING && RuntimeVersion < 50) return;
 
         for (ui32 pass = 0; pass < 1; ++pass) {
-            TSetup<LLVM> setup;
+            TSetup<LLVM, SPILLING> setup;
             TProgramBuilder& pb = *setup.PgmBuilder;
 
             const auto key1 = pb.NewDataLiteral<NUdf::EDataSlot::Uuid>("A1A1A1A1A1A1A1A1");
@@ -1261,8 +1298,14 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
                 EJoinKind::Inner, {0U, 1U}, {1U, 0U}, {1U, 0U}, {2U, 1U}, resultType),
                 [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); })
             );
+            if (SPILLING) {
+                setup.RenameCallable(pgmReturn, "GraceJoin", "GraceJoinWithSpilling");
+            }
 
             const auto graph = setup.BuildGraph(pgmReturn);
+            if (SPILLING) {
+                graph->GetContext().SpillerFactory = std::make_shared<TMockSpillerFactory>();
+            }
 
             const auto iterator = graph->GetValue().GetListIterator();
 
@@ -1293,10 +1336,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
     }
 
 
-    Y_UNIT_TEST_LLVM(TestInnerStringKey1) {
+    Y_UNIT_TEST_LLVM_SPILLING(TestInnerStringKey1) {
+        if (SPILLING && RuntimeVersion < 50) return;
 
         for (ui32 pass = 0; pass < 1; ++pass) {
-            TSetup<LLVM> setup;
+            TSetup<LLVM, SPILLING> setup;
             TProgramBuilder& pb = *setup.PgmBuilder;
 
             const auto key1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("1");
@@ -1339,8 +1383,14 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
                 EJoinKind::Inner, {0U}, {0U}, {1U, 0U}, {1U, 1U}, resultType),
                 [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); })
             );
+            if (SPILLING) {
+                setup.RenameCallable(pgmReturn, "GraceJoin", "GraceJoinWithSpilling");
+            }
 
             const auto graph = setup.BuildGraph(pgmReturn);
+            if (SPILLING) {
+                graph->GetContext().SpillerFactory = std::make_shared<TMockSpillerFactory>();
+            }
 
             const auto iterator = graph->GetValue().GetListIterator();
 
@@ -1367,10 +1417,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
 
 
 
-    Y_UNIT_TEST_LLVM(TMiniKQLGraceJoinTestInnerMulti1) {
+    Y_UNIT_TEST_LLVM_SPILLING(TMiniKQLGraceJoinTestInnerMulti1) {
+        if (SPILLING && RuntimeVersion < 50) return;
 
         for (ui32 pass = 0; pass < 1; ++pass) {
-            TSetup<LLVM> setup;
+            TSetup<LLVM, SPILLING> setup;
             TProgramBuilder& pb = *setup.PgmBuilder;
 
             const auto key1 = pb.NewDataLiteral<ui32>(1);
@@ -1413,8 +1464,15 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
                 EJoinKind::Inner, {0U}, {0U}, {1U, 0U}, {1U, 1U}, resultType),
                 [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); })
             );
+            if (SPILLING) {
+                setup.RenameCallable(pgmReturn, "GraceJoin", "GraceJoinWithSpilling");
+            }
 
             const auto graph = setup.BuildGraph(pgmReturn);
+            if (SPILLING) {
+                graph->GetContext().SpillerFactory = std::make_shared<TMockSpillerFactory>();
+            }
+
             const auto iterator = graph->GetValue().GetListIterator();
             NUdf::TUnboxedValue tuple;
 
@@ -1435,10 +1493,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
         }
     }
 
-    Y_UNIT_TEST_LLVM(TestLeft1) {
+    Y_UNIT_TEST_LLVM_SPILLING(TestLeft1) {
+        if (SPILLING && RuntimeVersion < 50) return;
 
         for (ui32 pass = 0; pass < 1; ++pass) {
-            TSetup<LLVM> setup;
+            TSetup<LLVM, SPILLING> setup;
             TProgramBuilder& pb = *setup.PgmBuilder;
 
             const auto key1 = pb.NewDataLiteral<ui32>(1);
@@ -1481,8 +1540,15 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
                 EJoinKind::Left, {0U}, {0U}, {1U, 0U}, {1U, 1U}, resultType),
                 [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); })
             );
+            if (SPILLING) {
+                setup.RenameCallable(pgmReturn, "GraceJoin", "GraceJoinWithSpilling");
+            }
 
             const auto graph = setup.BuildGraph(pgmReturn);
+            if (SPILLING) {
+                graph->GetContext().SpillerFactory = std::make_shared<TMockSpillerFactory>();
+            }
+
             const auto iterator = graph->GetValue().GetListIterator();
             NUdf::TUnboxedValue tuple;
 
@@ -1505,10 +1571,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
         }
     }
 
-    Y_UNIT_TEST_LLVM(TestLeftMulti1) {
+    Y_UNIT_TEST_LLVM_SPILLING(TestLeftMulti1) {
+        if (SPILLING && RuntimeVersion < 50) return;
 
         for (ui32 pass = 0; pass < 1; ++pass) {
-            TSetup<LLVM> setup;
+            TSetup<LLVM, SPILLING> setup;
             TProgramBuilder& pb = *setup.PgmBuilder;
 
             const auto key1 = pb.NewDataLiteral<ui32>(1);
@@ -1551,9 +1618,15 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
                 EJoinKind::Left, {0U}, {0U}, {1U, 0U}, {1U, 1U}, resultType),
                 [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); })
             );
-
+            if (SPILLING) {
+                setup.RenameCallable(pgmReturn, "GraceJoin", "GraceJoinWithSpilling");
+            }
 
             const auto graph = setup.BuildGraph(pgmReturn);
+            if (SPILLING) {
+                graph->GetContext().SpillerFactory = std::make_shared<TMockSpillerFactory>();
+            }
+
             const auto iterator = graph->GetValue().GetListIterator();
             NUdf::TUnboxedValue tuple;
 
@@ -1577,10 +1650,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
         }
     }
 
-    Y_UNIT_TEST_LLVM(TestLeftSemi1) {
+    Y_UNIT_TEST_LLVM_SPILLING(TestLeftSemi1) {
+        if (SPILLING && RuntimeVersion < 50) return;
 
         for (ui32 pass = 0; pass < 1; ++pass) {
-            TSetup<LLVM> setup;
+            TSetup<LLVM, SPILLING> setup;
             TProgramBuilder& pb = *setup.PgmBuilder;
 
             const auto key1 = pb.NewDataLiteral<ui32>(1);
@@ -1624,8 +1698,15 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
                 EJoinKind::LeftSemi, {0U}, {0U}, {1U, 0U, 0U, 1U}, {}, resultType),
                 [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); })
             );
+            if (SPILLING) {
+                setup.RenameCallable(pgmReturn, "GraceJoin", "GraceJoinWithSpilling");
+            }
 
             const auto graph = setup.BuildGraph(pgmReturn);
+            if (SPILLING) {
+                graph->GetContext().SpillerFactory = std::make_shared<TMockSpillerFactory>();
+            }
+
             const auto iterator = graph->GetValue().GetListIterator();
             NUdf::TUnboxedValue tuple;
 
@@ -1644,10 +1725,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
         }
     }
 
-    Y_UNIT_TEST_LLVM(TestLeftOnly1) {
+    Y_UNIT_TEST_LLVM_SPILLING(TestLeftOnly1) {
+        if (SPILLING && RuntimeVersion < 50) return;
 
         for (ui32 pass = 0; pass < 1; ++pass) {
-            TSetup<LLVM> setup;
+            TSetup<LLVM, SPILLING> setup;
             TProgramBuilder& pb = *setup.PgmBuilder;
 
             const auto key1 = pb.NewDataLiteral<ui32>(1);
@@ -1693,8 +1775,15 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
                 EJoinKind::LeftOnly, {0U}, {0U}, {1U, 0U, 0U, 1U}, {}, resultType),
                 [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); })
             );
+            if (SPILLING) {
+                setup.RenameCallable(pgmReturn, "GraceJoin", "GraceJoinWithSpilling");
+            }
 
             const auto graph = setup.BuildGraph(pgmReturn);
+            if (SPILLING) {
+                graph->GetContext().SpillerFactory = std::make_shared<TMockSpillerFactory>();
+            }
+
             const auto iterator = graph->GetValue().GetListIterator();
             NUdf::TUnboxedValue tuple;
 
@@ -1713,10 +1802,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
         }
     }
 
-    Y_UNIT_TEST_LLVM(TestLeftSemiWithNullKey1) {
+    Y_UNIT_TEST_LLVM_SPILLING(TestLeftSemiWithNullKey1) {
+        if (SPILLING && RuntimeVersion < 50) return;
 
         for (ui32 pass = 0; pass < 1; ++pass) {
-            TSetup<LLVM> setup;
+            TSetup<LLVM, SPILLING> setup;
             TProgramBuilder& pb = *setup.PgmBuilder;
 
             const auto key0 = pb.NewEmptyOptional(pb.NewDataType(NUdf::TDataType<ui32>::Id, true));
@@ -1762,8 +1852,15 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
                 EJoinKind::LeftSemi, {0U}, {0U}, {1U, 0U, 0U, 1U}, {}, resultType),
                 [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); })
             );
+            if (SPILLING) {
+                setup.RenameCallable(pgmReturn, "GraceJoin", "GraceJoinWithSpilling");
+            }
 
             const auto graph = setup.BuildGraph(pgmReturn);
+            if (SPILLING) {
+                graph->GetContext().SpillerFactory = std::make_shared<TMockSpillerFactory>();
+            }
+
             const auto iterator = graph->GetValue().GetListIterator();
             NUdf::TUnboxedValue tuple;
 
@@ -1782,10 +1879,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
         }
     }
 
-    Y_UNIT_TEST_LLVM(TestLeftOnlyWithNullKey1) {
+    Y_UNIT_TEST_LLVM_SPILLING(TestLeftOnlyWithNullKey1) {
+        if (SPILLING && RuntimeVersion < 50) return;
 
         for (ui32 pass = 0; pass < 1; ++pass) {
-            TSetup<LLVM> setup;
+            TSetup<LLVM, SPILLING> setup;
             TProgramBuilder& pb = *setup.PgmBuilder;
 
             const auto key0 = pb.NewEmptyOptional(pb.NewDataType(NUdf::TDataType<ui32>::Id, true));
@@ -1831,8 +1929,15 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
                 EJoinKind::LeftOnly, {0U}, {0U}, {1U, 0U, 0U, 1U}, {}, resultType),
                 [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); })
             );
+            if (SPILLING) {
+                setup.RenameCallable(pgmReturn, "GraceJoin", "GraceJoinWithSpilling");
+            }
 
             const auto graph = setup.BuildGraph(pgmReturn);
+            if (SPILLING) {
+                graph->GetContext().SpillerFactory = std::make_shared<TMockSpillerFactory>();
+            }
+
             const auto iterator = graph->GetValue().GetListIterator();
             NUdf::TUnboxedValue tuple;
             std::map<std::pair<TString, ui64>, ui32> u;
@@ -1852,10 +1957,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
         }
     }
 
-    Y_UNIT_TEST_LLVM(TestRight1) {
+    Y_UNIT_TEST_LLVM_SPILLING(TestRight1) {
+        if (SPILLING && RuntimeVersion < 50) return;
 
         for (ui32 pass = 0; pass < 1; ++pass) {
-            TSetup<LLVM> setup;
+            TSetup<LLVM, SPILLING> setup;
             TProgramBuilder& pb = *setup.PgmBuilder;
 
             const auto key1 = pb.NewDataLiteral<ui32>(1);
@@ -1898,8 +2004,15 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
                 EJoinKind::Right, {0U}, {0U}, {1U, 0U}, {1U, 1U}, resultType),
                 [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); })
             );
+            if (SPILLING) {
+                setup.RenameCallable(pgmReturn, "GraceJoin", "GraceJoinWithSpilling");
+            }
 
             const auto graph = setup.BuildGraph(pgmReturn);
+            if (SPILLING) {
+                graph->GetContext().SpillerFactory = std::make_shared<TMockSpillerFactory>();
+            }
+
             const auto iterator = graph->GetValue().GetListIterator();
             NUdf::TUnboxedValue tuple;
             std::map<std::pair<TString, TString>, ui32> u;
@@ -1922,10 +2035,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
     }
 
 
-        Y_UNIT_TEST_LLVM(TestRightOnly1) {
+    Y_UNIT_TEST_LLVM_SPILLING(TestRightOnly1) {
+        if (SPILLING && RuntimeVersion < 50) return;
 
         for (ui32 pass = 0; pass < 1; ++pass) {
-            TSetup<LLVM> setup;
+            TSetup<LLVM, SPILLING> setup;
             TProgramBuilder& pb = *setup.PgmBuilder;
 
             const auto key1 = pb.NewDataLiteral<ui32>(1);
@@ -1967,7 +2081,15 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
                 EJoinKind::RightOnly, {0U}, {0U}, {}, {1U, 0U, 0U, 1U}, resultType),
                 [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); })
             );
+            if (SPILLING) {
+                setup.RenameCallable(pgmReturn, "GraceJoin", "GraceJoinWithSpilling");
+            }
+
             const auto graph = setup.BuildGraph(pgmReturn);
+            if (SPILLING) {
+                graph->GetContext().SpillerFactory = std::make_shared<TMockSpillerFactory>();
+            }
+
             const auto iterator = graph->GetValue().GetListIterator();
             NUdf::TUnboxedValue tuple;
             std::map<std::pair<TString, ui32>, ui32> u;
@@ -1986,10 +2108,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
 
 
 
-    Y_UNIT_TEST_LLVM(TestRightSemi1) {
+    Y_UNIT_TEST_LLVM_SPILLING(TestRightSemi1) {
+        if (SPILLING && RuntimeVersion < 50) return;
 
         for (ui32 pass = 0; pass < 1; ++pass) {
-            TSetup<LLVM> setup;
+            TSetup<LLVM, SPILLING> setup;
             TProgramBuilder& pb = *setup.PgmBuilder;
 
             const auto key1 = pb.NewDataLiteral<ui32>(1);
@@ -2033,8 +2156,15 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
                 EJoinKind::RightSemi, {0U}, {0U}, {}, {1U, 0U, 0U, 1U}, resultType),
                 [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); })
             );
+            if (SPILLING) {
+                setup.RenameCallable(pgmReturn, "GraceJoin", "GraceJoinWithSpilling");
+            }
 
             const auto graph = setup.BuildGraph(pgmReturn);
+            if (SPILLING) {
+                graph->GetContext().SpillerFactory = std::make_shared<TMockSpillerFactory>();
+            }
+
             const auto iterator = graph->GetValue().GetListIterator();
             NUdf::TUnboxedValue tuple;
             std::map<std::pair<TString, ui32>, ui32> u;
@@ -2053,10 +2183,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
     }
 
 
-    Y_UNIT_TEST_LLVM(TestRightMulti1) {
+    Y_UNIT_TEST_LLVM_SPILLING(TestRightMulti1) {
+        if (SPILLING && RuntimeVersion < 50) return;
 
         for (ui32 pass = 0; pass < 1; ++pass) {
-            TSetup<LLVM> setup;
+            TSetup<LLVM, SPILLING> setup;
             TProgramBuilder& pb = *setup.PgmBuilder;
 
             const auto key1 = pb.NewDataLiteral<ui32>(1);
@@ -2099,9 +2230,15 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
                 EJoinKind::Right, {0U}, {0U}, {1U, 0U}, {1U, 1U}, resultType),
                 [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); })
             );
-
+            if (SPILLING) {
+                setup.RenameCallable(pgmReturn, "GraceJoin", "GraceJoinWithSpilling");
+            }
 
             const auto graph = setup.BuildGraph(pgmReturn);
+            if (SPILLING) {
+                graph->GetContext().SpillerFactory = std::make_shared<TMockSpillerFactory>();
+            }
+
             const auto iterator = graph->GetValue().GetListIterator();
             NUdf::TUnboxedValue tuple;
             std::map<std::pair<TString, TString>, ui32> u;
@@ -2125,10 +2262,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
     }
 
 
-   Y_UNIT_TEST_LLVM(TestRightSemiWithNullKey1) {
+    Y_UNIT_TEST_LLVM_SPILLING(TestRightSemiWithNullKey1) {
+        if (SPILLING && RuntimeVersion < 50) return;
 
         for (ui32 pass = 0; pass < 1; ++pass) {
-            TSetup<LLVM> setup;
+            TSetup<LLVM, SPILLING> setup;
             TProgramBuilder& pb = *setup.PgmBuilder;
 
             const auto key0 = pb.NewEmptyOptional(pb.NewDataType(NUdf::TDataType<ui32>::Id, true));
@@ -2174,8 +2312,15 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
                 EJoinKind::RightSemi, {0U}, {0U}, {}, {1U, 0U, 0U, 1U}, resultType),
                 [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); })
             );
+            if (SPILLING) {
+                setup.RenameCallable(pgmReturn, "GraceJoin", "GraceJoinWithSpilling");
+            }
 
             const auto graph = setup.BuildGraph(pgmReturn);
+            if (SPILLING) {
+                graph->GetContext().SpillerFactory = std::make_shared<TMockSpillerFactory>();
+            }
+
             const auto iterator = graph->GetValue().GetListIterator();
             NUdf::TUnboxedValue tuple;
             std::map<std::pair<TString, ui32>, ui32> u;
@@ -2193,10 +2338,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
         }
     }
 
-    Y_UNIT_TEST_LLVM(TestRightOnlyWithNullKey1) {
+    Y_UNIT_TEST_LLVM_SPILLING(TestRightOnlyWithNullKey1) {
+        if (SPILLING && RuntimeVersion < 50) return;
 
         for (ui32 pass = 0; pass < 1; ++pass) {
-            TSetup<LLVM> setup;
+            TSetup<LLVM, SPILLING> setup;
             TProgramBuilder& pb = *setup.PgmBuilder;
 
             const auto key0 = pb.NewEmptyOptional(pb.NewDataType(NUdf::TDataType<ui32>::Id, true));
@@ -2242,8 +2388,15 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
                 EJoinKind::RightOnly, {0U}, {0U}, {}, {1U, 0U, 0U, 1U}, resultType),
                 [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); })
             );
+            if (SPILLING) {
+                setup.RenameCallable(pgmReturn, "GraceJoin", "GraceJoinWithSpilling");
+            }
 
             const auto graph = setup.BuildGraph(pgmReturn);
+            if (SPILLING) {
+                graph->GetContext().SpillerFactory = std::make_shared<TMockSpillerFactory>();
+            }
+
             const auto iterator = graph->GetValue().GetListIterator();
             NUdf::TUnboxedValue tuple;
             std::map<std::pair<TString, ui64>, ui32> u;
@@ -2262,10 +2415,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
         }
     }
 
-    Y_UNIT_TEST_LLVM(TestFull1) {
+    Y_UNIT_TEST_LLVM_SPILLING(TestFull1) {
+        if (SPILLING && RuntimeVersion < 50) return;
 
         for (ui32 pass = 0; pass < 1; ++pass) {
-            TSetup<LLVM> setup;
+            TSetup<LLVM, SPILLING> setup;
             TProgramBuilder& pb = *setup.PgmBuilder;
 
             const auto key1 = pb.NewDataLiteral<ui32>(1);
@@ -2308,9 +2462,15 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
                 EJoinKind::Full, {0U}, {0U}, {1U, 0U}, {1U, 1U}, resultType),
                 [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); })
             );
-
+            if (SPILLING) {
+                setup.RenameCallable(pgmReturn, "GraceJoin", "GraceJoinWithSpilling");
+            }
 
             const auto graph = setup.BuildGraph(pgmReturn);
+            if (SPILLING) {
+                graph->GetContext().SpillerFactory = std::make_shared<TMockSpillerFactory>();
+            }
+
             const auto iterator = graph->GetValue().GetListIterator();
             NUdf::TUnboxedValue tuple;
             std::map<std::pair<TString, TString>, ui32> u;
@@ -2335,10 +2495,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
     }
 
 
-    Y_UNIT_TEST_LLVM(TestExclusion1) {
+    Y_UNIT_TEST_LLVM_SPILLING(TestExclusion1) {
+        if (SPILLING && RuntimeVersion < 50) return;
 
         for (ui32 pass = 0; pass < 1; ++pass) {
-            TSetup<LLVM> setup;
+            TSetup<LLVM, SPILLING> setup;
             TProgramBuilder& pb = *setup.PgmBuilder;
 
             const auto key1 = pb.NewDataLiteral<ui32>(1);
@@ -2381,9 +2542,15 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
                 EJoinKind::Exclusion, {0U}, {0U}, {1U, 0U}, {1U, 1U}, resultType),
                 [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); })
             );
-
+            if (SPILLING) {
+                setup.RenameCallable(pgmReturn, "GraceJoin", "GraceJoinWithSpilling");
+            }
 
             const auto graph = setup.BuildGraph(pgmReturn);
+            if (SPILLING) {
+                graph->GetContext().SpillerFactory = std::make_shared<TMockSpillerFactory>();
+            }
+
             const auto iterator = graph->GetValue().GetListIterator();
             NUdf::TUnboxedValue tuple;
             std::map<std::pair<TString, TString>, ui32> u;

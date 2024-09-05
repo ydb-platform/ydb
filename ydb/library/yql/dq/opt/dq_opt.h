@@ -6,6 +6,11 @@
 
 #include <util/generic/guid.h>
 
+namespace NYql {
+    class IDqOptimization;
+    struct TTypeAnnotationContext;
+}
+
 namespace NYql::NDq {
 
 NNodes::TCoAtom BuildAtom(TStringBuf value, TPositionHandle pos, TExprContext& ctx);
@@ -37,5 +42,8 @@ bool IsDqDependsOnStageOutput(const NNodes::TExprBase& node, const NNodes::TDqSt
 
 bool CanPushDqExpr(const NNodes::TExprBase& expr, const NNodes::TDqStageBase& stage);
 bool CanPushDqExpr(const NNodes::TExprBase& expr, const NNodes::TDqConnection& connection);
+
+IDqOptimization* GetDqOptCallback(const NNodes::TExprBase& providerCall, const TTypeAnnotationContext& typeAnnCtx);
+
 
 } // namespace NYql::NDq

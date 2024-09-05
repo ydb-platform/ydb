@@ -71,6 +71,7 @@ class Client(ABC):
             if apply_server_timezone is None:
                 apply_server_timezone = dst_safe
             self.apply_server_timezone = apply_server_timezone == 'always' or coerce_bool(apply_server_timezone)
+            self.server_tz = server_tz
         except UnknownTimeZoneError:
             logger.warning('Warning, server is using an unrecognized timezone %s, will use UTC default', server_tz)
 
@@ -133,7 +134,10 @@ class Client(ABC):
 
     def _prep_query(self, context: QueryContext):
         if context.is_select and not context.has_limit and self.query_limit:
-            return f'{context.final_query}\n LIMIT {self.query_limit}'
+            limit = f'\n LIMIT {self.query_limit}'
+            if isinstance(context.query, bytes):
+                return context.final_query + limit.encode()
+            return context.final_query + limit
         return context.final_query
 
     def _check_tz_change(self, new_tz) -> Optional[tzinfo]:
@@ -386,7 +390,7 @@ class Client(ABC):
                                    streaming=True).df_stream
 
     def create_query_context(self,
-                             query: Optional[str] = None,
+                             query: Optional[Union[str, bytes]] = None,
                              parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
                              settings: Optional[Dict[str, Any]] = None,
                              query_formats: Optional[Dict[str, str]] = None,

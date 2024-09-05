@@ -1,6 +1,18 @@
 # UPSERT INTO
 
-UPSERT (расшифровывается как UPDATE or INSERT) обновляет или добавляет множество строк в таблице на основании сравнения по первичному ключу. Отсутствующие строки добавляются. В присутствующих строках обновляются значения заданных столбцов, значения остальных столбцов остаются неизменными.
+{% if oss == true and backend_name == "YDB" %}
+
+{% note warning %}
+
+{% include [OLAP_not_allow_text](../../../../_includes/not_allow_for_olap_text.md) %}
+
+{% include [ways_add_data_to_olap](../../../../_includes/ways_add_data_to_olap.md) %}
+
+{% endnote %}
+
+{% endif %}
+
+UPSERT (расшифровывается как UPDATE or INSERT) обновляет или добавляет множество строк в строковой таблице на основании сравнения по первичному ключу. Отсутствующие строки добавляются. В присутствующих строках обновляются значения заданных столбцов, значения остальных столбцов остаются неизменными.
 
 {% if feature_mapreduce %}  Таблица по имени ищется в базе данных, заданной оператором [USE](../use.md).{% endif %}
 
@@ -16,7 +28,7 @@ UPSERT (расшифровывается как UPDATE or INSERT) обновля
 
 ``` yql
 UPSERT INTO my_table
-SELECT pk_column, data_column1, col24 as data_column3 FROM other_table  
+SELECT pk_column, data_column1, col24 as data_column3 FROM other_table
 ```
 
 ``` yql

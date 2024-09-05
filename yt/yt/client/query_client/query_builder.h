@@ -24,6 +24,7 @@ class TQueryBuilder
 {
 public:
     void SetSource(TString source);
+    void SetSource(TString source, TString alias);
 
     int AddSelectExpression(TString expression);
     int AddSelectExpression(TString expression, TString alias);
@@ -70,6 +71,7 @@ private:
 
 private:
     std::optional<TString> Source_;
+    std::optional<TString> SourceAlias_;
     std::vector<TEntryWithAlias> SelectEntries_;
     std::vector<TString> WhereConjuncts_;
     std::vector<TOrderByEntry> OrderByEntries_;

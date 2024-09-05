@@ -43,7 +43,7 @@ public:
         const Ydb::Auth::LoginRequest* protoRequest = GetProtoRequest();
         Credentials = PrepareCredentials(protoRequest->user(), protoRequest->password(), AppData()->AuthConfig);
         TString domainName = "/" + AppData()->DomainsInfo->GetDomain()->Name;
-        PathToDatabase = AppData()->AuthConfig.GetDomainLoginOnly() ? domainName : DatabaseName;
+        PathToDatabase = AppData()->AuthConfig.GetDomainLoginOnly() ? domainName : GetDatabaseName();
         auto sendParameters = GetSendParameters(Credentials, PathToDatabase);
         Send(sendParameters.Recipient, sendParameters.Event.Release());
         Become(&TThis::StateWork, Timeout, new TEvents::TEvWakeup());
@@ -63,6 +63,7 @@ public:
                 PipeClient = RegisterWithSameMailbox(pipe);
                 THolder<TEvSchemeShard::TEvLogin> request = MakeHolder<TEvSchemeShard::TEvLogin>();
                 request.Get()->Record = CreateLoginRequest(Credentials, AppData()->AuthConfig);
+                request.Get()->Record.SetPeerName(Request->GetPeerName());
                 NTabletPipe::SendData(SelfId(), PipeClient, request.Release());
                 return;
             }

@@ -5,6 +5,7 @@
 #include <util/system/thread.h>
 #include <util/system/mutex.h>
 #include <util/thread/pool.h>
+#include <mutex>
 
 namespace NYdb {
 namespace NConsoleClient {

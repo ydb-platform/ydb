@@ -91,16 +91,6 @@ ELSEIF (ARCH_ARM7 AND OS_LINUX)
         src/arm/ffi.c
         src/arm/sysv.S
     )
-ELSEIF (ARCH_ARM7EM AND OS_NONE)
-    ADDINCL(
-        contrib/restricted/libffi/configs/x86_64-pc-linux-gnu
-        GLOBAL contrib/restricted/libffi/configs/x86_64-pc-linux-gnu/include
-    )
-ELSEIF (ARCH_ARM8M AND OS_NONE)
-    ADDINCL(
-        contrib/restricted/libffi/configs/x86_64-pc-linux-gnu
-        GLOBAL contrib/restricted/libffi/configs/x86_64-pc-linux-gnu/include
-    )
 ELSEIF (ARCH_I386 AND OS_ANDROID)
     ADDINCL(
         contrib/restricted/libffi/configs/i686-pc-linux-android16
@@ -133,11 +123,6 @@ ELSEIF (ARCH_PPC64LE AND OS_LINUX)
         src/powerpc/linux64_closure.S
         src/powerpc/ppc_closure.S
         src/powerpc/sysv.S
-    )
-ELSEIF (ARCH_RISCV32 AND OS_NONE)
-    ADDINCL(
-        contrib/restricted/libffi/configs/x86_64-pc-linux-gnu
-        GLOBAL contrib/restricted/libffi/configs/x86_64-pc-linux-gnu/include
     )
 ELSEIF (ARCH_X86_64 AND OS_ANDROID)
     ADDINCL(
@@ -192,7 +177,7 @@ ELSEIF (ARCH_X86_64 AND OS_WINDOWS)
         configs/x86_64-microsoft-windows/win64_intel.masm
         src/x86/ffiw64.c
     )
-ELSEIF (ARCH_XTENSA AND OS_NONE)
+ELSEIF (OS_NONE)
     ADDINCL(
         contrib/restricted/libffi/configs/x86_64-pc-linux-gnu
         GLOBAL contrib/restricted/libffi/configs/x86_64-pc-linux-gnu/include

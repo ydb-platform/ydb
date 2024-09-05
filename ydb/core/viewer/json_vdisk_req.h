@@ -1,17 +1,11 @@
 #pragma once
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/interconnect.h>
-#include <ydb/library/actors/core/mon.h>
-#include <ydb/library/services/services.pb.h>
-#include <ydb/core/viewer/json/json.h>
-#include "viewer.h"
 #include "json_pipe_req.h"
+#include "viewer.h"
+#include <ydb/core/viewer/yaml/yaml.h>
 
-namespace NKikimr {
-namespace NViewer {
+namespace NKikimr::NViewer {
 
 using namespace NActors;
-
 
 template <typename RequestType, typename ResponseType>
 struct TJsonVDiskRequestHelper  {
@@ -24,9 +18,8 @@ struct TJsonVDiskRequestHelper  {
     }
 };
 
-
 template <typename RequestType, typename ResponseType>
-class TJsonVDiskRequest : public TViewerPipeClient<TJsonVDiskRequest<RequestType, ResponseType>> {
+class TJsonVDiskRequest : public TViewerPipeClient {
     enum EEv {
         EvRetryNodeRequest = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
         EvEnd
@@ -42,7 +35,7 @@ class TJsonVDiskRequest : public TViewerPipeClient<TJsonVDiskRequest<RequestType
 
 protected:
     using TThis = TJsonVDiskRequest<RequestType, ResponseType>;
-    using TBase = TViewerPipeClient<TThis>;
+    using TBase = TViewerPipeClient;
     using THelper = TJsonVDiskRequestHelper<RequestType, ResponseType>;
     IViewer* Viewer;
     TActorId Initiator;
@@ -63,17 +56,13 @@ protected:
     std::optional<TActorId> TcpProxyId;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::VIEWER_HANDLER;
-    }
-
     TJsonVDiskRequest(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
         : Viewer(viewer)
         , Initiator(ev->Sender)
         , Event(ev)
     {}
 
-    virtual void Bootstrap() {
+    void Bootstrap() override {
         const auto& params(Event->Get()->Request.GetParams());
         NodeId = FromStringWithDefault<ui32>(params.Get("node_id"), 0);
         PDiskId = FromStringWithDefault<ui32>(params.Get("pdisk_id"), Max<ui32>());
@@ -185,7 +174,7 @@ public:
         TBase::PassAway();
     }
 
-    void ReplyAndPassAway(const TString &error = "") {
+    void ReplyAndPassAway(const TString &error) {
         try {
             TStringStream json;
             if (error) {
@@ -199,10 +188,15 @@ public:
         }
         PassAway();
     }
-};
 
-template <typename RequestType, typename ResponseType>
-struct TJsonRequestParameters<TJsonVDiskRequest<RequestType, ResponseType>> {
+    void ReplyAndPassAway() override {
+        ReplyAndPassAway({});
+    }
+
+    static YAML::Node GetSchema() {
+        return TProtoToYaml::ProtoToYamlSchema<typename ResponseType::ProtoRecordType>();
+    }
+
     static YAML::Node GetParameters() {
         return YAML::Load(R"___(
             - name: node_id
@@ -251,12 +245,4 @@ struct TJsonRequestParameters<TJsonVDiskRequest<RequestType, ResponseType>> {
     }
 };
 
-template <typename RequestType, typename ResponseType>
-struct TJsonRequestSchema<TJsonVDiskRequest<RequestType, ResponseType>> {
-    static YAML::Node GetSchema() {
-        return TProtoToYaml::ProtoToYamlSchema<typename ResponseType::ProtoRecordType>();
-    }
-};
-
-}
 }

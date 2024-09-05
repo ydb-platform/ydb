@@ -20,8 +20,6 @@ bool ValidateProperties(const NKikimrSchemeOp::TResourcePoolProperties& properti
     return true;
 }
 
-
-
 }  // anonymous namespace
 
 TPath::TChecker IsParentPathValid(const TPath& parentPath) {

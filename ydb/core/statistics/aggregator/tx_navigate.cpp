@@ -60,6 +60,9 @@ struct TStatisticsAggregator::TTxNavigate : public TTxBase {
 
         if (Self->TraversalIsColumnTable) {
             Self->HiveId = entry.DomainInfo->ExtractHive();
+            if (Self->HiveId == 0) {
+                Self->HiveId = AppData()->DomainsInfo->GetHive();
+            }
         }
 
         return true;

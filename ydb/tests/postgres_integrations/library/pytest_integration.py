@@ -38,7 +38,8 @@ _tests_folder: Optional[str] = None
 _test_results: Optional[Dict[str, TestCase]] = None
 _kikimr_factory: KiKiMR = kikimr_cluster_factory()
 _integration_tests: Optional[List[str]] = None
-_skip_tests: Dict[str, str] = dict() # [test name: reason]
+_skip_tests: Dict[str, str] = dict()  # [test name: reason]
+
 
 def pytest_collection_finish(session: pytest.Session):
     global _tests_for_run_in_docker
@@ -230,6 +231,7 @@ def _read_integration_tests(folder: str) -> Set[str]:
     test_list_for_run = list(all - unit)
     test_list_for_run.sort()
     return test_list_for_run
+
 
 def _read_skip_tests(folder: str) -> Dict[str, str]:
     res = dict()

@@ -105,6 +105,7 @@
             float: right;
             align-items: center;
             position: relative; /* Added for positioning the dropdown */
+            white-space: nowrap;
         }
 
         .button-group > button {
@@ -113,6 +114,7 @@
             border: none;
             background: none;
             cursor: pointer;
+            white-space: nowrap;
         }
 
         .button-group > button svg {
@@ -146,6 +148,30 @@
             display: block; /* Make each button in the dropdown take up full width */
             margin-bottom: 5px; /* Add spacing between dropdown buttons */
             width: 100%; /* Full width of the dropdown */
+        }
+
+        .button-group button .button-text {
+            margin-left: 5px; /* Add spacing between icon and text */
+            cursor: pointer; /* Make text clickable */
+            
+        }
+        .button-group button::after { /* Target the "Copy" button specifically */
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #7d7d92; /* Same as your tooltip background */
+            color: white;
+            padding: 2px 5px;
+            border-radius: 3px;
+            visibility: hidden; /* Hide by default */
+            opacity: 0;
+            transition: visibility 0.2s, opacity 0.2s;
+        }
+
+        .button-group button:hover::after {
+            visibility: visible;
+            opacity: 1;
         }
 
         .tooltip {
@@ -401,14 +427,14 @@
         copyButtons.forEach(button => {
             button.addEventListener('click', function(event) {
                 event.preventDefault();
-                copyTestNameToClipboard(findParentBySelector(event.target,'tr').querySelector('.test_name').innerText);
+                copyTestNameToClipboard(findParentBySelector(event.target,'tr').querySelector('.test_name').querySelector('span').innerText);
             });
         });
         const muteButtons = document.querySelectorAll(".mute");
         muteButtons.forEach(button => {
             button.addEventListener('click', function(event) {
                 event.preventDefault();
-                copyTestNameForMuteToClipboard(findParentBySelector(event.target,'tr').querySelector('.test_name').innerText);
+                copyTestNameForMuteToClipboard(findParentBySelector(event.target,'tr').querySelector('.test_name').querySelector('span').innerText);
             });
         });
         const createIssueButton = document.querySelectorAll(".create_issue");
@@ -419,7 +445,7 @@
                 const fail_count = findParentBySelector(event.target,'tr').querySelectorAll('.svg_failure').length + findParentBySelector(event.target,'tr').querySelectorAll('.svg_mute').length
 
                 createIssue(
-                    event.target.closest('.create_issue').parentNode.getElementsByTagName('span')[0].textContent,
+                    findParentBySelector(event.target,'tr').querySelector('.test_name').querySelector('span').innerText,
                     findParentBySelector(event.target,'tr').querySelector('.test_owner').innerText,
                     success_count,fail_count
                 );
@@ -495,6 +521,7 @@
                         <svg  class="copy_svg"  xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="14" height="14" stroke="none" aria-hidden="true" viewBox="0 0 16 16">
                             <path  d="M12 2.5H8A1.5 1.5 0 0 0 6.5 4v1H8a3 3 0 0 1 3 3v1.5h1A1.5 1.5 0 0 0 13.5 8V4A1.5 1.5 0 0 0 12 2.5M11 11h1a3 3 0 0 0 3-3V4a3 3 0 0 0-3-3H8a3 3 0 0 0-3 3v1H4a3 3 0 0 0-3 3v4a3 3 0 0 0 3 3h4a3 3 0 0 0 3-3zM4 6.5h4A1.5 1.5 0 0 1 9.5 8v4A1.5 1.5 0 0 1 8 13.5H4A1.5 1.5 0 0 1 2.5 12V8A1.5 1.5 0 0 1 4 6.5" clip-rule="evenodd"></path>
                         </svg>
+                        <span class="button-text">Copy test filter</span>
                     </button>
                     {% if status.name == "FAIL" %} 
                     <button class="button mute" title="Copy mute string to clipboard" >
@@ -504,6 +531,7 @@
                             <!-- Second icon: microphone -->
                             <path transform="translate(0, 0)" d="M5.06 9.94A1.5 1.5 0 0 0 4 9.5H2a.5.5 0 0 1-.5-.5V7a.5.5 0 0 1 .5-.5h2a1.5 1.5 0 0 0 1.06-.44l2.483-2.482a.268.268 0 0 1 .457.19v8.464a.268.268 0 0 1-.457.19zM2 5h2l2.482-2.482A1.768 1.768 0 0 1 9.5 3.768v8.464a1.768 1.768 0 0 1-3.018 1.25L4 11H2a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2m10.28.72a.75.75 0 1 0-1.06 1.06L12.44 8l-1.22 1.22a.75.75 0 1 0 1.06 1.06l1.22-1.22 1.22 1.22a.75.75 0 1 0 1.06-1.06L14.56 8l1.22-1.22a.75.75 0 0 0-1.06-1.06L13.5 6.94z"  />
                         </svg>
+                        <span class="button-text">Copy mute string</span>
                     </button>
                     <button class="button create_issue" title="Create issue">
                         <svg class="issue_svg" xmlns="http://www.w3.org/2000/svg" width="32" height="14" position="left"  stroke="none" viewBox="2 0 30 17">
@@ -512,6 +540,7 @@
                             <!-- Second icon: microphone -->
                             <path transform="translate(0, 0)" d="M5.06 9.94A1.5 1.5 0 0 0 4 9.5H2a.5.5 0 0 1-.5-.5V7a.5.5 0 0 1 .5-.5h2a1.5 1.5 0 0 0 1.06-.44l2.483-2.482a.268.268 0 0 1 .457.19v8.464a.268.268 0 0 1-.457.19zM2 5h2l2.482-2.482A1.768 1.768 0 0 1 9.5 3.768v8.464a1.768 1.768 0 0 1-3.018 1.25L4 11H2a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2m10.28.72a.75.75 0 1 0-1.06 1.06L12.44 8l-1.22 1.22a.75.75 0 1 0 1.06 1.06l1.22-1.22 1.22 1.22a.75.75 0 1 0 1.06-1.06L14.56 8l1.22-1.22a.75.75 0 0 0-1.06-1.06L13.5 6.94z"  />
                         </svg>
+                        <span class="button-text">Create mute issue</span>
                     </button>
             {% endif %}
                 </div>

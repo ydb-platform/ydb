@@ -13,4 +13,4 @@ This command forces synchronous collection of table statistics and column statis
 * `path_to_table` — path to the table for which the statistis should be collected
 * `column_name` — collect column statistics only for specified columns of the table
 
-Current set of statistics is described here [{#T}](../../../concepts/optimizer.md#statistics).
+Current set of statistics is described here [{#T}](../../../../concepts/optimizer.md#statistics).

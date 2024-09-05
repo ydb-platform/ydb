@@ -324,14 +324,6 @@ public:
         return result;
     }
 
-    ui64 GetNumberOfStoredKeys() const {
-        return States.GetSize();
-    }
-
-    ui64 GetStoredKeysCapacity() const {
-        return States.GetCapacity();
-    }
-
     EFetchResult InputStatus = EFetchResult::One;
     NUdf::TUnboxedValuePod* Tongue = nullptr;
     NUdf::TUnboxedValuePod* Throat = nullptr;

@@ -13,14 +13,9 @@
 namespace NActors {
     class TChunkSerializer;
     class IActor;
-    class ISerializerToStream {
-    public:
-        virtual bool SerializeToArcadiaStream(TChunkSerializer*) const = 0;
-    };
-
+    
     class IEventBase
-        : TNonCopyable,
-          public ISerializerToStream {
+        : TNonCopyable {
     protected:
         // for compatibility with virtual actors
         virtual bool DoExecute(IActor* /*actor*/, std::unique_ptr<IEventHandle> /*eventPtr*/) {

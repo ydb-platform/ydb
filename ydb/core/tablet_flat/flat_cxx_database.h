@@ -7,6 +7,7 @@
 #include <util/system/type_name.h>
 #include <util/system/unaligned_mem.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
+#include <type_traits>
 #include <utility>
 
 // https://wiki.yandex-team.ru/kikimr/techdoc/db/cxxapi/nicedb/
@@ -647,15 +648,15 @@ enum class EMaterializationMode {
 };
 
 namespace NDetail {
-    namespace SFINAE {
-        template <typename>
-        struct type_check {
-            using type = int;
-        };
-
-        struct general {};
-        struct special : general {};
-    }
+    template <typename T>
+    class HasDefault
+    {
+    private:
+        template <typename C> static std::true_type test(decltype(C::Default)) ;
+        template <typename C> static std::false_type test(...);
+    public:
+        typedef decltype(test<T>(0)) type;
+    };
 }
 
 struct Schema {
@@ -1448,7 +1449,7 @@ struct Schema {
                 }
 
                 template <typename ColumnType>
-                auto GetValueOrDefault(typename ColumnType::Type defaultValue = GetDefaultValue<ColumnType>(NDetail::SFINAE::special())) const {
+                auto GetValueOrDefault(typename ColumnType::Type defaultValue = GetDefaultValue<ColumnType>()) const {
                     Y_DEBUG_ABORT_UNLESS(IsReady(), "Rowset is not ready");
                     Y_DEBUG_ABORT_UNLESS(IsValid(), "Rowset is not valid");
                     typename ColumnType::Type value(HaveValue<ColumnType>() ? GetColumnValue<ColumnType>() : defaultValue);
@@ -1473,24 +1474,24 @@ struct Schema {
                     return DbgPrintTuple(Iterator.GetKey(), typeRegistry) + " -> " + DbgPrintTuple(Iterator.GetValues(), typeRegistry);
                 }
 
-                template <typename ColumnType, typename NDetail::SFINAE::type_check<decltype(ColumnType::Default)>::type = 0>
-                static decltype(ColumnType::Default) GetNullValue(NDetail::SFINAE::special) {
+                template <typename ColumnType>
+                static typename ColumnType::Type GetNullValue() {
+                    return GetDefaultValue<ColumnType>();
+                }
+
+                template <typename ColumnType>
+                static ColumnType::Type GetDefaultValue(std::true_type) {
                     return ColumnType::Default;
                 }
 
                 template <typename ColumnType>
-                static typename ColumnType::Type GetNullValue(NDetail::SFINAE::general) {
+                static ColumnType::Type GetDefaultValue(std::false_type) {
                     return typename ColumnType::Type();
-                }
-
-                template <typename ColumnType, typename NDetail::SFINAE::type_check<decltype(ColumnType::Default)>::type = 0>
-                static decltype(ColumnType::Default) GetDefaultValue(NDetail::SFINAE::special) {
-                    return ColumnType::Default;
                 }
 
                 template <typename ColumnType>
-                static typename ColumnType::Type GetDefaultValue(NDetail::SFINAE::general) {
-                    return typename ColumnType::Type();
+                static ColumnType::Type GetDefaultValue() {
+                    return GetDefaultValue<ColumnType>(typename NDetail::HasDefault<ColumnType>::type());
                 }
 
                 NTable::TIteratorStats* Stats() const {
@@ -1510,7 +1511,7 @@ struct Schema {
                     auto& cell = tuple.Columns[index];
                     auto type = tuple.Types[index];
                     if (cell.IsNull())
-                        return GetNullValue<ColumnType>(NDetail::SFINAE::special());
+                        return GetNullValue<ColumnType>();
                     return TConvert<ColumnType, typename ColumnType::Type>::Convert(TRawTypeValue(cell.Data(), cell.Size(), type));
                 }
 

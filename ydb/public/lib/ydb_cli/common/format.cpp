@@ -146,7 +146,7 @@ void TCommandWithFormat::AddStdinFormats(TClientCommand::TConfig &config, const 
     AllowedFramingFormats = allowedFramingFormats;
 }
 
-void TCommandWithFormat::AddFormats(TClientCommand::TConfig& config, 
+void TCommandWithFormat::AddOutputFormats(TClientCommand::TConfig& config, 
                                     const TVector<EDataFormat>& allowedFormats, EDataFormat defaultFormat) {
     TStringStream description;
     description << "Output format. Available options: ";

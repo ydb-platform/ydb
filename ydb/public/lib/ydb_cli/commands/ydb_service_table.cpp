@@ -365,7 +365,7 @@ void TCommandExecuteQuery::Config(TConfig& config) {
     config.Opts->AddLongOption('f', "file", "Path to file with query text to execute")
         .RequiredArgument("PATH").StoreResult(&QueryFile);
 
-    AddFormats(config, {
+    AddOutputFormats(config, {
         EDataFormat::Pretty,
         EDataFormat::JsonUnicode,
         EDataFormat::JsonUnicodeArray,
@@ -841,7 +841,7 @@ void TCommandExplain::Config(TConfig& config) {
     config.Opts->AddLongOption("collect-diagnostics", "Collects diagnostics and saves it to file")
         .StoreTrue(&CollectFullDiagnostics);
 
-    AddFormats(config, {
+    AddOutputFormats(config, {
             EDataFormat::Pretty,
             EDataFormat::PrettyTable,
             EDataFormat::JsonUnicode,
@@ -1053,7 +1053,7 @@ void TCommandReadTable::Config(TConfig& config) {
         EDataFormat::JsonBase64
     });
 
-    AddFormats(config, {
+    AddOutputFormats(config, {
         EDataFormat::Pretty,
         EDataFormat::JsonUnicode,
         EDataFormat::JsonUnicodeArray,

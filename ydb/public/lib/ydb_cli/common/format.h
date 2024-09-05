@@ -32,7 +32,7 @@ protected:
                          const TVector<EDataFormat>& allowedFormats, EDataFormat defaultFormat = EDataFormat::JsonUnicode);
     void AddStdinFormats(TClientCommand::TConfig& config, const TVector<EDataFormat>& allowedStdinFormats, 
                          const TVector<EDataFormat>& allowedFramingFormats);
-    void AddFormats(TClientCommand::TConfig& config, 
+    void AddOutputFormats(TClientCommand::TConfig& config, 
                          const TVector<EDataFormat>& allowedFormats, EDataFormat defaultFormat = EDataFormat::Pretty);
     void AddMessagingFormats(TClientCommand::TConfig& config, const TVector<EMessagingFormat>& allowedFormats);
     void ParseFormats();

@@ -223,7 +223,7 @@ void TCommandDescribe::Config(TConfig& config) {
     config.Opts->AddLongOption("partition-stats", "[Table|Topic|Consumer] Show partition statistics").StoreTrue(&ShowPartitionStats);
 
     AddDeprecatedJsonOption(config, "(Deprecated, will be removed soon. Use --format option instead) [Table] Output in json format");
-    AddFormats(config, { EDataFormat::Pretty, EDataFormat::ProtoJsonBase64 });
+    AddOutputFormats(config, { EDataFormat::Pretty, EDataFormat::ProtoJsonBase64 });
     config.Opts->MutuallyExclusive("json", "format");
 
     config.SetFreeArgsNum(1);
@@ -986,7 +986,7 @@ void TCommandList::Config(TConfig& config) {
         .StoreTrue(&FromNewLine);
     config.Opts->AddCharOption('m', "Multithread recursive request")
         .StoreTrue(&Multithread);
-    AddFormats(config, { EDataFormat::Pretty, EDataFormat::Json });
+    AddOutputFormats(config, { EDataFormat::Pretty, EDataFormat::Json });
     config.SetFreeArgsMax(1);
     SetFreeArgTitle(0, "<path>", "Path to list");
 }

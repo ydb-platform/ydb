@@ -40,7 +40,7 @@ void TCommandSql::Config(TConfig& config) {
         .RequiredArgument("[String]").DefaultValue("yql").StoreResult(&Syntax)
         .Hidden();
 
-    AddFormats(config, {
+    AddOutputFormats(config, {
         EDataFormat::Pretty,
         EDataFormat::JsonUnicode,
         EDataFormat::JsonUnicodeArray,

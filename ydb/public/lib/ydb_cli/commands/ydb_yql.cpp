@@ -32,7 +32,7 @@ void TCommandYql::Config(TConfig& config) {
     config.Opts->AddLongOption('s', "script", "Text of script to execute").RequiredArgument("[String]").StoreResult(&Script);
     config.Opts->AddLongOption('f', "file", "Script file").RequiredArgument("PATH").StoreResult(&ScriptFile);
 
-    AddFormats(config, {
+    AddOutputFormats(config, {
         EDataFormat::Pretty,
         EDataFormat::JsonUnicode,
         EDataFormat::JsonUnicodeArray,

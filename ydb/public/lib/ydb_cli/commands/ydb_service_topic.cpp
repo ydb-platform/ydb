@@ -609,7 +609,7 @@ namespace {
         config.Opts->AddLongOption("partition-stats", "Show partition statistics")
             .StoreTrue(&ShowPartitionStats_);
         config.Opts->SetFreeArgsNum(1);
-        AddFormats(config, { EDataFormat::Pretty, EDataFormat::ProtoJsonBase64 });
+        AddOutputFormats(config, { EDataFormat::Pretty, EDataFormat::ProtoJsonBase64 });
         SetFreeArgTitle(0, "<topic-path>", "Topic path");
     }
 

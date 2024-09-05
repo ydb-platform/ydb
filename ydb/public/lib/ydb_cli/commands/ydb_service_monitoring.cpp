@@ -20,7 +20,7 @@ void TCommandSelfCheck::Config(TConfig& config) {
     TYdbSimpleCommand::Config(config);
     config.SetFreeArgsNum(0);
 
-    AddFormats(config, { EDataFormat::Pretty, EDataFormat::Json });
+    AddOutputFormats(config, { EDataFormat::Pretty, EDataFormat::Json });
 
     config.Opts->AddLongOption('v', "verbose", "Return detailed info about components checked with their statuses.")
         .StoreTrue(&Verbose);

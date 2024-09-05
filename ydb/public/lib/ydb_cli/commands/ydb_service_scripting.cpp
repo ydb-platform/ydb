@@ -33,7 +33,7 @@ void TCommandExecuteYqlScript::Config(TConfig& config) {
     config.Opts->AddLongOption("explain", "Explain query").Optional().StoreTrue(&Explain);
     config.Opts->AddLongOption("show-response-metadata", ResponseHeadersHelp).Optional().StoreTrue(&ShowHeaders);
 
-    AddFormats(config, {
+    AddOutputFormats(config, {
         EDataFormat::Pretty,
         EDataFormat::JsonUnicode,
         EDataFormat::JsonUnicodeArray,

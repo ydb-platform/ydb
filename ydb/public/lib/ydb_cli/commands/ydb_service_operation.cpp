@@ -74,7 +74,7 @@ TCommandGetOperation::TCommandGetOperation()
 void TCommandGetOperation::Config(TConfig& config) {
     TCommandWithOperationId::Config(config);
     AddDeprecatedJsonOption(config);
-    AddFormats(config, { EDataFormat::Pretty, EDataFormat::ProtoJsonBase64 });
+    AddOutputFormats(config, { EDataFormat::Pretty, EDataFormat::ProtoJsonBase64 });
     config.Opts->MutuallyExclusive("json", "format");
 }
 
@@ -178,7 +178,7 @@ void TCommandListOperations::Config(TConfig& config) {
     config.Opts->AddLongOption('t', "page-token", "Page token")
         .RequiredArgument("STRING").StoreResult(&PageToken);
     AddDeprecatedJsonOption(config);
-    AddFormats(config, { EDataFormat::Pretty, EDataFormat::ProtoJsonBase64 });
+    AddOutputFormats(config, { EDataFormat::Pretty, EDataFormat::ProtoJsonBase64 });
     config.Opts->MutuallyExclusive("json", "format");
 
     config.SetFreeArgsNum(1);

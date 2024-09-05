@@ -222,7 +222,7 @@ public:
                 srcDesc.SetClusterType(ToClusterType(clusterDesc->ClusterType));
                 srcDesc.SetDatabaseId(clusterDesc->DatabaseId);
 
-                bool useRowDispatcher = false;
+                bool sharedReading = false;
                 TString format;
                 size_t const settingsCount = topicSource.Settings().Size();
                 for (size_t i = 0; i < settingsCount; ++i) {
@@ -232,8 +232,8 @@ public:
                         srcDesc.SetConsumerName(TString(Value(setting)));
                     } else if (name == EndpointSetting) {
                         srcDesc.SetEndpoint(TString(Value(setting)));
-                    } else if (name == UseRowDispatcher) {
-                        useRowDispatcher = FromString<bool>(Value(setting));
+                    } else if (name == SharedReading) {
+                        sharedReading = FromString<bool>(Value(setting));
                     } else if (name == Format) {
                         format = TString(Value(setting));
                     } else if (name == UseSslSetting) {
@@ -283,11 +283,11 @@ public:
                 srcDesc.SetPredicate(predicateSql);
 
                 protoSettings.PackFrom(srcDesc);
-                useRowDispatcher = useRowDispatcher && (format == "json_each_row");
-                if (useRowDispatcher && !predicateSql.empty()) {
+                sharedReading = sharedReading && (format == "json_each_row");
+                if (sharedReading && !predicateSql.empty()) {
                     ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Row dispatcher will use the predicate: " + predicateSql));
                 }
-                sourceType = !useRowDispatcher ? "PqSource" : "PqRdSource";
+                sourceType = !sharedReading ? "PqSource" : "PqRdSource";
             }
         }
     }
@@ -352,7 +352,7 @@ public:
         }
 
         Add(props, EndpointSetting, clusterConfiguration->Endpoint, pos, ctx);
-        Add(props, UseRowDispatcher, ToString(clusterConfiguration->UseRowDispatcher), pos, ctx);
+        Add(props, SharedReading, ToString(clusterConfiguration->SharedReading), pos, ctx);
         Add(props, Format, format, pos, ctx);
 
         

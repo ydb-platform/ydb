@@ -84,7 +84,7 @@ class TestPqRowDispatcher(TestYdsBase):
     @yq_v1
     def test_read_raw_format_without_row_dispatcher(self, kikimr, client):
         client.create_yds_connection(
-            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), use_row_dispatcher=True
+            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
         )
         self.init_topics("test_read_raw_format_without_row_dispatcher", create_output=False)
 
@@ -110,7 +110,7 @@ class TestPqRowDispatcher(TestYdsBase):
     @yq_v1
     def test_simple_not_null(self, kikimr, client):
         client.create_yds_connection(
-            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), use_row_dispatcher=True
+            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
         )
         self.init_topics("test_simple_not_null")
 
@@ -146,7 +146,7 @@ class TestPqRowDispatcher(TestYdsBase):
     @pytest.mark.skip(reason="Is not implemented")
     def test_simple_optional(self, kikimr, client):
         client.create_yds_connection(
-            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), use_row_dispatcher=True
+            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
         )
         self.init_topics("test_simple_optional")
 
@@ -175,7 +175,7 @@ class TestPqRowDispatcher(TestYdsBase):
     @yq_v1
     def test_scheme_error(self, kikimr, client):
         client.create_yds_connection(
-            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), use_row_dispatcher=True
+            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
         )
         self.init_topics("test_scheme_error")
 
@@ -209,7 +209,7 @@ class TestPqRowDispatcher(TestYdsBase):
     @yq_v1
     def test_filter(self, kikimr, client):
         client.create_yds_connection(
-            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), use_row_dispatcher=True
+            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
         )
         self.init_topics("test_filter")
 
@@ -245,7 +245,7 @@ class TestPqRowDispatcher(TestYdsBase):
     @yq_v1
     def test_filter_with_mr(self, kikimr, client):
         client.create_yds_connection(
-            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), use_row_dispatcher=True
+            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
         )
         self.init_topics("test_filter_with_mr")
 
@@ -298,7 +298,7 @@ class TestPqRowDispatcher(TestYdsBase):
     @yq_v1
     def test_start_new_query(self, kikimr, client):
         client.create_yds_connection(
-            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), use_row_dispatcher=True
+            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
         )
         self.init_topics("test_start_new_query", create_output=False)
 
@@ -378,7 +378,7 @@ class TestPqRowDispatcher(TestYdsBase):
     @yq_v1
     def test_stop_start(self, kikimr, client):
         client.create_yds_connection(
-            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), use_row_dispatcher=True
+            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
         )
         self.init_topics("test_stop_start", create_output=False)
 
@@ -427,7 +427,7 @@ class TestPqRowDispatcher(TestYdsBase):
     @yq_v1
     def test_stop_start_with_filter(self, kikimr, client):
         client.create_yds_connection(
-            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), use_row_dispatcher=True
+            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
         )
         self.init_topics("test_stop_start", create_output=False)
 
@@ -479,7 +479,7 @@ class TestPqRowDispatcher(TestYdsBase):
     @yq_v1
     def test_restart_compute_node(self, kikimr, client):
         client.create_yds_connection(
-            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), use_row_dispatcher=True
+            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
         )
         self.init_topics("test_restart_compute_node")
 
@@ -535,7 +535,7 @@ class TestPqRowDispatcher(TestYdsBase):
     @yq_v1
     def test_3_sessions(self, kikimr, client):
         client.create_yds_connection(
-            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), use_row_dispatcher=True
+            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
         )
         self.init_topics("test_3_session", create_output=False)
 
@@ -619,7 +619,7 @@ class TestPqRowDispatcher(TestYdsBase):
     @yq_v1
     def test_many_partitions(self, kikimr, client):
         client.create_yds_connection(
-            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), use_row_dispatcher=True
+            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
         )
         self.init_topics("test_simple_not_null", partitions_count=4)
 
@@ -652,7 +652,7 @@ class TestPqRowDispatcher(TestYdsBase):
     @yq_v1
     def test_sensors(self, kikimr, client):
         client.create_yds_connection(
-            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), use_row_dispatcher=True
+            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
         )
         self.init_topics("test_sensors")
 

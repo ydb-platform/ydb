@@ -221,11 +221,11 @@ namespace NYql {
         case Ydb::Value::kDoubleValue:
             return ToString(value.value().double_value());
         case Ydb::Value::kBytesValue:
-            return NFq::EncloseAndEscapeString(ToString(value.value().bytes_value()), '"');
+            return NFq::EncloseAndEscapeString(value.value().bytes_value(), '"');
         case Ydb::Value::kTextValue:
-            return NFq::EncloseAndEscapeString(ToString(value.value().text_value()), '"');
+            return NFq::EncloseAndEscapeString(value.value().text_value(), '"');
         default:
-            ythrow yexception() << "ErrUnimplementedTypedValue, value case " << static_cast<ui64>(value.value().value_case());
+            throw yexception() << "ErrUnimplementedTypedValue, value case " << static_cast<ui64>(value.value().value_case());
         }
     }
 
@@ -244,7 +244,7 @@ namespace NYql {
         case TExpression::kNull:
             return FormatNull(expression.null());
         default:
-            ythrow yexception() << "UnimplementedExpression, payload_case " << static_cast<ui64>(expression.payload_case());
+            throw yexception() << "UnimplementedExpression, payload_case " << static_cast<ui64>(expression.payload_case());
         }
     }
 
@@ -270,7 +270,7 @@ namespace NYql {
             operation = " ^ ";
             break;
         default:
-            ythrow yexception() << "ErrUnimplementedArithmeticalExpression, operation " << static_cast<ui64>(expression.operation());
+            throw yexception() << "ErrUnimplementedArithmeticalExpression, operation " << static_cast<ui64>(expression.operation());
         }
 
         auto left = FormatExpression(expression.left_value());
@@ -305,7 +305,7 @@ namespace NYql {
         }
 
         if (succeeded == 0) {
-            ythrow yexception() << "failed to format AND statement, no operands";
+            throw yexception() << "failed to format AND statement, no operands";
         }
 
         if (succeeded == 1) {
@@ -339,7 +339,7 @@ namespace NYql {
         }
 
         if (cnt == 0) {
-            ythrow yexception() << "failed to format OR statement: no operands";
+            throw yexception() << "failed to format OR statement: no operands";
         }
 
         if (cnt == 1) {
@@ -384,7 +384,7 @@ namespace NYql {
             operation = " > ";
             break;
         default:
-            ythrow yexception() << "UnimplementedOperation, operation " << static_cast<ui64>(comparison.operation());
+            throw yexception() << "UnimplementedOperation, operation " << static_cast<ui64>(comparison.operation());
         }
 
         auto left = FormatExpression(comparison.left_value());
@@ -412,7 +412,7 @@ namespace NYql {
             case TPredicate::kBoolExpression:
                 return FormatExpression(predicate.bool_expression().value());
             default:
-                ythrow yexception() << "UnimplementedPredicateType, payload_case " << static_cast<ui64>(predicate.payload_case());
+                throw yexception() << "UnimplementedPredicateType, payload_case " << static_cast<ui64>(predicate.payload_case());
         }
     }
 

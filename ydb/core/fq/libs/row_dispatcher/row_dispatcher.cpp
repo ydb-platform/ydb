@@ -238,7 +238,7 @@ void TRowDispatcher::Handle(NActors::TEvents::TEvWakeup::TPtr&) {
     if (!CoordinatorActorId) {
         return;
     }
-    LOG_ROW_DISPATCHER_DEBUG("TEvWakeup, send start session to " << *CoordinatorActorId);
+    LOG_ROW_DISPATCHER_DEBUG("TEvWakeup, send ping to " << *CoordinatorActorId);
     Send(*CoordinatorActorId, new NActors::TEvents::TEvPing(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
 }
 

@@ -6,8 +6,8 @@ SRCS(
 
 PEERDIR(
     ydb/library/actors/core
-    ydb/library/yql/public/issue
     ydb/library/yql/dq/actors/protos
+    ydb/library/yql/public/issue
 )
 
 YQL_LAST_ABI_VERSION()

@@ -243,16 +243,6 @@ federated_query_config:
     max_inflight: 1
     storage:
       endpoint: ""
-  row_dispatcher:
-    enabled: false
-    timeout_before_start_session_sec: 2
-    send_status_period_sec: 2
-    max_session_used_memory: 1000000
-    coordinator:
-      enabled: true
-      node_path: "row_dispatcher"
-      storage:
-        endpoint: ""
   resource_manager:
     enabled: true
   private_proxy:

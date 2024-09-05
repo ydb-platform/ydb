@@ -198,6 +198,7 @@ SRCS(
     schemeshard_user_attr_limits.h
     schemeshard_utils.cpp
     schemeshard_utils.h
+    schemeshard_xxport__helpers.cpp
     schemeshard_export__cancel.cpp
     schemeshard_export__create.cpp
     schemeshard_export__forget.cpp

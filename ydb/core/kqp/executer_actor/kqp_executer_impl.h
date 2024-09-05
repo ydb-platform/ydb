@@ -1754,7 +1754,9 @@ protected:
         auto& response = *ResponseEv->Record.MutableResponse();
 
         response.SetStatus(status);
-        response.MutableIssues()->Swap(issues);
+        if (issues) {
+            response.MutableIssues()->Swap(issues);
+        }
 
         LOG_T("ReplyErrorAndDie. Response: " << response.DebugString()
             << ", to ActorId: " << Target);

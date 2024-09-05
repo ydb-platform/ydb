@@ -187,7 +187,7 @@ struct TCombinerNodes {
 class TState : public TComputationValue<TState> {
     typedef TComputationValue<TState> TBase;
 private:
-    using TStates = std::unordered_set<NUdf::TUnboxedValuePod*, TEqualsFunc, THashFunc, TMKQLAllocator<char, EMemorySubPool::Temporary>>;
+    using TStates = TRobinHoodHashSet<NUdf::TUnboxedValuePod*, TEqualsFunc, THashFunc, TMKQLAllocator<char, EMemorySubPool::Temporary>>;
     using TRow = std::vector<NUdf::TUnboxedValuePod, TMKQLAllocator<NUdf::TUnboxedValuePod>>;
     using TStorage = std::deque<TRow, TMKQLAllocator<TRow>>;
 

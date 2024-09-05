@@ -22,7 +22,9 @@ The format of data files is `.csv`, where each row corresponds to a record in th
 1,"%D0%9F%D1%80%D0%B8%D0%B2%D0%B5%D1%82"
 ```
 
-## Example {#example}
+## Examples {#example}
+
+### Tables {#example-table}
 
 When you export the tables created under [{#T}]({{ quickstart-path }}) in Getting started, the system will create the following file structure:
 
@@ -92,4 +94,25 @@ column_families {
   name: "default"
   compression: COMPRESSION_NONE
 }
+```
+
+### Directories {#example-directories}
+
+When you export empty directory `directory`, the system will create the following file structure:
+
+```
+└── directory
+    ├── permissions.pb
+    └── empty_dir
+```
+
+When you export directory `directory` with the nested table `table`, the system will create the following file structure:
+
+```
+└── directory
+    ├── permissions.pb
+    └── table
+        ├── data_00.csv
+        ├── permissions.pb
+        └── scheme.pb
 ```

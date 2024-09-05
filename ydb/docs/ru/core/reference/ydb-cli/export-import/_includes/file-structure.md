@@ -22,8 +22,9 @@
 1,"%D0%9F%D1%80%D0%B8%D0%B2%D0%B5%D1%82"
 ```
 
-## Пример {#example}
+## Примеры {#example}
 
+### Таблицы {#example-table}
 При выгрузке таблиц, созданных в разделе [{#T}]({{ quickstart-path }}) Начала работы, будет создана следующая файловая структура:
 
 ```
@@ -92,4 +93,24 @@ column_families {
   name: "default"
   compression: COMPRESSION_NONE
 }
+```
+
+### Директории {#example-directory}
+При выгрузке пустой директории `directory`, будет создана следующая файловая структура:
+
+```
+└── directory
+    ├── permissions.pb
+    └── empty_dir
+```
+
+При выгрузке директории `directory` со вложенной таблицей `table`, будет создана следующая файловая структура:
+
+```
+└── directory
+    ├── permissions.pb
+    └── table
+        ├── data_00.csv
+        ├── permissions.pb
+        └── scheme.pb
 ```

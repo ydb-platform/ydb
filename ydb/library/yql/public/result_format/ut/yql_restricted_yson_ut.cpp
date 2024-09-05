@@ -27,9 +27,9 @@ TString Normalize(const TString& yson) {
 Y_UNIT_TEST_SUITE(TRestrictedYson) {
     void RunTest(const NYT::TNode& node, const TString& expectedNodeStr, const TString& expectedEncodedStr) {
         UNIT_ASSERT_VALUES_EQUAL(FormatNode(node), expectedNodeStr);
-        TString encoded = NCommon::EncodeRestrictedYson(node, NYson::EYsonFormat::Text);
+        TString encoded = NResult::EncodeRestrictedYson(node, NYson::EYsonFormat::Text);
         UNIT_ASSERT_VALUES_EQUAL(Normalize(encoded), expectedEncodedStr);
-        TString decoded = NCommon::DecodeRestrictedYson(TStringBuf(encoded), NYson::EYsonFormat::Text);
+        TString decoded = NResult::DecodeRestrictedYson(TStringBuf(encoded), NYson::EYsonFormat::Text);
         UNIT_ASSERT_VALUES_EQUAL(FormatNode(node), Normalize(decoded));
     }
 

@@ -6,23 +6,38 @@
 namespace NKikimr {
 class THistory {
 private:
+    enum AccelerationType : ui8 {
+        PUT = 0,
+        GET,
+    };
+
+    static TString AccelerationTypeName(AccelerationType type) {
+        switch (type) {
+        case AccelerationType::PUT:
+            return "PutAcceleration";
+        case AccelerationType::GET:
+            return "GetAcceleration";
+        }
+    }
+
+public:
     struct TBaseEntry {
         TDuration Timestamp;
-        TBaseEntry(TInstant startTime)
-            : Timestamp(TInstant::Now() - startTime)
+        TBaseEntry(TMonotonic startTime)
+            : Timestamp(TMonotonic::Now() - startTime)
         {}
     };
 
     struct TVRequestEntry : public TBaseEntry {
         ui8 PartIdx;
-        ui32 QueryCount;
         ui8 OrderNumber;
-        
-        TVRequestEntry(TInstant startTime, ui8 partIdx, ui32 queryCount, ui8 orderNumber)
+        ui32 QueryCount;
+
+        TVRequestEntry(TMonotonic startTime, ui8 partIdx, ui32 queryCount, ui8 orderNumber)
             : TBaseEntry(startTime)
             , PartIdx(partIdx)
-            , QueryCount(queryCount)
             , OrderNumber(orderNumber)
+            , QueryCount(queryCount)
         {}
 
         void Output(IOutputStream& str, const char* typeName, const TIntrusivePtr<TBlobStorageGroupInfo>& info,
@@ -30,7 +45,7 @@ private:
             str << typeName         << "{"
                 << " TimestampMs# " << Timestamp.MilliSeconds();
             if (blobId && PartIdx != InvalidPartId) {
-                str << " sample PartId# "  << TLogoBlobID(*blobId, PartIdx).ToString();
+                str << " sample PartId# " << TLogoBlobID(*blobId, PartIdx).ToString();
             }
             str << " QueryCount# "  << QueryCount
                 << " VDiskId# "     << info->GetVDiskId(OrderNumber).ToString()
@@ -44,7 +59,7 @@ private:
         ui8 Status;
         TString ErrorReason;
         
-        TVResponseEntry(TInstant startTime, ui8 orderNumber, NKikimrProto::EReplyStatus status, const TString& errorReason)
+        TVResponseEntry(TMonotonic startTime, ui8 orderNumber, NKikimrProto::EReplyStatus status, const TString& errorReason)
             : TBaseEntry(startTime)
             , OrderNumber(orderNumber)
             , Status(status)
@@ -65,7 +80,7 @@ private:
     };
 
     struct TVPutEntry : public TVRequestEntry {
-        TVPutEntry(TInstant startTime, ui8 partIdx, ui32 queryCount, i8 orderNumber)
+        TVPutEntry(TMonotonic startTime, ui8 partIdx, ui32 queryCount, ui8 orderNumber)
             : TVRequestEntry(startTime, partIdx, queryCount, orderNumber)
         {}
 
@@ -76,8 +91,8 @@ private:
     };
 
     struct TVGetEntry : public TVRequestEntry {
-        TVGetEntry(TInstant startTime, ui8 partIdx, ui32 queryCount, ui8 orderNumber)
-            : TVRequestEntry(startTime, partIdx, queryCount,orderNumber)
+        TVGetEntry(TMonotonic startTime, ui8 partIdx, ui32 queryCount, ui8 orderNumber)
+            : TVRequestEntry(startTime, partIdx, queryCount, orderNumber)
         {}
 
         void Output(IOutputStream& str, const TIntrusivePtr<TBlobStorageGroupInfo>& info,
@@ -87,7 +102,7 @@ private:
     };
 
     struct TVPutResultEntry : public TVResponseEntry {
-        TVPutResultEntry(TInstant startTime, ui8 orderNumber, NKikimrProto::EReplyStatus status, const TString& errorReason)
+        TVPutResultEntry(TMonotonic startTime, ui8 orderNumber, NKikimrProto::EReplyStatus status, const TString& errorReason)
             : TVResponseEntry(startTime, orderNumber, status, errorReason)
         {}
 
@@ -99,7 +114,7 @@ private:
     };
 
     struct TVGetResultEntry : public TVResponseEntry {
-        TVGetResultEntry(TInstant startTime, ui8 orderNumber, NKikimrProto::EReplyStatus status, const TString& errorReason)
+        TVGetResultEntry(TMonotonic startTime, ui8 orderNumber, NKikimrProto::EReplyStatus status, const TString& errorReason)
             : TVResponseEntry(startTime, orderNumber, status, errorReason)
         {}
 
@@ -111,51 +126,30 @@ private:
     };
 
     struct TAccelerationEntry : public TBaseEntry {
-        TAccelerationEntry(TInstant startTime)
+        TAccelerationEntry(TMonotonic startTime, AccelerationType type)
             : TBaseEntry(startTime)
+            , Type(type)
         {}
 
-        void Output(IOutputStream& str, const char* typeName) const {
-            str << typeName << "{ TimestampMs# " << Timestamp.MilliSeconds() << " }";
-        }
-    };
-
-    struct TGetAccelerationEntry : public TAccelerationEntry {
-        TGetAccelerationEntry(TInstant startTime)
-            : TAccelerationEntry(startTime)
-        {}
-        void Output(IOutputStream& str, const TIntrusivePtr<TBlobStorageGroupInfo>& info,
-                const TLogoBlobID* blobId) const {
+        void Output(IOutputStream& str, const TIntrusivePtr<TBlobStorageGroupInfo>& info, const TLogoBlobID* blobId) const {
             Y_UNUSED(info);
             Y_UNUSED(blobId);
-            TAccelerationEntry::Output(str, "GetAcceleration");
+            str << AccelerationTypeName(Type) << "{ TimestampMs# " << Timestamp.MilliSeconds() << " }";
         }
+
+        AccelerationType Type;
     };
 
-    struct TPutAccelerationEntry : public TAccelerationEntry {
-        TPutAccelerationEntry(TInstant startTime)
-            : TAccelerationEntry(startTime)
-        {}
-
-        void Output(IOutputStream& str, const TIntrusivePtr<TBlobStorageGroupInfo>& info,
-                const TLogoBlobID* blobId) const {
-            Y_UNUSED(info);
-            Y_UNUSED(blobId);
-            TAccelerationEntry::Output(str, "PutAcceleration");
-        }
-    };
-
-
-    using TEntry = std::variant<TVPutEntry, TVGetEntry, TVPutResultEntry, TVGetResultEntry, TPutAccelerationEntry,
-            TGetAccelerationEntry>;
+    using TEntry = std::variant<TVPutEntry, TVGetEntry, TVPutResultEntry, TVGetResultEntry, TAccelerationEntry>;
 
 private:
 
     const TIntrusivePtr<TBlobStorageGroupInfo> Info;
-    TInstant StartTime;
+    TMonotonic StartTime;
     
     constexpr static ui32 TypicalHistorySize = TypicalPartsInBlob * 2;
     TStackVec<TEntry, TypicalHistorySize> Entries;
+    TStackVec<TEntry, 2> WaitingEntries;
 
 public:
     constexpr static ui32 InvalidPartId = 255;
@@ -163,15 +157,14 @@ public:
 public:
     THistory(const TIntrusivePtr<TBlobStorageGroupInfo>& info)
         : Info(info)
-        , StartTime(TInstant::Now())
+        , StartTime(TMonotonic::Now())
     {}
 
-    void AddVPut(ui8 partId, ui32 queryCount, ui32 orderNumber) {
-        Entries.emplace_back(TVPutEntry(StartTime, partId, queryCount, orderNumber));
+    void AddVPutToWaitingList(ui8 partId, ui32 queryCount, ui32 orderNumber) {
+        WaitingEntries.emplace_back(TVPutEntry(StartTime, partId, queryCount, orderNumber));
     }
-
-    void AddVGet(ui8 partId, ui32 queryCount, ui32 orderNumber) {
-        Entries.emplace_back(TVGetEntry(StartTime, partId, queryCount, orderNumber));
+    void AddVGetToWaitingList(ui8 partId, ui32 queryCount, ui32 orderNumber) {
+        WaitingEntries.emplace_back(TVGetEntry(StartTime, partId, queryCount, orderNumber));
     }
 
     void AddVPutResult(ui32 orderNumber, NKikimrProto::EReplyStatus status, const TString& errorReason) {
@@ -182,12 +175,19 @@ public:
         Entries.emplace_back(TVGetResultEntry(StartTime, orderNumber, status, errorReason));
     }
 
-    void AddPutAcceleration() {
-        Entries.emplace_back(TPutAccelerationEntry(StartTime));
+    void AddAcceleration(bool isPut) {
+        AccelerationType type = isPut ? AccelerationType::PUT : AccelerationType::GET;
+        Entries.emplace_back(TAccelerationEntry(StartTime, type));
     }
 
-    void AddGetAcceleration() {
-        Entries.emplace_back(TGetAccelerationEntry(StartTime));
+    void AddAllWaiting() {
+        for (TEntry& entry : WaitingEntries) {
+            std::visit([&](auto& e) {
+                e.Timestamp = TMonotonic::Now() - StartTime;
+                Entries.push_back(std::move(e));
+            }, entry);
+        }
+        WaitingEntries.clear();
     }
 
     TString Print(const TLogoBlobID* blobId = nullptr) const {

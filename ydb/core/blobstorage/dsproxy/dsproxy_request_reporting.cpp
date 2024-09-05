@@ -2,15 +2,15 @@
 
 namespace NKikimr {
 
-static std::array<std::atomic<bool>, NKikimrBlobStorage::EPutHandleClass_MAX> ReportPutPermissions;
-static std::array<std::atomic<bool>, NKikimrBlobStorage::EGetHandleClass_MAX> ReportGetPermissions;
+static std::array<std::atomic<bool>, NKikimrBlobStorage::EPutHandleClass_MAX + 1> ReportPutPermissions;
+static std::array<std::atomic<bool>, NKikimrBlobStorage::EGetHandleClass_MAX + 1> ReportGetPermissions;
 
 bool AllowToReport(NKikimrBlobStorage::EPutHandleClass handleClass) {
-    return ReportPutPermissions[(ui32)handleClass - 1].exchange(false);
+    return ReportPutPermissions[(ui32)handleClass].exchange(false);
 }
 
 bool AllowToReport(NKikimrBlobStorage::EGetHandleClass handleClass) {
-    return ReportGetPermissions[(ui32)handleClass - 1].exchange(false);
+    return ReportGetPermissions[(ui32)handleClass].exchange(false);
 }
 
 class TRequestReportingThrottler : public TActorBootstrapped<TRequestReportingThrottler> {

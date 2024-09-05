@@ -203,11 +203,8 @@ public:
     TString ToString() const;
 
     TString PrintHistory() const {
-        return History.Print(Blobs.empty() ? nullptr : &Blobs[0].BlobId);
-    }
-
-    void RegisterAcceleration() {
-        History.AddPutAcceleration();
+        Y_DEBUG_ABORT_UNLESS(!Blobs.empty());
+        return History.Print(&Blobs[0].BlobId);
     }
 
     void InvalidatePartStates(ui32 orderNumber) {
@@ -247,7 +244,7 @@ public:
                     p->SetGeneration(generation);
                 }
 
-                History.AddVPut(ptr->Id.PartId(), 1, orderNumber);
+                History.AddVPutToWaitingList(ptr->Id.PartId(), 1, orderNumber);
                 events.emplace_back(std::move(ev));
                 HandoffPartsSent += ptr->IsHandoff;
                 ++VPutRequests;
@@ -259,7 +256,8 @@ public:
                 }
                 auto ev = std::make_unique<TEvBlobStorage::TEvVMultiPut>(Info->GetVDiskId(it->first), deadline,
                     Blackboard.PutHandleClass, false);
-                ui8 partId = it->second->Id.PartId();
+
+                ui8 firstPartId = it->second->Id.PartId();
                 ui8 orderNumber = it->first;
                 while (it != end) {
                     auto [orderNumber, ptr] = *it++;
@@ -267,7 +265,7 @@ public:
                         Blobs[ptr->BlobIdx].Span.GetTraceId());
                     HandoffPartsSent += ptr->IsHandoff;
                 }
-                History.AddVPut(partId, ev->Record.ItemsSize(), orderNumber);
+                History.AddVPutToWaitingList(firstPartId, ev->Record.ItemsSize(), orderNumber);
                 events.emplace_back(std::move(ev));
                 ++VMultiPutRequests;
             }

@@ -206,7 +206,7 @@ public:
         TIntrusivePtr<TBlobStorageGroupProxyMon> Mon;
         TActorId Source = TActorId{};
         ui64 Cookie = 0;
-        TInstant Now;
+        TMonotonic Now;
         TIntrusivePtr<TStoragePoolCounters>& StoragePoolCounters;
         ui32 RestartCounter;
         NWilson::TTraceId TraceId = {};
@@ -235,10 +235,10 @@ public:
         , ParentSpan(TWilson::BlobStorage, std::move(params.Common.TraceId), params.TypeSpecific.Name)
         , RestartCounter(params.Common.RestartCounter)
         , CostModel(GroupQueues->CostModel)
+        , RequestStartTime(params.Common.Now)
         , Source(params.Common.Source)
         , Cookie(params.Common.Cookie)
         , LatencyQueueKind(params.Common.LatencyQueueKind)
-        , RequestStartTime(params.Common.Now)
         , RacingDomains(&Info->GetTopology())
         , ExecutionRelay(std::move(params.Common.ExecutionRelay))
     {
@@ -324,6 +324,7 @@ protected:
     bool Dead = false;
     const ui32 RestartCounter = 0;
     std::shared_ptr<const TCostModel> CostModel;
+    const TMonotonic RequestStartTime;
 
 private:
     const TActorId Source;
@@ -332,7 +333,6 @@ private:
     ui32 RequestsInFlight = 0;
     std::unique_ptr<IEventBase> Response;
     const TMaybe<TGroupStat::EKind> LatencyQueueKind;
-    const TInstant RequestStartTime;
     THPTimer Timer;
     std::deque<std::unique_ptr<IEventHandle>> PostponedQ;
     TBlobStorageGroupInfo::TGroupFailDomains RacingDomains; // a set of domains we've received RACE from

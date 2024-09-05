@@ -54,6 +54,9 @@ class TGetImpl {
 
     THistory History;
 
+    friend class TBlobStorageGroupGetRequest;
+    friend class THistory;
+
 public:
     TGetImpl(const TIntrusivePtr<TBlobStorageGroupInfo> &info, const TIntrusivePtr<TGroupQueues> &groupQueues,
             TEvBlobStorage::TEvGet *ev, TNodeLayoutInfoPtr&& nodeLayout,
@@ -162,7 +165,7 @@ public:
             TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> &outVGets,
             TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> &outVPuts,
             TAutoPtr<TEvBlobStorage::TEvGetResult> &outGetResult) {
-        NKikimrBlobStorage::TEvVGetResult &record = ev.Record;
+        const NKikimrBlobStorage::TEvVGetResult &record = ev.Record;
         Y_ABORT_UNLESS(record.HasStatus());
         const NKikimrProto::EReplyStatus status = record.GetStatus();
         Y_ABORT_UNLESS(status != NKikimrProto::RACE && status != NKikimrProto::BLOCKED && status != NKikimrProto::DEADLINE);
@@ -247,7 +250,7 @@ public:
         ++ResponseIndex;
 
         Step(logCtx, outVGets, outVPuts, outGetResult);
-        History.AddVPutResult(orderNumber, status, record.GetErrorReason());
+        History.AddVGetResult(orderNumber, status, record.GetErrorReason());
     }
 
     void OnVPutResult(TLogContext &logCtx, TEvBlobStorage::TEvVPutResult &ev,
@@ -291,14 +294,6 @@ public:
 
     TString PrintHistory() const {
         return History.Print((QuerySize == 0) ? nullptr : &Queries[0].Id);
-    }
-
-    void RegisterPutAcceleration() {
-        History.AddPutAcceleration();
-    }
-
-    void RegisterGetAcceleration() {
-        History.AddGetAcceleration();
     }
 
 protected:

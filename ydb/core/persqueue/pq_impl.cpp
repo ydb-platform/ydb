@@ -3504,7 +3504,7 @@ void TPersQueue::Handle(TEvPQ::TEvTxCalcPredicateResult::TPtr& ev, const TActorC
              " Step " << event.Step <<
              ", TxId " << event.TxId <<
              ", Partition " << event.Partition <<
-             ", Predicate " << (event.Predicate ? "true" : "false"));
+             ", Predicate " << event.Predicate);
 
     auto tx = GetTransaction(ctx, event.TxId);
     if (!tx) {

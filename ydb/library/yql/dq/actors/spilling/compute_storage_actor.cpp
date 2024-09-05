@@ -76,7 +76,7 @@ protected:
         if (!ErrorCallback_) Y_ABORT("Error: %s", error.c_str());
 
         LOG_E("Error: " << error);
-        ErrorCallback_(error);
+        ErrorCallback_(TStringBuilder() << "[Spilling]" << error);
         SendInternal(SpillingActorId_, new TEvents::TEvPoison);
         PassAway();
     }
@@ -224,7 +224,7 @@ private:
 
     void HandleWork(TEvDqSpilling::TEvError::TPtr& ev) {
         auto& msg = *ev->Get();
-        FailWithError(TStringBuilder() << "[TEvError] " << msg.Message);
+        FailWithError(TStringBuilder() << "[Spilling][TEvError] " << msg.Message);
     }
 
     bool HandleDelete(TKey blobId, ui64 size) {

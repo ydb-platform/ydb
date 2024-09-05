@@ -568,14 +568,24 @@ protected:
         auto reason = ev->Get()->Reason;
         switch (eventType) {
             case TEvKqpNode::TEvStartKqpTasksRequest::EventType: {
-                if (reason == TEvents::TEvUndelivered::EReason::ReasonActorUnknown) {
-                    LOG_D("Schedule a retry by ActorUnknown reason, nodeId:" << ev->Sender.NodeId() << " requestId: " << ev->Cookie);
-                    this->Schedule(TDuration::MilliSeconds(Planner->GetCurrentRetryDelay(ev->Cookie)), new typename TEvPrivate::TEvRetry(ev->Cookie, ev->Sender));
-                    return;
+                switch (reason) {
+                    case TEvents::TEvUndelivered::EReason::ReasonActorUnknown: {
+                        LOG_D("Schedule a retry by ActorUnknown reason, nodeId:" << ev->Sender.NodeId() << " requestId: " << ev->Cookie);
+                        this->Schedule(TDuration::MilliSeconds(Planner->GetCurrentRetryDelay(ev->Cookie)), new typename TEvPrivate::TEvRetry(ev->Cookie, ev->Sender));
+                        return;
+                    }
+                    case TEvents::TEvUndelivered::EReason::Disconnected: {
+                        InvalidateNode(ev->Sender.NodeId());
+                        ReplyUnavailable(TStringBuilder()
+                            << "Failed to send EvStartKqpTasksRequest because node is unavailable: " << ev->Sender.NodeId());
+                        return;
+                    }
+                    case TEvents::TEvUndelivered::EReason::ReasonUnknown: {
+                        InvalidateNode(ev->Sender.NodeId());
+                        InternalError(TStringBuilder() << "TEvKqpNode::TEvStartKqpTasksRequest lost: " << reason);
+                        return;
+                    }
                 }
-                InvalidateNode(ev->Sender.NodeId());
-                return InternalError(TStringBuilder()
-                    << "TEvKqpNode::TEvStartKqpTasksRequest lost: " << reason);
             }
             default: {
                 LOG_E("Event lost, type: " << eventType << ", reason: " << reason);

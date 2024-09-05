@@ -11,10 +11,19 @@ NYql::TIssue GetLocksInvalidatedIssue(const TKqpTransactionContext& txCtx, const
     TStringBuilder message;
     message << "Transaction locks invalidated.";
 
-    TMaybe<TString> tableName;
-    auto table = txCtx.TableByIdMap.FindPtr(pathId);
-    YQL_ENSURE(table);
-    return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message << " Table: " << *table);
+    if (pathId.OwnerId() != 0) {
+        auto table = txCtx.TableByIdMap.FindPtr(pathId);
+        YQL_ENSURE(table);
+        return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message << " Table: " << *table);
+    } else {
+        // Olap tables don't return SchemeShard in locks, so we use tableId here.
+        for (const auto& [pathId, table] : txCtx.TableByIdMap) {
+            if (pathId.TableId() == pathId.TableId()) {
+                return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message << " Table: " << table);
+            }
+        }
+        YQL_ENSURE(false);
+    }
 }
 
 TIssue GetLocksInvalidatedIssue(const TKqpTransactionContext& txCtx, const TKqpTxLock& invalidatedLock) {

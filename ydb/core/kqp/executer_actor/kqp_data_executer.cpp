@@ -207,6 +207,7 @@ public:
 
     void Finalize() {
         YQL_ENSURE(!AlreadyReplied);
+        YQL_ENSURE(!LocksBroken);
 
         ResponseEv->Record.MutableResponse()->SetStatus(Ydb::StatusIds::SUCCESS);
         Counters->TxProxyMon->ReportStatusOK->Inc();
@@ -1160,6 +1161,7 @@ private:
                 YQL_ENSURE(shardState->State == TShardState::EState::Executing);
                 shardState->State = TShardState::EState::Finished;
                 Counters->TxProxyMon->TxResultAborted->Inc();
+                LocksBroken = true;
 
                 if (!res->Record.GetTxLocks().empty()) {
                     ResponseEv->BrokenLockPathId = NYql::TKikimrPathId(
@@ -1223,6 +1225,7 @@ private:
                 shardState->State = TShardState::EState::Finished;
 
                 Counters->TxProxyMon->TxResultAborted->Inc(); // TODO: dedicated counter?
+                LocksBroken = true;
 
                 if (!res->Record.GetTxLocks().empty()) {
                     ResponseEv->BrokenLockPathId = TKikimrPathId(
@@ -2768,6 +2771,7 @@ private:
     bool VolatileTx = false;
     bool ImmediateTx = false;
     bool TxPlanned = false;
+    bool LocksBroken = false;
 
     TInstant FirstPrepareReply;
     TInstant LastPrepareReply;

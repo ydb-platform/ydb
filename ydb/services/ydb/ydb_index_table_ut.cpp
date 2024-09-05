@@ -32,7 +32,7 @@ void CreateTestTableWithIndex(NYdb::NTable::TTableClient& client) {
                 .AddNullableColumn("Timestamp", EPrimitiveType::Int64)
                 .AddNullableColumn("Data", EPrimitiveType::String)
                 .SetPrimaryKeyColumns({"NameHash", "Name"})
-                .AddSecondaryIndex("TimestampIndex",TVector<TString>({"Timestamp", "Name", "Version"}));
+                .AddSecondaryIndex("TimestampIndex", {"Timestamp", "Name", "Version"});
 
         auto tableSettings = NYdb::NTable::TCreateTableSettings().PartitioningPolicy(
             NYdb::NTable::TPartitioningPolicy().UniformPartitions(SHARD_COUNT));

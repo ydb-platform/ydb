@@ -842,7 +842,7 @@ static TString CreateSession(std::shared_ptr<grpc::Channel> channel) {
     return result.session_id();
 }
 
-void IncorrectConnectionStringPending(const TString& incorrectLocation) {
+void IncorrectConnectionStringPending(const std::string& incorrectLocation) {
     auto connection = NYdb::TDriver(incorrectLocation);
     auto client = NYdb::NTable::TTableClient(connection);
     auto session = client.CreateSession().ExtractValueSync().GetSession();
@@ -856,7 +856,7 @@ Y_UNIT_TEST_SUITE(GrpcConnectionStringParserTest) {
         bool done = false;
 
         {
-            TString location = TStringBuilder() << "localhost:" << grpc;
+            std::string location = TStringBuilder() << "localhost:" << grpc;
 
             // by default, location won't have database path
             auto connection = NYdb::TDriver(location);
@@ -1223,7 +1223,7 @@ Y_UNIT_TEST_SUITE(TGRpcYdbTest) {
             UNIT_ASSERT(deferred.status() == Ydb::StatusIds::BAD_REQUEST);
             NYql::TIssues issues;
             NYql::IssuesFromMessage(deferred.issues(), issues);
-            UNIT_ASSERT(issues.ToString().Contains("invalid or unset index type"));
+            UNIT_ASSERT(issues.ToString().contains("invalid or unset index type"));
         }
     }
 
@@ -4252,7 +4252,7 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
                 auto parser = TValueParser(val);
                 parser.OpenTuple();
                 UNIT_ASSERT(parser.TryNextElement());
-                return parser.GetOptionalUint64().GetRef();
+                return parser.GetOptionalUint64().value();
             };
 
             int n = 0;

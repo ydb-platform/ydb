@@ -96,7 +96,7 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
 
             const auto& schema = descr.GetSchemaPresets().begin()->second;
             UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns().size(), 10);
-            UNIT_ASSERT(schema.GetColumns()[0].ToString().StartsWith("{ name: \"timestamp\", type:"));
+            UNIT_ASSERT(schema.GetColumns()[0].ToString().starts_with("{ name: \"timestamp\", type:"));
             UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns()[1].ToString(), "{ name: \"resource_type\", type: Utf8 }");
             UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns()[4].ToString(), "{ name: \"level\", type: Int32? }");
             UNIT_ASSERT_VALUES_EQUAL(schema.GetPrimaryKeyColumns(),
@@ -280,7 +280,7 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
             UNIT_ASSERT_VALUES_EQUAL(descr.GetShardsCount(), 4);
             const auto& schema = descr.GetSchema();
             UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns().size(), 10);
-            UNIT_ASSERT(schema.GetColumns()[0].ToString().StartsWith("{ name: \"timestamp\", type:"));
+            UNIT_ASSERT(schema.GetColumns()[0].ToString().starts_with("{ name: \"timestamp\", type:"));
             UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns()[1].ToString(), "{ name: \"resource_type\", type: Utf8 }");
             UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns()[4].ToString(), "{ name: \"level\", type: Int32? }");
             UNIT_ASSERT_VALUES_EQUAL(schema.GetPrimaryKeyColumns(),
@@ -302,7 +302,7 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
             UNIT_ASSERT_VALUES_EQUAL(descr.GetShardsCount(), 4);
             const auto& schema = descr.GetSchema();
             UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns().size(), 10);
-            UNIT_ASSERT(schema.GetColumns()[0].ToString().StartsWith("{ name: \"timestamp\", type:"));
+            UNIT_ASSERT(schema.GetColumns()[0].ToString().starts_with("{ name: \"timestamp\", type:"));
             UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns()[1].ToString(), "{ name: \"resource_type\", type: Utf8 }");
             UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns()[4].ToString(), "{ name: \"level\", type: Int32? }");
             UNIT_ASSERT_VALUES_EQUAL(schema.GetPrimaryKeyColumns(),

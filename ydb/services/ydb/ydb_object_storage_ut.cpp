@@ -92,9 +92,9 @@ Y_UNIT_TEST_SUITE(YdbS3Internal) {
             UNIT_ASSERT_VALUES_EQUAL(res.GetContents().RowsCount(), 1);
             TResultSetParser parser(res.GetContents());
             UNIT_ASSERT(parser.TryNextRow());
-            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("Name").GetOptionalUtf8().GetRef(), "bucket50");
-            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("Path").GetOptionalUtf8().GetRef(), "/home/.bashrc");
-            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("Timestamp").GetOptionalUint64().GetRef(), 10);
+            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("Name").GetOptionalUtf8().value(), "bucket50");
+            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("Path").GetOptionalUtf8().value(), "/home/.bashrc");
+            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("Timestamp").GetOptionalUint64().value(), 10);
         }
     }
 

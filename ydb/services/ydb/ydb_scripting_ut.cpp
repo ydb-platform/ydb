@@ -43,7 +43,7 @@ Y_UNIT_TEST_SUITE(YdbScripting) {
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT(result.IsSuccess());
 
-        TVector<TResultSet> resultSets = result.GetResultSets();
+        auto resultSets = result.GetResultSets();
         UNIT_ASSERT_EQUAL(resultSets.size(), 1);
 
         TResultSetParser rsParser(resultSets[0]);
@@ -101,7 +101,7 @@ Y_UNIT_TEST_SUITE(YdbScripting) {
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT(result.IsSuccess());
 
-        TVector<TResultSet> resultSets = result.GetResultSets();
+        auto resultSets = result.GetResultSets();
         UNIT_ASSERT_EQUAL(resultSets.size(), 3);
 
         UNIT_ASSERT_EQUAL(resultSets[0].RowsCount(), 2);

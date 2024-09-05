@@ -13,7 +13,7 @@ private:
     YDB_READONLY_DEF(TString, ErrorString);
 
 public:
-    explicit TEvFetchDatabaseResponse(bool serverless, const TString& errorString)
+    TEvFetchDatabaseResponse(bool serverless, const TString& errorString)
         : Serverless(serverless)
         , ErrorString(errorString)
     {}

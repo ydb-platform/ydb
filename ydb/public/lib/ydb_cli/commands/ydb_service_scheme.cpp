@@ -223,7 +223,7 @@ void TCommandDescribe::Config(TConfig& config) {
     config.Opts->AddLongOption("partition-stats", "[Table|Topic|Consumer] Show partition statistics").StoreTrue(&ShowPartitionStats);
 
     AddDeprecatedJsonOption(config, "(Deprecated, will be removed soon. Use --format option instead) [Table] Output in json format");
-    AddFormats(config, { EOutputFormat::Pretty, EOutputFormat::ProtoJsonBase64 });
+    AddFormats(config, { EDataFormat::Pretty, EDataFormat::ProtoJsonBase64 });
     config.Opts->MutuallyExclusive("json", "format");
 
     config.SetFreeArgsNum(1);
@@ -940,7 +940,7 @@ int TCommandDescribe::PrintConsumerResponsePretty(const NYdb::NTopic::TConsumerD
 }
 
 void TCommandDescribe::WarnAboutTableOptions() {
-    if (ShowKeyShardBoundaries || ShowStats || ShowPartitionStats || OutputFormat != EOutputFormat::Default) {
+    if (ShowKeyShardBoundaries || ShowStats || ShowPartitionStats || OutputFormat != EDataFormat::Default) {
         TVector<TString> options;
         if (ShowKeyShardBoundaries) {
             options.emplace_back("\"partition-boundaries\"(\"shard-boundaries\")");
@@ -951,7 +951,7 @@ void TCommandDescribe::WarnAboutTableOptions() {
         if (ShowPartitionStats) {
             options.emplace_back("\"partition-stats\"");
         }
-        if (OutputFormat != EOutputFormat::Default) {
+        if (OutputFormat != EDataFormat::Default) {
             options.emplace_back("\"json\"");
         }
         Cerr << "Note: \"" << Path << "\" is not a table. Option";
@@ -986,7 +986,7 @@ void TCommandList::Config(TConfig& config) {
         .StoreTrue(&FromNewLine);
     config.Opts->AddCharOption('m', "Multithread recursive request")
         .StoreTrue(&Multithread);
-    AddFormats(config, { EOutputFormat::Pretty, EOutputFormat::Json });
+    AddFormats(config, { EDataFormat::Pretty, EDataFormat::Json });
     config.SetFreeArgsMax(1);
     SetFreeArgTitle(0, "<path>", "Path to list");
 }
@@ -1013,15 +1013,15 @@ int TCommandList::Run(TConfig& config) {
     std::unique_ptr<ISchemePrinter> printer;
 
     switch (OutputFormat) {
-    case EOutputFormat::Default:
-    case EOutputFormat::Pretty:
+    case EDataFormat::Default:
+    case EDataFormat::Pretty:
         if (AdvancedMode) {
             printer = std::make_unique<TTableSchemePrinter>(driver, std::move(settings));
         } else {
             printer = std::make_unique<TDefaultSchemePrinter>(driver, std::move(settings));
         }
         break;
-    case EOutputFormat::Json:
+    case EDataFormat::Json:
     {
         printer = std::make_unique<TJsonSchemePrinter>(driver, std::move(settings), AdvancedMode);
         break;

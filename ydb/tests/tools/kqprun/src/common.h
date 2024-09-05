@@ -71,7 +71,7 @@ struct TRunnerOptions {
     TString InProgressStatisticsOutputFile;
 
     EResultOutputFormat ResultOutputFormat = EResultOutputFormat::RowsJson;
-    NYdb::NConsoleClient::EOutputFormat PlanOutputFormat = NYdb::NConsoleClient::EOutputFormat::Default;
+    NYdb::NConsoleClient::EDataFormat PlanOutputFormat = NYdb::NConsoleClient::EDataFormat::Default;
     ETraceOptType TraceOptType = ETraceOptType::Disabled;
 
     TDuration ScriptCancelAfter;

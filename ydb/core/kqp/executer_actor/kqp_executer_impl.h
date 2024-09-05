@@ -710,7 +710,10 @@ protected:
         if (statusCode == Ydb::StatusIds::INTERNAL_ERROR) {
             InternalError(issues);
         } else if (statusCode == Ydb::StatusIds::TIMEOUT) {
-            AbortExecutionAndDie(ev->Sender, NYql::NDqProto::StatusIds::TIMEOUT, "Request timeout exceeded");
+            if (issues.Empty()) {
+                issues.AddIssue("Request timeout exceeded");
+            }
+            AbortExecutionAndDie(ev->Sender, NYql::NDqProto::StatusIds::TIMEOUT, issues);
         } else {
             RuntimeError(NYql::NDq::DqStatusToYdbStatus(msg.GetStatusCode()), issues);
         }
@@ -1679,16 +1682,21 @@ protected:
     }
 
     void AbortExecutionAndDie(TActorId abortSender, NYql::NDqProto::StatusIds::StatusCode status, const TString& message) {
+        AbortExecutionAndDie(abortSender, status, {NYql::TIssue(message)});
+    }
+
+    void AbortExecutionAndDie(TActorId abortSender, NYql::NDqProto::StatusIds::StatusCode status, const NYql::TIssues& issues) {
         if (AlreadyReplied) {
             return;
         }
 
-        LOG_E("Abort execution: " << NYql::NDqProto::StatusIds_StatusCode_Name(status) << "," << message);
+        LOG_E("Abort execution: " << NYql::NDqProto::StatusIds_StatusCode_Name(status) << ", " << issues.ToOneLineString());
         if (ExecuterSpan) {
             ExecuterSpan.EndError(TStringBuilder() << NYql::NDqProto::StatusIds_StatusCode_Name(status));
         }
 
         static_cast<TDerived*>(this)->FillResponseStats(Ydb::StatusIds::TIMEOUT);
+        NYql::IssuesToMessage(issues, ResponseEv->Record.MutableResponse()->MutableIssues());
 
         // TEvAbortExecution can come from either ComputeActor or SessionActor (== Target).
         if (abortSender != Target) {
@@ -1701,7 +1709,7 @@ protected:
         this->Send(Target, ResponseEv.release());
 
         Request.Transactions.crop(0);
-        TerminateComputeActors(Ydb::StatusIds::TIMEOUT, message);
+        TerminateComputeActors(Ydb::StatusIds::TIMEOUT, issues);
         this->PassAway();
     }
 

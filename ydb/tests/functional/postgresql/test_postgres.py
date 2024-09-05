@@ -82,7 +82,8 @@ class BasePostgresTest(object):
                 'KQP_COMPILE_ACTOR': LogLevels.DEBUG,
                 'KQP_COMPILE_REQUEST': LogLevels.DEBUG,
                 'KQP_PROXY': LogLevels.DEBUG
-            }
+            },
+            extra_feature_flags=['enable_pg_syntax']
         ))
         cls.cluster.start()
 

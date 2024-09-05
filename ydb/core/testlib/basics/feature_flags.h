@@ -65,6 +65,7 @@ public:
     FEATURE_FLAG_SETTER(EnableBackupService)
     FEATURE_FLAG_SETTER(EnableGranularTimecast)
     FEATURE_FLAG_SETTER(EnablePgSyntax)
+    FEATURE_FLAG_SETTER(EnableTieringInColumnShard)
 
     #undef FEATURE_FLAG_SETTER
 };

@@ -126,6 +126,7 @@ Y_UNIT_TEST_SUITE(AskActor) {
                 yexception,
                 "ask timeout");
             UNIT_ASSERT_VALUES_EQUAL(runtime->GetCurrentTime() - start, TDuration::Seconds(1));
+            UNIT_ASSERT_VALUES_EQUAL(1, 2);
         }
     }
 }

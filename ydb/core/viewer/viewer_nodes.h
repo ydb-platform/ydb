@@ -1388,12 +1388,14 @@ public:
                             ui32 nodeId = nodeStats.GetNodeId();
                             TNode* node = FindNode(nodeId);
                             if (node) {
-                                for (const NKikimrHive::THiveDomainStatsStateCount& stateStats : nodeStats.GetStateStats()) {
-                                    NKikimrViewer::TTabletStateInfo& viewerTablet(node->Tablets.emplace_back());
-                                    viewerTablet.SetType(NKikimrTabletBase::TTabletTypes::EType_Name(stateStats.GetTabletType()));
-                                    viewerTablet.SetCount(stateStats.GetCount());
-                                    viewerTablet.SetState(GetFlagFromTabletState(stateStats.GetVolatileState()));
-                                    FieldsAvailable.set(+ENodeFields::Tablets);
+                                if (Database) { // it's better to ask hive about tablets only if we're filtering by database
+                                    for (const NKikimrHive::THiveDomainStatsStateCount& stateStats : nodeStats.GetStateStats()) {
+                                        NKikimrViewer::TTabletStateInfo& viewerTablet(node->Tablets.emplace_back());
+                                        viewerTablet.SetType(NKikimrTabletBase::TTabletTypes::EType_Name(stateStats.GetTabletType()));
+                                        viewerTablet.SetCount(stateStats.GetCount());
+                                        viewerTablet.SetState(GetFlagFromTabletState(stateStats.GetVolatileState()));
+                                        FieldsAvailable.set(+ENodeFields::Tablets);
+                                    }
                                 }
                                 if (nodeStats.HasLastAliveTimestamp()) {
                                     node->SystemState.SetDisconnectTime(std::max(node->SystemState.GetDisconnectTime(), nodeStats.GetLastAliveTimestamp() / 1000)); // seconds
@@ -1650,10 +1652,14 @@ public:
         if (FieldsNeeded(FieldsTablets)) {
             for (auto& [nodeId, response] : TabletViewerResponse) {
                 if (response.IsOk()) {
+                    Cerr << "Good tablet response for node " << nodeId << Endl;
+                    Cerr << "LocationResponded: " << response.Get()->Record.GetLocationResponded().ShortDebugString() << Endl;
                     auto& tabletResponse(*(response.Get()->Record.MutableTabletResponse()));
                     if (tabletResponse.TabletStateInfoSize() > 0 && !tabletResponse.GetTabletStateInfo(0).HasCount()) {
+                        Cerr << "TabletResponse before merge: " << tabletResponse.ShortDebugString() << Endl;
                         GroupWhiteboardResponses(tabletResponse, "NodeId,Type,State");
                     }
+                    Cerr << "TabletResponse: " << tabletResponse.ShortDebugString() << Endl;
                     for (const auto& tabletState : tabletResponse.GetTabletStateInfo()) {
                         TNode* node = FindNode(tabletState.GetNodeId());
                         if (node) {
@@ -1665,6 +1671,8 @@ public:
                             }
                         }
                     }
+                } else {
+                    Cerr << "Bad tablet response for node " << nodeId << Endl;
                 }
             }
             for (auto& [nodeId, response] : TabletStateResponse) {

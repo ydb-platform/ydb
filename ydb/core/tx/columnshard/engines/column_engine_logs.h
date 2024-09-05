@@ -150,6 +150,10 @@ public:
         return *GetGranulePtrVerified(pathId);
     }
 
+    TGranuleMeta& MutableGranuleVerified(const ui64 pathId) const {
+        return *GetGranulePtrVerified(pathId);
+    }
+
     std::shared_ptr<TGranuleMeta> GetGranulePtrVerified(const ui64 pathId) const {
         auto result = GetGranuleOptional(pathId);
         AFL_VERIFY(result)("path_id", pathId);

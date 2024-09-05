@@ -23,7 +23,7 @@ TEST_DATA_FOLDER = yatest.common.source_path("ydb/tests/postgres_integrations/li
     ids=lambda item: item.name
 )
 def test_read_jtest_results(test):
-    filepath = path.join(TEST_DATA_FOLDER, "test-results-example.xml")
+    filepath = path.join(TEST_DATA_FOLDER, "junit-results-example.xml")
     parsed_result = pytest_integration._read_tests_result(filepath)
 
     parsed_test = parsed_result[test.name]
@@ -31,7 +31,7 @@ def test_read_jtest_results(test):
 
 
 def test_read_jtest_with_one_result():
-    filepath = path.join(TEST_DATA_FOLDER, "test-results-example1.xml")
+    filepath = path.join(TEST_DATA_FOLDER, "junit-results-example1.xml")
     parsed_result = pytest_integration._read_tests_result(filepath)
     parsed_test = parsed_result["f/test-failed"]
     assert parsed_test == TestCase(name="f/test-failed", state=TestState.FAILED, log="Failed\nfailed-mess")

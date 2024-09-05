@@ -1,3 +1,2 @@
 # ydb segfalts
-# TestBinaryByteSlicetoUUID
-TestIssue494
+TestIssue494 # https://github.com/ydb-platform/ydb/issues/8410

@@ -3,7 +3,7 @@
 #include <ydb-cpp-sdk/library/json_value/ydb_json_value.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/ydb_cli/common/scheme_printers.h>
-#include <ydb-cpp-sdk/client/topic/topic.h>
+#include <ydb-cpp-sdk/client/topic/client.h>
 #include <google/protobuf/port_def.inc>
 
 #include <util/string/join.h>

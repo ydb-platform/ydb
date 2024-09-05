@@ -584,7 +584,7 @@ bool HasIssue(const NYql::TIssues& issues, ui32 code,
 }
 
 void PrintQueryStats(const TDataQueryResult& result) {
-    if (!result.GetStats().Defined()) {
+    if (!result.GetStats().has_value()) {
         return;
     }
 
@@ -795,7 +795,7 @@ TString StreamResultToYsonImpl(TIterator& it, TVector<TString>* profiles, bool t
         if (!streamPart.IsSuccess()) {
             if (opStatus != NYdb::EStatus::SUCCESS) {
                 UNIT_ASSERT_VALUES_EQUAL_C(streamPart.GetStatus(), opStatus, streamPart.GetIssues().ToString());
-                UNIT_ASSERT_C(streamPart.GetIssues().ToString().Contains(issueMessageSubString), TStringBuilder() << "Issue should contain '" << issueMessageSubString << "'. " << streamPart.GetIssues().ToString());
+                UNIT_ASSERT_C(streamPart.GetIssues().ToString().contains(issueMessageSubString), TStringBuilder() << "Issue should contain '" << issueMessageSubString << "'. " << streamPart.GetIssues().ToString());
                 break;
             }
             if (throwOnTimeout && IsTimeoutError(streamPart.GetStatus())) {

@@ -273,7 +273,7 @@ public:
         NJobTrackerClient::TJobId jobId,
         const NApi::TGetJobSpecOptions& options) override;
 
-    TFuture<TSharedRef> GetJobStderr(
+    TFuture<TGetJobStderrResponse> GetJobStderr(
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
         NJobTrackerClient::TJobId jobId,
         const NApi::TGetJobStderrOptions& options) override;

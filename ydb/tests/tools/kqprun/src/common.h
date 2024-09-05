@@ -71,6 +71,8 @@ struct TRunnerOptions {
     NYdb::NConsoleClient::EOutputFormat PlanOutputFormat = NYdb::NConsoleClient::EOutputFormat::Default;
     ETraceOptType TraceOptType = ETraceOptType::Disabled;
 
+    TDuration ScriptCancelAfter;
+
     TYdbSetupSettings YdbSettings;
 };
 

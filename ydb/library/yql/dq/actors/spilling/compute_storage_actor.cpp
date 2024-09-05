@@ -76,7 +76,7 @@ protected:
         if (!ErrorCallback_) Y_ABORT("Error: %s", error.c_str());
 
         LOG_E("Error: " << error);
-        ErrorCallback_(TStringBuilder() << "[Spilling]" << error);
+        ErrorCallback_(TStringBuilder() << "[Compute spilling]" << error);
         SendInternal(SpillingActorId_, new TEvents::TEvPoison);
         PassAway();
     }

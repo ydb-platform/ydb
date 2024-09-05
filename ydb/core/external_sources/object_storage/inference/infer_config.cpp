@@ -42,6 +42,21 @@ std::shared_ptr<FormatConfig> MakeJsonListConfig(const THashMap<TString, TString
 }
 
 std::shared_ptr<FormatConfig> MakeFormatConfig(const THashMap<TString, TString>& params) {
+    static THashSet<TString> supportedParams {
+        "format",
+        "compression",
+        "filepattern",
+        "partitionedby",
+        "projection",
+        "csvdelimiter",
+    };
+
+    for (const auto& [param, value] : params) {
+        if (!supportedParams.contains(param)) {
+            throw yexception() << "parameter is not supported with type inference: " << param;
+        }
+    }
+
     EFileFormat format;
     if (auto formatPtr = params.FindPtr("format"); formatPtr) {
         format = ConvertFileFormat(*formatPtr);
@@ -51,11 +66,6 @@ std::shared_ptr<FormatConfig> MakeFormatConfig(const THashMap<TString, TString>&
         if (format != EFileFormat::CsvWithNames) {
             throw yexception() << "invalid parameter: csv_delimiter should only be specified for 'csv_with_names' format";
         }
-    }
-
-    if (params.FindPtr("data.timestamp.formatname") || params.FindPtr("data.timestamp.format") ||
-        params.FindPtr("data.datetime.formatname") || params.FindPtr("data.datetime.format")) {
-        throw yexception() << "datetime and timestamp parameters are not supported with type inferring";
     }
 
     std::shared_ptr<FormatConfig> config;

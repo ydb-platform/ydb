@@ -496,7 +496,7 @@ Pear|15|33|2024-05-06'''
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.FAILED)
-        assert "datetime and timestamp parameters are not supported with type inferring" in str(
+        assert "parameter is not supported with type inference" in str(
             client.describe_query(query_id).result
         )
 

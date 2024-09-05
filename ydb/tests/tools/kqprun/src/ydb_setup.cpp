@@ -191,14 +191,14 @@ private:
     void CreateTenants() {
         for (const TString& dedicatedTenant : Settings_.DedicatedTenants) {
             Ydb::Cms::CreateDatabaseRequest request;
-            request.set_path(GetTannantPath(dedicatedTenant));
+            request.set_path(GetTenantPath(dedicatedTenant));
             AddTenantStoragePool(request.mutable_resources()->add_storage_units(), dedicatedTenant);
             CreateTenant(std::move(request), "dedicated");
         }
 
         for (const TString& sharedTenant : Settings_.SharedTenants) {
             Ydb::Cms::CreateDatabaseRequest request;
-            request.set_path(GetTannantPath(sharedTenant));
+            request.set_path(GetTenantPath(sharedTenant));
             AddTenantStoragePool(request.mutable_shared_resources()->add_storage_units(), sharedTenant);
             CreateTenant(std::move(request), "shared");
         }
@@ -211,11 +211,11 @@ private:
                 TStringBuf shared;
                 TStringBuf(serverlessTenant).Split('@', serverless, shared);
 
-                request.set_path(GetTannantPath(TString(serverless)));
-                request.mutable_serverless_resources()->set_shared_database_path(GetTannantPath(TString(shared)));
+                request.set_path(GetTenantPath(TString(serverless)));
+                request.mutable_serverless_resources()->set_shared_database_path(GetTenantPath(TString(shared)));
             } else if (!Settings_.SharedTenants.empty()) {
-                request.set_path(GetTannantPath(serverlessTenant));
-                request.mutable_serverless_resources()->set_shared_database_path(GetTannantPath(*Settings_.SharedTenants.begin()));
+                request.set_path(GetTenantPath(serverlessTenant));
+                request.mutable_serverless_resources()->set_shared_database_path(GetTenantPath(*Settings_.SharedTenants.begin()));
             } else {
                 ythrow yexception() << "Can not create serverless tenant " << serverlessTenant << ", there is no shared tenants";
             }
@@ -453,7 +453,7 @@ private:
         };
     }
 
-    TString GetTannantPath(const TString& tenantName) const {
+    TString GetTenantPath(const TString& tenantName) const {
         return TStringBuilder() << NKikimr::CanonizePath(Settings_.DomainName) << NKikimr::CanonizePath(tenantName);
     }
 

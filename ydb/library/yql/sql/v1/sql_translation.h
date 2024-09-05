@@ -1,5 +1,6 @@
 #pragma once
 #include "context.h"
+#include "tiering.h"
 #include <ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.main.h>
 #include <library/cpp/charset/ci_string.h>
 
@@ -201,6 +202,8 @@ protected:
 
     bool AlterTopicAction(const TRule_alter_topic_action& node, TAlterTopicParameters& params);
 
+    bool StoreTieringRulesEntry(const TRule_tiering_rules_entry& entry, std::vector<TTieringRule>& result);
+    bool StoreTierSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value, TTierSettings& result);
 
     TNodePtr TypeSimple(const TRule_type_name_simple& node, bool onlyDataAllowed);
     TNodePtr TypeDecimal(const TRule_type_name_decimal& node);
@@ -250,6 +253,10 @@ protected:
     bool StoreStringSettingsEntry(const TRule_alter_table_setting_entry& entry, std::map<TString, TDeferredAtom>& result);
     bool ParseBackupCollectionSettings(std::map<TString, TDeferredAtom>& result, const TRule_backup_collection_settings& settings);
     bool ParseBackupCollectionSettings(std::map<TString, TDeferredAtom>& result, std::set<TString>& toReset, const TRule_alter_backup_collection_actions& actions);
+    bool ParseTierSettings(std::map<TString, TDeferredAtom>& result, const TString& tierName, const TRule_with_table_settings& settings);
+    bool ParseTieringPolicyDefaultColumn(std::map<TString, TDeferredAtom>& result, const TRule_an_id& settings);
+    bool ParseTieringPolicyTiers(std::map<TString, TDeferredAtom>& result, const TRule_tiering_rules& settings);
+    bool ParseTieringPolicySettings(std::map<TString, TDeferredAtom>& result, const TRule_alter_tiering_policy_action& alterAction);
 
     bool ValidateAuthMethod(const std::map<TString, TDeferredAtom>& result);
     bool ValidateExternalTable(const TCreateTableParameters& params);

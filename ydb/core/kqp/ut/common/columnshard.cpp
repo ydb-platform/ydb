@@ -9,26 +9,6 @@ extern "C" {
 namespace NKikimr {
 namespace NKqp {
 
-    TString GetConfigProtoWithName(const TString & tierName) {
-        return TStringBuilder() << "Name : \"" << tierName << "\"\n" <<
-        R"(
-            ObjectStorage : {
-                Endpoint: "fake"
-                Bucket: "fake"
-                SecretableAccessKey: {
-                    Value: {
-                        Data: "secretAccessKey"
-                    }
-                }
-                SecretableSecretKey: {
-                    Value: {
-                        Data: "fakeSecret"
-                    }
-                }
-            }
-        )";
-    }
-
     using namespace NYdb;
 
     TTestHelper::TTestHelper(const TKikimrSettings& settings)
@@ -56,21 +36,33 @@ namespace NKqp {
     }
 
     void TTestHelper::CreateTier(const TString& tierName) {
-        auto result = Session.ExecuteSchemeQuery("CREATE OBJECT " + tierName + " (TYPE TIER) WITH tierConfig = `" + GetConfigProtoWithName(tierName) + "`").GetValueSync();
+        AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "create_tier")("query", R"(
+            CREATE TIER )" + tierName + R"( WITH (
+                ENDPOINT = "fake",
+                BUCKET = "fake",
+                ACCESS_KEY = "secretAccessKey",
+                SECRET_KEY = "fakeSecret"
+            ))");
+        auto result = Session.ExecuteSchemeQuery(R"(
+            CREATE TIER )" + tierName + R"( WITH (
+                ENDPOINT = "fake",
+                BUCKET = "fake",
+                ACCESS_KEY = "secretAccessKey",
+                SECRET_KEY = "fakeSecret"
+            ))").GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
     TString TTestHelper::CreateTieringRule(const TString& tierName, const TString& columnName) {
         const TString ruleName = tierName + "_" + columnName;
-        const TString configTieringStr = TStringBuilder() <<  R"({
-            "rules" : [
-                {
-                    "tierName" : ")" << tierName << R"(",
-                    "durationForEvict" : "10d"
-                }
-            ]
-        })";
-        auto result = Session.ExecuteSchemeQuery("CREATE OBJECT IF NOT EXISTS " + ruleName + " (TYPE TIERING_RULE) WITH (defaultColumn = " + columnName + ", description = `" + configTieringStr + "`)").GetValueSync();
+        AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "create_rule")("query", R"(
+            CREATE TIERING POLICY IF NOT EXISTS )" + ruleName + R"(
+                ON )" + columnName + R"(
+                TIERS ("10d" TO TIER )" + tierName + ")");
+        auto result = Session.ExecuteSchemeQuery(R"(
+            CREATE TIERING POLICY IF NOT EXISTS )" + ruleName + R"(
+                ON )" + columnName + R"(
+                TIERS ("10d" TO TIER )" + tierName + ")").GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         return ruleName;
     }

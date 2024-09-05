@@ -273,7 +273,7 @@ public:
 
         const bool hasTiering = Transaction.HasAlterColumnTable() && Transaction.GetAlterColumnTable().HasAlterTtlSettings() &&
                                 Transaction.GetAlterColumnTable().GetAlterTtlSettings().HasUseTiering();
-        if (hasTiering && HasAppData() && !AppDataVerified().FeatureFlags.GetEnableOlapTiering()) {
+        if (hasTiering && HasAppData() && !AppDataVerified().FeatureFlags.GetEnableTieringInColumnShard()) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, "Tiering functionality is disabled for OLAP tables");
             return result;
         }

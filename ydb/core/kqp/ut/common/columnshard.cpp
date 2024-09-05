@@ -33,8 +33,8 @@ namespace NKqp {
 
     TTestHelper::TTestHelper(const TKikimrSettings& settings) {
         TKikimrSettings kikimrSettings(settings);
-        if (!kikimrSettings.FeatureFlags.HasEnableOlapTiering()) {
-            kikimrSettings.SetEnableOlapTiering(true);
+        if (!kikimrSettings.FeatureFlags.HasEnableTieringInColumnShard()) {
+            kikimrSettings.SetEnableTieringInColumnShard(true);
         }
 
         Kikimr = std::make_unique<TKikimrRunner>(kikimrSettings);

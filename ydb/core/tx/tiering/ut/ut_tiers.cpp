@@ -331,7 +331,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
             .SetEnableMetadataProvider(true)
-            .SetEnableOlapTiering(true)
+            .SetEnableTieringInColumnShard(true)
         ;
 
         Tests::TServer::TPtr server = new Tests::TServer(serverSettings);
@@ -421,7 +421,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
             .SetEnableMetadataProvider(true)
-            .SetEnableOlapTiering(true)
+            .SetEnableTieringInColumnShard(true)
             .SetAppConfig(appConfig);
 
         Tests::TServer::TPtr server = new Tests::TServer(serverSettings);
@@ -552,7 +552,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
             .SetEnableMetadataProvider(true)
-            .SetEnableOlapTiering(true)
+            .SetEnableTieringInColumnShard(true)
         ;
 
         Tests::TServer::TPtr server = new Tests::TServer(serverSettings);

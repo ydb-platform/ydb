@@ -96,7 +96,7 @@ column_families {
 }
 ```
 
-### Directories {#example-directories}
+### Directories {#example-directory}
 
 When you export empty directory `directory`, the system will create the following file structure:
 

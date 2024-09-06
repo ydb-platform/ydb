@@ -2,6 +2,8 @@
 
 #include "settings_common.h"
 
+#include <contrib/libs/protobuf/src/google/protobuf/map.h>
+
 #include <util/datetime/base.h>
 
 
@@ -29,7 +31,10 @@ struct TPoolSettings : public TSettingsBase {
         TString operator()(TDuration* setting) const;
     };
 
+    TPoolSettings(const google::protobuf::Map<TString, TString>& properties);
+
     bool operator==(const TPoolSettings& other) const = default;
+
     std::unordered_map<TString, TProperty> GetPropertiesMap(bool restricted = false);
     void Validate() const;
 

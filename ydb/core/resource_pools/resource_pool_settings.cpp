@@ -43,6 +43,14 @@ TString TPoolSettings::TExtractor::operator()(TDuration* setting) const {
 
 //// TPoolSettings
 
+TPoolSettings::TPoolSettings(const google::protobuf::Map<TString, TString>& properties) {
+    for (auto& [property, value] : GetPropertiesMap()) {
+        if (auto propertyIt = properties.find(property); propertyIt != properties.end()) {
+            std::visit(TPoolSettings::TParser{propertyIt->second}, value);
+        }
+    }
+}
+
 std::unordered_map<TString, TPoolSettings::TProperty> TPoolSettings::GetPropertiesMap(bool restricted) {
     std::unordered_map<TString, TProperty> properties = {
         {"concurrent_query_limit", &ConcurrentQueryLimit},

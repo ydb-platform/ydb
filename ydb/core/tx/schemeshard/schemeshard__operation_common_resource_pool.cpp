@@ -94,13 +94,7 @@ bool IsDescriptionValid(const THolder<TProposeResponse>& result, const NKikimrSc
 
 bool IsResourcePoolInfoValid(const THolder<TProposeResponse>& result, const TResourcePoolInfo::TPtr& info) {
     try {
-        const auto& properties = info->Properties.GetProperties();
-        NKikimr::NResourcePool::TPoolSettings settings;
-        for (auto [name, property] : settings.GetPropertiesMap()) {
-            if (const auto it = properties.find(name); it != properties.end()) {
-                std::visit(NKikimr::NResourcePool::TPoolSettings::TParser{it->second}, property);
-            }
-        }
+        NKikimr::NResourcePool::TPoolSettings settings(info->Properties.GetProperties());
         settings.Validate();
     } catch (...) {
         result->SetError(NKikimrScheme::StatusSchemeError, CurrentExceptionMessage());

@@ -11,7 +11,7 @@ if __name__ == "__main__":
     report_path = sys.argv[1]
     summary_path = sys.argv[2]
 
-    with open("report_path") as f:
+    with open(report_path) as f:
         obj = json.loads(f.read())
 
     all = []

@@ -1,10 +1,12 @@
 #pragma once
-#include <ydb/core/tx/schemeshard/olap/columns/update.h>
-#include <ydb/core/tx/schemeshard/olap/indexes/update.h>
-#include <ydb/core/tx/schemeshard/olap/columns/schema.h>
-#include <ydb/core/tx/schemeshard/olap/indexes/schema.h>
-#include <ydb/core/tx/schemeshard/olap/options/schema.h>
 #include "update.h"
+
+#include <ydb/core/tx/schemeshard/olap/column_family/update.h>
+#include <ydb/core/tx/schemeshard/olap/columns/schema.h>
+#include <ydb/core/tx/schemeshard/olap/columns/update.h>
+#include <ydb/core/tx/schemeshard/olap/indexes/schema.h>
+#include <ydb/core/tx/schemeshard/olap/indexes/update.h>
+#include <ydb/core/tx/schemeshard/olap/options/schema.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -14,6 +16,7 @@ namespace NKikimr::NSchemeShard {
         YDB_READONLY_DEF(TOlapColumnsDescription, Columns);
         YDB_READONLY_DEF(TOlapIndexesDescription, Indexes);
         YDB_READONLY_DEF(TOlapOptionsDescription, Options);
+        YDB_READONLY_DEF(std::vector<TOlapColumnFamlilyAdd>, ColumnFamilies);
 
         YDB_READONLY(ui32, NextColumnId, 1);
         YDB_READONLY(ui32, Version, 0);

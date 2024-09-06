@@ -1546,8 +1546,22 @@ public:
                                     );
                                     if (to_lower(comp) == "off") {
                                         f->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_NONE);
+                                    } else if (to_lower(comp) == "snappy") {
+                                        f->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_SNAPPY);
+                                    } else if (to_lower(comp) == "gzip") {
+                                        f->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_GZIP);
+                                    } else if (to_lower(comp) == "brotli") {
+                                        f->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_BROTLI);
+                                    } else if (to_lower(comp) == "zstd") {
+                                        f->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_ZSTD);
                                     } else if (to_lower(comp) == "lz4") {
                                         f->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZ4);
+                                    } else if (to_lower(comp) == "lzo") {
+                                        f->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZO);
+                                    } else if (to_lower(comp) == "bz2") {
+                                        f->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_BZ2);
+                                    } else if (to_lower(comp) == "lz4hadoop") {
+                                        f->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZ4_HADOOP);
                                     } else {
                                         auto errText = TStringBuilder() << "Unknown compression '" << comp
                                             << "' for a column family";

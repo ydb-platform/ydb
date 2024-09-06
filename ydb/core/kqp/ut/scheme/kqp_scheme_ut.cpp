@@ -7995,7 +7995,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         return "";
     }
 
-    Y_UNIT_TEST(CreateTableWithDefaultFamily) {
+    Y_UNIT_TEST(CreateColumnTableWithDefaultColumnFamily) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
         TKikimrRunner runner(runnerSettings);
@@ -8020,22 +8020,25 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         TActorId sender = runtime->AllocateEdgeActor();
         auto describeResult = DescribeTable(&runner.GetTestServer(), sender, tableName);
         auto schema = describeResult.GetPathDescription().GetColumnTableDescription().GetSchema();
-        // UNIT_ASSERT_EQUAL(schema.ColumnFamiliesSize(), 1);
-        UNIT_ASSERT_EQUAL(schema.GetColumnFamilies()[0].GetName(), "");
+        UNIT_ASSERT_EQUAL(schema.ColumnFamiliesSize(), 1);
+        UNIT_ASSERT_EQUAL(schema.GetColumnFamilies()[0].GetName(), "default");
+        UNIT_ASSERT_EQUAL(
+            eColumnCodecToString(schema.GetColumnFamilies()[0].GetColumnCodec()), eColumnCodecToString(NKikimrSchemeOp::ColumnCodecSNAPPY));
         auto columns = schema.GetColumns();
         for (const auto& column : columns) {
             if (column.HasSerializer()) {
                 auto serializer = column.GetSerializer();
+                UNIT_ASSERT_VALUES_EQUAL_C(
+                    column.GetFamilyName(), "default", TStringBuilder() << "family for column " << column.GetName() << " is not default");
                 UNIT_ASSERT_VALUES_EQUAL_C(eColumnCodecToString(serializer.GetArrowCompression().GetCodec()),
                     eColumnCodecToString(NKikimrSchemeOp::EColumnCodec::ColumnCodecSNAPPY),
-                    eColumnCodecToString(serializer.GetArrowCompression().GetCodec()));
-                UNIT_ASSERT_VALUES_EQUAL_C(
-                    column.GetFamilyName(), "", TStringBuilder() << "family for column " << column.GetName() << " is not default");
+                    TStringBuilder() << "Wrong codec for column " << column.GetName() << " (must be "
+                                     << eColumnCodecToString(NKikimrSchemeOp::EColumnCodec::ColumnCodecSNAPPY) << ")");
             }
         }
     }
 
-    Y_UNIT_TEST(CreateTableWithFamily) {
+    Y_UNIT_TEST(CreateColumnTableWithColumnFamily) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
         TKikimrRunner runner(runnerSettings);
@@ -8067,37 +8070,26 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         auto runtime = runner.GetTestServer().GetRuntime();
         TActorId sender = runtime->AllocateEdgeActor();
 
-        Cerr << "GET DescribeTable\n";
         auto describeResult = DescribeTable(&runner.GetTestServer(), sender, tableName);
         auto schema = describeResult.GetPathDescription().GetColumnTableDescription().GetSchema();
-        // UNIT_ASSERT_EQUAL(schema.ColumnFamiliesSize(), 3);
-        // UNIT_ASSERT_EQUAL(schema.GetColumnFamilies()[0].GetName(), "default");
-        // UNIT_ASSERT_EQUAL(schema.GetColumnFamilies()[1].GetName(), "family1");
-        // UNIT_ASSERT_EQUAL(schema.GetColumnFamilies()[2].GetName(), "family2");
+        std::vector<TString> columnFamiliesName = { "default", "family1", "family2" };
+        std::vector<NKikimrSchemeOp::EColumnCodec> columnFamiliesCodec = { NKikimrSchemeOp::EColumnCodec::ColumnCodecSNAPPY,
+            NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD, NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4 };
+        UNIT_ASSERT_EQUAL(schema.ColumnFamiliesSize(), columnFamiliesName.size());
+        auto columnFamilies = schema.GetColumnFamilies();
+        for (ui32 i = 0; i < (ui32)columnFamiliesName.size(); i++) {
+            UNIT_ASSERT_EQUAL(columnFamilies[i].GetName(), columnFamiliesName[i]);
+            UNIT_ASSERT_EQUAL(eColumnCodecToString(columnFamilies[i].GetColumnCodec()), eColumnCodecToString(columnFamiliesCodec[i]));
+        }
 
         auto columns = schema.GetColumns();
-        {
-            auto codec = columns[0].GetSerializer().GetArrowCompression().GetCodec();
-            UNIT_ASSERT_VALUES_EQUAL_C(eColumnCodecToString(codec), eColumnCodecToString(NKikimrSchemeOp::EColumnCodec::ColumnCodecSNAPPY),
-                eColumnCodecToString(codec));
-            UNIT_ASSERT_VALUES_EQUAL_C(
-                columns[0].GetFamilyName(), "", TStringBuilder() << "family for column " << columns[0].GetName() << " is not default");
-        }
-        {
-            auto codec = columns[1].GetSerializer().GetArrowCompression().GetCodec();
-            UNIT_ASSERT_VALUES_EQUAL_C(
-                eColumnCodecToString(codec), eColumnCodecToString(NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD), eColumnCodecToString(codec));
-            UNIT_ASSERT_VALUES_EQUAL_C(columns[1].GetFamilyName(), "family1",
-                TStringBuilder() << "family for column " << columns[1].GetName() << " is not "
-                                 << "family1");
-        }
-        {
-            auto codec = columns[2].GetSerializer().GetArrowCompression().GetCodec();
-            UNIT_ASSERT_VALUES_EQUAL_C(
-                eColumnCodecToString(codec), eColumnCodecToString(NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4), eColumnCodecToString(codec));
-            UNIT_ASSERT_VALUES_EQUAL_C(columns[2].GetFamilyName(), "family2",
-                TStringBuilder() << "family for column " << columns[2].GetName() << " is not "
-                                 << "family2");
+        for (ui32 i = 0; i < (ui32)columnFamiliesName.size(); i++) {
+            auto codec = columns[i].GetSerializer().GetArrowCompression().GetCodec();
+            UNIT_ASSERT_VALUES_EQUAL_C(columns[i].GetFamilyName(), columnFamiliesName[i],
+                TStringBuilder() << "family for column " << columns[i].GetName() << " is not " << columnFamiliesName[i]);
+            UNIT_ASSERT_VALUES_EQUAL_C(eColumnCodecToString(codec), eColumnCodecToString(columnFamiliesCodec[i]),
+                TStringBuilder() << "Wrong codec for column " << columns[i].GetName() << " (must be "
+                                 << eColumnCodecToString(columnFamiliesCodec[i]) << ")");
         }
     }
 }

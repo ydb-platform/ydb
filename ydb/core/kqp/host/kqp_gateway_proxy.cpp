@@ -401,9 +401,9 @@ void FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
         columnDesc.SetNotNull(columnIt->second.NotNull);
         if (columnIt->second.Families) {
             columnDesc.SetFamilyName(*columnIt->second.Families.begin());
-        }  // else {
-        //     columnDesc.SetFamilyName("default");
-        // }
+        } else {
+            columnDesc.SetFamilyName("default");
+        }
     }
 
     for (const auto& keyColumn : metadata.KeyColumnNames) {
@@ -505,22 +505,20 @@ bool FillCreateColumnTableDesc(NYql::TKikimrTableMetadataPtr metadata,
     }
 
     if (families.size()) {
-        auto defaultFamilyIt = families.find("default");
-        if (defaultFamilyIt.IsEnd()) {
+        if (families.find("default").IsEnd()) {
             code = Ydb::StatusIds::BAD_REQUEST;
             error = TStringBuilder() << "Default family is not set";
             return false;
         }
-        NYql::TColumnFamily defaultFamily = defaultFamilyIt->second;
         for (ui32 i = 0; i < schema->ColumnsSize(); i++) {
             auto column = schema->MutableColumns(i);
             auto familyIt = families.find(column->GetFamilyName());
-            NYql::TColumnFamily family;
             if (familyIt.IsEnd()) {
-                family = defaultFamilyIt->second;
-            } else {
-                family = familyIt->second;
+                code = Ydb::StatusIds::BAD_REQUEST;
+                error = TStringBuilder() << "Unknow family " << column->GetFamilyName();
+                return false;
             }
+            NYql::TColumnFamily family = familyIt->second;
             auto serializer = column->MutableSerializer();
             serializer->SetClassName("ARROW_SERIALIZER");
             auto codec = getCodecFromString(family.Compression.GetRef());

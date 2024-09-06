@@ -7,6 +7,10 @@ namespace NKikimr::NSchemeShard {
             Engine = tableSchema.GetEngine();
         }
 
+        if (!ColumnFamilies.Parse(tableSchema, errors)) {
+            return false;
+        }
+
         if (!Columns.Parse(tableSchema, errors, allowNullKeys)) {
             return false;
         }
@@ -26,6 +30,8 @@ namespace NKikimr::NSchemeShard {
         if (!Options.Parse(alterRequest, errors)) {
             return false;
         }
+
+        // TODO: Alter Family in ColumnTable
 
         return true;
     }

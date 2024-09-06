@@ -609,6 +609,11 @@ message TColumnTableRequestedOptions {
     optional TCompactionPlannerConstructorContainer CompactionPlannerConstructor = 3;
 }
 
+message TOlapColumnFamilyDiff {
+    optional string Name = 1;
+    optional EColumnCodec ColumnCodec = 2;
+}
+
 message TAlterColumnTableSchema {
     repeated TOlapColumnDescription AddColumns = 1;
     //optional TCompressionOptions DefaultCompression = 5;
@@ -617,6 +622,8 @@ message TAlterColumnTableSchema {
     repeated TOlapIndexRequested UpsertIndexes = 8;
     repeated string DropIndexes = 9;
     optional TColumnTableRequestedOptions Options = 12;
+    repeated TFamilyDescription AddColumnFamily = 13;
+    repeated TOlapColumnFamilyDiff AlterColumnFamily = 14;
 }
 
 // Schema presets are used to manage multiple tables with the same schema

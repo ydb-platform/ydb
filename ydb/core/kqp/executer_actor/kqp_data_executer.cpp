@@ -237,7 +237,6 @@ public:
     }
 
     void Finalize() {
-        YQL_ENSURE(!AlreadyReplied);
         if (LocksBroken) {
             return ReplyErrorAndDie(
                 Ydb::StatusIds::ABORTED,

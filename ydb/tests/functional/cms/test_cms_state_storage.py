@@ -22,6 +22,7 @@ class AbstractLocalClusterTest(object):
 
     @classmethod
     def setup_class(cls):
+        pass
         configurator = KikimrConfigGenerator(Erasure.NONE,
                                              nodes=5,
                                              use_in_memory_pdisks=False,

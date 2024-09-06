@@ -107,6 +107,41 @@ struct TDecimalMulBlockExec {
     }
 };
 
+std::shared_ptr<arrow::compute::ScalarKernel> MakeBlockMulKernel(const TVector<TType*>& argTypes, TType* resultType) {
+    MKQL_ENSURE(argTypes.size() == 2, "Require 2 arguments");
+    MKQL_ENSURE(argTypes[0]->GetKind() == TType::EKind::Block, "Require block");
+    MKQL_ENSURE(argTypes[1]->GetKind() == TType::EKind::Block, "Require block");
+    MKQL_ENSURE(resultType->GetKind() == TType::EKind::Block, "Require block");
+
+    bool isOptional = false;
+    auto dataType1 = UnpackOptionalData(static_cast<TBlockType*>(argTypes[0])->GetItemType(), isOptional);
+    auto dataType2 = UnpackOptionalData(static_cast<TBlockType*>(argTypes[1])->GetItemType(), isOptional);
+    auto dataResultType = UnpackOptionalData(static_cast<TBlockType*>(resultType)->GetItemType(), isOptional);
+
+    MKQL_ENSURE(*dataType1->GetDataSlot() == NUdf::EDataSlot::Decimal, "Require decimal");
+    MKQL_ENSURE(*dataType2->GetDataSlot() == NUdf::EDataSlot::Decimal, "Require decimal");
+    MKQL_ENSURE(*dataResultType->GetDataSlot() == NUdf::EDataSlot::Decimal, "Require decimal");
+
+    auto decimalType1 = static_cast<TDataDecimalType*>(dataType1);
+    auto decimalType2 = static_cast<TDataDecimalType*>(dataType2);
+    auto decimalResultType = static_cast<TDataDecimalType*>(dataResultType);
+
+    MKQL_ENSURE(decimalType1->GetParams() == decimalType2->GetParams(), "Require same precision/scale");
+    MKQL_ENSURE(decimalType1->GetParams() == decimalResultType->GetParams(), "Require same precision/scale");
+
+    auto [precision, scale] = decimalType1->GetParams();
+    MKQL_ENSURE(precision >= 1&& precision <= 35, TStringBuilder() << "Wrong precision: " << (int)precision);
+
+    auto exec = std::make_shared<TDecimalMulBlockExec>(NYql::NDecimal::GetDivider(precision), NYql::NDecimal::GetDivider(scale));
+
+    auto k = std::make_shared<arrow::compute::ScalarKernel>(ConvertToInputTypes(argTypes), ConvertToOutputType(resultType), 
+        [exec](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+        return exec->Exec(ctx, batch, res);
+    });
+    k->null_handling = arrow::compute::NullHandling::INTERSECTION;
+    return k;
+}
+
 }
 
 IComputationNode* WrapBlockDecimalMul(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
@@ -123,7 +158,7 @@ IComputationNode* WrapBlockDecimalMul(TCallable& callable, const TComputationNod
     TComputationNodePtrVector argsNodes = { firstCompute, secondCompute };
     TVector<TType*> argsTypes = { firstType, secondType };
 
-    std::shared_ptr<arrow::compute::ScalarKernel> kernel = {};
+    std::shared_ptr<arrow::compute::ScalarKernel> kernel = MakeBlockMulKernel(argsTypes, callable.GetType()->GetReturnType());
     return new TBlockFuncNode(ctx.Mutables, "DecimalMul", std::move(argsNodes), argsTypes, *kernel, kernel);
 }
 

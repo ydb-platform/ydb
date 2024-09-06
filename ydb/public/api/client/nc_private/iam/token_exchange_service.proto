@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package nebius.iam.v1;
+
+// import "ydb/public/api/client/nc_private/iam/annotations.proto";
+import "ydb/public/api/client/nc_private/iam/token_service.proto";
+
+// DO NOT REMOVE! THESE OPTIONS ARE NEEDED FOR Bazel BUILD TO CORRESPOND TO buf generate:
+option java_multiple_files = true;
+option java_outer_classname = "TokenExchangeServiceProto";
+option java_package = "ai.nebius.iam.token.v1";
+// END
+
+service TokenExchangeService {
+// coming from annotations.proto file
+// option (api_service_name) = "tokens.iam";
+// option (service_visibility) = PUBLIC;
+
+  rpc Exchange(ExchangeTokenRequest) returns (CreateTokenResponse);
+}

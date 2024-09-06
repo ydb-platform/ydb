@@ -253,7 +253,7 @@ void TSupportsMultisetAttributes::SetAttributes(
 void TSupportsPermissions::ValidatePermission(
     EPermissionCheckScope /*scope*/,
     EPermission /*permission*/,
-    const TString& /*user*/)
+    const std::string& /*user*/)
 { }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -265,7 +265,7 @@ TSupportsPermissions::TCachingPermissionValidator::TCachingPermissionValidator(
     , Scope_(scope)
 { }
 
-void TSupportsPermissions::TCachingPermissionValidator::Validate(EPermission permission, const TString& user)
+void TSupportsPermissions::TCachingPermissionValidator::Validate(EPermission permission, const std::string& user)
 {
     auto& validatedPermissions = ValidatedPermissions_[user];
     if (None(validatedPermissions & permission)) {
@@ -482,7 +482,7 @@ TFuture<TYsonString> TSupportsAttributes::DoGetAttribute(
         writer.OnBeginMap();
 
         if (attributeFilter) {
-            WriteAttributesFragment(&writer, attributeFilter, /*stable*/false);
+            WriteAttributesFragment(&writer, attributeFilter, /*stable*/ false);
         } else {
             if (builtinAttributeProvider) {
                 std::vector<ISystemAttributeProvider::TAttributeDescriptor> builtinDescriptors;
@@ -1729,7 +1729,7 @@ IYPathServiceContextPtr CreateYPathContext(
 
     return New<TYPathServiceContext>(
         std::move(requestMessage),
-        TMemoryUsageTrackerGuard{},
+        TMemoryUsageTrackerGuard(),
         GetNullMemoryUsageTracker(),
         std::move(logger),
         logLevel);
@@ -1746,7 +1746,7 @@ IYPathServiceContextPtr CreateYPathContext(
     return New<TYPathServiceContext>(
         std::move(requestHeader),
         std::move(requestMessage),
-        TMemoryUsageTrackerGuard{},
+        TMemoryUsageTrackerGuard(),
         GetNullMemoryUsageTracker(),
         std::move(logger),
         logLevel);

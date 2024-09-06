@@ -32,12 +32,17 @@ private:
 
 }
 
-IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TString>& hostnamePatterns, NActors::TActorSystem* actorSystem, size_t pathsLimit) {
+IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TString>& hostnamePatterns,
+                                                         NActors::TActorSystem* actorSystem,
+                                                         size_t pathsLimit,
+                                                         std::shared_ptr<NYql::ISecuredServiceAccountCredentialsFactory> credentialsFactory,
+                                                         bool enableInfer,
+                                                         bool allowLocalFiles) {
     std::vector<TRegExMatch> hostnamePatternsRegEx(hostnamePatterns.begin(), hostnamePatterns.end());
     return MakeIntrusive<TExternalSourceFactory>(TMap<TString, IExternalSource::TPtr>{
         {
             ToString(NYql::EDatabaseType::ObjectStorage),
-            CreateObjectStorageExternalSource(hostnamePatternsRegEx, actorSystem, pathsLimit)
+            CreateObjectStorageExternalSource(hostnamePatternsRegEx, actorSystem, pathsLimit, std::move(credentialsFactory), enableInfer, allowLocalFiles)
         },
         {
             ToString(NYql::EDatabaseType::ClickHouse),
@@ -66,6 +71,10 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
         {
             ToString(NYql::EDatabaseType::MsSQLServer),
             CreateExternalDataSource(TString{NYql::GenericProviderName}, {"BASIC"}, {"database_name", "use_tls"}, hostnamePatternsRegEx)
+        },
+        {
+            ToString(NYql::EDatabaseType::Oracle),
+            CreateExternalDataSource(TString{NYql::GenericProviderName}, {"BASIC"}, {"database_name", "use_tls", "service_name"}, hostnamePatternsRegEx)
         }}); 
 }
 

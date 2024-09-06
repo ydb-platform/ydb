@@ -33,7 +33,7 @@ public:
 
 private:
     std::vector<size_t> PreviousPathLengths_;
-    TString Path_;
+    TYPath Path_;
 
     static TString ToString(const TEntry& entry);
 };

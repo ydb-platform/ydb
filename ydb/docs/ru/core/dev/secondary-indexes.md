@@ -12,7 +12,7 @@
 
 ## Создание вторичных индексов {#create}
 
-Вторичный индекс является объектом схемы данных и может быть определен при создании таблицы [командой YQL `CREATE TABLE`](../yql/reference/syntax/create_table.md), или добавлен к ней позднее [командой YQL `ALTER TABLE`](../yql/reference/syntax/alter_table.md).
+Вторичный индекс является объектом схемы данных и может быть определен при создании таблицы [командой YQL `CREATE TABLE`](../yql/reference/syntax/create_table/index.md), или добавлен к ней позднее [командой YQL `ALTER TABLE`](../yql/reference/syntax/alter_table/index.md).
 
 Команда [создания индекса `table index add`](../reference/ydb-cli/commands/secondary_index.md#add) поддерживается в YDB CLI.
 
@@ -69,6 +69,12 @@ $to_update = (
 UPDATE table1 ON SELECT * FROM $to_update
 ```
 
+{% note info %}
+
+В настоящий момент обновление данных возможно только при использовании синхронного вторичного индекса. Это следствие того, что модификация данных возможна только в [Serializable](../concepts/transactions.md#modes) транзакциях, гарантии которых нарушаются при использовании асинхронных индексов.
+
+{% endnote %}
+
 ## Удаление данных с использованием вторичного индекса {#delete}
 
 Для удаления данных по вторичному индексу используется `SELECT` c предикатом по вторичному индексу, а затем вызывается инструкция `DELETE ON`.
@@ -81,6 +87,12 @@ SELECT series_id
 FROM series VIEW views_index
 WHERE views = 0;
 ```
+
+{% note info %}
+
+В настоящий момент удаление данных возможно только при использовании синхронного вторичного индекса. Это следствие того, что удаление возможно только в [Serializable](../concepts/transactions.md#modes) транзакциях, гарантии которых нарушаются при использовании асинхронных индексов.
+
+{% endnote %}
 
 ## Атомарная замена вторичного индекса {#atomic-index-replacement}
 

@@ -5,6 +5,7 @@
 
 #include <ydb/library/yql/providers/s3/proto/sink.pb.h>
 
+#include <ydb/core/protos/config.pb.h>
 
 namespace NKikimr::NKqp {
 
@@ -13,11 +14,11 @@ namespace {
 class TKqpFinalizeScriptService : public TActorBootstrapped<TKqpFinalizeScriptService> {
 public:
     TKqpFinalizeScriptService(const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
-        const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig,
-        IKqpFederatedQuerySetupFactory::TPtr federatedQuerySetupFactory)
+        IKqpFederatedQuerySetupFactory::TPtr federatedQuerySetupFactory,
+        std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory)
         : QueryServiceConfig(queryServiceConfig)
-        , MetadataProviderConfig(metadataProviderConfig)
         , FederatedQuerySetupFactory(federatedQuerySetupFactory)
+        , S3ActorsFactory(std::move(s3ActorsFactory))
     {}
 
     void Bootstrap(const TActorContext &ctx) {
@@ -80,8 +81,8 @@ private:
         Register(CreateScriptFinalizerActor(
             std::move(request),
             QueryServiceConfig,
-            MetadataProviderConfig,
-            FederatedQuerySetup
+            FederatedQuerySetup,
+            S3ActorsFactory
         ));
     }
 
@@ -123,7 +124,6 @@ private:
 
 private:
     const NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
-    const NKikimrConfig::TMetadataProviderConfig MetadataProviderConfig;
 
     IKqpFederatedQuerySetupFactory::TPtr FederatedQuerySetupFactory;
     std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
@@ -131,14 +131,16 @@ private:
     ui32 FinalizationRequestsInFlight = 0;
     std::queue<TString> WaitingFinalizationExecutions;
     std::unordered_map<TString, std::vector<TEvScriptFinalizeRequest::TPtr>> FinalizationRequestsQueue;
+
+    std::shared_ptr<NYql::NDq::IS3ActorsFactory> S3ActorsFactory;
 };
 
 }  // anonymous namespace
 
 IActor* CreateKqpFinalizeScriptService(const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
-    const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig,
-    IKqpFederatedQuerySetupFactory::TPtr federatedQuerySetupFactory) {
-    return new TKqpFinalizeScriptService(queryServiceConfig, metadataProviderConfig, std::move(federatedQuerySetupFactory));
+    IKqpFederatedQuerySetupFactory::TPtr federatedQuerySetupFactory,
+    std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory) {
+    return new TKqpFinalizeScriptService(queryServiceConfig, std::move(federatedQuerySetupFactory), std::move(s3ActorsFactory));
 }
 
 }  // namespace NKikimr::NKqp

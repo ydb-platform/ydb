@@ -54,6 +54,7 @@
 #include <util/generic/size_literals.h>
 #include <util/stream/file.h>
 #include <util/string/builder.h>
+#include <util/folder/dirut.h>
 
 #include <memory>
 #include <vector>
@@ -420,7 +421,7 @@ private:
 
 class TSimpleSkiffConverter : public ISkiffConverter {
 public:
-    TString ConvertNodeToSkiff(const TDqStatePtr /*state*/, const IDataProvider::TFillSettings& /*fillSettings*/, const NYT::TNode& /*rowSpec*/, const NYT::TNode& /*item*/) override {
+    TString ConvertNodeToSkiff(const TDqStatePtr /*state*/, const IDataProvider::TFillSettings& /*fillSettings*/, const NYT::TNode& /*rowSpec*/, const NYT::TNode& /*item*/, const TVector<TString>& /*columns*/) override {
         Y_ABORT("not implemented");
     }
 
@@ -477,7 +478,7 @@ private:
         if (NCommon::HasResOrPullOption(resOrPull, "type")) {
             TStringStream typeYson;
             NYson::TYsonWriter typeWriter(&typeYson);
-            NCommon::WriteResOrPullType(typeWriter, resOrPullInput.GetTypeAnn(), *columns);
+            NCommon::WriteResOrPullType(typeWriter, resOrPullInput.GetTypeAnn(), TColumnOrder(*columns));
             *type = typeYson.Str();
         }
     }
@@ -540,6 +541,23 @@ private:
         TTypeEnvironment& typeEnv,
         TUserDataTable& files) const
     {
+        if (!localRun) {
+            for (const auto& file : files) {
+                const auto& fileName = file.first.Alias();
+                const auto& block = file.second;
+                if (fileName == NCommon::PgCatalogFileName || block.Usage.Test(EUserDataBlockUsage::PgExt)) {
+                    auto f = IDqGateway::TFileResource();
+                    auto filePath = block.FrozenFile->GetPath().GetPath();
+                    f.SetLocalPath(RealPath(filePath));
+                    f.SetName(fileName);
+                    f.SetObjectId(block.FrozenFile->GetMd5());
+                    f.SetObjectType(IDqGateway::TFileResource::EUSER_FILE);
+                    f.SetSize(block.FrozenFile->GetSize());
+                    uploadList->emplace(f);
+                }
+            }
+        }
+
         if (!State->Settings->_SkipRevisionCheck.Get().GetOrElse(false)) {
             if (State->VanillaJobPath.empty()) {
                 auto f = IDqGateway::TFileResource();
@@ -760,9 +778,10 @@ private:
 
             TVector<TExprBase> fakeReads;
             auto paramsType = NDq::CollectParameters(programLambda, ctx);
+            NDq::TSpillingSettings spillingSettings{State->Settings->GetEnabledSpillingNodes()};
             *lambda = NDq::BuildProgram(
                 programLambda, *paramsType, compiler, typeEnv, *State->FunctionRegistry,
-                ctx, fakeReads);
+                ctx, fakeReads, spillingSettings);
         }
 
         auto block = MeasureBlock("RuntimeNodeVisitor");
@@ -1017,7 +1036,7 @@ private:
             TString skiffType;
             NYT::TNode rowSpec;
             if (fillSettings.Format == IDataProvider::EResultFormat::Skiff) {
-                auto parsedYtType =  SkiffConverter->ParseYTType(result.Input().Ref(), ctx, columns);
+                auto parsedYtType =  SkiffConverter->ParseYTType(result.Input().Ref(), ctx, TColumnOrder(columns));
 
                 type = parsedYtType.Type;
                 rowSpec = parsedYtType.RowSpec;
@@ -1118,7 +1137,7 @@ private:
                             break;
                         }
                         case IDataProvider::EResultFormat::Skiff: {
-                            writer.OnStringScalar(skiffConverter->ConvertNodeToSkiff(state, fillSettings, rowSpec, item));
+                            writer.OnStringScalar(skiffConverter->ConvertNodeToSkiff(state, fillSettings, rowSpec, item, columns));
                             break;
                         }
                         default: {
@@ -1160,7 +1179,7 @@ private:
                             break;
                         }
                         case IDataProvider::EResultFormat::Skiff: {
-                            writer.OnStringScalar(skiffConverter->ConvertNodeToSkiff(state, fillSettings, rowSpec, item));
+                            writer.OnStringScalar(skiffConverter->ConvertNodeToSkiff(state, fillSettings, rowSpec, item, columns));
                             break;
                         }
                         default: {
@@ -1448,7 +1467,7 @@ private:
         TString skiffType;
         NYT::TNode rowSpec;
         if (fillSettings.Format == IDataProvider::EResultFormat::Skiff) {
-            auto parsedYtType = SkiffConverter->ParseYTType(pull.Input().Ref(), ctx, columns);
+            auto parsedYtType = SkiffConverter->ParseYTType(pull.Input().Ref(), ctx, TColumnOrder(columns));
 
             type = parsedYtType.Type;
             rowSpec = parsedYtType.RowSpec;
@@ -1569,7 +1588,7 @@ private:
                         break;
                     }
                     case IDataProvider::EResultFormat::Skiff: {
-                        writer.OnStringScalar(skiffConverter->ConvertNodeToSkiff(state, fillSettings, rowSpec, item));
+                        writer.OnStringScalar(skiffConverter->ConvertNodeToSkiff(state, fillSettings, rowSpec, item, columns));
                         break;
                     }
                     default: {
@@ -1596,7 +1615,7 @@ private:
                         break;
                     }
                     case IDataProvider::EResultFormat::Skiff: {
-                        writer.OnStringScalar(skiffConverter->ConvertNodeToSkiff(state, fillSettings, rowSpec, item));
+                        writer.OnStringScalar(skiffConverter->ConvertNodeToSkiff(state, fillSettings, rowSpec, item, columns));
                         break;
                     }
                     default: {
@@ -1619,17 +1638,22 @@ private:
     }
 
     IDqGateway::TDqProgressWriter MakeDqProgressWriter(const TPublicIds::TPtr& publicIds) const {
-        IDqGateway::TDqProgressWriter dqProgressWriter = [progressWriter = State->ProgressWriter, publicIds, current = std::make_shared<TString>()](const TString& stage) {
-            if (*current != stage) {
+        IDqGateway::TDqProgressWriter dqProgressWriter = [progressWriter = State->ProgressWriter, publicIds, current = std::make_shared<IDqGateway::TProgressWriterState>()](IDqGateway::TProgressWriterState state) 
+        {
+            if (*current != state) {
                 for (const auto& publicId : publicIds->AllPublicIds) {
-                    auto p = TOperationProgress(TString(DqProviderName), publicId.first, TOperationProgress::EState::InProgress, stage);
+                    auto p = TOperationProgress(TString(DqProviderName), publicId.first, TOperationProgress::EState::InProgress, state.Stage);
                     if (publicId.second) {
                         p.Counters.ConstructInPlace();
                         p.Counters->Running = p.Counters->Total = publicId.second;
+                        auto maybeStats = state.Stats.find(publicId.first);
+                        if (maybeStats != state.Stats.end()) {
+                            p.Counters->Custom = maybeStats->second.ToMap();
+                        }
                     }
                     progressWriter(p);
                 }
-                *current = stage;
+                *current = std::move(state);
             }
         };
         return dqProgressWriter;

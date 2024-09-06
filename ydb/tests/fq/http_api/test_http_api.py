@@ -64,21 +64,14 @@ def normalize_json(data):
 
 class TestHttpApi(TestBase):
     def create_client(self, token="root@builtin"):
-        config = YQHttpClientConfig(
-            token=token,
-            project="my_folder"
-        )
+        config = YQHttpClientConfig(token=token, project="my_folder")
         config.endpoint = self.streaming_over_kikimr.http_api_endpoint()
         config.token_prefix = ""
         return YQHttpClient(config)
 
     def test_simple_analytics_query(self):
         with self.create_client() as client:
-            query_id = client.create_query(
-                "select 1",
-                name="my first query",
-                description="some description"
-            )
+            query_id = client.create_query("select 1", name="my first query", description="some description")
             assert query_id is not None
             assert len(query_id) == 20
 
@@ -94,37 +87,31 @@ class TestHttpApi(TestBase):
                 "text": "select 1",
                 "type": "ANALYTICS",
                 "status": "COMPLETED",
-                "meta": {
-                    "finished_at": "ISOTIME",
-                    "started_at": "ISOTIME"
-                },
-                "result_sets": [
-                    {
-                        "rows_count": 1,
-                        "truncated": False
-                    }
-                ]
+                "meta": {"finished_at": "ISOTIME", "started_at": "ISOTIME"},
+                "result_sets": [{"rows_count": 1, "truncated": False}],
             }
             assert query_json["id"] == query_id
 
             results = client.get_query_result_set(query_id, 0)
-            assert results == {
-                'columns': [{'name': 'column0', 'type': 'Int32'}],
-                'rows': [[1]]
-            }
+            assert results == {'columns': [{'name': 'column0', 'type': 'Int32'}], 'rows': [[1]]}
 
             response = client.stop_query(query_id)
             assert response.status_code == 204
 
     def test_empty_query(self):
         with self.create_client() as client:
-            with pytest.raises(YQHttpClientException, match=re.escape("""Error occurred. http code=400, status=400010, msg=BAD_REQUEST, details=[{'message': "text's length is not in [1; 102400]", 'issue_code': 200800, 'severity': 'ERROR', 'issues': []}]""")):  # noqa
+            with pytest.raises(
+                YQHttpClientException,
+                match=re.escape(
+                    """Error occurred. http code=400, status=400010, msg=BAD_REQUEST, details=[{'message': """
+                    """"text's length is not in [1; 102400]", 'issue_code': 200800, 'severity': 'ERROR', 'issues': []}]"""
+                ),
+            ):  # noqa
                 client.create_query()
 
     def test_warning(self):
         with self.create_client() as client:
-            query_id = client.create_query(
-                query_text="select 10000000000000000000+1")
+            query_id = client.create_query(query_text="select 10000000000000000000+1")
 
             wait_for_query_status(client, query_id, ["COMPLETED"])
             query_json = client.get_query(query_id)
@@ -165,58 +152,57 @@ class TestHttpApi(TestBase):
                                                     "position": {"column": 28, "row": 1},
                                                     "end_position": {"column": 28, "row": 1},
                                                     "issue_code": 1107,
-                                                    "issues": []
+                                                    "issues": [],
                                                 }
-                                            ]
+                                            ],
                                         }
-                                    ]
+                                    ],
                                 }
-                            ]
+                            ],
                         }
-                    ]
+                    ],
                 },
-                "meta": {
-                    "finished_at": "ISOTIME",
-                    "started_at": "ISOTIME"
-                },
-                "result_sets": [
-                    {
-                        "rows_count": 1,
-                        "truncated": False
-                    }
-                ]
+                "meta": {"finished_at": "ISOTIME", "started_at": "ISOTIME"},
+                "result_sets": [{"rows_count": 1, "truncated": False}],
             }
 
     def test_get_unknown_query(self):
         with self.create_client(token="zzz") as client:
-            with pytest.raises(YQHttpClientException, match=re.escape("Error occurred. http code=403, status=400020, msg=UNAUTHORIZED, details=[{'message': 'Authorization error. Permission denied', 'severity': 'ERROR', 'issues': []}]")):  # noqa
+            with pytest.raises(
+                YQHttpClientException,
+                match=re.escape(
+                    "Error occurred. http code=403, status=400020, msg=UNAUTHORIZED, details=[{'message': 'Authorization error. Permission denied', 'severity': 'ERROR', 'issues': []}]"
+                ),
+            ):  # noqa
                 client.get_query("bad_id")
 
     def test_unauthenticated(self):
         with self.create_client(token="zzz") as client:
-            with pytest.raises(YQHttpClientException, match=re.escape("Error occurred. http code=403, status=400020, msg=UNAUTHORIZED, details=[{'message': 'Authorization error. Permission denied', 'severity': 'ERROR', 'issues': []}]")):  # noqa
-                client.create_query(
-                    "select 1",
-                    name="my first query",
-                    description="some description"
-                )
+            with pytest.raises(
+                YQHttpClientException,
+                match=re.escape(
+                    "Error occurred. http code=403, status=400020, msg=UNAUTHORIZED, details=[{'message': 'Authorization error. Permission denied', 'severity': 'ERROR', 'issues': []}]"
+                ),
+            ):  # noqa
+                client.create_query("select 1", name="my first query", description="some description")
 
     def test_create_idempotency(self):
         self.init_topics("idempotency", create_output=False)
-        c = FederatedQueryClient(
-            "my_folder", streaming_over_kikimr=self.streaming_over_kikimr)
-        c.create_yds_connection("yds2", os.getenv(
-            "YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
+        c = FederatedQueryClient("my_folder", streaming_over_kikimr=self.streaming_over_kikimr)
+        c.create_yds_connection("yds2", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
 
         sql = f"select * from yds2.`{self.input_topic}`"
 
         with self.create_client() as client:
-            query_id1 = client.create_query(sql, name="my first query", description="some description",
-                                            idempotency_key="X")
-            query_id2 = client.create_query("select 2", name="my first query2", description="some description2",
-                                            idempotency_key="X")
-            query_id3 = client.create_query("select 3", name="my first query3", description="some description3",
-                                            idempotency_key="Y")
+            query_id1 = client.create_query(
+                sql, name="my first query", description="some description", idempotency_key="X"
+            )
+            query_id2 = client.create_query(
+                "select 2", name="my first query2", description="some description2", idempotency_key="X"
+            )
+            query_id3 = client.create_query(
+                "select 3", name="my first query3", description="some description3", idempotency_key="Y"
+            )
             assert query_id1 == query_id2
             assert query_id1 != query_id3
 
@@ -250,8 +236,9 @@ class TestHttpApi(TestBase):
         sql = f"select * from yds1.`{self.input_topic}`"
 
         with self.create_client() as client:
-            query_id = client.create_query(sql, query_type="STREAMING", name="my first query",
-                                           description="some description")
+            query_id = client.create_query(
+                sql, query_type="STREAMING", name="my first query", description="some description"
+            )
             assert query_id is not None
             assert len(query_id) == 20
 
@@ -264,11 +251,8 @@ class TestHttpApi(TestBase):
                 "text": "select * from yds1.`simple_streaming_query_input`",
                 "type": "STREAMING",
                 "status": "RUNNING",
-                "meta": {
-                    "finished_at": "",
-                    "started_at": "ISOTIME"
-                },
-                "result_sets": []
+                "meta": {"finished_at": "", "started_at": "ISOTIME"},
+                "result_sets": [],
             }
             assert query_json["id"] == query_id
 
@@ -290,10 +274,7 @@ class TestHttpApi(TestBase):
                 "text": "select * from yds1.`simple_streaming_query_input`",
                 "type": "STREAMING",
                 "status": "FAILED",
-                "meta": {
-                    "finished_at": "ISOTIME",
-                    "started_at": "ISOTIME"
-                }
+                "meta": {"finished_at": "ISOTIME", "started_at": "ISOTIME"},
             }
 
     def test_integral_results(self):
@@ -314,35 +295,58 @@ class TestHttpApi(TestBase):
             wait_for_query_status(client, query_id, ["COMPLETED"])
             raw_results = client.get_query_result_set(query_id, result_set_index=0, raw_format=True)
             expected_columns = [
-                {"name": "column0", "type": "Int32"}, {"name": "column1", "type": "Int32"},
-                {"name": "column2", "type": "Int64"}, {"name": "column3", "type": "Uint64"},
-                {"name": "column4", "type": "Uint64"}, {"name": "column5", "type": "Int64"},
-                {"name": "column6", "type": "Int64"}, {"name": "column7", "type": "Int64"},
-                {"name": "column8", "type": "Float"}, {"name": "column9", "type": "Double"},
-                {"name": "column10", "type": "Double"}, {"name": "column11", "type": "Bool"},
-                {"name": "column12", "type": "Bool"}, {"name": "column13", "type": "String"},
-                {"name": "column14", "type": "Utf8"}, {"name": "column15", "type": "Decimal(6,3)"},
-                {"name": "column16", "type": "Utf8"}, {"name": "column17", "type": "Utf8"},
-                {"name": "column18", "type": "Int8"}, {"name": "column19", "type": "Int16"},
-                {"name": "column20", "type": "Uint8"}, {"name": "column21", "type": "Uint16"},
+                {"name": "column0", "type": "Int32"},
+                {"name": "column1", "type": "Int32"},
+                {"name": "column2", "type": "Int64"},
+                {"name": "column3", "type": "Uint64"},
+                {"name": "column4", "type": "Uint64"},
+                {"name": "column5", "type": "Int64"},
+                {"name": "column6", "type": "Int64"},
+                {"name": "column7", "type": "Int64"},
+                {"name": "column8", "type": "Float"},
+                {"name": "column9", "type": "Double"},
+                {"name": "column10", "type": "Double"},
+                {"name": "column11", "type": "Bool"},
+                {"name": "column12", "type": "Bool"},
+                {"name": "column13", "type": "String"},
+                {"name": "column14", "type": "Utf8"},
+                {"name": "column15", "type": "Decimal(6,3)"},
+                {"name": "column16", "type": "Utf8"},
+                {"name": "column17", "type": "Utf8"},
+                {"name": "column18", "type": "Int8"},
+                {"name": "column19", "type": "Int16"},
+                {"name": "column20", "type": "Uint8"},
+                {"name": "column21", "type": "Uint16"},
             ]
 
             assert raw_results == {
                 "columns": expected_columns,
                 "rows": [
                     [
-                        100, -100,
-                        200, 200,
-                        10000000000, -20000000000,
-                        "18014398509481984", "-18014398509481984",
-                        123.5, -789.125,
-                        "inf", True,
-                        False, "aGVsbG8=",
-                        "hello", "1.23",
-                        "he\"llo_again", "Я Привет",
-                        1, 2, 3, 4
+                        100,
+                        -100,
+                        200,
+                        200,
+                        10000000000,
+                        -20000000000,
+                        "18014398509481984",
+                        "-18014398509481984",
+                        123.5,
+                        -789.125,
+                        "inf",
+                        True,
+                        False,
+                        "aGVsbG8=",
+                        "hello",
+                        "1.23",
+                        "he\"llo_again",
+                        "Я Привет",
+                        1,
+                        2,
+                        3,
+                        4,
                     ]
-                ]
+                ],
             }
 
             results = client.get_query_result_set(query_id, result_set_index=0)
@@ -350,22 +354,40 @@ class TestHttpApi(TestBase):
                 "columns": expected_columns,
                 "rows": [
                     [
-                        100, -100,
-                        200, 200,
-                        10000000000, -20000000000,
-                        "18014398509481984", "-18014398509481984",
-                        123.5, -789.125,
-                        float("inf"), True,
-                        False, "hello",
-                        "hello", Decimal("1.23"),
-                        "he\"llo_again", "Я Привет",
-                        1, 2, 3, 4
+                        100,
+                        -100,
+                        200,
+                        200,
+                        10000000000,
+                        -20000000000,
+                        "18014398509481984",
+                        "-18014398509481984",
+                        123.5,
+                        -789.125,
+                        float("inf"),
+                        True,
+                        False,
+                        "hello",
+                        "hello",
+                        Decimal("1.23"),
+                        "he\"llo_again",
+                        "Я Привет",
+                        1,
+                        2,
+                        3,
+                        4,
                     ]
-                ]
+                ],
             }
 
             # check incorrect result set index
-            with pytest.raises(YQHttpClientException, match=re.escape("Error occurred. http code=400, status=400010, msg=BAD_REQUEST, details=[{'message': 'Result set index out of bound: 1 >= 1', 'issue_code': 1003, 'severity': 'ERROR', 'issues': []}]")):  # noqa
+            with pytest.raises(
+                YQHttpClientException,
+                match=re.escape(
+                    "Error occurred. http code=400, status=400010, msg=BAD_REQUEST, details=[{'message': "
+                    "'Result set index out of bound: 1 >= 1', 'issue_code': 1003, 'severity': 'ERROR', 'issues': []}]"
+                ),
+            ):  # noqa
                 client.get_query_result_set(query_id, result_set_index=1)
 
     def test_optional_results(self):
@@ -385,38 +407,14 @@ class TestHttpApi(TestBase):
                 {'name': 'column2', 'type': 'Optional<Int32??>'},
                 {'name': 'column3', 'type': 'Optional<Int32>'},
                 {'name': 'column4', 'type': 'Optional<Int32?>'},
-                {'name': 'column5', 'type': 'Optional<Int32??>'}
+                {'name': 'column5', 'type': 'Optional<Int32??>'},
             ]
 
-            assert raw_results == {
-                'columns': expected_columns,
-                'rows': [
-                    [
-                        [1],
-                        [[2]],
-                        [[[3]]],
-                        [],
-                        [[]],
-                        [[[]]]
-                    ]
-                ]
-            }
+            assert raw_results == {'columns': expected_columns, 'rows': [[[1], [[2]], [[[3]]], [], [[]], [[[]]]]]}
 
             results = client.get_query_all_result_sets(query_id, 1)
 
-            assert results == {
-                "columns": expected_columns,
-                "rows": [
-                    [
-                        1,
-                        2,
-                        3,
-                        None,
-                        None,
-                        None
-                    ]
-                ]
-            }
+            assert results == {"columns": expected_columns, "rows": [[1, 2, 3, None, None, None]]}
 
     def test_pg_results(self):
         with self.create_client() as client:
@@ -444,7 +442,7 @@ class TestHttpApi(TestBase):
                 {'name': 'column10', 'type': 'pgtime'},
                 {'name': 'column11', 'type': 'pgtimestamp'},
                 {'name': 'column12', 'type': 'pginterval'},
-                {'name': 'column13', 'type': 'pgpoint'}
+                {'name': 'column13', 'type': 'pgpoint'},
             ]
 
             assert raw_results == {
@@ -464,9 +462,9 @@ class TestHttpApi(TestBase):
                         '17:56:23.246911',
                         '2024-02-10 17:57:10.763952',
                         '14:02:40.961814',
-                        '(1,200)'
+                        '(1,200)',
                     ]
-                ]
+                ],
             }
 
             results = client.get_query_all_result_sets(query_id, 1)
@@ -488,9 +486,9 @@ class TestHttpApi(TestBase):
                         '17:56:23.246911',
                         datetime(2024, 2, 10, 17, 57, 10, 763952),
                         '14:02:40.961814',
-                        '(1,200)'
+                        '(1,200)',
                     ]
-                ]
+                ],
             }
 
     def test_set_result(self):
@@ -502,9 +500,7 @@ class TestHttpApi(TestBase):
             query_id = client.create_query(sql)
             wait_for_query_status(client, query_id, ["COMPLETED"])
             raw_results = client.get_query_all_result_sets(query_id, 1, raw_format=True)
-            assert raw_results["columns"] == [
-                {"name": "column0", "type": "Set<Int32>"}
-            ]
+            assert raw_results["columns"] == [{"name": "column0", "type": "Set<Int32>"}]
 
             assert set(raw_results["rows"][0][0]) == {1, 2, 3}
 
@@ -608,9 +604,9 @@ class TestHttpApi(TestBase):
                         ["Foo", None],
                         ["Bar", None],
                         [],
-                        [1, "cHJpdmV0", "2019-09-16"]
+                        [1, "cHJpdmV0", "2019-09-16"],
                     ]
-                ]
+                ],
             }
 
             results = client.get_query_result_set(query_id, 0)
@@ -647,9 +643,9 @@ class TestHttpApi(TestBase):
                         "Foo",
                         "Bar",
                         [],
-                        (1, "privet", datetime(2019, 9, 16, 0, 0))
+                        (1, "privet", datetime(2019, 9, 16, 0, 0)),
                     ]
-                ]
+                ],
             }
 
     def test_result_offset_limit(self):
@@ -661,15 +657,7 @@ class TestHttpApi(TestBase):
 
             wait_for_query_status(client, query_id, ["COMPLETED"])
             results = client.get_query_result_set_page(query_id, result_set_index=0, offset=1, limit=2)
-            assert results == {
-                "columns": [
-                    {"name": "a", "type": "Int32"}
-                ],
-                "rows": [
-                    [7],
-                    [8]
-                ]
-            }
+            assert results == {"columns": [{"name": "a", "type": "Int32"}], "rows": [[7], [8]]}
 
     def test_openapi_spec(self):
         with self.create_client() as client:

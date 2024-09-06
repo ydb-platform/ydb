@@ -1,0 +1,8 @@
+<tmp_path>/program.sql:<main>: Error: Type annotation
+
+    <tmp_path>/program.sql:<main>:6:20: Error: At function: YtWriteTable!, Setting columngroups
+    	with column_groups="{g1=[l;b;c];def=#}"
+	                   ^
+        <tmp_path>/program.sql:<main>:6:20: Error: Column group "g1" refers to unknown column "l"
+        	with column_groups="{g1=[l;b;c];def=#}"
+	                   ^

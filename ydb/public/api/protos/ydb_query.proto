@@ -170,6 +170,8 @@ message ExecuteQueryRequest {
 
     // Allows to set size limitation (in bytes) for one result part
     int64 response_part_limit_bytes = 9 [(Ydb.value) = "[0; 33554432]"];
+
+    string pool_id = 10; // Workload manager pool id
 }
 
 message ResultSetMeta {
@@ -205,6 +207,8 @@ message ExecuteScriptRequest {
     // After script execution operation finishes, TTL will start counting.
     // After this TTL the results will be removed from database.
     google.protobuf.Duration results_ttl = 6;
+
+    string pool_id = 7; // Workload manager pool id
 }
 
 enum ExecStatus {

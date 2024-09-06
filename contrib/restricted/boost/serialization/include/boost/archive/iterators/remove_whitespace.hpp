@@ -149,7 +149,7 @@ class remove_whitespace :
     > super_t;
 public:
 //    remove_whitespace(){} // why is this needed?
-    // make composible buy using templated constructor
+    // make composable by using templated constructor
     template<class T>
     remove_whitespace(T start) :
         super_t(Base(static_cast< T >(start)))

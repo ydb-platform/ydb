@@ -4,6 +4,8 @@
 
 #include <library/cpp/yt/threading/fork_aware_spin_lock.h>
 
+#include <yt/yt/core/misc/static_ring_queue.h>
+
 namespace NYT::NConcurrency {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -49,8 +51,26 @@ public:
     DEFINE_SIGNAL_SIMPLE(void(), OnBeforeUninstall);
     DEFINE_SIGNAL_SIMPLE(void(), OnAfterInstall);
 
+    void RecordLocation(TSourceLocation loc)
+    {
+        Locations_.Append(&loc, &loc + 1);
+    }
+
+    void PrintModificationLocationsToStderr()
+    {
+        size_t size = Locations_.Size();
+        TSourceLocation lastLocations[MaxSize];
+        Locations_.CopyTailTo(size, &lastLocations[0]);
+        for (size_t i = 0; i < size; ++i) {
+            Cerr << NYT::ToString(lastLocations[i]) << Endl;
+        }
+    }
+
 private:
     TStorage Data_;
+
+    static constexpr int MaxSize = 8;
+    TStaticRingQueue<TSourceLocation, MaxSize> Locations_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -176,6 +196,25 @@ void TPropagatingStorage::EnsureUnique()
     Impl_ = Impl_->Clone();
 }
 
+void TPropagatingStorage::RecordLocation(TSourceLocation loc)
+{
+    Impl_->RecordLocation(loc);
+}
+
+void TPropagatingStorage::PrintModificationLocationsToStderr()
+{
+    Impl_->PrintModificationLocationsToStderr();
+}
+
+struct TPropagatingStorageInfo
+{
+    TPropagatingStorage Storage;
+    TSourceLocation Location;
+    TSourceLocation PrevLocation;
+};
+
+YT_DEFINE_GLOBAL(TFlsSlot<TPropagatingStorageInfo>, PropagatingStorageSlot);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TPropagatingStorageManager
@@ -188,12 +227,13 @@ public:
 
     TPropagatingStorage& GetCurrentPropagatingStorage()
     {
-        return *Slot_;
+        return PropagatingStorageSlot()->Storage;
     }
 
-    const TPropagatingStorage& GetPropagatingStorage(const TFls& fls)
+    const TPropagatingStorage* TryGetPropagatingStorage(const TFls& fls)
     {
-        return *Slot_.Get(fls);
+        auto* info = PropagatingStorageSlot().Get(fls);
+        return info != nullptr ? &info->Storage : nullptr;
     }
 
     void InstallGlobalSwitchHandler(TPropagatingStorageGlobalSwitchHandler handler)
@@ -207,7 +247,7 @@ public:
 
     TPropagatingStorage SwitchPropagatingStorage(TPropagatingStorage newStorage)
     {
-        auto& storage = *Slot_;
+        auto& storage = GetCurrentPropagatingStorage();
         int count = SwitchHandlerCount_.load(std::memory_order::acquire);
         for (int index = 0; index < count; ++index) {
             SwitchHandlers_[index](storage, newStorage);
@@ -216,8 +256,6 @@ public:
     }
 
 private:
-    TFlsSlot<TPropagatingStorage> Slot_;
-
     NThreading::TForkAwareSpinLock Lock_;
 
     static constexpr int MaxSwitchHandlerCount = 16;
@@ -233,9 +271,9 @@ TPropagatingStorage& GetCurrentPropagatingStorage()
     return TPropagatingStorageManager::Get()->GetCurrentPropagatingStorage();
 }
 
-const TPropagatingStorage& GetPropagatingStorage(const TFls& fls)
+const TPropagatingStorage* TryGetPropagatingStorage(const TFls& fls)
 {
-    return TPropagatingStorageManager::Get()->GetPropagatingStorage(fls);
+    return TPropagatingStorageManager::Get()->TryGetPropagatingStorage(fls);
 }
 
 void InstallGlobalPropagatingStorageSwitchHandler(TPropagatingStorageGlobalSwitchHandler handler)
@@ -245,13 +283,34 @@ void InstallGlobalPropagatingStorageSwitchHandler(TPropagatingStorageGlobalSwitc
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TPropagatingStorageGuard::TPropagatingStorageGuard(TPropagatingStorage storage)
+TSourceLocation SwitchPropagatingStorageLocation(TSourceLocation loc)
+{
+    PropagatingStorageSlot()->PrevLocation = PropagatingStorageSlot()->Location;
+    return std::exchange(PropagatingStorageSlot()->Location, loc);
+}
+
+void PrintLocationToStderr()
+{
+    Cerr << Format(
+        "PropagatingStorageLocation: %v, PrevLocation: %v, ModificationLocations:",
+        PropagatingStorageSlot()->Location,
+        PropagatingStorageSlot()->PrevLocation) << Endl;
+
+    PropagatingStorageSlot()->Storage.PrintModificationLocationsToStderr();
+}
+
+TPropagatingStorageGuard::TPropagatingStorageGuard(TPropagatingStorage storage, TSourceLocation loc)
     : OldStorage_(TPropagatingStorageManager::Get()->SwitchPropagatingStorage(std::move(storage)))
-{ }
+    , OldLocation_(SwitchPropagatingStorageLocation(loc))
+{
+    YT_VERIFY((OldLocation_.GetFileName() == nullptr) == (OldLocation_.GetLine() == -1));
+    YT_VERIFY((loc.GetFileName() == nullptr) == (loc.GetLine() == -1));
+}
 
 TPropagatingStorageGuard::~TPropagatingStorageGuard()
 {
     TPropagatingStorageManager::Get()->SwitchPropagatingStorage(std::move(OldStorage_));
+    SwitchPropagatingStorageLocation(OldLocation_);
 }
 
 const TPropagatingStorage& TPropagatingStorageGuard::GetOldStorage() const
@@ -261,8 +320,8 @@ const TPropagatingStorage& TPropagatingStorageGuard::GetOldStorage() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TNullPropagatingStorageGuard::TNullPropagatingStorageGuard()
-    : TPropagatingStorageGuard(TPropagatingStorage())
+TNullPropagatingStorageGuard::TNullPropagatingStorageGuard(TSourceLocation loc)
+    : TPropagatingStorageGuard(TPropagatingStorage(), loc)
 { }
 
 ////////////////////////////////////////////////////////////////////////////////

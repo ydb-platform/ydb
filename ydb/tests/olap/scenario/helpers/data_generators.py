@@ -42,14 +42,56 @@ class IColumnValueGenerator(ABC):
         pass
 
 
-class ColumnValueGeneratorNull(IColumnValueGenerator):
-    """NULL column value generator.
+class ColumnValueGeneratorConst(IColumnValueGenerator):
+    """Const column value generator.
 
-    Allways generate NULL value."""
+    Allways generate specified value."""
+
+    def __init__(self, value: Any) -> None:
+        """Constructor.
+
+         Args:
+            value: Value to generate.
+        Example:
+            DataGeneratorPerColumn(
+                self.schema2, 10,
+                ColumnValueGeneratorDefault(init_value=10))
+                    .with_column('not_level', ColumnValueGeneratorConst(42)
+            )
+        """
+
+        super().__init__()
+        self._value = value
 
     @override
-    def generate_value(column: ScenarioTestHelper.Column) -> Any:
-        return None
+    def generate_value(self, column: ScenarioTestHelper.Column) -> Any:
+        return self._value
+
+
+class ColumnValueGeneratorLambda(IColumnValueGenerator):
+    """Arbitrary value generator.
+
+    Uses arbitrary function to generate values."""
+
+    def __init__(self, func) -> None:
+        """Constructor.
+
+         Args:
+            func: Function used to generate values.
+        Example:
+            DataGeneratorPerColumn(
+                self.schema2, 10,
+                ColumnValueGeneratorDefault(init_value=10))
+                    .with_column('not_level', ColumnValueGeneratorLambda(lambda: time.now())
+            )
+        """
+
+        super().__init__()
+        self._func = func
+
+    @override
+    def generate_value(self, column: ScenarioTestHelper.Column) -> Any:
+        return self._func()
 
 
 class ColumnValueGeneratorRandom(IColumnValueGenerator):

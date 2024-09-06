@@ -1,5 +1,7 @@
 #include "shutdown.h"
 
+#include <yt/yt/core/concurrency/system_invokers.h>
+
 #include <yt/yt/core/misc/collection_helpers.h>
 #include <yt/yt/core/misc/proc.h>
 #include <yt/yt/core/misc/singleton.h>
@@ -10,6 +12,8 @@
 #include <library/cpp/yt/threading/event_count.h>
 
 #include <library/cpp/yt/misc/tls.h>
+
+#include <library/cpp/yt/system/exit.h>
 
 #include <util/generic/algorithm.h>
 
@@ -104,7 +108,7 @@ public:
                     YT_ABORT();
                 } else {
                     ::fprintf(stderr, "*** Shutdown hung, exiting\n");
-                    ::_exit(options.HungExitCode);
+                    AbortProcess(options.HungExitCode);
                 }
             }
         });
@@ -175,6 +179,12 @@ public:
     size_t GetShutdownThreadId()
     {
         return ShutdownThreadId_.load();
+    }
+
+    void EnsureSafeShutdown() const
+    {
+        NConcurrency::GetFinalizerInvoker();
+        NConcurrency::GetShutdownInvoker();
     }
 
 private:
@@ -273,6 +283,11 @@ FILE* TryGetShutdownLogFile()
 size_t GetShutdownThreadId()
 {
     return TShutdownManager::Get()->GetShutdownThreadId();
+}
+
+void EnsureSafeShutdown()
+{
+    TShutdownManager::Get()->EnsureSafeShutdown();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -55,6 +55,8 @@ struct TTestServer {
             KeyColumnNames: ["Key"]
             )"
         );
+
+        Server->GetRuntime()->SetLogPriority(NKikimrServices::EServiceKikimr::KQP_PROXY, NActors::NLog::EPriority::PRI_DEBUG);
     }
 
     template <class TQueryActor, class... TParams>
@@ -190,6 +192,87 @@ Y_UNIT_TEST_SUITE(QueryActorTest) {
 
         auto result = server.RunQueryActor<TSelectQuery>();
         UNIT_ASSERT_VALUES_EQUAL(result.StatusCode, Ydb::StatusIds::SUCCESS);
+    }
+
+    Y_UNIT_TEST(StreamQuery) {
+        TTestServer server;
+
+        struct TSelectStreamQuery : public TTestQueryActorBase {
+            TSelectStreamQuery(const TString& value, ui64 tableSize, ui64 rowsToRead)
+                : Value(value)
+                , TableSize(tableSize)
+                , RowsToRead(rowsToRead)
+            {}
+
+            void OnRunQuery() override {
+                TString sql = R"(
+                    DECLARE $value AS Text;
+                    DECLARE $table_size AS Uint64;
+
+                    SELECT x FROM AS_TABLE(
+                        ()->(Yql::ToStream(ListReplicate(<|x:$value|>, $table_size)))
+                    );
+                )";
+
+                NYdb::TParamsBuilder params;
+                params
+                    .AddParam("$value")
+                        .Utf8(Value)
+                        .Build()
+                    .AddParam("$table_size")
+                        .Uint64(TableSize)
+                        .Build();
+
+                RunStreamQuery(sql, &params, Value.Size() * 10);
+            }
+
+            void OnStreamResult(NYdb::TResultSet&& resultSet) override {
+                UNIT_ASSERT_C(ResultExpected, "Query was cancelled, results are not expected");
+
+                NYdb::TResultSetParser result(resultSet);
+                UNIT_ASSERT_VALUES_EQUAL_C(result.ColumnsCount(), 1, "Invalid number of columns");
+
+                while (result.TryNextRow()) {
+                    const TString& row = result.ColumnParser(0).GetUtf8();
+                    UNIT_ASSERT_VALUES_EQUAL_C(row, Value, "Ivalid row value");
+
+                    if (ReadedRows >= RowsToRead) {
+                        CancelStreamQuery();
+                        ResultExpected = false;
+                        return;
+                    }
+
+                    ReadedRows++;
+                    *FinalResult.add_rows()->mutable_text_value() = row;
+                }
+            }
+
+            void OnQueryResult() override {
+                ResultSets.clear();
+                ResultSets.emplace_back(std::move(FinalResult));
+                Finish();
+            }
+
+            const TString Value;
+            const ui64 TableSize;
+            const ui64 RowsToRead;
+
+            ui64 ReadedRows = 0;
+            bool ResultExpected = true;
+            Ydb::ResultSet FinalResult;
+        };
+
+        {  // Read part of table
+            auto result = server.RunQueryActor<TSelectStreamQuery>("0123456789ABCDEF", 4000000000, 1000);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.StatusCode, Ydb::StatusIds::SUCCESS, result.Issues.ToOneLineString());
+            UNIT_ASSERT_VALUES_EQUAL(result.ResultSets[0].RowsCount(), 1000);
+        }
+
+        {  // Read all table
+            auto result = server.RunQueryActor<TSelectStreamQuery>("0123456789ABCDEF", 1000, 2000);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.StatusCode, Ydb::StatusIds::SUCCESS, result.Issues.ToOneLineString());
+            UNIT_ASSERT_VALUES_EQUAL(result.ResultSets[0].RowsCount(), 1000);
+        }
     }
 }
 

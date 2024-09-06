@@ -31,9 +31,6 @@ TSchedulerThread::~TSchedulerThread()
 void TSchedulerThread::OnStart()
 { }
 
-void TSchedulerThread::OnStop()
-{ }
-
 void TSchedulerThread::Stop(bool graceful)
 {
     GracefulStop_.store(graceful);
@@ -61,7 +58,6 @@ void TSchedulerThread::StopPrologue()
 void TSchedulerThread::StopEpilogue()
 {
     TFiberSchedulerThread::StopEpilogue();
-    OnStop();
 }
 
 TClosure TSchedulerThread::OnExecute()

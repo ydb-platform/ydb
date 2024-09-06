@@ -64,6 +64,126 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
         return {runtime, server, sender};
     }
 
+    template<class TValue>
+    struct TRepeat {
+        TValue Value;
+        size_t Count;
+    };
+
+    template<class TValue>
+    TRepeat<std::decay_t<TValue>> Repeat(TValue&& value, size_t count) {
+        return TRepeat<std::decay_t<TValue>>{ std::forward<TValue>(value), count };
+    }
+
+    template<class TValue>
+    struct TConditional {
+        bool Condition;
+        TValue Value;
+    };
+
+    template<class TValue>
+    TConditional<std::decay_t<TValue>> Conditional(bool condition, TValue&& value) {
+        return TConditional<std::decay_t<TValue>>{ condition, std::forward<TValue>(value) };
+    }
+
+    struct TExpectedSpan {
+        std::string_view Name;
+        std::vector<TExpectedSpan> Children;
+
+        explicit TExpectedSpan(std::string_view name)
+            : Name(name)
+        {}
+
+        void AddChild(std::string_view name) {
+            Children.emplace_back(name);
+        }
+
+        void AddChild(const TExpectedSpan& span) {
+            Children.push_back(span);
+        }
+
+        void AddChild(TExpectedSpan&& span) {
+            Children.push_back(std::move(span));
+        }
+
+        void AddChild(const std::vector<TExpectedSpan>& children) {
+            for (auto& child : children) {
+                Children.push_back(child);
+            }
+        }
+
+        void AddChild(std::vector<TExpectedSpan>&& children) {
+            for (auto& child : children) {
+                Children.push_back(std::move(child));
+            }
+        }
+
+        template<class TValue>
+        void AddChild(const TRepeat<TValue>& repeat) {
+            for (size_t i = 0; i < repeat.Count; ++i) {
+                AddChild(repeat.Value);
+            }
+        }
+
+        template<class TValue>
+        void AddChild(const TConditional<TValue>& conditional) {
+            if (conditional.Condition) {
+                AddChild(conditional.Value);
+            }
+        }
+
+        template<class TValue>
+        void AddChild(TConditional<TValue>&& conditional) {
+            if (conditional.Condition) {
+                AddChild(std::move(conditional.Value));
+            }
+        }
+
+        void ToString(std::string& out) const {
+            out.append("(");
+            out.append(Name);
+            if (!Children.empty()) {
+                out.append(" -> [");
+                bool first = true;
+                for (auto& child : Children) {
+                    if (first) {
+                        first = false;
+                    } else {
+                        out.append(" , ");
+                    }
+                    child.ToString(out);
+                }
+                out.append("]");
+            }
+            out.append(")");
+        }
+
+        std::string ToString() const {
+            std::string out;
+            ToString(out);
+            return out;
+        }
+    };
+
+    template<class... TArgs>
+    TExpectedSpan ExpectedSpan(std::string_view name, TArgs&&... args) {
+        TExpectedSpan span(name);
+        (span.AddChild(std::forward<TArgs>(args)), ...);
+        return span;
+    }
+
+    template<class... TArgs>
+    std::vector<TExpectedSpan> ExpectedSpanVec(TArgs&&... args) {
+        std::vector<TExpectedSpan> vec;
+        (vec.emplace_back(std::forward<TArgs>(args)), ...);
+        return vec;
+    }
+
+    template<class... TArgs>
+    TConditional<std::vector<TExpectedSpan>> ConditionalSpanVec(bool condition, TArgs&&... args) {
+        return Conditional(condition, ExpectedSpanVec(std::forward<TArgs>(args)...));
+    }
+
     void CheckTxHasWriteLog(std::reference_wrapper<TFakeWilsonUploader::Span> txSpan) {
         auto writeLogSpan = txSpan.get().FindOne("Tablet.WriteLog");
         UNIT_ASSERT(writeLogSpan);
@@ -133,34 +253,32 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
             CheckTxHasDatashardUnits(progress, usesVolatileTxs ? 6 : 11);
         }
 
-        std::string canon;
-        if (usesVolatileTxs) {
-            canon = "(Session.query.QUERY_ACTION_EXECUTE -> [(CompileService -> [(CompileActor)]) , "
-                "(LiteralExecuter) , (DataExecuter -> [(WaitForTableResolve) , (RunTasks) , (Datashard.Transaction -> "
-                "[(Tablet.Transaction -> [(Tablet.Transaction.Execute -> [(Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit)])"
-                "]) , (Tablet.Transaction -> [(Tablet.Transaction.Execute -> "
-                "[(Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit)"
-                "]) , (Tablet.WriteLog -> "
-                "[(Tablet.WriteLog.LogEntry)])])]) , (Datashard.Transaction -> [(Tablet.Transaction -> [(Tablet.Transaction.Execute -> "
-                "[(Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit)])]) , "
-                "(Tablet.Transaction -> [(Tablet.Transaction.Execute -> [(Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit) , "
-                "(Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit)"
-                "]) , (Tablet.WriteLog -> [(Tablet.WriteLog.LogEntry)])])])])])";
-        } else {
-            canon = "(Session.query.QUERY_ACTION_EXECUTE -> [(CompileService -> [(CompileActor)]) , "
-                "(LiteralExecuter) , (DataExecuter -> [(WaitForTableResolve) , (RunTasks) , (Datashard.Transaction -> "
-                "[(Tablet.Transaction -> [(Tablet.Transaction.Execute -> [(Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit)]) , "
-                "(Tablet.WriteLog -> [(Tablet.WriteLog.LogEntry)])]) , (Tablet.Transaction -> [(Tablet.Transaction.Execute -> "
-                "[(Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit) , "
-                "(Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit)]) , (Tablet.WriteLog -> "
-                "[(Tablet.WriteLog.LogEntry)])])]) , (Datashard.Transaction -> [(Tablet.Transaction -> [(Tablet.Transaction.Execute -> "
-                "[(Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit)]) , (Tablet.WriteLog -> [(Tablet.WriteLog.LogEntry)])]) , "
-                "(Tablet.Transaction -> [(Tablet.Transaction.Execute -> [(Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit) , "
-                "(Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit) , "
-                "(Datashard.Unit) , (Datashard.Unit)]) , (Tablet.WriteLog -> [(Tablet.WriteLog.LogEntry)])])])])])";
-        }
+        std::string canon = ExpectedSpan("Session.query.QUERY_ACTION_EXECUTE",
+            ExpectedSpan("CompileService", "CompileActor"),
+            "LiteralExecuter",
+            ExpectedSpan("DataExecuter",
+                "WaitForTableResolve",
+                "RunTasks",
+                Repeat(
+                    ExpectedSpan("Datashard.Transaction",
+                        ExpectedSpan("Tablet.Transaction",
+                            ExpectedSpan("Tablet.Transaction.Execute",
+                                Repeat("Datashard.Unit", 3)),
+                            Conditional(!usesVolatileTxs,
+                                ExpectedSpan("Tablet.WriteLog", "Tablet.WriteLog.LogEntry")),
+                            "Tablet.Transaction.Complete"),
+                        Conditional(usesVolatileTxs, "Datashard.SendWithConfirmedReadOnlyLease"),
+                        ExpectedSpan("Tablet.Transaction",
+                            ExpectedSpan("Tablet.Transaction.Execute",
+                                Repeat("Datashard.Unit", usesVolatileTxs ? 6 : 11)),
+                            ExpectedSpan("Tablet.WriteLog",
+                                "Tablet.WriteLog.LogEntry"),
+                            "Tablet.Transaction.Complete"),
+                        "Datashard.SendResult"),
+                    2)))
+            .ToString();
 
-        UNIT_ASSERT_VALUES_EQUAL(canon, trace.ToString());
+        UNIT_ASSERT_VALUES_EQUAL(trace.ToString(), canon);
     }
 
     Y_UNIT_TEST(TestTraceDistributedSelect) {
@@ -222,79 +340,46 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
         TFakeWilsonUploader::Trace &trace = uploader->Traces.begin()->second;
 
         std::string canon;
-        if (server->GetSettings().AppConfig->GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup() || server->GetSettings().AppConfig->GetTableServiceConfig().GetPredicateExtract20()) {
-            auto readActorSpan = trace.Root.BFSFindOne("ReadActor");
-            UNIT_ASSERT(readActorSpan);
+        auto readActorSpan = trace.Root.BFSFindOne("ReadActor");
+        UNIT_ASSERT(readActorSpan);
 
-            auto dsReads = readActorSpan->get().FindAll("Datashard.Read"); // Read actor sends EvRead to each shard.
-            UNIT_ASSERT_VALUES_EQUAL(dsReads.size(), 2);
+        auto dsReads = readActorSpan->get().FindAll("Datashard.Read"); // Read actor sends EvRead to each shard.
+        UNIT_ASSERT_VALUES_EQUAL(dsReads.size(), 2);
 
-            canon = "(Session.query.QUERY_ACTION_EXECUTE -> [(CompileService -> [(CompileActor)]) , (LiteralExecuter) "
-                ", (DataExecuter -> [(WaitForTableResolve) , (WaitForShardsResolve) , (WaitForSnapshot) "
-                ", (ComputeActor -> [(ReadActor -> [(WaitForShardsResolve) , (Datashard.Read "
-                "-> [(Tablet.Transaction -> [(Tablet.Transaction.Execute -> [(Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit)]) "
-                ", (Tablet.Transaction.Wait) , (Tablet.Transaction.Enqueued) , (Tablet.Transaction.Execute -> [(Datashard.Unit)]) "
-                ", (Tablet.Transaction.Wait) , (Tablet.Transaction.Enqueued) , (Tablet.Transaction.Execute -> [(Datashard.Unit) "
-                ", (Datashard.Unit)]) , (Tablet.WriteLog -> [(Tablet.WriteLog.LogEntry)])])]) , (Datashard.Read -> [(Tablet.Transaction "
-                "-> [(Tablet.Transaction.Execute -> [(Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit)]) , (Tablet.Transaction.Wait) "
-                ", (Tablet.Transaction.Enqueued) , (Tablet.Transaction.Execute -> [(Datashard.Unit)]) , (Tablet.Transaction.Wait) "
-                ", (Tablet.Transaction.Enqueued) , (Tablet.Transaction.Execute -> [(Datashard.Unit) , (Datashard.Unit)]) , (Tablet.WriteLog "
-                "-> [(Tablet.WriteLog.LogEntry)])])])])]) , (ComputeActor), (RunTasks)])])";
+        canon = ExpectedSpan("Session.query.QUERY_ACTION_EXECUTE",
+            ExpectedSpan("CompileService", "CompileActor"),
+            "LiteralExecuter",
+            ExpectedSpan("DataExecuter",
+                "WaitForTableResolve",
+                "WaitForShardsResolve",
+                "WaitForSnapshot",
+                ExpectedSpan("ComputeActor",
+                    ExpectedSpan("ReadActor",
+                        "WaitForShardsResolve",
+                        Repeat(
+                            ExpectedSpan("Datashard.Read",
+                                ExpectedSpan("Tablet.Transaction",
+                                    ExpectedSpan("Tablet.Transaction.Execute",
+                                        Repeat("Datashard.Unit", 3)),
+                                    // No extra page fault with btree index (root is in meta)
+                                    ConditionalSpanVec(!bTreeIndex,
+                                        "Tablet.Transaction.Wait",
+                                        "Tablet.Transaction.Enqueued",
+                                        ExpectedSpan("Tablet.Transaction.Execute",
+                                            "Datashard.Unit")),
+                                    "Tablet.Transaction.Wait",
+                                    "Tablet.Transaction.Enqueued",
+                                    ExpectedSpan("Tablet.Transaction.Execute",
+                                        Repeat("Datashard.Unit", 2)),
+                                    ExpectedSpan("Tablet.WriteLog", "Tablet.WriteLog.LogEntry"),
+                                    "Tablet.Transaction.Complete"),
+                                "Datashard.SendWithConfirmedReadOnlyLease"),
+                            2))),
+                "ComputeActor",
+                "RunTasks"))
+            .ToString();
 
-            if (bTreeIndex) { // no index nodes (levels = 0)
-                canon = "(Session.query.QUERY_ACTION_EXECUTE -> [(CompileService -> [(CompileActor)]) , (LiteralExecuter) "
-                ", (DataExecuter -> [(WaitForTableResolve) , (WaitForShardsResolve) , (WaitForSnapshot) "
-                ", (ComputeActor -> [(ReadActor -> [(WaitForShardsResolve) , (Datashard.Read "
-                "-> [(Tablet.Transaction -> [(Tablet.Transaction.Execute -> [(Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit)]) "
-                ", (Tablet.Transaction.Wait) , (Tablet.Transaction.Enqueued) , (Tablet.Transaction.Execute -> [(Datashard.Unit) "
-                ", (Datashard.Unit)]) , (Tablet.WriteLog -> [(Tablet.WriteLog.LogEntry)])])]) , (Datashard.Read -> [(Tablet.Transaction "
-                "-> [(Tablet.Transaction.Execute -> [(Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit)]) , (Tablet.Transaction.Wait) "
-                ", (Tablet.Transaction.Enqueued) , (Tablet.Transaction.Execute -> [(Datashard.Unit) , (Datashard.Unit)]) , (Tablet.WriteLog "
-                "-> [(Tablet.WriteLog.LogEntry)])])])])]) , (ComputeActor) , (RunTasks)])])";
-            }
-
-        } else {
-            auto deSpan = trace.Root.BFSFindOne("DataExecuter");
-            UNIT_ASSERT(deSpan);
-
-            auto dsTxSpans = deSpan->get().FindAll("Datashard.Transaction");
-            UNIT_ASSERT_VALUES_EQUAL(2, dsTxSpans.size()); // Two shards, each executes a user transaction.
-
-            for (auto dsTxSpan : dsTxSpans) {
-                auto tabletTxs = dsTxSpan.get().FindAll("Tablet.Transaction");
-                UNIT_ASSERT_VALUES_EQUAL(1, tabletTxs.size());
-
-                auto propose = tabletTxs[0];
-                CheckTxHasWriteLog(propose);
-
-                // Blobs are loaded from BS.
-                UNIT_ASSERT_VALUES_EQUAL(2, propose.get().FindAll("Tablet.Transaction.Wait").size());
-                UNIT_ASSERT_VALUES_EQUAL(2, propose.get().FindAll("Tablet.Transaction.Enqueued").size());
-
-                // We execute tx multiple times, because we have to load data for it to execute.
-                auto executeSpans = propose.get().FindAll("Tablet.Transaction.Execute");
-                UNIT_ASSERT_VALUES_EQUAL(3, executeSpans.size());
-
-                CheckExecuteHasDatashardUnits(executeSpans[0], 3);
-                CheckExecuteHasDatashardUnits(executeSpans[1], 1);
-                CheckExecuteHasDatashardUnits(executeSpans[2], 3);
-            }
-
-            canon = "(Session.query.QUERY_ACTION_EXECUTE -> [(CompileService -> [(CompileActor)]) "
-                ", (LiteralExecuter) , (DataExecuter -> [(WaitForTableResolve) , (WaitForSnapshot) , (RunTasks) , "
-                "(Datashard.Transaction -> [(Tablet.Transaction -> [(Tablet.Transaction.Execute -> [(Datashard.Unit) , "
-                "(Datashard.Unit) , (Datashard.Unit)]) , (Tablet.Transaction.Wait) , (Tablet.Transaction.Enqueued) , "
-                "(Tablet.Transaction.Execute -> [(Datashard.Unit)]) , (Tablet.Transaction.Wait) , (Tablet.Transaction.Enqueued) , "
-                "(Tablet.Transaction.Execute -> [(Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit)]) , (Tablet.WriteLog -> "
-                "[(Tablet.WriteLog.LogEntry)])])]) , (Datashard.Transaction -> [(Tablet.Transaction -> [(Tablet.Transaction.Execute -> "
-                "[(Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit)]) , (Tablet.Transaction.Wait) , (Tablet.Transaction.Enqueued) , "
-                "(Tablet.Transaction.Execute -> [(Datashard.Unit)]) , (Tablet.Transaction.Wait) , (Tablet.Transaction.Enqueued) , "
-                "(Tablet.Transaction.Execute -> [(Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit)]) , (Tablet.WriteLog -> "
-                "[(Tablet.WriteLog.LogEntry)])])]) , (ComputeActor)])])";
-        }
-
-
-        UNIT_ASSERT_VALUES_EQUAL(canon, trace.ToString());
+        UNIT_ASSERT_VALUES_EQUAL(trace.ToString(), canon);
     }
 
     Y_UNIT_TEST(TestTraceDistributedSelectViaReadActors) {
@@ -344,15 +429,29 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
         auto dsReads = readActorSpan->get().FindAll("Datashard.Read"); // Read actor sends EvRead to each shard.
         UNIT_ASSERT_VALUES_EQUAL(dsReads.size(), 2);
 
-        std::string canon = "(Session.query.QUERY_ACTION_EXECUTE -> [(CompileService -> [(CompileActor)]) , "
-            "(DataExecuter -> [(WaitForTableResolve) , (WaitForShardsResolve) , (WaitForSnapshot) , "
-            "(ComputeActor -> [(ReadActor -> [(WaitForShardsResolve) , "
-            "(Datashard.Read -> [(Tablet.Transaction -> [(Tablet.Transaction.Execute -> [(Datashard.Unit) , "
-            "(Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit)]) , (Tablet.WriteLog -> [(Tablet.WriteLog.LogEntry)])])"
-            "]) , (Datashard.Read -> [(Tablet.Transaction -> [(Tablet.Transaction.Execute -> "
-            "[(Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit)]) , (Tablet.WriteLog -> "
-            "[(Tablet.WriteLog.LogEntry)])])])])]) , (ComputeActor) , (RunTasks)])])";
-        UNIT_ASSERT_VALUES_EQUAL(canon, trace.ToString());
+        std::string canon = ExpectedSpan("Session.query.QUERY_ACTION_EXECUTE",
+            ExpectedSpan("CompileService", "CompileActor"),
+            ExpectedSpan("DataExecuter",
+                "WaitForTableResolve",
+                "WaitForShardsResolve",
+                "WaitForSnapshot",
+                ExpectedSpan("ComputeActor",
+                    ExpectedSpan("ReadActor",
+                        "WaitForShardsResolve",
+                        Repeat(
+                            ExpectedSpan("Datashard.Read",
+                                ExpectedSpan("Tablet.Transaction",
+                                    ExpectedSpan("Tablet.Transaction.Execute",
+                                        Repeat("Datashard.Unit", 4)),
+                                    ExpectedSpan("Tablet.WriteLog", "Tablet.WriteLog.LogEntry"),
+                                    "Tablet.Transaction.Complete"),
+                                "Datashard.SendWithConfirmedReadOnlyLease"),
+                            2))),
+                "ComputeActor",
+                "RunTasks"))
+            .ToString();
+
+        UNIT_ASSERT_VALUES_EQUAL(trace.ToString(), canon);
     }
 
     Y_UNIT_TEST(TestTraceWriteImmediateOnShard) {
@@ -391,10 +490,16 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
         CheckTxHasWriteLog(writeTx);
         CheckTxHasDatashardUnits(writeTx, 5);
 
-        std::string canon = "(Datashard.WriteTransaction -> [(Tablet.Transaction -> [(Tablet.Transaction.Execute -> "
-        "[(Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit)]) , (Tablet.WriteLog -> "
-        "[(Tablet.WriteLog.LogEntry)])])])";
-        UNIT_ASSERT_VALUES_EQUAL(canon, trace.ToString());
+        std::string canon = ExpectedSpan("Datashard.WriteTransaction",
+            ExpectedSpan("Tablet.Transaction",
+                ExpectedSpan("Tablet.Transaction.Execute",
+                    Repeat("Datashard.Unit", 5)),
+                ExpectedSpan("Tablet.WriteLog", "Tablet.WriteLog.LogEntry"),
+                "Tablet.Transaction.Complete"),
+            "Datashard.SendImmediateWriteResult")
+            .ToString();
+
+        UNIT_ASSERT_VALUES_EQUAL(trace.ToString(), canon);
     }
 }
 

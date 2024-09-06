@@ -184,13 +184,16 @@ int main(int argc, char **argv)
 	unsigned ktail, mask, index;
 	unsigned sq_entries;
 	unsigned completed, dropped;
+	struct io_uring_params p;
 
 	if (argc > 1)
 		return T_EXIT_SKIP;
 
-	ret = io_uring_queue_init(IORING_MAX_ENTRIES, &ring, 0);
+	memset(&p, 0, sizeof(p));
+	ret = t_io_uring_init_sqarray(IORING_MAX_ENTRIES, &ring, &p);
 	if (ret == -ENOMEM)
-		ret = io_uring_queue_init(IORING_MAX_ENTRIES_FALLBACK, &ring, 0);
+		ret = t_io_uring_init_sqarray(IORING_MAX_ENTRIES_FALLBACK,
+					      &ring, &p);
 	if (ret < 0) {
 		perror("io_uring_queue_init");
 		exit(T_EXIT_FAIL);

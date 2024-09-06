@@ -81,12 +81,7 @@ private:
     bool UseLlvm = true;
 public:
     void FillExpectedAggregationGroupByPlanOptions() {
-#if SSA_RUNTIME_VERSION >= 2U
-        //            AddExpectedPlanOptions("TKqpOlapAgg");
         AddExpectedPlanOptions("WideCombiner");
-#else
-        AddExpectedPlanOptions("CombineCore");
-#endif
     }
     TString GetFixedQuery() const {
         TStringBuilder queryFixed;
@@ -177,7 +172,8 @@ void CheckPlanForAggregatePushdown(
     const TString& query,
     TClient& client,
     const std::vector<std::string>& expectedPlanNodes,
-    const std::string& readNodeType) {
+    const std::string& readNodeType)
+{
     auto res = StreamExplainQuery(query, client);
     UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
 

@@ -13,12 +13,18 @@ DEFINE_ENUM(EOrderByDirection,
     (Descending)
 );
 
+DEFINE_ENUM(ETableJoinType,
+    (Inner)
+    (Left)
+);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TQueryBuilder
 {
 public:
     void SetSource(TString source);
+    void SetSource(TString source, TString alias);
 
     int AddSelectExpression(TString expression);
     int AddSelectExpression(TString expression, TString alias);
@@ -35,6 +41,8 @@ public:
 
     void AddOrderByAscendingExpression(TString expression);
     void AddOrderByDescendingExpression(TString expression);
+
+    void AddJoinExpression(TString table, TString alias, TString onExpression, ETableJoinType type);
 
     void SetLimit(i64 limit);
 
@@ -53,13 +61,23 @@ private:
         std::optional<EOrderByDirection> Direction;
     };
 
+    struct TJoinEntry
+    {
+        TString Table;
+        TString Alias;
+        TString OnExpression;
+        ETableJoinType Type;
+    };
+
 private:
     std::optional<TString> Source_;
+    std::optional<TString> SourceAlias_;
     std::vector<TEntryWithAlias> SelectEntries_;
     std::vector<TString> WhereConjuncts_;
     std::vector<TOrderByEntry> OrderByEntries_;
     std::vector<TEntryWithAlias> GroupByEntries_;
     std::vector<TString> HavingConjuncts_;
+    std::vector<TJoinEntry> JoinEntries_;
     std::optional<i64> Limit_;
 
 private:

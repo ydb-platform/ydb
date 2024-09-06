@@ -26,11 +26,73 @@ void TStatistics::ReplacePathWithSample(const NYPath::TYPath& path, const T& sam
 
 ////////////////////////////////////////////////////////////////////////////////
 
+/*! Checks if the existing statistics in TSummaryMap are compatible with a statistic
+ * at |path|. Returns a pair of the conflict type (has a prefix in existing
+ * statistics, is a prefix of an existing statistic, or no conflict at all) and
+ * an iterator. If there is a conflict, iterator points to the conflicting statistic,
+ * otherwise it is a hint. Assumes that the |existingStatistics|
+ * are compatible.
+ */
+template <typename TSummaryMap>
+std::pair<EStatisticPathConflictType, typename TSummaryMap::iterator> IsCompatibleStatistic(
+    TSummaryMap& existingStatistics,
+    const NYPath::TYPath& path)
+{
+    auto it = existingStatistics.lower_bound(path);
+    if (it != existingStatistics.end()) {
+        if (it->first == path) {
+            return {EStatisticPathConflictType::Exists, it};
+        }
+        if (NYPath::HasPrefix(it->first, path)) {
+            return {EStatisticPathConflictType::IsPrefix, it};
+        }
+    }
+    if (it != existingStatistics.begin()) {
+        auto prev = std::prev(it);
+        if (NYPath::HasPrefix(path, prev->first)) {
+            return {EStatisticPathConflictType::HasPrefix, prev};
+        }
+    }
+    return {EStatisticPathConflictType::None, it};
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+//! Tries to emplace statistic into TSummaryMap, and checks if it is valid and compatible.
+template <typename TSummaryMap, typename... Ts>
+std::pair<typename TSummaryMap::iterator, bool> CheckedEmplaceStatistic(
+    TSummaryMap& existingStatistics,
+    const NYPath::TYPath& path,
+    Ts&&... args)
+{
+    auto [conflictType, hintIt] = IsCompatibleStatistic(existingStatistics, path);
+    if (conflictType == EStatisticPathConflictType::Exists) {
+        return {hintIt, false};
+    }
+    if (conflictType != EStatisticPathConflictType::None) {
+        auto prefixPath = hintIt->first;
+        auto conflictPath = path;
+
+        if (conflictType == EStatisticPathConflictType::IsPrefix) {
+            std::swap(prefixPath, conflictPath);
+        }
+
+        THROW_ERROR_EXCEPTION("Statistic path cannot be a prefix of another statistic path")
+            << TErrorAttribute("prefix_path", prefixPath)
+            << TErrorAttribute("contained_in_path", conflictPath);
+    }
+    auto emplacedIt = existingStatistics.emplace_hint(hintIt, path, std::forward<Ts>(args)...);
+    return {emplacedIt, true};
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 template <class TTags>
 void TTaggedStatistics<TTags>::AppendStatistics(const TStatistics& statistics, TTags tags)
 {
     for (const auto& [path, summary] : statistics.Data()) {
-        auto& pathSummaries = Data_[path];
+        auto [emplacedIterator, _] = CheckedEmplaceStatistic(Data_, path, TTaggedSummaries{});
+        auto& pathSummaries = emplacedIterator->second;
         auto it = pathSummaries.find(tags);
         if (it == pathSummaries.end()) {
             pathSummaries.emplace(tags, summary);
@@ -43,9 +105,8 @@ void TTaggedStatistics<TTags>::AppendStatistics(const TStatistics& statistics, T
 template <class TTags>
 void TTaggedStatistics<TTags>::AppendTaggedSummary(const NYPath::TYPath& path, const TTaggedStatistics<TTags>::TTaggedSummaries& taggedSummaries)
 {
-    auto taggedSummariesIt = Data_.find(path);
-    if (taggedSummariesIt == Data_.end()) {
-        Data_[path] = taggedSummaries;
+    auto [taggedSummariesIt, emplaceHappened] = CheckedEmplaceStatistic(Data_, path, taggedSummaries);
+    if (emplaceHappened) {
         return;
     }
 

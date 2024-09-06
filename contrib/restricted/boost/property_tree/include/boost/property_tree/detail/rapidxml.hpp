@@ -59,7 +59,7 @@ namespace boost { namespace property_tree { namespace detail {namespace rapidxml
 
         //! Gets human readable description of error.
         //! \return Pointer to null terminated description of the error.
-        const char *what() const noexcept BOOST_OVERRIDE
+        const char *what() const noexcept override
         {
             return m_what;
         }

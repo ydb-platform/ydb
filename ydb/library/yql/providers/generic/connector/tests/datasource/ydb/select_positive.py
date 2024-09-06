@@ -109,6 +109,11 @@ class Factory:
                     ydb_type=makeYdbTypeFromTypeID(Type.TIMESTAMP),
                     data_source_type=DataSourceType(ydb=types_ydb.Timestamp().to_non_nullable()),
                 ),
+                Column(
+                    name='col_17_json',
+                    ydb_type=makeYdbTypeFromTypeID(Type.JSON),
+                    data_source_type=DataSourceType(ydb=types_ydb.Json().to_non_nullable()),
+                ),
             ),
         )
 
@@ -139,6 +144,7 @@ class Factory:
                     datetime.date(1988, 11, 20),
                     datetime.datetime(1988, 11, 20, 12, 55, 28),
                     datetime.datetime(1988, 11, 20, 12, 55, 28, 111000),
+                    '{ "friends" : [{"name": "James Holden","age": 35},{"name": "Naomi Nagata","age": 30}]}',
                 ],
                 [
                     2,
@@ -158,6 +164,7 @@ class Factory:
                     datetime.date(2024, 5, 27),
                     datetime.datetime(2024, 5, 27, 18, 43, 32),
                     datetime.datetime(2024, 5, 27, 18, 43, 32, 123456),
+                    '{ "TODO" : "unicode" }',
                 ],
             ],
             data_source_kind=EDataSourceKind.YDB,
@@ -256,6 +263,11 @@ class Factory:
                     ydb_type=makeOptionalYdbTypeFromTypeID(Type.TIMESTAMP),
                     data_source_type=DataSourceType(ydb=types_ydb.Timestamp()),
                 ),
+                Column(
+                    name='col_17_json',
+                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.JSON),
+                    data_source_type=DataSourceType(ydb=types_ydb.Json()),
+                ),
             ),
         )
 
@@ -286,6 +298,7 @@ class Factory:
                     datetime.date(1988, 11, 20),
                     datetime.datetime(1988, 11, 20, 12, 55, 28),
                     datetime.datetime(1988, 11, 20, 12, 55, 28, 111000),
+                    '{ "friends" : [{"name": "James Holden","age": 35},{"name": "Naomi Nagata","age": 30}]}',
                 ],
                 [
                     2,
@@ -305,9 +318,11 @@ class Factory:
                     datetime.date(2024, 5, 27),
                     datetime.datetime(2024, 5, 27, 18, 43, 32),
                     datetime.datetime(2024, 5, 27, 18, 43, 32, 123456),
+                    '{ "TODO" : "unicode" }',
                 ],
                 [
                     3,
+                    None,
                     None,
                     None,
                     None,
@@ -485,15 +500,72 @@ class Factory:
 
         return [tc]
 
+    def _json(self) -> Sequence[TestCase]:
+        schema = Schema(
+            columns=ColumnList(
+                Column(
+                    name='col_00_id',
+                    ydb_type=makeYdbTypeFromTypeID(Type.INT32),
+                    data_source_type=DataSourceType(ydb=types_ydb.Int32().to_non_nullable()),
+                ),
+                Column(
+                    name='col_01_json',
+                    ydb_type=makeYdbTypeFromTypeID(Type.JSON),
+                    data_source_type=DataSourceType(ydb=types_ydb.Json().to_non_nullable()),
+                ),
+                Column(
+                    name='col_02_json_nullable',
+                    ydb_type=makeYdbTypeFromTypeID(Type.JSON),
+                    data_source_type=DataSourceType(ydb=types_ydb.Json()),
+                ),
+            ),
+        )
+
+        test_case_name = 'json'
+
+        data_in = [
+            [
+                1,
+                '{ "friends": [{"name": "James Holden","age": 35},{"name": "Naomi Nagata","age": 30}]}',
+                '{ "friends": [{"name": "James Holden","age": 35},{"name": "Naomi Nagata","age": 30}]}',
+            ],
+            [2, '{ "TODO" : "unicode" }', '{ "TODO" : "unicode" }'],
+            [3, '{}', None],
+        ]
+
+        data_out_1 = [
+            ['{"age":35,"name":"James Holden"}'],
+            [None],
+            [None],
+        ]
+
+        data_source_kind = EDataSourceKind.YDB
+
+        test_case_name = 'json'
+
+        return [
+            TestCase(
+                name_=test_case_name,
+                data_in=data_in,
+                data_out_=data_out_1,
+                protocol=EProtocol.NATIVE,
+                select_what=SelectWhat(SelectWhat.Item(name='JSON_QUERY(col_01_json, "$.friends[0]")', kind='expr')),
+                select_where=None,
+                data_source_kind=data_source_kind,
+                pragmas=dict(),
+                schema=schema,
+            ),
+        ]
+
     def make_test_cases(self) -> Sequence[TestCase]:
         return list(
             itertools.chain(
                 self._primitive_types(),
                 self._optional_types(),
-                # FIXME: YQ-3314
-                # self._constant(),
-                # self._count(),
+                self._constant(),
+                self._count(),
                 self._pushdown(),
                 self._unsupported_types(),
+                self._json(),
             )
         )

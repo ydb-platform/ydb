@@ -63,6 +63,9 @@ struct TModifyRowsOptions
 
     //! If set treat missing key columns as null.
     bool AllowMissingKeyColumns = false;
+
+    //! If set then WriteViaQueueProducer table schema will be used instead of Write table schema.
+    bool WriteViaQueueProducer = false;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

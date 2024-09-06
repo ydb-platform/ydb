@@ -194,7 +194,19 @@ namespace NKikimr::NStorage {
                            out << "ErrorReason: " << ErrorReason << "<br/>";
                         }
                         out << "Quorum: " << (HasQuorum() ? "yes" : "no") << "<br/>";
-                        out << "Scepter: " << (Scepter ? ToString(Scepter->Id) : "null");
+                        out << "Scepter: " << (Scepter ? ToString(Scepter->Id) : "null") << "<br/>";
+                    }
+                }
+
+                DIV_CLASS("panel panel-info") {
+                    DIV_CLASS("panel-heading") {
+                        out << "Static <-> dynamic node interaction";
+                    }
+                    DIV_CLASS("panel-body") {
+                        out << "IsSelfStatic: " << (IsSelfStatic ? "true" : "false") << "<br/>";
+                        out << "ConnectedToStaticNode: " << ConnectedToStaticNode << "<br/>";
+                        out << "StaticNodeSessionId: " << StaticNodeSessionId << "<br/>";
+                        out << "ConnectedDynamicNodes: " << FormatList(ConnectedDynamicNodes) << "<br/>";
                     }
                 }
 

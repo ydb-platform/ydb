@@ -28,3 +28,4 @@ extern "C" {
 #undef open
 #undef FATAL
 #undef locale_t
+#undef strtou64

@@ -42,7 +42,6 @@ protected:
 
     virtual void DoStart();
     virtual void DoShutdown();
-    virtual TClosure MakeFinalizerCallback();
     virtual void DoConfigure(int threadCount);
 
     virtual TSchedulerThreadPtr SpawnThread(int index) = 0;

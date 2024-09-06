@@ -1,7 +1,7 @@
 import sys
 
 TEMPLATE = """
-#include <@YQL_PYTHON_DIR@/python_udf/python_udf.h>
+#include <@YQL_BASE_DIR@/udfs/common/python/python_udf/python_udf.h>
 
 #include <@YQL_BASE_DIR@/public/udf/udf_registrator.h>
 
@@ -37,8 +37,8 @@ extern "C" UDF_API void SetBackTraceCallback(TBackTraceCallback callback) {
 
 
 def main():
-    assert len(sys.argv) == 8
-    flavor, module_name, package_name, path, libra_flag, yql_base_dir, yql_python_dir = sys.argv[1:]
+    assert len(sys.argv) == 7
+    flavor, module_name, package_name, path, libra_flag, yql_base_dir = sys.argv[1:]
     with open(path, 'w') as f:
         f.write(
             TEMPLATE.strip()
@@ -47,7 +47,6 @@ def main():
             .replace('@FLAVOR@', flavor)
             .replace('@WITH_LIBRA@', libra_flag)
             .replace('@YQL_BASE_DIR@', yql_base_dir)
-            .replace('@YQL_PYTHON_DIR@', yql_python_dir)
         )
         f.write('\n')
 

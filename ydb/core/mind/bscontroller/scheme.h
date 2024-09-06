@@ -49,7 +49,7 @@ struct Schema : NIceDb::Schema {
     };
 
     struct Group : Table<4> {
-        struct ID : Column<1, NScheme::NTypeIds::Uint32> {}; // PK
+        struct ID : Column<1, NScheme::NTypeIds::Uint32> { using Type = TGroupId; static constexpr Type Default = TGroupId::Zero();}; // PK
         struct Generation : Column<2, NScheme::NTypeIds::Uint32> {};
         struct ErasureSpecies : Column<3, NScheme::NTypeIds::Uint32> { using Type = TErasureType::EErasureSpecies; };
         struct Owner : Column<4, NScheme::NTypeIds::Uint64> {};
@@ -121,7 +121,7 @@ struct Schema : NIceDb::Schema {
         struct PDiskID : Column<2, PDisk::PDiskID::ColumnType> {}; // PK + FK PDisk.PDiskID
         struct VSlotID : Column<3, NScheme::NTypeIds::Uint32> {}; // PK
         struct Category : Column<4, NScheme::NTypeIds::Uint64> { using Type = NKikimrBlobStorage::TVDiskKind::EVDiskKind; };
-        struct GroupID : Column<5, Group::ID::ColumnType> {}; // FK Group.ID
+        struct GroupID : Column<5, Group::ID::ColumnType> {using Type = TGroupId; static constexpr Type Default = TGroupId::Zero(); }; // FK Group.ID
         struct GroupGeneration : Column<6, Group::Generation::ColumnType> {};
         struct RingIdx : Column<7, NScheme::NTypeIds::Uint32> {};
         struct FailDomainIdx : Column<8, NScheme::NTypeIds::Uint32> {};

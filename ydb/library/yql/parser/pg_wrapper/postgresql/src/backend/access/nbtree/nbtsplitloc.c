@@ -3,7 +3,7 @@
  * nbtsplitloc.c
  *	  Choose split point code for Postgres btree implementation.
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -35,7 +35,6 @@ typedef struct
 	/* split point identifying fields (returned by _bt_findsplitloc) */
 	OffsetNumber firstrightoff; /* first origpage item on rightpage */
 	bool		newitemonleft;	/* new item goes on left, or right? */
-
 } SplitPoint;
 
 typedef struct
@@ -120,7 +119,7 @@ static inline IndexTuple _bt_split_firstright(FindSplitData *state,
  * righthand page (which is called firstrightoff), plus a boolean
  * indicating whether the new tuple goes on the left or right page.  You
  * can think of the returned state as a point _between_ two adjacent data
- * items (laftleft and firstright data items) on an imaginary version of
+ * items (lastleft and firstright data items) on an imaginary version of
  * origpage that already includes newitem.  The bool is necessary to
  * disambiguate the case where firstrightoff == newitemoff (i.e. it is
  * sometimes needed to determine if the firstright tuple for the split is
@@ -152,7 +151,7 @@ _bt_findsplitloc(Relation rel,
 	SplitPoint	leftpage,
 				rightpage;
 
-	opaque = (BTPageOpaque) PageGetSpecialPointer(origpage);
+	opaque = BTPageGetOpaque(origpage);
 	maxoff = PageGetMaxOffsetNumber(origpage);
 
 	/* Total free space available on a btree page, after fixed overhead */

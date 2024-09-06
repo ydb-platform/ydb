@@ -39,7 +39,7 @@ struct TDriverRequest
 
     //! Stream used for reading command input.
     //! The stream must stay alive for the duration of #IDriver::Execute.
-    NConcurrency::IAsyncInputStreamPtr InputStream;
+    NConcurrency::IAsyncZeroCopyInputStreamPtr InputStream;
 
     //! Stream where the command output is written.
     //! The stream must stay alive for the duration of #IDriver::Execute.
@@ -49,13 +49,14 @@ struct TDriverRequest
     NYTree::IMapNodePtr Parameters;
 
     //! Name of the user issuing the request.
-    TString AuthenticatedUser = NSecurityClient::RootUserName;
+    // TODO(babenko): replace with TAuthenticationIdentity
+    std::string AuthenticatedUser = NSecurityClient::RootUserName;
 
     //! Provides an additional annotation to differentiate between
     //! various clients that authenticate via the same effective user.
-    std::optional<TString> UserTag;
+    std::optional<std::string> UserTag;
 
-    //! Filled in the context of http proxy.
+    //! Filled in the context of HTTP proxy.
     std::optional<NNet::TNetworkAddress> UserRemoteAddress;
 
     //! User token.

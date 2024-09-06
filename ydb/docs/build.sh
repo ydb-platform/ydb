@@ -1,46 +1,46 @@
-# Use this script to build YDB docs with Open Source tools and start HTTP server
-# You may specify output directory as a parameter. If omitted, docs will be generated to a TEMP subdirectory
+#!/bin/bash
 
-echo Checking YFM installed...
-yfm --version
-if [[ $? -ge 1 ]]; then
+# Use this script to build YDB docs with open-source tools and start an HTTP server
+# You may specify the output directory as a parameter. If omitted, the docs will be generated to a TEMP subdirectory
+
+set -e
+
+check_dependency() {
+  if ! command -v $1 &> /dev/null; then
+    echo
+    echo "You need to have $2 installed to run this script, exiting"
+    echo "Installation instructions: $3"
+    exit 1
+  fi
+}
+
+start_server() {
   echo
-  echo "You need to have YFM builder (https://diplodoc.com/docs/en/tools/docs/) installed to run this script, exiting"
-  exit
-fi
-
-echo Checking Python3 installed...
-python3 --version
-
-if [[ $? -ge 1 ]]; then
+  echo "Starting HTTP server, open the links in your browser:"
   echo
-  echo "You need to have Python3 (https://www.python.org/) installed to run this script, exiting"
-  exit
-fi
+  echo "- http://localhost:8888/en (English)"
+  echo "- http://localhost:8888/ru (Russian)"
+  echo
+  echo "Press Ctrl+C in this window to stop the HTTP server."
+  echo
+  python3 -m http.server 8888 -d $1
+}
 
 DIR=${1:-"$TMPDIR"docs}
 
-echo Starting YFM builder
-echo Output directory: $DIR
+check_dependency "yfm" "YFM builder" "https://diplodoc.com/docs/en/tools/docs/"
+check_dependency "python3" "Python3" "https://www.python.org/downloads/"
 
-yfm -i . -o $DIR --allowHTML
+echo "Starting YFM builder"
+echo "Output directory: $DIR"
 
-if [[ $? -ge 1 ]]; then
+if ! yfm -i . -o $DIR --allowHTML  --apply-presets; then
   echo
-  echo ================================
-  echo YFM build completed with ERRORS!
-  echo ================================
+  echo "================================"
+  echo "YFM build completed with ERRORS!"
+  echo "================================"
+  exit 1
 fi
 
-echo
-echo Starting HTTP server, open the links in your browser:
-echo
-echo "- http://localhost:8888/en (English)"
-echo "- http://localhost:8888/ru (Russian)"
-echo
-echo Press Ctrl+C in this window to stop the HTTP server.
-echo
-
-python3 -m http.server 8888 -d $DIR
-
+start_server $DIR
 

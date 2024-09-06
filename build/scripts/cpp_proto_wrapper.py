@@ -5,8 +5,8 @@ import re
 import argparse
 
 
-FROM_RE = re.compile(u"((?:struct|class)\\s+\\S+\\s+)final\\s*:")
-TO_RE = "\\1:"
+FROM_RE = re.compile(r"((?:struct|class)\s+\S+\s+)final\s*:")
+TO_RE = r"\1:"
 
 
 def parse_args() -> argparse.Namespace:
@@ -25,7 +25,7 @@ def main(namespace: argparse.Namespace) -> int:
         subprocess.check_output(namespace.subcommand, stdin=None, stderr=subprocess.STDOUT)
     except subprocess.CalledProcessError as e:
         sys.stderr.write(
-            '{} returned non-zero exit code {}.\n{}\n'.format(' '.join(e.cmd), e.returncode, e.output.decode('utf-8'))
+            '{} returned non-zero exit code {}.\n{}\n'.format(' '.join(e.cmd), e.returncode, e.output.decode('utf-8', errors='ignore'))
         )
         return e.returncode
 

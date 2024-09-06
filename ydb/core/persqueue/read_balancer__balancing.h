@@ -86,9 +86,9 @@ struct TPartitionFamily {
     std::unordered_set<ui32> LockedPartitions;
 
     // The number of active partitions in the family.
-    size_t ActivePartitionCount;
+    size_t ActivePartitionCount = 0;
     // The number of inactive partitions in the family.
-    size_t InactivePartitionCount;
+    size_t InactivePartitionCount = 0;
 
     // Reading sessions that have a list of partitions to read and these sessions can read this family
     std::unordered_map<TActorId, TSession*> SpecialSessions;
@@ -185,6 +185,7 @@ struct TConsumer {
     std::unordered_map<ui32, TPartitionFamily*> PartitionMapping;
     // All reading sessions in which the family is currently being read.
     std::unordered_map<TActorId, TSession*> Sessions;
+    std::optional<TOrderedSessions> OrderedSessions;
 
     // Families is not reading now.
     std::unordered_map<size_t, TPartitionFamily*> UnreadableFamilies;
@@ -215,7 +216,7 @@ struct TConsumer {
     TPartitionFamily* CreateFamily(std::vector<ui32>&& partitions, TPartitionFamily::EStatus status, const TActorContext& ctx);
     bool BreakUpFamily(ui32 partitionId, bool destroy, const TActorContext& ctx);
     bool BreakUpFamily(TPartitionFamily* family, ui32 partitionId, bool destroy, const TActorContext& ctx);
-    bool MergeFamilies(TPartitionFamily* lhs, TPartitionFamily* rhs, const TActorContext& ctx);
+    std::pair<TPartitionFamily*, bool> MergeFamilies(TPartitionFamily* lhs, TPartitionFamily* rhs, const TActorContext& ctx);
     void DestroyFamily(TPartitionFamily* family, const TActorContext& ctx);
     TPartitionFamily* FindFamily(ui32 partitionId);
 
@@ -276,6 +277,8 @@ struct TSession {
     // The partition families that are being read by this session.
     std::unordered_map<size_t, TPartitionFamily*> Families;
 
+    size_t Order;
+
     // true if client connected to read from concret partitions
     bool WithGroups() const;
 
@@ -285,32 +288,6 @@ struct TSession {
     TString DebugStr() const;
 };
 
-struct TStatistics {
-    struct TConsumerStatistics {
-        struct TPartitionStatistics {
-            ui32 PartitionId;
-            ui64 TabletId = 0;
-            ui32 State = 0;
-            TString Session;
-        };
-
-        TString ConsumerName;
-        std::vector<TPartitionStatistics> Partitions;
-    };
-
-    struct TSessionStatistics {
-        TString Session;
-        size_t ActivePartitionCount;
-        size_t InactivePartitionCount;
-        size_t SuspendedPartitionCount;
-        size_t TotalPartitionCount;
-    };
-
-    std::vector<TConsumerStatistics> Consumers;
-    std::vector<TSessionStatistics> Sessions;
-
-    size_t FreePartitions;
-};
 
 class TBalancer {
     friend struct TConsumer;
@@ -328,7 +305,8 @@ public:
     i32 GetLifetimeSeconds() const;
 
     TConsumer* GetConsumer(const TString& consumerName);
-    const TStatistics GetStatistics() const;
+    const std::unordered_map<TString, std::unique_ptr<TConsumer>>& GetConsumers() const;
+    const std::unordered_map<TActorId, std::unique_ptr<TSession>>& GetSessions() const;
 
     void UpdateConfig(std::vector<ui32> addedPartitions, std::vector<ui32> deletedPartitions, const TActorContext& ctx);
     bool SetCommittedState(const TString& consumer, ui32 partitionId, ui32 generation, ui64 cookie, const TActorContext& ctx);
@@ -350,6 +328,11 @@ public:
 
     void Handle(TEvPQ::TEvBalanceConsumer::TPtr& ev, const TActorContext& ctx);
 
+    void Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx);
+    void ProcessPendingStats(const TActorContext& ctx);
+
+    void RenderApp(TStringStream& str) const;
+
 private:
     TString GetPrefix() const;
     ui32 NextStep();
@@ -361,6 +344,14 @@ private:
     std::unordered_map<TString, std::unique_ptr<TConsumer>> Consumers;
 
     ui32 Step;
+
+    struct TData {
+        ui32 Generation;
+        ui64 Cookie;
+        const TString Consumer;
+        bool Commited;
+    };
+    std::unordered_map<ui32, std::vector<TData>> PendingUpdates;
 };
 
 }

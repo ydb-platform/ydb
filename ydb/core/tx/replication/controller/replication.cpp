@@ -1,3 +1,4 @@
+#include "lag_provider.h"
 #include "private_events.h"
 #include "replication.h"
 #include "secret_resolver.h"
@@ -17,8 +18,17 @@
 
 namespace NKikimr::NReplication::NController {
 
-class TReplication::TImpl {
+class TReplication::TImpl: public TLagProvider {
     friend class TReplication;
+
+    struct TTarget: public TItemWithLag {
+        THolder<ITarget> Ptr;
+
+        explicit TTarget(ITarget* iface)
+            : Ptr(iface)
+        {
+        }
+    };
 
     void ResolveSecret(const TString& secretName, const TActorContext& ctx) {
         if (SecretResolver) {
@@ -32,7 +42,9 @@ class TReplication::TImpl {
     ITarget* CreateTarget(TReplication* self, ui64 id, ETargetKind kind, Args&&... args) const {
         switch (kind) {
         case ETargetKind::Table:
-            return new TTableTarget(self, id, std::forward<Args>(args)...);
+            return new TTargetTable(self, id, std::forward<Args>(args)...);
+        case ETargetKind::IndexTable:
+            return new TTargetIndexTable(self, id, std::forward<Args>(args)...);
         }
     }
 
@@ -62,7 +74,7 @@ class TReplication::TImpl {
 
     void ProgressTargets(const TActorContext& ctx) {
         for (auto& [_, target] : Targets) {
-            target->Progress(ctx);
+            target.Ptr->Progress(ctx);
         }
     }
 
@@ -79,6 +91,7 @@ public:
     ui64 AddTarget(TReplication* self, ui64 id, ETargetKind kind, Args&&... args) {
         const auto res = Targets.emplace(id, CreateTarget(self, id, kind, std::forward<Args>(args)...));
         Y_VERIFY_S(res.second, "Duplicate target: " << id);
+        TLagProvider::AddPendingLag(id);
         return id;
     }
 
@@ -90,7 +103,7 @@ public:
     ITarget* FindTarget(ui64 id) {
         auto it = Targets.find(id);
         return it != Targets.end()
-            ? it->second.Get()
+            ? it->second.Ptr.Get()
             : nullptr;
     }
 
@@ -102,19 +115,22 @@ public:
         if (!YdbProxy && !(State == EState::Removing && !Targets)) {
             THolder<IActor> ydbProxy;
             const auto& params = Config.GetSrcConnectionParams();
+            const auto& endpoint = params.GetEndpoint();
+            const auto& database = params.GetDatabase();
+            const bool ssl = params.GetEnableSsl();
 
             switch (params.GetCredentialsCase()) {
             case NKikimrReplication::TConnectionParams::kStaticCredentials:
                 if (!params.GetStaticCredentials().HasPassword()) {
                     return ResolveSecret(params.GetStaticCredentials().GetPasswordSecretName(), ctx);
                 }
-                ydbProxy.Reset(CreateYdbProxy(params.GetEndpoint(), params.GetDatabase(), params.GetStaticCredentials()));
+                ydbProxy.Reset(CreateYdbProxy(endpoint, database, ssl, params.GetStaticCredentials()));
                 break;
             case NKikimrReplication::TConnectionParams::kOAuthToken:
                 if (!params.GetOAuthToken().HasToken()) {
                     return ResolveSecret(params.GetOAuthToken().GetTokenSecretName(), ctx);
                 }
-                ydbProxy.Reset(CreateYdbProxy(params.GetEndpoint(), params.GetDatabase(), params.GetOAuthToken().GetToken()));
+                ydbProxy.Reset(CreateYdbProxy(endpoint, database, ssl, params.GetOAuthToken().GetToken()));
                 break;
             default:
                 ErrorState(TStringBuilder() << "Unexpected credentials: " << params.GetCredentialsCase());
@@ -151,7 +167,7 @@ public:
 
     void Shutdown(const TActorContext& ctx) {
         for (auto& [_, target] : Targets) {
-            target->Shutdown(ctx);
+            target.Ptr->Shutdown(ctx);
         }
 
         for (auto* x : TVector<TActorId*>{&SecretResolver, &TargetDiscoverer, &TenantResolver, &YdbProxy}) {
@@ -174,6 +190,15 @@ public:
         SetState(EState::Error, issue);
     }
 
+    void UpdateLag(ui64 targetId, TDuration lag) {
+        auto it = Targets.find(targetId);
+        if (it == Targets.end()) {
+            return;
+        }
+
+        TLagProvider::UpdateLag(it->second, targetId, lag);
+    }
+
 private:
     const ui64 ReplicationId;
     const TPathId PathId;
@@ -183,7 +208,7 @@ private:
     EState State = EState::Ready;
     TString Issue;
     ui64 NextTargetId = 1;
-    THashMap<ui64, THolder<ITarget>> Targets;
+    THashMap<ui64, TTarget> Targets;
     THashSet<ui64> PendingAlterTargets;
     TActorId SecretResolver;
     TActorId YdbProxy;
@@ -327,6 +352,14 @@ void TReplication::RemovePendingAlterTarget(ui64 id) {
 
 bool TReplication::CheckAlterDone() const {
     return Impl->State == EState::Ready && Impl->PendingAlterTargets.empty();
+}
+
+void TReplication::UpdateLag(ui64 targetId, TDuration lag) {
+    Impl->UpdateLag(targetId, lag);
+}
+
+const TMaybe<TDuration> TReplication::GetLag() const {
+    return Impl->GetLag();
 }
 
 }

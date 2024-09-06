@@ -11,7 +11,7 @@ namespace NYT::NRpc {
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class... TArgs>
-void IServiceContext::SetRequestInfo(const char* format, TArgs&&... args)
+void IServiceContext::SetRequestInfo(TFormatString<TArgs...> format, TArgs&&... args)
 {
     if (IsLoggingEnabled()) {
         SetRawRequestInfo(Format(format, std::forward<TArgs>(args)...), /*incremental*/ false);
@@ -21,7 +21,7 @@ void IServiceContext::SetRequestInfo(const char* format, TArgs&&... args)
 }
 
 template <class... TArgs>
-void IServiceContext::SetIncrementalRequestInfo(const char* format, TArgs&&... args)
+void IServiceContext::SetIncrementalRequestInfo(TFormatString<TArgs...> format, TArgs&&... args)
 {
     if (IsLoggingEnabled()) {
         SetRawRequestInfo(Format(format, std::forward<TArgs>(args)...), /*incremental*/ true);
@@ -31,7 +31,7 @@ void IServiceContext::SetIncrementalRequestInfo(const char* format, TArgs&&... a
 }
 
 template <class... TArgs>
-void IServiceContext::SetResponseInfo(const char* format, TArgs&&... args)
+void IServiceContext::SetResponseInfo(TFormatString<TArgs...> format, TArgs&&... args)
 {
     if (IsLoggingEnabled()) {
         SetRawResponseInfo(Format(format, std::forward<TArgs>(args)...), /*incremental*/ false);
@@ -39,7 +39,7 @@ void IServiceContext::SetResponseInfo(const char* format, TArgs&&... args)
 }
 
 template <class... TArgs>
-void IServiceContext::SetIncrementalResponseInfo(const char* format, TArgs&&... args)
+void IServiceContext::SetIncrementalResponseInfo(TFormatString<TArgs...> format, TArgs&&... args)
 {
     if (IsLoggingEnabled()) {
         SetRawResponseInfo(Format(format, std::forward<TArgs>(args)...), /*incremental*/ true);

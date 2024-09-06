@@ -18,7 +18,7 @@
 #include "liburing.h"
 #include "helpers.h"
 
-#include "../syscall.h"
+#include "../src/syscall.h"
 
 /* bogus: setup returns a valid fd on success... expect can't predict the
    fd we'll get, so this really only takes 1 parameter: error */

@@ -1,5 +1,6 @@
 #include "dq_compute_actor_impl.h"
 #include "dq_compute_actor_async_input_helper.h"
+#include <ydb/library/yql/dq/actors/spilling/spiller_factory.h>
 
 namespace NYql::NDq {
 
@@ -208,6 +209,10 @@ protected:
         if (!limits.OutputChunkMaxSize) {
             limits.OutputChunkMaxSize = GetDqExecutionSettings().FlowControl.MaxOutputChunkSize;
 	}
+    
+        if (this->Task.GetEnableSpilling()) {
+            TaskRunner->SetSpillerFactory(std::make_shared<TDqSpillerFactory>(execCtx.GetTxId(), NActors::TActivationContext::ActorSystem(), execCtx.GetWakeupCallback(), execCtx.GetErrorCallback()));
+        }
 
         TaskRunner->Prepare(this->Task, limits, execCtx);
 
@@ -364,4 +369,3 @@ protected:
 };
 
 } //namespace NYql::NDq
-

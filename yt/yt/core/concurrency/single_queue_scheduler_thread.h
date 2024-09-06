@@ -72,7 +72,6 @@ protected:
     void EndExecute() override;
 
     void OnStart() override;
-    void OnStop() override;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

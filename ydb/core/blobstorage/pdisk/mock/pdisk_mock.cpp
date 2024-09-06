@@ -47,6 +47,7 @@ struct TPDiskMockState::TImpl {
     THashSet<ui32> ReadOnlyVDisks;
     TString StateErrorReason;
     NPDisk::EDeviceType DeviceType;
+    std::optional<TRcBuf> Metadata;
 
     TImpl(ui32 nodeId, ui32 pdiskId, ui64 pdiskGuid, ui64 size, ui32 chunkSize, NPDisk::EDeviceType deviceType)
         : NodeId(nodeId)
@@ -271,14 +272,14 @@ struct TPDiskMockState::TImpl {
 
     void SetReadOnly(const TVDiskID& vDiskId, bool isReadOnly) {
         if (isReadOnly) {
-            ReadOnlyVDisks.insert(vDiskId.GroupID);
+            ReadOnlyVDisks.insert(vDiskId.GroupID.GetRawId());
         } else {
-            ReadOnlyVDisks.erase(vDiskId.GroupID);
+            ReadOnlyVDisks.erase(vDiskId.GroupID.GetRawId());
         }
     }
 
     bool IsReadOnly(const TVDiskID& vDiskId) const {
-        return ReadOnlyVDisks.contains(vDiskId.GroupID);
+        return ReadOnlyVDisks.contains(vDiskId.GroupID.GetRawId());
     }
 };
 
@@ -928,6 +929,27 @@ public:
         Y_UNUSED(ev);
     }
 
+    void ErrorHandle(NPDisk::TEvReadMetadata::TPtr& ev) {
+        Send(ev->Sender, new NPDisk::TEvReadMetadataResult(NPDisk::EPDiskMetadataOutcome::ERROR, std::nullopt), 0, ev->Cookie);
+    }
+
+    void ErrorHandle(NPDisk::TEvWriteMetadata::TPtr& ev) {
+        Send(ev->Sender, new NPDisk::TEvWriteMetadataResult(NPDisk::EPDiskMetadataOutcome::ERROR, std::nullopt), 0, ev->Cookie);
+    }
+
+    void Handle(NPDisk::TEvReadMetadata::TPtr& ev) {
+        if (Impl.Metadata) {
+            Send(ev->Sender, new NPDisk::TEvReadMetadataResult(TRcBuf(*Impl.Metadata), Impl.PDiskGuid), 0, ev->Cookie);
+        } else {
+            Send(ev->Sender, new NPDisk::TEvReadMetadataResult(NPDisk::EPDiskMetadataOutcome::NO_METADATA, Impl.PDiskGuid), 0, ev->Cookie);
+        }
+    }
+
+    void Handle(NPDisk::TEvWriteMetadata::TPtr& ev) {
+        Impl.Metadata.emplace(std::move(ev->Get()->Metadata));
+        Send(ev->Sender, new NPDisk::TEvWriteMetadataResult(NPDisk::EPDiskMetadataOutcome::OK, Impl.PDiskGuid), 0, ev->Cookie);
+    }
+
     void HandleMoveToErrorState() {
         Impl.StateErrorReason = "Some error reason";
         Become(&TThis::StateError);
@@ -954,6 +976,8 @@ public:
         hFunc(NPDisk::TEvConfigureScheduler, Handle);
         hFunc(TEvBlobStorage::TEvAskWardenRestartPDiskResult, Handle);
         cFunc(TEvents::TSystem::Wakeup, ReportMetrics);
+        hFunc(NPDisk::TEvReadMetadata, Handle);
+        hFunc(NPDisk::TEvWriteMetadata, Handle);
 
         cFunc(EvBecomeError, HandleMoveToErrorState);
     )
@@ -970,6 +994,8 @@ public:
         hFunc(NPDisk::TEvSlay, ErrorHandle);
         hFunc(NPDisk::TEvChunkReserve, ErrorHandle);
         hFunc(NPDisk::TEvChunkForget, ErrorHandle);
+        hFunc(NPDisk::TEvReadMetadata, ErrorHandle);
+        hFunc(NPDisk::TEvWriteMetadata, ErrorHandle);
 
         cFunc(TEvents::TSystem::Wakeup, ReportMetrics);
         cFunc(EvBecomeNormal, HandleMoveToNormalState);

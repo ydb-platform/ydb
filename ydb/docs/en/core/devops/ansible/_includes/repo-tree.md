@@ -8,7 +8,6 @@
 │   ├── inventory # A directory containing inventory files, which list and organize the servers Ansible will manage.
 │   │   ├── 50-inventory.yaml # The main inventory file, specifying the hosts and groups for Ansible tasks.
 │   │   └── 99-inventory-vault.yaml #  An encrypted inventory file storing sensitive information, such as the root user's password for YDB, using Ansible Vault.
-│   ├── setup_playbook.yaml # A playbook file that initiates the installation and configuration roles for setting up YDB on the cluster.
 ├── README.md # A markdown file providing a description of the repository, including how to use it, prerequisites, and any other relevant information.
 ├── requirements.txt # A file listing Python package dependencies required for the virtual environment, ensuring all necessary tools and libraries are installed.
 ├── requirements.yaml # Specifies the Ansible collections needed, pointing to the latest versions or specific versions required for the project.

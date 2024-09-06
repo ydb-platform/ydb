@@ -140,6 +140,14 @@ using TInternedObjectDataPtr = TIntrusivePtr<TInternedObjectData<T>>;
 template <class T>
 class TInternedObject;
 
+namespace NStatisticPath {
+
+class TStatisticPathLiteral;
+class TStatisticPath;
+struct TStatisticPathSerializer;
+
+} // namespace NStatisticPath
+
 class TStatistics;
 class TSummary;
 
@@ -167,11 +175,13 @@ DEFINE_ENUM(EProcessErrorCode,
     ((NonZeroExitCode)    (10000))
     ((Signal)             (10001))
     ((CannotResolveBinary)(10002))
+    ((CannotStartProcess) (10003))
 );
 
 ////////////////////////////////////////////////////////////////////////////////
 
 DECLARE_REFCOUNTED_STRUCT(IMemoryUsageTracker)
+DECLARE_REFCOUNTED_STRUCT(IReservingMemoryUsageTracker)
 
 ////////////////////////////////////////////////////////////////////////////////
 

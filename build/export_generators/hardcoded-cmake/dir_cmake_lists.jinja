@@ -37,10 +37,4 @@ add_subdirectory({{ subdir }})
 {%-         include '[generator]/target_cmake_lists.jinja' -%}
 {%-     endfor -%}
 {%- endif -%}
-{# DEPRECATED - targets will be removed after release #}
-{%- if targets is defined -%}
-{%-     for target in targets -%}
-{%-         include '[generator]/target_cmake_lists.jinja' -%}
-{%-     endfor -%}
-{%- endif -%}
 {%- include 'epilogue.cmake' ignore missing -%}

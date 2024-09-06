@@ -150,7 +150,8 @@ namespace NKikimr {
                 }
             } else { // this is the first time configuration arrives -- no queues are created yet
                 EnsureMonitoring(false);
-                Sessions = MakeIntrusive<TGroupSessions>(Info, BSProxyCtx, MonActor, SelfId());
+                Sessions = MakeIntrusive<TGroupSessions>(Info, BSProxyCtx, MonActor, SelfId(),
+                        UseActorSystemTimeInBSQueue);
                 NumUnconnectedDisks = Sessions->GetNumUnconnectedDisks();
                 NodeMon->IncNumUnconnected(NumUnconnectedDisks);
             }
@@ -302,7 +303,7 @@ namespace NKikimr {
             bool limited = IsLimitedKeyless || !fullIfPossible;
             IsFullMonitoring = IsLimitedKeyless || fullIfPossible;
 
-            TString name = Sprintf("%09" PRIu32, GroupId);
+            TString name = Sprintf("%09" PRIu32, GroupId.GetRawId());
             TIntrusivePtr<::NMonitoring::TDynamicCounters> group = GetServiceCounters(
                     AppData()->Counters, "dsproxy")->GetSubgroup("blobstorageproxy", name);
             TIntrusivePtr<::NMonitoring::TDynamicCounters> percentileGroup = GetServiceCounters(
@@ -312,7 +313,7 @@ namespace NKikimr {
 
             Mon.Reset(new TBlobStorageGroupProxyMon(group, percentileGroup, overviewGroup, Info, NodeMon, limited));
             BSProxyCtx.Reset(new TBSProxyContext(group->GetSubgroup("subsystem", "memproxy")));
-            MonActor = RegisterWithSameMailbox(CreateBlobStorageGroupProxyMon(Mon, GroupId, Info, SelfId()));
+            MonActor = RegisterWithSameMailbox(CreateBlobStorageGroupProxyMon(Mon, GroupId.GetRawId(), Info, SelfId()));
         }
     }
 
@@ -320,6 +321,13 @@ namespace NKikimr {
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_PROXY, "RequestProxySessionsState Group# " << GroupId
                 << " Marker# DSP59");
         Send(ev->Sender, new TEvProxySessionsState(Sessions ? Sessions->GroupQueues : nullptr));
+    }
+
+    TAccelerationParams TBlobStorageGroupProxy::GetAccelerationParams() {
+        return TAccelerationParams{
+            .SlowDiskThreshold = .001f * SlowDiskThreshold.Update(TActivationContext::Now()),
+            .PredictedDelayMultiplier = .001f * PredictedDelayMultiplier.Update(TActivationContext::Now()),
+        };
     }
 
 } // NKikimr

@@ -148,6 +148,9 @@ roaring64_bitmap_t *roaring64_bitmap_create(void) {
 }
 
 void roaring64_bitmap_free(roaring64_bitmap_t *r) {
+    if (!r) {
+        return;
+    }
     art_iterator_t it = art_init_iterator(&r->art, /*first=*/true);
     while (it.value != NULL) {
         leaf_t *leaf = (leaf_t *)it.value;
@@ -224,7 +227,7 @@ roaring64_bitmap_t *roaring64_bitmap_of_ptr(size_t n_args,
 
 roaring64_bitmap_t *roaring64_bitmap_of(size_t n_args, ...) {
     roaring64_bitmap_t *r = roaring64_bitmap_create();
-    roaring64_bulk_context_t context = {0};
+    roaring64_bulk_context_t context = CROARING_ZERO_INITIALIZER;
     va_list ap;
     va_start(ap, n_args);
     for (size_t i = 0; i < n_args; i++) {
@@ -317,7 +320,7 @@ void roaring64_bitmap_add_many(roaring64_bitmap_t *r, size_t n_args,
         return;
     }
     const uint64_t *end = vals + n_args;
-    roaring64_bulk_context_t context = {0};
+    roaring64_bulk_context_t context = CROARING_ZERO_INITIALIZER;
     for (const uint64_t *current_val = vals; current_val != end;
          current_val++) {
         roaring64_bitmap_add_bulk(r, &context, *current_val);
@@ -456,7 +459,8 @@ bool roaring64_bitmap_contains_bulk(const roaring64_bitmap_t *r,
     uint8_t high48[ART_KEY_BYTES];
     uint16_t low16 = split_key(val, high48);
 
-    if (context->leaf == NULL || context->high_bytes != high48) {
+    if (context->leaf == NULL ||
+        art_compare_keys(context->high_bytes, high48) != 0) {
         // We're not positioned anywhere yet or the high bits of the key
         // differ.
         leaf_t *leaf = (leaf_t *)art_find(&r->art, high48);
@@ -640,7 +644,7 @@ void roaring64_bitmap_remove_many(roaring64_bitmap_t *r, size_t n_args,
         return;
     }
     const uint64_t *end = vals + n_args;
-    roaring64_bulk_context_t context = {0};
+    roaring64_bulk_context_t context = CROARING_ZERO_INITIALIZER;
     for (const uint64_t *current_val = vals; current_val != end;
          current_val++) {
         roaring64_bitmap_remove_bulk(r, &context, *current_val);
@@ -706,6 +710,10 @@ void roaring64_bitmap_remove_range_closed(roaring64_bitmap_t *r, uint64_t min,
     remove_range_closed_at(art, max_high48, 0, max_low16);
 }
 
+void roaring64_bitmap_clear(roaring64_bitmap_t *r) {
+    roaring64_bitmap_remove_range_closed(r, 0, UINT64_MAX);
+}
+
 uint64_t roaring64_bitmap_get_cardinality(const roaring64_bitmap_t *r) {
     art_iterator_t it = art_init_iterator(&r->art, /*first=*/true);
     uint64_t cardinality = 0;
@@ -723,7 +731,17 @@ uint64_t roaring64_bitmap_range_cardinality(const roaring64_bitmap_t *r,
     if (min >= max) {
         return 0;
     }
-    max--;  // A closed range is easier to work with.
+    // Convert to a closed range
+    // No underflow here: passing the above condition implies min < max, so
+    // there is a number less than max
+    return roaring64_bitmap_range_closed_cardinality(r, min, max - 1);
+}
+
+uint64_t roaring64_bitmap_range_closed_cardinality(const roaring64_bitmap_t *r,
+                                                   uint64_t min, uint64_t max) {
+    if (min > max) {
+        return 0;
+    }
 
     uint64_t cardinality = 0;
     uint8_t min_high48[ART_KEY_BYTES];
@@ -801,6 +819,50 @@ bool roaring64_bitmap_run_optimize(roaring64_bitmap_t *r) {
         art_iterator_next(&it);
     }
     return has_run_container;
+}
+
+/**
+ *  (For advanced users.)
+ * Collect statistics about the bitmap
+ */
+void roaring64_bitmap_statistics(const roaring64_bitmap_t *r,
+                                 roaring64_statistics_t *stat) {
+    memset(stat, 0, sizeof(*stat));
+    stat->min_value = roaring64_bitmap_minimum(r);
+    stat->max_value = roaring64_bitmap_maximum(r);
+
+    art_iterator_t it = art_init_iterator(&r->art, true);
+    while (it.value != NULL) {
+        leaf_t *leaf = (leaf_t *)it.value;
+        stat->n_containers++;
+        uint8_t truetype = get_container_type(leaf->container, leaf->typecode);
+        uint32_t card =
+            container_get_cardinality(leaf->container, leaf->typecode);
+        uint32_t sbytes =
+            container_size_in_bytes(leaf->container, leaf->typecode);
+        stat->cardinality += card;
+        switch (truetype) {
+            case BITSET_CONTAINER_TYPE:
+                stat->n_bitset_containers++;
+                stat->n_values_bitset_containers += card;
+                stat->n_bytes_bitset_containers += sbytes;
+                break;
+            case ARRAY_CONTAINER_TYPE:
+                stat->n_array_containers++;
+                stat->n_values_array_containers += card;
+                stat->n_bytes_array_containers += sbytes;
+                break;
+            case RUN_CONTAINER_TYPE:
+                stat->n_run_containers++;
+                stat->n_values_run_containers += card;
+                stat->n_bytes_run_containers += sbytes;
+                break;
+            default:
+                assert(false);
+                roaring_unreachable;
+        }
+        art_iterator_next(&it);
+    }
 }
 
 static bool roaring64_leaf_internal_validate(const art_val_t *val,
@@ -1924,7 +1986,7 @@ bool roaring64_bitmap_iterate(const roaring64_bitmap_t *r,
 
 void roaring64_bitmap_to_uint64_array(const roaring64_bitmap_t *r,
                                       uint64_t *out) {
-    roaring64_iterator_t it = {0};
+    roaring64_iterator_t it;  // gets initialized in the next line
     roaring64_iterator_init_at(r, &it, /*first=*/true);
     roaring64_iterator_read(&it, out, UINT64_MAX);
 }

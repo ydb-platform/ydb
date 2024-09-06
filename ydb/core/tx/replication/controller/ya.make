@@ -8,6 +8,7 @@ PEERDIR(
     ydb/core/tablet_flat
     ydb/core/tx/replication/common
     ydb/core/tx/replication/ydb_proxy
+    ydb/core/tx/scheme_board
     ydb/core/util
     ydb/core/ydb_convert
     ydb/services/metadata
@@ -19,6 +20,7 @@ SRCS(
     dst_alterer.cpp
     dst_creator.cpp
     dst_remover.cpp
+    lag_provider.cpp
     logging.cpp
     nodes_manager.cpp
     private_events.cpp

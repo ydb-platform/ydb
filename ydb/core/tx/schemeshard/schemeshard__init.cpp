@@ -89,7 +89,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                        TPathElement::EPathType,
                        TStepId, TTxId, TStepId, TTxId,
                        TString, TTxId,
-                       ui64, ui64, ui64> TPathRec;
+                       ui64, ui64, ui64,
+                       TString> TPathRec;
     typedef TDeque<TPathRec> TPathRows;
 
     template <typename SchemaTable, typename TRowSet>
@@ -106,7 +107,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             rowSet.template GetValueOrDefault<typename SchemaTable::LastTxId>(InvalidTxId),
             rowSet.template GetValueOrDefault<typename SchemaTable::DirAlterVersion>(1),
             rowSet.template GetValueOrDefault<typename SchemaTable::UserAttrsAlterVersion>(1),
-            rowSet.template GetValueOrDefault<typename SchemaTable::ACLVersion>(0)
+            rowSet.template GetValueOrDefault<typename SchemaTable::ACLVersion>(0),
+            rowSet.template GetValueOrDefault<typename SchemaTable::TempDirOwnerActorId>()
         );
     }
 
@@ -132,6 +134,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
         TPathElement::TPtr path = new TPathElement(pathId, parentPathId, domainId, name, owner);
 
+        TString tempDirOwnerActorId;
         std::tie(
             std::ignore, //pathId
             std::ignore, //parentPathId
@@ -146,13 +149,15 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             path->LastTxId,
             path->DirAlterVersion,
             path->UserAttrs->AlterVersion,
-            path->ACLVersion
-            ) = rec;
+            path->ACLVersion,
+            tempDirOwnerActorId) = rec;
 
         path->PathState = TPathElement::EPathState::EPathStateNoChanges;
         if (path->StepDropped) {
             path->PathState = TPathElement::EPathState::EPathStateNotExist;
         }
+
+        path->TempDirOwnerActorId.Parse(tempDirOwnerActorId.c_str(), tempDirOwnerActorId.size());
 
         return path;
     }
@@ -302,7 +307,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         return true;
     }
 
-    typedef std::tuple<TPathId, ui32, ui64, TString, TString, TString, ui64, TString, bool, TString, bool, TString> TTableRec;
+    typedef std::tuple<TPathId, ui32, ui64, TString, TString, TString, ui64, TString, bool, TString, bool, TString, TString> TTableRec;
     typedef TDeque<TTableRec> TTableRows;
 
     template <typename SchemaTable, typename TRowSet>
@@ -318,7 +323,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             rowSet.template GetValueOrDefault<typename SchemaTable::IsBackup>(false),
             rowSet.template GetValueOrDefault<typename SchemaTable::ReplicationConfig>(),
             rowSet.template GetValueOrDefault<typename SchemaTable::IsTemporary>(false),
-            rowSet.template GetValueOrDefault<typename SchemaTable::OwnerActorId>("")
+            rowSet.template GetValueOrDefault<typename SchemaTable::OwnerActorId>(""),
+            rowSet.template GetValueOrDefault<typename SchemaTable::IncrementalBackupConfig>()
         );
     }
 
@@ -1388,6 +1394,33 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 parent->DbRefCount++;
                 parent->AllChildrenCount++;
 
+                if (path->TempDirOwnerActorId) {
+                    const TActorId& tempDirOwnerActorId = path->TempDirOwnerActorId;
+
+                    auto& TempDirsByOwner = Self->TempDirsState.TempDirsByOwner;
+                    auto& nodeStates = Self->TempDirsState.NodeStates;
+
+                    auto it = TempDirsByOwner.find(tempDirOwnerActorId);
+                    const auto nodeId = tempDirOwnerActorId.NodeId();
+
+                    auto itNodeStates = nodeStates.find(nodeId);
+                    if (itNodeStates == nodeStates.end()) {
+                        auto& nodeState = nodeStates[nodeId];
+                        nodeState.Owners.insert(tempDirOwnerActorId);
+                        nodeState.RetryState.CurrentDelay =
+                            TDuration::MilliSeconds(Self->BackgroundCleaningRetrySettings.GetStartDelayMs());
+                    } else {
+                        itNodeStates->second.Owners.insert(tempDirOwnerActorId);
+                    }
+
+                    if (it == TempDirsByOwner.end()) {
+                        auto& currentTempTables = TempDirsByOwner[tempDirOwnerActorId];
+                        currentTempTables.insert(path->PathId);
+                    } else {
+                        it->second.insert(path->PathId);
+                    }
+                }
+
                 Self->AttachChild(path);
                 Self->PathsById[path->PathId] = path;
             }
@@ -1793,44 +1826,20 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     Y_ABORT_UNLESS(parseOk);
 
                     if (tableInfo->IsAsyncReplica()) {
-                        Self->PathsById.at(pathId)->SetAsyncReplica();
+                        Self->PathsById.at(pathId)->SetAsyncReplica(true);
+                    }
+                }
+
+                if (const auto incrementalBackupConfig = std::get<12>(rec)) {
+                    bool parseOk = ParseFromStringNoSizeLimit(tableInfo->MutableIncrementalBackupConfig(), incrementalBackupConfig);
+                    Y_ABORT_UNLESS(parseOk);
+
+                    if (tableInfo->IsRestoreTable()) {
+                        Self->PathsById.at(pathId)->SetRestoreTable();
                     }
                 }
 
                 tableInfo->IsBackup = std::get<8>(rec);
-                tableInfo->IsTemporary = std::get<10>(rec);
-
-                auto ownerActorIdStr = std::get<11>(rec);
-                tableInfo->OwnerActorId.Parse(ownerActorIdStr.c_str(), ownerActorIdStr.size());
-
-                if (tableInfo->IsTemporary) {
-                    Y_VERIFY_S(tableInfo->OwnerActorId,  "Empty OwnerActorId for temp table");
-
-                    TActorId ownerActorId = tableInfo->OwnerActorId;
-
-                    auto& tempTablesByOwner = Self->TempTablesState.TempTablesByOwner;
-                    auto& nodeStates = Self->TempTablesState.NodeStates;
-
-                    auto it = tempTablesByOwner.find(ownerActorId);
-                    auto nodeId = ownerActorId.NodeId();
-
-                    auto itNodeStates = nodeStates.find(nodeId);
-                    if (itNodeStates == nodeStates.end()) {
-                        auto& nodeState = nodeStates[nodeId];
-                        nodeState.Owners.insert(ownerActorId);
-                        nodeState.RetryState.CurrentDelay =
-                            TDuration::MilliSeconds(Self->BackgroundCleaningRetrySettings.GetStartDelayMs());
-                    } else {
-                        itNodeStates->second.Owners.insert(ownerActorId);
-                    }
-
-                    if (it == tempTablesByOwner.end()) {
-                        auto& currentTempTables = tempTablesByOwner[ownerActorId];
-                        currentTempTables.insert(pathId);
-                    } else {
-                        it->second.insert(pathId);
-                    }
-                }
 
                 Self->Tables[pathId] = tableInfo;
                 Self->IncrementPathDbRefCount(pathId);
@@ -1906,6 +1915,29 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 auto& view = Self->Views[pathId] = new TViewInfo();
                 view->AlterVersion = rowset.GetValue<Schema::View::AlterVersion>();
                 view->QueryText = rowset.GetValue<Schema::View::QueryText>();
+                Self->IncrementPathDbRefCount(pathId);
+
+                if (!rowset.Next()) {
+                    return false;
+                }
+            }
+        }
+
+        // Resorce Pool
+        {
+            auto rowset = db.Table<Schema::ResourcePool>().Range().Select();
+            if (!rowset.IsReady()) {
+                return false;
+            }
+
+            while (!rowset.EndOfSet()) {
+                TOwnerId ownerPathId = rowset.GetValue<Schema::ResourcePool::OwnerPathId>();
+                TLocalPathId localPathId = rowset.GetValue<Schema::ResourcePool::LocalPathId>();
+                TPathId pathId(ownerPathId, localPathId);
+
+                auto& resourcePool = Self->ResourcePools[pathId] = new TResourcePoolInfo();
+                resourcePool->AlterVersion = rowset.GetValue<Schema::ResourcePool::AlterVersion>();
+                Y_PROTOBUF_SUPPRESS_NODISCARD resourcePool->Properties.ParseFromString(rowset.GetValue<Schema::ResourcePool::Properties>());
                 Self->IncrementPathDbRefCount(pathId);
 
                 if (!rowset.Next()) {
@@ -2263,6 +2295,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 stats.RowCount = rowSet.GetValue<Schema::TablePartitionStats::RowCount>();
                 stats.DataSize = rowSet.GetValue<Schema::TablePartitionStats::DataSize>();
                 stats.IndexSize = rowSet.GetValue<Schema::TablePartitionStats::IndexSize>();
+                stats.ByKeyFilterSize = rowSet.GetValue<Schema::TablePartitionStats::ByKeyFilterSize>();
                 if (rowSet.HaveValue<Schema::TablePartitionStats::StoragePoolsStats>()) {
                     NKikimrTableStats::TStoragePoolsStats protobufRepresentation;
                     Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(
@@ -2453,8 +2486,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 Y_ABORT_UNLESS(it != Self->Topics.end());
                 Y_ABORT_UNLESS(it->second);
                 TTopicInfo::TPtr pqGroup = it->second;
-                if (pqInfo->AlterVersion <= pqGroup->AlterVersion)
+                if (pqInfo->AlterVersion <= pqGroup->AlterVersion) {
                     ++pqGroup->TotalPartitionCount;
+                    if (pqInfo->Status == NKikimrPQ::ETopicPartitionStatus::Active) {
+                        ++pqGroup->ActivePartitionCount;
+                    }
+                }
                 if (pqInfo->PqId >= pqGroup->NextPartitionId) {
                     pqGroup->NextPartitionId = pqInfo->PqId + 1;
                     pqGroup->TotalGroupCount = pqInfo->PqId + 1;
@@ -4036,7 +4073,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
             if (path->IsPQGroup()) {
                 auto pqGroup = Self->Topics.at(path->PathId);
-                auto delta = pqGroup->AlterData ? pqGroup->AlterData->TotalPartitionCount : pqGroup->TotalPartitionCount;
+                auto partitionDelta = pqGroup->AlterData ? pqGroup->AlterData->TotalPartitionCount : pqGroup->TotalPartitionCount;
+                auto activePartitionDelta = pqGroup->AlterData ? pqGroup->AlterData->ActivePartitionCount : pqGroup->ActivePartitionCount;
+
                 auto tabletConfig = pqGroup->AlterData ? (pqGroup->AlterData->TabletConfig.empty() ? pqGroup->TabletConfig : pqGroup->AlterData->TabletConfig)
                                                        : pqGroup->TabletConfig;
                 NKikimrPQ::TPQTabletConfig config;
@@ -4044,12 +4083,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 bool parseOk = ParseFromStringNoSizeLimit(config, tabletConfig);
                 Y_ABORT_UNLESS(parseOk);
 
-                const PQGroupReserve reserve(config, delta);
+                const PQGroupReserve reserve(config, activePartitionDelta);
 
-                inclusiveDomainInfo->IncPQPartitionsInside(delta);
+                inclusiveDomainInfo->IncPQPartitionsInside(partitionDelta);
                 inclusiveDomainInfo->IncPQReservedStorage(reserve.Storage);
 
-                Self->TabletCounters->Simple()[COUNTER_STREAM_SHARDS_COUNT].Add(delta);
+                Self->TabletCounters->Simple()[COUNTER_STREAM_SHARDS_COUNT].Add(partitionDelta);
                 Self->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_THROUGHPUT].Add(reserve.Throughput);
                 Self->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_STORAGE].Add(reserve.Storage);
             }
@@ -4171,8 +4210,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     TString settings = rowset.GetValue<Schema::Exports::Settings>();
                     auto domainPathId = TPathId(rowset.GetValueOrDefault<Schema::Exports::DomainPathOwnerId>(selfId),
                                                 rowset.GetValue<Schema::Exports::DomainPathId>());
+                    TString peerName = rowset.GetValueOrDefault<Schema::Exports::PeerName>();
 
-                    TExportInfo::TPtr exportInfo = new TExportInfo(id, uid, kind, settings, domainPathId);
+                    TExportInfo::TPtr exportInfo = new TExportInfo(id, uid, kind, settings, domainPathId, peerName);
 
                     if (rowset.HaveValue<Schema::Exports::UserSID>()) {
                         exportInfo->UserSID = rowset.GetValue<Schema::Exports::UserSID>();
@@ -4269,11 +4309,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     TImportInfo::EKind kind = static_cast<TImportInfo::EKind>(rowset.GetValue<Schema::Imports::Kind>());
                     auto domainPathId = TPathId(rowset.GetValue<Schema::Imports::DomainPathOwnerId>(),
                                                 rowset.GetValue<Schema::Imports::DomainPathLocalId>());
+                    TString peerName = rowset.GetValueOrDefault<Schema::Imports::PeerName>();
 
                     Ydb::Import::ImportFromS3Settings settings;
                     Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(settings, rowset.GetValue<Schema::Imports::Settings>()));
 
-                    TImportInfo::TPtr importInfo = new TImportInfo(id, uid, kind, settings, domainPathId);
+                    TImportInfo::TPtr importInfo = new TImportInfo(id, uid, kind, settings, domainPathId, peerName);
 
                     if (rowset.HaveValue<Schema::Imports::UserSID>()) {
                         importInfo->UserSID = rowset.GetValue<Schema::Imports::UserSID>();
@@ -4284,6 +4325,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                     importInfo->State = static_cast<TImportInfo::EState>(rowset.GetValue<Schema::Imports::State>());
                     importInfo->Issue = rowset.GetValueOrDefault<Schema::Imports::Issue>(TString());
+
+                    importInfo->StartTime = TInstant::Seconds(rowset.GetValueOrDefault<Schema::Imports::StartTime>());
+                    importInfo->EndTime = TInstant::Seconds(rowset.GetValueOrDefault<Schema::Imports::EndTime>());
 
                     Self->Imports[id] = importInfo;
                     if (uid) {
@@ -4363,9 +4407,11 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 while (!rowset.EndOfSet()) {
                     TIndexBuildInfo::TPtr indexInfo = TIndexBuildInfo::FromRow(rowset);
 
-                    Y_ABORT_UNLESS(!Self->IndexBuilds.contains(indexInfo->Id));
-                    Self->IndexBuilds[indexInfo->Id] = indexInfo;
+                    auto [it, emplaced] = Self->IndexBuilds.emplace(indexInfo->Id, indexInfo);
+                    Y_ABORT_UNLESS(emplaced);
                     if (indexInfo->Uid) {
+                        // TODO(mbkkt) It also should be unique, but we're not sure.
+                        Y_ASSERT(!Self->IndexBuildsByUid.contains(indexInfo->Uid));
                         Self->IndexBuildsByUid[indexInfo->Uid] = indexInfo;
                     }
 
@@ -4391,11 +4437,11 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 while (!rowset.EndOfSet()) {
                     TIndexBuildId id = rowset.GetValue<Schema::IndexBuildColumns::Id>();
-                    Y_VERIFY_S(Self->IndexBuilds.contains(id), "BuildIndex not found"
+                    const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(id);
+                    Y_VERIFY_S(buildInfoPtr, "BuildIndex not found"
                                    << ": id# " << id);
-
-                    TIndexBuildInfo::TPtr buildInfo = Self->IndexBuilds.at(id);
-                    buildInfo->AddIndexColumnInfo(rowset);
+                    auto& buildInfo = *buildInfoPtr->Get();
+                    buildInfo.AddIndexColumnInfo(rowset);
 
                     if (!rowset.Next()) {
                         return false;
@@ -4411,11 +4457,11 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 while (!rowset.EndOfSet()) {
                     TIndexBuildId id = rowset.GetValue<Schema::BuildColumnOperationSettings::Id>();
-                    Y_VERIFY_S(Self->IndexBuilds.contains(id), "BuildIndex not found"
+                    const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(id);
+                    Y_VERIFY_S(buildInfoPtr, "BuildIndex not found"
                                    << ": id# " << id);
-
-                    TIndexBuildInfo::TPtr buildInfo = Self->IndexBuilds.at(id);
-                    buildInfo->AddBuildColumnInfo(rowset);
+                    auto& buildInfo = *buildInfoPtr->Get();
+                    buildInfo.AddBuildColumnInfo(rowset);
 
                     if (!rowset.Next()) {
                         return false;
@@ -4432,11 +4478,11 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 while (!rowset.EndOfSet()) {
                     TIndexBuildId id = rowset.GetValue<Schema::IndexBuildShardStatus::Id>();
-                    Y_VERIFY_S(Self->IndexBuilds.contains(id), "BuildIndex not found"
+                    const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(id);
+                    Y_VERIFY_S(buildInfoPtr, "BuildIndex not found"
                                    << ": id# " << id);
-
-                    TIndexBuildInfo::TPtr buildInfo = Self->IndexBuilds.at(id);
-                    buildInfo->AddShardStatus(rowset);
+                    auto& buildInfo = *buildInfoPtr->Get();
+                    buildInfo.AddShardStatus(rowset);
 
                     if (!rowset.Next()) {
                         return false;

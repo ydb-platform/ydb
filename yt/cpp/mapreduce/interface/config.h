@@ -78,6 +78,7 @@ struct TConfig
     TString Prefix;
     TString ApiVersion;
     TString LogLevel;
+    TString LogPath;
 
     // Compression for data that is sent to YT cluster.
     EEncoding ContentEncoding;
@@ -125,6 +126,9 @@ struct TConfig
 
     TString RemoteTempFilesDirectory;
     TString RemoteTempTablesDirectory;
+    // @brief Keep temp tables produced by TTempTable (despite their name). Should not be used in user programs,
+    // but may be useful for setting via environment variable for debugging purposes.
+    bool KeepTempTables = false;
 
     //
     // Infer schemas for nonexstent tables from typed rows (e.g. protobuf)
@@ -197,6 +201,9 @@ struct TConfig
 
     /// Which implemetation of table writer to use.
     ETableWriterVersion TableWriterVersion = ETableWriterVersion::Auto;
+
+    /// Redirects stdout to stderr for jobs.
+    bool RedirectStdoutToStderr = false;
 
     static bool GetBool(const char* var, bool defaultValue = false);
     static int GetInt(const char* var, int defaultValue);

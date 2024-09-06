@@ -1,7 +1,6 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_utils.h>
 
-#include <ydb/core/base/compile_time_flags.h>
 #include <ydb/services/lib/sharding/sharding.h>
 
 #include <util/generic/size_literals.h>
@@ -99,7 +98,7 @@ TTestEnv CreateTestEnv(TTestBasicRuntime& runtime) {
     return env;
 }
 
-void CreateTopic(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId, const ui32 partitionCount) {
+void CreateTopic(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId, const ui32 partitionCount, bool withSplitMerge = true) {
     TString schema = TStringBuilder() << R"(
             Name: "Topic1"
             TotalGroupCount: )" << partitionCount
@@ -109,6 +108,9 @@ void CreateTopic(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId, const ui
                 PartitionConfig {
                     LifetimeSeconds: 3600
                     WriteSpeedInBytesPerSecond : 1024
+                }
+                PartitionStrategy {
+                    PartitionStrategyType: )" << (withSplitMerge ? "CAN_SPLIT_AND_MERGE" : "DISABLED") << R"(
                 }
             }
         )";
@@ -129,7 +131,7 @@ void ModifyTopic(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId, std::fun
     sb << scheme;
     TString scheme_ = sb.substr(1, sb.size() - 2);
 
-    Cerr << scheme_ << Endl;
+    Cerr << ">>>>> " << scheme_ << Endl << Flush;
 
     TestAlterPQGroup(runtime, ++txId, "/MyRoot/USER_1", scheme_, expectedResults);
     env.TestWaitNotification(runtime, txId);
@@ -636,60 +638,121 @@ Y_UNIT_TEST_SUITE(TSchemeShardTopicSplitMergeTest) {
                        {{TEvSchemeShard::EStatus::StatusInvalidParameter, "Invalid adjacent partition status"}});
     } // Y_UNIT_TEST(MargeInactivePartitions)
 
-    Y_UNIT_TEST(AllocateAfterSplit) {
+    Y_UNIT_TEST(DisableSplitMerge) {
         TTestBasicRuntime runtime;
         TTestEnv env = CreateTestEnv(runtime);
 
         ui64 txId = 100;
 
         CreateSubDomain(runtime, env, ++txId);
-        CreateExtSubDomain(runtime, env, ++txId, "USER_2");
-
-        ui64 tenantSchemeShard = 0;
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_2"),
-                           {NLs::PathExist,
-                            NLs::IsExternalSubDomain("USER_2"),
-                            NLs::ExtractTenantSchemeshard(&tenantSchemeShard)});
-        Y_ASSERT(tenantSchemeShard != 0);
-
-        TString boundary((char*)bound_1_2, sizeof(bound_1_2));
-        TString splitBoundry = "\010";
-
-        CreateTopic(runtime, env, ++txId, 2);
-        SplitPartition(runtime, env, txId, 0, splitBoundry);
-
-        auto topic = DescribeTopic(runtime);
-        Y_ASSERT(topic.HasAllocate());
-        auto allocate = topic.GetAllocate();
-
-
-        Cerr << "Allocate: " << allocate.DebugString() << Endl;
-        TestAllocatePQ(runtime, tenantSchemeShard, ++txId, "/MyRoot/USER_2", allocate.DebugString());
-        env.TestWaitNotification(runtime, txId);
-
-        // It doesn't work without sleep (previously reboot tablet was incidentally sleeping). We need to figure out why.
+        CreateTopic(runtime, env, ++txId, 1);
         runtime.SimulateSleep(TDuration::Seconds(1));
 
-        Cerr << "Describe: " << Endl;
-        auto allocatedTopic = DescribeTopic(runtime, "/MyRoot/USER_2/Topic1", tenantSchemeShard);
-        auto partition0 = allocatedTopic.GetPartitions()[0];
-        auto partition1 = allocatedTopic.GetPartitions()[1];
-        auto partition2 = allocatedTopic.GetPartitions()[2];
-        auto partition3 = allocatedTopic.GetPartitions()[3];
+        auto topic = DescribeTopic(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE),
+                static_cast<int>(topic.GetPQTabletConfig().GetPartitionStrategy().GetPartitionStrategyType()));
+        UNIT_ASSERT_VALUES_EQUAL(1, topic.GetPartitions().size());
 
-        ValidatePartition(partition0, NKikimrPQ::ETopicPartitionStatus::Inactive, Nothing(), boundary);
-        ValidatePartition(partition1, NKikimrPQ::ETopicPartitionStatus::Active, boundary, Nothing());
-        ValidatePartition(partition2, NKikimrPQ::ETopicPartitionStatus::Active, Nothing(), splitBoundry);
-        ValidatePartition(partition3, NKikimrPQ::ETopicPartitionStatus::Active, splitBoundry, boundary);
+        SplitPartition(runtime, env, txId, 0, "\010");
+        runtime.SimulateSleep(TDuration::Seconds(1));
 
-        ValidatePartitionParents(partition0, {});
-        ValidatePartitionParents(partition1, {});
-        ValidatePartitionParents(partition2, {0});
-        ValidatePartitionParents(partition3, {0});
+        topic = DescribeTopic(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE),
+                static_cast<int>(topic.GetPQTabletConfig().GetPartitionStrategy().GetPartitionStrategyType()));
+        UNIT_ASSERT_VALUES_EQUAL(3, topic.GetPartitions().size());
 
-        ValidatePartitionChildren(partition0, {2, 3});
-        ValidatePartitionChildren(partition1, {});
-        ValidatePartitionChildren(partition2, {});
-        ValidatePartitionChildren(partition3, {});
-    }
+        ModifyTopic(runtime, env, txId, [&](auto& scheme) {
+            {
+                auto* partitionStrategy = scheme.MutablePQTabletConfig()->MutablePartitionStrategy();
+                partitionStrategy->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED);
+            }
+        }, {{TEvSchemeShard::EStatus::StatusInvalidParameter}});
+
+        ModifyTopic(runtime, env, txId, [&](auto& scheme) {
+            {
+                auto* partitionStrategy = scheme.MutablePQTabletConfig()->MutablePartitionStrategy();
+                partitionStrategy->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED);
+                partitionStrategy->SetMaxPartitionCount(0);
+            }
+        });
+
+        topic = DescribeTopic(runtime);
+
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED),
+                static_cast<int>(topic.GetPQTabletConfig().GetPartitionStrategy().GetPartitionStrategyType()));
+
+        UNIT_ASSERT_VALUES_EQUAL(3, topic.GetPartitions().size());
+        for (const auto& p : topic.GetPartitions()) {
+            Cerr <<  ">>>>> Verify partition " << p.GetPartitionId() << Endl << Flush;
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(::NKikimrPQ::ETopicPartitionStatus::Active), static_cast<int>(p.GetStatus()));
+            UNIT_ASSERT(p.GetChildPartitionIds().empty());
+            UNIT_ASSERT(p.GetParentPartitionIds().empty());
+            UNIT_ASSERT(!p.HasKeyRange());
+        }
+
+    } // Y_UNIT_TEST(DisableSplitMerge)
+
+    Y_UNIT_TEST(EnableSplitMerge) {
+        TTestBasicRuntime runtime;
+        TTestEnv env = CreateTestEnv(runtime);
+
+        ui64 txId = 100;
+
+        CreateSubDomain(runtime, env, ++txId);
+        CreateTopic(runtime, env, ++txId, 3, false);
+
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        auto topic = DescribeTopic(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED),
+                static_cast<int>(topic.GetPQTabletConfig().GetPartitionStrategy().GetPartitionStrategyType()));
+
+        UNIT_ASSERT_VALUES_EQUAL(3, topic.GetPartitions().size());
+        for (const auto& p : topic.GetPartitions()) {
+            Cerr <<  ">>>>> Verify partition " << p.GetPartitionId() << Endl << Flush;
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(::NKikimrPQ::ETopicPartitionStatus::Active), static_cast<int>(p.GetStatus()));
+            UNIT_ASSERT(p.GetChildPartitionIds().empty());
+            UNIT_ASSERT(p.GetParentPartitionIds().empty());
+            UNIT_ASSERT(!p.HasKeyRange());
+        }
+
+        ModifyTopic(runtime, env, txId, [&](auto& scheme) {
+            {
+                scheme.MutablePQTabletConfig()->MutablePartitionStrategy()->SetPartitionStrategyType(
+                    ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE);
+            }
+        });
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        topic = DescribeTopic(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE),
+                static_cast<int>(topic.GetPQTabletConfig().GetPartitionStrategy().GetPartitionStrategyType()));
+
+        TString bound0((char*)bound_1_3, sizeof(bound_1_3));
+        TString bound1((char*)bound_2_3, sizeof(bound_2_3));
+
+        UNIT_ASSERT_VALUES_EQUAL(3, topic.GetPartitions().size());
+        for (const auto& p : topic.GetPartitions()) {
+            Cerr <<  ">>>>> Verify partition " << p.GetPartitionId() << Endl << Flush;
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(::NKikimrPQ::ETopicPartitionStatus::Active), static_cast<int>(p.GetStatus()));
+            UNIT_ASSERT(p.GetChildPartitionIds().empty());
+            UNIT_ASSERT(p.GetParentPartitionIds().empty());
+            UNIT_ASSERT(p.HasKeyRange());
+
+            switch(p.GetPartitionId()) {
+                case 0:
+                    ValidatePartition(p, NKikimrPQ::ETopicPartitionStatus::Active, Nothing(), bound0);
+                    break;
+                case 1:
+                    ValidatePartition(p, NKikimrPQ::ETopicPartitionStatus::Active, bound0,  bound1);
+                    break;
+                case 2:
+                    ValidatePartition(p, NKikimrPQ::ETopicPartitionStatus::Active, bound1, Nothing());
+                    break;
+                default:
+                    UNIT_ASSERT_C(false, "Unexpected partition id " << p.GetPartitionId());
+            }
+        }
+    } // Y_UNIT_TEST(EnableSplitMerge)
+
 } // Y_UNIT_TEST_SUITE(TSchemeShardTopicSplitMergeTest)

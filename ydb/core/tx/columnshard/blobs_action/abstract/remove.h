@@ -32,6 +32,10 @@ public:
 
     }
 
+    TTabletId GetSelfTabletId() const {
+        return SelfTabletId;
+    }
+
     void DeclareRemove(const TTabletId tabletId, const TUnifiedBlobId& blobId);
     void DeclareSelfRemove(const TUnifiedBlobId& blobId);
     void OnExecuteTxAfterRemoving(TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) {

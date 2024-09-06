@@ -1,8 +1,10 @@
 #pragma once
 #include "common/owner.h"
 #include "common/histogram.h"
+#include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/tx/columnshard/resources/memory.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/counters.h>
+#include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 namespace NKikimr::NColumnShard {
@@ -10,21 +12,23 @@ namespace NKikimr::NColumnShard {
 class TScanAggregations: public TCommonCountersOwner {
 private:
     using TBase = TCommonCountersOwner;
-    std::shared_ptr<NOlap::TMemoryAggregation> ReadBlobs;
-    std::shared_ptr<NOlap::TMemoryAggregation> GranulesProcessing;
-    std::shared_ptr<NOlap::TMemoryAggregation> GranulesReady;
     std::shared_ptr<NOlap::TMemoryAggregation> ResultsReady;
+    std::shared_ptr<NOlap::TMemoryAggregation> RequestedResourcesMemory;
     std::shared_ptr<TValueAggregationClient> ScanDuration;
     std::shared_ptr<TValueAggregationClient> BlobsWaitingDuration;
 public:
     TScanAggregations(const TString& moduleId)
         : TBase(moduleId)
-        , GranulesProcessing(std::make_shared<NOlap::TMemoryAggregation>(moduleId, "InFlight/Granules/Processing"))
         , ResultsReady(std::make_shared<NOlap::TMemoryAggregation>(moduleId, "InFlight/Results/Ready"))
+        , RequestedResourcesMemory(std::make_shared<NOlap::TMemoryAggregation>(moduleId, "InFlight/Resources/Requested"))
         , ScanDuration(TBase::GetValueAutoAggregationsClient("ScanDuration"))
         , BlobsWaitingDuration(TBase::GetValueAutoAggregationsClient("BlobsWaitingDuration"))
     {
 
+    }
+
+    std::shared_ptr<NOlap::TMemoryAggregation> GetRequestedResourcesMemory() const {
+        return RequestedResourcesMemory;
     }
 
     void OnBlobWaitingDuration(const TDuration d, const TDuration fullScanDuration) const {
@@ -32,9 +36,6 @@ public:
         ScanDuration->SetValue(fullScanDuration.MicroSeconds());
     }
 
-    const std::shared_ptr<NOlap::TMemoryAggregation>& GetGranulesProcessing() const {
-        return GranulesProcessing;
-    }
     const std::shared_ptr<NOlap::TMemoryAggregation>& GetResultsReady() const {
         return ResultsReady;
     }
@@ -127,6 +128,7 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr AckWaitingDuration;
 
     std::vector<NMonitoring::THistogramPtr> ScanDurationByStatus;
+    std::vector<NMonitoring::TDynamicCounters::TCounterPtr> ScansFinishedByStatus;
 
     NMonitoring::TDynamicCounters::TCounterPtr NoScanRecords;
     NMonitoring::TDynamicCounters::TCounterPtr NoScanIntervals;
@@ -212,9 +214,10 @@ public:
         LogScanIntervals->Add(1);
     }
 
-    void OnScanDuration(const EStatusFinish status, const TDuration d) const {
+    void OnScanFinished(const EStatusFinish status, const TDuration d) const {
         AFL_VERIFY((ui32)status < ScanDurationByStatus.size());
         ScanDurationByStatus[(ui32)status]->Collect(d.MilliSeconds());
+        ScansFinishedByStatus[(ui32)status]->Add(1);
     }
 
     void AckWaitingInfo(const TDuration d) const {
@@ -257,6 +260,8 @@ public:
     }
 
     TScanAggregations BuildAggregations();
+
+    void FillStats(::NKikimrTableStats::TTableStats& output) const;
 };
 
 class TCounterGuard: TNonCopyable {

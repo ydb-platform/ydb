@@ -3,7 +3,7 @@
  * parallel.h
  *	  Infrastructure for launching parallel workers
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/access/parallel.h
@@ -54,7 +54,7 @@ typedef struct ParallelWorkerContext
 	shm_toc    *toc;
 } ParallelWorkerContext;
 
-extern __thread volatile bool ParallelMessagePending;
+extern __thread PGDLLIMPORT volatile sig_atomic_t ParallelMessagePending;
 extern __thread PGDLLIMPORT int ParallelWorkerNumber;
 extern __thread PGDLLIMPORT bool InitializingParallelWorker;
 

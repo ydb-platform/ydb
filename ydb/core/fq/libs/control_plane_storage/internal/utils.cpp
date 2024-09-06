@@ -279,31 +279,6 @@ void CollectDetalizationStatistics(const NJson::TJsonValue& stats, THashMap<TStr
         AggregateStatisticsBySources(graph, aggregatedStatistics);
     }
 }
-
-bool IsIngressStat(TStringBuf statName) {
-    return std::none_of(FieldToPath.begin() + 1, FieldToPath.end(), [&](const auto& field_to_path) { return field_to_path.first == statName; });
-}
-
-void PrintSpeeds(TStringBuilder& builder, const StatsValuesList& stats, std::string_view postfix, TDuration execTime) {
-    for (const auto& [statName, value] : stats) {
-        if (!IsIngressStat(statName)) {
-            continue;
-        }
-        // getting bytes/second = 1'000'000 * bytes/microsecond
-        auto speed = (value * 1000000.) / std::max(execTime.MicroSeconds(), ui64{1});
-        builder << ", \"" << statName << postfix << "\": " << speed;
-    }
-}
-
-void PrintSpeeds(TStringBuilder& builder, const StatsValuesList& stats) {
-    for (const auto& [statName, stat] : stats) {
-        if (statName == "ExecutionTimeUs") {
-            PrintSpeeds(builder, stats, "PerSecond", TDuration::MicroSeconds(stat));
-        } else if (statName == "CpuTimeUs") {
-            PrintSpeeds(builder, stats, "PerCpuPerSecond", TDuration::MicroSeconds(stat));
-        }
-    }
-}
 }
 
 void PackStatisticsToProtobuf(google::protobuf::RepeatedPtrField<FederatedQuery::Internal::StatisticsNamedValue>& dest,
@@ -355,7 +330,6 @@ TStringBuilder& operator<<(TStringBuilder& builder, const Statistics& statistics
         builder << '"' << field << "\": " << value;
         first = false;
     }
-    PrintSpeeds(builder, statistics.Stats);
     builder << '}';
     return builder;
 }

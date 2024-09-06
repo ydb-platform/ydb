@@ -156,6 +156,22 @@ Y_FORCE_INLINE bool AddCell(TOutValue& row, NScheme::TTypeInfo type, const TCell
         val.set_int64_value(value);
         break;
     }
+    case NUdf::TDataType<NUdf::TDate32>::Id: {
+        i32 value;
+        if (!cell.ToValue(value, err))
+            return false;
+        val.set_int32_value(value);
+        break;
+    }
+    case NUdf::TDataType<NUdf::TDatetime64>::Id: 
+    case NUdf::TDataType<NUdf::TTimestamp64>::Id:
+    case NUdf::TDataType<NUdf::TInterval64>::Id: {
+        i64 value;
+        if (!cell.ToValue(value, err))
+            return false;
+        val.set_int64_value(value);
+        break;
+    }    
     case NUdf::TDataType<NUdf::TJsonDocument>::Id: {
         const auto json = NBinaryJson::SerializeToJson(TStringBuf(cell.Data(), cell.Size()));
         val.set_text_value(json);

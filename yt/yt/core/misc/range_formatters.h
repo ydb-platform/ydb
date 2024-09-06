@@ -9,26 +9,16 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// TRange formatter
 template <class T>
-struct TValueFormatter<TRange<T>, void>
-{
-    static void Do(TStringBuilderBase* builder, TRange<T> range, TStringBuf /*format*/)
-    {
-        FormatRange(builder, range, TDefaultFormatter());
-    }
-};
+void FormatValue(TStringBuilderBase* builder, const TRange<T>& collection, TStringBuf /*spec*/);
 
-// TSharedRange formatter
 template <class T>
-struct TValueFormatter<TSharedRange<T>>
-{
-    static void Do(TStringBuilderBase* builder, const TSharedRange<T>& range, TStringBuf /*format*/)
-    {
-        FormatRange(builder, range, TDefaultFormatter());
-    }
-};
+void FormatValue(TStringBuilderBase* builder, const TSharedRange<T>& collection, TStringBuf /*spec*/);
 
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT
+
+#define RANGE_FORMATTERS_INL_H_
+#include "range_formatters-inl.h"
+#undef RANGE_FORMATTERS_INL_H_

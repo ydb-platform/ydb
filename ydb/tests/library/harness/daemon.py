@@ -59,7 +59,6 @@ class Daemon(object):
         command,
         cwd,
         timeout,
-        stdin_file=yatest_common.work_path('stdin'),
         stdout_file=yatest_common.work_path('stdout'),
         stderr_file=yatest_common.work_path('stderr'),
         stderr_on_error_lines=0,
@@ -70,23 +69,15 @@ class Daemon(object):
         self.__command = tuple(command)
         self.__stderr_on_error_lines = stderr_on_error_lines
         self.__daemon = None
-        self.__killed = False
+        self.killed = False
         self.__core_pattern = core_pattern
         self.logger = logger.getChild(self.__class__.__name__)
-        self.__stdout_file = open(stdout_file, mode='w+b')
-        self.__stdin_file = open(stdin_file, mode='w+b')
-        self.__stderr_file = open(stderr_file, mode='w+b')
+        self.__stdout_file = open(stdout_file, mode='wb')
+        self.__stderr_file = open(stderr_file, mode='wb')
 
     @property
     def daemon(self):
         return self.__daemon
-
-    @property
-    def stdin_file_name(self):
-        if self.__stdin_file is not sys.stdin:
-            return os.path.abspath(self.__stdin_file.name)
-        else:
-            return None
 
     @property
     def stdout_file_name(self):
@@ -115,7 +106,6 @@ class Daemon(object):
             self.__command,
             check_exit_code=False,
             cwd=self.__cwd,
-            stdin=self.__stdin_file,
             stdout=self.__stdout_file,
             stderr=stderr_stream,
             wait=False,
@@ -133,7 +123,7 @@ class Daemon(object):
                 max_stderr_lines=self.__stderr_on_error_lines,
             )
 
-        self.__killed = False
+        self.killed = False
 
         return self
 
@@ -146,7 +136,7 @@ class Daemon(object):
         return 0, -signal.SIGTERM
 
     def __check_can_launch_stop(self, stop_type):
-        if self.__daemon is None or self.__killed:
+        if self.__daemon is None or self.killed:
             return False
 
         if self.__daemon is not None and self.__daemon.exit_code == 0:
@@ -211,7 +201,7 @@ class Daemon(object):
 
         self.__daemon.process.send_signal(signal.SIGKILL)
         wait_for(lambda: not self.is_alive(), self.__timeout)
-        self.__killed = True
+        self.killed = True
 
         self.__check_before_end_stop("kill")
 

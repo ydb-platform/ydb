@@ -1,6 +1,5 @@
 #pragma once
 
-#include "process_response.h"
 #include "query.h"
 
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
@@ -20,8 +19,6 @@ namespace NKikimr::NKqp {
 
 struct TEvKqp {
     using TEvQueryRequestRemote = NPrivateEvents::TEvQueryRequestRemote;
-
-    using TEvProcessResponse = NPrivateEvents::TEvProcessResponse;
 
     using TEvQueryRequest = NPrivateEvents::TEvQueryRequest;
 

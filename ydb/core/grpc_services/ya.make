@@ -110,7 +110,6 @@ PEERDIR(
     ydb/core/grpc_services/counters
     ydb/core/grpc_services/local_rpc
     ydb/core/grpc_services/cancelation
-    ydb/core/grpc_services/auth_processor
     ydb/core/health_check
     ydb/core/io_formats/ydb_dump
     ydb/core/kesus/tablet
@@ -127,6 +126,7 @@ PEERDIR(
     ydb/core/util
     ydb/core/ydb_convert
     ydb/core/security
+    ydb/core/security/ldap_auth_provider
     ydb/library/aclib
     ydb/library/binary_json
     ydb/library/dynumber
@@ -152,6 +152,7 @@ RECURSE(
     base
     counters
     local_rpc
+    tablet
 )
 
 RECURSE_FOR_TESTS(

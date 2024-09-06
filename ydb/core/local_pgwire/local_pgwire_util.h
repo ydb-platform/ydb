@@ -30,6 +30,14 @@ struct TConnectionState {
     uint32_t ConnectionNum = 0;
 };
 
+struct TPgWireAuthData {
+    TActorId Sender;
+    TString UserName;
+    TString DatabasePath;
+    TString Password;
+    TString PeerName;
+};
+
 struct TParsedStatement {
     NPG::TPGParse::TQueryData QueryData;
     std::vector<Ydb::Type> ParameterTypes;
@@ -56,6 +64,7 @@ struct TEvEvents {
         EvUpdateStatement,
         EvSingleQuery,
         EvCancelRequest,
+        EvAuthResponse,
         EvEnd
     };
 
@@ -97,6 +106,24 @@ struct TEvEvents {
 
     struct TEvCancelRequest : NActors::TEventLocal<TEvCancelRequest, EvCancelRequest> {
         TEvCancelRequest() = default;
+    };
+
+    struct TEvAuthResponse : NActors::TEventLocal<TEvAuthResponse, EvAuthResponse> {
+        TString SerializedToken;
+        TString Ticket;
+        TString ErrorMessage;
+        TActorId Sender;
+
+        TEvAuthResponse(const TString& serializedToken, const TString& ticket, const TActorId& sender)
+            : SerializedToken(serializedToken)
+            , Ticket(ticket)
+            , Sender(sender)
+        {}
+
+        TEvAuthResponse(const TString& errorMessage, const TActorId& sender)
+            : ErrorMessage(errorMessage)
+            , Sender(sender)
+        {}
     };
 };
 

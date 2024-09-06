@@ -8,6 +8,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include <roaring/portability.h>
+
 #ifdef __cplusplus
 extern "C" {
 namespace roaring {
@@ -89,13 +91,49 @@ typedef struct roaring_statistics_s {
         max_value; /* the maximal value, undefined if cardinality is zero */
     uint32_t
         min_value; /* the minimal value, undefined if cardinality is zero */
-    uint64_t sum_value; /* the sum of all values (could be used to compute
-                           average) */
+
+    CROARING_DEPRECATED
+    uint64_t sum_value; /* deprecated always zero */
 
     uint64_t cardinality; /* total number of values stored in the bitmap */
 
     // and n_values_arrays, n_values_rle, n_values_bitmap
 } roaring_statistics_t;
+
+/**
+ *  (For advanced users.)
+ * The roaring64_statistics_t can be used to collect detailed statistics about
+ * the composition of a roaring64 bitmap.
+ */
+typedef struct roaring64_statistics_s {
+    uint64_t n_containers; /* number of containers */
+
+    uint64_t n_array_containers;  /* number of array containers */
+    uint64_t n_run_containers;    /* number of run containers */
+    uint64_t n_bitset_containers; /* number of bitmap containers */
+
+    uint64_t
+        n_values_array_containers;    /* number of values in array containers */
+    uint64_t n_values_run_containers; /* number of values in run containers */
+    uint64_t
+        n_values_bitset_containers; /* number of values in  bitmap containers */
+
+    uint64_t n_bytes_array_containers;  /* number of allocated bytes in array
+                                           containers */
+    uint64_t n_bytes_run_containers;    /* number of allocated bytes in run
+                                           containers */
+    uint64_t n_bytes_bitset_containers; /* number of allocated bytes in  bitmap
+                                           containers */
+
+    uint64_t
+        max_value; /* the maximal value, undefined if cardinality is zero */
+    uint64_t
+        min_value; /* the minimal value, undefined if cardinality is zero */
+
+    uint64_t cardinality; /* total number of values stored in the bitmap */
+
+    // and n_values_arrays, n_values_rle, n_values_bitmap
+} roaring64_statistics_t;
 
 /**
  * Roaring-internal type used to iterate within a roaring container.

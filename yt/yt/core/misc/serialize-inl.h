@@ -7,6 +7,8 @@
 #include "collection_helpers.h"
 #include "maybe_inf.h"
 
+#include <yt/yt/core/phoenix/concepts.h>
+
 #include <yt/yt/core/yson/string.h>
 
 #include <library/cpp/yt/small_containers/compact_vector.h>
@@ -513,6 +515,7 @@ struct TValueBoundSerializer
     { };
 
     template <class T, class C>
+        requires (NPhoenix2::SupportsPhoenix2<T> || !NPhoenix2::SupportsPersist<T, C>)
     struct TSaver<
         T,
         C,
@@ -526,6 +529,7 @@ struct TValueBoundSerializer
     };
 
     template <class T, class C>
+        requires (NPhoenix2::SupportsPhoenix2<T> || !NPhoenix2::SupportsPersist<T, C>)
     struct TLoader<
         T,
         C,
@@ -538,6 +542,7 @@ struct TValueBoundSerializer
     };
 
     template <class T, class C>
+        requires (!NPhoenix2::SupportsPhoenix2<T>)
     struct TSaver<
         T,
         C,
@@ -550,6 +555,7 @@ struct TValueBoundSerializer
     };
 
     template <class T, class C>
+        requires (!NPhoenix2::SupportsPhoenix2<T>)
     struct TLoader<
         T,
         C,
@@ -605,14 +611,14 @@ struct TDefaultSerializer
 struct TRangeSerializer
 {
     template <class C>
-    static void Save(C& context, TRef value)
+    Y_FORCE_INLINE static void Save(C& context, TRef value)
     {
         auto* output = context.GetOutput();
         output->Write(value.Begin(), value.Size());
     }
 
     template <class C>
-    static void Load(C& context, const TMutableRef& value)
+    Y_FORCE_INLINE static void Load(C& context, const TMutableRef& value)
     {
         auto* input = context.GetInput();
         ReadRef(*input, value);
@@ -623,13 +629,13 @@ struct TRangeSerializer
 struct TPodSerializer
 {
     template <class T, class C>
-    static void Save(C& context, const T& value)
+    Y_FORCE_INLINE static void Save(C& context, const T& value)
     {
         TRangeSerializer::Save(context, TRef::FromPod(value));
     }
 
     template <class T, class C>
-    static void Load(C& context, T& value)
+    Y_FORCE_INLINE static void Load(C& context, T& value)
     {
         SERIALIZATION_DUMP_SUSPEND(context) {
             TRangeSerializer::Load(context, TMutableRef::FromPod(value));
@@ -757,16 +763,16 @@ struct TEnumSerializer
 
 struct TStringSerializer
 {
-    template <class C>
-    static void Save(C& context, TStringBuf value)
+    template <class T, class C>
+    static void Save(C& context, const T& value)
     {
         TSizeSerializer::Save(context, value.size());
 
         TRangeSerializer::Save(context, TRef::FromStringBuf(value));
     }
 
-    template <class C>
-    static void Load(C& context, TString& value)
+    template <class T, class C>
+    static void Load(C& context, T& value)
     {
         size_t size = TSizeSerializer::LoadSuspended(context);
         value.resize(size);
@@ -775,7 +781,7 @@ struct TStringSerializer
             TRangeSerializer::Load(context, TMutableRef::FromString(value));
         }
 
-        SERIALIZATION_DUMP_WRITE(context, "TString %Qv", value);
+        SERIALIZATION_DUMP_WRITE(context, "string %Qv", value);
     }
 };
 
@@ -1768,6 +1774,13 @@ struct TSerializerTraits<
 
 template <class C>
 struct TSerializerTraits<TString, C, void>
+{
+    using TSerializer = TStringSerializer;
+    using TComparer = TValueBoundComparer;
+};
+
+template <class C>
+struct TSerializerTraits<std::string, C, void>
 {
     using TSerializer = TStringSerializer;
     using TComparer = TValueBoundComparer;

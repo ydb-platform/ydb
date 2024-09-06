@@ -66,6 +66,10 @@ struct TDomainInfo : public TAtomicRefCount<TDomainInfo> {
         if (descr.HasServerlessComputeResourcesMode()) {
             ServerlessComputeResourcesMode = descr.GetServerlessComputeResourcesMode();
         }
+
+        if (descr.HasSharedHive()) {
+            SharedHiveId = descr.GetSharedHive();
+        }
     }
 
     inline ui64 GetVersion() const {
@@ -80,6 +84,14 @@ struct TDomainInfo : public TAtomicRefCount<TDomainInfo> {
         }
     }
 
+    inline ui64 ExtractHive() const {
+        if (IsServerless()) {
+            return SharedHiveId;
+        } else {
+            return Params.GetHive();
+        }
+    }
+
     inline bool IsServerless() const {
         return DomainKey != ResourcesDomainKey;
     }
@@ -89,6 +101,7 @@ struct TDomainInfo : public TAtomicRefCount<TDomainInfo> {
     NKikimrSubDomains::TProcessingParams Params;
     TCoordinators Coordinators;
     TMaybeServerlessComputeResourcesMode ServerlessComputeResourcesMode;
+    ui64 SharedHiveId = 0;
 
     TString ToString() const;
 
@@ -143,6 +156,7 @@ struct TSchemeCacheNavigate {
         KindBlockStoreVolume = 19,
         KindFileStore = 20,
         KindView = 21,
+        KindResourcePool = 22,
     };
 
     struct TListNodeEntry : public TAtomicRefCount<TListNodeEntry> {
@@ -250,6 +264,11 @@ struct TSchemeCacheNavigate {
         NKikimrSchemeOp::TViewDescription Description;
     };
 
+    struct TResourcePoolInfo : public TAtomicRefCount<TResourcePoolInfo> {
+        EKind Kind = KindUnknown;
+        NKikimrSchemeOp::TResourcePoolDescription Description;
+    };
+
     struct TEntry {
         enum class ERequestType : ui8 {
             ByPath,
@@ -301,6 +320,7 @@ struct TSchemeCacheNavigate {
         TIntrusiveConstPtr<TBlockStoreVolumeInfo> BlockStoreVolumeInfo;
         TIntrusiveConstPtr<TFileStoreInfo> FileStoreInfo;
         TIntrusiveConstPtr<TViewInfo> ViewInfo;
+        TIntrusiveConstPtr<TResourcePoolInfo> ResourcePoolInfo;
 
         TString ToString() const;
         TString ToString(const NScheme::TTypeRegistry& typeRegistry) const;
@@ -352,7 +372,8 @@ struct TSchemeCacheRequest {
         KindUnknown = 0,
         KindRegularTable = 1,
         KindSyncIndexTable = 2,
-        KindAsyncIndexTable= 3,
+        KindAsyncIndexTable = 3,
+        KindVectorIndexTable = 4,
     };
 
     struct TEntry {

@@ -66,7 +66,7 @@ table attribute drop | Удаление атрибута таблицы
 [tools copy](../tools-copy.md) | Копирование таблиц
 [tools dump](../export-import/tools-dump.md) | Выгрузка директории или таблицы в файловую систему
 {% if ydb-cli == "ydb" %}
-[tools pg-convert](../../../postgresql/pg-dump.md#pg-convert) | Конвертация дампа PostgreSQL, полученного утилитой pg_dump, в формат, понятный YDB
+[tools pg-convert](../../../postgresql/import.md#pg-convert) | Конвертация дампа PostgreSQL, полученного утилитой pg_dump, в формат, понятный YDB
 {% endif %}
 [tools rename](../commands/tools/rename.md) | Переименование таблиц
 [tools restore](../export-import/tools-restore.md) | Восстановление из файловой системы

@@ -10,6 +10,7 @@
 
 #include <boost/assert.hpp>
 #include <cstddef> // NULL
+#include <cstring> // strlen
 #include <algorithm>
 
 #include <boost/serialization/throw_exception.hpp>
@@ -58,7 +59,10 @@ basic_xml_iarchive<Archive>::load_end(const char *name){
         
     if(0 == (this->get_flags() & no_xml_tag_checking)){
         // double check that the tag matches what is expected - useful for debug
-        if(0 != name[this->This()->gimpl->rv.object_name.size()]
+        std::size_t parameter_name_length = std::strlen(name);
+        std::size_t object_name_length = this->This()->gimpl->rv.object_name.size();
+
+        if(parameter_name_length != object_name_length
         || ! std::equal(
                 this->This()->gimpl->rv.object_name.begin(),
                 this->This()->gimpl->rv.object_name.end(),

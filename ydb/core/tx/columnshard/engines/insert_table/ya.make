@@ -10,6 +10,7 @@ SRCS(
 
 PEERDIR(
     contrib/libs/apache/arrow
+    ydb/core/formats/arrow/modifier
     ydb/core/protos
     ydb/core/formats/arrow
     ydb/core/tablet_flat

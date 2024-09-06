@@ -48,7 +48,7 @@ static bool ConvertData(TCell& cell, const NScheme::TTypeInfo& colType, TMemoryP
 static arrow::Status ConvertColumn(const NScheme::TTypeInfo colType, std::shared_ptr<arrow::Array>& column, std::shared_ptr<arrow::Field>& field) {
     switch (colType.GetTypeId()) {
     case NScheme::NTypeIds::Decimal:
-        return arrow::Status::TypeError("Cannot convert Decimal type");
+        return arrow::Status::OK();
     case NScheme::NTypeIds::JsonDocument: {
         const static TSet<arrow::Type::type> jsonDocArrowTypes{ arrow::Type::BINARY, arrow::Type::STRING };
         if (!jsonDocArrowTypes.contains(column->type()->id())) {

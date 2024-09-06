@@ -449,7 +449,11 @@ public:
 
     bool OnDouble(double value) override {
         if (Y_UNLIKELY(std::isinf(value))) {
-            ythrow yexception() << "JSON number is infinite";
+            if (ThrowException) {
+                ythrow yexception() << "JSON number is infinite";
+            } else {
+                return false;
+            }
         }
         Json.AddEntry(TEntry(EEntryType::Number, Json.InternNumber(value)), /* createTopLevel */ true);
         return true;

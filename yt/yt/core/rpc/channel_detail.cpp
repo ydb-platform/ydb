@@ -21,7 +21,7 @@ TChannelWrapper::TChannelWrapper(IChannelPtr underlyingChannel)
     YT_ASSERT(UnderlyingChannel_);
 }
 
-const TString& TChannelWrapper::GetEndpointDescription() const
+const std::string& TChannelWrapper::GetEndpointDescription() const
 {
     return UnderlyingChannel_->GetEndpointDescription();
 }
@@ -60,6 +60,11 @@ void TChannelWrapper::UnsubscribeTerminated(const TCallback<void(const TError&)>
 int TChannelWrapper::GetInflightRequestCount()
 {
     return UnderlyingChannel_->GetInflightRequestCount();
+}
+
+const IMemoryUsageTrackerPtr& TChannelWrapper::GetChannelMemoryTracker()
+{
+    return UnderlyingChannel_->GetChannelMemoryTracker();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

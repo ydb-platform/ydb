@@ -13,6 +13,7 @@ QC.*
 $capture = Hyperscan::Capture(".*a{2}.*");
 $capture_many = Hyperscan::Capture(".*x(a+).*");
 $replace = Hyperscan::Replace("xa");
+$backtracking_grep = Hyperscan::BacktrackingGrep("(?<!xa)ax");
 
 SELECT
     value,
@@ -27,5 +28,6 @@ SELECT
     $multi_match2(value).2 AS some_multi_match2c,
     $capture(value) AS capture,
     $capture_many(value) AS capture_many,
-    $replace(value, "b") AS replace
+    $replace(value, "b") AS replace,
+    $backtracking_grep(value) as backtracking
 FROM Input;

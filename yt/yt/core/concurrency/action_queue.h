@@ -4,6 +4,8 @@
 
 #include <yt/yt/core/actions/callback.h>
 
+#include <yt/yt/core/logging/public.h>
+
 #include <yt/yt/library/profiling/public.h>
 #include <yt/yt/library/profiling/tag.h>
 
@@ -97,6 +99,15 @@ ISuspendableInvokerPtr CreateSuspendableInvoker(IInvokerPtr underlyingInvoker);
 IInvokerPtr CreateCodicilGuardedInvoker(
     IInvokerPtr underlyingInvoker,
     TString codicil);
+
+////////////////////////////////////////////////////////////////////////////////
+
+//! Creates an invoker that emits warning into #logger when callback executes
+//! longer than #threshold without interruptions.
+IInvokerPtr CreateWatchdogInvoker(
+    IInvokerPtr underlyingInvoker,
+    const NLogging::TLogger& logger,
+    TDuration threshold);
 
 ////////////////////////////////////////////////////////////////////////////////
 

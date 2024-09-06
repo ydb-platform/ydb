@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/events.h>
 
+#include <ydb/library/actors/core/event_pb.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/providers/s3/proto/file_queue.pb.h>
 
@@ -48,6 +49,10 @@ struct TEvS3Provider {
         EvCachePutRequest,
         EvCacheNotification,
         EvCacheSourceFinish,
+        // Decompressor events
+        EvDecompressDataRequest,
+        EvDecompressDataResult,
+        EvDecompressDataFinish,
         EvEnd
     };
     static_assert(EvEnd < EventSpaceEnd(NKikimr::TKikimrEvents::ES_S3_PROVIDER), "expect EvEnd < EventSpaceEnd(TEvents::ES_S3_PROVIDER)");
@@ -172,14 +177,15 @@ struct TEvS3Provider {
     };
 
     struct TEvNextBlock : public NActors::TEventLocal<TEvNextBlock, EvNextBlock> {
-        TEvNextBlock(NDB::Block& block, size_t pathInd, ui64 ingressDelta, TDuration cpuTimeDelta)
-            : PathIndex(pathInd), IngressDelta(ingressDelta), CpuTimeDelta(cpuTimeDelta) {
+        TEvNextBlock(NDB::Block& block, size_t pathInd, ui64 ingressDelta, TDuration cpuTimeDelta, ui64 ingressDecompressedDelta = 0)
+            : PathIndex(pathInd), IngressDelta(ingressDelta), CpuTimeDelta(cpuTimeDelta), IngressDecompressedDelta(ingressDecompressedDelta) {
             Block.swap(block);
         }
         NDB::Block Block;
         const size_t PathIndex;
         const ui64 IngressDelta;
         const TDuration CpuTimeDelta;
+        const ui64 IngressDecompressedDelta;
     };
 
     struct TEvNextRecordBatch : public NActors::TEventLocal<TEvNextRecordBatch, EvNextRecordBatch> {
@@ -193,6 +199,35 @@ struct TEvS3Provider {
     };
 
     struct TEvContinue : public NActors::TEventLocal<TEvContinue, EvContinue> {
+    };
+
+    struct TEvDecompressDataRequest : public NActors::TEventLocal<TEvDecompressDataRequest, EvDecompressDataRequest> {
+        TEvDecompressDataRequest(TString&& data) : Data(std::move(data)) {}
+        TString Data;
+    };
+
+    struct TEvDecompressDataResult : public NActors::TEventLocal<TEvDecompressDataResult, EvDecompressDataResult> {
+        TEvDecompressDataResult(TString&& data, const TDuration& cpuTime) 
+            : Data(std::move(data))
+            , CpuTime(cpuTime)
+        {}
+
+        TEvDecompressDataResult(std::exception_ptr exception, const TDuration& cpuTime) 
+            : Exception(exception)
+            , CpuTime(cpuTime)
+        {}
+
+        TString Data;
+        std::exception_ptr Exception;
+        TDuration CpuTime;
+    };
+
+    struct TEvDecompressDataFinish : public NActors::TEventLocal<TEvDecompressDataFinish, EvDecompressDataFinish> {
+        TEvDecompressDataFinish(const TDuration& cpuTime)
+            : CpuTime(cpuTime)
+        {}
+
+        TDuration CpuTime;
     };
 
     struct TReadRange {

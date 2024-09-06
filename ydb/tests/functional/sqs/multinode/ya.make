@@ -16,11 +16,6 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
-REQUIREMENTS(
-    cpu:4
-    ram:32
-)
-
 DEPENDS(
     ydb/apps/ydbd
     ydb/core/ymq/client/bin

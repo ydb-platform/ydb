@@ -8,6 +8,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/yt/small_containers
+    library/cpp/yt/string
     util
 )
 

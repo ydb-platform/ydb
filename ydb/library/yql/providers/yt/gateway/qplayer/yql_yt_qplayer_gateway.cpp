@@ -20,6 +20,7 @@ namespace {
 
 const TString YtGateway_CanonizePaths = "YtGateway_CanonizePaths";
 const TString YtGateway_GetTableInfo = "YtGateway_GetTableInfo";
+const TString YtGateway_GetTableRange = "YtGateway_GetTableRange";
 const TString YtGateway_GetFolder = "YtGateway_GetFolder";
 const TString YtGateway_GetFolders = "YtGateway_GetFolders";
 const TString YtGateway_ResolveLinks = "YtGateway_ResolveLinks";
@@ -208,30 +209,32 @@ public:
                 }
 
                 auto valueNode = NYT::NodeFromYsonString(item->Value);
-                data.Meta = MakeIntrusive<TYtTableMetaInfo>();
-                auto metaNode = valueNode["Meta"];
+                if (valueNode.HasKey("Meta")) {
+                    data.Meta = MakeIntrusive<TYtTableMetaInfo>();
+                    auto metaNode = valueNode["Meta"];
 
-                data.Meta->CanWrite = metaNode["CanWrite"].AsBool();
-                data.Meta->DoesExist = metaNode["DoesExist"].AsBool();
-                data.Meta->YqlCompatibleScheme = metaNode["YqlCompatibleScheme"].AsBool();
-                data.Meta->InferredScheme = metaNode["InferredScheme"].AsBool();
-                data.Meta->IsDynamic = metaNode["IsDynamic"].AsBool();
-                data.Meta->SqlView = metaNode["SqlView"].AsString();
-                data.Meta->SqlViewSyntaxVersion = metaNode["SqlViewSyntaxVersion"].AsUint64();
-                for (const auto& x : metaNode["Attrs"].AsMap()) {
-                    data.Meta->Attrs[x.first] = x.second.AsString();
+                    data.Meta->CanWrite = metaNode["CanWrite"].AsBool();
+                    data.Meta->DoesExist = metaNode["DoesExist"].AsBool();
+                    data.Meta->YqlCompatibleScheme = metaNode["YqlCompatibleScheme"].AsBool();
+                    data.Meta->InferredScheme = metaNode["InferredScheme"].AsBool();
+                    data.Meta->IsDynamic = metaNode["IsDynamic"].AsBool();
+                    data.Meta->SqlView = metaNode["SqlView"].AsString();
+                    data.Meta->SqlViewSyntaxVersion = metaNode["SqlViewSyntaxVersion"].AsUint64();
+                    for (const auto& x : metaNode["Attrs"].AsMap()) {
+                        data.Meta->Attrs[x.first] = x.second.AsString();
+                    }
                 }
-
-                data.Stat = MakeIntrusive<TYtTableStatInfo>();
-                auto statNode = valueNode["Stat"];
-                data.Stat->Id = statNode["Id"].AsString();
-                data.Stat->RecordsCount = statNode["RecordsCount"].AsUint64();
-                data.Stat->DataSize = statNode["DataSize"].AsUint64();
-                data.Stat->ChunkCount = statNode["ChunkCount"].AsUint64();
-                data.Stat->ModifyTime = statNode["ModifyTime"].AsUint64();
-                data.Stat->Revision = statNode["Revision"].AsUint64();
-                data.Stat->TableRevision = statNode["TableRevision"].AsUint64();
-
+                if (valueNode.HasKey("Stat")) {
+                    data.Stat = MakeIntrusive<TYtTableStatInfo>();
+                    auto statNode = valueNode["Stat"];
+                    data.Stat->Id = statNode["Id"].AsString();
+                    data.Stat->RecordsCount = statNode["RecordsCount"].AsUint64();
+                    data.Stat->DataSize = statNode["DataSize"].AsUint64();
+                    data.Stat->ChunkCount = statNode["ChunkCount"].AsUint64();
+                    data.Stat->ModifyTime = statNode["ModifyTime"].AsUint64();
+                    data.Stat->Revision = statNode["Revision"].AsUint64();
+                    data.Stat->TableRevision = statNode["TableRevision"].AsUint64();
+                }
                 data.WriteLock = options.ReadOnly() ? false : valueNode["WriteLock"].AsBool();
                 res.Data.push_back(data);
             }
@@ -257,12 +260,14 @@ public:
                     const auto& data = res.Data[i];
                     auto key = MakeGetTableInfoKey(req, optionsDup.Epoch());
 
-                    auto attrsNode = NYT::TNode();
-                    for (const auto& a : data.Meta->Attrs)  {
-                        attrsNode(a.first, a.second);
+                    auto attrsNode = NYT::TNode::CreateMap();
+                    if (data.Meta) {
+                        for (const auto& a : data.Meta->Attrs)  {
+                            attrsNode(a.first, a.second);
+                        }
                     }
 
-                    auto metaNode = NYT::TNode()
+                    auto metaNode = data.Meta ? NYT::TNode()
                         ("CanWrite",data.Meta->CanWrite)
                         ("DoesExist",data.Meta->DoesExist)
                         ("YqlCompatibleScheme",data.Meta->YqlCompatibleScheme)
@@ -270,21 +275,25 @@ public:
                         ("IsDynamic",data.Meta->IsDynamic)
                         ("SqlView",data.Meta->SqlView)
                         ("SqlViewSyntaxVersion",ui64(data.Meta->SqlViewSyntaxVersion))
-                        ("Attrs",attrsNode);
+                        ("Attrs",attrsNode) : NYT::TNode();
 
-                    auto statNode = NYT::TNode()
+                    auto statNode = data.Stat ? NYT::TNode()
                         ("Id",data.Stat->Id)
                         ("RecordsCount",data.Stat->RecordsCount)
                         ("DataSize",data.Stat->DataSize)
                         ("ChunkCount",data.Stat->ChunkCount)
                         ("ModifyTime",data.Stat->ModifyTime)
                         ("Revision",data.Stat->Revision)
-                        ("TableRevision",data.Stat->TableRevision);
+                        ("TableRevision",data.Stat->TableRevision) : NYT::TNode();
 
-                    auto valueNode = NYT::TNode()
-                        ("Meta", metaNode)
-                        ("Stat", statNode)
-                        ("WriteLock", data.WriteLock);
+                    auto valueNode = NYT::TNode::CreateMap();
+                    if (data.Meta) {
+                        valueNode("Meta", metaNode);
+                    }
+                    if (data.Stat) {
+                        valueNode("Stat", statNode);
+                    }
+                    valueNode("WriteLock", data.WriteLock);
 
                     auto value = NYT::NodeToYsonString(valueNode, NYT::NYson::EYsonFormat::Binary);
                     qContext.GetWriter()->Put({YtGateway_GetTableInfo, key},value).GetValueSync();
@@ -292,12 +301,108 @@ public:
             });
     }
 
-    NThreading::TFuture<TTableRangeResult> GetTableRange(TTableRangeOptions&& options) final {
-        if (QContext_.CanRead()) {
-            throw yexception() << "Can't replay GetTableRange";
+    static TString MakeGetTableRangeKey(const TTableRangeOptions& options) {
+        auto keyNode = NYT::TNode()
+            ("Cluster", options.Cluster())
+            ("Prefix", options.Prefix())
+            ("Suffix", options.Suffix());
+
+        if (options.Filter()) {
+            keyNode("Filter", MakeCacheKey(*options.Filter()));
         }
 
-        return Inner_->GetTableRange(std::move(options));
+        return MakeHash(NYT::NodeToCanonicalYsonString(keyNode, NYT::NYson::EYsonFormat::Binary));
+    }
+
+    NThreading::TFuture<TTableRangeResult> GetTableRange(TTableRangeOptions&& options) final {
+        TString key;
+        if (QContext_) {
+            key = MakeGetTableRangeKey(options);
+        }
+
+        if (QContext_.CanRead()) {
+            TTableRangeResult res;
+            res.SetSuccess();
+            auto item = QContext_.GetReader()->Get({YtGateway_GetTableRange, key}).GetValueSync();
+            if (!item) {
+                throw yexception() << "Missing replay data";
+            }
+
+            auto listNode = NYT::NodeFromYsonString(item->Value);
+            for (const auto& valueNode : listNode.AsList()) {
+                TCanonizedPath p;
+                p.Path = valueNode["Path"].AsString();
+                if (valueNode.HasKey("Columns")) {
+                    p.Columns.ConstructInPlace();
+                    for (const auto& c : valueNode["Columns"].AsList()) {
+                        p.Columns->push_back(c.AsString());
+                    }
+                }
+
+                if (valueNode.HasKey("Ranges")) {
+                    p.Ranges.ConstructInPlace();
+                    for (const auto& r : valueNode["Ranges"].AsString()) {
+                        NYT::TReadRange range;
+                        NYT::Deserialize(range, r);
+                        p.Ranges->push_back(range);
+                    }
+                }
+
+                if (valueNode.HasKey("AdditionalAttributes")) {
+                    p.AdditionalAttributes = valueNode["AdditionalAttributes"].AsString();
+                }
+
+                res.Tables.push_back(p);
+            }
+
+            return NThreading::MakeFuture<TTableRangeResult>(res);
+        }
+
+        return Inner_->GetTableRange(std::move(options))
+            .Subscribe([key, qContext = QContext_](const NThreading::TFuture<TTableRangeResult>& future) {
+                if (!qContext.CanWrite() || future.HasException()) {
+                    return;
+                }
+
+                const auto& res = future.GetValueSync();
+                if (!res.Success()) {
+                    return;
+                }
+
+                auto listNode = NYT::TNode::CreateList();
+                for (const auto& t : res.Tables) {
+                    listNode.Add();
+                    auto& valueNode = listNode.AsList().back();
+                    valueNode("Path", t.Path);
+                    if (t.Columns) {
+                        NYT::TNode columnsNode = NYT::TNode::CreateList();
+                        for (const auto& c : *t.Columns) {
+                            columnsNode.Add(NYT::TNode(c));
+                        }
+
+                        valueNode("Columns", columnsNode);
+                    }
+
+                    if (t.Ranges) {
+                        NYT::TNode rangesNode = NYT::TNode::CreateList();
+                        for (const auto& r : *t.Ranges) {
+                            NYT::TNode rangeNode;
+                            NYT::TNodeBuilder builder(&rangeNode);
+                            NYT::Serialize(r, &builder);
+                            rangesNode.Add(rangeNode);
+                        }
+
+                        valueNode("Ranges", rangesNode);
+                    }
+
+                    if (t.AdditionalAttributes) {
+                        valueNode("AdditionalAttributes", NYT::TNode(*t.AdditionalAttributes));
+                    }
+                }
+
+                auto value = NYT::NodeToYsonString(listNode, NYT::NYson::EYsonFormat::Binary);
+                qContext.GetWriter()->Put({YtGateway_GetTableRange, key}, value).GetValueSync();
+        });
     }
 
     static TString MakeGetFolderKey(const TFolderOptions& options) {

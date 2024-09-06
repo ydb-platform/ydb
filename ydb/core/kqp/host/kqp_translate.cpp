@@ -1,6 +1,8 @@
 #include "kqp_translate.h"
 
+#include <ydb/core/kqp/provider/yql_kikimr_results.h>
 #include <ydb/library/yql/sql/sql.h>
+#include <ydb/public/api/protos/ydb_query.pb.h>
 
 
 namespace NKikimr {
@@ -84,6 +86,7 @@ NSQLTranslation::TTranslationSettings TKqpTranslationSettingsBuilder::Build(NYql
         settings.SaveWorldDependencies = true;
     }
 
+    settings.PGDisable = !IsEnablePgSyntax;
     settings.InferSyntaxVersion = true;
     settings.V0ForceDisable = false;
     settings.WarnOnV0 = false;

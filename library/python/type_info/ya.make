@@ -1,9 +1,5 @@
 PY23_LIBRARY()
 
-SUBSCRIBER(
-    g:yt
-)
-
 PEERDIR(
     yt/python/yt/type_info
 )

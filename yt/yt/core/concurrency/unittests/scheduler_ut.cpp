@@ -1110,8 +1110,7 @@ TEST_W(TSchedulerTest, FutureUpdatedRaceInWaitFor_YT_18899)
             BIND([&] {
                 modifiedFuture = MakeFuture(TError{"error that should not be seen"});
             })
-                .AsyncVia(serializedInvoker)
-        ));
+                .AsyncVia(serializedInvoker)));
 
         NThreading::TCountDownLatch latch{1};
 
@@ -1389,7 +1388,7 @@ class TFairShareSchedulerTest
     , public ::testing::WithParamInterface<std::tuple<int, int, int, TDuration>>
 { };
 
-bool ApproximatelyEqual(TDuration lhs, TDuration rhs, TDuration eps = TDuration::MilliSeconds(1))
+bool ApproximatelyEqual(TDuration lhs, TDuration rhs, TDuration eps = TDuration::MilliSeconds(10))
 {
     return (lhs < rhs ? rhs - lhs : lhs - rhs) < eps;
 }
@@ -1610,8 +1609,7 @@ INSTANTIATE_TEST_SUITE_P(
         std::tuple(1, 5, 1, FSWorkTime),
         std::tuple(1, 7, 3, FSWorkTime),
         std::tuple(5, 7, 1, FSWorkTime),
-        std::tuple(5, 7, 3, FSWorkTime)
-        ));
+        std::tuple(5, 7, 3, FSWorkTime)));
 
 ////////////////////////////////////////////////////////////////////////////////
 

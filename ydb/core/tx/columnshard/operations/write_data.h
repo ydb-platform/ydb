@@ -20,7 +20,7 @@ public:
     {}
 
     bool Parse(const NKikimrDataEvents::TEvWrite::TOperation& proto, const NKikimr::NEvWrite::IPayloadReader& payload);
-    virtual std::shared_ptr<arrow::RecordBatch> ExtractBatch() override;
+    virtual TConclusion<std::shared_ptr<arrow::RecordBatch>> ExtractBatch() override;
     ui64 GetSchemaVersion() const override;
     ui64 GetSize() const override {
         Y_ABORT_UNLESS(OriginalDataSize);
@@ -31,18 +31,20 @@ private:
     NOlap::ISnapshotSchema::TPtr IndexSchema;
     NOlap::ISnapshotSchema::TPtr BatchSchema;
     TString IncomingData;
+    NEvWrite::EModificationType ModificationType = NEvWrite::EModificationType::Upsert;
 };
 
 class TProtoArrowData : public NEvWrite::IDataContainer {
 private:
     std::optional<ui64> OriginalDataSize;
+    NEvWrite::EModificationType ModificationType = NEvWrite::EModificationType::Replace;
 public:
     TProtoArrowData(const NOlap::ISnapshotSchema::TPtr& schema)
         : IndexSchema(schema)
     {}
 
     bool ParseFromProto(const NKikimrTxColumnShard::TEvWrite& proto);
-    virtual std::shared_ptr<arrow::RecordBatch> ExtractBatch() override;
+    virtual TConclusion<std::shared_ptr<arrow::RecordBatch>> ExtractBatch() override;
     ui64 GetSchemaVersion() const override;
     ui64 GetSize() const override {
         Y_ABORT_UNLESS(OriginalDataSize);

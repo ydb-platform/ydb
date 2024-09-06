@@ -3,7 +3,7 @@
  * matview.c
  *	  materialized view support
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -118,7 +118,7 @@ SetMatViewPopulatedState(Relation relation, bool newstate)
  * ExecRefreshMatView -- execute a REFRESH MATERIALIZED VIEW command
  *
  * This refreshes the materialized view by creating a new table and swapping
- * the relfilenodes of the new table and the old materialized view, so the OID
+ * the relfilenumbers of the new table and the old materialized view, so the OID
  * of the original materialized view is preserved. Thus we do not lose GRANT
  * nor references to this materialized view.
  *
@@ -167,6 +167,17 @@ ExecRefreshMatView(RefreshMatViewStmt *stmt, const char *queryString,
 										  lockmode, 0,
 										  RangeVarCallbackOwnsTable, NULL);
 	matviewRel = table_open(matviewOid, NoLock);
+	relowner = matviewRel->rd_rel->relowner;
+
+	/*
+	 * Switch to the owner's userid, so that any functions are run as that
+	 * user.  Also lock down security-restricted operations and arrange to
+	 * make GUC variable changes local to this command.
+	 */
+	GetUserIdAndSecContext(&save_userid, &save_sec_context);
+	SetUserIdAndSecContext(relowner,
+						   save_sec_context | SECURITY_RESTRICTED_OPERATION);
+	save_nestlevel = NewGUCNestLevel();
 
 	/* Make sure it is a materialized view. */
 	if (matviewRel->rd_rel->relkind != RELKIND_MATVIEW)
@@ -269,19 +280,6 @@ ExecRefreshMatView(RefreshMatViewStmt *stmt, const char *queryString,
 	 */
 	SetMatViewPopulatedState(matviewRel, !stmt->skipData);
 
-	relowner = matviewRel->rd_rel->relowner;
-
-	/*
-	 * Switch to the owner's userid, so that any functions are run as that
-	 * user.  Also arrange to make GUC variable changes local to this command.
-	 * Don't lock it down too tight to create a temporary table just yet.  We
-	 * will switch modes when we are about to execute user code.
-	 */
-	GetUserIdAndSecContext(&save_userid, &save_sec_context);
-	SetUserIdAndSecContext(relowner,
-						   save_sec_context | SECURITY_LOCAL_USERID_CHANGE);
-	save_nestlevel = NewGUCNestLevel();
-
 	/* Concurrent refresh builds new data in temp tablespace, and does diff. */
 	if (concurrent)
 	{
@@ -299,16 +297,11 @@ ExecRefreshMatView(RefreshMatViewStmt *stmt, const char *queryString,
 	 * it against access by any other process until commit (by which time it
 	 * will be gone).
 	 */
-	OIDNewHeap = make_new_heap(matviewOid, tableSpace, relpersistence,
-							   ExclusiveLock);
+	OIDNewHeap = make_new_heap(matviewOid, tableSpace,
+							   matviewRel->rd_rel->relam,
+							   relpersistence, ExclusiveLock);
 	LockRelationOid(OIDNewHeap, AccessExclusiveLock);
 	dest = CreateTransientRelDestReceiver(OIDNewHeap);
-
-	/*
-	 * Now lock down security-restricted operations.
-	 */
-	SetUserIdAndSecContext(relowner,
-						   save_sec_context | SECURITY_RESTRICTED_OPERATION);
 
 	/* Generate the data, if wanted. */
 	if (!stmt->skipData)
@@ -337,10 +330,10 @@ ExecRefreshMatView(RefreshMatViewStmt *stmt, const char *queryString,
 		refresh_by_heap_swap(matviewOid, OIDNewHeap, relpersistence);
 
 		/*
-		 * Inform stats collector about our activity: basically, we truncated
-		 * the matview and inserted some new data.  (The concurrent code path
-		 * above doesn't need to worry about this because the inserts and
-		 * deletes it issues get counted by lower-level code.)
+		 * Inform cumulative stats system about our activity: basically, we
+		 * truncated the matview and inserted some new data.  (The concurrent
+		 * code path above doesn't need to worry about this because the
+		 * inserts and deletes it issues get counted by lower-level code.)
 		 */
 		pgstat_count_truncate(matviewRel);
 		if (!stmt->skipData)
@@ -423,7 +416,7 @@ refresh_matview_datafill(DestReceiver *dest, Query *query,
 	ExecutorStart(queryDesc, 0);
 
 	/* run the plan */
-	ExecutorRun(queryDesc, ForwardScanDirection, 0L, true);
+	ExecutorRun(queryDesc, ForwardScanDirection, 0, true);
 
 	processed = queryDesc->estate->es_processed;
 
@@ -663,13 +656,35 @@ refresh_by_match_merge(Oid matviewOid, Oid tempOid, Oid relowner,
 						   SPI_getvalue(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1))));
 	}
 
+	/*
+	 * Create the temporary "diff" table.
+	 *
+	 * Temporarily switch out of the SECURITY_RESTRICTED_OPERATION context,
+	 * because you cannot create temp tables in SRO context.  For extra
+	 * paranoia, add the composite type column only after switching back to
+	 * SRO context.
+	 */
 	SetUserIdAndSecContext(relowner,
 						   save_sec_context | SECURITY_LOCAL_USERID_CHANGE);
-
-	/* Start building the query for creating the diff table. */
 	resetStringInfo(&querybuf);
 	appendStringInfo(&querybuf,
-					 "CREATE TEMP TABLE %s AS "
+					 "CREATE TEMP TABLE %s (tid pg_catalog.tid)",
+					 diffname);
+	if (SPI_exec(querybuf.data, 0) != SPI_OK_UTILITY)
+		elog(ERROR, "SPI_exec failed: %s", querybuf.data);
+	SetUserIdAndSecContext(relowner,
+						   save_sec_context | SECURITY_RESTRICTED_OPERATION);
+	resetStringInfo(&querybuf);
+	appendStringInfo(&querybuf,
+					 "ALTER TABLE %s ADD COLUMN newdata %s",
+					 diffname, tempname);
+	if (SPI_exec(querybuf.data, 0) != SPI_OK_UTILITY)
+		elog(ERROR, "SPI_exec failed: %s", querybuf.data);
+
+	/* Start building the query for populating the diff table. */
+	resetStringInfo(&querybuf);
+	appendStringInfo(&querybuf,
+					 "INSERT INTO %s "
 					 "SELECT mv.ctid AS tid, newdata.*::%s AS newdata "
 					 "FROM %s mv FULL JOIN %s newdata ON (",
 					 diffname, tempname, matviewname, tempname);
@@ -698,15 +713,12 @@ refresh_by_match_merge(Oid matviewOid, Oid tempOid, Oid relowner,
 			int			indnkeyatts = indexStruct->indnkeyatts;
 			oidvector  *indclass;
 			Datum		indclassDatum;
-			bool		isnull;
 			int			i;
 
 			/* Must get indclass the hard way. */
-			indclassDatum = SysCacheGetAttr(INDEXRELID,
-											indexRel->rd_indextuple,
-											Anum_pg_index_indclass,
-											&isnull);
-			Assert(!isnull);
+			indclassDatum = SysCacheGetAttrNotNull(INDEXRELID,
+												   indexRel->rd_indextuple,
+												   Anum_pg_index_indclass);
 			indclass = (oidvector *) DatumGetPointer(indclassDatum);
 
 			/* Add quals for all columns from this index. */
@@ -789,21 +801,21 @@ refresh_by_match_merge(Oid matviewOid, Oid tempOid, Oid relowner,
 	 *
 	 * ExecRefreshMatView() checks that after taking the exclusive lock on the
 	 * matview. So at least one unique index is guaranteed to exist here
-	 * because the lock is still being held; so an Assert seems sufficient.
+	 * because the lock is still being held.  (One known exception is if a
+	 * function called as part of refreshing the matview drops the index.
+	 * That's a pretty silly thing to do.)
 	 */
-	Assert(foundUniqueIndex);
+	if (!foundUniqueIndex)
+		elog(ERROR, "could not find suitable unique index on materialized view");
 
 	appendStringInfoString(&querybuf,
 						   " AND newdata.* OPERATOR(pg_catalog.*=) mv.*) "
 						   "WHERE newdata.* IS NULL OR mv.* IS NULL "
 						   "ORDER BY tid");
 
-	/* Create the temporary "diff" table. */
-	if (SPI_exec(querybuf.data, 0) != SPI_OK_UTILITY)
+	/* Populate the temporary "diff" table. */
+	if (SPI_exec(querybuf.data, 0) != SPI_OK_INSERT)
 		elog(ERROR, "SPI_exec failed: %s", querybuf.data);
-
-	SetUserIdAndSecContext(relowner,
-						   save_sec_context | SECURITY_RESTRICTED_OPERATION);
 
 	/*
 	 * We have no further use for data from the "full-data" temp table, but we

@@ -3,7 +3,7 @@
  * pg_amproc_d.h
  *    Macro definitions for pg_amproc
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * NOTES
@@ -19,6 +19,8 @@
 #define PG_AMPROC_D_H
 
 #define AccessMethodProcedureRelationId 2603
+#define AccessMethodProcedureIndexId 2655
+#define AccessMethodProcedureOidIndexId 2757
 
 #define Anum_pg_amproc_oid 1
 #define Anum_pg_amproc_amprocfamily 2

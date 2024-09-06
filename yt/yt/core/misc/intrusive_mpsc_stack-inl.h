@@ -19,6 +19,7 @@ TIntrusiveMpscStack<T, Tag>::TIntrusiveMpscStack() noexcept
 template <class T, class Tag>
 void TIntrusiveMpscStack<T, Tag>::Push(TNode* item) noexcept
 {
+    YT_VERIFY(item->Empty());
     // Past this line item is not a valid instance of TInstrusiveListItem.
 
     // NB: This saves up extra CAS in case of non-empty stack.

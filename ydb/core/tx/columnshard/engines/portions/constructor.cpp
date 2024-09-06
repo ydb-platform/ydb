@@ -57,8 +57,12 @@ void TPortionInfoConstructor::LoadRecord(const TIndexInfo& indexInfo, const TCol
 }
 
 void TPortionInfoConstructor::LoadIndex(const TIndexChunkLoadContext& loadContext) {
-    const auto linkBlobId = RegisterBlobId(loadContext.GetBlobRange().GetBlobId());
-    AddIndex(loadContext.BuildIndexChunk(linkBlobId));
+    if (loadContext.GetBlobRange()) {
+        const TBlobRangeLink16::TLinkId linkBlobId = RegisterBlobId(loadContext.GetBlobRange()->GetBlobId());
+        AddIndex(loadContext.BuildIndexChunk(linkBlobId));
+    } else {
+        AddIndex(loadContext.BuildIndexChunk());
+    }
 }
 
 const NKikimr::NOlap::TColumnRecord& TPortionInfoConstructor::AppendOneChunkColumn(TColumnRecord&& record) {
@@ -85,7 +89,7 @@ const NKikimr::NOlap::TColumnRecord& TPortionInfoConstructor::AppendOneChunkColu
 
 void TPortionInfoConstructor::AddMetadata(const ISnapshotSchema& snapshotSchema, const std::shared_ptr<arrow::RecordBatch>& batch) {
     Y_ABORT_UNLESS(batch->num_rows() == GetRecordsCount());
-    MetaConstructor.FillMetaInfo(NArrow::TFirstLastSpecialKeys(batch),
+    MetaConstructor.FillMetaInfo(NArrow::TFirstLastSpecialKeys(batch), IIndexInfo::CalcDeletions(batch, false),
         NArrow::TMinMaxSpecialKeys(batch, TIndexInfo::ArrowSchemaSnapshot()), snapshotSchema.GetIndexInfo());
 }
 

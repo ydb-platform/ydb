@@ -70,9 +70,11 @@ class CORS(object):
         The origin(s) may be regular expressions, case-sensitive strings,
         or else an asterisk.
 
-        :note: origins must include the schema and the port (if not port 80),
-        e.g.,
-        `CORS(app, origins=["http://localhost:8000", "https://example.com"])`.
+        ..  note::
+
+            origins must include the schema and the port (if not port 80),
+            e.g.,
+            `CORS(app, origins=["http://localhost:8000", "https://example.com"])`.
 
         Default : '*'
     :type origins: list, string or regex
@@ -191,7 +193,7 @@ def make_after_request_function(resources):
         normalized_path = unquote_plus(request.path)
         for res_regex, res_options in resources:
             if try_match(normalized_path, res_regex):
-                LOG.debug("Request to '%s' matches CORS resource '%s'. Using options: %s",
+                LOG.debug("Request to '%r' matches CORS resource '%s'. Using options: %s",
                       request.path, get_regexp_pattern(res_regex), res_options)
                 set_cors_headers(resp, res_options)
                 break

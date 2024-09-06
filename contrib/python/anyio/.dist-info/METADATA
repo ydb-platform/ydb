@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: anyio
-Version: 3.7.1
+Version: 4.4.0
 Summary: High level compatibility layer for multiple asynchronous event loop implementations
 Author-email: Alex Grönholm <alex.gronholm@nextday.fi>
 License: MIT
@@ -15,36 +15,35 @@ Classifier: Framework :: AnyIO
 Classifier: Typing :: Typed
 Classifier: Programming Language :: Python
 Classifier: Programming Language :: Python :: 3
-Classifier: Programming Language :: Python :: 3.7
 Classifier: Programming Language :: Python :: 3.8
 Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
-Requires-Python: >=3.7
+Classifier: Programming Language :: Python :: 3.12
+Requires-Python: >=3.8
 Description-Content-Type: text/x-rst
 License-File: LICENSE
-Requires-Dist: idna (>=2.8)
-Requires-Dist: sniffio (>=1.1)
-Requires-Dist: exceptiongroup ; python_version < "3.11"
-Requires-Dist: typing-extensions ; python_version < "3.8"
+Requires-Dist: idna >=2.8
+Requires-Dist: sniffio >=1.1
+Requires-Dist: exceptiongroup >=1.0.2 ; python_version < "3.11"
+Requires-Dist: typing-extensions >=4.1 ; python_version < "3.11"
 Provides-Extra: doc
 Requires-Dist: packaging ; extra == 'doc'
-Requires-Dist: Sphinx ; extra == 'doc'
-Requires-Dist: sphinx-rtd-theme (>=1.2.2) ; extra == 'doc'
-Requires-Dist: sphinxcontrib-jquery ; extra == 'doc'
-Requires-Dist: sphinx-autodoc-typehints (>=1.2.0) ; extra == 'doc'
+Requires-Dist: Sphinx >=7 ; extra == 'doc'
+Requires-Dist: sphinx-rtd-theme ; extra == 'doc'
+Requires-Dist: sphinx-autodoc-typehints >=1.2.0 ; extra == 'doc'
 Provides-Extra: test
 Requires-Dist: anyio[trio] ; extra == 'test'
-Requires-Dist: coverage[toml] (>=4.5) ; extra == 'test'
-Requires-Dist: hypothesis (>=4.0) ; extra == 'test'
-Requires-Dist: psutil (>=5.9) ; extra == 'test'
-Requires-Dist: pytest (>=7.0) ; extra == 'test'
-Requires-Dist: pytest-mock (>=3.6.1) ; extra == 'test'
+Requires-Dist: coverage[toml] >=7 ; extra == 'test'
+Requires-Dist: exceptiongroup >=1.2.0 ; extra == 'test'
+Requires-Dist: hypothesis >=4.0 ; extra == 'test'
+Requires-Dist: psutil >=5.9 ; extra == 'test'
+Requires-Dist: pytest >=7.0 ; extra == 'test'
+Requires-Dist: pytest-mock >=3.6.1 ; extra == 'test'
 Requires-Dist: trustme ; extra == 'test'
-Requires-Dist: uvloop (>=0.17) ; (python_version < "3.12" and platform_python_implementation == "CPython" and platform_system != "Windows") and extra == 'test'
-Requires-Dist: mock (>=4) ; (python_version < "3.8") and extra == 'test'
+Requires-Dist: uvloop >=0.17 ; (platform_python_implementation == "CPython" and platform_system != "Windows") and extra == 'test'
 Provides-Extra: trio
-Requires-Dist: trio (<0.22) ; extra == 'trio'
+Requires-Dist: trio >=0.23 ; extra == 'trio'
 
 .. image:: https://github.com/agronholm/anyio/actions/workflows/test.yml/badge.svg
   :target: https://github.com/agronholm/anyio/actions/workflows/test.yml

@@ -1,5 +1,7 @@
 LIBRARY()
 
+VERSION(Service-proxy-version)
+
 LICENSE(
     BSD-1-Clause AND
     BSD-2-Clause AND
@@ -112,7 +114,7 @@ IF (OS_LINUX AND NOT MUSL)
             memfd_create.c
         )
     ENDIF()
-    IF (OS_SDK != "ubuntu-20")
+    IF (OS_SDK != "ubuntu-20" AND OS_SDK != "ubuntu-22")
         # reallocarray was added in glibc=2.29
         ENABLE(PROVIDE_REALLOCARRAY)
     ENDIF()

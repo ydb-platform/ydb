@@ -45,7 +45,6 @@ public:
     TKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstPtr& kqpSettings,
         const TTableServiceConfig& tableServiceConfig,
         const TQueryServiceConfig& queryServiceConfig,
-        const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig,
         TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
         const TGUCSettings::TPtr& gUCSettings,
         const TMaybe<TString>& applicationName, const TString& uid, const TKqpQueryId& queryId,
@@ -70,7 +69,6 @@ public:
         , DbCounters(dbCounters)
         , Config(MakeIntrusive<TKikimrConfiguration>())
         , QueryServiceConfig(queryServiceConfig)
-        , MetadataProviderConfig(metadataProviderConfig)
         , CompilationTimeout(TDuration::MilliSeconds(tableServiceConfig.GetCompileTimeoutMs()))
         , UserRequestContext(userRequestContext)
         , CompileActorSpan(TWilsonKqp::CompileActor, std::move(traceId), "CompileActor")
@@ -148,7 +146,8 @@ private:
             .SetIsEnableExternalDataSources(AppData(ctx)->FeatureFlags.GetEnableExternalDataSources())
             .SetIsEnablePgConstsToParams(Config->EnablePgConstsToParams)
             .SetApplicationName(ApplicationName)
-            .SetQueryParameters(QueryId.QueryParameterTypes);
+            .SetQueryParameters(QueryId.QueryParameterTypes)
+            .SetIsEnablePgSyntax(AppData(ctx)->FeatureFlags.GetEnablePgSyntax());
 
         return ParseStatements(QueryId.Text, QueryId.Settings.Syntax, QueryId.IsSql(), settingsBuilder, PerStatementResult);
     }
@@ -174,11 +173,8 @@ private:
     }
 
     void StartSplitting(const TActorContext &ctx) {
-        YQL_ENSURE(PerStatementResult);
-
         const auto prepareSettings = PrepareCompilationSettings(ctx);
-
-        auto result = KqpHost->SplitQuery(QueryId.Text, prepareSettings);
+        auto result = KqpHost->SplitQuery(QueryRef, prepareSettings);
 
         Become(&TKqpCompileActor::CompileState);
         ReplySplitResult(ctx, std::move(result));
@@ -269,7 +265,7 @@ private:
         counters->TxProxyMon = new NTxProxy::TTxProxyMon(AppData(ctx)->Counters);
         std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader> loader =
             std::make_shared<TKqpTableMetadataLoader>(
-                QueryId.Cluster, TlsActivationContext->ActorSystem(), Config, true, TempTablesState, 2 * TDuration::Seconds(MetadataProviderConfig.GetRefreshPeriodSeconds()));
+                QueryId.Cluster, TlsActivationContext->ActorSystem(), Config, true, TempTablesState);
         Gateway = CreateKikimrIcGateway(QueryId.Cluster, QueryId.Settings.QueryType, QueryId.Database, std::move(loader),
             ctx.ExecutorThread.ActorSystem, ctx.SelfID.NodeId(), counters, QueryServiceConfig);
         Gateway->SetToken(QueryId.Cluster, UserToken);
@@ -277,13 +273,12 @@ private:
         Config->FeatureFlags = AppData(ctx)->FeatureFlags;
 
         KqpHost = CreateKqpHost(Gateway, QueryId.Cluster, QueryId.Database, Config, ModuleResolverState->ModuleResolver,
-            FederatedQuerySetup, UserToken, GUCSettings, ApplicationName, AppData(ctx)->FunctionRegistry,
-            false, false, std::move(TempTablesState), nullptr, SplitCtx);
+            FederatedQuerySetup, UserToken, GUCSettings, QueryServiceConfig, ApplicationName, AppData(ctx)->FunctionRegistry,
+            false, false, std::move(TempTablesState), nullptr, SplitCtx, UserRequestContext);
 
         IKqpHost::TPrepareSettings prepareSettings;
         prepareSettings.DocumentApiRestricted = QueryId.Settings.DocumentApiRestricted;
         prepareSettings.IsInternalCall = QueryId.Settings.IsInternalCall;
-        prepareSettings.PerStatementResult = PerStatementResult;
 
         switch (QueryId.Settings.Syntax) {
             case Ydb::Query::Syntax::SYNTAX_YQL_V1:
@@ -455,9 +450,9 @@ private:
     }
 
     void FillCompileResult(std::unique_ptr<NKikimrKqp::TPreparedQuery> preparingQuery, NKikimrKqp::EQueryType queryType,
-            bool allowCache) {
+            bool allowCache, bool success) {
         auto preparedQueryHolder = std::make_shared<TPreparedQueryHolder>(
-            preparingQuery.release(), AppData()->FunctionRegistry);
+            preparingQuery.release(), AppData()->FunctionRegistry, !success);
         preparedQueryHolder->MutableLlvmSettings().Fill(Config, queryType);
         KqpCompileResult->PreparedQuery = preparedQueryHolder;
         KqpCompileResult->AllowCache = CanCacheQuery(KqpCompileResult->PreparedQuery->GetPhysicalQuery()) && allowCache;
@@ -506,7 +501,7 @@ private:
 
         if (status == Ydb::StatusIds::SUCCESS) {
             YQL_ENSURE(kqpResult.PreparingQuery);
-            FillCompileResult(std::move(kqpResult.PreparingQuery), queryType, kqpResult.AllowCache);
+            FillCompileResult(std::move(kqpResult.PreparingQuery), queryType, kqpResult.AllowCache, true);
 
             auto now = TInstant::Now();
             auto duration = now - StartTime;
@@ -517,7 +512,7 @@ private:
                 << ", duration: " << duration);
         } else {
             if (kqpResult.PreparingQuery) {
-                FillCompileResult(std::move(kqpResult.PreparingQuery), queryType, kqpResult.AllowCache);
+                FillCompileResult(std::move(kqpResult.PreparingQuery), queryType, kqpResult.AllowCache, false);
             }
 
             LOG_ERROR_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, "Compilation failed"
@@ -556,7 +551,6 @@ private:
     TKqpDbCountersPtr DbCounters;
     TKikimrConfiguration::TPtr Config;
     TQueryServiceConfig QueryServiceConfig;
-    TMetadataProviderConfig MetadataProviderConfig;
     TDuration CompilationTimeout;
     TInstant StartTime;
     TDuration CompileCpuTime;
@@ -591,18 +585,15 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
         kqpConfig._ResultRowsLimit = serviceConfig.GetQueryLimits().GetResultRowsLimit();
     }
 
-    kqpConfig.EnableKqpDataQuerySourceRead = serviceConfig.GetEnableKqpDataQuerySourceRead();
     kqpConfig.EnableKqpScanQuerySourceRead = serviceConfig.GetEnableKqpScanQuerySourceRead();
     kqpConfig.EnableKqpDataQueryStreamLookup = serviceConfig.GetEnableKqpDataQueryStreamLookup();
     kqpConfig.EnableKqpScanQueryStreamLookup = serviceConfig.GetEnableKqpScanQueryStreamLookup();
     kqpConfig.EnableKqpScanQueryStreamIdxLookupJoin = serviceConfig.GetEnableKqpScanQueryStreamIdxLookupJoin();
     kqpConfig.EnableKqpDataQueryStreamIdxLookupJoin = serviceConfig.GetEnableKqpDataQueryStreamIdxLookupJoin();
-    kqpConfig.EnableKqpImmediateEffects = serviceConfig.GetEnableKqpImmediateEffects();
     kqpConfig.EnablePreparedDdl = serviceConfig.GetEnablePreparedDdl();
     kqpConfig.EnableSequences = serviceConfig.GetEnableSequences();
     kqpConfig.EnableColumnsWithDefault = serviceConfig.GetEnableColumnsWithDefault();
     kqpConfig.BindingsMode = RemapBindingsMode(serviceConfig.GetBindingsMode());
-    kqpConfig.PredicateExtract20 = serviceConfig.GetPredicateExtract20();
     kqpConfig.IndexAutoChooserMode = serviceConfig.GetIndexAutoChooseMode();
     kqpConfig.EnablePgConstsToParams = serviceConfig.GetEnablePgConstsToParams() && serviceConfig.GetEnableAstCache();
     kqpConfig.ExtractPredicateRangesLimit = serviceConfig.GetExtractPredicateRangesLimit();
@@ -612,7 +603,10 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
     kqpConfig.EnableOltpSink = serviceConfig.GetEnableOltpSink();
     kqpConfig.BlockChannelsMode = serviceConfig.GetBlockChannelsMode();
     kqpConfig.IdxLookupJoinsPrefixPointLimit = serviceConfig.GetIdxLookupJoinPointsLimit();
-    kqpConfig.OldLookupJoinBehaviour = serviceConfig.GetOldLookupJoinBehaviour();
+    kqpConfig.EnableSpillingGenericQuery = serviceConfig.GetEnableQueryServiceSpilling();
+    kqpConfig.DefaultCostBasedOptimizationLevel = serviceConfig.GetDefaultCostBasedOptimizationLevel();
+    kqpConfig.EnableConstantFolding = serviceConfig.GetEnableConstantFolding();
+    kqpConfig.SetDefaultEnabledSpillingNodes(serviceConfig.GetEnableSpillingNodes());
 
     if (const auto limit = serviceConfig.GetResourceManager().GetMkqlHeavyProgramMemoryLimit()) {
         kqpConfig._KqpYqlCombinerMemoryLimit = std::max(1_GB, limit - (limit >> 2U));
@@ -622,7 +616,6 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
 IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstPtr& kqpSettings,
     const TTableServiceConfig& tableServiceConfig,
     const TQueryServiceConfig& queryServiceConfig,
-    const TMetadataProviderConfig& metadataProviderConfig,
     TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
     const TString& uid, const TKqpQueryId& query, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
     std::optional<TKqpFederatedQuerySetup> federatedQuerySetup, TKqpDbCountersPtr dbCounters, const TGUCSettings::TPtr& gUCSettings,
@@ -631,7 +624,7 @@ IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstP
     ECompileActorAction compileAction, TMaybe<TQueryAst> queryAst, bool collectFullDiagnostics,
     bool perStatementResult, NYql::TExprContext* splitCtx, NYql::TExprNode::TPtr splitExpr)
 {
-    return new TKqpCompileActor(owner, kqpSettings, tableServiceConfig, queryServiceConfig, metadataProviderConfig,
+    return new TKqpCompileActor(owner, kqpSettings, tableServiceConfig, queryServiceConfig,
                                 moduleResolverState, counters, gUCSettings, applicationName,
                                 uid, query, userToken, dbCounters,
                                 federatedQuerySetup, userRequestContext,

@@ -24,7 +24,7 @@ namespace NKikimr::NBlobDepot {
                     (U.MustRestoreFirst, Request.MustRestoreFirst), (U.IndexOnly, Request.IsIndexOnly));
 
                 Response = std::make_unique<TEvBlobStorage::TEvRangeResult>(NKikimrProto::OK, Request.From, Request.To,
-                    Agent.VirtualGroupId);
+                    TGroupId::FromValue(Agent.VirtualGroupId));
 
                 // issue resolve query
                 TString from = Request.From.AsBinaryString();

@@ -194,6 +194,45 @@ Y_UNIT_TEST_SUITE(JsonValueTest) {
         );
     }
 
+    Y_UNIT_TEST(PrimitiveValueDate32) {
+        TValue value = TValueBuilder()
+            .Date32(-10)
+            .Build();
+        const TString jsonString = FormatValueJson(value, EBinaryStringEncoding::Unicode);
+        UNIT_ASSERT_NO_DIFF(jsonString, R"("1969-12-22")");
+        TValue resultValue = JsonToYdbValue(jsonString, value.GetType(), EBinaryStringEncoding::Unicode);
+        UNIT_ASSERT_NO_DIFF(
+            TProtoAccessor::GetProto(value).DebugString(),
+            TProtoAccessor::GetProto(resultValue).DebugString()
+        );
+    }
+
+    Y_UNIT_TEST(PrimitiveValueDatetime64) {
+        TValue value = TValueBuilder()
+            .Datetime64(-10)
+            .Build();
+        const TString jsonString = FormatValueJson(value, EBinaryStringEncoding::Unicode);
+        UNIT_ASSERT_NO_DIFF(jsonString, R"("1969-12-31T23:59:50Z")");
+        TValue resultValue = JsonToYdbValue(jsonString, value.GetType(), EBinaryStringEncoding::Unicode);
+        UNIT_ASSERT_NO_DIFF(
+            TProtoAccessor::GetProto(value).DebugString(),
+            TProtoAccessor::GetProto(resultValue).DebugString()
+        );
+    }
+
+    Y_UNIT_TEST(PrimitiveValueTimestamp64) {
+        TValue value = TValueBuilder()
+            .Timestamp64(-10)
+            .Build();
+        const TString jsonString = FormatValueJson(value, EBinaryStringEncoding::Unicode);
+        UNIT_ASSERT_NO_DIFF(jsonString, R"("1969-12-31T23:59:59.999990Z")");
+        TValue resultValue = JsonToYdbValue(jsonString, value.GetType(), EBinaryStringEncoding::Unicode);
+        UNIT_ASSERT_NO_DIFF(
+            TProtoAccessor::GetProto(value).DebugString(),
+            TProtoAccessor::GetProto(resultValue).DebugString()
+        );
+    }
+
     Y_UNIT_TEST(PrimitiveValueSimpleString) {
         TValue value = TValueBuilder()
             .String("Escape characters: \" \\ \f \b \t \r\nNon-escaped characters: / ' < > & []() ")

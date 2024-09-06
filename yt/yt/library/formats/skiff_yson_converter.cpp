@@ -134,12 +134,15 @@ struct TOptionalTypesMatch
         << ex;
 }
 
-template <typename... Args>
-[[noreturn]] void ThrowYsonToSkiffConversionError(const TComplexTypeFieldDescriptor& descriptor, const Args&... args)
+template <typename... TArgs>
+[[noreturn]] void ThrowYsonToSkiffConversionError(
+    const TComplexTypeFieldDescriptor& descriptor,
+    TFormatString<TArgs...> format,
+    TArgs&&... args)
 {
     THROW_ERROR_EXCEPTION("Yson to Skiff conversion error while converting %Qv field",
         descriptor.GetDescription())
-        << TError(args...);
+        << TError(format, std::forward<TArgs>(args)...);
 }
 
 [[noreturn]] void ThrowBadYsonToken(
@@ -168,12 +171,15 @@ template <typename... Args>
         actual);
 }
 
-template <typename... Args>
-[[noreturn]] void ThrowSkiffToYsonConversionError(const TComplexTypeFieldDescriptor& descriptor, const Args&... args)
+template <typename... TArgs>
+[[noreturn]] void ThrowSkiffToYsonConversionError(
+    const TComplexTypeFieldDescriptor& descriptor,
+    TFormatString<TArgs...> format,
+    TArgs&&... args)
 {
     THROW_ERROR_EXCEPTION("Skiff to Yson conversion error while converting %Qv field",
         descriptor.GetDescription())
-        << TError(args...);
+        << TError(format, std::forward<TArgs>(args)...);
 }
 
 TOptionalTypesMatch MatchOptionalTypes(
@@ -478,7 +484,7 @@ std::pair<TTypePair, TTypePair> MatchDictTypes(const TComplexTypeFieldDescriptor
         }
 
         if (skiffSchema->GetChildren().size() != 1) {
-            THROW_ERROR_EXCEPTION("%Qlv has unexpected children count: expected %v, actual %v",
+            THROW_ERROR_EXCEPTION("%Qlv has unexpected child count: expected %v, got %v",
                 EWireType::RepeatedVariant8,
                 1,
                 skiffSchema->GetChildren().size());
@@ -486,14 +492,14 @@ std::pair<TTypePair, TTypePair> MatchDictTypes(const TComplexTypeFieldDescriptor
 
         auto tupleSchema = skiffSchema->GetChildren()[0];
         if (tupleSchema->GetWireType() != EWireType::Tuple) {
-            THROW_ERROR_EXCEPTION("%Qlv has unexpected wire type: expected %Qlv, actual %Qlv",
+            THROW_ERROR_EXCEPTION("%Qlv has unexpected wire type: expected %Qlv, got %Qlv",
                 EWireType::RepeatedVariant8,
                 EWireType::Tuple,
                 tupleSchema->GetWireType());
         }
 
         if (tupleSchema->GetChildren().size() != 2) {
-            THROW_ERROR_EXCEPTION("%Qlv has unexpected children count: expected %v, found %v",
+            THROW_ERROR_EXCEPTION("%Qlv has unexpected child count: expected %v, got %v",
                 EWireType::Tuple,
                 1,
                 skiffSchema->GetChildren().size());
@@ -560,7 +566,7 @@ public:
             constexpr auto expectedValueType = WireTypeToYsonItemType<wireType>();
             auto ysonItem = cursor->GetCurrent();
             if (ysonItem.GetType() != expectedValueType) {
-                ThrowYsonToSkiffConversionError(Descriptor_, "Unexpected yson type: expected %Qlv, found %Qlv",
+                ThrowYsonToSkiffConversionError(Descriptor_, "Unexpected YSON type: expected %Qlv, got %Qlv",
                     expectedValueType,
                     ysonItem.GetType());
             }
@@ -1488,7 +1494,7 @@ write_list_ends:
 private:
     void ThrowUnexpectedVariant8Tag(ui8 tag) const
     {
-        ThrowSkiffToYsonConversionError(Descriptor_, "Unexpected %lv tag, expected %Qv or %Qv got %Qv",
+        ThrowSkiffToYsonConversionError(Descriptor_, "Unexpected %Qlv tag: expected %v or %v, got %v",
             EWireType::Variant8,
             0,
             1,
@@ -1556,7 +1562,7 @@ write_list_ends:
 private:
     void ThrowUnexpectedVariant8Tag(ui8 tag) const
     {
-        ThrowSkiffToYsonConversionError(Descriptor_, "Unexpected %lv tag, expected %Qv or %Qv got %Qv",
+        ThrowSkiffToYsonConversionError(Descriptor_, "Unexpected %Qlv tag: expected %v or %v, got %v",
             EWireType::Variant8,
             0,
             1,
@@ -1617,7 +1623,7 @@ TSkiffToYsonConverter CreateListSkiffToYsonConverter(
             if (tag == EndOfSequenceTag<ui8>()) {
                 break;
             } else if (tag != 0) {
-                ThrowSkiffToYsonConversionError(descriptor, "Unexpected %lv tag, expected %Qv or %Qv got %Qv",
+                ThrowSkiffToYsonConversionError(descriptor, "Unexpected %Qlv tag: expected %v or %v, got %v",
                     EWireType::RepeatedVariant8,
                     0,
                     EndOfSequenceTag<ui8>(),
@@ -1640,7 +1646,7 @@ TSkiffToYsonConverter CreateStructSkiffToYsonConverter(
         writer->WriteEntity();
     };
 
-    auto structMatch = MatchStructTypes(descriptor, skiffSchema, /*allowUnknownSkiffFields*/false);
+    auto structMatch = MatchStructTypes(descriptor, skiffSchema, /*allowUnknownSkiffFields*/ false);
     std::vector<TSkiffToYsonConverter> converterList;
     for (const auto& match : structMatch) {
         const auto& [fieldDescriptor, fieldSkiffSchema] = *match;
@@ -1775,7 +1781,7 @@ TSkiffToYsonConverter CreateDictSkiffToYsonConverter(
             if (tag == EndOfSequenceTag<ui8>()) {
                 break;
             } else if (tag != 0) {
-                ThrowSkiffToYsonConversionError(descriptor, "Unexpected %lv tag, expected %Qv or %Qv got %Qv",
+                ThrowSkiffToYsonConversionError(descriptor, "Unexpected %Qlv tag: expected %v or %v, got %v",
                     EWireType::RepeatedVariant8,
                     0,
                     EndOfSequenceTag<ui8>(),

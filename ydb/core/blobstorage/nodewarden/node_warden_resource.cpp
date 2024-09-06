@@ -188,7 +188,7 @@ void TNodeWarden::ApplyStateStorageConfig(const NKikimrBlobStorage::TStorageConf
         for (const auto& ring : info->Rings) {
             for (ui32 index = 0; index < ring.Replicas.size(); ++index) {
                 if (const TActorId& replicaId = ring.Replicas[index]; replicaId.NodeId() == LocalNodeId) {
-                    if (const auto [it, inserted] = localActorIds.insert(replicaId); inserted) {
+                    if (!localActorIds.erase(replicaId)) {
                         STLOG(PRI_INFO, BS_NODE, NW08, "starting new state storage replica",
                             (Component, comp), (ReplicaId, replicaId), (Index, index), (Config, *info));
                         as->RegisterLocalService(replicaId, as->Register(factory(info, index), TMailboxType::ReadAsFilled,
@@ -217,7 +217,7 @@ void TNodeWarden::ApplyStateStorageConfig(const NKikimrBlobStorage::TStorageConf
     // terminate unused replicas
     for (const auto& replicaId : localActorIds) {
         STLOG(PRI_INFO, BS_NODE, NW43, "terminating useless state storage replica", (ReplicaId, replicaId));
-        const TActorId actorId = as->RegisterLocalService(actorId, TActorId());
+        const TActorId actorId = as->RegisterLocalService(replicaId, TActorId());
         TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
     }
 

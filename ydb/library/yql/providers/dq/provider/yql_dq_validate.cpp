@@ -40,15 +40,19 @@ private:
         }
 
 
+        bool hasJoin = false;
         bool hasMapJoin = false;
         VisitExpr(TDqStageBase(&node).Program().Body().Ptr(),
             [](const TExprNode::TPtr& n) {
                 return !TDqConnection::Match(n.Get()) && !TDqPhyPrecompute::Match(n.Get()) && !TDqReadWrapBase::Match(n.Get());
             },
-            [&readPerProvider_ = ReadsPerProvider_, &hasErrors, &hasMapJoin, &ctx = Ctx_, &typeCtx = TypeCtx_](const TExprNode::TPtr& n) {
-                if (TDqPhyMapJoin::Match(n.Get())) {
-                    hasMapJoin = true;
+            [&readPerProvider_ = ReadsPerProvider_, &hasErrors, &hasJoin, &hasMapJoin, &ctx = Ctx_, &typeCtx = TypeCtx_](const TExprNode::TPtr& n) {
+                if (TDqPhyMapJoin::Match(n.Get()) || TDqPhyGraceJoin::Match(n.Get())) {
+                    hasJoin = hasMapJoin = true;
+                } else if (TCoGraceJoinCore::Match(n.Get()) || TCoGraceSelfJoinCore::Match(n.Get())) {
+                    hasJoin = true;
                 }
+
                 if (TCoScriptUdf::Match(n.Get()) && NKikimr::NMiniKQL::IsSystemPython(NKikimr::NMiniKQL::ScriptTypeFromStr(n->Head().Content()))) {
                     ReportError(ctx, *n, TStringBuilder() << "Cannot execute system python udf " << n->Content() << " in DQ");
                     hasErrors = true;
@@ -69,7 +73,7 @@ private:
         );
 
         HasMapJoin_ |= hasMapJoin;
-        if (hasMapJoin && CheckSelfMapJoin_) {
+        if (hasJoin && CheckSelfJoin_) {
             TNodeSet unitedVisitedStages;
             bool nonUniqStages = false;
             for (auto n: TDqStageBase(&node).Inputs()) {
@@ -80,7 +84,7 @@ private:
                 nonUniqStages |= (expectedSize != unitedVisitedStages.size()); // Found duplicates - some stage was visited twice from different inputs
             }
             if (nonUniqStages) {
-                ReportError(Ctx_, node, TStringBuilder() << "Cannot execute self join using mapjoin strategy in DQ");
+                ReportError(Ctx_, node, TStringBuilder() << "Cannot execute self join in DQ");
                 hasErrors = true;
             }
             if (visitedStages) {
@@ -141,9 +145,9 @@ public:
         : TypeCtx_(typeCtx)
         , Ctx_(ctx)
         , State_(state)
-        , CheckSelfMapJoin_(!TypeCtx_.ForceDq
+        , CheckSelfJoin_(!TypeCtx_.ForceDq
             && !State_->Settings->SplitStageOnDqReplicate.Get().GetOrElse(TDqSettings::TDefault::SplitStageOnDqReplicate)
-            && !State_->Settings->IsSpillingEnabled())
+            && !State_->Settings->IsSpillingInChannelsEnabled())
     {}
 
     bool ValidateDqExecution(const TExprNode& node) {
@@ -205,7 +209,7 @@ private:
     const TTypeAnnotationContext& TypeCtx_;
     TExprContext& Ctx_;
     const TDqState::TPtr State_;
-    const bool CheckSelfMapJoin_;
+    const bool CheckSelfJoin_;
 
     TNodeSet Visited_;
     THashMap<IDqIntegration*, TVector<const TExprNode*>> ReadsPerProvider_;

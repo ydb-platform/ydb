@@ -78,6 +78,7 @@ public:
     }
 
     virtual TTabletsByBlob GetBlobsToDelete() const = 0;
+    virtual bool HasToDelete(const TUnifiedBlobId& blobId, const TTabletId initiatorTabletId) const = 0;
     virtual std::shared_ptr<IBlobInUseTracker> GetBlobsTracker() const = 0;
 
     virtual ~IBlobsStorageOperator() = default;
@@ -115,13 +116,13 @@ public:
     }
 
     [[nodiscard]] std::shared_ptr<IBlobsGCAction> CreateGC() {
-        NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("storage_id", GetStorageId())("tablet_id", GetSelfTabletId());
+        NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_BLOBS)("storage_id", GetStorageId())("tablet_id", GetSelfTabletId());
         if (CurrentGCAction && CurrentGCAction->IsInProgress()) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "gc_in_progress");
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS)("event", "gc_in_progress");
             return nullptr;
         }
         if (Stopped) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "stopped_on_gc");
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS)("event", "stopped_on_gc");
             return nullptr;
         }
         auto task = CreateGCAction(Counters->GetConsumerCounter(NBlobOperations::EConsumer::GC)->GetRemoveGCCounters());

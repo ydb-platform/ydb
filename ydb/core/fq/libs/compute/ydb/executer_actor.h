@@ -6,10 +6,12 @@
 
 #include <ydb/library/actors/core/actor.h>
 
+#include <ydb/public/sdk/cpp/client/ydb_query/query.h>
+
 namespace NFq {
 
 std::unique_ptr<NActors::IActor> CreateExecuterActor(const TRunActorParams& params,
-                                                     Ydb::Query::StatsMode statsMode,
+                                                     NYdb::NQuery::EStatsMode statsMode,
                                                      const NActors::TActorId& parent,
                                                      const NActors::TActorId& connector,
                                                      const NActors::TActorId& pinger,

@@ -11,16 +11,12 @@ from ydb.tests.tools.fq_runner.kikimr_utils import yq_all
 
 
 class TestS3(object):
-
     @yq_all
     @pytest.mark.parametrize("format", ["json_list", "json_each_row", "csv_with_names", "parquet"])
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_egress(self, kikimr, s3, client, format, yq_version, unique_prefix):
         resource = boto3.resource(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         bucket = resource.Bucket("egress_bucket")
@@ -56,10 +52,7 @@ class TestS3(object):
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_convert(self, kikimr, s3, client, format1, format2, yq_version, unique_prefix):
         resource = boto3.resource(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         bucket = resource.Bucket("convert_bucket")
@@ -119,22 +112,27 @@ class TestS3(object):
             if file.key.startswith(f"{format1}_2_{format2}_{yq_version}/"):
                 file_size_2 += bucket.Object(file.key).content_length
 
-        assert file_size_1 == egress_bytes_1, f"File {format1} size {file_size_1} mistmatches egress bytes {egress_bytes_1}"
-        assert file_size_2 == egress_bytes_2, f"File {format2} size {file_size_2} mistmatches egress bytes {egress_bytes_2}"
+        assert (
+            file_size_1 == egress_bytes_1
+        ), f"File {format1} size {file_size_1} mistmatches egress bytes {egress_bytes_1}"
+        assert (
+            file_size_2 == egress_bytes_2
+        ), f"File {format2} size {file_size_2} mistmatches egress bytes {egress_bytes_2}"
         if format1 != "parquet":
-            assert file_size_1 == ingress_bytes_1, f"File {format1} size {file_size_1} mistmatches ingress bytes {egress_bytes_1}"
+            assert (
+                file_size_1 == ingress_bytes_1
+            ), f"File {format1} size {file_size_1} mistmatches ingress bytes {egress_bytes_1}"
         if format2 != "parquet":
-            assert file_size_2 == ingress_bytes_2, f"File {format2} size {file_size_2} mistmatches ingress bytes {egress_bytes_2}"
+            assert (
+                file_size_2 == ingress_bytes_2
+            ), f"File {format2} size {file_size_2} mistmatches ingress bytes {egress_bytes_2}"
         assert sum(kikimr.control_plane.get_metering(1)) == 30
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_precompute(self, kikimr, s3, client, yq_version, unique_prefix):
         resource = boto3.resource(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         bucket = resource.Bucket("pbucket")
@@ -207,10 +205,7 @@ class TestS3(object):
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_sum(self, kikimr, s3, client, yq_version, unique_prefix):
         resource = boto3.resource(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         bucket_name = f"sum_bucket_{yq_version}"
@@ -234,12 +229,15 @@ class TestS3(object):
         for file in bucket.objects.all():
             files_size += bucket.Object(file.key).content_length
 
-        sql = ("PRAGMA dq.MaxTasksPerStage=\"1\";" if yq_version == "v1" else "") + fR'''
+        sql = (
+            ("PRAGMA dq.MaxTasksPerStage=\"1\";" if yq_version == "v1" else "")
+            + fR'''
             select foo, bar from `{storage_connection_name}`.`file/*` with (format="csv_with_names", schema(
                 foo Int NOT NULL,
                 bar String NOT NULL
             ))
             '''
+        )
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)

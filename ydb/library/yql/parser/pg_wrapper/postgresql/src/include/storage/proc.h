@@ -4,7 +4,7 @@
  *	  per-process shared memory data structures
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/storage/proc.h
@@ -32,6 +32,8 @@
  * If none of the caches have overflowed, we can assume that an XID that's not
  * listed anywhere in the PGPROC array is not a running transaction.  Else we
  * have to look at pg_subtrans.
+ *
+ * See src/test/isolation/specs/subxid-overflow.spec if you change this.
  */
 #define PGPROC_MAX_CACHED_SUBXIDS 64	/* XXX guessed-at value */
 
@@ -60,17 +62,19 @@ struct XidCache
 #define		PROC_VACUUM_FOR_WRAPAROUND	0x08	/* set by autovac only */
 #define		PROC_IN_LOGICAL_DECODING	0x10	/* currently doing logical
 												 * decoding outside xact */
+#define		PROC_AFFECTS_ALL_HORIZONS	0x20	/* this proc's xmin must be
+												 * included in vacuum horizons
+												 * in all databases */
 
 /* flags reset at EOXact */
 #define		PROC_VACUUM_STATE_MASK \
 	(PROC_IN_VACUUM | PROC_IN_SAFE_IC | PROC_VACUUM_FOR_WRAPAROUND)
 
 /*
- * Flags that are valid to copy from another proc, the parallel leader
- * process in practice.  Currently, flags that are set during parallel
- * vacuum and parallel index creation are allowed.
+ * Xmin-related flags. Make sure any flags that affect how the process' Xmin
+ * value is interpreted by VACUUM are included here.
  */
-#define		PROC_COPYABLE_FLAGS (PROC_IN_VACUUM | PROC_IN_SAFE_IC)
+#define		PROC_XMIN_FLAGS (PROC_IN_VACUUM | PROC_IN_SAFE_IC)
 
 /*
  * We allow a small number of "weak" relation locks (AccessShareLock,
@@ -85,6 +89,41 @@ struct XidCache
  * structures we could possibly have.  See comments for MAX_BACKENDS.
  */
 #define INVALID_PGPROCNO		PG_INT32_MAX
+
+/*
+ * Flags for PGPROC.delayChkptFlags
+ *
+ * These flags can be used to delay the start or completion of a checkpoint
+ * for short periods. A flag is in effect if the corresponding bit is set in
+ * the PGPROC of any backend.
+ *
+ * For our purposes here, a checkpoint has three phases: (1) determine the
+ * location to which the redo pointer will be moved, (2) write all the
+ * data durably to disk, and (3) WAL-log the checkpoint.
+ *
+ * Setting DELAY_CHKPT_START prevents the system from moving from phase 1
+ * to phase 2. This is useful when we are performing a WAL-logged modification
+ * of data that will be flushed to disk in phase 2. By setting this flag
+ * before writing WAL and clearing it after we've both written WAL and
+ * performed the corresponding modification, we ensure that if the WAL record
+ * is inserted prior to the new redo point, the corresponding data changes will
+ * also be flushed to disk before the checkpoint can complete. (In the
+ * extremely common case where the data being modified is in shared buffers
+ * and we acquire an exclusive content lock on the relevant buffers before
+ * writing WAL, this mechanism is not needed, because phase 2 will block
+ * until we release the content lock and then flush the modified data to
+ * disk.)
+ *
+ * Setting DELAY_CHKPT_COMPLETE prevents the system from moving from phase 2
+ * to phase 3. This is useful if we are performing a WAL-logged operation that
+ * might invalidate buffers, such as relation truncation. In this case, we need
+ * to ensure that any buffers which were invalidated and thus not flushed by
+ * the checkpoint are actually destroyed on disk. Replay can cope with a file
+ * or block that doesn't exist, but not with a block that has the wrong
+ * contents.
+ */
+#define DELAY_CHKPT_START		(1<<0)
+#define DELAY_CHKPT_COMPLETE	(1<<1)
 
 typedef enum
 {
@@ -110,7 +149,7 @@ typedef enum
  * but its myProcLocks[] lists are valid.
  *
  * We allow many fields of this struct to be accessed without locks, such as
- * delayChkpt and isBackgroundWorker. However, keep in mind that writing
+ * delayChkptFlags and isBackgroundWorker. However, keep in mind that writing
  * mirrored ones (see below) requires holding ProcArrayLock or XidGenLock in
  * at least shared mode, so that pgxactoff does not change concurrently.
  *
@@ -128,8 +167,8 @@ typedef enum
 struct PGPROC
 {
 	/* proc->links MUST BE FIRST IN STRUCT (see ProcSleep,ProcWakeup,etc) */
-	SHM_QUEUE	links;			/* list link if process is in a list */
-	PGPROC	  **procgloballist; /* procglobal list that owns this PGPROC */
+	dlist_node	links;			/* list link if process is in a list */
+	dlist_head *procgloballist; /* procglobal list that owns this PGPROC */
 
 	PGSemaphore sem;			/* ONE semaphore to sleep on */
 	ProcWaitStatus waitStatus;
@@ -154,7 +193,11 @@ struct PGPROC
 
 	int			pgxactoff;		/* offset into various ProcGlobal->arrays with
 								 * data mirrored from this PGPROC */
-	int			pgprocno;
+
+	int			pgprocno;		/* Number of this PGPROC in
+								 * ProcGlobal->allProcs array. This is set
+								 * once by InitProcGlobal().
+								 * ProcGlobal->allProcs[n].pgprocno == n */
 
 	/* These fields are zero while a backend is still starting up: */
 	BackendId	backendId;		/* This backend's backend ID (if assigned) */
@@ -174,7 +217,7 @@ struct PGPROC
 	bool		recoveryConflictPending;
 
 	/* Info about LWLock the process is currently waiting for, if any. */
-	bool		lwWaiting;		/* true if waiting for an LW lock */
+	uint8		lwWaiting;		/* see LWLockWaitState */
 	uint8		lwWaitMode;		/* lwlock mode being waited for */
 	proclist_node lwWaitLink;	/* position in LW lock wait list */
 
@@ -191,7 +234,7 @@ struct PGPROC
 	pg_atomic_uint64 waitStart; /* time at which wait for lock acquisition
 								 * started */
 
-	bool		delayChkpt;		/* true if this proc delays checkpoint start */
+	int			delayChkptFlags;	/* for DELAY_CHKPT_* flags */
 
 	uint8		statusFlags;	/* this backend's status flags, see PROC_*
 								 * above. mirrored in
@@ -205,14 +248,14 @@ struct PGPROC
 	 */
 	XLogRecPtr	waitLSN;		/* waiting for this LSN or higher */
 	int			syncRepState;	/* wait state for sync rep */
-	SHM_QUEUE	syncRepLinks;	/* list link if process is in syncrep queue */
+	dlist_node	syncRepLinks;	/* list link if process is in syncrep queue */
 
 	/*
 	 * All PROCLOCK objects for locks held or awaited by this backend are
 	 * linked into one of these lists, according to the partition number of
 	 * their lock.
 	 */
-	SHM_QUEUE	myProcLocks[NUM_LOCK_PARTITIONS];
+	dlist_head	myProcLocks[NUM_LOCK_PARTITIONS];
 
 	XidCacheStatus subxidStatus;	/* mirrored with
 									 * ProcGlobal->subxidStates[i] */
@@ -342,13 +385,13 @@ typedef struct PROC_HDR
 	/* Length of allProcs array */
 	uint32		allProcCount;
 	/* Head of list of free PGPROC structures */
-	PGPROC	   *freeProcs;
+	dlist_head	freeProcs;
 	/* Head of list of autovacuum's free PGPROC structures */
-	PGPROC	   *autovacFreeProcs;
+	dlist_head	autovacFreeProcs;
 	/* Head of list of bgworker free PGPROC structures */
-	PGPROC	   *bgworkerFreeProcs;
+	dlist_head	bgworkerFreeProcs;
 	/* Head of list of walsender free PGPROC structures */
-	PGPROC	   *walsenderFreeProcs;
+	dlist_head	walsenderFreeProcs;
 	/* First pgproc waiting for group XID clear */
 	pg_atomic_uint32 procArrayGroupFirst;
 	/* First pgproc waiting for group transaction status update */
@@ -359,16 +402,13 @@ typedef struct PROC_HDR
 	Latch	   *checkpointerLatch;
 	/* Current shared estimate of appropriate spins_per_delay value */
 	int			spins_per_delay;
-	/* The proc of the Startup process, since not in ProcArray */
-	PGPROC	   *startupProc;
-	int			startupProcPid;
 	/* Buffer id of the buffer that Startup process waits for pin on, or -1 */
 	int			startupBufferPinWaitBufId;
 } PROC_HDR;
 
 extern __thread PGDLLIMPORT PROC_HDR *ProcGlobal;
 
-extern __thread PGPROC *PreparedXactProcs;
+extern __thread PGDLLIMPORT PGPROC *PreparedXactProcs;
 
 /* Accessor for PGPROC given a pgprocno. */
 #define GetPGProcByNumber(n) (&ProcGlobal->allProcs[(n)])
@@ -389,7 +429,7 @@ extern __thread PGDLLIMPORT int StatementTimeout;
 extern __thread PGDLLIMPORT int LockTimeout;
 extern __thread PGDLLIMPORT int IdleInTransactionSessionTimeout;
 extern __thread PGDLLIMPORT int IdleSessionTimeout;
-extern __thread bool log_lock_waits;
+extern __thread PGDLLIMPORT bool log_lock_waits;
 
 
 /*
@@ -402,23 +442,21 @@ extern void InitProcess(void);
 extern void InitProcessPhase2(void);
 extern void InitAuxiliaryProcess(void);
 
-extern void PublishStartupProcessInformation(void);
 extern void SetStartupBufferPinWaitBufId(int bufid);
 extern int	GetStartupBufferPinWaitBufId(void);
 
-extern bool HaveNFreeProcs(int n);
+extern bool HaveNFreeProcs(int n, int *nfree);
 extern void ProcReleaseLocks(bool isCommit);
 
-extern void ProcQueueInit(PROC_QUEUE *queue);
 extern ProcWaitStatus ProcSleep(LOCALLOCK *locallock, LockMethod lockMethodTable);
-extern PGPROC *ProcWakeup(PGPROC *proc, ProcWaitStatus waitStatus);
+extern void ProcWakeup(PGPROC *proc, ProcWaitStatus waitStatus);
 extern void ProcLockWakeup(LockMethod lockMethodTable, LOCK *lock);
 extern void CheckDeadLockAlert(void);
 extern bool IsWaitingForLock(void);
 extern void LockErrorCleanup(void);
 
 extern void ProcWaitForSignal(uint32 wait_event_info);
-extern void ProcSendSignal(int pid);
+extern void ProcSendSignal(int pgprocno);
 
 extern PGPROC *AuxiliaryPidGetProc(int pid);
 

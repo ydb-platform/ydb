@@ -8,6 +8,7 @@
 #include "formatter.h"
 #include "file_log_writer.h"
 #include "stream_log_writer.h"
+#include "system_log_event_provider.h"
 
 #include <yt/yt/core/concurrency/profiling_helpers.h>
 #include <yt/yt/core/concurrency/periodic_executor.h>
@@ -80,7 +81,7 @@ using namespace NTracing;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const TLogger Logger(SystemLoggingCategoryName);
+YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, SystemLoggingCategoryName);
 
 static constexpr auto DiskProfilingPeriod = TDuration::Minutes(5);
 static constexpr auto AnchorProfilingPeriod = TDuration::Seconds(15);
@@ -357,7 +358,7 @@ using TThreadLocalQueue = TSpscQueue<TLoggerQueueItem>;
 static constexpr uintptr_t ThreadQueueDestroyedSentinel = -1;
 YT_DEFINE_THREAD_LOCAL(TThreadLocalQueue*, PerThreadQueue);
 
-/////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 struct TLocalQueueReclaimer
 {
@@ -366,7 +367,7 @@ struct TLocalQueueReclaimer
 
 YT_DEFINE_THREAD_LOCAL(TLocalQueueReclaimer, LocalQueueReclaimer);
 
-/////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 class TLogManager::TImpl
     : public ISensorProducer
@@ -379,11 +380,13 @@ public:
         : EventQueue_(New<TMpscInvokerQueue>(
             EventCount_,
             NConcurrency::GetThreadTags("Logging")))
-        , LoggingThread_(New<TThread>(this))
+        , LoggingThread_(New<TLoggingThread>(this))
         , SystemWriters_({
             CreateStderrLogWriter(
                 std::make_unique<TPlainTextLogFormatter>(),
-                TString(StderrSystemWriterName))
+                CreateDefaultSystemLogEventProvider(/*systemMessagesEnabled*/ true, /*systemMessageFamily*/ ELogFamily::PlainText),
+                TString(StderrSystemWriterName),
+                New<TStderrLogWriterConfig>())
         })
         , DiskProfilingExecutor_(New<TPeriodicExecutor>(
             EventQueue_,
@@ -417,8 +420,8 @@ public:
             /*threadCount*/ 1,
             /*threadNamePrefix*/ "LogCompress"))
     {
-        RegisterWriterFactory(TString(TFileLogWriterConfig::Type), GetFileLogWriterFactory());
-        RegisterWriterFactory(TString(TStderrLogWriterConfig::Type), GetStderrLogWriterFactory());
+        RegisterWriterFactory(TString(TFileLogWriterConfig::WriterType), GetFileLogWriterFactory());
+        RegisterWriterFactory(TString(TStderrLogWriterConfig::WriterType), GetStderrLogWriterFactory());
     }
 
     void Initialize()
@@ -501,6 +504,12 @@ public:
             // Wait for all previously enqueued messages to be flushed
             // but no more than ShutdownGraceTimeout to prevent hanging.
             Synchronize(TInstant::Now() + Config_->ShutdownGraceTimeout);
+        }
+
+        // For now this is the only way to wait for log writers that perform asynchronous flushes.
+        // TODO(achulkov2): Refactor log manager to support asynchronous operations.
+        if (Config_->ShutdownBusyTimeout) {
+            Sleep(Config_->ShutdownBusyTimeout);
         }
 
         EventQueue_->Shutdown();
@@ -708,11 +717,11 @@ public:
     }
 
 private:
-    class TThread
+    class TLoggingThread
         : public TSchedulerThread
     {
     public:
-        explicit TThread(TImpl* owner)
+        explicit TLoggingThread(TImpl* owner)
             : TSchedulerThread(
                 owner->EventCount_,
                 "Logging",
@@ -843,7 +852,6 @@ private:
         switch (writerConfig->Format) {
             case ELogFormat::PlainText:
                 return std::make_unique<TPlainTextLogFormatter>(
-                    writerConfig->AreSystemMessagesEnabled(),
                     writerConfig->EnableSourceLocation);
 
             case ELogFormat::Json: [[fallthrough]];
@@ -851,9 +859,9 @@ private:
                 return std::make_unique<TStructuredLogFormatter>(
                     writerConfig->Format,
                     writerConfig->CommonFields,
-                    writerConfig->AreSystemMessagesEnabled(),
                     writerConfig->EnableSourceLocation,
                     writerConfig->EnableSystemFields,
+                    writerConfig->EnableHostField,
                     writerConfig->JsonFormat);
 
             default:
@@ -948,6 +956,11 @@ private:
         }
 
         GetWrittenEventsCounter(event).Increment();
+
+        if (event.Anchor) {
+            event.Anchor->MessageCounter.Current += 1;
+            event.Anchor->ByteCounter.Current += std::ssize(event.MessageRef);
+        }
 
         for (const auto& writer : GetWriters(event)) {
             writer->Write(event);
@@ -1130,18 +1143,16 @@ private:
         auto* currentAnchor = FirstAnchor_.load();
         while (currentAnchor) {
             auto getRate = [&] (auto& counter) {
-                auto current = counter.Current.load(std::memory_order::relaxed);
+                auto current = counter.Current;
                 auto rate = (current - counter.Previous) / deltaSeconds;
                 counter.Previous = current;
                 return rate;
             };
 
-            auto messageRate = getRate(currentAnchor->MessageCounter);
-            auto byteRate = getRate(currentAnchor->ByteCounter);
             result.push_back({
-                currentAnchor,
-                messageRate,
-                byteRate
+                .Anchor = currentAnchor,
+                .MessageRate = getRate(currentAnchor->MessageCounter),
+                .ByteRate = getRate(currentAnchor->ByteCounter),
             });
 
             currentAnchor = currentAnchor->NextAnchor;
@@ -1239,7 +1250,7 @@ private:
 
             MakeHeap(heap.begin(), heap.end());
             ExtractHeap(heap.begin(), heap.end());
-            THeapItem topItem = heap.back();
+            auto topItem = heap.back();
             heap.pop_back();
 
             while (!heap.empty()) {
@@ -1388,7 +1399,7 @@ private:
 private:
     const TIntrusivePtr<NThreading::TEventCount> EventCount_ = New<NThreading::TEventCount>();
     const TMpscInvokerQueuePtr EventQueue_;
-    const TIntrusivePtr<TThread> LoggingThread_;
+    const TIntrusivePtr<TLoggingThread> LoggingThread_;
     const TShutdownCookie ShutdownCookie_ = RegisterShutdownCallback(
         "LogManager",
         BIND_NO_PROPAGATE(&TImpl::Shutdown, MakeWeak(this)),

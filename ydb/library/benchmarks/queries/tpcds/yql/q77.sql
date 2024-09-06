@@ -82,8 +82,8 @@ $ss =
  (select 'store channel' as channel
         , ss.s_store_sk as id
         , sales
-        , coalesce(returns, 0) as returns
-        , (profit - coalesce(profit_loss,0)) as profit
+        , coalesce(returns, $z0_35) as returns
+        , (profit - coalesce(profit_loss,$z0_35)) as profit
  from   $ss ss left join $sr sr
         on  ss.s_store_sk = sr.s_store_sk
  union all
@@ -98,8 +98,8 @@ $ss =
  select 'web channel' as channel
         , ws.wp_web_page_sk as id
         , sales
-        , coalesce(returns, 0) returns
-        , (profit - coalesce(profit_loss,0)) as profit
+        , coalesce(returns, $z0_35) returns
+        , (profit - coalesce(profit_loss,$z0_35)) as profit
  from   $ws ws left join $wr wr
         on  ws.wp_web_page_sk = wr.wp_web_page_sk
  ) x

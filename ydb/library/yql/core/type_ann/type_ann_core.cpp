@@ -117,28 +117,51 @@ namespace NTypeAnnImpl {
         bool isValid;
         if (atomNode.Flags() & TNodeFlags::BinaryContent) {
             // just deserialize
-            switch (sizeof(T)) {
-            case sizeof(ui16): {
+            switch (slot) {
+            case NKikimr::NUdf::EDataSlot::Date: {
                 ui16 value;
                 ui16 tzId;
                 isValid = NKikimr::NMiniKQL::DeserializeTzDate(atomNode.Content(), value, tzId);
                 plainValue = SerializeTzComponents(isValid, value, tzId);
                 break;
             }
-            case sizeof(ui32): {
+            case NKikimr::NUdf::EDataSlot::Datetime: {
                 ui32 value;
                 ui16 tzId;
                 isValid = NKikimr::NMiniKQL::DeserializeTzDatetime(atomNode.Content(), value, tzId);
                 plainValue = SerializeTzComponents(isValid, value, tzId);
                 break;
             }
-            case sizeof(ui64): {
+            case NKikimr::NUdf::EDataSlot::Timestamp: {
                 ui64 value;
                 ui16 tzId;
                 isValid = NKikimr::NMiniKQL::DeserializeTzTimestamp(atomNode.Content(), value, tzId);
                 plainValue = SerializeTzComponents(isValid, value, tzId);
                 break;
             }
+            case NKikimr::NUdf::EDataSlot::Date32: {
+                i32 value;
+                ui16 tzId;
+                isValid = NKikimr::NMiniKQL::DeserializeTzDate32(atomNode.Content(), value, tzId);
+                plainValue = SerializeTzComponents(isValid, value, tzId);
+                break;
+            }
+            case NKikimr::NUdf::EDataSlot::Datetime64: {
+                i64 value;
+                ui16 tzId;
+                isValid = NKikimr::NMiniKQL::DeserializeTzDatetime64(atomNode.Content(), value, tzId);
+                plainValue = SerializeTzComponents(isValid, value, tzId);
+                break;
+            }
+            case NKikimr::NUdf::EDataSlot::Timestamp64: {
+                i64 value;
+                ui16 tzId;
+                isValid = NKikimr::NMiniKQL::DeserializeTzTimestamp64(atomNode.Content(), value, tzId);
+                plainValue = SerializeTzComponents(isValid, value, tzId);
+                break;
+            }
+            default:
+                Y_ENSURE(false, "Unknown data slot:" << slot);
             }
         } else {
             TStringBuf atom = atomNode.Content();
@@ -742,6 +765,18 @@ namespace NTypeAnnImpl {
                 if (!IsValidSmallData<i64>(input->Head(), input->Content(), ctx.Expr, NKikimr::NUdf::EDataSlot::Interval64, textValue)) {
                     return IGraphTransformer::TStatus::Error;
                 }
+            } else if (input->Content() == "TzDate32") {
+                if (!IsValidTzData<i32>(input->Head(), input->Content(), ctx.Expr, NKikimr::NUdf::EDataSlot::Date32, textValue)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+            } else if (input->Content() == "TzDatetime64") {
+                if (!IsValidTzData<i64>(input->Head(), input->Content(), ctx.Expr, NKikimr::NUdf::EDataSlot::Datetime64, textValue)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+            } else if (input->Content() == "TzTimestamp64") {
+                if (!IsValidTzData<i64>(input->Head(), input->Content(), ctx.Expr, NKikimr::NUdf::EDataSlot::Timestamp64, textValue)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
             } else if (input->Content() == "Uuid") {
                 if (input->Head().Content().size() != 16) {
                     ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "Bad atom format for type: "
@@ -1197,7 +1232,7 @@ namespace NTypeAnnImpl {
 
         YQL_ENSURE(IsSameAnnotation(*memberType, *resultType) ||
                    IsSameAnnotation(*ctx.Expr.MakeType<TOptionalExprType>(memberType), *resultType));
-        
+
         output = ctx.Expr.Builder(input->Pos())
             .Callable("IfStrict")
                 .Callable(0, "Exists")
@@ -2714,7 +2749,9 @@ namespace NTypeAnnImpl {
                 if (!(*dataTypeOne == *dataTypeTwo)) {
                     ctx.Expr.AddError(TIssue(
                         ctx.Expr.GetPosition(input->Pos()),
-                        TStringBuilder() << "Cannot calculate with different decimals."
+                        TStringBuilder() << "Cannot calculate with different decimals: "
+                            << static_cast<const TTypeAnnotationNode&>(*dataType[0]) << " != "
+                            << static_cast<const TTypeAnnotationNode&>(*dataType[1])
                     ));
 
                     return IGraphTransformer::TStatus::Error;
@@ -4393,6 +4430,16 @@ namespace NTypeAnnImpl {
             << *sourceType << " into " << *targetType));
 
         return IGraphTransformer::TStatus::Error;
+    }
+
+    IGraphTransformer::TStatus VersionWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+        Y_UNUSED(output);
+        if (!EnsureArgsCount(*input, 0, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        input->SetTypeAnn(ctx.Expr.MakeType<TDataExprType>(NKikimr::NUdf::EDataSlot::String));
+        return IGraphTransformer::TStatus::Ok;
     }
 
     IGraphTransformer::TStatus WidenIntegralWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
@@ -6146,18 +6193,18 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         };
 
         auto mergeMembers = [&ctx, &buildJustMember, &input, &left, &right, &mergeLambda](const TStringBuf& name, bool hasLeft, bool hasRight) -> TExprNode::TPtr {
-            auto leftMaybe = hasLeft ? 
+            auto leftMaybe = hasLeft ?
                 buildJustMember(left, name) :
                 ctx.Expr.NewCallable(input->Pos(), "Nothing", {
                     ExpandType(input->Pos(), *ctx.Expr.MakeType<TOptionalExprType>(right->GetTypeAnn()->Cast<TStructExprType>()->FindItemType(name)), ctx.Expr)
                 });
-            
-            auto rightMaybe = hasRight ? 
+
+            auto rightMaybe = hasRight ?
                 buildJustMember(right, name) :
                 ctx.Expr.NewCallable(input->Pos(), "Nothing", {
                     ExpandType(input->Pos(), *ctx.Expr.MakeType<TOptionalExprType>(left->GetTypeAnn()->Cast<TStructExprType>()->FindItemType(name)), ctx.Expr)
                 });
-            
+
             return ctx.Expr.Builder(input->Pos())
                 .List()
                     .Atom(0, name)
@@ -6445,7 +6492,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                             .With(1, result)
                         .Seal()
                     .Build();
-                }                        
+                }
             }
         } else if (collection->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Tuple) {
             for (size_t idx = 0; idx < collection->GetTypeAnn()->Cast<TTupleExprType>()->GetSize(); idx++) {
@@ -6476,7 +6523,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (result) { 
+        if (result) {
             output = result;
         } else {
             output = ctx.Expr.Builder(input->Pos()).Callable("Null").Seal().Build();
@@ -7536,7 +7583,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             }
 
             auto udfInfo = ctx.Types.UdfModules.FindPtr(moduleName);
-            TStringBuf fileAlias = udfInfo ? udfInfo->FileAlias : "";
+            TStringBuf fileAlias = udfInfo ? udfInfo->FileAlias : ""_sb;
             auto ret = ctx.Expr.Builder(input->Pos())
                 .Callable("Udf")
                     .Add(0, input->HeadPtr())
@@ -8888,10 +8935,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         TExprNode::TListType applyChildren = input->ChildrenList();
         applyChildren.pop_back(); // Remove position of list argument
 
-        if (input->Head().Type() != TExprNode::Lambda) {
-            if (!EnsureCallableType(input->Head(), ctx.Expr)) {
-                return IGraphTransformer::TStatus::Error;
-            }
+        if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Callable) {
             const TCallableExprType* callableType = input->Head().GetTypeAnn()->Cast<TCallableExprType>();
 
             if (applyChildren.size() < callableType->GetArgumentsSize() + 1 - callableType->GetOptionalArgumentsCount()) {
@@ -8945,11 +8989,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
         else {
             auto lambda = input->HeadPtr();
-            const auto args = lambda->Child(0);
-            if (input->ChildrenSize() - 2 != args->ChildrenSize()) {
-                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "Different arguments count, lambda has "
-                    << args->ChildrenSize() << " arguments, but provided " << (input->ChildrenSize() - 2)));
-                return IGraphTransformer::TStatus::Error;
+            auto status = ConvertToLambda(lambda, ctx.Expr, input->ChildrenSize() - 2);
+            if (status == IGraphTransformer::TStatus::Error) {
+                return status;
             }
 
             output = ctx.Expr.Builder(input->Pos())
@@ -9056,6 +9098,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         if (extractKeyLambda->IsAtom()) {
             TExprNode::TPtr applied;
             if (udf->IsLambda()) {
+                if (udf->Head().ChildrenSize() != 1) {
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(pos), TStringBuilder() << "Expected lambda with one argument, but got: " << udf->Head().ChildrenSize()));
+                    return IGraphTransformer::TStatus::Error;
+                }
+
                 applied = ctx.Expr.Builder(pos)
                     .Apply(udf)
                         .With(0, udfInput)
@@ -9796,11 +9843,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                         TStringBuilder() << "Failed to deduce column order for input - star / qualified star is present in projection"));
                     return IGraphTransformer::TStatus::Error;
                 }
-                childColumnOrder->push_back(ToString(item->Child(1)->Content()));
+                childColumnOrder->AddColumn(ToString(item->Child(1)->Content()));
             }
 
         }
-        YQL_ENSURE(childColumnOrder->size() == numColumns);
+        YQL_ENSURE(childColumnOrder->Size() == numColumns);
 
         output = ctx.Expr.Builder(input->Pos())
             .Callable("AssumeColumnOrder")
@@ -9816,7 +9863,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                                             .Add(0, input->Child(1)->ChildPtr(i))
                                             .Callable(1, "Member")
                                                 .Arg(0, "item")
-                                                .Atom(1, (*childColumnOrder)[i])
+                                                .Atom(1, childColumnOrder->at(i).PhysicalName)
                                             .Seal()
                                         .Seal();
                                 }
@@ -9858,14 +9905,14 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
-        TVector<TString> topLevelColumns;
+        TColumnOrder topLevelColumns;
         auto type = NCommon::ParseOrderAwareTypeFromYson(input->Head().Content(), topLevelColumns, ctx.Expr, ctx.Expr.GetPosition(input->Pos()));
         if (!type) {
             return IGraphTransformer::TStatus::Error;
         }
 
         TExprNodeList items;
-        for (auto& col : topLevelColumns) {
+        for (auto& [col, gen_col] : topLevelColumns) {
             items.push_back(ctx.Expr.NewAtom(input->Pos(), col));
         }
 
@@ -11053,7 +11100,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
             const auto handlerSlot = dataType->GetSlot();
             const auto castResult = GetCastResult(handlerSlot, resultSlot);
-            if (!castResult.Defined() || *castResult == NUdf::ECastOptions::Impossible) {
+            if (*castResult & NUdf::ECastOptions::Impossible) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(node.Pos()),
                     TStringBuilder() << "Cannot cast type of case handler " << handlerSlot << " to the returning type of JSON_VALUE " << resultSlot));
                 return false;
@@ -11848,7 +11895,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         auto resultType = ctx.Expr.MakeType<TOptionalExprType>(dstType);
 
         const auto cast = NUdf::GetCastResult(sSlot, tSlot);
-        if (!cast) {
+        if (*cast & NUdf::ECastOptions::Impossible) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
                 TStringBuilder() << "Unsupported types in rounding: " << *srcType << " " << input->Content() << " to " << *dstType));
             return IGraphTransformer::TStatus::Error;
@@ -12123,6 +12170,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["AssumeUniqueHint"] = &AssumeConstraintWrapper<false>;
         Functions["AssumeDistinctHint"] = &AssumeConstraintWrapper<false>;
         Functions["AssumeChopped"] = &AssumeConstraintWrapper<true>;
+        Functions["AssumeConstraints"] = &AssumeConstraintsWrapper;
         Functions["AssumeAllMembersNullableAtOnce"] = &AssumeAllMembersNullableAtOnceWrapper;
         Functions["AssumeStrict"] = &AssumeStrictWrapper;
         Functions["AssumeNonStrict"] = &AssumeStrictWrapper;
@@ -12316,7 +12364,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["Rank"] = &WinRankWrapper;
         Functions["DenseRank"] = &WinRankWrapper;
         Functions["PercentRank"] = &WinRankWrapper;
-        Functions["CumeDist"] = &WinRowNumberWrapper;
+        Functions["CumeDist"] = &WinCumeDistWrapper;
         Functions["NTile"] = &WinNTileWrapper;
         Functions["Ascending"] = &PresortWrapper;
         Functions["Descending"] = &PresortWrapper;
@@ -12647,6 +12695,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["UnionPositional"] = &UnionAllPositionalWrapper;
         ExtFunctions["SafeCast"] = &CastWrapper<false>;
         ExtFunctions["StrictCast"] = &CastWrapper<true>;
+        ExtFunctions["Version"] = &VersionWrapper;
 
         ExtFunctions["Aggregate"] = &AggregateWrapper;
         ExtFunctions["AggregateCombine"] = &AggregateWrapper;

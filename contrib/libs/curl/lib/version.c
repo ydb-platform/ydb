@@ -74,7 +74,7 @@
 #endif
 
 #ifdef HAVE_ZSTD
-#error #include <zstd.h>
+#include <zstd.h>
 #endif
 
 #ifdef USE_GSASL

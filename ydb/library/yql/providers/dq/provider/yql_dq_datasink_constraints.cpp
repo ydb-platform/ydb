@@ -48,6 +48,7 @@ public:
         AddHandler({TDqReplicate::CallableName()}, Hndl(&TDqDataSinkConstraintTransformer::HandleReplicate));
         AddHandler({
             TDqJoin::CallableName(),
+            TDqPhyGraceJoin::CallableName(),
             TDqPhyMapJoin::CallableName(),
             TDqPhyCrossJoin::CallableName(),
             TDqPhyJoinDict::CallableName(),

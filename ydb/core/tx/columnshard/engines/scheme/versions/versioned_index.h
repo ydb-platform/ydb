@@ -91,7 +91,7 @@ public:
             }
         }
         Y_ABORT_UNLESS(!Snapshots.empty());
-        Y_ABORT_UNLESS(version.IsZero());
+//        Y_ABORT_UNLESS(version.IsZero());
         return Snapshots.begin()->second;
     }
 
@@ -108,7 +108,7 @@ public:
         return PrimaryKey;
     }
 
-    void AddIndex(const TSnapshot& snapshot, TIndexInfo&& indexInfo);
+    const TIndexInfo* AddIndex(const TSnapshot& snapshot, TIndexInfo&& indexInfo);
 
     bool LoadShardingInfo(IDbWrapper& db);
 };

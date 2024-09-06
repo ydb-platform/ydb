@@ -8,6 +8,7 @@ ENDIF()
 
 SRCS(
     logger_ut.cpp
+    static_analysis_ut.cpp
 )
 
 PEERDIR(

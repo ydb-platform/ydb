@@ -2,20 +2,19 @@
 
 #include "common.h"
 
-#include <ydb/core/tx/columnshard/engines/protos/portion_info.pb.h>
-
+#include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
+#include <ydb/core/formats/arrow/splitter/stats.h>
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
-#include <ydb/core/tx/columnshard/splitter/stats.h>
-#include <ydb/core/tx/columnshard/splitter/chunks.h>
+#include <ydb/core/tx/columnshard/engines/protos/portion_info.pb.h>
 #include <ydb/core/tx/columnshard/splitter/chunk_meta.h>
+#include <ydb/core/tx/columnshard/splitter/chunks.h>
 
 #include <ydb/library/accessor/accessor.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/scalar.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
-
+#include <contrib/libs/apache/arrow/cpp/src/arrow/scalar.h>
 #include <util/string/builder.h>
 
 namespace NKikimrColumnShardDataSharingProto {
@@ -31,16 +30,17 @@ struct TChunkMeta: public TSimpleChunkMeta {
 private:
     using TBase = TSimpleChunkMeta;
     TChunkMeta() = default;
-    [[nodiscard]] TConclusionStatus DeserializeFromProto(const TChunkAddress& address, const NKikimrTxColumnShard::TIndexColumnMeta& proto, const TSimpleColumnInfo& columnInfo);
+    [[nodiscard]] TConclusionStatus DeserializeFromProto(
+        const TChunkAddress& address, const NKikimrTxColumnShard::TIndexColumnMeta& proto, const TSimpleColumnInfo& columnInfo);
     friend class TColumnRecord;
+
 public:
     TChunkMeta(TSimpleChunkMeta&& baseMeta)
-        : TBase(baseMeta)
-    {
-
+        : TBase(baseMeta) {
     }
 
-    [[nodiscard]] static TConclusion<TChunkMeta> BuildFromProto(const TChunkAddress& address, const NKikimrTxColumnShard::TIndexColumnMeta& proto, const TSimpleColumnInfo& columnInfo) {
+    [[nodiscard]] static TConclusion<TChunkMeta> BuildFromProto(
+        const TChunkAddress& address, const NKikimrTxColumnShard::TIndexColumnMeta& proto, const TSimpleColumnInfo& columnInfo) {
         TChunkMeta result;
         auto parse = result.DeserializeFromProto(address, proto, columnInfo);
         if (!parse) {
@@ -63,20 +63,19 @@ public:
 
     TChunkMeta(const TColumnChunkLoadContext& context, const TSimpleColumnInfo& columnInfo);
 
-    TChunkMeta(const std::shared_ptr<arrow::Array>& column, const TSimpleColumnInfo& columnInfo);
+    TChunkMeta(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& column, const TSimpleColumnInfo& columnInfo);
 };
 
 class TColumnRecord {
 private:
     TChunkMeta Meta;
     TColumnRecord(TChunkMeta&& meta)
-        : Meta(std::move(meta))
-    {
-
+        : Meta(std::move(meta)) {
     }
 
     TColumnRecord() = default;
     TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TColumnRecord& proto, const TSimpleColumnInfo& columnInfo);
+
 public:
     ui32 ColumnId = 0;
     ui16 Chunk = 0;
@@ -99,9 +98,7 @@ public:
         : Meta(std::move(meta))
         , ColumnId(address.GetColumnId())
         , Chunk(address.GetChunk())
-        , BlobRange(range)
-    {
-
+        , BlobRange(range) {
     }
 
     class TTestInstanceBuilder {
@@ -116,7 +113,7 @@ public:
         }
     };
 
-    ui32 GetColumnId() const { 
+    ui32 GetColumnId() const {
         return ColumnId;
     }
     ui16 GetChunkIdx() const {
@@ -127,7 +124,8 @@ public:
     }
 
     NKikimrColumnShardDataSharingProto::TColumnRecord SerializeToProto() const;
-    static TConclusion<TColumnRecord> BuildFromProto(const NKikimrColumnShardDataSharingProto::TColumnRecord& proto, const TSimpleColumnInfo& columnInfo) {
+    static TConclusion<TColumnRecord> BuildFromProto(
+        const NKikimrColumnShardDataSharingProto::TColumnRecord& proto, const TSimpleColumnInfo& columnInfo) {
         TColumnRecord result;
         auto parse = result.DeserializeFromProto(proto, columnInfo);
         if (!parse) {
@@ -136,14 +134,14 @@ public:
         return result;
     }
 
-    TColumnSerializationStat GetSerializationStat(const std::string& columnName) const {
-        TColumnSerializationStat result(ColumnId, columnName);
+    NArrow::NSplitter::TColumnSerializationStat GetSerializationStat(const std::string& columnName) const {
+        NArrow::NSplitter::TColumnSerializationStat result(ColumnId, columnName);
         result.Merge(GetSerializationStat());
         return result;
     }
 
-    TSimpleSerializationStat GetSerializationStat() const {
-        return TSimpleSerializationStat(BlobRange.Size, Meta.GetNumRows(), Meta.GetRawBytes());
+    NArrow::NSplitter::TSimpleSerializationStat GetSerializationStat() const {
+        return NArrow::NSplitter::TSimpleSerializationStat(BlobRange.Size, Meta.GetNumRows(), Meta.GetRawBytes());
     }
 
     const TChunkMeta& GetMeta() const {
@@ -163,18 +161,17 @@ public:
     }
 
     TString DebugString() const {
-        return TStringBuilder()
-            << "column_id:" << ColumnId << ";"
-            << "chunk_idx:" << Chunk << ";"
-            << "blob_range:" << BlobRange.ToString() << ";"
-            ;
+        return TStringBuilder() << "column_id:" << ColumnId << ";"
+                                << "chunk_idx:" << Chunk << ";"
+                                << "blob_range:" << BlobRange.ToString() << ";";
     }
 
-    TColumnRecord(const TChunkAddress& address, const std::shared_ptr<arrow::Array>& column, const TSimpleColumnInfo& columnInfo);
+    TColumnRecord(
+        const TChunkAddress& address, const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& column, const TSimpleColumnInfo& columnInfo);
 
     TColumnRecord(const TBlobRangeLink16::TLinkId blobLinkId, const TColumnChunkLoadContext& loadContext, const TSimpleColumnInfo& columnInfo);
 
-    friend IOutputStream& operator << (IOutputStream& out, const TColumnRecord& rec) {
+    friend IOutputStream& operator<<(IOutputStream& out, const TColumnRecord& rec) {
         out << '{';
         if (rec.Chunk) {
             out << 'n' << rec.Chunk;
@@ -186,49 +183,4 @@ public:
     }
 };
 
-class TSimpleOrderedColumnChunk: public IPortionColumnChunk {
-private:
-    using TBase = IPortionColumnChunk;
-    const TColumnRecord ColumnRecord;
-    YDB_READONLY_DEF(TString, Data);
-protected:
-    virtual TString DoDebugString() const override {
-        TStringBuilder sb;
-        sb << "column_id=" << GetColumnId() << ";data_size=" << Data.size() << ";";
-        if (GetChunkIdxOptional()) {
-            sb << "chunk=" << GetChunkIdxVerified() << ";";
-        } else {
-            sb << "chunk=NO_INITIALIZED;";
-        }
-        return sb;
-    }
-
-    virtual const TString& DoGetData() const override {
-        return Data;
-    }
-    virtual ui32 DoGetRecordsCountImpl() const override {
-        return ColumnRecord.GetMeta().GetNumRows();
-    }
-    virtual std::vector<std::shared_ptr<IPortionDataChunk>> DoInternalSplitImpl(const TColumnSaver& /*saver*/, const std::shared_ptr<NColumnShard::TSplitterCounters>& /*counters*/,
-                                                                                const std::vector<ui64>& /*splitSizes*/) const override {
-        Y_ABORT_UNLESS(false);
-        return {};
-    }
-    virtual TSimpleChunkMeta DoBuildSimpleChunkMeta() const override {
-        return ColumnRecord.GetMeta();
-    }
-    virtual std::shared_ptr<arrow::Scalar> DoGetFirstScalar() const override {
-        return nullptr;
-    }
-    virtual std::shared_ptr<arrow::Scalar> DoGetLastScalar() const override {
-        return nullptr;
-    }
-public:
-    TSimpleOrderedColumnChunk(const TColumnRecord& cRecord, const TString& data)
-        : TBase(cRecord.ColumnId, cRecord.Chunk)
-        , ColumnRecord(cRecord)
-        , Data(data) {
-    }
-};
-
-}
+}   // namespace NKikimr::NOlap

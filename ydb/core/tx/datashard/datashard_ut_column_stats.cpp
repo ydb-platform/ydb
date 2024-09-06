@@ -1,6 +1,6 @@
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
-#include <ydb/core/util/count_min_sketch.h>
+#include <ydb/library/minsketch/count_min_sketch.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -38,15 +38,15 @@ Y_UNIT_TEST_SUITE(StatisticsScan) {
         ExecSQL(server, sender, FillTableQuery());
 
         ui64 shardId = shards.at(0);
-        auto request = std::make_unique<TEvDataShard::TEvStatisticsScanRequest>();
-        auto* reqTableId = request->Record.MutableTableId();
+        auto request = std::make_unique<NStat::TEvStatistics::TEvStatisticsRequest>();
+        auto* reqTableId = request->Record.MutableTable()->MutablePathId();
         reqTableId->SetOwnerId(tableId.PathId.OwnerId);
-        reqTableId->SetTableId(tableId.PathId.LocalPathId);
+        reqTableId->SetLocalId(tableId.PathId.LocalPathId);
         runtime.SendToPipe(shardId, sender, request.release());
 
-        auto response = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvStatisticsScanResponse>(sender);
+        auto response = runtime.GrabEdgeEventRethrow<NStat::TEvStatistics::TEvStatisticsResponse>(sender);
         auto& record = response->Get()->Record;
-        UNIT_ASSERT(record.GetStatus() == NKikimrTxDataShard::TEvStatisticsScanResponse::SUCCESS);
+        UNIT_ASSERT(record.GetStatus() == NKikimrStat::TEvStatisticsResponse::STATUS_SUCCESS);
         UNIT_ASSERT(record.ColumnsSize() == 2);
 
         for (ui32 i = 0; i < 2; ++i) {

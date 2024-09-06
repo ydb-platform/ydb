@@ -13,7 +13,7 @@ TEST_SRCS(
     test_queue_attributes_validation.py
     test_queues_managing.py
     test_format_without_version.py
-    test_throttling_nonexistent_queue.py
+    test_throttling.py
     test_queue_counters.py
 )
 
@@ -22,14 +22,9 @@ IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
     TAG(ya:fat)
     REQUIREMENTS(
-        cpu:4
         ram:32
     )
 ELSE()
-    REQUIREMENTS(
-        cpu:4
-        ram:32
-    )
     TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()

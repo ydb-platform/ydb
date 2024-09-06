@@ -26,7 +26,7 @@
 
 ## {{ ydb-short-name }} Server {#ydb-server}
 
-{{ ydb-short-name }} Server — сборка для запуска узла [кластера YDB](../concepts/databases.md#cluster).
+{{ ydb-short-name }} Server — сборка для запуска узла [кластера YDB](../concepts/glossary.md#cluster).
 
 {% list tabs %}
 
@@ -40,7 +40,7 @@
 
 - Исходный код
 
-  {% include notitle [docker](_includes/server/source_code.md) %}
+  {% include notitle [source_code](_includes/server/source_code.md) %}
 
 {% endlist %}
 

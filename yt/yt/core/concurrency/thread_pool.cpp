@@ -173,6 +173,11 @@ public:
         TThreadPoolBase::Configure(threadCount);
     }
 
+    void Configure(TDuration pollingPeriod) override
+    {
+        Queue_->Reconfigure(pollingPeriod);
+    }
+
     int GetThreadCount() override
     {
         return TThreadPoolBase::GetThreadCount();
@@ -191,16 +196,9 @@ private:
 
     void DoShutdown() override
     {
-        Queue_->Shutdown();
+        Queue_->Shutdown(/*graceful*/ false);
         TThreadPoolBase::DoShutdown();
-    }
-
-    TClosure MakeFinalizerCallback() override
-    {
-        return BIND_NO_PROPAGATE([queue = Queue_, callback = TThreadPoolBase::MakeFinalizerCallback()] {
-            callback();
-            queue->DrainConsumer();
-        });
+        Queue_->OnConsumerFinished();
     }
 
     TSchedulerThreadPtr SpawnThread(int index) override

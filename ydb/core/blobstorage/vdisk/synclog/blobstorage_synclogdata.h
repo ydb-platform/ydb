@@ -280,7 +280,7 @@ namespace NKikimr {
                 TVector<ui32> &&chunksToDeleteDelayed,
                 ui64 recoveryLogConfirmedLsn);
 
-            void Serialize(const TDeltaToDiskRecLog &delta, bool oldFormat);
+            void Serialize(const TDeltaToDiskRecLog &delta);
             TString GetSerializedData() const { return SerializedData; }
             TEntryPointDbgInfo GetEntryPointDbgInfo() const { return EntryPointDbgInfo; }
 
@@ -292,7 +292,7 @@ namespace NKikimr {
             TString SerializedData;
             TEntryPointDbgInfo EntryPointDbgInfo;
 
-            static TString Serialize(const NKikimrVDiskData::TSyncLogEntryPoint &pb, bool oldFormat);
+            static TString Serialize(const NKikimrVDiskData::TSyncLogEntryPoint &pb);
         };
 
         ////////////////////////////////////////////////////////////////////////////

@@ -118,3 +118,7 @@ class Date(PrimitiveType):
 
 class Time(PrimitiveType):
     pass
+
+
+class Json(PrimitiveType):
+    pass

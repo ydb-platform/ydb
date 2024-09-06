@@ -7,7 +7,7 @@
 $p = (select p_partkey, p_name
 from
     {{part}}
-where FIND(p_name, 'rose') IS NOT NULL);
+where p_name like '%rose%');
 
 $j1 = (select ps_partkey, ps_suppkey, ps_supplycost
 from
@@ -43,7 +43,7 @@ on j.s_nationkey = n.n_nationkey
 $profit = (select 
     n_name as nation,
     DateTime::GetYear(cast(o_orderdate as timestamp)) as o_year,
-    l_extendedprice * (1 - l_discount) - ps_supplycost * l_quantity as amount
+    l_extendedprice * ($z1_12 - l_discount) - ps_supplycost * l_quantity as amount
 from $j5);
 
 select

@@ -23,9 +23,9 @@ struct TEvDeleteSharedBlobs: public NActors::TEventPB<TEvDeleteSharedBlobs, NKik
 struct TEvDeleteSharedBlobsFinished: public NActors::TEventPB<TEvDeleteSharedBlobsFinished,
     NKikimrColumnShardBlobOperationsProto::TEvDeleteSharedBlobsFinished, TEvColumnShard::EvDeleteSharedBlobsFinished> {
     TEvDeleteSharedBlobsFinished() = default;
-    TEvDeleteSharedBlobsFinished(const TTabletId tabletId)
-    {
+    TEvDeleteSharedBlobsFinished(const TTabletId tabletId, const NKikimrColumnShardBlobOperationsProto::TEvDeleteSharedBlobsFinished::EStatus status) {
         Record.SetTabletId((ui64)tabletId);
+        Record.SetStatus(status);
     }
 };
 

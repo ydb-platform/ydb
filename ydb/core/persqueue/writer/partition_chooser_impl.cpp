@@ -13,10 +13,7 @@ NYql::NDecimal::TUint128 Hash(const TString& sourceId) {
 }
 
 ui32 TAsIsSharder::operator()(const TString& sourceId, ui32 totalShards) const {
-    if (!sourceId) {
-        return 0;
-    }
-    return (sourceId.at(0) - 'A') % totalShards;
+    return NKikimr::NDataStreams::V1::ShardFromDecimal(AsInt<NYql::NDecimal::TUint128>(sourceId), totalShards);
 }
 
 ui32 TMd5Sharder::operator()(const TString& sourceId, ui32 totalShards) const {

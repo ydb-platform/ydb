@@ -5,6 +5,7 @@
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/rpc_kqp_base.h>
 #include <ydb/core/grpc_services/audit_dml_operations.h>
+#include <ydb/core/grpc_services/grpc_integrity_trails.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/public/api/protos/ydb_query.pb.h>
 #include <ydb/public/lib/operation_id/operation_id.h>
@@ -58,6 +59,7 @@ std::tuple<Ydb::StatusIds::StatusCode, NYql::TIssues> FillKqpRequest(
 
     kqpRequest.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT);
     kqpRequest.MutableRequest()->SetKeepSession(false);
+    kqpRequest.MutableRequest()->SetPoolId(req.pool_id());
 
     kqpRequest.MutableRequest()->SetCancelAfterMs(GetDuration(req.operation_params().cancel_after()).MilliSeconds());
     kqpRequest.MutableRequest()->SetTimeoutMs(GetDuration(req.operation_params().operation_timeout()).MilliSeconds());
@@ -90,6 +92,7 @@ public:
         }
 
         AuditContextAppend(Request_.get(), request);
+        NDataIntegrity::LogIntegrityTrails(Request_->GetTraceId(), request, TlsActivationContext->AsActorContext());
 
         Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS;
         if (auto scriptRequest = MakeScriptRequest(issues, status)) {
@@ -106,10 +109,12 @@ public:
 
 private:
     STRICT_STFUNC(StateFunc,
-        hFunc(NKqp::TEvKqp::TEvScriptResponse, Handle)
+        HFunc(NKqp::TEvKqp::TEvScriptResponse, Handle)
     )
 
-    void Handle(NKqp::TEvKqp::TEvScriptResponse::TPtr& ev) {
+    void Handle(NKqp::TEvKqp::TEvScriptResponse::TPtr& ev, const TActorContext& ctx) {
+        NDataIntegrity::LogIntegrityTrails(Request_->GetTraceId(), *Request_->GetProtoRequest(), ev, ctx);
+
         Ydb::Operations::Operation operation;
         operation.set_id(ev->Get()->OperationId);
         Ydb::Query::ExecuteScriptMetadata metadata;

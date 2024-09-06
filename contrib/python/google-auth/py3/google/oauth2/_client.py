@@ -39,10 +39,6 @@ _URLENCODED_CONTENT_TYPE = "application/x-www-form-urlencoded"
 _JSON_CONTENT_TYPE = "application/json"
 _JWT_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:jwt-bearer"
 _REFRESH_GRANT_TYPE = "refresh_token"
-_IAM_IDTOKEN_ENDPOINT = (
-    "https://iamcredentials.googleapis.com/v1/"
-    + "projects/-/serviceAccounts/{}:generateIdToken"
-)
 
 
 def _handle_error_response(response_data, retryable_error):
@@ -187,7 +183,11 @@ def _token_endpoint_request_no_throw(
     if headers:
         headers_to_use.update(headers)
 
-    def _perform_request():
+    response_data = {}
+    retryable_error = False
+
+    retries = _exponential_backoff.ExponentialBackoff()
+    for _ in retries:
         response = request(
             method="POST", url=token_uri, headers=headers_to_use, body=body, **kwargs
         )
@@ -196,7 +196,7 @@ def _token_endpoint_request_no_throw(
             if hasattr(response.data, "decode")
             else response.data
         )
-        response_data = ""
+
         try:
             # response_body should be a JSON
             response_data = json.loads(response_body)
@@ -210,18 +210,8 @@ def _token_endpoint_request_no_throw(
             status_code=response.status, response_data=response_data
         )
 
-        return False, response_data, retryable_error
-
-    request_succeeded, response_data, retryable_error = _perform_request()
-
-    if request_succeeded or not retryable_error or not can_retry:
-        return request_succeeded, response_data, retryable_error
-
-    retries = _exponential_backoff.ExponentialBackoff()
-    for _ in retries:
-        request_succeeded, response_data, retryable_error = _perform_request()
-        if request_succeeded or not retryable_error:
-            return request_succeeded, response_data, retryable_error
+        if not can_retry or not retryable_error:
+            return False, response_data, retryable_error
 
     return False, response_data, retryable_error
 
@@ -328,12 +318,15 @@ def jwt_grant(request, token_uri, assertion, can_retry=True):
     return access_token, expiry, response_data
 
 
-def call_iam_generate_id_token_endpoint(request, signer_email, audience, access_token):
+def call_iam_generate_id_token_endpoint(
+    request, iam_id_token_endpoint, signer_email, audience, access_token
+):
     """Call iam.generateIdToken endpoint to get ID token.
 
     Args:
         request (google.auth.transport.Request): A callable used to make
             HTTP requests.
+        iam_id_token_endpoint (str): The IAM ID token endpoint to use.
         signer_email (str): The signer email used to form the IAM
             generateIdToken endpoint.
         audience (str): The audience for the ID token.
@@ -346,7 +339,7 @@ def call_iam_generate_id_token_endpoint(request, signer_email, audience, access_
 
     response_data = _token_endpoint_request(
         request,
-        _IAM_IDTOKEN_ENDPOINT.format(signer_email),
+        iam_id_token_endpoint.format(signer_email),
         body,
         access_token=access_token,
         use_json=True,

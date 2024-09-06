@@ -29,10 +29,14 @@ struct Schema : NIceDb::Schema {
         struct UserAttrsAlterVersion : Column<14, NScheme::NTypeIds::Uint64> {};
         struct ACLVersion :            Column<15, NScheme::NTypeIds::Uint64> {};
         struct ParentOwnerId :         Column<16, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; static constexpr Type Default = InvalidOwnerId; };
+        struct TempDirOwnerActorId :   Column<17, NScheme::NTypeIds::String> {}; // Only for EPathType::EPathTypeDir.
+                                                                                 // Not empty if dir must be deleted after loosing connection with TempDirOwnerActorId actor.
+                                                                                 // See schemeshard__background_cleaning.cpp.
 
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<Id, ParentId, Name, CreateFinished, PathType, StepCreated, CreateTxId,
-            StepDropped, DropTxId, Owner, ACL, LastTxId, DirAlterVersion, UserAttrsAlterVersion, ACLVersion, ParentOwnerId>;
+            StepDropped, DropTxId, Owner, ACL, LastTxId, DirAlterVersion, UserAttrsAlterVersion, ACLVersion,
+            ParentOwnerId, TempDirOwnerActorId>;
     };
 
     struct MigratedPaths : Table<50> {
@@ -52,10 +56,13 @@ struct Schema : NIceDb::Schema {
         struct DirAlterVersion :       Column<14, NScheme::NTypeIds::Uint64> {};
         struct UserAttrsAlterVersion : Column<15, NScheme::NTypeIds::Uint64> {};
         struct ACLVersion :            Column<16, NScheme::NTypeIds::Uint64> {};
+        struct TempDirOwnerActorId :   Column<17, NScheme::NTypeIds::String> {}; // Only for EPathType::EPathTypeDir.
+                                                                                 // Not empty if dir must be deleted after loosing connection with TempDirOwnerActorId actor.
+                                                                                 // See schemeshard__background_cleaning.cpp.
 
         using TKey = TableKey<OwnerPathId, LocalPathId>;
         using TColumns = TableColumns<OwnerPathId, LocalPathId, ParentOwnerId, ParentLocalId, Name, PathType, StepCreated, CreateTxId,
-            StepDropped, DropTxId, Owner, ACL, LastTxId, DirAlterVersion, UserAttrsAlterVersion, ACLVersion>;
+            StepDropped, DropTxId, Owner, ACL, LastTxId, DirAlterVersion, UserAttrsAlterVersion, ACLVersion, TempDirOwnerActorId>;
     };
 
     struct TxInFlight : Table<2> { // not in use
@@ -121,7 +128,8 @@ struct Schema : NIceDb::Schema {
         struct IsBackup : Column<9, NScheme::NTypeIds::Bool> {};
         struct ReplicationConfig : Column<10, NScheme::NTypeIds::String> {};
         struct IsTemporary : Column<11, NScheme::NTypeIds::Bool> {};
-        struct OwnerActorId : Column<12, NScheme::NTypeIds::String> {};
+        struct OwnerActorId : Column<12, NScheme::NTypeIds::String> {}; // deprecated
+        struct IncrementalBackupConfig : Column<13, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<TabId>;
         using TColumns = TableColumns<
@@ -136,7 +144,8 @@ struct Schema : NIceDb::Schema {
             IsBackup,
             ReplicationConfig,
             IsTemporary,
-            OwnerActorId
+            OwnerActorId,
+            IncrementalBackupConfig
         >;
     };
 
@@ -154,7 +163,8 @@ struct Schema : NIceDb::Schema {
         struct IsBackup :            Column<10, NScheme::NTypeIds::Bool> {};
         struct ReplicationConfig :   Column<11, NScheme::NTypeIds::String> {};
         struct IsTemporary :         Column<12, NScheme::NTypeIds::Bool> {};
-        struct OwnerActorId :        Column<13, NScheme::NTypeIds::String> {};
+        struct OwnerActorId :        Column<13, NScheme::NTypeIds::String> {}; // deprecated
+        struct IncrementalBackupConfig :   Column<14, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<OwnerPathId, LocalPathId>;
         using TColumns = TableColumns<
@@ -170,7 +180,8 @@ struct Schema : NIceDb::Schema {
             IsBackup,
             ReplicationConfig,
             IsTemporary,
-            OwnerActorId
+            OwnerActorId,
+            IncrementalBackupConfig
         >;
     };
 
@@ -371,6 +382,8 @@ struct Schema : NIceDb::Schema {
         // Represented by NKikimrTableStats::TStoragePoolsStats.
         struct StoragePoolsStats : Column<33, NScheme::NTypeIds::String> { using Type = TString; };
 
+        struct ByKeyFilterSize : Column<34, NScheme::NTypeIds::Uint64> {};
+
         using TKey = TableKey<TableOwnerId, TableLocalId, PartitionId>;
         using TColumns = TableColumns<
             TableOwnerId,
@@ -405,7 +418,8 @@ struct Schema : NIceDb::Schema {
             SearchHeight,
             FullCompactionTs,
             MemDataSize,
-            StoragePoolsStats
+            StoragePoolsStats,
+            ByKeyFilterSize
         >;
     };
 
@@ -1153,6 +1167,7 @@ struct Schema : NIceDb::Schema {
 
         struct StartTime : Column<14, NScheme::NTypeIds::Uint64> {};
         struct EndTime : Column<15, NScheme::NTypeIds::Uint64> {};
+        struct PeerName : Column<16, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
@@ -1170,7 +1185,8 @@ struct Schema : NIceDb::Schema {
             Kind,
             UserSID,
             StartTime,
-            EndTime
+            EndTime,
+            PeerName
         >;
     };
 
@@ -1405,7 +1421,7 @@ struct Schema : NIceDb::Schema {
         struct Range : Column<4, NScheme::NTypeIds::String> { using Type = NKikimrTx::TKeyRange; };
         struct LastKeyAck : Column<5, NScheme::NTypeIds::String> { using Type = TString; };
 
-        struct Status : Column<6, NScheme::NTypeIds::Uint32> { using Type = NKikimrTxDataShard::TEvBuildIndexProgressResponse::EStatus; };
+        struct Status : Column<6, NScheme::NTypeIds::Uint32> { using Type = NKikimrIndexBuilder::EBuildStatus; };
         struct Message : Column<7, NScheme::NTypeIds::Utf8> {};
         struct UploadStatus : Column<8, NScheme::NTypeIds::Uint32> { using Type = Ydb::StatusIds::StatusCode; };
 
@@ -1473,6 +1489,10 @@ struct Schema : NIceDb::Schema {
         struct State : Column<8, NScheme::NTypeIds::Byte> {};
         struct Issue : Column<9, NScheme::NTypeIds::Utf8> {};
 
+        struct StartTime : Column<11, NScheme::NTypeIds::Uint64> {};
+        struct EndTime : Column<12, NScheme::NTypeIds::Uint64> {};
+        struct PeerName : Column<13, NScheme::NTypeIds::Utf8> {};
+
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
             Id,
@@ -1484,7 +1504,10 @@ struct Schema : NIceDb::Schema {
             Items,
             State,
             Issue,
-            UserSID
+            UserSID,
+            StartTime,
+            EndTime,
+            PeerName
         >;
     };
 
@@ -1784,6 +1807,16 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<ClassName, Identifier, StatusChannel, LogicDescription, Progress, State>;
     };
 
+    struct ResourcePool : Table<110> {
+        struct OwnerPathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
+        struct LocalPathId : Column<2, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
+        struct AlterVersion : Column<3, NScheme::NTypeIds::Uint64> {};
+        struct Properties : Column<4, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<OwnerPathId, LocalPathId>;
+        using TColumns = TableColumns<OwnerPathId, LocalPathId, AlterVersion, Properties>;
+    };
+
     using TTables = SchemaTables<
         Paths,
         TxInFlight,
@@ -1892,7 +1925,8 @@ struct Schema : NIceDb::Schema {
         PersQueueGroupStats,
         BuildColumnOperationSettings,
         View,
-        BackgroundSessions
+        BackgroundSessions,
+        ResourcePool
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

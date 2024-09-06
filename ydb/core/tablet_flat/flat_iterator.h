@@ -282,11 +282,18 @@ public:
             } else if (Stage == EStage::Snap) {
                 if (mode != ENext::Uncommitted) {
                     Ready = Snap();
-                    if (ErasedKeysCache && mode == ENext::Data &&
-                        (Stats.InvisibleRowSkips != SnapInvisibleRowSkips || Stage != EStage::Fill))
-                    {
-                        // Interrupt range when key is not at a head version, or skipped entirely
+                    // Interrupt range when key state might change between iterations
+                    if (ErasedKeysCache && mode == ENext::Data && Stats.UncertainErase) {
                         eraseCache.Flush();
+                    }
+                    // Handle keys that don't exist at current snapshot version
+                    if (Stage == EStage::Turn) {
+                        InitLastKey(ERowOp::Absent);
+                        ++Stats.DeletedRowSkips; /* skip this invisible key */
+                        if (ErasedKeysCache && mode == ENext::Data && !Stats.UncertainErase) {
+                            // Erase cache should treat this key as a cachable erase
+                            eraseCache.OnEraseKey(GetKey().Cells(), TRowVersion::Min());
+                        }
                     }
                 } else {
                     Y_DEBUG_ABORT_UNLESS(Active != Inactive);
@@ -300,7 +307,7 @@ public:
             } else {
                 InitLastKey(ERowOp::Erase);
                 ++Stats.DeletedRowSkips; /* skip internal technical row states w/o data */
-                if (ErasedKeysCache && Stats.InvisibleRowSkips == SnapInvisibleRowSkips) {
+                if (ErasedKeysCache && !Stats.UncertainErase) {
                     // Try to cache erases that are at a head version
                     eraseCache.OnEraseKey(GetKey().Cells(), GetRowVersion());
                 }
@@ -341,6 +348,7 @@ public:
     const TRowScheme* Scheme;
     const TRemap Remap;
     TIntrusivePtr<TKeyRangeCache> ErasedKeysCache;
+    NTable::TTransactionSet DecidedTransactions; // Needed for ErasedKeysCache
     TIteratorStats Stats;
 
 private:
@@ -435,7 +443,6 @@ private:
     TIterators Iterators;
     TForwardIter Active;
     TForwardIter Inactive;
-    ui64 SnapInvisibleRowSkips = 0;
     ui64 DeltaTxId = 0;
     TRowVersion DeltaVersion;
     bool Delta = false;
@@ -609,7 +616,7 @@ inline EReady TTableIterBase<TIteratorOps>::Start() noexcept
     }
 
     Stage = EStage::Snap;
-    SnapInvisibleRowSkips = Stats.InvisibleRowSkips;
+    Stats.UncertainErase = false;
     Inactive = Iterators.end();
     return EReady::Data;
 }
@@ -792,8 +799,6 @@ inline EReady TTableIterBase<TIteratorOps>::Snap() noexcept
             return EReady::Data;
 
         case EReady::Gone:
-            InitLastKey(ERowOp::Absent);
-            ++Stats.DeletedRowSkips;
             Stage = EStage::Turn;
             return EReady::Data;
 
@@ -811,14 +816,14 @@ inline EReady TTableIterBase<TIteratorOps>::Snap(TRowVersion rowVersion) noexcep
         TIteratorId ai = i->IteratorId;
         switch (ai.Type) {
             case EType::Mem: {
-                auto ready = MemIters[ai.Index]->SkipToRowVersion(rowVersion, Stats, CommittedTransactions, TransactionObserver);
+                auto ready = MemIters[ai.Index]->SkipToRowVersion(rowVersion, Stats, CommittedTransactions, TransactionObserver, DecidedTransactions);
                 if (ready) {
                     return EReady::Data;
                 }
                 break;
             }
             case EType::Run: {
-                auto ready = RunIters[ai.Index]->SkipToRowVersion(rowVersion, Stats, CommittedTransactions, TransactionObserver);
+                auto ready = RunIters[ai.Index]->SkipToRowVersion(rowVersion, Stats, CommittedTransactions, TransactionObserver, DecidedTransactions);
                 if (ready == EReady::Data) {
                     return EReady::Data;
                 } else if (ready != EReady::Gone) {

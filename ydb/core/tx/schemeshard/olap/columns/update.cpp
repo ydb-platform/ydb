@@ -71,10 +71,22 @@ namespace NKikimr::NSchemeShard {
                 return false;
             }
         }
-        const auto arrowTypeStatus = NArrow::GetArrowType(Type).status();
+        auto arrowTypeResult = NArrow::GetArrowType(Type);
+        const auto arrowTypeStatus = arrowTypeResult.status();
         if (!arrowTypeStatus.ok()) {
             errors.AddError(TStringBuilder() << "Column '" << Name << "': " << arrowTypeStatus.ToString());
             return false;
+        }
+        if (columnSchema.HasDefaultValue()) {
+            auto conclusion = DefaultValue.DeserializeFromProto(columnSchema.GetDefaultValue());
+            if (conclusion.IsFail()) {
+                errors.AddError(conclusion.GetErrorMessage());
+                return false;
+            }
+            if (!DefaultValue.IsCompatibleType(*arrowTypeResult)) {
+                errors.AddError("incompatible types for default write: def" + DefaultValue.DebugString() + ", col:" + (*arrowTypeResult)->ToString());
+                return false;
+            }
         }
         return true;
     }
@@ -93,6 +105,11 @@ namespace NKikimr::NSchemeShard {
                 columnSchema.GetTypeId(), nullptr)
                 .TypeInfo;
         }
+        auto arrowType = NArrow::TStatusValidator::GetValid(NArrow::GetArrowType(Type));
+        if (columnSchema.HasDefaultValue()) {
+            DefaultValue.DeserializeFromProto(columnSchema.GetDefaultValue()).Validate();
+            AFL_VERIFY(DefaultValue.IsCompatibleType(arrowType));
+        }
         if (columnSchema.HasSerializer()) {
             NArrow::NSerialization::TSerializerContainer serializer;
             AFL_VERIFY(serializer.DeserializeFromProto(columnSchema.GetSerializer()));
@@ -102,12 +119,21 @@ namespace NKikimr::NSchemeShard {
             serializer.DeserializeFromProto(columnSchema.GetCompression()).Validate();
             Serializer = serializer;
         }
+        if (columnSchema.HasDataAccessorConstructor()) {
+            NArrow::NAccessor::TConstructorContainer container;
+            AFL_VERIFY(container.DeserializeFromProto(columnSchema.GetDataAccessorConstructor()));
+            AccessorConstructor = container;
+        }
         if (columnSchema.HasDictionaryEncoding()) {
             auto settings = NArrow::NDictionary::TEncodingSettings::BuildFromProto(columnSchema.GetDictionaryEncoding());
             Y_ABORT_UNLESS(settings.IsSuccess());
             DictionaryEncoding = *settings;
         }
-        NotNullFlag = columnSchema.GetNotNull();
+        if (columnSchema.HasNotNull()) {
+            NotNullFlag = columnSchema.GetNotNull();
+        } else {
+            NotNullFlag = false;
+        }
     }
 
     void TOlapColumnAdd::Serialize(NKikimrSchemeOp::TOlapColumnDescription& columnSchema) const {
@@ -115,8 +141,12 @@ namespace NKikimr::NSchemeShard {
         columnSchema.SetType(TypeName);
         columnSchema.SetNotNull(NotNullFlag);
         columnSchema.SetStorageId(StorageId);
+        *columnSchema.MutableDefaultValue() = DefaultValue.SerializeToProto();
         if (Serializer) {
             Serializer->SerializeToProto(*columnSchema.MutableSerializer());
+        }
+        if (AccessorConstructor) {
+            *columnSchema.MutableDataAccessorConstructor() = AccessorConstructor.SerializeToProto();
         }
         if (DictionaryEncoding) {
             *columnSchema.MutableDictionaryEncoding() = DictionaryEncoding->SerializeToProto();
@@ -131,6 +161,21 @@ namespace NKikimr::NSchemeShard {
 
     bool TOlapColumnAdd::ApplyDiff(const TOlapColumnDiff& diffColumn, IErrorCollector& errors) {
         Y_ABORT_UNLESS(GetName() == diffColumn.GetName());
+        if (diffColumn.GetDefaultValue()) {
+            auto conclusion = DefaultValue.ParseFromString(*diffColumn.GetDefaultValue(), Type);
+            if (conclusion.IsFail()) {
+                errors.AddError(conclusion.GetErrorMessage());
+                return false;
+            }
+        }
+        if (!!diffColumn.GetAccessorConstructor()) {
+            auto conclusion = diffColumn.GetAccessorConstructor()->BuildConstructor();
+            if (conclusion.IsFail()) {
+                errors.AddError(conclusion.GetErrorMessage());
+                return false;
+            }
+            AccessorConstructor = conclusion.DetachResult();
+        }
         if (diffColumn.GetStorageId()) {
             StorageId = *diffColumn.GetStorageId();
         }

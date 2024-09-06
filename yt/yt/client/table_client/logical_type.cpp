@@ -99,7 +99,7 @@ const T& VerifiedCast(const F& from)
 
 TLogicalType::TLogicalType(ELogicalMetatype type)
     : Metatype_(type)
-{}
+{ }
 
 const TSimpleLogicalType& TLogicalType::AsSimpleTypeRef() const
 {
@@ -286,6 +286,12 @@ TString ToString(const TLogicalType& logicalType)
     YT_ABORT();
 }
 
+void FormatValue(TStringBuilderBase* builder, const TLogicalType& logicalType, TStringBuf spec)
+{
+    // TODO(arkady-e1ppa): Optimize and express ToString using this.
+    FormatValue(builder, ToString(logicalType), spec);
+}
+
 void PrintTo(ELogicalMetatype metatype, std::ostream* os)
 {
     *os << ToString(metatype);
@@ -368,7 +374,7 @@ std::optional<ESimpleLogicalValueType> TOptionalLogicalType::Simplify() const
 size_t TOptionalLogicalType::GetMemoryUsage() const
 {
     if (Element_->GetMetatype() == ELogicalMetatype::Simple) {
-        // All optionals of simple logical types are signletons and therefore we assume they use no space.
+        // All optionals of simple logical types are singletons and therefore we assume they use no space.
         return 0;
     } else {
         return sizeof(*this) + Element_->GetMemoryUsage();
@@ -401,7 +407,7 @@ TSimpleLogicalType::TSimpleLogicalType(ESimpleLogicalValueType element)
 
 size_t TSimpleLogicalType::GetMemoryUsage() const
 {
-    // All simple logical types are signletons and therefore we assume they use no space.
+    // All simple logical types are singletons and therefore we assume they use no space.
     return 0;
 }
 
@@ -2189,8 +2195,7 @@ size_t THash<NYT::NTableClient::TLogicalType>::operator()(const NYT::NTableClien
             return CombineHashes(
                 CombineHashes(
                     static_cast<size_t>(logicalType.AsDecimalTypeRef().GetPrecision()),
-                    static_cast<size_t>(logicalType.AsDecimalTypeRef().GetScale())
-                ),
+                    static_cast<size_t>(logicalType.AsDecimalTypeRef().GetScale())),
                 typeHash);
         case ELogicalMetatype::Optional:
             return CombineHashes((*this)(*logicalType.AsOptionalTypeRef().GetElement()), typeHash);
@@ -2208,15 +2213,13 @@ size_t THash<NYT::NTableClient::TLogicalType>::operator()(const NYT::NTableClien
             return CombineHashes(
                 CombineHashes(
                     (*this)(*logicalType.AsDictTypeRef().GetKey()),
-                    (*this)(*logicalType.AsDictTypeRef().GetValue())
-                ),
+                    (*this)(*logicalType.AsDictTypeRef().GetValue())),
                 typeHash);
         case ELogicalMetatype::Tagged:
             return CombineHashes(
                 CombineHashes(
                     THash<TString>()(logicalType.AsTaggedTypeRef().GetTag()),
-                    (*this)(*logicalType.AsTaggedTypeRef().GetElement())
-                ),
+                    (*this)(*logicalType.AsTaggedTypeRef().GetElement())),
                 typeHash);
     }
     YT_ABORT();

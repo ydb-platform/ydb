@@ -18,6 +18,33 @@ private:
     bool IsSameFieldsSequence(const std::vector<std::shared_ptr<arrow::Field>>& f1, const std::vector<std::shared_ptr<arrow::Field>>& f2);
 
 public:
+
+    class TRecordGuard {
+    private:
+        const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& Builders;
+        ui32 ColumnIdx = 0;
+    public:
+        TRecordGuard(std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders)
+            : Builders(builders)
+        {
+
+        }
+
+        ~TRecordGuard() {
+            AFL_VERIFY(ColumnIdx == Builders.size());
+        }
+
+        void Add(const arrow::Array& arr, const ui32 position, ui64* recordSize = nullptr) {
+            AFL_VERIFY(ColumnIdx < Builders.size());
+            AFL_VERIFY(NArrow::Append(*Builders[ColumnIdx], arr, position, recordSize));
+            AFL_VERIFY(++ColumnIdx <= Builders.size());
+        }
+    };
+
+    TRecordGuard StartRecord() {
+        return TRecordGuard(Builders);
+    }
+
     ui32 GetBuildersCount() const {
         return Builders.size();
     }

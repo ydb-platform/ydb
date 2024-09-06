@@ -11,7 +11,86 @@ namespace NKikimr {
         struct TProxyStat;
     };
 
-    using TBlobIdQueue = std::deque<TLogoBlobID>;
+    struct TBlobIdQueue {
+        std::deque<TLogoBlobID> Queue;
+        ui64 WorkUnits = 0;
+
+        void Push(const TLogoBlobID& id) {
+            WorkUnits += id.BlobSize();
+            Queue.push_back(id);
+        }
+
+        void PopFront() {
+            WorkUnits -= Queue.front().BlobSize();
+            Queue.pop_front();
+        }
+
+        bool IsEmpty() const {
+            return Queue.empty();
+        }
+
+        TLogoBlobID Front() const {
+            return Queue.front();
+        }
+
+        size_t GetNumItems() const {
+            return Queue.size();
+        }
+
+        ui64 GetNumWorkUnits() const {
+            return WorkUnits;
+        }
+
+        void Sort() {
+            if (!std::is_sorted(Queue.begin(), Queue.end())) {
+                std::sort(Queue.begin(), Queue.end());
+            }
+        }
+    };
+
+    struct TMilestoneQueue {
+        bool Valid = false;
+        std::deque<std::tuple<TLogoBlobID, ui64, ui64>> Items; // id, items, units
+
+        void PopIfNeeded(const TLogoBlobID& id) {
+            while (Valid && !Items.empty() && std::get<0>(Items.front()) <= id) {
+                Items.pop_front();
+            }
+        }
+
+        bool Match(const TLogoBlobID& id, ui64 *totalItems, ui64 *totalUnits) {
+            if (Valid && !Items.empty() && std::get<0>(Items.front()) <= id) {
+                *totalItems += std::get<1>(Items.front());
+                *totalUnits += std::get<2>(Items.front());
+                return true;
+            }
+            return false;
+        }
+
+        void Push(const TLogoBlobID& id, ui64 units) {
+            if (!Valid) {
+                Y_DEBUG_ABORT_UNLESS(Items.empty() || std::get<0>(Items.back()) < id);
+                if (Items.empty() || std::get<1>(Items.back()) == 1000) {
+                    Items.emplace_back(id, 0, 0);
+                }
+                ++std::get<1>(Items.back());
+                std::get<2>(Items.back()) += units;
+            }
+        }
+
+        void Finish() {
+            if (!std::exchange(Valid, true)) {
+                ui64 totalItems = 0;
+                ui64 totalUnits = 0;
+                for (auto it = Items.rbegin(); it != Items.rend(); ++it) {
+                    auto& [id, items, units] = *it;
+                    items = totalItems += items;
+                    units = totalUnits += units;
+                }
+            }
+        }
+    };
+
     using TBlobIdQueuePtr = std::shared_ptr<TBlobIdQueue>;
 
     struct TUnreplicatedBlobRecord { // for monitoring purposes
@@ -86,13 +165,16 @@ namespace NKikimr {
             std::unique_ptr<NRepl::TProxyStat> ProxyStat;
 
             TUnreplicatedBlobRecords UnreplicatedBlobRecords;
+            TMilestoneQueue MilestoneQueue;
 
-            void Finish(const TLogoBlobID &keyPos, bool eof, bool dropDonor, TUnreplicatedBlobRecords&& ubr) {
+            void Finish(const TLogoBlobID &keyPos, bool eof, bool dropDonor, TUnreplicatedBlobRecords&& ubr,
+                    TMilestoneQueue&& milestoneQueue) {
                 End = TAppData::TimeProvider->Now();
                 KeyPos = keyPos;
                 Eof = eof;
                 DropDonor = dropDonor;
                 UnreplicatedBlobRecords = std::move(ubr);
+                MilestoneQueue = std::move(milestoneQueue);
             }
 
             TString ToString() const;

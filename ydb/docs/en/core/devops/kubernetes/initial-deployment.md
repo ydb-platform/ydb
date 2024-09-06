@@ -49,7 +49,7 @@ Skip this section if you have already configured a suitable {{ k8s }} cluster.
 
 ## Overview of {{ ydb-short-name }} Helm chart
 
-The Helm chart installs [YDB Kubernetes Operator](https://github.com/ydb-platform/ydb-kubernetes-operator) to the {{ k8s }} cluster. It is a controller that follows the [Operator](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/) design pattern. It implements the logic required for deploying and managing {{ ydb-short-name }} components. 
+The Helm chart installs [YDB Kubernetes Operator](https://github.com/ydb-platform/ydb-kubernetes-operator) to the {{ k8s }} cluster. It is a controller that follows the [Operator](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/) design pattern. It implements the logic required for deploying and managing {{ ydb-short-name }} components.
 
 A {{ ydb-short-name }} cluster consists of two kinds of nodes:
 
@@ -113,25 +113,23 @@ See the operator's source code [on GitHub](https://github.com/ydb-platform/ydb-k
 
 Use `helm` to deploy the {{ ydb-short-name }} {{ k8s }} operator to the cluster:
 
-  Run the command:
+```bash
+helm install ydb-operator ydb/ydb-operator
+```
 
-  ```bash
-  helm install ydb-operator ydb/ydb-operator
-  ```
+* `ydb-operator`: The installation name.
+* `ydb/ydb-operator`: The name of the chart in the repository you have added earlier.
 
-  * `ydb-operator`: The installation name.
-  * `ydb/ydb-operator`: The name of the chart in the repository you have added earlier.
+Result:
 
-  Result:
-
-  ```text
-  NAME: ydb-operator
-  LAST DEPLOYED: Thu Aug 12 19:32:28 2021
-  NAMESPACE: default
-  STATUS: deployed
-  REVISION: 1
-  TEST SUITE: None
-  ```
+```text
+NAME: ydb-operator
+LAST DEPLOYED: Thu Aug 12 19:32:28 2021
+NAMESPACE: default
+STATUS: deployed
+REVISION: 1
+TEST SUITE: None
+```
 
 ### Deploy storage nodes
 
@@ -282,7 +280,7 @@ Check how {{ ydb-short-name }} works:
 
 After you have tested that the created {{ ydb-short-name }} cluster operates fine you can continue using it as you see fit. For example, if you just want to continue experimenting, you can use it to follow the [YQL tutorial](../../dev/yql-tutorial/index.md).
 
-Below are a few more things to consider. 
+Below are a few more things to consider.
 
 ### Monitoring
 

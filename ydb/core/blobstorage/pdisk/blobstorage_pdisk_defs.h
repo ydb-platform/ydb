@@ -37,8 +37,6 @@ namespace NKikimr {
         enum class EPDiskMetadataOutcome {
             OK, // metadata was successfully read/written
             ERROR, // I/O, locking or some other kind of error has occured
-            UNFORMATTED, // pdisk is not formatted properly
-            METADATA_UNSUPPORTED, // metadata record is unsupported in this PDisk format
             NO_METADATA, // no metadata record available
         };
 

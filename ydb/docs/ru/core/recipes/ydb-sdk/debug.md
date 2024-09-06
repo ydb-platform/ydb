@@ -1,8 +1,3 @@
----
-title: "Инструкция по диагностике проблем, связанных с {{ ydb-short-name }}"
-description: "В разделе содержатся рецепты кода с подключением средств диагностики в разных {{ ydb-short-name }} SDK."
----
-
 # Диагностика проблем
 
 {% include [work in progress message](_includes/addition.md) %}

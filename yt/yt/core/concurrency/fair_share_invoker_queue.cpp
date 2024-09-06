@@ -54,24 +54,17 @@ const IInvokerPtr& TFairShareInvokerQueue::GetInvoker(int bucketIndex, int queue
     return bucket.Invokers[queueIndex];
 }
 
-void TFairShareInvokerQueue::Shutdown()
+void TFairShareInvokerQueue::Shutdown(bool graceful)
 {
     for (auto& bucket : Buckets_) {
-        bucket.Queue->Shutdown();
+        bucket.Queue->Shutdown(graceful);
     }
 }
 
-void TFairShareInvokerQueue::DrainProducer()
+void TFairShareInvokerQueue::OnConsumerFinished()
 {
     for (auto& bucket : Buckets_) {
-        bucket.Queue->DrainProducer();
-    }
-}
-
-void TFairShareInvokerQueue::DrainConsumer()
-{
-    for (auto& bucket : Buckets_) {
-        bucket.Queue->DrainConsumer();
+        bucket.Queue->OnConsumerFinished();
     }
 }
 

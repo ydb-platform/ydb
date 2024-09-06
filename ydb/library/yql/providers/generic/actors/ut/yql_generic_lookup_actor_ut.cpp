@@ -17,29 +17,34 @@
 
 using namespace NYql::NConnector;
 using namespace NYql::NConnector::NTest;
-using namespace NYql;
 using namespace NActors;
 
 Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
 
-    //Simple actor to call IDqAsyncLookupSource::AsyncLookup from an actor system's thread
+    NYql::NUdf::TUnboxedValue CreateStructValue(NKikimr::NMiniKQL::THolderFactory& holderFactory, std::initializer_list<ui64> members) {
+        NYql::NUdf::TUnboxedValue* items;
+        NYql::NUdf::TUnboxedValue result = holderFactory.CreateDirectArrayHolder(members.size(), items);
+        for (size_t i = 0; i != members.size(); ++i) {
+            items[i] = NYql::NUdf::TUnboxedValuePod{*(members.begin() + i)};
+        }
+        return result;
+    }
+
+    // Simple actor to call IDqAsyncLookupSource::AsyncLookup from an actor system's thread
     class TCallLookupActor: public TActorBootstrapped<TCallLookupActor> {
     public:
         TCallLookupActor(
             std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
             NYql::NDq::IDqAsyncLookupSource* lookupSource,
-            NKikimr::NMiniKQL::TUnboxedValueVector&& keysToLookUp)
+            NYql::NDq::IDqAsyncLookupSource::TUnboxedValueMap&& request)
             : Alloc(alloc)
             , LookupSource(lookupSource)
-            , KeysToLookUp(std::move(keysToLookUp))
+            , Request(std::move(request))
         {
         }
 
         void Bootstrap() {
-            LookupSource->AsyncLookup(std::move(KeysToLookUp));
-            auto guard = Guard(*Alloc);
-            KeysToLookUp.clear();
-            KeysToLookUp.shrink_to_fit();
+            LookupSource->AsyncLookup(std::move(Request));
         }
 
     private:
@@ -48,7 +53,7 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
     private:
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
         NYql::NDq::IDqAsyncLookupSource* LookupSource;
-        NKikimr::NMiniKQL::TUnboxedValueVector KeysToLookUp;
+        NYql::NDq::IDqAsyncLookupSource::TUnboxedValueMap Request;
     };
 
     Y_UNIT_TEST(Lookup) {
@@ -95,8 +100,8 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
                         .Disjunction()
                             .Operand()
                                 .Conjunction()
-                                    .Operand().Equal().Column("id").Value<ui64>(0).Done().Done()
-                                    .Operand().Equal().Column("optional_id").OptionalValue<ui64>(100).Done().Done()
+                                    .Operand().Equal().Column("id").Value<ui64>(2).Done().Done()
+                                    .Operand().Equal().Column("optional_id").OptionalValue<ui64>(102).Done().Done()
                                     .Done()
                                 .Done()
                             .Operand()
@@ -107,8 +112,8 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
                                 .Done()
                             .Operand()
                                 .Conjunction()
-                                    .Operand().Equal().Column("id").Value<ui64>(2).Done().Done()
-                                    .Operand().Equal().Column("optional_id").OptionalValue<ui64>(102).Done().Done()
+                                    .Operand().Equal().Column("id").Value<ui64>(0).Done().Done()
+                                    .Operand().Equal().Column("optional_id").OptionalValue<ui64>(100).Done().Done()
                                     .Done()
                                 .Done()
                             .Done()
@@ -130,7 +135,7 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
                 .AddResponse(
                     MakeRecordBatch(
                         MakeArray<arrow::UInt64Builder, uint64_t>("id", {0, 1, 2}, arrow::uint64()),
-                        MakeArray<arrow::UInt64Builder, uint64_t>("optional_id", {100, 101, 103}, arrow::uint64()), //the last value is intentially wrong
+                        MakeArray<arrow::UInt64Builder, uint64_t>("optional_id", {100, 101, 103}, arrow::uint64()), // the last value is intentially wrong
                         MakeArray<arrow::StringBuilder, std::string>("string_value", {"a", "b", "c"}, arrow::utf8())
                     ),
                     NewSuccess()
@@ -148,18 +153,20 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
         Y_ABORT_UNLESS(packedLookupSource.PackFrom(lookupSourceSettings));
 
         NKikimr::NMiniKQL::TStructTypeBuilder keyTypeBuilder{typeEnv};
-        keyTypeBuilder.Add("id", typeBuilder.NewDataType(NUdf::EDataSlot::Uint64, false));
-        keyTypeBuilder.Add("optional_id", typeBuilder.NewDataType(NUdf::EDataSlot::Uint64, true));
+        keyTypeBuilder.Add("id", typeBuilder.NewDataType(NYql::NUdf::EDataSlot::Uint64, false));
+        keyTypeBuilder.Add("optional_id", typeBuilder.NewDataType(NYql::NUdf::EDataSlot::Uint64, true));
         NKikimr::NMiniKQL::TStructTypeBuilder outputypeBuilder{typeEnv};
-        outputypeBuilder.Add("string_value", typeBuilder.NewDataType(NUdf::EDataSlot::String, true));
+        outputypeBuilder.Add("string_value", typeBuilder.NewDataType(NYql::NUdf::EDataSlot::String, true));
 
         auto guard = Guard(*alloc.get());
+        auto keyTypeHelper = std::make_shared<NYql::NDq::IDqAsyncLookupSource::TKeyTypeHelper>(keyTypeBuilder.Build());
 
         auto [lookupSource, actor] = NYql::NDq::CreateGenericLookupActor(
             connectorMock,
-            std::make_shared<NTestCreds::TSecuredServiceAccountCredentialsFactory>(),
+            std::make_shared<NYql::NTestCreds::TSecuredServiceAccountCredentialsFactory>(),
             edge,
             alloc,
+            keyTypeHelper,
             std::move(lookupSourceSettings),
             keyTypeBuilder.Build(),
             outputypeBuilder.Build(),
@@ -168,46 +175,42 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
             1'000'000);
         runtime.Register(actor);
 
-        NKikimr::NMiniKQL::TUnboxedValueVector keys;
+        NYql::NDq::IDqAsyncLookupSource::TUnboxedValueMap request(3, keyTypeHelper->GetValueHash(), keyTypeHelper->GetValueEqual());
         for (size_t i = 0; i != 3; ++i) {
-            NUdf::TUnboxedValue* keyItems;
+            NYql::NUdf::TUnboxedValue* keyItems;
             auto key = holderFactory.CreateDirectArrayHolder(2, keyItems);
-            keyItems[0] = NUdf::TUnboxedValuePod(ui64(i));
-            keyItems[1] = NUdf::TUnboxedValuePod(ui64(100 + i));
-            keys.push_back(std::move(key));
+            keyItems[0] = NYql::NUdf::TUnboxedValuePod(ui64(i));
+            keyItems[1] = NYql::NUdf::TUnboxedValuePod(ui64(100 + i));
+            request.emplace(std::move(key), NYql::NUdf::TUnboxedValue{});
         }
 
-        guard.Release(); //let actors use alloc
+        guard.Release(); // let actors use alloc
 
-        auto callLookupActor = new TCallLookupActor(alloc, lookupSource, std::move(keys));
+        auto callLookupActor = new TCallLookupActor(alloc, lookupSource, std::move(request));
         runtime.Register(callLookupActor);
 
         auto ev = runtime.GrabEdgeEventRethrow<NYql::NDq::IDqAsyncLookupSource::TEvLookupResult>(edge);
         auto guard2 = Guard(*alloc.get());
-        NKikimr::NMiniKQL::TKeyPayloadPairVector lookupResult = std::move(ev->Get()->Data);
+        auto lookupResult = std::move(ev->Get()->Result);
 
         UNIT_ASSERT_EQUAL(3, lookupResult.size());
         {
-            auto& [k, v] = lookupResult[0];
-            UNIT_ASSERT_EQUAL(0, k.GetElement(0).Get<ui64>());
-            UNIT_ASSERT_EQUAL(100, k.GetElement(1).Get<ui64>());
-            NUdf::TUnboxedValue val = v.GetElement(0);
+            const auto* v = lookupResult.FindPtr(CreateStructValue(holderFactory, {0, 100}));
+            UNIT_ASSERT(v);
+            NYql::NUdf::TUnboxedValue val = v->GetElement(0);
             UNIT_ASSERT(val.AsStringRef() == TStringBuf("a"));
         }
         {
-            auto& [k, v] = lookupResult[1];
-            UNIT_ASSERT_EQUAL(1, k.GetElement(0).Get<ui64>());
-            UNIT_ASSERT_EQUAL(101, k.GetElement(1).Get<ui64>());
-            NUdf::TUnboxedValue val = v.GetElement(0);
+            const auto* v = lookupResult.FindPtr(CreateStructValue(holderFactory, {1, 101}));
+            UNIT_ASSERT(v);
+            NYql::NUdf::TUnboxedValue val = v->GetElement(0);
             UNIT_ASSERT(val.AsStringRef() == TStringBuf("b"));
         }
         {
-            auto& [k, v] = lookupResult[2];
-            UNIT_ASSERT_EQUAL(2, k.GetElement(0).Get<ui64>());
-            UNIT_ASSERT_EQUAL(102, k.GetElement(1).Get<ui64>());
-            //this key was not found and reported as empty
-            UNIT_ASSERT(!v);
+            const auto* v = lookupResult.FindPtr(CreateStructValue(holderFactory, {2, 102}));
+            UNIT_ASSERT(v);
+            UNIT_ASSERT(!*v);
         }
     }
 
-} //Y_UNIT_TEST_SUITE(GenericProviderLookupActor)
+} // Y_UNIT_TEST_SUITE(GenericProviderLookupActor)

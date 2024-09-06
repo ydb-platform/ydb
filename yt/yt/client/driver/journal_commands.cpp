@@ -305,18 +305,17 @@ void TWriteJournalCommand::DoExecute(ICommandContextPtr context)
 
     struct TWriteBufferTag { };
 
-    auto buffer = TSharedMutableRef::Allocate<TWriteBufferTag>(context->GetConfig()->WriteBufferSize, {.InitializeStorage = false});
-
     auto input = context->Request().InputStream;
 
     while (true) {
-        auto bytesRead = WaitFor(input->Read(buffer))
+        auto data = WaitFor(input->Read())
             .ValueOrThrow();
 
-        if (bytesRead == 0)
+        if (!data) {
             break;
+        }
 
-        parser->Read(TStringBuf(buffer.Begin(), bytesRead));
+        parser->Read(TStringBuf(data.Begin(), data.Size()));
     }
 
     parser->Finish();

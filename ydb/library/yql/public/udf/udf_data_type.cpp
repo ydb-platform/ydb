@@ -23,52 +23,55 @@ ui8 GetDecimalWidth(EDataTypeFeatures features, size_t size) {
 #define LD {ECastOptions::MayLoseData}
 #define FL {ECastOptions::MayFail | ECastOptions::MayLoseData}
 #define NO {ECastOptions::Impossible}
-#define UN {}
+#define UN {ECastOptions::Impossible | ECastOptions::Undefined}
 
 static const std::array<std::array<std::optional<TCastResultOptions>, DataSlotCount>, DataSlotCount> CastResultsTable = {{
     // Bool, Int8 ----integrals---- Uint64   Floats, Strings, YJsons, Uuid, DateTimes, Interval, TzDateTimes, Decimal, DyNumber, JsonDocument
-    {{ OK,  OK, OK, OK, OK, OK, OK, OK, OK,  OK, OK,  OK, OK,  NO, NO,  NO,  NO, NO, NO,  NO,  NO, NO, NO,  NO, NO, NO }}, // Bool
+    {{ OK,  OK, OK, OK, OK, OK, OK, OK, OK,  OK, OK,  OK, OK,  NO, NO,  NO,  NO, NO, NO,  NO,  NO, NO, NO,  NO, NO, NO,  NO, NO, NO,  NO,  NO, NO, NO }}, // Bool
 
-    {{ LD,  OK, MF, OK, MF, OK, MF, OK, MF,  OK, OK,  OK, OK,  NO, NO,  NO,  MF, MF, MF,  OK,  MF, MF, MF,  UN, NO, NO, OK, OK, OK, OK }}, // Int8
-    {{ LD,  MF, OK, OK, OK, OK, OK, OK, OK,  OK, OK,  OK, OK,  NO, NO,  NO,  OK, OK, OK,  OK,  OK, OK, OK,  UN, NO, NO, OK, OK, OK, OK }}, // Uint8
-    {{ LD,  MF, MF, OK, MF, OK, MF, OK, MF,  OK, OK,  OK, OK,  NO, NO,  NO,  MF, MF, MF,  OK,  MF, MF, MF,  UN, NO, NO, OK, OK, OK, OK }}, // Int16
-    {{ LD,  MF, MF, MF, OK, OK, OK, OK, OK,  OK, OK,  OK, OK,  NO, NO,  NO,  MF, OK, OK,  OK,  MF, OK, OK,  UN, NO, NO, OK, OK, OK, OK }}, // Uint16
-    {{ LD,  MF, MF, MF, MF, OK, MF, OK, MF,  OK, LD,  OK, OK,  NO, NO,  NO,  MF, MF, MF,  OK,  MF, MF, MF,  UN, NO, NO, MF, OK, OK, OK }}, // Int32
-    {{ LD,  MF, MF, MF, MF, MF, OK, OK, OK,  OK, LD,  OK, OK,  NO, NO,  NO,  MF, MF, OK,  OK,  MF, MF, OK,  UN, NO, NO, MF, OK, OK, OK }}, // Uint32
-    {{ LD,  MF, MF, MF, MF, MF, MF, OK, MF,  LD, LD,  OK, OK,  NO, NO,  NO,  MF, MF, MF,  MF,  MF, MF, MF,  UN, NO, NO, MF, MF, MF, MF }}, // Int64
-    {{ LD,  MF, MF, MF, MF, MF, MF, MF, OK,  LD, LD,  OK, OK,  NO, NO,  NO,  MF, MF, MF,  MF,  MF, MF, MF,  UN, NO, NO, MF, MF, MF, MF }}, // Uint64
+    {{ LD,  OK, MF, OK, MF, OK, MF, OK, MF,  OK, OK,  OK, OK,  NO, NO,  NO,  MF, MF, MF,  OK,  MF, MF, MF,  UN, NO, NO,  OK, OK, OK,  OK,  NO, NO, NO }}, // Int8
+    {{ LD,  MF, OK, OK, OK, OK, OK, OK, OK,  OK, OK,  OK, OK,  NO, NO,  NO,  OK, OK, OK,  OK,  OK, OK, OK,  UN, NO, NO,  OK, OK, OK,  OK,  NO, NO, NO }}, // Uint8
+    {{ LD,  MF, MF, OK, MF, OK, MF, OK, MF,  OK, OK,  OK, OK,  NO, NO,  NO,  MF, MF, MF,  OK,  MF, MF, MF,  UN, NO, NO,  OK, OK, OK,  OK,  NO, NO, NO }}, // Int16
+    {{ LD,  MF, MF, MF, OK, OK, OK, OK, OK,  OK, OK,  OK, OK,  NO, NO,  NO,  MF, OK, OK,  OK,  MF, OK, OK,  UN, NO, NO,  OK, OK, OK,  OK,  NO, NO, NO }}, // Uint16
+    {{ LD,  MF, MF, MF, MF, OK, MF, OK, MF,  OK, LD,  OK, OK,  NO, NO,  NO,  MF, MF, MF,  OK,  MF, MF, MF,  UN, NO, NO,  MF, OK, OK,  OK,  NO, NO, NO }}, // Int32
+    {{ LD,  MF, MF, MF, MF, MF, OK, OK, OK,  OK, LD,  OK, OK,  NO, NO,  NO,  MF, MF, OK,  OK,  MF, MF, OK,  UN, NO, NO,  MF, OK, OK,  OK,  NO, NO, NO }}, // Uint32
+    {{ LD,  MF, MF, MF, MF, MF, MF, OK, MF,  LD, LD,  OK, OK,  NO, NO,  NO,  MF, MF, MF,  MF,  MF, MF, MF,  UN, NO, NO,  MF, MF, MF,  MF,  NO, NO, NO }}, // Int64
+    {{ LD,  MF, MF, MF, MF, MF, MF, MF, OK,  LD, LD,  OK, OK,  NO, NO,  NO,  MF, MF, MF,  MF,  MF, MF, MF,  UN, NO, NO,  MF, MF, MF,  MF,  NO, NO, NO }}, // Uint64
 
-    {{ FL,  FL, FL, FL, FL, FL, FL, FL, FL,  OK, LD,  OK, OK,  NO, NO,  NO,  NO, NO, NO,  NO,  NO, NO, NO,  NO, NO, NO }}, // Double
-    {{ FL,  FL, FL, FL, FL, FL, FL, FL, FL,  OK, OK,  OK, OK,  NO, NO,  NO,  NO, NO, NO,  NO,  NO, NO, NO,  NO, NO, NO }}, // Float
+    {{ FL,  FL, FL, FL, FL, FL, FL, FL, FL,  OK, LD,  OK, OK,  NO, NO,  NO,  NO, NO, NO,  NO,  NO, NO, NO,  NO, NO, NO,  NO, NO, NO,  NO,  NO, NO, NO }}, // Double
+    {{ FL,  FL, FL, FL, FL, FL, FL, FL, FL,  OK, OK,  OK, OK,  NO, NO,  NO,  NO, NO, NO,  NO,  NO, NO, NO,  NO, NO, NO,  NO, NO, NO,  NO,  NO, NO, NO }}, // Float
 
-    {{ MF,  MF, MF, MF, MF, MF, MF, MF, MF,  FL, FL,  OK, MF,  MF, MF,  MF,  MF, MF, MF,  MF,  MF, MF, MF,  FL, FL, MF, MF, MF, MF, MF }}, // String
-    {{ MF,  MF, MF, MF, MF, MF, MF, MF, MF,  FL, FL,  OK, OK,  MF, MF,  MF,  MF, MF, MF,  MF,  MF, MF, MF,  FL, FL, MF, MF, MF, MF, MF }}, // Utf8
+    {{ MF,  MF, MF, MF, MF, MF, MF, MF, MF,  FL, FL,  OK, MF,  MF, MF,  MF,  MF, MF, MF,  MF,  MF, MF, MF,  FL, FL, MF,  MF, MF, MF,  MF,  MF, MF, MF }}, // String
+    {{ MF,  MF, MF, MF, MF, MF, MF, MF, MF,  FL, FL,  OK, OK,  MF, MF,  MF,  MF, MF, MF,  MF,  MF, MF, MF,  FL, FL, MF,  MF, MF, MF,  MF,  MF, MF, MF }}, // Utf8
 
-    {{ NO,  NO, NO, NO, NO, NO, NO, NO, NO,  NO, NO,  OK, NO,  OK, NO,  NO,  NO, NO, NO,  NO,  NO, NO, NO,  NO, NO, NO }}, // Yson
-    {{ NO,  NO, NO, NO, NO, NO, NO, NO, NO,  NO, NO,  OK, OK,  NO, OK,  NO,  NO, NO, NO,  NO,  NO, NO, NO,  NO, NO, OK }}, // Json
+    {{ NO,  NO, NO, NO, NO, NO, NO, NO, NO,  NO, NO,  OK, NO,  OK, NO,  NO,  NO, NO, NO,  NO,  NO, NO, NO,  NO, NO, NO,  NO, NO, NO,  NO,  NO, NO, NO }}, // Yson
+    {{ NO,  NO, NO, NO, NO, NO, NO, NO, NO,  NO, NO,  OK, OK,  NO, OK,  NO,  NO, NO, NO,  NO,  NO, NO, NO,  NO, NO, OK,  NO, NO, NO,  NO,  NO, NO, NO }}, // Json
 
-    {{ NO,  NO, NO, NO, NO, NO, NO, NO, NO,  NO, NO,  OK, OK,  NO, NO,  OK,  NO, NO, NO,  NO,  NO, NO, NO,  NO, NO, NO }}, // Uuid
+    {{ NO,  NO, NO, NO, NO, NO, NO, NO, NO,  NO, NO,  OK, OK,  NO, NO,  OK,  NO, NO, NO,  NO,  NO, NO, NO,  NO, NO, NO,  NO, NO, NO,  NO,  NO, NO, NO }}, // Uuid
 
-    {{ NO,  MF, MF, MF, OK, OK, OK, OK, OK,  OK, OK,  OK, OK,  NO, NO,  NO,  OK, OK, OK,  NO,  OK, OK, OK,  NO, NO, NO, OK, OK, OK, NO }}, // Date
-    {{ NO,  MF, MF, MF, MF, MF, OK, OK, OK,  OK, LD,  OK, OK,  NO, NO,  NO,  LD, OK, OK,  NO,  LD, OK, OK,  NO, NO, NO, LD, OK, OK, NO }}, // Datetime
-    {{ NO,  MF, MF, MF, MF, MF, MF, OK, OK,  LD, LD,  OK, OK,  NO, NO,  NO,  LD, LD, OK,  NO,  LD, LD, OK,  NO, NO, NO, LD, LD, OK, NO }}, // Timestamp
+    {{ NO,  MF, MF, MF, OK, OK, OK, OK, OK,  OK, OK,  OK, OK,  NO, NO,  NO,  OK, OK, OK,  NO,  OK, OK, OK,  NO, NO, NO,  OK, OK, OK,  NO,  NO, NO, NO }}, // Date
+    {{ NO,  MF, MF, MF, MF, MF, OK, OK, OK,  OK, LD,  OK, OK,  NO, NO,  NO,  LD, OK, OK,  NO,  LD, OK, OK,  NO, NO, NO,  LD, OK, OK,  NO,  NO, NO, NO }}, // Datetime
+    {{ NO,  MF, MF, MF, MF, MF, MF, OK, OK,  LD, LD,  OK, OK,  NO, NO,  NO,  LD, LD, OK,  NO,  LD, LD, OK,  NO, NO, NO,  LD, LD, OK,  NO,  NO, NO, NO }}, // Timestamp
 
-    {{ NO,  MF, MF, MF, MF, MF, MF, OK, MF,  LD, LD,  OK, OK,  NO, NO,  NO,  NO, NO, NO,  OK,  NO, NO, NO,  NO, NO, NO, NO, NO, NO, OK }}, // Interval
+    {{ NO,  MF, MF, MF, MF, MF, MF, OK, MF,  LD, LD,  OK, OK,  NO, NO,  NO,  NO, NO, NO,  OK,  NO, NO, NO,  NO, NO, NO,  NO, NO, NO,  OK,  NO, NO, NO }}, // Interval
 
-    {{ NO,  MF, MF, MF, OK, OK, OK, OK, OK,  OK, OK,  OK, OK,  NO, NO,  NO,  OK, OK, OK,  NO,  OK, OK, OK,  NO, NO, NO }}, // TzDate
-    {{ NO,  MF, MF, MF, MF, MF, OK, OK, OK,  OK, LD,  OK, OK,  NO, NO,  NO,  LD, OK, OK,  NO,  LD, OK, OK,  NO, NO, NO }}, // TzDatetime
-    {{ NO,  MF, MF, MF, MF, MF, MF, OK, OK,  LD, LD,  OK, OK,  NO, NO,  NO,  LD, LD, OK,  NO,  LD, LD, OK,  NO, NO, NO }}, // TzTimestamp
+    {{ NO,  MF, MF, MF, OK, OK, OK, OK, OK,  OK, OK,  OK, OK,  NO, NO,  NO,  OK, OK, OK,  NO,  OK, OK, OK,  NO, NO, NO,  NO, NO, NO,  NO,  OK, OK, OK }}, // TzDate
+    {{ NO,  MF, MF, MF, MF, MF, OK, OK, OK,  OK, LD,  OK, OK,  NO, NO,  NO,  LD, OK, OK,  NO,  LD, OK, OK,  NO, NO, NO,  NO, NO, NO,  NO,  LD, OK, OK }}, // TzDatetime
+    {{ NO,  MF, MF, MF, MF, MF, MF, OK, OK,  LD, LD,  OK, OK,  NO, NO,  NO,  LD, LD, OK,  NO,  LD, LD, OK,  NO, NO, NO,  NO, NO, NO,  NO,  LD, LD, OK }}, // TzTimestamp
 
-    {{ NO,  UN, UN, UN, UN, UN, UN, UN, UN,  LD, LD,  OK, OK,  NO, NO,  NO,  NO, NO, NO,  NO,  NO, NO, NO,  UN, NO, NO }}, // Decimal
+    {{ NO,  UN, UN, UN, UN, UN, UN, UN, UN,  LD, LD,  OK, OK,  NO, NO,  NO,  NO, NO, NO,  NO,  NO, NO, NO,  UN, NO, NO,  NO, NO, NO,  NO,  NO, NO, NO }}, // Decimal
+    {{ NO,  NO, NO, NO, NO, NO, NO, NO, NO,  NO, NO,  OK, OK,  NO, NO,  NO,  NO, NO, NO,  NO,  NO, NO, NO,  NO, OK, NO,  NO, NO, NO,  NO,  NO, NO, NO }}, // DyNumber
+    {{ NO,  NO, NO, NO, NO, NO, NO, NO, NO,  NO, NO,  OK, OK,  NO, OK,  NO,  NO, NO, NO,  NO,  NO, NO, NO,  NO, NO, OK,  NO, NO, NO,  NO,  NO, NO, NO }}, // JsonDocument
 
-    {{ NO,  NO, NO, NO, NO, NO, NO, NO, NO,  NO, NO,  OK, OK,  NO, NO,  NO,  NO, NO, NO,  NO,  NO, NO, NO,  NO, OK, NO }}, // DyNumber
+    {{ NO,  MF, MF, MF, MF, OK, MF, OK, MF,  LD, OK,  OK, OK,  NO, NO,  NO,  MF, MF, MF,  NO,  NO, NO, NO,  NO, NO, NO,  OK, OK, OK,  NO,  NO, NO, NO }}, // Date32
+    {{ NO,  MF, MF, MF, MF, MF, MF, OK, MF,  LD, LD,  OK, OK,  NO, NO,  NO,  FL, MF, MF,  NO,  NO, NO, NO,  NO, NO, NO,  LD, OK, OK,  NO,  NO, NO, NO }}, // Datetime64
+    {{ NO,  MF, MF, MF, MF, MF, MF, OK, MF,  LD, LD,  OK, OK,  NO, NO,  NO,  FL, FL, MF,  NO,  NO, NO, NO,  NO, NO, NO,  LD, LD, OK,  NO,  NO, NO, NO }}, // Timestamp64
 
-    {{ NO,  NO, NO, NO, NO, NO, NO, NO, NO,  NO, NO,  OK, OK,  NO, OK,  NO,  NO, NO, NO,  NO,  NO, NO, NO,  NO, NO, OK }}, // JsonDocument
+    {{ NO,  MF, MF, MF, MF, MF, MF, OK, MF,  LD, LD,  OK, OK,  NO, NO,  NO,  NO, NO, NO,  MF,  NO, NO, NO,  NO, NO, NO,  NO, NO, NO,  OK,  NO, NO, NO }}, // Interval64
 
-    {{ NO,  MF, MF, MF, MF, OK, MF, OK, MF,  LD, OK,  OK, OK,  NO, NO,  NO,  MF, MF, MF,  NO,  NO, NO, NO,  NO, NO, NO, OK, OK, OK, NO }}, // Date32
-    {{ NO,  MF, MF, MF, MF, MF, MF, OK, MF,  LD, LD,  OK, OK,  NO, NO,  NO,  FL, MF, MF,  NO,  NO, NO, NO,  NO, NO, NO, LD, OK, OK, NO }}, // Datetime64
-    {{ NO,  MF, MF, MF, MF, MF, MF, OK, MF,  LD, LD,  OK, OK,  NO, NO,  NO,  FL, FL, MF,  NO,  NO, NO, NO,  NO, NO, NO, LD, LD, OK, NO }}, // Timestamp64
-    {{ NO,  MF, MF, MF, MF, MF, MF, OK, MF,  LD, LD,  OK, OK,  NO, NO,  NO,  NO, NO, NO,  MF,  NO, NO, NO,  NO, NO, NO, NO, NO, NO, OK }}, // Interval64
+    {{ NO,  NO, NO, NO, NO, NO, NO, NO, NO,  NO, NO,  OK, OK,  NO, NO,  NO,  MF, MF, MF,  NO,  MF, MF, MF,  NO, NO, NO,  OK, OK, OK,  NO,  OK, OK, OK }}, // TzDate32
+    {{ NO,  NO, NO, NO, NO, NO, NO, NO, NO,  NO, NO,  OK, OK,  NO, NO,  NO,  MF, MF, MF,  NO,  MF, MF, MF,  NO, NO, NO,  LD, OK, OK,  NO,  LD, OK, OK }}, // TzDatetime64
+    {{ NO,  NO, NO, NO, NO, NO, NO, NO, NO,  NO, NO,  OK, OK,  NO, NO,  NO,  MF, MF, MF,  NO,  MF, MF, MF,  NO, NO, NO,  LD, LD, OK,  NO,  LD, LD, OK }}, // TzTimestamp64
 }};
 
 }

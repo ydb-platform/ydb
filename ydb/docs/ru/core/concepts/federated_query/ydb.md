@@ -22,7 +22,7 @@
 1. {% include [!](_includes/connector_deployment.md) %}
 1. [Выполнить запрос](#query) к внешнему источнику данных.
 
-## Синтаксис запросов { #query }
+## Синтаксис запросов {#query}
 Для извлечения данных из таблиц внешней базы {{ ydb-short-name }} используется следующая форма SQL-запроса:
 
 ```sql
@@ -68,3 +68,4 @@ SELECT * FROM ydb_datasource.<table_name>
 |`Date`|
 |`Datetime`|
 |`Timestamp`|
+|`Json`|

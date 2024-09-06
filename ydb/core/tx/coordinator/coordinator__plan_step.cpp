@@ -1,4 +1,5 @@
 #include "coordinator_impl.h"
+#include "coordinator_hooks.h"
 
 #include <util/generic/hash_set.h>
 
@@ -42,7 +43,29 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
     }
 
     void Plan(TTransactionContext &txc, const TActorContext &ctx) {
-        Y_UNUSED(txc);
+        if (Self->VolatileState.Preserved) {
+            // A preserved state indicates a newer generation has been started
+            // already, and this coordinator will stop eventually. Decline
+            // all pending transactions.
+            for (auto& slot : Slots) {
+                for (auto& proposal : slot) {
+                    Self->MonCounters.StepPlannedDeclinedTx->Inc();
+                    ProxyPlanConfirmations.Queue.emplace_back(
+                        proposal.TxId,
+                        proposal.Proxy,
+                        TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusRestarting,
+                        0);
+                    ++DeclinedCounter;
+                }
+            }
+            Self->SendStepConfirmations(ProxyPlanConfirmations, ctx);
+            return;
+        }
+
+        if (auto* hooks = ICoordinatorHooks::Get(); Y_UNLIKELY(hooks)) {
+            hooks->BeginPlanStep(Self->TabletID(), Self->Executor()->Generation(), PlanOnStep);
+        }
+
         NIceDb::TNiceDb db(txc.DB);
         ExecStartMoment = ctx.Now();
         const bool lowDiskSpace = Self->Executor()->GetStats().IsAnyChannelYellowStop;

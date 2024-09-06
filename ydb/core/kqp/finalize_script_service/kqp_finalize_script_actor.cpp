@@ -19,24 +19,34 @@ namespace NKikimr::NKqp {
 namespace {
 
 class TScriptFinalizerActor : public TActorBootstrapped<TScriptFinalizerActor> {
+    static constexpr size_t MAX_ARTIFACTS_SIZE_BYTES = 40_MB;
+
 public:
     TScriptFinalizerActor(TEvScriptFinalizeRequest::TPtr request,
         const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
-        const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig,
-        const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup)
+        const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
+        std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactor)
         : ReplyActor(request->Sender)
         , ExecutionId(request->Get()->Description.ExecutionId)
         , Database(request->Get()->Description.Database)
         , FinalizationStatus(request->Get()->Description.FinalizationStatus)
         , Request(std::move(request))
         , FinalizationTimeout(TDuration::Seconds(queryServiceConfig.GetFinalizeScriptServiceConfig().GetScriptFinalizationTimeoutSeconds()))
-        , MaximalSecretsSnapshotWaitTime(2 * TDuration::Seconds(metadataProviderConfig.GetRefreshPeriodSeconds()))
         , FederatedQuerySetup(federatedQuerySetup)
         , Compressor(queryServiceConfig.GetQueryArtifactsCompressionMethod(), queryServiceConfig.GetQueryArtifactsCompressionMinSize())
+        , S3ActorsFactor(std::move(s3ActorsFactor))
     {}
 
     void CompressScriptArtifacts() const {
         auto& description = Request->Get()->Description;
+
+        TString astTruncateDescription;
+        if (size_t planSize = description.QueryPlan.value_or("").size(); description.QueryAst && description.QueryAst->size() + planSize > MAX_ARTIFACTS_SIZE_BYTES) {
+            astTruncateDescription = TStringBuilder() << "Query artifacts size is " << description.QueryAst->size() + planSize << " bytes (plan + ast), that is larger than allowed limit " << MAX_ARTIFACTS_SIZE_BYTES << " bytes, ast was truncated";
+            size_t toRemove = std::min(description.QueryAst->size() + planSize - MAX_ARTIFACTS_SIZE_BYTES, description.QueryAst->size());
+            description.QueryAst = TruncateString(*description.QueryAst, description.QueryAst->size() - toRemove);
+        }
+
         auto ast = description.QueryAst;
         if (Compressor.IsEnabled() && ast) {
             const auto& [astCompressionMethod, astCompressed] = Compressor.Compress(*ast);
@@ -45,12 +55,15 @@ public:
         }
 
         if (description.QueryAst && description.QueryAst->size() > NDataShard::NLimits::MaxWriteValueSize) {
-            NYql::TIssue astTruncatedIssue(TStringBuilder() << "Query ast size is " << description.QueryAst->size() << " bytes, that is larger than allowed limit " << NDataShard::NLimits::MaxWriteValueSize << " bytes, ast was truncated");
+            astTruncateDescription = TStringBuilder() << "Query ast size is " << description.QueryAst->size() << " bytes, that is larger than allowed limit " << NDataShard::NLimits::MaxWriteValueSize << " bytes, ast was truncated";
+            description.QueryAst = TruncateString(*ast, NDataShard::NLimits::MaxWriteValueSize - 1_KB);
+            description.QueryAstCompressionMethod = std::nullopt;
+        }
+
+        if (astTruncateDescription) {
+            NYql::TIssue astTruncatedIssue(astTruncateDescription);
             astTruncatedIssue.SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_INFO);
             description.Issues.AddIssue(astTruncatedIssue);
-
-            description.QueryAst = ast->substr(0, NDataShard::NLimits::MaxWriteValueSize - 1_KB) + "...\n(TRUNCATED)";
-            description.QueryAstCompressionMethod = std::nullopt;
         }
     }
 
@@ -99,7 +112,7 @@ private:
     }
 
     void FetchSecrets() {
-        RegisterDescribeSecretsActor(SelfId(), UserToken, SecretNames, ActorContext().ActorSystem(), MaximalSecretsSnapshotWaitTime);
+        RegisterDescribeSecretsActor(SelfId(), UserToken, SecretNames, ActorContext().ActorSystem());
     }
 
     void Handle(TEvDescribeSecretsResponse::TPtr& ev) {
@@ -166,7 +179,7 @@ private:
             return;
         }
 
-        Register(NYql::NDq::MakeS3ApplicatorActor(
+        Register(S3ActorsFactor->CreateS3ApplicatorActor(
             SelfId(),
             FederatedQuerySetup->HttpGateway,
             CreateGuidAsString(),
@@ -181,7 +194,11 @@ private:
 
     void Handle(NFq::TEvents::TEvEffectApplicationResult::TPtr& ev) {
         if (ev->Get()->FatalError) {
-            FinishScriptFinalization(Ydb::StatusIds::BAD_REQUEST, std::move(ev->Get()->Issues));
+            NYql::TIssue rootIssue("Failed to commit/abort s3 multipart uploads");
+            for (const NYql::TIssue& issue : ev->Get()->Issues) {
+                rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue));
+            }
+            FinishScriptFinalization(Ydb::StatusIds::BAD_REQUEST, {rootIssue});
         } else {
             FinishScriptFinalization();
         }
@@ -220,6 +237,11 @@ private:
     }
 
 private:
+    static TString TruncateString(const TString& str, size_t size) {
+        return str.substr(0, std::min(str.size(), size)) + "...\n(TRUNCATED)";
+    }
+
+private:
     const TActorId ReplyActor;
     const TString ExecutionId;
     const TString Database;
@@ -227,9 +249,9 @@ private:
     TEvScriptFinalizeRequest::TPtr Request;
 
     const TDuration FinalizationTimeout;
-    const TDuration MaximalSecretsSnapshotWaitTime;
     const std::optional<TKqpFederatedQuerySetup>& FederatedQuerySetup;
     const NFq::TCompressor Compressor;
+    std::shared_ptr<NYql::NDq::IS3ActorsFactory> S3ActorsFactor;
 
     TString CustomerSuppliedId;
     std::vector<NKqpProto::TKqpExternalSink> Sinks;
@@ -243,9 +265,10 @@ private:
 
 IActor* CreateScriptFinalizerActor(TEvScriptFinalizeRequest::TPtr request,
     const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
-    const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig,
-    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup) {
-    return new TScriptFinalizerActor(std::move(request), queryServiceConfig, metadataProviderConfig, federatedQuerySetup);
+    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
+    std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory
+    ) {
+    return new TScriptFinalizerActor(std::move(request), queryServiceConfig, federatedQuerySetup, std::move(s3ActorsFactory));
 }
 
 }  // namespace NKikimr::NKqp

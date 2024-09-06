@@ -483,6 +483,7 @@ DOMAIN_SCHEMA = {
 NBS_SCHEMA = {
     "type": "object",
     "properties": {
+        "diagnostics": {"type": "object"},
         "enable": {"type": "boolean"},
         "new_config_generator_enabled": {"type": "boolean"},
         "sys": copy.deepcopy(SYS_SCHEMA),

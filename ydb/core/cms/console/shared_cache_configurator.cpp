@@ -7,6 +7,8 @@
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
+#include <ydb/core/protos/bootstrap.pb.h>
+
 namespace NKikimr::NConsole {
 
 class TSharedCacheConfigurator : public TActorBootstrapped<TSharedCacheConfigurator> {
@@ -45,8 +47,8 @@ public:
         }
         if (record.GetConfig().HasSharedCacheConfig()) {
             cfg.MergeFrom(record.GetConfig().GetSharedCacheConfig());
-        } else if (appData->SharedCacheConfigPtr) {
-            cfg.MergeFrom(*appData->SharedCacheConfigPtr);
+        } else {
+            cfg.MergeFrom(appData->SharedCacheConfig);
         }
 
         ApplyConfig(std::move(cfg), ctx);

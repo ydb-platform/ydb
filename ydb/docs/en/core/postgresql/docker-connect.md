@@ -40,7 +40,7 @@ To preserve the container's state, you need to remove the environment variable `
     docker-compose up -d --pull=always
     ```
 
-- Docker command:
+- Docker command
 
     ```bash
     docker run --name ydb-postgres -d --pull always -p 5432:5432 -p 8765:8765 -e POSTGRES_USER=root -e POSTGRES_PASSWORD=1234 -e YDB_EXPERIMENTAL_PG=1 -e YDB_USE_IN_MEMORY_PDISKS=true ghcr.io/ydb-platform/local-ydb:nightly

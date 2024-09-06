@@ -16,7 +16,7 @@ void TGarbageCollectionActor::Bootstrap(const TActorContext& ctx) {
     for (auto i = GCTask->GetBlobsToRemove().GetDirect().GetIterator(); i.IsValid(); ++i) {
         BlobIdsToRemove.emplace(i.GetBlobId().GetLogoBlobId());
     }
-    AFL_INFO(NKikimrServices::TX_COLUMNSHARD_TIER)("actor", "TGarbageCollectionActor")("event", "starting")("storage_id", GCTask->GetStorageId())("drafts", GCTask->GetDraftBlobIds().size())("to_delete", BlobIdsToRemove.size());
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BLOBS_TIER)("actor", "TGarbageCollectionActor")("event", "starting")("storage_id", GCTask->GetStorageId())("drafts", GCTask->GetDraftBlobIds().size())("to_delete", BlobIdsToRemove.size());
     for (auto&& i : GCTask->GetDraftBlobIds()) {
         BlobIdsToRemove.emplace(i.GetLogoBlobId());
     }
@@ -34,7 +34,7 @@ void TGarbageCollectionActor::Bootstrap(const TActorContext& ctx) {
 void TGarbageCollectionActor::CheckFinished() {
     if (SharedRemovingFinished && BlobIdsToRemove.empty()) {
         auto g = PassAwayGuard();
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD_TIER)("actor", "TGarbageCollectionActor")("event", "finished");
+        AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BLOBS_TIER)("actor", "TGarbageCollectionActor")("event", "finished");
         TActorContext::AsActorContext().Send(TabletActorId, std::make_unique<NColumnShard::TEvPrivate::TEvGarbageCollectionFinished>(GCTask));
     }
 }

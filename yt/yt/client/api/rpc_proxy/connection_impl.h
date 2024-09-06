@@ -27,7 +27,7 @@ public:
     ~TConnection();
 
     NRpc::IChannelPtr CreateChannel(bool sticky);
-    NRpc::IChannelPtr CreateChannelByAddress(const TString& address);
+    NRpc::IChannelPtr CreateChannelByAddress(const std::string& address);
 
     const TConnectionConfigPtr& GetConfig();
 
@@ -35,7 +35,7 @@ public:
     TClusterTag GetClusterTag() const override;
     const TString& GetLoggingTag() const override;
     const TString& GetClusterId() const override;
-    const std::optional<TString>& GetClusterName() const override;
+    const std::optional<std::string>& GetClusterName() const override;
 
     bool IsSameCluster(const IConnectionPtr& other) const override;
 
@@ -77,8 +77,8 @@ private:
 
     NServiceDiscovery::IServiceDiscoveryPtr ServiceDiscovery_;
 
-    std::vector<TString> DiscoverProxiesViaHttp();
-    std::vector<TString> DiscoverProxiesViaServiceDiscovery();
+    std::vector<std::string> DiscoverProxiesViaHttp();
+    std::vector<std::string> DiscoverProxiesViaServiceDiscovery();
 
     void OnProxyListUpdate();
 };

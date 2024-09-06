@@ -14,6 +14,7 @@
 #include "mkql_block_if.h"
 #include "mkql_block_just.h"
 #include "mkql_block_logical.h"
+#include "mkql_block_map_join.h"
 #include "mkql_block_compress.h"
 #include "mkql_block_skiptake.h"
 #include "mkql_block_top.h"
@@ -234,6 +235,8 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"JoinDict", &WrapJoinDict},
         {"GraceJoin", &WrapGraceJoin},
         {"GraceSelfJoin", &WrapGraceSelfJoin},
+        {"GraceJoinWithSpilling", &WrapGraceJoin},
+        {"GraceSelfJoinWithSpilling", &WrapGraceSelfJoin},
         {"MapJoinCore", &WrapMapJoinCore},
         {"CommonJoinCore", &WrapCommonJoinCore},
         {"CombineCore", &WrapCombineCore},
@@ -307,6 +310,7 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"BlockMergeFinalizeHashed", &WrapBlockMergeFinalizeHashed},
         {"BlockMergeManyFinalizeHashed", &WrapBlockMergeManyFinalizeHashed},
         {"ScalarApply", &WrapScalarApply},
+        {"BlockMapJoinCore", &WrapBlockMapJoinCore},
         {"MakeHeap", &WrapMakeHeap},
         {"PushHeap", &WrapPushHeap},
         {"PopHeap", &WrapPopHeap},
@@ -333,6 +337,7 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"WideSkipWhileInclusive", &WrapWideSkipWhileInclusive},
         {"WideCombiner", &WrapWideCombiner},
         {"WideLastCombiner", &WrapWideLastCombiner},
+        {"WideLastCombinerWithSpilling", &WrapWideLastCombinerWithSpilling},
         {"WideCondense1", &WrapWideCondense1},
         {"WideChopper", &WrapWideChopper},
         {"WideTop", &WrapWideTop},

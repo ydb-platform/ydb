@@ -121,8 +121,8 @@ TEST_F(TCoroutineTest, Binary)
         (actual = coro.Run(
             i < std::ssize(Coroutine2TestCases) ? Coroutine2TestCases[i].lhs : 0,
             i < std::ssize(Coroutine2TestCases) ? Coroutine2TestCases[i].rhs : 0));
-        ++i
-    ) {
+        ++i)
+    {
         EXPECT_EQ(Coroutine2TestCases[i].sum, *actual);
     }
 

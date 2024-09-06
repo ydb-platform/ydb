@@ -67,7 +67,7 @@ public:
             const auto& record = ev->Get()->Record;
             TLogoBlobID blob = LogoBlobIDFromLogoBlobID(record.GetBlobID());
             TVDiskID vDiskId = VDiskIDFromVDiskID(record.GetVDiskID());
-            LWTRACK(DSQueueVPutIsQueued, Orbit, vDiskId.GroupID, blob.ToString(), blob.Channel(), blob.PartId(),
+            LWTRACK(DSQueueVPutIsQueued, Orbit, vDiskId.GroupID.GetRawId(), blob.ToString(), blob.Channel(), blob.PartId(),
                     blob.BlobSize());
         }
 
@@ -142,7 +142,7 @@ public:
 
     void SendToVDisk(const TActorContext& ctx, const TActorId& remoteVDisk, ui64 queueCookie, ui64 msgId, ui64 sequenceId,
             bool sendMeCostSettings, NWilson::TTraceId traceId, const NBackpressure::TQueueClientId& clientId,
-            const THPTimer& processingTimer);
+            const TBSQueueTimer& processingTimer);
 
     void Discard();
 };

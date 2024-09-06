@@ -98,19 +98,19 @@
 
   Загрузка данных сервисного аккаунта из файла:
 
-  {% include [auth-sa-file](../../../_includes/nodejs/auth-sa-file.md) %}
+  {% include [auth-sa-file](../../_includes/nodejs/auth-sa-file.md) %}
 
   Загрузка данных сервисного аккаунта из стороннего источника (например, из хранилища секретов):
 
-  {% include [auth-sa-data](../../../_includes/nodejs/auth-sa-data.md) %}
+  {% include [auth-sa-data](../../_includes/nodejs/auth-sa-data.md) %}
 
 - Python
 
-  {% include [auth-sa-data](../../../_includes/python/auth-service-account.md) %}
+  {% include [auth-sa-data](../../_includes/python/auth-service-account.md) %}
 
 - Python (asyncio)
 
-  {% include [auth-sa-data](../../../_includes/python/async/auth-service-account.md) %}
+  {% include [auth-sa-data](../../_includes/python/async/auth-service-account.md) %}
 
 - C# (.NET)
 
@@ -151,7 +151,7 @@
           'temp_dir'       => './tmp', // Temp directory
           // 'root_cert_file' => './CA.pem', // Root CA file (uncomment for dedicated server)ы
       ],
-              
+
       'credentials' => new JwtWithJsonAuthentication('./jwtjson.json')
   ];
 
@@ -175,10 +175,10 @@
           // 'root_cert_file' => './CA.pem', // Root CA file (uncomment for dedicated server)
 
       ],
-      
+
       'credentials' => new JwtWithPrivateKeyAuthentication(
           "ajexxxxxxxxx","ajeyyyyyyyyy",'./private.key')
-          
+
   ];
 
   $ydb = new Ydb($config);

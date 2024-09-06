@@ -1,6 +1,6 @@
 #include "yt_codec_io.h"
 
-#include <ydb/library/yql/providers/common/codec/yql_restricted_yson.h>
+#include <ydb/library/yql/public/result_format/yql_restricted_yson.h>
 #include <ydb/library/yql/providers/common/codec/yql_codec_type_flags.h>
 #include <ydb/library/yql/providers/common/codec/yql_codec.h>
 #include <ydb/library/yql/providers/yt/common/yql_names.h>
@@ -887,8 +887,8 @@ protected:
                 return NUdf::TUnboxedValue();
             }
             auto& decoder = *SpecsCache_.GetSpecs().Inputs[TableIndex_];
-            auto val = ReadYsonValue(uwrappedType, decoder.NativeYtTypeFlags, SpecsCache_.GetHolderFactory(), cmd, Buf_, true);
-            return val.Release().MakeOptional();
+            auto val = ReadYsonValue((decoder.NativeYtTypeFlags & ENativeTypeCompatFlags::NTCF_COMPLEX) ? type : uwrappedType, decoder.NativeYtTypeFlags, SpecsCache_.GetHolderFactory(), cmd, Buf_, true);
+            return (decoder.NativeYtTypeFlags & ENativeTypeCompatFlags::NTCF_COMPLEX) ? val : val.Release().MakeOptional();
         } else {
             if (Y_LIKELY(cmd != EntitySymbol)) {
                 auto& decoder = *SpecsCache_.GetSpecs().Inputs[TableIndex_];
@@ -995,6 +995,9 @@ protected:
             case NUdf::TDataType<NUdf::TTzDate>::Id:
             case NUdf::TDataType<NUdf::TTzDatetime>::Id:
             case NUdf::TDataType<NUdf::TTzTimestamp>::Id:
+            case NUdf::TDataType<NUdf::TTzDate32>::Id:
+            case NUdf::TDataType<NUdf::TTzDatetime64>::Id:
+            case NUdf::TDataType<NUdf::TTzTimestamp64>::Id:
             case NUdf::TDataType<NUdf::TDyNumber>::Id:
             case NUdf::TDataType<NUdf::TUuid>::Id:
             case NUdf::TDataType<NUdf::TJsonDocument>::Id: {
@@ -1745,7 +1748,7 @@ public:
         for (size_t index = 0; index < Fields_.size(); ++index) {
             const TField& field = Fields_[index];
             auto value = row.GetElement(index);
-            if (field.Optional) {
+            if (field.Optional || field.Type->GetKind() == TTypeBase::EKind::Pg) {
                 if (!value) {
                     continue;
                 }
@@ -1756,8 +1759,20 @@ public:
             Buf_.WriteVarI32(field.Name.size());
             Buf_.WriteMany(field.Name.data(), field.Name.size());
             Buf_.Write(KeyValueSeparatorSymbol);
+            
+            bool isOptionalFieldTypeV3 = field.Optional && (NativeYtTypeFlags_ & ENativeTypeCompatFlags::NTCF_COMPLEX);
+            bool wrapOptionalTypeV3 = isOptionalFieldTypeV3 &&
+                (field.Type->GetKind() == TTypeBase::EKind::Optional || field.Type->GetKind() == TTypeBase::EKind::Pg);
+            if (wrapOptionalTypeV3) {
+                Buf_.Write(BeginListSymbol);
+            }
 
             WriteYsonValueInTableFormat(Buf_, field.Type, NativeYtTypeFlags_, std::move(value), true);
+
+            if (wrapOptionalTypeV3) {
+                Buf_.Write(ListItemSeparatorSymbol);
+                Buf_.Write(EndListSymbol);
+            }
 
             Buf_.Write(KeyedItemSeparatorSymbol);
         }
@@ -2210,7 +2225,7 @@ void DecodeToYson(TMkqlIOCache& specsCache, size_t tableIndex, const NYT::TNode&
             }
             if (res.GetType() != NYT::TNode::Undefined) {
                 if (dataType->GetKind() == TType::EKind::Data && static_cast<TDataType*>(dataType)->GetSchemeType() == NUdf::TDataType<NUdf::TYson>::Id) {
-                    items[field->StructIndex] = NCommon::EncodeRestrictedYson(res, NYT::NYson::EYsonFormat::Binary);
+                    items[field->StructIndex] = NResult::EncodeRestrictedYson(res, NYT::NYson::EYsonFormat::Binary);
                 } else {
                     items[field->StructIndex] = NYT::NodeToYsonString(res, NYT::NYson::EYsonFormat::Binary);
                 }

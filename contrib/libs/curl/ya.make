@@ -20,6 +20,7 @@ PEERDIR(
     contrib/libs/nghttp2
     contrib/libs/openssl
     contrib/libs/zlib
+    contrib/libs/zstd
 )
 
 IF (NOT EXPORT_CMAKE)
@@ -31,6 +32,7 @@ ENDIF()
 ADDINCL(
     GLOBAL contrib/libs/curl/include
     contrib/libs/curl/lib
+    contrib/libs/zstd/include
 )
 
 NO_COMPILER_WARNINGS()

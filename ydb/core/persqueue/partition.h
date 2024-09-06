@@ -28,6 +28,7 @@
 namespace NKikimr::NPQ {
 
 static const ui32 MAX_BLOB_PART_SIZE = 500_KB;
+static const ui32 DEFAULT_BUCKET_COUNTER_MULTIPLIER = 20;
 
 using TPartitionLabeledCounters = TProtobufTabletLabeledCounters<EPartitionLabeledCounters_descriptor>;
 
@@ -65,7 +66,6 @@ struct TTransaction {
     explicit TTransaction(TSimpleSharedPtr<TEvPQ::TEvProposePartitionConfig> proposeConfig)
         : ProposeConfig(proposeConfig)
     {
-
         Y_ABORT_UNLESS(ProposeConfig);
     }
 
@@ -139,12 +139,15 @@ private:
     struct THasDataReq;
     struct THasDataDeadline;
     using TMessageQueue = std::deque<TMessage>;
+    using TGetWriteInfoResp =
+        std::variant<TAutoPtr<TEvPQ::TEvGetWriteInfoResponse>,
+                     TAutoPtr<TEvPQ::TEvGetWriteInfoError>>;
 
     bool IsActive() const;
     bool CanWrite() const;
     bool CanEnqueue() const;
 
-    bool LastOffsetHasBeenCommited(const TUserInfo& userInfo) const;
+    bool LastOffsetHasBeenCommited(const TUserInfoBase& userInfo) const;
 
     void ReplyError(const TActorContext& ctx, const ui64 dst, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error);
     void ReplyPropose(const TActorContext& ctx, const NKikimrPQ::TEvProposeTransaction& event, NKikimrPQ::TEvProposeTransactionResult::EStatus statusCode,
@@ -283,6 +286,7 @@ private:
     ui32 NextChannel(bool isHead, ui32 blobSize);
     ui64 GetSizeLag(i64 offset);
     std::pair<TKey, ui32> GetNewWriteKey(bool headCleared);
+    std::pair<TKey, ui32> GetNewWriteKeyImpl(bool headCleared, bool needCompaction, ui32 headSize);
     THashMap<TString, TOwnerInfo>::iterator DropOwner(THashMap<TString, TOwnerInfo>::iterator& it,
                                                       const TActorContext& ctx);
     // will return rcount and rsize also
@@ -327,7 +331,7 @@ private:
 
     void SendWriteInfoRequest(const TSimpleSharedPtr<TEvPQ::TEvTxCalcPredicate>& event);
     void WriteInfoResponseHandler(const TActorId& sender,
-                        std::variant<TAutoPtr<TEvPQ::TEvGetWriteInfoResponse>, TAutoPtr<TEvPQ::TEvGetWriteInfoError>>&& ev,
+                        TGetWriteInfoResp&& ev,
                         const TActorContext& ctx);
 
 
@@ -386,6 +390,7 @@ private:
     void OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx);
 
     void EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
+                                  NKikimrPQ::TBootstrapConfig&& bootstrapConfig,
                                   NPersQueue::TTopicConverterPtr topicConverter,
                                   const TActorContext& ctx);
     TString GetKeyConfig() const;
@@ -429,7 +434,7 @@ private:
     void Handle(TEvPQ::TEvProcessChangeOwnerRequests::TPtr& ev, const TActorContext& ctx);
     void StartProcessChangeOwnerRequests(const TActorContext& ctx);
 
-    void CommitWriteOperations(const TTransaction& t);
+    void CommitWriteOperations(TTransaction& t);
 
     void HandleOnInit(TEvPQ::TEvDeletePartition::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvDeletePartition::TPtr& ev, const TActorContext& ctx);
@@ -453,7 +458,9 @@ public:
     }
 
     // The size of the data realy was persisted in the storage by the partition
-    ui64 MeteringDataSize() const;
+    ui64 UserDataSize() const;
+    // The size of the data was metered to user
+    ui64 MeteringDataSize(TInstant now) const;
     // The size of the storage that was reserved by the partition
     ui64 ReserveSize() const;
     // The size of the storage that usud by the partition. That included combination of the reserver and realy persisted data.
@@ -633,10 +640,16 @@ private:
     TPartitionGraph PartitionGraph;
     TPartitionSourceManager SourceManager;
 
+    struct TSourceIdPostPersistInfo {
+        ui64 SeqNo = 0;
+        ui64 Offset = 0;
+    };
+
     THashSet<TString> TxAffectedSourcesIds;
     THashSet<TString> WriteAffectedSourcesIds;
     THashSet<TString> TxAffectedConsumers;
     THashSet<TString> SetOffsetAffectedConsumers;
+    THashMap<TString, TSourceIdPostPersistInfo> TxSourceIdForPostPersist;
 
     ui32 MaxBlobSize;
     const ui32 TotalLevels = 4;
@@ -704,7 +717,7 @@ private:
 
 
     [[nodiscard]] EProcessResult PreProcessImmediateTx(const NKikimrPQ::TEvProposeTransaction& tx);
-    void ExecImmediateTx(const TTransaction& tx);
+    void ExecImmediateTx(TTransaction& tx);
 
     EProcessResult PreProcessRequest(TRegisterMessageGroupMsg& msg);
     EProcessResult PreProcessRequest(TDeregisterMessageGroupMsg& msg);
@@ -757,6 +770,7 @@ private:
 
     std::deque<TUserActionAndTransactionEvent> UserActionAndTransactionEvents;
     std::deque<TUserActionAndTransactionEvent> UserActionAndTxPendingCommit;
+    TVector<THolder<TEvPQ::TEvGetWriteInfoResponse>> WriteInfosApplied;
 
     THashMap<ui64, TSimpleSharedPtr<TTransaction>> TransactionsInflight;
     THashMap<TActorId, TSimpleSharedPtr<TTransaction>> WriteInfosToTx;
@@ -814,14 +828,17 @@ private:
     TSubscriber Subscriber;
 
     TInstant WriteCycleStartTime;
-    ui32 WriteCycleSize;
+    ui32 WriteCycleSize = 0;
     ui32 WriteCycleSizeEstimate = 0;
     ui32 WriteKeysSizeEstimate = 0;
-    ui32 WriteNewSize;
-    ui32 WriteNewSizeInternal;
-    ui64 WriteNewSizeUncompressed;
-    ui32 WriteNewMessages;
-    ui32 WriteNewMessagesInternal;
+    ui32 WriteNewSize = 0;
+    ui32 WriteNewSizeFull = 0;
+    ui32 WriteNewSizeInternal = 0;
+    ui64 WriteNewSizeUncompressed = 0;
+    ui64 WriteNewSizeUncompressedFull = 0;
+
+    ui32 WriteNewMessages = 0;
+    ui32 WriteNewMessagesInternal = 0;
 
     TInstant CurrentTimestamp;
 
@@ -860,6 +877,7 @@ private:
     NSlidingWindow::TSlidingWindow<NSlidingWindow::TMaxOperation<ui64>> WriteLagMs;
     //ToDo - counters.
     THolder<TPercentileCounter> InputTimeLag;
+    THolder<TMultiBucketCounter> SupportivePartitionTimeLag;
     TPartitionHistogramWrapper MessageSize;
 
     TPercentileCounter WriteLatency;
@@ -899,6 +917,8 @@ private:
     TDeque<std::unique_ptr<IEventBase>> PendingEvents;
     TRowVersion LastEmittedHeartbeat;
 
+    TLastCounter SourceIdCounter;
+
     const NKikimrPQ::TPQTabletConfig::TPartition* GetPartitionConfig(const NKikimrPQ::TPQTabletConfig& config);
 
     bool ClosedInternalPartition = false;
@@ -921,7 +941,18 @@ private:
     void ScheduleTransactionCompleted(const NKikimrPQ::TEvProposeTransaction& tx);
 
     void DestroyActor(const TActorContext& ctx);
+
+    TActorId OffloadActor;
+
+    void AddCmdWrite(const std::optional<TPartitionedBlob::TFormedBlobInfo>& newWrite,
+                     TEvKeyValue::TEvRequest* request,
+                     const TActorContext& ctx);
+    void RenameFormedBlobs(const std::deque<TPartitionedBlob::TRenameFormedBlobInfo>& formedBlobs,
+                           ProcessParameters& parameters,
+                           ui32 curWrites,
+                           TEvKeyValue::TEvRequest* request,
+                           const TActorContext& ctx);
+    ui32 RenameTmpCmdWrites(TEvKeyValue::TEvRequest* request);
 };
 
 } // namespace NKikimr::NPQ
-

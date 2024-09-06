@@ -6,6 +6,7 @@
 
 #include <yt/yt/core/misc/intrusive_mpsc_stack.h>
 #include <yt/yt/core/misc/singleton.h>
+#include <yt/yt/core/misc/shutdown.h>
 #include <yt/yt/core/misc/finally.h>
 
 #include <yt/yt/library/profiling/producer.h>
@@ -16,7 +17,7 @@
 
 #include <util/random/random.h>
 
-#ifndef NDEBUG
+#if defined(_asan_enabled_)
     #include <yt/yt/core/misc/shutdown.h>
 #endif
 
@@ -81,46 +82,8 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TFiberIdGenerator
-{
-public:
-    static TFiberIdGenerator* Get()
-    {
-        return LeakySingleton<TFiberIdGenerator>();
-    }
-
-    TFiberId Generate()
-    {
-        const TFiberId Factor = std::numeric_limits<TFiberId>::max() - 173864;
-        YT_ASSERT(Factor % 2 == 1); // Factor must be coprime with 2^n.
-
-        while (true) {
-            auto seed = Seed_++;
-            auto id = seed * Factor;
-            if (id != InvalidFiberId) {
-                return id;
-            }
-        }
-    }
-
-private:
-    std::atomic<TFiberId> Seed_;
-
-    DECLARE_LEAKY_SINGLETON_FRIEND()
-
-    TFiberIdGenerator()
-    {
-        Seed_.store(static_cast<TFiberId>(::time(nullptr)));
-    }
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
 class TFiberRegistry
 {
-    template <class Tag>
-    using TFiberStack = TIntrusiveMpscStack<TFiber, Tag>;
-
 public:
     //! Do not rename, change the signature, or drop Y_NO_INLINE.
     //! Used in devtools/gdb/yt_fibers_printer.py.
@@ -129,7 +92,7 @@ public:
         return LeakySingleton<TFiberRegistry>();
     }
 
-    void Register(TFiber* fiber)
+    void Register(TFiber* fiber) noexcept
     {
         RegisterQueue_.Push(fiber);
 
@@ -138,7 +101,7 @@ public:
         }
     }
 
-    void Unregister(TFiber* fiber)
+    void Unregister(TFiber* fiber) noexcept
     {
         UnregisterQueue_.Push(fiber);
 
@@ -159,6 +122,9 @@ public:
     }
 
 private:
+    template <class Tag>
+    using TFiberStack = TIntrusiveMpscStack<NDetail::TFiberBase, Tag>;
+
     TFiberStack<NDetail::TFiberRegisterTag> RegisterQueue_;
     TFiberStack<NDetail::TFiberUnregisterTag> UnregisterQueue_;
 
@@ -172,9 +138,9 @@ private:
 // cause realistically this is a "problem"
 // only during the shutdown which means that
 // process is going to be killed shortly after.
-// In debug we cleanup properly so that
+// In for asan we cleanup properly so that
 // there are no actual leaks.
-#ifndef NDEBUG
+#if defined(_asan_enabled_)
     TShutdownCookie ShutdownCookie_;
 
     void InitializeShutdownCookie()
@@ -185,7 +151,7 @@ private:
                 auto guard = Guard(Lock_);
                 while(GuardedProcessQueues());
             }),
-            /*priority*/std::numeric_limits<int>::min());
+            /*priority*/ std::numeric_limits<int>::min());
     }
 
 #endif
@@ -194,7 +160,7 @@ private:
     // were observed empty.
     bool GuardedProcessQueues()
     {
-#ifndef NDEBUG
+#if defined(_asan_enabled_)
         if (!ShutdownCookie_) {
             InitializeShutdownCookie();
         }
@@ -230,7 +196,7 @@ private:
         // We have to check ourselves that
         // PopBack return is a valid one.
         while (!toUnregister.Empty()) {
-            toUnregister.PopBack()->UnregisterAndDelete();
+            toUnregister.PopBack()->AsFiber()->DeleteFiber();
         }
 
         // NB: Around this line guard is released. We do not properly double check
@@ -247,12 +213,10 @@ private:
         Cerr << "Debug print begin\n";
         Cerr << "---------------------------------------------------------------" << '\n';
         for (auto& iter : Fibers_) {
-            auto* ptr = &iter;
-            auto* fiber = static_cast<TFiber*>(ptr);
-            auto* regNode = static_cast<TIntrusiveListItem<TFiber, NDetail::TFiberRegisterTag>*>(fiber);
-            auto* delNode = static_cast<TIntrusiveListItem<TFiber, NDetail::TFiberUnregisterTag>*>(fiber);
+            auto* fiber = iter.AsFiber();
+            auto* regNode = static_cast<TIntrusiveListItem<NDetail::TFiberBase, NDetail::TFiberRegisterTag>*>(fiber);
+            auto* delNode = static_cast<TIntrusiveListItem<NDetail::TFiberBase, NDetail::TFiberUnregisterTag>*>(fiber);
 
-            Cerr << Format("Fiber node at %v", iter) << '\n';
             Cerr << Format("Fiber address after cast is %v", fiber) << '\n';
             Cerr << Format("Fiber registration queue status: Next: %v, Prev: %v", regNode->Next(), regNode->Prev()) << '\n';
             // NB: Reading deletion queue is data race. Don't do this under tsan.
@@ -266,35 +230,191 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace NDetail {
+
+////////////////////////////////////////////////////////////////////////////////
+
+EFiberState TFiberIntrospectionBase::TryLockAsIntrospector() noexcept
+{
+    auto state = GetState();
+    if (state != EFiberState::Waiting) {
+        // Locked by running fiber.
+        return state;
+    }
+
+    State_.compare_exchange_strong(
+        state,
+        EFiberState::Introspecting,
+        std::memory_order::acquire,
+        std::memory_order::relaxed);
+
+    return state;
+}
+
+bool TFiberIntrospectionBase::TryLockForIntrospection(EFiberState* state, TFunctionView<void()> successHandler)
+{
+    auto& stateRef = *state;
+    stateRef = TryLockAsIntrospector();
+    if (stateRef != EFiberState::Waiting) {
+        // Locked by running fiber.
+        return false;
+    }
+
+    auto guard = Finally([&] {
+        // Release lock held by introspector.
+        YT_VERIFY(State_.load(std::memory_order::relaxed) == EFiberState::Introspecting);
+        State_.store(EFiberState::Waiting, std::memory_order::release);
+    });
+
+    successHandler();
+
+    return true;
+}
+
+TFiberId TFiberIntrospectionBase::GetFiberId() const
+{
+    return FiberId_.load(std::memory_order::relaxed);
+}
+
+TInstant TFiberIntrospectionBase::GetWaitingSince() const
+{
+    // Locked by introspector
+    YT_VERIFY(GetState() == EFiberState::Introspecting);
+    return WaitingSince_;
+}
+
+TFls* TFiberIntrospectionBase::GetFls()
+{
+    // Locked by introspector
+    YT_VERIFY(GetState() == EFiberState::Introspecting);
+    return Fls_;
+}
+
+void TFiberIntrospectionBase::OnCallbackExecutionStarted(TFiberId fiberId, TFls* fls)
+{
+    // Locked by running fiber.
+    YT_VERIFY(GetState() == EFiberState::Running);
+
+    FiberId_.store(fiberId, std::memory_order::relaxed);
+    Fls_ = fls;
+}
+
+void TFiberIntrospectionBase::OnCallbackExecutionFinished()
+{
+    // Locked by running fiber.
+    YT_VERIFY(GetState() == EFiberState::Running);
+
+    FiberId_.store(InvalidFiberId, std::memory_order::relaxed);
+    Fls_ = nullptr;
+}
+
+void TFiberIntrospectionBase::SetWaiting()
+{
+    WaitingSince_ = CpuInstantToInstant(GetApproximateCpuInstant());
+
+    // Release lock that should be acquired by running fiber.
+    YT_VERIFY(State_.load(std::memory_order::relaxed) == EFiberState::Running);
+    State_.store(EFiberState::Waiting, std::memory_order::release);
+}
+
+void TFiberIntrospectionBase::SetIdle()
+{
+    // 1) Locked by running fiber.
+    // 2) Reading this doesn't cause anything to happen.
+    // This state is never checked for, so just relaxed.
+    YT_VERIFY(State_.load(std::memory_order::relaxed) == EFiberState::Running);
+    State_.store(EFiberState::Idle, std::memory_order::relaxed);
+}
+
+std::optional<TDuration> TFiberIntrospectionBase::SetRunning()
+{
+    auto observed = GetState();
+    std::optional<NProfiling::TWallTimer> lockedTimer;
+
+    do {
+        // NB(arkady-e1ppa): We expect SetRunning to have
+        // either SetIdle, SetWaiting or Ctor in HB relation to this call.
+        // If we have SetIdle in HB relation then we must
+        // observed |Idle|.
+        // If we have SetWaiting in HB then we either observer
+        // |Waiting| by w-r coherence or |Introspecting|
+        // written by RWM from TryLockForIntrospection
+        // which observed mentioned SetWaiting write.
+        // If Ctor is in HB then this is the first op
+        // on State_ and thus guaranteed to read |Created|.
+        // This leaves |Running| and |Finished| impossible.
+        YT_VERIFY(observed != EFiberState::Running);
+        if (observed == EFiberState::Introspecting) {
+            if (!lockedTimer) {
+                lockedTimer.emplace();
+            }
+            ThreadYield();
+            observed = GetState();
+            continue;
+        }
+        // TryAcquire lock.
+    } while (!State_.compare_exchange_weak(
+        observed,
+        EFiberState::Running,
+        std::memory_order::acquire,
+        std::memory_order::relaxed));
+
+    return lockedTimer.has_value()
+        ? std::optional(lockedTimer->GetElapsedTime())
+        : std::nullopt;
+}
+
+void TFiberIntrospectionBase::SetFinished()
+{
+    // NB(arkady-e1ppa): This state is relevant for
+    // two reasons:
+    // 1) For dtor of fiber -- see ~Fiber for details
+    // 2) For verifying that fiber is attempted to be
+    // deleted exactly one. In such case (though we
+    // check it only in debug mode) exchange reads
+    // the last modification and if this function
+    // is called twice regardless of situation
+    // one of the calls will crash as it should.
+    YT_VERIFY(State_.load(std::memory_order::relaxed) == EFiberState::Running);
+    State_.store(EFiberState::Finished, std::memory_order::relaxed);
+}
+
+EFiberState TFiberIntrospectionBase::GetState() const
+{
+    return State_.load(std::memory_order::relaxed);
+}
+
+TFiber* TFiberBase::AsFiber() noexcept
+{
+    return static_cast<TFiber*>(this);
+}
+
+} // namespace NDetail
+
+////////////////////////////////////////////////////////////////////////////////
+
 TFiber* TFiber::CreateFiber(EExecutionStackKind stackKind)
 {
-    return new TFiber(stackKind);
+    auto* fiber = new TFiber(stackKind);
+    TFiberRegistry::Get()->Register(fiber);
+    return fiber;
 }
 
 void TFiber::ReleaseFiber(TFiber* fiber)
 {
     YT_VERIFY(fiber);
     fiber->SetFinished();
-    fiber->Clear();
     TFiberRegistry::Get()->Unregister(fiber);
 }
 
-TFiber::TFiber(EExecutionStackKind stackKind)
-    : Stack_(CreateExecutionStack(stackKind))
-    , MachineContext_({
-        this,
-        TArrayRef(static_cast<char*>(Stack_->GetStack()), Stack_->GetSize()),
-    })
+void TFiber::SetRunning()
 {
-    TFiberRegistry::Get()->Register(this);
-    TFiberProfiler::Get()->OnFiberCreated();
-    TFiberProfiler::Get()->OnStackAllocated(Stack_->GetSize());
-}
-
-TFiber::~TFiber()
-{
-    YT_VERIFY(GetState() == EFiberState::Finished);
-    TFiberProfiler::Get()->OnStackFreed(Stack_->GetSize());
+    if (auto delay = TFiberBase::SetRunning()) {
+        YT_LOG_WARNING(
+            "Fiber execution was delayed due to introspection (FiberId: %x, Delay: %v)",
+            GetFiberId(),
+            *delay);
+    }
 }
 
 bool TFiber::CheckFreeStackSpace(size_t space) const
@@ -307,114 +427,54 @@ TExceptionSafeContext* TFiber::GetMachineContext()
     return &MachineContext_;
 }
 
-TFiberId TFiber::GetFiberId() const
-{
-    return FiberId_.load(std::memory_order::relaxed);
-}
-
-
-EFiberState TFiber::GetState() const
-{
-    return State_.load(std::memory_order::relaxed);
-}
-
-void TFiber::SetRunning()
-{
-    auto expectedState = State_.load(std::memory_order::relaxed);
-    std::optional<NProfiling::TWallTimer> lockedTimer;
-    do {
-        YT_VERIFY(expectedState != EFiberState::Running);
-        if (expectedState == EFiberState::Introspecting) {
-            if (!lockedTimer) {
-                lockedTimer.emplace();
-            }
-            ThreadYield();
-            expectedState = State_.load();
-            continue;
-        }
-    } while (!State_.compare_exchange_weak(expectedState, EFiberState::Running));
-
-    if (lockedTimer) {
-        YT_LOG_WARNING("Fiber execution was delayed due to introspection (FiberId: %x, Delay: %v)",
-            GetFiberId(),
-            lockedTimer->GetElapsedTime());
-    }
-}
-
-void TFiber::SetWaiting()
-{
-    WaitingSince_.store(GetApproximateCpuInstant(), std::memory_order::release);
-
-    auto observed = State_.exchange(EFiberState::Waiting, std::memory_order::release);
-    YT_VERIFY(observed == EFiberState::Running);
-}
-
-void TFiber::SetFinished()
-{
-    auto observed = State_.exchange(EFiberState::Finished, std::memory_order::relaxed);
-    YT_VERIFY(observed == EFiberState::Running);
-}
-
-void TFiber::SetIdle()
-{
-    auto observed = State_.exchange(EFiberState::Idle, std::memory_order::relaxed);
-    YT_VERIFY(observed == EFiberState::Running);
-    Clear();
-}
-
-bool TFiber::TryIntrospectWaiting(EFiberState& state, const std::function<void()>& func)
-{
-    state = State_.load();
-    if (state != EFiberState::Waiting) {
-        return false;
-    }
-    if (!State_.compare_exchange_strong(state, EFiberState::Introspecting)) {
-        return false;
-    }
-    auto guard = Finally([&] {
-        YT_VERIFY(State_.exchange(state) == EFiberState::Introspecting);
-    });
-    func();
-    return true;
-}
-
-TInstant TFiber::GetWaitingSince() const
-{
-    YT_VERIFY(State_.load() == EFiberState::Introspecting);
-    return CpuInstantToInstant(WaitingSince_.load());
-}
-
-const TPropagatingStorage& TFiber::GetPropagatingStorage() const
-{
-    YT_VERIFY(State_.load() == EFiberState::Introspecting);
-    return NConcurrency::GetPropagatingStorage(*Fls_);
-}
-
-TFls* TFiber::GetFls() const
-{
-    return Fls_.get();
-}
-
-void TFiber::Recreate()
-{
-    FiberId_.store(TFiberIdGenerator::Get()->Generate(), std::memory_order::release);
-    Fls_ = std::make_unique<TFls>();
-}
-
-void TFiber::Clear()
-{
-    FiberId_.store(InvalidFiberId);
-    Fls_.reset();
-}
-
 void TFiber::ReadFibers(TFunctionView<void(TFiberList&)> callback)
 {
     return TFiberRegistry::Get()->ReadFibers(callback);
 }
 
-void TFiber::UnregisterAndDelete() noexcept
+TFiber::TFiber(EExecutionStackKind stackKind)
+    : Stack_(CreateExecutionStack(stackKind))
+    , MachineContext_({
+        .TrampoLine = this,
+        .Stack = TArrayRef(static_cast<char*>(Stack_->GetStack()), Stack_->GetSize()),
+    })
+{
+    TFiberProfiler::Get()->OnFiberCreated();
+    TFiberProfiler::Get()->OnStackAllocated(Stack_->GetSize());
+}
+
+TFiber::~TFiber()
+{
+    // What happens:
+    // SetFinished
+    // Sequenced-before
+    // Enqueue in deletion queue
+    // Synchronizes-with
+    // Dequeue from deletion queue (can be from another thread)
+    // Sequenced-before
+    // DeleteFiber
+    // Sequence-before
+    // GetState
+    // Since this is the only possible chain of events
+    // we are safe to use |GetState| (which does
+    // relaxed load).
+    YT_VERIFY(GetState() == EFiberState::Finished);
+    TFiberProfiler::Get()->OnStackFreed(Stack_->GetSize());
+}
+
+void TFiber::DeleteFiber() noexcept
 {
     YT_VERIFY(static_cast<TUnregisterBase*>(this)->Empty());
+    YT_VERIFY(!static_cast<TRegisterBase*>(this)->Empty());
+
+    // NB(arkady-e1ppa): Pair of events such as
+    // RegisterFiber and UnregisterFiber are always
+    // processes in the mentioned order.
+    // Since this is the case, every fiber
+    // is supposed to be inserted in the registry
+    // exactly once. And then removed from the registry
+    // also exactly once. This means that at this point
+    // we must be linked in the FiberList_.
     YT_VERIFY(!static_cast<TRegisterBase*>(this)->Empty());
 
     static_cast<TRegisterBase*>(this)->Unlink();

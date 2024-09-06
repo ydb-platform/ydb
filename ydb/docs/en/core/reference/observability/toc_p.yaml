@@ -5,3 +5,7 @@ items:
   include:
     mode: link
     path: metrics/toc_p.yaml
+- name: Tracing
+  include:
+    mode: link
+    path: tracing/toc_p.yaml

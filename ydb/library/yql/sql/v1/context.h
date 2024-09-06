@@ -18,6 +18,10 @@
 #include <util/generic/deque.h>
 #include <util/generic/vector.h>
 
+#define ANTLR3_TOKEN(NAME) SQLv1LexerTokens::TOKEN_##NAME << 16
+#define ANTLR4_TOKEN(NAME) (SQLv1Antlr4Lexer::TOKEN_##NAME << 16) + 1
+#define IS_TOKEN(ID, NAME) (UnifiedToken(ID) == ANTLR3_TOKEN(NAME) || UnifiedToken(ID) == ANTLR4_TOKEN(NAME))
+
 namespace NSQLTranslationV1 {
     inline bool IsAnonymousName(const TString& name) {
         return name == "$_";
@@ -26,6 +30,7 @@ namespace NSQLTranslationV1 {
     inline bool IsStreamingService(const TString& service) {
         return service == NYql::RtmrProviderName || service == NYql::PqProviderName;
     }
+
 
     struct TNodeWithUsageInfo : public TThrRefBase {
         explicit TNodeWithUsageInfo(const TNodePtr& node, TPosition namePos, int level)
@@ -263,6 +268,7 @@ namespace NSQLTranslationV1 {
         bool PragmaRegexUseRe2 = true;
         bool PragmaPullUpFlatMapOverJoin = true;
         bool FilterPushdownOverJoinOptionalSide = false;
+        bool RotateJoinTree = true;
         bool WarnUnnamedColumns = false;
         bool DiscoveryMode = false;
         bool EnableSystemColumns = true;
@@ -317,6 +323,7 @@ namespace NSQLTranslationV1 {
         ui64 ParallelModeCount = 0;
         bool CompactNamedExprs = false;
         bool ValidateUnusedExprs = false;
+        bool AnsiImplicitCrossJoin = false; // select * from A,B
     };
 
     class TColumnRefScope {
@@ -370,6 +377,10 @@ namespace NSQLTranslationV1 {
 
         const TString& Token(const NSQLv1Generated::TToken& token) {
             return Ctx.Token(token);
+        }
+
+        uint UnifiedToken(uint id) const {
+            return Ctx.Settings.Antlr4Parser + (id << 16);
         }
 
         TString Identifier(const NSQLv1Generated::TToken& token) {

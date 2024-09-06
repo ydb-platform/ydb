@@ -35,33 +35,37 @@ class KqpRun(object):
 
         cmd = self.kqprun_binary + ' '
 
-        cmd += '--emulate-yt ' \
-            '--exclude-linked-udfs ' \
-            '--clear-execution query ' \
-            '--app-config=%(config_file)s ' \
-            '--script-query=%(program_file)s ' \
-            '--scheme-query=%(scheme_file)s ' \
-            '--result-file=%(results_file)s ' \
-            '--log-file=%(log_file)s ' \
-            '--udfs-dir=%(udfs_dir)s ' \
-            '--result-format full-proto ' \
+        cmd += (
+            '--emulate-yt '
+            '--exclude-linked-udfs '
+            '--execution-case query '
+            '--app-config=%(config_file)s '
+            '--script-query=%(program_file)s '
+            '--scheme-query=%(scheme_file)s '
+            '--result-file=%(results_file)s '
+            '--log-file=%(log_file)s '
+            '--udfs-dir=%(udfs_dir)s '
+            '--result-format full-proto '
             '--result-rows-limit 0 ' % locals()
+        )
 
         if tables is not None:
             for table in tables:
                 if table.format != 'yson':
                     pytest.skip('skip tests containing tables with a non-yson attribute format')
-                cmd += '--table=yt.Root/%s@%s ' % (table.full_name, table.yqlrun_file)
+                cmd += '--table=yt./Root/%s@%s ' % (table.full_name, table.yqlrun_file)
 
         proc_result = yatest.common.process.execute(cmd.strip().split(), check_exit_code=False, cwd=self.res_dir)
         if proc_result.exit_code != 0 and check_error:
-            assert 0, \
-                'Command\n%(command)s\n finished with exit code %(code)d, stderr:\n\n%(stderr)s\n\nlog file:\n%(log_file)s' % {
+            assert 0, (
+                'Command\n%(command)s\n finished with exit code %(code)d, stderr:\n\n%(stderr)s\n\nlog file:\n%(log_file)s'
+                % {
                     'command': cmd,
                     'code': proc_result.exit_code,
                     'stderr': proc_result.std_err,
-                    'log_file': yql_utils.read_res_file(log_file)[1]
+                    'log_file': yql_utils.read_res_file(log_file)[1],
                 }
+            )
 
         results, log_results = yql_utils.read_res_file(results_file)
         err, log_err = yql_utils.read_res_file(log_file)
@@ -85,5 +89,5 @@ class KqpRun(object):
             None,
             program,
             proc_result,
-            None
+            None,
         )

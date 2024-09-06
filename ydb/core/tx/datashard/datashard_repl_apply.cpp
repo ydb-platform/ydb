@@ -24,10 +24,19 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         Y_UNUSED(ctx);
 
-        if (Self->State != TShardState::Ready && !Self->IsReplicated()) {
+        if (Self->State != TShardState::Ready) {
             Result = MakeHolder<TEvDataShard::TEvApplyReplicationChangesResult>(
                 NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED,
-                NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_WRONG_STATE);
+                NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_WRONG_STATE,
+                TStringBuilder() << "DataShard is not ready");
+            return true;
+        }
+
+        if (!Self->IsReplicated() && !Self->IsIncrementalRestore()) {
+            Result = MakeHolder<TEvDataShard::TEvApplyReplicationChangesResult>(
+                NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED,
+                NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_BAD_REQUEST,
+                TStringBuilder() << "Table is nor replicated nor under incremental restore");
             return true;
         }
 
@@ -58,7 +67,9 @@ public:
                 << " and cannot apply changes for schema version " << tableId.GetSchemaVersion();
             Result = MakeHolder<TEvDataShard::TEvApplyReplicationChangesResult>(
                 NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED,
-                NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_SCHEME_ERROR,
+                tableId.GetSchemaVersion() < userTable.GetTableSchemaVersion()
+                    ? NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_OUTDATED_SCHEME
+                    : NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_SCHEME_ERROR,
                 std::move(error));
             return true;
         }
@@ -95,13 +106,13 @@ public:
             TTransactionContext& txc, const TTableId& tableId, const TUserTable& userTable,
             TReplicationSourceState& source, const NKikimrTxDataShard::TEvApplyReplicationChanges::TChange& change)
     {
-        Y_ABORT_UNLESS(userTable.IsReplicated());
+        Y_ABORT_UNLESS(userTable.IsReplicated() || Self->IsIncrementalRestore());
 
         // TODO: check source and offset, persist new values
         i64 sourceOffset = change.GetSourceOffset();
 
         ui64 writeTxId = change.GetWriteTxId();
-        if (userTable.ReplicationConfig.HasWeakConsistency()) {
+        if (userTable.ReplicationConfig.HasWeakConsistency() || userTable.IncrementalBackupConfig.HasWeakConsistency()) {
             if (writeTxId) {
                 Result = MakeHolder<TEvDataShard::TEvApplyReplicationChangesResult>(
                     NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED,

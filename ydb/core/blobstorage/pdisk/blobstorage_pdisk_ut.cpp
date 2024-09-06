@@ -19,7 +19,8 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
                     TPDiskCategory(NPDisk::DEVICE_TYPE_ROT, 0).GetRaw());
         const TIntrusivePtr<::NMonitoring::TDynamicCounters> counters(new ::NMonitoring::TDynamicCounters);
 
-        THolder<NPDisk::IPDisk> pDisk = MakeHolder<NPDisk::TPDisk>(cfg, counters);
+        auto pCtx = std::make_shared<NPDisk::TPDiskCtx>();
+        THolder<NPDisk::IPDisk> pDisk = MakeHolder<NPDisk::TPDisk>(pCtx, cfg, counters);
         pDisk->Wakeup();
     }
 
@@ -199,10 +200,6 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
 
     // Test to reproduce bug from KIKIMR-10192
     Y_UNIT_TEST(TestLogSpliceNonceJump) {
-        if constexpr (!KIKIMR_PDISK_ENABLE_CUT_LOG_FROM_THE_MIDDLE) {
-            return;
-        }
-
         TActorTestContext testCtx({
             .IsBad = false,
             .DiskSize = 1ull << 30,
@@ -234,7 +231,6 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             // initiate log splicing, expect transition to be
             // 1 -> 2 -> ... -> 6
             NPDisk::TPDisk *pdisk = testCtx.GetPDisk();
-            UNIT_ASSERT(KIKIMR_PDISK_ENABLE_CUT_LOG_FROM_THE_MIDDLE);
             UNIT_ASSERT(pdisk->LogChunks.size() == 6);
             intensiveVDisk.CutLogAllButOne();
             // 1 -> 6
@@ -255,10 +251,6 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
 
     // Test to reproduce bug with multiple chunk splices from
     Y_UNIT_TEST(TestMultipleLogSpliceNonceJump) {
-        if constexpr (!KIKIMR_PDISK_ENABLE_CUT_LOG_FROM_THE_MIDDLE) {
-            return;
-        }
-
         TActorTestContext testCtx({
             .IsBad = false,
             .DiskSize = 1ull << 30,
@@ -299,7 +291,6 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             // initiate log splicing, expect transition to be
             // 1 -> 2 -> ... -> 9
             NPDisk::TPDisk *pdisk = testCtx.GetPDisk();
-            UNIT_ASSERT(KIKIMR_PDISK_ENABLE_CUT_LOG_FROM_THE_MIDDLE);
             UNIT_ASSERT_C(pdisk->LogChunks.size() == 9, pdisk->LogChunks.size());
             intensiveVDisk.CutLogAllButOne();
             // 1 -> 2 -> 6
@@ -315,7 +306,6 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             // initiate log splicing, expect transition to be
             // 1 -> 2 -> ... -> 6
             NPDisk::TPDisk *pdisk = testCtx.GetPDisk();
-            UNIT_ASSERT(KIKIMR_PDISK_ENABLE_CUT_LOG_FROM_THE_MIDDLE);
             UNIT_ASSERT(pdisk->LogChunks.size() == 6);
             moderateVDisk.CutLogAllButOne();
             // 1 -> 2 -> 6
@@ -559,10 +549,6 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
 
     // Test to reproduce bug from
     Y_UNIT_TEST(TestLogSpliceChunkReserve) {
-        if constexpr (!KIKIMR_PDISK_ENABLE_CUT_LOG_FROM_THE_MIDDLE) {
-            return;
-        }
-
         TActorTestContext testCtx({
             .IsBad = false,
             .DiskSize = 1ull << 30,
@@ -963,7 +949,7 @@ Y_UNIT_TEST_SUITE(PDiskCompatibilityInfo) {
         TVDiskMock vdisk(&testCtx);
         vdisk.InitFull();
         vdisk.SendEvLogSync();
-        auto pdiskId = testCtx.GetPDisk()->PDiskId;
+        auto pdiskId = testCtx.GetPDisk()->PCtx->PDiskId;
 
         const auto evInitRes = RestartPDisk(testCtx, pdiskId, vdisk, &newInfo);
         if (isCompatible) {
@@ -984,7 +970,7 @@ Y_UNIT_TEST_SUITE(PDiskCompatibilityInfo) {
         TVDiskMock vdisk(&testCtx);
         vdisk.InitFull();
         vdisk.SendEvLogSync();
-        auto pdiskId = testCtx.GetPDisk()->PDiskId;
+        auto pdiskId = testCtx.GetPDisk()->PCtx->PDiskId;
 
         {
             const auto evInitRes = RestartPDisk(testCtx, pdiskId, vdisk, &intermediateInfo);

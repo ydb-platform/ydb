@@ -81,10 +81,10 @@ public:
         request.mutable_partitioning_settings()->set_min_active_partitions(settings.PartitioningSettings_.GetMinActivePartitions());
         request.mutable_partitioning_settings()->set_partition_count_limit(settings.PartitioningSettings_.GetPartitionCountLimit());
         request.mutable_partitioning_settings()->set_max_active_partitions(settings.PartitioningSettings_.GetMaxActivePartitions());
-        request.mutable_partitioning_settings()->mutable_autoscaling_settings()->set_strategy(static_cast<Ydb::Topic::AutoscalingStrategy>(settings.PartitioningSettings_.GetAutoscalingSettings().GetStrategy()));
-        request.mutable_partitioning_settings()->mutable_autoscaling_settings()->mutable_partition_write_speed()->mutable_threshold_time()->set_seconds(settings.PartitioningSettings_.GetAutoscalingSettings().GetThresholdTime().Seconds());
-        request.mutable_partitioning_settings()->mutable_autoscaling_settings()->mutable_partition_write_speed()->set_scale_up_threshold_percent(settings.PartitioningSettings_.GetAutoscalingSettings().GetScaleUpThresholdPercent());
-        request.mutable_partitioning_settings()->mutable_autoscaling_settings()->mutable_partition_write_speed()->set_scale_down_threshold_percent(settings.PartitioningSettings_.GetAutoscalingSettings().GetScaleDownThresholdPercent());
+        request.mutable_partitioning_settings()->mutable_auto_partitioning_settings()->set_strategy(static_cast<Ydb::Topic::AutoPartitioningStrategy>(settings.PartitioningSettings_.GetAutoPartitioningSettings().GetStrategy()));
+        request.mutable_partitioning_settings()->mutable_auto_partitioning_settings()->mutable_partition_write_speed()->mutable_stabilization_window()->set_seconds(settings.PartitioningSettings_.GetAutoPartitioningSettings().GetStabilizationWindow().Seconds());
+        request.mutable_partitioning_settings()->mutable_auto_partitioning_settings()->mutable_partition_write_speed()->set_up_utilization_percent(settings.PartitioningSettings_.GetAutoPartitioningSettings().GetUpUtilizationPercent());
+        request.mutable_partitioning_settings()->mutable_auto_partitioning_settings()->mutable_partition_write_speed()->set_down_utilization_percent(settings.PartitioningSettings_.GetAutoPartitioningSettings().GetDownUtilizationPercent());
 
         request.mutable_retention_period()->set_seconds(settings.RetentionPeriod_.Seconds());
 
@@ -129,18 +129,18 @@ public:
             if (settings.AlterPartitioningSettings_->MaxActivePartitions_) {
                 request.mutable_alter_partitioning_settings()->set_set_max_active_partitions(*settings.AlterPartitioningSettings_->MaxActivePartitions_);
             }
-            if (settings.AlterPartitioningSettings_->AutoscalingSettings_) {
-                if (settings.AlterPartitioningSettings_->AutoscalingSettings_->Strategy_) {
-                    request.mutable_alter_partitioning_settings()->mutable_alter_autoscaling_settings()->set_set_strategy(static_cast<Ydb::Topic::AutoscalingStrategy>(*settings.AlterPartitioningSettings_->AutoscalingSettings_->Strategy_));
+            if (settings.AlterPartitioningSettings_->AutoPartitioningSettings_) {
+                if (settings.AlterPartitioningSettings_->AutoPartitioningSettings_->Strategy_) {
+                    request.mutable_alter_partitioning_settings()->mutable_alter_auto_partitioning_settings()->set_set_strategy(static_cast<Ydb::Topic::AutoPartitioningStrategy>(*settings.AlterPartitioningSettings_->AutoPartitioningSettings_->Strategy_));
                 }
-                if (settings.AlterPartitioningSettings_->AutoscalingSettings_->ScaleDownThresholdPercent_) {
-                    request.mutable_alter_partitioning_settings()->mutable_alter_autoscaling_settings()->mutable_set_partition_write_speed()->set_set_scale_down_threshold_percent(*settings.AlterPartitioningSettings_->AutoscalingSettings_->ScaleDownThresholdPercent_);
+                if (settings.AlterPartitioningSettings_->AutoPartitioningSettings_->DownUtilizationPercent_) {
+                    request.mutable_alter_partitioning_settings()->mutable_alter_auto_partitioning_settings()->mutable_set_partition_write_speed()->set_set_down_utilization_percent(*settings.AlterPartitioningSettings_->AutoPartitioningSettings_->DownUtilizationPercent_);
                 }
-                if (settings.AlterPartitioningSettings_->AutoscalingSettings_->ScaleUpThresholdPercent_) {
-                    request.mutable_alter_partitioning_settings()->mutable_alter_autoscaling_settings()->mutable_set_partition_write_speed()->set_set_scale_up_threshold_percent(*settings.AlterPartitioningSettings_->AutoscalingSettings_->ScaleUpThresholdPercent_);
+                if (settings.AlterPartitioningSettings_->AutoPartitioningSettings_->UpUtilizationPercent_) {
+                    request.mutable_alter_partitioning_settings()->mutable_alter_auto_partitioning_settings()->mutable_set_partition_write_speed()->set_set_up_utilization_percent(*settings.AlterPartitioningSettings_->AutoPartitioningSettings_->UpUtilizationPercent_);
                 }
-                if (settings.AlterPartitioningSettings_->AutoscalingSettings_->ThresholdTime_) {
-                    request.mutable_alter_partitioning_settings()->mutable_alter_autoscaling_settings()->mutable_set_partition_write_speed()->mutable_set_threshold_time()->set_seconds(settings.AlterPartitioningSettings_->AutoscalingSettings_->ThresholdTime_->Seconds());
+                if (settings.AlterPartitioningSettings_->AutoPartitioningSettings_->StabilizationWindow_) {
+                    request.mutable_alter_partitioning_settings()->mutable_alter_auto_partitioning_settings()->mutable_set_partition_write_speed()->mutable_set_stabilization_window()->set_seconds(settings.AlterPartitioningSettings_->AutoPartitioningSettings_->StabilizationWindow_->Seconds());
                 }
             }
         }

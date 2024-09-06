@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping
 from io import SEEK_SET, UnsupportedOperation
 from os import PathLike
 from pathlib import Path
-from typing import Any, BinaryIO, Callable, Mapping, cast
+from typing import Any, BinaryIO, cast
 
 from .. import (
     BrokenResourceError,
@@ -130,8 +131,8 @@ class FileWriteStream(_BaseFileStream, ByteSendStream):
         Create a file write stream by opening the given file for writing.
 
         :param path: path of the file to write to
-        :param append: if ``True``, open the file for appending; if ``False``, any existing file
-            at the given path will be truncated
+        :param append: if ``True``, open the file for appending; if ``False``, any
+            existing file at the given path will be truncated
 
         """
         mode = "ab" if append else "wb"

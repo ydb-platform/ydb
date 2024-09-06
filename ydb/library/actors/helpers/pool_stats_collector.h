@@ -214,6 +214,7 @@ private:
         THPTimer UsageTimer;
         TString Name;
         double Threads;
+        double LimitThreads;
 
         void Init(NMonitoring::TDynamicCounters* group, const TString& poolName, ui32 threads) {
             LastElapsedSeconds = 0;
@@ -221,6 +222,7 @@ private:
             UsageTimer.Reset();
             Name = poolName;
             Threads = threads;
+            LimitThreads = threads;
 
             PoolGroup = group->GetSubgroup("execpool", poolName);
 
@@ -362,7 +364,7 @@ private:
             double seconds = UsageTimer.PassedReset();
 
             // TODO[serxa]: It doesn't account for contention. Use 1 - parkedTicksDelta / seconds / numThreads KIKIMR-11916
-            const double currentThreadCount = poolStats.CurrentThreadCount;
+            const double currentThreadCount = poolStats.PotentialMaxThreadCount;
             const double elapsed = NHPTimer::GetSeconds(stats.ElapsedTicks);
             const double currentUsage = currentThreadCount > 0 ? ((elapsed - LastElapsedSeconds) / seconds / currentThreadCount) : 0;
             LastElapsedSeconds = elapsed;
@@ -374,6 +376,7 @@ private:
             Y_UNUSED(stats);
 #endif
             Threads = poolStats.CurrentThreadCount;
+            LimitThreads = poolStats.PotentialMaxThreadCount;
         }
     };
 

@@ -616,8 +616,8 @@ namespace NYql {
             //~ Cerr << res[2] << Endl;
             UNIT_ASSERT_NO_DIFF(
                 "{\"Write\"=["
-                "{\"Ref\"=[{\"Reference\"=[\"yt\";\"plato\";\"tmp/7ae6459a-7382d1e7-7935c08e-2\"];\"Columns\"=[\"bar\"];\"Remove\"=%true}]};"
-                "{\"Ref\"=[{\"Reference\"=[\"yt\";\"plato\";\"tmp/bb686f68-2245bd5f-2318fa4e-1\"];\"Columns\"=[\"foo\"];\"Remove\"=%true}]}"
+                "{\"Ref\"=[{\"Reference\"=[\"yt\";\"plato\";\"tmp/bb686f68-2245bd5f-2318fa4e-1\"];\"Columns\"=[\"bar\"];\"Remove\"=%true}]};"
+                "{\"Ref\"=[{\"Reference\"=[\"yt\";\"plato\";\"tmp/7ae6459a-7382d1e7-7935c08e-2\"];\"Columns\"=[\"foo\"];\"Remove\"=%true}]}"
                 "]}",
                 res[0]
             );

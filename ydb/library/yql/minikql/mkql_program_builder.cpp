@@ -84,6 +84,14 @@ void EnsureScriptSpecificTypes(
         case EScriptType::CustomPython:
         case EScriptType::CustomPython2:
         case EScriptType::CustomPython3:
+        case EScriptType::SystemPython2:
+        case EScriptType::SystemPython3:
+        case EScriptType::SystemPython3_8:
+        case EScriptType::SystemPython3_9:
+        case EScriptType::SystemPython3_10:
+        case EScriptType::SystemPython3_11:
+        case EScriptType::SystemPython3_12:
+        case EScriptType::SystemPython3_13:
             return TPythonTypeChecker().Walk(funcType, env);
         case EScriptType::Javascript:
             return TJavascriptTypeChecker().Walk(funcType, env);
@@ -229,40 +237,34 @@ bool ReduceOptionalElements(const TType* type, const TArrayRef<const ui32>& test
     return multiOptional;
 }
 
-std::vector<TType*> ValidateBlockStreamType(const TType* streamType) {
-    const auto wideComponents = GetWideComponents(AS_TYPE(TStreamType, streamType));
+static std::vector<TType*> ValidateBlockItems(const TArrayRef<TType* const>& wideComponents, bool unwrap) {
     MKQL_ENSURE(wideComponents.size() > 0, "Expected at least one column");
-    std::vector<TType*> streamItems;
-    streamItems.reserve(wideComponents.size());
+    std::vector<TType*> items;
+    items.reserve(wideComponents.size());
+    // XXX: Declare these variables outside the loop body to use for the last
+    // item (i.e. block length column) in the assertions below.
     bool isScalar;
-    for (size_t i = 0; i < wideComponents.size(); ++i) {
-        auto blockType = AS_TYPE(TBlockType, wideComponents[i]);
+    TType* itemType;
+    for (const auto& wideComponent : wideComponents) {
+        auto blockType = AS_TYPE(TBlockType, wideComponent);
         isScalar = blockType->GetShape() == TBlockType::EShape::Scalar;
-        auto withoutBlock = blockType->GetItemType();
-        streamItems.push_back(withoutBlock);
+        itemType = blockType->GetItemType();
+        items.push_back(unwrap ? itemType : blockType);
     }
 
     MKQL_ENSURE(isScalar, "Last column should be scalar");
-    MKQL_ENSURE(AS_TYPE(TDataType, streamItems.back())->GetSchemeType() == NUdf::TDataType<ui64>::Id, "Expected Uint64");
-    return streamItems;
+    MKQL_ENSURE(AS_TYPE(TDataType, itemType)->GetSchemeType() == NUdf::TDataType<ui64>::Id, "Expected Uint64");
+    return items;
 }
 
-std::vector<TType*> ValidateBlockFlowType(const TType* flowType) {
-    const auto wideComponents = GetWideComponents(AS_TYPE(TFlowType, flowType));
-    MKQL_ENSURE(wideComponents.size() > 0, "Expected at least one column");
-    std::vector<TType*> flowItems;
-    flowItems.reserve(wideComponents.size());
-    bool isScalar;
-    for (size_t i = 0; i < wideComponents.size(); ++i) {
-        auto blockType = AS_TYPE(TBlockType, wideComponents[i]);
-        isScalar = blockType->GetShape() == TBlockType::EShape::Scalar;
-        auto withoutBlock = blockType->GetItemType();
-        flowItems.push_back(withoutBlock);
-    }
+std::vector<TType*> ValidateBlockStreamType(const TType* streamType, bool unwrap = true) {
+    const auto wideComponents = GetWideComponents(AS_TYPE(TStreamType, streamType));
+    return ValidateBlockItems(wideComponents, unwrap);
+}
 
-    MKQL_ENSURE(isScalar, "Last column should be scalar");
-    MKQL_ENSURE(AS_TYPE(TDataType, flowItems.back())->GetSchemeType() == NUdf::TDataType<ui64>::Id, "Expected Uint64");
-    return flowItems;
+std::vector<TType*> ValidateBlockFlowType(const TType* flowType, bool unwrap = true) {
+    const auto wideComponents = GetWideComponents(AS_TYPE(TFlowType, flowType));
+    return ValidateBlockItems(wideComponents, unwrap);
 }
 
 } // namespace
@@ -301,6 +303,12 @@ bool IsCustomPython(EScriptType type) {
 bool IsSystemPython(EScriptType type) {
     return type == EScriptType::SystemPython2
         || type == EScriptType::SystemPython3
+        || type == EScriptType::SystemPython3_8
+        || type == EScriptType::SystemPython3_9
+        || type == EScriptType::SystemPython3_10
+        || type == EScriptType::SystemPython3_11
+        || type == EScriptType::SystemPython3_12
+        || type == EScriptType::SystemPython3_13
         || type == EScriptType::Python
         || type == EScriptType::Python2;
 }
@@ -2104,12 +2112,14 @@ TRuntimeNode TProgramBuilder::JoinDict(TRuntimeNode dict1, bool isMulti1, TRunti
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::GraceJoin(TRuntimeNode flowLeft, TRuntimeNode flowRight, EJoinKind joinKind,
+TRuntimeNode TProgramBuilder::GraceJoinCommon(const TStringBuf& funcName, TRuntimeNode flowLeft, TRuntimeNode flowRight, EJoinKind joinKind,
         const TArrayRef<const ui32>& leftKeyColumns, const TArrayRef<const ui32>& rightKeyColumns,
         const TArrayRef<const ui32>& leftRenames, const TArrayRef<const ui32>& rightRenames, TType* returnType, EAnyJoinSettings anyJoinSettings ) {
 
     MKQL_ENSURE(!leftKeyColumns.empty(), "At least one key column must be specified");
-    MKQL_ENSURE(!rightKeyColumns.empty(), "At least one key column must be specified");
+    if (flowRight) {
+        MKQL_ENSURE(!rightKeyColumns.empty(), "At least one key column must be specified");
+    }
 
     TRuntimeNode::TList leftKeyColumnsNodes, rightKeyColumnsNodes, leftRenamesNodes, rightRenamesNodes;
 
@@ -2126,9 +2136,11 @@ TRuntimeNode TProgramBuilder::GraceJoin(TRuntimeNode flowLeft, TRuntimeNode flow
     std::transform(rightRenames.cbegin(), rightRenames.cend(), std::back_inserter(rightRenamesNodes), [this](const ui32 idx) { return NewDataLiteral(idx); });
 
 
-    TCallableBuilder callableBuilder(Env, __func__, returnType);
+    TCallableBuilder callableBuilder(Env, funcName, returnType);
     callableBuilder.Add(flowLeft);
-    callableBuilder.Add(flowRight);
+    if (flowRight) {
+        callableBuilder.Add(flowRight);
+    }
     callableBuilder.Add(NewDataLiteral((ui32)joinKind));
     callableBuilder.Add(NewTuple(leftKeyColumnsNodes));
     callableBuilder.Add(NewTuple(rightKeyColumnsNodes));
@@ -2136,9 +2148,14 @@ TRuntimeNode TProgramBuilder::GraceJoin(TRuntimeNode flowLeft, TRuntimeNode flow
     callableBuilder.Add(NewTuple(rightRenamesNodes));
     callableBuilder.Add(NewDataLiteral((ui32)anyJoinSettings));
 
-
     return TRuntimeNode(callableBuilder.Build(), false);
+}
 
+TRuntimeNode TProgramBuilder::GraceJoin(TRuntimeNode flowLeft, TRuntimeNode flowRight, EJoinKind joinKind,
+        const TArrayRef<const ui32>& leftKeyColumns, const TArrayRef<const ui32>& rightKeyColumns,
+        const TArrayRef<const ui32>& leftRenames, const TArrayRef<const ui32>& rightRenames, TType* returnType, EAnyJoinSettings anyJoinSettings ) {
+
+    return GraceJoinCommon(__func__, flowLeft, flowRight, joinKind, leftKeyColumns, rightKeyColumns, leftRenames, rightRenames, returnType, anyJoinSettings);
 }
 
 TRuntimeNode TProgramBuilder::GraceSelfJoin(TRuntimeNode flowLeft,  EJoinKind joinKind, const TArrayRef<const ui32>& leftKeyColumns, const TArrayRef<const ui32>& rightKeyColumns,
@@ -2148,37 +2165,8 @@ TRuntimeNode TProgramBuilder::GraceSelfJoin(TRuntimeNode flowLeft,  EJoinKind jo
         THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
     }
 
-    MKQL_ENSURE(!leftKeyColumns.empty(), "At least one key column must be specified");
-
-
-    TRuntimeNode::TList leftKeyColumnsNodes,  rightKeyColumnsNodes, leftRenamesNodes, rightRenamesNodes;
-
-    leftKeyColumnsNodes.reserve(leftKeyColumns.size());
-    std::transform(leftKeyColumns.cbegin(), leftKeyColumns.cend(), std::back_inserter(leftKeyColumnsNodes), [this](const ui32 idx) { return NewDataLiteral(idx); });
-
-    rightKeyColumnsNodes.reserve(rightKeyColumns.size());
-    std::transform(rightKeyColumns.cbegin(), rightKeyColumns.cend(), std::back_inserter(rightKeyColumnsNodes), [this](const ui32 idx) { return NewDataLiteral(idx); });
-
-    leftRenamesNodes.reserve(leftRenames.size());
-    std::transform(leftRenames.cbegin(), leftRenames.cend(), std::back_inserter(leftRenamesNodes), [this](const ui32 idx) { return NewDataLiteral(idx); });
-
-    rightRenamesNodes.reserve(rightRenames.size());
-    std::transform(rightRenames.cbegin(), rightRenames.cend(), std::back_inserter(rightRenamesNodes), [this](const ui32 idx) { return NewDataLiteral(idx); });
-
-
-    TCallableBuilder callableBuilder(Env, __func__, returnType);
-    callableBuilder.Add(flowLeft);
-    callableBuilder.Add(NewDataLiteral((ui32)joinKind));
-    callableBuilder.Add(NewTuple(leftKeyColumnsNodes));
-    callableBuilder.Add(NewTuple(rightKeyColumnsNodes));
-    callableBuilder.Add(NewTuple(leftRenamesNodes));
-    callableBuilder.Add(NewTuple(rightRenamesNodes));
-    callableBuilder.Add(NewDataLiteral((ui32)anyJoinSettings));
-
-    return TRuntimeNode(callableBuilder.Build(), false);
-
+    return GraceJoinCommon(__func__, flowLeft, {}, joinKind, leftKeyColumns, rightKeyColumns, leftRenames, rightRenames, returnType, anyJoinSettings);
 }
-
 
 TRuntimeNode TProgramBuilder::ToSortedDict(TRuntimeNode list, bool all, const TUnaryLambda& keySelector,
     const TUnaryLambda& payloadSelector, bool isCompact, ui64 itemsCountHint) {
@@ -3297,8 +3285,11 @@ TRuntimeNode TProgramBuilder::AddTimezone(TRuntimeNode utc, TRuntimeNode id) {
     case NUdf::EDataSlot::Date: tzType = NUdf::EDataSlot::TzDate; break;
     case NUdf::EDataSlot::Datetime: tzType = NUdf::EDataSlot::TzDatetime; break;
     case NUdf::EDataSlot::Timestamp: tzType = NUdf::EDataSlot::TzTimestamp; break;
+    case NUdf::EDataSlot::Date32: tzType = NUdf::EDataSlot::TzDate32; break;
+    case NUdf::EDataSlot::Datetime64: tzType = NUdf::EDataSlot::TzDatetime64; break;
+    case NUdf::EDataSlot::Timestamp64: tzType = NUdf::EDataSlot::TzTimestamp64; break;
     default:
-        ythrow yexception() << "Unknown date type: " << (ui32)*dataType1->GetDataSlot();
+        ythrow yexception() << "Unknown date type: " << *dataType1->GetDataSlot();
     }
 
     auto resultType = NewOptionalType(NewDataType(tzType));
@@ -3318,8 +3309,11 @@ TRuntimeNode TProgramBuilder::RemoveTimezone(TRuntimeNode local) {
     case NUdf::EDataSlot::TzDate: type = NUdf::EDataSlot::Date; break;
     case NUdf::EDataSlot::TzDatetime: type = NUdf::EDataSlot::Datetime; break;
     case NUdf::EDataSlot::TzTimestamp: type = NUdf::EDataSlot::Timestamp; break;
+    case NUdf::EDataSlot::TzDate32: type = NUdf::EDataSlot::Date32; break;
+    case NUdf::EDataSlot::TzDatetime64: type = NUdf::EDataSlot::Datetime64; break;
+    case NUdf::EDataSlot::TzTimestamp64: type = NUdf::EDataSlot::Timestamp64; break;
     default:
-        ythrow yexception() << "Unknown date with timezone type: " << (ui32)*dataType1->GetDataSlot();
+        ythrow yexception() << "Unknown date with timezone type: " << *dataType1->GetDataSlot();
     }
 
     return Convert(local, NewDataType(type, isOptional1));
@@ -4768,11 +4762,7 @@ TRuntimeNode TProgramBuilder::WideCombiner(TRuntimeNode flow, i64 memLimit, cons
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::WideLastCombiner(TRuntimeNode flow, const TWideLambda& extractor, const TBinaryWideLambda& init, const TTernaryWideLambda& update, const TBinaryWideLambda& finish) {
-    if constexpr (RuntimeVersion < 29U) {
-        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
-    }
-
+TRuntimeNode TProgramBuilder::WideLastCombinerCommon(const TStringBuf& funcName, TRuntimeNode flow, const TWideLambda& extractor, const TBinaryWideLambda& init, const TTernaryWideLambda& update, const TBinaryWideLambda& finish) {
     const auto wideComponents = GetWideComponents(AS_TYPE(TFlowType, flow.GetStaticType()));
 
     TRuntimeNode::TList itemArgs;
@@ -4810,7 +4800,7 @@ TRuntimeNode TProgramBuilder::WideLastCombiner(TRuntimeNode flow, const TWideLam
     tupleItems.reserve(output.size());
     std::transform(output.cbegin(), output.cend(), std::back_inserter(tupleItems), std::bind(&TRuntimeNode::GetStaticType, std::placeholders::_1));
 
-    TCallableBuilder callableBuilder(Env, __func__, NewFlowType(NewMultiType(tupleItems)));
+    TCallableBuilder callableBuilder(Env, funcName, NewFlowType(NewMultiType(tupleItems)));
     callableBuilder.Add(flow);
     callableBuilder.Add(NewDataLiteral(ui32(keyArgs.size())));
     callableBuilder.Add(NewDataLiteral(ui32(stateArgs.size())));
@@ -4824,6 +4814,22 @@ TRuntimeNode TProgramBuilder::WideLastCombiner(TRuntimeNode flow, const TWideLam
     std::for_each(finishStateArgs.cbegin(), finishStateArgs.cend(), std::bind(&TCallableBuilder::Add, std::ref(callableBuilder), std::placeholders::_1));
     std::for_each(output.cbegin(), output.cend(), std::bind(&TCallableBuilder::Add, std::ref(callableBuilder), std::placeholders::_1));
     return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TProgramBuilder::WideLastCombiner(TRuntimeNode flow, const TWideLambda& extractor, const TBinaryWideLambda& init, const TTernaryWideLambda& update, const TBinaryWideLambda& finish) {
+    if constexpr (RuntimeVersion < 29U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+
+    return WideLastCombinerCommon(__func__, flow, extractor, init, update, finish);
+}
+
+TRuntimeNode TProgramBuilder::WideLastCombinerWithSpilling(TRuntimeNode flow, const TWideLambda& extractor, const TBinaryWideLambda& init, const TTernaryWideLambda& update, const TBinaryWideLambda& finish) {
+    if constexpr (RuntimeVersion < 49U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+
+    return WideLastCombinerCommon(__func__, flow, extractor, init, update, finish);
 }
 
 TRuntimeNode TProgramBuilder::WideCondense1(TRuntimeNode flow, const TWideLambda& init, const TWideSwitchLambda& switcher, const TBinaryWideLambda& update, bool useCtx) {
@@ -5257,10 +5263,12 @@ TRuntimeNode TProgramBuilder::Cast(TRuntimeNode arg, TType* type) {
     }
 
     const auto options = NKikimr::NUdf::GetCastResult(*sourceType->GetDataSlot(), *targetType->GetDataSlot());
-    MKQL_ENSURE(!(options && (*options & NKikimr::NUdf::ECastOptions::Impossible)),
+    MKQL_ENSURE((*options & NKikimr::NUdf::ECastOptions::Undefined) ||
+        !(*options & NKikimr::NUdf::ECastOptions::Impossible),
         "Impossible to cast " <<  *static_cast<TType*>(sourceType) << " into " << *static_cast<TType*>(targetType));
 
-    const bool useToIntegral = !options || NKikimr::NUdf::ECastOptions::MayFail & *options;
+    const bool useToIntegral = (*options & NKikimr::NUdf::ECastOptions::Undefined) ||
+        (*options & NKikimr::NUdf::ECastOptions::MayFail);
     return useToIntegral ? ToIntegral(arg, type) : Convert(arg, type);
 }
 
@@ -5405,7 +5413,7 @@ TRuntimeNode TProgramBuilder::Round(const std::string_view& callableName, TRunti
     const auto ts = *static_cast<TDataType*>(targetType)->GetDataSlot();
 
     const auto options = NKikimr::NUdf::GetCastResult(ss, ts);
-    MKQL_ENSURE(options && !(*options & NKikimr::NUdf::ECastOptions::Impossible),
+    MKQL_ENSURE(!(*options & NKikimr::NUdf::ECastOptions::Impossible),
         "Impossible to cast " <<  *sourceType << " into " << *targetType);
 
     MKQL_ENSURE(*options & (NKikimr::NUdf::ECastOptions::MayFail |
@@ -5844,6 +5852,63 @@ TRuntimeNode TProgramBuilder::ScalarApply(const TArrayRef<const TRuntimeNode>& a
 
     builder.Add(ret);
     return TRuntimeNode(builder.Build(), false);
+}
+
+TRuntimeNode TProgramBuilder::BlockMapJoinCore(TRuntimeNode flow, TRuntimeNode dict,
+    EJoinKind joinKind, const TArrayRef<const ui32>& leftKeyColumns
+) {
+    if constexpr (RuntimeVersion < 51U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+    MKQL_ENSURE(joinKind == EJoinKind::Inner || joinKind == EJoinKind::Left ||
+                joinKind == EJoinKind::LeftSemi || joinKind == EJoinKind::LeftOnly,
+                "Unsupported join kind");
+    MKQL_ENSURE(!leftKeyColumns.empty(), "At least one key column must be specified");
+
+    TRuntimeNode::TList leftKeyColumnsNodes;
+    leftKeyColumnsNodes.reserve(leftKeyColumns.size());
+    std::transform(leftKeyColumns.cbegin(), leftKeyColumns.cend(),
+        std::back_inserter(leftKeyColumnsNodes), [this](const ui32 idx) {
+            return NewDataLiteral(idx);
+        });
+
+    auto returnJoinItems = ValidateBlockFlowType(flow.GetStaticType(), false);
+    const auto payloadType = AS_TYPE(TDictType, dict.GetStaticType())->GetPayloadType();
+    const auto payloadItemType = payloadType->IsList()
+                               ? AS_TYPE(TListType, payloadType)->GetItemType()
+                               : payloadType;
+    if (joinKind == EJoinKind::Inner || joinKind == EJoinKind::Left) {
+        // XXX: This is the contract ensured by the expression compiler and
+        // optimizers to ease the processing of the dict payload in wide context.
+        MKQL_ENSURE(payloadItemType->IsTuple(), "Dict payload has to be a Tuple");
+        const auto payloadItems = AS_TYPE(TTupleType, payloadItemType)->GetElements();
+        TVector<TType*> dictBlockItems;
+        dictBlockItems.reserve(payloadItems.size());
+        for (const auto& payloadItem : payloadItems) {
+            MKQL_ENSURE(!payloadItem->IsBlock(), "Dict payload item has to be non-block");
+            const auto itemType = joinKind == EJoinKind::Inner ? payloadItem
+                                : NewOptionalType(payloadItem);
+            dictBlockItems.emplace_back(NewBlockType(itemType, TBlockType::EShape::Many));
+        }
+        // Block length column has to be the last column in wide block flow item,
+        // so all contents of the dict payload should be appended to the resulting
+        // wide type before the block size column.
+        const auto blockLenPos = std::prev(returnJoinItems.end());
+        returnJoinItems.insert(blockLenPos, dictBlockItems.cbegin(), dictBlockItems.cend());
+    } else {
+        // XXX: This is the contract ensured by the expression compiler and
+        // optimizers for join types that don't require the right (i.e. dict) part.
+        MKQL_ENSURE(payloadItemType->IsVoid(), "Dict payload has to be Void");
+    }
+    TType* returnJoinType = NewFlowType(NewMultiType(returnJoinItems));
+
+    TCallableBuilder callableBuilder(Env, __func__, returnJoinType);
+    callableBuilder.Add(flow);
+    callableBuilder.Add(dict);
+    callableBuilder.Add(NewDataLiteral((ui32)joinKind));
+    callableBuilder.Add(NewTuple(leftKeyColumnsNodes));
+
+    return TRuntimeNode(callableBuilder.Build(), false);
 }
 
 namespace {

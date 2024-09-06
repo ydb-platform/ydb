@@ -17,8 +17,10 @@ PEERDIR(
     ydb/core/kqp/common
     ydb/core/kqp/common/events
     ydb/core/kqp/counters
+    ydb/core/kqp/gateway/behaviour/resource_pool_classifier
     ydb/core/kqp/proxy_service/proto
     ydb/core/kqp/run_script_actor
+    ydb/core/kqp/workload_service
     ydb/core/mind
     ydb/core/protos
     ydb/core/tx/tx_proxy
@@ -29,6 +31,7 @@ PEERDIR(
     ydb/library/table_creator
     ydb/library/yql/providers/common/http_gateway
     ydb/library/yql/providers/common/proto
+    ydb/library/yql/providers/s3/actors_factory
     ydb/library/yql/public/issue
     ydb/library/yql/dq/actors/spilling
     ydb/public/api/protos

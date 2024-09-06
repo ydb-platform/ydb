@@ -10,6 +10,8 @@
 
 #include <yt/yt/core/bus/tcp/dispatcher.h>
 
+#include <yt/yt/library/oom/oom.h>
+
 #include <yt/yt/library/tracing/jaeger/tracer.h>
 
 #include <yt/yt/library/profiling/perf/counters.h>
@@ -19,6 +21,7 @@
 #include <yt/yt/core/logging/log_manager.h>
 
 #include <yt/yt/core/concurrency/execution_stack.h>
+#include <yt/yt/core/concurrency/fiber_scheduler_thread.h>
 #include <yt/yt/core/concurrency/periodic_executor.h>
 
 #include <tcmalloc/malloc_extension.h>
@@ -59,9 +62,10 @@ class TCMallocLimitsAdjuster
 public:
     void Adjust(const TTCMallocConfigPtr& config)
     {
-        i64 totalMemory = GetContainerMemoryLimit();
+        i64 totalMemory = GetAnonymousMemoryLimit();
         AdjustPageHeapLimit(totalMemory, config);
         AdjustAggressiveReleaseThreshold(totalMemory, config);
+        SetupMemoryLimitHandler(config);
     }
 
     i64 GetAggressiveReleaseThreshold()
@@ -102,27 +106,46 @@ private:
         }
     }
 
-    i64 GetContainerMemoryLimit() const
+    void SetupMemoryLimitHandler(const TTCMallocConfigPtr& config)
+    {
+        TTCMallocLimitHandlerOptions handlerOptions {
+            .HeapDumpDirectory = config->HeapSizeLimit->DumpMemoryProfilePath,
+            .Timeout = config->HeapSizeLimit->DumpMemoryProfileTimeout,
+        };
+
+        if (config->HeapSizeLimit->DumpMemoryProfileOnViolation) {
+            EnableTCMallocLimitHandler(handlerOptions);
+        } else {
+            DisableTCMallocLimitHandler();
+        }
+    }
+
+    i64 GetAnonymousMemoryLimit() const
     {
         auto resourceTracker = NProfiling::GetResourceTracker();
         if (!resourceTracker) {
             return 0;
         }
 
-        return resourceTracker->GetTotalMemoryLimit();
+        return resourceTracker->GetAnonymousMemoryLimit();
     }
 
     TAllocatorMemoryLimit ProposeHeapMemoryLimit(i64 totalMemory, const TTCMallocConfigPtr& config) const
     {
-        const auto& heapLimitConfig = config->HeapSizeLimit;
+        const auto& heapSizeConfig = config->HeapSizeLimit;
 
-        if (totalMemory == 0 || !heapLimitConfig->ContainerMemoryRatio) {
+        if (totalMemory == 0 || !heapSizeConfig->ContainerMemoryRatio && !heapSizeConfig->ContainerMemoryMargin) {
             return {};
         }
 
         TAllocatorMemoryLimit proposed;
-        proposed.limit = *heapLimitConfig->ContainerMemoryRatio * totalMemory;
-        proposed.hard = heapLimitConfig->Hard;
+        proposed.hard = heapSizeConfig->Hard;
+
+        if (heapSizeConfig->ContainerMemoryMargin) {
+            proposed.limit = totalMemory - *heapSizeConfig->ContainerMemoryMargin;
+        } else {
+            proposed.limit = *heapSizeConfig->ContainerMemoryRatio * totalMemory;
+        }
 
         return proposed;
     }
@@ -201,6 +224,8 @@ void ConfigureSingletons(const TSingletonsConfigPtr& config)
 
     NBus::TTcpDispatcher::Get()->Configure(config->TcpDispatcher);
 
+    NPipes::TIODispatcher::Get()->Configure(config->IODispatcher);
+
     NRpc::TDispatcher::Get()->Configure(config->RpcDispatcher);
 
     NRpc::NGrpc::TDispatcher::Get()->Configure(config->GrpcDispatcher);
@@ -234,9 +259,18 @@ void ConfigureSingletons(const TSingletonsConfigPtr& config)
     NYson::SetProtobufInteropConfig(config->ProtobufInterop);
 }
 
+TTCMallocConfigPtr MergeTCMallocDynamicConfig(const TTCMallocConfigPtr& staticConfig, const TTCMallocConfigPtr& dynamicConfig)
+{
+    auto mergedConfig = CloneYsonStruct(dynamicConfig);
+    mergedConfig->HeapSizeLimit->DumpMemoryProfilePath = staticConfig->HeapSizeLimit->DumpMemoryProfilePath;
+    return mergedConfig;
+}
+
 void ReconfigureSingletons(const TSingletonsConfigPtr& config, const TSingletonsDynamicConfigPtr& dynamicConfig)
 {
     SetSpinWaitSlowPathLoggingThreshold(dynamicConfig->SpinWaitSlowPathLoggingThreshold.value_or(config->SpinWaitSlowPathLoggingThreshold));
+
+    NConcurrency::UpdateMaxIdleFibers(dynamicConfig->MaxIdleFibers);
 
     if (!NYTAlloc::IsConfiguredFromEnv()) {
         NYTAlloc::Configure(dynamicConfig->YTAlloc ? dynamicConfig->YTAlloc : config->YTAlloc);
@@ -255,6 +289,8 @@ void ReconfigureSingletons(const TSingletonsConfigPtr& config, const TSingletons
 
     NBus::TTcpDispatcher::Get()->Configure(config->TcpDispatcher->ApplyDynamic(dynamicConfig->TcpDispatcher));
 
+    NPipes::TIODispatcher::Get()->Configure(dynamicConfig->IODispatcher ? dynamicConfig->IODispatcher : config->IODispatcher);
+
     NRpc::TDispatcher::Get()->Configure(config->RpcDispatcher->ApplyDynamic(dynamicConfig->RpcDispatcher));
 
     if (dynamicConfig->TracingTransport) {
@@ -264,7 +300,7 @@ void ReconfigureSingletons(const TSingletonsConfigPtr& config, const TSingletons
     }
 
     if (dynamicConfig->TCMalloc) {
-        ConfigureTCMalloc(dynamicConfig->TCMalloc);
+        ConfigureTCMalloc(MergeTCMallocDynamicConfig(config->TCMalloc, dynamicConfig->TCMalloc));
     } else if (config->TCMalloc) {
         ConfigureTCMalloc(config->TCMalloc);
     }

@@ -19,6 +19,9 @@ namespace NKikimr::NColumnShard {
 using namespace NTabletFlatExecutor;
 
 class TTxInit : public TTransactionBase<TColumnShard> {
+private:
+    const TMonotonic StartInstant = TMonotonic::Now();
+
 public:
     TTxInit(TColumnShard* self)
         : TBase(self)
@@ -165,9 +168,9 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
         }
         Self->TablesManager = std::move(tManagerLocal);
 
-        Self->SetCounter(COUNTER_TABLES, Self->TablesManager.GetTables().size());
-        Self->SetCounter(COUNTER_TABLE_PRESETS, Self->TablesManager.GetSchemaPresets().size());
-        Self->SetCounter(COUNTER_TABLE_TTLS, Self->TablesManager.GetTtl().PathsCount());
+        Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TABLES, Self->TablesManager.GetTables().size());
+        Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TABLE_PRESETS, Self->TablesManager.GetSchemaPresets().size());
+        Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TABLE_TTLS, Self->TablesManager.GetTtl().PathsCount());
         ACFL_DEBUG("step", "TTablesManager::Load_Finish");
     }
 
@@ -222,6 +225,14 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
         }
         Self->SharingSessionsManager = local;
     }
+    { 
+        TMemoryProfileGuard g("TTxInit/TInFlightReadsTracker");
+        TInFlightReadsTracker local(Self->StoragesManager, Self->Counters.GetRequestsTracingCounters());
+        if (!local.LoadFromDatabase(txc.DB)) {
+            return false;
+        }
+        Self->InFlightReadsTracker = std::move(local);
+    }
 
     Self->UpdateInsertTableCounters();
     Self->UpdateIndexCounters();
@@ -250,6 +261,7 @@ bool TTxInit::Execute(TTransactionContext& txc, const TActorContext& ctx) {
 }
 
 void TTxInit::Complete(const TActorContext& ctx) {
+    Self->Counters.GetCSCounters().Initialization.OnTxInitFinished(TMonotonic::Now() - StartInstant);
     Self->ProgressTxController->OnTabletInit();
     Self->SwitchToWork(ctx);
     NYDBTest::TControllers::GetColumnShardController()->OnTabletInitCompleted(*Self);
@@ -257,6 +269,8 @@ void TTxInit::Complete(const TActorContext& ctx) {
 
 class TTxUpdateSchema : public TTransactionBase<TColumnShard> {
     std::vector<NOlap::INormalizerTask::TPtr> NormalizerTasks;
+    const TMonotonic StartInstant = TMonotonic::Now();
+
 public:
     TTxUpdateSchema(TColumnShard* self)
         : TBase(self)
@@ -281,7 +295,7 @@ bool TTxUpdateSchema::Execute(TTransactionContext& txc, const TActorContext&) {
                 break;
             }
             NIceDb::TNiceDb db(txc.DB);
-            Self->NormalizerController.UpdateControllerState(db);
+            Self->NormalizerController.OnNormalizerFinished(db);
             Self->NormalizerController.SwitchNormalizer();
         } else {
             Self->NormalizerController.GetCounters().OnNormalizerFails();
@@ -295,6 +309,7 @@ bool TTxUpdateSchema::Execute(TTransactionContext& txc, const TActorContext&) {
 
 void TTxUpdateSchema::Complete(const TActorContext& ctx) {
     AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("step", "TTxUpdateSchema.Complete");
+    Self->Counters.GetCSCounters().Initialization.OnTxUpdateSchemaFinished(TMonotonic::Now() - StartInstant);
     if (NormalizerTasks.empty()) {
         AFL_VERIFY(Self->NormalizerController.IsNormalizationFinished())("details", Self->NormalizerController.DebugString());
         Self->Execute(new TTxInit(Self), ctx);
@@ -320,7 +335,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
     void Complete(const TActorContext& ctx) override;
-    TTxType GetTxType() const override { return TXTYPE_UPDATE_SCHEMA; }
+    TTxType GetTxType() const override { return TXTYPE_APPLY_NORMALIZER; }
 
 private:
     NOlap::INormalizerChanges::TPtr Changes;
@@ -335,7 +350,7 @@ bool TTxApplyNormalizer::Execute(TTransactionContext& txc, const TActorContext&)
 
     if (Self->NormalizerController.GetNormalizer()->GetActiveTasksCount() == 1) {
         NIceDb::TNiceDb db(txc.DB);
-        Self->NormalizerController.UpdateControllerState(db);
+        Self->NormalizerController.OnNormalizerFinished(db);
     }
     return true;
 }
@@ -360,6 +375,9 @@ void TTxApplyNormalizer::Complete(const TActorContext& ctx) {
 
 /// Create local database on tablet start if none
 class TTxInitSchema : public TTransactionBase<TColumnShard> {
+private:
+    const TMonotonic StartInstant = TMonotonic::Now();
+
 public:
     TTxInitSchema(TColumnShard* self)
         : TBase(self)
@@ -376,6 +394,17 @@ bool TTxInitSchema::Execute(TTransactionContext& txc, const TActorContext&) {
     const bool isFirstRun = txc.DB.GetScheme().IsEmpty();
     NIceDb::TNiceDb(txc.DB).Materialize<Schema>();
 
+    if (!NYDBTest::TControllers::GetColumnShardController()->BuildLocalBaseModifier()) {
+        NIceDb::TNiceDb db(txc.DB);
+        if (!Self->NormalizerController.InitControllerState(db)) {
+            return false;
+        }
+    }
+    {
+        NOlap::TNormalizationController::TInitContext initCtx(Self->Info());
+        Self->NormalizerController.InitNormalizers(initCtx);
+    }
+
     if (isFirstRun) {
         txc.DB.Alter().SetExecutorAllowLogBatching(gAllowLogBatchingDefaultValue);
         txc.DB.Alter().SetExecutorLogFlushPeriod(TDuration::MicroSeconds(500));
@@ -385,11 +414,6 @@ bool TTxInitSchema::Execute(TTransactionContext& txc, const TActorContext&) {
         if (localBaseModifier) {
             localBaseModifier->Apply(txc);
         }
-    }
-
-    if (!NYDBTest::TControllers::GetColumnShardController()->BuildLocalBaseModifier()) {
-        NIceDb::TNiceDb db(txc.DB);
-        Self->NormalizerController.InitControllerState(db);
     }
 
     // Enable compression for the SmallBlobs table
@@ -416,6 +440,7 @@ bool TTxInitSchema::Execute(TTransactionContext& txc, const TActorContext&) {
 }
 
 void TTxInitSchema::Complete(const TActorContext& ctx) {
+    Self->Counters.GetCSCounters().Initialization.OnTxInitSchemaFinished(TMonotonic::Now() - StartInstant);
     LOG_S_DEBUG("TxInitSchema.Complete at tablet " << Self->TabletID(););
     Self->Execute(new TTxUpdateSchema(Self), ctx);
 }

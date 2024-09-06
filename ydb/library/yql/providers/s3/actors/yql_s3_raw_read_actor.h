@@ -2,8 +2,7 @@
 
 #include <ydb/library/actors/core/actor.h>
 
-#include <ydb/library/yql/providers/s3/actors/yql_s3_source_factory.h>
-
+#include <ydb/library/yql/providers/s3/actors_factory/yql_s3_actors_factory.h>
 #include <ydb/library/yql/providers/s3/credentials/credentials.h>
 #include <ydb/library/yql/providers/s3/object_listers/yql_s3_list.h>
 #include <ydb/library/yql/providers/s3/range_helpers/path_list_reader.h>
@@ -20,7 +19,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateRawRead
     IHTTPGateway::TPtr gateway,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
     const TString& url,
-    const TS3Credentials::TAuthInfo& authInfo,
+    const TS3Credentials& credentials,
     const TString& pattern,
     NYql::NS3Lister::ES3PatternVariant patternVariant,
     NYql::NS3Details::TPathList&& paths,
@@ -37,7 +36,8 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateRawRead
     NActors::TActorId fileQueueActor,
     ui64 fileQueueBatchSizeLimit,
     ui64 fileQueueBatchObjectCountLimit,
-    ui64 fileQueueConsumersCountDelta
+    ui64 fileQueueConsumersCountDelta,
+    bool allowLocalFiles
 );
 
 } // namespace NYql::NDq

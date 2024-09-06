@@ -50,7 +50,7 @@ public:
 
     bool EnableKeepAlive;
 
-    bool CancelFiberOnConnectionClose;
+    std::optional<bool> CancelFiberOnConnectionClose;
 
     //! Disables Nagle's algorithm.
     bool NoDelay;

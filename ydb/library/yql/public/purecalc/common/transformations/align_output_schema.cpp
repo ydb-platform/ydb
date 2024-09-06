@@ -1,6 +1,8 @@
 #include "align_output_schema.h"
 
+#include <ydb/library/yql/public/purecalc/common/names.h>
 #include <ydb/library/yql/public/purecalc/common/type_from_schema.h>
+#include <ydb/library/yql/public/purecalc/common/transformations/utils.h>
 
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 
@@ -11,11 +13,17 @@ namespace {
     class TOutputAligner : public TSyncTransformerBase {
     private:
         const TTypeAnnotationNode* OutputStruct_;
+        bool AcceptsBlocks_;
         EProcessorMode ProcessorMode_;
 
     public:
-        explicit TOutputAligner(const TTypeAnnotationNode* outputStruct, EProcessorMode processorMode)
+        explicit TOutputAligner(
+            const TTypeAnnotationNode* outputStruct,
+            bool acceptsBlocks,
+            EProcessorMode processorMode
+        )
             : OutputStruct_(outputStruct)
+            , AcceptsBlocks_(acceptsBlocks)
             , ProcessorMode_(processorMode)
         {
         }
@@ -28,6 +36,19 @@ namespace {
             const auto* expectedItemType = MakeExpectedItemType();
             const auto* actualType = MakeActualType(input);
             const auto* actualItemType = MakeActualItemType(input);
+
+            // XXX: Tweak the obtained expression type, is the spec supports blocks:
+            // 1. Remove "_yql_block_length" attribute, since it's for internal usage.
+            // 2. Strip block container from the type to store its internal type.
+            if (AcceptsBlocks_) {
+                Y_ENSURE(actualItemType->GetKind() == ETypeAnnotationKind::Struct);
+                actualItemType = UnwrapBlockStruct(actualItemType->Cast<TStructExprType>(), ctx);
+                if (ProcessorMode_ == EProcessorMode::PullList) {
+                    actualType = ctx.MakeType<TListExprType>(actualItemType);
+                } else {
+                    actualType = ctx.MakeType<TStreamExprType>(actualItemType);
+                }
+            }
 
             if (!ValidateOutputType(actualItemType, expectedItemType, ctx)) {
                 return TStatus::Error;
@@ -78,8 +99,12 @@ namespace {
             auto actualType = MakeActualType(input);
             switch (actualType->GetKind()) {
                 case ETypeAnnotationKind::Stream:
+                    Y_ENSURE(ProcessorMode_ != EProcessorMode::PullList,
+                             "processor mode mismatches the actual container type");
                     return actualType->Cast<TStreamExprType>()->GetItemType();
                 case ETypeAnnotationKind::List:
+                    Y_ENSURE(ProcessorMode_ == EProcessorMode::PullList,
+                             "processor mode mismatches the actual container type");
                     return actualType->Cast<TListExprType>()->GetItemType();
                 default:
                     Y_ABORT("unexpected return type");
@@ -88,6 +113,10 @@ namespace {
     };
 }
 
-TAutoPtr<IGraphTransformer> NYql::NPureCalc::MakeOutputAligner(const TTypeAnnotationNode* outputStruct, EProcessorMode processorMode) {
-    return new TOutputAligner(outputStruct, processorMode);
+TAutoPtr<IGraphTransformer> NYql::NPureCalc::MakeOutputAligner(
+    const TTypeAnnotationNode* outputStruct,
+    bool acceptsBlocks,
+    EProcessorMode processorMode
+) {
+    return new TOutputAligner(outputStruct, acceptsBlocks, processorMode);
 }

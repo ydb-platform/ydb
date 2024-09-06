@@ -221,7 +221,7 @@ async def retry_operation(callee, retry_settings=None, *args, **kwargs):  # pyli
         else:
             try:
                 return await next_opt.result
-            except Exception as e:  # pylint: disable=W0703
+            except BaseException as e:  # pylint: disable=W0703
                 next_opt.set_exception(e)
 
 
@@ -236,7 +236,7 @@ class SessionCheckout:
         :param blocking: A flag that specifies that session acquire method should blocks
         :param timeout: A timeout in seconds for session acquire
         """
-        self._pool = pool
+        self._pool: SessionPool = pool
         self._acquired = None
         self._timeout = timeout
         self._retry_timeout = retry_timeout
@@ -251,7 +251,7 @@ class SessionCheckout:
 
 
 class SessionPool:
-    def __init__(self, driver: ydb.pool.IConnectionPool, size: int, min_pool_size: int = 0):
+    def __init__(self, driver: "ydb.aio.Driver", size: int, min_pool_size: int = 0):
         self._driver_await_timeout = 3
         self._should_stop = asyncio.Event()
         self._waiters = 0
@@ -286,7 +286,7 @@ class SessionPool:
 
         return await retry_operation(wrapper_callee, retry_settings)
 
-    def _create(self) -> ydb.ISession:
+    def _create(self) -> Session:
         self._active_count += 1
         session = self._driver.table_client.session()
         self._logger.debug("Created session %s", session)
@@ -301,6 +301,9 @@ class SessionPool:
             self._logger.error("Failed to create session. Reason: %s", str(e))
         except Exception as e:  # pylint: disable=W0703
             self._logger.exception("Failed to create session. Reason: %s", str(e))
+        except BaseException as e:  # pylint: disable=W0703
+            self._logger.exception("Failed to create session. Reason (base exception): %s", str(e))
+            raise
 
         return None
 
@@ -324,7 +327,7 @@ class SessionPool:
             if not new_sess:
                 self._destroy(session)
             return new_sess
-        except Exception as e:
+        except BaseException as e:
             self._destroy(session)
             raise e
 
@@ -338,7 +341,7 @@ class SessionPool:
         _, session = task_wait.result()
         return session
 
-    async def acquire(self, timeout: float = None, retry_timeout: float = None, retry_num: int = None) -> ydb.ISession:
+    async def acquire(self, timeout: float = None, retry_timeout: float = None, retry_num: int = None) -> Session:
 
         if self._should_stop.is_set():
             self._logger.error("Take session from closed session pool")
@@ -408,7 +411,10 @@ class SessionPool:
                 asyncio.ensure_future(coro)
         return None
 
-    async def release(self, session: ydb.ISession):
+    async def release(self, session: Session):
+        self._release_nowait(session)
+
+    def _release_nowait(self, session: Session):
         self._logger.debug("Put on session %s", session.session_id)
         if session.closing():
             self._destroy(session)
@@ -421,7 +427,8 @@ class SessionPool:
             self._destroy(session)
             return False
 
-        await self._active_queue.put((time.time() + 10 * 60, session))
+        # self._active_queue has no size limit, it means that put_nowait will be successfully always
+        self._active_queue.put_nowait((time.time() + 10 * 60, session))
         self._logger.debug("Session returned to queue: %s", session.session_id)
 
     async def _pick_for_keepalive(self):
@@ -445,7 +452,7 @@ class SessionPool:
         await session.keep_alive(self._req_settings)
         try:
             await self.release(session)
-        except Exception:  # pylint: disable=W0703
+        except BaseException:  # pylint: disable=W0703
             self._destroy(session)
 
     async def _keep_alive_loop(self):

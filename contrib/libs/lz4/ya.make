@@ -6,9 +6,9 @@ LICENSE(BSD-2-Clause)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(1.9.4)
+VERSION(1.10.0)
 
-ORIGINAL_SOURCE(https://github.com/lz4/lz4/archive/v1.9.4.tar.gz)
+ORIGINAL_SOURCE(https://github.com/lz4/lz4/archive/v1.10.0.tar.gz)
 
 PEERDIR(
     contrib/libs/xxhash

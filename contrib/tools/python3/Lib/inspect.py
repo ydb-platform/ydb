@@ -160,6 +160,7 @@ import builtins
 from keyword import iskeyword
 from operator import attrgetter
 from collections import namedtuple, OrderedDict
+from weakref import ref as make_weakref
 
 # Create constants for the compiler flags in Include/code.h
 # We try to get them from dis to avoid duplication
@@ -279,7 +280,13 @@ def get_annotations(obj, *, globals=None, locals=None, eval_str=False):
     if globals is None:
         globals = obj_globals
     if locals is None:
-        locals = obj_locals
+        locals = obj_locals or {}
+
+    # "Inject" type parameters into the local namespace
+    # (unless they are shadowed by assignments *in* the local namespace),
+    # as a way of emulating annotation scopes when calling `eval()`
+    if type_params := getattr(obj, "__type_params__", ()):
+        locals = {param.__name__: param for param in type_params} | locals
 
     return_value = {key:
         value if not isinstance(value, str) else eval(value, globals, locals)
@@ -400,13 +407,13 @@ def isgeneratorfunction(obj):
     return _has_code_flag(obj, CO_GENERATOR)
 
 # A marker for markcoroutinefunction and iscoroutinefunction.
-_is_coroutine_marker = object()
+_is_coroutine_mark = object()
 
 def _has_coroutine_mark(f):
     while ismethod(f):
         f = f.__func__
     f = functools._unwrap_partial(f)
-    return getattr(f, "_is_coroutine_marker", None) is _is_coroutine_marker
+    return getattr(f, "_is_coroutine_marker", None) is _is_coroutine_mark
 
 def markcoroutinefunction(func):
     """
@@ -414,7 +421,7 @@ def markcoroutinefunction(func):
     """
     if hasattr(func, '__func__'):
         func = func.__func__
-    func._is_coroutine_marker = _is_coroutine_marker
+    func._is_coroutine_marker = _is_coroutine_mark
     return func
 
 def iscoroutinefunction(obj):
@@ -1798,9 +1805,16 @@ def _check_class(klass, attr):
             return entry.__dict__[attr]
     return _sentinel
 
+
 @functools.lru_cache()
-def _shadowed_dict_from_mro_tuple(mro):
-    for entry in mro:
+def _shadowed_dict_from_weakref_mro_tuple(*weakref_mro):
+    for weakref_entry in weakref_mro:
+        # Normally we'd have to check whether the result of weakref_entry()
+        # is None here, in case the object the weakref is pointing to has died.
+        # In this specific case, however, we know that the only caller of this
+        # function is `_shadowed_dict()`, and that therefore this weakref is
+        # guaranteed to point to an object that is still alive.
+        entry = weakref_entry()
         dunder_dict = _get_dunder_dict_of_class(entry)
         if '__dict__' in dunder_dict:
             class_dict = dunder_dict['__dict__']
@@ -1810,8 +1824,19 @@ def _shadowed_dict_from_mro_tuple(mro):
                 return class_dict
     return _sentinel
 
+
 def _shadowed_dict(klass):
-    return _shadowed_dict_from_mro_tuple(_static_getmro(klass))
+    # gh-118013: the inner function here is decorated with lru_cache for
+    # performance reasons, *but* make sure not to pass strong references
+    # to the items in the mro. Doing so can lead to unexpected memory
+    # consumption in cases where classes are dynamically created and
+    # destroyed, and the dynamically created classes happen to be the only
+    # objects that hold strong references to other objects that take up a
+    # significant amount of memory.
+    return _shadowed_dict_from_weakref_mro_tuple(
+        *[make_weakref(entry) for entry in _static_getmro(klass)]
+    )
+
 
 def getattr_static(obj, attr, default=_sentinel):
     """Retrieve attributes without triggering dynamic lookup via the
@@ -2126,8 +2151,10 @@ def _signature_is_builtin(obj):
             ismethoddescriptor(obj) or
             isinstance(obj, _NonUserDefinedCallables) or
             # Can't test 'isinstance(type)' here, as it would
-            # also be True for regular python classes
-            obj in (type, object))
+            # also be True for regular python classes.
+            # Can't use the `in` operator here, as it would
+            # invoke the custom __eq__ method.
+            obj is type or obj is object)
 
 
 def _signature_is_functionlike(obj):
@@ -3108,6 +3135,8 @@ class Signature:
         parameters_ex = ()
         arg_vals = iter(args)
 
+        pos_only_param_in_kwargs = []
+
         while True:
             # Let's iterate through the positional arguments and corresponding
             # parameters
@@ -3128,10 +3157,10 @@ class Signature:
                         break
                     elif param.name in kwargs:
                         if param.kind == _POSITIONAL_ONLY:
-                            msg = '{arg!r} parameter is positional only, ' \
-                                  'but was passed as a keyword'
-                            msg = msg.format(arg=param.name)
-                            raise TypeError(msg) from None
+                            # Raise a TypeError once we are sure there is no
+                            # **kwargs param later.
+                            pos_only_param_in_kwargs.append(param)
+                            continue
                         parameters_ex = (param,)
                         break
                     elif (param.kind == _VAR_KEYWORD or
@@ -3213,20 +3242,22 @@ class Signature:
                                     format(arg=param_name)) from None
 
             else:
-                if param.kind == _POSITIONAL_ONLY:
-                    # This should never happen in case of a properly built
-                    # Signature object (but let's have this check here
-                    # to ensure correct behaviour just in case)
-                    raise TypeError('{arg!r} parameter is positional only, '
-                                    'but was passed as a keyword'. \
-                                    format(arg=param.name))
-
                 arguments[param_name] = arg_val
 
         if kwargs:
             if kwargs_param is not None:
                 # Process our '**kwargs'-like parameter
                 arguments[kwargs_param.name] = kwargs
+            elif pos_only_param_in_kwargs:
+                raise TypeError(
+                    'got some positional-only arguments passed as '
+                    'keyword arguments: {arg!r}'.format(
+                        arg=', '.join(
+                            param.name
+                            for param in pos_only_param_in_kwargs
+                        ),
+                    ),
+                )
             else:
                 raise TypeError(
                     'got an unexpected keyword argument {arg!r}'.format(

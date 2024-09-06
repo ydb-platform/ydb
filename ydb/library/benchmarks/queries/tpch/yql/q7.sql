@@ -10,12 +10,11 @@ $n = select n_name, n_nationkey from {{nation}} as n
 $l = select 
     l_orderkey, l_suppkey,
     DateTime::GetYear(cast(l_shipdate as timestamp)) as l_year,
-    l_extendedprice * (1 - l_discount) as volume
+    l_extendedprice * ($z1_12 - l_discount) as volume
 from 
     {{lineitem}} as l
 where 
-    cast(cast(l.l_shipdate as Timestamp) as Date) 
-    between Date('1995-01-01') and Date('1996-12-31');
+    l.l_shipdate between Date('1995-01-01') and Date('1996-12-31');
 
 $j1 = select 
     n_name as supp_nation,

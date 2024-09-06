@@ -77,11 +77,14 @@ public:
         if (TProxyActor::NeedCreateProxyActor(Action_)) {
             configurationFlags |= TSqsEvents::TEvGetConfiguration::EFlags::NeedQueueLeader;
         }
+        bool enableThrottling = (Action_ != EAction::CreateQueue);
         this->Send(MakeSqsServiceID(this->SelfId().NodeId()),
             MakeHolder<TSqsEvents::TEvGetConfiguration>(
                 RequestId_,
                 UserName_,
                 GetQueueName(),
+                FolderId_,
+                enableThrottling,
                 configurationFlags)
         );
     }
@@ -359,12 +362,9 @@ protected:
             #undef RESPONSE_CASE
         }
     }
-    
-    template <class TResponse>
-    void AuditLogEntry(const TResponse& response, const TString& requestId, const TError* error = nullptr) {
-        if (!error && response.HasError()) {
-            error = &response.GetError();
-        }
+
+private:
+    void AuditLogEntryImpl(const TString& requestId, const TError* error = nullptr) {
         static const TString EmptyValue = "{none}";
         AUDIT_LOG(
             AUDIT_PART("component", TString("ymq"))
@@ -380,6 +380,15 @@ protected:
             AUDIT_PART("reason", error->GetMessage(), error)
             AUDIT_PART("detailed_status", error->GetErrorCode(), error)
         );
+    }
+
+protected: 
+    template <class TResponse>
+    void AuditLogEntry(const TResponse& response, const TString& requestId, const TError* error = nullptr) {
+        if (!error && response.HasError()) {
+            error = &response.GetError();
+        }
+        AuditLogEntryImpl(requestId, error);
     }
 
     void PassAway() {
@@ -637,17 +646,16 @@ private:
             return;
         }
 
-        if (TDerived::NeedExistingQueue()) {
-            if (ev->Get()->Throttled) {
-                MakeError(MutableErrorDesc(), NErrors::THROTTLING_EXCEPTION, "Too many requests for nonexistent queue.");
-                SendReplyAndDie();
-                return;
-            }
-            if (!ev->Get()->QueueExists) {
-                MakeError(MutableErrorDesc(), NErrors::NON_EXISTENT_QUEUE);
-                SendReplyAndDie();
-                return;
-            }
+        if (ev->Get()->Throttled) {
+            MakeError(MutableErrorDesc(), NErrors::THROTTLING_EXCEPTION, "Too many requests for nonexistent queue.");
+            SendReplyAndDie();
+            return;
+        }
+
+        if (TDerived::NeedExistingQueue() && !ev->Get()->QueueExists) {
+            MakeError(MutableErrorDesc(), NErrors::NON_EXISTENT_QUEUE);
+            SendReplyAndDie();
+            return;
         }
 
         Y_ABORT_UNLESS(SchemeCache_);

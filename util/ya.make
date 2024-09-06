@@ -22,6 +22,7 @@ JOIN_SRCS(
     datetime/base.cpp
     datetime/constants.cpp
     datetime/cputimer.cpp
+    datetime/process_uptime.cpp
     datetime/systime.cpp
     datetime/uptime.cpp
 )
@@ -245,6 +246,10 @@ ENDIF()
 
 IF (TSTRING_IS_STD_STRING)
     CFLAGS(GLOBAL -DTSTRING_IS_STD_STRING)
+ENDIF()
+
+IF (NO_CUSTOM_CHAR_PTR_STD_COMPARATOR)
+    CFLAGS(GLOBAL -DNO_CUSTOM_CHAR_PTR_STD_COMPARATOR)
 ENDIF()
 
 JOIN_SRCS(

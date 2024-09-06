@@ -40,12 +40,14 @@ RECURSE(
     mind
     mon
     mon_alloc
+    memory_controller
     node_whiteboard
     persqueue
     pgproxy
     public_http
     quoter
     raw_socket
+    resource_pools
     scheme
     scheme_types
     security

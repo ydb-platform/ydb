@@ -303,8 +303,7 @@ std::shared_ptr<TSkiffSchema> ParseSchema(
             "Invalid type for Skiff schema description; expected %Qlv or %Qlv, found %Qlv",
             ENodeType::Map,
             ENodeType::String,
-            schemaNodeType
-        );
+            schemaNodeType);
     }
 }
 

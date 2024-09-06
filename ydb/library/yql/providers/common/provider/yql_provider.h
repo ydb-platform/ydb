@@ -32,6 +32,8 @@ struct TOperationStatistics;
 
 namespace NCommon {
 
+constexpr TStringBuf PgCatalogFileName = "_yql_pg_catalog";
+
 struct TWriteTableSettings {
     NNodes::TMaybeNode<NNodes::TCoAtom> Mode;
     NNodes::TMaybeNode<NNodes::TCoAtom> Temporary;

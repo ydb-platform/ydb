@@ -20,7 +20,7 @@ std::shared_ptr<IBlobsDeclareRemovingAction> TOperator::DoStartDeclareRemovingAc
 }
 
 std::shared_ptr<IBlobsWritingAction> TOperator::DoStartWritingAction() {
-    return std::make_shared<TWriteAction>(GetStorageId(), GetCurrentOperator(), (ui64)GetSelfTabletId(), GCInfo);
+    return std::make_shared<TWriteAction>(GetStorageId(), GetCurrentOperator(), (ui64)GetSelfTabletId(), Generation, StepCounter.Inc(), GCInfo);
 }
 
 std::shared_ptr<IBlobsReadingAction> TOperator::DoStartReadingAction() {
@@ -34,14 +34,14 @@ std::shared_ptr<IBlobsGCAction> TOperator::DoCreateGCAction(const std::shared_pt
     {
         TTabletsByBlob deleteBlobIds;
         if (!GCInfo->ExtractForGC(draftBlobIds, deleteBlobIds, 100000)) {
-            AFL_INFO(NKikimrServices::TX_COLUMNSHARD_TIER)("event", "start_gc_skipped")("reason", "cannot_extract");
+            AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BLOBS_TIER)("event", "start_gc_skipped")("reason", "cannot_extract");
             return nullptr;
         }
         categories = GetSharedBlobs()->BuildRemoveCategories(std::move(deleteBlobIds));
     }
     auto gcTask = std::make_shared<TGCTask>(GetStorageId(), std::move(draftBlobIds), GetCurrentOperator(), std::move(categories), counters);
     if (gcTask->IsEmpty()) {
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD_TIER)("event", "start_gc_skipped")("reason", "task_empty");
+        AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BLOBS_TIER)("event", "start_gc_skipped")("reason", "task_empty");
         return nullptr;
     }
     return gcTask;
@@ -86,14 +86,16 @@ void TOperator::InitNewExternalOperator() {
 TOperator::TOperator(const TString& storageId, const NColumnShard::TColumnShard& shard, const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& storageSharedBlobsManager)
     : TBase(storageId, storageSharedBlobsManager)
     , TabletActorId(shard.SelfId())
+    , Generation(shard.Executor()->Generation())
 {
     InitNewExternalOperator(shard.GetTierManagerPointer(storageId));
 }
 
 TOperator::TOperator(const TString& storageId, const TActorId& shardActorId, const std::shared_ptr<NWrappers::IExternalStorageConfig>& storageConfig,
-    const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& storageSharedBlobsManager)
+    const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& storageSharedBlobsManager, const ui64 generation)
     : TBase(storageId, storageSharedBlobsManager)
     , TabletActorId(shardActorId)
+    , Generation(generation)
     , InitializationConfig(storageConfig)
 {
     InitNewExternalOperator();

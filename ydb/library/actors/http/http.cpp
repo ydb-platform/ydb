@@ -551,6 +551,7 @@ THttpOutgoingRequestPtr THttpIncomingRequest::Forward(TStringBuf baseUrl) const 
     }
     THttpOutgoingRequestPtr request = new THttpOutgoingRequest(Method, newScheme, newHost, GetURL(), Protocol, Version);
     THeadersBuilder newHeaders(Headers);
+    newHeaders.Erase("Accept-Encoding");
     newHeaders.Set("Host", newHost);
     request->Set(newHeaders);
     if (Body) {

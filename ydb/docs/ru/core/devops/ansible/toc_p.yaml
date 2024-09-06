@@ -1,6 +1,4 @@
 items:
-- name: Обзор
-  href: index.md
 - name: Первоначальное развёртывание
   href: initial-deployment.md
 - name: Подготовка виртуальных машин с Terraform

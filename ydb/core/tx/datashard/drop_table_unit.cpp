@@ -80,11 +80,9 @@ EExecutionStatus TDropTableUnit::Execute(TOperation::TPtr op,
     auto it = DataShard.GetUserTables().find(tableId);
     Y_ABORT_UNLESS(it != DataShard.GetUserTables().end());
     {
-        for (const auto& [indexPathId, indexInfo] : it->second->Indexes) {
-            if (indexInfo.Type == TUserTable::TTableIndex::EIndexType::EIndexTypeGlobalAsync) {
-                RemoveSenders.emplace_back(new TEvChangeExchange::TEvRemoveSender(indexPathId));
-            }
-        }
+        it->second->ForEachAsyncIndex([&](const auto& indexPathId, const auto&) {
+            RemoveSenders.emplace_back(new TEvChangeExchange::TEvRemoveSender(indexPathId));
+        });
         for (const auto& [streamPathId, _] : it->second->CdcStreams) {
             RemoveSenders.emplace_back(new TEvChangeExchange::TEvRemoveSender(streamPathId));
         }

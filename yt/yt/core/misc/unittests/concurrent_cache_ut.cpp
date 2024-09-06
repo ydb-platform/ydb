@@ -141,8 +141,7 @@ INSTANTIATE_TEST_SUITE_P(
     ::testing::Values(
         std::tuple(2, 1, 1000, false),
         std::tuple(2, 5, 1000, false),
-        std::tuple(2, 5, 1000, true)
-        ));
+        std::tuple(2, 5, 1000, true)));
 
 ////////////////////////////////////////////////////////////////////////////////
 

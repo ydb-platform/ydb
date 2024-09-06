@@ -32,7 +32,7 @@ Below are examples of the code for authentication using a service account file i
     if err != nil {
       panic(err)
     }
-    defer db.Close(ctx) 
+    defer db.Close(ctx)
     ...
   }
   ```
@@ -64,7 +64,7 @@ Below are examples of the code for authentication using a service account file i
     if err != nil {
       panic(err)
     }
-    defer nativeDriver.Close(ctx) 
+    defer nativeDriver.Close(ctx)
     connector, err := ydb.Connector(nativeDriver)
     if err != nil {
       panic(err)
@@ -84,7 +84,7 @@ Below are examples of the code for authentication using a service account file i
       GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
               .withAuthProvider(authProvider)
               .build());
-      
+
       TableClient tableClient = TableClient.newClient(transport).build();
 
       doWork(tableClient);
@@ -98,19 +98,19 @@ Below are examples of the code for authentication using a service account file i
 
   Loading service account data from a file:
 
-  {% include [auth-sa-file](../../../_includes/nodejs/auth-sa-file.md) %}
+  {% include [auth-sa-file](../../_includes/nodejs/auth-sa-file.md) %}
 
   Loading service account data from a third-party source (for example, a secret storage):
 
-  {% include [auth-sa-data](../../../_includes/nodejs/auth-sa-data.md) %}
+  {% include [auth-sa-data](../../_includes/nodejs/auth-sa-data.md) %}
 
 - Python
 
-  {% include [auth-sa-data](../../../_includes/python/auth-service-account.md) %}
+  {% include [auth-sa-data](../../_includes/python/auth-service-account.md) %}
 
 - Python (asyncio)
 
-  {% include [auth-sa-data](../../../_includes/python/async/auth-service-account.md) %}
+  {% include [auth-sa-data](../../_includes/python/async/auth-service-account.md) %}
 
 - C# (.NET)
 
@@ -151,13 +151,13 @@ Below are examples of the code for authentication using a service account file i
           'temp_dir'       => './tmp', // Temp directory
           // 'root_cert_file' => './CA.pem', // Root CA file (uncomment for dedicated server)ы
       ],
-              
+
       'credentials' => new JwtWithJsonAuthentication('./jwtjson.json')
   ];
 
   $ydb = new Ydb($config);
   ```
-  
+
   or
 
   ```php
@@ -175,10 +175,10 @@ Below are examples of the code for authentication using a service account file i
           // 'root_cert_file' => './CA.pem', // Root CA file (uncomment for dedicated server)
 
       ],
-      
+
       'credentials' => new JwtWithPrivateKeyAuthentication(
           "ajexxxxxxxxx","ajeyyyyyyyyy",'./private.key')
-          
+
   ];
 
   $ydb = new Ydb($config);

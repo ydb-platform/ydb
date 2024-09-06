@@ -31,7 +31,8 @@ struct IYPathServiceContext
 {
     virtual void SetRequestHeader(std::unique_ptr<NRpc::NProto::TRequestHeader> header) = 0;
 
-    virtual void SetReadRequestComplexityLimiter(const TReadRequestComplexityLimiterPtr& limiter) = 0;
+    virtual void SetReadRequestComplexityLimiter(
+        const TReadRequestComplexityLimiterPtr& limiter) = 0;
     virtual TReadRequestComplexityLimiterPtr GetReadRequestComplexityLimiter() = 0;
 };
 
@@ -138,9 +139,9 @@ protected:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-#define DECLARE_SUPPORTS_METHOD(method, base) \
+#define DECLARE_SUPPORTS_METHOD(method, ...) \
     class TSupports##method \
-        : public base \
+        __VA_OPT__(: public)  __VA_ARGS__ \
     { \
     protected: \
         DECLARE_YPATH_SERVICE_METHOD(::NYT::NYTree::NProto, method); \
@@ -174,8 +175,7 @@ protected:
         method, \
         { \
             tokenizer.ThrowUnexpected(); \
-        } \
-    ) \
+        }) \
     \
     void TSupports##method::method##Attribute(const NYPath::TYPath& /*path*/, TReq##method* /*request*/, TRsp##method* /*response*/, const TCtx##method##Ptr& context) \
     { \
@@ -197,7 +197,6 @@ protected:
 DEFINE_YPATH_CONTEXT_IMPL(IYPathServiceContext, TTypedYPathServiceContext);
 
 class TSupportsExistsBase
-    : public virtual TRefCounted
 {
 protected:
     template <class TContextPtr>
@@ -246,7 +245,8 @@ protected:
     virtual void ValidatePermission(
         EPermissionCheckScope scope,
         EPermission permission,
-        const TString& user = {});
+        // TODO(babenko): replace with optional
+        const std::string& user = {});
 
     class TCachingPermissionValidator
     {
@@ -255,7 +255,7 @@ protected:
             TSupportsPermissions* owner,
             EPermissionCheckScope scope);
 
-        void Validate(EPermission permission, const TString& user = {});
+        void Validate(EPermission permission, const std::string& user = {});
 
     private:
         TSupportsPermissions* const Owner_;

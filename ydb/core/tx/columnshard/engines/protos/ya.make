@@ -5,7 +5,6 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/tx/columnshard/engines/scheme/statistics/protos
     ydb/core/formats/arrow/protos
 
 )

@@ -43,8 +43,8 @@ ss_sold_year, ss_item_sk, ss_customer_sk,
 Math::Round(cast(ss_qty as double)/(coalesce(ws_qty,0)+coalesce(cs_qty,0)),-2) ratio,
 ss_qty store_qty, ss_wc store_wholesale_cost, ss_sp store_sales_price,
 coalesce(ws_qty,0)+coalesce(cs_qty,0) other_chan_qty,
-coalesce(ws_wc,0)+coalesce(cs_wc,0) other_chan_wholesale_cost,
-coalesce(ws_sp,0)+coalesce(cs_sp,0) other_chan_sales_price
+coalesce(ws_wc,$z0_35)+coalesce(cs_wc,$z0_35) other_chan_wholesale_cost,
+coalesce(ws_sp,$z0_35)+coalesce(cs_sp,$z0_35) other_chan_sales_price
 from $ss ss
 left join $ws ws on (ws.ws_sold_year=ss.ss_sold_year and ws.ws_item_sk=ss.ss_item_sk and ws.ws_customer_sk=ss.ss_customer_sk)
 left join $cs cs on (cs.cs_sold_year=ss.ss_sold_year and cs.cs_item_sk=ss.ss_item_sk and cs.cs_customer_sk=ss.ss_customer_sk)

@@ -99,11 +99,13 @@ Y_UNIT_TEST(JoinNoStatsScan) {
 
 template <typename Iterator>
 TCollectedStreamResult JoinStatsBasic(
-        std::function<Iterator(TKikimrRunner&, ECollectQueryStatsMode, const TString&)> getIter) {
+        std::function<Iterator(TKikimrRunner&, ECollectQueryStatsMode, const TString&)> getIter, bool StreamLookupJoin = false) {
     NKikimrConfig::TAppConfig appConfig;
+    appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);
     appConfig.MutableTableServiceConfig()->SetEnableKqpScanQueryStreamLookup(false);
-    appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(false);
     appConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
+    appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(true);
+
     auto settings = TKikimrSettings()
         .SetAppConfig(appConfig);
     TKikimrRunner kikimr(settings);
@@ -120,15 +122,18 @@ TCollectedStreamResult JoinStatsBasic(
     return res;
 }
 
-Y_UNIT_TEST(JoinStatsBasicYql) {
-    auto res = JoinStatsBasic<NYdb::NScripting::TYqlResultPartIterator>(GetYqlStreamIterator);
+Y_UNIT_TEST_TWIN(JoinStatsBasicYql, StreamLookupJoin) {
+    auto res = JoinStatsBasic<NYdb::NScripting::TYqlResultPartIterator>(GetYqlStreamIterator, StreamLookupJoin);
 
-    UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases().size(), 3);
-    if (res.QueryStats->query_phases(0).table_access(0).name() == "/Root/KeyValue") {
-        UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases(2).table_access(0).name(), "/Root/EightShard");
+    if (StreamLookupJoin) {
+        UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases(0).table_access().size(), 2);
     } else {
+        UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases().size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases(0).table_access().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases(0).table_access(0).name(), "/Root/EightShard");
-        UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases(2).table_access(0).name(), "/Root/KeyValue");
+        UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases(1).table_access().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases(1).table_access(0).name(), "/Root/KeyValue");
     }
 }
 
@@ -401,9 +406,11 @@ Y_UNIT_TEST(StatsProfile) {
     //UNIT_ASSERT_EQUAL(node2.GetMap().at("Stats").GetMapSafe().at("ComputeNodes").GetArraySafe().size(), 1);
 }
 
-Y_UNIT_TEST(StreamLookupStats) {
+Y_UNIT_TEST_TWIN(StreamLookupStats, StreamLookupJoin) {
     NKikimrConfig::TAppConfig app;
+    app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);
     app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(true);
+
     TKikimrRunner kikimr(TKikimrSettings().SetAppConfig(app));
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
@@ -425,18 +432,26 @@ Y_UNIT_TEST(StreamLookupStats) {
     UNIT_ASSERT(streamLookup.IsDefined());
 
     auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
-    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).affected_shards(), 1);
-    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
-    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/TwoShard");
-    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).partitions_count(), 1);
+
+    if (StreamLookupJoin) {
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).affected_shards(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).partitions_count(), 1);
+    } else {
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).affected_shards(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/TwoShard");
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).partitions_count(), 1);
+    }
 
     AssertTableStats(result, "/Root/TwoShard", {
         .ExpectedReads = 2,
     });
 }
 
-Y_UNIT_TEST(SysViewTimeout) {
+Y_UNIT_TEST(SysViewClientLost) {
     TKikimrRunner kikimr;
     CreateLargeTable(kikimr, 500000, 10, 100, 5000, 1);
 
@@ -475,12 +490,13 @@ Y_UNIT_TEST(SysViewTimeout) {
     auto settings = TStreamExecScanQuerySettings();
     settings.ClientTimeout(TDuration::MilliSeconds(50));
 
-    TStringStream request;
-    request << R"(
+    TStringStream timeoutedRequestStream;
+    timeoutedRequestStream << R"(
         SELECT COUNT(*) FROM `/Root/LargeTable` WHERE SUBSTRING(DataText, 50, 5) = "22222";
     )";
+    TString timeoutedRequest = timeoutedRequestStream.Str();
 
-    auto result = db.StreamExecuteScanQuery(request.Str(), settings).GetValueSync();
+    auto result = db.StreamExecuteScanQuery(timeoutedRequest, settings).GetValueSync();
 
     if (result.IsSuccess()) {
         try {
@@ -495,7 +511,13 @@ Y_UNIT_TEST(SysViewTimeout) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED);
     }
 
+    ui32 timeoutedCount = 0;
+    ui32 iterations = 10;
+    while (timeoutedCount == 0 && iterations > 0)
     {
+        iterations--;
+        Sleep(TDuration::Seconds(1));
+
         TStringStream request;
         request << "SELECT * FROM `/Root/.sys/top_queries_by_read_bytes_one_hour` ORDER BY Duration";
 
@@ -503,7 +525,6 @@ Y_UNIT_TEST(SysViewTimeout) {
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
 
         ui64 queryCount = 0;
-        ui64 rowsCount = 0;
         for (;;) {
             auto streamPart = it.ReadNext().GetValueSync();
             if (!streamPart.IsSuccess()) {
@@ -518,17 +539,16 @@ Y_UNIT_TEST(SysViewTimeout) {
                 while (parser.TryNextRow()) {
                     auto value = parser.ColumnParser("QueryText").GetOptionalUtf8();
                     UNIT_ASSERT(value);
-                    if (*value == request.Str()) {
+                    if (*value == timeoutedRequest) {
                         queryCount++;
                     }
-                    rowsCount++;
                 }
             }
         }
-
-        UNIT_ASSERT(queryCount == 1);
-        UNIT_ASSERT(rowsCount == 2);
+        timeoutedCount = queryCount;
     }
+
+    UNIT_ASSERT(timeoutedCount == 1);
 }
 
 Y_UNIT_TEST(SysViewCancelled) {
@@ -567,9 +587,9 @@ Y_UNIT_TEST(SysViewCancelled) {
         UNIT_ASSERT(rowsCount == 1);
     }
 
-    auto prepareResult = session.PrepareDataQuery(Q_(R"(
-        SELECT COUNT(*) FROM `/Root/LargeTable` WHERE SUBSTRING(DataText, 50, 5) = "33333";
-    )")).GetValueSync();
+    TStringStream cancelledRequest;
+    cancelledRequest << "SELECT COUNT(*) FROM `/Root/LargeTable` WHERE SUBSTRING(DataText, 50, 5) = \"33333\"";
+    auto prepareResult = session.PrepareDataQuery(cancelledRequest.Str()).GetValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(prepareResult.GetStatus(), NYdb::EStatus::SUCCESS, prepareResult.GetIssues().ToString());
     auto dataQuery = prepareResult.GetQuery();
 
@@ -604,7 +624,7 @@ Y_UNIT_TEST(SysViewCancelled) {
                 while (parser.TryNextRow()) {
                     auto value = parser.ColumnParser("QueryText").GetOptionalUtf8();
                     UNIT_ASSERT(value);
-                    if (*value == request.Str()) {
+                    if (*value == cancelledRequest.Str()) {
                         queryCount++;
                     }
                     rowsCount++;
@@ -613,7 +633,7 @@ Y_UNIT_TEST(SysViewCancelled) {
         }
 
         UNIT_ASSERT(queryCount == 1);
-        UNIT_ASSERT(rowsCount == 2);
+        UNIT_ASSERT(rowsCount == 3);
     }
 }
 

@@ -15,18 +15,15 @@ void TWriteAction::DoOnCompleteTxAfterWrite(NColumnShard::TColumnShard& self, co
     ui64 blobsWritten = BlobBatch.GetBlobCount();
     ui64 bytesWritten = BlobBatch.GetTotalSize();
     if (blobsWroteSuccessfully) {
-        self.IncCounter(NColumnShard::COUNTER_UPSERT_BLOBS_WRITTEN, blobsWritten);
-        self.IncCounter(NColumnShard::COUNTER_UPSERT_BYTES_WRITTEN, bytesWritten);
-        //    self.IncCounter(NColumnShard::COUNTER_RAW_BYTES_UPSERTED, insertedBytes);
-        self.IncCounter(NColumnShard::COUNTER_WRITE_SUCCESS);
+        self.Counters.GetTabletCounters()->OnWriteSuccess(blobsWritten, bytesWritten);
         Manager->SaveBlobBatchOnComplete(std::move(BlobBatch));
     } else {
-        self.IncCounter(NColumnShard::COUNTER_WRITE_FAIL);
+        self.Counters.GetTabletCounters()->OnWriteFailure();
     }
 }
 
 void TWriteAction::DoSendWriteBlobRequest(const TString& data, const TUnifiedBlobId& blobId) {
-    AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BS)("event", "write_blob")("blob_id", blobId.ToStringNew());
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)("event", "write_blob")("blob_id", blobId.ToStringNew());
     return BlobBatch.SendWriteBlobRequest(data, blobId, TInstant::Max(), TActorContext::AsActorContext());
 }
 

@@ -5,6 +5,10 @@
 #include <ydb/library/yql/ast/yql_gc_nodes.h>
 #include <util/system/mutex.h>
 
+#ifndef YQL_OPERATION_STATISTICS_CUSTOM_FIELDS
+#define YQL_OPERATION_STATISTICS_CUSTOM_FIELDS
+#endif
+
 namespace NYql {
     struct TOperationProgress {
 #define YQL_OPERATION_PROGRESS_STATE_MAP(xx) \
@@ -36,6 +40,7 @@ namespace NYql {
         TStage Stage;
 
         TString RemoteId;
+        THashMap<TString, TString> RemoteData;
 
         struct TCounters {
             ui64 Completed = 0ULL;
@@ -45,6 +50,7 @@ namespace NYql {
             ui64 Failed = 0ULL;
             ui64 Lost = 0ULL;
             ui64 Pending = 0ULL;
+            THashMap<TString, i64> Custom = {};
             bool operator==(const TCounters& rhs) const noexcept {
                 return Completed == rhs.Completed &&
                        Running == rhs.Running &&
@@ -52,7 +58,8 @@ namespace NYql {
                        Aborted == rhs.Aborted &&
                        Failed == rhs.Failed &&
                        Lost == rhs.Lost &&
-                       Pending == rhs.Pending;
+                       Pending == rhs.Pending &&
+                       Custom == rhs.Custom;
             }
 
             bool operator!=(const TCounters& rhs) const noexcept {

@@ -234,7 +234,7 @@ static int test_generic_drain(struct io_uring *ring)
 	}
 
 	sleep(1);
-	// TODO: randomize event triggerring order
+	// TODO: randomize event triggering order
 	for (i = 0; i < max_entry; i++) {
 		if (si[i].op != multi && si[i].op != single)
 			continue;

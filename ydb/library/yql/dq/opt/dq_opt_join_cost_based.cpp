@@ -202,7 +202,8 @@ void ComputeStatistics(const std::shared_ptr<TJoinOptimizerNode>& join, IProvide
             *join->RightArg->Stats,
             join->LeftJoinKeys, 
             join->RightJoinKeys, 
-            EJoinAlgoType::GraceJoin
+            EJoinAlgoType::GraceJoin,
+            join->JoinType
         )
     );
 }
@@ -214,15 +215,19 @@ public:
         , MaxDPhypTableSize_(maxDPhypDPTableSize)
     {}
 
-    std::shared_ptr<TJoinOptimizerNode> JoinSearch(const std::shared_ptr<TJoinOptimizerNode>& joinTree) override {
+    std::shared_ptr<TJoinOptimizerNode> JoinSearch(
+        const std::shared_ptr<TJoinOptimizerNode>& joinTree, 
+        const TOptimizerHints& hints = {}
+    ) override {
+
         auto relsCount = joinTree->Labels().size();
 
         if (relsCount <= 64) { // The algorithm is more efficient.
-            return JoinSearchImpl<TNodeSet64>(joinTree);
+            return JoinSearchImpl<TNodeSet64>(joinTree, hints);
         }
 
         if (64 < relsCount && relsCount <= 128) {
-            return JoinSearchImpl<TNodeSet128>(joinTree);
+            return JoinSearchImpl<TNodeSet128>(joinTree, hints);
         }
 
         ComputeStatistics(joinTree, this->Pctx);
@@ -234,11 +239,15 @@ private:
     using TNodeSet128 = std::bitset<128>;
 
     template <typename TNodeSet>
-    std::shared_ptr<TJoinOptimizerNode> JoinSearchImpl(const std::shared_ptr<TJoinOptimizerNode>& joinTree) {
-        TJoinHypergraph<TNodeSet> hypergraph = MakeJoinHypergraph<TNodeSet>(joinTree);
-        TDPHypSolver<TNodeSet> solver(hypergraph, this->Pctx);
+    std::shared_ptr<TJoinOptimizerNode> JoinSearchImpl(
+        const std::shared_ptr<TJoinOptimizerNode>& joinTree, 
+        const TOptimizerHints& hints = {}
+    ) {
+        TJoinHypergraph<TNodeSet> hypergraph = MakeJoinHypergraph<TNodeSet>(joinTree, hints.JoinOrderHints);
+        TDPHypSolver<TNodeSet> solver(hypergraph, this->Pctx, hints.CardinalityHints, hints.JoinAlgoHints);
 
         if (solver.CountCC(MaxDPhypTableSize_) >= MaxDPhypTableSize_) {
+            YQL_CLOG(TRACE, CoreDq) << "Maximum DPhyp threshold exceeded\n";
             ComputeStatistics(joinTree, this->Pctx);
             return joinTree;
         }
@@ -260,9 +269,24 @@ TExprBase DqOptimizeEquiJoinWithCosts(
     TTypeAnnotationContext& typesCtx,
     ui32 optLevel,
     IOptimizerNew& opt,
-    const TProviderCollectFunction& providerCollect
+    const TProviderCollectFunction& providerCollect,
+    const TOptimizerHints& hints
 ) {
-    if (optLevel == 0) {
+    int dummyEquiJoinCounter = 0;
+    return DqOptimizeEquiJoinWithCosts(node, ctx, typesCtx, optLevel, opt, providerCollect, dummyEquiJoinCounter, hints);
+}
+
+TExprBase DqOptimizeEquiJoinWithCosts(
+    const TExprBase& node,
+    TExprContext& ctx,
+    TTypeAnnotationContext& typesCtx,
+    ui32 optLevel,
+    IOptimizerNew& opt,
+    const TProviderCollectFunction& providerCollect,
+    int& equiJoinCounter,
+    const TOptimizerHints& hints
+) {
+    if (optLevel <= 1) {
         return node;
     }
 
@@ -290,6 +314,17 @@ TExprBase DqOptimizeEquiJoinWithCosts(
 
     YQL_CLOG(TRACE, CoreDq) << "All statistics for join in place";
 
+    bool allRowStorage = std::all_of(
+        rels.begin(), 
+        rels.end(), 
+        [](std::shared_ptr<TRelOptimizerNode>& r) {return r->Stats->StorageType==EStorageType::RowStorage; });
+
+    if (optLevel == 2 && allRowStorage) {
+        return node;
+    }
+
+    equiJoinCounter++;
+
     auto joinTuple = equiJoin.Arg(equiJoin.ArgCount() - 2).Cast<TCoEquiJoinTuple>();
 
     // Generate an initial tree
@@ -302,7 +337,14 @@ TExprBase DqOptimizeEquiJoinWithCosts(
         YQL_CLOG(TRACE, CoreDq) << str.str();
     }
 
-    joinTree = opt.JoinSearch(joinTree);
+    joinTree = opt.JoinSearch(joinTree, hints);
+
+    if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::ProviderKqp, NYql::NLog::ELevel::TRACE)) {
+        std::stringstream str;
+        str << "Optimizied join tree:\n";
+        joinTree->Print(str);
+        YQL_CLOG(TRACE, CoreDq) << str.str();
+    }
 
     // rewrite the join tree and record the output statistics
     TExprBase res = RearrangeEquiJoinTree(ctx, equiJoin, joinTree);

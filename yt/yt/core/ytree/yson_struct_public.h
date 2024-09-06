@@ -6,7 +6,7 @@
 
 namespace NYT::NYTree {
 
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 DEFINE_ENUM(EUnrecognizedStrategy,
     (Drop)
@@ -24,12 +24,12 @@ concept CExternalizedYsonStructTraits = requires {
 };
 
 template <class T>
-concept CExternallySerializable = requires (T t) {
+concept CExternallySerializable = requires (T* t) {
     { GetExternalizedYsonStructTraits(t) } -> CExternalizedYsonStructTraits;
 };
 
 template <CExternallySerializable T>
-using TGetExternalizedYsonStructTraits = decltype(GetExternalizedYsonStructTraits(std::declval<T>()));
+using TGetExternalizedYsonStructTraits = decltype(GetExternalizedYsonStructTraits(std::declval<T*>()));
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -862,8 +862,7 @@ template <class T, class D>
 TFuture<T> ApplyTimeoutHelper(
     TFutureBase<T> this_,
     D timeoutOrDeadline,
-    TFutureTimeoutOptions options,
-    IInvokerPtr invoker)
+    TFutureTimeoutOptions options)
 {
     auto promise = NewPromise<T>();
 
@@ -888,7 +887,7 @@ TFuture<T> ApplyTimeoutHelper(
             cancelable.Cancel(error);
         }),
         timeoutOrDeadline,
-        std::move(invoker));
+        options.Invoker);
 
     this_.Subscribe(BIND_NO_PROPAGATE([=] (const NYT::TErrorOr<T>& value) {
         NConcurrency::TDelayedExecutor::Cancel(cookie);
@@ -1133,8 +1132,7 @@ TFuture<T> TFutureBase<T>::ToImmediatelyCancelable() const
 template <class T>
 TFuture<T> TFutureBase<T>::WithDeadline(
     TInstant deadline,
-    TFutureTimeoutOptions options,
-    IInvokerPtr invoker) const
+    TFutureTimeoutOptions options) const
 {
     YT_ASSERT(Impl_);
 
@@ -1142,14 +1140,13 @@ TFuture<T> TFutureBase<T>::WithDeadline(
         return TFuture<T>(Impl_);
     }
 
-    return NYT::NDetail::ApplyTimeoutHelper(*this, deadline, std::move(options), std::move(invoker));
+    return NYT::NDetail::ApplyTimeoutHelper(*this, deadline, std::move(options));
 }
 
 template <class T>
 TFuture<T> TFutureBase<T>::WithTimeout(
     TDuration timeout,
-    TFutureTimeoutOptions options,
-    IInvokerPtr invoker) const
+    TFutureTimeoutOptions options) const
 {
     YT_ASSERT(Impl_);
 
@@ -1157,16 +1154,15 @@ TFuture<T> TFutureBase<T>::WithTimeout(
         return TFuture<T>(Impl_);
     }
 
-    return NYT::NDetail::ApplyTimeoutHelper(*this, timeout, std::move(options), std::move(invoker));
+    return NYT::NDetail::ApplyTimeoutHelper(*this, timeout, std::move(options));
 }
 
 template <class T>
 TFuture<T> TFutureBase<T>::WithTimeout(
     std::optional<TDuration> timeout,
-    TFutureTimeoutOptions options,
-    IInvokerPtr invoker) const
+    TFutureTimeoutOptions options) const
 {
-    return timeout ? WithTimeout(*timeout, std::move(options), std::move(invoker)) : TFuture<T>(Impl_);
+    return timeout ? WithTimeout(*timeout, std::move(options)) : TFuture<T>(Impl_);
 }
 
 template <class T>
@@ -2402,12 +2398,14 @@ class TCancelableBoundedConcurrencyRunner
 public:
     TCancelableBoundedConcurrencyRunner(
         std::vector<TCallback<TFuture<T>()>> callbacks,
-        int concurrencyLimit)
+        int concurrencyLimit,
+        bool failOnError = false)
         : Callbacks_(std::move(callbacks))
         , ConcurrencyLimit_(concurrencyLimit)
         , Futures_(Callbacks_.size(), VoidFuture)
         , Results_(Callbacks_.size())
         , CurrentIndex_(std::min<int>(ConcurrencyLimit_, ssize(Callbacks_)))
+        , FailOnFirstError_(failOnError)
     { }
 
     TFuture<std::vector<TErrorOr<T>>> Run()
@@ -2434,11 +2432,12 @@ private:
     const TPromise<std::vector<TErrorOr<T>>> Promise_ = NewPromise<std::vector<TErrorOr<T>>>();
 
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
-    std::optional<TError> CancelationError_;
+    std::optional<TError> Error_;
     std::vector<TFuture<void>> Futures_;
     std::vector<TErrorOr<T>> Results_;
     int CurrentIndex_;
     int FinishedCount_ = 0;
+    const bool FailOnFirstError_ = false;
 
 
     void RunCallback(int index)
@@ -2452,9 +2451,9 @@ private:
 
         {
             auto guard = Guard(SpinLock_);
-            if (CancelationError_) {
+            if (Error_) {
                 guard.Release();
-                future.Cancel(*CancelationError_);
+                future.Cancel(*Error_);
                 return;
             }
 
@@ -2469,11 +2468,16 @@ private:
 
     void OnResult(int index, const NYT::TErrorOr<T>& result)
     {
+        if (FailOnFirstError_ && !result.IsOK()) {
+            OnError(result);
+            return;
+        }
+
         int newIndex;
         int finishedCount;
         {
             auto guard = Guard(SpinLock_);
-            if (CancelationError_) {
+            if (Error_) {
                 return;
             }
 
@@ -2491,25 +2495,30 @@ private:
         }
     }
 
+    void OnError(const NYT::TError& error)
+    {
+        {
+            auto guard = Guard(SpinLock_);
+            if (Error_) {
+                return;
+            }
+            Error_ = error;
+        }
+
+        // NB: Setting of Error_ disallows modification of CurrentIndex_ and Futures_.
+        for (int index = 0; index < std::min<int>(ssize(Futures_), CurrentIndex_); ++index) {
+            Futures_[index].Cancel(error);
+        }
+
+        Promise_.TrySet(error);
+    }
+
     void OnCanceled(const NYT::TError& error)
     {
         auto wrappedError = NYT::TError(NYT::EErrorCode::Canceled, "Canceled")
             << error;
 
-        {
-            auto guard = Guard(SpinLock_);
-            if (CancelationError_) {
-                return;
-            }
-            CancelationError_ = wrappedError;
-        }
-
-        // NB: Setting of CancelationError_ disallows modification of CurrentIndex_ and Futures_.
-        for (int index = 0; index < std::min<int>(ssize(Futures_), CurrentIndex_); ++index) {
-            Futures_[index].Cancel(wrappedError);
-        }
-
-        Promise_.TrySet(wrappedError);
+        OnError(wrappedError);
     }
 };
 
@@ -2589,10 +2598,21 @@ TFuture<std::vector<TErrorOr<T>>> RunWithBoundedConcurrency(
 template <class T>
 TFuture<std::vector<TErrorOr<T>>> CancelableRunWithBoundedConcurrency(
     std::vector<TCallback<TFuture<T>()>> callbacks,
+    int concurrencyLimit,
+    bool failOnError)
+{
+    YT_VERIFY(concurrencyLimit >= 0);
+    return New<NYT::NDetail::TCancelableBoundedConcurrencyRunner<T>>(std::move(callbacks), concurrencyLimit, failOnError)
+        ->Run();
+}
+
+template <class T>
+TFuture<std::vector<TErrorOr<T>>> RunWithAllSucceededBoundedConcurrency(
+    std::vector<TCallback<TFuture<T>()>> callbacks,
     int concurrencyLimit)
 {
     YT_VERIFY(concurrencyLimit >= 0);
-    return New<NYT::NDetail::TCancelableBoundedConcurrencyRunner<T>>(std::move(callbacks), concurrencyLimit)
+    return New<NYT::NDetail::TCancelableBoundedConcurrencyRunner<T>>(std::move(callbacks), concurrencyLimit, true)
         ->Run();
 }
 

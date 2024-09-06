@@ -9,16 +9,14 @@ from ydb.tests.tools.fq_runner.kikimr_utils import yq_all
 
 
 class TestStatsMode:
-
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    @pytest.mark.parametrize("stats_mode", ["STATS_MODE_NONE", "STATS_MODE_BASIC", "STATS_MODE_FULL", "STATS_MODE_PROFILE"])
+    @pytest.mark.parametrize(
+        "stats_mode", ["STATS_MODE_NONE", "STATS_MODE_BASIC", "STATS_MODE_FULL", "STATS_MODE_PROFILE"]
+    )
     def test_mode(self, kikimr, s3, client, stats_mode):
         resource = boto3.resource(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         bucket = resource.Bucket("pbucket")

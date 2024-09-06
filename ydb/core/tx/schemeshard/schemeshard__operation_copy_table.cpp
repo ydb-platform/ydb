@@ -14,12 +14,13 @@ void PrepareScheme(NKikimrSchemeOp::TTableDescription* schema, const TString& na
     const NScheme::TTypeRegistry* typeRegistry = AppData(context.Ctx)->TypeRegistry;
 
     NKikimrSchemeOp::TTableDescription completedSchema;
-    context.SS->DescribeTable(srcTableInfo, typeRegistry, true, false, &completedSchema);
+    context.SS->DescribeTable(*srcTableInfo, typeRegistry, true, &completedSchema);
     completedSchema.SetName(name);
 
     //inherit all from Src except PartitionConfig, PartitionConfig could be altered
     completedSchema.MutablePartitionConfig()->CopyFrom(schema->GetPartitionConfig());
     schema->Swap(&completedSchema);
+    schema->SetSystemColumnNamesAllowed(true);
 }
 
 class TConfigureParts: public TSubOperationState {
@@ -361,7 +362,8 @@ public:
                 .IsAtLocalSchemeShard()
                 .IsResolved()
                 .NotDeleted()
-                .NotUnderDeleting();
+                .NotUnderDeleting()
+                .FailOnRestrictedCreateInTempZone(Transaction.GetAllowCreateInTempDir());
 
             if (checks) {
                 if (parent.Base()->IsTableIndex()) {
@@ -515,6 +517,9 @@ public:
         // replication config is not copied
         schema.ClearReplicationConfig();
 
+        // incr backup config is not copied
+        schema.ClearIncrementalBackupConfig();
+
         NKikimrSchemeOp::TPartitionConfig compilationPartitionConfig;
         if (!TPartitionConfigMerger::ApplyChanges(compilationPartitionConfig, srcTableInfo->PartitionConfig(), schema.GetPartitionConfig(), AppData(), errStr)
             || !TPartitionConfigMerger::VerifyCreateParams(compilationPartitionConfig, AppData(), IsShadowDataAllowed(), errStr)) {
@@ -526,7 +531,7 @@ public:
         const NScheme::TTypeRegistry* typeRegistry = AppData()->TypeRegistry;
         const TSchemeLimits& limits = domainInfo->GetSchemeLimits();
         TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(nullptr, schema, *typeRegistry,
-            limits, *domainInfo, context.SS->EnableTablePgTypes, errStr, LocalSequences);
+            limits, *domainInfo, context.SS->EnableTablePgTypes, context.SS->EnableTableDatetime64, errStr, LocalSequences);
         if (!alterData.Get()) {
             result->SetError(NKikimrScheme::StatusSchemeError, errStr);
             return result;

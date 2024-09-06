@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    address.cpp
     gc.cpp
     gc_actor.cpp
     write.cpp

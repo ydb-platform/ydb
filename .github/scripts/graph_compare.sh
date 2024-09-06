@@ -3,19 +3,19 @@
 # Creates ya.make in the current directory listing affected ydb targets
 # Parameters: base_commit_sha head_commit_sha
 
-set -ex
+set -exo pipefail
 
 workdir=$(mktemp -d)
 echo Workdir: $workdir
 echo Checkout base commit...
 git checkout $1
 echo Build graph for base commit...
-./ya make -Gj0 -ttt ydb --build release -k --cache-tests --no-strip-idle-build-results | jq '.graph[]' > $workdir/graph_base
+./ya make -Gj0 -ttt ydb --build release -k --cache-tests --build-all | jq '.graph[]' > $workdir/graph_base
 
 echo Checkout head commit...
 git checkout $2
 echo Build graph for head commit...
-./ya make -Gj0 -ttt ydb --build release -k --cache-tests --no-strip-idle-build-results | jq '.graph[]' > $workdir/graph_head
+./ya make -Gj0 -ttt ydb --build release -k --cache-tests --build-all | jq '.graph[]' > $workdir/graph_head
 
 echo Generate lists of uids for base and head...
 cat $workdir/graph_base | jq '.uid' > $workdir/uid_base
@@ -40,7 +40,7 @@ echo Append into ya.make RECURSE_FOR_TESTS to all required tests...
 cat $workdir/ts2 | (echo 'RECURSE_FOR_TESTS(';cat;echo ')') >> ya.make
 
 echo Generate list of module names from the head graph based on the list of uids...
-cat $workdir/graph_head | jq -r --slurpfile uids $workdir/uids_new 'select( ."target_properties"."module_type" != null) | select( any( .uid; .==$uids[] )) | .target_properties.module_dir' | sort | uniq > $workdir/modules
+cat $workdir/graph_head | jq -r --slurpfile uids $workdir/uids_new 'select( ."target_properties"."module_type" != null) | select( ( ."target_properties"."module_tag" // "-" | strings | contains("proto") ) | not ) | select( any( .uid; .==$uids[] )) | .target_properties.module_dir' | sort | uniq > $workdir/modules
 
 echo Number of modules:
 cat $workdir/modules | wc -l

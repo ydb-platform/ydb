@@ -31,6 +31,9 @@ struct TPathId;
 
 
 THashSet<EAlterOperationKind> GetAlterOperationKinds(const Ydb::Table::AlterTableRequest* req);
+bool BuildAlterTableModifyScheme(const TString& path, const Ydb::Table::AlterTableRequest* req, NKikimrSchemeOp::TModifyScheme* modifyScheme,
+    const TTableProfiles& profiles, const TPathId& resolvedPathId,
+    Ydb::StatusIds::StatusCode& status, TString& error);
 bool BuildAlterTableModifyScheme(const Ydb::Table::AlterTableRequest* req, NKikimrSchemeOp::TModifyScheme* modifyScheme,
     const TTableProfiles& profiles, const TPathId& resolvedPathId,
     Ydb::StatusIds::StatusCode& status, TString& error);
@@ -130,11 +133,12 @@ bool FillTableDescription(NKikimrSchemeOp::TModifyScheme& out,
 
 
 // out
-void FillSequenceDescription(Ydb::Table::CreateTableRequest& out,
-    const NKikimrSchemeOp::TTableDescription& in);
+bool FillSequenceDescription(Ydb::Table::CreateTableRequest& out, const NKikimrSchemeOp::TTableDescription& in, 
+    Ydb::StatusIds::StatusCode& status, TString& error);
 
-// out
-void FillSequenceDescription(Ydb::Table::CreateTableRequest& out,
-    const NKikimrSchemeOp::TTableDescription& in);
+// in
+bool FillSequenceDescription(
+    NKikimrSchemeOp::TSequenceDescription& out, const Ydb::Table::SequenceDescription& in, 
+    Ydb::StatusIds::StatusCode& status, TString& error);
 
 } // namespace NKikimr

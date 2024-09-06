@@ -95,7 +95,7 @@ public:
         if (Program) {
             return Program->ApplyTo(batch, NArrow::GetCustomExecContext());
         } else if (OverrideProcessingColumnsVector) {
-            batch = NArrow::ExtractColumnsValidate(batch, *OverrideProcessingColumnsVector);
+            batch = NArrow::TColumnOperator().VerifyIfAbsent().Extract(batch, *OverrideProcessingColumnsVector);
         }
         return arrow::Status::OK();
     }

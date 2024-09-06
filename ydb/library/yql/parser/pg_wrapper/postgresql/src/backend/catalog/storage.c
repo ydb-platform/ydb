@@ -3,7 +3,7 @@
  * storage.c
  *	  code to create and destroy physical storage for relations
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -38,7 +38,7 @@
 __thread int			wal_skip_threshold = 2048;	/* in kilobytes */
 
 /*
- * We keep a list of all relations (represented as RelFileNode values)
+ * We keep a list of all relations (represented as RelFileLocator values)
  * that have been created or deleted in the current transaction.  When
  * a relation is created, we create the physical file immediately, but
  * remember it so that we can delete the file again if the current
@@ -59,7 +59,7 @@ __thread int			wal_skip_threshold = 2048;	/* in kilobytes */
 
 typedef struct PendingRelDelete
 {
-	RelFileNode relnode;		/* relation that may need to be deleted */
+	RelFileLocator rlocator;	/* relation that may need to be deleted */
 	BackendId	backend;		/* InvalidBackendId if not a temp rel */
 	bool		atCommit;		/* T=delete at commit; F=delete at abort */
 	int			nestLevel;		/* xact nesting level of request */
@@ -68,12 +68,12 @@ typedef struct PendingRelDelete
 
 typedef struct PendingRelSync
 {
-	RelFileNode rnode;
+	RelFileLocator rlocator;
 	bool		is_truncated;	/* Has the file experienced truncation? */
 } PendingRelSync;
 
 static __thread PendingRelDelete *pendingDeletes = NULL; /* head of linked list */
-__thread HTAB	   *pendingSyncHash = NULL;
+static __thread HTAB *pendingSyncHash = NULL;
 
 
 /*
@@ -81,7 +81,7 @@ __thread HTAB	   *pendingSyncHash = NULL;
  *		Queue an at-commit fsync.
  */
 static void
-AddPendingSync(const RelFileNode *rnode)
+AddPendingSync(const RelFileLocator *rlocator)
 {
 	PendingRelSync *pending;
 	bool		found;
@@ -91,14 +91,14 @@ AddPendingSync(const RelFileNode *rnode)
 	{
 		HASHCTL		ctl;
 
-		ctl.keysize = sizeof(RelFileNode);
+		ctl.keysize = sizeof(RelFileLocator);
 		ctl.entrysize = sizeof(PendingRelSync);
 		ctl.hcxt = TopTransactionContext;
 		pendingSyncHash = hash_create("pending sync hash", 16, &ctl,
 									  HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
 	}
 
-	pending = hash_search(pendingSyncHash, rnode, HASH_ENTER, &found);
+	pending = hash_search(pendingSyncHash, rlocator, HASH_ENTER, &found);
 	Assert(!found);
 	pending->is_truncated = false;
 }
@@ -112,12 +112,14 @@ AddPendingSync(const RelFileNode *rnode)
  * modules that need them.
  *
  * This function is transactional. The creation is WAL-logged, and if the
- * transaction aborts later on, the storage will be destroyed.
+ * transaction aborts later on, the storage will be destroyed.  A caller
+ * that does not want the storage to be destroyed in case of an abort may
+ * pass register_delete = false.
  */
 SMgrRelation
-RelationCreateStorage(RelFileNode rnode, char relpersistence)
+RelationCreateStorage(RelFileLocator rlocator, char relpersistence,
+					  bool register_delete)
 {
-	PendingRelDelete *pending;
 	SMgrRelation srel;
 	BackendId	backend;
 	bool		needs_wal;
@@ -143,26 +145,34 @@ RelationCreateStorage(RelFileNode rnode, char relpersistence)
 			return NULL;		/* placate compiler */
 	}
 
-	srel = smgropen(rnode, backend);
+	srel = smgropen(rlocator, backend);
 	smgrcreate(srel, MAIN_FORKNUM, false);
 
 	if (needs_wal)
-		log_smgrcreate(&srel->smgr_rnode.node, MAIN_FORKNUM);
+		log_smgrcreate(&srel->smgr_rlocator.locator, MAIN_FORKNUM);
 
-	/* Add the relation to the list of stuff to delete at abort */
-	pending = (PendingRelDelete *)
-		MemoryContextAlloc(TopMemoryContext, sizeof(PendingRelDelete));
-	pending->relnode = rnode;
-	pending->backend = backend;
-	pending->atCommit = false;	/* delete if abort */
-	pending->nestLevel = GetCurrentTransactionNestLevel();
-	pending->next = pendingDeletes;
-	pendingDeletes = pending;
+	/*
+	 * Add the relation to the list of stuff to delete at abort, if we are
+	 * asked to do so.
+	 */
+	if (register_delete)
+	{
+		PendingRelDelete *pending;
+
+		pending = (PendingRelDelete *)
+			MemoryContextAlloc(TopMemoryContext, sizeof(PendingRelDelete));
+		pending->rlocator = rlocator;
+		pending->backend = backend;
+		pending->atCommit = false;	/* delete if abort */
+		pending->nestLevel = GetCurrentTransactionNestLevel();
+		pending->next = pendingDeletes;
+		pendingDeletes = pending;
+	}
 
 	if (relpersistence == RELPERSISTENCE_PERMANENT && !XLogIsNeeded())
 	{
 		Assert(backend == InvalidBackendId);
-		AddPendingSync(&rnode);
+		AddPendingSync(&rlocator);
 	}
 
 	return srel;
@@ -172,14 +182,14 @@ RelationCreateStorage(RelFileNode rnode, char relpersistence)
  * Perform XLogInsert of an XLOG_SMGR_CREATE record to WAL.
  */
 void
-log_smgrcreate(const RelFileNode *rnode, ForkNumber forkNum)
+log_smgrcreate(const RelFileLocator *rlocator, ForkNumber forkNum)
 {
 	xl_smgr_create xlrec;
 
 	/*
 	 * Make an XLOG entry reporting the file creation.
 	 */
-	xlrec.rnode = *rnode;
+	xlrec.rlocator = *rlocator;
 	xlrec.forkNum = forkNum;
 
 	XLogBeginInsert();
@@ -199,7 +209,7 @@ RelationDropStorage(Relation rel)
 	/* Add the relation to the list of stuff to delete at commit */
 	pending = (PendingRelDelete *)
 		MemoryContextAlloc(TopMemoryContext, sizeof(PendingRelDelete));
-	pending->relnode = rel->rd_node;
+	pending->rlocator = rel->rd_locator;
 	pending->backend = rel->rd_backend;
 	pending->atCommit = true;	/* delete if commit */
 	pending->nestLevel = GetCurrentTransactionNestLevel();
@@ -237,7 +247,7 @@ RelationDropStorage(Relation rel)
  * No-op if the relation is not among those scheduled for deletion.
  */
 void
-RelationPreserveStorage(RelFileNode rnode, bool atCommit)
+RelationPreserveStorage(RelFileLocator rlocator, bool atCommit)
 {
 	PendingRelDelete *pending;
 	PendingRelDelete *prev;
@@ -247,7 +257,7 @@ RelationPreserveStorage(RelFileNode rnode, bool atCommit)
 	for (pending = pendingDeletes; pending != NULL; pending = next)
 	{
 		next = pending->next;
-		if (RelFileNodeEquals(rnode, pending->relnode)
+		if (RelFileLocatorEquals(rlocator, pending->rlocator)
 			&& pending->atCommit == atCommit)
 		{
 			/* unlink and delete list entry */
@@ -282,16 +292,16 @@ RelationTruncate(Relation rel, BlockNumber nblocks)
 	ForkNumber	forks[MAX_FORKNUM];
 	BlockNumber blocks[MAX_FORKNUM];
 	int			nforks = 0;
-
-	/* Open it at the smgr level if not already done */
-	RelationOpenSmgr(rel);
+	SMgrRelation reln;
 
 	/*
-	 * Make sure smgr_targblock etc aren't pointing somewhere past new end
+	 * Make sure smgr_targblock etc aren't pointing somewhere past new end.
+	 * (Note: don't rely on this reln pointer below this loop.)
 	 */
-	rel->rd_smgr->smgr_targblock = InvalidBlockNumber;
+	reln = RelationGetSmgr(rel);
+	reln->smgr_targblock = InvalidBlockNumber;
 	for (int i = 0; i <= MAX_FORKNUM; ++i)
-		rel->rd_smgr->smgr_cached_nblocks[i] = InvalidBlockNumber;
+		reln->smgr_cached_nblocks[i] = InvalidBlockNumber;
 
 	/* Prepare for truncation of MAIN fork of the relation */
 	forks[nforks] = MAIN_FORKNUM;
@@ -299,7 +309,7 @@ RelationTruncate(Relation rel, BlockNumber nblocks)
 	nforks++;
 
 	/* Prepare for truncation of the FSM if it exists */
-	fsm = smgrexists(rel->rd_smgr, FSM_FORKNUM);
+	fsm = smgrexists(RelationGetSmgr(rel), FSM_FORKNUM);
 	if (fsm)
 	{
 		blocks[nforks] = FreeSpaceMapPrepareTruncateRel(rel, nblocks);
@@ -312,7 +322,7 @@ RelationTruncate(Relation rel, BlockNumber nblocks)
 	}
 
 	/* Prepare for truncation of the visibility map too if it exists */
-	vm = smgrexists(rel->rd_smgr, VISIBILITYMAP_FORKNUM);
+	vm = smgrexists(RelationGetSmgr(rel), VISIBILITYMAP_FORKNUM);
 	if (vm)
 	{
 		blocks[nforks] = visibilitymap_prepare_truncate(rel, nblocks);
@@ -324,6 +334,22 @@ RelationTruncate(Relation rel, BlockNumber nblocks)
 	}
 
 	RelationPreTruncate(rel);
+
+	/*
+	 * Make sure that a concurrent checkpoint can't complete while truncation
+	 * is in progress.
+	 *
+	 * The truncation operation might drop buffers that the checkpoint
+	 * otherwise would have flushed. If it does, then it's essential that the
+	 * files actually get truncated on disk before the checkpoint record is
+	 * written. Otherwise, if reply begins from that checkpoint, the
+	 * to-be-truncated blocks might still exist on disk but have older
+	 * contents than expected, which can cause replay to fail. It's OK for the
+	 * blocks to not exist on disk at all, but not for them to have the wrong
+	 * contents.
+	 */
+	Assert((MyProc->delayChkptFlags & DELAY_CHKPT_COMPLETE) == 0);
+	MyProc->delayChkptFlags |= DELAY_CHKPT_COMPLETE;
 
 	/*
 	 * We WAL-log the truncation before actually truncating, which means
@@ -343,7 +369,7 @@ RelationTruncate(Relation rel, BlockNumber nblocks)
 		xl_smgr_truncate xlrec;
 
 		xlrec.blkno = nblocks;
-		xlrec.rnode = rel->rd_node;
+		xlrec.rlocator = rel->rd_locator;
 		xlrec.flags = SMGR_TRUNCATE_ALL;
 
 		XLogBeginInsert();
@@ -363,13 +389,24 @@ RelationTruncate(Relation rel, BlockNumber nblocks)
 			XLogFlush(lsn);
 	}
 
-	/* Do the real work to truncate relation forks */
-	smgrtruncate(rel->rd_smgr, forks, nforks, blocks);
+	/*
+	 * This will first remove any buffers from the buffer pool that should no
+	 * longer exist after truncation is complete, and then truncate the
+	 * corresponding files on disk.
+	 */
+	smgrtruncate(RelationGetSmgr(rel), forks, nforks, blocks);
+
+	/* We've done all the critical work, so checkpoints are OK now. */
+	MyProc->delayChkptFlags &= ~DELAY_CHKPT_COMPLETE;
 
 	/*
 	 * Update upper-level FSM pages to account for the truncation. This is
 	 * important because the just-truncated pages were likely marked as
 	 * all-free, and would be preferentially selected.
+	 *
+	 * NB: There's no point in delaying checkpoints until this is done.
+	 * Because the FSM is not WAL-logged, we have to be prepared for the
+	 * possibility of corruption after a crash anyway.
 	 */
 	if (need_fsm_vacuum)
 		FreeSpaceMapVacuumRange(rel, nblocks, InvalidBlockNumber);
@@ -389,9 +426,9 @@ RelationPreTruncate(Relation rel)
 
 	if (!pendingSyncHash)
 		return;
-	RelationOpenSmgr(rel);
 
-	pending = hash_search(pendingSyncHash, &(rel->rd_smgr->smgr_rnode.node),
+	pending = hash_search(pendingSyncHash,
+						  &(RelationGetSmgr(rel)->smgr_rlocator.locator),
 						  HASH_FIND, NULL);
 	if (pending)
 		pending->is_truncated = true;
@@ -403,12 +440,18 @@ RelationPreTruncate(Relation rel)
  * Note that this requires that there is no dirty data in shared buffers. If
  * it's possible that there are, callers need to flush those using
  * e.g. FlushRelationBuffers(rel).
+ *
+ * Also note that this is frequently called via locutions such as
+ *		RelationCopyStorage(RelationGetSmgr(rel), ...);
+ * That's safe only because we perform only smgr and WAL operations here.
+ * If we invoked anything else, a relcache flush could cause our SMgrRelation
+ * argument to become a dangling pointer.
  */
 void
 RelationCopyStorage(SMgrRelation src, SMgrRelation dst,
 					ForkNumber forkNum, char relpersistence)
 {
-	PGAlignedBlock buf;
+	PGIOAlignedBlock buf;
 	Page		page;
 	bool		use_wal;
 	bool		copying_initfork;
@@ -429,7 +472,7 @@ RelationCopyStorage(SMgrRelation src, SMgrRelation dst,
 	 * We need to log the copied data in WAL iff WAL archiving/streaming is
 	 * enabled AND it's a permanent relation.  This gives the same answer as
 	 * "RelationNeedsWAL(rel) || copying_initfork", because we know the
-	 * current operation created a new relfilenode.
+	 * current operation created new relation storage.
 	 */
 	use_wal = XLogIsNeeded() &&
 		(relpersistence == RELPERSISTENCE_PERMANENT || copying_initfork);
@@ -445,13 +488,23 @@ RelationCopyStorage(SMgrRelation src, SMgrRelation dst,
 
 		if (!PageIsVerifiedExtended(page, blkno,
 									PIV_LOG_WARNING | PIV_REPORT_STAT))
+		{
+			/*
+			 * For paranoia's sake, capture the file path before invoking the
+			 * ereport machinery.  This guards against the possibility of a
+			 * relcache flush caused by, e.g., an errcontext callback.
+			 * (errcontext callbacks shouldn't be risking any such thing, but
+			 * people have been known to forget that rule.)
+			 */
+			char	   *relpath = relpathbackend(src->smgr_rlocator.locator,
+												 src->smgr_rlocator.backend,
+												 forkNum);
+
 			ereport(ERROR,
 					(errcode(ERRCODE_DATA_CORRUPTED),
 					 errmsg("invalid page in block %u of relation %s",
-							blkno,
-							relpathbackend(src->smgr_rnode.node,
-										   src->smgr_rnode.backend,
-										   forkNum))));
+							blkno, relpath)));
+		}
 
 		/*
 		 * WAL-log the copied page. Unfortunately we don't know what kind of a
@@ -459,7 +512,7 @@ RelationCopyStorage(SMgrRelation src, SMgrRelation dst,
 		 * space.
 		 */
 		if (use_wal)
-			log_newpage(&dst->smgr_rnode.node, forkNum, blkno, page, false);
+			log_newpage(&dst->smgr_rlocator.locator, forkNum, blkno, page, false);
 
 		PageSetChecksumInplace(page, blkno);
 
@@ -485,19 +538,19 @@ RelationCopyStorage(SMgrRelation src, SMgrRelation dst,
 }
 
 /*
- * RelFileNodeSkippingWAL
- *		Check if a BM_PERMANENT relfilenode is using WAL.
+ * RelFileLocatorSkippingWAL
+ *		Check if a BM_PERMANENT relfilelocator is using WAL.
  *
- * Changes of certain relfilenodes must not write WAL; see "Skipping WAL for
- * New RelFileNode" in src/backend/access/transam/README.  Though it is known
- * from Relation efficiently, this function is intended for the code paths not
- * having access to Relation.
+ * Changes to certain relations must not write WAL; see "Skipping WAL for
+ * New RelFileLocator" in src/backend/access/transam/README.  Though it is
+ * known from Relation efficiently, this function is intended for the code
+ * paths not having access to Relation.
  */
 bool
-RelFileNodeSkippingWAL(RelFileNode rnode)
+RelFileLocatorSkippingWAL(RelFileLocator rlocator)
 {
 	if (!pendingSyncHash ||
-		hash_search(pendingSyncHash, &rnode, HASH_FIND, NULL) == NULL)
+		hash_search(pendingSyncHash, &rlocator, HASH_FIND, NULL) == NULL)
 		return false;
 
 	return true;
@@ -513,7 +566,7 @@ EstimatePendingSyncsSpace(void)
 	long		entries;
 
 	entries = pendingSyncHash ? hash_get_num_entries(pendingSyncHash) : 0;
-	return mul_size(1 + entries, sizeof(RelFileNode));
+	return mul_size(1 + entries, sizeof(RelFileLocator));
 }
 
 /*
@@ -528,57 +581,58 @@ SerializePendingSyncs(Size maxSize, char *startAddress)
 	HASH_SEQ_STATUS scan;
 	PendingRelSync *sync;
 	PendingRelDelete *delete;
-	RelFileNode *src;
-	RelFileNode *dest = (RelFileNode *) startAddress;
+	RelFileLocator *src;
+	RelFileLocator *dest = (RelFileLocator *) startAddress;
 
 	if (!pendingSyncHash)
 		goto terminate;
 
-	/* Create temporary hash to collect active relfilenodes */
-	ctl.keysize = sizeof(RelFileNode);
-	ctl.entrysize = sizeof(RelFileNode);
+	/* Create temporary hash to collect active relfilelocators */
+	ctl.keysize = sizeof(RelFileLocator);
+	ctl.entrysize = sizeof(RelFileLocator);
 	ctl.hcxt = CurrentMemoryContext;
-	tmphash = hash_create("tmp relfilenodes",
+	tmphash = hash_create("tmp relfilelocators",
 						  hash_get_num_entries(pendingSyncHash), &ctl,
 						  HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
 
-	/* collect all rnodes from pending syncs */
+	/* collect all rlocator from pending syncs */
 	hash_seq_init(&scan, pendingSyncHash);
 	while ((sync = (PendingRelSync *) hash_seq_search(&scan)))
-		(void) hash_search(tmphash, &sync->rnode, HASH_ENTER, NULL);
+		(void) hash_search(tmphash, &sync->rlocator, HASH_ENTER, NULL);
 
 	/* remove deleted rnodes */
 	for (delete = pendingDeletes; delete != NULL; delete = delete->next)
 		if (delete->atCommit)
-			(void) hash_search(tmphash, (void *) &delete->relnode,
+			(void) hash_search(tmphash, &delete->rlocator,
 							   HASH_REMOVE, NULL);
 
 	hash_seq_init(&scan, tmphash);
-	while ((src = (RelFileNode *) hash_seq_search(&scan)))
+	while ((src = (RelFileLocator *) hash_seq_search(&scan)))
 		*dest++ = *src;
 
 	hash_destroy(tmphash);
 
 terminate:
-	MemSet(dest, 0, sizeof(RelFileNode));
+	MemSet(dest, 0, sizeof(RelFileLocator));
 }
 
 /*
  * RestorePendingSyncs
  *		Restore syncs within a parallel worker.
  *
- * RelationNeedsWAL() and RelFileNodeSkippingWAL() must offer the correct
+ * RelationNeedsWAL() and RelFileLocatorSkippingWAL() must offer the correct
  * answer to parallel workers.  Only smgrDoPendingSyncs() reads the
  * is_truncated field, at end of transaction.  Hence, don't restore it.
  */
 void
 RestorePendingSyncs(char *startAddress)
 {
-	RelFileNode *rnode;
+	RelFileLocator *rlocator;
 
 	Assert(pendingSyncHash == NULL);
-	for (rnode = (RelFileNode *) startAddress; rnode->relNode != 0; rnode++)
-		AddPendingSync(rnode);
+	for (rlocator = (RelFileLocator *) startAddress; rlocator->relNumber != 0;
+		 rlocator++)
+		AddPendingSync(rlocator);
 }
 
 /*
@@ -624,7 +678,7 @@ smgrDoPendingDeletes(bool isCommit)
 			{
 				SMgrRelation srel;
 
-				srel = smgropen(pending->relnode, pending->backend);
+				srel = smgropen(pending->rlocator, pending->backend);
 
 				/* allocate the initial array, or extend it, if needed */
 				if (maxrels == 0)
@@ -694,7 +748,7 @@ smgrDoPendingSyncs(bool isCommit, bool isParallelWorker)
 	/* Skip syncing nodes that smgrDoPendingDeletes() will delete. */
 	for (pending = pendingDeletes; pending != NULL; pending = pending->next)
 		if (pending->atCommit)
-			(void) hash_search(pendingSyncHash, (void *) &pending->relnode,
+			(void) hash_search(pendingSyncHash, &pending->rlocator,
 							   HASH_REMOVE, NULL);
 
 	hash_seq_init(&scan, pendingSyncHash);
@@ -705,7 +759,7 @@ smgrDoPendingSyncs(bool isCommit, bool isParallelWorker)
 		BlockNumber total_blocks = 0;
 		SMgrRelation srel;
 
-		srel = smgropen(pendingsync->rnode, InvalidBackendId);
+		srel = smgropen(pendingsync->rlocator, InvalidBackendId);
 
 		/*
 		 * We emit newpage WAL records for smaller relations.
@@ -779,7 +833,7 @@ smgrDoPendingSyncs(bool isCommit, bool isParallelWorker)
 				 * page including any unused space.  ReadBufferExtended()
 				 * counts some pgstat events; unfortunately, we discard them.
 				 */
-				rel = CreateFakeRelcacheEntry(srel->smgr_rnode.node);
+				rel = CreateFakeRelcacheEntry(srel->smgr_rlocator.locator);
 				log_newpage_range(rel, fork, 0, n, false);
 				FreeFakeRelcacheEntry(rel);
 			}
@@ -799,7 +853,7 @@ smgrDoPendingSyncs(bool isCommit, bool isParallelWorker)
  * smgrGetPendingDeletes() -- Get a list of non-temp relations to be deleted.
  *
  * The return value is the number of relations scheduled for termination.
- * *ptr is set to point to a freshly-palloc'd array of RelFileNodes.
+ * *ptr is set to point to a freshly-palloc'd array of RelFileLocators.
  * If there are no relations to be deleted, *ptr is set to NULL.
  *
  * Only non-temporary relations are included in the returned list.  This is OK
@@ -813,11 +867,11 @@ smgrDoPendingSyncs(bool isCommit, bool isParallelWorker)
  * by upper-level transactions.
  */
 int
-smgrGetPendingDeletes(bool forCommit, RelFileNode **ptr)
+smgrGetPendingDeletes(bool forCommit, RelFileLocator **ptr)
 {
 	int			nestLevel = GetCurrentTransactionNestLevel();
 	int			nrels;
-	RelFileNode *rptr;
+	RelFileLocator *rptr;
 	PendingRelDelete *pending;
 
 	nrels = 0;
@@ -832,14 +886,14 @@ smgrGetPendingDeletes(bool forCommit, RelFileNode **ptr)
 		*ptr = NULL;
 		return 0;
 	}
-	rptr = (RelFileNode *) palloc(nrels * sizeof(RelFileNode));
+	rptr = (RelFileLocator *) palloc(nrels * sizeof(RelFileLocator));
 	*ptr = rptr;
 	for (pending = pendingDeletes; pending != NULL; pending = pending->next)
 	{
 		if (pending->nestLevel >= nestLevel && pending->atCommit == forCommit
 			&& pending->backend == InvalidBackendId)
 		{
-			*rptr = pending->relnode;
+			*rptr = pending->rlocator;
 			rptr++;
 		}
 	}
@@ -914,7 +968,7 @@ smgr_redo(XLogReaderState *record)
 		xl_smgr_create *xlrec = (xl_smgr_create *) XLogRecGetData(record);
 		SMgrRelation reln;
 
-		reln = smgropen(xlrec->rnode, InvalidBackendId);
+		reln = smgropen(xlrec->rlocator, InvalidBackendId);
 		smgrcreate(reln, xlrec->forkNum, true);
 	}
 	else if (info == XLOG_SMGR_TRUNCATE)
@@ -927,7 +981,7 @@ smgr_redo(XLogReaderState *record)
 		int			nforks = 0;
 		bool		need_fsm_vacuum = false;
 
-		reln = smgropen(xlrec->rnode, InvalidBackendId);
+		reln = smgropen(xlrec->rlocator, InvalidBackendId);
 
 		/*
 		 * Forcibly create relation if it doesn't exist (which suggests that
@@ -962,11 +1016,11 @@ smgr_redo(XLogReaderState *record)
 			nforks++;
 
 			/* Also tell xlogutils.c about it */
-			XLogTruncateRelation(xlrec->rnode, MAIN_FORKNUM, xlrec->blkno);
+			XLogTruncateRelation(xlrec->rlocator, MAIN_FORKNUM, xlrec->blkno);
 		}
 
 		/* Prepare for truncation of FSM and VM too */
-		rel = CreateFakeRelcacheEntry(xlrec->rnode);
+		rel = CreateFakeRelcacheEntry(xlrec->rlocator);
 
 		if ((xlrec->flags & SMGR_TRUNCATE_FSM) != 0 &&
 			smgrexists(reln, FSM_FORKNUM))

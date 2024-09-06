@@ -36,6 +36,9 @@ TMaybe<Ydb::Table::CreateTableRequest> GenYdbScheme(
     const TMap<ui32, TUserTable::TUserColumn>& columns,
     const NKikimrSchemeOp::TPathDescription& pathDesc);
 
+TMaybe<Ydb::Scheme::ModifyPermissionsRequest> GenYdbPermissions(
+    const NKikimrSchemeOp::TPathDescription& pathDesc);
+
 TString DecimalToString(const std::pair<ui64, i64>& loHi);
 TString DyNumberToString(TStringBuf data);
 bool DecimalToStream(const std::pair<ui64, i64>& loHi, IOutputStream& out, TString& err);

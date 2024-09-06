@@ -99,10 +99,7 @@ def test_lockfile_get_packages_meta_ok():
     assert len(packages) == 1
     assert pkg.tarball_url == "@babel%2fcli/-/cli-7.6.2.tgz"
     assert pkg.sky_id == "rbtorrent:cb1849da3e4947e56a8f6bde6a1ec42703ddd187"
-    assert (
-        pkg.integrity
-        == b"24367e4ff6ebf693df4f696600c272a490d34d31ccf5e3c3fc40f5d13463473255744572f89077891961cd8993b796243601efc561a55159cbb5dbfaaee883ad"
-    )
+    assert pkg.integrity == "JDZ+T/br9pPfT2lmAMJypJDTTTHM9ePD/ED10TRjRzJVdEVy+JB3iRlhzYmTt5YkNgHvxWGlUVnLtdv6ruiDrQ=="
     assert pkg.integrity_algorithm == "sha512"
 
 

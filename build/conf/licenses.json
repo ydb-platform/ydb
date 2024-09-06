@@ -55,8 +55,6 @@
             "GPL-2.0-only WITH Mysql-Linking-Exception-2018",
             "GPL-2.0-only WITH Universal-FOSS-exception-1.0",
             "GPL-2.0-or-later WITH Avisynth-C-Interface-Exception",
-            "GPL-2.0-or-later WITH Bison-Exception-2.0",
-            "GPL-2.0-or-later WITH Bison-exception-2.2",
             "GPL-2.0-or-later WITH C-Interface-Exception",
             "GPL-2.0-or-later WITH freertos-exception-2.0",
             "GPL-2.0-or-later WITH Libtool-exception",
@@ -97,8 +95,10 @@
             "LicenseRef-scancode-gary-s-brown",
             "LicenseRef-scancode-generic-cla",
             "LicenseRef-scancode-generic-exception",
+            "LicenseRef-scancode-hdf4",
             "LicenseRef-scancode-intel-osl-1993",
             "LicenseRef-scancode-jdom",
+            "LicenseRef-scancode-llnl",
             "LicenseRef-scancode-mit-xfig",
             "LicenseRef-scancode-newlib-historical",
             "LicenseRef-scancode-nilsson-historical",
@@ -230,6 +230,8 @@
             "GPL-2.0-only WITH GCC-exception-2.0",
             "GPL-2.0-only WITH Linux-syscall-note",
             "GPL-2.0-or-later WITH Linux-syscall-note",
+            "GPL-2.0-or-later WITH Bison-exception-2.0",
+            "GPL-2.0-or-later WITH Bison-exception-2.2",
             "GPL-3.0-only WITH Bison-exception-2.2",
             "GPL-3.0-or-later WITH Bison-exception-2.2",
             "H2",
@@ -313,6 +315,7 @@
             "SSLeay",
             "Sunpro",
             "Unicode",
+            "Unicode-3.0",
             "Unicode-DFS-2016",
             "Unicode-Icu-58",
             "Unicode-Mappings",
@@ -331,14 +334,6 @@
             "Zlib",
             "zlib-acknowledgement",
             "ZPL-2.1"
-        ],
-        "dynamic": [
-            "LGPL",
-            "LGPL-2.0-only",
-            "LGPL-2.1-only",
-            "LGPL-2.1-or-later",
-            "LGPL-3.0-only",
-            "LGPL-3.0-or-later"
         ]
     },
     "REQUIRE_DERIVATIVE_DISCLOSURE": {
@@ -358,52 +353,70 @@
             "GPL-3.0-or-later",
             "GPLv2+",
             "TMate"
-        ],
-        "static": [
-            "EPL-1.0",
-            "EPL-2.0",
-            "LGPL",
-            "LGPL-2.0-only",
-            "LGPL-2.0-or-later WITH Libtool-exception",
-            "LGPL-2.0-or-later WITH Qt-LGPL-exception-1.1",
-            "LGPL-2.1-only",
-            "LGPL-2.1-or-later",
-            "LGPL-3.0-only",
-            "LGPL-3.0-or-later"
         ]
     },
     "REQUIRE_MODIFICATIONS_DISCLOSURE": {
         "default": [
             "CDDL-1.0",
             "CDDL-1.1"
-        ],
-        "dynamic": [
-            "EPL-1.0",
-            "EPL-2.0"
         ]
     },
     "SERVICE": {
         "default": [
             "Service-Default-License",
             "Service-Dll-Harness",
-            "Service-Prebuilt-Tool",
             "Service-Py23-Proxy",
             "Service-Unknown-License-Java"
         ]
     },
     "restricted": {
+        "LGPL": {
+            "static": [ "REQUIRE_DERIVATIVE_DISCLOSURE" ],
+            "dynamic": [ "REQUIRE_CITATION" ]
+        },
         "LGPL-1.0-or-later": {
-            "static": [
-                "REQUIRE_DERIVATIVE_DISCLOSURE"
-            ]
+            "static": [ "REQUIRE_DERIVATIVE_DISCLOSURE" ],
+            "dynamic": [ "REQUIRE_CITATION" ]
+        },
+        "LGPL-2.0-only": {
+            "static": [ "REQUIRE_DERIVATIVE_DISCLOSURE" ],
+            "dynamic": [ "REQUIRE_CITATION" ]
         },
         "LGPL-2.0-or-later": {
-            "static": [
-                "REQUIRE_DERIVATIVE_DISCLOSURE"
-            ],
-            "dynamic": [
-                "REQUIRE_CITATION"
-            ]
+            "static": [ "REQUIRE_DERIVATIVE_DISCLOSURE" ],
+            "dynamic": [ "REQUIRE_CITATION" ]
+        },
+        "LGPL-2.0-or-later WITH Libtool-exception": {
+            "static": [ "REQUIRE_DERIVATIVE_DISCLOSURE" ],
+            "dynamic": [ "REQUIRE_CITATION" ]
+        },
+        "LGPL-2.0-or-later WITH Qt-LGPL-exception-1.1": {
+            "static": [ "REQUIRE_DERIVATIVE_DISCLOSURE" ],
+            "dynamic": [ "REQUIRE_CITATION" ]
+        },
+        "LGPL-2.1-only": {
+            "static": [ "REQUIRE_DERIVATIVE_DISCLOSURE" ],
+            "dynamic": [ "REQUIRE_CITATION" ]
+        },
+        "LGPL-2.1-or-later": {
+            "static": [ "REQUIRE_DERIVATIVE_DISCLOSURE" ],
+            "dynamic": [ "REQUIRE_CITATION" ]
+        },
+        "LGPL-3.0-only": {
+            "static": [ "REQUIRE_DERIVATIVE_DISCLOSURE" ],
+            "dynamic": [ "REQUIRE_CITATION" ]
+        },
+        "LGPL-3.0-or-later": {
+            "static": [ "REQUIRE_DERIVATIVE_DISCLOSURE" ],
+            "dynamic": [ "REQUIRE_CITATION" ]
+        },
+        "EPL-1.0": {
+            "static": [ "REQUIRE_DERIVATIVE_DISCLOSURE" ],
+            "dynamic": [ "REQUIRE_MODIFICATIONS_DISCLOSURE" ]
+        },
+        "EPL-2.0": {
+            "static": [ "REQUIRE_DERIVATIVE_DISCLOSURE" ],
+            "dynamic": [ "REQUIRE_MODIFICATIONS_DISCLOSURE" ]
         }
     }
 }

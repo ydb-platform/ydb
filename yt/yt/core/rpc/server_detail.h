@@ -18,7 +18,7 @@ namespace NYT::NRpc {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// Magic constant! This is the lower limit of the memory allocated for the request.
+// Magic constant! This is lower limit of memory allocated for request.
 constexpr i64 TypicalRequestSize = 4_KB;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -34,7 +34,7 @@ public:
     TRequestId GetRequestId() const override;
     NYT::NBus::TBusNetworkStatistics GetBusNetworkStatistics() const override;
     const NYTree::IAttributeDictionary& GetEndpointAttributes() const override;
-    const TString& GetEndpointDescription() const override;
+    const std::string& GetEndpointDescription() const override;
 
     i64 GetTotalSize() const override;
 
@@ -199,7 +199,7 @@ public:
     NRpc::TRequestId GetRequestId() const override;
     NYT::NBus::TBusNetworkStatistics GetBusNetworkStatistics() const override;
     const NYTree::IAttributeDictionary& GetEndpointAttributes() const override;
-    const TString& GetEndpointDescription() const override;
+    const std::string& GetEndpointDescription() const override;
 
     std::optional<TInstant> GetStartTime() const override;
     std::optional<TDuration> GetTimeout() const override;

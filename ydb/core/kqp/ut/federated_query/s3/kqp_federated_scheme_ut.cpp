@@ -1,7 +1,6 @@
 #include "s3_recipe_ut_helpers.h"
 
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-#include <ydb/core/kqp/ut/federated_query/common/common.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
@@ -26,7 +25,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedSchemeTest) {
 
         CreateBucketWithObject("CreateExternalDataSourceBucket", "obj", TEST_CONTENT);
 
-        auto kikimr = MakeKikimrRunner(true);
+        auto kikimr = NTestUtils::MakeKikimrRunner();
 
         auto queryClient = kikimr->GetQueryClient();
 
@@ -197,7 +196,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedSchemeTest) {
     }
 
     Y_UNIT_TEST(InvalidDropForExternalTableWithAuth) {
-        auto kikimr = MakeKikimrRunner(true);
+        auto kikimr = NTestUtils::MakeKikimrRunner();
 
         auto driver = kikimr->GetDriver();
         NScripting::TScriptingClient yqlScriptClient(driver);
@@ -215,6 +214,28 @@ Y_UNIT_TEST_SUITE(KqpFederatedSchemeTest) {
             return std::make_pair(result.IsSuccess(), result.GetIssues().ToString());
         };
         TestInvalidDropForExternalTableWithAuth(queryClientExecutor, "generic_query");
+    }
+
+    Y_UNIT_TEST(ExternalTableDdlLocationValidation) {
+        auto kikimr = NTestUtils::MakeKikimrRunner();
+        auto db = kikimr->GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto query = TStringBuilder() << R"(
+            CREATE EXTERNAL DATA SOURCE `/Root/ExternalDataSource` WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="my-bucket",
+                AUTH_METHOD="NONE"
+            );
+            CREATE EXTERNAL TABLE `/Root/ExternalTable` (
+                Key Uint64,
+                Value String
+            ) WITH (
+                DATA_SOURCE="/Root/ExternalDataSource",
+                LOCATION="{"
+            );)";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Location '{' contains invalid wildcard:");
     }
 }
 

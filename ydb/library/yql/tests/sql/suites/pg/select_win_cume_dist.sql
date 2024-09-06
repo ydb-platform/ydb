@@ -1,8 +1,3 @@
 --!syntax_pg
-select
-r,x,
-cume_dist() over w
-from (select * from (values (1,3),(2,null),(3,4),(4,5)) as a(r,x)) as z
-window w as (order by r)
-order by r
-
+SELECT cume_dist() over w FROM (VALUES (4),(5),(5),(6)) as a(x)
+window w as (ORDER BY x ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)

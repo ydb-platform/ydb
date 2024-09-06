@@ -1,6 +1,4 @@
 use plato;
-pragma EmitAggApply;
-pragma UseBlocks;
 pragma yt.UsePartitionsByKeysForFinalAgg="false";
 
 SELECT

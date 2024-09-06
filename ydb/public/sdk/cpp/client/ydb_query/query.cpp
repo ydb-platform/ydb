@@ -1,5 +1,7 @@
 #include "query.h"
 
+#include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
+
 namespace NYdb::NQuery {
 
 std::optional<EStatsMode> ParseStatsMode(std::string_view statsMode) {
@@ -42,8 +44,17 @@ TScriptExecutionOperation::TScriptExecutionOperation(TStatus&& status, Ydb::Oper
     Metadata_.ExecutionId = metadata.execution_id();
     Metadata_.ExecMode = static_cast<EExecMode>(metadata.exec_mode());
     Metadata_.ExecStatus = static_cast<EExecStatus>(metadata.exec_status());
-    Metadata_.ExecStats = metadata.exec_stats();
-    Metadata_.ResultSetsMeta.insert(Metadata_.ResultSetsMeta.end(), metadata.result_sets_meta().begin(), metadata.result_sets_meta().end());
+    Metadata_.ExecStats = TExecStats(std::move(*metadata.mutable_exec_stats()));
+
+    Metadata_.ResultSetsMeta.reserve(metadata.result_sets_meta_size());
+    for (const auto& resultSetMeta : metadata.result_sets_meta()) {
+        std::vector<TColumn> columns;
+        columns.reserve(resultSetMeta.columns_size());
+        for (const auto& column : resultSetMeta.columns()) {
+            columns.emplace_back(column.name(), column.type());
+        }
+        Metadata_.ResultSetsMeta.emplace_back(std::move(columns)); 
+    }
 
     if (metadata.has_script_content()) {
         Metadata_.ScriptContent.Syntax = static_cast<ESyntax>(metadata.script_content().syntax());

@@ -1,23 +1,20 @@
 #include "ydb_workload.h"
+#include "ydb_workload_import.h"
 
-#include "click_bench.h"
-#include "tpch.h"
 #include "topic_workload/topic_workload.h"
 #include "transfer_workload/transfer_workload.h"
 #include "query_workload.h"
 #include "ydb_benchmark.h"
 
-#include "ydb/library/yverify_stream/yverify_stream.h"
+#include <ydb/library/yverify_stream/yverify_stream.h>
 
-#include <ydb/library/workload/workload_factory.h>
+#include <ydb/library/workload/abstract/workload_factory.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 
 #include <library/cpp/threading/local_executor/local_executor.h>
-#include <library/cpp/threading/future/async.h>
 
-#include <util/random/random.h>
 #include <util/system/spinlock.h>
 #include <util/thread/pool.h>
 
@@ -47,10 +44,8 @@ TWorkloadStats GetWorkloadStats(const NHdr::THistogram& hdr) {
 TCommandWorkload::TCommandWorkload()
     : TClientCommandTree("workload", {}, "YDB workload service")
 {
-    AddCommand(std::make_unique<TCommandClickBench>());
     AddCommand(std::make_unique<TCommandWorkloadTopic>());
     AddCommand(std::make_unique<TCommandWorkloadTransfer>());
-    AddCommand(std::make_unique<TCommandTpch>());
     AddCommand(std::make_unique<TCommandQueryWorkload>());
     for (const auto& key: NYdbWorkload::TWorkloadFactory::GetRegisteredKeys()) {
         AddCommand(std::make_unique<TWorkloadCommandRoot>(key.c_str()));
@@ -334,46 +329,46 @@ void TWorkloadCommand::PrintWindowStats(int windowIt) {
     }
 }
 
-TWorkloadCommandInit::TWorkloadCommandInit(const TString& key)
-    : TWorkloadCommandBase("init", key, NYdbWorkload::TWorkloadParams::ECommandType::Init, "Create and initialize tables for workload")
+TWorkloadCommandInit::TWorkloadCommandInit(NYdbWorkload::TWorkloadParams& params)
+    : TWorkloadCommandBase("init", params, NYdbWorkload::TWorkloadParams::ECommandType::Init, "Create and initialize tables for workload")
 {}
 
 void TWorkloadCommandInit::Config(TConfig& config) {
     TWorkloadCommandBase::Config(config);
-    config.Opts->AddLongOption('t', "upload-threads", "Number of threads to generate and upload tables content.")
-        .Optional().DefaultValue(UpsertThreadsCount).StoreResult(&UpsertThreadsCount);
     config.Opts->AddLongOption("clear", "Clear tables before init").NoArgument()
         .Optional().StoreResult(&Clear, true);
 }
 
-TWorkloadCommandRun::TWorkloadCommandRun(const TString& key, const NYdbWorkload::IWorkloadQueryGenerator::TWorkloadType& workload)
+TWorkloadCommandRun::TWorkloadCommandRun(NYdbWorkload::TWorkloadParams& params, const NYdbWorkload::IWorkloadQueryGenerator::TWorkloadType& workload)
     : TWorkloadCommand(workload.CommandName, std::initializer_list<TString>(), workload.Description)
-    , Params(NYdbWorkload::TWorkloadFactory::MakeHolder(key))
+    , Params(params)
     , Type(workload.Type)
 {}
 
 int TWorkloadCommandRun::Run(TConfig& config) {
     PrepareForRun(config);
-    Params->DbPath = config.Database;
-    auto workloadGen = Params->CreateGenerator();
+    Params.DbPath = config.Database;
+    auto workloadGen = Params.CreateGenerator();
     return RunWorkload(*workloadGen, Type);
 }
 
 void TWorkloadCommandRun::Config(TConfig& config) {
     TWorkloadCommand::Config(config);
-    Params->ConfigureOpts(*config.Opts, NYdbWorkload::TWorkloadParams::ECommandType::Run, Type);
+    config.Opts->SetFreeArgsNum(0);
+    Params.ConfigureOpts(*config.Opts, NYdbWorkload::TWorkloadParams::ECommandType::Run, Type);
 }
 
-TWorkloadCommandBase::TWorkloadCommandBase(const TString& name, const TString& key, const NYdbWorkload::TWorkloadParams::ECommandType commandType, const TString& description, int type)
+TWorkloadCommandBase::TWorkloadCommandBase(const TString& name, NYdbWorkload::TWorkloadParams& params, const NYdbWorkload::TWorkloadParams::ECommandType commandType, const TString& description, int type)
     : TYdbCommand(name, std::initializer_list<TString>(), description)
     , CommandType(commandType)
-    , Params(NYdbWorkload::TWorkloadFactory::MakeHolder(key))
+    , Params(params)
     , Type(type)
 {}
 
 void TWorkloadCommandBase::Config(TConfig& config) {
     TYdbCommand::Config(config);
-    Params->ConfigureOpts(*config.Opts, CommandType, Type);
+    config.Opts->SetFreeArgsNum(0);
+    Params.ConfigureOpts(*config.Opts, CommandType, Type);
 }
 
 int TWorkloadCommandBase::Run(TConfig& config) {
@@ -382,14 +377,14 @@ int TWorkloadCommandBase::Run(TConfig& config) {
     TopicClient = MakeHolder<NTopic::TTopicClient>(*Driver);
     SchemeClient = MakeHolder<NScheme::TSchemeClient>(*Driver);
     QueryClient = MakeHolder<NQuery::TQueryClient>(*Driver);
-    Params->DbPath = config.Database;
-    auto workloadGen = Params->CreateGenerator();
+    Params.DbPath = config.Database;
+    auto workloadGen = Params.CreateGenerator();
     return DoRun(*workloadGen, config);
 }
 
 void TWorkloadCommandBase::CleanTables(NYdbWorkload::IWorkloadQueryGenerator& workloadGen, TConfig& config) {
     auto pathsToDelete = workloadGen.GetCleanPaths();
-    NScheme::TRemoveDirectorySettings settings;
+    TRemovePathRecursiveSettings settings;
     settings.NotExistsIsOk(true);
     for (const auto& path : pathsToDelete) {
         Cout << "Remove path " << path << "..."  << Endl;
@@ -399,38 +394,51 @@ void TWorkloadCommandBase::CleanTables(NYdbWorkload::IWorkloadQueryGenerator& wo
     }
 }
 
-std::unique_ptr<TClientCommand> TWorkloadCommandRoot::CreateRunCommand(const TString& key, const NYdbWorkload::IWorkloadQueryGenerator::TWorkloadType& workload) {
+std::unique_ptr<TClientCommand> TWorkloadCommandRoot::CreateRunCommand(const NYdbWorkload::IWorkloadQueryGenerator::TWorkloadType& workload) {
     switch (workload.Kind) {
     case NYdbWorkload::IWorkloadQueryGenerator::TWorkloadType::EKind::Workload:
-        return std::make_unique<TWorkloadCommandRun>(key, workload);
+        return std::make_unique<TWorkloadCommandRun>(*Params, workload);
     case NYdbWorkload::IWorkloadQueryGenerator::TWorkloadType::EKind::Benchmark:
-        return std::make_unique<TWorkloadCommandBenchmark>(key, workload);
+        return std::make_unique<TWorkloadCommandBenchmark>(*Params, workload);
     }
 }
 
 TWorkloadCommandRoot::TWorkloadCommandRoot(const TString& key)
     : TClientCommandTree(key, {}
-    , "YDB " + NYdbWorkload::TWorkloadFactory::MakeHolder(key)->GetWorkloadName() + " workload")
+        , "YDB " + NYdbWorkload::TWorkloadFactory::MakeHolder(key)->GetWorkloadName() + " workload"
+      )
+    , Params(NYdbWorkload::TWorkloadFactory::MakeHolder(key))
 {
-    AddCommand(std::make_unique<TWorkloadCommandInit>(key));
-    auto supportedWorkloads = NYdbWorkload::TWorkloadFactory::MakeHolder(key)->CreateGenerator()->GetSupportedWorkloadTypes();
+    AddCommand(std::make_unique<TWorkloadCommandInit>(*Params));
+    {
+        auto initializers = Params->CreateDataInitializers();
+        if (!initializers.empty()) {
+            AddCommand(std::make_unique<TWorkloadCommandImport>(*Params, std::move(initializers)));
+        }
+    }
+    auto supportedWorkloads = Params->CreateGenerator()->GetSupportedWorkloadTypes();
     switch (supportedWorkloads.size()) {
     case 0:
         break;
     case 1:
         supportedWorkloads.back().CommandName = "run";
-        AddCommand(CreateRunCommand(key, supportedWorkloads.back()));
+        AddCommand(CreateRunCommand(supportedWorkloads.back()));
         break;
     default: {
         auto run = std::make_unique<TClientCommandTree>("run", std::initializer_list<TString>(), "Run YDB " + NYdbWorkload::TWorkloadFactory::MakeHolder(key)->GetWorkloadName() + " workload");
         for (const auto& type: supportedWorkloads) {
-            run->AddCommand(CreateRunCommand(key, type));
+            run->AddCommand(CreateRunCommand(type));
         }
         AddCommand(std::move(run));
         break;
     }
     }
-    AddCommand(std::make_unique<TWorkloadCommandClean>(key));
+    AddCommand(std::make_unique<TWorkloadCommandClean>(*Params));
+}
+    
+void TWorkloadCommandRoot::Config(TConfig& config) {
+    TClientCommandTree::Config(config);
+    Params->ConfigureOpts(*config.Opts, NYdbWorkload::TWorkloadParams::ECommandType::Root, 0);
 }
 
 int TWorkloadCommandInit::DoRun(NYdbWorkload::IWorkloadQueryGenerator& workloadGen, TConfig& config) {
@@ -439,10 +447,12 @@ int TWorkloadCommandInit::DoRun(NYdbWorkload::IWorkloadQueryGenerator& workloadG
     }
     auto ddlQueries = workloadGen.GetDDLQueries();
     if (!ddlQueries.empty()) {
+        Cout << "Init tables " << "..."  << Endl;
         auto result = TableClient->RetryOperationSync([ddlQueries](NTable::TSession session) {
             return session.ExecuteSchemeQuery(ddlQueries.c_str()).GetValueSync();
         });
         ThrowOnError(result);
+        Cout << "Init tables " << "...Ok"  << Endl;
     }
 
     auto session = GetSession();
@@ -465,77 +475,11 @@ int TWorkloadCommandInit::DoRun(NYdbWorkload::IWorkloadQueryGenerator& workloadG
         }
     }
 
-    auto dataGeneratorList = workloadGen.GetBulkInitialData();
-    TAtomic stop = 0;
-    for (auto dataGen : dataGeneratorList) {
-        TThreadPoolParams params;
-        params.SetCatching(false);
-        TThreadPool pool;
-        pool.Start(UpsertThreadsCount);
-        const auto start = Now();
-        Cout << "Fill table " << dataGen->GetName() << "..."  << Endl;
-        Bar = MakeHolder<TProgressBar>(dataGen->GetSize());
-        TVector<NThreading::TFuture<void>> sendings;
-        for (ui32 t = 0; t < UpsertThreadsCount; ++t) {
-            sendings.push_back(NThreading::Async([this, dataGen, &stop] () {
-                if (!ProcessDataGenerator(dataGen, stop)) {
-                    AtomicSet(stop, 1);
-                }
-            }, pool));
-        }
-        NThreading::WaitAll(sendings).Wait();
-        const bool wasErrors = AtomicGet(stop);
-        Cout << "Fill table " << dataGen->GetName() << "..."  << (wasErrors ? "Breaked" : "OK" ) << " (" << (Now() - start) << ")" << Endl;
-        if (wasErrors) {
-            break;
-        }
-    }
-    return AtomicGet(stop) ? EXIT_FAILURE : EXIT_SUCCESS;
+    return EXIT_SUCCESS;
 }
 
-TStatus TWorkloadCommandInit::SendDataPortion(NYdbWorkload::IBulkDataGenerator::TDataPortionPtr portion) const {
-    if (auto* value = std::get_if<TValue>(&portion->Data)) {
-        return TableClient->BulkUpsert(portion->Table, std::move(*value)).GetValueSync();
-    }
-    NRetry::TRetryOperationSettings retrySettings;
-    retrySettings.RetryUndefined(true);
-    if (auto* value = std::get_if<NYdbWorkload::IBulkDataGenerator::TDataPortion::TCsv>(&portion->Data)) {
-        return TableClient->RetryOperationSync([value, portion](NTable::TTableClient& client) {
-            NTable::TBulkUpsertSettings settings;
-            settings.FormatSettings(value->FormatString);
-            return client.BulkUpsert(portion->Table, NTable::EDataFormat::CSV, value->Data, TString(), settings).GetValueSync();
-        }, retrySettings);
-    }
-    if (auto* value = std::get_if<NYdbWorkload::IBulkDataGenerator::TDataPortion::TArrow>(&portion->Data)) {
-        return TableClient->RetryOperationSync([value, portion](NTable::TTableClient& client) {
-            return client.BulkUpsert(portion->Table, NTable::EDataFormat::ApacheArrow, value->Data, value->Schema).GetValueSync();
-        }, retrySettings);
-    }
-    Y_FAIL_S("Invalid data portion");
-}
-
-bool TWorkloadCommandInit::ProcessDataGenerator(std::shared_ptr<NYdbWorkload::IBulkDataGenerator> dataGen, const TAtomic& stop) noexcept try {
-    for (auto portions = dataGen->GenerateDataPortion(); !portions.empty() && !AtomicGet(stop); portions = dataGen->GenerateDataPortion()) {
-        for (const auto& data: portions) {
-            const auto res = SendDataPortion(data);
-            auto g = Guard(Lock);
-            if (!res.IsSuccess()) {
-                Cerr << "Bulk upset to " << dataGen->GetName() << " failed: " << res.GetIssues().ToString() << Endl;
-                return false;
-            }
-            Bar->AddProgress(data->Size);
-        }
-    }
-    return true;
-} catch (...) {
-    auto g = Guard(Lock);
-    Cerr << "Fill table " << dataGen->GetName() << " failed: " << CurrentExceptionMessage() << ", backtrace: ";
-    PrintBackTrace();
-    return false;
-}
-
-TWorkloadCommandClean::TWorkloadCommandClean(const TString& key)
-    : TWorkloadCommandBase("clean", key, NYdbWorkload::TWorkloadParams::ECommandType::Clean, "Drop tables created in init phase")
+TWorkloadCommandClean::TWorkloadCommandClean(NYdbWorkload::TWorkloadParams& params)
+    : TWorkloadCommandBase("clean", params, NYdbWorkload::TWorkloadParams::ECommandType::Clean, "Drop tables created in init phase")
 {}
 
 int TWorkloadCommandClean::DoRun(NYdbWorkload::IWorkloadQueryGenerator& workloadGen, TConfig& config) {

@@ -3,7 +3,7 @@
  * globals.c
  *	  global variable declarations
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -28,6 +28,7 @@
 __thread ProtocolVersion FrontendProtocol;
 
 __thread volatile sig_atomic_t InterruptPending = false;
+volatile sig_atomic_t* ImplPtrInterruptPending() { return &InterruptPending; }
 __thread volatile sig_atomic_t QueryCancelPending = false;
 __thread volatile sig_atomic_t ProcDiePending = false;
 __thread volatile sig_atomic_t CheckClientConnectionPending = false;
@@ -36,6 +37,7 @@ __thread volatile sig_atomic_t IdleInTransactionSessionTimeoutPending = false;
 __thread volatile sig_atomic_t IdleSessionTimeoutPending = false;
 __thread volatile sig_atomic_t ProcSignalBarrierPending = false;
 __thread volatile sig_atomic_t LogMemoryContextPending = false;
+__thread volatile sig_atomic_t IdleStatsUpdateTimeoutPending = false;
 __thread volatile uint32 InterruptHoldoffCount = 0;
 __thread volatile uint32 QueryCancelHoldoffCount = 0;
 __thread volatile uint32 CritSectionCount = 0;
@@ -122,7 +124,7 @@ __thread int			IntervalStyle = INTSTYLE_POSTGRES;
 __thread bool		enableFsync = true;
 __thread bool		allowSystemTableMods = false;
 __thread int			work_mem = 4096;
-__thread double		hash_mem_multiplier = 1.0;
+__thread double		hash_mem_multiplier = 2.0;
 __thread int			maintenance_work_mem = 65536;
 __thread int			max_parallel_maintenance_workers = 2;
 
@@ -132,13 +134,16 @@ __thread int			max_parallel_maintenance_workers = 2;
  * MaxBackends is computed by PostmasterMain after modules have had a chance to
  * register background workers.
  */
-__thread int			NBuffers = 1000;
-__thread int			MaxConnections = 90;
+__thread int			NBuffers = 16384;
+__thread int			MaxConnections = 100;
 __thread int			max_worker_processes = 8;
 __thread int			max_parallel_workers = 8;
 __thread int			MaxBackends = 0;
 
-__thread int			VacuumCostPageHit = 1;	/* GUC parameters for vacuum */
+/* GUC parameters for vacuum */
+__thread int			VacuumBufferUsageLimit = 256;
+
+__thread int			VacuumCostPageHit = 1;
 __thread int			VacuumCostPageMiss = 2;
 __thread int			VacuumCostPageDirty = 20;
 __thread int			VacuumCostLimit = 200;

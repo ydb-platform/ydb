@@ -40,11 +40,15 @@ import warnings
 from google.protobuf.internal import api_implementation
 
 _USE_C_DESCRIPTORS = False
-if api_implementation.Type() == 'cpp':
+if api_implementation.Type() != 'python':
   # Used by MakeDescriptor in cpp mode
   import binascii
   import os
-  from google.protobuf.pyext import _message
+  # pylint: disable=protected-access
+  _message = api_implementation._c_module
+  # TODO(jieluo): Remove this import after fix api_implementation
+  if _message is None:
+    from google.protobuf.pyext import _message
   _USE_C_DESCRIPTORS = True
 
 
@@ -62,6 +66,7 @@ if _USE_C_DESCRIPTORS:
   # and make it return True when the descriptor is an instance of the extension
   # type written in C++.
   class DescriptorMetaclass(type):
+
     def __instancecheck__(cls, obj):
       if super(DescriptorMetaclass, cls).__instancecheck__(obj):
         return True
@@ -598,13 +603,13 @@ class FieldDescriptor(DescriptorBase):
     self.is_extension = is_extension
     self.extension_scope = extension_scope
     self.containing_oneof = containing_oneof
-    if api_implementation.Type() == 'cpp':
+    if api_implementation.Type() == 'python':
+      self._cdescriptor = None
+    else:
       if is_extension:
         self._cdescriptor = _message.default_pool.FindExtensionByName(full_name)
       else:
         self._cdescriptor = _message.default_pool.FindFieldByName(full_name)
-    else:
-      self._cdescriptor = None
 
   @property
   def camelcase_name(self):
@@ -616,6 +621,42 @@ class FieldDescriptor(DescriptorBase):
     if self._camelcase_name is None:
       self._camelcase_name = _ToCamelCase(self.name)
     return self._camelcase_name
+
+  @property
+  def has_presence(self):
+    """Whether the field distinguishes between unpopulated and default values.
+
+    Raises:
+      RuntimeError: singular field that is not linked with message nor file.
+    """
+    if self.label == FieldDescriptor.LABEL_REPEATED:
+      return False
+    if (self.cpp_type == FieldDescriptor.CPPTYPE_MESSAGE or
+        self.containing_oneof):
+      return True
+    # self.containing_type is used here instead of self.file for legacy
+    # compatibility. FieldDescriptor.file was added in cl/153110619
+    # Some old/generated code didn't link file to FieldDescriptor.
+    # TODO(jieluo): remove syntax usage b/240619313
+    return self.containing_type.syntax == 'proto2'
+
+  @property
+  def is_packed(self):
+    """Returns if the field is packed."""
+    if self.label != FieldDescriptor.LABEL_REPEATED:
+      return False
+    field_type = self.type
+    if (field_type == FieldDescriptor.TYPE_STRING or
+        field_type == FieldDescriptor.TYPE_GROUP or
+        field_type == FieldDescriptor.TYPE_MESSAGE or
+        field_type == FieldDescriptor.TYPE_BYTES):
+      return False
+    if self.containing_type.syntax == 'proto2':
+      return self.has_options and self.GetOptions().packed
+    else:
+      return (not self.has_options or
+              not self.GetOptions().HasField('packed') or
+              self.GetOptions().packed)
 
   @staticmethod
   def ProtoTypeToCppProtoType(proto_type):
@@ -647,7 +688,7 @@ class EnumDescriptor(_NestedDescriptorBase):
     full_name (str): Full name of the type, including package name
       and any enclosing type(s).
 
-    values (list[EnumValueDescriptors]): List of the values
+    values (list[EnumValueDescriptor]): List of the values
       in this enum.
     values_by_name (dict(str, EnumValueDescriptor)): Same as :attr:`values`,
       but indexed by the "name" field of each EnumValueDescriptor.
@@ -695,6 +736,30 @@ class EnumDescriptor(_NestedDescriptorBase):
     self.values_by_name = dict((v.name, v) for v in values)
     # Values are reversed to ensure that the first alias is retained.
     self.values_by_number = dict((v.number, v) for v in reversed(values))
+
+  @property
+  def is_closed(self):
+    """Returns true whether this is a "closed" enum.
+
+    This means that it:
+    - Has a fixed set of values, rather than being equivalent to an int32.
+    - Encountering values not in this set causes them to be treated as unknown
+      fields.
+    - The first value (i.e., the default) may be nonzero.
+
+    WARNING: Some runtimes currently have a quirk where non-closed enums are
+    treated as closed when used as the type of fields defined in a
+    `syntax = proto2;` file. This quirk is not present in all runtimes; as of
+    writing, we know that:
+
+    - C++, Java, and C++-based Python share this quirk.
+    - UPB and UPB-based Python do not.
+    - PHP and Ruby treat all enums as open regardless of declaration.
+
+    Care should be taken when using this function to respect the target
+    runtime's enum handling quirks.
+    """
+    return self.file.syntax == 'proto2'
 
   def CopyToProto(self, proto):
     """Copies this to a descriptor_pb2.EnumDescriptorProto.
@@ -849,11 +914,14 @@ class ServiceDescriptor(_NestedDescriptorBase):
 
     Args:
       name (str): Name of the method.
+
     Returns:
-      MethodDescriptor or None: the descriptor for the requested method, if
-      found.
+      MethodDescriptor: The descriptor for the requested method.
+
+    Raises:
+      KeyError: if the method cannot be found in the service.
     """
-    return self.methods_by_name.get(name, None)
+    return self.methods_by_name[name]
 
   def CopyToProto(self, proto):
     """Copies this to a descriptor_pb2.ServiceDescriptorProto.
@@ -879,6 +947,8 @@ class MethodDescriptor(DescriptorBase):
       accepts.
     output_type (Descriptor): The descriptor of the message that this method
       returns.
+    client_streaming (bool): Whether this method uses client streaming.
+    server_streaming (bool): Whether this method uses server streaming.
     options (descriptor_pb2.MethodOptions or None): Method options message, or
       None to use default method options.
   """
@@ -886,14 +956,32 @@ class MethodDescriptor(DescriptorBase):
   if _USE_C_DESCRIPTORS:
     _C_DESCRIPTOR_CLASS = _message.MethodDescriptor
 
-    def __new__(cls, name, full_name, index, containing_service,
-                input_type, output_type, options=None, serialized_options=None,
+    def __new__(cls,
+                name,
+                full_name,
+                index,
+                containing_service,
+                input_type,
+                output_type,
+                client_streaming=False,
+                server_streaming=False,
+                options=None,
+                serialized_options=None,
                 create_key=None):
       _message.Message._CheckCalledFromGeneratedFile()  # pylint: disable=protected-access
       return _message.default_pool.FindMethodByName(full_name)
 
-  def __init__(self, name, full_name, index, containing_service,
-               input_type, output_type, options=None, serialized_options=None,
+  def __init__(self,
+               name,
+               full_name,
+               index,
+               containing_service,
+               input_type,
+               output_type,
+               client_streaming=False,
+               server_streaming=False,
+               options=None,
+               serialized_options=None,
                create_key=None):
     """The arguments are as described in the description of MethodDescriptor
     attributes above.
@@ -911,6 +999,8 @@ class MethodDescriptor(DescriptorBase):
     self.containing_service = containing_service
     self.input_type = input_type
     self.output_type = output_type
+    self.client_streaming = client_streaming
+    self.server_streaming = server_streaming
 
   def CopyToProto(self, proto):
     """Copies this to a descriptor_pb2.MethodDescriptorProto.
@@ -951,7 +1041,7 @@ class FileDescriptor(DescriptorBase):
     public_dependencies (list[FileDescriptor]): A subset of
       :attr:`dependencies`, which were declared as "public".
     message_types_by_name (dict(str, Descriptor)): Mapping from message names
-      to their :class:`Desctiptor`.
+      to their :class:`Descriptor`.
     enum_types_by_name (dict(str, EnumDescriptor)): Mapping from enum names to
       their :class:`EnumDescriptor`.
     extensions_by_name (dict(str, FieldDescriptor)): Mapping from extension
@@ -972,13 +1062,7 @@ class FileDescriptor(DescriptorBase):
       # FileDescriptor() is called from various places, not only from generated
       # files, to register dynamic proto files and messages.
       # pylint: disable=g-explicit-bool-comparison
-      if serialized_pb == b'':
-        # Cpp generated code must be linked in if serialized_pb is ''
-        try:
-          return _message.default_pool.FindFileByName(name)
-        except KeyError:
-          raise RuntimeError('Please link in cpp generated lib for %s' % (name))
-      elif serialized_pb:
+      if serialized_pb:
         return _message.default_pool.AddSerializedFile(serialized_pb)
       else:
         return super(FileDescriptor, cls).__new__(cls)
@@ -1093,7 +1177,7 @@ def MakeDescriptor(desc_proto, package='', build_file_if_cpp=True,
   Returns:
     A Descriptor for protobuf messages.
   """
-  if api_implementation.Type() == 'cpp' and build_file_if_cpp:
+  if api_implementation.Type() != 'python' and build_file_if_cpp:
     # The C++ implementation requires all descriptors to be backed by the same
     # definition in the C++ descriptor pool. To do this, we build a
     # FileDescriptorProto with the same definition as this descriptor and build

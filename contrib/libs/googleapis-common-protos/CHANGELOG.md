@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.63.2](https://github.com/googleapis/python-api-common-protos/compare/v1.63.1...v1.63.2) (2024-06-19)
+
+
+### Bug Fixes
+
+* **deps:** Require protobuf&gt;=3.20.2 ([c77c0dc](https://github.com/googleapis/python-api-common-protos/commit/c77c0dc5d29ef780d781a3c5d757736a9ed09674))
+* Regenerate pb2 files for compatibility with protobuf 5.x ([c77c0dc](https://github.com/googleapis/python-api-common-protos/commit/c77c0dc5d29ef780d781a3c5d757736a9ed09674))
+
+## [1.63.1](https://github.com/googleapis/python-api-common-protos/compare/v1.63.0...v1.63.1) (2024-05-30)
+
+
+### Bug Fixes
+
+* Increase upper limit for protobuf 5.X versions ([#212](https://github.com/googleapis/python-api-common-protos/issues/212)) ([28fc17a](https://github.com/googleapis/python-api-common-protos/commit/28fc17a9208aa98782acc6bee6c40ec12b959706))
+
 ## [1.63.0](https://github.com/googleapis/python-api-common-protos/compare/v1.62.0...v1.63.0) (2024-03-08)
 
 

@@ -227,7 +227,7 @@ auto Bind(
 ////////////////////////////////////////////////////////////////////////////////
 
 #ifdef YT_ENABLE_BIND_LOCATION_TRACKING
-    #define BIND_IMPL(propagate, ...) ::NYT::Bind<propagate, ::NYT::TCurrentTranslationUnitTag, __COUNTER__>(FROM_HERE, __VA_ARGS__)
+    #define BIND_IMPL(propagate, ...) ::NYT::Bind<propagate, ::NYT::TCurrentTranslationUnitTag, __COUNTER__>(YT_CURRENT_SOURCE_LOCATION, __VA_ARGS__)
 #else
     #define BIND_IMPL(propagate, ...) ::NYT::Bind<propagate>(__VA_ARGS__)
 #endif

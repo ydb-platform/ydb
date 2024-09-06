@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from distutils import log
 import distutils.command.install_scripts as orig
 import os
@@ -13,12 +15,12 @@ class install_scripts(orig.install_scripts):
         orig.install_scripts.initialize_options(self)
         self.no_ep = False
 
-    def run(self):
+    def run(self) -> None:
         self.run_command("egg_info")
         if self.distribution.scripts:
             orig.install_scripts.run(self)  # run first to set up self.outfiles
         else:
-            self.outfiles = []
+            self.outfiles: list[str] = []
         if self.no_ep:
             # don't install entry point scripts into .egg file!
             return
@@ -57,10 +59,10 @@ class install_scripts(orig.install_scripts):
         target = os.path.join(self.install_dir, script_name)
         self.outfiles.append(target)
 
+        encoding = None if "b" in mode else "utf-8"
         mask = current_umask()
         if not self.dry_run:
             ensure_directory(target)
-            f = open(target, "w" + mode)
-            f.write(contents)
-            f.close()
+            with open(target, "w" + mode, encoding=encoding) as f:
+                f.write(contents)
             chmod(target, 0o777 - mask)

@@ -42,19 +42,16 @@ def test_select_positive(
     "test_case", tc_collection.get('select_missing_database'), ids=tc_collection.ids('select_missing_database')
 )
 @pytest.mark.usefixtures("settings")
-@pytest.mark.usefixtures("clickhouse_client")
 def test_select_missing_database(
     request: pytest.FixtureRequest,
     settings: Settings,
     runner_type: str,
-    clickhouse_client: Client,
     test_case: select_missing_database.TestCase,
 ):
     runner = configure_runner(runner_type=runner_type, settings=settings)
-    scenario.select_missing_table(
+    scenario.select_missing_database(
         settings=settings,
         runner=runner,
-        client=clickhouse_client,
         test_case=test_case,
         test_name=request.node.name,
     )

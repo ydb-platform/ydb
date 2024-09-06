@@ -270,7 +270,8 @@ class DynamicConfigGenerator(object):
         if self._cluster_details.use_auto_config:
             app_config.ActorSystemConfig.CpuCount = self._cluster_details.dynamic_cpu_count
             app_config.ActorSystemConfig.NodeType = app_config.ActorSystemConfig.ENodeType.Value('COMPUTE')
-            app_config.ActorSystemConfig.ForceIOPoolThreads = self._cluster_details.force_io_pool_threads
+            if self._cluster_details.force_io_pool_threads is not None:
+                app_config.ActorSystemConfig.ForceIOPoolThreads = self._cluster_details.force_io_pool_threads
         action.AddConfigItem.ConfigItem.Config.CopyFrom(app_config)
         action.AddConfigItem.EnableAutoSplit = True
 

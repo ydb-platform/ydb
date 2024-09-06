@@ -130,7 +130,8 @@ class YQv2Extension(ExtensionPoint):
     def apply_to_kikimr_conf(self, request, configuration):
         extra_feature_flags = [
             'enable_external_data_sources',
-            'enable_script_execution_operations'
+            'enable_script_execution_operations',
+            'enable_external_source_schema_inference',
         ]
         if self.is_replace_if_exists:
             extra_feature_flags.append('enable_replace_if_exists_for_external_entities')
@@ -270,8 +271,9 @@ class ConnectorExtension(ExtensionPoint):
 
     def apply_to_kikimr(self, request, kikimr):
         kikimr.control_plane.fq_config['common']['disable_ssl_for_generic_data_sources'] = True
-        kikimr.control_plane.fq_config['control_plane_storage']['available_connection'].append('POSTGRESQL_CLUSTER')
         kikimr.control_plane.fq_config['control_plane_storage']['available_connection'].append('CLICKHOUSE_CLUSTER')
+        kikimr.control_plane.fq_config['control_plane_storage']['available_connection'].append('GREENPLUM_CLUSTER')
+        kikimr.control_plane.fq_config['control_plane_storage']['available_connection'].append('POSTGRESQL_CLUSTER')
         kikimr.control_plane.fq_config['control_plane_storage']['available_connection'].append('YDB_DATABASE')
 
         generic = {

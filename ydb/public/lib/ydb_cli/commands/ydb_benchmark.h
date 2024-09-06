@@ -4,7 +4,7 @@ namespace NYdb::NConsoleClient {
 
 class TWorkloadCommandBenchmark final: public TWorkloadCommandBase {
 public:
-    TWorkloadCommandBenchmark(const TString& key, const NYdbWorkload::IWorkloadQueryGenerator::TWorkloadType& workload);
+    TWorkloadCommandBenchmark(NYdbWorkload::TWorkloadParams& params, const NYdbWorkload::IWorkloadQueryGenerator::TWorkloadType& workload);
     virtual void Config(TConfig& config) override;
 
 protected:
@@ -22,10 +22,13 @@ private:
     TString OutFilePath;
     ui32 IterationsCount;
     TString JsonReportFileName;
+    TString CsvReportFileName;
     TString MiniStatFileName;
+    TString PlanFileName;
     TSet<ui32> QueriesToRun;
     TSet<ui32> QueriesToSkip;
     TVector<TString> QuerySettings;
+    ui32 VerboseLevel = 0;
 };
 
 }

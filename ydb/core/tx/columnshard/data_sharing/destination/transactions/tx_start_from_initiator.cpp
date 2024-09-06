@@ -27,7 +27,6 @@ bool TTxConfirmFromInitiator::DoExecute(NTabletFlatExecutor::TTransactionContext
 }
 
 void TTxConfirmFromInitiator::DoComplete(const TActorContext& /*ctx*/) {
-    Session->Start(*Self);
     Session->GetInitiatorController().ConfirmSuccess(Session->GetSessionId());
 }
 

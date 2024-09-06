@@ -20,7 +20,7 @@ from clickhouse_connect import common
 
 logger = logging.getLogger(__name__)
 
-# We disable this warning.  Verify must explicitly set to false, so we assume the user knows what they're doing
+# We disable this warning.  Verify must be explicitly set to false, so we assume the user knows what they're doing
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Increase this number just to be safe when ClickHouse is returning progress headers
@@ -118,13 +118,13 @@ def get_pool_manager(keep_interval: int = DEFAULT_KEEP_INTERVAL,
     return manager
 
 
-def check_conn_reset(manager: PoolManager):
+def check_conn_expiration(manager: PoolManager):
     reset_seconds = common.get_setting('max_connection_age')
     if reset_seconds:
         last_reset = all_managers.get(manager, 0)
         now = int(time.time())
         if last_reset < now - reset_seconds:
-            logger.debug('connection reset')
+            logger.debug('connection expiration')
             manager.clear()
             all_managers[manager] = now
 

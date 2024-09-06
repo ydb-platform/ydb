@@ -19,8 +19,6 @@ SET(ORIG_SOURCES
 
 PEERDIR(
     contrib/libs/apache/arrow
-    ydb/library/actors/util
-    ydb/library/yql/dq/actors/spilling
     library/cpp/enumbitset
     library/cpp/packedtypes
     library/cpp/random_provider

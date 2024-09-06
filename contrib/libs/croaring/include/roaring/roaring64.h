@@ -203,6 +203,11 @@ void roaring64_bitmap_remove_range_closed(roaring64_bitmap_t *r, uint64_t min,
                                           uint64_t max);
 
 /**
+ * Empties the bitmap.
+ */
+void roaring64_bitmap_clear(roaring64_bitmap_t *r);
+
+/**
  * Returns true if the provided value is present.
  */
 bool roaring64_bitmap_contains(const roaring64_bitmap_t *r, uint64_t val);
@@ -273,6 +278,12 @@ uint64_t roaring64_bitmap_range_cardinality(const roaring64_bitmap_t *r,
                                             uint64_t min, uint64_t max);
 
 /**
+ * Returns the number of elements in the range [min, max]
+ */
+uint64_t roaring64_bitmap_range_closed_cardinality(const roaring64_bitmap_t *r,
+                                                   uint64_t min, uint64_t max);
+
+/**
  * Returns true if the bitmap is empty (cardinality is zero).
  */
 bool roaring64_bitmap_is_empty(const roaring64_bitmap_t *r);
@@ -291,6 +302,13 @@ uint64_t roaring64_bitmap_maximum(const roaring64_bitmap_t *r);
  * Returns true if the result has at least one run container.
  */
 bool roaring64_bitmap_run_optimize(roaring64_bitmap_t *r);
+
+/**
+ *  (For advanced users.)
+ * Collect statistics about the bitmap
+ */
+void roaring64_bitmap_statistics(const roaring64_bitmap_t *r,
+                                 roaring64_statistics_t *stat);
 
 /**
  * Perform internal consistency checks.

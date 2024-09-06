@@ -15,7 +15,7 @@ using namespace NYson;
 using namespace NYTree;
 
 //! Used only for YT_LOG_FATAL below.
-static const TLogger Logger("TableClientComparator");
+YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "TableClientComparator");
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -336,11 +336,6 @@ void FormatValue(TStringBuilderBase* builder, const TComparator& comparator, TSt
     builder->AppendChar('}');
 }
 
-TString ToString(const TComparator& comparator)
-{
-    return ToStringViaBuilder(comparator);
-}
-
 void Serialize(const TComparator& comparator, IYsonConsumer* consumer)
 {
     BuildYsonFluently(consumer)
@@ -388,7 +383,7 @@ TKeyComparer::TKeyComparer()
     : TBase(
         New<TCaller>(
 #ifdef YT_ENABLE_BIND_LOCATION_TRACKING
-            FROM_HERE,
+            YT_CURRENT_SOURCE_LOCATION,
 #endif
             nullptr,
             &ComparePrefix),

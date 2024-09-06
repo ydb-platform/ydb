@@ -2,6 +2,10 @@ UNITTEST()
 
 FORK_SUBTESTS()
 
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(ram:32)
+ENDIF()
+
 IF (SANITIZER_TYPE OR WITH_VALGRIND)
     TIMEOUT(3600)
     SIZE(LARGE)
@@ -19,8 +23,10 @@ SRCS(
     decommit_3dc.cpp
     defrag.cpp
     discover.cpp
+    ds_proxy_lwtrace.cpp
     encryption.cpp
     extra_block_checks.cpp
+    gc.cpp
     gc_quorum_3dc.cpp
     get.cpp
     group_reconfiguration.cpp
@@ -49,8 +55,6 @@ PEERDIR(
     ydb/core/blobstorage/vdisk/common
     ydb/core/blobstorage/vdisk/scrub
 )
-
-REQUIREMENTS(ram:32)
 
 END()
 

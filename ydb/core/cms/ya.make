@@ -238,4 +238,5 @@ RECURSE(
 RECURSE_FOR_TESTS(
     ut
     ut_sentinel
+    ut_sentinel_unstable
 )

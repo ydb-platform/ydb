@@ -1,6 +1,8 @@
 #pragma once
 
 #include <yt/yt/core/test_framework/framework.h>
+#include <yt/yt/core/test_framework/test_memory_tracker.h>
+#include <yt/yt/core/test_framework/test_server_host.h>
 
 #include <yt/yt/core/bus/bus.h>
 #include <yt/yt/core/bus/server.h>
@@ -13,6 +15,7 @@
 
 #include <yt/yt/core/concurrency/thread_pool.h>
 #include <yt/yt/core/concurrency/delayed_executor.h>
+#include <yt/yt/core/concurrency/thread_pool_poller.h>
 
 #include <yt/yt/core/bus/public.h>
 
@@ -40,6 +43,12 @@
 #include <yt/yt/core/rpc/grpc/server.h>
 #include <yt/yt/core/rpc/grpc/proto/grpc.pb.h>
 
+#include <yt/yt/core/http/server.h>
+#include <yt/yt/core/https/config.h>
+#include <yt/yt/core/https/server.h>
+#include <yt/yt/core/rpc/http/server.h>
+#include <yt/yt/core/rpc/http/channel.h>
+
 #include <yt/yt/core/misc/error.h>
 #include <yt/yt/core/misc/shutdown.h>
 
@@ -53,168 +62,37 @@
 #include <library/cpp/testing/common/env.h>
 #include <library/cpp/testing/common/network.h>
 
-#include <random>
-
 namespace NYT::NRpc {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TTestNodeMemoryTracker
-    : public IMemoryUsageTracker
-{
-public:
-    explicit TTestNodeMemoryTracker(size_t limit);
-
-    i64 GetLimit() const override;
-    i64 GetUsed() const override;
-    i64 GetFree() const override;
-    bool IsExceeded() const override;
-
-    TError TryAcquire(i64 size) override;
-    TError TryChange(i64 size) override;
-    bool Acquire(i64 size) override;
-    void Release(i64 size) override;
-    void SetLimit(i64 size) override;
-
-    void ClearTotalUsage();
-    i64 GetTotalUsage() const;
-
-    TSharedRef Track(
-        TSharedRef reference,
-        bool keepHolder = false) override;
-private:
-    class TTestTrackedReferenceHolder
-        : public TSharedRangeHolder
-    {
-    public:
-        TTestTrackedReferenceHolder(
-            TSharedRef underlying,
-            TMemoryUsageTrackerGuard guard)
-            : Underlying_(std::move(underlying))
-            , Guard_(std::move(guard))
-        { }
-
-        TSharedRangeHolderPtr Clone(const TSharedRangeHolderCloneOptions& options) override
-        {
-            if (options.KeepMemoryReferenceTracking) {
-                return this;
-            }
-            return Underlying_.GetHolder()->Clone(options);
-        }
-
-        std::optional<size_t> GetTotalByteSize() const override
-        {
-            return Underlying_.GetHolder()->GetTotalByteSize();
-        }
-
-    private:
-        const TSharedRef Underlying_;
-        const TMemoryUsageTrackerGuard Guard_;
-    };
-
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock_);
-    i64 Usage_;
-    i64 Limit_;
-    i64 TotalUsage_;
-
-    TError DoTryAcquire(i64 size);
-    void DoAcquire(i64 size);
-    void DoRelease(i64 size);
-};
-
-DECLARE_REFCOUNTED_CLASS(TTestNodeMemoryTracker)
-DEFINE_REFCOUNTED_TYPE(TTestNodeMemoryTracker)
-
-////////////////////////////////////////////////////////////////////////////////
-
-class TTestServerHost
-{
-public:
-    void InitilizeAddress()
-    {
-        Port_ = NTesting::GetFreePort();
-        Address_ = Format("localhost:%v", Port_);
-        MemoryUsageTracker_ = New<TTestNodeMemoryTracker>(32_MB);
-    }
-
-    void InitializeServer(
-        IServerPtr server,
-        const IInvokerPtr& invoker,
-        bool secure,
-        TTestCreateChannelCallback createChannel)
-    {
-        Server_ = server;
-        TestService_ = CreateTestService(invoker, secure, createChannel, MemoryUsageTracker_);
-        NoBaggageService_ = CreateNoBaggageService(invoker);
-        Server_->RegisterService(TestService_);
-        Server_->RegisterService(NoBaggageService_);
-        Server_->Start();
-    }
-
-    void TearDown()
-    {
-        Server_->Stop().Get().ThrowOnError();
-        Server_.Reset();
-    }
-
-    const NTesting::TPortHolder& GetPort() const
-    {
-        return Port_;
-    }
-
-    TTestNodeMemoryTrackerPtr GetMemoryUsageTracker()
-    {
-        return MemoryUsageTracker_;
-    }
-
-    TString GetAddress() const
-    {
-        return Address_;
-    }
-
-    ITestServicePtr GetTestService()
-    {
-        return TestService_;
-    }
-
-    IServerPtr GetServer()
-    {
-        return Server_;
-    }
-
-protected:
-    NTesting::TPortHolder Port_;
-    TString Address_;
-
-    ITestServicePtr TestService_;
-    IServicePtr NoBaggageService_;
-    IServerPtr Server_;
-    TTestNodeMemoryTrackerPtr MemoryUsageTracker_;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
 template <class TImpl>
-class TTestBase
+class TRpcTestBase
     : public ::testing::Test
 {
 public:
     void SetUp() final
     {
-        Host_.InitilizeAddress();
+        bool secure = TImpl::Secure;
 
         WorkerPool_ = NConcurrency::CreateThreadPool(4, "Worker");
-        bool secure = TImpl::Secure;
-        Host_.InitializeServer(
-            TImpl::CreateServer(Host_.GetPort(), Host_.GetMemoryUsageTracker()),
-            WorkerPool_->GetInvoker(),
-            secure,
-            /*createChannel*/ {});
+        MemoryUsageTracker_ = New<TTestNodeMemoryTracker>(32_MB);
+        TestService_ = CreateTestService(WorkerPool_->GetInvoker(), secure, {}, MemoryUsageTracker_);
+
+        auto services = std::vector<IServicePtr>{
+            TestService_,
+            CreateNoBaggageService(WorkerPool_->GetInvoker())
+        };
+
+        Host_ = TImpl::CreateTestServerHost(
+            NTesting::GetFreePort(),
+            std::move(services),
+            MemoryUsageTracker_);
     }
 
     void TearDown() final
     {
-        Host_.TearDown();
+        Host_->TearDown();
     }
 
     IChannelPtr CreateChannel(
@@ -222,25 +100,25 @@ public:
         THashMap<TString, NYTree::INodePtr> grpcArguments = {})
     {
         if (address) {
-            return TImpl::CreateChannel(*address, Host_.GetAddress(), std::move(grpcArguments));
+            return TImpl::CreateChannel(*address, Host_->GetAddress(), std::move(grpcArguments));
         } else {
-            return TImpl::CreateChannel(Host_.GetAddress(), Host_.GetAddress(), std::move(grpcArguments));
+            return TImpl::CreateChannel(Host_->GetAddress(), Host_->GetAddress(), std::move(grpcArguments));
         }
     }
 
-    TTestNodeMemoryTrackerPtr GetMemoryUsageTracker()
+    TTestNodeMemoryTrackerPtr GetMemoryUsageTracker() const
     {
-        return Host_.GetMemoryUsageTracker();
+        return Host_->GetMemoryUsageTracker();
     }
 
-    ITestServicePtr GetTestService()
+    ITestServicePtr GetTestService() const
     {
-        return Host_.GetTestService();
+        return TestService_;
     }
 
-    IServerPtr GetServer()
+    IServerPtr GetServer() const
     {
-        return Host_.GetServer();
+        return Host_->GetServer();
     }
 
     static bool CheckCancelCode(TErrorCode code)
@@ -267,7 +145,9 @@ public:
 
 private:
     NConcurrency::IThreadPoolPtr WorkerPool_;
-    TTestServerHost Host_;
+    TTestNodeMemoryTrackerPtr MemoryUsageTracker_;
+    TTestServerHostPtr Host_;
+    ITestServicePtr TestService_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -279,15 +159,24 @@ public:
     static constexpr bool AllowTransportErrors = false;
     static constexpr bool Secure = false;
 
-    static IServerPtr CreateServer(ui16 port, IMemoryUsageTrackerPtr memoryUsageTracker)
+    static TTestServerHostPtr CreateTestServerHost(
+        NTesting::TPortHolder port,
+        std::vector<IServicePtr> services,
+        TTestNodeMemoryTrackerPtr memoryUsageTracker)
     {
         auto busServer = MakeBusServer(port, memoryUsageTracker);
-        return NRpc::NBus::CreateBusServer(busServer);
+        auto server = NRpc::NBus::CreateBusServer(busServer);
+
+        return New<TTestServerHost>(
+            std::move(port),
+            server,
+            services,
+            memoryUsageTracker);
     }
 
     static IChannelPtr CreateChannel(
-        const TString& address,
-        const TString& serverAddress,
+        const std::string& address,
+        const std::string& serverAddress,
         THashMap<TString, NYTree::INodePtr> grpcArguments)
     {
         return TImpl::CreateChannel(address, serverAddress, std::move(grpcArguments));
@@ -306,8 +195,8 @@ class TRpcOverBusImpl
 {
 public:
     static IChannelPtr CreateChannel(
-        const TString& address,
-        const TString& /*serverAddress*/,
+        const std::string& address,
+        const std::string& /*serverAddress*/,
         THashMap<TString, NYTree::INodePtr> /*grpcArguments*/)
     {
         auto client = CreateBusClient(NYT::NBus::TBusClientConfig::CreateTcp(address));
@@ -474,8 +363,8 @@ public:
     static constexpr bool Secure = EnableSsl;
 
     static IChannelPtr CreateChannel(
-        const TString& address,
-        const TString& /*serverAddress*/,
+        const std::string& address,
+        const std::string& /*serverAddress*/,
         THashMap<TString, NYTree::INodePtr> grpcArguments)
     {
         auto channelConfig = New<NGrpc::TChannelConfig>();
@@ -500,9 +389,10 @@ public:
         return NGrpc::CreateGrpcChannel(channelConfig);
     }
 
-    static IServerPtr CreateServer(
-        ui16 port,
-        IMemoryUsageTrackerPtr /*memoryUsageTracker*/)
+    static TTestServerHostPtr CreateTestServerHost(
+        NTesting::TPortHolder port,
+        std::vector<IServicePtr> services,
+        TTestNodeMemoryTrackerPtr memoryUsageTracker)
     {
         auto serverAddressConfig = New<NGrpc::TServerAddressConfig>();
         if (EnableSsl) {
@@ -524,7 +414,13 @@ public:
 
         auto serverConfig = New<NGrpc::TServerConfig>();
         serverConfig->Addresses.push_back(serverAddressConfig);
-        return NGrpc::CreateServer(serverConfig);
+
+        auto server = NGrpc::CreateServer(serverConfig);
+        return New<TTestServerHost>(
+            std::move(port),
+            std::move(server),
+            std::move(services),
+            std::move(memoryUsageTracker));
     }
 };
 
@@ -545,8 +441,8 @@ public:
     }
 
     static IChannelPtr CreateChannel(
-        const TString& address,
-        const TString& serverAddress,
+        const std::string& address,
+        const std::string& serverAddress,
         THashMap<TString, NYTree::INodePtr> /*grpcArguments*/)
     {
         auto clientConfig = NYT::NBus::TBusClientConfig::CreateUds(
@@ -556,12 +452,83 @@ public:
     }
 
 private:
-    static TString SocketPath_;
+    static inline std::string SocketPath_;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <bool EnableSsl>
+class TRpcOverHttpImpl
+{
+public:
+    static constexpr bool AllowTransportErrors = true;
+
+    // NOTE: Some minor functionality is still missing from the HTTPs server.
+    // TODO(melkov): Fill ssl_credentials_ext in server code and enable the Secure flag.
+    static constexpr bool Secure = false;
+
+    static IChannelPtr CreateChannel(
+        const std::string& address,
+        const std::string& /*serverAddress*/,
+        THashMap<TString, NYTree::INodePtr> /*grpcArguments*/)
+    {
+        static auto poller = NConcurrency::CreateThreadPoolPoller(4, "HttpChannelTest");
+        auto credentials = New<NHttps::TClientCredentialsConfig>();
+        credentials->PrivateKey = New<NCrypto::TPemBlobConfig>();
+        credentials->PrivateKey->Value = ServerKey;
+        credentials->CertChain = New<NCrypto::TPemBlobConfig>();
+        credentials->CertChain->Value = ServerCert;
+        return NHttp::CreateHttpChannel(address, poller, EnableSsl, credentials);
+    }
+
+    static TTestServerHostPtr CreateTestServerHost(
+        NTesting::TPortHolder port,
+        std::vector<IServicePtr> services,
+        TTestNodeMemoryTrackerPtr memoryUsageTracker)
+    {
+        auto config = New<NHttps::TServerConfig>();
+        config->Port = port;
+        config->CancelFiberOnConnectionClose = true;
+        config->ServerName = "HttpServerTest";
+
+        NYT::NHttp::IServerPtr httpServer;
+        if (EnableSsl) {
+            config->Credentials = New<NHttps::TServerCredentialsConfig>();
+            config->Credentials->PrivateKey = New<NCrypto::TPemBlobConfig>();
+            config->Credentials->PrivateKey->Value = ServerKey;
+            config->Credentials->CertChain = New<NCrypto::TPemBlobConfig>();
+            config->Credentials->CertChain->Value = ServerCert;
+            httpServer = NYT::NHttps::CreateServer(config, 4);
+        } else {
+            httpServer = NYT::NHttp::CreateServer(config, 4);
+        }
+
+        auto httpRpcServer = NYT::NRpc::NHttp::CreateServer(httpServer);
+        return New<TTestServerHost>(
+            std::move(port),
+            httpRpcServer,
+            services,
+            memoryUsageTracker);
+    }
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
 using TAllTransports = ::testing::Types<
+#ifdef _linux_
+    TRpcOverBus<TRpcOverUdsImpl>,
+    TRpcOverBus<TRpcOverBusImpl<true>>,
+#endif
+    TRpcOverBus<TRpcOverBusImpl<false>>,
+    TRpcOverGrpcImpl<false, false>,
+    TRpcOverGrpcImpl<false, true>,
+    TRpcOverGrpcImpl<true, false>,
+    TRpcOverGrpcImpl<true, true>,
+    TRpcOverHttpImpl<false>,
+    TRpcOverHttpImpl<true>
+>;
+
+using TWithAttachments = ::testing::Types<
 #ifdef _linux_
     TRpcOverBus<TRpcOverUdsImpl>,
     TRpcOverBus<TRpcOverBusImpl<true>>,
@@ -579,7 +546,9 @@ using TWithoutUds = ::testing::Types<
 #endif
     TRpcOverBus<TRpcOverBusImpl<false>>,
     TRpcOverGrpcImpl<false, false>,
-    TRpcOverGrpcImpl<true, false>
+    TRpcOverGrpcImpl<true, false>,
+    TRpcOverHttpImpl<false>,
+    TRpcOverHttpImpl<true>
 >;
 
 using TWithoutGrpc = ::testing::Types<

@@ -174,7 +174,7 @@ private:
 
 class TOlapTableConstructor : public TTableConstructorBase {
     TOlapSchema TableSchema;
-    bool HasDataChannels = false;
+    ui32 ChannelsCount = 64;
 private:
     bool DoDeserialize(const NKikimrSchemeOp::TColumnTableDescription& description, IErrorCollector& errors) override {
         if (description.HasSchemaPresetName() || description.HasSchemaPresetId()) {
@@ -187,7 +187,9 @@ private:
             return false;
         }
 
-        HasDataChannels = description.GetStorageConfig().HasDataChannelCount();
+        if (description.GetStorageConfig().HasDataChannelCount()) {
+            ChannelsCount = description.GetStorageConfig().GetDataChannelCount();
+        }
 
         TOlapSchemaUpdate schemaDiff;
         if (!schemaDiff.Parse(description.GetSchema(), errors)) {
@@ -203,9 +205,7 @@ private:
 private:
     TConclusionStatus BuildDescription(const TOperationContext& /*context*/, TColumnTableInfo::TPtr& table) const override {
         auto& description = table->Description;
-        if (HasDataChannels) {
-            description.MutableStorageConfig()->SetDataChannelCount(1);
-        }
+        description.MutableStorageConfig()->SetDataChannelCount(ChannelsCount);
         TableSchema.Serialize(*description.MutableSchema());
         return TConclusionStatus::Success();
     }
@@ -315,7 +315,7 @@ public:
                     context.SS->TabletID(),
                     context.Ctx.SelfID,
                     ui64(OperationId.GetTxId()),
-                    columnShardTxBody,
+                    columnShardTxBody, seqNo,
                     context.SS->SelectProcessingParams(txState->TargetPathId));
 
                 context.OnComplete.BindMsgToPipe(OperationId, tabletId, shard.Idx, event.release());
@@ -582,12 +582,10 @@ public:
         TEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
         auto result = MakeHolder<TProposeResponse>(status, ui64(opTxId), ui64(ssId));
 
-        if (context.SS->IsServerlessDomain(TPath::Init(context.SS->RootPathId(), context.SS))) {
-            if (AppData()->ColumnShardConfig.GetDisabledOnSchemeShard()) {
-                result->SetError(NKikimrScheme::StatusPreconditionFailed,
-                    "OLAP schema operations are not supported");
-                return result;
-            }
+        if (AppData()->ColumnShardConfig.GetDisabledOnSchemeShard() && context.SS->ColumnTables.empty()) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                "OLAP schema operations are not supported");
+            return result;
         }
 
         if (createDescription.GetSharding().GetColumnShards().size()) {

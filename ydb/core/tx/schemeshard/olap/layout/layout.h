@@ -129,6 +129,13 @@ private:
 public:
     TColumnTablesLayout(std::vector<TTablesGroup>&& groups);
 
+    void RemoveGroupsWithPathId(const TPathId& pathId) {
+        const auto pred = [&](const TTablesGroup& item) {
+            return item.GetTableIds().GetIds().contains(pathId);
+        };
+        Groups.erase(std::remove_if(Groups.begin(), Groups.end(), pred), Groups.end());
+    }
+
     static std::vector<ui64> ShardIdxToTabletId(const std::vector<TShardIdx>& shards, const TSchemeShard& ss);
 
     static TColumnTablesLayout BuildTrivial(const std::vector<ui64>& tabletIds);

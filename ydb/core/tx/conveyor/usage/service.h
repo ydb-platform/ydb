@@ -19,7 +19,7 @@ public:
 
     void Bootstrap() {
         auto gAway = PassAwayGuard();
-        Task->Execute(nullptr);
+        Task->Execute(nullptr, Task);
     }
 };
 
@@ -47,8 +47,7 @@ public:
             context.Send(MakeServiceId(selfId.NodeId()), new NConveyor::TEvExecution::TEvNewTask(task));
             return true;
         } else {
-            task->Execute(nullptr);
-            context.Send(task->GetOwnerId().value_or(selfId), new NConveyor::TEvExecution::TEvTaskProcessedResult(task));
+            task->Execute(nullptr, task);
             return false;
         }
     }

@@ -12,19 +12,29 @@ namespace NKikimr::NColumnShard {
 namespace NKikimr::NOlap {
 
 class TCleanPortionsNormalizer : public TPortionsNormalizerBase {
-    static inline TFactory::TRegistrator<TCleanPortionsNormalizer> Registrator = TFactory::TRegistrator<TCleanPortionsNormalizer>(ENormalizerSequentialId::PortionsCleaner);
+public:
+    static TString GetClassNameStatic() {
+        return ::ToString(ENormalizerSequentialId::PortionsCleaner);
+    }
+
+private:
+    static inline TFactory::TRegistrator<TCleanPortionsNormalizer> Registrator = TFactory::TRegistrator<TCleanPortionsNormalizer>(GetClassNameStatic());
 public:
     class TNormalizerResult;
     class TTask;
 
 public:
+    virtual std::optional<ENormalizerSequentialId> DoGetEnumSequentialId() const override {
+        return ENormalizerSequentialId::PortionsCleaner;
+    }
+
+    virtual TString GetClassName() const override {
+        return GetClassNameStatic();
+    }
+
     TCleanPortionsNormalizer(const TNormalizationController::TInitContext& info)
         : TPortionsNormalizerBase(info)
     {}
-
-    virtual ENormalizerSequentialId GetType() const override {
-        return ENormalizerSequentialId::PortionsCleaner;
-    }
 
     virtual std::set<ui32> GetColumnsFilter(const ISnapshotSchema::TPtr& /*schema*/) const override {
         return {};

@@ -1,4 +1,3 @@
-pragma UseBlocks;
 USE plato;
 
 SELECT

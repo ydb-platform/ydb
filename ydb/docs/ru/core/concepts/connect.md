@@ -35,15 +35,16 @@
 * `/local` — база данных по умолчанию при самостоятельном развертывании [с использованием Docker](../quickstart.md).
 
 ## Строка соединения {#connection_string}
-Строка соединения (connection string) -- строка в виде URL, задающая одновременно эндпоинт и путь базы данных, в следующем формате:
 
-\<endpoint\>?database=\<database\>
+Строка соединения (connection string) — это строка в формате URL, указывающая эндпоинт и путь к базе данных, с использованием следующего синтаксиса:
+
+`<endpoint>?database=<database>`
 
 Примеры:
-- grpc://localhost:7135?database=/local
-- grpcs://ydb.serverless.yandexcloud.net:2135?database=/ru-central1/b1g8skpblkos03malf3s/etn01q5ko6sh271beftr
+- `grpc://localhost:7135?database=/local`
+- `grpcs://ydb.serverless.yandexcloud.net:2135?database=/ru-central1/b1g8skpblkos03malf3s/etn01q5ko6sh271beftr`
 
-Соединение с помощью строки соединения является альтернативой раздельному указанию эндпоинта и пути базы данных, и может применяться в тех инструментах, которые его поддерживают.
+Использование строки соединения является альтернативой раздельному указанию эндпоинта и пути к базе данных и может применяться в тех инструментах, которые поддерживают данный метод.
 
 ## Корневой сертификат для TLS {#tls-cert}
 

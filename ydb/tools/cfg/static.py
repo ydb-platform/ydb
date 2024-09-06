@@ -276,6 +276,10 @@ class StaticConfigGenerator(object):
         return self.__cluster_details.get_service("table_service_config")
 
     @property
+    def column_shard_config(self):
+        return self.__cluster_details.get_service("column_shard_config")
+
+    @property
     def hive_config(self):
         return self.__proto_config("hive", config_pb2.THiveConfig, self.__cluster_details.get_service("hive_config"))
 
@@ -386,6 +390,12 @@ class StaticConfigGenerator(object):
         if self.table_service_config:
             normalized_config["table_service_config"] = self.table_service_config
 
+        if self.column_shard_config:
+            normalized_config["column_shard_config"] = self.column_shard_config
+
+        if self.__cluster_details.client_certificate_authorization is not None:
+            normalized_config["client_certificate_authorization"] = self.__cluster_details.client_certificate_authorization
+
         if self.__cluster_details.blob_storage_config is not None:
             normalized_config["blob_storage_config"] = self.__cluster_details.blob_storage_config
         else:
@@ -490,17 +500,18 @@ class StaticConfigGenerator(object):
 
         if self._yaml_config_enabled:
             normalized_config['yaml_config_enabled'] = True
-        
+
         return normalized_config
 
     def get_yaml_format_config(self, normalized_config):
         return yaml.safe_dump(normalized_config, sort_keys=True, default_flow_style=False, indent=2)
 
     def get_yaml_format_dynconfig(self, normalized_config):
+        cluster_uuid = normalized_config.get('nameservice_config', {}).get('cluster_uuid', '')
         dynconfig = {
             'metadata': {
                 'kind': 'MainConfig',
-                'cluster': normalized_config['nameservice_config']['cluster_uuid'],
+                'cluster': cluster_uuid,
                 'version': 0,
             },
             'config': copy.deepcopy(normalized_config),

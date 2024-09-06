@@ -91,6 +91,8 @@ struct TNumDivInterval {
     static_assert(TOutput::Features & NYql::NUdf::TimeIntervalType, "Output must be interval type");
     static_assert(std::is_same_v<typename TOutput::TLayout, i64>, "Output layout type must be i64");
 
+    static constexpr auto NullMode = TKernel::ENullMode::AlwaysNull;
+
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right)
     {
         if constexpr (std::is_same_v<ui64, typename TRight::TLayout>) {
@@ -177,8 +179,28 @@ void RegisterDiv(IBuiltinFunctionRegistry& registry) {
     RegisterIntegralDiv<NUdf::TDataType<NUdf::TInterval64>>(registry);
 }
 
+template <typename TInterval>
+void RegisterIntervalDiv(TKernelFamilyBase& owner) {
+    AddBinaryKernelPoly<TInterval, NUdf::TDataType<i8>, TInterval, TNumDivInterval>(owner);
+    AddBinaryKernelPoly<TInterval, NUdf::TDataType<ui8>, TInterval, TNumDivInterval>(owner);
+    AddBinaryKernelPoly<TInterval, NUdf::TDataType<i16>, TInterval, TNumDivInterval>(owner);
+    AddBinaryKernelPoly<TInterval, NUdf::TDataType<ui16>, TInterval, TNumDivInterval>(owner);
+    AddBinaryKernelPoly<TInterval, NUdf::TDataType<i32>, TInterval, TNumDivInterval>(owner);
+    AddBinaryKernelPoly<TInterval, NUdf::TDataType<ui32>, TInterval, TNumDivInterval>(owner);
+    AddBinaryKernelPoly<TInterval, NUdf::TDataType<i64>, TInterval, TNumDivInterval>(owner);
+    AddBinaryKernelPoly<TInterval, NUdf::TDataType<ui64>, TInterval, TNumDivInterval>(owner);
+}
+
 void RegisterDiv(TKernelFamilyMap& kernelFamilyMap) {
-    kernelFamilyMap["Div"] = std::make_unique<TBinaryNumericKernelFamily<TIntegralDiv, TDiv>>();
+    auto family = std::make_unique<TKernelFamilyBase>();
+
+    AddBinaryIntegralKernels<TIntegralDiv>(*family);
+    AddBinaryRealKernels<TDiv>(*family);
+
+    RegisterIntervalDiv<NUdf::TDataType<NUdf::TInterval>>(*family);
+    RegisterIntervalDiv<NUdf::TDataType<NUdf::TInterval64>>(*family);
+
+    kernelFamilyMap["Div"] = std::move(family);
 }
 
 } // namespace NMiniKQL

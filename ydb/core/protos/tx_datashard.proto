@@ -12,6 +12,7 @@ import "ydb/core/protos/tablet.proto";
 import "ydb/core/protos/tx.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
 import "ydb/core/protos/table_stats.proto";
+import "ydb/core/protos/statistics.proto";
 import "ydb/core/protos/subdomains.proto";
 import "ydb/core/protos/query_stats.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
@@ -258,6 +259,8 @@ message TKqpReadRangesSourceSettings {
     optional uint64 MaxInFlightShards = 16;
     optional bool UseFollowers = 17 [default = false];
     optional bool AllowInconsistentReads = 18 [default = false];
+
+    repeated TKqpTransaction.TColumnMeta DuplicateCheckColumns = 19;
 }
 
 message TKqpTaskInfo {
@@ -769,6 +772,7 @@ message TEvGetTableStats {
     optional uint64 DataSizeResolution = 2;
     optional uint64 RowCountResolution = 3;
     optional bool CollectKeySample = 4;
+    optional uint32 HistogramBucketsCount = 5;
 }
 
 message TEvGetTableStatsResult {
@@ -814,7 +818,7 @@ message TObjectStorageListingFilter {
     }
     optional bytes Values = 1;
     repeated uint32 Columns = 2;
-    repeated EMatchType MatchTypes = 3; 
+    repeated EMatchType MatchTypes = 3;
 }
 
 message TEvObjectStorageListingRequest {
@@ -1425,23 +1429,12 @@ message TEvBuildIndexProgressResponse {
     optional uint64 OwnerId = 3;
     optional uint64 PathId = 4;
 
-    enum EStatus {
-        INVALID = 0;
-        ACCEPTED = 1;
-        INPROGRESS = 2;
-        DONE = 3;
-
-        ABORTED = 4;
-        BUILD_ERROR = 5;
-        BAD_REQUEST = 6;
-    }
-
-    optional EStatus Status = 5;
+    optional NKikimrIndexBuilder.EBuildStatus Status = 5;
 
     optional Ydb.StatusIds.StatusCode UploadStatus = 6;
     repeated Ydb.Issue.IssueMessage Issues = 7;
 
-    optional NKikimrTx.TKeyRange RequestedKeyRange = 8;
+    reserved 8;
     optional bytes LastKeyAck = 9;
 
     optional uint64 RowsDelta = 10;
@@ -1449,6 +1442,48 @@ message TEvBuildIndexProgressResponse {
 
     optional uint64 RequestSeqNoGeneration = 12;
     optional uint64 RequestSeqNoRound = 13;
+}
+
+message TEvSampleKRequest {
+    optional uint64 Id = 1;
+
+    optional uint64 TabletId = 2;
+    optional NKikimrProto.TPathID PathId = 3;
+
+    optional uint64 K = 4;
+    // For now we use tablet id as seed value, but it's not convinient for tests
+    optional uint64 Seed = 5;
+    // We want to sample small instead of large probabilites
+    // because size of message will be smaller (varint)
+    optional uint64 MaxProbability = 6;
+
+    repeated string Columns = 7;
+    optional NKikimrTx.TKeyRange KeyRange = 8;
+
+    optional uint64 SnapshotTxId = 9;
+    optional uint64 SnapshotStep = 10;
+
+    optional uint64 SeqNoGeneration = 11;
+    optional uint64 SeqNoRound = 12;
+}
+
+message TEvSampleKResponse {
+    optional uint64 Id = 1;
+
+    optional uint64 TabletId = 2;
+    optional NKikimrProto.TPathID PathId = 3;
+
+    optional NKikimrIndexBuilder.EBuildStatus Status = 4;
+    repeated Ydb.Issue.IssueMessage Issues = 5;
+
+    optional uint64 RowsDelta = 6;
+    optional uint64 BytesDelta = 7;
+
+    optional uint64 RequestSeqNoGeneration = 8;
+    optional uint64 RequestSeqNoRound = 9;
+
+    repeated uint64 Probabilities = 10;
+    repeated bytes Rows = 11;
 }
 
 message TEvCdcStreamScanRequest {
@@ -1491,32 +1526,6 @@ message TEvCdcStreamScanResponse {
     optional TStats Stats = 6;
 }
 
-message TEvStatisticsScanRequest {
-    optional NKikimrDataEvents.TTableId TableId = 1;
-    optional bytes StartKey = 2;
-}
-
-message TEvStatisticsScanResponse {
-    message TStatistic {
-        optional uint32 Type = 1;
-        optional bytes Data = 2;
-    }
-    message TColumn {
-        optional uint32 Tag = 1;
-        repeated TStatistic Statistics = 2;
-    }
-    repeated TColumn Columns = 1;
-
-    enum EStatus {
-        SUCCESS = 1;
-        ABORTED = 2;
-        ERROR = 3;
-    }
-    optional EStatus Status = 2;
-
-    optional fixed64 ShardTabletId = 3;
-}
-
 message TComputeShardingPolicy {
     repeated string ColumnNames = 1;
     optional uint32 ShardsCount = 2 [default = 0];
@@ -1546,8 +1555,9 @@ message TEvKqpScan {
     optional NYql.NDqProto.EDqStatsMode StatsMode = 18;
     optional bytes OlapProgram = 19;
     optional NKikimrSchemeOp.EOlapProgramType OlapProgramType = 20;
-    optional bool CostDataOnly = 21[default = false];
     optional TComputeShardingPolicy ComputeShardingPolicy = 23;
+    optional uint64 LockTxId = 24;
+    optional uint32 LockNodeId = 25;
 }
 
 message TEvCompactTable {
@@ -1854,6 +1864,7 @@ message TEvApplyReplicationChangesResult {
         REASON_SCHEME_ERROR = 2;
         REASON_BAD_REQUEST = 3;
         REASON_UNEXPECTED_ROW_OPERATION = 4;
+        REASON_OUTDATED_SCHEME = 6;
     }
 
     optional EStatus Status = 1;

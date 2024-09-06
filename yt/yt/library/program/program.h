@@ -12,12 +12,6 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DEFINE_ENUM(EProgramExitCode,
-    ((OK)(0))
-    ((OptionsError)(1))
-    ((ProgramError)(2))
-);
-
 class TProgram
 {
 public:
@@ -40,8 +34,6 @@ public:
      *  Tries to flush logging messages.
      *  Aborts via |_exit| call.
      */
-    [[noreturn]]
-    static void Abort(EProgramExitCode code) noexcept;
     [[noreturn]]
     static void Abort(int code) noexcept;
 
@@ -74,9 +66,6 @@ protected:
     //! but some YT components (e.g. CHYT) can override it to provide its own version.
     [[noreturn]]
     virtual void PrintVersionAndExit();
-
-    [[noreturn]]
-    void Exit(EProgramExitCode code) noexcept;
 
     [[noreturn]]
     void Exit(int code) noexcept;

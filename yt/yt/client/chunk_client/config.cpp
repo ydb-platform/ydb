@@ -168,6 +168,10 @@ void TReplicationReaderConfig::Register(TRegistrar registrar)
         .Default(false);
     registrar.Parameter("chunk_meta_cache_failure_probability", &TThis::ChunkMetaCacheFailureProbability)
         .Default();
+    registrar.Parameter("use_chunk_prober", &TThis::UseChunkProber)
+        .Default(false);
+    registrar.Parameter("use_read_blocks_batcher", &TThis::UseReadBlocksBatcher)
+        .Default(false);
 
     registrar.Postprocessor([] (TThis* config) {
         // Seems unreasonable to make backoff greater than half of total session timeout.
@@ -286,6 +290,9 @@ void TReplicationWriterConfig::Register(TRegistrar registrar)
 
     registrar.Parameter("testing_delay", &TThis::TestingDelay)
         .Default();
+
+    registrar.Parameter("enable_local_throttling", &TThis::EnableLocalThrottling)
+        .Default(false);
 
     registrar.Preprocessor([] (TThis* config) {
         config->NodeChannel->RetryBackoffTime = TDuration::Seconds(10);

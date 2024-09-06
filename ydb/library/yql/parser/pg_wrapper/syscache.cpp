@@ -1,11 +1,5 @@
 #include "pg_compat.h"
 
-#include <ydb/library/yql/minikql/mkql_alloc.h>
-#include <ydb/library/yql/parser/pg_catalog/catalog.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/context.h>
-#include <ydb/library/yql/parser/pg_wrapper/memory_context.h>
-#include <ydb/library/yql/parser/pg_wrapper/pg_catalog_consts.h>
-
 #define SortBy PG_SortBy
 #define TypeName PG_TypeName
 
@@ -38,6 +32,12 @@ extern "C" {
 #undef fopen
 #undef bind
 #undef locale_t
+
+#include <ydb/library/yql/minikql/mkql_alloc.h>
+#include <ydb/library/yql/parser/pg_catalog/catalog.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/context.h>
+#include <ydb/library/yql/parser/pg_wrapper/memory_context.h>
+#include <ydb/library/yql/parser/pg_wrapper/pg_catalog_consts.h>
 
 #include "arena_ctx.h"
 #include "utils.h"
@@ -197,24 +197,38 @@ struct TSysCache {
         return *Singleton<TSysCache>();
     }
 
+    static TSysCache& MutableInstance() {
+        return *Singleton<TSysCache>();
+    }    
+
     TSysCache()
     {
-        InitializeProcs();
-        InitializeTypes();
-        InitializeDatabase();
-        InitializeAuthId();
-        InitializeNameNamespaces();
-        for (auto& item : Items) {
-            if (item) {
-                item->FinalizeRangeMaps();
-            }
-        }
-
         Arena.Release();
+        Rebuild();
     }
 
     ~TSysCache() {
         Arena.Acquire();
+    }
+
+    void Rebuild() {
+        with_lock(Arena) {
+            for (auto& x : Items) {
+                x.reset();
+            }
+
+            InitializeProcs();
+            InitializeTypes();
+            InitializeDatabase();
+            InitializeAuthId();
+            InitializeNameAndOidNamespaces();
+            InitializeRelNameNamespaces();
+            for (auto& item : Items) {
+                if (item) {
+                    item->FinalizeRangeMaps();
+                }
+            }
+        }
     }
 
     static void FillDatum(ui32 count, Datum* values, bool* nulls, ui32 attrNum, Datum value) {
@@ -407,12 +421,12 @@ struct TSysCache {
         FillAttr(tupleDesc, Anum_pg_type_typdefaultbin, PG_NODE_TREEOID);
         FillAttr(tupleDesc, Anum_pg_type_typdefault, TEXTOID);
         FillAttr(tupleDesc, Anum_pg_type_typacl, ACLITEMARRAYOID);
-        auto& cacheItem = Items[TYPEOID] = std::make_unique<TSysCacheItem>(OidHasher1, OidEquals1, tupleDesc);
-        auto& lookupMap = cacheItem->LookupMap;
+        auto& cacheItem1 = Items[TYPEOID] = std::make_unique<TSysCacheItem>(OidHasher1, OidEquals1, tupleDesc);
+        auto& lookupMap1 = cacheItem1->LookupMap;
+        auto& cacheItem2 = Items[TYPENAMENSP] = std::make_unique<TSysCacheItem>(NsNameHasher, NsNameEquals, tupleDesc);
+        auto& lookupMap2 = cacheItem2->LookupMap;
 
         NPg::EnumTypes([&](ui32 oid, const NPg::TTypeDesc& desc){
-            auto key = THeapTupleKey(oid, 0, 0, 0);
-
             Datum values[Natts_pg_type];
             bool nulls[Natts_pg_type];
             Zero(values);
@@ -462,7 +476,11 @@ struct TSysCache {
             Y_ENSURE(row->typmodout == desc.TypeModOutFuncId);
             Y_ENSURE(row->typalign == desc.TypeAlign);
             Y_ENSURE(row->typstorage == storage);
-            lookupMap.emplace(key, h);
+
+            auto key1 = THeapTupleKey(oid, 0, 0, 0);            
+            lookupMap1.emplace(key1, h);
+            auto key2 = THeapTupleKey((Datum)desc.Name.c_str(), PG_CATALOG_NAMESPACE, 0, 0);
+            lookupMap2.emplace(key2, h);
         });
 
     }
@@ -473,15 +491,17 @@ struct TSysCache {
         FillAttr(tupleDesc, Anum_pg_database_datname, NAMEOID);
         FillAttr(tupleDesc, Anum_pg_database_datdba, OIDOID);
         FillAttr(tupleDesc, Anum_pg_database_encoding, INT4OID);
-        FillAttr(tupleDesc, Anum_pg_database_datcollate, NAMEOID);
-        FillAttr(tupleDesc, Anum_pg_database_datctype, NAMEOID);
+        FillAttr(tupleDesc, Anum_pg_database_datlocprovider, CHAROID);
         FillAttr(tupleDesc, Anum_pg_database_datistemplate, BOOLOID);
         FillAttr(tupleDesc, Anum_pg_database_datallowconn, BOOLOID);
         FillAttr(tupleDesc, Anum_pg_database_datconnlimit, INT4OID);
-        FillAttr(tupleDesc, Anum_pg_database_datlastsysoid, OIDOID);
         FillAttr(tupleDesc, Anum_pg_database_datfrozenxid, XIDOID);
         FillAttr(tupleDesc, Anum_pg_database_datminmxid, XIDOID);
         FillAttr(tupleDesc, Anum_pg_database_dattablespace, OIDOID);
+        FillAttr(tupleDesc, Anum_pg_database_datcollate, TEXTOID);
+        FillAttr(tupleDesc, Anum_pg_database_datctype, TEXTOID);
+        FillAttr(tupleDesc, Anum_pg_database_daticulocale, TEXTOID);
+        FillAttr(tupleDesc, Anum_pg_database_datcollversion, TEXTOID);
         FillAttr(tupleDesc, Anum_pg_database_datacl, ACLITEMARRAYOID);
         Datum values[Natts_pg_database];
         bool nulls[Natts_pg_database];
@@ -498,15 +518,17 @@ struct TSysCache {
         FillAttr(tupleDesc, Anum_pg_database_datname, NAMEOID);
         FillAttr(tupleDesc, Anum_pg_database_datdba, OIDOID);
         FillAttr(tupleDesc, Anum_pg_database_encoding, INT4OID);
-        FillAttr(tupleDesc, Anum_pg_database_datcollate, NAMEOID);
-        FillAttr(tupleDesc, Anum_pg_database_datctype, NAMEOID);
+        FillAttr(tupleDesc, Anum_pg_database_datlocprovider, CHAROID);
         FillAttr(tupleDesc, Anum_pg_database_datistemplate, BOOLOID);
         FillAttr(tupleDesc, Anum_pg_database_datallowconn, BOOLOID);
         FillAttr(tupleDesc, Anum_pg_database_datconnlimit, INT4OID);
-        FillAttr(tupleDesc, Anum_pg_database_datlastsysoid, OIDOID);
         FillAttr(tupleDesc, Anum_pg_database_datfrozenxid, XIDOID);
         FillAttr(tupleDesc, Anum_pg_database_datminmxid, XIDOID);
         FillAttr(tupleDesc, Anum_pg_database_dattablespace, OIDOID);
+        FillAttr(tupleDesc, Anum_pg_database_datcollate, TEXTOID);
+        FillAttr(tupleDesc, Anum_pg_database_datctype, TEXTOID);
+        FillAttr(tupleDesc, Anum_pg_database_daticulocale, TEXTOID);
+        FillAttr(tupleDesc, Anum_pg_database_datcollversion, TEXTOID);
         FillAttr(tupleDesc, Anum_pg_database_datacl, ACLITEMARRAYOID);
         auto& cacheItem = Items[DATABASEOID] = std::make_unique<TSysCacheItem>(OidHasher1, OidEquals1, tupleDesc);
         auto& lookupMap = cacheItem->LookupMap;
@@ -625,7 +647,7 @@ struct TSysCache {
         cacheItem->PgThreadContextLookup = std::move(threadContextLookup);
     }
 
-    void InitializeNameNamespaces() {
+    void InitializeRelNameNamespaces() {
         TupleDesc tupleDesc = CreateTemplateTupleDesc(Natts_pg_class);
         FillAttr(tupleDesc, Anum_pg_class_oid, OIDOID);
         FillAttr(tupleDesc, Anum_pg_class_relname, NAMEOID);
@@ -686,9 +708,47 @@ struct TSysCache {
             lookupMap.emplace(key, h);
         }
     }
+
+    void InitializeNameAndOidNamespaces() {
+        TupleDesc tupleDesc = CreateTemplateTupleDesc(Natts_pg_namespace);
+        FillAttr(tupleDesc, Anum_pg_namespace_oid, OIDOID);
+        FillAttr(tupleDesc, Anum_pg_namespace_nspname, NAMEOID);
+        FillAttr(tupleDesc, Anum_pg_namespace_nspowner, OIDOID);
+        FillAttr(tupleDesc, Anum_pg_namespace_nspacl, ACLITEMARRAYOID);
+        auto& cacheItem1 = Items[NAMESPACENAME] = std::make_unique<TSysCacheItem>(NsNameHasher, NsNameEquals, tupleDesc);
+        auto& lookupMap1 = cacheItem1->LookupMap;
+        auto& cacheItem2 = Items[NAMESPACEOID] = std::make_unique<TSysCacheItem>(OidHasher1, OidEquals1, tupleDesc);
+        auto& lookupMap2 = cacheItem2->LookupMap;
+
+        NPg::EnumNamespace([&](ui32 oid, const NPg::TNamespaceDesc& desc) {
+            Datum values[Natts_pg_namespace];
+            bool nulls[Natts_pg_namespace];
+            Zero(values);
+            std::fill_n(nulls, Natts_pg_namespace, true);
+            FillDatum(Natts_pg_namespace, values, nulls, Anum_pg_namespace_oid, oid);
+            auto name = MakeFixedString(desc.Name, NAMEDATALEN);
+            FillDatum(Natts_pg_namespace, values, nulls, Anum_pg_namespace_nspname, (Datum)name);
+            FillDatum(Natts_pg_namespace, values, nulls, Anum_pg_namespace_nspowner, (Datum)1);
+            HeapTuple h = heap_form_tuple(tupleDesc, values, nulls);
+            auto row = (Form_pg_namespace)GETSTRUCT(h);
+            Y_ENSURE(row->oid == oid);
+            Y_ENSURE(NameStr(row->nspname) == desc.Name);
+            Y_ENSURE(row->nspowner == 1);
+
+            auto key1 = THeapTupleKey((Datum)name, 0, 0, 0);
+            lookupMap1.emplace(key1, h);
+            auto key2 = THeapTupleKey((Datum)oid, 0, 0, 0);
+            lookupMap2.emplace(key2, h);
+        });
+    }
 };
 
 }
+
+void RebuildSysCache() {
+    TSysCache::MutableInstance().Rebuild();
+}
+
 }
 namespace NKikimr {
 namespace NMiniKQL {

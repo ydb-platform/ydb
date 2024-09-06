@@ -17,6 +17,7 @@ They only use the values entered directly on the command line without accessing 
 ```
 
 Where:
+
 - `<profile_name>` is the required profile name.
 - `<connection options>` are [connection parameters](../../connect.md#command-line-pars) to be written to the profile. You need to specify at least one connection parameter; otherwise the command will run [in interactive mode](#interactive).
 
@@ -31,6 +32,7 @@ If a profile with the specified name exists, the command will return an error.
 ```
 
 Where:
+
 - `<profile_name>` is the required profile name.
 - `<connection options>` are optional [connection parameters](../../connect.md#command-line-pars) to be written to the profile.
 
@@ -45,6 +47,7 @@ If a profile with the specified name already exists, it will be overwritten with
 ```
 
 Where:
+
 - `<profile_name>` is the required profile name.
 - `<connection options>` are optional [connection parameters](../../connect.md#command-line-pars) to be written to the profile.
 - `<reset options>` are optional settings for deleting parameters from an existing profile. Possible values:
@@ -68,8 +71,8 @@ ydb config profile create quickstart --endpoint grpc://localhost:2136 --database
 
 * `path_database`: Database path. Specify one of these values:
 
-   * `/Root/test`: If you used an executable to deploy your cluster.
-   * `/local`: If you deployed your cluster from a Docker image.
+  * `/Root/test`: If you used an executable to deploy your cluster.
+  * `/local`: If you deployed your cluster from a Docker image.
 
 #### Creating a profile from previous connection settings {#cmdline-example-from-explicit}
 
@@ -206,7 +209,7 @@ Creating a new `mydb1` profile:
      [3] Use OAuth token of a Yandex Passport user (yc-token). Doesn't work with federative accounts. cloud.yandex.com/docs/iam/concepts/authorization/oauth-token
      [4] Use metadata service on a virtual machine (use-metadata-credentials) cloud.yandex.com/docs/compute/operations/vm-connect/auth-inside-vm
      [5] Use service account key file (sa-key-file) cloud.yandex.com/docs/iam/operations/iam-token/create-for-sa
-     [6] Set new OAuth token (ydb-token)
+     [6] Set new access token (ydb-token)
      [7] Don't save authentication data for profile "mydb1"
    Please enter your numeric choice:
    ```

@@ -3,8 +3,8 @@ LIBRARY()
 SRCS(
     change_exchange.cpp
     change_record.cpp
-    change_sender_common_ops.cpp
     change_sender_monitoring.cpp
+    change_sender_partitioner.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(change_record.h)

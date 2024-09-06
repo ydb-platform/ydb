@@ -12,19 +12,30 @@ namespace NKikimr::NColumnShard {
 namespace NKikimr::NOlap {
 
 class TPortionsNormalizer : public TPortionsNormalizerBase {
-    static inline TFactory::TRegistrator<TPortionsNormalizer> Registrator = TFactory::TRegistrator<TPortionsNormalizer>(ENormalizerSequentialId::PortionsMetadata);
+public:
+    static TString GetClassNameStatic() {
+        return ::ToString(ENormalizerSequentialId::PortionsMetadata);
+    }
+
+private:
+    static inline TFactory::TRegistrator<TPortionsNormalizer> Registrator = TFactory::TRegistrator<TPortionsNormalizer>(
+        GetClassNameStatic());
 public:
     class TNormalizerResult;
     class TTask;
 
 public:
+    virtual std::optional<ENormalizerSequentialId> DoGetEnumSequentialId() const override {
+        return ENormalizerSequentialId::PortionsMetadata;
+    }
+
+    virtual TString GetClassName() const override {
+        return GetClassNameStatic();
+    }
+
     TPortionsNormalizer(const TNormalizationController::TInitContext& info)
         : TPortionsNormalizerBase(info)
     {}
-
-    virtual ENormalizerSequentialId GetType() const override {
-        return ENormalizerSequentialId::PortionsMetadata;
-    }
 
     virtual INormalizerTask::TPtr BuildTask(std::vector<std::shared_ptr<TPortionInfo>>&& portions, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas) const override;
     virtual TConclusion<bool> DoInitImpl(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) override;

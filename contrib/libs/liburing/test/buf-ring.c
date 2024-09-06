@@ -293,7 +293,7 @@ static int test_one_read(int fd, int bgid, struct io_uring *ring)
 	return cqe->flags >> 16;
 }
 
-static int test_running(int bgid, int entries, int loops)
+static int test_running(int bgid, int entries, int loops, int use_mmap)
 {
 	int ring_mask = io_uring_buf_ring_mask(entries);
 	struct io_uring_buf_ring *br;
@@ -308,11 +308,37 @@ static int test_running(int bgid, int entries, int loops)
 	else if (ret != T_SETUP_OK)
 		return 1;
 
-	br = io_uring_setup_buf_ring(&ring, entries, bgid, 0, &ret);
-	if (!br) {
-		/* by now should have checked if this is supported or not */
-		fprintf(stderr, "Buffer ring register failed %d\n", ret);
-		return 1;
+	if (!use_mmap) {
+		br = io_uring_setup_buf_ring(&ring, entries, bgid, 0, &ret);
+		if (!br) {
+			/* by now should have checked if this is supported or not */
+			fprintf(stderr, "Buffer ring register failed %d\n", ret);
+			return 1;
+		}
+	} else {
+		struct io_uring_buf_reg reg = {
+			.ring_entries = entries,
+			.bgid = bgid,
+			.flags = IOU_PBUF_RING_MMAP,
+		};
+		size_t ring_size;
+		off_t off;
+
+		ret = io_uring_register_buf_ring(&ring, &reg, 0);
+		if (ret) {
+			fprintf(stderr, "mmap ring register failed %d\n", ret);
+			return 1;
+		}
+
+		off = IORING_OFF_PBUF_RING |
+			(unsigned long long) bgid << IORING_OFF_PBUF_SHIFT;
+		ring_size = sizeof(struct io_uring_buf) * entries;
+		br = mmap(NULL, ring_size, PROT_READ | PROT_WRITE,
+				MAP_SHARED | MAP_POPULATE, ring.ring_fd, off);
+		if (br == MAP_FAILED) {
+			perror("mmap");
+			return 1;
+		}
 	}
 
 	buffers = malloc(sizeof(bool) * entries);
@@ -424,12 +450,21 @@ int main(int argc, char *argv[])
 	}
 
 	for (i = 0; !no_buf_ring && entries[i] != -1; i++) {
-		ret = test_running(2, entries[i], 3);
+		ret = test_running(2, entries[i], 3, 0);
 		if (ret) {
 			fprintf(stderr, "test_running(%d) failed\n", entries[i]);
 			return T_EXIT_FAIL;
 		}
 	}
+
+	for (i = 0; !no_buf_ring && entries[i] != -1; i++) {
+		ret = test_running(2, entries[i], 3, 1);
+		if (ret) {
+			fprintf(stderr, "test_running(%d) mmap failed\n", entries[i]);
+			return T_EXIT_FAIL;
+		}
+	}
+
 
 	return T_EXIT_PASS;
 }

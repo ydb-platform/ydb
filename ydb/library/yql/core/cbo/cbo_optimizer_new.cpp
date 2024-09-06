@@ -5,8 +5,8 @@
 #include <util/string/builder.h>
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
-
-#include <library/cpp/disjoint_sets/disjoint_sets.h>
+#include <util/string/cast.h>
+#include <util/string/printf.h>
 
 const TString& ToString(NYql::EJoinKind);
 const TString& ToString(NYql::EJoinAlgoType);
@@ -28,6 +28,14 @@ namespace {
         {"LeftSemi",EJoinKind::LeftSemi},
         {"RightSemi",EJoinKind::RightSemi},
         {"Cross",EJoinKind::Cross}};
+
+    THashMap<TString,TCardinalityHints::ECardOperation> HintOpMap = {
+        {"+",TCardinalityHints::ECardOperation::Add},
+        {"-",TCardinalityHints::ECardOperation::Subtract},
+        {"*",TCardinalityHints::ECardOperation::Multiply},
+        {"/",TCardinalityHints::ECardOperation::Divide},
+        {"#",TCardinalityHints::ECardOperation::Replace}};
+
 }
 
 EJoinKind ConvertToJoinKind(const TString& joinString) {
@@ -101,11 +109,10 @@ void TJoinOptimizerNode::Print(std::stringstream& stream, int ntabs) {
     }
     stream << "\n";
 
-    for (int i = 0; i < ntabs; i++){
-        stream << "    ";
-    }
-
     if (Stats) {
+        for (int i = 0; i < ntabs; i++){
+            stream << "    ";
+        }
         stream << *Stats << "\n";
     }
 
@@ -114,12 +121,12 @@ void TJoinOptimizerNode::Print(std::stringstream& stream, int ntabs) {
 }
 
 bool IsPKJoin(const TOptimizerStatistics& stats, const TVector<TString>& joinKeys) {
-    if (stats.KeyColumns.size() == 0) {
+    if (!stats.KeyColumns) {
         return false;
     }
 
-    for(size_t i = 0; i < stats.KeyColumns.size(); i++){
-        if (std::find(joinKeys.begin(), joinKeys.end(), stats.KeyColumns[i]) == joinKeys.end()) {
+    for(size_t i = 0; i < stats.KeyColumns->Data.size(); i++){
+        if (std::find(joinKeys.begin(), joinKeys.end(), stats.KeyColumns->Data[i]) == joinKeys.end()) {
             return false;
         }
     }
@@ -131,13 +138,15 @@ bool TBaseProviderContext::IsJoinApplicable(const std::shared_ptr<IBaseOptimizer
     const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions,
     const TVector<TString>& leftJoinKeys,
     const TVector<TString>& rightJoinKeys,
-    EJoinAlgoType joinAlgo) {
+    EJoinAlgoType joinAlgo,
+    EJoinKind joinKind) {
 
     Y_UNUSED(left);
     Y_UNUSED(right);
     Y_UNUSED(joinConditions);
     Y_UNUSED(leftJoinKeys);
     Y_UNUSED(rightJoinKeys);
+    Y_UNUSED(joinKind);
 
     return joinAlgo == EJoinAlgoType::MapJoin;
 }
@@ -159,7 +168,9 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
     const TOptimizerStatistics& leftStats,
     const TOptimizerStatistics& rightStats,
     const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions,
-    EJoinAlgoType joinAlgo) const
+    EJoinAlgoType joinAlgo,
+    EJoinKind joinKind,
+    TCardinalityHints::TCardinalityHint* maybeHint) const
 {
     TVector<TString> leftJoinKeys;
     TVector<TString> rightJoinKeys;
@@ -169,7 +180,7 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
         rightJoinKeys.emplace_back(c.second.AttributeName);
     }
 
-    return ComputeJoinStats(leftStats, rightStats, leftJoinKeys, rightJoinKeys, joinAlgo);
+    return ComputeJoinStats(leftStats, rightStats, leftJoinKeys, rightJoinKeys, joinAlgo, joinKind, maybeHint);
 }
 
 TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
@@ -177,17 +188,37 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
     const TOptimizerStatistics& rightStats,
     const TVector<TString>& leftJoinKeys,
     const TVector<TString>& rightJoinKeys,
-    EJoinAlgoType joinAlgo) const
+    EJoinAlgoType joinAlgo,
+    EJoinKind joinKind,
+    TCardinalityHints::TCardinalityHint* maybeHint) const
 {
-    double newCard;
+    double newCard{};
     EStatisticsType outputType;
     bool leftKeyColumns = false;
     bool rightKeyColumns = false;
     double selectivity = 1.0;
 
+    bool isRightPKJoin = IsPKJoin(rightStats,rightJoinKeys);
+    bool isLeftPKJoin = IsPKJoin(leftStats,leftJoinKeys);
 
-    if (IsPKJoin(rightStats,rightJoinKeys)) {
-        newCard = leftStats.Nrows * rightStats.Selectivity;
+    if (isRightPKJoin && isLeftPKJoin) {
+        auto rightPKJoinCard = leftStats.Nrows * rightStats.Selectivity;
+        auto leftPKJoinCard = rightStats.Nrows * leftStats.Selectivity;
+        if (rightPKJoinCard > leftPKJoinCard) {
+            isRightPKJoin = false;
+        }
+    }
+
+    if (isRightPKJoin) {
+        switch (joinKind) {
+            case EJoinKind::LeftJoin:
+            case EJoinKind::LeftOnly:
+                newCard = leftStats.Nrows; break;
+            default: {
+                newCard = leftStats.Nrows * rightStats.Selectivity;
+            }
+        }
+
         selectivity = leftStats.Selectivity * rightStats.Selectivity;
         leftKeyColumns = true;
         if (leftStats.Type == EStatisticsType::BaseTable){
@@ -195,22 +226,45 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
         } else {
             outputType = leftStats.Type;
         }
-    }
-    else if (IsPKJoin(leftStats,leftJoinKeys)) {
-        newCard = rightStats.Nrows;
-        newCard = rightStats.Nrows * leftStats.Selectivity;
+    } else if (isLeftPKJoin) {
+        switch (joinKind) {
+            case EJoinKind::RightJoin:
+            case EJoinKind::RightOnly:
+                newCard = rightStats.Nrows; break;
+            default: {
+                newCard = leftStats.Selectivity * rightStats.Nrows;
+            }
+        }
+        
         selectivity = leftStats.Selectivity * rightStats.Selectivity;
-
         rightKeyColumns = true;
         if (rightStats.Type == EStatisticsType::BaseTable){
             outputType = EStatisticsType::FilteredFactTable;
         } else {
             outputType = rightStats.Type;
         }
-    }
-    else {
-        newCard = 0.2 * leftStats.Nrows * rightStats.Nrows;
+    } else {
+        std::optional<double> lhsUniqueVals;
+        std::optional<double> rhsUniqueVals;
+        if (leftStats.ColumnStatistics && rightStats.ColumnStatistics && !leftJoinKeys.empty() && !rightJoinKeys.empty()) {
+            auto lhs = leftJoinKeys[0];
+            lhsUniqueVals = leftStats.ColumnStatistics->Data[lhs].NumUniqueVals;
+            auto rhs = rightJoinKeys[0];
+            rightStats.ColumnStatistics->Data[rhs];
+            rhsUniqueVals = leftStats.ColumnStatistics->Data[lhs].NumUniqueVals;
+        }
+
+        if (lhsUniqueVals.has_value() && rhsUniqueVals.has_value()) {
+            newCard = leftStats.Nrows * rightStats.Nrows / std::max(*lhsUniqueVals, *rhsUniqueVals);
+        } else {
+            newCard = 0.2 * leftStats.Nrows * rightStats.Nrows;
+        }
+
         outputType = EStatisticsType::ManyManyJoin;
+    }
+
+    if (maybeHint) {
+        newCard = maybeHint->ApplyHint(newCard);
     }
 
     int newNCols = leftStats.Ncols + rightStats.Ncols;
@@ -221,7 +275,7 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
         + leftStats.Cost + rightStats.Cost;
 
     auto result = TOptimizerStatistics(outputType, newCard, newNCols, newByteSize, cost,
-        leftKeyColumns ? leftStats.KeyColumns : ( rightKeyColumns ? rightStats.KeyColumns : TOptimizerStatistics::EmptyColumns));
+        leftKeyColumns ? leftStats.KeyColumns : ( rightKeyColumns ? rightStats.KeyColumns : TIntrusivePtr<TOptimizerStatistics::TKeyColumns>()));
     result.Selectivity = selectivity;
     return result;
 }
@@ -231,5 +285,81 @@ const TBaseProviderContext& TBaseProviderContext::Instance() {
     return staticContext;
 }
 
+TCardinalityHints::TCardinalityHints(const TString& json) {
+    auto jsonValue = NJson::TJsonValue();
+    NJson::ReadJsonTree(json, &jsonValue, true);
+
+    for (auto s : jsonValue.GetArraySafe()) {
+        auto h = s.GetMapSafe();
+
+        TCardinalityHints::TCardinalityHint hint;
+
+        for (auto t : h.at("labels").GetArraySafe()) {
+            hint.JoinLabels.push_back(t.GetStringSafe());
+        }
+
+        auto op = h.at("op").GetStringSafe();
+        hint.Operation = HintOpMap.at(op);
+
+        hint.Value = h.at("value").GetDoubleSafe();
+        Hints.push_back(hint);
+    }
+}
+
+std::shared_ptr<IBaseOptimizerNode> MakeJoinTreeFromJson(const NJson::TJsonValue& jsonTree) {
+    if (jsonTree.IsArray()) {
+        auto children = jsonTree.GetArraySafe();
+        Y_ENSURE(children.size() == 2, Sprintf("Expected 2 inputs for JoinOrder hints, got: %ld", children.size()));
+        
+        auto joinNode = TJoinOptimizerNode(
+            MakeJoinTreeFromJson(children[0]),
+            MakeJoinTreeFromJson(children[1]),
+            {},
+            EJoinKind::Cross, // just a stub
+            EJoinAlgoType::Undefined,
+            true
+        );
+        return std::make_shared<TJoinOptimizerNode>(std::move(joinNode));
+    }
+
+    Y_ENSURE(
+        jsonTree.IsString(),
+        Sprintf("A relation must be a string for JoinOrder hints! Got %s, expected a string.", jsonTree.GetStringRobust().c_str())
+    );
+    return std::make_shared<TRelOptimizerNode>(jsonTree.GetStringSafe(), nullptr);
+}
+
+TJoinOrderHints::TJoinOrderHints(const TString& json) {
+    const static TString PARSING_FORMAT_ERROR = 
+        R"(Join order hints parsing failed. The example of the format: [ ["A", "B"], ["B", "C"] ])";
+
+    NJson::TJsonValue jsonTree;
+    NJson::ReadJsonTree(json, &jsonTree, true);
+
+    Y_ENSURE(jsonTree.IsArray(), PARSING_FORMAT_ERROR);
+    for (const auto& hintTreeJson: jsonTree.GetArray()) {
+        HintTrees.push_back(MakeJoinTreeFromJson(hintTreeJson));
+    }
+}
+
+TJoinAlgoHints::TJoinAlgoHints(const TString& json) {
+    auto jsonValue = NJson::TJsonValue();
+    NJson::ReadJsonTree(json, &jsonValue, true);
+
+    for (auto s : jsonValue.GetArraySafe()) {
+        auto h = s.GetMapSafe();
+
+        TJoinAlgoHints::TJoinAlgoHint hint;
+
+        for (auto t : h.at("labels").GetArraySafe()) {
+            hint.JoinLabels.push_back(t.GetStringSafe());
+        }
+
+        auto algo = h.at("algo").GetStringSafe();
+        hint.JoinHint = FromString<EJoinAlgoType>(algo);
+
+        Hints.push_back(hint);
+    }
+}
 
 } // namespace NYql

@@ -3,6 +3,7 @@
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/library/yql/providers/s3/actors_factory/yql_s3_actors_factory.h>
 #include <ydb/library/yql/core/issue/yql_issue.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 #include <ydb/public/sdk/cpp/client/ydb_query/client.h>
@@ -86,6 +87,7 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
     TMaybe<NFake::TStorage> Storage = Nothing();
     NKqp::IKqpFederatedQuerySetupFactory::TPtr FederatedQuerySetupFactory = std::make_shared<NKqp::TKqpFederatedQuerySetupFactoryNoop>();
     NMonitoring::TDynamicCounterPtr CountersRoot = MakeIntrusive<NMonitoring::TDynamicCounters>();
+    std::shared_ptr<NYql::NDq::IS3ActorsFactory> S3ActorsFactory = NYql::NDq::CreateDefaultS3ActorsFactory();
 
     TKikimrSettings()
     {
@@ -110,6 +112,7 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
     TKikimrSettings& SetStorage(const NFake::TStorage& storage) { Storage = storage; return *this; };
     TKikimrSettings& SetFederatedQuerySetupFactory(NKqp::IKqpFederatedQuerySetupFactory::TPtr value) { FederatedQuerySetupFactory = value; return *this; };
     TKikimrSettings& SetUseRealThreads(bool value) { UseRealThreads = value; return *this; };
+    TKikimrSettings& SetS3ActorsFactory(std::shared_ptr<NYql::NDq::IS3ActorsFactory> value) { S3ActorsFactory = std::move(value); return *this; };
 };
 
 class TKikimrRunner {
@@ -225,6 +228,7 @@ enum class EIndexTypeSql {
     Global,
     GlobalSync,
     GlobalAsync,
+    GlobalVectorKMeansTree,
 };
 
 inline constexpr TStringBuf IndexTypeSqlString(EIndexTypeSql type) {
@@ -235,6 +239,8 @@ inline constexpr TStringBuf IndexTypeSqlString(EIndexTypeSql type) {
         return "GLOBAL SYNC";
     case EIndexTypeSql::GlobalAsync:
         return "GLOBAL ASYNC";
+    case NKqp::EIndexTypeSql::GlobalVectorKMeansTree:
+        return "GLOBAL";
     }
 }
 
@@ -245,6 +251,30 @@ inline NYdb::NTable::EIndexType IndexTypeSqlToIndexType(EIndexTypeSql type) {
         return NYdb::NTable::EIndexType::GlobalSync;
     case EIndexTypeSql::GlobalAsync:
         return NYdb::NTable::EIndexType::GlobalAsync;
+    case EIndexTypeSql::GlobalVectorKMeansTree:
+        return NYdb::NTable::EIndexType::GlobalVectorKMeansTree;
+    }
+}
+
+inline constexpr TStringBuf IndexSubtypeSqlString(EIndexTypeSql type) {
+    switch (type) {
+    case EIndexTypeSql::Global:
+    case EIndexTypeSql::GlobalSync:
+    case EIndexTypeSql::GlobalAsync:
+        return "";
+    case NKqp::EIndexTypeSql::GlobalVectorKMeansTree:
+        return "USING vector_kmeans_tree";
+    }
+}
+
+inline constexpr TStringBuf IndexWithSqlString(EIndexTypeSql type) {
+    switch (type) {
+    case EIndexTypeSql::Global:
+    case EIndexTypeSql::GlobalSync:
+    case EIndexTypeSql::GlobalAsync:
+        return "";
+    case NKqp::EIndexTypeSql::GlobalVectorKMeansTree:
+        return "WITH (similarity=inner_product, vector_type=float, vector_dimension=1024)";
     }
 }
 
@@ -331,6 +361,14 @@ TVector<ui64> GetTableShards(Tests::TServer::TPtr server, TActorId sender, const
 TVector<ui64> GetColumnTableShards(Tests::TServer* server, TActorId sender, const TString &path);
 
 void WaitForZeroSessions(const NKqp::TKqpCounters& counters);
+
+bool JoinOrderAndAlgosMatch(const TString& optimized, const TString& reference);
+
+/* Gets join order with details as: join algo, join type and scan type. */
+NJson::TJsonValue GetDetailedJoinOrder(const TString& deserializedPlan);
+
+/* Gets tables join order without details : only tables. */
+NJson::TJsonValue GetJoinOrder(const TString& deserializedPlan);
 
 } // namespace NKqp
 } // namespace NKikimr

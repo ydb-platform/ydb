@@ -23,6 +23,7 @@
 
 #include <util/generic/xrange.h>
 
+#include <library/cpp/svnversion/svnversion.h>
 #include <library/cpp/yson/writer.h>
 
 namespace NYql {
@@ -537,7 +538,7 @@ TExprNode::TPtr ExpandEquiJoinImpl(const TExprNode& node, TExprContext& ctx) {
     const auto& renames = GetRenames(node, ctx);
     const auto& joinKind = node.Child(2)->Head().Content();
     if (joinKind == "Cross") {
-        auto result = ctx.Builder(node.Pos())
+        return ctx.Builder(node.Pos())
             .Callable("FlatMap")
                 .Add(0, std::move(list1))
                 .Lambda(1)
@@ -565,20 +566,6 @@ TExprNode::TPtr ExpandEquiJoinImpl(const TExprNode& node, TExprContext& ctx) {
                     .Seal()
                 .Seal()
             .Seal().Build();
-
-        if (const auto iterator = FindNode(result->Tail().Tail().HeadPtr(),
-            [] (const TExprNode::TPtr& node) { return node->IsCallable("Iterator"); })) {
-            auto children = iterator->ChildrenList();
-            children.emplace_back(ctx.NewCallable(iterator->Pos(), "DependsOn", {result->Tail().Head().HeadPtr()}));
-            result = ctx.ReplaceNode(std::move(result), *iterator, ctx.ChangeChildren(*iterator, std::move(children)));
-        }
-
-        if (const auto forward = FindNode(result->Tail().Tail().HeadPtr(),
-            [] (const TExprNode::TPtr& node) { return node->IsCallable("ForwardList"); })) {
-            result = ctx.ReplaceNode(std::move(result), *forward, ctx.RenameNode(*forward, "Collect"));
-        }
-
-        return result;
     }
 
     const auto list1type = list1->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
@@ -669,8 +656,8 @@ TExprNode::TPtr ExpandEquiJoinImpl(const TExprNode& node, TExprContext& ctx) {
     const bool multi1 = payload1 && !uniqueLeft;
     const bool multi2 = payload2 && !uniqueRight;
 
-    list1 = PrepareListForJoin(std::move(list1), keyTypeItems, keyMembers1, payloads1, payload1, optKey, filter1, ctx);
-    list2 = PrepareListForJoin(std::move(list2), keyTypeItems, keyMembers2, payloads2, payload2, optKey, filter2, ctx);
+    list1 = PrepareListForJoin(std::move(list1), keyTypeItems, keyMembers1, std::move(payloads1), payload1, optKey, filter1, ctx);
+    list2 = PrepareListForJoin(std::move(list2), keyTypeItems, keyMembers2, std::move(payloads2), payload2, optKey, filter2, ctx);
 
     return ctx.Builder(node.Pos())
         .Callable("Map")
@@ -2304,10 +2291,11 @@ IGraphTransformer::TStatus PeepHoleFinalStage(const TExprNode::TPtr& input, TExp
 }
 
 IGraphTransformer::TStatus PeepHoleBlockStage(const TExprNode::TPtr& input, TExprNode::TPtr& output,
-    TExprContext& ctx, TTypeAnnotationContext& types, const TExtPeepHoleOptimizerMap& extOptimizers)
+    TExprContext& ctx, TTypeAnnotationContext& types, const TExtPeepHoleOptimizerMap& extOptimizers, TProcessedNodesSet& cache)
 {
     TOptimizeExprSettings settings(&types);
     settings.CustomInstantTypeTransformer = types.CustomInstantTypeTransformer.Get();
+    settings.ProcessedNodes = &cache;
 
     return OptimizeExpr(input, output, [&types, &extOptimizers](
         const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
@@ -2672,6 +2660,33 @@ TExprNode::TPtr DropDependsOnFromEmptyIterator(const TExprNode::TPtr& input, TEx
         return ctx.ChangeChildren(*input, std::move(newChildren));
     }
     return input;
+}
+
+TExprNode::TPtr ExpandVersion(const TExprNode::TPtr& node, TExprContext& ctx) {
+    YQL_CLOG(DEBUG, CorePeepHole) << "Expand Version";
+    const TString branch(GetBranch());
+    TString result;
+    auto pos = branch.rfind("/");
+    if (pos != TString::npos) {
+        result = branch.substr(branch.rfind("/") + 1);
+    }
+    if (result.empty()) {
+        result = "unknown";
+    }
+    return ctx.Builder(node->Pos())
+        .Callable("String")
+            .Atom(0, result)
+        .Seal().Build();
+}
+
+TExprNode::TPtr ExpandRightOverCons(const TExprNode::TPtr& node, TExprContext& ctx) {
+    Y_UNUSED(ctx);
+    if (node->Head().IsCallable(ConsName)) {
+        YQL_CLOG(DEBUG, CorePeepHole) << "Expand Right! over Cons!";
+        return node->Head().TailPtr();
+    }
+
+    return node;
 }
 
 TExprNode::TPtr ExpandPartitionsByKeys(const TExprNode::TPtr& node, TExprContext& ctx) {
@@ -5055,9 +5070,61 @@ TExprNode::TListType&& DropUnused(TExprNode::TListType&& list, const std::vector
     return std::move(list);
 }
 
+std::set<ui32> FillAllIndexes(const TTypeAnnotationNode& rowType) {
+    std::set<ui32> set;
+    for (ui32 i = 0U; i < rowType.Cast<TMultiExprType>()->GetSize(); ++i)
+        set.emplace(i);
+    return set;
+}
+
+template<bool EvenOnly>
+void RemoveUsedIndexes(const TExprNode& list, std::set<ui32>& unused) {
+    for (auto i = 0U; i < list.ChildrenSize() >> (EvenOnly ? 1U : 0U); ++i)
+        unused.erase(FromString<ui32>(list.Child(EvenOnly ? i << 1U : i)->Content()));
+}
+
 TExprNode::TPtr DropUnusedArgs(const TExprNode& lambda, const std::vector<ui32>& unused, TExprContext& ctx, ui32 skip = 0U) {
     const auto& copy = ctx.DeepCopyLambda(lambda);
     return ctx.ChangeChild(*copy, 0U, ctx.NewArguments(copy->Head().Pos(), DropUnused(copy->Head().ChildrenList(), unused, skip)));
+}
+
+void DropUnusedRenames(TExprNode::TPtr& renames, const std::vector<ui32>& unused, TExprContext& ctx) {
+    TExprNode::TListType children;
+    children.reserve(renames->ChildrenSize());
+    for (auto i = 0U; i < renames->ChildrenSize() >> 1U; ++i) {
+        const auto idx = i << 1U;
+        const auto outIndex = renames->Child(1U + idx);
+        const auto oldOutPos = FromString<ui32>(outIndex->Content());
+        if (const auto iter = std::lower_bound(unused.cbegin(), unused.cend(), oldOutPos); unused.cend() == iter || *iter != oldOutPos) {
+            children.emplace_back(renames->ChildPtr(idx));
+            const auto newOutPos = oldOutPos - ui32(std::distance(unused.cbegin(), iter));
+            children.emplace_back(ctx.NewAtom(outIndex->Pos(), newOutPos));
+        }
+    }
+
+    renames = ctx.ChangeChildren(*renames, std::move(children));
+}
+
+template<bool EvenOnly>
+void UpdateInputIndexes(TExprNode::TPtr& indexes, const std::vector<ui32>& unused, TExprContext& ctx) {
+    TExprNode::TListType children;
+    children.reserve(indexes->ChildrenSize());
+    for (auto i = 0U; i < indexes->ChildrenSize() >> (EvenOnly ? 1U : 0U); ++i) {
+        const auto idx = i << (EvenOnly ? 1U : 0U);
+        const auto outIndex = indexes->Child(idx);
+        const auto oldValue = FromString<ui32>(outIndex->Content());
+        const auto newValue = oldValue - ui32(std::distance(unused.cbegin(), std::lower_bound(unused.cbegin(), unused.cend(), oldValue)));
+        if (oldValue == newValue) {
+            children.emplace_back(indexes->ChildPtr(idx));
+        } else {
+            children.emplace_back(ctx.NewAtom(indexes->Child(idx)->Pos(), newValue));
+        }
+        if constexpr (EvenOnly) {
+            children.emplace_back(indexes->ChildPtr(1U + idx));
+        }
+    }
+
+    indexes = ctx.ChangeChildren(*indexes, std::move(children));
 }
 
 TExprNode::TPtr DropUnusedStateFromUpdate(const TExprNode& lambda, const std::vector<ui32>& unused, TExprContext& ctx) {
@@ -5461,6 +5528,9 @@ struct TBlockRules {
 
     // all kernels whose name begins with capital letter are YQL kernel
     static constexpr std::initializer_list<TBlockFuncMap::value_type> FuncsInit = {
+        {"Abs", { "Abs" } },
+        {"Minus", { "Minus" } },
+
         {"+", { "Add" } },
         {"-", { "Sub" } },
         {"*", { "Mul" } },
@@ -5634,7 +5704,11 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
         allInputTypes.push_back(i);
     }
 
-    auto resolveStatus = types.ArrowResolver->AreTypesSupported(ctx.GetPosition(lambda->Pos()), allInputTypes, ctx);
+    const IArrowResolver::TUnsupportedTypeCallback onUnsupportedType = [&types](const auto& typeKindOrSlot) {
+        std::visit([&types](const auto& value) { types.IncNoBlockType(value); }, typeKindOrSlot);
+    };
+
+    auto resolveStatus = types.ArrowResolver->AreTypesSupported(ctx.GetPosition(lambda->Pos()), allInputTypes, ctx, onUnsupportedType);
     YQL_ENSURE(resolveStatus != IArrowResolver::ERROR);
     if (resolveStatus != IArrowResolver::OK) {
         return false;
@@ -5688,7 +5762,7 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
         if (node->IsList() || rewriteAsIs ||
             node->IsCallable({"And", "Or", "Xor", "Not", "Coalesce", "Exists", "If", "Just", "AsStruct", "Member", "Nth", "ToPg", "FromPg", "PgResolvedCall", "PgResolvedOp"}))
         {
-            if (node->IsCallable() && !IsSupportedAsBlockType(node->Pos(), *node->GetTypeAnn(), ctx, types)) {
+            if (node->IsCallable() && !IsSupportedAsBlockType(node->Pos(), *node->GetTypeAnn(), ctx, types, true)) {
                 return true;
             }
 
@@ -5716,7 +5790,7 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
                 auto child = node->ChildPtr(index);
                 if (!child->GetTypeAnn()->IsComputable()) {
                     funcArgs.push_back(child);
-                } else if (child->IsComplete() && IsSupportedAsBlockType(child->Pos(), *child->GetTypeAnn(), ctx, types)) {
+                } else if (child->IsComplete() && IsSupportedAsBlockType(child->Pos(), *child->GetTypeAnn(), ctx, types, true)) {
                     funcArgs.push_back(ctx.NewCallable(node->Pos(), "AsScalar", { child }));
                 } else if (auto rit = rewrites.find(child.Get()); rit != rewrites.end()) {
                     funcArgs.push_back(rit->second);
@@ -5737,7 +5811,7 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
                     auto member = funcArgs[index];
                     auto child = member->TailPtr();
                     TExprNodePtr rewrite;
-                    if (child->IsComplete() && IsSupportedAsBlockType(child->Pos(), *child->GetTypeAnn(), ctx, types)) {
+                    if (child->IsComplete() && IsSupportedAsBlockType(child->Pos(), *child->GetTypeAnn(), ctx, types, true)) {
                         rewrite = ctx.NewCallable(child->Pos(), "AsScalar", { child });
                     } else if (auto rit = rewrites.find(child.Get()); rit != rewrites.end()) {
                         rewrite = rit->second;
@@ -5762,6 +5836,7 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
         const bool isUdf = node->IsCallable("Apply") && node->Head().IsCallable("Udf");
         if (isUdf) {
             if (!GetSetting(*node->Head().Child(7), "blocks")) {
+                types.IncNoBlockCallable(node->Head().Head().Content());
                 return true;
             }
         }
@@ -5773,7 +5848,7 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
                 allTypes.push_back(node->Child(i)->GetTypeAnn());
             }
 
-            auto resolveStatus = types.ArrowResolver->AreTypesSupported(ctx.GetPosition(node->Pos()), allTypes, ctx);
+            auto resolveStatus = types.ArrowResolver->AreTypesSupported(ctx.GetPosition(node->Pos()), allTypes, ctx, onUnsupportedType);
             YQL_ENSURE(resolveStatus != IArrowResolver::ERROR);
             if (resolveStatus != IArrowResolver::OK) {
                 return true;
@@ -5839,6 +5914,7 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
         } else {
             auto fit = funcs.find(node->Content());
             if (fit == funcs.end()) {
+                types.IncNoBlockCallable(node->Content());
                 return true;
             }
 
@@ -5848,6 +5924,7 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
             auto resolveStatus = types.ArrowResolver->LoadFunctionMetadata(ctx.GetPosition(node->Pos()), arrowFunctionName, argTypes, outType, ctx);
             YQL_ENSURE(resolveStatus != IArrowResolver::ERROR);
             if (resolveStatus != IArrowResolver::OK) {
+                types.IncNoBlockCallable(node->Content());
                 return true;
             }
             funcArgs.push_back(ExpandType(node->Pos(), *outType, ctx));
@@ -5960,9 +6037,10 @@ bool CanRewriteToBlocksWithInput(const TExprNode& input, const TTypeAnnotationCo
 }
 
 TExprNode::TPtr OptimizeWideMapBlocks(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
+    Y_ENSURE(node->IsCallable("WideMap"));
     const auto lambda = node->TailPtr();
     // Swap trivial WideMap and WideFromBlocks.
-    if (node->IsCallable("WideMap") && node->Head().IsCallable("WideFromBlocks")) {
+    if (node->Head().IsCallable("WideFromBlocks")) {
         if (auto newLambda = RebuildArgumentsOnlyLambdaForBlocks(*lambda, ctx, types)) {
             YQL_CLOG(DEBUG, CorePeepHole) << "Swap " << node->Head().Content() << " with " << node->Content();
             return ctx.Builder(node->Pos())
@@ -6450,6 +6528,17 @@ TExprNode::TPtr OptimizeWideMaps(const TExprNode::TPtr& node, TExprContext& ctx)
                         .Add(1, DropUnusedArgs(node->Tail(), unusedState, ctx))
                     .Seal().Build();
             }
+        } else if (input.IsCallable({"GraceJoinCore", "GraceSelfJoinCore", "MapJoinCore"})) {
+            YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " over " << input.Content() << " with " << unused.size() << " unused fields.";
+            auto children = input.ChildrenList();
+            const bool self = input.IsCallable("GraceSelfJoinCore");
+            DropUnusedRenames(children[5U], unused, ctx);
+            DropUnusedRenames(children[self ? 4U : 6U], unused, ctx);
+            return ctx.Builder(node->Pos())
+                .Callable(node->Content())
+                    .Add(0, ctx.ChangeChildren(input, std::move(children)))
+                    .Add(1, DropUnusedArgs(node->Tail(), unused, ctx))
+                .Seal().Build();
         } else if (node->IsCallable("WideMap") && input.IsCallable("ReplicateScalars")) {
             YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " over " << input.Content();
             return SwapReplicateScalarsWithWideMap(node, ctx);
@@ -6537,56 +6626,6 @@ TExprNode::TPtr  OptimizeSqueezeToDict(const TExprNode::TPtr& node, TExprContext
             ctx.FuseLambdas(*node->Child(2U), input.Tail()),
             node->TailPtr()
         });
-    }
-    return node;
-}
-
-TExprNode::TListType GetOptionals(const TPositionHandle& pos, const TStructExprType& type, TExprContext& ctx) {
-    TExprNode::TListType result;
-    for (const auto& item : type.GetItems())
-        if (ETypeAnnotationKind::Optional == item->GetItemType()->GetKind())
-            result.emplace_back(ctx.NewAtom(pos, item->GetName()));
-    return result;
-}
-
-TExprNode::TListType GetOptionals(const TPositionHandle& pos, const TTupleExprType& type, TExprContext& ctx) {
-    TExprNode::TListType result;
-    if (const auto& items = type.GetItems(); !items.empty())
-        for (ui32 i = 0U; i < items.size(); ++i)
-            if (ETypeAnnotationKind::Optional == items[i]->GetKind())
-                result.emplace_back(ctx.NewAtom(pos, i));
-    return result;
-}
-
-template <bool TupleOrStruct>
-TExprNode::TPtr ExpandSkipNullFields(const TExprNode::TPtr& node, TExprContext& ctx) {
-    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content();
-    if (auto fields = node->ChildrenSize() > 1U ? node->Tail().ChildrenList() :
-            GetOptionals(node->Pos(), *GetSeqItemType(node->Head().GetTypeAnn())->Cast<std::conditional_t<TupleOrStruct, TTupleExprType, TStructExprType>>(), ctx);
-        fields.empty()) {
-        return node->HeadPtr();
-    } else {
-        return ctx.Builder(node->Pos())
-            .Callable("OrderedFilter")
-                .Add(0, node->HeadPtr())
-                .Lambda(1)
-                    .Param("item")
-                    .Callable("And")
-                        .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                            for (ui32 i = 0U; i < fields.size(); ++i) {
-                                parent
-                                    .Callable(i, "Exists")
-                                        .Callable(0, TupleOrStruct ? "Nth" : "Member")
-                                            .Arg(0, "item")
-                                            .Add(1, std::move(fields[i]))
-                                        .Seal()
-                                    .Seal();
-                            }
-                            return parent;
-                        })
-                    .Seal()
-                .Seal()
-            .Seal().Build();
     }
     return node;
 }
@@ -6693,6 +6732,59 @@ TExprNode::TPtr OptimizeMapJoinCore(const TExprNode::TPtr& node, TExprContext& c
                         .Seal()
                 .Seal()
             .Seal().Build();
+    }
+
+    return node;
+}
+
+TExprNode::TPtr OptimizeGraceJoinCore(const TExprNode::TPtr& node, TExprContext& ctx) {
+    const TCoGraceJoinCore grace(node);
+    auto leftUnused = FillAllIndexes(GetSeqItemType(*grace.LeftInput().Ref().GetTypeAnn()));
+    auto rightUnused = FillAllIndexes(GetSeqItemType(*grace.RightInput().Ref().GetTypeAnn()));
+    RemoveUsedIndexes<false>(grace.LeftKeysColumns().Ref(), leftUnused);
+    RemoveUsedIndexes<false>(grace.RightKeysColumns().Ref(), rightUnused);
+    RemoveUsedIndexes<true>(grace.LeftRenames().Ref(), leftUnused);
+    RemoveUsedIndexes<true>(grace.RightRenames().Ref(), rightUnused);
+    if (!(leftUnused.empty() && rightUnused.empty())) {
+        YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " with " << leftUnused.size() << " left and " << rightUnused.size() << " right unused columns.";
+
+        auto children = node->ChildrenList();
+        if (!leftUnused.empty()) {
+            const std::vector<ui32> unused(leftUnused.cbegin(), leftUnused.cend());
+            children[TCoGraceJoinCore::idx_LeftInput] = MakeWideMapForDropUnused(std::move(children[TCoGraceJoinCore::idx_LeftInput]), unused, ctx);
+            UpdateInputIndexes<false>(children[TCoGraceJoinCore::idx_LeftKeysColumns], unused, ctx);
+            UpdateInputIndexes<true>(children[TCoGraceJoinCore::idx_LeftRenames], unused, ctx);
+        }
+        if (!rightUnused.empty()) {
+            const std::vector<ui32> unused(rightUnused.cbegin(), rightUnused.cend());
+            children[TCoGraceJoinCore::idx_RightInput] = MakeWideMapForDropUnused(std::move(children[TCoGraceJoinCore::idx_RightInput]), unused, ctx);
+            UpdateInputIndexes<false>(children[TCoGraceJoinCore::idx_RightKeysColumns], unused, ctx);
+            UpdateInputIndexes<true>(children[TCoGraceJoinCore::idx_RightRenames], unused, ctx);
+        }
+        return ctx.ChangeChildren(*node, std::move(children));
+    }
+
+    return node;
+}
+
+TExprNode::TPtr OptimizeGraceSelfJoinCore(const TExprNode::TPtr& node, TExprContext& ctx) {
+    const TCoGraceSelfJoinCore grace(node);
+    auto unused = FillAllIndexes(GetSeqItemType(*grace.Input().Ref().GetTypeAnn()));
+    RemoveUsedIndexes<false>(grace.LeftKeysColumns().Ref(), unused);
+    RemoveUsedIndexes<false>(grace.RightKeysColumns().Ref(), unused);
+    RemoveUsedIndexes<true>(grace.LeftRenames().Ref(), unused);
+    RemoveUsedIndexes<true>(grace.RightRenames().Ref(), unused);
+    if (!unused.empty()) {
+        YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " with " << unused.size() << " unused columns.";
+
+        auto children = node->ChildrenList();
+        const std::vector<ui32> vector(unused.cbegin(), unused.cend());
+        children[TCoGraceSelfJoinCore::idx_Input] = MakeWideMapForDropUnused(std::move(children[TCoGraceSelfJoinCore::idx_Input]), vector, ctx);
+        UpdateInputIndexes<false>(children[TCoGraceSelfJoinCore::idx_LeftKeysColumns], vector, ctx);
+        UpdateInputIndexes<false>(children[TCoGraceSelfJoinCore::idx_RightKeysColumns], vector, ctx);
+        UpdateInputIndexes<true>(children[TCoGraceSelfJoinCore::idx_LeftRenames], vector, ctx);
+        UpdateInputIndexes<true>(children[TCoGraceSelfJoinCore::idx_RightRenames], vector, ctx);
+        return ctx.ChangeChildren(*node, std::move(children));
     }
 
     return node;
@@ -6888,7 +6980,7 @@ template <bool Asc, bool Equals>
 TExprNode::TPtr AggrComparePg(const TExprNode& node, TExprContext& ctx) {
     YQL_CLOG(DEBUG, CorePeepHole) << "Expand '" << node.Content() << "' over Pg.";
     auto op = Asc ? ( Equals ? "<=" : "<") : ( Equals ? ">=" : ">");
-    auto finalPart = (Equals == Asc) ? MakeBool<true>(node.Pos(), ctx) : 
+    auto finalPart = (Equals == Asc) ? MakeBool<true>(node.Pos(), ctx) :
         ctx.NewCallable(node.Pos(), "Exists", { node.TailPtr() });
     if (!Asc) {
         finalPart = ctx.NewCallable(node.Pos(), "Not", { finalPart });
@@ -8237,8 +8329,8 @@ struct TPeepHoleRules {
         {"Or", &OptimizeLogicalDups<false>},
         {"CombineByKey", &ExpandCombineByKey},
         {"FinalizeByKey", &ExpandFinalizeByKey},
-        {"SkipNullMembers", &ExpandSkipNullFields<false>},
-        {"SkipNullElements", &ExpandSkipNullFields<true>},
+        {"SkipNullMembers", &ExpandSkipNullFields},
+        {"SkipNullElements", &ExpandSkipNullFields},
         {"ConstraintsOf", &ExpandConstraintsOf},
         {"==", &ExpandSqlEqual<true, false>},
         {"!=", &ExpandSqlEqual<false, false>},
@@ -8268,6 +8360,8 @@ struct TPeepHoleRules {
         {"JsonValue", &ExpandJsonValue},
         {"JsonExists", &ExpandJsonExists},
         {"EmptyIterator", &DropDependsOnFromEmptyIterator},
+        {"Version", &ExpandVersion},
+        {RightName, &ExpandRightOverCons},
     };
 
     const TExtPeepHoleOptimizerMap CommonStageExtRules = {
@@ -8337,6 +8431,8 @@ struct TPeepHoleRules {
         {"WideCondense1", &OptimizeWideCondense1},
         {"WideChopper", &OptimizeWideChopper},
         {"MapJoinCore", &OptimizeMapJoinCore},
+        {"GraceJoinCore", &OptimizeGraceJoinCore},
+        {"GraceSelfJoinCore", &OptimizeGraceSelfJoinCore},
         {"CommonJoinCore", &OptimizeCommonJoinCore},
         {"BuildTablePath", &DoBuildTablePath},
         {"Exists", &OptimizeExists},
@@ -8349,6 +8445,7 @@ struct TPeepHoleRules {
         {"AssumeUnique", &DropAssume},
         {"AssumeDistinct", &DropAssume},
         {"AssumeChopped", &DropAssume},
+        {"AssumeConstraints", &DropAssume},
         {"EmptyFrom", &DropEmptyFrom},
         {"Top", &OptimizeTopOrSort<false, true>},
         {"TopSort", &OptimizeTopOrSort<true, true>},
@@ -8370,10 +8467,7 @@ struct TPeepHoleRules {
     };
 
     const TExtPeepHoleOptimizerMap BlockStageExtRules = {
-        {"NarrowFlatMap", &OptimizeWideMapBlocks},
-        {"NarrowMultiMap", &OptimizeWideMapBlocks},
         {"WideMap", &OptimizeWideMapBlocks},
-        {"NarrowMap", &OptimizeWideMapBlocks},
         {"WideFilter", &OptimizeWideFilterBlocks},
         {"WideToBlocks", &OptimizeWideToBlocks},
         {"WideFromBlocks", &OptimizeWideFromBlocks},
@@ -8400,7 +8494,7 @@ struct TPeepHoleRules {
     const TExtPeepHoleOptimizerMap BlockStageExtFinalRules = {
         {"BlockExtend", &ExpandBlockExtend},
         {"BlockOrderedExtend", &ExpandBlockExtend},
-        {"ReplicateScalars", &ExpandReplicateScalars} 
+        {"ReplicateScalars", &ExpandReplicateScalars}
     };
 
     static const TPeepHoleRules& Instance() {
@@ -8481,10 +8575,10 @@ THolder<IGraphTransformer> CreatePeepHoleFinalStageTransformer(TTypeAnnotationCo
 
     pipeline.Add(
         CreateFunctorTransformer(
-            [&types](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) -> IGraphTransformer::TStatus {
+            [&types, cache = TProcessedNodesSet()](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) mutable -> IGraphTransformer::TStatus {
                 if (types.IsBlockEngineEnabled()) {
                     const auto& extStageRules = TPeepHoleRules::Instance().BlockStageExtRules;
-                    return PeepHoleBlockStage(input, output, ctx, types, extStageRules);
+                    return PeepHoleBlockStage(input, output, ctx, types, extStageRules, cache);
                 } else {
                     output = input;
                     return IGraphTransformer::TStatus::Ok;
@@ -8500,10 +8594,10 @@ THolder<IGraphTransformer> CreatePeepHoleFinalStageTransformer(TTypeAnnotationCo
 
     pipeline.Add(
         CreateFunctorTransformer(
-            [&types](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) -> IGraphTransformer::TStatus {
+            [&types, cache = TProcessedNodesSet()](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) mutable -> IGraphTransformer::TStatus {
                 if (types.IsBlockEngineEnabled()) {
                     const auto& extStageRules = TPeepHoleRules::Instance().BlockStageExtFinalRules;
-                    return PeepHoleBlockStage(input, output, ctx, types, extStageRules);
+                    return PeepHoleBlockStage(input, output, ctx, types, extStageRules, cache);
                 } else {
                     output = input;
                     return IGraphTransformer::TStatus::Ok;

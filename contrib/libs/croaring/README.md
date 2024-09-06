@@ -16,7 +16,7 @@ Bitsets, also called bitmaps, are commonly used as fast data structures. Unfortu
 
 Roaring bitmaps are compressed bitmaps which tend to outperform conventional compressed bitmaps such as WAH, EWAH or Concise.
 They are used by several major systems such as [Apache Lucene][lucene] and derivative systems such as [Solr][solr] and
-[Elasticsearch][elasticsearch], [Metamarkets' Druid][druid], [LinkedIn Pinot][pinot], [Netflix Atlas][atlas], [Apache Spark][spark], [OpenSearchServer][opensearchserver], [Cloud Torrent][cloudtorrent], [Whoosh][whoosh], [InfluxDB](https://www.influxdata.com), [Pilosa][pilosa], [Bleve](http://www.blevesearch.com), [Microsoft Visual Studio Team Services (VSTS)][vsts], and eBay's [Apache Kylin][kylin]. The CRoaring library is used in several systems such as [Apache Doris](http://doris.incubator.apache.org), [ClickHouse](https://github.com/ClickHouse/ClickHouse), and [StarRocks](https://github.com/StarRocks/starrocks). The YouTube SQL Engine, [Google Procella](https://research.google/pubs/pub48388/), uses Roaring bitmaps for indexing.
+[Elasticsearch][elasticsearch], [Metamarkets' Druid][druid], [LinkedIn Pinot][pinot], [Netflix Atlas][atlas], [Apache Spark][spark], [OpenSearchServer][opensearchserver], [Cloud Torrent][cloudtorrent], [Whoosh][whoosh], [InfluxDB](https://www.influxdata.com), [Pilosa][pilosa], [Bleve](http://www.blevesearch.com), [Microsoft Visual Studio Team Services (VSTS)][vsts], and eBay's [Apache Kylin][kylin]. The CRoaring library is used in several systems such as [Apache Doris](http://doris.incubator.apache.org), [ClickHouse](https://github.com/ClickHouse/ClickHouse), [Redpanda](https://github.com/redpanda-data/redpanda), and [StarRocks](https://github.com/StarRocks/starrocks). The YouTube SQL Engine, [Google Procella](https://research.google/pubs/pub48388/), uses Roaring bitmaps for indexing.
 
 We published a peer-reviewed article on the design and evaluation of this library:
 
@@ -147,7 +147,7 @@ Linux or macOS users might follow the following instructions if they have a rece
 # Using Roaring as a CPM dependency
 
 
-If you like CMake and CPM, you can just a few lines in you `CMakeLists.txt` file to grab a `CRoaring` release. [See our CPM demonstration for further details](https://github.com/RoaringBitmap/CPMdemo).
+If you like CMake and CPM, you can add just a few lines in your `CMakeLists.txt` file to grab a `CRoaring` release. [See our CPM demonstration for further details](https://github.com/RoaringBitmap/CPMdemo).
 
 
 
@@ -177,7 +177,7 @@ target_link_libraries(hello roaring::roaring)
 
 # Using as a CMake dependency with FetchContent
 
-If you like CMake, you can just a few lines in you `CMakeLists.txt` file to grab a `CRoaring` release. [See our demonstration for further details](https://github.com/RoaringBitmap/croaring_cmake_demo_single_file).
+If you like CMake, you can add just a few lines in your `CMakeLists.txt` file to grab a `CRoaring` release. [See our demonstration for further details](https://github.com/RoaringBitmap/croaring_cmake_demo_single_file).
 
 If you installed the CRoaring library locally, you may use it with CMake's `find_package` function as in this example:
 
@@ -236,7 +236,16 @@ It will generate three files for C users: ``roaring.h``, ``roaring.c`` and ``ama
 
 # API
 
-The C interface is found in the file ``include/roaring/roaring.h``. We have C++ interface at `cpp/roaring.hh`.
+The C interface is found in the files
+
+- [roaring.h](https://github.com/RoaringBitmap/CRoaring/blob/master/include/roaring/roaring.h),
+- [roaring64.h](https://github.com/RoaringBitmap/CRoaring/blob/master/include/roaring/roaring64.h).
+
+We also have a C++ interface:
+
+- [roaring.hh](https://github.com/RoaringBitmap/CRoaring/blob/master/cpp/roaring.hh),
+- [roaring64map.hh](https://github.com/RoaringBitmap/CRoaring/blob/master/cpp/roaring64map.hh).
+
 
 # Dealing with large volumes
 
@@ -249,7 +258,7 @@ We have microbenchmarks constructed with the Google Benchmarks.
 Under Linux or macOS, you may run them as follows:
 
 ```
-cmake -B build
+cmake -B build -D ENABLE_ROARING_MICROBENCHMARKS=ON
 cmake --build build
 ./build/microbenchmarks/bench
 ```
@@ -266,7 +275,7 @@ have an x64 processor, you could benchmark the code without AVX-512 even if both
 and compiler supports it:
 
 ```
-cmake -B buildnoavx512 -D ROARING_DISABLE_AVX512=ON
+cmake -B buildnoavx512 -D ROARING_DISABLE_AVX512=ON -D ENABLE_ROARING_MICROBENCHMARKS=ON
 cmake --build buildnoavx512
 ./buildnoavx512/microbenchmarks/bench
 ```
@@ -274,7 +283,7 @@ cmake --build buildnoavx512
 You can benchmark without AVX or AVX-512 as well:
 
 ```
-cmake -B buildnoavx -D ROARING_DISABLE_AVX=ON
+cmake -B buildnoavx -D ROARING_DISABLE_AVX=ON -D ENABLE_ROARING_MICROBENCHMARKS=ON
 cmake --build buildnoavx
 ./buildnoavx/microbenchmarks/bench
 ```
@@ -293,6 +302,21 @@ int main(){
     ...
 }
 ```
+
+By default we use:
+```C
+static roaring_memory_t global_memory_hook = {
+    .malloc = malloc,
+    .realloc = realloc,
+    .calloc = calloc,
+    .free = free,
+    .aligned_malloc = roaring_bitmap_aligned_malloc,
+    .aligned_free = roaring_bitmap_aligned_free,
+};
+```
+
+We require that the `free`/`aligned_free` functions follow the C
+convention where `free(NULL)`/`aligned_free(NULL)` have no effect.
 
 
 # Example (C)
@@ -740,12 +764,16 @@ We have optimizations specific to AVX2 and AVX-512 in the code, and they are tur
 
 ## Usage (Using `conan`)
 
-You can install the library using the conan package manager:
+You can install pre-built binaries for `roaring` or build it from source using [Conan](https://conan.io/). Use the following command to install latest version:
 
 ```
-$ echo -e "[requires]\nroaring/0.3.3" > conanfile.txt
-$ conan install .
+conan install --requires="roaring/[*]" --build=missing
 ```
+
+For detailed instructions on how to use Conan, please refer to the [Conan documentation](https://docs.conan.io/2/).
+
+The `roaring` Conan recipe is kept up to date by Conan maintainers and community contributors.
+If the version is out of date, please [create an issue or pull request](https://github.com/conan-io/conan-center-index) on the ConanCenterIndex repository.
 
 
 ## Usage (Using `vcpkg` on Windows, Linux and macOS)

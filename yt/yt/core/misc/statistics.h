@@ -106,6 +106,15 @@ std::optional<TSummary> FindSummary(const TStatistics& statistics, const TString
 
 ////////////////////////////////////////////////////////////////////////////////
 
+DEFINE_ENUM(EStatisticPathConflictType,
+    (HasPrefix)
+    (IsPrefix)
+    (Exists)
+    (None)
+);
+
+////////////////////////////////////////////////////////////////////////////////
+
 void Serialize(const TStatistics& statistics, NYson::IYsonConsumer* consumer);
 
 void CreateBuildingYsonConsumer(std::unique_ptr<NYson::IBuildingYsonConsumer<TStatistics>>* buildingConsumer, NYson::EYsonType ysonType);

@@ -1,10 +1,10 @@
 /*-------------------------------------------------------------------------
  *
  * relmapper.h
- *	  Catalog-to-filenode mapping
+ *	  Catalog-to-filenumber mapping
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/utils/relmapper.h
@@ -35,12 +35,15 @@ typedef struct xl_relmap_update
 #define MinSizeOfRelmapUpdate offsetof(xl_relmap_update, data)
 
 
-extern Oid	RelationMapOidToFilenode(Oid relationId, bool shared);
+extern RelFileNumber RelationMapOidToFilenumber(Oid relationId, bool shared);
 
-extern Oid	RelationMapFilenodeToOid(Oid relationId, bool shared);
-
-extern void RelationMapUpdateMap(Oid relationId, Oid fileNode, bool shared,
-								 bool immediate);
+extern Oid	RelationMapFilenumberToOid(RelFileNumber filenumber, bool shared);
+extern RelFileNumber RelationMapOidToFilenumberForDatabase(char *dbpath,
+														   Oid relationId);
+extern void RelationMapCopy(Oid dbid, Oid tsid, char *srcdbpath,
+							char *dstdbpath);
+extern void RelationMapUpdateMap(Oid relationId, RelFileNumber fileNumber,
+								 bool shared, bool immediate);
 
 extern void RelationMapRemoveMapping(Oid relationId);
 

@@ -44,6 +44,7 @@ public:
     FEATURE_FLAG_SETTER(EnableTopicDiskSubDomainQuota)
     FEATURE_FLAG_SETTER(EnablePQConfigTransactionsAtSchemeShard)
     FEATURE_FLAG_SETTER(EnableScriptExecutionOperations)
+    FEATURE_FLAG_SETTER(EnableExternalDataSources)
     FEATURE_FLAG_SETTER(EnableForceImmediateEffectsExecution)
     FEATURE_FLAG_SETTER(EnableTopicSplitMerge)
     FEATURE_FLAG_SETTER(EnableTempTables)
@@ -58,6 +59,13 @@ public:
     FEATURE_FLAG_SETTER(EnableAddColumsWithDefaults)
     FEATURE_FLAG_SETTER(EnableReplaceIfExistsForExternalEntities)
     FEATURE_FLAG_SETTER(EnableCMSRequestPriorities)
+    FEATURE_FLAG_SETTER(EnableTableDatetime64)
+    FEATURE_FLAG_SETTER(EnableResourcePools)
+    FEATURE_FLAG_SETTER(EnableChangefeedsOnIndexTables)
+    FEATURE_FLAG_SETTER(EnableBackupService)
+    FEATURE_FLAG_SETTER(EnableGranularTimecast)
+    FEATURE_FLAG_SETTER(EnablePgSyntax)
+    FEATURE_FLAG_SETTER(EnableTieringInColumnShard)
 
     #undef FEATURE_FLAG_SETTER
 };

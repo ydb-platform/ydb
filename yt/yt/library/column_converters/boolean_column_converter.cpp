@@ -7,6 +7,8 @@
 
 namespace NYT::NColumnConverters {
 
+using namespace NTableClient;
+
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace {
@@ -20,7 +22,9 @@ void FillColumnarBooleanValues(
     column->StartIndex = startIndex;
     column->ValueCount = valueCount;
 
-    auto& values = column->Values.emplace();
+    column->Values = IUnversionedColumnarRowBatch::TValueBuffer{};
+    auto& values = *column->Values;
+
     values.BitWidth = 1;
     values.Data = bitmap;
 }
@@ -33,7 +37,7 @@ class TBooleanColumnConverter
 public:
     TBooleanColumnConverter(
         int columnIndex,
-        const NTableClient::TColumnSchema& columnSchema,
+        const TColumnSchema& columnSchema,
         int columnOffset)
         : ColumnIndex_(columnIndex)
         , ColumnSchema_(columnSchema)
@@ -67,7 +71,7 @@ public:
 
 private:
     const int ColumnIndex_;
-    const NTableClient::TColumnSchema ColumnSchema_;
+    const TColumnSchema ColumnSchema_;
     const int ColumnOffset_;
 
     TBitmapOutput Values_;
@@ -83,7 +87,7 @@ private:
     {
         for (const auto& rowValues : rowsValues) {
             auto value = rowValues[ColumnOffset_];
-            bool isNull = !value || value->Type == NTableClient::EValueType::Null;
+            bool isNull = !value || value->Type == EValueType::Null;
             bool data = isNull ? false : value->Data.Boolean;
             NullBitmap_.Append(isNull);
             Values_.Append(data);
@@ -95,7 +99,7 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-IColumnConverterPtr CreateBooleanColumnConverter(int columnId, const NTableClient::TColumnSchema& columnSchema, int columnOffset)
+IColumnConverterPtr CreateBooleanColumnConverter(int columnId, const TColumnSchema& columnSchema, int columnOffset)
 {
     return std::make_unique<TBooleanColumnConverter>(columnId, columnSchema, columnOffset);
 }

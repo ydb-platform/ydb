@@ -14,7 +14,7 @@
  * hard postmaster crash, remaining segments will be removed, if they
  * still exist, at the next postmaster startup.
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -33,6 +33,7 @@
 #endif
 #include <sys/stat.h>
 
+#include "common/pg_prng.h"
 #include "lib/ilist.h"
 #include "miscadmin.h"
 #include "port/pg_bitutils.h"
@@ -172,15 +173,15 @@ dsm_postmaster_startup(PGShmemHeader *shim)
 
 	/*
 	 * Loop until we find an unused identifier for the new control segment. We
-	 * sometimes use 0 as a sentinel value indicating that no control segment
-	 * is known to exist, so avoid using that value for a real control
-	 * segment.
+	 * sometimes use DSM_HANDLE_INVALID as a sentinel value indicating "no
+	 * control segment", so avoid generating that value for a real handle.
 	 */
 	for (;;)
 	{
 		Assert(dsm_control_address == NULL);
 		Assert(dsm_control_mapped_size == 0);
-		dsm_control_handle = random() << 1; /* Even numbers only */
+		/* Use even numbers only */
+		dsm_control_handle = pg_prng_uint32(&pg_global_prng_state) << 1;
 		if (dsm_control_handle == DSM_HANDLE_INVALID)
 			continue;
 		if (dsm_impl_op(DSM_OP_CREATE, dsm_control_handle, segsize,
@@ -395,6 +396,7 @@ static void
 dsm_backend_startup(void)
 {
 #ifdef EXEC_BACKEND
+	if (IsUnderPostmaster)
 	{
 		void	   *control_address = NULL;
 
@@ -494,8 +496,12 @@ dsm_create(Size size, int flags)
 	FreePageManager *dsm_main_space_fpm = dsm_main_space_begin;
 	bool		using_main_dsm_region = false;
 
-	/* Unsafe in postmaster (and pointless in a stand-alone backend). */
-	Assert(IsUnderPostmaster);
+	/*
+	 * Unsafe in postmaster. It might seem pointless to allow use of dsm in
+	 * single user mode, but otherwise some subsystems will need dedicated
+	 * single user mode code paths.
+	 */
+	Assert(IsUnderPostmaster || !IsPostmasterEnvironment);
 
 	if (!dsm_init_done)
 		dsm_backend_startup();
@@ -536,7 +542,8 @@ dsm_create(Size size, int flags)
 		for (;;)
 		{
 			Assert(seg->mapped_address == NULL && seg->mapped_size == 0);
-			seg->handle = random() << 1;	/* Even numbers only */
+			/* Use even numbers only */
+			seg->handle = pg_prng_uint32(&pg_global_prng_state) << 1;
 			if (seg->handle == DSM_HANDLE_INVALID)	/* Reserve sentinel */
 				continue;
 			if (dsm_impl_op(DSM_OP_CREATE, seg->handle, size, &seg->impl_private,
@@ -931,7 +938,8 @@ dsm_pin_segment(dsm_segment *seg)
 	LWLockAcquire(DynamicSharedMemoryControlLock, LW_EXCLUSIVE);
 	if (dsm_control->item[seg->control_slot].pinned)
 		elog(ERROR, "cannot pin a segment that is already pinned");
-	dsm_impl_pin_segment(seg->handle, seg->impl_private, &handle);
+	if (!is_main_region_dsm_handle(seg->handle))
+		dsm_impl_pin_segment(seg->handle, seg->impl_private, &handle);
 	dsm_control->item[seg->control_slot].pinned = true;
 	dsm_control->item[seg->control_slot].refcnt++;
 	dsm_control->item[seg->control_slot].impl_private_pm_handle = handle;
@@ -988,8 +996,9 @@ dsm_unpin_segment(dsm_handle handle)
 	 * releasing the lock, because impl_private_pm_handle may get modified by
 	 * dsm_impl_unpin_segment.
 	 */
-	dsm_impl_unpin_segment(handle,
-						   &dsm_control->item[control_slot].impl_private_pm_handle);
+	if (!is_main_region_dsm_handle(handle))
+		dsm_impl_unpin_segment(handle,
+							   &dsm_control->item[control_slot].impl_private_pm_handle);
 
 	/* Note that 1 means no references (0 means unused slot). */
 	if (--dsm_control->item[control_slot].refcnt == 1)
@@ -1037,7 +1046,7 @@ dsm_unpin_segment(dsm_handle handle)
  * Find an existing mapping for a shared memory segment, if there is one.
  */
 dsm_segment *
-dsm_find_mapping(dsm_handle h)
+dsm_find_mapping(dsm_handle handle)
 {
 	dlist_iter	iter;
 	dsm_segment *seg;
@@ -1045,7 +1054,7 @@ dsm_find_mapping(dsm_handle h)
 	dlist_foreach(iter, &dsm_segment_list)
 	{
 		seg = dlist_container(dsm_segment, node, iter.cur);
-		if (seg->handle == h)
+		if (seg->handle == handle)
 			return seg;
 	}
 
@@ -1237,7 +1246,7 @@ make_main_region_dsm_handle(int slot)
 	 */
 	handle = 1;
 	handle |= slot << 1;
-	handle |= random() << (pg_leftmost_one_pos32(dsm_control->maxitems) + 1);
+	handle |= pg_prng_uint32(&pg_global_prng_state) << (pg_leftmost_one_pos32(dsm_control->maxitems) + 1);
 	return handle;
 }
 

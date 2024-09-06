@@ -151,6 +151,7 @@ namespace NDataShard {
     extern TDuration gDbStatsReportInterval;
     extern ui64 gDbStatsDataSizeResolution;
     extern ui64 gDbStatsRowCountResolution;
+    extern ui32 gDbStatsHistogramBucketsCount;
 
     // This SeqNo is used to discard outdated schema Tx requests on datashards.
     // In case of tablet restart on network disconnects SS can resend same Propose for the same schema Tx.
@@ -328,8 +329,8 @@ struct TEvDataShard {
         EvOverloadReady,
         EvOverloadUnsubscribe,
 
-        EvStatisticsScanRequest,
-        EvStatisticsScanResponse,
+        EvSampleKRequest,
+        EvSampleKResponse,
 
         EvEnd
     };
@@ -646,7 +647,7 @@ struct TEvDataShard {
                 TString result;
                 TStringOutput out(result);
                 for (ui32 i = 0; i < Record.ErrorSize(); ++i) {
-                    out << Record.GetError(i).GetKind() << " (" 
+                    out << Record.GetError(i).GetKind() << " ("
                         << (Record.GetError(i).HasReason() ? Record.GetError(i).GetReason() : "no reason")
                         << ") |";
                 }
@@ -829,11 +830,8 @@ struct TEvDataShard {
                                                         NKikimrTxDataShard::TEvGetTableStats,
                                                         TEvDataShard::EvGetTableStats> {
         TEvGetTableStats() = default;
-        explicit TEvGetTableStats(ui64 tableId, ui64 dataSizeResolution = 0, ui64 rowCountResolution = 0, bool collectKeySample = false) {
+        explicit TEvGetTableStats(ui64 tableId) {
             Record.SetTableId(tableId);
-            Record.SetDataSizeResolution(dataSizeResolution);
-            Record.SetRowCountResolution(rowCountResolution);
-            Record.SetCollectKeySample(collectKeySample);
         }
     };
 
@@ -1444,6 +1442,18 @@ struct TEvDataShard {
     {
     };
 
+    struct TEvSampleKRequest
+        : public TEventPB<TEvSampleKRequest,
+                          NKikimrTxDataShard::TEvSampleKRequest,
+                          TEvDataShard::EvSampleKRequest> {
+    };
+
+    struct TEvSampleKResponse
+        : public TEventPB<TEvSampleKResponse,
+                          NKikimrTxDataShard::TEvSampleKResponse,
+                          TEvDataShard::EvSampleKResponse> {
+    };
+
     struct TEvKqpScan
         : public TEventPB<TEvKqpScan,
                           NKikimrTxDataShard::TEvKqpScan,
@@ -1705,20 +1715,6 @@ struct TEvDataShard {
             Record.SetStatus(status);
             Record.SetErrorDescription(error);
         }
-    };
-
-    struct TEvStatisticsScanRequest
-        : public TEventPB<TEvStatisticsScanRequest,
-                          NKikimrTxDataShard::TEvStatisticsScanRequest,
-                          EvStatisticsScanRequest>
-    {
-    };
-
-    struct TEvStatisticsScanResponse
-        : public TEventPB<TEvStatisticsScanResponse,
-                          NKikimrTxDataShard::TEvStatisticsScanResponse,
-                          EvStatisticsScanResponse>
-    {
     };
 };
 

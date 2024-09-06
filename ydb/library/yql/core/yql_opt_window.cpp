@@ -209,7 +209,7 @@ TCalcOverWindowTraits ExtractCalcOverWindowTraits(const TExprNode::TPtr& frames,
             rawTraits.FrameSettings = frameSettings;
             rawTraits.Pos = traits->Pos();
 
-            YQL_ENSURE(traits->IsCallable("WindowTraits") || ft == EFrameType::FrameByRows, "Non-canonical frame for window functions");
+            YQL_ENSURE(traits->IsCallable({"WindowTraits","CumeDist"}) || ft == EFrameType::FrameByRows, "Non-canonical frame for window functions");
             if (traits->IsCallable("WindowTraits")) {
                 maxDataOutpace = Max(maxDataOutpace, frameOutpace);
                 maxDataLag = Max(maxDataLag, frameLag);
@@ -2654,14 +2654,15 @@ TExprNode::TPtr ProcessRowsFrames(TPositionHandle pos, const TExprNode::TPtr& in
     return WrapWithWinContext(processed, ctx);
 }
 
-TExprNode::TPtr ProcessRangeFrames(TPositionHandle pos, const TExprNode::TPtr& input, const TExprNode::TPtr& sortKey, const TExprNode::TPtr& frames, TExprContext& ctx) {
+TExprNode::TPtr ProcessRangeFrames(TPositionHandle pos, const TExprNode::TPtr& input, const TExprNode::TPtr& sortKey, const TExprNode::TPtr& frames,
+    const TMaybe<TString>& partitionRowsColumn, TExprContext& ctx) {
     if (frames->ChildrenSize() == 0) {
         return input;
     }
 
     TExprNode::TPtr processed = input;
     TQueueParams queueParams;
-    TVector<TChain1MapTraits::TPtr> traits = BuildFoldMapTraits(queueParams, frames, {}, ctx);
+    TVector<TChain1MapTraits::TPtr> traits = BuildFoldMapTraits(queueParams, frames, partitionRowsColumn, ctx);
     YQL_ENSURE(!queueParams.DataQueueNeeded);
     YQL_ENSURE(queueParams.LagQueueSize == 0);
     YQL_ENSURE(queueParams.LagQueueItemType == nullptr);
@@ -2957,18 +2958,17 @@ TExprNode::TPtr ExpandSingleCalcOverWindow(TPositionHandle pos, const TExprNode:
     auto topLevelStreamArg = ctx.NewArgument(pos, "stream");
     TExprNode::TPtr processed = topLevelStreamArg;
 
-    // All RANGE frames (even simplest RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
-    // will require additional memory to store TableRow()'s - so we want to start with minimum size of row
-    // (i.e. process range frames first)
-    processed = ProcessRangeFrames(pos, processed, originalSortKey, rangeFrames, ctx);
-    rowType = ApplyFramesToType(*rowType, outputRowType, *rangeFrames, ctx);
-
     TMaybe<TString> partitionRowsColumn;
-    if (NeedPartitionRows(rowsFrames, ctx)) {
-        partitionRowsColumn = AllocatePartitionRowsColumn(*rowType);
+    if (NeedPartitionRows(frames, ctx)) {
+        partitionRowsColumn = AllocatePartitionRowsColumn(outputRowType);
         input = AddPartitionRowsColumn(pos, input, fullKeyColumns, *partitionRowsColumn, ctx, types);
     }
 
+    // All RANGE frames (even simplest RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+    // will require additional memory to store TableRow()'s - so we want to start with minimum size of row
+    // (i.e. process range frames first)
+    processed = ProcessRangeFrames(pos, processed, originalSortKey, rangeFrames, partitionRowsColumn, ctx);
+    rowType = ApplyFramesToType(*rowType, outputRowType, *rangeFrames, ctx);
     processed = ProcessRowsFrames(pos, processed, *rowType, topLevelStreamArg, rowsFrames, partitionRowsColumn, ctx);
 
     auto topLevelStreamProcessingLambda = ctx.NewLambda(pos, ctx.NewArguments(pos, {topLevelStreamArg}), std::move(processed));
@@ -3101,7 +3101,7 @@ TExprNode::TPtr RebuildCalcOverWindowGroup(TPositionHandle pos, const TExprNode:
                 auto columnName = kvTuple->ChildPtr(0);
 
                 auto traits = kvTuple->ChildPtr(1);
-                YQL_ENSURE(traits->IsCallable({"Lag", "Lead", "RowNumber", "Rank", "DenseRank", "WindowTraits"}));
+                YQL_ENSURE(traits->IsCallable({"Lag", "Lead", "RowNumber", "Rank", "DenseRank", "WindowTraits", "PercentRank", "CumeDist", "NTile"}));
                 if (traits->IsCallable("WindowTraits")) {
                     YQL_ENSURE(traits->Head().GetTypeAnn());
                     const TTypeAnnotationNode& oldItemType = *traits->Head().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
@@ -3115,19 +3115,11 @@ TExprNode::TPtr RebuildCalcOverWindowGroup(TPositionHandle pos, const TExprNode:
                             .Add(5, traits->Child(5)->IsLambda() ? ctx.DeepCopyLambda(*traits->Child(5)) : traits->ChildPtr(5))
                         .Seal()
                         .Build();
-                } else {
-                    TExprNodeList args;
-                    args.push_back(inputType);
-                    if (traits->ChildrenSize() > 1) {
-                        YQL_ENSURE(traits->Head().GetTypeAnn());
-                        const TTypeAnnotationNode& oldItemType = *traits->Head().GetTypeAnn()->Cast<TTypeExprType>()->GetType()
-                            ->Cast<TListExprType>()->GetItemType();
-                        args.push_back(ctx.DeepCopyLambda(*ReplaceFirstLambdaArgWithCastStruct(*traits->Child(1), oldItemType, ctx)));
-                    }
-                    if (traits->ChildrenSize() > 2) {
-                        args.push_back(traits->ChildPtr(2));
-                    }
-                    traits = ctx.NewCallable(traits->Pos(), traits->Content(), std::move(args));
+                } else if (traits->IsCallable({"Lag", "Lead", "Rank", "DenseRank", "PercentRank"})) {
+                    YQL_ENSURE(traits->Head().GetTypeAnn());
+                    const TTypeAnnotationNode& oldItemType = *traits->Head().GetTypeAnn()->Cast<TTypeExprType>()->GetType()
+                        ->Cast<TListExprType>()->GetItemType();
+                    traits = ctx.ChangeChild(*traits, 1, ctx.DeepCopyLambda(*ReplaceFirstLambdaArgWithCastStruct(*traits->Child(1), oldItemType, ctx)));
                 }
 
                 winOnArgs.push_back(ctx.NewList(kvTuple->Pos(), {columnName, traits}));

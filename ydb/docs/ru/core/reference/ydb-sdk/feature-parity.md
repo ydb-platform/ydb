@@ -24,7 +24,7 @@
 |**Credentials providers**|||||||||
 |Anonymous (по умолчанию)|\+|\+|\+|\+|\+|\+|\+|\+|
 |Static (user - password)|\+|\+|\+|\+|\-|\-|\+|\+|
-|Token: IAM, OAuth|\+|\+|\+|\+|\+|\+|\+|\+|
+|Token: IAM, Access token|\+|\+|\+|\+|\+|\+|\+|\+|
 |Service account (Yandex.Cloud specific)|\+|\+|\+|\+|\+|\+|\-|\+|
 |Metadata (Yandex.Cloud specific)|\+|\+|\+|\+|\+|\+|\+|\+|
 |**Работа с сессиями Table-сервиса**|||||||||

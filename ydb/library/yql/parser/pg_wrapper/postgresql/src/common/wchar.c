@@ -3,7 +3,7 @@
  * wchar.c
  *	  Functions for working with multibyte characters in various encodings.
  *
- * Portions Copyright (c) 1998-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1998-2023, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	  src/common/wchar.c
@@ -13,6 +13,7 @@
 #include "c.h"
 
 #include "mb/pg_wchar.h"
+#include "utils/ascii.h"
 
 
 /*
@@ -583,8 +584,8 @@ pg_utf_mblen(const unsigned char *s)
 
 struct mbinterval
 {
-	unsigned short first;
-	unsigned short last;
+	unsigned int first;
+	unsigned int last;
 };
 
 /* auxiliary function for binary search in interval table */
@@ -620,14 +621,8 @@ mbbisearch(pg_wchar ucs, const struct mbinterval *table, int max)
  *		value of -1.
  *
  *	  - Non-spacing and enclosing combining characters (general
- *		category code Mn or Me in the Unicode database) have a
+ *		category code Mn, Me or Cf in the Unicode database) have a
  *		column width of 0.
- *
- *	  - Other format characters (general category code Cf in the Unicode
- *		database) and ZERO WIDTH SPACE (U+200B) have a column width of 0.
- *
- *	  - Hangul Jamo medial vowels and final consonants (U+1160-U+11FF)
- *		have a column width of 0.
  *
  *	  - Spacing characters in the East Asian Wide (W) or East Asian
  *		FullWidth (F) category as defined in Unicode Technical
@@ -644,7 +639,8 @@ mbbisearch(pg_wchar ucs, const struct mbinterval *table, int max)
 static int
 ucs_wcwidth(pg_wchar ucs)
 {
-#include "common/unicode_combining_table.h"
+#include "common/unicode_nonspacing_table.h"
+#include "common/unicode_east_asian_fw_table.h"
 
 	/* test for 8-bit control characters */
 	if (ucs == 0)
@@ -653,27 +649,25 @@ ucs_wcwidth(pg_wchar ucs)
 	if (ucs < 0x20 || (ucs >= 0x7f && ucs < 0xa0) || ucs > 0x0010ffff)
 		return -1;
 
-	/* binary search in table of non-spacing characters */
-	if (mbbisearch(ucs, combining,
-				   sizeof(combining) / sizeof(struct mbinterval) - 1))
+	/*
+	 * binary search in table of non-spacing characters
+	 *
+	 * XXX: In the official Unicode sources, it is possible for a character to
+	 * be described as both non-spacing and wide at the same time. As of
+	 * Unicode 13.0, treating the non-spacing property as the determining
+	 * factor for display width leads to the correct behavior, so do that
+	 * search first.
+	 */
+	if (mbbisearch(ucs, nonspacing,
+				   sizeof(nonspacing) / sizeof(struct mbinterval) - 1))
 		return 0;
 
-	/*
-	 * if we arrive here, ucs is not a combining or C0/C1 control character
-	 */
+	/* binary search in table of wide characters */
+	if (mbbisearch(ucs, east_asian_fw,
+				   sizeof(east_asian_fw) / sizeof(struct mbinterval) - 1))
+		return 2;
 
-	return 1 +
-		(ucs >= 0x1100 &&
-		 (ucs <= 0x115f ||		/* Hangul Jamo init. consonants */
-		  (ucs >= 0x2e80 && ucs <= 0xa4cf && (ucs & ~0x0011) != 0x300a &&
-		   ucs != 0x303f) ||	/* CJK ... Yi */
-		  (ucs >= 0xac00 && ucs <= 0xd7a3) ||	/* Hangul Syllables */
-		  (ucs >= 0xf900 && ucs <= 0xfaff) ||	/* CJK Compatibility
-												 * Ideographs */
-		  (ucs >= 0xfe30 && ucs <= 0xfe6f) ||	/* CJK Compatibility Forms */
-		  (ucs >= 0xff00 && ucs <= 0xff5f) ||	/* Fullwidth Forms */
-		  (ucs >= 0xffe0 && ucs <= 0xffe6) ||
-		  (ucs >= 0x20000 && ucs <= 0x2ffff)));
+	return 1;
 }
 
 /*
@@ -1757,11 +1751,227 @@ pg_utf8_verifychar(const unsigned char *s, int len)
 	return l;
 }
 
+/*
+ * The fast path of the UTF-8 verifier uses a deterministic finite automaton
+ * (DFA) for multibyte characters. In a traditional table-driven DFA, the
+ * input byte and current state are used to compute an index into an array of
+ * state transitions. Since the address of the next transition is dependent
+ * on this computation, there is latency in executing the load instruction,
+ * and the CPU is not kept busy.
+ *
+ * Instead, we use a "shift-based" DFA as described by Per Vognsen:
+ *
+ * https://gist.github.com/pervognsen/218ea17743e1442e59bb60d29b1aa725
+ *
+ * In a shift-based DFA, the input byte is an index into array of integers
+ * whose bit pattern encodes the state transitions. To compute the next
+ * state, we simply right-shift the integer by the current state and apply a
+ * mask. In this scheme, the address of the transition only depends on the
+ * input byte, so there is better pipelining.
+ *
+ * The naming convention for states and transitions was adopted from a UTF-8
+ * to UTF-16/32 transcoder, whose table is reproduced below:
+ *
+ * https://github.com/BobSteagall/utf_utils/blob/6b7a465265de2f5fa6133d653df0c9bdd73bbcf8/src/utf_utils.cpp
+ *
+ * ILL  ASC  CR1  CR2  CR3  L2A  L3A  L3B  L3C  L4A  L4B  L4C CLASS / STATE
+ * ==========================================================================
+ * err, END, err, err, err, CS1, P3A, CS2, P3B, P4A, CS3, P4B,      | BGN/END
+ * err, err, err, err, err, err, err, err, err, err, err, err,      | ERR
+ *                                                                  |
+ * err, err, END, END, END, err, err, err, err, err, err, err,      | CS1
+ * err, err, CS1, CS1, CS1, err, err, err, err, err, err, err,      | CS2
+ * err, err, CS2, CS2, CS2, err, err, err, err, err, err, err,      | CS3
+ *                                                                  |
+ * err, err, err, err, CS1, err, err, err, err, err, err, err,      | P3A
+ * err, err, CS1, CS1, err, err, err, err, err, err, err, err,      | P3B
+ *                                                                  |
+ * err, err, err, CS2, CS2, err, err, err, err, err, err, err,      | P4A
+ * err, err, CS2, err, err, err, err, err, err, err, err, err,      | P4B
+ *
+ * In the most straightforward implementation, a shift-based DFA for UTF-8
+ * requires 64-bit integers to encode the transitions, but with an SMT solver
+ * it's possible to find state numbers such that the transitions fit within
+ * 32-bit integers, as Dougall Johnson demonstrated:
+ *
+ * https://gist.github.com/dougallj/166e326de6ad4cf2c94be97a204c025f
+ *
+ * This packed representation is the reason for the seemingly odd choice of
+ * state values below.
+ */
+
+/* Error */
+#define	ERR  0
+/* Begin */
+#define	BGN 11
+/* Continuation states, expect 1/2/3 continuation bytes */
+#define	CS1 16
+#define	CS2  1
+#define	CS3  5
+/* Partial states, where the first continuation byte has a restricted range */
+#define	P3A  6					/* Lead was E0, check for 3-byte overlong */
+#define	P3B 20					/* Lead was ED, check for surrogate */
+#define	P4A 25					/* Lead was F0, check for 4-byte overlong */
+#define	P4B 30					/* Lead was F4, check for too-large */
+/* Begin and End are the same state */
+#define	END BGN
+
+/* the encoded state transitions for the lookup table */
+
+/* ASCII */
+#define ASC (END << BGN)
+/* 2-byte lead */
+#define L2A (CS1 << BGN)
+/* 3-byte lead */
+#define L3A (P3A << BGN)
+#define L3B (CS2 << BGN)
+#define L3C (P3B << BGN)
+/* 4-byte lead */
+#define L4A (P4A << BGN)
+#define L4B (CS3 << BGN)
+#define L4C (P4B << BGN)
+/* continuation byte */
+#define CR1 (END << CS1) | (CS1 << CS2) | (CS2 << CS3) | (CS1 << P3B) | (CS2 << P4B)
+#define CR2 (END << CS1) | (CS1 << CS2) | (CS2 << CS3) | (CS1 << P3B) | (CS2 << P4A)
+#define CR3 (END << CS1) | (CS1 << CS2) | (CS2 << CS3) | (CS1 << P3A) | (CS2 << P4A)
+/* invalid byte */
+#define ILL ERR
+
+static const uint32 Utf8Transition[256] =
+{
+	/* ASCII */
+
+	ILL, ASC, ASC, ASC, ASC, ASC, ASC, ASC,
+	ASC, ASC, ASC, ASC, ASC, ASC, ASC, ASC,
+	ASC, ASC, ASC, ASC, ASC, ASC, ASC, ASC,
+	ASC, ASC, ASC, ASC, ASC, ASC, ASC, ASC,
+
+	ASC, ASC, ASC, ASC, ASC, ASC, ASC, ASC,
+	ASC, ASC, ASC, ASC, ASC, ASC, ASC, ASC,
+	ASC, ASC, ASC, ASC, ASC, ASC, ASC, ASC,
+	ASC, ASC, ASC, ASC, ASC, ASC, ASC, ASC,
+
+	ASC, ASC, ASC, ASC, ASC, ASC, ASC, ASC,
+	ASC, ASC, ASC, ASC, ASC, ASC, ASC, ASC,
+	ASC, ASC, ASC, ASC, ASC, ASC, ASC, ASC,
+	ASC, ASC, ASC, ASC, ASC, ASC, ASC, ASC,
+
+	ASC, ASC, ASC, ASC, ASC, ASC, ASC, ASC,
+	ASC, ASC, ASC, ASC, ASC, ASC, ASC, ASC,
+	ASC, ASC, ASC, ASC, ASC, ASC, ASC, ASC,
+	ASC, ASC, ASC, ASC, ASC, ASC, ASC, ASC,
+
+	/* continuation bytes */
+
+	/* 80..8F */
+	CR1, CR1, CR1, CR1, CR1, CR1, CR1, CR1,
+	CR1, CR1, CR1, CR1, CR1, CR1, CR1, CR1,
+
+	/* 90..9F */
+	CR2, CR2, CR2, CR2, CR2, CR2, CR2, CR2,
+	CR2, CR2, CR2, CR2, CR2, CR2, CR2, CR2,
+
+	/* A0..BF */
+	CR3, CR3, CR3, CR3, CR3, CR3, CR3, CR3,
+	CR3, CR3, CR3, CR3, CR3, CR3, CR3, CR3,
+	CR3, CR3, CR3, CR3, CR3, CR3, CR3, CR3,
+	CR3, CR3, CR3, CR3, CR3, CR3, CR3, CR3,
+
+	/* leading bytes */
+
+	/* C0..DF */
+	ILL, ILL, L2A, L2A, L2A, L2A, L2A, L2A,
+	L2A, L2A, L2A, L2A, L2A, L2A, L2A, L2A,
+	L2A, L2A, L2A, L2A, L2A, L2A, L2A, L2A,
+	L2A, L2A, L2A, L2A, L2A, L2A, L2A, L2A,
+
+	/* E0..EF */
+	L3A, L3B, L3B, L3B, L3B, L3B, L3B, L3B,
+	L3B, L3B, L3B, L3B, L3B, L3C, L3B, L3B,
+
+	/* F0..FF */
+	L4A, L4B, L4B, L4B, L4C, ILL, ILL, ILL,
+	ILL, ILL, ILL, ILL, ILL, ILL, ILL, ILL
+};
+
+static void
+utf8_advance(const unsigned char *s, uint32 *state, int len)
+{
+	/* Note: We deliberately don't check the state's value here. */
+	while (len > 0)
+	{
+		/*
+		 * It's important that the mask value is 31: In most instruction sets,
+		 * a shift by a 32-bit operand is understood to be a shift by its mod
+		 * 32, so the compiler should elide the mask operation.
+		 */
+		*state = Utf8Transition[*s++] >> (*state & 31);
+		len--;
+	}
+
+	*state &= 31;
+}
+
 static int
 pg_utf8_verifystr(const unsigned char *s, int len)
 {
 	const unsigned char *start = s;
+	const int	orig_len = len;
+	uint32		state = BGN;
 
+/*
+ * With a stride of two vector widths, gcc will unroll the loop. Even if
+ * the compiler can unroll a longer loop, it's not worth it because we
+ * must fall back to the byte-wise algorithm if we find any non-ASCII.
+ */
+#define STRIDE_LENGTH (2 * sizeof(Vector8))
+
+	if (len >= STRIDE_LENGTH)
+	{
+		while (len >= STRIDE_LENGTH)
+		{
+			/*
+			 * If the chunk is all ASCII, we can skip the full UTF-8 check,
+			 * but we must first check for a non-END state, which means the
+			 * previous chunk ended in the middle of a multibyte sequence.
+			 */
+			if (state != END || !is_valid_ascii(s, STRIDE_LENGTH))
+				utf8_advance(s, &state, STRIDE_LENGTH);
+
+			s += STRIDE_LENGTH;
+			len -= STRIDE_LENGTH;
+		}
+
+		/* The error state persists, so we only need to check for it here. */
+		if (state == ERR)
+		{
+			/*
+			 * Start over from the beginning with the slow path so we can
+			 * count the valid bytes.
+			 */
+			len = orig_len;
+			s = start;
+		}
+		else if (state != END)
+		{
+			/*
+			 * The fast path exited in the middle of a multibyte sequence.
+			 * Walk backwards to find the leading byte so that the slow path
+			 * can resume checking from there. We must always backtrack at
+			 * least one byte, since the current byte could be e.g. an ASCII
+			 * byte after a 2-byte lead, which is invalid.
+			 */
+			do
+			{
+				Assert(s > start);
+				s--;
+				len++;
+				Assert(IS_HIGHBIT_SET(*s));
+			} while (pg_utf_mblen(s) <= 1);
+		}
+	}
+
+	/* check remaining bytes */
 	while (len > 0)
 	{
 		int			l;

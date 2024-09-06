@@ -6,7 +6,7 @@
 | --- | --- |
 | Flag | false |
 
-Automatically run [COMMIT](../../select.md#commit) after every statement.
+Automatically run [COMMIT](../../commit.md) after every statement.
 
 ### TablePathPrefix {#table-path-prefix}
 
@@ -33,7 +33,7 @@ EACH uses [TablePathPrefix](#table-path-prefix) for each list item.
 
 | Value type | Default |
 | --- | --- |
-| 1. Action<br>2. Warning code or "*" | — |
+| 1. Action<br/>2. Warning code or "*" | — |
 
 Action:
 
@@ -75,7 +75,7 @@ When set to "auto", it enables a new compute engine. Computing is made, whenever
 
 When you use `SELECT foo.* FROM ... AS foo`, remove the `foo.` prefix from the names of the result columns.
 
-It can be also used with a [JOIN](../../join.md), but in this case it may fail in the case of a name conflict (that can be resolved by using [WITHOUT](../../select.md#without) and renaming columns). For JOIN in SimpleColumns mode, an implicit Coalesce is made for key columns: the query `SELECT * FROM T1 AS a JOIN T2 AS b USING(key)` in the SimpleColumns mode works same as `SELECT a.key ?? b.key AS key, ... FROM T1 AS a JOIN T2 AS b USING(key)`.
+It can be also used with a [JOIN](../../join.md), but in this case it may fail in the case of a name conflict (that can be resolved by using [WITHOUT](../../select/without.md) and renaming columns). For JOIN in SimpleColumns mode, an implicit Coalesce is made for key columns: the query `SELECT * FROM T1 AS a JOIN T2 AS b USING(key)` in the SimpleColumns mode works same as `SELECT a.key ?? b.key AS key, ... FROM T1 AS a JOIN T2 AS b USING(key)`.
 
 ### CoalesceJoinKeysOnQualifiedAll
 
@@ -97,7 +97,7 @@ Controls implicit Coalesce for the key `JOIN` columns in the SimpleColumns mode.
 
 If the flag is set, then [JOIN](../../join.md) will require strict matching of key types.
 By default, JOIN preconverts keys to a shared type, which might result in performance degradation.
-StrictJoinKeyTypes is a [scoped](#pragmascope) setting.
+StrictJoinKeyTypes is a [scoped](../../pragma.md#pragmascope) setting.
 
 {% endif %}
 
@@ -158,11 +158,11 @@ You can explicitly select the old behavior by using the `DisableAnsiOrderByLimit
 
 `OrderedColumns`/`DisableOrderedColumns`
 
-Output the [column order](../../select.md#orderedcolumns) in SELECT/JOIN/UNION ALL and preserve it when writing the results. The order of columns is undefined by default.
+Output the [column order](../../select/order_by.md) in SELECT/JOIN/UNION ALL and preserve it when writing the results. The order of columns is undefined by default.
 
 ### PositionalUnionAll {#positionalunionall}
 
-Enable the standard column-by-column execution for [UNION ALL](../../select.md#unionall). This automatically enables
+Enable the standard column-by-column execution for [UNION ALL](../../select/union.md#unionall). This automatically enables
 [ordered columns](#orderedcolumns).
 
 ### RegexUseRe2
@@ -181,7 +181,7 @@ Use Re2 UDF instead of Pcre to execute SQL the `REGEX`,`MATCH`,`RLIKE` statement
 
 In the classical version, the result of integer division remains integer (by default).
 If disabled, the result is always Double.
-ClassicDivision is a [scoped](#pragmascope) setting.
+ClassicDivision is a [scoped](../../pragma.md#pragmascope) setting.
 
 ### UnicodeLiterals
 
@@ -192,7 +192,7 @@ ClassicDivision is a [scoped](#pragmascope) setting.
 | Flag | false |
 
 When this mode is enabled, string literals without suffixes like "foo"/'bar'/@@multiline@@ will be of type `Utf8`, when disabled - `String`.
-UnicodeLiterals is a [scoped](#pragmascope) setting.
+UnicodeLiterals is a [scoped](../../pragma.md#pragmascope) setting.
 
 ### WarnUntypedStringLiterals
 
@@ -203,7 +203,7 @@ UnicodeLiterals is a [scoped](#pragmascope) setting.
 | Flag | false |
 
 When this mode is enabled, a warning will be generated for string literals without suffixes like "foo"/'bar'/@@multiline@@. It can be suppressed by explicitly choosing the suffix `s` for the `String` type, or `u` for the `Utf8` type.
-WarnUntypedStringLiterals is a [scoped](#pragmascope) setting.
+WarnUntypedStringLiterals is a [scoped](../../pragma.md#pragmascope) setting.
 
 ### AllowDotInAlias
 
@@ -242,4 +242,3 @@ Increasing the limit on the number of dimensions in [GROUP BY](../../group_by.md
 Use this option with care, because the computational complexity of the query grows exponentially with the number of dimensions.
 
 {% endif %}
-

@@ -64,7 +64,7 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static inline const NLogging::TLogger Logger("Proc");
+YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "Proc");
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -517,6 +517,20 @@ TCgroupMemoryStat GetCgroupMemoryStat(
     }
 
     return stat;
+#else
+    Y_UNUSED(cgroupPath, cgroupMountPoint);
+    return {};
+#endif
+}
+
+std::optional<i64> GetCgroupAnonymousMemoryLimit(
+    const TString& cgroupPath,
+    const TString& cgroupMountPoint)
+{
+#ifdef _linux_
+    TString path = cgroupMountPoint + "/memory" + cgroupPath + "/memory.anon.limit";
+    auto content = Trim(TUnbufferedFileInput(path).ReadAll(), "\n");
+    return FromString<i64>(content);
 #else
     Y_UNUSED(cgroupPath, cgroupMountPoint);
     return {};
@@ -1199,7 +1213,7 @@ void SendSignal(const std::vector<int>& pids, const TString& signalName)
     auto sig = FindSignalIdBySignalName(signalName);
     for (int pid : pids) {
         if (kill(pid, *sig) != 0 && errno != ESRCH) {
-            THROW_ERROR_EXCEPTION("Unable to kill process %d", pid)
+            THROW_ERROR_EXCEPTION("Unable to kill process %v", pid)
                 << TError::FromSystem();
         }
     }

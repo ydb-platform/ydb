@@ -22,6 +22,7 @@ Y_UNIT_TEST_SUITE(TPQTest) {
 
 Y_UNIT_TEST(TestDirectReadHappyWay) {
     TTestContext tc;
+    tc.EnableDetailedPQLog = true;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
     }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
@@ -65,6 +66,7 @@ Y_UNIT_TEST(TestDirectReadHappyWay) {
 
 Y_UNIT_TEST(DirectReadBadSessionOrPipe) {
     TTestContext tc;
+    tc.EnableDetailedPQLog = true;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
     }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
@@ -122,6 +124,7 @@ Y_UNIT_TEST(DirectReadBadSessionOrPipe) {
 }
 Y_UNIT_TEST(DirectReadOldPipe) {
     TTestContext tc;
+    tc.EnableDetailedPQLog = true;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
     }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
@@ -500,7 +503,7 @@ Y_UNIT_TEST(TestCheckACL) {
         TFakeSchemeShardState::TPtr state{new TFakeSchemeShardState()};
         ui64 ssId = 9876;
         BootFakeSchemeShard(*tc.Runtime, ssId, state);
-        IActor* ticketParser = NKikimr::CreateTicketParser(tc.Runtime->GetAppData().AuthConfig);
+        IActor* ticketParser = NKikimr::CreateTicketParser({.AuthConfig = tc.Runtime->GetAppData().AuthConfig, .CertificateAuthValues = {}});
         TActorId ticketParserId = tc.Runtime->Register(ticketParser);
         tc.Runtime->RegisterService(NKikimr::MakeTicketParserID(), ticketParserId);
 

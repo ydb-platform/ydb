@@ -12,15 +12,22 @@ SRCS(
 
 PEERDIR(
     library/cpp/getopt
-    ydb/library/grpc/client
     library/cpp/svnversion
+    ydb/core/persqueue/ut/common
     ydb/core/testlib/default
-    ydb/services/datastreams
+    ydb/core/tx/schemeshard/ut_helpers
+    ydb/library/grpc/client
     ydb/public/sdk/cpp/client/ydb_topic
+    ydb/services/datastreams
+
+    ydb/public/sdk/cpp/client/ydb_persqueue_public/ut/ut_utils
+    ydb/public/sdk/cpp/client/ydb_topic/ut/ut_utils
 )
 
 YQL_LAST_ABI_VERSION()
 
-REQUIREMENTS(ram:11)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(ram:11)
+ENDIF()
 
 END()

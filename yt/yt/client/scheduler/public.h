@@ -60,6 +60,7 @@ YT_DEFINE_ERROR_ENUM(
     ((WatcherHandlerFailed)                   (217))
     ((MasterDisconnected)                     (218))
     ((NoSuchJobShell)                         (219))
+    ((JobResourceLimitsRestrictionsViolated)  (220))
 );
 
 DEFINE_ENUM(EUnavailableChunkAction,
@@ -101,8 +102,7 @@ DEFINE_ENUM(EAbortReason,
     ((JobOnUnexpectedNode)             ( 21))
     ((ShallowMergeFailed)              ( 22))
     ((InconsistentJobState)            ( 23))
-    // COMPAT(pogorelov)
-    ((JobStatisticsWaitTimeout)        ( 24))
+    ((AllocationFinished)              ( 24))
     ((OperationFailed)                 ( 25))
     ((JobRevivalDisabled)              ( 26))
     ((BannedInTentativeTree)           ( 27))
@@ -128,8 +128,6 @@ DEFINE_ENUM(EAbortReason,
     ((JobMemoryThrashing)              ( 47))
     ((InterruptionUnsupported)         ( 48))
     ((Abandoned)                       ( 49))
-    // TODO(ignat): is it actually a scheduling type of abortion?
-    ((JobSettlementTimedOut)           ( 50))
     ((NonexistentPoolTree)             ( 51))
     ((WrongSchedulingSegmentModule)    ( 52))
     ((UnresolvedNodeId)                ( 53))

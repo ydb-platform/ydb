@@ -11,8 +11,6 @@ jobs:
     name: Build and test cmake
     uses: ./.github/workflows/build_and_test_provisioned.yml
     with:
-      runner_label: auto-provisioned
-      run_unit_tests: false
-      run_functional_tests: false
+      runner_label: auto-provisioned, postcommit
     secrets: inherit
 

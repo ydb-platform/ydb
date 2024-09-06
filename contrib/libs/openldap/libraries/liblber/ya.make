@@ -9,6 +9,8 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
+VERSION(2.6.8)
+
 ADDINCL(
     contrib/libs/openldap/include
 )

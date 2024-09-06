@@ -5,7 +5,7 @@
 #include <ydb/library/uuid/uuid.h>
 
 #include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
-#include <ydb/library/yql/providers/common/codec/yql_codec_results.h>
+#include <ydb/library/yql/public/result_format/yql_codec_results.h>
 #include <ydb/library/yql/public/decimal/yql_decimal.h>
 
 namespace NYql {
@@ -26,7 +26,7 @@ bool ResultsOverflow(ui64 rows, ui64 bytes, const IDataProvider::TFillSettings& 
     return false;
 }
 
-void WriteValueToYson(const TStringStream& stream, NCommon::TYsonResultWriter& writer, const NKikimrMiniKQL::TType& type,
+void WriteValueToYson(const TStringStream& stream, NResult::TYsonResultWriter& writer, const NKikimrMiniKQL::TType& type,
     const NKikimrMiniKQL::TValue& value, const TVector<TString>* fieldsOrder,
     const IDataProvider::TFillSettings& fillSettings, bool& truncated, bool firstLevel = false)
 {
@@ -292,6 +292,14 @@ TExprNode::TPtr MakeAtomForDataType(EDataSlot slot, const NKikimrMiniKQL::TValue
         return ctx.NewAtom(pos, ToString(value.GetUint64()));
     } else if (slot == EDataSlot::Interval) {
         return ctx.NewAtom(pos, ToString(value.GetInt64()));
+    } else if (slot == EDataSlot::Date32) {
+        return ctx.NewAtom(pos, ToString(value.GetInt32()));
+    } else if (slot == EDataSlot::Datetime64) {
+        return ctx.NewAtom(pos, ToString(value.GetInt64()));
+    } else if (slot == EDataSlot::Timestamp64) {
+        return ctx.NewAtom(pos, ToString(value.GetInt64()));
+    } else if (slot == EDataSlot::Interval64) {
+        return ctx.NewAtom(pos, ToString(value.GetInt64()));
     } else {
        return nullptr;
     }
@@ -325,7 +333,7 @@ void KikimrResultToYson(const TStringStream& stream, NYson::TYsonWriter& writer,
     const TVector<TString>& columnHints, const IDataProvider::TFillSettings& fillSettings, bool& truncated)
 {
     truncated = false;
-    NCommon::TYsonResultWriter resultWriter(writer);
+    NResult::TYsonResultWriter resultWriter(writer);
     WriteValueToYson(stream, resultWriter, result.GetType(), result.GetValue(), columnHints.empty() ? nullptr : &columnHints,
         fillSettings, truncated, true);
 }
@@ -363,6 +371,7 @@ NKikimrMiniKQL::TResult* KikimrResultToProto(const NKikimrMiniKQL::TResult& resu
     auto* truncatedValue = packedValue->AddStruct();
 
     bool truncated = false;
+    TColumnOrder order(columnHints);
     if (result.GetType().GetKind() == NKikimrMiniKQL::ETypeKind::List) {
         const auto& itemType = result.GetType().GetList().GetItem();
 
@@ -378,11 +387,11 @@ NKikimrMiniKQL::TResult* KikimrResultToProto(const NKikimrMiniKQL::TResult& resu
             auto* newItem = dataType->MutableList()->MutableItem();
             newItem->SetKind(NKikimrMiniKQL::ETypeKind::Struct);
             auto* newStructType = newItem->MutableStruct();
-            for (auto& column : columnHints) {
-                auto* memberIndex = memberIndices.FindPtr(column);
+            for (auto& [column, gen_col] : order) {
+                auto* memberIndex = memberIndices.FindPtr(gen_col);
                 YQL_ENSURE(memberIndex);
 
-                *newStructType->AddMember() = structType.GetMember(*memberIndex);
+                (*newStructType->AddMember() = structType.GetMember(*memberIndex)).SetName(column);
             }
         } else {
             *dataType = result.GetType();
@@ -395,11 +404,10 @@ NKikimrMiniKQL::TResult* KikimrResultToProto(const NKikimrMiniKQL::TResult& resu
                 truncated = true;
                 break;
             }
-
             if (!memberIndices.empty()) {
                 auto* newStruct = dataValue->AddList();
-                for (auto& column : columnHints) {
-                    auto* memberIndex = memberIndices.FindPtr(column);
+                for (auto& [column, gen_column] : order) {
+                    auto* memberIndex = memberIndices.FindPtr(gen_column);
                     YQL_ENSURE(memberIndex);
 
                     *newStruct->AddStruct() = item.GetStruct(*memberIndex);

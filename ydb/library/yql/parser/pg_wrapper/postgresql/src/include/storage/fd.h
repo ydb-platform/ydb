@@ -4,7 +4,7 @@
  *	  Virtual file descriptor definitions.
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/storage/fd.h
@@ -44,6 +44,7 @@
 #define FD_H
 
 #include <dirent.h>
+#include <fcntl.h>
 
 typedef enum RecoveryInitSyncMethod
 {
@@ -51,20 +52,24 @@ typedef enum RecoveryInitSyncMethod
 	RECOVERY_INIT_SYNC_METHOD_SYNCFS
 }			RecoveryInitSyncMethod;
 
-struct iovec;					/* avoid including port/pg_iovec.h here */
-
 typedef int File;
+
+
+#define IO_DIRECT_DATA			0x01
+#define IO_DIRECT_WAL			0x02
+#define IO_DIRECT_WAL_INIT		0x04
 
 
 /* GUC parameter */
 extern __thread PGDLLIMPORT int max_files_per_process;
 extern __thread PGDLLIMPORT bool data_sync_retry;
-extern __thread int	recovery_init_sync_method;
+extern __thread PGDLLIMPORT int recovery_init_sync_method;
+extern __thread PGDLLIMPORT int io_direct_flags;
 
 /*
  * This is private to fd.c, but exported for save/restore_backend_variables()
  */
-extern __thread int	max_safe_fds;
+extern __thread PGDLLIMPORT int max_safe_fds;
 
 /*
  * On Windows, we have to interpret EACCES as possibly meaning the same as
@@ -80,6 +85,23 @@ extern __thread int	max_safe_fds;
 #endif
 
 /*
+ * O_DIRECT is not standard, but almost every Unix has it.  We translate it
+ * to the appropriate Windows flag in src/port/open.c.  We simulate it with
+ * fcntl(F_NOCACHE) on macOS inside fd.c's open() wrapper.  We use the name
+ * PG_O_DIRECT rather than defining O_DIRECT in that case (probably not a good
+ * idea on a Unix).  We can only use it if the compiler will correctly align
+ * PGIOAlignedBlock for us, though.
+ */
+#if defined(O_DIRECT) && defined(pg_attribute_aligned)
+#define		PG_O_DIRECT O_DIRECT
+#elif defined(F_NOCACHE)
+#define		PG_O_DIRECT 0x80000000
+#define		PG_O_DIRECT_USE_F_NOCACHE
+#else
+#define		PG_O_DIRECT 0
+#endif
+
+/*
  * prototypes for functions in fd.c
  */
 
@@ -88,10 +110,13 @@ extern File PathNameOpenFile(const char *fileName, int fileFlags);
 extern File PathNameOpenFilePerm(const char *fileName, int fileFlags, mode_t fileMode);
 extern File OpenTemporaryFile(bool interXact);
 extern void FileClose(File file);
-extern int	FilePrefetch(File file, off_t offset, int amount, uint32 wait_event_info);
-extern int	FileRead(File file, char *buffer, int amount, off_t offset, uint32 wait_event_info);
-extern int	FileWrite(File file, char *buffer, int amount, off_t offset, uint32 wait_event_info);
+extern int	FilePrefetch(File file, off_t offset, off_t amount, uint32 wait_event_info);
+extern int	FileRead(File file, void *buffer, size_t amount, off_t offset, uint32 wait_event_info);
+extern int	FileWrite(File file, const void *buffer, size_t amount, off_t offset, uint32 wait_event_info);
 extern int	FileSync(File file, uint32 wait_event_info);
+extern int	FileZero(File file, off_t offset, off_t amount, uint32 wait_event_info);
+extern int	FileFallocate(File file, off_t offset, off_t amount, uint32 wait_event_info);
+
 extern off_t FileSize(File file);
 extern int	FileTruncate(File file, off_t offset, uint32 wait_event_info);
 extern void FileWriteback(File file, off_t offset, off_t nbytes, uint32 wait_event_info);
@@ -101,11 +126,11 @@ extern int	FileGetRawFlags(File file);
 extern mode_t FileGetRawMode(File file);
 
 /* Operations used for sharing named temporary files */
-extern File PathNameCreateTemporaryFile(const char *name, bool error_on_failure);
+extern File PathNameCreateTemporaryFile(const char *path, bool error_on_failure);
 extern File PathNameOpenTemporaryFile(const char *path, int mode);
-extern bool PathNameDeleteTemporaryFile(const char *name, bool error_on_failure);
-extern void PathNameCreateTemporaryDir(const char *base, const char *name);
-extern void PathNameDeleteTemporaryDir(const char *name);
+extern bool PathNameDeleteTemporaryFile(const char *path, bool error_on_failure);
+extern void PathNameCreateTemporaryDir(const char *basedir, const char *directory);
+extern void PathNameDeleteTemporaryDir(const char *dirname);
 extern void TempTablespacePath(char *path, Oid tablespace);
 
 /* Operations that allow use of regular stdio --- USE WITH CAUTION */
@@ -142,6 +167,7 @@ extern int	MakePGDirectory(const char *directoryName);
 
 /* Miscellaneous support routines */
 extern void InitFileAccess(void);
+extern void InitTemporaryFileAccess(void);
 extern void set_max_safe_fds(void);
 extern void closeAllVfds(void);
 extern void SetTempTablespaces(Oid *tableSpaces, int numSpaces);
@@ -160,17 +186,12 @@ extern int	pg_fsync(int fd);
 extern int	pg_fsync_no_writethrough(int fd);
 extern int	pg_fsync_writethrough(int fd);
 extern int	pg_fdatasync(int fd);
-extern void pg_flush_data(int fd, off_t offset, off_t amount);
-extern ssize_t pg_pwritev_with_retry(int fd,
-									 const struct iovec *iov,
-									 int iovcnt,
-									 off_t offset);
+extern void pg_flush_data(int fd, off_t offset, off_t nbytes);
 extern int	pg_truncate(const char *path, off_t length);
 extern void fsync_fname(const char *fname, bool isdir);
 extern int	fsync_fname_ext(const char *fname, bool isdir, bool ignore_perm, int elevel);
-extern int	durable_rename(const char *oldfile, const char *newfile, int loglevel);
-extern int	durable_unlink(const char *fname, int loglevel);
-extern int	durable_rename_excl(const char *oldfile, const char *newfile, int loglevel);
+extern int	durable_rename(const char *oldfile, const char *newfile, int elevel);
+extern int	durable_unlink(const char *fname, int elevel);
 extern void SyncDataDirectory(void);
 extern int	data_sync_elevel(int elevel);
 

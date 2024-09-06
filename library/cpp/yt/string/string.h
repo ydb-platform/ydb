@@ -1,6 +1,6 @@
 #pragma once
 
-#include "string_builder.h"
+#include "format_arg.h"
 
 #include <util/datetime/base.h>
 
@@ -25,6 +25,25 @@ struct TDefaultFormatter
     {
         FormatValue(builder, obj, TStringBuf("v"));
     }
+};
+
+//! Bind spec to a formatter.
+//! Used in ranges processing.
+class TSpecBoundFormatter
+{
+public:
+    explicit TSpecBoundFormatter(TStringBuf spec)
+        : Spec_(spec)
+    { }
+
+    template <class T>
+    void operator()(TStringBuilderBase* builder, const T& obj) const
+    {
+        FormatValue(builder, obj, Spec_);
+    }
+
+private:
+    TStringBuf Spec_;
 };
 
 static constexpr TStringBuf DefaultJoinToStringDelimiter = ", ";
@@ -52,37 +71,21 @@ void JoinToString(
     const TIterator& begin,
     const TIterator& end,
     const TFormatter& formatter,
-    TStringBuf delimiter = DefaultJoinToStringDelimiter)
-{
-    for (auto current = begin; current != end; ++current) {
-        if (current != begin) {
-            builder->AppendString(delimiter);
-        }
-        formatter(builder, *current);
-    }
-}
+    TStringBuf delimiter = DefaultJoinToStringDelimiter);
 
 template <class TIterator, class TFormatter>
 TString JoinToString(
     const TIterator& begin,
     const TIterator& end,
     const TFormatter& formatter,
-    TStringBuf delimiter = DefaultJoinToStringDelimiter)
-{
-    TStringBuilder builder;
-    JoinToString(&builder, begin, end, formatter, delimiter);
-    return builder.Flush();
-}
+    TStringBuf delimiter = DefaultJoinToStringDelimiter);
 
 //! A handy shortcut with default formatter.
 template <class TIterator>
 TString JoinToString(
     const TIterator& begin,
     const TIterator& end,
-    TStringBuf delimiter = DefaultJoinToStringDelimiter)
-{
-    return JoinToString(begin, end, TDefaultFormatter(), delimiter);
-}
+    TStringBuf delimiter = DefaultJoinToStringDelimiter);
 
 //! Joins a collection of given items into a string intermixing them with the delimiter.
 /*!
@@ -94,35 +97,17 @@ template <class TCollection, class TFormatter>
 TString JoinToString(
     const TCollection& collection,
     const TFormatter& formatter,
-    TStringBuf delimiter = DefaultJoinToStringDelimiter)
-{
-    using std::begin;
-    using std::end;
-    return JoinToString(begin(collection), end(collection), formatter, delimiter);
-}
+    TStringBuf delimiter = DefaultJoinToStringDelimiter);
 
 //! A handy shortcut with the default formatter.
 template <class TCollection>
 TString JoinToString(
     const TCollection& collection,
-    TStringBuf delimiter = DefaultJoinToStringDelimiter)
-{
-    return JoinToString(collection, TDefaultFormatter(), delimiter);
-}
+    TStringBuf delimiter = DefaultJoinToStringDelimiter);
 
 //! Concatenates a bunch of TStringBuf-like instances into TString.
 template <class... Ts>
-TString ConcatToString(Ts... args)
-{
-    size_t length = 0;
-    ((length += args.length()), ...);
-
-    TString result;
-    result.reserve(length);
-    (result.append(args), ...);
-
-    return result;
-}
+TString ConcatToString(Ts... args);
 
 //! Converts a range of items into strings.
 template <class TIter, class TFormatter>
@@ -130,29 +115,14 @@ std::vector<TString> ConvertToStrings(
     const TIter& begin,
     const TIter& end,
     const TFormatter& formatter,
-    size_t maxSize = std::numeric_limits<size_t>::max())
-{
-    std::vector<TString> result;
-    for (auto it = begin; it != end; ++it) {
-        TStringBuilder builder;
-        formatter(&builder, *it);
-        result.push_back(builder.Flush());
-        if (result.size() == maxSize) {
-            break;
-        }
-    }
-    return result;
-}
+    size_t maxSize = std::numeric_limits<size_t>::max());
 
 //! A handy shortcut with the default formatter.
 template <class TIter>
 std::vector<TString> ConvertToStrings(
     const TIter& begin,
     const TIter& end,
-    size_t maxSize = std::numeric_limits<size_t>::max())
-{
-    return ConvertToStrings(begin, end, TDefaultFormatter(), maxSize);
-}
+    size_t maxSize = std::numeric_limits<size_t>::max());
 
 //! Converts a given collection of items into strings.
 /*!
@@ -164,21 +134,13 @@ template <class TCollection, class TFormatter>
 std::vector<TString> ConvertToStrings(
     const TCollection& collection,
     const TFormatter& formatter,
-    size_t maxSize = std::numeric_limits<size_t>::max())
-{
-    using std::begin;
-    using std::end;
-    return ConvertToStrings(begin(collection), end(collection), formatter, maxSize);
-}
+    size_t maxSize = std::numeric_limits<size_t>::max());
 
 //! A handy shortcut with default formatter.
 template <class TCollection>
 std::vector<TString> ConvertToStrings(
     const TCollection& collection,
-    size_t maxSize = std::numeric_limits<size_t>::max())
-{
-    return ConvertToStrings(collection, TDefaultFormatter(), maxSize);
-}
+    size_t maxSize = std::numeric_limits<size_t>::max());
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -222,3 +184,7 @@ TStringBuf FormatBool(bool value);
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT
+
+#define STRING_INL_H_
+#include "string-inl.h"
+#undef STRING_INL_H_

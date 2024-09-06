@@ -127,6 +127,11 @@ public:
     )
 
     void HandleResultSets(const TString& queryId, const TActorContext& ctx) {
+        if (ResultSetSizes_.empty()) {
+            SendReply(ctx);
+            return;
+        }
+
         Become(&ExecuteDataQueryRPC::GatherResultSetsState);
         QueryId_ = queryId;
         MakeLocalCall(CreateResultSetRequest(queryId, 0, 0), ctx);

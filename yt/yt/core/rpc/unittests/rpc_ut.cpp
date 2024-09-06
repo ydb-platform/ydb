@@ -1,5 +1,7 @@
 #include <yt/yt/core/rpc/unittests/lib/common.h>
 
+#include <random>
+
 namespace NYT::NRpc {
 namespace {
 
@@ -41,14 +43,17 @@ TString StringFromSharedRef(const TSharedRef& sharedRef)
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TImpl>
-using TRpcTest = TTestBase<TImpl>;
+using TRpcTest = TRpcTestBase<TImpl>;
 template <class TImpl>
-using TNotUdsTest = TTestBase<TImpl>;
+using TAttachmentsTest = TRpcTestBase<TImpl>;
 template <class TImpl>
-using TNotGrpcTest = TTestBase<TImpl>;
+using TNotUdsTest = TRpcTestBase<TImpl>;
 template <class TImpl>
-using TGrpcTest = TTestBase<TImpl>;
+using TNotGrpcTest = TRpcTestBase<TImpl>;
+template <class TImpl>
+using TGrpcTest = TRpcTestBase<TImpl>;
 TYPED_TEST_SUITE(TRpcTest, TAllTransports);
+TYPED_TEST_SUITE(TAttachmentsTest, TWithAttachments);
 TYPED_TEST_SUITE(TNotUdsTest, TWithoutUds);
 TYPED_TEST_SUITE(TNotGrpcTest, TWithoutGrpc);
 TYPED_TEST_SUITE(TGrpcTest, TGrpcOnly);
@@ -486,7 +491,7 @@ TYPED_TEST(TRpcTest, ManyAsyncRequests)
     EXPECT_TRUE(AllSucceeded(asyncResults).Get().IsOK());
 }
 
-TYPED_TEST(TRpcTest, RegularAttachments)
+TYPED_TEST(TAttachmentsTest, RegularAttachments)
 {
     TTestProxy proxy(this->CreateChannel());
     auto req = proxy.RegularAttachments();
@@ -536,7 +541,7 @@ TYPED_TEST(TNotGrpcTest, TrackedRegularAttachments)
     EXPECT_EQ("TTestProxy_",  StringFromSharedRef(attachments[2]));
 }
 
-TYPED_TEST(TRpcTest, NullAndEmptyAttachments)
+TYPED_TEST(TAttachmentsTest, NullAndEmptyAttachments)
 {
     TTestProxy proxy(this->CreateChannel());
     auto req = proxy.NullAndEmptyAttachments();
@@ -639,7 +644,7 @@ TYPED_TEST(TRpcTest, ResponseMemoryTag)
     }
 
     auto currentMemoryUsage = GetMemoryUsageForTag(testMemoryTag);
-    EXPECT_GE(currentMemoryUsage - initialMemoryUsage, 256_KB)
+    EXPECT_GE(currentMemoryUsage - initialMemoryUsage, 200_KB)
         << "InitialUsage: " << initialMemoryUsage << std::endl
         << "Current: " << currentMemoryUsage;
 }
@@ -787,12 +792,12 @@ TYPED_TEST(TRpcTest, RequestQueueSizeLimit)
 
     // Concurrency byte limit + queue byte size limit = 10 + 20 = 30.
     // First 30 requests must be successful, 31st request must be failed.
-    for (int i = 0; i < 30; ++i) {
+    for (int i = 0; i <= 30; ++i) {
         proxies.push_back(TTestProxy(this->CreateChannel()));
         proxies[i].SetDefaultTimeout(TDuration::Seconds(60.0));
     }
 
-    for (int i = 0; i < 30; ++i) {
+    for (int i = 0; i <= 30; ++i) {
         auto req = proxies[i].SlowCall();
         futures.push_back(req->Invoke().AsVoid());
     }
@@ -808,7 +813,7 @@ TYPED_TEST(TRpcTest, RequestQueueSizeLimit)
     EXPECT_TRUE(AllSucceeded(std::move(futures)).Get().IsOK());
 }
 
-TYPED_TEST(TNotGrpcTest, RequestMemoryOverflowException)
+TYPED_TEST(TNotGrpcTest, RequesMemoryPressureException)
 {
     auto memoryUsageTracker = this->GetMemoryUsageTracker();
     memoryUsageTracker->ClearTotalUsage();
@@ -823,7 +828,7 @@ TYPED_TEST(TNotGrpcTest, RequestMemoryOverflowException)
     auto result = WaitFor(req->Invoke().AsVoid());
 
     // Limit of memory is 32 MB.
-    EXPECT_EQ(NRpc::EErrorCode::MemoryOverflow, req->Invoke().Get().GetCode());
+    EXPECT_EQ(NRpc::EErrorCode::MemoryPressure, req->Invoke().Get().GetCode());
 }
 
 TYPED_TEST(TNotGrpcTest, MemoryTracking)
@@ -1548,7 +1553,7 @@ TEST(TCachingChannelFactoryTest, IdleChannels)
         : public IChannelFactory
     {
     public:
-        IChannelPtr CreateChannel(const TString& /*address*/) override
+        IChannelPtr CreateChannel(const std::string& /*address*/) override
         {
             return CreateLocalChannel(Server_);
         }

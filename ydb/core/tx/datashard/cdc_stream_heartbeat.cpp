@@ -33,6 +33,10 @@ public:
     TTxType GetTxType() const override { return TXTYPE_CDC_STREAM_EMIT_HEARTBEATS; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
+        if (Self->State != TShardState::Ready) {
+            return true;
+        }
+
         LOG_I("Emit change records"
             << ": edge# " << Edge
             << ", at tablet# " << Self->TabletID());
@@ -51,7 +55,7 @@ public:
                 .WithSchemaVersion(0) // not used
                 .Build();
 
-            const auto& record = *recordPtr->Get<TChangeRecord>();
+            const auto& record = *recordPtr;
             Self->PersistChangeRecord(db, record);
 
             ChangeRecords.push_back(IDataShardChangeCollector::TChange{

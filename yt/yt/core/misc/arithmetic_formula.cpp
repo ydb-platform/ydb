@@ -96,7 +96,7 @@ void ThrowError(const TString& formula, int position, const TString& message, EE
         formula);
     builder.AppendChar(' ', position);
     builder.AppendFormat("^\n%v", message);
-    THROW_ERROR_EXCEPTION(builder.Flush())
+    THROW_ERROR_EXCEPTION(std::move(builder.Flush()), NYT::TError::DisableFormat)
         << TErrorAttribute("context", context)
         << TErrorAttribute("context_pos", contextPosition);
 }
@@ -137,7 +137,7 @@ DEFINE_ENUM(EFormulaTokenType,
 );
 
 static int Precedence(EFormulaTokenType type) {
-    constexpr static int precedence[] =
+    static constexpr int precedence[] =
     {
         FOR_EACH_TOKEN(EXTRACT_PRECEDENCE)
     };
@@ -907,12 +907,7 @@ void Deserialize(TBooleanFormulaTags& tags, NYTree::INodePtr node)
     tags = TBooleanFormulaTags(ConvertTo<THashSet<TString>>(node));
 }
 
-TString ToString(const TBooleanFormulaTags& tags)
-{
-    return ToStringViaBuilder(tags);
-}
-
-void FormatValue(TStringBuilderBase* builder, const TBooleanFormulaTags& tags, TStringBuf /*format*/)
+void FormatValue(TStringBuilderBase* builder, const TBooleanFormulaTags& tags, TStringBuf /*spec*/)
 {
     builder->AppendFormat("%v", tags.GetSourceTags());
 }
@@ -1039,6 +1034,11 @@ void TBooleanFormula::Load(TStreamLoadContext& context)
     using NYT::Load;
     auto formula = Load<TString>(context);
     Impl_ = MakeGenericFormulaImpl(formula, EEvaluationContext::Boolean);
+}
+
+void FormatValue(TStringBuilderBase* builder, const TBooleanFormula& booleanFormula, TStringBuf /*spec*/)
+{
+    builder->AppendFormat("%v", booleanFormula.GetFormula());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

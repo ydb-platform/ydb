@@ -4,39 +4,48 @@
 -- TPC TPC-H Parameter Substitution (Version 2.17.2 build 0)
 -- using 1680793381 as a seed to the RNG
 
-$phone_code = ($c_phone) -> {
-    RETURN (Substring(CAST($c_phone AS String), 0u, 2u));
-};
-
 $customers = (
 select
     c_acctbal,
     c_custkey,
-    $phone_code(c_phone) as cntrycode
+    Substring(CAST(c_phone AS STRING), 0u, 2u) as cntrycode
 from
     {{customer}}
-where ($phone_code(c_phone) = '31' or $phone_code(c_phone) = '29' or $phone_code(c_phone) = '30' or $phone_code(c_phone) = '26' or $phone_code(c_phone) = '28' or $phone_code(c_phone) = '25' or $phone_code(c_phone) = '15')
 );
+
+$c = (
+select
+    c_acctbal,
+    c_custkey,
+    cntrycode
+from
+    $customers
+where
+    cntrycode = '31' or cntrycode = '29' or cntrycode = '30' or cntrycode = '26' or cntrycode = '28' or cntrycode = '25' or cntrycode = '15'
+);
+
 $avg = (
 select
     avg(c_acctbal) as a
 from
-    $customers
+    $c
 where
-    c_acctbal > 0.00
+    c_acctbal > $z0_12
 );
+
 $join1 = (
 select
     c.c_acctbal as c_acctbal,
     c.c_custkey as c_custkey,
     c.cntrycode as cntrycode
 from
-    $customers as c
+    $c as c
 cross join
     $avg as a
 where
     c.c_acctbal > a.a
 );
+
 $join2 = (
 select
     j.cntrycode as cntrycode,

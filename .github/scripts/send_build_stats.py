@@ -1,13 +1,20 @@
 #!/usr/bin/env python3
 
+import configparser
 import datetime
 import os
 import ydb
 import uuid
 import subprocess
 
+dir = os.path.dirname(__file__)
+config = configparser.ConfigParser()
+config_file_path = f"{dir}/../config/ydb_qa_db.ini"
+config.read(config_file_path)
 
-YDBD_PATH = "ydb/apps/ydbd/ydbd"
+YDBD_PATH = config["YDBD"]["YDBD_PATH"]
+DATABASE_ENDPOINT = config["QA_DB"]["DATABASE_ENDPOINT"]
+DATABASE_PATH = config["QA_DB"]["DATABASE_PATH"]
 
 FROM_ENV_COLUMNS = [
     "github_head_ref",
@@ -59,11 +66,11 @@ def main():
     if not os.path.exists(YDBD_PATH):
         # can be possible due to incremental builds and ydbd itself is not affected by changes
         print("{} not exists, skipping".format(YDBD_PATH))
-        return 1
+        return 0
 
     with ydb.Driver(
-        endpoint="grpcs://ydb.serverless.yandexcloud.net:2135",
-        database="/ru-central1/b1ggceeul2pkher8vhb6/etn6d1qbals0c29ho4lf",
+        endpoint=DATABASE_ENDPOINT,
+        database=DATABASE_PATH,
         credentials=ydb.credentials_from_env_variables()
     ) as driver:
         driver.wait(timeout=10, fail_fast=True)
@@ -106,7 +113,7 @@ VALUES
             )
 
             build_preset = os.environ.get("build_preset", None)
-            github_sha = os.environ.get("GITHUB_SHA", None)
+            github_sha = os.environ.get("commit_git_sha", None)
 
             if github_sha is not None:
                 git_commit_time_bytes = subprocess.check_output(
@@ -138,7 +145,10 @@ VALUES
             for column in FROM_ENV_COLUMNS:
                 value = os.environ.get(column.upper(), None)
                 parameters["$" + column] = sanitize_str(value)
-
+            
+            #workaround for https://github.com/ydb-platform/ydb/issues/5294
+            parameters["$github_sha"] = sanitize_str(github_sha)
+            
             print("Executing query:\n{}".format(text_query))
             print("With parameters:")
             for k, v in parameters.items():

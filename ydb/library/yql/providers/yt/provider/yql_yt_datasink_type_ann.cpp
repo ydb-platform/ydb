@@ -385,11 +385,25 @@ private:
     }
 
     TStatus ValidateTableWrite(const TPosition& pos, const TExprNode::TPtr& table, TExprNode::TPtr& content, const TTypeAnnotationNode* itemType,
-        const TVector<TYqlRowSpecInfo::TPtr>& contentRowSpecs, const TString& cluster, const EYtWriteMode mode, const bool initialWrite, const bool monotonicKeys, TExprContext& ctx) const
+        const TVector<TYqlRowSpecInfo::TPtr>& contentRowSpecs, const TString& cluster, const TExprNode& settings, TExprContext& ctx) const
     {
         YQL_ENSURE(itemType);
         if (content && !EnsurePersistableType(content->Pos(), *itemType, ctx)) {
             return TStatus::Error;
+        }
+
+        EYtWriteMode mode = EYtWriteMode::Renew;
+        if (auto modeSetting = NYql::GetSetting(settings, EYtSettingType::Mode)) {
+            mode = FromString<EYtWriteMode>(modeSetting->Child(1)->Content());
+        }
+        const bool initialWrite = NYql::HasSetting(settings, EYtSettingType::Initial);
+        const bool monotonicKeys = NYql::HasSetting(settings, EYtSettingType::MonotonicKeys);
+        TString columnGroups;
+        if (auto setting = NYql::GetSetting(settings, EYtSettingType::ColumnGroups)) {
+            if (!ValidateColumnGroups(*setting, *itemType->Cast<TStructExprType>(), ctx)) {
+                return TStatus::Error;
+            }
+            columnGroups.assign(setting->Tail().Content());
         }
 
         if (!initialWrite && mode != EYtWriteMode::Append) {
@@ -424,6 +438,15 @@ private:
                 << "Insert with "
                 << ToString(EYtSettingType::MonotonicKeys).Quote()
                 << " setting cannot be used with a non-existent table"));
+            return TStatus::Error;
+        }
+
+        if (initialWrite && !replaceMeta && columnGroups != description.ColumnGroupSpec) {
+            ctx.AddError(TIssue(pos, TStringBuilder()
+                << "Insert with "
+                << (outTableInfo.Epoch.GetOrElse(0) ? "different " : "")
+                << ToString(EYtSettingType::ColumnGroups).Quote()
+                << " to existing table is not allowed"));
             return TStatus::Error;
         }
 
@@ -569,13 +592,23 @@ private:
                 }
             }
 
+            if (initialWrite) {
+                nextDescription.ColumnGroupSpec = columnGroups;
+            } else if (columnGroups != nextDescription.ColumnGroupSpec) {
+                ctx.AddError(TIssue(pos, TStringBuilder()
+                    << "All appends within the same commit should have the equal "
+                    << ToString(EYtSettingType::ColumnGroups).Quote()
+                    << " value"));
+                return TStatus::Error;
+            }
+
             YQL_ENSURE(nextDescription.RowSpec);
             if (contentRowSpecs) {
                 size_t from = 0;
                 if (initialWrite) {
                     ++nextDescription.WriteValidateCount;
                     if (nextDescription.IsReplaced) {
-                        nextDescription.RowSpec->CopySortness(*contentRowSpecs.front(), TYqlRowSpecInfo::ECopySort::Exact);
+                        nextDescription.RowSpec->CopySortness(ctx, *contentRowSpecs.front(), TYqlRowSpecInfo::ECopySort::Exact);
                         if (auto contentNativeType = contentRowSpecs.front()->GetNativeYtType()) {
                             nextDescription.RowSpec->CopyTypeOrders(*contentNativeType);
                         }
@@ -583,7 +616,7 @@ private:
                     } else {
                         nextDescription.MonotonicKeys = monotonicKeys;
                         if (description.RowSpec) {
-                            nextDescription.RowSpec->CopySortness(*description.RowSpec, TYqlRowSpecInfo::ECopySort::Exact);
+                            nextDescription.RowSpec->CopySortness(ctx, *description.RowSpec, TYqlRowSpecInfo::ECopySort::Exact);
                             const auto currNativeType = description.RowSpec->GetNativeYtType();
                             if (currNativeType && nextDescription.RowSpec->GetNativeYtType() != currNativeType) {
                                 nextDescription.RowSpec->CopyTypeOrders(*currNativeType);
@@ -611,7 +644,7 @@ private:
 
                 const bool uniqueKeys = nextDescription.RowSpec->UniqueKeys;
                 for (size_t s = from; s < contentRowSpecs.size(); ++s) {
-                    const bool hasSortChanges = nextDescription.RowSpec->MakeCommonSortness(*contentRowSpecs[s]);
+                    const bool hasSortChanges = nextDescription.RowSpec->MakeCommonSortness(ctx, *contentRowSpecs[s]);
                     const bool breaksSorting = hasSortChanges || !nextDescription.RowSpec->CompareSortness(*contentRowSpecs[s], false);
                     if (monotonicKeys) {
                         if (breaksSorting) {
@@ -1441,6 +1474,8 @@ private:
             | EYtSettingType::Expiration
             | EYtSettingType::MonotonicKeys
             | EYtSettingType::MutationId
+            | EYtSettingType::ColumnGroups
+            | EYtSettingType::SecurityTags
             , ctx))
         {
             return TStatus::Error;
@@ -1455,13 +1490,6 @@ private:
             return status.Combine(TStatus::Repeat);
         }
 
-        EYtWriteMode mode = EYtWriteMode::Renew;
-        if (auto modeSetting = NYql::GetSetting(*settings, EYtSettingType::Mode)) {
-            mode = FromString<EYtWriteMode>(modeSetting->Child(1)->Content());
-        }
-        const bool initialWrite = NYql::HasSetting(*settings, EYtSettingType::Initial);
-        const bool monotonicKeys = NYql::HasSetting(*settings, EYtSettingType::MonotonicKeys);
-
         auto writeTable = TYtWriteTable(input);
         auto cluster = writeTable.DataSink().Cluster().StringValue();
 
@@ -1471,7 +1499,7 @@ private:
         }
 
         auto content =  writeTable.Content().Ptr();
-        status = ValidateTableWrite(ctx.GetPosition(input->Pos()), table, content, itemType, {}, cluster, mode, initialWrite, monotonicKeys, ctx);
+        status = ValidateTableWrite(ctx.GetPosition(input->Pos()), table, content, itemType, {}, cluster, *settings, ctx);
         if (TStatus::Error == status.Level) {
             return status;
         }
@@ -1719,6 +1747,8 @@ private:
             | EYtSettingType::Expiration
             | EYtSettingType::MonotonicKeys
             | EYtSettingType::MutationId
+            | EYtSettingType::ColumnGroups
+            | EYtSettingType::SecurityTags
             , ctx))
         {
             return TStatus::Error;
@@ -1727,24 +1757,17 @@ private:
         if (!NYql::HasSetting(*table->Child(TYtTable::idx_Settings), EYtSettingType::Anonymous)
             || !table->Child(TYtTable::idx_Name)->Content().StartsWith("tmp/"))
         {
-            EYtWriteMode mode = EYtWriteMode::Renew;
-            if (auto modeSetting = NYql::GetSetting(*settings, EYtSettingType::Mode)) {
-                mode = FromString<EYtWriteMode>(modeSetting->Child(1)->Content());
-            }
-            const bool initialWrite = NYql::HasSetting(*settings, EYtSettingType::Initial);
-            const bool monotonicKeys = NYql::HasSetting(*settings, EYtSettingType::MonotonicKeys);
-
             auto publish = TYtPublish(input);
 
             TVector<TYqlRowSpecInfo::TPtr> contentRowSpecs;
             for (auto out: publish.Input()) {
                 contentRowSpecs.push_back(MakeIntrusive<TYqlRowSpecInfo>(GetOutTable(out).Cast<TYtOutTable>().RowSpec()));
                 if (IsUnorderedOutput(out)) {
-                    contentRowSpecs.back()->ClearSortness();
+                    contentRowSpecs.back()->ClearSortness(ctx);
                 }
             }
             TExprNode::TPtr content; // Don't try to convert content
-            auto status = ValidateTableWrite(ctx.GetPosition(input->Pos()), table, content, itemType, contentRowSpecs, TString{publish.DataSink().Cluster().Value()}, mode, initialWrite, monotonicKeys, ctx);
+            auto status = ValidateTableWrite(ctx.GetPosition(input->Pos()), table, content, itemType, contentRowSpecs, publish.DataSink().Cluster().StringValue(), *settings, ctx);
             if (TStatus::Ok != status.Level) {
                 return status;
             }

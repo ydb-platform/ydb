@@ -23,6 +23,8 @@ DECLARE_REFCOUNTED_STRUCT(IFairShareActionQueue)
 
 DECLARE_REFCOUNTED_STRUCT(IQuantizedExecutor)
 
+DECLARE_REFCOUNTED_CLASS(TAsyncLooper);
+
 namespace NDetail {
 
 DECLARE_REFCOUNTED_STRUCT(TDelayedExecutorEntry)
@@ -36,6 +38,7 @@ DECLARE_REFCOUNTED_CLASS(TRelativeThroughputThrottlerConfig)
 DECLARE_REFCOUNTED_CLASS(TPrefetchingThrottlerConfig)
 DECLARE_REFCOUNTED_STRUCT(IThroughputThrottler)
 DECLARE_REFCOUNTED_STRUCT(IReconfigurableThroughputThrottler)
+DECLARE_REFCOUNTED_STRUCT(ITestableReconfigurableThroughputThrottler)
 
 DECLARE_REFCOUNTED_STRUCT(IAsyncInputStream)
 DECLARE_REFCOUNTED_STRUCT(IAsyncOutputStream)

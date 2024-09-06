@@ -41,6 +41,7 @@ class Client(ABC):
     database = None
     max_error_message = 0
     apply_server_timezone = False
+    show_clickhouse_errors = True
 
     def __init__(self,
                  database: str,
@@ -48,7 +49,8 @@ class Client(ABC):
                  uri: str,
                  query_retries: int,
                  server_host_name: Optional[str],
-                 apply_server_timezone: Optional[Union[str, bool]]):
+                 apply_server_timezone: Optional[Union[str, bool]],
+                 show_clickhouse_errors: Optional[bool]):
         """
         Shared initialization of ClickHouse Connect client
         :param database: database name
@@ -57,6 +59,8 @@ class Client(ABC):
         """
         self.query_limit = coerce_int(query_limit)
         self.query_retries = coerce_int(query_retries)
+        if show_clickhouse_errors is not None:
+            self.show_clickhouse_errors = coerce_bool(show_clickhouse_errors)
         self.server_host_name = server_host_name
         self.server_tz, dst_safe = pytz.UTC, True
         self.server_version, server_tz = \
@@ -67,12 +71,13 @@ class Client(ABC):
             if apply_server_timezone is None:
                 apply_server_timezone = dst_safe
             self.apply_server_timezone = apply_server_timezone == 'always' or coerce_bool(apply_server_timezone)
+            self.server_tz = server_tz
         except UnknownTimeZoneError:
             logger.warning('Warning, server is using an unrecognized timezone %s, will use UTC default', server_tz)
 
         if not self.apply_server_timezone and not tzutil.local_tz_dst_safe:
             logger.warning('local timezone %s may return unexpected times due to Daylight Savings Time/' +
-                           'Summer Time differences', tzutil.local_tz.tzname())
+                           'Summer Time differences', tzutil.local_tz.tzname(None))
         readonly = 'readonly'
         if not self.min_version('19.17'):
             readonly = common.get_setting('readonly')
@@ -129,7 +134,10 @@ class Client(ABC):
 
     def _prep_query(self, context: QueryContext):
         if context.is_select and not context.has_limit and self.query_limit:
-            return f'{context.final_query}\n LIMIT {self.query_limit}'
+            limit = f'\n LIMIT {self.query_limit}'
+            if isinstance(context.query, bytes):
+                return context.final_query + limit.encode()
+            return context.final_query + limit
         return context.final_query
 
     def _check_tz_change(self, new_tz) -> Optional[tzinfo]:
@@ -382,7 +390,7 @@ class Client(ABC):
                                    streaming=True).df_stream
 
     def create_query_context(self,
-                             query: Optional[str] = None,
+                             query: Optional[Union[str, bytes]] = None,
                              parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
                              settings: Optional[Dict[str, Any]] = None,
                              query_formats: Optional[Dict[str, str]] = None,

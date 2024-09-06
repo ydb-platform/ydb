@@ -4,6 +4,7 @@ SRCS(
     auto_config_initializer.cpp
     config.cpp
     config.h
+    config_helpers.cpp
     config_parser.cpp
     config_parser.h
     driver.h
@@ -17,11 +18,10 @@ SRCS(
     run.h
     service_initializer.cpp
     service_initializer.h
-    cert_auth_props.h
-    cert_auth_props.cpp
 )
 
 PEERDIR(
+    contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core
     contrib/libs/protobuf
     ydb/library/actors/core
     ydb/library/actors/dnsresolver
@@ -70,7 +70,6 @@ PEERDIR(
     ydb/core/graph/shard
     ydb/core/grpc_services
     ydb/core/grpc_services/base
-    ydb/core/grpc_services/auth_processor
     ydb/core/health_check
     ydb/core/http_proxy
     ydb/core/jaeger_tracing
@@ -85,6 +84,7 @@ PEERDIR(
     ydb/core/load_test
     ydb/core/local_pgwire
     ydb/core/log_backend
+    ydb/core/memory_controller
     ydb/core/metering
     ydb/core/mind
     ydb/core/mind/address_classification
@@ -100,8 +100,9 @@ PEERDIR(
     ydb/core/scheme
     ydb/core/scheme_types
     ydb/core/security
-    ydb/core/statistics
+    ydb/core/security/ldap_auth_provider
     ydb/core/statistics/aggregator
+    ydb/core/statistics/service
     ydb/core/sys_view/processor
     ydb/core/sys_view/service
     ydb/core/tablet
@@ -113,6 +114,7 @@ PEERDIR(
     ydb/core/tx/coordinator
     ydb/core/tx/conveyor/service
     ydb/core/tx/limiter/service
+    ydb/core/tx/limiter/grouped_memory/usage
     ydb/core/tx/datashard
     ydb/core/tx/long_tx_service
     ydb/core/tx/long_tx_service/public
@@ -138,6 +140,7 @@ PEERDIR(
     ydb/library/yql/providers/yt/codec/codegen
     ydb/library/yql/providers/yt/comp_nodes/llvm14
     ydb/library/yql/providers/pq/cm_client
+    ydb/library/yql/providers/s3/actors
     ydb/library/yql/public/udf/service/exception_policy
     ydb/public/lib/base
     ydb/public/lib/deprecated/client
@@ -154,8 +157,6 @@ PEERDIR(
     ydb/services/maintenance
     ydb/services/metadata/ds_table
     ydb/services/metadata
-    ydb/services/bg_tasks/ds_table
-    ydb/services/bg_tasks
     ydb/services/ext_index/service
     ydb/services/ext_index/metadata
     ydb/services/monitoring
@@ -164,6 +165,7 @@ PEERDIR(
     ydb/services/persqueue_v1
     ydb/services/rate_limiter
     ydb/services/replication
+    ydb/services/tablet
     ydb/services/ydb
 )
 

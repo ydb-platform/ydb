@@ -286,7 +286,7 @@ public:
     bool IsUniqueKeys() const;
     bool HasRenamedColumns() const;
     bool IsEmpty() const;
-    bool IsCGCompatarorApplicable() const;
+    bool IsCGComparatorApplicable() const;
 
     std::optional<int> GetTtlColumnIndex() const;
 
@@ -327,7 +327,11 @@ public:
     //! but without |$timestamp| column, if any.
     TTableSchemaPtr ToWrite() const;
 
-    //! For sorted tables, return the current schema
+    //! For sorted tables, return the current schema.
+    //! For ordered tables, prepends the current schema with |(tablet_index, sequence_number)| key column.
+    TTableSchemaPtr ToWriteViaQueueProducer() const;
+
+    //! For sorted tables, return the current schema.
     //! For ordered tables, prepends the current schema with |(tablet_index)| key column.
     TTableSchemaPtr WithTabletIndex() const;
 
@@ -422,9 +426,6 @@ DEFINE_REFCOUNTED_TYPE(TTableSchema)
 void FormatValue(TStringBuilderBase* builder, const TTableSchema& schema, TStringBuf spec);
 void FormatValue(TStringBuilderBase* builder, const TTableSchemaPtr& schema, TStringBuf spec);
 
-TString ToString(const TTableSchema& schema);
-TString ToString(const TTableSchemaPtr& schema);
-
 //! Returns serialized NTableClient.NProto.TTableSchemaExt.
 TString SerializeToWireProto(const TTableSchemaPtr& schema);
 
@@ -476,7 +477,22 @@ std::vector<TColumnStableName> MapNamesToStableNames(
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TNestedColumn
+{
+    TStringBuf NestedTableName;
+    bool IsKey;
+    TStringBuf Aggregate;
+};
+
+std::optional<TNestedColumn> TryParseNestedAggregate(TStringBuf description);
+
+EValueType GetNestedColumnElementType(const TLogicalType* logicalType);
+
+////////////////////////////////////////////////////////////////////////////////
+
 void ValidateKeyColumns(const TKeyColumns& keyColumns);
+
+void ValidateDynamicTableKeyColumnCount(int count);
 
 void ValidateColumnName(const TString& name);
 
@@ -484,12 +500,14 @@ void ValidateColumnSchema(
     const TColumnSchema& columnSchema,
     bool isTableSorted = false,
     bool isTableDynamic = false,
-    bool allowUnversionedUpdateColumns = false);
+    bool allowUnversionedUpdateColumns = false,
+    bool allowTimestampColumns = false);
 
 void ValidateTableSchema(
     const TTableSchema& schema,
     bool isTableDynamic = false,
-    bool allowUnversionedUpdateColumns = false);
+    bool allowUnversionedUpdateColumns = false,
+    bool allowTimestampColumns = false);
 
 void ValidateNoDescendingSortOrder(const TTableSchema& schema);
 

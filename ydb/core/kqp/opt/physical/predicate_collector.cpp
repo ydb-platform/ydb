@@ -38,6 +38,12 @@ bool IsSupportedDataType(const TCoDataCtor& node) {
         }
     }
 
+    if constexpr (NKikimr::NSsa::RuntimeVersion >= 5U) {
+        if (node.Maybe<TCoDate32>() ||  node.Maybe<TCoDatetime64>() || node.Maybe<TCoTimestamp64>() || node.Maybe<TCoInterval64>()) {
+            return true;
+        }
+    }
+
     return false;
 }
 
@@ -83,7 +89,16 @@ bool IsMemberColumn(const TExprBase& node, const TExprNode* lambdaArg) {
 }
 
 bool IsGoodTypeForArithmeticPushdown(const TTypeAnnotationNode& type) {
-    return NUdf::EDataTypeFeatures::NumericType & NUdf::GetDataTypeInfo(RemoveOptionality(type).Cast<TDataExprType>()->GetSlot()).Features;
+    const auto fatures = NUdf::GetDataTypeInfo(RemoveOptionality(type).Cast<TDataExprType>()->GetSlot()).Features;
+    return NUdf::EDataTypeFeatures::NumericType & fatures
+        || (NKikimr::NSsa::RuntimeVersion >= 5U && (NUdf::EDataTypeFeatures::BigDateType & fatures) && !(NUdf::EDataTypeFeatures::TzDateType & fatures));
+}
+
+bool IsGoodTypeForComparsionPushdown(const TTypeAnnotationNode& type) {
+    const auto fatures = NUdf::GetDataTypeInfo(RemoveOptionality(type).Cast<TDataExprType>()->GetSlot()).Features;
+    return (NUdf::EDataTypeFeatures::CanCompare  & fatures)
+        && (((NUdf::EDataTypeFeatures::NumericType | NUdf::EDataTypeFeatures::StringType) & fatures) ||
+            (NKikimr::NSsa::RuntimeVersion >= 5U && (NUdf::EDataTypeFeatures::BigDateType & fatures) && !(NUdf::EDataTypeFeatures::TzDateType & fatures)));
 }
 
 [[maybe_unused]]
@@ -128,7 +143,14 @@ bool AbstractTreeCanBePushed(const TExprBase& expr, const TExprNode* ) {
 
 bool CheckExpressionNodeForPushdown(const TExprBase& node, const TExprNode* lambdaArg) {
     if constexpr (NKikimr::NSsa::RuntimeVersion >= 5U) {
-        if (node.Maybe<TCoIf>() || node.Maybe<TCoJust>() || node.Maybe<TCoCoalesce>()) {
+        if (node.Maybe<TCoJust>() || node.Maybe<TCoCoalesce>()) {
+            return true;
+        }
+        // Temporary fix for https://github.com/ydb-platform/ydb/issues/7967
+        else if (auto ifPred = node.Maybe<TCoIf>()) {
+            if (ifPred.ThenValue().Maybe<TCoNothing>() || ifPred.ElseValue().Maybe<TCoNothing>()) {
+                return false;
+            }
             return true;
         }
     }
@@ -190,13 +212,10 @@ bool IsGoodTypesForPushdownCompare(const TTypeAnnotationNode& typeOne, const TTy
             }
             return true;
         }
-        case ETypeAnnotationKind::Data: {
-            const auto fOne = NUdf::GetDataTypeInfo(rawOne.Cast<TDataExprType>()->GetSlot()).Features;
-            const auto fTwo = NUdf::GetDataTypeInfo(rawTwo.Cast<TDataExprType>()->GetSlot()).Features;
-            return ((NUdf::EDataTypeFeatures::NumericType | NUdf::EDataTypeFeatures::StringType) & fOne) && (NUdf::EDataTypeFeatures::CanCompare  & fOne)
-                && ((NUdf::EDataTypeFeatures::NumericType | NUdf::EDataTypeFeatures::StringType) & fTwo) && (NUdf::EDataTypeFeatures::CanCompare  & fTwo);
-        }
-        default: break;
+        case ETypeAnnotationKind::Data:
+            return IsGoodTypeForComparsionPushdown(typeOne) && IsGoodTypeForComparsionPushdown(typeTwo);
+        default:
+            break;
     }
     return false;
 }

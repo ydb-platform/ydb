@@ -234,7 +234,7 @@ public:
     }
 
     void UpdateCpuQuota(double cpuUsage) {
-        TDuration duration = TDuration::MicroSeconds(QueryStats.total_duration_us());
+        TDuration duration = QueryStats.GetTotalDuration();
         if (cpuUsage && duration) {
             Send(NFq::ComputeDatabaseControlPlaneServiceActorId(), new TEvYdbCompute::TEvCpuQuotaAdjust(Params.Scope.ToString(), duration, cpuUsage)); 
         }
@@ -282,7 +282,7 @@ private:
     NYdb::EStatus Status = NYdb::EStatus::SUCCESS;
     NYdb::NQuery::EExecStatus ExecStatus = NYdb::NQuery::EExecStatus::Unspecified;
     NYql::NDqProto::StatusIds::StatusCode StatusCode = NYql::NDqProto::StatusIds::StatusCode::StatusIds_StatusCode_UNSPECIFIED;
-    Ydb::TableStats::QueryStats QueryStats;
+    NYdb::NQuery::TExecStats QueryStats;
     NKikimr::TBackoffTimer BackoffTimer;
     NFq::TStatusCodeByScopeCounters::TPtr FailedStatusCodeCounters;
     FederatedQuery::QueryMeta::ComputeStatus ComputeStatus = FederatedQuery::QueryMeta::RUNNING;

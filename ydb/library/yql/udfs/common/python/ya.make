@@ -6,4 +6,5 @@ RECURSE(
     main_py3
     python3_small
     python_udf
+    system_python
 )

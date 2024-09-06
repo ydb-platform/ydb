@@ -24,37 +24,35 @@ struct TRedirectUrlParameters {
     TStringBuf State;
     TStringBuf Scheme;
     TStringBuf Host;
+    NMvp::EAccessServiceType AccessServiceType;
+    TStringBuf AuthUrlPath;
 };
+
+bool TryAppendAuthEndpointFromDetailsYandexProfile(const TRedirectUrlParameters& parameters, TStringBuilder& locationHeaderValue) {
+    if (parameters.AccessServiceType != NMvp::yandex_v2) {
+        return false;
+    }
+    const auto& eventDetails = parameters.SessionServerCheckDetails;
+    size_t posAuthUrl = eventDetails.find(parameters.AuthUrlPath);
+    if (posAuthUrl != TStringBuf::npos) {
+        size_t pos = eventDetails.rfind("https://", posAuthUrl);
+        locationHeaderValue << eventDetails.substr(pos, posAuthUrl - pos) << parameters.AuthUrlPath;
+        return true;
+    }
+    return false;
+}
 
 TString CreateRedirectUrl(const TRedirectUrlParameters& parameters) {
     TStringBuilder locationHeaderValue;
-    TStringBuf authUrl = "/oauth/authorize";
-    const auto& eventDetails = parameters.SessionServerCheckDetails;
-    size_t posAuthUrl = eventDetails.find(authUrl);
-    if (posAuthUrl != TStringBuf::npos) {
-        size_t pos = eventDetails.rfind("https://", posAuthUrl);
-        locationHeaderValue << eventDetails.substr(pos, posAuthUrl - pos);
-    } else {
-        locationHeaderValue << parameters.OidcSettings.AuthorizationServerAddress;
+    if (!TryAppendAuthEndpointFromDetailsYandexProfile(parameters, locationHeaderValue)) {
+        locationHeaderValue << parameters.OidcSettings.GetAuthEndpointURL();
     }
-    locationHeaderValue << authUrl
-                        << "?response_type=code"
+    locationHeaderValue << "?response_type=code"
                         << "&scope=openid"
                         << "&state=" << parameters.State
-                        << "&client_id=" << parameters.OidcSettings.CLIENT_ID
+                        << "&client_id=" << parameters.OidcSettings.ClientId
                         << "&redirect_uri=" << parameters.Scheme << parameters.Host << parameters.CallbackUrl;
     return locationHeaderValue;
-}
-
-void SetCORS(const NHttp::THttpIncomingRequestPtr& request, NHttp::THeadersBuilder* const headers) {
-    TString origin = TString(NHttp::THeaders(request->Headers)["Origin"]);
-    if (origin.empty()) {
-        origin = "*";
-    }
-    headers->Set("Access-Control-Allow-Origin", origin);
-    headers->Set("Access-Control-Allow-Credentials", "true");
-    headers->Set("Access-Control-Allow-Headers", "Content-Type,Authorization,Origin,Accept");
-    headers->Set("Access-Control-Allow-Methods", "OPTIONS, GET, POST");
 }
 
 NHttp::THttpOutgoingResponsePtr CreateResponseForAjaxRequest(const NHttp::THttpIncomingRequestPtr& request, NHttp::THeadersBuilder& headers, const TString& redirectUrl) {
@@ -74,6 +72,17 @@ TStringBuf GetRequestedUrl(const NHttp::THttpIncomingRequestPtr& request, bool i
 }
 
 } // namespace
+
+void SetCORS(const NHttp::THttpIncomingRequestPtr& request, NHttp::THeadersBuilder* const headers) {
+    TString origin = TString(NHttp::THeaders(request->Headers)["Origin"]);
+    if (origin.empty()) {
+        origin = "*";
+    }
+    headers->Set("Access-Control-Allow-Origin", origin);
+    headers->Set("Access-Control-Allow-Credentials", "true");
+    headers->Set("Access-Control-Allow-Headers", "Content-Type,Authorization,Origin,Accept");
+    headers->Set("Access-Control-Allow-Methods", "OPTIONS, GET, POST");
+}
 
 TString HmacSHA256(TStringBuf key, TStringBuf data) {
     unsigned char hash[SHA256_DIGEST_LENGTH];
@@ -114,7 +123,9 @@ NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(TStringBuf eventDetai
                                                     .CallbackUrl = GetAuthCallbackUrl(),
                                                     .State = state,
                                                     .Scheme = (request->Endpoint->Secure ? "https://" : "http://"),
-                                                    .Host = request->Host});
+                                                    .Host = request->Host,
+                                                    .AccessServiceType = settings.AccessServiceType,
+                                                    .AuthUrlPath = settings.AuthUrlPath});
     const size_t cookieMaxAgeSec = 420;
     TStringBuilder setCookieBuilder;
     setCookieBuilder << CreateNameYdbOidcCookie(settings.ClientSecret, state) << "=" << GenerateCookie(state, GetRequestedUrl(request, isAjaxRequest), settings.ClientSecret, isAjaxRequest)
@@ -149,7 +160,18 @@ TString CreateNameYdbOidcCookie(TStringBuf key, TStringBuf state) {
     return TOpenIdConnectSettings::YDB_OIDC_COOKIE + "_" + HexEncode(HmacSHA256(key, state));
 }
 
+TString CreateNameSessionCookie(TStringBuf key) {
+    return "__Host_" + TOpenIdConnectSettings::SESSION_COOKIE + "_" + HexEncode(key);
+}
+
 const TString& GetAuthCallbackUrl() {
     static const TString callbackUrl = "/auth/callback";
     return callbackUrl;
+}
+
+TString CreateSecureCookie(const TString& key, const TString& value) {
+    TStringBuilder cookieBuilder;
+    cookieBuilder << CreateNameSessionCookie(key) << "=" << Base64Encode(value)
+            << "; Path=/; Secure; HttpOnly; SameSite=None; Partitioned";
+    return cookieBuilder;
 }

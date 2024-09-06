@@ -218,7 +218,6 @@ ENDIF()
 
 SRCS(
     src/algorithm.cpp
-    src/algorithm_old.cpp
     src/any.cpp
     src/atomic.cpp
     src/barrier.cpp

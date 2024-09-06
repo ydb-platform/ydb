@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(69.5.1)
+VERSION(70.3.0)
 
 LICENSE(MIT)
 
@@ -68,7 +68,6 @@ PY_SRCS(
     pkg_resources/_vendor/platformdirs/unix.py
     pkg_resources/_vendor/platformdirs/version.py
     pkg_resources/_vendor/platformdirs/windows.py
-    pkg_resources/_vendor/typing_extensions.py
     pkg_resources/_vendor/zipp.py
     pkg_resources/extern/__init__.py
     setuptools/__init__.py
@@ -81,6 +80,21 @@ PY_SRCS(
     setuptools/_distutils/_macos_compat.py
     setuptools/_distutils/_modified.py
     setuptools/_distutils/_msvccompiler.py
+    setuptools/_distutils/_vendor/__init__.py
+    setuptools/_distutils/_vendor/packaging/__init__.py
+    setuptools/_distutils/_vendor/packaging/_elffile.py
+    setuptools/_distutils/_vendor/packaging/_manylinux.py
+    setuptools/_distutils/_vendor/packaging/_musllinux.py
+    setuptools/_distutils/_vendor/packaging/_parser.py
+    setuptools/_distutils/_vendor/packaging/_structures.py
+    setuptools/_distutils/_vendor/packaging/_tokenizer.py
+    setuptools/_distutils/_vendor/packaging/markers.py
+    setuptools/_distutils/_vendor/packaging/metadata.py
+    setuptools/_distutils/_vendor/packaging/requirements.py
+    setuptools/_distutils/_vendor/packaging/specifiers.py
+    setuptools/_distutils/_vendor/packaging/tags.py
+    setuptools/_distutils/_vendor/packaging/utils.py
+    setuptools/_distutils/_vendor/packaging/version.py
     setuptools/_distutils/archive_util.py
     setuptools/_distutils/bcppcompiler.py
     setuptools/_distutils/ccompiler.py
@@ -109,6 +123,7 @@ PY_SRCS(
     setuptools/_distutils/command/upload.py
     setuptools/_distutils/compat/__init__.py
     setuptools/_distutils/compat/py38.py
+    setuptools/_distutils/compat/py39.py
     setuptools/_distutils/config.py
     setuptools/_distutils/core.py
     setuptools/_distutils/cygwinccompiler.py
@@ -124,8 +139,6 @@ PY_SRCS(
     setuptools/_distutils/log.py
     setuptools/_distutils/msvc9compiler.py
     setuptools/_distutils/msvccompiler.py
-    setuptools/_distutils/py38compat.py
-    setuptools/_distutils/py39compat.py
     setuptools/_distutils/spawn.py
     setuptools/_distutils/sysconfig.py
     setuptools/_distutils/text_file.py
@@ -192,7 +205,11 @@ PY_SRCS(
     setuptools/_vendor/tomli/_parser.py
     setuptools/_vendor/tomli/_re.py
     setuptools/_vendor/tomli/_types.py
-    setuptools/_vendor/typing_extensions.py
+    setuptools/_vendor/wheel/__init__.py
+    setuptools/_vendor/wheel/macosx_libfile.py
+    setuptools/_vendor/wheel/metadata.py
+    setuptools/_vendor/wheel/util.py
+    setuptools/_vendor/wheel/wheelfile.py
     setuptools/_vendor/zipp.py
     setuptools/archive_util.py
     setuptools/build_meta.py
@@ -201,6 +218,7 @@ PY_SRCS(
     setuptools/command/alias.py
     setuptools/command/bdist_egg.py
     setuptools/command/bdist_rpm.py
+    setuptools/command/bdist_wheel.py
     setuptools/command/build.py
     setuptools/command/build_clib.py
     setuptools/command/build_ext.py
@@ -237,7 +255,6 @@ PY_SRCS(
     setuptools/config/expand.py
     setuptools/config/pyprojecttoml.py
     setuptools/config/setupcfg.py
-    setuptools/dep_util.py
     setuptools/depends.py
     setuptools/discovery.py
     setuptools/dist.py
@@ -271,6 +288,7 @@ RESOURCE_FILES(
     pkg_resources/_vendor/more_itertools/py.typed
     pkg_resources/_vendor/packaging/py.typed
     pkg_resources/_vendor/platformdirs/py.typed
+    setuptools/_distutils/_vendor/packaging/py.typed
     setuptools/_vendor/importlib_metadata/py.typed
     setuptools/_vendor/importlib_resources/py.typed
     setuptools/_vendor/jaraco/functools/py.typed

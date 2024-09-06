@@ -3,6 +3,8 @@ items:
   href: fluent-bit.md
 - name: Grafana data source
   href: grafana.md
+- name: Logstash plugins
+  href: logstash.md
 - name: Schema migrations with goose
   href: goose.md
 - name: Schema migrations with Liquibase
@@ -13,3 +15,9 @@ items:
   href: hibernate.md
 - name: Importing from JDBC data sources
   href: import-jdbc.md
+- name: DBeaver
+  href: ide/dbeaver.md
+- name: DataGrip
+  href: ide/datagrip.md
+- name: Spring Data JDBC
+  href: spring-data-jdbc.md

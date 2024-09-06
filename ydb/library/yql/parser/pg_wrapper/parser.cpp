@@ -32,6 +32,7 @@ extern "C" {
 #include "utils/memdebug.h"
 #include "utils/resowner.h"
 #include "utils/timestamp.h"
+#include "utils/guc_hooks.h"
 #include "port/pg_bitutils.h"
 #include "port/pg_crc32c.h"
 #include "postmaster/postmaster.h"
@@ -58,6 +59,8 @@ extern "C" {
 #undef bind
 #undef locale_t
 }
+
+#include "utils.h"
 
 extern "C" {
 
@@ -236,6 +239,7 @@ TString GetCommandName(Node* node) {
 extern "C" void setup_pg_thread_cleanup() {
     struct TThreadCleanup {
         ~TThreadCleanup() {
+            NYql::TExtensionsRegistry::Instance().CleanupThread();
             destroy_timezone_hashtable();
             destroy_typecache_hashtable();
             RE_cleanup_cache();

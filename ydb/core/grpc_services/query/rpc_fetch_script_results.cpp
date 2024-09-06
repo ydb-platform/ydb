@@ -25,7 +25,7 @@ using TEvFetchScriptResultsRequest = TGrpcRequestNoOperationCall<Ydb::Query::Fet
     Ydb::Query::FetchScriptResultsResponse>;
 
 constexpr i64 MAX_ROWS_LIMIT = 1000;
-constexpr i64 MAX_SIZE_LIMIT = 60_MB;
+constexpr i64 MAX_SIZE_LIMIT = 50_MB;
 
 class TFetchScriptResultsRPC : public TRpcRequestActor<TFetchScriptResultsRPC, TEvFetchScriptResultsRequest, false> {
 public:
@@ -71,7 +71,7 @@ public:
             return;
         }
 
-        Register(NKqp::CreateGetScriptExecutionResultActor(SelfId(), DatabaseName, ExecutionId, req->result_set_index(), RowsOffset, req->rows_limit(), req->rows_limit() ? 0 : MAX_SIZE_LIMIT, Request->GetDeadline()));
+        Register(NKqp::CreateGetScriptExecutionResultActor(SelfId(), GetDatabaseName(), ExecutionId, req->result_set_index(), RowsOffset, req->rows_limit(), req->rows_limit() ? 0 : MAX_SIZE_LIMIT, Request->GetDeadline()));
 
         Become(&TFetchScriptResultsRPC::StateFunc);
     }

@@ -155,7 +155,8 @@ public:
         ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections,
         const ::NMonitoring::TDynamicCounterPtr& clientCounters,
         const TString& tenantName,
-        NActors::TMon* monitoring
+        NActors::TMon* monitoring,
+        std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory
         )
         : YqSharedResources(yqSharedResources)
         , CredentialsProviderFactory(credentialsProviderFactory)
@@ -177,6 +178,7 @@ public:
         , InternalServiceId(MakeInternalServiceActorId())
         , Monitoring(monitoring)
         , ComputeConfig(config.GetCompute())
+        , S3ActorsFactory(std::move(s3ActorsFactory))
     {
         Y_ENSURE(GetYqlDefaultModuleResolverWithContext(ModuleResolver));
     }
@@ -441,7 +443,9 @@ private:
             task.operation_id(),
             computeConnection,
             NProtoInterop::CastFromProto(task.result_ttl()),
-            std::map<TString, Ydb::TypedValue>(task.parameters().begin(), task.parameters().end())
+            std::map<TString, Ydb::TypedValue>(task.parameters().begin(), task.parameters().end()),
+            S3ActorsFactory,
+            ComputeConfig.GetWorkloadManagerConfig(task.scope())
             );
 
         auto runActorId =
@@ -518,6 +522,7 @@ private:
     TActorId InternalServiceId;
     NActors::TMon* Monitoring;
     TComputeConfig ComputeConfig;
+    std::shared_ptr<NYql::NDq::IS3ActorsFactory> S3ActorsFactory;
 };
 
 
@@ -536,7 +541,8 @@ NActors::IActor* CreatePendingFetcher(
     ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections,
     const ::NMonitoring::TDynamicCounterPtr& clientCounters,
     const TString& tenantName,
-    NActors::TMon* monitoring)
+    NActors::TMon* monitoring,
+    std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory)
 {
     return new TPendingFetcher(
         yqSharedResources,
@@ -553,7 +559,8 @@ NActors::IActor* CreatePendingFetcher(
         std::move(pqCmConnections),
         clientCounters,
         tenantName,
-        monitoring);
+        monitoring,
+        std::move(s3ActorsFactory));
 }
 
 TActorId MakePendingFetcherId(ui32 nodeId) {

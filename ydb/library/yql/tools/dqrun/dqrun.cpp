@@ -4,6 +4,7 @@
 #include <ydb/library/yql/providers/yt/gateway/native/yql_yt_native.h>
 #include <ydb/library/yql/providers/yt/provider/yql_yt_gateway.h>
 #include <ydb/library/yql/providers/yt/provider/yql_yt_provider.h>
+#include <ydb/library/yql/providers/yt/actors/yql_yt_provider_factories.h>
 #include <ydb/library/yql/providers/yt/comp_nodes/dq/dq_yt_factory.h>
 #include <ydb/library/yql/providers/yt/mkql_dq/yql_yt_dq_transform.h>
 #include <ydb/library/yql/providers/yt/dq_task_preprocessor/yql_yt_dq_task_preprocessor.h>
@@ -37,9 +38,9 @@
 #include <ydb/library/yql/providers/ydb/comp_nodes/yql_ydb_dq_transform.h>
 #include <ydb/library/yql/providers/function/gateway/dq_function_gateway.h>
 #include <ydb/library/yql/providers/function/provider/dq_function_provider.h>
-#include <ydb/library/yql/providers/s3/actors/yql_s3_sink_factory.h>
-#include <ydb/library/yql/providers/s3/actors/yql_s3_source_factory.h>
 #include <ydb/library/yql/providers/s3/provider/yql_s3_provider.h>
+#include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
+#include <ydb/library/yql/providers/solomon/async_io/dq_solomon_read_actor.h>
 #include <ydb/library/yql/providers/solomon/gateway/yql_solomon_gateway.h>
 #include <ydb/library/yql/providers/solomon/provider/yql_solomon_provider.h>
 #include <ydb/library/yql/providers/pg/provider/yql_pg_provider.h>
@@ -58,6 +59,7 @@
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 #include <ydb/library/yql/minikql/mkql_utils.h>
 #include <ydb/library/yql/protos/yql_mount.pb.h>
+#include <ydb/library/yql/protos/pg_ext.pb.h>
 #include <ydb/library/yql/core/file_storage/proto/file_storage.pb.h>
 #include <ydb/library/yql/core/file_storage/http_download/http_download.h>
 #include <ydb/library/yql/core/file_storage/file_storage.h>
@@ -66,11 +68,16 @@
 #include <ydb/library/yql/core/services/yql_out_transformers.h>
 #include <ydb/library/yql/core/url_lister/url_lister_manager.h>
 #include <ydb/library/yql/core/yql_library_compiler.h>
+#include <ydb/library/yql/core/pg_ext/yql_pg_ext.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/parser.h>
 #include <ydb/library/yql/utils/log/tls_backend.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/utils/backtrace/backtrace.h>
 #include <ydb/library/yql/utils/bindings/utils.h>
 #include <ydb/library/yql/core/qplayer/storage/file/yql_qstorage_file.h>
+#include <ydb/library/yql/public/result_format/yql_result_format_response.h>
+#include <ydb/library/yql/public/result_format/yql_result_format_type.h>
+#include <ydb/library/yql/public/result_format/yql_result_format_data.h>
 
 #include <ydb/core/fq/libs/actors/database_resolver.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/db_async_resolver_impl.h>
@@ -128,6 +135,8 @@ struct TRunOptions {
     IOutputStream* ErrStream = &Cerr;
     IOutputStream* TracePlan = &Cerr;
     bool UseMetaFromGraph = false;
+    bool WithFinalIssues = false;
+    bool ValidateResultFormat = false;
 };
 
 class TStoreMappingFunctor: public NLastGetopt::IOptHandler {
@@ -263,20 +272,27 @@ private:
 NDq::IDqAsyncIoFactory::TPtr CreateAsyncIoFactory(
     const NYdb::TDriver& driver,
     IHTTPGateway::TPtr httpGateway,
+    NFile::TYtFileServices::TPtr ytFileServices,
     NYql::NConnector::IClient::TPtr genericClient,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+    NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,
     size_t HTTPmaxTimeSeconds, 
     size_t maxRetriesCount) {
     auto factory = MakeIntrusive<NYql::NDq::TDqAsyncIoFactory>();
     RegisterDqInputTransformLookupActorFactory(*factory);
+    if (ytFileServices) {
+        RegisterYtLookupActorFactory(*factory, ytFileServices, functionRegistry);
+    }
     RegisterDqPqReadActorFactory(*factory, driver, nullptr);
     RegisterYdbReadActorFactory(*factory, driver, nullptr);
-    RegisterS3ReadActorFactory(*factory, nullptr, httpGateway, GetHTTPDefaultRetryPolicy(TDuration::Seconds(HTTPmaxTimeSeconds), maxRetriesCount), {}, nullptr);
-    RegisterS3WriteActorFactory(*factory, nullptr, httpGateway);
+    RegisterDQSolomonReadActorFactory(*factory, nullptr);
     RegisterClickHouseReadActorFactory(*factory, nullptr, httpGateway);
     RegisterGenericProviderFactories(*factory, credentialsFactory, genericClient);
-
     RegisterDqPqWriteActorFactory(*factory, driver, nullptr);
+
+    auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
+    s3ActorsFactory->RegisterS3WriteActorFactory(*factory, nullptr, httpGateway, GetHTTPDefaultRetryPolicy());
+    s3ActorsFactory->RegisterS3ReadActorFactory(*factory, nullptr, httpGateway, GetHTTPDefaultRetryPolicy(TDuration::Seconds(HTTPmaxTimeSeconds), maxRetriesCount));
 
     return factory;
 }
@@ -398,6 +414,9 @@ int RunProgram(TProgramPtr program, const TRunOptions& options, const THashMap<T
         auto config = TOptPipelineConfigurator(program, options.PrintPlan, options.TracePlan);
         status = program->RunWithConfig(options.User, config);
     }
+    if (options.WithFinalIssues) {
+        program->FinalizeIssues();
+    }
     program->PrintErrorsTo(*options.ErrStream);
     if (status == TProgram::TStatus::Error) {
         if (options.TraceOpt) {
@@ -409,13 +428,35 @@ int RunProgram(TProgramPtr program, const TRunOptions& options, const THashMap<T
 
     Cout << "Getting results..." << Endl;
     if (program->HasResults()) {
-        NYson::TYsonWriter yson(options.ResultOut, options.ResultsFormat);
+        TString str;
+        TStringOutput out(str);
+        NYson::TYsonWriter yson(options.ValidateResultFormat ? &out : options.ResultOut, options.ResultsFormat);
         yson.OnBeginList();
         for (const auto& result: program->Results()) {
             yson.OnListItem();
             yson.OnRaw(result);
         }
         yson.OnEndList();
+        if (options.ValidateResultFormat) {
+            if (!str.empty()) {
+                auto node = NYT::NodeFromYsonString(str);
+                for (const auto& r : NResult::ParseResponse(node)) {
+                    for (const auto& write : r.Writes) {
+                        if (write.Type) {
+                            NResult::TEmptyTypeVisitor visitor;
+                            NResult::ParseType(*write.Type, visitor);
+                        }
+
+                        if (write.Type && write.Data) {
+                            NResult::TEmptyDataVisitor visitor;
+                            NResult::ParseData(*write.Type, *write.Data, visitor);
+                        }
+                    }
+                }
+            }
+
+            options.ResultOut->Write(str.Data(), str.Size());
+        }
     }
 
     if (options.LineageStream) {
@@ -469,6 +510,7 @@ int RunMain(int argc, const char* argv[])
     clusterMapping["pg_catalog"] = PgProviderName;
     clusterMapping["information_schema"] = PgProviderName;
 
+    TString pgExtConfig;
     TString mountConfig;
     TString mestricsPusherConfig;
     TString udfResolver;
@@ -499,6 +541,7 @@ int RunMain(int argc, const char* argv[])
     TString opId;
     IQStoragePtr qStorage;
     TQContext qContext;
+    TString ysonAttrs;
 
     NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
     opts.AddLongOption('p', "program", "Program to execute (use '-' to read from stdin)")
@@ -662,6 +705,10 @@ int RunMain(int argc, const char* argv[])
         .Optional()
         .RequiredArgument("ENDPOINT")
         .StoreResult(&tokenAccessorEndpoint);
+    opts.AddLongOption("yson-attrs", "Provide operation yson attribues").StoreResult(&ysonAttrs);
+    opts.AddLongOption("pg-ext", "pg extensions config file").StoreResult(&pgExtConfig);
+    opts.AddLongOption("with-final-issues").NoArgument();
+    opts.AddLongOption("validate-result-format", "Check that result-format can parse Result").NoArgument();
     opts.AddHelpOption('h');
 
     opts.SetFreeArgsNum(0);
@@ -766,6 +813,20 @@ int RunMain(int argc, const char* argv[])
 
     runOptions.User = user;
 
+    NPg::SetSqlLanguageParser(NSQLTranslationPG::CreateSqlLanguageParser());
+    NPg::LoadSystemFunctions(*NSQLTranslationPG::CreateSystemFunctionsParser());
+    if (!pgExtConfig.empty()) {
+        NProto::TPgExtensions config;
+        Y_ABORT_UNLESS(NKikimr::ParsePBFromFile(pgExtConfig, &config));
+        TVector<NPg::TExtensionDesc> extensions;
+        PgExtensionsFromProto(config, extensions);
+        NPg::RegisterExtensions(extensions, false,
+            *NSQLTranslationPG::CreateExtensionSqlParser(),
+            NKikimr::NMiniKQL::CreateExtensionLoader().get());
+    }
+
+    NPg::GetSqlLanguageParser()->Freeze();
+
     TUserDataTable dataTable;
     FillUsedFiles(filesMappingList, dataTable);
     FillUsedUrls(urlMappingList, dataTable);
@@ -814,8 +875,10 @@ int RunMain(int argc, const char* argv[])
         GetPgFactory()
     };
 
+    NFile::TYtFileServices::TPtr ytFileServices;
+
     if (emulateYt) {
-        auto ytFileServices = NFile::TYtFileServices::Make(funcRegistry.Get(), tablesMapping, storage, tmpDir, res.Has("keep-temp"));
+        ytFileServices = NFile::TYtFileServices::Make(funcRegistry.Get(), tablesMapping, storage, tmpDir, res.Has("keep-temp"));
         for (auto& cluster: gatewaysConfig.GetYt().GetClusterMapping()) {
             clusters.emplace(to_lower(cluster.GetName()), TString{YtProviderName});
         }
@@ -899,7 +962,7 @@ int RunMain(int argc, const char* argv[])
         if (!httpGateway) {
             httpGateway = IHTTPGateway::Make(gatewaysConfig.HasHttpGateway() ? &gatewaysConfig.GetHttpGateway() : nullptr);
         }
-        dataProvidersInit.push_back(GetS3DataProviderInitializer(httpGateway, nullptr, true));
+        dataProvidersInit.push_back(GetS3DataProviderInitializer(httpGateway, nullptr, true, nullptr));
     }
 
     if (gatewaysConfig.HasPq()) {
@@ -950,7 +1013,7 @@ int RunMain(int argc, const char* argv[])
 
             bool enableSpilling = res.Has("enable-spilling");
             dqGateway = CreateLocalDqGateway(funcRegistry.Get(), dqCompFactory, dqTaskTransformFactory, dqTaskPreprocessorFactories, enableSpilling,
-                CreateAsyncIoFactory(driver, httpGateway, genericClient, credentialsFactory, requestTimeout, maxRetries), threads,
+                CreateAsyncIoFactory(driver, httpGateway, ytFileServices, genericClient, credentialsFactory, *funcRegistry, requestTimeout, maxRetries), threads,
                 metricsRegistry, metricsPusherFactory);
         }
 
@@ -958,6 +1021,7 @@ int RunMain(int argc, const char* argv[])
     }
 
     TExprContext ctx;
+    ctx.NextUniqueId = NPg::GetSqlLanguageParser()->GetContext().NextUniqueId;
     IModuleResolver::TPtr moduleResolver;
     if (!mountConfig.empty()) {
         TModulesTable modules;
@@ -1057,6 +1121,18 @@ int RunMain(int argc, const char* argv[])
 
     if (runOptions.LineageOnly) {
         runOptions.LineageStream = &Cout;
+    }
+
+    if (ysonAttrs) {
+        program->SetOperationAttrsYson(ysonAttrs);
+    }
+
+    if (res.Has("with-final-issues")) {
+        runOptions.WithFinalIssues = true;
+    }
+
+    if (res.Has("validate-result-format")) {
+        runOptions.ValidateResultFormat = true;
     }
 
     int result = RunProgram(std::move(program), runOptions, clusters, sqlFlags);

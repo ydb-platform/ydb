@@ -1,5 +1,6 @@
 #include "datashard_failpoints.h"
 #include "datashard_impl.h"
+#include "datashard_integrity_trails.h"
 #include "datashard_pipeline.h"
 #include "datashard_write_operation.h"
 #include "execution_unit_ctors.h"
@@ -167,6 +168,10 @@ void TFinishProposeWriteUnit::CompleteRequest(TOperation::TPtr op, const TActorC
                     << " at tablet " << DataShard.TabletID() << " " << res->GetError());
     }
 
+    if (op->IsImmediate() && !op->IsReadOnly()) {
+        NDataIntegrity::LogIntegrityTrailsFinish<NKikimrDataEvents::TEvWriteResult>(ctx, DataShard.TabletID(), op->GetGlobalTxId(), res->GetStatus());
+    }
+
     if (res->IsPrepared()) {
         DataShard.IncCounter(COUNTER_WRITE_SUCCESS_COMPLETE_LATENCY, duration);
     } else {
@@ -187,11 +192,11 @@ void TFinishProposeWriteUnit::CompleteRequest(TOperation::TPtr op, const TActorC
         }
 
         if (op->IsImmediate() && !op->IsReadOnly() && !op->IsAborted() && op->MvccReadWriteVersion) {
-            DataShard.SendImmediateWriteResult(*op->MvccReadWriteVersion, op->GetTarget(), res.release(), op->GetCookie());
+            DataShard.SendImmediateWriteResult(*op->MvccReadWriteVersion, op->GetTarget(), res.release(), op->GetCookie(), {}, op->GetTraceId());
         } else if (op->HasVolatilePrepareFlag() && !op->IsDirty()) {
-            DataShard.SendWithConfirmedReadOnlyLease(op->GetFinishProposeTs(), op->GetTarget(), res.release(), op->GetCookie());
+            DataShard.SendWithConfirmedReadOnlyLease(op->GetFinishProposeTs(), op->GetTarget(), res.release(), op->GetCookie(), {}, op->GetTraceId());
         } else {
-            ctx.Send(op->GetTarget(), res.release(), 0, op->GetCookie());
+            ctx.Send(op->GetTarget(), res.release(), 0, op->GetCookie(), op->GetTraceId());
         }
     }
 }

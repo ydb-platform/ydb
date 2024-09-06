@@ -651,28 +651,30 @@ private:
             auto& res = (*lineage.Fields)[x.first];
             TMaybe<bool> hasStructItems;
             for (const auto& i : inners) {
-                auto f = (*i.Fields).FindPtr(x.first);
-                for (const auto& x : f->Items) {
-                    res.Items.insert(x);
-                }
-
-                if (f->StructItems || f->Items.empty()) {
-                    if (!hasStructItems) {
-                        hasStructItems = true;
+                if (auto f = (*i.Fields).FindPtr(x.first)) {
+                    for (const auto& x : f->Items) {
+                        res.Items.insert(x);
                     }
-                } else {
-                    hasStructItems = false;
+
+                    if (f->StructItems || f->Items.empty()) {
+                        if (!hasStructItems) {
+                            hasStructItems = true;
+                        }
+                    } else {
+                        hasStructItems = false;
+                    }
                 }
             }
 
             if (hasStructItems && *hasStructItems) {
                 res.StructItems.ConstructInPlace();
                 for (const auto& i : inners) {
-                    auto f = (*i.Fields).FindPtr(x.first);
-                    if (f->StructItems) {
-                        for (const auto& si : *f->StructItems) {
-                            for (const auto& x : si.second) {
-                                (*res.StructItems)[si.first].insert(x);
+                    if (auto f = (*i.Fields).FindPtr(x.first)) {
+                        if (f->StructItems) {
+                            for (const auto& si : *f->StructItems) {
+                                for (const auto& x : si.second) {
+                                    (*res.StructItems)[si.first].insert(x);
+                                }
                             }
                         }
                     }

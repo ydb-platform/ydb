@@ -301,9 +301,9 @@ namespace NFwd {
 
             auto& meta = Part->IndexPages.GetBTree(groupId);
             Levels.resize(meta.LevelCount + 1);
-            Levels[0].Queue.push_back({meta.PageId, meta.DataSize});
+            Levels[0].Queue.push_back({meta.GetPageId(), meta.GetDataSize()});
             if (meta.LevelCount) {
-                IndexPageLocator.Add(meta.PageId, GroupId, 0);
+                IndexPageLocator.Add(meta.GetPageId(), GroupId, 0);
             }
         }
 
@@ -371,7 +371,7 @@ namespace NFwd {
             if (levelId + 2 < Levels.size()) { // next level is index
                 NPage::TBtreeIndexNode node(page.Data);
                 for (auto pos : xrange(node.GetChildrenCount())) {
-                    IndexPageLocator.Add(node.GetShortChild(pos).PageId, GroupId, levelId + 1);
+                    IndexPageLocator.Add(node.GetShortChild(pos).GetPageId(), GroupId, levelId + 1);
                 }
             }
             
@@ -433,12 +433,12 @@ namespace NFwd {
                     NPage::TBtreeIndexNode node(page.Data);
                     for (auto pos : xrange(node.GetChildrenCount())) {
                         auto& child = node.GetShortChild(pos);
-                        if (child.RowCount <= BeginRowId) {
+                        if (child.GetRowCount() <= BeginRowId) {
                             continue;
                         }
-                        Y_ABORT_UNLESS(!Levels[levelId + 1].Queue || Levels[levelId + 1].Queue.back().PageId < child.PageId);
-                        Levels[levelId + 1].Queue.push_back({child.PageId, child.DataSize});
-                        if (child.RowCount >= EndRowId) {
+                        Y_ABORT_UNLESS(!Levels[levelId + 1].Queue || Levels[levelId + 1].Queue.back().PageId < child.GetPageId());
+                        Levels[levelId + 1].Queue.push_back({child.GetPageId(), child.GetDataSize()});
+                        if (child.GetRowCount() >= EndRowId) {
                             break;
                         }
                     }

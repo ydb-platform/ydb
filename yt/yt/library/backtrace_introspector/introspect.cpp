@@ -32,7 +32,7 @@ using namespace NBacktrace;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const auto& Logger = BacktraceIntrospectorLogger;
+static constexpr auto& Logger = BacktraceIntrospectorLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -48,7 +48,7 @@ std::vector<TFiberIntrospectionInfo> IntrospectFibers()
 
     auto introspectionAction = [&] (NYT::NConcurrency::TFiber::TFiberList& fibers) {
         for (auto& fiberRef : fibers) {
-            auto* fiber = &fiberRef;
+            auto* fiber = fiberRef.AsFiber();
 
             auto fiberId = fiber->GetFiberId();
             if (fiberId == InvalidFiberId) {
@@ -58,11 +58,12 @@ std::vector<TFiberIntrospectionInfo> IntrospectFibers()
             EmplaceOrCrash(fiberStates, fiberId, EFiberState::Introspecting);
 
             EFiberState state;
-            if (!fiber->TryIntrospectWaiting(state, [&] {
+
+            auto onIntrospectionLockAcquired = [&] {
                 YT_LOG_DEBUG("Waiting fiber is successfully locked for introspection (FiberId: %x)",
                     fiberId);
 
-                const auto& propagatingStorage = fiber->GetPropagatingStorage();
+                const auto& propagatingStorage = *NConcurrency::TryGetPropagatingStorage(*fiber->GetFls());
                 const auto* traceContext = TryGetTraceContextFromPropagatingStorage(propagatingStorage);
 
                 TFiberIntrospectionInfo info{
@@ -91,7 +92,8 @@ std::vector<TFiberIntrospectionInfo> IntrospectFibers()
 
                 YT_LOG_DEBUG("Fiber introspection completed (FiberId: %x)",
                     info.FiberId);
-            })) {
+            };
+            if (!fiber->TryLockForIntrospection(&state, onIntrospectionLockAcquired)) {
                 YT_LOG_DEBUG("Failed to lock fiber for introspection (FiberId: %x, State: %v)",
                     fiberId,
                     state);
@@ -160,7 +162,7 @@ void FormatBacktrace(TStringBuilder* builder, const std::vector<const void*>& ba
     if (!backtrace.empty()) {
         builder->AppendString("Backtrace:\n");
         SymbolizeBacktrace(
-            MakeRange(backtrace),
+            TRange(backtrace),
             [&] (TStringBuf str) {
                 builder->AppendFormat("  %v", str);
             });

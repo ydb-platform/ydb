@@ -2,7 +2,7 @@
 
 #include "common.h"
 
-#include <yt/yt/core/misc/error.h>
+#include <yt/yt/core/misc/stripped_error.h>
 
 #include <util/system/file.h>
 
@@ -101,6 +101,11 @@ struct TCgroupMemoryStat
 };
 
 TCgroupMemoryStat GetCgroupMemoryStat(
+    const TString& cgroupPath,
+    const TString& cgroupMountPoint = "/sys/fs/cgroup");
+
+
+std::optional<i64> GetCgroupAnonymousMemoryLimit(
     const TString& cgroupPath,
     const TString& cgroupMountPoint = "/sys/fs/cgroup");
 

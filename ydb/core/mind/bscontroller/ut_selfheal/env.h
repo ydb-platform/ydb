@@ -5,6 +5,7 @@
 #include "node_warden_mock.h"
 #include "timer_actor.h"
 #include "events.h"
+#include <ydb/core/base/blobstorage_common.h>
 
 struct TEnvironmentSetup {
     std::unique_ptr<TTestActorSystem> Runtime;
@@ -180,7 +181,7 @@ struct TEnvironmentSetup {
 
     void SetupStorage() {
         const TActorId proxyId = MakeBlobStorageProxyID(GroupId);
-        Runtime->RegisterService(proxyId, Runtime->Register(CreateBlobStorageGroupProxyMockActor(GroupId), NodeId));
+        Runtime->RegisterService(proxyId, Runtime->Register(CreateBlobStorageGroupProxyMockActor(TGroupId::FromValue(GroupId)), NodeId));
 
         for (ui32 nodeId : Runtime->GetNodes()) {
             const TActorId wardenId = Runtime->Register(new TNodeWardenMock(nodeId, TabletId), nodeId);

@@ -4,7 +4,7 @@
  *
  * See src/backend/access/brin/README for details.
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -36,6 +36,7 @@
 #include "utils/acl.h"
 #include "utils/builtins.h"
 #include "utils/datum.h"
+#include "utils/guc.h"
 #include "utils/index_selfuncs.h"
 #include "utils/memutils.h"
 #include "utils/rel.h"
@@ -108,6 +109,7 @@ brinhandler(PG_FUNCTION_ARGS)
 	amroutine->amcanparallel = false;
 	amroutine->amcaninclude = false;
 	amroutine->amusemaintenanceworkmem = false;
+	amroutine->amsummarizing = true;
 	amroutine->amparallelvacuumoptions =
 		VACUUM_OPTION_PARALLEL_CLEANUP;
 	amroutine->amkeytype = InvalidOid;
@@ -329,7 +331,7 @@ brinbeginscan(Relation r, int nkeys, int norderbys)
 
 	scan = RelationGetIndexScan(r, nkeys, norderbys);
 
-	opaque = (BrinOpaque *) palloc(sizeof(BrinOpaque));
+	opaque = palloc_object(BrinOpaque);
 	opaque->bo_rmAccess = brinRevmapInitialize(r, &opaque->bo_pagesPerRange,
 											   scan->xs_snapshot);
 	opaque->bo_bdesc = brin_build_desc(r);
@@ -372,7 +374,6 @@ bringetbitmap(IndexScanDesc scan, TIDBitmap *tbm)
 			  **nullkeys;
 	int		   *nkeys,
 			   *nnullkeys;
-	int			keyno;
 	char	   *ptr;
 	Size		len;
 	char	   *tmp PG_USED_FOR_ASSERTS_ONLY;
@@ -395,7 +396,7 @@ bringetbitmap(IndexScanDesc scan, TIDBitmap *tbm)
 	 * don't look them up here; we do that lazily the first time we see a scan
 	 * key reference each of them.  We rely on zeroing fn_oid to InvalidOid.
 	 */
-	consistentFn = palloc0(sizeof(FmgrInfo) * bdesc->bd_tupdesc->natts);
+	consistentFn = palloc0_array(FmgrInfo, bdesc->bd_tupdesc->natts);
 
 	/*
 	 * Make room for per-attribute lists of scan keys that we'll pass to the
@@ -454,7 +455,7 @@ bringetbitmap(IndexScanDesc scan, TIDBitmap *tbm)
 	memset(nnullkeys, 0, sizeof(int) * bdesc->bd_tupdesc->natts);
 
 	/* Preprocess the scan keys - split them into per-attribute arrays. */
-	for (keyno = 0; keyno < scan->numberOfKeys; keyno++)
+	for (int keyno = 0; keyno < scan->numberOfKeys; keyno++)
 	{
 		ScanKey		key = &scan->keyData[keyno];
 		AttrNumber	keyattno = key->sk_attno;
@@ -592,6 +593,17 @@ bringetbitmap(IndexScanDesc scan, TIDBitmap *tbm)
 					bval = &dtup->bt_columns[attno - 1];
 
 					/*
+					 * If the BRIN tuple indicates that this range is empty,
+					 * we can skip it: there's nothing to match.  We don't
+					 * need to examine the next columns.
+					 */
+					if (dtup->bt_empty_range)
+					{
+						addrange = false;
+						break;
+					}
+
+					/*
 					 * First check if there are any IS [NOT] NULL scan keys,
 					 * and if we're violating them. In that case we can
 					 * terminate early, without invoking the support function.
@@ -686,6 +698,13 @@ bringetbitmap(IndexScanDesc scan, TIDBitmap *tbm)
 								break;
 						}
 					}
+
+					/*
+					 * If we found a scan key eliminating the range, no need
+					 * to check additional ones.
+					 */
+					if (!addrange)
+						break;
 				}
 			}
 		}
@@ -829,9 +848,9 @@ brinbuild(Relation heap, Relation index, IndexInfo *indexInfo)
 	 * whole relation will be rolled back.
 	 */
 
-	meta = ReadBuffer(index, P_NEW);
+	meta = ExtendBufferedRel(BMR_REL(index), MAIN_FORKNUM, NULL,
+							 EB_LOCK_FIRST | EB_SKIP_EXTENSION_LOCK);
 	Assert(BufferGetBlockNumber(meta) == BRIN_METAPAGE_BLKNO);
-	LockBuffer(meta, BUFFER_LOCK_EXCLUSIVE);
 
 	brin_metapage_init(BufferGetPage(meta), BrinGetPagesPerRange(index),
 					   BRIN_CURRENT_VERSION);
@@ -882,7 +901,7 @@ brinbuild(Relation heap, Relation index, IndexInfo *indexInfo)
 	/*
 	 * Return statistics
 	 */
-	result = (IndexBuildResult *) palloc(sizeof(IndexBuildResult));
+	result = palloc_object(IndexBuildResult);
 
 	result->heap_tuples = reltuples;
 	result->index_tuples = idxtuples;
@@ -896,9 +915,8 @@ brinbuildempty(Relation index)
 	Buffer		metabuf;
 
 	/* An empty BRIN index has a metapage only. */
-	metabuf =
-		ReadBufferExtended(index, INIT_FORKNUM, P_NEW, RBM_NORMAL, NULL);
-	LockBuffer(metabuf, BUFFER_LOCK_EXCLUSIVE);
+	metabuf = ExtendBufferedRel(BMR_REL(index), INIT_FORKNUM, NULL,
+								EB_LOCK_FIRST | EB_SKIP_EXTENSION_LOCK);
 
 	/* Initialize and xlog metabuffer. */
 	START_CRIT_SECTION();
@@ -926,7 +944,7 @@ brinbulkdelete(IndexVacuumInfo *info, IndexBulkDeleteResult *stats,
 {
 	/* allocate stats if first time through, else re-use existing struct */
 	if (stats == NULL)
-		stats = (IndexBulkDeleteResult *) palloc0(sizeof(IndexBulkDeleteResult));
+		stats = palloc0_object(IndexBulkDeleteResult);
 
 	return stats;
 }
@@ -945,7 +963,7 @@ brinvacuumcleanup(IndexVacuumInfo *info, IndexBulkDeleteResult *stats)
 		return stats;
 
 	if (!stats)
-		stats = (IndexBulkDeleteResult *) palloc0(sizeof(IndexBulkDeleteResult));
+		stats = palloc0_object(IndexBulkDeleteResult);
 	stats->num_pages = RelationGetNumberOfBlocks(info->index);
 	/* rest of stats is initialized by zeroing */
 
@@ -1007,6 +1025,9 @@ brin_summarize_range(PG_FUNCTION_ARGS)
 	Oid			heapoid;
 	Relation	indexRel;
 	Relation	heapRel;
+	Oid			save_userid;
+	int			save_sec_context;
+	int			save_nestlevel;
 	double		numSummarized = 0;
 
 	if (RecoveryInProgress())
@@ -1016,13 +1037,10 @@ brin_summarize_range(PG_FUNCTION_ARGS)
 				 errhint("BRIN control functions cannot be executed during recovery.")));
 
 	if (heapBlk64 > BRIN_ALL_BLOCKRANGES || heapBlk64 < 0)
-	{
-		char	   *blk = psprintf(INT64_FORMAT, heapBlk64);
-
 		ereport(ERROR,
 				(errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),
-				 errmsg("block number out of range: %s", blk)));
-	}
+				 errmsg("block number out of range: %lld",
+						(long long) heapBlk64)));
 	heapBlk = (BlockNumber) heapBlk64;
 
 	/*
@@ -1033,9 +1051,30 @@ brin_summarize_range(PG_FUNCTION_ARGS)
 	 */
 	heapoid = IndexGetRelation(indexoid, true);
 	if (OidIsValid(heapoid))
+	{
 		heapRel = table_open(heapoid, ShareUpdateExclusiveLock);
+
+		/*
+		 * Autovacuum calls us.  For its benefit, switch to the table owner's
+		 * userid, so that any index functions are run as that user.  Also
+		 * lock down security-restricted operations and arrange to make GUC
+		 * variable changes local to this command.  This is harmless, albeit
+		 * unnecessary, when called from SQL, because we fail shortly if the
+		 * user does not own the index.
+		 */
+		GetUserIdAndSecContext(&save_userid, &save_sec_context);
+		SetUserIdAndSecContext(heapRel->rd_rel->relowner,
+							   save_sec_context | SECURITY_RESTRICTED_OPERATION);
+		save_nestlevel = NewGUCNestLevel();
+	}
 	else
+	{
 		heapRel = NULL;
+		/* Set these just to suppress "uninitialized variable" warnings */
+		save_userid = InvalidOid;
+		save_sec_context = -1;
+		save_nestlevel = -1;
+	}
 
 	indexRel = index_open(indexoid, ShareUpdateExclusiveLock);
 
@@ -1048,7 +1087,7 @@ brin_summarize_range(PG_FUNCTION_ARGS)
 						RelationGetRelationName(indexRel))));
 
 	/* User must own the index (comparable to privileges needed for VACUUM) */
-	if (!pg_class_ownercheck(indexoid, GetUserId()))
+	if (heapRel != NULL && !object_ownercheck(RelationRelationId, indexoid, save_userid))
 		aclcheck_error(ACLCHECK_NOT_OWNER, OBJECT_INDEX,
 					   RelationGetRelationName(indexRel));
 
@@ -1063,8 +1102,20 @@ brin_summarize_range(PG_FUNCTION_ARGS)
 				 errmsg("could not open parent table of index \"%s\"",
 						RelationGetRelationName(indexRel))));
 
-	/* OK, do it */
-	brinsummarize(indexRel, heapRel, heapBlk, true, &numSummarized, NULL);
+	/* see gin_clean_pending_list() */
+	if (indexRel->rd_index->indisvalid)
+		brinsummarize(indexRel, heapRel, heapBlk, true, &numSummarized, NULL);
+	else
+		ereport(DEBUG1,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("index \"%s\" is not valid",
+						RelationGetRelationName(indexRel))));
+
+	/* Roll back any GUC changes executed by index functions */
+	AtEOXact_GUC(false, save_nestlevel);
+
+	/* Restore userid and security context */
+	SetUserIdAndSecContext(save_userid, save_sec_context);
 
 	relation_close(indexRel, ShareUpdateExclusiveLock);
 	relation_close(heapRel, ShareUpdateExclusiveLock);
@@ -1093,13 +1144,10 @@ brin_desummarize_range(PG_FUNCTION_ARGS)
 				 errhint("BRIN control functions cannot be executed during recovery.")));
 
 	if (heapBlk64 > MaxBlockNumber || heapBlk64 < 0)
-	{
-		char	   *blk = psprintf(INT64_FORMAT, heapBlk64);
-
 		ereport(ERROR,
 				(errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),
-				 errmsg("block number out of range: %s", blk)));
-	}
+				 errmsg("block number out of range: %lld",
+						(long long) heapBlk64)));
 	heapBlk = (BlockNumber) heapBlk64;
 
 	/*
@@ -1107,6 +1155,9 @@ brin_desummarize_range(PG_FUNCTION_ARGS)
 	 * passed indexoid isn't an index then IndexGetRelation() will fail.
 	 * Rather than emitting a not-very-helpful error message, postpone
 	 * complaining, expecting that the is-it-an-index test below will fail.
+	 *
+	 * Unlike brin_summarize_range(), autovacuum never calls this.  Hence, we
+	 * don't switch userid.
 	 */
 	heapoid = IndexGetRelation(indexoid, true);
 	if (OidIsValid(heapoid))
@@ -1125,7 +1176,7 @@ brin_desummarize_range(PG_FUNCTION_ARGS)
 						RelationGetRelationName(indexRel))));
 
 	/* User must own the index (comparable to privileges needed for VACUUM) */
-	if (!pg_class_ownercheck(indexoid, GetUserId()))
+	if (!object_ownercheck(RelationRelationId, indexoid, GetUserId()))
 		aclcheck_error(ACLCHECK_NOT_OWNER, OBJECT_INDEX,
 					   RelationGetRelationName(indexRel));
 
@@ -1140,12 +1191,21 @@ brin_desummarize_range(PG_FUNCTION_ARGS)
 				 errmsg("could not open parent table of index \"%s\"",
 						RelationGetRelationName(indexRel))));
 
-	/* the revmap does the hard work */
-	do
+	/* see gin_clean_pending_list() */
+	if (indexRel->rd_index->indisvalid)
 	{
-		done = brinRevmapDesummarizeRange(indexRel, heapBlk);
+		/* the revmap does the hard work */
+		do
+		{
+			done = brinRevmapDesummarizeRange(indexRel, heapBlk);
+		}
+		while (!done);
 	}
-	while (!done);
+	else
+		ereport(DEBUG1,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("index \"%s\" is not valid",
+						RelationGetRelationName(indexRel))));
 
 	relation_close(indexRel, ShareUpdateExclusiveLock);
 	relation_close(heapRel, ShareUpdateExclusiveLock);
@@ -1178,7 +1238,7 @@ brin_build_desc(Relation rel)
 	 * Obtain BrinOpcInfo for each indexed column.  While at it, accumulate
 	 * the number of columns stored, since the number is opclass-defined.
 	 */
-	opcinfo = (BrinOpcInfo **) palloc(sizeof(BrinOpcInfo *) * tupdesc->natts);
+	opcinfo = palloc_array(BrinOpcInfo *, tupdesc->natts);
 	for (keyno = 0; keyno < tupdesc->natts; keyno++)
 	{
 		FmgrInfo   *opcInfoFn;
@@ -1250,7 +1310,7 @@ initialize_brin_buildstate(Relation idxRel, BrinRevmap *revmap,
 {
 	BrinBuildState *state;
 
-	state = palloc(sizeof(BrinBuildState));
+	state = palloc_object(BrinBuildState);
 
 	state->bs_irel = idxRel;
 	state->bs_numtuples = 0;
@@ -1260,8 +1320,6 @@ initialize_brin_buildstate(Relation idxRel, BrinRevmap *revmap,
 	state->bs_rmAccess = revmap;
 	state->bs_bdesc = brin_build_desc(idxRel);
 	state->bs_dtuple = brin_new_memtuple(state->bs_bdesc);
-
-	brin_memtuple_initialize(state->bs_dtuple, state->bs_bdesc);
 
 	return state;
 }
@@ -1574,6 +1632,64 @@ union_tuples(BrinDesc *bdesc, BrinMemTuple *a, BrinTuple *b)
 	db = brin_deform_tuple(bdesc, b, NULL);
 	MemoryContextSwitchTo(oldcxt);
 
+	/*
+	 * Check if the ranges are empty.
+	 *
+	 * If at least one of them is empty, we don't need to call per-key union
+	 * functions at all. If "b" is empty, we just use "a" as the result (it
+	 * might be empty fine, but that's fine). If "a" is empty but "b" is not,
+	 * we use "b" as the result (but we have to copy the data into "a" first).
+	 *
+	 * Only when both ranges are non-empty, we actually do the per-key merge.
+	 */
+
+	/* If "b" is empty - ignore it and just use "a" (even if it's empty etc.). */
+	if (db->bt_empty_range)
+	{
+		/* skip the per-key merge */
+		MemoryContextDelete(cxt);
+		return;
+	}
+
+	/*
+	 * Now we know "b" is not empty. If "a" is empty, then "b" is the result.
+	 * But we need to copy the data from "b" to "a" first, because that's how
+	 * we pass result out.
+	 *
+	 * We have to copy all the global/per-key flags etc. too.
+	 */
+	if (a->bt_empty_range)
+	{
+		for (keyno = 0; keyno < bdesc->bd_tupdesc->natts; keyno++)
+		{
+			int			i;
+			BrinValues *col_a = &a->bt_columns[keyno];
+			BrinValues *col_b = &db->bt_columns[keyno];
+			BrinOpcInfo *opcinfo = bdesc->bd_info[keyno];
+
+			col_a->bv_allnulls = col_b->bv_allnulls;
+			col_a->bv_hasnulls = col_b->bv_hasnulls;
+
+			/* If "b" has no data, we're done. */
+			if (col_b->bv_allnulls)
+				continue;
+
+			for (i = 0; i < opcinfo->oi_nstored; i++)
+				col_a->bv_values[i] =
+					datumCopy(col_b->bv_values[i],
+							  opcinfo->oi_typcache[i]->typbyval,
+							  opcinfo->oi_typcache[i]->typlen);
+		}
+
+		/* "a" started empty, but "b" was not empty, so remember that */
+		a->bt_empty_range = false;
+
+		/* skip the per-key merge */
+		MemoryContextDelete(cxt);
+		return;
+	}
+
+	/* Now we know neither range is empty. */
 	for (keyno = 0; keyno < bdesc->bd_tupdesc->natts; keyno++)
 	{
 		FmgrInfo   *unionFn;
@@ -1583,8 +1699,11 @@ union_tuples(BrinDesc *bdesc, BrinMemTuple *a, BrinTuple *b)
 
 		if (opcinfo->oi_regular_nulls)
 		{
+			/* Does the "b" summary represent any NULL values? */
+			bool		b_has_nulls = (col_b->bv_hasnulls || col_b->bv_allnulls);
+
 			/* Adjust "hasnulls". */
-			if (!col_a->bv_hasnulls && col_b->bv_hasnulls)
+			if (!col_a->bv_allnulls && b_has_nulls)
 				col_a->bv_hasnulls = true;
 
 			/* If there are no values in B, there's nothing left to do. */
@@ -1596,12 +1715,17 @@ union_tuples(BrinDesc *bdesc, BrinMemTuple *a, BrinTuple *b)
 			 * values from B into A, and we're done.  We cannot run the
 			 * operators in this case, because values in A might contain
 			 * garbage.  Note we already established that B contains values.
+			 *
+			 * Also adjust "hasnulls" in order not to forget the summary
+			 * represents NULL values. This is not redundant with the earlier
+			 * update, because that only happens when allnulls=false.
 			 */
 			if (col_a->bv_allnulls)
 			{
 				int			i;
 
 				col_a->bv_allnulls = false;
+				col_a->bv_hasnulls = true;
 
 				for (i = 0; i < opcinfo->oi_nstored; i++)
 					col_a->bv_values[i] =
@@ -1671,7 +1795,9 @@ add_values_to_range(Relation idxRel, BrinDesc *bdesc, BrinMemTuple *dtup,
 					Datum *values, bool *nulls)
 {
 	int			keyno;
-	bool		modified = false;
+
+	/* If the range starts empty, we're certainly going to modify it. */
+	bool		modified = dtup->bt_empty_range;
 
 	/*
 	 * Compare the key values of the new tuple to the stored index values; our
@@ -1685,9 +1811,24 @@ add_values_to_range(Relation idxRel, BrinDesc *bdesc, BrinMemTuple *dtup,
 		Datum		result;
 		BrinValues *bval;
 		FmgrInfo   *addValue;
+		bool		has_nulls;
 
 		bval = &dtup->bt_columns[keyno];
 
+		/*
+		 * Does the range have actual NULL values? Either of the flags can be
+		 * set, but we ignore the state before adding first row.
+		 *
+		 * We have to remember this, because we'll modify the flags and we
+		 * need to know if the range started as empty.
+		 */
+		has_nulls = ((!dtup->bt_empty_range) &&
+					 (bval->bv_hasnulls || bval->bv_allnulls));
+
+		/*
+		 * If the value we're adding is NULL, handle it locally. Otherwise
+		 * call the BRIN_PROCNUM_ADDVALUE procedure.
+		 */
 		if (bdesc->bd_info[keyno]->oi_regular_nulls && nulls[keyno])
 		{
 			/*
@@ -1713,7 +1854,32 @@ add_values_to_range(Relation idxRel, BrinDesc *bdesc, BrinMemTuple *dtup,
 								   nulls[keyno]);
 		/* if that returned true, we need to insert the updated tuple */
 		modified |= DatumGetBool(result);
+
+		/*
+		 * If the range was had actual NULL values (i.e. did not start empty),
+		 * make sure we don't forget about the NULL values. Either the
+		 * allnulls flag is still set to true, or (if the opclass cleared it)
+		 * we need to set hasnulls=true.
+		 *
+		 * XXX This can only happen when the opclass modified the tuple, so
+		 * the modified flag should be set.
+		 */
+		if (has_nulls && !(bval->bv_hasnulls || bval->bv_allnulls))
+		{
+			Assert(modified);
+			bval->bv_hasnulls = true;
+		}
 	}
+
+	/*
+	 * After updating summaries for all the keys, mark it as not empty.
+	 *
+	 * If we're actually changing the flag value (i.e. tuple started as
+	 * empty), we should have modified the tuple. So we should not see empty
+	 * range that was not modified.
+	 */
+	Assert(!dtup->bt_empty_range || modified);
+	dtup->bt_empty_range = false;
 
 	return modified;
 }

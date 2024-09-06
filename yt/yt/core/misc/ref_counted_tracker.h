@@ -1,12 +1,12 @@
 #pragma once
 
 #include "public.h"
-#include "source_location.h"
 #include "singleton.h"
 
 #include <library/cpp/yt/threading/fork_aware_spin_lock.h>
 
 #include <library/cpp/yt/misc/tls.h>
+#include <library/cpp/yt/misc/source_location.h>
 
 namespace NYT {
 

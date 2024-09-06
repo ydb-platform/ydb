@@ -192,7 +192,7 @@ class ReaderReconnector:
                 if self._stream_reader is not None:
                     # noinspection PyBroadException
                     try:
-                        await self._stream_reader.close()
+                        await self._stream_reader.close(flush=False)
                     except BaseException:
                         # supress any error on close stream reader
                         pass

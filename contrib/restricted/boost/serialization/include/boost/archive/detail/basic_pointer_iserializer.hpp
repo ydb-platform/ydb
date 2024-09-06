@@ -7,7 +7,7 @@
 #endif
 
 /////////1/////////2/////////3/////////4/////////5/////////6/////////7/////////8
-// basic_pointer_oserializer.hpp: extenstion of type_info required for
+// basic_pointer_oserializer.hpp: extension of type_info required for
 // serialization.
 
 // (C) Copyright 2002 Robert Ramey - http://www.rrsd.com .

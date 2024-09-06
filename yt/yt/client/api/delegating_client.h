@@ -96,13 +96,13 @@ public:
         const TPullQueueOptions& options),
         (queuePath, offset, partitionIndex, rowBatchReadOptions, options))
 
-    DELEGATE_METHOD(TFuture<NQueueClient::IQueueRowsetPtr>, PullConsumer, (
+    DELEGATE_METHOD(TFuture<NQueueClient::IQueueRowsetPtr>, PullQueueConsumer, (
         const NYPath::TRichYPath& consumerPath,
         const NYPath::TRichYPath& queuePath,
         std::optional<i64> offset,
         int partitionIndex,
         const NQueueClient::TQueueRowBatchReadOptions& rowBatchReadOptions,
-        const TPullConsumerOptions& options),
+        const TPullQueueConsumerOptions& options),
         (consumerPath, queuePath, offset, partitionIndex, rowBatchReadOptions, options))
 
     DELEGATE_METHOD(TFuture<void>, RegisterQueueConsumer, (
@@ -123,6 +123,20 @@ public:
         const std::optional<NYPath::TRichYPath>& consumerPath,
         const TListQueueConsumerRegistrationsOptions& options),
         (queuePath, consumerPath, options))
+
+    DELEGATE_METHOD(TFuture<TCreateQueueProducerSessionResult>, CreateQueueProducerSession, (
+        const NYPath::TRichYPath& producerPath,
+        const NYPath::TRichYPath& queuePath,
+        const NQueueClient::TQueueProducerSessionId& sessionId,
+        const TCreateQueueProducerSessionOptions& options),
+        (producerPath, queuePath, sessionId, options))
+
+    DELEGATE_METHOD(TFuture<void>, RemoveQueueProducerSession, (
+        const NYPath::TRichYPath& producerPath,
+        const NYPath::TRichYPath& queuePath,
+        const NQueueClient::TQueueProducerSessionId& sessionId,
+        const TRemoveQueueProducerSessionOptions& options),
+        (producerPath, queuePath, sessionId, options))
 
     // Cypress
     DELEGATE_METHOD(TFuture<NYson::TYsonString>, GetNode, (
@@ -409,14 +423,14 @@ public:
         (group, member, options))
 
     DELEGATE_METHOD(TFuture<TCheckPermissionResponse>, CheckPermission, (
-        const TString& user,
+        const std::string& user,
         const NYPath::TYPath& path,
         NYTree::EPermission permission,
         const TCheckPermissionOptions& options),
         (user, path, permission, options))
 
     DELEGATE_METHOD(TFuture<TCheckPermissionByAclResult>, CheckPermissionByAcl, (
-        const std::optional<TString>& user,
+        const std::optional<std::string>& user,
         NYTree::EPermission permission,
         NYTree::INodePtr acl,
         const TCheckPermissionByAclOptions& options),
@@ -496,7 +510,7 @@ public:
         const TGetJobSpecOptions& options),
         (jobId, options))
 
-    DELEGATE_METHOD(TFuture<TSharedRef>, GetJobStderr, (
+    DELEGATE_METHOD(TFuture<TGetJobStderrResponse>, GetJobStderr, (
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
         NJobTrackerClient::TJobId jobId,
         const TGetJobStderrOptions& options),
@@ -540,6 +554,13 @@ public:
         const TAbortJobOptions& options),
         (jobId, options))
 
+    DELEGATE_METHOD(TFuture<void>, DumpJobProxyLog, (
+        NJobTrackerClient::TJobId jobId,
+        NJobTrackerClient::TOperationId operationId,
+        const NYPath::TYPath& path,
+        const TDumpJobProxyLogOptions& options),
+        (jobId, operationId, path, options))
+
     // Metadata
     DELEGATE_METHOD(TFuture<TClusterMeta>, GetClusterMeta, (
         const TGetClusterMetaOptions& options),
@@ -578,7 +599,7 @@ public:
 
     DELEGATE_METHOD(TFuture<void>, SwitchLeader, (
         NHydra::TCellId cellId,
-        const TString& newLeaderAddress,
+        const std::string& newLeaderAddress,
         const TSwitchLeaderOptions& options),
         (cellId, newLeaderAddress, options))
 
@@ -592,17 +613,17 @@ public:
         (options))
 
     DELEGATE_METHOD(TFuture<void>, KillProcess, (
-        const TString& address,
+        const std::string& address,
         const TKillProcessOptions& options),
         (address, options))
 
     DELEGATE_METHOD(TFuture<TString>, WriteCoreDump, (
-        const TString& address,
+        const std::string& address,
         const TWriteCoreDumpOptions& options),
         (address, options))
 
     DELEGATE_METHOD(TFuture<TGuid>, WriteLogBarrier, (
-        const TString& address,
+        const std::string& address,
         const TWriteLogBarrierOptions& options),
         (address, options))
 
@@ -612,7 +633,7 @@ public:
         (operationId, options))
 
     DELEGATE_METHOD(TFuture<void>, HealExecNode, (
-        const TString& address,
+        const std::string& address,
         const THealExecNodeOptions& options),
         (address, options))
 
@@ -653,7 +674,7 @@ public:
 
     DELEGATE_METHOD(TFuture<TMaintenanceIdPerTarget>, AddMaintenance, (
         EMaintenanceComponent component,
-        const TString& address,
+        const std::string& address,
         EMaintenanceType type,
         const TString& comment,
         const TAddMaintenanceOptions& options),
@@ -661,57 +682,57 @@ public:
 
     DELEGATE_METHOD(TFuture<TMaintenanceCountsPerTarget>, RemoveMaintenance, (
         EMaintenanceComponent component,
-        const TString& address,
+        const std::string& address,
         const TMaintenanceFilter& filter,
         const TRemoveMaintenanceOptions& options),
         (component, address, filter, options))
 
     DELEGATE_METHOD(TFuture<TDisableChunkLocationsResult>, DisableChunkLocations, (
-        const TString& nodeAddress,
+        const std::string& nodeAddress,
         const std::vector<TGuid>& locationUuids,
         const TDisableChunkLocationsOptions& options),
         (nodeAddress, locationUuids, options))
 
     DELEGATE_METHOD(TFuture<TDestroyChunkLocationsResult>, DestroyChunkLocations, (
-        const TString& nodeAddress,
+        const std::string& nodeAddress,
         bool recoverUnlinkedDisks,
         const std::vector<TGuid>& locationUuids,
         const TDestroyChunkLocationsOptions& options),
         (nodeAddress, recoverUnlinkedDisks, locationUuids, options))
 
     DELEGATE_METHOD(TFuture<TResurrectChunkLocationsResult>, ResurrectChunkLocations, (
-        const TString& nodeAddress,
+        const std::string& nodeAddress,
         const std::vector<TGuid>& locationUuids,
         const TResurrectChunkLocationsOptions& options),
         (nodeAddress, locationUuids, options))
 
     DELEGATE_METHOD(TFuture<TRequestRestartResult>, RequestRestart, (
-        const TString& nodeAddress,
+        const std::string& nodeAddress,
         const TRequestRestartOptions& options),
         (nodeAddress, options))
 
     DELEGATE_METHOD(TFuture<void>, SetUserPassword, (
-        const TString& user,
+        const std::string& user,
         const TString& currentPasswordSha256,
         const TString& newPasswordSha256,
         const TSetUserPasswordOptions& options),
         (user, currentPasswordSha256, newPasswordSha256, options))
 
     DELEGATE_METHOD(TFuture<TIssueTokenResult>, IssueToken, (
-        const TString& user,
+        const std::string& user,
         const TString& passwordSha256,
         const TIssueTokenOptions& options),
         (user, passwordSha256, options))
 
     DELEGATE_METHOD(TFuture<void>, RevokeToken, (
-        const TString& user,
+        const std::string& user,
         const TString& passwordSha256,
         const TString& tokenSha256,
         const TRevokeTokenOptions& options),
         (user, passwordSha256, tokenSha256, options))
 
     DELEGATE_METHOD(TFuture<TListUserTokensResult>, ListUserTokens, (
-        const TString& user,
+        const std::string& user,
         const TString& passwordSha256,
         const TListUserTokensOptions& options),
         (user, passwordSha256, options))
@@ -808,10 +829,32 @@ public:
         const TPausePipelineOptions& options),
         (pipelinePath, options))
 
-    DELEGATE_METHOD(TFuture<TPipelineStatus>, GetPipelineStatus, (
+    DELEGATE_METHOD(TFuture<TPipelineState>, GetPipelineState, (
         const NYPath::TYPath& pipelinePath,
-        const TGetPipelineStatusOptions& options),
+        const TGetPipelineStateOptions& options),
         (pipelinePath, options))
+
+    DELEGATE_METHOD(TFuture<TGetFlowViewResult>, GetFlowView, (
+        const NYPath::TYPath& pipelinePath,
+        const NYPath::TYPath& viewPath,
+        const TGetFlowViewOptions& options),
+        (pipelinePath, viewPath, options))
+
+    // Distributed client
+    DELEGATE_METHOD(TFuture<TDistributedWriteSessionPtr>, StartDistributedWriteSession, (
+        const NYPath::TRichYPath& path,
+        const TDistributedWriteSessionStartOptions& options),
+        (path, options))
+
+    DELEGATE_METHOD(TFuture<void>, FinishDistributedWriteSession, (
+        TDistributedWriteSessionPtr session,
+        const TDistributedWriteSessionFinishOptions& options),
+        (std::move(session), options))
+
+    DELEGATE_METHOD(TFuture<ITableWriterPtr>, CreateParticipantTableWriter, (
+        const TDistributedWriteCookiePtr& cookie,
+        const TParticipantTableWriterOptions& options),
+        (cookie, options))
 
     #undef DELEGATE_METHOD
 

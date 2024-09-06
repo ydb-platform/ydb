@@ -19,12 +19,12 @@ def select_positive(
     if test_case.select_where is not None:
         where_statement = "WHERE " + test_case.select_where.render(
             cluster_name=settings.ydb.cluster_name,
-            table_name=test_case.qualified_table_name,
+            table_name=test_case.table_name,
         )
     yql_script = f"""
         {test_case.pragmas_sql_string}
         SELECT {test_case.select_what.yql_select_names}
-        FROM {settings.ydb.cluster_name}.{test_case.qualified_table_name}
+        FROM {settings.ydb.cluster_name}.{test_case.table_name}
         {where_statement}
     """
     result = runner.run(
@@ -46,7 +46,7 @@ def select_missing_table(
 ):
     yql_script = f"""
         SELECT *
-        FROM {settings.ydb.cluster_name}.{test_case.qualified_table_name}
+        FROM {settings.ydb.cluster_name}.{test_case.table_name}
     """
     result = runner.run(
         test_name=test_name,

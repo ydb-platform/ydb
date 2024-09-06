@@ -120,11 +120,13 @@ class DescriptorPool(object):
 
   if _USE_C_DESCRIPTORS:
 
-    def __new__(cls, descriptor_db=None):
-      # pylint: disable=protected-access
-      return descriptor._message.DescriptorPool(descriptor_db)
+   def __new__(cls, descriptor_db=None):
+     # pylint: disable=protected-access
+     return descriptor._message.DescriptorPool(descriptor_db)
 
-  def __init__(self, descriptor_db=None):
+  def __init__(
+      self, descriptor_db=None, use_deprecated_legacy_json_field_conflicts=False
+  ):
     """Initializes a Pool of proto buffs.
 
     The descriptor_db argument to the constructor is provided to allow
@@ -135,6 +137,8 @@ class DescriptorPool(object):
 
     Args:
       descriptor_db: A secondary source of file descriptors.
+      use_deprecated_legacy_json_field_conflicts: Unused, for compatibility with
+        C++.
     """
 
     self._internal_db = descriptor_database.DescriptorDatabase()
@@ -144,9 +148,6 @@ class DescriptorPool(object):
     self._service_descriptors = {}
     self._file_descriptors = {}
     self._toplevel_extensions = {}
-    # TODO(jieluo): Remove _file_desc_by_toplevel_extension after
-    # maybe year 2020 for compatibility issue (with 3.4.1 only).
-    self._file_desc_by_toplevel_extension = {}
     self._top_enum_values = {}
     # We store extensions in two two-level mappings: The first key is the
     # descriptor of the message being extended, the second key is the extension
@@ -207,15 +208,20 @@ class DescriptorPool(object):
     Args:
       serialized_file_desc_proto (bytes): A bytes string, serialization of the
         :class:`FileDescriptorProto` to add.
+
+    Returns:
+      FileDescriptor: Descriptor for the added file.
     """
 
     # pylint: disable=g-import-not-at-top
     from google.protobuf import descriptor_pb2
     file_desc_proto = descriptor_pb2.FileDescriptorProto.FromString(
         serialized_file_desc_proto)
-    self.Add(file_desc_proto)
+    file_desc = self._ConvertFileProtoToFileDescriptor(file_desc_proto)
+    file_desc.serialized_pb = serialized_file_desc_proto
+    return file_desc
 
-  # Add Descriptor to descriptor pool is dreprecated. Please use Add()
+  # Add Descriptor to descriptor pool is deprecated. Please use Add()
   # or AddSerializedFile() to add a FileDescriptorProto instead.
   @_Deprecated
   def AddDescriptor(self, desc):
@@ -240,7 +246,7 @@ class DescriptorPool(object):
     self._descriptors[desc.full_name] = desc
     self._AddFileDescriptor(desc.file)
 
-  # Add EnumDescriptor to descriptor pool is dreprecated. Please use Add()
+  # Add EnumDescriptor to descriptor pool is deprecated. Please use Add()
   # or AddSerializedFile() to add a FileDescriptorProto instead.
   @_Deprecated
   def AddEnumDescriptor(self, enum_desc):
@@ -281,7 +287,7 @@ class DescriptorPool(object):
         self._top_enum_values[full_name] = enum_value
     self._AddFileDescriptor(enum_desc.file)
 
-  # Add ServiceDescriptor to descriptor pool is dreprecated. Please use Add()
+  # Add ServiceDescriptor to descriptor pool is deprecated. Please use Add()
   # or AddSerializedFile() to add a FileDescriptorProto instead.
   @_Deprecated
   def AddServiceDescriptor(self, service_desc):
@@ -302,7 +308,7 @@ class DescriptorPool(object):
                                 service_desc.file.name)
     self._service_descriptors[service_desc.full_name] = service_desc
 
-  # Add ExtensionDescriptor to descriptor pool is dreprecated. Please use Add()
+  # Add ExtensionDescriptor to descriptor pool is deprecated. Please use Add()
   # or AddSerializedFile() to add a FileDescriptorProto instead.
   @_Deprecated
   def AddExtensionDescriptor(self, extension):
@@ -326,6 +332,8 @@ class DescriptorPool(object):
       raise TypeError('Expected an extension descriptor.')
 
     if extension.extension_scope is None:
+      self._CheckConflictRegister(
+          extension, extension.full_name, extension.file.name)
       self._toplevel_extensions[extension.full_name] = extension
 
     try:
@@ -367,12 +375,6 @@ class DescriptorPool(object):
     """
 
     self._AddFileDescriptor(file_desc)
-    # TODO(jieluo): This is a temporary solution for FieldDescriptor.file.
-    # FieldDescriptor.file is added in code gen. Remove this solution after
-    # maybe 2020 for compatibility reason (with 3.4.1 only).
-    for extension in file_desc.extensions_by_name.values():
-      self._file_desc_by_toplevel_extension[
-          extension.full_name] = file_desc
 
   def _AddFileDescriptor(self, file_desc):
     """Adds a FileDescriptor to the pool, non-recursively.
@@ -478,7 +480,7 @@ class DescriptorPool(object):
       pass
 
     try:
-      return self._file_desc_by_toplevel_extension[symbol]
+      return self._toplevel_extensions[symbol].file
     except KeyError:
       pass
 
@@ -787,8 +789,6 @@ class DescriptorPool(object):
                            file_descriptor.package, scope)
         file_descriptor.extensions_by_name[extension_desc.name] = (
             extension_desc)
-        self._file_desc_by_toplevel_extension[extension_desc.full_name] = (
-            file_descriptor)
 
       for desc_proto in file_proto.message_type:
         self._SetAllFieldTypes(file_proto.package, desc_proto, scope)
@@ -808,7 +808,6 @@ class DescriptorPool(object):
             self._MakeServiceDescriptor(service_proto, index, scope,
                                         file_proto.package, file_descriptor))
 
-      self.Add(file_proto)
       self._file_descriptors[file_proto.name] = file_descriptor
 
     # Add extensions to the pool
@@ -865,11 +864,17 @@ class DescriptorPool(object):
         for index, extension in enumerate(desc_proto.extension)]
     oneofs = [
         # pylint: disable=g-complex-comprehension
-        descriptor.OneofDescriptor(desc.name, '.'.join((desc_name, desc.name)),
-                                   index, None, [], desc.options,
-                                   # pylint: disable=protected-access
-                                   create_key=descriptor._internal_create_key)
-        for index, desc in enumerate(desc_proto.oneof_decl)]
+        descriptor.OneofDescriptor(
+            desc.name,
+            '.'.join((desc_name, desc.name)),
+            index,
+            None,
+            [],
+            _OptionsOrNone(desc),
+            # pylint: disable=protected-access
+            create_key=descriptor._internal_create_key)
+        for index, desc in enumerate(desc_proto.oneof_decl)
+    ]
     extension_ranges = [(r.start, r.end) for r in desc_proto.extension_range]
     if extension_ranges:
       is_extendable = True
@@ -987,6 +992,11 @@ class DescriptorPool(object):
     else:
       full_name = field_proto.name
 
+    if field_proto.json_name:
+      json_name = field_proto.json_name
+    else:
+      json_name = None
+
     return descriptor.FieldDescriptor(
         name=field_proto.name,
         full_name=full_name,
@@ -1003,6 +1013,7 @@ class DescriptorPool(object):
         is_extension=is_extension,
         extension_scope=None,
         options=_OptionsOrNone(field_proto),
+        json_name=json_name,
         file=file_desc,
         # pylint: disable=protected-access
         create_key=descriptor._internal_create_key)
@@ -1107,6 +1118,8 @@ class DescriptorPool(object):
         field_desc.default_value = b''
       elif field_proto.type == descriptor.FieldDescriptor.TYPE_MESSAGE:
         field_desc.default_value = None
+      elif field_proto.type == descriptor.FieldDescriptor.TYPE_GROUP:
+        field_desc.default_value = None
       else:
         # All other types are of the "int" type.
         field_desc.default_value = 0
@@ -1195,6 +1208,8 @@ class DescriptorPool(object):
         containing_service=None,
         input_type=input_type,
         output_type=output_type,
+        client_streaming=method_proto.client_streaming,
+        server_streaming=method_proto.server_streaming,
         options=_OptionsOrNone(method_proto),
         # pylint: disable=protected-access
         create_key=descriptor._internal_create_key)
@@ -1215,21 +1230,25 @@ class DescriptorPool(object):
       for enum in desc.enum_types:
         yield (_PrefixWithDot(enum.full_name), enum)
 
-  def _GetDeps(self, dependencies):
+  def _GetDeps(self, dependencies, visited=None):
     """Recursively finds dependencies for file protos.
 
     Args:
       dependencies: The names of the files being depended on.
+      visited: The names of files already found.
 
     Yields:
       Each direct and indirect dependency.
     """
 
+    visited = visited or set()
     for dependency in dependencies:
-      dep_desc = self.FindFileByName(dependency)
-      yield dep_desc
-      for parent_dep in dep_desc.dependencies:
-        yield parent_dep
+      if dependency not in visited:
+        visited.add(dependency)
+        dep_desc = self.FindFileByName(dependency)
+        yield dep_desc
+        public_files = [d.name for d in dep_desc.public_dependencies]
+        yield from self._GetDeps(public_files, visited)
 
   def _GetTypeFromScope(self, package, type_name, scope):
     """Finds a given type name in the current scope.

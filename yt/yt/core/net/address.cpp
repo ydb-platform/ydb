@@ -388,6 +388,12 @@ void FromProto(TNetworkAddress* address, const TString& protoAddress)
     address->Length_ = protoAddress.size();
 }
 
+void FormatValue(TStringBuilderBase* builder, const TNetworkAddress& address, TStringBuf spec)
+{
+    // TODO(arkady-e1ppa): Optimize.
+    FormatValue(builder, ToString(address), spec);
+}
+
 TString ToString(const TNetworkAddress& address, const TNetworkAddressFormatOptions& options)
 {
     const auto& sockAddr = address.GetSockAddr();
@@ -745,11 +751,6 @@ void FormatValue(TStringBuilderBase* builder, const TIP6Address& address, TStrin
     }
 }
 
-TString ToString(const TIP6Address& address)
-{
-    return ToStringViaBuilder(address);
-}
-
 bool operator == (const TIP6Address& lhs, const TIP6Address& rhs)
 {
     return ::memcmp(lhs.GetRawBytes(), rhs.GetRawBytes(), TIP6Address::ByteSize) == 0;
@@ -803,6 +804,8 @@ void Serialize(const TIP6Address& value, IYsonConsumer* consumer)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace {
+
 int GetMaskSize(const TIP6Address& mask)
 {
     int size = 0;
@@ -812,6 +815,8 @@ int GetMaskSize(const TIP6Address& mask)
     }
     return size;
 }
+
+} // namespace
 
 TIP6Network::TIP6Network(const TIP6Address& network, const TIP6Address& mask)
     : Network_(network)
@@ -827,7 +832,7 @@ TIP6Network::TIP6Network(const TIP6Address& network, const TIP6Address& mask)
             seenOne = true;
         } else {
             if (seenOne) {
-                THROW_ERROR_EXCEPTION("Invalid network mask %Qv", ToString(mask));
+                THROW_ERROR_EXCEPTION("Invalid network mask %Qv", mask);
             }
         }
     }
@@ -913,8 +918,7 @@ bool TIP6Network::FromString(TStringBuf str, TIP6Network* network)
 
 void FormatValue(TStringBuilderBase* builder, const TIP6Network& network, TStringBuf /*spec*/)
 {
-    auto projectId = network.GetProjectId();
-    if (projectId) {
+    if (auto projectId = network.GetProjectId()) {
         // The network has been created from string in
         // project id notation. Save it just the way it came.
 
@@ -937,11 +941,6 @@ void FormatValue(TStringBuilderBase* builder, const TIP6Network& network, TStrin
             network.GetAddress(),
             network.GetMaskSize());
     }
-}
-
-TString ToString(const TIP6Network& network)
-{
-    return ToStringViaBuilder(network);
 }
 
 void Deserialize(TIP6Network& value, INodePtr node)
@@ -967,7 +966,7 @@ void Serialize(const TIP6Network& value, IYsonConsumer* consumer)
 //! Performs asynchronous host name resolution.
 class TAddressResolver::TImpl
     : public virtual TRefCounted
-    , private TAsyncExpiringCache<TString, TNetworkAddress>
+    , private TAsyncExpiringCache<std::string, TNetworkAddress>
 {
 public:
     explicit TImpl(TAddressResolverConfigPtr config)
@@ -979,7 +978,7 @@ public:
         Configure(std::move(config));
     }
 
-    TFuture<TNetworkAddress> Resolve(const TString& hostName)
+    TFuture<TNetworkAddress> Resolve(const std::string& hostName)
     {
         // Check if |address| parses into a valid IPv4 or IPv6 address.
         if (auto result = TNetworkAddress::TryParse(hostName); result.IsOK()) {
@@ -1054,7 +1053,7 @@ private:
 
     TAtomicIntrusivePtr<IDnsResolver> DnsResolver_;
 
-    TFuture<TNetworkAddress> DoGet(const TString& hostName, bool /*isPeriodicUpdate*/) noexcept override
+    TFuture<TNetworkAddress> DoGet(const std::string& hostName, bool /*isPeriodicUpdate*/) noexcept override
     {
         TDnsResolveOptions options{
             .EnableIPv4 = Config_->EnableIPv4,
@@ -1103,7 +1102,7 @@ TAddressResolver* TAddressResolver::Get()
     return LeakySingleton<TAddressResolver>();
 }
 
-TFuture<TNetworkAddress> TAddressResolver::Resolve(const TString& address)
+TFuture<TNetworkAddress> TAddressResolver::Resolve(const std::string& address)
 {
     return Impl_->Resolve(address);
 }

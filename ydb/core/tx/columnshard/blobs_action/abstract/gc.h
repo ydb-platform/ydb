@@ -32,6 +32,10 @@ protected:
     virtual void RemoveBlobIdFromDB(const TTabletId tabletId, const TUnifiedBlobId& blobId, TBlobManagerDb& dbBlobs) = 0;
     virtual bool DoIsEmpty() const = 0;
 public:
+    void AddSharedBlobToNextIteration(const TUnifiedBlobId& blobId, const TTabletId ownerTabletId) {
+        AFL_VERIFY(BlobsToRemove.RemoveBorrowed(ownerTabletId, blobId));
+    }
+
     void OnExecuteTxAfterCleaning(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs);
     void OnCompleteTxAfterCleaning(NColumnShard::TColumnShard& self, const std::shared_ptr<IBlobsGCAction>& taskAction);
 

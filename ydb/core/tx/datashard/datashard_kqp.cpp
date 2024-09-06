@@ -1012,7 +1012,19 @@ public:
         return {};
     }
 
-    std::function<void()> GetWakeupCallback() const override {
+    NDq::TWakeUpCallback GetWakeupCallback() const override {
+        return {};
+    }
+
+    NDq::TErrorCallback GetErrorCallback() const override {
+        return {};
+    }
+
+    TIntrusivePtr<NDq::TSpillingTaskCounters> GetSpillingTaskCounters() const override {
+        return {};
+    }
+
+    NDq::TTxId GetTxId() const override {
         return {};
     }
 };

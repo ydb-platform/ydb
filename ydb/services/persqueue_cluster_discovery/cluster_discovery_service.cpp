@@ -14,6 +14,7 @@
 
 #include <algorithm>
 
+#include <ydb/core/protos/pqconfig.pb.h>
 
 namespace NKikimr::NPQ::NClusterDiscovery {
 

@@ -26,7 +26,7 @@ namespace NYT::NProfiling {
 
 struct TSensorInfo
 {
-    TString Name;
+    std::string Name;
     int ObjectCount;
     int CubeSize;
     TError Error;
@@ -41,84 +41,84 @@ public:
     explicit TSolomonRegistry();
 
     ICounterImplPtr RegisterCounter(
-        const TString& name,
+        const std::string& name,
         const TTagSet& tags,
         TSensorOptions options) override;
 
     ITimeCounterImplPtr RegisterTimeCounter(
-        const TString& name,
+        const std::string& name,
         const TTagSet& tags,
         TSensorOptions options) override;
 
     IGaugeImplPtr RegisterGauge(
-        const TString& name,
+        const std::string& name,
         const TTagSet& tags,
         TSensorOptions options) override;
 
     ITimeGaugeImplPtr RegisterTimeGauge(
-        const TString& name,
+        const std::string& name,
         const TTagSet& tags,
         TSensorOptions options) override;
 
     ISummaryImplPtr RegisterSummary(
-        const TString& name,
+        const std::string& name,
         const TTagSet& tags,
         TSensorOptions options) override;
 
     IGaugeImplPtr RegisterGaugeSummary(
-        const TString& name,
+        const std::string& name,
         const TTagSet& tags,
         TSensorOptions options) override;
 
     ITimeGaugeImplPtr RegisterTimeGaugeSummary(
-        const TString& name,
+        const std::string& name,
         const TTagSet& tags,
         TSensorOptions options) override;
 
     ITimerImplPtr RegisterTimerSummary(
-        const TString& name,
+        const std::string& name,
         const TTagSet& tags,
         TSensorOptions options) override;
 
     ITimerImplPtr RegisterTimeHistogram(
-        const TString& name,
+        const std::string& name,
         const TTagSet& tags,
         TSensorOptions options) override;
 
     IHistogramImplPtr RegisterGaugeHistogram(
-        const TString& name,
+        const std::string& name,
         const TTagSet& tags,
         TSensorOptions options) override;
 
     IHistogramImplPtr RegisterRateHistogram(
-        const TString& name,
+        const std::string& name,
         const TTagSet& tags,
         TSensorOptions options) override;
 
     void RegisterFuncCounter(
-        const TString& name,
+        const std::string& name,
         const TTagSet& tags,
         TSensorOptions options,
         const TRefCountedPtr& owner,
         std::function<i64()> reader) override;
 
     void RegisterFuncGauge(
-        const TString& name,
+        const std::string& name,
         const TTagSet& tags,
         TSensorOptions options,
         const TRefCountedPtr& owner,
         std::function<double()> reader) override;
 
     void RegisterProducer(
-        const TString& prefix,
+        const std::string& prefix,
         const TTagSet& tags,
         TSensorOptions options,
         const ISensorProducerPtr& owner) override;
 
     void RenameDynamicTag(
         const TDynamicTagPtr& tag,
-        const TString& name,
-        const TString& value) override;
+        const std::string& name,
+        const std::string& value) override;
 
     static TSolomonRegistryPtr Get();
 
@@ -126,7 +126,7 @@ public:
     void SetDynamicTags(std::vector<TTag> dynamicTags);
     std::vector<TTag> GetDynamicTags();
 
-    void SetGridFactor(std::function<int(const TString&)> gridFactor);
+    void SetGridFactor(std::function<int(const std::string&)> gridFactor);
     void SetWindowSize(int windowSize);
     void SetProducerCollectionBatchSize(int batchSize);
     void ProcessRegistrations();
@@ -136,7 +136,7 @@ public:
         ::NMonitoring::IMetricConsumer* consumer) const;
 
     void ReadRecentSensorValues(
-        const TString& name,
+        const std::string& name,
         const TTagList& tags,
         const TReadOptions& options,
         NYTree::TFluentAny fluent) const;
@@ -154,12 +154,12 @@ public:
 
     NProto::TSensorDump DumpSensors();
     NProto::TSensorDump DumpSensors(std::vector<TTagId> extraTags);
-    NProto::TSensorDump DumpSensors(const std::optional<TString>& host, const THashMap<TString, TString>& instanceTags);
+    NProto::TSensorDump DumpSensors(const std::optional<std::string>& host, const THashMap<std::string, std::string>& instanceTags);
 
 private:
     i64 Iteration_ = 0;
     std::optional<int> WindowSize_;
-    std::function<int(const TString&)> GridFactor_;
+    std::function<int(const std::string&)> GridFactor_;
     TProfiler SelfProfiler_;
 
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, DynamicTagsLock_);
@@ -174,9 +174,9 @@ private:
     TTagRegistry Tags_;
     TProducerSet Producers_;
 
-    THashMap<TString, TSensorSet> Sensors_;
+    THashMap<std::string, TSensorSet> Sensors_;
 
-    TSensorSet* FindSet(const TString& name, const TSensorOptions& options);
+    TSensorSet* FindSet(const std::string& name, const TSensorOptions& options);
 
     TCounter RegistrationCount_;
     TEventTimer SensorCollectDuration_, ReadDuration_;

@@ -16,13 +16,13 @@ The terms "simple", "primitive", and "elementary" data types are used synonymous
 
 {% include [x](tz_date_types.md) %}
 
-# Casting between data types {#cast}
+## Casting between data types {#cast}
 
-## Explicit casting {#explicit-cast}
+### Explicit casting {#explicit-cast}
 
 Explicit casting using [CAST](../../syntax/expressions.md#cast):
 
-### Casting to numeric types
+#### Casting to numeric types
 
 | Type | Bool | Int | Uint | Float | Double | Decimal |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -47,7 +47,7 @@ Explicit casting using [CAST](../../syntax/expressions.md#cast):
 <sup>3</sup> Possible only in the case of a non-negative value.
 <sup>4</sup> Using the built-in function [Yson::ConvertTo](../../udf/list/yson.md#ysonconvertto).
 
-### Converting to date and time data types
+#### Converting to date and time data types
 
 | Type | Date | Datetime | Timestamp | Interval |
 | --- | --- | --- | --- | --- |
@@ -67,7 +67,7 @@ Explicit casting using [CAST](../../syntax/expressions.md#cast):
 | **Timestamp** | Yes | Yes | — | No |
 | **Interval** | No | No | No | — | — |
 
-### Conversion to other data types
+#### Conversion to other data types
 
 | Type | String | Utf8 | Json | Yson | Uuid |
 | --- | --- | --- | --- | --- | --- |
@@ -93,11 +93,11 @@ Explicit casting using [CAST](../../syntax/expressions.md#cast):
 
 {% include [x](../../_includes/cast_examples.md) %}
 
-## Implicit casting {#implicit-cast}
+### Implicit casting {#implicit-cast}
 
 Implicit type casting that occurs in basic operations ( +-\*/) between different data types. The table cells specify the operation result type, if the operation is possible:
 
-### Numeric types
+#### Numeric types
 
 | Type | Int | Uint | Float | Double |
 | --- | --- | --- | --- | --- |
@@ -106,7 +106,7 @@ Implicit type casting that occurs in basic operations ( +-\*/) between different
 | **Float** | `Float` | `Float` | — | `Double` |
 | **Double** | `Double` | `Double` | `Double` | — |
 
-### Date and time types
+#### Date and time types
 
 | Type | Date | Datetime | Timestamp | Interval | TzDate | TzDatetime | TzTimestamp |
 | --- | --- | --- | --- | --- | --- | --- | --- |

@@ -2,6 +2,7 @@
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
+#include <ydb/library/yql/providers/s3/actors_factory/yql_s3_actors_factory.h>
 #include <ydb/library/yql/providers/s3/object_listers/yql_s3_list.h>
 #include <ydb/library/yql/providers/s3/proto/retry_config.pb.h>
 #include <ydb/library/yql/providers/s3/proto/source.pb.h>
@@ -11,8 +12,6 @@
 #include <ydb/library/actors/core/actor.h>
 
 namespace NYql::NDq {
-
-struct TS3ReadActorFactoryConfig;
 
 NActors::IActor* CreateS3FileQueueActor(
         TTxId txId,
@@ -25,11 +24,13 @@ NActors::IActor* CreateS3FileQueueActor(
         ui64 batchSizeLimit,
         ui64 batchObjectCountLimit,
         IHTTPGateway::TPtr gateway,
+        IHTTPGateway::TRetryPolicy::TPtr retryPolicy,
         TString url,
-        TS3Credentials::TAuthInfo authInfo,
+        const TS3Credentials& credentials,
         TString pattern,
         NYql::NS3Lister::ES3PatternVariant patternVariant,
-        NS3Lister::ES3PatternType patternType);
+        NS3Lister::ES3PatternType patternType,
+        bool allowLocalFiles);
 
 std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateS3ReadActor(
     const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
@@ -48,6 +49,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateS3ReadA
     const TS3ReadActorFactoryConfig& cfg,
     ::NMonitoring::TDynamicCounterPtr counters,
     ::NMonitoring::TDynamicCounterPtr taskCounters,
-    IMemoryQuotaManager::TPtr memoryQuotaManager);
+    IMemoryQuotaManager::TPtr memoryQuotaManager,
+    bool allowLocalFiles);
 
 } // namespace NYql::NDq

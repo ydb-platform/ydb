@@ -4,6 +4,7 @@
 #include <google/protobuf/util/message_differencer.h>
 
 #include <util/generic/yexception.h>
+#include <util/string/escape.h>
 
 #include <memory>
 
@@ -72,6 +73,27 @@ bool TKqpQueryId::operator==(const TKqpQueryId& other) const {
     }
 
     return true;
+}
+
+TString TKqpQueryId::SerializeToString() const {
+    TStringBuilder result = TStringBuilder() << "{"
+        << "Cluster: " << Cluster << ", "
+        << "Database: " << Database << ", "
+        << "UserSid: " << UserSid << ", "
+        << "Text: " << EscapeC(Text) << ", "
+        << "Settings: " << Settings.SerializeToString() << ", ";
+    if (QueryParameterTypes) {
+        result << "QueryParameterTypes: [";
+        for (const auto& param : *QueryParameterTypes) {
+            result << "name: " << param.first << ", type: " << param.second.ShortDebugString();
+        }
+        result << "], ";
+    } else {
+        result << "QueryParameterTypes: <empty>, ";
+    }
+
+    result << "GUCSettings: " << GUCSettings.SerializeToString() << "}";
+    return result;
 }
 
 } // namespace NKikimr::NKqp

@@ -139,7 +139,7 @@ SELECT
   ForceRemoveMember(
     $struct,
     "c"
-  ) AS ab; -- ("a": 1, "b": 2) 
+  ) AS ab; -- ("a": 1, "b": 2)
 ```
 
 ## ChooseMembers {#choosemembers}
@@ -172,7 +172,7 @@ SELECT
 
 Исключение из структуры полей с заданными именами.
 
-Если какого-либо из полей не существовало, будет возвращена ошибка. 
+Если какого-либо из полей не существовало, будет возвращена ошибка.
 
 **Сигнатура**
 ```
@@ -398,7 +398,7 @@ SELECT
 Комбинируют две структуры одним из четырех способов, используя предоставленную функцию для слияния полей с одинаковыми именами:
 
 * `StructUnion` добавляет в результат все поля обеих структур;
-* `StructIntersection` — поля, которые есть в обеих структурах; 
+* `StructIntersection` — поля, которые есть в обеих структурах;
 * `StructDifference` — поля которые есть в left, но которых нет в right;
 * `StructSymmetricDifference` — все поля, которые есть только в одной из структур.
 
@@ -425,10 +425,10 @@ $left = <|a: 1, b: 2, c: 3|>;
 $right = <|c: 1, d: 2, e: 3|>;
 
 SELECT
-    StructUnion($left, $right),                        -- <|a: 1, b: 2, c: 3, d: 2, e: 3|>
-    StructUnion($left, $right, $merge),                -- <|a: 1, b: 2, c: 4, d: 2, e: 3|>
-    StructIntersection($left, $right, $merge),         -- <|c: 4|>
-    StructDifference($left, $right, $merge),           -- <|a: 1, b: 1|>
-    StructSymmetricDifference($left, $right, $merge)   -- <|a: 1, b: 2, d: 2, e: 3|>
+    StructUnion($left, $right),                 -- <|a: 1, b: 2, c: 3, d: 2, e: 3|>
+    StructUnion($left, $right, $merge),         -- <|a: 1, b: 2, c: 4, d: 2, e: 3|>
+    StructIntersection($left, $right, $merge),  -- <|c: 4|>
+    StructDifference($left, $right),            -- <|a: 1, b: 1|>
+    StructSymmetricDifference($left, $right)    -- <|a: 1, b: 2, d: 2, e: 3|>
 ;
 ```

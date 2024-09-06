@@ -350,10 +350,10 @@ $left = <|a: 1, b: 2, c: 3|>;
 $right = <|c: 1, d: 2, e: 3|>;
 
 SELECT
-    StructUnion($left, $right),                        -- <|a: 1, b: 2, c: 3, d: 2, e: 3|>
-    StructUnion($left, $right, $merge),                -- <|a: 1, b: 2, c: 4, d: 2, e: 3|>
-    StructIntersection($left, $right, $merge),         -- <|c: 4|>
-    StructDifference($left, $right, $merge),           -- <|a: 1, b: 1|>
-    StructSymmetricDifference($left, $right, $merge)   -- <|a: 1, b: 2, d: 2, e: 3|>
+    StructUnion($left, $right),                 -- <|a: 1, b: 2, c: 3, d: 2, e: 3|>
+    StructUnion($left, $right, $merge),         -- <|a: 1, b: 2, c: 4, d: 2, e: 3|>
+    StructIntersection($left, $right, $merge),  -- <|c: 4|>
+    StructDifference($left, $right),            -- <|a: 1, b: 1|>
+    StructSymmetricDifference($left, $right)    -- <|a: 1, b: 2, d: 2, e: 3|>
 ;
 ```

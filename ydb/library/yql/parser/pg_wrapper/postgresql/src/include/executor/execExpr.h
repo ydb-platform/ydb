@@ -4,7 +4,7 @@
  *	  Low level infrastructure related to expression evaluation
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/executor/execExpr.h
@@ -21,6 +21,7 @@
 struct ExprEvalStep;
 struct SubscriptingRefState;
 struct ScalarArrayOpExprHashTable;
+struct JsonConstructorExprState;
 
 /* Bits in ExprState->flags (see also execnodes.h for public flag bits): */
 /* expression's interpreter has been initialized */
@@ -235,6 +236,8 @@ typedef enum ExprEvalOp
 	EEOP_SCALARARRAYOP,
 	EEOP_HASHED_SCALARARRAYOP,
 	EEOP_XMLEXPR,
+	EEOP_JSON_CONSTRUCTOR,
+	EEOP_IS_JSON,
 	EEOP_AGGREF,
 	EEOP_GROUPING_FUNC,
 	EEOP_WINDOW_FUNC,
@@ -252,6 +255,8 @@ typedef enum ExprEvalOp
 	EEOP_AGG_PLAIN_TRANS_INIT_STRICT_BYREF,
 	EEOP_AGG_PLAIN_TRANS_STRICT_BYREF,
 	EEOP_AGG_PLAIN_TRANS_BYREF,
+	EEOP_AGG_PRESORTED_DISTINCT_SINGLE,
+	EEOP_AGG_PRESORTED_DISTINCT_MULTI,
 	EEOP_AGG_ORDERED_TRANS_DATUM,
 	EEOP_AGG_ORDERED_TRANS_TUPLE,
 
@@ -574,15 +579,11 @@ typedef struct ExprEvalStep
 		struct
 		{
 			bool		has_nulls;
+			bool		inclause;	/* true for IN and false for NOT IN */
 			struct ScalarArrayOpExprHashTable *elements_tab;
 			FmgrInfo   *finfo;	/* function's lookup data */
 			FunctionCallInfo fcinfo_data;	/* arguments etc */
-			/* faster to access without additional indirection: */
-			PGFunction	fn_addr;	/* actual call address */
-			FmgrInfo   *hash_finfo; /* function's lookup data */
-			FunctionCallInfo hash_fcinfo_data;	/* arguments etc */
-			/* faster to access without additional indirection: */
-			PGFunction	hash_fn_addr;	/* actual call address */
+			ScalarArrayOpExpr *saop;
 		}			hashedscalararrayop;
 
 		/* for EEOP_XMLEXPR */
@@ -596,6 +597,12 @@ typedef struct ExprEvalStep
 			Datum	   *argvalue;
 			bool	   *argnull;
 		}			xmlexpr;
+
+		/* for EEOP_JSON_CONSTRUCTOR */
+		struct
+		{
+			struct JsonConstructorExprState *jcstate;
+		}			json_constructor;
 
 		/* for EEOP_AGGREF */
 		struct
@@ -657,6 +664,14 @@ typedef struct ExprEvalStep
 			int			jumpnull;
 		}			agg_plain_pergroup_nullcheck;
 
+		/* for EEOP_AGG_PRESORTED_DISTINCT_{SINGLE,MULTI} */
+		struct
+		{
+			AggStatePerTrans pertrans;
+			ExprContext *aggcontext;
+			int			jumpdistinct;
+		}			agg_presorted_distinctcheck;
+
 		/* for EEOP_AGG_PLAIN_TRANS_[INIT_][STRICT_]{BYVAL,BYREF} */
 		/* for EEOP_AGG_ORDERED_TRANS_{DATUM,TUPLE} */
 		struct
@@ -667,8 +682,19 @@ typedef struct ExprEvalStep
 			int			transno;
 			int			setoff;
 		}			agg_trans;
+
+		/* for EEOP_IS_JSON */
+		struct
+		{
+			JsonIsPredicate *pred;	/* original expression node */
+		}			is_json;
+
 	}			d;
 } ExprEvalStep;
+
+/* Enforce the size rule given in the comment above */
+StaticAssertDecl(sizeof(ExprEvalStep) <= 64,
+				 "size of ExprEvalStep exceeds 64 bytes");
 
 
 /* Non-inline data for container operations */
@@ -710,6 +736,21 @@ typedef struct SubscriptExecSteps
 	ExecEvalSubroutine sbs_assign;	/* assign to an element */
 	ExecEvalSubroutine sbs_fetch_old;	/* fetch old value for assignment */
 } SubscriptExecSteps;
+
+/* EEOP_JSON_CONSTRUCTOR state, too big to inline */
+typedef struct JsonConstructorExprState
+{
+	JsonConstructorExpr *constructor;
+	Datum	   *arg_values;
+	bool	   *arg_nulls;
+	Oid		   *arg_types;
+	struct
+	{
+		int			category;
+		Oid			outfuncid;
+	}		   *arg_type_cache; /* cache for datum_to_json[b]() */
+	int			nargs;
+} JsonConstructorExprState;
 
 
 /* functions in execExpr.c */
@@ -761,6 +802,9 @@ extern void ExecEvalHashedScalarArrayOp(ExprState *state, ExprEvalStep *op,
 extern void ExecEvalConstraintNotNull(ExprState *state, ExprEvalStep *op);
 extern void ExecEvalConstraintCheck(ExprState *state, ExprEvalStep *op);
 extern void ExecEvalXmlExpr(ExprState *state, ExprEvalStep *op);
+extern void ExecEvalJsonConstructor(ExprState *state, ExprEvalStep *op,
+									ExprContext *econtext);
+extern void ExecEvalJsonIsPredicate(ExprState *state, ExprEvalStep *op);
 extern void ExecEvalGroupingFunc(ExprState *state, ExprEvalStep *op);
 extern void ExecEvalSubPlan(ExprState *state, ExprEvalStep *op,
 							ExprContext *econtext);
@@ -771,9 +815,13 @@ extern void ExecEvalSysVar(ExprState *state, ExprEvalStep *op,
 
 extern void ExecAggInitGroup(AggState *aggstate, AggStatePerTrans pertrans, AggStatePerGroup pergroup,
 							 ExprContext *aggcontext);
-extern Datum ExecAggTransReparent(AggState *aggstate, AggStatePerTrans pertrans,
-								  Datum newValue, bool newValueIsNull,
-								  Datum oldValue, bool oldValueIsNull);
+extern Datum ExecAggCopyTransValue(AggState *aggstate, AggStatePerTrans pertrans,
+								   Datum newValue, bool newValueIsNull,
+								   Datum oldValue, bool oldValueIsNull);
+extern bool ExecEvalPreOrderedDistinctSingle(AggState *aggstate,
+											 AggStatePerTrans pertrans);
+extern bool ExecEvalPreOrderedDistinctMulti(AggState *aggstate,
+											AggStatePerTrans pertrans);
 extern void ExecEvalAggOrderedTransDatum(ExprState *state, ExprEvalStep *op,
 										 ExprContext *econtext);
 extern void ExecEvalAggOrderedTransTuple(ExprState *state, ExprEvalStep *op,

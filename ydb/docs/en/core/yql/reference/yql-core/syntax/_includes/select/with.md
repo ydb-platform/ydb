@@ -1,6 +1,6 @@
-## WITH
+# WITH
 
-It's set after the data source in `FROM` and is used for additional hints for tables. You can't use hints for subqueries and [named expressions](../../expressions.md#named-nodes).
+It's set after the data source in `FROM` and is used for additional hints for {% if backend_name == "YDB" %}row-oriented and column-oriented{% else %} tables{% endif %}. You can't use hints for subqueries and [named expressions](../../expressions.md#named-nodes).
 
 The following values are supported:
 

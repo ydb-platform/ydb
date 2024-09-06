@@ -20,6 +20,7 @@ struct TWriteMsg {
     TMaybe<ui64> Offset;
     TEvPQ::TEvWrite::TMsg Msg;
     std::optional<ui64> InitialSeqNo;
+    bool Internal = false;
 };
 
 struct TOwnershipMsg {

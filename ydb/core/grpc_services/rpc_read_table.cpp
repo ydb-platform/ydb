@@ -24,6 +24,8 @@
 
 #include <util/generic/size_literals.h>
 
+#include <ydb/core/protos/stream.pb.h>
+
 namespace NKikimr {
 namespace NGRpcService {
 

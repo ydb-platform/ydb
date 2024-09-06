@@ -80,7 +80,7 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString ToString(const TLegacyReadLimit& limit);
+void FormatValue(TStringBuilderBase* builder, const TLegacyReadLimit& limit, TStringBuf spec);
 
 bool IsTrivial(const TLegacyReadLimit& limit);
 bool IsTrivial(const NProto::TReadLimit& limit);
@@ -117,7 +117,7 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString ToString(const TLegacyReadRange& range);
+void FormatValue(TStringBuilderBase* builder, const TLegacyReadRange& range, TStringBuf spec);
 
 void ToProto(NProto::TReadRange* protoReadRange, const TLegacyReadRange& readRange);
 void FromProto(TLegacyReadRange* readRange, const NProto::TReadRange& protoReadRange);
@@ -179,7 +179,7 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString ToString(const TReadLimit& readLimit);
+void FormatValue(TStringBuilderBase* builder, const TReadLimit& readLimit, TStringBuf spec);
 
 void ToProto(NProto::TReadLimit* protoReadLimit, const TReadLimit& readLimit);
 //! If protoReadLimit contains key, it is transformed into new key bound by
@@ -214,7 +214,7 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString ToString(const TReadRange& readRange);
+void FormatValue(TStringBuilderBase* builder, const TReadRange& readRange, TStringBuf spec);
 
 void ToProto(NProto::TReadRange* protoReadRange, const TReadRange& readRange);
 //! See comment for FromProto(TReadLimit*, const NProto::TReadLimit&, bool, std::optional<int>).

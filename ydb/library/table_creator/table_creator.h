@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/events.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -65,6 +66,9 @@ private:
     NYql::TIssues Issues;
 };
 
+THolder<NSchemeCache::TSchemeCacheNavigate> BuildSchemeCacheNavigateRequest(const TVector<TVector<TString>>& pathsComponents, const TString& database, TIntrusiveConstPtr<NACLib::TUserToken> userToken);
+THolder<NSchemeCache::TSchemeCacheNavigate> BuildSchemeCacheNavigateRequest(const TVector<TVector<TString>>& pathsComponents);
+
 } // namespace NTableCreator
 
 NActors::IActor* CreateTableCreator(
@@ -72,6 +76,8 @@ NActors::IActor* CreateTableCreator(
     TVector<NKikimrSchemeOp::TColumnDescription> columns,
     TVector<TString> keyColumns,
     NKikimrServices::EServiceKikimr logService,
-    TMaybe<NKikimrSchemeOp::TTTLSettings> ttlSettings = Nothing());
+    TMaybe<NKikimrSchemeOp::TTTLSettings> ttlSettings = Nothing(),
+    bool isSystemUser = false,
+    TMaybe<NKikimrSchemeOp::TPartitioningPolicy> partitioningPolicy = Nothing());
 
 } // namespace NKikimr

@@ -14,14 +14,9 @@ IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
     TAG(ya:fat)
     REQUIREMENTS(
-        cpu:4
         ram:32
     )
 ELSE()
-    REQUIREMENTS(
-        cpu:4
-        ram:32
-    )
     TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()

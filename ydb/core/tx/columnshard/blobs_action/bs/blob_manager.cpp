@@ -1,5 +1,6 @@
 #include "blob_manager.h"
 #include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
+#include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
 #include <ydb/core/base/blobstorage.h>
 #include "gc.h"
@@ -38,8 +39,8 @@ public:
         : TabletInfo(tabletInfo)
         , GenStepRef(genStep)
         , Counters(counters)
-        , Gen(std::get<0>(GenStepRef->GenStep))
-        , Step(std::get<1>(GenStepRef->GenStep))
+        , Gen(GenStepRef->GenStep.Generation())
+        , Step(GenStepRef->GenStep.Step())
         , Channel(channel)
         , InFlightCount(0)
         , TotalSizeBytes(0) {
@@ -87,7 +88,6 @@ void TBlobBatch::SendWriteBlobRequest(const TString& blobData, const TUnifiedBlo
 }
 
 void TBlobBatch::OnBlobWriteResult(const TLogoBlobID& blobId, const NKikimrProto::EReplyStatus status) {
-    BatchInfo->Counters.OnPutResult(blobId.BlobSize());
     Y_ABORT_UNLESS(status == NKikimrProto::OK, "The caller must handle unsuccessful status");
     Y_ABORT_UNLESS(BatchInfo);
     Y_ABORT_UNLESS(blobId.Cookie() < BatchInfo->InFlight.size());
@@ -127,13 +127,12 @@ TBlobManager::TBlobManager(TIntrusivePtr<TTabletStorageInfo> tabletInfo, ui32 ge
     , TabletInfo(tabletInfo)
     , CurrentGen(gen)
     , CurrentStep(0)
-    , BlobCountToTriggerGC(BLOB_COUNT_TO_TRIGGER_GC_DEFAULT, 0, Max<i64>())
-    , GCIntervalSeconds(GC_INTERVAL_SECONDS_DEFAULT, 0, Max<i64>()) {
+{
+    BlobsManagerCounters.CurrentGen->Set(CurrentGen);
+    BlobsManagerCounters.CurrentStep->Set(CurrentStep);
 }
 
-void TBlobManager::RegisterControls(NKikimr::TControlBoard& icb) {
-    icb.RegisterSharedControl(BlobCountToTriggerGC, "ColumnShardControls.BlobCountToTriggerGC");
-    icb.RegisterSharedControl(GCIntervalSeconds, "ColumnShardControls.GCIntervalSeconds");
+void TBlobManager::RegisterControls(NKikimr::TControlBoard& /*icb*/) {
 }
 
 bool TBlobManager::LoadState(IBlobManagerDb& db, const TTabletId selfTabletId) {
@@ -144,6 +143,7 @@ bool TBlobManager::LoadState(IBlobManagerDb& db, const TTabletId selfTabletId) {
     if (!db.LoadGCBarrierPreparation(GCBarrierPreparation)) {
         return false;
     }
+    AFL_VERIFY(!GCBarrierPreparation.Generation() || LastCollectedGenStep <= GCBarrierPreparation)("prepared", GCBarrierPreparation)("last", LastCollectedGenStep);
 
     // Load the keep and delete queues
     std::vector<TUnifiedBlobId> blobsToKeep;
@@ -152,40 +152,19 @@ bool TBlobManager::LoadState(IBlobManagerDb& db, const TTabletId selfTabletId) {
         return false;
     }
 
-    for (auto it = BlobsToDelete.GetIterator(); it.IsValid(); ++it) {
-        BlobsManagerCounters.OnDeleteBlobMarker(it.GetBlobId().BlobSize());
-    }
-    BlobsManagerCounters.OnBlobsDelete(BlobsToDelete);
+    BlobsManagerCounters.OnBlobsToDelete(BlobsToDelete);
 
     // Build the list of steps that cannot be garbage collected before Keep flag is set on the blobs
-    THashSet<TGenStep> genStepsWithBlobsToKeep;
+    TBlobsByGenStep blobsToKeepLocal;
     for (const auto& unifiedBlobId : blobsToKeep) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)("add_blob_to_keep", unifiedBlobId.ToStringNew());
         TLogoBlobID blobId = unifiedBlobId.GetLogoBlobId();
-        TGenStep genStep{ blobId.Generation(), blobId.Step() };
-        Y_ABORT_UNLESS(genStep > LastCollectedGenStep);
+        Y_ABORT_UNLESS(LastCollectedGenStep < TGenStep(blobId));
 
-        BlobsToKeep.insert(blobId);
-        BlobsManagerCounters.OnKeepMarker(blobId.BlobSize());
-        const ui64 groupId = dsGroupSelector.GetGroup(blobId);
-        // Keep + DontKeep (probably in different gen:steps)
-        // GC could go through it to a greater LastCollectedGenStep
-        if (BlobsToDelete.Contains(SelfTabletId, TUnifiedBlobId(groupId, blobId))) {
-            continue;
-        }
-
-        genStepsWithBlobsToKeep.insert(genStep);
+        AFL_VERIFY(blobsToKeepLocal.Add(blobId))("blob_to_keep_double", unifiedBlobId.ToStringNew());
     }
-    BlobsManagerCounters.OnBlobsKeep(BlobsToKeep);
-
-    AllocatedGenSteps.clear();
-    for (const auto& gs : genStepsWithBlobsToKeep) {
-        AllocatedGenSteps.push_back(new TAllocatedGenStep(gs));
-    }
-    AllocatedGenSteps.push_back(new TAllocatedGenStep({ CurrentGen, 0 }));
-
-    Sort(AllocatedGenSteps.begin(), AllocatedGenSteps.end(), [](const TAllocatedGenStepConstPtr& a, const TAllocatedGenStepConstPtr& b) {
-        return a->GenStep < b->GenStep;
-    });
+    std::swap(blobsToKeepLocal, BlobsToKeep);
+    BlobsManagerCounters.OnBlobsToKeep(BlobsToKeep);
 
     return true;
 }
@@ -199,7 +178,7 @@ void TBlobManager::PopGCBarriers(const TGenStep gs) {
 std::deque<TGenStep> TBlobManager::FindNewGCBarriers() {
     TGenStep newCollectGenStep = LastCollectedGenStep;
     std::deque<TGenStep> result;
-    if (AllocatedGenSteps.empty()) {
+    if (AllocatedGenSteps.empty() && LastCollectedGenStep < TGenStep(CurrentGen, CurrentStep)) {
         result.emplace_back(TGenStep(CurrentGen, CurrentStep));
     }
     for (auto& allocated : AllocatedGenSteps) {
@@ -210,21 +189,33 @@ std::deque<TGenStep> TBlobManager::FindNewGCBarriers() {
         result.emplace_back(allocated->GenStep);
         newCollectGenStep = allocated->GenStep;
     }
-    if (result.empty() || LastCollectedGenStep < result.front()) {
-        result.emplace_front(LastCollectedGenStep);
-    }
     return result;
 }
 
 class TBlobManager::TGCContext {
 private:
-    static inline const ui32 channelIdx = BLOB_CHANNEL;
-    static inline const ui32 BlobsGCCountLimit = 50000;
+    static inline const ui32 BlobsGCCountLimit = 500000;
     YDB_ACCESSOR_DEF(NBlobOperations::NBlobStorage::TGCTask::TGCListsByGroup, PerGroupGCListsInFlight);
     YDB_ACCESSOR_DEF(TTabletsByBlob, ExtractedToRemoveFromDB);
     YDB_ACCESSOR_DEF(std::deque<TUnifiedBlobId>, KeepsToErase);
     YDB_READONLY_DEF(std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>, SharedBlobsManager);
 public:
+    ui64 GetKeepBytes() const {
+        ui64 size = 0;
+        for (auto&& i : KeepsToErase) {
+            size += i.BlobSize();
+        }
+        return size;
+    }
+
+    ui64 GetDeleteBytes() const {
+        ui64 size = 0;
+        for (TTabletsByBlob::TIterator it(ExtractedToRemoveFromDB); it.IsValid(); ++it) {
+            size += it.GetBlobId().BlobSize();
+        }
+        return size;
+    }
+
     TGCContext(const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& sharedBlobsManager)
         : SharedBlobsManager(sharedBlobsManager)
     {
@@ -234,10 +225,11 @@ public:
     void InitializeFirst(const TIntrusivePtr<TTabletStorageInfo>& tabletInfo) {
         // Clear all possibly not kept trash in channel's groups: create an event for each group
         // TODO: we need only actual channel history here
-        const auto& channelHistory = tabletInfo->ChannelInfo(channelIdx)->History;
-
-        for (auto it = channelHistory.begin(); it != channelHistory.end(); ++it) {
-            PerGroupGCListsInFlight[it->GroupID];
+        for (ui32 channelIdx = 2; channelIdx < tabletInfo->Channels.size(); ++channelIdx) {
+            const auto& channelHistory = tabletInfo->ChannelInfo(channelIdx)->History;
+            for (auto it = channelHistory.begin(); it != channelHistory.end(); ++it) {
+                PerGroupGCListsInFlight[TBlobAddress(it->GroupID, channelIdx)];
+            }
         }
     }
 
@@ -264,124 +256,129 @@ void TBlobManager::DrainDeleteTo(const TGenStep& dest, TGCContext& gcContext) {
     TTabletsByBlob extractedOld = BlobsToDelete.ExtractBlobs(predShared, gcContext.GetFreeSpace());
     gcContext.MutableExtractedToRemoveFromDB().Add(extractedOld);
 
-    TTabletId tabletId;
-    TUnifiedBlobId unifiedBlobId;
-    while (extractedOld.ExtractFront(tabletId, unifiedBlobId)) {
+    for (TTabletsByBlob::TIterator it(extractedOld); it.IsValid(); ++it) {
+        const auto& unifiedBlobId = it.GetBlobId();
+        TBlobAddress bAddress(unifiedBlobId.GetDsGroup(), unifiedBlobId.GetLogoBlobId().Channel());
         auto logoBlobId = unifiedBlobId.GetLogoBlobId();
         if (!gcContext.GetSharedBlobsManager()->BuildStoreCategories({ unifiedBlobId }).GetDirect().IsEmpty()) {
-            AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BS)("to_delete_gc", unifiedBlobId.ToStringNew());
-            NBlobOperations::NBlobStorage::TGCTask::TGCLists& gl = gcContext.MutablePerGroupGCListsInFlight()[unifiedBlobId.GetDsGroup()];
+            AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)("to_delete_gc", unifiedBlobId.ToStringNew());
+            NBlobOperations::NBlobStorage::TGCTask::TGCLists& gl = gcContext.MutablePerGroupGCListsInFlight()[bAddress];
             gl.DontKeepList.insert(logoBlobId);
         } else {
-            AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BS)("to_delete_gc", unifiedBlobId.ToStringNew())("skip_reason", "not_direct");
+            AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)("to_delete_gc", unifiedBlobId.ToStringNew())("skip_reason", "not_direct");
         }
     }
 }
 
-void TBlobManager::DrainKeepTo(const TGenStep& dest, TGCContext& gcContext) {
-    AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BS)("event", "PreparePerGroupGCRequests")
-        ("gen", std::get<0>(dest))("step", std::get<1>(dest))("blobs_to_keep_count", BlobsToKeep.size());
-    auto keepBlobIt = BlobsToKeep.begin();
-    for (; keepBlobIt != BlobsToKeep.end(); ++keepBlobIt) {
-        TGenStep genStep{ keepBlobIt->Generation(), keepBlobIt->Step() };
-        AFL_VERIFY(LastCollectedGenStep < genStep);
-        if (dest < genStep) {
-            break;
-        }
-        const ui32 blobGroup = TabletInfo->GroupFor(keepBlobIt->Channel(), keepBlobIt->Generation());
-        const TUnifiedBlobId keepUnified(blobGroup, *keepBlobIt);
+bool TBlobManager::DrainKeepTo(const TGenStep& dest, TGCContext& gcContext) {
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)("event", "PreparePerGroupGCRequests")("gen_step", dest)("gs_blobs_to_keep_count", BlobsToKeep.GetSize());
+
+    const auto pred = [&](const TGenStep& genStep, const TLogoBlobID& logoBlobId) {
+        AFL_VERIFY(LastCollectedGenStep < genStep)("last", LastCollectedGenStep.ToString())("gen", genStep.ToString());
+        const ui32 blobGroup = TabletInfo->GroupFor(logoBlobId.Channel(), logoBlobId.Generation());
+        TBlobAddress bAddress(blobGroup, logoBlobId.Channel());
+        const TUnifiedBlobId keepUnified(blobGroup, logoBlobId);
         gcContext.MutableKeepsToErase().emplace_back(keepUnified);
         if (BlobsToDelete.ExtractBlobTo(keepUnified, gcContext.MutableExtractedToRemoveFromDB())) {
-            if (keepBlobIt->Generation() == CurrentGen) {
-                AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BS)("to_not_keep", keepUnified.ToStringNew());
-                continue;
+            if (logoBlobId.Generation() == CurrentGen) {
+                AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)("to_not_keep", keepUnified.ToStringNew());
+                return;
             }
             if (gcContext.GetSharedBlobsManager()->BuildStoreCategories({ keepUnified }).GetDirect().IsEmpty()) {
-                AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BS)("to_not_keep_not_direct", keepUnified.ToStringNew());
-                continue;
+                AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)("to_not_keep_not_direct", keepUnified.ToStringNew());
+                return;
             }
-            AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BS)("to_not_keep_old", keepUnified.ToStringNew());
-            gcContext.MutablePerGroupGCListsInFlight()[blobGroup].DontKeepList.insert(*keepBlobIt);
+            AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)("to_not_keep_old", keepUnified.ToStringNew());
+            gcContext.MutablePerGroupGCListsInFlight()[bAddress].DontKeepList.insert(logoBlobId);
         } else {
-            AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BS)("to_keep", keepUnified.ToStringNew());
-            gcContext.MutablePerGroupGCListsInFlight()[blobGroup].KeepList.insert(*keepBlobIt);
+            AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)("to_keep", keepUnified.ToStringNew());
+            gcContext.MutablePerGroupGCListsInFlight()[bAddress].KeepList.insert(logoBlobId);
         }
-    }
-    BlobsToKeep.erase(BlobsToKeep.begin(), keepBlobIt);
+    };
+
+    return BlobsToKeep.ExtractTo(dest, gcContext.GetFreeSpace(), pred);
 }
 
 std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTask(const TString& storageId,
     const std::shared_ptr<TBlobManager>& manager, const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& sharedBlobsInfo,
     const std::shared_ptr<NBlobOperations::TRemoveGCCounters>& counters) noexcept {
     AFL_VERIFY(!CollectGenStepInFlight);
-    if (BlobsToKeep.empty() && BlobsToDelete.IsEmpty() && LastCollectedGenStep == TGenStep{ CurrentGen, CurrentStep }) {
-        ACFL_DEBUG("event", "TBlobManager::BuildGCTask skip")("current_gen", CurrentGen)("current_step", CurrentStep);
+    if (BlobsToKeep.IsEmpty() && BlobsToDelete.IsEmpty() && LastCollectedGenStep == TGenStep{ CurrentGen, CurrentStep }) {
+        BlobsManagerCounters.GCCounters.SkipCollectionEmpty->Add(1);
+        ACFL_DEBUG("event", "TBlobManager::BuildGCTask skip")("current_gen", CurrentGen)("current_step", CurrentStep)("reason", "empty");
+        return nullptr;
+    }
+
+    if (AppData()->TimeProvider->Now() - PreviousGCTime < NYDBTest::TControllers::GetColumnShardController()->GetOverridenGCPeriod()) {
+        ACFL_DEBUG("event", "TBlobManager::BuildGCTask skip")("current_gen", CurrentGen)("current_step", CurrentStep)("reason", "too_often");
+        BlobsManagerCounters.GCCounters.SkipCollectionThrottling->Add(1);
         return nullptr;
     }
 
     PreviousGCTime = AppData()->TimeProvider->Now();
     TGCContext gcContext(sharedBlobsInfo);
-    if (FirstGC) {
-        gcContext.InitializeFirst(TabletInfo);
-        FirstGC = false;
-    }
-
     NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("action_id", TGUID::CreateTimebased().AsGuidString());
     const std::deque<TGenStep> newCollectGenSteps = FindNewGCBarriers();
-    AFL_VERIFY(newCollectGenSteps.size());
-    AFL_VERIFY(newCollectGenSteps.front() == LastCollectedGenStep);
-
     if (GCBarrierPreparation != LastCollectedGenStep) {
-        if (!std::get<0>(GCBarrierPreparation)) {
-            for (auto&& newCollectGenStep : newCollectGenSteps) {
-                DrainKeepTo(newCollectGenStep, gcContext);
-                CollectGenStepInFlight = std::max(CollectGenStepInFlight.value_or(newCollectGenStep), newCollectGenStep);
-                if (gcContext.IsFull()) {
-                    break;
-                }
-            }
-            DrainDeleteTo(*CollectGenStepInFlight, gcContext);
-        } else {
-            AFL_VERIFY(std::get<0>(GCBarrierPreparation) != CurrentGen);
+        if (GCBarrierPreparation.Generation()) {
+            AFL_VERIFY(GCBarrierPreparation.Generation() < CurrentGen);
             AFL_VERIFY(LastCollectedGenStep <= GCBarrierPreparation);
-            CollectGenStepInFlight = GCBarrierPreparation;
-            DrainKeepTo(*CollectGenStepInFlight, gcContext);
-            DrainDeleteTo(*CollectGenStepInFlight, gcContext);
-        }
-    }
-    if (!gcContext.IsFull()) {
-        for (auto&& newCollectGenStep : newCollectGenSteps) {
-            DrainKeepTo(newCollectGenStep, gcContext);
-            DrainDeleteTo(newCollectGenStep, gcContext);
-            CollectGenStepInFlight = std::max(CollectGenStepInFlight.value_or(newCollectGenStep), newCollectGenStep);
-            if (gcContext.IsFull()) {
-                break;
+            if (DrainKeepTo(GCBarrierPreparation, gcContext)) {
+                CollectGenStepInFlight = GCBarrierPreparation;
             }
         }
+    } else {
+        DrainDeleteTo(LastCollectedGenStep, gcContext);
+    }
+    for (auto&& newCollectGenStep : newCollectGenSteps) {
+        if (!DrainKeepTo(newCollectGenStep, gcContext)) {
+            break;
+        }
+        if (newCollectGenStep.Generation() == CurrentGen) {
+            CollectGenStepInFlight = std::max(CollectGenStepInFlight.value_or(newCollectGenStep), newCollectGenStep);
+        }
     }
 
-    AFL_VERIFY(CollectGenStepInFlight);
-    PopGCBarriers(*CollectGenStepInFlight);
-    AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD_BS)("notice", "collect_gen_step")("value", *CollectGenStepInFlight)("current_gen", CurrentGen);
+    if (CollectGenStepInFlight) {
+        PopGCBarriers(*CollectGenStepInFlight);
+        if (FirstGC) {
+            gcContext.InitializeFirst(TabletInfo);
+            FirstGC = false;
+        }
+        if (!BlobsToKeep.IsEmpty()) {
+            AFL_VERIFY(*CollectGenStepInFlight < BlobsToKeep.GetMinGenStepVerified())("gs", *CollectGenStepInFlight)("first", BlobsToKeep.GetMinGenStepVerified());
+        }
+        AFL_VERIFY(LastCollectedGenStep < *CollectGenStepInFlight);
+    }
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)("notice", "collect_gen_step")("value", CollectGenStepInFlight)("current_gen", CurrentGen);
 
+    if (gcContext.IsFull()) {
+        PreviousGCTime = TInstant::Zero();
+    }
+
+    BlobsManagerCounters.GCCounters.OnGCTask(gcContext.GetKeepsToErase().size(), gcContext.GetKeepBytes(),
+        gcContext.GetExtractedToRemoveFromDB().GetSize(), gcContext.GetDeleteBytes(), gcContext.IsFull(), !!CollectGenStepInFlight);
     auto removeCategories = sharedBlobsInfo->BuildRemoveCategories(std::move(gcContext.MutableExtractedToRemoveFromDB()));
-
-    auto result = std::make_shared<NBlobOperations::NBlobStorage::TGCTask>(storageId, std::move(gcContext.MutablePerGroupGCListsInFlight()), *CollectGenStepInFlight,
-        std::move(gcContext.MutableKeepsToErase()), manager, std::move(removeCategories), counters, TabletInfo->TabletID, CurrentGen);
+    auto result = std::make_shared<NBlobOperations::NBlobStorage::TGCTask>(storageId, std::move(gcContext.MutablePerGroupGCListsInFlight()), 
+        CollectGenStepInFlight, std::move(gcContext.MutableKeepsToErase()), manager, std::move(removeCategories), counters, TabletInfo->TabletID, CurrentGen);
     if (result->IsEmpty()) {
+        BlobsManagerCounters.GCCounters.OnEmptyGCTask();
         CollectGenStepInFlight = {};
         return nullptr;
     }
+
     return result;
 }
 
-TBlobBatch TBlobManager::StartBlobBatch(ui32 channel) {
+TBlobBatch TBlobManager::StartBlobBatch() {
+    AFL_VERIFY(++CurrentStep < Max<ui32>() - 10);
+    BlobsManagerCounters.CurrentStep->Set(CurrentStep);
+    AFL_VERIFY(TabletInfo->Channels.size() > 2);
+    const auto& channel = TabletInfo->Channels[(CurrentStep % (TabletInfo->Channels.size() - 2)) + 2];
     ++CountersUpdate.BatchesStarted;
-    Y_ABORT_UNLESS(channel == BLOB_CHANNEL, "Support for multiple blob channels is not implemented yet");
-    ++CurrentStep;
     TAllocatedGenStepConstPtr genStepRef = new TAllocatedGenStep({ CurrentGen, CurrentStep });
     AllocatedGenSteps.push_back(genStepRef);
-    auto batchInfo = std::make_unique<TBlobBatch::TBatchInfo>(TabletInfo, genStepRef, channel, BlobsManagerCounters);
+    auto batchInfo = std::make_unique<TBlobBatch::TBatchInfo>(TabletInfo, genStepRef, channel.Channel, BlobsManagerCounters);
     return TBlobBatch(std::move(batchInfo));
 }
 
@@ -401,13 +398,11 @@ void TBlobManager::DoSaveBlobBatchOnComplete(TBlobBatch&& blobBatch) {
         TGenStep genStep{ logoBlobId.Generation(), logoBlobId.Step() };
 
         AFL_VERIFY(genStep > edgeGenStep)("gen_step", genStep)("edge_gen_step", edgeGenStep)("blob_id", blobId.ToStringNew());
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BS)("to_keep", logoBlobId.ToString());
+        AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)("to_keep", logoBlobId.ToString());
 
-        BlobsManagerCounters.OnKeepMarker(logoBlobId.BlobSize());
-        BlobsToKeep.insert(std::move(logoBlobId));
+        AFL_VERIFY(BlobsToKeep.Add(logoBlobId));
+        BlobsManagerCounters.OnBlobsToKeep(BlobsToKeep);
     }
-    BlobsManagerCounters.OnBlobsKeep(BlobsToKeep);
-
     blobBatch.BatchInfo->GenStepRef.Reset();
 }
 
@@ -423,7 +418,7 @@ void TBlobManager::DoSaveBlobBatchOnExecute(const TBlobBatch& blobBatch, IBlobMa
         TGenStep genStep{ logoBlobId.Generation(), logoBlobId.Step() };
 
         AFL_VERIFY(genStep > edgeGenStep)("gen_step", genStep)("edge_gen_step", edgeGenStep)("blob_id", blobId.ToStringNew());
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BS)("to_keep_on_execute", logoBlobId.ToString());
+        AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)("to_keep_on_execute", logoBlobId.ToString());
         db.AddBlobToKeep(blobId);
     }
 }
@@ -431,11 +426,11 @@ void TBlobManager::DoSaveBlobBatchOnExecute(const TBlobBatch& blobBatch, IBlobMa
 void TBlobManager::DeleteBlobOnExecute(const TTabletId tabletId, const TUnifiedBlobId& blobId, IBlobManagerDb& db) {
     // Persist deletion intent
     db.AddBlobToDelete(blobId, tabletId);
-    AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BS)("to_delete_on_execute", blobId);
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)("to_delete_on_execute", blobId);
 }
 
 void TBlobManager::DeleteBlobOnComplete(const TTabletId tabletId, const TUnifiedBlobId& blobId) {
-    AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BS)("to_delete_on_complete", blobId)("tablet_id_delete", (ui64)tabletId);
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)("to_delete_on_complete", blobId)("tablet_id_delete", (ui64)tabletId);
     ++CountersUpdate.BlobsDeleted;
 
     // Check if the deletion needs to be delayed until the blob is no longer
@@ -443,39 +438,51 @@ void TBlobManager::DeleteBlobOnComplete(const TTabletId tabletId, const TUnified
     if (!IsBlobInUsage(blobId)) {
         LOG_S_DEBUG("BlobManager at tablet " << TabletInfo->TabletID << " Delete Blob " << blobId);
         AFL_VERIFY(BlobsToDelete.Add(tabletId, blobId));
-        BlobsManagerCounters.OnDeleteBlobMarker(blobId.BlobSize());
-        BlobsManagerCounters.OnBlobsDelete(BlobsToDelete);
+        BlobsManagerCounters.OnBlobsToDelete(BlobsToDelete);
     } else {
-        BlobsManagerCounters.OnDeleteBlobDelayedMarker(blobId.BlobSize());
         LOG_S_DEBUG("BlobManager at tablet " << TabletInfo->TabletID << " Delay Delete Blob " << blobId);
-        BlobsToDeleteDelayed.Add(tabletId, blobId);
+        AFL_VERIFY(BlobsToDeleteDelayed.Add(tabletId, blobId));
+        BlobsManagerCounters.OnBlobsToDeleteDelayed(BlobsToDeleteDelayed);
     }
 }
 
-void TBlobManager::OnGCFinishedOnExecute(const TGenStep& genStep, IBlobManagerDb& db) {
-    db.SaveLastGcBarrier(genStep);
+void TBlobManager::OnGCFinishedOnExecute(const std::optional<TGenStep>& genStep, IBlobManagerDb& db) {
+    if (genStep) {
+        db.SaveLastGcBarrier(*genStep);
+    }
 }
 
-void TBlobManager::OnGCFinishedOnComplete(const TGenStep& genStep) {
-    LastCollectedGenStep = genStep;
-    CollectGenStepInFlight.reset();
+void TBlobManager::OnGCFinishedOnComplete(const std::optional<TGenStep>& genStep) {
+    if (genStep) {
+        LastCollectedGenStep = *genStep;
+        AFL_VERIFY(GCBarrierPreparation == LastCollectedGenStep)("prepare", GCBarrierPreparation)("last", LastCollectedGenStep);
+        CollectGenStepInFlight.reset();
+    } else {
+        AFL_VERIFY(!CollectGenStepInFlight);
+    }
 }
 
-void TBlobManager::OnGCStartOnExecute(const TGenStep& genStep, IBlobManagerDb& db) {
-    db.SaveGCBarrierPreparation(genStep);
+void TBlobManager::OnGCStartOnExecute(const std::optional<TGenStep>& genStep, IBlobManagerDb& db) {
+    if (genStep) {
+        AFL_VERIFY(LastCollectedGenStep < *genStep)("last", LastCollectedGenStep)("prepared", genStep);
+        db.SaveGCBarrierPreparation(*genStep);
+    }
 }
 
-void TBlobManager::OnGCStartOnComplete(const TGenStep& genStep) {
-    GCBarrierPreparation = genStep;
+void TBlobManager::OnGCStartOnComplete(const std::optional<TGenStep>& genStep) {
+    if (genStep) {
+        AFL_VERIFY(GCBarrierPreparation <= *genStep)("last", GCBarrierPreparation)("prepared", genStep);
+        GCBarrierPreparation = *genStep;
+    }
 }
 
 void TBlobManager::OnBlobFree(const TUnifiedBlobId& blobId) {
-    AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BS)("event", "blob_free")("blob_id", blobId);
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)("event", "blob_free")("blob_id", blobId);
     // Check if the blob is marked for delayed deletion
     if (BlobsToDeleteDelayed.ExtractBlobTo(blobId, BlobsToDelete)) {
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BS)("blob_id", blobId)("event", "blob_delayed_deleted");
-        BlobsManagerCounters.OnBlobsDelete(BlobsToDelete);
-        BlobsManagerCounters.OnDeleteBlobMarker(blobId.GetLogoBlobId().BlobSize());
+        AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)("blob_id", blobId)("event", "blob_delayed_deleted");
+        BlobsManagerCounters.OnBlobsToDelete(BlobsToDelete);
+        BlobsManagerCounters.OnBlobsToDeleteDelayed(BlobsToDeleteDelayed);
     }
 }
 

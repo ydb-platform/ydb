@@ -1,5 +1,3 @@
-pragma UseBlocks;
-
 use plato;
 
 insert into @tmp

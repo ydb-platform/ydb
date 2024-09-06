@@ -31,6 +31,12 @@ common:
     to: /yql/reference/types/index.md
   - from: /public-talks/index.md
     to: /public-materials/videos.md
+  - from: /concepts/databases.md
+    to: /concepts/glossary.md
+  - from: /postgresql/pg-dump.md
+    to: /postgresql/import.md
+  - from: /postgresql/docker-connect.md
+    to: /postgresql/connect.md
 
 # DevOps-related redirects
   - from: /getting_started/kubernetes.md
@@ -60,17 +66,25 @@ common:
   - from: /administration/production-storage-config.md
     to: /deploy/configuration/config.md
   - from: /administration/decommissioning.md
-    to: /deploy/manual/decommissioning.md
+    to: /devops/manual/decommissioning.md
+  - from: /deploy/manual/decommissioning.md
+    to: /devops/manual/decommissioning.md
   - from: /administration/monitoring.md
-    to: /deploy/manual/monitoring.md
+    to: /devops/manual/monitoring.md
+  - from: /deploy/manual/monitoring.md
+    to: /devops/manual/monitoring.md
   - from: /administration/state-storage-move.md
-    to: /deploy/manual/state-storage-move.md
-  - from: /administration/static-group-move.md
-    to: /deploy/manual/static-group-move.md
+    to: /devops/manual/state-storage-move.md
+  - from: /deploy/manual/static-group-move.md
+    to: /devops/manual/static-group-move.md
   - from: /administration/upgrade.md
-    to: /deploy/manual/upgrade.md
+    to: /devops/manual/upgrade.md
+  - from: /deploy/manual/upgrade.md
+    to: /devops/manual/upgrade.md
   - from: /maintenance/backup_and_recovery.md
     to: /devops/manual/backup-and-recovery.md
+  - from: /deploy/index.md
+    to: /devops/index.md
 
 # Dev-related redirects
   - from: /db/index.md
@@ -268,21 +282,21 @@ common:
   - from: reference/ydb-sdk/recipes/upsert.md
     to: recipes/ydb-sdk/upsert.md
 
-# Redirects from export_import to export-import   
+# Redirects from export_import to export-import
   - from: /reference/ydb-cli/export_import/s3_conn.md
     to: /reference/ydb-cli/export-import/auth-s3.md
   - from: /reference/ydb-cli/export_import/s3_export.md
-    to: /reference/ydb-cli/export-import/export-s3.md    
+    to: /reference/ydb-cli/export-import/export-s3.md
   - from: /reference/ydb-cli/export_import/file_structure.md
-    to: /reference/ydb-cli/export-import/file-structure.md     
+    to: /reference/ydb-cli/export-import/file-structure.md
   - from: /reference/ydb-cli/export_import/import-file.md
-    to: /reference/ydb-cli/export-import/import-file.md      
+    to: /reference/ydb-cli/export-import/import-file.md
   - from: /reference/ydb-cli/export_import/s3_import.md
-    to: /reference/ydb-cli/export-import/import-s3.md   
+    to: /reference/ydb-cli/export-import/import-s3.md
   - from: /reference/ydb-cli/export_import/index.md
-    to: /reference/ydb-cli/export-import/index.md   
+    to: /reference/ydb-cli/export-import/index.md
   - from: /reference/ydb-cli/export_import/tools_dump.md
-    to: /reference/ydb-cli/export-import/tools-dump.md   
+    to: /reference/ydb-cli/export-import/tools-dump.md
   - from: /reference/ydb-cli/export_import/tools_restore.md
     to: /reference/ydb-cli/export-import/tools-restore.md
 

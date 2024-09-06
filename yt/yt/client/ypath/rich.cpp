@@ -7,6 +7,7 @@
 #include <yt/yt/client/table_client/column_sort_schema.h>
 #include <yt/yt/client/table_client/column_rename_descriptor.h>
 #include <yt/yt/client/table_client/schema.h>
+#include <yt/yt/client/table_client/versioned_io_options.h>
 
 #include <yt/yt/core/misc/error.h>
 
@@ -206,6 +207,16 @@ void TRichYPath::SetForeign(bool value)
     Attributes().Set("foreign", value);
 }
 
+bool TRichYPath::GetReadViaExecNode() const
+{
+    return GetAttribute(*this, "read_via_exec_node", false);
+}
+
+void TRichYPath::SetReadViaExecNode(bool value)
+{
+    Attributes().Set("read_via_exec_node", value);
+}
+
 std::optional<std::vector<TString>> TRichYPath::GetColumns() const
 {
     if (Attributes().Contains("channel")) {
@@ -234,8 +245,8 @@ std::vector<NChunkClient::TLegacyReadRange> TRichYPath::GetRanges() const
         return std::vector<TLegacyReadRange>({
             TLegacyReadRange(
                 optionalLowerLimit.value_or(TLegacyReadLimit()),
-                optionalUpperLimit.value_or(TLegacyReadLimit())
-            )});
+                optionalUpperLimit.value_or(TLegacyReadLimit())),
+            });
     } else {
         return optionalRanges.value_or(std::vector<TLegacyReadRange>({TLegacyReadRange()}));
     }
@@ -644,14 +655,15 @@ std::optional<TSortColumns> TRichYPath::GetChunkSortColumns() const
     return FindAttribute<TSortColumns>(*this, "chunk_sort_columns");
 }
 
-std::optional<TString> TRichYPath::GetCluster() const
+std::optional<std::string> TRichYPath::GetCluster() const
 {
-    return FindAttribute<TString>(*this, "cluster");
+    return FindAttribute<std::string>(*this, "cluster");
 }
 
-void TRichYPath::SetCluster(const TString& value)
+void TRichYPath::SetCluster(const std::string& value)
 {
-    Attributes().Set("cluster", value);
+    // TODO(babenko): switch to std::string
+    Attributes().Set("cluster", TString(value));
 }
 
 std::optional<std::vector<TString>> TRichYPath::GetClusters() const
@@ -669,6 +681,11 @@ bool TRichYPath::GetCreate() const
     return GetAttribute<bool>(*this, "create", false);
 }
 
+TVersionedReadOptions TRichYPath::GetVersionedReadOptions() const
+{
+    return GetAttribute(*this, "versioned_read_options", TVersionedReadOptions());
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TString ConvertToString(const TRichYPath& path, EYsonFormat ysonFormat)
@@ -679,10 +696,10 @@ TString ConvertToString(const TRichYPath& path, EYsonFormat ysonFormat)
     return builder.Flush();
 }
 
-TString ToString(const TRichYPath& path)
+void FormatValue(TStringBuilderBase* builder, const TRichYPath& path, TStringBuf spec)
 {
     // NB: we intentionally use Text format since string-representation of rich ypath should be readable.
-    return ConvertToString(path, EYsonFormat::Text);
+    FormatValue(builder, ConvertToString(path, EYsonFormat::Text), spec);
 }
 
 std::vector<TRichYPath> Normalize(const std::vector<TRichYPath>& paths)
@@ -768,6 +785,8 @@ const std::vector<TString>& GetWellKnownRichYPathAttributes()
         "cluster",
         "clusters",
         "create",
+        "read_via_exec_node",
+        "versioned_read_options",
     };
     return WellKnownAttributes;
 }

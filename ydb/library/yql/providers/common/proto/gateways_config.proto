@@ -398,6 +398,10 @@ message TS3GatewayConfig {
     optional uint64 RegexpCacheSize = 14;
     optional uint64 GeneratorPathsLimit = 15;
     optional uint64 MaxListingResultSizePerPartition = 16;
+    optional uint64 RowsInBatch = 17; // Default = 1000
+    optional uint64 MaxInflight = 18; // Default = 20
+    optional uint64 DataInflight = 19; // Default = 200 MB
+    optional bool AllowLocalFiles = 20;
 
     repeated TAttr DefaultSettings = 100;
 }
@@ -510,6 +514,7 @@ message TCoreAttr {
 
 message TYqlCoreConfig {
     repeated TCoreAttr Flags = 1;
+    optional TActivationPercentage QPlayerActivation = 2;
 }
 
 /////////////////////////////// Sql Core ///////////////////////////////
@@ -589,8 +594,13 @@ message TGenericClusterConfig {
 }
 
 message TGenericConnectorConfig {
-    // Connector instance network endpoint
+    // There are two options to configure Connector network address:
+    // 1. Set address statically via `Endpoint.Host` and `Endpoint.Port`;
+    // 2. Ask YDB to set `Endpoint.Port` to the value of expression `./ydbd --ic-port + OffsetFromIcPort`,
+    // while Connector's hostname will still be taken from `Endpoint.Host` (with 'localhost' as a default value).
     optional NYql.NConnector.NApi.TEndpoint Endpoint = 3;
+    optional uint32 OffsetFromIcPort = 6;
+
     // If true, Connector GRPC Client will use TLS encryption.
     optional bool UseSsl = 4;
     // Path to the custom CA certificate to verify Connector's certs.

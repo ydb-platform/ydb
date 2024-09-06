@@ -35,7 +35,7 @@ using namespace NYTree;
 using NYT::ToProto;
 using NYT::FromProto;
 
-/////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 namespace {
 
@@ -749,8 +749,12 @@ bool TTableSchema::IsEmpty() const
     return Columns().empty();
 }
 
-bool TTableSchema::IsCGCompatarorApplicable() const
+bool TTableSchema::IsCGComparatorApplicable() const
 {
+    if (GetKeyColumnCount() > MaxKeyColumnCountInDynamicTable) {
+        return false;
+    }
+
     auto keyTypes = GetKeyColumnTypes();
     return std::none_of(keyTypes.begin(), keyTypes.end(), [] (auto type) {
         return type == EValueType::Any;
@@ -795,7 +799,7 @@ TKeyColumns TTableSchema::GetKeyColumns() const
 
 int TTableSchema::GetColumnCount() const
 {
-    return static_cast<int>(Columns().size());
+    return ssize(Columns());
 }
 
 std::vector<TString> TTableSchema::GetColumnNames() const
@@ -924,19 +928,16 @@ TTableSchemaPtr TTableSchema::FromKeyColumns(const TKeyColumns& keyColumns)
 
 TTableSchemaPtr TTableSchema::FromSortColumns(const TSortColumns& sortColumns)
 {
-    TTableSchema schema;
     std::vector<TColumnSchema> columns;
     for (const auto& sortColumn : sortColumns) {
         columns.push_back(
             TColumnSchema(sortColumn.Name, ESimpleLogicalValueType::Any)
                 .SetSortOrder(sortColumn.SortOrder));
     }
-    schema.ColumnInfo_ = std::make_shared<const TColumnInfo>(
-        std::move(columns),
-        std::vector<TDeletedColumn>{});
-    schema.KeyColumnCount_ = sortColumns.size();
-    ValidateTableSchema(schema);
-    return New<TTableSchema>(std::move(schema));
+
+    auto schema = New<TTableSchema>(std::move(columns), /*strict*/ false);
+    ValidateTableSchema(*schema);
+    return schema;
 }
 
 TTableSchemaPtr TTableSchema::ToQuery() const
@@ -965,6 +966,35 @@ TTableSchemaPtr TTableSchema::ToQuery() const
     }
 }
 
+TTableSchemaPtr TTableSchema::ToWriteViaQueueProducer() const
+{
+    std::vector<TColumnSchema> columns;
+    if (IsSorted()) {
+        for (const auto& column : Columns()) {
+            if (!column.Expression()) {
+                columns.push_back(column);
+            }
+        }
+    } else {
+        columns.push_back(TColumnSchema(TabletIndexColumnName, ESimpleLogicalValueType::Int64)
+            .SetSortOrder(ESortOrder::Ascending));
+        columns.push_back(TColumnSchema(SequenceNumberColumnName, ESimpleLogicalValueType::Int64));
+        for (const auto& column : Columns()) {
+            if (column.StableName().Underlying() != TimestampColumnName &&
+                column.StableName().Underlying() != CumulativeDataWeightColumnName)
+            {
+                columns.push_back(column);
+            }
+        }
+    }
+    return New<TTableSchema>(
+        std::move(columns),
+        Strict_,
+        UniqueKeys_,
+        ETableSchemaModification::None,
+        DeletedColumns());
+}
+
 TTableSchemaPtr TTableSchema::ToWrite() const
 {
     std::vector<TColumnSchema> columns;
@@ -985,8 +1015,12 @@ TTableSchemaPtr TTableSchema::ToWrite() const
             }
         }
     }
-    return New<TTableSchema>(std::move(columns), Strict_, UniqueKeys_,
-        ETableSchemaModification::None, DeletedColumns());
+    return New<TTableSchema>(
+        std::move(columns),
+        Strict_,
+        UniqueKeys_,
+        ETableSchemaModification::None,
+        DeletedColumns());
 }
 
 TTableSchemaPtr TTableSchema::WithTabletIndex() const
@@ -997,8 +1031,12 @@ TTableSchemaPtr TTableSchema::WithTabletIndex() const
         auto columns = Columns();
         // XXX: Is it ok? $tablet_index is usually a key column.
         columns.push_back(TColumnSchema(TabletIndexColumnName, ESimpleLogicalValueType::Int64));
-        return New<TTableSchema>(std::move(columns), Strict_, UniqueKeys_,
-            ETableSchemaModification::None, DeletedColumns());
+        return New<TTableSchema>(
+            std::move(columns),
+            Strict_,
+            UniqueKeys_,
+            ETableSchemaModification::None,
+            DeletedColumns());
     }
 }
 
@@ -1010,8 +1048,12 @@ TTableSchemaPtr TTableSchema::ToVersionedWrite() const
         auto columns = Columns();
         columns.insert(columns.begin(), TColumnSchema(TabletIndexColumnName, ESimpleLogicalValueType::Int64)
             .SetSortOrder(ESortOrder::Ascending));
-        return New<TTableSchema>(std::move(columns), Strict_, UniqueKeys_,
-            ETableSchemaModification::None, DeletedColumns());
+        return New<TTableSchema>(
+            std::move(columns),
+            Strict_,
+            UniqueKeys_,
+            ETableSchemaModification::None,
+            DeletedColumns());
     }
 }
 
@@ -1053,8 +1095,12 @@ TTableSchemaPtr TTableSchema::ToKeys() const
     }
     const auto& info = *ColumnInfo_;
     std::vector<TColumnSchema> columns(info.Columns.begin(), info.Columns.begin() + KeyColumnCount_);
-    return New<TTableSchema>(std::move(columns), Strict_, UniqueKeys_,
-        ETableSchemaModification::None, info.DeletedColumns);
+    return New<TTableSchema>(
+        std::move(columns),
+        Strict_,
+        UniqueKeys_,
+        ETableSchemaModification::None,
+        info.DeletedColumns);
 }
 
 TTableSchemaPtr TTableSchema::ToUniqueKeys() const
@@ -1068,8 +1114,12 @@ TTableSchemaPtr TTableSchema::ToUniqueKeys() const
             std::vector<TDeletedColumn>());
     }
     const auto& info = *ColumnInfo_;
-    return New<TTableSchema>(info.Columns, Strict_, /*uniqueKeys*/ true,
-        ETableSchemaModification::None, info.DeletedColumns);
+    return New<TTableSchema>(
+        info.Columns,
+        Strict_,
+        /*uniqueKeys*/ true,
+        ETableSchemaModification::None,
+        info.DeletedColumns);
 }
 
 TTableSchemaPtr TTableSchema::ToStrippedColumnAttributes() const
@@ -1088,8 +1138,12 @@ TTableSchemaPtr TTableSchema::ToStrippedColumnAttributes() const
         auto& strippedColumn = strippedColumns.emplace_back(column.Name(), column.LogicalType());
         strippedColumn.SetStableName(column.StableName());
     }
-    return New<TTableSchema>(std::move(strippedColumns), Strict_, /*uniqueKeys*/ false,
-        ETableSchemaModification::None, info.DeletedColumns);
+    return New<TTableSchema>(
+        std::move(strippedColumns),
+        Strict_,
+        /*uniqueKeys*/ false,
+        ETableSchemaModification::None,
+        info.DeletedColumns);
 }
 
 TTableSchemaPtr TTableSchema::ToSortedStrippedColumnAttributes() const
@@ -1108,8 +1162,12 @@ TTableSchemaPtr TTableSchema::ToSortedStrippedColumnAttributes() const
         auto& strippedColumn = strippedColumns.emplace_back(column.Name(), column.LogicalType(), column.SortOrder());
         strippedColumn.SetStableName(column.StableName());
     }
-    return New<TTableSchema>(std::move(strippedColumns), Strict_, UniqueKeys_,
-        ETableSchemaModification::None, info.DeletedColumns);
+    return New<TTableSchema>(
+        std::move(strippedColumns),
+        Strict_,
+        UniqueKeys_,
+        ETableSchemaModification::None,
+        info.DeletedColumns);
 }
 
 TTableSchemaPtr TTableSchema::ToCanonical() const
@@ -1130,8 +1188,12 @@ TTableSchemaPtr TTableSchema::ToCanonical() const
         [] (const TColumnSchema& lhs, const TColumnSchema& rhs) {
             return lhs.Name() < rhs.Name();
         });
-    return New<TTableSchema>(columns, Strict_, UniqueKeys_,
-        ETableSchemaModification::None, info.DeletedColumns);
+    return New<TTableSchema>(
+        columns,
+        Strict_,
+        UniqueKeys_,
+        ETableSchemaModification::None,
+        info.DeletedColumns);
 }
 
 TTableSchemaPtr TTableSchema::ToSorted(const TKeyColumns& keyColumns) const
@@ -1230,11 +1292,11 @@ TTableSchemaPtr TTableSchema::ToReplicationLog() const
         columns.push_back(TColumnSchema(TReplicationLogTable::ValueColumnNamePrefix + TabletIndexColumnName, ESimpleLogicalValueType::Int64));
     }
     return New<TTableSchema>(
-            std::move(columns),
-            /* strict */ true,
-            /* uniqueKeys */ false,
-            ETableSchemaModification::None,
-            DeletedColumns());
+        std::move(columns),
+        /* strict */ true,
+        /* uniqueKeys */ false,
+        ETableSchemaModification::None,
+        DeletedColumns());
 }
 
 TTableSchemaPtr TTableSchema::ToUnversionedUpdate(bool sorted) const
@@ -1272,11 +1334,11 @@ TTableSchemaPtr TTableSchema::ToUnversionedUpdate(bool sorted) const
     }
 
     return New<TTableSchema>(
-            std::move(columns),
-            /*strict*/ true,
-            /*uniqueKeys*/ sorted,
-            ETableSchemaModification::None,
-            info.DeletedColumns);
+        std::move(columns),
+        /*strict*/ true,
+        /*uniqueKeys*/ sorted,
+        ETableSchemaModification::None,
+        info.DeletedColumns);
 }
 
 TTableSchemaPtr TTableSchema::ToModifiedSchema(ETableSchemaModification schemaModification) const
@@ -1379,11 +1441,6 @@ void FormatValue(TStringBuilderBase* builder, const TTableSchema& schema, TStrin
     builder->AppendChar(']');
 }
 
-TString ToString(const TTableSchema& schema)
-{
-    return ToStringViaBuilder(schema);
-}
-
 void FormatValue(TStringBuilderBase* builder, const TTableSchemaPtr& schema, TStringBuf spec)
 {
     if (schema) {
@@ -1391,11 +1448,6 @@ void FormatValue(TStringBuilderBase* builder, const TTableSchemaPtr& schema, TSt
     } else {
         builder->AppendString(TStringBuf("<null>"));
     }
-}
-
-TString ToString(const TTableSchemaPtr& schema)
-{
-    return ToStringViaBuilder(schema);
 }
 
 TString SerializeToWireProto(const TTableSchemaPtr& schema)
@@ -1537,6 +1589,128 @@ bool IsEqualIgnoringRequiredness(const TTableSchema& lhs, const TTableSchema& rh
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// Parses description of the following form nested_key.name or nested_value.name or nested_value.name.sum
+std::optional<TNestedColumn> TryParseNestedAggregate(TStringBuf description)
+{
+    if (!description.StartsWith("nested")) {
+        return std::nullopt;
+    }
+
+    const char* ptr = description.data();
+    const char* ptrEnd = ptr + description.size();
+
+    auto skipSpace = [&] () {
+        while (ptr != ptrEnd) {
+            if (!IsSpace(*ptr)) {
+                break;
+            }
+
+            ++ptr;
+        }
+    };
+
+    auto parseName = [&] () {
+        auto start = ptr;
+        while (ptr != ptrEnd) {
+            auto ch = *ptr;
+            if (!isalpha(ch) && !isdigit(ch) && ch != '_' && ch != '-' && ch != '%' && ch != '.') {
+                break;
+            }
+
+            ++ptr;
+        }
+
+        return TStringBuf(start, ptr);
+    };
+
+    auto parseToken = [&] (TStringBuf token) {
+        if (TStringBuf(ptr, ptrEnd).StartsWith(token)) {
+            ptr += token.size();
+            return true;
+        }
+
+        return false;
+    };
+
+    auto throwError = [&] (TStringBuf message) {
+        int location = ptr - description.data();
+
+        THROW_ERROR_EXCEPTION("Error while parsing nested aggregate description: %v", message)
+            << TErrorAttribute("position", Format("%v", location))
+            << TErrorAttribute("description", description);
+    };
+
+    auto nestedFunction = parseName();
+
+    skipSpace();
+
+    if (!parseToken("(")) {
+        throwError("expected \"(\"");
+    }
+
+    if (nestedFunction == "nested_key") {
+        skipSpace();
+        auto nestedTableName = parseName();
+        skipSpace();
+
+        if (parseToken(")")) {
+            return TNestedColumn{
+                .NestedTableName = nestedTableName,
+                .IsKey = true
+            };
+        }
+
+        throwError("expected \")\"");
+    } else if (nestedFunction == "nested_value") {
+        skipSpace();
+        auto nestedTableName = parseName();
+        skipSpace();
+
+        if (parseToken(")")) {
+            return TNestedColumn{
+                .NestedTableName = nestedTableName,
+                .IsKey = false
+            };
+        }
+
+        if (parseToken(",")) {
+            skipSpace();
+            auto aggregateFunction = parseName();
+            skipSpace();
+
+            if (parseToken(")")) {
+                return TNestedColumn{
+                    .NestedTableName = nestedTableName,
+                    .IsKey = false,
+                    .Aggregate = aggregateFunction
+                };
+            }
+
+            throwError("expected \")\"");
+        }
+
+        throwError("expected \")\" or \",\" ");
+    }
+
+    THROW_ERROR_EXCEPTION("Error while parsing nested aggregate description. Expected nested_key or nested_value");
+}
+
+EValueType GetNestedColumnElementType(const TLogicalType* logicalType)
+{
+    if (logicalType->GetMetatype() == ELogicalMetatype::Optional) {
+        logicalType = logicalType->GetElement().Get();
+    }
+
+    if (logicalType->GetMetatype() != ELogicalMetatype::List) {
+        THROW_ERROR_EXCEPTION("Invalid nested column type %Qv",
+            *logicalType);
+    }
+
+    return GetWireType(logicalType->GetElement());
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void ValidateKeyColumns(const TKeyColumns& keyColumns)
 {
     ValidateKeyColumnCount(keyColumns.size());
@@ -1552,10 +1726,21 @@ void ValidateKeyColumns(const TKeyColumns& keyColumns)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void ValidateDynamicTableKeyColumnCount(int count)
+{
+    THROW_ERROR_EXCEPTION_IF(count > MaxKeyColumnCountInDynamicTable,
+        "Too many key columns: expected <= %v, got %v",
+        MaxKeyColumnCountInDynamicTable,
+        count);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void ValidateSystemColumnSchema(
     const TColumnSchema& columnSchema,
     bool isTableSorted,
-    bool allowUnversionedUpdateColumns)
+    bool allowUnversionedUpdateColumns,
+    bool allowTimestampColumns)
 {
     static const auto allowedSortedTablesSystemColumns = THashMap<TString, ESimpleLogicalValueType>{
         {EmptyValueColumnName, ESimpleLogicalValueType::Int64},
@@ -1609,6 +1794,13 @@ void ValidateSystemColumnSchema(
         }
     }
 
+    if (allowTimestampColumns) {
+        if (name.StartsWith(TimestampColumnPrefix)) {
+            validateType(ESimpleLogicalValueType::Uint64);
+            return;
+        }
+    }
+
     // Unexpected system column.
     THROW_ERROR_EXCEPTION("System column name %Qv is not allowed here",
         name);
@@ -1632,7 +1824,8 @@ void ValidateColumnSchema(
     const TColumnSchema& columnSchema,
     bool isTableSorted,
     bool isTableDynamic,
-    bool allowUnversionedUpdateColumns)
+    bool allowUnversionedUpdateColumns,
+    bool allowTimestampColumns)
 {
     static const auto allowedAggregates = THashSet<TString>{
         "sum",
@@ -1645,6 +1838,11 @@ void ValidateColumnSchema(
         "dict_sum",
     };
 
+    static const auto allowedNestedAggregates = THashSet<TString>{
+        "sum",
+        "max"
+    };
+
     try {
         const auto& stableName = columnSchema.StableName();
         ValidateColumnName(stableName.Underlying());
@@ -1653,7 +1851,11 @@ void ValidateColumnSchema(
         ValidateColumnName(name);
 
         if (stableName.Underlying().StartsWith(SystemColumnNamePrefix) || name.StartsWith(SystemColumnNamePrefix)) {
-            ValidateSystemColumnSchema(columnSchema, isTableSorted, allowUnversionedUpdateColumns);
+            ValidateSystemColumnSchema(
+                columnSchema,
+                isTableSorted,
+                allowUnversionedUpdateColumns,
+                allowTimestampColumns);
         }
 
         {
@@ -1709,9 +1911,28 @@ void ValidateColumnSchema(
             THROW_ERROR_EXCEPTION("Key column cannot be aggregated");
         }
 
-        if (columnSchema.Aggregate() && allowedAggregates.find(*columnSchema.Aggregate()) == allowedAggregates.end()) {
-            THROW_ERROR_EXCEPTION("Invalid aggregate function %Qv",
-                *columnSchema.Aggregate());
+        if (columnSchema.Aggregate()) {
+            auto aggregateName = *columnSchema.Aggregate();
+
+            if (auto nested = TryParseNestedAggregate(aggregateName)) {
+                if (nested->NestedTableName.empty()) {
+                    THROW_ERROR_EXCEPTION("Invalid nested table name for aggregate %Qv",
+                        aggregateName);
+                }
+
+                GetNestedColumnElementType(columnSchema.LogicalType().Get());
+
+                if (!nested->IsKey) {
+                    auto aggregateName = nested->Aggregate;
+                    if (!aggregateName.empty() && allowedNestedAggregates.find(aggregateName) == allowedNestedAggregates.end()) {
+                        THROW_ERROR_EXCEPTION("Invalid aggregate function %Qv",
+                            aggregateName);
+                    }
+                }
+            } else if (allowedAggregates.find(aggregateName) == allowedAggregates.end()) {
+                THROW_ERROR_EXCEPTION("Invalid aggregate function %Qv",
+                    aggregateName);
+            }
         }
 
         if (columnSchema.Expression() && columnSchema.Required()) {
@@ -1754,21 +1975,17 @@ void ValidateDynamicTableConstraints(const TTableSchema& schema)
         THROW_ERROR_EXCEPTION("There must be at least one non-key column");
     }
 
-    if (schema.GetKeyColumnCount() > MaxKeyColumnCountInDynamicTable) {
-        THROW_ERROR_EXCEPTION("Too many key columns: limit %v, actual: %v",
-            MaxKeyColumnCountInDynamicTable,
-            schema.GetKeyColumnCount());
-    }
+    ValidateDynamicTableKeyColumnCount(schema.GetKeyColumnCount());
 
     for (const auto& column : schema.Columns()) {
         try {
-            auto logical_type = column.LogicalType();
+            auto logicalType = column.LogicalType();
             if (column.SortOrder() && !column.IsOfV1Type() &&
-                logical_type->GetMetatype() != ELogicalMetatype::List &&
-                logical_type->GetMetatype() != ELogicalMetatype::Tuple)
+                logicalType->GetMetatype() != ELogicalMetatype::List &&
+                logicalType->GetMetatype() != ELogicalMetatype::Tuple)
             {
                 THROW_ERROR_EXCEPTION("Dynamic table cannot have key column of type %Qv",
-                    *logical_type);
+                    *logicalType);
             }
         } catch (const std::exception& ex) {
             THROW_ERROR_EXCEPTION("Error validating column %v in dynamic table schema",
@@ -1969,7 +2186,11 @@ void ValidateSchemaAttributes(const TTableSchema& schema)
     }
 }
 
-void ValidateTableSchema(const TTableSchema& schema, bool isTableDynamic, bool allowUnversionedUpdateColumns)
+void ValidateTableSchema(
+    const TTableSchema& schema,
+    bool isTableDynamic,
+    bool allowUnversionedUpdateColumns,
+    bool allowTimestampColumns)
 {
     int totalTypeComplexity = 0;
     for (const auto& column : schema.Columns()) {
@@ -1977,7 +2198,8 @@ void ValidateTableSchema(const TTableSchema& schema, bool isTableDynamic, bool a
             column,
             schema.IsSorted(),
             isTableDynamic,
-            allowUnversionedUpdateColumns);
+            allowUnversionedUpdateColumns,
+            allowTimestampColumns);
         if (!schema.GetStrict() && column.IsRenamed()) {
             THROW_ERROR_EXCEPTION("Renamed column %v in non-strict schema",
                 column.GetDiagnosticNameString());
@@ -1996,6 +2218,44 @@ void ValidateTableSchema(const TTableSchema& schema, bool isTableDynamic, bool a
     ValidateSchemaAttributes(schema);
     if (isTableDynamic) {
         ValidateDynamicTableConstraints(schema);
+    }
+
+    // Validate nested table names.
+    std::vector<TStringBuf> definedNestedTableNames;
+    std::vector<TStringBuf> usedNestedTableNames;
+
+    for (const auto& columnSchema : schema.Columns()) {
+        if (columnSchema.Aggregate()) {
+            const auto& aggregateName = *columnSchema.Aggregate();
+
+            if (auto nested = TryParseNestedAggregate(aggregateName)) {
+                // Already validated.
+                YT_VERIFY(!nested->NestedTableName.empty());
+
+                if (nested->IsKey) {
+                    definedNestedTableNames.push_back(nested->NestedTableName);
+                } else {
+                    usedNestedTableNames.push_back(nested->NestedTableName);
+                }
+            }
+        }
+    }
+
+    std::sort(definedNestedTableNames.begin(), definedNestedTableNames.end());
+    definedNestedTableNames.erase(
+        std::unique(definedNestedTableNames.begin(), definedNestedTableNames.end()),
+        definedNestedTableNames.end());
+
+    std::sort(usedNestedTableNames.begin(), usedNestedTableNames.end());
+    usedNestedTableNames.erase(
+        std::unique(usedNestedTableNames.begin(), usedNestedTableNames.end()),
+        usedNestedTableNames.end());
+
+    for (auto nestedName : usedNestedTableNames) {
+        if (!std::binary_search(definedNestedTableNames.begin(), definedNestedTableNames.end(), nestedName)) {
+            THROW_ERROR_EXCEPTION("No key columns for nested table %Qv",
+                nestedName);
+        }
     }
 }
 

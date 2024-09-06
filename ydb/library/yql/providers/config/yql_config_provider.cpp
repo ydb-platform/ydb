@@ -547,6 +547,16 @@ namespace {
                     return false;
                 }
             }
+            else if (name == "TypeAnnNodeRepeatLimit") {
+                if (args.size() != 1) {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 1 argument, but got " << args.size()));
+                    return false;
+                }
+                if (!TryFromString(args[0], ctx.TypeAnnNodeRepeatLimit)) {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected integer, but got: " << args[0]));
+                    return false;
+                }
+            }
             else if (name == "PureDataSource") {
                 if (args.size() != 1) {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 1 argument, but got " << args.size()));
@@ -650,6 +660,21 @@ namespace {
                 }
 
                 Types.FilterPushdownOverJoinOptionalSide = (name == "FilterPushdownOverJoinOptionalSide");
+            } else if (name == "RotateJoinTree") {
+                if (args.size() > 1) {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected at most 1 argument, but got " << args.size()));
+                    return false;
+                }
+
+                bool res = true;
+                if (!args.empty()) {
+                    if (!TryFromString(args[0], res)) {
+                        ctx.AddError(TIssue(pos, TStringBuilder() << "Expected bool, but got: " << args[0]));
+                        return false;
+                    }
+                }
+
+                Types.RotateJoinTree = res;
             }
             else if (name == "SQL") {
                 if (args.size() > 1) {
@@ -932,8 +957,23 @@ namespace {
                     return false;
                 }
                 Types.StreamLookupJoin = name == "_EnableStreamLookupJoin";
-            }
-            else {
+            } else if (name == "MaxAggPushdownPredicates") {
+                if (args.size() != 1) {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected single numeric argument, but got " << args.size()));
+                    return false;
+                }
+                ui32 value;
+                if (!TryFromString(args[0], value)) {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected non-negative integer, but got: " << args[0]));
+                    return false;
+                }
+                const ui32 hardLimit = 10;
+                if (value > hardLimit) {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Hard limit for setting MaxAggPushdownPredicates is " << hardLimit << ", but got: " << args[0]));
+                    return false;
+                }
+                Types.MaxAggPushdownPredicates = value;
+            } else {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Unsupported command: " << name));
                 return false;
             }

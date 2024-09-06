@@ -20,7 +20,6 @@
 
 #include <ydb/core/blockstore/core/blockstore.h>
 #include <ydb/core/filestore/core/filestore.h>
-#include <ydb/services/bg_tasks/service.h>
 
 #include <util/generic/ptr.h>
 #include <util/generic/set.h>
@@ -41,7 +40,6 @@
     action(TEvDataShard::TEvSplitPartitioningChangedAck,  NSchemeShard::TXTYPE_SPLIT_PARTITIONING_CHANGED_DST_ACK) \
 \
     action(TEvColumnShard::TEvProposeTransactionResult,   NSchemeShard::TXTYPE_COLUMNSHARD_PROPOSE_RESULT)              \
-    action(NBackgroundTasks::TEvAddTaskResult,            NSchemeShard::TXTYPE_ADD_BACKGROUND_TASK_RESULT)              \
     action(TEvColumnShard::TEvNotifyTxCompletionResult,   NSchemeShard::TXTYPE_COLUMNSHARD_NOTIFY_TX_COMPLETION_RESULT) \
 \
     action(NSequenceShard::TEvSequenceShard::TEvCreateSequenceResult,   NSchemeShard::TXTYPE_SEQUENCESHARD_CREATE_SEQUENCE_RESULT)   \
@@ -86,6 +84,7 @@ namespace NKikimr {
 namespace NSchemeShard {
 
 class TSchemeShard;
+class TPath;
 
 struct TOperationContext {
 public:
@@ -339,7 +338,7 @@ ISubOperation::TPtr CreateAlterUserAttrs(TOperationId id, TTxState::ETxState sta
 ISubOperation::TPtr CreateForceDropUnsafe(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateForceDropUnsafe(TOperationId id, TTxState::ETxState state);
 
-ISubOperation::TPtr CreateNewTable(TOperationId id, const TTxTransaction& tx, const THashSet<TString>& localSequences = { });
+ISubOperation::TPtr CreateNewTable(TOperationId id, const TTxTransaction& tx, const THashSet<TString>& localSequences = {});
 ISubOperation::TPtr CreateNewTable(TOperationId id, TTxState::ETxState state);
 
 ISubOperation::TPtr CreateCopyTable(TOperationId id, const TTxTransaction& tx,
@@ -610,6 +609,22 @@ ISubOperation::TPtr CreateAlterBlobDepot(TOperationId id, const TTxTransaction& 
 ISubOperation::TPtr CreateAlterBlobDepot(TOperationId id, TTxState::ETxState state);
 ISubOperation::TPtr CreateDropBlobDepot(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateDropBlobDepot(TOperationId id, TTxState::ETxState state);
+
+// Resource Pool
+// Create
+ISubOperation::TPtr CreateNewResourcePool(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateNewResourcePool(TOperationId id, TTxState::ETxState state);
+// Alter
+ISubOperation::TPtr CreateAlterResourcePool(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateAlterResourcePool(TOperationId id, TTxState::ETxState state);
+// Drop
+ISubOperation::TPtr CreateDropResourcePool(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateDropResourcePool(TOperationId id, TTxState::ETxState state);
+
+// returns Reject in case of error, nullptr otherwise
+ISubOperation::TPtr CascadeDropTableChildren(TVector<ISubOperation::TPtr>& result, const TOperationId& id, const TPath& table);
+
+TVector<ISubOperation::TPtr> CreateRestoreIncrementalBackup(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
 
 }
 }

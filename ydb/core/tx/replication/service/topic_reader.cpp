@@ -58,7 +58,7 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
 
         for (auto& msg : result.Messages) {
             Y_ABORT_UNLESS(msg.GetCodec() == NYdb::NTopic::ECodec::RAW);
-            records.emplace_back(msg.GetOffset(), std::move(msg.GetData()));
+            records.emplace_back(msg.GetOffset(), std::move(msg.GetData()), msg.GetCreateTime());
         }
 
         Send(Worker, new TEvWorker::TEvData(ToString(result.PartitionId), std::move(records)));

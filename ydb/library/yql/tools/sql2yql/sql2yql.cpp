@@ -198,6 +198,7 @@ int BuildAST(int argc, char* argv[]) {
     opts.AddLongOption("assume-ydb-on-slash", "Assume YDB provider if cluster name starts with '/'").NoArgument();
     opts.AddLongOption("test-format", "compare formatted query's AST with the original query's AST (only syntaxVersion=1 is supported).").NoArgument();
     opts.AddLongOption("test-double-format", "check if formatting already formatted query produces the same result").NoArgument();
+    opts.AddLongOption("test-antlr4", "check antlr4 parser").NoArgument();
     opts.AddLongOption("format-output", "Saves formatted query to it").RequiredArgument("format-output").StoreResult(&outFileNameFormat);
     opts.SetFreeArgDefaultTitle("query file");
     opts.AddHelpOption();
@@ -270,6 +271,7 @@ int BuildAST(int argc, char* argv[]) {
             settings.WarnOnV0 = false;
             settings.V0ForceDisable = false;
             settings.AssumeYdbOnClusterWithSlash = res.Has("assume-ydb-on-slash");
+            settings.TestAntlr4 = res.Has("test-antlr4");
 
             if (res.Has("lexer")) {
                 NYql::TIssues issues;

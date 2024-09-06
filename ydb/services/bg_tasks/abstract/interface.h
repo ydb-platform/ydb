@@ -4,6 +4,7 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/conclusion/status.h>
+#include <ydb/library/conclusion/result.h>
 
 #include <library/cpp/json/writer/json_value.h>
 #include <library/cpp/json/json_reader.h>
@@ -338,6 +339,7 @@ template <class IInterface, class TOperatorPolicy = TDefaultProtoContainerPolicy
 class TInterfaceProtoContainer: public TCommonInterfaceContainer<IInterface> {
 private:
     using TProto = typename IInterface::TProto;
+    using TSelf = TInterfaceProtoContainer<IInterface, TOperatorPolicy>;
 protected:
     using TBase = TCommonInterfaceContainer<IInterface>;
     using TFactory = typename TBase::TFactory;
@@ -360,6 +362,14 @@ public:
         }
         Object = object;
         return true;
+    }
+
+    static TConclusion<TSelf> BuildFromProto(const TProto& data) {
+        TSelf result;
+        if (!result.DeserializeFromProto(data)) {
+            return TConclusionStatus::Fail("cannot parse interface from proto: " + data.DebugString());
+        }
+        return result;
     }
 
     TProto SerializeToProto() const {

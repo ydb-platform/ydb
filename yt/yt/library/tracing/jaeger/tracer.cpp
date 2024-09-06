@@ -1,4 +1,5 @@
 #include "tracer.h"
+#include "private.h"
 
 #include <yt/yt/library/tracing/jaeger/model.pb.h>
 
@@ -37,8 +38,11 @@ using namespace NAuth;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const NLogging::TLogger Logger{"Jaeger"};
-static const NProfiling::TProfiler Profiler{"/tracing"};
+static const auto& Logger = JaegerLogger;
+static const auto& Profiler = TracingProfiler;
+
+////////////////////////////////////////////////////////////////////////////////
+
 static const TString ServiceTicketMetadataName = "x-ya-service-ticket";
 static const TString TracingServiceAlias = "tracing";
 
@@ -97,6 +101,9 @@ void TJaegerTracerConfig::Register(TRegistrar registrar)
 
     registrar.Parameter("tvm_service", &TThis::TvmService)
         .Optional();
+
+    registrar.Parameter("test_drop_spans", &TThis::TestDropSpans)
+        .Default(false);
 }
 
 TJaegerTracerConfigPtr TJaegerTracerConfig::ApplyDynamic(const TJaegerTracerDynamicConfigPtr& dynamicConfig) const
@@ -121,6 +128,7 @@ TJaegerTracerConfigPtr TJaegerTracerConfig::ApplyDynamic(const TJaegerTracerDyna
     config->ProcessTags = ProcessTags;
     config->EnablePidTag = EnablePidTag;
     config->TvmService = TvmService;
+    config->TestDropSpans = TestDropSpans;
 
     config->Postprocess();
     return config;
@@ -195,7 +203,7 @@ void ToProto(NProto::Span* proto, const TTraceContextPtr& traceContext)
     for (const auto& traceId : traceContext->GetAsyncChildren()) {
         auto* tag = proto->add_tags();
 
-        tag->set_key(Format("yt.async_trace_id.%d", i++));
+        tag->set_key(Format("yt.async_trace_id.%v", i++));
         tag->set_v_str(ToString(traceId));
     }
 
@@ -225,10 +233,10 @@ TBatchInfo::TBatchInfo()
 { }
 
 TBatchInfo::TBatchInfo(const TString& endpoint)
-    : TracesDequeued_(Profiler.WithTag("endpoint", endpoint).Counter("/traces_dequeued"))
-    , TracesDropped_(Profiler.WithTag("endpoint", endpoint).Counter("/traces_dropped"))
-    , MemoryUsage_(Profiler.WithTag("endpoint", endpoint).Gauge("/memory_usage"))
-    , TraceQueueSize_(Profiler.WithTag("endpoint", endpoint).Gauge("/queue_size"))
+    : TracesDequeued_(Profiler().WithTag("endpoint", endpoint).Counter("/traces_dequeued"))
+    , TracesDropped_(Profiler().WithTag("endpoint", endpoint).Counter("/traces_dropped"))
+    , MemoryUsage_(Profiler().WithTag("endpoint", endpoint).Gauge("/memory_usage"))
+    , TraceQueueSize_(Profiler().WithTag("endpoint", endpoint).Gauge("/queue_size"))
 { }
 
 void TBatchInfo::PopFront()
@@ -295,9 +303,7 @@ std::tuple<std::vector<TSharedRef>, int, int> TBatchInfo::PeekQueue(const TJaege
 }
 
 TJaegerChannelManager::TJaegerChannelManager()
-    : Channel_()
-    , ReopenTime_(TInstant::Now())
-    , RpcTimeout_()
+    : ReopenTime_(TInstant::Now())
 { }
 
 TJaegerChannelManager::TJaegerChannelManager(
@@ -308,10 +314,10 @@ TJaegerChannelManager::TJaegerChannelManager(
     , Endpoint_(endpoint)
     , ReopenTime_(TInstant::Now() + config->ReconnectPeriod + RandomDuration(config->ReconnectPeriod))
     , RpcTimeout_(config->RpcTimeout)
-    , PushedBytes_(Profiler.WithTag("endpoint", endpoint).Counter("/pushed_bytes"))
-    , PushErrors_(Profiler.WithTag("endpoint", endpoint).Counter("/push_errors"))
-    , PayloadSize_(Profiler.WithTag("endpoint", endpoint).Summary("/payload_size"))
-    , PushDuration_(Profiler.WithTag("endpoint", endpoint).Timer("/push_duration"))
+    , PushedBytes_(Profiler().WithTag("endpoint", endpoint).Counter("/pushed_bytes"))
+    , PushErrors_(Profiler().WithTag("endpoint", endpoint).Counter("/push_errors"))
+    , PayloadSize_(Profiler().WithTag("endpoint", endpoint).Summary("/payload_size"))
+    , PushDuration_(Profiler().WithTag("endpoint", endpoint).Timer("/push_duration"))
 {
     auto channelEndpointConfig = CloneYsonStruct(config->CollectorChannelConfig);
     channelEndpointConfig->Address = endpoint;
@@ -384,7 +390,7 @@ TJaegerTracer::TJaegerTracer(
     , Config_(config)
     , TvmService_(config->TvmService ? CreateTvmService(config->TvmService) : nullptr)
 {
-    Profiler.AddFuncGauge("/enabled", MakeStrong(this), [this] {
+    Profiler().AddFuncGauge("/enabled", MakeStrong(this), [this] {
         return Config_.Acquire()->IsEnabled();
     });
 
@@ -592,6 +598,15 @@ void TJaegerTracer::Flush()
             }
             YT_LOG_DEBUG("Span queue is empty (Endpoint: %v)", endpoint);
             LastSuccessfulFlushTime_ = flushStartTime;
+            continue;
+        }
+
+        if (config->TestDropSpans) {
+            DropQueue(batchCount, endpoint);
+            YT_LOG_DEBUG("Spans dropped in test (BatchCount: %v, SpanCount: %v, Endpoint: %v)",
+                batchCount,
+                spanCount,
+                endpoint);
             continue;
         }
 

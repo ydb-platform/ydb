@@ -15,8 +15,7 @@ VERSION(3.11.3)
 ORIGINAL_SOURCE(https://github.com/nlohmann/json/archive/v3.11.3.tar.gz)
 
 ADDINCL(
-    ONE_LEVEL
-    contrib/restricted/nlohmann_json/include
+    GLOBAL contrib/restricted/nlohmann_json/include
 )
 
 NO_UTIL()

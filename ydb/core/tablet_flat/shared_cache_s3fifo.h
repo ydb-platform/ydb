@@ -10,94 +10,39 @@ namespace NKikimr::NCache {
 
 namespace {
 
-/*
-
-The ghost FIFO queue G can be implemented as part of
-the indexing structure. For example, we can store object
-fingerprint and insertion time of ghost entries in a bucket
-based hash table [33, 37, 93, 158]. The fingerprint is a 4-
-byte hash of the object ID. The insertion time is a virtual
-timestamp, counting the number of objects inserted into G
-thus far. Let 𝑆G denote the size of the ghost queue. If the
-current time is 𝑁 (i.e., there were 𝑁 insertions into G), then
-all the entries whose timestamp is lower than 𝑁 − 𝑆G are no
-longer in G. A ghost entry is removed from the hash table
-when the object is requested or during hash collision — when
-the slot is needed to store another entry.
-
-*/
-
-class TSimpleHashTable {
-    struct TItem {
-        size_t Hash = 0;
-        ui64 Timestamp = 0;
+template <typename TKey>
+class TGhostQueue {
+    struct TGhost : public TIntrusiveListItem<TGhost> {
+        ui64 Size;
     };
 
 public:
-    TSimpleHashTable(size_t limit)
-        : Now(1)
-        , TTL(limit)
-        , HashTable(limit * 2)
+    TGhostQueue(ui64 limit)
+        : Limit(limit)
     {
     }
 
-    // Note: doesn't support shrinking
-    void UpdateLimit(size_t limit) {
-        TTL = limit;
-
-        if (HashTable.size() < limit * 2) {
-            Resize(Max(limit * 2, HashTable.size() * 2));
-        }
+    void Add(TKey key, ui64 size) {
+        Y_UNUSED(key, size);
     }
 
-    void Add(size_t hash) {
-        const auto index = GetIndex(hash);
-        HashTable[index] = {hash, Now};
-        Now++;
-    }
-
-    bool Erase(size_t hash) {
-        const auto index = GetIndex(hash);
-        const auto& item = HashTable[index];
-
-        if (item.Hash == hash && IsRecent(HashTable[index].Timestamp)) {
-            HashTable[index] = {};
-            return true;
-        }
-
+    bool Erase(TKey key, ui64 size) {
+        Y_UNUSED(key, size);
         return false;
     }
 
 private:
-    void Resize(size_t size) {
-        TVector<TItem> oldHashTable(size);
-        oldHashTable.swap(HashTable);
-
-        for (const auto item : oldHashTable) {
-            if (IsRecent(item.Timestamp)) {
-                HashTable[GetIndex(item.Hash)] = item;
-            }
-        }
-    }
-
-    bool IsRecent(ui64 timestamp) const {
-        return timestamp && Now - timestamp <= TTL;
-    }
-
-    size_t GetIndex(size_t hash) const {
-        return hash % HashTable.size();
-    }
-
-    ui64 Now;
-    ui64 TTL;
-    TVector<TItem> HashTable;
+    ui64 Limit;
+    ui64 Size = 0;
+    THashMap<TKey, TGhost> GhostsMap;
+    TIntrusiveList<TGhost> GhostsQueue;
 };
 
 }
 
 template <typename TItem
+        , typename TKey
         , typename TSize
-        , typename THash
         , typename TLocation
         , typename TFrequency
     >
@@ -127,8 +72,9 @@ class TS3FIFOCache : public ICacheCache<TItem> {
 public:
     TS3FIFOCache(ui64 limit)
         : Limit(limit)
-        , SmallQueue{ELocation::SmallQueue}
-        , MainQueue{ELocation::MainQueue}
+        , SmallQueue(ELocation::SmallQueue)
+        , MainQueue(ELocation::MainQueue)
+        , GhostQueue(127)
     {}
 
     TItem* EvictNext() override {
@@ -174,7 +120,7 @@ public:
     TIntrusiveList<TItem> Insert(TItem* item) {
         Y_DEBUG_ABORT_UNLESS(GetLocation(item) == ELocation::None);
 
-        Push(EraseGhost() ? MainQueue : SmallQueue, item);
+        Push(EraseGhost(item) ? MainQueue : SmallQueue, item);
         SetFrequency(item, 0);
 
         TIntrusiveList<TItem> evictedList;
@@ -265,24 +211,23 @@ private:
     }
 
     void AddGhost(const TItem* item) {
-        GhostQueue.Add(GetHash(item));
+        GhostQueue.Add(GetKey(item), GetSize(item));
     }
 
     bool EraseGhost(const TItem* item) {
-        return GhostQueue.Erase(GetHash(item));
-    } 
+        return GhostQueue.Erase(GetKey(item), GetSize(item));
+    }
+
+    TKey GetKey(const TItem* item) const {
+        return TKey::Get(item);
+    }
 
     ui64 GetSize(const TItem* item) const {
         return TSize::Get(item);
     }
 
-    size_t GetHash(const TItem* item) const {
-        return THash::Get(item);
-    }
-
     ELocation GetLocation(const TItem* item) const {
         return static_cast<ELocation>(TLocation::Get(item));
-
     }
 
     void SetLocation(TItem* item, ELocation location) const {
@@ -293,7 +238,7 @@ private:
         return TFrequency::Get(item);
     }
 
-    ui32 SetFrequency(TItem* item, ui32 frequency) const {
+    void SetFrequency(TItem* item, ui32 frequency) const {
         TFrequency::Set(item, frequency);
     }
 
@@ -302,7 +247,7 @@ private:
 
     TQueue SmallQueue;
     TQueue MainQueue;
-    TSimpleHashTable GhostQueue;
+    TGhostQueue<TKey> GhostQueue;
 
 };
 

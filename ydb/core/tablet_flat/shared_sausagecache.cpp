@@ -131,16 +131,16 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             Y_VERIFY_S(CacheFlags2 == 0, "Unexpected " << CacheFlags2 << " page cache flags 2");
         }
 
+        struct TKey : std::pair<TLogoBlobID, ui32> {
+            static TKey Get(const TPage *x) {
+                return {{x->Collection->MetaId, x->PageId}};
+            }
+        };
+
         struct TSize {
             static ui64 Get(const TPage *x) {
                 Y_DEBUG_ABORT_UNLESS(x->State == PageStateLoaded);
                 return sizeof(TPage) + x->Size;
-            }
-        };
-
-        struct THash {
-            static size_t Get(const TPage *x) {
-                return std::hash<std::pair<ui32, ui32>>()({x->Collection->MetaId.Hash(), x->PageId});
             }
         };
 
@@ -254,7 +254,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         switch (Config->ReplacementPolicy) {
             case NKikimrSharedCache::S3FIFO:
-                return MakeHolder<TS3FIFOCache<TPage, TPage::TSize, TPage::TCacheFlags1, TPage::TCacheFlags2>>(1);
+                return MakeHolder<TS3FIFOCache<TPage, TPage::TKey, TPage::TSize, TPage::TCacheFlags1, TPage::TCacheFlags2>>(1);
             case NKikimrSharedCache::ThreeLeveledLRU:
             default: {
                 TCacheCacheConfig cacheCacheConfig(1, Config->Counters->FreshBytes, Config->Counters->StagingBytes, Config->Counters->WarmBytes);

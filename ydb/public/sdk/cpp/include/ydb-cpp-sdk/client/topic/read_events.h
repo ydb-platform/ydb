@@ -426,6 +426,8 @@ void TPrintable<TReadSessionEvent::TPartitionSessionStatusEvent>::DebugString(TS
 template<>
 void TPrintable<TReadSessionEvent::TPartitionSessionClosedEvent>::DebugString(TStringBuilder& ret, bool printData) const;
 template<>
+void TPrintable<TReadSessionEvent::TEndPartitionSessionEvent>::DebugString(TStringBuilder& ret, bool printData) const;
+template<>
 void TPrintable<TSessionClosedEvent>::DebugString(TStringBuilder& ret, bool printData) const;
 
 std::string DebugString(const TReadSessionEvent::TEvent& event);

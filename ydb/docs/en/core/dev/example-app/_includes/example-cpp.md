@@ -24,10 +24,9 @@ App code snippet for creating a client:
 {% include [steps/02_create_table.md](steps/02_create_table.md) %}
 
 ```c++
-    //! Creates sample tables with ExecuteQuery Query Service
-    ThrowOnError(client.RetryQuery([path](TSession session) {
+    //! Creates sample tables with the ExecuteQuery method
+    ThrowOnError(client.RetryQuerySync([](TSession session) {
         auto query = Sprintf(R"(
-            PRAGMA TablePathPrefix("%s");
             CREATE TABLE series (
                 series_id Uint64,
                 title Utf8,
@@ -35,8 +34,8 @@ App code snippet for creating a client:
                 release_date Uint64,
                 PRIMARY KEY (series_id)
             );
-        )", path.c_str());
-        return session.ExecuteQuery(query, TTxControl::NoTx());
+        )");
+        return session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
     }));
 ```
 
@@ -46,15 +45,12 @@ Code snippet for data insert/update:
 
 ```c++
 //! Shows basic usage of mutating operations.
-void UpsertSimple(TQueryClient client, const TString& path) {
-    ThrowOnError(client.RetryQuerySync([path](TSession session) {
+void UpsertSimple(TQueryClient client) {
+    ThrowOnError(client.RetryQuerySync([](TSession session) {
         auto query = Sprintf(R"(
-            --!syntax_v1
-            PRAGMA TablePathPrefix("%s");
-
             UPSERT INTO episodes (series_id, season_id, episode_id, title) VALUES
                 (2, 6, 1, "TBD");
-        )", path.c_str());
+        )");
 
         return session.ExecuteQuery(query,
             TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).GetValueSync();
@@ -70,25 +66,22 @@ void UpsertSimple(TQueryClient client, const TString& path) {
 To execute YQL queries, use the `ExecuteQuery` method.
 The SDK lets you explicitly control the execution of transactions and configure the transaction execution mode using the `TTxControl` class.
 
-In the code snippet below, the transaction is started with the `TTxControl::BeginTx` method. With `TTxSettings`, set the `SerializableRW` transaction execution mode. When all the queries in the transaction are completed, the transaction is automatically completed by explicitly setting `CommitTx()`. The `query` described using the YQL syntax is passed to the `ExecuteQuery` method for execution.
-
+In the code snippet below, the transaction settings are defined using the `TTxControl::BeginTx` method. With `TTxSettings`, set the `SerializableRW` transaction execution mode. When all the queries in the transaction are completed, the transaction is automatically completed by explicitly setting `CommitTx()`. The `query` described using the YQL syntax is passed to the `ExecuteQuery` method for execution.
 
 ```c++
-void SelectSimple(TQueryClient client, const TString& path) {
+void SelectSimple(TQueryClient client) {
     TMaybe<TResultSet> resultSet;
-    ThrowOnError(client.RetryQuerySync([&path, &resultSet](TSession session) {
+    ThrowOnError(client.RetryQuerySync([&resultSet](TSession session) {
         auto query = Sprintf(R"(
-            PRAGMA TablePathPrefix("%s");
-
             SELECT series_id, title, CAST(CAST(release_date AS Date) AS String) AS release_date
             FROM series
             WHERE series_id = 1;
-        )", path.c_str());
+        )");
 
         auto txControl =
-            // Begin new transaction with SerializableRW mode
+            // Begin a new transaction with SerializableRW mode
             TTxControl::BeginTx(TTxSettings::SerializableRW())
-            // Commit transaction at the end of the query
+            // Commit the transaction at the end of the query
             .CommitTx();
 
         auto result = session.ExecuteQuery(query, txControl).GetValueSync();
@@ -102,13 +95,13 @@ void SelectSimple(TQueryClient client, const TString& path) {
 
 {% include [steps/05_results_processing.md](steps/05_results_processing.md) %}
 
-The `TResultSetParser` class is used for processing query execution results.  
+The `TResultSetParser` class is used for processing query execution results.
 
 The code snippet below shows how to process query results using the `parser` object:
 
 ```c++
     TResultSetParser parser(*resultSet);
-    if (parser.TryNextRow()) {
+    while (parser.TryNextRow()) {
         Cout << "> SelectSimple:" << Endl << "Series"
             << ", Id: " << parser.ColumnParser("series_id").GetOptionalUint64()
             << ", Title: " << parser.ColumnParser("title").GetOptionalUtf8()
@@ -130,15 +123,12 @@ series, Id: 1, title: IT Crowd, Release date: 2006-02-03
 The code snippet shows the use of parameterized queries and the `TParamsBuilder` to generate parameters and pass them to the `ExecuteQuery`method:
 
 ```c++
-void SelectWithParams(TQueryClient client, const TString& path) {
+void SelectWithParams(TQueryClient client) {
     TMaybe<TResultSet> resultSet;
-    ThrowOnError(client.RetryQuerySync([&path, &resultSet](TSession session) {
+    ThrowOnError(client.RetryQuerySync([&resultSet](TSession session) {
         ui64 seriesId = 2;
         ui64 seasonId = 3;
         auto query = Sprintf(R"(
-            --!syntax_v1
-            PRAGMA TablePathPrefix("%s");
-
             DECLARE $seriesId AS Uint64;
             DECLARE $seasonId AS Uint64;
 
@@ -147,7 +137,7 @@ void SelectWithParams(TQueryClient client, const TString& path) {
             INNER JOIN series AS sr
             ON sa.series_id = sr.series_id
             WHERE sa.series_id = $seriesId AND sa.season_id = $seasonId;
-        )", path.c_str());
+        )");
 
         auto params = TParamsBuilder()
             .AddParam("$seriesId")
@@ -191,25 +181,25 @@ Season, title: Season 3, series title: Silicon Valley
 
 Making a stream query that results in a data stream. Streaming lets you read an unlimited number of rows and amount of data.
 
-**WARNING**: Do not use without RetryQuery.
+{% note warning %}
+
+Do not use the `StreamExecuteQuery` method without wrapping the call with `RetryQuery` or `RetryQuerySync`.
+
+{% endnote %}
 
 ```c++
-void StreamQuerySelect(TQueryClient client, const TString& path) {
+void StreamQuerySelect(TQueryClient client) {
     std::vector <TResultSet> resultSets;
-    // WARNING: Do not use without RetryQuery!!!
-    ThrowOnError(client.RetryQuerySync([path, &resultSets](TQueryClient client) -> TStatus {
+    ThrowOnError(client.RetryQuerySync([&resultSets](TQueryClient client) -> TStatus {
         resultSets.clear();
         auto query = Sprintf(R"(
-            --!syntax_v1
-            PRAGMA TablePathPrefix("%s");
-
             DECLARE $series AS List<UInt64>;
 
             SELECT series_id, season_id, title, CAST(CAST(first_aired AS Date) AS String) AS first_aired
             FROM seasons
             WHERE series_id IN $series
             ORDER BY season_id;
-        )", path.c_str());
+        )");
 
         auto parameters = TParamsBuilder()
             .AddParam("$series")
@@ -226,6 +216,7 @@ void StreamQuerySelect(TQueryClient client, const TString& path) {
             return resultStreamQuery;
         }
 
+        // Iterates over results
         bool eos = false;
 
         while (!eos) {
@@ -245,7 +236,7 @@ void StreamQuerySelect(TQueryClient client, const TString& path) {
             }
         }
         return TStatus(EStatus::SUCCESS, NYql::TIssues());
-    }));
+    })); // The end of the retried lambda
     
     Cout << "> StreamQuery:" << Endl;
     for (auto rs : resultSets) {
@@ -279,21 +270,18 @@ The first step is to prepare and execute the first query:
 
 ```c++
 //! Shows usage of transactions consisting of multiple data queries with client logic between them.
-void MultiStep(TQueryClient client, const TString& path) {
+void MultiStep(TQueryClient client) {
     TMaybe<TResultSet> resultSet;
-    ThrowOnError(client.RetryQuerySync([&path, &resultSet](TSession session) {
+    ThrowOnError(client.RetryQuerySync([&resultSet](TSession session) {
         ui64 seriesId = 2;
         ui64 seasonId = 5;
         auto query1 = Sprintf(R"(
-            --!syntax_v1
-            PRAGMA TablePathPrefix("%s");
-
             DECLARE $seriesId AS Uint64;
             DECLARE $seasonId AS Uint64;
 
             SELECT first_aired AS from_date FROM seasons
             WHERE series_id = $seriesId AND season_id = $seasonId;
-        )", path.c_str());
+        )");
 
         auto params1 = TParamsBuilder()
             .AddParam("$seriesId")
@@ -304,8 +292,8 @@ void MultiStep(TQueryClient client, const TString& path) {
                 .Build()
             .Build();
 
-        // Execute first query to get the required values to the client.
-        // Transaction control settings don't set CommitTx flag to keep transaction active
+        // Execute the first query to retrieve the required values for the client.
+        // Transaction control settings do not set the CommitTx flag, allowing the transaction to remain active
         // after query execution.
         auto result = session.ExecuteQuery(
             query1,
@@ -319,12 +307,13 @@ void MultiStep(TQueryClient client, const TString& path) {
         }
 ```
 
-To continue working within the current transaction, you need to get the current `transaction id`:
+A transaction identifier needs to be obtained to continue working within the current transaction:
 
 ```c++
-        // Get active transaction id
-        auto tx = resultValue.GetTransaction();
-
+        // Get the active transaction id
+        auto txId = resultValue.GetTransaction()->GetId();
+        
+        // Processing the request result
         TResultSetParser parser(resultValue.GetResultSet(0));
         parser.TryNextRow();
         auto date = parser.ColumnParser("from_date").GetOptionalUint64();
@@ -343,16 +332,13 @@ The next step is to create the next query that uses the results of code executio
 ```c++
         // Construct next query based on the results of client logic
         auto query2 = Sprintf(R"(
-            --!syntax_v1
-            PRAGMA TablePathPrefix("%s");
-
             DECLARE $seriesId AS Uint64;
             DECLARE $fromDate AS Uint64;
             DECLARE $toDate AS Uint64;
 
             SELECT season_id, episode_id, title, air_date FROM episodes
             WHERE series_id = $seriesId AND air_date >= $fromDate AND air_date <= $toDate;
-        )", path.c_str());
+        )");
 
         auto params2 = TParamsBuilder()
             .AddParam("$seriesId")
@@ -366,12 +352,12 @@ The next step is to create the next query that uses the results of code executio
                 .Build()
             .Build();
 
-        // Execute second query.
-        // Transaction control settings continues active transaction (tx) and
-        // commits it at the end of second query execution.
+        // Execute the second query.
+        // The transaction control settings continue the active transaction (tx)
+        // and commit it at the end of the second query execution.
         auto result2 = session.ExecuteQuery(
             query2,
-            TTxControl::Tx(tx->GetId()).CommitTx(),
+            TTxControl::Tx(txId).CommitTx(),
             params2).GetValueSync();
         
         if (!result2.IsSuccess()) {
@@ -379,7 +365,7 @@ The next step is to create the next query that uses the results of code executio
         }
         resultSet = result2.GetResultSet(0);
         return result2;
-    }));
+    })); // The end of the retried lambda
 
     TResultSetParser parser(*resultSet);
     Cout << "> MultiStep:" << Endl;
@@ -409,11 +395,11 @@ Episode 3, Season: 5, title: Chief Operating Officer, Air date: Sun Apr 08, 2018
 Code snippet for `BeginTransaction` and `tx.Commit()` calls:
 
 ```c++
-void ExplicitTcl(TQueryClient client, const TString& path) {
-    // Show usage of explicit Begin/Commit transaction control calls.
-    // In most cases it's better to use transaction control settings in ExecuteDataQuery calls instead
-    // to avoid additional hops to YDB cluster and allow more efficient execution of queries.
-    ThrowOnError(client.RetryQuerySync([&path](TQueryClient client) -> TStatus {
+void ExplicitTcl(TQueryClient client) {
+    // Demonstrate the use of explicit Begin and Commit transaction control calls.
+    // In most cases, it's preferable to use transaction control settings within ExecuteDataQuery calls instead, 
+    // as this avoids additional hops to the YDB cluster and allows for more efficient query execution.
+    ThrowOnError(client.RetryQuerySync([](TQueryClient client) -> TStatus {
         auto airDate = TInstant::Now();
         auto session = client.GetSession().GetValueSync().GetSession();
         auto beginResult = session.BeginTransaction(TTxSettings::SerializableRW()).GetValueSync();
@@ -425,13 +411,10 @@ void ExplicitTcl(TQueryClient client, const TString& path) {
         auto tx = beginResult.GetTransaction();
 
         auto query = Sprintf(R"(
-            --!syntax_v1
-            PRAGMA TablePathPrefix("%s");
-
             DECLARE $airDate AS Date;
 
             UPDATE episodes SET air_date = CAST($airDate AS Uint16) WHERE title = "TBD";
-        )", path.c_str());
+        )");
 
         auto params = TParamsBuilder()
             .AddParam("$airDate")

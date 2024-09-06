@@ -8,7 +8,7 @@ namespace NYT::NLogging {
 
 void TLoggerOwner::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::Logger>("logger")();
+    PHOENIX_REGISTER_FIELD(1, Logger)();
 }
 
 PHOENIX_DEFINE_TYPE(TLoggerOwner);

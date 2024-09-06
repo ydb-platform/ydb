@@ -2,9 +2,9 @@
 
 #include <library/cpp/deprecated/atomic/atomic.h>
 
+#include <util/datetime/base.h>
 #include <util/system/mutex.h>
-
-#include "timers.h"
+#include <util/system/hp_timer.h>
 
 /* Token bucket.
  * Makes flow of *inflow* units per second in average, with up to *capacity* bursts.
@@ -40,6 +40,35 @@
    }
 
 */
+
+struct TInstantTimerMs {
+    using TTime = TInstant;
+    static constexpr ui64 Resolution = 1000ull; // milliseconds
+    static TTime Now() {
+        return TInstant::Now();
+    }
+    static ui64 Duration(TTime from, TTime to) {
+        return (to - from).MilliSeconds();
+    }
+};
+
+struct THPTimerUs {
+    using TTime = NHPTimer::STime;
+    static constexpr ui64 Resolution = 1000000ull; // microseconds
+    static TTime Now() {
+        NHPTimer::STime ret;
+        NHPTimer::GetTime(&ret);
+        return ret;
+    }
+    static ui64 Duration(TTime from, TTime to) {
+        i64 cycles = to - from;
+        if (cycles > 0) {
+            return ui64(double(cycles) * double(Resolution) / NHPTimer::GetClockRate());
+        } else {
+            return 0;
+        }
+    }
+};
 
 template <typename StatCounter, typename Lock = TMutex, typename Timer = TInstantTimerMs>
 class TBucketQuoter {

@@ -7,7 +7,8 @@
 #include "vdisk_mongroups.h"
 #include "vdisk_performance_params.h"
 
-#include <library/cpp/lockfree_bucket/lockfree_bucket.h>
+#include <library/cpp/bucket_quoter/bucket_quoter.h>
+#include <ydb/library/lockfree_bucket/lockfree_bucket.h>
 #include <util/system/compiler.h>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>

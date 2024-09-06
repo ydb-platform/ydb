@@ -3,10 +3,9 @@
 #include <atomic>
 #include <limits>
 
-#include <library/cpp/bucket_quoter/timers.h>
 #include <util/datetime/base.h>
 
-template<class TTimer = TInstantTimerMs> 
+template<class TTimer> 
 class TLockFreeBucket {
 public:
     TLockFreeBucket(std::atomic<i64>& maxTokens, std::atomic<i64>& minTokens, std::atomic<ui64>& inflowPerSecond)

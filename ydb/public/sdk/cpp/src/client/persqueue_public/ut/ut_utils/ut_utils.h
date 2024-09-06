@@ -45,7 +45,7 @@ public:
             NYdb::TDriverConfig cfg;
             cfg.SetEndpoint(TStringBuilder() << "localhost:" << Server.GrpcPort);
             cfg.SetDatabase("/Root");
-            cfg.SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG));
+            cfg.SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
             Driver = MakeHolder<NYdb::TDriver>(cfg);
         }
         return *Driver;
@@ -168,7 +168,7 @@ public:
                     }
                     Y_ABORT_UNLESS(continueToken);
 
-                    TMaybe<ui64> seqNo = Nothing();
+                    std::optional<ui64> seqNo = std::nullopt;
                     if (!AutoSeqNo) {
                         seqNo = acknowledgeableMessage.SequenceNumber;
                         Log << TLOG_INFO << "[" << sourceId << "] Write messages with sequence numbers "
@@ -377,7 +377,7 @@ public:
         Stop = true;
         Thread.Join();
     }
-    void PostImpl(TVector<TFunction>&& fs) override {
+    void PostImpl(std::vector<TFunction>&& fs) override {
         for (auto& f : fs) {
             TasksQueue.Enqueue(std::move(f));
         }

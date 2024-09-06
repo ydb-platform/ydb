@@ -144,7 +144,7 @@ namespace NYdb::NTopic::NTests {
 
                         UNIT_ASSERT_GT(consumerStats->GetLastReadOffset(), 0);
                         UNIT_ASSERT_GT(consumerStats->GetCommittedOffset(), 0);
-                        UNIT_ASSERT_GE(consumerStats->GetReadSessionId(), 0);
+                        UNIT_ASSERT_GE(TString{consumerStats->GetReadSessionId()}, 0);
                         UNIT_ASSERT_VALUES_EQUAL(consumerStats->GetReaderName(), "");
                     } else {
                         UNIT_ASSERT_VALUES_EQUAL(stats->GetStartOffset(), 0);
@@ -296,9 +296,9 @@ namespace NYdb::NTopic::NTests {
 
                 // Event 1: start partition session
                 {
-                    TMaybe<TReadSessionEvent::TEvent> event = readSession->GetEvent(true);
+                    std::optional<TReadSessionEvent::TEvent> event = readSession->GetEvent(true);
                     UNIT_ASSERT(event);
-                    auto startPartitionSession = std::get_if<TReadSessionEvent::TStartPartitionSessionEvent>(event.Get());
+                    auto startPartitionSession = std::get_if<TReadSessionEvent::TStartPartitionSessionEvent>(&event.value());
                     UNIT_ASSERT_C(startPartitionSession, DebugString(*event));
 
                     startPartitionSession->Confirm();
@@ -306,9 +306,9 @@ namespace NYdb::NTopic::NTests {
 
                 // Event 2: data received
                 {
-                    TMaybe<TReadSessionEvent::TEvent> event = readSession->GetEvent(true);
+                    std::optional<TReadSessionEvent::TEvent> event = readSession->GetEvent(true);
                     UNIT_ASSERT(event);
-                    auto dataReceived = std::get_if<TReadSessionEvent::TDataReceivedEvent>(event.Get());
+                    auto dataReceived = std::get_if<TReadSessionEvent::TDataReceivedEvent>(&event.value());
                     UNIT_ASSERT_C(dataReceived, DebugString(*event));
 
                     dataReceived->Commit();
@@ -316,9 +316,9 @@ namespace NYdb::NTopic::NTests {
 
                 // Event 3: commit acknowledgement
                 {
-                    TMaybe<TReadSessionEvent::TEvent> event = readSession->GetEvent(true);
+                    std::optional<TReadSessionEvent::TEvent> event = readSession->GetEvent(true);
                     UNIT_ASSERT(event);
-                    auto commitOffsetAck = std::get_if<TReadSessionEvent::TCommitOffsetAcknowledgementEvent>(event.Get());
+                    auto commitOffsetAck = std::get_if<TReadSessionEvent::TCommitOffsetAcknowledgementEvent>(&event.value());
 
                     UNIT_ASSERT_C(commitOffsetAck, DebugString(*event));
 
@@ -363,7 +363,7 @@ namespace NYdb::NTopic::NTests {
             if (allowUpdateRow) {
                 acl.AddAccess(NACLib::EAccessType::Allow, NACLib::UpdateRow, authToken);
             }
-            setup.GetServer().AnnoyingClient->ModifyACL("/Root", TEST_TOPIC, acl.SerializeAsString());
+            setup.GetServer().AnnoyingClient->ModifyACL("/Root", TString{TEST_TOPIC}, acl.SerializeAsString());
 
             return client.DescribePartition(existingTopic ? TEST_TOPIC : "bad-topic", testPartitionId, settings).GetValueSync();
         }
@@ -409,7 +409,7 @@ namespace NYdb::NTopic::NTests {
                 if (resultStatus == EStatus::SUCCESS) {
                     auto& p = result.GetPartitionDescription().GetPartition();
                     UNIT_ASSERT(p.GetActive());
-                    UNIT_ASSERT(p.GetPartitionLocation().Defined());
+                    UNIT_ASSERT(p.GetPartitionLocation().has_value());
                 }
             }
         }

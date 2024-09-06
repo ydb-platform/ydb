@@ -16,6 +16,8 @@
 #include <library/cpp/threading/future/future.h>
 #include <library/cpp/threading/future/async.h>
 
+#include <util/stream/zlib.h>
+
 #include <future>
 
 namespace NYdb::NTopic::NTests {
@@ -99,7 +101,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         NYdb::TDriverConfig cfg;
         cfg.SetEndpoint(TStringBuilder() << "invalid:" << setup.GetServer().GrpcPort);
         cfg.SetDatabase("/Invalid");
-        cfg.SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG));
+        cfg.SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
         auto driver = NYdb::TDriver(cfg);
 
         {
@@ -113,13 +115,13 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             auto writeSession = client.CreateWriteSession(writeSettings);
 
             auto event = writeSession->GetEvent(true);
-            UNIT_ASSERT(event.Defined() && std::holds_alternative<TSessionClosedEvent>(event.GetRef()));
+            UNIT_ASSERT(event && std::holds_alternative<TSessionClosedEvent>(event.value()));
         }
 
         {
             auto settings = TTopicClientSettings()
                 .Database({"/Root"})
-                .DiscoveryEndpoint({TStringBuilder() << "localhost:" << setup.GetServer().GrpcPort});
+                .DiscoveryEndpoint("localhost:" + std::to_string(setup.GetServer().GrpcPort));
 
             TTopicClient client(driver, settings);
 
@@ -130,7 +132,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             auto writeSession = client.CreateWriteSession(writeSettings);
 
             auto event = writeSession->GetEvent(true);
-            UNIT_ASSERT(event.Defined() && !std::holds_alternative<TSessionClosedEvent>(event.GetRef()));
+            UNIT_ASSERT(event && !std::holds_alternative<TSessionClosedEvent>(event.value()));
         }
     }
 
@@ -171,13 +173,13 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             auto readSession = client.CreateReadSession(readSettings);
 
             auto event = readSession->GetEvent(true);
-            UNIT_ASSERT(event.Defined());
+            UNIT_ASSERT(event.has_value());
 
             auto& startPartitionSession = std::get<TReadSessionEvent::TStartPartitionSessionEvent>(*event);
             startPartitionSession.Confirm();
 
             event = readSession->GetEvent(true);
-            UNIT_ASSERT(event.Defined());
+            UNIT_ASSERT(event.has_value());
 
             auto& dataReceived = std::get<TReadSessionEvent::TDataReceivedEvent>(*event);
             dataReceived.Commit();
@@ -234,16 +236,16 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         auto readSession = client.CreateReadSession(readSettings);
 
         auto event = readSession->GetEvent(true);
-        UNIT_ASSERT(event.Defined());
+        UNIT_ASSERT(event.has_value());
 
         auto& startPartitionSession = std::get<TReadSessionEvent::TStartPartitionSessionEvent>(*event);
         startPartitionSession.Confirm();
 
         UNIT_CHECK_GENERATED_EXCEPTION(readSession->GetEvent(true, 0), TContractViolation);
-        UNIT_CHECK_GENERATED_EXCEPTION(readSession->GetEvents(true, Nothing(), 0), TContractViolation);
+        UNIT_CHECK_GENERATED_EXCEPTION(readSession->GetEvents(true, std::nullopt, 0), TContractViolation);
 
         event = readSession->GetEvent(true, 1);
-        UNIT_ASSERT(event.Defined());
+        UNIT_ASSERT(event.has_value());
 
         auto& dataReceived = std::get<TReadSessionEvent::TDataReceivedEvent>(*event);
         dataReceived.Commit();
@@ -335,7 +337,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         auto description = result.GetConsumerDescription();
         UNIT_ASSERT(description.GetPartitions().size() == 1);
         auto stats = description.GetPartitions().front().GetPartitionConsumerStats();
-        UNIT_ASSERT(stats.Defined());
+        UNIT_ASSERT(stats.has_value());
         UNIT_ASSERT(stats->GetCommittedOffset() == 50);
     }
 
@@ -694,7 +696,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         auto description = result.GetTopicDescription();
         UNIT_ASSERT(description.GetPartitions().size() == 1);
         auto stats = description.GetPartitions().front().GetPartitionStats();
-        UNIT_ASSERT(stats.Defined());
+        UNIT_ASSERT(stats.has_value());
         UNIT_ASSERT_VALUES_EQUAL(stats->GetEndOffset(), count);
 
     }
@@ -778,7 +780,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             std::visit(TOverloaded {
                 [&](TReadSessionEvent::TDataReceivedEvent& event) {
                     for (auto& message: event.GetMessages()) {
-                        TString sourceId = message.GetMessageGroupId();
+                        std::string sourceId = message.GetMessageGroupId();
                         ui32 seqNo = message.GetSeqNo();
                         UNIT_ASSERT_VALUES_EQUAL(readMessageCount + 1, seqNo);
                         ++readMessageCount;
@@ -828,11 +830,11 @@ Y_UNIT_TEST_SUITE(TSettingsValidation) {
 
         auto client = setup.MakeClient();
         ui64 producerIndex = 0u;
-        auto runTest = [&](TString producer, TString msgGroup, const TMaybe<bool>& useDedup, bool useSeqNo, EExpectedTestResult result) ->bool
+        auto runTest = [&](TString producer, TString msgGroup, const std::optional<bool>& useDedup, bool useSeqNo, EExpectedTestResult result) ->bool
         {
             TWriteSessionSettings writeSettings;
             writeSettings.Path(setup.GetTopicPath()).Codec(NTopic::ECodec::RAW);
-            TString useDedupStr = useDedup.Defined() ? ToString(*useDedup) : "<unset>";
+            TString useDedupStr = useDedup.has_value() ? ToString(*useDedup) : "<unset>";
             if (producer) {
                 producer += ToString(producerIndex);
             }
@@ -847,7 +849,7 @@ Y_UNIT_TEST_SUITE(TSettingsValidation) {
                  << useDedupStr << ", manual SeqNo: " << useSeqNo << Endl;
 
             try {
-                if (useDedup.Defined()) {
+                if (useDedup.has_value()) {
                     writeSettings.DeduplicationEnabled(useDedup);
                 }
                 auto session = client.CreateWriteSession(writeSettings);
@@ -856,12 +858,12 @@ Y_UNIT_TEST_SUITE(TSettingsValidation) {
                 ui64 written = 0;
                 while (written < 10) {
                     auto event = session->GetEvent(true);
-                    if (std::holds_alternative<TSessionClosedEvent>(event.GetRef())) {
+                    if (std::holds_alternative<TSessionClosedEvent>(event.value())) {
                         auto closed = std::get<TSessionClosedEvent>(*event);
                         Cerr << "Session failed with error: " << closed.DebugString() << Endl;
                         UNIT_ASSERT(result == EExpectedTestResult::FAIL_ON_RPC);
                         return false;
-                    } else if (std::holds_alternative<TWriteSessionEvent::TReadyToAcceptEvent>(event.GetRef())) {
+                    } else if (std::holds_alternative<TWriteSessionEvent::TReadyToAcceptEvent>(event.value())) {
                         token = std::move(std::get<TWriteSessionEvent::TReadyToAcceptEvent>(*event).ContinuationToken);
                         if (useSeqNo) {
                             session->Write(std::move(*token), "data", seqNo++);
@@ -947,10 +949,10 @@ Y_UNIT_TEST_SUITE(TSettingsValidation) {
 
         auto readSession = client.CreateReadSession(readSettings);
         auto event = readSession->GetEvent(true);
-        UNIT_ASSERT(event.Defined());
+        UNIT_ASSERT(event.has_value());
 
         auto& closeEvent = std::get<NYdb::NTopic::TSessionClosedEvent>(*event);
-        UNIT_ASSERT(closeEvent.DebugString().Contains("Too small max memory usage"));
+        UNIT_ASSERT(closeEvent.DebugString().contains("Too small max memory usage"));
     }
 
 } // Y_UNIT_TEST_SUITE(TSettingsValidation)

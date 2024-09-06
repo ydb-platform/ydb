@@ -662,7 +662,7 @@ void TReadSessionImplTestSetup::SuccessfulInit(bool hasInitRequest) {
 
 TPartitionStream::TPtr TReadSessionImplTestSetup::CreatePartitionStream(const TString& topic, const TString& cluster, ui64 partition, ui64 assignId) {
     MockProcessor->AddServerResponse(TMockReadSessionProcessor::TServerReadInfo().CreatePartitionStream(topic, cluster, partition, assignId)); // Callback will be called.
-    TMaybe<TReadSessionEvent::TEvent> event = EventsQueue->GetEvent(true);
+    std::optional<TReadSessionEvent::TEvent> event = EventsQueue->GetEvent(true);
     UNIT_ASSERT(event);
     UNIT_ASSERT_EVENT_TYPE(*event, TReadSessionEvent::TCreatePartitionStreamEvent);
     auto& createEvent = std::get<TReadSessionEvent::TCreatePartitionStreamEvent>(*event);
@@ -673,7 +673,7 @@ TPartitionStream::TPtr TReadSessionImplTestSetup::CreatePartitionStream(const TS
 }
 
 void TReadSessionImplTestSetup::AssertNoEvents() {
-    TMaybe<TReadSessionEvent::TEvent> event = GetEventsQueue()->GetEvent(false);
+    std::optional<TReadSessionEvent::TEvent> event = GetEventsQueue()->GetEvent(false);
     UNIT_ASSERT(!event);
 }
 
@@ -691,7 +691,7 @@ Y_UNIT_TEST_SUITE(PersQueueSdkReadSessionTest) {
         TDeferredCommit dc;
         // Event 1: create partition stream.
         {
-            TMaybe<TReadSessionEvent::TEvent> event = session->GetEvent(true);
+            std::optional<TReadSessionEvent::TEvent> event = session->GetEvent(true);
             UNIT_ASSERT(event);
             UNIT_ASSERT_EVENT_TYPE(*event, TReadSessionEvent::TCreatePartitionStreamEvent);
             std::get<TReadSessionEvent::TCreatePartitionStreamEvent>(*event).Confirm();
@@ -699,7 +699,7 @@ Y_UNIT_TEST_SUITE(PersQueueSdkReadSessionTest) {
         }
         // Event 2: data.
         {
-            TMaybe<TReadSessionEvent::TEvent> event = session->GetEvent(true);
+            std::optional<TReadSessionEvent::TEvent> event = session->GetEvent(true);
             UNIT_ASSERT(event);
             UNIT_ASSERT_EVENT_TYPE(*event, TReadSessionEvent::TDataReceivedEvent);
             TReadSessionEvent::TDataReceivedEvent& dataEvent = std::get<TReadSessionEvent::TDataReceivedEvent>(*event);
@@ -715,7 +715,7 @@ Y_UNIT_TEST_SUITE(PersQueueSdkReadSessionTest) {
         setup.WriteToTopic({"message3"});
         // Event 3: data.
         {
-            TMaybe<TReadSessionEvent::TEvent> event = session->GetEvent(true);
+            std::optional<TReadSessionEvent::TEvent> event = session->GetEvent(true);
             UNIT_ASSERT(event);
             UNIT_ASSERT_EVENT_TYPE(*event, TReadSessionEvent::TDataReceivedEvent);
             TReadSessionEvent::TDataReceivedEvent& dataEvent = std::get<TReadSessionEvent::TDataReceivedEvent>(*event);
@@ -736,14 +736,14 @@ Y_UNIT_TEST_SUITE(PersQueueSdkReadSessionTest) {
 
         // Event 4: commit ack.
         if (commit) {  // (commit && close) branch check is broken with current TReadSession::Close quick fix
-            TMaybe<TReadSessionEvent::TEvent> event = session->GetEvent(!close); // Event is expected to be already in queue if closed.
+            std::optional<TReadSessionEvent::TEvent> event = session->GetEvent(!close); // Event is expected to be already in queue if closed.
             UNIT_ASSERT(event);
             Cerr << "commit ack or close event " << DebugString(*event) << Endl;
             UNIT_ASSERT(std::holds_alternative<TReadSessionEvent::TCommitAcknowledgementEvent>(*event) || std::holds_alternative<TSessionClosedEvent>(*event));
         }
 
         if (close && !commit) {
-            TMaybe<TReadSessionEvent::TEvent> event = session->GetEvent(false);
+            std::optional<TReadSessionEvent::TEvent> event = session->GetEvent(false);
             UNIT_ASSERT(event);
             Cerr << "close event " << DebugString(*event) << Endl;
             UNIT_ASSERT(std::holds_alternative<TSessionClosedEvent>(*event));
@@ -812,7 +812,7 @@ Y_UNIT_TEST_SUITE(PersQueueSdkReadSessionTest) {
         // Set policy with max retries == 3.
         settings.RetryPolicy(NYdb::NPersQueue::IRetryPolicy::GetExponentialBackoffPolicy(TDuration::MilliSeconds(10), TDuration::MilliSeconds(10), TDuration::MilliSeconds(100), 3));
         std::shared_ptr<IReadSession> session = setup.GetPersQueueClient().CreateReadSession(settings);
-        TMaybe<TReadSessionEvent::TEvent> event = session->GetEvent(true);
+        std::optional<TReadSessionEvent::TEvent> event = session->GetEvent(true);
         UNIT_ASSERT(event);
         Cerr << DebugString(*event) << Endl;
         UNIT_ASSERT_EVENT_TYPE(*event, TSessionClosedEvent);
@@ -827,7 +827,7 @@ Y_UNIT_TEST_SUITE(PersQueueSdkReadSessionTest) {
         // Success.
         {
             std::shared_ptr<IReadSession> session = setup.GetPersQueueClient().CreateReadSession(settings);
-            TMaybe<TReadSessionEvent::TEvent> event = session->GetEvent(true);
+            std::optional<TReadSessionEvent::TEvent> event = session->GetEvent(true);
             UNIT_ASSERT(event);
             Cerr << DebugString(*event) << Endl;
             UNIT_ASSERT_NOT_EVENT_TYPE(*event, TSessionClosedEvent);
@@ -837,7 +837,7 @@ Y_UNIT_TEST_SUITE(PersQueueSdkReadSessionTest) {
         {
             settings.AppendClusters("unknown_cluster");
             std::shared_ptr<IReadSession> session = setup.GetPersQueueClient().CreateReadSession(settings);
-            TMaybe<TReadSessionEvent::TEvent> event = session->GetEvent(true);
+            std::optional<TReadSessionEvent::TEvent> event = session->GetEvent(true);
             UNIT_ASSERT(event);
             Cerr << DebugString(*event) << Endl;
             UNIT_ASSERT_EVENT_TYPE(*event, TSessionClosedEvent);
@@ -847,7 +847,7 @@ Y_UNIT_TEST_SUITE(PersQueueSdkReadSessionTest) {
         {
             settings.ReadOriginal({"unknown_cluster"});
             std::shared_ptr<IReadSession> session = setup.GetPersQueueClient().CreateReadSession(settings);
-            TMaybe<TReadSessionEvent::TEvent> event = session->GetEvent(true);
+            std::optional<TReadSessionEvent::TEvent> event = session->GetEvent(true);
             UNIT_ASSERT(event);
             Cerr << DebugString(*event) << Endl;
             UNIT_ASSERT_EVENT_TYPE(*event, TSessionClosedEvent);
@@ -861,7 +861,7 @@ Y_UNIT_TEST_SUITE(PersQueueSdkReadSessionTest) {
 
         // Event 1: create partition stream.
         {
-            TMaybe<TReadSessionEvent::TEvent> event = session->GetEvent(true);
+            std::optional<TReadSessionEvent::TEvent> event = session->GetEvent(true);
             UNIT_ASSERT(event);
             UNIT_ASSERT_EVENT_TYPE(*event, TReadSessionEvent::TCreatePartitionStreamEvent);
             std::get<TReadSessionEvent::TCreatePartitionStreamEvent>(*event).Confirm();
@@ -870,7 +870,7 @@ Y_UNIT_TEST_SUITE(PersQueueSdkReadSessionTest) {
 
         // Event 2: receive data.
         auto GetDataEvent = [&](const TString& content) -> TMaybe<TReadSessionEvent::TEvent> {
-            TMaybe<TReadSessionEvent::TEvent> event = session->GetEvent(true);
+            std::optional<TReadSessionEvent::TEvent> event = session->GetEvent(true);
             UNIT_ASSERT(event);
             UNIT_ASSERT_EVENT_TYPE(*event, TReadSessionEvent::TDataReceivedEvent);
             TReadSessionEvent::TDataReceivedEvent& dataEvent = std::get<TReadSessionEvent::TDataReceivedEvent>(*event);
@@ -899,7 +899,7 @@ Y_UNIT_TEST_SUITE(PersQueueSdkReadSessionTest) {
         // Commit and check that other events will come.
         for (int i = 0; i < 2; ++i) {
             std::get<TReadSessionEvent::TDataReceivedEvent>(*dataEvents[i]).Commit();
-            TMaybe<TReadSessionEvent::TEvent> event = session->GetEvent(true);
+            std::optional<TReadSessionEvent::TEvent> event = session->GetEvent(true);
             UNIT_ASSERT(event);
             Y_ASSERT(std::holds_alternative<TReadSessionEvent::TCommitAcknowledgementEvent>(*event));
             Cerr << DebugString(*event) << Endl;
@@ -1146,7 +1146,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
 
         // Check destroy event.
         if (!forceful) {
-            TMaybe<TReadSessionEvent::TEvent> event = setup.EventsQueue->GetEvent(true);
+            std::optional<TReadSessionEvent::TEvent> event = setup.EventsQueue->GetEvent(true);
             UNIT_ASSERT(event);
             UNIT_ASSERT_EVENT_TYPE(*event, TReadSessionEvent::TDestroyPartitionStreamEvent);
             auto& destroyEvent = std::get<TReadSessionEvent::TDestroyPartitionStreamEvent>(*event);
@@ -1165,7 +1165,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
 
         // Check closed event.
         {
-            TMaybe<TReadSessionEvent::TEvent> event = setup.EventsQueue->GetEvent(true);
+            std::optional<TReadSessionEvent::TEvent> event = setup.EventsQueue->GetEvent(true);
             UNIT_ASSERT(event);
             UNIT_ASSERT_EVENT_TYPE(*event, TReadSessionEvent::TPartitionStreamClosedEvent);
             auto& closedEvent = std::get<TReadSessionEvent::TPartitionStreamClosedEvent>(*event);
@@ -1200,7 +1200,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
         }
 
         for (ui64 i = 1; i <= 2; ) {
-            TMaybe<TReadSessionEvent::TEvent> event = setup.EventsQueue->GetEvent(true);
+            std::optional<TReadSessionEvent::TEvent> event = setup.EventsQueue->GetEvent(true);
             UNIT_ASSERT(event);
             UNIT_ASSERT_EVENT_TYPE(*event, TReadSessionEvent::TDataReceivedEvent);
             auto& dataEvent = std::get<TReadSessionEvent::TDataReceivedEvent>(*event);
@@ -1226,7 +1226,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
 
         // Exception was passed during decompression.
         {
-            TMaybe<TReadSessionEvent::TEvent> event = setup.EventsQueue->GetEvent(true);
+            std::optional<TReadSessionEvent::TEvent> event = setup.EventsQueue->GetEvent(true);
             UNIT_ASSERT(event);
             UNIT_ASSERT_EVENT_TYPE(*event, TReadSessionEvent::TDataReceivedEvent);
             auto& dataEvent = std::get<TReadSessionEvent::TDataReceivedEvent>(*event);
@@ -1254,7 +1254,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
                                                .Batch("src_id")
                                                .CompressMessage(1, data, codec));
 
-        TMaybe<TReadSessionEvent::TEvent> event = setup.EventsQueue->GetEvent(true);
+        std::optional<TReadSessionEvent::TEvent> event = setup.EventsQueue->GetEvent(true);
         UNIT_ASSERT(event);
         UNIT_ASSERT_EVENT_TYPE(*event, TReadSessionEvent::TDataReceivedEvent);
         auto& dataEvent = std::get<TReadSessionEvent::TDataReceivedEvent>(*event);
@@ -1360,7 +1360,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
         ui64 prevSeqNo = 41;
         for (size_t i = 0; i < batches; ++i) {
             Cerr << "Getting new event" << Endl;
-            TMaybe<TReadSessionEvent::TEvent> event = setup.EventsQueue->GetEvent(true, batchLimit);
+            std::optional<TReadSessionEvent::TEvent> event = setup.EventsQueue->GetEvent(true, batchLimit);
             UNIT_ASSERT(event);
             UNIT_ASSERT_EVENT_TYPE(*event, TReadSessionEvent::TDataReceivedEvent);
             Cerr << DebugString(*event) << Endl;
@@ -1500,7 +1500,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
         }
 
         {
-            TVector<TReadSessionEvent::TEvent> events = setup.EventsQueue->GetEvents(true);
+            std::optional<TReadSessionEvent::TEvent> events = setup.EventsQueue->GetEvents(true);
             UNIT_ASSERT_VALUES_EQUAL(events.size(), 1);
             UNIT_ASSERT_EVENT_TYPE(events[0], TReadSessionEvent::TDataReceivedEvent);
             TReadSessionEvent::TDataReceivedEvent& dataEvent = std::get<TReadSessionEvent::TDataReceivedEvent>(events[0]);
@@ -1540,7 +1540,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
 
         stream->RequestStatus();
 
-        TMaybe<TReadSessionEvent::TEvent> event = setup.EventsQueue->GetEvent(true);
+        std::optional<TReadSessionEvent::TEvent> event = setup.EventsQueue->GetEvent(true);
         UNIT_ASSERT(event);
         UNIT_ASSERT_EVENT_TYPE(*event, TReadSessionEvent::TPartitionStreamStatusEvent);
         auto& statusEvent = std::get<TReadSessionEvent::TPartitionStreamStatusEvent>(*event);
@@ -1591,7 +1591,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
             }));
 
         for (int i = 0; i < 2; ) {
-            TMaybe<TReadSessionEvent::TEvent> event = setup.EventsQueue->GetEvent(true);
+            std::optional<TReadSessionEvent::TEvent> event = setup.EventsQueue->GetEvent(true);
             UNIT_ASSERT(event);
             UNIT_ASSERT_EVENT_TYPE(*event, TReadSessionEvent::TDataReceivedEvent);
             TReadSessionEvent::TDataReceivedEvent& dataEvent = std::get<TReadSessionEvent::TDataReceivedEvent>(*event);
@@ -1616,7 +1616,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
                                                .Batch("src_id")
                                                .CompressMessage(1, "message1"));
 
-        TMaybe<TReadSessionEvent::TEvent> event = setup.EventsQueue->GetEvent(true);
+        std::optional<TReadSessionEvent::TEvent> event = setup.EventsQueue->GetEvent(true);
         UNIT_ASSERT(event);
         UNIT_ASSERT_EVENT_TYPE(*event, TReadSessionEvent::TDataReceivedEvent);
         TReadSessionEvent::TDataReceivedEvent& dataEvent = std::get<TReadSessionEvent::TDataReceivedEvent>(*event);
@@ -1693,7 +1693,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
 
         setup.MockProcessor->AddServerResponse(TMockReadSessionProcessor::TServerReadInfo()
                                                .ForcefulReleasePartitionStream());
-        TMaybe<TReadSessionEvent::TEvent> event = setup.EventsQueue->GetEvent(true);
+        std::optional<TReadSessionEvent::TEvent> event = setup.EventsQueue->GetEvent(true);
         UNIT_ASSERT(event);
         UNIT_ASSERT_EVENT_TYPE(*event, TReadSessionEvent::TPartitionStreamClosedEvent);
         calledPromise.GetFuture().Wait();
@@ -1724,7 +1724,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
                                                .Batch("src_id")
                                                .CompressMessage(1, "message1"));
 
-        TMaybe<TReadSessionEvent::TEvent> event = setup.EventsQueue->GetEvent(true);
+        std::optional<TReadSessionEvent::TEvent> event = setup.EventsQueue->GetEvent(true);
         UNIT_ASSERT(event);
         UNIT_ASSERT_EVENT_TYPE(*event, TReadSessionEvent::TDataReceivedEvent);
 

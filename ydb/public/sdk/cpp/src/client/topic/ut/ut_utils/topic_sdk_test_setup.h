@@ -8,7 +8,7 @@ namespace NYdb::NTopic::NTests {
 
 #define TEST_CASE_NAME (this->Name_)
 
-inline static const TString TEST_TOPIC = "test-topic";
+inline static const std::string TEST_TOPIC = "test-topic";
 inline static const TString TEST_CONSUMER = "test-consumer";
 inline static const TString TEST_MESSAGE_GROUP_ID = "test-message_group_id";
 
@@ -16,13 +16,13 @@ class TTopicSdkTestSetup {
 public:
     TTopicSdkTestSetup(const TString& testCaseName, const NKikimr::Tests::TServerSettings& settings = MakeServerSettings(), bool createTopic = true);
 
-    void CreateTopic(const TString& path = TEST_TOPIC, const TString& consumer = TEST_CONSUMER, size_t partitionCount = 1,
+    void CreateTopic(const TString& path = TString{TEST_TOPIC}, const TString& consumer = TEST_CONSUMER, size_t partitionCount = 1,
                      std::optional<size_t> maxPartitionCount = std::nullopt);
-    void CreateTopicWithAutoscale(const TString& path = TEST_TOPIC, const TString& consumer = TEST_CONSUMER, size_t partitionCount = 1,
+    void CreateTopicWithAutoscale(const TString& path = TString{TEST_TOPIC}, const TString& consumer = TEST_CONSUMER, size_t partitionCount = 1,
                      size_t maxPartitionCount = 100);
 
     TString GetEndpoint() const;
-    TString GetTopicPath(const TString& name = TEST_TOPIC) const;
+    TString GetTopicPath(const TString& name = TString{TEST_TOPIC}) const;
     TString GetTopicParent() const;
     TString GetDatabase() const;
 

@@ -531,7 +531,6 @@ bool FillCreateColumnTableDesc(NYql::TKikimrTableMetadataPtr metadata,
         }
     }
 
-    Cerr << "Gateway ColumnFamiliesSize: " << tableDesc.GetSchema().ColumnFamiliesSize() << Endl;
     return true;
 }
 

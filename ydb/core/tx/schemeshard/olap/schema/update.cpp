@@ -31,7 +31,9 @@ namespace NKikimr::NSchemeShard {
             return false;
         }
 
-        // TODO: Alter Family in ColumnTable
+        if (!ColumnFamilies.Parse(alterRequest, errors)) {
+            return false;
+        }
 
         return true;
     }

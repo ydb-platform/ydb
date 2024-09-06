@@ -8092,6 +8092,87 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
                                  << eColumnCodecToString(columnFamiliesCodec[i]) << ")");
         }
     }
+
+    Y_UNIT_TEST(ColumnTableAddColumnFamily) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TKikimrRunner runner(runnerSettings);
+        auto tableClient = runner.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        TString tableName = "/Root/TableWithFamily";
+        {
+            auto query = TStringBuilder() << R"(CREATE TABLE `)" << tableName << R"(` (
+                    Key Uint64 NOT NULL,
+                    Value1 String,
+                    Value2 Uint32,
+                    PRIMARY KEY (Key),
+                    FAMILY default (
+                        DATA = "test",
+                        COMPRESSION = "snappy"
+                    ))
+                    WITH (STORE = COLUMN);)";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        auto runtime = runner.GetTestServer().GetRuntime();
+        TActorId sender = runtime->AllocateEdgeActor();
+        {
+            auto describeResult = DescribeTable(&runner.GetTestServer(), sender, tableName);
+            auto schema = describeResult.GetPathDescription().GetColumnTableDescription().GetSchema();
+            UNIT_ASSERT_EQUAL(schema.ColumnFamiliesSize(), 1);
+            UNIT_ASSERT_EQUAL(schema.GetColumnFamilies()[0].GetName(), "default");
+            UNIT_ASSERT_EQUAL(eColumnCodecToString(schema.GetColumnFamilies()[0].GetColumnCodec()),
+                eColumnCodecToString(NKikimrSchemeOp::EColumnCodec::ColumnCodecSNAPPY));
+        }
+
+        {
+            auto query = TStringBuilder() << R"(ALTER TABLE `)" << tableName << R"(`
+                    ADD FAMILY family1 (
+                        DATA = "test",
+                        COMPRESSION = "zstd");)";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto describeResult = DescribeTable(&runner.GetTestServer(), sender, tableName);
+            auto schema = describeResult.GetPathDescription().GetColumnTableDescription().GetSchema();
+            UNIT_ASSERT_EQUAL(schema.ColumnFamiliesSize(), 2);
+            UNIT_ASSERT_EQUAL(schema.GetColumnFamilies()[0].GetName(), "default");
+            UNIT_ASSERT_EQUAL(eColumnCodecToString(schema.GetColumnFamilies()[0].GetColumnCodec()),
+                eColumnCodecToString(NKikimrSchemeOp::EColumnCodec::ColumnCodecSNAPPY));
+            UNIT_ASSERT_EQUAL(schema.GetColumnFamilies()[1].GetName(), "family1");
+            UNIT_ASSERT_EQUAL(eColumnCodecToString(schema.GetColumnFamilies()[1].GetColumnCodec()),
+                eColumnCodecToString(NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD));
+        }
+
+        {
+            auto query = TStringBuilder() << R"(ALTER TABLE `)" << tableName << R"(`
+                    ADD FAMILY family2 (
+                        DATA = "test",
+                        COMPRESSION = "lz4"),
+                    ADD FAMILY family3 (
+                        DATA = "test",
+                        COMPRESSION = "snappy");)";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto describeResult = DescribeTable(&runner.GetTestServer(), sender, tableName);
+            auto schema = describeResult.GetPathDescription().GetColumnTableDescription().GetSchema();
+            UNIT_ASSERT_EQUAL(schema.ColumnFamiliesSize(), 4);
+            UNIT_ASSERT_EQUAL(schema.GetColumnFamilies()[0].GetName(), "default");
+            UNIT_ASSERT_EQUAL(eColumnCodecToString(schema.GetColumnFamilies()[0].GetColumnCodec()),
+                eColumnCodecToString(NKikimrSchemeOp::EColumnCodec::ColumnCodecSNAPPY));
+            UNIT_ASSERT_EQUAL(schema.GetColumnFamilies()[1].GetName(), "family1");
+            UNIT_ASSERT_EQUAL(eColumnCodecToString(schema.GetColumnFamilies()[1].GetColumnCodec()),
+                eColumnCodecToString(NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD));
+            UNIT_ASSERT_EQUAL(schema.GetColumnFamilies()[2].GetName(), "family2");
+            UNIT_ASSERT_EQUAL(eColumnCodecToString(schema.GetColumnFamilies()[2].GetColumnCodec()),
+                eColumnCodecToString(NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4));
+            UNIT_ASSERT_EQUAL(schema.GetColumnFamilies()[3].GetName(), "family3");
+            UNIT_ASSERT_EQUAL(eColumnCodecToString(schema.GetColumnFamilies()[3].GetColumnCodec()),
+                eColumnCodecToString(NKikimrSchemeOp::EColumnCodec::ColumnCodecSNAPPY));
+        }
+    }
 }
 
 Y_UNIT_TEST_SUITE(KqpOlapTypes) {

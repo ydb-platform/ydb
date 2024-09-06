@@ -555,8 +555,6 @@ void TPathDescriber::DescribeColumnTable(TPathId pathId, TPathElement::TPtr path
     description->CopyFrom(tableInfo->Description);
     description->MutableSharding()->CopyFrom(tableInfo->Description.GetSharding());
 
-    Cerr << "ColumnFamiliesSize: " << tableInfo->Description.GetSchema().ColumnFamiliesSize() << Endl;
-
     if (tableInfo->IsStandalone()) {
         FillAggregatedStats(*pathDescription, tableInfo->GetStats());
     } else {

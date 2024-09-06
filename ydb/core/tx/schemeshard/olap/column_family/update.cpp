@@ -71,17 +71,20 @@ bool TOlapColumnFamiliesUpdate::Parse(const NKikimrSchemeOp::TColumnTableSchema&
     return true;
 }
 
-// bool TOlapColumnFamiliesUpdate::Parse(const NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest, IErrorCollector& errors) {
-// TSet<TString> addColumnFamilies;
-// for (auto&& family : tableSchema.GetColumnFamilies()) {
-//     if (!familyNames.emplace(family.GetName()).second) {
-//         errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "Duplicate column family '" << family.GetName() << "'");
-//         return false;
-//     }
-//     AddFamily.emplace_back(family);
-// }
-
-//     return true;
-// }
-
+bool TOlapColumnFamiliesUpdate::Parse(const NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest, IErrorCollector& errors) {
+    TSet<TString> addColumnFamilies;
+    for (auto&& family : alterRequest.GetAddColumnFamily()) {
+        if (!addColumnFamilies.emplace(family.GetName()).second) {
+            errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "Duplicate column family '" << family.GetName() << "'");
+            return false;
+        }
+        TOlapColumnFamlilyAdd columnFamily({});
+        if (!columnFamily.ParseFromRequest(family, errors)) {
+            return false;
+        }
+        addColumnFamilies.insert(family.GetName());
+        AddColumnFamilies.emplace_back(columnFamily);
+    }
+    return true;
+}
 }

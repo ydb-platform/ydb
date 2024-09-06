@@ -50,10 +50,17 @@ private:
                 return parse;
             }
         }
+
+        for (auto&& family : dsDescription.GetPartitionConfig().GetColumnFamilies()) {
+            NKikimrSchemeOp::TAlterColumnTableSchema* alterSchema = olapDescription.MutableAlterSchema();
+            alterSchema->AddAddColumnFamily()->CopyFrom(family);
+        }
+
         return TConclusionStatus::Success();
     }
 
-    TConclusionStatus ParseFromDSRequest(const NKikimrSchemeOp::TColumnDescription& dsColumn, NKikimrSchemeOp::TOlapColumnDescription& olapColumn) const {
+    TConclusionStatus ParseFromDSRequest(
+        const NKikimrSchemeOp::TColumnDescription& dsColumn, NKikimrSchemeOp::TOlapColumnDescription& olapColumn) const {
         olapColumn.SetName(dsColumn.GetName());
         olapColumn.SetType(dsColumn.GetType());
         if (dsColumn.HasTypeId()) {

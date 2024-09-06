@@ -404,6 +404,7 @@ void TCommandExecuteQuery::Config(TConfig& config) {
 
 void TCommandExecuteQuery::Parse(TConfig& config) {
     TClientCommand::Parse(config);
+    ParseInputFormats();
     ParseFormats();
     if (BasicStats && CollectStatsMode) {
         throw TMisuseException() << "Both mutually exclusive options \"--stats\" and \"-s\" are provided.";

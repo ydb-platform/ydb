@@ -20,7 +20,7 @@ enum class EBatchMode {
     Adaptive /* "adaptive" */
 };
 
-class TCommandWithParameters : public TCommandWithExamples, public TCommandWithFormat {
+class TCommandWithParameters : public TCommandWithExamples, public TCommandWithInput {
 protected:
     void ParseParameters(TClientCommand::TConfig& config);
     void AddParametersOption(TClientCommand::TConfig& config, const TString& clarification = "");

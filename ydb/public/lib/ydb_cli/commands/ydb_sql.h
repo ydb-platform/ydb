@@ -10,7 +10,7 @@
 namespace NYdb {
 namespace NConsoleClient {
 
-class TCommandSql : public TYdbCommand, public TCommandWithFormat,
+class TCommandSql : public TYdbCommand, public TCommandWithOutput,
     public TInterruptibleCommand
 {
 public:

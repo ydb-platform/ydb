@@ -28,15 +28,41 @@ protected:
 
 class TCommandWithFormat {
 protected:
+    // Has both input and output
+    bool IsIoCommand();
+    virtual bool HasInput();
+    virtual bool HasOutput();
+};
+
+class TCommandWithInput: virtual public TCommandWithFormat {
+protected:
     void AddInputFormats(TClientCommand::TConfig& config, 
                          const TVector<EDataFormat>& allowedFormats, EDataFormat defaultFormat = EDataFormat::JsonUnicode);
     void AddStdinFormats(TClientCommand::TConfig& config, const TVector<EDataFormat>& allowedStdinFormats, 
                          const TVector<EDataFormat>& allowedFramingFormats);
+    void ParseInputFormats();
+
+protected:
+    EDataFormat InputFormat = EDataFormat::Default;
+    EDataFormat FramingFormat = EDataFormat::Default;
+    EDataFormat StdinFormat = EDataFormat::Default;
+    TVector<EDataFormat> StdinFormats;
+
+private:
+    TVector<EDataFormat> AllowedInputFormats;
+    TVector<EDataFormat> AllowedStdinFormats;
+    TVector<EDataFormat> AllowedFramingFormats;
+    
+protected:
+    bool IsStdinFormatSet = false;
+    bool IsFramingFormatSet = false;
+};
+
+class TCommandWithOutput: virtual public TCommandWithFormat {
+protected:
     void AddOutputFormats(TClientCommand::TConfig& config, 
                          const TVector<EDataFormat>& allowedFormats, EDataFormat defaultFormat = EDataFormat::Pretty);
-    void AddMessagingFormats(TClientCommand::TConfig& config, const TVector<EMessagingFormat>& allowedFormats);
     void ParseFormats();
-    void ParseMessagingFormats();
 
     // Deprecated
     void AddDeprecatedJsonOption(TClientCommand::TConfig& config,
@@ -45,23 +71,22 @@ protected:
 
 protected:
     EDataFormat OutputFormat = EDataFormat::Default;
-    EDataFormat InputFormat = EDataFormat::Default;
-    EDataFormat FramingFormat = EDataFormat::Default;
-    EDataFormat StdinFormat = EDataFormat::Default;
-    TVector<EDataFormat> StdinFormats;
+
+private:
+    TVector<EDataFormat> AllowedFormats;
+    bool DeprecatedOptionUsed = false;
+};
+
+class TCommandWithMessagingFormat {
+protected:
+    void AddMessagingFormats(TClientCommand::TConfig& config, const TVector<EMessagingFormat>& allowedFormats);
+    void ParseMessagingFormats();
+
+protected:
     EMessagingFormat MessagingFormat = EMessagingFormat::SingleMessage;
 
 private:
-    TVector<EDataFormat> AllowedInputFormats;
-    TVector<EDataFormat> AllowedStdinFormats;
-    TVector<EDataFormat> AllowedFramingFormats;
-    TVector<EDataFormat> AllowedFormats;
     TVector<EMessagingFormat> AllowedMessagingFormats;
-    bool DeprecatedOptionUsed = false;
-    
-protected:
-    bool IsStdinFormatSet = false;
-    bool IsFramingFormatSet = false;
 };
 
 class TResultSetPrinter {

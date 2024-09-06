@@ -321,7 +321,7 @@ void TCommandImportFromJson::Config(TConfig& config) {
 void TCommandImportFromJson::Parse(TConfig& config) {
     TCommandImportFileBase::Parse(config);
 
-    ParseFormats();
+    ParseInputFormats();
 }
 
 int TCommandImportFromJson::Run(TConfig& config) {

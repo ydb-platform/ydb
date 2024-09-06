@@ -90,14 +90,20 @@ void TCommandWithResponseHeaders::PrintResponseHeaderPretty(const TStatus& statu
 
 const TString TCommandWithResponseHeaders::ResponseHeadersHelp = "Show response metadata for ydb call";
 
-// Deprecated
-void TCommandWithFormat::AddDeprecatedJsonOption(TClientCommand::TConfig& config, const TString& description) {
-    config.Opts->AddLongOption("json", description).NoArgument()
-        .StoreValue(&OutputFormat, EDataFormat::Json).StoreValue(&DeprecatedOptionUsed, true)
-        .Hidden();
+
+bool TCommandWithFormat::IsIoCommand(){
+    return HasInput() && HasOutput();
 }
 
-void TCommandWithFormat::AddInputFormats(TClientCommand::TConfig& config, 
+bool TCommandWithFormat::HasInput() {
+    return false;
+}
+
+bool TCommandWithFormat::HasOutput() {
+    return false;
+}
+
+void TCommandWithInput::AddInputFormats(TClientCommand::TConfig& config, 
                                          const TVector<EDataFormat>& allowedFormats, EDataFormat defaultFormat) {
     TStringStream description;
     description << "Input format. Available options: ";
@@ -117,7 +123,7 @@ void TCommandWithFormat::AddInputFormats(TClientCommand::TConfig& config,
     AllowedInputFormats = allowedFormats;
 }
 
-void TCommandWithFormat::AddStdinFormats(TClientCommand::TConfig &config, const TVector<EDataFormat>& allowedStdinFormats,
+void TCommandWithInput::AddStdinFormats(TClientCommand::TConfig &config, const TVector<EDataFormat>& allowedStdinFormats,
                                          const TVector<EDataFormat>& allowedFramingFormats) {
     TStringStream description;
     description << "Stdin parameters format and framing. Specify this option twice to select both.\n"
@@ -146,44 +152,7 @@ void TCommandWithFormat::AddStdinFormats(TClientCommand::TConfig &config, const 
     AllowedFramingFormats = allowedFramingFormats;
 }
 
-void TCommandWithFormat::AddOutputFormats(TClientCommand::TConfig& config, 
-                                    const TVector<EDataFormat>& allowedFormats, EDataFormat defaultFormat) {
-    TStringStream description;
-    description << "Output format. Available options: ";
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
-    Y_ABORT_UNLESS(std::find(allowedFormats.begin(), allowedFormats.end(), defaultFormat) != allowedFormats.end(), 
-        "Couldn't find default format %s in allowed formats", (TStringBuilder() << defaultFormat).c_str());
-    for (const auto& format : allowedFormats) {
-        auto findResult = FormatDescriptions.find(format);
-        Y_ABORT_UNLESS(findResult != FormatDescriptions.end(),
-            "Couldn't find description for %s output format", (TStringBuilder() << format).c_str());
-        description << "\n  " << colors.BoldColor() << format << colors.OldColor()
-            << "\n    " << findResult->second;
-    }
-    description << "\nDefault: " << colors.CyanColor() << "\"" << defaultFormat << "\"" << colors.OldColor() << ".";
-    config.Opts->AddLongOption("format", description.Str())
-        .RequiredArgument("STRING").StoreResult(&OutputFormat);
-    AllowedFormats = allowedFormats;
-}
-
-void TCommandWithFormat::AddMessagingFormats(TClientCommand::TConfig& config, const TVector<EMessagingFormat>& allowedFormats) {
-    TStringStream description;
-    description << "Client-side format. Available options: ";
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
-    for (const auto& format : allowedFormats) {
-        auto findResult = MessagingFormatDescriptions.find(format);
-        Y_ABORT_UNLESS(findResult != MessagingFormatDescriptions.end(),
-            "Couldn't find description for %s output format", (TStringBuilder() << format).c_str());
-        description << "\n  " << colors.BoldColor() << format << colors.OldColor()
-            << "\n    " << findResult->second;
-    }
-    config.Opts->AddLongOption("format", description.Str())
-        .DefaultValue( "single-message" )
-        .RequiredArgument("STRING").StoreResult(&MessagingFormat);
-    AllowedMessagingFormats = allowedFormats;
-}
-
-void TCommandWithFormat::ParseFormats() {
+void TCommandWithInput::ParseInputFormats() {
     if (InputFormat != EDataFormat::Default
             && std::find(AllowedInputFormats.begin(), AllowedInputFormats.end(), InputFormat) == AllowedInputFormats.end()) {
         throw TMisuseException() << "Input format " << InputFormat << " is not available for this command";
@@ -220,7 +189,36 @@ void TCommandWithFormat::ParseFormats() {
             StdinFormat = InputFormat;
         }
     }
+}
 
+// Deprecated
+void TCommandWithOutput::AddDeprecatedJsonOption(TClientCommand::TConfig& config, const TString& description) {
+    config.Opts->AddLongOption("json", description).NoArgument()
+        .StoreValue(&OutputFormat, EDataFormat::Json).StoreValue(&DeprecatedOptionUsed, true)
+        .Hidden();
+}
+
+void TCommandWithOutput::AddOutputFormats(TClientCommand::TConfig& config, 
+                                    const TVector<EDataFormat>& allowedFormats, EDataFormat defaultFormat) {
+    TStringStream description;
+    description << "Output format. Available options: ";
+    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    Y_ABORT_UNLESS(std::find(allowedFormats.begin(), allowedFormats.end(), defaultFormat) != allowedFormats.end(), 
+        "Couldn't find default format %s in allowed formats", (TStringBuilder() << defaultFormat).c_str());
+    for (const auto& format : allowedFormats) {
+        auto findResult = FormatDescriptions.find(format);
+        Y_ABORT_UNLESS(findResult != FormatDescriptions.end(),
+            "Couldn't find description for %s output format", (TStringBuilder() << format).c_str());
+        description << "\n  " << colors.BoldColor() << format << colors.OldColor()
+            << "\n    " << findResult->second;
+    }
+    description << "\nDefault: " << colors.CyanColor() << "\"" << defaultFormat << "\"" << colors.OldColor() << ".";
+    config.Opts->AddLongOption("format", description.Str())
+        .RequiredArgument("STRING").StoreResult(&OutputFormat);
+    AllowedFormats = allowedFormats;
+}
+
+void TCommandWithOutput::ParseFormats() {
     if (OutputFormat == EDataFormat::Default || DeprecatedOptionUsed) {
         return;
     }
@@ -229,7 +227,24 @@ void TCommandWithFormat::ParseFormats() {
     }
 }
 
-void TCommandWithFormat::ParseMessagingFormats() {
+void TCommandWithMessagingFormat::AddMessagingFormats(TClientCommand::TConfig& config, const TVector<EMessagingFormat>& allowedFormats) {
+    TStringStream description;
+    description << "Client-side format. Available options: ";
+    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    for (const auto& format : allowedFormats) {
+        auto findResult = MessagingFormatDescriptions.find(format);
+        Y_ABORT_UNLESS(findResult != MessagingFormatDescriptions.end(),
+            "Couldn't find description for %s output format", (TStringBuilder() << format).c_str());
+        description << "\n  " << colors.BoldColor() << format << colors.OldColor()
+            << "\n    " << findResult->second;
+    }
+    config.Opts->AddLongOption("format", description.Str())
+        .DefaultValue( "single-message" )
+        .RequiredArgument("STRING").StoreResult(&MessagingFormat);
+    AllowedMessagingFormats = allowedFormats;
+}
+
+void TCommandWithMessagingFormat::ParseMessagingFormats() {
     if (MessagingFormat != EMessagingFormat::SingleMessage
             && std::find(AllowedMessagingFormats.begin(), AllowedMessagingFormats.end(), MessagingFormat) == AllowedMessagingFormats.end()) {
         throw TMisuseException() << "Messaging format " << MessagingFormat << " is not available for this command";

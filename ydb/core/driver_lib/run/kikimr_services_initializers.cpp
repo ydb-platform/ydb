@@ -303,6 +303,7 @@ void AddExecutorPool(
         TBasicExecutorPoolConfig basic;
         basic.PoolId = poolId;
         basic.PoolName = poolConfig.GetName();
+        basic.UseRingQueue = systemConfig.HasUseRingQueue() && systemConfig.GetUseRingQueue();
         if (poolConfig.HasMaxAvgPingDeviation()) {
             auto poolGroup = counters->GetSubgroup("execpool", basic.PoolName);
             auto &poolInfo = cpuManager.PingInfoByPool[poolId];

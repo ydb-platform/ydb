@@ -36,6 +36,24 @@ NKikimrConfig::TAppConfig AppCfg() {
 
 Y_UNIT_TEST_SUITE(KqpScanSpilling) {
 
+Y_UNIT_TEST(SpillingPragmaParseError) {
+    Cerr << "cwd: " << NFs::CurrentWorkingDirectory() << Endl;
+    TKikimrRunner kikimr(AppCfg());
+
+    auto db = kikimr.GetQueryClient();
+    auto query = R"(
+        --!syntax_v1
+        PRAGMA ydb.EnableSpillingNodes="GraceJoin1";
+        select t1.Key, t1.Value, t2.Key, t2.Value
+        from `/Root/KeyValue` as t1 full join `/Root/KeyValue` as t2 on t1.Value = t2.Value
+        order by t1.Value
+    )";
+
+    auto explainMode = NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain);
+    auto planres = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), explainMode).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(planres.GetStatus(), EStatus::GENERIC_ERROR, planres.GetIssues().ToString());
+}
+
 Y_UNIT_TEST(SelfJoinQueryService) {
     Cerr << "cwd: " << NFs::CurrentWorkingDirectory() << Endl;
 
@@ -60,6 +78,7 @@ Y_UNIT_TEST(SelfJoinQueryService) {
 
     auto query = R"(
         --!syntax_v1
+        PRAGMA ydb.CostBasedOptimizationLevel='0';
         select t1.Key, t1.Value, t2.Key, t2.Value
         from `/Root/KeyValue` as t1 join `/Root/KeyValue` as t2 on t1.Value = t2.Value
         order by t1.Key
@@ -120,6 +139,7 @@ Y_UNIT_TEST(SelfJoin) {
 
     auto query = R"(
         --!syntax_v1
+        PRAGMA ydb.CostBasedOptimizationLevel='0';
         select t1.Key, t1.Value, t2.Key, t2.Value
         from `/Root/KeyValue` as t1 join `/Root/KeyValue` as t2 on t1.Key = t2.Key
         order by t1.Key

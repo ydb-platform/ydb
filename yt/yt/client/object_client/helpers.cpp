@@ -285,6 +285,13 @@ bool IsUploadTransactionType(EObjectType type)
         type == EObjectType::UploadNestedTransaction;
 }
 
+bool IsExternalizedTransactionType(EObjectType type)
+{
+    return
+        type == EObjectType::ExternalizedTransaction ||
+        type == EObjectType::ExternalizedNestedTransaction;
+}
+
 bool IsCompositeNodeType(EObjectType type)
 {
     return

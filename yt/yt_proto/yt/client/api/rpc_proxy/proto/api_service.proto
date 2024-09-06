@@ -2467,10 +2467,14 @@ message TReqGetJobStderr
         string operation_alias = 3;
     }
     required NYT.NProto.TGuid job_id = 2;
+    optional int64 limit = 4;
+    optional int64 offset = 5;
 }
 
 message TRspGetJobStderr
 {
+    optional int64 end_offset = 1;
+    optional int64 total_size = 2;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3364,6 +3368,7 @@ message TRspGetQueryTrackerInfo
     required string cluster_name = 1;
     required bytes supported_features = 2; // YSON
     repeated string access_control_objects = 3;
+    optional string query_tracker_stage = 4;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

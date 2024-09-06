@@ -24,7 +24,7 @@ static constexpr auto& Logger = SolomonLogger;
 
 void TProducerCounters::ClearOutdated(i64 lastIteration)
 {
-    std::vector<TString> countersToRemove;
+    std::vector<std::string> countersToRemove;
     for (const auto& [name, counter] : Counters) {
         if (std::get<1>(counter) != lastIteration) {
             countersToRemove.push_back(name);
@@ -34,7 +34,7 @@ void TProducerCounters::ClearOutdated(i64 lastIteration)
         Counters.erase(name);
     }
 
-    std::vector<TString> gaugesToRemove;
+    std::vector<std::string> gaugesToRemove;
     for (const auto& [name, gauge] : Gauges) {
         if (gauge.second != lastIteration) {
             gaugesToRemove.push_back(name);
@@ -94,7 +94,7 @@ void TCounterWriter::PopTag()
     Counters_.pop_back();
 }
 
-void TCounterWriter::AddGauge(const TString& name, double value)
+void TCounterWriter::AddGauge(const std::string& name, double value)
 {
     auto& [gauge, iteration] = Counters_.back()->Gauges[name];
     iteration = Iteration_;
@@ -114,7 +114,7 @@ void TCounterWriter::AddGauge(const TString& name, double value)
     gauge.Update(value);
 }
 
-void TCounterWriter::AddCounter(const TString& name, i64 value)
+void TCounterWriter::AddCounter(const std::string& name, i64 value)
 {
     auto& [counter, iteration, lastValue] = Counters_.back()->Counters[name];
     iteration = Iteration_;

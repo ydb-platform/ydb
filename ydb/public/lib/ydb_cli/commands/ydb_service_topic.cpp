@@ -2,9 +2,13 @@
 
 #include "ydb_service_topic.h"
 #include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
+#include <ydb/public/lib/ydb_cli/commands/ydb_service_scheme.h>
 #include <ydb/public/lib/ydb_cli/common/command.h>
+#include <ydb/public/lib/ydb_cli/common/pretty_table.h>
+#include <ydb/public/lib/ydb_cli/common/print_utils.h>
 #include <ydb/public/lib/ydb_cli/topic/topic_read.h>
 #include <ydb/public/lib/ydb_cli/topic/topic_write.h>
+#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 
 #include <util/generic/set.h>
 #include <util/stream/str.h>
@@ -488,6 +492,7 @@ namespace {
         : TClientCommandTree("consumer", {}, "Consumer operations") {
         AddCommand(std::make_unique<TCommandTopicConsumerAdd>());
         AddCommand(std::make_unique<TCommandTopicConsumerDrop>());
+        AddCommand(std::make_unique<TCommandTopicConsumerDescribe>());
         AddCommand(std::make_unique<TCommandTopicConsumerOffset>());
     }
 
@@ -592,6 +597,41 @@ namespace {
         return EXIT_SUCCESS;
     }
 
+    TCommandTopicConsumerDescribe::TCommandTopicConsumerDescribe()
+        : TYdbCommand("describe", {}, "Consumer describe operation") {
+    }
+
+    void TCommandTopicConsumerDescribe::Config(TConfig& config) {
+        TYdbCommand::Config(config);
+        config.Opts->AddLongOption("consumer", "Consumer to describe")
+            .Required()
+            .StoreResult(&ConsumerName_);
+        config.Opts->AddLongOption("partition-stats", "Show partition statistics")
+            .StoreTrue(&ShowPartitionStats_);
+        config.Opts->SetFreeArgsNum(1);
+        AddOutputFormats(config, { EDataFormat::Pretty, EDataFormat::ProtoJsonBase64 });
+        SetFreeArgTitle(0, "<topic-path>", "Topic path");
+    }
+
+    void TCommandTopicConsumerDescribe::Parse(TConfig& config) {
+        TYdbCommand::Parse(config);
+        ParseFormats();
+        ParseTopicName(config, 0);
+    }
+
+    int TCommandTopicConsumerDescribe::Run(TConfig& config) {
+        TDriver driver = CreateDriver(config);
+        NYdb::NTopic::TTopicClient topicClient(driver);
+
+        auto consumerDescription = topicClient.DescribeConsumer(TopicName, ConsumerName_, NYdb::NTopic::TDescribeConsumerSettings().IncludeStats(ShowPartitionStats_)).GetValueSync();
+        ThrowOnError(consumerDescription);
+
+        return PrintDescription(this, OutputFormat, consumerDescription.GetConsumerDescription(), &TCommandTopicConsumerDescribe::PrintPrettyResult);
+    }
+
+    int TCommandTopicConsumerDescribe::PrintPrettyResult(const NYdb::NTopic::TConsumerDescription& description) const {
+        return PrintPrettyDescribeConsumerResult(description, ShowPartitionStats_);
+    }
 
     TCommandTopicConsumerCommitOffset::TCommandTopicConsumerCommitOffset()
         : TYdbCommand("commit", {}, "Commit offset for consumer") {
@@ -883,8 +923,8 @@ namespace {
         AddMessagingFormats(config, {
                                     EMessagingFormat::NewlineDelimited,
                                     EMessagingFormat::SingleMessage,
-                                    //      EOutputFormat::JsonRawStreamConcat,
-                                    //      EOutputFormat::JsonRawArray,
+                                    //      EDataFormat::JsonRawStreamConcat,
+                                    //      EDataFormat::JsonRawArray,
                                 });
         AddAllowedCodecs(config, AllowedCodecs);
 

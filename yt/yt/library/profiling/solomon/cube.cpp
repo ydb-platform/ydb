@@ -174,7 +174,7 @@ T TCube<T>::Rollup(const TProjection& window, int index) const
 
 template <class T>
 int TCube<T>::ReadSensors(
-    const TString& name,
+    const std::string& name,
     const TReadOptions& options,
     TTagWriter* tagWriter,
     ::NMonitoring::IMetricConsumer* consumer) const
@@ -184,13 +184,13 @@ int TCube<T>::ReadSensors(
     int sensorsEmitted = 0;
 
     auto prepareNameLabel = [&] (std::optional<TStringBuf> suffix) {
-        TString sensorName;
+        std::string sensorName;
         sensorName.reserve(name.size() + (suffix ? suffix->size() : 0));
         if (options.DisableSensorsRename) {
             sensorName += name;
         } else if (options.StripSensorsNamePrefix) {
             auto delimiterPos = name.find_last_of('/');
-            if (TString::npos == delimiterPos) {
+            if (std::string::npos == delimiterPos) {
                 sensorName.assign(name);
             } else {
                 sensorName.assign(name, delimiterPos + 1);

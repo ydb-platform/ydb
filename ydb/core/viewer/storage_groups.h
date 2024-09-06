@@ -1112,15 +1112,7 @@ public:
             return RequestDone();
         }
         auto& navigateResult(itNavigateKeySetResult->second);
-        if (ev->Get()->Request->ResultSet.size() == 1) {
-            if (ev->Get()->Request->ResultSet.begin()->Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
-                navigateResult.Set(std::move(ev));
-            } else {
-                navigateResult.Error(TStringBuilder() << "Error " << ev->Get()->Request->ResultSet.begin()->Status);
-            }
-        } else {
-            navigateResult.Error(TStringBuilder() << "Invalid number of results: " << ev->Get()->Request->ResultSet.size());
-        }
+        navigateResult.Set(std::move(ev));
         if (navigateResult.IsOk()) {
             TString path = CanonizePath(navigateResult->Request->ResultSet.begin()->Path);
             TIntrusiveConstPtr<TSchemeCacheNavigate::TDomainDescription> domainDescription = navigateResult->Request->ResultSet.begin()->DomainDescription;

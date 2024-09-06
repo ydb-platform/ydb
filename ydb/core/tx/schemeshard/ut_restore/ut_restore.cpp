@@ -6,6 +6,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/tablet/resource_broker.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/auditlog_helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
 #include <ydb/core/tx/datashard/datashard.h>
@@ -20,10 +21,8 @@
 
 #include <ydb/public/api/protos/ydb_import.pb.h>
 
-#include <aws/core/Aws.h>
 #include <contrib/libs/zstd/include/zstd.h>
 #include <library/cpp/string_utils/quote/quote.h>
-#include <library/cpp/testing/hook/hook.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/size_literals.h>
@@ -38,16 +37,6 @@ using namespace NKikimr::NSchemeShard;
 using namespace NKikimr::NWrappers::NTestHelpers;
 
 namespace {
-
-    Aws::SDKOptions Options;
-
-    Y_TEST_HOOK_BEFORE_RUN(InitAwsAPI) {
-        Aws::InitAPI(Options);
-    }
-
-    Y_TEST_HOOK_AFTER_RUN(ShutdownAwsAPI) {
-        Aws::ShutdownAPI(Options);
-    }
 
     const TString EmptyYsonStr = R"([[[[];%false]]])";
 
@@ -327,6 +316,7 @@ namespace {
 
         runtime.SetObserverFunc(prevObserver);
     }
+
 
 } // anonymous
 
@@ -1217,7 +1207,7 @@ value {
 
         const TVector<ui32> keyTags = {1};
         TVector<ui32> valueTags(values.size());
-        std::iota(valueTags.begin(), valueTags.end(), 2);            
+        std::iota(valueTags.begin(), valueTags.end(), 2);
 
         UploadRow(runtime, "/MyRoot/Table", partitionIdx, keyTags, valueTags, keys, values);
 
@@ -1309,7 +1299,7 @@ value {
             "jsondoc_value",
             "uuid_value",
         };
-        
+
         auto contentOriginalTable = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", readKeyDesc, readColumns);
         NKqp::CompareYson(expectedJson, contentOriginalTable);
 
@@ -2177,7 +2167,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
     void Run(TTestBasicRuntime& runtime, TTestEnv& env,
             THashMap<TString, TString>&& data, const TString& request,
             Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS,
-            const TString& dbName = "/MyRoot", bool serverless = false, const TString& userSID = "")
+            const TString& dbName = "/MyRoot", bool serverless = false, const TString& userSID = "", const TString& peerName = "")
     {
         ui64 id = 100;
 
@@ -2267,7 +2257,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             break;
         }
 
-        TestImport(runtime, schemeshardId, ++id, dbName, Sprintf(request.data(), port), userSID, initialStatus);
+        TestImport(runtime, schemeshardId, ++id, dbName, Sprintf(request.data(), port), userSID, peerName, initialStatus);
         env.TestWaitNotification(runtime, id, schemeshardId);
 
         if (initialStatus != Ydb::StatusIds::SUCCESS) {
@@ -3123,6 +3113,9 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
     void CancelShouldSucceed(TDelayFunc delayFunc) {
         TTestBasicRuntime runtime;
+        std::vector<std::string> auditLines;
+        runtime.AuditLogBackends = std::move(CreateTestAuditLogBackends(auditLines));
+
         TTestEnv env(runtime, TTestEnvOptions());
         ui64 txId = 100;
 
@@ -3167,11 +3160,44 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         )", port));
         const ui64 importId = txId;
 
+        // Check audit record for import start
+        {
+            auto line = FindAuditLine(auditLines, "operation=IMPORT START");
+            UNIT_ASSERT_STRING_CONTAINS(line, "component=schemeshard");
+            UNIT_ASSERT_STRING_CONTAINS(line, "operation=IMPORT START");
+            UNIT_ASSERT_STRING_CONTAINS(line, Sprintf("id=%lu", importId));
+            UNIT_ASSERT_STRING_CONTAINS(line, "remote_address={none}");
+            UNIT_ASSERT_STRING_CONTAINS(line, "subject={none}");
+            UNIT_ASSERT_STRING_CONTAINS(line, "database=/MyRoot");
+            UNIT_ASSERT_STRING_CONTAINS(line, "status=SUCCESS");
+            UNIT_ASSERT_STRING_CONTAINS(line, "detailed_status=SUCCESS");
+            UNIT_ASSERT(!line.contains("reason"));
+            UNIT_ASSERT(!line.contains("start_time"));
+            UNIT_ASSERT(!line.contains("end_time"));
+        }
+
         WaitForDelayed(runtime, delayed, prevObserver);
 
         TestCancelImport(runtime, ++txId, "/MyRoot", importId);
         runtime.Send(delayed.Release(), 0, true);
         env.TestWaitNotification(runtime, importId);
+
+        // Check audit record for import end
+        //
+        {
+            auto line = FindAuditLine(auditLines, "operation=IMPORT END");
+            UNIT_ASSERT_STRING_CONTAINS(line, "component=schemeshard");
+            UNIT_ASSERT_STRING_CONTAINS(line, "operation=IMPORT END");
+            UNIT_ASSERT_STRING_CONTAINS(line, Sprintf("id=%lu", importId));
+            UNIT_ASSERT_STRING_CONTAINS(line, "remote_address={none}");
+            UNIT_ASSERT_STRING_CONTAINS(line, "subject={none}");
+            UNIT_ASSERT_STRING_CONTAINS(line, "database=/MyRoot");
+            UNIT_ASSERT_STRING_CONTAINS(line, "status=ERROR");
+            UNIT_ASSERT_STRING_CONTAINS(line, "detailed_status=CANCELLED");
+            UNIT_ASSERT_STRING_CONTAINS(line, "reason=Cancelled");
+            UNIT_ASSERT_STRING_CONTAINS(line, "start_time=");
+            UNIT_ASSERT_STRING_CONTAINS(line, "end_time=");
+        }
 
         TestGetImport(runtime, importId, "/MyRoot", Ydb::StatusIds::CANCELLED);
     }
@@ -3461,6 +3487,218 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         UNIT_ASSERT(entry.HasStartTime());
         UNIT_ASSERT(entry.HasEndTime());
         UNIT_ASSERT_LT(entry.GetStartTime().seconds(), entry.GetEndTime().seconds());
+    }
+
+    // Based on CompletedImportEndTime
+    Y_UNIT_TEST(AuditCompletedImport) {
+        TTestBasicRuntime runtime;
+        std::vector<std::string> auditLines;
+        runtime.AuditLogBackends = std::move(CreateTestAuditLogBackends(auditLines));
+
+        TTestEnv env(runtime);
+
+        runtime.UpdateCurrentTime(TInstant::Now());
+        ui64 txId = 100;
+
+        const auto data = GenerateTestData(R"(
+            columns {
+              name: "key"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            columns {
+              name: "value"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            primary_key: "key"
+        )", {{"a", 1}});
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        const auto request = Sprintf(R"(
+            OperationParams {
+              labels {
+                key: "uid"
+                value: "foo"
+              }
+            }
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Table"
+              }
+            }
+        )", port);
+        TestImport(runtime, ++txId, "/MyRoot", request, /*userSID*/ "user@builtin", /*peerName*/ "127.0.0.1:9876");
+
+        // Check audit record for import start
+        {
+            auto line = FindAuditLine(auditLines, "operation=IMPORT START");
+            UNIT_ASSERT_STRING_CONTAINS(line, "component=schemeshard");
+            UNIT_ASSERT_STRING_CONTAINS(line, "operation=IMPORT START");
+            UNIT_ASSERT_STRING_CONTAINS(line, Sprintf("id=%lu", txId));
+            UNIT_ASSERT_STRING_CONTAINS(line, "uid=foo");
+            UNIT_ASSERT_STRING_CONTAINS(line, "remote_address=127.0.0.1");
+            UNIT_ASSERT_STRING_CONTAINS(line, "subject=user@builtin");
+            UNIT_ASSERT_STRING_CONTAINS(line, "database=/MyRoot");
+            UNIT_ASSERT_STRING_CONTAINS(line, "status=SUCCESS");
+            UNIT_ASSERT_STRING_CONTAINS(line, "detailed_status=SUCCESS");
+            UNIT_ASSERT(!line.contains("reason"));
+            UNIT_ASSERT(!line.contains("start_time"));
+            UNIT_ASSERT(!line.contains("end_time"));
+        }
+
+        runtime.AdvanceCurrentTime(TDuration::Seconds(30)); // doing import
+
+        env.TestWaitNotification(runtime, txId);
+
+        // Check audit record for import end
+        //
+        {
+            auto line = FindAuditLine(auditLines, "operation=IMPORT END");
+            UNIT_ASSERT_STRING_CONTAINS(line, "component=schemeshard");
+            UNIT_ASSERT_STRING_CONTAINS(line, "operation=IMPORT END");
+            UNIT_ASSERT_STRING_CONTAINS(line, Sprintf("id=%lu", txId));
+            UNIT_ASSERT_STRING_CONTAINS(line, "uid=foo");
+            UNIT_ASSERT_STRING_CONTAINS(line, "remote_address=127.0.0.1");
+            UNIT_ASSERT_STRING_CONTAINS(line, "subject=user@builtin");
+            UNIT_ASSERT_STRING_CONTAINS(line, "database=/MyRoot");
+            UNIT_ASSERT_STRING_CONTAINS(line, "status=SUCCESS");
+            UNIT_ASSERT_STRING_CONTAINS(line, "detailed_status=SUCCESS");
+            UNIT_ASSERT(!line.contains("reason"));
+            UNIT_ASSERT_STRING_CONTAINS(line, "start_time=");
+            UNIT_ASSERT_STRING_CONTAINS(line, "end_time=");
+        }
+
+        const auto desc = TestGetImport(runtime, txId, "/MyRoot");
+        const auto& entry = desc.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Import::ImportProgress::PROGRESS_DONE);
+        UNIT_ASSERT(entry.HasStartTime());
+        UNIT_ASSERT(entry.HasEndTime());
+        UNIT_ASSERT_LT(entry.GetStartTime().seconds(), entry.GetEndTime().seconds());
+    }
+
+    // Based on CancelledImportEndTime
+    Y_UNIT_TEST(AuditCancelledImport) {
+        TTestBasicRuntime runtime;
+        std::vector<std::string> auditLines;
+        runtime.AuditLogBackends = std::move(CreateTestAuditLogBackends(auditLines));
+
+        TTestEnv env(runtime);
+
+        runtime.UpdateCurrentTime(TInstant::Now());
+        ui64 txId = 100;
+
+        const auto data = GenerateTestData(R"(
+            columns {
+              name: "key"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            columns {
+              name: "value"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            primary_key: "key"
+        )", {{"a", 1}});
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        auto delayFunc = [](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() != TEvSchemeShard::EvModifySchemeTransaction) {
+                return false;
+            }
+
+            return ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record
+                .GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpRestore;
+        };
+
+        THolder<IEventHandle> delayed;
+        auto prevObserver = SetDelayObserver(runtime, delayed, delayFunc);
+
+        const auto request = Sprintf(R"(
+            OperationParams {
+              labels {
+                key: "uid"
+                value: "foo"
+              }
+            }
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Table"
+              }
+            }
+        )", port);
+        TestImport(runtime, ++txId, "/MyRoot", request, /*userSID*/ "user@builtin", /*peerName*/ "127.0.0.1:9876");
+        const ui64 importId = txId;
+
+        // Check audit record for import start
+        {
+            auto line = FindAuditLine(auditLines, "operation=IMPORT START");
+            UNIT_ASSERT_STRING_CONTAINS(line, "component=schemeshard");
+            UNIT_ASSERT_STRING_CONTAINS(line, "operation=IMPORT START");
+            UNIT_ASSERT_STRING_CONTAINS(line, Sprintf("id=%lu", importId));
+            UNIT_ASSERT_STRING_CONTAINS(line, "uid=foo");
+            UNIT_ASSERT_STRING_CONTAINS(line, "remote_address=127.0.0.1");
+            UNIT_ASSERT_STRING_CONTAINS(line, "subject=user@builtin");
+            UNIT_ASSERT_STRING_CONTAINS(line, "database=/MyRoot");
+            UNIT_ASSERT_STRING_CONTAINS(line, "status=SUCCESS");
+            UNIT_ASSERT_STRING_CONTAINS(line, "detailed_status=SUCCESS");
+            UNIT_ASSERT(!line.contains("reason"));
+            UNIT_ASSERT(!line.contains("start_time"));
+            UNIT_ASSERT(!line.contains("end_time"));
+        }
+
+        runtime.AdvanceCurrentTime(TDuration::Seconds(30)); // doing import
+
+        WaitForDelayed(runtime, delayed, prevObserver);
+
+        TestCancelImport(runtime, ++txId, "/MyRoot", importId);
+
+        auto desc = TestGetImport(runtime, importId, "/MyRoot");
+        auto entry = desc.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Import::ImportProgress::PROGRESS_CANCELLATION);
+        UNIT_ASSERT(entry.HasStartTime());
+        UNIT_ASSERT(!entry.HasEndTime());
+
+        runtime.Send(delayed.Release(), 0, true);
+        env.TestWaitNotification(runtime, importId);
+
+        desc = TestGetImport(runtime, importId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        entry = desc.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Import::ImportProgress::PROGRESS_CANCELLED);
+        UNIT_ASSERT(entry.HasStartTime());
+        UNIT_ASSERT(entry.HasEndTime());
+        UNIT_ASSERT_LT(entry.GetStartTime().seconds(), entry.GetEndTime().seconds());
+
+        // Check audit record for import end
+        //
+        {
+            auto line = FindAuditLine(auditLines, "operation=IMPORT END");
+            UNIT_ASSERT_STRING_CONTAINS(line, "component=schemeshard");
+            UNIT_ASSERT_STRING_CONTAINS(line, "operation=IMPORT END");
+            UNIT_ASSERT_STRING_CONTAINS(line, Sprintf("id=%lu", importId));
+            UNIT_ASSERT_STRING_CONTAINS(line, "uid=foo");
+            UNIT_ASSERT_STRING_CONTAINS(line, "remote_address=127.0.0.1");
+            UNIT_ASSERT_STRING_CONTAINS(line, "subject=user@builtin");
+            UNIT_ASSERT_STRING_CONTAINS(line, "database=/MyRoot");
+            UNIT_ASSERT_STRING_CONTAINS(line, "status=ERROR");
+            UNIT_ASSERT_STRING_CONTAINS(line, "detailed_status=CANCELLED");
+            UNIT_ASSERT_STRING_CONTAINS(line, "reason=Cancelled");
+            UNIT_ASSERT_STRING_CONTAINS(line, "start_time=");
+            UNIT_ASSERT_STRING_CONTAINS(line, "end_time=");
+        }
     }
 
     Y_UNIT_TEST(UserSID) {

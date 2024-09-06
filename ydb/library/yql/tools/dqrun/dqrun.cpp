@@ -75,7 +75,9 @@
 #include <ydb/library/yql/utils/backtrace/backtrace.h>
 #include <ydb/library/yql/utils/bindings/utils.h>
 #include <ydb/library/yql/core/qplayer/storage/file/yql_qstorage_file.h>
-#include <ydb/library/yql/public/result_format/yql_result_format.h>
+#include <ydb/library/yql/public/result_format/yql_result_format_response.h>
+#include <ydb/library/yql/public/result_format/yql_result_format_type.h>
+#include <ydb/library/yql/public/result_format/yql_result_format_data.h>
 
 #include <ydb/core/fq/libs/actors/database_resolver.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/db_async_resolver_impl.h>
@@ -443,6 +445,11 @@ int RunProgram(TProgramPtr program, const TRunOptions& options, const THashMap<T
                         if (write.Type) {
                             NResult::TEmptyTypeVisitor visitor;
                             NResult::ParseType(*write.Type, visitor);
+                        }
+
+                        if (write.Type && write.Data) {
+                            NResult::TEmptyDataVisitor visitor;
+                            NResult::ParseData(*write.Type, *write.Data, visitor);
                         }
                     }
                 }

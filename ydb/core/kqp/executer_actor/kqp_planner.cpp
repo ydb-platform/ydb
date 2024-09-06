@@ -279,8 +279,14 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
 
     auto placingOptions = ResourceManager_->GetPlacingOptions();
 
+    ui64 nonParallelLimit = placingOptions.MaxNonParallelTasksExecutionLimit;
+    if (MayRunTasksLocally) {
+        // not applied to column shards and external sources
+        nonParallelLimit = placingOptions.MaxNonParallelDataQueryTasksLimit;
+    }
+
     bool singleNodeExecutionMakeSence = (
-        ResourceEstimations.size() <= placingOptions.MaxNonParallelTasksExecutionLimit ||
+        ResourceEstimations.size() <= nonParallelLimit ||
         // all readers are located on the one node.
         TasksPerNode.size() == 1
     );

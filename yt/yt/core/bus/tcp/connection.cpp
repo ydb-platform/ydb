@@ -106,7 +106,7 @@ TTcpConnection::TTcpConnection(
     TConnectionId id,
     SOCKET socket,
     EMultiplexingBand multiplexingBand,
-    const TString& endpointDescription,
+    const std::string& endpointDescription,
     const IAttributeDictionary& endpointAttributes,
     const TNetworkAddress& endpointNetworkAddress,
     const std::optional<std::string>& endpointAddress,
@@ -654,7 +654,7 @@ void TTcpConnection::OnDialerFinished(const TErrorOr<SOCKET>& socketOrError)
     }
 }
 
-const TString& TTcpConnection::GetEndpointDescription() const
+const std::string& TTcpConnection::GetEndpointDescription() const
 {
     return EndpointDescription_;
 }

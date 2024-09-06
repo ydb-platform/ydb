@@ -21,7 +21,7 @@ TChannelWrapper::TChannelWrapper(IChannelPtr underlyingChannel)
     YT_ASSERT(UnderlyingChannel_);
 }
 
-const TString& TChannelWrapper::GetEndpointDescription() const
+const std::string& TChannelWrapper::GetEndpointDescription() const
 {
     return UnderlyingChannel_->GetEndpointDescription();
 }

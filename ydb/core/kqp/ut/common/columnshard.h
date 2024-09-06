@@ -63,9 +63,9 @@ namespace NKqp {
         };
 
     private:
-        TKikimrRunner Kikimr;
-        NYdb::NTable::TTableClient TableClient;
-        NYdb::NTable::TSession Session;
+        std::unique_ptr<TKikimrRunner> Kikimr;
+        std::unique_ptr<NYdb::NTable::TTableClient> TableClient;
+        std::unique_ptr<NYdb::NTable::TSession> Session;
 
     public:
         TTestHelper(const TKikimrSettings& settings);

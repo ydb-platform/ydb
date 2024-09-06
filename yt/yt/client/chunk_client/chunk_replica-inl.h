@@ -140,6 +140,11 @@ Y_FORCE_INLINE int TChunkReplica::GetReplicaIndex() const
     return (Value_ & 0x1f000000) >> 24;
 }
 
+Y_FORCE_INLINE void TChunkReplica::RegisterMetadata(auto&& registrar)
+{
+    registrar.template Field<1, &TThis::Value_>("value")();
+}
+
 Y_FORCE_INLINE void ToProto(ui32* value, TChunkReplica replica)
 {
     *value = replica.Value_;

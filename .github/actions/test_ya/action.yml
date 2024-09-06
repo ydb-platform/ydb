@@ -36,6 +36,10 @@ inputs:
   testman_project_id:
     required: false
     description: "test manager project id"
+  increment:
+    type: boolean
+    required: true
+    description: If true, compares build graphs between the current and previous commits to find a list of test suites to run. Otherwise, runs all tests.
   put_build_results_to_cache:
     required: false
     default: "true"
@@ -111,6 +115,24 @@ runs:
           echo "NODE_TLS_REJECT_UNAUTHORIZED=0" >> $GITHUB_ENV
         fi
 
+    - name: Generate ya.make with affected test suites and modules list
+      if: inputs.increment == 'true'
+      shell: bash
+      run: |
+        ORIGINAL_HEAD=$(git rev-parse HEAD)
+        ./.github/scripts/graph_compare.sh $ORIGINAL_HEAD~1 $ORIGINAL_HEAD
+        git checkout $ORIGINAL_HEAD
+ 
+    - name: Change target in case of incremental
+      id: target_choice
+      shell: bash
+      run: |
+        if [ "${{ inputs.increment }}" == "true" ]; then
+          echo "target=." >> $GITHUB_OUTPUT
+        else
+          echo "target=${{ inputs.build_target }}" >> $GITHUB_OUTPUT
+        fi
+  
     - name: ya build and test
       id: build
       shell: bash
@@ -276,14 +298,18 @@ runs:
             IS_RETRY=0
           fi
 
+          CURRENT_PUBLIC_DIR_RELATIVE=try_$RETRY
+          CURRENT_PUBLIC_DIR=$PUBLIC_DIR/$CURRENT_PUBLIC_DIR_RELATIVE
+          mkdir $CURRENT_PUBLIC_DIR
+
           if [ ${{ inputs.testman_token }} ]; then
             # inititalize testmo session
             TESTMO_RUN_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-            TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:resources:add-link --name build --url "$TESTMO_RUN_URL" --resources testmo.json
-            TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:resources:add-field --name git-sha --type string --value "${GITHUB_SHA:0:7}" --resources testmo.json
+            TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:resources:add-link --name build --url "$TESTMO_RUN_URL" --resources $CURRENT_PUBLIC_DIR/testmo.json
+            TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:resources:add-field --name git-sha --type string --value "${GITHUB_SHA:0:7}" --resources $CURRENT_PUBLIC_DIR/testmo.json
             TESTMO_RUN_ID=$(
               TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:run:create --instance "https://$TESTMO_PROXY_ADDR" --project-id ${{ inputs.testman_project_id }} \
-                --name "$TESTMO_RUN_NAME" --source "$TESTMO_SOURCE" --resources testmo.json \
+                --name "$TESTMO_RUN_NAME" --source "$TESTMO_SOURCE" --resources $CURRENT_PUBLIC_DIR/testmo.json \
                 --tags "$TESTMO_BRANCH_TAG" --tags "$TESTMO_EXTRA_TAG"
             )
             echo "runid=${TESTMO_RUN_ID}" >> $GITHUB_OUTPUT
@@ -306,13 +332,9 @@ runs:
 
           echo $CURRENT_MESSAGE | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
 
-          CURRENT_PUBLIC_DIR_RELATIVE=try_$RETRY
-          CURRENT_PUBLIC_DIR=$PUBLIC_DIR/$CURRENT_PUBLIC_DIR_RELATIVE
-          mkdir $CURRENT_PUBLIC_DIR
-
           CURRENT_JUNIT_XML_PATH=$CURRENT_PUBLIC_DIR/junit.xml
           set +ex
-          (./ya make ${{ inputs.build_target }} "${params[@]}" \
+          (./ya make ${{ steps.target_choice.outputs.target }} "${params[@]}" \
             $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.log"  \
             --evlog-file "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" \
             --junit "$CURRENT_JUNIT_XML_PATH" --output "$YA_MAKE_OUT_DIR"; echo $? > exit_code) |& cat >> $YA_MAKE_OUTPUT

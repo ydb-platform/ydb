@@ -140,6 +140,22 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModi
     }
 }
 
+void ISnapshotSchema::AdaptBatchToSchema(NArrow::TGeneralContainer& batch, const ISnapshotSchema::TPtr& targetSchema) const {
+    if (targetSchema->GetVersion() != GetVersion()) {
+        std::vector<ui32> columnIdxToDelete;
+        for (size_t columnIdx = 0; columnIdx < batch.GetSchema()->GetFields().size(); ++columnIdx) {
+            const std::optional<ui32> targetColumnId = targetSchema->GetColumnIdOptional(batch.GetSchema()->field(columnIdx)->name());
+            const ui32 batchColumnId = GetColumnIdVerified(GetFieldByIndex(columnIdx)->name());
+            if (!targetColumnId || *targetColumnId != batchColumnId) {
+                columnIdxToDelete.emplace_back(columnIdx);
+            }
+        }
+        if (!columnIdxToDelete.empty()) {
+            batch.DeleteFieldsByIndex(columnIdxToDelete);
+        }
+    }
+}
+
 ui32 ISnapshotSchema::GetColumnId(const std::string& columnName) const {
     auto id = GetColumnIdOptional(columnName);
     AFL_VERIFY(id)("column_name", columnName)("schema", JoinSeq(",", GetSchema()->field_names()));

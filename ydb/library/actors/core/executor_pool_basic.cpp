@@ -32,7 +32,7 @@ namespace NActors {
 
     constexpr TDuration TBasicExecutorPool::DEFAULT_TIME_PER_MAILBOX;
 
-    TString GetCurrentThreadKind() { 
+    TString GetCurrentThreadKind() {
         if (TlsThreadContext) {
             return TlsThreadContext->WorkerId >= 0 ? "[common]" : "[shared]";
         }
@@ -55,9 +55,32 @@ namespace NActors {
         i16 defaultThreadCount,
         i16 priority,
         bool hasOwnSharedThread,
-        TExecutorPoolJail *jail)
-        : TExecutorPoolBase(poolId, threads, affinity)
-        , DefaultSpinThresholdCycles(spinThreshold * NHPTimer::GetCyclesPerSecond() * 0.000001) // convert microseconds to cycles
+        TExecutorPoolJail *jail
+    )
+        : TBasicExecutorPool(TBasicExecutorPoolConfig{
+            .PoolId = poolId,
+            .PoolName = poolName,
+            .Threads = threads,
+            .SpinThreshold = spinThreshold,
+            .Affinity = (affinity ? static_cast<TCpuMask>(*affinity) : TCpuMask{}),
+            .TimePerMailbox = timePerMailbox,
+            .EventsPerMailbox = eventsPerMailbox,
+            .RealtimePriority = realtimePriority,
+            .MinThreadCount = minThreadCount,
+            .MaxThreadCount = maxThreadCount,
+            .DefaultThreadCount = defaultThreadCount,
+            .Priority = priority,
+            .HasSharedThread = hasOwnSharedThread,
+        }, harmonizer, jail)
+    {
+        if (affinity != nullptr) {
+            delete affinity;
+        }
+    }
+
+    TBasicExecutorPool::TBasicExecutorPool(const TBasicExecutorPoolConfig& cfg, IHarmonizer *harmonizer, TExecutorPoolJail *jail)
+        : TExecutorPoolBase(cfg.PoolId, cfg.Threads, new TAffinity(cfg.Affinity), cfg.UseRingQueue)
+        , DefaultSpinThresholdCycles(cfg.SpinThreshold * NHPTimer::GetCyclesPerSecond() * 0.000001) // convert microseconds to cycles
         , SpinThresholdCycles(DefaultSpinThresholdCycles)
         , SpinThresholdCyclesPerThread(new NThreading::TPadded<std::atomic<ui64>>[threads])
         , Threads(new NThreading::TPadded<TExecutorThreadCtx>[threads])
@@ -232,7 +255,8 @@ namespace NActors {
                     }
                 }
             } else {
-                if (const ui32 activation = Activations.Pop(++revolvingCounter)) {
+                TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION_FROM_QUEUE, false> activityGuard;
+                if (const ui32 activation = std::visit([&revolvingCounter](auto &x) {return x.Pop(++revolvingCounter);}, Activations)) {
                     if (workerId >= 0) {
                         Threads[workerId].SetWork();
                     } else {
@@ -305,8 +329,9 @@ namespace NActors {
 
     void TBasicExecutorPool::ScheduleActivationExCommon(ui32 activation, ui64 revolvingCounter, TAtomic x) {
         TSemaphore semaphore = TSemaphore::GetSemaphore(x);
-
-        Activations.Push(activation, revolvingCounter);
+        std::visit([activation, revolvingCounter](auto &x) {
+            x.Push(activation, revolvingCounter);
+        }, Activations);
         bool needToWakeUp = false;
         bool needToChangeOldSemaphore = true;
 
@@ -597,7 +622,7 @@ namespace NActors {
     i16 TBasicExecutorPool::GetMaxFullThreadCount() const {
         return MaxFullThreadCount;
     }
-    
+
     ui32 TBasicExecutorPool::GetThreads() const {
         return MaxFullThreadCount;
     }

@@ -96,7 +96,7 @@ void TCommandImportFromS3::Config(TConfig& config) {
         .RequiredArgument("BOOL").StoreResult<bool>(&UseVirtualAddressing).DefaultValue("true");
 
     AddDeprecatedJsonOption(config);
-    AddFormats(config, { EOutputFormat::Pretty, EOutputFormat::ProtoJsonBase64 });
+    AddOutputFormats(config, { EDataFormat::Pretty, EDataFormat::ProtoJsonBase64 });
     config.Opts->MutuallyExclusive("json", "format");
 }
 
@@ -265,12 +265,12 @@ void TCommandImportFromCsv::Config(TConfig& config) {
     config.Opts->AddLongOption("newline-delimited",
             "No newline characters inside records, enables some import optimizations (see docs)")
         .StoreTrue(&NewlineDelimited);
-    if (InputFormat == EOutputFormat::Csv) {
+    if (InputFormat == EDataFormat::Csv) {
         config.Opts->AddLongOption("delimiter", "Field delimiter in rows")
             .RequiredArgument("STRING").StoreResult(&Delimiter).DefaultValue(Delimiter);
     }
-    config.Opts->AddLongOption("null-value", "Value that would be interpreted as NULL")
-            .RequiredArgument("STRING").StoreResult(&NullValue).DefaultValue(NullValue);
+    config.Opts->AddLongOption("null-value", "Value that would be interpreted as NULL, no NULL value by default")
+            .RequiredArgument("STRING").StoreResult(&NullValue);
     // TODO: quoting/quote_char
 }
 
@@ -286,9 +286,7 @@ int TCommandImportFromCsv::Run(TConfig& config) {
     settings.Header(Header);
     settings.NewlineDelimited(NewlineDelimited);
     settings.HeaderRow(HeaderRow);
-    if (config.ParseResult->Has("null-value")) {
-        settings.NullValue(NullValue);
-    }
+    settings.NullValue(NullValue);
 
     if (Delimiter.size() != 1) {
         throw TMisuseException()
@@ -310,8 +308,8 @@ void TCommandImportFromJson::Config(TConfig& config) {
     TCommandImportFileBase::Config(config);
 
     AddInputFormats(config, {
-        EOutputFormat::JsonUnicode,
-        EOutputFormat::JsonBase64
+        EDataFormat::JsonUnicode,
+        EDataFormat::JsonBase64
     });
 }
 

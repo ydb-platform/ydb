@@ -115,3 +115,13 @@ extern "C" void yql_iterator_close(struct yql_table_iterator** iterator) {
     pfree(*iterator);
     *iterator = nullptr;
 }
+
+extern "C" ui64 TouchReadTableApi() {
+    return 
+        (ui64)&yql_read_table +
+        (ui64)&yql_iterator_error +
+        (ui64)&yql_iterator_has_data +
+        (ui64)&yql_iterator_value +
+        (ui64)&yql_iterator_move +
+        (ui64)&yql_iterator_close;
+}

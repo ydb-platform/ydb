@@ -403,7 +403,6 @@ class TDataShard
 
         struct TEvAsyncTableStats : public TEventLocal<TEvAsyncTableStats, EvAsyncTableStats> {
             ui64 TableId = -1;
-            ui64 IndexSize = 0;
             TInstant StatsUpdateTime;
             NTable::TStats Stats;
             THashSet<ui64> PartOwners;
@@ -1572,6 +1571,15 @@ public:
         return false;
     }
 
+    bool IsIncrementalRestore() const {
+        for (const auto& [_, info] : TableInfos) {
+            if (info->IsIncrementalRestore()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     ui32 Generation() const { return Executor()->Generation(); }
     bool IsFollower() const { return Executor()->GetStats().IsFollower; }
     bool SyncSchemeOnFollower(NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx,
@@ -2634,7 +2642,7 @@ private:
             Schema::PlanQueue::TableId,
             Schema::DeadlineQueue::TableId
         };
-    THashSet<ui64> SysTablesPartOnwers;
+    THashSet<ui64> SysTablesPartOwners;
 
     // Sys table contents
     ui32 State;
@@ -2649,7 +2657,7 @@ private:
 
     NMiniKQL::IKeyAccessSampler::TPtr DisabledKeySampler;
     NMiniKQL::IKeyAccessSampler::TPtr EnabledKeySampler;
-    NMiniKQL::IKeyAccessSampler::TPtr CurrentKeySampler; // Points to enbaled or disabled
+    NMiniKQL::IKeyAccessSampler::TPtr CurrentKeySampler; // Points to enabled or disabled
     TInstant StartedKeyAccessSamplingAt;
     TInstant StopKeyAccessSamplingAt;
 
@@ -2690,7 +2698,7 @@ private:
         { }
     };
 
-    TIntrusivePtr<TMediatorTimecastEntry> MediatorTimeCastEntry;
+    TMediatorTimecastEntry::TCPtr MediatorTimeCastEntry;
     TSet<ui64> MediatorTimeCastWaitingSteps;
     TMultiMap<TRowVersion, TMediatorDelayedReply> MediatorDelayedReplies;
 
@@ -3241,6 +3249,7 @@ protected:
 
             ev->Record.MutableTableStats()->SetDataSize(ti.Stats.DataStats.DataSize.Size + ti.Stats.MemDataSize);
             ev->Record.MutableTableStats()->SetIndexSize(ti.Stats.DataStats.IndexSize.Size);
+            ev->Record.MutableTableStats()->SetByKeyFilterSize(ti.Stats.DataStats.ByKeyFilterSize);
             ev->Record.MutableTableStats()->SetInMemSize(ti.Stats.MemDataSize);
 
             TMap<ui8, std::tuple<ui64, ui64>> channels; // Channel -> (DataSize, IndexSize)
@@ -3267,7 +3276,13 @@ protected:
             ev->Record.MutableTableStats()->SetImmediateTxCompleted(TabletCounters->Cumulative()[COUNTER_PREPARE_IMMEDIATE].Get() + TabletCounters->Cumulative()[COUNTER_WRITE_IMMEDIATE].Get());
             ev->Record.MutableTableStats()->SetPlannedTxCompleted(TabletCounters->Cumulative()[COUNTER_PLANNED_TX_COMPLETE].Get());
             ev->Record.MutableTableStats()->SetTxRejectedByOverload(TabletCounters->Cumulative()[COUNTER_PREPARE_OVERLOADED].Get() + TabletCounters->Cumulative()[COUNTER_WRITE_OVERLOADED].Get());
-            ev->Record.MutableTableStats()->SetTxRejectedBySpace(TabletCounters->Cumulative()[COUNTER_PREPARE_OUT_OF_SPACE].Get() + TabletCounters->Cumulative()[COUNTER_WRITE_OUT_OF_SPACE].Get());
+            ev->Record.MutableTableStats()->SetTxRejectedBySpace(
+                TabletCounters->Cumulative()[COUNTER_PREPARE_OUT_OF_SPACE].Get() 
+              + TabletCounters->Cumulative()[COUNTER_PREPARE_DISK_SPACE_EXHAUSTED].Get()
+              + TabletCounters->Cumulative()[COUNTER_WRITE_OUT_OF_SPACE].Get()
+              + TabletCounters->Cumulative()[COUNTER_WRITE_DISK_SPACE_EXHAUSTED].Get()
+            );
+
             ev->Record.MutableTableStats()->SetTxCompleteLagMsec(TabletCounters->Simple()[COUNTER_TX_COMPLETE_LAG].Get());
             ev->Record.MutableTableStats()->SetInFlightTxCount(TabletCounters->Simple()[COUNTER_TX_IN_FLY].Get()
                 + TabletCounters->Simple()[COUNTER_IMMEDIATE_TX_IN_FLY].Get());
@@ -3294,7 +3309,7 @@ protected:
             for (const auto& pi : ti.Stats.PartOwners) {
                 ev->Record.AddUserTablePartOwners(pi);
             }
-            for (const auto& pi : SysTablesPartOnwers) {
+            for (const auto& pi : SysTablesPartOwners) {
                 ev->Record.AddSysTablesPartOwners(pi);
             }
 
@@ -3322,6 +3337,10 @@ protected:
     bool AllowCancelROwithReadsets() const;
 
     void ResolveTablePath(const TActorContext &ctx);
+
+public:
+    NMonitoring::TDynamicCounters::TCounterPtr CounterReadIteratorLastKeyReset;
+    void IncCounterReadIteratorLastKeyReset();
 };
 
 NKikimrTxDataShard::TError::EKind ConvertErrCode(NMiniKQL::IEngineFlat::EResult code);

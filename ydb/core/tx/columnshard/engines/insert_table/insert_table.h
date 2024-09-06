@@ -82,6 +82,9 @@ public:
     TInsertionSummary::TCounters Commit(IDbWrapper& dbTable, ui64 planStep, ui64 txId,
                      const THashSet<TWriteId>& writeIds, std::function<bool(ui64)> pathExists);
     void Abort(IDbWrapper& dbTable, const THashSet<TWriteId>& writeIds);
+    void MarkAsNotAbortable(const TWriteId writeId) {
+        Summary.MarkAsNotAbortable(writeId);
+    }
     THashSet<TWriteId> OldWritesToAbort(const TInstant& now) const;
     THashSet<TWriteId> DropPath(IDbWrapper& dbTable, ui64 pathId);
 
@@ -91,7 +94,8 @@ public:
     void EraseAbortedOnExecute(IDbWrapper& dbTable, const TInsertedData& key, const std::shared_ptr<IBlobsDeclareRemovingAction>& blobsAction);
     void EraseAbortedOnComplete(const TInsertedData& key);
 
-    std::vector<TCommittedBlob> Read(ui64 pathId, const TSnapshot& snapshot, const std::shared_ptr<arrow::Schema>& pkSchema) const;
+    std::vector<TCommittedBlob> Read(
+        ui64 pathId, const std::optional<ui64> lockId, const TSnapshot& reqSnapshot, const std::shared_ptr<arrow::Schema>& pkSchema) const;
     bool Load(IDbWrapper& dbTable, const TInstant loadTime);
 };
 

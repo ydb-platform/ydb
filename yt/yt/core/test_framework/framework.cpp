@@ -59,7 +59,18 @@ void WaitForPredicate(
             }
         }
     }
-    THROW_ERROR_EXCEPTION("Wait failed");
+    THROW_ERROR_EXCEPTION("Wait failed: %s", options.Message);
+}
+
+void WaitForPredicate(
+    std::function<bool()> predicate,
+    const TString& message)
+{
+    WaitForPredicate(
+        std::move(predicate),
+        TWaitForPredicateOptions{
+            .Message = message,
+        });
 }
 
 void WaitForPredicate(

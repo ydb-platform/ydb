@@ -4,19 +4,19 @@ namespace NKikimr::NOlap::NReader {
 
 class TCurrentBatch {
 private:
-    std::vector<TPartialReadResult> Results;
+    std::vector<std::shared_ptr<TPartialReadResult>> Results;
     ui64 RecordsCount = 0;
 public:
     ui64 GetRecordsCount() const {
         return RecordsCount;
     }
 
-    void AddChunk(TPartialReadResult&& res) {
-        RecordsCount += res.GetRecordsCount();
+    void AddChunk(std::shared_ptr<TPartialReadResult>&& res) {
+        RecordsCount += res->GetRecordsCount();
         Results.emplace_back(std::move(res));
     }
 
-    void FillResult(std::vector<TPartialReadResult>& result) const {
+    void FillResult(std::vector<std::shared_ptr<TPartialReadResult>>& result) const {
         if (Results.empty()) {
             return;
         }
@@ -26,11 +26,12 @@ public:
     }
 };
 
-std::vector<TPartialReadResult> TPartialReadResult::SplitResults(std::vector<TPartialReadResult>&& resultsExt, const ui32 maxRecordsInResult) {
+std::vector<std::shared_ptr<TPartialReadResult>> TPartialReadResult::SplitResults(
+    std::vector<std::shared_ptr<TPartialReadResult>>&& resultsExt, const ui32 maxRecordsInResult) {
     std::vector<TCurrentBatch> resultBatches;
     TCurrentBatch currentBatch;
     for (auto&& i : resultsExt) {
-        AFL_VERIFY(i.GetRecordsCount());
+        AFL_VERIFY(i->GetRecordsCount());
         currentBatch.AddChunk(std::move(i));
         if (currentBatch.GetRecordsCount() >= maxRecordsInResult) {
             resultBatches.emplace_back(std::move(currentBatch));
@@ -41,7 +42,7 @@ std::vector<TPartialReadResult> TPartialReadResult::SplitResults(std::vector<TPa
         resultBatches.emplace_back(std::move(currentBatch));
     }
 
-    std::vector<TPartialReadResult> result;
+    std::vector<std::shared_ptr<TPartialReadResult>> result;
     for (auto&& i : resultBatches) {
         i.FillResult(result);
     }

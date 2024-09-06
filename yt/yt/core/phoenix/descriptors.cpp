@@ -18,11 +18,6 @@ TFieldTag TFieldDescriptor::GetTag() const
     return Tag_;
 }
 
-bool TFieldDescriptor::IsDeprecated() const
-{
-    return Deprecated_;
-}
-
 const TFieldSchemaPtr& TFieldDescriptor::GetSchema() const
 {
     std::call_once(
@@ -31,7 +26,6 @@ const TFieldSchemaPtr& TFieldDescriptor::GetSchema() const
             Schema_ = New<TFieldSchema>();
             Schema_->Name = Name_;
             Schema_->Tag = Tag_;
-            Schema_->Deprecated = Deprecated_;
         });
     return Schema_;
 }
@@ -53,9 +47,9 @@ const std::vector<std::unique_ptr<TFieldDescriptor>>& TTypeDescriptor::Fields() 
     return Fields_;
 }
 
-const std::vector<const TTypeDescriptor*>& TTypeDescriptor::BaseTypes() const
+const std::vector<TTypeTag>& TTypeDescriptor::BaseTypeTags() const
 {
-    return BaseTypes_;
+    return BaseTypeTags_;
 }
 
 bool TTypeDescriptor::IsTemplate() const
@@ -74,9 +68,7 @@ const TTypeSchemaPtr& TTypeDescriptor::GetSchema() const
             for (const auto& fieldDescriptor : Fields_) {
                 Schema_->Fields.push_back(fieldDescriptor->GetSchema());
             }
-            for (const auto* baseTypeDescriptor : BaseTypes_) {
-                Schema_->BaseTypeTags.push_back(baseTypeDescriptor->Tag_);
-            }
+            Schema_->BaseTypeTags = BaseTypeTags_;
             Schema_->Template = Template_;
         });
     return Schema_;
@@ -90,31 +82,6 @@ const TYsonString& TTypeDescriptor::GetSchemaYson() const
             SchemaYson_ = ConvertToYsonString(GetSchema());
         });
     return SchemaYson_;
-}
-
-std::vector<TTypeTag> TTypeDescriptor::GetBaseTypeTags() const
-{
-    std::vector<TTypeTag> result;
-    result.reserve(BaseTypes_.size());
-    for (const auto* baseTypeDescriptor : BaseTypes_) {
-        result.push_back(baseTypeDescriptor->Tag_);
-    }
-    return result;
-}
-
-void* TTypeDescriptor::TryConstruct() const
-{
-    return Constructor_ ? Constructor_() : nullptr;
-}
-
-void* TTypeDescriptor::ConstructOrThrow() const
-{
-    auto* instance = TryConstruct();
-    if (!instance) {
-        THROW_ERROR_EXCEPTION("Cannot instantiate object of type %v",
-            Name_);
-    }
-    return instance;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -157,15 +124,29 @@ const TTypeDescriptor& TUniverseDescriptor::GetTypeDescriptorByTagOrThrow(TTypeT
     return *descriptor;
 }
 
+const TTypeDescriptor& TUniverseDescriptor::GetTypeDescriptorByTag(TTypeTag tag) const
+{
+    const auto* descriptor = FindTypeDescriptorByTag(tag);
+    YT_VERIFY(descriptor);
+    return *descriptor;
+}
+
 const TTypeDescriptor* TUniverseDescriptor::FindTypeDescriptorByTypeIndex(std::type_index typeIndex) const
 {
     auto it = TypeIndexToDescriptor_.find(typeIndex);
     return it == TypeIndexToDescriptor_.end() ? nullptr : it->second;
 }
 
+const TTypeDescriptor& TUniverseDescriptor::GetTypeDescriptorByTypeIndex(std::type_index typeIndex) const
+{
+    const auto* descriptor = FindTypeDescriptorByTypeIndex(typeIndex);
+    YT_VERIFY(descriptor);
+    return *descriptor;
+}
+
 const TTypeDescriptor& TUniverseDescriptor::GetTypeDescriptorByTypeIndexOrThrow(std::type_index typeIndex) const
 {
-    const auto& descriptor = FindTypeDescriptorByTypeIndex(typeIndex);
+    const auto* descriptor = FindTypeDescriptorByTypeIndex(typeIndex);
     if (!descriptor) {
         THROW_ERROR_EXCEPTION("Type %v is not registered",
             CppDemangle(typeIndex.name()));

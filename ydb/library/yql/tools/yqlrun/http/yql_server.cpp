@@ -442,6 +442,9 @@ YQL_ACTION(OptimizeOrValidateFile)
 
             Writer.Write(TStringBuf("opttrace"), traceOut->Str());
         }
+        if (options & TYqlAction::WithFinalIssues) {
+            prg->FinalizeIssues();
+        }
         WriteStatus(noError, prg->Issues());
     }
 };
@@ -509,6 +512,9 @@ YQL_ACTION(FileRun)
             Writer.Write(TStringBuf("opttrace"), traceOut->Str());
         }
 
+        if (options & TYqlAction::WithFinalIssues) {
+            prg->FinalizeIssues();
+        }
         WriteStatus(status != TProgram::TStatus::Error, prg->Issues());
 
         if (status != TProgram::TStatus::Error) {

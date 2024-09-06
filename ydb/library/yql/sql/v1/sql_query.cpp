@@ -5,6 +5,7 @@
 #include "sql_values.h"
 #include "node.h"
 #include <ydb/library/yql/parser/proto_ast/gen/v1/SQLv1Lexer.h>
+#include <ydb/library/yql/parser/proto_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h>
 #include <ydb/library/yql/sql/v1/object_processing.h>
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/utils/yql_paths.h>
@@ -14,6 +15,7 @@
 namespace NSQLTranslationV1 {
 
 using NALPDefault::SQLv1LexerTokens;
+using NALPDefaultAntlr4::SQLv1Antlr4Lexer;
 
 using namespace NSQLv1Generated;
 
@@ -218,8 +220,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             if (rule.HasBlock2()) { // OR REPLACE
                 replaceIfExists = true;
                 Y_DEBUG_ABORT_UNLESS(
-                    rule.GetBlock2().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_OR &&
-                    rule.GetBlock2().GetToken2().GetId() == SQLv1LexerTokens::TOKEN_REPLACE
+                    (IS_TOKEN(rule.GetBlock2().GetToken1().GetId(), OR) && 
+                     IS_TOKEN(rule.GetBlock2().GetToken2().GetId(), REPLACE))
                 );
             }
 
@@ -227,22 +229,26 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             const auto& block = rule.GetBlock3();
             ETableType tableType = ETableType::Table;
             bool temporary = false;
-            if (block.HasAlt2() && block.GetAlt2().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_TABLESTORE) {
+            if (block.HasAlt2() &&
+                IS_TOKEN(block.GetAlt2().GetToken1().GetId(), TABLESTORE)
+            ) {
                 tableType = ETableType::TableStore;
                 if (isCreateTableAs) {
                     Context().Error(GetPos(block.GetAlt2().GetToken1()))
                         << "CREATE TABLE AS is not supported for TABLESTORE";
                     return false;
                 }
-            } else if (block.HasAlt3() && block.GetAlt3().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_EXTERNAL) {
+            } else if (block.HasAlt3() &&
+                       IS_TOKEN(block.GetAlt3().GetToken1().GetId(), EXTERNAL)
+                    ) {
                 tableType = ETableType::ExternalTable;
                 if (isCreateTableAs) {
                     Context().Error(GetPos(block.GetAlt3().GetToken1()))
                         << "CREATE TABLE AS is not supported for EXTERNAL TABLE";
                     return false;
                 }
-            } else if (block.HasAlt4() && block.GetAlt4().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_TEMP ||
-                    block.HasAlt5() && block.GetAlt5().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_TEMPORARY) {
+            } else if (block.HasAlt4() && IS_TOKEN(block.GetAlt4().GetToken1().GetId(), TEMP) ||
+                       block.HasAlt5() && IS_TOKEN(block.GetAlt5().GetToken1().GetId(), TEMPORARY)) {
                 temporary = true;
             }
 
@@ -250,9 +256,9 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             if (rule.HasBlock4()) { // IF NOT EXISTS
                 existingOk = true;
                 Y_DEBUG_ABORT_UNLESS(
-                    rule.GetBlock4().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_IF &&
-                    rule.GetBlock4().GetToken2().GetId() == SQLv1LexerTokens::TOKEN_NOT &&
-                    rule.GetBlock4().GetToken3().GetId() == SQLv1LexerTokens::TOKEN_EXISTS
+                    IS_TOKEN(rule.GetBlock4().GetToken1().GetId(), IF) &&
+                    IS_TOKEN(rule.GetBlock4().GetToken2().GetId(), NOT) &&
+                    IS_TOKEN(rule.GetBlock4().GetToken3().GetId(), EXISTS)
                 );
             }
 
@@ -339,8 +345,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             if (rule.HasBlock3()) { // IF EXISTS
                 missingOk = true;
                 Y_DEBUG_ABORT_UNLESS(
-                    rule.GetBlock3().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_IF &&
-                    rule.GetBlock3().GetToken2().GetId() == SQLv1LexerTokens::TOKEN_EXISTS
+                    IS_TOKEN(rule.GetBlock3().GetToken1().GetId(), IF) &&
+                    IS_TOKEN(rule.GetBlock3().GetToken2().GetId(), EXISTS)
                 );
             }
 
@@ -431,7 +437,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
         case TRule_sql_stmt_core::kAltSqlStmtCore15: {
             Ctx.BodyPart();
             const auto& rule = core.GetAlt_sql_stmt_core15().GetRule_alter_table_stmt1();
-            const bool isTablestore = rule.GetToken2().GetId() == SQLv1LexerTokens::TOKEN_TABLESTORE;
+            const bool isTablestore = IS_TOKEN(rule.GetToken2().GetId(), TABLESTORE);
             TTableRef tr;
             if (!SimpleTableRefImpl(rule.GetRule_simple_table_ref3(), tr)) {
                 return false;
@@ -697,7 +703,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             switch (node.GetBlock4().Alt_case()) {
                 case TRule_alter_group_stmt_TBlock4::kAlt1: {
                     auto& addDropNode = node.GetBlock4().GetAlt1();
-                    const bool isDrop = addDropNode.GetToken1().GetId() == SQLv1LexerTokens::TOKEN_DROP;
+                    const bool isDrop = IS_TOKEN(addDropNode.GetToken1().GetId(), DROP);
                     TVector<TDeferredAtom> roles;
                     bool allowSystemRoles = false;
                     roles.emplace_back();
@@ -746,13 +752,13 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 return false;
             }
 
-            const bool isUser = node.GetToken2().GetId() == SQLv1LexerTokens::TOKEN_USER;
+            const bool isUser = IS_TOKEN(node.GetToken2().GetId(), USER);
             bool missingOk = false;
             if (node.HasBlock3()) { // IF EXISTS
                 missingOk = true;
                 Y_DEBUG_ABORT_UNLESS(
-                    node.GetBlock3().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_IF &&
-                    node.GetBlock3().GetToken2().GetId() == SQLv1LexerTokens::TOKEN_EXISTS
+                    IS_TOKEN(node.GetBlock3().GetToken1().GetId(), IF) &&
+                    IS_TOKEN(node.GetBlock3().GetToken2().GetId(), EXISTS)
                 );
             }
 
@@ -788,9 +794,9 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             if (node.HasBlock3()) { // IF NOT EXISTS
                 existingOk = true;
                 Y_DEBUG_ABORT_UNLESS(
-                    node.GetBlock3().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_IF &&
-                    node.GetBlock3().GetToken2().GetId() == SQLv1LexerTokens::TOKEN_NOT &&
-                    node.GetBlock3().GetToken3().GetId() == SQLv1LexerTokens::TOKEN_EXISTS
+                    IS_TOKEN(node.GetBlock3().GetToken1().GetId(), IF) &&
+                    IS_TOKEN(node.GetBlock3().GetToken2().GetId(), NOT) &&
+                    IS_TOKEN(node.GetBlock3().GetToken3().GetId(), EXISTS)
                 );
             }
 
@@ -842,8 +848,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             if (node.HasBlock3()) { // IF EXISTS
                 missingOk = true;
                 Y_DEBUG_ABORT_UNLESS(
-                    node.GetBlock3().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_IF &&
-                    node.GetBlock3().GetToken2().GetId() == SQLv1LexerTokens::TOKEN_EXISTS
+                    IS_TOKEN(node.GetBlock3().GetToken1().GetId(), IF) &&
+                    IS_TOKEN(node.GetBlock3().GetToken2().GetId(), EXISTS)
                 );
             }
 
@@ -874,8 +880,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             if (node.HasBlock2()) { // OR REPLACE
                 replaceIfExists = true;
                 Y_DEBUG_ABORT_UNLESS(
-                    node.GetBlock2().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_OR &&
-                    node.GetBlock2().GetToken2().GetId() == SQLv1LexerTokens::TOKEN_REPLACE
+                    IS_TOKEN(node.GetBlock2().GetToken1().GetId(), OR) &&
+                    IS_TOKEN(node.GetBlock2().GetToken2().GetId(), REPLACE)
                 );
             }
 
@@ -883,9 +889,9 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             if (node.HasBlock6()) { // IF NOT EXISTS
                 existingOk = true;
                 Y_DEBUG_ABORT_UNLESS(
-                    node.GetBlock6().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_IF &&
-                    node.GetBlock6().GetToken2().GetId() == SQLv1LexerTokens::TOKEN_NOT &&
-                    node.GetBlock6().GetToken3().GetId() == SQLv1LexerTokens::TOKEN_EXISTS
+                    IS_TOKEN(node.GetBlock6().GetToken1().GetId(), IF) &&
+                    IS_TOKEN(node.GetBlock6().GetToken2().GetId(), NOT) &&
+                    IS_TOKEN(node.GetBlock6().GetToken3().GetId(), EXISTS)
                 );
             }
 
@@ -941,8 +947,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             if (node.HasBlock5()) { // IF EXISTS
                 missingOk = true;
                 Y_DEBUG_ABORT_UNLESS(
-                    node.GetBlock5().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_IF &&
-                    node.GetBlock5().GetToken2().GetId() == SQLv1LexerTokens::TOKEN_EXISTS
+                    IS_TOKEN(node.GetBlock5().GetToken1().GetId(), IF) &&
+                    IS_TOKEN(node.GetBlock5().GetToken2().GetId(), EXISTS)
                 );
             }
 
@@ -1002,16 +1008,21 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore35: {
             Ctx.BodyPart();
-            // create_topic_stmt: CREATE TOPIC topic1 (CONSUMER ...)? [WITH (opt1 = val1, ...]?
+            // create_topic_stmt: CREATE TOPIC (IF NOT EXISTS)? topic1 (CONSUMER ...)? [WITH (opt1 = val1, ...]?
             auto& rule = core.GetAlt_sql_stmt_core35().GetRule_create_topic_stmt1();
             TTopicRef tr;
-            if (!TopicRefImpl(rule.GetRule_topic_ref3(), tr)) {
+            if (!TopicRefImpl(rule.GetRule_topic_ref4(), tr)) {
                 return false;
+            }
+            bool existingOk = false;
+            if (rule.HasBlock3()) { // if not exists
+                existingOk = true;
             }
 
             TCreateTopicParameters params;
-            if (rule.HasBlock4()) { //create_topic_entry (consumers)
-                auto& entries = rule.GetBlock4().GetRule_create_topic_entries1();
+            params.ExistingOk = existingOk;
+            if (rule.HasBlock5()) { //create_topic_entry (consumers)
+                auto& entries = rule.GetBlock5().GetRule_create_topic_entries1();
                 auto& firstEntry = entries.GetRule_create_topic_entry2();
                 if (!CreateTopicEntry(firstEntry, params)) {
                     return false;
@@ -1024,8 +1035,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 }
 
             }
-            if (rule.HasBlock5()) { // with_topic_settings
-                auto& topic_settings_node = rule.GetBlock5().GetRule_with_topic_settings1().GetRule_topic_settings3();
+            if (rule.HasBlock6()) { // with_topic_settings
+                auto& topic_settings_node = rule.GetBlock6().GetRule_with_topic_settings1().GetRule_topic_settings3();
                 CreateTopicSettings(topic_settings_node, params.TopicSettings);
             }
 
@@ -1034,20 +1045,26 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore36: {
 //            alter_topic_stmt: ALTER TOPIC topic_ref alter_topic_action (COMMA alter_topic_action)*;
+//            alter_topic_stmt: ALTER TOPIC IF EXISTS topic_ref alter_topic_action (COMMA alter_topic_action)*;
 
             Ctx.BodyPart();
             auto& rule = core.GetAlt_sql_stmt_core36().GetRule_alter_topic_stmt1();
             TTopicRef tr;
-            if (!TopicRefImpl(rule.GetRule_topic_ref3(), tr)) {
+            bool missingOk = false;
+            if (rule.HasBlock3()) { // IF EXISTS
+                missingOk = true;
+            }
+            if (!TopicRefImpl(rule.GetRule_topic_ref4(), tr)) {
                 return false;
             }
 
             TAlterTopicParameters params;
-            auto& firstEntry = rule.GetRule_alter_topic_action4();
+            params.MissingOk = missingOk;
+            auto& firstEntry = rule.GetRule_alter_topic_action5();
             if (!AlterTopicAction(firstEntry, params)) {
                 return false;
             }
-            const auto& list = rule.GetBlock5();
+            const auto& list = rule.GetBlock6();
             for (auto& node : list) {
                 if (!AlterTopicAction(node.GetRule_alter_topic_action2(), params)) {
                     return false;
@@ -1058,15 +1075,22 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore37: {
-            // drop_topic_stmt: DROP TOPIC
+            // drop_topic_stmt: DROP TOPIC (IF EXISTS)? topic_ref;
             Ctx.BodyPart();
             const auto& rule = core.GetAlt_sql_stmt_core37().GetRule_drop_topic_stmt1();
 
+            TDropTopicParameters params;
+            if (rule.HasBlock3()) { // IF EXISTS
+                params.MissingOk = true;
+            } else {
+                params.MissingOk = false;
+            }
+
             TTopicRef tr;
-            if (!TopicRefImpl(rule.GetRule_topic_ref3(), tr)) {
+            if (!TopicRefImpl(rule.GetRule_topic_ref4(), tr)) {
                 return false;
             }
-            AddStatementToBlocks(blocks, BuildDropTopic(Ctx.Pos(), tr, Ctx.Scoped));
+            AddStatementToBlocks(blocks, BuildDropTopic(Ctx.Pos(), tr, params, Ctx.Scoped));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore38: {

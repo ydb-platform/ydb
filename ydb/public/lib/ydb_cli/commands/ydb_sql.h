@@ -15,10 +15,12 @@ class TCommandSql : public TYdbCommand, public TCommandWithFormat,
 {
 public:
     TCommandSql();
-    TCommandSql(TString script, TString collectStatsMode);
     virtual void Config(TConfig& config) override;
     virtual void Parse(TConfig& config) override;
     virtual int Run(TConfig& config) override;
+    void SetSyntax(TString&& syntax);
+    void SetCollectStatsMode(TString&& collectStatsMode);
+    void SetScript(TString&& script);
 
 private:
     int RunCommand(TConfig& config);

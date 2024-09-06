@@ -291,7 +291,7 @@ TString GenerateCryptoStrongRandomString(int length)
         auto* data = reinterpret_cast<char*>(bytes.data());
         return TString{data, static_cast<size_t>(length)};
     } else {
-        THROW_ERROR_EXCEPTION("Failed to generate %v random bytes")
+        THROW_ERROR_EXCEPTION("Failed to generate %v random bytes", length)
             << TErrorAttribute("openssl_error_code", ERR_get_error());
     }
 }

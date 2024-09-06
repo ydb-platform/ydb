@@ -100,6 +100,7 @@ private:
         TRACE_EVENT(NKikimrServices::PQ_PARTITION_CHOOSER);
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvPersQueue::TEvGetPartitionIdForWriteResponse, Handle);
+            HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             SFunc(TEvents::TEvPoison, TThis::Die);
         }

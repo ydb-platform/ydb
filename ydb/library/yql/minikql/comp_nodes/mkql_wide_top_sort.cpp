@@ -365,7 +365,7 @@ public:
     }
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
-        if (!state.HasValue()) {
+        if (state.IsInvalid()) {
             const auto count = Count->GetValue(ctx).Get<ui64>();
             std::vector<bool> dirs(Directions.size());
             std::transform(Directions.cbegin(), Directions.cend(), dirs.begin(), [&ctx](IComputationNode* dir){ return dir->GetValue(ctx).Get<bool>(); });
@@ -404,7 +404,7 @@ public:
 #ifndef MKQL_DISABLE_CODEGEN
     ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
         auto& context = ctx.Codegen.GetContext();
-        DIScopeAnnotator annotate(*ctx.Annotator);
+        DIScopeAnnotator annotate(ctx.Annotator);
 
         const auto valueType = Type::getInt128Ty(context);
         const auto ptrValueType = PointerType::getUnqual(valueType);
@@ -424,7 +424,7 @@ public:
 
         for (auto i = 0U; i < getters.size(); ++i) {
             getters[Indexes[i]] = [i, outs, indexType, valueType, outputPtrType, outputType](const TCodegenContext& ctx, BasicBlock*& block) {
-                DIScopeAnnotator annotate(*ctx.Annotator);
+                DIScopeAnnotator annotate(ctx.Annotator);
                 const auto values = annotate(new LoadInst(outputPtrType, outs, "values", block));
                 const auto pointer = annotate(GetElementPtrInst::CreateInBounds(outputType, values, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, i)}, (TString("ptr_") += ToString(i)).c_str(), block));
                 return annotate(new LoadInst(valueType, pointer, (TString("load_") += ToString(i)).c_str(), block));
@@ -885,7 +885,7 @@ public:
     }
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
-        if (!state.HasValue()) {
+        if (state.IsInvalid()) {
             std::vector<bool> dirs(Directions.size());
             std::transform(Directions.cbegin(), Directions.cend(), dirs.begin(), [&ctx](IComputationNode* dir){ return dir->GetValue(ctx).Get<bool>(); });
             MakeState(ctx, state, dirs.data());
@@ -927,7 +927,7 @@ public:
 #ifndef MKQL_DISABLE_CODEGEN
     ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
         auto& context = ctx.Codegen.GetContext();
-        DIScopeAnnotator annotate(*ctx.Annotator);
+        DIScopeAnnotator annotate(ctx.Annotator);
 
         const auto valueType = Type::getInt128Ty(context);
         const auto ptrValueType = PointerType::getUnqual(valueType);
@@ -947,7 +947,7 @@ public:
 
         for (auto i = 0U; i < getters.size(); ++i) {
             getters[Indexes[i]] = [i, outs, indexType, valueType, outputPtrType, outputType](const TCodegenContext& ctx, BasicBlock*& block) {
-                DIScopeAnnotator annotate(*ctx.Annotator);
+                DIScopeAnnotator annotate(ctx.Annotator);
                 const auto values = annotate(new LoadInst(outputPtrType, outs, "values", block));
                 const auto pointer = annotate(GetElementPtrInst::CreateInBounds(outputType, values, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, i)}, (TString("ptr_") += ToString(i)).c_str(), block));
                 return annotate(new LoadInst(valueType, pointer, (TString("load_") += ToString(i)).c_str(), block));

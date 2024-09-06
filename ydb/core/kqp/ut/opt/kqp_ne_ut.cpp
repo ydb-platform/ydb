@@ -11,6 +11,110 @@ using namespace NYdb;
 using namespace NYdb::NTable;
 
 Y_UNIT_TEST_SUITE(KqpNewEngine) {
+    Y_UNIT_TEST(StreamLookupWithView) {
+        TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(false);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetIndexAutoChooseMode(NKikimrConfig::TTableServiceConfig_EIndexAutoChooseMode_MAX_USED_PREFIX);
+        appConfig.MutableFeatureFlags()->SetEnableViews(true);
+        settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
+        settings.SetAppConfig(appConfig);
+
+        auto kikimr = TKikimrRunner{settings};
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableViews(true);
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        AssertSuccessResult(session.ExecuteSchemeQuery(R"(
+            --!syntax_v1
+
+            CREATE TABLE `object_table`
+            (
+              object_id utf8,
+              role utf8,
+              id utf8 not NULL,
+              primary key (id)
+            );
+
+            ALTER TABLE `object_table` ADD INDEX `object_id_index` GLOBAL ON (object_id);
+            ALTER TABLE `object_table` ADD INDEX `role_index` GLOBAL ON (role);
+
+            CREATE TABLE `role_table`
+            (
+              granted_by_role utf8,
+              granted_role utf8,
+              role_type utf8,
+              role utf8,
+              id utf8 not NULL,
+              primary key (id)
+            );
+
+            ALTER TABLE `role_table` ADD INDEX `granted_by_role_index` GLOBAL ON (granted_by_role);
+            ALTER TABLE `role_table` ADD INDEX `granted_role_index` GLOBAL ON (granted_role);
+            ALTER TABLE `role_table` ADD INDEX `role_index` GLOBAL ON (role);
+
+            CREATE TABLE `access_table`
+            (
+              endpoints utf8,
+              name utf8,
+              class utf8,
+              type utf8,
+              id utf8 not NULL,
+              primary key (id)
+            );
+
+            ALTER TABLE `access_table` ADD INDEX `endpoints_index` GLOBAL ON (endpoints);
+            ALTER TABLE `access_table` ADD INDEX `class_index` GLOBAL ON (class);
+        )").GetValueSync());
+
+        AssertSuccessResult(session.ExecuteSchemeQuery(R"(
+            --!syntax_v1
+          CREATE VIEW granted_privilege WITH (security_invoker = TRUE) AS
+            SELECT DISTINCT
+                object_table.object_id AS object_id,
+                role_table.granted_role AS granted_role,
+                access_table.id AS id,
+                role_table.role AS role,
+                access_table.`type` AS object_type,
+            FROM `/Root/access_table` AS access_table
+                     INNER JOIN `/Root/object_table` AS object_table ON access_table.id = object_table.object_id
+                     INNER JOIN `/Root/role_table` AS role_table ON object_table.role = role_table.granted_role
+        )").GetValueSync());
+
+        auto result = session.ExecuteDataQuery(R"(
+            UPSERT INTO `access_table` (id, type) VALUES
+                ("10", "OPERATION_PRIVILEGE");
+            UPSERT INTO `role_table` (id, granted_role, role_type) VALUES
+                ("10", "admin", "USER_ROLE");
+            UPSERT INTO `object_table` (id, object_id, role) VALUES
+                ("10", "10", "admin");
+        )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+        AssertSuccessResult(result);
+
+        auto testQueryParams = [&] (TString query, TParams params) {
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params).GetValueSync();
+            AssertSuccessResult(result);
+
+            Cerr << FormatResultSetYson(result.GetResultSet(0)) << Endl;
+        };
+
+        auto params = kikimr.GetTableClient().GetParamsBuilder()
+            .AddParam("$jp1").Utf8("admin").Build()
+            .AddParam("$jp2").Utf8("10").Build()
+            .AddParam("$jp3").Uint64(2).Build()
+            .Build();
+
+        testQueryParams(R"(
+            --!syntax_v1
+            DECLARE $jp1 AS Text;
+            DECLARE $jp2 AS Text;
+            DECLARE $jp3 AS Uint64;
+            select g1_0.id from granted_privilege g1_0 where (
+                g1_0.role = 'admin'
+            ) and g1_0.role=$jp1 and g1_0.object_type=$jp2 limit $jp3
+        )", params);
+    }
+
     Y_UNIT_TEST(Select1) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
@@ -3870,6 +3974,55 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         AssertTableReads(result, "/Root/SecondaryKeys/Index/indexImplTable", 1);
     }
 
+    Y_UNIT_TEST(MultipleBroadcastJoin) {
+        TKikimrSettings kisettings;
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetIndexAutoChooseMode(NKikimrConfig::TTableServiceConfig_EIndexAutoChooseMode_MAX_USED_PREFIX);
+        kisettings.SetAppConfig(appConfig);
+
+        TKikimrRunner kikimr(kisettings);
+
+        auto db = kikimr.GetTableClient();
+        auto client = kikimr.GetQueryClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto session = db.CreateSession().GetValueSync().GetSession();
+            AssertSuccessResult(session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+
+                create table demo_ba(id text, some text, ref1 text, ref2 text, primary key(id));
+                create table demo_ref1(id text, code text, some text, primary key(id), index ix_code global on (code));
+                create table demo_ref2(id text, code text, some text, primary key(id), index ix_code global on (code));
+            )").GetValueSync());
+        }
+        
+        auto query = R"(
+            select ba_0.id, ba_0.some,
+              r_1.id, r_1.some, r_1.code,
+              r_2.id, r_2.some, r_2.code
+            from demo_ba ba_0
+            left join demo_ref1 r_1 on r_1.id=ba_0.ref1
+            left join demo_ref2 r_2 on r_2.code=ba_0.ref2
+            where ba_0.id in ("ba#10"u,"ba#20"u,"ba#30"u,"ba#40"u,"ba#50"u,"ba#60"u,"ba#70"u,"ba#80"u,"ba#90"u,"ba#100"u);
+            )";
+
+        auto settings = NYdb::NQuery::TExecuteQuerySettings()
+            .Syntax(NYdb::NQuery::ESyntax::YqlV1)
+            .ConcurrentResultSets(false);
+        {
+            auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            //CompareYson(R"([[[1];["321"]]])", FormatResultSetYson(result.GetResultSet(0)));
+            //CompareYson(R"([[["111"];[1]]])", FormatResultSetYson(result.GetResultSet(1)));
+        }
+        {
+            auto it = client.StreamExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            Cerr << StreamResultToYson(it);
+        }
+
+    }
 
     Y_UNIT_TEST(ComplexLookupLimit) {
         TKikimrSettings settings;

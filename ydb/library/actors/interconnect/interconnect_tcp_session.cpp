@@ -1183,6 +1183,14 @@ namespace NActors {
                                         str << x->GetPeerCommonName();
                                     }
                                 }
+                                TABLER() {
+                                    TABLED() {
+                                        str << "Signature algorithm";
+                                    }
+                                    TABLED() {
+                                        str << x->GetSignatureAlgorithm();
+                                    }
+                                }
                             }
                             TABLER() {
                                 TABLED() { str << "AuthOnly CN"; }

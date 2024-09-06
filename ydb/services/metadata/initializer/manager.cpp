@@ -5,7 +5,7 @@ namespace NKikimr::NMetadata::NInitializer {
 
 void TManager::DoPrepareObjectsBeforeModification(std::vector<TDBInitialization>&& objects,
     NModifications::IAlterPreparationController<TDBInitialization>::TPtr controller,
-    const TInternalModificationContext& /*context*/) const
+    const TInternalModificationContext& /*context*/, const NMetadata::NModifications::TAlterOperationContext& /*alterContext*/) const
 {
     controller->OnPreparationFinished(std::move(objects));
 }

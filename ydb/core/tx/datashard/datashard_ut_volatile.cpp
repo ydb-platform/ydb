@@ -1224,8 +1224,12 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
                 "value:   [\n"
                 "    2\n"
                 "  ]\n");
+        }
 
-            msg = readResults.back()->Get<TEvDataShard::TEvReadResult>();
+        SimulateSleep(runtime, TDuration::MilliSeconds(0));
+
+        {
+            auto* msg = readResults.back()->Get<TEvDataShard::TEvReadResult>();
             UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
             UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetFinished(), true);
         }

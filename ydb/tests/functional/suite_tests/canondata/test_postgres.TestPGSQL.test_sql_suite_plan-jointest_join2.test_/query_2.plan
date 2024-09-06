@@ -43,7 +43,7 @@
                                                 "TopSortBy": "argument.s2.name"
                                             },
                                             {
-                                                "Condition": "name = name",
+                                                "Condition": "s3.name = s2.name",
                                                 "Inputs": [
                                                     {
                                                         "InternalOperatorId": 3
@@ -174,7 +174,10 @@
                 ],
                 "Subplan Name": "CTE precompute_0_0"
             }
-        ]
+        ],
+        "Stats": {
+            "ResourcePoolId": "default"
+        }
     },
     "meta": {
         "type": "query",

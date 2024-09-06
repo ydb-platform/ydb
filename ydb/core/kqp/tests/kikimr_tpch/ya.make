@@ -1,5 +1,6 @@
 UNITTEST()
 
+ENV(YDB_HARD_MEMORY_LIMIT_BYTES="107374182400")
 INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 

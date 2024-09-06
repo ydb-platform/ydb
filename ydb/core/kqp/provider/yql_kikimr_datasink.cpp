@@ -886,9 +886,14 @@ public:
             return false;
         }
 
-        if (tableDesc.Metadata->Kind == EKikimrTableKind::Olap && mode != "replace" && mode != "drop" && mode != "drop_if_exists" && mode != "insert_abort" && mode != "update" && mode != "upsert" && mode != "delete" && mode != "update_on" && mode != "delete_on") {
+        if (tableDesc.Metadata->Kind == EKikimrTableKind::Olap && mode != "replace" && mode != "drop" && mode != "drop_if_exists" && mode != "insert_abort" && mode != "update" && mode != "upsert" && mode != "delete" && mode != "update_on" && mode != "delete_on" && mode != "analyze") {
             ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Write mode '" << static_cast<TStringBuf>(mode) << "' is not supported for olap tables."));
             return true;
+        }
+
+        if (tableDesc.Metadata->Kind == EKikimrTableKind::Datashard && mode == "analyze") {
+            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << static_cast<TStringBuf>(mode) << " is not supported for oltp tables."));
+            return true; 
         }
 
         return false;
@@ -1168,7 +1173,8 @@ public:
                 YQL_ENSURE(settings.Mode);
                 auto mode = settings.Mode.Cast();
 
-                if (mode == "create") {
+                if (mode == "create" || mode == "create_if_not_exists") {
+                    bool existingOk = mode == "create_if_not_exists";
                     return Build<TKiCreateTopic>(ctx, node->Pos())
                             .World(node->Child(0))
                             .DataSink(node->Child(1))
@@ -1176,9 +1182,11 @@ public:
                             .TopicSettings(settings.TopicSettings.Cast())
                             .Consumers(settings.Consumers.Cast())
                             .Settings(settings.Other)
+                            .ExistingOk<TCoAtom>().Value(existingOk).Build()
                             .Done()
                             .Ptr();
-                } else if (mode == "alter") {
+                } else if (mode == "alter" || mode == "alter_if_exists") {
+                    bool missingOk = mode == "alter_if_exists";
                     return Build<TKiAlterTopic>(ctx, node->Pos())
                             .World(node->Child(0))
                             .DataSink(node->Child(1))
@@ -1188,14 +1196,17 @@ public:
                             .AlterConsumers(settings.AlterConsumers.Cast())
                             .DropConsumers(settings.DropConsumers.Cast())
                             .Settings(settings.Other)
+                            .MissingOk<TCoAtom>().Value(missingOk).Build()
                             .Done()
                             .Ptr();
-                } else if (mode == "drop") {
+                } else if (mode == "drop" || mode == "drop_if_exists") {
+                    bool missingOk = (mode == "drop_if_exists");
                         return Build<TKiDropTopic>(ctx, node->Pos())
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
                         .Topic().Build(key.GetTopicPath())
                         .Settings(settings.Other)
+                        .MissingOk<TCoAtom>().Value(missingOk).Build()
                         .Done()
                         .Ptr();
                 } else {

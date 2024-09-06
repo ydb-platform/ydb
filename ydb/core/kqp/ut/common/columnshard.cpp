@@ -22,7 +22,7 @@ namespace NKqp {
                 }
                 SecretableSecretKey: {
                     Value: {
-                        Data: "secretSecretKey"
+                        Data: "fakeSecret"
                     }
                 }
             }
@@ -31,32 +31,37 @@ namespace NKqp {
 
     using namespace NYdb;
 
-    TTestHelper::TTestHelper(const TKikimrSettings& settings)
-        : Kikimr(settings)
-        , TableClient(Kikimr.GetTableClient())
-        , Session(TableClient.CreateSession().GetValueSync().GetSession())
-    {}
+    TTestHelper::TTestHelper(const TKikimrSettings& settings) {
+        TKikimrSettings kikimrSettings(settings);
+        if (!kikimrSettings.FeatureFlags.HasEnableTieringInColumnShard()) {
+            kikimrSettings.SetEnableTieringInColumnShard(true);
+        }
+
+        Kikimr = std::make_unique<TKikimrRunner>(kikimrSettings);
+        TableClient = std::make_unique<NYdb::NTable::TTableClient>(Kikimr->GetTableClient());
+        Session = std::make_unique<NYdb::NTable::TSession>(TableClient->CreateSession().GetValueSync().GetSession());
+    }
 
     NKikimr::NKqp::TKikimrRunner& TTestHelper::GetKikimr() {
-        return Kikimr;
+        return *Kikimr;
     }
 
     TTestActorRuntime& TTestHelper::GetRuntime() {
-        return *Kikimr.GetTestServer().GetRuntime();
+        return *Kikimr->GetTestServer().GetRuntime();
     }
 
     NYdb::NTable::TSession& TTestHelper::GetSession() {
-        return Session;
+        return *Session;
     }
 
     void TTestHelper::CreateTable(const TColumnTableBase& table, const EStatus expectedStatus) {
         std::cerr << (table.BuildQuery()) << std::endl;
-        auto result = Session.ExecuteSchemeQuery(table.BuildQuery()).GetValueSync();
+        auto result = GetSession().ExecuteSchemeQuery(table.BuildQuery()).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expectedStatus, result.GetIssues().ToString());
     }
 
     void TTestHelper::CreateTier(const TString& tierName) {
-        auto result = Session.ExecuteSchemeQuery("CREATE OBJECT " + tierName + " (TYPE TIER) WITH tierConfig = `" + GetConfigProtoWithName(tierName) + "`").GetValueSync();
+        auto result = GetSession().ExecuteSchemeQuery("CREATE OBJECT " + tierName + " (TYPE TIER) WITH tierConfig = `" + GetConfigProtoWithName(tierName) + "`").GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
@@ -70,43 +75,43 @@ namespace NKqp {
                 }
             ]
         })";
-        auto result = Session.ExecuteSchemeQuery("CREATE OBJECT IF NOT EXISTS " + ruleName + " (TYPE TIERING_RULE) WITH (defaultColumn = " + columnName + ", description = `" + configTieringStr + "`)").GetValueSync();
+        auto result = GetSession().ExecuteSchemeQuery("CREATE OBJECT IF NOT EXISTS " + ruleName + " (TYPE TIERING_RULE) WITH (defaultColumn = " + columnName + ", description = `" + configTieringStr + "`)").GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         return ruleName;
     }
 
     void TTestHelper::SetTiering(const TString& tableName, const TString& ruleName) {
         auto alterQuery = TStringBuilder() << "ALTER TABLE `" << tableName <<  "` SET (TIERING = '" << ruleName << "')";
-        auto result = Session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+        auto result = GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
     void TTestHelper::ResetTiering(const TString& tableName) {
         auto alterQuery = TStringBuilder() << "ALTER TABLE `" << tableName <<  "` RESET (TIERING)";
-        auto result = Session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+        auto result = GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
     void TTestHelper::DropTable(const TString& tableName) {
-        auto result = Session.DropTable(tableName).GetValueSync();
+        auto result = GetSession().DropTable(tableName).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
     void TTestHelper::BulkUpsert(const TColumnTable& table, TTestHelper::TUpdatesBuilder& updates, const Ydb::StatusIds_StatusCode& opStatus /*= Ydb::StatusIds::SUCCESS*/) {
         Y_UNUSED(opStatus);
-        NKikimr::Tests::NCS::THelper helper(Kikimr.GetTestServer());
+        NKikimr::Tests::NCS::THelper helper(GetKikimr().GetTestServer());
         auto batch = updates.BuildArrow();
         helper.SendDataViaActorSystem(table.GetName(), batch, opStatus);
     }
 
     void TTestHelper::BulkUpsert(const TColumnTable& table, std::shared_ptr<arrow::RecordBatch> batch, const Ydb::StatusIds_StatusCode& opStatus /*= Ydb::StatusIds::SUCCESS*/) {
         Y_UNUSED(opStatus);
-        NKikimr::Tests::NCS::THelper helper(Kikimr.GetTestServer());
+        NKikimr::Tests::NCS::THelper helper(GetKikimr().GetTestServer());
         helper.SendDataViaActorSystem(table.GetName(), batch, opStatus);
     }
 
     void TTestHelper::ReadData(const TString& query, const TString& expected, const EStatus opStatus /*= EStatus::SUCCESS*/) {
-        auto it = TableClient.StreamExecuteScanQuery(query).GetValueSync();
+        auto it = TableClient->StreamExecuteScanQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString()); // Means stream successfully get
         TString result = StreamResultToYson(it, false, opStatus);
         if (opStatus == EStatus::SUCCESS) {
@@ -115,17 +120,17 @@ namespace NKqp {
     }
 
     void TTestHelper::RebootTablets(const TString& tableName) {
-        auto runtime = Kikimr.GetTestServer().GetRuntime();
+        auto runtime = GetKikimr().GetTestServer().GetRuntime();
         TActorId sender = runtime->AllocateEdgeActor();
         TVector<ui64> shards;
         {
-            auto describeResult = DescribeTable(&Kikimr.GetTestServer(), sender, tableName);
+            auto describeResult = DescribeTable(&GetKikimr().GetTestServer(), sender, tableName);
             for (auto shard : describeResult.GetPathDescription().GetColumnTableDescription().GetSharding().GetColumnShards()) {
                 shards.push_back(shard);
             }
         }
         for (auto shard : shards) {
-            Kikimr.GetTestServer().GetRuntime()->Send(MakePipePerNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(
+            GetKikimr().GetTestServer().GetRuntime()->Send(MakePipePerNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(
                     new TEvents::TEvPoisonPill(), shard, false));
         }
     }

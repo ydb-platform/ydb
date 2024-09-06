@@ -12,6 +12,7 @@ namespace NKikimr::NPDisk {
 struct TCompletionAction {
     ui64 OperationIdx;
     NHPTimer::STime SubmitTime;
+    NHPTimer::STime GetTime;
     TCompletionAction *FlushAction = nullptr;
     ui64 CostNs = 0;
     NWilson::TTraceId TraceId;

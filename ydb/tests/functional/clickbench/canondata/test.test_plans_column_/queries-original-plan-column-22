@@ -81,8 +81,17 @@
                                                                         "PlanNodeType": "Connection",
                                                                         "Plans": [
                                                                             {
-                                                                                "Node Type": "TableFullScan",
+                                                                                "Node Type": "Filter-TableFullScan",
                                                                                 "Operators": [
+                                                                                    {
+                                                                                        "Inputs": [
+                                                                                            {
+                                                                                                "InternalOperatorId": 1
+                                                                                            }
+                                                                                        ],
+                                                                                        "Name": "Filter",
+                                                                                        "Predicate": "Not"
+                                                                                    },
                                                                                     {
                                                                                         "Inputs": [],
                                                                                         "Name": "TableFullScan",
@@ -271,7 +280,7 @@
                                                                                 ],
                                                                                 "Parent Relationship": "InitPlan",
                                                                                 "PlanNodeId": 4,
-                                                                                "Subplan Name": "CTE TableFullScan_9",
+                                                                                "Subplan Name": "CTE Filter-TableFullScan_9",
                                                                                 "Tables": [
                                                                                     "clickbench/plans/column/hits"
                                                                                 ]
@@ -300,7 +309,7 @@
                                                                                 "PlanNodeId": 2,
                                                                                 "Plans": [
                                                                                     {
-                                                                                        "CTE Name": "TableFullScan_9",
+                                                                                        "CTE Name": "Filter-TableFullScan_9",
                                                                                         "KeyColumns": [
                                                                                             "SearchPhrase",
                                                                                             "UserID"
@@ -328,7 +337,10 @@
                             }
                         ]
                     }
-                ]
+                ],
+                "Stats": {
+                    "ResourcePoolId": "default"
+                }
             },
             "tables": [
                 {

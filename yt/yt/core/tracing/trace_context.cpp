@@ -110,7 +110,16 @@ TTracingTransportConfigPtr GetTracingTransportConfig()
 
 namespace NDetail {
 
-YT_DEFINE_THREAD_LOCAL(TTraceContext*, CurrentTraceContext);
+// Expended from YT_DEFINE_THREAD_LOCAL(TTraceContext*, CurrentTraceContext);
+// with Overrides added.
+thread_local TTraceContext *CurrentTraceContextData{};
+YT_PREVENT_TLS_CACHING TTraceContext*& CurrentTraceContext()
+{
+    NYT::NOrigin::EnableOriginOverrides();
+    asm volatile("");
+    return CurrentTraceContextData;
+}
+
 YT_DEFINE_THREAD_LOCAL(TCpuInstant, TraceContextTimingCheckpoint);
 
 TSpanId GenerateSpanId()

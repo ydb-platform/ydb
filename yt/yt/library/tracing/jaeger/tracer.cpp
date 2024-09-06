@@ -1,4 +1,5 @@
 #include "tracer.h"
+#include "private.h"
 
 #include <yt/yt/library/tracing/jaeger/model.pb.h>
 
@@ -37,8 +38,10 @@ using namespace NAuth;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "Jaeger");
-YT_DEFINE_GLOBAL(const NProfiling::TProfiler, Profiler, "/tracing");
+static const auto& Logger = JaegerLogger;
+static const auto& Profiler = TracingProfiler;
+
+////////////////////////////////////////////////////////////////////////////////
 
 static const TString ServiceTicketMetadataName = "x-ya-service-ticket";
 static const TString TracingServiceAlias = "tracing";
@@ -200,7 +203,7 @@ void ToProto(NProto::Span* proto, const TTraceContextPtr& traceContext)
     for (const auto& traceId : traceContext->GetAsyncChildren()) {
         auto* tag = proto->add_tags();
 
-        tag->set_key(Format("yt.async_trace_id.%d", i++));
+        tag->set_key(Format("yt.async_trace_id.%v", i++));
         tag->set_v_str(ToString(traceId));
     }
 
@@ -300,9 +303,7 @@ std::tuple<std::vector<TSharedRef>, int, int> TBatchInfo::PeekQueue(const TJaege
 }
 
 TJaegerChannelManager::TJaegerChannelManager()
-    : Channel_()
-    , ReopenTime_(TInstant::Now())
-    , RpcTimeout_()
+    : ReopenTime_(TInstant::Now())
 { }
 
 TJaegerChannelManager::TJaegerChannelManager(

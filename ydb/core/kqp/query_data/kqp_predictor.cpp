@@ -131,7 +131,7 @@ ui32 TStagePredictor::GetUsableThreads() {
         userPoolSize = TlsActivationContext->ActorSystem()->GetPoolThreadsCount(AppData()->UserPoolId);
     }
     if (!userPoolSize) {
-        ALS_ERROR(NKikimrServices::KQP_EXECUTER) << "user pool is undefined for executer tasks construction";
+        ALS_INFO(NKikimrServices::KQP_EXECUTER) << "user pool is undefined for executer tasks construction";
         userPoolSize = NSystemInfo::NumberOfCpus();
     }
     return Max<ui32>(1, *userPoolSize);

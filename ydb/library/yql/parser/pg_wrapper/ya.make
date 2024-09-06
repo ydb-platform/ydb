@@ -33,7 +33,7 @@ SRCS(
     comp_factory.cpp
     type_cache.cpp
     pg_aggs.cpp
-    GLOBAL read_table.cpp
+    read_table.cpp
     recovery.cpp
     superuser.cpp
     config.cpp
@@ -88,6 +88,7 @@ PEERDIR(
     ydb/library/yql/public/udf
     ydb/library/yql/utils
     ydb/library/yql/public/decimal
+    ydb/library/yql/public/result_format
     ydb/library/binary_json
     ydb/library/dynumber
     ydb/library/uuid

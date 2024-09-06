@@ -18,7 +18,9 @@ namespace NKikimr::NEvWrite {
 
     void TWritersController::OnSuccess(const ui64 shardId, const ui64 writeId, const ui32 writePartId) {
         WriteIds[WritesIndex.Inc() - 1] = TWriteIdForShard(shardId, writeId, writePartId);
+        Counters->OnCSReply(TMonotonic::Now() - StartInstant);
         if (!WritesCount.Dec()) {
+            Counters->OnFullReply(TMonotonic::Now() - StartInstant);
             auto req = MakeHolder<NLongTxService::TEvLongTxService::TEvAttachColumnShardWrites>(LongTxId);
             for (auto&& i : WriteIds) {
                 req->AddWrite(i.GetShardId(), i.GetWriteId());
@@ -28,6 +30,7 @@ namespace NKikimr::NEvWrite {
     }
 
     void TWritersController::OnFail(const Ydb::StatusIds::StatusCode code, const TString& message) {
+        Counters->OnCSFailed(code);
         NYql::TIssues issues;
         issues.AddIssue(message);
         LongTxActorId.Send(LongTxActorId, new TEvPrivate::TEvShardsWriteResult(code, issues));

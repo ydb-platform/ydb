@@ -86,7 +86,8 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
     if (!hasSchemaChanges
         && !copyAlter.HasPartitionConfig()
         && !copyAlter.HasTTLSettings()
-        && !copyAlter.HasReplicationConfig())
+        && !copyAlter.HasReplicationConfig()
+        && !copyAlter.HasIncrementalBackupConfig())
     {
         errStr = Sprintf("No changes specified");
         status = NKikimrScheme::StatusInvalidParameter;
@@ -364,6 +365,10 @@ public:
 
         TTableInfo::TPtr table = context.SS->Tables.at(pathId);
         table->FinishAlter();
+
+        if (!table->IsAsyncReplica()) {
+            path->SetAsyncReplica(false);
+        }
 
         auto ttlIt = context.SS->TTLEnabledTables.find(pathId);
         if (table->IsTTLEnabled() && ttlIt == context.SS->TTLEnabledTables.end()) {
@@ -731,7 +736,7 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
     // Admins can alter indexImplTable unconditionally.
     // Regular users can only alter allowed fields.
     if (!IsSuperUser(context.UserToken.Get())
-        && (!CheckAllowedFields(alter, {"Name", "PathId", "PartitionConfig", "ReplicationConfig"})
+        && (!CheckAllowedFields(alter, {"Name", "PathId", "PartitionConfig", "ReplicationConfig", "IncrementalBackupConfig"})
             || (alter.HasPartitionConfig()
                 && !CheckAllowedFields(alter.GetPartitionConfig(), {"PartitioningPolicy"})
             )

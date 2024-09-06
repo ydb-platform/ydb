@@ -424,7 +424,7 @@ private:
     void MediatorTimeCastUnregisterTablet(const TActorContext& ctx);
     void Handle(TEvMediatorTimecast::TEvRegisterTabletResult::TPtr& ev, const TActorContext& ctx);
 
-    TIntrusivePtr<TMediatorTimecastEntry> MediatorTimeCastEntry;
+    TMediatorTimecastEntry::TCPtr MediatorTimeCastEntry;
 
     void DeleteExpiredTransactions(const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvCancelTransactionProposal::TPtr& ev, const TActorContext& ctx);
@@ -495,12 +495,12 @@ private:
 
     bool AllOriginalPartitionsInited() const;
 
-    void Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& ev, const TActorContext& ctx);
+    void Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& ev);
     void Handle(TEvPQ::TEvDeletePartitionDone::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvTransactionCompleted::TPtr& ev, const TActorContext& ctx);
 
-    void BeginDeleteTx(const TDistributedTransaction& tx);
     void BeginDeletePartitions(TTxWriteInfo& writeInfo);
+    void BeginDeletePartitions(const TDistributedTransaction& tx);
 
     bool CheckTxWriteOperation(const NKikimrPQ::TPartitionOperation& operation,
                                const TWriteId& writeId) const;
@@ -524,6 +524,12 @@ private:
 
     void SendTransactionsReadRequest(const TString& fromKey, bool includeFrom,
                                      const TActorContext& ctx);
+
+    void AddCmdDeleteTx(NKikimrClient::TKeyValueRequest& request,
+                        ui64 txId);
+
+    bool AllSupportivePartitionsHaveBeenDeleted(const TMaybe<TWriteId>& writeId) const;
+    void DeleteWriteId(const TMaybe<TWriteId>& writeId);
 };
 
 

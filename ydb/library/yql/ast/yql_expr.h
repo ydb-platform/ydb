@@ -2525,6 +2525,7 @@ struct TExprContext : private TNonCopyable {
     ui64 StringsAllocationLimit = 100000000;
     ui64 RepeatTransformLimit = 1000000;
     ui64 RepeatTransformCounter = 0;
+    ui64 TypeAnnNodeRepeatLimit = 1000;
 
     TGcNodeConfig GcConfig;
 
@@ -2718,6 +2719,8 @@ struct TExprContext : private TNonCopyable {
     template <typename T, typename... Args>
     const T* MakeConstraint(Args&&... args);
 
+    TConstraintSet MakeConstraintSet(const NYT::TNode& serializedConstraints);
+
     void AddError(const TIssue& error) {
         ENSURE_NOT_FROZEN_CTX
         IssueManager.RaiseIssue(error);
@@ -2834,6 +2837,8 @@ bool CompareExprTrees(const TExprNode*& one, const TExprNode*& two);
 
 bool CompareExprTreeParts(const TExprNode& one, const TExprNode& two, const TNodeMap<ui32>& argsMap);
 
+TString MakeCacheKey(const TExprNode& root);
+
 void GatherParents(const TExprNode& node, TParentsMap& parentsMap);
 
 struct TConvertToAstSettings {
@@ -2843,6 +2848,7 @@ struct TConvertToAstSettings {
     bool PrintArguments = false;
     bool AllowFreeArgs = false;
     bool NormalizeAtomFlags = false;
+    IAllocator* Allocator = TDefaultAllocator::Instance();
 };
 
 TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& ctx, const TConvertToAstSettings& settings);

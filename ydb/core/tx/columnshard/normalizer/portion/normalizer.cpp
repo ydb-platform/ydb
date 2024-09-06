@@ -7,7 +7,7 @@
 namespace NKikimr::NOlap {
 
 TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizerBase::DoInit(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) {
-    auto initRes = DoInitImpl(controller,txc);
+    auto initRes = DoInitImpl(controller, txc);
 
     if (initRes.IsFail()) {
         return initRes;

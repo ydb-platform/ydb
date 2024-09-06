@@ -81,24 +81,31 @@ message TTable {
 
 // KQP -> SA
 message TEvAnalyze {
-    optional uint64 Cookie = 1; // request cookie to match response item
+    optional bytes OperationId = 1; // unique identifier to match response item
     repeated TTable Tables = 2; // list of analyzed tables and columns
     repeated EColumnStatisticType Types = 3; // list of statistics types requested. Empty means asking for all available.
 }
 
 // SA -> KQP
 message TEvAnalyzeResponse {
-    optional uint64 Cookie = 1;
+    optional bytes OperationId = 1;
+
+    enum EStatus {
+        STATUS_UNSPECIFIED = 0;
+        STATUS_SUCCESS = 1;
+        STATUS_ERROR = 2;
+    }
+    optional EStatus Status = 2;    
 }
 
 // KQP -> SA
 message TEvAnalyzeStatus {
-    optional NKikimrProto.TPathID PathId = 1;
+    optional bytes OperationId = 1; // unique identifier to match response item
 }
 
 // SA -> KQP
 message TEvAnalyzeStatusResponse {
-    optional NKikimrProto.TPathID PathId = 1;
+    optional bytes OperationId = 1;
 
     enum EStatus {
         STATUS_UNSPECIFIED = 0;
@@ -111,13 +118,16 @@ message TEvAnalyzeStatusResponse {
 
 // SA -> Shard
 message TEvAnalyzeTable {
-    optional TTable Table = 1;  // analyzed table
-    repeated EColumnStatisticType Types = 2; // list of statistics types requested. Empty means asking for all available.
+    optional bytes OperationId = 1; // unique identifier to match response item
+    optional TTable Table = 2;  // analyzed table
+    repeated EColumnStatisticType Types = 3; // list of statistics types requested. Empty means asking for all available.
 }
 
 // Shard -> SA
 message TEvAnalyzeTableResponse {
-    optional NKikimrProto.TPathID PathId = 1;   
+    optional bytes OperationId = 1;
+    optional NKikimrProto.TPathID PathId = 2;
+    optional fixed64 ShardTabletId = 3;
 }
 
 

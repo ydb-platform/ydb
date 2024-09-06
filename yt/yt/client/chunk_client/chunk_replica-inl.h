@@ -140,6 +140,11 @@ Y_FORCE_INLINE int TChunkReplica::GetReplicaIndex() const
     return (Value_ & 0x1f000000) >> 24;
 }
 
+Y_FORCE_INLINE void TChunkReplica::RegisterMetadata(auto&& registrar)
+{
+    registrar.template Field<1, &TThis::Value_>("value")();
+}
+
 Y_FORCE_INLINE void ToProto(ui32* value, TChunkReplica replica)
 {
     *value = replica.Value_;
@@ -304,8 +309,8 @@ inline bool IsErasureChunkId(TChunkId id)
 inline bool IsErasureChunkPartType(NObjectClient::EObjectType type)
 {
     return
-        type >= NObjectClient::MinErasureChunkPartType && type <= NObjectClient::MaxErasureChunkPartType ||
-        type >= NObjectClient::MinErasureJournalChunkPartType && type <= NObjectClient::MaxErasureJournalChunkPartType;
+        (type >= NObjectClient::MinErasureChunkPartType && type <= NObjectClient::MaxErasureChunkPartType) ||
+        (type >= NObjectClient::MinErasureJournalChunkPartType && type <= NObjectClient::MaxErasureJournalChunkPartType);
 }
 
 inline bool IsErasureChunkPartId(TChunkId id)

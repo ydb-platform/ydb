@@ -28,8 +28,8 @@ namespace NKikimr::NDataShard {
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
 
 using TColumnsTypes = THashMap<TString, NScheme::TTypeInfo>;
-using TTypes = TVector<std::pair<TString, Ydb::Type>>;
-using TRows = TVector<std::pair<TSerializedCellVec, TString>>;
+using TTypes = NTxProxy::TUploadTypes;
+using TRows = NTxProxy::TUploadRows;
 
 static TColumnsTypes GetAllTypes(const TUserTable& tableInfo) {
     TColumnsTypes result;
@@ -118,42 +118,6 @@ bool BuildExtraColumns(TVector<TCell>& cells, const NKikimrIndexBuilder::TColumn
 
     return true;
 }
-
-struct TStatus {
-    Ydb::StatusIds::StatusCode StatusCode = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
-    NYql::TIssues Issues;
-
-    bool IsNone() const {
-        return StatusCode == Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
-    }
-
-    bool IsSuccess() const {
-        return StatusCode == Ydb::StatusIds::SUCCESS;
-    }
-
-    bool IsRetriable() const {
-        return StatusCode == Ydb::StatusIds::UNAVAILABLE || StatusCode == Ydb::StatusIds::OVERLOADED;
-    }
-
-    TString ToString() const {
-        return TStringBuilder()
-               << "Status {"
-               << " Code: " << Ydb::StatusIds_StatusCode_Name(StatusCode)
-               << " Issues: " << Issues.ToString()
-               << " }";
-    }
-};
-
-struct TUploadLimits {
-    ui64 BatchRowsLimit = 500;
-    ui64 BatchBytesLimit = 1u << 23; // 8MB
-    ui32 MaxUploadRowsRetryCount = 50;
-    ui32 BackoffCeiling = 3;
-
-    TDuration GetTimeoutBackouff(ui32 retryNo) const {
-        return TDuration::Seconds(1u << Max(retryNo, BackoffCeiling));
-    }
-};
 
 class TBufferData: public IStatHolder, public TNonCopyable {
 public:
@@ -258,7 +222,7 @@ protected:
     ui64 RetryCount = 0;
 
     TUploadMonStats Stats = TUploadMonStats("tablets", "build_index_upload");
-    TStatus UploadStatus;
+    TUploadStatus UploadStatus;
 
     TBuildScanUpload(ui64 buildIndexId,
                      const TString& target,
@@ -373,14 +337,14 @@ public:
         progress->Record.SetRequestSeqNoRound(SeqNo.Round);
 
         if (abort != EAbort::None) {
-            progress->Record.SetStatus(NKikimrTxDataShard::TEvBuildIndexProgressResponse::ABORTED);
+            progress->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
             UploadStatus.Issues.AddIssue(NYql::TIssue("Aborted by scan host env"));
 
             LOG_W(Debug());
         } else if (!UploadStatus.IsSuccess()) {
-            progress->Record.SetStatus(NKikimrTxDataShard::TEvBuildIndexProgressResponse::BUILD_ERROR);
+            progress->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
         } else {
-            progress->Record.SetStatus(NKikimrTxDataShard::TEvBuildIndexProgressResponse::DONE);
+            progress->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::DONE);
         }
 
         UploadStatusToMessage(progress->Record);
@@ -478,12 +442,13 @@ private:
             progress->Record.SetRequestSeqNoGeneration(SeqNo.Generation);
             progress->Record.SetRequestSeqNoRound(SeqNo.Round);
 
-            progress->Record.SetLastKeyAck(TSerializedCellVec::Serialize(LastUploadedKey.GetCells()));
+            // TODO(mbkkt) ReleaseBuffer isn't possible, we use LastUploadedKey for logging
+            progress->Record.SetLastKeyAck(LastUploadedKey.GetBuffer());
             progress->Record.SetRowsDelta(WriteBuf.GetRows());
             progress->Record.SetBytesDelta(WriteBuf.GetBytes());
             WriteBuf.Clear();
 
-            progress->Record.SetStatus(NKikimrTxDataShard::TEvBuildIndexProgressResponse::INPROGRESS);
+            progress->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS);
             UploadStatusToMessage(progress->Record);
 
             ctx.Send(ProgressActorId, progress.Release());
@@ -663,17 +628,15 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
         return;
     }
 
-    auto response = MakeHolder<TEvDataShard::TEvBuildIndexProgressResponse>();
-    response->Record.SetBuildIndexId(record.GetBuildIndexId());
-    response->Record.SetTabletId(TabletID());
-    response->Record.SetStatus(NKikimrTxDataShard::TEvBuildIndexProgressResponse::ACCEPTED);
 
     TScanRecord::TSeqNo seqNo = {record.GetSeqNoGeneration(), record.GetSeqNoRound()};
-    response->Record.SetRequestSeqNoGeneration(seqNo.Generation);
-    response->Record.SetRequestSeqNoRound(seqNo.Round);
-
     auto badRequest = [&](const TString& error) {
-        response->Record.SetStatus(NKikimrTxDataShard::TEvBuildIndexProgressResponse::BAD_REQUEST);
+        auto response = MakeHolder<TEvDataShard::TEvBuildIndexProgressResponse>();
+        response->Record.SetBuildIndexId(record.GetBuildIndexId());
+        response->Record.SetTabletId(TabletID());
+        response->Record.SetRequestSeqNoGeneration(seqNo.Generation);
+        response->Record.SetRequestSeqNoRound(seqNo.Round);
+        response->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST);
         auto issue = response->Record.AddIssues();
         issue->set_severity(NYql::TSeverityIds::S_ERROR);
         issue->set_message(error);
@@ -699,7 +662,6 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
     if (const auto* recCard = ScanManager.Get(buildIndexId)) {
         if (recCard->SeqNo == seqNo) {
             // do no start one more scan
-            ctx.Send(ev->Sender, std::move(response));
             return;
         }
 
@@ -774,8 +736,6 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
     TScanRecord recCard = {scanId, seqNo};
 
     ScanManager.Set(buildIndexId, recCard);
-
-    ctx.Send(ev->Sender, std::move(response));
 }
 
 }

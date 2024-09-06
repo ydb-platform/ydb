@@ -457,23 +457,16 @@ public:
         return ERequestType::Discover;
     }
 
-    TBlobStorageGroupMirror3dcDiscoverRequest(TIntrusivePtr<TBlobStorageGroupInfo> info,
-            TIntrusivePtr<TGroupQueues> state, const TActorId& source,
-            TIntrusivePtr<TBlobStorageGroupProxyMon> mon, TEvBlobStorage::TEvDiscover *ev,
-            ui64 cookie, NWilson::TTraceId traceId, TInstant now,
-            TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters)
-        : TBlobStorageGroupRequestActor(std::move(info), std::move(state), std::move(mon), source, cookie,
-                NKikimrServices::BS_PROXY_DISCOVER, false, {}, now, storagePoolCounters, ev->RestartCounter,
-                std::move(traceId), "DSProxy.Discover", ev, std::move(ev->ExecutionRelay),
-                NKikimrServices::TActivity::BS_GROUP_DISCOVER)
-        , TabletId(ev->TabletId)
-        , MinGeneration(ev->MinGeneration)
-        , StartTime(now)
-        , Deadline(ev->Deadline)
-        , ReadBody(ev->ReadBody)
-        , DiscoverBlockedGeneration(ev->DiscoverBlockedGeneration)
-        , ForceBlockedGeneration(ev->ForceBlockedGeneration)
-        , FromLeader(ev->FromLeader)
+    TBlobStorageGroupMirror3dcDiscoverRequest(TBlobStorageGroupDiscoverParameters& params)
+        : TBlobStorageGroupRequestActor(params)
+        , TabletId(params.Common.Event->TabletId)
+        , MinGeneration(params.Common.Event->MinGeneration)
+        , StartTime(params.Common.Now)
+        , Deadline(params.Common.Event->Deadline)
+        , ReadBody(params.Common.Event->ReadBody)
+        , DiscoverBlockedGeneration(params.Common.Event->DiscoverBlockedGeneration)
+        , ForceBlockedGeneration(params.Common.Event->ForceBlockedGeneration)
+        , FromLeader(params.Common.Event->FromLeader)
         , GetBlockTracker(Info.Get())
     {}
 
@@ -486,7 +479,7 @@ public:
     }
 
     void Bootstrap() override {
-        A_LOG_DEBUG_S("DSPDM01", "bootstrap"
+        DSP_LOG_DEBUG_S("DSPDM01", "bootstrap"
             << " ActorId# " << SelfId()
             << " Group# " << Info->GroupID
             << " TabletId# " << TabletId
@@ -506,7 +499,7 @@ public:
                 auto vd = Info->GetVDiskId(vdisk.OrderNumber);
                 auto query = std::make_unique<TEvBlobStorage::TEvVGetBlock>(TabletId, vd, Deadline);
 
-                A_LOG_DEBUG_S("DSPDM06", "sending TEvVGetBlock# " << query->ToString());
+                DSP_LOG_DEBUG_S("DSPDM06", "sending TEvVGetBlock# " << query->ToString());
 
                 SendToQueue(std::move(query), 0);
                 ++RequestsInFlight;
@@ -523,7 +516,7 @@ public:
     void SendWorkerMessages() {
         Worker->GenerateGetRequests(Msgs, Deadline);
         for (auto& msg : Msgs) {
-            A_LOG_DEBUG_S("DSPDM07", "sending TEvVGet# " << msg->ToString());
+            DSP_LOG_DEBUG_S("DSPDM07", "sending TEvVGet# " << msg->ToString());
 
             SendToQueue(std::move(msg), 0);
             ++RequestsInFlight;
@@ -542,7 +535,7 @@ public:
         const auto& record = msg->Record;
         Y_ABORT_UNLESS(record.HasVDiskID());
 
-        A_LOG_DEBUG_S("DSPDM04", "received TEvVGetResult# " << msg->ToString());
+        DSP_LOG_DEBUG_S("DSPDM04", "received TEvVGetResult# " << msg->ToString());
 
         // get worker for this ring and apply result
         if (!Worker->Apply(msg)) {
@@ -569,7 +562,7 @@ public:
                         NKikimrBlobStorage::Discover, true, !ReadBody, TEvBlobStorage::TEvGet::TForceBlockTabletData(TabletId, ForceBlockedGeneration));
                 query->IsInternal = true;
 
-                A_LOG_DEBUG_S("DSPDM17", "sending TEvGet# " << query->ToString());
+                DSP_LOG_DEBUG_S("DSPDM17", "sending TEvGet# " << query->ToString());
 
                 SendToProxy(std::move(query));
                 ++RequestsInFlight;
@@ -584,7 +577,7 @@ public:
         Y_ABORT_UNLESS(RequestsInFlight > 0);
         --RequestsInFlight;
 
-        A_LOG_DEBUG_S("DSPDM05", "received TEvGetResult# " << ev->Get()->ToString());
+        DSP_LOG_DEBUG_S("DSPDM05", "received TEvGetResult# " << ev->Get()->ToString());
 
         // get item from probe queue and ensure that we receive answer for exactly this query
         Y_ABORT_UNLESS(Worker->IsReady());
@@ -622,7 +615,7 @@ public:
             case NKikimrProto::NODATA:
                 if (state.MustExist) {
                     // we have just lost the blob
-                    R_LOG_ALERT_S("DSPDM09", "!!! LOST THE BLOB !!! BlobId# " << ResultBlobId.ToString()
+                    DSP_LOG_ALERT_S("DSPDM09", "!!! LOST THE BLOB !!! BlobId# " << ResultBlobId.ToString()
                             << " Group# " << Info->GroupID);
                     return ReplyAndDie(NKikimrProto::ERROR);
                 } else if (Worker->IsReady()) {
@@ -655,7 +648,7 @@ public:
                             BlockedGeneration));
             }
 
-            R_LOG_DEBUG_S("DSPDM03", "Response# " << response->ToString());
+            DSP_LOG_DEBUG_S("DSPDM03", "Response# " << response->ToString());
 
             Y_ABORT_UNLESS(!Responded);
             const TDuration duration = TActivationContext::Now() - StartTime;
@@ -667,7 +660,7 @@ public:
     }
 
     void ReplyAndDie(NKikimrProto::EReplyStatus status) override {
-        R_LOG_ERROR_S("DSPDM02", "Status# " << NKikimrProto::EReplyStatus_Name(status));
+        DSP_LOG_ERROR_S("DSPDM02", "Status# " << NKikimrProto::EReplyStatus_Name(status));
 
         Y_ABORT_UNLESS(!Responded);
         Y_ABORT_UNLESS(status != NKikimrProto::OK);
@@ -688,7 +681,7 @@ public:
 
         TEvBlobStorage::TEvVGetBlockResult *msg = ev->Get();
 
-        A_LOG_DEBUG_S("DSPDM08", "received TEvVGetBlockResult# " << msg->ToString()
+        DSP_LOG_DEBUG_S("DSPDM08", "received TEvVGetBlockResult# " << msg->ToString()
                 << " BlockedGeneration# " << BlockedGeneration);
 
         const auto& record = msg->Record;
@@ -736,13 +729,8 @@ public:
     }
 };
 
-IActor* CreateBlobStorageGroupMirror3dcDiscoverRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
-        const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
-        const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvDiscover *ev,
-        ui64 cookie, NWilson::TTraceId traceId, TInstant now,
-        TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters) {
-    return new TBlobStorageGroupMirror3dcDiscoverRequest(info, state, source, mon, ev, cookie, std::move(traceId), now,
-            storagePoolCounters);
+IActor* CreateBlobStorageGroupMirror3dcDiscoverRequest(TBlobStorageGroupDiscoverParameters params) {
+    return new TBlobStorageGroupMirror3dcDiscoverRequest(params);
 }
 
 }//NKikimr

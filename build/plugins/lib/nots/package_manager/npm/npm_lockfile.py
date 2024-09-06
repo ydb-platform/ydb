@@ -42,7 +42,7 @@ class NpmLockfile(BaseLockfile):
         packages = self.data.get("packages", {})
 
         for key, meta in packages.items():
-            if not key:
+            if self._should_skip_package(key, meta):
                 continue
             yield _parse_package_meta(key, meta)
 
@@ -54,7 +54,7 @@ class NpmLockfile(BaseLockfile):
         packages = self.data.get("packages", {})
 
         for key, meta in iteritems(packages):
-            if not key:
+            if self._should_skip_package(key, meta):
                 continue
             meta["resolved"] = fn(_parse_package_meta(key, meta, allow_file_protocol=True))
             packages[key] = meta
@@ -64,6 +64,9 @@ class NpmLockfile(BaseLockfile):
 
     def validate_has_addons_flags(self):
         raise NotImplementedError()
+
+    def _should_skip_package(self, key, meta):
+        return not key or key.startswith(".") or meta.get("link", None) is True
 
 
 def _parse_package_meta(key, meta, allow_file_protocol=False):

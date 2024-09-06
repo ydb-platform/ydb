@@ -109,7 +109,7 @@ void OomWatchdog(TOomWatchdogOptions options)
                 rssFile,
                 rssShmem,
                 MakeFormattableView(
-                    MakeRange(TCMallocStats),
+                    TRange(TCMallocStats),
                     [&] (auto* builder, auto metric) {
                         auto value = tcmalloc::MallocExtension::GetNumericProperty(metric);
                         builder->AppendFormat("%v: %v", metric, value);

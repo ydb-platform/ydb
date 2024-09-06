@@ -1,5 +1,6 @@
 RECURSE(
     apps
+    docs
     core
     library
     mvp
@@ -7,4 +8,5 @@ RECURSE(
     services
     tests
     tools
+    yql_docs
 )

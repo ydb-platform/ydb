@@ -41,7 +41,7 @@
                                                 "Name": "Limit"
                                             },
                                             {
-                                                "Condition": "k = k",
+                                                "Condition": "p.k = c.k",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 15
@@ -66,8 +66,8 @@
                                                         "Operators": [
                                                             {
                                                                 "Inputs": [],
-                                                                "Iterator": "precompute_1_0",
-                                                                "Name": "Iterator"
+                                                                "Name": "ToFlow",
+                                                                "ToFlow": "precompute_1_0"
                                                             }
                                                         ],
                                                         "PlanNodeId": 14
@@ -80,7 +80,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Collect",
+                                                        "Node Type": "Stage",
                                                         "PlanNodeId": 12,
                                                         "Plans": [
                                                             {
@@ -211,7 +211,10 @@
                 ],
                 "Subplan Name": "CTE precompute_1_0"
             }
-        ]
+        ],
+        "Stats": {
+            "ResourcePoolId": "default"
+        }
     },
     "meta": {
         "type": "query",

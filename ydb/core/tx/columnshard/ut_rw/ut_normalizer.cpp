@@ -3,6 +3,7 @@
 
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
+#include <ydb/core/tx/columnshard/engines/portions/constructor.h>
 
 #include <ydb/core/tx/columnshard/operations/write_data.h>
 
@@ -161,7 +162,7 @@ public:
     }
 };
 
-class TPortinosCleaner : public NYDBTest::ILocalDBModifier {
+class TPortionsCleaner : public NYDBTest::ILocalDBModifier {
 public:
     virtual void Apply(NTabletFlatExecutor::TTransactionContext& txc) const override {
         using namespace NColumnShard;
@@ -184,6 +185,21 @@ public:
         }
     }
 };
+
+
+class TEmptyPortionsCleaner : public NYDBTest::ILocalDBModifier {
+public:
+    virtual void Apply(NTabletFlatExecutor::TTransactionContext& txc) const override {
+        using namespace NColumnShard;
+        NIceDb::TNiceDb db(txc.DB);
+        for (size_t pathId = 100; pathId != 299; ++pathId) {
+            for (size_t portionId = 1000; portionId != 1199; ++portionId) {
+                db.Table<Schema::IndexPortions>().Key(pathId, portionId).Update();
+            }
+        }
+    }
+};
+
 
 class TTablesCleaner : public NYDBTest::ILocalDBModifier {
 public:
@@ -317,7 +333,11 @@ Y_UNIT_TEST_SUITE(Normalizers) {
     }
 
     Y_UNIT_TEST(PortionsNormalizer) {
-        TestNormalizerImpl<TPortinosCleaner>();
+        TestNormalizerImpl<TPortionsCleaner>();
+    }
+
+    Y_UNIT_TEST(CleanEmptyPortionsNormalizer) {
+        TestNormalizerImpl<TEmptyPortionsCleaner>();
     }
 
     Y_UNIT_TEST(EmptyTablesNormalizer) {

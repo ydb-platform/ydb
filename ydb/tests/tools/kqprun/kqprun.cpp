@@ -32,6 +32,7 @@ struct TExecutionOptions {
 
     std::vector<TString> ScriptQueries;
     TString SchemeQuery;
+    bool UseTemplates = false;
 
     ui32 LoopCount = 1;
     TDuration LoopDelay;
@@ -39,6 +40,7 @@ struct TExecutionOptions {
     bool ForgetExecution = false;
     std::vector<EExecutionCase> ExecutionCases;
     std::vector<NKikimrKqp::EQueryAction> ScriptQueryActions;
+    std::vector<TString> Databases;
     std::vector<TString> TraceIds;
     std::vector<TString> PoolIds;
     std::vector<TString> UserSIDs;
@@ -70,23 +72,37 @@ struct TExecutionOptions {
     }
 
     NKqpRun::TRequestOptions GetSchemeQueryOptions() const {
+        TString sql = SchemeQuery;
+        if (UseTemplates) {
+            ReplaceYqlTokenTemplate(sql);
+        }
+
         return {
-            .Query = SchemeQuery,
+            .Query = sql,
             .Action = NKikimrKqp::EQueryAction::QUERY_ACTION_EXECUTE,
             .TraceId = DefaultTraceId,
             .PoolId = "",
-            .UserSID = BUILTIN_ACL_ROOT
+            .UserSID = BUILTIN_ACL_ROOT,
+            .Database = ""
         };
     }
 
-    NKqpRun::TRequestOptions GetScriptQueryOptions(size_t index, TInstant startTime) const {
+    NKqpRun::TRequestOptions GetScriptQueryOptions(size_t index, size_t queryId, TInstant startTime) const {
         Y_ABORT_UNLESS(index < ScriptQueries.size());
+
+        TString sql = ScriptQueries[index];
+        if (UseTemplates) {
+            ReplaceYqlTokenTemplate(sql);
+            SubstGlobal(sql, "${QUERY_ID}", ToString(queryId));
+        }
+
         return {
-            .Query = ScriptQueries[index],
+            .Query = sql,
             .Action = GetScriptQueryAction(index),
             .TraceId = TStringBuilder() << GetValue(index, TraceIds, DefaultTraceId) << "-" << startTime.ToString(),
             .PoolId = GetValue(index, PoolIds, TString()),
-            .UserSID = GetValue(index, UserSIDs, TString(BUILTIN_ACL_ROOT))
+            .UserSID = GetValue(index, UserSIDs, TString(BUILTIN_ACL_ROOT)),
+            .Database = GetValue(index, Databases, TString())
         };
     }
 
@@ -97,6 +113,15 @@ private:
             return defaultValue;
         }
         return values[std::min(index, values.size() - 1)];
+    }
+
+    static void ReplaceYqlTokenTemplate(TString& sql) {
+        const TString variableName = TStringBuilder() << "${" << NKqpRun::YQL_TOKEN_VARIABLE << "}";
+        if (const TString& yqlToken = GetEnv(NKqpRun::YQL_TOKEN_VARIABLE)) {
+            SubstGlobal(sql, variableName, yqlToken);
+        } else if (sql.Contains(variableName)) {
+            ythrow yexception() << "Failed to replace ${YQL_TOKEN} template, please specify YQL_TOKEN environment variable\n";
+        }
     }
 };
 
@@ -134,7 +159,7 @@ void RunArgumentQueries(const TExecutionOptions& executionOptions, NKqpRun::TKqp
 
         switch (executionCase) {
         case TExecutionOptions::EExecutionCase::GenericScript:
-            if (!runner.ExecuteScript(executionOptions.GetScriptQueryOptions(id, startTime))) {
+            if (!runner.ExecuteScript(executionOptions.GetScriptQueryOptions(id, queryId, startTime))) {
                 ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Script execution failed";
             }
             Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Fetching script results..." << colors.Default() << Endl;
@@ -150,19 +175,19 @@ void RunArgumentQueries(const TExecutionOptions& executionOptions, NKqpRun::TKqp
             break;
 
         case TExecutionOptions::EExecutionCase::GenericQuery:
-            if (!runner.ExecuteQuery(executionOptions.GetScriptQueryOptions(id, startTime))) {
+            if (!runner.ExecuteQuery(executionOptions.GetScriptQueryOptions(id, queryId, startTime))) {
                 ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Query execution failed";
             }
             break;
 
         case TExecutionOptions::EExecutionCase::YqlScript:
-            if (!runner.ExecuteYqlScript(executionOptions.GetScriptQueryOptions(id, startTime))) {
+            if (!runner.ExecuteYqlScript(executionOptions.GetScriptQueryOptions(id, queryId, startTime))) {
                 ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Yql script execution failed";
             }
             break;
 
         case TExecutionOptions::EExecutionCase::AsyncQuery:
-            runner.ExecuteQueryAsync(executionOptions.GetScriptQueryOptions(id, startTime));
+            runner.ExecuteQueryAsync(executionOptions.GetScriptQueryOptions(id, queryId, startTime));
             break;
         }
     }
@@ -260,14 +285,6 @@ class TMain : public TMainClassArgs {
         return TFileInput(file).ReadAll();
     }
 
-    static void ReplaceTemplate(const TString& variableName, const TString& variableValue, TString& query) {
-        TString variableTemplate = TStringBuilder() << "${" << variableName << "}";
-        for (size_t position = query.find(variableTemplate); position != TString::npos; position = query.find(variableTemplate, position)) {
-            query.replace(position, variableTemplate.size(), variableValue);
-            position += variableValue.size();
-        }
-    }
-
     static IOutputStream* GetDefaultOutput(const TString& file) {
         if (file == "-") {
             return &Cout;
@@ -315,13 +332,15 @@ protected:
             .RequiredArgument("file")
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
                 ExecutionOptions.SchemeQuery = LoadFile(option->CurVal());
-                ReplaceTemplate(NKqpRun::YQL_TOKEN_VARIABLE, YqlToken, ExecutionOptions.SchemeQuery);
             });
         options.AddLongOption('p', "script-query", "Script query to execute (typically DML query)")
             .RequiredArgument("file")
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
                 ExecutionOptions.ScriptQueries.emplace_back(LoadFile(option->CurVal()));
             });
+        options.AddLongOption("templates", "Enable templates for -s and -p queries, such as ${YQL_TOKEN} and ${QUERY_ID}")
+            .NoArgument()
+            .SetFlag(&ExecutionOptions.UseTemplates);
 
         options.AddLongOption('t', "table", "File with input table (can be used by YT with -E flag), table@file")
             .RequiredArgument("table@file")
@@ -338,7 +357,7 @@ protected:
                 TablesMapping[tableName] = filePath;
             });
 
-        options.AddLongOption('c', "app-config", "File with app config (TAppConfig for ydb tennant)")
+        options.AddLongOption('c', "app-config", "File with app config (TAppConfig for ydb tenant)")
             .RequiredArgument("file")
             .DefaultValue("./configuration/app_config.conf")
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
@@ -423,10 +442,10 @@ protected:
         options.AddLongOption("script-statistics", "File with script inprogress statistics")
             .RequiredArgument("file")
             .StoreResult(&RunnerOptions.InProgressStatisticsOutputFile);
-        TChoices<NYdb::NConsoleClient::EOutputFormat> planFormat({
-            {"pretty", NYdb::NConsoleClient::EOutputFormat::Pretty},
-            {"table", NYdb::NConsoleClient::EOutputFormat::PrettyTable},
-            {"json", NYdb::NConsoleClient::EOutputFormat::JsonUnicode},
+        TChoices<NYdb::NConsoleClient::EDataFormat> planFormat({
+            {"pretty", NYdb::NConsoleClient::EDataFormat::Pretty},
+            {"table", NYdb::NConsoleClient::EDataFormat::PrettyTable},
+            {"json", NYdb::NConsoleClient::EDataFormat::JsonUnicode},
         });
         options.AddLongOption('P', "plan-format", "Script query plan format")
             .RequiredArgument("plan-format")
@@ -477,6 +496,10 @@ protected:
                 ExecutionOptions.ScriptQueryActions.emplace_back(scriptAction(choice));
             });
 
+        options.AddLongOption("cancel-after", "Cancel script execution operation after specified delay in milliseconds")
+            .RequiredArgument("uint")
+            .StoreMappedResultT<ui64>(&RunnerOptions.ScriptCancelAfter, &TDuration::MilliSeconds<ui64>);
+
         options.AddLongOption('F', "forget", "Forget script execution operation after fetching results")
             .NoArgument()
             .SetFlag(&ExecutionOptions.ForgetExecution);
@@ -489,6 +512,10 @@ protected:
             .RequiredArgument("uint")
             .DefaultValue(1000)
             .StoreMappedResultT<ui64>(&ExecutionOptions.LoopDelay, &TDuration::MilliSeconds<ui64>);
+
+        options.AddLongOption('D', "database", "Database path for -p queries")
+            .RequiredArgument("path")
+            .EmplaceTo(&ExecutionOptions.Databases);
 
         options.AddLongOption('U', "user", "User SID for -p queries")
             .RequiredArgument("user-SID")
@@ -531,6 +558,23 @@ protected:
         options.AddLongOption('E', "emulate-yt", "Emulate YT tables (use file gateway instead of native gateway)")
             .NoArgument()
             .SetFlag(&EmulateYt);
+
+        options.AddLongOption("domain", "Test cluster domain name")
+            .RequiredArgument("name")
+            .DefaultValue(RunnerOptions.YdbSettings.DomainName)
+            .StoreResult(&RunnerOptions.YdbSettings.DomainName);
+
+        options.AddLongOption("dedicated", "Dedicated tenant path, relative inside domain")
+            .RequiredArgument("path")
+            .InsertTo(&RunnerOptions.YdbSettings.DedicatedTenants);
+
+        options.AddLongOption("shared", "Shared tenant path, relative inside domain")
+            .RequiredArgument("path")
+            .InsertTo(&RunnerOptions.YdbSettings.SharedTenants);
+
+        options.AddLongOption("serverless", "Serverless tenant path, relative inside domain (use string serverless-name@shared-name to specify shared database)")
+            .RequiredArgument("path")
+            .InsertTo(&RunnerOptions.YdbSettings.ServerlessTenants);
 
         TChoices<std::function<void()>> backtrace({
             {"heavy", &NKikimr::EnableYDBBacktraceFormat},

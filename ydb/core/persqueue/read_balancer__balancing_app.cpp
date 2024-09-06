@@ -29,6 +29,7 @@ void TBalancer::RenderApp(TStringStream& str) const {
                         TABLEH() { str << "Status"; }
                         TABLEH() { str << "Partitions"; }
                         TABLEH() { str << "Session"; }
+                        TABLEH() { str << "Statistics"; }
                     }
                 }
 
@@ -44,6 +45,7 @@ void TBalancer::RenderApp(TStringStream& str) const {
                                 }
                             }
                             TABLED() { str << (family->Session ? family->Session->SessionName : ""); }
+                            TABLED() { str << "Active " << family->ActivePartitionCount << " / Inactive " << family->InactivePartitionCount << " / Locked " << family->LockedPartitions.size(); }
                         }
                     }
                 }
@@ -66,71 +68,71 @@ void TBalancer::RenderApp(TStringStream& str) const {
                         TABLEH() { str << "P Generation"; }
                         TABLEH() { str << "P Cookie"; }
                     }
+                }
 
-                    TABLEBODY() {
-                        for (auto& [partitionId, partition] : consumer->Partitions) {
-                            const auto* family = consumer->FindFamily(partitionId);
-                            const auto* node = consumer->GetPartitionGraph().GetPartition(partitionId);
-                            TString style = node && node->Children.empty() ? "text-success" : "text-muted";
-                            auto* partitionInfo = GetPartitionInfo(partitionId);
+                TABLEBODY() {
+                    for (auto& [partitionId, partition] : consumer->Partitions) {
+                        const auto* family = consumer->FindFamily(partitionId);
+                        const auto* node = consumer->GetPartitionGraph().GetPartition(partitionId);
+                        TString style = node && node->Children.empty() ? "text-success" : "text-muted";
+                        auto* partitionInfo = GetPartitionInfo(partitionId);
 
-                            TABLER() {
-                                TABLED() { DIV_CLASS_ID(style, partitionAnchor(partitionId)) {
-                                    str << partitionId << " ";
-                                    if (partitionInfo) {
-                                        HREF(TStringBuilder() << "?TabletID=" << partitionInfo->TabletId) { str << "#"; }
-                                    }
-                                } }
-                                TABLED() {
-                                    if (family) {
-                                        HREF("#" + familyAnchor(family->Id)) { str << family->Id; }
-                                    }
+                        TABLER() {
+                            TABLED() { DIV_CLASS_ID(style, partitionAnchor(partitionId)) {
+                                str << partitionId << " ";
+                                if (partitionInfo) {
+                                    HREF(TStringBuilder() << "?TabletID=" << partitionInfo->TabletId) { str << "#"; }
                                 }
-                                TABLED() {
-                                    if (family) {
-                                        if (partition.IsInactive()) {
-                                            str << "Finished";
-                                            ++finished;
-                                        } else {
-                                            str << "Read";
-                                            ++read;
-                                        }
-                                    } else if (consumer->IsReadable(partitionId)) {
-                                        str << "Ready";
-                                        ++ready;
-                                    } else {
-                                        str << "Free";
-                                        ++free;
-                                    }
+                            } }
+                            TABLED() {
+                                if (family) {
+                                    HREF("#" + familyAnchor(family->Id)) { str << family->Id; }
                                 }
-                                TABLED() {
-                                    if (node) {
-                                        for (auto* parent : node->Parents) {
-                                            HREF("#" + partitionAnchor(parent->Id)) { str << parent->Id; }
-                                            str << ", ";
-                                        }
-                                    } else {
-                                        str << "error: not found";
-                                    }
-                                }
-                                TABLED() {
-                                    if (partition.Commited) {
-                                        str << "commited";
-                                    } else if (partition.ReadingFinished) {
-                                        if (partition.ScaleAwareSDK) {
-                                            str << "reading child";
-                                        } else if (partition.StartedReadingFromEndOffset) {
-                                            str << "finished";
-                                        } else {
-                                            str << "scheduled. iteration: " << partition.Iteration;
-                                        }
-                                    } else if (partition.Iteration) {
-                                        str << "iteration: " << partition.Iteration;
-                                    }
-                                }
-                                TABLED() { str << partition.PartitionGeneration; }
-                                TABLED() { str << partition.PartitionCookie; }
                             }
+                            TABLED() {
+                                if (family) {
+                                    if (partition.IsInactive()) {
+                                        str << "Finished";
+                                        ++finished;
+                                    } else {
+                                        str << "Read";
+                                        ++read;
+                                    }
+                                } else if (consumer->IsReadable(partitionId)) {
+                                    str << "Ready";
+                                    ++ready;
+                                } else {
+                                    str << "Free";
+                                    ++free;
+                                }
+                            }
+                            TABLED() {
+                                if (node) {
+                                    for (auto* parent : node->Parents) {
+                                        HREF("#" + partitionAnchor(parent->Id)) { str << parent->Id; }
+                                        str << ", ";
+                                    }
+                                } else {
+                                    str << "error: not found";
+                                }
+                            }
+                            TABLED() {
+                                if (partition.Commited) {
+                                    str << "commited";
+                                } else if (partition.ReadingFinished) {
+                                    if (partition.ScaleAwareSDK) {
+                                        str << "reading child";
+                                    } else if (partition.StartedReadingFromEndOffset) {
+                                        str << "finished";
+                                    } else {
+                                        str << "scheduled. iteration: " << partition.Iteration;
+                                    }
+                                } else if (partition.Iteration) {
+                                    str << "iteration: " << partition.Iteration;
+                                }
+                            }
+                            TABLED() { str << partition.PartitionGeneration; }
+                            TABLED() { str << partition.PartitionCookie; }
                         }
                     }
                 }
@@ -158,6 +160,64 @@ void TBalancer::RenderApp(TStringStream& str) const {
                     TABLER() {
                         TABLED() { STRONG() { str << "Total"; }}
                         TABLED() { str << (finished + read + ready + free); }
+                    }
+                }
+            }
+
+            TABLE_CLASS("table") {
+                CAPTION() { str << "Sessions"; }
+                TABLEHEAD() {
+                    TABLER() {
+                        TABLEH() { }
+                        TABLEH() { str << "Id"; }
+                        TABLEH() { str << "Partitions"; }
+                        TABLEH() { str << "<span title=\"All families / Active / Releasing\">Families</span>"; }
+                        TABLEH() { str << "<span title=\"All partitions / Active / Inactive / Releasing\">Statistics</span>"; };
+                        TABLEH() { str << "Client node"; }
+                        TABLEH() { str << "Proxy node"; }
+                    }
+                }
+                TABLEBODY() {
+                    size_t familyAllCount = 0;
+                    size_t activeFamilyCount = 0;
+                    size_t releasingFamilyCount = 0;
+                    size_t activePartitionCount = 0;
+                    size_t inactivePartitionCount = 0;
+                    size_t releasingPartitionCount = 0;
+
+                    size_t i = 0;
+                    for (auto& [pipe, session] : Sessions) {
+                        if (session->ClientId != consumerName) {
+                            continue;
+                        }
+
+                        familyAllCount += session->Families.size();
+                        activeFamilyCount += session->ActiveFamilyCount;
+                        releasingFamilyCount += session->ReleasingFamilyCount;
+                        activePartitionCount += session->ActivePartitionCount;
+                        inactivePartitionCount += session->InactivePartitionCount;
+                        releasingPartitionCount += session->ReleasingPartitionCount;
+
+                        TABLER() {
+                            TABLED() { str << ++i; }
+                            TABLED() { str << session->SessionName; }
+                            TABLED() { str << (session->Partitions.empty() ? "" : JoinRange(", ", session->Partitions.begin(), session->Partitions.end())); }
+                            TABLED() { str << session->Families.size() << " / " << session->ActiveFamilyCount << " / " << session->ReleasingFamilyCount; }
+                            TABLED() { str << (session->ActivePartitionCount + session->InactivePartitionCount + session->ReleasingPartitionCount)
+                                           << " / " << session->ActivePartitionCount << " / " << session->InactivePartitionCount << " / " << session->ReleasingPartitionCount; }
+                            TABLED() { str << session->ClientNode; }
+                            TABLED() { str << session->ProxyNodeId; }
+                        }
+                    }
+                    TABLER() {
+                        TABLED() { }
+                        TABLED() { str << "<strong>Total:</strong>"; }
+                        TABLED() { }
+                        TABLED() { str << familyAllCount << " / " << activeFamilyCount << " / " << releasingFamilyCount; }
+                        TABLED() { str << (activePartitionCount + inactivePartitionCount + releasingPartitionCount) << " / " << activePartitionCount << " / "
+                                       << inactivePartitionCount << " / " << releasingPartitionCount; }
+                        TABLED() { }
+                        TABLED() { }
                     }
                 }
             }

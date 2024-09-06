@@ -96,7 +96,7 @@ void ThrowError(const TString& formula, int position, const TString& message, EE
         formula);
     builder.AppendChar(' ', position);
     builder.AppendFormat("^\n%v", message);
-    THROW_ERROR_EXCEPTION(builder.Flush())
+    THROW_ERROR_EXCEPTION(std::move(builder.Flush()), NYT::TError::DisableFormat)
         << TErrorAttribute("context", context)
         << TErrorAttribute("context_pos", contextPosition);
 }

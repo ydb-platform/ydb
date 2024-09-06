@@ -75,6 +75,9 @@
 #include <ydb/library/yql/utils/backtrace/backtrace.h>
 #include <ydb/library/yql/utils/bindings/utils.h>
 #include <ydb/library/yql/core/qplayer/storage/file/yql_qstorage_file.h>
+#include <ydb/library/yql/public/result_format/yql_result_format_response.h>
+#include <ydb/library/yql/public/result_format/yql_result_format_type.h>
+#include <ydb/library/yql/public/result_format/yql_result_format_data.h>
 
 #include <ydb/core/fq/libs/actors/database_resolver.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/db_async_resolver_impl.h>
@@ -132,6 +135,8 @@ struct TRunOptions {
     IOutputStream* ErrStream = &Cerr;
     IOutputStream* TracePlan = &Cerr;
     bool UseMetaFromGraph = false;
+    bool WithFinalIssues = false;
+    bool ValidateResultFormat = false;
 };
 
 class TStoreMappingFunctor: public NLastGetopt::IOptHandler {
@@ -409,6 +414,9 @@ int RunProgram(TProgramPtr program, const TRunOptions& options, const THashMap<T
         auto config = TOptPipelineConfigurator(program, options.PrintPlan, options.TracePlan);
         status = program->RunWithConfig(options.User, config);
     }
+    if (options.WithFinalIssues) {
+        program->FinalizeIssues();
+    }
     program->PrintErrorsTo(*options.ErrStream);
     if (status == TProgram::TStatus::Error) {
         if (options.TraceOpt) {
@@ -420,13 +428,35 @@ int RunProgram(TProgramPtr program, const TRunOptions& options, const THashMap<T
 
     Cout << "Getting results..." << Endl;
     if (program->HasResults()) {
-        NYson::TYsonWriter yson(options.ResultOut, options.ResultsFormat);
+        TString str;
+        TStringOutput out(str);
+        NYson::TYsonWriter yson(options.ValidateResultFormat ? &out : options.ResultOut, options.ResultsFormat);
         yson.OnBeginList();
         for (const auto& result: program->Results()) {
             yson.OnListItem();
             yson.OnRaw(result);
         }
         yson.OnEndList();
+        if (options.ValidateResultFormat) {
+            if (!str.empty()) {
+                auto node = NYT::NodeFromYsonString(str);
+                for (const auto& r : NResult::ParseResponse(node)) {
+                    for (const auto& write : r.Writes) {
+                        if (write.Type) {
+                            NResult::TEmptyTypeVisitor visitor;
+                            NResult::ParseType(*write.Type, visitor);
+                        }
+
+                        if (write.Type && write.Data) {
+                            NResult::TEmptyDataVisitor visitor;
+                            NResult::ParseData(*write.Type, *write.Data, visitor);
+                        }
+                    }
+                }
+            }
+
+            options.ResultOut->Write(str.Data(), str.Size());
+        }
     }
 
     if (options.LineageStream) {
@@ -677,6 +707,8 @@ int RunMain(int argc, const char* argv[])
         .StoreResult(&tokenAccessorEndpoint);
     opts.AddLongOption("yson-attrs", "Provide operation yson attribues").StoreResult(&ysonAttrs);
     opts.AddLongOption("pg-ext", "pg extensions config file").StoreResult(&pgExtConfig);
+    opts.AddLongOption("with-final-issues").NoArgument();
+    opts.AddLongOption("validate-result-format", "Check that result-format can parse Result").NoArgument();
     opts.AddHelpOption('h');
 
     opts.SetFreeArgsNum(0);
@@ -781,6 +813,8 @@ int RunMain(int argc, const char* argv[])
 
     runOptions.User = user;
 
+    NPg::SetSqlLanguageParser(NSQLTranslationPG::CreateSqlLanguageParser());
+    NPg::LoadSystemFunctions(*NSQLTranslationPG::CreateSystemFunctionsParser());
     if (!pgExtConfig.empty()) {
         NProto::TPgExtensions config;
         Y_ABORT_UNLESS(NKikimr::ParsePBFromFile(pgExtConfig, &config));
@@ -790,6 +824,8 @@ int RunMain(int argc, const char* argv[])
             *NSQLTranslationPG::CreateExtensionSqlParser(),
             NKikimr::NMiniKQL::CreateExtensionLoader().get());
     }
+
+    NPg::GetSqlLanguageParser()->Freeze();
 
     TUserDataTable dataTable;
     FillUsedFiles(filesMappingList, dataTable);
@@ -926,7 +962,7 @@ int RunMain(int argc, const char* argv[])
         if (!httpGateway) {
             httpGateway = IHTTPGateway::Make(gatewaysConfig.HasHttpGateway() ? &gatewaysConfig.GetHttpGateway() : nullptr);
         }
-        dataProvidersInit.push_back(GetS3DataProviderInitializer(httpGateway, nullptr, true));
+        dataProvidersInit.push_back(GetS3DataProviderInitializer(httpGateway, nullptr, true, nullptr));
     }
 
     if (gatewaysConfig.HasPq()) {
@@ -985,6 +1021,7 @@ int RunMain(int argc, const char* argv[])
     }
 
     TExprContext ctx;
+    ctx.NextUniqueId = NPg::GetSqlLanguageParser()->GetContext().NextUniqueId;
     IModuleResolver::TPtr moduleResolver;
     if (!mountConfig.empty()) {
         TModulesTable modules;
@@ -1088,6 +1125,14 @@ int RunMain(int argc, const char* argv[])
 
     if (ysonAttrs) {
         program->SetOperationAttrsYson(ysonAttrs);
+    }
+
+    if (res.Has("with-final-issues")) {
+        runOptions.WithFinalIssues = true;
+    }
+
+    if (res.Has("validate-result-format")) {
+        runOptions.ValidateResultFormat = true;
     }
 
     int result = RunProgram(std::move(program), runOptions, clusters, sqlFlags);

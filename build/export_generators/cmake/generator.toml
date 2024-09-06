@@ -87,11 +87,22 @@ include="skip"
 
 # All Conan attributes make sorted_set for stability generated conanfile,
 # order has no effect for all conan options
+# All OS conan attributes
 conan-requires="sorted_set"
 conan-tool_requires="sorted_set"
 conan-imports="sorted_set"
 conan-options="sorted_set"
 conan-generators="sorted_set"
+
+# OS depends conan attributes
+conan-os_depends="list"
+conan-os_depends-ITEM="dict"
+conan-os_depends-os="str"
+conan-os_depends-requires="sorted_set"
+conan-os_depends-tool_requires="sorted_set"
+conan-os_depends-imports="sorted_set"
+conan-os_depends-options="sorted_set"
+conan-os_depends-generators="sorted_set"
 
 # For project languages order important only for ASM, it must be after C/CXX,
 # this special logic maked in template, here use sorted_set for stability generated vars

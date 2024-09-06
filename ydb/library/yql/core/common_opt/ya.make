@@ -22,6 +22,7 @@ PEERDIR(
     ydb/library/yql/core
     ydb/library/yql/core/expr_nodes
     ydb/library/yql/parser/pg_catalog
+    library/cpp/disjoint_sets
 )
 
 YQL_LAST_ABI_VERSION()

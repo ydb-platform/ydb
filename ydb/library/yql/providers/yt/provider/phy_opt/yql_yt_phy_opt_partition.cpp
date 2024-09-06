@@ -35,8 +35,8 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PartitionByKey(TExprBas
 
     auto cluster = TString{GetClusterName(input)};
     TSyncMap syncList;
-    if (!IsYtCompleteIsolatedLambda(keySelectorLambda.Ref(), syncList, cluster, true, false)
-        || !IsYtCompleteIsolatedLambda(handlerLambda.Ref(), syncList, cluster, true, false)) {
+    if (!IsYtCompleteIsolatedLambda(keySelectorLambda.Ref(), syncList, cluster, false)
+        || !IsYtCompleteIsolatedLambda(handlerLambda.Ref(), syncList, cluster, false)) {
         return node;
     }
 
@@ -94,7 +94,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PartitionByKey(TExprBas
         }
 
         TCoLambda sortKeySelectorLambda = partByKey.SortKeySelectorLambda().Cast<TCoLambda>();
-        if (!IsYtCompleteIsolatedLambda(sortKeySelectorLambda.Ref(), syncList, cluster, true, false)) {
+        if (!IsYtCompleteIsolatedLambda(sortKeySelectorLambda.Ref(), syncList, cluster, false)) {
             return node;
         }
 

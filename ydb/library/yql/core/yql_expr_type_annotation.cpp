@@ -3126,12 +3126,20 @@ bool IsWideSequenceBlockType(const TTypeAnnotationNode& type) {
     return IsWideBlockType(*itemType);
 }
 
-bool IsSupportedAsBlockType(TPositionHandle pos, const TTypeAnnotationNode& type, TExprContext& ctx, TTypeAnnotationContext& types) {
+bool IsSupportedAsBlockType(TPositionHandle pos, const TTypeAnnotationNode& type, TExprContext& ctx, TTypeAnnotationContext& types,
+    bool reportUnspported)
+{
     if (!types.ArrowResolver) {
         return false;
     }
 
-    auto resolveStatus = types.ArrowResolver->AreTypesSupported(ctx.GetPosition(pos), { &type }, ctx);
+    IArrowResolver::TUnsupportedTypeCallback onUnsupportedType;
+    if (reportUnspported) {
+        onUnsupportedType  = [&types](const auto& typeKindOrSlot) {
+            std::visit([&types](const auto& value) { types.IncNoBlockType(value); }, typeKindOrSlot);
+        };
+    }
+    auto resolveStatus = types.ArrowResolver->AreTypesSupported(ctx.GetPosition(pos), { &type }, ctx, onUnsupportedType);
     YQL_ENSURE(resolveStatus != IArrowResolver::ERROR);
     return resolveStatus == IArrowResolver::OK;
 }

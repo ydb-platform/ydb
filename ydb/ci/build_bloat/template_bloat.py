@@ -1,30 +1,46 @@
 #!/usr/bin/env python3
 import argparse
 import json
-import os
 import sys
 
-from jinja2 import Environment, FileSystemLoader, StrictUndefined
+import tree_map
 
 THRESHHOLD_TO_SHOW_ON_TREE_VIEW = 1024*10 
 
 def remove_brackets(name, b1, b2):
     inside_template = 0
-    final_name = ""
-    for c in name:
+    final_name_builder = []
+    pos = 0
+    while pos != len(name):
+        pos_next_b1 = name.find(b1, pos)
+        pos_next_b2 = name.find(b2, pos)
+
+        pos_next = pos_next_b1
+        if pos_next == -1:
+            pos_next = pos_next_b2
+        elif pos_next_b2 != -1 and pos_next_b2 < pos_next:
+            pos_next = pos_next_b2
+
+        c = name[pos_next]
+
         if c == b1:
             inside_template += 1
             if inside_template == 1:
-                final_name += c
+                final_name_builder.append(name[pos:pos_next])
+                
         elif c == b2:
             inside_template -= 1
             if inside_template == 0:
-                final_name += c
+                final_name_builder.append(c)
         else:
-            if inside_template:
-                continue
-            final_name += c
-    return final_name
+            if inside_template == 0:
+                final_name_builder.append(name[pos:pos_next])
+            
+        if pos_next == -1:
+            break
+        pos = pos_next + 1
+             
+    return "".join(final_name_builder)
 
 def get_aggregation_key(name):
     final_name = name
@@ -89,51 +105,9 @@ def print_stat(f, d):
     for s in sorted(p[2]):
         print("    " + s, file=f)
 
-
-def add_to_tree(tree, path, value, count):
-    tree["name"] = path[0]
-    if "children" not in tree:
-        tree["children"] = {}
-    if len(path) == 1:
-        # paths can be the same, but return value differs
-        # assert "size" not in tree
-        if "size" not in tree:
-            tree["size"] = 0
-        tree["size"] += value
-        tree["type"] = "function"
-        tree["count"] = count
-    else:
-        tree["type"] = "namespace"
-        if path[1] not in tree["children"]:
-            tree["children"][path[1]] = {}
-        add_to_tree(tree["children"][path[1]], path[1:], value, count)
-
-def children_to_list(tree):
-    if "children" not in tree:
-        return
-    tree["children"] = list(tree["children"].values())
-    for child in tree["children"]:
-        children_to_list(child)
-
-def propogate_size(tree):
-    if "size" not in tree:
-        tree["size"] = 0
-    for child in tree.get("children", []):
-        tree["size"] += propogate_size(child)
-    return tree["size"]
-
-def enrich_names_with_sec(tree):
-    area = 0
-    for child_ in tree.get("children", []):
-        enrich_names_with_sec(child_)
-
-    tree["name"] = tree["name"] + " " + "{:_} KiB".format(int(tree["size"]/1024))
-    if "count" in tree:
-        tree["name"] += ", {} times".format(tree["count"])
-
-def build_tree(items):
-    tree = {}
+def get_tree_paths(items):
     total_size = 0
+    paths_to_add = []
     for name, (size, count, obj_files, avg, min, max) in items:
         # we skip small entities to order to make html view usable
         if size < THRESHHOLD_TO_SHOW_ON_TREE_VIEW:
@@ -161,13 +135,12 @@ def build_tree(items):
 
         root_name = "root (all function less than {} KiB are ommited)".format(THRESHHOLD_TO_SHOW_ON_TREE_VIEW // 1024)
         path = [root_name] + path
-
-        add_to_tree(tree, path, size, count)
-    children_to_list(tree)
-    propogate_size(tree)
-    enrich_names_with_sec(tree)
-    print("Total size =", total_size)
-    return tree
+        path_with_info = [[chunk, "namespace", 0] for chunk in path]
+        path_with_info[-1][1] = "function"
+        path_with_info[-1][2] = size
+        path_with_info[-1][0] += ", {} times".format(count)
+        paths_to_add.append(path_with_info)
+    return paths_to_add
 
 
 def parse_args():
@@ -194,7 +167,6 @@ def parse_args():
     )
     return parser.parse_args()
 
-
 def main():
     options = parse_args()
     json_path = options.bloat_json
@@ -214,28 +186,12 @@ def main():
 
     if options.html_template_bloat:
         output_dir = options.html_template_bloat
-        current_script_dir = os.path.dirname(os.path.realpath(__file__))
-        html_dir = os.path.join(current_script_dir, "html")
-
-        tree = build_tree(items)
-
-        env = Environment(loader=FileSystemLoader(html_dir), undefined=StrictUndefined)
+        tree_paths = get_tree_paths(items)
         types = [
             ("namespace", "Namespace", "#66C2A5"),
             ("function", "Function", "#FC8D62"),
         ]
-        file_names = os.listdir(html_dir)
-        os.makedirs(output_dir, exist_ok=True)
-        for file_name in file_names:
-            data = env.get_template(file_name).render(types=types)
-
-            dst_path = os.path.join(output_dir, file_name)
-            with open(dst_path, "w") as f:
-                f.write(data)
-
-        with open(os.path.join(output_dir, "bloat.json"), "w") as f:
-            f.write("kTree = ")
-            json.dump(tree, f, indent=4)
+        tree_map.generate_tree_map_html(output_dir, tree_paths, unit_name="KiB", factor=1.0/1024, types=types)
 
     return 0
 

@@ -436,7 +436,10 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
         TIntrusivePtr<TTestTimeProvider> testTimeProvider = new TTestTimeProvider(originalTimeProvider);
         NKikimr::TAppData::TimeProvider = testTimeProvider;
 
-        TKikimrWithGrpcAndRootSchemaNoSystemViews server;
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableResourcePools(true);
+
+        TKikimrWithGrpcAndRootSchemaNoSystemViews server(appConfig);
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_NOTICE);
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_SERVER, NActors::NLog::PRI_NOTICE);
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_PROXY, NActors::NLog::PRI_NOTICE);
@@ -586,8 +589,12 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
             UNIT_ASSERT_EQUAL(entry.Type, NYdb::NScheme::ESchemeEntryType::Directory);
 
             auto children = val.GetChildren();
-            UNIT_ASSERT_EQUAL_C(children.size(), 1, children.size());
+            UNIT_ASSERT_EQUAL_C(children.size(), 2, children.size());
             for (const auto& child: children) {
+                if (child.Name == ".metadata") {
+                    continue;
+                }
+
                 UNIT_ASSERT_EQUAL(child.Type, NYdb::NScheme::ESchemeEntryType::Table);
 
                 auto result = session.DropTable(TStringBuilder() << "Root" << "/" <<  child.Name).ExtractValueSync();

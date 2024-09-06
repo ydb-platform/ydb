@@ -43,6 +43,7 @@ namespace NActors {
         TString PrivateKey; // private key for the certificate in PEM format
         TString CaFilePath; // path to certificate authority file
         TString CipherList; // encryption algorithms
+        THashSet<TString> ForbiddenSignatureAlgorithms;
         TDuration MessagePendingTimeout = TDuration::Seconds(1); // timeout for which messages are queued while in PendingConnection state
         ui64 MessagePendingSize = Max<ui64>(); // size of the queue
         ui32 MaxSerializedEventSize = NActors::EventMaxByteSize;

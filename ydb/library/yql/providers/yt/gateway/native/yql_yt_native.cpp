@@ -233,17 +233,22 @@ public:
     TFuture<void> CloseSession(TCloseSessionOptions&& options) final {
         YQL_LOG_CTX_SCOPE(TStringBuf("Gateway"), __FUNCTION__);
 
+        TSession::TPtr session;
         with_lock(Mutex_) {
             auto it = Sessions_.find(options.SessionId());
             if (it != Sessions_.end()) {
-                auto session = it->second;
+                session = it->second;
                 Sessions_.erase(it);
-                try {
-                    session->Close();
-                } catch (...) {
-                    YQL_CLOG(ERROR, ProviderYt) << CurrentExceptionMessage();
-                    return MakeErrorFuture<void>(std::current_exception());
-                }
+            }
+        }
+
+        // Do final destruction outside of mutex, because it may do some transaction aborts on YT clusters
+        if (session) {
+            try {
+                session->Close();
+            } catch (...) {
+                YQL_CLOG(ERROR, ProviderYt) << CurrentExceptionMessage();
+                return MakeErrorFuture<void>(std::current_exception());
             }
         }
 
@@ -1118,6 +1123,7 @@ public:
                         .AddAttribute(TString("sorted_by"))
                         .AddAttribute(TString("revision"))
                         .AddAttribute(TString("content_revision"))
+                        .AddAttribute(TString(SecurityTagsName))
                     )
                 ).Apply([tableName, execCtx = std::move(execCtx)](const TFuture<NYT::TNode>& f) {
                     execCtx->StoreQueryCache();
@@ -1130,6 +1136,10 @@ public:
                     TString strModifyTime = attrs["modification_time"].AsString();
                     statInfo->ModifyTime = TInstant::ParseIso8601(strModifyTime).Seconds();
                     statInfo->TableRevision = attrs["revision"].IntCast<ui64>();
+                    statInfo->SecurityTags = {};
+                    for (const auto& tagNode : attrs[SecurityTagsName].AsList()) {
+                        statInfo->SecurityTags.insert(tagNode.AsString());
+                    }
                     statInfo->Revision = GetContentRevision(attrs);
                     TRunResult result;
                     result.OutTableStats.emplace_back(statInfo->Id, statInfo);
@@ -2538,14 +2548,15 @@ private:
                 if (attrs.AsMap().contains("optimize_for") && attrs["optimize_for"].AsString() != "scan") {
                     metaInfo->Attrs["optimize_for"] = attrs["optimize_for"].AsString();
                 }
+                if (attrs.AsMap().contains("schema_mode") && attrs["schema_mode"].AsString() == "weak") {
+                    metaInfo->Attrs["schema_mode"] = attrs["schema_mode"].AsString();
+                }
                 if (attrs.AsMap().contains(SecurityTagsName)) {
                     TVector<TString> securityTags;
                     for (const auto& tag : attrs[SecurityTagsName].AsList()) {
                         securityTags.push_back(tag.AsString());
                     }
-                    if (!securityTags.empty()) {
-                        metaInfo->Attrs[SecurityTagsName] = JoinSeq(';', securityTags);
-                    }
+                    statInfo->SecurityTags = {securityTags.begin(), securityTags.end()};
                 }
 
                 NYT::TNode schemaAttrs;
@@ -3195,6 +3206,16 @@ private:
         bool forceTransform = NYql::HasSetting(merge.Settings().Ref(), EYtSettingType::ForceTransform);
         bool combineChunks = NYql::HasSetting(merge.Settings().Ref(), EYtSettingType::CombineChunks);
         TMaybe<ui64> limit = GetLimit(merge.Settings().Ref());
+
+        const auto cluster = merge.DataSink().Cluster().StringValue();
+        const bool hasOutGroup = !execCtx->OutTables_.front().ColumnGroups.IsUndefined();
+        const bool lookup = execCtx->Options_.Config()->OptimizeFor.Get(cluster).GetOrElse(NYT::OF_LOOKUP_ATTR) == NYT::OF_LOOKUP_ATTR;
+        const bool enabledColGroup = execCtx->Options_.Config()->ColumnGroupMode.Get().GetOrElse(EColumnGroupMode::Disable) != EColumnGroupMode::Disable;
+        const bool hasNonTmpInput = !AllOf(execCtx->InputTables_, [](const auto& table) { return table.Temp; });
+
+        forceTransform = forceTransform
+            || (!lookup && enabledColGroup != hasOutGroup)
+            || (!lookup && hasOutGroup && hasNonTmpInput);
 
         return execCtx->Session_->Queue_->Async([forceTransform, combineChunks, limit, execCtx]() {
             return execCtx->LookupQueryCacheAsync().Apply([forceTransform, combineChunks, limit, execCtx] (const auto& f) {
@@ -4390,7 +4411,7 @@ private:
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
                 auto entry = execCtx->GetEntry();
                 bool cacheHit = f.GetValue();
-                PrepareDestinations(execCtx->OutTables_, execCtx, entry, !cacheHit);
+                PrepareDestinations(execCtx->OutTables_, execCtx, entry, !cacheHit, execCtx->Options_.SecurityTags());
                 execCtx->QueryCacheItem.Destroy();
                 return cacheHit;
             });
@@ -5033,7 +5054,8 @@ private:
         const TOutputInfo& out,
         const TExecParamsPtr& execCtx,
         const TString& cluster,
-        bool createTable)
+        bool createTable,
+        const TSet<TString>& securityTags = {})
     {
         PrepareCommonAttributes<TExecParamsPtr>(attrs, execCtx, cluster, createTable);
 
@@ -5043,6 +5065,14 @@ private:
             const auto nativeTypeCompat = execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(cluster).GetOrElse(NTCF_LEGACY);
             attrs["schema"] = RowSpecToYTSchema(out.Spec[YqlRowSpecAttribute], nativeTypeCompat, out.ColumnGroups).ToNode();
         }
+
+        if (!securityTags.empty()) {
+            auto tagsAttrNode = NYT::TNode::CreateList();
+            for (const auto& tag : securityTags) {
+                tagsAttrNode.Add(tag);
+            }
+            attrs[SecurityTagsName] = std::move(tagsAttrNode);
+        }
     }
 
     template <class TExecParamsPtr>
@@ -5050,7 +5080,8 @@ private:
         const TVector<TOutputInfo>& outTables,
         const TExecParamsPtr& execCtx,
         const TTransactionCache::TEntry::TPtr& entry,
-        bool createTables)
+        bool createTables,
+        const TSet<TString>& securityTags = {})
     {
         auto cluster = execCtx->Cluster_;
 
@@ -5068,7 +5099,7 @@ private:
             for (auto& out: outTables) {
                 NYT::TNode attrs = NYT::TNode::CreateMap();
 
-                PrepareAttributes(attrs, out, execCtx, cluster, true);
+                PrepareAttributes(attrs, out, execCtx, cluster, true, securityTags);
 
                 YQL_CLOG(INFO, ProviderYt) << "Create tmp table " << out.Path << ", attrs: " << NYT::NodeToYsonString(attrs);
 

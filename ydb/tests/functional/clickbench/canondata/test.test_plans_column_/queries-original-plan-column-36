@@ -59,8 +59,17 @@
                                                         "PlanNodeType": "Connection",
                                                         "Plans": [
                                                             {
-                                                                "Node Type": "TableRangeScan",
+                                                                "Node Type": "Filter-TableRangeScan",
                                                                 "Operators": [
+                                                                    {
+                                                                        "Inputs": [
+                                                                            {
+                                                                                "InternalOperatorId": 1
+                                                                            }
+                                                                        ],
+                                                                        "Name": "Filter",
+                                                                        "Predicate": "DontCountHits == 0 And IsRefresh == 0 And URL != "
+                                                                    },
                                                                     {
                                                                         "Inputs": [],
                                                                         "Name": "TableRangeScan",
@@ -273,7 +282,10 @@
                             }
                         ]
                     }
-                ]
+                ],
+                "Stats": {
+                    "ResourcePoolId": "default"
+                }
             },
             "tables": [
                 {

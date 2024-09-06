@@ -15,3 +15,9 @@ items:
   href: hibernate.md
 - name: Импорт из источников JDBC
   href: import-jdbc.md
+- name: DBeaver
+  href: ide/dbeaver.md
+- name: DataGrip
+  href: ide/datagrip.md
+- name: Spring Data JDBC
+  href: spring-data-jdbc.md

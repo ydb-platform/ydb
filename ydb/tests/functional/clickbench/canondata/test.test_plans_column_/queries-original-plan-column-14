@@ -60,8 +60,17 @@
                                                         "PlanNodeType": "Connection",
                                                         "Plans": [
                                                             {
-                                                                "Node Type": "TableFullScan",
+                                                                "Node Type": "Filter-TableFullScan",
                                                                 "Operators": [
+                                                                    {
+                                                                        "Inputs": [
+                                                                            {
+                                                                                "InternalOperatorId": 1
+                                                                            }
+                                                                        ],
+                                                                        "Name": "Filter",
+                                                                        "Predicate": "SearchPhrase != "
+                                                                    },
                                                                     {
                                                                         "Inputs": [],
                                                                         "Name": "TableFullScan",
@@ -177,7 +186,10 @@
                             }
                         ]
                     }
-                ]
+                ],
+                "Stats": {
+                    "ResourcePoolId": "default"
+                }
             },
             "tables": [
                 {

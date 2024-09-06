@@ -16,6 +16,7 @@
 #include <array>
 #include <bitset>
 #include <functional>
+#include <utility>
 
 
 namespace NKikimr {
@@ -115,6 +116,7 @@ public:
     TIntrusivePtr<TKqpCounters> Counters;
     const TString PoolId;
     const double MemoryPoolPercent;
+    const TString Database;
 
 private:
     std::atomic<ui64> TxScanQueryMemory = 0;
@@ -122,24 +124,37 @@ private:
     std::atomic<ui32> TxExecutionUnits = 0;
 
 public:
-    explicit TTxState(ui64 txId, TInstant now, TIntrusivePtr<TKqpCounters> counters, const TString& poolId, const double memoryPoolPercent)
+    explicit TTxState(ui64 txId, TInstant now, TIntrusivePtr<TKqpCounters> counters, const TString& poolId, const double memoryPoolPercent,
+        const TString& database)
         : TxId(txId)
         , CreatedAt(now)
         , Counters(std::move(counters))
         , PoolId(poolId)
         , MemoryPoolPercent(memoryPoolPercent)
+        , Database(database)
     {}
 
+    std::pair<TString, TString> MakePoolId() const {
+        return std::make_pair(Database, PoolId);
+    }
+
     TString ToString() const {
-        return TStringBuilder() << "TxResourcesInfo{ "
+        auto res = TStringBuilder() << "TxResourcesInfo { "
             << "TxId: " << TxId
-            << ", PoolId: " << PoolId
-            << ", MemoryPoolPercent: " << MemoryPoolPercent
-            << ", memory initially granted resources: " << TxExternalDataQueryMemory.load()
-            << ", extra allocations " << TxScanQueryMemory.load()
+            << ", Database: " << Database;
+
+        if (!PoolId.empty()) {
+            res << ", PoolId: " << PoolId
+                << ", MemoryPoolPercent: " << Sprintf("%.2f", MemoryPoolPercent);
+        }
+
+        res << ", memory initially granted resources: " << TxExternalDataQueryMemory.load()
+            << ", tx total allocations " << TxScanQueryMemory.load()
             << ", execution units: " << TxExecutionUnits.load()
             << ", started at: " << CreatedAt
             << " }";
+
+        return res;
     }
 
     ui64 GetExtraMemoryAllocatedSize() {
@@ -221,6 +236,13 @@ struct TKqpLocalNodeResources {
     std::array<ui64, EKqpMemoryPool::Count> Memory;
 };
 
+struct TPlannerPlacingOptions {
+    ui64 MaxNonParallelTasksExecutionLimit = 8;
+    ui64 MaxNonParallelDataQueryTasksLimit = 1000;
+    ui64 MaxNonParallelTopStageExecutionLimit = 1;
+    bool PreferLocalDatacenterExecution = true;
+};
+
 /// per node singleton with instant API
 class IKqpResourceManager : private TNonCopyable {
 public:
@@ -230,6 +252,7 @@ public:
 
     virtual TKqpRMAllocateResult AllocateResources(TIntrusivePtr<TTxState>& tx, TIntrusivePtr<TTaskState>& task, const TKqpResourcesRequest& resources) = 0;
 
+    virtual TPlannerPlacingOptions GetPlacingOptions() = 0;
     virtual TTaskResourceEstimation EstimateTaskResources(const NYql::NDqProto::TDqTask& task, const ui32 tasksCount) = 0;
     virtual void EstimateTaskResources(TTaskResourceEstimation& result, const ui32 tasksCount) = 0;
 

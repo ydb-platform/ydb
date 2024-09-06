@@ -22,7 +22,7 @@ pip install pytest-lazy-fixtures
 
 ## Usage
 
-To use your fixtures inside `@pytest.mark.parametrize` you can use `lf` (`lazy_fixture`) or `pytest.lazy_fixtures`.
+To use your fixtures inside `@pytest.mark.parametrize` you can use `lf` (`lazy_fixture`).
 
 ```python
 import pytest
@@ -33,10 +33,6 @@ def one():
     return 1
 
 @pytest.mark.parametrize('arg1,arg2', [('val1', lf('one'))])
-def test_func(arg1, arg2):
-    assert arg2 == 1
-
-@pytest.mark.parametrize('arg1,arg2', [('val1', pytest.lazy_fixtures('one'))])
 def test_func(arg1, arg2):
     assert arg2 == 1
 ```
@@ -75,7 +71,7 @@ def test_func(arg1, arg2):
     assert arg2 == 1
 ```
 
-And there is some useful wrapper called `lfc` (`lazy_fixture_callable`) or `pytest.lazy_fixtures_callable`.
+And there is some useful wrapper called `lfc` (`lazy_fixture_callable`).
 It can work with any callable and your fixtures, e.g.
 
 ```python

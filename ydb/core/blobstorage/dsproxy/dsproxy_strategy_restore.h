@@ -24,7 +24,7 @@ public:
             bool isErrorDisk = false;
             for (ui32 partIdx = beginPartIdx; partIdx < endPartIdx; ++partIdx) {
                 if (disk.DiskParts[partIdx].Situation == TBlobState::ESituation::Error) {
-                    R_LOG_DEBUG_SX(logCtx, "BPG50", "Id# " << state.Id.ToString()
+                    DSP_LOG_DEBUG_SX(logCtx, "BPG50", "Id# " << state.Id.ToString()
                         << " restore disk# " << diskIdx
                         << " part# " << partIdx
                         << " error");
@@ -36,7 +36,7 @@ public:
             if (!isErrorDisk) {
                 for (ui32 partIdx = beginPartIdx; partIdx < endPartIdx; ++partIdx) {
                     const TBlobState::ESituation partSituation = disk.DiskParts[partIdx].Situation;
-                    R_LOG_DEBUG_SX(logCtx, "BPG51", "Id# " << state.Id.ToString()
+                    DSP_LOG_DEBUG_SX(logCtx, "BPG51", "Id# " << state.Id.ToString()
                         << " restore disk# " << diskIdx
                         << " part# " << partIdx
                         << " situation# " << TBlobState::SituationToString(partSituation));
@@ -60,7 +60,7 @@ public:
         const ui32 optimisticReplicas = optimisticLayout.CountEffectiveReplicas(info.Type);
         *optimisticState = info.BlobState(optimisticReplicas, errorDisks);
 
-        R_LOG_DEBUG_SX(logCtx, "BPG55", "restore Id# " << state.Id.ToString()
+        DSP_LOG_DEBUG_SX(logCtx, "BPG55", "restore Id# " << state.Id.ToString()
             << " optimisticReplicas# " << optimisticReplicas
             << " optimisticState# " << TBlobStorageGroupInfo::BlobStateToString(*optimisticState));
     }
@@ -80,7 +80,8 @@ public:
     }
 
     EStrategyOutcome Process(TLogContext &logCtx, TBlobState &state, const TBlobStorageGroupInfo &info,
-            TBlackboard &blackboard, TGroupDiskRequests &groupDiskRequests) override {
+            TBlackboard &blackboard, TGroupDiskRequests &groupDiskRequests,
+            const TAccelerationParams& accelerationParams) override {
         // Check if the work is already done.
         if (state.WholeSituation == TBlobState::ESituation::Absent) {
             return EStrategyOutcome::DONE; // nothing to restore
@@ -130,11 +131,12 @@ public:
             // Find the slowest disk, if there are more than 1
             TDiskDelayPredictions worstDisks;
             state.GetWorstPredictedDelaysNs(info, *blackboard.GroupQueues,
-                    HandleClassToQueueId(blackboard.PutHandleClass), 1,
-                    &worstDisks);
+                    HandleClassToQueueId(blackboard.PutHandleClass),
+                    &worstDisks, accelerationParams.PredictedDelayMultiplier);
 
             // Check if the slowest disk exceptionally slow, or just not very fast
-            if (worstDisks[1].PredictedNs > 0 && worstDisks[0].PredictedNs > worstDisks[1].PredictedNs * 2) {
+            if (worstDisks[1].PredictedNs > 0 && worstDisks[0].PredictedNs > worstDisks[1].PredictedNs *
+                    accelerationParams.SlowDiskThreshold) {
                 slowDiskSubgroupIdxs.push_back(worstDisks[0].DiskIdx);
             }
         }

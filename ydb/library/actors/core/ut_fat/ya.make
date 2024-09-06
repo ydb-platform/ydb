@@ -15,9 +15,6 @@ ELSE()
     TIMEOUT(1200)
     TAG(ya:fat)
     SPLIT_FACTOR(20)
-    REQUIREMENTS(
-        ram:16
-    )
 ENDIF()
 
 

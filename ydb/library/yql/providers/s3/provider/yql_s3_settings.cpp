@@ -73,6 +73,8 @@ void TS3Configuration::Init(const TS3GatewayConfig& config, TIntrusivePtr<TTypeA
     RegexpCacheSize = config.HasRegexpCacheSize() ? config.GetRegexpCacheSize() : 100;
     AllowConcurrentListings =
         config.HasAllowConcurrentListings() ? config.GetAllowConcurrentListings() : false;
+    AllowLocalFiles =
+        config.HasAllowLocalFiles() ? config.GetAllowLocalFiles() : false;
     GeneratorPathsLimit =
         config.HasGeneratorPathsLimit() ? config.GetGeneratorPathsLimit() : 50'000;
     MaxListingResultSizePerPhysicalPartition =

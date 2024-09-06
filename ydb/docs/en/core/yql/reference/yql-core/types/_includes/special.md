@@ -8,7 +8,7 @@
 | `Generic` | The data type used for data types. |
 | `Unit` | Unit is the data type used for non-enumerable entities (data sources and data sinks, atoms, etc.&nbsp;). |
 | `Null` | Void is a singular data type with the only possible null value. It's the type of the `NULL` literal and can be converted to any `Optional` type. |
-| `Void` | Void is a singular data type with the only possible ` "null" value`. |
+| `Void` | Void is a singular data type with the only possible `"null"` value. |
 | `EmptyList` | A singular data type with the only possible [] value. It's the type of the `[]` literal and can be converted to any `List` type. |
 | `EmptyDict` | A singular data type with the only possible {} value. It's a type of the `{}` literal and can be converted to any `Dict` or `Set` type. |
 

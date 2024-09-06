@@ -25,6 +25,14 @@ std::unique_ptr<NYql::NPg::IExtensionSqlParser> CreateExtensionSqlParser() {
     throw yexception() << "CreateExtensionSqlParser: PG types are not supported";
 }
 
+std::unique_ptr<NYql::NPg::ISystemFunctionsParser> CreateSystemFunctionsParser() {
+    throw yexception() << "CreateSystemFunctionsParser: PG types are not supported";
+}
+
+std::unique_ptr<NYql::NPg::ISqlLanguageParser> CreateSqlLanguageParser() {
+    throw yexception() << "CreateSqlLanguageParser: PG types are not supported";
+}
+
 } // NSQLTranslationPG
 
 namespace NYql {
@@ -74,7 +82,7 @@ TString PgValueCoerce(const NUdf::TUnboxedValuePod& value, ui32 pgTypeId, i32 ty
     throw yexception() << "PgValueCoerce: PG types are not supported";
 }
 
-void WriteYsonValuePg(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod& value, NKikimr::NMiniKQL::TPgType* type,
+void WriteYsonValuePg(NResult::TYsonResultWriter& writer, const NUdf::TUnboxedValuePod& value, NKikimr::NMiniKQL::TPgType* type,
     const TVector<ui32>* structPositions) {
     Y_UNUSED(writer);
     Y_UNUSED(value);

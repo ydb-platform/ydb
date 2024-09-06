@@ -17,6 +17,7 @@
 #include "resource_subscriber/counters.h"
 #include "resource_subscriber/task.h"
 #include "normalizer/abstract/abstract.h"
+#include "operations/manager.h"
 
 #include "export/events/events.h"
 
@@ -203,6 +204,8 @@ class TColumnShard
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvTxProcessing::TEvReadSetAck::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvColumnShard::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvColumnShard::TEvCheckPlannedTransaction::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvColumnShard::TEvCancelTransactionProposal::TPtr& ev, const TActorContext& ctx);
@@ -217,8 +220,9 @@ class TColumnShard
     void Handle(TEvPrivate::TEvScanStats::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvReadFinished::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorContext& ctx);
+    void Handle(NActors::TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvPingSnapshotsUsage::TPtr& ev, const TActorContext& ctx);
-    
+
     void Handle(TEvPrivate::TEvWriteIndex::TPtr& ev, const TActorContext& ctx);
     void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev);
     void Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActorContext& ctx);
@@ -281,6 +285,7 @@ class TColumnShard
 
     void ActivateTiering(const ui64 pathId, const TString& useTiering);
     void OnTieringModified(const std::optional<ui64> pathId = {});
+
 public:
     enum class EOverloadStatus {
         ShardTxInFly /* "shard_tx" */,
@@ -344,6 +349,9 @@ protected:
         switch (ev->GetTypeRewrite()) {
             hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);
 
+            HFunc(TEvTxProcessing::TEvReadSet, Handle);
+            HFunc(TEvTxProcessing::TEvReadSetAck, Handle);
+
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(TEvTabletPipe::TEvServerConnected, Handle);
@@ -363,6 +371,7 @@ protected:
             HFunc(TEvPrivate::TEvScanStats, Handle);
             HFunc(TEvPrivate::TEvReadFinished, Handle);
             HFunc(TEvPrivate::TEvPeriodicWakeup, Handle);
+            HFunc(NActors::TEvents::TEvWakeup, Handle);
             HFunc(TEvPrivate::TEvPingSnapshotsUsage, Handle);
             
             HFunc(NEvents::TDataEvents::TEvWrite, Handle);
@@ -436,7 +445,7 @@ private:
     ui64 StatsReportRound = 0;
     TString OwnerPath;
 
-    TIntrusivePtr<TMediatorTimecastEntry> MediatorTimeCastEntry;
+    TMediatorTimecastEntry::TCPtr MediatorTimeCastEntry;
     bool MediatorTimeCastRegistered = false;
     TSet<ui64> MediatorTimeCastWaitingSteps;
     const TDuration PeriodicWakeupActivationPeriod;
@@ -447,6 +456,7 @@ private:
     TActorId ResourceSubscribeActor;
     TActorId BufferizationWriteActorId;
     TActorId StatsReportPipe;
+    std::vector<TActorId> ActorsToStop;
 
     TInFlightReadsTracker InFlightReadsTracker;
     TTablesManager TablesManager;
@@ -458,7 +468,7 @@ private:
     NOlap::NResourceBroker::NSubscribe::TTaskContext CompactTaskSubscription;
     NOlap::NResourceBroker::NSubscribe::TTaskContext TTLTaskSubscription;
 
-    bool ProgressTxInFlight = false;
+    std::optional<ui64> ProgressTxInFlight;
     THashMap<ui64, TInstant> ScanTxInFlight;
     THashMap<TWriteId, TLongTxWriteInfo> LongTxWrites;
     using TPartsForLTXShard = THashMap<ui32, TLongTxWriteInfo*>;
@@ -495,7 +505,6 @@ private:
     TWriteId BuildNextWriteId(NTabletFlatExecutor::TTransactionContext& txc);
     TWriteId BuildNextWriteId(NIceDb::TNiceDb& db);
 
-    void EnqueueProgressTx(const TActorContext& ctx);
     void EnqueueBackgroundActivities(const bool periodic = false);
     virtual void Enqueue(STFUNC_SIG) override;
 
@@ -530,6 +539,7 @@ private:
 public:
     ui64 TabletTxCounter = 0;
 
+    void EnqueueProgressTx(const TActorContext& ctx, const std::optional<ui64> continueTxId);
     NOlap::TSnapshot GetLastTxSnapshot() const {
         return NOlap::TSnapshot(LastPlannedStep, LastPlannedTxId);
     }
@@ -555,6 +565,11 @@ public:
     TTxController& GetProgressTxController() const {
         AFL_VERIFY(ProgressTxController);
         return *ProgressTxController;
+    }
+
+    TOperationsManager& GetOperationsManager() const {
+        AFL_VERIFY(OperationsManager);
+        return *OperationsManager;
     }
 
     bool HasIndex() const {

@@ -134,10 +134,11 @@ If there are multiple followers, their delay from the leader may vary: although 
 | `TTL` | Expression | `Interval("<literal>") ON <column> [AS <unit>]` | Yes | Yes |
 
 Where `<unit>` is a unit of measurement, specified only for column with a [numeric type](../../../concepts/ttl.md#restrictions):
-* `SECONDS`;
-* `MILLISECONDS`;
-* `MICROSECONDS`;
-* `NANOSECONDS`.
+
+* `SECONDS`
+* `MILLISECONDS`
+* `MICROSECONDS`
+* `NANOSECONDS`
 
 For more information about deleting expired data, see [Time to Live (TTL)](../../../concepts/ttl.md).
 
@@ -172,11 +173,13 @@ YDB's column-oriented tables store data of each column separately (independently
 At the moment, the main use case for YDB column-oriented tables is writing data with an increasing primary key (for example, event time), analyzing this data, and deleting outdated data based on TTL. The optimal way to add data to YDB column-oriented tables is [batch upload](../../../dev/batch-upload.md), performed in MB-sized blocks. Data packet insertion is atomic: data will be written either to all partitions or none.
 
 In most cases, working with YDB column-oriented tables is similar to working with row tables, but there are differences:
+
 * Only `NOT NULL` columns can be used as the primary key.
 * Data is partitioned not by the primary key, but by the hash of the partitioning columns, to evenly distribute the data across the hosts.
 * Column-oriented tables support a limited set of data types:
-    + Available in both the primary key and other columns: `Date`, `Datetime`, `Timestamp`, `Int32`, `Int64`, `Uint8`, `Uint16`, `Uint32`, `Uint64`, `Utf8`, `String`;
-    + Available only in columns not included in the primary key: `Bool`, `Decimal`, `Double`, `Float`, `Int8`, `Int16`, `Interval`, `JsonDocument`, `Json`, `Uuid`, `Yson`.
+
+  + Available in both the primary key and other columns: `Date`, `Datetime`, `Timestamp`, `Int32`, `Int64`, `Uint8`, `Uint16`, `Uint32`, `Uint64`, `Utf8`, `String`;
+  + Available only in columns not included in the primary key: `Bool`, `Decimal`, `Double`, `Float`, `Int8`, `Int16`, `Interval`, `JsonDocument`, `Json`, `Uuid`, `Yson`.
 
 Let's recreate the "article" table, this time in column-oriented format, using the following YQL command:
 ```sql

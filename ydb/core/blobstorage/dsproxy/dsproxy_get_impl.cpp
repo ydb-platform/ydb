@@ -57,7 +57,7 @@ void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReas
 
                 // extra validation code for phantom logic
                 if (PhantomCheck) {
-                    TSubgroupPartLayout possiblyWritten;
+                    TSubgroupPartLayout possiblyPresent;
 
                     for (ui32 idxInSubgroup = 0; idxInSubgroup < blobState.Disks.size(); ++idxInSubgroup) {
                         const auto& disk = blobState.Disks[idxInSubgroup];
@@ -81,10 +81,13 @@ void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReas
                             }
                             switch (disk.DiskParts[partIdx].Situation) {
                                 case TBlobState::ESituation::Unknown:
+                                    Y_DEBUG_ABORT_S("proxy didn't probe some valid parts of the blob while returning NODATA"
+                                        << " State# " << blobState.ToString());
+                                    [[fallthrough]];
                                 case TBlobState::ESituation::Error:
                                 case TBlobState::ESituation::Present:
                                 case TBlobState::ESituation::Sent:
-                                    possiblyWritten.AddItem(idxInSubgroup, partIdx, Info->Type);
+                                    possiblyPresent.AddItem(idxInSubgroup, partIdx, Info->Type);
                                     break;
 
                                 case TBlobState::ESituation::Absent:
@@ -95,32 +98,11 @@ void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReas
                         }
                     }
 
-                    switch (Info->Type.GetErasure()) {
-                        case TBlobStorageGroupType::ErasureMirror3dc:
-                            if (possiblyWritten.GetDisksWithPart(0) || possiblyWritten.GetDisksWithPart(1) ||
-                                    possiblyWritten.GetDisksWithPart(2)) {
-                                okay = false;
-                            }
-                            break;
-
-                        case TBlobStorageGroupType::ErasureMirror3of4:
-                            if (possiblyWritten.GetDisksWithPart(0) || possiblyWritten.GetDisksWithPart(1)) {
-                                okay = false;
-                            }
-                            break;
-
-                        default: {
-                            ui32 numDistinctParts = 0;
-                            for (ui32 partIdx = 0; partIdx < Info->Type.TotalPartCount(); ++partIdx) {
-                                if (possiblyWritten.GetDisksWithPart(partIdx)) {
-                                    ++numDistinctParts;
-                                }
-                            }
-                            if (numDistinctParts >= Info->Type.MinimalRestorablePartCount()) {
-                                okay = false;
-                            }
-                            break;
-                        }
+                    const TBlobStorageGroupInfo::TSubgroupVDisks zero(&Info->GetTopology());
+                    const auto& checker = Info->GetQuorumChecker();
+                    const bool canBeRestored = checker.GetBlobState(possiblyPresent, zero) != TBlobStorageGroupInfo::EBS_UNRECOVERABLE_FRAGMENTARY;
+                    if (canBeRestored) {
+                        okay = false; // there is a slight chance that we can restore that blob
                     }
                 }
 
@@ -149,7 +131,7 @@ void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReas
         }
     }
     NActors::NLog::EPriority priority = PriorityForStatusOutbound(status);
-    A_LOG_LOG_SX(logCtx, priority != NActors::NLog::PRI_DEBUG, priority, "BPG29", "Response# " << outGetResult->Print(false));
+    DSP_LOG_LOG_SX(logCtx, priority, "BPG29", "Response# " << outGetResult->Print(false));
     if (CollectDebugInfo || (IsVerboseNoDataEnabled && IsNoData)) {
         TStringStream str;
         logCtx.LogAcc.Output(str);
@@ -159,29 +141,28 @@ void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReas
 }
 
 
-ui64 TGetImpl::GetTimeToAccelerateNs(TLogContext &logCtx, NKikimrBlobStorage::EVDiskQueueId queueId, ui32 nthWorst) {
+ui64 TGetImpl::GetTimeToAccelerateNs(TLogContext &logCtx, NKikimrBlobStorage::EVDiskQueueId queueId) {
     Y_UNUSED(logCtx);
     // Find the slowest disk
     TDiskDelayPredictions worstDisks;
     if (Blackboard.BlobStates.size() == 1) {
         Blackboard.BlobStates.begin()->second.GetWorstPredictedDelaysNs(
-                *Info, *Blackboard.GroupQueues, queueId, nthWorst, &worstDisks);
+                *Info, *Blackboard.GroupQueues, queueId, &worstDisks,
+                AccelerationParams.PredictedDelayMultiplier);
     } else {
         Blackboard.GetWorstPredictedDelaysNs(
-                *Info, *Blackboard.GroupQueues, queueId, nthWorst, &worstDisks);
+                *Info, *Blackboard.GroupQueues, queueId, &worstDisks,
+                AccelerationParams.PredictedDelayMultiplier);
     }
-    nthWorst = std::min(nthWorst, (ui32)worstDisks.size() - 1);
-    return worstDisks[nthWorst].PredictedNs;
+    return worstDisks[std::min(3u, (ui32)worstDisks.size() - 1)].PredictedNs;
 }
 
-ui64 TGetImpl::GetTimeToAccelerateGetNs(TLogContext &logCtx, ui32 acceleratesSent) {
-    Y_DEBUG_ABORT_UNLESS(acceleratesSent < 2);
-    return GetTimeToAccelerateNs(logCtx, HandleClassToQueueId(Blackboard.GetHandleClass), 2 - acceleratesSent);
+ui64 TGetImpl::GetTimeToAccelerateGetNs(TLogContext &logCtx) {
+    return GetTimeToAccelerateNs(logCtx, HandleClassToQueueId(Blackboard.GetHandleClass));
 }
 
-ui64 TGetImpl::GetTimeToAcceleratePutNs(TLogContext &logCtx, ui32 acceleratesSent) {
-    Y_DEBUG_ABORT_UNLESS(acceleratesSent < 2);
-    return GetTimeToAccelerateNs(logCtx, HandleClassToQueueId(Blackboard.PutHandleClass), 2 - acceleratesSent);
+ui64 TGetImpl::GetTimeToAcceleratePutNs(TLogContext &logCtx) {
+    return GetTimeToAccelerateNs(logCtx, HandleClassToQueueId(Blackboard.PutHandleClass));
 }
 
 TString TGetImpl::DumpFullState() const {
@@ -254,7 +235,7 @@ void TGetImpl::GenerateInitialRequests(TLogContext &logCtx, TDeque<std::unique_p
 
     for (ui32 queryIdx = 0; queryIdx < QuerySize; ++queryIdx) {
         const TEvBlobStorage::TEvGet::TQuery &query = Queries[queryIdx];
-        R_LOG_DEBUG_SX(logCtx, "BPG56", "query.Id# " << query.Id.ToString()
+        DSP_LOG_DEBUG_SX(logCtx, "BPG56", "query.Id# " << query.Id.ToString()
             << " shift# " << query.Shift
             << " size# " << query.Size);
         Blackboard.AddNeeded(query.Id, query.Shift, query.Size);
@@ -295,7 +276,7 @@ void TGetImpl::PrepareRequests(TLogContext &logCtx, TDeque<std::unique_ptr<TEvBl
 
     for (auto& vget : gets) {
         if (vget) {
-            R_LOG_DEBUG_SX(logCtx, "BPG14", "Send get to orderNumber# "
+            DSP_LOG_DEBUG_SX(logCtx, "BPG14", "Send get to orderNumber# "
                 << Info->GetTopology().GetOrderNumber(VDiskIDFromVDiskID(vget->Record.GetVDiskID()))
                 << " vget# " << vget->ToString());
             outVGets.push_back(std::move(vget));
@@ -313,7 +294,7 @@ void TGetImpl::PrepareVPuts(TLogContext &logCtx, TDeque<std::unique_ptr<TEvBlobS
             put.Id.PartId() != 3 || put.Buffer.IsEmpty());
         auto vput = std::make_unique<TEvBlobStorage::TEvVPut>(put.Id, put.Buffer, vdiskId, true, nullptr, Deadline,
             Blackboard.PutHandleClass);
-        R_LOG_DEBUG_SX(logCtx, "BPG15", "Send put to orderNumber# " << put.OrderNumber << " vput# " << vput->ToString());
+        DSP_LOG_DEBUG_SX(logCtx, "BPG15", "Send put to orderNumber# " << put.OrderNumber << " vput# " << vput->ToString());
         outVPuts.push_back(std::move(vput));
         ++VPutRequests;
     }
@@ -328,13 +309,13 @@ EStrategyOutcome TGetImpl::RunBoldStrategy(TLogContext &logCtx) {
     if (MustRestoreFirst) {
         strategies.push_back(&s2);
     }
-    return Blackboard.RunStrategies(logCtx, strategies);
+    return Blackboard.RunStrategies(logCtx, strategies, AccelerationParams);
 }
 
 EStrategyOutcome TGetImpl::RunMirror3dcStrategy(TLogContext &logCtx) {
     return MustRestoreFirst
-        ? Blackboard.RunStrategy(logCtx, TMirror3dcGetWithRestoreStrategy())
-        : Blackboard.RunStrategy(logCtx, TMirror3dcBasicGetStrategy(NodeLayout, PhantomCheck));
+        ? Blackboard.RunStrategy(logCtx, TMirror3dcGetWithRestoreStrategy(), AccelerationParams)
+        : Blackboard.RunStrategy(logCtx, TMirror3dcBasicGetStrategy(NodeLayout, PhantomCheck), AccelerationParams);
 }
 
 EStrategyOutcome TGetImpl::RunMirror3of4Strategy(TLogContext &logCtx) {
@@ -345,7 +326,7 @@ EStrategyOutcome TGetImpl::RunMirror3of4Strategy(TLogContext &logCtx) {
     if (MustRestoreFirst) {
         strategies.push_back(&s2);
     }
-    return Blackboard.RunStrategies(logCtx, strategies);
+    return Blackboard.RunStrategies(logCtx, strategies, AccelerationParams);
 }
 
 EStrategyOutcome TGetImpl::RunStrategies(TLogContext &logCtx) {
@@ -356,9 +337,9 @@ EStrategyOutcome TGetImpl::RunStrategies(TLogContext &logCtx) {
     } else if (MustRestoreFirst || PhantomCheck) {
         return RunBoldStrategy(logCtx);
     } else if (Info->Type.ErasureFamily() == TErasureType::ErasureParityBlock) {
-        return Blackboard.RunStrategy(logCtx, TMinIopsBlockStrategy());
+        return Blackboard.RunStrategy(logCtx, TMinIopsBlockStrategy(), AccelerationParams);
     } else if (Info->Type.ErasureFamily() == TErasureType::ErasureMirror) {
-        return Blackboard.RunStrategy(logCtx, TMinIopsMirrorStrategy());
+        return Blackboard.RunStrategy(logCtx, TMinIopsMirrorStrategy(), AccelerationParams);
     } else {
         return RunBoldStrategy(logCtx);
     }

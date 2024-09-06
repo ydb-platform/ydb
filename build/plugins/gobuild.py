@@ -72,7 +72,9 @@ def compare_versions(version1, version2):
 
 
 def go_package_name(unit):
-    name = unit.get('GO_PACKAGE_VALUE')
+    name = unit.get('_GO_PACKAGE_VALUE')
+    if not name and unit.enabled('GO_TEST_MODULE'):
+        name = unit.get('GO_PACKAGE_VALUE')
     if not name:
         name = unit.get('GO_TEST_IMPORT_PATH')
         if name:

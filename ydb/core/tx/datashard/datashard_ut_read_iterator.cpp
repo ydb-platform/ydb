@@ -4,6 +4,7 @@
 #include "read_iterator.h"
 
 #include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/converter.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
@@ -2886,6 +2887,9 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
 
         TTestHelper helper(serverSettings);
 
+        // Don't allow granular timecast side-stepping mediator time hacks in this test
+        TBlockEvents<TEvMediatorTimecast::TEvGranularUpdate> blockGranularUpdate(*helper.Server->GetRuntime());
+
         auto waitFor = [&](const auto& condition, const TString& description) {
             if (!condition()) {
                 Cerr << "... waiting for " << description << Endl;
@@ -3016,6 +3020,9 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
             .SetUseRealThreads(false);
 
         TTestHelper helper(serverSettings);
+
+        // Don't allow granular timecast side-stepping mediator time hacks in this test
+        TBlockEvents<TEvMediatorTimecast::TEvGranularUpdate> blockGranularUpdate(*helper.Server->GetRuntime());
 
         auto waitFor = [&](const auto& condition, const TString& description) {
             if (!condition()) {
@@ -4625,6 +4632,88 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorConsistency) {
             result1 == "ERROR: ABORTED" || result2 == "ERROR: ABORTED",
             "result1: " << result1 << ", "
             "result2: " << result2);
+    }
+
+    Y_UNIT_TEST(Bug_7674_IteratorDuplicateRows) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false);
+        TServer::TPtr server = new TServer(serverSettings);
+
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 10), (2, 20), (3, 30), (4, 40), (5, 50);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (6, 60), (7, 70), (8, 80), (9, 90), (10, 100);");
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        auto forceSmallChunks = runtime.AddObserver<TEvDataShard::TEvRead>(
+            [&](TEvDataShard::TEvRead::TPtr& ev) {
+                auto* msg = ev->Get();
+                // Force chunks of at most 3 rows
+                msg->Record.SetMaxRowsInResult(3);
+            });
+
+        TBlockEvents<TEvDataShard::TEvReadAck> blockedAcks(runtime);
+        TBlockEvents<TEvDataShard::TEvReadResult> blockedResults(runtime);
+        TBlockEvents<TEvDataShard::TEvReadContinue> blockedContinue(runtime);
+
+        auto waitFor = [&](const TString& description, const auto& condition, size_t count = 1) {
+            while (!condition()) {
+                UNIT_ASSERT_C(count > 0, "... failed to wait for " << description);
+                Cerr << "... waiting for " << description << Endl;
+                TDispatchOptions options;
+                options.CustomFinalCondition = [&]() {
+                    return condition();
+                };
+                runtime.DispatchEvents(options);
+                --count;
+            }
+        };
+
+        auto readFuture = KqpSimpleSend(runtime, "SELECT key, value FROM `/Root/table-1` ORDER BY key LIMIT 7");
+        waitFor("first TEvReadContinue", [&]{ return blockedContinue.size() >= 1; });
+        waitFor("first TEvReadResult", [&]{ return blockedResults.size() >= 1; });
+
+        blockedContinue.Unblock(1);
+        waitFor("second TEvReadContinue", [&]{ return blockedContinue.size() >= 1; });
+        waitFor("second TEvReadResult", [&]{ return blockedResults.size() >= 2; });
+
+        // We need both results to arrive without pauses
+        blockedResults.Unblock();
+
+        waitFor("both TEvReadAcks", [&]{ return blockedAcks.size() >= 2; });
+
+        // Unblock the first TEvReadAck and then pending TEvReadContinue
+        blockedAcks.Unblock(1);
+        blockedContinue.Unblock(1);
+
+        // Give it some time to trigger the bug
+        runtime.SimulateSleep(TDuration::MilliSeconds(1));
+
+        // Stop blocking everything
+        blockedAcks.Unblock().Stop();
+        blockedResults.Unblock().Stop();
+        blockedContinue.Unblock().Stop();
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            FormatResult(AwaitResponse(runtime, std::move(readFuture))),
+            "{ items { uint32_value: 1 } items { uint32_value: 10 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 20 } }, "
+            "{ items { uint32_value: 3 } items { uint32_value: 30 } }, "
+            "{ items { uint32_value: 4 } items { uint32_value: 40 } }, "
+            "{ items { uint32_value: 5 } items { uint32_value: 50 } }, "
+            "{ items { uint32_value: 6 } items { uint32_value: 60 } }, "
+            "{ items { uint32_value: 7 } items { uint32_value: 70 } }");
     }
 
 }

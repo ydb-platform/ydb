@@ -41,19 +41,20 @@ void TCompletionLogWrite::Exec(TActorSystem *actorSystem) {
     for (auto it = LogWriteQueue.begin(); it != LogWriteQueue.end(); ++it) {
         TLogWrite &evLog = *(*it);
         TLogWrite *&batch = batchMap[evLog.Owner];
-        LOG_DEBUG_S(*actorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDisk->PDiskId
+        LOG_DEBUG_S(*actorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDisk->PCtx->PDiskId
                 << " ReqId# " << evLog.ReqId.Id << " TEvLogResult Sender# " << evLog.Sender.LocalId()
                 << " Lsn# " << evLog.Lsn << " Latency# " << evLog.LifeDurationMs(now)
                 << " InputTime# " << HPMilliSeconds(evLog.InputTime - evLog.CreationTime)
                 << " ScheduleTime# " << HPMilliSeconds(evLog.ScheduleTime - evLog.InputTime)
                 << " DeviceTime# " << HPMilliSeconds(now - evLog.ScheduleTime)
                 << " Size# " << evLog.Data.size());
-        LWTRACK(PDiskLogWriteComplete, evLog.Orbit, PDisk->PDiskId, evLog.ReqId.Id, HPSecondsFloat(evLog.CreationTime),
+        LWTRACK(PDiskLogWriteComplete, evLog.Orbit, PDisk->PCtx->PDiskId, evLog.ReqId.Id, HPSecondsFloat(evLog.CreationTime),
                 double(evLog.Cost) / 1000000.0,
                 HPMilliSecondsFloat(now - evLog.CreationTime),
                 HPMilliSecondsFloat(evLog.InputTime - evLog.CreationTime),
                 HPMilliSecondsFloat(evLog.ScheduleTime - evLog.InputTime),
-                HPMilliSecondsFloat(now - evLog.ScheduleTime));
+                HPMilliSecondsFloat(now - evLog.ScheduleTime),
+                HPMilliSecondsFloat(GetTime - SubmitTime));
         if (evLog.Result->Results) {
             evLog.Result->Results.front().Orbit = std::move(evLog.Orbit);
         }
@@ -135,7 +136,7 @@ TCompletionChunkReadPart::TCompletionChunkReadPart(TPDisk *pDisk, TIntrusivePtr<
 
 TCompletionChunkReadPart::~TCompletionChunkReadPart() {
     if (CumulativeCompletion) {
-        CumulativeCompletion->PartDeleted(PDisk->ActorSystem);
+        CumulativeCompletion->PartDeleted(PDisk->PCtx->ActorSystem);
     }
     AtomicSub(PDisk->InFlightChunkRead, RawReadSize);
 }
@@ -158,7 +159,7 @@ void TCompletionChunkReadPart::Exec(TActorSystem *actorSystem) {
     ui64 firstSector;
     ui64 lastSector;
     ui64 sectorOffset;
-    bool isOk = ParseSectorOffset(PDisk->Format, actorSystem, PDisk->PDiskId,
+    bool isOk = ParseSectorOffset(PDisk->Format, actorSystem, PDisk->PCtx->PDiskId,
             Read->Offset + CommonBufferOffset, PayloadReadSize, firstSector, lastSector, sectorOffset);
     Y_ABORT_UNLESS(isOk);
 
@@ -188,7 +189,7 @@ void TCompletionChunkReadPart::Exec(TActorSystem *actorSystem) {
         ui32 beginUserOffset = sectorIdx * userSectorSize;
 
         TSectorRestorator restorator(false, 1, false,
-            format, actorSystem, PDisk->PDiskActor, PDisk->PDiskId, &PDisk->Mon, PDisk->BufferPool.Get());
+            format, PDisk->PCtx.get(), &PDisk->Mon, PDisk->BufferPool.Get());
         ui64 lastNonce = Min((ui64)0, chunkNonce - 1);
         restorator.Restore(source, format.Offset(Read->ChunkIdx, sectorIdx), format.MagicDataChunk, lastNonce,
                 Read->Owner);
@@ -201,7 +202,7 @@ void TCompletionChunkReadPart::Exec(TActorSystem *actorSystem) {
             endBadUserOffset = beginUserOffset + userSectorSize;
         } else {
             if (beginBadUserOffset != 0xffffffff) {
-                LOG_INFO_S(*actorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << (ui32)PDisk->PDiskId
+                LOG_INFO_S(*actorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDisk->PCtx->PDiskId
                         << " ReqId# " << Read->ReqId
                         << " Can't read chunk chunkIdx# " << Read->ChunkIdx
                         << " for owner# " << Read->Owner
@@ -222,7 +223,7 @@ void TCompletionChunkReadPart::Exec(TActorSystem *actorSystem) {
             TDataSectorFooter *footer = (TDataSectorFooter*) (source + format.SectorSize - sizeof(TDataSectorFooter));
             if (footer->Nonce != chunkNonce + sectorIdx) {
                 ui32 userOffset = sectorIdx * userSectorSize;
-                LOG_INFO_S(*actorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << (ui32)PDisk->PDiskId
+                LOG_INFO_S(*actorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDisk->PCtx->PDiskId
                         << " ReqId# " << Read->ReqId
                         << " Can't read chunk chunkIdx# " << Read->ChunkIdx
                         << " for owner# " << Read->Owner
@@ -263,7 +264,7 @@ void TCompletionChunkReadPart::Exec(TActorSystem *actorSystem) {
         ++sectorIdx;
     }
     if (beginBadUserOffset != 0xffffffff) {
-        LOG_INFO_S(*actorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << (ui32)PDisk->PDiskId
+        LOG_INFO_S(*actorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDisk->PCtx->PDiskId
             << " ReqId# " << Read->ReqId
             << " Can't read chunk chunkIdx# " << Read->ChunkIdx
             << " for owner# " << Read->Owner
@@ -274,7 +275,9 @@ void TCompletionChunkReadPart::Exec(TActorSystem *actorSystem) {
         endBadUserOffset = 0xffffffff;
     }
 
-    LWTRACK(PDiskChunkReadPieceComplete, Read->Orbit, PDisk->PDiskId, RawReadSize, CommonBufferOffset);
+    double deviceTimeMs = HPMilliSecondsFloat(GetTime - SubmitTime);
+    LWTRACK(PDiskChunkReadPieceComplete, Orbit, PDisk->PCtx->PDiskId, RawReadSize, CommonBufferOffset, deviceTimeMs);
+    Read->Orbit.Join(Orbit);
     CumulativeCompletion->PartReadComplete(actorSystem);
     CumulativeCompletion = nullptr;
 
@@ -315,12 +318,12 @@ void TCompletionChunkRead::Exec(TActorSystem *actorSystem) {
     result->Data.Commit();
 
     Y_ABORT_UNLESS(Read);
-    LOG_DEBUG_S(*actorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDisk->PDiskId << " ReqId# " << Read->ReqId.Id
+    LOG_DEBUG_S(*actorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDisk->PCtx->PDiskId << " ReqId# " << Read->ReqId.Id
             << " " << result->ToString() << " To# " << Read->Sender.LocalId());
 
     double responseTimeMs = HPMilliSecondsFloat(HPNow() - Read->CreationTime);
     PDisk->Mon.IncrementResponseTime(Read->PriorityClass, responseTimeMs, Read->Size);
-    LWTRACK(PDiskChunkResponseTime, Read->Orbit, PDisk->PDiskId, Read->ReqId.Id, Read->PriorityClass, responseTimeMs,
+    LWTRACK(PDiskChunkResponseTime, Read->Orbit, PDisk->PCtx->PDiskId, Read->ReqId.Id, Read->PriorityClass, responseTimeMs,
             Read->Size);
 
     actorSystem->Send(Read->Sender, result.Release());
@@ -336,7 +339,7 @@ void TCompletionChunkRead::ReplyError(TActorSystem *actorSystem, TString reason)
     CommonBuffer.Clear();
 
     TStringStream error;
-    error << "PDiskId# " << PDisk->PDiskId << " ReqId# " << Read->ReqId << " reason# " << reason;
+    error << "PDiskId# " << PDisk->PCtx->PDiskId << " ReqId# " << Read->ReqId << " reason# " << reason;
     auto result = MakeHolder<TEvChunkReadResult>(NKikimrProto::CORRUPTED,
             Read->ChunkIdx, Read->Offset, Read->Cookie,
             PDisk->GetStatusFlags(Read->Owner, Read->OwnerGroupType), error.Str());
@@ -387,10 +390,10 @@ void TCompletionEventSender::Exec(TActorSystem *actorSystem) {
 void TChunkTrimCompletion::Exec(TActorSystem *actorSystem) {
     double responseTimeMs = HPMilliSecondsFloat(HPNow() - StartTime);
     LOG_DEBUG_S(*actorSystem, NKikimrServices::BS_PDISK,
-            "PDiskId# " << PDisk->PDiskId << " ReqId# " << ReqId
+            "PDiskId# " << PDisk->PCtx->PDiskId << " ReqId# " << ReqId
             << " TChunkTrimCompletion timeMs# "
             << ui64(responseTimeMs) << " sizeBytes# " << SizeBytes);
-    LWPROBE(PDiskTrimResponseTime, PDisk->PDiskId, ReqId.Id, responseTimeMs, SizeBytes);
+    LWPROBE(PDiskTrimResponseTime, PDisk->PCtx->PDiskId, ReqId.Id, responseTimeMs, SizeBytes);
     PDisk->Mon.Trim.CountResponse();
     NWilson::TSpan span(TWilson::PDiskBasic, std::move(TraceId), "PDisk.TryTrimChunk", NWilson::EFlags::AUTO_END, actorSystem);
     span.Attribute("size", static_cast<i64>(SizeBytes));

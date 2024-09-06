@@ -102,15 +102,18 @@ public:
     void Exec(TActorSystem *actorSystem) override {
         auto execSpan = Span.CreateChild(TWilson::PDiskDetailed, "PDisk.CompletionChunkWrite.Exec");
         double responseTimeMs = HPMilliSecondsFloat(HPNow() - StartTime);
-        LOG_DEBUG_S(*actorSystem, NKikimrServices::BS_PDISK,
-                "PDiskId# " << PDiskId << " ReqId# " << ReqId
-            << "TCompletionChunkWrite " << Event->ToString().data()
-            << " PriorityClass# " << (ui32)PriorityClass
-            << " timeMs# " << ui64(responseTimeMs) << " sizeBytes# " << SizeBytes);
+        STLOGX(*actorSystem, PRI_DEBUG, BS_PDISK, BPD01, "TCompletionChunkWrite::Exec",
+                (DiskId, PDiskId),
+                (ReqId, ReqId),
+                (Event, Event->ToString()),
+                (PriorityClass, (ui32)PriorityClass),
+                (timeMs, responseTimeMs),
+                (sizeBytes, SizeBytes));
         if (Mon) {
             Mon->IncrementResponseTime(PriorityClass, responseTimeMs, SizeBytes);
         }
         LWTRACK(PDiskChunkResponseTime, Orbit, PDiskId, ReqId.Id, PriorityClass, responseTimeMs, SizeBytes);
+        Event->Orbit = std::move(Orbit);
         actorSystem->Send(Recipient, Event.Release());
         if (Mon) {
             Mon->GetWriteCounter(PriorityClass)->CountResponse();

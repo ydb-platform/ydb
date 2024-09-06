@@ -280,7 +280,7 @@ public:
         return NKikimrServices::TActivity::LOCAL_KMEANS_SCAN_ACTOR;
     }
 
-    TLocalKMeansScanBase(const TUserTable& table, TLead&& lead, NKikimrTxDataShard::TEvLocalKMeansRequest& request, const TActorId& responseActorId, TAutoPtr<TEvDataShard::TEvLocalKMeansProgressResponse>&& response)
+    TLocalKMeansScanBase(const TUserTable& table, TLead&& lead, const NKikimrTxDataShard::TEvLocalKMeansRequest& request, const TActorId& responseActorId, TAutoPtr<TEvDataShard::TEvLocalKMeansProgressResponse>&& response)
         : TActor{&TThis::StateWork}
         , Parent{request.GetParent()}
         , Child{request.GetChild()}

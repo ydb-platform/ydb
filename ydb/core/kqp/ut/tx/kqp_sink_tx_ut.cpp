@@ -148,7 +148,7 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
                 // Olap has Reads in this query, so it breaks now.
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
             } else {
-                // Oltp hasn't Reads in this query, so it breaks later.
+                // Oltp doesn't have Reads in this query, so it breaks later.
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             }
 

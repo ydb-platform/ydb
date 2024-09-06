@@ -1252,7 +1252,6 @@ private:
 
                 Counters->TxProxyMon->TxResultAborted->Inc(); // TODO: dedicated counter?
                 LocksBroken = true;
-                YQL_ENSURE(!res->Record.GetTxLocks().empty());
 
                 if (!res->Record.GetTxLocks().empty()) {
                     ResponseEv->BrokenLockPathId = TKikimrPathId(

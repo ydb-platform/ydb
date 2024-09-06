@@ -1,5 +1,9 @@
 UNITTEST()
 
+ADDINCL(
+    ydb/public/sdk/cpp
+)
+
 SRCS(
     dummy_provider_ut.cpp
 )

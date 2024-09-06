@@ -151,7 +151,7 @@ protected:
         server->AnnoyingClient->CreateTopicNoLegacy(VALID_TOPIC_PATH, partsCount,
                                                     true,
                                                     true,
-                                                    Nothing(),
+                                                    std::nullopt,
                                                     {"c0nsumer", "consumer-1", "consumer-2"});
 
         NACLib::TDiffACL acl;
@@ -182,7 +182,7 @@ protected:
         Ydb::Topic::UpdateOffsetsInTransactionResponse response;
 
         grpc::Status status = stub->UpdateOffsetsInTransaction(&rcontext,
-                                                               CreateRequest(session->GetId(), tx->GetId(),
+                                                               CreateRequest(TString{session->GetId()}, TString{tx->GetId()},
                                                                              consumer, topics),
                                                                &response);
         UNIT_ASSERT(status.ok());

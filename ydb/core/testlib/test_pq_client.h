@@ -1436,7 +1436,7 @@ public:
 
         auto pqClient = NYdb::NPersQueue::TPersQueueClient(*Driver);
         auto settings = NYdb::NPersQueue::TCreateTopicSettings().PartitionsCount(params.PartsCount).ClientWriteDisabled(!params.CanWrite);
-        settings.FederationAccount(params.Account.Defined() ? std::optional<std::string>(params.Account.GetRef()) : std::nullopt);
+        settings.FederationAccount(params.Account.value());
         settings.SupportedCodecs(params.Codecs);
         //settings.MaxPartitionWriteSpeed(50_MB);
         //settings.MaxPartitionWriteBurst(50_MB);

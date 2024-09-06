@@ -149,7 +149,7 @@ Y_UNIT_TEST_SUITE(Backup)
                 auto res = s.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
                 UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
 
-                auto yson = NYdb::FormatResultSetYson(res.GetResultSet(0));
+                TString yson = NYdb::FormatResultSetYson(res.GetResultSet(0));
 
                 const TString& expected = "[[[1u];[\"5b99a330-04ef-4f1a-9b64-ba6d5f44ea01\"];\"5b99a330-04ef-4f1a-9b64-ba6d5f44ea02\"]]";
                 CompareYson(expected, yson);

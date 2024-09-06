@@ -1,5 +1,13 @@
 UNITTEST_FOR(ydb/services/persqueue_v1)
 
+ADDINCL(
+    ydb/public/sdk/cpp
+)
+
+CFLAGS(
+    -DYDB_SDK_USE_STD_STRING
+)
+
 FORK_SUBTESTS()
 
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)

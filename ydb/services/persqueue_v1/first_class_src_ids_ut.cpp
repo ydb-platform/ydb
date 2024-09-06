@@ -110,7 +110,7 @@ Y_UNIT_TEST_SUITE(TFstClassSrcIdPQTest) {
         writer->Close();
 
         NYdb::NPersQueue::TReadSessionSettings readerSettings;
-        readerSettings.ConsumerName("debug").AppendTopics(topic);
+        readerSettings.ConsumerName("debug").AppendTopics(std::string{topic});
         auto reader = CreateReader(*driver, readerSettings);
         auto mbEv = GetNextMessageSkipAssignment(reader);
         UNIT_ASSERT(mbEv.Defined());

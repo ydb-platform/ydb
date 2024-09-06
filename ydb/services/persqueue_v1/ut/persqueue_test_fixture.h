@@ -16,7 +16,7 @@
 
 namespace NKikimr::NPersQueueTests {
 
-static void ModifyTopicACL(NYdb::TDriver* driver, const TString& topic, const TVector<std::pair<TString, TVector<TString>>>& acl) {
+static void ModifyTopicACL(NYdb::TDriver* driver, const TString& topic, const std::vector<std::pair<std::string, std::vector<std::string>>>& acl) {
 
     NYdb::NScheme::TSchemeClient schemeClient(*driver);
     auto modifyPermissionsSettings = NYdb::NScheme::TModifyPermissionsSettings();
@@ -114,7 +114,7 @@ static void ModifyTopicACL(NYdb::TDriver* driver, const TString& topic, const TV
 
             Cerr << "=== PersQueueClient" << Endl;
             NYdb::TDriverConfig driverCfg;
-            driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << Server->GrpcPort).SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG)).SetDatabase("/Root");
+            driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << Server->GrpcPort).SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release())).SetDatabase("/Root");
             YdbDriver.reset(new NYdb::TDriver(driverCfg));
             PersQueueClient = MakeHolder<NYdb::NPersQueue::TPersQueueClient>(*YdbDriver);
 
@@ -176,11 +176,11 @@ static void ModifyTopicACL(NYdb::TDriver* driver, const TString& topic, const TV
             return TenantMode;
         }
 
-        void ModifyTopicACL(const TString& topic, const TVector<std::pair<TString, TVector<TString>>>& acl) {
+        void ModifyTopicACL(const TString& topic, const std::vector<std::pair<std::string, std::vector<std::string>>>& acl) {
             ::ModifyTopicACL(YdbDriver.get(), topic, acl);
         }
 
-        void ModifyTopicACLAndWait(const TString& topic, const TVector<std::pair<TString, TVector<TString>>>& acl) {
+        void ModifyTopicACLAndWait(const TString& topic, const std::vector<std::pair<std::string, std::vector<std::string>>>& acl) {
             auto driver = YdbDriver.get();
             auto schemeClient = NYdb::NScheme::TSchemeClient(*driver);
             auto desc = schemeClient.DescribePath(topic).ExtractValueSync();

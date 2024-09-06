@@ -66,7 +66,7 @@ class TExampleDummyProviderFactory : public ICredentialsProviderFactory {
             strong->AddPeriodicTask(CreatePingPongTask(facility), TDuration::Seconds(1));
         }
 
-        TString GetAuthInfo() const override {
+        std::string GetAuthInfo() const override {
             return "";
         }
 

@@ -150,8 +150,7 @@ protected:
         , KeyColumnIds(tableInfo.KeyColumnIds)
         , KeyTypes(tableInfo.KeyColumnTypes)
         , TableRange(tableInfo.Range)
-        , RequestedRange(range)
-    {
+        , RequestedRange(range) {
     }
 
     template <typename TAddRow>
@@ -230,11 +229,10 @@ public:
     }
 
     TAutoPtr<IDestructable> Finish(EAbort abort) noexcept override {
-        auto ctx = TActivationContext::AsActorContext().MakeFor(TBase::SelfId());
+        auto ctx = TActivationContext::ActorContextFor(TBase::SelfId());
 
         if (Uploader) {
-            TAutoPtr<TEvents::TEvPoisonPill> poison = new TEvents::TEvPoisonPill;
-            ctx.Send(Uploader, poison.Release());
+            ctx.Send(Uploader, new TEvents::TEvPoisonPill);
             Uploader = {};
         }
 
@@ -398,7 +396,7 @@ private:
             UploadMode,
             true /*writeToPrivateTable*/);
 
-        Uploader = TActivationContext::AsActorContext().MakeFor(TBase::SelfId()).Register(actor);
+        Uploader = TActivationContext::ActorContextFor(TBase::SelfId()).Register(actor);
     }
 };
 
@@ -417,8 +415,7 @@ public:
                     const TUserTable& tableInfo,
                     TUploadLimits limits)
         : TBuildScanUpload(buildIndexId, target, seqNo, dataShardId, progressActorId, range, tableInfo, limits)
-        , TargetDataColumnPos(targetIndexColumns.size())
-    {
+        , TargetDataColumnPos(targetIndexColumns.size()) {
         ScanTags = BuildTags(tableInfo, targetIndexColumns, targetDataColumns);
         UploadColumnsTypes = BuildTypes(tableInfo, targetIndexColumns, targetDataColumns);
         UploadMode = NTxProxy::EUploadRowsMode::WriteToTableShadow;
@@ -449,8 +446,7 @@ public:
                       const NKikimrIndexBuilder::TColumnBuildSettings& columnBuildSettings,
                       const TUserTable& tableInfo,
                       TUploadLimits limits)
-        : TBuildScanUpload(buildIndexId, target, seqNo, dataShardId, progressActorId, range, tableInfo, limits)
-    {
+        : TBuildScanUpload(buildIndexId, target, seqNo, dataShardId, progressActorId, range, tableInfo, limits) {
         Y_ABORT_UNLESS(columnBuildSettings.columnSize() > 0);
         UploadColumnsTypes = BuildTypes(tableInfo, columnBuildSettings);
         UploadMode = NTxProxy::EUploadRowsMode::UpsertIfExists;
@@ -486,8 +482,7 @@ TAutoPtr<NTable::IScan> CreateBuildIndexScan(
     TProtoColumnsCRef targetDataColumns,
     const NKikimrIndexBuilder::TColumnBuildSettings& columnsToBuild,
     const TUserTable& tableInfo,
-    TUploadLimits limits)
-{
+    TUploadLimits limits) {
     if (columnsToBuild.columnSize() > 0) {
         return new TBuildColumnsScan(
             buildIndexId, target, seqNo, dataShardId, progressActorId, range, columnsToBuild, tableInfo, limits);
@@ -500,8 +495,7 @@ class TDataShard::TTxHandleSafeBuildIndexScan: public NTabletFlatExecutor::TTran
 public:
     TTxHandleSafeBuildIndexScan(TDataShard* self, TEvDataShard::TEvBuildIndexCreateRequest::TPtr&& ev)
         : TTransactionBase(self)
-        , Ev(std::move(ev))
-    {
+        , Ev(std::move(ev)) {
     }
 
     bool Execute(TTransactionContext&, const TActorContext& ctx) {

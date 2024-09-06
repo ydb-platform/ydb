@@ -192,10 +192,25 @@ struct TCalculation: TMetric {
     }
 };
 
-// This scan contains 3 phases:
+// This scan needed to run local (not distributed) kmeans.
+// We have this local stage because we construct kmeans tree from top to bottom.
+// And bottom kmeans can be constructed completely locally in datashards to avoid extra communication.
+// Also it can be used for small tables.
+//
+// This class is kind of state machine, it has 3 phases.
+// Each of them corresponds to 1-N rounds of NTable::IScan (which is kind of state machine itself).
 // 1. First iteration collect sample of clusters
 // 2. Then N iterations recompute clusters (main cycle of batched kmeans)
 // 3. Finally last iteration upload clusters to level table and postings to corresponding posting table
+//
+// These phases maps to State:
+// 1. -- EState::SAMPLE
+// 2. -- EState::KMEANS
+// 3. -- EState::UPLOAD*
+//
+// Which UPLOAD* will be used depends on that will client of this scan request (see UploadState)
+//
+// NTable::IScan::Seek used to switch from current state to the next one.
 class TLocalKMeansScanBase: public TActor<TLocalKMeansScanBase>, public NTable::IScan {
 protected:
     using EState = NKikimrTxDataShard::TEvLocalKMeansRequest;
@@ -352,11 +367,10 @@ public:
 
     TAutoPtr<IDestructable> Finish(EAbort abort) noexcept final {
         LOG_T("Finish " << Debug());
-        auto ctx = TActivationContext::AsActorContext().MakeFor(this->SelfId());
+        auto ctx = TActivationContext::ActorContextFor(this->SelfId());
 
         if (Uploader) {
-            TAutoPtr<TEvents::TEvPoisonPill> poison = new TEvents::TEvPoisonPill;
-            ctx.Send(Uploader, poison.Release());
+            ctx.Send(Uploader, new TEvents::TEvPoisonPill);
             Uploader = {};
         }
 
@@ -442,7 +456,7 @@ protected:
             WriteBuf.Clear();
             if (!ReadBuf.IsEmpty() && ReadBuf.IsReachLimits(Limits)) {
                 ReadBuf.FlushTo(WriteBuf);
-                Upload(true);
+                Upload(false);
             }
 
             Driver->Touch(EScan::Feed);
@@ -495,7 +509,7 @@ protected:
             NTxProxy::EUploadRowsMode::WriteToTableShadow,
             true /*writeToPrivateTable*/);
 
-        Uploader = TActivationContext::AsActorContext().MakeFor(this->SelfId()).Register(actor);
+        Uploader = TActivationContext::ActorContextFor(this->SelfId()).Register(actor);
     }
 
     void UploadSample() {
@@ -560,12 +574,13 @@ public:
                 // because this datashard doesn't have valid embeddings for this parent
                 return EScan::Final;
             }
+            ++Round;
             return EScan::Feed;
         }
 
         Y_ASSERT(State == EState::KMEANS);
-        RecomputeClusters(Round == MaxRounds);
-        if (Round == MaxRounds) {
+        RecomputeClusters(Round >= MaxRounds);
+        if (Round >= MaxRounds) {
             lead = std::move(Lead);
             lead.SetTags(UploadScan);
 
@@ -940,4 +955,4 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
     ScanManager.Set(id, recCard);
 }
 
-} //namespace NKikimr::NDataShard
+}

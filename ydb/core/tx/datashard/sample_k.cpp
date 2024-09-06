@@ -78,8 +78,7 @@ public:
         , RequestedRange(range)
         , K(k)
         , MaxProbability(maxProbability)
-        , Rng(seed)
-    {
+        , Rng(seed) {
         Y_ASSERT(MaxProbability != 0);
     }
 
@@ -154,7 +153,7 @@ public:
             Response->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
         }
         LOG_T("Finish " << Debug());
-        TActivationContext::AsActorContext().MakeFor(SelfId()).Send(ResponseActorId, Response.Release());
+        TActivationContext::ActorContextFor(SelfId()).Send(ResponseActorId, Response.Release());
         Driver = nullptr;
         PassAway();
         return nullptr;
@@ -224,8 +223,7 @@ class TDataShard::TTxHandleSafeSampleKScan: public NTabletFlatExecutor::TTransac
 public:
     TTxHandleSafeSampleKScan(TDataShard* self, TEvDataShard::TEvSampleKRequest::TPtr&& ev)
         : TTransactionBase(self)
-        , Ev(std::move(ev))
-    {
+        , Ev(std::move(ev)) {
     }
 
     bool Execute(TTransactionContext&, const TActorContext& ctx) {

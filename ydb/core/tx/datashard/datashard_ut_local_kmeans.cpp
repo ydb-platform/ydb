@@ -697,4 +697,4 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
     }
 }
 
-} // namespace NKikimr
+}

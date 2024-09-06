@@ -353,7 +353,6 @@ public:
     void ProcessChunkForgetQueue();
     void ProcessChunkWriteQueue();
     void ProcessChunkReadQueue();
-    void ProcessChunkReadQueue2();
     void ProcessLogReadQueue();
     void ProcessYardInitSet();
     void TrimAllUntrimmedChunks();

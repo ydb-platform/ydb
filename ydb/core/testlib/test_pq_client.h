@@ -552,7 +552,7 @@ public:
         TString endpoint = TStringBuilder() << "localhost:" << GRpcPort;
         auto driverConfig = NYdb::TDriverConfig()
             .SetEndpoint(endpoint)
-            .SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG));
+            .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
         if (databaseName)
             driverConfig.SetDatabase(*databaseName);
         Driver.Reset(MakeHolder<NYdb::TDriver>(driverConfig));
@@ -895,7 +895,7 @@ public:
         auto pos = name.rfind("/");
         Y_ABORT_UNLESS(pos != TString::npos);
         auto pref = "/Root/PQ/" + name.substr(0, pos);
-        ModifyACL(pref, name.substr(pos + 1), acl.SerializeAsString());
+        ModifyACL(TString{pref}, name.substr(pos + 1), acl.SerializeAsString());
     }
 
     void CreateTopicNoLegacy(const TString& name, ui32 partsCount, bool doWait = true, bool canWrite = true,
@@ -1422,7 +1422,7 @@ public:
         TVector<TString> ReadRules = {"user"};
         TMaybe<TString> Account = Nothing();
         bool ExpectFail = false;
-        TVector<NYdb::NPersQueue::ECodec> Codecs = NYdb::NPersQueue::GetDefaultCodecs();
+        std::vector<NYdb::NPersQueue::ECodec> Codecs = NYdb::NPersQueue::GetDefaultCodecs();
     };
 
     void CreateTopicNoLegacy(const CreateTopicNoLegacyParams& params)
@@ -1436,7 +1436,7 @@ public:
 
         auto pqClient = NYdb::NPersQueue::TPersQueueClient(*Driver);
         auto settings = NYdb::NPersQueue::TCreateTopicSettings().PartitionsCount(params.PartsCount).ClientWriteDisabled(!params.CanWrite);
-        settings.FederationAccount(params.Account);
+        settings.FederationAccount(params.Account.Defined() ? std::optional<std::string>(params.Account.GetRef()) : std::nullopt);
         settings.SupportedCodecs(params.Codecs);
         //settings.MaxPartitionWriteSpeed(50_MB);
         //settings.MaxPartitionWriteBurst(50_MB);

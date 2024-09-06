@@ -14,15 +14,15 @@ using namespace Tests;
 using Ydb::Table::VectorIndexSettings;
 using namespace NTableIndex::NTableVectorKmeansTreeIndex;
 
-static ui64 sId = 1;
+static std::atomic<ui64> sId = 1;
 static constexpr const char* kMainTable = "/Root/table-main";
 static constexpr const char* kLevelTable = "/Root/table-level";
 static constexpr const char* kPostingTable = "/Root/table-posting";
 
 Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
-    [[maybe_unused]] static void DoBadRequest(Tests::TServer::TPtr server, TActorId sender, std::unique_ptr<TEvDataShard::TEvLocalKMeansRequest> & ev,
-                                              size_t dims = 2, VectorIndexSettings::VectorType type = VectorIndexSettings::VECTOR_TYPE_FLOAT, VectorIndexSettings::Distance metric = VectorIndexSettings::DISTANCE_COSINE) {
-        auto id = sId++;
+    static void DoBadRequest(Tests::TServer::TPtr server, TActorId sender, std::unique_ptr<TEvDataShard::TEvLocalKMeansRequest> & ev,
+                             size_t dims = 2, VectorIndexSettings::VectorType type = VectorIndexSettings::VECTOR_TYPE_FLOAT, VectorIndexSettings::Distance metric = VectorIndexSettings::DISTANCE_COSINE) {
+        auto id = sId.fetch_add(1, std::memory_order_relaxed);
         auto& runtime = *server->GetRuntime();
         auto snapshot = CreateVolatileSnapshot(server, {kMainTable});
         auto datashards = GetTableShards(server, sender, kMainTable);
@@ -89,7 +89,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
     static std::tuple<TString, TString> DoLocalKMeans(Tests::TServer::TPtr server, TActorId sender, ui32 parent, ui64 seed, ui64 k,
                                                       NKikimrTxDataShard::TEvLocalKMeansRequest::EState upload,
                                                       VectorIndexSettings::VectorType type, auto metric) {
-        auto id = sId++;
+        auto id = sId.fetch_add(1, std::memory_order_relaxed);
         auto& runtime = *server->GetRuntime();
         auto snapshot = CreateVolatileSnapshot(server, {kMainTable});
         auto datashards = GetTableShards(server, sender, kMainTable);

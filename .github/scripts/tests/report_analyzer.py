@@ -27,5 +27,5 @@ if __name__ == "__main__":
     with open (summary_path, "w") as f:
         f.write("RSS usage by tests, sorted\n\n")    
         for rss, path in all:
-            f.write("{} {%.2f} GiB \n".format(path, rss))
+            f.write("{} {:.2f} GiB \n".format(path, rss))
         f.write("\n")

@@ -470,5 +470,74 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinBasicTest) {
 
 } // Y_UNIT_TEST_SUITE
 
+Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinMoreTest) {
+
+    constexpr size_t testSize = 1 << 14;
+    constexpr size_t valueSize = 3;
+    static const TVector<TString> threeLetterValues = GenerateValues(valueSize);
+    static const TString hugeString(128, '1');
+
+    const TVector<TKSV> MakeFillTKSV(const TVector<ui64>& keyInit,
+        const ui64 subkeyMultiplier, const TVector<TString>& valuePayload
+    ) {
+        TVector<TKSV> testKSV;
+        for (size_t i = 0; i < keyInit.size(); i++) {
+            testKSV.push_back(std::make_tuple(keyInit[i],
+                                              keyInit[i] * subkeyMultiplier,
+                                              valuePayload[i]));
+        }
+        return testKSV;
+    }
+
+    Y_UNIT_TEST(TestInnerOn1) {
+        TVector<ui64> keyInit(testSize);
+        std::fill(keyInit.begin(), keyInit.end(), 1);
+        const auto leftFlow = MakeFillTKSV(keyInit, 1001, threeLetterValues);
+        TKSWMap rightMap = {{1, hugeString}};
+        TestBlockJoinWithRightOnUint64(EJoinKind::Inner, leftFlow, rightMap);
+    }
+
+    Y_UNIT_TEST(TestInnerMultiOn1) {
+        TVector<ui64> keyInit(testSize);
+        std::fill(keyInit.begin(), keyInit.end(), 1);
+        const auto leftFlow = MakeFillTKSV(keyInit, 1001, threeLetterValues);
+        TKSWMultiMap rightMultiMap = {{1, {"1", hugeString}}};
+        TestBlockMultiJoinWithRightOnUint64(EJoinKind::Inner, leftFlow, rightMultiMap);
+    }
+
+    Y_UNIT_TEST(TestLeftOn1) {
+        TVector<ui64> keyInit(testSize);
+        std::fill(keyInit.begin(), keyInit.end(), 1);
+        const auto leftFlow = MakeFillTKSV(keyInit, 1001, threeLetterValues);
+        TKSWMap rightMap = {{1, hugeString}};
+        TestBlockJoinWithRightOnUint64(EJoinKind::Left, leftFlow, rightMap);;
+    }
+
+    Y_UNIT_TEST(TestLeftMultiOn1) {
+        TVector<ui64> keyInit(testSize);
+        std::fill(keyInit.begin(), keyInit.end(), 1);
+        const auto leftFlow = MakeFillTKSV(keyInit, 1001, threeLetterValues);
+        TKSWMultiMap rightMultiMap = {{1, {"1", hugeString}}};
+        TestBlockMultiJoinWithRightOnUint64(EJoinKind::Left, leftFlow, rightMultiMap);
+    }
+
+    Y_UNIT_TEST(TestLeftSemiOn1) {
+        TVector<ui64> keyInit(testSize);
+        std::fill(keyInit.begin(), keyInit.end(), 1);
+        const auto leftFlow = MakeFillTKSV(keyInit, 1001, threeLetterValues);
+        const TKSVSet rightSet({1});
+        TestBlockJoinWithoutRightOnUint64(EJoinKind::LeftSemi, leftFlow, rightSet);
+    }
+
+    Y_UNIT_TEST(TestLeftOnlyOn1) {
+        TVector<ui64> keyInit(testSize);
+        std::fill(keyInit.begin(), keyInit.end(), 1);
+        const auto leftFlow = MakeFillTKSV(keyInit, 1001, threeLetterValues);
+        const TKSVSet rightSet({1});
+        TestBlockJoinWithoutRightOnUint64(EJoinKind::LeftOnly, leftFlow, rightSet);
+    }
+
+} // Y_UNIT_TEST_SUITE
+
 } // namespace NMiniKQL
 } // namespace NKikimr

@@ -10,8 +10,6 @@
 
 - 2024
 
-  {% include [IT_Picnic](./_includes/conferences/2024/IT_picnic.md) %}
-
   {% include [Saint_HighLoad](./_includes/conferences/2024/Saint_HighLoad.md) %}
 
   {% include [Ya_Tech](./_includes/conferences/2024/Yandex_Infrastructure.md) %}

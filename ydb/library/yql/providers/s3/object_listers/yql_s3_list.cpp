@@ -136,7 +136,7 @@ TS3ListObjectV2Response ParseListObjectV2Response(
         const auto errorMessage = TStringBuilder{} << message << ", error: code: " << code 
             << ", request id: [" << requestId << "]";
         YQL_CLOG(DEBUG, ProviderS3) << "[TS3Lister::ParseListObjectV2Response] " << errorMessage;
-        ythrow yexception() << errorMessage;
+        throw yexception() << errorMessage;
     } else if (root.Name() != "ListBucketResult") {
         const auto errorMessage = TStringBuilder{} << "Unexpected response '" << root.Name()
                             << "' on discovery, request id: [" << requestId << "]";

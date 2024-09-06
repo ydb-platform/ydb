@@ -60,7 +60,7 @@ TTableRange CreateRangeFrom(const TUserTable& table, ui32 parent, TCell& from, T
     from = TCell::Make(parent - 1);
     to = TCell::Make(parent);
     TTableRange range{{&from, 1}, false, {&to, 1}, true};
-        return Intersect(table.KeyColumnTypes, range, table.GetTableRange());
+    return Intersect(table.KeyColumnTypes, range, table.GetTableRange());
 }
 
 NTable::TLead CreateLeadFrom(const TTableRange& range) {
@@ -196,11 +196,9 @@ struct TCalculation: TMetric {
 // 1. First iteration collect sample of clusters
 // 2. Then N iterations recompute clusters (main cycle of batched kmeans)
 // 3. Finally last iteration upload clusters to level table and postings to corresponding posting table
-template <typename TMetric>
-class TLocalKMeansScan final: public TActor<TLocalKMeansScan<TMetric>>, public NTable::IScan, private TCalculation<TMetric> {
+class TLocalKMeansScanBase: public TActor<TLocalKMeansScanBase>, public NTable::IScan {
 protected:
     using EState = NKikimrTxDataShard::TEvLocalKMeansRequest;
-    using TTBase = TActor<TLocalKMeansScan<TMetric>>;
 
     ui32 Parent = 0;
     ui32 Child = 0;
@@ -235,15 +233,6 @@ protected:
     std::vector<TProbability> MaxRows;
     std::vector<TString> Clusters;
 
-    // KMeans
-    using TEmbedding = std::vector<typename TMetric::TSum>;
-
-    struct TAggregated {
-        TEmbedding Cluster;
-        ui64 Count = 0;
-    };
-    std::vector<TAggregated> Aggregated;
-
     // Upload
     std::shared_ptr<TTypes> TargetTypes;
     std::shared_ptr<TTypes> NextTypes;
@@ -276,8 +265,8 @@ public:
         return NKikimrServices::TActivity::LOCAL_KMEANS_SCAN_ACTOR;
     }
 
-    TLocalKMeansScan(const TUserTable& table, TLead&& lead, NKikimrTxDataShard::TEvLocalKMeansRequest& request, const TActorId& responseActorId, TAutoPtr<TEvDataShard::TEvLocalKMeansProgressResponse>&& response)
-        : TTBase::TActor{&TTBase::TThis::StateWork}
+    TLocalKMeansScanBase(const TUserTable& table, TLead&& lead, NKikimrTxDataShard::TEvLocalKMeansRequest& request, const TActorId& responseActorId, TAutoPtr<TEvDataShard::TEvLocalKMeansProgressResponse>&& response)
+        : TActor{&TThis::StateWork}
         , Parent{request.GetParent()}
         , Child{request.GetChild()}
         , MaxRounds{request.GetNeedsRounds() - request.GetDoneRounds()}
@@ -290,7 +279,6 @@ public:
         , NextTable{request.GetPostingName()}
         , ResponseActorId{responseActorId}
         , Response{std::move(response)} {
-        this->Dimensions = request.GetSettings().vector_dimension();
         const auto& embedding = request.GetEmbeddingColumn();
         const auto& data = request.GetDataColumns();
         // scan tags
@@ -354,14 +342,193 @@ public:
         }
     }
 
-    ~TLocalKMeansScan() final = default;
-
     TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) noexcept final {
         TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
         LOG_T("Prepare " << Debug());
 
         Driver = driver;
         return {EScan::Feed, {}};
+    }
+
+    TAutoPtr<IDestructable> Finish(EAbort abort) noexcept final {
+        LOG_T("Finish " << Debug());
+        auto ctx = TActivationContext::AsActorContext().MakeFor(this->SelfId());
+
+        if (Uploader) {
+            TAutoPtr<TEvents::TEvPoisonPill> poison = new TEvents::TEvPoisonPill;
+            ctx.Send(Uploader, poison.Release());
+            Uploader = {};
+        }
+
+        auto& record = Response->Record;
+        if (abort != EAbort::None) {
+            record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
+        } else if (UploadStatus.IsSuccess()) {
+            record.SetStatus(NKikimrIndexBuilder::EBuildStatus::DONE);
+        } else {
+            record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
+        }
+        NYql::IssuesToMessage(UploadStatus.Issues, record.MutableIssues());
+        ctx.Send(ResponseActorId, Response.Release());
+
+        Driver = nullptr;
+        this->PassAway();
+        return nullptr;
+    }
+
+    void Describe(IOutputStream& out) const noexcept final {
+        out << Debug();
+    }
+
+    TString Debug() const {
+        auto builder = TStringBuilder() << " TLocalKMeansScan";
+        if (Response) {
+            auto& r = Response->Record;
+            builder << " Id: " << r.GetId();
+        }
+        return builder << " State: " << State
+                       << " Round: " << Round
+                       << " MaxRounds: " << MaxRounds
+                       << " ReadBuf size: " << ReadBuf.Size()
+                       << " WriteBuf size: " << WriteBuf.Size()
+                       << " ";
+    }
+
+    EScan PageFault() noexcept final {
+        LOG_T("PageFault " << Debug());
+
+        if (!ReadBuf.IsEmpty() && WriteBuf.IsEmpty()) {
+            ReadBuf.FlushTo(WriteBuf);
+            Upload(false);
+        }
+
+        return EScan::Feed;
+    }
+
+protected:
+    STFUNC(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            HFunc(TEvTxUserProxy::TEvUploadRowsResponse, Handle);
+            CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
+            default:
+                LOG_E("TLocalKMeansScan: StateWork unexpected event type: " << ev->GetTypeRewrite() << " event: " << ev->ToString() << " " << Debug());
+        }
+    }
+
+    void HandleWakeup(const NActors::TActorContext& /*ctx*/) {
+        LOG_T("Retry upload " << Debug());
+
+        if (!WriteBuf.IsEmpty()) {
+            Upload(true);
+        }
+    }
+
+    void Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr& ev, const TActorContext& ctx) {
+        LOG_T("Handle TEvUploadRowsResponse "
+              << Debug()
+              << " Uploader: " << Uploader.ToString()
+              << " ev->Sender: " << ev->Sender.ToString());
+
+        if (Uploader) {
+            Y_VERIFY_S(Uploader == ev->Sender, "Mismatch Uploader: " << Uploader.ToString() << " ev->Sender: " << ev->Sender.ToString() << Debug());
+        } else {
+            Y_ABORT_UNLESS(Driver == nullptr);
+            return;
+        }
+
+        UploadStatus.StatusCode = ev->Get()->Status;
+        UploadStatus.Issues = ev->Get()->Issues;
+        if (UploadStatus.IsSuccess()) {
+            WriteBuf.Clear();
+            if (!ReadBuf.IsEmpty() && ReadBuf.IsReachLimits(Limits)) {
+                ReadBuf.FlushTo(WriteBuf);
+                Upload(true);
+            }
+
+            Driver->Touch(EScan::Feed);
+            return;
+        }
+
+        if (RetryCount < Limits.MaxUploadRowsRetryCount && UploadStatus.IsRetriable()) {
+            LOG_N("Got retriable error, " << Debug() << UploadStatus.ToString());
+
+            ctx.Schedule(Limits.GetTimeoutBackouff(RetryCount), new TEvents::TEvWakeup());
+            return;
+        }
+
+        LOG_N("Got error, abort scan, " << Debug() << UploadStatus.ToString());
+
+        Driver->Touch(EScan::Final);
+    }
+
+    EScan FeedUpload() {
+        if (!ReadBuf.IsReachLimits(Limits)) {
+            return EScan::Feed;
+        }
+        if (!WriteBuf.IsEmpty()) {
+            return EScan::Sleep;
+        }
+        ReadBuf.FlushTo(WriteBuf);
+        Upload(false);
+        return EScan::Feed;
+    }
+
+    ui64 GetProbability() {
+        return Rng.GenRand64();
+    }
+
+    void Upload(bool isRetry) {
+        if (isRetry) {
+            ++RetryCount;
+        } else {
+            RetryCount = 0;
+            if (State != EState::KMEANS && NextTypes) {
+                TargetTypes = std::exchange(NextTypes, {});
+                TargetTable = std::move(NextTable);
+            }
+        }
+
+        auto actor = NTxProxy::CreateUploadRowsInternal(
+            this->SelfId(), TargetTable,
+            TargetTypes,
+            WriteBuf.GetRowsData(),
+            NTxProxy::EUploadRowsMode::WriteToTableShadow,
+            true /*writeToPrivateTable*/);
+
+        Uploader = TActivationContext::AsActorContext().MakeFor(this->SelfId()).Register(actor);
+    }
+
+    void UploadSample() {
+        Y_ASSERT(ReadBuf.IsEmpty());
+        Y_ASSERT(WriteBuf.IsEmpty());
+        std::array<TCell, 2> pk;
+        std::array<TCell, 1> data;
+        for (NTable::TPos pos = 0; const auto& row : Clusters) {
+            pk[0] = TCell::Make(Parent);
+            pk[1] = TCell::Make(Child + pos);
+            data[0] = TCell{row};
+            WriteBuf.AddRow({}, TSerializedCellVec{pk}, TSerializedCellVec::Serialize(data));
+            ++pos;
+        }
+        Upload(false);
+    }
+};
+
+template <typename TMetric>
+class TLocalKMeansScan final: public TLocalKMeansScanBase, private TCalculation<TMetric> {
+    // KMeans
+    using TEmbedding = std::vector<typename TMetric::TSum>;
+
+    struct TAggregated {
+        TEmbedding Cluster;
+        ui64 Count = 0;
+    };
+    std::vector<TAggregated> Aggregated;
+
+public:
+    TLocalKMeansScan(const TUserTable& table, TLead&& lead, NKikimrTxDataShard::TEvLocalKMeansRequest& request, const TActorId& responseActorId, TAutoPtr<TEvDataShard::TEvLocalKMeansProgressResponse>&& response)
+        : TLocalKMeansScanBase{table, std::move(lead), request, responseActorId, std::move(response)} {
+        this->Dimensions = request.GetSettings().vector_dimension();
     }
 
     EScan Seek(TLead& lead, ui64 seq) noexcept final {
@@ -432,129 +599,7 @@ public:
         }
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort) noexcept final {
-        LOG_T("Finish " << Debug());
-        auto ctx = TActivationContext::AsActorContext().MakeFor(this->SelfId());
-
-        if (Uploader) {
-            TAutoPtr<TEvents::TEvPoisonPill> poison = new TEvents::TEvPoisonPill;
-            ctx.Send(Uploader, poison.Release());
-            Uploader = {};
-        }
-
-        auto& record = Response->Record;
-        if (abort != EAbort::None) {
-            record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
-        } else if (UploadStatus.IsSuccess()) {
-            record.SetStatus(NKikimrIndexBuilder::EBuildStatus::DONE);
-        } else {
-            record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
-        }
-        NYql::IssuesToMessage(UploadStatus.Issues, record.MutableIssues());
-        ctx.Send(ResponseActorId, Response.Release());
-
-        Driver = nullptr;
-        this->PassAway();
-        return nullptr;
-    }
-
-    void Describe(IOutputStream& out) const noexcept final {
-        out << Debug();
-    }
-
-    TString Debug() const {
-        auto builder = TStringBuilder() << " TLocalKMeansScan";
-        if (Response) {
-            auto& r = Response->Record;
-            builder << " Id: " << r.GetId();
-        }
-        return builder << " State: " << State
-                       << " Round: " << Round
-                       << " MaxRounds: " << MaxRounds
-                       << " ReadBuf size: " << ReadBuf.Size()
-                       << " WriteBuf size: " << WriteBuf.Size()
-                       << " ";
-    }
-
-    EScan PageFault() noexcept final {
-        LOG_T("PageFault " << Debug());
-
-        if (!ReadBuf.IsEmpty() && WriteBuf.IsEmpty()) {
-            ReadBuf.FlushTo(WriteBuf);
-            Upload(false);
-        }
-
-        return EScan::Feed;
-    }
-
 private:
-    STFUNC(StateWork) {
-        switch (ev->GetTypeRewrite()) {
-            HFunc(TEvTxUserProxy::TEvUploadRowsResponse, Handle);
-            CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
-            default:
-                LOG_E("TLocalKMeansScan: StateWork unexpected event type: " << ev->GetTypeRewrite() << " event: " << ev->ToString() << " " << Debug());
-        }
-    }
-
-    void HandleWakeup(const NActors::TActorContext& /*ctx*/) {
-        LOG_T("Retry upload " << Debug());
-
-        if (!WriteBuf.IsEmpty()) {
-            Upload(true);
-        }
-    }
-
-    void Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr& ev, const TActorContext& ctx) {
-        LOG_T("Handle TEvUploadRowsResponse "
-              << Debug()
-              << " Uploader: " << Uploader.ToString()
-              << " ev->Sender: " << ev->Sender.ToString());
-
-        if (Uploader) {
-            Y_VERIFY_S(Uploader == ev->Sender, "Mismatch Uploader: " << Uploader.ToString() << " ev->Sender: " << ev->Sender.ToString() << Debug());
-        } else {
-            Y_ABORT_UNLESS(Driver == nullptr);
-            return;
-        }
-
-        UploadStatus.StatusCode = ev->Get()->Status;
-        UploadStatus.Issues = ev->Get()->Issues;
-        if (UploadStatus.IsSuccess()) {
-            WriteBuf.Clear();
-            if (!ReadBuf.IsEmpty() && ReadBuf.IsReachLimits(Limits)) {
-                ReadBuf.FlushTo(WriteBuf);
-                Upload(true);
-            }
-
-            Driver->Touch(EScan::Feed);
-            return;
-        }
-
-        if (RetryCount < Limits.MaxUploadRowsRetryCount && UploadStatus.IsRetriable()) {
-            LOG_N("Got retriable error, " << Debug() << UploadStatus.ToString());
-
-            ctx.Schedule(Limits.GetTimeoutBackouff(RetryCount), new TEvents::TEvWakeup());
-            return;
-        }
-
-        LOG_N("Got error, abort scan, " << Debug() << UploadStatus.ToString());
-
-        Driver->Touch(EScan::Final);
-    }
-
-    EScan FeedUpload() {
-        if (!ReadBuf.IsReachLimits(Limits)) {
-            return EScan::Feed;
-        }
-        if (!WriteBuf.IsEmpty()) {
-            return EScan::Sleep;
-        }
-        ReadBuf.FlushTo(WriteBuf);
-        Upload(false);
-        return EScan::Feed;
-    }
-
     bool InitAggregated() {
         if (Clusters.size() == 0) {
             return false;
@@ -603,10 +648,6 @@ private:
             ++r;
         }
         Clusters.erase(w, Clusters.end());
-    }
-
-    ui64 GetProbability() {
-        return Rng.GenRand64();
     }
 
     ui32 FeedEmbedding(const TRow& row, NTable::TPos embeddingPos) {
@@ -705,42 +746,6 @@ private:
         TSerializedCellVec::UnsafeAppendCells(key.Slice(1), pk);
         ReadBuf.AddRow(TSerializedCellVec{key}, TSerializedCellVec{std::move(pk)}, TSerializedCellVec::Serialize((*row).Slice(DataPos)));
         return FeedUpload();
-    }
-
-    void Upload(bool isRetry) {
-        if (isRetry) {
-            ++RetryCount;
-        } else {
-            RetryCount = 0;
-            if (State != EState::KMEANS && NextTypes) {
-                TargetTypes = std::exchange(NextTypes, {});
-                TargetTable = std::move(NextTable);
-            }
-        }
-
-        auto actor = NTxProxy::CreateUploadRowsInternal(
-            this->SelfId(), TargetTable,
-            TargetTypes,
-            WriteBuf.GetRowsData(),
-            NTxProxy::EUploadRowsMode::WriteToTableShadow,
-            true /*writeToPrivateTable*/);
-
-        Uploader = TActivationContext::AsActorContext().MakeFor(this->SelfId()).Register(actor);
-    }
-
-    void UploadSample() {
-        Y_ASSERT(ReadBuf.IsEmpty());
-        Y_ASSERT(WriteBuf.IsEmpty());
-        std::array<TCell, 2> pk;
-        std::array<TCell, 1> data;
-        for (NTable::TPos pos = 0; const auto& row : Clusters) {
-            pk[0] = TCell::Make(Parent);
-            pk[1] = TCell::Make(Child + pos);
-            data[0] = TCell{row};
-            WriteBuf.AddRow({}, TSerializedCellVec{pk}, TSerializedCellVec::Serialize(data));
-            ++pos;
-        }
-        Upload(false);
     }
 };
 
@@ -861,7 +866,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
     if (settings.vector_dimension() < 1) {
         badRequest(TStringBuilder() << "Dimension of vector should be at least one");
         return;
-    } 
+    }
     TAutoPtr<NTable::IScan> scan;
 
     auto createScan = [&]<typename T> {

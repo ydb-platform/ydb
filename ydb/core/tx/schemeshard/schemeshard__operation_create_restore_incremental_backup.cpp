@@ -59,7 +59,7 @@ void DoCreatePqPart(
     partitionConfig.SetBurstSize(1_MB); // TODO: configurable burst
     partitionConfig.SetMaxCountInPartition(Max<i32>());
 
-    if (op.GetTopicAutopartitioning()) {
+    if (op.GetTopicAutoPartitioning()) {
         auto * ps = pqConfig.MutablePartitionStrategy();
         ps->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE);
         ps->SetMaxPartitionCount(op.GetMaxPartitionCount());

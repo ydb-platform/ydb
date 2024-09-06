@@ -963,7 +963,7 @@ message TCreateCdcStream {
     optional uint32 TopicPartitions = 4;
 
     // Topic autopartitioning settings
-    optional bool TopicAutopartitioning = 5 [default = false]; // we always can split and merge of topic partitions
+    optional bool TopicAutoPartitioning = 5 [default = false]; // we always can split and merge of topic partitions
     optional uint32 MaxPartitionCount = 6;
 }
 

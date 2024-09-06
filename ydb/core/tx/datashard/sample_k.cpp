@@ -153,7 +153,7 @@ public:
             Response->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
         }
         LOG_T("Finish " << Debug());
-        TActivationContext::ActorContextFor(SelfId()).Send(ResponseActorId, Response.Release());
+        Send(ResponseActorId, Response.Release());
         Driver = nullptr;
         PassAway();
         return nullptr;

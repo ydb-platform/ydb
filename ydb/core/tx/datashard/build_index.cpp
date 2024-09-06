@@ -229,10 +229,8 @@ public:
     }
 
     TAutoPtr<IDestructable> Finish(EAbort abort) noexcept override {
-        auto ctx = TActivationContext::ActorContextFor(TBase::SelfId());
-
         if (Uploader) {
-            ctx.Send(Uploader, new TEvents::TEvPoisonPill);
+            this->Send(Uploader, new TEvents::TEvPoisonPill);
             Uploader = {};
         }
 
@@ -255,7 +253,7 @@ public:
 
         UploadStatusToMessage(progress->Record);
 
-        ctx.Send(ProgressActorId, progress.Release());
+        this->Send(ProgressActorId, progress.Release());
 
         LOG_D("Finish " << Debug());
 
@@ -353,7 +351,7 @@ private:
             progress->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS);
             UploadStatusToMessage(progress->Record);
 
-            ctx.Send(ProgressActorId, progress.Release());
+            this->Send(ProgressActorId, progress.Release());
 
             if (!ReadBuf.IsEmpty() && ReadBuf.IsReachLimits(Limits)) {
                 ReadBuf.FlushTo(WriteBuf);

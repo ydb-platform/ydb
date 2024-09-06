@@ -367,10 +367,9 @@ public:
 
     TAutoPtr<IDestructable> Finish(EAbort abort) noexcept final {
         LOG_T("Finish " << Debug());
-        auto ctx = TActivationContext::ActorContextFor(this->SelfId());
 
         if (Uploader) {
-            ctx.Send(Uploader, new TEvents::TEvPoisonPill);
+            Send(Uploader, new TEvents::TEvPoisonPill);
             Uploader = {};
         }
 
@@ -383,7 +382,7 @@ public:
             record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
         }
         NYql::IssuesToMessage(UploadStatus.Issues, record.MutableIssues());
-        ctx.Send(ResponseActorId, Response.Release());
+        Send(ResponseActorId, Response.Release());
 
         Driver = nullptr;
         this->PassAway();

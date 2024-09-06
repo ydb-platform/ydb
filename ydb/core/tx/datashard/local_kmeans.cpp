@@ -53,18 +53,14 @@ Y_PURE_FUNCTION TTriWayDotProduct<TRes> CosineImpl(const ui8* lhs, const ui8* rh
 
 namespace NKikimr::NDataShard {
 
-TTableRange CreateRangeFrom(const TUserTable& table, ui32 parent, std::vector<TCell>& cells) {
+TTableRange CreateRangeFrom(const TUserTable& table, ui32 parent, TCell& from, TCell& to) {
     if (parent == 0) {
         return table.GetTableRange();
     }
-    // TODO(mbkkt) unfortunately it doesn't work, but it should, seems like a bug, for some reason Seek to {some, inf} doesn't find anything
-    // from = TCell::Make(parent - 1);
-    // to = TCell::Make(parent);
-    // TTableRange range{{&to, 1}, false, {&to, 1}, true};
-    cells.resize(table.KeyColumnTypes.size());
-    cells[0] = TCell::Make(parent);
-    TTableRange range{cells, true, {&cells[0], 1}, true};
-    return Intersect(table.KeyColumnTypes, range, table.GetTableRange());
+    from = TCell::Make(parent - 1);
+    to = TCell::Make(parent);
+    TTableRange range{{&from, 1}, false, {&to, 1}, true};
+        return Intersect(table.KeyColumnTypes, range, table.GetTableRange());
 }
 
 NTable::TLead CreateLeadFrom(const TTableRange& range) {
@@ -823,8 +819,8 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
         ScanManager.Drop(id);
     }
 
-    std::vector<TCell> cells;
-    const auto range = CreateRangeFrom(userTable, record.GetParent(), cells);
+    TCell from, to;
+    const auto range = CreateRangeFrom(userTable, record.GetParent(), from, to);
     if (range.IsEmptyRange(userTable.KeyColumnTypes)) {
         badRequest(TStringBuilder() << " requested range doesn't intersect with table range");
         return;

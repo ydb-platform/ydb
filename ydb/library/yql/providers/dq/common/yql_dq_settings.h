@@ -133,6 +133,7 @@ struct TDqSettings {
 
     NCommon::TConfSetting<ui64, false> _MaxAttachmentsSize;
     NCommon::TConfSetting<bool, false> DisableCheckpoints;
+    NCommon::TConfSetting<TString, false> Scheduler;
 
     // This options will be passed to executor_actor and worker_actor
     template <typename TProtoConfig>
@@ -186,6 +187,7 @@ struct TDqSettings {
         SAVE_SETTING(TaskRunnerStats);
         SAVE_SETTING(SpillingEngine);
         SAVE_SETTING(DisableCheckpoints);
+        SAVE_SETTING(Scheduler);
 #undef SAVE_SETTING
     }
 

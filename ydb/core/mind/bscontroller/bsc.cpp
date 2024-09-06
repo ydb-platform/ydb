@@ -270,6 +270,13 @@ void TBlobStorageController::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev) {
     const bool initial = !HostRecords;
     HostRecords = std::make_shared<THostRecordMap::element_type>(ev->Get());
     if (initial) {
+        if (auto *appData = AppData()) {
+            if (appData->Icb) {
+                EnableSelfHealWithDegraded = std::make_shared<TControlWrapper>(0, 0, 1);
+                appData->Icb->RegisterSharedControl(*EnableSelfHealWithDegraded,
+                    "BlobStorageControllerControls.EnableSelfHealWithDegraded");
+            }
+        }
         SelfHealId = Register(CreateSelfHealActor());
         PushStaticGroupsToSelfHeal();
         if (StorageConfigObtained) {

@@ -218,14 +218,24 @@ struct AggregateFunctionSumData
     }
 };
 
+template <typename ArrowType>
+struct UnwrapArrowType {
+    using Type = arrow::TypeTraits<ArrowType>::CType;
+};
+
+template <>
+struct UnwrapArrowType<arrow::Decimal128Type> {
+    using Type = arrow::Decimal128;
+};
 
 /// Counts the sum of the numbers.
 template <typename T, typename TResult, typename Data>
 class AggregateFunctionSum final : public IAggregateFunctionDataHelper<Data, AggregateFunctionSum<T, TResult, Data>>
 {
 public:
-    using ColumnType = arrow::NumericArray<T>;
-    using MutableColumnType = arrow::NumericBuilder<TResult>;
+    using ColumnType = typename arrow::TypeTraits<T>::ArrayType;
+    using ValueType = typename UnwrapArrowType<T>::Type;
+    using MutableColumnType = typename arrow::TypeTraits<TResult>::BuilderType;
 
     explicit AggregateFunctionSum(const DataTypes & argument_types_)
         : IAggregateFunctionDataHelper<Data, AggregateFunctionSum<T, TResult, Data>>(argument_types_, {})
@@ -237,15 +247,25 @@ public:
 
     DataTypePtr getReturnType() const override
     {
-        return std::make_shared<TResult>();
+        if constexpr (arrow::is_decimal128_type<TResult>::value) {
+            return std::make_shared<TResult>(22, 9);
+        } else {
+            return std::make_shared<TResult>();
+        }
     }
 
     bool allocatesMemoryInArena() const override { return false; }
 
+    const ValueType *get_raw_values(const ColumnType &column) const {
+        static_assert(std::is_same_v<ValueType, arrow::Decimal128> || std::is_same_v<ValueType, std::decay_t<decltype(*column.raw_values())>>);
+
+        return reinterpret_cast<const ValueType *>(column.raw_values());
+    }
+
     void add(AggregateDataPtr __restrict place, const IColumn ** columns, size_t row_num, Arena *) const override
     {
         const auto & column = assert_cast<const ColumnType &>(*columns[0]);
-        this->data(place).add(column.Value(row_num));
+        this->data(place).add(*(get_raw_values(column) + row_num));
     }
 
     void addBatchSinglePlace(
@@ -259,11 +279,11 @@ public:
         if (auto * flags = column.null_bitmap_data())
         {
             auto * condition_map = flags + column.offset();
-            this->data(place).addManyConditional(column.raw_values(), condition_map, row_begin, row_end);
+            this->data(place).addManyConditional(get_raw_values(column), condition_map, row_begin, row_end);
         }
         else
         {
-            this->data(place).addMany(column.raw_values(), row_begin, row_end);
+            this->data(place).addMany(get_raw_values(column), row_begin, row_end);
         }
     }
 
@@ -285,8 +305,7 @@ class WrappedSum final : public ArrowAggregateFunctionWrapper
 {
 public:
     template <typename T, typename ResultT>
-    using AggregateFunctionSumWithOverflow =
-        AggregateFunctionSum<T, ResultT, AggregateFunctionSumData<typename arrow::TypeTraits<ResultT>::CType>>;
+    using AggregateFunctionSumWithOverflow = AggregateFunctionSum<T, ResultT, AggregateFunctionSumData<typename UnwrapArrowType<ResultT>::Type>>;
 
     WrappedSum(std::string name)
         : ArrowAggregateFunctionWrapper(std::move(name))
@@ -328,6 +347,8 @@ public:
                 return std::make_shared<AggFunc<arrow::DoubleType, arrow::DoubleType>>(argument_types);
             case arrow::Type::DURATION:
                 return std::make_shared<AggFunc<arrow::DurationType, arrow::DurationType>>(argument_types);
+            case arrow::Type::DECIMAL:
+                return std::make_shared<AggFunc<arrow::Decimal128Type, arrow::Decimal128Type>>(argument_types);
             default:
                 break;
         }

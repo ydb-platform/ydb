@@ -336,7 +336,7 @@ private:
             case NYdb::EPrimitiveType::Interval:
                 return TStringBuilder() << valueParser.GetInterval();
             case NYdb::EPrimitiveType::Date32:
-                return valueParser.GetInt32();
+                return valueParser.GetDate32();
             case NYdb::EPrimitiveType::Datetime64:
                 return valueParser.GetDatetime64();
             case NYdb::EPrimitiveType::Timestamp64:

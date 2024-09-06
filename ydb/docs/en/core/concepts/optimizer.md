@@ -6,7 +6,7 @@ A query plan is a graph of operations, such as reading data from a source, filte
 
 ## Rule-based Optimizer
 
-A significant part of the optimizations in YDB is applicable to almost any query plan, which eliminates the need to analyze alternative plans and their costs. The rule-based optimizer consists of a set of heuristic rules that are applied whenever possible. For example, it is useful to filter out data as early as possible in the execution plan for any query. Each optimizer rule comprises of a condition that triggers the rule and rewriting logic that is executed when the plan is applied. Rules are applied iteratively as long as any rule conditions match.
+A significant part of the optimizations in YDB is applicable to almost any query plan, which eliminates the need to analyze alternative plans and their costs. The rule-based optimizer consists of a set of heuristic rules that are applied whenever possible. For example, it is useful to filter out data as early as possible in the execution plan for any query. Each optimizer rule comprises a condition that triggers the rule and rewriting logic that is executed when the plan is applied. Rules are applied iteratively as long as any rule conditions match.
 
 ## Cost-Based Query Optimizer
 
@@ -20,7 +20,7 @@ The cost optimizer consists of three main components:
 
 ### Plan enumerator
 
-The current Cost Based Optimizer in {{ ydb-short-name }} enumerates all useful join trees, for which the join conditions are defined. We first build a join hypergraph, where the nodes are tables and edges are join conditions. Depending on how the original query was written, the join hypergraph may have quite different topologies, varying from simple chain-like graphs to complex cliques. The resulting topology of the join graph determines how many possible alternite plans need to be considered by the optimizer.
+The current Cost-Based Optimizer in {{ ydb-short-name }} enumerates all useful join trees, for which the join conditions are defined. We first build a join hypergraph, where the nodes are tables and edges are join conditions. Depending on how the original query was written, the join hypergraph may have quite different topologies, varying from simple chain-like graphs to complex cliques. The resulting topology of the join graph determines how many possible alternite plans need to be considered by the optimizer.
 
 For example, a star is a common topology in analytical queries, where a main fact table is joined to multiple dimension tables:
 
@@ -57,7 +57,7 @@ The topology greatly influences the number of alternative plans that the optimiz
 | Star | 18 |
 | Clique | 15 |
 
-{{ ydb-short-name }} uses a modification of the [DPHyp](https://www.researchgate.net/publication/47862092_Dynamic_Programming_Strikes_Back) algorithm to search for the best join order. DPHyp is modern dynamic programming algorithm for query optimization that avoids enumerating unnecessary alternatives and allows you to optimize plans with `JOIN` operators, complex predicates, and even `GROUP BY` and `ORDER BY` operators.
+{{ ydb-short-name }} uses a modification of the [DPHyp](https://www.researchgate.net/publication/47862092_Dynamic_Programming_Strikes_Back) algorithm to search for the best join order. DPHyp is a modern dynamic programming algorithm for query optimization that avoids enumerating unnecessary alternatives and allows you to optimize plans with `JOIN` operators, complex predicates, and even `GROUP BY` and `ORDER BY` operators.
 
 ### Cost Estimation Function
 
@@ -65,16 +65,16 @@ In order to compare plans, we need to estimate their costs. Cost Function estima
 
 ### Statistics for the Cost Based Optimizer {#statistics}
 
-Cost Based Optimizer uses tables statistics and individual column statistics. {{ ydb-short-name }} collects and maintains statistics in the background. You can force statistics collection using the [ANALYZE](../yql/reference/syntax/analyze.md) command.
+Cost Based Optimizer uses table statistics and individual column statistics. {{ ydb-short-name }} collects and maintains statistics in the background. You can force statistics collection using the [ANALYZE](../yql/reference/syntax/analyze.md) command.
 
 Current set of table statistics:
 
-* Number of records;
+* Number of records
 * Table size in bytes
 
 Current set of column statistics:
 
-* [Count-min sketch](https://en.wikipedia.org/wiki/Count%E2%80%93min_sketch).
+* [Count-min sketch](https://en.wikipedia.org/wiki/Count%E2%80%93min_sketch)
 
 Current cost optimization levels
 

@@ -145,7 +145,7 @@ private:
             TPeer node = {SelfId().NodeId(), InstanceId + "," + HostName(), 0, 0, 0, DataCenter};
             bool selfPlacement = true;
             if (!Peers.empty()) {
-                auto FirstPeer = NextPeer;
+                auto firstPeer = NextPeer;
                 while (true) {
                     Y_ABORT_UNLESS(NextPeer < Peers.size());
                     auto& nextNode = Peers[NextPeer];
@@ -154,9 +154,9 @@ private:
                         NextPeer = 0;
                     }
 
-                    if (    (!UseDataCenter || DataCenter.empty() || nextNode.DataCenter.empty() || DataCenter == nextNode.DataCenter) // non empty DC must match
-                            && (   nextNode.MemoryLimit == 0 // memory is NOT limited
-                                || nextNode.MemoryLimit >= nextNode.MemoryAllocated + totalMemoryLimit) // or enough
+                    if ((!UseDataCenter || DataCenter.empty() || nextNode.DataCenter.empty() || DataCenter == nextNode.DataCenter) // non empty DC must match
+                         && (nextNode.MemoryLimit == 0 // memory is NOT limited
+                             || nextNode.MemoryLimit >= nextNode.MemoryAllocated + totalMemoryLimit) // or enough
                     ) {
                         // adjust allocated size to place next tasks correctly, will be reset after next health check
                         nextNode.MemoryAllocated += totalMemoryLimit;
@@ -169,7 +169,7 @@ private:
                         break;
                     }
 
-                    if (NextPeer == FirstPeer) {  // we closed loop w/o success, fallback to self placement then
+                    if (NextPeer == firstPeer) {  // we closed loop w/o success, fallback to self placement then
                         break;
                     }
                 }

@@ -1,8 +1,8 @@
 # Apache Superset
 
-Apache Superset это современная платформа для анализа и визуализации данных.
+Apache Superset — это современная платформа для анализа и визуализации данных.
 
-Поддержка [сетевого протокола PostgreSQL](https://ydb.tech/docs/ru/postgresql/intro) в {{ ydb-short-name }} позволяет использовать [Apache Superset](https://superset.apache.org/) для запросов и визуализации данных из {{ ydb-short-name }}.
+Поддержка [сетевого протокола PostgreSQL](../../postgresql/intro.md) в {{ ydb-short-name }} позволяет использовать [Apache Superset](https://superset.apache.org/) для выполнения запросов и визуализации данных из {{ ydb-short-name }}.
 
 ## Пререквизиты
 
@@ -15,23 +15,24 @@ Apache Superset это современная платформа для анал
 
 ## Создание подключения к {{ ydb-short-name }} {#add-database-connection}
 
-Для создания подключения к {{ ydb-short-name }} из Apache Superset с использованием сетевого протокола PostgreSQL необходимо выполнить следующие шаги:
+Чтобы создать подключение к {{ ydb-short-name }} из Apache Superset с использованием сетевого протокола PostgreSQL, выполните следующие шаги:
 
-1. В верхнем меню Apache Superset, наведите курсор на **Settings** и выберите в выпадающем списке **Database Connections**.
+1. В верхнем меню Apache Superset наведите курсор на **Settings** и выберите в выпадающем списке пункт **Database Connections**.
 
-1. Нажмите кнопку **+ DATABASE**.
-    Откроется окно мастера **Connect a database**.
+1. Нажмите кнопку **+ DATABASE**. 
 
-1. На первом шаге мастера, нажмите кнопку **PostgreSQL**.
+   Откроется окно мастера **Connect a database**.
 
-1. На втором шаге мастера, введите данные о подключении к {{ ydb-short-name }} в следующие поля:
+1. На первом шаге мастера нажмите кнопку **PostgreSQL**.
 
-   * **HOST**. [Эндпоинт](https://ydb.tech/docs/ru/concepts/connect#endpoint) кластера {{ ydb-short-name }}, к которому осуществляется подключение.
-   * **PORT**. Порт эндпойнта {{ ydb-short-name }}.
-   * **DATABASE NAME**. Путь к [базе данных](https://ydb.tech/docs/ru/concepts/glossary#database) в кластере {{ ydb-short-name }}, к которой будут выполняться запросы.
-   * **USERNAME**. Логин для подключения к базе данных {{ ydb-short-name }}.
-   * **PASSWORD**. Пароль для подключения к базе данных {{ ydb-short-name }}.
-   * **DISPLAY NAME**. Наименование соединения с {{ ydb-short-name }} в Apache Superset.
+1. На втором шаге мастера введите данные для подключения к {{ ydb-short-name }} в следующие поля:
+
+* **HOST** — [эндпоинт](../../concepts/connect.md#endpoint) кластера {{ ydb-short-name }}, к которому осуществляется подключение.
+* **PORT** — порт эндпоинта {{ ydb-short-name }}.
+* **DATABASE NAME** — путь к [базе данных](../../concepts/glossary.md#database) в кластере {{ ydb-short-name }}, к которой будут выполняться запросы.
+* **USERNAME** — логин для подключения к базе данных {{ ydb-short-name }}.
+* **PASSWORD** — пароль для подключения к базе данных {{ ydb-short-name }}.
+* **DISPLAY NAME** — наименование соединения с {{ ydb-short-name }} в Apache Superset.
 
    ![](_assets/superset-ydb-connection-details.png =400x)
 

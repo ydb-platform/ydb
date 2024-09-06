@@ -210,6 +210,14 @@ public:
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, ParticipantWriteTable,
         .SetStreamingEnabled(true));
 
+    // Shuffle service
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, StartShuffle);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, FinishShuffle);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, WriteShuffleData,
+        .SetStreamingEnabled(true));
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, ReadShuffleData,
+        .SetStreamingEnabled(true));
+
     // Misc
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, CheckClusterLiveness);
 };

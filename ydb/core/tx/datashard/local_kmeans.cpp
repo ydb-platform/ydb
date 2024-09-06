@@ -53,13 +53,18 @@ Y_PURE_FUNCTION TTriWayDotProduct<TRes> CosineImpl(const ui8* lhs, const ui8* rh
 
 namespace NKikimr::NDataShard {
 
-TTableRange CreateRangeFrom(const TUserTable& table, ui32 parent) {
+TTableRange CreateRangeFrom(const TUserTable& table, ui32 parent, std::vector<TCell>& cells) {
     if (parent == 0) {
         return table.GetTableRange();
     }
-    const auto parentCell = TCell::Make(parent);
-    const TTableRange parentRange{{&parentCell, 1}};
-    return Intersect(table.KeyColumnTypes, table.GetTableRange(), parentRange);
+    // TODO(mbkkt) unfortunately it doesn't work, but it should, seems like a bug, for some reason Seek to {some, inf} doesn't find anything
+    // from = TCell::Make(parent - 1);
+    // to = TCell::Make(parent);
+    // TTableRange range{{&to, 1}, false, {&to, 1}, true};
+    cells.resize(table.KeyColumnTypes.size());
+    cells[0] = TCell::Make(parent);
+    TTableRange range{cells, true, {&cells[0], 1}, true};
+    return Intersect(table.KeyColumnTypes, range, table.GetTableRange());
 }
 
 NTable::TLead CreateLeadFrom(const TTableRange& range) {
@@ -108,8 +113,8 @@ struct TMetric {
 
 template <typename T>
 struct TCosineSimilarity: TMetric<T> {
-    using TCoord = TMetric<T>::TCoord;
-    using TSum = TMetric<T>::TSum;
+    using TCoord = typename TMetric<T>::TCoord;
+    using TSum = typename TMetric<T>::TSum;
     // double used to avoid precision issues
     using TRes = double;
 
@@ -128,8 +133,8 @@ struct TCosineSimilarity: TMetric<T> {
 
 template <typename T>
 struct TL1Distance: TMetric<T> {
-    using TCoord = TMetric<T>::TCoord;
-    using TSum = TMetric<T>::TSum;
+    using TCoord = typename TMetric<T>::TCoord;
+    using TSum = typename TMetric<T>::TSum;
     using TRes = std::conditional_t<std::is_floating_point_v<T>, T, ui64>;
 
     static TRes Init() {
@@ -144,8 +149,8 @@ struct TL1Distance: TMetric<T> {
 
 template <typename T>
 struct TL2Distance: TMetric<T> {
-    using TCoord = TMetric<T>::TCoord;
-    using TSum = TMetric<T>::TSum;
+    using TCoord = typename TMetric<T>::TCoord;
+    using TSum = typename TMetric<T>::TSum;
     using TRes = std::conditional_t<std::is_floating_point_v<T>, T, ui64>;
 
     static TRes Init() {
@@ -160,8 +165,8 @@ struct TL2Distance: TMetric<T> {
 
 template <typename T>
 struct TMaxInnerProductSimilarity: TMetric<T> {
-    using TCoord = TMetric<T>::TCoord;
-    using TSum = TMetric<T>::TSum;
+    using TCoord = typename TMetric<T>::TCoord;
+    using TSum = typename TMetric<T>::TSum;
     using TRes = std::conditional_t<std::is_floating_point_v<T>, T, i64>;
 
     static TRes Init() {
@@ -176,19 +181,13 @@ struct TMaxInnerProductSimilarity: TMetric<T> {
 
 template <typename TMetric>
 struct TCalculation: TMetric {
-    using TEmbedding = std::vector<typename TMetric::TSum>;
-
-    struct TAggregated {
-        TEmbedding Cluster;
-        ui64 Count = 0;
-    };
-
-    ui32 FindClosest(std::span<const TString> clusters, const char* embedding, std::span<const TAggregated> aggregated) {
-        auto min = TMetric::Init();
+    ui32 FindClosest(std::span<const TString> clusters, const char* embedding) {
+        auto min = this->Init();
         ui32 closest = std::numeric_limits<ui32>::max();
         for (size_t i = 0; const auto& cluster : clusters) {
-            auto distance = TMetric::Distance(cluster.data(), embedding);
-            if (distance < min || (distance == min && aggregated[i].Count < aggregated[closest].Count)) {
+            auto distance = this->Distance(cluster.data(), embedding);
+            if (distance < min) {
+                min = distance;
                 closest = i;
             }
             ++i;
@@ -197,6 +196,10 @@ struct TCalculation: TMetric {
     }
 };
 
+// This scan contains 3 phases:
+// 1. First iteration collect sample of clusters
+// 2. Then N iterations recompute clusters (main cycle of batched kmeans)
+// 3. Finally last iteration upload clusters to level table and postings to corresponding posting table
 template <typename TMetric>
 class TLocalKMeansScan final: public TActor<TLocalKMeansScan<TMetric>>, public NTable::IScan, private TCalculation<TMetric> {
 protected:
@@ -237,7 +240,13 @@ protected:
     std::vector<TString> Clusters;
 
     // KMeans
-    std::vector<typename TCalculation<TMetric>::TAggregated> Aggregated;
+    using TEmbedding = std::vector<typename TMetric::TSum>;
+
+    struct TAggregated {
+        TEmbedding Cluster;
+        ui64 Count = 0;
+    };
+    std::vector<TAggregated> Aggregated;
 
     // Upload
     std::shared_ptr<TTypes> TargetTypes;
@@ -392,7 +401,7 @@ public:
         }
 
         Y_ASSERT(State == EState::KMEANS);
-        RecomputeClusters();
+        RecomputeClusters(Round == MaxRounds);
         if (Round == MaxRounds) {
             lead = std::move(Lead);
             lead.SetTags(UploadScan);
@@ -580,15 +589,24 @@ private:
         ++aggregate.Count;
     }
 
-    void RecomputeClusters() {
-        auto* clusters = Clusters.data();
+    void RecomputeClusters(bool last) {
+        auto r = Clusters.begin();
+        auto w = r;
         for (auto& aggregate : Aggregated) {
-            auto& cluster = *clusters++;
-            if (aggregate.Count == 0) {
-                continue; // TODO(mbkkt) is it impossible?
+            if (aggregate.Count != 0) {
+                auto& cluster = *r;
+                this->Fill(cluster, aggregate.Cluster.data(), aggregate.Count);
+                if (w != r) {
+                    Y_ASSERT(w < r);
+                    *w = std::move(*r);
+                }
+                ++w;
+            } else if (!last) {
+                ++w;
             }
-            this->Fill(cluster, aggregate.Cluster.data(), aggregate.Count);
+            ++r;
         }
+        Clusters.erase(w, Clusters.end());
     }
 
     ui64 GetProbability() {
@@ -603,7 +621,7 @@ private:
         if (!this->IsExpectedSize(embedding)) {
             return std::numeric_limits<ui32>::max();
         }
-        return this->FindClosest(Clusters, embedding.data(), Aggregated);
+        return this->FindClosest(Clusters, embedding.data());
     }
 
     EScan FeedSample(const TRow& row) noexcept {
@@ -805,7 +823,8 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
         ScanManager.Drop(id);
     }
 
-    const auto range = CreateRangeFrom(userTable, record.GetParent());
+    std::vector<TCell> cells;
+    const auto range = CreateRangeFrom(userTable, record.GetParent(), cells);
     if (range.IsEmptyRange(userTable.KeyColumnTypes)) {
         badRequest(TStringBuilder() << " requested range doesn't intersect with table range");
         return;
@@ -832,8 +851,8 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
         return;
     }
 
-    if (record.GetK() < 1) {
-        badRequest(TStringBuilder() << "Should be requested at least single row");
+    if (record.GetK() < 2) {
+        badRequest(TStringBuilder() << "Should be requested partition on at least two rows");
         return;
     }
 
@@ -842,11 +861,11 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
         return;
     }
 
-    TScanOptions scanOpts;
-    scanOpts.SetSnapshotRowVersion(rowVersion);
-    scanOpts.SetResourceBroker("build_index", 10); // TODO(mbkkt) Should be different group?
-
     const auto& settings = record.GetSettings();
+    if (settings.vector_dimension() < 1) {
+        badRequest(TStringBuilder() << "Dimension of vector should be at least one");
+        return;
+    } 
     TAutoPtr<NTable::IScan> scan;
 
     auto createScan = [&]<typename T> {
@@ -874,6 +893,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
         }
     };
 
+    // TODO(mbkkt) unify distance and similarity to single field in proto
     if (settings.has_similarity() && settings.has_distance()) {
         badRequest("Shouldn't be specified similarity and distance at the same time");
     } else if (settings.has_similarity()) {
@@ -911,6 +931,9 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
         return;
     }
 
+    TScanOptions scanOpts;
+    scanOpts.SetSnapshotRowVersion(rowVersion);
+    scanOpts.SetResourceBroker("build_index", 10); // TODO(mbkkt) Should be different group?
     const auto scanId = QueueScan(userTable.LocalTid, std::move(scan), ev->Cookie, scanOpts);
     TScanRecord recCard = {scanId, seqNo};
     ScanManager.Set(id, recCard);

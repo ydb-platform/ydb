@@ -8,40 +8,69 @@
 
 namespace NKikimr::NCache {
 
-namespace {
-
-template <typename TKey>
+template <typename TKey, typename TKeyHash>
 class TGhostQueue {
     struct TGhost : public TIntrusiveListItem<TGhost> {
+        TKey Key;
         ui64 Size;
+
+        TGhost(const TKey& key, ui64 size)
+            : Key(key)
+            , Size(size)
+        {}
     };
 
 public:
     TGhostQueue(ui64 limit)
         : Limit(limit)
-    {
+    {}
+
+    void Add(const TKey& key, ui64 size) {
+        auto inserted = GhostsMap.emplace(key, MakeHolder<TGhost>(key, size));
+        Y_ABORT_UNLESS(inserted.second);
+        GhostsQueue.PushFront(inserted.first->second.Get());
+        Size += size;
+
+        EvictWhileFull();
     }
 
-    void Add(TKey key, ui64 size) {
-        Y_UNUSED(key, size);
-    }
-
-    bool Erase(TKey key, ui64 size) {
-        Y_UNUSED(key, size);
+    bool Erase(const TKey& key, ui64 size) {
+        if (auto ptr = GhostsMap.FindPtr(key)) {
+            Y_ABORT_UNLESS((*ptr)->Size == size);
+            Erase((*ptr).Get());
+            return true;
+        }
         return false;
+    }
+    
+    void UpdateLimit(ui64 limit) {
+        Limit = limit;
+        EvictWhileFull();
     }
 
 private:
+    void EvictWhileFull() {
+        while (!GhostsQueue.Empty() && Size > Limit) {
+            Erase(GhostsQueue.Back());
+        }
+    }
+
+    void Erase(TGhost* ghost) {
+        Y_ABORT_UNLESS(Size >= ghost->Size);
+        Size -= ghost->Size;
+        ghost->Unlink();
+        Y_ABORT_UNLESS(GhostsMap.erase(ghost->Key));
+    }
+
     ui64 Limit;
     ui64 Size = 0;
-    THashMap<TKey, TGhost> GhostsMap;
+    THashMap<TKey, THolder<TGhost>, TKeyHash> GhostsMap;
     TIntrusiveList<TGhost> GhostsQueue;
 };
 
-}
-
 template <typename TItem
         , typename TKey
+        , typename TKeyHash
         , typename TSize
         , typename TLocation
         , typename TFrequency
@@ -74,7 +103,7 @@ public:
         : Limit(limit)
         , SmallQueue(ELocation::SmallQueue)
         , MainQueue(ELocation::MainQueue)
-        , GhostQueue(127)
+        , GhostQueue(limit)
     {}
 
     TItem* EvictNext() override {
@@ -152,6 +181,7 @@ public:
 
     void UpdateLimit(ui64 limit) override {
         Limit = limit;
+        GhostQueue.UpdateLimit(limit);
     }
 
 private:
@@ -247,7 +277,7 @@ private:
 
     TQueue SmallQueue;
     TQueue MainQueue;
-    TGhostQueue<TKey> GhostQueue;
+    TGhostQueue<TKey, TKeyHash> GhostQueue;
 
 };
 

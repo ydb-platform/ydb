@@ -131,9 +131,20 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             Y_VERIFY_S(CacheFlags2 == 0, "Unexpected " << CacheFlags2 << " page cache flags 2");
         }
 
-        struct TKey : std::pair<TLogoBlobID, ui32> {
+        struct TKey {
+            TLogoBlobID LogoBlobID;
+            ui32 PageId;
+
+            auto operator<=>(const TKey&) const = default;
+
             static TKey Get(const TPage *x) {
-                return {{x->Collection->MetaId, x->PageId}};
+                return {x->Collection->MetaId, x->PageId};
+            }
+        };
+
+        struct TKeyHash {
+            inline size_t operator()(const TKey& key) const {
+                return MultiHash(key.LogoBlobID.Hash(), key.PageId);
             }
         };
 
@@ -254,7 +265,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         switch (Config->ReplacementPolicy) {
             case NKikimrSharedCache::S3FIFO:
-                return MakeHolder<TS3FIFOCache<TPage, TPage::TKey, TPage::TSize, TPage::TCacheFlags1, TPage::TCacheFlags2>>(1);
+                return MakeHolder<TS3FIFOCache<TPage, TPage::TKey, TPage::TKeyHash, TPage::TSize, TPage::TCacheFlags1, TPage::TCacheFlags2>>(1);
             case NKikimrSharedCache::ThreeLeveledLRU:
             default: {
                 TCacheCacheConfig cacheCacheConfig(1, Config->Counters->FreshBytes, Config->Counters->StagingBytes, Config->Counters->WarmBytes);

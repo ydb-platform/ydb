@@ -163,7 +163,7 @@ public:
         str << "</tr>";
     }
 
-    void PrintHTML(IOutputStream &str, TQuotaRecord *sharedQuota, NKikimrBlobStorage::TPDiskSpaceColor::E *colorBorder) {
+    void PrintHTML(IOutputStream &str, TQuotaRecord *sharedQuota, NKikimrBlobStorage::TPDiskSpaceColor::E *colorBorder, double *borderOccupancy) {
         str << "<pre>";
         str << "ColorLimits#\n";
         ColorLimits.Print(str);
@@ -171,8 +171,12 @@ public:
         str << "\nExpectedOwnerCount# " << ExpectedOwnerCount;
         str << "\nActiveOwners# " << ActiveOwnerIds.size();
         if (colorBorder) {
-            str << "\nColorBorder# " << NKikimrBlobStorage::TPDiskSpaceColor::E_Name(*colorBorder) << "\n";
+            str << "\nColorBorder# " << NKikimrBlobStorage::TPDiskSpaceColor::E_Name(*colorBorder);
         }
+        if (borderOccupancy) {
+            str << "\nColorBorderOccupancy# " << *borderOccupancy;
+        }
+        str << "\n";
         str << "</pre>";
         str << "<table class='table table-sortable tablesorter tablesorter-bootstrap table-bordered'>";
         str << R"_(<tr>
@@ -531,9 +535,9 @@ public:
 
     void PrintHTML(IOutputStream &str) {
         str << "<h4>GlobalQuota</h4>";
-        GlobalQuota->PrintHTML(str, nullptr, nullptr);
+        GlobalQuota->PrintHTML(str, nullptr, nullptr, nullptr);
         str << "<h4>OwnerQuota</h4>";
-        OwnerQuota->PrintHTML(str, SharedQuota.Get(), &ColorBorder);
+        OwnerQuota->PrintHTML(str, SharedQuota.Get(), &ColorBorder, &ColorBorderOccupancy);
     }
 
     ui32 ColorFlagLimit(TOwner owner, NKikimrBlobStorage::TPDiskSpaceColor::E color) {

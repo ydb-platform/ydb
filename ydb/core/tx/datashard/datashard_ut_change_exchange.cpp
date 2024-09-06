@@ -839,7 +839,9 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 .SetEnableChangefeedDebeziumJsonFormat(true)
                 .SetEnableTopicMessageMeta(true)
                 .SetEnableChangefeedInitialScan(true)
-                .SetEnableUuidAsPrimaryKey(true);
+                .SetEnableUuidAsPrimaryKey(true)
+                .SetEnableTopicSplitMerge(true)
+                .SetEnablePQConfigTransactionsAtSchemeShard(true);
 
             Server = new TServer(settings);
             if (useRealThreads) {

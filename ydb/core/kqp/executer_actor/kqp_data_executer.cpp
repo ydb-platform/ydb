@@ -210,7 +210,7 @@ public:
         if (LocksBroken) {
             return ReplyErrorAndDie(
                 Ydb::StatusIds::ABORTED,
-                YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, "Transaction locks invalidated. Unknown table."););
+                YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, "Transaction locks invalidated. Unknown table."));
         }
 
         ResponseEv->Record.MutableResponse()->SetStatus(Ydb::StatusIds::SUCCESS);

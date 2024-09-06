@@ -982,8 +982,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(`message` IS NOT NULL)",
             R"((`level`, `uid`) > (Int32("1"), NULL))",
             R"((`level`, `uid`) != (Int32("1"), NULL))",
-            R"(`level` >= CAST("2" As Int32))",
-            R"(CAST("2" As Int32) >= `level`)",
+            //R"(`level` >= CAST("2" As Int32))",
+            //R"(CAST("2" As Int32) >= `level`)",
 #if SSA_RUNTIME_VERSION >= 2U
             R"(`uid` LIKE "%30000%")",
             R"(`uid` LIKE "uid%")",

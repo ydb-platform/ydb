@@ -34,6 +34,10 @@ TKikimrRunner GetKikimrRunnerWithStats() {
     setting.SetValue(STATS);
     settings.push_back(setting);
 
+    setting.SetName("CostBasedOptimizationLevel");
+    setting.SetValue("4");
+    settings.push_back(setting);
+
     TKikimrSettings serverSettings;
     serverSettings.SetKqpSettings(settings);
 

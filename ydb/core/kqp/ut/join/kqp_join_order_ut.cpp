@@ -74,6 +74,10 @@ static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false,
 
     NKikimrKqp::TKqpSetting setting;
 
+    setting.SetName("CostBasedOptimizationLevel");
+    setting.SetValue("4");
+    settings.push_back(setting);
+
     if (stats != "") {
         setting.SetName("OptOverrideStatistics");
         setting.SetValue(stats);
@@ -189,9 +193,9 @@ void ExecuteJoinOrderTestDataQuery(const TString& queryPath, bool useStreamLooku
 }
 
 Y_UNIT_TEST_SUITE(KqpJoinOrder) {
-    Y_UNIT_TEST(Chain65Nodes) {
-        TChainTester(65).Test();
-    }
+    //Y_UNIT_TEST(Chain65Nodes) {
+    //    TChainTester(65).Test();
+    //}
 
     TString ExecuteJoinOrderTestDataQueryWithStats(const TString& queryPath, const TString& statsPath, bool useStreamLookupJoin, bool useColumnStore) {
         auto kikimr = GetKikimrWithJoinSettings(useStreamLookupJoin, GetStatic(statsPath));

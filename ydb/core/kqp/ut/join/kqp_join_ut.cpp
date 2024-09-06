@@ -1880,7 +1880,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         {
             auto result = session.ExecuteDataQuery(R"(
                 --!syntax_v1
-
+                    pragma ydb.CostBasedOptimizationLevel = "4";
                     pragma ydb.OptOverrideStatistics = '{"/Root/Input1": {"n_rows":10000}, "/Root/Input2" : {"n_rows":10000}, "/Root/Input3":{"n_rows":10000}, "/Root/Input4":{"n_rows":10000}, "/Root/Input5":{"n_rows":10000}}';
 
                     $rightSemi = select * from Input2 as b right semi join Input1 as a on a.v1 = b.v2 and a.k1 = b.k2;

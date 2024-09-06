@@ -55,7 +55,7 @@
                                                             "RegionID"
                                                         ],
                                                         "Node Type": "HashShuffle",
-                                                        "PlanNodeId": 7,
+                                                        "PlanNodeId": 8,
                                                         "PlanNodeType": "Connection",
                                                         "Plans": [
                                                             {
@@ -77,7 +77,7 @@
                                                                 "Plans": [
                                                                     {
                                                                         "Node Type": "UnionAll",
-                                                                        "PlanNodeId": 5,
+                                                                        "PlanNodeId": 6,
                                                                         "PlanNodeType": "Connection",
                                                                         "Plans": [
                                                                             {
@@ -122,7 +122,7 @@
                                                                     },
                                                                     {
                                                                         "Node Type": "UnionAll",
-                                                                        "PlanNodeId": 3,
+                                                                        "PlanNodeId": 4,
                                                                         "PlanNodeType": "Connection",
                                                                         "Plans": [
                                                                             {

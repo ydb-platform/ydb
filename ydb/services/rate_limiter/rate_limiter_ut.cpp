@@ -113,9 +113,9 @@ private:
             }
 
             if (Settings.IsUsedAmount_) {
-                request.set_used(Settings.Amount_.GetRef());
+                request.set_used(Settings.Amount_.value());
             } else {
-                request.set_required(Settings.Amount_.GetRef());
+                request.set_required(Settings.Amount_.value());
             }
 
             auto id = SelfId();
@@ -277,7 +277,7 @@ Y_UNIT_TEST_SUITE(TGRpcRateLimiterTest) {
             const auto listResultFuture = setup.RateLimiterClient.ListResources(TTestSetup::CoordinationNodePath, "", TListResourcesSettings().Recursive(true));
             ASSERT_STATUS_SUCCESS(listResultFuture);
             const auto listResult = listResultFuture.GetValueSync();
-            TVector<TString> paths = listResult.GetResourcePaths();
+            auto paths = listResult.GetResourcePaths();
             std::sort(paths.begin(), paths.end());
             UNIT_ASSERT_VALUES_EQUAL(paths.size(), 5);
             UNIT_ASSERT_VALUES_EQUAL(paths[0], "parent1");
@@ -292,7 +292,7 @@ Y_UNIT_TEST_SUITE(TGRpcRateLimiterTest) {
             const auto listResultFuture = setup.RateLimiterClient.ListResources(TTestSetup::CoordinationNodePath, "", TListResourcesSettings().Recursive(false));
             ASSERT_STATUS_SUCCESS(listResultFuture);
             const auto listResult = listResultFuture.GetValueSync();
-            TVector<TString> paths = listResult.GetResourcePaths();
+            auto paths = listResult.GetResourcePaths();
             std::sort(paths.begin(), paths.end());
             UNIT_ASSERT_VALUES_EQUAL(paths.size(), 2);
             UNIT_ASSERT_VALUES_EQUAL(paths[0], "parent1");
@@ -304,7 +304,7 @@ Y_UNIT_TEST_SUITE(TGRpcRateLimiterTest) {
             const auto listResultFuture = setup.RateLimiterClient.ListResources(TTestSetup::CoordinationNodePath, "parent1", TListResourcesSettings().Recursive());
             ASSERT_STATUS_SUCCESS(listResultFuture);
             const auto listResult = listResultFuture.GetValueSync();
-            TVector<TString> paths = listResult.GetResourcePaths();
+            auto paths = listResult.GetResourcePaths();
             std::sort(paths.begin(), paths.end());
             UNIT_ASSERT_VALUES_EQUAL(paths.size(), 3);
             UNIT_ASSERT_VALUES_EQUAL(paths[0], "parent1");

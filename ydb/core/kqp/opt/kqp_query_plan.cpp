@@ -527,7 +527,7 @@ private:
                 readInfo.LookupBy.push_back(TString(keyColumn->GetName()));
             }
 
-            if (SerializerCtx.Config->CostBasedOptimizationLevel.Get().GetOrElse(TDqSettings::TDefault::CostBasedOptimizationLevel)!=0) {
+            if (SerializerCtx.Config->CostBasedOptimizationLevel.Get().GetOrElse(SerializerCtx.Config->DefaultCostBasedOptimizationLevel)!=0) {
 
                 if (auto stats = SerializerCtx.TypeCtx.GetStats(tableLookup.Raw())) {
                     planNode.OptEstimates["E-Rows"] = TStringBuilder() << stats->Nrows;
@@ -959,7 +959,8 @@ private:
 
         if (auto maybeRead = TMaybeNode<TKqlReadTableBase>(node)) {
             operatorId = Visit(maybeRead.Cast(), planNode);
-        } else if (auto maybeReadRanges = TMaybeNode<TKqlReadTableRangesBase>(node)) {
+        } else if (TMaybeNode<TKqlReadTableRangesBase>(node) && !TMaybeNode<TKqpReadOlapTableRangesBase>(node)) {
+            auto maybeReadRanges = TMaybeNode<TKqlReadTableRangesBase>(node);
             operatorId = Visit(maybeReadRanges.Cast(), planNode);
         } else if (auto maybeLookup = TMaybeNode<TKqlLookupTableBase>(node)) {
             operatorId = Visit(maybeLookup.Cast(), planNode);
@@ -1055,6 +1056,27 @@ private:
 
                 auto mapLambdaInputs = Visit(map.Lambda().Body().Ptr(), planNode);
                 inputIds.insert(inputIds.end(), mapLambdaInputs.begin(), mapLambdaInputs.end());
+            } else if (TMaybeNode<TKqpReadOlapTableRangesBase>(node)) {
+                auto olapTable = TExprBase(node).Cast<TKqpReadOlapTableRangesBase>();
+
+                auto pred = [](const TExprNode::TPtr& n) -> bool { 
+                    if (auto maybeFilter = TMaybeNode<TKqpOlapFilter>(n)) { return true; } return false; 
+                };
+                if (auto maybeOlapFilter = FindNode(olapTable.Process().Body().Ptr(), pred)) {
+                    auto olapFilter = TExprBase(maybeOlapFilter).Cast<TKqpOlapFilter>();
+
+                    TOperator op;
+                    op.Properties["Name"] = "Filter";
+                    
+                    op.Properties["Predicate"] = OlapStr(olapFilter.Condition().Ptr());
+
+                    AddOptimizerEstimates(op, olapFilter);
+
+                    operatorId = AddOperator(planNode, "Filter", std::move(op));
+                    inputIds.push_back(Visit(olapTable, planNode));
+                } else {
+                    operatorId = Visit(olapTable, planNode);
+                }
             } else {
                 for (const auto& child : node->Children()) {
                     if(!child->IsLambda()) {
@@ -1077,6 +1099,52 @@ private:
         }
 
         return inputIds;
+    }
+
+    TString OlapStr(const TExprNode::TPtr& node) {
+        TVector<TString> s;
+
+        if (TMaybeNode<TKqpOlapNot>(node)) {
+            s.emplace_back("Not");
+        } else if (auto maybeList = TMaybeNode<TCoAtomList>(node)) {
+            auto listPtr = maybeList.Cast().Ptr();
+            size_t listSize = listPtr->Children().size();
+            if (listSize == 3) {
+                THashMap<TString, TString> strComp = {
+                    {"eq", "=="}, 
+                    {"neq", "!="},
+                    {"lt", "<"},
+                    {"lte", "<="},
+                    {"gt", ">"},
+                    {"gte", ">="}
+                };
+                TString compSign = TString(listPtr->Child(0)->Content());
+                if (strComp.contains(compSign)) {
+                    TString attr = TString(listPtr->Child(1)->Content());
+                    TString value;
+                    if (listPtr->Child(2)->ChildrenSize() >= 1) {
+                        value = TString(listPtr->Child(2)->Child(0)->Content());
+                    }
+                    
+                    return Sprintf("%s %s %s", attr.c_str(), strComp[compSign].c_str(), value.c_str());
+                }
+            }
+        }
+
+        for (const auto& child: node->Children()) {
+            auto childStr = OlapStr(child);
+            if (!childStr.empty()) {
+                s.push_back(std::move(childStr));
+            }
+        }
+
+        TString delim = " ";
+        if (TMaybeNode<TKqpOlapAnd>(node)) {
+            delim = " And ";
+        } else if (TMaybeNode<TKqpOlapOr>(node)) {
+            delim = " Or ";
+        } 
+        return JoinStrings(s, delim);
     }
 
     TVector<std::variant<ui32, TArgContext>> Visit(const TCoMap& map, TQueryPlanNode& planNode) {
@@ -1447,7 +1515,7 @@ private:
     }
 
     void AddOptimizerEstimates(TOperator& op, const TExprBase& expr) {
-        if (SerializerCtx.Config->CostBasedOptimizationLevel.Get().GetOrElse(TDqSettings::TDefault::CostBasedOptimizationLevel)==0) {
+        if (SerializerCtx.Config->CostBasedOptimizationLevel.Get().GetOrElse(SerializerCtx.Config->DefaultCostBasedOptimizationLevel)==0) {
             return;
         }
 
@@ -1970,6 +2038,58 @@ NJson::TJsonValue ReconstructQueryPlanRec(const NJson::TJsonValue& plan,
 
     if (plan.GetMapSafe().contains("Stats") && operatorIndex==0) {
         result["Stats"] = plan.GetMapSafe().at("Stats");
+    }
+
+    if (plan.GetMapSafe().at("Node Type") == "TableLookupJoin" && plan.GetMapSafe().contains("Table")) {
+        result["Node Type"] = "LookupJoin";
+        NJson::TJsonValue newOps;
+        NJson::TJsonValue op;
+
+        op["Name"] = "LookupJoin";
+        op["LookupKeyColumns"] = plan.GetMapSafe().at("LookupKeyColumns");
+
+        newOps.AppendValue(op);
+        result["Operators"] = newOps;
+
+        NJson::TJsonValue newPlans;
+
+        NJson::TJsonValue lookupPlan;
+        lookupPlan["Node Type"] = "TableLookup";
+        lookupPlan["PlanNodeType"] = "TableLookup";
+
+        NJson::TJsonValue lookupOps;
+        NJson::TJsonValue lookupOp;
+
+        lookupOp["Name"] = "TableLookup";
+        lookupOp["Columns"] = plan.GetMapSafe().at("Columns");
+        lookupOp["LookupKeyColumns"] = plan.GetMapSafe().at("LookupKeyColumns");
+        lookupOp["Table"] = plan.GetMapSafe().at("Table");
+
+        if (plan.GetMapSafe().contains("E-Cost")) {
+            lookupOp["E-Cost"] = plan.GetMapSafe().at("E-Cost");
+        }
+        if (plan.GetMapSafe().contains("E-Rows")) {
+            lookupOp["E-Rows"] = plan.GetMapSafe().at("E-Rows");
+        }
+        if (plan.GetMapSafe().contains("E-Size")) {
+            lookupOp["E-Size"] = plan.GetMapSafe().at("E-Size");
+        }
+
+        lookupOps.AppendValue(lookupOp);
+        lookupPlan["Operators"] = lookupOps;
+
+        newPlans.AppendValue(ReconstructQueryPlanRec(
+            plan.GetMapSafe().at("Plans").GetArraySafe()[0],
+            0, 
+            planIndex, 
+            precomputes, 
+            nodeCounter));
+
+        newPlans.AppendValue(lookupPlan);
+
+        result["Plans"] = newPlans;
+
+        return result;
     }
 
     if (!plan.GetMapSafe().contains("Operators")) {

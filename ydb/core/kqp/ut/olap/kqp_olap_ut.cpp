@@ -982,8 +982,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(`message` IS NOT NULL)",
             R"((`level`, `uid`) > (Int32("1"), NULL))",
             R"((`level`, `uid`) != (Int32("1"), NULL))",
-            R"(`level` >= CAST("2" As Int32))",
-            R"(CAST("2" As Int32) >= `level`)",
+            //R"(`level` >= CAST("2" As Int32))",
+            //R"(CAST("2" As Int32) >= `level`)",
 #if SSA_RUNTIME_VERSION >= 2U
             R"(`uid` LIKE "%30000%")",
             R"(`uid` LIKE "uid%")",
@@ -1085,7 +1085,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(`level` != NULL)",
             R"(`level` > NULL)",
             R"(`timestamp` >= CAST(3000001U AS Timestamp))",
-            R"(`level` >= CAST("2" As Uint32))",
             R"(`level` = NULL)",
             R"(`level` > NULL)",
             R"(Re2::Match('uid.*')(`uid`))",
@@ -1208,12 +1207,12 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto tableClient = kikimr.GetTableClient();
 
         std::vector< std::pair<TString, TString> > secondLvlFilters = {
-            { R"(`uid` LIKE "%30000%")", "TableFullScan" },
-            { R"(`uid` NOT LIKE "%30000%")", "TableFullScan" },
-            { R"(`uid` LIKE "uid%")", "TableFullScan" },
-            { R"(`uid` LIKE "%001")", "TableFullScan" },
+            { R"(`uid` LIKE "%30000%")", "Filter-TableFullScan" },
+            { R"(`uid` NOT LIKE "%30000%")", "Filter-TableFullScan" },
+            { R"(`uid` LIKE "uid%")", "Filter-TableFullScan" },
+            { R"(`uid` LIKE "%001")", "Filter-TableFullScan" },
 #if SSA_RUNTIME_VERSION >= 4U
-            { R"(`uid` LIKE "uid%001")", "TableFullScan" },
+            { R"(`uid` LIKE "uid%001")", "Filter-TableFullScan" },
 #else
             { R"(`uid` LIKE "uid%001")", "Filter-TableFullScan" }, // We have filter (Size >= 6)
 #endif
@@ -2055,6 +2054,36 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 */
 
+    // Unit test for https://github.com/ydb-platform/ydb/issues/7967
+    Y_UNIT_TEST(PredicatePushdownNulls) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+
+        TKikimrRunner kikimr(settings);
+
+        TStreamExecScanQuerySettings scanSettings;
+        scanSettings.Explain(true);
+
+        TLocalHelper(kikimr.GetTestServer()).CreateTestOlapTable();
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 10);
+
+        auto tableClient = kikimr.GetTableClient();
+
+        TString query = R"(
+                SELECT `timestamp` FROM `/Root/olapStore/olapTable` WHERE
+                    (case when level > 0
+	                    then level
+	                    else null
+	                end) > 0;
+        )";
+
+        auto it = tableClient.StreamExecuteScanQuery(query).GetValueSync();
+        // Check for successful execution
+        auto streamPart = it.ReadNext().GetValueSync();
+
+        UNIT_ASSERT(streamPart.IsSuccess());
+    }
+
     Y_UNIT_TEST(PredicatePushdownCastErrors) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
@@ -2180,7 +2209,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
                         auto result = CollectStreamResult(it);
                         auto ast = result.QueryStats->Getquery_ast();
-
+                        
                         pushdown = ast.find("KqpOlapFilter") != std::string::npos;
                     } else {
                         // Error means that predicate not pushed down

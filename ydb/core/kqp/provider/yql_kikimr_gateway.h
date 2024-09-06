@@ -529,6 +529,7 @@ struct TKikimrTableMetadata : public TThrRefBase {
         PathId.ToMessage(message->MutablePathId());
         message->SetSchemaVersion(SchemaVersion);
         message->SetKind(static_cast<ui32>(Kind));
+        message->SetStatsLoaded(StatsLoaded);
         message->SetRecordsCount(RecordsCount);
         message->SetDataSize(DataSize);
         message->SetStatsLoaded(StatsLoaded);

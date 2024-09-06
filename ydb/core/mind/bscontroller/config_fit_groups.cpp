@@ -607,6 +607,7 @@ namespace NKikimr {
                                     groupInfo->ID, 0, groupInfo->Generation, StoragePool.VDiskKind, failRealmIdx,
                                     failDomainIdx, vdiskIdx, TMood::Normal, groupInfo, &VSlotReadyTimestampQ,
                                     TInstant::Zero(), TDuration::Zero());
+                                vslotInfo->VDiskStatusTimestamp = State.Mono;
 
                                 // mark as uncommitted
                                 State.UncommittedVSlots.insert(vslotId);

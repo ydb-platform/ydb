@@ -108,7 +108,7 @@ async function createTables(session: Session, logger: Logger) {
 }
 ```
 
-Метод `Session.createTable()` не позволяет создавать колоночные таблицы. Это можно сделать с помощью метода `Session.executeQuery()`, который выполняет YQL-запросы. Работа с методом `Session.executeQuery()` описана в разделе [Получение выборки данных](#query-processing). 
+Метод `Session.createTable()` не позволяет создавать колоночные таблицы. Это можно сделать с помощью метода `Session.executeQuery()`, который выполняет YQL-запросы. Работа с методом `Session.executeQuery()` описана в разделе [Получение выборки данных](#query-processing).
 
 Если вы создали строковую таблицу и хотите вывести информацию о её структуре и убедиться, что она успешно создалась, воспользуйтесь методом `Session.describeTable()`:
 

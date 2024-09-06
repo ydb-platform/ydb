@@ -84,6 +84,7 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
     const bool enableOlapSink, const bool useEvWrite, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings)
 {
+    Y_UNUSED(GUCSettings);
     if (request.Transactions.empty()) {
         // commit-only or rollback-only data transaction
         return CreateKqpDataExecuter(
@@ -128,7 +129,7 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
                 std::move(request), database, userToken, counters, true,
                 tableServiceConfig, std::move(asyncIoFactory), creator,
                 userRequestContext, enableOlapSink, useEvWrite, statementResultIndex,
-                federatedQuerySetup, GUCSettings
+                federatedQuerySetup, /*GUCSettings*/nullptr
             );
 
         default:

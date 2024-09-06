@@ -1,4 +1,5 @@
 #include "datashard_impl.h"
+#include "datashard_integrity_trails.h"
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
 
@@ -224,6 +225,11 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
                     }
                 }
             }
+        }
+
+        if (!op->IsReadOnly() && op->IsKqpDataTransaction() && op->HasKeysInfo()) {
+            const NMiniKQL::IEngineFlat::TValidationInfo& keys = op->GetKeysInfo();
+            NDataIntegrity::LogIntegrityTrailsKeys(ctx, DataShard.TabletID(), op->GetGlobalTxId(), keys);
         }
     }
 

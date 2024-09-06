@@ -9,9 +9,11 @@
 {% list tabs %}
 
 - Saint HighLoad++ 2024
+
     @[YouTube](https://youtu.be/6l64n8t8Ivs?si=coC70xmfuaoIzxPA)
 
 - ИТ-Пикник 2024
+
     @[YouTube](https://youtu.be/bdj_JrRPju0?si=392etOk5RyZVY6Kp)
 
 {% endlist %}

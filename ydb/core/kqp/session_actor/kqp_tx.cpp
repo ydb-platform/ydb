@@ -11,7 +11,9 @@ NYql::TIssue GetLocksInvalidatedIssue(const TKqpTransactionContext& txCtx, const
 
     if (pathId.OwnerId() != 0) {
         auto table = txCtx.TableByIdMap.FindPtr(pathId);
-        YQL_ENSURE(table);
+        if (!table) {
+            return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message << " Unknown table.");    
+        }
         return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message << " Table: " << *table);
     } else {
         // Olap tables don't return SchemeShard in locks, thus we use tableId here.
@@ -20,7 +22,7 @@ NYql::TIssue GetLocksInvalidatedIssue(const TKqpTransactionContext& txCtx, const
                 return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message << " Table: " << table);
             }
         }
-        YQL_ENSURE(false);
+        return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message << " Unknown table.");    
     }
 }
 

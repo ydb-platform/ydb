@@ -237,7 +237,12 @@ public:
     }
 
     void Finalize() {
-        YQL_ENSURE(!LocksBroken);
+        YQL_ENSURE(!AlreadyReplied);
+        if (LocksBroken) {
+            return ReplyErrorAndDie(
+                Ydb::StatusIds::ABORTED,
+                YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, "Transaction locks invalidated. Unknown table."));
+        }
 
         auto& response = *ResponseEv->Record.MutableResponse();
 
@@ -1101,9 +1106,11 @@ private:
                     ResponseEv->BrokenLockPathId = TKikimrPathId(
                         res->Record.GetTxLocks(0).GetSchemeShard(),
                         res->Record.GetTxLocks(0).GetPathId());
+                    return ReplyErrorAndDie(Ydb::StatusIds::ABORTED, {});
                 }
 
-                return ReplyErrorAndDie(Ydb::StatusIds::ABORTED, {});
+                CheckExecutionComplete();
+                return;
             }
             case NKikimrTxDataShard::TEvProposeTransactionResult::PREPARED: {
                 YQL_ENSURE(false);

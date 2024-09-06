@@ -83,16 +83,16 @@ namespace NYdb::NTopic::NTests {
 
             auto readSession = client.CreateReadSession(CreateReadSessionSettings());
 
-            TMaybe<TReadSessionEvent::TEvent> event = readSession->GetEvent(true);
+            std::optional<TReadSessionEvent::TEvent> event = readSession->GetEvent(true);
             UNIT_ASSERT(event);
-            auto startPartitionSession = std::get_if<TReadSessionEvent::TStartPartitionSessionEvent>(event.Get());
+            auto startPartitionSession = std::get_if<TReadSessionEvent::TStartPartitionSessionEvent>(&event.value());
             UNIT_ASSERT_C(startPartitionSession, DebugString(*event));
 
             startPartitionSession->Confirm();
 
             event = readSession->GetEvent(true);
             UNIT_ASSERT(event);
-            auto dataReceived = std::get_if<TReadSessionEvent::TDataReceivedEvent>(event.Get());
+            auto dataReceived = std::get_if<TReadSessionEvent::TDataReceivedEvent>(&event.value());
             UNIT_ASSERT_C(dataReceived, DebugString(*event));
 
             dataReceived->Commit();
@@ -103,7 +103,7 @@ namespace NYdb::NTopic::NTests {
 
             event = readSession->GetEvent(true);
             UNIT_ASSERT(event);
-            auto commitOffsetAck = std::get_if<TReadSessionEvent::TCommitOffsetAcknowledgementEvent>(event.Get());
+            auto commitOffsetAck = std::get_if<TReadSessionEvent::TCommitOffsetAcknowledgementEvent>(&event.value());
             UNIT_ASSERT_C(commitOffsetAck, DebugString(*event));
             UNIT_ASSERT_VALUES_EQUAL(commitOffsetAck->GetCommittedOffset(), expectedCommitedOffset);
         }
@@ -391,7 +391,7 @@ namespace NYdb::NTopic::NTests {
             discovery.SetGoodEndpoints(*setup);
             auto driverConfig = CreateConfig(*setup, discovery.GetDiscoveryAddr());
             auto* tracingBackend = new TTracingBackend();
-            driverConfig.SetLog(CreateCompositeLogBackend({new TStreamLogBackend(&Cerr), tracingBackend}));
+            driverConfig.SetLog(std::unique_ptr<TLogBackend>(CreateCompositeLogBackend({new TStreamLogBackend(&Cerr), tracingBackend}).Release()));
             TDriver driver(driverConfig);
             TTopicClient client(driver);
             auto sessionSettings = TWriteSessionSettings()
@@ -424,7 +424,7 @@ namespace NYdb::NTopic::NTests {
             discovery.SetGoodEndpoints(*setup);
             auto driverConfig = CreateConfig(*setup, discovery.GetDiscoveryAddr());
             auto* tracingBackend = new TTracingBackend();
-            driverConfig.SetLog(CreateCompositeLogBackend({new TStreamLogBackend(&Cerr), tracingBackend}));
+            driverConfig.SetLog(std::unique_ptr<TLogBackend>(CreateCompositeLogBackend({new TStreamLogBackend(&Cerr), tracingBackend}).Release()));
             TDriver driver(driverConfig);
             TTopicClient client(driver);
             auto retryPolicy = std::make_shared<TYdbPqTestRetryPolicy>();
@@ -471,13 +471,13 @@ namespace NYdb::NTopic::NTests {
             // But at first we only add node 1 to the discovery service.
             auto setup = CreateSetup(TEST_CASE_NAME, 2, /* createTopic = */ false);
             setup->GetServer().AnnoyingClient->MarkNodeInHive(setup->GetServer().GetRuntime(), 0, false);
-            setup->CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1);
+            setup->CreateTopic(TString{TEST_TOPIC}, TEST_CONSUMER, 1);
             setup->GetServer().AnnoyingClient->MarkNodeInHive(setup->GetServer().GetRuntime(), 0, true);
             TMockDiscoveryService discovery;
             discovery.SetEndpoints(setup->GetRuntime().GetNodeId(0), 1, setup->GetServer().GrpcPort);
             auto driverConfig = CreateConfig(*setup, discovery.GetDiscoveryAddr());
             auto* tracingBackend = new TTracingBackend();
-            driverConfig.SetLog(CreateCompositeLogBackend({new TStreamLogBackend(&Cerr), tracingBackend}));
+            driverConfig.SetLog(std::unique_ptr<TLogBackend>(CreateCompositeLogBackend({new TStreamLogBackend(&Cerr), tracingBackend}).Release()));
             TDriver driver(driverConfig);
             TTopicClient client(driver);
             auto retryPolicy = std::make_shared<TYdbPqTestRetryPolicy>();
@@ -522,7 +522,7 @@ namespace NYdb::NTopic::NTests {
             discovery.SetEndpoints(setup->GetRuntime().GetNodeId(0), 1, 0);
             auto driverConfig = CreateConfig(*setup, discovery.GetDiscoveryAddr());
             auto* tracingBackend = new TTracingBackend();
-            driverConfig.SetLog(CreateCompositeLogBackend({new TStreamLogBackend(&Cerr), tracingBackend}));
+            driverConfig.SetLog(std::unique_ptr<TLogBackend>(CreateCompositeLogBackend({new TStreamLogBackend(&Cerr), tracingBackend}).Release()));
             TDriver driver(driverConfig);
             TTopicClient client(driver);
             auto retryPolicy = std::make_shared<TYdbPqTestRetryPolicy>();
@@ -560,13 +560,13 @@ namespace NYdb::NTopic::NTests {
             auto setup = CreateSetup(TEST_CASE_NAME, 2, /* createTopic = */ false);
             // Make the node 1 unavailable.
             setup->GetServer().AnnoyingClient->MarkNodeInHive(setup->GetServer().GetRuntime(), 0, false);
-            setup->CreateTopic(TEST_TOPIC, TEST_CONSUMER, 2);
+            setup->CreateTopic(TString{TEST_TOPIC}, TEST_CONSUMER, 2);
 
             TMockDiscoveryService discovery;
             discovery.SetGoodEndpoints(*setup);
             auto driverConfig = CreateConfig(*setup, discovery.GetDiscoveryAddr());
             auto* tracingBackend = new TTracingBackend();
-            driverConfig.SetLog(CreateCompositeLogBackend({new TStreamLogBackend(&Cerr), tracingBackend}));
+            driverConfig.SetLog(std::unique_ptr<TLogBackend>(CreateCompositeLogBackend({new TStreamLogBackend(&Cerr), tracingBackend}).Release()));
             TDriver driver(driverConfig);
             TTopicClient client(driver);
             auto retryPolicy = std::make_shared<TYdbPqTestRetryPolicy>();
@@ -625,14 +625,14 @@ namespace NYdb::NTopic::NTests {
                 // Allow UpdateRow only, no DescribeSchema permission.
                 NACLib::TDiffACL acl;
                 acl.AddAccess(NACLib::EAccessType::Allow, NACLib::UpdateRow, authToken);
-                setup->GetServer().AnnoyingClient->ModifyACL("/Root", TEST_TOPIC, acl.SerializeAsString());
+                setup->GetServer().AnnoyingClient->ModifyACL("/Root", TString{TEST_TOPIC}, acl.SerializeAsString());
             }
 
             TMockDiscoveryService discovery;
             discovery.SetGoodEndpoints(*setup);
             auto* tracingBackend = new TTracingBackend();
             auto driverConfig = CreateConfig(*setup, discovery.GetDiscoveryAddr())
-                .SetLog(CreateCompositeLogBackend({new TStreamLogBackend(&Cerr), tracingBackend}))
+                .SetLog(std::unique_ptr<TLogBackend>(CreateCompositeLogBackend({new TStreamLogBackend(&Cerr), tracingBackend}).Release()))
                 .SetAuthToken(authToken);
             TDriver driver(driverConfig);
             TTopicClient client(driver);
@@ -662,13 +662,13 @@ namespace NYdb::NTopic::NTests {
 
         Y_UNIT_TEST(WithoutPartitionWithSplit) {
             auto setup = CreateSetupForSplitMerge(TEST_CASE_NAME);
-            setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1, 100);
+            setup.CreateTopic(TString{TEST_TOPIC}, TEST_CONSUMER, 1, 100);
 
             TMockDiscoveryService discovery;
             discovery.SetGoodEndpoints(setup);
             auto driverConfig = CreateConfig(setup, discovery.GetDiscoveryAddr());
             auto* tracingBackend = new TTracingBackend();
-            driverConfig.SetLog(CreateCompositeLogBackend({new TStreamLogBackend(&Cerr), tracingBackend}));
+            driverConfig.SetLog(std::unique_ptr<TLogBackend>(CreateCompositeLogBackend({new TStreamLogBackend(&Cerr), tracingBackend}).Release()));
             TDriver driver(driverConfig);
             TTopicClient client(driver);
             auto writeSettings = TWriteSessionSettings()

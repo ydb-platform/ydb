@@ -51,7 +51,7 @@ namespace NKikimr::NPersQueueTests {
         std::optional<ui32> partitionGroup,
         std::optional<TString> codec,
         std::optional<bool> reconnectOnFailure,
-        THashMap<TString, TString> sessionMeta
+        std::unordered_map<std::string, std::string> sessionMeta
     ) {
         auto settings = TWriteSessionSettings().Path(topic).MessageGroupId(sourceId);
         if (partitionGroup) settings.PartitionGroupId(*partitionGroup);
@@ -84,7 +84,7 @@ namespace NKikimr::NPersQueueTests {
             auto future = reader->WaitEvent();
             future.Wait(timeout);
 
-            TMaybe<NYdb::NPersQueue::TReadSessionEvent::TEvent> event = reader->GetEvent(false, 1);
+            std::optional<NYdb::NPersQueue::TReadSessionEvent::TEvent> event = reader->GetEvent(false, 1);
             if (!event)
                 return {};
             if (auto dataEvent = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent>(&*event)) {

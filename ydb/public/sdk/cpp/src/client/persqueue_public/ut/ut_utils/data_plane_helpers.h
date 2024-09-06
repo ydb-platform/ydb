@@ -4,6 +4,8 @@
 #include <ydb-cpp-sdk/client/table/table.h>
 #include <src/client/persqueue_public/persqueue.h>
 
+#include <util/generic/hash.h>
+
 namespace NKikimr::NPersQueueTests {
 
     std::shared_ptr<NYdb::NPersQueue::IWriteSession> CreateWriter(

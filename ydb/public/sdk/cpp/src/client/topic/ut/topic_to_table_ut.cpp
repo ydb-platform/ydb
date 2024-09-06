@@ -61,7 +61,7 @@ protected:
                        const TString& topic, const TString& groupId,
                        NTable::TTransaction& tx);
 
-    void CreateTopic(const TString& path = TEST_TOPIC,
+    void CreateTopic(const TString& path = TString{TEST_TOPIC},
                      const TString& consumer = TEST_CONSUMER,
                      size_t partitionCount = 1,
                      std::optional<size_t> maxPartitionCount = std::nullopt);
@@ -70,10 +70,10 @@ protected:
 
     TTopicWriteSessionPtr CreateTopicWriteSession(const TString& topicPath,
                                                   const TString& messageGroupId,
-                                                  TMaybe<ui32> partitionId);
+                                                  std::optional<ui32> partitionId);
     TTopicWriteSessionContext& GetTopicWriteSession(const TString& topicPath,
                                                     const TString& messageGroupId,
-                                                    TMaybe<ui32> partitionId);
+                                                    std::optional<ui32> partitionId);
 
     TTopicReadSessionPtr CreateTopicReadSession(const TString& topicPath,
                                                 const TString& consumerName,
@@ -86,7 +86,7 @@ protected:
                       const TString& messageGroupId,
                       const TString& message,
                       NTable::TTransaction* tx = nullptr,
-                      TMaybe<ui32> partitionId = Nothing());
+                      std::optional<ui32> partitionId = std::nullopt);
     TVector<TString> ReadFromTopic(const TString& topicPath,
                                    const TString& consumerName,
                                    const TDuration& duration,
@@ -344,8 +344,8 @@ void TFixture::WriteToTopicWithInvalidTxId(bool invalidTxId)
     auto writeSession = client.CreateWriteSession(options);
 
     auto event = writeSession->GetEvent(true);
-    UNIT_ASSERT(event.Defined() && std::holds_alternative<TWriteSessionEvent::TReadyToAcceptEvent>(event.GetRef()));
-    auto token = std::move(std::get<TWriteSessionEvent::TReadyToAcceptEvent>(event.GetRef()).ContinuationToken);
+    UNIT_ASSERT(event && std::holds_alternative<TWriteSessionEvent::TReadyToAcceptEvent>(event.value()));
+    auto token = std::move(std::get<TWriteSessionEvent::TReadyToAcceptEvent>(event.value()).ContinuationToken);
 
     NTopic::TWriteMessage params("message");
     params.Tx(tx);
@@ -361,8 +361,8 @@ void TFixture::WriteToTopicWithInvalidTxId(bool invalidTxId)
 
     while (true) {
         event = writeSession->GetEvent(true);
-        UNIT_ASSERT(event.Defined());
-        auto& v = event.GetRef();
+        UNIT_ASSERT(event.has_value());
+        auto& v = event.value();
         if (auto e = std::get_if<TWriteSessionEvent::TAcksEvent>(&v); e) {
             UNIT_ASSERT(false);
         } else if (auto e = std::get_if<TWriteSessionEvent::TReadyToAcceptEvent>(&v); e) {
@@ -451,8 +451,8 @@ Y_UNIT_TEST_F(WriteToTopic_Invalid_Tx, TFixture)
 Y_UNIT_TEST_F(WriteToTopic_Two_WriteSession, TFixture)
 {
     TString topicPath[2] = {
-        TEST_TOPIC,
-        TEST_TOPIC + "_2"
+        TString{TEST_TOPIC},
+        TString{TEST_TOPIC} + "_2"
     };
 
     CreateTopic(topicPath[1]);
@@ -470,8 +470,8 @@ Y_UNIT_TEST_F(WriteToTopic_Two_WriteSession, TFixture)
         params.Tx(tx);
 
         auto event = ws->GetEvent(true);
-        UNIT_ASSERT(event.Defined() && std::holds_alternative<TWriteSessionEvent::TReadyToAcceptEvent>(event.GetRef()));
-        auto token = std::move(std::get<TWriteSessionEvent::TReadyToAcceptEvent>(event.GetRef()).ContinuationToken);
+        UNIT_ASSERT(event && std::holds_alternative<TWriteSessionEvent::TReadyToAcceptEvent>(event.value()));
+        auto token = std::move(std::get<TWriteSessionEvent::TReadyToAcceptEvent>(event.value()).ContinuationToken);
 
         ws->Write(std::move(token), std::move(params));
     };
@@ -499,7 +499,7 @@ Y_UNIT_TEST_F(WriteToTopic_Two_WriteSession, TFixture)
             }
         }
 
-        auto& v = event.GetRef();
+        auto& v = event.value();
         if (auto e = std::get_if<TWriteSessionEvent::TAcksEvent>(&v); e) {
             ++acks;
         } else if (auto e = std::get_if<TWriteSessionEvent::TReadyToAcceptEvent>(&v); e) {
@@ -514,7 +514,7 @@ Y_UNIT_TEST_F(WriteToTopic_Two_WriteSession, TFixture)
 
 auto TFixture::CreateTopicWriteSession(const TString& topicPath,
                                        const TString& messageGroupId,
-                                       TMaybe<ui32> partitionId) -> TTopicWriteSessionPtr
+                                       std::optional<ui32> partitionId) -> TTopicWriteSessionPtr
 {
     NTopic::TTopicClient client(GetDriver());
     NTopic::TWriteSessionSettings options;
@@ -528,7 +528,7 @@ auto TFixture::CreateTopicWriteSession(const TString& topicPath,
 
 auto TFixture::GetTopicWriteSession(const TString& topicPath,
                                     const TString& messageGroupId,
-                                    TMaybe<ui32> partitionId) -> TTopicWriteSessionContext&
+                                     std::optional<ui32> partitionId) -> TTopicWriteSessionContext&
 {
     std::pair<TString, TString> key(topicPath, messageGroupId);
     auto i = TopicWriteSessions.find(key);
@@ -659,7 +659,7 @@ void TFixture::WriteToTopic(const TString& topicPath,
                             const TString& messageGroupId,
                             const TString& message,
                             NTable::TTransaction* tx,
-                            TMaybe<ui32> partitionId)
+                            std::optional<ui32> partitionId)
 {
     TTopicWriteSessionContext& context = GetTopicWriteSession(topicPath, messageGroupId, partitionId);
     context.WaitForContinuationToken();
@@ -694,7 +694,7 @@ TVector<TString> TFixture::ReadFromTopic(const TString& topicPath,
             if (auto* e = std::get_if<NTopic::TReadSessionEvent::TDataReceivedEvent>(&event)) {
                 Cerr << e->HasCompressedMessages() << " " << e->GetMessagesCount() << Endl;
                 for (auto& m : e->GetMessages()) {
-                    messages.push_back(m.GetData());
+                    messages.push_back(TString{m.GetData()});
                 }
 
                 if (!tx) {

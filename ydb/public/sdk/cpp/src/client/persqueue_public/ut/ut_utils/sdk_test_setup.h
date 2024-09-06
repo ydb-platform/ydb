@@ -88,7 +88,7 @@ public:
         }
     }
 
-    static TString GetTestTopic() {
+    static std::string GetTestTopic() {
         return "test-topic";
     }
 

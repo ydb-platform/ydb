@@ -29,7 +29,7 @@
 --IN PROGRESS--
 * Open [muted_ya.txt](https://github.com/ydb-platform/ydb/blob/main/.github/config/muted_ya.txt)
 * Press "Edit file" and delete line of test
-* Commit changes (Edit the branch for merging, for example, replace `{username}-patch-1` with `unmute/{username}`)
+* Commit changes (Edit the branch for merging, for example, replace `{username}-patch-1` with `mute/{username}`)
 * Edit PR name like "UnMute {testname}"
 * Take "OK" from member of test owner team in PR
 * Merge

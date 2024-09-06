@@ -84,7 +84,7 @@ public:
                 auto color_class = parser.ColumnParser("color_class").GetOptionalUint32();
                 if (color_class.has_value()) {
                     versionInfoCache->emplace_back(
-                        parser.ColumnParser("version_str").GetUtf8(),
+                        TString{parser.ColumnParser("version_str").GetUtf8()},
                         *color_class
                     );
                 }

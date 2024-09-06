@@ -937,7 +937,7 @@ void TPDisk::SendChunkReadError(const TIntrusivePtr<TChunkRead>& read, TStringSt
 }
 
 TPDisk::EChunkReadPieceResult TPDisk::ChunkReadPiece(TIntrusivePtr<TChunkRead> &read, ui64 pieceCurrentSector,
-        ui64 pieceSizeLimit, ui64 *reallyReadDiskBytes, NWilson::TTraceId traceId, NLWTrace::TOrbit&& orbit) {
+        ui64 pieceSizeLimit, NWilson::TTraceId traceId, NLWTrace::TOrbit&& orbit) {
     if (read->IsReplied) {
         return ReadPieceResultOk;
     }
@@ -950,12 +950,11 @@ TPDisk::EChunkReadPieceResult TPDisk::ChunkReadPiece(TIntrusivePtr<TChunkRead> &
         sectorsToRead = pieceSizeLimit / Format.SectorSize;
         bytesToRead = sectorsToRead * Format.SectorSize;
     }
+    Y_VERIFY_S(bytesToRead == pieceSizeLimit, bytesToRead << " " << pieceSizeLimit);
+    Y_VERIFY_S(sectorsToRead == pieceSizeLimit / Format.SectorSize, sectorsToRead << " " << pieceSizeLimit);
+    Y_VERIFY_S(pieceSizeLimit % Format.SectorSize == 0, pieceSizeLimit);
 
     Y_ABORT_UNLESS(sectorsToRead);
-
-    if (reallyReadDiskBytes) {
-        *reallyReadDiskBytes = bytesToRead;
-    }
 
     ui64 firstSector;
     ui64 lastSector;
@@ -2250,49 +2249,32 @@ void TPDisk::ProcessChunkReadQueue() {
     ui64 bufferSize = BufferPool->GetBufferSize() / Format.SectorSize * Format.SectorSize;
 
     for (auto& req : JointChunkReads) {
-
         req->SpanStack.PopOk();
         req->SpanStack.Push(TWilson::PDiskDetailed, "PDisk.InBlockDevice", NWilson::EFlags::AUTO_END);
-        switch (req->GetType()) {
-            case ERequestType::RequestChunkReadPiece:
-            {
-                TChunkReadPiece *piece = static_cast<TChunkReadPiece*>(req.Get());
-                Y_ABORT_UNLESS(!piece->SelfPointer);
-                TIntrusivePtr<TChunkRead> &read = piece->ChunkRead;
-                TReqId reqId = read->ReqId;
-                ui32 chunkIdx = read->ChunkIdx;
-                bool isComplete = false;
-                ui8 priorityClass = read->PriorityClass;
-                NHPTimer::STime creationTime = read->CreationTime;
-                if (!read->IsReplied) {
-                    P_LOG(PRI_DEBUG, BPD36, "Performing TChunkReadPiece", (ReqId, reqId), (chunkIdx, chunkIdx));
 
-                    ui32 size = 0;
-                    while (!isComplete && size < piece->PieceSizeLimit) {
-                        ui64 currentLimit = Min(bufferSize, piece->PieceSizeLimit - size);
-                        ui64 reallyReadDiskBytes;
-                        EChunkReadPieceResult result = ChunkReadPiece(read, piece->PieceCurrentSector + size / Format.SectorSize,
-                                currentLimit, &reallyReadDiskBytes, piece->SpanStack.GetTraceId(), std::move(piece->Orbit));
-                        isComplete = (result != ReadPieceResultInProgress);
-                        // Read pieces is sliced previously and it is expected that ChunkReadPiece will read exactly
-                        // currentLimit bytes
-                        Y_VERIFY_S(reallyReadDiskBytes == currentLimit, reallyReadDiskBytes << " != " << currentLimit);
-                        size += currentLimit;
-                    }
-                }
-                piece->OnSuccessfulDestroy(PCtx->ActorSystem);
-                if (isComplete) {
-                    //
-                    // WARNING: Don't access "read" after this point.
-                    // Don't add code before the warning!
-                    //
-                    Mon.IncrementQueueTime(priorityClass, HPMilliSeconds(now - creationTime));
-                    P_LOG(PRI_DEBUG, BPD37, "enqueued all TChunkReadPiece", (ReqId, reqId), (chunkIdx, chunkIdx));
-                }
-                break;
-            }
-            default:
-                Y_FAIL_S("Unexpected request type# " << ui64(req->GetType()) << " in JointChunkReads");
+        Y_VERIFY_S(req->GetType() == ERequestType::RequestChunkReadPiece, "Unexpected request type# " << ui64(req->GetType()) << " in JointChunkReads");
+        TChunkReadPiece *piece = static_cast<TChunkReadPiece*>(req.Get());
+        Y_ABORT_UNLESS(!piece->SelfPointer);
+        TIntrusivePtr<TChunkRead> &read = piece->ChunkRead;
+        TReqId reqId = read->ReqId;
+        ui32 chunkIdx = read->ChunkIdx;
+        ui8 priorityClass = read->PriorityClass;
+        NHPTimer::STime creationTime = read->CreationTime;
+        Y_VERIFY(!read->IsReplied);
+        P_LOG(PRI_DEBUG, BPD36, "Performing TChunkReadPiece", (ReqId, reqId), (chunkIdx, chunkIdx));
+
+        ui64 currentLimit = Min(bufferSize, piece->PieceSizeLimit);
+        EChunkReadPieceResult result = ChunkReadPiece(read, piece->PieceCurrentSector, currentLimit,
+            piece->SpanStack.GetTraceId(), std::move(piece->Orbit));
+        bool isComplete = (result != ReadPieceResultInProgress);
+        piece->OnSuccessfulDestroy(PCtx->ActorSystem);
+        if (isComplete) {
+            //
+            // WARNING: Don't access "read" after this point.
+            // Don't add code before the warning!
+            //
+            Mon.IncrementQueueTime(priorityClass, HPMilliSeconds(now - creationTime));
+            P_LOG(PRI_DEBUG, BPD37, "enqueued all TChunkReadPiece", (ReqId, reqId), (chunkIdx, chunkIdx));
         }
     }
     LWTRACK(PDiskProcessChunkReadQueue, UpdateCycleOrbit, PCtx->PDiskId, JointChunkReads.size());

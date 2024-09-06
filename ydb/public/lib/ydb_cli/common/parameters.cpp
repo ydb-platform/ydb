@@ -119,13 +119,11 @@ void TCommandWithParameters::AddParametersOption(TClientCommand::TConfig& config
         descr << ' ' << clarification;
     }
     descr << Endl << "Several parameter options can be specified. " << Endl
-        << "To change input format use --input-format option." << Endl
+        // TODO: to change binary strings encoding use --input-binary-strings option
+        //<< "To change input format use --input-format option." << Endl
         << "Escaping depends on operating system.";
     config.Opts->AddLongOption('p', "param", descr.Str())
-        .RequiredArgument("$name=value").AppendTo(&ParameterOptions);
-    config.Opts->AddLongOption("param-file", "File name with parameter names and values "
-        "in json format. You may specify this option repeatedly.")
-        .RequiredArgument("PATH").AppendTo(&ParameterFiles);
+        .RequiredArgument("name=value or $name=value").AppendTo(&ParameterOptions);
 
     AddOptionExamples(
         "param",
@@ -148,6 +146,13 @@ void TCommandWithParameters::AddParametersOption(TClientCommand::TConfig& config
             .EndExample()
         .Build()
     );
+}
+
+void TCommandWithParameters::AddParametersFileOption(TClientCommand::TConfig& config) {
+    config.Opts->AddLongOption("param-file", "File name with parameter names and values "
+        "in json format. You may specify this option repeatedly.")
+        .RequiredArgument("PATH").AppendTo(&ParameterFiles)
+        .Hidden();
 }
 
 void TCommandWithParameters::AddParametersStdinOption(TClientCommand::TConfig& config, const TString& requestString) {

@@ -24,6 +24,8 @@ class TCommandWithParameters : public TCommandWithExamples, public TCommandWithF
 protected:
     void ParseParameters(TClientCommand::TConfig& config);
     void AddParametersOption(TClientCommand::TConfig& config, const TString& clarification = "");
+    // Deprecated. Use --input-file instead.
+    void AddParametersFileOption(TClientCommand::TConfig& config);
     void AddParametersStdinOption(TClientCommand::TConfig& config, const TString& requestString);
     bool GetNextParams(THolder<TParamsBuilder>& paramBuilder);
 

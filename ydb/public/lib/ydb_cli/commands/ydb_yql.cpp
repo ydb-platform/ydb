@@ -44,6 +44,7 @@ void TCommandYql::Config(TConfig& config) {
     });
 
     AddParametersOption(config);
+    AddParametersFileOption(config);
 
     AddInputFormats(config, {
         EDataFormat::JsonUnicode,

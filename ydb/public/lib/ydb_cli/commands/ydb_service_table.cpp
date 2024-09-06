@@ -376,7 +376,8 @@ void TCommandExecuteQuery::Config(TConfig& config) {
         EDataFormat::Parquet,
     });
 
-    AddParametersOption(config, "(for data & scan queries)");
+    AddParametersOption(config, "(for data, scan and generic queries)");
+    AddParametersFileOption(config);
 
     AddInputFormats(config, {
         EDataFormat::JsonUnicode,

@@ -33,9 +33,7 @@ public:
                                 const NActors::TActorId& httpProxyId,
                                 const TOpenIdConnectSettings& settings);
 
-
     virtual void Bootstrap(const NActors::TActorContext& ctx);
-
     void HandleProxy(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event, const NActors::TActorContext& ctx);
 
 protected:

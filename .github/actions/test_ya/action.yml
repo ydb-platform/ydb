@@ -127,10 +127,10 @@ runs:
           GRAPH_COMPARE_OUTPUT="$PUBLIC_DIR/graph_compare.log"
           GRAPH_COMPARE_OUTPUT_URL="$PUBLIC_DIR_URL/graph_compare.log"
 
-          set +ex
+          set +e
           ./.github/scripts/graph_compare.sh $ORIGINAL_HEAD~1 $ORIGINAL_HEAD |& tee $GRAPH_COMPARE_OUTPUT
-          RC=$PIPESTATUS[0]
-          set -ex
+          RC=${PIPESTATUS[0]}
+          set -e
 
           if [ $RC -ne 0 ]; then
             echo "graph_compare.sh returned $RC, build failed"

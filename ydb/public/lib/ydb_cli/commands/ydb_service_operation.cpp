@@ -80,7 +80,7 @@ void TCommandGetOperation::Config(TConfig& config) {
 
 void TCommandGetOperation::Parse(TConfig& config) {
     TCommandWithOperationId::Parse(config);
-    ParseFormats();
+    ParseOutputFormats();
 }
 
 int TCommandGetOperation::Run(TConfig& config) {
@@ -187,7 +187,7 @@ void TCommandListOperations::Config(TConfig& config) {
 
 void TCommandListOperations::Parse(TConfig& config) {
     TYdbCommand::Parse(config);
-    ParseFormats();
+    ParseOutputFormats();
 
     Kind = config.ParseResult->GetFreeArgs()[0];
     if (!KindToHandler.contains(Kind)) {

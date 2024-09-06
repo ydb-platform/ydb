@@ -405,7 +405,7 @@ void TCommandExecuteQuery::Config(TConfig& config) {
 void TCommandExecuteQuery::Parse(TConfig& config) {
     TClientCommand::Parse(config);
     ParseInputFormats();
-    ParseFormats();
+    ParseOutputFormats();
     if (BasicStats && CollectStatsMode) {
         throw TMisuseException() << "Both mutually exclusive options \"--stats\" and \"-s\" are provided.";
     }
@@ -861,7 +861,7 @@ void TCommandExplain::SaveDiagnosticsToFile(const TString& diagnostics) {
 
 void TCommandExplain::Parse(TConfig& config) {
     TClientCommand::Parse(config);
-    ParseFormats();
+    ParseOutputFormats();
     CheckQueryOptions();
 }
 
@@ -1072,7 +1072,7 @@ void TCommandReadTable::Config(TConfig& config) {
 
 void TCommandReadTable::Parse(TConfig& config) {
     TClientCommand::Parse(config);
-    ParseFormats();
+    ParseOutputFormats();
     ParsePath(config, 0);
 }
 
@@ -1230,7 +1230,7 @@ void TCommandIndexAddGlobal::Config(TConfig& config) {
 
 void TCommandIndexAddGlobal::Parse(TConfig& config) {
     TClientCommand::Parse(config);
-    ParseFormats();
+    ParseOutputFormats();
     ParsePath(config, 0);
 }
 

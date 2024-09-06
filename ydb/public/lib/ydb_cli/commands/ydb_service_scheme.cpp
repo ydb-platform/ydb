@@ -233,7 +233,7 @@ void TCommandDescribe::Config(TConfig& config) {
 void TCommandDescribe::Parse(TConfig& config) {
     TClientCommand::Parse(config);
     Database = config.Database;
-    ParseFormats();
+    ParseOutputFormats();
     ParsePath(config, 0);
 }
 

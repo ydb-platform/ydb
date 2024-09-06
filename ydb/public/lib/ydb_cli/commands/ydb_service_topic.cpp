@@ -616,7 +616,7 @@ namespace {
 
     void TCommandTopicConsumerDescribe::Parse(TConfig& config) {
         TYdbCommand::Parse(config);
-        ParseFormats();
+        ParseOutputFormats();
         ParseTopicName(config, 0);
     }
 

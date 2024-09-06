@@ -72,7 +72,7 @@ void TCommandYql::Config(TConfig& config) {
 void TCommandYql::Parse(TConfig& config) {
     TClientCommand::Parse(config);
     ParseInputFormats();
-    ParseFormats();
+    ParseOutputFormats();
     if (Script && ScriptFile) {
         throw TMisuseException() << "Both mutually exclusive options \"Text of script\" (\"--script\", \"-s\") "
             << "and \"Path to file with script text\" (\"--file\", \"-f\") were provided.";

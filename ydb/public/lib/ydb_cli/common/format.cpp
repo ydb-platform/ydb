@@ -218,7 +218,7 @@ void TCommandWithOutput::AddOutputFormats(TClientCommand::TConfig& config,
     AllowedFormats = allowedFormats;
 }
 
-void TCommandWithOutput::ParseFormats() {
+void TCommandWithOutput::ParseOutputFormats() {
     if (OutputFormat == EDataFormat::Default || DeprecatedOptionUsed) {
         return;
     }

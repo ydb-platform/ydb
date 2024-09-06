@@ -105,7 +105,7 @@ void TCommandImportFromS3::Config(TConfig& config) {
 
 void TCommandImportFromS3::Parse(TConfig& config) {
     TClientCommand::Parse(config);
-    ParseFormats();
+    ParseOutputFormats();
 
     ParseAwsProfile(config, "aws-profile");
     ParseAwsAccessKey(config, "access-key");

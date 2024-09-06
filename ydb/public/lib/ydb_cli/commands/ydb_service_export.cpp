@@ -138,7 +138,7 @@ void TCommandExportToYt::Config(TConfig& config) {
 
 void TCommandExportToYt::Parse(TConfig& config) {
     TClientCommand::Parse(config);
-    ParseFormats();
+    ParseOutputFormats();
 
     ParseYtProxy(config, "proxy");
     ParseYtToken(config, "token");
@@ -287,7 +287,7 @@ void TCommandExportToS3::Config(TConfig& config) {
 
 void TCommandExportToS3::Parse(TConfig& config) {
     TClientCommand::Parse(config);
-    ParseFormats();
+    ParseOutputFormats();
 
     ParseAwsProfile(config, "aws-profile");
     ParseAwsAccessKey(config, "access-key");

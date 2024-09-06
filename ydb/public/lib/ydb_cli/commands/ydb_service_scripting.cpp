@@ -84,7 +84,7 @@ void TCommandExecuteYqlScript::Config(TConfig& config) {
 void TCommandExecuteYqlScript::Parse(TConfig& config) {
     TClientCommand::Parse(config);
     ParseInputFormats();
-    ParseFormats();
+    ParseOutputFormats();
     if (!Script && !ScriptFile) {
         throw TMisuseException() << "Neither \"Text of script\" (\"--script\", \"-s\") "
             << "nor \"Path to file with script text\" (\"--file\", \"-f\") were provided.";

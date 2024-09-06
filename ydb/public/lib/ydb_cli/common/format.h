@@ -62,7 +62,7 @@ class TCommandWithOutput: virtual public TCommandWithFormat {
 protected:
     void AddOutputFormats(TClientCommand::TConfig& config, 
                          const TVector<EDataFormat>& allowedFormats, EDataFormat defaultFormat = EDataFormat::Pretty);
-    void ParseFormats();
+    void ParseOutputFormats();
 
     // Deprecated
     void AddDeprecatedJsonOption(TClientCommand::TConfig& config,

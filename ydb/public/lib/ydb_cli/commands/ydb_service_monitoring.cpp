@@ -28,7 +28,7 @@ void TCommandSelfCheck::Config(TConfig& config) {
 
 void TCommandSelfCheck::Parse(TConfig& config) {
     TYdbSimpleCommand::Parse(config);
-    ParseFormats();
+    ParseOutputFormats();
 }
 
 int TCommandSelfCheck::Run(TConfig& config) {

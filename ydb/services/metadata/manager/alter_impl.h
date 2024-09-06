@@ -138,7 +138,7 @@ public:
     void Handle(TEvFetchDatabaseResponse::TPtr& ev) {
         TString errorMessage;
         if (const auto& errorString = ev->Get()->GetErrorString()) {
-            errorMessage = TStringBuilder() << "Cannot fetch database '" << Context.GetExternalData().GetDatabase() << "': " << errorString;
+            errorMessage = TStringBuilder() << "Cannot fetch database '" << Context.GetExternalData().GetDatabase() << "': " << *errorString;
         } else if (ev->Get()->GetServerless()) {
             errorMessage = TStringBuilder() << "Objects " << TObject::GetTypeId() << " are disabled for serverless domains. Please contact your system administrator to enable it";
         }

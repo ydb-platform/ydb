@@ -91,7 +91,7 @@ private:
         return false;
     }
 
-    void Reply(const TString& errorMessage = "") {
+    void Reply(const std::optional<TString>& errorMessage = std::nullopt) {
         Send(Owner, new TEvFetchDatabaseResponse(Serverless, errorMessage));
         PassAway();
     }

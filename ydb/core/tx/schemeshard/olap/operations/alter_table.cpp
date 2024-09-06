@@ -312,28 +312,6 @@ public:
             return result;
         }
 
-        NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
-        auto domainInfo = parentPath.DomainInfo();
-        const TSchemeLimits& limits = domainInfo->GetSchemeLimits();
-
-        if (Transaction.HasAlterColumnTable()) {
-            auto& alterSchema = Transaction.GetAlterColumnTable().GetAlterSchema();
-            TTablesStorage::TTableReadGuard table = context.SS->ColumnTables.at(path->PathId);
-            ui64 curCols = table->Description.GetSchema().GetColumns().size();
-            ui64 dropCols = alterSchema.GetDropColumns().size();
-            ui64 addCols = alterSchema.GetAddColumns().size();
-            if (curCols + addCols - dropCols > limits.MaxColumnTableColumns) {
-                TString errStr = TStringBuilder()
-                    << "Too many columns"
-                    << ": current:" << curCols
-                    << ", new: " << addCols
-                    << ", dropping: " << dropCols
-                    << ". Limit: " << limits.MaxColumnTableColumns;
-                result->SetError(NKikimrScheme::StatusSchemeError, errStr);
-                return result;
-            }
-        }
-
         NIceDb::TNiceDb db(context.GetDB());
 
         if (update->GetShardIds().size()) {

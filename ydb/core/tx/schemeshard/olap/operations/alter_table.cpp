@@ -257,6 +257,15 @@ class TAlterColumnTable: public TSubOperation {
         }
     }
 
+    bool isAlterCompression() const {
+        for (const auto& alterColumn : Transaction.GetAlterColumnTable().GetAlterSchema().GetAlterColumns()) {
+            if (alterColumn.HasSerializer()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
 public:
     using TSubOperation::TSubOperation;
 
@@ -271,13 +280,9 @@ public:
             return result;
         }
         
-        if (HasAppData() && !AppDataVerified().FeatureFlags.GetEnableOlapCompression()) {
-            for (const auto& alterColumn : Transaction.GetAlterColumnTable().GetAlterSchema().GetAlterColumns()) {
-                if (alterColumn.HasSerializer()) {
-                    result->SetError(NKikimrScheme::StatusPreconditionFailed, "Compression is disabled for OLAP tables");
-                    return result;
-                }
-            }
+        if (!AppDataVerified().FeatureFlags.GetEnableOlapCompression() && isAlterCompression()) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed, "Compression is disabled for OLAP tables");
+            return result;
         }
 
         const bool hasTiering = Transaction.HasAlterColumnTable() && Transaction.GetAlterColumnTable().HasAlterTtlSettings() &&

@@ -9,13 +9,13 @@ class TTestFeatureFlagsHolder {
 public:
     TFeatureFlags FeatureFlags;
 
-#define FEATURE_FLAG_SETTER(name)                    \
-    TDerived& Set##name(std::optional<bool> value) { \
-        if (value) {                                 \
-            FeatureFlags.Set##name(*value);          \
-        }                                            \
-        return *static_cast<TDerived*>(this);        \
-    }
+    #define FEATURE_FLAG_SETTER(name) \
+        TDerived& Set##name(std::optional<bool> value) { \
+            if (value) { \
+                FeatureFlags.Set##name(*value); \
+            } \
+            return *static_cast<TDerived*>(this); \
+        }
 
     FEATURE_FLAG_SETTER(AllowYdbRequestsWithoutDatabase)
     FEATURE_FLAG_SETTER(EnableSystemViews)
@@ -69,7 +69,7 @@ public:
     FEATURE_FLAG_SETTER(EnableMetadataObjectsOnServerless)
     FEATURE_FLAG_SETTER(EnableOlapCompression)
 
-#undef FEATURE_FLAG_SETTER
+    #undef FEATURE_FLAG_SETTER
 };
 
-}
+} // NKikimr

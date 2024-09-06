@@ -436,6 +436,18 @@ class TAlterOlapStore: public TSubOperation {
         }
     }
 
+    bool isAlterCompression() const {
+        const auto& alter = Transaction.GetAlterColumnStore();
+        for (const auto& alterSchema : alter.GetAlterSchemaPresets()) {
+            for (const auto& alterColumn : alterSchema.GetAlterSchema().GetAlterColumns()) {
+                if (alterColumn.HasSerializer()) {
+                        return true;
+                }
+            }
+        }
+        return false;
+    }
+
 public:
     using TSubOperation::TSubOperation;
 
@@ -455,19 +467,13 @@ public:
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
-        if (HasAppData() && !AppDataVerified().FeatureFlags.GetEnableOlapCompression()) {
-            for (const auto& alterSchema : alter.GetAlterSchemaPresets()) {
-                for (const auto& alterColumn : alterSchema.GetAlterSchema().GetAlterColumns()) {
-                    if (alterColumn.HasSerializer()) {
-                        result->SetError(NKikimrScheme::StatusPreconditionFailed, "Compression is disabled for OLAP tables");
-                        return result;
-                    }
-                }
-            }
-        }
-
         if (!alter.HasName()) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, "No store name in Alter");
+            return result;
+        }
+
+        if (!AppDataVerified().FeatureFlags.GetEnableOlapCompression() && isAlterCompression()) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed, "Compression is disabled for OLAP tables");
             return result;
         }
 

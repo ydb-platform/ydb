@@ -31,6 +31,7 @@ struct TPoolSettings : public TSettingsBase {
         TString operator()(TDuration* setting) const;
     };
 
+    TPoolSettings() = default;
     TPoolSettings(const google::protobuf::Map<TString, TString>& properties);
 
     bool operator==(const TPoolSettings& other) const = default;

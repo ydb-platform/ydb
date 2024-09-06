@@ -397,6 +397,39 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
         tester.SetIsOlap(true);
         tester.Execute();
     }
+
+    class TRollback : public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto client = Kikimr->GetQueryClient();
+
+            auto session = client.GetSession().GetValueSync().GetSession();
+            auto tx = session.BeginTransaction(TTxSettings::SerializableRW())
+                .ExtractValueSync()
+                .GetTransaction();
+            UNIT_ASSERT(tx.IsActive());
+
+            auto result = session.ExecuteQuery(Q_(R"(
+                SELECT * FROM `/Root/KV`;
+            )"), TTxControl::Tx(tx.GetId())).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto rollbackResult = tx.Rollback().ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(rollbackResult.GetStatus(), EStatus::SUCCESS, rollbackResult.GetIssues().ToString());
+        }
+    };
+
+    Y_UNIT_TEST(OltpRollback) {
+        TRollback tester;
+        tester.SetIsOlap(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(OlapRollback) {
+        TRollback tester;
+        tester.SetIsOlap(true);
+        tester.Execute();
+    }
 }
 
 } // namespace NKqp

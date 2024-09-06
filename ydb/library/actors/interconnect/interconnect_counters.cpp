@@ -250,8 +250,8 @@ namespace {
                 PerDataCenterCounters = Counters->GetSubgroup("dataCenterId", *DataCenterId);
             }
 
-            const bool updatePerSession = HasSessionCounters && (!PerSessionCounters || updatePerDataCenter);
-            if (updatePerSession) {
+            const bool updatePerSession = !PerSessionCounters || updatePerDataCenter;
+            if (HasSessionCounters && updatePerSession) {
                 auto base = MergePerDataCenterCounters ? PerDataCenterCounters : Counters;
                 PerSessionCounters = base->GetSubgroup("peer", *HumanFriendlyPeerHostName);
             }

@@ -135,7 +135,7 @@ private:
 inline TExprNode::TPtr ExpandAggregatePeepholeImpl(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx,
     const bool useFinalizeByKey, const bool useBlocks, const bool allowSpilling) {
     TAggregateExpander aggExpander(!useFinalizeByKey && !useBlocks, useFinalizeByKey, node, ctx, typesCtx,
-        true, false, false, allowSpilling);
+        true, false, false, typesCtx.IsBlockEngineEnabled() && !allowSpilling);
     return aggExpander.ExpandAggregate();
 }
 

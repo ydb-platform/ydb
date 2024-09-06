@@ -443,6 +443,8 @@ Y_UNIT_TEST(AlterTable) {
             "ALTER TABLE user\n\tADD CHANGEFEED user WITH (resolved_timestamps = Interval(\"PT1S\"));\n"},
         {"alter table user add changefeed user with (topic_min_active_partitions = 1)",
             "ALTER TABLE user\n\tADD CHANGEFEED user WITH (topic_min_active_partitions = 1);\n"},
+        {"alter table user add changefeed user with (topic_auto_partitioning = 'ENABLED', topic_min_active_partitions = 1, topic_min_active_partitions = 7)",
+            "ALTER TABLE user\n\tADD CHANGEFEED user WITH (topic_auto_partitioning = 'ENABLED', topic_min_active_partitions = 1, topic_min_active_partitions = 7);\n"},
     };
 
     TSetup setup;

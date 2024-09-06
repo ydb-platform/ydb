@@ -5,11 +5,11 @@
 Выполните команду по следующему образцу:
 
 ``` bash
-( export <auth_mode_var>="<auth_mode_value>" && cd ydb-go-examples && \
-go run ./basic -ydb="<endpoint>?database=<database>" )
+( export <auth_mode_var>="<auth_mode_value>" && cd ydb-go-sdk/examples && \
+go run . -ydb="<endpoint>/<database>" )
 ```
 
-, где
+где
 
 - `<endpoint>` - [эндпоинт](../../../../concepts/connect.md#endpoint).
 - `<database>` - [путь базы данных](../../../../concepts/connect.md#database).
@@ -20,5 +20,5 @@ go run ./basic -ydb="<endpoint>?database=<database>" )
 
 ``` bash
 ( export YDB_ACCESS_TOKEN_CREDENTIALS="t1.9euelZqOnJuJlc..." && cd ydb-go-examples && \
-go run ./basic -ydb="grpcs://ydb.example.com:2135?database=/somepath/somelocation" )
+go run ./basic -ydb="grpcs://ydb.example.com:2135/somepath/somelocation" )
 ```

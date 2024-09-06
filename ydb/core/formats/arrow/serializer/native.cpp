@@ -15,10 +15,11 @@
 
 namespace NKikimr::NArrow::NSerialization {
 
-arrow::Result<std::shared_ptr<arrow::RecordBatch>> TNativeSerializer::DoDeserialize(const TString& data) const {
+arrow::Result<std::shared_ptr<arrow::RecordBatch>> TNativeSerializer::DoDeserialize(const TString& data, arrow::MemoryPool* pool) const {
     arrow::ipc::DictionaryMemo dictMemo;
     auto options = arrow::ipc::IpcReadOptions::Defaults();
     options.use_threads = false;
+    options.memory_pool = pool;
 
     std::shared_ptr<arrow::Buffer> buffer(std::make_shared<TBufferOverString>(data));
     arrow::io::BufferReader readerStream(buffer);

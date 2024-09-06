@@ -45,7 +45,7 @@ protected:
     }
     virtual TString DoSerializeFull(const std::shared_ptr<arrow::RecordBatch>& batch) const override;
     virtual TString DoSerializePayload(const std::shared_ptr<arrow::RecordBatch>& batch) const override;
-    virtual arrow::Result<std::shared_ptr<arrow::RecordBatch>> DoDeserialize(const TString& data) const override;
+    virtual arrow::Result<std::shared_ptr<arrow::RecordBatch>> DoDeserialize(const TString& data, arrow::MemoryPool* pool) const override;
     virtual arrow::Result<std::shared_ptr<arrow::RecordBatch>> DoDeserialize(const TString& data, const std::shared_ptr<arrow::Schema>& schema) const override;
 
     virtual TConclusionStatus DoDeserializeFromRequest(NYql::TFeaturesExtractor& features) override;

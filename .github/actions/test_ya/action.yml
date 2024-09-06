@@ -340,13 +340,16 @@ runs:
           echo $CURRENT_MESSAGE | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
 
           CURRENT_JUNIT_XML_PATH=$CURRENT_PUBLIC_DIR/junit.xml
+          CURRENT_REPORT=$CURRENT_PUBLIC_DIR/report.json
           set +ex
           (./ya make $YA_MAKE_TARGET "${params[@]}" \
             $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.log"  \
             --evlog-file "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" \
-            --junit "$CURRENT_JUNIT_XML_PATH" --output "$YA_MAKE_OUT_DIR"; echo $? > exit_code) |& cat >> $YA_MAKE_OUTPUT
+            --junit "$CURRENT_JUNIT_XML_PATH" --build-results-report "$CURRENT_REPORT" --output "$YA_MAKE_OUT_DIR"; echo $? > exit_code) |& cat >> $YA_MAKE_OUTPUT
           set -ex
           RC=`cat exit_code`
+
+          .github/scripts/tests/report_analyzer.py "$CURRENT_REPORT" $CURRENT_PUBLIC_DIR/summary_report.txt || true
 
           # convert to chromium trace
           # seems analyze-make don't have simple "output" parameter, so change cwd

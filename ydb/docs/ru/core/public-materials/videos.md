@@ -10,11 +10,13 @@
 
 - 2024
 
-    {% include [Saint_HighLoad](./_includes/conferences/2024/Saint_HighLoad.md) %}
+  {% include [IT_Picnic](./_includes/conferences/2024/IT_picnic.md) %}
 
-    {% include [Ya_Tech](./_includes/conferences/2024/Yandex_Infrastructure.md) %}
+  {% include [Saint_HighLoad](./_includes/conferences/2024/Saint_HighLoad.md) %}
+
+  {% include [Ya_Tech](./_includes/conferences/2024/Yandex_Infrastructure.md) %}
     
-    {% include [True_Tech](./_includes/conferences/2024/True_Tech.md) %}
+  {% include [True_Tech](./_includes/conferences/2024/True_Tech.md) %}
 
 - 2023
 

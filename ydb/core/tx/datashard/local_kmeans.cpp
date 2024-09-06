@@ -533,11 +533,11 @@ class TLocalKMeansScan final: public TLocalKMeansScanBase, private TCalculation<
     // KMeans
     using TEmbedding = std::vector<typename TMetric::TSum>;
 
-    struct TAggregated {
+    struct TAggregatedCluster {
         TEmbedding Cluster;
         ui64 Count = 0;
     };
-    std::vector<TAggregated> Aggregated;
+    std::vector<TAggregatedCluster> AggregatedClusters;
 
 public:
     TLocalKMeansScan(const TUserTable& table, TLead&& lead, NKikimrTxDataShard::TEvLocalKMeansRequest& request, const TActorId& responseActorId, TAutoPtr<TEvDataShard::TEvLocalKMeansProgressResponse>&& response)
@@ -569,7 +569,7 @@ public:
                 return EScan::Feed;
             }
             State = EState::KMEANS;
-            if (!InitAggregated()) {
+            if (!InitAggregatedClusters()) {
                 // We don't need to do anything,
                 // because this datashard doesn't have valid embeddings for this parent
                 return EScan::Final;
@@ -615,7 +615,7 @@ public:
     }
 
 private:
-    bool InitAggregated() {
+    bool InitAggregatedClusters() {
         if (Clusters.size() == 0) {
             return false;
         }
@@ -626,18 +626,18 @@ private:
             Clusters.resize(K);
         }
         Y_ASSERT(Clusters.size() == K);
-        Aggregated.resize(K);
-        for (auto& aggregate : Aggregated) {
+        AggregatedClusters.resize(K);
+        for (auto& aggregate : AggregatedClusters) {
             aggregate.Cluster.resize(this->Dimensions, 0);
         }
         return true;
     }
 
-    void Aggregate(ui32 pos, const char* embedding) {
+    void AggregateToCluster(ui32 pos, const char* embedding) {
         if (pos >= K) {
             return;
         }
-        auto& aggregate = Aggregated[pos];
+        auto& aggregate = AggregatedClusters[pos];
         auto* coords = aggregate.Cluster.data();
         for (auto coord : this->GetCoords(embedding)) {
             *coords++ += coord;
@@ -648,7 +648,7 @@ private:
     void RecomputeClusters(bool last) {
         auto r = Clusters.begin();
         auto w = r;
-        for (auto& aggregate : Aggregated) {
+        for (auto& aggregate : AggregatedClusters) {
             if (aggregate.Count != 0) {
                 auto& cluster = *r;
                 this->Fill(cluster, aggregate.Cluster.data(), aggregate.Count);
@@ -707,7 +707,7 @@ private:
     EScan FeedKMeans(const TRow& row) noexcept {
         Y_ASSERT(row.Size() == 1);
         const ui32 pos = FeedEmbedding(row, 0);
-        Aggregate(pos, row.Get(0).Data());
+        AggregateToCluster(pos, row.Get(0).Data());
         return EScan::Feed;
     }
 

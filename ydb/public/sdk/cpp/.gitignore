@@ -9,6 +9,7 @@ install_manifest.txt
 compile_commands.json
 CTestTestfile.cmake
 _deps
+.clangd
 
 # Ignore generated binaries -- any file without extension
 # Ignore all

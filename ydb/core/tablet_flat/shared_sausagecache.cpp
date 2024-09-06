@@ -133,7 +133,14 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         struct TSize {
             static ui64 Get(const TPage *x) {
-                return sizeof(TPage) + (x->State == PageStateLoaded ? x->Size : 0);
+                Y_DEBUG_ABORT_UNLESS(x->State == PageStateLoaded);
+                return sizeof(TPage) + x->Size;
+            }
+        };
+
+        struct THash {
+            static size_t Get(const TPage *x) {
+                return std::hash<std::pair<ui32, ui32>>()({x->Collection->MetaId.Hash(), x->PageId});
             }
         };
 

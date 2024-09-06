@@ -325,6 +325,7 @@ message TEvListSessionsRequest {
     repeated uint32 Columns = 5;
     optional int64 FreeSpace = 6;
     optional int64 Limit = 7;
+    optional string TenantName = 8;
 }
 
 message TEvListSessionsResponse {

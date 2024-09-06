@@ -375,12 +375,12 @@ bool TWorkloadCommandBenchmark::RunBench(TClient& client, NYdbWorkload::IWorkloa
                 TFsPath(PlanFileName).Parent().MkDirs();
                 {
                     TFileOutput out(PlanFileName + ".table");
-                    TQueryPlanPrinter queryPlanPrinter(EOutputFormat::PrettyTable, true, out, 120);
+                    TQueryPlanPrinter queryPlanPrinter(EDataFormat::PrettyTable, true, out, 120);
                     queryPlanPrinter.Print(res.GetQueryPlan());
                 }
                 {
                     TFileOutput out(PlanFileName + ".json");
-                    TQueryPlanPrinter queryPlanPrinter(EOutputFormat::JsonBase64, true, out, 120);
+                    TQueryPlanPrinter queryPlanPrinter(EDataFormat::JsonBase64, true, out, 120);
                     queryPlanPrinter.Print(res.GetQueryPlan());
                 }
                 {

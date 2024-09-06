@@ -28,6 +28,7 @@
 #include "engines/changes/ttl.h"
 
 #include "resource_subscriber/counters.h"
+#include "transactions/operators/ev_write/sync.h"
 
 #include "bg_tasks/adapter/adapter.h"
 #include "bg_tasks/manager/manager.h"
@@ -41,6 +42,7 @@
 #include <ydb/services/metadata/service.h>
 #include <ydb/core/tx/tiering/manager.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
+#include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -64,7 +66,7 @@ NTabletPipe::TClientConfig GetPipeClientConfig() {
 
 TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     : TActor(&TThis::StateInit)
-    , TTabletExecutedFlat(info, tablet, nullptr)
+    , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
     , TabletCountersHolder(new TProtobufTabletCounters<ESimpleCounters_descriptor, ECumulativeCounters_descriptor,
           EPercentileCounters_descriptor, ETxTypes_descriptor>())
     , Counters(*TabletCountersHolder)
@@ -272,11 +274,12 @@ bool TColumnShard::RemoveLongTxWrite(NIceDb::TNiceDb& db, const TWriteId writeId
             return true;
         } else {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_remove_prepared_tx_insertion")("write_id", (ui64)writeId)("tx_id", txId);
+            return false;
         }
     } else {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_remove_removed_tx_insertion")("write_id", (ui64)writeId)("tx_id", txId);
+        return true;
     }
-    return false;
 }
 
 void TColumnShard::TryAbortWrites(NIceDb::TNiceDb& db, NOlap::TDbWrapper& dbTable, THashSet<TWriteId>&& writesToAbort) {
@@ -635,6 +638,9 @@ void TColumnShard::StartIndexTask(std::vector<const NOlap::TInsertedData*>&& dat
     data.reserve(dataToIndex.size());
     for (auto& ptr : dataToIndex) {
         data.push_back(*ptr);
+        if (!TablesManager.HasTable(data.back().PathId)) {
+            data.back().SetRemove();
+        }
     }
 
     Y_ABORT_UNLESS(data.size());
@@ -882,6 +888,33 @@ void TColumnShard::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev, const TAct
             SharingSessionsManager->InitializeEventsExchange(*this, ev->Cookie);
             break;
     }
+}
+
+void TColumnShard::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorContext& ctx) {
+    const ui64 txId = ev->Get()->Record.GetTxId();
+    if (!GetProgressTxController().GetTxOperatorOptional(txId)) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "read_set_ignored")("proto", ev->Get()->Record.DebugString());
+        Send(MakePipePerNodeCacheID(false),
+            new TEvPipeCache::TEvForward(
+                new TEvTxProcessing::TEvReadSetAck(0, txId, TabletID(), ev->Get()->Record.GetTabletProducer(), TabletID(), 0),
+                ev->Get()->Record.GetTabletProducer(), true),
+            IEventHandle::FlagTrackDelivery, txId);
+        return;
+    }
+    auto op = GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitSyncTransactionOperator>(txId);
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "read_set")("proto", ev->Get()->Record.DebugString())("lock_id", op->GetLockId());
+    NKikimrTx::TReadSetData data;
+    AFL_VERIFY(data.ParseFromArray(ev->Get()->Record.GetReadSet().data(), ev->Get()->Record.GetReadSet().size()));
+    auto tx = op->CreateReceiveBrokenFlagTx(
+        *this, ev->Get()->Record.GetTabletProducer(), data.GetDecision() != NKikimrTx::TReadSetData::DECISION_COMMIT);
+    Execute(tx.release(), ctx);
+}
+
+void TColumnShard::Handle(TEvTxProcessing::TEvReadSetAck::TPtr& ev, const TActorContext& ctx) {
+    auto op = GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitSyncTransactionOperator>(ev->Get()->Record.GetTxId());
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "read_set_ack")("proto", ev->Get()->Record.DebugString())("lock_id", op->GetLockId());
+    auto tx = op->CreateReceiveResultAckTx(*this, ev->Get()->Record.GetTabletConsumer());
+    Execute(tx.release(), ctx);
 }
 
 void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvProposeFromInitiator::TPtr& ev, const TActorContext& ctx) {

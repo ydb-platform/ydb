@@ -2633,12 +2633,13 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
         static bool IsDropped(const TItem& item);
     };
 
-    ui64 Id;
+    ui64 Id;  // TxId from the original TEvCreateExportRequest
     TString Uid;
     EKind Kind;
     TString Settings;
     TPathId DomainPathId;
     TMaybe<TString> UserSID;
+    TString PeerName;  // required for making audit log records
     TVector<TItem> Items;
 
     TPathId ExportPathId = InvalidPathId;
@@ -2663,12 +2664,14 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
             const TString& uid,
             const EKind kind,
             const TString& settings,
-            const TPathId domainPathId)
+            const TPathId domainPathId,
+            const TString& peerName)
         : Id(id)
         , Uid(uid)
         , Kind(kind)
         , Settings(settings)
         , DomainPathId(domainPathId)
+        , PeerName(peerName)
     {
     }
 
@@ -2678,8 +2681,9 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
             const TString& uid,
             const EKind kind,
             const TSettingsPB& settingsPb,
-            const TPathId domainPathId)
-        : TExportInfo(id, uid, kind, SerializeSettings(settingsPb), domainPathId)
+            const TPathId domainPathId,
+            const TString& peerName)
+        : TExportInfo(id, uid, kind, SerializeSettings(settingsPb), domainPathId, peerName)
     {
     }
 
@@ -2790,12 +2794,13 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         static bool IsDone(const TItem& item);
     };
 
-    ui64 Id;
+    ui64 Id;  // TxId from the original TEvCreateImportRequest
     TString Uid;
     EKind Kind;
     Ydb::Import::ImportFromS3Settings Settings;
     TPathId DomainPathId;
     TMaybe<TString> UserSID;
+    TString PeerName;  // required for making audit log records
 
     EState State = EState::Invalid;
     TString Issue;
@@ -2811,12 +2816,14 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
             const TString& uid,
             const EKind kind,
             const Ydb::Import::ImportFromS3Settings& settings,
-            const TPathId domainPathId)
+            const TPathId domainPathId,
+            const TString& peerName)
         : Id(id)
         , Uid(uid)
         , Kind(kind)
         , Settings(settings)
         , DomainPathId(domainPathId)
+        , PeerName(peerName)
     {
     }
 
@@ -3019,7 +3026,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             result << " DebugMessage: " << DebugMessage;
             result << " SeqNoRound: " << SeqNoRound;
             result << " Processed: " << Processed.ToString();
-            
+
             result << " }";
 
             return result;

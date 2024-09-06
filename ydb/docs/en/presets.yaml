@@ -1,6 +1,8 @@
 default:
   lang: en
   pub-cover-size: 700x400
+  yandex_docs: https://yandex.cloud/en/docs
+  azure_docs: https://learn.microsoft.com/en-us
   team:
       blinkov:
         name: Ivan Blinkov

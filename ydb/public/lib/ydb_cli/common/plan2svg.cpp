@@ -385,6 +385,14 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
             stage->SpillingComputeTime = std::make_shared<TSingleMetric>(SpillingComputeTime, *spillingComputeTimeNode);
         }
 
+        if (auto* spillingChannelBytesNode = stage->StatsNode->GetValueByPath("SpillingChannelBytes")) {
+            stage->SpillingChannelBytes = std::make_shared<TSingleMetric>(SpillingChannelBytes, *spillingChannelBytesNode);
+        }
+
+        if (auto* spillingChannelTimeNode = stage->StatsNode->GetValueByPath("SpillingChannelTimeUs")) {
+            stage->SpillingChannelTime = std::make_shared<TSingleMetric>(SpillingChannelTime, *spillingChannelTimeNode);
+        }
+
         if (auto* outputNode = stage->StatsNode->GetValueByPath("Output")) {
             if (auto* popNode = (*outputNode)[0].GetValueByPath("Pop")) {
                 if (auto* bytesNode = popNode->GetValueByPath("Bytes")) {
@@ -846,6 +854,47 @@ void TPlan::PrintValues(TStringBuilder& canvas, std::shared_ptr<TSingleMetric> m
     }
 }
 
+void TPlan::PrintStageSummary(TStringBuilder& background, TStringBuilder&, ui32 y0, std::shared_ptr<TSingleMetric> metric, const TString& mediumColor, const TString& lightColor, const TString& textSum, const TString& tooltip) {
+    ui32 x0 = Config.HeaderWidth + GAP_X + INTERNAL_GAP_X;
+    ui32 width = Config.SummaryWidth - INTERNAL_GAP_X * 2;
+    if (metric->Summary && metric->Summary->Max) {
+        width = metric->Details.Sum * width / metric->Summary->Max;
+    }
+    background
+        << "<g><title>" << tooltip << "</title>" << Endl;
+    if (metric->Details.Max) {
+        auto wavg = width / 2;
+        if (metric->Details.Max > metric->Details.Min) {
+            wavg = (metric->Details.Avg - metric->Details.Min) * width / (metric->Details.Max - metric->Details.Min);
+        }
+        background
+        << "  <rect x='" << x0 << "' y='" << y0
+        << "' width='" << width << "' height='" << INTERNAL_HEIGHT
+        << "' stroke-width='0' fill='" << lightColor << "'/>"
+        << "  <polygon points='" << x0 << "," << y0 << " "
+        << x0 + wavg << "," << y0 + INTERNAL_HEIGHT - metric->Details.Avg * INTERNAL_HEIGHT / metric->Details.Max << " "
+        << x0 + width << "," << y0 + INTERNAL_HEIGHT - metric->Details.Min * INTERNAL_HEIGHT / metric->Details.Max << " "
+        << x0 + width << "," << y0 + INTERNAL_HEIGHT << " "
+        << x0 << "," << y0 + INTERNAL_HEIGHT
+        << "' stroke='none' fill='" << mediumColor << "'/>" << Endl;
+    } else {
+        background
+        << "  <rect x='" << x0 << "' y='" << y0
+        << "' width='" << width << "' height='" << INTERNAL_HEIGHT
+        << "' stroke-width='0' fill='" << mediumColor << "'/>" << Endl;
+    }
+    if (textSum) {
+        background
+        << "<rect x='" << x0 << "' y='" << y0 + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2
+        << "' width='" << textSum.size() * INTERNAL_TEXT_HEIGHT * 7 / 10 << "' height='" << INTERNAL_TEXT_HEIGHT + 1
+        << "' stroke-width='0' opacity='0.5' fill='" << Config.Palette.StageDark << "'/>" << Endl
+        << "<text font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextSummary << "' x='" << x0
+        << "' y='" << y0 + INTERNAL_TEXT_HEIGHT + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2 << "'>" << textSum << "</text>" << Endl;
+    }
+    background
+        << "</g>" << Endl;
+}
+
 void TPlan::PrintSvg(ui64 maxTime, ui32& offsetY, TStringBuilder& background, TStringBuilder& canvas) {
     OffsetY = offsetY;
     ui32 planHeight = Stages.back()->OffsetY + Stages.back()->Height + Stages.back()->CteHeight;
@@ -899,7 +948,6 @@ void TPlan::PrintSvg(ui64 maxTime, ui32& offsetY, TStringBuilder& background, TS
         }
 
 
-        ui32 x0 = Config.HeaderWidth + GAP_X + INTERNAL_GAP_X;
         ui32 y0 = s->OffsetY + offsetY + INTERNAL_GAP_Y;
 
         auto tx0 = Config.HeaderWidth + GAP_X + Config.SummaryWidth + GAP_X + INTERNAL_GAP_X;
@@ -908,53 +956,47 @@ void TPlan::PrintSvg(ui64 maxTime, ui32& offsetY, TStringBuilder& background, TS
         auto px = tx0 + TimeOffset * tw / maxTime;
         auto pw = MaxTime * tw / maxTime;
 
+        auto taskCount = s->CpuTime ? s->CpuTime->Details.Count : 0;
+
         if (s->OutputBytes) {
-            ui32 width = 0;
-            if (s->OutputBytes->Summary->Max) {
-                width = s->OutputBytes->Details.Sum * (Config.SummaryWidth - INTERNAL_GAP_X * 2) / s->OutputBytes->Summary->Max;
-            }
-            canvas
-                << "<text text-anchor='end' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.StageText << "' x='" << Config.HeaderWidth
-                << "' y='" << y0 + INTERNAL_TEXT_HEIGHT + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2 << "'>" << s->OutputBytes->Details.Count << "</text>" << Endl;
-            background
-                << "<g><title>Output "
+            auto textSum = FormatBytes(s->OutputBytes->Details.Sum);
+            TStringBuilder tooltip;
+            tooltip
+                << "Output "
                 << s->OutputBytes->Details.Sum * 100 / s->OutputBytes->Summary->Value << "%, \u2211"
-                << FormatBytes(s->OutputBytes->Details.Sum) << ", " << FormatBytes(s->OutputBytes->Details.Min) << " | "
+                << textSum << ", " << FormatBytes(s->OutputBytes->Details.Min) << " | "
                 << FormatBytes(s->OutputBytes->Details.Avg) << " | " << FormatBytes(s->OutputBytes->Details.Max);
             if (s->OutputRows && s->OutputRows->Details.Sum) {
-            background
+            tooltip
                 << ", Rows \u2211"
                 << FormatRows(s->OutputRows->Details.Sum) << ", " << FormatRows(s->OutputRows->Details.Min) << " | "
                 << FormatRows(s->OutputRows->Details.Avg) << " | " << FormatRows(s->OutputRows->Details.Max)
                 << ", Width " << FormatBytes(s->OutputBytes->Details.Sum / s->OutputRows->Details.Sum);
             }
-            background
-                << "</title>" << Endl;
-            if (width < INTERNAL_HEIGHT) {
-            background
-                << "  <rect x='" << x0 << "' y='" << y0 << "' width='" << INTERNAL_HEIGHT << "' height='" << INTERNAL_HEIGHT << "' stroke='none' fill='" << Config.Palette.StageDark << "' />" << Endl;
-            }
-            if (s->OutputBytes->Details.Max) {
-                ui32 minWidth = width * s->OutputBytes->Details.Min / s->OutputBytes->Details.Max;
+            PrintStageSummary(background, canvas, y0, s->OutputBytes, Config.Palette.OutputMedium, Config.Palette.OutputLight, textSum, tooltip);
+
+            if (s->SpillingChannelBytes && s->SpillingChannelBytes->Details.Sum) {
+                auto textSum = FormatBytes(s->SpillingChannelBytes->Details.Sum);
+                auto x1 = Config.HeaderWidth + GAP_X + Config.SummaryWidth + - INTERNAL_GAP_X;
+                auto x0 = x1 - textSum.size() * INTERNAL_TEXT_HEIGHT * 7 / 10;
                 background
-                    << "  <rect x='" << x0 + minWidth << "' y='" << y0
-                    << "' width='" << width - minWidth << "' height='" << INTERNAL_HEIGHT
-                    << "' stroke-width='0' fill='" << Config.Palette.OutputLight << "'/>" << Endl;
-
-                ui32 avgX = width * s->OutputBytes->Details.Avg / s->OutputBytes->Details.Max;
-
-                background << "  <line x1='" << x0 + avgX << "' y1='" << y0
-                        << "' x2='" << x0 + avgX << "' y2='" << y0 + INTERNAL_HEIGHT
-                        << "' stroke-width='1' stroke='" << Config.Palette.OutputDark << "' />" << Endl;
-
-                width = minWidth;
-            }
-            background
-                << "  <rect x='" << x0 << "' y='" << y0
-                << "' width='" << width << "' height='" << INTERNAL_HEIGHT
-                << "' stroke-width='0' fill='" << Config.Palette.OutputMedium << "'/>" << Endl;
-            background
+                << "<g><title>" << "Channel Spilling \u2211" << textSum
+                << ", " << FormatBytes(s->SpillingChannelBytes->Details.Min) << " | "
+                << FormatBytes(s->SpillingChannelBytes->Details.Avg) << " | " << FormatBytes(s->SpillingChannelBytes->Details.Max)
+                << "</title>" << Endl
+                << "<rect x='" << x0 << "' y='" << y0 + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2
+                << "' width='" << x1 - x0 << "' height='" << INTERNAL_TEXT_HEIGHT + 1
+                << "' stroke-width='0' fill='" << Config.Palette.SpillingBytesLight << "'/>" << Endl
+                << "<text text-anchor='end' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextSummary << "' x='" << x1 - 1
+                << "' y='" << y0 + INTERNAL_TEXT_HEIGHT + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2 << "'>" << textSum << "</text>" << Endl
                 << "</g>" << Endl;
+            }
+
+            if (s->OutputBytes->Details.Count != taskCount) {
+                canvas
+                << "<text text-anchor='end' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.StageText << "' x='" << Config.HeaderWidth
+                << "' y='" << y0 + INTERNAL_TEXT_HEIGHT + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2 << "'>" << s->OutputBytes->Details.Count << "</text>" << Endl;
+            }
 
             auto d = s->OutputBytes->MaxTime - s->OutputBytes->MinTime;
             TStringBuilder title;
@@ -980,45 +1022,37 @@ void TPlan::PrintSvg(ui64 maxTime, ui32& offsetY, TStringBuilder& background, TS
         y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
 
         if (s->MaxMemoryUsage) {
-            ui32 width = 0;
-            if (s->MaxMemoryUsage->Summary->Max) {
-                width = s->MaxMemoryUsage->Details.Sum * (Config.SummaryWidth - INTERNAL_GAP_X * 2) / s->MaxMemoryUsage->Summary->Max;
+            auto textSum = FormatBytes(s->MaxMemoryUsage->Details.Sum);
+            TStringBuilder tooltip;
+            tooltip
+                << "Memory "
+                << s->MaxMemoryUsage->Details.Sum * 100 / s->MaxMemoryUsage->Summary->Value << "%, \u2211"
+                << textSum << ", " << FormatBytes(s->MaxMemoryUsage->Details.Min) << " | "
+                << FormatBytes(s->MaxMemoryUsage->Details.Avg) << " | " << FormatBytes(s->MaxMemoryUsage->Details.Max);
+            PrintStageSummary(background, canvas, y0, s->MaxMemoryUsage, Config.Palette.MemMedium, Config.Palette.MemLight, textSum, tooltip);
+
+            if (s->SpillingComputeBytes && s->SpillingComputeBytes->Details.Sum) {
+                auto textSum = FormatBytes(s->SpillingComputeBytes->Details.Sum);
+                auto x1 = Config.HeaderWidth + GAP_X + Config.SummaryWidth + - INTERNAL_GAP_X;
+                auto x0 = x1 - textSum.size() * INTERNAL_TEXT_HEIGHT * 7 / 10;
+                background
+                << "<g><title>" << "Compute Spilling \u2211" << textSum
+                << ", " << FormatBytes(s->SpillingComputeBytes->Details.Min) << " | "
+                << FormatBytes(s->SpillingComputeBytes->Details.Avg) << " | " << FormatBytes(s->SpillingComputeBytes->Details.Max)
+                << "</title>" << Endl
+                << "<rect x='" << x0 << "' y='" << y0 + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2
+                << "' width='" << x1 - x0 << "' height='" << INTERNAL_TEXT_HEIGHT + 1
+                << "' stroke-width='0' fill='" << Config.Palette.SpillingBytesLight << "'/>" << Endl
+                << "<text text-anchor='end' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextSummary << "' x='" << x1 - 1
+                << "' y='" << y0 + INTERNAL_TEXT_HEIGHT + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2 << "'>" << textSum << "</text>" << Endl
+                << "</g>" << Endl;
             }
-            canvas
+
+            if (s->MaxMemoryUsage->Details.Count != taskCount) {
+                canvas
                 << "<text text-anchor='end' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.StageText << "' x='" << Config.HeaderWidth
                 << "' y='" << y0 + INTERNAL_TEXT_HEIGHT + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2 << "'>" << s->MaxMemoryUsage->Details.Count << "</text>" << Endl;
-            background
-                << "<g><title>Memory "
-                << s->MaxMemoryUsage->Details.Sum * 100 / s->MaxMemoryUsage->Summary->Value << "%, \u2211"
-                << FormatBytes(s->MaxMemoryUsage->Details.Sum) << ", " << FormatBytes(s->MaxMemoryUsage->Details.Min) << " | "
-                << FormatBytes(s->MaxMemoryUsage->Details.Avg) << " | " << FormatBytes(s->MaxMemoryUsage->Details.Max)
-                << "</title>" << Endl;
-            if (width < INTERNAL_HEIGHT) {
-            background
-                << "  <rect x='" << x0 << "' y='" << y0 << "' width='" << INTERNAL_HEIGHT << "' height='" << INTERNAL_HEIGHT / 2 << "' stroke='none' fill='" << Config.Palette.StageDark << "' />" << Endl;
             }
-            if (s->MaxMemoryUsage->Details.Max) {
-                ui32 minWidth = width * s->MaxMemoryUsage->Details.Min / s->MaxMemoryUsage->Details.Max;
-                background
-                    << "<rect x='" << x0 + minWidth << "' y='" << y0
-                    << "' width='" << width - minWidth << "' height='" << INTERNAL_HEIGHT
-                    << "' stroke-width='0' fill='" << Config.Palette.MemLight << "'/>" << Endl;
-
-                ui32 avgX = width * s->MaxMemoryUsage->Details.Avg / s->MaxMemoryUsage->Details.Max;
-
-                background << "<line x1='" << x0 + avgX << "' y1='" << y0
-                        << "' x2='" << x0 + avgX << "' y2='" << y0 + INTERNAL_HEIGHT
-                        << "' stroke-width='1' stroke='" << Config.Palette.MemMedium << "' />" << Endl;
-
-                width = minWidth;
-            }
-            background
-                << "<rect x='" << x0 << "' y='" << y0
-                << "' width='" << width << "' height='" << INTERNAL_HEIGHT
-                << "' stroke-width='0' fill='" << Config.Palette.MemMedium << "'/>" << Endl;
-            background
-                << "</g>" << Endl;
-
 
             if (!s->MaxMemoryUsage->History.Values.empty()) {
                 PrintValues(canvas, s->MaxMemoryUsage, px, y0, pw, INTERNAL_HEIGHT, "Max MEM " + FormatBytes(s->MaxMemoryUsage->History.MaxValue), Config.Palette.MemMedium, Config.Palette.MemMedium);
@@ -1029,48 +1063,23 @@ void TPlan::PrintSvg(ui64 maxTime, ui32& offsetY, TStringBuilder& background, TS
             }
         }
 
-        // MEM is mandatory metric
         y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
 
         if (s->CpuTime) {
-            ui32 width = 0;
-            if (s->CpuTime->Summary->Max) {
-                width = s->CpuTime->Details.Sum * (Config.SummaryWidth - INTERNAL_GAP_X * 2) / s->CpuTime->Summary->Max;
-            }
-            canvas
-                << "<text text-anchor='end' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.StageText << "' x='" << Config.HeaderWidth
-                << "' y='" << y0 + INTERNAL_TEXT_HEIGHT + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2 << "'>" << s->CpuTime->Details.Count << "</text>" << Endl;
-            background
-                << "<g><title>CPU Usage "
+            auto textSum = FormatUsage(s->CpuTime->Details.Sum);
+            TStringBuilder tooltip;
+            tooltip
+                << "CPU Usage "
                 << s->CpuTime->Details.Sum * 100 / s->CpuTime->Summary->Value << "%, \u2211"
-                << FormatUsage(s->CpuTime->Details.Sum) << ", " << FormatUsage(s->CpuTime->Details.Min) << " | "
-                << FormatUsage(s->CpuTime->Details.Avg) << " | " << FormatUsage(s->CpuTime->Details.Max)
-                << "</title>" << Endl;
-            if (width < INTERNAL_HEIGHT) {
-            background
-                << "  <rect x='" << x0 << "' y='" << y0 << "' width='" << INTERNAL_HEIGHT << "' height='" << INTERNAL_HEIGHT << "' stroke='none' fill='" << Config.Palette.StageDark << "' />" << Endl;
+                << textSum << ", " << FormatUsage(s->CpuTime->Details.Min) << " | "
+                << FormatUsage(s->CpuTime->Details.Avg) << " | " << FormatUsage(s->CpuTime->Details.Max);
+            PrintStageSummary(background, canvas, y0, s->CpuTime, Config.Palette.CpuMedium, Config.Palette.CpuLight, textSum, tooltip);
+
+            if (taskCount) {
+                canvas
+                << "<text text-anchor='end' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.StageText << "' x='" << Config.HeaderWidth
+                << "' y='" << y0 + INTERNAL_TEXT_HEIGHT + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2 << "'>" << taskCount << "</text>" << Endl;
             }
-            if (s->CpuTime->Details.Max) {
-                ui32 minWidth = width * s->CpuTime->Details.Min / s->CpuTime->Details.Max;
-                background
-                    << "<rect x='" << x0 + minWidth << "' y='" << y0
-                    << "' width='" << width - minWidth << "' height='" << INTERNAL_HEIGHT
-                    << "' stroke-width='0' fill='" << Config.Palette.CpuLight << "'/>" << Endl;
-
-                ui32 avgX = width * s->CpuTime->Details.Avg / s->CpuTime->Details.Max;
-
-                background << "<line x1='" << x0 + avgX << "' y1='" << y0
-                        << "' x2='" << x0 + avgX << "' y2='" << y0 + INTERNAL_HEIGHT
-                        << "' stroke-width='1' stroke='' />" << Endl;
-
-                width = minWidth;
-            }
-            background
-                << "<rect x='" << x0 << "' y='" << y0
-                << "' width='" << width << "' height='" << INTERNAL_HEIGHT
-                << "' stroke-width='0' fill='" << Config.Palette.CpuMedium << "'/>" << Endl;
-            background
-                << "</g>" << Endl;
 
             if (!s->CpuTime->History.Deriv.empty()) {
                 auto maxCpu = s->CpuTime->History.MaxDeriv * TIME_SERIES_RANGES / (s->CpuTime->History.MaxTime - s->CpuTime->History.MinTime);
@@ -1082,7 +1091,6 @@ void TPlan::PrintSvg(ui64 maxTime, ui32& offsetY, TStringBuilder& background, TS
             }
         }
 
-        // CPU is mandatory metric
         y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
 
         for (auto& c : s->Connections) {
@@ -1185,52 +1193,27 @@ void TPlan::PrintSvg(ui64 maxTime, ui32& offsetY, TStringBuilder& background, TS
                 << "</g>" << Endl;
 
             if (c->InputBytes) {
-                ui32 width = 0;
-                if (c->InputBytes->Summary->Max) {
-                    width = c->InputBytes->Details.Sum * (Config.SummaryWidth - INTERNAL_GAP_X * 2) / c->InputBytes->Summary->Max;
-                }
-                canvas
-                    << "<text text-anchor='end' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.StageText << "' x='" << Config.HeaderWidth
-                    << "' y='" << y0 + INTERNAL_TEXT_HEIGHT + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2 << "'>" << c->InputBytes->Details.Count << "</text>" << Endl;
-                background
-                    << "<g><title>Input "
+                auto textSum = FormatBytes(c->InputBytes->Details.Sum);
+                TStringBuilder tooltip;
+                tooltip
+                    << "Input "
                     << c->InputBytes->Details.Sum * 100 / c->InputBytes->Summary->Value << "%, \u2211"
-                    << FormatBytes(c->InputBytes->Details.Sum) << ", " << FormatBytes(c->InputBytes->Details.Min) << " | "
+                    << textSum << ", " << FormatBytes(c->InputBytes->Details.Min) << " | "
                     << FormatBytes(c->InputBytes->Details.Avg) << " | " << FormatBytes(c->InputBytes->Details.Max);
                 if (c->InputRows && c->InputRows->Details.Sum) {
-                background
+                tooltip
                     << ", Rows \u2211"
                     << FormatRows(c->InputRows->Details.Sum) << ", " << FormatRows(c->InputRows->Details.Min) << " | "
                     << FormatRows(c->InputRows->Details.Avg) << " | " << FormatRows(c->InputRows->Details.Max)
                     << ", Width " << FormatBytes(c->InputBytes->Details.Sum / c->InputRows->Details.Sum);
                 }
-                background
-                    << "</title>" << Endl;
-                if (width < INTERNAL_HEIGHT) {
-                background
-                    << "  <rect x='" << x0 << "' y='" << y0 << "' width='" << INTERNAL_HEIGHT << "' height='" << INTERNAL_HEIGHT / 2 << "' stroke='none' fill='" << Config.Palette.StageDark << "' />" << Endl;
+                PrintStageSummary(background, canvas, y0, c->InputBytes, Config.Palette.InputMedium, Config.Palette.InputLight, textSum, tooltip);
+
+                if (c->InputBytes->Details.Count != taskCount) {
+                    canvas
+                    << "<text text-anchor='end' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.StageText << "' x='" << Config.HeaderWidth
+                    << "' y='" << y0 + INTERNAL_TEXT_HEIGHT + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2 << "'>" << c->InputBytes->Details.Count << "</text>" << Endl;
                 }
-                if (c->InputBytes->Details.Max) {
-                    ui32 minWidth = width * c->InputBytes->Details.Min / c->InputBytes->Details.Max;
-                    background
-                        << "  <rect x='" << x0 + minWidth << "' y='" << y0
-                        << "' width='" << width - minWidth << "' height='" << INTERNAL_HEIGHT
-                        << "' stroke-width='0' fill='" << Config.Palette.InputLight << "'/>" << Endl;
-
-                    ui32 avgX = width * c->InputBytes->Details.Avg / c->InputBytes->Details.Max;
-
-                    background << "  <line x1='" << x0 + avgX << "' y1='" << y0
-                            << "' x2='" << x0 + avgX << "' y2='" << y0 + INTERNAL_HEIGHT
-                            << "' stroke-width='1' stroke='" << Config.Palette.InputDark << "' />" << Endl;
-
-                    width = minWidth;
-                }
-                background
-                    << "  <rect x='" << x0 << "' y='" << y0
-                    << "' width='" << width << "' height='" << INTERNAL_HEIGHT
-                    << "' stroke-width='0' fill='" << Config.Palette.InputMedium << "'/>" << Endl;
-                background
-                    << "</g>" << Endl;
 
                 auto d = c->InputBytes->MaxTime - c->InputBytes->MinTime;
                 TStringBuilder title;
@@ -1250,57 +1233,33 @@ void TPlan::PrintSvg(ui64 maxTime, ui32& offsetY, TStringBuilder& background, TS
                 if (!c->InputBytes->History.Deriv.empty()) {
                     PrintDeriv(canvas, c->InputBytes->History, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.InputDark);
                 }
+
                 y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
             }
         }
 
         if (s->Source && s->Source->IngressBytes) {
-            ui32 width = 0;
-            if (s->Source->IngressBytes->Summary->Max) {
-                width = s->Source->IngressBytes->Details.Sum * (Config.SummaryWidth - INTERNAL_GAP_X * 2) / s->Source->IngressBytes->Summary->Max;
-            }
-            canvas
-                << "<text text-anchor='end' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.StageText << "' x='" << Config.HeaderWidth
-                << "' y='" << y0 + INTERNAL_TEXT_HEIGHT + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2 << "'>" << s->Source->IngressBytes->Details.Count << "</text>" << Endl;
-            background
-                << "<g><title>Ingress "
+            auto textSum = FormatBytes(s->Source->IngressBytes->Details.Sum);
+            TStringBuilder tooltip;
+            tooltip
+                << "Ingress "
                 << s->Source->IngressBytes->Details.Sum * 100 / s->Source->IngressBytes->Summary->Value << "%, \u2211"
-                << FormatBytes(s->Source->IngressBytes->Details.Sum) << ", " << FormatBytes(s->Source->IngressBytes->Details.Min) << " | "
+                << textSum << ", " << FormatBytes(s->Source->IngressBytes->Details.Min) << " | "
                 << FormatBytes(s->Source->IngressBytes->Details.Avg) << " | " << FormatBytes(s->Source->IngressBytes->Details.Max);
             if (s->Source->IngressRows && s->Source->IngressRows->Details.Sum) {
-            background
+            tooltip
                 << ", Rows \u2211"
                 << FormatRows(s->Source->IngressRows->Details.Sum) << ", " << FormatRows(s->Source->IngressRows->Details.Min) << " | "
                 << FormatRows(s->Source->IngressRows->Details.Avg) << " | " << FormatRows(s->Source->IngressRows->Details.Max)
                 << ", Width " << FormatBytes(s->Source->IngressBytes->Details.Sum / s->Source->IngressRows->Details.Sum);
             }
-            background
-                << "</title>" << Endl;
-            if (width < INTERNAL_HEIGHT) {
-            background
-                << "  <rect x='" << x0 << "' y='" << y0 << "' width='" << INTERNAL_HEIGHT << "' height='" << INTERNAL_HEIGHT / 2 << "' stroke='none' fill='" << Config.Palette.StageDark << "' />" << Endl;
+            PrintStageSummary(background, canvas, y0, s->Source->IngressBytes, Config.Palette.IngressMedium, Config.Palette.IngressLight, textSum, tooltip);
+
+            if (s->Source->IngressBytes->Details.Count != taskCount) {
+                canvas
+                << "<text text-anchor='end' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.StageText << "' x='" << Config.HeaderWidth
+                << "' y='" << y0 + INTERNAL_TEXT_HEIGHT + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2 << "'>" << s->Source->IngressBytes->Details.Count << "</text>" << Endl;
             }
-            if (s->Source->IngressBytes->Details.Max) {
-                ui32 minWidth = width * s->Source->IngressBytes->Details.Min / s->Source->IngressBytes->Details.Max;
-                background
-                    << "  <rect x='" << x0 + minWidth << "' y='" << y0
-                    << "' width='" << width - minWidth << "' height='" << INTERNAL_HEIGHT
-                    << "' stroke-width='0' fill='" << Config.Palette.IngressLight << "'/>" << Endl;
-
-                ui32 avgX = width * s->Source->IngressBytes->Details.Avg / s->Source->IngressBytes->Details.Max;
-
-                background << "  <line x1='" << x0 + avgX << "' y1='" << y0
-                        << "' x2='" << x0 + avgX << "' y2='" << y0 + INTERNAL_HEIGHT
-                        << "' stroke-width='1' stroke='" << Config.Palette.IngressDark << "' />" << Endl;
-
-                width = minWidth;
-            }
-            background
-                << "  <rect x='" << x0 << "' y='" << y0
-                << "' width='" << width << "' height='" << INTERNAL_HEIGHT
-                << "' stroke-width='0' fill='" << Config.Palette.IngressMedium << "'/>" << Endl;
-            background
-                << "</g>" << Endl;
 
             auto d = s->Source->IngressBytes->MaxTime - s->Source->IngressBytes->MinTime;
             TStringBuilder title;
@@ -1320,6 +1279,7 @@ void TPlan::PrintSvg(ui64 maxTime, ui32& offsetY, TStringBuilder& background, TS
             if (!s->Source->IngressBytes->History.Deriv.empty()) {
                 PrintDeriv(canvas, s->Source->IngressBytes->History, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.IngressDark);
             }
+
             y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
         }
     }
@@ -1350,6 +1310,7 @@ TColorPalette::TColorPalette() {
     ConnectionText= "#FF0000";
     MinMaxLine    = "#FFFF00";
     TextLight     = "#FFFFFF";
+    TextSummary   = "#000000";
     SpillingBytesDark   = "#34495E";
     SpillingBytesMedium = "#5D6D7E";
     SpillingBytesLight  = "#85929E";

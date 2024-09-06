@@ -186,7 +186,7 @@ namespace NYql {
             return false;
         }
 
-    }
+    } // namespace
 
     bool IsEmptyFilterPredicate(const TCoLambda& lambda) {
         auto maybeBool = lambda.Body().Maybe<TCoBool>();

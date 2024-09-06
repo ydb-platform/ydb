@@ -29,7 +29,7 @@ void TGRpcYmqService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger)
                 ActorSystem_->Send(GRpcRequestProxyId_,                                                                             \
                     new TGrpcRequestOperationCall<Ydb::Ymq::V1::NAME##Request, Ydb::Ymq::V1::NAME##Response>        \
                         (ctx, CB, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::LIMIT_TYPE), ATTR}));                              \
-            }, &Ydb::Ymq::V1::YmqService::AsyncService::Request ## NAME,                                            \
+            }, &Ydb::Ymq::V1::YmqService::AsyncService::RequestYmq ## NAME,                                            \
             #NAME, logger, getCounterBlock("ymq", #NAME))->Run();
 
     ADD_REQUEST(GetQueueUrl, DoYmqGetQueueUrlRequest, nullptr, Off)

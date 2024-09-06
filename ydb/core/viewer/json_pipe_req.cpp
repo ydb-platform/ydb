@@ -113,6 +113,40 @@ TString TViewerPipeClient::GetPath(TEvTxProxySchemeCache::TEvNavigateKeySetResul
     return {};
 }
 
+bool TViewerPipeClient::IsSuccess(const std::unique_ptr<TEvTxProxySchemeCache::TEvNavigateKeySetResult>& ev) {
+    return (ev->Request->ResultSet.size() == 1) && (ev->Request->ResultSet.begin()->Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok);
+}
+
+TString TViewerPipeClient::GetError(const std::unique_ptr<TEvTxProxySchemeCache::TEvNavigateKeySetResult>& ev) {
+    if (ev->Request->ResultSet.size() == 0) {
+        return "empty response";
+    }
+    switch (ev->Request->ResultSet.begin()->Status) {
+        case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
+            return "Ok";
+        case NSchemeCache::TSchemeCacheNavigate::EStatus::Unknown:
+            return "Unknown";
+        case NSchemeCache::TSchemeCacheNavigate::EStatus::RootUnknown:
+            return "RootUnknown";
+        case NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown:
+            return "PathErrorUnknown";
+        case NSchemeCache::TSchemeCacheNavigate::EStatus::PathNotTable:
+            return "PathNotTable";
+        case NSchemeCache::TSchemeCacheNavigate::EStatus::PathNotPath:
+            return "PathNotPath";
+        case NSchemeCache::TSchemeCacheNavigate::EStatus::TableCreationNotComplete:
+            return "TableCreationNotComplete";
+        case NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError:
+            return "LookupError";
+        case NSchemeCache::TSchemeCacheNavigate::EStatus::RedirectLookupError:
+            return "RedirectLookupError";
+        case NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied:
+            return "AccessDenied";
+        default:
+            return ::ToString(static_cast<int>(ev->Request->ResultSet.begin()->Status));
+    }
+}
+
 void TViewerPipeClient::RequestHiveDomainStats(NNodeWhiteboard::TTabletId hiveId) {
     TActorId pipeClient = ConnectTabletPipe(hiveId);
     THolder<TEvHive::TEvRequestHiveDomainStats> request = MakeHolder<TEvHive::TEvRequestHiveDomainStats>();
@@ -266,6 +300,11 @@ TViewerPipeClient::TRequestResponse<NConsole::TEvConsole::TEvGetNodeConfigRespon
     return MakeRequestToPipe<NConsole::TEvConsole::TEvGetNodeConfigResponse>(pipeClient, request.Release(), cookie);
 }
 
+TViewerPipeClient::TRequestResponse<NConsole::TEvConsole::TEvGetAllConfigsResponse> TViewerPipeClient::MakeRequestConsoleGetAllConfigs() {
+    TActorId pipeClient = ConnectTabletPipe(GetConsoleId());
+    return MakeRequestToPipe<NConsole::TEvConsole::TEvGetAllConfigsResponse>(pipeClient, new NConsole::TEvConsole::TEvGetAllConfigsRequest());
+}
+
 void TViewerPipeClient::RequestConsoleGetTenantStatus(const TString& path) {
     TActorId pipeClient = ConnectTabletPipe(GetConsoleId());
     THolder<NConsole::TEvConsole::TEvGetTenantStatusRequest> request = MakeHolder<NConsole::TEvConsole::TEvGetTenantStatusRequest>();
@@ -398,6 +437,11 @@ TViewerPipeClient::TRequestResponse<NSysView::TEvSysView::TEvGetPDisksResponse> 
     TActorId pipeClient = ConnectTabletPipe(GetBSControllerId());
     auto request = std::make_unique<NSysView::TEvSysView::TEvGetPDisksRequest>();
     return MakeRequestToPipe<NSysView::TEvSysView::TEvGetPDisksResponse>(pipeClient, request.release());
+}
+
+TViewerPipeClient::TRequestResponse<NSysView::TEvSysView::TEvGetStorageStatsResponse> TViewerPipeClient::RequestBSControllerStorageStats() {
+    TActorId pipeClient = ConnectTabletPipe(GetBSControllerId());
+    return MakeRequestToPipe<NSysView::TEvSysView::TEvGetStorageStatsResponse>(pipeClient, new NSysView::TEvSysView::TEvGetStorageStatsRequest());
 }
 
 void TViewerPipeClient::RequestBSControllerPDiskUpdateStatus(const NKikimrBlobStorage::TUpdateDriveStatus& driveStatus, bool force) {

@@ -510,7 +510,7 @@ public:
         const TGetJobSpecOptions& options),
         (jobId, options))
 
-    DELEGATE_METHOD(TFuture<TSharedRef>, GetJobStderr, (
+    DELEGATE_METHOD(TFuture<TGetJobStderrResponse>, GetJobStderr, (
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
         NJobTrackerClient::TJobId jobId,
         const TGetJobStderrOptions& options),

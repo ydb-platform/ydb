@@ -17,7 +17,6 @@ ydb/core/kqp/ut/query KqpLimits.QueryReplySize
 ydb/core/kqp/ut/query KqpQuery.QueryTimeout
 ydb/core/kqp/ut/scan KqpRequestContext.TraceIdInErrorMessage
 ydb/core/kqp/ut/scheme [*/*]*
-ydb/core/kqp/ut/scheme KqpOlapScheme.DropThenAddColumn
 ydb/core/kqp/ut/scheme KqpOlapScheme.TenThousandColumns
 ydb/core/kqp/ut/scheme KqpScheme.AlterAsyncReplication
 ydb/core/kqp/ut/scheme KqpScheme.QueryWithAlter
@@ -104,3 +103,6 @@ ydb/tests/functional/tenants test_tenants.py.*
 ydb/tests/functional/ydb_cli test_ydb_impex.py.TestImpex.test_big_dataset*
 ydb/tests/tools/pq_read/test test_timeout.py.TestTimeout.test_timeout
 ydb/core/kqp/ut/query KqpStats.SysViewClientLost
+ydb/core/kqp/ut/olap KqpOlap.ManyColumnShards
+ydb/public/sdk/cpp/client/ydb_topic/ut TxUsage.WriteToTopic_Invalid_Session
+

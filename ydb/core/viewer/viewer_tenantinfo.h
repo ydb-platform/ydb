@@ -379,7 +379,7 @@ public:
         TString path = GetPath(ev);
         auto& result(NavigateKeySetResult[path]);
         result.Set(std::move(ev));
-        if (result.Get()->Request->ResultSet.size() == 1 && result.Get()->Request->ResultSet.begin()->Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
+        if (result.IsOk()) {
             auto domainInfo = result.Get()->Request->ResultSet.begin()->DomainInfo;
             TTabletId hiveId = domainInfo->Params.GetHive();
             if (hiveId) {

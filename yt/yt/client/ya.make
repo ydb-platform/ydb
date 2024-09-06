@@ -227,6 +227,7 @@ RECURSE(
 )
 
 RECURSE_FOR_TESTS(
+    api/unittests
     table_client/unittests
     unittests
 )

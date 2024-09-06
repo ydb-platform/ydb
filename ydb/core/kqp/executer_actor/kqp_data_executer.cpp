@@ -207,17 +207,13 @@ public:
 
     void Finalize() {
         YQL_ENSURE(!AlreadyReplied);
-
         if (LocksBroken) {
-            TString message = "Transaction locks invalidated.";
-
-            return ReplyErrorAndDie(Ydb::StatusIds::ABORTED,
-                YqlIssue({}, TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message));
+            return ReplyErrorAndDie(
+                Ydb::StatusIds::ABORTED,
+                YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, "Transaction locks invalidated. Unknown table."));
         }
 
-        auto& response = *ResponseEv->Record.MutableResponse();
-
-        FillResponseStats(Ydb::StatusIds::SUCCESS);
+        ResponseEv->Record.MutableResponse()->SetStatus(Ydb::StatusIds::SUCCESS);
         Counters->TxProxyMon->ReportStatusOK->Inc();
 
         auto addLocks = [this](const auto& data) {
@@ -257,7 +253,7 @@ public:
             if (LockHandle) {
                 ResponseEv->LockHandle = std::move(LockHandle);
             }
-            BuildLocks(*response.MutableResult()->MutableLocks(), Locks);
+            BuildLocks(*ResponseEv->Record.MutableResponse()->MutableResult()->MutableLocks(), Locks);
         }
 
         auto resultSize = ResponseEv->GetByteSize();
@@ -283,7 +279,6 @@ public:
 
         ExecuterSpan.EndOk();
 
-        Request.Transactions.crop(0);
         AlreadyReplied = true;
         PassAway();
     }
@@ -466,10 +461,14 @@ private:
 
         NYql::TIssues issues;
         NYql::IssuesFromMessage(res->Record.GetIssues(), issues);
-        LOG_D("Got evWrite result, shard: " << shardId << ", status: "
-            << NKikimrDataEvents::TEvWriteResult::EStatus_Name(res->Record.GetStatus())
-            << ", error: " << issues.ToString());
 
+        LOG_D("Recv EvWriteResult from ShardID=" << shardId
+            << ", Status=" << NKikimrDataEvents::TEvWriteResult::EStatus_Name(ev->Get()->GetStatus())
+            << ", TxId=" << ev->Get()->Record.GetTxId()
+            << ", LocksCount= " << ev->Get()->Record.GetTxLocks().size()
+            << ", Cookie=" << ev->Cookie
+            << ", error=" << issues.ToString());
+    
         if (Stats) {
             Stats->AddDatashardPrepareStats(std::move(*res->Record.MutableTxStats()));
         }
@@ -621,10 +620,11 @@ private:
                 state.State = TShardState::EState::Finished;
 
                 YQL_ENSURE(state.DatashardState.Defined());
-                YQL_ENSURE(!state.DatashardState->Follower);
-
-                Send(MakePipePerNodeCacheID(/* allowFollowers */ false), new TEvPipeCache::TEvForward(
-                    new TEvDataShard::TEvCancelTransactionProposal(TxId), shardId, /* subscribe */ false));
+                //nothing to cancel on follower
+                if (!state.DatashardState->Follower) {
+                    Send(MakePipePerNodeCacheID(/* allowFollowers */ false), new TEvPipeCache::TEvForward(
+                        new TEvDataShard::TEvCancelTransactionProposal(TxId), shardId, /* subscribe */ false));
+                }
             }
         }
     }
@@ -1132,9 +1132,13 @@ private:
 
         NYql::TIssues issues;
         NYql::IssuesFromMessage(res->Record.GetIssues(), issues);
-        LOG_D("Got evWrite result, shard: " << shardId << ", status: "
-            << NKikimrDataEvents::TEvWriteResult::EStatus_Name(res->Record.GetStatus())
-            << ", error: " << issues.ToString());
+
+        LOG_D("Recv EvWriteResult from ShardID=" << shardId
+            << ", Status=" << NKikimrDataEvents::TEvWriteResult::EStatus_Name(ev->Get()->GetStatus())
+            << ", TxId=" << ev->Get()->Record.GetTxId()
+            << ", LocksCount= " << ev->Get()->Record.GetTxLocks().size()
+            << ", Cookie=" << ev->Cookie
+            << ", error=" << issues.ToString());
 
         if (Stats) {
             Stats->AddDatashardStats(std::move(*res->Record.MutableTxStats()));
@@ -1164,25 +1168,12 @@ private:
                 Counters->TxProxyMon->TxResultAborted->Inc();
                 LocksBroken = true;
 
-                TMaybe<TString> tableName;
                 if (!res->Record.GetTxLocks().empty()) {
-                    auto& lock = res->Record.GetTxLocks(0);
-                    auto tableId = TTableId(lock.GetSchemeShard(), lock.GetPathId());
-                    auto it = FindIf(TasksGraph.GetStagesInfo(), [tableId](const auto& x){ return x.second.Meta.TableId.HasSamePath(tableId); });
-                    if (it != TasksGraph.GetStagesInfo().end()) {
-                        tableName = it->second.Meta.TableConstInfo->Path;
-                    }
+                    ResponseEv->BrokenLockPathId = NYql::TKikimrPathId(
+                        res->Record.GetTxLocks(0).GetSchemeShard(),
+                        res->Record.GetTxLocks(0).GetPathId());
+                    return ReplyErrorAndDie(Ydb::StatusIds::ABORTED, {});
                 }
-
-                // Reply as soon as we know which table had locks invalidated
-                if (tableName) {
-                    auto message = TStringBuilder()
-                        << "Transaction locks invalidated. Table: " << *tableName;
-
-                    return ReplyErrorAndDie(Ydb::StatusIds::ABORTED,
-                        YqlIssue({}, TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message));
-                }
-
 
                 CheckExecutionComplete();
                 return;
@@ -1239,29 +1230,15 @@ private:
                 shardState->State = TShardState::EState::Finished;
 
                 Counters->TxProxyMon->TxResultAborted->Inc(); // TODO: dedicated counter?
-
                 LocksBroken = true;
 
-                TMaybe<TString> tableName;
                 if (!res->Record.GetTxLocks().empty()) {
-                    auto& lock = res->Record.GetTxLocks(0);
-                    auto tableId = TTableId(lock.GetSchemeShard(), lock.GetPathId());
-                    auto it = FindIf(TasksGraph.GetStagesInfo(), [tableId](const auto& x){ return x.second.Meta.TableId.HasSamePath(tableId); });
-                    if (it != TasksGraph.GetStagesInfo().end()) {
-                        tableName = it->second.Meta.TableConstInfo->Path;
-                    }
+                    ResponseEv->BrokenLockPathId = TKikimrPathId(
+                        res->Record.GetTxLocks(0).GetSchemeShard(),
+                        res->Record.GetTxLocks(0).GetPathId());
+                    return ReplyErrorAndDie(Ydb::StatusIds::ABORTED, {});
                 }
 
-                // Reply as soon as we know which table had locks invalidated
-                if (tableName) {
-                    auto message = TStringBuilder()
-                        << "Transaction locks invalidated. Table: " << *tableName;
-
-                    return ReplyErrorAndDie(Ydb::StatusIds::ABORTED,
-                        YqlIssue({}, TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message));
-                }
-
-                // Receive more replies from other shards
                 CheckExecutionComplete();
                 return;
             }
@@ -1730,6 +1707,23 @@ private:
 
         NDataIntegrity::LogIntegrityTrails("EvWriteTx", Request.UserTraceId, TxId, shardId, TlsActivationContext->AsActorContext());
 
+        auto shardsToString = [](const auto& shards) {
+            TStringBuilder builder;
+            for (const auto& shard : shards) {
+                builder << shard << " ";
+            }
+            return builder;
+        };
+
+        LOG_D("Send EvWrite to ShardID=" << shardId
+            << ", TxId=" << evWriteTransaction->Record.GetTxId()
+            << ", TxMode=" << evWriteTransaction->Record.GetTxMode()
+            << ", LockTxId=" << evWriteTransaction->Record.GetLockTxId() << ", LockNodeId=" << evWriteTransaction->Record.GetLockNodeId()
+            << ", LocksOp=" << NKikimrDataEvents::TKqpLocks::ELocksOp_Name(evWriteTransaction->Record.GetLocks().GetOp())
+            << ", SendingShards=" << shardsToString(evWriteTransaction->Record.GetLocks().GetSendingShards())
+            << ", ReceivingShards=" << shardsToString(evWriteTransaction->Record.GetLocks().GetReceivingShards())
+            << ", LocksCount= " << evWriteTransaction->Record.GetLocks().LocksSize());
+
         LOG_D("ExecuteEvWriteTransaction traceId.verbosity: " << std::to_string(traceId.GetVerbosity()));
 
         Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvForward(evWriteTransaction.release(), shardId, true), 0, 0, std::move(traceId));
@@ -2173,7 +2167,7 @@ private:
 
     using TDatashardTxs = THashMap<ui64, NKikimrTxDataShard::TKqpTransaction*>;
     using TEvWriteTxs = THashMap<ui64, NKikimrDataEvents::TEvWrite*>;
-    using TTopicTabletTxs = THashMap<ui64, NKikimrPQ::TDataTransaction>;
+    using TTopicTabletTxs = NTopic::TTopicOperationTransactions;
 
     void ContinueExecute() {
         if (Stats) {
@@ -2430,10 +2424,10 @@ private:
                     }
                 }
 
-                for (auto& [_, tx] : topicTxs) {
-                    tx.SetOp(NKikimrPQ::TDataTransaction::Commit);
-                    *tx.MutableSendingShards() = sendingShards;
-                    *tx.MutableReceivingShards() = receivingShards;
+                for (auto& [_, t] : topicTxs) {
+                    t.tx.SetOp(NKikimrPQ::TDataTransaction::Commit);
+                    *t.tx.MutableSendingShards() = sendingShards;
+                    *t.tx.MutableReceivingShards() = receivingShards;
                     YQL_ENSURE(!arbiter);
                 }
             }
@@ -2473,7 +2467,7 @@ private:
         Planner = CreateKqpPlanner({
             .TasksGraph = TasksGraph,
             .TxId = TxId,
-            .LockTxId = lockTxId.GetOrElse(0),
+            .LockTxId = lockTxId,
             .LockNodeId = SelfId().NodeId(),
             .Executer = SelfId(),
             .Snapshot = GetSnapshot(),
@@ -2595,13 +2589,12 @@ private:
             writeId = Request.TopicOperations.GetWriteId();
         }
 
-        for (auto& tx : topicTxs) {
-            auto tabletId = tx.first;
-            auto& transaction = tx.second;
+        for (auto& [tabletId, t] : topicTxs) {
+            auto& transaction = t.tx;
 
             auto ev = std::make_unique<TEvPersQueue::TEvProposeTransaction>();
 
-            if (writeId.Defined()) {
+            if (t.hasWrite && writeId.Defined()) {
                 auto* w = transaction.MutableWriteId();
                 w->SetNodeId(SelfId().NodeId());
                 w->SetKeyId(*writeId);

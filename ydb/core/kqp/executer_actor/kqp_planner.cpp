@@ -185,7 +185,9 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
     auto result = std::make_unique<TEvKqpNode::TEvStartKqpTasksRequest>(TasksGraph.GetMeta().GetArenaIntrusivePtr());
     auto& request = result->Record;
     request.SetTxId(TxId);
-    request.SetLockTxId(LockTxId);
+    if (LockTxId) {
+        request.SetLockTxId(*LockTxId);
+    }
     request.SetLockNodeId(LockNodeId);
     ActorIdToProto(ExecuterId, request.MutableExecuterActorId());
 
@@ -277,8 +279,14 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
 
     auto placingOptions = ResourceManager_->GetPlacingOptions();
 
+    ui64 nonParallelLimit = placingOptions.MaxNonParallelTasksExecutionLimit;
+    if (MayRunTasksLocally) {
+        // not applied to column shards and external sources
+        nonParallelLimit = placingOptions.MaxNonParallelDataQueryTasksLimit;
+    }
+
     bool singleNodeExecutionMakeSence = (
-        ResourceEstimations.size() <= placingOptions.MaxNonParallelTasksExecutionLimit ||
+        ResourceEstimations.size() <= nonParallelLimit ||
         // all readers are located on the one node.
         TasksPerNode.size() == 1
     );

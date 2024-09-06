@@ -17,9 +17,6 @@
 
 #include <util/system/hostname.h>
 #include <library/cpp/deprecated/atomic/atomic.h>
-#include <library/cpp/testing/hook/hook.h>
-
-#include <aws/core/Aws.h>
 
 namespace NKikimr {
 
@@ -34,16 +31,6 @@ enum class EInitialEviction {
 };
 
 namespace {
-
-Aws::SDKOptions Options;
-
-Y_TEST_HOOK_BEFORE_RUN(InitAwsAPI) {
-    Aws::InitAPI(Options);
-}
-
-Y_TEST_HOOK_AFTER_RUN(ShutdownAwsAPI) {
-    Aws::ShutdownAPI(Options);
-}
 
 static const std::vector<NArrow::NTest::TTestColumn> testYdbSchema = TTestSchema::YdbSchema();
 static const std::vector<NArrow::NTest::TTestColumn> testYdbPk = TTestSchema::YdbPkSchema();

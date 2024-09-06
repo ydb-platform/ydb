@@ -100,7 +100,7 @@ TJoinHypergraph<TNodeSet> MakeJoinHypergraph(
         YQL_CLOG(TRACE, CoreDq) << graph.String();
     }
 
-    if (hints.HintsTree != nullptr) {
+    if (!hints.HintTrees.empty()) { 
         TJoinOrderHintsApplier joinHints(graph);
         joinHints.Apply(hints);
         if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {

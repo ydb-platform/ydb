@@ -1,5 +1,7 @@
 #include "infer_config.h"
 
+#include <contrib/libs/apache/arrow/cpp/src/arrow/util/value_parsing.h>
+
 namespace NKikimr::NExternalSource::NObjectStorage::NInference {
 
 namespace {
@@ -12,12 +14,14 @@ std::shared_ptr<FormatConfig> MakeCsvConfig(const THashMap<TString, TString>& pa
         }
         config->ParseOpts.delimiter = (*delimiter)[0];
     }
+    config->ConvOpts.timestamp_parsers.push_back(arrow::TimestampParser::MakeStrptime("\%Y-\%m-\%d \%H:\%M:\%S"));
     return config;
 }
 
 std::shared_ptr<FormatConfig> MakeTsvConfig(const THashMap<TString, TString>&) {
     auto config = std::make_shared<TsvConfig>();
     config->ParseOpts.delimiter = '\t';
+    config->ConvOpts.timestamp_parsers.push_back(arrow::TimestampParser::MakeStrptime("\%Y-\%m-\%d \%H:\%M:\%S"));
     return config;
 }
 

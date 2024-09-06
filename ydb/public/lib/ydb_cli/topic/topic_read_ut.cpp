@@ -142,7 +142,7 @@ namespace NYdb::NConsoleClient {
             }
         }
 
-        NTopic::TReadSessionSettings PrepareReadSessionSettings(const TString& topicPath) {
+        NTopic::TReadSessionSettings PrepareReadSessionSettings(const std::string& topicPath) {
             NTopic::TReadSessionSettings settings;
             settings.ConsumerName("cli");
             settings.AppendTopics(topicPath);

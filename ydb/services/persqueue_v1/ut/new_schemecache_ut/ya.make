@@ -1,5 +1,9 @@
 UNITTEST_FOR(ydb/services/persqueue_v1)
 
+ADDINCL(
+    ydb/public/sdk/cpp
+)
+
 FORK_SUBTESTS()
 
 IF (WITH_VALGRIND)

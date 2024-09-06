@@ -94,7 +94,7 @@ public:
         TPersQueueV1TestServer server = CreateServer();
 
         const int iterations = 10;
-        TVector<std::pair<TString, TVector<TString>>> permissions;
+        std::vector<std::pair<std::string, std::vector<std::string>>> permissions;
         for (int i = 0; i != iterations; ++i) {
             permissions.push_back({GenerateValidToken(i), {"ydb.generic.write"}});
         }
@@ -176,7 +176,7 @@ public:
         TPersQueueV1TestServer server = CreateServer();
         SET_LOCALS;
         const int iterations = 3;
-        TVector<std::pair<TString, TVector<TString>>> permissions;
+        std::vector<std::pair<std::string, std::vector<std::string>>> permissions;
         for (int i = 0; i != iterations; ++i) {
             permissions.push_back({GenerateValidToken(i), {"ydb.generic.write"}});
         }

@@ -1,4 +1,4 @@
-## [How to Mute a Test](#how-to)
+## [How to Mute a test](#how-to-mute)
 
 - Through a PR Report
   - Open report in PR ![screen](https://storage.yandexcloud.net/ydb-public-images/report_mute.png)
@@ -11,7 +11,7 @@
    - Click the `Mute` link, which will create a draft issue in GitHub.
 
 
-* Add the issue to the [Mute and Un-mute](https://github.com/orgs/ydb-platform/projects/45) project.
+* Add the issue to the [Mute and Un-mute](https://github.com/orgs/ydb-platform/projects/45/views/6?visibleFields=%5B%22Title%22%2C%22Assignees%22%2C%22Status%22%2C126637100%5D) project.
 * Set the `status` to `Mute`
 * Set the `owner` field to the team name (see the issue for the owner's name). ![image.png](https://storage.yandexcloud.net/ydb-public-images/create_issue.png)
 * Open [muted_ya.txt](https://github.com/ydb-platform/ydb/blob/main/.github/config/muted_ya.txt) in a new tab and edit it.
@@ -19,17 +19,33 @@
 * Edit the branch for merging, for example, replace `{username}-patch-1` with `{username}/mute`.
 * Create a PR - copy the PR name from the issue name.
 * Copy the issue description to the PR, keep the line `Not for changelog (changelog entry is not required)`.
+* Take "OK" from member of test owner team in PR
 * Merge.
+* Link Issue and Pr (field "Development" in issue and PR)
+* Inform test owner team about new mutes - dm or in public chat (with mention of maintainer of team)
 * You are awesome!
+
+## [How to UnMute a test](#how-to-unmute)
+--IN PROGRESS--
+* Open [muted_ya.txt](https://github.com/ydb-platform/ydb/blob/main/.github/config/muted_ya.txt)
+* Press "Edit file" and delete line of test
+* Commit changes (Edit the branch for merging, for example, replace `{username}-patch-1` with `{username}/mute`)
+* Edit PR name like "UnMute {testname}"
+* Take "OK" from member of test owner team in PR
+* Merge
+* If test have an issue in [Mute and Un-mute](https://github.com/orgs/ydb-platform/projects/45/views/6?visibleFields=%5B%22Title%22%2C%22Assignees%22%2C%22Status%22%2C126637100%5D) in status "Muted" - Move it to "Unmuted"
+* Link Issue and Pr (field "Development" in issue and PR)
+* You are awesome!
+
 
 ## Flaky Tests
 
 ### Who and When Monitors Flaky Tests
 
-The CI duty engineer checks flaky tests once a day (only working days). 
+The CI duty engineer (in progress) checks flaky tests once a day (only working days). 
 
 - Open the [Flaky](https://datalens.yandex/4un3zdm0zcnyr) dashboard.
-- Perform the sections **[Mute Flaky Test](#mute-flaky)** and **[Test Flaps More - Need to Unmute](#unmute)**.
+- Perform the sections **[Mute Flaky Test](#mute-flaky)** and **[Test Flaps More - Need to Unmute](#unmute-flaky)** once a day or ondemand
 
 ### [Mute Flaky Tests](#mute-flaky)
 
@@ -47,14 +63,10 @@ Open the [Flaky](https://datalens.yandex/4un3zdm0zcnyr) dashboard.
   * `fail_count >= 3`
   * `run_count >= 10`
 - Click the `Mute` link, which will create a draft issue in GitHub.
-  * Add the issue to the [Mute and Un-mute](https://github.com/orgs/ydb-platform/projects/45) project.
-  * Set the `status` to {red}(`Mute`).
-  * Set the `owner` field to the team name (see the issue for the owner's name). ![image.png](/kikimr/ydb-qa/mute-autotests/.files/image-3.png =700x)
-  * Copy the line under `Add line to muted_ya.txt` (for example, like in the screenshot, `ydb/core/kqp/ut/query KqpStats.SysViewClientLost`) and add it to [muted_ya.txt](https://github.com/ydb-platform/ydb/blob/main/.github/config/muted_ya.txt).
-  * Create a PR, merge.
-  * You are awesome!
+- Perform steps from [How to mute](#how-to-mute)
+- You are awesome!
 
-### [Test Flaps More - Need to Unmute](#unmute)
+### [Test is no longer flaky - Time to Unmute](#unmute-flaky)
 
 - Open the [Flaky](https://datalens.yandex/4un3zdm0zcnyr) dashboard.
 - Look at the tests in the UNMute candidate table.
@@ -62,7 +74,6 @@ Open the [Flaky](https://datalens.yandex/4un3zdm0zcnyr) dashboard.
 ![image.png](https://storage.yandexcloud.net/ydb-public-images/unmute.png)
 
 - If the `summary:` column shows `mute <= 3` and `success rate >= 98%` - **it's time to enable the test**.
-- Open [mute_ya.txt](https://github.com/ydb-platform/ydb/blob/main/.github/config/muted_ya.txt).
-- Delete the paths from the file that correspond to our tests.
-- Create a PR and merge into main.
+- Perform steps from [How to Unmute](#how-to-unmute)
+- You are awesome!
 

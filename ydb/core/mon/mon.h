@@ -54,6 +54,7 @@ public:
         bool UseAuth = true;
         TVector<TString> AllowedSIDs;
         bool SortPages = true;
+        TString MonServiceName = "utils";
     };
 
     virtual NMonitoring::IMonPage* RegisterActorPage(TRegisterActorPageFields fields) = 0;

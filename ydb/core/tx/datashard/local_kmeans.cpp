@@ -608,8 +608,8 @@ public:
                 return FeedUploadTmp2Tmp(key, row);
             case EState::UPLOAD_TMP_TO_POSTING:
                 return FeedUploadTmp2Posting(key, row);
-            case EState::DONE:
-                Y_UNREACHABLE();
+            default:
+                return EScan::Final;
         }
     }
 

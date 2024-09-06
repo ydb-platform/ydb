@@ -1505,6 +1505,7 @@ message TEvLocalKMeansRequest {
     optional uint32 K = 10;
 
     enum EState {
+        UNSPECIFIED = 0;
         SAMPLE = 1;
         KMEANS = 2;
         UPLOAD_MAIN_TO_TMP = 3;

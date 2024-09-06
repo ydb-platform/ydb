@@ -1734,8 +1734,6 @@ private:
 
         auto traceId = ExecuterSpan.GetTraceId();
 
-        NDataIntegrity::LogIntegrityTrails("EvWriteTx", Request.UserTraceId, TxId, shardId, TlsActivationContext->AsActorContext());
-
         auto shardsToString = [](const auto& shards) {
             TStringBuilder builder;
             for (const auto& shard : shards) {

@@ -347,11 +347,6 @@ class TCdcChangeSenderMain
             }
 
             bool operator()(const TPQPartitionInfo& lhs, const TPQPartitionInfo& rhs) const {
-                if (!lhs.KeyRange.ToBound && !rhs.KeyRange.ToBound) {
-                    // topic auto partitioning enabled
-                    return lhs.PartitionId < rhs.PartitionId;
-                }
-
                 Y_ABORT_UNLESS(lhs.KeyRange.ToBound || rhs.KeyRange.ToBound);
 
                 if (!lhs.KeyRange.ToBound) {
@@ -567,6 +562,75 @@ class TCdcChangeSenderMain
         }
     }
 
+    void InitializePartitionToShard(const NKikimrSchemeOp::TPersQueueGroupDescription& pqDesc) {
+        PartitionToShard.clear();
+        for (const auto& partition : pqDesc.GetPartitions()) {
+            PartitionToShard.emplace(partition.GetPartitionId(), partition.GetTabletId());
+        }
+    }
+
+    TVector<NKikimr::TKeyDesc::TPartitionInfo> BuildPartitioning(const NKikimrSchemeOp::TPersQueueGroupDescription& pqDesc, const TVector<NScheme::TTypeInfo>& schema) {
+        TSet<TPQPartitionInfo, TPQPartitionInfo::TLess> partitions(schema);
+
+        for (const auto& partition : pqDesc.GetPartitions()) {
+            const auto partitionId = partition.GetPartitionId();
+            const auto shardId = partition.GetTabletId();
+
+            auto keyRange = TPartitionKeyRange::Parse(partition.GetKeyRange());
+            Y_ABORT_UNLESS(!keyRange.FromBound || keyRange.FromBound->GetCells().size() == schema.size());
+            Y_ABORT_UNLESS(!keyRange.ToBound || keyRange.ToBound->GetCells().size() == schema.size());
+
+            partitions.insert({partitionId, shardId, std::move(keyRange)});
+        }
+
+        // used to validate
+        bool isFirst = true;
+        const TPQPartitionInfo* prev = nullptr;
+
+        TVector<NKikimr::TKeyDesc::TPartitionInfo> partitioning;
+        partitioning.reserve(partitions.size());
+        for (const auto& cur : partitions) {
+            if (isFirst) {
+                isFirst = false;
+                Y_ABORT_UNLESS(!cur.KeyRange.FromBound.Defined());
+            } else {
+                Y_ABORT_UNLESS(cur.KeyRange.FromBound.Defined());
+                Y_ABORT_UNLESS(prev);
+                Y_ABORT_UNLESS(prev->KeyRange.ToBound.Defined());
+                // TODO: compare cells
+            }
+
+            auto& part = partitioning.emplace_back(cur.PartitionId); // TODO: double-check that it is right partitioning
+
+            if (cur.KeyRange.ToBound) {
+                part.Range = NKikimr::TKeyDesc::TPartitionRangeInfo{
+                    .EndKeyPrefix = *cur.KeyRange.ToBound,
+                };
+            } else {
+                part.Range = NKikimr::TKeyDesc::TPartitionRangeInfo{};
+            }
+
+            prev = &cur;
+        }
+
+        if (prev) {
+            Y_ABORT_UNLESS(!prev->KeyRange.ToBound.Defined());
+        }
+
+        return partitioning;
+    }
+
+    TVector<NKikimr::TKeyDesc::TPartitionInfo> BuildSimplePartitioning(const NKikimrSchemeOp::TPersQueueGroupDescription& pqDesc) {
+        TVector<NKikimr::TKeyDesc::TPartitionInfo> partitioning;
+        partitioning.reserve(pqDesc.GetPartitions().size());
+        for (const auto& partition : pqDesc.GetPartitions()) {
+            partitioning.emplace_back(partition.GetPartitionId());
+        }
+
+        return partitioning;
+    }
+
+
     void HandleTopic(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         const auto& result = ev->Get()->Request;
 
@@ -603,9 +667,7 @@ class TCdcChangeSenderMain
         const auto& pqConfig = pqDesc.GetPQTabletConfig();
 
         TVector<NScheme::TTypeInfo> schema;
-        PartitionToShard.clear();
-
-        auto topicAutoPartitioning = ::NKikimrPQ::TPQTabletConfig::TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED != pqConfig.GetPartitionStrategy().GetPartitionStrategyType();
+        InitializePartitionToShard(pqDesc);
 
         schema.reserve(pqConfig.PartitionKeySchemaSize());
         for (const auto& keySchema : pqConfig.GetPartitionKeySchema()) {
@@ -613,72 +675,22 @@ class TCdcChangeSenderMain
             schema.push_back(NScheme::TTypeInfo(keySchema.GetTypeId()));
         }
 
-        TSet<TPQPartitionInfo, TPQPartitionInfo::TLess> partitions(schema);
-
-        for (const auto& partition : pqDesc.GetPartitions()) {
-            const auto partitionId = partition.GetPartitionId();
-            const auto shardId = partition.GetTabletId();
-
-            PartitionToShard.emplace(partitionId, shardId);
-
-            auto keyRange = TPartitionKeyRange::Parse(partition.GetKeyRange());
-            if (!topicAutoPartitioning) {
-                Y_ABORT_UNLESS(!keyRange.FromBound || keyRange.FromBound->GetCells().size() == schema.size());
-                Y_ABORT_UNLESS(!keyRange.ToBound || keyRange.ToBound->GetCells().size() == schema.size());
-            }
-
-            partitions.insert({partitionId, shardId, std::move(keyRange)});
-        }
-
-        // used to validate
-        bool isFirst = true;
-        const TPQPartitionInfo* prev = nullptr;
-
-        TVector<NKikimr::TKeyDesc::TPartitionInfo> partitioning;
-        partitioning.reserve(partitions.size());
-        for (const auto& cur : partitions) {
-            if (!topicAutoPartitioning) {
-                if (isFirst) {
-                    isFirst = false;
-                    Y_ABORT_UNLESS(!cur.KeyRange.FromBound.Defined());
-                } else {
-                    Y_ABORT_UNLESS(cur.KeyRange.FromBound.Defined());
-                    Y_ABORT_UNLESS(prev);
-                    Y_ABORT_UNLESS(prev->KeyRange.ToBound.Defined());
-                    // TODO: compare cells
-                }
-            }
-
-            auto& part = partitioning.emplace_back(cur.PartitionId); // TODO: double-check that it is right partitioning
-
-            if (cur.KeyRange.ToBound) {
-                part.Range = NKikimr::TKeyDesc::TPartitionRangeInfo{
-                    .EndKeyPrefix = *cur.KeyRange.ToBound,
-                };
-            } else {
-                part.Range = NKikimr::TKeyDesc::TPartitionRangeInfo{};
-            }
-
-            prev = &cur;
-        }
-
-        if (prev && !topicAutoPartitioning) {
-            Y_ABORT_UNLESS(!prev->KeyRange.ToBound.Defined());
-        }
-
         const auto topicVersion = entry.Self->Info.GetVersion().GetGeneralVersion();
         const bool versionChanged = !TopicVersion || TopicVersion != topicVersion;
         TopicVersion = topicVersion;
 
         KeyDesc = NKikimr::TKeyDesc::CreateMiniKeyDesc(schema);
-        KeyDesc->Partitioning = std::make_shared<TVector<NKikimr::TKeyDesc::TPartitionInfo>>(std::move(partitioning));
 
-        if (topicAutoPartitioning) {
+        if (::NKikimrPQ::TPQTabletConfig::TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED != pqConfig.GetPartitionStrategy().GetPartitionStrategyType()) {
+            KeyDesc->Partitioning = std::make_shared<TVector<NKikimr::TKeyDesc::TPartitionInfo>>(BuildSimplePartitioning(pqDesc));
             SetPartitioner(new TBoundaryPartitioner(pqDesc));
-        } else if (NKikimrSchemeOp::ECdcStreamFormatProto == Stream.Format) {
-            SetPartitioner(NChangeExchange::CreateSchemaBoundaryPartitioner<TChangeRecord>(*KeyDesc.Get()));
         } else {
-            SetPartitioner(new TMd5Partitioner(KeyDesc->GetPartitions().size()));
+            KeyDesc->Partitioning = std::make_shared<TVector<NKikimr::TKeyDesc::TPartitionInfo>>(BuildPartitioning(pqDesc, schema));
+            if (NKikimrSchemeOp::ECdcStreamFormatProto == Stream.Format) {
+                SetPartitioner(NChangeExchange::CreateSchemaBoundaryPartitioner<TChangeRecord>(*KeyDesc.Get()));
+            } else {
+                SetPartitioner(new TMd5Partitioner(KeyDesc->GetPartitions().size()));
+            }
         }
 
         CreateSenders(MakePartitionIds(*KeyDesc->Partitioning), versionChanged);

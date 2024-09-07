@@ -2787,6 +2787,32 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             CompareYson("[[200u]]", result);
         }
     }
+
+    Y_UNIT_TEST(TableSinkWithOlapStore) {
+       NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        TLocalHelper(kikimr).CreateTestOlapTables();
+
+        WriteTestData(kikimr, "/Root/olapStore/olapTable0", 0, 1000000, 3, true);
+
+
+        auto client = kikimr.GetQueryClient();
+        {
+            auto result = client.ExecuteQuery(R"(
+                SELECT * FROM `/Root/olapStore/olapTable0` ORDER BY timestamp;
+                INSERT INTO `/Root/olapStore/olapTable1` SELECT * FROM `/Root/olapStore/olapTable0`;
+                INSERT INTO `/Root/olapStore/olapTable0` SELECT * FROM `/Root/olapStore/olapTable1`;
+                SELECT * FROM `/Root/olapStore/olapTable1` ORDER BY timestamp;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+    }
 }
 
 }

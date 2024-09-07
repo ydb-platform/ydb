@@ -106,7 +106,9 @@ namespace NSQLTranslation {
         bool InferSyntaxVersion;
         EV0Behavior V0Behavior;
         bool V0ForceDisable;
+        bool PGDisable;
         bool WarnOnV0;
+        bool TestAntlr4;
         ISqlFeaturePolicy::TPtr V0WarnAsError;
         ISqlFeaturePolicy::TPtr DqDefaultAuto;
         ISqlFeaturePolicy::TPtr BlockDefaultAuto;

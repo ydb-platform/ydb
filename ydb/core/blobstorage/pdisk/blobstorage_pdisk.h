@@ -10,6 +10,7 @@
 #include <ydb/core/blobstorage/base/bufferwithgaps.h>
 #include <ydb/core/blobstorage/base/transparent.h>
 #include <ydb/core/blobstorage/base/batched_vec.h>
+#include <ydb/core/util/stlog.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <util/generic/map.h>
 
@@ -19,6 +20,7 @@ namespace NKikimr {
 IActor* CreatePDisk(const TIntrusivePtr<TPDiskConfig> &cfg, const NPDisk::TMainKey &mainKey,
     const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters);
 
+struct TPDiskMon;
 namespace NPDisk {
 
 struct TCommitRecord {
@@ -1555,6 +1557,38 @@ struct TEvWriteMetadataResult : TEventLocal<TEvWriteMetadataResult, TEvBlobStora
     {}
 };
 
+
+/*
+ * One common context in the PDisk's world.
+ * It should only contain things that are used in each of the PDisk's component.
+ * Since it is used from multiple threads it's build once
+ * in TPDiskActor::Boorstrap and never changed
+ */
+struct TPDiskCtx {
+    TActorSystem * const ActorSystem = nullptr;
+    const ui32 PDiskId = 0;
+    const TActorId PDiskActor; 
+    // TPDiskMon * const Mon = nullptr; TODO implement it
+
+    TPDiskCtx() = default;
+
+    TPDiskCtx(TActorSystem *actorSystem)
+        : ActorSystem(actorSystem)
+    {}
+
+    TPDiskCtx(TActorSystem *actorSystem, ui32 pdiskId, TActorId pdiskActor)
+        : ActorSystem(actorSystem)
+        , PDiskId(pdiskId)
+        , PDiskActor(pdiskActor)
+    {}
+};
+
+#define P_LOG(LEVEL, MARKER, ...) \
+    do { \
+        if (PCtx && PCtx->ActorSystem) { \
+            STLOGX(*PCtx->ActorSystem, LEVEL, BS_PDISK, MARKER, __VA_ARGS__, (PDiskId, PCtx->PDiskId)); \
+        } \
+    } while (false)
+
 } // NPDisk
 } // NKikimr
-

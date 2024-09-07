@@ -78,7 +78,7 @@ public:
 
     void SetBroken() {
         SharingInfo->Broken = 1;
-        SharingInfo->InternalGenerationCounter = TSysTables::TLocksTable::TLock::ESetErrors::ErrorBroken;
+        SharingInfo->InternalGenerationCounter = (ui64)TSysTables::TLocksTable::TLock::ESetErrors::ErrorBroken;
     }
 
     bool IsBroken() const {

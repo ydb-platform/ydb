@@ -1343,6 +1343,14 @@ message TImmediateControlsConfig {
             DefaultValue: 200 }];
     }
 
+    message TBlobStorageControllerControls {
+        optional uint64 EnableSelfHealWithDegraded = 1 [(ControlOptions) = {
+            Description: "Should SelfHeal automatically process groups that are in DEGRADED status (one step from nonworking)",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0 }];
+    }
+
     optional TDataShardControls DataShardControls = 1;
     optional TTxLimitControls TxLimitControls = 2;
     optional TCoordinatorControls CoordinatorControls = 3;
@@ -1353,6 +1361,7 @@ message TImmediateControlsConfig {
     optional TTabletControls TabletControls = 8;
     optional TDSProxyControls DSProxyControls = 9;
     optional TPDiskControls PDiskControls = 10;
+    optional TBlobStorageControllerControls BlobStorageControllerControls = 11;
 };
 
 message TMeteringConfig {

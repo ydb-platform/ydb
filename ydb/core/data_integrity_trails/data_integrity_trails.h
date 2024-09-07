@@ -1,5 +1,7 @@
 #pragma once
 
+#include <util/stream/str.h>
+
 namespace NKikimr {
 namespace NDataIntegrity {
 

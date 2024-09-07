@@ -84,7 +84,7 @@ constexpr auto PG_ERROR = ERROR;
 #include <ydb/library/yql/public/udf/arrow/block_builder.cpp>
 #include <ydb/library/yql/parser/pg_catalog/catalog.h>
 #include <ydb/library/yql/providers/common/codec/yql_codec_buf.h>
-#include <ydb/library/yql/providers/common/codec/yql_codec_results.h>
+#include <ydb/library/yql/public/result_format/yql_codec_results.h>
 #include <ydb/library/yql/public/udf/udf_value_builder.h>
 #include <ydb/library/yql/utils/fp_bits.h>
 #include <library/cpp/yson/detail.h>
@@ -3699,7 +3699,7 @@ void WriteYsonValueInTableFormatPg(TOutputBuf& buf, TPgType* type, const NUdf::T
     }
 }
 
-void WriteYsonValuePg(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod& value, TPgType* type,
+void WriteYsonValuePg(NResult::TYsonResultWriter& writer, const NUdf::TUnboxedValuePod& value, TPgType* type,
     const TVector<ui32>* structPositions) {
     if (!value) {
         writer.OnNull();

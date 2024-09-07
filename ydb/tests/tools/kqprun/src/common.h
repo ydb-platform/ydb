@@ -27,6 +27,9 @@ struct TAsyncQueriesSettings {
 struct TYdbSetupSettings {
     ui32 NodeCount = 1;
     TString DomainName = "Root";
+    std::unordered_set<TString> DedicatedTenants;
+    std::unordered_set<TString> SharedTenants;
+    std::unordered_set<TString> ServerlessTenants;
     TDuration InitializationTimeout = TDuration::Seconds(10);
 
     bool MonitoringEnabled = false;
@@ -68,8 +71,10 @@ struct TRunnerOptions {
     TString InProgressStatisticsOutputFile;
 
     EResultOutputFormat ResultOutputFormat = EResultOutputFormat::RowsJson;
-    NYdb::NConsoleClient::EOutputFormat PlanOutputFormat = NYdb::NConsoleClient::EOutputFormat::Default;
+    NYdb::NConsoleClient::EDataFormat PlanOutputFormat = NYdb::NConsoleClient::EDataFormat::Default;
     ETraceOptType TraceOptType = ETraceOptType::Disabled;
+
+    TDuration ScriptCancelAfter;
 
     TYdbSetupSettings YdbSettings;
 };
@@ -81,6 +86,7 @@ struct TRequestOptions {
     TString TraceId;
     TString PoolId;
     TString UserSID;
+    TString Database;
 };
 
 }  // namespace NKqpRun

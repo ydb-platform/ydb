@@ -1302,7 +1302,6 @@ public:
                 || (QueryState->HasOlapTable // htap
                     && QueryState->HasOltpTable
                     && Settings.TableService.GetEnableOlapSink()
-                    && Settings.TableService.GetEnableOltpSink()
                     && Settings.TableService.GetEnableHtapTx()))
             && (request.QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_UNDEFINED
                 || request.QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_GENERIC_QUERY
@@ -1314,7 +1313,7 @@ public:
             RequestCounters, Settings.TableService,
             AsyncIoFactory, QueryState ? QueryState->PreparedQuery : nullptr, SelfId(),
             QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId),
-            useEvWrite, QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup, GUCSettings);
+            QueryState->HasOlapTable, useEvWrite, QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup, GUCSettings);
 
         auto exId = RegisterWithSameMailbox(executerActor);
         LOG_D("Created new KQP executer: " << exId << " isRollback: " << isRollback);

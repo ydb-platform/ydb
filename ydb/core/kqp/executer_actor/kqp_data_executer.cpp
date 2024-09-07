@@ -127,12 +127,13 @@ public:
         TKqpRequestCounters::TPtr counters, bool streamResult,
         const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
         NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
-        const TActorId& creator, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
+        const TActorId& creator, const TIntrusivePtr<TUserRequestContext>& userRequestContext, const bool forceArbiterCommit,
         const bool useEvWrite, ui32 statementResultIndex, const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
         const TGUCSettings::TPtr& GUCSettings)
         : TBase(std::move(request), database, userToken, counters, tableServiceConfig,
             userRequestContext, statementResultIndex, TWilsonKqp::DataExecuter, "DataExecuter", streamResult)
         , AsyncIoFactory(std::move(asyncIoFactory))
+        , ForceArbiterCommit(forceArbiterCommit)
         , UseEvWrite(useEvWrite)
         , FederatedQuerySetup(federatedQuerySetup)
         , GUCSettings(GUCSettings)
@@ -2405,9 +2406,10 @@ private:
                 // cause interconnect overload and reduce throughput however,
                 // so we don't want to use a crossover value that is too high.
                 const size_t minArbiterMeshSize = 5; // TODO: make configurable?
-                if (VolatileTx &&
+                if (ForceArbiterCommit ||
+                    (VolatileTx &&
                     receivingShardsSet.size() >= minArbiterMeshSize &&
-                    AppData()->FeatureFlags.GetEnableVolatileTransactionArbiters())
+                    AppData()->FeatureFlags.GetEnableVolatileTransactionArbiters()))
                 {
                     std::vector<ui64> candidates;
                     candidates.reserve(receivingShardsSet.size());
@@ -2788,6 +2790,7 @@ private:
 
 private:
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
+    bool ForceArbiterCommit = false;
     bool UseEvWrite = false;
     const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
     const TGUCSettings::TPtr GUCSettings;
@@ -2832,12 +2835,12 @@ private:
 IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
     TKqpRequestCounters::TPtr counters, bool streamResult, const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, const TActorId& creator,
-    const TIntrusivePtr<TUserRequestContext>& userRequestContext, const bool useEvWrite, ui32 statementResultIndex,
+    const TIntrusivePtr<TUserRequestContext>& userRequestContext, const bool forceArbiterCommit, const bool useEvWrite, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings)
 {
     return new TKqpDataExecuter(std::move(request), database, userToken, counters, streamResult, tableServiceConfig,
         std::move(asyncIoFactory), creator, userRequestContext,
-        useEvWrite, statementResultIndex, federatedQuerySetup, GUCSettings);
+        forceArbiterCommit, useEvWrite, statementResultIndex, federatedQuerySetup, GUCSettings);
 }
 
 } // namespace NKqp

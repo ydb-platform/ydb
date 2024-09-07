@@ -55,9 +55,9 @@ struct TDecimalMulBlockExec {
             if (!valid1 || arrow::BitUtil::GetBit(valid1, i + offset1)) {
                 *resPtr = Do(*val1Ptr, *val2Ptr);
                 arrow::BitUtil::SetBit(resValid, i);
+            } else {
+                arrow::BitUtil::ClearBit(resValid, i);
             }
-
-            arrow::BitUtil::ClearBit(resValid, i);
         }
     }
 
@@ -78,9 +78,9 @@ struct TDecimalMulBlockExec {
             if (!valid2 || arrow::BitUtil::GetBit(valid2, i + offset2)) {
                 *resPtr = Do(*val1Ptr, *val2Ptr);
                 arrow::BitUtil::SetBit(resValid, i);
+            } else {
+                arrow::BitUtil::ClearBit(resValid, i);
             }
-
-            arrow::BitUtil::ClearBit(resValid, i);
         }
     }
 
@@ -102,6 +102,8 @@ struct TDecimalMulBlockExec {
                 (!valid2 || arrow::BitUtil::GetBit(valid2, i + offset2))) {
                 *resPtr = Do(*val1Ptr, *val2Ptr);
                 arrow::BitUtil::SetBit(resValid, i);
+            } else {
+                arrow::BitUtil::ClearBit(resValid, i);
             }
         }
     }

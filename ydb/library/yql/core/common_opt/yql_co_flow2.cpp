@@ -1060,7 +1060,7 @@ TNodeMap<ESubgraphType> MarkSubgraphForAggregate(const TExprNode::TPtr& root, co
     TNodeMap<ESubgraphType> result;
     size_t insideDependsOn = 0;
     VisitExpr(root, [&](const TExprNode::TPtr& node) {
-        if (node->IsComplete()) {
+        if (node->IsArguments() || node->IsComplete()) {
             result[node.Get()] = EXPR_CONST;
             return false;
         }

@@ -106,6 +106,27 @@ struct TDecimalMulBlockExec {
         }
     }
 
+    arrow::Status ExecScalarScalar(arrow::compute::KernelContext* kernelCtx,
+        const arrow::compute::ExecBatch& batch, arrow::Datum* res) const 
+    {
+        MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
+        const auto& arg1 = batch.values[0];
+        const auto& arg2 = batch.values[1];
+        if (!arg1.scalar()->is_valid || !arg2.scalar()->is_valid) {
+            *res = arrow::MakeNullScalar(GetPrimitiveDataType<NYql::NDecimal::TInt128>());
+        } else {
+            const auto val1Ptr = reinterpret_cast<const NYql::NDecimal::TInt128*>(GetStringScalarValue(*arg1.scalar()).data());
+            const auto val2Ptr = reinterpret_cast<const NYql::NDecimal::TInt128*>(GetStringScalarValue(*arg2.scalar()).data());
+            std::shared_ptr<arrow::Buffer> buffer(ARROW_RESULT(arrow::AllocateBuffer(16, kernelCtx->memory_pool())));
+            auto* mem = reinterpret_cast<NYql::NDecimal::TInt128*>(buffer->mutable_data());
+            auto resDatum = arrow::Datum(std::make_shared<TPrimitiveDataType<NYql::NDecimal::TInt128>::TScalarResult>(buffer));
+            *mem = Do(*val1Ptr, *val2Ptr);
+            *res = resDatum;
+        }
+    
+        return arrow::Status::OK();
+    }
+
     arrow::Status ExecScalarArray(const arrow::compute::ExecBatch& batch, arrow::Datum* res) const
     {
         MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
@@ -182,7 +203,7 @@ struct TDecimalMulBlockExec {
         const auto& arg2 = batch.values[1];
         if (arg1.is_scalar()) {
             if (arg2.is_scalar()) {
-                // scalar-scalar
+                return ExecScalarScalar(ctx, batch, res);
             } else {
                 return ExecScalarArray(batch, res);
             }

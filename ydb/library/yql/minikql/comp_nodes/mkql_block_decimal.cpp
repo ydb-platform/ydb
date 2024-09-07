@@ -1,4 +1,4 @@
-#include "mkql_block_decimal_mul.h"
+#include "mkql_block_decimal.h"
 
 #include <ydb/library/yql/minikql/arrow/arrow_defs.h>
 #include <ydb/library/yql/minikql/mkql_type_builder.h>
@@ -274,6 +274,42 @@ IComputationNode* WrapBlockDecimalMul(TCallable& callable, const TComputationNod
 
     std::shared_ptr<arrow::compute::ScalarKernel> kernel = MakeBlockMulKernel(argsTypes, callable.GetType()->GetReturnType());
     return new TBlockFuncNode(ctx.Mutables, "DecimalMul", std::move(argsNodes), argsTypes, *kernel, kernel);
+}
+
+IComputationNode* WrapBlockDecimalDiv(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 args");
+
+    auto first = callable.GetInput(0);
+    auto second = callable.GetInput(1);
+
+    auto firstType = AS_TYPE(TBlockType, first.GetStaticType());
+    auto secondType = AS_TYPE(TBlockType, second.GetStaticType());
+
+    auto firstCompute = LocateNode(ctx.NodeLocator, callable, 0);
+    auto secondCompute = LocateNode(ctx.NodeLocator, callable, 1);
+    TComputationNodePtrVector argsNodes = { firstCompute, secondCompute };
+    TVector<TType*> argsTypes = { firstType, secondType };
+
+    std::shared_ptr<arrow::compute::ScalarKernel> kernel = MakeBlockMulKernel(argsTypes, callable.GetType()->GetReturnType());
+    return new TBlockFuncNode(ctx.Mutables, "DecimalDiv", std::move(argsNodes), argsTypes, *kernel, kernel);
+}
+
+IComputationNode* WrapBlockDecimalMod(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 args");
+
+    auto first = callable.GetInput(0);
+    auto second = callable.GetInput(1);
+
+    auto firstType = AS_TYPE(TBlockType, first.GetStaticType());
+    auto secondType = AS_TYPE(TBlockType, second.GetStaticType());
+
+    auto firstCompute = LocateNode(ctx.NodeLocator, callable, 0);
+    auto secondCompute = LocateNode(ctx.NodeLocator, callable, 1);
+    TComputationNodePtrVector argsNodes = { firstCompute, secondCompute };
+    TVector<TType*> argsTypes = { firstType, secondType };
+
+    std::shared_ptr<arrow::compute::ScalarKernel> kernel = MakeBlockMulKernel(argsTypes, callable.GetType()->GetReturnType());
+    return new TBlockFuncNode(ctx.Mutables, "DecimalMod", std::move(argsNodes), argsTypes, *kernel, kernel);
 }
 
 }

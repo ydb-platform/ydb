@@ -68,7 +68,7 @@ protected:
         auto accessor = ExtractDataAccessor();
         InFlightSize = accessor->GetSize();
         const i64 sizeInFlight = MemoryInFlight.Add(InFlightSize);
-        if (TLimits::MemoryInFlightWriting < sizeInFlight && sizeInFlight != InFlightSize) {
+        if (TLimits::MemoryInFlightWriting < (ui64)sizeInFlight && sizeInFlight != InFlightSize) {
             return ReplyError(Ydb::StatusIds::OVERLOADED, "a lot of memory in flight");
         }
         if (NCSIndex::TServiceOperator::IsEnabled()) {

@@ -3,6 +3,7 @@
 #include "transactions/tx_finish_async.h"
 
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
+#include <ydb/core/tx/columnshard/subscriber/events/transaction_completed/event.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -11,7 +12,7 @@ TTxController::TTxController(TColumnShard& owner)
     , Counters(owner.Counters.GetCSCounters().TxProgress) {
 }
 
-bool TTxController::HaveOutdatedTxs() const {
+bool TTxController::HaveOutdatedTxs() const { 
     if (DeadlineQueue.empty()) {
         return false;
     }
@@ -108,7 +109,8 @@ std::shared_ptr<TTxController::ITransactionOperator> TTxController::UpdateTxSour
 TTxController::TTxInfo TTxController::RegisterTx(const std::shared_ptr<TTxController::ITransactionOperator>& txOperator, const TString& txBody,
     NTabletFlatExecutor::TTransactionContext& txc) {
     NIceDb::TNiceDb db(txc.DB);
-    auto& txInfo = txOperator->GetTxInfo();
+    auto& txInfo = txOperator->MutableTxInfo();
+    //txInfo.MinStep = GetAllowedStep();
     AFL_VERIFY(txInfo.MaxStep == Max<ui64>());
     AFL_VERIFY(Operators.emplace(txInfo.TxId, txOperator).second);
 
@@ -124,7 +126,7 @@ TTxController::TTxInfo TTxController::RegisterTxWithDeadline(const std::shared_p
     auto& txInfo = txOperator->MutableTxInfo();
     txInfo.MinStep = GetAllowedStep();
     txInfo.MaxStep = txInfo.MinStep + MaxCommitTxDelay.MilliSeconds();
-
+    
     AFL_VERIFY(Operators.emplace(txOperator->GetTxId(), txOperator).second);
 
     Schema::SaveTxInfo(db, txInfo, txBody);
@@ -141,7 +143,7 @@ bool TTxController::AbortTx(const TPlanQueueItem planQueueItem, NTabletFlatExecu
     opIt->second->CompleteOnAbort(Owner, NActors::TActivationContext::AsActorContext());
     Counters.OnAbortTx(opIt->second->GetOpType());
 
-    AFL_VERIFY(Operators.erase(planQueueItem.TxId));
+    PassAwayTx(planQueueItem.TxId);
     AFL_VERIFY(DeadlineQueue.erase(planQueueItem));
     NIceDb::TNiceDb db(txc.DB);
     Schema::EraseTxInfo(db, planQueueItem.TxId);
@@ -162,7 +164,7 @@ bool TTxController::CompleteOnCancel(const ui64 txId, const TActorContext& ctx) 
     if (opIt->second->GetTxInfo().MaxStep != Max<ui64>()) {
         DeadlineQueue.erase(TPlanQueueItem(opIt->second->GetTxInfo().MaxStep, txId));
     }
-    Operators.erase(txId);
+    PassAwayTx(txId);
     return true;
 }
 
@@ -206,12 +208,26 @@ void TTxController::ProgressOnExecute(const ui64 txId, NTabletFlatExecutor::TTra
     auto opIt = Operators.find(txId);
     AFL_VERIFY(opIt != Operators.end())("tx_id", txId);
     Counters.OnFinishPlannedTx(opIt->second->GetOpType());
-    AFL_VERIFY(Operators.erase(txId));
+    PassAwayTx(txId);
     Schema::EraseTxInfo(db, txId);
 }
 
 void TTxController::ProgressOnComplete(const TPlanQueueItem& txItem) {
+    //PassAwayTx(txItem.TxId);
     AFL_VERIFY(RunningQueue.erase(txItem))("info", txItem.DebugString());
+}
+
+void TTxController::PassAwayTx(const ui64 txId) {
+    AFL_VERIFY(Operators.erase(txId));
+    Owner.Subscribers->OnEvent(std::make_shared<NColumnShard::NSubscriber::TEventTransactionCompleted>(txId));
+}
+
+THashSet<ui64> TTxController::GetTxs() const {
+    THashSet<ui64> result;
+    for (const auto& [txId, _]: Operators) {
+        result.emplace(txId);
+    }
+    return result;
 }
 
 std::optional<TTxController::TPlanQueueItem> TTxController::GetPlannedTx() const {

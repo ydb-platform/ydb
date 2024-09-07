@@ -111,7 +111,7 @@ void TColumnEngineForLogs::UpdatePortionStats(TColumnEngineStats& engineStats, c
     if (isErase) { // PortionsToDrop
         engineStats.ColumnRecords -= columnRecords;
 
-        stats -= deltaStats;
+        //???stats -= deltaStats;
     } else if (isAdd) { // Load || AppendedPortions
         engineStats.ColumnRecords += columnRecords;
 
@@ -574,6 +574,39 @@ void TColumnEngineForLogs::DoRegisterTable(const ui64 pathId) {
         g->StartActualizationIndex();
         g->RefreshScheme();
     }
+}
+
+bool TColumnEngineForLogs::ProgressMoveTableData(const ui64 srcPathId, const ui64 dstPathId, NTable::TDatabase& db) {
+    Y_UNUSED(db);
+    auto srcGranule = GranulesStorage->GetGranuleOptional(srcPathId);
+    AFL_VERIFY(srcGranule);
+    const auto& srcPortions = srcGranule->GetPortions();
+    if (srcPortions.empty()) {
+        return true;
+    }
+    const auto dstGranule = GranulesStorage->GetGranuleOptional(dstPathId);
+    AFL_VERIFY(dstGranule);
+    const size_t ChangeAtOnceLimit = 10000; //To fit max local db transaction change limit
+    size_t count = 0;
+    TDbWrapper dbWrapper(db, nullptr);
+    std::vector<ui64> ids;
+    for (auto& [id, portionInfo]: srcPortions) {
+        AFL_VERIFY(portionInfo->GetPathId() == srcPathId);
+        portionInfo->SetPathId(dstPathId);
+        auto schemaPtr = GetVersionedIndex().GetLastSchema();
+        portionInfo->SaveToDatabase(dbWrapper, schemaPtr->GetIndexInfo().GetPKFirstColumnId(), true);
+        dstGranule->UpsertPortion(*portionInfo);
+        ids.push_back(id);
+        ++count;
+        if (count == ChangeAtOnceLimit) {
+            return false;
+        } 
+    }
+    for (const auto& id: ids) {
+        srcGranule->ErasePortion(id);
+    }
+
+    return true;
 }
 
 } // namespace NKikimr::NOlap

@@ -46,6 +46,9 @@ public:
     }
 
     void RegisterSubscriber(const std::shared_ptr<ISubscriber>& s) {
+        if (s->IsFinished()) {
+            return;
+        }
         for (auto&& et : s->GetEventTypes()) {
             AFL_VERIFY(Subscribers[et].emplace(s).second);
         }

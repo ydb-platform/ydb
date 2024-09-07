@@ -7,6 +7,12 @@
 
 namespace NKikimr::NColumnShard {
 
+namespace NSubscriber {
+
+class ISubscriber;
+
+}
+
 class TSchemaTransactionOperator: public IProposeTxOperator, public TMonitoringObjectsCounter<TSchemaTransactionOperator> {
 private:
     using TBase = IProposeTxOperator;
@@ -16,7 +22,8 @@ private:
     std::unique_ptr<NTabletFlatExecutor::ITransaction> TxAddSharding;
     NKikimrTxColumnShard::TSchemaTxBody SchemaTxBody;
     THashSet<TActorId> NotifySubscribers;
-    THashSet<ui64> WaitPathIdsToErase;
+    std::shared_ptr<NSubscriber::ISubscriber> WaitOnPropose; 
+    bool Completed = false;
 
     virtual void DoOnTabletInit(TColumnShard& owner) override;
 
@@ -55,12 +62,14 @@ private:
                 return "Scheme:AlterStore";
             case NKikimrTxColumnShard::TSchemaTxBody::kDropTable:
                 return "Scheme:DropTable";
+            case NKikimrTxColumnShard::TSchemaTxBody::kMoveTable:
+                return "Scheme:MoveTable";
             case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET:
                 return "Scheme:TXBODY_NOT_SET";
         }
     }
     virtual bool DoIsAsync() const override {
-        return WaitPathIdsToErase.size();
+        return !!WaitOnPropose;
     }
     virtual bool DoParse(TColumnShard& owner, const TString& data) override {
         if (!SchemaTxBody.ParseFromString(data)) {
@@ -81,8 +90,8 @@ private:
 public:
     using TBase::TBase;
 
-    virtual bool ProgressOnExecute(
-        TColumnShard& owner, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) override {
+    virtual bool ProgressOnExecute(TColumnShard& owner, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) override {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("schema_tx_progress_execute", DoGetOpType());
         if (!!TxAddSharding) {
             auto* tx = dynamic_cast<TTxAddShardingInfo*>(TxAddSharding.get());
             AFL_VERIFY(tx);
@@ -90,7 +99,7 @@ public:
             TxAddSharding->Execute(txc, NActors::TActivationContext::AsActorContext());
         }
         if (SchemaTxBody.TxBody_case() != NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET) {
-            owner.RunSchemaTx(SchemaTxBody, version, txc);
+            Completed = owner.ProgressSchemaTx(SchemaTxBody, version, txc);
             owner.ProtectSchemaSeqNo(SchemaTxBody.GetSeqNo(), txc);
         }
         return true;
@@ -100,14 +109,19 @@ public:
         if (!!TxAddSharding) {
             TxAddSharding->Complete(ctx);
         }
-        for (TActorId subscriber : NotifySubscribers) {
-            auto event = MakeHolder<TEvColumnShard::TEvNotifyTxCompletionResult>(owner.TabletID(), GetTxId());
-            ctx.Send(subscriber, event.Release(), 0, 0);
-        }
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("schema_tx_progress_complete", DoGetOpType())("completed", Completed);
+        if (Completed) {
+            for (TActorId subscriber : NotifySubscribers) {
+                auto event = MakeHolder<TEvColumnShard::TEvNotifyTxCompletionResult>(owner.TabletID(), GetTxId());
+                ctx.Send(subscriber, event.Release(), 0, 0);
+            }
 
-        auto result = std::make_unique<TEvColumnShard::TEvProposeTransactionResult>(owner.TabletID(), TxInfo.TxKind, TxInfo.TxId, NKikimrTxColumnShard::SUCCESS);
-        result->Record.SetStep(TxInfo.PlanStep);
-        ctx.Send(TxInfo.Source, result.release(), 0, TxInfo.Cookie);
+            auto result = std::make_unique<TEvColumnShard::TEvProposeTransactionResult>(owner.TabletID(), TxInfo.TxKind, TxInfo.TxId, NKikimrTxColumnShard::SUCCESS);
+            result->Record.SetStep(TxInfo.PlanStep);
+            ctx.Send(TxInfo.Source, result.release(), 0, TxInfo.Cookie);
+        } else {
+            owner.EnqueueProgressTx(ctx, std::nullopt);
+        }
         return true;
     }
 

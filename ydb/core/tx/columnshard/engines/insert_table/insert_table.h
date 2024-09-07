@@ -4,13 +4,13 @@
 #include "path_info.h"
 #include <ydb/core/tx/columnshard/counters/insert_table.h>
 
+namespace NKikimr::NColumnShard::NSubscriber {
+    class TManager;
+}
+
 namespace NKikimr::NOlap {
 
 class IDbWrapper;
-
-/// Use one table for inserted and committed blobs:
-/// !Commited => {PlanStep, WriteTxId} are {0, WriteId}
-///  Commited => {PlanStep, WriteTxId} are {PlanStep, TxId}
 
 class TInsertTableAccessor {
 protected:
@@ -60,6 +60,9 @@ public:
     }
     const THashMap<TWriteId, TInsertedData>& GetAborted() const { return Summary.GetAborted(); }
     const THashMap<TWriteId, TInsertedData>& GetInserted() const { return Summary.GetInserted(); }
+    bool HasCommittedByPathId(const ui64 pathId) {
+        return !Summary.GetPathInfo(pathId).GetCommitted().empty();
+    }
     const TInsertionSummary::TCounters& GetCountersPrepared() const {
         return Summary.GetCountersPrepared();
     }
@@ -73,8 +76,12 @@ public:
 
 class TInsertTable: public TInsertTableAccessor {
 private:
+    std::shared_ptr<NColumnShard::NSubscriber::TManager> Subscribers;;
     bool Loaded = false;
 public:
+    TInsertTable(std::shared_ptr<NColumnShard::NSubscriber::TManager> subscribers)
+        : Subscribers(subscribers)
+    {}
     static constexpr const TDuration WaitCommitDelay = TDuration::Minutes(10);
     static constexpr ui64 CleanupPackageSize = 10000;
 

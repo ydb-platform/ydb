@@ -100,9 +100,9 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActo
 
     for (auto&& aggr : baseAggregations) {
         const auto& writeMeta = aggr->GetWriteMeta();
-
-        if (!TablesManager.IsReadyForWrite(writeMeta.GetTableId())) {
-            ACFL_ERROR("event", "absent_pathId")("path_id", writeMeta.GetTableId())("has_index", TablesManager.HasPrimaryIndex());
+        const auto pathId = writeMeta.GetTableId();
+        if (!TablesManager.IsReadyForWrite(pathId)) {
+            ACFL_ERROR("event", "absent_pathId")("path_id", pathId)("has_index", TablesManager.HasPrimaryIndex());
             Counters.GetTabletCounters()->IncCounter(COUNTER_WRITE_FAIL);
 
             auto result = std::make_unique<TEvColumnShard::TEvWriteResult>(TabletID(), writeMeta, NKikimrTxColumnShard::EResultStatus::ERROR);
@@ -196,13 +196,13 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_writing")("reason", "disabled");
         return returnFail(COUNTER_WRITE_FAIL, EWriteFailReason::Disabled);
     }
-
     if (!TablesManager.IsReadyForWrite(tableId)) {
         LOG_S_NOTICE("Write (fail) into pathId:" << writeMeta.GetTableId() << (TablesManager.HasPrimaryIndex() ? "" : " no index")
                                                  << " at tablet " << TabletID());
 
         return returnFail(COUNTER_WRITE_FAIL, EWriteFailReason::NoTable);
     }
+    //
 
     {
         auto& portionsIndex =
@@ -424,6 +424,7 @@ private:
 void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActorContext& ctx) {
     NActors::TLogContextGuard gLogging =
         NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())("event", "TEvWrite");
+    ///???
 
     const auto& record = ev->Get()->Record;
     const auto source = ev->Sender;
@@ -520,6 +521,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
 
     const auto tableId = operation.GetTableId().GetTableId();
 
+    ///???
     if (!TablesManager.IsReadyForWrite(tableId)) {
         Counters.GetTabletCounters()->IncCounter(COUNTER_WRITE_FAIL);
         auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(

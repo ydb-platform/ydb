@@ -54,7 +54,7 @@ inline Ydb::StatusIds::StatusCode ConvertToYdbStatus(NKikimrTxColumnShard::EResu
         return Ydb::StatusIds::GENERIC_ERROR;
     }
 }
-}
+} //namespace NColumnShard
 
 struct TEvColumnShard {
     enum EEv {

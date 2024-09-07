@@ -3,9 +3,13 @@
 #include <ydb/core/protos/tx_columnshard.pb.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/engines/db_wrapper.h>
+#include <ydb/core/tx/columnshard/subscriber/abstract/manager/manager.h>
+#include <ydb/core/tx/columnshard/subscriber/events/indexation_completed/event.h>
+
 
 namespace NKikimr::NOlap {
 
+    //
 bool TInsertTable::Insert(IDbWrapper& dbTable, TInsertedData&& data) {
     if (auto* dataPtr = Summary.AddInserted(std::move(data))) {
         AddBlobLink(dataPtr->GetBlobRange().BlobId);
@@ -95,10 +99,15 @@ void TInsertTable::EraseCommittedOnComplete(const TInsertedData& data) {
     if (Summary.EraseCommitted(data)) {
         RemoveBlobLinkOnComplete(data.GetBlobRange().BlobId);
     }
+    //TODO improve me
+    if (!HasCommittedByPathId(data.PathId)) {
+        Subscribers->OnEvent(std::make_shared<NColumnShard::NSubscriber::TEventIndexationCompleted>(data.PathId));
+    }
 }
 
 void TInsertTable::EraseAbortedOnExecute(
     IDbWrapper& dbTable, const TInsertedData& data, const std::shared_ptr<IBlobsDeclareRemovingAction>& blobsAction) {
+    ///?
     if (Summary.HasAborted((TWriteId)data.WriteTxId)) {
         dbTable.EraseAborted(data);
         RemoveBlobLinkOnExecute(data.GetBlobRange().BlobId, blobsAction);
@@ -106,6 +115,7 @@ void TInsertTable::EraseAbortedOnExecute(
 }
 
 void TInsertTable::EraseAbortedOnComplete(const TInsertedData& data) {
+    ///?
     if (Summary.EraseAborted((TWriteId)data.WriteTxId)) {
         RemoveBlobLinkOnComplete(data.GetBlobRange().BlobId);
     }

@@ -22,10 +22,15 @@ TLongTxTransactionOperator::TProposeResult TLongTxTransactionOperator::DoStartPr
 
         auto it = owner.InsertTable->GetInserted().find(writeId);
         if (it != owner.InsertTable->GetInserted().end()) {
-            auto granuleShardingInfo = owner.GetIndexAs<NOlap::TColumnEngineForLogs>().GetVersionedIndex().GetShardingInfoActual(it->second.PathId);
+            const auto pathId = it->second.PathId;
+            auto granuleShardingInfo = owner.GetIndexAs<NOlap::TColumnEngineForLogs>().GetVersionedIndex().GetShardingInfoActual(pathId);
             if (granuleShardingInfo && lw.GranuleShardingVersionId && *lw.GranuleShardingVersionId != granuleShardingInfo->GetSnapshotVersion()) {
                 return TProposeResult(NKikimrTxColumnShard::EResultStatus::ERROR,
                     TStringBuilder() << "Commit TxId# " << GetTxId() << " references WriteId# " << (ui64)writeId << " declined through sharding deprecated");
+            }
+            if (owner.TablesManager.IsNewDataTxLocked(pathId)) {
+                return TProposeResult(NKikimrTxColumnShard::EResultStatus::ERROR,
+                    TStringBuilder() << "Commit TxId# " << GetTxId() << " references WriteId# " << (ui64)writeId << " with PathId" << pathId << " which is locked");
             }
         }
     }

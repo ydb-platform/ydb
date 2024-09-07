@@ -79,7 +79,7 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , TablesManager(StoragesManager, info->TabletID)
     , Subscribers(std::make_shared<NSubscriber::TManager>(*this))
     , PipeClientCache(NTabletPipe::CreateBoundedClientCache(new NTabletPipe::TBoundedClientCacheConfig(), GetPipeClientConfig()))
-    , InsertTable(std::make_unique<NOlap::TInsertTable>())
+    , InsertTable(std::make_unique<NOlap::TInsertTable>(Subscribers))
     , InsertTaskSubscription(NOlap::TInsertColumnEngineChanges::StaticTypeName(), Counters.GetSubscribeCounters())
     , CompactTaskSubscription(NOlap::TCompactColumnEngineChanges::StaticTypeName(), Counters.GetSubscribeCounters())
     , TTLTaskSubscription(NOlap::TTTLColumnEngineChanges::StaticTypeName(), Counters.GetSubscribeCounters())
@@ -148,7 +148,7 @@ void TColumnShard::SendWaitPlanStep(ui64 step) {
 }
 
 void TColumnShard::RescheduleWaitingReads() {
-    ui64 minWaitingStep = Max<ui64>();
+    ui64 minWaitingStep = Max<ui64>();//
     NOlap::TSnapshot maxReadVersion = GetMaxReadVersion();
     for (auto it = WaitingScans.begin(); it != WaitingScans.end();) {
         if (maxReadVersion < it->first) {
@@ -319,37 +319,40 @@ void TColumnShard::ProtectSchemaSeqNo(const NKikimrTxColumnShard::TSchemaSeqNo& 
     }
 }
 
-void TColumnShard::RunSchemaTx(const NKikimrTxColumnShard::TSchemaTxBody& body, const NOlap::TSnapshot& version,
+bool TColumnShard::ProgressSchemaTx(const NKikimrTxColumnShard::TSchemaTxBody& body, const NOlap::TSnapshot& version,
                                NTabletFlatExecutor::TTransactionContext& txc) {
     switch (body.TxBody_case()) {
         case NKikimrTxColumnShard::TSchemaTxBody::kInitShard: {
             RunInit(body.GetInitShard(), version, txc);
-            return;
+            return true;
         }
         case NKikimrTxColumnShard::TSchemaTxBody::kEnsureTables: {
             for (const auto& tableProto : body.GetEnsureTables().GetTables()) {
                 RunEnsureTable(tableProto, version, txc);
             }
-            return;
+            return true;
         }
         case NKikimrTxColumnShard::TSchemaTxBody::kAlterTable: {
             RunAlterTable(body.GetAlterTable(), version, txc);
-            return;
+            return true;
         }
         case NKikimrTxColumnShard::TSchemaTxBody::kDropTable: {
             RunDropTable(body.GetDropTable(), version, txc);
-            return;
+            return true;
         }
         case NKikimrTxColumnShard::TSchemaTxBody::kAlterStore: {
             RunAlterStore(body.GetAlterStore(), version, txc);
-            return;
+            return true;
+        }
+        case NKikimrTxColumnShard::TSchemaTxBody::kMoveTable: {
+            return ProgressMoveTable(body.GetMoveTable(), version, txc);
         }
         case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET: {
             break;
         }
     }
     Y_ABORT("Unsupported schema tx type");
-}
+    }
 
 void TColumnShard::RunInit(const NKikimrTxColumnShard::TInitShard& proto, const NOlap::TSnapshot& version,
                            NTabletFlatExecutor::TTransactionContext& txc) {
@@ -503,6 +506,34 @@ void TColumnShard::RunAlterStore(const NKikimrTxColumnShard::TAlterStore& proto,
         }
         TablesManager.AddSchemaVersion(presetProto.GetId(), version, presetProto.GetSchema(), db, Tiers);
     }
+}
+
+bool TColumnShard::ProgressMoveTable(const NKikimrTxColumnShard::TMoveTable& proto, const NOlap::TSnapshot& version,
+                                 NTabletFlatExecutor::TTransactionContext& txc) {
+    NIceDb::TNiceDb db(txc.DB);
+
+    const ui64 srcPathId = proto.GetSrcPathId();
+    const ui64 dstPathId = proto.GetDstPathId();
+    AFL_VERIFY(!InsertTable->HasCommittedByPathId(srcPathId));
+    if (!TablesManager.HasTable(dstPathId)) {
+        TablesManager.CloneTable(srcPathId, dstPathId, version, db, Tiers);
+    }
+    if (!MoveTableDataLock) {
+        MoveTableDataLock = DataLocksManager->RegisterLock(std::make_shared<NOlap::NDataLocks::TListTablesLock>(TString("MOVE_TABLE::") + ToString(srcPathId), THashSet<ui64>{srcPathId}));
+    }
+    if (!TablesManager.GetPrimaryIndex()->ProgressMoveTableData(srcPathId, dstPathId, txc.DB)) {
+        return false;
+    }
+    TablesManager.DropTable(srcPathId, version, db);
+    TablesManager.FinishMovingTable();
+    MoveTableDataLock->Release(*DataLocksManager);
+    MoveTableDataLock.reset();
+    TBlobGroupSelector dsGroupSelector(Info());
+    NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
+    THashSet<TWriteId> writesToAbort = InsertTable->DropPath(dbTable, srcPathId);
+
+    TryAbortWrites(db, dbTable, std::move(writesToAbort));
+    return true;
 }
 
 void TColumnShard::EnqueueBackgroundActivities(const bool periodic) {
@@ -818,7 +849,7 @@ void TColumnShard::SetupCleanupTables() {
         return;
     }
 
-    auto changes = TablesManager.MutablePrimaryIndex().StartCleanupTables(TablesManager.MutablePathsToDrop());
+    auto changes = TablesManager.MutablePrimaryIndex().StartCleanupTables(TablesManager.GetPathsToDrop());
     if (!changes) {
         ACFL_DEBUG("background", "cleanup")("skip_reason", "no_changes");
         return;

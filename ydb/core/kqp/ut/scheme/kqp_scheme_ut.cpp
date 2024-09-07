@@ -1058,8 +1058,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         CreateAndAlterTableWithPartitionSize(true);
     }
 
-    Y_UNIT_TEST(RenameTable) {
-        TKikimrRunner kikimr;
+    Y_UNIT_TEST_TWIN(RenameTable, СolumnTable) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TKikimrRunner kikimr(runnerSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1067,11 +1069,18 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             TString query = R"(
             --!syntax_v1
             CREATE TABLE `/Root/table` (
-                Key Uint64,
+                Key Uint64 NOT NULL,
                 Value String,
                 PRIMARY KEY (Key)
-            );
-            )";
+            )
+            )" 
+            + (СolumnTable ? TString(R"(
+            PARTITION BY HASH(Key)
+            WITH (
+                STORE = COLUMN,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1 --10
+            )
+            )") : TString());
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
@@ -1115,6 +1124,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
+        Cerr << "4---\n\n\n\n";
+        Sleep(TDuration::Seconds(2));
+        Cerr << "+++\n\n\n\n";
+
+
         {
             auto query = TStringBuilder() << R"(
             --!syntax_v1
@@ -1135,6 +1149,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             }
         }
 
+        Cerr << "5---\n\n\n\n";
+        Sleep(TDuration::Seconds(2));
+        Cerr << "+++\n\n\n\n";
+
         {
             auto query = TStringBuilder() << R"(
             --!syntax_v1
@@ -1146,6 +1164,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
+        Cerr << "6---\n\n\n\n";
+        Sleep(TDuration::Seconds(2));
+        Cerr << "+++\n\n\n\n";
+
+
         {
             auto query = TStringBuilder() << R"(
             --!syntax_v1
@@ -1155,6 +1178,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             const auto result = session.ExecuteSchemeQuery(query << ";").GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
         }
+
+        Cerr << "7---\n\n\n\n";
+        Sleep(TDuration::Seconds(2));
+        Cerr << "+++\n\n\n\n";
+
 
         {
             auto query = TStringBuilder() << R"(

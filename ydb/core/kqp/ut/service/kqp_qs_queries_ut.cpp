@@ -3155,6 +3155,24 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 insertResult.GetIssues().ToString().Contains("Write transactions between column and row tables are disabled at current time"),
                 insertResult.GetIssues().ToString());
         }
+
+        {
+            auto session = client.GetSession().GetValueSync().GetSession();
+            {
+                auto insertResult = session.ExecuteQuery(R"(
+                    REPLACE INTO `/Root/ColumnShard` (Col1, Col2, Col3) VALUES
+                        (1u, "test1", 10), (2u, "test2", 11), (3u, "test3", 12), (4u, NULL, 13);
+                )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+                UNIT_ASSERT(insertResult.IsSuccess());
+            }
+            {
+                auto insertResult = session.ExecuteQuery(R"(
+                    REPLACE INTO `/Root/DataShard` (Col1, Col2, Col3) VALUES
+                        (1u, "test1", 10), (2u, "test2", 11), (3u, "test3", 12), (4u, NULL, 13);
+                )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+                UNIT_ASSERT(insertResult.IsSuccess());
+            }
+        }
     }
 
     Y_UNIT_TEST(TableSink_ReplaceFromSelectLargeOlap) {

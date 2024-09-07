@@ -11,6 +11,7 @@ ydb/core/kqp/provider/ut KikimrIcGateway.TestLoadBasicSecretValueFromExternalDat
 ydb/core/kqp/ut/join KqpJoinOrder.Chain65Nodes
 ydb/core/kqp/ut/olap KqpOlapBlobsSharing.*
 ydb/core/kqp/ut/olap KqpOlapStatistics.StatsUsageWithTTL
+ydb/core/kqp/ut/olap KqpOlap.TableSinkWithOlapStore
 ydb/core/kqp/ut/pg KqpPg.CreateIndex
 ydb/core/kqp/ut/tx KqpLocksTricky.TestNoLocksIssueInteractiveTx+withSink
 ydb/core/kqp/ut/tx KqpLocksTricky.TestNoLocksIssue+withSink

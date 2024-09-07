@@ -2824,7 +2824,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
-        TLocalHelper(kikimr).CreateTestOlapTable();
+        TLocalHelper(kikimr).CreateTestOlapTables();
 
         WriteTestData(kikimr, "/Root/olapStore/olapTable0", 0, 1000000, 3, true);
 
@@ -2839,5 +2839,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
     }
+
 }
+
 }

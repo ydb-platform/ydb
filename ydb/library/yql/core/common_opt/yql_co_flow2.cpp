@@ -1366,7 +1366,9 @@ TExprBase FilterOverAggregate(const TCoFlatMapBase& node, TExprContext& ctx, TOp
             const TNodeMap<ESubgraphType> marked = MarkSubgraphForAggregate(p, arg, keyColumns);
             auto rootIt = marked.find(p.Get());
             YQL_ENSURE(rootIt != marked.end());
-            YQL_ENSURE(rootIt->second == EXPR_MIXED, "Key-only or const predicates should be handled earlier");
+            if (rootIt->second != EXPR_MIXED) {
+                continue;
+            }
 
             TNodeMap<ICalcualtor::TPtr> calcCache;
             TExprNodeList keyPredicates;

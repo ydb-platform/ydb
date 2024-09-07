@@ -157,8 +157,7 @@ namespace NProtoAST {
     public:
         TProtoASTBuilder(TStringBuf data, const TString& queryName = "query", google::protobuf::Arena* arena = nullptr)
             : QueryName(queryName)
-            , Data(data)
-            , InputStream(Data)  // Why the hell antlr needs non-const ptr??
+            , InputStream(data)
             , Lexer(&InputStream)
             , TokenStream(&Lexer)
             , Parser(&TokenStream, arena)
@@ -189,7 +188,6 @@ namespace NProtoAST {
 
     private:
         TString QueryName;
-        std::string Data;
 
         antlr4::ANTLRInputStream InputStream;
         TLexer Lexer;

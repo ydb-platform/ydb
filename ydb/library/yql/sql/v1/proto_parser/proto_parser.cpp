@@ -32,7 +32,7 @@ namespace NSQLTranslationV1 {
 
 using namespace NSQLv1Generated;
 
-void ValidateMessages(const google::protobuf::Message* msg1, const google::protobuf::Message* msg2, bool& hasNonAscii) {
+void ValidateMessagesImpl(const google::protobuf::Message* msg1, const google::protobuf::Message* msg2, bool hasNonAscii) {
     YQL_ENSURE(!msg1 == !msg2);
     if (!msg1) {
         return;
@@ -47,7 +47,6 @@ void ValidateMessages(const google::protobuf::Message* msg1, const google::proto
         const bool isEof2 = token2.GetId() == Max<ui32>();
         YQL_ENSURE(isEof1 == isEof2);
         YQL_ENSURE(token1.GetValue() == token2.GetValue());
-        hasNonAscii = hasNonAscii || AnyOf(token1.GetValue(), [](char c) { return !isascii(c);});
         if (!isEof1) {
             YQL_ENSURE(token1.GetLine() == token2.GetLine());
             if (!hasNonAscii) {
@@ -66,10 +65,15 @@ void ValidateMessages(const google::protobuf::Message* msg1, const google::proto
         if (field1.IsMessage()) {
             YQL_ENSURE(field1.Size() == field2.Size());
             for (size_t j = 0; j < field1.Size(); ++j) {
-                ValidateMessages(field1.template Get<NProtoBuf::Message>(j), field2.template Get<NProtoBuf::Message>(j), hasNonAscii);
+                ValidateMessagesImpl(field1.template Get<NProtoBuf::Message>(j), field2.template Get<NProtoBuf::Message>(j), hasNonAscii);
             }
         }
     }
+}
+
+void ValidateMessages(const TString& query, const google::protobuf::Message* msg1, const google::protobuf::Message* msg2) {
+    const bool hasNonAscii = AnyOf(query, [](char c) { return !isascii(c);});
+    return ValidateMessagesImpl(msg1, msg2, hasNonAscii);
 }
 
 google::protobuf::Message* SqlAST(const TString& query, const TString& queryName, TIssues& err,
@@ -85,8 +89,7 @@ google::protobuf::Message* SqlAST(const TString& query, const TString& queryName
         if (testAntlr4) {
             NProtoAST::TProtoASTBuilder<NALPAnsiAntlr4::SQLv1Antlr4Parser, NALPAnsiAntlr4::SQLv1Antlr4Lexer> builder(query, queryName, arena);
             auto res2 = builder.BuildAST(collector);
-            bool hasNonAscii = false;
-            ValidateMessages(res, res2, hasNonAscii);
+            ValidateMessages(query, res, res2);
         }
 
         return res;
@@ -96,8 +99,7 @@ google::protobuf::Message* SqlAST(const TString& query, const TString& queryName
         if (testAntlr4) {
             NProtoAST::TProtoASTBuilder<NALPDefaultAntlr4::SQLv1Antlr4Parser, NALPDefaultAntlr4::SQLv1Antlr4Lexer> builder(query, queryName, arena);
             auto res2 = builder.BuildAST(collector);
-            bool hasNonAscii = false;
-            ValidateMessages(res, res2, hasNonAscii);
+            ValidateMessages(query, res, res2);
         }
 
         return res;
@@ -122,8 +124,7 @@ google::protobuf::Message* SqlAST(const TString& query, const TString& queryName
         if (testAntlr4) {
             NProtoAST::TProtoASTBuilder<NALPAnsiAntlr4::SQLv1Antlr4Parser, NALPAnsiAntlr4::SQLv1Antlr4Lexer> builder(query, queryName, arena);
             auto res2 = builder.BuildAST(err);
-            bool hasNonAscii = false;
-            ValidateMessages(res, res2, hasNonAscii);
+            ValidateMessages(query, res, res2);
         }
 
         return res;
@@ -133,8 +134,7 @@ google::protobuf::Message* SqlAST(const TString& query, const TString& queryName
         if (testAntlr4) {
             NProtoAST::TProtoASTBuilder<NALPDefaultAntlr4::SQLv1Antlr4Parser, NALPDefaultAntlr4::SQLv1Antlr4Lexer> builder(query, queryName, arena);
             auto res2 =  builder.BuildAST(err);
-            bool hasNonAscii = false;
-            ValidateMessages(res, res2, hasNonAscii);
+            ValidateMessages(query, res, res2);
         }
 
         return res;

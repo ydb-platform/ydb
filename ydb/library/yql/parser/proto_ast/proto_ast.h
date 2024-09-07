@@ -102,8 +102,6 @@ namespace antlr4 {
         NProtoAST::IErrorCollector* errors;
         bool* error;
     public:
-        static ConsoleErrorListener INSTANCE;
-
         YqlErrorListener(NProtoAST::IErrorCollector* errors, bool* error);
 
         virtual void syntaxError(Recognizer *recognizer, Token * offendingSymbol, size_t line, size_t charPositionInLine,
@@ -137,8 +135,8 @@ namespace NProtoAST {
                 return Parser.Parse(Lexer, &errors);
             } catch (const TTooManyErrors&) {
                 return nullptr;
-            } catch (const yexception& e) {
-                errors.Error(0, 0, e.what());
+            } catch (...) {
+                errors.Error(0, 0, CurrentExceptionMessage());
                 return nullptr;
             }
         }
@@ -159,7 +157,8 @@ namespace NProtoAST {
     public:
         TProtoASTBuilder(TStringBuf data, const TString& queryName = "query", google::protobuf::Arena* arena = nullptr)
             : QueryName(queryName)
-            , InputStream(std::string(data))  // Why the hell antlr needs non-const ptr??
+            , Data(data)
+            , InputStream(Data)  // Why the hell antlr needs non-const ptr??
             , Lexer(&InputStream)
             , TokenStream(&Lexer)
             , Parser(&TokenStream, arena)
@@ -169,6 +168,7 @@ namespace NProtoAST {
         google::protobuf::Message* BuildAST(IErrorCollector& errors) {
             // TODO: find a better way to break on lexer errors
             typename antlr4::YqlErrorListener listener(&errors, &Parser.error);
+            Parser.removeErrorListeners();
             Parser.addErrorListener(&listener);
             try {
                 auto result = Parser.Parse(&errors);
@@ -179,8 +179,8 @@ namespace NProtoAST {
                 Parser.removeErrorListener(&listener);
                 Parser.error = false;
                 return nullptr;
-            } catch (const yexception& e) {
-                errors.Error(0, 0, e.what());
+            } catch (...) {
+                errors.Error(0, 0, CurrentExceptionMessage());
                 Parser.removeErrorListener(&listener);
                 Parser.error = false;
                 return nullptr;
@@ -189,6 +189,7 @@ namespace NProtoAST {
 
     private:
         TString QueryName;
+        std::string Data;
 
         antlr4::ANTLRInputStream InputStream;
         TLexer Lexer;
@@ -232,8 +233,8 @@ namespace NProtoAST {
                     }
                 }
             } catch (const TTooManyErrors&) {
-            } catch (const yexception& e) {
-                errors.Error(0, 0, e.what());
+            } catch (...) {
+                errors.Error(0, 0, CurrentExceptionMessage());
             }
         }
 
@@ -272,8 +273,8 @@ namespace NProtoAST {
                     }
                 }
             } catch (const TTooManyErrors&) {
-            } catch (const yexception& e) {
-                errors.Error(0, 0, e.what());
+            } catch (...) {
+                errors.Error(0, 0, CurrentExceptionMessage());
             }
         }
 

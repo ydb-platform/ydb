@@ -145,11 +145,14 @@ private:
                 return TTxController::TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "No primary index for TTL");
             }
 
-            auto schema = Self->TablesManager.GetPrimaryIndexSafe().GetVersionedIndex().GetLastSchema()->GetSchema();
-            auto ttlColumn = schema->GetFieldByName(columnName);
-            if (!ttlColumn) {
-                return TTxController::TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "TTL tx wrong TTL column '" + columnName + "'");
+            auto schemaSnapshot = Self->TablesManager.GetPrimaryIndexSafe().GetVersionedIndex().GetLastSchema();
+            auto schema = schemaSnapshot->GetSchema();
+            auto index = schemaSnapshot->GetColumnIdOptional(columnName);
+            if (!index) {
+                return TTxController::TProposeResult(
+                    NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "TTL tx wrong TTL column '" + columnName + "'");
             }
+            auto ttlColumn = schemaSnapshot->GetFieldByColumnIdVerified(*index);
 
             const TInstant now = TlsActivationContext ? AppData()->TimeProvider->Now() : TInstant::Now();
             for (ui64 pathId : ttlBody.GetPathIds()) {

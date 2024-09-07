@@ -157,7 +157,7 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, TInd
 }
 
 void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, const NKikimrSchemeOp::TColumnTableSchema& schema) {
-    std::optional<NOlap::TIndexInfo> indexInfoOptional = NOlap::TIndexInfo::BuildFromProto(schema, StoragesManager);
+    std::optional<NOlap::TIndexInfo> indexInfoOptional = NOlap::TIndexInfo::BuildFromProto(schema, StoragesManager, SchemaObjectsCache);
     AFL_VERIFY(indexInfoOptional);
     NOlap::TIndexInfo indexInfo = std::move(*indexInfoOptional);
     indexInfo.SetAllKeys(StoragesManager);

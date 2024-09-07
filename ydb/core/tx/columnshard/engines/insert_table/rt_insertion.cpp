@@ -23,9 +23,10 @@ void TInsertionSummary::RemovePriority(const TPathInfo& pathInfo) noexcept {
     const auto priority = pathInfo.GetIndexationPriority();
     auto it = Priorities.find(priority);
     if (it == Priorities.end()) {
-        Y_ABORT_UNLESS(!priority);
+        AFL_VERIFY(!priority);
         return;
     }
+    AFL_VERIFY(!!priority);
     Y_ABORT_UNLESS(it->second.erase(&pathInfo) || !priority);
     if (it->second.empty()) {
         Priorities.erase(it);
@@ -33,7 +34,9 @@ void TInsertionSummary::RemovePriority(const TPathInfo& pathInfo) noexcept {
 }
 
 void TInsertionSummary::AddPriority(const TPathInfo& pathInfo) noexcept {
-    Y_ABORT_UNLESS(Priorities[pathInfo.GetIndexationPriority()].emplace(&pathInfo).second);
+    if (!!pathInfo.GetIndexationPriority()) {
+        Y_ABORT_UNLESS(Priorities[pathInfo.GetIndexationPriority()].emplace(&pathInfo).second);
+    }
 }
 
 NKikimr::NOlap::TPathInfo& TInsertionSummary::GetPathInfo(const ui64 pathId) {

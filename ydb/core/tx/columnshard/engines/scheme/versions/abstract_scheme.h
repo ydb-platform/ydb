@@ -63,7 +63,7 @@ public:
     TString DebugString() const {
         return DoDebugString();
     }
-    virtual const std::shared_ptr<arrow::Schema>& GetSchema() const = 0;
+    virtual const std::shared_ptr<NArrow::TSchemaLite>& GetSchema() const = 0;
     virtual const TIndexInfo& GetIndexInfo() const = 0;
     virtual const TSnapshot& GetSnapshot() const = 0;
     virtual ui64 GetVersion() const = 0;

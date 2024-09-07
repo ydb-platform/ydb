@@ -47,6 +47,7 @@ public:
         if (it == PathInfo.end()) {
             return;
         }
+        RemovePriority(it->second);
         AFL_VERIFY(it->second.IsEmpty());
         PathInfo.erase(it);
     }

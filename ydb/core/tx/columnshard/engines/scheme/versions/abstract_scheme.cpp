@@ -35,7 +35,7 @@ TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> ISnapshotSchema::Normali
             return batch;
         }
     }
-    const std::shared_ptr<arrow::Schema>& resultArrowSchema = GetSchema();
+    const std::shared_ptr<NArrow::TSchemaLite>& resultArrowSchema = GetSchema();
 
     std::shared_ptr<NArrow::TGeneralContainer> result = std::make_shared<NArrow::TGeneralContainer>(batch->GetRecordsCount());
     for (size_t i = 0; i < resultArrowSchema->fields().size(); ++i) {
@@ -78,15 +78,15 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModi
         return TConclusionStatus::Fail("not valid incoming batch: " + status.ToString());
     }
 
-    const std::shared_ptr<arrow::Schema> dstSchema = GetIndexInfo().ArrowSchema();
+    const std::shared_ptr<NArrow::TSchemaLite> dstSchema = GetIndexInfo().ArrowSchema();
 
     auto batch = NArrow::TColumnOperator().SkipIfAbsent().Extract(incomingBatch, dstSchema->field_names());
 
     for (auto&& i : batch->schema()->fields()) {
-        AFL_VERIFY(GetIndexInfo().HasColumnName(i->name()));
-        if (!dstSchema->GetFieldByName(i->name())->Equals(i)) {
-            return TConclusionStatus::Fail("not equal field types for column '" + i->name() + "': " + i->ToString() + " vs " +
-                                           dstSchema->GetFieldByName(i->name())->ToString());
+        auto fSchema = GetIndexInfo().GetColumnFieldVerified(GetIndexInfo().GetColumnIdVerified(i->name()));
+        if (!fSchema->Equals(i)) {
+            return TConclusionStatus::Fail(
+                "not equal field types for column '" + i->name() + "': " + i->ToString() + " vs " + fSchema->ToString());
         }
         if (GetIndexInfo().IsNullableVerified(i->name())) {
             continue;

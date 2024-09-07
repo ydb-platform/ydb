@@ -6,21 +6,22 @@
 #include "abstract/index_info.h"
 #include "indexes/abstract/meta.h"
 
-#include <ydb/core/tx/columnshard/common/snapshot.h>
-
-#include <ydb/core/sys_view/common/schema.h>
-#include <ydb/core/tx/columnshard/common/scalars.h>
-#include <ydb/core/tx/columnshard/common/portion.h>
 #include <ydb/core/formats/arrow/dictionary/object.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/core/formats/arrow/transformer/abstract.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/core/sys_view/common/schema.h>
+#include <ydb/core/tx/columnshard/common/portion.h>
+#include <ydb/core/tx/columnshard/common/scalars.h>
+#include <ydb/core/tx/columnshard/common/snapshot.h>
+
+#include <library/cpp/string_utils/quote/quote.h>
 
 namespace arrow {
-    class Array;
-    class Field;
-    class Schema;
-}
+class Array;
+class Field;
+class Schema;
+}   // namespace arrow
 
 namespace NKikimr::NOlap {
 
@@ -41,19 +42,66 @@ class TSnapshotColumnInfo;
 class ISnapshotSchema;
 using TNameTypeInfo = std::pair<TString, NScheme::TTypeInfo>;
 
+class TSchemaObjectsCache {
+private:
+    THashMap<TString, std::shared_ptr<arrow::Field>> Fields;
+    THashMap<TString, std::shared_ptr<TColumnFeatures>> ColumnFeatures;
+    mutable ui64 AcceptionFieldsCount = 0;
+    mutable ui64 AcceptionFeaturesCount = 0;
+
+public:
+    void RegisterField(const TString& fingerprint, const std::shared_ptr<arrow::Field>& f) {
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "register_field")("fp", fingerprint)("f", f->ToString());
+        AFL_VERIFY(Fields.emplace(fingerprint, f).second);
+    }
+    void RegisterColumnFeatures(const TString& fingerprint, const std::shared_ptr<TColumnFeatures>& f) {
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "register_column_features")("fp", fingerprint)("info", f->DebugString());
+        AFL_VERIFY(ColumnFeatures.emplace(fingerprint, f).second);
+    }
+    std::shared_ptr<arrow::Field> GetField(const TString& fingerprint) const {
+        auto it = Fields.find(fingerprint);
+        if (it == Fields.end()) {
+            AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "get_field_miss")("fp", fingerprint)("count", Fields.size())(
+                "acc", AcceptionFieldsCount);
+            return nullptr;
+        }
+        if (++AcceptionFieldsCount % 1000 == 0) {
+            AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "get_field_accept")("fp", fingerprint)("count", Fields.size())(
+                "acc", AcceptionFieldsCount);
+        }
+        return it->second;
+    }
+    std::shared_ptr<TColumnFeatures> GetColumnFeatures(const TString& fingerprint) const {
+        auto it = ColumnFeatures.find(fingerprint);
+        if (it == ColumnFeatures.end()) {
+            AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "get_column_features_miss")("fp", UrlEscapeRet(fingerprint))(
+                "count", ColumnFeatures.size())("acc", AcceptionFeaturesCount);
+            return nullptr;
+        }
+        if (++AcceptionFeaturesCount % 1000 == 0) {
+            AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "get_column_features_accept")("fp", UrlEscapeRet(fingerprint))(
+                "count", ColumnFeatures.size())("acc", AcceptionFeaturesCount);
+        }
+        return it->second;
+    }
+};
+
 /// Column engine index description in terms of tablet's local table.
 /// We have to use YDB types for keys here.
-struct TIndexInfo : public NTable::TScheme::TTableSchema, public IIndexInfo {
+struct TIndexInfo: public NTable::TScheme::TTableSchema, public IIndexInfo {
 private:
-    THashMap<ui32, TColumnFeatures> ColumnFeatures;
+    THashMap<ui32, ui32> IdIntoIndex;
+    THashMap<ui32, std::shared_ptr<TColumnFeatures>> ColumnFeatures;
     THashMap<ui32, std::shared_ptr<arrow::Field>> ArrowColumnByColumnIdCache;
     THashMap<ui32, NIndexes::TIndexMetaContainer> Indexes;
     TIndexInfo(const TString& name);
     bool SchemeNeedActualization = false;
     std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor> CompactionPlannerConstructor;
     bool ExternalGuaranteeExclusivePK = false;
-    bool DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema, const std::shared_ptr<IStoragesManager>& operators);
-    void InitializeCaches(const std::shared_ptr<IStoragesManager>& operators);
+    bool DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema, const std::shared_ptr<IStoragesManager>& operators,
+        const std::shared_ptr<TSchemaObjectsCache>& cache);
+    void InitializeCaches(const std::shared_ptr<IStoragesManager>& operators, const std::shared_ptr<TSchemaObjectsCache>& cache);
+
 public:
     std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor> GetCompactionPlannerConstructor() const;
 
@@ -80,7 +128,7 @@ public:
     const TColumnFeatures& GetColumnFeaturesVerified(const ui32 columnId) const {
         auto it = ColumnFeatures.find(columnId);
         AFL_VERIFY(it != ColumnFeatures.end());
-        return it->second;
+        return *it->second;
     }
 
     NSplitter::TEntityGroups GetEntityGroupsByStorageId(const TString& specialTier, const IStoragesManager& storages) const;
@@ -95,7 +143,7 @@ public:
             result.emplace(portionTierName);
         } else {
             for (auto&& i : ColumnFeatures) {
-                result.emplace(i.second.GetOperator()->GetStorageId());
+                result.emplace(i.second->GetOperator()->GetStorageId());
             }
         }
         return result;
@@ -117,7 +165,7 @@ public:
         } else {
             auto it = ColumnFeatures.find(columnId);
             AFL_VERIFY(it != ColumnFeatures.end());
-            return it->second.GetOperator()->GetStorageId();
+            return it->second->GetOperator()->GetStorageId();
         }
     }
 
@@ -132,11 +180,11 @@ public:
     TString DebugString() const {
         TStringBuilder sb;
         sb << "("
-            << "version=" << Version << ";"
-            << "name=" << Name << ";"
-            << ")";
+           << "version=" << Version << ";"
+           << "name=" << Name << ";"
+           << ")";
         for (auto&& i : ColumnFeatures) {
-            sb << GetColumnName(i.first) << ":" << i.second.DebugString() << ";";
+            sb << GetColumnName(i.first) << ":" << i.second->DebugString() << ";";
         }
         return sb;
     }
@@ -147,15 +195,17 @@ public:
         return result;
     }
 
-    std::vector<std::shared_ptr<IPortionDataChunk>> ActualizeColumnData(const std::vector<std::shared_ptr<IPortionDataChunk>>& source, const TIndexInfo& sourceIndexInfo, const ui32 columnId) const {
+    std::vector<std::shared_ptr<IPortionDataChunk>> ActualizeColumnData(
+        const std::vector<std::shared_ptr<IPortionDataChunk>>& source, const TIndexInfo& sourceIndexInfo, const ui32 columnId) const {
         auto itCurrent = ColumnFeatures.find(columnId);
         auto itPred = sourceIndexInfo.ColumnFeatures.find(columnId);
         AFL_VERIFY(itCurrent != ColumnFeatures.end());
         AFL_VERIFY(itPred != sourceIndexInfo.ColumnFeatures.end());
-        return itCurrent->second.ActualizeColumnData(source, itPred->second);
+        return itCurrent->second->ActualizeColumnData(source, *itPred->second);
     }
 
-    static std::optional<TIndexInfo> BuildFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema, const std::shared_ptr<IStoragesManager>& operators);
+    static std::optional<TIndexInfo> BuildFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema,
+        const std::shared_ptr<IStoragesManager>& operators, const std::shared_ptr<TSchemaObjectsCache>& cache);
 
     bool HasColumnId(const ui32 columnId) const {
         return ColumnFeatures.contains(columnId);
@@ -169,6 +219,12 @@ public:
         return Indexes.contains(indexId);
     }
 
+    std::optional<ui32> GetColumnIndexOptional(const ui32 id) const;
+    ui32 GetColumnIndexVerified(const ui32 id) const {
+        auto result = GetColumnIndexOptional(id);
+        AFL_VERIFY(result);
+        return *result;
+    }
     std::shared_ptr<arrow::Field> GetColumnFieldOptional(const ui32 columnId) const;
     std::shared_ptr<arrow::Field> GetColumnFieldVerified(const ui32 columnId) const;
     std::shared_ptr<arrow::Schema> GetColumnSchema(const ui32 columnId) const;
@@ -211,6 +267,7 @@ public:
         YDB_ACCESSOR_DEF(TStorageData, SecondaryInplaceData);
         using TPrimaryStorageData = THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>;
         YDB_ACCESSOR_DEF(TPrimaryStorageData, ExternalData);
+
     public:
         TSecondaryData() = default;
     };
@@ -231,8 +288,8 @@ public:
     std::shared_ptr<NIndexes::NMax::TIndexMeta> GetIndexMetaMax(const ui32 columnId) const;
     std::shared_ptr<NIndexes::NCountMinSketch::TIndexMeta> GetIndexMetaCountMinSketch(const std::set<ui32>& columnIds) const;
 
-    [[nodiscard]] TConclusionStatus AppendIndex(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& originalData, const ui32 indexId,
-        const std::shared_ptr<IStoragesManager>& operators, TSecondaryData& result) const;
+    [[nodiscard]] TConclusionStatus AppendIndex(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& originalData,
+        const ui32 indexId, const std::shared_ptr<IStoragesManager>& operators, TSecondaryData& result) const;
 
     /// Returns an id of the column located by name. The name should exists in the schema.
     ui32 GetColumnIdVerified(const std::string& name) const;
@@ -291,17 +348,8 @@ public:
 
     std::vector<ui32> GetColumnIds(const std::vector<TString>& columnNames) const;
 
-    std::shared_ptr<arrow::Schema> ArrowSchema() const;
-    std::shared_ptr<arrow::Schema> ArrowSchemaWithSpecials() const;
-    std::shared_ptr<arrow::Schema> AddColumns(const std::shared_ptr<arrow::Schema>& schema,
-                                              const std::vector<TString>& columns) const;
-
-    std::shared_ptr<arrow::Field> ArrowColumnFieldOptional(const ui32 columnId) const;
-    std::shared_ptr<arrow::Field> ArrowColumnFieldVerified(const ui32 columnId) const;
-
-    const THashSet<TString>& GetRequiredColumns() const {
-        return RequiredColumns;
-    }
+    const std::shared_ptr<NArrow::TSchemaLite>& ArrowSchema() const;
+    const std::shared_ptr<NArrow::TSchemaLite>& ArrowSchemaWithSpecials() const;
 
     const THashSet<ui32>& GetMinMaxIdxColumns() const {
         return MinMaxIdxColumnsIds;
@@ -310,8 +358,12 @@ public:
     bool AllowTtlOverColumn(const TString& name) const;
 
     /// Returns whether the sorting keys defined.
-    bool IsSorted() const { return true; }
-    bool IsSortedColumn(const ui32 columnId) const { return GetPKFirstColumnId() == columnId; }
+    bool IsSorted() const {
+        return true;
+    }
+    bool IsSortedColumn(const ui32 columnId) const {
+        return GetPKFirstColumnId() == columnId;
+    }
 
     ui64 GetVersion() const {
         return Version;
@@ -329,17 +381,17 @@ private:
     std::vector<ui32> SchemaColumnIdsWithSpecials;
     std::set<ui32> SchemaColumnIdsWithSpecialsSet;
     std::vector<ui32> PKColumnIds;
-    std::shared_ptr<arrow::Schema> Schema;
-    std::shared_ptr<arrow::Schema> SchemaWithSpecials;
+    std::shared_ptr<NArrow::TSchemaLite> SchemaWithSpecials;
+    std::shared_ptr<NArrow::TSchemaLite> Schema;
     std::shared_ptr<arrow::Schema> PrimaryKey;
-    THashSet<TString> RequiredColumns;
     THashSet<ui32> MinMaxIdxColumnsIds;
     NArrow::NSerialization::TSerializerContainer DefaultSerializer = NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer();
 };
 
-std::shared_ptr<arrow::Schema> MakeArrowSchema(const NTable::TScheme::TTableSchema::TColumns& columns, const std::vector<ui32>& ids);
+std::shared_ptr<arrow::Schema> MakeArrowSchema(const NTable::TScheme::TTableSchema::TColumns& columns, const std::vector<ui32>& ids,
+    const std::shared_ptr<TSchemaObjectsCache>& cache = nullptr);
 
 /// Extracts columns with the specific ids from the schema.
 std::vector<TNameTypeInfo> GetColumns(const NTable::TScheme::TTableSchema& tableSchema, const std::vector<ui32>& ids);
 
-} // namespace NKikimr::NOlap
+}   // namespace NKikimr::NOlap

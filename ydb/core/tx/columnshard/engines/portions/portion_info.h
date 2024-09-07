@@ -635,7 +635,6 @@ public:
     class TPreparedBatchData {
     private:
         std::vector<TPreparedColumn> Columns;
-        std::shared_ptr<arrow::Schema> Schema;
         size_t RowsCount = 0;
     public:
         struct TAssembleOptions {
@@ -676,10 +675,6 @@ public:
             return nullptr;
         }
 
-        std::vector<std::string> GetSchemaColumnNames() const {
-            return Schema->field_names();
-        }
-
         size_t GetColumnsCount() const {
             return Columns.size();
         }
@@ -688,9 +683,8 @@ public:
             return RowsCount;
         }
 
-        TPreparedBatchData(std::vector<TPreparedColumn>&& columns, std::shared_ptr<arrow::Schema> schema, const size_t rowsCount)
+        TPreparedBatchData(std::vector<TPreparedColumn>&& columns, const size_t rowsCount)
             : Columns(std::move(columns))
-            , Schema(schema)
             , RowsCount(rowsCount) {
         }
 

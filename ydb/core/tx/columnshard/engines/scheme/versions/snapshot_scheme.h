@@ -9,7 +9,7 @@ namespace NKikimr::NOlap {
 class TSnapshotSchema: public ISnapshotSchema {
 private:
     TIndexInfo IndexInfo;
-    std::shared_ptr<arrow::Schema> Schema;
+    std::shared_ptr<NArrow::TSchemaLite> Schema;
     TSnapshot Snapshot;
 protected:
     virtual TString DoDebugString() const override {
@@ -33,7 +33,7 @@ public:
     ui32 GetColumnIdVerified(const std::string& columnName) const override;
     int GetFieldIndex(const ui32 columnId) const override;
 
-    const std::shared_ptr<arrow::Schema>& GetSchema() const override;
+    const std::shared_ptr<NArrow::TSchemaLite>& GetSchema() const override;
     const TIndexInfo& GetIndexInfo() const override;
     const TSnapshot& GetSnapshot() const override;
     ui32 GetColumnsCount() const override;

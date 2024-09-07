@@ -80,15 +80,16 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModi
 
     const std::shared_ptr<NArrow::TSchemaLite> dstSchema = GetIndexInfo().ArrowSchema();
 
-    auto batch = NArrow::TColumnOperator().SkipIfAbsent().Extract(incomingBatch, dstSchema->field_names());
+    auto batch = NArrow::TColumnOperator().SkipIfAbsent().Extract(incomingBatch, dstSchema);
 
     for (auto&& i : batch->schema()->fields()) {
-        auto fSchema = GetIndexInfo().GetColumnFieldVerified(GetIndexInfo().GetColumnIdVerified(i->name()));
+        const ui32 columnId = GetIndexInfo().GetColumnIdVerified(i->name());
+        auto fSchema = GetIndexInfo().GetColumnFieldVerified(columnId);
         if (!fSchema->Equals(i)) {
             return TConclusionStatus::Fail(
                 "not equal field types for column '" + i->name() + "': " + i->ToString() + " vs " + fSchema->ToString());
         }
-        if (GetIndexInfo().IsNullableVerified(i->name())) {
+        if (GetIndexInfo().IsNullableVerified(columnId)) {
             continue;
         }
         if (NArrow::HasNulls(batch->GetColumnByName(i->name()))) {

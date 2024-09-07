@@ -160,7 +160,6 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, cons
     std::optional<NOlap::TIndexInfo> indexInfoOptional = NOlap::TIndexInfo::BuildFromProto(schema, StoragesManager, SchemaObjectsCache);
     AFL_VERIFY(indexInfoOptional);
     NOlap::TIndexInfo indexInfo = std::move(*indexInfoOptional);
-    indexInfo.SetAllKeys(StoragesManager);
     RegisterSchemaVersion(snapshot, std::move(indexInfo));
 }
 

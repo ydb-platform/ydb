@@ -104,8 +104,15 @@ public:
 
 /// Column engine index description in terms of tablet's local table.
 /// We have to use YDB types for keys here.
-struct TIndexInfo: public NTable::TScheme::TTableSchema, public IIndexInfo {
+struct TIndexInfo: public IIndexInfo {
 private:
+    using TColumns = THashMap<ui32, NTable::TColumn>;
+    using TColumnNames = THashMap<TString, ui32>;
+
+    TColumnNames ColumnNames;
+    std::vector<ui32> PKColumnIds;
+    std::vector<TNameTypeInfo> PKColumns;
+
     THashMap<ui32, ui32> IdIntoIndex;
     THashMap<ui32, std::shared_ptr<TColumnFeatures>> ColumnFeatures;
     THashMap<ui32, NIndexes::TIndexMetaContainer> Indexes;
@@ -115,8 +122,10 @@ private:
     bool ExternalGuaranteeExclusivePK = false;
     bool DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema, const std::shared_ptr<IStoragesManager>& operators,
         const std::shared_ptr<TSchemaObjectsCache>& cache);
-    void InitializeCaches(const std::shared_ptr<IStoragesManager>& operators, const std::shared_ptr<TSchemaObjectsCache>& cache, const bool withColumnFeatures = true);
-    std::shared_ptr<TColumnFeatures> BuildDefaultColumnFeatures(const ui32 columnId, const std::shared_ptr<IStoragesManager>& operators) const;
+    void InitializeCaches(const std::shared_ptr<IStoragesManager>& operators, const THashMap<ui32, NTable::TColumn>& columns,
+        const std::shared_ptr<TSchemaObjectsCache>& cache, const bool withColumnFeatures = true);
+    std::shared_ptr<TColumnFeatures> BuildDefaultColumnFeatures(
+        const ui32 columnId, const THashMap<ui32, NTable::TColumn>& columns, const std::shared_ptr<IStoragesManager>& operators) const;
 
 public:
     std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor> GetCompactionPlannerConstructor() const;
@@ -126,12 +135,12 @@ public:
     }
 
     bool IsNullableVerified(const ui32 colId) const {
-        auto it = Columns.find(colId);
-        if (it == Columns.end()) {
+        auto it = ColumnFeatures.find(colId);
+        if (it == ColumnFeatures.end()) {
             AFL_VERIFY(IIndexInfo::IsSpecialColumn(colId));
             return IIndexInfo::IsNullableVerified(colId);
         }
-        return !it->second.NotNull;
+        return it->second->GetIsNullable();
     }
 
     std::shared_ptr<arrow::Scalar> GetColumnExternalDefaultValueVerified(const std::string& colName) const;
@@ -205,9 +214,26 @@ public:
         return sb;
     }
 
+    void SetAllKeys(const std::shared_ptr<IStoragesManager>& operators, const THashMap<ui32, NTable::TColumn>& columns);
+
 public:
     static TIndexInfo BuildDefault() {
         TIndexInfo result("dummy");
+        return result;
+    }
+
+    static TIndexInfo BuildDefault(
+        const std::shared_ptr<IStoragesManager>& operators, const TColumns& columns, const std::vector<TString>& pkNames) {
+        TIndexInfo result = BuildDefault();
+        for (auto&& i : columns) {
+            result.ColumnNames[i.second.Name] = i.first;
+        }
+        for (auto&& i : pkNames) {
+            auto it = result.ColumnNames.find(i);
+            AFL_VERIFY(it != result.ColumnNames.end());
+            result.PKColumnIds.emplace_back(it->second);
+        }
+        result.SetAllKeys(operators, columns);
         return result;
     }
 
@@ -309,9 +335,6 @@ public:
 
     /// Returns an id of the column located by name. The name should exists in the schema.
     ui32 GetColumnIdVerified(const std::string& name) const;
-    ui32 GetColumnId(const std::string& name) const {
-        return GetColumnIdVerified(name);
-    }
     std::set<ui32> GetColumnIdsVerified(const std::set<TString>& names) const {
         std::set<ui32> result;
         for (auto&& i : names) {
@@ -334,29 +357,23 @@ public:
     }
     std::vector<ui32> GetEntityIds() const;
 
-    /// Returns info of columns defined by specific ids.
-    std::vector<TNameTypeInfo> GetColumns(const std::vector<ui32>& ids) const;
-
     /// Traditional Primary Key (includes uniqueness, search and sorting logic)
-    std::vector<TNameTypeInfo> GetPrimaryKeyColumns() const {
-        return GetColumns(KeyColumns);
+    const std::vector<TNameTypeInfo>& GetPrimaryKeyColumns() const {
+        return PKColumns;
     }
 
     /// Returns id of the first column of the primary key.
     ui32 GetPKFirstColumnId() const {
-        Y_ABORT_UNLESS(KeyColumns.size());
-        return KeyColumns[0];
+        Y_ABORT_UNLESS(PKColumnIds.size());
+        return PKColumnIds[0];
     }
 
     const std::shared_ptr<arrow::Schema>& GetReplaceKey() const { return PrimaryKey; }
     const std::shared_ptr<arrow::Schema>& GetPrimaryKey() const { return PrimaryKey; }
 
-    /// Initializes sorting, replace, index and extended keys.
-    void SetAllKeys(const std::shared_ptr<IStoragesManager>& operators);
-
     void CheckTtlColumn(const TString& ttlColumn) const {
         Y_ABORT_UNLESS(!ttlColumn.empty());
-        Y_ABORT_UNLESS(MinMaxIdxColumnsIds.contains(GetColumnId(ttlColumn)));
+        Y_ABORT_UNLESS(MinMaxIdxColumnsIds.contains(GetColumnIdVerified(ttlColumn)));
     }
 
     std::vector<ui32> GetColumnIds(const std::vector<TString>& columnNames) const;
@@ -392,7 +409,6 @@ private:
     TString Name;
     std::vector<ui32> SchemaColumnIds;
     std::vector<ui32> SchemaColumnIdsWithSpecials;
-    std::vector<ui32> PKColumnIds;
     std::shared_ptr<NArrow::TSchemaLite> SchemaWithSpecials;
     std::shared_ptr<NArrow::TSchemaLite> Schema;
     std::shared_ptr<arrow::Schema> PrimaryKey;

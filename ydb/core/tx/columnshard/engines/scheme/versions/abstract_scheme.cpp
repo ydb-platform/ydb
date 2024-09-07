@@ -40,7 +40,7 @@ TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> ISnapshotSchema::Normali
     std::shared_ptr<NArrow::TGeneralContainer> result = std::make_shared<NArrow::TGeneralContainer>(batch->GetRecordsCount());
     for (size_t i = 0; i < resultArrowSchema->fields().size(); ++i) {
         auto& resultField = resultArrowSchema->fields()[i];
-        auto columnId = GetIndexInfo().GetColumnId(resultField->name());
+        auto columnId = GetIndexInfo().GetColumnIdVerified(resultField->name());
         auto oldField = dataSchema.GetFieldByColumnIdOptional(columnId);
         if (oldField) {
             auto fAccessor = batch->GetAccessorByNameOptional(oldField->name());

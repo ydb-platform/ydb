@@ -152,7 +152,7 @@ public:
     std::set<ui32> GetProcessingColumnIds() const {
         std::set<ui32> result;
         for (auto&& i : GetProgram().GetProcessingColumns()) {
-            result.emplace(ResultIndexSchema->GetIndexInfo().GetColumnId(i));
+            result.emplace(ResultIndexSchema->GetIndexInfo().GetColumnIdVerified(i));
         }
         return result;
     }

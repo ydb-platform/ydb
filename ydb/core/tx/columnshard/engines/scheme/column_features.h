@@ -33,9 +33,9 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<IBlobsStorageOperator>, Operator);
 public:
     TColumnFeatures(const ui32 columnId, const std::shared_ptr<arrow::Field>& arrowField, const NArrow::NSerialization::TSerializerContainer& serializer,
-        const std::shared_ptr<IBlobsStorageOperator>& bOperator, const bool needMinMax, const bool isSorted,
+        const std::shared_ptr<IBlobsStorageOperator>& bOperator, const bool needMinMax, const bool isSorted, const bool isNullable,
         const std::shared_ptr<arrow::Scalar>& defaultValue)
-        : TBase(columnId, arrowField, serializer, needMinMax, isSorted, defaultValue)
+        : TBase(columnId, arrowField, serializer, needMinMax, isSorted, isNullable, defaultValue)
         , Operator(bOperator)
     {
         AFL_VERIFY(Operator);

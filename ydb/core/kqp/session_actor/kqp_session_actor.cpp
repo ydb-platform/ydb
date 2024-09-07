@@ -857,7 +857,7 @@ public:
         QueryState->HasOlapTable |= ::NKikimr::NKqp::HasOlapTableReadInTx(phyQuery) || ::NKikimr::NKqp::HasOlapTableWriteInTx(phyQuery);
         QueryState->HasOltpTable |= ::NKikimr::NKqp::HasOltpTableReadInTx(phyQuery) || ::NKikimr::NKqp::HasOltpTableWriteInTx(phyQuery);
         QueryState->HasTableWrite |= ::NKikimr::NKqp::HasOlapTableWriteInTx(phyQuery) || ::NKikimr::NKqp::HasOltpTableWriteInTx(phyQuery);
-        if (QueryState->HasOlapTable && QueryState->HasOltpTable && QueryState->HasTableWrite) {
+        if (QueryState->HasOlapTable && QueryState->HasOltpTable && QueryState->HasTableWrite && !Settings.TableService.GetEnableHtapTx()) {
             ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
                             "Write transactions between column and row tables are disabled at current time.");
             return false;
@@ -1292,7 +1292,18 @@ public:
         request.ResourceManager_ = ResourceManager_;
         LOG_D("Sending to Executer TraceId: " << request.TraceId.GetTraceId() << " " << request.TraceId.GetSpanIdSize());
 
-        const bool useEvWrite = ((QueryState->HasOlapTable && Settings.TableService.GetEnableOlapSink()) || (!QueryState->HasOlapTable && Settings.TableService.GetEnableOltpSink()))
+        const bool useEvWrite = (
+                    (QueryState->HasOlapTable // olap only
+                    && !QueryState->HasOltpTable
+                    && Settings.TableService.GetEnableOlapSink())
+                || (QueryState->HasOltpTable // oltp only
+                    && !QueryState->HasOlapTable
+                    && Settings.TableService.GetEnableOltpSink())
+                || (QueryState->HasOlapTable // htap
+                    && QueryState->HasOltpTable
+                    && Settings.TableService.GetEnableOlapSink()
+                    && Settings.TableService.GetEnableOltpSink()
+                    && Settings.TableService.GetEnableHtapTx()))
             && (request.QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_UNDEFINED
                 || request.QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_GENERIC_QUERY
                 || request.QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY
@@ -1303,7 +1314,7 @@ public:
             RequestCounters, Settings.TableService,
             AsyncIoFactory, QueryState ? QueryState->PreparedQuery : nullptr, SelfId(),
             QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId),
-            Settings.TableService.GetEnableOlapSink(), useEvWrite, QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup, GUCSettings);
+            useEvWrite, QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup, GUCSettings);
 
         auto exId = RegisterWithSameMailbox(executerActor);
         LOG_D("Created new KQP executer: " << exId << " isRollback: " << isRollback);

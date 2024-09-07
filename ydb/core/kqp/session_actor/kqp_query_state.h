@@ -164,6 +164,10 @@ public:
     ui32 StatementResultIndex = 0;
     ui32 StatementResultSize = 0;
 
+    bool HasOlapTable = false;
+    bool HasOltpTable = false;
+    bool HasTableWrite = false;
+
     TMaybe<TString> CommandTagName;
 
     NKikimrKqp::EQueryAction GetAction() const {

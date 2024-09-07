@@ -9,7 +9,7 @@ namespace NKikimr::NOlap {
 class TFilteredSnapshotSchema: public ISnapshotSchema {
     ISnapshotSchema::TPtr OriginalSnapshot;
     std::shared_ptr<NArrow::TSchemaLite> Schema;
-    std::set<ui32> ColumnIds;
+    std::vector<ui32> ColumnIds;
     THashMap<ui32, ui32> IdIntoIndex;
 
 protected:
@@ -18,7 +18,7 @@ public:
     TFilteredSnapshotSchema(const ISnapshotSchema::TPtr& originalSnapshot, const std::vector<ui32>& columnIds);
     TFilteredSnapshotSchema(const ISnapshotSchema::TPtr& originalSnapshot, const std::set<ui32>& columnIds);
 
-    virtual const std::set<ui32>& GetColumnIds() const override {
+    virtual const std::vector<ui32>& GetColumnIds() const override {
         return ColumnIds;
     }
     TColumnSaver GetColumnSaver(const ui32 columnId) const override;

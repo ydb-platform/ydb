@@ -4,11 +4,11 @@
 
 namespace NKikimr::NOlap {
 
-TFilteredSnapshotSchema::TFilteredSnapshotSchema(const ISnapshotSchema::TPtr& originalSnapshot, const std::vector<ui32>& columnIds)
-    : TFilteredSnapshotSchema(originalSnapshot, std::set(columnIds.begin(), columnIds.end())) {
+TFilteredSnapshotSchema::TFilteredSnapshotSchema(const ISnapshotSchema::TPtr& originalSnapshot, const std::set<ui32>& columnIds)
+    : TFilteredSnapshotSchema(originalSnapshot, std::vector(columnIds.begin(), columnIds.end())) {
 }
 
-TFilteredSnapshotSchema::TFilteredSnapshotSchema(const ISnapshotSchema::TPtr& originalSnapshot, const std::set<ui32>& columnIds)
+TFilteredSnapshotSchema::TFilteredSnapshotSchema(const ISnapshotSchema::TPtr& originalSnapshot, const std::vector<ui32>& columnIds)
     : OriginalSnapshot(originalSnapshot)
     , ColumnIds(columnIds)
 {
@@ -21,12 +21,12 @@ TFilteredSnapshotSchema::TFilteredSnapshotSchema(const ISnapshotSchema::TPtr& or
 }
 
 TColumnSaver TFilteredSnapshotSchema::GetColumnSaver(const ui32 columnId) const {
-    Y_ABORT_UNLESS(ColumnIds.contains(columnId));
+    AFL_VERIFY(std::find(ColumnIds.begin(), ColumnIds.end(), columnId) != ColumnIds.end());
     return OriginalSnapshot->GetColumnSaver(columnId);
 }
 
 std::shared_ptr<TColumnLoader> TFilteredSnapshotSchema::GetColumnLoaderOptional(const ui32 columnId) const {
-    Y_ABORT_UNLESS(ColumnIds.contains(columnId));
+    AFL_VERIFY(std::find(ColumnIds.begin(), ColumnIds.end(), columnId) != ColumnIds.end());
     return OriginalSnapshot->GetColumnLoaderOptional(columnId);
 }
 
@@ -35,7 +35,7 @@ std::optional<ui32> TFilteredSnapshotSchema::GetColumnIdOptional(const std::stri
     if (!result) {
         return result;
     }
-    if (!ColumnIds.contains(*result)) {
+    if (std::find(ColumnIds.begin(), ColumnIds.end(), *result) == ColumnIds.end()) {
         return std::nullopt;
     }
     return result;
@@ -43,7 +43,7 @@ std::optional<ui32> TFilteredSnapshotSchema::GetColumnIdOptional(const std::stri
 
 ui32 TFilteredSnapshotSchema::GetColumnIdVerified(const std::string& columnName) const {
     auto result = OriginalSnapshot->GetColumnIdVerified(columnName);
-    AFL_VERIFY(ColumnIds.contains(result));
+    AFL_VERIFY(std::find(ColumnIds.begin(), ColumnIds.end(), result) != ColumnIds.end());
     return result;
 }
 

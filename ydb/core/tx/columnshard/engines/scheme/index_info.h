@@ -46,10 +46,19 @@ class TSchemaObjectsCache {
 private:
     THashMap<TString, std::shared_ptr<arrow::Field>> Fields;
     THashMap<TString, std::shared_ptr<TColumnFeatures>> ColumnFeatures;
+    THashSet<TString> StringsCache;
     mutable ui64 AcceptionFieldsCount = 0;
     mutable ui64 AcceptionFeaturesCount = 0;
 
 public:
+    const TString& GetStringCache(const TString& original) {
+        auto it = StringsCache.find(original);
+        if (it == StringsCache.end()) {
+            it = StringsCache.emplace(original).first;
+        }
+        return *it;
+    }
+
     void RegisterField(const TString& fingerprint, const std::shared_ptr<arrow::Field>& f) {
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "register_field")("fp", fingerprint)("f", f->ToString());
         AFL_VERIFY(Fields.emplace(fingerprint, f).second);
@@ -71,16 +80,23 @@ public:
         }
         return it->second;
     }
-    std::shared_ptr<TColumnFeatures> GetColumnFeatures(const TString& fingerprint) const {
+    template <class TConstructor>
+    TConclusion<std::shared_ptr<TColumnFeatures>> GetOrCreateColumnFeatures(const TString& fingerprint, const TConstructor& constructor) {
         auto it = ColumnFeatures.find(fingerprint);
         if (it == ColumnFeatures.end()) {
             AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "get_column_features_miss")("fp", UrlEscapeRet(fingerprint))(
                 "count", ColumnFeatures.size())("acc", AcceptionFeaturesCount);
-            return nullptr;
-        }
-        if (++AcceptionFeaturesCount % 1000 == 0) {
-            AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "get_column_features_accept")("fp", UrlEscapeRet(fingerprint))(
-                "count", ColumnFeatures.size())("acc", AcceptionFeaturesCount);
+            TConclusion<std::shared_ptr<TColumnFeatures>> resultConclusion = constructor();
+            if (resultConclusion.IsFail()) {
+                return resultConclusion;
+            }
+            it = ColumnFeatures.emplace(fingerprint, resultConclusion.DetachResult()).first;
+            AFL_VERIFY(it->second);
+        } else {
+            if (++AcceptionFeaturesCount % 1000 == 0) {
+                AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "get_column_features_accept")("fp", UrlEscapeRet(fingerprint))(
+                    "count", ColumnFeatures.size())("acc", AcceptionFeaturesCount);
+            }
         }
         return it->second;
     }
@@ -92,7 +108,6 @@ struct TIndexInfo: public NTable::TScheme::TTableSchema, public IIndexInfo {
 private:
     THashMap<ui32, ui32> IdIntoIndex;
     THashMap<ui32, std::shared_ptr<TColumnFeatures>> ColumnFeatures;
-    THashMap<ui32, std::shared_ptr<arrow::Field>> ArrowColumnByColumnIdCache;
     THashMap<ui32, NIndexes::TIndexMetaContainer> Indexes;
     TIndexInfo(const TString& name);
     bool SchemeNeedActualization = false;
@@ -100,7 +115,8 @@ private:
     bool ExternalGuaranteeExclusivePK = false;
     bool DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema, const std::shared_ptr<IStoragesManager>& operators,
         const std::shared_ptr<TSchemaObjectsCache>& cache);
-    void InitializeCaches(const std::shared_ptr<IStoragesManager>& operators, const std::shared_ptr<TSchemaObjectsCache>& cache);
+    void InitializeCaches(const std::shared_ptr<IStoragesManager>& operators, const std::shared_ptr<TSchemaObjectsCache>& cache, const bool withColumnFeatures = true);
+    std::shared_ptr<TColumnFeatures> BuildDefaultColumnFeatures(const ui32 columnId, const std::shared_ptr<IStoragesManager>& operators) const;
 
 public:
     std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor> GetCompactionPlannerConstructor() const;
@@ -312,9 +328,6 @@ public:
     std::vector<TString> GetColumnNames(const std::vector<ui32>& ids) const;
     std::vector<std::string> GetColumnSTLNames(const std::vector<ui32>& ids) const;
     const std::vector<ui32>& GetColumnIds(const bool withSpecial = true) const;
-    const std::set<ui32>& GetColumnIdsSet() const {
-        return SchemaColumnIdsWithSpecialsSet;
-    }
     const std::vector<ui32>& GetPKColumnIds() const {
         AFL_VERIFY(PKColumnIds.size());
         return PKColumnIds;
@@ -379,7 +392,6 @@ private:
     TString Name;
     std::vector<ui32> SchemaColumnIds;
     std::vector<ui32> SchemaColumnIdsWithSpecials;
-    std::set<ui32> SchemaColumnIdsWithSpecialsSet;
     std::vector<ui32> PKColumnIds;
     std::shared_ptr<NArrow::TSchemaLite> SchemaWithSpecials;
     std::shared_ptr<NArrow::TSchemaLite> Schema;
@@ -389,6 +401,8 @@ private:
 };
 
 std::shared_ptr<arrow::Schema> MakeArrowSchema(const NTable::TScheme::TTableSchema::TColumns& columns, const std::vector<ui32>& ids,
+    const std::shared_ptr<TSchemaObjectsCache>& cache = nullptr);
+std::vector<std::shared_ptr<arrow::Field>> MakeArrowFields(const NTable::TScheme::TTableSchema::TColumns& columns, const std::vector<ui32>& ids,
     const std::shared_ptr<TSchemaObjectsCache>& cache = nullptr);
 
 /// Extracts columns with the specific ids from the schema.

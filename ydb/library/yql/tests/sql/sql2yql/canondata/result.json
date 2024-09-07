@@ -9080,9 +9080,16 @@
     ],
     "test_sql2yql.test[join-mergejoin_saves_output_sort_nested]": [
         {
-            "checksum": "f35f42ed698e1adc183f00736d1bc9ef",
-            "size": 2608,
-            "uri": "https://{canondata_backend}/1936947/659b615f15086142a8960946dabd06b519d43335/resource.tar.gz#test_sql2yql.test_join-mergejoin_saves_output_sort_nested_/sql.yql"
+            "checksum": "3ea2ef45dfabc180e2a75d194525fbb6",
+            "size": 2837,
+            "uri": "https://{canondata_backend}/1936947/7dabc5ea0642eb49e4a3155ef894e1670ac842fb/resource.tar.gz#test_sql2yql.test_join-mergejoin_saves_output_sort_nested_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[join-mergejoin_saves_output_sort_unmatched]": [
+        {
+            "checksum": "0efba072937fd539eb7198ed2a648de3",
+            "size": 2070,
+            "uri": "https://{canondata_backend}/1936947/7dabc5ea0642eb49e4a3155ef894e1670ac842fb/resource.tar.gz#test_sql2yql.test_join-mergejoin_saves_output_sort_unmatched_/sql.yql"
         }
     ],
     "test_sql2yql.test[join-mergejoin_semi_composite_to_inner]": [
@@ -28680,9 +28687,16 @@
     ],
     "test_sql_format.test[join-mergejoin_saves_output_sort_nested]": [
         {
-            "checksum": "2dd95869b8704fc3a26c230cb6fa72ec",
-            "size": 458,
-            "uri": "https://{canondata_backend}/1880306/64654158d6bfb1289c66c626a8162239289559d0/resource.tar.gz#test_sql_format.test_join-mergejoin_saves_output_sort_nested_/formatted.sql"
+            "checksum": "a3a8e3bf45de1c78b7f5898229a63eb7",
+            "size": 498,
+            "uri": "https://{canondata_backend}/1936947/7dabc5ea0642eb49e4a3155ef894e1670ac842fb/resource.tar.gz#test_sql_format.test_join-mergejoin_saves_output_sort_nested_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[join-mergejoin_saves_output_sort_unmatched]": [
+        {
+            "checksum": "d95699a4e35a5f8c26f14fe749fb7f88",
+            "size": 376,
+            "uri": "https://{canondata_backend}/1936947/7dabc5ea0642eb49e4a3155ef894e1670ac842fb/resource.tar.gz#test_sql_format.test_join-mergejoin_saves_output_sort_unmatched_/formatted.sql"
         }
     ],
     "test_sql_format.test[join-mergejoin_semi_composite_to_inner]": [

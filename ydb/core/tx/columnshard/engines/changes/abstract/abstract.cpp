@@ -113,7 +113,7 @@ void TColumnEngineChanges::AbortEmergency(const TString& reason) {
 
 void TColumnEngineChanges::OnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& context) {
     if (!!LockGuard) {
-        LockGuard.reset();
+        LockGuard->Release(*self.DataLocksManager);
     }
     DoOnFinish(self, context);
 }

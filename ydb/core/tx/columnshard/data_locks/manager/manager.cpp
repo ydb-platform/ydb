@@ -5,9 +5,10 @@ namespace NKikimr::NOlap::NDataLocks {
 
 std::optional<TManager::TGuard> TManager::Lock(ILock::TPtr&& lock, const ELockType lockType, ILockAccuired::TPtr&& onAccuired) {
     AFL_VERIFY(lock);
-    //TODO optimize me, i.e, group by pathId
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "lock")("name", lock->GetLockName())("try", onAccuired ? "yes" : "no");
     for (const auto& awaiting: Awaiting) {
         if (!lock->IsCompatibleWith(*awaiting.Lock)) {
+            AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "lock")("name", lock->GetLockName())("incompatible", awaiting.Lock->GetLockName());
             if (onAccuired) {
                 Awaiting.emplace_back(TLockInfo{
                     .Lock = std::move(lock),
@@ -21,9 +22,11 @@ std::optional<TManager::TGuard> TManager::Lock(ILock::TPtr&& lock, const ELockTy
     for (auto&[id, existing]: Locks) {
         if (existing.LockType == ELockType::Shared && existing.LockType == ELockType::Shared && lock->IsEqualTo(*existing.Lock)) {
             ++existing.LockCount;
+            AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "lock")("name", lock->GetLockName())("reuse", existing.Lock->GetLockName())("count", existing.LockCount);
             return TGuard(id, StopFlag);
         }
         if (lockType == ELockType::Exclusive || existing.LockType == ELockType::Exclusive) {
+            AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "lock")("name", lock->GetLockName())("incompatible", existing.Lock->GetLockName());
             if (!lock->IsCompatibleWith(*existing.Lock)) {
                 if (onAccuired) {
                     Awaiting.emplace_back(TLockInfo{
@@ -36,15 +39,16 @@ std::optional<TManager::TGuard> TManager::Lock(ILock::TPtr&& lock, const ELockTy
             }
         }
     }
+    ++LastLockId;
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "lock")("name", lock->GetLockName())("registered", LastLockId);
     AFL_VERIFY(Locks.emplace(
-        ++LastLockId, 
+        LastLockId, 
         TLockInfo {
             .Lock = std::move(lock),
             .LockType = lockType,
             .LockCount = 1
         }
     ).second);
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "lock")("process_id", lock->GetLockName());
     return TGuard(LastLockId, StopFlag);
 }
 

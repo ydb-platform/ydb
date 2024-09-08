@@ -13,7 +13,7 @@ enum class ELockType {
     Exclusive
 };
 
-class TManager: public std::enable_shared_from_this<TManager> {
+class TManager {
 private:
     struct TLockInfo {
         std::unique_ptr<ILock> Lock;
@@ -27,6 +27,7 @@ private:
     void ReleaseLock(const size_t lockId);
 public:
     TManager() = default;
+
     void Stop();
 
     class TGuard {
@@ -41,9 +42,23 @@ public:
         {
         }
         TGuard(const TGuard&) = delete;
-        TGuard(TGuard&&) = default;
+        TGuard(TGuard&& other) {
+            LockId = other.LockId;
+            StopFlag = std::move(other.StopFlag);
+            Released = other.Released;
+            other.Released = true;
+        }
         TGuard& operator=(const TGuard&) = delete;
-        TGuard& operator=(TGuard&&) = default;
+        TGuard& operator=(TGuard&& other) {
+            if (this == &other) {
+                return *this;
+            }
+            LockId = other.LockId;
+            StopFlag = std::move(other.StopFlag);
+            Released = other.Released;
+            other.Released = true;
+            return *this;
+        }
 
         size_t GetLockId() const {
             return LockId;

@@ -51,6 +51,10 @@ private:
     void AddCommittedSize(const i64 size, const ui64 overloadLimit);
 
 public:
+    bool IsEmpty() const {
+        return Committed.empty() && !InsertedSize;
+    }
+
     const THashMap<TWriteId, TInsertedData>& GetInserted() const;
 
     void AddInsertedSize(const i64 size, const ui64 overloadLimit);

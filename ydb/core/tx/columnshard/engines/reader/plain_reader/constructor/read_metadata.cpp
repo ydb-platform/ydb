@@ -63,7 +63,7 @@ std::set<ui32> TReadMetadata::GetPKColumnIds() const {
     std::set<ui32> result;
     auto& indexInfo = ResultIndexSchema->GetIndexInfo();
     for (auto&& i : indexInfo.GetPrimaryKeyColumns()) {
-        Y_ABORT_UNLESS(result.emplace(indexInfo.GetColumnId(i.first)).second);
+        Y_ABORT_UNLESS(result.emplace(indexInfo.GetColumnIdVerified(i.first)).second);
     }
     return result;
 }

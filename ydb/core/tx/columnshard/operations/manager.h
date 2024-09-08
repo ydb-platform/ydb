@@ -119,12 +119,24 @@ class TOperationsManager {
     NOlap::NTxInteractions::TInteractionsContext InteractionsContext;
 
     THashMap<ui64, ui64> Tx2Lock;
+    THashMap<TInsertWriteId, TOperationWriteId> InsertWriteIdToOpWriteId;
     THashMap<ui64, TLockFeatures> LockFeatures;
     THashMap<TOperationWriteId, TWriteOperation::TPtr> Operations;
     TOperationWriteId LastWriteId = TOperationWriteId(0);
 
 public:
 
+    TWriteOperation::TPtr GetOperationByInsertWriteIdVerified(const TInsertWriteId insertWriteId) const {
+        auto it = InsertWriteIdToOpWriteId.find(insertWriteId);
+        AFL_VERIFY(it != InsertWriteIdToOpWriteId.end());
+        return GetOperationVerified(it->second);
+    }
+
+    void LinkInsertWriteIdToOperationWriteId(const std::vector<TInsertWriteId>& insertions, const TOperationWriteId operationId) {
+        for (auto&& i : insertions) {
+            InsertWriteIdToOpWriteId.emplace(i, operationId);
+        }
+    }
     bool Load(NTabletFlatExecutor::TTransactionContext& txc);
     void AddEventForTx(TColumnShard& owner, const ui64 txId, const std::shared_ptr<NOlap::NTxInteractions::ITxEventWriter>& writer);
     void AddEventForLock(TColumnShard& owner, const ui64 lockId, const std::shared_ptr<NOlap::NTxInteractions::ITxEventWriter>& writer);
@@ -180,7 +192,7 @@ public:
             return true;
         }
     }
-    static EOperationBehaviour GetBehaviour(const NEvents::TDataEvents::TEvWrite& evWrite);
+    static TConclusion<EOperationBehaviour> GetBehaviour(const NEvents::TDataEvents::TEvWrite& evWrite);
     TLockFeatures& GetLockVerified(const ui64 lockId) {
         auto result = GetLockOptional(lockId);
         AFL_VERIFY(result)("lock_id", lockId);

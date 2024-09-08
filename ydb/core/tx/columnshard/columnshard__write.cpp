@@ -289,7 +289,7 @@ public:
     }
 
     TConclusionStatus Parse(const NEvents::TDataEvents::TEvWrite& evWrite) {
-        AFL_VERIFY(evWrite.Record.GetLocks().GetLocks().size() == 1);
+        AFL_VERIFY(evWrite.Record.GetLocks().GetLocks().size() >= 1);
         auto& locks = evWrite.Record.GetLocks();
         auto& lock = evWrite.Record.GetLocks().GetLocks()[0];
         SendingShards = std::set<ui64>(locks.GetSendingShards().begin(), locks.GetSendingShards().end());
@@ -429,15 +429,16 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     const auto& record = ev->Get()->Record;
     const auto source = ev->Sender;
     const auto cookie = ev->Cookie;
-    const auto behaviour = TOperationsManager::GetBehaviour(*ev->Get());
+    const auto behaviourConclusion = TOperationsManager::GetBehaviour(*ev->Get());
     //    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("ev_write", record.DebugString());
-    if (behaviour == EOperationBehaviour::Undefined) {
+    if (behaviourConclusion.IsFail()) {
         Counters.GetTabletCounters()->IncCounter(COUNTER_WRITE_FAIL);
-        auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(
-            TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, "invalid write event");
+        auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST,
+            "invalid write event: " + behaviourConclusion.GetErrorMessage());
         ctx.Send(source, result.release(), 0, cookie);
         return;
     }
+    auto behaviour = *behaviourConclusion;
 
     if (behaviour == EOperationBehaviour::AbortWriteLock) {
         Execute(new TAbortWriteTransaction(this, record.GetLocks().GetLocks()[0].GetLockId(), source, cookie), ctx);

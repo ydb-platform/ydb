@@ -38,7 +38,7 @@ private:
     YDB_READONLY_DEF(TString, SessionId);
     const TString Info;
     YDB_READONLY(ui64, RuntimeId, GetNextRuntimeId());
-    std::shared_ptr<NDataLocks::TManager::TGuard> LockGuard;
+    std::optional<NDataLocks::TManager::TGuard> LockGuard;
     EState State = EState::Created;
 protected:
     TTransferContext TransferContext;

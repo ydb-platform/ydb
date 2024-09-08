@@ -59,11 +59,15 @@ protected:
         }
         return result;
     }
-    virtual std::shared_ptr<NDataLocks::ILock> DoBuildDataLockImpl() const override {
+    virtual std::unique_ptr<NDataLocks::ILock> DoBuildDataLockImpl() const override {
         const auto pred = [](const TPortionForEviction& p) {
             return p.GetPortionInfo().GetAddress();
         };
-        return std::make_shared<NDataLocks::TListPortionsLock>(TypeString() + "::" + RWAddress.DebugString() + "::" + GetTaskIdentifier(), PortionsToEvict, pred);
+        return std::make_unique<NDataLocks::TListPortionsLock>(
+            TypeString() + "::" + RWAddress.DebugString() + "::" + GetTaskIdentifier(),
+            PortionsToEvict, 
+            pred)
+        ;
     }
 public:
     class TMemoryPredictorSimplePolicy: public IMemoryPredictor {

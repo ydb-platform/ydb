@@ -75,7 +75,11 @@ void TColumnEngineChanges::Abort(NColumnShard::TColumnShard& self, TChangesFinis
 
 void TColumnEngineChanges::Start(NColumnShard::TColumnShard& self) {
     AFL_VERIFY(!LockGuard);
-    LockGuard = self.DataLocksManager->RegisterLock(BuildDataLock());
+    LockGuard = self.DataLocksManager->TryLock(
+        BuildDataLock(), 
+        NDataLocks::ELockType::Exclusive
+    );
+    AFL_VERIFY(LockGuard);
     Y_ABORT_UNLESS(Stage == EStage::Created);
     NYDBTest::TControllers::GetColumnShardController()->OnWriteIndexStart(self.TabletID(), *this);
     DoStart(self);
@@ -109,7 +113,7 @@ void TColumnEngineChanges::AbortEmergency(const TString& reason) {
 
 void TColumnEngineChanges::OnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& context) {
     if (!!LockGuard) {
-        LockGuard->Release(*self.DataLocksManager);
+        LockGuard.reset();
     }
     DoOnFinish(self, context);
 }

@@ -197,7 +197,7 @@ public:
     };
 private:
     EStage Stage = EStage::Created;
-    std::shared_ptr<NDataLocks::TManager::TGuard> LockGuard;
+    std::optional<NDataLocks::TManager::TGuard> LockGuard;
     TString AbortedReason;
 
 protected:
@@ -221,8 +221,8 @@ protected:
 
     const TString TaskIdentifier = TGUID::Create().AsGuidString();
     virtual ui64 DoCalcMemoryForUsage() const = 0;
-    virtual std::shared_ptr<NDataLocks::ILock> DoBuildDataLock() const = 0;
-    std::shared_ptr<NDataLocks::ILock> BuildDataLock() const {
+    virtual std::unique_ptr<NDataLocks::ILock> DoBuildDataLock() const = 0;
+    std::unique_ptr<NDataLocks::ILock> BuildDataLock() const {
         return DoBuildDataLock();
     }
 

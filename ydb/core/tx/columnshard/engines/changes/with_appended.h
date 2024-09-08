@@ -22,15 +22,26 @@ protected:
         out << "remove=" << PortionsToRemove.size() << ";append=" << AppendedPortions.size() << ";";
     }
 
-    virtual std::shared_ptr<NDataLocks::ILock> DoBuildDataLockImpl() const = 0;
+    virtual std::unique_ptr<NDataLocks::ILock> DoBuildDataLockImpl() const = 0;
 
-    virtual std::shared_ptr<NDataLocks::ILock> DoBuildDataLock() const override final {
+    virtual std::unique_ptr<NDataLocks::ILock> DoBuildDataLock() const override final {
         auto actLock = DoBuildDataLockImpl();
         if (actLock) {
-            auto selfLock = std::make_shared<NDataLocks::TListPortionsLock>(TypeString() + "::" + GetTaskIdentifier() + "::REMOVE", PortionsToRemove);
-            return std::make_shared<NDataLocks::TCompositeLock>(TypeString() + "::" + GetTaskIdentifier(), std::vector<std::shared_ptr<NDataLocks::ILock>>({actLock, selfLock}));
+            std::vector<NDataLocks::ILock::TPtr> locks;
+            locks.emplace_back(std::move(actLock));
+            locks.emplace_back(std::make_unique<NDataLocks::TListPortionsLock>(
+                TypeString() + "::" + GetTaskIdentifier() + "::REMOVE", 
+                PortionsToRemove
+            ));
+            return std::make_unique<NDataLocks::TCompositeLock>(
+                TypeString() + "::" + GetTaskIdentifier(), 
+                std::move(locks)
+            );
         } else {
-            auto selfLock = std::make_shared<NDataLocks::TListPortionsLock>(TypeString() + "::" + GetTaskIdentifier(), PortionsToRemove);
+            auto selfLock = std::make_unique<NDataLocks::TListPortionsLock>(
+                TypeString() + "::" + GetTaskIdentifier(), 
+                PortionsToRemove
+            );
             return selfLock;
         }
     }

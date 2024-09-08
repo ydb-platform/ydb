@@ -348,7 +348,7 @@ public:
         }
 
         if (HasTxSinkInTx(tx)) {
-            // Sink results can't be committed in transaction.
+            // Sink results can't be committed with changes
             return false;
         }
 

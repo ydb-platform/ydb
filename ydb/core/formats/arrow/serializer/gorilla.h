@@ -19,6 +19,29 @@ namespace NKikimr::NArrow::NSerialization {
         }
     private:
 
+        uint64_t TGorillaSerializer::getU64FromArrayData(
+                std::shared_ptr<arrow::DataType> &column_type,
+                std::shared_ptr<arrow::ArrayData> &array_data,
+                size_t i
+        );
+        std::shared_ptr<arrow::ArrayBuilder> TGorillaSerializer::getColumnBuilderByType(
+                std::shared_ptr<arrow::DataType> &column_type
+        );
+        arrow::Status TGorillaSerializer::builderAppendValue(
+                std::shared_ptr<arrow::DataType> &column_type,
+                std::shared_ptr<arrow::ArrayBuilder> &column_builder,
+                uint64_t value
+        );
+        std::vector<uint64_t> TGorillaSerializer::getU64VecFromBatch(
+                const std::shared_ptr<arrow::RecordBatch> &batch,
+                size_t column_index
+        );
+        template<typename T, typename F>
+        arrow::Result<std::string> TGorillaSerializer::serializeBatchEntities(
+                const std::shared_ptr<arrow::Schema> &batch_schema,
+                std::vector<T> &entities,
+                F create_c_func
+        );
         static const inline TFactory::TRegistrator<TGorillaSerializer> Registrator = TFactory::TRegistrator<TGorillaSerializer>(GetClassNameStatic());
     protected:
         virtual bool IsCompatibleForExchangeWithSameClass(const ISerializer& /*item*/) const override {
@@ -26,6 +49,7 @@ namespace NKikimr::NArrow::NSerialization {
         }
 
         virtual bool IsEqualToSameClass(const ISerializer& item) const override {
+            Y_UNUSED(item);
             return true;
         }
         virtual TString DoSerializeFull(const std::shared_ptr<arrow::RecordBatch>& batch) const override;
@@ -45,11 +69,9 @@ namespace NKikimr::NArrow::NSerialization {
         }
 
         virtual bool IsHardPacker() const override {
-            // TODO: ???.
             return false;
         }
 
         TGorillaSerializer() {}
     };
-
 }

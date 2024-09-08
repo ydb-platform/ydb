@@ -1,6 +1,7 @@
 #pragma once
 #include "meta.h"
 
+#include <ydb/core/formats/arrow/modifier/subset.h>
 #include <ydb/core/protos/tx_columnshard.pb.h>
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
@@ -203,7 +204,6 @@ public:
         } else {
             return TStringBuilder() << BlobRange << ";write_id=" << (ui64)GetWriteIdVerified();
         }
-        
     }
 
     bool HasSnapshot() const {

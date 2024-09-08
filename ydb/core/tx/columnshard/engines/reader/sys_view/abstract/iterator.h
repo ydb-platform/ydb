@@ -135,10 +135,6 @@ public:
             }
         }
 
-        const NTable::TScheme::TTableSchema& GetSchema() const override {
-            return StatsSchema;
-        }
-
         NSsa::TColumnInfo GetDefaultColumn() const override {
             return NSsa::TColumnInfo::Original(1, "PathId");
         }

@@ -53,6 +53,7 @@ private:
     std::shared_ptr<IStoragesManager> StoragesManager;
 
     std::shared_ptr<NActualizer::TController> ActualizationController;
+    std::shared_ptr<TSchemaObjectsCache> SchemaObjectsCache = std::make_shared<TSchemaObjectsCache>();
 
 public:
     const std::shared_ptr<NActualizer::TController>& GetActualizationController() const {
@@ -147,6 +148,10 @@ public:
     }
 
     const TGranuleMeta& GetGranuleVerified(const ui64 pathId) const {
+        return *GetGranulePtrVerified(pathId);
+    }
+
+    TGranuleMeta& MutableGranuleVerified(const ui64 pathId) const {
         return *GetGranulePtrVerified(pathId);
     }
 

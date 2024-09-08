@@ -142,7 +142,7 @@ bool TYtKey::Parse(const TExprNode& key, TExprContext& ctx, bool isOutput) {
 
         const TExprNode* tableName = nameNode->Child(0);
 
-        if (tableName->Content().empty()) {
+        if (tableName->Content().empty() || tableName ->Content() == "//") {
             ctx.AddError(TIssue(ctx.GetPosition(tableName->Pos()), "Table name must not be empty"));
             return false;
         }

@@ -87,23 +87,7 @@ NUdf::TUnboxedValue TDefaultValueBuilder::SubString(NUdf::TUnboxedValuePod value
 }
 
 NUdf::TUnboxedValue TDefaultValueBuilder::NewList(NUdf::TUnboxedValue* items, ui64 count) const {
-    if (!items || !count)
-        return HolderFactory_.GetEmptyContainerLazy();
-
-    if (count < Max<ui32>()) {
-        NUdf::TUnboxedValue* inplace = nullptr;
-        auto array = HolderFactory_.CreateDirectArrayHolder(count, inplace);
-        for (ui64 i = 0; i < count; ++i)
-            *inplace++ = std::move(*items++);
-        return std::move(array);
-    }
-
-    TDefaultListRepresentation list;
-    for (ui64 i = 0; i < count; ++i) {
-        list = list.Append(std::move(*items++));
-    }
-
-    return HolderFactory_.CreateDirectListHolder(std::move(list));
+    return HolderFactory_.NewList()->Add(items, count).Build();
 }
 
 NUdf::TUnboxedValue TDefaultValueBuilder::ReverseList(const NUdf::TUnboxedValuePod& list) const
@@ -329,6 +313,10 @@ bool TDefaultValueBuilder::GetSecureParam(NUdf::TStringRef key, NUdf::TStringRef
     if (SecureParamsProvider_)
         return SecureParamsProvider_->GetSecureParam(key, value);
     return false;
+}
+
+NUdf::IListValueBuilder::TPtr TDefaultValueBuilder::BuildList() const {
+    return HolderFactory_.NewList();
 }
 
 } // namespace NMiniKQL

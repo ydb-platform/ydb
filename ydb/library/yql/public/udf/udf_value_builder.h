@@ -42,6 +42,20 @@ public:
 
 UDF_ASSERT_TYPE_SIZE(IDictValueBuilder, 8);
 
+class IListValueBuilder {
+public:
+    using TPtr = TUniquePtr<IListValueBuilder>;
+
+public:
+    virtual ~IListValueBuilder() = default;
+
+    virtual IListValueBuilder& Add(TUnboxedValue&& element) = 0;
+
+    virtual IListValueBuilder& Add(const NUdf::TUnboxedValue* elements, size_t count) = 0;
+
+    virtual TUnboxedValue Build() = 0;
+};
+
 ///////////////////////////////////////////////////////////////////////////////
 // IDateBuilder
 ///////////////////////////////////////////////////////////////////////////////
@@ -288,7 +302,19 @@ public:
 };
 #endif
 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 27)
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 39)
+class IValueBuilder8: public IValueBuilder7 {
+public:
+    virtual IListValueBuilder::TPtr BuildList() const = 0;
+};
+#endif
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 39)
+class IValueBuilder: public IValueBuilder8 {
+protected:    
+    IValueBuilder();
+};
+#elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 27)
 class IValueBuilder: public IValueBuilder7 {
 protected:    
     IValueBuilder();

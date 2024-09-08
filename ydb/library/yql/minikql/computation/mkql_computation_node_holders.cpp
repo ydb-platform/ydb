@@ -2909,6 +2909,54 @@ private:
     TKeyPayloadPairVector Items_;
 };
 
+///////////////////////////////////////////////////////////////////////////////
+// TListValueBuilder
+///////////////////////////////////////////////////////////////////////////////
+class TListValueBuilder: public NUdf::IListValueBuilder {
+public:
+    explicit TListValueBuilder(const THolderFactory &HolderFactory)
+        : HolderFactory_(HolderFactory) 
+    {}
+
+    IListValueBuilder& Add(NUdf::TUnboxedValue&& element) final {
+        List_.emplace_back(element);
+        return *this;
+    }
+
+    IListValueBuilder& Add(const NUdf::TUnboxedValue* elements, size_t count) final {
+        List_.reserve(List_.size() + count);
+        std::copy_n(std::make_move_iterator(elements), count, std::back_inserter(List_));
+        return *this;
+    }
+
+    NUdf::TUnboxedValue Build() final {
+        if (List_.empty()) {
+            return HolderFactory_.GetEmptyContainerLazy();
+        }
+
+        if (List_.size() < Max<ui32>()) {
+            NUdf::TUnboxedValue* inplace = nullptr;
+            auto array = HolderFactory_.CreateDirectArrayHolder(List_.size(), inplace);
+
+            std::copy_n(std::make_move_iterator(List_.begin()), List_.size(), inplace);
+
+            return std::move(array);
+        } else {
+            TDefaultListRepresentation list;
+            
+            for (auto& element : List_) {
+                list = list.Append(std::move(element));
+            }
+
+            return HolderFactory_.CreateDirectListHolder(std::move(list));
+        }
+    }
+
+private:
+    const NMiniKQL::THolderFactory &HolderFactory_;
+    TVector<NUdf::TUnboxedValue> List_;
+};
+
 //////////////////////////////////////////////////////////////////////////////
 // THolderFactory
 //////////////////////////////////////////////////////////////////////////////
@@ -3448,6 +3496,10 @@ NUdf::IDictValueBuilder::TPtr THolderFactory::NewDict(
     return new TDictValueBuilder(*this, types, isTuple, flags, encoded ? keyType : nullptr,
         GetHash(*keyType, useIHash), GetEquate(*keyType, useIHash),
         GetCompare(*keyType, useIHash));
+}
+
+NUdf::IListValueBuilder::TPtr THolderFactory::NewList() const {
+    return new TListValueBuilder(*this);
 }
 
 #define DEFINE_HASHED_SINGLE_FIXED_MAP_OPT(xType) \

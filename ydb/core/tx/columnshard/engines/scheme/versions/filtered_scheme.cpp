@@ -35,7 +35,7 @@ std::optional<ui32> TFilteredSnapshotSchema::GetColumnIdOptional(const std::stri
     if (!result) {
         return result;
     }
-    if (!IdIntoIndex.contains(columnId)) {
+    if (!IdIntoIndex.contains(*result)) {
         return std::nullopt;
     }
     return result;
@@ -43,7 +43,7 @@ std::optional<ui32> TFilteredSnapshotSchema::GetColumnIdOptional(const std::stri
 
 ui32 TFilteredSnapshotSchema::GetColumnIdVerified(const std::string& columnName) const {
     auto result = OriginalSnapshot->GetColumnIdVerified(columnName);
-    AFL_VERIFY(IdIntoIndex.contains(columnId));
+    AFL_VERIFY(IdIntoIndex.contains(result));
     return result;
 }
 

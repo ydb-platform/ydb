@@ -464,11 +464,11 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
                     if (lockInfo->GetGeneration() != commitOperation->GetGeneration()) {
                         sendError("tablet lock have another generation: " + ::ToString(lockInfo->GetGeneration()) +
                                       " != " + ::ToString(commitOperation->GetGeneration()),
-                            NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED);
+                            NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
                     } else if (lockInfo->GetInternalGenerationCounter() != commitOperation->GetInternalGenerationCounter()) {
                         sendError("tablet lock have another internal generation counter: " + ::ToString(lockInfo->GetInternalGenerationCounter()) +
                                 " != " + ::ToString(commitOperation->GetInternalGenerationCounter()),
-                            NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED);
+                            NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
                     } else {
                         Execute(new TProposeWriteTransaction(this, commitOperation, source, cookie), ctx);
                     }
@@ -479,8 +479,6 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         }
         return;
     }
-
-    const ui64 lockId = (behaviour == EOperationBehaviour::InTxWrite) ? record.GetTxId() : record.GetLockTxId();
 
     if (record.GetOperations().size() != 1) {
         Counters.GetTabletCounters()->IncCounter(COUNTER_WRITE_FAIL);
@@ -550,6 +548,15 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     std::optional<ui32> granuleShardingVersionId;
     if (record.HasGranuleShardingVersionId()) {
         granuleShardingVersionId = record.GetGranuleShardingVersionId();
+    }
+
+    ui64 lockId = 0;
+    if (behaviour == EOperationBehaviour::NoTxWrite) {
+        static TAtomicCounter Counter = 0;
+        const ui64 shift = (ui64)1 << 47;
+        lockId = shift + Counter.Inc();
+    } else {
+        lockId = (behaviour == EOperationBehaviour::InTxWrite) ? record.GetTxId() : record.GetLockTxId();
     }
 
     OperationsManager->RegisterLock(lockId, Generation());

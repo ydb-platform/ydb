@@ -73,7 +73,8 @@ public:
 
     static void AddSpecialFields(std::vector<std::shared_ptr<arrow::Field>>& fields) {
         AddSnapshotFields(fields);
-        fields.push_back(arrow::field(SPEC_COL_DELETE_FLAG, arrow::boolean()));
+        static const std::shared_ptr<arrow::Field> f = arrow::field(SPEC_COL_DELETE_FLAG, arrow::boolean());
+        fields.push_back(f);
     }
 
     static const std::vector<std::string>& SnapshotColumnNames() {
@@ -82,8 +83,10 @@ public:
     }
 
     static void AddSnapshotFields(std::vector<std::shared_ptr<arrow::Field>>& fields) {
-        fields.push_back(arrow::field(SPEC_COL_PLAN_STEP, arrow::uint64()));
-        fields.push_back(arrow::field(SPEC_COL_TX_ID, arrow::uint64()));
+        static const std::shared_ptr<arrow::Field> ps = arrow::field(SPEC_COL_PLAN_STEP, arrow::uint64());
+        static const std::shared_ptr<arrow::Field> txid = arrow::field(SPEC_COL_TX_ID, arrow::uint64());
+        fields.push_back(ps);
+        fields.push_back(txid);
     }
 
     static void AddDeleteFields(std::vector<std::shared_ptr<arrow::Field>>& fields) {

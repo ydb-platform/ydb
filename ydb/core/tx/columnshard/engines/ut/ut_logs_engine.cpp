@@ -475,10 +475,10 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         auto lastSchema = engine.GetVersionedIndex().GetLastSchema();
         UNIT_ASSERT_EQUAL(lastSchema->GetSnapshot(), indexSnaphot);
         const TIndexInfo& indexInfo = lastSchema->GetIndexInfo();
-        THashSet<ui32> oneColumnId = { indexInfo.GetColumnId(testColumns[0].GetName()) };
+        THashSet<ui32> oneColumnId = { indexInfo.GetColumnIdVerified(testColumns[0].GetName()) };
         THashSet<ui32> columnIds;
         for (auto& c : testColumns) {
-            columnIds.insert(indexInfo.GetColumnId(c.GetName()));
+            columnIds.insert(indexInfo.GetColumnIdVerified(c.GetName()));
         }
 
         { // select from snap before insert
@@ -573,7 +573,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         planStep = 3;
 
         const TIndexInfo& indexInfo = engine.GetVersionedIndex().GetLastSchema()->GetIndexInfo();
-        THashSet<ui32> oneColumnId = { indexInfo.GetColumnId(key[0].GetName()) };
+        THashSet<ui32> oneColumnId = { indexInfo.GetColumnIdVerified(key[0].GetName()) };
 
         { // full scan
             ui64 txId = 1;
@@ -750,7 +750,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             planStep = 3;
 
             const TIndexInfo& indexInfo = engine.GetVersionedIndex().GetLastSchema()->GetIndexInfo();
-            THashSet<ui32> oneColumnId = {indexInfo.GetColumnId(testColumns[0].GetName())};
+            THashSet<ui32> oneColumnId = {indexInfo.GetColumnIdVerified(testColumns[0].GetName())};
 
             { // full scan
                 ui64 txId = 1;
@@ -790,7 +790,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             engine.Load(db);
 
             const TIndexInfo& indexInfo = engine.GetVersionedIndex().GetLastSchema()->GetIndexInfo();
-            THashSet<ui32> oneColumnId = {indexInfo.GetColumnId(testColumns[0].GetName())};
+            THashSet<ui32> oneColumnId = { indexInfo.GetColumnIdVerified(testColumns[0].GetName()) };
 
             { // full scan
                 ui64 txId = 1;

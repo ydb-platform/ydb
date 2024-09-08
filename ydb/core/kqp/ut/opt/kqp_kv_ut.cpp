@@ -435,7 +435,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
 
         const auto testSingle = [&](const ::ReadRowsPgParam& testParam, bool isNull)
         {
-            auto* typeDesc = NPg::TypeDescFromPgTypeId(testParam.TypeId);
+            auto typeDesc = NPg::TypeDescFromPgTypeId(testParam.TypeId);
             UNIT_ASSERT(!!typeDesc);
             const auto typeName = NPg::PgTypeNameFromTypeDesc(typeDesc);
             const auto& pgType = TPgType(typeName, testParam.TypeMod);
@@ -510,7 +510,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
 
         const auto testSingle = [&](const ::ReadRowsPgParam& testParam, bool isNull)
         {
-            auto* typeDesc = NPg::TypeDescFromPgTypeId(testParam.TypeId);
+            auto typeDesc = NPg::TypeDescFromPgTypeId(testParam.TypeId);
             UNIT_ASSERT(!!typeDesc);
             const auto typeName = NPg::PgTypeNameFromTypeDesc(typeDesc);
             const auto& pgType = TPgType(typeName, testParam.TypeMod);

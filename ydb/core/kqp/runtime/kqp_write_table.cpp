@@ -231,7 +231,7 @@ public:
         CellsInfo[index].Value = value;
 
         if (type.GetTypeId() == NScheme::NTypeIds::Pg) {
-            const auto typeDesc = type.GetTypeDesc();
+            auto typeDesc = type.GetTypeDesc();
             if (typmod != -1 && NPg::TypeDescNeedsCoercion(typeDesc)) {
                 TMaybe<TString> err;
                 CellsInfo[index].PgBinaryValue = NYql::NCommon::PgValueCoerce(value, NPg::PgTypeIdFromTypeDesc(typeDesc), typmod, &err);

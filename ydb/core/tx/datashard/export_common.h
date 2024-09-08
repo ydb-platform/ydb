@@ -43,7 +43,7 @@ TString DecimalToString(const std::pair<ui64, i64>& loHi);
 TString DyNumberToString(TStringBuf data);
 bool DecimalToStream(const std::pair<ui64, i64>& loHi, IOutputStream& out, TString& err);
 bool DyNumberToStream(TStringBuf data, IOutputStream& out, TString& err);
-bool PgToStream(TStringBuf data, void* typeDesc, IOutputStream& out, TString& err);
+bool PgToStream(TStringBuf data, const void* typeDesc, IOutputStream& out, TString& err);
 bool UuidToStream(const std::pair<ui64, ui64>& loHi, IOutputStream& out, TString& err);
 
 } // NDataShard

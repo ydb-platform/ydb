@@ -355,7 +355,7 @@ private:
 
             if (col.GetTypeId() == NScheme::NTypeIds::Pg) {
                 auto* pg = meta->mutable_type()->mutable_pg_type();
-                auto* typeDesc = typeInfoMod.TypeInfo.GetTypeDesc();
+                auto typeDesc = typeInfoMod.TypeInfo.GetTypeDesc();
                 pg->set_type_name(NPg::PgTypeNameFromTypeDesc(typeDesc));
                 pg->set_type_modifier(typeInfoMod.TypeMod);
                 pg->set_oid(NPg::PgTypeIdFromTypeDesc(typeDesc));

@@ -469,7 +469,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                     }
                 }
             } else {
-                auto* typeDesc = NPg::TypeDescFromPgTypeName(typeName);
+                auto typeDesc = NPg::TypeDescFromPgTypeName(typeName);
                 if (!typeDesc) {
                     errStr = Sprintf("Type '%s' specified for column '%s' is not supported by storage", col.GetType().data(), colName.data());
                     return nullptr;
@@ -2501,7 +2501,7 @@ std::optional<std::pair<i64, i64>> ValidateSequenceType(const TString& sequenceN
             }
         }
     } else {
-        auto* typeDesc = NPg::TypeDescFromPgTypeName(typeName);
+        auto typeDesc = NPg::TypeDescFromPgTypeName(typeName);
         if (!typeDesc) {
             errStr = Sprintf("Type '%s' specified for sequence '%s' is not supported", dataType.data(), sequenceName.c_str());
             return std::nullopt;

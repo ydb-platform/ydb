@@ -25,7 +25,7 @@ TVector<TKqpTableColumn> GetKqpColumns(const TKikimrTableMetadata& table, const 
         ui32 columnId = 0;
         ui32 columnType = 0;
         bool notNull = false;
-        void* columnTypeDesc = nullptr;
+        const void* columnTypeDesc = nullptr;
 
         auto columnData = table.Columns.FindPtr(name);
         if (columnData) {

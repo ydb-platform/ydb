@@ -164,7 +164,7 @@ public:
                 }
             } else if (typeInProto.has_pg_type()) {
                 const auto& typeName = typeInProto.pg_type().type_name();
-                auto* typeDesc = NPg::TypeDescFromPgTypeName(typeName);
+                auto typeDesc = NPg::TypeDescFromPgTypeName(typeName);
                 if (!typeDesc) {
                     errorMessage = Sprintf("Unknown pg type for column %s: %s",
                                            name.c_str(), typeName.c_str());

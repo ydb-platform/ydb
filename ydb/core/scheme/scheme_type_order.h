@@ -81,7 +81,7 @@ struct TTypeInfoOrder {
         return TypeIdOrder.IsDescending();
     }
 
-    void* GetTypeDesc() const {
+    const void* GetTypeDesc() const {
         return TypeDesc;
     }
 
@@ -91,7 +91,7 @@ struct TTypeInfoOrder {
 
 private:
     TTypeIdOrder TypeIdOrder;
-    void* TypeDesc = {};
+    const void* TypeDesc = {};
 };
 
 }

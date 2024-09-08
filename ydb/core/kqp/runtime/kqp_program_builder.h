@@ -13,9 +13,9 @@ struct TKqpTableColumn {
     TString Name;
     NUdf::TDataTypeId Type;
     bool NotNull;
-    void* TypeDesc;
+    const void* TypeDesc;
 
-    TKqpTableColumn(ui32 id, const TStringBuf& name, NUdf::TDataTypeId type, bool notNull, void* typeDesc)
+    TKqpTableColumn(ui32 id, const TStringBuf& name, NUdf::TDataTypeId type, bool notNull, const void* typeDesc)
         : Id(id)
         , Name(name)
         , Type(type)

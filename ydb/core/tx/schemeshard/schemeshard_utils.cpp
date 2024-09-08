@@ -554,7 +554,7 @@ bool ExtractTypes(const NKikimrSchemeOp::TTableDescription& baseTableDescr, TCol
         auto typeName = NMiniKQL::AdaptLegacyYqlType(column.GetType());
         const NScheme::IType* type = typeRegistry->GetType(typeName);
         if (!type) {
-            auto* typeDesc = NPg::TypeDescFromPgTypeName(typeName);
+            auto typeDesc = NPg::TypeDescFromPgTypeName(typeName);
             if (!typeDesc) {
                 explain += TStringBuilder() << "Type '" << column.GetType() << "' specified for column '" << columnName << "' is not supported by storage";
                 return false;

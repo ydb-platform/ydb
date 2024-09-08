@@ -257,7 +257,7 @@ bool TSchemeModifier::AddPgColumn(ui32 tid, const TString &name, ui32 id, ui32 t
     NScheme::TTypeInfo typeInfo;
     if (pgType != 0) {
         Y_ABORT_UNLESS((NScheme::TTypeId)type == NScheme::NTypeIds::Pg);
-        auto* typeDesc = NPg::TypeDescFromPgTypeId(pgType);
+        auto typeDesc = NPg::TypeDescFromPgTypeId(pgType);
         Y_ABORT_UNLESS(typeDesc);
         typeInfo = NScheme::TTypeInfo(type, typeDesc);
     } else {

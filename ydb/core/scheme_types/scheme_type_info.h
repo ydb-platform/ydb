@@ -9,7 +9,7 @@ public:
     constexpr TTypeInfo()
     {}
 
-    explicit constexpr TTypeInfo(TTypeId typeId, void* typeDesc = {})
+    explicit constexpr TTypeInfo(TTypeId typeId, const void* typeDesc = {})
         : TypeId(typeId)
         , TypeDesc(typeDesc)
     {
@@ -30,13 +30,13 @@ public:
         return TypeId;
     }
 
-    void* GetTypeDesc() const {
+    const void* GetTypeDesc() const {
         return TypeDesc;
     }
 
 private:
     TTypeId TypeId = 0;
-    void* TypeDesc = {};
+    const void* TypeDesc = {};
 };
 
 } // namespace NKikimr::NScheme

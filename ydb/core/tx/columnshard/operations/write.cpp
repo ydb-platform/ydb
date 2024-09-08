@@ -46,7 +46,7 @@ void TWriteOperation::CommitOnExecute(TColumnShard& owner, NTabletFlatExecutor::
     TBlobGroupSelector dsGroupSelector(owner.Info());
     NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
 
-    for (auto gWriteId : GlobalWriteIds) {
+    for (auto gWriteId : InsertWriteIds) {
         auto pathExists = [&](ui64 pathId) {
             return owner.TablesManager.HasTable(pathId);
         };
@@ -65,7 +65,7 @@ void TWriteOperation::OnWriteFinish(
     NTabletFlatExecutor::TTransactionContext& txc, const std::vector<TInsertWriteId>& insertWriteIds, const bool ephemeralFlag) {
     Y_ABORT_UNLESS(Status == EOperationStatus::Started);
     Status = EOperationStatus::Prepared;
-    GlobalWriteIds = globalWriteIds;
+    InsertWriteIds = insertWriteIds;
 
     if (ephemeralFlag) {
         return;
@@ -87,7 +87,7 @@ void TWriteOperation::OnWriteFinish(
 }
 
 void TWriteOperation::ToProto(NKikimrTxColumnShard::TInternalOperationData& proto) const {
-    for (auto&& writeId : GlobalWriteIds) {
+    for (auto&& writeId : InsertWriteIds) {
         proto.AddInternalWriteIds((ui64)writeId);
     }
     proto.SetModificationType((ui32)ModificationType);
@@ -95,7 +95,7 @@ void TWriteOperation::ToProto(NKikimrTxColumnShard::TInternalOperationData& prot
 
 void TWriteOperation::FromProto(const NKikimrTxColumnShard::TInternalOperationData& proto) {
     for (auto&& writeId : proto.GetInternalWriteIds()) {
-        GlobalWriteIds.push_back(TInsertWriteId(writeId));
+        InsertWriteIds.push_back(TInsertWriteId(writeId));
     }
     if (proto.HasModificationType()) {
         ModificationType = (NEvWrite::EModificationType)proto.GetModificationType();
@@ -111,7 +111,7 @@ void TWriteOperation::AbortOnExecute(TColumnShard& owner, NTabletFlatExecutor::T
     NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
 
     THashSet<TInsertWriteId> writeIds;
-    writeIds.insert(GlobalWriteIds.begin(), GlobalWriteIds.end());
+    writeIds.insert(InsertWriteIds.begin(), InsertWriteIds.end());
     owner.InsertTable->Abort(dbTable, writeIds);
 }
 

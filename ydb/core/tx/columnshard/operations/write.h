@@ -50,7 +50,7 @@ class TWriteOperation {
     YDB_READONLY_DEF(TOperationWriteId, WriteId);
     YDB_READONLY(ui64, LockId, 0);
     YDB_READONLY(ui64, Cookie, 0);
-    YDB_READONLY_DEF(TVector<TInsertWriteId>, GlobalWriteIds);
+    YDB_READONLY_DEF(std::vector<TInsertWriteId>, InsertWriteIds);
     YDB_ACCESSOR(EOperationBehaviour, Behaviour, EOperationBehaviour::Undefined);
     YDB_READONLY_DEF(std::optional<ui32>, GranuleShardingVersionId);
     YDB_READONLY(NEvWrite::EModificationType, ModificationType, NEvWrite::EModificationType::Upsert);

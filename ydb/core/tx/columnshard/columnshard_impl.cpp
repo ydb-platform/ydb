@@ -206,7 +206,7 @@ TInsertWriteId TColumnShard::HasLongTxWrite(const NLongTxService::TLongTxId& lon
     if (it != LongTxWritesByUniqueId.end()) {
         auto itPart = it->second.find(partId);
         if (itPart != it->second.end()) {
-            return itPart->second->WriteId;
+            return itPart->second->InsertWriteId;
         }
     }
     return (TInsertWriteId)0;
@@ -217,7 +217,7 @@ TInsertWriteId TColumnShard::GetLongTxWrite(NIceDb::TNiceDb& db, const NLongTxSe
     if (it != LongTxWritesByUniqueId.end()) {
         auto itPart = it->second.find(partId);
         if (itPart != it->second.end()) {
-            return itPart->second->WriteId;
+            return itPart->second->InsertWriteId;
         }
     } else {
         it = LongTxWritesByUniqueId.emplace(longTxId.UniqueId, TPartsForLTXShard()).first;
@@ -231,25 +231,26 @@ TInsertWriteId TColumnShard::GetLongTxWrite(NIceDb::TNiceDb& db, const NLongTxSe
     lw.GranuleShardingVersionId = granuleShardingVersionId;
     it->second[partId] = &lw;
 
-    Schema::SaveLongTxWrite(db, writeId, partId, longTxId, granuleShardingVersionId);
-    return writeId;
+    Schema::SaveLongTxWrite(db, insertWriteId, partId, longTxId, granuleShardingVersionId);
+    return insertWriteId;
 }
 
 void TColumnShard::AddLongTxWrite(const TInsertWriteId writeId, ui64 txId) {
-    auto& lw = LongTxWrites.at(writeId);
-    lw.PreparedTxId = txId;
+    auto it = LongTxWrites.find(writeId);
+    AFL_VERIFY(it != LongTxWrites.end());
+    it->second.PreparedTxId = txId;
 }
 
 void TColumnShard::LoadLongTxWrite(const TInsertWriteId writeId, const ui32 writePartId, const NLongTxService::TLongTxId& longTxId, const std::optional<ui32> granuleShardingVersion) {
     auto& lw = LongTxWrites[writeId];
     lw.WritePartId = writePartId;
-    lw.WriteId = (ui64)writeId;
+    lw.InsertWriteId = writeId;
     lw.LongTxId = longTxId;
     lw.GranuleShardingVersionId = granuleShardingVersion;
     LongTxWritesByUniqueId[longTxId.UniqueId][writePartId] = &lw;
 }
 
-bool TColumnShard::RemoveLongTxWrite(NIceDb::TNiceDb& db, const TLongTxWriteId writeId, const ui64 txId) {
+bool TColumnShard::RemoveLongTxWrite(NIceDb::TNiceDb& db, const TInsertWriteId writeId, const ui64 txId) {
     if (auto* lw = LongTxWrites.FindPtr(writeId)) {
         ui64 prepared = lw->PreparedTxId;
         if (!prepared || txId == prepared) {
@@ -271,8 +272,8 @@ bool TColumnShard::RemoveLongTxWrite(NIceDb::TNiceDb& db, const TLongTxWriteId w
     }
 }
 
-void TColumnShard::TryAbortWrites(NIceDb::TNiceDb& db, NOlap::TDbWrapper& dbTable, THashSet<TLongTxWriteId>&& writesToAbort) {
-    std::vector<TLongTxWriteId> failedAborts;
+void TColumnShard::TryAbortWrites(NIceDb::TNiceDb& db, NOlap::TDbWrapper& dbTable, THashSet<TInsertWriteId>&& writesToAbort) {
+    std::vector<TInsertWriteId> failedAborts;
     for (auto& writeId : writesToAbort) {
         if (!RemoveLongTxWrite(db, writeId, 0)) {
             failedAborts.push_back(writeId);
@@ -620,14 +621,14 @@ public:
     using TBase::TBase;
 };
 
-void TColumnShard::StartIndexTask(std::vector<const NOlap::TInsertedData*>&& dataToIndex, const i64 bytesToIndex) {
+void TColumnShard::StartIndexTask(std::vector<const NOlap::TCommittedData*>&& dataToIndex, const i64 bytesToIndex) {
     Counters.GetCSCounters().IndexationInput(bytesToIndex);
 
-    std::vector<NOlap::TInsertedData> data;
+    std::vector<NOlap::TCommittedData> data;
     data.reserve(dataToIndex.size());
     for (auto& ptr : dataToIndex) {
         data.push_back(*ptr);
-        if (!TablesManager.HasTable(data.back().PathId)) {
+        if (!TablesManager.HasTable(data.back().GetPathId())) {
             data.back().SetRemove();
         }
     }
@@ -680,7 +681,7 @@ void TColumnShard::SetupIndexation() {
     Counters.GetCSCounters().OnSetupIndexation();
     ui64 bytesToIndex = 0;
     ui64 txBytesWrite = 0;
-    std::vector<const NOlap::TInsertedData*> dataToIndex;
+    std::vector<const NOlap::TCommittedData*> dataToIndex;
     dataToIndex.reserve(TLimits::MIN_SMALL_BLOBS_TO_INSERT);
     for (auto it = InsertTable->GetPathPriorities().rbegin(); it != InsertTable->GetPathPriorities().rend(); ++it) {
         for (auto* pathInfo : it->second) {

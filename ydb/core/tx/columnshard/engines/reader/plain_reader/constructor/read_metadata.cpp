@@ -35,7 +35,7 @@ TConclusionStatus TReadMetadata::Init(
     if (LockId) {
         for (auto&& i : CommittedBlobs) {
             if (auto writeId = i.GetWriteIdOptional()) {
-                auto op = owner->GetOperationsManager().GetOperationVerified(*writeId);
+                auto op = owner->GetOperationsManager().GetOperationVerified((TOperationWriteId)*writeId);
                 AddWriteIdToCheck(*writeId, op->GetLockId());
             }
         }

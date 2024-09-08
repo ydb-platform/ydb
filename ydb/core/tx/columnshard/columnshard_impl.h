@@ -3,7 +3,6 @@
 #include "background_controller.h"
 #include "counters.h"
 #include "columnshard.h"
-#include "columnshard_common.h"
 #include "columnshard_ttl.h"
 #include "columnshard_private_events.h"
 #include "tables_manager.h"
@@ -514,7 +513,7 @@ private:
     void RunDropTable(const NKikimrTxColumnShard::TDropTable& body, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc);
     void RunAlterStore(const NKikimrTxColumnShard::TAlterStore& body, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc);
 
-    void StartIndexTask(std::vector<const NOlap::TInsertedData*>&& dataToIndex, const i64 bytesToIndex);
+    void StartIndexTask(std::vector<const NOlap::TCommittedData*>&& dataToIndex, const i64 bytesToIndex);
     void SetupIndexation();
     void SetupCompaction();
     bool SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls = {});

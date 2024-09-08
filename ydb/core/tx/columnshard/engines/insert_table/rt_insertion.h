@@ -1,7 +1,10 @@
 #pragma once
-#include <ydb/core/tx/columnshard/counters/insert_table.h>
-#include <ydb/library/accessor/accessor.h>
+#include "inserted.h"
 #include "path_info.h"
+
+#include <ydb/core/tx/columnshard/counters/insert_table.h>
+
+#include <ydb/library/accessor/accessor.h>
 
 namespace NKikimr::NOlap {
 class IBlobsDeclareRemovingAction;
@@ -33,6 +36,7 @@ private:
     void OnNewInserted(TPathInfo& pathInfo, const ui64 dataSize, const bool load) noexcept;
     void OnEraseInserted(TPathInfo& pathInfo, const ui64 dataSize) noexcept;
     static TAtomicCounter CriticalInserted;
+
 public:
     bool HasPathIdData(const ui64 pathId) const {
         auto it = PathInfo.find(pathId);
@@ -75,14 +79,18 @@ public:
     bool EraseAborted(const TInsertWriteId writeId);
     bool HasAborted(const TInsertWriteId writeId);
 
-    bool EraseCommitted(const TInsertedData& data);
-    bool HasCommitted(const TInsertedData& data);
+    bool EraseCommitted(const TCommittedData& data);
+    bool HasCommitted(const TCommittedData& data);
 
     const TInsertedData* AddInserted(TInsertedData&& data, const bool load = false);
     std::optional<TInsertedData> ExtractInserted(const TInsertWriteId id);
 
-    const TCounters& GetCountersPrepared() const { return StatsPrepared; }
-    const TCounters& GetCountersCommitted() const { return StatsCommitted; }
+    const TCounters& GetCountersPrepared() const {
+        return StatsPrepared;
+    }
+    const TCounters& GetCountersCommitted() const {
+        return StatsCommitted;
+    }
     const NColumnShard::TInsertTableCounters& GetCounters() const {
         return Counters;
     }
@@ -101,4 +109,4 @@ public:
     }
 };
 
-}
+}   // namespace NKikimr::NOlap

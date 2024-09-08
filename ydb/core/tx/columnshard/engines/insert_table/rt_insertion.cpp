@@ -92,7 +92,7 @@ void TInsertionSummary::OnEraseInserted(TPathInfo& pathInfo, const ui64 dataSize
 THashSet<TInsertWriteId> TInsertionSummary::GetInsertedByPathId(const ui64 pathId) const {
     THashSet<TInsertWriteId> result;
     for (auto& [writeId, data] : Inserted) {
-        if (data.PathId == pathId) {
+        if (data.GetPathId() == pathId) {
             result.insert(writeId);
         }
     }
@@ -140,8 +140,8 @@ bool TInsertionSummary::HasAborted(const TInsertWriteId writeId) {
     return true;
 }
 
-bool TInsertionSummary::EraseCommitted(const TInsertedData& data) {
-    TPathInfo* pathInfo = GetPathInfoOptional(data.PathId);
+bool TInsertionSummary::EraseCommitted(const TCommittedData& data) {
+    TPathInfo* pathInfo = GetPathInfoOptional(data.GetPathId());
     if (!pathInfo) {
         Counters.Committed.SkipErase(data.BlobSize());
         return false;
@@ -155,8 +155,8 @@ bool TInsertionSummary::EraseCommitted(const TInsertedData& data) {
     }
 }
 
-bool TInsertionSummary::HasCommitted(const TInsertedData& data) {
-    TPathInfo* pathInfo = GetPathInfoOptional(data.PathId);
+bool TInsertionSummary::HasCommitted(const TCommittedData& data) {
+    TPathInfo* pathInfo = GetPathInfoOptional(data.GetPathId());
     if (!pathInfo) {
         return false;
     }
@@ -164,7 +164,7 @@ bool TInsertionSummary::HasCommitted(const TInsertedData& data) {
 }
 
 const NKikimr::NOlap::TInsertedData* TInsertionSummary::AddAborted(TInsertedData&& data, const bool load /*= false*/) {
-    const TInsertWriteId writeId = data.WriteTxId;
+    const TInsertWriteId writeId = data.GetInsertWriteId();
     Counters.Aborted.Add(data.BlobSize(), load);
     auto insertInfo = Aborted.emplace(writeId, std::move(data));
     Y_ABORT_UNLESS(insertInfo.second);
@@ -176,7 +176,7 @@ std::optional<NKikimr::NOlap::TInsertedData> TInsertionSummary::ExtractInserted(
     if (it == Inserted.end()) {
         return {};
     } else {
-        auto pathInfo = GetPathInfoOptional(it->second.PathId);
+        auto pathInfo = GetPathInfoOptional(it->second.GetPathId());
         if (pathInfo) {
             OnEraseInserted(*pathInfo, it->second.BlobSize());
         }
@@ -187,9 +187,9 @@ std::optional<NKikimr::NOlap::TInsertedData> TInsertionSummary::ExtractInserted(
 }
 
 const NKikimr::NOlap::TInsertedData* TInsertionSummary::AddInserted(TInsertedData&& data, const bool load /*= false*/) {
-    const TInsertWriteId writeId = data.WriteTxId;
+    const TInsertWriteId writeId = data.GetInsertWriteId();
     const ui32 dataSize = data.BlobSize();
-    const ui64 pathId = data.PathId;
+    const ui64 pathId = data.GetPathId();
     auto insertInfo = Inserted.emplace(writeId, std::move(data));
     if (insertInfo.second) {
         OnNewInserted(GetPathInfo(pathId), dataSize, load);

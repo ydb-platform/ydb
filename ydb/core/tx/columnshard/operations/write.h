@@ -26,7 +26,8 @@ namespace NKikimr::NColumnShard {
 
 class TColumnShard;
 
-using TWriteId = NOlap::TWriteId;
+using TOperationWriteId = NOlap::TOperationWriteId;
+using TInsertWriteId = NOlap::TInsertWriteId;
 
 enum class EOperationStatus : ui32 {
     Draft = 1,
@@ -46,10 +47,10 @@ enum class EOperationBehaviour : ui32 {
 class TWriteOperation {
     YDB_READONLY(EOperationStatus, Status, EOperationStatus::Draft);
     YDB_READONLY_DEF(TInstant, CreatedAt);
-    YDB_READONLY_DEF(TWriteId, WriteId);
+    YDB_READONLY_DEF(TOperationWriteId, WriteId);
     YDB_READONLY(ui64, LockId, 0);
     YDB_READONLY(ui64, Cookie, 0);
-    YDB_READONLY_DEF(TVector<TWriteId>, GlobalWriteIds);
+    YDB_READONLY_DEF(TVector<TInsertWriteId>, GlobalWriteIds);
     YDB_ACCESSOR(EOperationBehaviour, Behaviour, EOperationBehaviour::Undefined);
     YDB_READONLY_DEF(std::optional<ui32>, GranuleShardingVersionId);
     YDB_READONLY(NEvWrite::EModificationType, ModificationType, NEvWrite::EModificationType::Upsert);
@@ -57,12 +58,12 @@ class TWriteOperation {
 public:
     using TPtr = std::shared_ptr<TWriteOperation>;
 
-    TWriteOperation(const TWriteId writeId, const ui64 lockId, const ui64 cookie, const EOperationStatus& status, const TInstant createdAt,
+    TWriteOperation(const TOperationWriteId writeId, const ui64 lockId, const ui64 cookie, const EOperationStatus& status, const TInstant createdAt,
         const std::optional<ui32> granuleShardingVersionId, const NEvWrite::EModificationType mType);
 
     void Start(TColumnShard& owner, const ui64 tableId, const NEvWrite::IDataContainer::TPtr& data, const NActors::TActorId& source,
         const std::shared_ptr<NOlap::ISnapshotSchema>& schema, const TActorContext& ctx);
-    void OnWriteFinish(NTabletFlatExecutor::TTransactionContext& txc, const TVector<TWriteId>& globalWriteIds, const bool ephemeralFlag);
+    void OnWriteFinish(NTabletFlatExecutor::TTransactionContext& txc, const std::vector<TInsertWriteId>& insertWriteIds, const bool ephemeralFlag);
     void CommitOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc, const NOlap::TSnapshot& snapshot) const;
     void CommitOnComplete(TColumnShard& owner, const NOlap::TSnapshot& snapshot) const;
     void AbortOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) const;

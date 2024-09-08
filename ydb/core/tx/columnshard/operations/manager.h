@@ -120,8 +120,8 @@ class TOperationsManager {
 
     THashMap<ui64, ui64> Tx2Lock;
     THashMap<ui64, TLockFeatures> LockFeatures;
-    THashMap<TWriteId, TWriteOperation::TPtr> Operations;
-    TWriteId LastWriteId = TWriteId(0);
+    THashMap<TOperationWriteId, TWriteOperation::TPtr> Operations;
+    TOperationWriteId LastWriteId = TOperationWriteId(0);
 
 public:
 
@@ -129,11 +129,11 @@ public:
     void AddEventForTx(TColumnShard& owner, const ui64 txId, const std::shared_ptr<NOlap::NTxInteractions::ITxEventWriter>& writer);
     void AddEventForLock(TColumnShard& owner, const ui64 lockId, const std::shared_ptr<NOlap::NTxInteractions::ITxEventWriter>& writer);
 
-    TWriteOperation::TPtr GetOperation(const TWriteId writeId) const;
-    TWriteOperation::TPtr GetOperationVerified(const TWriteId writeId) const {
+    TWriteOperation::TPtr GetOperation(const TOperationWriteId writeId) const;
+    TWriteOperation::TPtr GetOperationVerified(const TOperationWriteId writeId) const {
         return TValidator::CheckNotNull(GetOperationOptional(writeId));
     }
-    TWriteOperation::TPtr GetOperationOptional(const TWriteId writeId) const {
+    TWriteOperation::TPtr GetOperationOptional(const TOperationWriteId writeId) const {
         return GetOperation(writeId);
     }
     void CommitTransactionOnExecute(
@@ -199,7 +199,7 @@ public:
     TOperationsManager();
 
 private:
-    TWriteId BuildNextWriteId();
+    TOperationWriteId BuildNextOperationWriteId();
     void RemoveOperationOnExecute(const TWriteOperation::TPtr& op, NTabletFlatExecutor::TTransactionContext& txc);
     void RemoveOperationOnComplete(const TWriteOperation::TPtr& op);
     void OnTransactionFinishOnExecute(const TVector<TWriteOperation::TPtr>& operations, const TLockFeatures& lock, const ui64 txId,

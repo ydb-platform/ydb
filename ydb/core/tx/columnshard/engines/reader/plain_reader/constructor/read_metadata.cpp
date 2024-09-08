@@ -119,7 +119,7 @@ void TReadMetadata::DoOnReplyConstruction(const ui64 tabletId, NKqp::NInternalIm
     }
 }
 
-bool TReadMetadata::IsMyUncommitted(const TWriteId writeId) const {
+bool TReadMetadata::IsMyUncommitted(const TInsertWriteId writeId) const {
     AFL_VERIFY(LockSharingInfo);
     auto it = ConflictedWriteIds.find(writeId);
     AFL_VERIFY(it != ConflictedWriteIds.end());

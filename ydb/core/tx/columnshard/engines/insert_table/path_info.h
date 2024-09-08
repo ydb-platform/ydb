@@ -55,7 +55,7 @@ public:
         return Committed.empty() && !InsertedSize;
     }
 
-    const THashMap<TWriteId, TInsertedData>& GetInserted() const;
+    const THashMap<TInsertWriteId, TInsertedData>& GetInserted() const;
 
     void AddInsertedSize(const i64 size, const ui64 overloadLimit);
 

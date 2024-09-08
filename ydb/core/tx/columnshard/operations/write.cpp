@@ -12,7 +12,7 @@
 
 namespace NKikimr::NColumnShard {
 
-TWriteOperation::TWriteOperation(const TWriteId writeId, const ui64 lockId, const ui64 cookie, const EOperationStatus& status,
+TWriteOperation::TWriteOperation(const TOperationWriteId writeId, const ui64 lockId, const ui64 cookie, const EOperationStatus& status,
     const TInstant createdAt, const std::optional<ui32> granuleShardingVersionId, const NEvWrite::EModificationType mType)
     : Status(status)
     , CreatedAt(createdAt)
@@ -61,7 +61,8 @@ void TWriteOperation::CommitOnComplete(TColumnShard& owner, const NOlap::TSnapsh
     owner.UpdateInsertTableCounters();
 }
 
-void TWriteOperation::OnWriteFinish(NTabletFlatExecutor::TTransactionContext& txc, const TVector<TWriteId>& globalWriteIds, const bool ephemeralFlag) {
+void TWriteOperation::OnWriteFinish(
+    NTabletFlatExecutor::TTransactionContext& txc, const std::vector<TInsertWriteId>& insertWriteIds, const bool ephemeralFlag) {
     Y_ABORT_UNLESS(Status == EOperationStatus::Started);
     Status = EOperationStatus::Prepared;
     GlobalWriteIds = globalWriteIds;
@@ -94,7 +95,7 @@ void TWriteOperation::ToProto(NKikimrTxColumnShard::TInternalOperationData& prot
 
 void TWriteOperation::FromProto(const NKikimrTxColumnShard::TInternalOperationData& proto) {
     for (auto&& writeId : proto.GetInternalWriteIds()) {
-        GlobalWriteIds.push_back(TWriteId(writeId));
+        GlobalWriteIds.push_back(TInsertWriteId(writeId));
     }
     if (proto.HasModificationType()) {
         ModificationType = (NEvWrite::EModificationType)proto.GetModificationType();
@@ -109,7 +110,7 @@ void TWriteOperation::AbortOnExecute(TColumnShard& owner, NTabletFlatExecutor::T
     TBlobGroupSelector dsGroupSelector(owner.Info());
     NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
 
-    THashSet<TWriteId> writeIds;
+    THashSet<TInsertWriteId> writeIds;
     writeIds.insert(GlobalWriteIds.begin(), GlobalWriteIds.end());
     owner.InsertTable->Abort(dbTable, writeIds);
 }

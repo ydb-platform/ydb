@@ -29,7 +29,7 @@ private:
 
 public:
     ui64 PlanStep = 0;
-    ui64 WriteTxId = 0;
+    TInsertWriteId WriteTxId = (TInsertWriteId)0;
     ui64 PathId = 0;
     TString DedupId;
 
@@ -141,7 +141,7 @@ public:
 class TCommittedBlob {
 private:
     TBlobRange BlobRange;
-    std::variant<TSnapshot, TWriteId> WriteInfo;
+    std::variant<TSnapshot, TInsertWriteId> WriteInfo;
     YDB_READONLY(ui64, SchemaVersion, 0);
     YDB_READONLY(ui64, RecordsCount, 0);
     YDB_READONLY(bool, IsDelete, false);
@@ -177,7 +177,7 @@ public:
         , SchemaSubset(subset) {
     }
 
-    TCommittedBlob(const TBlobRange& blobRange, const TWriteId writeId, const ui64 schemaVersion, const ui64 recordsCount,
+    TCommittedBlob(const TBlobRange& blobRange, const TInsertWriteId writeId, const ui64 schemaVersion, const ui64 recordsCount,
         const std::optional<NArrow::TReplaceKey>& first, const std::optional<NArrow::TReplaceKey>& last, const bool isDelete,
         const NArrow::TSchemaSubset& subset)
         : BlobRange(blobRange)
@@ -228,11 +228,11 @@ public:
         return *result;
     }
 
-    const TWriteId* GetWriteIdOptional() const {
-        return std::get_if<TWriteId>(&WriteInfo);
+    const TInsertWriteId* GetWriteIdOptional() const {
+        return std::get_if<TInsertWriteId>(&WriteInfo);
     }
 
-    TWriteId GetWriteIdVerified() const {
+    TInsertWriteId GetWriteIdVerified() const {
         auto* result = GetWriteIdOptional();
         AFL_VERIFY(result);
         return *result;

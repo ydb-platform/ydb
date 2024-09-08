@@ -19,8 +19,8 @@ private:
     TCounters StatsCommitted;
     const NColumnShard::TInsertTableCounters Counters;
 
-    THashMap<TWriteId, TInsertedData> Inserted;
-    THashMap<TWriteId, TInsertedData> Aborted;
+    THashMap<TInsertWriteId, TInsertedData> Inserted;
+    THashMap<TInsertWriteId, TInsertedData> Aborted;
     mutable TInstant MinInsertedTs = TInstant::Zero();
 
     std::map<TPathInfoIndexPriority, std::set<const TPathInfo*>> Priorities;
@@ -52,7 +52,7 @@ public:
         PathInfo.erase(it);
     }
 
-    void MarkAsNotAbortable(const TWriteId writeId) {
+    void MarkAsNotAbortable(const TInsertWriteId writeId) {
         auto it = Inserted.find(writeId);
         if (it == Inserted.end()) {
             return;
@@ -60,26 +60,26 @@ public:
         it->second.MarkAsNotAbortable();
     }
 
-    THashSet<TWriteId> GetInsertedByPathId(const ui64 pathId) const;
+    THashSet<TInsertWriteId> GetInsertedByPathId(const ui64 pathId) const;
 
-    THashSet<TWriteId> GetExpiredInsertions(const TInstant timeBorder, const ui64 limit) const;
+    THashSet<TInsertWriteId> GetExpiredInsertions(const TInstant timeBorder, const ui64 limit) const;
 
-    const THashMap<TWriteId, TInsertedData>& GetInserted() const {
+    const THashMap<TInsertWriteId, TInsertedData>& GetInserted() const {
         return Inserted;
     }
-    const THashMap<TWriteId, TInsertedData>& GetAborted() const {
+    const THashMap<TInsertWriteId, TInsertedData>& GetAborted() const {
         return Aborted;
     }
 
     const TInsertedData* AddAborted(TInsertedData&& data, const bool load = false);
-    bool EraseAborted(const TWriteId writeId);
-    bool HasAborted(const TWriteId writeId);
+    bool EraseAborted(const TInsertWriteId writeId);
+    bool HasAborted(const TInsertWriteId writeId);
 
     bool EraseCommitted(const TInsertedData& data);
     bool HasCommitted(const TInsertedData& data);
 
     const TInsertedData* AddInserted(TInsertedData&& data, const bool load = false);
-    std::optional<TInsertedData> ExtractInserted(const TWriteId id);
+    std::optional<TInsertedData> ExtractInserted(const TInsertWriteId id);
 
     const TCounters& GetCountersPrepared() const { return StatsPrepared; }
     const TCounters& GetCountersCommitted() const { return StatsCommitted; }

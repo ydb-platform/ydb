@@ -48,7 +48,7 @@ public:
     }
 
     void Insert(const TInsertedData& data) override {
-        Inserted.emplace(TWriteId{data.WriteTxId}, data);
+        Inserted.emplace(data.WriteTxId, data);
     }
 
     void Commit(const TInsertedData& data) override {
@@ -56,11 +56,11 @@ public:
     }
 
     void Abort(const TInsertedData& data) override {
-        Aborted.emplace(TWriteId{data.WriteTxId}, data);
+        Aborted.emplace(data.WriteTxId, data);
     }
 
     void EraseInserted(const TInsertedData& data) override {
-        Inserted.erase(TWriteId{data.WriteTxId});
+        Inserted.erase(data.WriteTxId);
     }
 
     void EraseCommitted(const TInsertedData& data) override {
@@ -68,7 +68,7 @@ public:
     }
 
     void EraseAborted(const TInsertedData& data) override {
-        Aborted.erase(TWriteId{data.WriteTxId});
+        Aborted.erase(data.WriteTxId);
     }
 
     bool Load(TInsertTableAccessor& accessor,
@@ -189,9 +189,9 @@ public:
     }
 
 private:
-    THashMap<TWriteId, TInsertedData> Inserted;
+    THashMap<TInsertWriteId, TInsertedData> Inserted;
     THashMap<ui64, TSet<TInsertedData>> Committed;
-    THashMap<TWriteId, TInsertedData> Aborted;
+    THashMap<TInsertWriteId, TInsertedData> Aborted;
     THashMap<ui32, TIndex> Indices;
 };
 

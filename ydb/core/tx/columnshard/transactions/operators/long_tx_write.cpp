@@ -43,7 +43,7 @@ bool TLongTxTransactionOperator::DoParse(TColumnShard& /*owner*/, const TString&
     }
 
     for (auto& id : commitTxBody.GetWriteIds()) {
-        WriteIds.insert(TWriteId{ id });
+        WriteIds.insert(TInsertWriteId{ id });
     }
     return true;
 }

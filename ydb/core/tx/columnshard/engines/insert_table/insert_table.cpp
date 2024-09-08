@@ -17,7 +17,7 @@ bool TInsertTable::Insert(IDbWrapper& dbTable, TInsertedData&& data) {
 }
 
 TInsertionSummary::TCounters TInsertTable::Commit(
-    IDbWrapper& dbTable, ui64 planStep, ui64 txId, const THashSet<TWriteId>& writeIds, std::function<bool(ui64)> pathExists) {
+    IDbWrapper& dbTable, ui64 planStep, ui64 txId, const THashSet<TInsertWriteId>& writeIds, std::function<bool(ui64)> pathExists) {
     Y_ABORT_UNLESS(!writeIds.empty());
 
     TInsertionSummary::TCounters counters;
@@ -51,7 +51,7 @@ TInsertionSummary::TCounters TInsertTable::Commit(
     return counters;
 }
 
-void TInsertTable::Abort(IDbWrapper& dbTable, const THashSet<TWriteId>& writeIds) {
+void TInsertTable::Abort(IDbWrapper& dbTable, const THashSet<TInsertWriteId>& writeIds) {
     Y_ABORT_UNLESS(!writeIds.empty());
 
     for (auto writeId : writeIds) {
@@ -64,7 +64,7 @@ void TInsertTable::Abort(IDbWrapper& dbTable, const THashSet<TWriteId>& writeIds
     }
 }
 
-THashSet<TWriteId> TInsertTable::OldWritesToAbort(const TInstant& now) const {
+THashSet<TInsertWriteId> TInsertTable::OldWritesToAbort(const TInstant& now) const {
     return Summary.GetExpiredInsertions(now - WaitCommitDelay, CleanupPackageSize);
 }
 
@@ -84,14 +84,14 @@ void TInsertTable::EraseCommittedOnComplete(const TInsertedData& data) {
 
 void TInsertTable::EraseAbortedOnExecute(
     IDbWrapper& dbTable, const TInsertedData& data, const std::shared_ptr<IBlobsDeclareRemovingAction>& blobsAction) {
-    if (Summary.HasAborted((TWriteId)data.WriteTxId)) {
+    if (Summary.HasAborted((TInsertWriteId)data.WriteTxId)) {
         dbTable.EraseAborted(data);
         RemoveBlobLinkOnExecute(data.GetBlobRange().BlobId, blobsAction);
     }
 }
 
 void TInsertTable::EraseAbortedOnComplete(const TInsertedData& data) {
-    if (Summary.EraseAborted((TWriteId)data.WriteTxId)) {
+    if (Summary.EraseAborted((TInsertWriteId)data.WriteTxId)) {
         RemoveBlobLinkOnComplete(data.GetBlobRange().BlobId);
     }
 }
@@ -99,6 +99,11 @@ void TInsertTable::EraseAbortedOnComplete(const TInsertedData& data) {
 bool TInsertTable::Load(IDbWrapper& dbTable, const TInstant loadTime) {
     Y_ABORT_UNLESS(!Loaded);
     Loaded = true;
+    LastWriteId = 0;
+    if (!Schema::GetSpecialValueOpt(db, Schema::EValueIds::LastWriteId, LastWriteId)) {
+        return false;
+    }
+
     return dbTable.Load(*this, loadTime);
 }
 
@@ -120,12 +125,23 @@ std::vector<TCommittedBlob> TInsertTable::Read(
     }
     if (lockId) {
         for (const auto& [writeId, data] : pInfo->GetInserted()) {
-            result.emplace_back(TCommittedBlob(data.GetBlobRange(), TWriteId(writeId), data.GetSchemaVersion(), data.GetMeta().GetNumRows(),
+            result.emplace_back(TCommittedBlob(data.GetBlobRange(), writeId, data.GetSchemaVersion(), data.GetMeta().GetNumRows(),
                 data.GetMeta().GetFirstPK(pkSchema), data.GetMeta().GetLastPK(pkSchema),
                 data.GetMeta().GetModificationType() == NEvWrite::EModificationType::Delete, data.GetMeta().GetSchemaSubset()));
         }
     }
     return result;
+}
+
+NKikimr::NOlap::TInsertWriteId TInsertTable::BuildNextWriteId(NTabletFlatExecutor::TTransactionContext& txc) {
+    NIceDb::TNiceDb db(txc.DB);
+    return BuildNextWriteId(db);
+}
+
+NKikimr::NOlap::TInsertWriteId TInsertTable::BuildNextWriteId(NIceDb::TNiceDb& db) {
+    TInsertWriteId writeId = ++LastWriteId;
+    Schema::SaveSpecialValue(db, NColumnShard::Schema::EValueIds::LastWriteId, (ui64)writeId);
+    return writeId;
 }
 
 bool TInsertTableAccessor::RemoveBlobLinkOnExecute(

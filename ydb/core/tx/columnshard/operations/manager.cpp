@@ -13,7 +13,7 @@ bool TOperationsManager::Load(NTabletFlatExecutor::TTransactionContext& txc) {
         }
 
         while (!rowset.EndOfSet()) {
-            const TWriteId writeId = (TWriteId)rowset.GetValue<Schema::Operations::WriteId>();
+            const TOperationWriteId writeId = (TOperationWriteId)rowset.GetValue<Schema::Operations::WriteId>();
             const ui64 createdAtSec = rowset.GetValue<Schema::Operations::CreatedAt>();
             const ui64 lockId = rowset.GetValue<Schema::Operations::LockId>();
             const ui64 cookie = rowset.GetValueOrDefault<Schema::Operations::Cookie>(0);
@@ -138,7 +138,7 @@ void TOperationsManager::AbortTransactionOnComplete(TColumnShard& owner, const u
     OnTransactionFinishOnComplete(aborted, *lock, txId);
 }
 
-TWriteOperation::TPtr TOperationsManager::GetOperation(const TWriteId writeId) const {
+TWriteOperation::TPtr TOperationsManager::GetOperation(const TOperationWriteId writeId) const {
     auto it = Operations.find(writeId);
     if (it == Operations.end()) {
         return nullptr;
@@ -176,7 +176,7 @@ void TOperationsManager::RemoveOperationOnComplete(const TWriteOperation::TPtr& 
     Operations.erase(op->GetWriteId());
 }
 
-TWriteId TOperationsManager::BuildNextWriteId() {
+TOperationWriteId TOperationsManager::BuildNextOperationWriteId() {
     return ++LastWriteId;
 }
 
@@ -199,7 +199,7 @@ void TOperationsManager::LinkTransactionOnComplete(const ui64 /*lockId*/, const 
 
 TWriteOperation::TPtr TOperationsManager::RegisterOperation(
     const ui64 lockId, const ui64 cookie, const std::optional<ui32> granuleShardingVersionId, const NEvWrite::EModificationType mType) {
-    auto writeId = BuildNextWriteId();
+    auto writeId = BuildNextOperationWriteId();
     auto operation = std::make_shared<TWriteOperation>(
         writeId, lockId, cookie, EOperationStatus::Draft, AppData()->TimeProvider->Now(), granuleShardingVersionId, mType);
     Y_ABORT_UNLESS(Operations.emplace(operation->GetWriteId(), operation).second);

@@ -67,8 +67,8 @@ public:
     bool HasPathIdData(const ui64 pathId) const {
         return Summary.HasPathIdData(pathId);
     }
-    const THashMap<TWriteId, TInsertedData>& GetAborted() const { return Summary.GetAborted(); }
-    const THashMap<TWriteId, TInsertedData>& GetInserted() const { return Summary.GetInserted(); }
+    const THashMap<TInsertWriteId, TInsertedData>& GetAborted() const { return Summary.GetAborted(); }
+    const THashMap<TInsertWriteId, TInsertedData>& GetInserted() const { return Summary.GetInserted(); }
     const TInsertionSummary::TCounters& GetCountersPrepared() const {
         return Summary.GetCountersPrepared();
     }
@@ -83,18 +83,20 @@ public:
 class TInsertTable: public TInsertTableAccessor {
 private:
     bool Loaded = false;
+    TInsertWriteId LastWriteId = TInsertWriteId{ 0 };
+
 public:
     static constexpr const TDuration WaitCommitDelay = TDuration::Minutes(10);
     static constexpr ui64 CleanupPackageSize = 10000;
 
     bool Insert(IDbWrapper& dbTable, TInsertedData&& data);
     TInsertionSummary::TCounters Commit(IDbWrapper& dbTable, ui64 planStep, ui64 txId,
-                     const THashSet<TWriteId>& writeIds, std::function<bool(ui64)> pathExists);
-    void Abort(IDbWrapper& dbTable, const THashSet<TWriteId>& writeIds);
-    void MarkAsNotAbortable(const TWriteId writeId) {
+                     const THashSet<TInsertWriteId>& writeIds, std::function<bool(ui64)> pathExists);
+    void Abort(IDbWrapper& dbTable, const THashSet<TInsertWriteId>& writeIds);
+    void MarkAsNotAbortable(const TInsertWriteId writeId) {
         Summary.MarkAsNotAbortable(writeId);
     }
-    THashSet<TWriteId> OldWritesToAbort(const TInstant& now) const;
+    THashSet<TInsertWriteId> OldWritesToAbort(const TInstant& now) const;
 
     void EraseCommittedOnExecute(IDbWrapper& dbTable, const TInsertedData& key, const std::shared_ptr<IBlobsDeclareRemovingAction>& blobsAction);
     void EraseCommittedOnComplete(const TInsertedData& key);
@@ -105,6 +107,9 @@ public:
     std::vector<TCommittedBlob> Read(
         ui64 pathId, const std::optional<ui64> lockId, const TSnapshot& reqSnapshot, const std::shared_ptr<arrow::Schema>& pkSchema) const;
     bool Load(IDbWrapper& dbTable, const TInstant loadTime);
+
+    TInsertWriteId BuildNextWriteId(NTabletFlatExecutor::TTransactionContext& txc);
+    TInsertWriteId BuildNextWriteId(NIceDb::TNiceDb& db);
 };
 
 }

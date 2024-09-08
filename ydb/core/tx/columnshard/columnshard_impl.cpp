@@ -201,31 +201,31 @@ NOlap::TSnapshot TColumnShard::GetMinReadSnapshot() const {
     return NOlap::TSnapshot::MaxForPlanStep(minReadStep);
 }
 
-TWriteId TColumnShard::HasLongTxWrite(const NLongTxService::TLongTxId& longTxId, const ui32 partId) const {
+TInsertWriteId TColumnShard::HasLongTxWrite(const NLongTxService::TLongTxId& longTxId, const ui32 partId) const {
     auto it = LongTxWritesByUniqueId.find(longTxId.UniqueId);
     if (it != LongTxWritesByUniqueId.end()) {
         auto itPart = it->second.find(partId);
         if (itPart != it->second.end()) {
-            return (TWriteId)itPart->second->WriteId;
+            return itPart->second->WriteId;
         }
     }
-    return (TWriteId)0;
+    return (TInsertWriteId)0;
 }
 
-TWriteId TColumnShard::GetLongTxWrite(NIceDb::TNiceDb& db, const NLongTxService::TLongTxId& longTxId, const ui32 partId, const std::optional<ui32> granuleShardingVersionId) {
+TInsertWriteId TColumnShard::GetLongTxWrite(NIceDb::TNiceDb& db, const NLongTxService::TLongTxId& longTxId, const ui32 partId, const std::optional<ui32> granuleShardingVersionId) {
     auto it = LongTxWritesByUniqueId.find(longTxId.UniqueId);
     if (it != LongTxWritesByUniqueId.end()) {
         auto itPart = it->second.find(partId);
         if (itPart != it->second.end()) {
-            return (TWriteId)itPart->second->WriteId;
+            return itPart->second->WriteId;
         }
     } else {
         it = LongTxWritesByUniqueId.emplace(longTxId.UniqueId, TPartsForLTXShard()).first;
     }
 
-    TWriteId writeId = BuildNextWriteId(db);
-    auto& lw = LongTxWrites[writeId];
-    lw.WriteId = (ui64)writeId;
+    TInsertWriteId insertWriteId = InsertTable->BuildNextWriteId(db);
+    auto& lw = LongTxWrites[insertWriteId];
+    lw.InsertWriteId = insertWriteId;
     lw.WritePartId = partId;
     lw.LongTxId = longTxId;
     lw.GranuleShardingVersionId = granuleShardingVersionId;
@@ -235,23 +235,12 @@ TWriteId TColumnShard::GetLongTxWrite(NIceDb::TNiceDb& db, const NLongTxService:
     return writeId;
 }
 
-TWriteId TColumnShard::BuildNextWriteId(NTabletFlatExecutor::TTransactionContext& txc) {
-    NIceDb::TNiceDb db(txc.DB);
-    return BuildNextWriteId(db);
-}
-
-TWriteId TColumnShard::BuildNextWriteId(NIceDb::TNiceDb& db) {
-    TWriteId writeId = ++LastWriteId;
-    Schema::SaveSpecialValue(db, Schema::EValueIds::LastWriteId, (ui64)writeId);
-    return writeId;
-}
-
-void TColumnShard::AddLongTxWrite(TWriteId writeId, ui64 txId) {
+void TColumnShard::AddLongTxWrite(const TInsertWriteId writeId, ui64 txId) {
     auto& lw = LongTxWrites.at(writeId);
     lw.PreparedTxId = txId;
 }
 
-void TColumnShard::LoadLongTxWrite(TWriteId writeId, const ui32 writePartId, const NLongTxService::TLongTxId& longTxId, const std::optional<ui32> granuleShardingVersion) {
+void TColumnShard::LoadLongTxWrite(const TInsertWriteId writeId, const ui32 writePartId, const NLongTxService::TLongTxId& longTxId, const std::optional<ui32> granuleShardingVersion) {
     auto& lw = LongTxWrites[writeId];
     lw.WritePartId = writePartId;
     lw.WriteId = (ui64)writeId;
@@ -260,7 +249,7 @@ void TColumnShard::LoadLongTxWrite(TWriteId writeId, const ui32 writePartId, con
     LongTxWritesByUniqueId[longTxId.UniqueId][writePartId] = &lw;
 }
 
-bool TColumnShard::RemoveLongTxWrite(NIceDb::TNiceDb& db, const TWriteId writeId, const ui64 txId) {
+bool TColumnShard::RemoveLongTxWrite(NIceDb::TNiceDb& db, const TLongTxWriteId writeId, const ui64 txId) {
     if (auto* lw = LongTxWrites.FindPtr(writeId)) {
         ui64 prepared = lw->PreparedTxId;
         if (!prepared || txId == prepared) {
@@ -282,8 +271,8 @@ bool TColumnShard::RemoveLongTxWrite(NIceDb::TNiceDb& db, const TWriteId writeId
     }
 }
 
-void TColumnShard::TryAbortWrites(NIceDb::TNiceDb& db, NOlap::TDbWrapper& dbTable, THashSet<TWriteId>&& writesToAbort) {
-    std::vector<TWriteId> failedAborts;
+void TColumnShard::TryAbortWrites(NIceDb::TNiceDb& db, NOlap::TDbWrapper& dbTable, THashSet<TLongTxWriteId>&& writesToAbort) {
+    std::vector<TLongTxWriteId> failedAborts;
     for (auto& writeId : writesToAbort) {
         if (!RemoveLongTxWrite(db, writeId, 0)) {
             failedAborts.push_back(writeId);

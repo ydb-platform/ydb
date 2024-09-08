@@ -104,9 +104,10 @@ struct IKqpTableWriterCallbacks {
 
     virtual void OnReady(const TTableId& tableId) = 0;
 
-    virtual void OnPrepared(TPreparedInfo&& preparedInfo) = 0;
+    // TODO: also track memory here
+    virtual void OnPrepared(TPreparedInfo&& preparedInfo, ui64 dataSize) = 0;
 
-    //virtual void OnCommitted(ui64 shardId) = 0;
+    virtual void OnCommitted(ui64 shardId, ui64 dataSize) = 0;
 
     virtual void OnMessageAcknowledged(ui64 shardId, ui64 dataSize, bool isShardEmpty) = 0;
 
@@ -456,14 +457,7 @@ public:
             return;
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED: {
-            const auto& result = ev->Get()->Record;
-            TPreparedInfo preparedInfo;
-            preparedInfo.ShardId = result.GetOrigin();
-            preparedInfo.MinStep = result.GetMinStep();
-            preparedInfo.MaxStep = result.GetMaxStep();
-            preparedInfo.Coordinators = TVector<ui64>(result.GetDomainCoordinators().begin(),
-                                                                  result.GetDomainCoordinators().end());
-            Callbacks->OnPrepared(std::move(preparedInfo));
+            ProcessWritePreparedShard(ev);
             return;
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED: {
@@ -602,6 +596,22 @@ public:
         }
     }
 
+    void ProcessWritePreparedShard(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
+        YQL_ENSURE(Mode == EMode::PREPARE);
+        const auto& record = ev->Get()->Record;
+        TPreparedInfo preparedInfo;
+        preparedInfo.ShardId = record.GetOrigin();
+        preparedInfo.MinStep = record.GetMinStep();
+        preparedInfo.MaxStep = record.GetMaxStep();
+        preparedInfo.Coordinators = TVector<ui64>(record.GetDomainCoordinators().begin(),
+                                                                record.GetDomainCoordinators().end());
+        const auto result = ShardedWriteController->OnMessageAcknowledged(
+                ev->Get()->Record.GetOrigin(), ev->Cookie);
+        if (result) {
+            Callbacks->OnPrepared(std::move(preparedInfo), result->DataSize);
+        }
+    }
+
     void ProcessWriteCompletedShard(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
         CA_LOG_D("Got completed result TxId=" << ev->Get()->Record.GetTxId()
             << ", TabletId=" << ev->Get()->Record.GetOrigin()
@@ -625,7 +635,11 @@ public:
         }
 
         if (Mode == EMode::COMMIT) {
-            Callbacks->OnMessageAcknowledged(ev->Get()->Record.GetOrigin(), 0, true);
+            const auto result = ShardedWriteController->OnMessageAcknowledged(
+                ev->Get()->Record.GetOrigin(), ev->Cookie);
+            if (result) {
+                Callbacks->OnCommitted(ev->Get()->Record.GetOrigin(), result->DataSize);
+            }
         } else {
             const auto result = ShardedWriteController->OnMessageAcknowledged(
                 ev->Get()->Record.GetOrigin(), ev->Cookie);
@@ -638,41 +652,32 @@ public:
     void SetPrepare(ui64 txId) {
         Mode = EMode::PREPARE;
         TxId = txId;
-        for (const auto shardId : ShardedWriteController->GetShardsIds()) {
+
+        // TODO: move to ShardedWriteController
+        /*for (const auto shardId : ShardedWriteController->GetShardsIds()) {
             const auto metadata = ShardedWriteController->GetMessageMetadata(shardId);
             if (!metadata || (metadata->IsLast && metadata->SendAttempts != 0)) {
                 SendEmptyFinalToShard(shardId);
             }
-        }
+        }*/
     }
 
     void SetCommit() {
         Mode = EMode::COMMIT;
+        // TODO: ShardedWriteController for empty
     }
 
     void SetImmediateCommit(ui64 txId) {
         Mode = EMode::IMMEDIATE_COMMIT;
         TxId = txId;
-        // TODO: send data for empty
+        // TODO: ShardedWriteController for empty
     }
 
     void Flush() {
-        //Mode = EMode::FLUSH;
+        Mode = EMode::FLUSH;
         for (const size_t shardId : ShardedWriteController->GetPendingShards()) {
             SendDataToShard(shardId);
         }
-    }
-
-    void SendEmptyFinalToShard(const ui64 shardId) {
-        auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(
-            NKikimrDataEvents::TEvWrite::MODE_PREPARE);
-        evWrite->SetTxId(TxId);
-        evWrite->Record.MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
-        Send(
-            PipeCacheId,
-            new TEvPipeCache::TEvForward(evWrite.release(), shardId, true),
-            0,
-            0);
     }
 
     void SendDataToShard(const ui64 shardId) {
@@ -701,26 +706,28 @@ public:
             ? NKikimrDataEvents::TEvWrite::MODE_PREPARE
             : NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
         
-        if (Closed && isImmediateCommit) {
-            evWrite->Record.SetTxId(TxId);
+        if (isImmediateCommit) {
             const auto lock = LocksManager.GetLock(shardId);
-                // multi immediate evwrite
-            auto* locks = evWrite->Record.MutableLocks();
-            locks->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
-            //locks->AddSendingShards(shardId); // TODO: other shards
-            //locks->AddReceivingShards(shardId);
             if (lock) {
-                *locks->AddLocks() = *lock;
+                evWrite->Record.SetTxId(TxId);
+                auto* locks = evWrite->Record.MutableLocks();
+                locks->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
+                locks->AddSendingShards(shardId);
+                locks->AddReceivingShards(shardId);
+                if (lock) {
+                    *locks->AddLocks() = *lock;
+                }
             }
-        } else if (Closed && isPrepare) {
+        } else if (isPrepare) {
             evWrite->Record.SetTxId(TxId);
-            // NOT TRUE:: // Last immediate write (only for datashard)
-            const auto lock = LocksManager.GetLock(shardId);
-                // multi immediate evwrite
             auto* locks = evWrite->Record.MutableLocks();
             locks->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
-            //locks->AddSendingShards(shardId); // TODO: other shards
+            // TODO: other shards from prepareInfo
+            locks->AddSendingShards(shardId);
             locks->AddReceivingShards(shardId);
+
+            // TODO: multi locks (for tablestore support)
+            const auto lock = LocksManager.GetLock(shardId);
             if (lock) {
                 *locks->AddLocks() = *lock;
             }
@@ -1056,7 +1063,12 @@ private:
         Process();
     }
 
-    void OnPrepared(TPreparedInfo&&) override {
+    void OnPrepared(TPreparedInfo&&, ui64) override {
+        AFL_ENSURE(false);
+    }
+
+    void OnCommitted(ui64, ui64) override {
+        AFL_ENSURE(false);
     }
 
     void OnMessageAcknowledged(ui64 shardId, ui64 dataSize, bool isShardEmpty) override {
@@ -1488,18 +1500,23 @@ public:
         ProcessQueue(tableId);
     }
 
-    void OnPrepared(TPreparedInfo&& preparedInfo) override {
+    void OnPrepared(TPreparedInfo&& preparedInfo, ui64 dataSize) override {
+        AFL_ENSURE(State == EState::PREPARING);
+        Y_UNUSED(dataSize);
         OnPreparedCallback(std::move(preparedInfo));
         Process();
     }
 
-    void OnMessageAcknowledged(ui64 shardId, ui64 dataSize, bool isShardEmpty) override {
+    void OnCommitted(ui64 shardId, ui64 dataSize) override {
+        AFL_ENSURE(State == EState::COMMITTING);
         Y_UNUSED(dataSize);
-        if (State == EState::COMMITTING && isShardEmpty) {
-            OnCommitCallback(shardId);
-        } else {
-            Process();
-        }
+        OnCommitCallback(shardId);
+        Process();
+    }
+
+    void OnMessageAcknowledged(ui64 shardId, ui64 dataSize, bool isShardEmpty) override {
+        Y_UNUSED(shardId, dataSize, isShardEmpty);
+        Process();
     }
 
     void OnError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues) override {

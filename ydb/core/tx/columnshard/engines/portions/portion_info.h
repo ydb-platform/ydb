@@ -357,7 +357,7 @@ public:
             }
         }
         {
-            auto it = std::lower_bound(Indexes.begin(), Indexes.end(), address, [](const TColumnRecord& item, const TChunkAddress& address) {
+            auto it = std::lower_bound(Indexes.begin(), Indexes.end(), address, [](const TIndexChunk& item, const TChunkAddress& address) {
                 return item.GetAddress() < address;
             });
             if (it != Indexes.end() && it->GetAddress() == address) {

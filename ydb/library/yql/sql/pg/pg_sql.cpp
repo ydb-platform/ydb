@@ -3114,7 +3114,7 @@ public:
         }
 
         if (schemaname == "public") {
-            return "";
+            return Settings.DefaultCluster;;
         }
         if (schemaname == "" && Settings.GUCSettings) {
             auto search_path = Settings.GUCSettings->Get("search_path");

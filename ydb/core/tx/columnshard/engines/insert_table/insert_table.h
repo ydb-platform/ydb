@@ -24,6 +24,12 @@ protected:
     bool RemoveBlobLinkOnExecute(const TUnifiedBlobId& blobId, const std::shared_ptr<IBlobsDeclareRemovingAction>& blobsAction);
     bool RemoveBlobLinkOnComplete(const TUnifiedBlobId& blobId);
 public:
+    void ErasePath(const ui64 pathId) {
+        Summary.ErasePath(pathId);
+    }
+    bool HasDataInPathId(const ui64 pathId) const {
+        return Summary.HasPathIdData(pathId);
+    }
     const std::map<TPathInfoIndexPriority, std::set<const TPathInfo*>>& GetPathPriorities() const {
         return Summary.GetPathPriorities();
     }
@@ -58,6 +64,9 @@ public:
         const ui64 pathId = data.PathId;
         return Summary.GetPathInfo(pathId).AddCommitted(std::move(data), load);
     }
+    bool HasPathIdData(const ui64 pathId) const {
+        return Summary.HasPathIdData(pathId);
+    }
     const THashMap<TWriteId, TInsertedData>& GetAborted() const { return Summary.GetAborted(); }
     const THashMap<TWriteId, TInsertedData>& GetInserted() const { return Summary.GetInserted(); }
     const TInsertionSummary::TCounters& GetCountersPrepared() const {
@@ -86,7 +95,6 @@ public:
         Summary.MarkAsNotAbortable(writeId);
     }
     THashSet<TWriteId> OldWritesToAbort(const TInstant& now) const;
-    THashSet<TWriteId> DropPath(IDbWrapper& dbTable, ui64 pathId);
 
     void EraseCommittedOnExecute(IDbWrapper& dbTable, const TInsertedData& key, const std::shared_ptr<IBlobsDeclareRemovingAction>& blobsAction);
     void EraseCommittedOnComplete(const TInsertedData& key);

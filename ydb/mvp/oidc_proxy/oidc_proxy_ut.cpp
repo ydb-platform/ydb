@@ -952,7 +952,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         const TString hostProxy = "oidcproxy.net";
         const TString protectedPage = "/counters";
 
-        auto checkAllowedHostList = [&] (const TString& requestedHost, const TString& expectedStatus) {
+        auto checkAllowedHostList = [&] (const TString& requestedHost, const TString& expectedStatus, const TString& expectedBodyContent = "") {
             const TString url = "/" + requestedHost + protectedPage;
             TStringBuilder httpRequest;
             httpRequest << "GET " + url + " HTTP/1.1\r\n"
@@ -968,6 +968,9 @@ Y_UNIT_TEST_SUITE(Mvp) {
             TAutoPtr<IEventHandle> handle;
             NHttp::TEvHttpProxy::TEvHttpOutgoingResponse* outgoingResponseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
             UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Status, expectedStatus);
+            if (!expectedBodyContent.empty()) {
+                UNIT_ASSERT_STRING_CONTAINS(outgoingResponseEv->Response->Body, expectedBodyContent);
+            }
         };
 
         for (const TString& allowedHost : allowedProxyHosts) {
@@ -975,7 +978,44 @@ Y_UNIT_TEST_SUITE(Mvp) {
         }
 
         for (const TString& forbiddenHost : forbiddenProxyHosts) {
-            checkAllowedHostList(forbiddenHost, "404");
+            checkAllowedHostList(forbiddenHost, "403", "403 Forbidden host: " + forbiddenHost);
         }
+    }
+
+    Y_UNIT_TEST(OpenIdConnectHandleNullResponseFromProtectedResource) {
+        TPortManager tp;
+        ui16 sessionServicePort = tp.GetPort(8655);
+        TMvpTestRuntime runtime;
+        runtime.Initialize();
+
+        const TString allowedProxyHost {"ydb.viewer.page"};
+
+        TOpenIdConnectSettings settings {
+            .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
+            .AllowedProxyHosts = {allowedProxyHost},
+        };
+
+        const NActors::TActorId edge = runtime.AllocateEdgeActor();
+        const NActors::TActorId target = runtime.Register(new NMVP::TProtectedPageHandler(edge, settings));
+
+        const TString iamToken {"protected_page_iam_token"};
+        NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
+        EatWholeString(incomingRequest, "GET /" + allowedProxyHost + "/counters HTTP/1.1\r\n"
+                                "Host: oidcproxy.net\r\n"
+                                "Authorization: Bearer " + iamToken + "\r\n");
+        runtime.Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(incomingRequest)));
+        TAutoPtr<IEventHandle> handle;
+
+        auto outgoingRequestEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(handle);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->Host, allowedProxyHost);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->URL, "/counters");
+        UNIT_ASSERT_STRING_CONTAINS(outgoingRequestEv->Request->Headers, "Authorization: Bearer " + iamToken);
+
+        const TString expectedError = "Response is NULL for some reason";
+        runtime.Send(new IEventHandle(handle->Sender, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(outgoingRequestEv->Request, nullptr, expectedError)));
+
+        auto outgoingResponseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Status, "400");
+        UNIT_ASSERT_STRING_CONTAINS(outgoingResponseEv->Response->Body, expectedError);
     }
 }

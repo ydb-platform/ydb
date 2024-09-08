@@ -8,6 +8,7 @@
 **Список функций**
 
 * ```Digest::Crc32c(String{Flags::AutoMap}) -> Uint32```
+* ```Digest::Crc64(String{Flags::AutoMap}) -> Uint64```
 * ```Digest::Fnv32(String{Flags::AutoMap}) -> Uint32```
 * ```Digest::Fnv64(String{Flags::AutoMap}) -> Uint64```
 * ```Digest::MurMurHash(String{Flags:AutoMap}) -> Uint64```

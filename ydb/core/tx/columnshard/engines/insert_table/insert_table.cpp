@@ -68,21 +68,6 @@ THashSet<TWriteId> TInsertTable::OldWritesToAbort(const TInstant& now) const {
     return Summary.GetExpiredInsertions(now - WaitCommitDelay, CleanupPackageSize);
 }
 
-THashSet<TWriteId> TInsertTable::DropPath(IDbWrapper& dbTable, ui64 pathId) {
-    auto pathInfo = Summary.ExtractPathInfo(pathId);
-    if (!!pathInfo) {
-        for (auto& data : pathInfo->GetCommitted()) {
-            dbTable.EraseCommitted(data);
-            TInsertedData copy = data;
-            copy.Undo();
-            dbTable.Abort(copy);
-            Summary.AddAborted(std::move(copy));
-        }
-    }
-
-    return Summary.GetInsertedByPathId(pathId);
-}
-
 void TInsertTable::EraseCommittedOnExecute(
     IDbWrapper& dbTable, const TInsertedData& data, const std::shared_ptr<IBlobsDeclareRemovingAction>& blobsAction) {
     if (Summary.HasCommitted(data)) {

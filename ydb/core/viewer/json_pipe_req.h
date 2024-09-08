@@ -150,6 +150,12 @@ protected:
         TString GetError() const {
             return std::get<TString>(Response);
         }
+
+        void Event(const TString& name) {
+            if (Span) {
+                Span.Event(name);
+            }
+        }
     };
 
     NTabletPipe::TClientConfig GetPipeClientConfig();

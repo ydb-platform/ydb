@@ -27,7 +27,6 @@ namespace NActors {
     void TTestActorRuntime::TNodeData::Stop() {
         if (Mon) {
             Mon->Stop();
-            GetAppData<NKikimr::TAppData>()->Mon = nullptr;
         }
         TNodeDataBase::Stop();
     }

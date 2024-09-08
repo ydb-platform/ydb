@@ -15,6 +15,7 @@
 #include "queue_client.h"
 #include "query_tracker_client.h"
 #include "flow_client.h"
+#include "shuffle_client.h"
 
 #include <yt/yt/client/bundle_controller_client/bundle_controller_client.h>
 
@@ -73,6 +74,7 @@ struct IClient
     , public NBundleControllerClient::IBundleControllerClient
     , public IFlowClient
     , public IDistributedTableClient
+    , public IShuffleClient
 {
     //! Terminates all channels.
     //! Aborts all pending uncommitted transactions.

@@ -46,6 +46,8 @@ struct TKqpEvents {
         EvListProxyNodesResponse,
         EvUpdateDatabaseInfo,
         EvDelayedRequestError
+        EvBufferWrite,
+        EvBufferWriteResult,
     };
 
     static_assert (EvCompileInvalidateRequest + 1 == EvAbortExecution);
@@ -178,6 +180,19 @@ struct TKqpWorkloadServiceEvents {
         EvUpdatePoolInfo,
         EvSubscribeOnPoolChanges,
         EvFetchDatabaseResponse,
+    };
+};
+
+struct TKqpBufferWriterEvents {
+    enum EKqpBufferWriterEvents {
+        EvPrepare = EventSpaceBegin(TKikimrEvents::ES_KQP) + 800,
+        EvPrepared,
+        EvCommit,
+        EvCommitted,
+        EvRollback,
+        EvFlush,
+        EvError,
+        EvTerminate,
     };
 };
 

@@ -348,7 +348,7 @@ public:
         }
 
         if (HasTxSinkInTx(tx)) {
-            // At current time transactional internal sinks require separate tnx with commit.
+            // Sink results can't be committed in transaction.
             return false;
         }
 

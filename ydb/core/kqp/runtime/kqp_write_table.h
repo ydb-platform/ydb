@@ -12,19 +12,34 @@ namespace NKqp {
 
 class IShardedWriteController : public TThrRefBase {
 public:
-    virtual void OnPartitioningChanged(const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry) = 0;
     virtual void OnPartitioningChanged(
-        const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry,
+        NSchemeCache::TSchemeCacheNavigate::TEntry&& schemeEntry) = 0;
+    virtual void OnPartitioningChanged(
+        NSchemeCache::TSchemeCacheNavigate::TEntry&& schemeEntry,
         NSchemeCache::TSchemeCacheRequest::TEntry&& partitionsEntry) = 0;
 
-    virtual void AddData(NMiniKQL::TUnboxedValueBatch&& data) = 0;
+    using TWriteToken = ui64;
+
+    // Data ordering invariant:
+    // For two writes A and B:
+    // A happend before B <=> Close(A) happend before Open(B).
+
+    virtual TWriteToken Open(
+        const TTableId TableId,
+        const NKikimrDataEvents::TEvWrite::TOperation::EOperationType operationType,
+        TVector<NKikimrKqp::TKqpColumnMetadataProto>&& inputColumns) = 0;
+    virtual void Write(TWriteToken token, const NMiniKQL::TUnboxedValueBatch& data) = 0;
+    virtual void Close(TWriteToken token) = 0;
     virtual void Close() = 0;
 
     virtual TVector<ui64> GetPendingShards() const = 0;
+    virtual ui64 GetShardsCount() const = 0;
+    virtual TVector<ui64> GetShardsIds() const = 0;
 
     struct TMessageMetadata {
         ui64 Cookie = 0;
         ui64 OperationsCount = 0;
+        bool IsLast = false;
         bool IsFinal = false;
         ui64 SendAttempts = 0;
     };
@@ -36,18 +51,21 @@ public:
     };
 
     virtual TSerializationResult SerializeMessageToPayload(ui64 shardId, NKikimr::NEvents::TDataEvents::TEvWrite& evWrite) = 0;
-    virtual NKikimrDataEvents::EDataFormat GetDataFormat() = 0;
-    virtual std::vector<ui32> GetWriteColumnIds() = 0;
 
-    virtual std::optional<i64> OnMessageAcknowledged(ui64 shardId, ui64 cookie) = 0;
+    struct TMessageAcknowledgedResult {
+        ui64 DataSize = 0;
+        bool IsShardEmpty = 0;
+    };
+
+    virtual std::optional<TMessageAcknowledgedResult> OnMessageAcknowledged(ui64 shardId, ui64 cookie) = 0;
     virtual void OnMessageSent(ui64 shardId, ui64 cookie) = 0;
 
     virtual void ResetRetries(ui64 shardId, ui64 cookie) = 0;
 
     virtual i64 GetMemory() const = 0;
 
-    virtual bool IsClosed() const = 0;
-    virtual bool IsFinished() const = 0;
+    virtual bool IsAllWritesClosed() const = 0;
+    virtual bool IsAllWritesFinished() const = 0;
 
     virtual bool IsReady() const = 0;
 };
@@ -63,7 +81,6 @@ struct TShardedWriteControllerSettings {
 
 IShardedWriteControllerPtr CreateShardedWriteController(
     const TShardedWriteControllerSettings& settings,
-    TVector<NKikimrKqp::TKqpColumnMetadataProto>&& inputColumns,
     const NMiniKQL::TTypeEnvironment& typeEnv,
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc);
 

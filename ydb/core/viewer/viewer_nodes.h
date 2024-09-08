@@ -1534,7 +1534,7 @@ public:
             }
             if (FieldsNeeded(FieldsTablets) && TabletViewerResponse.count(nodeId) == 0) {
                 auto viewerRequest = std::make_unique<TEvViewer::TEvViewerRequest>();
-                viewerRequest->Record.MutableTabletRequest()->SetGroupBy("NodeId,Type,State");
+                viewerRequest->Record.MutableTabletRequest()->SetGroupBy("Type,State");
                 viewerRequest->Record.SetTimeout(Timeout / 2);
                 for (const TNode* node : batch.NodesToAskAbout) {
                     viewerRequest->Record.MutableLocation()->AddNodeId(node->GetNodeId());
@@ -1652,14 +1652,10 @@ public:
         if (FieldsNeeded(FieldsTablets)) {
             for (auto& [nodeId, response] : TabletViewerResponse) {
                 if (response.IsOk()) {
-                    Cerr << "Good tablet response for node " << nodeId << Endl;
-                    Cerr << "LocationResponded: " << response.Get()->Record.GetLocationResponded().ShortDebugString() << Endl;
                     auto& tabletResponse(*(response.Get()->Record.MutableTabletResponse()));
                     if (tabletResponse.TabletStateInfoSize() > 0 && !tabletResponse.GetTabletStateInfo(0).HasCount()) {
-                        Cerr << "TabletResponse before merge: " << tabletResponse.ShortDebugString() << Endl;
                         GroupWhiteboardResponses(tabletResponse, "NodeId,Type,State");
                     }
-                    Cerr << "TabletResponse: " << tabletResponse.ShortDebugString() << Endl;
                     for (const auto& tabletState : tabletResponse.GetTabletStateInfo()) {
                         TNode* node = FindNode(tabletState.GetNodeId());
                         if (node) {
@@ -1671,8 +1667,6 @@ public:
                             }
                         }
                     }
-                } else {
-                    Cerr << "Bad tablet response for node " << nodeId << Endl;
                 }
             }
             for (auto& [nodeId, response] : TabletStateResponse) {

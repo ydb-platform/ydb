@@ -241,11 +241,11 @@ public:
     }
 
     void Finalize() {
+        YQL_ENSURE(!AlreadyReplied);
         if (LocksBroken) {
-            TString message = "Transaction locks invalidated.";
-
-            return ReplyErrorAndDie(Ydb::StatusIds::ABORTED,
-                YqlIssue({}, TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message));
+            return ReplyErrorAndDie(
+                Ydb::StatusIds::ABORTED,
+                YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, "Transaction locks invalidated. Unknown table."));
         }
 
         auto& response = *ResponseEv->Record.MutableResponse();
@@ -1183,6 +1183,23 @@ private:
                 CheckExecutionComplete();
                 return;
             }
+            case NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN: {
+                LOG_D("Broken locks: " << res->Record.DebugString());
+                YQL_ENSURE(shardState->State == TShardState::EState::Executing);
+                shardState->State = TShardState::EState::Finished;
+                Counters->TxProxyMon->TxResultAborted->Inc();
+                LocksBroken = true;
+
+                if (!res->Record.GetTxLocks().empty()) {
+                    ResponseEv->BrokenLockPathId = NYql::TKikimrPathId(
+                        res->Record.GetTxLocks(0).GetSchemeShard(),
+                        res->Record.GetTxLocks(0).GetPathId());
+                    return ReplyErrorAndDie(Ydb::StatusIds::ABORTED, {});
+                }
+
+                CheckExecutionComplete();
+                return;
+            }
             default:
             {
                 return ShardError(res->Record);
@@ -1235,29 +1252,15 @@ private:
                 shardState->State = TShardState::EState::Finished;
 
                 Counters->TxProxyMon->TxResultAborted->Inc(); // TODO: dedicated counter?
-
                 LocksBroken = true;
 
-                TMaybe<TString> tableName;
                 if (!res->Record.GetTxLocks().empty()) {
-                    auto& lock = res->Record.GetTxLocks(0);
-                    auto tableId = TTableId(lock.GetSchemeShard(), lock.GetPathId());
-                    auto it = FindIf(TasksGraph.GetStagesInfo(), [tableId](const auto& x){ return x.second.Meta.TableId.HasSamePath(tableId); });
-                    if (it != TasksGraph.GetStagesInfo().end()) {
-                        tableName = it->second.Meta.TableConstInfo->Path;
-                    }
+                    ResponseEv->BrokenLockPathId = TKikimrPathId(
+                        res->Record.GetTxLocks(0).GetSchemeShard(),
+                        res->Record.GetTxLocks(0).GetPathId());
+                    return ReplyErrorAndDie(Ydb::StatusIds::ABORTED, {});
                 }
 
-                // Reply as soon as we know which table had locks invalidated
-                if (tableName) {
-                    auto message = TStringBuilder()
-                        << "Transaction locks invalidated. Table: " << *tableName;
-
-                    return ReplyErrorAndDie(Ydb::StatusIds::ABORTED,
-                        YqlIssue({}, TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message));
-                }
-
-                // Receive more replies from other shards
                 CheckExecutionComplete();
                 return;
             }

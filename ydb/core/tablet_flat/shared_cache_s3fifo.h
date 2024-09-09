@@ -1,6 +1,7 @@
 #pragma once
 #include "defs.h"
 #include <ydb/core/util/cache_cache_iface.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 #include <library/cpp/monlib/counters/counters.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <util/generic/ptr.h>
@@ -8,16 +9,28 @@
 
 namespace NKikimr::NCache {
 
-template <typename TKey, typename TKeyHash>
+template <typename TKey, typename TKeyHash, typename TKeyEqual>
 class TGhostQueue {
-    struct TGhost : public TIntrusiveListItem<TGhost> {
+    struct TGhost {
         TKey Key;
-        ui64 Size;
+        ui64 Size; // zero size is tombstone
 
         TGhost(const TKey& key, ui64 size)
             : Key(key)
             , Size(size)
         {}
+    };
+
+    struct TGhostHash {
+        inline size_t operator()(const TGhost* ghost) const {
+            return TKeyHash()(ghost->Key);
+        }
+    };
+
+    struct TGhostEqual {
+        inline bool operator()(const TGhost* left, const TGhost* right) const {
+            return TKeyEqual()(left->Key, right->Key);
+        }
     };
 
 public:
@@ -26,18 +39,31 @@ public:
     {}
 
     void Add(const TKey& key, ui64 size) {
-        auto inserted = GhostsMap.emplace(key, MakeHolder<TGhost>(key, size));
-        Y_ABORT_UNLESS(inserted.second);
-        GhostsQueue.PushFront(inserted.first->second.Get());
-        Size += size;
+        if (Y_UNLIKELY(size == 0)) {
+            Y_DEBUG_ABORT_S("Empty " << key.ToString() << " page");
+            return;
+        }
+
+        TGhost* ghost = &GhostsQueue.emplace_back(key, size);
+        if (Y_UNLIKELY(!GhostsSet.emplace(ghost).second)) {
+            GhostsQueue.pop_back();
+            Y_DEBUG_ABORT_S("Duplicated " << key.ToString() << " page");
+        }
+
+        Size += ghost->Size;
 
         EvictWhileFull();
     }
 
     bool Erase(const TKey& key, ui64 size) {
-        if (auto ptr = GhostsMap.FindPtr(key)) {
-            Y_ABORT_UNLESS((*ptr)->Size == size);
-            Erase((*ptr).Get());
+        TGhost key_(key, size);
+        if (auto it = GhostsSet.find(&key_); it != GhostsSet.end()) {
+            TGhost* ghost = const_cast<TGhost*>(*it);
+            Y_DEBUG_ABORT_UNLESS(ghost->Size == size);
+            Y_ABORT_UNLESS(Size >= ghost->Size);
+            Size -= ghost->Size;
+            ghost->Size = 0;// mark as deleted
+            GhostsSet.erase(it);
             return true;
         }
         return false;
@@ -48,29 +74,45 @@ public:
         EvictWhileFull();
     }
 
-private:
-    void EvictWhileFull() {
-        while (!GhostsQueue.Empty() && Size > Limit) {
-            Erase(GhostsQueue.Back());
+    TString Dump() {
+        TStringBuilder result;
+        size_t size = 0;
+        for (auto it : GhostsQueue) {
+            const TGhost* ghost = &it;
+            if (ghost->Size) { // isn't deleted
+                Y_DEBUG_ABORT_UNLESS(GhostsSet.contains(ghost));
+                if (size != 0) result << ", ";
+                result << "{" << ghost->Key.ToString() << " " << ghost->Size << "b}";
+                size++;
+            }
         }
+        Y_DEBUG_ABORT_UNLESS(GhostsSet.size() == size);
+        return result;
     }
 
-    void Erase(TGhost* ghost) {
-        Y_ABORT_UNLESS(Size >= ghost->Size);
-        Size -= ghost->Size;
-        ghost->Unlink();
-        Y_ABORT_UNLESS(GhostsMap.erase(ghost->Key));
+private:
+    void EvictWhileFull() {
+        while (!GhostsQueue.empty() && Size > Limit) {
+            TGhost* ghost = &GhostsQueue.front();
+            if (ghost->Size) { // isn't deleted
+                Y_ABORT_UNLESS(Size >= ghost->Size);
+                Size -= ghost->Size;
+                Y_DEBUG_ABORT_UNLESS(GhostsSet.erase(ghost));
+            }
+            GhostsQueue.pop_front();
+        }
     }
 
     ui64 Limit;
     ui64 Size = 0;
-    THashMap<TKey, THolder<TGhost>, TKeyHash> GhostsMap;
-    TIntrusiveList<TGhost> GhostsQueue;
+    THashSet<TGhost*, TGhostHash, TGhostEqual> GhostsSet;
+    TDeque<TGhost> GhostsQueue;
 };
 
 template <typename TItem
         , typename TKey
         , typename TKeyHash
+        , typename TKeyEqual
         , typename TSize
         , typename TLocation
         , typename TFrequency
@@ -213,10 +255,10 @@ private:
 
     TItem* Pop(TQueue& queue) {
         Y_DEBUG_ABORT_UNLESS(!queue.Queue.Empty());
-        Y_ABORT_UNLESS(GetLocation(queue.Queue.Back()) == queue.Location);
-        Y_DEBUG_ABORT_UNLESS(queue.Size >= GetSize(queue.Queue.Back()));
+        Y_ABORT_UNLESS(GetLocation(queue.Queue.Front()) == queue.Location);
+        Y_DEBUG_ABORT_UNLESS(queue.Size >= GetSize(queue.Queue.Front()));
 
-        TItem* item = queue.Queue.PopBack();
+        TItem* item = queue.Queue.PopFront();
         queue.Size -= GetSize(item);
         SetLocation(item, ELocation::None);
 
@@ -226,7 +268,7 @@ private:
     void Push(TQueue& queue, TItem* item) {
         Y_ABORT_UNLESS(GetLocation(item) == ELocation::None);
 
-        queue.Queue.PushFront(item);
+        queue.Queue.PushBack(item);
         queue.Size += GetSize(item);
         SetLocation(item, queue.Location);
     }
@@ -277,7 +319,7 @@ private:
 
     TQueue SmallQueue;
     TQueue MainQueue;
-    TGhostQueue<TKey, TKeyHash> GhostQueue;
+    TGhostQueue<TKey, TKeyHash, TKeyEqual> GhostQueue;
 
 };
 

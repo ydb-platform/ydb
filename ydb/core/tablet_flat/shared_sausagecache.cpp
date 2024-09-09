@@ -140,11 +140,21 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             static TKey Get(const TPage *x) {
                 return {x->Collection->MetaId, x->PageId};
             }
+
+            TString ToString() const {
+                return TStringBuilder() << "LogoBlobID: " << LogoBlobID.ToString() << " PageId: " << PageId;
+            }
         };
 
         struct TKeyHash {
             inline size_t operator()(const TKey& key) const {
                 return MultiHash(key.LogoBlobID.Hash(), key.PageId);
+            }
+        };
+
+        struct TKeyEqual {
+            inline bool operator()(const TKey& left, const TKey& right) const {
+                return left.LogoBlobID == right.LogoBlobID && left.PageId == right.PageId;
             }
         };
 
@@ -265,7 +275,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         switch (Config->ReplacementPolicy) {
             case NKikimrSharedCache::S3FIFO:
-                return MakeHolder<TS3FIFOCache<TPage, TPage::TKey, TPage::TKeyHash, TPage::TSize, TPage::TCacheFlags1, TPage::TCacheFlags2>>(1);
+                return MakeHolder<TS3FIFOCache<TPage, TPage::TKey, TPage::TKeyHash, TPage::TKeyEqual, TPage::TSize, TPage::TCacheFlags1, TPage::TCacheFlags2>>(1);
             case NKikimrSharedCache::ThreeLeveledLRU:
             default: {
                 TCacheCacheConfig cacheCacheConfig(1, Config->Counters->FreshBytes, Config->Counters->StagingBytes, Config->Counters->WarmBytes);

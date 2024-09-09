@@ -323,25 +323,22 @@ std::shared_ptr<arrow::compute::ScalarKernel> MakeBlockKernel(const TVector<TTyp
     auto [precision, scale] = decimalType1->GetParams();
     MKQL_ENSURE(precision >= 1&& precision <= 35, TStringBuilder() << "Wrong precision: " << (int)precision);
 
-    switch (dataType2->GetSchemeType()) {
-    case NUdf::TDataType<NUdf::TDecimal>::Id: {
-        auto exec = std::make_shared<TExec<NYql::NDecimal::TInt128>>(precision, scale);
+    auto createKernel = [&](auto exec) {
         auto k = std::make_shared<arrow::compute::ScalarKernel>(ConvertToInputTypes(argTypes), ConvertToOutputType(resultType), 
             [exec](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
             return exec->Exec(ctx, batch, res);
         });
         k->null_handling = arrow::compute::NullHandling::INTERSECTION;
-        return k;
+        return k;       
+    };
+
+    switch (dataType2->GetSchemeType()) {
+    case NUdf::TDataType<NUdf::TDecimal>::Id: {
+        return createKernel(std::make_shared<TExec<NYql::NDecimal::TInt128>>(precision, scale));
     }
 #define MAKE_PRIMITIVE_TYPE_MUL(type) \
     case NUdf::TDataType<type>::Id: { \
-        auto exec = std::make_shared<TExec<type>>(precision, scale); \
-        auto k = std::make_shared<arrow::compute::ScalarKernel>(ConvertToInputTypes(argTypes), ConvertToOutputType(resultType), \
-            [exec](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) { \
-            return exec->Exec(ctx, batch, res); \
-        }); \
-        k->null_handling = arrow::compute::NullHandling::INTERSECTION; \
-        return k; \
+        return createKernel(std::make_shared<TExec<type>>(precision, scale)); \
     }
     INTEGRAL_VALUE_TYPES(MAKE_PRIMITIVE_TYPE_MUL)
 #undef MAKE_PRIMITIVE_TYPE_MUL    

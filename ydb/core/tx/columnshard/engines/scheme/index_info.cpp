@@ -40,8 +40,14 @@ std::optional<ui32> TIndexInfo::GetColumnIdOptional(const std::string& name) con
     return IIndexInfo::GetColumnIdOptional(name);
 }
 
-TString TIndexInfo::GetColumnName(ui32 id, bool required) const {
-    return GetColumnFeaturesVerified(id).GetColumnName();
+TString TIndexInfo::GetColumnName(const ui32 id, bool required) const {
+    const auto& f = GetColumnFeaturesOptional(id);
+    if (!f) {
+        AFL_VERIFY(!required);
+        return "";
+    } else {
+        return f->GetColumnName();
+    }
 }
 
 const std::vector<ui32>& TIndexInfo::GetColumnIds(const bool withSpecial) const {

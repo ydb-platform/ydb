@@ -344,7 +344,7 @@ public:
     std::optional<ui32> GetColumnIdOptional(const std::string& name) const;
 
     /// Returns a name of the column located by id.
-    TString GetColumnName(ui32 id, bool required = true) const;
+    TString GetColumnName(const ui32 id, bool required = true) const;
 
     /// Returns names of columns defined by the specific ids.
     std::vector<TString> GetColumnNames(const std::vector<ui32>& ids) const;

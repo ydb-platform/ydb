@@ -168,6 +168,8 @@ public:
     bool HasOltpTable = false;
     bool HasTableWrite = false;
 
+    TShardIdToTableInfoPtr ShardIdToTableInfo = std::make_shared<TShardIdToTableInfo>();
+
     TMaybe<TString> CommandTagName;
 
     NKikimrKqp::EQueryAction GetAction() const {

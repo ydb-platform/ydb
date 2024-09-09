@@ -417,7 +417,9 @@ protected:
             case NYql::NDqProto::COMPUTE_STATE_FINISHED:
                 // Don't finalize stats twice.
                 if (Planner->CompletedCA(taskId, computeActor)) {
-                    ExtraData[computeActor].Swap(state.MutableExtraData());
+                    auto& extraData = ExtraData[computeActor];
+                    extraData.TaskId = taskId;
+                    extraData.Data.Swap(state.MutableExtraData());
 
                     Stats->AddComputeActorStats(
                         computeActor.NodeId(),
@@ -1977,7 +1979,12 @@ protected:
 
     TActorId KqpTableResolverId;
     TActorId KqpShardsResolverId;
-    THashMap<TActorId, NYql::NDqProto::TComputeActorExtraData> ExtraData;
+
+    struct TExtraData {
+        ui64 TaskId;
+        NYql::NDqProto::TComputeActorExtraData Data;
+    };
+    THashMap<TActorId, TExtraData> ExtraData;
 
     TInstant StartResolveTime;
     TInstant LastResourceUsageUpdate;
@@ -2025,8 +2032,9 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, const TActorId& creator,
     const TIntrusivePtr<TUserRequestContext>& userRequestContext,
-    const bool enableOlapSink, const bool useEvWrite, ui32 statementResultIndex,
-    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings);
+    const bool useEvWrite, ui32 statementResultIndex,
+    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
+    const TShardIdToTableInfoPtr& shardIdToTableInfo);
 
 IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters,

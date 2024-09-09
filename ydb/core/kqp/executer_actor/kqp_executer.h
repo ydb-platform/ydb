@@ -1,6 +1,7 @@
 #pragma once
 
 #include <library/cpp/lwtrace/shuttle.h>
+#include <ydb/core/kqp/common/kqp_tx.h>
 #include <ydb/core/kqp/common/kqp_event_ids.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/query_data/kqp_query_data.h>
@@ -12,12 +13,6 @@
 
 namespace NKikimr {
 namespace NKqp {
-
-struct TTableInfo {
-    bool IsOlap = false;
-    TString Path;
-};
-using TShardIdToTableInfoPtr = std::shared_ptr<THashMap<ui64, std::shared_ptr<TTableInfo>>>;
 
 struct TEvKqpExecuter {
     struct TEvTxRequest : public TEventPB<TEvTxRequest, NKikimrKqp::TEvExecuterTxRequest,
@@ -33,7 +28,7 @@ struct TEvKqpExecuter {
         NLWTrace::TOrbit Orbit;
         IKqpGateway::TKqpSnapshot Snapshot;
         std::optional<NYql::TKikimrPathId> BrokenLockPathId;
-        TShardIdToTableInfoPtr ShardIdToTableInfo;
+        //TShardIdToTableInfoPtr ShardIdToTableInfo;
         ui64 ResultRowsCount = 0;
         ui64 ResultRowsBytes = 0;
 
@@ -110,7 +105,7 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, TPreparedQueryHolder::TConstPtr preparedQuery, const TActorId& creator,
     const TIntrusivePtr<TUserRequestContext>& userRequestContext,
     const bool useEvWrite, ui32 statementResultIndex,
-    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings);
+    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings, const TShardIdToTableInfoPtr& shardIdToTableInfo);
 
 IActor* CreateKqpSchemeExecuter(
     TKqpPhyTxHolder::TConstPtr phyTx, NKikimrKqp::EQueryType queryType, const TActorId& target,

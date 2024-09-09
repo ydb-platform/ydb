@@ -317,6 +317,14 @@ struct TTxId {
     }
 };
 
+struct TTableInfo {
+    bool IsOlap = false;
+    TString Path;
+};
+
+using TShardIdToTableInfo = THashMap<ui64, TTableInfo>;
+using TShardIdToTableInfoPtr = std::shared_ptr<TShardIdToTableInfo>;
+
 }
 
 template<>

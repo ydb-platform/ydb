@@ -129,13 +129,14 @@ public:
         NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
         const TActorId& creator, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
         const bool useEvWrite, ui32 statementResultIndex, const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
-        const TGUCSettings::TPtr& GUCSettings)
+        const TGUCSettings::TPtr& GUCSettings, const TShardIdToTableInfoPtr& shardIdToTableInfo)
         : TBase(std::move(request), database, userToken, counters, tableServiceConfig,
             userRequestContext, statementResultIndex, TWilsonKqp::DataExecuter, "DataExecuter", streamResult)
         , AsyncIoFactory(std::move(asyncIoFactory))
         , UseEvWrite(useEvWrite)
         , FederatedQuerySetup(federatedQuerySetup)
         , GUCSettings(GUCSettings)
+        , ShardIdToTableInfo(shardIdToTableInfo)
     {
         Target = creator;
 
@@ -215,34 +216,46 @@ public:
         ResponseEv->Record.MutableResponse()->SetStatus(Ydb::StatusIds::SUCCESS);
         Counters->TxProxyMon->ReportStatusOK->Inc();
 
-        auto addLocks = [this](const auto& data) {
+        auto addLocks = [this](const ui64 taskId, const auto& data) {
             if (data.GetData().template Is<NKikimrTxDataShard::TEvKqpInputActorResultInfo>()) {
                 NKikimrTxDataShard::TEvKqpInputActorResultInfo info;
                 YQL_ENSURE(data.GetData().UnpackTo(&info), "Failed to unpack settings");
                 for (auto& lock : info.GetLocks()) {
                     Locks.push_back(lock);
+
+                    const auto& task = TasksGraph.GetTask(taskId);
+                    const auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
+                    auto& info = (*ShardIdToTableInfo)[lock.GetDataShard()];
+                    info.IsOlap = (stageInfo.Meta.TableKind == ETableKind::Olap);
+                    info.Path = stageInfo.Meta.TablePath;
                 }
             } else if (data.GetData().template Is<NKikimrKqp::TEvKqpOutputActorResultInfo>()) {
                 NKikimrKqp::TEvKqpOutputActorResultInfo info;
                 YQL_ENSURE(data.GetData().UnpackTo(&info), "Failed to unpack settings");
                 for (auto& lock : info.GetLocks()) {
                     Locks.push_back(lock);
+
+                    const auto& task = TasksGraph.GetTask(taskId);
+                    const auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
+                    auto& info = (*ShardIdToTableInfo)[lock.GetDataShard()];
+                    info.IsOlap = (stageInfo.Meta.TableKind == ETableKind::Olap);
+                    info.Path = stageInfo.Meta.TablePath;
                 }
             }
         };
 
-        for (auto& [_, data] : ExtraData) {
-            for (const auto& source : data.GetSourcesExtraData()) {
-                addLocks(source);
+        for (auto& [_, extraData] : ExtraData) {
+            for (const auto& source : extraData.Data.GetSourcesExtraData()) {
+                addLocks(extraData.TaskId, source);
             }
-            for (const auto& transform : data.GetInputTransformsData()) {
-                addLocks(transform);
+            for (const auto& transform : extraData.Data.GetInputTransformsData()) {
+                addLocks(extraData.TaskId, transform);
             }
-            for (const auto& sink : data.GetSinksExtraData()) {
-                addLocks(sink);
+            for (const auto& sink : extraData.Data.GetSinksExtraData()) {
+                addLocks(extraData.TaskId, sink);
             }
-            if (data.HasComputeExtraData()) {
-                addLocks(data.GetComputeExtraData());
+            if (extraData.Data.HasComputeExtraData()) {
+                addLocks(extraData.TaskId, extraData.Data.GetComputeExtraData());
             }
         }
 
@@ -1963,6 +1976,10 @@ private:
             if (task.Meta.ShardId && (task.Meta.Reads || task.Meta.Writes)) {
                 NYql::NDqProto::TDqTask* protoTask = ArenaSerializeTaskToProto(TasksGraph, task, true);
                 datashardTasks[task.Meta.ShardId].emplace_back(protoTask);
+
+                auto& info = (*ShardIdToTableInfo)[task.Meta.ShardId];
+                info.IsOlap = (stageInfo.Meta.TableKind == ETableKind::Olap);
+                info.Path = stageInfo.Meta.TablePath;
             } else if (stageInfo.Meta.IsSysView()) {
                 computeTasks.emplace_back(task.Id);
             } else {
@@ -2791,6 +2808,7 @@ private:
     bool UseEvWrite = false;
     const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
     const TGUCSettings::TPtr GUCSettings;
+    TShardIdToTableInfoPtr ShardIdToTableInfo;
 
     bool HasExternalSources = false;
     bool SecretSnapshotRequired = false;
@@ -2833,11 +2851,11 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     TKqpRequestCounters::TPtr counters, bool streamResult, const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, const TActorId& creator,
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, const bool useEvWrite, ui32 statementResultIndex,
-    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings)
+    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings, const TShardIdToTableInfoPtr& shardIdToTableInfo)
 {
     return new TKqpDataExecuter(std::move(request), database, userToken, counters, streamResult, tableServiceConfig,
         std::move(asyncIoFactory), creator, userRequestContext,
-        useEvWrite, statementResultIndex, federatedQuerySetup, GUCSettings);
+        useEvWrite, statementResultIndex, federatedQuerySetup, GUCSettings, shardIdToTableInfo);
 }
 
 } // namespace NKqp

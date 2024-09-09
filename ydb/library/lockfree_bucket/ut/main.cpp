@@ -1,5 +1,5 @@
 #include <library/cpp/testing/unittest/registar.h>
-#include <library/cpp/lockfree_bucket/lockfree_bucket.h>
+#include <ydb/library/lockfree_bucket/lockfree_bucket.h>
 #include <util/system/guard.h>
 #include <util/system/spinlock.h>
 #include <util/system/types.h>

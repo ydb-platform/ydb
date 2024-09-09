@@ -1206,7 +1206,6 @@ Y_UNIT_TEST_SUITE(Cdc) {
         {
             TTestYdsEnv env(tableDesc, streamDesc);
 
-            DBGTRACE_LOG("exec SQL");
             for (const auto& query : queries) {
                 ExecSQL(env.GetServer(), env.GetEdgeActor(), query);
             }

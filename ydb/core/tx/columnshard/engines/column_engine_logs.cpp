@@ -271,7 +271,7 @@ bool TColumnEngineForLogs::LoadCounters(IDbWrapper& db) {
     return db.LoadCounters(callback);
 }
 
-std::shared_ptr<TInsertColumnEngineChanges> TColumnEngineForLogs::StartInsert(std::vector<TInsertedData>&& dataToIndex) noexcept {
+std::shared_ptr<TInsertColumnEngineChanges> TColumnEngineForLogs::StartInsert(std::vector<TCommittedData>&& dataToIndex) noexcept {
     Y_ABORT_UNLESS(dataToIndex.size());
 
     TSaverContext saverContext(StoragesManager);
@@ -279,7 +279,7 @@ std::shared_ptr<TInsertColumnEngineChanges> TColumnEngineForLogs::StartInsert(st
     auto pkSchema = VersionedIndex.GetLastSchema()->GetIndexInfo().GetReplaceKey();
 
     for (const auto& data : changes->GetDataToIndex()) {
-        const ui64 pathId = data.PathId;
+        const ui64 pathId = data.GetPathId();
 
         if (changes->PathToGranule.contains(pathId)) {
             continue;

@@ -49,7 +49,7 @@ JOOQ — это библиотека для Java, которая позволя�
             <database>
                 <name>tech.ydb.jooq.codegen.YdbDatabase</name>
                 <!-- исключение системных таблицы -->
-                <excludes>.sys.*</excludes> 
+                <excludes>.sys.*</excludes>
             </database>
             <target>
                 <packageName>ydb</packageName>
@@ -129,7 +129,7 @@ YdbDSLContext dsl = YDB.using(conn);
 
 ```java
 String url = "jdbc:ydb:<grpc/grpcs>://<host>:<2135/2136>/path/to/database[?saFile=file:~/sa_key.json]";
-try (CloseableYdbDSLContext dsl = YDB.using(url)) {
+try(CloseableYdbDSLContext dsl = YDB.using(url)) {
     // ...
 }
 ```
@@ -160,13 +160,13 @@ spring.datasource.url=jdbc:ydb:<grpc/grpcs>://<host>:<2135/2136>/path/to/databas
 
 ```java
 public void upsert(YdbDSLContext context) {
-  context.upsertInto(EPISODES)
-          .set(record)
-          .execute();    
+    context.upsertInto(EPISODES)
+            .set(record)
+            .execute();
 }
 ```
 
-Команда [`REPLACE`](../yql/reference/syntax/replace_into.md): 
+Команда [`REPLACE`](../yql/reference/syntax/replace_into.md):
 
 ```java
 public void replace(YdbDSLContext context) {
@@ -180,8 +180,8 @@ public void replace(YdbDSLContext context) {
 
 ```java
 var record = ydbDSLContext.selectFrom(SERIES.useIndex(Indexes.TITLE_NAME.name))
-    .where(SERIES.TITLE.eq(title))
-    .fetchOne();
+        .where(SERIES.TITLE.eq(title))
+        .fetchOne();
 ```
 
 В остальном диалект {{ ydb-short-name }} следует документации JOOQ.

@@ -49,7 +49,7 @@ Let's look at an example of the `maven` plugin:
             <database>
                 <name>tech.ydb.jooq.codegen.YdbDatabase</name>
                 <!-- исключение системных таблицы -->
-                <excludes>.sys.*</excludes> 
+                <excludes>.sys.*</excludes>
             </database>
             <target>
                 <packageName>ydb</packageName>
@@ -80,7 +80,6 @@ ydb/default_schema/DefaultSchema.java
 ```
 
 ## Usage {#usage}
-
 
 To integrate {{ ydb-short-name }} with JOOQ into your project, you need to add two dependencies: {{ ydb-short-name }} JDBC Driver and the JOOQ extension for {{ ydb-short-name }}.
 
@@ -130,8 +129,8 @@ or
 
 ```java
 String url = "jdbc:ydb:<grpc/grpcs>://<host>:<2135/2136>/path/to/database[?saFile=file:~/sa_key.json]";
-try (CloseableYdbDSLContext dsl = YDB.using(url)) {
-    // ...
+try(CloseableYdbDSLContext dsl = YDB.using(url)) {
+        // ...
 }
 ```
 
@@ -159,9 +158,9 @@ The [`UPSERT`](../yql/reference/syntax/upsert_into.md) command:
 
 ```java
 public void upsert(YdbDSLContext context) {
-  context.upsertInto(EPISODES)
-          .set(record)
-          .execute();    
+    context.upsertInto(EPISODES)
+            .set(record)
+            .execute();
 }
 ```
 
@@ -179,8 +178,8 @@ To specify an index in the VIEW statement, you must use the `useIndex` method on
 
 ```java
 var record = ydbDSLContext.selectFrom(SERIES.useIndex(Indexes.TITLE_NAME.name))
-    .where(SERIES.TITLE.eq(title))
-    .fetchOne();
+        .where(SERIES.TITLE.eq(title))
+        .fetchOne();
 ```
 
 In all other respects, the {{ ydb-short-name }} dialect follows the JOOQ documentation.

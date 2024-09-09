@@ -2,7 +2,7 @@
 
 |  Среда | Инструкция | Уровень поддержки |
 | --- | --- | --- |
-| Embedded UI | [Справка](../../../reference/embedded-ui/index.md) | |
+| Встроенный UI | [Справка](../../../reference/embedded-ui/index.md) | |
 | [DBeaver](https://dbeaver.com)  |  [Инструкция](../dbeaver.md) | C помощью [JDBC-драйвера](https://github.com/ydb-platform/ydb-jdbc-driver/releases)|
 | JetBrains Database viewer |  —  | C помощью [JDBC-драйвера](https://github.com/ydb-platform/ydb-jdbc-driver/releases)|
 | [JetBrains DataGrip](https://www.jetbrains.com/ru-ru/datagrip/) | [Инструкция](../datagrip.md) | C помощью [JDBC-драйвера](https://github.com/ydb-platform/ydb-jdbc-driver/releases)|

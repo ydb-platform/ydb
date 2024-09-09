@@ -1,7 +1,7 @@
-# Data Ingestion {#ingestion}
+# Data ingestion {#ingestion}
 
 {% include notitle [Table of contents](_includes/toc-table.md) %}
 
-## Streaming Data Ingestion {#streaming-ingestion}
+## Streaming data ingestion {#streaming-ingestion}
 
 {% include notitle [Table of contents](_includes/toc-table-streaming.md) %}

@@ -1,4 +1,4 @@
-# Graphical Interface Clients
+# Graphical user interfaces
 
 |  Environment | Instruction | Compatibility Level |
 | --- | --- | --- |

@@ -1,4 +1,4 @@
-# Data Visualization (Business Intelligence, BI)
+# Data visualization (Business intelligence, BI)
 
 | Environment | Compatibility Level  | Instruction |
 | --- | :---: | --- |

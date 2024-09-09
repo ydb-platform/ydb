@@ -1,4 +1,4 @@
-# Streaming Data Ingestion
+# Streaming data ingestion
 
 | Delivery System | Instruction |
 | --- | --- |

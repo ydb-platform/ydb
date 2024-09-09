@@ -9,28 +9,31 @@ In addition to its own native protocol, {{ ydb-name }} has a compatibility layer
 {% endnote %}
 
 
-## Graphical Interface Clients {#gui}
+## Graphical user interfaces {#gui}
 
-{% include notitle [Table of contents](gui_clients/_includes/toc-table.md) %}
+{% include notitle [Table of contents](gui/_includes/toc-table.md) %}
 
-## Data Visualization (Business Intelligence, BI) {#bi}
+## Data visualization (Business intelligence, BI) {#bi}
 
 {% include notitle [Table of contents](visualization/_includes/toc-table.md) %}
 
-
-## Data Ingestion {#ingestion}
+## Data ingestion {#ingestion}
 
 {% include notitle [Table of contents](ingestion/_includes/toc-table.md) %}
 
-### Streaming Data Ingestion {#streaming-ingestion}
+### Streaming data ingestion {#streaming-ingestion}
 
 {% include notitle [Table of contents](ingestion/_includes/toc-table-streaming.md) %}
 
-## Data Migrations {#schema_migration}
+## Data migrations {#schema_migration}
 
 {% include notitle [Table of contents](migration/_includes/toc-table.md) %}
 
-## See Also
+## Object–relational mapping (ORM) {#orm}
+
+{% include notitle [Table of contents](orm/_includes/toc-table.md) %}
+
+## See also
 
 * [{#T}](../reference/ydb-sdk/index.md)
 * [{#T}](../postgresql/intro.md)

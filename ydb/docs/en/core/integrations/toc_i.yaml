@@ -1,21 +1,26 @@
 items:
-- name: Graphical Interface Clients
-  href: gui_clients/index.md
+- name: Graphical user interfaces
+  href: gui/index.md
   include:
     mode: link
-    path: gui_clients/toc-ide.yaml
-- name: Data Visualization
+    path: gui/toc-ide.yaml
+- name: Data visualization
   href: visualization/index.md
   include:
     mode: link
     path: visualization/toc-visualization.yaml
-- name: Data Ingestion
+- name: Data ingestion
   href: ingestion/index.md
   include:
     mode: link
     path: ingestion/toc-ingestion.yaml
-- name: Data Migrations
+- name: Data migrations
   href: migration/index.md
   include:
     mode: link
     path: migration/toc-migration.yaml
+- name: Object–relational mapping
+  href: orm/index.md
+  include:
+    mode: link
+    path: orm/toc-orm.yaml

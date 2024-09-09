@@ -1,14 +1,14 @@
-# {{ ydb-short-name }} dialect for Hibernate
+# Диалект {{ ydb-short-name }} для Hibernate
 
-## Overview {#overview}
+## Введение {#overview}
 
-This is a guide to using [Hibernate](https://hibernate.org/) with {{ ydb-short-name }}.
+Это руководство использования [Hibernate](https://hibernate.org/orm/) с {{ ydb-short-name }}.
 
-Hibernate is an Object-Relational Mapping (ORM) framework for Java that facilitates the mapping of object-oriented models to SQL.
+Hibernate - это фреймворк объектно-реляционного отображения (ORM) для Java, облегчающий процесс отображения объектно-ориентированных моделей.
 
-## Installation {#install-dialect}
+## Установка диалекта {{ ydb-short-name }} {#install-dialect}
 
-Add the following dependency to your project:
+Примеры для различных систем сборки:
 
 {% list tabs %}
 
@@ -41,17 +41,17 @@ Add the following dependency to your project:
 
 {% endlist %}
 
-If you use Hibernate version 5, you need `<artifactId>hibernate-ydb-dialect-v5</artifactId>` for Maven or `implementation 'tech.ydb.dialects:hibernate-ydb-dialect-v5:$version` for Gradle instead of the similar package without the `-v5` suffix.
+Если вы используете Hibernate версии 5, вам понадобится `<artifactId>hibernate-ydb-dialect-v5</artifactId>` для Maven или `implementation "tech.ydb.dialects:hibernate-ydb-dialect-v5:$version"` для Gradle вместо аналогичного пакета без `-v5` суффикса.
 
-## Configuration {#configuration-dialect}
+## Конфигурация диалекта {#configuration-dialect}
 
-Configure Hibernate to use the custom {{ ydb-short-name }} dialect by updating your [persistence.xml](https://docs.jboss.org/hibernate/orm/6.4/introduction/html_single/Hibernate_Introduction.html#configuration-jpa) file:
+Сконфигурируйте Hibernate для использования диалекта {{ ydb-short-name }}, обновив [persistence.xml](https://docs.jboss.org/hibernate/orm/6.4/introduction/html_single/Hibernate_Introduction.html#configuration-jpa) файл:
 
 ```xml
 <property name="hibernate.dialect">tech.ydb.hibernate.dialect.YdbDialect</property>
 ```
 
-Or, if you are using programmatic configuration:
+Или, если вы используете программную настройку:
 
 {% list tabs %}
 
@@ -82,31 +82,31 @@ Or, if you are using programmatic configuration:
 
 {% endlist %}
 
-## Usage {#using}
+## Использование {#using}
 
-Use this custom dialect just like any other Hibernate dialect. Map your entity classes to database tables and use Hibernate's session factory to perform database operations.
+Используйте этот диалект так же, как и любой другой диалект Hibernate. Сопоставьте классы сущностей с таблицами базы данных и используйте фабрику сессий Hibernate для выполнения операций с базой данных.
 
-Table of comparison of Java types descriptions with [{{ ydb-short-name }} types](../../yql/reference/types/primitive.md):
+Таблица сопоставления Java типов с [{{ ydb-short-name }} типами](../../yql/reference/types/primitive.md):
 
-| Java type                                                                      | {{ ydb-short-name }} type   |
-|--------------------------------------------------------------------------------|-----------------------------|
-| `bool`, `Boolean`                                                              | `Bool`                      |
-| `String`, enum with annotation `@Enumerated(EnumType.STRING)`                  | `Text` (synonym `Utf8`)     |
-| `java.time.LocalDate`                                                          | `Date`                      |
-| `java.math.BigDecimal`, `java.math.BigInteger`                                 | `Decimal(22,9)`             |
-| `double`, `Double`                                                             | `Double`                    |
-| `float`, `Float`                                                               | `Float`                     |
-| `int`, `java.lang.Integer`                                                     | `Int32`                     |
-| `long`, `java.lang.Long`                                                       | `Int64`                     |
-| `short`, `java.lang.Short`                                                     | `Int16`                     |
-| `byte`, `java.lang.Byte`, enum with annotation `@Enumerated(EnumType.ORDINAL)` | `Int8`                      |
-| `[]byte`                                                                       | `Bytes`  (synonym `String`) |
-| `java.time.LocalDateTime` (timezone will be set to `UTC`)                      | `Datetime`                  |
-| `java.time.Instant` (timezone will be set to `UTC`)                            | `Timestamp`                 |
+| Java type                                                                   | {{ ydb-short-name }} type   |
+|-----------------------------------------------------------------------------|-----------------------------|
+| `bool`, `Boolean`                                                           | `Bool`                      |
+| `String`, enum с аннотацией `@Enumerated(EnumType.STRING)`                  | `Text` (синоним `Utf8`)     |
+| `java.time.LocalDate`                                                       | `Date`                      |
+| `java.math.BigDecimal`, `java.math.BigInteger`                              | `Decimal(22,9)`             |
+| `double`, `Double`                                                          | `Double`                    |
+| `float`, `Float`                                                            | `Float`                     |
+| `int`, `java.lang.Integer`                                                  | `Int32`                     |
+| `long`, `java.lang.Long`                                                    | `Int64`                     |
+| `short`, `java.lang.Short`                                                  | `Int16`                     |
+| `byte`, `java.lang.Byte`, enum с аннотацией `@Enumerated(EnumType.ORDINAL)` | `Int8`                      |
+| `[]byte`                                                                    | `Bytes`  (синоним `String`) |
+| `java.time.LocalDateTime` (timezone будет установлена в `UTC`)              | `Datetime`                  |
+| `java.time.Instant` (timezone будет установлена в `UTC`)                    | `Timestamp`                 |
 
-{{ ydb-short-name }} dialect supports database schema generation based on Hibernate entities.
+Диалект {{ ydb-short-name }} поддерживает генерацию схемы базы данных на основе объектов Hibernate.
 
-For example, for the `Group` class:
+Например, для класса `Group`:
 
 {% list tabs %}
 
@@ -151,7 +151,7 @@ For example, for the `Group` class:
 
 {% endlist %}
 
-The following `Groups` table will be created, and the `GroupName` will be indexed by a global secondary index named `group_name_index`:
+Будет сгенерирована следующая таблица `Groups` и вторичный индекс `group_name_index` к колонке `GroupName`:
 
 ```sql
 CREATE TABLE Groups (
@@ -165,7 +165,7 @@ ALTER TABLE Groups
        ON (GroupName);
 ```
 
-If you evolve the Group entity by adding the `deparment` field:
+Если эволюционировать сущность Group путем добавления поля `deparment`:
 
 {% list tabs %}
 
@@ -185,13 +185,13 @@ If you evolve the Group entity by adding the `deparment` field:
 
 {% endlist %}
 
-At the start of the application, Hibernate will update the database schema if the `update` mode is set in properties:
+Hibernate при старте приложения обновит схему базы данных, если установлен режим `update`:
 
 ```properties
 jakarta.persistence.schema-generation.database.action=update
 ```
 
-The result of changing the schema is:
+Результат изменения схемы:
 
 ```sql
 ALTER TABLE Groups
@@ -200,13 +200,13 @@ ALTER TABLE Groups
 
 {% note warning %}
 
-Hibernate is not designed to manage database schemas. You can manage your database schema using [Liquibase](./liquibase.md) or [Flyway](./flyway.md).
+Hibernate не предназначен для управления схемами баз данных. Вы можете использовать [Liquibase](../migration/liquibase.md) или [Flyway](../migration/flyway.md) для управления схемой базы данных.
 
 {% endnote %}
 
-{{ ydb-short-name }} dialect supports `@OneToMany`, `@ManyToOne` and `@ManyToMany` relationships.
+Диалект {{ ydb-short-name }} поддерживает `@OneToMany`, `@ManyToOne`, `@ManyToMany` связи.
 
-For example, for `@OneToMany` generates a SQL script:
+Например, сгенерированный SQL скрипт для `@OneToMany`:
 
 {% list tabs %}
 
@@ -251,9 +251,9 @@ For example, for `@OneToMany` generates a SQL script:
 
 {% endlist %}
 
-### Example with Spring Data JPA
+### Пример с Spring Data JPA {#integration-with-spring-data-jpa-example}
 
-Configure [Spring Data JPA](https://spring.io/projects/spring-data-jpa/) with Hibernate to use custom {{ ydb-short-name }} dialect by updating your `application.properties`:
+Настройте Spring Data JPA для использования диалекта {{ ydb-short-name }}, обновив свой `application.properties`:
 
 ```properties
 spring.jpa.properties.hibernate.dialect=tech.ydb.hibernate.dialect.YdbDialect
@@ -262,7 +262,7 @@ spring.datasource.driver-class-name=tech.ydb.jdbc.YdbDriver
 spring.datasource.url=jdbc:ydb:<grpc/grpcs>://<host>:<2135/2136>/path/to/database[?saFile=file:~/sa_key.json]
 ```
 
-Create a simple entity and repository:
+Создадим простую сущность и репозиторий:
 
 {% list tabs %}
 
@@ -339,7 +339,7 @@ Create a simple entity and repository:
 
 {% endlist %}
 
-Usage example:
+Пример использования:
 
 {% list tabs %}
 
@@ -405,4 +405,4 @@ Usage example:
 
 {% endlist %}
 
-An example of a simple Spring Data JPA repository can be found at the following [link](https://github.com/ydb-platform/ydb-java-examples/tree/master/jdbc/spring-data-jpa).
+Пример простого приложения Spring Data JPA можно найти по [ссылке](https://github.com/ydb-platform/ydb-java-examples/tree/master/jdbc/spring-data-jpa).

@@ -1,4 +1,4 @@
-# Data Ingestion
+# Data ingestion
 
 | Delivery System | Instruction |
 | --- | --- |
@@ -6,4 +6,3 @@
 | [LogStash](https://www.elastic.co/logstash) | [Instruction](../logstash.md) |
 | [Kafka Connect Sink](https://docs.confluent.io/platform/current/connect/index.html) | [Instruction](https://github.com/ydb-platform/ydb-kafka-sink-connector) |
 | Arbitrary [JDBC data sources](https://en.wikipedia.org/wiki/Java_Database_Connectivity) | [Instruction](../import-jdbc.md) |
-| [Spring Data JDBC](https://spring.io/projects/spring-data-jdbc) | [Instruction](../spring-data-jdbc.md) |

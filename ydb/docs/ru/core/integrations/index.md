@@ -9,9 +9,9 @@
 {% endnote %}
 
 
-## Клиенты с графическим интерфейсом {#gui}
+##  Графические пользовательские интерфейсы {#gui}
 
- {% include notitle [Содержание](gui_clients/_includes/toc-table.md) %}
+ {% include notitle [Содержание](gui/_includes/toc-table.md) %}
 
 
 ## Визуализация данных (Business Intelligence, BI) {#bi}
@@ -39,6 +39,10 @@
 ## Миграции данных {#schema_migration}
 
 {% include notitle [Содержание](migration/_includes/toc-table.md) %}
+
+## Объектно-реляционное отображение (ORM) {#orm}
+
+{% include notitle [Содержание](orm/_includes/toc-table.md) %}
 
 ## Смотрите также
 

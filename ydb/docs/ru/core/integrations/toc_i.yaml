@@ -1,9 +1,9 @@
 items:
-- name: Клиенты с графическим интерфейсом
-  href: gui_clients/index.md
+- name: Графические пользовательские интерфейсы
+  href: gui/index.md
   include:
     mode: link
-    path: gui_clients/toc-ide.yaml
+    path: gui/toc-ide.yaml
 - name: Визуализация данных (Business Intelligence, BI)
   href: visualization/index.md
   include:
@@ -19,4 +19,9 @@ items:
   include:
     mode: link
     path: migration/toc-migration.yaml
+- name: Объектно-реляционное отображение
+  href: orm/index.md
+  include:
+    mode: link
+    path: orm/toc-orm.yaml
 

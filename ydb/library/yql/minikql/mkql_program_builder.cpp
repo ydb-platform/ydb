@@ -2775,9 +2775,11 @@ TRuntimeNode TProgramBuilder::BuildBlockLogical(const std::string_view& callable
 
 TRuntimeNode TProgramBuilder::BuildBlockDecimalBinary(const std::string_view& callableName, TRuntimeNode first, TRuntimeNode second) {
     auto firstType = AS_TYPE(TBlockType, first.GetStaticType());
+    auto secondType = AS_TYPE(TBlockType, second.GetStaticType());
 
-    bool isOpt1;
+    bool isOpt1, isOpt2;
     auto* leftDataType = UnpackOptionalData(firstType->GetItemType(), isOpt1);
+    UnpackOptionalData(secondType->GetItemType(), isOpt2);
 
     MKQL_ENSURE(leftDataType->GetSchemeType() == NUdf::TDataType<NUdf::TDecimal>::Id, "Requires decimal args.");
 
@@ -2786,7 +2788,7 @@ TRuntimeNode TProgramBuilder::BuildBlockDecimalBinary(const std::string_view& ca
     auto [precision, scale] = lParams;
 
     TType* outputType = TDataDecimalType::Create(precision, scale, Env);
-    if (isOpt1 || isOpt1) {
+    if (isOpt1 || isOpt2) {
         outputType = TOptionalType::Create(outputType, Env);
     }
     outputType = NewBlockType(outputType, TBlockType::EShape::Many);

@@ -647,18 +647,6 @@ enum class EMaterializationMode {
     NonExisting,
 };
 
-namespace NDetail {
-    template <typename T>
-    class HasDefault
-    {
-    private:
-        template <typename C> static std::true_type test(decltype(C::Default)) ;
-        template <typename C> static std::false_type test(...);
-    public:
-        static constexpr bool value = decltype(test<T>(0))::value;
-    };
-}
-
 struct Schema {
     template <typename T>
     struct Precharger {
@@ -1481,10 +1469,10 @@ struct Schema {
 
                 template <typename ColumnType>
                 static typename ColumnType::Type GetDefaultValue() {
-                    if constexpr (NDetail::HasDefault<ColumnType>::value) {
+                    constexpr bool hasDefault = requires {ColumnType::Default;};
+                    if constexpr (hasDefault) {
                         return ColumnType::Default;
-                    }
-                    else {
+                    } else {
                         return typename ColumnType::Type();
                     }
                 }

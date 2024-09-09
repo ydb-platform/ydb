@@ -37,6 +37,10 @@ message TKqpLocks {
     // This may only be used with generic readsets without any other data and
     // currently limited to volatile transactions.
     optional uint64 ArbiterShard = 5;
+
+    optional uint64 ArbiterColumnShard = 6;
+    repeated uint64 SendingColumnShards = 7;  
+    repeated uint64 ReceivingColumnShards = 8;
 }
 
 message TTableId {
@@ -105,7 +109,7 @@ message TEvWrite {
     optional uint32 LockNodeId = 5;
     optional TKqpLocks Locks = 6;
 
-    // Other params
+    // Other paramss
     optional uint64 OverloadSubscribe = 7;
 
     // Writes are performed "over" the specified snapshot when specified

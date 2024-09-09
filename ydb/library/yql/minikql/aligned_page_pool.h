@@ -23,6 +23,7 @@ struct TAlignedPagePoolCounters {
     ::NMonitoring::TDynamicCounters::TCounterPtr AllocationsCntr;
     ::NMonitoring::TDynamicCounters::TCounterPtr PoolsCntr;
     ::NMonitoring::TDynamicCounters::TCounterPtr LostPagesBytesFreeCntr;
+    ::NMonitoring::TDynamicCounterPtr CountersRoot;
 
     void Swap(TAlignedPagePoolCounters& other) {
         DoSwap(TotalBytesAllocatedCntr, other.TotalBytesAllocatedCntr);

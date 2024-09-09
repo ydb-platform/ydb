@@ -21,6 +21,8 @@ namespace NKikimr {
 
 static ui64 SYS_PAGE_SIZE = NSystemInfo::GetPageSize();
 
+static TAlignedPagePoolCounters DefaultCounters = TAlignedPagePoolCounters(new NMonitoring::TDynamicCounters(), "default");
+
 constexpr ui32 MidLevels = 10;
 constexpr ui32 MaxMidSize = (1u << MidLevels) * TAlignedPagePool::POOL_PAGE_SIZE;
 static_assert(MaxMidSize == 64 * 1024 * 1024, "Upper memory block 64 Mb");
@@ -184,10 +186,19 @@ int TFakeUnalignedMmap::Munmap(void* addr, size_t size)
     return 0;
 }
 
-TAlignedPagePoolCounters::TAlignedPagePoolCounters(::NMonitoring::TDynamicCounterPtr countersRoot, const TString& name) {
-    if (!countersRoot || name.empty())
+TAlignedPagePoolCounters::TAlignedPagePoolCounters(::NMonitoring::TDynamicCounterPtr countersRoot, const TString& name)
+    : CountersRoot(countersRoot) {
+
+    ::NMonitoring::TDynamicCounterPtr subGroup = DefaultCounters.CountersRoot;
+    if (!CountersRoot || name.empty()) {
+        CountersRoot = DefaultCounters.CountersRoot;
+        TotalBytesAllocatedCntr = DefaultCounters.TotalBytesAllocatedCntr;
+        AllocationsCntr = DefaultCounters.AllocationsCntr;
+        PoolsCntr = DefaultCounters.PoolsCntr;
+        LostPagesBytesFreeCntr = DefaultCounters.LostPagesBytesFreeCntr;
         return;
-    ::NMonitoring::TDynamicCounterPtr subGroup = countersRoot->GetSubgroup("counters", "utils")->GetSubgroup("subsystem", "mkqlalloc");
+    }
+
     TotalBytesAllocatedCntr = subGroup->GetCounter(name + "/TotalBytesAllocated");
     AllocationsCntr = subGroup->GetCounter(name + "/Allocations", true);
     PoolsCntr = subGroup->GetCounter(name + "/Pools", true);

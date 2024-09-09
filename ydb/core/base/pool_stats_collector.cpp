@@ -30,6 +30,11 @@ private:
     class TMiniKQLPoolStats {
     public:
         void Init(::NMonitoring::TDynamicCounters* group) {
+            auto counters = TAlignedPagePoolCounters();
+            if (counters.CountersRoot) {
+                group->RegisterSubgroup("subsystem", "mkqlalloc", counters.CountersRoot);
+            }
+
             CounterGroup = group->GetSubgroup("subsystem", "mkqlalloc");
             TotalBytes = CounterGroup->GetCounter("GlobalPoolTotalBytes", false);
         }

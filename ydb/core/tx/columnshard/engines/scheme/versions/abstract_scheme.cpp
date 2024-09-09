@@ -80,7 +80,7 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModi
 
     const std::shared_ptr<NArrow::TSchemaLite> dstSchema = GetIndexInfo().ArrowSchema();
 
-    auto batch = NArrow::TColumnOperator().SkipIfAbsent().Extract(incomingBatch, dstSchema->field_names());
+    auto batch = NArrow::TColumnOperator().SkipIfAbsent().Extract(incomingBatch, dstSchema->fields());
 
     for (auto&& i : batch->schema()->fields()) {
         const ui32 columnId = GetIndexInfo().GetColumnIdVerified(i->name());
@@ -218,8 +218,9 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::BuildDefaultBa
     const std::vector<std::shared_ptr<arrow::Field>>& fields, const ui32 rowsCount, const bool force) const {
     std::vector<std::shared_ptr<arrow::Array>> columns;
     for (auto&& i : fields) {
-        auto defaultValue = GetExternalDefaultValueVerified(i->name());
-        if (!defaultValue && !GetIndexInfo().IsNullableVerified(i->name())) {
+        const ui32 columnId = GetColumnIdVerified(i->name());
+        auto defaultValue = GetExternalDefaultValueVerified(columnId);
+        if (!defaultValue && !GetIndexInfo().IsNullableVerified(columnId)) {
             if (force) {
                 defaultValue = NArrow::DefaultScalar(i->type());
             } else {

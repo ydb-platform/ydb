@@ -43,16 +43,16 @@ TConclusionStatus TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*ta
         return TConclusionStatus::Fail("no data in batch");
     }
     const auto& indexSchema = ActualSchema->GetIndexInfo().ArrowSchema();
-    NArrow::TSchemaSubset subset;
-    auto reorderConclusion = NArrow::TColumnOperator().Adapt(OriginalBatch, indexSchema, &subset);
-    if (reorderConclusion.IsFail()) {
+    auto subsetConclusion = NArrow::TColumnOperator().BuildSequentialSubset(OriginalBatch, indexSchema);
+    if (subsetConclusion.IsFail()) {
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "unadaptable schemas")("index", indexSchema->ToString())("problem", reorderConclusion.GetErrorMessage());
-        ReplyError("cannot reorder schema: " + reorderConclusion.GetErrorMessage(),
+        ReplyError(
+            "unadaptable schema: " + subsetConclusion.GetErrorMessage(),
             NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Internal);
-        return TConclusionStatus::Fail("cannot reorder schema: " + reorderConclusion.GetErrorMessage());
-    } else {
-        OriginalBatch = reorderConclusion.DetachResult();
+        return TConclusionStatus::Fail("cannot reorder schema: " + subsetConclusion.GetErrorMessage());
     }
+    NArrow::TSchemaSubset subset = subsetConclusion.DetachResult();
+
     if (OriginalBatch->num_columns() != indexSchema->num_fields()) {
         AFL_VERIFY(OriginalBatch->num_columns() < indexSchema->num_fields())("original", OriginalBatch->num_columns())(
                                                       "index", indexSchema->num_fields());

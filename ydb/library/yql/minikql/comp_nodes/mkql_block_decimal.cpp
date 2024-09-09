@@ -229,9 +229,15 @@ struct TDecimalMulBlockExec: TDecimalBlockExec<TDecimalMulBlockExec<TRight>, TRi
     { }
 
     NYql::NDecimal::TInt128 Do(NYql::NDecimal::TInt128 left, NYql::NDecimal::TInt128 right) const {
-        const auto mul = Divider > 1 ?
-            NYql::NDecimal::MulAndDivNormalDivider(left, right, Divider):
-            NYql::NDecimal::Mul(left, right);
+        NYql::NDecimal::TInt128 mul;
+
+        if constexpr(std::is_same_v<TRight, NYql::NDecimal::TInt128>) {
+            mul = Divider > 1 ?
+                NYql::NDecimal::MulAndDivNormalDivider(left, right, Divider):
+                NYql::NDecimal::Mul(left, right);
+        } else {
+            mul = NYql::NDecimal::Mul(left, right);
+        }
 
         if (mul > -Bound && mul < +Bound)
             return mul;
@@ -253,9 +259,15 @@ struct TDecimalDivBlockExec: TDecimalBlockExec<TDecimalDivBlockExec<TRight>, TRi
     { }
 
     NYql::NDecimal::TInt128 Do(NYql::NDecimal::TInt128 left, NYql::NDecimal::TInt128 right) const {
-        const auto div = NYql::NDecimal::MulAndDivNormalMultiplier(left, Divider, right);
-        if (div > -Bound && div < +Bound)
-            return div;
+        NYql::NDecimal::TInt128 div;
+
+        if constexpr (std::is_same_v<TRight, NYql::NDecimal::TInt128>) {
+            div = NYql::NDecimal::MulAndDivNormalMultiplier(left, Divider, right);
+            if (div > -Bound && div < +Bound)
+                return div;
+        } else {
+            div = NYql::NDecimal::Div(left, right);
+        }
 
         return NYql::NDecimal::IsNan(div) ? NYql::NDecimal::Nan() : (div > 0 ? +NYql::NDecimal::Inf() : -NYql::NDecimal::Inf());
     }

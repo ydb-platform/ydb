@@ -458,7 +458,8 @@ public:
             return result;
         }
 
-        TPath path = TPath::Resolve(parentPathStr, context.SS).Dive(name);
+        TPath parentPath = TPath::Resolve(parentPathStr, context.SS);
+        TPath path = parentPath.Dive(name);
         {
             TPath::TChecker checks = path.Check();
             checks
@@ -504,6 +505,22 @@ public:
         if (!alterData) {
             return result;
         }
+
+        auto domainInfo = parentPath.DomainInfo();
+        const TSchemeLimits& limits = domainInfo->GetSchemeLimits();
+
+        for (auto& [_, preset]: alterData->SchemaPresets) {
+            ui64 columnCount = preset.GetColumns().GetColumns().size();
+            if (columnCount > limits.MaxColumnTableColumns) {
+                TString errStr = TStringBuilder()
+                    << "Too many columns"
+                    << ". new: " << columnCount
+                    << ". Limit: " << limits.MaxColumnTableColumns;
+                result->SetError(NKikimrScheme::StatusSchemeError, errStr);
+                return result;
+            }
+        }
+
         storeInfo->AlterData = alterData;
 
         NIceDb::TNiceDb db(context.GetDB());

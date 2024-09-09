@@ -2674,6 +2674,64 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                                 Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
                             }
                 )", {NKikimrScheme::StatusSchemeError});
+
+            TString olapSchema = R"(
+                Name: "OlapStore1"
+                ColumnShardCount: 1
+                SchemaPresets {
+                    Name: "default"
+                    Schema {
+                        Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                        Columns { Name: "data" Type: "Utf8" }
+                        KeyColumnNames: "timestamp"
+                        Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
+                    }
+                }
+            )";
+
+            TestCreateOlapStore(runtime, txId++, "/MyRoot", olapSchema, {NKikimrScheme::StatusAccepted});
+            env.TestWaitNotification(runtime, txId - 1);
+
+            TString olapSchemaBig = R"(
+                Name: "OlapStoreBig"
+                ColumnShardCount: 1
+                SchemaPresets {
+                    Name: "default"
+                    Schema {
+                        Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                        Columns { Name: "data" Type: "Utf8" }
+                        Columns { Name: "data2" Type: "Utf8" }
+                        Columns { Name: "data3" Type: "Utf8" }
+                        KeyColumnNames: "timestamp"
+                        Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
+                    }
+                }
+            )";
+
+            TestCreateOlapStore(runtime, txId++, "/MyRoot", olapSchemaBig, {NKikimrScheme::StatusSchemeError});
+            env.TestWaitNotification(runtime, txId - 1);
+
+            TestAlterOlapStore(runtime, txId++, "/MyRoot", R"(
+                Name: "OlapStore1"
+                AlterSchemaPresets {
+                    Name: "default"
+                    AlterSchema {
+                        AddColumns { Name: "comment" Type: "Utf8" }
+                    }
+                }
+            )", {NKikimrScheme::StatusAccepted});
+            env.TestWaitNotification(runtime, txId - 1);
+
+            TestAlterOlapStore(runtime, txId++, "/MyRoot", R"(
+                Name: "OlapStore1"
+                AlterSchemaPresets {
+                    Name: "default"
+                    AlterSchema {
+                        AddColumns { Name: "comment2" Type: "Utf8" }
+                    }
+                }
+            )", {NKikimrScheme::StatusSchemeError});
+            env.TestWaitNotification(runtime, txId - 1);
         }
     }
 

@@ -394,6 +394,21 @@ public:
             return result;
         }
 
+        auto domainInfo = parentPath.DomainInfo();
+        const TSchemeLimits& limits = domainInfo->GetSchemeLimits();
+
+        for (auto& preset: createDescription.GetSchemaPresets()) {
+            ui64 columnCount = preset.schema().columns().size();
+            if (columnCount > limits.MaxColumnTableColumns) {
+                TString errStr = TStringBuilder()
+                    << "Too many columns"
+                    << ". new: " << columnCount
+                    << ". Limit: " << limits.MaxColumnTableColumns;
+                result->SetError(NKikimrScheme::StatusSchemeError, errStr);
+                return result;
+            }
+        }
+
         TProposeErrorCollector errors(*result);
         TOlapStoreInfo::TPtr storeInfo = std::make_shared<TOlapStoreInfo>();
         if (!storeInfo->ParseFromRequest(createDescription, errors)) {

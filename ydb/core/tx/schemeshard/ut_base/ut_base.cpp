@@ -6343,6 +6343,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                         "PartitionPerTablet: 10 "
                         "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}"
                         );
+        env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/PQGroup_1", true),
                            {NLs::CheckPartCount("PQGroup_1", 100, 10, 10, 100),

@@ -338,22 +338,29 @@ public:
     }
 
     const TColumnRecord* GetRecordPointer(const TChunkAddress& address) const {
-        for (auto&& i : Records) {
-            if (i.GetAddress() == address) {
-                return &i;
-            }
+        auto it = std::lower_bound(Records.begin(), Records.end(), address, [](const TColumnRecord& item, const TChunkAddress& address) {
+            return item.GetAddress() < address;
+        });
+        if (it != Records.end() && it->GetAddress() == address) {
+            return &*it;
         }
         return nullptr;
     }
 
     bool HasEntityAddress(const TChunkAddress& address) const {
-        for (auto&& c : GetRecords()) {
-            if (c.GetAddress() == address) {
+        {
+            auto it = std::lower_bound(Records.begin(), Records.end(), address, [](const TColumnRecord& item, const TChunkAddress& address) {
+                return item.GetAddress() < address;
+            });
+            if (it != Records.end() && it->GetAddress() == address) {
                 return true;
             }
         }
-        for (auto&& c : GetIndexes()) {
-            if (c.GetAddress() == address) {
+        {
+            auto it = std::lower_bound(Indexes.begin(), Indexes.end(), address, [](const TIndexChunk& item, const TChunkAddress& address) {
+                return item.GetAddress() < address;
+            });
+            if (it != Indexes.end() && it->GetAddress() == address) {
                 return true;
             }
         }

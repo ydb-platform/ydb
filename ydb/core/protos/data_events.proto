@@ -109,7 +109,7 @@ message TEvWrite {
     optional uint32 LockNodeId = 5;
     optional TKqpLocks Locks = 6;
 
-    // Other paramss
+    // Other params
     optional uint64 OverloadSubscribe = 7;
 
     // Writes are performed "over" the specified snapshot when specified

@@ -9,7 +9,11 @@
 
 namespace NKikimr::NCache {
 
-template <typename TKey, typename TKeyHash, typename TKeyEqual>
+// TODO: remove template args and make some page base class
+
+template <typename TKey
+        , typename TKeyHash
+        , typename TKeyEqual>
 class TGhostQueue {
     struct TGhost {
         TKey Key;
@@ -109,7 +113,7 @@ private:
     TDeque<TGhost> GhostsQueue;
 };
 
-template <typename TItem
+template <typename TPage
         , typename TKey
         , typename TKeyHash
         , typename TKeyEqual
@@ -117,7 +121,7 @@ template <typename TItem
         , typename TLocation
         , typename TFrequency
     >
-class TS3FIFOCache : public ICacheCache<TItem> {
+class TS3FIFOCache : public ICacheCache<TPage> {
     enum class ELocation {
         None,
         SmallQueue,
@@ -136,7 +140,7 @@ class TS3FIFOCache : public ICacheCache<TItem> {
 
     struct TQueue {
         ELocation Location;
-        TIntrusiveList<TItem> Queue;
+        TIntrusiveList<TPage> Queue;
         ui64 Size = 0;
     };
 
@@ -148,7 +152,7 @@ public:
         , GhostQueue(limit)
     {}
 
-    TItem* EvictNext() override {
+    TPage* EvictNext() override {
         if (SmallQueue.Queue.Empty() && MainQueue.Queue.Empty()) {
             return nullptr;
         }
@@ -156,69 +160,46 @@ public:
         // TODO: account passive pages inside the cache
         TLimit savedLimit = std::exchange(Limit, TLimit(SmallQueue.Size + MainQueue.Size - 1));
 
-        TItem* evictedItem = EvictOneIfFull();
-        Y_DEBUG_ABORT_UNLESS(evictedItem);
+        TPage* evictedPage = EvictOneIfFull();
+        Y_DEBUG_ABORT_UNLESS(evictedPage);
         
         Limit = savedLimit;
 
-        return evictedItem;
+        return evictedPage;
     }
 
-    TIntrusiveList<TItem> Touch(TItem* item) override {
-        const ELocation location = GetLocation(item);
+    TIntrusiveList<TPage> Touch(TPage* page) override {
+        const ELocation location = GetLocation(page);
         switch (location) {
             case ELocation::SmallQueue:
             case ELocation::MainQueue: {
-                TouchFast(item);
+                TouchFast(page);
                 return {};
             }
             case ELocation::None:
-                return Insert(item);
+                return Insert(page);
             default:
-                Y_ABORT("Unknown item location");
+                Y_ABORT("Unknown page location");
         }
     }
 
-    void TouchFast(TItem* item) {
-        Y_DEBUG_ABORT_UNLESS(GetLocation(item) != ELocation::None);
-
-        ui32 frequency = GetFrequency(item);
-        if (frequency < 3) {
-            SetFrequency(item, frequency + 1);
-        }
-    }
-
-    TIntrusiveList<TItem> Insert(TItem* item) {
-        Y_DEBUG_ABORT_UNLESS(GetLocation(item) == ELocation::None);
-
-        Push(EraseGhost(item) ? MainQueue : SmallQueue, item);
-        SetFrequency(item, 0);
-
-        TIntrusiveList<TItem> evictedList;
-        while (TItem* evictedItem = EvictOneIfFull()) {
-            evictedList.PushBack(evictedItem);
-        }
-
-        return evictedList;
-    }
-
-    void Erase(TItem* item) override {
-        const ELocation location = GetLocation(item);
+    void Erase(TPage* page) override {
+        const ELocation location = GetLocation(page);
         switch (location) {
             case ELocation::None:
                 break;
             case ELocation::SmallQueue:
-                Erase(SmallQueue, item);
+                Erase(SmallQueue, page);
                 break;
             case ELocation::MainQueue:
-                Erase(MainQueue, item);
+                Erase(MainQueue, page);
                 break;
             default:
-                Y_ABORT("Unknown item location");
+                Y_ABORT("Unknown page location");
         }
 
-        SetFrequency(item, 0);
-        EraseGhost(item);
+        SetFrequency(page, 0);
+        EraseGhost(page);
     }
 
     void UpdateLimit(ui64 limit) override {
@@ -227,23 +208,23 @@ public:
     }
 
 private:
-    TItem* EvictOneIfFull() {
+    TPage* EvictOneIfFull() {
         while (true) {
             if (!SmallQueue.Queue.Empty() && SmallQueue.Size > Limit.SmallQueueLimit) {
-                TItem* item = Pop(SmallQueue);
-                if (GetFrequency(item) > 1) { // TODO: why 1?
-                    Push(MainQueue, item);
+                TPage* page = Pop(SmallQueue);
+                if (GetFrequency(page) > 1) { // TODO: why 1?
+                    Push(MainQueue, page);
                 } else {
-                    AddGhost(item);
-                    return item;
+                    AddGhost(page);
+                    return page;
                 }
             } else if (!MainQueue.Queue.Empty() && MainQueue.Size > Limit.MainQueueLimit) {
-                TItem* item = Pop(MainQueue);
-                if (ui32 frequency = GetFrequency(item); frequency > 0) {
-                    SetFrequency(item, frequency - 1);
-                    Push(MainQueue, item);
+                TPage* page = Pop(MainQueue);
+                if (ui32 frequency = GetFrequency(page); frequency > 0) {
+                    SetFrequency(page, frequency - 1);
+                    Push(MainQueue, page);
                 } else {
-                    return item;
+                    return page;
                 }
             } else {
                 break;
@@ -253,65 +234,88 @@ private:
         return nullptr;
     }
 
-    TItem* Pop(TQueue& queue) {
+    void TouchFast(TPage* page) {
+        Y_DEBUG_ABORT_UNLESS(GetLocation(page) != ELocation::None);
+
+        ui32 frequency = GetFrequency(page);
+        if (frequency < 3) {
+            SetFrequency(page, frequency + 1);
+        }
+    }
+
+    TIntrusiveList<TPage> Insert(TPage* page) {
+        Y_DEBUG_ABORT_UNLESS(GetLocation(page) == ELocation::None);
+
+        Push(EraseGhost(page) ? MainQueue : SmallQueue, page);
+        SetFrequency(page, 0);
+
+        TIntrusiveList<TPage> evictedList;
+        while (TPage* evictedPage = EvictOneIfFull()) {
+            evictedList.PushBack(evictedPage);
+        }
+
+        return evictedList;
+    }
+
+    TPage* Pop(TQueue& queue) {
         Y_DEBUG_ABORT_UNLESS(!queue.Queue.Empty());
         Y_ABORT_UNLESS(GetLocation(queue.Queue.Front()) == queue.Location);
         Y_DEBUG_ABORT_UNLESS(queue.Size >= GetSize(queue.Queue.Front()));
 
-        TItem* item = queue.Queue.PopFront();
-        queue.Size -= GetSize(item);
-        SetLocation(item, ELocation::None);
+        TPage* page = queue.Queue.PopFront();
+        queue.Size -= GetSize(page);
+        SetLocation(page, ELocation::None);
 
-        return item;
+        return page;
     }
 
-    void Push(TQueue& queue, TItem* item) {
-        Y_ABORT_UNLESS(GetLocation(item) == ELocation::None);
+    void Push(TQueue& queue, TPage* page) {
+        Y_ABORT_UNLESS(GetLocation(page) == ELocation::None);
 
-        queue.Queue.PushBack(item);
-        queue.Size += GetSize(item);
-        SetLocation(item, queue.Location);
+        queue.Queue.PushBack(page);
+        queue.Size += GetSize(page);
+        SetLocation(page, queue.Location);
     }
 
-    void Erase(TQueue& queue, TItem* item) {
-        Y_ABORT_UNLESS(GetLocation(item) == queue.Location);
-        Y_DEBUG_ABORT_UNLESS(queue.Size >= GetSize(item));
+    void Erase(TQueue& queue, TPage* page) {
+        Y_ABORT_UNLESS(GetLocation(page) == queue.Location);
+        Y_DEBUG_ABORT_UNLESS(queue.Size >= GetSize(page));
 
-        item->Unlink();
-        queue.Size -= GetSize(item);
-        SetLocation(item, ELocation::None);
+        page->Unlink();
+        queue.Size -= GetSize(page);
+        SetLocation(page, ELocation::None);
     }
 
-    void AddGhost(const TItem* item) {
-        GhostQueue.Add(GetKey(item), GetSize(item));
+    void AddGhost(const TPage* page) {
+        GhostQueue.Add(GetKey(page), GetSize(page));
     }
 
-    bool EraseGhost(const TItem* item) {
-        return GhostQueue.Erase(GetKey(item), GetSize(item));
+    bool EraseGhost(const TPage* page) {
+        return GhostQueue.Erase(GetKey(page), GetSize(page));
     }
 
-    TKey GetKey(const TItem* item) const {
-        return TKey::Get(item);
+    TKey GetKey(const TPage* page) const {
+        return TKey::Get(page);
     }
 
-    ui64 GetSize(const TItem* item) const {
-        return TSize::Get(item);
+    ui64 GetSize(const TPage* page) const {
+        return TSize::Get(page);
     }
 
-    ELocation GetLocation(const TItem* item) const {
-        return static_cast<ELocation>(TLocation::Get(item));
+    ELocation GetLocation(const TPage* page) const {
+        return static_cast<ELocation>(TLocation::Get(page));
     }
 
-    void SetLocation(TItem* item, ELocation location) const {
-        TLocation::Set(item, static_cast<ui32>(location));
+    void SetLocation(TPage* page, ELocation location) const {
+        TLocation::Set(page, static_cast<ui32>(location));
     }
 
-    ui32 GetFrequency(const TItem* item) const {
-        return TFrequency::Get(item);
+    ui32 GetFrequency(const TPage* page) const {
+        return TFrequency::Get(page);
     }
 
-    void SetFrequency(TItem* item, ui32 frequency) const {
-        TFrequency::Set(item, frequency);
+    void SetFrequency(TPage* page, ui32 frequency) const {
+        TFrequency::Set(page, frequency);
     }
 
 private:

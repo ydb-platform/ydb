@@ -13,6 +13,12 @@
 namespace NKikimr {
 namespace NKqp {
 
+struct TTableInfo {
+    bool IsOlap = false;
+    TString Path;
+};
+using TShardIdToTableInfoPtr = std::shared_ptr<THashMap<ui64, std::shared_ptr<TTableInfo>>>;
+
 struct TEvKqpExecuter {
     struct TEvTxRequest : public TEventPB<TEvTxRequest, NKikimrKqp::TEvExecuterTxRequest,
         TKqpExecuterEvents::EvTxRequest> {};
@@ -27,6 +33,7 @@ struct TEvKqpExecuter {
         NLWTrace::TOrbit Orbit;
         IKqpGateway::TKqpSnapshot Snapshot;
         std::optional<NYql::TKikimrPathId> BrokenLockPathId;
+        TShardIdToTableInfoPtr ShardIdToTableInfo;
         ui64 ResultRowsCount = 0;
         ui64 ResultRowsBytes = 0;
 

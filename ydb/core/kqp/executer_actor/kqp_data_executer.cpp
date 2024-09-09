@@ -127,13 +127,12 @@ public:
         TKqpRequestCounters::TPtr counters, bool streamResult,
         const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
         NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
-        const TActorId& creator, const TIntrusivePtr<TUserRequestContext>& userRequestContext, const bool forceArbiterCommit,
+        const TActorId& creator, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
         const bool useEvWrite, ui32 statementResultIndex, const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
         const TGUCSettings::TPtr& GUCSettings)
         : TBase(std::move(request), database, userToken, counters, tableServiceConfig,
             userRequestContext, statementResultIndex, TWilsonKqp::DataExecuter, "DataExecuter", streamResult)
         , AsyncIoFactory(std::move(asyncIoFactory))
-        , ForceArbiterCommit(forceArbiterCommit)
         , UseEvWrite(useEvWrite)
         , FederatedQuerySetup(federatedQuerySetup)
         , GUCSettings(GUCSettings)

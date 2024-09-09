@@ -1,4 +1,5 @@
 #include "datashard_impl.h"
+#include "datashard_integrity_trails.h"
 #include "datashard_pipeline.h"
 
 #include "ydb/core/tx/datashard/datashard_write_operation.h"
@@ -103,6 +104,11 @@ EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
                 }
             }
         }
+    }
+
+    if (!op->IsReadOnly() && op->HasKeysInfo()) {
+        const NMiniKQL::IEngineFlat::TValidationInfo& keys = op->GetKeysInfo();
+        NDataIntegrity::LogIntegrityTrailsKeys(ctx, DataShard.TabletID(), op->GetGlobalTxId(), keys);
     }
 
     if (!op->IsImmediate()) {

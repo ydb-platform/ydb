@@ -6866,7 +6866,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         AsyncForceDropUnsafe(runtime, ++txId, pVer.PathId.LocalPathId);
 
         TestModificationResult(runtime, txId-2, NKikimrScheme::StatusAccepted);
-        TestModificationResult(runtime, txId-1, NKikimrScheme::StatusAccepted);
+        TestModificationResults(runtime, txId-1, {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications});
         TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
 
         TActorId sender = runtime.AllocateEdgeActor();

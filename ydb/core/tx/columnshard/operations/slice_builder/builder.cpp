@@ -45,7 +45,8 @@ TConclusionStatus TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*ta
     const auto& indexSchema = ActualSchema->GetIndexInfo().ArrowSchema();
     auto subsetConclusion = NArrow::TColumnOperator().BuildSequentialSubset(OriginalBatch, indexSchema);
     if (subsetConclusion.IsFail()) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "unadaptable schemas")("index", indexSchema->ToString())("problem", reorderConclusion.GetErrorMessage());
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "unadaptable schemas")("index", indexSchema->ToString())(
+            "problem", subsetConclusion.GetErrorMessage());
         ReplyError(
             "unadaptable schema: " + subsetConclusion.GetErrorMessage(),
             NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Internal);

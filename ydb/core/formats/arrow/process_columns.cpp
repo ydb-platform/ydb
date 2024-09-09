@@ -10,7 +10,7 @@ namespace NKikimr::NArrow {
 
 namespace {
 
-template <class T, class TOutput>
+template <class T>
 class TColumnNameAccessor {
 public:
     static const std::string& GetFieldName(const T& val) {
@@ -21,7 +21,7 @@ public:
 template <>
 class TColumnNameAccessor<std::shared_ptr<arrow::Field>> {
 public:
-    static const std::string& GetFieldName(const T& val) {
+    static const std::string& GetFieldName(const std::shared_ptr<arrow::Field>& val) {
         return val->name();
     }
 };
@@ -146,6 +146,11 @@ std::shared_ptr<arrow::Table> TColumnOperator::Extract(
 }
 
 std::shared_ptr<arrow::RecordBatch> TColumnOperator::Extract(
+    const std::shared_ptr<arrow::RecordBatch>& incoming, const std::vector<std::shared_ptr<arrow::Field>>& columns) {
+    return ExtractImpl(AbsentColumnPolicy, incoming, columns);
+}
+
+std::shared_ptr<arrow::RecordBatch> TColumnOperator::Extract(
     const std::shared_ptr<arrow::RecordBatch>& incoming, const std::vector<TString>& columnNames) {
     return ExtractImpl(AbsentColumnPolicy, incoming, columnNames);
 }
@@ -195,24 +200,23 @@ NKikimr::TConclusion<std::shared_ptr<arrow::Table>> TColumnOperator::Reorder(
 }
 namespace {
 template <class TDataContainer, class TSchemaImpl>
-TConclusion<std::shared_ptr<TSchemaSubset>> BuildSequentialSubsetImpl(
+TConclusion<TSchemaSubset> BuildSequentialSubsetImpl(
     const std::shared_ptr<TDataContainer>& srcBatch, const std::shared_ptr<TSchemaImpl>& dstSchema) {
-    TSchemaSubset result;
     AFL_VERIFY(srcBatch);
     AFL_VERIFY(dstSchema);
-    if (dstSchema->num_fields() < srcBatch->num_fields()) {
+    if (dstSchema->num_fields() < srcBatch->schema()->num_fields()) {
         AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "incorrect columns set: destination must been wider than source")(
-            "source", srcBatch->schema()->ToString())("destination", dstSchema->schema()->ToString());
+            "source", srcBatch->schema()->ToString())("destination", dstSchema->ToString());
         return TConclusionStatus::Fail("incorrect columns set: destination must been wider than source");
     }
     std::set<ui32> fieldIdx;
     auto itSrc = srcBatch->schema()->fields().begin();
-    auto itDst = dstSchema->schema()->fields().begin();
-    while (itSrc != srcBatch->schema()->fields().end() && itDst != dstSchema->schema()->fields().end()) {
-        if (itSrc->name() != itDst->name()) {
+    auto itDst = dstSchema->fields().begin();
+    while (itSrc != srcBatch->schema()->fields().end() && itDst != dstSchema->fields().end()) {
+        if ((*itSrc)->name() != (*itDst)->name()) {
             ++itDst;
         } else {
-            fieldIdx.emplace(itDst - dstSchema->schema()->fields().begin());
+            fieldIdx.emplace(itDst - dstSchema->fields().begin());
             if (!(*itDst)->Equals(*itSrc)) {
                 AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "cannot_use_incoming_batch")("reason", "invalid_column_type")(
                     "column_type", (*itDst)->ToString(true))("incoming_type", (*itSrc)->ToString(true));
@@ -222,18 +226,17 @@ TConclusion<std::shared_ptr<TSchemaSubset>> BuildSequentialSubsetImpl(
             ++itDst;
             ++itSrc;
         }
-        ++idx;
     }
-    if (itDst == dstSchema->schema()->fields().end() && itSrc != srcBatch->schema()->fields().end()) {
+    if (itDst == dstSchema->fields().end() && itSrc != srcBatch->schema()->fields().end()) {
         AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "incorrect columns order in source set")("source", srcBatch->schema()->ToString())(
-            "destination", dstSchema->schema()->ToString());
+            "destination", dstSchema->ToString());
         return TConclusionStatus::Fail("incorrect columns order in source set");
     }
     return TSchemaSubset(fieldIdx, dstSchema->num_fields());
 }
 }   // namespace
 
-NKikimr::TConclusion<NKikimr::NArrow::TSchemaSubset> TColumnOperator::BuildSequentialSubset(
+TConclusion<TSchemaSubset> TColumnOperator::BuildSequentialSubset(
     const std::shared_ptr<arrow::RecordBatch>& incoming, const std::shared_ptr<NArrow::TSchemaLite>& dstSchema) {
     return BuildSequentialSubsetImpl(incoming, dstSchema);
 }

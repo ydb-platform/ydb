@@ -760,7 +760,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
                         DECLARE $id AS Uint64;
                         --JOIN with same table to make depended read
                         SELECT t1.Data as Data, t1.Key as Key, t1.Text as Text FROM `/Root/OneShardWithFolower` as t1
-                            INNER JOIN OneShardWithFolower as t2 ON t1.Key = t2.Key WHERE t1.Text = "Value1" ORDER BY t1.Key;
+                            INNER JOIN OneShardWithFolower as t2 ON t1.Key = t2.Key WHERE t1.Text = "Value1" ORDER BY Key;
                     )"):
                     TString(R"(
                         DECLARE $id AS Uint64;

@@ -2276,7 +2276,7 @@ void TPDisk::ProcessChunkReadQueue() {
         EChunkReadPieceResult result = ChunkReadPiece(read, piece->PieceCurrentSector, currentLimit,
             piece->SpanStack.GetTraceId(), std::move(piece->Orbit));
         bool isComplete = (result != ReadPieceResultInProgress);
-        Y_VERIFY(isComplete || currentLimit  >= piece->PieceSizeLimit);
+        Y_VERIFY_S(isComplete || currentLimit >= piece->PieceSizeLimit, isComplete << " " << currentLimit << " " << piece->PieceSizeLimit);
         piece->OnSuccessfulDestroy(PCtx->ActorSystem);
         if (isComplete) {
             //
@@ -3141,39 +3141,40 @@ void TPDisk::PushRequestToForseti(TRequestBase *request) {
         if (!isAdded) {
             if (request->GetType() == ERequestType::RequestChunkWrite) {
                 TIntrusivePtr<TChunkWrite> whole(static_cast<TChunkWrite*>(request));
-                ui32 maxJobSize = 0;
-                ui32 lastJobSize = 0; // unused
-                ui32 jobCount = 0;
-                SplitChunkJobSize(whole->TotalSize, &maxJobSize, &lastJobSize, &jobCount);
+
+                const ui32 jobSizeLimit  = ui64(ForsetiOpPieceSizeCached) * Format.SectorPayloadSize() / Format.SectorSize;
+                const ui32 jobCount = (whole->TotalSize + jobSizeLimit - 1) / jobSizeLimit;
+
                 ui32 remainingSize = whole->TotalSize;
                 for (ui32 idx = 0; idx < jobCount; ++idx) {
-                    // Schedule small job.
                     auto span = request->SpanStack.CreateChild(TWilson::PDiskBasic, "PDisk.ChunkWritePiece", NWilson::EFlags::AUTO_END);
                     span.Attribute("small_job_idx", idx)
-                        .Attribute("is_last_piece", false);
-                    ui32 jobSize = Min(remainingSize, maxJobSize);
-                    remainingSize -= jobSize;
-                    TChunkWritePiece *piece = new TChunkWritePiece(whole, idx * maxJobSize, jobSize, std::move(span));
+                        .Attribute("is_last_piece", idx == jobCount - 1);
+                    ui32 jobSize = Min(remainingSize, jobSizeLimit);
+                    TChunkWritePiece *piece = new TChunkWritePiece(whole, idx * jobSizeLimit, jobSize, std::move(span));
                     piece->EstimateCost(DriveModel);
                     AddJobToForseti(cbs, piece, request->JobKind);
+                    remainingSize -= jobSize;
                 }
                 Y_VERIFY_S(remainingSize == 0, remainingSize);
             } else if (request->GetType() == ERequestType::RequestChunkRead) {
                 TIntrusivePtr<TChunkRead> read = std::move(static_cast<TChunkRead*>(request)->SelfPointer);
                 ui32 totalSectors = read->LastSector - read->FirstSector + 1;
 
-                ui32 maxJobSize = (ForsetiOpPieceSizeCached + Format.SectorSize - 1) / Format.SectorSize;
-                ui32 jobCount = (totalSectors + maxJobSize - 1) / maxJobSize;
+                Y_DEBUG_ABORT_UNLESS(ForsetiOpPieceSizeCached % Format.SectorSize == 0);
+                const ui32 jobSizeLimit = ForsetiOpPieceSizeCached / Format.SectorSize;
+                const ui32 jobCount = (totalSectors + jobSizeLimit - 1) / jobSizeLimit;
                 for (ui32 idx = 0; idx < jobCount; ++idx) {
                     auto span = request->SpanStack.CreateChild(TWilson::PDiskBasic, "PDisk.ChunkReadPiece", NWilson::EFlags::AUTO_END);
+                    bool isLast = idx == jobCount - 1;
                     span.Attribute("small_job_idx", idx)
-                        .Attribute("is_last_piece", idx == jobCount - 1);
+                        .Attribute("is_last_piece", isLast);
 
-                    ui32 jobSize = Min(totalSectors, maxJobSize);
-                    auto piece = new TChunkReadPiece(read, idx * maxJobSize, jobSize * Format.SectorSize, false, std::move(span));
+                    ui32 jobSize = Min(totalSectors, jobSizeLimit);
+                    auto piece = new TChunkReadPiece(read, idx * jobSizeLimit, jobSize * Format.SectorSize, isLast, std::move(span));
                     read->Orbit.Fork(piece->Orbit);
-                    LWTRACK(PDiskChunkReadPieceAddToScheduler, piece->Orbit, PCtx->PDiskId, idx, idx * maxJobSize * Format.SectorSize,
-                            maxJobSize * Format.SectorSize);
+                    LWTRACK(PDiskChunkReadPieceAddToScheduler, piece->Orbit, PCtx->PDiskId, idx, idx * jobSizeLimit * Format.SectorSize,
+                            jobSizeLimit * Format.SectorSize);
                     piece->EstimateCost(DriveModel);
                     piece->SelfPointer = piece;
                     AddJobToForseti(cbs, piece, request->JobKind);
@@ -3190,14 +3191,6 @@ void TPDisk::PushRequestToForseti(TRequestBase *request) {
                 " PushRequestToForseti Push to FastOperationsQueue.size# %" PRIu64,
                 (ui32)PCtx->PDiskId, (ui64)request->ReqId.Id, (ui64)FastOperationsQueue.size());
     }
-}
-
-void TPDisk::SplitChunkJobSize(ui32 totalSize, ui32 *outMaxJobSize, ui32 *outLastJobSize, ui32 *outJobCount) {
-    const ui64 sectorPayloadSize = Format.SectorPayloadSize();
-    ui64 payloadBytesPieceLimit = ui64(ForsetiOpPieceSizeCached) * Format.SectorPayloadSize() / Format.SectorSize;
-    *outMaxJobSize = (payloadBytesPieceLimit + sectorPayloadSize - 1) / sectorPayloadSize * sectorPayloadSize;
-    *outJobCount = (totalSize + *outMaxJobSize - 1) / *outMaxJobSize;
-    *outLastJobSize = totalSize - *outMaxJobSize * (*outJobCount - 1);
 }
 
 void TPDisk::AddJobToForseti(NSchLab::TCbs *cbs, TRequestBase *request, NSchLab::EJobKind jobKind) {
@@ -3411,18 +3404,17 @@ void TPDisk::EnqueueAll() {
 void TPDisk::Update() {
     Mon.UpdateDurationTracker.UpdateStarted();
 
-    // Make input queue empty
     {
         TGuard<TMutex> guard(StateMutex);
         ForsetiMaxLogBatchNsCached = ForsetiMaxLogBatchNs;
         ForsetiOpPieceSizeCached = PDiskCategory.IsSolidState() ? ForsetiOpPieceSizeSsd : ForsetiOpPieceSizeRot;
-        Y_VERIFY_S(ForsetiOpPieceSizeCached <= Cfg->BufferPoolBufferSizeBytes,
-            ForsetiOpPieceSizeCached << " " << Cfg->BufferPoolBufferSizeBytes);
-        EnqueueAll();
-        /*userSectorSize = */Format.SectorPayloadSize();
-
+        ForsetiOpPieceSizeCached = Min<i64>(ForsetiOpPieceSizeCached, Cfg->BufferPoolBufferSizeBytes);
+        ForsetiOpPieceSizeCached = AlignDown<i64>(ForsetiOpPieceSizeCached, Format.SectorSize);
         // Switch the scheduler when possible
         ForsetiScheduler.SetIsBinLogEnabled(EnableForsetiBinLog);
+
+        // Make input queue empty
+        EnqueueAll();
     }
 
     // Make token injection to correct drive model underestimations and avoid disk underutilization

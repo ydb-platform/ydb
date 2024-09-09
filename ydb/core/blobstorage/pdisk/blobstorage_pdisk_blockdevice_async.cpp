@@ -419,12 +419,8 @@ class TRealBlockDevice : public IBlockDevice {
                     Device.Mon.DeviceWriteDuration.Increment(duration);
                     LWPROBE(PDiskDeviceWriteDuration, Device.GetPDiskId(), duration, opSize);
                 }
-                P_LOG(PRI_NOTICE, BPD01, "iop is done",
-                        (Type, op->GetType() == IAsyncIoOperation::EType::PRead ? "read" : "write"),
-                        (Duration, duration),
-                        (Offset, op->GetOffset()),
-                        (Size, opSize)
-                );
+                P_LOG(PRI_TRACE, BPD01, "iop is done", (Type, op->GetType()), (Duration, duration),
+                    (Offset, op->GetOffset()), (Size, opSize));
                 if (completionAction->FlushAction) {
                     ui64 idx = completionAction->FlushAction->OperationIdx;
                     Y_ABORT_UNLESS(WaitingNoops[idx % MaxWaitingNoops] == nullptr);

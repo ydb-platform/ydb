@@ -107,17 +107,7 @@ namespace {
         return result.Defined();
     }
 
-    template <typename T>
-    bool TryParse(TStringBuf value, T& result, TString& err, const void* parseParam) {
-        Y_UNUSED(value);
-        Y_UNUSED(result);
-        Y_UNUSED(err);
-        Y_UNUSED(parseParam);
-        Y_ABORT("TryParse with parseParam is unimplemented");
-    }
-
-    template <>
-    bool TryParse(TStringBuf value, NPg::TConvertResult& result, TString& err, const void* typeDesc) {
+    bool TryParse(TStringBuf value, NPg::TConvertResult& result, TString& err, const NScheme::TTypeDesc* typeDesc) {
         TString unescaped;
         if (!CheckedUnescape(value, unescaped)) {
             err = MakeError<NPg::TConvertResult>();
@@ -233,9 +223,9 @@ namespace {
             return Conv(c, v, pool, conv);
         }
 
-        static bool Make(TCell& c, TStringBuf v, TMemoryPool& pool, TString& err, TConverter<T, TStringBuf> conv, const void* parseParam) {
+        static bool Make(TCell& c, TStringBuf v, TMemoryPool& pool, TString& err, TConverter<T, TStringBuf> conv, const NScheme::TTypeDesc* parseParam) {
             T t;
-            if (!TryParse<T>(v, t, err, parseParam)) {
+            if (!TryParse(v, t, err, parseParam)) {
                 return false;
             }
 

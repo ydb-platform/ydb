@@ -119,7 +119,7 @@ NKikimr::TConclusionStatus TSchemaTransactionOperator::ValidateTableSchema(const
     TVector<TString> columnErrors;
     for (const NKikimrSchemeOp::TOlapColumnDescription& column : schema.GetColumns()) {
         TString name = column.GetName();
-        const void* typeDescr = nullptr;
+        const NScheme::TTypeDesc* typeDescr = nullptr;
         if (column.GetTypeId() == NTypeIds::Pg && column.HasTypeInfo()) {
             typeDescr = NPg::TypeDescFromPgTypeId(column.GetTypeInfo().GetPgTypeId());
         }

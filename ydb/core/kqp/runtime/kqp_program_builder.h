@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/core/scheme_types/scheme_type_desc.h>
+
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
 
 namespace NKikimr {
@@ -13,9 +15,9 @@ struct TKqpTableColumn {
     TString Name;
     NUdf::TDataTypeId Type;
     bool NotNull;
-    const void* TypeDesc;
+    const NScheme::TTypeDesc* TypeDesc;
 
-    TKqpTableColumn(ui32 id, const TStringBuf& name, NUdf::TDataTypeId type, bool notNull, const void* typeDesc)
+    TKqpTableColumn(ui32 id, const TStringBuf& name, NUdf::TDataTypeId type, bool notNull, const NScheme::TTypeDesc* typeDesc)
         : Id(id)
         , Name(name)
         , Type(type)

@@ -1,15 +1,19 @@
 #pragma once
 
+#include "scheme_type_desc.h"
+
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
 namespace NKikimr::NScheme {
+
+struct TTypeDesc;
 
 class TTypeInfo {
 public:
     constexpr TTypeInfo()
     {}
 
-    explicit constexpr TTypeInfo(TTypeId typeId, const void* typeDesc = {})
+    explicit constexpr TTypeInfo(TTypeId typeId, const TTypeDesc* typeDesc = {})
         : TypeId(typeId)
         , TypeDesc(typeDesc)
     {
@@ -30,13 +34,13 @@ public:
         return TypeId;
     }
 
-    const void* GetTypeDesc() const {
+    const TTypeDesc* GetTypeDesc() const {
         return TypeDesc;
     }
 
 private:
     TTypeId TypeId = 0;
-    const void* TypeDesc = {};
+    const TTypeDesc* TypeDesc = {};
 };
 
 } // namespace NKikimr::NScheme

@@ -1980,9 +1980,9 @@ void ValidateDynamicTableConstraints(const TTableSchema& schema)
     for (const auto& column : schema.Columns()) {
         try {
             auto logicalType = column.LogicalType();
-            if (column.SortOrder() && !column.IsOfV1Type() &&
-                logicalType->GetMetatype() != ELogicalMetatype::List &&
-                logicalType->GetMetatype() != ELogicalMetatype::Tuple)
+            if (!IsComparable(logicalType) &&
+                column.SortOrder() &&
+                !column.IsOfV1Type(ESimpleLogicalValueType::Any))
             {
                 THROW_ERROR_EXCEPTION("Dynamic table cannot have key column of type %Qv",
                     *logicalType);

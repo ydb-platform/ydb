@@ -1152,6 +1152,10 @@ private:
                     Issues.AddIssue(TIssue(ex.message()));
                     FatalCode = NYql::NDqProto::StatusIds::BAD_REQUEST;
                     RetryStuff->Cancel();
+                } catch (const yexception& ex) {
+                    Issues.AddIssue(ExceptionToIssue(ex));
+                    FatalCode = NYql::NDqProto::StatusIds::BAD_REQUEST;
+                    RetryStuff->Cancel();
                 }
             }
         } catch (const TS3ReadAbort&) {

@@ -51,10 +51,12 @@ public:
 
     virtual IListValueBuilder& Add(TUnboxedValue&& element) = 0;
 
-    virtual IListValueBuilder& Add(const NUdf::TUnboxedValue* elements, size_t count) = 0;
+    virtual IListValueBuilder& AddMany(const NUdf::TUnboxedValue* elements, size_t count) = 0;
 
     virtual TUnboxedValue Build() = 0;
 };
+
+UDF_ASSERT_TYPE_SIZE(IListValueBuilder, 8);
 
 ///////////////////////////////////////////////////////////////////////////////
 // IDateBuilder
@@ -305,7 +307,7 @@ public:
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 39)
 class IValueBuilder8: public IValueBuilder7 {
 public:
-    virtual IListValueBuilder::TPtr BuildList() const = 0;
+    virtual IListValueBuilder::TPtr NewListBuilder() const = 0;
 };
 #endif
 

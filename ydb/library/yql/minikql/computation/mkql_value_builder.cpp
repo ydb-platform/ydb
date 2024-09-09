@@ -87,7 +87,7 @@ NUdf::TUnboxedValue TDefaultValueBuilder::SubString(NUdf::TUnboxedValuePod value
 }
 
 NUdf::TUnboxedValue TDefaultValueBuilder::NewList(NUdf::TUnboxedValue* items, ui64 count) const {
-    return HolderFactory_.NewList()->Add(items, count).Build();
+    return HolderFactory_.NewList()->AddMany(items, count).Build();
 }
 
 NUdf::TUnboxedValue TDefaultValueBuilder::ReverseList(const NUdf::TUnboxedValuePod& list) const
@@ -315,7 +315,7 @@ bool TDefaultValueBuilder::GetSecureParam(NUdf::TStringRef key, NUdf::TStringRef
     return false;
 }
 
-NUdf::IListValueBuilder::TPtr TDefaultValueBuilder::BuildList() const {
+NUdf::IListValueBuilder::TPtr TDefaultValueBuilder::NewListBuilder() const {
     return HolderFactory_.NewList();
 }
 

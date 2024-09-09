@@ -2923,7 +2923,7 @@ public:
         return *this;
     }
 
-    IListValueBuilder& Add(const NUdf::TUnboxedValue* elements, size_t count) final {
+    IListValueBuilder& AddMany(const NUdf::TUnboxedValue* elements, size_t count) final {
         List_.reserve(List_.size() + count);
         std::copy_n(std::make_move_iterator(elements), count, std::back_inserter(List_));
         return *this;

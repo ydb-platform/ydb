@@ -91,7 +91,7 @@ public:
 
     NUdf::TUnboxedValue NewArray64(ui64 count, NUdf::TUnboxedValue*& itemsPtr) const final;
 
-    NUdf::IListValueBuilder::TPtr BuildList() const final;
+    NUdf::IListValueBuilder::TPtr NewListBuilder() const final;
 
 private:
     const THolderFactory& HolderFactory_;

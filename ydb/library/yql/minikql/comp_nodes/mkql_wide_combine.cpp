@@ -616,21 +616,26 @@ private:
         if (SpillingBucketsCount > 0) {
             return true;
         }
-        ui64 maxLineCount = 0;
-        ui32 maxLineBucketInd = (ui32)-1;
-        for (ui64 i = 0; i < SpilledBucketCount; ++i) {
-            const auto& bucket = SpilledBuckets[i];
-            if (bucket.BucketState == TSpilledBucket::EBucketState::InMemory && bucket.LineCount > maxLineCount) {
-                maxLineCount = bucket.LineCount;
-                maxLineBucketInd = i;
+        while (true) {
+            ui64 maxLineCount = 0;
+            ui32 maxLineBucketInd = (ui32)-1;
+            for (ui64 i = 0; i < SpilledBucketCount; ++i) {
+                const auto& bucket = SpilledBuckets[i];
+                if (bucket.BucketState == TSpilledBucket::EBucketState::InMemory && (maxLineBucketInd == (ui32)-1 || bucket.LineCount > maxLineCount)) {
+                    maxLineCount = bucket.LineCount;
+                    maxLineBucketInd = i;
+                }
+            }
+            if (maxLineBucketInd == (ui32)-1) {
+                break;
+            }
+            auto& bucketToSpill = SpilledBuckets[maxLineBucketInd];
+            SpillMoreStateFromBucket(bucketToSpill);
+            if (bucketToSpill.BucketState == TSpilledBucket::EBucketState::SpillingState) {
+                return true;
             }
         }
-        if (maxLineBucketInd != (ui32)-1) {
-            SpillMoreStateFromBucket(SpilledBuckets[maxLineBucketInd]);
-            return true;
-        } else {
-            return false;
-        }
+        return false;
     }
 
     EUpdateResult ProcessSpilledData() {

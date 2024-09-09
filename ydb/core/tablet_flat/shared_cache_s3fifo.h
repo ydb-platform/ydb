@@ -14,7 +14,7 @@ namespace NKikimr::NCache {
 template <typename TPageKey
         , typename TPageKeyHash
         , typename TPageKeyEqual>
-class TGhostQueue {
+class TTS3FIFOGhostQueue {
     struct TGhostPage {
         TPageKey Key;
         ui64 Size; // zero size is tombstone
@@ -38,7 +38,7 @@ class TGhostQueue {
     };
 
 public:
-    TGhostQueue(ui64 limit)
+    TTS3FIFOGhostQueue(ui64 limit)
         : Limit(limit)
     {}
 
@@ -78,19 +78,22 @@ public:
         EvictWhileFull();
     }
 
-    TString Dump() {
+    TString Dump() const {
         TStringBuilder result;
-        size_t size = 0;
-        for (auto it : GhostsQueue) {
-            const TGhostPage* ghost = &it;
+        size_t count = 0;
+        ui64 size = 0;
+        for (auto it = GhostsQueue.begin(); it != GhostsQueue.end(); it++) {
+            const TGhostPage* ghost = &*it;
             if (ghost->Size) { // isn't deleted
                 Y_DEBUG_ABORT_UNLESS(GhostsSet.contains(ghost));
-                if (size != 0) result << ", ";
+                if (count != 0) result << ", ";
                 result << "{" << ghost->Key.ToString() << " " << ghost->Size << "b}";
-                size++;
+                count++;
+                size += ghost->Size;
             }
         }
-        Y_DEBUG_ABORT_UNLESS(GhostsSet.size() == size);
+        Y_DEBUG_ABORT_UNLESS(GhostsSet.size() == count);
+        Y_DEBUG_ABORT_UNLESS(Size == size);
         return result;
     }
 
@@ -205,6 +208,32 @@ public:
     void UpdateLimit(ui64 limit) override {
         Limit = limit;
         GhostQueue.UpdateLimit(limit);
+    }
+
+    TString Dump() const {
+        TStringBuilder result;
+
+        auto dump = [&](const TQueue& queue) {
+            size_t count = 0;
+            ui64 size = 0;
+            for (auto it = queue.Queue.begin(); it != queue.Queue.end(); it++) {
+                const TPage* page = &*it;
+                if (count != 0) result << ", ";
+                result << "{" << GetKey(page).ToString() << " " << GetFrequency(page) << "f " << GetSize(page) << "b}";
+                count++;
+                size += GetSize(page);
+            }
+            Y_DEBUG_ABORT_UNLESS(queue.Size == size);
+        };
+
+        result << "SmallQueue: ";
+        dump(SmallQueue);
+        result << Endl << "MainQueue: ";
+        dump(MainQueue);
+        result << Endl << "GhostQueue: ";
+        result << GhostQueue.Dump();
+
+        return result;
     }
 
 private:
@@ -322,7 +351,7 @@ private:
     TLimit Limit;
     TQueue SmallQueue;
     TQueue MainQueue;
-    TGhostQueue<TPageKey, TPageKeyHash, TPageKeyEqual> GhostQueue;
+    TTS3FIFOGhostQueue<TPageKey, TPageKeyHash, TPageKeyEqual> GhostQueue;
 
 };
 

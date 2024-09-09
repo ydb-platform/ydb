@@ -5,47 +5,55 @@ namespace NKikimr::NCache {
 
 namespace {
 
-    struct TPage {
+    struct TPage : public TIntrusiveListItem<TPage> {
         ui32 Id;
         size_t Size;
+
+        TPage(ui32 id, size_t size) 
+            : Id(id), Size(size)
+        {}
 
         ui32 CacheFlags1 : 4 = 0;
         ui32 CacheFlags2 : 4 = 0;
     };
 
-    struct TKey {
+    struct TPageKey {
         ui32 Id;
 
-        TKey(ui32 id)
+        TPageKey(ui32 id)
             : Id(id)
         {}
+
+        static TPageKey Get(const TPage* page) {
+            return {page->Id};
+        }
 
         TString ToString() const {
             return std::to_string(Id);
         }
     };
 
-    struct TKeyHash {
-        inline size_t operator()(const TKey& key) const {
+    struct TPageKeyHash {
+        inline size_t operator()(const TPageKey& key) const {
             return std::hash<ui32>()(key.Id);
         }
     };
 
-    struct TKeyEqual {
-        inline bool operator()(const TKey& left, const TKey& right) const {
+    struct TPageKeyEqual {
+        inline bool operator()(const TPageKey& left, const TPageKey& right) const {
             return left.Id == right.Id;
         }
     };
 
-    struct TSize {
-        static ui64 Get(const TPage *x) {
-            return x->Size;
+    struct TPageSize {
+        static ui64 Get(const TPage *page) {
+            return page->Size;
         }
     };
 
-    struct TCacheFlags1 {
-        static ui32 Get(const TPage *x) {
-            return x->CacheFlags1;
+    struct TPageLocation {
+        static ui32 Get(const TPage *page) {
+            return page->CacheFlags1;
         }
         static void Set(TPage *x, ui32 flags) {
             Y_ABORT_UNLESS(flags < (1 << 4));
@@ -53,22 +61,22 @@ namespace {
         }
     };
 
-    struct TCacheFlags2 {
-        static ui32 Get(const TPage *x) {
-            return x->CacheFlags2;
+    struct TPageFrequency {
+        static ui32 Get(const TPage *page) {
+            return page->CacheFlags2;
         }
-        static void Set(TPage *x, ui32 flags) {
+        static void Set(TPage *page, ui32 flags) {
             Y_ABORT_UNLESS(flags < (1 << 4));
-            x->CacheFlags2 = flags;
+            page->CacheFlags2 = flags;
         }
     };
 
 }
 
-Y_UNIT_TEST_SUITE(TGhostQueue) {
+Y_UNIT_TEST_SUITE(TTS3FIFOGhostQueue) {
     
     Y_UNIT_TEST(Add) {
-        TGhostQueue<TKey, TKeyHash, TKeyEqual> queue(100);
+        TTS3FIFOGhostQueue<TPageKey, TPageKeyHash, TPageKeyEqual> queue(100);
         UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "");
 
         queue.Add(1, 10);
@@ -88,7 +96,7 @@ Y_UNIT_TEST_SUITE(TGhostQueue) {
     }
 
     Y_UNIT_TEST(Erase) {
-        TGhostQueue<TKey, TKeyHash, TKeyEqual> queue(100);
+        TTS3FIFOGhostQueue<TPageKey, TPageKeyHash, TPageKeyEqual> queue(100);
         UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "");
 
         queue.Add(1, 10);
@@ -110,7 +118,7 @@ Y_UNIT_TEST_SUITE(TGhostQueue) {
     }
 
     Y_UNIT_TEST(Erase_Add) {
-        TGhostQueue<TKey, TKeyHash, TKeyEqual> queue(100);
+        TTS3FIFOGhostQueue<TPageKey, TPageKeyHash, TPageKeyEqual> queue(100);
         UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "");
 
         queue.Add(1, 10);
@@ -129,7 +137,7 @@ Y_UNIT_TEST_SUITE(TGhostQueue) {
     }
 
     Y_UNIT_TEST(Add_Big) {
-        TGhostQueue<TKey, TKeyHash, TKeyEqual> queue(100);
+        TTS3FIFOGhostQueue<TPageKey, TPageKeyHash, TPageKeyEqual> queue(100);
         UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "");
 
         queue.Add(1, 101);
@@ -137,7 +145,7 @@ Y_UNIT_TEST_SUITE(TGhostQueue) {
     }
 
     Y_UNIT_TEST(UpdateLimit) {
-        TGhostQueue<TKey, TKeyHash, TKeyEqual> queue(100);
+        TTS3FIFOGhostQueue<TPageKey, TPageKeyHash, TPageKeyEqual> queue(100);
         UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "");
 
         queue.Add(1, 10);
@@ -149,6 +157,54 @@ Y_UNIT_TEST_SUITE(TGhostQueue) {
         queue.UpdateLimit(80);
         UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "{3 30b}, {4 40b}");
     }
+
+}
+
+Y_UNIT_TEST_SUITE(TS3FIFOCache) {
+
+    TVector<TPage*> Touch(auto& cache, TPage& page) {
+        auto evicted = cache.Touch(&page);
+        TVector<TPage*> result;
+        for (auto& p : evicted) {
+            result.push_back(&p);
+        }
+        return result;
+    }
+
+    Y_UNIT_TEST(Touch) {
+        TS3FIFOCache<TPage, TPageKey, TPageKeyHash, TPageKeyEqual, TPageSize, TPageLocation, TPageFrequency> cache(100);
+
+        TPage page1{1, 2};
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page1), TVector<TPage*>{});
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
+            << "SmallQueue: {1 0f 2b}" << Endl
+            << "MainQueue: " << Endl
+            << "GhostQueue: "));
+        
+        TPage page2{2, 3};
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page2), TVector<TPage*>{});
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
+            << "SmallQueue: {1 0f 2b}, {2 0f 3b}" << Endl
+            << "MainQueue: " << Endl
+            << "GhostQueue: "));
+        
+        TPage page3{3, 4};
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page3), TVector<TPage*>{});
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
+            << "SmallQueue: {1 0f 2b}, {2 0f 3b}, {3 0f 4b}" << Endl
+            << "MainQueue: " << Endl
+            << "GhostQueue: "));
+
+        TPage page4{4, 1};
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page4), TVector<TPage*>{});
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
+            << "SmallQueue: {1 0f 2b}, {2 0f 3b}, {3 0f 4b}, {4 0f 1b}" << Endl
+            << "MainQueue: " << Endl
+            << "GhostQueue: "));
+
+        
+    }
+
 }
 
 }

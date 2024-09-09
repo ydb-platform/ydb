@@ -137,8 +137,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
             auto operator<=>(const TKey&) const = default;
 
-            static TKey Get(const TPage *x) {
-                return {x->Collection->MetaId, x->PageId};
+            static TKey Get(const TPage *page) {
+                return {page->Collection->MetaId, page->PageId};
             }
 
             TString ToString() const {
@@ -159,15 +159,15 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         };
 
         struct TSize {
-            static ui64 Get(const TPage *x) {
-                Y_DEBUG_ABORT_UNLESS(x->State == PageStateLoaded);
-                return sizeof(TPage) + x->Size;
+            static ui64 Get(const TPage *page) {
+                Y_DEBUG_ABORT_UNLESS(page->State == PageStateLoaded);
+                return sizeof(TPage) + page->Size;
             }
         };
 
         struct TCacheFlags1 {
-            static ui32 Get(const TPage *x) {
-                return x->CacheFlags1;
+            static ui32 Get(const TPage *page) {
+                return page->CacheFlags1;
             }
             static void Set(TPage *x, ui32 flags) {
                 Y_ABORT_UNLESS(flags < (1 << 4));
@@ -176,12 +176,12 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         };
 
         struct TCacheFlags2 {
-            static ui32 Get(const TPage *x) {
-                return x->CacheFlags2;
+            static ui32 Get(const TPage *page) {
+                return page->CacheFlags2;
             }
-            static void Set(TPage *x, ui32 flags) {
+            static void Set(TPage *page, ui32 flags) {
                 Y_ABORT_UNLESS(flags < (1 << 4));
-                x->CacheFlags2 = flags;
+                page->CacheFlags2 = flags;
             }
         };
     };

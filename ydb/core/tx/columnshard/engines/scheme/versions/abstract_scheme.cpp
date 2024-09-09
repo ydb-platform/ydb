@@ -121,7 +121,7 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModi
             AFL_VERIFY(batch->num_columns() <= dstSchema->num_fields());
             if (batch->num_columns() < dstSchema->num_fields()) {
                 ui32 idx = 0;
-                for (ui32 idx = 0; idx < dstSchema->num_fields(); ++idx) {
+                for (ui32 idx = 0; idx < (ui32)dstSchema->num_fields(); ++idx) {
                     if (GetIndexInfo().IsNullableVerifiedByIndex(idx)) {
                         continue;
                     }
@@ -131,7 +131,7 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModi
                     if (batch->GetColumnByName(dstSchema->field(idx)->name())) {
                         continue;
                     }
-                    return TConclusionStatus::Fail("empty field for non-default column: '" + f->name() + "'");
+                    return TConclusionStatus::Fail("empty field for non-default column: '" + dstSchema->field(idx)->name() + "'");
                 }
             }
             return batch;
@@ -208,8 +208,9 @@ std::vector<std::shared_ptr<arrow::Field>> ISnapshotSchema::GetAbsentFields(cons
 
 TConclusionStatus ISnapshotSchema::CheckColumnsDefault(const std::vector<std::shared_ptr<arrow::Field>>& fields) const {
     for (auto&& i : fields) {
-        auto defaultValue = GetExternalDefaultValueVerified(i->name());
-        if (!defaultValue && !GetIndexInfo().IsNullableVerified(i->name())) {
+        const ui32 colId = GetColumnIdVerified(i->name());
+        auto defaultValue = GetExternalDefaultValueVerified(colId);
+        if (!defaultValue && !GetIndexInfo().IsNullableVerified(colId)) {
             return TConclusionStatus::Fail("not nullable field with no default: " + i->name());
         }
     }

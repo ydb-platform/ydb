@@ -378,9 +378,6 @@ std::shared_ptr<arrow::Scalar> TIndexInfo::GetColumnExternalDefaultValueVerified
 }
 
 std::shared_ptr<arrow::Scalar> TIndexInfo::GetColumnExternalDefaultValueVerified(const ui32 columnId) const {
-    if (IIndexInfo::IsSpecialColumn(columnId)) {
-        return IIndexInfo::DefaultColumnValue(columnId);
-    }
     return GetColumnFeaturesVerified(columnId).GetDefaultValue().GetValue();
 }
 
@@ -448,6 +445,11 @@ std::shared_ptr<NKikimr::NOlap::TColumnFeatures> TIndexInfo::BuildDefaultColumnF
         return std::make_shared<TColumnFeatures>(columnId, GetColumnFieldVerified(columnId), DefaultSerializer, operators->GetDefaultOperator(),
             NArrow::IsPrimitiveYqlType(itC->second.PType), columnId == GetPKFirstColumnId(), false, nullptr);
     }
+}
+
+std::shared_ptr<arrow::Scalar> TIndexInfo::GetColumnExternalDefaultValueByIndexVerified(const ui32 colIndex) const {
+    AFL_VERIFY(colIndex < ColumnFeatures.size())("index", colIndex)("size", ColumnFeatures.size());
+    return ColumnFeatures[colIndex]->GetDefaultValue().GetValue();
 }
 
 }   // namespace NKikimr::NOlap

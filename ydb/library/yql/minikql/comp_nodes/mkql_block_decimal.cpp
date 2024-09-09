@@ -274,7 +274,9 @@ struct TDecimalModBlockExec: TDecimalBlockExec<TDecimalModBlockExec<TRight>, TRi
     { }
 
     NYql::NDecimal::TInt128 Do(NYql::NDecimal::TInt128 left, NYql::NDecimal::TInt128 right) const {
-        if constexpr (std::is_same_v<TRight, NYql::NDecimal::TInt128> || std::is_signed<TRight>::value) {
+        if constexpr (std::is_same_v<TRight, NYql::NDecimal::TInt128>) {
+            return NYql::NDecimal::Mod(left, right);
+        } else if constexpr (std::is_signed<TRight>::value) {
             if (right >= +Bound || right <= -Bound)
                 return left;
         } else {

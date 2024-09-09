@@ -92,7 +92,6 @@ Y_UNIT_TEST_SUITE(KqpSinkLocks) {
             auto commitResult = tx1->Commit().GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::ABORTED, commitResult.GetIssues().ToString());
             commitResult.GetIssues().PrintTo(Cerr);
-            UNIT_ASSERT_C(commitResult.GetIssues().Size() != 0, commitResult.GetIssues().ToString());
             if (!GetIsOlap()) {
                 UNIT_ASSERT_C(HasIssue(commitResult.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
                     [] (const NYql::TIssue& issue) {

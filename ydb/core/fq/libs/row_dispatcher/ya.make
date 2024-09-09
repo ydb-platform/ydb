@@ -34,10 +34,6 @@ YQL_LAST_ABI_VERSION()
 
 END()
 
-RECURSE(
-    events
-)
-
 RECURSE_FOR_TESTS(
     ut
 )

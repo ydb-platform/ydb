@@ -26,6 +26,7 @@ TStringBuf GetNormalClusterName(TStringBuf clusterName)
 // TODO(ignat): move this logic to ads/bsyeti/libs/ytex/client/
 TClientsCacheConfigPtr GetClustersConfigWithNormalClusterName(const TClientsCacheConfigPtr& config)
 {
+    YT_VERIFY(config);
     auto newConfig = New<TClientsCacheConfig>();
 
     newConfig->DefaultConfig = CloneYsonStruct(config->DefaultConfig, /*postprocess*/ false, /*setDefaults*/ false);
@@ -49,7 +50,7 @@ TConnectionConfigPtr MakeClusterConfig(
     const bool useDefaultConfig = (it == clustersConfig->ClusterConfigs.end());
     const auto& config = useDefaultConfig ? clustersConfig->DefaultConfig : it->second;
 
-    auto newConfig = CloneYsonStruct(config, /*postprocess*/ false, /*setDefaults*/ false);
+    auto newConfig = config ? CloneYsonStruct(config, /*postprocess*/ false, /*setDefaults*/ false) : New<NApi::NRpcProxy::TConnectionConfig>();
     // Ignore cluster url from DefaultConfig, but use it from ClusterConfigs[_] if it is set.
     if (useDefaultConfig || !newConfig->ClusterUrl.has_value() || newConfig->ClusterUrl->empty()) {
         newConfig->ClusterUrl = ToString(cluster);
@@ -58,6 +59,7 @@ TConnectionConfigPtr MakeClusterConfig(
     if (!proxyRole.empty()) {
         newConfig->ProxyRole = ToString(proxyRole);
     }
+    newConfig->Postprocess();
     return newConfig;
 }
 

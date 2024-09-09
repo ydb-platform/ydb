@@ -33,7 +33,6 @@ namespace NStorageOptimizer {
 class IOptimizerPlannerConstructor;
 }
 class TPortionInfoWithBlobs;
-struct TInsertedData;
 class TSnapshotColumnInfo;
 class ISnapshotSchema;
 using TNameTypeInfo = std::pair<TString, NScheme::TTypeInfo>;

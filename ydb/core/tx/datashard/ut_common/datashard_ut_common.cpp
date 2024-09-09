@@ -1772,7 +1772,7 @@ ui64 AsyncAlterAddStream(
         desc.MutableStreamDescription()->SetAwsRegion(*streamDesc.AwsRegion);
     }
     if (streamDesc.TopicAutoPartitioning) {
-        desc.SetTopicAutopartitioning(true);
+        desc.SetTopicAutoPartitioning(true);
         desc.SetMaxPartitionCount(1000);
     }
 

@@ -2188,15 +2188,17 @@ Y_UNIT_TEST_SUITE(Cdc) {
     Y_UNIT_TEST(SplitTopicPartition_TopicAutoPartitioning) {
         auto streamDesc = WithTopicAutoPartitioning(true, Updates(NKikimrSchemeOp::ECdcStreamFormatJson));
         auto action = [&](TServer::TPtr server) {
-            ui64 txId = 5873497659289024590;
+            Cerr << ">>>>> TTestTxConfig::SchemeShard=" << TTestTxConfig::SchemeShard << Endl << Flush;
+            ui64 txId = 100;
 
-            AsyncSend(*server->GetRuntime(), TTestTxConfig::SchemeShard, InternalTransaction(AlterPQGroupRequest(++txId, "/Root/Table/Stream", R"(
+            AsyncSend(*server->GetRuntime(), 72057594046644480ull, InternalTransaction(AlterPQGroupRequest(++txId, "/Root/Table/Stream", R"(
                 Name: "streamImpl"
                 Split {
                     Partition: 0
                     SplitBoundary: 'a'
                 }
             )")));
+            TestModificationResults(*server->GetRuntime(), txId, {NKikimrScheme::StatusAccepted});
 
             return txId;
         };

@@ -27,7 +27,7 @@ using namespace NYdb::NTopic::NTests;
 using namespace NSchemeShardUT_Private;
 
 // TODO
-static constexpr ui64 SS = 72057594046644480l;
+static constexpr ui64 SS = 72057594046644480ull;
 
 NKikimrSchemeOp::TModifyScheme CreateTransaction(const TString& parentPath, ::NKikimrSchemeOp::TPersQueueGroupDescription& scheme);
 

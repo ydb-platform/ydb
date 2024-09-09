@@ -13,7 +13,7 @@ IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
-    TIMEOUT(600)
+    TIMEOUT(60)
     SIZE(MEDIUM)
 ENDIF()
 

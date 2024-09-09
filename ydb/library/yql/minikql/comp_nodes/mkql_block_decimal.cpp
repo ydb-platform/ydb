@@ -205,7 +205,8 @@ struct TDecimalBlockExec {
     }
 };
 
-struct TDecimalMulBlockExec: TDecimalBlockExec<TDecimalMulBlockExec> {
+template<typename TRight>
+struct TDecimalMulBlockExec: TDecimalBlockExec<TDecimalMulBlockExec<TRight>> {
     const NYql::NDecimal::TInt128 Bound;
     const NYql::NDecimal::TInt128 Divider;
 
@@ -228,7 +229,8 @@ struct TDecimalMulBlockExec: TDecimalBlockExec<TDecimalMulBlockExec> {
     }
 };
 
-struct TDecimalDivBlockExec: TDecimalBlockExec<TDecimalDivBlockExec> {
+template<typename TRight>
+struct TDecimalDivBlockExec: TDecimalBlockExec<TDecimalDivBlockExec<TRight>> {
     const NYql::NDecimal::TInt128 Bound;
     const NYql::NDecimal::TInt128 Divider;
 
@@ -248,7 +250,7 @@ struct TDecimalDivBlockExec: TDecimalBlockExec<TDecimalDivBlockExec> {
     }
 };
 
-template<typename TRight = NYql::NDecimal::TInt128>
+template<typename TRight>
 struct TDecimalModBlockExec: TDecimalBlockExec<TDecimalModBlockExec<TRight>> {
     const NYql::NDecimal::TInt128 Bound;
     const NYql::NDecimal::TInt128 Divider;
@@ -273,7 +275,7 @@ struct TDecimalModBlockExec: TDecimalBlockExec<TDecimalModBlockExec<TRight>> {
     }
 };
 
-template<typename TExec>
+template<template <typename> class TExec>
 std::shared_ptr<arrow::compute::ScalarKernel> MakeBlockKernel(const TVector<TType*>& argTypes, TType* resultType) {
     MKQL_ENSURE(argTypes.size() == 2, "Require 2 arguments");
     MKQL_ENSURE(argTypes[0]->GetKind() == TType::EKind::Block, "Require block");
@@ -286,27 +288,41 @@ std::shared_ptr<arrow::compute::ScalarKernel> MakeBlockKernel(const TVector<TTyp
     auto dataResultType = UnpackOptionalData(static_cast<TBlockType*>(resultType)->GetItemType(), isOptional);
 
     MKQL_ENSURE(*dataType1->GetDataSlot() == NUdf::EDataSlot::Decimal, "Require decimal");
-    MKQL_ENSURE(*dataType2->GetDataSlot() == NUdf::EDataSlot::Decimal, "Require decimal");
     MKQL_ENSURE(*dataResultType->GetDataSlot() == NUdf::EDataSlot::Decimal, "Require decimal");
 
     auto decimalType1 = static_cast<TDataDecimalType*>(dataType1);
-    auto decimalType2 = static_cast<TDataDecimalType*>(dataType2);
     auto decimalResultType = static_cast<TDataDecimalType*>(dataResultType);
 
-    MKQL_ENSURE(decimalType1->GetParams() == decimalType2->GetParams(), "Require same precision/scale");
     MKQL_ENSURE(decimalType1->GetParams() == decimalResultType->GetParams(), "Require same precision/scale");
 
     auto [precision, scale] = decimalType1->GetParams();
     MKQL_ENSURE(precision >= 1&& precision <= 35, TStringBuilder() << "Wrong precision: " << (int)precision);
 
-    auto exec = std::make_shared<TExec>(precision, scale);
-
-    auto k = std::make_shared<arrow::compute::ScalarKernel>(ConvertToInputTypes(argTypes), ConvertToOutputType(resultType), 
-        [exec](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
-        return exec->Exec(ctx, batch, res);
-    });
-    k->null_handling = arrow::compute::NullHandling::INTERSECTION;
-    return k;
+    switch (dataType2->GetSchemeType()) {
+    case NUdf::TDataType<NUdf::TDecimal>::Id: {
+        auto exec = std::make_shared<TExec<NYql::NDecimal::TInt128>>(precision, scale);
+        auto k = std::make_shared<arrow::compute::ScalarKernel>(ConvertToInputTypes(argTypes), ConvertToOutputType(resultType), 
+            [exec](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+            return exec->Exec(ctx, batch, res);
+        });
+        k->null_handling = arrow::compute::NullHandling::INTERSECTION;
+        return k;
+    }
+#define MAKE_PRIMITIVE_TYPE_MUL(type) \
+    case NUdf::TDataType<type>::Id: { \
+        auto exec = std::make_shared<TExec<type>>(precision, scale); \
+        auto k = std::make_shared<arrow::compute::ScalarKernel>(ConvertToInputTypes(argTypes), ConvertToOutputType(resultType), \
+            [exec](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) { \
+            return exec->Exec(ctx, batch, res); \
+        }); \
+        k->null_handling = arrow::compute::NullHandling::INTERSECTION; \
+        return k; \
+    }
+    INTEGRAL_VALUE_TYPES(MAKE_PRIMITIVE_TYPE_MUL)
+#undef MAKE_PRIMITIVE_TYPE_MUL    
+    default:
+        Y_ABORT("Unupported type.");
+    }
 }
 
 }
@@ -361,7 +377,7 @@ IComputationNode* WrapBlockDecimalMod(TCallable& callable, const TComputationNod
     TComputationNodePtrVector argsNodes = { firstCompute, secondCompute };
     TVector<TType*> argsTypes = { firstType, secondType };
 
-    std::shared_ptr<arrow::compute::ScalarKernel> kernel = MakeBlockKernel<TDecimalModBlockExec<NYql::NDecimal::TInt128>>(argsTypes, callable.GetType()->GetReturnType());
+    std::shared_ptr<arrow::compute::ScalarKernel> kernel = MakeBlockKernel<TDecimalModBlockExec>(argsTypes, callable.GetType()->GetReturnType());
     return new TBlockFuncNode(ctx.Mutables, "DecimalMod", std::move(argsNodes), argsTypes, *kernel, kernel);
 }
 

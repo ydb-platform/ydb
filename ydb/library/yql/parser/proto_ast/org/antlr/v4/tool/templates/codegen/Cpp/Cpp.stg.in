@@ -492,7 +492,7 @@ RuleReturnType <currentRule.escapedName>(<args; separator=",">);
 
 >>
 
-RuleFunction(currentRule, args, code, locals, ruleCtx, altLabelCtxs, namedActions, finallyAction, postamble, exceptions) ::= <<
+RuleFunction(currentRule, args, code, locals, ruleCtx, altLabelCtxs, namedActions, finallyAction, postamble, exceptions, elemId) ::= <<
 <ruleCtx>
 <! TODO: untested !><altLabelCtxs: {l | <altLabelCtxs.(l)>}; separator = "\n">
 <parser.name>::RuleReturnType <parser.name>::<currentRule.escapedName>(<args; separator=",">) {

@@ -3,13 +3,13 @@
 
 namespace NKikimr::NOlap::NDataLocks {
 
-std::optional<TManager::TGuard> TManager::Lock(ILock::TPtr&& lock, const ELockType lockType, ILockAccuired::TPtr&& onAccuired) {
+std::optional<TManager::TGuard> TManager::Lock(ILock::TPtr&& lock, const ELockType lockType, ILockAcquired::TPtr&& onAcquired) {
     AFL_VERIFY(lock);
-    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "lock")("name", lock->GetLockName())("try", onAccuired ? "yes" : "no");
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "lock")("name", lock->GetLockName())("try", onAcquired ? "yes" : "no");
     for (const auto& awaiting: Awaiting) {
         if (!lock->IsCompatibleWith(*awaiting.Lock)) {
             AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "lock")("name", lock->GetLockName())("incompatible", awaiting.Lock->GetLockName());
-            if (onAccuired) {
+            if (onAcquired) {
                 Awaiting.emplace_back(TLockInfo{
                     .Lock = std::move(lock),
                     .LockType = lockType,
@@ -28,7 +28,7 @@ std::optional<TManager::TGuard> TManager::Lock(ILock::TPtr&& lock, const ELockTy
         if (lockType == ELockType::Exclusive || existing.LockType == ELockType::Exclusive) {
             AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "lock")("name", lock->GetLockName())("incompatible", existing.Lock->GetLockName());
             if (!lock->IsCompatibleWith(*existing.Lock)) {
-                if (onAccuired) {
+                if (onAcquired) {
                     Awaiting.emplace_back(TLockInfo{
                         .Lock = std::move(lock),
                         .LockType = lockType,

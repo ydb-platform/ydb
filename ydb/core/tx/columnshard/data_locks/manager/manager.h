@@ -71,15 +71,15 @@ public:
         void Release(TManager& manager);
     };
 
-    struct ILockAccuired {
-        using TPtr = std::unique_ptr<ILockAccuired>;
-        virtual void OnLockAccuired(TGuard&& guard) = 0;
-        virtual ~ILockAccuired() = default;
+    struct ILockAcquired {
+        using TPtr = std::unique_ptr<ILockAcquired>;
+        virtual void OnLockAcquired(TGuard&& guard) = 0;
+        virtual ~ILockAcquired() = default;
     };
 
-    std::optional<TGuard> Lock(ILock::TPtr&& lock,  const ELockType type, ILockAccuired::TPtr&& onAccuired);
+    std::optional<TGuard> Lock(ILock::TPtr&& lock,  const ELockType type, ILockAcquired::TPtr&& onAcquired);
     std::optional<TGuard> TryLock(ILock::TPtr&& lock,  const ELockType type) {
-        return Lock(std::move(lock), type, ILockAccuired::TPtr{});
+        return Lock(std::move(lock), type, ILockAcquired::TPtr{});
     }
     
     std::optional<TString> IsLocked(const TPortionInfo& portion, const TLockScope& scope = TLockScope{.Action = EAction::Modify, .Originator = EOriginator::Bg}, const std::optional<TGuard>& ignored = std::nullopt) const;

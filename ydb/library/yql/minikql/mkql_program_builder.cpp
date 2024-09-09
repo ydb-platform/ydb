@@ -2775,18 +2775,13 @@ TRuntimeNode TProgramBuilder::BuildBlockLogical(const std::string_view& callable
 
 TRuntimeNode TProgramBuilder::BuildBlockDecimalBinary(const std::string_view& callableName, TRuntimeNode first, TRuntimeNode second) {
     auto firstType = AS_TYPE(TBlockType, first.GetStaticType());
-    auto secondType = AS_TYPE(TBlockType, second.GetStaticType());
 
-    bool isOpt1, isOpt2;
+    bool isOpt1;
     auto* leftDataType = UnpackOptionalData(firstType->GetItemType(), isOpt1);
-    auto* rightDataType = UnpackOptionalData(secondType->GetItemType(), isOpt2);
 
     MKQL_ENSURE(leftDataType->GetSchemeType() == NUdf::TDataType<NUdf::TDecimal>::Id, "Requires decimal args.");
-    MKQL_ENSURE(rightDataType->GetSchemeType() == NUdf::TDataType<NUdf::TDecimal>::Id, "Requires decimal args.");
 
     const auto& lParams = static_cast<TDataDecimalType*>(leftDataType)->GetParams();
-    const auto& rParams = static_cast<TDataDecimalType*>(rightDataType)->GetParams();
-    MKQL_ENSURE(lParams == rParams, "Requires decimals of same precision/scale.");
 
     auto [precision, scale] = lParams;
 

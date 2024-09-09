@@ -355,13 +355,16 @@ IGraphTransformer::TStatus BlockDecimalBinaryWrapper(const TExprNode::TPtr& inpu
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!EnsureSpecificDataType(input->Child(i)->Pos(), *dataType, EDataSlot::Decimal, ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error;
-        }
+        // TODO:
+        //if (!EnsureSpecificDataType(input->Child(i)->Pos(), *dataType, EDataSlot::Decimal, ctx.Expr)) {
+        //    return IGraphTransformer::TStatus::Error;
+        //}
 
-        const auto* dataParamsType = static_cast<const TDataExprParamsType*>(dataType);
-        precision = dataParamsType->GetParamOne();
-        scale = dataParamsType->GetParamTwo();
+        if (dataType->GetSlot() == EDataSlot::Decimal) {
+            const auto* dataParamsType = static_cast<const TDataExprParamsType*>(dataType);
+            precision = dataParamsType->GetParamOne();
+            scale = dataParamsType->GetParamTwo();
+        }
 
         isOptionalResult = isOptionalResult || isOptional;
         allScalars = allScalars && isScalar;

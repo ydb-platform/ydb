@@ -120,16 +120,18 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModi
         case NEvWrite::EModificationType::Upsert: {
             AFL_VERIFY(batch->num_columns() <= dstSchema->num_fields());
             if (batch->num_columns() < dstSchema->num_fields()) {
-                for (auto&& f : dstSchema->fields()) {
-                    if (GetIndexInfo().IsNullableVerified(f->name())) {
+                ui32 idx = 0;
+                for (ui32 idx = 0; idx < dstSchema->num_fields(); ++idx) {
+                    if (GetIndexInfo().IsNullableVerifiedByIndex(idx)) {
                         continue;
                     }
-                    if (batch->GetColumnByName(f->name())) {
+                    if (GetIndexInfo().GetColumnExternalDefaultValueByIndexVerified(idx)) {
                         continue;
                     }
-                    if (!GetIndexInfo().GetColumnExternalDefaultValueVerified(f->name())) {
-                        return TConclusionStatus::Fail("empty field for non-default column: '" + f->name() + "'");
+                    if (batch->GetColumnByName(dstSchema->field(idx)->name())) {
+                        continue;
                     }
+                    return TConclusionStatus::Fail("empty field for non-default column: '" + f->name() + "'");
                 }
             }
             return batch;

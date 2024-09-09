@@ -113,7 +113,7 @@ private:
     std::vector<TNameTypeInfo> PKColumns;
 
     THashMap<ui32, ui32> IdIntoIndex;
-    THashMap<ui32, std::shared_ptr<TColumnFeatures>> ColumnFeatures;
+    std::vector<std::shared_ptr<TColumnFeatures>> ColumnFeatures;
     THashMap<ui32, NIndexes::TIndexMetaContainer> Indexes;
     TIndexInfo(const TString& name);
     bool SchemeNeedActualization = false;
@@ -128,18 +128,13 @@ private:
 
 public:
     std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor> GetCompactionPlannerConstructor() const;
-
-    bool IsNullableVerified(const std::string& fName) const {
-        return IsNullableVerified(GetColumnIdVerified(fName));
+    bool IsNullableVerifiedByIndex(const ui32 colIndex) const {
+        AFL_VERIFY(colIndex < ColumnFeatures.size());
+        return ColumnFeatures[colIndex]->GetIsNullable();
     }
 
     bool IsNullableVerified(const ui32 colId) const {
-        auto it = ColumnFeatures.find(colId);
-        if (it == ColumnFeatures.end()) {
-            AFL_VERIFY(IIndexInfo::IsSpecialColumn(colId));
-            return IIndexInfo::IsNullableVerified(colId);
-        }
-        return it->second->GetIsNullable();
+        return GetColumnFeaturesVerified(colId).GetIsNullable();
     }
 
     std::shared_ptr<arrow::Scalar> GetColumnExternalDefaultValueVerified(const std::string& colName) const;
@@ -150,9 +145,18 @@ public:
     }
 
     const TColumnFeatures& GetColumnFeaturesVerified(const ui32 columnId) const {
-        auto it = ColumnFeatures.find(columnId);
-        AFL_VERIFY(it != ColumnFeatures.end());
-        return *it->second;
+        auto it = IdIntoIndex.find(colId);
+        AFL_VERIFY(it != IdIntoIndex.end());
+        return *ColumnFeatures[it->second];
+    }
+
+    const std::shared_ptr<TColumnFeatures>& GetColumnFeaturesOptional(const ui32 columnId) const {
+        auto it = IdIntoIndex.find(colId);
+        if (it != IdIntoIndex.end()) {
+            return ColumnFeatures[it->second];
+        } else {
+            return Default<std::shared_ptr<TColumnFeatures>>();
+        }
     }
 
     NSplitter::TEntityGroups GetEntityGroupsByStorageId(const TString& specialTier, const IStoragesManager& storages) const;
@@ -167,7 +171,7 @@ public:
             result.emplace(portionTierName);
         } else {
             for (auto&& i : ColumnFeatures) {
-                result.emplace(i.second->GetOperator()->GetStorageId());
+                result.emplace(i->GetOperator()->GetStorageId());
             }
         }
         return result;
@@ -187,9 +191,7 @@ public:
         if (specialTier && specialTier != IStoragesManager::DefaultStorageId) {
             return specialTier;
         } else {
-            auto it = ColumnFeatures.find(columnId);
-            AFL_VERIFY(it != ColumnFeatures.end());
-            return it->second->GetOperator()->GetStorageId();
+            return GetColumnFeaturesVerified(columnId).GetOperator()->GetStorageId();
         }
     }
 
@@ -208,7 +210,7 @@ public:
            << "name=" << Name << ";"
            << ")";
         for (auto&& i : ColumnFeatures) {
-            sb << GetColumnName(i.first) << ":" << i.second->DebugString() << ";";
+            sb << i->GetColumnName() << ":" << i->DebugString() << ";";
         }
         return sb;
     }
@@ -238,18 +240,14 @@ public:
 
     std::vector<std::shared_ptr<IPortionDataChunk>> ActualizeColumnData(
         const std::vector<std::shared_ptr<IPortionDataChunk>>& source, const TIndexInfo& sourceIndexInfo, const ui32 columnId) const {
-        auto itCurrent = ColumnFeatures.find(columnId);
-        auto itPred = sourceIndexInfo.ColumnFeatures.find(columnId);
-        AFL_VERIFY(itCurrent != ColumnFeatures.end());
-        AFL_VERIFY(itPred != sourceIndexInfo.ColumnFeatures.end());
-        return itCurrent->second->ActualizeColumnData(source, *itPred->second);
+        return GetColumnFeaturesVerified(columnId).ActualizeColumnData(source, sourceIndexInfo.GetColumnFeaturesVerified(columnId));
     }
 
     static std::optional<TIndexInfo> BuildFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema,
         const std::shared_ptr<IStoragesManager>& operators, const std::shared_ptr<TSchemaObjectsCache>& cache);
 
     bool HasColumnId(const ui32 columnId) const {
-        return ColumnFeatures.contains(columnId);
+        return IdIntoIndex.contains(columnId);
     }
 
     bool HasColumnName(const std::string& columnName) const {

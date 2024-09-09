@@ -41,13 +41,7 @@ std::optional<ui32> TIndexInfo::GetColumnIdOptional(const std::string& name) con
 }
 
 TString TIndexInfo::GetColumnName(ui32 id, bool required) const {
-    const auto ci = ColumnFeatures.find(id);
-
-    if (ci != ColumnFeatures.end()) {
-        return ci->second->GetColumnName();
-    }
-
-    return IIndexInfo::GetColumnName(id, required);
+    return GetColumnFeaturesVerified(id).GetColumnName();
 }
 
 const std::vector<ui32>& TIndexInfo::GetColumnIds(const bool withSpecial) const {
@@ -62,9 +56,7 @@ std::vector<TString> TIndexInfo::GetColumnNames(const std::vector<ui32>& ids) co
     std::vector<TString> out;
     out.reserve(ids.size());
     for (ui32 id : ids) {
-        const auto ci = ColumnFeatures.find(id);
-        Y_ABORT_UNLESS(ci != ColumnFeatures.end());
-        out.push_back(ci->second->GetColumnName());
+        out.push_back(GetColumnName(id));
     }
     return out;
 }
@@ -73,9 +65,7 @@ std::vector<std::string> TIndexInfo::GetColumnSTLNames(const std::vector<ui32>& 
     std::vector<std::string> out;
     out.reserve(ids.size());
     for (ui32 id : ids) {
-        const auto ci = ColumnFeatures.find(id);
-        Y_ABORT_UNLESS(ci != ColumnFeatures.end());
-        out.push_back(ci->second->GetColumnName());
+        out.push_back(GetColumnName(id));
     }
     return out;
 }
@@ -130,17 +120,15 @@ void TIndexInfo::SetAllKeys(const std::shared_ptr<IStoragesManager>& operators, 
 }
 
 TColumnSaver TIndexInfo::GetColumnSaver(const ui32 columnId) const {
-    auto it = ColumnFeatures.find(columnId);
-    AFL_VERIFY(it != ColumnFeatures.end());
-    return it->second->GetColumnSaver();
+    return GetColumnFeaturesVerified(columnId).GetColumnSaver();
 }
 
 std::shared_ptr<TColumnLoader> TIndexInfo::GetColumnLoaderOptional(const ui32 columnId) const {
-    auto it = ColumnFeatures.find(columnId);
-    if (it == ColumnFeatures.end()) {
+    const auto& cFeatures = GetColumnFeaturesOptional(columnId);
+    if (!cFeatures) {
         return nullptr;
     } else {
-        return it->second->GetLoader();
+        return cFeatures->GetLoader();
     }
 }
 
@@ -255,7 +243,7 @@ bool TIndexInfo::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema&
                 AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_parse_column_feature")("reason", fConclusion.GetErrorMessage());
                 return false;
             }
-            AFL_VERIFY(ColumnFeatures.emplace(col.GetId(), fConclusion.DetachResult()).second);
+            ColumnFeatures.emplace_back(fConclusion.DetachResult());
         }
         for (auto&& cId : GetSystemColumnIds()) {
             THashMap<ui32, std::shared_ptr<TColumnFeatures>> it;
@@ -264,7 +252,7 @@ bool TIndexInfo::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema&
                 return BuildDefaultColumnFeatures(cId, {}, operators);
             };
             auto fConclusion = cache->GetOrCreateColumnFeatures(fingerprint, createPred);
-            AFL_VERIFY(ColumnFeatures.emplace(cId, fConclusion.DetachResult()).second);
+            ColumnFeatures.emplace_back(fConclusion.DetachResult());
         }
     }
 
@@ -354,13 +342,13 @@ void TIndexInfo::InitializeCaches(const std::shared_ptr<IStoragesManager>& opera
         {
             TMemoryProfileGuard g("TIndexInfo::DeserializeFromProto::InitializeCaches::Columns");
             for (auto&& c : columns) {
-                AFL_VERIFY(ColumnFeatures.emplace(c.first, BuildDefaultColumnFeatures(c.first, columns, operators)).second);
+                ColumnFeatures.emplace_back(BuildDefaultColumnFeatures(c.first, columns, operators));
             }
         }
         {
             TMemoryProfileGuard g("TIndexInfo::DeserializeFromProto::InitializeCaches::SysColumns");
             for (auto&& cId : GetSystemColumnIds()) {
-                AFL_VERIFY(ColumnFeatures.emplace(cId, BuildDefaultColumnFeatures(cId, columns, operators)).second);
+                ColumnFeatures.emplace_back(BuildDefaultColumnFeatures(cId, columns, operators));
             }
         }
     }

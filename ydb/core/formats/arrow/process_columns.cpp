@@ -16,6 +16,9 @@ public:
     static const std::string& GetFieldName(const T& val) {
         return val;
     }
+    static TString DebugString(const std::vector<T>& items) {
+        return JoinSeq(",", items);
+    }
 };
 
 template <>
@@ -23,6 +26,13 @@ class TColumnNameAccessor<std::shared_ptr<arrow::Field>> {
 public:
     static const std::string& GetFieldName(const std::shared_ptr<arrow::Field>& val) {
         return val->name();
+    }
+    static TString DebugString(const std::vector<std::shared_ptr<arrow::Field>>& items) {
+        TStringBuilder sb;
+        for (auto&& i : items) {
+            sb << i->name() << ",";
+        }
+        return sb;
     }
 };
 
@@ -96,7 +106,7 @@ std::shared_ptr<TDataContainer> ExtractImpl(const TColumnOperator::EExtractProbl
     switch (policy) {
         case TColumnOperator::EExtractProblemsPolicy::Verify:
             AFL_VERIFY((ui32)result->num_columns() == columnNames.size())("schema", incoming->schema()->ToString())(
-                                                          "required", JoinSeq(",", columnNames));
+                                                          "required", TColumnNameAccessor<TStringContainer>::DebugString(columnNames));
             break;
         case TColumnOperator::EExtractProblemsPolicy::Null:
             if ((ui32)result->num_columns() != columnNames.size()) {

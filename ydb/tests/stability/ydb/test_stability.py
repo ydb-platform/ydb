@@ -46,6 +46,7 @@ class TestSetupForStability(object):
         yatest_common.binary_path('ydb/tests/tools/nemesis/driver/nemesis'),
         yatest_common.binary_path('ydb/tools/simple_queue/simple_queue'),
         yatest_common.binary_path('ydb/tools/olap_workload/olap_workload'),
+        yatest_common.binary_path('ydb/tools/statistics_workload/statistics_workload'),
     )
 
     @classmethod
@@ -135,6 +136,21 @@ class TestSetupForStability(object):
 
         logger.info('Sleeping for {} minute(s)'.format(sleep_time_min))
         time.sleep(sleep_time_min * 60)
+
+        self._stop_nemesis()
+
+    def test_statistics_workload(self):
+        self._start_nemesis()
+        duration = 90*60
+
+        for node_id, node in enumerate(self.kikimr_cluster.nodes.values()):
+            node.ssh_command(
+                f'screen -d -m bash -c "sudo /Berkanavt/nemesis/bin/statistics_workload --database /Root/db1 --duration {duration}  --log_file /Berkanavt/nemesis/log/statistics_workload.log"',
+                raise_on_error=True
+            )
+
+        logger.info('Sleeping for {} minute(s)'.format(duration))
+        time.sleep(duration)
 
         self._stop_nemesis()
 

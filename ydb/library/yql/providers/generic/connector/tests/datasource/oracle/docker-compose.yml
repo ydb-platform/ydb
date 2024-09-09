@@ -16,8 +16,4 @@ services:
       - 1521
     volumes:
       - ./init/startup:/opt/oracle/scripts/startup
-    tmpfs:
-      - /run
-      - /tmp
-      - /var
 version: "3.4"

@@ -51,7 +51,7 @@ services:
       POSTGRES_PASSWORD: password
       POSTGRES_USER: user
       YDB_DEFAULT_LOG_LEVEL: DEBUG
-      DB_USE_IN_MEMORY_PDISKS: true
+      DB_USE_IN_MEMORY_PDISKS: "true"
     hostname: tests-fq-generic-ydb
     image: ghcr.io/ydb-platform/local-ydb:latest@sha256:9045e00afec1923dc3277564c7b2f829087c2115f45f18e1d38b80bb89f98be6
     volumes:

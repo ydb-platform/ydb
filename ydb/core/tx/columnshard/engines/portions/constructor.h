@@ -26,7 +26,7 @@ private:
     std::optional<ui64> ShardingVersion;
 
     std::vector<TIndexChunk> Indexes;
-    YDB_ACCESSOR_DEF(std::vector<TColumnRecord>, Records);
+    YDB_READONLY_DEF(std::vector<TColumnRecord>, Records);
     std::vector<TUnifiedBlobId> BlobIds;
 
 public:

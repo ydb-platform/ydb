@@ -32,10 +32,12 @@ ui32 TIndexInfo::GetColumnIdVerified(const std::string& name) const {
 }
 
 std::optional<ui32> TIndexInfo::GetColumnIdOptional(const std::string& name) const {
-    const auto ni = ColumnNames.find(name);
-
-    if (ni != ColumnNames.end()) {
-        return ni->second;
+    const auto pred = [](const TNameInfo& item, const std::string& value) {
+        return item.GetName() < value;
+    };
+    auto it = std::lower_bound(ColumnNames.begin(), ColumnNames.end(), name, pred);
+    if (it != ColumnNames.end()) {
+        return it->GetColumnId();
     }
     return IIndexInfo::GetColumnIdOptional(name);
 }
@@ -216,18 +218,19 @@ bool TIndexInfo::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema&
     THashMap<ui32, NTable::TColumn> columns;
     {
         TMemoryProfileGuard g("TIndexInfo::DeserializeFromProto::Columns");
+        ColumnNames.clear();
         for (const auto& col : schema.GetColumns()) {
             const ui32 id = col.GetId();
             const TString& name = cache->GetStringCache(col.GetName());
             const bool notNull = col.HasNotNull() ? col.GetNotNull() : false;
             auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(col.GetTypeId(), col.HasTypeInfo() ? &col.GetTypeInfo() : nullptr);
             columns[id] = NTable::TColumn(name, id, typeInfoMod.TypeInfo, cache->GetStringCache(typeInfoMod.TypeMod), notNull);
-            ColumnNames[name] = id;
+            ColumnNames.emplace_back(name, id);
         }
+        std::sort(ColumnNames.begin(), ColumnNames.end());
     }
     for (const auto& keyName : schema.GetKeyColumnNames()) {
-        Y_ABORT_UNLESS(ColumnNames.contains(keyName));
-        PKColumnIds.push_back(ColumnNames[keyName]);
+        PKColumnIds.push_back(GetColumnIdVerified(keyName));
     }
     InitializeCaches(operators, columns, cache, false);
     SetAllKeys(operators, columns);

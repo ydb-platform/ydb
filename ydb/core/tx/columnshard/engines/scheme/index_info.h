@@ -106,9 +106,26 @@ public:
 struct TIndexInfo: public IIndexInfo {
 private:
     using TColumns = THashMap<ui32, NTable::TColumn>;
-    using TColumnNames = THashMap<TString, ui32>;
 
-    TColumnNames ColumnNames;
+    class TNameInfo {
+    private:
+        YDB_READONLY_DEF(TString, Name);
+        YDB_READONLY(ui32, ColumnId, 0);
+
+    public:
+        TNameInfo(const TString& name, const ui32 columnId)
+            : Name(name)
+            , ColumnId(columnId)
+        {
+
+        }
+
+        bool operator<(const TNameInfo& item) const {
+            return Name < item.Name;
+        }
+    };
+
+    std::vector<TNameInfo> ColumnNames;
     std::vector<ui32> PKColumnIds;
     std::vector<TNameTypeInfo> PKColumns;
 
@@ -229,12 +246,12 @@ public:
         const std::shared_ptr<IStoragesManager>& operators, const TColumns& columns, const std::vector<TString>& pkNames) {
         TIndexInfo result = BuildDefault();
         for (auto&& i : columns) {
-            result.ColumnNames[i.second.Name] = i.first;
+            result.ColumnNames.emplace_back(i.second.Name, i.first);
         }
+        std::sort(result.ColumnNames.begin(), result.ColumnNames.end());
         for (auto&& i : pkNames) {
-            auto it = result.ColumnNames.find(i);
-            AFL_VERIFY(it != result.ColumnNames.end());
-            result.PKColumnIds.emplace_back(it->second);
+            const ui32 columnId = result.GetColumnIdVerified(i);
+            result.PKColumnIds.emplace_back(columnId);
         }
         result.SetAllKeys(operators, columns);
         return result;

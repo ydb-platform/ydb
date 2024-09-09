@@ -913,7 +913,7 @@ void TColumnShard::Handle(TEvTxProcessing::TEvReadSetAck::TPtr& ev, const TActor
     if (!opPtr) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "missed_read_set_ack")("proto", ev->Get()->Record.DebugString())(
             "tx_id", ev->Get()->Record.GetTxId());
-        continue;
+        return;
     }
     auto op = TValidator::CheckNotNull(dynamic_pointer_cast<TEvWriteCommitSyncTransactionOperator>(opPtr));
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "read_set_ack")("proto", ev->Get()->Record.DebugString())("lock_id", op->GetLockId());

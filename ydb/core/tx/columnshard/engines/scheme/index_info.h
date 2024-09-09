@@ -145,13 +145,13 @@ public:
     }
 
     const TColumnFeatures& GetColumnFeaturesVerified(const ui32 columnId) const {
-        auto it = IdIntoIndex.find(colId);
+        auto it = IdIntoIndex.find(columnId);
         AFL_VERIFY(it != IdIntoIndex.end());
         return *ColumnFeatures[it->second];
     }
 
     const std::shared_ptr<TColumnFeatures>& GetColumnFeaturesOptional(const ui32 columnId) const {
-        auto it = IdIntoIndex.find(colId);
+        auto it = IdIntoIndex.find(columnId);
         if (it != IdIntoIndex.end()) {
             return ColumnFeatures[it->second];
         } else {

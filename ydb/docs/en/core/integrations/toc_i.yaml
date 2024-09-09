@@ -21,3 +21,5 @@ items:
   href: ide/datagrip.md
 - name: Spring Data JDBC
   href: spring-data-jdbc.md
+- name: JOOQ
+  href: jooq.md

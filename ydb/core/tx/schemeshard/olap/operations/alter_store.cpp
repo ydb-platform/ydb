@@ -2,6 +2,8 @@
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
+#include "checks.h"
+
 namespace {
 
 using namespace NKikimr;
@@ -509,16 +511,9 @@ public:
         auto domainInfo = parentPath.DomainInfo();
         const TSchemeLimits& limits = domainInfo->GetSchemeLimits();
 
-        for (auto& [_, preset]: alterData->SchemaPresets) {
-            ui64 columnCount = preset.GetColumns().GetColumns().size();
-            if (columnCount > limits.MaxColumnTableColumns) {
-                TString errStr = TStringBuilder()
-                    << "Too many columns"
-                    << ". new: " << columnCount
-                    << ". Limit: " << limits.MaxColumnTableColumns;
-                result->SetError(NKikimrScheme::StatusSchemeError, errStr);
-                return result;
-            }
+        if (!NKikimr::NSchemeShard::NOlap::CheckLimits(limits, alterData, errStr)) {
+            result->SetError(NKikimrScheme::StatusSchemeError, errStr);
+            return result;
         }
 
         storeInfo->AlterData = alterData;

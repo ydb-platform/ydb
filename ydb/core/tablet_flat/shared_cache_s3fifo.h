@@ -11,29 +11,29 @@ namespace NKikimr::NCache {
 
 // TODO: remove template args and make some page base class
 
-template <typename TKey
-        , typename TKeyHash
-        , typename TKeyEqual>
+template <typename TPageKey
+        , typename TPageKeyHash
+        , typename TPageKeyEqual>
 class TGhostQueue {
-    struct TGhost {
-        TKey Key;
+    struct TGhostPage {
+        TPageKey Key;
         ui64 Size; // zero size is tombstone
 
-        TGhost(const TKey& key, ui64 size)
+        TGhostPage(const TPageKey& key, ui64 size)
             : Key(key)
             , Size(size)
         {}
     };
 
-    struct TGhostHash {
-        inline size_t operator()(const TGhost* ghost) const {
-            return TKeyHash()(ghost->Key);
+    struct TGhostPageHash {
+        inline size_t operator()(const TGhostPage* ghost) const {
+            return TPageKeyHash()(ghost->Key);
         }
     };
 
-    struct TGhostEqual {
-        inline bool operator()(const TGhost* left, const TGhost* right) const {
-            return TKeyEqual()(left->Key, right->Key);
+    struct TGhostPageEqual {
+        inline bool operator()(const TGhostPage* left, const TGhostPage* right) const {
+            return TPageKeyEqual()(left->Key, right->Key);
         }
     };
 
@@ -42,13 +42,13 @@ public:
         : Limit(limit)
     {}
 
-    void Add(const TKey& key, ui64 size) {
+    void Add(const TPageKey& key, ui64 size) {
         if (Y_UNLIKELY(size == 0)) {
             Y_DEBUG_ABORT_S("Empty " << key.ToString() << " page");
             return;
         }
 
-        TGhost* ghost = &GhostsQueue.emplace_back(key, size);
+        TGhostPage* ghost = &GhostsQueue.emplace_back(key, size);
         if (Y_UNLIKELY(!GhostsSet.emplace(ghost).second)) {
             GhostsQueue.pop_back();
             Y_DEBUG_ABORT_S("Duplicated " << key.ToString() << " page");
@@ -59,10 +59,10 @@ public:
         EvictWhileFull();
     }
 
-    bool Erase(const TKey& key, ui64 size) {
-        TGhost key_(key, size);
+    bool Erase(const TPageKey& key, ui64 size) {
+        TGhostPage key_(key, size);
         if (auto it = GhostsSet.find(&key_); it != GhostsSet.end()) {
-            TGhost* ghost = const_cast<TGhost*>(*it);
+            TGhostPage* ghost = const_cast<TGhostPage*>(*it);
             Y_DEBUG_ABORT_UNLESS(ghost->Size == size);
             Y_ABORT_UNLESS(Size >= ghost->Size);
             Size -= ghost->Size;
@@ -82,7 +82,7 @@ public:
         TStringBuilder result;
         size_t size = 0;
         for (auto it : GhostsQueue) {
-            const TGhost* ghost = &it;
+            const TGhostPage* ghost = &it;
             if (ghost->Size) { // isn't deleted
                 Y_DEBUG_ABORT_UNLESS(GhostsSet.contains(ghost));
                 if (size != 0) result << ", ";
@@ -97,7 +97,7 @@ public:
 private:
     void EvictWhileFull() {
         while (!GhostsQueue.empty() && Size > Limit) {
-            TGhost* ghost = &GhostsQueue.front();
+            TGhostPage* ghost = &GhostsQueue.front();
             if (ghost->Size) { // isn't deleted
                 Y_ABORT_UNLESS(Size >= ghost->Size);
                 Size -= ghost->Size;
@@ -109,17 +109,17 @@ private:
 
     ui64 Limit;
     ui64 Size = 0;
-    THashSet<TGhost*, TGhostHash, TGhostEqual> GhostsSet;
-    TDeque<TGhost> GhostsQueue;
+    THashSet<TGhostPage*, TGhostPageHash, TGhostPageEqual> GhostsSet;
+    TDeque<TGhostPage> GhostsQueue;
 };
 
 template <typename TPage
-        , typename TKey
-        , typename TKeyHash
-        , typename TKeyEqual
-        , typename TSize
-        , typename TLocation
-        , typename TFrequency
+        , typename TPageKey
+        , typename TPageKeyHash
+        , typename TPageKeyEqual
+        , typename TPageSize
+        , typename TPageLocation
+        , typename TPageFrequency
     >
 class TS3FIFOCache : public ICacheCache<TPage> {
     enum class ELocation {
@@ -294,36 +294,35 @@ private:
         return GhostQueue.Erase(GetKey(page), GetSize(page));
     }
 
-    TKey GetKey(const TPage* page) const {
-        return TKey::Get(page);
+    TPageKey GetKey(const TPage* page) const {
+        return TPageKey::Get(page);
     }
 
     ui64 GetSize(const TPage* page) const {
-        return TSize::Get(page);
+        return TPageSize::Get(page);
     }
 
     ELocation GetLocation(const TPage* page) const {
-        return static_cast<ELocation>(TLocation::Get(page));
+        return static_cast<ELocation>(TPageLocation::Get(page));
     }
 
     void SetLocation(TPage* page, ELocation location) const {
-        TLocation::Set(page, static_cast<ui32>(location));
+        TPageLocation::Set(page, static_cast<ui32>(location));
     }
 
     ui32 GetFrequency(const TPage* page) const {
-        return TFrequency::Get(page);
+        return TPageFrequency::Get(page);
     }
 
     void SetFrequency(TPage* page, ui32 frequency) const {
-        TFrequency::Set(page, frequency);
+        TPageFrequency::Set(page, frequency);
     }
 
 private:
     TLimit Limit;
-
     TQueue SmallQueue;
     TQueue MainQueue;
-    TGhostQueue<TKey, TKeyHash, TKeyEqual> GhostQueue;
+    TGhostQueue<TPageKey, TPageKeyHash, TPageKeyEqual> GhostQueue;
 
 };
 

@@ -3,7 +3,6 @@ import argparse
 import ydb
 import logging
 import time
-import os
 import random
 import string
 
@@ -66,6 +65,7 @@ class Workload(object):
 
     def create_table(self, table_name):
         logger.info(f"create table '{table_name}'")
+
         def callee(session):
             session.execute_scheme(f"""
                 CREATE TABLE `{table_name}` (
@@ -92,6 +92,7 @@ class Workload(object):
 
     def drop_table(self, table_name):
         logger.info(f'drop table {table_name}')
+
         def callee(session):
             session.drop_table(table_name)
         self.run_query_ignore_errors(callee)
@@ -122,6 +123,7 @@ class Workload(object):
 
     def delete_from_table(self, table_name):
         logger.info(f"delete from table '{table_name}'")
+
         def callee(session):
             session.transaction().execute(f"DELETE FROM `{table_name}`", commit_tx=True)
         self.run_query_ignore_errors(callee)
@@ -132,6 +134,7 @@ class Workload(object):
     def analyze(self, table_name):
         table_path = self.database + "/" + table_name
         logger.info(f"analyze '{table_name}'")
+
         def callee(session):
             session.execute_scheme(f"ANALYZE `{table_path}`")
         self.run_query_ignore_errors(callee)
@@ -152,7 +155,7 @@ class Workload(object):
 
             self.drop_all_tables_with_prefix(table_name)
             self.create_table(table_name)
-                
+
             self.add_data(table_name)
             count = self.rows_count(table_name)
             logger.info(f"number of rows in table '{table_name}' {count}")

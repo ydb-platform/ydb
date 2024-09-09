@@ -1,5 +1,7 @@
 #pragma once
 
+#include "memory_pool.h"
+
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/library/conclusion/status.h>
 #include <ydb/services/metadata/abstract/request_features.h>
@@ -19,7 +21,7 @@ class ISerializer {
 protected:
     virtual TString DoSerializeFull(const std::shared_ptr<arrow::RecordBatch>& batch) const = 0;
     virtual TString DoSerializePayload(const std::shared_ptr<arrow::RecordBatch>& batch) const = 0;
-    virtual arrow::Result<std::shared_ptr<arrow::RecordBatch>> DoDeserialize(const TString& data) const = 0;
+    virtual arrow::Result<std::shared_ptr<arrow::RecordBatch>> DoDeserialize(const TString& data, arrow::MemoryPool* pool = arrow::default_memory_pool()) const = 0;
     virtual arrow::Result<std::shared_ptr<arrow::RecordBatch>> DoDeserialize(const TString& data, const std::shared_ptr<arrow::Schema>& schema) const = 0;
     virtual TString DoDebugString() const {
         return "";
@@ -73,6 +75,15 @@ public:
             return batch;
         }
         return TStatusValidator::GetValid(Deserialize(SerializeFull(batch)));
+    }
+
+    std::shared_ptr<arrow::RecordBatch> RepackWithCustomPool(const std::shared_ptr<arrow::RecordBatch>& batch) {
+        if (!batch) {
+            return batch;
+        }
+
+        // assume that if `!!batch` then the serialized string is not empty.
+        return TStatusValidator::GetValid(DoDeserialize(SerializeFull(batch), GetMemoryPool()));
     }
 
     TString Repack(const TString& batchString) {

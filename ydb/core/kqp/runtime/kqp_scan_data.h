@@ -8,6 +8,7 @@
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/permutations.h>
+#include <ydb/core/formats/arrow/serializer/native.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tablet_flat/flat_database.h>
 
@@ -86,7 +87,7 @@ public:
     }
 
     TBatchDataAccessor(const std::shared_ptr<arrow::Table>& batch, std::vector<ui32>&& dataIndexes)
-        : Batch(batch)
+        : Batch(NArrow::TStatusValidator::GetValid(arrow::Table::FromRecordBatches({NArrow::NSerialization::TNativeSerializer().RepackWithCustomPool(NArrow::ToBatch(batch, true))})))
         , DataIndexes(std::move(dataIndexes))
     {
         AFL_VERIFY(Batch);
@@ -94,17 +95,15 @@ public:
     }
 
     TBatchDataAccessor(const std::shared_ptr<arrow::Table>& batch)
-        : Batch(batch) {
+        : Batch(NArrow::TStatusValidator::GetValid(arrow::Table::FromRecordBatches({NArrow::NSerialization::TNativeSerializer().RepackWithCustomPool(NArrow::ToBatch(batch, true))}))) {
         AFL_VERIFY(Batch);
         AFL_VERIFY(Batch->num_rows());
-
     }
 
     TBatchDataAccessor(const std::shared_ptr<arrow::RecordBatch>& batch)
-        : Batch(NArrow::TStatusValidator::GetValid(arrow::Table::FromRecordBatches({batch}))) {
+        : Batch(NArrow::TStatusValidator::GetValid(arrow::Table::FromRecordBatches({NArrow::NSerialization::TNativeSerializer().RepackWithCustomPool(batch)}))) {
         AFL_VERIFY(Batch);
         AFL_VERIFY(Batch->num_rows());
-
     }
 };
 

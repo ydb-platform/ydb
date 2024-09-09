@@ -257,15 +257,6 @@ class TAlterColumnTable: public TSubOperation {
         }
     }
 
-    bool isAlterCompression() const {
-        for (const auto& alterColumn : Transaction.GetAlterColumnTable().GetAlterSchema().GetAlterColumns()) {
-            if (alterColumn.HasSerializer()) {
-                return true;
-            }
-        }
-        return false;
-    }
-
 public:
     using TSubOperation::TSubOperation;
 
@@ -277,11 +268,6 @@ public:
         const bool isAlterSharding = Transaction.HasAlterColumnTable() && Transaction.GetAlterColumnTable().HasReshardColumnTable();
         if (isAlterSharding && !AppData()->FeatureFlags.GetEnableAlterShardingInColumnShard()) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, "Alter sharding is disabled for OLAP tables");
-            return result;
-        }
-        
-        if (!AppDataVerified().FeatureFlags.GetEnableOlapCompression() && isAlterCompression()) {
-            result->SetError(NKikimrScheme::StatusPreconditionFailed, "Compression is disabled for OLAP tables");
             return result;
         }
 

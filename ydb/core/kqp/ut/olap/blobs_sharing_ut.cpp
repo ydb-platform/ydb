@@ -69,6 +69,7 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
     TKikimrSettings GetKikimrSettings() {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableAlterShardingInColumnShard(true);
+        featureFlags.SetEnableOlapCompression(true);
         return TKikimrSettings().SetWithSampleTables(false).SetFeatureFlags(featureFlags);
     }
 

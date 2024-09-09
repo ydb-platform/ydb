@@ -37,6 +37,10 @@ namespace NKqp {
             kikimrSettings.SetEnableTieringInColumnShard(true);
         }
 
+        if (!kikimrSettings.FeatureFlags.HasEnableOlapCompression()) {
+            kikimrSettings.SetEnableOlapCompression(true);
+        }
+
         Kikimr = std::make_unique<TKikimrRunner>(kikimrSettings);
         TableClient = std::make_unique<NYdb::NTable::TTableClient>(Kikimr->GetTableClient());
         Session = std::make_unique<NYdb::NTable::TSession>(TableClient->CreateSession().GetValueSync().GetSession());

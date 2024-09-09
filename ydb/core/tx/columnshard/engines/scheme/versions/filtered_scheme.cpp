@@ -21,12 +21,12 @@ TFilteredSnapshotSchema::TFilteredSnapshotSchema(const ISnapshotSchema::TPtr& or
 }
 
 TColumnSaver TFilteredSnapshotSchema::GetColumnSaver(const ui32 columnId) const {
-    AFL_VERIFY(std::find(ColumnIds.begin(), ColumnIds.end(), columnId) != ColumnIds.end());
+    AFL_VERIFY(IdIntoIndex.contains(columnId));
     return OriginalSnapshot->GetColumnSaver(columnId);
 }
 
 std::shared_ptr<TColumnLoader> TFilteredSnapshotSchema::GetColumnLoaderOptional(const ui32 columnId) const {
-    AFL_VERIFY(std::find(ColumnIds.begin(), ColumnIds.end(), columnId) != ColumnIds.end());
+    AFL_VERIFY(IdIntoIndex.contains(columnId));
     return OriginalSnapshot->GetColumnLoaderOptional(columnId);
 }
 
@@ -35,7 +35,7 @@ std::optional<ui32> TFilteredSnapshotSchema::GetColumnIdOptional(const std::stri
     if (!result) {
         return result;
     }
-    if (std::find(ColumnIds.begin(), ColumnIds.end(), *result) == ColumnIds.end()) {
+    if (!IdIntoIndex.contains(*result)) {
         return std::nullopt;
     }
     return result;
@@ -43,7 +43,7 @@ std::optional<ui32> TFilteredSnapshotSchema::GetColumnIdOptional(const std::stri
 
 ui32 TFilteredSnapshotSchema::GetColumnIdVerified(const std::string& columnName) const {
     auto result = OriginalSnapshot->GetColumnIdVerified(columnName);
-    AFL_VERIFY(std::find(ColumnIds.begin(), ColumnIds.end(), result) != ColumnIds.end());
+    AFL_VERIFY(IdIntoIndex.contains(result));
     return result;
 }
 

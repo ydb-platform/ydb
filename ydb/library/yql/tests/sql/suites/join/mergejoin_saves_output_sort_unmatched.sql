@@ -6,7 +6,6 @@ pragma yt.JoinMergeUnsortedFactor="0";
 pragma yt.JoinAllowColumnRenames="true";
 
 FROM Input1 AS a JOIN Input2 AS b ON b.k2 = a.k1 AND a.v1 = b.v2
-                 JOIN Input3 AS c ON a.k1 = c.k3 AND a.v1 = c.v3
-SELECT c.k3 AS ck3, c.k3 AS ck3_extra, c.k3 AS ck3_extra2, c.v3, a.k1 as ak1
-ORDER BY ck3, ck3_extra, ck3_extra2, c.v3 -- should be noop
+SELECT b.k2 AS bk2, b.v2 as bv2, a.k1 as ak1
+ORDER BY bv2 -- should be a separate sort
 ;

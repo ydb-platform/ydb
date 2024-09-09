@@ -4,21 +4,17 @@
 
 namespace NKikimr::NDataShard {
 
-using TTypes = NTxProxy::TUploadTypes;
-using TRows = NTxProxy::TUploadRows;
-
 class TBufferData: public IStatHolder, public TNonCopyable {
 public:
     TBufferData()
-        : Rows{std::make_shared<TRows>()}
-    {
+        : Rows{std::make_shared<NTxProxy::TUploadRows>()} {
     }
 
     ui64 GetRows() const override final {
         return Rows->size();
     }
 
-    std::shared_ptr<TRows> GetRowsData() const {
+    auto GetRowsData() const {
         return Rows;
     }
 
@@ -68,7 +64,7 @@ public:
     }
 
 private:
-    std::shared_ptr<TRows> Rows;
+    std::shared_ptr<NTxProxy::TUploadRows> Rows;
     ui64 ByteSize = 0;
     TSerializedCellVec LastKey;
 };

@@ -28,11 +28,11 @@ namespace NKikimr::NDataShard {
 #define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
 
-static std::shared_ptr<TTypes> BuildTypes(const TUserTable& tableInfo, const NKikimrIndexBuilder::TColumnBuildSettings& buildSettings) {
+static std::shared_ptr<NTxProxy::TUploadTypes> BuildTypes(const TUserTable& tableInfo, const NKikimrIndexBuilder::TColumnBuildSettings& buildSettings) {
     auto types = GetAllTypes(tableInfo);
 
     Y_ABORT_UNLESS(buildSettings.columnSize() > 0);
-    auto result = std::make_shared<TTypes>();
+    auto result = std::make_shared<NTxProxy::TUploadTypes>();
     result->reserve(tableInfo.KeyColumnIds.size() + buildSettings.columnSize());
 
     for (const auto& keyColId : tableInfo.KeyColumnIds) {
@@ -48,10 +48,10 @@ static std::shared_ptr<TTypes> BuildTypes(const TUserTable& tableInfo, const NKi
     return result;
 }
 
-static std::shared_ptr<TTypes> BuildTypes(const TUserTable& tableInfo, TProtoColumnsCRef indexColumns, TProtoColumnsCRef dataColumns) {
+static std::shared_ptr<NTxProxy::TUploadTypes> BuildTypes(const TUserTable& tableInfo, TProtoColumnsCRef indexColumns, TProtoColumnsCRef dataColumns) {
     auto types = GetAllTypes(tableInfo);
 
-    auto result = std::make_shared<TTypes>();
+    auto result = std::make_shared<NTxProxy::TUploadTypes>();
     result->reserve(indexColumns.size() + dataColumns.size());
 
     for (const auto& colName : indexColumns) {
@@ -110,8 +110,8 @@ protected:
     const ui64 DataShardId;
     const TActorId ProgressActorId;
 
-    TTags ScanTags;                             // first: columns we scan, order as in IndexTable
-    std::shared_ptr<TTypes> UploadColumnsTypes; // columns types we upload to indexTable
+    TTags ScanTags;                                             // first: columns we scan, order as in IndexTable
+    std::shared_ptr<NTxProxy::TUploadTypes> UploadColumnsTypes; // columns types we upload to indexTable
     NTxProxy::EUploadRowsMode UploadMode;
 
     const TTags KeyColumnIds;

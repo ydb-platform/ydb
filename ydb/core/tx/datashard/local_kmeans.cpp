@@ -249,8 +249,8 @@ protected:
     std::vector<TString> Clusters;
 
     // Upload
-    std::shared_ptr<TTypes> TargetTypes;
-    std::shared_ptr<TTypes> NextTypes;
+    std::shared_ptr<NTxProxy::TUploadTypes> TargetTypes;
+    std::shared_ptr<NTxProxy::TUploadTypes> NextTypes;
 
     TString TargetTable;
     TString NextTable;

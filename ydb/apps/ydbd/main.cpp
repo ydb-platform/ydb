@@ -10,6 +10,7 @@
 
 int main(int argc, char **argv) {
     SetupTerminateHandler();
+    // rebuild
 
     auto factories = std::make_shared<NKikimr::TModuleFactories>();
     factories->DataShardExportFactory = std::make_shared<TDataShardExportFactory>();

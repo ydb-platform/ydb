@@ -18,7 +18,7 @@ DROP RESOURCE POOL <имя>
 
 ## Разрешения
 
-Требуется разрешение `REMOVE SCHEMA` на директорию `.metadata/workload_manager/pools`
+Требуется разрешение `REMOVE SCHEMA` до пула в директории `.metadata/workload_manager/pools`
 
 ## Примеры
 

@@ -16,26 +16,10 @@ namespace NMiniKQL {
 
 namespace {
 
-struct TDecimalMulBlockExec {
-    const NYql::NDecimal::TInt128 Bound;
-    const NYql::NDecimal::TInt128 Divider;
-
-    TDecimalMulBlockExec(
-        NYql::NDecimal::TInt128 bound,
-        NYql::NDecimal::TInt128 divider)
-        : Bound(bound)
-        , Divider(divider)
-    { }
-
+template<typename T>
+struct TDecimalBlockExec {
     NYql::NDecimal::TInt128 Do(NYql::NDecimal::TInt128 left, NYql::NDecimal::TInt128 right) const {
-        const auto mul = Divider > 1 ?
-            NYql::NDecimal::MulAndDivNormalDivider(left, right, Divider):
-            NYql::NDecimal::Mul(left, right);
-
-        if (mul > -Bound && mul < +Bound)
-            return mul;
-
-        return NYql::NDecimal::IsNan(mul) ? NYql::NDecimal::Nan() : (mul > 0 ? +NYql::NDecimal::Inf() : -NYql::NDecimal::Inf());
+        return static_cast<const T*>(this)->Do(left, right);
     }
 
     void ArrayScalarCore(
@@ -221,7 +205,76 @@ struct TDecimalMulBlockExec {
     }
 };
 
-std::shared_ptr<arrow::compute::ScalarKernel> MakeBlockMulKernel(const TVector<TType*>& argTypes, TType* resultType) {
+struct TDecimalMulBlockExec: TDecimalBlockExec<TDecimalMulBlockExec> {
+    const NYql::NDecimal::TInt128 Bound;
+    const NYql::NDecimal::TInt128 Divider;
+
+    TDecimalMulBlockExec(
+        ui8 precision,
+        ui8 scale)
+        : Bound(NYql::NDecimal::GetDivider(precision))
+        , Divider(NYql::NDecimal::GetDivider(scale))
+    { }
+
+    NYql::NDecimal::TInt128 Do(NYql::NDecimal::TInt128 left, NYql::NDecimal::TInt128 right) const {
+        const auto mul = Divider > 1 ?
+            NYql::NDecimal::MulAndDivNormalDivider(left, right, Divider):
+            NYql::NDecimal::Mul(left, right);
+
+        if (mul > -Bound && mul < +Bound)
+            return mul;
+
+        return NYql::NDecimal::IsNan(mul) ? NYql::NDecimal::Nan() : (mul > 0 ? +NYql::NDecimal::Inf() : -NYql::NDecimal::Inf());
+    }
+};
+
+struct TDecimalDivBlockExec: TDecimalBlockExec<TDecimalDivBlockExec> {
+    const NYql::NDecimal::TInt128 Bound;
+    const NYql::NDecimal::TInt128 Divider;
+
+    TDecimalDivBlockExec(
+        ui8 precision,
+        ui8 scale)
+        : Bound(NYql::NDecimal::GetDivider(precision))
+        , Divider(NYql::NDecimal::GetDivider(scale))
+    { }
+
+    NYql::NDecimal::TInt128 Do(NYql::NDecimal::TInt128 left, NYql::NDecimal::TInt128 right) const {
+        const auto div = NYql::NDecimal::MulAndDivNormalMultiplier(left, Divider, right);
+        if (div > -Bound && div < +Bound)
+            return div;
+
+        return NYql::NDecimal::IsNan(div) ? NYql::NDecimal::Nan() : (div > 0 ? +NYql::NDecimal::Inf() : -NYql::NDecimal::Inf());
+    }
+};
+
+template<typename TRight = NYql::NDecimal::TInt128>
+struct TDecimalModBlockExec: TDecimalBlockExec<TDecimalModBlockExec<TRight>> {
+    const NYql::NDecimal::TInt128 Bound;
+    const NYql::NDecimal::TInt128 Divider;
+
+    TDecimalModBlockExec(
+        ui8 precision,
+        ui8 scale)
+        : Bound(NYql::NDecimal::GetDivider(precision - scale))
+        , Divider(NYql::NDecimal::GetDivider(scale))
+    { }
+
+    NYql::NDecimal::TInt128 Do(NYql::NDecimal::TInt128 left, NYql::NDecimal::TInt128 right) const {
+        if constexpr (std::is_same_v<TRight, NYql::NDecimal::TInt128> || std::is_signed<TRight>::value) {
+            if (right >= +Bound || right <= -Bound)
+                return left;
+        } else {
+            if (right >= Bound)
+                return left;
+        }
+
+        return NYql::NDecimal::Mod(left, NYql::NDecimal::Mul(Divider, right));
+    }
+};
+
+template<typename TExec>
+std::shared_ptr<arrow::compute::ScalarKernel> MakeBlockKernel(const TVector<TType*>& argTypes, TType* resultType) {
     MKQL_ENSURE(argTypes.size() == 2, "Require 2 arguments");
     MKQL_ENSURE(argTypes[0]->GetKind() == TType::EKind::Block, "Require block");
     MKQL_ENSURE(argTypes[1]->GetKind() == TType::EKind::Block, "Require block");
@@ -246,7 +299,7 @@ std::shared_ptr<arrow::compute::ScalarKernel> MakeBlockMulKernel(const TVector<T
     auto [precision, scale] = decimalType1->GetParams();
     MKQL_ENSURE(precision >= 1&& precision <= 35, TStringBuilder() << "Wrong precision: " << (int)precision);
 
-    auto exec = std::make_shared<TDecimalMulBlockExec>(NYql::NDecimal::GetDivider(precision), NYql::NDecimal::GetDivider(scale));
+    auto exec = std::make_shared<TExec>(precision, scale);
 
     auto k = std::make_shared<arrow::compute::ScalarKernel>(ConvertToInputTypes(argTypes), ConvertToOutputType(resultType), 
         [exec](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
@@ -272,7 +325,7 @@ IComputationNode* WrapBlockDecimalMul(TCallable& callable, const TComputationNod
     TComputationNodePtrVector argsNodes = { firstCompute, secondCompute };
     TVector<TType*> argsTypes = { firstType, secondType };
 
-    std::shared_ptr<arrow::compute::ScalarKernel> kernel = MakeBlockMulKernel(argsTypes, callable.GetType()->GetReturnType());
+    std::shared_ptr<arrow::compute::ScalarKernel> kernel = MakeBlockKernel<TDecimalMulBlockExec>(argsTypes, callable.GetType()->GetReturnType());
     return new TBlockFuncNode(ctx.Mutables, "DecimalMul", std::move(argsNodes), argsTypes, *kernel, kernel);
 }
 
@@ -290,7 +343,7 @@ IComputationNode* WrapBlockDecimalDiv(TCallable& callable, const TComputationNod
     TComputationNodePtrVector argsNodes = { firstCompute, secondCompute };
     TVector<TType*> argsTypes = { firstType, secondType };
 
-    std::shared_ptr<arrow::compute::ScalarKernel> kernel = MakeBlockMulKernel(argsTypes, callable.GetType()->GetReturnType());
+    std::shared_ptr<arrow::compute::ScalarKernel> kernel = MakeBlockKernel<TDecimalDivBlockExec>(argsTypes, callable.GetType()->GetReturnType());
     return new TBlockFuncNode(ctx.Mutables, "DecimalDiv", std::move(argsNodes), argsTypes, *kernel, kernel);
 }
 
@@ -308,7 +361,7 @@ IComputationNode* WrapBlockDecimalMod(TCallable& callable, const TComputationNod
     TComputationNodePtrVector argsNodes = { firstCompute, secondCompute };
     TVector<TType*> argsTypes = { firstType, secondType };
 
-    std::shared_ptr<arrow::compute::ScalarKernel> kernel = MakeBlockMulKernel(argsTypes, callable.GetType()->GetReturnType());
+    std::shared_ptr<arrow::compute::ScalarKernel> kernel = MakeBlockKernel<TDecimalModBlockExec<NYql::NDecimal::TInt128>>(argsTypes, callable.GetType()->GetReturnType());
     return new TBlockFuncNode(ctx.Mutables, "DecimalMod", std::move(argsNodes), argsTypes, *kernel, kernel);
 }
 

@@ -160,14 +160,14 @@ class TYtUploader: public TActorBootstrapped<TYtUploader> {
                 return {};
             }
 
-             return NYT::TError(
-                 NCustomErrorCodes::InvalidNodeType,
-                 "Invalid type of %v"
-                 ": expected %Qv"
-                 ", actual %Qv",
-                 path,
-                 expected,
-                 actual);
+            return NYT::TError(
+                NCustomErrorCodes::InvalidNodeType,
+                "Invalid type of %v"
+                ": expected %Qv"
+                ", actual %Qv",
+                path,
+                expected,
+                actual);
         } catch (const yexception& ex) {
             return NYT::TError("Error while checking type of %v: %v", path, ex.what());
         }

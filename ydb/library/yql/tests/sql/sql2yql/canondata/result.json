@@ -10569,6 +10569,13 @@
             "uri": "https://{canondata_backend}/1784117/d56ae82ad9d30397a41490647be1bd2124718f98/resource.tar.gz#test_sql2yql.test_limit-zero_limit_/sql.yql"
         }
     ],
+    "test_sql2yql.test[lineage-error_type]": [
+        {
+            "checksum": "09dc81028852fd592ae2ae96787107ab",
+            "size": 1628,
+            "uri": "https://{canondata_backend}/1784826/8212a6594777651314d94a2e2f95179c0016604c/resource.tar.gz#test_sql2yql.test_lineage-error_type_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[lineage-flatten_list_nested_lambda]": [
         {
             "checksum": "1405a87aecd4676d7955fff219819b5f",
@@ -17511,6 +17518,13 @@
             "checksum": "9cbee7499e54e16143791b73d4891146",
             "size": 1289,
             "uri": "https://{canondata_backend}/1880306/2acf5b55cb208565b2cb35901ac765fc11dca857/resource.tar.gz#test_sql2yql.test_solomon-LabelColumns_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[solomon-Subquery]": [
+        {
+            "checksum": "93c45f401cb4eaaf94f9731a8cf3d519",
+            "size": 2206,
+            "uri": "https://{canondata_backend}/1925842/4cd572fb4c53ca13dd4b61884e96490799969da0/resource.tar.gz#test_sql2yql.test_solomon-Subquery_/sql.yql"
         }
     ],
     "test_sql2yql.test[solomon-UnknownSetting]": [
@@ -30155,6 +30169,13 @@
             "uri": "https://{canondata_backend}/1880306/64654158d6bfb1289c66c626a8162239289559d0/resource.tar.gz#test_sql_format.test_limit-zero_limit_/formatted.sql"
         }
     ],
+    "test_sql_format.test[lineage-error_type]": [
+        {
+            "checksum": "aa7268913aed17bf13095a2f03f475ee",
+            "size": 106,
+            "uri": "https://{canondata_backend}/1784826/8212a6594777651314d94a2e2f95179c0016604c/resource.tar.gz#test_sql_format.test_lineage-error_type_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[lineage-flatten_list_nested_lambda]": [
         {
             "checksum": "3fdec3c3ffc5993a6088aa56eac4fcea",
@@ -33954,6 +33975,13 @@
             "checksum": "5d2ff6d76dac9a34c9ca42f73fedbc40",
             "size": 219,
             "uri": "https://{canondata_backend}/1880306/2acf5b55cb208565b2cb35901ac765fc11dca857/resource.tar.gz#test_sql_format.test_solomon-LabelColumns_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[solomon-Subquery]": [
+        {
+            "checksum": "011dae5a5c7dff0acaff130860bb39c5",
+            "size": 354,
+            "uri": "https://{canondata_backend}/1925842/4cd572fb4c53ca13dd4b61884e96490799969da0/resource.tar.gz#test_sql_format.test_solomon-Subquery_/formatted.sql"
         }
     ],
     "test_sql_format.test[solomon-UnknownSetting]": [

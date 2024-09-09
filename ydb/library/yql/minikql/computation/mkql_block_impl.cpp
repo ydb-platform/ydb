@@ -343,6 +343,7 @@ void TBlockState::ClearValues() {
 }
 
 void TBlockState::FillArrays() {
+    MKQL_ENSURE(Count == 0, "All existing arrays have to be processed");
     auto& counterDatum = TArrowBlock::From(Values.back()).GetDatum();
     MKQL_ENSURE(counterDatum.is_scalar(), "Unexpected block length type (expecting scalar)");
     Count = counterDatum.scalar_as<arrow::UInt64Scalar>().value;

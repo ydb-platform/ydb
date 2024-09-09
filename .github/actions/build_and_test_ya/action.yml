@@ -95,29 +95,16 @@ runs:
         folder_prefix: ya-
         build_preset: ${{ inputs.build_preset }}
 
-    - name: Generate ya.make with affected test suites and modules list
-      if: inputs.increment == 'true'
-      uses: ./.github/actions/graph_compare
- 
-    - name: Change target in case of incremental
-      id: target_choice
-      shell: bash
-      run: |
-        if [ "${{ inputs.increment }}" == "true" ]; then
-          echo "target=." >> $GITHUB_OUTPUT
-        else
-          echo "target=${{ inputs.build_target }}" >> $GITHUB_OUTPUT
-        fi
-
     - name: Run build and tests
       id: build
       uses: ./.github/actions/test_ya
       with:
-        build_target: ${{ steps.target_choice.outputs.target }}
+        build_target: ${{ inputs.build_target }}
         build_preset: ${{ inputs.build_preset }}
         test_size: ${{ inputs.test_size }}
         test_type: ${{ inputs.test_type }}
         run_tests: ${{ inputs.run_tests }}
+        increment: ${{ inputs.increment }}
         testman_token: ${{ fromJSON( inputs.secs ).TESTMO_TOKEN2 }}
         testman_url: ${{  fromJSON( inputs.vars ).TESTMO_URL }}
         testman_project_id: ${{  fromJSON( inputs.vars ).TESTMO_PROJECT_ID }}

@@ -641,6 +641,7 @@ message TSchemeCacheRequest {
 message TEvViewerRequest {
     TNodeLocation Location = 1;
     uint32 Timeout = 2; // ms
+    string MergeFields = 3;
     oneof Request {
         NKikimrWhiteboard.TEvTabletStateRequest TabletRequest = 11;
         NKikimrWhiteboard.TEvSystemStateRequest SystemRequest = 12;

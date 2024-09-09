@@ -2,6 +2,7 @@ LIBRARY()
 
 PEERDIR(
     contrib/libs/antlr3_cpp_runtime
+    contrib/libs/antlr4_cpp_runtime
     contrib/libs/protobuf
 )
 

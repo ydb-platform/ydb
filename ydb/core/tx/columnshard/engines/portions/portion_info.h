@@ -338,22 +338,29 @@ public:
     }
 
     const TColumnRecord* GetRecordPointer(const TChunkAddress& address) const {
-        for (auto&& i : Records) {
-            if (i.GetAddress() == address) {
-                return &i;
-            }
+        auto it = std::lower_bound(Records.begin(), Records.end(), address, [](const TColumnRecord& item, const TChunkAddress& address) {
+            return item.GetAddress() < address;
+        });
+        if (it != Records.end() && it->GetAddress() == address) {
+            return &*it;
         }
         return nullptr;
     }
 
     bool HasEntityAddress(const TChunkAddress& address) const {
-        for (auto&& c : GetRecords()) {
-            if (c.GetAddress() == address) {
+        {
+            auto it = std::lower_bound(Records.begin(), Records.end(), address, [](const TColumnRecord& item, const TChunkAddress& address) {
+                return item.GetAddress() < address;
+            });
+            if (it != Records.end() && it->GetAddress() == address) {
                 return true;
             }
         }
-        for (auto&& c : GetIndexes()) {
-            if (c.GetAddress() == address) {
+        {
+            auto it = std::lower_bound(Indexes.begin(), Indexes.end(), address, [](const TIndexChunk& item, const TChunkAddress& address) {
+                return item.GetAddress() < address;
+            });
+            if (it != Indexes.end() && it->GetAddress() == address) {
                 return true;
             }
         }
@@ -635,7 +642,6 @@ public:
     class TPreparedBatchData {
     private:
         std::vector<TPreparedColumn> Columns;
-        std::shared_ptr<arrow::Schema> Schema;
         size_t RowsCount = 0;
     public:
         struct TAssembleOptions {
@@ -676,10 +682,6 @@ public:
             return nullptr;
         }
 
-        std::vector<std::string> GetSchemaColumnNames() const {
-            return Schema->field_names();
-        }
-
         size_t GetColumnsCount() const {
             return Columns.size();
         }
@@ -688,9 +690,8 @@ public:
             return RowsCount;
         }
 
-        TPreparedBatchData(std::vector<TPreparedColumn>&& columns, std::shared_ptr<arrow::Schema> schema, const size_t rowsCount)
+        TPreparedBatchData(std::vector<TPreparedColumn>&& columns, const size_t rowsCount)
             : Columns(std::move(columns))
-            , Schema(schema)
             , RowsCount(rowsCount) {
         }
 

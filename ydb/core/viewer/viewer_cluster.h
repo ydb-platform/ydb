@@ -396,7 +396,6 @@ private:
                 if (node->Static) {
                     if (TabletStateResponse.count(nodeId) == 0) {
                         auto request = std::make_unique<TEvWhiteboard::TEvTabletStateRequest>();
-                        request->Record.SetGroupBy("Type,State");
                         TabletStateResponse.emplace(nodeId, MakeWhiteboardRequest(nodeId, request.release()));
                         ++WhiteboardStateRequestsInFlight;
                     }

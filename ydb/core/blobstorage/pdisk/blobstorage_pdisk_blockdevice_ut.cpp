@@ -1,5 +1,6 @@
 #include "defs.h"
 
+#include "blobstorage_pdisk.h"
 #include "blobstorage_pdisk_blockdevice.h"
 #include <ydb/library/pdisk_io/buffers.h>
 #include "blobstorage_pdisk_actorsystem_creator.h"
@@ -184,9 +185,9 @@ void RunTestMultipleRequestsFromCompletionAction() {
         THolder<NPDisk::TBufferPool> bufferPool(NPDisk::CreateBufferPool(dataSize, 1, false, {}));
         NPDisk::TBuffer::TPtr alignedBuffer(bufferPool->Pop());
         memset(alignedBuffer->Data(), 0, dataSize);
-        THolder<NPDisk::IBlockDevice> device(NPDisk::CreateRealBlockDevice(path, 0, *mon, 0, 0, 4,
+        THolder<NPDisk::IBlockDevice> device(NPDisk::CreateRealBlockDevice(path, *mon, 0, 0, 4,
                 NPDisk::TDeviceMode::LockFile, 2 << generations, nullptr));
-        device->Initialize(creator.GetActorSystem(), {});
+        device->Initialize(std::make_shared<NPDisk::TPDiskCtx>(creator.GetActorSystem()));
 
         (new TWriter(*device, alignedBuffer.Get(), (i32)generations, &counter))->Exec(nullptr);
 
@@ -217,9 +218,9 @@ void RunTestDestructionWithMultipleFlushesFromCompletionAction() {
     TString path = CreateFile(tempDir().c_str(), dataSize);
 
     TActorSystemCreator creator;
-    THolder<NPDisk::IBlockDevice> device(NPDisk::CreateRealBlockDevice(path, 0, *mon, 0, 0, 4,
+    THolder<NPDisk::IBlockDevice> device(NPDisk::CreateRealBlockDevice(path, *mon, 0, 0, 4,
                 NPDisk::TDeviceMode::LockFile, 2 << generations, nullptr));
-    device->Initialize(creator.GetActorSystem(), {});
+    device->Initialize(std::make_shared<NPDisk::TPDiskCtx>(creator.GetActorSystem()));
 
     (new TFlusher(*device, generations, &counter))->Exec(nullptr);
     device->Stop();
@@ -354,7 +355,7 @@ Y_UNIT_TEST_SUITE(TBlockDeviceTest) {
             NPDisk::TAlignedData alignedBuffer;
             alignedBuffer.Resize(dataSize);
             memset(alignedBuffer.Get(), 0, dataSize);
-            THolder<NPDisk::IBlockDevice> device(NPDisk::CreateRealBlockDevice(path, 0, *mon));
+            THolder<NPDisk::IBlockDevice> device(NPDisk::CreateRealBlockDevice(path, *mon));
             device->Initialize(nullptr);
 
             (new TRabbit(*device, alignedBuffer, generations, &counter))->Exec(nullptr);

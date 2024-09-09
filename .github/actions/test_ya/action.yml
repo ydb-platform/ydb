@@ -349,7 +349,7 @@ runs:
           set -ex
           RC=`cat exit_code`
 
-          .github/scripts/tests/report_analyzer.py "$CURRENT_REPORT" $CURRENT_PUBLIC_DIR/summary_report.txt || true
+          .github/scripts/tests/report_analyzer.py --report_file "$CURRENT_REPORT" --summary_file $CURRENT_PUBLIC_DIR/summary_report.txt || true
 
           # convert to chromium trace
           # seems analyze-make don't have simple "output" parameter, so change cwd

@@ -2021,7 +2021,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
     // Schema snapshots
     using TActionFunc = std::function<ui64(TServer::TPtr)>;
 
-    ui64 ResolvePqTablet(TTestActorRuntime& runtime, const TActorId& sender, const TString& path, ui32 partitionId) {
+    auto GetTopicDescription(TTestActorRuntime& runtime, const TActorId& sender, const TString& path) {
         auto streamDesc = Ls(runtime, sender, path);
 
         const auto& streamEntry = streamDesc->ResultSet.at(0);
@@ -2036,7 +2036,11 @@ Y_UNIT_TEST_SUITE(Cdc) {
         const auto& topicEntry = topicDesc->ResultSet.at(0);
         UNIT_ASSERT(topicEntry.PQGroupInfo);
 
-        const auto& pqDesc = topicEntry.PQGroupInfo->Description;
+        return topicEntry.PQGroupInfo->Description;
+    }
+
+    ui64 ResolvePqTablet(TTestActorRuntime& runtime, const TActorId& sender, const TString& path, ui32 partitionId) {
+        const auto& pqDesc = GetTopicDescription(runtime, sender, path);
         for (const auto& partition : pqDesc.GetPartitions()) {
             if (partitionId == partition.GetPartitionId()) {
                 return partition.GetTabletId();
@@ -2048,7 +2052,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
     }
 
     auto GetRecords(TTestActorRuntime& runtime, const TActorId& sender, const TString& path, ui32 partitionId) {
-        Cerr << ">>>>> GetRecords" << Endl << Flush;
+        Cerr << ">>>>> GetRecords path=" << path << " partitionId=" << partitionId << Endl << Flush;
         NKikimrClient::TPersQueueRequest request;
         request.MutablePartitionRequest()->SetTopic(path);
         request.MutablePartitionRequest()->SetPartition(partitionId);
@@ -2057,7 +2061,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         cmd.SetClientId(NKikimr::NPQ::CLIENTID_WITHOUT_CONSUMER);
         cmd.SetCount(10000);
         cmd.SetOffset(0);
-        cmd.SetReadTimestampMs(100);
+        cmd.SetReadTimestampMs(0);
         cmd.SetExternalOperation(true);
 
         auto req = MakeHolder<TEvPersQueue::TEvRequest>();
@@ -2076,11 +2080,16 @@ Y_UNIT_TEST_SUITE(Cdc) {
         return result;
     }
 
-    TVector<NJson::TJsonValue> WaitForContent(TServer::TPtr server, const TActorId& sender, const TString& path, const TVector<TString>& expected) {
-        TVector<std::pair<TString, TString>> result;
+    TVector<NJson::TJsonValue> WaitForContent(TServer::TPtr server, const TActorId& sender, const TString& path, const TVector<TString>& expected, bool allPartitions = false) {
+        size_t partitionCount = 1;
+        if (allPartitions) {
+            const auto& pqDesc = GetTopicDescription(*server->GetRuntime(), sender, path);
+            partitionCount = pqDesc.GetPartitions().size();
+        }
 
+        TVector<std::pair<TString, TString>> result;
         while (true) {
-            for (int p = 0; p < 3; ++p) {
+            for (size_t p = 0; p < partitionCount; ++p) {
                 const auto records = GetRecords(*server->GetRuntime(), sender, path, p);
                 result.insert(result.end(), records.begin(), records.end());
                 if (result.size() >= expected.size()) {
@@ -2098,12 +2107,14 @@ Y_UNIT_TEST_SUITE(Cdc) {
                     return values;
                 }
             }
+
             SimulateSleep(server, TDuration::Seconds(1));
         }
     }
 
     void ShouldDeliverChanges(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc, TActionFunc action,
-            const TVector<TString>& queriesBefore, const TVector<TString>& queriesAfter, const TVector<TString>& records)
+            const TVector<TString>& queriesBefore, const TVector<TString>& queriesAfter, const TVector<TString>& records,
+            bool allPartitions = false)
     {
         TTestPqEnv env(tableDesc, streamDesc, false);
 
@@ -2142,7 +2153,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         }
 
         sendEnqueued();
-        WaitForContent(env.GetServer(), env.GetEdgeActor(), "/Root/Table/Stream", records);
+        WaitForContent(env.GetServer(), env.GetEdgeActor(), "/Root/Table/Stream", records, allPartitions);
     }
 
     TShardedTableOptions WithExtraColumn() {
@@ -2216,7 +2227,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         }, {
             R"({"update":{"value":10},"key":[1]})",
             R"({"update":{"value":20},"key":[2]})",
-        });
+        }, true);
     }
 
     Y_UNIT_TEST(DropColumn) {

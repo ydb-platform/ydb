@@ -30,8 +30,7 @@ protected:
 
 public:
     TLongTxWriteBase(const TString& databaseName, const TString& path, const TString& token, const TLongTxId& longTxId, const TString& dedupId)
-        : TBase()
-        , DatabaseName(databaseName)
+        : DatabaseName(databaseName)
         , Path(path)
         , DedupId(dedupId)
         , LongTxId(longTxId)
@@ -41,8 +40,8 @@ public:
         }
     }
 
-    ~TLongTxWriteBase() {
-        MemoryInFlight.Sub(InFlightSize);
+    virtual ~TLongTxWriteBase() {
+        AFL_VERIFY(MemoryInFlight.Sub(InFlightSize) >= 0);
     }
 
 protected:
@@ -66,6 +65,7 @@ protected:
         }
 
         auto accessor = ExtractDataAccessor();
+        AFL_VERIFY(!InFlightSize);
         InFlightSize = accessor->GetSize();
         const i64 sizeInFlight = MemoryInFlight.Add(InFlightSize);
         if (TLimits::MemoryInFlightWriting < (ui64)sizeInFlight && sizeInFlight != InFlightSize) {

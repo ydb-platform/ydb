@@ -286,6 +286,12 @@ class TColumnShard
     void OnTieringModified(const std::optional<ui64> pathId = {});
 
 public:
+    ui64 BuildEphemeralTxId() {
+        static TAtomicCounter Counter = 0;
+        static constexpr ui64 shift = (ui64)1 << 47;
+        return shift | Counter.Inc();
+    }
+
     enum class EOverloadStatus {
         ShardTxInFly /* "shard_tx" */,
         ShardWritesInFly /* "shard_writes" */,
@@ -494,6 +500,9 @@ private:
         return ProgressTxController->GetTxCompleteLag(mediatorTime);
     }
 
+    bool HasLongTxWrites(const TInsertWriteId insertWriteId) const {
+        return LongTxWrites.contains(insertWriteId);
+    }
     TInsertWriteId HasLongTxWrite(const NLongTxService::TLongTxId& longTxId, const ui32 partId) const;
     TInsertWriteId GetLongTxWrite(NIceDb::TNiceDb& db, const NLongTxService::TLongTxId& longTxId, const ui32 partId, const std::optional<ui32> granuleShardingVersionId);
     void AddLongTxWrite(const TInsertWriteId writeId, ui64 txId);

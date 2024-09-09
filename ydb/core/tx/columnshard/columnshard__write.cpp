@@ -554,11 +554,11 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
 
     ui64 lockId = 0;
     if (behaviour == EOperationBehaviour::NoTxWrite) {
-        static TAtomicCounter Counter = 0;
-        const ui64 shift = (ui64)1 << 47;
-        lockId = shift + Counter.Inc();
+        lockId = BuildEphemeralTxId();
+    } else if (behaviour == EOperationBehaviour::InTxWrite) {
+        lockId = record.GetTxId();
     } else {
-        lockId = (behaviour == EOperationBehaviour::InTxWrite) ? record.GetTxId() : record.GetLockTxId();
+        lockId = record.GetLockTxId();
     }
 
     OperationsManager->RegisterLock(lockId, Generation());

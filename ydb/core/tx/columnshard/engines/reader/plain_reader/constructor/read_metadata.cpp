@@ -35,7 +35,7 @@ TConclusionStatus TReadMetadata::Init(
     if (LockId) {
         for (auto&& i : CommittedBlobs) {
             if (auto writeId = i.GetWriteIdOptional()) {
-                if (owner->HasLongTxWrites()) {
+                if (owner->HasLongTxWrites(*writeId)) {
                 } else {
                     auto op = owner->GetOperationsManager().GetOperationByInsertWriteIdVerified(*writeId);
                     AddWriteIdToCheck(*writeId, op->GetLockId());

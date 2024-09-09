@@ -500,9 +500,6 @@ private:
         return ProgressTxController->GetTxCompleteLag(mediatorTime);
     }
 
-    bool HasLongTxWrites(const TInsertWriteId insertWriteId) const {
-        return LongTxWrites.contains(insertWriteId);
-    }
     TInsertWriteId HasLongTxWrite(const NLongTxService::TLongTxId& longTxId, const ui32 partId) const;
     TInsertWriteId GetLongTxWrite(NIceDb::TNiceDb& db, const NLongTxService::TLongTxId& longTxId, const ui32 partId, const std::optional<ui32> granuleShardingVersionId);
     void AddLongTxWrite(const TInsertWriteId writeId, ui64 txId);
@@ -543,6 +540,9 @@ private:
 public:
     ui64 TabletTxCounter = 0;
 
+    bool HasLongTxWrites(const TInsertWriteId insertWriteId) const {
+        return LongTxWrites.contains(insertWriteId);
+    }
     void EnqueueProgressTx(const TActorContext& ctx, const std::optional<ui64> continueTxId);
     NOlap::TSnapshot GetLastTxSnapshot() const {
         return NOlap::TSnapshot(LastPlannedStep, LastPlannedTxId);

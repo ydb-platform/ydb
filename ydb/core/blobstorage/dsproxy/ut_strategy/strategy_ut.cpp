@@ -113,7 +113,7 @@ void RunStrategyTest(TBlobStorageGroupType type) {
         blackboard[id].Whole.Data.Write(0, TRope(data));
 
         TLogContext logCtx(NKikimrServices::BS_PROXY, false);
-        logCtx.SuppressLog = true;
+        logCtx.LogAcc.IsLogEnabled = false;
 
         TGroupModel model(info);
 
@@ -326,7 +326,7 @@ Y_UNIT_TEST_SUITE(DSProxyStrategyTest) {
         std::vector<TOperation> stock;
 
         TLogContext logCtx(NKikimrServices::BS_PROXY, false);
-        logCtx.SuppressLog = true;
+        logCtx.LogAcc.IsLogEnabled = false;
 
         auto runStrategies = [&](TBlackboard& blackboard) {
             return blackboard.RunStrategy(logCtx, TMirror3dcGetWithRestoreStrategy(), TAccelerationParams{});

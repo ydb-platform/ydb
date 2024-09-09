@@ -73,7 +73,6 @@ namespace NKikimr {
         const TString RequestPrefix;
         const NKikimrServices::EServiceKikimr LogComponent;
         TLogAccumulator LogAcc;
-        bool SuppressLog = false;
 
         TLogContext(NKikimrServices::EServiceKikimr logComponent, bool logAccEnabled)
             : RequestPrefix(Sprintf("[%016" PRIx64 "]", TAppData::RandomProvider->GenRand64()))
@@ -82,37 +81,9 @@ namespace NKikimr {
         {}
     };
 
-#define ENABLE_LOG_ACCUMULATION 0
 #define ENABLE_ALTERNATIVE_LOG_ACCUMULATION 1
 
-#if ENABLE_LOG_ACCUMULATION
-    #error "this version is deprecated, isRelease is removed"
-    #define A_LOG_LOG_S_IMPL(accumulator, priority, component, stream) \
-        do { \
-            ::NActors::NLog::TSettings *mSettings = \
-                (::NActors::NLog::TSettings*)(TActivationContext::LoggerSettings()); \
-            if (mSettings) { \
-                ::NActors::NLog::EPriority mPriority = (::NActors::NLog::EPriority)(priority); \
-                ::NActors::NLog::EComponent mComponent = (::NActors::NLog::EComponent)(component); \
-                if (mSettings->Satisfies(mPriority, mComponent, 0ul)) { \
-                    if (isRelease) { \
-                        (accumulator).UnleashUponLogger(); \
-                    } \
-                    TStringBuilder logStringBuilder; \
-                    logStringBuilder << stream; \
-                    TActivationContext::Send(new IEventHandle(mSettings->LoggerActorId, TActorId(), \
-                        new ::NActors::NLog::TEvLog(mPriority, mComponent, (TString)logStringBuilder)); \
-                } else { \
-                    if (!(isRelease)) { \
-                        TStringBuilder logStringBuilder; \
-                        logStringBuilder << "(R) " << (accumulator).LifeMs() << " "; \
-                        logStringBuilder << stream; \
-                        (accumulator).Add(mPriority, mComponent, (TString)logStringBuilder); \
-                    }\
-                }\
-            } \
-        } while (0)
-#elif ENABLE_ALTERNATIVE_LOG_ACCUMULATION
+#if ENABLE_ALTERNATIVE_LOG_ACCUMULATION
     #define A_LOG_LOG_S_IMPL(accumulator, priority, component, stream) \
         do { \
             if ((accumulator).IsEnabled) { \
@@ -143,9 +114,6 @@ namespace NKikimr {
 #define DSP_LOG_LOG_SX(logCtx, priority, marker, stream) \
     do { \
         auto& lc = (logCtx); \
-        if (lc.SuppressLog) { \
-            break; \
-        } \
         A_LOG_LOG_S_IMPL(lc.LogAcc, priority, lc.LogComponent, \
             lc.RequestPrefix << " " << stream << " Marker# " << marker); \
     } while (false)

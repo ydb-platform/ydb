@@ -218,7 +218,7 @@ public:
         IsMaximumLimitValueReached = isReached;
     }
 
-    bool GetMaximumLimitValueReached() noexcept {
+    bool GetMaximumLimitValueReached() const noexcept {
         return IsMaximumLimitValueReached;
     }
 

@@ -2,6 +2,8 @@
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
+#include "checks.h"
+
 namespace {
 
 using namespace NKikimr;
@@ -458,7 +460,8 @@ public:
             return result;
         }
 
-        TPath path = TPath::Resolve(parentPathStr, context.SS).Dive(name);
+        TPath parentPath = TPath::Resolve(parentPathStr, context.SS);
+        TPath path = parentPath.Dive(name);
         {
             TPath::TChecker checks = path.Check();
             checks
@@ -504,6 +507,15 @@ public:
         if (!alterData) {
             return result;
         }
+
+        auto domainInfo = parentPath.DomainInfo();
+        const TSchemeLimits& limits = domainInfo->GetSchemeLimits();
+
+        if (!NKikimr::NSchemeShard::NOlap::CheckLimits(limits, alterData, errStr)) {
+            result->SetError(NKikimrScheme::StatusSchemeError, errStr);
+            return result;
+        }
+
         storeInfo->AlterData = alterData;
 
         NIceDb::TNiceDb db(context.GetDB());

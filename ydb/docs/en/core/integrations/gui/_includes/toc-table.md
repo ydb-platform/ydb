@@ -1,6 +1,6 @@
 # Graphical user interfaces
 
-|  Environment | Instruction | Compatibility Level |
+|  Environment | Instruction | Compatibility level |
 | --- | --- | --- |
 | Embedded UI | [Instruction](../../../reference/embedded-ui/index.md) | |
 | [DBeaver](https://dbeaver.com)  |  [Instruction](../dbeaver.md) | By [JDBC-driver](https://github.com/ydb-platform/ydb-jdbc-driver/releases)|

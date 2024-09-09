@@ -2048,6 +2048,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
     }
 
     auto GetRecords(TTestActorRuntime& runtime, const TActorId& sender, const TString& path, ui32 partitionId) {
+        Cerr << ">>>>> GetRecords" << Endl << Flush;
         NKikimrClient::TPersQueueRequest request;
         request.MutablePartitionRequest()->SetTopic(path);
         request.MutablePartitionRequest()->SetPartition(partitionId);
@@ -2056,7 +2057,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         cmd.SetClientId(NKikimr::NPQ::CLIENTID_WITHOUT_CONSUMER);
         cmd.SetCount(10000);
         cmd.SetOffset(0);
-        cmd.SetReadTimestampMs(0);
+        cmd.SetReadTimestampMs(100);
         cmd.SetExternalOperation(true);
 
         auto req = MakeHolder<TEvPersQueue::TEvRequest>();
@@ -2076,23 +2077,27 @@ Y_UNIT_TEST_SUITE(Cdc) {
     }
 
     TVector<NJson::TJsonValue> WaitForContent(TServer::TPtr server, const TActorId& sender, const TString& path, const TVector<TString>& expected) {
+        TVector<std::pair<TString, TString>> result;
+
         while (true) {
-            const auto records = GetRecords(*server->GetRuntime(), sender, path, 0);
-            for (ui32 i = 0; i < std::min(records.size(), expected.size()); ++i) {
-                AssertJsonsEqual(records.at(i).second, expected.at(i));
-            }
+            for (int p = 0; p < 3; ++p) {
+                const auto records = GetRecords(*server->GetRuntime(), sender, path, p);
+                result.insert(result.end(), records.begin(), records.end());
+                if (result.size() >= expected.size()) {
+                    for (ui32 i = 0; i < std::min(result.size(), expected.size()); ++i) {
+                        AssertJsonsEqual(result.at(i).second, expected.at(i));
+                    }
 
-            if (records.size() >= expected.size()) {
-                UNIT_ASSERT_VALUES_EQUAL_C(records.size(), expected.size(),
-                    "Unexpected record: " << records.at(expected.size()).second);
-                TVector<NJson::TJsonValue> values;
-                for (const auto& pr : records) {
-                    bool ok = NJson::ReadJsonTree(pr.second, &values.emplace_back());
-                    Y_ABORT_UNLESS(ok);
+                    UNIT_ASSERT_VALUES_EQUAL_C(result.size(), expected.size(),
+                        "Unexpected record: " << records.at(expected.size()).second);
+                    TVector<NJson::TJsonValue> values;
+                    for (const auto& pr : result) {
+                        bool ok = NJson::ReadJsonTree(pr.second, &values.emplace_back());
+                        Y_ABORT_UNLESS(ok);
+                    }
+                    return values;
                 }
-                return values;
             }
-
             SimulateSleep(server, TDuration::Seconds(1));
         }
     }
@@ -2188,7 +2193,8 @@ Y_UNIT_TEST_SUITE(Cdc) {
     Y_UNIT_TEST(SplitTopicPartition_TopicAutoPartitioning) {
         auto streamDesc = WithTopicAutoPartitioning(true, Updates(NKikimrSchemeOp::ECdcStreamFormatJson));
         auto action = [&](TServer::TPtr server) {
-            Cerr << ">>>>> TTestTxConfig::SchemeShard=" << TTestTxConfig::SchemeShard << Endl << Flush;
+            server->GetRuntime()->SimulateSleep(TDuration::Seconds(1));
+
             ui64 txId = 100;
 
             AsyncSend(*server->GetRuntime(), 72057594046644480ull, InternalTransaction(AlterPQGroupRequest(++txId, "/Root/Table/Stream", R"(

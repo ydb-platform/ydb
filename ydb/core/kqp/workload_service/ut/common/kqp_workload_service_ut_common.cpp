@@ -528,7 +528,7 @@ private:
         request->SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
         request->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
         request->SetDatabase(Settings_.DomainName_);
-        request->SetPoolId(*settings.PoolId_);
+        request->SetPoolId(settings.PoolId_);
 
         return event;
     }

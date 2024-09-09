@@ -19,7 +19,7 @@ namespace NKikimr::NColumnShard {
 
 using namespace NTabletFlatExecutor;
 
-void TColumnShard::OverloadWriteFail(const EOverloadStatus overloadReason, const NEvWrite::TWriteData& writeData, const ui64 cookie,
+void TColumnShard::OverloadWriteFail(const EOverloadStatus overloadReason, const NEvWrite::TWriteMeta& writeMeta, const ui64 writeSize, const ui64 cookie,
     std::unique_ptr<NActors::IEventBase>&& event, const TActorContext& ctx) {
     Counters.GetTabletCounters()->IncCounter(COUNTER_WRITE_FAIL);
     switch (overloadReason) {
@@ -27,28 +27,28 @@ void TColumnShard::OverloadWriteFail(const EOverloadStatus overloadReason, const
             Counters.OnWriteOverloadDisk();
             break;
         case EOverloadStatus::InsertTable:
-            Counters.OnWriteOverloadInsertTable(writeData.GetSize());
+            Counters.OnWriteOverloadInsertTable(writeSize);
             break;
         case EOverloadStatus::OverloadMetadata:
-            Counters.OnWriteOverloadMetadata(writeData.GetSize());
+            Counters.OnWriteOverloadMetadata(writeSize);
             break;
         case EOverloadStatus::ShardTxInFly:
-            Counters.OnWriteOverloadShardTx(writeData.GetSize());
+            Counters.OnWriteOverloadShardTx(writeSize);
             break;
         case EOverloadStatus::ShardWritesInFly:
-            Counters.OnWriteOverloadShardWrites(writeData.GetSize());
+            Counters.OnWriteOverloadShardWrites(writeSize);
             break;
         case EOverloadStatus::ShardWritesSizeInFly:
-            Counters.OnWriteOverloadShardWritesSize(writeData.GetSize());
+            Counters.OnWriteOverloadShardWritesSize(writeSize);
             break;
         case EOverloadStatus::None:
             Y_ABORT("invalid function usage");
     }
 
-    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "write_overload")("size", writeData.GetSize())(
-        "path_id", writeData.GetWriteMeta().GetTableId())("reason", overloadReason);
+    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "write_overload")("size", writeSize)("path_id", writeMeta.GetTableId())(
+        "reason", overloadReason);
 
-    ctx.Send(writeData.GetWriteMeta().GetSource(), event.release(), 0, cookie);
+    ctx.Send(writeMeta.GetSource(), event.release(), 0, cookie);
 }
 
 TColumnShard::EOverloadStatus TColumnShard::CheckOverloaded(const ui64 tableId) const {
@@ -240,7 +240,7 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
     if (overloadStatus != EOverloadStatus::None) {
         std::unique_ptr<NActors::IEventBase> result = std::make_unique<TEvColumnShard::TEvWriteResult>(
             TabletID(), writeData.GetWriteMeta(), NKikimrTxColumnShard::EResultStatus::OVERLOADED);
-        OverloadWriteFail(overloadStatus, writeData, cookie, std::move(result), ctx);
+        OverloadWriteFail(overloadStatus, writeData.GetWriteMeta(), writeData.GetSize(), cookie, std::move(result), ctx);
         Counters.GetCSCounters().OnFailedWriteResponse(EWriteFailReason::Overload);
     } else {
         if (ui64 writeId = (ui64)HasLongTxWrite(writeMeta.GetLongTxIdUnsafe(), writeMeta.GetWritePartId())) {
@@ -538,10 +538,9 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
 
     auto overloadStatus = CheckOverloaded(tableId);
     if (overloadStatus != EOverloadStatus::None) {
-        NEvWrite::TWriteData writeData(NEvWrite::TWriteMeta(0, tableId, source, {}), arrowData, nullptr, nullptr);
         std::unique_ptr<NActors::IEventBase> result = NEvents::TDataEvents::TEvWriteResult::BuildError(
             TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED, "overload data error");
-        OverloadWriteFail(overloadStatus, writeData, cookie, std::move(result), ctx);
+        OverloadWriteFail(overloadStatus, NEvWrite::TWriteMeta(0, tableId, source, {}), arrowData->GetSize(), cookie, std::move(result), ctx);
         return;
     }
 

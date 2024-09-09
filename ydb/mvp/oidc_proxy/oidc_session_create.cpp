@@ -20,21 +20,6 @@ THandlerSessionCreate::THandlerSessionCreate(const NActors::TActorId& sender,
 {}
 
 void THandlerSessionCreate::Bootstrap(const NActors::TActorContext& ctx) {
-    // NHttp::TUrlParameters urlParameters(Request->URL);
-    // TString code = urlParameters["code"];
-    // TString state = urlParameters["state"];
-
-    // NHttp::THeaders headers(Request->Headers);
-    // NHttp::TCookies cookies(headers.Get("cookie"));
-
-    // if (IsStateValid(state, cookies, ctx) && !code.Empty()) {
-    //     RequestSessionToken(code, ctx);
-    // } else {
-    //     NHttp::THttpOutgoingResponsePtr response = GetHttpOutgoingResponsePtr(Request, Settings, IsAjaxRequest);
-    //     ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
-    //     TBase::Die(ctx);
-    //     return;
-    // }
     TryRestoreOidcSessionFromCookie(ctx);
 }
 
@@ -126,7 +111,7 @@ void THandlerSessionCreate::TryRestoreOidcSessionFromCookie(const NActors::TActo
             NHttp::THeadersBuilder responseHeaders;
             responseHeaders.Set("Content-Type", "text/html");
             SetCORS(Request, &responseHeaders);
-            const static TStringBuf BAD_REQUEST_HTML_PAGE = "<html><head><title>400 Bad Request</title></head><body bgcolor=\"white\"><center><h1>go back to the page</h1></center></body></html>";
+            const static TStringBuf BAD_REQUEST_HTML_PAGE = "<html><head><title>400 Bad Request</title></head><body bgcolor=\"white\"><center><h1>Unknown error has occurred. Please open the page again</h1></center></body></html>";
             ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(Request->CreateResponse("400", "Bad Request", responseHeaders, BAD_REQUEST_HTML_PAGE)));
         }
         Die(ctx);

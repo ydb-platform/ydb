@@ -2956,7 +2956,7 @@ public:
 
 private:
     const NMiniKQL::THolderFactory &HolderFactory_;
-    TVector<NUdf::TUnboxedValue> List_;
+    TVector<NUdf::TUnboxedValue, TMKQLAllocator<NUdf::TUnboxedValue, EMemorySubPool::Temporary>> List_;
 };
 
 //////////////////////////////////////////////////////////////////////////////

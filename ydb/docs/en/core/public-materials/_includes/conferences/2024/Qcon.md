@@ -4,6 +4,8 @@
 
 {{ ydb-short-name }} is a versatile, open-source Distributed SQL database management system that combines high availability and scalability with strong consistency and ACID transactions. It provides services for machine learning products and goes beyond traditional vector search capabilities.
 
+{% include [no_video](../../no_video.md) %}
+
 **Outline**:
 
 This database is used for industrial operations within Yandex. Among its clients are Yandex Market, Yandex Alice, and Yandex Taxi, which are some of the largest and most demanding AI-based applications.

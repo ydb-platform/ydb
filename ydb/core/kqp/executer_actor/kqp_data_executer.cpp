@@ -279,6 +279,9 @@ public:
             for (const auto& sink : data.GetSinksExtraData()) {
                 addLocks(sink);
             }
+            if (data.HasComputeExtraData()) {
+                addLocks(data.GetComputeExtraData());
+            }
         }
 
         ResponseEv->Snapshot = GetSnapshot();
@@ -495,10 +498,20 @@ private:
 
         NYql::TIssues issues;
         NYql::IssuesFromMessage(res->Record.GetIssues(), issues);
-        LOG_D("Got evWrite result, shard: " << shardId << ", status: "
-            << NKikimrDataEvents::TEvWriteResult::EStatus_Name(res->Record.GetStatus())
-            << ", error: " << issues.ToString());
 
+        LOG_D("Recv EvWriteResult (prepare) from ShardID=" << shardId
+            << ", Status=" << NKikimrDataEvents::TEvWriteResult::EStatus_Name(ev->Get()->GetStatus())
+            << ", TxId=" << ev->Get()->Record.GetTxId()
+            << ", Locks= " << [&]() {
+                TStringBuilder builder;
+                for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
+                    builder << lock.ShortDebugString();
+                }
+                return builder;
+            }()
+            << ", Cookie=" << ev->Cookie
+            << ", error=" << issues.ToString());
+    
         if (Stats) {
             Stats->AddDatashardPrepareStats(std::move(*res->Record.MutableTxStats()));
         }
@@ -515,6 +528,18 @@ private:
             }
             case NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED: {
                 YQL_ENSURE(false);
+            }
+            case NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN: {
+                LOG_D("Broken locks: " << res->Record.DebugString());
+                YQL_ENSURE(shardState->State == TShardState::EState::Preparing);
+                Counters->TxProxyMon->TxResultAborted->Inc();
+                LocksBroken = true;
+
+                YQL_ENSURE(!res->Record.GetTxLocks().empty());
+                ResponseEv->BrokenLockPathId = NYql::TKikimrPathId(
+                    res->Record.GetTxLocks(0).GetSchemeShard(),
+                    res->Record.GetTxLocks(0).GetPathId());
+                ReplyErrorAndDie(Ydb::StatusIds::ABORTED, {});
             }
             default:
             {
@@ -891,6 +916,7 @@ private:
                 return ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, issues);
             }
             case NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN: {
+                issues.AddIssue(NYql::YqlIssue({}, TIssuesIds::KIKIMR_LOCKS_INVALIDATED, "Transaction locks invalidated."));
                 return ReplyErrorAndDie(Ydb::StatusIds::ABORTED, issues);
             }
         }
@@ -951,6 +977,7 @@ private:
     }
 
     void ExecutePlanned() {
+        YQL_ENSURE(!LocksBroken);
         YQL_ENSURE(TxCoordinator);
         auto ev = MakeHolder<TEvTxProxy::TEvProposeTransaction>();
         ev->Record.SetCoordinatorID(TxCoordinator);
@@ -1158,9 +1185,19 @@ private:
 
         NYql::TIssues issues;
         NYql::IssuesFromMessage(res->Record.GetIssues(), issues);
-        LOG_D("Got evWrite result, shard: " << shardId << ", status: "
-            << NKikimrDataEvents::TEvWriteResult::EStatus_Name(res->Record.GetStatus())
-            << ", error: " << issues.ToString());
+
+        LOG_D("Recv EvWriteResult (execute) from ShardID=" << shardId
+            << ", Status=" << NKikimrDataEvents::TEvWriteResult::EStatus_Name(ev->Get()->GetStatus())
+            << ", TxId=" << ev->Get()->Record.GetTxId()
+            << ", Locks= " << [&]() {
+                TStringBuilder builder;
+                for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
+                    builder << lock.ShortDebugString();
+                }
+                return builder;
+            }()
+            << ", Cookie=" << ev->Cookie
+            << ", error=" << issues.ToString());
 
         if (Stats) {
             Stats->AddDatashardStats(std::move(*res->Record.MutableTxStats()));
@@ -1189,7 +1226,6 @@ private:
                 shardState->State = TShardState::EState::Finished;
                 Counters->TxProxyMon->TxResultAborted->Inc();
                 LocksBroken = true;
-
                 if (!res->Record.GetTxLocks().empty()) {
                     ResponseEv->BrokenLockPathId = NYql::TKikimrPathId(
                         res->Record.GetTxLocks(0).GetSchemeShard(),
@@ -1705,17 +1741,14 @@ private:
     }
 
     void ExecuteEvWriteTransaction(ui64 shardId, NKikimrDataEvents::TEvWrite& evWrite) {
-        YQL_ENSURE(!ImmediateTx);
         TShardState shardState;
-        shardState.State = TShardState::EState::Preparing;
+        shardState.State = ImmediateTx ? TShardState::EState::Executing : TShardState::EState::Preparing;
         shardState.DatashardState.ConstructInPlace();
 
         auto evWriteTransaction = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>();
         evWriteTransaction->Record = evWrite;
-        evWriteTransaction->Record.SetTxMode(NKikimrDataEvents::TEvWrite::MODE_PREPARE);
+        evWriteTransaction->Record.SetTxMode(ImmediateTx ? NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE : NKikimrDataEvents::TEvWrite::MODE_PREPARE);
         evWriteTransaction->Record.SetTxId(TxId);
-
-        evWriteTransaction->Record.MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
 
         auto locksCount = evWriteTransaction->Record.GetLocks().LocksSize();
         shardState.DatashardState->ShardReadLocks = locksCount > 0;
@@ -1726,6 +1759,29 @@ private:
             << ", locks: " << evWriteTransaction->Record.GetLocks().ShortDebugString());
 
         auto traceId = ExecuterSpan.GetTraceId();
+
+        auto shardsToString = [](const auto& shards) {
+            TStringBuilder builder;
+            for (const auto& shard : shards) {
+                builder << shard << " ";
+            }
+            return builder;
+        };
+
+        LOG_D("Send EvWrite to ShardID=" << shardId
+            << ", TxId=" << evWriteTransaction->Record.GetTxId()
+            << ", TxMode=" << evWriteTransaction->Record.GetTxMode()
+            << ", LockTxId=" << evWriteTransaction->Record.GetLockTxId() << ", LockNodeId=" << evWriteTransaction->Record.GetLockNodeId()
+            << ", LocksOp=" << NKikimrDataEvents::TKqpLocks::ELocksOp_Name(evWriteTransaction->Record.GetLocks().GetOp())
+            << ", SendingShards=" << shardsToString(evWriteTransaction->Record.GetLocks().GetSendingShards())
+            << ", ReceivingShards=" << shardsToString(evWriteTransaction->Record.GetLocks().GetReceivingShards())
+            << ", Locks= " << [&]() {
+                TStringBuilder builder;
+                for (const auto& lock : evWriteTransaction->Record.GetLocks().GetLocks()) {
+                    builder << lock.ShortDebugString();
+                }
+                return builder;
+            }());
 
         LOG_D("ExecuteEvWriteTransaction traceId.verbosity: " << std::to_string(traceId.GetVerbosity()));
 
@@ -2445,12 +2501,10 @@ private:
     }
 
     void ExecuteTasks() {
-        {
-            auto lockTxId = Request.AcquireLocksTxId;
-            if (lockTxId.Defined() && *lockTxId == 0) {
-                lockTxId = TxId;
-                LockHandle = TLockHandle(TxId, TActivationContext::ActorSystem());
-            }
+        auto lockTxId = Request.AcquireLocksTxId;
+        if (lockTxId.Defined() && *lockTxId == 0) {
+            lockTxId = TxId;
+            LockHandle = TLockHandle(TxId, TActivationContext::ActorSystem());
         }
 
         LWTRACK(KqpDataExecuterStartTasksAndTxs, ResponseEv->Orbit, TxId, ComputeTasks.size(), DatashardTxs.size() + EvWriteTxs.size());
@@ -2472,6 +2526,8 @@ private:
         Planner = CreateKqpPlanner({
             .TasksGraph = TasksGraph,
             .TxId = TxId,
+            .LockTxId = lockTxId.GetOrElse(0),
+            .LockNodeId = SelfId().NodeId(),
             .Executer = SelfId(),
             .Snapshot = GetSnapshot(),
             .Database = Database,

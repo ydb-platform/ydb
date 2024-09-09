@@ -63,6 +63,8 @@ constexpr ui32 MEMORY_ESTIMATION_OVERFLOW = 2;
 
 TKqpPlanner::TKqpPlanner(TKqpPlanner::TArgs&& args)
     : TxId(args.TxId)
+    , LockTxId(args.LockTxId)
+    , LockNodeId(args.LockNodeId)
     , ExecuterId(args.Executer)
     , Snapshot(args.Snapshot)
     , Database(args.Database)
@@ -88,7 +90,6 @@ TKqpPlanner::TKqpPlanner(TKqpPlanner::TArgs&& args)
     , ResourceManager_(args.ResourceManager_)
     , CaFactory_(args.CaFactory_)
 {
-
     if (GUCSettings) {
         SerializedGUCSettings = GUCSettings->SerializeToString();
     }
@@ -176,6 +177,8 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
     auto result = std::make_unique<TEvKqpNode::TEvStartKqpTasksRequest>(TasksGraph.GetMeta().GetArenaIntrusivePtr());
     auto& request = result->Record;
     request.SetTxId(TxId);
+    request.SetLockTxId(LockTxId);
+    request.SetLockNodeId(LockNodeId);
     ActorIdToProto(ExecuterId, request.MutableExecuterActorId());
 
     if (Deadline) {
@@ -421,6 +424,8 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
     auto startResult = CaFactory_->CreateKqpComputeActor({
         .ExecuterId = ExecuterId,
         .TxId = TxId,
+        .LockTxId = LockTxId,
+        .LockNodeId = LockNodeId,
         .Task = taskDesc,
         .TxInfo = TxInfo,
         .RuntimeSettings = settings,

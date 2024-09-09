@@ -11,8 +11,6 @@ namespace NKqp {
 using namespace NYdb;
 using namespace NYdb::NTable;
 
-using namespace NResourceBroker;
-
 NKikimrResourceBroker::TResourceBrokerConfig MakeResourceBrokerTestConfig(ui32 multiplier = 1) {
     NKikimrResourceBroker::TResourceBrokerConfig config;
 
@@ -178,7 +176,8 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         result.GetIssues().PrintTo(Cerr);
 
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::OVERLOADED);
+        UNIT_ASSERT_C(result.GetIssues().ToString().Contains("Mkql memory limit exceeded"), result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(ComputeActorMemoryAllocationFailureQueryService) {

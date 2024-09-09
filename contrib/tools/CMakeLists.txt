@@ -13,4 +13,3 @@
 # changes in this file.
 
 add_subdirectory(protoc)
-add_subdirectory(python3)

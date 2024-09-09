@@ -19,14 +19,15 @@ CREATE EXTERNAL DATA SOURCE test_data_source WITH (
   AUTH_METHOD="BASIC",
   USE_TLS="TRUE",
   LOGIN="login",
-  PASSWORD_SECRET_NAME="test_password_name"
-)
+  PASSWORD_SECRET_NAME="test_password_name",
+  PROTOCOL="NATIVE"
+);
 ```
 
 После создания внешнего источника данных можно выполнять чтение данных из созданного объекта `EXTERNAL DATA SOURCE`. Пример ниже иллюстрирует чтение данных из таблицы `test_table` из базы данных `default` в кластере ClickHouse:
 
 ```sql
-SELECT * FROM test_data_source.test_table
+SELECT * FROM test_data_source.test_table;
 ```
 
 С помощью внешних источников данных можно выполнять [федеративные запросы](../federated_query/index.md) для задач межсистемной аналитики данных.

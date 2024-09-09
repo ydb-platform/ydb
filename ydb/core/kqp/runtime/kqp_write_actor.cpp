@@ -104,7 +104,6 @@ struct IKqpTableWriterCallbacks {
 
     virtual void OnReady(const TTableId& tableId) = 0;
 
-    // TODO: also track memory here
     virtual void OnPrepared(TPreparedInfo&& preparedInfo, ui64 dataSize) = 0;
 
     virtual void OnCommitted(ui64 shardId, ui64 dataSize) = 0;
@@ -653,13 +652,7 @@ public:
         Mode = EMode::PREPARE;
         TxId = txId;
 
-        // TODO: move to ShardedWriteController
-        /*for (const auto shardId : ShardedWriteController->GetShardsIds()) {
-            const auto metadata = ShardedWriteController->GetMessageMetadata(shardId);
-            if (!metadata || (metadata->IsLast && metadata->SendAttempts != 0)) {
-                SendEmptyFinalToShard(shardId);
-            }
-        }*/
+        // TODO: ShardedWriteController for empty
     }
 
     void SetCommit() {
@@ -1138,6 +1131,7 @@ struct TBufferWriteMessage {
     TActorId From;
     TWriteToken Token;
     bool Close = false;
+    // TODO: move to serialized data
     std::shared_ptr<TVector<NMiniKQL::TUnboxedValueBatch>> Data;
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
 };
@@ -1157,7 +1151,7 @@ struct TEvBufferWriteResult : public TEventLocal<TEvBufferWriteResult, TKqpEvent
 }
 
 
-class TKqpBufferWriteActor :public TActorBootstrapped<TKqpBufferWriteActor>, public IKqpWriteBuffer, public IKqpTableWriterCallbacks {
+class TKqpBufferWriteActor :public TActorBootstrapped<TKqpBufferWriteActor>, public IKqpTableWriterCallbacks {
     using TBase = TActorBootstrapped<TKqpBufferWriteActor>;
 
 public:
@@ -1258,6 +1252,7 @@ public:
             auto result = std::make_unique<TEvBufferWriteResult>();
             result->Token = message.Token;
 
+            // TODO: send ok only when there are free space
             Send(message.From, result.release());
 
             {
@@ -1317,7 +1312,7 @@ public:
         return result;
     }
 
-    THashMap<ui64, NKikimrDataEvents::TLock> GetLocks() const override {
+    THashMap<ui64, NKikimrDataEvents::TLock> GetLocks() const {
         THashMap<ui64, NKikimrDataEvents::TLock> result;
         for (const auto& [_, info] : WriteInfos) {
             for (const auto& [shardId, lockInfo] : info.WriteTableActor->GetLocks()) {
@@ -1329,18 +1324,18 @@ public:
         return result;
     }
 
-    void Flush(std::function<void()> callback) override {
+    void Flush() {
         State = EState::FLUSHING;
-        OnFlushedCallback = callback;
+        //OnFlushedCallback = callback;
         Close();
         Process();
     }
 
-    void Prepare(std::function<void(TPreparedInfo&& preparedInfo)> callback, TPrepareSettings&& prepareSettings) override {
+    void Prepare(TPrepareSettings&& prepareSettings) {
         YQL_ENSURE(State == EState::WRITING);
-        Y_UNUSED(callback, prepareSettings);
+        Y_UNUSED(prepareSettings);
         State = EState::PREPARING;
-        OnPreparedCallback = std::move(callback);
+        // OnPreparedCallback = std::move(callback);
         for (auto& [_, info] : WriteInfos) {
             info.WriteTableActor->SetPrepare(prepareSettings.TxId);
         }
@@ -1348,19 +1343,19 @@ public:
         Process();
     }
 
-    void OnCommit(std::function<void(ui64)> callback) override {
+    void OnCommit() {
         YQL_ENSURE(State == EState::PREPARING);
         State = EState::COMMITTING;
-        OnCommitCallback = std::move(callback);
+        //OnCommitCallback = std::move(callback);
         for (auto& [_, info] : WriteInfos) {
             info.WriteTableActor->SetCommit();
         }
     }
 
-    void ImmediateCommit(std::function<void(ui64)> callback, ui64 txId) override {
+    void ImmediateCommit(ui64 txId) {
         YQL_ENSURE(State == EState::WRITING);
         State = EState::COMMITTING;
-        OnCommitCallback = std::move(callback);
+        //OnCommitCallback = std::move(callback);
         for (auto& [_, info] : WriteInfos) {
             info.WriteTableActor->SetImmediateCommit(txId);
         }
@@ -1376,7 +1371,7 @@ public:
         }
     }
 
-    bool IsFinished() const override {
+    bool IsFinished() const {
         return State == EState::FINISHED;
     }
 
@@ -1401,7 +1396,7 @@ public:
         return totalMemory;
     }
 
-    THashSet<ui64> GetShardsIds() const override {
+    THashSet<ui64> GetShardsIds() const {
         THashSet<ui64> shardIds;
         for (auto& [_, info] : WriteInfos) {
             for (const auto& id : info.WriteTableActor->GetShardsIds()) {
@@ -1435,10 +1430,6 @@ public:
         PassAway();
     }
 
-    TActorId GetActorId() const override {
-        return SelfId();
-    }
-
     void Process() {
         if (GetTotalFreeSpace() <= 0) {
             State = EState::WAITING;
@@ -1468,20 +1459,13 @@ public:
             CA_LOG_D("Write actor finished");
             switch (State) {
                 case EState::PREPARING:
-                    //Settings.Callbacks->OnPrepared();
                     break;
                 case EState::COMMITTING:
-                    //Settings.Callbacks->OnCommitted();
                     break;
                 case EState::ROLLINGBACK:
-                    //Settings.Callbacks->OnRolledBack();
                     break;
                 case EState::FLUSHING:
-                    //Settings.Callbacks->OnFlushed();
-                    //if (OnFlushedCallback != nullptr) {
-                    YQL_ENSURE(OnFlushedCallback != nullptr);
-                    OnFlushedCallback();
-                    //}
+                    //OnFlushedCallback();
                     break;
                 default:
                     YQL_ENSURE(false);
@@ -1502,15 +1486,15 @@ public:
 
     void OnPrepared(TPreparedInfo&& preparedInfo, ui64 dataSize) override {
         AFL_ENSURE(State == EState::PREPARING);
-        Y_UNUSED(dataSize);
-        OnPreparedCallback(std::move(preparedInfo));
+        Y_UNUSED(preparedInfo, dataSize);
+        //OnPreparedCallback(std::move(preparedInfo));
         Process();
     }
 
     void OnCommitted(ui64 shardId, ui64 dataSize) override {
         AFL_ENSURE(State == EState::COMMITTING);
-        Y_UNUSED(dataSize);
-        OnCommitCallback(shardId);
+        Y_UNUSED(shardId, dataSize);
+        //OnCommitCallback(shardId);
         Process();
     }
 
@@ -1556,10 +1540,6 @@ private:
     THashMap<TTableId, TWriteInfo> WriteInfos;
 
     EState State;
-    std::function<void()> OnFlushedCallback;
-    std::function<void(TPreparedInfo&& preparedInfo)> OnPreparedCallback;
-    std::function<void(ui64)> OnCommitCallback;
-
     THashMap<TTableId, std::deque<TBufferWriteMessage>> DataQueues;
 
     const i64 MemoryLimit;
@@ -1743,9 +1723,8 @@ private:
     TWriteToken WriteToken;
 };
 
-std::pair<IKqpWriteBuffer*, NActors::IActor*> CreateKqpBufferWriterActor(TKqpBufferWriterSettings&& settings) {
-    auto* actor = new TKqpBufferWriteActor(std::move(settings));
-    return std::make_pair<IKqpWriteBuffer*, NActors::IActor*>(actor, actor);
+NActors::IActor* CreateKqpBufferWriterActor(TKqpBufferWriterSettings&& settings) {
+    return new TKqpBufferWriteActor(std::move(settings));
 }
 
 

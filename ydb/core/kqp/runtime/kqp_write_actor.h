@@ -10,34 +10,11 @@
 namespace NKikimr {
 namespace NKqp {
 
-
-// TODO: move somewhere else
-class IKqpWriteBuffer {
-public:
-    virtual ~IKqpWriteBuffer() = default;
-
-    // Only when all writes are closed!
-    virtual void Flush(std::function<void()> callback) = 0;
-    //virtual void Flush(TTableId tableId) = 0;
-
-    virtual void Prepare(std::function<void(TPreparedInfo&&)> callback, TPrepareSettings&& prepareSettings) = 0;
-    virtual void OnCommit(std::function<void(ui64)> callback) = 0;
-    virtual void ImmediateCommit(std::function<void(ui64)> callback, ui64 txId) = 0;
-    //virtual void Rollback(std::function<void(ui64)> callback) = 0;
-
-    virtual THashSet<ui64> GetShardsIds() const = 0;
-    virtual THashMap<ui64, NKikimrDataEvents::TLock> GetLocks() const = 0;
-
-    virtual bool IsFinished() const = 0;
-
-    virtual TActorId GetActorId() const = 0;
-};
-
 struct TKqpBufferWriterSettings {
     TActorId SessionActorId;
 };
 
-std::pair<IKqpWriteBuffer*, NActors::IActor*> CreateKqpBufferWriterActor(TKqpBufferWriterSettings&& settings);
+NActors::IActor* CreateKqpBufferWriterActor(TKqpBufferWriterSettings&& settings);
 
 void RegisterKqpWriteActor(NYql::NDq::TDqAsyncIoFactory&, TIntrusivePtr<TKqpCounters>);
 

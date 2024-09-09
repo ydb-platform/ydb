@@ -347,60 +347,37 @@ std::shared_ptr<arrow::compute::ScalarKernel> MakeBlockKernel(const TVector<TTyp
     }
 }
 
+template<template <typename> class TExec>
+IComputationNode* WrapBlockDecimal(TStringBuf name, TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 args");
+
+    auto first = callable.GetInput(0);
+    auto second = callable.GetInput(1);
+
+    auto firstType = AS_TYPE(TBlockType, first.GetStaticType());
+    auto secondType = AS_TYPE(TBlockType, second.GetStaticType());
+
+    auto firstCompute = LocateNode(ctx.NodeLocator, callable, 0);
+    auto secondCompute = LocateNode(ctx.NodeLocator, callable, 1);
+    TComputationNodePtrVector argsNodes = { firstCompute, secondCompute };
+    TVector<TType*> argsTypes = { firstType, secondType };
+
+    std::shared_ptr<arrow::compute::ScalarKernel> kernel = MakeBlockKernel<TExec>(argsTypes, callable.GetType()->GetReturnType());
+    return new TBlockFuncNode(ctx.Mutables, name, std::move(argsNodes), argsTypes, *kernel, kernel);
+}
+
 }
 
 IComputationNode* WrapBlockDecimalMul(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 args");
-
-    auto first = callable.GetInput(0);
-    auto second = callable.GetInput(1);
-
-    auto firstType = AS_TYPE(TBlockType, first.GetStaticType());
-    auto secondType = AS_TYPE(TBlockType, second.GetStaticType());
-
-    auto firstCompute = LocateNode(ctx.NodeLocator, callable, 0);
-    auto secondCompute = LocateNode(ctx.NodeLocator, callable, 1);
-    TComputationNodePtrVector argsNodes = { firstCompute, secondCompute };
-    TVector<TType*> argsTypes = { firstType, secondType };
-
-    std::shared_ptr<arrow::compute::ScalarKernel> kernel = MakeBlockKernel<TDecimalMulBlockExec>(argsTypes, callable.GetType()->GetReturnType());
-    return new TBlockFuncNode(ctx.Mutables, "DecimalMul", std::move(argsNodes), argsTypes, *kernel, kernel);
+    return WrapBlockDecimal<TDecimalMulBlockExec>("DecimalMul", callable, ctx);
 }
 
 IComputationNode* WrapBlockDecimalDiv(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 args");
-
-    auto first = callable.GetInput(0);
-    auto second = callable.GetInput(1);
-
-    auto firstType = AS_TYPE(TBlockType, first.GetStaticType());
-    auto secondType = AS_TYPE(TBlockType, second.GetStaticType());
-
-    auto firstCompute = LocateNode(ctx.NodeLocator, callable, 0);
-    auto secondCompute = LocateNode(ctx.NodeLocator, callable, 1);
-    TComputationNodePtrVector argsNodes = { firstCompute, secondCompute };
-    TVector<TType*> argsTypes = { firstType, secondType };
-
-    std::shared_ptr<arrow::compute::ScalarKernel> kernel = MakeBlockKernel<TDecimalDivBlockExec>(argsTypes, callable.GetType()->GetReturnType());
-    return new TBlockFuncNode(ctx.Mutables, "DecimalDiv", std::move(argsNodes), argsTypes, *kernel, kernel);
+    return WrapBlockDecimal<TDecimalDivBlockExec>("DecimalDiv", callable, ctx);
 }
 
 IComputationNode* WrapBlockDecimalMod(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 args");
-
-    auto first = callable.GetInput(0);
-    auto second = callable.GetInput(1);
-
-    auto firstType = AS_TYPE(TBlockType, first.GetStaticType());
-    auto secondType = AS_TYPE(TBlockType, second.GetStaticType());
-
-    auto firstCompute = LocateNode(ctx.NodeLocator, callable, 0);
-    auto secondCompute = LocateNode(ctx.NodeLocator, callable, 1);
-    TComputationNodePtrVector argsNodes = { firstCompute, secondCompute };
-    TVector<TType*> argsTypes = { firstType, secondType };
-
-    std::shared_ptr<arrow::compute::ScalarKernel> kernel = MakeBlockKernel<TDecimalModBlockExec>(argsTypes, callable.GetType()->GetReturnType());
-    return new TBlockFuncNode(ctx.Mutables, "DecimalMod", std::move(argsNodes), argsTypes, *kernel, kernel);
+    return WrapBlockDecimal<TDecimalModBlockExec>("DecimalMod", callable, ctx);
 }
 
 }

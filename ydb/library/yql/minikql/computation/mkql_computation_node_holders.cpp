@@ -2950,6 +2950,8 @@ public:
 
             return HolderFactory_.CreateDirectListHolder(std::move(list));
         }
+
+        List_.clear();
     }
 
 private:

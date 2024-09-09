@@ -221,6 +221,12 @@ TColumnSchema& TColumnSchema::SetExpression(std::optional<TString> value)
     return *this;
 }
 
+TColumnSchema& TColumnSchema::SetMaterialized(std::optional<bool> value)
+{
+    Materialized_ = std::move(value);
+    return *this;
+}
+
 TColumnSchema& TColumnSchema::SetAggregate(std::optional<TString> value)
 {
     Aggregate_ = std::move(value);
@@ -349,6 +355,10 @@ void FormatValue(TStringBuilderBase* builder, const TColumnSchema& schema, TStri
         builder->AppendFormat("; expression=%Qv", *expression);
     }
 
+    if (const auto& materialized = schema.Materialized()) {
+        builder->AppendFormat("; materialized=%Qv", *materialized);
+    }
+
     if (const auto& aggregate = schema.Aggregate()) {
         builder->AppendFormat("; aggregate=%v", *aggregate);
     }
@@ -408,6 +418,11 @@ void ToProto(NProto::TColumnSchema* protoSchema, const TColumnSchema& schema)
     } else {
         protoSchema->clear_expression();
     }
+    if (schema.Materialized()) {
+        protoSchema->set_materialized(*schema.Materialized());
+    } else {
+        protoSchema->clear_materialized();
+    }
     if (schema.Aggregate()) {
         protoSchema->set_aggregate(*schema.Aggregate());
     } else {
@@ -456,12 +471,13 @@ void FromProto(TColumnSchema* schema, const NProto::TColumnSchema& protoSchema)
         schema->SetLogicalType(MakeLogicalType(GetLogicalType(physicalType), protoSchema.required()));
     }
 
-    schema->SetLock(protoSchema.has_lock() ? std::make_optional(protoSchema.lock()) : std::nullopt);
-    schema->SetExpression(protoSchema.has_expression() ? std::make_optional(protoSchema.expression()) : std::nullopt);
-    schema->SetAggregate(protoSchema.has_aggregate() ? std::make_optional(protoSchema.aggregate()) : std::nullopt);
-    schema->SetSortOrder(protoSchema.has_sort_order() ? std::make_optional(CheckedEnumCast<ESortOrder>(protoSchema.sort_order())) : std::nullopt);
-    schema->SetGroup(protoSchema.has_group() ? std::make_optional(protoSchema.group()) : std::nullopt);
-    schema->SetMaxInlineHunkSize(protoSchema.has_max_inline_hunk_size() ? std::make_optional(protoSchema.max_inline_hunk_size()) : std::nullopt);
+    schema->SetLock(YT_PROTO_OPTIONAL(protoSchema, lock));
+    schema->SetExpression(YT_PROTO_OPTIONAL(protoSchema, expression));
+    schema->SetMaterialized(YT_PROTO_OPTIONAL(protoSchema, materialized));
+    schema->SetAggregate(YT_PROTO_OPTIONAL(protoSchema, aggregate));
+    schema->SetSortOrder(YT_APPLY_PROTO_OPTIONAL(protoSchema, sort_order, CheckedEnumCast<ESortOrder>));
+    schema->SetGroup(YT_PROTO_OPTIONAL(protoSchema, group));
+    schema->SetMaxInlineHunkSize(YT_PROTO_OPTIONAL(protoSchema, max_inline_hunk_size));
 }
 
 void FromProto(TDeletedColumn* schema, const NProto::TDeletedColumn& protoSchema)
@@ -549,7 +565,11 @@ TTableSchema::TTableSchema(
             ++KeyColumnCount_;
         }
         if (column.Expression()) {
-            HasComputedColumns_ = true;
+            if (column.Materialized().value_or(true)) {
+                HasMaterializedComputedColumns_ = true;
+            } else {
+                HasNonMaterializedComputedColumns_ = true;
+            }
         }
         if (column.Aggregate()) {
             HasAggregateColumns_ = true;
@@ -702,9 +722,19 @@ TTableSchemaPtr TTableSchema::Filter(const std::optional<std::vector<TString>>& 
     return Filter(THashSet<TString>(columnNames->begin(), columnNames->end()), discardSortOrder);
 }
 
+bool TTableSchema::HasMaterializedComputedColumns() const
+{
+    return HasMaterializedComputedColumns_;
+}
+
+bool TTableSchema::HasNonMaterializedComputedColumns() const
+{
+    return HasNonMaterializedComputedColumns_;
+}
+
 bool TTableSchema::HasComputedColumns() const
 {
-    return HasComputedColumns_;
+    return HasMaterializedComputedColumns() || HasNonMaterializedComputedColumns();
 }
 
 bool TTableSchema::HasAggregateColumns() const
@@ -1551,6 +1581,7 @@ bool operator==(const TColumnSchema& lhs, const TColumnSchema& rhs)
         lhs.SortOrder() == rhs.SortOrder() &&
         lhs.Lock() == rhs.Lock() &&
         lhs.Expression() == rhs.Expression() &&
+        lhs.Materialized() == rhs.Materialized() &&
         lhs.Aggregate() == rhs.Aggregate() &&
         lhs.Group() == rhs.Group() &&
         lhs.MaxInlineHunkSize() == rhs.MaxInlineHunkSize();
@@ -1902,9 +1933,13 @@ void ValidateColumnSchema(
         }
 
         ValidateSchemaValueType(columnSchema.GetWireType());
-
-        if (columnSchema.Expression() && !columnSchema.SortOrder() && isTableDynamic) {
-            THROW_ERROR_EXCEPTION("Non-key column cannot be computed");
+        if (columnSchema.Expression()) {
+            auto materialized = columnSchema.Materialized().value_or(true);
+            if (materialized && !columnSchema.SortOrder() && isTableDynamic) {
+                THROW_ERROR_EXCEPTION("Non-key column cannot be computed in materializable way");
+            } else if (!materialized && columnSchema.SortOrder()) {
+                THROW_ERROR_EXCEPTION("Key column cannot be computed in non-materializable way");
+            }
         }
 
         if (columnSchema.Aggregate() && columnSchema.SortOrder()) {
@@ -2418,6 +2453,7 @@ size_t THash<NYT::NTableClient::TColumnSchema>::operator()(const NYT::NTableClie
         columnSchema.SortOrder(),
         columnSchema.Lock(),
         columnSchema.Expression(),
+        columnSchema.Materialized(),
         columnSchema.Aggregate(),
         columnSchema.Group(),
         columnSchema.MaxInlineHunkSize());

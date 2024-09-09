@@ -395,6 +395,10 @@ google::protobuf::Timestamp GetProtoNow();
         ? std::optional(YT_PROTO_OPTIONAL_CONVERT(__VA_ARGS__)((message).field())) \
         : std::nullopt)
 
+// TODO(cherepashka): to remove after std::optional::and_then is here.
+//! This macro may be used to extract std::optional<T> from protobuf message field of type T and to apply some function to value if it is present.
+#define YT_APPLY_PROTO_OPTIONAL(message, field, function) (((message).has_##field()) ? std::make_optional(function((message).field())) : std::nullopt)
+
 ////////////////////////////////////////////////////////////////////////////////
 
 // TODO(gritukan): This is a hack that allows to use proper string type in the protobuf-related code.

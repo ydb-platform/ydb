@@ -330,6 +330,7 @@ private:
 
 class TAsyncIndexChangeSenderMain
     : public TActorBootstrapped<TAsyncIndexChangeSenderMain>
+    , public NChangeExchange::IChangeSenderIdentity
     , public NChangeExchange::TBaseChangeSender<TChangeRecord>
     , public NChangeExchange::IChangeSenderResolver
     , public NChangeExchange::ISenderFactory
@@ -502,7 +503,7 @@ class TAsyncIndexChangeSenderMain
 
     void ResolveIndex() {
         auto request = MakeHolder<TNavigate>();
-        request->ResultSet.emplace_back(MakeNavigateEntry(PathId, TNavigate::OpList));
+        request->ResultSet.emplace_back(MakeNavigateEntry(IndexPathId, TNavigate::OpList));
 
         Send(MakeSchemeCacheID(), new TEvNavigate(request.Release()));
         Become(&TThis::StateResolveIndex);
@@ -533,7 +534,7 @@ class TAsyncIndexChangeSenderMain
 
         const auto& entry = result->ResultSet.at(0);
 
-        if (!CheckTableId(entry, PathId)) {
+        if (!CheckTableId(entry, IndexPathId)) {
             return;
         }
 
@@ -746,7 +747,7 @@ class TAsyncIndexChangeSenderMain
 
     void Handle(TEvChangeExchange::TEvRemoveSender::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
-        Y_ABORT_UNLESS(ev->Get()->PathId == PathId);
+        Y_ABORT_UNLESS(ev->Get()->PathId == GetChangeSenderIdentity());
 
         RemoveRecords();
         PassAway();
@@ -773,7 +774,8 @@ public:
 
     explicit TAsyncIndexChangeSenderMain(const TDataShardId& dataShard, const TTableId& userTableId, const TPathId& indexPathId)
         : TActorBootstrapped()
-        , TBaseChangeSender(this, this, this, dataShard.ActorId, indexPathId)
+        , TBaseChangeSender(this, this, this, this, dataShard.ActorId)
+        , IndexPathId(indexPathId)
         , DataShard(dataShard)
         , UserTableId(userTableId)
         , IndexTableVersion(0)
@@ -806,7 +808,12 @@ public:
         }
     }
 
+    TPathId GetChangeSenderIdentity() const override final {
+        return IndexPathId;
+    }
+
 private:
+    const TPathId IndexPathId;
     const TDataShardId DataShard;
     const TTableId UserTableId;
     mutable TMaybe<TString> LogPrefix;
@@ -817,7 +824,6 @@ private:
     TPathId IndexTablePathId;
     ui64 IndexTableVersion;
     THolder<TKeyDesc> KeyDesc;
-
 }; // TAsyncIndexChangeSenderMain
 
 IActor* CreateAsyncIndexChangeSender(const TDataShardId& dataShard, const TTableId& userTableId, const TPathId& indexPathId) {

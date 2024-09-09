@@ -325,6 +325,7 @@ private:
 
 class TCdcChangeSenderMain
     : public TActorBootstrapped<TCdcChangeSenderMain>
+    , public NChangeExchange::IChangeSenderIdentity
     , public NChangeExchange::TBaseChangeSender<TChangeRecord>
     , public NChangeExchange::IChangeSenderResolver
     , public NChangeExchange::ISenderFactory
@@ -474,7 +475,7 @@ class TCdcChangeSenderMain
 
     void ResolveCdcStream() {
         auto request = MakeHolder<TNavigate>();
-        request->ResultSet.emplace_back(MakeNavigateEntry(PathId, TNavigate::OpList));
+        request->ResultSet.emplace_back(MakeNavigateEntry(StreamPathId, TNavigate::OpList));
 
         Send(MakeSchemeCacheID(), new TEvNavigate(request.Release()));
         Become(&TThis::StateResolveCdcStream);
@@ -505,7 +506,7 @@ class TCdcChangeSenderMain
 
         const auto& entry = result->ResultSet.at(0);
 
-        if (!CheckTableId(entry, PathId)) {
+        if (!CheckTableId(entry, StreamPathId)) {
             return;
         }
 
@@ -718,7 +719,7 @@ class TCdcChangeSenderMain
 
     void Handle(TEvChangeExchange::TEvRemoveSender::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
-        Y_ABORT_UNLESS(ev->Get()->PathId == PathId);
+        Y_ABORT_UNLESS(ev->Get()->PathId == GetChangeSenderIdentity());
 
         RemoveRecords();
         PassAway();
@@ -745,7 +746,8 @@ public:
 
     explicit TCdcChangeSenderMain(const TDataShardId& dataShard, const TPathId& streamPathId)
         : TActorBootstrapped()
-        , TBaseChangeSender(this, this, this, dataShard.ActorId, streamPathId)
+        , TBaseChangeSender(this, this, this, this, dataShard.ActorId)
+        , StreamPathId(streamPathId)
         , DataShard(dataShard)
         , TopicVersion(0)
     {
@@ -777,7 +779,12 @@ public:
         }
     }
 
+    TPathId GetChangeSenderIdentity() const override final {
+        return StreamPathId;
+    }
+
 private:
+    const TPathId StreamPathId;
     const TDataShardId DataShard;
     mutable TMaybe<TString> LogPrefix;
 

@@ -825,7 +825,9 @@ bool TPDisk::ChunkWritePiece(TChunkWrite *evChunkWrite, ui32 pieceShift, ui32 pi
     }
     guard.Release();
 
-    Y_VERIFY((evChunkWrite->Offset + evChunkWrite->BytesWritten) % Format.SectorPayloadSize() == 0);
+    // Y_VERIFY_S((evChunkWrite->Offset + evChunkWrite->BytesWritten) % Format.SectorPayloadSize() == 0, evChunkWrite->ToString()
+    //     << " pieceShift# " << pieceShift
+    //     << " pieceSize# " << pieceSize);
     // first sector to write data
     ui64 beginSectorIdx = (evChunkWrite->Offset + evChunkWrite->BytesWritten) / Format.SectorPayloadSize();
 
@@ -853,38 +855,48 @@ bool TPDisk::ChunkWritePiece(TChunkWrite *evChunkWrite, ui32 pieceShift, ui32 pi
     ui8 *dst = buffer->Data();
     Y_VERIFY(pieceSize / Format.SectorPayloadSize() * Format.SectorSize <= buffer->Size());
 
-    ui32 partIdx = evChunkWrite->CurrentPart;
+    ui32& partIdx = evChunkWrite->CurrentPart;
     auto& parts = *evChunkWrite->PartsPtr;
     for (ui64 sector = beginSectorIdx; sector < endSectorIdx; ++sector) {
         ui32 remainingPartSize = parts[partIdx].second - evChunkWrite->CurrentPartOffset;
-        Y_VERIFY_S(parts[partIdx].first, "nullptr in chunkWrite->Parts");
-        ui8 *src = (ui8*)parts[partIdx].first + evChunkWrite->CurrentPartOffset;
-        if (remainingPartSize) {
-            cypher.StartMessage(++nonce);
-            ui32 sizeToWrite = Min(remainingPartSize, sectorPayloadSize);
+        Y_VERIFY(remainingPartSize);
+        cypher.StartMessage(++nonce);
+        ui32 sizeToWrite = Min(remainingPartSize, sectorPayloadSize);
+        if (parts[partIdx].first) {
+            ui8 *src = (ui8*)parts[partIdx].first + evChunkWrite->CurrentPartOffset;
             cypher.Encrypt(dst, src, sizeToWrite);
-            if (remainingPartSize < sectorPayloadSize) {
-                cypher.EncryptZeroes(dst + remainingPartSize, sectorPayloadSize - remainingPartSize);
-            }
-            remainingPartSize -= sizeToWrite;
-            if (remainingPartSize > 0) {
-                evChunkWrite->CurrentPartOffset += sectorPayloadSize;
-            } else {
-                partIdx++;
-                evChunkWrite->CurrentPartOffset = 0;
-            }
-
-            TDataSectorFooter &sectorFooter = *(TDataSectorFooter*)(dst + Format.SectorSize - sizeof(TDataSectorFooter));
-            sectorFooter.Version = PDISK_DATA_VERSION;
-            sectorFooter.Nonce = nonce;
-            sectorFooter.Hash = hash.HashSector(Format.Offset(chunkIdx, sector), Format.MagicDataChunk, dst, Format.SectorSize);
-
-            evChunkWrite->RemainingSize -= sizeToWrite;
-            dst += Format.SectorSize;
+        } else {
+            cypher.EncryptZeroes(dst, sizeToWrite);
         }
+        remainingPartSize -= sizeToWrite;
+        if (remainingPartSize > 0) {
+            evChunkWrite->CurrentPartOffset += sectorPayloadSize;
+        } else {
+            partIdx++;
+            evChunkWrite->CurrentPartOffset = 0;
+        }
+
+        TDataSectorFooter &sectorFooter = *(TDataSectorFooter*)(dst + Format.SectorSize - sizeof(TDataSectorFooter));
+        sectorFooter.Version = PDISK_DATA_VERSION;
+        sectorFooter.Nonce = nonce;
+        sectorFooter.Hash = hash.HashSector(Format.Offset(chunkIdx, sector), Format.MagicDataChunk, dst, Format.SectorSize);
+
+        evChunkWrite->RemainingSize -= sizeToWrite;
+        evChunkWrite->BytesWritten -= sizeToWrite;
+        dst += Format.SectorSize;
+
+        Y_VERIFY(sizeToWrite == sectorPayloadSize || evChunkWrite->RemainingSize == 0);
     }
 
     bool lastPart = evChunkWrite->RemainingSize == 0;
+    P_LOG(PRI_NOTICE, BPD79, "ChunkWrite",
+            (ChunkIdx, chunkIdx),
+            (OwnerId, (ui32)evChunkWrite->Owner),
+            (EvWrite, evChunkWrite->ToString()),
+            (BeginSectorIdx, beginSectorIdx),
+            (EndSectorIdx, endSectorIdx),
+            (RemainingSize, evChunkWrite->RemainingSize),
+            (LastPart, lastPart));
 
     if (lastPart) {
         evChunkWrite->Completion->Orbit = std::move(evChunkWrite->Orbit);

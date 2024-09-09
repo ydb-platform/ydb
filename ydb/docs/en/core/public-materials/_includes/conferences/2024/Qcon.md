@@ -1,4 +1,4 @@
-### {{ ydb-short-name }}: dealing with Big Data and moving towards AI {#2024-qcon}
+## {{ ydb-short-name }}: dealing with Big Data and moving towards AI {#2024-qcon}
 
 {% include notitle [general_tag](../../tags.md#general) %}
 

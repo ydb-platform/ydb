@@ -98,10 +98,15 @@ GROUP BY `responseStatus`, `timestamp`
 ORDER BY `timestamp`
 ```
 
+{% note tip %}
+
+For this kind of queries, using [column-oriented tables](../concepts/datamodel/table.md#column-oriented-tables) will likely be beneficial in terms of performance.
+
+{% endnote %}
+
 ### Tables { #tables }
 
 Table visualizations will always be available for any valid {{ ydb-short-name }} query that returns exactly one result set.
-
 
 ![Table](../_assets/grafana/table.png)
 

@@ -32,7 +32,8 @@ private:
     using TBase = NColumnShard::TCommonCountersOwner;
     NMonitoring::TDynamicCounters::TCounterPtr RequestsCount;
     NMonitoring::THistogramPtr CSReplyDuration;
-    NMonitoring::THistogramPtr FullReplyDuration;
+    NMonitoring::THistogramPtr SucceedFullReplyDuration;
+    NMonitoring::THistogramPtr FailedFullReplyDuration;
     NMonitoring::THistogramPtr BytesDistribution;
     NMonitoring::THistogramPtr RowsDistribution;
     NMonitoring::TDynamicCounters::TCounterPtr RowsCount;
@@ -43,7 +44,8 @@ public:
         : TBase("CSUpload")
         , RequestsCount(TBase::GetDeriviative("Requests"))
         , CSReplyDuration(TBase::GetHistogram("Replies/Shard/DurationMs", NMonitoring::ExponentialHistogram(15, 2, 1)))
-        , FullReplyDuration(TBase::GetHistogram("Replies/Full/DurationMs", NMonitoring::ExponentialHistogram(15, 2, 1)))
+        , SucceedFullReplyDuration(TBase::GetHistogram("Replies/Success/Full/DurationMs", NMonitoring::ExponentialHistogram(15, 2, 1)))
+        , FailedFullReplyDuration(TBase::GetHistogram("Replies/Failed/Full/DurationMs", NMonitoring::ExponentialHistogram(15, 2, 1)))
         , BytesDistribution(TBase::GetHistogram("Requests/Bytes", NMonitoring::ExponentialHistogram(15, 2, 1024)))
         , RowsDistribution(TBase::GetHistogram("Requests/Rows", NMonitoring::ExponentialHistogram(15, 2, 16)))
         , RowsCount(TBase::GetDeriviative("Rows"))
@@ -67,8 +69,12 @@ public:
         CSReplyDuration->Collect(d.MilliSeconds());
     }
 
-    void OnFullReply(const TDuration d) const {
-        FullReplyDuration->Collect(d.MilliSeconds());
+    void OnSucceedFullReply(const TDuration d) const {
+        SucceedFullReplyDuration->Collect(d.MilliSeconds());
+    }
+
+    void OnFailedFullReply(const TDuration d) const {
+        FailedFullReplyDuration->Collect(d.MilliSeconds());
     }
 };
 // External transaction controller class
@@ -76,11 +82,29 @@ class TWritersController {
 private:
     TAtomicCounter WritesCount = 0;
     TAtomicCounter WritesIndex = 0;
+    TAtomicCounter FailsCount = 0;
+    TMutex Mutex;
+    NYql::TIssues Issues;
+    std::optional<Ydb::StatusIds::StatusCode> Code;
     NActors::TActorIdentity LongTxActorId;
     std::vector<TWriteIdForShard> WriteIds;
     const TMonotonic StartInstant = TMonotonic::Now();
     YDB_READONLY_DEF(NLongTxService::TLongTxId, LongTxId);
     YDB_READONLY(std::shared_ptr<TCSUploadCounters>, Counters, std::make_shared<TCSUploadCounters>());
+    void SendReply() {
+        if (FailsCount.Val()) {
+            Counters->OnFailedFullReply(TMonotonic::Now() - StartInstant);
+            AFL_VERIFY(Code);
+            LongTxActorId.Send(LongTxActorId, new TEvPrivate::TEvShardsWriteResult(*Code, Issues));
+        } else {
+            Counters->OnSucceedFullReply(TMonotonic::Now() - StartInstant);
+            auto req = MakeHolder<NLongTxService::TEvLongTxService::TEvAttachColumnShardWrites>(LongTxId);
+            for (auto&& i : WriteIds) {
+                req->AddWrite(i.GetShardId(), i.GetWriteId());
+            }
+            LongTxActorId.Send(NLongTxService::MakeLongTxServiceID(LongTxActorId.NodeId()), req.Release());
+        }
+    }
 public:
     using TPtr = std::shared_ptr<TWritersController>;
 
@@ -140,10 +164,6 @@ private:
         TBase::PassAway();
     }
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::GRPC_REQ_SHARD_WRITER;
-    }
-
     TShardWriter(const ui64 shardId, const ui64 tableId, const TString& dedupId, const IShardInfo::TPtr& data,
         const NWilson::TProfileSpan& parentSpan, TWritersController::TPtr externalController, const ui32 writePartIdx, const EModificationType mType);
 

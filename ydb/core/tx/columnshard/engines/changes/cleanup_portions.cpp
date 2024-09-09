@@ -17,19 +17,19 @@ void TCleanupPortionsColumnEngineChanges::DoDebugString(TStringOutput& out) cons
 
 void TCleanupPortionsColumnEngineChanges::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) {
     THashSet<ui64> pathIds;
-    if (self) {
-        THashMap<TString, THashSet<TUnifiedBlobId>> blobIdsByStorage;
-        for (auto&& p : PortionsToDrop) {
-            p.RemoveFromDatabase(context.DBWrapper);
-
-            p.FillBlobIdsByStorage(blobIdsByStorage, context.EngineLogs.GetVersionedIndex());
-            pathIds.emplace(p.GetPathId());
-        }
-        for (auto&& i : blobIdsByStorage) {
-            auto action = BlobsAction.GetRemoving(i.first);
-            for (auto&& b : i.second) {
-                action->DeclareRemove((TTabletId)self->TabletID(), b);
-            }
+    if (!self) {
+        return;
+    }
+    THashMap<TString, THashSet<TUnifiedBlobId>> blobIdsByStorage;
+    for (auto&& p : PortionsToDrop) {
+        p.RemoveFromDatabase(context.DBWrapper);
+        p.FillBlobIdsByStorage(blobIdsByStorage, context.EngineLogs.GetVersionedIndex());
+        pathIds.emplace(p.GetPathId());
+    }
+    for (auto&& i : blobIdsByStorage) {
+        auto action = BlobsAction.GetRemoving(i.first);
+        for (auto&& b : i.second) {
+            action->DeclareRemove((TTabletId)self->TabletID(), b);
         }
     }
 }

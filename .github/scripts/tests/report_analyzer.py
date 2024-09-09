@@ -4,15 +4,30 @@
 The tool used to analyze file created by "ya make ... --build-results-report <file>"
 """
 
+import argparse
 import sys
 import json 
 
 if __name__ == "__main__":
-    report_path = sys.argv[1]
-    summary_path = sys.argv[2]
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--report_file", 
+        help="path to file received via 'ya make ... --build-results-report <file>'", 
+        type=argparse.FileType("r"), 
+        required=True
+    )
+    parser.add_argument(
+        "--summary_file", 
+        help="output file for summary", 
+        type=argparse.FileType("w"), 
+        default="-"
+    )
+    args = parser.parse_args()
 
-    with open(report_path) as f:
-        obj = json.loads(f.read())
+    report_file = args.report_file
+    summary_file = args.summary_file
+
+    obj = json.load(report_file)
 
     all = []
 
@@ -24,8 +39,7 @@ if __name__ == "__main__":
             all.append((rss_consumtion, path))
 
     all.sort()
-    with open (summary_path, "w") as f:
-        f.write("RSS usage by tests, sorted\n\n")    
-        for rss, path in all:
-            f.write("{} {:.2f} GiB \n".format(path, rss))
-        f.write("\n")
+    summary_file.write("RSS usage by tests, sorted\n\n")    
+    for rss, path in all:
+        summary_file.write("{} {:.2f} GiB\n".format(path, rss))
+    summary_file.write("\n")

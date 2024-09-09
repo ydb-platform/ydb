@@ -18,6 +18,7 @@ struct TCompletionAction {
     NWilson::TTraceId TraceId;
     EIoResult Result = EIoResult::Unknown;
     TString ErrorReason;
+    bool IsChunkRead = false;
 
     mutable NLWTrace::TOrbit Orbit;
 protected:

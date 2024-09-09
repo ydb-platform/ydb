@@ -425,7 +425,11 @@ class TRealBlockDevice : public IBlockDevice {
                     WaitingNoops[idx % MaxWaitingNoops] = completionAction->FlushAction;
                     completionAction->FlushAction = nullptr;
                 }
-                Device.CompletionThread->Schedule(completionAction);
+                if (completionAction->IsChunkRead) {
+                    Device.CompletionThread->Schedule(completionAction);
+                } else {
+                    completionAction->Exec(Device.PCtx->ActorSystem);
+                }
                 auto seqnoL6 = AtomicGetAndIncrement(Device.Mon.SeqnoL6);
                 Device.Mon.L6.Set(duration > Device.Reordering, seqnoL6);
             }
@@ -443,7 +447,11 @@ class TRealBlockDevice : public IBlockDevice {
                     LWTRACK(PDiskDeviceGetFromWaiting, WaitingNoops[i]->Orbit);
                     double durationMs = HPMilliSecondsFloat(HPNow() - WaitingNoops[i]->GetTime);
                     Device.Mon.DeviceFlushDuration.Increment(durationMs);
-                    Device.CompletionThread->Schedule(WaitingNoops[i]);
+                    if (WaitingNoops[i]->IsChunkRead) {
+                        Device.CompletionThread->Schedule(WaitingNoops[i]);
+                    } else {
+                        WaitingNoops[i]->Exec(Device.PCtx->ActorSystem);
+                    }
                     WaitingNoops[i] = nullptr;
                 }
                 ++NextPossibleNoop;

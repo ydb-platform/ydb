@@ -19,6 +19,9 @@ IF (EXPORT_CMAKE)
         CMAKE_TARGET
         AIO::aio
     )
+    PEERDIR(
+        contrib/libs/libaio/static
+    )
 ELSEIF (USE_AIO == "dynamic")
     PEERDIR(
         contrib/libs/libaio/dynamic

@@ -21,6 +21,9 @@ IF (EXPORT_CMAKE)
         CMAKE_TARGET
         IDN::IDN
     )
+    PEERDIR(
+        contrib/libs/libidn/static
+    )
 ELSEIF (USE_IDN == "dynamic")
     PEERDIR(
         contrib/libs/libidn/dynamic

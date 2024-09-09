@@ -1258,8 +1258,13 @@ private:
         YQL_CLOG(INFO, ProviderKqp) << "Compiled query:\n" << KqpExprToPrettyString(*queryExpr, ctx);
 
         if (Config->EnableCreateTableAs) {
-            result.QueryExprs = RewriteExpression(queryExpr, ctx, *TypesCtx, SessionCtx, Cluster);
+            auto [rewriteResults, rewriteIssues] = RewriteExpression(queryExpr, ctx, *TypesCtx, SessionCtx, Cluster);
+            ctx.IssueManager.AddIssues(rewriteIssues);
+            if (!rewriteIssues.Empty()) {
+                return result;
+            }
 
+            result.QueryExprs = rewriteResults;
             for (const auto& resultPart : result.QueryExprs) {
                 YQL_CLOG(INFO, ProviderKqp) << "Splitted Compiled query part:\n" << KqpExprToPrettyString(*resultPart, ctx);
             }
@@ -1279,7 +1284,7 @@ private:
         settingsBuilder
             .SetSqlAutoCommit(false)
             .SetUsePgParser(settings.UsePgParser);
-        auto compileResult = CompileYqlQuery(query, /* isSql */ true, *ExprCtx, sqlVersion, settingsBuilder, settings.PerStatementResult);
+        auto compileResult = CompileYqlQuery(query, /* isSql */ true, *ExprCtx, sqlVersion, settingsBuilder);
 
         return TSplitResult{
             .Ctx = std::move(ExprCtxStorage),
@@ -1289,7 +1294,7 @@ private:
     }
 
     TCompileExprResult CompileYqlQuery(const TKqpQueryRef& query, bool isSql, TExprContext& ctx, TMaybe<TSqlVersion>& sqlVersion,
-        TKqpTranslationSettingsBuilder& settingsBuilder, bool perStatementResult) const
+        TKqpTranslationSettingsBuilder& settingsBuilder) const
     {
         auto compileResult = CompileQuery(query, isSql, ctx, sqlVersion, settingsBuilder);
         if (!compileResult.QueryExprs) {
@@ -1301,12 +1306,7 @@ private:
         }
 
         // Currently used only for create table as
-        if (!perStatementResult && compileResult.QueryExprs.size() > 1) {
-            ctx.AddError(YqlIssue(TPosition(), TIssuesIds::KIKIMR_BAD_REQUEST,
-                "Query can be executed only in per-statement mode (NoTx)"));
-            compileResult.QueryExprs = {};
-            return compileResult;
-        } else if (compileResult.QueryExprs.size() > 1) {
+        if (compileResult.QueryExprs.size() > 1) {
             return compileResult;
         }
 
@@ -1378,7 +1378,7 @@ private:
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, SessionCtx->Config()._KqpYqlSyntaxVersion.Get().GetRef(), Cluster, query.Text, SessionCtx->Config().BindingsMode, GUCSettings);
         settingsBuilder.SetSqlAutoCommit(false)
             .SetUsePgParser(settings.UsePgParser);
-        auto compileResult = CompileYqlQuery(query, isSql, ctx, sqlVersion, settingsBuilder, false);
+        auto compileResult = CompileYqlQuery(query, isSql, ctx, sqlVersion, settingsBuilder);
         if (compileResult.QueryExprs.empty()) {
             return nullptr;
         }
@@ -1438,7 +1438,7 @@ private:
         TMaybe<TSqlVersion> sqlVersion;
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, SessionCtx->Config()._KqpYqlSyntaxVersion.Get().GetRef(), Cluster, query.Text, SessionCtx->Config().BindingsMode, GUCSettings);
         settingsBuilder.SetSqlAutoCommit(false);
-        auto compileResult = CompileYqlQuery(query, /* isSql */ true, ctx, sqlVersion, settingsBuilder, false);
+        auto compileResult = CompileYqlQuery(query, /* isSql */ true, ctx, sqlVersion, settingsBuilder);
         if (compileResult.QueryExprs.empty()) {
             return nullptr;
         }
@@ -1466,7 +1466,7 @@ private:
         TMaybe<TSqlVersion> sqlVersion;
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, SessionCtx->Config()._KqpYqlSyntaxVersion.Get().GetRef(), Cluster, queryAst.Text, SessionCtx->Config().BindingsMode, GUCSettings);
         settingsBuilder.SetSqlAutoCommit(false);
-        auto compileResult = CompileYqlQuery(queryAst, false, ctx, sqlVersion, settingsBuilder, false);
+        auto compileResult = CompileYqlQuery(queryAst, false, ctx, sqlVersion, settingsBuilder);
         if (compileResult.QueryExprs.empty()) {
             return nullptr;
         }
@@ -1512,7 +1512,7 @@ private:
             TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, SessionCtx->Config()._KqpYqlSyntaxVersion.Get().GetRef(), Cluster, query.Text, SessionCtx->Config().BindingsMode, GUCSettings);
             settingsBuilder.SetSqlAutoCommit(false)
                 .SetUsePgParser(settings.UsePgParser);
-            auto compileResult = CompileYqlQuery(query, /* isSql */ true, ctx, sqlVersion, settingsBuilder, settings.PerStatementResult);
+            auto compileResult = CompileYqlQuery(query, /* isSql */ true, ctx, sqlVersion, settingsBuilder);
             if (compileResult.QueryExprs.empty()) {
                 return nullptr;
             }
@@ -1549,7 +1549,7 @@ private:
         TMaybe<TSqlVersion> sqlVersion = 1;
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, SessionCtx->Config()._KqpYqlSyntaxVersion.Get().GetRef(), Cluster, query.Text, SessionCtx->Config().BindingsMode, GUCSettings);
         settingsBuilder.SetSqlAutoCommit(false);
-        auto compileResult = CompileYqlQuery(query, true, ctx, sqlVersion, settingsBuilder, false);
+        auto compileResult = CompileYqlQuery(query, true, ctx, sqlVersion, settingsBuilder);
         if (compileResult.QueryExprs.empty()) {
             return nullptr;
         }
@@ -1570,7 +1570,7 @@ private:
         TMaybe<TSqlVersion> sqlVersion;
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, SessionCtx->Config()._KqpYqlSyntaxVersion.Get().GetRef(), Cluster, queryAst.Text, SessionCtx->Config().BindingsMode, GUCSettings);
         settingsBuilder.SetSqlAutoCommit(false);
-        auto compileResult = CompileYqlQuery(queryAst, false, ctx, sqlVersion, settingsBuilder, false);
+        auto compileResult = CompileYqlQuery(queryAst, false, ctx, sqlVersion, settingsBuilder);
         if (compileResult.QueryExprs.empty()) {
             return nullptr;
         }
@@ -1597,7 +1597,7 @@ private:
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, SessionCtx->Config()._KqpYqlSyntaxVersion.Get().GetRef(), Cluster, script.Text, SessionCtx->Config().BindingsMode, GUCSettings);
         settingsBuilder.SetSqlAutoCommit(true)
             .SetUsePgParser(settings.UsePgParser);
-        auto compileResult = CompileYqlQuery(script, true, ctx, sqlVersion, settingsBuilder, false);
+        auto compileResult = CompileYqlQuery(script, true, ctx, sqlVersion, settingsBuilder);
         if (compileResult.QueryExprs.empty()) {
             return nullptr;
         }
@@ -1626,7 +1626,7 @@ private:
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, SessionCtx->Config()._KqpYqlSyntaxVersion.Get().GetRef(), Cluster, script.Text, SessionCtx->Config().BindingsMode, GUCSettings);
         settingsBuilder.SetSqlAutoCommit(true)
             .SetUsePgParser(settings.UsePgParser);
-        auto compileResult = CompileYqlQuery(script, true, ctx, sqlVersion, settingsBuilder, false);
+        auto compileResult = CompileYqlQuery(script, true, ctx, sqlVersion, settingsBuilder);
         if (compileResult.QueryExprs.empty()) {
             return nullptr;
         }
@@ -1650,7 +1650,7 @@ private:
         TMaybe<TSqlVersion> sqlVersion;
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, SessionCtx->Config()._KqpYqlSyntaxVersion.Get().GetRef(), Cluster, script.Text, SessionCtx->Config().BindingsMode, GUCSettings);
         settingsBuilder.SetSqlAutoCommit(true);
-        auto compileResult = CompileYqlQuery(script, true, ctx, sqlVersion, settingsBuilder, false);
+        auto compileResult = CompileYqlQuery(script, true, ctx, sqlVersion, settingsBuilder);
         if (compileResult.QueryExprs.empty()) {
             return nullptr;
         }
@@ -1678,7 +1678,7 @@ private:
         TMaybe<TSqlVersion> sqlVersion;
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, SessionCtx->Config()._KqpYqlSyntaxVersion.Get().GetRef(), Cluster, script.Text, SessionCtx->Config().BindingsMode, GUCSettings);
         settingsBuilder.SetSqlAutoCommit(true);
-        auto compileResult = CompileYqlQuery(script, true, ctx, sqlVersion, settingsBuilder, false);
+        auto compileResult = CompileYqlQuery(script, true, ctx, sqlVersion, settingsBuilder);
         if (compileResult.QueryExprs.empty()) {
             return nullptr;
         }

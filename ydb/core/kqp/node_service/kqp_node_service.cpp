@@ -133,6 +133,8 @@ private:
         auto requester = ev->Sender;
 
         ui64 txId = msg.GetTxId();
+        ui64 lockTxId = msg.GetLockTxId();
+        ui32 lockNodeId = msg.GetLockNodeId();
 
         YQL_ENSURE(msg.GetStartAllOrFail()); // todo: support partial start
 
@@ -191,6 +193,8 @@ private:
             auto result = CaFactory_->CreateKqpComputeActor({
                 .ExecuterId = request.Executer,
                 .TxId = txId,
+                .LockTxId = lockTxId,
+                .LockNodeId = lockNodeId,
                 .Task = &dqTask,
                 .TxInfo = txInfo,
                 .RuntimeSettings = runtimeSettingsBase,
@@ -235,7 +239,7 @@ private:
         for (auto&& i : computesByStage) {
             for (auto&& m : i.second.MutableMetaInfo()) {
                 Register(CreateKqpScanFetcher(msg.GetSnapshot(), std::move(m.MutableActorIds()),
-                    m.GetMeta(), runtimeSettingsBase, txId, scanPolicy, Counters, NWilson::TTraceId(ev->TraceId)));
+                    m.GetMeta(), runtimeSettingsBase, txId, lockTxId, lockNodeId, scanPolicy, Counters, NWilson::TTraceId(ev->TraceId)));
             }
         }
 

@@ -1862,12 +1862,11 @@ public:
     }
 
     void ReplyBusy(TEvKqp::TEvQueryRequest::TPtr& ev) {
-        ui64 proxyRequestId = ev->Cookie;
         auto busyStatus = Settings.TableService.GetUseSessionBusyStatus()
             ? Ydb::StatusIds::SESSION_BUSY
             : Ydb::StatusIds::PRECONDITION_FAILED;
 
-        ReplyProcessError(ev, proxyRequestId, busyStatus, "Pending previous query completion");
+        ReplyProcessError(ev, busyStatus, "Pending previous query completion");
     }
 
     static bool IsFatalError(const Ydb::StatusIds::StatusCode status) {

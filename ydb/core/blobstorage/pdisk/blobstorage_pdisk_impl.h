@@ -280,6 +280,7 @@ public:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Chunk writing
     bool ChunkWritePiece(TChunkWrite *evChunkWrite, ui32 pieceShift, ui32 pieceSize);
+    bool ChunkWritePiece2(TChunkWrite *evChunkWrite, ui32 pieceShift, ui32 pieceSize);
     void SendChunkWriteError(TChunkWrite &evChunkWrite, const TString &errorReason, NKikimrProto::EReplyStatus status);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Chunk reading

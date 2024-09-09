@@ -239,7 +239,8 @@ struct TChunkState {
     };
 
     ui64 Nonce;
-    ui64 CurrentNonce;
+    ui64 CurrentNonce; // is it necessary?
+    // std::atomic<ui64> CurrentNonce; // is it necessary?
     ui64 PreviousNonce;
     std::atomic<i64> OperationsInProgress;
     TOwner OwnerId;

@@ -421,6 +421,9 @@ private:
             case NYdb::TTypeParser::ETypeKind::Pg:
                 return valueParser.GetPg().Content_;
 
+            case NYdb::TTypeParser::ETypeKind::Decimal:
+                return valueParser.GetDecimal().ToString();
+
             default:
                 return NJson::JSON_UNDEFINED;
         }

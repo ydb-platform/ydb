@@ -129,7 +129,7 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActo
                 auto result = std::make_unique<TEvColumnShard::TEvWriteResult>(TabletID(), writeMeta, errCode);
                 ctx.Send(writeMeta.GetSource(), result.release());
             } else {
-                auto operation = OperationsManager->GetOperation((TWriteId)writeMeta.GetWriteId());
+                auto operation = OperationsManager->GetOperation((TOperationWriteId)writeMeta.GetWriteId());
                 Y_ABORT_UNLESS(operation);
                 auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), operation->GetLockId(),
                     ev->Get()->GetWriteResultStatus(), ev->Get()->GetErrorMessage() ? ev->Get()->GetErrorMessage() : "put data fails");
@@ -289,7 +289,7 @@ public:
     }
 
     TConclusionStatus Parse(const NEvents::TDataEvents::TEvWrite& evWrite) {
-        AFL_VERIFY(evWrite.Record.GetLocks().GetLocks().size() == 1);
+        AFL_VERIFY(evWrite.Record.GetLocks().GetLocks().size() >= 1);
         auto& locks = evWrite.Record.GetLocks();
         auto& lock = evWrite.Record.GetLocks().GetLocks()[0];
         SendingShards = std::set<ui64>(locks.GetSendingShards().begin(), locks.GetSendingShards().end());
@@ -324,7 +324,8 @@ public:
         return TConclusionStatus::Success();
     }
 
-    std::unique_ptr<NColumnShard::TEvWriteCommitSyncTransactionOperator> CreateTxOperator(const NKikimrTxColumnShard::ETransactionKind kind) const {
+    std::unique_ptr<NColumnShard::TEvWriteCommitSyncTransactionOperator> CreateTxOperator(
+        const NKikimrTxColumnShard::ETransactionKind kind) const {
         AFL_VERIFY(ReceivingShards.size());
         if (IsPrimary()) {
             return std::make_unique<NColumnShard::TEvWriteCommitPrimaryTransactionOperator>(
@@ -428,15 +429,16 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     const auto& record = ev->Get()->Record;
     const auto source = ev->Sender;
     const auto cookie = ev->Cookie;
-    const auto behaviour = TOperationsManager::GetBehaviour(*ev->Get());
-//    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("ev_write", record.DebugString());
-    if (behaviour == EOperationBehaviour::Undefined) {
+    const auto behaviourConclusion = TOperationsManager::GetBehaviour(*ev->Get());
+    //    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("ev_write", record.DebugString());
+    if (behaviourConclusion.IsFail()) {
         Counters.GetTabletCounters()->IncCounter(COUNTER_WRITE_FAIL);
-        auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(
-            TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, "invalid write event");
+        auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST,
+            "invalid write event: " + behaviourConclusion.GetErrorMessage());
         ctx.Send(source, result.release(), 0, cookie);
         return;
     }
+    auto behaviour = *behaviourConclusion;
 
     if (behaviour == EOperationBehaviour::AbortWriteLock) {
         Execute(new TAbortWriteTransaction(this, record.GetLocks().GetLocks()[0].GetLockId(), source, cookie), ctx);
@@ -447,8 +449,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         auto commitOperation = std::make_shared<TCommitOperation>(TabletID());
         const auto sendError = [&](const TString& message, const NKikimrDataEvents::TEvWriteResult::EStatus status) {
             Counters.GetTabletCounters()->IncCounter(COUNTER_WRITE_FAIL);
-            auto result =
-                NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), 0, status, message);
+            auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), 0, status, message);
             ctx.Send(source, result.release(), 0, cookie);
         };
         auto conclusionParse = commitOperation->Parse(*ev->Get());
@@ -464,11 +465,12 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
                     if (lockInfo->GetGeneration() != commitOperation->GetGeneration()) {
                         sendError("tablet lock have another generation: " + ::ToString(lockInfo->GetGeneration()) +
                                       " != " + ::ToString(commitOperation->GetGeneration()),
-                            NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED);
+                            NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
                     } else if (lockInfo->GetInternalGenerationCounter() != commitOperation->GetInternalGenerationCounter()) {
-                        sendError("tablet lock have another internal generation counter: " + ::ToString(lockInfo->GetInternalGenerationCounter()) +
+                        sendError(
+                            "tablet lock have another internal generation counter: " + ::ToString(lockInfo->GetInternalGenerationCounter()) +
                                 " != " + ::ToString(commitOperation->GetInternalGenerationCounter()),
-                            NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED);
+                            NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
                     } else {
                         Execute(new TProposeWriteTransaction(this, commitOperation, source, cookie), ctx);
                     }
@@ -479,8 +481,6 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         }
         return;
     }
-
-    const ui64 lockId = (behaviour == EOperationBehaviour::InTxWrite) ? record.GetTxId() : record.GetLockTxId();
 
     if (record.GetOperations().size() != 1) {
         Counters.GetTabletCounters()->IncCounter(COUNTER_WRITE_FAIL);
@@ -550,6 +550,15 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     std::optional<ui32> granuleShardingVersionId;
     if (record.HasGranuleShardingVersionId()) {
         granuleShardingVersionId = record.GetGranuleShardingVersionId();
+    }
+
+    ui64 lockId = 0;
+    if (behaviour == EOperationBehaviour::NoTxWrite) {
+        static TAtomicCounter Counter = 0;
+        const ui64 shift = (ui64)1 << 47;
+        lockId = shift + Counter.Inc();
+    } else {
+        lockId = (behaviour == EOperationBehaviour::InTxWrite) ? record.GetTxId() : record.GetLockTxId();
     }
 
     OperationsManager->RegisterLock(lockId, Generation());

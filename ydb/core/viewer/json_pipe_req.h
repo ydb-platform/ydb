@@ -73,6 +73,13 @@ protected:
         TRequestResponse& operator =(TRequestResponse&&) = default;
 
         void Set(std::unique_ptr<T>&& response) {
+            constexpr bool hasErrorCheck = requires(const std::unique_ptr<T>& r) {TViewerPipeClient::IsSuccess(r);};
+            if constexpr (hasErrorCheck) {
+                if (!TViewerPipeClient::IsSuccess(response)) {
+                    Error(TViewerPipeClient::GetError(response));
+                    return;
+                }
+            }
             if (!IsDone()) {
                 Span.EndOk();
             }
@@ -143,6 +150,12 @@ protected:
         TString GetError() const {
             return std::get<TString>(Response);
         }
+
+        void Event(const TString& name) {
+            if (Span) {
+                Span.Event(name);
+            }
+        }
     };
 
     NTabletPipe::TClientConfig GetPipeClientConfig();
@@ -200,12 +213,17 @@ protected:
 
     static TPathId GetPathId(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
     static TString GetPath(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
+
+    static bool IsSuccess(const std::unique_ptr<TEvTxProxySchemeCache::TEvNavigateKeySetResult>& ev);
+    static TString GetError(const std::unique_ptr<TEvTxProxySchemeCache::TEvNavigateKeySetResult>& ev);
+
     TRequestResponse<TEvHive::TEvResponseHiveDomainStats> MakeRequestHiveDomainStats(TTabletId hiveId);
     TRequestResponse<TEvHive::TEvResponseHiveStorageStats> MakeRequestHiveStorageStats(TTabletId hiveId);
     TRequestResponse<TEvHive::TEvResponseHiveNodeStats> MakeRequestHiveNodeStats(TTabletId hiveId, TEvHive::TEvRequestHiveNodeStats* request);
     void RequestConsoleListTenants();
     TRequestResponse<NConsole::TEvConsole::TEvListTenantsResponse> MakeRequestConsoleListTenants();
     TRequestResponse<NConsole::TEvConsole::TEvGetNodeConfigResponse> MakeRequestConsoleNodeConfigByTenant(TString tenant, ui64 cookie = 0);
+    TRequestResponse<NConsole::TEvConsole::TEvGetAllConfigsResponse> MakeRequestConsoleGetAllConfigs();
     void RequestConsoleGetTenantStatus(const TString& path);
     TRequestResponse<NConsole::TEvConsole::TEvGetTenantStatusResponse> MakeRequestConsoleGetTenantStatus(const TString& path);
     void RequestBSControllerConfig();

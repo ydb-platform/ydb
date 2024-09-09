@@ -434,25 +434,20 @@ void TTestSchema::InitSchema(const std::vector<NArrow::NTest::TTestColumn>& colu
 namespace NKikimr::NColumnShard {
     NOlap::TIndexInfo BuildTableInfo(const std::vector<NArrow::NTest::TTestColumn>& ydbSchema,
                          const std::vector<NArrow::NTest::TTestColumn>& key) {
-        NOlap::TIndexInfo indexInfo = NOlap::TIndexInfo::BuildDefault();
-
+        THashMap<ui32, NTable::TColumn> columns;
         for (ui32 i = 0; i < ydbSchema.size(); ++i) {
             ui32 id = i + 1;
             auto& name = ydbSchema[i].GetName();
             auto& type = ydbSchema[i].GetType();
 
-            indexInfo.Columns[id] = NTable::TColumn(name, id, type, "");
-            indexInfo.ColumnNames[name] = id;
+            columns[id] = NTable::TColumn(name, id, type, "");
         }
 
+        std::vector<TString> pkNames;
         for (const auto& c : key) {
-            indexInfo.KeyColumns.push_back(indexInfo.ColumnNames[c.GetName()]);
+            pkNames.push_back(c.GetName());
         }
-
-        auto storage = std::make_shared<NOlap::TTestStoragesManager>();
-        storage->Initialize(TInstant::Now().Seconds());
-        indexInfo.SetAllKeys(NOlap::TTestStoragesManager::GetInstance());
-        return indexInfo;
+        return NOlap::TIndexInfo::BuildDefault(NOlap::TTestStoragesManager::GetInstance(), columns, pkNames);
     }
 
     void SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, const NOlap::TSnapshot& snapshot, bool succeed) {

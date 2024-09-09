@@ -609,7 +609,7 @@ namespace {
         config.Opts->AddLongOption("partition-stats", "Show partition statistics")
             .StoreTrue(&ShowPartitionStats_);
         config.Opts->SetFreeArgsNum(1);
-        AddFormats(config, { EOutputFormat::Pretty, EOutputFormat::ProtoJsonBase64 });
+        AddOutputFormats(config, { EDataFormat::Pretty, EDataFormat::ProtoJsonBase64 });
         SetFreeArgTitle(0, "<topic-path>", "Topic path");
     }
 
@@ -923,8 +923,8 @@ namespace {
         AddMessagingFormats(config, {
                                     EMessagingFormat::NewlineDelimited,
                                     EMessagingFormat::SingleMessage,
-                                    //      EOutputFormat::JsonRawStreamConcat,
-                                    //      EOutputFormat::JsonRawArray,
+                                    //      EDataFormat::JsonRawStreamConcat,
+                                    //      EDataFormat::JsonRawArray,
                                 });
         AddAllowedCodecs(config, AllowedCodecs);
 

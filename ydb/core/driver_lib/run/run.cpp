@@ -1676,6 +1676,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TGraphServiceInitializer(runConfig));
     }
 
+    if (serviceMask.EnableAwsService) {
+        sil->AddServiceInitializer(new TAwsApiInitializer(*this));
+    }
+
     return sil;
 }
 

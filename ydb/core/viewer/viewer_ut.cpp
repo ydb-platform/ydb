@@ -1816,8 +1816,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TKeepAliveHttpClient httpClient("localhost", monPort);
         TStringStream responseStream;
         TKeepAliveHttpClient::THeaders headers;
-        headers["Content-Type"] = "application/json";
-        const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoGet("/viewer/feature_flags?timeout=600000&base64=false", &responseStream, headers);
+        headers["Accept"] = "application/json";
+        const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoGet("/viewer/feature_flags", &responseStream, headers);
         const TString response = responseStream.ReadAll();
         UNIT_ASSERT_EQUAL_C(statusCode, HTTP_OK, statusCode << ": " << response);
         NJson::TJsonReaderConfig jsonCfg;

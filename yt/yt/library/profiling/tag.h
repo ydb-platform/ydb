@@ -20,7 +20,7 @@ constexpr int TypicalTagCount = 6;
 
 using TTagIdList = TCompactVector<TTagId, TypicalTagCount>;
 
-using TTag = std::pair<TString, TString>;
+using TTag = std::pair<std::string, std::string>;
 
 using TTagList = TCompactVector<TTag, TypicalTagCount>;
 

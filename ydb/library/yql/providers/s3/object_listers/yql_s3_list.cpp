@@ -133,11 +133,15 @@ TS3ListObjectV2Response ParseListObjectV2Response(
     if (const auto& root = xml.Root(); root.Name() == "Error") {
         const auto& code = root.Node("Code", true).Value<TString>();
         const auto& message = root.Node("Message", true).Value<TString>();
-        ythrow yexception() << message << ", error: code: " << code << ", request id: ["
-                            << requestId << "]";
+        const auto errorMessage = TStringBuilder{} << message << ", error: code: " << code 
+            << ", request id: [" << requestId << "]";
+        YQL_CLOG(DEBUG, ProviderS3) << "[TS3Lister::ParseListObjectV2Response] " << errorMessage;
+        throw yexception() << errorMessage;
     } else if (root.Name() != "ListBucketResult") {
-        ythrow yexception() << "Unexpected response '" << root.Name()
+        const auto errorMessage = TStringBuilder{} << "Unexpected response '" << root.Name()
                             << "' on discovery, request id: [" << requestId << "]";
+        YQL_CLOG(DEBUG, ProviderS3) << "[TS3Lister::ParseListObjectV2Response] " << errorMessage;
+        throw yexception() << errorMessage;
     } else {
         const NXml::TNamespacesForXPath nss(
             1U, {"s3", "http://s3.amazonaws.com/doc/2006-03-01/"});
@@ -313,7 +317,8 @@ private:
 
         auto gateway = ctx.GatewayWeak.lock();
         if (!gateway) {
-            ythrow yexception() << "Gateway disappeared";
+            YQL_CLOG(DEBUG, ProviderS3) << "[TS3Lister::SubmitRequestIntoGateway] Gateway disappeared";
+            throw yexception() << "Gateway disappeared";
         }
 
         auto sharedCtx = ctx.SharedCtx;
@@ -360,7 +365,8 @@ private:
     static void OnDiscovery(TListingContext ctx, IHTTPGateway::TResult&& result) try {
         auto gateway = ctx.GatewayWeak.lock();
         if (!gateway) {
-            ythrow yexception() << "Gateway disappeared";
+            YQL_CLOG(DEBUG, ProviderS3) << "[TS3Lister::OnDiscovery] Gateway disappeared";
+            throw yexception() << "Gateway disappeared";
         }
         if (!result.Issues) {
             auto xmlString = result.Content.Extract();
@@ -539,8 +545,10 @@ IS3Lister::TPtr MakeS3Lister(
     }
 
     if (!allowLocalFiles) {
-        ythrow yexception() << "Using local files as DataSource isn't allowed, but trying access "
+        const auto errorMessage = TStringBuilder{} << "Using local files as DataSource isn't allowed, but trying access "
                             << listingRequest.Url;
+        YQL_CLOG(DEBUG, ProviderS3) << "[IS3Lister::MakeS3Lister] " << errorMessage;
+        throw yexception() << errorMessage;
     }
     return std::make_shared<TLocalS3Lister>(listingRequest, delimiter);
 }

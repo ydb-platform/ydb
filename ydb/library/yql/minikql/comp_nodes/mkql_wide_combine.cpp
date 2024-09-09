@@ -710,7 +710,7 @@ private:
     }
 
     bool IsSwitchToSpillingModeCondition() const {
-        return TlsAllocState->IsMemoryYellowZoneEnabled() || TlsAllocState->GetMaximumLimitValueReached();
+        return !HasMemoryForProcessing() || TlsAllocState->GetMaximumLimitValueReached();
     }
 
 public:

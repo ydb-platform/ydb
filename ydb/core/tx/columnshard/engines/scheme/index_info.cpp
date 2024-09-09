@@ -36,7 +36,7 @@ std::optional<ui32> TIndexInfo::GetColumnIdOptional(const std::string& name) con
         return item.GetName() < value;
     };
     auto it = std::lower_bound(ColumnNames.begin(), ColumnNames.end(), name, pred);
-    if (it != ColumnNames.end()) {
+    if (it != ColumnNames.end() && it->GetName() == name) {
         return it->GetColumnId();
     }
     return IIndexInfo::GetColumnIdOptional(name);

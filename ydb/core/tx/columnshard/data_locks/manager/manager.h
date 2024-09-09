@@ -30,9 +30,9 @@ public:
 
     void Stop();
 
-    class TGuard {
+    class TGuard: TNonCopyable {
     private:
-        size_t LockId;
+        const size_t LockId;
         std::shared_ptr<TAtomicCounter> StopFlag;
         bool Released = false;
     public:
@@ -40,24 +40,6 @@ public:
             : LockId(lockId)
             , StopFlag(stopFlag)
         {
-        }
-        TGuard(const TGuard&) = delete;
-        TGuard(TGuard&& other) {
-            LockId = other.LockId;
-            StopFlag = std::move(other.StopFlag);
-            Released = other.Released;
-            other.Released = true;
-        }
-        TGuard& operator=(const TGuard&) = delete;
-        TGuard& operator=(TGuard&& other) {
-            if (this == &other) {
-                return *this;
-            }
-            LockId = other.LockId;
-            StopFlag = std::move(other.StopFlag);
-            Released = other.Released;
-            other.Released = true;
-            return *this;
         }
 
         size_t GetLockId() const {
@@ -77,13 +59,13 @@ public:
         virtual ~ILockAcquired() = default;
     };
 
-    std::optional<TGuard> Lock(ILock::TPtr&& lock,  const ELockType type, ILockAcquired::TPtr&& onAcquired);
-    std::optional<TGuard> TryLock(ILock::TPtr&& lock,  const ELockType type) {
+    std::unique_ptr<TGuard> Lock(ILock::TPtr&& lock,  const ELockType type, ILockAcquired::TPtr&& onAcquired);
+    std::unique_ptr<TGuard> TryLock(ILock::TPtr&& lock,  const ELockType type) {
         return Lock(std::move(lock), type, ILockAcquired::TPtr{});
     }
     
-    std::optional<TString> IsLocked(const TPortionInfo& portion, const TLockScope& scope = TLockScope{.Action = EAction::Modify, .Originator = EOriginator::Bg}, const std::optional<TGuard>& ignored = std::nullopt) const;
-    std::optional<TString> IsLocked(const TGranuleMeta& granule, const TLockScope& scope = TLockScope{.Action = EAction::Modify, .Originator = EOriginator::Bg}, const std::optional<TGuard>& ignored = std::nullopt) const;
+    std::optional<TString> IsLocked(const TPortionInfo& portion, const TLockScope& scope = TLockScope{.Action = EAction::Modify, .Originator = EOriginator::Bg}, const std::unique_ptr<TGuard>& ignored = nullptr) const;
+    std::optional<TString> IsLocked(const TGranuleMeta& granule, const TLockScope& scope = TLockScope{.Action = EAction::Modify, .Originator = EOriginator::Bg}, const std::unique_ptr<TGuard>& ignored = nullptr) const;
     std::optional<TString> IsLockedTableSchema(const ui64 pathId, const TLockScope& scope = TLockScope{.Action = EAction::Modify, .Originator = EOriginator::Bg});
     //std::optional<TString> IsLockedTableDataCommitted(const ui64 pathId, const TLockScope& scope = TLockScope{.Action = EAction::Modify, .Originator = EOriginator::Bg});
 };

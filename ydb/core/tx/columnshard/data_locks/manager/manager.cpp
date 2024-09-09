@@ -3,7 +3,7 @@
 
 namespace NKikimr::NOlap::NDataLocks {
 
-std::optional<TManager::TGuard> TManager::Lock(ILock::TPtr&& lock, const ELockType lockType, ILockAcquired::TPtr&& onAcquired) {
+std::unique_ptr<TManager::TGuard> TManager::Lock(ILock::TPtr&& lock, const ELockType lockType, ILockAcquired::TPtr&& onAcquired) {
     AFL_VERIFY(lock);
     AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "lock")("name", lock->GetLockName())("try", onAcquired ? "yes" : "no");
     for (const auto& awaiting: Awaiting) {
@@ -16,14 +16,14 @@ std::optional<TManager::TGuard> TManager::Lock(ILock::TPtr&& lock, const ELockTy
                     .LockCount = 0
                 });
             }
-            return std::nullopt;
+            return nullptr;
         }
     }
     for (auto&[id, existing]: Locks) {
         if (existing.LockType == ELockType::Shared && existing.LockType == ELockType::Shared && lock->IsEqualTo(*existing.Lock)) {
             ++existing.LockCount;
             AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "lock")("name", lock->GetLockName())("reuse", existing.Lock->GetLockName())("count", existing.LockCount);
-            return TGuard(id, StopFlag);
+            return std::make_unique<TGuard>(id, StopFlag);
         }
         if (lockType == ELockType::Exclusive || existing.LockType == ELockType::Exclusive) {
             AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "lock")("name", lock->GetLockName())("incompatible", existing.Lock->GetLockName());
@@ -35,7 +35,7 @@ std::optional<TManager::TGuard> TManager::Lock(ILock::TPtr&& lock, const ELockTy
                         .LockCount = 0
                     });
                 }
-                return std::nullopt;
+                return nullptr;
             }
         }
     }
@@ -49,7 +49,7 @@ std::optional<TManager::TGuard> TManager::Lock(ILock::TPtr&& lock, const ELockTy
             .LockCount = 1
         }
     ).second);
-    return TGuard(LastLockId, StopFlag);
+    return std::make_unique<TGuard>(LastLockId, StopFlag);
 }
 
 void TManager::ReleaseLock(const size_t lockId) {
@@ -62,7 +62,7 @@ void TManager::ReleaseLock(const size_t lockId) {
     }
 }
 
-std::optional<TString> TManager::IsLocked(const TPortionInfo& portion, const TLockScope& scope, const std::optional<TGuard>& ignored) const {
+std::optional<TString> TManager::IsLocked(const TPortionInfo& portion, const TLockScope& scope, const std::unique_ptr<TGuard>& ignored) const {
     for (const auto& [id, lockInfo] : Locks) {
         if (ignored && ignored->GetLockId() == id) {
             continue;
@@ -74,7 +74,7 @@ std::optional<TString> TManager::IsLocked(const TPortionInfo& portion, const TLo
     return {};
 }
 
-std::optional<TString> TManager::IsLocked(const TGranuleMeta& granule, const TLockScope& scope, const std::optional<TGuard>& ignored) const {
+std::optional<TString> TManager::IsLocked(const TGranuleMeta& granule, const TLockScope& scope, const std::unique_ptr<TGuard>& ignored) const {
     for (const auto& [id, lockInfo] : Locks) {
         if (ignored && ignored->GetLockId() == id) {
             continue;

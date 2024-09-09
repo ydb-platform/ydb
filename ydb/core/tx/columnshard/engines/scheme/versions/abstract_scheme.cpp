@@ -120,7 +120,6 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModi
         case NEvWrite::EModificationType::Upsert: {
             AFL_VERIFY(batch->num_columns() <= dstSchema->num_fields());
             if (batch->num_columns() < dstSchema->num_fields()) {
-                ui32 idx = 0;
                 for (ui32 idx = 0; idx < (ui32)dstSchema->num_fields(); ++idx) {
                     if (GetIndexInfo().IsNullableVerifiedByIndex(idx)) {
                         continue;

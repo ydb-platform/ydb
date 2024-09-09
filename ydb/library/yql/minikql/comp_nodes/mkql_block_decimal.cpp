@@ -16,16 +16,27 @@ namespace NMiniKQL {
 
 namespace {
 
-template<typename T>
+template<typename T, typename TRight>
 struct TDecimalBlockExec {
     NYql::NDecimal::TInt128 Do(NYql::NDecimal::TInt128 left, NYql::NDecimal::TInt128 right) const {
         return static_cast<const T*>(this)->Do(left, right);
     }
 
+
+    template<typename U>
+    const U* GetScalarValue(const arrow::Scalar& scalar) const {
+        return reinterpret_cast<const U*>(GetPrimitiveScalarValuePtr(scalar));
+    }
+    
+    template<>
+    const NYql::NDecimal::TInt128* GetScalarValue<NYql::NDecimal::TInt128>(const arrow::Scalar& scalar) const {
+        return reinterpret_cast<const NYql::NDecimal::TInt128*>(GetStringScalarValue(scalar).data());
+    }
+ 
     void ArrayScalarCore(
         const NYql::NDecimal::TInt128* val1Ptr,
         const ui8* valid1,
-        const NYql::NDecimal::TInt128* val2Ptr,
+        const TRight* val2Ptr,
         const ui8* valid2,
         NYql::NDecimal::TInt128* resPtr,
         ui8* resValid,
@@ -48,7 +59,7 @@ struct TDecimalBlockExec {
     void ScalarArrayCore(
         const NYql::NDecimal::TInt128* val1Ptr,
         const ui8* valid1,
-        const NYql::NDecimal::TInt128* val2Ptr,
+        const TRight* val2Ptr,
         const ui8* valid2,
         NYql::NDecimal::TInt128* resPtr,
         ui8* resValid,
@@ -71,7 +82,7 @@ struct TDecimalBlockExec {
     void ArrayArrayCore(
         const NYql::NDecimal::TInt128* val1Ptr,
         const ui8* valid1,
-        const NYql::NDecimal::TInt128* val2Ptr,
+        const TRight* val2Ptr,
         const ui8* valid2,
         NYql::NDecimal::TInt128* resPtr,
         ui8* resValid,
@@ -101,8 +112,8 @@ struct TDecimalBlockExec {
         if (!arg1.scalar()->is_valid || !arg2.scalar()->is_valid) {
             *res = arrow::MakeNullScalar(GetPrimitiveDataType<NYql::NDecimal::TInt128>());
         } else {
-            const auto val1Ptr = reinterpret_cast<const NYql::NDecimal::TInt128*>(GetStringScalarValue(*arg1.scalar()).data());
-            const auto val2Ptr = reinterpret_cast<const NYql::NDecimal::TInt128*>(GetStringScalarValue(*arg2.scalar()).data());
+            const auto val1Ptr = GetScalarValue<NYql::NDecimal::TInt128>(*arg1.scalar());
+            const auto val2Ptr = GetScalarValue<TRight>(*arg2.scalar());
             std::shared_ptr<arrow::Buffer> buffer(ARROW_RESULT(arrow::AllocateBuffer(16, kernelCtx->memory_pool())));
             auto* mem = reinterpret_cast<NYql::NDecimal::TInt128*>(buffer->mutable_data());
             auto resDatum = arrow::Datum(std::make_shared<TPrimitiveDataType<NYql::NDecimal::TInt128>::TScalarResult>(buffer));
@@ -120,10 +131,10 @@ struct TDecimalBlockExec {
         const auto& arg2 = batch.values[1];
         auto& resArr = *res->array();
         if (arg1.scalar()->is_valid) {
-            const auto val1Ptr = reinterpret_cast<const NYql::NDecimal::TInt128*>(GetStringScalarValue(*arg1.scalar()).data());
+            const auto val1Ptr = GetScalarValue<NYql::NDecimal::TInt128>(*arg1.scalar());
             const auto& arr2 = *arg2.array();
             auto length = arr2.length;
-            const auto val2Ptr = reinterpret_cast<const NYql::NDecimal::TInt128*>(arr2.buffers[1]->data());
+            const auto val2Ptr = reinterpret_cast<const TRight*>(arr2.buffers[1]->data());
             const auto nullCount2 = arr2.GetNullCount();
             const auto valid2 = (nullCount2 == 0) ? nullptr : arr2.GetValues<uint8_t>(0);
             auto resPtr = reinterpret_cast<NYql::NDecimal::TInt128*>(resArr.buffers[1]->mutable_data());
@@ -148,7 +159,7 @@ struct TDecimalBlockExec {
             auto length = arr1.length;
             const auto nullCount1 = arr1.GetNullCount();
             const auto valid1 = (nullCount1 == 0) ? nullptr : arr1.GetValues<uint8_t>(0);
-            const auto val2Ptr = reinterpret_cast<const NYql::NDecimal::TInt128*>(GetStringScalarValue(*arg2.scalar()).data());
+            const auto val2Ptr = GetScalarValue<TRight>(*arg2.scalar());
             auto resPtr = reinterpret_cast<NYql::NDecimal::TInt128*>(resArr.buffers[1]->mutable_data());
             auto resValid = res->array()->GetMutableValues<uint8_t>(0);
             ArrayScalarCore(val1Ptr, valid1, val2Ptr, nullptr, resPtr, resValid, length, arr1.offset, 0);
@@ -170,7 +181,7 @@ struct TDecimalBlockExec {
         const auto val1Ptr = reinterpret_cast<const NYql::NDecimal::TInt128*>(arr1.buffers[1]->data());
         const auto nullCount1 = arr1.GetNullCount();
         const auto valid1 = (nullCount1 == 0) ? nullptr : arr1.GetValues<uint8_t>(0);
-        const auto val2Ptr = reinterpret_cast<const NYql::NDecimal::TInt128*>(arr2.buffers[1]->data());
+        const auto val2Ptr = reinterpret_cast<const TRight*>(arr2.buffers[1]->data());
         const auto nullCount2 = arr2.GetNullCount();
         const auto valid2 = (nullCount2 == 0) ? nullptr : arr2.GetValues<uint8_t>(0);
         auto& resArr = *res->array();
@@ -206,7 +217,7 @@ struct TDecimalBlockExec {
 };
 
 template<typename TRight>
-struct TDecimalMulBlockExec: TDecimalBlockExec<TDecimalMulBlockExec<TRight>> {
+struct TDecimalMulBlockExec: TDecimalBlockExec<TDecimalMulBlockExec<TRight>, TRight> {
     const NYql::NDecimal::TInt128 Bound;
     const NYql::NDecimal::TInt128 Divider;
 
@@ -230,7 +241,7 @@ struct TDecimalMulBlockExec: TDecimalBlockExec<TDecimalMulBlockExec<TRight>> {
 };
 
 template<typename TRight>
-struct TDecimalDivBlockExec: TDecimalBlockExec<TDecimalDivBlockExec<TRight>> {
+struct TDecimalDivBlockExec: TDecimalBlockExec<TDecimalDivBlockExec<TRight>, TRight> {
     const NYql::NDecimal::TInt128 Bound;
     const NYql::NDecimal::TInt128 Divider;
 
@@ -251,7 +262,7 @@ struct TDecimalDivBlockExec: TDecimalBlockExec<TDecimalDivBlockExec<TRight>> {
 };
 
 template<typename TRight>
-struct TDecimalModBlockExec: TDecimalBlockExec<TDecimalModBlockExec<TRight>> {
+struct TDecimalModBlockExec: TDecimalBlockExec<TDecimalModBlockExec<TRight>, TRight> {
     const NYql::NDecimal::TInt128 Bound;
     const NYql::NDecimal::TInt128 Divider;
 

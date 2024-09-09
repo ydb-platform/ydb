@@ -5,7 +5,7 @@
 #include <ydb/library/uuid/uuid.h>
 
 #include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
-#include <ydb/library/yql/providers/common/codec/yql_codec_results.h>
+#include <ydb/library/yql/public/result_format/yql_codec_results.h>
 #include <ydb/library/yql/public/decimal/yql_decimal.h>
 
 namespace NYql {
@@ -26,7 +26,7 @@ bool ResultsOverflow(ui64 rows, ui64 bytes, const IDataProvider::TFillSettings& 
     return false;
 }
 
-void WriteValueToYson(const TStringStream& stream, NCommon::TYsonResultWriter& writer, const NKikimrMiniKQL::TType& type,
+void WriteValueToYson(const TStringStream& stream, NResult::TYsonResultWriter& writer, const NKikimrMiniKQL::TType& type,
     const NKikimrMiniKQL::TValue& value, const TVector<TString>* fieldsOrder,
     const IDataProvider::TFillSettings& fillSettings, bool& truncated, bool firstLevel = false)
 {
@@ -333,7 +333,7 @@ void KikimrResultToYson(const TStringStream& stream, NYson::TYsonWriter& writer,
     const TVector<TString>& columnHints, const IDataProvider::TFillSettings& fillSettings, bool& truncated)
 {
     truncated = false;
-    NCommon::TYsonResultWriter resultWriter(writer);
+    NResult::TYsonResultWriter resultWriter(writer);
     WriteValueToYson(stream, resultWriter, result.GetType(), result.GetValue(), columnHints.empty() ? nullptr : &columnHints,
         fillSettings, truncated, true);
 }

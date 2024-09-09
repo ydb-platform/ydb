@@ -627,7 +627,7 @@ TPortionInfo::TPreparedBatchData PrepareForAssembleImpl(const TPortionInfo& port
         preparedColumns.emplace_back(c.Compile());
     }
 
-    return TPortionInfo::TPreparedBatchData(std::move(preparedColumns), resultSchema.GetSchema(), rowsCount);
+    return TPortionInfo::TPreparedBatchData(std::move(preparedColumns), rowsCount);
 }
 
 }

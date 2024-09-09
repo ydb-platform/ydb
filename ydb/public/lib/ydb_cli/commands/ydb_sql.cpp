@@ -40,15 +40,15 @@ void TCommandSql::Config(TConfig& config) {
         .RequiredArgument("[String]").DefaultValue("yql").StoreResult(&Syntax)
         .Hidden();
 
-    AddFormats(config, {
-        EOutputFormat::Pretty,
-        EOutputFormat::JsonUnicode,
-        EOutputFormat::JsonUnicodeArray,
-        EOutputFormat::JsonBase64,
-        EOutputFormat::JsonBase64Array,
-        EOutputFormat::Csv,
-        EOutputFormat::Tsv,
-        EOutputFormat::Parquet,
+    AddOutputFormats(config, {
+        EDataFormat::Pretty,
+        EDataFormat::JsonUnicode,
+        EDataFormat::JsonUnicodeArray,
+        EDataFormat::JsonBase64,
+        EDataFormat::JsonBase64Array,
+        EDataFormat::Csv,
+        EDataFormat::Tsv,
+        EDataFormat::Parquet,
     });
 
     config.SetFreeArgsNum(0);
@@ -153,13 +153,13 @@ int TCommandSql::PrintResponse(NQuery::TExecuteQueryIterator& result) {
 
     if (plan) {
         if (!ExplainMode && !ExplainAnalyzeMode
-                && (OutputFormat == EOutputFormat::Default || OutputFormat == EOutputFormat::Pretty)) {
+                && (OutputFormat == EDataFormat::Default || OutputFormat == EDataFormat::Pretty)) {
             Cout << Endl << "Execution plan:" << Endl;
         }
         // TODO: get rid of pretty-table format, refactor TQueryPrinter to reflect that
-        EOutputFormat format = (OutputFormat == EOutputFormat::Default || OutputFormat == EOutputFormat::Pretty)
+        EDataFormat format = (OutputFormat == EDataFormat::Default || OutputFormat == EDataFormat::Pretty)
             && (ExplainMode || ExplainAnalyzeMode)
-            ? EOutputFormat::PrettyTable : OutputFormat;
+            ? EDataFormat::PrettyTable : OutputFormat;
         TQueryPlanPrinter queryPlanPrinter(format, /* show actual costs */ !ExplainMode);
         queryPlanPrinter.Print(*plan);
     }

@@ -14,7 +14,7 @@ namespace NYT::NClient::NCache {
 
 //! Cache of clients per cluster.
 struct IClientsCache
-    : public TRefCounted
+    : public virtual TRefCounted
 {
     virtual NApi::IClientPtr GetClient(TStringBuf clusterUrl) = 0;
 };

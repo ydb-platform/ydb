@@ -102,7 +102,7 @@ NYql::TAstParseResult SqlToYql(const TString& query, const NSQLTranslation::TTra
     TContext ctx(settings, hints, res.Issues);
     NSQLTranslation::TErrorCollectorOverIssues collector(res.Issues, settings.MaxErrors, settings.File);
 
-    google::protobuf::Message* ast(SqlAST(query, queryName, collector, settings.AnsiLexer,  settings.Antlr4Parser, settings.Arena));
+    google::protobuf::Message* ast(SqlAST(query, queryName, collector, settings.AnsiLexer,  settings.Antlr4Parser, settings.TestAntlr4, settings.Arena));
     if (ast) {
         SqlASTToYqlImpl(res, *ast, ctx);
     } else {
@@ -195,7 +195,7 @@ TVector<NYql::TAstParseResult> SqlToAstStatements(const TString& query, const NS
     TContext ctx(settings, hints, issues);
     NSQLTranslation::TErrorCollectorOverIssues collector(issues, settings.MaxErrors, settings.File);
 
-    google::protobuf::Message* astProto(SqlAST(query, queryName, collector, settings.AnsiLexer, settings.Antlr4Parser, settings.Arena));
+    google::protobuf::Message* astProto(SqlAST(query, queryName, collector, settings.AnsiLexer, settings.Antlr4Parser, settings.TestAntlr4, settings.Arena));
     if (astProto) {
         auto ast = static_cast<const TSQLv1ParserAST&>(*astProto);
         const auto& query = ast.GetRule_sql_query();

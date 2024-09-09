@@ -568,14 +568,24 @@ protected:
         auto reason = ev->Get()->Reason;
         switch (eventType) {
             case TEvKqpNode::TEvStartKqpTasksRequest::EventType: {
-                if (reason == TEvents::TEvUndelivered::EReason::ReasonActorUnknown) {
-                    LOG_D("Schedule a retry by ActorUnknown reason, nodeId:" << ev->Sender.NodeId() << " requestId: " << ev->Cookie);
-                    this->Schedule(TDuration::MilliSeconds(Planner->GetCurrentRetryDelay(ev->Cookie)), new typename TEvPrivate::TEvRetry(ev->Cookie, ev->Sender));
-                    return;
+                switch (reason) {
+                    case TEvents::TEvUndelivered::EReason::ReasonActorUnknown: {
+                        LOG_D("Schedule a retry by ActorUnknown reason, nodeId:" << ev->Sender.NodeId() << " requestId: " << ev->Cookie);
+                        this->Schedule(TDuration::MilliSeconds(Planner->GetCurrentRetryDelay(ev->Cookie)), new typename TEvPrivate::TEvRetry(ev->Cookie, ev->Sender));
+                        return;
+                    }
+                    case TEvents::TEvUndelivered::EReason::Disconnected: {
+                        InvalidateNode(ev->Sender.NodeId());
+                        ReplyUnavailable(TStringBuilder()
+                            << "Failed to send EvStartKqpTasksRequest because node is unavailable: " << ev->Sender.NodeId());
+                        return;
+                    }
+                    case TEvents::TEvUndelivered::EReason::ReasonUnknown: {
+                        InvalidateNode(ev->Sender.NodeId());
+                        InternalError(TStringBuilder() << "TEvKqpNode::TEvStartKqpTasksRequest lost: " << reason);
+                        return;
+                    }
                 }
-                InvalidateNode(ev->Sender.NodeId());
-                return InternalError(TStringBuilder()
-                    << "TEvKqpNode::TEvStartKqpTasksRequest lost: " << reason);
             }
             default: {
                 LOG_E("Event lost, type: " << eventType << ", reason: " << reason);
@@ -684,7 +694,7 @@ protected:
         if (statusCode == Ydb::StatusIds::INTERNAL_ERROR) {
             InternalError(issues);
         } else if (statusCode == Ydb::StatusIds::TIMEOUT) {
-            TimeoutError(ev->Sender);
+            TimeoutError(ev->Sender, issues);
         } else {
             RuntimeError(NYql::NDq::DqStatusToYdbStatus(msg.GetStatusCode()), issues);
         }
@@ -1706,29 +1716,32 @@ protected:
         ReplyErrorAndDie(status, &issues);
     }
 
-    void TimeoutError(TActorId abortSender) {
+    void TimeoutError(TActorId abortSender, NYql::TIssues issues) {
         if (AlreadyReplied) {
             LOG_E("Timeout when we already replied - not good" << Endl << TBackTrace().PrintToString() << Endl);
             return;
         }
 
         const auto status = NYql::NDqProto::StatusIds::TIMEOUT;
-        const TString message = "Request timeout exceeded";
+        if (issues.Empty()) {
+            issues.AddIssue("Request timeout exceeded");
+        }
 
-        TerminateComputeActors(Ydb::StatusIds::TIMEOUT, message);
+        TerminateComputeActors(Ydb::StatusIds::TIMEOUT, issues);
 
         AlreadyReplied = true;
 
-        LOG_E("Abort execution: " << NYql::NDqProto::StatusIds_StatusCode_Name(status) << "," << message);
+        LOG_E("Abort execution: " << NYql::NDqProto::StatusIds_StatusCode_Name(status) << ", " << issues.ToOneLineString());
         if (ExecuterSpan) {
             ExecuterSpan.EndError(TStringBuilder() << NYql::NDqProto::StatusIds_StatusCode_Name(status));
         }
 
         ResponseEv->Record.MutableResponse()->SetStatus(Ydb::StatusIds::TIMEOUT);
+        NYql::IssuesToMessage(issues, ResponseEv->Record.MutableResponse()->MutableIssues());
 
         // TEvAbortExecution can come from either ComputeActor or SessionActor (== Target).
         if (abortSender != Target) {
-            auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(status, message);
+            auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(status, issues);
             this->Send(Target, abortEv.Release());
         }
 
@@ -1751,7 +1764,9 @@ protected:
         auto& response = *ResponseEv->Record.MutableResponse();
 
         response.SetStatus(status);
-        response.MutableIssues()->Swap(issues);
+        if (issues) {
+            response.MutableIssues()->Swap(issues);
+        }
 
         LOG_T("ReplyErrorAndDie. Response: " << response.DebugString()
             << ", to ActorId: " << Target);

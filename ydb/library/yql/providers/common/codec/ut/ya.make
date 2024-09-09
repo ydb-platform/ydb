@@ -8,7 +8,6 @@ ENDIF()
 
 SRCS(
     yql_json_codec_ut.cpp
-    yql_restricted_yson_ut.cpp
 )
 
 PEERDIR(

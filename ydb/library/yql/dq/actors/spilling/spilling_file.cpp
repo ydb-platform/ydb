@@ -1,6 +1,7 @@
 #include "spilling.h"
 #include "spilling_file.h"
 
+#include <format>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
@@ -406,7 +407,10 @@ private:
             LOG_E("[Write] File size limit exceeded. "
                 << "From: " << ev->Sender << ", blobId: " << msg.BlobId << ", bytes: " << msg.Blob.size());
 
-            Send(ev->Sender, new TEvDqSpilling::TEvError("File size limit exceeded"));
+            const auto usedMb = (fd.TotalSize + msg.Blob.size()) / 1024 / 1024;
+            const auto limitMb = Config_.MaxFileSize / 1024 / 1024;
+
+            Send(ev->Sender, new TEvDqSpilling::TEvError(std::format("File size limit exceeded: {}/{}Mb", usedMb, limitMb)));
 
             Counters_->SpillingTooBigFileErrors->Inc();
             return;
@@ -416,7 +420,9 @@ private:
             LOG_E("[Write] Total size limit exceeded. "
                 << "From: " << ev->Sender << ", blobId: " << msg.BlobId << ", bytes: " << msg.Blob.size());
 
-            Send(ev->Sender, new TEvDqSpilling::TEvError("Total size limit exceeded"));
+            const auto usedMb = (TotalSize_ + msg.Blob.size()) / 1024 / 1024;
+            const auto limitMb = Config_.MaxTotalSize / 1024 / 1024;
+            Send(ev->Sender, new TEvDqSpilling::TEvError(std::format("Total size limit exceeded: {}/{}Mb", usedMb, limitMb)));
 
             Counters_->SpillingNoSpaceErrors->Inc();
             return;

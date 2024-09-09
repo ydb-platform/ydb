@@ -60,6 +60,7 @@ namespace NSQLTranslation {
         , V0ForceDisable(InTestEnvironment())
         , PGDisable(false)
         , WarnOnV0(true)
+        , TestAntlr4(false)
         , V0WarnAsError(ISqlFeaturePolicy::MakeAlwaysDisallow())
         , DqDefaultAuto(ISqlFeaturePolicy::MakeAlwaysDisallow())
         , BlockDefaultAuto(ISqlFeaturePolicy::MakeAlwaysDisallow())

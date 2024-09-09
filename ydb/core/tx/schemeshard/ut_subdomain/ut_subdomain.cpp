@@ -2568,6 +2568,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
         }
 
+
         //clear subdomain
         {
             TestDescribeResult(DescribePath(runtime, "/MyRoot"),
@@ -2582,6 +2583,155 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                                 NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards),
                                 NLs::PathsInsideDomain(0),
                                 NLs::ShardsInsideDomain(0)});
+        }
+    }
+
+    Y_UNIT_TEST(ColumnSchemeLimitsRejects) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TSchemeLimits lowLimits;
+        lowLimits.MaxDepth = 4;
+        lowLimits.MaxPaths = 3;
+        lowLimits.MaxChildrenInDir = 3;
+        lowLimits.MaxAclBytesSize = 25;
+        lowLimits.MaxTableColumns = 3;
+        lowLimits.MaxColumnTableColumns = 3;
+        lowLimits.MaxTableColumnNameLength = 10;
+        lowLimits.MaxTableKeyColumns = 1;
+        lowLimits.MaxShards = 6;
+        lowLimits.MaxShardsInPath = 4;
+        lowLimits.MaxPQPartitions = 20;
+
+
+        //lowLimits.ExtraPathSymbolsAllowed = "!\"#$%&'()*+,-.:;<=>?@[\\]^_`{|}~";
+        SetSchemeshardSchemaLimits(runtime, lowLimits);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                           {NLs::PathExist,
+                            NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards, lowLimits.MaxPQPartitions)});
+
+        {
+            TestCreateSubDomain(runtime, txId++,  "/MyRoot",
+                                "PlanResolution: 50 "
+                                "Coordinators: 1 "
+                                "Mediators: 1 "
+                                "TimeCastBucketsPerMediator: 2 "
+                                "Name: \"USER_0\""
+                                " DatabaseQuotas {"
+                                "    data_stream_shards_quota: 2"
+                                "    data_stream_reserved_storage_quota: 200000"
+                                "}");
+        }
+
+        //create column tables, column limits
+        {
+            TestMkDir(runtime, txId++, "/MyRoot/USER_0", "C");
+            env.TestWaitNotification(runtime, txId - 1);
+
+            // MaxColumnTableColumns
+            TestCreateColumnTable(runtime, txId++, "/MyRoot/USER_0/C", R"(
+                            Name: "C2"
+                            ColumnShardCount: 1
+                            Schema {
+                                Columns { Name: "RowId" Type: "Uint64", NotNull: true }
+                                Columns { Name: "Value0" Type: "Utf8" }
+                                Columns { Name: "Value1" Type: "Utf8" }
+                                KeyColumnNames: "RowId"
+                                Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
+                            }
+                )", {NKikimrScheme::StatusAccepted});
+            env.TestWaitNotification(runtime, txId - 1);
+
+            TestAlterColumnTable(runtime, txId++, "/MyRoot/USER_0/C", R"(
+                Name: "C2"
+                AlterSchema {
+                    DropColumns {Name: "Value0"}
+                }
+            )", {NKikimrScheme::StatusAccepted});
+            env.TestWaitNotification(runtime, txId - 1);
+
+            TestAlterColumnTable(runtime, txId++, "/MyRoot/USER_0/C", R"(
+                Name: "C2"
+                AlterSchema {
+                    DropColumns {Name: "Value1"}
+                    AddColumns { Name: "Value2" Type: "Utf8" }
+                    AddColumns { Name: "Value3" Type: "Utf8" }
+                    AddColumns { Name: "Value4" Type: "Utf8" }
+                }
+            )", {NKikimrScheme::StatusSchemeError});
+            env.TestWaitNotification(runtime, txId - 1);
+
+            TestCreateColumnTable(runtime, txId++, "/MyRoot/USER_0/C", R"(
+                            Name: "C1"
+                            ColumnShardCount: 1
+                            Schema {
+                                Columns { Name: "RowId" Type: "Uint64", NotNull: true }
+                                Columns { Name: "Value0" Type: "Utf8" }
+                                Columns { Name: "Value1" Type: "Utf8" }
+                                Columns { Name: "Value2" Type: "Utf8" }
+                                KeyColumnNames: "RowId"
+                                Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
+                            }
+                )", {NKikimrScheme::StatusSchemeError});
+
+            TString olapSchema = R"(
+                Name: "OlapStore1"
+                ColumnShardCount: 1
+                SchemaPresets {
+                    Name: "default"
+                    Schema {
+                        Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                        Columns { Name: "data" Type: "Utf8" }
+                        KeyColumnNames: "timestamp"
+                        Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
+                    }
+                }
+            )";
+
+            TestCreateOlapStore(runtime, txId++, "/MyRoot", olapSchema, {NKikimrScheme::StatusAccepted});
+            env.TestWaitNotification(runtime, txId - 1);
+
+            TString olapSchemaBig = R"(
+                Name: "OlapStoreBig"
+                ColumnShardCount: 1
+                SchemaPresets {
+                    Name: "default"
+                    Schema {
+                        Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                        Columns { Name: "data" Type: "Utf8" }
+                        Columns { Name: "data2" Type: "Utf8" }
+                        Columns { Name: "data3" Type: "Utf8" }
+                        KeyColumnNames: "timestamp"
+                        Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
+                    }
+                }
+            )";
+
+            TestCreateOlapStore(runtime, txId++, "/MyRoot", olapSchemaBig, {NKikimrScheme::StatusSchemeError});
+            env.TestWaitNotification(runtime, txId - 1);
+
+            TestAlterOlapStore(runtime, txId++, "/MyRoot", R"(
+                Name: "OlapStore1"
+                AlterSchemaPresets {
+                    Name: "default"
+                    AlterSchema {
+                        AddColumns { Name: "comment" Type: "Utf8" }
+                    }
+                }
+            )", {NKikimrScheme::StatusAccepted});
+            env.TestWaitNotification(runtime, txId - 1);
+
+            TestAlterOlapStore(runtime, txId++, "/MyRoot", R"(
+                Name: "OlapStore1"
+                AlterSchemaPresets {
+                    Name: "default"
+                    AlterSchema {
+                        AddColumns { Name: "comment2" Type: "Utf8" }
+                    }
+                }
+            )", {NKikimrScheme::StatusSchemeError});
+            env.TestWaitNotification(runtime, txId - 1);
         }
     }
 

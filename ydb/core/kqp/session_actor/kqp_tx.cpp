@@ -5,24 +5,33 @@ namespace NKqp {
 
 using namespace NYql;
 
-TIssue GetLocksInvalidatedIssue(const TKqpTransactionContext& txCtx, const TMaybe<TKqpTxLock>& invalidatedLock) {
+NYql::TIssue GetLocksInvalidatedIssue(const TKqpTransactionContext& txCtx, const TKikimrPathId& pathId) {
     TStringBuilder message;
     message << "Transaction locks invalidated.";
 
-    TMaybe<TString> tableName;
-    if (invalidatedLock) {
-        TKikimrPathId id(invalidatedLock->GetSchemeShard(), invalidatedLock->GetPathId());
-        auto table = txCtx.TableByIdMap.FindPtr(id);
-        if (table) {
-            tableName = *table;
+    if (pathId.OwnerId() != 0) {
+        auto table = txCtx.TableByIdMap.FindPtr(pathId);
+        if (!table) {
+            return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message << " Unknown table.");    
         }
+        return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message << " Table: " << *table);
+    } else {
+        // Olap tables don't return SchemeShard in locks, thus we use tableId here.
+        for (const auto& [pathId, table] : txCtx.TableByIdMap) {
+            if (pathId.TableId() == pathId.TableId()) {
+                return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message << " Table: " << table);
+            }
+        }
+        return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message << " Unknown table.");    
     }
+}
 
-    if (tableName) {
-        message << " Table: " << *tableName;
-    }
-
-    return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message);
+TIssue GetLocksInvalidatedIssue(const TKqpTransactionContext& txCtx, const TKqpTxLock& invalidatedLock) {
+    return GetLocksInvalidatedIssue(
+        txCtx,
+        TKikimrPathId(
+            invalidatedLock.GetSchemeShard(),
+            invalidatedLock.GetPathId()));
 }
 
 std::pair<bool, std::vector<TIssue>> MergeLocks(const NKikimrMiniKQL::TType& type, const NKikimrMiniKQL::TValue& value,

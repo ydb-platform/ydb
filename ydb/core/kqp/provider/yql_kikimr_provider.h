@@ -316,7 +316,6 @@ public:
 
         for (const auto& info : tableInfos) {
             tableInfoMap.emplace(info.GetTableName(), &info);
-
             TKikimrPathId pathId(info.GetTableId().GetOwnerId(), info.GetTableId().GetTableId());
             TableByIdMap.emplace(pathId, info.GetTableName());
         }

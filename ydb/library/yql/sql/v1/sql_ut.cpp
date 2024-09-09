@@ -7203,4 +7203,18 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifier) {
 
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
     }
+
+    Y_UNIT_TEST(BacktickMatching) {
+        auto req = "select\n"
+                   "    1 as `Schema has \\`RealCost\\``\n"
+                   "    -- foo`bar";
+        auto res = SqlToYql(req);
+        UNIT_ASSERT(res.Root);
+        UNIT_ASSERT(res.IsOk());
+        UNIT_ASSERT(res.Issues.Size() == 0);
+        res = SqlToYqlWithAnsiLexer(req);
+        UNIT_ASSERT(res.Root);
+        UNIT_ASSERT(res.IsOk());
+        UNIT_ASSERT(res.Issues.Size() == 0);
+    }
 }

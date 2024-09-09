@@ -28,7 +28,8 @@ struct TEvKqpExecuter {
         NLWTrace::TOrbit Orbit;
         IKqpGateway::TKqpSnapshot Snapshot;
         std::optional<NYql::TKikimrPathId> BrokenLockPathId;
-        //TShardIdToTableInfoPtr ShardIdToTableInfo;
+        std::optional<ui64> BrokenLockShardId;
+
         ui64 ResultRowsCount = 0;
         ui64 ResultRowsBytes = 0;
 

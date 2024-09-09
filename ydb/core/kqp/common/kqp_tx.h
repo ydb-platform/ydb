@@ -319,7 +319,7 @@ struct TTxId {
 
 struct TTableInfo {
     bool IsOlap = false;
-    TString Path;
+    THashSet<TString> Pathes;
 };
 
 using TShardIdToTableInfo = THashMap<ui64, TTableInfo>;
@@ -441,6 +441,7 @@ public:
 };
 
 NYql::TIssue GetLocksInvalidatedIssue(const TKqpTransactionContext& txCtx, const NYql::TKikimrPathId& pathId);
+NYql::TIssue GetLocksInvalidatedIssue(const TShardIdToTableInfo& shardIdToTableInfo, const ui64& shardId);
 std::pair<bool, std::vector<NYql::TIssue>> MergeLocks(const NKikimrMiniKQL::TType& type,
     const NKikimrMiniKQL::TValue& value, TKqpTransactionContext& txCtx);
 

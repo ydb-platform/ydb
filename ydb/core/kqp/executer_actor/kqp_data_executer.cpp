@@ -208,9 +208,8 @@ public:
     void Finalize() {
         YQL_ENSURE(!AlreadyReplied);
         if (LocksBroken) {
-            return ReplyErrorAndDie(
-                Ydb::StatusIds::ABORTED,
-                YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, "Transaction locks invalidated. Unknown table."));
+            YQL_ENSURE(ResponseEv->BrokenLockShardId);
+            return ReplyErrorAndDie(Ydb::StatusIds::ABORTED, {});
         }
 
         ResponseEv->Record.MutableResponse()->SetStatus(Ydb::StatusIds::SUCCESS);
@@ -227,7 +226,7 @@ public:
                     const auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
                     auto& info = (*ShardIdToTableInfo)[lock.GetDataShard()];
                     info.IsOlap = (stageInfo.Meta.TableKind == ETableKind::Olap);
-                    info.Path = stageInfo.Meta.TablePath;
+                    info.Pathes.insert(stageInfo.Meta.TablePath);
                 }
             } else if (data.GetData().template Is<NKikimrKqp::TEvKqpOutputActorResultInfo>()) {
                 NKikimrKqp::TEvKqpOutputActorResultInfo info;
@@ -239,7 +238,7 @@ public:
                     const auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
                     auto& info = (*ShardIdToTableInfo)[lock.GetDataShard()];
                     info.IsOlap = (stageInfo.Meta.TableKind == ETableKind::Olap);
-                    info.Path = stageInfo.Meta.TablePath;
+                    info.Pathes.insert(stageInfo.Meta.TablePath);
                 }
             }
         };
@@ -1206,6 +1205,8 @@ private:
                 shardState->State = TShardState::EState::Finished;
                 Counters->TxProxyMon->TxResultAborted->Inc();
                 LocksBroken = true;
+                ResponseEv->BrokenLockShardId = shardId;
+
                 if (!res->Record.GetTxLocks().empty()) {
                     ResponseEv->BrokenLockPathId = NYql::TKikimrPathId(
                         res->Record.GetTxLocks(0).GetSchemeShard(),
@@ -1268,9 +1269,10 @@ private:
 
                 Counters->TxProxyMon->TxResultAborted->Inc(); // TODO: dedicated counter?
                 LocksBroken = true;
+                ResponseEv->BrokenLockShardId = shardId; // todo: without responseEv
 
                 if (!res->Record.GetTxLocks().empty()) {
-                    ResponseEv->BrokenLockPathId = TKikimrPathId(
+                    ResponseEv->BrokenLockPathId = NYql::TKikimrPathId(
                         res->Record.GetTxLocks(0).GetSchemeShard(),
                         res->Record.GetTxLocks(0).GetPathId());
                     return ReplyErrorAndDie(Ydb::StatusIds::ABORTED, {});
@@ -1979,7 +1981,7 @@ private:
 
                 auto& info = (*ShardIdToTableInfo)[task.Meta.ShardId];
                 info.IsOlap = (stageInfo.Meta.TableKind == ETableKind::Olap);
-                info.Path = stageInfo.Meta.TablePath;
+                info.Pathes.insert(stageInfo.Meta.TablePath);
             } else if (stageInfo.Meta.IsSysView()) {
                 computeTasks.emplace_back(task.Id);
             } else {

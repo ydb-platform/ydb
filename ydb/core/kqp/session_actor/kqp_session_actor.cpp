@@ -1472,6 +1472,8 @@ public:
                 case Ydb::StatusIds::ABORTED: {
                     if (ev->BrokenLockPathId) {
                         issues.AddIssue(GetLocksInvalidatedIssue(*QueryState->TxCtx, *ev->BrokenLockPathId));
+                    } else if (ev->BrokenLockShardId) {
+                        issues.AddIssue(GetLocksInvalidatedIssue(*QueryState->ShardIdToTableInfo, *ev->BrokenLockShardId));
                     }
                     break;
                 }

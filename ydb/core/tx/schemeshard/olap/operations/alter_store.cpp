@@ -1,6 +1,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
+#include <ydb/core/formats/arrow/accessor/common/const.h>
 
 #include "checks.h"
 
@@ -514,6 +515,17 @@ public:
         if (!NKikimr::NSchemeShard::NOlap::CheckLimits(limits, alterData, errStr)) {
             result->SetError(NKikimrScheme::StatusSchemeError, errStr);
             return result;
+        }
+
+        if (!AppData()->FeatureFlags.GetEnableSparsedColumns()) {
+            for (auto& [_, preset]: alterData->SchemaPresets) {
+                for (auto& [_, column]: preset.GetColumns().GetColumns()) {
+                    if (column.GetDefaultValue().GetValue() || (column.GetAccessorConstructor().GetClassName() == NKikimr::NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName)) {
+                        result->SetError(NKikimrScheme::StatusSchemeError,"schema update error: sparsed columns are disabled");
+                        return result;
+                    }
+                }
+            }
         }
 
         storeInfo->AlterData = alterData;

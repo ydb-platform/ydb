@@ -1,6 +1,7 @@
 #include "update.h"
 #include <ydb/core/tx/schemeshard/olap/operations/alter/abstract/converter.h>
 #include <ydb/core/tx/schemeshard/olap/common/common.h>
+#include <ydb/core/formats/arrow/accessor/common/const.h>
 
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 
@@ -48,6 +49,14 @@ NKikimr::TConclusionStatus TStandaloneSchemaUpdate::DoInitializeImpl(const TUpda
                 << ": new: " << targetSchema.GetColumns().GetColumns().size()
                 << ". Limit: " << limits.MaxColumnTableColumns;
             return TConclusionStatus::Fail(errStr);
+        }
+    }
+
+    if (!AppData()->FeatureFlags.GetEnableSparsedColumns()) {
+        for (auto& [_, column]: targetSchema.GetColumns().GetColumns()) {
+            if (column.GetDefaultValue().GetValue() || (column.GetAccessorConstructor().GetClassName() == NKikimr::NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName)) {
+                return TConclusionStatus::Fail("schema update error: sparsed columns are disabled");
+            }
         }
     }
 

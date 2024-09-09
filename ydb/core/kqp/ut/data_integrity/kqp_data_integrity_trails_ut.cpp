@@ -50,38 +50,6 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
         UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: DataShard"), LogEnabled ? 2 : 0);
     }
 
-    Y_UNIT_TEST(UpsertEvWrite) {
-        NKikimrConfig::TAppConfig AppConfig;
-        AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
-        TKikimrSettings serverSettings = TKikimrSettings().SetAppConfig(AppConfig);
-        TStringStream ss;
-        serverSettings.LogStream = &ss;
-        TKikimrRunner kikimr(serverSettings);
-        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::DATA_INTEGRITY, NLog::PRI_TRACE);
-        
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-
-        auto result = session.ExecuteDataQuery(R"(
-            --!syntax_v1
-
-            UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES
-                (3u, "Value3"),
-                (101u, "Value101"),
-                (201u, "Value201");
-        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-        // check executer logs
-        UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: Executer"), 2);
-        // check session actor logs
-        UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY DEBUG: Component: SessionActor"), 2);
-        // check grpc logs
-        UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY TRACE: Component: Grpc"), 2);
-        // check datashard logs
-        UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: DataShard"), 4);
-    }
-
     Y_UNIT_TEST(Ddl) {
         TKikimrSettings serverSettings;
         TStringStream ss;

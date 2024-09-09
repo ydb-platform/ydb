@@ -132,7 +132,7 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceActors) {
         // Check alter access
         TSampleQueries::CheckSuccess(ydb->ExecuteQuery(TStringBuilder() << R"(
             ALTER RESOURCE POOL )" << NResourcePool::DEFAULT_POOL_ID << R"( SET (
-                QUEUE_SIZE=1
+                QUERY_MEMORY_LIMIT_PERCENT_PER_NODE=1
             );
         )", settings));
 
@@ -205,7 +205,7 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceSubscriptions) {
 
         ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
             ALTER RESOURCE POOL )" << ydb->GetSettings().PoolId_ << R"( SET (
-                QUEUE_SIZE=42
+                CONCURRENT_QUERY_LIMIT=42
             );
         )");
 
@@ -214,7 +214,7 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceSubscriptions) {
 
         const auto& config = response->Get()->Config;
         UNIT_ASSERT_C(config, "Pool config not found");
-        UNIT_ASSERT_VALUES_EQUAL(config->QueueSize, 42);
+        UNIT_ASSERT_VALUES_EQUAL(config->ConcurrentQueryLimit, 42);
     }
 
     Y_UNIT_TEST(TestResourcePoolSubscriptionAfterAclChange) {

@@ -15,6 +15,7 @@ RECURSE(
     grpc
     http_proxy
     keys
+    lockfree_bucket
     logger
     login
     mkql_proto

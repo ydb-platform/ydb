@@ -235,6 +235,14 @@ public:
         const NYPath::TYPath& path,
         const NApi::TJournalWriterOptions& options) override;
 
+    TFuture<TDistributedWriteSessionPtr> StartDistributedWriteSession(
+        const NYPath::TRichYPath& path,
+        const TDistributedWriteSessionStartOptions& options = {}) override;
+
+    TFuture<void> FinishDistributedWriteSession(
+        TDistributedWriteSessionPtr session,
+        const TDistributedWriteSessionFinishOptions& options = {}) override;
+
     // Custom methods.
 
     //! Returns proxy address this transaction is sticking to.

@@ -2,9 +2,9 @@
 
 {% include notitle [practice_tag](../../tags.md#practice) %}
 
-[ {{ team.fomichev.name }} ]( {{ team.fomichev.profile }} ) ( {{ team.fomichev.position }} ), [ {{ team.zinal.name }} ](  {{ team.zinal.profile }} ) ( {{ team.zinal.position }} ), [  {{ team.nizametdinov.name }} ]( {{ team.nizametdinov.profile }} ) ( {{ team.nizametdinov.position }} ), [ {{ team.kulin.name }} ]( {{ team.kulin.profile }} ) ( {{ team.kulin.position }} ) объяснили, что такое CDC и какие задачи с помощью него можно решить сейчас и в перспективе. Основной упор в вебинаре сделан на практику – продемонстрировано, как с помощью CDC поддерживать актуальное состояние кэша базы данных оперативной памяти приложения. Пример выполнен в виде программы на языке Go, в ней также покажем приёмы работы с YDB Go SDK. 
+[ {{ team.fomichev.name }} ]( {{ team.fomichev.profile }} ) ( {{ team.fomichev.position }} ), [ {{ team.zinal.name }} ](  {{ team.zinal.profile }} ) ( {{ team.zinal.position }} ), [  {{ team.nizametdinov.name }} ]( {{ team.nizametdinov.profile }} ) ( {{ team.nizametdinov.position }} ), [ {{ team.kulin.name }} ]( {{ team.kulin.profile }} ) ( {{ team.kulin.position }} ) объяснили, что такое CDC и какие задачи с помощью него можно решить сейчас и в перспективе. Основной упор в вебинаре сделан на практику – продемонстрировано, как с помощью CDC поддерживать актуальное состояние кэша базы данных оперативной памяти приложения. Пример выполнен в виде программы на языке Go, в ней также покажем приёмы работы с YDB Go SDK.
 
-В вебинаре: 
+В вебинаре:
 * включение CDC для таблицы;
 * прослушивание потока изменений;
 * работа с CDC, c использованием командного интерпретатора YDB CLI.
@@ -15,7 +15,7 @@
 
 {% include notitle [practice_tag](../../tags.md#practice) %}
 
-Применение {{ ydb-name }} как управляемого сервиса позволяет разработчикам и архитекторам сосредоточиться на бизнес-задачах, а команда Yandex Cloud возьмёт на себя заботы о надёжности, производительности и ресурсной эффективности баз данных. 
+Применение {{ ydb-name }} как управляемого сервиса позволяет разработчикам и архитекторам сосредоточиться на бизнес-задачах, а команда Yandex Cloud возьмёт на себя заботы о надёжности, производительности и ресурсной эффективности баз данных.
 
 В вебинаре [ {{ team.zinal.name }} ]( {{ team.zinal.profile }} ) ( {{ team.zinal.position }} ) показал:
 * [YDB в целом и сервис YDB в Yandex Cloud](https://www.youtube.com/watch?v=d5NEDzsyp7Q&t=90s).

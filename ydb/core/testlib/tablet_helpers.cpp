@@ -88,14 +88,14 @@ namespace NKikimr {
             const ui64 tabletId = ev->Get()->TabletId;
             auto& entry = Entries[tabletId];
             if (!entry) {
-                entry = new TMediatorTimecastEntry();
+                entry = new TMediatorTimecastSharedEntry();
             }
 
-            ctx.Send(ev->Sender, new TEvMediatorTimecast::TEvRegisterTabletResult(tabletId, entry));
+            ctx.Send(ev->Sender, new TEvMediatorTimecast::TEvRegisterTabletResult(tabletId, new TMediatorTimecastEntry(entry, entry)));
         }
 
     private:
-        THashMap<ui64, TIntrusivePtr<TMediatorTimecastEntry>> Entries;
+        THashMap<ui64, TIntrusivePtr<TMediatorTimecastSharedEntry>> Entries;
     };
 
     void SetupMediatorTimecastProxy(TTestActorRuntime& runtime, ui32 nodeIndex, bool useFake = false)

@@ -561,7 +561,9 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
     Y_UNIT_TEST(AlterTtl) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnvOptions options;
+        options.EnableTieringInColumnShard(true);
+        TTestEnv env(runtime, options);
         ui64 txId = 100;
 
         TString olapSchema = R"(
@@ -642,8 +644,8 @@ Y_UNIT_TEST_SUITE(TOlap) {
         runtime.UpdateCurrentTime(TInstant::Now() - TDuration::Seconds(600));
 
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
-        csController->SetPeriodicWakeupActivationPeriod(TDuration::Seconds(1));
-        csController->SetLagForCompactionBeforeTierings(TDuration::Seconds(1));
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
         csController->SetOverrideReduceMemoryIntervalLimit(1LLU << 30);
 
         // disable stats batching

@@ -6,7 +6,7 @@
 namespace NKikimr::NOlap {
 
 std::unique_ptr<NKikimr::TEvColumnShard::TEvInternalScan> TModificationRestoreTask::DoBuildRequestInitiator() const {
-    auto request = std::make_unique<TEvColumnShard::TEvInternalScan>(LocalPathId);
+    auto request = std::make_unique<TEvColumnShard::TEvInternalScan>(LocalPathId, WriteData.GetWriteMeta().GetLockIdOptional());
     request->ReadToSnapshot = Snapshot;
     auto pkData = NArrow::TColumnOperator().VerifyIfAbsent().Extract(IncomingData, ActualSchema->GetPKColumnNames());
     request->RangesFilter = TPKRangesFilter::BuildFromRecordBatchLines(pkData, false);
@@ -21,7 +21,7 @@ NKikimr::TConclusionStatus TModificationRestoreTask::DoOnDataChunk(const std::sh
     if (result.IsFail()) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "merge_data_problems")
             ("write_id", WriteData.GetWriteMeta().GetWriteId())("tablet_id", TabletId)("message", result.GetErrorMessage());
-        SendErrorMessage(result.GetErrorMessage());
+        SendErrorMessage(result.GetErrorMessage(), NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Request);
     }
     return result;
 }
@@ -29,7 +29,7 @@ NKikimr::TConclusionStatus TModificationRestoreTask::DoOnDataChunk(const std::sh
 void TModificationRestoreTask::DoOnError(const TString& errorMessage) {
     AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "restore_data_problems")("write_id", WriteData.GetWriteMeta().GetWriteId())(
         "tablet_id", TabletId)("message", errorMessage);
-    SendErrorMessage(errorMessage);
+    SendErrorMessage(errorMessage, NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Internal);
 }
 
 NKikimr::TConclusionStatus TModificationRestoreTask::DoOnFinished() {
@@ -61,10 +61,10 @@ TModificationRestoreTask::TModificationRestoreTask(const ui64 tabletId, const NA
 
 }
 
-void TModificationRestoreTask::SendErrorMessage(const TString& errorMessage) {
+void TModificationRestoreTask::SendErrorMessage(const TString& errorMessage, const NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass errorClass) {
     auto writeDataPtr = std::make_shared<NEvWrite::TWriteData>(std::move(WriteData));
     TWritingBuffer buffer(writeDataPtr->GetBlobsAction(), { std::make_shared<TWriteAggregation>(*writeDataPtr) });
-    auto evResult = NColumnShard::TEvPrivate::TEvWriteBlobsResult::Error(NKikimrProto::EReplyStatus::CORRUPTED, std::move(buffer), errorMessage);
+    auto evResult = NColumnShard::TEvPrivate::TEvWriteBlobsResult::Error(NKikimrProto::EReplyStatus::CORRUPTED, std::move(buffer), errorMessage, errorClass);
     TActorContext::AsActorContext().Send(ParentActorId, evResult.release());
 }
 

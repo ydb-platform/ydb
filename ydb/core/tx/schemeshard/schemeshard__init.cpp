@@ -1826,7 +1826,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     Y_ABORT_UNLESS(parseOk);
 
                     if (tableInfo->IsAsyncReplica()) {
-                        Self->PathsById.at(pathId)->SetAsyncReplica();
+                        Self->PathsById.at(pathId)->SetAsyncReplica(true);
                     }
                 }
 
@@ -4210,8 +4210,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     TString settings = rowset.GetValue<Schema::Exports::Settings>();
                     auto domainPathId = TPathId(rowset.GetValueOrDefault<Schema::Exports::DomainPathOwnerId>(selfId),
                                                 rowset.GetValue<Schema::Exports::DomainPathId>());
+                    TString peerName = rowset.GetValueOrDefault<Schema::Exports::PeerName>();
 
-                    TExportInfo::TPtr exportInfo = new TExportInfo(id, uid, kind, settings, domainPathId);
+                    TExportInfo::TPtr exportInfo = new TExportInfo(id, uid, kind, settings, domainPathId, peerName);
 
                     if (rowset.HaveValue<Schema::Exports::UserSID>()) {
                         exportInfo->UserSID = rowset.GetValue<Schema::Exports::UserSID>();
@@ -4308,11 +4309,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     TImportInfo::EKind kind = static_cast<TImportInfo::EKind>(rowset.GetValue<Schema::Imports::Kind>());
                     auto domainPathId = TPathId(rowset.GetValue<Schema::Imports::DomainPathOwnerId>(),
                                                 rowset.GetValue<Schema::Imports::DomainPathLocalId>());
+                    TString peerName = rowset.GetValueOrDefault<Schema::Imports::PeerName>();
 
                     Ydb::Import::ImportFromS3Settings settings;
                     Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(settings, rowset.GetValue<Schema::Imports::Settings>()));
 
-                    TImportInfo::TPtr importInfo = new TImportInfo(id, uid, kind, settings, domainPathId);
+                    TImportInfo::TPtr importInfo = new TImportInfo(id, uid, kind, settings, domainPathId, peerName);
 
                     if (rowset.HaveValue<Schema::Imports::UserSID>()) {
                         importInfo->UserSID = rowset.GetValue<Schema::Imports::UserSID>();
@@ -4405,9 +4407,11 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 while (!rowset.EndOfSet()) {
                     TIndexBuildInfo::TPtr indexInfo = TIndexBuildInfo::FromRow(rowset);
 
-                    Y_ABORT_UNLESS(!Self->IndexBuilds.contains(indexInfo->Id));
-                    Self->IndexBuilds[indexInfo->Id] = indexInfo;
+                    auto [it, emplaced] = Self->IndexBuilds.emplace(indexInfo->Id, indexInfo);
+                    Y_ABORT_UNLESS(emplaced);
                     if (indexInfo->Uid) {
+                        // TODO(mbkkt) It also should be unique, but we're not sure.
+                        Y_ASSERT(!Self->IndexBuildsByUid.contains(indexInfo->Uid));
                         Self->IndexBuildsByUid[indexInfo->Uid] = indexInfo;
                     }
 
@@ -4433,11 +4437,11 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 while (!rowset.EndOfSet()) {
                     TIndexBuildId id = rowset.GetValue<Schema::IndexBuildColumns::Id>();
-                    Y_VERIFY_S(Self->IndexBuilds.contains(id), "BuildIndex not found"
+                    const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(id);
+                    Y_VERIFY_S(buildInfoPtr, "BuildIndex not found"
                                    << ": id# " << id);
-
-                    TIndexBuildInfo::TPtr buildInfo = Self->IndexBuilds.at(id);
-                    buildInfo->AddIndexColumnInfo(rowset);
+                    auto& buildInfo = *buildInfoPtr->Get();
+                    buildInfo.AddIndexColumnInfo(rowset);
 
                     if (!rowset.Next()) {
                         return false;
@@ -4453,11 +4457,11 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 while (!rowset.EndOfSet()) {
                     TIndexBuildId id = rowset.GetValue<Schema::BuildColumnOperationSettings::Id>();
-                    Y_VERIFY_S(Self->IndexBuilds.contains(id), "BuildIndex not found"
+                    const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(id);
+                    Y_VERIFY_S(buildInfoPtr, "BuildIndex not found"
                                    << ": id# " << id);
-
-                    TIndexBuildInfo::TPtr buildInfo = Self->IndexBuilds.at(id);
-                    buildInfo->AddBuildColumnInfo(rowset);
+                    auto& buildInfo = *buildInfoPtr->Get();
+                    buildInfo.AddBuildColumnInfo(rowset);
 
                     if (!rowset.Next()) {
                         return false;
@@ -4474,11 +4478,11 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 while (!rowset.EndOfSet()) {
                     TIndexBuildId id = rowset.GetValue<Schema::IndexBuildShardStatus::Id>();
-                    Y_VERIFY_S(Self->IndexBuilds.contains(id), "BuildIndex not found"
+                    const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(id);
+                    Y_VERIFY_S(buildInfoPtr, "BuildIndex not found"
                                    << ": id# " << id);
-
-                    TIndexBuildInfo::TPtr buildInfo = Self->IndexBuilds.at(id);
-                    buildInfo->AddShardStatus(rowset);
+                    auto& buildInfo = *buildInfoPtr->Get();
+                    buildInfo.AddShardStatus(rowset);
 
                     if (!rowset.Next()) {
                         return false;

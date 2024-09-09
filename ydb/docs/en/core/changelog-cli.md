@@ -12,14 +12,16 @@ Released on June 24, 2024. To update to version **2.10.0**, select the [Download
 * Added replication description support in the `ydb scheme describe` and `ydb scheme ls` commands.
 * Added big datetime types support: `Date32`, `Datetime64`, `Timestamp64`, `Interval64`.
 * `ydb workload` commands rework:
-   * Added the `--clear` option to the `init` subcommand, allowing tables from previous runs to be removed before workload initialization.
-   * Added the `ydb workload * import` command to prepopulate tables with initial content before executing benchmarks.
+
+  * Added the `--clear` option to the `init` subcommand, allowing tables from previous runs to be removed before workload initialization.
+  * Added the `ydb workload * import` command to prepopulate tables with initial content before executing benchmarks.
 
 **Backward incompatible changes:**
 
 * `ydb workload` commands rework:
-   * The `--path` option was moved to a specific workload level. For example: `ydb workload tpch --path some/tables/path init ...`.
-   * The `--store=s3` option was changed to `--store=external-s3` in the `init` subcommand.
+
+  * The `--path` option was moved to a specific workload level. For example: `ydb workload tpch --path some/tables/path init ...`.
+  * The `--store=s3` option was changed to `--store=external-s3` in the `init` subcommand.
 
 
 **Bug fixes:**
@@ -33,7 +35,7 @@ Released on April 25, 2024. To update to version **2.9.0**, select the [Download
 **Features:**
 
 * Improved query logical plan tables: added colors, more information, fixed some bugs.
-* The verbose option `-v`` is supported for `ydb workload` commands to provide debug information.
+* The verbose option `-v` is supported for `ydb workload` commands to provide debug information.
 * Added an option to run `ydb workload tpch` with an S3 source to measure [federated queries](concepts/federated_query/index.md) performance.
 * Added the `--rate` option for `ydb workload` commands to control the transactions (or requests) per second limit.
 * Added the `--use-virtual-addressing` option for S3 import/export, allowing the switch to [virtual hosting of buckets](https://docs.aws.amazon.com/AmazonS3/latest/userguide/VirtualHosting.html) for the S3 path layout.
@@ -73,7 +75,7 @@ Released on January 12, 2024. To update to version **2.8.0**, select the [Downlo
 
 * Fixed an error displaying tables in `pretty` format with [Unicode](https://en.wikipedia.org/wiki/Unicode) characters.
 
-* Fixed an error substituting the wrong primary key in the command [ydb tools pg-convert](postgresql/pg-dump.md#pg-convert).
+* Fixed an error substituting the wrong primary key in the command [ydb tools pg-convert](postgresql/import.md#pg-convert).
 
 ## Version 2.7.0 {#2-7-0}
 
@@ -81,7 +83,7 @@ Released on October 23, 2023. To update to version **2.7.0**, select the [Downlo
 
 **Features:**
 
-* Added the [ydb tools pg-convert](postgresql/pg-dump.md#pg-convert) command, which prepares a dump obtained by the [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html) utility for loading into the YDB postgres-compatible layer.
+* Added the [ydb tools pg-convert](postgresql/import.md#pg-convert) command, which prepares a dump obtained by the [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html) utility for loading into the YDB postgres-compatible layer.
 
 * Added the `ydb workload query` load testing command, which loads the database with [script execution queries](reference/ydb-cli/yql.md) in multiple threads.
 
@@ -246,16 +248,18 @@ Release date: September 20, 2022. To update to version **2.0.0**, select the [Do
 **Features:**
 
 * Added the ability to work with topics:
-   * `ydb topic create`: Create a topic.
-   * `ydb topic alter`: Update a topic.
-   * `ydb topic write`: Write data to a topic.
-   * `ydb topic read`: Read data from a topic.
-   * `ydb topic drop`: Delete a topic.
+
+  * `ydb topic create`: Create a topic.
+  * `ydb topic alter`: Update a topic.
+  * `ydb topic write`: Write data to a topic.
+  * `ydb topic read`: Read data from a topic.
+  * `ydb topic drop`: Delete a topic.
 
 * Added a new type of load testing:
-   * `ydb workload kv init`: Create a table for kv load testing.
-   * `ydb workload kv run`: Apply one of three types of load: run multiple `UPSERT` sessions, run multiple `INSERT` sessions, or run multiple sessions of GET requests by primary key.
-   * `ydb workload kv clean`: Delete a test table.
+
+  * `ydb workload kv init`: Create a table for kv load testing.
+  * `ydb workload kv run`: Apply one of three types of load: run multiple `UPSERT` sessions, run multiple `INSERT` sessions, or run multiple sessions of GET requests by primary key.
+  * `ydb workload kv clean`: Delete a test table.
 
 * Added the ability to disable current active profile (see the `ydb config profile deactivate` command).
 * Added the ability to delete a profile non-interactively with no commit (see the `--force` option under the `ydb config profile remove` command).

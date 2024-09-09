@@ -11,28 +11,30 @@ Query execution stage.
 **UI representation**:
 ![stage](_assets/stage.png)
 
-A stage can contatin the following operations:
+A stage can contain the following operations:
 
 #### TableFullScan
 Full table scan. This operation's resource consumption is proportional to the table size, so it should be avoided whenever possible.
 
-Attribute | Description 
---- | --- 
+Attribute | Description
+--- | ---
 Table | table name
 ReadColumns | read columns list
 ReadLimit | read rows limit
 Reverse | flag indicating the order in which the rows will be read, by default the order is forward (ascending), but if the flag is set to `true`, the reading order will be reversed (descending).
+Parallel | flag indicating that rows will be read from shards in parallel
 
 #### TableRangeScan
 Reading a table by a specific primary key range.
 
 Attribute | Description
---- | --- 
+--- | ---
 Table | table name
 ReadColumns | read columns list
 ReadRange | key range
 ReadLimit | read rows limit
 Reverse | flag indicating the order in which the rows will be read, by default the order is forward (ascending), but if the flag is set to `true`, the reading order will be reversed (descending).
+Parallel | flag indicating that rows will be read from shards in parallel
 
 #### TablePointLookup
 Reading a table by specific primary key values. Note that for this operation, all components of the primary key should be specified. Reading by a key prefix is performed as a `TableRangeScan` operation.
@@ -68,7 +70,7 @@ Attribute | Description
 Predicate | filtering condition
 Limit | rows limit
 
-#### Aggregate 
+#### Aggregate
 Grouping rows by the values of the specified columns or expressions.
 
 Attribute | Description

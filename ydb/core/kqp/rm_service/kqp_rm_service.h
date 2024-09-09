@@ -139,9 +139,9 @@ public:
     }
 
     TString ToString() const {
-        auto res = TStringBuilder() << "TxResourcesInfo{ "
+        auto res = TStringBuilder() << "TxResourcesInfo { "
             << "TxId: " << TxId
-            << "Database: " << Database;
+            << ", Database: " << Database;
 
         if (!PoolId.empty()) {
             res << ", PoolId: " << PoolId
@@ -149,7 +149,7 @@ public:
         }
 
         res << ", memory initially granted resources: " << TxExternalDataQueryMemory.load()
-            << ", extra allocations " << TxScanQueryMemory.load()
+            << ", tx total allocations " << TxScanQueryMemory.load()
             << ", execution units: " << TxExecutionUnits.load()
             << ", started at: " << CreatedAt
             << " }";
@@ -236,6 +236,13 @@ struct TKqpLocalNodeResources {
     std::array<ui64, EKqpMemoryPool::Count> Memory;
 };
 
+struct TPlannerPlacingOptions {
+    ui64 MaxNonParallelTasksExecutionLimit = 8;
+    ui64 MaxNonParallelDataQueryTasksLimit = 1000;
+    ui64 MaxNonParallelTopStageExecutionLimit = 1;
+    bool PreferLocalDatacenterExecution = true;
+};
+
 /// per node singleton with instant API
 class IKqpResourceManager : private TNonCopyable {
 public:
@@ -245,6 +252,7 @@ public:
 
     virtual TKqpRMAllocateResult AllocateResources(TIntrusivePtr<TTxState>& tx, TIntrusivePtr<TTaskState>& task, const TKqpResourcesRequest& resources) = 0;
 
+    virtual TPlannerPlacingOptions GetPlacingOptions() = 0;
     virtual TTaskResourceEstimation EstimateTaskResources(const NYql::NDqProto::TDqTask& task, const ui32 tasksCount) = 0;
     virtual void EstimateTaskResources(TTaskResourceEstimation& result, const ui32 tasksCount) = 0;
 

@@ -113,10 +113,10 @@ public:
         Direct = FromStringWithDefault<bool>(params.Get("direct"), Direct);
         OffloadMerge = FromStringWithDefault<bool>(params.Get("offload_merge"), OffloadMerge);
         MetadataCache = FromStringWithDefault<bool>(params.Get("metadata_cache"), MetadataCache);
+        Direct |= !TBase::Event->Get()->Request.GetHeader("X-Forwarded-From-Node").empty(); // we're already forwarding
         Direct |= (Database == AppData()->TenantName); // we're already on the right node
         if (Database && !Direct) {
-            RequestStateStorageEndpointsLookup(Database); // to find some dynamic node and redirect query there
-            Become(&TThis::StateResolvingDatabase, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
+            return RedirectToDatabase(Database); // to find some dynamic node and redirect query there
         } else {
             TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
             auto* domain = domains->GetDomain();
@@ -158,17 +158,6 @@ public:
             }
         }
         TBase::PassAway();
-    }
-
-    void HandleResolvingDatabase(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
-        TBase::ReplyAndPassAway(MakeForward(GetNodesFromBoardReply(ev)));
-    }
-
-    STATEFN(StateResolvingDatabase) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvStateStorage::TEvBoardInfo, HandleResolvingDatabase);
-            cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
-        }
     }
 
     STATEFN(StateCollectingInfo) {
@@ -390,7 +379,7 @@ public:
         TString path = GetPath(ev);
         auto& result(NavigateKeySetResult[path]);
         result.Set(std::move(ev));
-        if (result.Get()->Request->ResultSet.size() == 1 && result.Get()->Request->ResultSet.begin()->Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
+        if (result.IsOk()) {
             auto domainInfo = result.Get()->Request->ResultSet.begin()->DomainInfo;
             TTabletId hiveId = domainInfo->Params.GetHive();
             if (hiveId) {
@@ -656,35 +645,38 @@ public:
                 TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
                 auto* domain = domains->GetDomain();
                 TStackVec<TTabletId, 64> tablets;
-                for (TTabletId tabletId : entry.DomainInfo->Params.GetCoordinators()) {
-                    tablets.emplace_back(tabletId);
-                }
-                for (TTabletId tabletId : entry.DomainInfo->Params.GetMediators()) {
-                    tablets.emplace_back(tabletId);
-                }
-                if (entry.DomainInfo->Params.HasSchemeShard()) {
-                    tablets.emplace_back(entry.DomainInfo->Params.GetSchemeShard());
-                } else {
-
-                    tablets.emplace_back(domain->SchemeRoot);
-                    tablets.emplace_back(MakeBSControllerID());
-                    tablets.emplace_back(MakeConsoleID());
-                }
-                TTabletId hiveId = domains->GetHive();
-                if (entry.DomainInfo->Params.HasHive()) {
-                    hiveId = entry.DomainInfo->Params.GetHive();
-                } else {
-                    if (tenant.GetType() == NKikimrViewer::Serverless) {
-                        auto itResourceNavigate = NavigateKeySetResult.find(tenant.GetResourceId());
-                        if (itResourceNavigate != NavigateKeySetResult.end() && itResourceNavigate->second.IsOk()) {
-                            NSchemeCache::TSchemeCacheNavigate::TEntry entry = itResourceNavigate->second.Get()->Request->ResultSet.front();
-                            if (entry.DomainInfo->Params.HasHive()) {
-                                hiveId = entry.DomainInfo->Params.GetHive();
+                TTabletId hiveId;
+                if (entry.DomainInfo) {
+                    for (TTabletId tabletId : entry.DomainInfo->Params.GetCoordinators()) {
+                        tablets.emplace_back(tabletId);
+                    }
+                    for (TTabletId tabletId : entry.DomainInfo->Params.GetMediators()) {
+                        tablets.emplace_back(tabletId);
+                    }
+                    if (entry.DomainInfo->Params.HasSchemeShard()) {
+                        tablets.emplace_back(entry.DomainInfo->Params.GetSchemeShard());
+                    } else {
+                        tablets.emplace_back(domain->SchemeRoot);
+                    }
+                    if (entry.DomainInfo->Params.HasHive()) {
+                        tablets.emplace_back(hiveId = entry.DomainInfo->Params.GetHive());
+                    } else {
+                        if (tenant.GetType() == NKikimrViewer::Serverless) {
+                            auto itResourceNavigate = NavigateKeySetResult.find(tenant.GetResourceId());
+                            if (itResourceNavigate != NavigateKeySetResult.end() && itResourceNavigate->second.IsOk()) {
+                                NSchemeCache::TSchemeCacheNavigate::TEntry entry = itResourceNavigate->second.Get()->Request->ResultSet.front();
+                                if (entry.DomainInfo->Params.HasHive()) {
+                                    tablets.emplace_back(hiveId = entry.DomainInfo->Params.GetHive());
+                                }
                             }
+                        } else {
+                            tablets.emplace_back(hiveId = domains->GetHive());
                         }
                     }
+                } else {
+                    tablets.emplace_back(domain->SchemeRoot);
+                    tablets.emplace_back(hiveId = domains->GetHive());
                 }
-                tablets.emplace_back(hiveId);
 
                 if (SystemTablets) {
                     for (TTabletId tabletId : tablets) {

@@ -121,6 +121,11 @@ TConclusion<bool> TPredicateFilter::DoExecuteInplace(const std::shared_ptr<IData
 TConclusion<bool> TSnapshotFilter::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
     auto filter = MakeSnapshotFilter(
         source->GetStageData().GetTable()->BuildTableVerified(), source->GetContext()->GetReadMetadata()->GetRequestSnapshot());
+    if (filter.GetFilteredCount().value_or(source->GetRecordsCount()) != source->GetRecordsCount()) {
+        if (source->AddTxConflict()) {
+            return true;
+        }
+    }
     source->MutableStageData().AddFilter(filter);
     return true;
 }
@@ -222,8 +227,8 @@ TConclusion<bool> TAllocateMemoryStep::DoExecuteInplace(
     const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
 
     auto allocation = std::make_shared<TFetchingStepAllocation>(source, GetProcessingDataSize(source), step);
-    NGroupedMemoryManager::TScanMemoryLimiterOperator::SendToAllocation(
-        source->GetContext()->GetProcessMemoryControlId(), source->GetFirstIntervalId(), { allocation }, (ui32)StageIndex);
+    NGroupedMemoryManager::TScanMemoryLimiterOperator::SendToAllocation(source->GetContext()->GetProcessMemoryControlId(),
+        source->GetContext()->GetCommonContext()->GetScanId(), source->GetFirstIntervalId(), { allocation }, (ui32)StageIndex);
     return false;
 }
 

@@ -685,7 +685,7 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
 
         // Block plan steps at tablet 1
         TBlockEvents<TEvTxProcessing::TEvPlanStep> blockedPlan1(runtime,
-            [&](TEvTxProcessing::TEvPlanStep::TPtr& ev) {
+            [&](const TEvTxProcessing::TEvPlanStep::TPtr& ev) {
                 return ev->Get()->Record.GetTabletID() == tablet1;
             });
 
@@ -943,12 +943,12 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
         WatcherState->Updates.clear();
 
         TBlockEvents<TEvTxProcessing::TEvPlanStep> blockedPlan1(runtime,
-            [&](TEvTxProcessing::TEvPlanStep::TPtr& ev) {
+            [&](const TEvTxProcessing::TEvPlanStep::TPtr& ev) {
                 return ev->Get()->Record.GetTabletID() == tablet1;
             });
 
         TBlockEvents<TEvTxProcessing::TEvPlanStep> blockedPlan2(runtime,
-            [&](TEvTxProcessing::TEvPlanStep::TPtr& ev) {
+            [&](const TEvTxProcessing::TEvPlanStep::TPtr& ev) {
                 return ev->Get()->Record.GetTabletID() == tablet2;
             });
 

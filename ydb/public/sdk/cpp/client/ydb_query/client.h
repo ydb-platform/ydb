@@ -97,9 +97,9 @@ public:
 
     TAsyncStatus RetryQuery(TQueryWithoutSessionFunc&& queryFunc, TRetryOperationSettings settings = TRetryOperationSettings());
 
-    TStatus RetryQuery(const TQuerySyncFunc& queryFunc, TRetryOperationSettings settings = TRetryOperationSettings());
+    TStatus RetryQuerySync(const TQuerySyncFunc& queryFunc, TRetryOperationSettings settings = TRetryOperationSettings());
 
-    TStatus RetryQuery(const TQueryWithoutSessionSyncFunc& queryFunc, TRetryOperationSettings settings = TRetryOperationSettings());
+    TStatus RetryQuerySync(const TQueryWithoutSessionSyncFunc& queryFunc, TRetryOperationSettings settings = TRetryOperationSettings());
 
     TAsyncExecuteQueryResult RetryQuery(const TString& query, const TTxControl& txControl,
         TDuration timeout, bool isIndempotent);

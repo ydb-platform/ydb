@@ -86,6 +86,7 @@ namespace {
         const TInterconnectProxyCommon::TPtr Common;
         const bool MergePerDataCenterCounters;
         const bool MergePerPeerCounters;
+        const bool HasSessionCounters;
         NMonitoring::TDynamicCounterPtr Counters;
         NMonitoring::TDynamicCounterPtr PerSessionCounters;
         NMonitoring::TDynamicCounterPtr PerDataCenterCounters;
@@ -102,6 +103,7 @@ namespace {
             : Common(common)
             , MergePerDataCenterCounters(common->Settings.MergePerDataCenterCounters)
             , MergePerPeerCounters(common->Settings.MergePerPeerCounters)
+            , HasSessionCounters(!MergePerDataCenterCounters && !MergePerPeerCounters)
             , Counters(common->MonCounters)
             , AdaptiveCounters(MergePerDataCenterCounters
                     ? PerDataCenterCounters :
@@ -249,7 +251,7 @@ namespace {
             }
 
             const bool updatePerSession = !PerSessionCounters || updatePerDataCenter;
-            if (updatePerSession) {
+            if (HasSessionCounters && updatePerSession) {
                 auto base = MergePerDataCenterCounters ? PerDataCenterCounters : Counters;
                 PerSessionCounters = base->GetSubgroup("peer", *HumanFriendlyPeerHostName);
             }
@@ -263,12 +265,12 @@ namespace {
                 false;
 
             if (updatePerSession) {
-                Connected = PerSessionCounters->GetCounter("Connected");
-                Disconnections = PerSessionCounters->GetCounter("Disconnections", true);
-                ClockSkewMicrosec = PerSessionCounters->GetCounter("ClockSkewMicrosec");
-                Traffic = PerSessionCounters->GetCounter("Traffic", true);
-                Events = PerSessionCounters->GetCounter("Events", true);
-                ScopeErrors = PerSessionCounters->GetCounter("ScopeErrors", true);
+                Connected = AdaptiveCounters->GetCounter("Connected");
+                Disconnections = AdaptiveCounters->GetCounter("Disconnections", true);
+                ClockSkewMicrosec = AdaptiveCounters->GetCounter("ClockSkewMicrosec");
+                Traffic = AdaptiveCounters->GetCounter("Traffic", true);
+                Events = AdaptiveCounters->GetCounter("Events", true);
+                ScopeErrors = AdaptiveCounters->GetCounter("ScopeErrors", true);
 
                 for (const auto& [id, name] : Common->ChannelName) {
                     OutputChannels.try_emplace(id, Counters->GetSubgroup("channel", name), Traffic, Events);

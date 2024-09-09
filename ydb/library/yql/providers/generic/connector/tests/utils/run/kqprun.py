@@ -13,7 +13,7 @@ from ydb.library.yql.providers.generic.connector.tests.utils.log import make_log
 from ydb.library.yql.providers.generic.connector.tests.utils.schema import Schema
 from ydb.library.yql.providers.generic.connector.tests.utils.settings import Settings, GenericSettings
 
-from ydb.library.yql.providers.generic.connector.tests.utils.run.parent import Runner
+from ydb.library.yql.providers.generic.connector.tests.utils.run.parent import Runner, DefaultTimeout
 from ydb.library.yql.providers.generic.connector.tests.utils.run.result import Result
 
 LOGGER = make_logger(__name__)
@@ -259,7 +259,7 @@ class KqpRunner(Runner):
         returncode = 0
 
         try:
-            output = subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT, timeout=60)
+            output = subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT, timeout=DefaultTimeout)
         except subprocess.CalledProcessError as e:
             LOGGER.error(
                 'Execution failed:\n\nSTDOUT: %s\n\nSTDERR: %s\n\n',

@@ -11,7 +11,6 @@ namespace NKikimr {
 class TBlobStorageGroupMirror3of4DiscoverRequest : public TBlobStorageGroupRequestActor {
     const ui64 TabletId;
     const ui32 MinGeneration;
-    const TInstant StartTime;
     const TInstant Deadline;
     const bool ReadBody;
     const bool DiscoverBlockedGeneration;
@@ -31,7 +30,6 @@ public:
         : TBlobStorageGroupRequestActor(params)
         , TabletId(params.Common.Event->TabletId)
         , MinGeneration(params.Common.Event->MinGeneration)
-        , StartTime(params.Common.Now)
         , Deadline(params.Common.Event->Deadline)
         , ReadBody(params.Common.Event->ReadBody)
         , DiscoverBlockedGeneration(params.Common.Event->DiscoverBlockedGeneration)
@@ -54,7 +52,7 @@ public:
     }
 
     void Bootstrap() override {
-        A_LOG_INFO_S("DSPDX01", "bootstrap"
+        DSP_LOG_INFO_S("DSPDX01", "bootstrap"
             << " TabletId# " << TabletId
             << " MinGeneration# " << MinGeneration
             << " Deadline# " << Deadline
@@ -92,7 +90,7 @@ public:
             s << "]";
             return s;
         };
-        R_LOG_ERROR_S("DSPDX02", "request failed"
+        DSP_LOG_ERROR_S("DSPDX02", "request failed"
             << " Status# " << NKikimrProto::EReplyStatus_Name(status)
             << " ErrorReason# " << (ErrorReason ? ErrorReason : "<none>")
             << " FailedGroupDisks# " << formatFailedGroupDisks());

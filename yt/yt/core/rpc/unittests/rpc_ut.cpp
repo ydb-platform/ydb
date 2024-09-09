@@ -968,12 +968,19 @@ TYPED_TEST(TNotGrpcTest, RequestQueueByteSizeLimit)
 
 TYPED_TEST(TRpcTest, ConcurrencyLimit)
 {
+    auto shared_counter = std::make_shared<std::atomic<int>>(0);
+
     std::vector<TFuture<void>> futures;
     for (int i = 0; i < 10; ++i) {
         TTestProxy proxy(this->CreateChannel());
         proxy.SetDefaultTimeout(TDuration::Seconds(10.0));
         auto req = proxy.SlowCall();
-        futures.push_back(req->Invoke().AsVoid());
+        futures.push_back(
+            req->Invoke()
+                .AsVoid()
+                .Apply(BIND([counter = shared_counter] {
+                    counter->fetch_add(1);
+                })));
     }
 
     Sleep(TDuration::MilliSeconds(200));
@@ -982,13 +989,15 @@ TYPED_TEST(TRpcTest, ConcurrencyLimit)
     {
         TTestProxy proxy(this->CreateChannel());
         auto req = proxy.SlowCall();
-        backlogFuture = req->Invoke().AsVoid();
+        backlogFuture =
+            req->Invoke()
+                .AsVoid()
+                .Apply(BIND([counter = shared_counter] {
+                    EXPECT_EQ(counter->load(), 10);
+                }));
     }
 
     EXPECT_TRUE(AllSucceeded(std::move(futures)).Get().IsOK());
-
-    Sleep(TDuration::MilliSeconds(200));
-    EXPECT_FALSE(backlogFuture.IsSet());
 
     EXPECT_TRUE(backlogFuture.Get().IsOK());
 }
@@ -1553,7 +1562,7 @@ TEST(TCachingChannelFactoryTest, IdleChannels)
         : public IChannelFactory
     {
     public:
-        IChannelPtr CreateChannel(const TString& /*address*/) override
+        IChannelPtr CreateChannel(const std::string& /*address*/) override
         {
             return CreateLocalChannel(Server_);
         }

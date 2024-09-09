@@ -169,7 +169,8 @@ void TInitConfigStep::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorCon
 
         if (Partition()->Config.GetVersion() < Partition()->TabletConfig.GetVersion()) {
             auto event = MakeHolder<TEvPQ::TEvChangePartitionConfig>(Partition()->TopicConverter,
-                                                                     Partition()->TabletConfig);
+                                                                     Partition()->TabletConfig,
+                                                                     NKikimrPQ::TBootstrapConfig());
             Partition()->PushFrontDistrTx(event.Release());
         }
         break;

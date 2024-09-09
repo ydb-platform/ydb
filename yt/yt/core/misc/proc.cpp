@@ -523,6 +523,20 @@ TCgroupMemoryStat GetCgroupMemoryStat(
 #endif
 }
 
+std::optional<i64> GetCgroupAnonymousMemoryLimit(
+    const TString& cgroupPath,
+    const TString& cgroupMountPoint)
+{
+#ifdef _linux_
+    TString path = cgroupMountPoint + "/memory" + cgroupPath + "/memory.anon.limit";
+    auto content = Trim(TUnbufferedFileInput(path).ReadAll(), "\n");
+    return FromString<i64>(content);
+#else
+    Y_UNUSED(cgroupPath, cgroupMountPoint);
+    return {};
+#endif
+}
+
 THashMap<TString, i64> GetVmstat()
 {
 #ifdef _linux_

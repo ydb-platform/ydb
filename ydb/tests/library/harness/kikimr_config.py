@@ -385,12 +385,16 @@ class KikimrConfigGenerator(object):
         if default_user_sid:
             self.yaml_config["domains_config"]["security_config"]["default_user_sids"] = [default_user_sid]
 
+        if os.getenv("YDB_HARD_MEMORY_LIMIT_BYTES"):
+            self.yaml_config["memory_controller_config"] = {"hard_limit_bytes": int(os.getenv("YDB_HARD_MEMORY_LIMIT_BYTES"))}
+
         if pg_compatible_expirement:
             self.yaml_config["table_service_config"]["enable_prepared_ddl"] = True
             self.yaml_config["table_service_config"]["enable_ast_cache"] = True
             self.yaml_config["table_service_config"]["index_auto_choose_mode"] = 'max_used_prefix'
             self.yaml_config["feature_flags"]['enable_temp_tables'] = True
             self.yaml_config["feature_flags"]['enable_table_pg_types'] = True
+            self.yaml_config['feature_flags']['enable_pg_syntax'] = True
             self.yaml_config['feature_flags']['enable_uniq_constraint'] = True
             if "local_pg_wire_config" not in self.yaml_config:
                 self.yaml_config["local_pg_wire_config"] = {}

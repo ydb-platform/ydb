@@ -696,38 +696,34 @@ private:
     NYql::TIssueManager IssueManager_;
 };
 
-namespace {
-
-    inline TMaybe<TString> ToMaybe(const TVector<TStringBuf>& vec) {
-        if (vec.empty()) {
-            return {};
-        }
-        return TString{vec[0]};
+inline TMaybe<TString> ToMaybe(const TVector<TStringBuf>& vec) {
+    if (vec.empty()) {
+        return {};
     }
+    return TString{vec[0]};
+}
 
-    inline const TMaybe<TString> ExtractYdbToken(const TVector<TStringBuf>& authHeadValues) {
-        if (authHeadValues.empty()) {
-            return {};
-        }
-        return TString{authHeadValues[0]};
+inline const TMaybe<TString> ExtractYdbToken(const TVector<TStringBuf>& authHeadValues) {
+    if (authHeadValues.empty()) {
+        return {};
     }
+    return TString{authHeadValues[0]};
+}
 
-    inline const TMaybe<TString> ExtractDatabaseName(const TVector<TStringBuf>& dbHeaderValues) {
-        if (dbHeaderValues.empty()) {
-            return {};
-        }
-        return CGIUnescapeRet(dbHeaderValues[0]);
+inline const TMaybe<TString> ExtractDatabaseName(const TVector<TStringBuf>& dbHeaderValues) {
+    if (dbHeaderValues.empty()) {
+        return {};
     }
+    return CGIUnescapeRet(dbHeaderValues[0]);
+}
 
-    inline TString MakeAuthError(const TString& in, NYql::TIssueManager& issues) {
-        TStringStream out;
-        out << "unauthenticated"
-            << (in ? ", " : "") << in
-            << (issues.GetIssues() ? ": " : "");
-        issues.GetIssues().PrintTo(out, true /* one line */);
-        return out.Str();
-    }
-
+inline TString MakeAuthError(const TString& in, NYql::TIssueManager& issues) {
+    TStringStream out;
+    out << "unauthenticated"
+        << (in ? ", " : "") << in
+        << (issues.GetIssues() ? ": " : "");
+    issues.GetIssues().PrintTo(out, true /* one line */);
+    return out.Str();
 }
 
 template <ui32 TRpcId, typename TReq, typename TResp, TRateLimiterMode RlMode = TRateLimiterMode::Off>

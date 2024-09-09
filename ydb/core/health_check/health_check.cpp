@@ -251,6 +251,7 @@ public:
     struct TGroupState {
         TString ErasureSpecies;
         std::vector<const NKikimrSysView::TVSlotEntry*> VSlots;
+        ui32 Generation;
     };
 
     struct TSelfCheckResult {
@@ -1276,12 +1277,17 @@ public:
         for (const auto& group : Groups->GetEntries()) {
             auto groupId = group.GetKey().GetGroupId();
             auto poolId = group.GetInfo().GetStoragePoolId();
-            GroupState[groupId].ErasureSpecies = group.GetInfo().GetErasureSpeciesV2();
+            auto& groupState = GroupState[groupId];
+            groupState.ErasureSpecies = group.GetInfo().GetErasureSpeciesV2();
+            groupState.Generation = group.GetInfo().GetGeneration();
             StoragePoolState[poolId].Groups.emplace(groupId);
         }
         for (const auto& vSlot : VSlots->GetEntries()) {
             auto vSlotId = GetVSlotId(vSlot.GetKey());
-            GroupState[vSlot.GetInfo().GetGroupId()].VSlots.push_back(&vSlot);
+            auto groupStateIt = GroupState.find(vSlot.GetInfo().GetGroupId());
+            if (groupStateIt != GroupState.end() && vSlot.GetInfo().GetGroupGeneration() == groupStateIt->second.Generation) {
+                groupStateIt->second.VSlots.push_back(&vSlot);
+            }
         }
         for (const auto& pool : StoragePools->GetEntries()) { // there is no specific pool for static group here
             ui64 poolId = pool.GetKey().GetStoragePoolId();
@@ -1320,15 +1326,15 @@ public:
     static void Check(TSelfCheckContext& context, const NKikimrWhiteboard::TSystemStateInfo::TPoolStats& poolStats) {
         if (poolStats.name() == "System" || poolStats.name() == "IC" || poolStats.name() == "IO") {
             if (poolStats.usage() >= 0.99) {
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Pool usage is over than 99%", ETags::OverloadState);
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Pool usage is over 99%", ETags::OverloadState);
             } else if (poolStats.usage() >= 0.95) {
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Pool usage is over than 95%", ETags::OverloadState);
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Pool usage is over 95%", ETags::OverloadState);
             } else {
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
             }
         } else {
             if (poolStats.usage() >= 0.99) {
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Pool usage is over than 99%", ETags::OverloadState);
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Pool usage is over 99%", ETags::OverloadState);
             } else {
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
             }
@@ -1524,9 +1530,9 @@ public:
                 if (static_cast<i64>(domain.GetPathsLimit()) - static_cast<i64>(domain.GetPathsInside()) <= 1) {
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Paths quota exhausted", ETags::QuotaUsage);
                 } else if (usage >= 0.99) {
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Paths quota usage is over than 99%", ETags::QuotaUsage);
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Paths quota usage is over 99%", ETags::QuotaUsage);
                 } else if (usage >= 0.90) {
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Paths quota usage is over than 90%", ETags::QuotaUsage);
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Paths quota usage is over 90%", ETags::QuotaUsage);
                 } else {
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
                 }
@@ -1537,9 +1543,9 @@ public:
                 if (static_cast<i64>(domain.GetShardsLimit()) - static_cast<i64>(domain.GetShardsInside()) <= 1) {
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Shards quota exhausted", ETags::QuotaUsage);
                 } else if (usage >= 0.99) {
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Shards quota usage is over than 99%", ETags::QuotaUsage);
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Shards quota usage is over 99%", ETags::QuotaUsage);
                 } else if (usage >= 0.90) {
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Shards quota usage is over than 90%", ETags::QuotaUsage);
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Shards quota usage is over 90%", ETags::QuotaUsage);
                 } else {
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
                 }
@@ -1782,6 +1788,13 @@ public:
 
         storageVDiskStatus.set_id(GetVSlotId(vSlot->GetKey()));
 
+        if (!vSlot->GetInfo().HasStatusV2()) {
+            // this should mean that BSC recently restarted and does not have accurate data yet - we should not report to avoid false positives
+            context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
+            storageVDiskStatus.set_overall(context.GetOverallStatus());
+            return;
+        }
+
         const auto *descriptor = NKikimrBlobStorage::EVDiskStatus_descriptor();
         auto status = descriptor->FindValueByName(vSlot->GetInfo().GetStatusV2());
         if (!status) { // this case is not expected because becouse bsc assignes status according EVDiskStatus enum
@@ -1801,16 +1814,12 @@ public:
                 storageVDiskStatus.set_overall(context.GetOverallStatus());
                 return;
             }
-            case NKikimrBlobStorage::INIT_PENDING: { // initialization in process
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, TStringBuilder() << "VDisk is being initialized", ETags::VDiskState);
-                storageVDiskStatus.set_overall(context.GetOverallStatus());
-                return;
-            }
             case NKikimrBlobStorage::REPLICATING: { // the disk accepts queries, but not all the data was replicated
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::BLUE, TStringBuilder() << "Replication in progress", ETags::VDiskState);
                 storageVDiskStatus.set_overall(context.GetOverallStatus());
                 return;
             }
+            case NKikimrBlobStorage::INIT_PENDING:
             case NKikimrBlobStorage::READY: { // the disk is fully operational and does not affect group fault tolerance
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
             }
@@ -1984,9 +1993,9 @@ public:
 
         switch (vDiskInfo.GetVDiskState()) {
             case NKikimrWhiteboard::EVDiskState::OK:
+            case NKikimrWhiteboard::EVDiskState::Initial:
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
                 break;
-            case NKikimrWhiteboard::EVDiskState::Initial:
             case NKikimrWhiteboard::EVDiskState::SyncGuidRecovery:
                 context.IssueRecords.clear();
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW,
@@ -2066,7 +2075,7 @@ public:
             ++DisksColors[status];
             switch (status) {
                 case Ydb::Monitoring::StatusFlag::BLUE: // disk is good, but not available
-                case Ydb::Monitoring::StatusFlag::YELLOW: // disk is initializing, not currently available
+                // No yellow or orange status here - this is intentional - they are used when a disk is running out of space, but is currently available
                 case Ydb::Monitoring::StatusFlag::RED: // disk is bad, probably not available
                 case Ydb::Monitoring::StatusFlag::GREY: // the status is absent, the disk is not available
                     IncrementFor(realm);
@@ -2082,7 +2091,7 @@ public:
             if (ErasureSpecies == NONE) {
                 if (FailedDisks > 0) {
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Group failed", ETags::GroupState, {ETags::VDiskState});
-                } else if (DisksColors[Ydb::Monitoring::StatusFlag::YELLOW] > 0) {
+                } else if (DisksColors[Ydb::Monitoring::StatusFlag::YELLOW] > 0 || DisksColors[Ydb::Monitoring::StatusFlag::ORANGE] > 0) {
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Group degraded", ETags::GroupState, {ETags::VDiskState});
                 }
             } else if (ErasureSpecies == BLOCK_4_2) {
@@ -2096,7 +2105,7 @@ public:
                     } else {
                         context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Group degraded", ETags::GroupState, {ETags::VDiskState});
                     }
-                } else if (DisksColors[Ydb::Monitoring::StatusFlag::YELLOW] > 0) {
+                } else if (DisksColors[Ydb::Monitoring::StatusFlag::YELLOW] > 0 || DisksColors[Ydb::Monitoring::StatusFlag::ORANGE] > 0) {
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Group degraded", ETags::GroupState, {ETags::VDiskState});
                 }
             } else if (ErasureSpecies == MIRROR_3_DC) {
@@ -2110,7 +2119,7 @@ public:
                     } else {
                         context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Group degraded", ETags::GroupState, {ETags::VDiskState});
                     }
-                } else if (DisksColors[Ydb::Monitoring::StatusFlag::YELLOW] > 0) {
+                } else if (DisksColors[Ydb::Monitoring::StatusFlag::YELLOW] > 0 || DisksColors[Ydb::Monitoring::StatusFlag::ORANGE] > 0) {
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Group degraded", ETags::GroupState, {ETags::VDiskState});
                 }
             }
@@ -2232,15 +2241,15 @@ public:
                             break;
                         }
                         case ETags::VDiskState: {
-                            message = std::regex_replace(message.c_str(), std::regex("^VDisk has "), "VDisk have ");
+                            message = std::regex_replace(message.c_str(), std::regex("^VDisk has "), "VDisks have ");
                             message = std::regex_replace(message.c_str(), std::regex("^VDisk is "), "VDisks are ");
-                            message = std::regex_replace(message.c_str(), std::regex("^VDisk "), "VDisk ");
+                            message = std::regex_replace(message.c_str(), std::regex("^VDisk "), "VDisks ");
                             break;
                         }
                         case ETags::PDiskState: {
-                            message = std::regex_replace(message.c_str(), std::regex("^PDisk has "), "PDisk have ");
+                            message = std::regex_replace(message.c_str(), std::regex("^PDisk has "), "PDisks have ");
                             message = std::regex_replace(message.c_str(), std::regex("^PDisk is "), "PDisks are ");
-                            message = std::regex_replace(message.c_str(), std::regex("^PDisk "), "PDisk ");
+                            message = std::regex_replace(message.c_str(), std::regex("^PDisk "), "PDisks ");
                             break;
                         }
                         default:

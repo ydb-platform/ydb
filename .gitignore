@@ -26,6 +26,9 @@ __pycache__/
 *.pb.h
 *.pb.cc
 
+# Other generated
+*.fbs.h
+
 # MacOS specific
 .DS_Store
 
@@ -40,6 +43,7 @@ __pycache__/
 .idea/
 .vscode/
 .clangd
+.antlr/
 
 # KDevelop IDE
 *.kdev4

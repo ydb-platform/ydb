@@ -7,7 +7,8 @@ namespace NKikimr::NOlap::NGroupedMemoryManager {
 
 TAllocationGuard::~TAllocationGuard() {
     if (TlsActivationContext && !Released) {
-        NActors::TActivationContext::AsActorContext().Send(ActorId, std::make_unique<NEvents::TEvExternal::TEvFinishTask>(ProcessId, AllocationId));
+        NActors::TActivationContext::AsActorContext().Send(
+            ActorId, std::make_unique<NEvents::TEvExternal::TEvFinishTask>(ProcessId, ScopeId, AllocationId));
     }
 }
 
@@ -16,7 +17,7 @@ void TAllocationGuard::Update(const ui64 newVolume) {
     Memory = newVolume;
     if (TlsActivationContext) {
         NActors::TActivationContext::AsActorContext().Send(
-            ActorId, std::make_unique<NEvents::TEvExternal::TEvUpdateTask>(ProcessId, AllocationId, newVolume));
+            ActorId, std::make_unique<NEvents::TEvExternal::TEvUpdateTask>(ProcessId, ScopeId, AllocationId, newVolume));
     }
 }
 
@@ -30,16 +31,19 @@ bool IAllocation::OnAllocated(std::shared_ptr<TAllocationGuard>&& guard, const s
 
 TGroupGuard::~TGroupGuard() {
     if (TlsActivationContext) {
-        NActors::TActivationContext::AsActorContext().Send(ActorId, std::make_unique<NEvents::TEvExternal::TEvFinishGroup>(ProcessId, GroupId));
+        NActors::TActivationContext::AsActorContext().Send(
+            ActorId, std::make_unique<NEvents::TEvExternal::TEvFinishGroup>(ProcessId, ExternalScopeId, GroupId));
     }
 }
 
-TGroupGuard::TGroupGuard(const NActors::TActorId& actorId, const ui64 processId, const ui64 groupId)
+TGroupGuard::TGroupGuard(const NActors::TActorId& actorId, const ui64 processId, const ui64 externalScopeId, const ui64 groupId)
     : ActorId(actorId)
     , ProcessId(processId)
+    , ExternalScopeId(externalScopeId)
     , GroupId(groupId) {
     if (TlsActivationContext) {
-        NActors::TActivationContext::AsActorContext().Send(ActorId, std::make_unique<NEvents::TEvExternal::TEvStartGroup>(ProcessId, GroupId));
+        NActors::TActivationContext::AsActorContext().Send(
+            ActorId, std::make_unique<NEvents::TEvExternal::TEvStartGroup>(ProcessId, ExternalScopeId, GroupId));
     }
 }
 
@@ -54,6 +58,21 @@ TProcessGuard::TProcessGuard(const NActors::TActorId& actorId, const ui64 proces
     , ProcessId(processId) {
     if (TlsActivationContext) {
         NActors::TActivationContext::AsActorContext().Send(ActorId, std::make_unique<NEvents::TEvExternal::TEvStartProcess>(ProcessId, stages));
+    }
+}
+
+TScopeGuard::~TScopeGuard() {
+    if (TlsActivationContext) {
+        NActors::TActivationContext::AsActorContext().Send(ActorId, std::make_unique<NEvents::TEvExternal::TEvFinishProcessScope>(ProcessId, ScopeId));
+    }
+}
+
+TScopeGuard::TScopeGuard(const NActors::TActorId& actorId, const ui64 processId, const ui64 scopeId)
+    : ActorId(actorId)
+    , ProcessId(processId)
+    , ScopeId(scopeId) {
+    if (TlsActivationContext) {
+        NActors::TActivationContext::AsActorContext().Send(ActorId, std::make_unique<NEvents::TEvExternal::TEvStartProcessScope>(ProcessId, ScopeId));
     }
 }
 

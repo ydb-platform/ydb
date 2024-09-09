@@ -162,7 +162,7 @@ struct TTestReadSession : public ITestReadSession {
         TImpl(const TString& name, bool autoCommit)
             : Name(name)
             , AutoCommit(autoCommit)
-            , Semaphore(name.c_str(), SemCount) {}
+            , Semaphore((TStringBuilder() << name << "::" << RandomNumber<size_t>()).c_str(), SemCount) {}
 
         TString Name;
         std::unordered_map<ui32, ui64> Offsets;

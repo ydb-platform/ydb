@@ -48,9 +48,9 @@ SELECT Url::NormalizeWithDefaultHttpScheme("http://ydb.tech#foo"); -- "http://yd
 **Примеры**
 
 ```sql
-SELECT Url::Decode("http://ydb.tech/%D1%81%D1%82%D1%80%D0%B0%D0%BD%D0%B8%D1%86%D0%B0"); 
+SELECT Url::Decode("http://ydb.tech/%D1%81%D1%82%D1%80%D0%B0%D0%BD%D0%B8%D1%86%D0%B0");
   -- "http://ydb.tech/страница"
-SELECT Url::Encode("http://ydb.tech/страница");                                         
+SELECT Url::Encode("http://ydb.tech/страница");
   -- "http://ydb.tech/%D1%81%D1%82%D1%80%D0%B0%D0%BD%D0%B8%D1%86%D0%B0"
 ```
 
@@ -58,7 +58,9 @@ SELECT Url::Encode("http://ydb.tech/страница");
 
 Разбирает URL на составные части.
 
-* ```Url::Parse(Parse{Flags:AutoMap}) -> Struct< Frag: String?, Host: String?, ParseError: String?, Pass: String?, Path: String?, Port: String?, Query: String?, Scheme: String?, User: String? >```
+```
+Url::Parse(Parse{Flags:AutoMap}) -> Struct< Frag: String?, Host: String?, ParseError: String?, Pass: String?, Path: String?, Port: String?, Query: String?, Scheme: String?, User: String? >
+```
 
 **Примеры**
 

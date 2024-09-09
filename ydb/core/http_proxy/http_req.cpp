@@ -45,7 +45,7 @@
 #include <ydb/services/datastreams/shard_iterator.h>
 #include <ydb/services/lib/sharding/sharding.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_ymq/ymq.h>
+#include <ydb/services/ymq/grpc_service.h>
 #include <ydb/services/ymq/ymq_proxy.h>
 
 
@@ -528,6 +528,16 @@ namespace NKikimr::NHttpProxy {
                         action = NSQS::EAction::DeleteQueue;
                     } else if (Method == "ChangeMessageVisibility") {
                         action = NSQS::EAction::ChangeMessageVisibility;
+                    } else if (Method == "SetQueueAttributes") {
+                        action = NSQS::EAction::SetQueueAttributes;
+                    } else if (Method == "SendMessageBatch") {
+                        action = NSQS::EAction::SendMessageBatch;
+                    }else if (Method == "DeleteMessageBatch") {
+                        action = NSQS::EAction::DeleteMessageBatch;
+                    } else if (Method == "ChangeMessageVisibilityBatch") {
+                        action = NSQS::EAction::ChangeMessageVisibilityBatch;
+                    } else if (Method == "ListDeadLetterSourceQueues") {
+                        action = NSQS::EAction::ListDeadLetterSourceQueues;
                     }
 
                     requestHolder->SetRequestId(HttpContext.RequestId);
@@ -1046,16 +1056,16 @@ namespace NKikimr::NHttpProxy {
 
 
         #define DECLARE_YMQ_PROCESSOR_QUEUE_UNKNOWN(name) Name2YmqProcessor[#name] = MakeHolder<TYmqHttpRequestProcessor<Ydb::Ymq::V1::YmqService, Ydb::Ymq::V1::name##Request, Ydb::Ymq::V1::name##Response, Ydb::Ymq::V1::name##Result,\
-                    decltype(&Ydb::Ymq::V1::YmqService::Stub::Async##name), NKikimr::NGRpcService::TEvYmq##name##Request>> \
-                    (#name, &Ydb::Ymq::V1::YmqService::Stub::Async##name, [](Ydb::Ymq::V1::name##Request&){return "";});
+                    decltype(&Ydb::Ymq::V1::YmqService::Stub::AsyncYmq##name), NKikimr::NGRpcService::TEvYmq##name##Request>> \
+                    (#name, &Ydb::Ymq::V1::YmqService::Stub::AsyncYmq##name, [](Ydb::Ymq::V1::name##Request&){return "";});
         DECLARE_YMQ_PROCESSOR_QUEUE_UNKNOWN(GetQueueUrl);
         DECLARE_YMQ_PROCESSOR_QUEUE_UNKNOWN(CreateQueue);
         DECLARE_YMQ_PROCESSOR_QUEUE_UNKNOWN(ListQueues);
         #undef DECLARE_YMQ_PROCESSOR_QUEUE_UNKNOWN
 
         #define DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(name) Name2YmqProcessor[#name] = MakeHolder<TYmqHttpRequestProcessor<Ydb::Ymq::V1::YmqService, Ydb::Ymq::V1::name##Request, Ydb::Ymq::V1::name##Response, Ydb::Ymq::V1::name##Result,\
-                    decltype(&Ydb::Ymq::V1::YmqService::Stub::Async##name), NKikimr::NGRpcService::TEvYmq##name##Request>> \
-                    (#name, &Ydb::Ymq::V1::YmqService::Stub::Async##name, [](Ydb::Ymq::V1::name##Request& request){return request.Getqueue_url();});
+                    decltype(&Ydb::Ymq::V1::YmqService::Stub::AsyncYmq##name), NKikimr::NGRpcService::TEvYmq##name##Request>> \
+                    (#name, &Ydb::Ymq::V1::YmqService::Stub::AsyncYmq##name, [](Ydb::Ymq::V1::name##Request& request){return request.Getqueue_url();});
         DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(SendMessage);
         DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(ReceiveMessage);
         DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(GetQueueAttributes);
@@ -1063,6 +1073,11 @@ namespace NKikimr::NHttpProxy {
         DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(PurgeQueue);
         DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(DeleteQueue);
         DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(ChangeMessageVisibility);
+        DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(SetQueueAttributes);
+        DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(SendMessageBatch);
+        DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(DeleteMessageBatch);
+        DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(ChangeMessageVisibilityBatch);
+        DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(ListDeadLetterSourceQueues);
         #undef DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN
     }
 

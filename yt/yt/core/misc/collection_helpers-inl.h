@@ -350,6 +350,12 @@ const T& VectorAtOr(const std::vector<T>& vector, ssize_t index, const T& defaul
     return index < std::ssize(vector) ? vector[index] : defaultValue;
 }
 
+template <class T>
+i64 GetVectorMemoryUsage(const std::vector<T>& vector)
+{
+    return vector.capacity() * sizeof(T);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT

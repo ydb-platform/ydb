@@ -10,15 +10,43 @@
 
 namespace NKikimr {
 
-class TMediatorTimecastEntry : public TThrRefBase {
-    TAtomic Step;
+class TMediatorTimecastSharedEntry : public TThrRefBase {
 public:
-    TMediatorTimecastEntry()
-        : Step(0)
-    {}
+    using TPtr = TIntrusivePtr<TMediatorTimecastSharedEntry>;
+    using TCPtr = TIntrusiveConstPtr<TMediatorTimecastSharedEntry>;
 
-    ui64 Get(ui64 tabletId) const;
-    void Update(ui64 step, ui64 *exemption, ui64 exsz);
+    TMediatorTimecastSharedEntry() noexcept = default;
+    ~TMediatorTimecastSharedEntry() noexcept = default;
+
+    ui64 Get() const noexcept;
+    void Set(ui64 step) noexcept;
+
+private:
+    std::atomic<ui64> Step{ 0 };
+};
+
+class TMediatorTimecastEntry : public TThrRefBase {
+public:
+    using TPtr = TIntrusivePtr<TMediatorTimecastEntry>;
+    using TCPtr = TIntrusiveConstPtr<TMediatorTimecastEntry>;
+
+    TMediatorTimecastEntry(
+        const TMediatorTimecastSharedEntry::TPtr& safeStep,
+        const TMediatorTimecastSharedEntry::TPtr& latestStep) noexcept;
+    ~TMediatorTimecastEntry() noexcept;
+
+    /**
+     * Note: tabletId argument is not used (for compatibility only)
+     */
+    ui64 Get(ui64 tabletId = 0) const noexcept;
+
+    ui64 GetFrozenStep() const noexcept;
+    void SetFrozenStep(ui64 step) noexcept;
+
+private:
+    const TMediatorTimecastSharedEntry::TCPtr SafeStep;
+    const TMediatorTimecastSharedEntry::TCPtr LatestStep;
+    std::atomic<ui64> FrozenStep{ 0 };
 };
 
 class TMediatorTimecastReadStep : public TThrRefBase {
@@ -75,7 +103,7 @@ struct TEvMediatorTimecast {
         NKikimrSubDomains::TProcessingParams ProcessingParams;
 
 
-        TEvRegisterTablet(ui64 tabletId, const NKikimrSubDomains::TProcessingParams &processing)
+        TEvRegisterTablet(ui64 tabletId, const NKikimrSubDomains::TProcessingParams& processing)
             : TabletId(tabletId)
             , ProcessingParams(processing)
         {}
@@ -94,11 +122,11 @@ struct TEvMediatorTimecast {
 
     struct TEvRegisterTabletResult : public TEventLocal<TEvRegisterTabletResult, EvRegisterTabletResult> {
         const ui64 TabletId;
-        const TIntrusivePtr<TMediatorTimecastEntry> Entry;
+        const TMediatorTimecastEntry::TCPtr Entry;
 
-        TEvRegisterTabletResult(ui64 tabletId, TIntrusivePtr<TMediatorTimecastEntry> &entry)
+        TEvRegisterTabletResult(ui64 tabletId, TMediatorTimecastEntry::TCPtr entry)
             : TabletId(tabletId)
-            , Entry(entry)
+            , Entry(std::move(entry))
         {}
 
         TString ToString() const {

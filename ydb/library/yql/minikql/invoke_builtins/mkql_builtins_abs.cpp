@@ -54,7 +54,7 @@ struct TAbs : public TSimpleArithmeticUnary<TInput, TOutput, TAbs<TInput, TOutpu
 #endif
 };
 
-struct TDecimalAbs {
+struct TDecimalAbs : public TDecimalUnary<TDecimalAbs> {
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& arg) {
         const auto a = arg.GetInt128();
         return a < 0 ? NUdf::TUnboxedValuePod(-a) : arg;
@@ -83,7 +83,9 @@ void RegisterAbs(IBuiltinFunctionRegistry& registry) {
 }
 
 void RegisterAbs(TKernelFamilyMap& kernelFamilyMap) {
-    kernelFamilyMap["Abs"] = std::make_unique<TUnaryNumericKernelFamily<TAbs>>();
+    auto family = std::make_unique<TUnaryNumericKernelFamily<TAbs>>();
+    AddUnaryDecimalKernels<TDecimalAbs>(*family);
+    kernelFamilyMap["Abs"] = std::move(family);
 }
 
 } // namespace NMiniKQL

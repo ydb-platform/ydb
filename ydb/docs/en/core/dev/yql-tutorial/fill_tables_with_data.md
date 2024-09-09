@@ -7,7 +7,7 @@ REPLACE INTO series (series_id, title, release_date, series_info)
 
 VALUES
 
-    -- By default, numeric literals have type Int32 
+    -- By default, numeric literals have type Int32
     -- if the value is within the range.
     -- Otherwise, they automatically expand to Int64.
     (

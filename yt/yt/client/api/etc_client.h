@@ -32,8 +32,8 @@ struct TClusterMeta
     std::shared_ptr<NHiveClient::NProto::TClusterDirectory> ClusterDirectory;
     std::shared_ptr<NChunkClient::NProto::TMediumDirectory> MediumDirectory;
     std::shared_ptr<NObjectClient::NProto::TUserDirectory> UserDirectory;
-    std::vector<TString> MasterCacheNodeAddresses;
-    std::vector<TString> TimestampProviderAddresses;
+    std::vector<std::string> MasterCacheNodeAddresses;
+    std::vector<std::string> TimestampProviderAddresses;
     NYTree::IMapNodePtr Features;
 };
 

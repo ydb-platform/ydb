@@ -51,6 +51,7 @@ SRCS(
     counters_kesus.proto
     counters_keyvalue.proto
     counters_mediator.proto
+    counters_node_broker.proto
     counters_pq.proto
     counters_replication.proto
     counters_schemeshard.proto
@@ -149,6 +150,7 @@ SRCS(
 
 GENERATE_ENUM_SERIALIZATION(blobstorage_pdisk_config.pb.h)
 GENERATE_ENUM_SERIALIZATION(datashard_load.pb.h)
+GENERATE_ENUM_SERIALIZATION(shared_cache.pb.h)
 
 PEERDIR(
     ydb/library/actors/protos

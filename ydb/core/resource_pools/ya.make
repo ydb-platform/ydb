@@ -6,6 +6,7 @@ SRCS(
 )
 
 PEERDIR(
+    contrib/libs/protobuf
     util
 )
 

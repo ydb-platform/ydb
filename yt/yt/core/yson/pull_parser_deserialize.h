@@ -67,6 +67,9 @@ void Deserialize(unsigned long long& value, TYsonPullParserCursor* cursor);
 // double
 void Deserialize(double& value, TYsonPullParserCursor* cursor);
 
+// std::string
+void Deserialize(std::string& value, TYsonPullParserCursor* cursor);
+
 // TString
 void Deserialize(TString& value, TYsonPullParserCursor* cursor);
 

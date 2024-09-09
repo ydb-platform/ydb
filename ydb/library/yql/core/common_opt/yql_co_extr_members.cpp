@@ -603,7 +603,7 @@ TExprNode::TPtr ApplyExtractMembersToCalcOverWindow(const TExprNode::TPtr& node,
                 if (payload->IsCallable("WindowTraits")) {
                     structType = payload->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
                 }
-                else if (payload->IsCallable({"Lead", "Lag", "Rank", "DenseRank"})) {
+                else if (payload->IsCallable({"Lead", "Lag", "Rank", "DenseRank", "PercentRank"})) {
                     structType = payload->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TListExprType>()
                         ->GetItemType()->Cast<TStructExprType>();
                 } else {

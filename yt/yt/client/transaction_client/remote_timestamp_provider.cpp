@@ -38,7 +38,7 @@ IChannelPtr CreateTimestampProviderChannel(
     auto channel = CreateBalancingChannel(
         config,
         std::move(channelFactory),
-        std::move(endpointDescription),
+        endpointDescription,
         std::move(endpointAttributes));
     channel = CreateRetryingChannel(
         config,
@@ -49,7 +49,7 @@ IChannelPtr CreateTimestampProviderChannel(
 IChannelPtr CreateTimestampProviderChannelFromAddresses(
     TRemoteTimestampProviderConfigPtr config,
     IChannelFactoryPtr channelFactory,
-    const std::vector<TString>& discoveredAddresses)
+    const std::vector<std::string>& discoveredAddresses)
 {
     auto channelConfig = CloneYsonStruct(config);
     if (!discoveredAddresses.empty()) {

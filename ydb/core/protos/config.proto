@@ -25,6 +25,7 @@ import "ydb/core/protos/memory_controller_config.proto";
 import "ydb/core/protos/netclassifier.proto";
 import "ydb/core/protos/node_broker.proto";
 import "ydb/core/protos/pqconfig.proto";
+import "ydb/core/protos/replication.proto";
 import "ydb/core/protos/resource_broker.proto";
 import "ydb/core/protos/shared_cache.proto";
 import "ydb/core/protos/stream.proto";
@@ -118,6 +119,7 @@ message TActorSystemConfig {
     optional ENodeType NodeType = 14 [default = COMPUTE];
     optional uint32 ForceIOPoolThreads = 17;
     optional bool UseSharedThreads = 18;
+    optional bool UseRingQueue = 19;
 
     optional bool MonitorStuckActors = 15;
     optional EActorSystemProfile ActorSystemProfile = 16;
@@ -1326,6 +1328,37 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 1000000,
             DefaultValue: 1000 }];
+        optional uint64 LongRequestThresholdMs = 3 [(ControlOptions) = {
+            Description: "The amount of time (ms) to process DSProxy request, beyond which request is considered long and being reported to log",
+            MinValue: 1,
+            MaxValue: 1000000,
+            DefaultValue: 50000 }];
+        optional uint64 LongRequestReportingDelayMs = 4 [(ControlOptions) = {
+            Description: "Delay (ms) between reports of long requests for one handle class",
+            MinValue: 1,
+            MaxValue: 1000000,
+            DefaultValue: 60000 }];
+    }
+
+    message TPDiskControls {
+        optional uint64 MaxCommonLogChunksHDD = 1 [(ControlOptions) = {
+            Description: "Regulate the maximum of log chunks on the PDisk, setting for HDD",
+            MinValue: 1,
+            MaxValue: 1000000,
+            DefaultValue: 200 }];
+        optional uint64 MaxCommonLogChunksSSD = 2 [(ControlOptions) = {
+            Description: "Regulate the maximum of log chunks on the PDisk, setting for SSD, NVME",
+            MinValue: 1,
+            MaxValue: 1000000,
+            DefaultValue: 200 }];
+    }
+
+    message TBlobStorageControllerControls {
+        optional uint64 EnableSelfHealWithDegraded = 1 [(ControlOptions) = {
+            Description: "Should SelfHeal automatically process groups that are in DEGRADED status (one step from nonworking)",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0 }];
     }
 
     optional TDataShardControls DataShardControls = 1;
@@ -1337,6 +1370,8 @@ message TImmediateControlsConfig {
     optional TVDiskControls VDiskControls = 7;
     optional TTabletControls TabletControls = 8;
     optional TDSProxyControls DSProxyControls = 9;
+    optional TPDiskControls PDiskControls = 10;
+    optional TBlobStorageControllerControls BlobStorageControllerControls = 11;
 };
 
 message TMeteringConfig {
@@ -1504,6 +1539,8 @@ message THiveConfig {
     optional double NodeUsageRangeToKick = 75 [default = 0.2];
     optional bool LessSystemTabletsMoves = 77 [default = true];
     optional uint64 MaxPingsInFlight = 78 [default = 1000];
+    optional string CutHistoryDenyList = 76 [default = "ColumnShard,KeyValue,PersQueue,BlobDepot"];
+    optional string CutHistoryAllowList = 79 [default = "DataShard"];
 }
 
 message TBlobCacheConfig {
@@ -1550,6 +1587,12 @@ message TColumnShardConfig {
 
     optional uint32 MaxInFlightIntervalsOnRequest = 16;
     optional uint32 MaxReadStaleness_ms = 18 [default = 300000];
+    optional uint32 GCIntervalMs = 19 [default = 30000];
+    optional uint32 CompactionActualizationLagMs = 20 [default = 1000];
+    optional uint32 ActualizationTasksLagMs = 21 [default = 1000];
+    optional uint32 LagForCompactionBeforeTieringsMs = 22 [default = 3600000];
+    optional uint32 OptimizerFreshnessCheckDurationMs = 23 [default = 300000];
+    optional uint32 SmallPortionDetectSizeLimit = 24 [default = 1048576];  // 1 << 20
 }
 
 message TSchemeShardConfig {
@@ -1937,6 +1980,7 @@ message TAppConfig {
     optional TMetadataCacheConfig MetadataCacheConfig = 80;
     optional TMemoryControllerConfig MemoryControllerConfig = 81;
 	optional TGroupedMemoryLimiterConfig GroupedMemoryLimiterConfig = 82;
+    optional NKikimrReplication.TReplicationDefaults ReplicationConfig = 83;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

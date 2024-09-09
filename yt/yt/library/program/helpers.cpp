@@ -62,7 +62,7 @@ class TCMallocLimitsAdjuster
 public:
     void Adjust(const TTCMallocConfigPtr& config)
     {
-        i64 totalMemory = GetContainerMemoryLimit();
+        i64 totalMemory = GetAnonymousMemoryLimit();
         AdjustPageHeapLimit(totalMemory, config);
         AdjustAggressiveReleaseThreshold(totalMemory, config);
         SetupMemoryLimitHandler(config);
@@ -120,27 +120,32 @@ private:
         }
     }
 
-    i64 GetContainerMemoryLimit() const
+    i64 GetAnonymousMemoryLimit() const
     {
         auto resourceTracker = NProfiling::GetResourceTracker();
         if (!resourceTracker) {
             return 0;
         }
 
-        return resourceTracker->GetTotalMemoryLimit();
+        return resourceTracker->GetAnonymousMemoryLimit();
     }
 
     TAllocatorMemoryLimit ProposeHeapMemoryLimit(i64 totalMemory, const TTCMallocConfigPtr& config) const
     {
-        const auto& heapLimitConfig = config->HeapSizeLimit;
+        const auto& heapSizeConfig = config->HeapSizeLimit;
 
-        if (totalMemory == 0 || !heapLimitConfig->ContainerMemoryRatio) {
+        if (totalMemory == 0 || !heapSizeConfig->ContainerMemoryRatio && !heapSizeConfig->ContainerMemoryMargin) {
             return {};
         }
 
         TAllocatorMemoryLimit proposed;
-        proposed.limit = *heapLimitConfig->ContainerMemoryRatio * totalMemory;
-        proposed.hard = heapLimitConfig->Hard;
+        proposed.hard = heapSizeConfig->Hard;
+
+        if (heapSizeConfig->ContainerMemoryMargin) {
+            proposed.limit = totalMemory - *heapSizeConfig->ContainerMemoryMargin;
+        } else {
+            proposed.limit = *heapSizeConfig->ContainerMemoryRatio * totalMemory;
+        }
 
         return proposed;
     }

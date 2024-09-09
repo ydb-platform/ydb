@@ -2620,6 +2620,87 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
     }
 
+    Y_UNIT_TEST(CTASWithoutPerStatement) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        appConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        appConfig.MutableTableServiceConfig()->SetEnableAstCache(false);
+        appConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(false);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetKqpSettings({setting})
+            .SetWithSampleTables(false)
+            .SetEnableTempTables(true);
+
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetQueryClient();
+
+        {
+            auto result = db.ExecuteQuery(R"(
+                CREATE TABLE Table1 (
+                    PRIMARY KEY (Key)
+                ) AS SELECT 1u AS Key, "1" AS Value1, "1" AS Value2;
+                CREATE TABLE Table2 (
+                    PRIMARY KEY (Key)
+                ) AS SELECT 2u AS Key, "2" AS Value1, "2" AS Value2;
+                )", TTxControl::NoTx(), TExecuteQuerySettings()).ExtractValueSync();
+
+            UNIT_ASSERT(!result.IsSuccess());
+            UNIT_ASSERT_C(
+                result.GetIssues().ToString().Contains("Several CTAS statement can't be used without per-statement mode."),
+                result.GetIssues().ToString());
+        }
+
+        {
+            auto result = db.ExecuteQuery(R"(
+                CREATE TABLE Table2 (
+                    PRIMARY KEY (Key)
+                ) AS SELECT 2u AS Key, "2" AS Value1, "2" AS Value2;
+                SELECT * FROM Table1 ORDER BY Key;
+                )", TTxControl::NoTx(), TExecuteQuerySettings()).ExtractValueSync();
+
+            UNIT_ASSERT(!result.IsSuccess());
+            UNIT_ASSERT_C(
+                result.GetIssues().ToString().Contains("CTAS statement can't be used with other statements without per-statement mode."),
+                result.GetIssues().ToString());
+        }
+
+        {
+            auto result = db.ExecuteQuery(R"(
+            SELECT * FROM Table1 ORDER BY Key;
+                CREATE TABLE Table2 (
+                    PRIMARY KEY (Key)
+                ) AS SELECT 2u AS Key, "2" AS Value1, "2" AS Value2;
+                )", TTxControl::NoTx(), TExecuteQuerySettings()).ExtractValueSync();
+
+            UNIT_ASSERT(!result.IsSuccess());
+            UNIT_ASSERT_C(
+                result.GetIssues().ToString().Contains("CTAS statement can't be used with other statements without per-statement mode."),
+                result.GetIssues().ToString());
+        }
+
+        {
+            auto result = db.ExecuteQuery(R"(
+                CREATE TABLE Table1 (
+                    PRIMARY KEY (Key)
+                ) AS SELECT 1u AS Key, "1" AS Value1, "1" AS Value2;
+                )", TTxControl::NoTx(), TExecuteQuerySettings()).ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = db.ExecuteQuery(R"(
+                SELECT * FROM Table1 ORDER BY Key;
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
+            CompareYson(R"([[[1u];["1"];["1"]]])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
     Y_UNIT_TEST(SeveralCTAS) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
@@ -3265,8 +3346,8 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             auto session = Kikimr->GetTableClient().CreateSession().GetValueSync().GetSession();
 
             auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
-            csController->SetPeriodicWakeupActivationPeriod(TDuration::Seconds(1));
-            csController->SetLagForCompactionBeforeTierings(TDuration::Seconds(1));
+            csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+            csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
             csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
 
             const TString query = Sprintf(R"(
@@ -3815,7 +3896,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
         {
             auto it = client.StreamExecuteQuery(R"sql(
-                SELECT * FROM `/Root/ColumnShard`;
+                SELECT * FROM `/Root/ColumnShard` ORDER BY Col1;
             )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
             TString output = StreamResultToYson(it);
@@ -3828,7 +3909,8 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             auto it = client.StreamExecuteQuery(R"sql(
                 SELECT * FROM `/Root/DataShard`
                 UNION ALL
-                SELECT * FROM `/Root/ColumnShard`;
+                SELECT * FROM `/Root/ColumnShard`
+                ORDER BY Col1;
             )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
             TString output = StreamResultToYson(it);
@@ -3839,8 +3921,9 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
         {
             auto it = client.StreamExecuteQuery(R"sql(
-                SELECT r.Col3, c.Col3 FROM `/Root/DataShard` AS r
-                JOIN `/Root/ColumnShard` AS c ON r.Col1 + 1 = c.Col1;
+                SELECT r.Col3 AS a, c.Col3 AS b FROM `/Root/DataShard` AS r
+                JOIN `/Root/ColumnShard` AS c ON r.Col1 + 1 = c.Col1
+                ORDER BY a;
             )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
             TString output = StreamResultToYson(it);
@@ -4310,6 +4393,46 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                             ).GetValueSync();
 
             UNIT_ASSERT_VALUES_EQUAL(alterResult.GetStatus(), EStatus::SUCCESS);
+        }
+    }
+
+    Y_UNIT_TEST(TableSink_OlapRWQueries) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        const TString query = R"(
+            CREATE TABLE `/Root/ColumnShard` (
+                Col1 Uint64 NOT NULL,
+                Col2 String,
+                Col3 Int32 NOT NULL,
+                PRIMARY KEY (Col1)
+            )
+            PARTITION BY HASH(Col1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 3);
+        )";
+
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto client = kikimr.GetQueryClient();
+        {
+            auto result = client.ExecuteQuery(R"(
+                REPLACE INTO `/Root/ColumnShard` (Col1, Col2, Col3) VALUES
+                    (1u, "test1", 10), (2u, "test2", 11), (3u, "test3", 12), (4u, NULL, 13);
+                SELECT * FROM `/Root/ColumnShard` ORDER BY Col1;
+                INSERT INTO `/Root/ColumnShard` SELECT Col1 + 100 AS Col1, Col2, Col3 FROM `/Root/ColumnShard`;
+                SELECT * FROM `/Root/ColumnShard` ORDER BY Col1;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([[1u;["test1"];10];[2u;["test2"];11];[3u;["test3"];12];[4u;#;13]])", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(R"([[1u;["test1"];10];[2u;["test2"];11];[3u;["test3"];12];[4u;#;13];[101u;["test1"];10];[102u;["test2"];11];[103u;["test3"];12];[104u;#;13]])", FormatResultSetYson(result.GetResultSet(1)));
         }
     }
 }

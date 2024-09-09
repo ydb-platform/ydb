@@ -651,7 +651,7 @@ public:
         Y_ABORT_UNLESS(tableInfo->GetPartitions().back().EndOfRange.empty(), "End of last range must be +INF");
 
         if (tableInfo->IsAsyncReplica()) {
-            newTable->SetAsyncReplica();
+            newTable->SetAsyncReplica(true);
         }
 
         if (tableInfo->IsRestoreTable()) {

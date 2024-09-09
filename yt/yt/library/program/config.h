@@ -43,7 +43,13 @@ public:
     // If program heap size exceeds the limit tcmalloc is instructed to release memory to the kernel.
     std::optional<double> ContainerMemoryRatio;
 
-    //! If true tcmalloc crashes when system allocates more memory than #ContainerMemoryRatio.
+    //! Similar to #ContainerMemoryRatio, but is set in terms of absolute difference from
+    //! the container memory limit.
+    //! For example, if ContainerMemoryLimit=200Gb and ContainerMemoryMargin=1Gb
+    // then tcmalloc limit will be 199Gb.
+    std::optional<double> ContainerMemoryMargin;
+
+    //! If true tcmalloc crashes when system allocates more memory than #ContainerMemoryRatio/#ContainerMemoryMargin.
     bool Hard;
 
     bool DumpMemoryProfileOnViolation;

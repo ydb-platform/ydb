@@ -343,6 +343,7 @@ void TBlockState::ClearValues() {
 }
 
 void TBlockState::FillArrays() {
+    MKQL_ENSURE(Count == 0, "All existing arrays have to be processed");
     auto& counterDatum = TArrowBlock::From(Values.back()).GetDatum();
     MKQL_ENSURE(counterDatum.is_scalar(), "Unexpected block length type (expecting scalar)");
     Count = counterDatum.scalar_as<arrow::UInt64Scalar>().value;
@@ -357,13 +358,9 @@ void TBlockState::FillArrays() {
                 return;
             }
             MKQL_ENSURE(datum.is_arraylike(), "Unexpected block type (expecting array or chunked array)");
-            if (datum.is_array()) {
-                Deques[i].push_back(datum.array());
-            } else {
-                for (auto& chunk : datum.chunks()) {
-                    Deques[i].push_back(chunk->data());
-                }
-            }
+            ForEachArrayData(datum, [this, i](const auto& arrayData) {
+                Deques[i].push_back(arrayData);
+            });
         }
     }
 }

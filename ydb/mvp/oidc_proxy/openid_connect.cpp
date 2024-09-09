@@ -148,12 +148,12 @@ TRestoreOidcContextResult RestoreSessionStoredOnClientSide(const TString& state,
             expectedState = jsonState->GetStringRobust();
         }
         const NJson::TJsonValue* jsonRedirectUrl = nullptr;
-        if (jsonValue.GetValuePointer("redirect_url", &jsonRedirectUrl)) {
+        if (jsonValue.GetValuePointer("requested_address", &jsonRedirectUrl)) {
             redirectUrl = jsonRedirectUrl->GetStringRobust();
         } else {
             return TRestoreOidcContextResult({.IsSuccess = false,
                                              .IsErrorRetryable = false,
-                                             .ErrorMessage = errorMessage << "Redirect url not found in cookie"});
+                                             .ErrorMessage = errorMessage << "Requested address not found in cookie"});
         }
         const NJson::TJsonValue* jsonExpirationTime = nullptr;
         if (jsonValue.GetValuePointer("expiration_time", &jsonExpirationTime)) {

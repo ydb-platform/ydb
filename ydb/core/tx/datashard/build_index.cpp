@@ -388,13 +388,13 @@ private:
         LOG_D("Upload, last key " << DebugPrintPoint(KeyTypes, WriteBuf.GetLastKey().GetCells(), *AppData()->TypeRegistry) << " " << Debug());
 
         auto actor = NTxProxy::CreateUploadRowsInternal(
-            TBase::SelfId(), TargetTable,
+            this->SelfId(), TargetTable,
             UploadColumnsTypes,
             WriteBuf.GetRowsData(),
             UploadMode,
             true /*writeToPrivateTable*/);
 
-        Uploader = TActivationContext::ActorContextFor(TBase::SelfId()).Register(actor);
+        Uploader = this->Register(actor);
     }
 };
 
@@ -523,7 +523,6 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
                                                      std::unique_ptr<IEventHandle>(ev.Release()));
         return;
     }
-
 
     TScanRecord::TSeqNo seqNo = {record.GetSeqNoGeneration(), record.GetSeqNoRound()};
     auto badRequest = [&](const TString& error) {

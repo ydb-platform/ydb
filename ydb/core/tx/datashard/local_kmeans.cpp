@@ -508,7 +508,7 @@ protected:
             NTxProxy::EUploadRowsMode::WriteToTableShadow,
             true /*writeToPrivateTable*/);
 
-        Uploader = TActivationContext::ActorContextFor(this->SelfId()).Register(actor);
+        Uploader = this->Register(actor);
     }
 
     void UploadSample() {

@@ -28,7 +28,7 @@ public:
     void SetUp(NUnitTest::TTestContext&) override {
         TAutoPtr<TAppPrepare> app = new TAppPrepare();
         Runtime.Initialize(app->Unwrap());
-        Runtime.SetLogPriority(NKikimrServices::YQ_ROW_DISPATCHER, NLog::PRI_TRACE);
+        Runtime.SetLogPriority(NKikimrServices::FQ_ROW_DISPATCHER, NLog::PRI_TRACE);
         Runtime.SetDispatchTimeout(TDuration::Seconds(5));
 
         ReadActorId1 = Runtime.AllocateEdgeActor();
@@ -36,12 +36,13 @@ public:
         RowDispatcherActorId = Runtime.AllocateEdgeActor();
     }
 
-    void Init(ui64 maxSessionUsedMemory = std::numeric_limits<ui64>::max()) {
+    void Init(const TString& topicPath, ui64 maxSessionUsedMemory = std::numeric_limits<ui64>::max()) {
         Config.SetTimeoutBeforeStartSessionSec(TimeoutBeforeStartSessionSec);
         Config.SetMaxSessionUsedMemory(maxSessionUsedMemory);
         Config.SetSendStatusPeriodSec(2);
 
         TopicSession = Runtime.Register(NewTopicSession(
+            topicPath,
             Config,
             RowDispatcherActorId,
             0,
@@ -153,7 +154,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
     Y_UNIT_TEST_F(TwoSessionsWithoutOffsets, TFixture) {
         const TString topicName = "topic1";
         PQCreateStream(topicName);
-        Init();
+        Init(topicName);
         auto source = BuildSource(topicName);
         StartSession(ReadActorId1, source);
         StartSession(ReadActorId2, source);
@@ -173,7 +174,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
     Y_UNIT_TEST_F(SessionWithPredicateAndSessionWithoutPredicate, TFixture) {
         const TString topicName = "topic2";
         PQCreateStream(topicName);
-        Init();
+        Init(topicName);
         auto source1 = BuildSource(topicName, false);
         auto source2 = BuildSource(topicName, true);
         StartSession(ReadActorId1, source1);
@@ -194,7 +195,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
     Y_UNIT_TEST_F(SecondSessionWithoutOffsetsAfterSessionConnected, TFixture) {
         const TString topicName = "topic3";
         PQCreateStream(topicName);
-        Init();
+        Init(topicName);
         auto source = BuildSource(topicName);
         StartSession(ReadActorId1, source);
 
@@ -222,7 +223,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
     Y_UNIT_TEST_F(TwoSessionsWithOffsets, TFixture) {
         const TString topicName = "topic4";
         PQCreateStream(topicName);
-        Init();
+        Init(topicName);
         auto source = BuildSource(topicName);
         const std::vector<TString> data = { Json1, Json2, Json3};
         PQWrite(data, topicName);
@@ -255,7 +256,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
     Y_UNIT_TEST_F(BadDataSessionError, TFixture) {
         const TString topicName = "topic5";
         PQCreateStream(topicName);
-        Init();
+        Init(topicName);
         auto source = BuildSource(topicName);
         StartSession(ReadActorId1, source);
 
@@ -269,7 +270,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
     Y_UNIT_TEST_F(RestartSessionIfNewClientWithOffset, TFixture) {
         const TString topicName = "topic6";
         PQCreateStream(topicName);
-        Init();
+        Init(topicName);
         auto source = BuildSource(topicName);
         StartSession(ReadActorId1, source);
 
@@ -298,7 +299,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
 
     Y_UNIT_TEST_F(ReadNonExistentTopic, TFixture) {
         const TString topicName = "topic7";
-        Init();
+        Init(topicName);
         auto source = BuildSource(topicName);
         StartSession(ReadActorId1, source);
         ExpectSessionError(ReadActorId1, "no path");
@@ -308,7 +309,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
     Y_UNIT_TEST_F(SlowSession, TFixture) {
         const TString topicName = "topic8";
         PQCreateStream(topicName);
-        Init(50);
+        Init(topicName, 50);
         auto source = BuildSource(topicName);
         StartSession(ReadActorId1, source);
         StartSession(ReadActorId2, source);

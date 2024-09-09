@@ -13,6 +13,7 @@
 namespace NFq {
 
 std::unique_ptr<NActors::IActor> NewTopicSession(
+    const TString& topicPath,
     const NConfig::TRowDispatcherConfig& config,
     NActors::TActorId rowDispatcherActorId,
     ui32 partitionId,

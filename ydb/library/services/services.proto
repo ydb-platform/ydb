@@ -401,7 +401,7 @@ enum EServiceKikimr {
 
     DATA_INTEGRITY = 3000;
 
-    YQ_ROW_DISPATCHER = 3100;
+    FQ_ROW_DISPATCHER = 3100;
 };
 
 message TActivity {

@@ -266,18 +266,17 @@ public:
                         .Build()
                     .Build()
                 .Done();
-        } else {
-            return Build<TCoFlatMap>(ctx, flatmap.Pos())
-                .InitFrom(flatmap)
-                .Input<TDqSourceWrap>()
-                    .InitFrom(dqSourceWrap)
-                    .Input<TDqPqTopicSource>()
-                        .InitFrom(dqPqTopicSource)
-                        .FilterPredicate(newFilterLambda.Cast())
-                        .Build()
-                    .Build()
-                .Done();
         }
+        return Build<TCoFlatMap>(ctx, flatmap.Pos())
+            .InitFrom(flatmap)
+            .Input<TDqSourceWrap>()
+                .InitFrom(dqSourceWrap)
+                .Input<TDqPqTopicSource>()
+                    .InitFrom(dqPqTopicSource)
+                    .FilterPredicate(newFilterLambda.Cast())
+                    .Build()
+                .Build()
+            .Done();
     }
 
 private:

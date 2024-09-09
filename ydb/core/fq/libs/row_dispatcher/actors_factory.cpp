@@ -9,6 +9,7 @@ struct TActorFactory : public IActorFactory {
     TActorFactory() {}
 
     NActors::TActorId RegisterTopicSession(
+        const TString& topicPath,
         const NConfig::TRowDispatcherConfig& config,
         NActors::TActorId rowDispatcherActorId,
         ui32 partitionId,
@@ -17,6 +18,7 @@ struct TActorFactory : public IActorFactory {
         const ::NMonitoring::TDynamicCounterPtr& counters) const override {
 
         auto actorPtr = NFq::NewTopicSession(
+            topicPath,
             config,
             rowDispatcherActorId,
             partitionId,

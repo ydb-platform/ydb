@@ -4,7 +4,7 @@
 
 namespace NYql::NDq {
 
-static const ui64 PingPeriodSeconds = 2;
+const ui64 PingPeriodSeconds = 2;
 
 void TRetryEventsQueue::Init(
     const TTxId& txId,

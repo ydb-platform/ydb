@@ -26,6 +26,7 @@ struct TTestActorFactory : public NFq::NRowDispatcher::IActorFactory {
     }
 
     NActors::TActorId RegisterTopicSession(
+        const TString& /*topicPath*/,
         const NConfig::TRowDispatcherConfig& /*config*/,
         NActors::TActorId /*rowDispatcherActorId*/,
         ui32 /*partitionId*/,
@@ -50,7 +51,7 @@ public:
     void SetUp(NUnitTest::TTestContext&) override {
         TAutoPtr<TAppPrepare> app = new TAppPrepare();
         Runtime.Initialize(app->Unwrap());
-        Runtime.SetLogPriority(NKikimrServices::YQ_ROW_DISPATCHER, NLog::PRI_TRACE);
+        Runtime.SetLogPriority(NKikimrServices::FQ_ROW_DISPATCHER, NLog::PRI_TRACE);
         NConfig::TRowDispatcherConfig config;
         config.SetEnabled(true);
         NConfig::TCommonConfig commonConfig;

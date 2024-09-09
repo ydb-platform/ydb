@@ -22,18 +22,16 @@ public:
     void SetUp(NUnitTest::TTestContext&) override {
         TAutoPtr<TAppPrepare> app = new TAppPrepare();
         Runtime.Initialize(app->Unwrap());
-        Runtime.SetLogPriority(NKikimrServices::YQ_ROW_DISPATCHER, NLog::PRI_DEBUG);
+        Runtime.SetLogPriority(NKikimrServices::FQ_ROW_DISPATCHER, NLog::PRI_DEBUG);
     }
 
     void TearDown(NUnitTest::TTestContext& /* context */) override {
-        if (Filter) {
-            Filter.reset();
-        }
+        Filter.reset();
     }
 
     void MakeFilter(
-        TVector<TString> columns,
-        TVector<TString> types,
+        const TVector<TString>& columns,
+        const TVector<TString>& types,
         const TString& whereFilter,
         NFq::TJsonFilter::TCallback callback) {
         Filter = NFq::NewJsonFilter(

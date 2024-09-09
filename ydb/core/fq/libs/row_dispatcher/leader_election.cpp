@@ -213,7 +213,7 @@ void TLeaderElection::ProcessState() {
         if (!CoordinationNodeCreated) {
             Register(MakeCreateCoordinationNodeActor(
                 SelfId(),
-                NKikimrServices::YQ_ROW_DISPATCHER,
+                NKikimrServices::FQ_ROW_DISPATCHER,
                 YdbConnection,
                 CoordinationNodePath,
                 MakeSchemaRetryPolicy()));

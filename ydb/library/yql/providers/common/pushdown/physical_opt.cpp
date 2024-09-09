@@ -9,6 +9,8 @@ namespace NYql::NPushdown {
 
 using namespace NNodes;
 
+namespace {
+
 static TPredicateNode SplitForPartialPushdown(
     const NPushdown::TPredicateNode& predicateTree,
     TExprContext& ctx,
@@ -30,6 +32,8 @@ static TPredicateNode SplitForPartialPushdown(
     NPushdown::TPredicateNode predicateToPush;
     predicateToPush.SetPredicates(pushable, ctx, pos);
     return predicateToPush;
+}
+
 }
 
 TMaybeNode<TCoLambda> MakePushdownPredicate(const TCoLambda& lambda, TExprContext& ctx, const TPositionHandle& pos, const TSettings& settings) {

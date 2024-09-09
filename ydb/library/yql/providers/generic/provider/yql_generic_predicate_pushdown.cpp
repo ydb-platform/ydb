@@ -10,7 +10,7 @@ namespace NYql {
     using namespace NConnector::NApi;
 
     TString FormatColumn(const TString& value);
-    TString FormatValue(const Ydb::TypedValue& value) ;
+    TString FormatValue(const Ydb::TypedValue& value);
     TString FormatNull(const TExpression_TNull&);
     TString FormatExpression(const TExpression& expression);
     TString FormatArithmeticalExpression(const TExpression_TArithmeticalExpression& expression);
@@ -201,31 +201,31 @@ namespace NYql {
     }
 
     TString FormatColumn(const TString& value) {
-        return NFq::EncloseAndEscapeString(value, '`');;
+        return NFq::EncloseAndEscapeString(value, '`');
     }
 
     TString FormatValue(const Ydb::TypedValue& value) {
         switch (value.value().value_case()) {
-        case  Ydb::Value::kBoolValue:
-            return ToString(value.value().bool_value());
-        case Ydb::Value::kInt32Value:
-            return ToString(value.value().int32_value());
-        case Ydb::Value::kUint32Value:
-            return ToString(value.value().uint32_value());
-        case Ydb::Value::kInt64Value:
-            return ToString(value.value().int64_value());
-        case Ydb::Value::kUint64Value:
-            return ToString(value.value().uint64_value());
-        case Ydb::Value::kFloatValue:
-            return ToString(value.value().float_value());
-        case Ydb::Value::kDoubleValue:
-            return ToString(value.value().double_value());
-        case Ydb::Value::kBytesValue:
-            return NFq::EncloseAndEscapeString(value.value().bytes_value(), '"');
-        case Ydb::Value::kTextValue:
-            return NFq::EncloseAndEscapeString(value.value().text_value(), '"');
-        default:
-            throw yexception() << "ErrUnimplementedTypedValue, value case " << static_cast<ui64>(value.value().value_case());
+            case  Ydb::Value::kBoolValue:
+                return ToString(value.value().bool_value());
+            case Ydb::Value::kInt32Value:
+                return ToString(value.value().int32_value());
+            case Ydb::Value::kUint32Value:
+                return ToString(value.value().uint32_value());
+            case Ydb::Value::kInt64Value:
+                return ToString(value.value().int64_value());
+            case Ydb::Value::kUint64Value:
+                return ToString(value.value().uint64_value());
+            case Ydb::Value::kFloatValue:
+                return ToString(value.value().float_value());
+            case Ydb::Value::kDoubleValue:
+                return ToString(value.value().double_value());
+            case Ydb::Value::kBytesValue:
+                return NFq::EncloseAndEscapeString(value.value().bytes_value(), '"');
+            case Ydb::Value::kTextValue:
+                return NFq::EncloseAndEscapeString(value.value().text_value(), '"');
+            default:
+                throw yexception() << "ErrUnimplementedTypedValue, value case " << static_cast<ui64>(value.value().value_case());
         }
     }
 
@@ -235,42 +235,42 @@ namespace NYql {
 
     TString FormatExpression(const TExpression& expression) {
         switch (expression.payload_case()) {
-        case TExpression::kColumn:
-            return FormatColumn(expression.column());
-        case TExpression::kTypedValue:
-            return FormatValue(expression.typed_value());
-        case TExpression::kArithmeticalExpression:
-            return FormatArithmeticalExpression(expression.arithmetical_expression());
-        case TExpression::kNull:
-            return FormatNull(expression.null());
-        default:
-            throw yexception() << "UnimplementedExpression, payload_case " << static_cast<ui64>(expression.payload_case());
+            case TExpression::kColumn:
+                return FormatColumn(expression.column());
+            case TExpression::kTypedValue:
+                return FormatValue(expression.typed_value());
+            case TExpression::kArithmeticalExpression:
+                return FormatArithmeticalExpression(expression.arithmetical_expression());
+            case TExpression::kNull:
+                return FormatNull(expression.null());
+            default:
+                throw yexception() << "UnimplementedExpression, payload_case " << static_cast<ui64>(expression.payload_case());
         }
     }
 
     TString FormatArithmeticalExpression(const TExpression_TArithmeticalExpression& expression) {
         TString operation;
         switch (expression.operation()) {
-        case TExpression_TArithmeticalExpression::MUL:
-            operation = " * ";
-            break;
-        case TExpression_TArithmeticalExpression::ADD:
-            operation = " + ";
-            break;
-        case TExpression_TArithmeticalExpression::SUB:
-            operation = " - ";
-            break;
-        case TExpression_TArithmeticalExpression::BIT_AND:
-            operation = " & ";
-            break;
-        case TExpression_TArithmeticalExpression::BIT_OR:
-            operation = " | ";
-            break;
-        case TExpression_TArithmeticalExpression::BIT_XOR:
-            operation = " ^ ";
-            break;
-        default:
-            throw yexception() << "ErrUnimplementedArithmeticalExpression, operation " << static_cast<ui64>(expression.operation());
+            case TExpression_TArithmeticalExpression::MUL:
+                operation = " * ";
+                break;
+            case TExpression_TArithmeticalExpression::ADD:
+                operation = " + ";
+                break;
+            case TExpression_TArithmeticalExpression::SUB:
+                operation = " - ";
+                break;
+            case TExpression_TArithmeticalExpression::BIT_AND:
+                operation = " & ";
+                break;
+            case TExpression_TArithmeticalExpression::BIT_OR:
+                operation = " | ";
+                break;
+            case TExpression_TArithmeticalExpression::BIT_XOR:
+                operation = " ^ ";
+                break;
+            default:
+                throw yexception() << "ErrUnimplementedArithmeticalExpression, operation " << static_cast<ui64>(expression.operation());
         }
 
         auto left = FormatExpression(expression.left_value());
@@ -396,7 +396,7 @@ namespace NYql {
     TString FormatPredicate(const TPredicate& predicate, bool topLevel ) {
         switch (predicate.payload_case()) {
             case TPredicate::PAYLOAD_NOT_SET:
-                    return {};
+                return {};
             case TPredicate::kNegation:
                 return FormatNegation(predicate.negation());
             case TPredicate::kConjunction:

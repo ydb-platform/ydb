@@ -79,7 +79,7 @@ public:
         virtual ui64 GetSeqNo() const = 0;
     };
 
-    TRetryEventsQueue() {};
+    TRetryEventsQueue() {}
 
     void Init(const TTxId& txId, const NActors::TActorId& senderId, const NActors::TActorId& selfId, ui64 eventQueueId = 0, bool keepAlive = false);
 

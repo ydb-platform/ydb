@@ -147,7 +147,7 @@ public:
     TRuntime() 
     : NActors::TTestBasicRuntime(2, true){
         Initialize(NKikimr::TAppPrepare().Unwrap());
-        SetLogPriority(NKikimrServices::YQ_ROW_DISPATCHER, NLog::PRI_DEBUG);
+        SetLogPriority(NKikimrServices::FQ_ROW_DISPATCHER, NLog::PRI_DEBUG);
 
         ClientEdgeActorId = AllocateEdgeActor(0);
         ServerEdgeActorId = AllocateEdgeActor(1);

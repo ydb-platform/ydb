@@ -48,11 +48,11 @@
 #define LOG_STREAMS_STORAGE_SERVICE_AS_ERROR(actorSystem, logRecordStream) LOG_STREAMS_IMPL_AS(actorSystem, ERROR, STREAMS_STORAGE_SERVICE, logRecordStream)
 
 // Component: ROW_DISPATCHER.
-#define LOG_ROW_DISPATCHER_TRACE(logRecordStream) LOG_STREAMS_IMPL(TRACE, YQ_ROW_DISPATCHER, LogPrefix << logRecordStream)
-#define LOG_ROW_DISPATCHER_DEBUG(logRecordStream) LOG_STREAMS_IMPL(DEBUG, YQ_ROW_DISPATCHER, LogPrefix << logRecordStream)
-#define LOG_ROW_DISPATCHER_INFO(logRecordStream) LOG_STREAMS_IMPL(INFO, YQ_ROW_DISPATCHER, LogPrefix << logRecordStream)
-#define LOG_ROW_DISPATCHER_WARN(logRecordStream) LOG_STREAMS_IMPL(WARN, YQ_ROW_DISPATCHER, LogPrefix << logRecordStream)
-#define LOG_ROW_DISPATCHER_ERROR(logRecordStream) LOG_STREAMS_IMPL(ERROR, YQ_ROW_DISPATCHER, LogPrefix << logRecordStream)
+#define LOG_ROW_DISPATCHER_TRACE(logRecordStream) LOG_STREAMS_IMPL(TRACE, FQ_ROW_DISPATCHER, LogPrefix << logRecordStream)
+#define LOG_ROW_DISPATCHER_DEBUG(logRecordStream) LOG_STREAMS_IMPL(DEBUG, FQ_ROW_DISPATCHER, LogPrefix << logRecordStream)
+#define LOG_ROW_DISPATCHER_INFO(logRecordStream) LOG_STREAMS_IMPL(INFO, FQ_ROW_DISPATCHER, LogPrefix << logRecordStream)
+#define LOG_ROW_DISPATCHER_WARN(logRecordStream) LOG_STREAMS_IMPL(WARN, FQ_ROW_DISPATCHER, LogPrefix << logRecordStream)
+#define LOG_ROW_DISPATCHER_ERROR(logRecordStream) LOG_STREAMS_IMPL(ERROR, FQ_ROW_DISPATCHER, LogPrefix << logRecordStream)
 
 // Component: STREAMS_SCHEDULER_SERVICE.
 #define LOG_STREAMS_SCHEDULER_SERVICE_EMERG(logRecordStream) LOG_STREAMS_IMPL(EMERG, STREAMS_SCHEDULER_SERVICE, logRecordStream)

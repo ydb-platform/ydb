@@ -116,7 +116,7 @@ public:
 
     void Bootstrap();
 
-    static constexpr char ActorName[] = "YQ_ROW_DISPATCHER";
+    static constexpr char ActorName[] = "FQ_ROW_DISPATCHER";
 
     void Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& ev);
     void HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev);
@@ -315,6 +315,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr &ev) {
     if (topicSessionInfo.Sessions.empty()) {
         LOG_ROW_DISPATCHER_DEBUG("Create new session " << readOffset);
         sessionActorId = ActorFactory->RegisterTopicSession(
+            ev->Get()->Record.GetSource().GetTopicPath(),
             Config,
             SelfId(),
             ev->Get()->Record.GetPartitionId(),
@@ -371,7 +372,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr &ev) {
     ConsumerSessionKey key{ev->Sender, ev->Get()->Record.GetPartitionId()};
     auto it = Consumers.find(key);
     if (it == Consumers.end()) {
-        LOG_ROW_DISPATCHER_DEBUG("Wrong consumer");
+        LOG_ROW_DISPATCHER_WARN("Wrong consumer, sender " << ev->Sender << ", part id " << ev->Get()->Record.GetPartitionId());
         return;
     }
     if (!it->second->EventsQueue.OnEventReceived(ev)) {

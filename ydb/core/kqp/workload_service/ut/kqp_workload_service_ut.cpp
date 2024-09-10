@@ -752,7 +752,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
         TSampleQueries::TSelect42::CheckResult(ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, TQueryRunnerSettings().PoolId(NResourcePool::DEFAULT_POOL_ID)));
     }
 
-    Y_UNIT_TEST(TestMultyGrupClassification) {
+    Y_UNIT_TEST(TestMultiGroupClassification) {
         auto ydb = TYdbSetupSettings().Create();
 
         auto settings = TQueryRunnerSettings().PoolId("");

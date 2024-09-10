@@ -2694,6 +2694,50 @@ namespace Tests {
         return Server->DynamicNodes();
     }
 
+    void TTenants::CreateTenant(Ydb::Cms::CreateDatabaseRequest request, ui32 nodes, TDuration timeout) {
+        const TString path = request.path();
+        const bool serverless = request.has_serverless_resources();
+
+        // Create new tenant
+        auto& runtime = *Server->GetRuntime();
+        const auto result = NKikimr::NRpcService::DoLocalRpc<NKikimr::NGRpcService::TGrpcRequestOperationCall<Ydb::Cms::CreateDatabaseRequest, Ydb::Cms::CreateDatabaseResponse>>(
+            std::move(request), "", "", runtime.GetActorSystem(0), true
+        ).ExtractValueSync();
+
+        if (result.operation().status() != Ydb::StatusIds::SUCCESS) {
+            NYql::TIssues issues;
+            NYql::IssuesFromMessage(result.operation().issues(), issues);
+            ythrow yexception() << "Failed to create tenant " << path << ", " << result.operation().status() << ", reason:\n" << issues.ToString();
+        }
+
+        // Run new tenant
+        if (!serverless) {
+            Run(path, nodes);
+        }
+
+        // Wait tenant is up
+        Ydb::Cms::GetDatabaseStatusResult getTenantResult;
+        const TActorId edgeActor = runtime.AllocateEdgeActor();
+        const TInstant start = TInstant::Now();
+        while (TInstant::Now() - start <= timeout) {
+            auto getTenantRequest = std::make_unique<NConsole::TEvConsole::TEvGetTenantStatusRequest>();
+            getTenantRequest->Record.MutableRequest()->set_path(path);
+            runtime.SendToPipe(MakeConsoleID(), edgeActor, getTenantRequest.release(), 0, GetPipeConfigWithRetries());
+
+            auto response = runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvGetTenantStatusResponse>(edgeActor, timeout);
+            if (!response) {
+                ythrow yexception() << "Waiting CMS get tenant response timeout. Last tenant description:\n" << getTenantResult.DebugString();
+            }
+            response->Get()->Record.GetResponse().operation().result().UnpackTo(&getTenantResult);
+            if (getTenantResult.state() == Ydb::Cms::GetDatabaseStatusResult::RUNNING) {
+                return;
+            }
+
+            Sleep(TDuration::MilliSeconds(100));
+        }
+        ythrow yexception() << "Waiting tenant status RUNNING timeout. Spent time " << TInstant::Now() - start << " exceeds limit " << timeout << ". Last tenant description:\n" << getTenantResult.DebugString();
+    }
+
     TVector<ui32> &TTenants::Nodes(const TString &name) {
         return Tenants[name];
     }

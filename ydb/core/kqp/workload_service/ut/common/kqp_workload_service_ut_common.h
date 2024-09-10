@@ -26,6 +26,7 @@ struct TQueryRunnerSettings {
     FLUENT_SETTING_DEFAULT(ui32, NodeIndex, 0);
     FLUENT_SETTING_DEFAULT(TString, PoolId, "");
     FLUENT_SETTING_DEFAULT(TString, UserSID, "user@" BUILTIN_SYSTEM_DOMAIN);
+    FLUENT_SETTING_DEFAULT(TString, Database, "");
 
     // Runner settings
     FLUENT_SETTING_DEFAULT(bool, HangUpDuringExecution, false);
@@ -66,7 +67,9 @@ struct TYdbSetupSettings {
     // Cluster settings
     FLUENT_SETTING_DEFAULT(ui32, NodeCount, 1);
     FLUENT_SETTING_DEFAULT(TString, DomainName, "Root");
+    FLUENT_SETTING_DEFAULT(bool, CreateSampleTenants, false);
     FLUENT_SETTING_DEFAULT(bool, EnableResourcePools, true);
+    FLUENT_SETTING_DEFAULT(bool, EnableMetadataObjectsOnServerless, true);
 
     // Default pool settings
     FLUENT_SETTING_DEFAULT(TString, PoolId, "sample_pool_id");
@@ -77,6 +80,10 @@ struct TYdbSetupSettings {
     FLUENT_SETTING_DEFAULT(double, DatabaseLoadCpuThreshold, -1);
 
     TIntrusivePtr<IYdbSetup> Create() const;
+
+    TString GetDedicatedTenantName() const;
+    TString GetSharedTenantName() const;
+    TString GetServerlessTenantName() const;
 };
 
 class IYdbSetup : public TThrRefBase {
@@ -130,6 +137,12 @@ struct TSampleQueries {
     static void CheckCancelled(const TResult& result) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::CANCELLED, result.GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Request timeout exceeded, cancelling after");
+    }
+
+    template <typename TResult>
+    static void CheckNotFound(const TResult& result, const TString& poolId) {
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::NOT_FOUND, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), TStringBuilder() << "Resource pool " << poolId << " not found or you don't have access permissions");
     }
 
     struct TSelect42 {

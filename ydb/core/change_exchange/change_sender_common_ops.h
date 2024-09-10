@@ -70,6 +70,12 @@ public:
     virtual IActor* CreateSender(ui64 partitionId) const = 0;
 };
 
+class IChangeSenderIdentity {
+public:
+    virtual ~IChangeSenderIdentity() = default;
+    virtual TPathId GetChangeSenderIdentity() const = 0;
+};
+
 template <typename TChangeRecord>
 class TBaseChangeSender {
     using TIncompleteRecord = TEvChangeExchange::TEvRequestRecords::TRecordInfo;
@@ -470,8 +476,8 @@ protected:
 
     void EnqueueRecords(TVector<TEvChangeExchange::TEvEnqueueRecords::TRecordInfo>&& records) {
         for (auto& record : records) {
-            Y_VERIFY_S(PathId == record.PathId, "Unexpected record's path id"
-                << ": expected# " << PathId
+            Y_VERIFY_S(Identity->GetChangeSenderIdentity() == record.PathId, "Unexpected record's path id"
+                << ": expected# " << Identity->GetChangeSenderIdentity()
                 << ", got# " << record.PathId);
             Enqueued.emplace(record.Order, record.BodySize);
         }
@@ -561,15 +567,15 @@ protected:
 
     explicit TBaseChangeSender(
         IActorOps* const actorOps,
+        IChangeSenderIdentity* const identity,
         IChangeSenderResolver* const resolver,
         ISenderFactory* const senderFactory,
-        const TActorId changeServer,
-        const TPathId& pathId)
+        const TActorId changeServer)
             : ActorOps(actorOps)
+            , Identity(identity)
             , Resolver(resolver)
             , SenderFactory(senderFactory)
             , ChangeServer(changeServer)
-            , PathId(pathId)
             , MemLimit(192_KB)
             , MemUsage(0)
     {}
@@ -585,7 +591,7 @@ protected:
                         ctx.Send(ev->Forward(to));
                     } else {
                         ActorOps->Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes(TStringBuilder()
-                            << "Change sender '" << PathId << ":" << partitionId << "' is not running"));
+                            << "Change sender '" << Identity->GetChangeSenderIdentity() << ":" << partitionId << "' is not running"));
                     }
                 } else {
                     ActorOps->Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPNOTFOUND));
@@ -635,7 +641,7 @@ protected:
                                     TABLED() { html << sender.Pending.size(); }
                                     TABLED() { html << sender.Prepared.size(); }
                                     TABLED() { html << sender.Broadcasting.size(); }
-                                    TABLED() { ActorLink(html, tabletId, PathId, partitionId); }
+                                    TABLED() { ActorLink(html, tabletId, Identity->GetChangeSenderIdentity(), partitionId); }
                                 }
                             }
                         }
@@ -763,13 +769,13 @@ protected:
 
 private:
     IActorOps* const ActorOps;
+    IChangeSenderIdentity* const Identity;
     IChangeSenderResolver* const Resolver;
     ISenderFactory* const SenderFactory;
     THolder<IChangeSenderPartitioner<TChangeRecord>> Partitioner;
 
 protected:
     TActorId ChangeServer;
-    const TPathId PathId;
 
 private:
     const ui64 MemLimit;

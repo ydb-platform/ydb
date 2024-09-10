@@ -10,7 +10,7 @@ To return a list of multiple values from one line, *DO NOT* use the `AGGREGATE_L
 
 For example, you can combine it with `DISTINCT` and the function [String::JoinFromList](../../../udf/list/string.md) (it's an equivalent of `','.join(list)` in Python) to output to a string all the values found in the column after [GROUP BY](../../../syntax/group_by.md).
 
-**Examples**
+### Examples
 
 ```yql
 SELECT

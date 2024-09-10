@@ -12,7 +12,7 @@ Returned value:
 * Normalized URL.
 * `NULL`, if the passed string argument can't be parsed as a URL.
 
-**Examples**
+### Examples
 
 ```sql
 SELECT Url::Normalize("hTTp://wWw.yDb.TECH/"); -- "http://www.ydb.tech/"
@@ -30,7 +30,7 @@ Returned value:
 * Normalized URL.
 * Source URL, if the normalization has failed.
 
-**Examples**
+### Examples
 
 ```sql
 SELECT Url::NormalizeWithDefaultHttpScheme("wWw.yDb.TECH");    -- "http://www.ydb.tech/"
@@ -41,12 +41,12 @@ SELECT Url::NormalizeWithDefaultHttpScheme("http://ydb.tech#foo"); -- "http://yd
 
 Encode a UTF-8 string to the urlencoded format (`Url::Encode`) and back (`Url::Decode`).
 
-**List of functions**
+### List of functions
 
 * ```Url::Encode(String?) -> String?```
 * ```Url::Decode(String?) -> String?```
 
-**Examples**
+### Examples
 
 ```sql
 SELECT Url::Decode("http://ydb.tech/%D1%81%D1%82%D1%80%D0%B0%D0%BD%D0%B8%D1%86%D0%B0");
@@ -63,7 +63,7 @@ Parses the URL into parts.
 Url::Parse(Parse{Flags:AutoMap}) -> Struct< Frag: String?, Host: String?, ParseError: String?, Pass: String?, Path: String?, Port: String?, Query: String?, Scheme: String?, User: String? >
 ```
 
-**Examples**
+### Examples
 
 ```sql
 SELECT Url::Parse(
@@ -87,7 +87,7 @@ SELECT Url::Parse(
 
 Get a component of the URL.
 
-**List of functions**
+### List of functions
 
 * ```Url::GetScheme(String{Flags:AutoMap}) -> String```
 
@@ -125,7 +125,7 @@ Get a component of the URL.
 * ```Url::GetOwner(String{Flags:AutoMap}) -> String```
   Returns the domain that's most likely owned by an individual or organization. Unlike Url::GetSignificantDomain, it uses a special whitelist. Besides the ***.co.uk domains, it can return a third-level domain used by free hosting sites and blogs (for example: something.livejournal.com)
 
-**Examples**
+### Examples
 
 ```sql
 SELECT Url::GetScheme("https://ydb.tech");       -- "https://"
@@ -146,7 +146,7 @@ SELECT Url::GetDomain("http://www.ydb.tech", 2); -- "ydb.tech"
 * ```Url::CutQueryStringA­ndFragment(String{Flags:AutoMap}) -> String```
   Returns a copy of the passed URL, stripping out all the CGI parameters and fragments ("?foo=bar" and/or "#baz").
 
-**Examples**
+### Examples
 
 ```sql
 SELECT Url::CutScheme("http://www.ydb.tech"); -- "www.ydb.tech"
@@ -157,7 +157,7 @@ SELECT Url::CutWWW("www.ydb.tech");           -- "ydb.tech"
 
 [Punycode](https://en.wikipedia.org/wiki/Punycode) transformations.
 
-**List of functions**
+### List of functions
 
 * ```Url::HostNameToPunycode(String{Flag:AutoMap}) -> String?```
 * ```Url::ForceHostNameToPunycode(String{Flag:AutoMap}) -> String```
@@ -165,7 +165,7 @@ SELECT Url::CutWWW("www.ydb.tech");           -- "ydb.tech"
 * ```Url::ForcePunycodeToHostName(String{Flag:AutoMap}) -> String```
 * ```Url::CanBePunycodeHostName(String{Flag:AutoMap}) -> Bool```
 
-**Examples**
+### Examples
 
 ```sql
 SELECT Url::PunycodeToHostName("xn--80aniges7g.xn--j1aef"); -- "example.com"
@@ -175,7 +175,7 @@ SELECT Url::PunycodeToHostName("xn--80aniges7g.xn--j1aef"); -- "example.com"
 
 [Query](https://docs.python.org/3/library/urllib.parse.html) transformations.
 
-**List of functions**
+### List of functions
 
 ```sql
 Url::QueryStringToList(String{Flag:AutoMap}, [
@@ -201,7 +201,7 @@ Url::BuildQueryString(List<Tuple<String, String?>>{Flag:AutoMap}, [
 ]) -> String
 ```
 
-**Examples**
+### Examples
 
 ```sql
 SELECT Url::QueryStringToList("a=1&b=2&a=3");                       -- [("a", "1"), ("b", "2"), ("a", "3")]

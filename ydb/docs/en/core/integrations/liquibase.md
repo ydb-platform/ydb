@@ -392,7 +392,7 @@ Let's apply this changeset to an empty database:
 
 After executing the `liquibase update` command, Liquibase will print the following log:
 
-```bash
+```text
 UPDATE SUMMARY
 Run:                          2
 Previously run:               0
@@ -421,7 +421,7 @@ Example contents of the `DATABASECHANGELOG` table:
 
 Let's say we need to create a {{ydb-short-name }} topic and turn off the param `AUTO_PARTITIONING_BY_SIZE` of the table. This can be done with a native SQL script:
 
-```sql
+```yql
 --liquibase formatted sql
 
 --changeset kurdyukov-kir:create-a-topic
@@ -453,7 +453,7 @@ Also, let's add a new column `is_deleted` and remove the `index_episodes_title` 
 
 After executing `liquibase update`, the database schema will be successfully updated with all of these changes:
 
-```bash
+```text
 UPDATE SUMMARY
 Run:                          3
 Previously run:               2

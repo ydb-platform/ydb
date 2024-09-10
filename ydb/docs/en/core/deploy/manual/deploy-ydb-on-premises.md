@@ -41,12 +41,14 @@ For more information about hardware requirements, see [{#T}](../../devops/system
 The TLS protocol provides traffic protection and authentication for {{ ydb-short-name }} server nodes. Before you install your cluster, determine which servers it will host, establish the node naming convention, come up with node names, and prepare your TLS keys and certificates.
 
 You can use existing certificates or generate new ones. Prepare the following files with TLS keys and certificates in the PEM format:
+
 * `ca.crt`: CA-issued certificate used to sign the other TLS certificates (these files are the same on all the cluster nodes).
 * `node.key`: Secret TLS keys for each cluster node (one key per cluster server).
 * `node.crt`: TLS certificates for each cluster node (each certificate corresponds to a key).
 * `web.pem`: Concatenation of the node secret key, node certificate, and the CA certificate needed for the monitoring HTTP interface (a separate file is used for each server in the cluster).
 
 Your organization should define the parameters required for certificate generation in its policy. The following parameters are commonly used for generating certificates and keys for {{ ydb-short-name }}:
+
 * 2048-bit or 4096-bit RSA keys
 * Certificate signing algorithm: SHA-256 with RSA encryption
 * Validity period of node certificates: at least 1 year
@@ -321,6 +323,7 @@ The database creation procedure depends on whether you enabled user authenticati
 You will see that the database was created successfully when the command returns a zero code.
 
 The command example above uses the following parameters:
+
 * `/Root`: Name of the root domain, must match the `domains_config`.`domain`.`name` setting in the cluster configuration file.
 * `testdb`: Name of the created database.
 * `ssd:1`:  Name of the storage pool and the number of storage groups allocated. The pool name usually means the type of data storage devices and must match the `storage_pool_types`.`kind` setting inside the `domains_config`.`domain` element of the configuration file.
@@ -463,7 +466,6 @@ A common way to provide access to the {{ ydb-short-name }} built-in web interfac
 
 {% endnote %}
 
-
 ## Installing {{ ydb-short-name }} in the unprotected mode
 
 {% note warning %}
@@ -475,6 +477,7 @@ We do not recommend using the unprotected {{ ydb-short-name }} mode for developm
 The above installation procedure assumes that {{ ydb-short-name }} was deployed in the standard protected mode.
 
 The unprotected {{ ydb-short-name }} mode is primarily intended for test scenarios associated with {{ ydb-short-name }} software development and testing. In the unprotected mode:
+
 * Traffic between cluster nodes and between applications and the cluster runs over an unencrypted connection.
 * Users are not authenticated (it doesn't make sense to enable authentication when the traffic is unencrypted because the login and password in such a configuration would be transparently transmitted across the network).
 

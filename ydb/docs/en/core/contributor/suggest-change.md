@@ -13,6 +13,7 @@ You need to have a GitHub account to suggest any changes to the YDB source code.
 * In general to connect to github you can use: ssh/token/ssh from yubikey/password etc. Recommended method is ssh keys.
 * If you don't have already created keys (or yubikey), then just create new keys. Full instructions are on [this GitHub page](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent#generating-a-new-ssh-key).
 * If you have a yubikey, you can use the legacy key from the yubikey:
+
   * Let's assume you have already configured yubikey (or configure yubikey locally)
   * On your laptop: `skotty ssh keys`
   * Upload `legacy@yubikey` ssh key to github ([via UI](https://github.com/settings/keys))
@@ -24,17 +25,21 @@ If you are developing on a remote dev host you can use the key from your laptop 
 Suppose your remote machine is dev123456.search.yandex.net.
 
 * on your laptop add ssh forwarding (`~/.ssh/config`):
-```
+
+```text
 Host dev123456.search.yandex.net
     ForwardAgent yes
 ```
+
 * on remote dev host add to `~/.bashrc`:
-```
+
+```bash
 if [[ -S "$SSH_AUTH_SOCK" && ! -h "$SSH_AUTH_SOCK" ]]; then
     ln -sf "$SSH_AUTH_SOCK" ~/.ssh/ssh_auth_sock;
 fi
 export SSH_AUTH_SOCK=~/.ssh/ssh_auth_sock;
 ```
+
 * test connection: `ssh -T git@github.com`
 
 ### Git CLI {#git_cli}
@@ -43,7 +48,7 @@ You need to have the `git` command-line utility installed to run commands from t
 
 To install it under Linux/Ubuntu run:
 
-```
+```bash
 sudo apt-get update
 sudo apt-get install git
 ```
@@ -54,7 +59,7 @@ You need to have some libraries installed on the development machine.
 
 To install it under Linux/Ubuntu run:
 
-```
+```bash
 sudo apt-get update
 sudo apt-get install libidn11-dev libaio-dev libc6-dev
 ```
@@ -67,9 +72,10 @@ Install GitHub CLI as described [at the home page](https://cli.github.com/). For
 
 Run authentication configuration:
 
-```
+```bash
 gh auth login
 ```
+
 You will be asked several questions interactively, answer them as follows:
 
 |Question|Answer|
@@ -82,13 +88,15 @@ You will be asked several questions interactively, answer them as follows:
 
 After the last answer, you will be asked for a token which you can generate in the GitHub UI:
 
-```
-Tip: you can generate a Personal Access Token here https://github.com/settings/tokens
+{% note tip %}
+
+You can generate a Personal Access Token here https://github.com/settings/tokens
 The minimum required scopes are 'repo', 'read:org', 'admin:public_key'.
-? Paste your authentication token:
-```
+
+{% endnote %}
 
 Open the [https://github.com/settings/tokens](https://github.com/settings/tokens), click on "Generate new token" / "Classic", tick FOUR boxes:
+
 * **Box `workflow`**
 * Three others as adivised in the tip: "repo", "admin:public_key" and "read:org" (under "admin:org")
 
@@ -101,16 +109,17 @@ YDB official repository is [https://github.com/ydb-platform/ydb](https://github.
 To work on the {{ ydb-short-name }} code changes, you need to create a fork repository under your GitHub account. Create a fork by pressing the `Fork` button on the [official {{ ydb-short-name }} repository page](https://github.com/ydb-platform/ydb).
 
 After your fork is set up, create a local git repository with two remotes:
+
 - `official`: official {{ ydb-short-name }} repository, for main and stable branches
 - `fork`: your {{ ydb-short-name }} repository fork, for your development branches
 
-```
+```bash
 mkdir -p ~/ydbwork
 cd ~/ydbwork
 git clone -o official git@github.com:ydb-platform/ydb.git
 ```
 
-```
+```bash
 cd ydb
 git remote add fork git@github.com:{your_github_user_name}/ydb.git
 ```
@@ -121,7 +130,7 @@ Forking a repository is an instant action, however cloning to the local machine 
 
 Next, let's configure the default `git push` behavior:
 
-```
+```bash
 git config push.default current
 git config push.autoSetupRemote true
 ```
@@ -129,7 +138,8 @@ git config push.autoSetupRemote true
 This way, `git push {remote}` command will automatically set upstream for the current branch to the `{remote}` and consecutive `git push` commands will only push current branch.
 
 If you intend to use GitHub CLI, then set `ydb-platform/ydb` as a default repository for GitHub CLI:
-```
+
+```bash
 gh repo set-default ydb-platform/ydb
 ```
 
@@ -137,7 +147,7 @@ gh repo set-default ydb-platform/ydb
 
 Run the following command to set up your name and email for commits pushed using Git (replace example name and email with your real ones):
 
-```
+```bash
 git config --global user.name "Marco Polo"
 git config --global user.email "marco@ydb.tech"
 ```
@@ -152,13 +162,13 @@ Usually you need a fresh revision to branch from. Sync your local `main` branch 
 
 If your current local branch is `main`:
 
-```
+```bash
 git pull --ff-only official main
 ```
 
 If your current local branch is not `main`:
 
-```
+```bash
 cd ~/ydbwork/ydb
 git fetch official main:main
 ```
@@ -169,7 +179,7 @@ This command updates your local `main` branch without checking it out.
 
 Create a development branch using Git (replace "feature42" with a name for your new branch):
 
-```
+```bash
 git checkout -b feature42
 ```
 
@@ -177,18 +187,19 @@ git checkout -b feature42
 
 Edit files locally, use standard Git commands to add files, verify status, make commits, and push changes to your fork repository:
 
-```
+```bash
 git add .
 git status
 ```
 
-```
+```bash
 git commit -m "Implemented feature 42"
 git push fork
 ```
 
 Consecutive pushes do not require an upstream or a branch name:
-```
+
+```bash
 git push
 ```
 
@@ -203,7 +214,7 @@ When the changes are completed and locally tested (see [Ya Build and Test](build
   Visit your branch's page on GitHub.com (https://github.com/{your_github_user_name}/ydb/tree/{branch_name}), press `Contribute` and then `Open Pull Request`.
   You can also use the link in the `git push` output to open a Pull Request:
 
-  ```
+  ```text
   ...
   remote: Resolving deltas: 100% (1/1), completed with 1 local object.
   remote:
@@ -215,11 +226,12 @@ When the changes are completed and locally tested (see [Ya Build and Test](build
 - GitHub CLI
 
   Install and configure [GitHub CLI](https://cli.github.com/).
-  ```
+
+  ```bash
   cd ~/ydbwork/ydb
   ```
 
-  ```
+  ```bash
   gh pr create --title "Feature 42 implemented"
   ```
 
@@ -263,7 +275,7 @@ If there's a Pull Request opened for some development branch in your repository,
 
 If you have conflicts on the Pull Request, you may rebase your changes on top of the actual trunk from the official repository. To do so, [refresh main](#fork_sync) branch state on your local machine, and run the rebase command:
 
-```
+```bash
 # Assuming your active branch is your development branch
 git fetch official main:main
 git rebase main
@@ -273,14 +285,14 @@ git rebase main
 
 When required to cherry-pick a fix to the stable branch, first branch off of the stable branch:
 
-```
+```bash
 git fetch official
 git checkout -b "cherry-pick-fix42" official/stable-24-1
 ```
 
 Then cherry-pick the fix and push the branch to your fork:
 
-```
+```bash
 git cherry-pick {fixes_commit_hash}
 git push fork
 ```
@@ -289,6 +301,6 @@ And then create a PR from your branch with the cherry-picked fix to the stable b
 
 If you are using GitHub CLI, pass `-B` argument to specify the target branch:
 
-```
+```bash
 gh pr create --title "Title" -B stable-24-1
 ```

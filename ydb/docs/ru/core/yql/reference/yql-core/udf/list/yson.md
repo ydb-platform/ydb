@@ -37,7 +37,7 @@
 
 {% include [_includes/yson/intro_footer.md](_includes/yson/intro_footer.md) %}
 
-**Примеры**
+## Примеры
 
 ``` yql
 $node = Json(@@
@@ -96,13 +96,14 @@ Yson::From(T) -> Resource<'Yson2.Node'>
 
 `Yson::From` является полиморфной функцией, преобразующей в Yson ресурс большинство примитивных типов данных и контейнеров (списки, словари, кортежи, структуры и т.п.). Тип исходного объекта должен быть совместим с Yson. Например, в ключах словарей допустимы только типы `String` или `Utf8`, а вот `String?` или `Utf8?` уже нет.
 
-**Пример**
+### Пример
 
 ```sql
 SELECT Yson::Serialize(Yson::From(TableRow())) FROM table1;
 ```
 
 ## Yson::WithAttributes
+
 ``` yql
 Yson::WithAttributes(Resource<'Yson2.Node'>{Flags:AutoMap}, Resource<'Yson2.Node'>{Flags:AutoMap}) -> Resource<'Yson2.Node'>?
 ```
@@ -116,12 +117,14 @@ Yson::Equals(Resource<'Yson2.Node'>{Flags:AutoMap}, Resource<'Yson2.Node'>{Flags
 Проверка деревьев в памяти на равенство, толерантная к исходному формату сериализации и порядку перечисления ключей в словарях.
 
 ## Yson::GetHash
+
 ``` yql
 Yson::GetHash(Resource<'Yson2.Node'>{Flags:AutoMap}) -> Uint64
 ```
 Вычисление 64-битного хэша от дерева объектов.
 
 ## Yson::Is...
+
 ``` yql
 Yson::IsEntity(Resource<'Yson2.Node'>{Flags:AutoMap}) -> bool
 Yson::IsString(Resource<'Yson2.Node'>{Flags:AutoMap}) -> bool
@@ -135,12 +138,14 @@ Yson::IsDict(Resource<'Yson2.Node'>{Flags:AutoMap}) -> bool
 Проверка, что текущий узел имеет соответствующий тип. Entity это `#`.
 
 ## Yson::GetLength
+
 ``` yql
 Yson::GetLength(Resource<'Yson2.Node'>{Flags:AutoMap}) -> Uint64?
 ```
 Получение числа элементов в списке или словаре.
 
 ## Yson::ConvertTo... {#ysonconvertto}
+
 ``` yql
 Yson::ConvertTo(Resource<'Yson2.Node'>{Flags:AutoMap}, Type<T>) -> T
 Yson::ConvertToBool(Resource<'Yson2.Node'>{Flags:AutoMap}) -> Bool?
@@ -170,7 +175,7 @@ Yson::ConvertToStringDict(Resource<'Yson2.Node'>{Flags:AutoMap}) -> Dict<String,
 
 `Yson::ConvertTo` является полиморфной функцией, преобразующей Yson ресурс в указанный во втором аргументе тип данных с поддержкой вложенных контейнеров (списки, словари, кортежи, структуры и т.п.).
 
-**Пример**
+### Пример
 
 ```sql
 $data = Yson(@@{
@@ -193,6 +198,7 @@ SELECT Yson::ConvertTo($data,
 ```
 
 ## Yson::Contains {#ysoncontains}
+
 ``` yql
 Yson::Contains(Resource<'Yson2.Node'>{Flags:AutoMap}, String) -> Bool?
 ```
@@ -201,6 +207,7 @@ Yson::Contains(Resource<'Yson2.Node'>{Flags:AutoMap}, String) -> Bool?
 
 
 ## Yson::Lookup... {#ysonlookup}
+
 ``` yql
 Yson::Lookup(Resource<'Yson2.Node'>{Flags:AutoMap}, String) -> Resource<'Yson2.Node'>?
 Yson::LookupBool(Resource<'Yson2.Node'>{Flags:AutoMap}, String) -> Bool?
@@ -215,6 +222,7 @@ Yson::LookupList(Resource<'Yson2.Node'>{Flags:AutoMap}, String) -> List<Resource
 
 
 ## Yson::YPath {#ysonypath}
+
 ``` yql
 Yson::YPath(Resource<'Yson2.Node'>{Flags:AutoMap}, String) -> Resource<'Yson2.Node'>?
 Yson::YPathBool(Resource<'Yson2.Node'>{Flags:AutoMap}, String) -> Bool?
@@ -230,12 +238,14 @@ Yson::YPathList(Resource<'Yson2.Node'>{Flags:AutoMap}, String) -> List<Resource<
 {% include [_includes/yson/ypath_overlay.md](_includes/yson/ypath_overlay.md) %}
 
 ## Yson::Attributes {#ysonattributes}
+
 ``` yql
 Yson::Attributes(Resource<'Yson2.Node'>{Flags:AutoMap}) -> Dict<String,Resource<'Yson2.Node'>>
 ```
 Получение всех атрибутов узла в виде словаря.
 
 ## Yson::Serialize... {#ysonserialize}
+
 ``` yql
 Yson::Serialize(Resource<'Yson2.Node'>{Flags:AutoMap}) -> Yson -- бинарное представление
 Yson::SerializeText(Resource<'Yson2.Node'>{Flags:AutoMap}) -> Yson
@@ -243,6 +253,7 @@ Yson::SerializePretty(Resource<'Yson2.Node'>{Flags:AutoMap}) -> Yson -- чтоб
 ```
 
 ## Yson::SerializeJson {#ysonserializejson}
+
 ```yql
 Yson::SerializeJson(Resource<'Yson2.Node'>{Flags:AutoMap}, [Resource<'Yson2.Options'>?, SkipMapEntity:Bool?, EncodeUtf8:Bool?]) -> Json?
 ```
@@ -253,6 +264,7 @@ Yson::SerializeJson(Resource<'Yson2.Node'>{Flags:AutoMap}, [Resource<'Yson2.Opti
 Типы данных `Yson` и `Json`, возвращаемые функциями сериализации, представляет собой частный случай строки, про которую известно, что в ней находятся данные в соответствующем формате (Yson/Json).
 
 ## Yson::Options {#ysonoptions}
+
 ``` yql
 Yson::Options([AutoConvert:Bool?, Strict:Bool?]) -> Resource<'Yson2.Options'>
 ```
@@ -261,7 +273,8 @@ Yson::Options([AutoConvert:Bool?, Strict:Bool?]) -> Resource<'Yson2.Options'>
 * **AutoConvert** — если переданное в Yson значение не в точности соответствует типу данных результата, то значение будет по возможности сконвертировано. Например, `Yson::ConvertToInt64` в этом режиме будет делать Int64 даже из чисел типа Double.
 * **Strict** — по умолчанию все функции из библиотеки Yson возвращают ошибку в случае проблем в ходе выполнения запроса (например, попытка парсинга строки не являющейся Yson/Json, или попытка поиска по ключу в скалярном типе, или запрошено преобразование в несовместимый тип данных, и т.п.), а если отключить строгий режим, то вместо ошибки в большинстве случаев будет возвращаться `NULL`. При преобразовании в словарь или список (`ConvertTo<Type>Dict` или `ConvertTo<Type>List`) плохие элементы будут выброшены из полученной коллекции.
 
-**Пример:**
+### Пример
+
 ``` yql
 $yson = @@{y = true; x = 5.5}@@y;
 SELECT Yson::LookupBool($yson, "z"); --- null

@@ -8,7 +8,7 @@ This article describes the main groups of configurable parameters in this file.
 
 A YDB cluster consists of multiple nodes, and one or more typical server configurations are usually used for their deployment. To avoid repeating its description for each node, there is a `host_configs` section in the configuration file that lists the used configurations and assigned IDs.
 
-**Syntax**
+### Syntax
 
 ```yaml
 host_configs:
@@ -26,7 +26,7 @@ The `host_config_id` attribute specifies a numeric configuration ID. The `drive`
 - `path`: Path to the mounted block device, for example, `/dev/disk/by-partlabel/ydb_disk_ssd_01`
 - `type`: Type of the device's physical media: `ssd`, `nvme`, or `rot` (rotational - HDD)
 
-**Examples**
+### Examples
 
 One configuration with ID 1 and one SSD disk accessible via `/dev/disk/by-partlabel/ydb_disk_ssd_01`:
 
@@ -82,7 +82,7 @@ This group lists the static cluster nodes on which the Storage processes run and
 - Placement in a specific availability zone, rack
 - Server inventory number (optional)
 
-**Syntax**
+### Syntax
 
 ```yaml
 hosts:
@@ -97,7 +97,7 @@ hosts:
   ...
 ```
 
-**Examples**
+### Examples
 
 ```yaml
 hosts:
@@ -127,7 +127,7 @@ When deploying YDB with a Kubernetes operator, the entire `hosts` section is gen
 
 This section contains the configuration of the YDB cluster root domain, including the [Blob Storage](#domains-blob) (binary object storage), [State Storage](#domains-state), and [authentication](#auth) configurations.
 
-**Syntax**
+### Syntax
 
 ```yaml
 domains_config:
@@ -156,7 +156,7 @@ The following [fault tolerance modes](../../concepts/topology.md) are available:
 | `mirror-3-dc` | Redundancy factor of 3, applies to multi-data center clusters. |
 | `mirror-3dc-3-nodes` | Redundancy factor of 3. Applies for testing. |
 
-**Syntax**
+### Syntax
 
 ```yaml
   storage_pool_types:
@@ -194,7 +194,8 @@ The following guidelines can be used to select State Storage nodes:
 
 When deploying State Storage on clusters that use multiple storage pools with a possible combination of fault tolerance modes, consider increasing the number of nodes and spreading them across different storage pools because unavailability of State Storage results in unavailability of the entire cluster.
 
-**Syntax**
+### Syntax
+
 ```yaml
 state_storage:
 - ring:
@@ -211,7 +212,7 @@ Odd numbers must be used for `nto_select` because using even numbers does not im
 
 The [authentication mode](../../concepts/auth.md) in the {{ ydb-short-name }} cluster is created in the `domains_config.security_config` section.
 
-**Syntax**
+### Syntax
 
 ```yaml
 domains_config:

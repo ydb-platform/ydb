@@ -31,6 +31,7 @@ SELECT * FROM test_data_source.test_table
 External data sources allow execution of [federated queries](../federated_query/index.md) for cross-system data analytics tasks.
 
 The following data sources can be used:
+
 - [ClickHouse](../federated_query/clickhouse.md)
 - [PostgreSQL](../federated_query/postgresql.md)
 - [Connections to S3 ({{ objstorage-name }})](../federated_query/s3/external_data_source.md)

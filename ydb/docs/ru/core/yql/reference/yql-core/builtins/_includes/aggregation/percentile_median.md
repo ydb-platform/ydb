@@ -1,6 +1,7 @@
 ## PERCENTILE и MEDIAN {#percentile-median}
 
-**Сигнатура**
+### Сигнатура
+
 ```
 PERCENTILE(T, Double)->T
 PERCENTILE(T, Tuple<Double, ...>)->Tuple<T, ...>
@@ -23,7 +24,8 @@ MEDIAN(T, [ List<Double> ])->List<T>
 
 Значения прецентиля должны лежать в диапазоне от `0.0` до `1.0` включительно.
 
-**Примеры**
+### Примеры
+
 ``` yql
 SELECT
     MEDIAN(numeric_column),

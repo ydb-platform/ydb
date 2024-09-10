@@ -3,6 +3,7 @@
 A table is a relational [table](https://en.wikipedia.org/wiki/Table_(database)) containing a set of related data, composed of rows and columns. Tables represent entities. For instance, a blog article can be represented by a table named article with columns: `id`, `date_create`, `title`, `author`, `body` and so on.
 
 Rows in the table hold the data, while columns define the data types. For example, the id column cannot be empty (`NOT NULL`) and should contain only unique integer values. A record in YQL might look like this:
+
 ```sql
 CREATE TABLE article (
     id Int64 NOT NULL,
@@ -162,6 +163,7 @@ Using a [Bloom filter](https://en.wikipedia.org/wiki/Bloom_filter) lets you more
 | `KEY_BLOOM_FILTER` | Enum | `ENABLED`, `DISABLED` | Yes | No |
 
 ## Column-oriented tables {#column-oriented-tables}
+
 {% note warning %}
 
 Column-oriented {{ ydb-short-name }} tables are in the Preview mode.
@@ -209,6 +211,7 @@ At the moment, not all functionality of column-oriented tables is implemented. T
 Unlike row-oriented {{ ydb-short-name }} tables, you cannot partition column-oriented tables by primary keys but only by specially designated partitioning keys. Partitioning keys constitute a subset of the table's primary keys.
 
 Example of column-oriented partitioning:
+
 ```sql
 CREATE TABLE article_column_table (
     id Int64 NOT NULL,
@@ -222,7 +225,6 @@ WITH (STORE = COLUMN);
 ```
 
 Unlike data partitioning in row-oriented {{ ydb-short-name }} tables, key values are not used to partition data in column-oriented tables. This way, you can uniformly distribute data across all your existing partitions. This kind of partitioning enables you to avoid hotspots at data inserta and speeding up analytical queries that process (that is, read) large amounts of data.
-
 
 How you select partitioning keys substantially affects the performance of queries to your column-oriented tables. Learn more in [{#T}](../../../dev/primary-key/column-oriented.md).
 

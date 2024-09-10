@@ -16,7 +16,7 @@ CREATE OBJECT `secret_name` (TYPE SECRET) WITH value=`secret_value`;
 * `secret_name` - имя секрета.
 * `secret_value` - содержимое секрета.
 
-**Пример**
+## Пример
 
 Следующий запрос создает секрет с именем `MySecretName` и значением `MySecretData`.
 

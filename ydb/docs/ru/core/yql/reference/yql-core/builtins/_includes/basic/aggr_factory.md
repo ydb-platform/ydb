@@ -10,7 +10,8 @@
 Полученную фабрику можно использовать как второй параметр функции [AGGREGATE_BY](../../aggregation.md#aggregateby).
 Если агрегационная функция работает на двух колонках вместо одной, как например, [MIN_BY](../../aggregation.md#minby), то в [AGGREGATE_BY](../../aggregation.md#aggregateby) первым аргументом передается `Tuple` из двух значений. Подробнее это указано при описании такой агрегационной функции.
 
-**Примеры:**
+### Примеры
+
 ``` yql
 $factory = AggregationFactory("MIN");
 SELECT
@@ -27,14 +28,15 @@ FROM my_table;
 1. Фабрика для агрегационных функций;
 2. Лямбда функция с одним аргументом, преобразующая входной элемент.
 
-**Примеры:**
+### Примеры
+
 ``` yql
 $f = AggregationFactory("sum");
 $g = AggregateTransformInput($f, ($x) -> (cast($x as Int32)));
 $h = AggregateTransformInput($f, ($x) -> ($x * 2));
-select ListAggregate([1,2,3], $f); -- 6
-select ListAggregate(["1","2","3"], $g); -- 6
-select ListAggregate([1,2,3], $h); -- 12
+SELECT ListAggregate([1,2,3], $f); -- 6
+SELECT ListAggregate(["1","2","3"], $g); -- 6
+SELECT ListAggregate([1,2,3], $h); -- 12
 ```
 
 `AggregateTransformOutput()` преобразует фабрику для [агрегационных функций](../../aggregation.md), например, полученную через функцию [AggregationFactory](#aggregationfactory) в другую фабрику, в которой после окончания выполнения агрегации производится указанное преобразование результата.
@@ -44,7 +46,8 @@ select ListAggregate([1,2,3], $h); -- 12
 1. Фабрика для агрегационных функций;
 2. Лямбда функция с одним аргументом, преобразующая результат.
 
-**Примеры:**
+### Примеры
+
 ``` yql
 $f = AggregationFactory("sum");
 $g = AggregateTransformOutput($f, ($x) -> ($x * 2));
@@ -60,7 +63,8 @@ select ListAggregate([1,2,3], $g); -- 12
 
 1. Фабрика для агрегационных функций.
 
-**Примеры:**
+### Примеры
+
 ``` yql
 $i = AggregationFactory("AGGREGATE_LIST_DISTINCT");
 $j = AggregateFlatten($i);

@@ -1,6 +1,7 @@
 ## TOP и BOTTOM {#top-bottom}
 
-**Сигнатура**
+### Сигнатура
+
 ```
 TOP(T?, limit:Uint32)->List<T>
 TOP(T, limit:Uint32)->List<T>
@@ -10,7 +11,8 @@ BOTTOM(T, limit:Uint32)->List<T>
 
 Вернуть список максимальных/минимальных значений выражения. Первый аргумент - выражение, второй - ограничение на количество элементов.
 
-**Примеры**
+### Примеры
+
 ``` yql
 SELECT
     TOP(key, 3),
@@ -30,7 +32,8 @@ FROM my_table;
 
 ## TOP_BY и BOTTOM_BY {#top-bottom-by}
 
-**Сигнатура**
+### Сигнатура
+
 ```
 TOP_BY(T1, T2, limit:Uint32)->List<T1>
 BOTTOM_BY(T1, T2, limit:Uint32)->List<T1>
@@ -40,7 +43,8 @@ BOTTOM_BY(T1, T2, limit:Uint32)->List<T1>
 
 При использовании [фабрики агрегационной функции](../../basic.md#aggregationfactory) в качестве первого аргумента [AGGREGATE_BY](../../aggregation.md#aggregateby) передается `Tuple` из значения и ключа. Ограничение на количество элементов в этом случае передаётся вторым аргументом при создании фабрики.
 
-**Примеры**
+### Примеры
+
 ``` yql
 SELECT
     TOP_BY(value, LENGTH(value), 3),

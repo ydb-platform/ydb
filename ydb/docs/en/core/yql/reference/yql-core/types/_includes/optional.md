@@ -22,9 +22,9 @@ YQL queries can return values of container types and accept them as input parame
 {% endnote %}
 {% endif %}
 
-**Example**
+### Example
 
-```sql
+```yql
 $dict = {"a":1, "b":null};
 $found = $dict["b"];
 select if($found is not null, unwrap($found), -1);
@@ -41,8 +41,9 @@ null
 
 The `NULL` literal has a separate singular `Null` type and can be implicitly converted to any optional type (for example, the nested type `Optional<Optional<...Optional<T>...>>`). In ANSI SQL, `NULL` means "an unknown value", that's why logical and arithmetic operations involving `NULL` or empty `Optional` have certain specifics.
 
-**Examples**
-```
+### Examples
+
+```yql
 SELECT
     True OR NULL,        -- Just(True) (works the same way as True OR <unknown value of type Bool>)
     False AND NULL,      -- Just(False)
@@ -65,6 +66,7 @@ SELECT
 In YQL, there is no implicit type conversion from Optional<T> to T, so the enforceability of the NOT NULL constraint on a table column is ensured at the query compilation stage in {{ ydb-short-name }}.
 
 You can create a non-nullable column in a {{ ydb-short-name }} table using the [CREATE TABLE](../../../reference/syntax/create_table/index.md) operation with the keyword `NOT NULL`:
+
 ```sql
 CREATE TABLE t (
     Key Uint64 NOT NULL,
@@ -77,6 +79,7 @@ After that, write operations to table `t` will only be executed if the values to
 ### Example of the interaction between the NOT NULL constraint and YQL functions.
 
 Many of the YQL functions have optional types as return values. Since YQL is a strongly-typed language, a query like
+
 ```sql
 CREATE TABLE t (
     c Utf8 NOT NULL,
@@ -85,5 +88,6 @@ CREATE TABLE t (
 INSERT INTO t(c)
 SELECT CAST('q' AS Utf8);
 ```
+
 cannot be executed. The reason for this is the type mismatch between the column `c`, which has the type `Utf8`, and the result of the `CAST` function, which has the type `Optional<Utf8>`. To make the query work correctly in such scenarios, it is necessary to use the [COALESCE](../../builtins/basic.md#coalesce) function, whose argument can specify a fallback value to insert into the table in case the function (in the example, CAST) returns an empty `Optional`. If, in the case of an empty `Optional`, the insertion should not be performed and an error should be returned, the [UNWRAP](../../builtins/basic.md#optional-ops) function can be used to unpack the contents of the optional type.
 {% endif %}

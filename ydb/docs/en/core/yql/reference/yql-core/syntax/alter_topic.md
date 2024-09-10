@@ -111,7 +111,7 @@ ALTER TOPIC `my_topic` SET (
 
 The `RESET (option[, option2, ...])` action enables you to reset the topic settings to defaults.
 
-**Example**
+### Example
 
 ```sql
 ALTER TOPIC `my_topic` RESET (

@@ -1,6 +1,6 @@
 # Re2
 
-**List of functions**
+## List of functions
 
 ```
 Re2::Grep(pattern:String, options:Struct<...>?) -> (string:String?) -> Bool
@@ -22,7 +22,7 @@ Make sure to double all the backslashes in your regular expressions (if they are
 
 {% endnote %}
 
-**Examples**
+## Examples
 
 ```sql
 $value = "xaaxaaxaa";
@@ -102,7 +102,7 @@ Notes on Re2::Options from the official [repository](https://github.com/google/r
 
 It is not recommended to use Re2::Options in the code. Most parameters can be replaced with regular expression flags.
 
-**Flag usage examples**
+### Flag usage examples
 
 ```sql
 $value = "Foo bar FOO"u;

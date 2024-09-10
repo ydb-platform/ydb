@@ -1,6 +1,7 @@
 ## AGGREGATE_LIST {#agg-list}
 
-**Сигнатура**
+### Сигнатура
+
 ```
 AGGREGATE_LIST(T? [, limit:Uint64])->List<T>
 AGGREGATE_LIST(T [, limit:Uint64])->List<T>
@@ -18,7 +19,7 @@ AGGREGATE_LIST_DISTINCT(T [, limit:Uint64])->List<T>
 
 Например, можно использовать в сочетании с `DISTINCT` и функцией [String::JoinFromList](../../../udf/list/string.md) (аналог `','.join(list)` из Python) для распечатки в строку всех значений, которые встретились в столбце после применения [GROUP BY](../../../syntax/group_by.md).
 
-**Примеры**
+### Примеры
 
 ``` yql
 SELECT

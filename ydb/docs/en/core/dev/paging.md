@@ -12,9 +12,7 @@ The query in listing 1 demonstrates the recommended way to organize paginated ou
 
 {% endnote %}
 
-<small>Listing 1: Query for organizing paginated output</small>
-
-```sql
+```yql
 --  Table `schools`:
 -- ┌─────────┬─────────┬─────┐
 -- | Name    | Type    | Key |

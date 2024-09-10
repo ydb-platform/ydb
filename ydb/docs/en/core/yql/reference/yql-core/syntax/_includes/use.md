@@ -10,7 +10,7 @@ Alternatively, you can specify the cluster right at the beginning of the table p
 
 As far as `USE` is concerned, you can add it inside [actions](../action.md){% if feature_subquery %} or [subquery templates](../subquery.md){% endif %}. The value of the current cluster is inherited by declarations of nested actions{% if feature_subquery %} or subqueries{% endif %}. The scope of `USE` is terminated at the end of the action{% if feature_subquery %} or {% endif %} subquery template where it has been declared.
 
-**Examples:**
+## Examples
 
 ```yql
 USE {{ example_cluster }};

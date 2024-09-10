@@ -88,7 +88,7 @@ To create a multi-line time series, the query must return at least 3 fields:
 
 For example:
 
-```sql
+```yql
 SELECT
     `timestamp`,
     `responseStatus`
@@ -101,7 +101,6 @@ ORDER BY `timestamp`
 ### Tables { #tables }
 
 Table visualizations will always be available for any valid {{ ydb-short-name }} query that returns exactly one result set.
-
 
 ![Table](../_assets/grafana/table.png)
 
@@ -120,13 +119,13 @@ There are two kinds of macros - [Grafana-level](#macros) and {{ ydb-short-name }
 
 Here is an example of a query with a macro that will use Grafana's time filter:
 
-```sql
+```yql
 SELECT `timeCol`
 FROM `/database/endpoint/my-logs`
 WHERE $__timeFilter(`timeCol`)
 ```
 
-```sql
+```yql
 SELECT `timeCol`
 FROM `/database/endpoint/my-logs`
 WHERE $__timeFilter(`timeCol` + Interval("PT24H"))

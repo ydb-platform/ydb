@@ -9,6 +9,7 @@
 ## Синтаксис {#syntax}
 
 Общий синтаксис вызова оконной функции имеет вид
+
 ```
 function_name([expression [, expression ...]]) OVER (window_definition)
 или
@@ -19,7 +20,7 @@ function_name([expression [, expression ...]]) OVER window_name
 
 В запросе каждому имени окна должно быть сопоставлено _определение окна_ (`window_definition`):
 
-```
+```yql
 SELECT
     F0(...) OVER (window_definition_0),
     F1(...) OVER w1,
@@ -34,6 +35,7 @@ WINDOW
 ```
 
 Здесь `window_definition` записывается в виде
+
 ```
 [ PARTITION BY (expression AS column_identifier | column_identifier) [, ...] ]
 [ ORDER BY expression [ASC | DESC] ]
@@ -60,6 +62,7 @@ WINDOW
 ## Алгоритм вычисления
 
 ### Разбиение {#partition}
+
 Указание `PARTITION BY` группирует строки исходной таблицы в _разделы_, которые затем обрабатываются независимо друг от друга.
 Если `PARTITION BY` не указан, то все строки исходной таблицы попадают в один раздел. Указание `ORDER BY` определяет порядок строк в разделе.
 В `PARTITION BY`, как и в [GROUP BY](../group_by.md) можно использовать алиасы и [SessionWindow](../group_by.md#session-window).
@@ -67,6 +70,7 @@ WINDOW
 При отсутствии `ORDER BY` порядок строк в разделе не определен.
 
 ### Рамка {#frame}
+
 Определение рамки `frame_definition` задает множество строк раздела, попадающих в *рамку окна* связанную с текущей строкой.
 
 В режиме `ROWS` (в YQL пока поддерживается только он) в рамку окна попадают строки с указанными смещениями относительно текущей строки раздела. Например, для `ROWS BETWEEN 3 PRECEDING AND 5 FOLLOWING` в рамку окна попадут три строки перед текущей, текущая строка и пять строк после текущей строки.
@@ -82,7 +86,7 @@ WINDOW
 
 [Список доступных оконных функций](../../builtins/window.md)
 
-**Примеры:**
+### Примеры
 
 ```sql
 SELECT

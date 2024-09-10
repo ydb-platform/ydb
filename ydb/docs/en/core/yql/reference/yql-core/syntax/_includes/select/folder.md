@@ -25,7 +25,7 @@ Use FOLDER with attributes containing large values with caution (`schema` could 
 
 {% endnote %}
 
-**Examples:**
+### Examples
 
 ```yql
 USE hahn;

@@ -20,6 +20,7 @@ WITH (option = value [, ...])
 
 * `CONNECTION_STRING` — [строка соединения](../../../concepts/connect.md#connection_string) c базой-источником. Обязательный параметр.
 * Настройки для аутентификации в базе-источнике одним из способов (обязательно):
+
   * С помощью [токена](../../../recipes/ydb-sdk/auth-access-token.md):
     * `TOKEN_SECRET_NAME` — имя [секрета](../../../concepts/datamodel/secrets.md), содержащего токен.
   * С помощью [логина и пароля](../../../recipes/ydb-sdk/auth-static.md):

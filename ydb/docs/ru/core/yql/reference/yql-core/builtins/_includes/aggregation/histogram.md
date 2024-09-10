@@ -1,6 +1,7 @@
 ## HISTOGRAM {#histogram}
 
-**Сигнатура**
+### Сигнатура
+
 ```
 HISTOGRAM(Double?)->HistogramStruct?
 HISTOGRAM(Double?, weight:Double)->HistogramStruct?
@@ -60,12 +61,18 @@ BlockWardHistogram
 ```
 
 Чем отличается Adaptive и Block:
-<blockquote>Contrary to adaptive histogram, block histogram doesn't rebuild bins after the addition of each point. Instead, it accumulates points and in case the amount of points overflows specified limits, it shrinks all the points at once to produce histogram. Indeed, there exist two limits and two shrinkage operations:
+
+{% block info %}
+
+Contrary to adaptive histogram, block histogram doesn't rebuild bins after the addition of each point. Instead, it accumulates points and in case the amount of points overflows specified limits, it shrinks all the points at once to produce histogram. Indeed, there exist two limits and two shrinkage operations:
 
 1. FastGreedyShrink is fast but coarse. It is used to shrink from upper limit to intermediate limit (override FastGreedyShrink to set specific behaviour).
-2. SlowShrink is slow, but produces finer histogram. It shrinks from the intermediate limit to the actual number of bins in a manner similar to that in adaptive histogram (set CalcQuality in 34constuctor)
+2. SlowShrink is slow, but produces finer histogram. It shrinks from the intermediate limit to the actual number of bins in a manner similar to that in adaptive histogram (set CalcQuality in constuctor)
+
 While FastGreedyShrink is used most of the time, SlowShrink is mostly used for histogram finalization
-</blockquote>
+
+{% endblock %}
+
 {% endif %}
 
 ### Если нужна точная гистограмма
@@ -75,7 +82,8 @@ While FastGreedyShrink is used most of the time, SlowShrink is mostly used for h
 
 При использовании [фабрики агрегационной функции](../../basic.md#aggregationfactory) в качестве первого аргумента [AGGREGATE_BY](../../aggregation.md#aggregateby) передается `Tuple` из значения и веса.
 
-**Примеры**
+### Примеры
+
 ``` yql
 SELECT
     HISTOGRAM(numeric_column)
@@ -103,7 +111,8 @@ FROM my_table;
 
 Построение гистограммы по явно указанной фиксированной шкале корзин.
 
-**Сигнатура**
+### Сигнатура
+
 ```
 LinearHistogram(Double?)->HistogramStruct?
 LinearHistogram(Double? [, binSize:Double [, min:Double [, max:Double]]])->HistogramStruct?
@@ -125,21 +134,26 @@ LogHistogram(Double? [, logBase:Double [, min:Double [, max:Double]]])->Histogra
 
 Если разброс входных значений неконтролируемо велик, рекомендуется указывать минимальное и максимальное значение для предотвращения потенциальных падений из-за высокого потребления памяти.
 
-**Примеры**
+### Примеры
+
 ``` yql
 SELECT
     LogarithmicHistogram(numeric_column, 2)
 FROM my_table;
 ```
+
 ## CDF (cumulative distribution function) {#histogramcdf}
 
 К каждому виду функции Histogram можно приписать суффикс CDF для построения кумулятивной функции распределения. Конструкции
+
 ``` yql
 SELECT
     Histogram::ToCumulativeDistributionFunction(Histogram::Normalize(<вид_функции>Histogram(numeric_column)))
 FROM my_table;
 ```
+
 и
+
 ``` yql
 SELECT
     <вид_функции>HistogramCDF(numeric_column)

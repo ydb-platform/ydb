@@ -14,7 +14,7 @@ The usual comparison operators are available, as shown in Table 9.1.
 Table 9.1. Comparison Operators
 
 #|
-|| **Operator**| **Description** ||
+|| Operator | Description ||
 || datatype < datatype → boolean | Less than ||
 || datatype > datatype → boolean | Greater than ||
 || datatype <= datatype → boolean | Less than or equal to ||

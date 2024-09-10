@@ -7,15 +7,15 @@ Specified as the `WalkFolders` function in the [FROM](../../select/from.md) clau
 
 Returns a single column `State` with the same type as `InitialState`.
 
-**Mandatory parameters**:
+Mandatory parameters**:
 
 1. Path — Path to the initial directory;
 
-**Optional parameters**:
+Optional parameters*
 
 1. InitialState (Persistable). The state type must be serializable (for example, Callable or Resource cannot be used). By default, ListCreate(String) is used.
 
-**Optional named parameters**:
+Optional named parameters:
 
 1. RootAttributes (`String`) — a string containing a list of desired meta-attributes separated by semicolons (e.g., `"schema;row_count"`). Default is `""`.
 1. PreHandler — a lambda function that is called for the list of descendants of the current directory after the `List` operation. It takes a list of nodes, the current state, the current traversal depth, and returns the next state.
@@ -25,6 +25,7 @@ Returns a single column `State` with the same type as `InitialState`.
 1. ResolveHandler — a lambda function that is called after `PreHandler`, which takes the list of descendant links of the current directory, the current state, the list of requested attributes for the parent directory, and the current traversal depth. It returns a `Tuple<List<Tuple<String,String>>, TypeOf(InitialState)>` — a tuple of the list of links to be visited with the requested meta-attributes and the next state. If a link is broken, `WalkFolders` will ignore it, so you don't need to check for this in the handler.
     Signature: `(List<Struct<'Path':String, 'Type':String, 'Attributes':Yson>>, TypeOf(InitialState), List<String>, Int32) -> Tuple<List<Tuple<String,String>>, TypeOf(InitialState)>`.
     Default implementation:
+
     ```yql
     -- Resolve each link, requesting the same attributes as the parent directory.
     ($nodes, $state, $rootAttrList, $level) -> {
@@ -35,6 +36,7 @@ Returns a single column `State` with the same type as `InitialState`.
 1. DiveHandler — a lambda function that is called after `ResolveHandler`. It takes the list of descendant directories of the current directory, the current state, the list of requested attributes for the parent directory, and the current traversal depth. It returns a `Tuple<List<Tuple<String,String>>, TypeOf(InitialState)>` — a tuple of the list of directories to visit (after processing the current directory) with the requested meta-attributes and the next state. The obtained paths are placed in the traversal queue.
     Signature: `(List<Struct<'Path':String, 'Type':String, 'Attributes':Yson>>, TypeOf(InitialState), List<String>, Int32) -> Tuple<List<Tuple<String,String>>, TypeOf(InitialState)>`.
     Default implementation:
+
     ```yql
     -- Visit each subdirectory, requesting the same attributes as the parent directory.
         ($nodes, $state, $rootAttrList, $level) -> {
@@ -63,6 +65,7 @@ Recommendations for usage:
 ## Examples {#examples}
 
 **Recursively collect the paths** of all tables starting from the `initial_folder`:
+
 ``` yql
 $postHandler = ($nodes, $state, $level) -> {
     $tables = ListFilter($nodes, ($x)->($x.Type = "table"));
@@ -73,6 +76,7 @@ SELECT State FROM WalkFolders(`initial_folder`, $postHandler AS PostHandler);
 ```
 
 **Recursively find the most recently** created table in the `initial_folder`:
+
 ```yql
 $extractTimestamp = ($node) -> {
     $creation_time_str = Yson::LookupString($node.Attributes, "creation_time");
@@ -111,6 +115,7 @@ SELECT State FROM WalkFolders(`initial_folder`,
 ```
 
 **Collect paths from all nodes** in the `initial_folder` without descending into subdirectories:
+
 ```yql
 $diveHandler = ($_, $state, $_, $_) -> {
     $nextToVisit = [];
@@ -126,7 +131,9 @@ FROM WalkFolders(`initial_folder`, $diveHandler AS DiveHandler, $postHandler AS 
 
 ```
 
+
 **Recursively collect the paths** of all broken (destination path does not exist) links from the `initial_folder`:
+
 ```yql
 $resolveHandler = ($list, $state, $attrList, $_) -> {
     $broken_links = ListFilter($list, ($link) -> (Yson::LookupBool($link.Attributes, "broken")));
@@ -137,7 +144,7 @@ $resolveHandler = ($list, $state, $attrList, $_) -> {
         )
     );
     $nextState = ListExtend($state, $broken_links_target_paths);
-    -- WalkFolders игнорирует сломанные ссылки при разрешении
+    -- WalkFolders ignores broken links when resolving.
     $paths = ListTake(ListExtract($list, "Path"), 1);
     $pathsWithReqAttrs = ListMap($paths, ($x) -> (($x, $attrList)));
     RETURN ($pathsWithReqAttrs, $nextState);
@@ -147,9 +154,11 @@ SELECT
     State
 FROM WalkFolders(`initial_folder`, $resolveHandler AS ResolveHandler, "target_path" AS RootAttributes);
 ```
+
 **Recursively collect YSON** for each node from the `initial_folder`, containing `Type`, `Path`, and a dictionary Attributes with the node's attributes (`creation_time`, user attribute `foo`):
+
 ```yql
--- В случае, если нужно накопить очень большое состояние в одном запросе, можно хранить его в виде строки, чтобы обойти ограничение на количество узлов во время Evaluate.
+-- If you need to accumulate a very large state in a single request, you can store it as a string to bypass the limitation on the number of nodes during evaluation.
 $saveNodesToYsonString = ($list, $stateStr, $_) -> {
     RETURN $stateStr || ListFold($list, "", ($node, $str) -> ($str || ToBytes(Yson::SerializeText(Yson::From($node))) || "\n"));
 };
@@ -163,6 +172,7 @@ SELECT
 
 ```
 **Pagination of WalkFolders results**. Skip the first 200 paths, then collect 100 from `initial_folder`:
+
 ```yql
 $skip = 200ul;
 $take = 100ul;

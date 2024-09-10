@@ -50,6 +50,7 @@ Where:
 ### Data schema description {#schema}
 
 The data schema description consists of a set of fields:
+
 - Field name.
 - Field type.
 - Required data flag.
@@ -72,7 +73,7 @@ In {{ ydb-full-name }}, the following data paths are supported:
 
 Example query to read data from S3 ({{ objstorage-full-name }}):
 
-```sql
+```yql
 SELECT
     *
 FROM

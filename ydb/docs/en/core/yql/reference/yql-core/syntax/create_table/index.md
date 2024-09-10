@@ -43,9 +43,10 @@ The invocation of `CREATE TABLE` creates {% if concept_table %}a [table]({{ conc
 * [Column-oriented](../../../../concepts/datamodel/table.md#column-oriented-tables) tables.
 
 The table type is specified by the `STORE` parameter in the `WITH` clause, where `ROW` indicates a [row-oriented](../../../../concepts/datamodel/table.md#row-oriented-tables) table and `COLUMN` indicates a [column-oriented](../../../../concepts/datamodel/table.md#column-oriented-tables) table:
+
 ```sql
 CREATE <table_name> (
-  columns 
+  columns
   ...
 )
 
@@ -70,7 +71,7 @@ By default, if the `STORE` parameter is not specified, a row-oriented table is c
       a Uint64,
       b Uint64,
       c Float,
-      d "List<List<Int32>>" 
+      d "List<List<Int32>>"
       PRIMARY KEY (a, b)
     );
     ```
@@ -121,7 +122,7 @@ By default, if the `STORE` parameter is not specified, a row-oriented table is c
   WITH (
     STORE = COLUMN
   );
-  ```  
+  ```
 
 {% endlist %}
 
@@ -151,7 +152,8 @@ All columns allow NULL values, meaning they are [optional](../../types/optional.
 Specifying a `PRIMARY KEY` with a non-empty list of columns is mandatory. These columns become part of the key in the order they are listed.
 {% endif %}
 
-**Example**:
+#### Example
+
 ```sql
 CREATE TABLE <table_name> (
   a Uint64,

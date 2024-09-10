@@ -6,7 +6,7 @@ For large-scale setups, it is recommended to use at least 9 servers for highly a
 
 {% note info %}
 
-**Recommended Server Requirements**:
+Recommended server requirements:
 
 * 16 CPUs (calculated based on the utilization of 8 CPUs by the storage node and 8 CPUs by the dynamic node).
 * 16 GB RAM (recommended minimum RAM).

@@ -10,7 +10,7 @@ SELECT *
     WHERE …
 ```
 
-**Examples**
+## Examples
 
 * Select all the fields from the `series` row-oriented table using the `views_index` index with the `views >=someValue` criteria:
 

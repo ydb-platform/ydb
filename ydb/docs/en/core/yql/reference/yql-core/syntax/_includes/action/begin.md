@@ -2,7 +2,7 @@
 
 Performing an action without declaring it (anonymous action).
 
-**Syntax**
+### Syntax
 
 1. `BEGIN`.
 1. List of top-level expressions.
@@ -10,7 +10,7 @@ Performing an action without declaring it (anonymous action).
 
 An anonymous action can't include any parameters.
 
-**Example**
+### Example
 
 ```
 DO BEGIN

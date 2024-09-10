@@ -8,9 +8,9 @@ Unlike [`INSERT INTO`](../insert_into.md) and [`UPDATE`](../update.md), the quer
 
 {% endnote %}
 
-* Setting values for `REPLACE INTO` using `VALUES`.
+## Examples
 
-  **Example**
+* Setting values for `REPLACE INTO` using `VALUES`.
 
   ```sql
   REPLACE INTO my_table (Key1, Key2, Value2) VALUES
@@ -20,8 +20,6 @@ Unlike [`INSERT INTO`](../insert_into.md) and [`UPDATE`](../update.md), the quer
   ```
 
 * Fetching values for `REPLACE INTO` using a `SELECT`.
-
-  **Example**
 
   ```sql
   REPLACE INTO my_table

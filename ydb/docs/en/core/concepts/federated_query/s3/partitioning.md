@@ -15,7 +15,7 @@ year=2022
 
 The query below explicitly implies that only the data for February 2021 needs to be processed, and other data is not needed.
 
-```sql
+```yql
 SELECT
     *
 FROM
@@ -38,7 +38,7 @@ If the data partitioning scheme is not specified, then _all_ stored data will be
 
 If you explicitly describe the storage structure, specifying that the data in S3 ({{ objstorage-full-name }}) is placed in directories by years and months
 
-```sql
+```yql
 SELECT
     *
 FROM
@@ -121,6 +121,7 @@ When using other types for specifying partitioning, an error is returned.
 The storage path format, where the name of each directory explicitly specifies the column name, is called the "[Hive-Metastore format](https://en.wikipedia.org/wiki/Apache_Hive)" or simply the "Hive format."
 
 This format looks as follows:
+
 ```
 month=01
     year=2021

@@ -44,7 +44,8 @@
 
 Направить результат вычисления [SELECT STREAM](../select_stream.md) в указанный стрим на кластере, заданном оператором [USE](../use.md). Стрим должен существовать и иметь схему, подходящую результату запроса.
 
-**Примеры:**
+## Примеры
+
 ``` yql
 INSERT INTO my_stream_dst
 SELECT STREAM key FROM my_stream_src;
@@ -52,7 +53,7 @@ SELECT STREAM key FROM my_stream_src;
 
 Существует возможность указать в качестве цели таблицу на кластере ydb. Таблица должна существовать на момент создания операции. Схема таблицы должна быть совместима с типом результата запроса.
 
-**Примеры:**
+## Примеры
 ``` yql
 INSERT INTO ydb_cluster.`my_table_dst`
 SELECT STREAM * FROM rtmr_cluster.`my_stream_source`;

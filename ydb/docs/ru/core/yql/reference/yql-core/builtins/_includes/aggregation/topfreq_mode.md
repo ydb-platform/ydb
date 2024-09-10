@@ -1,6 +1,7 @@
 ## TOPFREQ и MODE {#topfreq-mode}
 
-**Сигнатура**
+### Сигнатура
+
 ```
 TOPFREQ(T [, num:Uint32 [, bufSize:Uint32]])->List<Struct<Frequency:Uint64, Value:T>>
 MODE(T [, num:Uint32 [, bufSize:Uint32]])->List<Struct<Frequency:Uint64, Value:T>>
@@ -18,7 +19,8 @@ MODE(T [, num:Uint32 [, bufSize:Uint32]])->List<Struct<Frequency:Uint64, Value:T
 1. Для `TOPFREQ` — желаемое число элементов в результате. `MODE` является алиасом к `TOPFREQ` с 1 в этом аргументе. У `TOPFREQ` по умолчанию тоже 1.
 2. Число элементов в используемом буфере, что позволяет разменивать потребление памяти на точность. По умолчанию 100.
 
-**Примеры**
+### Примеры
+
 ``` yql
 SELECT
     MODE(my_column),

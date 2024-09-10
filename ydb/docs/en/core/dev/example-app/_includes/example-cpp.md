@@ -154,8 +154,6 @@ The given code snippet prints the following text to the console at startup:
 series, Id: 1, title: IT Crowd, Release date: 2006-02-03
 ```
 
-
-
 {% include [param_queries.md](steps/06_param_queries.md) %}
 
 The code snippet shows the use of parameterized queries and the `GetParamsBuilder` to generate parameters and pass them to the `ExecuteDataQuery` method.

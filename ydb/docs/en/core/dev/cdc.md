@@ -14,11 +14,11 @@ You can read data using an [SDK](../reference/ydb-sdk/index.md) or the [{{ ydb-s
 path/to/table/changefeed_name
 ```
 
-> For example, if a table named `table` contains a changefeed named `updates_feed` in the `my` directory, its path looks as follows:
->
-> ```text
-> my/table/updates_feed
-> ```
+For example, if a table named `table` contains a changefeed named `updates_feed` in the `my` directory, its path looks as follows:
+
+```text
+my/table/updates_feed
+```
 
 Before reading data, add a [consumer](../concepts/topic.md#consumer). Below is a sample command that adds a consumer named `my_consumer` to the `updates_feed` changefeed of the `table` table in the `my` directory:
 

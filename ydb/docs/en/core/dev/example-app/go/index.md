@@ -18,7 +18,7 @@ Next, from the same working directory, run the following command to start the te
 
 {% include [init.md](../_includes/steps/01_init.md) %}
 
-To work with `YDB` in `Go`, import the `ydb-go-sdk` driver package:
+To work with {{ ydb-short-name }} in `Go`, import the `ydb-go-sdk` driver package:
 
 ```go
 import (

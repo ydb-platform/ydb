@@ -25,7 +25,7 @@ For example:
 
 {% endif %}
 
-**Example**
+### Example
 
 ```(sql)
 $sample = AsList(
@@ -44,7 +44,7 @@ This conversion can be convenient in the following cases:
 * When the cells in a container column store IDs from another table that you want to join with [`JOIN`](../../join.md).
 {% endif %}
 
-**Syntax**
+### Syntax
 
 * `FLATTEN BY` is specified after `FROM`, but before `GROUP BY`, if `GROUP BY` is present in the query.
 * The type of the result column depends on the type of the source column:

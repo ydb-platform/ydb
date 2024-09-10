@@ -82,7 +82,7 @@ Suppose we have an existing project with the current database schema:
 
 Let's write down our existing migrations as follows:
 
-```
+```text
 db/migration:
   V1__create_series.sql
   V2__create_seasons.sql
@@ -95,7 +95,7 @@ Contents of `SQL` files:
 
 - V1__create_series.sql
 
-  ```sql
+  ```yql
   CREATE TABLE series -- series is the table name.
   (                           -- Must be unique within the folder.
       series_id    Int64,
@@ -113,7 +113,7 @@ Contents of `SQL` files:
 
 - V2__create_seasons.sql
 
-  ```sql
+  ```yql
   CREATE TABLE seasons
   (
       series_id Uint64,
@@ -127,7 +127,7 @@ Contents of `SQL` files:
 
 - V3__create_episodes.sql
 
-```sql
+```yql
 CREATE TABLE episodes
 (
     series_id Uint64,
@@ -165,7 +165,7 @@ Command [migrate](https://documentation.red-gate.com/flyway/flyway-cli-and-api/u
 
 Let's add the migration of data downloads to the previous example:
 
-```
+```text
 db/migration:
   V1__create_series.sql
   V2__create_seasons.sql
@@ -175,7 +175,7 @@ db/migration:
 
 {% cut "The contents of `V4__load_data.sql`" %}
 
-```sql
+```yql
 INSERT INTO series (series_id, title, release_date, series_info)
 VALUES
 
@@ -329,7 +329,7 @@ Command [info](https://documentation.red-gate.com/flyway/flyway-cli-and-api/usag
 
 Let's add another migration that renames the previously added secondary index:
 
-```
+```text
 db/migration:
   V1__create_series.sql
   V2__create_seasons.sql
@@ -341,7 +341,7 @@ db/migration:
 
 {% cut "The contents of `V6__rename_series_title_index.sql`" %}
 
-```sql
+```yql
 ALTER TABLE `series` RENAME INDEX `title_index` TO `title_index_new`;
 ```
 

@@ -18,7 +18,7 @@ Where:
 * **Index_columns** is a list of comma-separated names of columns in the created table to be used for a search in the index.
 * **Cover_columns** is a list of comma-separated names of columns in the created table, which will be stored in the index in addition to the search columns, making it possible to fetch additional data without accessing the table for it.
 
-**Example**
+## Example
 
 ```sql
 CREATE TABLE my_table (

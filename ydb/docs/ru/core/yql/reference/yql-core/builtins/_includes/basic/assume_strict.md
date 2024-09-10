@@ -1,6 +1,7 @@
 ## AssumeStrict {#assumestrict}
 
-**Сигнатура**
+### Сигнатура
+
 ```
 AssumeStrict(T)->T
 ```
@@ -11,7 +12,8 @@ AssumeStrict(T)->T
 
 Если есть уверенность, что при вычислении выражения ошибок времени выполнения на самом деле не возникает, то имеет смысл использовать `AssumeStrict`.
 
-**Пример**
+### Пример
+
 ``` yql
 SELECT * FROM T1 AS a JOIN T2 AS b USING(key)
 WHERE AssumeStrict(Unwrap(CAST(a.key AS Int32))) == 1;

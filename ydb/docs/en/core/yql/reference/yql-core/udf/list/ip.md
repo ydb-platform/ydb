@@ -2,7 +2,7 @@
 
 The `Ip`  module supports both the IPv4 and IPv6 addresses. By default, they are represented as binary strings of 4 and 16 bytes, respectively.
 
-**List of functions**
+## List of functions
 
 * ```Ip::FromString(String{Flags:AutoMap}) -> String?``` - From a human-readable representation to a binary representation.
 * ```Ip::SubnetFromString(String{Flags:AutoMap}) -> String?``` - From a human-readable representation of subnet to a binary representation.
@@ -17,7 +17,7 @@ The `Ip`  module supports both the IPv4 and IPv6 addresses. By default, they are
 * ```Ip::SubnetMatch(String{Flags:AutoMap}, String{Flags:AutoMap}) -> Bool```: The first argument is a subnet, the second argument is a subnet or an address.
 
 
-**Examples**
+## Examples
 
 ```sql
 SELECT Ip::IsEmbeddedIPv4(

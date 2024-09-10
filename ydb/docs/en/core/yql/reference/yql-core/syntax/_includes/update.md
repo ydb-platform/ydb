@@ -4,7 +4,7 @@ Updates the data in the table.{% if feature_mapreduce %}  The table is searched 
 
 `UPDATE` can't change the value of the primary key columns.
 
-**Example**
+## Example
 
 ```sql
 UPDATE my_table
@@ -18,7 +18,7 @@ Updates the data in the table based on the results of a subquery. The set of col
 
 The primary key value is used to search for the rows being updated. For each row found, the values of the non-key columns is replaced with the values returned in the corresponding row of the result of the subquery. The values of the table columns that are missing in the returned columns of the subquery remain unchanged.
 
-**Example**
+### Example
 
 ```sql
 $to_update = (

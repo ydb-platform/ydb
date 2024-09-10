@@ -2,7 +2,7 @@
 
 Functions for ASCII strings:
 
-**List of functions**
+## List of functions
 
 * ```String::Base64Encode(String{Flags:AutoMap}) -> String```
 
@@ -137,7 +137,7 @@ The functions from the String library don't support Cyrillic and can only work w
 
 {% endnote %}
 
-**Examples**
+## Examples
 
 ```sql
 SELECT String::Base64Encode("YQL"); -- "WVFM"

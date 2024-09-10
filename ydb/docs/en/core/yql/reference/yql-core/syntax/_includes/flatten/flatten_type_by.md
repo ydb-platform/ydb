@@ -14,7 +14,7 @@ To specify the type of container to convert to, you can use:
 
    To filter the `NULL` values without serialization, specify the operation by using `FLATTEN OPTIONAL BY`.
 
-**Examples**
+### Examples
 
 ```sql
 SELECT

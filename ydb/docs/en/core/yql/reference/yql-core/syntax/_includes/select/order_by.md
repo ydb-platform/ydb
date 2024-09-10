@@ -9,7 +9,7 @@ Each criteria can be followed by the sorting direction:
 
 Multiple sorting criteria will be applied left-to-right.
 
-**Example**
+## Example
 
 ```yql
 SELECT key, string_column

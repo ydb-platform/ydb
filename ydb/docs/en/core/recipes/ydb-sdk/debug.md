@@ -7,6 +7,7 @@ When troubleshooting issues with {{ ydb-short-name }}, diagnostics tools such as
 This section contains code recipes for enabling diagnostics tools in different {{ ydb-short-name }} SDKs.
 
 Table of contents:
+
 - [Enable logging](debug-logs.md)
 - [Enable metrics in Prometheus](debug-prometheus.md)
 - [Enable tracing in Jaeger](debug-jaeger.md)

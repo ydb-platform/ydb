@@ -2,7 +2,7 @@
 
 The results of calculating the aggregate function as subtotals for the groups and overall totals over individual columns or whole table.
 
-**Syntax**
+### Syntax
 
 ```sql
 SELECT
@@ -31,7 +31,7 @@ The values of columns not used in calculations are replaced with `NULL` in the s
 * `0`: If `NULL` is used for the original empty value.
 * `1`: If `NULL` is added for a subtotal or overall total.
 
-**Example**
+### Example
 
 ```sql
 SELECT

@@ -17,7 +17,7 @@ CREATE OBJECT `secret_name:user_name` (TYPE SECRET_ACCESS)
 * `secret_name` - имя [секрета](../../../concepts/datamodel/secrets.md).
 * `user_name` - имя пользователя, которому выдается доступ.
 
-**Пример**
+## Пример
 
 Следующий SQL-запрос выдаст права на использование секрета `MySecretName` пользователю `another_user`:
 

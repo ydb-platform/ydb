@@ -31,7 +31,7 @@
 
 Send the result of the [SELECT STREAM](../select_stream.md) calculation to the specified stream on the cluster specified by the [USE](../use.md) operator. The stream must exist and have a scheme matching the query result.
 
-**Examples:**
+## Examples
 
 ```yql
 INSERT INTO my_stream_dst
@@ -40,7 +40,6 @@ SELECT STREAM key FROM my_stream_src;
 
 You can specify a table on the ydb cluster as the target. The table must exist at the time you create the operation. The table schema must be compatible with the type of query result.
 
-**Examples:**
 
 ```yql
 INSERT INTO ydb_cluster.`my_table_dst`

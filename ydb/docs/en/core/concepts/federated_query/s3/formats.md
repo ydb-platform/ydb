@@ -17,6 +17,7 @@ The table below lists the data formats supported in {{ ydb-short-name }}.
 |[`raw`](#raw)|✓||
 
 ### Format csv_with_names {#csv_with_names}
+
 This format is based on the [CSV](https://en.wikipedia.org/wiki/CSV) format. Data is placed in columns separated by commas, with column names in the file's first row.
 
 Example data:
@@ -59,6 +60,7 @@ Query result:
 This format is based on the [`TSV`](https://en.wikipedia.org/wiki/Tab-separated_values) format. Data is placed in columns separated by tab characters (code `0x9`), with column names in the file's first row.
 
 Example data:
+
 ```
 Year    Manufacturer    Model   Price
 1997    Man_1   Model_1    3000.00
@@ -94,9 +96,11 @@ Query result:
 {% endcut %}
 
 ### Format json_list {#json_list}
+
 This format is based on the [JSON representation](https://en.wikipedia.org/wiki/JSON) of data. Each file must contain an array of JSON objects.
 
 Example of valid data (data presented as a list of JSON objects):
+
 ```json
 [
     { "Year": 1997, "Manufacturer": "Man_1", "Model": "Model_1", "Price": 3000.0 },
@@ -105,6 +109,7 @@ Example of valid data (data presented as a list of JSON objects):
 ```
 
 Example of **INVALID** data (each line contains a separate JSON object, but they are not combined into a list):
+
 ```json
 { "Year": 1997, "Manufacturer": "Man_1", "Model": "Model_1", "Price": 3000.0 }
 { "Year": 1999, "Manufacturer": "Man_2", "Model": "Model_2", "Price": 4900.00 }
@@ -115,6 +120,7 @@ Example of **INVALID** data (each line contains a separate JSON object, but they
 This format is based on the [JSON representation](https://en.wikipedia.org/wiki/JSON) of data. Each file must contain a JSON object on each line without combining them into a JSON array. This format is used for data streaming systems like Apache Kafka or [{{ydb-full-name}} Topics](../../topic.md).
 
 Example of valid data (each line contains a separate JSON object):
+
 ```json
 { "Year": 1997, "Manufacturer": "Man_1", "Model": "Model_1", "Price": 3000.0 }
 { "Year": 1999, "Manufacturer": "Man_2", "Model": "Model_2", "Price": 4900.00 }
@@ -281,4 +287,4 @@ For Parquet file format, the following internal compression algorithms are suppo
 |[Raw](https://en.wikipedia.org/wiki/Gzip)|raw|✓||
 |[Snappy](https://en.wikipedia.org/wiki/Snappy_(compression))|snappy|✓|✓|
 
-{{ydb-full-name}} does not support working with externally compressed Parquet files, such as files named "<myfile>.parquet.gz" or similar. All files in Parquet format must be without external compression.
+{{ydb-full-name}} does not support working with externally compressed Parquet files, such as files named `<myfile>.parquet.gz` or similar. All files in Parquet format must be without external compression.

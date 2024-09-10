@@ -2,7 +2,7 @@
 
 It lets you combine multiple data sources (subqueries or tables) by equality of values in the specified columns or expressions (the `JOIN` keys).
 
-**Syntax**
+## Syntax
 
 ```sql
 SELECT ...    FROM table_1
@@ -27,7 +27,7 @@ Since columns in YQL are identified by their names, and you can't have two colum
 
 {% endnote %}
 
-## Types of join (Join_Type)
+## Types of join
 
 * `INNER` <span style="color: gray;">(default)</span>: Rows from joined subqueries that don't match any rows on the other side won't be included in the result.
 * `LEFT`: If there's no value in the right subquery, it adds a row to the result with column values from the left subquery, using `NULL` in columns from the right subquery
@@ -46,7 +46,7 @@ Since columns in YQL are identified by their names, and you can't have two colum
 
 {% endnote %}
 
-## Conditions for joining (Join_Condition)
+## Conditions for joining
 
 For `CROSS JOIN`, no join condition is specified. The result includes the Cartesian product of the left and right subquery, meaning it combines everything with everything. The number of rows in the resulting subquery is the product of the number of rows in the left and right subqueries.
 
@@ -55,7 +55,7 @@ For any other JOIN types, specify the condition using one of the two methods:
 1. `USING (column_name)`. Used if both the left and right subqueries share a column whose equality of values is a join condition.
 2. `ON (equality_conditions)`. Lets you set a condition of equality for column values or expressions over columns in the left and right subqueries or use several such conditions combined by `and`.
 
-**Examples:**
+### Examples
 
 ```sql
 SELECT    a.value as a_value, b.value as b_value

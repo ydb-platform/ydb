@@ -39,7 +39,7 @@ $out1, $out2 = PROCESS $mySubquery($myParam1, $myParam2);
 
 {% endif %}
 
-**Examples**
+### Examples
 
 ```yql
 DEFINE SUBQUERY $hello_world($name, $suffix?) AS
@@ -139,7 +139,7 @@ These functions combine the results of one or more subquery templates passed by 
 * `SubqueryMerge` uses the same constraints as `SubqueryExtend` and also outputs a sorted result if all subqueries have the same sort order.
 * `SubqueryUnionMerge` uses the same constraints as `SubqueryUnionAll` and also outputs a sorted result if all subqueries have the same sort order.
 
-**Examples:**
+### Examples
 
 ```yql
 DEFINE SUBQUERY $sub1() as
@@ -168,7 +168,7 @@ They substitute each item from the list into the subquery template as a paramete
 * `SubqueryMergeFor` uses the same constraints as `SubqueryExtendFor` and also outputs a sorted result if all subqueries have the same sort order.
 * `SubqueryUnionMergeFor` uses the same constraints as `SubqueryUnionAllFor` and also outputs a sorted result if all subqueries have the same sort order.
 
-**Examples:**
+### Examples
 
 ```yql
 DEFINE SUBQUERY $sub($i) as
@@ -188,7 +188,7 @@ The functions take the following arguments:
 
 And they build a new query template without parameters where sorting is performed or a comment on the use of sorting is added to the result. To use the resulting query template, call the `PROCESS` function, since, when using a `SELECT`, sorting is ignored.
 
-**Examples:**
+### Examples
 
 ```yql
 DEFINE SUBQUERY $sub() as

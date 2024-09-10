@@ -2,7 +2,7 @@
 
 Set of auxiliary functions for the [HISTOGRAM aggregate function](../../../builtins/aggregation.md). In the signature description below, HistogramStruct refers to the result of the aggregate function `HISTOGRAM`, `LinearHistogram` or `LogarithmicHistogram` being a structure of a certain type.
 
-**List of functions**
+## List of functions
 
 * ```Histogram::Print(HistogramStruct{Flags:AutoMap}, Byte?) -> String```
 * ```Histogram::Normalize(HistogramStruct{Flags:AutoMap}, [Double?]) -> HistogramStruct```: The second argument specifies the desired area of the histogram, 100 by default.

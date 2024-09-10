@@ -1,6 +1,7 @@
 ## COUNT {#count}
 
-**Сигнатура**
+### Сигнатура
+
 ```
 COUNT(*)->Uint64
 COUNT(T)->Uint64
@@ -11,7 +12,8 @@ COUNT(T?)->Uint64
 
 Как и другие агрегатные функции, может использоваться в сочетании с [GROUP BY](../../../syntax/group_by.md) для получения статистики по частям таблицы, соответствующим значениям в столбцах, по которым идет группировка. {% if select_statement != "SELECT STREAM" %}А модификатор [DISTINCT](../../../syntax/group_by.md#distinct) позволяет посчитать число уникальных значений.{% endif %}
 
-**Примеры**
+### Примеры
+
 ``` yql
 SELECT COUNT(*) FROM my_table;
 ```
@@ -28,7 +30,8 @@ SELECT COUNT(DISTINCT value) FROM my_table;
 
 ## MIN и MAX {#min-max}
 
-**Сигнатура**
+### Сигнатура
+
 ```
 MIN(T?)->T?
 MIN(T)->T?
@@ -40,14 +43,16 @@ MAX(T)->T?
 
 В качестве аргумента допустимо произвольное вычислимое выражение с результатом, допускающим сравнение значений.
 
-**Примеры**
+### Примеры
+
 ``` yql
 SELECT MIN(value), MAX(value) FROM my_table;
 ```
 
 ## SUM {#sum}
 
-**Сигнатура**
+### Сигнатура
+
 ```
 SUM(Unsigned?)->Uint64?
 SUM(Signed?)->Int64?
@@ -67,7 +72,8 @@ SELECT SUM(value) FROM my_table;
 
 ## AVG {#avg}
 
-**Сигнатура**
+### Сигнатура
+
 ```
 AVG(Double?)->Double?
 AVG(Interval?)->Interval?
@@ -80,14 +86,16 @@ AVG(Decimal(N, M)?)->Decimal(N, M)?
 
 Целочисленные значения и интервалы времени автоматически приводятся к Double.
 
-**Примеры**
+### Примеры
+
 ``` yql
 SELECT AVG(value) FROM my_table;
 ```
 
 ## COUNT_IF {#count-if}
 
-**Сигнатура**
+### Сигнатура
+
 ```
 COUNT_IF(Bool?)->Uint64?
 ```
@@ -98,7 +106,8 @@ COUNT_IF(Bool?)->Uint64?
 
 Функция *не* выполняет неявного приведения типов к булевым для строк и чисел.
 
-**Примеры**
+### Примеры
+
 ``` yql
 SELECT
   COUNT_IF(value % 2 == 1) AS odd_count
@@ -114,7 +123,8 @@ SELECT
 
 ## SUM_IF и AVG_IF {#sum-if}
 
-**Сигнатура**
+### Сигнатура
+
 ```
 SUM_IF(Unsigned?, Bool?)->Uint64?
 SUM_IF(Signed?, Bool?)->Int64?
@@ -127,7 +137,8 @@ AVG_IF(Double?, Bool?)->Double?
 
 Таким образом, `SUM_IF(value, condition)` является чуть более короткой записью для `SUM(IF(condition, value))`, аналогично для `AVG`. Расширение типа данных аргумента работает так же аналогично одноименным функциям без суффикса.
 
-**Примеры**
+### Примеры
+
 ``` yql
 SELECT
     SUM_IF(value, value % 2 == 1) AS odd_sum,
@@ -137,7 +148,7 @@ FROM my_table;
 
 При использовании [фабрики агрегационной функции](../../basic.md#aggregationfactory) в качестве первого аргумента [AGGREGATE_BY](../../aggregation.md#aggregateby) передается `Tuple` из значения и предиката.
 
-**Примеры**
+### Примеры
 
 ``` yql
 $sum_if_factory = AggregationFactory("SUM_IF");
@@ -151,7 +162,8 @@ FROM my_table;
 
 ## SOME {#some}
 
-**Сигнатура**
+### Сигнатура
+
 ```
 SOME(T?)->T?
 SOME(T)->T?
@@ -161,7 +173,8 @@ SOME(T)->T?
 
 Из-за отсутствия гарантий `SOME` вычислительно дешевле, чем часто использующиеся в подобных ситуациях [MIN и MAX](#min-max).
 
-**Примеры**
+### Примеры
+
 ``` yql
 SELECT
   SOME(value)

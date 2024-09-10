@@ -6,7 +6,7 @@ In the case of transactional load, parameters let you avoid recompilation of que
 
 Passing of parameters is supported in the SDK, CLI, and graphical interfaces.
 
-**Syntax**
+## Syntax
 
 ```sql
 DECLARE $named-node AS data_type;
@@ -24,7 +24,7 @@ Only serializable data types are allowed:
 * [Containers](../../../types/containers.md), except `Stream<Type>`.
 * `Void` and `Null` are the supported [special types](../../../types/special.md).
 
-**Example**
+## Example
 
 ```yql
 DECLARE $x AS String;

@@ -7,6 +7,7 @@ The main entity of the DSL is **selectors**. They allow the overriding of parts 
 ## Labels {#labels}
 
 Labels are special tags used to mark nodes or groups of nodes. Each node has a set of automatically assigned labels:
+
 * `node_id` — the internal identifier of the node in the system
 * `node_host` — the node's `hostname` obtained at startup
 * `tenant` — the database served by this node
@@ -49,13 +50,16 @@ selector_config:
 A mapping in which you can set the allowable values for labels. This section is used as a hint when generating possible configurations using the resolve command. Values are not validated at node startup.
 
 There are two types of labels available:
+
 * string;
 * enum.
 
 ### string
+
 It can take any value or be unset.
 
 Example:
+
 ```yaml
 dynamic:
   type: string
@@ -64,9 +68,11 @@ host_name:
 ```
 
 ### enum
+
 It can take values from the `values` list or be unset.
 
 Example:
+
 ```yaml
 flavour:
   type: enum
@@ -99,6 +105,7 @@ selector: {}
 This operator allows for selecting nodes with label values from a list.
 
 The following selector will select all nodes where `label1` is equal to `value1` **or** `value2`:
+
 ```yaml
 selector:
   label1:
@@ -112,6 +119,7 @@ selector:
 This operator allows selecting nodes where the chosen label does not match any value from a list.
 
 The following selector will select all nodes where `label1` is equal to `value1` **and** `label2` is not equal to `value2` **and** `value3`:
+
 ```yaml
 selector:
   label1: value1
@@ -307,9 +315,8 @@ Configurations can contain complex sets of overrides. With the [{{ ydb-short-nam
 
 The configuration transformation command is described in more detail in the section [{#T}](../../reference/ydb-cli/configs.md).
 
-Example output of `{{ ydb-cli }} admin config
+Example output of `{{ ydb-cli }} admin config resolve --all -f cluster.yaml` for the following configuration file:
 
- resolve --all -f cluster.yaml` for the following configuration file:
 ```yaml
 metadata:
   cluster: ""
@@ -331,7 +338,9 @@ selector_config:
       node_type: COMPUTE
       cpu_count: 8
 ```
+
 Output:
+
 ```yaml
 ---
 label_sets: # sets of labels for which the configuration is generated

@@ -14,7 +14,7 @@
 
 {% if feature_mapreduce %}Таблица по имени ищется в базе данных, заданной оператором [USE](../use.md).{% endif %}
 
-**Примеры**
+## Примеры
 
 ``` yql
 SELECT key FROM my_table;

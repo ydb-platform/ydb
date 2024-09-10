@@ -12,7 +12,7 @@
 * TimezoneId (16 бит);
 * DayOfYear (9 бит) — день от начала года;
 * WeekOfYear (6 бит) — неделя от начала года, 1 января всегда относится к первой неделе;
-* WeekOfYearIso8601 (6 бит) — неделя года согласно ISO 8601 (первой неделей считается та, в которой 4 января)
+* WeekOfYearIso8601 (6 бит) — неделя года согласно ISO 8601 (первой неделей считается та, в которой 4 января);
 * DayOfWeek (3 бита) — день недели.
 
 Если таймзона не GMT, то в компонентах хранится локальное время в соответствующей таймзоне.
@@ -21,7 +21,7 @@
 
 Преобразование из простого типа во внутреннее представление. Всегда успешно при непустом входе.
 
-**Список функций**
+### Список функций
 
 * ```DateTime::Split(Date{Flags:AutoMap}) -> Resource<TM>```
 * ```DateTime::Split(Datetime{Flags:AutoMap}) -> Resource<TM>```
@@ -36,7 +36,7 @@
 
 Сборка простого типа из внутреннего представления. Всегда успешна при непустом входе.
 
-**Список функций**
+### Список функций
 
 * ```DateTime::MakeDate(Resource<TM>{Flags:AutoMap}) -> Date```
 * ```DateTime::MakeDatetime(Resource<TM>{Flags:AutoMap}) -> Datetime```
@@ -45,7 +45,7 @@
 * ```DateTime::MakeTzDatetime(Resource<TM>{Flags:AutoMap}) -> TzDatetime```
 * ```DateTime::MakeTzTimestamp(Resource<TM>{Flags:AutoMap}) -> TzTimestamp```
 
-**Примеры**
+### Примеры
 
 ``` yql
 SELECT
@@ -63,7 +63,7 @@ SELECT
 
 Взятие компоненты внутреннего представления.
 
-**Список функций**
+### Список функций
 
 * ```DateTime::GetYear(Resource<TM>{Flags:AutoMap}) -> Uint16```
 * ```DateTime::GetDayOfYear(Resource<TM>{Flags:AutoMap}) -> Uint16```
@@ -82,7 +82,7 @@ SELECT
 * ```DateTime::GetTimezoneId(Resource<TM>{Flags:AutoMap}) -> Uint16```
 * ```DateTime::GetTimezoneName(Resource<TM>{Flags:AutoMap}) -> String```
 
-**Примеры**
+### Примеры
 
 ``` yql
 $tm = DateTime::Split(TzDatetime("2019-01-09T00:00:00,Europe/Moscow"));
@@ -99,13 +99,13 @@ SELECT
 
 Обновление одной или нескольких компонент во внутреннем представлении. Возвращает либо обновлённую копию, либо NULL, если после обновления получается некорректная дата или возникают другие противоречия.
 
-**Список функций**
+### Список функций
 
 ```
 DateTime::Update( Resource<TM>{Flags:AutoMap}, [ Year:Uint16?, Month:Uint8?, Day:Uint8?, Hour:Uint8?, Minute:Uint8?, Second:Uint8?, Microsecond:Uint32?, Timezone:String? ]) -> Resource<TM>?
 ```
 
-**Примеры**
+### Примеры
 
 ``` yql
 $tm = DateTime::Split(Timestamp("2019-01-01T01:02:03.456789Z"));
@@ -125,7 +125,7 @@ SELECT
 
 Получение Timestamp из количества секунд/миллисекунд/микросекунд от начала эпохи в UTC. При выходе за границы Timestamp возвращается NULL.
 
-**Список функций**
+### Список функций
 
 * ```DateTime::FromSeconds(Uint32{Flags:AutoMap}) -> Timestamp```
 * ```DateTime::FromMilliseconds(Uint64{Flags:AutoMap}) -> Timestamp```
@@ -135,24 +135,25 @@ SELECT
 
 Получение количества секунд/миллисекунд/микросекунд от начала эпохи в UTC из простого типа.
 
-**Список функций**
+### Список функций
 
 * ```DateTime::ToSeconds(Date/DateTime/Timestamp/TzDate/TzDatetime/TzTimestamp{Flags:AutoMap}) -> Uint32```
 * ```DateTime::ToMilliseconds(Date/DateTime/Timestamp/TzDate/TzDatetime/TzTimestamp{Flags:AutoMap}) -> Uint64```
 * ```DateTime::ToMicroseconds(Date/DateTime/Timestamp/TzDate/TzDatetime/TzTimestamp{Flags:AutoMap}) -> Uint64```
 
-**Примеры**
+### Примеры
 
 ``` yql
 SELECT
     DateTime::FromSeconds(1546304523), -- 2019-01-01T01:02:03.000000Z
     DateTime::ToMicroseconds(Timestamp("2019-01-01T01:02:03.456789Z")); -- 1546304523456789
 ```
+
 ## Interval... {#interval}
 
 Преобразования между ```Interval``` и различными единицами измерения времени.
 
-**Список функций**
+### Список функций
 
 * ```DateTime::ToDays(Interval{Flags:AutoMap}) -> Int16```
 * ```DateTime::ToHours(Interval{Flags:AutoMap}) -> Int32```
@@ -173,12 +174,11 @@ SELECT
 
 {% endnote %}
 
-
 AddTimezone никак не влияет на вывод ToSeconds(), поскольку ToSeconds() всегда возвращают время в таймзоне GMT.
 
 Interval также можно создавать из строкового литерала в формате [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601%23Durations).
 
-**Примеры**
+### Примеры
 
 ``` yql
 SELECT
@@ -191,7 +191,7 @@ SELECT
 
 Получить начало периода, содержащего дату/время. При некорректном результате возвращается NULL. Если таймзона не GMT, то начало периода будет в указанной временной зоне.
 
-**Список функций**
+### Список функций
 
 * ```DateTime::StartOfYear(Resource<TM>{Flags:AutoMap}) -> Resource<TM>?```
 * ```DateTime::StartOfQuarter(Resource<TM>{Flags:AutoMap}) -> Resource<TM>?```
@@ -206,7 +206,7 @@ SELECT
 
 * ```DateTime::TimeOfDay(Resource<TM>{Flags:AutoMap}) -> Interval```
 
-**Примеры**
+### Примеры
 
 ``` yql
 SELECT
@@ -239,7 +239,7 @@ SELECT
 Прибавить/вычесть заданное количество единиц к компоненте во внутреннем представлении и обновить остальные поля.
 Возвращает либо обновлённую копию, либо NULL, если после обновления получается некорректная дата или возникают другие противоречия.
 
-**Список функций**
+### Список функций
 
 * ```DateTime::ShiftYears(Resource<TM>{Flags:AutoMap}, Int32) -> Resource<TM>?```
 * ```DateTime::ShiftQuarters(Resource<TM>{Flags:AutoMap}, Int32) -> Resource<TM>?```
@@ -248,7 +248,7 @@ SELECT
 Если в результате номер дня в месяце превышает максимально возможный, то в поле `Day` будет записан последний день месяца,
 время при этом не изменится (см. примеры).
 
-**Примеры**
+### Примеры
 
 ``` yql
 $tm1 = DateTime::Split(DateTime("2019-01-31T01:01:01Z"));
@@ -267,7 +267,7 @@ SELECT
 
 Получить строковое представление момента времени, используя произвольную строку форматирования.
 
-**Список функций**
+### Список функций
 
 * ```DateTime::Format(String) -> (Resource<TM>{Flags:AutoMap}) -> String```
 
@@ -287,7 +287,7 @@ SELECT
 
 Все остальные символы строки форматирования переносятся без изменений.
 
-**Примеры**
+### Примеры
 
 ``` yql
 $format = DateTime::Format("%Y-%m-%d %H:%M:%S %Z");
@@ -301,7 +301,7 @@ SELECT
 
 Распарсить строку во внутреннее представление, используя произвольную строку форматирования. Для незаполненных полей используются значения по умолчанию. При возникновении ошибок возвращается NULL.
 
-**Список функций**
+### Список функций
 
 * ```DateTime::Parse(String) -> (String{Flags:AutoMap}) -> Resource<TM>?```
 
@@ -318,7 +318,7 @@ SELECT
 * `%b` - короткое трехбуквенное регистронезависимое английское название месяца (Jan);
 * `%B` - полное регистронезависимое английское название месяца (January).
 
-**Примеры**
+### Примеры
 
 ``` yql
 $parse1 = DateTime::Parse("%H:%M:%S");
@@ -335,14 +335,14 @@ SELECT
 
 Для распространённых форматов есть врапперы вокруг соответствующих методов util. Можно получить только TM с компонентами в UTC таймзоне.
 
-**Список функций**
+### Список функций
 
 * ```DateTime::ParseRfc822(String{Flags:AutoMap}) -> Resource<TM>?```
 * ```DateTime::ParseIso8601(String{Flags:AutoMap}) -> Resource<TM>?```
 * ```DateTime::ParseHttp(String{Flags:AutoMap}) -> Resource<TM>?```
 * ```DateTime::ParseX509(String{Flags:AutoMap}) -> Resource<TM>?```
 
-**Примеры**
+### Примеры
 
 ``` yql
 SELECT
@@ -358,7 +358,7 @@ SELECT
 
 ## Типовые сценарии
 
-**Преобразования между строками и секундами**
+### Преобразования между строками и секундами
 
 Преобразование строковой даты (в таймзоне Москвы) в секунды (в таймзоне GMT):
 
@@ -375,7 +375,7 @@ SELECT
     DateTime::ToSeconds(AddTimezone(Date("2019-09-16"), 'Europe/Moscow')) AS md_us2, -- 1568592000
 ```
 
-Преобразование строковой даты (в таймзоне Москвы) в секунды (в таймзоне Москвы). Поскольку DateTime::ToSeconds() экспортирует только GMT, придется временно забыть о таймзонах и работать только в GMT (выглядит это так, как будто временно мы считаем, что в Москве таймзона GMT):
+Преобразование строковой даты (в таймзоне Москвы) в секунды (в таймзоне Москвы). Поскольку `DateTime::ToSeconds()` экспортирует только GMT, придется временно забыть о таймзонах и работать только в GMT (выглядит это так, как будто временно мы считаем, что в Москве таймзона GMT):
 
 ``` yql
 $date_parse = DateTime::Parse("%Y-%m-%d");
@@ -401,7 +401,8 @@ SELECT
     $date_format(AddTimezone(DateTime::FromSeconds(1568592000), 'Europe/Moscow')) -- "2019-09-16 03:00:00 Europe/Moscow"
 ```
 
-Преобразование секунд (в таймзоне Москвы) в строковую дату (в таймзоне Москвы). Здесь таймзона %Z выводится для справки - обычно выводить ее не нужно, потому что она будет равна "GMT" и может сбить с толку.
+Преобразование секунд (в таймзоне Москвы) в строковую дату (в таймзоне Москвы). Здесь таймзона `%Z` выводится для справки - обычно выводить ее не нужно, потому что она будет равна "GMT" и может сбить с толку.
+
 ``` yql
 $date_format = DateTime::Format("%Y-%m-%d %H:%M:%S %Z");
 SELECT
@@ -409,12 +410,13 @@ SELECT
 ```
 
 Преобразование секунд (в таймзоне GMT) в трехбуквенное название дня недели (в таймзоне Москвы):
+
 ``` yql
 SELECT
     SUBSTRING(DateTime::GetDayOfWeekName(AddTimezone(DateTime::FromSeconds(1568581200), "Europe/Moscow")), 0, 3) -- "Mon"
 ```
 
-**Форматирование даты и времени**
+### Форматирование даты и времени
 
 Обычно для форматирования времени используется отдельное именованное выражение, но можно обойтись и без него:
 
@@ -434,7 +436,7 @@ SELECT
 ;
 ```
 
-**Преобразование типов**
+### Преобразование типов
 
 Так можно преобразовывать только константы:
 
@@ -452,7 +454,7 @@ SELECT
     CAST("2019-09-16" AS Date) -- 2019-09-16
 ```
 
-**Преобразование времени в дату**
+### Преобразование времени в дату
 
 CAST в Date или TzDate дает такую дату в таймзоне GMT, в которую происходит полночь по локальному времени (например, для московского времени 2019-10-22 00:00:00, будет возвращена дата 2019-10-21). Для получения даты в локальной таймзоне можно использовать DateTime::Format.
 
@@ -483,7 +485,7 @@ SELECT CAST(TzDatetime("1970-01-01T23:59:59,America/Los_Angeles") as TzDate);
 
 ```
 
-**Летнее время**
+### Летнее время
 
 Обратите внимание, что летнее время зависит от года:
 

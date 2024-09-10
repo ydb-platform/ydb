@@ -66,7 +66,7 @@ All columns allow writing `NULL` values, that is, they are [optional](../../type
 It is mandatory to specify the `PRIMARY KEY` with a non-empty list of columns. Those columns become part of the key in the listed order.
 {% endif %}
 
-**Example**
+### Example
 
     CREATE TABLE my_table (
 {% if feature_not_null_for_pk %}        a Uint64 NOT NULL,{% else %}        a Uint64,{% endif %}
@@ -78,11 +78,10 @@ It is mandatory to specify the `PRIMARY KEY` with a non-empty list of columns. T
 {% endif %}
     )
 
-
 {% if feature_secondary_index %}
 {% if feature_olap_tables %}#{% endif %}## Secondary indexes {#secondary_index}
 
-The INDEX construct is used to define a {% if concept_secondary_index %}[secondary index]({{ concept_secondary_index }}){% else %}secondary index{% endif %} in a table:
+The `INDEX` clause is used to define a {% if concept_secondary_index %}[secondary index]({{ concept_secondary_index }}){% else %}secondary index{% endif %} in a table:
 
 ```sql
 CREATE TABLE table_name (
@@ -93,12 +92,13 @@ CREATE TABLE table_name (
 ```
 
 Where:
+
 * **Index_name** is the unique name of the index to be used to access data.
 * **SYNC/ASYNC** indicates synchronous/asynchronous data writes to the index. If not specified, synchronous.
 * **Index_columns** is a list of comma-separated names of columns in the created table to be used for a search in the index.
 * **Cover_columns** is a list of comma-separated names of columns in the created table, which will be stored in the index in addition to the search columns, making it possible to fetch additional data without accessing the table for it.
 
-**Example**
+#### Example
 
 ```sql
 CREATE TABLE my_table (
@@ -144,8 +144,6 @@ Here, key is the name of the parameter and value is its value.
 For a list of valid parameter names and values, see the [{{ backend_name }} table description]({{ concept_table }}).
 
 For example, this code will create a table with enabled automatic partitioning by partition size and the preferred size of each partition is 512 MB:
-
-<small>Listing 4</small>
 
 ```sql
 CREATE TABLE my_table (
@@ -236,7 +234,7 @@ Make sure to add the `PRIMARY KEY` and `PARTITION BY` clauses with a non-empty l
 
 If you omit modifiers, a column is assigned an [optional](../../types/optional.md) type and can accept `NULL` values. To create a non-optional type, use `NOT NULL`.
 
-**Example**
+#### Example
 
 ```sql
 CREATE TABLE my_table (

@@ -2,7 +2,7 @@
 
 Functions for Unicode strings.
 
-**List of functions**
+## List of functions
 
 * ```Unicode::IsUtf(String) -> Bool```
 
@@ -32,7 +32,7 @@ SELECT Unicode::Find("aaa", "bb"); -- Null
 If ```from``` exceeds the length of the original string, an empty string ```""``` is returned.
 
 ```sql
-select Unicode::Substring("0123456789abcdefghij", 10); -- "abcdefghij"
+SELECT Unicode::Substring("0123456789abcdefghij", 10); -- "abcdefghij"
 ```
 
 * The ```Unicode::Normalize...``` functions convert the passed UTF-8 string to a [normalization form](https://unicode.org/reports/tr15/#Norm_Forms):
@@ -47,7 +47,7 @@ select Unicode::Substring("0123456789abcdefghij", 10); -- "abcdefghij"
   Transliterates with Latin letters the words from the passed string, consisting entirely of characters of the alphabet of the language passed by the second argument. If no language is specified, the words are transliterated from Russian. Available languages: "kaz", "rus", "tur", and "ukr".
 
 ```sql
-select Unicode::Translit("Тот уголок земли, где я провел"); -- "Tot ugolok zemli, gde ya provel"
+SELECT Unicode::Translit("Тот уголок земли, где я провел"); -- "Tot ugolok zemli, gde ya provel"
 ```
 
 * ```Unicode::LevensteinDistance(stringA:Utf8{Flags:AutoMap}, stringB:Utf8{Flags:AutoMap}) -> Uint64```
@@ -65,8 +65,8 @@ Parameters:
   - ```FillOffset``` parameter is not used.
 
 ```sql
-select Unicode::Fold("Kongreßstraße", false AS DoSimpleCyr, false AS DoRenyxa); -- "kongressstrasse"
-select Unicode::Fold("ҫурт"); -- "сурт"
+SELECT Unicode::Fold("Kongreßstraße", false AS DoSimpleCyr, false AS DoRenyxa); -- "kongressstrasse"
+SELECT Unicode::Fold("ҫурт"); -- "сурт"
 SELECT Unicode::Fold("Eylül", "Turkish" AS Language); -- "eylul"
 ```
 
@@ -87,8 +87,8 @@ SELECT Unicode::Fold("Eylül", "Turkish" AS Language); -- "eylul"
   Deletes all/first/last occurrences of characters in the ```symbols``` set from the ```input```. The second argument is interpreted as an unordered set of characters to be removed.
 
 ```sql
-select Unicode::ReplaceLast("absence", "enc", ""); -- "abse"
-select Unicode::RemoveAll("abandon", "an"); -- "bdo"
+SELECT Unicode::ReplaceLast("absence", "enc", ""); -- "abse"
+SELECT Unicode::RemoveAll("abandon", "an"); -- "bdo"
 ```
 
 * ```Unicode::ToCodePointList(Utf8{Flags:AutoMap}) -> List<Uint32>```
@@ -100,8 +100,8 @@ select Unicode::RemoveAll("abandon", "an"); -- "bdo"
   Generates a Unicode string from codepoints.
 
 ```sql
-select Unicode::ToCodePointList("Щавель"); -- [1065, 1072, 1074, 1077, 1083, 1100]
-select Unicode::FromCodePointList(AsList(99,111,100,101,32,112,111,105,110,116,115,32,99,111,110,118,101,114,116,101,114)); -- "code points converter"
+SELECT Unicode::ToCodePointList("Щавель"); -- [1065, 1072, 1074, 1077, 1083, 1100]
+SELECT Unicode::FromCodePointList(AsList(99,111,100,101,32,112,111,105,110,116,115,32,99,111,110,118,101,114,116,101,114)); -- "code points converter"
 ```
 
 * ```Unicode::Reverse(Utf8{Flags:AutoMap}) -> Utf8```
@@ -129,8 +129,8 @@ select Unicode::FromCodePointList(AsList(99,111,100,101,32,112,111,105,110,116,1
   Concatenates a list of strings via a ```separator``` into a single string.
 
 ```sql
-select Unicode::SplitToList("One, two, three, four, five", ", ", 2 AS Limit); -- ["One", "two", "three, four, five"]
-select Unicode::JoinFromList(["One", "two", "three", "four", "five"], ";"); -- "One;two;three;four;five"
+SELECT Unicode::SplitToList("One, two, three, four, five", ", ", 2 AS Limit); -- ["One", "two", "three, four, five"]
+SELECT Unicode::JoinFromList(["One", "two", "three", "four", "five"], ";"); -- "One;two;three;four;five"
 ```
 
 * ```Unicode::ToUint64(string:Utf8{Flags:AutoMap}, [prefix:Uint16?]) -> Uint64```
@@ -146,8 +146,8 @@ If there are incorrect characters in a string or a number goes beyond ui64, the 
   Similar to the Unicode::ToUint64() function, except that it returns Null instead of an error.
 
 ```sql
-select Unicode::ToUint64("77741"); -- 77741
-select Unicode::ToUint64("-77741"); -- 18446744073709473875
-select Unicode::TryToUint64("asdh831"); -- Null
+SELECT Unicode::ToUint64("77741"); -- 77741
+SELECT Unicode::ToUint64("-77741"); -- 18446744073709473875
+SELECT Unicode::TryToUint64("asdh831"); -- Null
 ```
 

@@ -19,12 +19,14 @@ The [`table index add` command](../reference/ydb-cli/commands/secondary_index.md
 Since an index contains its own data derived from table data, when creating an index on an existing table with data, an operation is performed to initially build an index. This may take a long time. This operation is executed in the background and you can keep working with the table while it's in progress. However, you can't use the new index until it's build is completed.
 
 An index can only be used in the order of the fields included in it. If an index contains two fields, such as `a` and `b`, you can effectively use it for queries such as:
+
 * `WHERE a = $var1 AND b = $var2`.
 * `WHERE a = $var1`.
 * `WHERE a > $var1` and other comparison operators.
 * `WHERE a = $var1 AND b > $var2` and any other comparison operators in which the first field must be checked for equality.
 
 This index can't be used in the following queries:
+
 * `WHERE b = $var1`.
 * `WHERE a > $var1 AND b > $var2`, which is equivalent to `WHERE a > $var1` in terms of applying the index.
 * `WHERE b > $var1`.
@@ -35,8 +37,9 @@ Considering the above, there's no use in pre-indexing all possible combinations 
 
 For a table to be accessed by a secondary index, its name must be explicitly specified in the `VIEW` section after the table name as described in the article about the YQL [`SELECT` statement](../yql/reference/syntax/select#secondary_index). For example, a query to retrieve orders from the `orders` table by the specified customer ID (`id_customer`) looks like this:
 
-```sql
+```yql
 DECLARE $customer_id AS Uint64;
+
 SELECT *
 FROM   orders VIEW idx_customer AS o
 WHERE  o.id_customer = $customer_id
@@ -60,7 +63,7 @@ The [`UPDATE`](../yql/reference/syntax/update.md), [`UPSERT`](../yql/reference/s
 
 To update data in the `table1` table, run the query:
 
-```sql
+```yql
 $to_update = (
     SELECT pk_field, $f1 AS field1, $f2 AS field2, ...
     FROM   table1 VIEW idx_field3
@@ -81,7 +84,7 @@ To delete data by secondary index, use `SELECT` with a predicate by secondary in
 
 To delete all data about series with zero views from the `series` table, run the query:
 
-```sql
+```yql
 DELETE FROM series ON
 SELECT series_id
 FROM series VIEW views_index

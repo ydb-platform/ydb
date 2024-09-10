@@ -54,7 +54,7 @@ If named expression substitution results in completely identical subgraphs in th
 
 {% endnote %}
 
-**Examples**
+### Examples
 
 ```yql
 $multiplier = 712;

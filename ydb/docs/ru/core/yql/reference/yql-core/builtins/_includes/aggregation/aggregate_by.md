@@ -5,7 +5,8 @@
 1. Колонка, `DISTINCT` колонка или выражение;
 2. Фабрика.
 
-**Примеры:**
+### Примеры
+
 ``` yql
 $count_factory = AggregationFactory("COUNT");
 

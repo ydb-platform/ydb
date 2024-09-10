@@ -1,4 +1,3 @@
-
 # Lexical structure
 
 The {% if feature_mapreduce %}program{% else %}query{% endif %} in the YQL language is a valid UTF-8 text consisting of _commands_ (statements) separated by semicolons (`;`).
@@ -86,9 +85,11 @@ Unlike [PRAGMA](../pragma.md), SQL hints act locally – they are linked to a sp
 and affect only the corresponding statement or even a part of it.
 SQL hints are a set of settings "name-value list" and defined inside special comments —
 comments with SQL hints must have `+` as the first character:
+
 ```sql
 --+ Name1(Value1 Value2 Value3) Name2(Value4) ...
 ```
+
 An SQL hint name must be comprised of ASCII alphanumeric characters and start with a letter. Hint names are case insensitive.
 A hint name must be followed by a custom number of space-separated values. A value can be a custom set of characters.
 If there's a space or parenthesis in a set of characters, single quotation marks must be used:
@@ -110,6 +111,7 @@ To escape a single quotation within a value, double it:
 ```
 
 If there're two or more hints with the same name in the list, the latter is used:
+
 ```sql
 --+ foo(v1 v2) bar(v3) foo()
 -- equivalent to
@@ -117,6 +119,7 @@ If there're two or more hints with the same name in the list, the latter is used
 ```
 
 Unknown SQL hint names (or syntactically incorrect hints) never result in errors, they're simply ignored:
+
 ```sql
 --+ foo(value1) bar(value2  baz(value3)
 -- due to a missing closing parenthesis in bar, is equivalent to
@@ -186,7 +189,8 @@ SELECT $text;
   * `y` — `Yson`
   * `j` — `Json`
 
-**Example:**
+#### Example
+
 ```yql
 SELECT "foo"u, '[1;2]'y, @@{"a":null}@@j;
 ```

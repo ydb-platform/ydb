@@ -1,6 +1,6 @@
 # Pire
 
-**List of functions**
+## List of functions
 
 * ```Pire::Grep(pattern:String) -> (string:String?) -> Bool```
 * ```Pire::Match(pattern:String) -> (string:String?) -> Bool```
@@ -37,7 +37,7 @@ When escaping special characters in a regular expression, be sure to use the sec
 
 You can enable the case-insensitive mode by specifying, at the beginning of the regular expression, the flag `(?i)`.
 
-**Examples**
+### Examples
 
 ```sql
 $value = "xaaxaaxaa";
@@ -81,7 +81,7 @@ Use the MultiGrep/MultiMatch functions to optimize the query execution speed. Be
 * Pire has a limit on the size of the state machine (YQL uses the default value set in the library). If you exceed the limit, the error is raised at the start of the query: `Failed to glue up regexes, probably the finite state machine appeared to be too large`.
 When you call MultiGrep/MultiMatch, regular expressions are passed one per line using [multiline string literals](../../syntax/expressions.md#multiline-string-literals):
 
-**Examples**
+### Examples
 
 ```sql
 $multi_match = Pire::MultiMatch(@@a.*

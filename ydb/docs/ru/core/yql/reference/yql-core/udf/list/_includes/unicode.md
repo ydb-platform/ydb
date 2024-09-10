@@ -1,7 +1,7 @@
 # Unicode
 Функции для работы с Unicode строками.
 
-**Список функций**
+## Список функций
 
 * ```Unicode::IsUtf(String) -> Bool```
 
@@ -10,6 +10,7 @@
 * ```Unicode::GetLength(Utf8{Flags:AutoMap}) -> Uint64```
 
   Возвращает длину utf-8 строки в символах (unicode code points). Суррогатные пары учитываются как один символ.
+
 ```sql
 SELECT Unicode::GetLength("жніўня"); -- 6
 ```
@@ -29,7 +30,7 @@ SELECT Unicode::Find("aaa", "bb"); -- Null
   В случае ```from``` больше длины исходной строки, возвращается пустая строка ```""```
 
 ```sql
-select Unicode::Substring("0123456789abcdefghij", 10); -- "abcdefghij"
+SELECT Unicode::Substring("0123456789abcdefghij", 10); -- "abcdefghij"
 ```
 
 * Функции ```Unicode::Normalize...``` приводят переданную utf-8 строку в одну из [нормальных форм](https://unicode.org/reports/tr15/#Norm_Forms):
@@ -46,7 +47,7 @@ select Unicode::Substring("0123456789abcdefghij", 10); -- "abcdefghij"
   Транслитерирует в латинский алфавит слова переданной строки, целиком состоящие из символов алфавита языка, переданного вторым аргументом. Если язык не указан, то транслитерация ведется с русского. Доступные языки: "kaz", "rus", "tur", "ukr".
 
 ```sql
-select Unicode::Translit("Тот уголок земли, где я провел"); -- "Tot ugolok zemli, gde ya provel"
+SELECT Unicode::Translit("Тот уголок земли, где я провел"); -- "Tot ugolok zemli, gde ya provel"
 ```
 
 * ```Unicode::LevensteinDistance(stringA:Utf8{Flags:AutoMap}, stringB:Utf8{Flags:AutoMap}) -> Uint64```
@@ -64,8 +65,8 @@ select Unicode::Translit("Тот уголок земли, где я провел
   - ```FillOffset``` параметр не используется
 
 ```sql
-select Unicode::Fold("Kongreßstraße",  false AS DoSimpleCyr, false AS DoRenyxa); -- "kongressstrasse"
-select Unicode::Fold("ҫурт"); -- "сурт"
+SELECT Unicode::Fold("Kongreßstraße",  false AS DoSimpleCyr, false AS DoRenyxa); -- "kongressstrasse"
+SELECT Unicode::Fold("ҫурт"); -- "сурт"
 SELECT Unicode::Fold("Eylül", "Turkish" AS Language); -- "eylul"
 ```
 
@@ -81,8 +82,8 @@ SELECT Unicode::Fold("Eylül", "Turkish" AS Language); -- "eylul"
 
   Удаляются все/первое/последнее вхождения символов в наборе ```symbols``` из ```input```. Второй аргумент интерпретируется как неупорядоченный набор символов для удаления.
 ```sql
-select Unicode::ReplaceLast("absence", "enc", ""); -- "abse"
-select Unicode::RemoveAll("abandon", "an"); -- "bdo"
+SELECT Unicode::ReplaceLast("absence", "enc", ""); -- "abse"
+SELECT Unicode::RemoveAll("abandon", "an"); -- "bdo"
 ```
 
 * ```Unicode::ToCodePointList(Utf8{Flags:AutoMap}) -> List<Uint32>```
@@ -93,8 +94,8 @@ select Unicode::RemoveAll("abandon", "an"); -- "bdo"
   Сформировать unicode строку из codepoint'ов.
 
 ```sql
-select Unicode::ToCodePointList("Щавель"); -- [1065, 1072, 1074, 1077, 1083, 1100]
-select Unicode::FromCodePointList(AsList(99,111,100,101,32,112,111,105,110,116,115,32,99,111,110,118,101,114,116,101,114)); -- "code points converter"
+SELECT Unicode::ToCodePointList("Щавель"); -- [1065, 1072, 1074, 1077, 1083, 1100]
+SELECT Unicode::FromCodePointList(AsList(99,111,100,101,32,112,111,105,110,116,115,32,99,111,110,118,101,114,116,101,114)); -- "code points converter"
 ```
 
 * ```Unicode::Reverse(Utf8{Flags:AutoMap}) -> Utf8```
@@ -113,6 +114,7 @@ select Unicode::FromCodePointList(AsList(99,111,100,101,32,112,111,105,110,116,1
   ```string``` -- исходная строка
   ```separator``` -- разделитель
   Параметры:
+
   - DelimeterString:Bool? — считать разделитель строкой (true, по умолчанию) или набором символов "любой из" (false)
   - SkipEmpty:Bool? - пропускать ли пустые строки в результате, по умолчанию false
   - Limit:Uint64? - ограничение на число извлекаемых компонент, по умолчанию не ограничено; необработанный суффикс оригинальной строки возвращается последним элементом при превышении лимита
@@ -122,8 +124,8 @@ select Unicode::FromCodePointList(AsList(99,111,100,101,32,112,111,105,110,116,1
   Конкатенация списка строк через ```separator``` в единую строку.
 
 ```sql
-select Unicode::SplitToList("One, two, three, four, five", ", ", 2 AS Limit); -- ["One", "two", "three, four, five"]
-select Unicode::JoinFromList(["One", "two", "three", "four", "five"], ";"); -- "One;two;three;four;five"
+SELECT Unicode::SplitToList("One, two, three, four, five", ", ", 2 AS Limit); -- ["One", "two", "three, four, five"]
+SELECT Unicode::JoinFromList(["One", "two", "three", "four", "five"], ";"); -- "One;two;three;four;five"
 ```
 
 * ```Unicode::ToUint64(string:Utf8{Flags:AutoMap}, [prefix:Uint16?]) -> Uint64```
@@ -137,21 +139,22 @@ select Unicode::JoinFromList(["One", "two", "three", "four", "five"], ";"); -- "
 
   Аналогично функции Unicode::ToUint64(), но вместо ошибки возвращает Null.
 ```sql
-select Unicode::ToUint64("77741"); -- 77741
-select Unicode::ToUint64("-77741"); -- 18446744073709473875
-select Unicode::TryToUint64("asdh831"); -- Null
+SELECT Unicode::ToUint64("77741"); -- 77741
+SELECT Unicode::ToUint64("-77741"); -- 18446744073709473875
+SELECT Unicode::TryToUint64("asdh831"); -- Null
 ```
 
 * ```Unicode::Strip(string:Utf8{Flags:AutoMap}) -> Utf8```
 
   Вырезает из строки крайние символы Unicode-категории Space.
 ```sql
-select Unicode::Strip("\u200ыкль\u2002"u); -- "ыкль"
+SELECT Unicode::Strip("\u200ыкль\u2002"u); -- "ыкль"
 ```
 
 * ```Unicode::IsAscii(string:Utf8{Flags:AutoMap}) -> Bool```
 
   Проверяет, состоит ли utf-8 строка исключительно из символов ascii.
+
 * ```Unicode::IsSpace(string:Utf8{Flags:AutoMap}) -> Bool```
 * ```Unicode::IsUpper(string:Utf8{Flags:AutoMap}) -> Bool```
 * ```Unicode::IsLower(string:Utf8{Flags:AutoMap}) -> Bool```
@@ -165,6 +168,6 @@ select Unicode::Strip("\u200ыкль\u2002"u); -- "ыкль"
 
   Проверяет, состоит ли utf-8 строка ```string``` исключительно из символов, указанных в ```unicode_set```. Символы в ```unicode_set``` нужно указывать в квадратных скобках.
 ```sql
-select Unicode::IsUnicodeSet("ваоао"u, "[вао]"u); -- true
-select Unicode::IsUnicodeSet("ваоао"u, "[ваб]"u); -- false
+SELECT Unicode::IsUnicodeSet("ваоао"u, "[вао]"u); -- true
+SELECT Unicode::IsUnicodeSet("ваоао"u, "[ваб]"u); -- false
 ```

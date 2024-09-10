@@ -39,7 +39,7 @@ Where:
 
 Using the extended version of SessionWindow, you can, for example, do the following: divide a partition into sessions, as in the SessionWindow use case with two arguments, but with the maximum session length limited by a certain constant:
 
-**Example**
+### Example
 
 ```sql
 $max_len = 1000; -- is the maximum session length.
@@ -62,5 +62,5 @@ FROM my_table
 GROUP BY user, SessionWindow(ts, $init, $update, $calculate) AS session_start
 ```
 
-You can use SessionWindow in GROUP BY only once.
+You can use `SessionWindow` in `GROUP BY` only once.
 

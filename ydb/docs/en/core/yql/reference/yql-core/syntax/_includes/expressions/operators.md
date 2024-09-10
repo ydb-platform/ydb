@@ -6,7 +6,7 @@ The operators `+`, `-`, `*`, `/`, `%` are defined for [primitive data types](../
 
 For the Decimal data type, bankers rounding is used (to the nearest even integer).
 
-**Examples**
+### Examples
 
 ```yql
 SELECT 2 + 2;
@@ -23,7 +23,7 @@ The operators `=`, `==`, `!=`, `<>`, `>`, `<` are defined for:
 * Primitive data types except Yson and Json.
 * Tuples and structures with the same set of fields. No order is defined for structures, but you can check for (non-)equality. Tuples are compared element-by-element left to right.
 
-**Examples**
+#### Examples
 
 ```yql
 SELECT 2 > 1;
@@ -33,7 +33,7 @@ SELECT 2 > 1;
 
 Use the operators `AND`, `OR`, `XOR` for logical operations on Boolean values (`Bool`).
 
-**Examples**
+#### Examples*
 
 ```yql
 SELECT 3 > 0 AND false;
@@ -48,7 +48,7 @@ Bitwise operations on numbers:
 * `<`, `>`: Left or right shifts.
 * `|<`, `>|`: Circular left or right shifts.
 
-**Examples**
+### Examples
 
 ```yql
 SELECT

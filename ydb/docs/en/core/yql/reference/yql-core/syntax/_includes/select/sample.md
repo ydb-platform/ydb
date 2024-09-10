@@ -22,7 +22,7 @@ In the `BERNOULLI` mode, if the `REPEATABLE` keyword is added, the seed is mixed
 
 {% endnote %}
 
-**Examples:**
+## Examples
 
 ```yql
 SELECT *

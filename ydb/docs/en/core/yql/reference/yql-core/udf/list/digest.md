@@ -2,7 +2,7 @@
 
 A set of commonly used hash functions.
 
-**List of functions**
+## List of functions
 
 * ```Digest::Crc32c(String{Flags::AutoMap}) -> Uint32```
 * ```Digest::Fnv32(String{Flags::AutoMap}) -> Uint32```
@@ -33,7 +33,7 @@ A set of commonly used hash functions.
 * ```Digest::XXH3(String{Flags:AutoMap}) -> Uint64```
 * ```Digest::XXH3_128(String{Flags:AutoMap}) -> Tuple<Uint64,Uint64>```
 
-**Examples**
+### Examples
 
 ```sql
 SELECT Digest::Md5Hex("YQL");  -- "1a0c1b56e9d617688ee345da4030da3c"

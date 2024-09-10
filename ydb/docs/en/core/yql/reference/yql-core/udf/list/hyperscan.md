@@ -6,7 +6,7 @@ The library includes 4 implementations that use different sets of processor inst
 
 By default, all functions work in the single-byte mode. However, if the regular expression is a valid UTF-8 string but is not a valid ASCII string, the UTF-8 mode is enabled automatically.
 
-**List of functions**
+## List of functions
 
 * ```Hyperscan::Grep(pattern:String) -> (string:String?) -> Bool```
 * ```Hyperscan::Match(pattern:String) -> (string:String?) -> Bool```
@@ -52,7 +52,7 @@ However, if you want to match a string against any of the listed expressions (th
 
 When you call `MultiGrep`/`MultiMatch`, regular expressions are passed one per line using [multiline string literals](../../syntax/expressions.md#named-nodes):
 
-**Example**
+### Example
 
 ```sql
 $multi_match = Hyperscan::MultiMatch(@@a.*

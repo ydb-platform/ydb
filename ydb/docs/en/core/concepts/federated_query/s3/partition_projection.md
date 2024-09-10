@@ -14,6 +14,7 @@ year=2022
 ```
 
 When executing the query below, {{ ydb-full-name }} will perform the following actions:
+
 1. Retrieve a full list of subdirectories within '/'.
 2. Attempt to process the name of each subdirectory in the format `year=<DIGITS>`.
 3. For each subdirectory `year=<DIGITS>`, retrieve a list of all subdirectories in the format `month=<DIGITS>`.
@@ -51,7 +52,7 @@ Advanced partitioning is called "partition projection" and is specified through 
 
 Example of specifying advanced partitioning:
 
-```sql
+```yql
 SELECT
     *
 FROM
@@ -86,7 +87,7 @@ The example above specifies that data exists for each year and each month from 2
 
 In general, the advanced partitioning setup looks as follows:
 
-```sql
+```yql
 SELECT
     *
 FROM
@@ -155,6 +156,7 @@ It is used for columns whose values can be represented as dates. The allowable d
 2. Allowed interval dimensions: YEARS, MONTHS, WEEKS, DAYS, HOURS, MINUTES, SECONDS, MILLISECONDS.
 3. Only one arithmetic operation is allowed in expressions; expressions like `NOW-5MINUTES+6SECONDS` are not supported.
 4. Working with intervals always results in obtaining a valid date, but depending on the dimension, the final results may vary:
+
    - Adding `MONTHS` to a date adds a calendar month, not a fixed number of days. For example, if the current date is `2023-01-31`, adding `1 MONTHS` will result in the date `2023-02-28`.
    - Adding `30 DAYS` to a date adds a fixed number of days. For example, if the current date is `2023-01-31`, adding `30 DAYS` will result in the date `2023-03-02`.
    - The earliest possible date is `1970-01-01` (time 0 in [Unix time](https://en.wikipedia.org/wiki/Unix_time)). If the result of calculations is a date earlier than the minimum, the entire query fails with an error.

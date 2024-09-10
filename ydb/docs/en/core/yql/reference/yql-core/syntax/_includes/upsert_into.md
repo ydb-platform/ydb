@@ -12,7 +12,7 @@ UPSERT (which stands for UPDATE or INSERT) updates or inserts multiple rows to a
 
 Column mapping when using `UPSERT INTO ... SELECT` is done by names. Use `AS` to fetch a column with the desired name in `SELECT`.
 
-**Examples**
+## Examples
 
 ```yql
 UPSERT INTO my_table

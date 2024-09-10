@@ -1,6 +1,6 @@
 # Re2
 
-**Список функций**
+## Список функций
 
 ```
 Re2::Grep(pattern:String, options:Struct<...>?) -> (string:String?) -> Bool
@@ -22,7 +22,7 @@ Re2::Options([CaseSensitive:Bool?,DotNl:Bool?,Literal:Bool?,LogErrors:Bool?,Long
 
 {% endnote %}
 
-**Примеры**
+## Примеры
 
 ```sql
 $value = "xaaxaaxaa";
@@ -102,7 +102,7 @@ SELECT
 
 Не рекомендуется Re2::Options использовать в коде. Большинство параметров можно заменить на флаги регулярного выражения.
 
-**Пример использования флагов**
+### Пример использования флагов
 
 ```sql
 $value = "Foo bar FOO"u;

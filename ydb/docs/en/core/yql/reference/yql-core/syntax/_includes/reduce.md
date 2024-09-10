@@ -24,7 +24,7 @@ In `REDUCE`, you can pass multiple inputs (the input here means a table, a [rang
 
 After `USING`, in `REDUCE` you can optionally specify `ASSUME ORDER BY` with a list of columns. The result of such a `REDUCE` statement is treated as sorted, but without actually running a sort. Sort check is performed at the query execution stage. It supports setting the sort order using the keywords `ASC` (ascending order) and `DESC` (descending order). Expressions are not supported in `ASSUME ORDER BY`.
 
-**Examples:**
+## Examples
 
 ```yql
 REDUCE my_table

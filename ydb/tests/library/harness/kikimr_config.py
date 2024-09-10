@@ -520,20 +520,12 @@ class KikimrConfigGenerator(object):
         return self.yaml_config.get('audit_config', {}).get('file_backend', {}).get('file_path')
 
     @property
-    def nbs_enable(self):
-        return self._enable_nbs
-
-    @property
     def sqs_service_enabled(self):
         return self.yaml_config['sqs_config']['enable_sqs']
 
     @property
     def output_path(self):
         return self.__output_path
-
-    def set_binary_path(self, binary_path):
-        self.__binary_path = binary_path
-        return self
 
     @property
     def binary_path(self):

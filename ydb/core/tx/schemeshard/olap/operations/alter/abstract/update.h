@@ -11,7 +11,6 @@ namespace NKikimr::NSchemeShard::NOlap::NAlter {
 class ISSEntityUpdate {
 private:
     bool Initialized = false;
-
 protected:
     virtual TConclusionStatus DoInitialize(const TUpdateInitializationContext& context) = 0;
     virtual TConclusionStatus DoStart(const TUpdateStartContext& context) = 0;

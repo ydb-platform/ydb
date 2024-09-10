@@ -472,7 +472,7 @@ public:
             return result;
         }
 
-        if (!AppDataVerified().FeatureFlags.GetEnableOlapCompression() && isAlterCompression()) {
+        if (!AppData()->FeatureFlags.GetEnableOlapCompression() && isAlterCompression()) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, "Compression is disabled for OLAP tables");
             return result;
         }

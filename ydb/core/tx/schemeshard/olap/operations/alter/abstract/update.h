@@ -54,7 +54,7 @@ public:
 
     TConclusionStatus Initialize(const TUpdateInitializationContext& context) {
         AFL_VERIFY(!Initialized);
-        if (!AppDataVerified().FeatureFlags.GetEnableOlapCompression() && isAlterCompression(context)) {
+        if (!AppData()->FeatureFlags.GetEnableOlapCompression() && isAlterCompression(context)) {
             return TConclusionStatus::Fail("Compression is disabled for OLAP tables");
         }
         auto result = DoInitialize(context);

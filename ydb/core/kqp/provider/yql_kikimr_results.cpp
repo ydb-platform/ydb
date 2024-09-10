@@ -26,13 +26,8 @@ bool ResultsOverflow(ui64 rows, ui64 bytes, const IDataProvider::TFillSettings& 
     return false;
 }
 
-<<<<<<< HEAD
 void WriteValueToYson(const TStringStream& stream, NResult::TYsonResultWriter& writer, const NKikimrMiniKQL::TType& type,
     const NKikimrMiniKQL::TValue& value, const TVector<TString>* fieldsOrder,
-=======
-void WriteValueToYson(const TStringStream& stream, NCommon::TYsonResultWriter& writer, const NKikimrMiniKQL::TType& type,
-    const NKikimrMiniKQL::TValue& value, const TColumnOrder* fieldsOrder,
->>>>>>> 57776d3f7a (KQP part of duplicated columns)
     const IDataProvider::TFillSettings& fillSettings, bool& truncated, bool firstLevel = false)
 {
     switch (type.GetKind()) {
@@ -338,7 +333,7 @@ void KikimrResultToYson(const TStringStream& stream, NYson::TYsonWriter& writer,
     const TColumnOrder& columnHints, const IDataProvider::TFillSettings& fillSettings, bool& truncated)
 {
     truncated = false;
-    NCommon::TYsonResultWriter resultWriter(writer);
+    NResult::TYsonResultWriter resultWriter(writer);
     WriteValueToYson(stream, resultWriter, result.GetType(), result.GetValue(), columnHints.Size() == 0 ? nullptr : &columnHints,
         fillSettings, truncated, true);
 }

@@ -36,6 +36,10 @@ inputs:
   testman_project_id:
     required: false
     description: "test manager project id"
+  increment:
+    type: boolean
+    required: true
+    description: If true, compares build graphs between the current and previous commits to find a list of test suites to run. Otherwise, runs all tests.
   put_build_results_to_cache:
     required: false
     default: "true"
@@ -64,6 +68,34 @@ outputs:
 runs:
   using: "composite"
   steps:
+    - name: comment-build-start
+      if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
+      shell: bash
+      env:
+        BUILD_PRESET: ${{ inputs.build_preset }}
+        GITHUB_TOKEN: ${{ github.token }}
+      run: |
+        jobs_url="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs"
+        # tricky: we are searching job with name that contains build_preset
+        check_url=$(curl -s $jobs_url | jq --arg n "$BUILD_PRESET" -r '.jobs[] | select(.name | contains($n)) | .html_url')
+        
+        platform_name="$(echo "$(uname -s)-$(uname -p)" | tr '[:upper:]' '[:lower:]')-$BUILD_PRESET"
+        echo "Pre-commit [check]($check_url) **$platform_name** for $(git rev-parse HEAD) has started." | .github/scripts/tests/comment-pr.py --rewrite
+
+        curl -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
+          https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
+          -d '{"state":"pending","description":"The check has been started","context":"build_${{inputs.build_preset}}"}'
+
+        if [[ "${{inputs.run_tests}}" == "true" ]];then
+          curl -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
+            -d '{"state":"pending","description":"The check has been started","context":"test_${{inputs.build_preset}}"}'
+        fi
+  
+    - name: Clean ya cache
+      shell: bash
+      run: rm -rf ~/.ya
+  
     - name: Init
       id: init
       shell: bash
@@ -116,6 +148,33 @@ runs:
       shell: bash
       run: |
         set -x
+        echo "Artifacts will be uploaded [here](${PUBLIC_DIR_URL}/index.html)" | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
+
+        ORIGINAL_HEAD=$(git rev-parse HEAD)
+        
+        if [ "${{ inputs.increment }}" = "true" ]; then
+          GRAPH_COMPARE_OUTPUT="$PUBLIC_DIR/graph_compare.log"
+          GRAPH_COMPARE_OUTPUT_URL="$PUBLIC_DIR_URL/graph_compare.log"
+
+          set +e
+          ./.github/scripts/graph_compare.sh $ORIGINAL_HEAD~1 $ORIGINAL_HEAD |& tee $GRAPH_COMPARE_OUTPUT
+          RC=${PIPESTATUS[0]}
+          set -e
+
+          if [ $RC -ne 0 ]; then
+            echo "graph_compare.sh returned $RC, build failed"
+            echo "status=failed" >> $GITHUB_OUTPUT
+            BUILD_FAILED=1
+            echo "Graph compare failed, see the [logs]($GRAPH_COMPARE_OUTPUT_URL)." | GITHUB_TOKEN="${{ github.token }}"  .github/scripts/tests/comment-pr.py --color red
+            exit $RC
+          fi
+          
+          git checkout $ORIGINAL_HEAD
+          YA_MAKE_TARGET=.
+        else
+          YA_MAKE_TARGET=${{ inputs.build_target }}
+        fi
+
         readarray -d ',' -t test_size < <(printf "%s" "${{ inputs.test_size }}")
         readarray -d ',' -t test_type < <(printf "%s" "${{ inputs.test_type }}")
 
@@ -238,7 +297,6 @@ runs:
         YA_MAKE_OUTPUT="$PUBLIC_DIR/ya_make_output.log"
         YA_MAKE_OUTPUT_URL="$PUBLIC_DIR_URL/ya_make_output.log"
         echo "20 [Ya make output]($YA_MAKE_OUTPUT_URL)" >> $SUMMARY_LINKS
-        echo "YA_MAKE_OUTPUT_URL=$YA_MAKE_OUTPUT_URL" >> $GITHUB_ENV 
 
         BUILD_FAILED=0
 
@@ -276,14 +334,18 @@ runs:
             IS_RETRY=0
           fi
 
+          CURRENT_PUBLIC_DIR_RELATIVE=try_$RETRY
+          CURRENT_PUBLIC_DIR=$PUBLIC_DIR/$CURRENT_PUBLIC_DIR_RELATIVE
+          mkdir $CURRENT_PUBLIC_DIR
+
           if [ ${{ inputs.testman_token }} ]; then
             # inititalize testmo session
             TESTMO_RUN_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-            TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:resources:add-link --name build --url "$TESTMO_RUN_URL" --resources testmo.json
-            TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:resources:add-field --name git-sha --type string --value "${GITHUB_SHA:0:7}" --resources testmo.json
+            TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:resources:add-link --name build --url "$TESTMO_RUN_URL" --resources $CURRENT_PUBLIC_DIR/testmo.json
+            TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:resources:add-field --name git-sha --type string --value "${GITHUB_SHA:0:7}" --resources $CURRENT_PUBLIC_DIR/testmo.json
             TESTMO_RUN_ID=$(
               TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:run:create --instance "https://$TESTMO_PROXY_ADDR" --project-id ${{ inputs.testman_project_id }} \
-                --name "$TESTMO_RUN_NAME" --source "$TESTMO_SOURCE" --resources testmo.json \
+                --name "$TESTMO_RUN_NAME" --source "$TESTMO_SOURCE" --resources $CURRENT_PUBLIC_DIR/testmo.json \
                 --tags "$TESTMO_BRANCH_TAG" --tags "$TESTMO_EXTRA_TAG"
             )
             echo "runid=${TESTMO_RUN_ID}" >> $GITHUB_OUTPUT
@@ -306,18 +368,17 @@ runs:
 
           echo $CURRENT_MESSAGE | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
 
-          CURRENT_PUBLIC_DIR_RELATIVE=try_$RETRY
-          CURRENT_PUBLIC_DIR=$PUBLIC_DIR/$CURRENT_PUBLIC_DIR_RELATIVE
-          mkdir $CURRENT_PUBLIC_DIR
-
           CURRENT_JUNIT_XML_PATH=$CURRENT_PUBLIC_DIR/junit.xml
+          CURRENT_REPORT=$CURRENT_PUBLIC_DIR/report.json
           set +ex
-          (./ya make ${{ inputs.build_target }} "${params[@]}" \
+          (./ya make $YA_MAKE_TARGET "${params[@]}" \
             $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.log"  \
             --evlog-file "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" \
-            --junit "$CURRENT_JUNIT_XML_PATH" --output "$YA_MAKE_OUT_DIR"; echo $? > exit_code) |& cat >> $YA_MAKE_OUTPUT
+            --junit "$CURRENT_JUNIT_XML_PATH" --build-results-report "$CURRENT_REPORT" --output "$YA_MAKE_OUT_DIR"; echo $? > exit_code) |& cat >> $YA_MAKE_OUTPUT
           set -ex
           RC=`cat exit_code`
+
+          .github/scripts/tests/report_analyzer.py --report_file "$CURRENT_REPORT" --summary_file $CURRENT_PUBLIC_DIR/summary_report.txt || true
 
           # convert to chromium trace
           # seems analyze-make don't have simple "output" parameter, so change cwd
@@ -328,6 +389,7 @@ runs:
             echo "ya make returned $RC, build failed"
             echo "status=failed" >> $GITHUB_OUTPUT
             BUILD_FAILED=1
+            echo "Build failed, see the [logs]($YA_MAKE_OUTPUT_URL)." | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color red
             break
           fi
 
@@ -411,8 +473,8 @@ runs:
 
         if [ $BUILD_FAILED = 0 ]; then
           echo "status=true" >> $GITHUB_OUTPUT
+          echo "Build successful." |  GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color green
         fi
-        
 
     - name: comment-build-status
       if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
@@ -426,15 +488,12 @@ runs:
           curl -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
             https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
             -d '{"state":"failure","description":"The check has been failed","context":"build_${{inputs.build_preset}}"}'
-          echo "Build failed. see the [logs]($YA_MAKE_OUTPUT_URL)." | .github/scripts/tests/comment-pr.py --color red
         else
           curl -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
             https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
             -d '{"state":"success","description":"The check has been completed successfully","context":"build_${{inputs.build_preset}}"}'
-          echo "Build successful." | .github/scripts/tests/comment-pr.py --color green
         fi
     
-
     - name: Clean up unfinished testmo sessions
       if: always()
       shell: bash
@@ -480,7 +539,7 @@ runs:
         set -x
         echo "::group::s3-sync"
         .github/scripts/Indexer/indexer.py -r "$PUBLIC_DIR/"
-        echo "00 [Workflow artifacts](${S3_URL_PREFIX}/index.html)" >> $SUMMARY_LINKS
+        echo "00 [Artifacts](${PUBLIC_DIR_URL}/index.html)" >> $SUMMARY_LINKS
         s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-check-md5 "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"
         cat $SUMMARY_LINKS | python3 -c 'import sys; print(" | ".join([v for _, v in sorted([l.strip().split(" ", 1) for l in sys.stdin], key=lambda a: (int(a[0]), a))]))' >> $GITHUB_STEP_SUMMARY
         echo "::endgroup::"
@@ -489,3 +548,57 @@ runs:
       if: always()
       shell: bash
       run: df -h
+
+    - name: build_stats
+      shell: bash
+      continue-on-error: true
+      if: always()
+      run: |
+        set -x
+        export build_preset="${{ inputs.build_preset }}" 
+        export commit_git_sha="$(git rev-parse HEAD)"
+
+        python3 -m pip install ydb ydb[yc]
+        python3 .github/scripts/send_build_stats.py
+
+    - name: show_build_size_diff
+      shell: bash
+      continue-on-error: true
+      if: always()
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+      run: |
+        set -x
+        export build_preset="${{ inputs.build_preset }}" 
+        export branch_to_compare="$GITHUB_REF_NAME" 
+        export yellow_treshold=102400
+        export red_treshold=2097152 
+        export commit_git_sha="$(git rev-parse HEAD)"
+
+        python3 -m pip install ydb ydb[yc] humanize
+
+        get_sizes_comment_script=.github/scripts/get_build_diff.py
+        comment_raw=`$get_sizes_comment_script`
+        
+        IFS=';;;'
+        read -ra comment_arr <<< "$comment_raw"
+
+        printf "$comment"
+        if [[ ${comment_raw} != "Error"* ]];then
+          color=${comment_arr[0]}
+          replace=$color";;;"
+          comment=${comment_raw/$replace/""}
+          
+          printf "$comment" | .github/scripts/tests/comment-pr.py --color $color
+
+        else
+          echo "Skipped build size difference, comment_raw = ${comment_raw}"
+        fi
+
+    - name: comment-if-cancel
+      shell: bash
+      if: cancelled() && (github.event_name == 'pull_request' || github.event_name == 'pull_request_target')
+      env:
+        BUILD_PRESET: ${{ inputs.build_preset }}
+        GITHUB_TOKEN: ${{ github.token }}
+      run:  echo "Check cancelled" | .github/scripts/tests/comment-pr.py --color black

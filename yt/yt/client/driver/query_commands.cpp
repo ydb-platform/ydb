@@ -386,6 +386,7 @@ void TGetQueryTrackerInfoCommand::DoExecute(ICommandContextPtr context)
 
     context->ProduceOutputValue(BuildYsonStringFluently()
         .BeginMap()
+            .Item("query_tracker_stage").Value(result.QueryTrackerStage)
             .Item("cluster_name").Value(result.ClusterName)
             .Item("supported_features").Value(result.SupportedFeatures)
             .Item("access_control_objects").Value(result.AccessControlObjects)

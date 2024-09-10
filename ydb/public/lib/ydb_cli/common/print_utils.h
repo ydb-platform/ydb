@@ -12,5 +12,7 @@ TString FormatDuration(TDuration duration);
 TString PrettySize(size_t size);
 TString EntryTypeToString(NScheme::ESchemeEntryType entry);
 
+int PrintProtoJsonBase64(const google::protobuf::Message& msg);
+
 }
 }

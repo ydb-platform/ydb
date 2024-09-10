@@ -2,12 +2,16 @@
 
 #include "settings_common.h"
 
+#include <contrib/libs/protobuf/src/google/protobuf/map.h>
+
 #include <util/datetime/base.h>
 
 
 namespace NKikimr::NResourcePool {
 
 inline constexpr char DEFAULT_POOL_ID[] = "default";
+
+inline constexpr i64 POOL_MAX_CONCURRENT_QUERY_LIMIT = 1000;
 
 struct TPoolSettings : public TSettingsBase {
     typedef double TPercent;
@@ -27,8 +31,13 @@ struct TPoolSettings : public TSettingsBase {
         TString operator()(TDuration* setting) const;
     };
 
+    TPoolSettings() = default;
+    TPoolSettings(const google::protobuf::Map<TString, TString>& properties);
+
     bool operator==(const TPoolSettings& other) const = default;
+
     std::unordered_map<TString, TProperty> GetPropertiesMap(bool restricted = false);
+    void Validate() const;
 
     i32 ConcurrentQueryLimit = -1;  // -1 = disabled
     i32 QueueSize = -1;  // -1 = disabled

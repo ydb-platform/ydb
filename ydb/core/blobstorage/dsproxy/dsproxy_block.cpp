@@ -16,7 +16,6 @@ class TBlobStorageGroupBlockRequest : public TBlobStorageGroupRequestActor {
     const ui32 Generation;
     const TInstant Deadline;
     const ui64 IssuerGuid;
-    TInstant StartTime;
     bool SeenAlready = false;
 
     TGroupQuorumTracker QuorumTracker;
@@ -99,7 +98,7 @@ class TBlobStorageGroupBlockRequest : public TBlobStorageGroupRequestActor {
         std::unique_ptr<TEvBlobStorage::TEvBlockResult> result(new TEvBlobStorage::TEvBlockResult(status));
         result->ErrorReason = ErrorReason;
         DSP_LOG_LOG_S(PriorityForStatusResult(status), "DSPB04", "Result# " << result->Print(false));
-        Mon->CountBlockResponseTime(TActivationContext::Now() - StartTime);
+        Mon->CountBlockResponseTime(TActivationContext::Monotonic() - RequestStartTime);
         return SendResponseAndDie(std::move(result));
     }
 
@@ -138,7 +137,6 @@ public:
         , Generation(params.Common.Event->Generation)
         , Deadline(params.Common.Event->Deadline)
         , IssuerGuid(params.Common.Event->IssuerGuid)
-        , StartTime(params.Common.Now)
         , QuorumTracker(Info.Get())
     {}
 

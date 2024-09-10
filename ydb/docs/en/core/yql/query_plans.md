@@ -14,7 +14,7 @@ Query execution stage.
 
 ![stage](_assets/stage.png)
 
-A stage can contatin the following operations:
+A stage can contain the following operations:
 
 #### TableFullScan
 
@@ -26,6 +26,7 @@ Table | table name
 ReadColumns | read columns list
 ReadLimit | read rows limit
 Reverse | flag indicating the order in which the rows will be read, by default the order is forward (ascending), but if the flag is set to `true`, the reading order will be reversed (descending).
+Parallel | flag indicating that rows will be read from shards in parallel
 
 #### TableRangeScan
 
@@ -38,6 +39,7 @@ ReadColumns | read columns list
 ReadRange | key range
 ReadLimit | read rows limit
 Reverse | flag indicating the order in which the rows will be read, by default the order is forward (ascending), but if the flag is set to `true`, the reading order will be reversed (descending).
+Parallel | flag indicating that rows will be read from shards in parallel
 
 #### TablePointLookup
 

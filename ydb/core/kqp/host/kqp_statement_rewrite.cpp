@@ -213,12 +213,10 @@ namespace {
                 exprCtx.NewAtom(pos, "mode"),
                 exprCtx.NewAtom(pos, "replace"),
             }));
-        if (!isOlap) {
-            insertSettings.push_back(
-                exprCtx.NewList(pos, {
-                    exprCtx.NewAtom(pos, "AllowInconsistentWrites"),
-                }));
-        }
+        insertSettings.push_back(
+            exprCtx.NewList(pos, {
+                exprCtx.NewAtom(pos, "AllowInconsistentWrites"),
+            }));
 
         const auto insert = exprCtx.NewCallable(pos, "Write!", {
             topLevelRead == nullptr ? exprCtx.NewWorld(pos) : exprCtx.NewCallable(pos, "Left!", {topLevelRead.Get()}),

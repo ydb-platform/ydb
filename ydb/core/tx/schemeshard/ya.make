@@ -208,6 +208,7 @@ SRCS(
     schemeshard_utils.cpp
     schemeshard_utils.h
     schemeshard_bg_tasks__list.cpp
+    schemeshard_xxport__helpers.cpp
     schemeshard_export__cancel.cpp
     schemeshard_export__create.cpp
     schemeshard_export__forget.cpp
@@ -262,6 +263,7 @@ PEERDIR(
     ydb/core/persqueue/events
     ydb/core/persqueue/writer
     ydb/core/protos
+    ydb/core/resource_pools
     ydb/core/scheme
     ydb/core/statistics
     ydb/core/sys_view/partition_stats

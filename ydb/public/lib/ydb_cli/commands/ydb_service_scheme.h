@@ -4,14 +4,20 @@
 #include "ydb_common.h"
 
 #include <ydb/public/lib/ydb_cli/common/format.h>
+#include <ydb/public/lib/ydb_cli/common/print_utils.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
 #include <ydb/public/sdk/cpp/client/draft/ydb_replication.h>
 #include <ydb/public/sdk/cpp/client/ydb_coordination/coordination.h>
+#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 
 namespace NYdb {
+
+namespace NTopic {
+struct TDescribeConsumerResult;
+} // namespace NTopic
 namespace NConsoleClient {
 
 class TCommandScheme : public TClientCommandTree {
@@ -45,6 +51,31 @@ void PrintAllPermissions(
     const TVector<NScheme::TPermissions>& effectivePermissions
 );
 
+// Pretty print consumer info ('scheme describe' and 'topic consumer describe' commands)
+int PrintPrettyDescribeConsumerResult(const NYdb::NTopic::TConsumerDescription& description, bool withPartitionsStats);
+
+template <typename TCommand, typename TValue>
+using TPrettyPrinter = int(TCommand::*)(const TValue&) const;
+
+template <typename TCommand, typename TValue>
+static int PrintDescription(TCommand* self, EDataFormat format, const TValue& value, TPrettyPrinter<TCommand, TValue> prettyFunc) {
+    switch (format) {
+        case EDataFormat::Default:
+        case EDataFormat::Pretty:
+            return std::invoke(prettyFunc, self, value);
+        case EDataFormat::Json:
+            Cerr << "Warning! Option --json is deprecated and will be removed soon. "
+                 << "Use \"--format proto-json-base64\" option instead." << Endl;
+            [[fallthrough]];
+        case EDataFormat::ProtoJsonBase64:
+            return PrintProtoJsonBase64(TProtoAccessor::GetProto(value));
+        default:
+            throw TMisuseException() << "This command doesn't support " << format << " output format";
+    }
+
+    return EXIT_SUCCESS;
+}
+
 class TCommandDescribe : public TYdbOperationCommand, public TCommandWithPath, public TCommandWithFormat {
 public:
     TCommandDescribe();
@@ -68,6 +99,10 @@ private:
 
     int DescribeReplication(const TDriver& driver);
     int PrintReplicationResponsePretty(const NYdb::NReplication::TDescribeReplicationResult& result) const;
+
+    int TryTopicConsumerDescribeOrFail(NYdb::TDriver& driver, const NScheme::TDescribePathResult& result);
+    std::pair<TString, TString> ParseTopicConsumer() const;
+    int PrintConsumerResponsePretty(const NYdb::NTopic::TConsumerDescription& description) const;
 
     template<typename TDescriptionType>
     void PrintPermissionsIfNeeded(const TDescriptionType& description) const {

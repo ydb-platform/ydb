@@ -2837,6 +2837,8 @@ bool CompareExprTrees(const TExprNode*& one, const TExprNode*& two);
 
 bool CompareExprTreeParts(const TExprNode& one, const TExprNode& two, const TNodeMap<ui32>& argsMap);
 
+TString MakeCacheKey(const TExprNode& root);
+
 void GatherParents(const TExprNode& node, TParentsMap& parentsMap);
 
 struct TConvertToAstSettings {

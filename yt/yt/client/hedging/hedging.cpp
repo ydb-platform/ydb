@@ -21,8 +21,6 @@
 
 #include <yt/yt/core/rpc/dispatcher.h>
 
-#include <yt/yt_proto/yt/client/hedging/proto/config.pb.h>
-
 #include <util/datetime/base.h>
 
 #include <util/generic/va_args.h>
@@ -165,7 +163,7 @@ public:
     UNSUPPORTED_METHOD(TFuture<NConcurrency::IAsyncZeroCopyInputStreamPtr>, GetJobInput, (NJobTrackerClient::TJobId, const TGetJobInputOptions&));
     UNSUPPORTED_METHOD(TFuture<NYson::TYsonString>, GetJobInputPaths, (NJobTrackerClient::TJobId, const TGetJobInputPathsOptions&));
     UNSUPPORTED_METHOD(TFuture<NYson::TYsonString>, GetJobSpec, (NJobTrackerClient::TJobId, const TGetJobSpecOptions&));
-    UNSUPPORTED_METHOD(TFuture<TSharedRef>, GetJobStderr, (const NScheduler::TOperationIdOrAlias&, NJobTrackerClient::TJobId, const TGetJobStderrOptions&));
+    UNSUPPORTED_METHOD(TFuture<TGetJobStderrResponse>, GetJobStderr, (const NScheduler::TOperationIdOrAlias&, NJobTrackerClient::TJobId, const TGetJobStderrOptions&));
     UNSUPPORTED_METHOD(TFuture<TSharedRef>, GetJobFailContext, (const NScheduler::TOperationIdOrAlias&, NJobTrackerClient::TJobId, const TGetJobFailContextOptions&));
     UNSUPPORTED_METHOD(TFuture<TListOperationsResult>, ListOperations, (const TListOperationsOptions&));
     UNSUPPORTED_METHOD(TFuture<TListJobsResult>, ListJobs, (const NScheduler::TOperationIdOrAlias&, const TListJobsOptions&));
@@ -229,6 +227,10 @@ public:
     UNSUPPORTED_METHOD(TFuture<void>, PausePipeline, (const TYPath&, const TPausePipelineOptions&));
     UNSUPPORTED_METHOD(TFuture<TPipelineState>, GetPipelineState, (const TYPath&, const TGetPipelineStateOptions&));
     UNSUPPORTED_METHOD(TFuture<TGetFlowViewResult>, GetFlowView, (const NYPath::TYPath&, const NYPath::TYPath&, const TGetFlowViewOptions&));
+    UNSUPPORTED_METHOD(TFuture<TShuffleHandlePtr>, StartShuffle, (const TString&, int, const TStartShuffleOptions&));
+    UNSUPPORTED_METHOD(TFuture<void>, FinishShuffle, (const TShuffleHandlePtr&, const TFinishShuffleOptions&));
+    UNSUPPORTED_METHOD(TFuture<IRowBatchReaderPtr>, CreateShuffleReader, (const TShuffleHandlePtr&, int, const NTableClient::TTableReaderConfigPtr&));
+    UNSUPPORTED_METHOD(TFuture<IRowBatchWriterPtr>, CreateShuffleWriter, (const TShuffleHandlePtr&, const TString&, const NTableClient::TTableWriterConfigPtr&));
 
 private:
     const THedgingExecutorPtr Executor_;
@@ -304,48 +306,6 @@ NApi::IClientPtr CreateHedgingClient(
 NApi::IClientPtr CreateHedgingClient(const THedgingClientOptionsPtr& config, const IClientsCachePtr& clientsCache)
 {
     return CreateHedgingClient(config, clientsCache, CreateDummyPenaltyProvider());
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-THedgingClientOptionsPtr GetHedgingClientConfig(const THedgingClientConfig& protoConfig)
-{
-    auto config = New<THedgingClientOptions>();
-    config->BanPenalty = TDuration::MilliSeconds(protoConfig.GetBanPenalty());
-    config->BanDuration = TDuration::MilliSeconds(protoConfig.GetBanDuration());
-
-    NProfiling::TTagSet counterTagSet;
-
-    for (const auto& [tagName, tagValue] : protoConfig.GetTags()) {
-        config->Tags.emplace(tagName, tagValue);
-    }
-
-    config->Connections.reserve(protoConfig.GetClients().size());
-    for (const auto& client : protoConfig.GetClients()) {
-        auto connectionConfig = ConvertTo<NYT::TIntrusivePtr<TConnectionWithPenaltyConfig>>(
-            GetConnectionConfig(client.GetClientConfig()));
-        connectionConfig->InitialPenalty = TDuration::MilliSeconds(client.GetInitialPenalty());
-        config->Connections.push_back(std::move(connectionConfig));
-    }
-    return config;
-}
-
-NApi::IClientPtr CreateHedgingClient(const THedgingClientConfig& config)
-{
-    return CreateHedgingClient(GetHedgingClientConfig(config));
-}
-
-NApi::IClientPtr CreateHedgingClient(const THedgingClientConfig& config, const IClientsCachePtr& clientsCache)
-{
-    return CreateHedgingClient(GetHedgingClientConfig(config), clientsCache);
-}
-
-NApi::IClientPtr CreateHedgingClient(
-    const THedgingClientConfig& config,
-    const IClientsCachePtr& clientsCache,
-    const IPenaltyProviderPtr& penaltyProvider)
-{
-    return CreateHedgingClient(GetHedgingClientConfig(config), clientsCache, penaltyProvider);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -13,48 +13,48 @@ namespace NYdb {
 namespace NConsoleClient {
 
 namespace {
-    THashMap<EOutputFormat, TString> InputFormatDescriptions = {
-        { EOutputFormat::JsonUnicode, "Input in json format, binary strings are decoded with unicode characters" },
-        { EOutputFormat::JsonBase64, "Input in json format, binary strings are decoded with base64" },
-        { EOutputFormat::Csv, "Input in csv format" },
-        { EOutputFormat::Tsv, "Input in tsv format" },
+    THashMap<EDataFormat, TString> InputFormatDescriptions = {
+        { EDataFormat::JsonUnicode, "Input in json format, binary strings are decoded with unicode characters" },
+        { EDataFormat::JsonBase64, "Input in json format, binary strings are decoded with base64" },
+        { EDataFormat::Csv, "Input in csv format" },
+        { EDataFormat::Tsv, "Input in tsv format" },
     };
 
-    THashMap<EOutputFormat, TString> StdinFormatDescriptions = {
-        { EOutputFormat::JsonUnicode, "Parameter names and values in json unicode format" },
-        { EOutputFormat::JsonBase64, "Parameter names and values in json unicode format, binary string parameter values are base64-encoded" },
-        { EOutputFormat::Csv, "Parameter names and values in csv format" },
-        { EOutputFormat::Tsv, "Parameter names and values in tsv format" },
-        { EOutputFormat::NewlineDelimited, "Newline character delimits parameter sets on stdin and triggers "
+    THashMap<EDataFormat, TString> StdinFormatDescriptions = {
+        { EDataFormat::JsonUnicode, "Parameter names and values in json unicode format" },
+        { EDataFormat::JsonBase64, "Parameter names and values in json unicode format, binary string parameter values are base64-encoded" },
+        { EDataFormat::Csv, "Parameter names and values in csv format" },
+        { EDataFormat::Tsv, "Parameter names and values in tsv format" },
+        { EDataFormat::NewlineDelimited, "Newline character delimits parameter sets on stdin and triggers "
                                             "processing in accordance to \"batch\" option" },
-        { EOutputFormat::Raw, "Binary value with no transformations or parsing, parameter name is set by an \"stdin-par\" option" },
-        { EOutputFormat::NoFraming, "Data from stdin is taken as a single set of parameters" },
+        { EDataFormat::Raw, "Binary value with no transformations or parsing, parameter name is set by an \"stdin-par\" option" },
+        { EDataFormat::NoFraming, "Data from stdin is taken as a single set of parameters" },
     };
 
-    THashMap<EOutputFormat, TString> FormatDescriptions = {
-        { EOutputFormat::Pretty, "Human readable output" },
-        { EOutputFormat::PrettyTable, "Human readable table output" },
-        { EOutputFormat::Json, "Output in json format" },
-        { EOutputFormat::JsonUnicode, "Output in json format, binary strings are encoded with unicode characters. "
+    THashMap<EDataFormat, TString> FormatDescriptions = {
+        { EDataFormat::Pretty, "Human readable output" },
+        { EDataFormat::PrettyTable, "Human readable table output" },
+        { EDataFormat::Json, "Output in json format" },
+        { EDataFormat::JsonUnicode, "Output in json format, binary strings are encoded with unicode characters. "
                                       "Every row is a separate json on a separate line." },
-        { EOutputFormat::JsonUnicodeArray, "Output in json format, binary strings are encoded with unicode characters. "
+        { EDataFormat::JsonUnicodeArray, "Output in json format, binary strings are encoded with unicode characters. "
                                            "Every resultset is a json array of rows. "
                                            "Every row is a separate json on a separate line." },
-        { EOutputFormat::JsonBase64, "Output in json format, binary strings are encoded with base64. "
+        { EDataFormat::JsonBase64, "Output in json format, binary strings are encoded with base64. "
                                      "Every row is a separate json on a separate line." },
-        { EOutputFormat::JsonBase64Simplify, "Output in json format, binary strings are encoded with base64. "
+        { EDataFormat::JsonBase64Simplify, "Output in json format, binary strings are encoded with base64. "
                                      "Every row is a separate json on a separate line. " 
                                      "Output only basic information about plan." },
-        { EOutputFormat::JsonBase64Array, "Output in json format, binary strings are encoded with base64. "
+        { EDataFormat::JsonBase64Array, "Output in json format, binary strings are encoded with base64. "
                                            "Every resultset is a json array of rows. "
                                            "Every row is a separate json on a separate line." },
-        { EOutputFormat::JsonRawArray, "Output in json format, binary strings are not encoded."
+        { EDataFormat::JsonRawArray, "Output in json format, binary strings are not encoded."
                                         "Every resultset is a json array of rows. "
                                         "Every row is a separate binary data on a separate line"},
-        { EOutputFormat::ProtoJsonBase64, "Output result protobuf in json format, binary strings are encoded with base64" },
-        { EOutputFormat::Csv, "Output in csv format" },
-        { EOutputFormat::Tsv, "Output in tsv format" },
-        { EOutputFormat::Parquet, "Output in parquet format" },
+        { EDataFormat::ProtoJsonBase64, "Output result protobuf in json format, binary strings are encoded with base64" },
+        { EDataFormat::Csv, "Output in csv format" },
+        { EDataFormat::Tsv, "Output in tsv format" },
+        { EDataFormat::Parquet, "Output in parquet format" },
     };
 
     THashMap<EMessagingFormat, TString> MessagingFormatDescriptions = {
@@ -93,12 +93,12 @@ const TString TCommandWithResponseHeaders::ResponseHeadersHelp = "Show response 
 // Deprecated
 void TCommandWithFormat::AddDeprecatedJsonOption(TClientCommand::TConfig& config, const TString& description) {
     config.Opts->AddLongOption("json", description).NoArgument()
-        .StoreValue(&OutputFormat, EOutputFormat::Json).StoreValue(&DeprecatedOptionUsed, true)
+        .StoreValue(&OutputFormat, EDataFormat::Json).StoreValue(&DeprecatedOptionUsed, true)
         .Hidden();
 }
 
 void TCommandWithFormat::AddInputFormats(TClientCommand::TConfig& config, 
-                                         const TVector<EOutputFormat>& allowedFormats, EOutputFormat defaultFormat) {
+                                         const TVector<EDataFormat>& allowedFormats, EDataFormat defaultFormat) {
     TStringStream description;
     description << "Input format. Available options: ";
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
@@ -117,8 +117,8 @@ void TCommandWithFormat::AddInputFormats(TClientCommand::TConfig& config,
     AllowedInputFormats = allowedFormats;
 }
 
-void TCommandWithFormat::AddStdinFormats(TClientCommand::TConfig &config, const TVector<EOutputFormat>& allowedStdinFormats,
-                                         const TVector<EOutputFormat>& allowedFramingFormats) {
+void TCommandWithFormat::AddStdinFormats(TClientCommand::TConfig &config, const TVector<EDataFormat>& allowedStdinFormats,
+                                         const TVector<EDataFormat>& allowedFramingFormats) {
     TStringStream description;
     description << "Stdin parameters format and framing. Specify this option twice to select both.\n"
                 << "1. Parameters format. Available options: ";
@@ -146,8 +146,8 @@ void TCommandWithFormat::AddStdinFormats(TClientCommand::TConfig &config, const 
     AllowedFramingFormats = allowedFramingFormats;
 }
 
-void TCommandWithFormat::AddFormats(TClientCommand::TConfig& config, 
-                                    const TVector<EOutputFormat>& allowedFormats, EOutputFormat defaultFormat) {
+void TCommandWithFormat::AddOutputFormats(TClientCommand::TConfig& config, 
+                                    const TVector<EDataFormat>& allowedFormats, EDataFormat defaultFormat) {
     TStringStream description;
     description << "Output format. Available options: ";
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
@@ -184,7 +184,7 @@ void TCommandWithFormat::AddMessagingFormats(TClientCommand::TConfig& config, co
 }
 
 void TCommandWithFormat::ParseFormats() {
-    if (InputFormat != EOutputFormat::Default
+    if (InputFormat != EDataFormat::Default
             && std::find(AllowedInputFormats.begin(), AllowedInputFormats.end(), InputFormat) == AllowedInputFormats.end()) {
         throw TMisuseException() << "Input format " << InputFormat << " is not available for this command";
     }
@@ -195,7 +195,7 @@ void TCommandWithFormat::ParseFormats() {
                      "Allowed stdin formats should contain all allowed input formats");
         }
         for (const auto& format : StdinFormats) {
-            if (format == EOutputFormat::Default) {
+            if (format == EDataFormat::Default) {
                 IsStdinFormatSet = true;
                 IsFramingFormatSet = true;
             } else if (std::find(AllowedStdinFormats.begin(), AllowedStdinFormats.end(), format) != AllowedStdinFormats.end()) {
@@ -221,7 +221,7 @@ void TCommandWithFormat::ParseFormats() {
         }
     }
 
-    if (OutputFormat == EOutputFormat::Default || DeprecatedOptionUsed) {
+    if (OutputFormat == EDataFormat::Default || DeprecatedOptionUsed) {
         return;
     }
     if (std::find(AllowedFormats.begin(), AllowedFormats.end(), OutputFormat) == AllowedFormats.end()) {
@@ -239,10 +239,10 @@ void TCommandWithFormat::ParseMessagingFormats() {
 
 void TQueryPlanPrinter::Print(const TString& plan) {
     switch (Format) {
-        case EOutputFormat::Default:
-        case EOutputFormat::JsonBase64Simplify:
-        case EOutputFormat::Pretty:
-        case EOutputFormat::PrettyTable: {
+        case EDataFormat::Default:
+        case EDataFormat::JsonBase64Simplify:
+        case EDataFormat::Pretty:
+        case EDataFormat::PrettyTable: {
             NJson::TJsonValue planJson;
             NJson::ReadJsonTree(plan, &planJson, true);
 
@@ -257,18 +257,18 @@ void TQueryPlanPrinter::Print(const TString& plan) {
                     const auto& query = queries[queryId];
                     Output << "Query " << queryId << ":" << Endl;
 
-                    if (Format == EOutputFormat::PrettyTable) {
+                    if (Format == EDataFormat::PrettyTable) {
                         PrintPrettyTable(query);
-                    } else if (Format == EOutputFormat::JsonBase64Simplify) {
+                    } else if (Format == EDataFormat::JsonBase64Simplify) {
                         PrintSimplifyJson(query);
                     } else{
                         PrintPretty(query);
                     }
                 }
             } else {
-                if (Format == EOutputFormat::PrettyTable) {
+                if (Format == EDataFormat::PrettyTable) {
                     PrintPrettyTable(planJson);
-                } else if (Format == EOutputFormat::JsonBase64Simplify) {
+                } else if (Format == EDataFormat::JsonBase64Simplify) {
                     PrintSimplifyJson(planJson);
                 } else {
                     PrintPretty(planJson);
@@ -277,8 +277,8 @@ void TQueryPlanPrinter::Print(const TString& plan) {
 
             break;
         }
-        case EOutputFormat::JsonUnicode:
-        case EOutputFormat::JsonBase64:
+        case EDataFormat::JsonUnicode:
+        case EDataFormat::JsonBase64:
             PrintJson(plan);
             break;
         default:
@@ -540,7 +540,7 @@ TString TQueryPlanPrinter::JsonToString(const NJson::TJsonValue& jsonValue) {
     return jsonValue.GetStringRobust();
 }
 
-TResultSetPrinter::TResultSetPrinter(EOutputFormat format, std::function<bool()> isInterrupted)
+TResultSetPrinter::TResultSetPrinter(EDataFormat format, std::function<bool()> isInterrupted)
     : Format(format)
     , IsInterrupted(isInterrupted)
     , ParquetPrinter(std::make_unique<TResultSetParquetPrinter>(""))
@@ -559,29 +559,29 @@ void TResultSetPrinter::Print(const TResultSet& resultSet) {
     PrintedSomething = true;
 
     switch (Format) {
-    case EOutputFormat::Default:
-    case EOutputFormat::Pretty:
+    case EDataFormat::Default:
+    case EDataFormat::Pretty:
         PrintPretty(resultSet);
         break;
-    case EOutputFormat::JsonUnicodeArray:
+    case EDataFormat::JsonUnicodeArray:
         PrintJsonArray(resultSet, EBinaryStringEncoding::Unicode);
         break;
-    case EOutputFormat::JsonUnicode:
+    case EDataFormat::JsonUnicode:
         FormatResultSetJson(resultSet, &Cout, EBinaryStringEncoding::Unicode);
         break;
-    case EOutputFormat::JsonBase64Array:
+    case EDataFormat::JsonBase64Array:
         PrintJsonArray(resultSet, EBinaryStringEncoding::Base64);
         break;
-    case EOutputFormat::JsonBase64:
+    case EDataFormat::JsonBase64:
         FormatResultSetJson(resultSet, &Cout, EBinaryStringEncoding::Base64);
         break;
-    case EOutputFormat::Csv:
+    case EDataFormat::Csv:
         PrintCsv(resultSet, ",");
         break;
-    case EOutputFormat::Tsv:
+    case EDataFormat::Tsv:
         PrintCsv(resultSet, "\t");
         break;
-    case EOutputFormat::Parquet:
+    case EDataFormat::Parquet:
         ParquetPrinter->Print(resultSet);
         break;
     default:
@@ -602,8 +602,8 @@ void TResultSetPrinter::Reset() {
 
 void TResultSetPrinter::BeginResultSet() {
     switch (Format) {
-    case EOutputFormat::JsonUnicodeArray:
-    case EOutputFormat::JsonBase64Array:
+    case EDataFormat::JsonUnicodeArray:
+    case EDataFormat::JsonBase64Array:
         Cout << '[';
         break;
     default:
@@ -613,11 +613,11 @@ void TResultSetPrinter::BeginResultSet() {
 
 void TResultSetPrinter::EndResultSet() {
     switch (Format) {
-    case EOutputFormat::JsonUnicodeArray:
-    case EOutputFormat::JsonBase64Array:
+    case EDataFormat::JsonUnicodeArray:
+    case EDataFormat::JsonBase64Array:
         Cout << ']' << Endl;
         break;
-    case EOutputFormat::Parquet:
+    case EDataFormat::Parquet:
         ParquetPrinter->Reset();
         break;
     default:
@@ -627,8 +627,8 @@ void TResultSetPrinter::EndResultSet() {
 
 void TResultSetPrinter::EndLineBeforeNextResult() {
     switch (Format) {
-    case EOutputFormat::JsonUnicodeArray:
-    case EOutputFormat::JsonBase64Array:
+    case EDataFormat::JsonUnicodeArray:
+    case EDataFormat::JsonBase64Array:
         Cout << ',' << Endl;
         break;
     default:

@@ -22,6 +22,7 @@ struct TConnectionWithPenaltyConfig
     static void Register(TRegistrar registrar);
 };
 
+DEFINE_REFCOUNTED_TYPE(TConnectionWithPenaltyConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -41,6 +42,38 @@ struct THedgingClientOptions
 };
 
 DEFINE_REFCOUNTED_TYPE(THedgingClientOptions)
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TReplicationLagPenaltyProviderOptions
+    : public virtual NYTree::TYsonStruct
+{
+    // Clusters that need checks for replication lag.
+    std::vector<TString> ReplicaClusters;
+
+    // Table that needs checks for replication lag.
+    TString TablePath;
+
+    // Same as BanPenalty in hedging client.
+    TDuration LagPenalty;
+    // Tablet is considered "lagged" if CurrentTimestamp - TabletLastReplicationTimestamp >= MaxTabletLag.
+    TDuration MaxTabletLag;
+
+    // Real value from 0.0 to 1.0. Replica cluster receives LagPenalty if NumberOfTabletsWithLag >= MaxTabletsWithLagFraction * TotalNumberOfTablets.
+    double MaxTabletsWithLagFraction;
+
+    // Replication lag check period.
+    TDuration CheckPeriod;
+
+    // In case of any errors from master client - clear all penalties.
+    bool ClearPenaltiesOnErrors;
+
+    REGISTER_YSON_STRUCT(TReplicationLagPenaltyProviderOptions);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TReplicationLagPenaltyProviderOptions)
 
 ////////////////////////////////////////////////////////////////////////////////
 

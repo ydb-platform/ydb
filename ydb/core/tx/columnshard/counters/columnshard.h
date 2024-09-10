@@ -72,7 +72,6 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr WriteRequests;
     THashMap<EWriteFailReason, NMonitoring::TDynamicCounters::TCounterPtr> FailedWriteRequests;
     NMonitoring::TDynamicCounters::TCounterPtr SuccessWriteRequests;
-
 public:
     const TCSInitialization Initialization;
     TTxProgressCounters TxProgress;

@@ -75,7 +75,9 @@
 #include <ydb/library/yql/utils/backtrace/backtrace.h>
 #include <ydb/library/yql/utils/bindings/utils.h>
 #include <ydb/library/yql/core/qplayer/storage/file/yql_qstorage_file.h>
-#include <ydb/library/yql/public/result_format/yql_result_format.h>
+#include <ydb/library/yql/public/result_format/yql_result_format_response.h>
+#include <ydb/library/yql/public/result_format/yql_result_format_type.h>
+#include <ydb/library/yql/public/result_format/yql_result_format_data.h>
 
 #include <ydb/core/fq/libs/actors/database_resolver.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/db_async_resolver_impl.h>
@@ -443,6 +445,11 @@ int RunProgram(TProgramPtr program, const TRunOptions& options, const THashMap<T
                         if (write.Type) {
                             NResult::TEmptyTypeVisitor visitor;
                             NResult::ParseType(*write.Type, visitor);
+                        }
+
+                        if (write.Type && write.Data) {
+                            NResult::TEmptyDataVisitor visitor;
+                            NResult::ParseData(*write.Type, *write.Data, visitor);
                         }
                     }
                 }
@@ -949,13 +956,14 @@ int RunMain(int argc, const char* argv[])
     }
 
     if (gatewaysConfig.HasS3()) {
+        gatewaysConfig.MutableS3()->SetAllowLocalFiles(true);
         for (auto& cluster: gatewaysConfig.GetS3().GetClusterMapping()) {
             clusters.emplace(to_lower(cluster.GetName()), TString{S3ProviderName});
         }
         if (!httpGateway) {
             httpGateway = IHTTPGateway::Make(gatewaysConfig.HasHttpGateway() ? &gatewaysConfig.GetHttpGateway() : nullptr);
         }
-        dataProvidersInit.push_back(GetS3DataProviderInitializer(httpGateway, nullptr, true, nullptr));
+        dataProvidersInit.push_back(GetS3DataProviderInitializer(httpGateway, nullptr));
     }
 
     if (gatewaysConfig.HasPq()) {

@@ -5,7 +5,6 @@
 #include "service_initializer.h"
 
 #include <ydb/core/actorlib_impl/destruct_actor.h>
-#include <ydb/core/actorlib_impl/load_network.h>
 
 #include "ydb/core/audit/audit_log_service.h"
 
@@ -245,10 +244,13 @@
 
 #include <util/system/hostname.h>
 
+#ifndef KIKIMR_DISABLE_S3_OPS
 #include <aws/core/Aws.h>
+#endif
 
 namespace {
 
+#ifndef KIKIMR_DISABLE_S3_OPS
 struct TAwsApiGuard {
     TAwsApiGuard() {
         Aws::InitAPI(Options);
@@ -261,6 +263,7 @@ struct TAwsApiGuard {
 private:
     Aws::SDKOptions Options;
 };
+#endif
 
 }
 
@@ -771,8 +774,6 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
             // TODO(alexvru): pool?
             setup->LocalServices.emplace_back(NInterconnect::MakeLoadResponderActorId(NodeId),
                 TActorSetupCmd(NInterconnect::CreateLoadResponderActor(), TMailboxType::ReadAsFilled, systemPoolId));
-
-            //IC_Load::InitializeService(setup, appData, maxNode);
         }
     }
 
@@ -1091,6 +1092,7 @@ void TSharedCacheInitializer::InitializeServices(
     }
     config->TotalAsyncQueueInFlyLimit = cfg.GetAsyncQueueInFlyLimit();
     config->TotalScanQueueInFlyLimit = cfg.GetScanQueueInFlyLimit();
+    config->ReplacementPolicy = cfg.GetReplacementPolicy();
 
     if (cfg.HasActivePagesReservationPercent()) {
         config->ActivePagesReservationPercent = cfg.GetActivePagesReservationPercent();
@@ -2067,8 +2069,8 @@ void TMemoryControllerInitializer::InitializeServices(
         mergeResourceBrokerConfigs(Config.GetResourceBrokerConfig());
     }
 
-    auto* actor = NMemory::CreateMemoryController(TDuration::Seconds(1), ProcessMemoryInfoProvider, 
-        Config.GetMemoryControllerConfig(), resourceBrokerSelfConfig, 
+    auto* actor = NMemory::CreateMemoryController(TDuration::Seconds(1), ProcessMemoryInfoProvider,
+        Config.GetMemoryControllerConfig(), resourceBrokerSelfConfig,
         appData->Counters);
     setup->LocalServices.emplace_back(
         NMemory::MakeMemoryControllerId(0),
@@ -2784,6 +2786,7 @@ void TGraphServiceInitializer::InitializeServices(NActors::TActorSystemSetup* se
         TActorSetupCmd(NGraph::CreateGraphService(appData->TenantName), TMailboxType::HTSwap, appData->UserPoolId));
 }
 
+#ifndef KIKIMR_DISABLE_S3_OPS
 TAwsApiInitializer::TAwsApiInitializer(IGlobalObjectStorage& globalObjects)
     : GlobalObjects(globalObjects)
 {
@@ -2794,6 +2797,7 @@ void TAwsApiInitializer::InitializeServices(NActors::TActorSystemSetup* setup, c
     Y_UNUSED(appData);
     GlobalObjects.AddGlobalObject(std::make_shared<TAwsApiGuard>());
 }
+#endif
 
 } // namespace NKikimrServicesInitializers
 } // namespace NKikimr

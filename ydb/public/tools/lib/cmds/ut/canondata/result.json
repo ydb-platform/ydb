@@ -1,5 +1,0 @@
-{
-    "test.test_merge_two_yaml_configs": {
-        "uri": "file://test.test_merge_two_yaml_configs/patched.yaml"
-    }
-}

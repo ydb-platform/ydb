@@ -62,7 +62,7 @@ class TLogReader : public TLogReaderBase {
 
     bool IsInitial;
     TPDisk * const PDisk;
-    TActorSystem * const ActorSystem;
+    std::shared_ptr<TPDiskCtx> PCtx;
     const TActorId ReplyTo;
 
     TOwner Owner;

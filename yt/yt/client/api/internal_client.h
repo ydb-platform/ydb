@@ -106,6 +106,18 @@ struct TGetOrderedTabletSafeTrimRowCountRequest
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TRegisterShuffleChunksOptions
+    : public TTimeoutOptions
+{ };
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TFetchShuffleChunksOptions
+    : public TTimeoutOptions
+{ };
+
+////////////////////////////////////////////////////////////////////////////////
+
 //! Provides a set of private APIs.
 /*!
  *  Only native clients are expected to implement this.
@@ -173,6 +185,16 @@ struct IInternalClient
         NObjectClient::TObjectId leaseId,
         bool persistent,
         const TUnreferenceLeaseOptions& options = {}) = 0;
+
+    virtual TFuture<void> RegisterShuffleChunks(
+        const TShuffleHandlePtr& handle,
+        const std::vector<NChunkClient::NProto::TChunkSpec>& chunkSpecs,
+        const TRegisterShuffleChunksOptions& options = {}) = 0;
+
+    virtual TFuture<std::vector<NChunkClient::NProto::TChunkSpec>> FetchShuffleChunks(
+        const TShuffleHandlePtr& handle,
+        int partitionIndex,
+        const TFetchShuffleChunksOptions& options = {}) = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(IInternalClient)

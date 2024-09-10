@@ -785,7 +785,7 @@ void THive::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev) {
     for (const TEvInterconnect::TNodeInfo& node : ev->Get()->Nodes) {
         NodesInfo[node.NodeId] = node;
         auto dataCenterId = node.Location.GetDataCenterId();
-        if (dataCenterId != 0) {
+        if (dataCenterId) {
             DataCenters[dataCenterId]; // just create entry in hash map
         }
     }
@@ -1714,6 +1714,16 @@ void THive::UpdateCounterPingQueueSize() {
     if (TabletCounters != nullptr) {
         auto& counter = TabletCounters->Simple()[NHive::COUNTER_PINGQUEUE_SIZE];
         counter.Set(NodePingQueue.size());
+    }
+}
+
+void THive::UpdateCounterTabletChannelHistorySize() {
+    auto& histogram = TabletCounters->Percentile()[NHive::COUNTER_TABLET_CHANNEL_HISTORY_SIZE];
+    histogram.Clear();
+    for (const auto& [_, tablet] : Tablets) {
+        for (const auto& channel : tablet.TabletStorageInfo->Channels) {
+            histogram.IncrementFor(channel.History.size());
+        }
     }
 }
 
@@ -2733,7 +2743,7 @@ ui32 THive::GetDataCenters() {
 
 void THive::AddRegisteredDataCentersNode(TDataCenterId dataCenterId, TNodeId nodeId) {
     BLOG_D("AddRegisteredDataCentersNode(" << dataCenterId << ", " << nodeId << ")");
-    if (dataCenterId != 0) { // ignore default data center id if exists
+    if (dataCenterId) { // ignore default data center id if exists
         auto& dataCenter = DataCenters[dataCenterId];
         bool wasRegistered = dataCenter.IsRegistered();
         dataCenter.RegisteredNodes.insert(nodeId);
@@ -2746,7 +2756,7 @@ void THive::AddRegisteredDataCentersNode(TDataCenterId dataCenterId, TNodeId nod
 
 void THive::RemoveRegisteredDataCentersNode(TDataCenterId dataCenterId, TNodeId nodeId) {
     BLOG_D("RemoveRegisteredDataCentersNode(" << dataCenterId << ", " << nodeId << ")");
-    if (dataCenterId != 0) { // ignore default data center id if exists
+    if (dataCenterId) { // ignore default data center id if exists
         auto& dataCenter = DataCenters[dataCenterId];
         bool wasRegistered = dataCenter.IsRegistered();
         dataCenter.RegisteredNodes.erase(nodeId);

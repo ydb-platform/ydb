@@ -109,6 +109,7 @@ protected:
 public:
     void Bootstrap() {
         try {
+            StartTime = TInstant::Now();
             {
                 TStringBuilder prefixBuilder;
                 prefixBuilder << "SelfId: " << this->SelfId() << ", TxId: " << TxId << ", task: " << Task.GetId() << ". ";
@@ -313,12 +314,12 @@ protected:
     void OnMemoryLimitExceptionHandler() {
         TString memoryConsumptionDetails = MemoryLimits.MemoryQuotaManager->MemoryConsumptionDetails();
         TStringBuilder failureReason = TStringBuilder()
-            << "Mkql memory limit exceeded, limit: " << GetMkqlMemoryLimit()
+            << "Mkql memory limit exceeded, allocated by task " << Task.GetId() << ": " << GetMkqlMemoryLimit()
             << ", host: " << HostName()
             << ", canAllocateExtraMemory: " << CanAllocateExtraMemory;
 
         if (!memoryConsumptionDetails.empty()) {
-            failureReason << ", memory manager details: " << memoryConsumptionDetails;
+            failureReason << ", memory manager details for current node: " << memoryConsumptionDetails;
         }
 
         InternalError(NYql::NDqProto::StatusIds::OVERLOADED, TIssuesIds::KIKIMR_PRECONDITION_FAILED, failureReason);
@@ -1049,8 +1050,14 @@ protected:
                     );
                 }
 
+                TStringBuilder reason = TStringBuilder() << "Task execution timeout ";
+                if (RuntimeSettings.Timeout) {
+                    reason << RuntimeSettings.Timeout->MilliSeconds() << "ms ";
+                }
+                reason << "exceeded, terminating after " << (TInstant::Now() - StartTime).MilliSeconds() << "ms";
+
                 State = NDqProto::COMPUTE_STATE_FAILURE;
-                ReportStateAndMaybeDie(NYql::NDqProto::StatusIds::TIMEOUT, {TIssue("timeout exceeded")}, true);
+                ReportStateAndMaybeDie(NYql::NDqProto::StatusIds::TIMEOUT, {TIssue(reason)}, true);
                 break;
             }
             case EEvWakeupTag::PeriodicStatsTag: {
@@ -1825,6 +1832,8 @@ public:
                     }
                 }
             }
+        } else {
+            // TODO: what should happen in this case?
         }
 
         static_cast<TDerived*>(this)->FillExtraStats(dst, last);
@@ -1926,6 +1935,7 @@ protected:
     NWilson::TSpan ComputeActorSpan;
     TDuration SourceCpuTime;
 private:
+    TInstant StartTime;
     bool Running = true;
     TInstant LastSendStatsTime;
     bool PassExceptions = false;

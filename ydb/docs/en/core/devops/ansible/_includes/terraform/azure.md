@@ -2,7 +2,7 @@ Create an [account](https://portal.azure.com/#home) in Azure and top up your [ac
 
 Authentication to the Azure Provider for Terraform goes through the CLI:
 
-1. You can download, install, and configure the Azure CLI by following [these instructions](https://learn.microsoft.com/ru-ru/cli/azure/install-azure-cli).
+1. You can download, install, and configure the Azure CLI by following [these instructions]({{ azure_docs }}/cli/azure/install-azure-cli).
 2. Log in using the Azure CLI interactively with the `az login` command.
 3. The easiest way to create a pair of SSH keys (Linux, macOS) is to use the `ssh-keygen` command.
 

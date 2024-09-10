@@ -3,7 +3,6 @@
 #include "background_controller.h"
 #include "counters.h"
 #include "columnshard.h"
-#include "columnshard_common.h"
 #include "columnshard_ttl.h"
 #include "columnshard_private_events.h"
 #include "tables_manager.h"
@@ -287,6 +286,12 @@ class TColumnShard
     void OnTieringModified(const std::optional<ui64> pathId = {});
 
 public:
+    ui64 BuildEphemeralTxId() {
+        static TAtomicCounter Counter = 0;
+        static constexpr ui64 shift = (ui64)1 << 47;
+        return shift | Counter.Inc();
+    }
+
     enum class EOverloadStatus {
         ShardTxInFly /* "shard_tx" */,
         ShardWritesInFly /* "shard_writes" */,
@@ -321,7 +326,7 @@ public:
     }
 
 private:
-    void OverloadWriteFail(const EOverloadStatus overloadReason, const NEvWrite::TWriteData& writeData, const ui64 cookie, std::unique_ptr<NActors::IEventBase>&& event, const TActorContext& ctx);
+    void OverloadWriteFail(const EOverloadStatus overloadReason, const NEvWrite::TWriteMeta& writeMeta, const ui64 writeSize, const ui64 cookie, std::unique_ptr<NActors::IEventBase>&& event, const TActorContext& ctx);
     EOverloadStatus CheckOverloaded(const ui64 tableId) const;
 
 protected:
@@ -425,7 +430,7 @@ private:
     std::optional<TMonotonic> StartInstant;
 
     struct TLongTxWriteInfo {
-        ui64 WriteId;
+        TInsertWriteId InsertWriteId;
         ui32 WritePartId;
         NLongTxService::TLongTxId LongTxId;
         ui64 PreparedTxId = 0;
@@ -435,7 +440,6 @@ private:
     ui64 CurrentSchemeShardId = 0;
     TMessageSeqNo LastSchemaSeqNo;
     std::optional<NKikimrSubDomains::TProcessingParams> ProcessingParams;
-    TWriteId LastWriteId = TWriteId{0};
     ui64 LastPlannedStep = 0;
     ui64 LastPlannedTxId = 0;
     NOlap::TSnapshot LastCompletedTx = NOlap::TSnapshot::Zero();
@@ -470,7 +474,7 @@ private:
 
     std::optional<ui64> ProgressTxInFlight;
     THashMap<ui64, TInstant> ScanTxInFlight;
-    THashMap<TWriteId, TLongTxWriteInfo> LongTxWrites;
+    THashMap<TInsertWriteId, TLongTxWriteInfo> LongTxWrites;
     using TPartsForLTXShard = THashMap<ui32, TLongTxWriteInfo*>;
     THashMap<TULID, TPartsForLTXShard> LongTxWritesByUniqueId;
     TMultiMap<NOlap::TSnapshot, TEvColumnShard::TEvScan::TPtr> WaitingScans;
@@ -483,7 +487,7 @@ private:
 
     void TryRegisterMediatorTimeCast();
     void UnregisterMediatorTimeCast();
-    void TryAbortWrites(NIceDb::TNiceDb& db, NOlap::TDbWrapper& dbTable, THashSet<TWriteId>&& writesToAbort);
+    void TryAbortWrites(NIceDb::TNiceDb& db, NOlap::TDbWrapper& dbTable, THashSet<TInsertWriteId>&& writesToAbort);
 
     bool WaitPlanStep(ui64 step);
     void SendWaitPlanStep(ui64 step);
@@ -496,14 +500,11 @@ private:
         return ProgressTxController->GetTxCompleteLag(mediatorTime);
     }
 
-    TWriteId HasLongTxWrite(const NLongTxService::TLongTxId& longTxId, const ui32 partId) const;
-    TWriteId GetLongTxWrite(NIceDb::TNiceDb& db, const NLongTxService::TLongTxId& longTxId, const ui32 partId, const std::optional<ui32> granuleShardingVersionId);
-    void AddLongTxWrite(TWriteId writeId, ui64 txId);
-    void LoadLongTxWrite(TWriteId writeId, const ui32 writePartId, const NLongTxService::TLongTxId& longTxId, const std::optional<ui32> granuleShardingVersion);
-    bool RemoveLongTxWrite(NIceDb::TNiceDb& db, const TWriteId writeId, const ui64 txId);
-
-    TWriteId BuildNextWriteId(NTabletFlatExecutor::TTransactionContext& txc);
-    TWriteId BuildNextWriteId(NIceDb::TNiceDb& db);
+    TInsertWriteId HasLongTxWrite(const NLongTxService::TLongTxId& longTxId, const ui32 partId) const;
+    TInsertWriteId GetLongTxWrite(NIceDb::TNiceDb& db, const NLongTxService::TLongTxId& longTxId, const ui32 partId, const std::optional<ui32> granuleShardingVersionId);
+    void AddLongTxWrite(const TInsertWriteId writeId, ui64 txId);
+    void LoadLongTxWrite(const TInsertWriteId writeId, const ui32 writePartId, const NLongTxService::TLongTxId& longTxId, const std::optional<ui32> granuleShardingVersion);
+    bool RemoveLongTxWrite(NIceDb::TNiceDb& db, const TInsertWriteId writeId, const ui64 txId);
 
     void EnqueueBackgroundActivities(const bool periodic = false);
     virtual void Enqueue(STFUNC_SIG) override;
@@ -518,7 +519,7 @@ private:
     void RunDropTable(const NKikimrTxColumnShard::TDropTable& body, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc);
     void RunAlterStore(const NKikimrTxColumnShard::TAlterStore& body, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc);
 
-    void StartIndexTask(std::vector<const NOlap::TInsertedData*>&& dataToIndex, const i64 bytesToIndex);
+    void StartIndexTask(std::vector<const NOlap::TCommittedData*>&& dataToIndex, const i64 bytesToIndex);
     void SetupIndexation();
     void SetupCompaction();
     bool SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls = {});
@@ -539,6 +540,9 @@ private:
 public:
     ui64 TabletTxCounter = 0;
 
+    bool HasLongTxWrites(const TInsertWriteId insertWriteId) const {
+        return LongTxWrites.contains(insertWriteId);
+    }
     void EnqueueProgressTx(const TActorContext& ctx, const std::optional<ui64> continueTxId);
     NOlap::TSnapshot GetLastTxSnapshot() const {
         return NOlap::TSnapshot(LastPlannedStep, LastPlannedTxId);

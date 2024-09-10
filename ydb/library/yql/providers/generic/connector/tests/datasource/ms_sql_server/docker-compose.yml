@@ -16,10 +16,6 @@ services:
       DOTNET_SYSTEM_GLOBALIZATION_INVARIANT: "false"
       LANG: ru_RU.UTF-8
       SA_PASSWORD: Qwerty12345!
-    tmpfs:
-      - /run
-      - /tmp
-      - /var
     ports:
       - 1433:1433
 version: "3.4"

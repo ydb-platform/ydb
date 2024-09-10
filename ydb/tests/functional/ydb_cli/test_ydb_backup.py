@@ -1198,3 +1198,69 @@ class TestRestoreACLOption(BaseTestBackupInFiles):
             is_permissions_the_same(self.driver.scheme_client, "/Root/folder/table", "/Root/restored/table"),
             is_(False)
         )
+
+class TestRestoreNoData(BaseTestBackupInFiles):
+    def test_restore_no_data(self):
+        self.driver.scheme_client.make_directory("/Root/folder")
+
+        session = self.driver.table_client.session().create()
+
+        # Create table and modify permissions on it
+        create_table_with_data(session, "folder/table")
+        modify_permissions(self.driver.scheme_client, "folder/table")
+
+        # Backup table
+        backup_files_dir = output_path(self.test_name, "test_single_table", "backup_files_dir")
+        yatest_common.execute(
+            [
+                backup_bin(),
+                "--verbose",
+                "--endpoint", "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port,
+                "--database", "/Root",
+                "tools", "dump",
+                "--path", "/Root/folder",
+                "--output", backup_files_dir
+            ]
+        )
+        assert_that(
+            os.listdir(backup_files_dir),
+            is_(["table"])
+        )
+        assert_that(
+            self.scheme_listdir("/Root"),
+            is_(["folder"])
+        )
+
+        # Restore table
+        restore_cmd = [
+            backup_bin(),
+            "--verbose",
+            "--endpoint", "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port,
+            "--database", "/Root",
+            "tools", "restore",
+            "--path", "/Root/restored",
+            "--input", backup_files_dir,
+            "--restore-data", "false",
+        ]
+        yatest_common.execute(restore_cmd)
+
+        assert_that(
+            self.scheme_listdir("/Root"),
+            contains_inanyorder("folder", "restored")
+        )
+        assert_that(
+            self.scheme_listdir("/Root/restored"),
+            is_(["table"])
+        )
+        assert_that(
+            is_tables_descriptions_the_same(session, "/Root/folder/table", "/Root/restored/table"),
+            is_(True)
+        )
+        assert_that(
+            is_permissions_the_same(self.driver.scheme_client, "/Root/folder/table", "/Root/restored/table"),
+            is_(True)
+        )
+        assert_that(
+            is_data_the_same(session, "/Root/folder/table", "/Root/restored/table"),
+            is_(False)
+        )

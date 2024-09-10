@@ -45,6 +45,11 @@ TTableDescription TableDescriptionFromProto(const Ydb::Table::CreateTableRequest
     return TProtoAccessor::FromProto(proto);
 }
 
+TTableDescription TableDescriptionWithoutIndexesFromProto(Ydb::Table::CreateTableRequest proto) {
+    proto.clear_indexes();
+    return TableDescriptionFromProto(proto);
+}
+
 Ydb::Scheme::ModifyPermissionsRequest ReadPermissions(const TString& fsPath) {
     Ydb::Scheme::ModifyPermissionsRequest proto;
     Y_ENSURE(google::protobuf::TextFormat::ParseFromString(TFileInput(fsPath).ReadAll(), &proto));
@@ -259,11 +264,21 @@ TRestoreResult TRestoreClient::RestoreTable(const TFsPath& fsPath, const TString
         return CheckSchema(dbPath, dumpedDesc);
     }
 
-    if (settings.RestoreData_) {
-        auto woIndexes = scheme;
-        woIndexes.clear_indexes();
+    auto withoutIndexesDesc = TableDescriptionWithoutIndexesFromProto(scheme);
+    if (withoutIndexesDesc.GetAttributes().contains(DOC_API_TABLE_VERSION_ATTR) && settings.SkipDocumentTables_) {
+        return Result<TRestoreResult>();
+    }
 
-        auto result = RestoreData(fsPath, dbPath, settings, TableDescriptionFromProto(woIndexes));
+    auto createResult = TableClient.RetryOperationSync([&dbPath, &withoutIndexesDesc](TSession session) {
+        return session.CreateTable(dbPath, TTableDescription(withoutIndexesDesc),
+            TCreateTableSettings().RequestType(DOC_API_REQUEST_TYPE)).GetValueSync();
+    });
+    if (!createResult.IsSuccess()) {
+        return Result<TRestoreResult>(dbPath, std::move(createResult));
+    }
+
+    if (settings.RestoreData_) {
+        auto result = RestoreData(fsPath, dbPath, settings, withoutIndexesDesc);
         if (!result.IsSuccess()) {
             return result;
         }
@@ -337,18 +352,6 @@ struct TWriterWaiter {
 };
 
 TRestoreResult TRestoreClient::RestoreData(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings, const TTableDescription& desc) {
-    if (desc.GetAttributes().contains(DOC_API_TABLE_VERSION_ATTR) && settings.SkipDocumentTables_) {
-        return Result<TRestoreResult>();
-    }
-
-    auto createResult = TableClient.RetryOperationSync([&dbPath, &desc](TSession session) {
-        return session.CreateTable(dbPath, TTableDescription(desc),
-            TCreateTableSettings().RequestType(DOC_API_REQUEST_TYPE)).GetValueSync();
-    });
-    if (!createResult.IsSuccess()) {
-        return Result<TRestoreResult>(dbPath, std::move(createResult));
-    }
-
     THolder<NPrivate::IDataAccumulator> accumulator;
     THolder<NPrivate::IDataWriter> writer;
 

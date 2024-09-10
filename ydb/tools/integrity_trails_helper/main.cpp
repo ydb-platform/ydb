@@ -129,22 +129,20 @@ std::vector<std::string> ReadPK(NJson::TJsonValue& jsonValue) {
     auto &pkField = jsonValue["primary_key"];
 
     if (!pkField.IsArray()) {
-        Cerr << "Scheme parsing error, primary key is not an array" << Endl;
+        Cerr << "Scheme parsing error, primary_key is not an array" << Endl;
         return {};
     }
 
     std::vector<std::string> pk;
 
-    if (pkField.IsArray()) {
-        auto &pkArray = pkField.GetArray();
+    auto &pkArray = pkField.GetArray();
 
-        for (size_t i = 0; i < pkArray.size(); ++i) {
-            if (!pkArray[i].IsString()) {
-                Cerr << "Scheme parsing error, primary key array element is not a string" << Endl;
-                return {};
-            }
-            pk.push_back(pkArray[i].GetString());
+    for (size_t i = 0; i < pkArray.size(); ++i) {
+        if (!pkArray[i].IsString()) {
+            Cerr << "Scheme parsing error, primary key array element is not a string" << Endl;
+            return {};
         }
+        pk.push_back(pkArray[i].GetString());
     }
 
     return pk;
@@ -154,7 +152,7 @@ std::map<std::string, std::string> ReadColumnMapping(NJson::TJsonValue& jsonValu
     auto &columnsField = jsonValue["columns"];
 
     if (!columnsField.IsArray()) {
-        Cerr << "Scheme parsing error, columns is not an array";
+        Cerr << "Scheme parsing error, columns is not an array" << Endl;
         return {};
     }
 
@@ -166,7 +164,7 @@ std::map<std::string, std::string> ReadColumnMapping(NJson::TJsonValue& jsonValu
         auto &column = columnsArray[i];
 
         if (!column.IsMap()) {
-            Cerr << "Scheme parsing error, column is not an object";
+            Cerr << "Scheme parsing error, column is not an object" << Endl;
             return {};
         }
 
@@ -179,6 +177,11 @@ std::map<std::string, std::string> ReadColumnMapping(NJson::TJsonValue& jsonValu
             typeId = typeField["type_id"].GetString();
         } else if (typeField.Has("optional_type")) {
             typeId = typeField["optional_type"]["item"]["type_id"].GetString();
+        }
+
+        if (typeId.empty()) {
+            Cerr << "Scheme parsing error, type_id is not found" << Endl;
+            return {};
         }
 
         colToType[nameField] = typeId;

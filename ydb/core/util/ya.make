@@ -46,7 +46,6 @@ SRCS(
     single_thread_ic_mock.h
     stlog.cpp
     stlog.h
-    templates.h
     testactorsys.cpp
     testactorsys.h
     text.cpp

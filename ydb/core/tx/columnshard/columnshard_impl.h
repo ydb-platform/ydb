@@ -285,6 +285,12 @@ class TColumnShard
     void OnTieringModified(const std::optional<ui64> pathId = {});
 
 public:
+    ui64 BuildEphemeralTxId() {
+        static TAtomicCounter Counter = 0;
+        static constexpr ui64 shift = (ui64)1 << 47;
+        return shift | Counter.Inc();
+    }
+
     enum class EOverloadStatus {
         ShardTxInFly /* "shard_tx" */,
         ShardWritesInFly /* "shard_writes" */,
@@ -319,7 +325,7 @@ public:
     }
 
 private:
-    void OverloadWriteFail(const EOverloadStatus overloadReason, const NEvWrite::TWriteData& writeData, const ui64 cookie, std::unique_ptr<NActors::IEventBase>&& event, const TActorContext& ctx);
+    void OverloadWriteFail(const EOverloadStatus overloadReason, const NEvWrite::TWriteMeta& writeMeta, const ui64 writeSize, const ui64 cookie, std::unique_ptr<NActors::IEventBase>&& event, const TActorContext& ctx);
     EOverloadStatus CheckOverloaded(const ui64 tableId) const;
 
 protected:
@@ -532,6 +538,9 @@ private:
 public:
     ui64 TabletTxCounter = 0;
 
+    bool HasLongTxWrites(const TInsertWriteId insertWriteId) const {
+        return LongTxWrites.contains(insertWriteId);
+    }
     void EnqueueProgressTx(const TActorContext& ctx, const std::optional<ui64> continueTxId);
     NOlap::TSnapshot GetLastTxSnapshot() const {
         return NOlap::TSnapshot(LastPlannedStep, LastPlannedTxId);

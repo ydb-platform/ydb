@@ -4,7 +4,7 @@ STYLE_PYTHON()
 
 NO_CHECK_IMPORTS()
 
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner.inc)
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/mdb_mock/recipe.inc)
 
@@ -52,7 +52,7 @@ IF (OPENSOURCE)
 ENDIF()
 
 PEERDIR(
-    ydb/tests/fq/generic/analytics/utils
+    ydb/tests/fq/generic/utils
     library/python/testing/recipe
     library/python/testing/yatest_common
     library/recipes/common
@@ -71,8 +71,3 @@ TEST_SRCS(
 )
 
 END()
-
-RECURSE_FOR_TESTS(
-    utils
-)
-

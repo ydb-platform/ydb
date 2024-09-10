@@ -54,7 +54,7 @@ DEPENDS(
 )
 
 PEERDIR(
-    ydb/tests/fq/generic/streaming/utils
+    ydb/tests/fq/generic/utils
     ydb/tests/tools/datastreams_helpers
     library/python/testing/recipe
     library/python/testing/yatest_common
@@ -71,6 +71,3 @@ TEST_SRCS(
 
 END()
 
-RECURSE_FOR_TESTS(
-    utils
-)

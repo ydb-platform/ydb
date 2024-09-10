@@ -1,5 +1,6 @@
 #include "gorilla/compressor.h"
 #include "gorilla/decompressor.h"
+#include "gorilla.h"
 #include "stream.h"
 #include "parsing.h"
 #include <ydb/core/formats/arrow/dictionary/conversion.h>
@@ -8,11 +9,17 @@
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/actors/core/log.h>
 
+#include <sstream>
+
 #include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/dictionary.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/buffer.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/io/memory.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/reader.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/writer.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/api.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/io/api.h>
 
 namespace NKikimr::NArrow::NSerialization {
     // Character dividing arrow schema and compressed data in serialized string.
@@ -22,7 +29,7 @@ namespace NKikimr::NArrow::NSerialization {
             std::shared_ptr<arrow::DataType> &column_type,
             std::shared_ptr<arrow::ArrayData> &array_data,
             size_t i
-    ) {
+    ) const {
         uint64_t reinterpreted_value;
         if (column_type->Equals(arrow::uint64())) {
             uint64_t value = array_data->GetValues<uint64_t>(1)[i];
@@ -34,7 +41,7 @@ namespace NKikimr::NArrow::NSerialization {
             double value = array_data->GetValues<double>(1)[i];
             reinterpreted_value = *reinterpret_cast<uint64_t *>(&value);
         } else if (column_type->Equals(arrow::TimestampType(arrow::TimeUnit::MICRO))) {
-            arrow::TimestampArray casted_timestamp_data(array_data);
+            auto casted_timestamp_data = arrow::TimestampArray(array_data);
             reinterpreted_value = casted_timestamp_data.Value(i);
         } else {
             Y_ABORT("Unknown value column type met for uint64_t serialization.");
@@ -44,7 +51,7 @@ namespace NKikimr::NArrow::NSerialization {
 
     std::shared_ptr<arrow::ArrayBuilder> TGorillaSerializer::getColumnBuilderByType(
             std::shared_ptr<arrow::DataType> &column_type
-    ) {
+    ) const {
         std::shared_ptr<arrow::ArrayBuilder> value_column_builder;
         if (column_type->Equals(arrow::uint64())) {
             value_column_builder = std::make_shared<arrow::UInt64Builder>();
@@ -56,7 +63,7 @@ namespace NKikimr::NArrow::NSerialization {
             value_column_builder = std::make_shared<arrow::TimestampBuilder>(
                     arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO), arrow::default_memory_pool());
         } else {
-            Y_ABORT("Unknown value column type met to get column builder.")
+            Y_ABORT("Unknown value column type met to get column builder.");
         }
         return value_column_builder;
     }
@@ -65,21 +72,21 @@ namespace NKikimr::NArrow::NSerialization {
             std::shared_ptr<arrow::DataType> &column_type,
             std::shared_ptr<arrow::ArrayBuilder> &column_builder,
             uint64_t value
-    ) {
+    ) const {
         if (column_type->Equals(arrow::uint64())) {
-            Y_VERIFY_OK(std::dynamic_pointer_cast<arrow::UInt64Builder>(column_builder)->Append(value));
+            Y_ABORT_UNLESS(std::dynamic_pointer_cast<arrow::UInt64Builder>(column_builder)->Append(value).ok());
         } else if (column_type->Equals(arrow::uint32())) {
             uint32_t reinterpreted_value = *reinterpret_cast<uint32_t *>(&value);
-            Y_VERIFY_OK(
-                    std::dynamic_pointer_cast<arrow::UInt32Builder>(column_builder)->Append(reinterpreted_value));
+            Y_ABORT_UNLESS(
+                    std::dynamic_pointer_cast<arrow::UInt32Builder>(column_builder)->Append(reinterpreted_value).ok());
         } else if (column_type->Equals(arrow::DoubleType())) {
             double reinterpreted_value = *reinterpret_cast<double *>(&value);
-            Y_VERIFY_OK(
-                    std::dynamic_pointer_cast<arrow::DoubleBuilder>(column_builder)->Append(reinterpreted_value));
+            Y_ABORT_UNLESS(
+                    std::dynamic_pointer_cast<arrow::DoubleBuilder>(column_builder)->Append(reinterpreted_value).ok());
         } else if (column_type->Equals(arrow::TimestampType(arrow::TimeUnit::MICRO))) {
-            Y_VERIFY_OK(std::dynamic_pointer_cast<arrow::TimestampBuilder>(column_builder)->Append(value));
+            Y_ABORT_UNLESS(std::dynamic_pointer_cast<arrow::TimestampBuilder>(column_builder)->Append(value).ok());
         } else {
-            Y_ABORT("Unknown value column type met to append value to builder.")
+            Y_ABORT("Unknown value column type met to append value to builder.");
         }
         return arrow::Status::OK();
     }
@@ -87,7 +94,7 @@ namespace NKikimr::NArrow::NSerialization {
     std::vector<uint64_t> TGorillaSerializer::getU64VecFromBatch(
             const std::shared_ptr<arrow::RecordBatch> &batch,
             size_t column_index
-    ) {
+    ) const {
         std::vector<uint64_t> entities_vec;
         auto data = batch->column_data()[column_index];
         auto column_type = batch->schema()->field(column_index)->type();
@@ -103,23 +110,23 @@ namespace NKikimr::NArrow::NSerialization {
     }
 
     template<typename T, typename F>
-    arrow::Result<std::string> TGorillaSerializer::serializeBatchEntities(
+    arrow::Result<TString> TGorillaSerializer::serializeBatchEntities(
             const std::shared_ptr<arrow::Schema> &batch_schema,
             std::vector<T> &entities,
             F create_c_func
-    ) {
+    ) const {
         auto schema_serialized_buffer = arrow::ipc::SerializeSchema(*batch_schema).ValueOrDie();
         auto schema_serialized_str = schema_serialized_buffer->ToString();
 
         std::stringstream out_stream;
         auto arrays_size = entities.size();
 
-        std::unique_ptr<CompressorBase<T>> c = create_c_func(out_stream);
-        for (int i = 0; i < arrays_size; i++) {
+        std::unique_ptr<NGorilla::CompressorBase<T>> c = create_c_func(out_stream);
+        for (size_t i = 0; i < arrays_size; i++) {
             c->compress(entities[i]);
         }
         c->finish();
-        std::string compressed = out_stream.str();
+        TString compressed = out_stream.str();
 
         return {std::to_string(schema_serialized_str.length()) + "\n" + schema_serialized_str + compressed};
     }
@@ -129,19 +136,20 @@ namespace NKikimr::NArrow::NSerialization {
         auto column_type = initial_schema->field(0)->type();
 
         auto entities_vec = getU64VecFromBatch(batch, 0);
-        arrow::Result<std::string> serialization_res;
+        arrow::Result<TString> serialization_res;
         if (column_type->Equals(arrow::TimestampType(arrow::TimeUnit::MICRO))) {
             serialization_res = serializeBatchEntities(initial_schema, entities_vec, [](std::stringstream &out_stream) {
-                auto bw = std::make_shared<BitWriter>(out_stream);
-                return std::make_unique<TimestampsCompressor>(bw);
+                auto bw = std::make_shared<NGorilla::BitWriter>(out_stream);
+                return std::make_unique<NGorilla::TimestampsCompressor>(bw);
             });
         } else {
             serialization_res = serializeBatchEntities(initial_schema, entities_vec, [](std::stringstream &out_stream) {
-                auto bw = std::make_shared<BitWriter>(out_stream);
-                return std::make_unique<ValuesCompressor>(bw);
+                auto bw = std::make_shared<NGorilla::BitWriter>(out_stream);
+                return std::make_unique<NGorilla::ValuesCompressor>(bw);
             });
         }
-        return serialization_res;
+        Y_ABORT_UNLESS(serialization_res.ok());
+        return *serialization_res;
     }
 
     TString TGorillaSerializer::DoSerializeFull(const std::shared_ptr<arrow::RecordBatch>& batch) const {
@@ -149,7 +157,7 @@ namespace NKikimr::NArrow::NSerialization {
     }
 
     template<typename T>
-    std::vector<T> deserializeEntities(std::unique_ptr<DecompressorBase<T>> &d) {
+    std::vector<T> deserializeEntities(std::unique_ptr<NGorilla::DecompressorBase<T>> &d) {
         std::vector<T> entities;
         std::optional<T> current_pair;
         do {
@@ -171,25 +179,26 @@ namespace NKikimr::NArrow::NSerialization {
         std::stringstream header_ss((data.substr(0, div_pos)));
         header_ss >> schema_length;
         size_t schema_from_pos = div_pos + 1;
-        auto reader_stream = arrow::io::BufferReader::FromString(data.substr(schema_from_pos));
+        auto reader_buf = arrow::Buffer::FromString(data.substr(schema_from_pos));
+        auto reader_stream = std::make_unique<arrow::io::BufferReader>(reader_buf);
         arrow::ipc::DictionaryMemo dictMemo;
         auto schema = arrow::ipc::ReadSchema(reader_stream.get(), &dictMemo).ValueOrDie();
 
         // Deserialize data.
         auto column_type = schema->field(0)->type();
         std::stringstream in_stream(data.substr(schema_from_pos + schema_length));
-        auto br = std::make_shared<BitReader>(in_stream);
-        std::unique_ptr<DecompressorBase<uint64_t>> d;
+        auto br = std::make_shared<NGorilla::BitReader>(in_stream);
+        std::unique_ptr<NGorilla::DecompressorBase<uint64_t>> d;
         if (column_type->Equals(arrow::TimestampType(arrow::TimeUnit::MICRO))) {
-            d = std::make_unique<TimestampsDecompressor>(br);
+            d = std::make_unique<NGorilla::TimestampsDecompressor>(br);
         } else {
-            d = std::make_unique<ValuesDecompressor>(br);
+            d = std::make_unique<NGorilla::ValuesDecompressor>(br);
         }
         auto entities = deserializeEntities(d);
 
         auto column_builder = getColumnBuilderByType(column_type);
         for (auto e: entities) {
-            Y_VERIFY_OK(builderAppendValue(column_type, column_builder, e));
+            Y_ABORT_UNLESS(builderAppendValue(column_type, column_builder, e).ok());
         }
 
         std::shared_ptr<arrow::Array> column_array;
@@ -212,19 +221,23 @@ namespace NKikimr::NArrow::NSerialization {
             return batch_result;
         }
         std::shared_ptr<arrow::RecordBatch> batch = *batch_result;
-        if (!batch->schema.Equals(*schema)) {
+        if (!batch->schema()->Equals(*schema)) {
             return arrow::Status(arrow::StatusCode::SerializationError, "deserialized schema is corrupted");
         }
         return batch_result;
     }
 
     NKikimr::TConclusionStatus TGorillaSerializer::DoDeserializeFromRequest(NYql::TFeaturesExtractor& features) {
+        Y_UNUSED(features);
         return TConclusionStatus::Success();
     }
 
     NKikimr::TConclusionStatus TGorillaSerializer::DoDeserializeFromProto(const NKikimrSchemeOp::TOlapColumn::TSerializer& proto) {
+        Y_UNUSED(proto);
         return TConclusionStatus::Success();
     }
 
-    void TGorillaSerializer::DoSerializeToProto(NKikimrSchemeOp::TOlapColumn::TSerializer& proto) const { }
+    void TGorillaSerializer::DoSerializeToProto(NKikimrSchemeOp::TOlapColumn::TSerializer& proto) const {
+        Y_UNUSED(proto);
+    }
 }

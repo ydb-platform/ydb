@@ -2,33 +2,15 @@
 
 #include <iostream>
 #include <fstream>
+#include <optional>
 #include <cstdint>
 #include <stdexcept>
 #include <cmath>
 
+#include <ydb/library/conclusion/result.h>
 #include "bit_reader.h"
 
 namespace NKikimr::NArrow::NSerialization::NGorilla {
-    uint8_t leadingZeros(uint64_t v) {
-        uint64_t mask = 0x8000000000000000;
-        uint8_t ret = 0;
-        while (ret < 64 && (v & mask) == 0) {
-            mask >>= 1;
-            ret++;
-        }
-        return ret;
-    }
-
-    uint8_t trailingZeros(uint64_t v) {
-        uint64_t mask = 0x0000000000000001;
-        uint8_t ret = 0;
-        while (ret < 64 && (v & mask) == 0) {
-            mask <<= 1;
-            ret++;
-        }
-        return ret;
-    }
-
     template<typename T>
     class DecompressorBase {
     public:

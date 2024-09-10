@@ -8,6 +8,7 @@
 #include <vector>
 #include <bit>
 
+#include <ydb/library/conclusion/result.h>
 #include "bit_writer.h"
 
 namespace NKikimr::NArrow::NSerialization::NGorilla {
@@ -18,6 +19,26 @@ namespace NKikimr::NArrow::NSerialization::NGorilla {
     constexpr uint64_t VALUE_FINISH_FIRST_UNCOMPRESSED_FLAG = 0xFFFFFFFFFFFFFFFF;
     constexpr uint64_t VALUE_FINISH_LEADING_ZEROS = 0x3F;
     constexpr uint64_t VALUE_FINISH_SIGNIFICANT_BITS = 0x3F;
+
+    uint8_t leadingZeros(uint64_t v) {
+        uint64_t mask = 0x8000000000000000;
+        uint8_t ret = 0;
+        while (ret < 64 && (v & mask) == 0) {
+            mask >>= 1;
+            ret++;
+        }
+        return ret;
+    }
+
+    uint8_t trailingZeros(uint64_t v) {
+        uint64_t mask = 0x0000000000000001;
+        uint8_t ret = 0;
+        while (ret < 64 && (v & mask) == 0) {
+            mask <<= 1;
+            ret++;
+        }
+        return ret;
+    }
 
     // Header is a first time aligned to 2 hours window.
     //

@@ -259,10 +259,8 @@ struct TDecimalDivBlockExec: TDecimalBlockExec<TDecimalDivBlockExec<TRight>, TRi
     { }
 
     NYql::NDecimal::TInt128 Do(NYql::NDecimal::TInt128 left, NYql::NDecimal::TInt128 right) const {
-        NYql::NDecimal::TInt128 div;
-
         if constexpr (std::is_same_v<TRight, NYql::NDecimal::TInt128>) {
-            div = NYql::NDecimal::MulAndDivNormalMultiplier(left, Divider, right);
+            NYql::NDecimal::TInt128 div = NYql::NDecimal::MulAndDivNormalMultiplier(left, Divider, right);
             if (div > -Bound && div < +Bound) {
                 return div;
             }

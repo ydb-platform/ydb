@@ -12,7 +12,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TInsertionsDedupNormalizer::DoIn
     using namespace NColumnShard;
     auto rowset = db.Table<NColumnShard::Schema::InsertTable>().Select();
     if (!rowset.IsReady()) {
-        return TConclusionStatus::Fail("cannot read TxInfo");
+        return TConclusionStatus::Fail("cannot read insertion info");
     }
 
     THashMap<TInsertWriteId, TInsertTableRecordLoadContext> aborted;
@@ -20,8 +20,13 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TInsertionsDedupNormalizer::DoIn
     while (!rowset.EndOfSet()) {
         TInsertTableRecordLoadContext constructor;
         constructor.ParseFromDatabase(rowset);
-        AFL_VERIFY(!constructor.GetPlanStep());
+        if (constructor.GetRecType() == NColumnShard::Schema::EInsertTableIds::Committed) {
+            AFL_VERIFY(constructor.GetPlanStep());
+        } else {
+            AFL_VERIFY(!constructor.GetPlanStep());
+        }
         if (constructor.GetRecType() != NColumnShard::Schema::EInsertTableIds::Committed && constructor.GetDedupId()) {
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "correct_record")("dedup", constructor.GetDedupId());
             constructor.Remove(db);
             constructor.SetDedupId("");
             constructor.Upsert(db);
@@ -34,12 +39,13 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TInsertionsDedupNormalizer::DoIn
             }
         }
         if (!rowset.Next()) {
-            return TConclusionStatus::Fail("cannot read TxInfo");
+            return TConclusionStatus::Fail("cannot read insertion info");
         }
     }
 
     for (auto&& i : inserted) {
         if (aborted.contains(i.first)) {
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "remove_aborted_record")("write_id", constructor.GetInsertWriteId());
             i.second.Remove(db);
         }
     }
@@ -47,4 +53,4 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TInsertionsDedupNormalizer::DoIn
     return std::vector<INormalizerTask::TPtr>();
 }
 
-}
+}   // namespace NKikimr::NOlap

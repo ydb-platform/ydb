@@ -56,13 +56,16 @@ TString CollectTokens(const TRule_select_stmt& selectStatement) {
 }
 
 NSQLTranslation::TTranslationSettings CreateViewTranslationSettings(
-    const NSQLTranslation::TTranslationSettings& base, const NYql::NProto::TTranslationSettings& persistedSettings
+    const TContext& base, const NYql::NProto::TTranslationSettings& persistedSettings
 ) {
     NSQLTranslation::TTranslationSettings settings;
     settings.UpdateWith(persistedSettings);
 
-    settings.ClusterMapping = base.ClusterMapping;
-    settings.DefaultCluster = base.DefaultCluster;
+    settings.ClusterMapping = base.Settings.ClusterMapping;
+    const auto& cluster = base.Scoped->CurrCluster;
+    settings.DefaultCluster = cluster.GetLiteral()
+        ? *cluster.GetLiteral()
+        : base.Settings.DefaultCluster;
 
     settings.Mode = NSQLTranslation::ESqlMode::LIMITED_VIEW;
 
@@ -72,7 +75,7 @@ NSQLTranslation::TTranslationSettings CreateViewTranslationSettings(
 TNodePtr BuildViewSelect(
     const TRule_select_stmt& query, TContext& ctx, const NYql::NProto::TTranslationSettings& persistedSettings
 ) {
-    const auto viewTranslationSettings = CreateViewTranslationSettings(ctx.Settings, persistedSettings);
+    const auto viewTranslationSettings = CreateViewTranslationSettings(ctx, persistedSettings);
     TContext viewParsingContext(viewTranslationSettings, {}, ctx.Issues);
     TSqlSelect select(viewParsingContext, viewTranslationSettings.Mode);
     TPosition pos;

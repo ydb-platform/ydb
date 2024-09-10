@@ -222,9 +222,9 @@ static INode::TPtr CreateTableSettings(const TTableSettings& tableSettings, ETab
     if (tableSettings.MaxPartitions) {
         settings = L(settings, Q(Y(Q("maxPartitions"), tableSettings.MaxPartitions)));
     }
-    if (tableSettings.PartitionsCount) {
-        settings = L(settings, Q(Y(Q("maxPartitions"), tableSettings.PartitionsCount)));
-        settings = L(settings, Q(Y(Q("minPartitions"), tableSettings.PartitionsCount)));
+    if (tableSettings.PartitionCount) {
+        settings = L(settings, Q(Y(Q("maxPartitions"), tableSettings.PartitionCount)));
+        settings = L(settings, Q(Y(Q("minPartitions"), tableSettings.PartitionCount)));
     }
     if (tableSettings.KeyBloomFilter) {
         const auto& ref = tableSettings.KeyBloomFilter.GetRef();

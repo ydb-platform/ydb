@@ -1,6 +1,7 @@
 #pragma once
 #include "context.h"
 #include <ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.main.h>
+#include <ydb/library/yql/sql/settings/serializer/serializer.h>
 #include <library/cpp/charset/ci_string.h>
 
 namespace NSQLTranslationV1 {
@@ -236,7 +237,7 @@ protected:
     bool ParseExternalDataSourceSettings(std::map<TString, TDeferredAtom>& result, const TRule_with_table_settings& settings);
     bool ParseExternalDataSourceSettings(std::map<TString, TDeferredAtom>& result, std::set<TString>& toReset, const TRule_alter_external_data_source_action& alterActions);
     bool ParseViewOptions(std::map<TString, TDeferredAtom>& features, const TRule_with_table_settings& options);
-    bool ParseViewQuery(std::map<TString, TDeferredAtom>& features, const TRule_select_stmt& query);
+    bool ParseViewQuery(std::map<TString, TDeferredAtom>& features, const TRule_select_stmt& query, const NSQLTranslation::TTranslationSettingsSerializer& contextSerializer);
     bool ParseResourcePoolSettings(std::map<TString, TDeferredAtom>& result, const TRule_with_table_settings& settings);
     bool ParseResourcePoolSettings(std::map<TString, TDeferredAtom>& result, std::set<TString>& toReset, const TRule_alter_resource_pool_action& alterAction);
     bool ParseResourcePoolClassifierSettings(std::map<TString, TDeferredAtom>& result, const TRule_with_table_settings& settings);

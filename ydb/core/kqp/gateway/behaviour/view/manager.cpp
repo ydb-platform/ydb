@@ -4,7 +4,7 @@
 #include <ydb/core/kqp/gateway/actors/scheme.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/library/yql/sql/settings/protos/translation_settings.pb.h>
+#include <ydb/library/yql/sql/settings/serializer/proto/translation_settings.pb.h>
 
 namespace NKikimr::NKqp {
 

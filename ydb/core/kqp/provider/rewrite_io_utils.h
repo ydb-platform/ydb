@@ -2,7 +2,7 @@
 
 #include <ydb/core/kqp/host/kqp_translate.h>
 #include <ydb/library/yql/ast/yql_expr.h>
-#include <ydb/library/yql/sql/settings/protos/translation_settings.pb.h>
+#include <ydb/library/yql/sql/settings/serializer/proto/translation_settings.pb.h>
 
 namespace NYql {
 

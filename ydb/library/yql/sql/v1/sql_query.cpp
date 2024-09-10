@@ -220,7 +220,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             if (rule.HasBlock2()) { // OR REPLACE
                 replaceIfExists = true;
                 Y_DEBUG_ABORT_UNLESS(
-                    (IS_TOKEN(rule.GetBlock2().GetToken1().GetId(), OR) && 
+                    (IS_TOKEN(rule.GetBlock2().GetToken1().GetId(), OR) &&
                      IS_TOKEN(rule.GetBlock2().GetToken2().GetId(), REPLACE))
                 );
             }
@@ -1242,7 +1242,18 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             if (!ParseViewOptions(features, node.GetRule_with_table_settings4())) {
                 return false;
             }
-            if (!ParseViewQuery(features, node.GetRule_select_stmt6())) {
+            NSQLTranslation::TTranslationSettingsSerializer contextSerializer;
+            contextSerializer.PathPrefixSetter = [&ctx = Ctx](TString& pathPrefix) {
+                const auto& service = ctx.Scoped->CurrService;
+                const auto& cluster = ctx.Scoped->CurrCluster;
+                pathPrefix = ctx.GetPrefixPath(service, cluster);
+            };
+            if (!ParseViewQuery(
+                    features,
+                    node.GetRule_select_stmt6(),
+                    contextSerializer
+                )
+            ) {
                 return false;
             }
 

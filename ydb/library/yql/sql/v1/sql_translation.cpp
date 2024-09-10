@@ -9,7 +9,6 @@
 #include <ydb/library/yql/parser/proto_ast/gen/v1/SQLv1Lexer.h>
 #include <ydb/library/yql/parser/proto_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h>
 #include <ydb/library/yql/sql/settings/partitioning.h>
-#include <ydb/library/yql/sql/settings/protos/translation_settings.pb.h>
 
 #include <util/generic/scope.h>
 #include <util/string/join.h>
@@ -55,29 +54,13 @@ TString CollectTokens(const TRule_select_stmt& selectStatement) {
     return tokenCollector.Tokens;
 }
 
-NSQLTranslation::TTranslationSettings CreateViewTranslationSettings(
-    const TContext& base, const NYql::NProto::TTranslationSettings& persistedSettings
-) {
-    NSQLTranslation::TTranslationSettings settings;
-    settings.UpdateWith(persistedSettings);
-
-    settings.ClusterMapping = base.Settings.ClusterMapping;
-    const auto& cluster = base.Scoped->CurrCluster;
-    settings.DefaultCluster = cluster.GetLiteral()
-        ? *cluster.GetLiteral()
-        : base.Settings.DefaultCluster;
-
-    settings.Mode = NSQLTranslation::ESqlMode::LIMITED_VIEW;
-
-    return settings;
-}
-
 TNodePtr BuildViewSelect(
-    const TRule_select_stmt& query, TContext& ctx, const NYql::NProto::TTranslationSettings& persistedSettings
+    const TRule_select_stmt& query,
+    NYql::TIssues& issues,
+    const NSQLTranslation::TTranslationSettings& translationSettings
 ) {
-    const auto viewTranslationSettings = CreateViewTranslationSettings(ctx, persistedSettings);
-    TContext viewParsingContext(viewTranslationSettings, {}, ctx.Issues);
-    TSqlSelect select(viewParsingContext, viewTranslationSettings.Mode);
+    TContext context(translationSettings, {}, issues);
+    TSqlSelect select(context, translationSettings.Mode);
     TPosition pos;
     auto source = select.Build(query, pos);
     if (!source) {
@@ -88,18 +71,8 @@ TNodePtr BuildViewSelect(
         std::move(source),
         false,
         false,
-        viewParsingContext.Scoped
+        context.Scoped
     );
-}
-
-NYql::NProto::TTranslationSettings CaptureContext(const TContext& ctx) {
-    auto capturedContext = ctx.Settings.Serialize();
-
-    const auto& service = ctx.Scoped->CurrService;
-    const auto& cluster = ctx.Scoped->CurrCluster;
-    capturedContext.SetPathPrefix(ctx.GetPrefixPath(service, cluster).data());
-
-    return capturedContext;
 }
 
 }
@@ -4868,17 +4841,33 @@ bool TSqlTranslation::ParseViewOptions(std::map<TString, TDeferredAtom>& feature
     return true;
 }
 
-bool TSqlTranslation::ParseViewQuery(std::map<TString, TDeferredAtom>& features,
-                                     const TRule_select_stmt& query) {
+bool TSqlTranslation::ParseViewQuery(
+    std::map<TString, TDeferredAtom>& features,
+    const TRule_select_stmt& query,
+    const NSQLTranslation::TTranslationSettingsSerializer& contextSerializer
+) {
     const TString queryText = CollectTokens(query);
     features["query_text"] = { Ctx.Pos(), queryText };
 
-    const auto capturedContext = CaptureContext(Ctx);
-    features["captured_context"] = { Ctx.Pos(), capturedContext.SerializeAsString() };
+    TString capturedContext;
+    contextSerializer.Serialize(Ctx.Settings, capturedContext);
+    features["captured_context"] = { Ctx.Pos(), capturedContext };
+
+    NSQLTranslation::TTranslationSettings translationSettings;
+    translationSettings.Mode = NSQLTranslation::ESqlMode::LIMITED_VIEW;
+    contextSerializer.Deserialize(capturedContext, translationSettings);
+    {
+        const auto& cluster = Ctx.Scoped->CurrCluster;
+        translationSettings.DefaultCluster = cluster.GetLiteral()
+            ? *cluster.GetLiteral()
+            : Ctx.Settings.DefaultCluster;
+
+        translationSettings.ClusterMapping = Ctx.Settings.ClusterMapping;
+    }
 
     // AST is needed for ready-made validation of CREATE VIEW statement.
     // Query is stored as plain text, not AST.
-    const auto viewSelect = BuildViewSelect(query, Ctx, capturedContext);
+    const auto viewSelect = BuildViewSelect(query, Ctx.Issues, translationSettings);
     if (!viewSelect) {
         return false;
     }

@@ -167,7 +167,7 @@ PEERDIR(
     ydb/library/yql/providers/common/proto
     ydb/library/yql/public/issue/protos
     ydb/library/yql/public/types
-    ydb/library/yql/sql/settings/protos
+    ydb/library/yql/sql/settings/serializer/proto
     ydb/library/services
     ydb/library/ydb_issue/proto
     ydb/core/tx/columnshard/engines/scheme/defaults/protos

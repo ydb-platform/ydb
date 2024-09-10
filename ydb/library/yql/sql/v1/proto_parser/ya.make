@@ -1,7 +1,6 @@
 LIBRARY()
 
 PEERDIR(
-    ydb/library/yql/sql/settings/protos
     ydb/library/yql/utils
 
     ydb/library/yql/parser/proto_ast

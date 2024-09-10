@@ -29,7 +29,7 @@
 #include <ydb/core/util/pb.h>
 
 #include <ydb/library/login/protos/login.pb.h>
-#include <ydb/library/yql/sql/settings/protos/translation_settings.pb.h>
+#include <ydb/library/yql/sql/settings/serializer/proto/translation_settings.pb.h>
 
 #include <ydb/public/api/protos/ydb_import.pb.h>
 #include <ydb/core/protos/blockstore_config.pb.h>
@@ -3094,7 +3094,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         void MakeTop(ui64 k) {
             Y_ASSERT(k > 0);
             auto kth = Rows.begin() + k - 1;
-            // TODO(mbkkt) use floyd rivest 
+            // TODO(mbkkt) use floyd rivest
             std::nth_element(Rows.begin(), kth, Rows.end());
             Rows.erase(kth + 1, Rows.end());
             Y_ASSERT(kth->P < MaxProbability);

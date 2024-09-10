@@ -1,7 +1,6 @@
 #pragma once
 
 #include <ydb/library/yql/core/pg_settings/guc_settings.h>
-#include <ydb/library/yql/sql/settings/protos/translation_settings.pb.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
@@ -126,9 +125,6 @@ namespace NSQLTranslation {
 
         TMaybe<TString> ApplicationName;
         bool PgSortNulls = false;
-
-        NYql::NProto::TTranslationSettings Serialize() const;
-        void UpdateWith(const NYql::NProto::TTranslationSettings& serializedSettings);
     };
 
     bool ParseTranslationSettings(const TString& query, NSQLTranslation::TTranslationSettings& settings, NYql::TIssues& issues);

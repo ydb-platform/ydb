@@ -5,6 +5,7 @@
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <ydb/library/yql/sql/settings/serializer/serializer.h>
 #include <ydb/library/yql/sql/sql.h>
 #include <ydb/library/yql/utils/log/log.h>
 
@@ -24,7 +25,9 @@ TExprNode::TPtr CompileViewQuery(
 ) {
     auto translationSettings = settingsBuilder.Build(ctx);
     translationSettings.Mode = NSQLTranslation::ESqlMode::LIMITED_VIEW;
-    translationSettings.UpdateWith(capturedContext);
+
+    NSQLTranslation::TTranslationSettingsSerializer contextSerializer;
+    contextSerializer.Deserialize(capturedContext, translationSettings);
 
     TAstParseResult queryAst;
     queryAst = NSQLTranslation::SqlToYql(query, translationSettings);

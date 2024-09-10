@@ -142,6 +142,10 @@ class TS3FIFOCache : public ICacheCache<TPage> {
     };
 
     struct TQueue {
+        TQueue(ELocation location)
+            : Location(location)
+        {}
+
         ELocation Location;
         TIntrusiveList<TPage> Queue;
         ui64 Size = 0;
@@ -241,7 +245,7 @@ private:
         while (true) {
             if (!SmallQueue.Queue.Empty() && SmallQueue.Size > Limit.SmallQueueLimit) {
                 TPage* page = Pop(SmallQueue);
-                if (GetFrequency(page) > 1) { // TODO: why 1?
+                if (GetFrequency(page) > 1) { // load inserts, first read touches, second read touches
                     Push(MainQueue, page);
                 } else {
                     AddGhost(page);

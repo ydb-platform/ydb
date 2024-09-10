@@ -4174,7 +4174,7 @@ public:
             return nullptr;
         }
 
-        if (rangeFunction && schema != "pg_catalog") {
+        if (rangeFunction && !schema.empty() && schema != "pg_catalog") {
             injectRead = true;
             return ParseTableRangeFunction(name, schema, value->args);
         }

@@ -436,7 +436,7 @@ class TAlterOlapStore: public TSubOperation {
         }
     }
 
-    bool isAlterCompression() const {
+    bool IsAlterCompression() const {
         const auto& alter = Transaction.GetAlterColumnStore();
         for (const auto& alterSchema : alter.GetAlterSchemaPresets()) {
             for (const auto& alterColumn : alterSchema.GetAlterSchema().GetAlterColumns()) {
@@ -472,7 +472,7 @@ public:
             return result;
         }
 
-        if (!AppData()->FeatureFlags.GetEnableOlapCompression() && isAlterCompression()) {
+        if (!AppData()->FeatureFlags.GetEnableOlapCompression() && IsAlterCompression()) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, "Compression is disabled for OLAP tables");
             return result;
         }

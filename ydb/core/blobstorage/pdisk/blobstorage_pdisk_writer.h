@@ -299,6 +299,10 @@ public:
         sectorFooter.Version = PDISK_DATA_VERSION;
         sectorFooter.Nonce = Nonce;
         sectorFooter.Hash = Hash.HashSector(sectorOffset, magic, sector, Format.SectorSize);
+        P_LOG(PRI_NOTICE, BPD01, SelfInfo() << " PrepareParitySectorFooter",
+                (SectorOffset, sectorOffset),
+                (Nonce, Nonce),
+                (Hash, sectorFooter.Hash));
 
         BufferedWriter->MarkDirty();
         ++Nonce;
@@ -311,7 +315,7 @@ public:
         sectorFooter.Nonce = Nonce;
         sectorFooter.Hash = Hash.HashSector(sectorOffset, magic, sector, Format.SectorSize);
         if (!IsLog) {
-            P_LOG(PRI_TRACE, BPD01, SelfInfo() << " PrepareParitySectorFooter",
+            P_LOG(PRI_NOTICE, BPD01, SelfInfo() << " PrepareParitySectorFooter",
                     (SectorOffset, sectorOffset),
                     (Nonce, Nonce),
                     (Hash, sectorFooter.Hash));

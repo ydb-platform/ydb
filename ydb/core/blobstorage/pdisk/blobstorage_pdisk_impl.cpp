@@ -832,7 +832,7 @@ bool TPDisk::ChunkWritePiece(TChunkWrite *evChunkWrite, ui32 pieceShift, ui32 pi
     ui64 beginSectorIdx = (evChunkWrite->Offset + evChunkWrite->BytesWritten) / Format.SectorPayloadSize();
 
     TChunkState &state = ChunkState[chunkIdx];
-    state.CurrentNonce = state.Nonce + (ui64)beginSectorIdx;
+    state.CurrentNonce = state.Nonce + beginSectorIdx;
 
     auto& nonce = state.CurrentNonce;
     const auto& key = Format.ChunkKey;
@@ -860,7 +860,7 @@ bool TPDisk::ChunkWritePiece(TChunkWrite *evChunkWrite, ui32 pieceShift, ui32 pi
     for (ui64 sector = beginSectorIdx; sector < endSectorIdx; ++sector) {
         ui32 remainingPartSize = parts[partIdx].second - evChunkWrite->CurrentPartOffset;
         Y_VERIFY(remainingPartSize);
-        cypher.StartMessage(++nonce);
+        cypher.StartMessage(nonce);
         ui32 sizeToWrite = Min(remainingPartSize, sectorPayloadSize);
         if (parts[partIdx].first) {
             ui8 *src = (ui8*)parts[partIdx].first + evChunkWrite->CurrentPartOffset;
@@ -876,13 +876,19 @@ bool TPDisk::ChunkWritePiece(TChunkWrite *evChunkWrite, ui32 pieceShift, ui32 pi
             evChunkWrite->CurrentPartOffset = 0;
         }
 
+        cypher.Encrypt(dst + Format.SectorSize - sizeof(TDataSectorFooter) - CanarySize, &Canary, CanarySize);
         TDataSectorFooter &sectorFooter = *(TDataSectorFooter*)(dst + Format.SectorSize - sizeof(TDataSectorFooter));
         sectorFooter.Version = PDISK_DATA_VERSION;
         sectorFooter.Nonce = nonce;
         sectorFooter.Hash = hash.HashSector(Format.Offset(chunkIdx, sector), Format.MagicDataChunk, dst, Format.SectorSize);
+        P_LOG(PRI_NOTICE, BPD01, " PrepareParitySectorFooter",
+                (SectorOffset, Format.Offset(chunkIdx, sector)),
+                (Nonce, nonce),
+                (Hash, sectorFooter.Hash));
 
+        ++nonce;
         evChunkWrite->RemainingSize -= sizeToWrite;
-        evChunkWrite->BytesWritten -= sizeToWrite;
+        evChunkWrite->BytesWritten += sizeToWrite;
         dst += Format.SectorSize;
 
         Y_VERIFY(sizeToWrite == sectorPayloadSize || evChunkWrite->RemainingSize == 0);

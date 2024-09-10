@@ -6,8 +6,6 @@ NO_CHECK_IMPORTS()
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)
  
-# INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/mdb_mock/recipe.inc)
- 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/token_accessor_mock/recipe.inc)
 
 IF (AUTOCHECK)
@@ -69,12 +67,6 @@ PEERDIR(
 TEST_SRCS(
     conftest.py
     test_join.py
-    # test_clickhouse.py
-    # test_greenplum.py
-    # test_postgresql.py
-    # test_join_analytics.py
-    # test_join_streaming.py
-    # test_ydb.py
 )
 
 END()

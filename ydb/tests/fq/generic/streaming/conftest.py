@@ -41,7 +41,6 @@ def kikimr(
             settings.token_accessor_mock.endpoint,
             settings.token_accessor_mock.hmac_secret_file,
         ),
-        #MDBExtension(settings.mdb_mock.endpoint),
         YdbMvpExtension(mvp_external_ydb_endpoint),
         YQv2Extension(yq_version),
     ]

@@ -425,7 +425,7 @@ template <typename TNodeSet> std::shared_ptr<TJoinOptimizerNodeInternal> TDPHypS
 
     for (auto joinAlgo : AllJoinAlgos) {
         if (ctx.IsJoinApplicable(left, right, joinConditions, leftJoinKeys, rightJoinKeys, joinAlgo, joinKind)){
-            auto cost = ctx.ComputeJoinStats(*left->Stats, *right->Stats, leftJoinKeys, rightJoinKeys, joinAlgo, joinKind, maybeHint).Cost;
+            auto cost = ctx.ComputeJoinStats(*left->Stats, *right->Stats, joinConditions, joinAlgo, joinKind, maybeHint).Cost;
             if (maybeJoinHint) {
                 if (joinAlgo == maybeJoinHint->JoinHint) {
                     cost = -1;
@@ -440,7 +440,7 @@ template <typename TNodeSet> std::shared_ptr<TJoinOptimizerNodeInternal> TDPHypS
 
         if (isCommutative) {
             if (ctx.IsJoinApplicable(right, left, reversedJoinConditions, rightJoinKeys, leftJoinKeys, joinAlgo, joinKind)){
-                auto cost = ctx.ComputeJoinStats(*right->Stats, *left->Stats,  rightJoinKeys, leftJoinKeys, joinAlgo, joinKind, maybeHint).Cost;
+                auto cost = ctx.ComputeJoinStats(*right->Stats, *left->Stats,  reversedJoinConditions, joinAlgo, joinKind, maybeHint).Cost;
                 if (maybeJoinHint) {
                     if (joinAlgo == maybeJoinHint->JoinHint) {
                         cost = -1;

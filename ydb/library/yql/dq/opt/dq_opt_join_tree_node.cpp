@@ -14,7 +14,7 @@ std::shared_ptr<TJoinOptimizerNodeInternal> MakeJoinInternal(
     TCardinalityHints::TCardinalityHint* maybeHint) {
 
     auto res = std::make_shared<TJoinOptimizerNodeInternal>(left, right, joinConditions, leftJoinKeys, rightJoinKeys, joinKind, joinAlgo);
-    res->Stats = std::make_shared<TOptimizerStatistics>(ctx.ComputeJoinStats(*left->Stats, *right->Stats, leftJoinKeys, rightJoinKeys, joinAlgo, joinKind, maybeHint));
+    res->Stats = std::make_shared<TOptimizerStatistics>(ctx.ComputeJoinStats(*left->Stats, *right->Stats, joinConditions, joinAlgo, joinKind, maybeHint));
     return res;
 }
 

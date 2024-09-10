@@ -14,12 +14,9 @@ ydb.interceptor.monkey_patch_event_handler()
 logger = logging.getLogger("StatisticsWorkload")
 
 
-def timestamp():
-    return int(1000 * time.time())
-
-
-def table_name_with_timestamp(table_prefix):
-    return os.path.join(table_prefix + "_" + str(timestamp()))
+def table_name_with_prefix(table_prefix):
+    table_suffix = ''.join(random.choices(string.ascii_uppercase + string.digits, k=5))
+    return os.path.join(table_prefix + "_" + table_suffix)
 
 
 def random_string(length):
@@ -150,7 +147,7 @@ class Workload(object):
 
     def execute(self):
         table_prefix = "test_table"
-        table_name = table_name_with_timestamp(table_prefix)
+        table_name = table_name_with_prefix(table_prefix)
         table_statistics = ".metadata/_statistics"
 
         try:

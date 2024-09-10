@@ -115,7 +115,6 @@ class KikimrConfigGenerator(object):
             nodes=None,
             additional_log_configs=None,
             port_allocator=None,
-            has_cluster_uuid=True,
             load_udfs=False,
             udfs_path=None,
             output_path=None,
@@ -124,7 +123,6 @@ class KikimrConfigGenerator(object):
             slot_count=0,
             pdisk_store_path=None,
             version=None,
-            enable_nbs=False,
             enable_sqs=False,
             domain_name='Root',
             suppress_version_check=True,
@@ -144,7 +142,6 @@ class KikimrConfigGenerator(object):
             fq_config_path=None,
             public_http_config_path=None,
             public_http_config=None,
-            enable_datastreams=False,
             auth_config_path=None,
             enable_public_api_external_blobs=False,
             node_kind=None,
@@ -181,9 +178,6 @@ class KikimrConfigGenerator(object):
         erasure = Erasure.NONE if erasure is None else erasure
         self.__grpc_ssl_enable = grpc_ssl_enable
         self.__grpc_tls_data_path = None
-        self.__grpc_ca_file = None
-        self.__grpc_cert_file = None
-        self.__grpc_key_file = None
         self.__grpc_tls_ca = None
         self.__grpc_tls_key = None
         self.__grpc_tls_cert = None
@@ -200,7 +194,6 @@ class KikimrConfigGenerator(object):
         if nodes is None:
             nodes = rings_count * erasure.min_fail_domains
         self._rings_count = rings_count
-        self._enable_nbs = enable_nbs
         self.__node_ids = list(range(1, nodes + 1))
         self.n_to_select = n_to_select
         if self.n_to_select is None:

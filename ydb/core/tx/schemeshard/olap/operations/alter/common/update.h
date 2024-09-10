@@ -19,6 +19,16 @@ private:
         return NKikimrTxColumnShard::ETransactionKind::TX_KIND_SCHEMA;
     }
     virtual TConclusionStatus DoInitializeImpl(const TUpdateInitializationContext& context) = 0;
+
+    bool IsAlterCompression(const TUpdateInitializationContext& context) const {
+        for (const auto& alterColumn : context.GetModification()->GetAlterColumnTable().GetAlterSchema().GetAlterColumns()) {
+            if (alterColumn.HasSerializer()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
 protected:
     virtual TConclusionStatus DoStartImpl(const TUpdateStartContext& /*context*/) {
         return TConclusionStatus::Success();
@@ -27,6 +37,9 @@ protected:
         return TConclusionStatus::Success();
     }
     virtual TConclusionStatus DoInitialize(const TUpdateInitializationContext& context) override final {
+        if (!AppData()->FeatureFlags.GetEnableOlapCompression() && IsAlterCompression(context)) {
+            return TConclusionStatus::Fail("Compression is disabled for OLAP tables");
+        }
         if (!context.GetModification()->HasAlterColumnTable() && !context.GetModification()->HasAlterTable()) {
             return TConclusionStatus::Fail("no update data");
         }

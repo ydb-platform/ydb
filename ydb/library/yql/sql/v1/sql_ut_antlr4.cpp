@@ -7213,5 +7213,15 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifier) {
         UNIT_ASSERT(res.Root);
         UNIT_ASSERT(res.IsOk());
         UNIT_ASSERT(res.Issues.Size() == 0);
+
+        req = "select 1 as `a``b`, 2 as ````, 3 as `\\x60a\\x60`, 4 as ```b```, 5 as `\\`c\\``";
+        res = SqlToYql(req);
+        UNIT_ASSERT(res.Root);
+        UNIT_ASSERT(res.IsOk());
+        UNIT_ASSERT(res.Issues.Size() == 0);
+        res = SqlToYqlWithAnsiLexer(req);
+        UNIT_ASSERT(res.Root);
+        UNIT_ASSERT(res.IsOk());
+        UNIT_ASSERT(res.Issues.Size() == 0);
     }
 }

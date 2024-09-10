@@ -37,6 +37,9 @@ protected:
     bool Followers = true;
     bool Metrics = true;
     bool WithRetry = true;
+    TString Database;
+    TString SharedDatabase;
+    bool Direct = false;
     ui32 Requests = 0;
     ui32 MaxRequestsInFlight = 200;
     NWilson::TSpan Span;
@@ -158,6 +161,10 @@ protected:
         }
     };
 
+    std::optional<TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> DatabaseNavigateResponse;
+    std::optional<TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> ResourceNavigateResponse;
+    std::optional<TRequestResponse<TEvStateStorage::TEvBoardInfo>> DatabaseBoardInfoResponse;
+
     NTabletPipe::TClientConfig GetPipeClientConfig();
 
     ~TViewerPipeClient();
@@ -211,11 +218,17 @@ protected:
         return MakeBSControllerID();
     }
 
+    static TPathId GetPathId(const TEvTxProxySchemeCache::TEvNavigateKeySetResult& ev);
+    static TString GetPath(const TEvTxProxySchemeCache::TEvNavigateKeySetResult& ev);
+
     static TPathId GetPathId(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
     static TString GetPath(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
 
     static bool IsSuccess(const std::unique_ptr<TEvTxProxySchemeCache::TEvNavigateKeySetResult>& ev);
     static TString GetError(const std::unique_ptr<TEvTxProxySchemeCache::TEvNavigateKeySetResult>& ev);
+
+    static bool IsSuccess(const std::unique_ptr<TEvStateStorage::TEvBoardInfo>& ev);
+    static TString GetError(const std::unique_ptr<TEvStateStorage::TEvBoardInfo>& ev);
 
     TRequestResponse<TEvHive::TEvResponseHiveDomainStats> MakeRequestHiveDomainStats(TTabletId hiveId);
     TRequestResponse<TEvHive::TEvResponseHiveStorageStats> MakeRequestHiveStorageStats(TTabletId hiveId);
@@ -252,6 +265,7 @@ protected:
     void RequestStateStorageMetadataCacheEndpointsLookup(const TString& path);
     TRequestResponse<TEvStateStorage::TEvBoardInfo> MakeRequestStateStorageEndpointsLookup(const TString& path, ui64 cookie = 0);
     std::vector<TNodeId> GetNodesFromBoardReply(TEvStateStorage::TEvBoardInfo::TPtr& ev);
+    std::vector<TNodeId> GetNodesFromBoardReply(const TEvStateStorage::TEvBoardInfo& ev);
     void InitConfig(const TCgiParameters& params);
     void InitConfig(const TRequestSettings& settings);
     void ClosePipes();
@@ -285,9 +299,12 @@ protected:
     void AddEvent(const TString& name);
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev);
     void HandleResolveDatabase(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
-    void HandleResolveDatabase(TEvStateStorage::TEvBoardInfo::TPtr& ev);
+    void HandleResolveResource(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
+    void HandleResolve(TEvStateStorage::TEvBoardInfo::TPtr& ev);
     STATEFN(StateResolveDatabase);
+    STATEFN(StateResolveResource);
     void RedirectToDatabase(const TString& database);
+    bool NeedToRedirect();
     void HandleTimeout();
     void PassAway() override;
 };

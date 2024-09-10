@@ -61,9 +61,7 @@ class TJsonNodes : public TViewerPipeClient {
 
     std::optional<TRequestResponse<TEvInterconnect::TEvNodesInfo>> NodesInfoResponse;
     std::optional<TRequestResponse<TEvWhiteboard::TEvNodeStateResponse>> NodeStateResponse;
-    std::optional<TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> DatabaseNavigateResponse;
     std::optional<TRequestResponse<TEvStateStorage::TEvBoardInfo>> DatabaseBoardInfoResponse;
-    std::optional<TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> ResourceNavigateResponse;
     std::optional<TRequestResponse<TEvStateStorage::TEvBoardInfo>> ResourceBoardInfoResponse;
     std::optional<TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> PathNavigateResponse;
     std::unordered_map<TTabletId, TRequestResponse<TEvHive::TEvResponseHiveNodeStats>> HiveNodeStats;
@@ -95,9 +93,7 @@ class TJsonNodes : public TViewerPipeClient {
 
     ETimeoutTag CurrentTimeoutState = NoTimeout;
 
-    TString Database;
     TString SharedDatabase;
-    bool Direct = false;
     bool FilterDatabase = false;
     bool HasDatabaseNodes = false;
     TPathId FilterPathId;
@@ -556,10 +552,6 @@ public:
         if (UptimeSeconds || ProblemNodesOnly || !Filter.empty()) {
             FieldsRequired.set(+ENodeFields::SystemState);
         }
-        Database = params.Get("database");
-        if (!Database) {
-            Database = params.Get("tenant");
-        }
         FilterPath = params.Get("path");
         if (FilterPath && !Database) {
             Database = FilterPath;
@@ -667,55 +659,54 @@ public:
     }
 
     void Bootstrap() override {
-        Direct |= !TBase::Event->Get()->Request.GetHeader("X-Forwarded-From-Node").empty(); // we're already forwarding
-        Direct |= (Database == AppData()->TenantName) || Database.empty(); // we're already on the right node or don't use database filter
+        if (TBase::NeedToRedirect()) {
+            return;
+        }
 
-        if (Database && !Direct) {
-            return RedirectToDatabase(Database); // to find some dynamic node and redirect query there
-        } else {
-            if (FieldsNeeded(FieldsNodeInfo)) {
-                NodesInfoResponse = MakeRequest<TEvInterconnect::TEvNodesInfo>(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
-                NodeStateResponse = MakeWhiteboardRequest(TActivationContext::ActorSystem()->NodeId, new TEvWhiteboard::TEvNodeStateRequest());
-            }
-            if (FilterStoragePool || !FilterGroupIds.empty()) {
-                FilterDatabase = false; // we disable database filter if we're filtering by pool or group
-            }
-            if (FilterDatabase) {
+        if (FieldsNeeded(FieldsNodeInfo)) {
+            NodesInfoResponse = MakeRequest<TEvInterconnect::TEvNodesInfo>(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
+            NodeStateResponse = MakeWhiteboardRequest(TActivationContext::ActorSystem()->NodeId, new TEvWhiteboard::TEvNodeStateRequest());
+        }
+        if (FilterStoragePool || !FilterGroupIds.empty()) {
+            FilterDatabase = false; // we disable database filter if we're filtering by pool or group
+        }
+        if (FilterDatabase) {
+            if (!DatabaseNavigateResponse) {
                 DatabaseNavigateResponse = MakeRequestSchemeCacheNavigate(Database, ENavigateRequestDatabase);
-                if (!FieldsNeeded(FieldsHiveNodeStat) && !(FilterPath && FieldsNeeded(FieldsTablets))) {
-                    DatabaseBoardInfoResponse = MakeRequestStateStorageEndpointsLookup(Database, EBoardInfoRequestDatabase);
-                }
             }
-            if (FilterPath && FieldsNeeded(FieldsTablets)) {
-                PathNavigateResponse = MakeRequestSchemeCacheNavigate(FilterPath, ENavigateRequestPath);
+            if (!FieldsNeeded(FieldsHiveNodeStat) && !(FilterPath && FieldsNeeded(FieldsTablets))) {
+                DatabaseBoardInfoResponse = MakeRequestStateStorageEndpointsLookup(Database, EBoardInfoRequestDatabase);
             }
-            if (FilterStoragePool) {
-                StoragePoolsResponse = RequestBSControllerPools();
-                GroupsResponse = RequestBSControllerGroups();
-                VSlotsResponse = RequestBSControllerVSlots();
-                FilterStorageStage = EFilterStorageStage::Pools;
-            } else if (!FilterGroupIds.empty()) {
-                VSlotsResponse = RequestBSControllerVSlots();
-                FilterStorageStage = EFilterStorageStage::VSlots;
-            }
-            if (With != EWith::Everything) {
+        }
+        if (FilterPath && FieldsNeeded(FieldsTablets)) {
+            PathNavigateResponse = MakeRequestSchemeCacheNavigate(FilterPath, ENavigateRequestPath);
+        }
+        if (FilterStoragePool) {
+            StoragePoolsResponse = RequestBSControllerPools();
+            GroupsResponse = RequestBSControllerGroups();
+            VSlotsResponse = RequestBSControllerVSlots();
+            FilterStorageStage = EFilterStorageStage::Pools;
+        } else if (!FilterGroupIds.empty()) {
+            VSlotsResponse = RequestBSControllerVSlots();
+            FilterStorageStage = EFilterStorageStage::VSlots;
+        }
+        if (With != EWith::Everything) {
+            PDisksResponse = RequestBSControllerPDisks();
+        }
+        if (ProblemNodesOnly || GroupBy == ENodeFields::Uptime) {
+            FieldsRequired.set(+ENodeFields::SystemState);
+            TTabletId rootHiveId = AppData()->DomainsInfo->GetHive();
+            HivesToAsk.push_back(rootHiveId);
+            if (!PDisksResponse) {
                 PDisksResponse = RequestBSControllerPDisks();
             }
-            if (ProblemNodesOnly || GroupBy == ENodeFields::Uptime) {
-                FieldsRequired.set(+ENodeFields::SystemState);
-                TTabletId rootHiveId = AppData()->DomainsInfo->GetHive();
-                HivesToAsk.push_back(rootHiveId);
-                if (!PDisksResponse) {
-                    PDisksResponse = RequestBSControllerPDisks();
-                }
-            }
-            if (FieldsNeeded(FieldsHiveNodeStat) && !FilterDatabase && !FilterPath) {
-                TTabletId rootHiveId = AppData()->DomainsInfo->GetHive();
-                HivesToAsk.push_back(rootHiveId);
-            }
-            Schedule(TDuration::MilliSeconds(Timeout * 50 / 100), new TEvents::TEvWakeup(TimeoutTablets)); // 50% timeout (for tablets)
-            TBase::Become(&TThis::StateWork, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup(TimeoutFinal));
         }
+        if (FieldsNeeded(FieldsHiveNodeStat) && !FilterDatabase && !FilterPath) {
+            TTabletId rootHiveId = AppData()->DomainsInfo->GetHive();
+            HivesToAsk.push_back(rootHiveId);
+        }
+        Schedule(TDuration::MilliSeconds(Timeout * 50 / 100), new TEvents::TEvWakeup(TimeoutTablets)); // 50% timeout (for tablets)
+        TBase::Become(&TThis::StateWork, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup(TimeoutFinal));
     }
 
     void InvalidateNodes() {

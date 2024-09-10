@@ -12,7 +12,6 @@ class TJsonFeatureFlags : public TViewerPipeClient {
     using TBase = TViewerPipeClient;
     TJsonSettings JsonSettings;
     ui32 Timeout = 0;
-    TString FilterDatabase;
     THashSet<TString> FilterFeatures;
     bool ChangedOnly = false;
     TRequestResponse<NConsole::TEvConsole::TEvListTenantsResponse> TenantsResponse;
@@ -26,23 +25,17 @@ public:
     {}
 
     void Bootstrap() override {
+        if (NeedToRedirect()) {
+            return;
+        }
         const auto& params(Event->Get()->Request.GetParams());
         JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), true);
         JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);
-        FilterDatabase = params.Get("database");
         StringSplitter(params.Get("features")).Split(',').SkipEmpty().Collect(&FilterFeatures);
-        bool direct = FromStringWithDefault<bool>(params.Get("direct"), false);
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
         ChangedOnly = FromStringWithDefault<bool>(params.Get("changed"), ChangedOnly);
-
-        direct |= !TBase::Event->Get()->Request.GetHeader("X-Forwarded-From-Node").empty(); // we're already forwarding
-        direct |= (FilterDatabase == AppData()->TenantName); // we're already on the right node
-        if (FilterDatabase && !direct) {
-            return RedirectToDatabase(FilterDatabase); // to find some dynamic node and redirect query there
-        }
-
-        if (FilterDatabase) {
-            PathNameNavigateKeySetResults[FilterDatabase] = MakeRequestSchemeCacheNavigate(FilterDatabase);
+        if (Database && DatabaseNavigateResponse) {
+            PathNameNavigateKeySetResults[Database] = std::move(*DatabaseNavigateResponse);
         } else {
             TenantsResponse = MakeRequestConsoleListTenants();
         }

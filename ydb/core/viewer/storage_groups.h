@@ -122,7 +122,6 @@ public:
     using TFieldsType = std::bitset<+EGroupFields::COUNT>;
 
     // Common
-    std::optional<TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> DatabaseNavigateResult;
     std::unordered_map<TPathId, TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> NavigateKeySetResult;
     std::unordered_map<TPathId, TTabletId> PathId2HiveId;
     std::unordered_map<TTabletId, TRequestResponse<TEvHive::TEvResponseHiveStorageStats>> HiveStorageStats;
@@ -145,8 +144,6 @@ public:
     ui64 PDiskStateRequestsInFlight = 0;
 
     ui32 Timeout = 0;
-    TString Database;
-    bool Direct = false;
     TString Filter;
     std::unordered_set<TString> DatabaseStoragePools;
     std::unordered_set<TString> FilterStoragePools;
@@ -610,18 +607,11 @@ public:
         : TBase(viewer, ev)
     {
         const auto& params(Event->Get()->Request.GetParams());
-        InitConfig(params);
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
-        Database = params.Get("tenant");
-        if (Database.empty()) {
-            Database = params.Get("database");
-        }
         if (!Database.empty()) {
             FieldsRequired.set(+EGroupFields::PoolName);
             NeedFilter = true;
         }
-        Direct = FromStringWithDefault<bool>(params.Get("direct"), Direct);
-
         FieldsRequired.set(+EGroupFields::GroupId);
         TString filterStoragePool = params.Get("pool");
         if (!filterStoragePool.empty()) {
@@ -726,32 +716,35 @@ public:
 
 public:
     void Bootstrap() override {
-        Direct |= !TBase::Event->Get()->Request.GetHeader("X-Forwarded-From-Node").empty(); // we're already forwarding
-        Direct |= (Database == AppData()->TenantName) || Database.empty(); // we're already on the right node or don't use database filter
-
-        if (Database && !Direct) {
-            return RedirectToDatabase(Database); // to find some dynamic node and redirect query there
-        } else {
-            if (Database) {
-                DatabaseNavigateResult = MakeRequestSchemeCacheNavigate(Database, 0);
-            }
-            if (FallbackToWhiteboard) {
-                RequestWhiteboard();
+        if (TBase::NeedToRedirect()) {
+            return;
+        }
+        if (Database) {
+            if (!DatabaseNavigateResponse) {
+                DatabaseNavigateResponse = MakeRequestSchemeCacheNavigate(Database, 0);
             } else {
-                if (FieldsNeeded(FieldsBsGroups)) {
-                    GetGroupsResponse = RequestBSControllerGroups();
-                }
-                if (FieldsNeeded(FieldsBsPools)) {
-                    GetStoragePoolsResponse = RequestBSControllerPools();
-                }
-                if (FieldsNeeded(FieldsBsVSlots)) {
-                    GetVSlotsResponse = RequestBSControllerVSlots();
-                }
-                if (FieldsNeeded(FieldsBsPDisks)) {
-                    GetPDisksResponse = RequestBSControllerPDisks();
-                }
+                auto pathId = GetPathId(DatabaseNavigateResponse->GetRef());
+                auto result = NavigateKeySetResult.emplace(pathId, std::move(*DatabaseNavigateResponse));
+                ProcessNavigate(result.first->second, true);
             }
         }
+        if (FallbackToWhiteboard) {
+            RequestWhiteboard();
+        } else {
+            if (FieldsNeeded(FieldsBsGroups)) {
+                GetGroupsResponse = RequestBSControllerGroups();
+            }
+            if (FieldsNeeded(FieldsBsPools)) {
+                GetStoragePoolsResponse = RequestBSControllerPools();
+            }
+            if (FieldsNeeded(FieldsBsVSlots)) {
+                GetVSlotsResponse = RequestBSControllerVSlots();
+            }
+            if (FieldsNeeded(FieldsBsPDisks)) {
+                GetPDisksResponse = RequestBSControllerPDisks();
+            }
+        }
+
         if (Requests == 0) {
             return ReplyAndPassAway();
         }
@@ -1100,19 +1093,7 @@ public:
         }
     }
 
-    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        bool firstNavigate = (ev->Cookie == 0);
-        TPathId pathId = GetPathId(ev);
-        if (firstNavigate && DatabaseNavigateResult.has_value() && pathId) {
-            NavigateKeySetResult.emplace(pathId, std::move(*DatabaseNavigateResult));
-        }
-        auto itNavigateKeySetResult = NavigateKeySetResult.find(pathId);
-        if (itNavigateKeySetResult == NavigateKeySetResult.end()) {
-            BLOG_W("Invalid NavigateKeySetResult PathId: " << pathId << " Path: " << CanonizePath(ev->Get()->Request->ResultSet.begin()->Path));
-            return RequestDone();
-        }
-        auto& navigateResult(itNavigateKeySetResult->second);
-        navigateResult.Set(std::move(ev));
+    void ProcessNavigate(TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>& navigateResult, bool firstNavigate) {
         if (navigateResult.IsOk()) {
             TString path = CanonizePath(navigateResult->Request->ResultSet.begin()->Path);
             TIntrusiveConstPtr<TSchemeCacheNavigate::TDomainDescription> domainDescription = navigateResult->Request->ResultSet.begin()->DomainDescription;
@@ -1134,6 +1115,22 @@ public:
                 }
             }
         }
+    }
+
+    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        bool firstNavigate = (ev->Cookie == 0);
+        TPathId pathId = GetPathId(ev);
+        if (firstNavigate && DatabaseNavigateResponse && pathId) {
+            NavigateKeySetResult.emplace(pathId, std::move(*DatabaseNavigateResponse));
+        }
+        auto itNavigateKeySetResult = NavigateKeySetResult.find(pathId);
+        if (itNavigateKeySetResult == NavigateKeySetResult.end()) {
+            BLOG_W("Invalid NavigateKeySetResult PathId: " << pathId << " Path: " << CanonizePath(ev->Get()->Request->ResultSet.begin()->Path));
+            return RequestDone();
+        }
+        auto& navigateResult(itNavigateKeySetResult->second);
+        navigateResult.Set(std::move(ev));
+        ProcessNavigate(navigateResult, firstNavigate);
         RequestDone();
     }
 

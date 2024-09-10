@@ -1,5 +1,7 @@
 #include "threadparkpad.h"
 #include <util/system/winint.h>
+#include <util/datetime/base.h>
+
 
 #ifdef _linux_
 
@@ -20,6 +22,7 @@ namespace NActors {
         }
 
         bool Park() noexcept {
+            ::Sleep(TDuration::MilliSeconds(10));
             __atomic_fetch_sub(&Futex, 1, __ATOMIC_SEQ_CST);
             while (__atomic_load_n(&Futex, __ATOMIC_ACQUIRE) == -1)
                 SysFutex(&Futex, FUTEX_WAIT_PRIVATE, -1, nullptr, nullptr, 0);

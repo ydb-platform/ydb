@@ -200,7 +200,7 @@ namespace NActors {
                     ++*MonCounters->Sleeps;
                 }
 
-                NanoSleep(delta * 1000); // ok, looks like we should sleep a bit.
+                NanoSleep(delta * 1000000); // ok, looks like we should sleep a bit.
 
                 // Don't count sleep in elapsed microseconds
                 hpprev = GetCycleCountFast();

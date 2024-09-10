@@ -4,7 +4,7 @@ from typing import Optional
 
 import yatest.common
 
-from ydb.tests.fq.generic.utils.endpoint_determiner import EndpointDeterminer
+from ydb.tests.fq.generic.analytics.utils.endpoint_determiner import EndpointDeterminer
 
 
 @dataclass
@@ -68,7 +68,7 @@ class Settings:
 
     @classmethod
     def from_env(cls) -> 'Settings':
-        docker_compose_file = yatest.common.source_path('ydb/tests/fq/generic/docker-compose.yml')
+        docker_compose_file = yatest.common.source_path('ydb/tests/fq/generic/analytics/docker-compose.yml')
         endpoint_determiner = EndpointDeterminer(docker_compose_file)
 
         s = cls(

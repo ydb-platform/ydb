@@ -210,7 +210,10 @@ int main(int argc, char* argv[]) {
 
     NJson::TJsonValue jsonValue;
 
-    NJson::ReadJsonTree(json, &jsonValue);
+    if (!NJson::ReadJsonTree(json, &jsonValue)) {
+        Cerr << "Failed to parse JSON" << Endl;
+        return 1;
+    }
 
     std::vector<std::string> pk = ReadPK(jsonValue);
 

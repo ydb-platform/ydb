@@ -1199,6 +1199,7 @@ class TestRestoreACLOption(BaseTestBackupInFiles):
             is_(False)
         )
 
+
 class TestRestoreNoData(BaseTestBackupInFiles):
     def test_restore_no_data(self):
         self.driver.scheme_client.make_directory("/Root/folder")
@@ -1253,11 +1254,7 @@ class TestRestoreNoData(BaseTestBackupInFiles):
             is_(["table"])
         )
         assert_that(
-            is_tables_descriptions_the_same(session, "/Root/folder/table", "/Root/restored/table"),
-            is_(True)
-        )
-        assert_that(
-            is_permissions_the_same(self.driver.scheme_client, "/Root/folder/table", "/Root/restored/table"),
+            is_tables_the_same(session, self.driver.scheme_client, "/Root/folder/table", "/Root/restored/table", False),
             is_(True)
         )
         assert_that(

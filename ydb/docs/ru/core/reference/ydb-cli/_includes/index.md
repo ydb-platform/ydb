@@ -1,5 +1,11 @@
 # {{ ydb-short-name }} CLI
 
+{% note info %}
+
+Работа с колоночными таблицами поддержана частично.
+
+{% endnote %}
+
 Интерфейс командной строки {{ ydb-short-name }} CLI — программа для управления вашими данными в {{ ydb-short-name }}.
 
 Для того чтобы воспользоваться {{ ydb-short-name }} CLI, выполните [установку](../install.md), а также настройте [соединение и аутентификацию](../connect.md).
@@ -10,7 +16,7 @@
 * [Получение информации об объекте схемы](../commands/scheme-describe.md).
 * [Работа с директориями](../commands/dir.md).
 * [Выполнение YQL](../yql-query-overview.md).
-* [Потоковое чтение таблицы](../commands/readtable.md).
+* [Потоковое чтение строковых таблиц](../commands/readtable.md).
 * [Работа со вторичными индексами](../commands/secondary_index.md).
 * [Получение списка эндпоинтов для базы данных](../commands/discovery-list.md).
 * [Нагрузочное тестирование](../commands/workload/index.md).

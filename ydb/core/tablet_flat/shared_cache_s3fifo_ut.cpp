@@ -73,7 +73,7 @@ namespace {
 
 }
 
-Y_UNIT_TEST_SUITE(TTS3FIFOGhostQueue) {
+Y_UNIT_TEST_SUITE(TS3FIFOGhostQueue) {
     
     Y_UNIT_TEST(Add) {
         TTS3FIFOGhostQueue<TPageKey, TPageKeyHash, TPageKeyEqual> queue(100);

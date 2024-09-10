@@ -93,6 +93,7 @@ bool TOlapSchema::ValidateTtlSettings(const NKikimrSchemeOp::TColumnDataLifeCycl
 }
 
 bool TOlapSchema::Update(const TOlapSchemaUpdate& schemaUpdate, IErrorCollector& errors) {
+    Cerr << "TOlapSchema::Update ColumnFamilies.size(): " << ColumnFamilies.size() << Endl;
     for (const auto& family : schemaUpdate.GetColumnFamilies().GetAddColumnFamilies()) {
         ColumnFamilies.emplace_back(family);
     }

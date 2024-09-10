@@ -8,14 +8,18 @@
 
 namespace NKikimr::NSchemeShard {
 
+using ColumnFamiliesByName = THashMap<TString, TOlapColumnFamlilyAdd>;
+
 class TOlapSchemaUpdate {
     YDB_READONLY_DEF(TOlapColumnsUpdate, Columns);
     YDB_READONLY_DEF(TOlapIndexesUpdate, Indexes);
     YDB_READONLY_DEF(TOlapOptionsUpdate, Options);
     YDB_READONLY_DEF(TOlapColumnFamiliesUpdate, ColumnFamilies)
     YDB_READONLY_OPT(NKikimrSchemeOp::EColumnTableEngine, Engine);
+    YDB_READONLY_DEF(ColumnFamiliesByName, CurrentColumnFamilies);
 
 public:
+    void PutCurrentFamilies(const std::vector<TOlapColumnFamlilyAdd>& currentColumnFamilies);
     bool Parse(const NKikimrSchemeOp::TColumnTableSchema& tableSchema, IErrorCollector& errors, bool allowNullKeys = false);
     bool Parse(const NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest, IErrorCollector& errors);
 };

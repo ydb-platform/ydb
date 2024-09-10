@@ -33,6 +33,8 @@ private:
             }
         }
 
+        Cerr << "ParseFromDSRequest ColumnFamiliesSize: " << dsDescription.GetPartitionConfig().GetColumnFamilies().size() << Endl;
+
         for (auto&& dsColumn : dsDescription.GetColumns()) {
             NKikimrSchemeOp::TAlterColumnTableSchema* alterSchema = olapDescription.MutableAlterSchema();
             NKikimrSchemeOp::TOlapColumnDescription* olapColumn = alterSchema->AddAddColumns();
@@ -79,7 +81,7 @@ private:
             return TConclusionStatus::Fail("DefaultFromSequence not supported");
         }
         if (dsColumn.HasFamilyName() || dsColumn.HasFamily()) {
-            return TConclusionStatus::Fail("FamilyName and Family not supported");
+            olapColumn.SetFamilyName(dsColumn.GetFamilyName());
         }
         return TConclusionStatus::Success();
     }
@@ -87,6 +89,7 @@ public:
     TConclusion<NKikimrSchemeOp::TAlterColumnTable> Convert(const NKikimrSchemeOp::TModifyScheme& modify) {
         NKikimrSchemeOp::TAlterColumnTable result;
         if (modify.HasAlterColumnTable()) {
+            Cerr << "HasAlterColumnTable" << Endl;
             if (modify.GetOperationType() != NKikimrSchemeOp::ESchemeOpAlterColumnTable) {
                 return TConclusionStatus::Fail("Invalid operation type: " + NKikimrSchemeOp::EOperationType_Name(modify.GetOperationType()));
             }
@@ -96,6 +99,7 @@ public:
             if (modify.GetOperationType() != NKikimrSchemeOp::ESchemeOpAlterTable) {
                 return TConclusionStatus::Fail("Invalid operation type");
             }
+            Cerr << "HasAlterTable" << Endl;
             auto parse = ParseFromDSRequest(modify.GetAlterTable(), result);
             if (parse.IsFail()) {
                 return parse;

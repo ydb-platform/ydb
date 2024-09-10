@@ -8,19 +8,21 @@
 #include <ydb/core/formats/arrow/dictionary/object.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/core/tx/columnshard/engines/scheme/defaults/common/scalar.h>
+#include <ydb/core/tx/schemeshard/olap/column_family/schema.h>
 
 namespace NKikimr::NSchemeShard {
 
 class TOlapColumnDiff {
 private:
     YDB_READONLY_DEF(TString, Name);
+    YDB_READONLY_DEF(TString, FamilyName);
     YDB_READONLY_DEF(NArrow::NSerialization::TSerializerContainer, Serializer);
     YDB_READONLY_DEF(NArrow::NDictionary::TEncodingDiff, DictionaryEncoding);
     YDB_READONLY_DEF(std::optional<TString>, StorageId);
     YDB_READONLY_DEF(std::optional<TString>, DefaultValue);
     YDB_READONLY_DEF(NArrow::NAccessor::TRequestedConstructorContainer, AccessorConstructor);
 public:
-    bool ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDiff& columnSchema, IErrorCollector& errors) {
+    bool ParseFromRequest(/*const THashMap<TString, TOlapColumnFamlilyAdd>& columnFamilies,*/ const NKikimrSchemeOp::TOlapColumnDiff& columnSchema, IErrorCollector& errors) {
         Name = columnSchema.GetName();
         if (!!columnSchema.GetStorageId()) {
             StorageId = columnSchema.GetStorageId();
@@ -71,7 +73,7 @@ public:
         : KeyOrder(keyOrder) {
 
     }
-    bool ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescription& columnSchema, IErrorCollector& errors);
+    bool ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescription& columnSchema, IErrorCollector& errors, const THashMap<TString, TOlapColumnFamlilyAdd>& columnFamilies = {});
     void ParseFromLocalDB(const NKikimrSchemeOp::TOlapColumnDescription& columnSchema);
     void Serialize(NKikimrSchemeOp::TOlapColumnDescription& columnSchema) const;
     bool ApplyDiff(const TOlapColumnDiff& diffColumn, IErrorCollector& errors);
@@ -90,7 +92,7 @@ private:
     YDB_READONLY_DEF(TVector<TOlapColumnDiff>, AlterColumns);
 public:
     bool Parse(const NKikimrSchemeOp::TColumnTableSchema& tableSchema, IErrorCollector& errors, bool allowNullKeys = false);
-    bool Parse(const NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest, IErrorCollector& errors);
+    bool Parse(const THashMap<TString, TOlapColumnFamlilyAdd>& columnFamilies, const NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest, IErrorCollector& errors);
 };
 
 }

@@ -5,15 +5,21 @@
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 
 NKikimr::TConclusionStatus TStandaloneSchemaUpdate::DoInitializeImpl(const TUpdateInitializationContext& context) {
+    Cerr << "TStandaloneSchemaUpdate::DoInitializeImpl\n";
     const auto& originalTable = context.GetOriginalEntityAsVerified<TStandaloneTable>();
     auto alter = TConverterModifyToAlter().Convert(*context.GetModification());
     if (alter.IsFail()) {
         return alter;
     }
     auto alterCS = alter.DetachResult();
+
+    TOlapSchema originalSchema;
+    originalSchema.ParseFromLocalDB(originalTable.GetTableInfoVerified().Description.GetSchema());
+
     if (alterCS.HasAlterSchema()) {
         TSimpleErrorCollector collector;
         TOlapSchemaUpdate schemaUpdate;
+        schemaUpdate.PutCurrentFamilies(originalSchema.GetColumnFamilies());
         if (!schemaUpdate.Parse(alterCS.GetAlterSchema(), collector)) {
             return TConclusionStatus::Fail("update parse error: " + collector->GetErrorMessage() + ". in alter constructor STANDALONE_UPDATE");
         }
@@ -25,9 +31,6 @@ NKikimr::TConclusionStatus TStandaloneSchemaUpdate::DoInitializeImpl(const TUpda
     if (!AlterSchema && !AlterTTL) {
         return TConclusionStatus::Fail("no data for update");
     }
-
-    TOlapSchema originalSchema;
-    originalSchema.ParseFromLocalDB(originalTable.GetTableInfoVerified().Description.GetSchema());
 
     TSimpleErrorCollector collector;
     TOlapSchema targetSchema = originalSchema;

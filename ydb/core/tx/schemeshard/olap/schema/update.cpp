@@ -2,6 +2,12 @@
 
 namespace NKikimr::NSchemeShard {
 
+void TOlapSchemaUpdate::PutCurrentFamilies(const std::vector<TOlapColumnFamlilyAdd>& currentColumnFamilies) {
+    for (const auto& family : currentColumnFamilies) {
+        CurrentColumnFamilies[family.GetName()] = family;
+    }
+}
+
     bool TOlapSchemaUpdate::Parse(const NKikimrSchemeOp::TColumnTableSchema& tableSchema, IErrorCollector& errors, bool allowNullKeys) {
         if (tableSchema.HasEngine()) {
             Engine = tableSchema.GetEngine();
@@ -19,7 +25,11 @@ namespace NKikimr::NSchemeShard {
     }
 
     bool TOlapSchemaUpdate::Parse(const NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest, IErrorCollector& errors) {
-        if (!Columns.Parse(alterRequest, errors)) {
+        if (!ColumnFamilies.Parse(CurrentColumnFamilies, alterRequest, errors)) {
+            return false;
+        }
+
+        if (!Columns.Parse(CurrentColumnFamilies, alterRequest, errors)) {
             return false;
         }
 
@@ -28,10 +38,6 @@ namespace NKikimr::NSchemeShard {
         }
 
         if (!Options.Parse(alterRequest, errors)) {
-            return false;
-        }
-
-        if (!ColumnFamilies.Parse(alterRequest, errors)) {
             return false;
         }
 

@@ -71,7 +71,8 @@ bool TOlapColumnFamiliesUpdate::Parse(const NKikimrSchemeOp::TColumnTableSchema&
     return true;
 }
 
-bool TOlapColumnFamiliesUpdate::Parse(const NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest, IErrorCollector& errors) {
+bool TOlapColumnFamiliesUpdate::Parse(THashMap<TString, TOlapColumnFamlilyAdd>& currentColumnFamilies,
+    const NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest, IErrorCollector& errors) {
     TSet<TString> addColumnFamilies;
     for (auto&& family : alterRequest.GetAddColumnFamily()) {
         if (!addColumnFamilies.emplace(family.GetName()).second) {
@@ -84,6 +85,15 @@ bool TOlapColumnFamiliesUpdate::Parse(const NKikimrSchemeOp::TAlterColumnTableSc
         }
         addColumnFamilies.insert(family.GetName());
         AddColumnFamilies.emplace_back(columnFamily);
+        currentColumnFamilies[family.GetName()] = columnFamily;
+    }
+
+    for (auto&& family : alterRequest.GetAlterColumnFamily()) {
+        TOlapColumnFamlilyDiff columnFamily({});
+        if (!columnFamily.ParseFromRequest(family, errors)) {
+            return false;
+        }
+        AlterColumnFamily.emplace_back(columnFamily);
     }
     return true;
 }

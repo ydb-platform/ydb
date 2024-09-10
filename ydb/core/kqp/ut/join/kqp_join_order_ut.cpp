@@ -4,6 +4,8 @@
 
 #include <util/string/printf.h>
 
+#include <ydb/public/lib/ydb_cli/common/format.h>
+
 #include <fstream>
 #include <regex>
 
@@ -400,6 +402,10 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
             auto result = session.ExplainDataQuery(query).ExtractValueSync();
             result.GetIssues().PrintTo(Cerr);
             Cerr << result.GetPlan() << Endl;
+
+            NYdb::NConsoleClient::TQueryPlanPrinter queryPlanPrinter(NYdb::NConsoleClient::EDataFormat::PrettyTable, true, Cout, 0);
+            queryPlanPrinter.Print(result.GetPlan());
+
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
             if (useStreamLookupJoin) {
                 return;

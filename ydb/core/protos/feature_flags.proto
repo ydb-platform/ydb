@@ -152,4 +152,6 @@ message TFeatureFlags {
     optional bool EnableAlterShardingInColumnShard = 138 [default = false];
     optional bool EnablePgSyntax = 139 [default = false];
     optional bool EnableTieringInColumnShard = 140 [default = false];
+    //optional bool EnableMetadataObjectsOnServerless = 141 [default = true]; NB. exists in main
+    optional bool EnableOlapCompression = 142 [default = false];
 }

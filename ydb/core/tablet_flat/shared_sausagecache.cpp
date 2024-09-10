@@ -365,7 +365,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             page->EnsureNoCacheFlags();
             
             // touch each page multiple times to make it warm
-            for (ui32 touchTimes = 0; touchTimes < 2; touchTimes++) {
+            for (ui32 touchTimes = 0; touchTimes < 3; touchTimes++) {
                 Evict(Cache->Touch(page));
             }
         }

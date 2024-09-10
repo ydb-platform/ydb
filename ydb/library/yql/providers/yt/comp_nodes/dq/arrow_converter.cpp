@@ -628,6 +628,12 @@ public:
                 auto result = arrow::compute::Cast(DictPrimitiveConverter_.Convert(block), Settings_.ArrowType);
                 YQL_ENSURE(result.ok());
                 return *result;
+            } else if (Settings_.Type->IsData() && static_cast<NKikimr::NMiniKQL::TDataType*>(Settings_.Type)->GetDataSlot() == NUdf::EDataSlot::Json 
+                && arrow::Type::STRING == Settings_.ArrowType->id() && arrow::Type::BINARY == valType->id())
+            {
+                auto result = arrow::compute::Cast(DictPrimitiveConverter_.Convert(block), Settings_.ArrowType);
+                YQL_ENSURE(result.ok());
+                return *result;
             } else {
                 return DictYsonConverter_.Convert(block);
             }
@@ -637,6 +643,12 @@ public:
             if (noConvert) {
                 return block;
             } else if (arrow::Type::UINT8 == Settings_.ArrowType->id() && arrow::Type::BOOL == blockType->id()) {
+                auto result = arrow::compute::Cast(arrow::Datum(*block), Settings_.ArrowType);
+                YQL_ENSURE(result.ok());
+                return *result;
+            } else if (Settings_.Type->IsData() && static_cast<NKikimr::NMiniKQL::TDataType*>(Settings_.Type)->GetDataSlot() == NUdf::EDataSlot::Json 
+                && arrow::Type::STRING == Settings_.ArrowType->id() && arrow::Type::BINARY == blockType->id())
+            {
                 auto result = arrow::compute::Cast(arrow::Datum(*block), Settings_.ArrowType);
                 YQL_ENSURE(result.ok());
                 return *result;

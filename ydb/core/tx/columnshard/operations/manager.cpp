@@ -13,7 +13,7 @@ bool TOperationsManager::Load(NTabletFlatExecutor::TTransactionContext& txc) {
         }
 
         while (!rowset.EndOfSet()) {
-            const TWriteId writeId = (TWriteId)rowset.GetValue<Schema::Operations::WriteId>();
+            const TOperationWriteId writeId = (TOperationWriteId)rowset.GetValue<Schema::Operations::WriteId>();
             const ui64 createdAtSec = rowset.GetValue<Schema::Operations::CreatedAt>();
             const ui64 lockId = rowset.GetValue<Schema::Operations::LockId>();
             const ui64 cookie = rowset.GetValueOrDefault<Schema::Operations::Cookie>(0);
@@ -31,6 +31,7 @@ bool TOperationsManager::Load(NTabletFlatExecutor::TTransactionContext& txc) {
             auto operation = std::make_shared<TWriteOperation>(
                 writeId, lockId, cookie, status, TInstant::Seconds(createdAtSec), granuleShardingVersionId, NEvWrite::EModificationType::Upsert);
             operation->FromProto(metaProto);
+            LinkInsertWriteIdToOperationWriteId(operation->GetInsertWriteIds(), operation->GetWriteId());
             AFL_VERIFY(operation->GetStatus() != EOperationStatus::Draft);
 
             AFL_VERIFY(Operations.emplace(operation->GetWriteId(), operation).second);
@@ -75,7 +76,7 @@ void TOperationsManager::CommitTransactionOnExecute(
         opPtr->CommitOnExecute(owner, txc, snapshot);
         commited.emplace_back(opPtr);
     }
-    OnTransactionFinishOnExecute(commited, txId, txc);
+    OnTransactionFinishOnExecute(commited, lock, txId, txc);
 }
 
 void TOperationsManager::CommitTransactionOnComplete(
@@ -101,7 +102,7 @@ void TOperationsManager::CommitTransactionOnComplete(
         opPtr->CommitOnComplete(owner, snapshot);
         commited.emplace_back(opPtr);
     }
-    OnTransactionFinishOnComplete(commited, txId);
+    OnTransactionFinishOnComplete(commited, lock, txId);
 }
 
 void TOperationsManager::AbortTransactionOnExecute(TColumnShard& owner, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc) {
@@ -118,7 +119,7 @@ void TOperationsManager::AbortTransactionOnExecute(TColumnShard& owner, const ui
         aborted.emplace_back(opPtr);
     }
 
-    OnTransactionFinishOnExecute(aborted, txId, txc);
+    OnTransactionFinishOnExecute(aborted, *lock, txId, txc);
 }
 
 void TOperationsManager::AbortTransactionOnComplete(TColumnShard& owner, const ui64 txId) {
@@ -135,10 +136,10 @@ void TOperationsManager::AbortTransactionOnComplete(TColumnShard& owner, const u
         aborted.emplace_back(opPtr);
     }
 
-    OnTransactionFinishOnComplete(aborted, txId);
+    OnTransactionFinishOnComplete(aborted, *lock, txId);
 }
 
-TWriteOperation::TPtr TOperationsManager::GetOperation(const TWriteId writeId) const {
+TWriteOperation::TPtr TOperationsManager::GetOperation(const TOperationWriteId writeId) const {
     auto it = Operations.find(writeId);
     if (it == Operations.end()) {
         return nullptr;
@@ -147,24 +148,20 @@ TWriteOperation::TPtr TOperationsManager::GetOperation(const TWriteId writeId) c
 }
 
 void TOperationsManager::OnTransactionFinishOnExecute(
-    const TVector<TWriteOperation::TPtr>& operations, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc) {
-    const ui64 lockId = GetLockForTxVerified(txId);
-    auto itLock = LockFeatures.find(lockId);
-    AFL_VERIFY(itLock != LockFeatures.end());
+    const TVector<TWriteOperation::TPtr>& operations, const TLockFeatures& lock, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc) {
     for (auto&& op : operations) {
         RemoveOperationOnExecute(op, txc);
     }
     NIceDb::TNiceDb db(txc.DB);
-    db.Table<Schema::OperationTxIds>().Key(txId, lockId).Delete();
+    db.Table<Schema::OperationTxIds>().Key(txId, lock.GetLockId()).Delete();
 }
 
 void TOperationsManager::OnTransactionFinishOnComplete(
-    const TVector<TWriteOperation::TPtr>& operations, const ui64 txId) {
-    const ui64 lockId = GetLockForTxVerified(txId);
-    auto itLock = LockFeatures.find(lockId);
-    AFL_VERIFY(itLock != LockFeatures.end());
-    itLock->second.RemoveInteractions(InteractionsContext);
-    LockFeatures.erase(lockId);
+    const TVector<TWriteOperation::TPtr>& operations, const TLockFeatures& lock, const ui64 txId) {
+    {
+        lock.RemoveInteractions(InteractionsContext);
+        LockFeatures.erase(lock.GetLockId());
+    }
     Tx2Lock.erase(txId);
     for (auto&& op : operations) {
         RemoveOperationOnComplete(op);
@@ -177,10 +174,13 @@ void TOperationsManager::RemoveOperationOnExecute(const TWriteOperation::TPtr& o
 }
 
 void TOperationsManager::RemoveOperationOnComplete(const TWriteOperation::TPtr& op) {
+    for (auto&& i : op->GetInsertWriteIds()) {
+        AFL_VERIFY(InsertWriteIdToOpWriteId.erase(i));
+    }
     Operations.erase(op->GetWriteId());
 }
 
-TWriteId TOperationsManager::BuildNextWriteId() {
+TOperationWriteId TOperationsManager::BuildNextOperationWriteId() {
     return ++LastWriteId;
 }
 
@@ -203,7 +203,7 @@ void TOperationsManager::LinkTransactionOnComplete(const ui64 /*lockId*/, const 
 
 TWriteOperation::TPtr TOperationsManager::RegisterOperation(
     const ui64 lockId, const ui64 cookie, const std::optional<ui32> granuleShardingVersionId, const NEvWrite::EModificationType mType) {
-    auto writeId = BuildNextWriteId();
+    auto writeId = BuildNextOperationWriteId();
     auto operation = std::make_shared<TWriteOperation>(
         writeId, lockId, cookie, EOperationStatus::Draft, AppData()->TimeProvider->Now(), granuleShardingVersionId, mType);
     Y_ABORT_UNLESS(Operations.emplace(operation->GetWriteId(), operation).second);
@@ -212,10 +212,26 @@ TWriteOperation::TPtr TOperationsManager::RegisterOperation(
     return operation;
 }
 
-EOperationBehaviour TOperationsManager::GetBehaviour(const NEvents::TDataEvents::TEvWrite& evWrite) {
+TConclusion<EOperationBehaviour> TOperationsManager::GetBehaviour(const NEvents::TDataEvents::TEvWrite& evWrite) {
     if (evWrite.Record.HasTxId() && evWrite.Record.HasLocks()) {
-        if (evWrite.Record.GetLocks().GetLocks().size() != 1) {
-            return EOperationBehaviour::Undefined;
+        if (evWrite.Record.GetLocks().GetLocks().size() < 1) {
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("proto", evWrite.Record.DebugString())("event", "undefined behaviour");
+            return TConclusionStatus::Fail("no locks in case tx/locks");
+        }
+        auto& baseLock = evWrite.Record.GetLocks().GetLocks()[0];
+        for (auto&& i : evWrite.Record.GetLocks().GetLocks()) {
+            if (i.GetLockId() != baseLock.GetLockId()) {
+                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("proto", evWrite.Record.DebugString())("event", "undefined behaviour");
+                return TConclusionStatus::Fail("different lock ids in operation");
+            }
+            if (i.GetGeneration() != baseLock.GetGeneration()) {
+                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("proto", evWrite.Record.DebugString())("event", "undefined behaviour");
+                return TConclusionStatus::Fail("different lock generations in operation");
+            }
+            if (i.GetCounter() != baseLock.GetCounter()) {
+                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("proto", evWrite.Record.DebugString())("event", "undefined behaviour");
+                return TConclusionStatus::Fail("different lock generation counters in operation");
+            }
         }
         if (evWrite.Record.GetLocks().GetOp() == NKikimrDataEvents::TKqpLocks::Commit) {
             return EOperationBehaviour::CommitWriteLock;
@@ -230,13 +246,20 @@ EOperationBehaviour TOperationsManager::GetBehaviour(const NEvents::TDataEvents:
             return EOperationBehaviour::WriteWithLock;
         }
 
-        return EOperationBehaviour::Undefined;
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("proto", evWrite.Record.DebugString())("event", "undefined behaviour");
+        return TConclusionStatus::Fail("mode not IMMEDIATE for LockTxId + LockNodeId");
+    }
+
+    if (!evWrite.Record.HasLockTxId() && !evWrite.Record.HasLockNodeId() &&
+        evWrite.Record.GetTxMode() == NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE) {
+        return EOperationBehaviour::NoTxWrite;
     }
 
     if (evWrite.Record.HasTxId() && evWrite.Record.GetTxMode() == NKikimrDataEvents::TEvWrite::MODE_PREPARE) {
         return EOperationBehaviour::InTxWrite;
     }
-    return EOperationBehaviour::Undefined;
+    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("proto", evWrite.Record.DebugString())("event", "undefined behaviour");
+    return TConclusionStatus::Fail("undefined request for detect tx type");
 }
 
 TOperationsManager::TOperationsManager() {

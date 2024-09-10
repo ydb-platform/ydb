@@ -424,7 +424,6 @@ private:
 class TBlobStorageGroupMirror3dcDiscoverRequest : public TBlobStorageGroupRequestActor {
     const ui64 TabletId;
     const ui32 MinGeneration;
-    const TInstant StartTime;
     const TInstant Deadline;
     const bool ReadBody;
     const bool DiscoverBlockedGeneration;
@@ -461,7 +460,6 @@ public:
         : TBlobStorageGroupRequestActor(params)
         , TabletId(params.Common.Event->TabletId)
         , MinGeneration(params.Common.Event->MinGeneration)
-        , StartTime(params.Common.Now)
         , Deadline(params.Common.Event->Deadline)
         , ReadBody(params.Common.Event->ReadBody)
         , DiscoverBlockedGeneration(params.Common.Event->DiscoverBlockedGeneration)
@@ -651,7 +649,7 @@ public:
             DSP_LOG_DEBUG_S("DSPDM03", "Response# " << response->ToString());
 
             Y_ABORT_UNLESS(!Responded);
-            const TDuration duration = TActivationContext::Now() - StartTime;
+            const TDuration duration = TActivationContext::Monotonic() - RequestStartTime;
             LWPROBE(DSProxyRequestDuration, TEvBlobStorage::EvDiscover, 0, duration.SecondsFloat() * 1000.0,
                     TabletId, Info->GroupID.GetRawId(), TLogoBlobID::MaxChannel, "", true);
             SendResponseAndDie(std::move(response));
@@ -664,7 +662,7 @@ public:
 
         Y_ABORT_UNLESS(!Responded);
         Y_ABORT_UNLESS(status != NKikimrProto::OK);
-        const TDuration duration = TActivationContext::Now() - StartTime;
+        const TDuration duration = TActivationContext::Monotonic() - RequestStartTime;
         LWPROBE(DSProxyRequestDuration, TEvBlobStorage::EvDiscover, 0, duration.SecondsFloat() * 1000.0,
                 TabletId, Info->GroupID.GetRawId(), TLogoBlobID::MaxChannel, "", false);
         std::unique_ptr<TEvBlobStorage::TEvDiscoverResult> response(new TEvBlobStorage::TEvDiscoverResult(

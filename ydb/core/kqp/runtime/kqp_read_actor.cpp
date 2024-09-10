@@ -856,8 +856,9 @@ public:
             << ", limit: " << limit
             << ", readId = " << id
             << ", reverse = " << record.GetReverse()
-            << " snapshot = (txid=" << Settings->GetSnapshot().GetTxId() << ",step=" << Settings->GetSnapshot().GetStep() << ")"
-            << " lockTxId = " << Settings->GetLockTxId());
+            << ", snapshot = (txid=" << Settings->GetSnapshot().GetTxId() << ",step=" << Settings->GetSnapshot().GetStep() << ")"
+            << ", lockTxId = " << Settings->GetLockTxId()
+            << ", lockNodeId = " << Settings->GetLockNodeId());
 
         Counters->CreatedIterators->Inc();
         ReadIdByTabletId[state->TabletId].push_back(id);
@@ -912,6 +913,26 @@ public:
             // dropped read
             return;
         }
+
+        CA_LOG_D("Recv TEvReadResult from ShardID=" << Reads[id].Shard->TabletId
+            << ", ReadId=" << id
+            << ", Status=" << Ydb::StatusIds::StatusCode_Name(record.GetStatus().GetCode())
+            << ", Finished=" << record.GetFinished()
+            << ", RowCount=" << record.GetRowCount()
+            << ", TxLocks= " << [&]() {
+                TStringBuilder builder;
+                for (const auto& lock : record.GetTxLocks()) {
+                    builder << lock.ShortDebugString();
+                }
+                return builder;
+            }()
+            << ", BrokenTxLocks= " << [&]() {
+                TStringBuilder builder;
+                for (const auto& lock : record.GetBrokenTxLocks()) {
+                    builder << lock.ShortDebugString();
+                }
+                return builder;
+            }());
 
         if (!record.HasNodeId()) {
             Counters->ReadActorAbsentNodeId->Inc();

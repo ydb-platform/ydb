@@ -304,8 +304,7 @@ namespace {
 
         config.Opts->AddLongOption("auto-partitioning-max-partitions-count", "Maximum number of partitions for topic")
             .Optional()
-            .StoreResult(&MaxActivePartitions_)
-            .DefaultValue(1);
+            .StoreResult(&MaxActivePartitions_);
         AddAutoPartitioning(config, false);
     }
 
@@ -329,7 +328,11 @@ namespace {
         GetAutoPartitioningUpUtilizationPercent() ? *GetAutoPartitioningUpUtilizationPercent() : 0,
         GetAutoPartitioninDownUtilizationPercent() ? *GetAutoPartitioninDownUtilizationPercent() : 0);
 
-        settings.PartitioningSettings(MinActivePartitions_, MaxActivePartitions_, autoscaleSettings);
+        ui32 finalMaxActivePartitions = MaxActivePartitions_.Defined() ? *MaxActivePartitions_
+                                      : autoscaleSettings.GetStrategy() != NTopic::EAutoPartitioningStrategy::Disabled ? MinActivePartitions_ + 50
+                                      : MinActivePartitions_;
+
+        settings.PartitioningSettings(MinActivePartitions_, finalMaxActivePartitions, autoscaleSettings);
         settings.PartitionWriteBurstBytes(PartitionWriteSpeedKbps_ * 1_KB);
         settings.PartitionWriteSpeedBytesPerSecond(PartitionWriteSpeedKbps_ * 1_KB);
 
@@ -609,7 +612,7 @@ namespace {
         config.Opts->AddLongOption("partition-stats", "Show partition statistics")
             .StoreTrue(&ShowPartitionStats_);
         config.Opts->SetFreeArgsNum(1);
-        AddFormats(config, { EOutputFormat::Pretty, EOutputFormat::ProtoJsonBase64 });
+        AddOutputFormats(config, { EDataFormat::Pretty, EDataFormat::ProtoJsonBase64 });
         SetFreeArgTitle(0, "<topic-path>", "Topic path");
     }
 
@@ -923,8 +926,8 @@ namespace {
         AddMessagingFormats(config, {
                                     EMessagingFormat::NewlineDelimited,
                                     EMessagingFormat::SingleMessage,
-                                    //      EOutputFormat::JsonRawStreamConcat,
-                                    //      EOutputFormat::JsonRawArray,
+                                    //      EDataFormat::JsonRawStreamConcat,
+                                    //      EDataFormat::JsonRawArray,
                                 });
         AddAllowedCodecs(config, AllowedCodecs);
 

@@ -3,7 +3,6 @@
 #ifndef KIKIMR_DISABLE_S3_OPS
 
 #include "abstract.h"
-#include "s3_storage_config.h"
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/wrappers/events/common.h>
@@ -32,7 +31,7 @@
 
 namespace NKikimr::NWrappers::NExternalStorage {
 
-class TS3ExternalStorage: public IExternalStorageOperator, TS3User {
+class TS3ExternalStorage: public IExternalStorageOperator {
 private:
     THolder<Aws::S3::S3Client> Client;
     const Aws::Client::ClientConfiguration Config;

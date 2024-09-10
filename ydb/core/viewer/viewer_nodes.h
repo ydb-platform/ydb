@@ -8,13 +8,6 @@
 #include "wb_group.h"
 #include <library/cpp/protobuf/json/proto2json.h>
 
-template<>
-struct std::hash<NKikimr::TSubDomainKey> {
-    std::size_t operator ()(const NKikimr::TSubDomainKey& s) const {
-        return s.Hash();
-    }
-};
-
 namespace NKikimr::NViewer {
 
 using namespace NProtobufJson;
@@ -1374,7 +1367,9 @@ public:
             for (TTabletId hiveId : HivesToAsk) {
                 auto request = std::make_unique<TEvHive::TEvRequestHiveNodeStats>();
                 request->Record.SetReturnMetrics(true);
-                request->Record.SetReturnExtendedTabletInfo(true);
+                if (Database) { // it's better to ask hive about tablets only if we're filtering by database
+                    request->Record.SetReturnExtendedTabletInfo(true);
+                }
                 if (AskHiveAboutPaths) {
                     request->Record.SetFilterTabletsBySchemeShardId(FilterPathId.OwnerId);
                     request->Record.SetFilterTabletsByPathId(FilterPathId.LocalPathId);
@@ -1393,12 +1388,14 @@ public:
                             ui32 nodeId = nodeStats.GetNodeId();
                             TNode* node = FindNode(nodeId);
                             if (node) {
-                                for (const NKikimrHive::THiveDomainStatsStateCount& stateStats : nodeStats.GetStateStats()) {
-                                    NKikimrViewer::TTabletStateInfo& viewerTablet(node->Tablets.emplace_back());
-                                    viewerTablet.SetType(NKikimrTabletBase::TTabletTypes::EType_Name(stateStats.GetTabletType()));
-                                    viewerTablet.SetCount(stateStats.GetCount());
-                                    viewerTablet.SetState(GetFlagFromTabletState(stateStats.GetVolatileState()));
-                                    FieldsAvailable.set(+ENodeFields::Tablets);
+                                if (Database) { // it's better to ask hive about tablets only if we're filtering by database
+                                    for (const NKikimrHive::THiveDomainStatsStateCount& stateStats : nodeStats.GetStateStats()) {
+                                        NKikimrViewer::TTabletStateInfo& viewerTablet(node->Tablets.emplace_back());
+                                        viewerTablet.SetType(NKikimrTabletBase::TTabletTypes::EType_Name(stateStats.GetTabletType()));
+                                        viewerTablet.SetCount(stateStats.GetCount());
+                                        viewerTablet.SetState(GetFlagFromTabletState(stateStats.GetVolatileState()));
+                                        FieldsAvailable.set(+ENodeFields::Tablets);
+                                    }
                                 }
                                 if (nodeStats.HasLastAliveTimestamp()) {
                                     node->SystemState.SetDisconnectTime(std::max(node->SystemState.GetDisconnectTime(), nodeStats.GetLastAliveTimestamp() / 1000)); // seconds
@@ -1537,7 +1534,7 @@ public:
             }
             if (FieldsNeeded(FieldsTablets) && TabletViewerResponse.count(nodeId) == 0) {
                 auto viewerRequest = std::make_unique<TEvViewer::TEvViewerRequest>();
-                viewerRequest->Record.MutableTabletRequest()->SetGroupBy("NodeId,Type,State");
+                viewerRequest->Record.MutableTabletRequest()->SetGroupBy("Type,State");
                 viewerRequest->Record.SetTimeout(Timeout / 2);
                 for (const TNode* node : batch.NodesToAskAbout) {
                     viewerRequest->Record.MutableLocation()->AddNodeId(node->GetNodeId());

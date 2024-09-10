@@ -383,6 +383,7 @@ public:
         OPTION_FIELD(TString, OptLLVM)
         OPTION_FIELD(TString, OperationHash)
         OPTION_FIELD(TSecureParams, SecureParams)
+        OPTION_FIELD_DEFAULT(TSet<TString>, AdditionalSecurityTags, {})
     };
 
     struct TRunResult : public NCommon::TOperationResult {

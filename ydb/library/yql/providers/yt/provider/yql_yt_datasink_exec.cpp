@@ -252,6 +252,35 @@ private:
                 << ", cache mode: " << queryCacheMode;
         }
 
+        TSet<TString> addSecTags;
+        if (settings->TableContentDeliveryMode.Get(cluster) == ETableContentDeliveryMode::File || TYtFill::Match(input.Get())) {
+            for (size_t pos = 0; pos < optimizedNode->ChildrenSize(); pos++) {
+                auto childPtr = optimizedNode->ChildPtr(pos);
+                if (childPtr->Type() == TExprNode::Lambda) {
+                    VisitExpr(childPtr->TailPtr(), [&addSecTags](const TExprNode::TPtr& node) -> bool {
+                        if (TYtTableContent::Match(node.Get())) {
+                            auto tableContent = TYtTableContent(node.Get());
+                            if (auto readTable = tableContent.Input().Maybe<TYtReadTable>()) {
+                                for (auto section : readTable.Cast().Input()) {
+                                    for (auto path : section.Paths()) {
+                                        if (auto tableBase = path.Table().Maybe<TYtTableBase>()) {
+                                            if (auto stat = TYtTableBaseInfo::GetStat(tableBase.Cast())) {
+                                                for (const auto& tag : stat->SecurityTags) {
+                                                    addSecTags.insert(tag);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            return false;
+                        }
+                        return true;
+                    });
+                }
+            }
+        }
+
         YQL_CLOG(DEBUG, ProviderYt) << "Executing " << input->Content() << " (UniqueId=" << input->UniqueId() << ")";
 
         return State_->Gateway->Run(optimizedNode, ctx,
@@ -265,6 +294,7 @@ private:
                 .OptLLVM(State_->Types->OptLLVM.GetOrElse(TString()))
                 .OperationHash(operationHash)
                 .SecureParams(secureParams)
+                .AdditionalSecurityTags(addSecTags)
             );
     }
 

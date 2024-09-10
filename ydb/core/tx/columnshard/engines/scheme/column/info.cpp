@@ -32,6 +32,7 @@ TConclusionStatus TSimpleColumnInfo::DeserializeFromProto(const NKikimrSchemeOp:
     if (columnInfo.HasDataAccessorConstructor()) {
         AFL_VERIFY(DataAccessorConstructor.DeserializeFromProto(columnInfo.GetDataAccessorConstructor()));
     }
+    IsNullable = columnInfo.HasNotNull() ? !columnInfo.GetNotNull() : true;
     AFL_VERIFY(Serializer);
     if (columnInfo.HasDictionaryEncoding()) {
         auto settings = NArrow::NDictionary::TEncodingSettings::BuildFromProto(columnInfo.GetDictionaryEncoding());
@@ -42,14 +43,15 @@ TConclusionStatus TSimpleColumnInfo::DeserializeFromProto(const NKikimrSchemeOp:
     return TConclusionStatus::Success();
 }
 
-TSimpleColumnInfo::TSimpleColumnInfo(const ui32 columnId, const std::shared_ptr<arrow::Field>& arrowField, const NArrow::NSerialization::TSerializerContainer& serializer,
-    const bool needMinMax, const bool isSorted,
+TSimpleColumnInfo::TSimpleColumnInfo(const ui32 columnId, const std::shared_ptr<arrow::Field>& arrowField,
+    const NArrow::NSerialization::TSerializerContainer& serializer, const bool needMinMax, const bool isSorted, const bool isNullable,
     const std::shared_ptr<arrow::Scalar>& defaultValue)
     : ColumnId(columnId)
     , ArrowField(arrowField)
     , Serializer(serializer)
     , NeedMinMax(needMinMax)
     , IsSorted(isSorted)
+    , IsNullable(isNullable)
     , DefaultValue(defaultValue)
 {
     ColumnName = ArrowField->name();

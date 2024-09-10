@@ -710,7 +710,7 @@ private:
     }
 
     bool IsSwitchToSpillingModeCondition() const {
-        return !HasMemoryForProcessing();
+        return !HasMemoryForProcessing() || TlsAllocState->GetMaximumLimitValueReached();
     }
 
 public:

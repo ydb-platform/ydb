@@ -52,7 +52,7 @@ class TCommandListOperations : public TYdbCommand,
                                public TCommandWithFormat {
 
     struct THandlerWrapper {
-        using THandler = std::function<void(NOperation::TOperationClient&, ui64, const TString&, EOutputFormat)>;
+        using THandler = std::function<void(NOperation::TOperationClient&, ui64, const TString&, EDataFormat)>;
 
         THandler Handler;
         bool Hidden;

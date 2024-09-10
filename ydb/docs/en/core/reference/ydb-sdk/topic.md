@@ -758,7 +758,7 @@ If no ProducerId is specified on write session setup, the session runs in no-ded
   auto session = topicClient.CreateWriteSession(settings);
   ```
 
-If, on other hand, you want to ensure deduplication is enabled, you can specify the ProducerId option or call the `EnableDeduplication()` method from WriteSessionSettings. The '[Connecting to a topic for message writes](#start-writer)' section has an example of write session that has deduplication enabled.
+If, on other hand, you want to ensure deduplication is enabled, you can specify the ProducerId option or call the `DeduplicationEnabled()` method from WriteSessionSettings. The '[Connecting to a topic for message writes](#start-writer)' section has an example of write session that has deduplication enabled.
 
 {% endlist %}
 

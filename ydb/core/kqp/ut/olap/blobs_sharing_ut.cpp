@@ -15,7 +15,6 @@
 namespace NKikimr::NKqp {
 
 Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
-
     namespace {
     class TTransferStatus {
     private:
@@ -60,7 +59,6 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
             return TConclusionStatus::Success();
         }
         virtual void DoSerializeToProto(NKikimrColumnShardDataSharingProto::TInitiator::TController& /*proto*/) const override {
-
         }
 
         virtual TString GetClassName() const override {
@@ -68,10 +66,16 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
         }
     };
 
+    TKikimrSettings GetKikimrSettings() {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableAlterShardingInColumnShard(true);
+        return TKikimrSettings().SetWithSampleTables(false).SetFeatureFlags(featureFlags);
+    }
+
     class TSharingDataTestCase {
     private:
         const ui32 ShardsCount;
-        TKikimrRunner& Kikimr;
+        TKikimrRunner Kikimr;
         TTypedLocalHelper Helper;
         NYDBTest::TControllers::TGuard<NYDBTest::NColumnShard::TController> Controller;
         std::vector<ui64> ShardIds;
@@ -86,9 +90,9 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
             Helper.FillPKOnly(kff, recordsCount);
         }
 
-        TSharingDataTestCase(const ui32 shardsCount, TKikimrRunner& kikimr)
+        TSharingDataTestCase(const ui32 shardsCount)
             : ShardsCount(shardsCount)
-            , Kikimr(kikimr)
+            , Kikimr(GetKikimrSettings())
             , Helper("", Kikimr, "olapTable", "olapStore12")
             , Controller(NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>()) {
             Controller->SetCompactionControl(NYDBTest::EOptimizerCompactionWeightControl::Disable);
@@ -196,18 +200,14 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
         }
     };
     Y_UNIT_TEST(BlobsSharingSplit1_1) {
-        auto settings = TKikimrSettings().SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
-        TSharingDataTestCase tester(4, kikimr);
+        TSharingDataTestCase tester(4);
         tester.AddRecords(800000);
         Sleep(TDuration::Seconds(1));
         tester.Execute(0, { 1 }, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), { 0 });
     }
 
     Y_UNIT_TEST(BlobsSharingSplit1_1_clean) {
-        auto settings = TKikimrSettings().SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
-        TSharingDataTestCase tester(2, kikimr);
+        TSharingDataTestCase tester(2);
         tester.AddRecords(80000);
         CompareYson(tester.GetHelper().GetQueryResult("SELECT COUNT(*) FROM `/Root/olapStore12/olapTable`"), R"([[80000u;]])");
         Sleep(TDuration::Seconds(1));
@@ -219,9 +219,7 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
     }
 
     Y_UNIT_TEST(BlobsSharingSplit1_1_clean_with_restarts) {
-        auto settings = TKikimrSettings().SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
-        TSharingDataTestCase tester(2, kikimr);
+        TSharingDataTestCase tester(2);
         tester.SetRebootTablet(true);
         tester.AddRecords(80000);
         CompareYson(tester.GetHelper().GetQueryResult("SELECT COUNT(*) FROM `/Root/olapStore12/olapTable`"), R"([[80000u;]])");
@@ -234,18 +232,14 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
     }
 
     Y_UNIT_TEST(BlobsSharingSplit3_1) {
-        auto settings = TKikimrSettings().SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
-        TSharingDataTestCase tester(4, kikimr);
+        TSharingDataTestCase tester(4);
         tester.AddRecords(800000);
         Sleep(TDuration::Seconds(1));
         tester.Execute(0, { 1, 2, 3 }, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), { 0 });
     }
 
     Y_UNIT_TEST(BlobsSharingSplit1_3_1) {
-        auto settings = TKikimrSettings().SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
-        TSharingDataTestCase tester(4, kikimr);
+        TSharingDataTestCase tester(4);
         tester.AddRecords(800000);
         Sleep(TDuration::Seconds(1));
         tester.Execute(1, { 0 }, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), { 0 });
@@ -255,9 +249,7 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
     }
 
     Y_UNIT_TEST(BlobsSharingSplit1_3_2_1_clean) {
-        auto settings = TKikimrSettings().SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
-        TSharingDataTestCase tester(4, kikimr);
+        TSharingDataTestCase tester(4);
         tester.AddRecords(800000);
         Sleep(TDuration::Seconds(1));
         tester.Execute(1, { 0 }, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), { 0 });
@@ -273,7 +265,7 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
     class TReshardingTest {
     public:
         TReshardingTest()
-            : Kikimr(TKikimrSettings().SetWithSampleTables(false))
+            : Kikimr(GetKikimrSettings())
             , CSController(NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>())
             , TableClient(Kikimr.GetTableClient()) {
             CSController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));

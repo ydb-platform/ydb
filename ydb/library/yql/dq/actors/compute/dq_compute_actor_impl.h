@@ -109,6 +109,7 @@ protected:
 public:
     void Bootstrap() {
         try {
+            StartTime = TInstant::Now();
             {
                 TStringBuilder prefixBuilder;
                 prefixBuilder << "SelfId: " << this->SelfId() << ", TxId: " << TxId << ", task: " << Task.GetId() << ". ";
@@ -1049,8 +1050,14 @@ protected:
                     );
                 }
 
+                TStringBuilder reason = TStringBuilder() << "Task execution timeout ";
+                if (RuntimeSettings.Timeout) {
+                    reason << RuntimeSettings.Timeout->MilliSeconds() << "ms ";
+                }
+                reason << "exceeded, terminating after " << (TInstant::Now() - StartTime).MilliSeconds() << "ms";
+
                 State = NDqProto::COMPUTE_STATE_FAILURE;
-                ReportStateAndMaybeDie(NYql::NDqProto::StatusIds::TIMEOUT, {TIssue("timeout exceeded")}, true);
+                ReportStateAndMaybeDie(NYql::NDqProto::StatusIds::TIMEOUT, {TIssue(reason)}, true);
                 break;
             }
             case EEvWakeupTag::PeriodicStatsTag: {
@@ -1928,6 +1935,7 @@ protected:
     NWilson::TSpan ComputeActorSpan;
     TDuration SourceCpuTime;
 private:
+    TInstant StartTime;
     bool Running = true;
     TInstant LastSendStatsTime;
     bool PassExceptions = false;

@@ -160,7 +160,7 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         const TNodeId nodeId = Record.GetNodeId();
 
-        State.emplace(*Self, Self->HostRecords, TActivationContext::Now());
+        State.emplace(*Self, Self->HostRecords, TActivationContext::Now(), TActivationContext::Monotonic());
         State->CheckConsistency();
 
         auto updateIsSuccessful = true;

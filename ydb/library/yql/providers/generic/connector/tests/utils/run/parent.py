@@ -1,8 +1,13 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
+from typing import Final
 
 from ydb.library.yql.providers.generic.connector.tests.utils.settings import Settings, GenericSettings
 from ydb.library.yql.providers.generic.connector.tests.utils.run.result import Result
+
+
+# 3 mins
+DefaultTimeout: Final = 180
 
 
 class Runner(ABC):

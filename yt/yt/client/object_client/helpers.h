@@ -77,6 +77,9 @@ bool IsSystemTransactionType(EObjectType type);
 //! Checks if the given type if an upload transaction.
 bool IsUploadTransactionType(EObjectType type);
 
+//! Checks if the given type is an externalized Cypress transaction.
+bool IsExternalizedTransactionType(EObjectType type);
+
 //! Checks if node with the given type can contain other nodes.
 bool IsCompositeNodeType(EObjectType type);
 

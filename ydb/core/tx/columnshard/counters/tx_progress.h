@@ -24,6 +24,8 @@ private:
         NMonitoring::TDynamicCounters::TCounterPtr FinishProposeOnComplete;
         NMonitoring::TDynamicCounters::TCounterPtr FinishPlannedTx;
         NMonitoring::TDynamicCounters::TCounterPtr AbortTx;
+        NMonitoring::THistogramPtr HistogramTxProgressDuration;
+        NMonitoring::THistogramPtr HistogramTxProgressLag;
 
         TProgressCounters(const TCommonCountersOwner& owner)
             : TBase(owner)
@@ -34,13 +36,23 @@ private:
             , FinishProposeOnExecute(TBase::GetDeriviative("FinishProposeOnExecute"))
             , FinishProposeOnComplete(TBase::GetDeriviative("FinishProposeOnComplete"))
             , FinishPlannedTx(TBase::GetDeriviative("FinishPlannedTx"))
-            , AbortTx(TBase::GetDeriviative("AbortTx")) {
+            , AbortTx(TBase::GetDeriviative("AbortTx"))
+            , HistogramTxProgressDuration(TBase::GetHistogram("TxProgress/Execution/DurationMs", NMonitoring::ExponentialHistogram(18, 2, 5)))
+            , HistogramTxProgressLag(TBase::GetHistogram("TxProgress/LagOnComplete/DurationMs", NMonitoring::ExponentialHistogram(18, 2, 5))) {
         }
     };
 
     THashMap<TOpType, TProgressCounters> CountersByOpType;
 
 public:
+    void OnTxProgressDuration(const TString& opType, const TDuration d) {
+        GetSubGroup(opType).HistogramTxProgressDuration->Collect(d.MilliSeconds());
+    }
+
+    void OnTxProgressLag(const TString& opType, const TDuration d) {
+        GetSubGroup(opType).HistogramTxProgressLag->Collect(d.MilliSeconds());
+    }
+
     void OnRegisterTx(const TOpType& opType) {
         GetSubGroup(opType).RegisterTx->Add(1);
     }

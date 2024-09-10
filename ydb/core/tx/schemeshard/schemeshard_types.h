@@ -39,6 +39,7 @@ struct TSchemeLimits {
 
     // table
     ui64 MaxTableColumns = 200;
+    ui64 MaxColumnTableColumns = 10000;
     ui64 MaxTableColumnNameLength = 255;
     ui64 MaxTableKeyColumns = 20;
     ui64 MaxTableIndices = 20;

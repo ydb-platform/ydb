@@ -752,7 +752,7 @@ Pear,15,33'''
 
     @yq_v2
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_bad_request(self, kikimr, s3, client, unique_prefix):
+    def bad_request_on_invalid_json(self, kikimr, s3, client, unique_prefix):
         resource = boto3.resource(
             "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )

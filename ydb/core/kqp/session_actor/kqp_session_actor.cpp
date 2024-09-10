@@ -854,10 +854,10 @@ public:
         }
 
         const NKqpProto::TKqpPhyQuery& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
-        QueryState->HasOlapTable |= ::NKikimr::NKqp::HasOlapTableReadInTx(phyQuery) || ::NKikimr::NKqp::HasOlapTableWriteInTx(phyQuery);
-        QueryState->HasOltpTable |= ::NKikimr::NKqp::HasOltpTableReadInTx(phyQuery) || ::NKikimr::NKqp::HasOltpTableWriteInTx(phyQuery);
-        QueryState->HasTableWrite |= ::NKikimr::NKqp::HasOlapTableWriteInTx(phyQuery) || ::NKikimr::NKqp::HasOltpTableWriteInTx(phyQuery);
-        if (QueryState->HasOlapTable && QueryState->HasOltpTable && QueryState->HasTableWrite && !Settings.TableService.GetEnableHtapTx()) {
+        QueryState->TxCtx->HasOlapTable |= ::NKikimr::NKqp::HasOlapTableReadInTx(phyQuery) || ::NKikimr::NKqp::HasOlapTableWriteInTx(phyQuery);
+        QueryState->TxCtx->HasOltpTable |= ::NKikimr::NKqp::HasOltpTableReadInTx(phyQuery) || ::NKikimr::NKqp::HasOltpTableWriteInTx(phyQuery);
+        QueryState->TxCtx->HasTableWrite |= ::NKikimr::NKqp::HasOlapTableWriteInTx(phyQuery) || ::NKikimr::NKqp::HasOltpTableWriteInTx(phyQuery);
+        if (QueryState->TxCtx->HasOlapTable && QueryState->TxCtx->HasOltpTable && QueryState->TxCtx->HasTableWrite && !Settings.TableService.GetEnableHtapTx()) {
             ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
                             "Write transactions between column and row tables are disabled at current time.");
             return false;
@@ -1112,7 +1112,7 @@ public:
         txCtx.HasImmediateEffects = true;
         txCtx.ClearDeferredEffects();
 
-        SendToExecuter(std::move(request));
+        SendToExecuter(QueryState->TxCtx.Get(), std::move(request));
     }
 
     bool ExecutePhyTx(const TKqpPhyTxHolder::TConstPtr& tx, bool commit) {
@@ -1245,7 +1245,7 @@ public:
             txCtx.Locks.Size(),
             request.AcquireLocksTxId.Defined());
 
-        SendToExecuter(std::move(request));
+        SendToExecuter(QueryState->TxCtx.Get(), std::move(request));
         ++QueryState->CurrentTx;
         return false;
     }
@@ -1280,7 +1280,7 @@ public:
         return results;
     }
 
-    void SendToExecuter(IKqpGateway::TExecPhysicalRequest&& request, bool isRollback = false) {
+    void SendToExecuter(TKqpTransactionContext* txCtx, IKqpGateway::TExecPhysicalRequest&& request, bool isRollback = false) {
         if (QueryState) {
             request.Orbit = std::move(QueryState->Orbit);
             QueryState->StatementResultSize = GetResultsCount(request);
@@ -1292,28 +1292,28 @@ public:
         request.ResourceManager_ = ResourceManager_;
         LOG_D("Sending to Executer TraceId: " << request.TraceId.GetTraceId() << " " << request.TraceId.GetSpanIdSize());
 
-        const bool useEvWrite = (
-                    (QueryState->HasOlapTable // olap only
-                    && !QueryState->HasOltpTable
+        bool useEvWrite = (
+                    (txCtx->HasOlapTable // olap only
+                    && !txCtx->HasOltpTable
                     && Settings.TableService.GetEnableOlapSink())
-                || (QueryState->HasOltpTable // oltp only
-                    && !QueryState->HasOlapTable
+                || (txCtx->HasOltpTable // oltp only
+                    && !txCtx->HasOlapTable
                     && Settings.TableService.GetEnableOltpSink())
-                || (QueryState->HasOlapTable // htap
-                    && QueryState->HasOltpTable
+                || (txCtx->HasOlapTable // htap
+                    && txCtx->HasOltpTable
                     && Settings.TableService.GetEnableOlapSink()
                     && Settings.TableService.GetEnableHtapTx()))
             && (request.QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_UNDEFINED
                 || request.QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_GENERIC_QUERY
                 || request.QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY
-                || (!QueryState->HasOlapTable && request.QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_DML)
-                || (!QueryState->HasOlapTable && request.QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_PREPARED_DML));
+                || (!txCtx->HasOlapTable && request.QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_DML)
+                || (!txCtx->HasOlapTable && request.QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_PREPARED_DML));
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
             QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(),
             RequestCounters, Settings.TableService,
             AsyncIoFactory, QueryState ? QueryState->PreparedQuery : nullptr, SelfId(),
             QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId),
-            useEvWrite, QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup, GUCSettings, QueryState->ShardIdToTableInfo);
+            useEvWrite, QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup, GUCSettings, txCtx->ShardIdToTableInfo);
 
         auto exId = RegisterWithSameMailbox(executerActor);
         LOG_D("Created new KQP executer: " << exId << " isRollback: " << isRollback);
@@ -1473,7 +1473,7 @@ public:
                     if (ev->BrokenLockPathId) {
                         issues.AddIssue(GetLocksInvalidatedIssue(*QueryState->TxCtx, *ev->BrokenLockPathId));
                     } else if (ev->BrokenLockShardId) {
-                        issues.AddIssue(GetLocksInvalidatedIssue(*QueryState->ShardIdToTableInfo, *ev->BrokenLockShardId));
+                        issues.AddIssue(GetLocksInvalidatedIssue(*QueryState->TxCtx->ShardIdToTableInfo, *ev->BrokenLockShardId));
                     }
                     break;
                 }
@@ -2081,7 +2081,7 @@ public:
             request.DataShardLocks[dsLock.GetDataShard()].emplace_back(dsLock);
         }
 
-        SendToExecuter(std::move(request), true);
+        SendToExecuter(txCtx, std::move(request), true);
     }
 
     void ResetTxState() {

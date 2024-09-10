@@ -121,6 +121,14 @@ private:
     friend class TKqpTransactionContext;
 };
 
+struct TTableInfo {
+    bool IsOlap = false;
+    THashSet<TString> Pathes;
+};
+
+using TShardIdToTableInfo = THashMap<ui64, TTableInfo>;
+using TShardIdToTableInfoPtr = std::shared_ptr<TShardIdToTableInfo>;
+
 class TKqpTransactionContext : public NYql::TKikimrTransactionContextBase  {
 public:
     explicit TKqpTransactionContext(bool implicit, const NMiniKQL::IFunctionRegistry* funcRegistry,
@@ -285,6 +293,12 @@ public:
     TTxAllocatorState::TPtr TxAlloc;
 
     IKqpGateway::TKqpSnapshotHandle SnapshotHandle;
+
+    bool HasOlapTable = false;
+    bool HasOltpTable = false;
+    bool HasTableWrite = false;
+
+    TShardIdToTableInfoPtr ShardIdToTableInfo = std::make_shared<TShardIdToTableInfo>();
 };
 
 struct TTxId {
@@ -316,14 +330,6 @@ struct TTxId {
         return HumanStr;
     }
 };
-
-struct TTableInfo {
-    bool IsOlap = false;
-    THashSet<TString> Pathes;
-};
-
-using TShardIdToTableInfo = THashMap<ui64, TTableInfo>;
-using TShardIdToTableInfoPtr = std::shared_ptr<TShardIdToTableInfo>;
 
 }
 

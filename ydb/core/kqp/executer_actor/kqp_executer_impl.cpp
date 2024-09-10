@@ -83,7 +83,7 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
     const TIntrusivePtr<TUserRequestContext>& userRequestContext,
     const bool useEvWrite, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
-    const TShardIdToTableInfoPtr& shardIdToTableInfo)
+    const TShardIdToTableInfoPtr& shardIdToTableInfo, const bool htapTx)
 {
     if (request.Transactions.empty()) {
         // commit-only or rollback-only data transaction
@@ -91,7 +91,7 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
             std::move(request), database, userToken, counters, false, tableServiceConfig,
             std::move(asyncIoFactory), creator, 
             userRequestContext, useEvWrite, statementResultIndex, 
-            federatedQuerySetup, /*GUCSettings*/nullptr, shardIdToTableInfo
+            federatedQuerySetup, /*GUCSettings*/nullptr, shardIdToTableInfo, htapTx
         );
     }
 
@@ -114,7 +114,7 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
                 std::move(request), database, userToken, counters, false, tableServiceConfig,
                 std::move(asyncIoFactory), creator, 
                 userRequestContext, useEvWrite, statementResultIndex, 
-                federatedQuerySetup, /*GUCSettings*/nullptr, shardIdToTableInfo
+                federatedQuerySetup, /*GUCSettings*/nullptr, shardIdToTableInfo, htapTx
             );
 
         case NKqpProto::TKqpPhyTx::TYPE_SCAN:
@@ -129,7 +129,7 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
                 std::move(request), database, userToken, counters, true,
                 tableServiceConfig, std::move(asyncIoFactory), creator,
                 userRequestContext, useEvWrite, statementResultIndex,
-                federatedQuerySetup, GUCSettings, shardIdToTableInfo
+                federatedQuerySetup, GUCSettings, shardIdToTableInfo, htapTx
             );
 
         default:

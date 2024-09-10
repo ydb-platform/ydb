@@ -8273,6 +8273,13 @@
             "uri": "https://{canondata_backend}/1784117/d56ae82ad9d30397a41490647be1bd2124718f98/resource.tar.gz#test_sql2yql.test_join-cross_join_with_lazy_list_/sql.yql"
         }
     ],
+    "test_sql2yql.test[join-do_not_suppres_equijoin_input_sorts]": [
+        {
+            "checksum": "f0414b010a5b710a7b4e40eb58c281a6",
+            "size": 1677,
+            "uri": "https://{canondata_backend}/1942415/648a56e0787ca3112c139c169f33c33294672c1c/resource.tar.gz#test_sql2yql.test_join-do_not_suppres_equijoin_input_sorts_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[join-emptyjoin_unused_keys]": [
         {
             "checksum": "a10f3ec3492bdb510c3dbdf0892a77d4",
@@ -27885,6 +27892,13 @@
             "checksum": "02b2c8d65c090ccd68d72a454400686b",
             "size": 318,
             "uri": "https://{canondata_backend}/1880306/64654158d6bfb1289c66c626a8162239289559d0/resource.tar.gz#test_sql_format.test_join-cross_join_with_lazy_list_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[join-do_not_suppres_equijoin_input_sorts]": [
+        {
+            "checksum": "d3e970630b591a773a59ed5ec3c33861",
+            "size": 183,
+            "uri": "https://{canondata_backend}/1942415/648a56e0787ca3112c139c169f33c33294672c1c/resource.tar.gz#test_sql_format.test_join-do_not_suppres_equijoin_input_sorts_/formatted.sql"
         }
     ],
     "test_sql_format.test[join-emptyjoin_unused_keys]": [

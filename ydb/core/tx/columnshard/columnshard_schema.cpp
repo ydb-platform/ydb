@@ -10,18 +10,18 @@ bool Schema::InsertTable_Load(NIceDb::TNiceDb& db, const IBlobGroupSelector* dsG
     }
 
     while (!rowset.EndOfSet()) {
-        TInsertTableRecordLoadContext constructor;
-        AFL_VERIFY(constructor.ParseFromDatabase(rowset));
+        NOlap::TInsertTableRecordLoadContext constructor;
+        constructor.ParseFromDatabase(rowset);
 
-        switch (recType) {
-            case EInsertTableIds::Inserted:
-                insertTable.AddInserted(constructor.BuildInsertedOrAborted(), true);
+        switch (constructor.GetRecType()) {
+            case Schema::EInsertTableIds::Inserted:
+                insertTable.AddInserted(constructor.BuildInsertedOrAborted(dsGroupSelector), true);
                 break;
-            case EInsertTableIds::Committed:
-                insertTable.AddCommitted(constructor.BuildCommitted(), true);
+            case Schema::EInsertTableIds::Committed:
+                insertTable.AddCommitted(constructor.BuildCommitted(dsGroupSelector), true);
                 break;
-            case EInsertTableIds::Aborted:
-                insertTable.AddAborted(constructor.BuildInsertedOrAborted(), true);
+            case Schema::EInsertTableIds::Aborted:
+                insertTable.AddAborted(constructor.BuildInsertedOrAborted(dsGroupSelector), true);
                 break;
         }
         if (!rowset.Next()) {

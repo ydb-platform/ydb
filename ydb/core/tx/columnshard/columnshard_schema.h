@@ -979,23 +979,24 @@ public:
 
 class TInsertTableRecordLoadContext {
 private:
-    EInsertTableIds RecType;
+    NColumnShard::Schema::EInsertTableIds RecType;
     ui64 PlanStep;
     ui64 WriteTxId;
     ui64 PathId;
     YDB_ACCESSOR_DEF(TString, DedupId);
     ui64 SchemaVersion;
+    TString BlobIdString;
     std::optional<NOlap::TUnifiedBlobId> BlobId;
     TString MetadataString;
     std::optional<NKikimrTxColumnShard::TLogicalMetadata> Metadata;
     std::optional<ui64> RangeOffset;
     std::optional<ui64> RangeSize;
 
-    void Prepare() {
+    void Prepare(const IBlobGroupSelector* dsGroupSelector) {
         AFL_VERIFY(!PreparedFlag);
         PreparedFlag = true;
         TString error;
-        NOlap::TUnifiedBlobId blobId = NOlap::TUnifiedBlobId::ParseFromString(rowset.GetValue<InsertTable::BlobId>(), dsGroupSelector, error);
+        NOlap::TUnifiedBlobId blobId = NOlap::TUnifiedBlobId::ParseFromString(BlobIdString, dsGroupSelector, error);
         Y_ABORT_UNLESS(blobId.IsValid(), "Failied to parse blob id: %s", error.c_str());
         BlobId = blobId;
 
@@ -1010,66 +1011,89 @@ private:
     bool ParsedFlag = false;
 
 public:
+    TInsertWriteId GetInsertWriteId() const {
+        AFL_VERIFY(ParsedFlag);
+        AFL_VERIFY(RecType != NColumnShard::Schema::EInsertTableIds::Committed);
+        return (TInsertWriteId)WriteTxId;
+    }
+
+    NColumnShard::Schema::EInsertTableIds GetRecType() const {
+        AFL_VERIFY(ParsedFlag);
+        return RecType;
+    }
+
+    ui64 GetPlanStep() const {
+        AFL_VERIFY(ParsedFlag);
+        return PlanStep;
+    }
+
     void Remove(NIceDb::TNiceDb& db) {
         AFL_VERIFY(ParsedFlag);
-        db.Table<InsertTable>().Key((ui8)RecType, PlanStep, WriteTxId, PathId, DedupId).Delete();
+        db.Table<NColumnShard::Schema::InsertTable>().Key((ui8)RecType, PlanStep, WriteTxId, PathId, DedupId).Delete();
     }
 
     void Upsert(NIceDb::TNiceDb& db) {
         AFL_VERIFY(ParsedFlag);
+        using namespace NColumnShard;
         if (RangeOffset) {
-            db.Table<InsertTable>()
+            db.Table<Schema::InsertTable>()
                 .Key((ui8)RecType, PlanStep, WriteTxId, PathId, DedupId)
-                .Update(NIceDb::TUpdate<InsertTable::BlobId>(BlobId), NIceDb::TUpdate<InsertTable::BlobRangeOffset>(*RangeOffset),
-                    NIceDb::TUpdate<InsertTable::BlobRangeSize>(*RangeSize), NIceDb::TUpdate<InsertTable::Meta>(MetadataString),
-                    NIceDb::TUpdate<InsertTable::SchemaVersion>(SchemaVersion));
+                .Update(NIceDb::TUpdate<Schema::InsertTable::BlobId>(BlobIdString),
+                    NIceDb::TUpdate<Schema::InsertTable::BlobRangeOffset>(*RangeOffset),
+                    NIceDb::TUpdate<Schema::InsertTable::BlobRangeSize>(*RangeSize), NIceDb::TUpdate<Schema::InsertTable::Meta>(MetadataString),
+                    NIceDb::TUpdate<Schema::InsertTable::SchemaVersion>(SchemaVersion));
         } else {
-            db.Table<InsertTable>()
+            db.Table<Schema::InsertTable>()
                 .Key((ui8)RecType, PlanStep, WriteTxId, PathId, DedupId)
-                .Update(NIceDb::TUpdate<InsertTable::BlobId>(BlobId), NIceDb::TUpdate<InsertTable::Meta>(MetadataString),
-                    NIceDb::TUpdate<InsertTable::SchemaVersion>(SchemaVersion));
+                .Update(NIceDb::TUpdate<Schema::InsertTable::BlobId>(BlobIdString), NIceDb::TUpdate<Schema::InsertTable::Meta>(MetadataString),
+                    NIceDb::TUpdate<Schema::InsertTable::SchemaVersion>(SchemaVersion));
         }
     }
 
     template <class TRowset>
     void ParseFromDatabase(TRowset& rowset) {
-        AFL_VERIFY(!ParsedFlag)("duplication parsing");
+        AFL_VERIFY(!ParsedFlag)("problem", "duplication parsing");
         ParsedFlag = true;
-        RecType = (EInsertTableIds)rowset.GetValue<InsertTable::Committed>();
-        PlanStep = rowset.GetValue<InsertTable::PlanStep>();
-        WriteTxId = rowset.GetValueOrDefault<InsertTable::WriteTxId>();
+        using namespace NColumnShard;
+        RecType = (Schema::EInsertTableIds)rowset.template GetValue<Schema::InsertTable::Committed>();
+        PlanStep = rowset.template GetValue<Schema::InsertTable::PlanStep>();
+        WriteTxId = rowset.template GetValueOrDefault<Schema::InsertTable::WriteTxId>();
         AFL_VERIFY(WriteTxId);
 
-        PathId = rowset.GetValue<InsertTable::PathId>();
-        DedupId = rowset.GetValue<InsertTable::DedupId>();
-        SchemaVersion = rowset.HaveValue<InsertTable::SchemaVersion>() ? rowset.GetValue<InsertTable::SchemaVersion>() : 0;
-        BlobId = rowset.GetValue<InsertTable::BlobId>();
-        MetadataString = rowset.GetValue<InsertTable::Meta>();
-        if (rowset.HaveValue<InsertTable::BlobRangeOffset>()) {
-            RangeOffset = rowset.GetValue<InsertTable::BlobRangeOffset>();
+        PathId = rowset.template GetValue<Schema::InsertTable::PathId>();
+        DedupId = rowset.template GetValue<Schema::InsertTable::DedupId>();
+        SchemaVersion =
+            rowset.template HaveValue<Schema::InsertTable::SchemaVersion>() ? rowset.template GetValue<Schema::InsertTable::SchemaVersion>() : 0;
+        BlobIdString = rowset.template GetValue<Schema::InsertTable::BlobId>();
+        MetadataString = rowset.template GetValue<Schema::InsertTable::Meta>();
+        if (rowset.template HaveValue<Schema::InsertTable::BlobRangeOffset>()) {
+            RangeOffset = rowset.template GetValue<Schema::InsertTable::BlobRangeOffset>();
         }
-        if (rowset.HaveValue<InsertTable::BlobRangeSize>()) {
-            RangeSize = rowset.GetValue<InsertTable::BlobRangeSize>();
+        if (rowset.template HaveValue<Schema::InsertTable::BlobRangeSize>()) {
+            RangeSize = rowset.template GetValue<Schema::InsertTable::BlobRangeSize>();
         }
-        Prepare();
     }
 
-    NOlap::TCommittedData BuildCommitted() {
+    NOlap::TCommittedData BuildCommitted(const IBlobGroupSelector* dsGroupSelector) {
+        Prepare(dsGroupSelector);
+        using namespace NColumnShard;
         AFL_VERIFY(RecType == Schema::EInsertTableIds::Committed);
         auto userData = std::make_shared<NOlap::TUserData>(PathId,
-            NOlap::TBlobRange(BlobId, RangeOffset.value_or(0), RangeSize.value_or(blobId.BlobSize())), *Metadata, SchemaVersion, std::nullopt);
+            NOlap::TBlobRange(*BlobId, RangeOffset.value_or(0), RangeSize.value_or(BlobId->BlobSize())), *Metadata, SchemaVersion, std::nullopt);
         AFL_VERIFY(!!DedupId);
         AFL_VERIFY(PlanStep);
         return NOlap::TCommittedData(userData, PlanStep, WriteTxId, DedupId);
     }
 
-    NOlap::TInsertedData BuildInsertedOrAborted() {
+    NOlap::TInsertedData BuildInsertedOrAborted(const IBlobGroupSelector* dsGroupSelector) {
+        Prepare(dsGroupSelector);
+        using namespace NColumnShard;
         AFL_VERIFY(RecType != Schema::EInsertTableIds::Committed);
         auto userData = std::make_shared<NOlap::TUserData>(PathId,
-            NOlap::TBlobRange(BlobId, RangeOffset.value_or(0), RangeSize.value_or(blobId.BlobSize())), *Metadata, SchemaVersion, std::nullopt);
+            NOlap::TBlobRange(*BlobId, RangeOffset.value_or(0), RangeSize.value_or(BlobId->BlobSize())), *Metadata, SchemaVersion, std::nullopt);
         AFL_VERIFY(!DedupId);
         AFL_VERIFY(!PlanStep);
-        return NOlap::TInsertedData(WriteTxId, userData);
+        return NOlap::TInsertedData((TInsertWriteId)WriteTxId, userData);
     }
 };
 

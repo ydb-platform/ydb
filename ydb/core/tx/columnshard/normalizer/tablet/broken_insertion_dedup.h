@@ -9,7 +9,7 @@ namespace NKikimr::NOlap {
 class TInsertionsDedupNormalizer: public TNormalizationController::INormalizerComponent {
 public:
     static TString GetClassNameStatic() {
-        return "InsertionsDedupNormalizer";
+        return "CleanInsertionDedup";
     }
 private:
     class TNormalizerResult;

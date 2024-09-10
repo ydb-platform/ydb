@@ -4,11 +4,11 @@ STYLE_PYTHON()
 
 NO_CHECK_IMPORTS()
 
-# INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)
-# 
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)
+ 
 # INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/mdb_mock/recipe.inc)
-# 
-# INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/token_accessor_mock/recipe.inc)
+ 
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/token_accessor_mock/recipe.inc)
 
 IF (AUTOCHECK)
     # Temporarily disable these tests due to infrastructure incompatibility
@@ -30,8 +30,8 @@ IF (AUTOCHECK)
     )
 ENDIF()
 
-# ENV(COMPOSE_HTTP_TIMEOUT=1200)  # during parallel tests execution there could be huge disk io, which triggers timeouts in docker-compose 
-# INCLUDE(${ARCADIA_ROOT}/library/recipes/docker_compose/recipe.inc)
+ENV(COMPOSE_HTTP_TIMEOUT=1200)  # during parallel tests execution there could be huge disk io, which triggers timeouts in docker-compose 
+INCLUDE(${ARCADIA_ROOT}/library/recipes/docker_compose/recipe.inc)
 
 IF (OPENSOURCE)
     IF (SANITIZER_TYPE)
@@ -56,7 +56,7 @@ DEPENDS(
 )
 
 PEERDIR(
-    # ydb/tests/fq/generic/utils
+    ydb/tests/fq/generic/streaming/utils
     ydb/tests/tools/datastreams_helpers
     library/python/testing/recipe
     library/python/testing/yatest_common
@@ -78,3 +78,7 @@ TEST_SRCS(
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    utils
+)

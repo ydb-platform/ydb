@@ -758,6 +758,8 @@ private:
     TDeque<IAsyncIoOperation*> Trash;
     TMutex TrashMutex;
 
+    TSpinLock SubmitThreadLock;
+
     std::optional<TDriveData> DriveData;
 
 public:
@@ -941,6 +943,7 @@ protected:
         if (Flags & TDeviceMode::UseSpdk) {
             SpdkSubmitGetThread->Schedule(op);
         } else {
+            TGuard<TSpinLock> g(SubmitThreadLock);
             SubmitThread->Schedule(op);
         }
     }

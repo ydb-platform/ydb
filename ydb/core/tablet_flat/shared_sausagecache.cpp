@@ -160,7 +160,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         struct TSize {
             static ui64 Get(const TPage *page) {
-                Y_DEBUG_ABORT_UNLESS(page->State == PageStateLoaded);
                 return sizeof(TPage) + page->Size;
             }
         };

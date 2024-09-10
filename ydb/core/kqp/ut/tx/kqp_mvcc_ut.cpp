@@ -55,7 +55,7 @@ Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
 
             UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR,
                 [](const NYql::TIssue& issue){
-                    return issue.GetMessage().Contains("has no snapshot at");
+                    return issue.GetMessage().contains("has no snapshot at");
                 }), result.GetIssues().ToString());
 
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::ABORTED);

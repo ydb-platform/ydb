@@ -39,7 +39,7 @@ Y_UNIT_TEST_SUITE(KqpLocks) {
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
             [] (const NYql::TIssue& issue) {
-                return issue.GetMessage().Contains("/Root/Test");
+                return issue.GetMessage().contains("/Root/Test");
             }));
 
         result = session2.ExecuteDataQuery(Q_(R"(
@@ -78,7 +78,7 @@ Y_UNIT_TEST_SUITE(KqpLocks) {
         commitResult.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT(HasIssue(commitResult.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
             [] (const NYql::TIssue& issue) {
-                return issue.GetMessage().Contains("/Root/Test");
+                return issue.GetMessage().contains("/Root/Test");
             }));
 
         result = session2.ExecuteDataQuery(Q_(R"(
@@ -148,7 +148,7 @@ Y_UNIT_TEST_SUITE(KqpLocks) {
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
             [] (const NYql::TIssue& issue) {
-                return issue.GetMessage().Contains("/Root/Test");
+                return issue.GetMessage().contains("/Root/Test");
             }));
 
         result = session1.ExecuteDataQuery(Q1_(R"(
@@ -195,7 +195,7 @@ Y_UNIT_TEST_SUITE(KqpLocks) {
 
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
             [] (const NYql::TIssue& issue) {
-                return issue.GetMessage().Contains("/Root/Test");
+                return issue.GetMessage().contains("/Root/Test");
             }));
 
         result = session1.ExecuteDataQuery(Q1_(R"(
@@ -237,7 +237,7 @@ Y_UNIT_TEST_SUITE(KqpLocks) {
         commitResult.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_C(HasIssue(commitResult.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
             [] (const NYql::TIssue& issue) {
-                return issue.GetMessage().Contains("/Root/Test");
+                return issue.GetMessage().contains("/Root/Test");
             }), commitResult.GetIssues().ToString());
     }
 

@@ -228,7 +228,7 @@ Y_UNIT_TEST_SUITE(KqpTypes) {
             }
             else {
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
-                UNIT_ASSERT(result.GetIssues().ToString().Contains("Type 'Datetime64' specified for column 'DatetimePK', but support for new date/time 64 types is disabled (EnableTableDatetime64 feature flag is off)"));
+                UNIT_ASSERT(result.GetIssues().ToString().contains("Type 'Datetime64' specified for column 'DatetimePK', but support for new date/time 64 types is disabled (EnableTableDatetime64 feature flag is off)"));
                 return;
             }
         }

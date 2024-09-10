@@ -874,7 +874,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
         UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
         auto strPlan = res.GetPlan();
-        UNIT_ASSERT(strPlan);
+        UNIT_ASSERT(!strPlan.empty());
 
         Cerr << strPlan << Endl;
 

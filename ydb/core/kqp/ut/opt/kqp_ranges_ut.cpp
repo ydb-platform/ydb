@@ -1508,7 +1508,7 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
                 TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
-            CompareYson(expectedYson, FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(TString{expectedYson}, TString{FormatResultSetYson(result.GetResultSet(0))});
         }
     }
 

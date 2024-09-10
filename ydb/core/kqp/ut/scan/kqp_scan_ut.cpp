@@ -1351,7 +1351,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         part.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT(HasIssue(part.GetIssues(), NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
             [](const NYql::TIssue& issue) {
-                return issue.GetMessage().Contains("Requested too many execution units");
+                return issue.GetMessage().contains("Requested too many execution units");
             }));
 
         part = it.ReadNext().GetValueSync();
@@ -1734,7 +1734,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         for (auto v : {1, 2, 3, 42, 50, 100}) {
             pl.AddListItem().OptionalUint64(v);
         }
-        pl.AddListItem().OptionalUint64(Nothing());
+        pl.AddListItem().OptionalUint64(std::nullopt);
         pl.EndList().Build();
 
         auto it = db.StreamExecuteScanQuery(query, params.Build()).GetValueSync();
@@ -1792,8 +1792,8 @@ Y_UNIT_TEST_SUITE(KqpScan) {
             UNIT_ASSERT_C(!streamPart.EOS(), streamPart.GetIssues().ToString());
             UNIT_ASSERT(
                 HasIssue(streamPart.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR, [](const NYql::TIssue& issue) {
-                    return issue.GetMessage().Contains("Terminate was called")   // general termination prefix
-                           && issue.GetMessage().Contains("Bad filter value.");  // test specific UDF exception
+                    return issue.GetMessage().contains("Terminate was called")   // general termination prefix
+                           && issue.GetMessage().contains("Bad filter value.");  // test specific UDF exception
                 }));
         };
 
@@ -2108,7 +2108,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto result = it.ReadNext().GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNSUPPORTED);
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_UNSUPPORTED, [](const NYql::TIssue& issue) {
-            return issue.GetMessage().Contains("ATOM evaluation is not supported in YDB queries.");
+            return issue.GetMessage().contains("ATOM evaluation is not supported in YDB queries.");
         }));
     }
 

@@ -31,7 +31,7 @@ TVector<THashMap<TString, NYdb::TValue>> CollectRows(NYdb::NTable::TScanQueryPar
         }
 
         if (streamPart.HasDiagnostics()) {
-            TString diagnosticsString = streamPart.GetDiagnostics();
+            auto diagnosticsString = TString{streamPart.GetDiagnostics()};
             if (!diagnosticsString.empty() && diagnostics) {
                 UNIT_ASSERT(NJson::ReadJsonFastTree(diagnosticsString, diagnostics));
             }

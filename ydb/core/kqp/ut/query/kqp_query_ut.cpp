@@ -192,8 +192,8 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
                 "erase_row",
             };
 
-            TVector<TString> grantPermissions;
-            TVector<TString> revokePermissions;
+            std::vector<std::string> grantPermissions;
+            std::vector<std::string> revokePermissions;
 
             for (const auto& permission : allPermissions) {
                 if (permissions.contains(permission)) {
@@ -226,11 +226,11 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
 
             auto session = db.CreateSession().GetValueSync().GetSession();
             const auto result = params
-                ? session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), *params).ExtractValueSync()
-                : session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                ? session.ExecuteDataQuery(std::string{query}, TTxControl::BeginTx().CommitTx(), *params).ExtractValueSync()
+                : session.ExecuteDataQuery(std::string{query}, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expectedStatus, result.GetIssues().ToString());
             if (expectedIssue) {
-                UNIT_ASSERT_C(result.GetIssues().ToString().Contains(*expectedIssue), result.GetIssues().ToString());
+                UNIT_ASSERT_C(result.GetIssues().ToString().contains(*expectedIssue), result.GetIssues().ToString());
             }
         };
 
@@ -634,7 +634,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNSUPPORTED);
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_UNSUPPORTED, [](const NYql::TIssue& issue) {
-            return issue.GetMessage().Contains("ATOM evaluation is not supported in YDB queries.");
+            return issue.GetMessage().contains("ATOM evaluation is not supported in YDB queries.");
         }));
     }
 
@@ -1041,7 +1041,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNSUPPORTED, result.GetIssues().ToString());
             UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_UNSUPPORTED, [](const NYql::TIssue& issue) {
-                return issue.GetMessage().Contains("EVALUATE IF is not supported in YDB queries.");
+                return issue.GetMessage().contains("EVALUATE IF is not supported in YDB queries.");
             }));
         }
 
@@ -1053,7 +1053,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNSUPPORTED, result.GetIssues().ToString());
             UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_UNSUPPORTED, [](const NYql::TIssue& issue) {
-                return issue.GetMessage().Contains("EVALUATE is not supported in YDB queries.");
+                return issue.GetMessage().contains("EVALUATE is not supported in YDB queries.");
             }));
         }
 
@@ -1091,7 +1091,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNSUPPORTED, result.GetIssues().ToString());
             UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_UNSUPPORTED, [](const NYql::TIssue& issue) {
-                return issue.GetMessage().Contains("ATOM evaluation is not supported in YDB queries.");
+                return issue.GetMessage().contains("ATOM evaluation is not supported in YDB queries.");
             }));
         }
     }
@@ -1108,7 +1108,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         result.GetIssues().PrintTo(Cerr);
         if (result.GetStatus() == EStatus::GENERIC_ERROR) {
             UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR, [](const NYql::TIssue& issue) {
-                return issue.GetMessage().Contains("Execution failed");
+                return issue.GetMessage().contains("Execution failed");
             }));
         } else {
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
@@ -1144,7 +1144,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         result.GetIssues().PrintTo(Cerr);
 
         const auto issueChecker = [](const NYql::TIssue& issue) {
-            return issue.GetMessage().Contains("can't be performed in data query");
+            return issue.GetMessage().contains("can't be performed in data query");
         };
 
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
@@ -1451,7 +1451,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT(!prepareResult.IsSuccess());
             UNIT_ASSERT_C(
-                prepareResult.GetIssues().ToString().Contains("AS VALUES statement is not supported for CreateTableAs."),
+                prepareResult.GetIssues().ToString().contains("AS VALUES statement is not supported for CreateTableAs."),
                 prepareResult.GetIssues().ToString());
         }
 
@@ -1468,7 +1468,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT(!prepareResult.IsSuccess());
             UNIT_ASSERT_C(
-                prepareResult.GetIssues().ToString().Contains("Column types are not supported for CREATE TABLE AS"),
+                prepareResult.GetIssues().ToString().contains("Column types are not supported for CREATE TABLE AS"),
                 prepareResult.GetIssues().ToString());
         }
 
@@ -1483,7 +1483,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT(!prepareResult.IsSuccess());
             UNIT_ASSERT_C(
-                prepareResult.GetIssues().ToString().Contains("CTAS statement can be executed only in NoTx mode."),
+                prepareResult.GetIssues().ToString().contains("CTAS statement can be executed only in NoTx mode."),
                 prepareResult.GetIssues().ToString());
         }
 
@@ -1500,7 +1500,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT(!prepareResult.IsSuccess());
             UNIT_ASSERT_C(
-                prepareResult.GetIssues().ToString().Contains("CREATE TABLE AS with columns is not supported"),
+                prepareResult.GetIssues().ToString().contains("CREATE TABLE AS with columns is not supported"),
                 prepareResult.GetIssues().ToString());
         }
     }
@@ -1601,7 +1601,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(!prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
             UNIT_ASSERT_C(
-                prepareResult.GetIssues().ToString().Contains("Creating table with data is not supported."),
+                prepareResult.GetIssues().ToString().contains("Creating table with data is not supported."),
                 prepareResult.GetIssues().ToString());
         }
     }

@@ -191,7 +191,7 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
 
             UNIT_ASSERT(txSnaphsot.IsValid());
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT(result.GetTransaction().Defined());
+            UNIT_ASSERT(result.GetTransaction().has_value());
             tx.emplace(*result.GetTransaction());
 
             // running the query that touches the main table and the index.

@@ -780,10 +780,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             TDescribeTableResult describe = session.DescribeTable(tableName).GetValueSync();
             UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
             const auto& partSettings = describe.GetTableDescription().GetPartitioningSettings();
-            UNIT_ASSERT(partSettings.GetPartitioningBySize().Defined());
-            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningBySize().GetRef(), false);
-            UNIT_ASSERT(partSettings.GetPartitioningByLoad().Defined());
-            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningByLoad().GetRef(), false);
+            UNIT_ASSERT(partSettings.GetPartitioningBySize().has_value());
+            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningBySize().value(), false);
+            UNIT_ASSERT(partSettings.GetPartitioningByLoad().has_value());
+            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningByLoad().value(), false);
         }
     }
 
@@ -963,10 +963,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             TDescribeTableResult describe = session.DescribeTable(tableName).GetValueSync();
             UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
             const auto& partSettings = describe.GetTableDescription().GetPartitioningSettings();
-            UNIT_ASSERT(partSettings.GetPartitioningBySize().Defined());
-            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningBySize().GetRef(), true);
-            UNIT_ASSERT(partSettings.GetPartitioningByLoad().Defined());
-            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningByLoad().GetRef(), false);
+            UNIT_ASSERT(partSettings.GetPartitioningBySize().has_value());
+            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningBySize().value(), true);
+            UNIT_ASSERT(partSettings.GetPartitioningByLoad().has_value());
+            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningByLoad().value(), false);
             UNIT_ASSERT_VALUES_EQUAL(partSettings.GetMinPartitionsCount(), 1);
             UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitionSizeMb(), 2048);
         }
@@ -976,10 +976,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             TDescribeTableResult describe = session.DescribeTable(tableName).GetValueSync();
             UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
             const auto& partSettings = describe.GetTableDescription().GetPartitioningSettings();
-            UNIT_ASSERT(partSettings.GetPartitioningBySize().Defined());
-            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningBySize().GetRef(), false);
-            UNIT_ASSERT(partSettings.GetPartitioningByLoad().Defined());
-            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningByLoad().GetRef(), false);
+            UNIT_ASSERT(partSettings.GetPartitioningBySize().has_value());
+            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningBySize().value(), false);
+            UNIT_ASSERT(partSettings.GetPartitioningByLoad().has_value());
+            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningByLoad().value(), false);
         }
     }
 
@@ -1698,13 +1698,13 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto parser = TValueParser(val);
             parser.OpenTuple();
             UNIT_ASSERT(parser.TryNextElement());
-            return parser.GetOptionalUint64().GetRef();
+            return parser.GetOptionalUint64().value();
         };
 
-        const TVector<TKeyRange>& keyRanges = describeResult.GetTableDescription().GetKeyRanges();
+        const std::vector<TKeyRange>& keyRanges = describeResult.GetTableDescription().GetKeyRanges();
 
         size_t n = 0;
-        const TVector<ui64> expectedRanges = { 10ul, 100ul, 1000ul, 10000ul };
+        const std::vector<ui64> expectedRanges = { 10ul, 100ul, 1000ul, 10000ul };
 
         for (const auto& range : keyRanges) {
             if (n == 0) {
@@ -1764,13 +1764,13 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto parser = TValueParser(val);
             parser.OpenTuple();
             UNIT_ASSERT(parser.TryNextElement());
-            return parser.GetOptionalInt64().GetRef();
+            return parser.GetOptionalInt64().value();
         };
 
-        const TVector<TKeyRange>& keyRanges = describeResult.GetTableDescription().GetKeyRanges();
+        const std::vector<TKeyRange>& keyRanges = describeResult.GetTableDescription().GetKeyRanges();
 
         size_t n = 0;
-        const TVector<i64> expectedRanges = { 0l, 10l, 10000l };
+        const std::vector<i64> expectedRanges = { 0l, 10l, 10000l };
 
         for (const auto& range : keyRanges) {
             if (n == 0) {
@@ -1819,16 +1819,16 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto parser = TValueParser(val);
             parser.OpenTuple();
             UNIT_ASSERT(parser.TryNextElement());
-            ui64 pk1 = parser.GetOptionalUint64().GetRef();
+            ui64 pk1 = parser.GetOptionalUint64().value();
             UNIT_ASSERT(parser.TryNextElement());
             auto pk2 = parser.GetOptionalString();
-            return std::pair<ui64, TMaybe<TString>>(pk1, pk2);
+            return std::pair<ui64, std::optional<std::string>>(pk1, pk2);
         };
 
-        const TVector<TKeyRange>& keyRanges = describeResult.GetTableDescription().GetKeyRanges();
+        const std::vector<TKeyRange>& keyRanges = describeResult.GetTableDescription().GetKeyRanges();
 
         size_t n = 0;
-        const TVector<std::pair<ui64, TString>> expectedRanges = {
+        const std::vector<std::pair<ui64, TString>> expectedRanges = {
             { 10ul, "" },
             { 100ul, "123" },
             { 1000ul, "cde" }
@@ -1843,8 +1843,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 const auto& [expectedPk1, expectedPk2] = expectedRanges[n - 1];
 
                 UNIT_ASSERT_VALUES_EQUAL(pk1, expectedPk1);
-                if (pk2.Defined()) {
-                    UNIT_ASSERT_VALUES_EQUAL(pk2.GetRef(), expectedPk2);
+                if (pk2.has_value()) {
+                    UNIT_ASSERT_VALUES_EQUAL(pk2.value(), expectedPk2);
                 } else {
                     UNIT_ASSERT_VALUES_EQUAL("", expectedPk2);
                 }
@@ -1857,8 +1857,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 const auto&[expectedPk1, expectedPk2] = expectedRanges[n];
 
                 UNIT_ASSERT_VALUES_EQUAL(pk1, expectedPk1);
-                if (pk2.Defined()) {
-                    UNIT_ASSERT_VALUES_EQUAL(pk2.GetRef(), expectedPk2);
+                if (pk2.has_value()) {
+                    UNIT_ASSERT_VALUES_EQUAL(pk2.value(), expectedPk2);
                 } else {
                     UNIT_ASSERT_VALUES_EQUAL("", expectedPk2);
                 }
@@ -2050,7 +2050,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         for (const auto& family : columnFamilies) {
             if (family.GetName() == "Family1") {
                 UNIT_ASSERT_VALUES_EQUAL(family.GetData(), "test");
-                UNIT_ASSERT_VALUES_EQUAL(family.GetCompression(), EColumnFamilyCompression::None);
+                UNIT_ASSERT_VALUES_EQUAL(family.GetCompression().value(), EColumnFamilyCompression::None);
             } else {
                 UNIT_ASSERT(family.GetName() == "default" || family.GetName() == "Family2");
             }
@@ -2177,11 +2177,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             for (const auto& family : columnFamilies) {
                 if (family.GetName() == "Family1") {
                     UNIT_ASSERT_VALUES_EQUAL(family.GetData(), "test");
-                    UNIT_ASSERT_VALUES_EQUAL(family.GetCompression(), EColumnFamilyCompression::None);
+                    UNIT_ASSERT_VALUES_EQUAL(family.GetCompression().value(), EColumnFamilyCompression::None);
                 } else {
                     UNIT_ASSERT(family.GetName() == "default");
                     UNIT_ASSERT_VALUES_EQUAL(family.GetData(), "test");
-                    UNIT_ASSERT_VALUES_EQUAL(family.GetCompression(), EColumnFamilyCompression::LZ4);
+                    UNIT_ASSERT_VALUES_EQUAL(family.GetCompression().value(), EColumnFamilyCompression::LZ4);
                 }
             }
         }
@@ -2209,14 +2209,14 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             for (const auto& family : columnFamilies) {
                 if (family.GetName() == "Family1") {
                     UNIT_ASSERT_VALUES_EQUAL(family.GetData(), "test");
-                    UNIT_ASSERT_VALUES_EQUAL(family.GetCompression(), EColumnFamilyCompression::LZ4);
+                    UNIT_ASSERT_VALUES_EQUAL(family.GetCompression().value(), EColumnFamilyCompression::LZ4);
                 } else if (family.GetName() == "Family2") {
                     UNIT_ASSERT_VALUES_EQUAL(family.GetData(), "test");
-                    UNIT_ASSERT_VALUES_EQUAL(family.GetCompression(), EColumnFamilyCompression::None);
+                    UNIT_ASSERT_VALUES_EQUAL(family.GetCompression().value(), EColumnFamilyCompression::None);
                 } else {
                     UNIT_ASSERT(family.GetName() == "default");
                     UNIT_ASSERT_VALUES_EQUAL(family.GetData(), "test");
-                    UNIT_ASSERT_VALUES_EQUAL(family.GetCompression(), EColumnFamilyCompression::LZ4);
+                    UNIT_ASSERT_VALUES_EQUAL(family.GetCompression().value(), EColumnFamilyCompression::LZ4);
                 }
             }
             const auto& columns = describeResult.GetTableDescription().GetColumns();
@@ -2249,7 +2249,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         auto describeResult = session.DescribeTable(tableName).GetValueSync();
         UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
-        UNIT_ASSERT(describeResult.GetTableDescription().GetStorageSettings().GetStoreExternalBlobs().GetOrElse(false));
+        UNIT_ASSERT(describeResult.GetTableDescription().GetStorageSettings().GetStoreExternalBlobs().value_or(false));
     }
 
     Y_UNIT_TEST(CreateAndAlterTableComplex) {
@@ -2408,7 +2408,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             TDescribeTableResult describe = session.DescribeTable(tableName).GetValueSync();
             UNIT_ASSERT_EQUAL_C(describe.GetStatus(), EStatus::SUCCESS, describe.GetIssues().ToString());
             auto tableDesc = describe.GetTableDescription();
-            TVector<TTableColumn> columns = tableDesc.GetTableColumns();
+            std::vector<TTableColumn> columns = tableDesc.GetTableColumns();
             UNIT_ASSERT_VALUES_EQUAL(columns.size(), 2);
             TType valueType = columns[1].Type;
             TTypeParser parser(valueType);
@@ -3113,7 +3113,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         TDescribeTableResult describe = session.DescribeTable(tableName).GetValueSync();
         UNIT_ASSERT_EQUAL_C(describe.GetStatus(), EStatus::SUCCESS, describe.GetIssues().ToString());
         auto tableDesc = describe.GetTableDescription();
-        TVector<TTableColumn> columns = tableDesc.GetTableColumns();
+        std::vector<TTableColumn> columns = tableDesc.GetTableColumns();
         UNIT_ASSERT_VALUES_EQUAL(columns.size(), 7);
 
         auto checkColumn = [&] (ui64 columnIdx, ui32 precision, ui32 scale) {
@@ -3926,7 +3926,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto describeResult = session.DescribeTable(tableName, NYdb::NTable::TDescribeTableSettings()).GetValueSync();
         UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
         const auto tableDesc = session.DescribeTable(tableName).GetValueSync().GetTableDescription();
-        TVector<TTableColumn> columns = tableDesc.GetTableColumns();
+        std::vector<TTableColumn> columns = tableDesc.GetTableColumns();
         UNIT_ASSERT_VALUES_EQUAL(columns.size(), 3);
         TTableColumn& familyColumn = columns[2];
         UNIT_ASSERT_EQUAL(familyColumn.Name, "FAMILY");
@@ -4583,7 +4583,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             const auto& changefeeds = result.GetTableDescription().GetChangefeedDescriptions();
             UNIT_ASSERT_VALUES_EQUAL(changefeeds.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(changefeeds.at(0), changefeed);
-            UNIT_ASSERT_VALUES_EQUAL(changefeeds.at(0).GetAttributes(), changefeed.GetAttributes());
+            UNIT_ASSERT(changefeeds.at(0).GetAttributes() == changefeed.GetAttributes());
         }
     }
 
@@ -5255,19 +5255,19 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             for (size_t i = 0; parser.TryNextRow(); ++i) {
                 {
                     auto& c = parser.ColumnParser("CUint8");
-                    UNIT_ASSERT_VALUES_EQUAL(i, *c.GetOptionalUint8().Get());
+                    UNIT_ASSERT_VALUES_EQUAL(i, c.GetOptionalUint8().value());
                 }
                 {
                     auto& c = parser.ColumnParser("CInt8");
-                    UNIT_ASSERT_VALUES_EQUAL(i, *c.GetOptionalInt8().Get());
+                    UNIT_ASSERT_VALUES_EQUAL(i, c.GetOptionalInt8().value());
                 }
                 {
                     auto& c = parser.ColumnParser("CUint16");
-                    UNIT_ASSERT_VALUES_EQUAL(i, *c.GetOptionalUint16().Get());
+                    UNIT_ASSERT_VALUES_EQUAL(i, c.GetOptionalUint16().value());
                 }
                 {
                     auto& c = parser.ColumnParser("CInt16");
-                    UNIT_ASSERT_VALUES_EQUAL(i, *c.GetOptionalInt16().Get());
+                    UNIT_ASSERT_VALUES_EQUAL(i, c.GetOptionalInt16().value());
                 }
             }
         }

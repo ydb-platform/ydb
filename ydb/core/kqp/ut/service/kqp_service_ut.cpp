@@ -120,7 +120,7 @@ Y_UNIT_TEST_SUITE(KqpService) {
             }
 
             auto session = sessions[id];
-            TMaybe<TTransaction> tx;
+            std::optional<TTransaction> tx;
 
             while (true) {
                 if (tx) {
@@ -199,7 +199,7 @@ Y_UNIT_TEST_SUITE(KqpService) {
         ui32 busyResultCount = 0;
         auto status = db.RetryOperation([&queriesCount, &busyResultCount](TSession session) {
             UNIT_ASSERT(queriesCount);
-            UNIT_ASSERT(session.GetId());
+            UNIT_ASSERT(!session.GetId().empty());
 
             auto futures = simulateSessionBusy(queriesCount, session);
 
@@ -230,7 +230,7 @@ Y_UNIT_TEST_SUITE(KqpService) {
         ui32 busyResultCount = 0;
         auto status = db.RetryOperationSync([&queriesCount, &busyResultCount](TSession session) {
             UNIT_ASSERT(queriesCount);
-            UNIT_ASSERT(session.GetId());
+            UNIT_ASSERT(!session.GetId().empty());
 
             auto futures = simulateSessionBusy(queriesCount, session);
 

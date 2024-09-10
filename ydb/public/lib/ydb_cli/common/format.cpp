@@ -422,7 +422,7 @@ TString ReplaceAll(TString str, const TString& from, const TString& to) {
 }
 
 TString FormatPrettyTableDouble(TString stringValue) {
-    std::strstream stream;
+    std::stringstream stream;
 
     double value = 0.0;
 

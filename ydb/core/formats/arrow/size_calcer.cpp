@@ -246,7 +246,7 @@ NKikimr::NArrow::TSerializedBatch TSerializedBatch::Build(std::shared_ptr<arrow:
     if (context.GetFieldsForSpecialKeys().size()) {
         specialKeys = TFirstLastSpecialKeys(batch, context.GetFieldsForSpecialKeys()).SerializeToString();
     }
-    return TSerializedBatch(NArrow::SerializeSchema(*batch->schema()), NArrow::SerializeBatchNoCompression(batch), batch->num_rows(), 
+    return TSerializedBatch(NArrow::SerializeSchema(*batch->schema()), NArrow::SerializeBatchNoCompression(batch), batch->num_rows(),
         NArrow::GetBatchDataSize(batch), specialKeys);
 }
 

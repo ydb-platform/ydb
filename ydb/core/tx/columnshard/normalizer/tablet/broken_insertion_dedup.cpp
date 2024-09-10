@@ -45,7 +45,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TInsertionsDedupNormalizer::DoIn
 
     for (auto&& i : inserted) {
         if (aborted.contains(i.first)) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "remove_aborted_record")("write_id", constructor.GetInsertWriteId());
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "remove_aborted_record")("write_id", i.first);
             i.second.Remove(db);
         }
     }

@@ -111,7 +111,6 @@ TMaybe<Ydb::StatusIds::StatusCode> GetYdbStatus(const TIssue& issue) {
         case TIssuesIds::KIKIMR_TRANSACTION_NOT_FOUND:
             return Ydb::StatusIds::NOT_FOUND;
 
-        case TIssuesIds::CORE_EXEC:
         case TIssuesIds::KIKIMR_BAD_REQUEST:
         case TIssuesIds::KIKIMR_BAD_COLUMN_TYPE:
         case TIssuesIds::KIKIMR_NO_COLUMN_DEFAULT_VALUE:

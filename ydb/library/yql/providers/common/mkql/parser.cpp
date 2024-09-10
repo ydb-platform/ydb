@@ -267,10 +267,10 @@ TRuntimeNode BuildParseCall(
                 return ctx.ProgramBuilder.Apply(
                     ctx.ProgramBuilder.Udf("Yson2.ConvertTo", {}, userType),
                     {dom});
-            } catch(const yexception& e) {
-                auto resException = TErrorException(UNEXPECTED_ERROR);
-                resException.Append(e.what());
-                throw resException;
+            } catch(const yexception& ex) {
+                auto errorEx = TErrorException(TIssuesIds::KIKIMR_BAD_REQUEST);
+                errorEx.Append(ex.what());
+                throw errorEx;
             }
         };
 

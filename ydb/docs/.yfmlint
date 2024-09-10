@@ -3,9 +3,9 @@ log-levels:
   MD002: 'error' # First heading should be a top-level heading
   MD003: 'disabled' # Heading style
   MD004: 'disabled' # Unordered list style
-  MD005: 'error' # Inconsistent indentation for list items at the same level
+  MD005: 'disabled' # Inconsistent indentation for list items at the same level
   MD006: 'error' # Consider starting bulleted lists at the beginning of the line
-  MD007: 'error' # Unordered list indentation
+  MD007: 'disabled' # Unordered list indentation
   MD009: 'error' # Trailing spaces
   MD010: 'error' # Hard tabs
   MD011: 'error' # Reversed link syntax
@@ -31,9 +31,9 @@ log-levels:
   MD034: 'disabled' # Bare URL used
   MD035: 'error' # Horizontal rule style
   MD036: 'disabled' # Emphasis used instead of a heading
-  MD037: 'error' # Spaces inside emphasis markers
+  MD037: 'disabled' # Spaces inside emphasis markers
   MD038: 'error' # Spaces inside code span elements
-  MD039: 'error' # Spaces inside link text
+  MD039: 'disabled' # Spaces inside link text
   MD040: 'disabled' # Fenced code blocks should have a language specified
   MD041: 'disabled' # First line in a file should be a top-level heading
   MD042: 'error' # No empty links

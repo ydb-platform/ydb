@@ -4173,19 +4173,19 @@ Yes|
 SELECT regr_slope(x,y) FROM (VALUES (1,2),(2,3),(3,1)) a(x,y) → -0.5
 ```||
 ||regr_sxx ( Y double precision, X double precision ) → double precision|
-Computes the “sum of squares” of the independent variable, sum(X^2) - sum(X)^2/N.|
+Computes the “sum of squares” of the independent variable, `sum(X^2) - sum(X)^2/N`.|
 Yes|
 ```sql
 SELECT regr_sxx(x,y) FROM (VALUES (1,2),(2,3),(3,1)) a(x,y) → 2
 ```||
 ||regr_sxy ( Y double precision, X double precision ) → double precision|
-Computes the “sum of products” of independent times dependent variables, sum(X*Y) - sum(X) * sum(Y)/N.|
+Computes the “sum of products” of independent times dependent variables, `sum(X*Y) - sum(X) * sum(Y)/N`.|
 Yes|
 ```sql
 SELECT regr_sxy(x,y) FROM (VALUES (1,2),(2,3),(3,1)) a(x,y) → -1
 ```||
 ||regr_syy ( Y double precision, X double precision ) → double precision|
-Computes the “sum of squares” of the dependent variable, sum(Y^2) - sum(Y)^2/N.|
+Computes the “sum of squares” of the dependent variable, `sum(Y^2) - sum(Y)^2/N`.|
 Yes|
 ```sql
 SELECT regr_syy(x,y) FROM (VALUES (1,2),(2,3),(3,1)) a(x,y) → 2

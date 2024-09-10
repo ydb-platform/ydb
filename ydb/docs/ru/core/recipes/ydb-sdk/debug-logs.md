@@ -345,6 +345,7 @@
 
   В YDB PHP SDK для логирования вам нужно использовать класс, который реализует `\Psr\Log\LoggerInterface`.
   В YDB-PHP-SDK встроены логгеры в пространстве имен `YdbPlatform\Ydb\Logger`:
+
   * `NullLogger` - по умолчанию, который ничего не выводит
   * `SimpleStdLogger($level)` - логгер, который выводит логи в stderr.
 

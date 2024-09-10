@@ -60,7 +60,7 @@ Ydb::ResultSet TKqpProtoBuilder::BuildYdbResultSet(
     for (ui32 idx = 0; idx < mkqlSrcRowStructType->GetMembersCount(); ++idx) {
         auto* column = resultSet.add_columns();
         ui32 memberIndex = (!columnOrder || columnOrder->empty()) ? idx : (*columnOrder)[idx];
-        column->set_name(TString(columnHints ? order.at(memberIndex).LogicalName : mkqlSrcRowStructType->GetMemberName(memberIndex)));
+        column->set_name(TString(columnHints ? order.at(idx).LogicalName : mkqlSrcRowStructType->GetMemberName(memberIndex)));
         ExportTypeToProto(mkqlSrcRowStructType->GetMemberType(memberIndex), *column->mutable_type());
     }
 

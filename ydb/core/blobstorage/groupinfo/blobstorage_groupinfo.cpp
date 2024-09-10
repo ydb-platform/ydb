@@ -821,8 +821,8 @@ TVDiskID TBlobStorageGroupInfo::GetVDiskInSubgroup(ui32 idxInSubgroup, ui32 hash
 }
 
 ui32 TBlobStorageGroupInfo::GetOrderNumber(const TVDiskID &vdisk) const {
-    Y_VERIFY_S(vdisk.GroupID == GroupID, "Expected GroupID# " << GroupID << ", given GroupID# " << vdisk.GroupID);
-    Y_VERIFY_S(vdisk.GroupGeneration == GroupGeneration, "Expected GroupGeneration# " << GroupGeneration
+    Y_VERIFY_DEBUG_S(vdisk.GroupID == GroupID, "Expected GroupID# " << GroupID << ", given GroupID# " << vdisk.GroupID);
+    Y_VERIFY_DEBUG_S(vdisk.GroupGeneration == GroupGeneration, "Expected GroupGeneration# " << GroupGeneration
             << ", given GroupGeneration# " << vdisk.GroupGeneration);
     return Topology->GetOrderNumber(vdisk);
 }

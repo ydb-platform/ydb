@@ -1,7 +1,5 @@
 #include "serializer.h"
 
-#include <ydb/library/yql/sql/settings/serializer/proto/translation_settings.pb.h>
-
 namespace NSQLTranslation {
 
 void TTranslationSettingsSerializer::Serialize(

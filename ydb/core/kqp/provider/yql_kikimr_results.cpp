@@ -27,7 +27,7 @@ bool ResultsOverflow(ui64 rows, ui64 bytes, const IDataProvider::TFillSettings& 
 }
 
 void WriteValueToYson(const TStringStream& stream, NResult::TYsonResultWriter& writer, const NKikimrMiniKQL::TType& type,
-    const NKikimrMiniKQL::TValue& value, const TVector<TString>* fieldsOrder,
+    const NKikimrMiniKQL::TValue& value, const TColumnOrder* fieldsOrder,
     const IDataProvider::TFillSettings& fillSettings, bool& truncated, bool firstLevel = false)
 {
     switch (type.GetKind()) {

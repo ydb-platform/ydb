@@ -260,15 +260,15 @@ TRestoreResult TRestoreClient::RestoreTable(const TFsPath& fsPath, const TString
     auto scheme = ReadTableScheme(fsPath.Child(SCHEME_FILE_NAME));
     auto dumpedDesc = TableDescriptionFromProto(scheme);
 
+    if (dumpedDesc.GetAttributes().contains(DOC_API_TABLE_VERSION_ATTR) && settings.SkipDocumentTables_) {
+        return Result<TRestoreResult>();
+    }
+
     if (settings.DryRun_) {
         return CheckSchema(dbPath, dumpedDesc);
     }
 
     auto withoutIndexesDesc = TableDescriptionWithoutIndexesFromProto(scheme);
-    if (withoutIndexesDesc.GetAttributes().contains(DOC_API_TABLE_VERSION_ATTR) && settings.SkipDocumentTables_) {
-        return Result<TRestoreResult>();
-    }
-
     auto createResult = TableClient.RetryOperationSync([&dbPath, &withoutIndexesDesc](TSession session) {
         return session.CreateTable(dbPath, TTableDescription(withoutIndexesDesc),
             TCreateTableSettings().RequestType(DOC_API_REQUEST_TYPE)).GetValueSync();

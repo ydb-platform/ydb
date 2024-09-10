@@ -1,6 +1,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb/public/lib/ydb_cli/common/format.h>
 
 #include <util/string/printf.h>
 
@@ -208,6 +209,10 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
             execRes.GetIssues().PrintTo(Cerr);
             UNIT_ASSERT_VALUES_EQUAL(execRes.GetStatus(), EStatus::SUCCESS);
             auto plan = CollectStreamResult(execRes).PlanJson;
+
+            NYdb::NConsoleClient::TQueryPlanPrinter queryPlanPrinter(NYdb::NConsoleClient::EDataFormat::PrettyTable, true, Cout, 0);
+            queryPlanPrinter.Print(plan.GetRef());
+
             Cerr << plan.GetRef();
             return plan.GetRef();
         }
@@ -398,9 +403,13 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
             const TString query = GetStatic(queryPath);
         
             auto result = session.ExplainDataQuery(query).ExtractValueSync();
+
             result.GetIssues().PrintTo(Cerr);
             Cerr << result.GetPlan() << Endl;
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            NYdb::NConsoleClient::TQueryPlanPrinter queryPlanPrinter(NYdb::NConsoleClient::EDataFormat::PrettyTable, true, Cout, 0);
+            queryPlanPrinter.Print(result.GetPlan());
             if (useStreamLookupJoin) {
                 return;
             }

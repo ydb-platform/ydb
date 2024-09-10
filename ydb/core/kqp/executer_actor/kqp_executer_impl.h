@@ -294,7 +294,7 @@ protected:
             batch.Payload = std::move(computeData.Payload);
 
             TKqpProtoBuilder protoBuilder{*AppData()->FunctionRegistry};
-            auto resultSet = protoBuilder.BuildYdbResultSet(std::move(batches), txResult.MkqlItemType, txResult.ColumnOrder);
+            auto resultSet = protoBuilder.BuildYdbResultSet(std::move(batches), txResult.MkqlItemType, txResult.ColumnOrder, txResult.ColumnHints);
 
             if (!trailingResults) {
                 auto streamEv = MakeHolder<TEvKqpExecuter::TEvStreamData>();
@@ -1838,7 +1838,7 @@ protected:
         IActor* proxy;
         if (txResult.IsStream && txResult.QueryResultIndex.Defined()) {
             proxy = CreateResultStreamChannelProxy(TxId, channel.Id, txResult.MkqlItemType,
-                txResult.ColumnOrder, *txResult.QueryResultIndex, Target, this->SelfId(), StatementResultIndex);
+                txResult.ColumnOrder, txResult.ColumnHints, *txResult.QueryResultIndex, Target, this->SelfId(), StatementResultIndex);
         } else {
             proxy = CreateResultDataChannelProxy(TxId, channel.Id, this->SelfId(),
                 channel.DstInputIndex, ResponseEv.get());

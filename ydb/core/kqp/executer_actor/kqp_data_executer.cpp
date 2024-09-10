@@ -508,6 +508,7 @@ private:
                 YQL_ENSURE(shardState->State == TShardState::EState::Preparing);
                 Counters->TxProxyMon->TxResultAborted->Inc();
                 LocksBroken = true;
+                ResponseEv->BrokenLockShardId = shardId;
 
                 if (!res->Record.GetTxLocks().empty()) {
                     ResponseEv->BrokenLockPathId = NYql::TKikimrPathId(

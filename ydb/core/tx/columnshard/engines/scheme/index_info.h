@@ -129,7 +129,6 @@ private:
     std::vector<ui32> PKColumnIds;
     std::vector<TNameTypeInfo> PKColumns;
 
-    THashMap<ui32, ui32> IdIntoIndex;
     std::vector<std::shared_ptr<TColumnFeatures>> ColumnFeatures;
     THashMap<ui32, NIndexes::TIndexMetaContainer> Indexes;
     TIndexInfo(const TString& name);
@@ -164,15 +163,12 @@ public:
     }
 
     const TColumnFeatures& GetColumnFeaturesVerified(const ui32 columnId) const {
-        auto it = IdIntoIndex.find(columnId);
-        AFL_VERIFY(it != IdIntoIndex.end());
-        return *ColumnFeatures[it->second];
+        return *ColumnFeatures[GetColumnIndexVerified(columnId)];
     }
 
     const std::shared_ptr<TColumnFeatures>& GetColumnFeaturesOptional(const ui32 columnId) const {
-        auto it = IdIntoIndex.find(columnId);
-        if (it != IdIntoIndex.end()) {
-            return ColumnFeatures[it->second];
+        if (auto idx = GetColumnIndexOptional(columnId)) {
+            return ColumnFeatures[*idx];
         } else {
             return Default<std::shared_ptr<TColumnFeatures>>();
         }
@@ -266,7 +262,7 @@ public:
         const std::shared_ptr<IStoragesManager>& operators, const std::shared_ptr<TSchemaObjectsCache>& cache);
 
     bool HasColumnId(const ui32 columnId) const {
-        return IdIntoIndex.contains(columnId);
+        return !!GetColumnIndexOptional(columnId);
     }
 
     bool HasColumnName(const std::string& columnName) const {

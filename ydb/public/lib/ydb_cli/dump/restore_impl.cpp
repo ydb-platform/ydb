@@ -52,36 +52,21 @@ Ydb::Scheme::ModifyPermissionsRequest ReadPermissions(const TString& fsPath) {
 }
 
 TStatus WaitForIndexBuild(TOperationClient& client, const TOperation::TOperationId& id) {
-    const ui32 maxRetries = 20;
     TDuration retrySleep = TDuration::MilliSeconds(100);
-
-    for (ui32 retryNumber = 0; retryNumber <= maxRetries; ++retryNumber) {
+    while (true) {
         auto operation = client.Get<TBuildIndexOperation>(id).GetValueSync();
         if (!operation.Status().IsTransportError()) {
-            switch (operation.Metadata().State) {
-                case EBuildIndexState::Done:
-                    return TStatus(EStatus::SUCCESS, {});
-                case EBuildIndexState::Rejected:
-                    return TStatus(
-                        EStatus::GENERIC_ERROR,
-                        { NYql::TIssue("Build index was rejected, operationId: " + ProtoToString(id)) }
-                    );
-                case EBuildIndexState::Cancelled:
-                    return TStatus(
-                        EStatus::GENERIC_ERROR,
-                        { NYql::TIssue("Build index was cancelled, operationId: " + ProtoToString(id)) }
-                    );
+            switch (operation.Status().GetStatus()) {
+                case EStatus::OVERLOADED:
+                case EStatus::UNAVAILABLE:
+                case EStatus::STATUS_UNDEFINED:
+                    break; // retry
                 default:
-                    break;
+                    return operation.Status();
             }         
         }
         NConsoleClient::ExponentialBackoff(retrySleep, TDuration::Minutes(1));
     }
-
-    return TStatus(
-        EStatus::GENERIC_ERROR,
-        { NYql::TIssue("The index takes too long to build, operationId: " + ProtoToString(id)) }
-    );
 }
 
 bool IsOperationStarted(TStatus operationStatus) {

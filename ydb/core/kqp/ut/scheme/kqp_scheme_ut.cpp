@@ -1,6 +1,7 @@
 #include <ydb/core/kqp/gateway/behaviour/resource_pool_classifier/fetcher.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/ut/common/columnshard.h>
+#include <ydb/core/kqp/workload_service/ut/common/kqp_workload_service_ut_common.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
@@ -6225,6 +6226,57 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             "Path does not exist");
     }
 
+    Y_UNIT_TEST(DisableResourcePoolsOnServerless) {
+        auto ydb = NWorkload::TYdbSetupSettings()
+            .CreateSampleTenants(true)
+            .EnableResourcePoolsOnServerless(false)
+            .Create();
+
+        auto checkDisabled = [](const auto& result) {
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Resource pools are disabled for serverless domains. Please contact your system administrator to enable it");
+        };
+
+        auto checkNotFound = [](const auto& result) {
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Path does not exist");
+        };
+
+        const auto& createSql = R"(
+            CREATE RESOURCE POOL MyResourcePool WITH (
+                CONCURRENT_QUERY_LIMIT=20,
+                QUEUE_SIZE=1000
+            );)";
+
+        const auto& alterSql = R"(
+            ALTER RESOURCE POOL MyResourcePool
+                SET (CONCURRENT_QUERY_LIMIT = 30, QUEUE_SIZE = 100),
+                RESET (QUERY_MEMORY_LIMIT_PERCENT_PER_NODE);
+            )";
+
+        const auto& dropSql = "DROP RESOURCE POOL MyResourcePool;";
+
+        auto settings = NWorkload::TQueryRunnerSettings().PoolId("");
+
+        // Dedicated, enabled
+        settings.Database(ydb->GetSettings().GetDedicatedTenantName()).NodeIndex(1);
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createSql, settings));
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(alterSql, settings));
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSql, settings));
+
+        // Shared, enabled
+        settings.Database(ydb->GetSettings().GetSharedTenantName()).NodeIndex(2);
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createSql, settings));
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(alterSql, settings));
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSql, settings));
+
+        // Serverless, disabled
+        settings.Database(ydb->GetSettings().GetServerlessTenantName()).NodeIndex(2);
+        checkDisabled(ydb->ExecuteQuery(createSql, settings));
+        checkNotFound(ydb->ExecuteQuery(alterSql, settings));
+        checkNotFound(ydb->ExecuteQuery(dropSql, settings));
+    }
+
     Y_UNIT_TEST(ResourcePoolsValidation) {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetEnableResourcePools(true);
@@ -6492,6 +6544,57 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         checkQuery("DROP RESOURCE POOL CLASSIFIER MyResourcePoolClassifier;",
             EStatus::GENERIC_ERROR,
             "Classifier with name MyResourcePoolClassifier not found in database /Root");
+    }
+
+    Y_UNIT_TEST(DisableResourcePoolClassifiersOnServerless) {
+        auto ydb = NWorkload::TYdbSetupSettings()
+            .CreateSampleTenants(true)
+            .EnableResourcePoolsOnServerless(false)
+            .Create();
+
+        auto checkDisabled = [](const auto& result) {
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Resource pool classifiers are disabled for serverless domains. Please contact your system administrator to enable it");
+        };
+
+        auto checkNotFound = [](const auto& result) {
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Classifier with name MyResourcePoolClassifier not found in database");
+        };
+
+        const auto& createSql = R"(
+            CREATE RESOURCE POOL CLASSIFIER MyResourcePoolClassifier WITH (
+                RANK=20,
+                RESOURCE_POOL="test_pool"
+            );)";
+
+        const auto& alterSql = R"(
+            ALTER RESOURCE POOL CLASSIFIER MyResourcePoolClassifier
+                SET (RANK = 1, MEMBERNAME = "test@user"),
+                RESET (RESOURCE_POOL);
+            )";
+
+        const auto& dropSql = "DROP RESOURCE POOL CLASSIFIER MyResourcePoolClassifier;";
+
+        auto settings = NWorkload::TQueryRunnerSettings().PoolId("");
+
+        // Dedicated, enabled
+        settings.Database(ydb->GetSettings().GetDedicatedTenantName()).NodeIndex(1);
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createSql, settings));
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(alterSql, settings));
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSql, settings));
+
+        // Shared, enabled
+        settings.Database(ydb->GetSettings().GetSharedTenantName()).NodeIndex(2);
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createSql, settings));
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(alterSql, settings));
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSql, settings));
+
+        // Serverless, disabled
+        settings.Database(ydb->GetSettings().GetServerlessTenantName()).NodeIndex(2);
+        checkDisabled(ydb->ExecuteQuery(createSql, settings));
+        checkDisabled(ydb->ExecuteQuery(alterSql, settings));
+        checkNotFound(ydb->ExecuteQuery(dropSql, settings));
     }
 
     Y_UNIT_TEST(ResourcePoolClassifiersValidation) {
@@ -6781,6 +6884,46 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Classifier with name MyResourcePoolClassifier not found in database /Root");
+    }
+
+    Y_UNIT_TEST(DisableMetadataObjectsOnServerless) {
+        auto ydb = NWorkload::TYdbSetupSettings()
+            .CreateSampleTenants(true)
+            .EnableMetadataObjectsOnServerless(false)
+            .Create();
+
+        auto checkDisabled = [](const auto& result) {
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Objects SECRET are disabled for serverless domains. Please contact your system administrator to enable it");
+        };
+
+        const auto& createSql = "CREATE OBJECT MySecretObject (TYPE SECRET) WITH (value=\"qwerty\");";
+        const auto& alterSql = "ALTER OBJECT MySecretObject (TYPE SECRET) SET value = \"abcde\";";
+        const auto& upsertSql = "UPSERT OBJECT MySecretObject (TYPE SECRET) WITH value = \"edcba\";";
+        const auto& dropSql = "DROP OBJECT MySecretObject (TYPE SECRET);";
+
+        auto settings = NWorkload::TQueryRunnerSettings().PoolId("");
+
+        // Dedicated, enabled
+        settings.Database(ydb->GetSettings().GetDedicatedTenantName()).NodeIndex(1);
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createSql, settings));
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(alterSql, settings));
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(upsertSql, settings));
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSql, settings));
+
+        // Shared, enabled
+        settings.Database(ydb->GetSettings().GetSharedTenantName()).NodeIndex(2);
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createSql, settings));
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(alterSql, settings));
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(upsertSql, settings));
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSql, settings));
+
+        // Serverless, disabled
+        settings.Database(ydb->GetSettings().GetServerlessTenantName()).NodeIndex(2);
+        checkDisabled(ydb->ExecuteQuery(createSql, settings));
+        checkDisabled(ydb->ExecuteQuery(alterSql, settings));
+        checkDisabled(ydb->ExecuteQuery(upsertSql, settings));
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSql, settings));
     }
 }
 

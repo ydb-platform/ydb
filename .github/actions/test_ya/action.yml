@@ -148,7 +148,7 @@ runs:
       shell: bash
       run: |
         set -x
-        echo "Artifacts will be uploaded [here](${PUBLIC_DIR_URL}/index.html)" | .github/scripts/tests/comment-pr.py
+        echo "Artifacts will be uploaded [here](${PUBLIC_DIR_URL}/index.html)" | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
 
         ORIGINAL_HEAD=$(git rev-parse HEAD)
         

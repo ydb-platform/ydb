@@ -24,12 +24,12 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TInsertionsDedupNormalizer::DoIn
             AFL_VERIFY(constructor.GetPlanStep());
         } else {
             AFL_VERIFY(!constructor.GetPlanStep());
-        }
-        if (constructor.GetRecType() != NColumnShard::Schema::EInsertTableIds::Committed && constructor.GetDedupId()) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "correct_record")("dedup", constructor.GetDedupId());
-            constructor.Remove(db);
-            constructor.SetDedupId("");
-            constructor.Upsert(db);
+            if (constructor.GetDedupId()) {
+                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "correct_record")("dedup", constructor.GetDedupId());
+                constructor.Remove(db);
+                constructor.SetDedupId("");
+                constructor.Upsert(db);
+            }
             if (constructor.GetRecType() == NColumnShard::Schema::EInsertTableIds::Aborted) {
                 aborted.emplace(constructor.GetInsertWriteId(), constructor);
             } else if (constructor.GetRecType() == NColumnShard::Schema::EInsertTableIds::Inserted) {

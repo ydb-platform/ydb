@@ -20,7 +20,6 @@
 * `JSON` — записывать данные в формате {% if oss == true and backend_name == "YDB" %}[JSON](../../../../concepts/cdc.md#json-record-structure){% else %}JSON{% endif %}.
 * `DYNAMODB_STREAMS_JSON` — записывать данные в {% if oss == true and backend_name == "YDB" %}[JSON-формате, совместимом с Amazon DynamoDB Streams](../../../../concepts/cdc.md#dynamodb-streams-json-record-structure){% else %}JSON-формате, совместимом с Amazon DynamoDB Streams{% endif %}.
 * `DEBEZIUM_JSON` — записывать данные в {% if oss == true and backend_name == "YDB" %}[JSON-формате, аналогичном Debezium формату](../../../../concepts/cdc.md#debezium-json-record-structure){% else %}JSON-формате, аналогичном Debezium формату{% endif %}.
-{% endif %}
 * `VIRTUAL_TIMESTAMPS` — включение-выключение {% if oss == true and backend_name == "YDB" %}[виртуальных меток времени](../../../../concepts/cdc.md#virtual-timestamps){% else %}виртуальных меток времени{% endif %}.
 * `RETENTION_PERIOD` — {% if oss == true and backend_name == "YDB" %}[время хранения записей](../../../../concepts/cdc.md#retention-period){% else %}время хранения записей{% endif %}. Тип значения — `Interval`, значение по умолчанию — 24 часа (`Interval('PT24H')`).
 * `TOPIC_MIN_ACTIVE_PARTITIONS` — {% if oss == true and backend_name == "YDB" %}[количество партиций топика](../../../../concepts/cdc.md#topic-partitions){% else %}количество партиций топика{% endif %}. По умолчанию количество партиций топика равно количеству партиций таблицы.

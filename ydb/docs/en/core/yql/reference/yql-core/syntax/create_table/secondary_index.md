@@ -13,6 +13,7 @@ CREATE TABLE table_name (
 ```
 
 Where:
+
 * **Index_name** is the unique name of the index to be used to access data.
 * **SYNC/ASYNC** indicates synchronous/asynchronous data writes to the index. If not specified, synchronous.
 * **Index_columns** is a list of comma-separated names of columns in the created table to be used for a search in the index.

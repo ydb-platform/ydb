@@ -24,42 +24,44 @@ CREATE TABLE table_name (
 * **cover_columns** — имена колонок создаваемой таблицы через запятую, которые будет сохранены в индексе дополнительно к колонкам поиска, давая возможность получить дополнительные данные без обращения за ними в таблицу.
 
 {% if backend_name == "YDB" %}
+
 ## Примеры создания таблиц со вторичным индексом {#secondary-index-tables-example}
 
 {% list tabs %}
 
 - Строковая таблица cо вторичным индексом
 
-```yql
-    CREATE TABLE my_table (
-        a Uint64,
-        b Uint64,
-        c Utf8,
-        d Date,
-        INDEX idx_d GLOBAL ON (d),
-        INDEX idx_ba GLOBAL ASYNC ON (b, a) COVER (c),
-        PRIMARY KEY (a)
-    )
-    ```
+  ```yql
+  CREATE TABLE my_table (
+      a Uint64,
+      b Uint64,
+      c Utf8,
+      d Date,
+      INDEX idx_d GLOBAL ON (d),
+      INDEX idx_ba GLOBAL ASYNC ON (b, a) COVER (c),
+      PRIMARY KEY (a)
+  )
+  ```
 
 - Колоночная таблица cо вторичным индексом
 
-```yql
-    CREATE TABLE my_table (
-    a Uint64 NOT NULL,
-    b Uint64,
-    c Utf8,
-    d Date,
-    INDEX idx_d GLOBAL ON (d),
-    INDEX idx_ba GLOBAL ASYNC ON (b, a) COVER (c),
-    PRIMARY KEY (a)
-    )
-    WITH (
-        STORE = COLUMN
-    );
-    ```
+  ```yql
+  CREATE TABLE my_table (
+      a Uint64 NOT NULL,
+      b Uint64,
+      c Utf8,
+      d Date,
+      INDEX idx_d GLOBAL ON (d),
+      INDEX idx_ba GLOBAL ASYNC ON (b, a) COVER (c),
+      PRIMARY KEY (a)
+  )
+  WITH (
+      STORE = COLUMN
+  );
+  ```
 
 {% endlist %}
+
 {% else %}
 
 ## Пример
@@ -75,4 +77,5 @@ CREATE TABLE my_table (
     PRIMARY KEY (a)
 )
 ```
+
 {% endif %}

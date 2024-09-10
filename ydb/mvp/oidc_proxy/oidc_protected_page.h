@@ -11,6 +11,8 @@
 namespace NMVP {
 namespace NOIDC {
 
+class TContextStorage;
+
 class THandlerSessionServiceCheck : public NActors::TActorBootstrapped<THandlerSessionServiceCheck> {
 protected:
     using TBase = NActors::TActorBootstrapped<THandlerSessionServiceCheck>;
@@ -21,7 +23,7 @@ protected:
     const TOpenIdConnectSettings Settings;
     TString ProtectedPageUrl;
     TString RequestedPageScheme;
-    // bool IsAjaxRequest = false;
+    TContextStorage* const ContextStorage;
 
     const static inline TStringBuf IAM_TOKEN_SCHEME = "Bearer ";
     const static inline TStringBuf IAM_TOKEN_SCHEME_LOWER = "bearer ";
@@ -31,7 +33,8 @@ public:
     THandlerSessionServiceCheck(const NActors::TActorId& sender,
                                 const NHttp::THttpIncomingRequestPtr& request,
                                 const NActors::TActorId& httpProxyId,
-                                const TOpenIdConnectSettings& settings);
+                                const TOpenIdConnectSettings& settings,
+                                TContextStorage* const contextStorage);
 
     virtual void Bootstrap(const NActors::TActorContext& ctx);
     void HandleProxy(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event, const NActors::TActorContext& ctx);

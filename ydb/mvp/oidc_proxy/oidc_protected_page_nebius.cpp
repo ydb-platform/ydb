@@ -14,8 +14,9 @@ namespace NOIDC {
 THandlerSessionServiceCheckNebius::THandlerSessionServiceCheckNebius(const NActors::TActorId& sender,
                                                                      const NHttp::THttpIncomingRequestPtr& request,
                                                                      const NActors::TActorId& httpProxyId,
-                                                                     const TOpenIdConnectSettings& settings)
-    : THandlerSessionServiceCheck(sender, request, httpProxyId, settings)
+                                                                     const TOpenIdConnectSettings& settings,
+                                                                     TContextStorage* const contextStorage)
+    : THandlerSessionServiceCheck(sender, request, httpProxyId, settings, contextStorage)
 {}
 
 void THandlerSessionServiceCheckNebius::StartOidcProcess(const NActors::TActorContext& ctx) {
@@ -100,8 +101,7 @@ void THandlerSessionServiceCheckNebius::ExchangeSessionToken(const TString sessi
 
 void THandlerSessionServiceCheckNebius::RequestAuthorizationCode(const NActors::TActorContext& ctx) {
     LOG_DEBUG_S(ctx, EService::MVP, "Request authorization code");
-    TContext context(Request);
-    NHttp::THttpOutgoingResponsePtr httpResponse = GetHttpOutgoingResponsePtr(Request, Settings, context);
+    NHttp::THttpOutgoingResponsePtr httpResponse = GetHttpOutgoingResponsePtr(Request, Settings, ContextStorage);
     ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse));
     Die(ctx);
 }

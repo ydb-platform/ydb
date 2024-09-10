@@ -8,8 +8,9 @@ namespace NOIDC {
 THandlerSessionCreateNebius::THandlerSessionCreateNebius(const NActors::TActorId& sender,
                                                          const NHttp::THttpIncomingRequestPtr& request,
                                                          const NActors::TActorId& httpProxyId,
-                                                         const TOpenIdConnectSettings& settings)
-    : THandlerSessionCreate(sender, request, httpProxyId, settings)
+                                                         const TOpenIdConnectSettings& settings,
+                                                         TContextStorage* const contextStorage)
+    : THandlerSessionCreate(sender, request, httpProxyId, settings, contextStorage)
 {}
 
 void THandlerSessionCreateNebius::RequestSessionToken(const TString& code, const NActors::TActorContext& ctx) {
@@ -35,7 +36,7 @@ void THandlerSessionCreateNebius::RequestSessionToken(const TString& code, const
 void THandlerSessionCreateNebius::ProcessSessionToken(const TString& sessionToken, const NActors::TActorContext& ctx) {
     NHttp::THeadersBuilder responseHeaders;
     responseHeaders.Set("Set-Cookie", CreateSecureCookie(Settings.ClientId, sessionToken));
-    responseHeaders.Set("Location", Context.GetRequestedAddress());
+    responseHeaders.Set("Location", RestoredContext.GetRequestedAddress());
     NHttp::THttpOutgoingResponsePtr httpResponse;
     httpResponse = Request->CreateResponse("302", "Cookie set", responseHeaders);
     ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse));

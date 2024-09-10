@@ -2,6 +2,7 @@
 
 #include <util/generic/string.h>
 #include <util/generic/ptr.h>
+#include <util/datetime/base.h>
 
 namespace NHttp {
 
@@ -14,6 +15,9 @@ namespace NMVP {
 namespace NOIDC {
 
 class TContext {
+public:
+    static const TDuration STATE_LIFE_TIME;
+
 private:
     TString State;
     bool IsAjaxRequest = false;
@@ -35,6 +39,18 @@ private:
     static TStringBuf GetRequestedUrl(const NHttp::THttpIncomingRequestPtr& request, bool isAjaxRequest);
 
     TString GenerateCookie(const TString& secret) const;
+};
+
+class TContextRecord {
+private:
+    TContext Context;
+    TInstant ExpirationTime;
+
+public:
+    TContextRecord(const TContext& context);
+
+    TContext GetContext() const;
+    TInstant GetExpirationTime() const;
 };
 
 } // NOIDC

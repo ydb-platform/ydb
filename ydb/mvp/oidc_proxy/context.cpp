@@ -1,6 +1,7 @@
 #include <util/generic/string.h>
 #include <util/random/random.h>
 #include <util/string/builder.h>
+#include <util/datetime/base.h>
 #include <library/cpp/string_utils/base64/base64.h>
 #include <ydb/library/actors/http/http.h>
 #include "openid_connect.h"
@@ -8,6 +9,8 @@
 
 namespace NMVP {
 namespace NOIDC {
+
+const TDuration TContext::STATE_LIFE_TIME = TDuration::Minutes(10);
 
 TContext::TContext(const TString& state, const TString& requestedAddress, bool isAjaxRequest)
     : State(state)
@@ -43,8 +46,7 @@ TString TContext::CreateYdbOidcCookie(const TString& secret) const {
 }
 
 TString TContext::GenerateCookie(const TString& secret) const {
-    const TDuration StateLifeTime = TDuration::Minutes(10);
-    TInstant expirationTime = TInstant::Now() + StateLifeTime;
+    TInstant expirationTime = TInstant::Now() + STATE_LIFE_TIME;
     TStringBuilder stateStruct;
     stateStruct << "{\"state\":\"" << State
                 << "\",\"requested_address\":\"" << RequestedAddress
@@ -85,6 +87,19 @@ TStringBuf TContext::GetRequestedUrl(const NHttp::THttpIncomingRequestPtr& reque
         return request->URL;
     }
     return requestedUrl;
+}
+
+TContextRecord::TContextRecord(const TContext& context)
+    : Context(context)
+    , ExpirationTime(TInstant::Now() + TContext::STATE_LIFE_TIME)
+{}
+
+TContext TContextRecord::GetContext() const {
+    return Context;
+}
+
+TInstant TContextRecord::GetExpirationTime() const {
+    return ExpirationTime;
 }
 
 } // NOIDC

@@ -7,6 +7,7 @@ LIBRARY()
 SRCS(
     mvp.cpp
     context.cpp
+    context_storage.cpp
     oidc_client.cpp
     openid_connect.cpp
     oidc_settings.cpp

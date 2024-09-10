@@ -11,12 +11,14 @@ namespace NOIDC {
 THandlerSessionServiceCheck::THandlerSessionServiceCheck(const NActors::TActorId& sender,
                                                          const NHttp::THttpIncomingRequestPtr& request,
                                                          const NActors::TActorId& httpProxyId,
-                                                         const TOpenIdConnectSettings& settings)
+                                                         const TOpenIdConnectSettings& settings,
+                                                         TContextStorage* const contextStorage)
     : Sender(sender)
     , Request(request)
     , HttpProxyId(httpProxyId)
     , Settings(settings)
     , ProtectedPageUrl(Request->URL.SubStr(1))
+    , ContextStorage(contextStorage)
 {}
 
 void THandlerSessionServiceCheck::Bootstrap(const NActors::TActorContext& ctx) {

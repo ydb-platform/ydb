@@ -11,6 +11,7 @@
 #include <util/system/rwlock.h>
 #include <contrib/libs/yaml-cpp/include/yaml-cpp/yaml.h>
 #include "oidc_settings.h"
+#include "context_storage.h"
 
 namespace NMVP {
 namespace NOIDC {
@@ -56,6 +57,7 @@ protected:
     NActors::TActorId HandlerId;
 
     TString YdbUserToken;
+    TContextStorage ContextStorage;
     static NMvp::TTokensConfig TokensConfig;
     static TOpenIdConnectSettings OpenIdConnectSettings;
 

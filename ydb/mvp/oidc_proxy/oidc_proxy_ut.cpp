@@ -11,6 +11,7 @@
 #include "oidc_settings.h"
 #include "openid_connect.h"
 #include "context.h"
+#include "context_storage.h"
 
 using namespace NMVP::NOIDC;
 
@@ -41,8 +42,10 @@ Y_UNIT_TEST_SUITE(Mvp) {
             .AccessServiceType = profile
         };
 
+        TContextStorage contextStorage;
+
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
-        const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings));
+        const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings, &contextStorage));
 
         const TString iamToken {"protected_page_iam_token"};
         NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
@@ -87,8 +90,10 @@ Y_UNIT_TEST_SUITE(Mvp) {
             .AccessServiceType = profile
         };
 
+        TContextStorage contextStorage;
+
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
-        const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings));
+        const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings, &contextStorage));
 
         NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
         EatWholeString(incomingRequest, "OPTIONS /" + allowedProxyHost + "/counters HTTP/1.1\r\n"
@@ -140,8 +145,10 @@ Y_UNIT_TEST_SUITE(Mvp) {
             .AccessServiceType = profile
         };
 
+        TContextStorage contextStorage;
+
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
-        const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings));
+        const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings, &contextStorage));
 
         TSessionServiceMock sessionServiceMock;
         sessionServiceMock.AllowedCookies.second = "allowed_session_cookie";
@@ -191,8 +198,10 @@ Y_UNIT_TEST_SUITE(Mvp) {
             .AccessServiceType = NMvp::yandex_v2
         };
 
+        TContextStorage contextStorage;
+
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
-        const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings));
+        const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings, &contextStorage));
 
         TSessionServiceMock sessionServiceMock;
         sessionServiceMock.AllowedCookies.second = "allowed_session_cookie";
@@ -271,8 +280,10 @@ Y_UNIT_TEST_SUITE(Mvp) {
             .AccessServiceType = NMvp::yandex_v2
         };
 
+        TContextStorage contextStorage;
+
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
-        const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings));
+        const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings, &contextStorage));
 
         TSessionServiceMock sessionServiceMock;
         sessionServiceMock.AllowedCookies.second = "allowed_session_cookie";
@@ -382,8 +393,10 @@ Y_UNIT_TEST_SUITE(Mvp) {
             .AccessServiceType = NMvp::nebius_v1
         };
 
+        TContextStorage contextStorage;
+
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
-        const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings));
+        const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings, &contextStorage));
 
         TSessionServiceMock sessionServiceMock;
         sessionServiceMock.AllowedCookies.second = "allowed_session_cookie";
@@ -442,8 +455,10 @@ Y_UNIT_TEST_SUITE(Mvp) {
             .AllowedProxyHosts = {allowedProxyHost}
         };
 
+        TContextStorage contextStorage;
+
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
-        const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings));
+        const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings, &contextStorage));
 
         TSessionServiceMock sessionServiceMock;
         sessionServiceMock.IsTokenAllowed = false;
@@ -587,8 +602,10 @@ Y_UNIT_TEST_SUITE(Mvp) {
             .AllowedProxyHosts = {allowedProxyHost}
         };
 
+        TContextStorage contextStorage;
+
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
-        const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings));
+        const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings, &contextStorage));
 
         TSessionServiceMock sessionServiceMock;
         sessionServiceMock.AllowedCookies.second = "allowed_session_cookie";
@@ -628,7 +645,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         UNIT_ASSERT_STRING_CONTAINS(setCookie, CreateNameYdbOidcCookie(settings.ClientSecret, state));
         redirectStrategy.CheckSpecificHeaders(headers);
 
-        const NActors::TActorId sessionCreator = runtime.Register(new TSessionCreateHandler(edge, settings));
+        const NActors::TActorId sessionCreator = runtime.Register(new TSessionCreateHandler(edge, settings, &contextStorage));
         incomingRequest = new NHttp::THttpIncomingRequest();
         TStringBuilder request;
         request << "GET /auth/callback?code=code_template&state=" << state << " HTTP/1.1\r\n";
@@ -705,6 +722,8 @@ Y_UNIT_TEST_SUITE(Mvp) {
             .ClientSecret = "0123456789abcdef"
         };
 
+        TContextStorage contextStorage;
+
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
 
         TSessionServiceMock sessionServiceMock;
@@ -713,7 +732,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         builder.AddListeningPort(settings.SessionServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&sessionServiceMock);
         std::unique_ptr<grpc::Server> sessionServer(builder.BuildAndStart());
 
-        const NActors::TActorId sessionCreator = runtime.Register(new TSessionCreateHandler(edge, settings));
+        const NActors::TActorId sessionCreator = runtime.Register(new TSessionCreateHandler(edge, settings, &contextStorage));
         const TString state = "test_state";
         const TString wrongState = "wrong_state";
         const TString hostProxy = "oidcproxy.net";
@@ -756,8 +775,10 @@ Y_UNIT_TEST_SUITE(Mvp) {
             .ClientSecret = "123456789abcdef"
         };
 
+        TContextStorage contextStorage;
+
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
-        const NActors::TActorId sessionCreator = runtime.Register(new TSessionCreateHandler(edge, settings));
+        const NActors::TActorId sessionCreator = runtime.Register(new TSessionCreateHandler(edge, settings, &contextStorage));
 
         TSessionServiceMock sessionServiceMock;
         sessionServiceMock.IsTokenAllowed = false;
@@ -806,6 +827,8 @@ Y_UNIT_TEST_SUITE(Mvp) {
             .ClientSecret = "123456789abcdef"
         };
 
+        TContextStorage contextStorage;
+
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
 
         TSessionServiceMock sessionServiceMock;
@@ -814,7 +837,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         builder.AddListeningPort(settings.SessionServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&sessionServiceMock);
         std::unique_ptr<grpc::Server> sessionServer(builder.BuildAndStart());
 
-        const NActors::TActorId sessionCreator = runtime.Register(new TSessionCreateHandler(edge, settings));
+        const NActors::TActorId sessionCreator = runtime.Register(new TSessionCreateHandler(edge, settings, &contextStorage));
         const TString state = "test_state";
         TStringBuilder request;
         request << "GET /auth/callback?code=code_template&state=" << state << " HTTP/1.1\r\n";
@@ -869,8 +892,10 @@ Y_UNIT_TEST_SUITE(Mvp) {
             .ClientSecret = "123456789abcdef"
         };
 
+        TContextStorage contextStorage;
+
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
-        const NActors::TActorId sessionCreator = runtime.Register(new TSessionCreateHandler(edge, settings));
+        const NActors::TActorId sessionCreator = runtime.Register(new TSessionCreateHandler(edge, settings, &contextStorage));
 
         TSessionServiceMock sessionServiceMock;
         sessionServiceMock.IsOpenIdScopeMissed = true;
@@ -918,6 +943,8 @@ Y_UNIT_TEST_SUITE(Mvp) {
             .ClientSecret = "123456789abcdef"
         };
 
+        TContextStorage contextStorage;
+
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
 
         TSessionServiceMock sessionServiceMock;
@@ -926,7 +953,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         builder.AddListeningPort(settings.SessionServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&sessionServiceMock);
         std::unique_ptr<grpc::Server> sessionServer(builder.BuildAndStart());
 
-        const NActors::TActorId sessionCreator = runtime.Register(new TSessionCreateHandler(edge, settings));
+        const NActors::TActorId sessionCreator = runtime.Register(new TSessionCreateHandler(edge, settings, &contextStorage));
         TString firstRequestState = "first_request_state";
         TString secondRequestState = "second_request_state";
         TContext context1(firstRequestState, "/requested/page", redirectStrategy.IsAjaxRequest());
@@ -984,8 +1011,10 @@ Y_UNIT_TEST_SUITE(Mvp) {
             }
         };
 
+        TContextStorage contextStorage;
+
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
-        const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings));
+        const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings, &contextStorage));
 
         TSessionServiceMock sessionServiceMock;
         sessionServiceMock.AllowedCookies.second = "allowed_session_cookie";
@@ -1040,8 +1069,10 @@ Y_UNIT_TEST_SUITE(Mvp) {
             .AllowedProxyHosts = {allowedProxyHost},
         };
 
+        TContextStorage contextStorage;
+
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
-        const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings));
+        const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings, &contextStorage));
 
         const TString iamToken {"protected_page_iam_token"};
         NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();

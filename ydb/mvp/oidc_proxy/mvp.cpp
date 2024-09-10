@@ -104,7 +104,7 @@ int TMVP::Init() {
         ActorSystem.Send(HttpProxyId, ev);
     }
 
-    InitOIDC(ActorSystem, BaseHttpProxyId, OpenIdConnectSettings);
+    InitOIDC(ActorSystem, BaseHttpProxyId, OpenIdConnectSettings, &ContextStorage);
 
     ActorSystem.Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
                          "/ping",

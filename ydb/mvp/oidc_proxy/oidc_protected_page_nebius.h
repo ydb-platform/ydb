@@ -5,6 +5,8 @@
 namespace NMVP {
 namespace NOIDC {
 
+class TContextStorage;
+
 class THandlerSessionServiceCheckNebius : public THandlerSessionServiceCheck {
 private:
     using TBase = THandlerSessionServiceCheck;
@@ -13,7 +15,8 @@ public:
     THandlerSessionServiceCheckNebius(const NActors::TActorId& sender,
                                       const NHttp::THttpIncomingRequestPtr& request,
                                       const NActors::TActorId& httpProxyId,
-                                      const TOpenIdConnectSettings& settings);
+                                      const TOpenIdConnectSettings& settings,
+                                      TContextStorage* const contextStorage);
 
     void StartOidcProcess(const NActors::TActorContext& ctx) override;
     void HandleExchange(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event, const NActors::TActorContext& ctx);

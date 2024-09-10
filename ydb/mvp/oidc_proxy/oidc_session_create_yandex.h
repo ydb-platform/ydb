@@ -6,6 +6,8 @@
 namespace NMVP {
 namespace NOIDC {
 
+class TContextStorage;
+
 class THandlerSessionCreateYandex : public THandlerSessionCreate {
 private:
     using TBase = THandlerSessionCreate;
@@ -15,7 +17,8 @@ public:
     THandlerSessionCreateYandex(const NActors::TActorId& sender,
                                 const NHttp::THttpIncomingRequestPtr& request,
                                 const NActors::TActorId& httpProxyId,
-                                const TOpenIdConnectSettings& settings);
+                                const TOpenIdConnectSettings& settings,
+                                TContextStorage* const contextStorage);
 
     void RequestSessionToken(const TString& code, const NActors::TActorContext& ctx) override;
     void ProcessSessionToken(const TString& sessionToken, const NActors::TActorContext& ctx) override;

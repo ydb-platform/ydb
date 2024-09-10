@@ -5,6 +5,8 @@
 #include "openid_connect.h"
 #include "oidc_session_create.h"
 #include "oidc_settings.h"
+#include "context.h"
+#include "context_storage.h"
 
 namespace NMVP {
 namespace NOIDC {
@@ -12,15 +14,21 @@ namespace NOIDC {
 THandlerSessionCreate::THandlerSessionCreate(const NActors::TActorId& sender,
                                              const NHttp::THttpIncomingRequestPtr& request,
                                              const NActors::TActorId& httpProxyId,
-                                             const TOpenIdConnectSettings& settings)
+                                             const TOpenIdConnectSettings& settings,
+                                             TContextStorage* const contextStorage)
     : Sender(sender)
     , Request(request)
     , HttpProxyId(httpProxyId)
     , Settings(settings)
+    , ContextStorage(contextStorage)
 {}
 
 void THandlerSessionCreate::Bootstrap(const NActors::TActorContext& ctx) {
-    TryRestoreOidcSessionFromCookie(ctx);
+    if (Settings.StoreContextOnHost) {
+        TryRestoreContextFromHostStorage(ctx);
+    } else {
+        TryRestoreContextFromCookie(ctx);
+    }
 }
 
 void THandlerSessionCreate::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event, const NActors::TActorContext& ctx) {
@@ -81,11 +89,11 @@ void THandlerSessionCreate::RetryRequestToProtectedResource(const NActors::TActo
 
 void THandlerSessionCreate::RetryRequestToProtectedResource(NHttp::THeadersBuilder* responseHeaders, const NActors::TActorContext& ctx, const TString& responseMessage) const {
     SetCORS(Request, responseHeaders);
-    responseHeaders->Set("Location", Context.GetRequestedAddress());
+    responseHeaders->Set("Location", RestoredContext.GetRequestedAddress());
     ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(Request->CreateResponse("302", responseMessage, *responseHeaders)));
 }
 
-void THandlerSessionCreate::TryRestoreOidcSessionFromCookie(const NActors::TActorContext& ctx) {
+void THandlerSessionCreate::TryRestoreContextFromCookie(const NActors::TActorContext& ctx) {
     NHttp::TUrlParameters urlParameters(Request->URL);
     TString code = urlParameters["code"];
     TString state = urlParameters["state"];
@@ -93,9 +101,9 @@ void THandlerSessionCreate::TryRestoreOidcSessionFromCookie(const NActors::TActo
     NHttp::THeaders headers(Request->Headers);
     NHttp::TCookies cookies(headers.Get("cookie"));
     TRestoreOidcContextResult restoreSessionResult = RestoreSessionStoredOnClientSide(state, cookies, Settings.ClientSecret);
-    Context = restoreSessionResult.Context;
+    RestoredContext = restoreSessionResult.Context;
     if (restoreSessionResult.IsSuccess()) {
-        if (code.Empty()) {
+        if (code.empty()) {
             LOG_DEBUG_S(ctx, NMVP::EService::MVP, "Restore oidc session failed: receive empty 'code' parameter");
             RetryRequestToProtectedResource(ctx, "Empty code");
             Die(ctx);
@@ -115,6 +123,30 @@ void THandlerSessionCreate::TryRestoreOidcSessionFromCookie(const NActors::TActo
             ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(Request->CreateResponse("400", "Bad Request", responseHeaders, BAD_REQUEST_HTML_PAGE)));
         }
         Die(ctx);
+    }
+}
+
+void THandlerSessionCreate::TryRestoreContextFromHostStorage(const NActors::TActorContext& ctx) {
+    NHttp::TUrlParameters urlParameters(Request->URL);
+    TString code = urlParameters["code"];
+    TString state = urlParameters["state"];
+
+    std::pair<bool, TContextRecord> restoreContextResult = ContextStorage->Find(state);
+    if (restoreContextResult.first) {
+        RestoredContext = restoreContextResult.second.GetContext();
+        if (code.empty()) {
+            LOG_DEBUG_S(ctx, NMVP::EService::MVP, "Restore context from host failed: Receive empty 'code' parameter");
+            RetryRequestToProtectedResource(ctx, "Empty code");
+            Die(ctx);
+        } else if (TInstant::Now() > restoreContextResult.second.GetExpirationTime()) {
+            LOG_DEBUG_S(ctx, NMVP::EService::MVP, "Restore context from host failed: State life time expired");
+            RetryRequestToProtectedResource(ctx, "Found");
+            Die(ctx);
+        } else {
+            RequestSessionToken(code, ctx);
+        }
+    } else {
+        // Try to find context on other host
     }
 }
 

@@ -11,8 +11,9 @@ namespace NOIDC {
 THandlerSessionCreateYandex::THandlerSessionCreateYandex(const NActors::TActorId& sender,
                                                          const NHttp::THttpIncomingRequestPtr& request,
                                                          const NActors::TActorId& httpProxyId,
-                                                         const TOpenIdConnectSettings& settings)
-    : THandlerSessionCreate(sender, request, httpProxyId, settings)
+                                                         const TOpenIdConnectSettings& settings,
+                                                         TContextStorage* const contextStorage)
+    : THandlerSessionCreate(sender, request, httpProxyId, settings, contextStorage)
 {}
 
 void THandlerSessionCreateYandex::RequestSessionToken(const TString& code, const NActors::TActorContext& ctx) {

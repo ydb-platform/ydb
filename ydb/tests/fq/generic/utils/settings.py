@@ -92,7 +92,7 @@ class Settings:
             )
 
         if 'clickhouse' in docker_compose_yml_data['services']:
-            s.clickhouse=cls.ClickHouse(
+            s.clickhouse = cls.ClickHouse(
                 dbname='db',
                 username='user',
                 password='password',
@@ -100,20 +100,20 @@ class Settings:
             )
 
         if 'greenplum' in docker_compose_yml_data['services']:
-            s.greenplum=cls.Greenplum(
+            s.greenplum = cls.Greenplum(
                 dbname='template1',
                 username='gpadmin',
                 password='123456',
             )
 
         if 'postgresql' in docker_compose_yml_data['services']:
-            s.postgresql=cls.PostgreSQL(
+            s.postgresql = cls.PostgreSQL(
                 dbname='db',
                 username='user',
                 password='password',
             )
 
         if 'ydb' in docker_compose_yml_data['services']:
-            ydb=cls.Ydb(dbname='local', username='user', password='password')
+            ydb = cls.Ydb(dbname='local', username='user', password='password')
 
         return s

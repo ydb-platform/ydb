@@ -76,9 +76,9 @@ class Settings:
                 grpc_host='localhost',
                 grpc_port=endpoint_determiner.get_port('fq-connector-go', 2130),
             ),
-            #mdb_mock=cls.MdbMock(
+            # mdb_mock=cls.MdbMock(
             #    endpoint=environ['MDB_MOCK_ENDPOINT'],
-            #),
+            # ),
             token_accessor_mock=cls.TokenAccessorMock(
                 endpoint=environ['TOKEN_ACCESSOR_MOCK_ENDPOINT'],
                 hmac_secret_file=environ['TOKEN_ACCESSOR_HMAC_SECRET_FILE'],

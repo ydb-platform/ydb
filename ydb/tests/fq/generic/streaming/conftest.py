@@ -19,11 +19,7 @@ def settings() -> Settings:
 
 @pytest.fixture
 def mvp_external_ydb_endpoint(request) -> str:
-    return (
-        request.param["endpoint"]
-        if request is not None and hasattr(request, "param")
-        else None
-    )
+    return request.param["endpoint"] if request is not None and hasattr(request, "param") else None
 
 
 @pytest.fixture
@@ -34,9 +30,7 @@ def kikimr(
     mvp_external_ydb_endpoint: str,
 ):
     kikimr_extensions = [
-        ConnectorExtension(
-            settings.connector.grpc_host, settings.connector.grpc_port, False
-        ),
+        ConnectorExtension(settings.connector.grpc_host, settings.connector.grpc_port, False),
         TokenAccessorExtension(
             settings.token_accessor_mock.endpoint,
             settings.token_accessor_mock.hmac_secret_file,

@@ -166,6 +166,8 @@ Y_UNIT_TEST_SUITE(TS3FIFOCache) {
         auto evicted = cache.Touch(&page);
         TVector<ui32> result;
         for (auto& p : evicted) {
+            UNIT_ASSERT_VALUES_EQUAL(p.CacheFlags1, 0);
+            UNIT_ASSERT_VALUES_EQUAL(p.CacheFlags2, 0);
             result.push_back(p.Id);
         }
         return result;
@@ -174,6 +176,8 @@ Y_UNIT_TEST_SUITE(TS3FIFOCache) {
     std::optional<ui32> EvictNext(auto& cache) {
         auto evicted = cache.EvictNext();
         if (evicted) {
+            UNIT_ASSERT_VALUES_EQUAL(evicted->CacheFlags1, 0);
+            UNIT_ASSERT_VALUES_EQUAL(evicted->CacheFlags2, 0);
             return evicted->Id;
         }
         return {};

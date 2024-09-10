@@ -104,7 +104,7 @@ private:
             if (ghost->Size) { // isn't deleted
                 Y_ABORT_UNLESS(Size >= ghost->Size);
                 Size -= ghost->Size;
-                Y_DEBUG_ABORT_UNLESS(GhostsSet.erase(ghost));
+                Y_ABORT_UNLESS(GhostsSet.erase(ghost));
             }
             GhostsQueue.pop_front();
         }
@@ -245,9 +245,10 @@ private:
         while (true) {
             if (!SmallQueue.Queue.Empty() && SmallQueue.Size > Limit.SmallQueueLimit) {
                 TPage* page = Pop(SmallQueue);
-                if (GetFrequency(page) > 1) { // load inserts, first read touches, second read touches
+                if (ui32 frequency = GetFrequency(page); frequency > 1) { // load inserts, first read touches, second read touches
                     Push(MainQueue, page);
                 } else {
+                    if (frequency) SetFrequency(page, 0);
                     AddGhost(page);
                     return page;
                 }
@@ -293,7 +294,7 @@ private:
     TPage* Pop(TQueue& queue) {
         Y_DEBUG_ABORT_UNLESS(!queue.Queue.Empty());
         Y_ABORT_UNLESS(GetLocation(queue.Queue.Front()) == queue.Location);
-        Y_DEBUG_ABORT_UNLESS(queue.Size >= GetSize(queue.Queue.Front()));
+        Y_ABORT_UNLESS(queue.Size >= GetSize(queue.Queue.Front()));
 
         TPage* page = queue.Queue.PopFront();
         queue.Size -= GetSize(page);
@@ -312,7 +313,7 @@ private:
 
     void Erase(TQueue& queue, TPage* page) {
         Y_ABORT_UNLESS(GetLocation(page) == queue.Location);
-        Y_DEBUG_ABORT_UNLESS(queue.Size >= GetSize(page));
+        Y_ABORT_UNLESS(queue.Size >= GetSize(page));
 
         page->Unlink();
         queue.Size -= GetSize(page);

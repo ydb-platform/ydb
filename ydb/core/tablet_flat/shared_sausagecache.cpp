@@ -127,8 +127,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         }
 
         void EnsureNoCacheFlags() {
-            Y_VERIFY_S(CacheFlags1 == 0, "Unexpected " << CacheFlags1 << " page cache flags 1");
-            Y_VERIFY_S(CacheFlags2 == 0, "Unexpected " << CacheFlags2 << " page cache flags 2");
+            Y_VERIFY_S(CacheFlags1 == 0, "Unexpected page " << CacheFlags1 << " cache flags 1");
+            Y_VERIFY_S(CacheFlags2 == 0, "Unexpected page " << CacheFlags2 << " cache flags 2");
         }
 
         struct TKey {

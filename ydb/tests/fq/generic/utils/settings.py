@@ -114,6 +114,6 @@ class Settings:
             )
 
         if 'ydb' in docker_compose_yml_data['services']:
-            ydb = cls.Ydb(dbname='local', username='user', password='password')
+            s.ydb = cls.Ydb(dbname='local', username='user', password='password')
 
         return s

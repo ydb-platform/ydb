@@ -5,7 +5,6 @@ from ydb.tests.tools.fq_runner.custom_hooks import *  # noqa: F401,F403 Adding c
 from ydb.tests.tools.fq_runner.kikimr_utils import ConnectorExtension
 from ydb.tests.tools.fq_runner.kikimr_utils import YQv2Extension
 from ydb.tests.tools.fq_runner.kikimr_utils import TokenAccessorExtension
-from ydb.tests.tools.fq_runner.kikimr_utils import MDBExtension
 from ydb.tests.tools.fq_runner.kikimr_utils import YdbMvpExtension
 from ydb.tests.tools.fq_runner.kikimr_utils import start_kikimr
 

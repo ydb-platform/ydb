@@ -12,14 +12,10 @@
 namespace NKikimr::NKqp {
 
 Y_UNIT_TEST_SUITE(KqpOlapSysView) {
-    TKikimrSettings GetKikimrSettings() {
-        NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableOlapCompression(true);
-        return TKikimrSettings().SetWithSampleTables(false).SetFeatureFlags(featureFlags);
-    }
-
     Y_UNIT_TEST(StatsSysView) {
-        TKikimrRunner kikimr(GetKikimrSettings());
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
 
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
         TLocalHelper(kikimr).CreateTestOlapTable();
@@ -54,7 +50,9 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
     }
 
     Y_UNIT_TEST(StatsSysViewTable) {
-        TKikimrRunner kikimr(GetKikimrSettings());
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
 
         TLocalHelper(kikimr).CreateTestOlapTable("olapTable_1");
@@ -114,7 +112,9 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         ui64 bytesPK1;
         {
             auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
-            TKikimrRunner kikimr(GetKikimrSettings());
+            auto settings = TKikimrSettings()
+                .SetWithSampleTables(false);
+            TKikimrRunner kikimr(settings);
             Tests::NCommon::TLoggerInit(kikimr).Initialize();
             TTypedLocalHelper helper("", kikimr, "olapTable", "olapStore12");
             helper.CreateTestOlapTable();
@@ -131,7 +131,9 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         const ui32 rowsCount = 800000;
         const ui32 groupsCount = 512;
         {
-            TKikimrRunner kikimr(GetKikimrSettings());
+            auto settings = TKikimrSettings()
+                .SetWithSampleTables(false);
+            TKikimrRunner kikimr(settings);
             Tests::NCommon::TLoggerInit(kikimr).Initialize();
             TTypedLocalHelper helper("Utf8", kikimr);
             helper.CreateTestOlapTable();
@@ -184,7 +186,9 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         ui64 rawBytesPK1;
         ui64 bytesPK1;
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
-        TKikimrRunner kikimr(GetKikimrSettings());
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
         TTypedLocalHelper helper("", kikimr, "olapTable", "olapStore");
         helper.CreateTestOlapTable();
@@ -219,7 +223,8 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         ui64 rawBytes1;
         ui64 bytes1;
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
-        TKikimrRunner kikimr(GetKikimrSettings());
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
         TTypedLocalHelper helper("Utf8", kikimr);
         helper.CreateTestOlapTable();
@@ -249,7 +254,9 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         ui64 rawBytes1;
         ui64 bytes1;
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
-        TKikimrRunner kikimr(GetKikimrSettings());
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
         TTypedLocalHelper helper("Utf8", kikimr);
         helper.CreateTestOlapTable();
@@ -285,7 +292,8 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         ui64 rawBytes1;
         ui64 bytes1;
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
-        TKikimrRunner kikimr(GetKikimrSettings());
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
         TTypedLocalHelper helper("Utf8", kikimr);
         helper.CreateTestOlapTable();
@@ -356,8 +364,9 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
     }
 
     Y_UNIT_TEST(StatsSysViewColumns) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
-        TKikimrRunner kikimr(GetKikimrSettings());
+        TKikimrRunner kikimr(settings);
 
         TLocalHelper(kikimr.GetTestServer()).CreateTestOlapTable();
         for (ui64 i = 0; i < 10; ++i) {
@@ -411,7 +420,8 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
     }
 
     Y_UNIT_TEST(StatsSysViewRanges) {
-        TKikimrRunner kikimr(GetKikimrSettings());
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         csController->SetCompactionControl(NYDBTest::EOptimizerCompactionWeightControl::Disable);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
@@ -503,7 +513,8 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
     }
 
     Y_UNIT_TEST(StatsSysViewFilter) {
-        TKikimrRunner kikimr(GetKikimrSettings());
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
 
         TLocalHelper(kikimr.GetTestServer()).CreateTestOlapTable();
@@ -569,7 +580,8 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
     }
 
     Y_UNIT_TEST(StatsSysViewAggregation) {
-        TKikimrRunner kikimr(GetKikimrSettings());
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
 
         TLocalHelper(kikimr.GetTestServer()).CreateTestOlapTable("olapTable_1");

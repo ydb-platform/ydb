@@ -3,6 +3,7 @@ import argparse
 import ydb
 import logging
 import time
+import os
 import random
 import string
 
@@ -11,6 +12,14 @@ ydb.interceptor.monkey_patch_event_handler()
 
 
 logger = logging.getLogger("StatisticsWorkload")
+
+
+def timestamp():
+    return int(1000 * time.time())
+
+
+def table_name_with_timestamp(table_prefix):
+    return os.path.join(table_prefix + "_" + str(timestamp()))
 
 
 def random_string(length):
@@ -140,7 +149,8 @@ class Workload(object):
         self.run_query_ignore_errors(callee)
 
     def execute(self):
-        table_name = "test_table"
+        table_prefix = "test_table"
+        table_name = table_name_with_timestamp(table_prefix)
         table_statistics = ".metadata/_statistics"
 
         try:
@@ -153,7 +163,7 @@ class Workload(object):
                 logger.error(f"table '{table_statistics}' is not empty")
                 return
 
-            self.drop_all_tables_with_prefix(table_name)
+            self.drop_all_tables_with_prefix(table_prefix)
             self.create_table(table_name)
 
             self.add_data(table_name)
@@ -177,13 +187,9 @@ class Workload(object):
 
     def run(self):
         started_at = time.time()
-        sleep_time = 20
 
         while time.time() - started_at < self.duration:
             self.execute()
-
-            logger.info(f"sleeping for {sleep_time} seconds")
-            time.sleep(sleep_time)
 
 
 if __name__ == '__main__':
@@ -194,7 +200,7 @@ if __name__ == '__main__':
     parser.add_argument('--database', default=None, required=True, help='A database to connect')
     parser.add_argument('--duration', default=120, type=lambda x: int(x), help='A duration of workload in seconds')
     parser.add_argument('--batch_size', default=1000, help='Batch size for bulk insert')
-    parser.add_argument('--batch_count', default=10, help='The number of butches to be inserted')
+    parser.add_argument('--batch_count', default=3, help='The number of butches to be inserted')
     parser.add_argument('--log_file', default='', help='Append log into specified file')
 
     args = parser.parse_args()

@@ -141,16 +141,19 @@ class TestSetupForStability(object):
 
     def test_statistics_workload(self):
         self._start_nemesis()
-        duration = 90*60
+
+        log_file = "/Berkanavt/nemesis/log/statistics_workload.log"
+        test_path = "/Berkanavt/nemesis/bin/statistics_workload"
 
         for node_id, node in enumerate(self.kikimr_cluster.nodes.values()):
             node.ssh_command(
-                f'screen -d -m bash -c "sudo /Berkanavt/nemesis/bin/statistics_workload --database /Root/db1 --duration {duration}  --log_file /Berkanavt/nemesis/log/statistics_workload.log"',
+                f'screen -d -m bash -c "while true; do sudo {test_path} --database /Root/db1 --log_file {log_file} ; done"',
                 raise_on_error=True
             )
+        sleep_time_min = 90
 
-        logger.info('Sleeping for {} minute(s)'.format(duration))
-        time.sleep(duration)
+        logger.info('Sleeping for {} minute(s)'.format(sleep_time_min))
+        time.sleep(sleep_time_min*60)
 
         self._stop_nemesis()
 

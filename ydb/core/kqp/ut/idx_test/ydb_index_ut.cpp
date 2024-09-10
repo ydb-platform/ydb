@@ -33,10 +33,10 @@ static void RunTest(ui32 shardsCount, ui32 rowsCount, ui32 indexCount, const TRu
     auto builder = TTableBuilder()
         .AddNullableColumn(keyColumnName, EPrimitiveType::Uint64);
 
-    TVector<TString> pks;
+    std::vector<std::string> pks;
     pks.push_back(keyColumnName);
 
-    TVector<TString> dataColumn;
+    std::vector<std::string> dataColumn;
     if (withDataColumn) {
         dataColumn.push_back("value");
     }
@@ -53,15 +53,15 @@ static void RunTest(ui32 shardsCount, ui32 rowsCount, ui32 indexCount, const TRu
 
         if (!pkOverlap) {
             if (uniqIndex) {
-                builder.AddUniqueSecondaryIndex(ss.Str() + "_name", TVector<TString>{ss.Str()}, dataColumn);
+                builder.AddUniqueSecondaryIndex(ss.Str() + "_name", std::vector<std::string>{ss.Str()}, dataColumn);
             } else {
-                builder.AddSecondaryIndex(ss.Str() + "_name", TVector<TString>{ss.Str()}, dataColumn);
+                builder.AddSecondaryIndex(ss.Str() + "_name", std::vector<std::string>{ss.Str()}, dataColumn);
             }
         } else {
             if (uniqIndex) {
-                builder.AddUniqueSecondaryIndex(ss.Str() + "_name", TVector<TString>{ss.Str(), keyColumnName}, dataColumn);
+                builder.AddUniqueSecondaryIndex(ss.Str() + "_name", std::vector<std::string>{ss.Str(), keyColumnName}, dataColumn);
             } else {
-                builder.AddSecondaryIndex(ss.Str() + "_name", TVector<TString>{ss.Str(), keyColumnName}, dataColumn);
+                builder.AddSecondaryIndex(ss.Str() + "_name", std::vector<std::string>{ss.Str(), keyColumnName}, dataColumn);
             }
         }
         if (indexOverlap) {

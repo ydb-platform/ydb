@@ -2024,7 +2024,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
             proto.mutable_columns()->begin()->set_not_null(true);
             auto result = session.CreateTable("/Root/NotNullCheck2", TTableDescription(std::move(proto), {})).GetValueSync();
             UNIT_ASSERT_C(!result.GetIssues().Empty(), "ok with faulty protobuf");
-            UNIT_ASSERT(result.GetIssues().ToString().Contains("Error: Not consistent column type and not_null option for column: 1"));
+            UNIT_ASSERT(result.GetIssues().ToString().contains("Error: Not consistent column type and not_null option for column: 1"));
         }
     }
 

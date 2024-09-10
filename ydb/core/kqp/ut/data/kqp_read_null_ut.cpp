@@ -112,7 +112,7 @@ Y_UNIT_TEST_SUITE(KqpUserConstraint) {
             NYql::TIssues issues;
             NYql::IssuesFromMessage(ev->Get()->Record.GetRef().GetResponse().GetQueryIssues(), issues);
             UNIT_ASSERT(HasIssue(issues, NYql::TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION, [](const NYql::TIssue& issue) {
-                return issue.GetMessage().Contains("got NULL from NOT NULL column");
+                return issue.GetMessage().contains("got NULL from NOT NULL column");
             }));
         } else {
             UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetRef().GetYdbStatus(), Ydb::StatusIds::SUCCESS);

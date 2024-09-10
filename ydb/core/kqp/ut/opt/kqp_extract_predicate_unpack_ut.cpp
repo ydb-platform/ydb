@@ -140,7 +140,7 @@ void Test(const TString& query, const TString& answer, THashSet<TString> allowSc
     CompareYson(answer, FormatResultSetYson(result.GetResultSet(0)));
 
     auto explain = session.ExplainDataQuery(query).ExtractValueSync();
-    UNIT_ASSERT(explain.GetPlan().Contains("Lookup"));
+    UNIT_ASSERT(explain.GetPlan().contains("Lookup"));
     Cerr << explain.GetPlan();
 
     NJson::TJsonValue plan;

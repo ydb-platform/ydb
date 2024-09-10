@@ -29,7 +29,7 @@ void ThrowOnError(const TStatus& status) {
 }
 
 template <typename T>
-void BuildRow(const TString& line, const TVector<TTableColumn>& columns, TValueBuilderBase<T>& row) {
+void BuildRow(const std::string& line, const std::vector<TTableColumn>& columns, TValueBuilderBase<T>& row) {
     TVector<TStringBuf> data = StringSplitter(line).Split('|').SkipEmpty();
     Y_ENSURE(data.size() == columns.size());
 

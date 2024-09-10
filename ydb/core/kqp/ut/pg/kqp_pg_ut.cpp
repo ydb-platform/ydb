@@ -2295,7 +2295,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             UNIT_ASSERT_C(resultSelect.IsSuccess(), resultSelect.GetIssues().ToString());
 
             bool allDoneOk = true;
-            NTestHelpers::CheckDelete(clientConfig, id, Ydb::StatusIds::SUCCESS, allDoneOk);
+            NTestHelpers::CheckDelete(clientConfig, TString{id}, Ydb::StatusIds::SUCCESS, allDoneOk);
 
             UNIT_ASSERT(allDoneOk);
         }
@@ -2347,7 +2347,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             UNIT_ASSERT_C(resultSelect.IsSuccess(), resultSelect.GetIssues().ToString());
 
             bool allDoneOk = true;
-            NTestHelpers::CheckDelete(clientConfig, id, Ydb::StatusIds::SUCCESS, allDoneOk);
+            NTestHelpers::CheckDelete(clientConfig, TString{id}, Ydb::StatusIds::SUCCESS, allDoneOk);
 
             UNIT_ASSERT(allDoneOk);
         }
@@ -2915,7 +2915,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         UNIT_ASSERT_C(resultSelect.IsSuccess(), resultSelect.GetIssues().ToString());
 
         bool allDoneOk = true;
-        NTestHelpers::CheckDelete(clientConfig, id, Ydb::StatusIds::SUCCESS, allDoneOk);
+        NTestHelpers::CheckDelete(clientConfig, TString{id}, Ydb::StatusIds::SUCCESS, allDoneOk);
 
         UNIT_ASSERT(allDoneOk);
 
@@ -2989,7 +2989,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
 
         bool allDoneOk = true;
-        NTestHelpers::CheckDelete(clientConfig, id, Ydb::StatusIds::SUCCESS, allDoneOk);
+        NTestHelpers::CheckDelete(clientConfig, TString{id}, Ydb::StatusIds::SUCCESS, allDoneOk);
 
         UNIT_ASSERT(allDoneOk);
 
@@ -3210,7 +3210,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             }
 
             bool allDoneOk = true;
-            NTestHelpers::CheckDelete(clientConfig, id, Ydb::StatusIds::SUCCESS, allDoneOk);
+            NTestHelpers::CheckDelete(clientConfig, TString{id}, Ydb::StatusIds::SUCCESS, allDoneOk);
 
             UNIT_ASSERT(allDoneOk);
         }
@@ -3490,14 +3490,14 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                 UPDATE test SET key = key, value = 121 WHERE key = 123;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
             UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), EStatus::SUCCESS);
-            UNIT_ASSERT(result.GetIssues().ToString().Contains("Cannot update primary key column: key"));
+            UNIT_ASSERT(result.GetIssues().ToString().contains("Cannot update primary key column: key"));
         }
         {
             auto result = db.ExecuteQuery(R"(
                 UPDATE test SET key = 12 WHERE key = 123;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
             UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), EStatus::SUCCESS);
-            UNIT_ASSERT(result.GetIssues().ToString().Contains("Cannot update primary key column: key"));
+            UNIT_ASSERT(result.GetIssues().ToString().contains("Cannot update primary key column: key"));
         }
         {
             auto result = db.ExecuteQuery(R"(
@@ -3546,8 +3546,8 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                 UPDATE test SET key1 = 1, key2 = 2, value = 2 WHERE key1 = 1;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
             UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), EStatus::SUCCESS);
-            UNIT_ASSERT(result.GetIssues().ToString().Contains("Cannot update primary key column: key1"));
-            UNIT_ASSERT(result.GetIssues().ToString().Contains("Cannot update primary key column: key2"));
+            UNIT_ASSERT(result.GetIssues().ToString().contains("Cannot update primary key column: key1"));
+            UNIT_ASSERT(result.GetIssues().ToString().contains("Cannot update primary key column: key2"));
         }
         {
             kikimr.GetTestClient().CreateTable("/Root", R"(
@@ -3642,7 +3642,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                 SELECT * FROM test;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT(result.GetIssues().ToString().Contains("Cannot find table 'db.[/Root/test]'"));
+            UNIT_ASSERT(result.GetIssues().ToString().contains("Cannot find table 'db.[/Root/test]'"));
         }
     }
 
@@ -3694,7 +3694,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                 SELECT * FROM test;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT(result.GetIssues().ToString().Contains("Cannot find table 'db.[/Root/test]'"));
+            UNIT_ASSERT(result.GetIssues().ToString().contains("Cannot find table 'db.[/Root/test]'"));
         }
     }
 
@@ -3957,7 +3957,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                 SELECT * FROM test;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT(result.GetIssues().ToString().Contains("Cannot find table 'db.[/Root/test]'"));
+            UNIT_ASSERT(result.GetIssues().ToString().contains("Cannot find table 'db.[/Root/test]'"));
         }
     }
 
@@ -4191,21 +4191,21 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                 INSERT INTO t VALUES (1, 'a', 'a');
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT(result.GetIssues().ToString().Contains("values have 3 columns, INSERT INTO expects: 2"));
+            UNIT_ASSERT(result.GetIssues().ToString().contains("values have 3 columns, INSERT INTO expects: 2"));
         }
         {
             auto result = db.ExecuteQuery(R"(
                 INSERT INTO t VALUES ('a', 1);
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-            UNIT_ASSERT(result.GetIssues().ToString().Contains("invalid input syntax for type integer: \"a\""));
+            UNIT_ASSERT(result.GetIssues().ToString().contains("invalid input syntax for type integer: \"a\""));
         }
         {
             auto result = db.ExecuteQuery(R"(
                 INSERT INTO nopg VALUES ('a');
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT(result.GetIssues().ToString().Contains("Failed to convert 'id': pgunknown to Optional<Uint64>"));
+            UNIT_ASSERT(result.GetIssues().ToString().contains("Failed to convert 'id': pgunknown to Optional<Uint64>"));
         }
     }
 
@@ -4758,7 +4758,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                 )");
                 auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-                UNIT_ASSERT(result.GetIssues().ToString().Contains("alternative is not implemented yet : 34"));
+                UNIT_ASSERT(result.GetIssues().ToString().contains("alternative is not implemented yet : 34"));
             }
         }
 
@@ -4778,7 +4778,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                 )");
                 auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-                UNIT_ASSERT(result.GetIssues().ToString().Contains("Unable to find an overload for operator = with given argument type(s): (text,int4)"));
+                UNIT_ASSERT(result.GetIssues().ToString().contains("Unable to find an overload for operator = with given argument type(s): (text,int4)"));
             }
 
             {
@@ -4787,7 +4787,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                 )");
                 auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-                UNIT_ASSERT(result.GetIssues().ToString().Contains("Unable to find an overload for operator = with given argument type(s): (text,int4)"));
+                UNIT_ASSERT(result.GetIssues().ToString().contains("Unable to find an overload for operator = with given argument type(s): (text,int4)"));
             }
 
             {
@@ -4796,7 +4796,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                 )");
                 auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-                UNIT_ASSERT(result.GetIssues().ToString().Contains("invalid input syntax for type integer: \"a\""));
+                UNIT_ASSERT(result.GetIssues().ToString().contains("invalid input syntax for type integer: \"a\""));
             }
         }
 
@@ -4817,21 +4817,21 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                     INSERT INTO PgTable1 VALUES (1, 'a', 'a');
                 )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-                UNIT_ASSERT(result.GetIssues().ToString().Contains("values have 3 columns, INSERT INTO expects: 2"));
+                UNIT_ASSERT(result.GetIssues().ToString().contains("values have 3 columns, INSERT INTO expects: 2"));
             }
             {
                 auto result = db.ExecuteQuery(R"(
                     INSERT INTO PgTable2 VALUES ('a');
                 )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-                UNIT_ASSERT(result.GetIssues().ToString().Contains("Failed to convert 'id': pgunknown to Optional<Uint64>"));
+                UNIT_ASSERT(result.GetIssues().ToString().contains("Failed to convert 'id': pgunknown to Optional<Uint64>"));
             }
             {
                 auto result = db.ExecuteQuery(R"(
                     INSERT INTO PgTable1 VALUES ('a', 1);
                 )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-                UNIT_ASSERT(result.GetIssues().ToString().Contains("invalid input syntax for type integer: \"a\""));
+                UNIT_ASSERT(result.GetIssues().ToString().contains("invalid input syntax for type integer: \"a\""));
             }
         }
 
@@ -4904,7 +4904,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                 INSERT INTO t (id, data2) VALUES ($1, $2);
             )", NYdb::NQuery::TTxControl::NoTx(), params, settings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-            UNIT_ASSERT(result.GetIssues().ToString().Contains("invalid byte sequence for encoding \"UTF8\": 0x00"));
+            UNIT_ASSERT(result.GetIssues().ToString().contains("invalid byte sequence for encoding \"UTF8\": 0x00"));
         }
     }
 

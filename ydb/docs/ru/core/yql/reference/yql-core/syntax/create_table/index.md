@@ -4,7 +4,7 @@
 
 {% if feature_bulk_tables %}
 
-Таблица создается автоматически при первом [INSERT INTO](insert_into.md){% if feature_mapreduce %}, в заданной оператором [USE](../use.md) базе данных{% endif %}. Схема при этом определяется автоматически.
+Таблица создается автоматически при первом [INSERT INTO](../insert_into.md){% if feature_mapreduce %}, в заданной оператором [USE](../use.md) базе данных{% endif %}. Схема при этом определяется автоматически.
 
 {% else %}
 
@@ -150,7 +150,7 @@ CREATE TABLE <table_name> (
 ```
 {% endif %}
 
-{% if backend_name == "YDB" %}
+{% if backend_name == "YDB" and oss == true %}
 
 При создании строковых таблиц возможно задать:
 * [Вторичный индекс](secondary_index.md).

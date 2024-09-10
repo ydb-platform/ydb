@@ -6,7 +6,7 @@
 
 {% endif %}
 
-Конструкция `INDEX` используется для определения {% if concept_secondary_index %}[вторичного индекса]({{ concept_secondary_index }}){% else %}вторичного индекса{% endif %} {% if backend_name == "YDB" %}для [строковых](../../../../concepts/datamodel/table.md#row-oriented-tables) таблиц{% else %}на таблице{% endif %}:
+Конструкция `INDEX` используется для определения {% if concept_secondary_index %}[вторичного индекса]({{ concept_secondary_index }}){% else %}вторичного индекса{% endif %} {% if backend_name == "YDB" %}для {% if backend_name == "YDB" and oss == true %}[строковых](../../../../concepts/datamodel/table.md#row-oriented-tables){% else %}строковых{% endif %} таблиц{% else %}на таблице{% endif %}:
 
 ```sql
 CREATE TABLE table_name (
@@ -22,7 +22,7 @@ CREATE TABLE table_name (
 * **index_columns** — имена колонок создаваемой таблицы через запятую, по которым возможен поиск в индексе.
 * **cover_columns** — имена колонок создаваемой таблицы через запятую, которые будет сохранены в индексе дополнительно к колонкам поиска, давая возможность получить дополнительные данные без обращения за ними в таблицу.
 
-{% if backend_name == "YDB" %}
+{% if backend_name == "YDB" and oss == true %}
 ## Примеры создания таблиц со вторичным индексом {#secondary-index-tables-example}
 
 {% list tabs %}

@@ -32,11 +32,11 @@ struct TTargetTablePathId {
     TPathId Value;
 };
 
-class TAsyncIndexChangeSenderShard: public TActorBootstrapped<TAsyncIndexChangeSenderShard> {
+class TBaseChangeSenderShard: public TActorBootstrapped<TBaseChangeSenderShard> {
     TStringBuf GetLogPrefix() const {
         if (!LogPrefix) {
             LogPrefix = TStringBuilder()
-                << "[AsyncIndexChangeSenderShard]"
+                << "[" << LogName << "ChangeSenderShard]"
                 << "[" << DataShard.TabletId << ":" << DataShard.Generation << "]"
                 << "[" << ShardId << "]"
                 << SelfId() /* contains brackets */ << " ";
@@ -291,9 +291,15 @@ public:
         return NKikimrServices::TActivity::CHANGE_SENDER_ASYNC_INDEX_ACTOR_PARTITION;
     }
 
-    TAsyncIndexChangeSenderShard(const TActorId& parent, const TDataShardId& dataShard, ui64 shardId,
-            const TPathId& indexTablePathId, const TMap<TTag, TTag>& tagMap)
-        : Parent(parent)
+    TBaseChangeSenderShard(
+        const TString& logName,
+        const TActorId& parent,
+        const TDataShardId& dataShard,
+        ui64 shardId,
+        const TPathId& indexTablePathId,
+        const TMap<TTag, TTag>& tagMap)
+        : LogName(logName)
+        , Parent(parent)
         , DataShard(dataShard)
         , ShardId(shardId)
         , TargetTablePathId(indexTablePathId)
@@ -317,6 +323,7 @@ public:
     }
 
 private:
+    const TString LogName;
     const TActorId Parent;
     const TDataShardId DataShard;
     const ui64 ShardId;
@@ -334,7 +341,7 @@ private:
     ui32 Attempt = 0;
     TDuration Delay = TDuration::MilliSeconds(10);
 
-}; // TAsyncIndexChangeSenderShard
+}; // TBaseChangeSenderShard
 
 struct IChangeSenderMain {
     enum class EState {
@@ -362,11 +369,11 @@ struct IChangeSenderMainImpl {
     virtual const char* GetLogName() const = 0;
 };
 
-class TChangeSenderMain
-    : public TActorBootstrapped<TChangeSenderMain>
+class TBaseChangeSenderMain
+    : public TActorBootstrapped<TBaseChangeSenderMain>
     , public IChangeSenderMain
-    , public NChangeExchange::IChangeSenderIdentity
     , public NChangeExchange::TBaseChangeSender<TChangeRecord>
+    , public NChangeExchange::IChangeSenderIdentity
     , public NChangeExchange::IChangeSenderResolver
     , public NChangeExchange::ISenderFactory
     , private NSchemeCache::TSchemeCacheHelpers
@@ -717,7 +724,7 @@ class TChangeSenderMain
     }
 
     IActor* CreateSender(ui64 partitionId) const override {
-        return new TAsyncIndexChangeSenderShard(SelfId(), DataShard, partitionId, TargetTablePathId, TagMap);
+        return new TBaseChangeSenderShard(Impl->GetLogName(), SelfId(), DataShard, partitionId, TargetTablePathId, TagMap);
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TPtr& ev) {
@@ -772,7 +779,7 @@ public:
         return NKikimrServices::TActivity::CHANGE_SENDER_ASYNC_INDEX_ACTOR_MAIN;
     }
 
-    explicit TChangeSenderMain(
+    explicit TBaseChangeSenderMain(
         THolder<IChangeSenderMainImpl> impl,
         const TDataShardId& dataShard,
         const TTableId& userTableId,
@@ -787,7 +794,7 @@ public:
     {
     }
 
-    explicit TChangeSenderMain(
+    explicit TBaseChangeSenderMain(
         THolder<IChangeSenderMainImpl> impl,
         const TDataShardId& dataShard,
         const TTableId& userTableId,
@@ -897,7 +904,7 @@ private:
     TPathId TargetTablePathId;
     ui64 TargetTableVersion;
     THolder<TKeyDesc> KeyDesc;
-}; // TChangeSenderMain
+}; // TBaseChangeSenderMain
 
 struct TAsyncIndexChangeSenderMainImpl
     : public IChangeSenderMainImpl
@@ -930,7 +937,7 @@ struct TAsyncIndexChangeSenderMainImpl
 };
 
 IActor* CreateAsyncIndexChangeSender(const TDataShardId& dataShard, const TTableId& userTableId, const TPathId& indexPathId) {
-    return new TChangeSenderMain(MakeHolder<TMainImpl>(), dataShard, userTableId, TIndexPathId(indexPathId));
+    return new TBaseChangeSenderMain(MakeHolder<TAsyncIndexChangeSenderMainImpl>(), dataShard, userTableId, TIndexPathId(indexPathId));
 }
 
 }

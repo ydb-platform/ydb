@@ -2745,10 +2745,6 @@ namespace NTypeAnnImpl {
                 allScalars = allScalars && isScalar;
             }
 
-            if (!itemType) {
-                return IGraphTransformer::TStatus::Error;
-            }
-
             if (!EnsureDataOrOptionalOfData(input->Child(i)->Pos(), itemType, isOptional[i], dataType[i], ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }

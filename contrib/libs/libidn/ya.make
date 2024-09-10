@@ -6,6 +6,8 @@ LIBRARY()
 
 WITHOUT_LICENSE_TEXTS()
 
+SUBSCRIBER(g:cpp-contrib)
+
 VERSION(1.42)
 
 ORIGINAL_SOURCE(mirror://gnu/libidn/libidn-1.42.tar.gz)
@@ -21,14 +23,13 @@ IF (EXPORT_CMAKE)
         CMAKE_TARGET
         IDN::IDN
     )
-    PEERDIR(
-        contrib/libs/libidn/static
-    )
-ELSEIF (USE_IDN == "dynamic")
+ENDIF()
+
+IF (USE_IDN == "dynamic" AND NOT EXPORT_CMAKE)
     PEERDIR(
         contrib/libs/libidn/dynamic
     )
-ELSEIF (USE_IDN == "local")
+ELSEIF (USE_IDN == "local" OR EXPORT_CMAKE)
     GLOBAL_CFLAGS(${USE_LOCAL_IDN_CFLAGS})
     DEFAULT(USE_LOCAL_IDN_LDFLAGS -lidn)
     LDFLAGS(${USE_LOCAL_IDN_LDFLAGS})
@@ -40,7 +41,7 @@ ENDIF()
 
 END()
 
-IF (USE_IDN != "local")
+IF (USE_IDN != "local" AND NOT EXPORT_CMAKE)
     RECURSE(
         dynamic
         static

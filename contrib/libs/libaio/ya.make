@@ -6,6 +6,8 @@ LIBRARY()
 
 WITHOUT_LICENSE_TEXTS()
 
+SUBSCRIBER(g:cpp-contrib)
+
 VERSION(0.3.113)
 
 LICENSE(Service-Dll-Harness)
@@ -19,14 +21,13 @@ IF (EXPORT_CMAKE)
         CMAKE_TARGET
         AIO::aio
     )
-    PEERDIR(
-        contrib/libs/libaio/static
-    )
-ELSEIF (USE_AIO == "dynamic")
+ENDIF()
+
+IF (USE_AIO == "dynamic" AND NOT EXPORT_CMAKE)
     PEERDIR(
         contrib/libs/libaio/dynamic
     )
-ELSEIF (USE_AIO == "local")
+ELSEIF (USE_AIO == "local" OR EXPORT_CMAKE)
     GLOBAL_CFLAGS(${USE_LOCAL_AIO_CFLAGS})
     DEFAULT(USE_LOCAL_AIO_LDFLAGS -laio)
     LDFLAGS(${USE_LOCAL_AIO_LDFLAGS})
@@ -38,7 +39,7 @@ ENDIF()
 
 END()
 
-IF (USE_AIO != "local")
+IF (USE_AIO != "local" AND NOT EXPORT_CMAKE)
     RECURSE(
         dynamic
         static

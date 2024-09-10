@@ -430,4 +430,3 @@ static TStatus ExplicitTclTransaction(TSession session, const TString& path, con
     return tx.Commit().GetValueSync();
 }
 ```
-

@@ -214,8 +214,8 @@ private:
 template <typename TChangeRecord>
 class TLocalTableWriter
     : public TActor<TLocalTableWriter<TChangeRecord>>
-    , public NChangeExchange::IChangeSenderIdentity
     , public NChangeExchange::TBaseChangeSender<TChangeRecord>
+    , public NChangeExchange::IChangeSenderIdentity
     , public NChangeExchange::IChangeSenderResolver
     , public NChangeExchange::ISenderFactory
     , private NSchemeCache::TSchemeCacheHelpers

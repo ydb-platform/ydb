@@ -795,9 +795,6 @@ void TPDisk::AskVDisksToCutLogs(TOwner ownerFilter, bool doForce) {
     }
 }
 
-struct TChunkWriter2 {
-};
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Chunk writing
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -906,6 +903,7 @@ bool TPDisk::ChunkWritePiece2(TChunkWritePiece *piece, TChunkWrite *chunkWrite, 
         //return lastPart;
     };
 
+    // f();
     bool added = ChunkWritePool.AddFunc(std::move(f));
     Y_VERIFY(added);
 
@@ -2342,19 +2340,11 @@ void TPDisk::ProcessChunkWriteQueue() {
     // NHPTimer::STime now = HPNow();
     for (auto it = JointChunkWrites.begin(); it != JointChunkWrites.end(); ++it) {
         TRequestBase *req = (*it);
-        if (!req) {
-            continue;
-        }
         req->SpanStack.PopOk();
         req->SpanStack.Push(TWilson::PDiskDetailed, "PDisk.InBlockDevice", NWilson::EFlags::AUTO_END);
 
         Y_VERIFY(req->GetType() == ERequestType::RequestChunkWritePiece);
         TChunkWritePiece *piece = static_cast<TChunkWritePiece*>(req);
-        P_LOG(PRI_NOTICE, BPD01, "ChunkWritePiece",
-            (PieceOffset, piece->PieceShift),
-            (PieceSize, piece->PieceSize),
-            (EvChunkWrite, piece->ChunkWrite->ToString())
-        );
         // hack to pass one weird unit test
         piece->ChunkWrite->Offset = piece->ChunkWrite->Offset / Format.SectorPayloadSize() * Format.SectorPayloadSize(); 
 
@@ -2363,8 +2353,6 @@ void TPDisk::ProcessChunkWriteQueue() {
             // unused
             // Mon.IncrementQueueTime(piece->ChunkWrite->PriorityClass, piece->ChunkWrite->LifeDurationMs(now));
         }
-        *it = nullptr;
-        break;
     }
     JointChunkWrites.clear();
 }
@@ -3295,10 +3283,21 @@ void TPDisk::PushRequestToForseti(TRequestBase *request) {
                     ui32 jobSize = Min(remainingSize, jobSizeLimit);
                     TChunkWritePiece *piece = new TChunkWritePiece(whole, idx * jobSizeLimit, jobSize, std::move(span));
                     piece->EstimateCost(DriveModel);
-                    AddJobToForseti(cbs, piece, request->JobKind);
                     remainingSize -= jobSize;
+                    whole->UnenqueuedSize -= jobSize;
+                    P_LOG(PRI_NOTICE, BPD01, "Created new ChunkWritePiece",
+                        (PieceOffset, piece->PieceShift),
+                        (PieceSize, piece->PieceSize),
+                        (Idx, idx),
+                        (JobCount, jobCount),
+                        (JobSizeLimit, jobSizeLimit),
+                        (EvChunkWrite, piece->ChunkWrite->ToString())
+                    );
+                    AddJobToForseti(cbs, piece, request->JobKind);
                 }
                 Y_VERIFY_S(remainingSize == 0, remainingSize);
+                Y_VERIFY_S(whole->UnenqueuedSize == 0, whole->UnenqueuedSize);
+
             } else if (request->GetType() == ERequestType::RequestChunkRead) {
                 TIntrusivePtr<TChunkRead> read = std::move(static_cast<TChunkRead*>(request)->SelfPointer);
                 ui32 totalSectors = read->LastSector - read->FirstSector + 1;
@@ -3705,9 +3704,9 @@ void TPDisk::Update() {
     if (tact == ETact::TactLc) {
         ProcessLogWriteQueueAndCommits();
     }
+    ProcessChunkWriteQueue();
     ProcessFastOperationsQueue();
     ProcessChunkReadQueue();
-    ProcessChunkWriteQueue();
     ProcessLogReadQueue();
     ProcessChunkTrimQueue();
     if (tact != ETact::TactLc) {

@@ -46,6 +46,7 @@ extern "C" {
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 #include <util/string/join.h>
+#include <util/string/split.h>
 #include <util/generic/scope.h>
 #include <util/generic/stack.h>
 #include <util/generic/hash_set.h>
@@ -3023,8 +3024,13 @@ public:
                                 return nullptr;
                             }
                             auto seqName = StrVal(localConst->val);
-
-                            alterColumns.push_back(QL(QAX(colName), QL(QA("setDefault"), QL(QA("nextval"), QA(seqName)))));
+                            TVector<TString> seqNameList;
+                            Split(seqName, ".", seqNameList);
+                            if (seqNameList.size() != 2 && seqNameList.size() != 1) {
+                                AddError(TStringBuilder() << "Expected list size is 1 or 2, but there are " << seqNameList.size());
+                                return nullptr;
+                            }
+                            alterColumns.push_back(QL(QAX(colName), QL(QA("setDefault"), QL(QA("nextval"), QA(seqNameList.back())))));
                             break;
                         }
                         default:

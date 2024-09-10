@@ -22,7 +22,6 @@ import "ydb/core/tx/columnshard/engines/scheme/defaults/protos/data.proto";
 import "ydb/core/tx/columnshard/common/protos/snapshot.proto";
 import "ydb/core/formats/arrow/protos/accessor.proto";
 
-import "google/protobuf/empty.proto";
 import "google/protobuf/struct.proto";
 
 package NKikimrSchemeOp;

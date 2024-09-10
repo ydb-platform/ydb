@@ -8,21 +8,29 @@ services:
       CLICKHOUSE_USER: user
     image: clickhouse/clickhouse-server:23-alpine@sha256:b078c1cd294632afa2aeba3530e7ba2e568513da23304354f455a25fab575c06
     volumes:
-    - ./clickhouse:/docker-entrypoint-initdb.d
+      - ./clickhouse:/docker-entrypoint-initdb.d
+    tmpfs:
+      - /run
+      - /tmp
+      - /var
   fq-connector-go:
     command: |
       sh -c "
         echo \"$$(dig tests-fq-generic-ydb +short) tests-fq-generic-ydb\" >> /etc/hosts; cat /etc/hosts;
         /opt/ydb/bin/fq-connector-go server -c /opt/ydb/cfg/fq-connector-go.yaml"
     container_name: tests-fq-generic-fq-connector-go
-    image: ghcr.io/ydb-platform/fq-connector-go:v0.5.8-rc.1@sha256:856bdb6e4183f3e051777558c28edbfe43ec0510bf39664b4613badda9c4128b
+    image: ghcr.io/ydb-platform/fq-connector-go:v0.5.8-rc.2@sha256:12d15f2e82608bc4e64fa91c549361c587754aeb0e6c6a2cee749caebb11baf8
     ports:
-    - "2130"
+      - "2130"
   greenplum:
     container_name: tests-fq-generic-greenplum
     image: ghcr.io/ydb-platform/fq-connector-go_greenplum:6.25.3-6432@sha256:9e862b05719b289b447562fbce6c003916a764a549f924a4175eecd7e7891a0b
     volumes:
-    - ./greenplum/init_db.sh:/init_db.sh
+      - ./greenplum/init_db.sh:/init_db.sh
+    tmpfs:
+      - /run
+      - /tmp
+      - /var
   postgresql:
     command: -p 6432
     container_name: tests-fq-generic-postgresql
@@ -32,16 +40,21 @@ services:
       POSTGRES_USER: user
     image: postgres:15-bullseye@sha256:3411b9f2e5239cd7867f34fcf22fe964230f7d447a71d63c283e3593d3f84085
     volumes:
-    - ./postgresql:/docker-entrypoint-initdb.d
+      - ./postgresql:/docker-entrypoint-initdb.d
+    tmpfs:
+      - /run
+      - /tmp
+      - /var
   ydb:
     container_name: tests-fq-generic-ydb
     environment:
       POSTGRES_PASSWORD: password
       POSTGRES_USER: user
       YDB_DEFAULT_LOG_LEVEL: DEBUG
+      DB_USE_IN_MEMORY_PDISKS: "true"
     hostname: tests-fq-generic-ydb
     image: ghcr.io/ydb-platform/local-ydb:latest@sha256:9045e00afec1923dc3277564c7b2f829087c2115f45f18e1d38b80bb89f98be6
     volumes:
-    - ./ydb/init_ydb:/init_ydb
-    - ./ydb/01_basic.sh:/01_basic.sh
+      - ./ydb/init_ydb:/init_ydb
+      - ./ydb/01_basic.sh:/01_basic.sh
 version: "3.4"

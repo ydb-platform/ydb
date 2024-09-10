@@ -244,10 +244,13 @@
 
 #include <util/system/hostname.h>
 
+#ifndef KIKIMR_DISABLE_S3_OPS
 #include <aws/core/Aws.h>
+#endif
 
 namespace {
 
+#ifndef KIKIMR_DISABLE_S3_OPS
 struct TAwsApiGuard {
     TAwsApiGuard() {
         Aws::InitAPI(Options);
@@ -260,6 +263,7 @@ struct TAwsApiGuard {
 private:
     Aws::SDKOptions Options;
 };
+#endif
 
 }
 
@@ -2065,8 +2069,8 @@ void TMemoryControllerInitializer::InitializeServices(
         mergeResourceBrokerConfigs(Config.GetResourceBrokerConfig());
     }
 
-    auto* actor = NMemory::CreateMemoryController(TDuration::Seconds(1), ProcessMemoryInfoProvider, 
-        Config.GetMemoryControllerConfig(), resourceBrokerSelfConfig, 
+    auto* actor = NMemory::CreateMemoryController(TDuration::Seconds(1), ProcessMemoryInfoProvider,
+        Config.GetMemoryControllerConfig(), resourceBrokerSelfConfig,
         appData->Counters);
     setup->LocalServices.emplace_back(
         NMemory::MakeMemoryControllerId(0),
@@ -2782,6 +2786,7 @@ void TGraphServiceInitializer::InitializeServices(NActors::TActorSystemSetup* se
         TActorSetupCmd(NGraph::CreateGraphService(appData->TenantName), TMailboxType::HTSwap, appData->UserPoolId));
 }
 
+#ifndef KIKIMR_DISABLE_S3_OPS
 TAwsApiInitializer::TAwsApiInitializer(IGlobalObjectStorage& globalObjects)
     : GlobalObjects(globalObjects)
 {
@@ -2792,6 +2797,7 @@ void TAwsApiInitializer::InitializeServices(NActors::TActorSystemSetup* setup, c
     Y_UNUSED(appData);
     GlobalObjects.AddGlobalObject(std::make_shared<TAwsApiGuard>());
 }
+#endif
 
 } // namespace NKikimrServicesInitializers
 } // namespace NKikimr

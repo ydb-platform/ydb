@@ -8,7 +8,7 @@
 
 </div>
 
-People need databases to store their data and persistent queues to transfer their data from one system to another. We’ve united tables and persisted queues within one data platform. Now you have a possibility to take your data from a queue, then process it and keep the result in a database within a single transaction. So your application developers don’t need to think about data inconsistency in cases of connection failures or other errors. 
+People need databases to store their data and persistent queues to transfer their data from one system to another. We’ve united tables and persisted queues within one data platform. Now you have a possibility to take your data from a queue, then process it and keep the result in a database within a single transaction. So your application developers don’t need to think about data inconsistency in cases of connection failures or other errors.
 
 @[YouTube](https://youtu.be/LOpP47pNFGM?si=vAXyubijAA31QaTR)
 

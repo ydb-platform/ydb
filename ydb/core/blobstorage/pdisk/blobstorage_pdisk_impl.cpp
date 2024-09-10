@@ -845,21 +845,40 @@ bool TPDisk::ChunkWritePiece2(TChunkWritePiece *piece, TChunkWrite *chunkWrite, 
         for (ui64 sector = beginSectorIdx; sector < endSectorIdx; ++sector) {
             cypher.StartMessage(nonce);
 
-            ui32 remainingPartSize = partIdx < parts.Size() ? parts[partIdx].second - chunkWrite->CurrentPartOffset : sectorPayloadSize;
-            Y_VERIFY(remainingPartSize);
-            ui32 sizeToWrite = Min(remainingPartSize, sectorPayloadSize);
-            if (partIdx < parts.Size() && parts[partIdx].first) {
-                ui8 *src = (ui8*)parts[partIdx].first + chunkWrite->CurrentPartOffset;
-                cypher.Encrypt(dst, src, sizeToWrite);
-            } else {
-                cypher.EncryptZeroes(dst, sizeToWrite);
-            }
-            remainingPartSize -= sizeToWrite;
-            if (remainingPartSize > 0) {
-                chunkWrite->CurrentPartOffset += sectorPayloadSize;
-            } else {
-                partIdx++;
-                chunkWrite->CurrentPartOffset = 0;
+            ui32 sectorFreeBytes = sectorPayloadSize;
+            ui32 dstOffset = 0;
+            while (sectorFreeBytes) {
+                ui32 remainingPartSize = partIdx < parts.Size() ? parts[partIdx].second - chunkWrite->CurrentPartOffset : 0;
+                // Y_VERIFY(remainingPartSize);
+                ui32 sizeToWrite = Min(remainingPartSize, sectorFreeBytes);
+                if (partIdx >= parts.Size()) {
+                    cypher.EncryptZeroes(dst + dstOffset, sectorFreeBytes);
+                    sectorFreeBytes = 0;
+                } else if (parts[partIdx].first) {
+                    ui8 *src = (ui8*)parts[partIdx].first + chunkWrite->CurrentPartOffset;
+                    cypher.Encrypt(dst + dstOffset, src, sizeToWrite);
+                } else {
+                    cypher.EncryptZeroes(dst + dstOffset, sizeToWrite);
+                }
+                sectorFreeBytes -= sizeToWrite;
+                remainingPartSize -= sizeToWrite;
+                chunkWrite->RemainingSize -= sizeToWrite;
+                chunkWrite->BytesWritten += sizeToWrite;
+                dstOffset += sizeToWrite;
+                if (remainingPartSize == 0) {
+                    partIdx++;
+                    chunkWrite->CurrentPartOffset = 0;
+                } else {
+                    chunkWrite->CurrentPartOffset += sizeToWrite;
+                }
+                P_LOG(PRI_NOTICE, BPD01, " while ",
+                        (Sector, sector),
+                        (SectorFreeBytes, sectorFreeBytes),
+                        (SizeWritten, sizeToWrite),
+                        (RemainingPartSize, remainingPartSize),
+                        (PartIdx, partIdx),
+                        (PartsSize, parts.Size())
+                        );
             }
 
             cypher.Encrypt(dst + Format.SectorSize - sizeof(TDataSectorFooter) - CanarySize, &Canary, CanarySize);
@@ -873,15 +892,13 @@ bool TPDisk::ChunkWritePiece2(TChunkWritePiece *piece, TChunkWrite *chunkWrite, 
                     (Hash, sectorFooter.Hash));
 
             ++nonce;
-            chunkWrite->RemainingSize -= sizeToWrite;
-            chunkWrite->BytesWritten += sizeToWrite;
             dst += Format.SectorSize;
 
             // Y_VERIFY_S(sizeToWrite == sectorPayloadSize || chunkWrite->RemainingSize == 0, sizeToWrite << " " << chunkWrite->ToString());
         }
 
         bool lastPart = chunkWrite->RemainingSize == 0;
-        P_LOG(PRI_NOTICE, BPD79, "ChunkWritePieceDone",
+        P_LOG(PRI_DEBUG, BPD79, "ChunkWritePieceDone",
                 (ChunkIdx, chunkIdx),
                 (EvWrite, chunkWrite->ToString()),
                 (BeginSectorIdx, beginSectorIdx),
@@ -903,7 +920,7 @@ bool TPDisk::ChunkWritePiece2(TChunkWritePiece *piece, TChunkWrite *chunkWrite, 
         //return lastPart;
     };
 
-    // f();
+     //f();
     bool added = ChunkWritePool.AddFunc(std::move(f));
     Y_VERIFY(added);
 
@@ -2337,7 +2354,7 @@ void TPDisk::Slay(TSlay &evSlay) {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 void TPDisk::ProcessChunkWriteQueue() {
-    // NHPTimer::STime now = HPNow();
+    NHPTimer::STime now = HPNow();
     for (auto it = JointChunkWrites.begin(); it != JointChunkWrites.end(); ++it) {
         TRequestBase *req = (*it);
         req->SpanStack.PopOk();
@@ -2351,7 +2368,7 @@ void TPDisk::ProcessChunkWriteQueue() {
         bool lastPart = ChunkWritePiece2(piece, piece->ChunkWrite.Get(), piece->ChunkWrite->Offset + piece->PieceShift, piece->PieceSize);
         if (lastPart) {
             // unused
-            // Mon.IncrementQueueTime(piece->ChunkWrite->PriorityClass, piece->ChunkWrite->LifeDurationMs(now));
+            Mon.IncrementQueueTime(piece->ChunkWrite->PriorityClass, piece->ChunkWrite->LifeDurationMs(now));
         }
     }
     JointChunkWrites.clear();

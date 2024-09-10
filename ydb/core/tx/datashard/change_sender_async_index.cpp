@@ -24,6 +24,14 @@ namespace NKikimr::NDataShard {
 using namespace NTable;
 using ESenderType = TEvChangeExchange::ESenderType;
 
+struct TIndexPathId {
+    TPathId Value;
+};
+
+struct TTargetTablePathId {
+    TPathId Value;
+};
+
 class TAsyncIndexChangeSenderShard: public TActorBootstrapped<TAsyncIndexChangeSenderShard> {
     TStringBuf GetLogPrefix() const {
         if (!LogPrefix) {
@@ -149,8 +157,8 @@ class TAsyncIndexChangeSenderShard: public TActorBootstrapped<TAsyncIndexChangeS
     }
 
     void Adjust(NKikimrChangeExchange::TChangeRecord& record) const {
-        record.SetPathOwnerId(IndexTablePathId.OwnerId);
-        record.SetLocalPathId(IndexTablePathId.LocalPathId);
+        record.SetPathOwnerId(TargetTablePathId.OwnerId);
+        record.SetLocalPathId(TargetTablePathId.LocalPathId);
 
         Y_ABORT_UNLESS(record.HasAsyncIndex());
         AdjustTags(*record.MutableAsyncIndex());
@@ -251,7 +259,7 @@ class TAsyncIndexChangeSenderShard: public TActorBootstrapped<TAsyncIndexChangeS
                 HTML(html) {
                     DL_CLASS("dl-horizontal") {
                         TermDescLink(html, "ShardId", ShardId, TabletPath(ShardId));
-                        TermDesc(html, "IndexTablePathId", IndexTablePathId);
+                        TermDesc(html, "TargetTablePathId", TargetTablePathId);
                         TermDesc(html, "LeaderPipeCache", LeaderPipeCache);
                         TermDesc(html, "LastRecordOrder", LastRecordOrder);
                     }
@@ -288,7 +296,7 @@ public:
         : Parent(parent)
         , DataShard(dataShard)
         , ShardId(shardId)
-        , IndexTablePathId(indexTablePathId)
+        , TargetTablePathId(indexTablePathId)
         , TagMap(tagMap)
         , LeaseConfirmationCookie(0)
         , LastRecordOrder(0)
@@ -312,7 +320,7 @@ private:
     const TActorId Parent;
     const TDataShardId DataShard;
     const ui64 ShardId;
-    const TPathId IndexTablePathId;
+    const TPathId TargetTablePathId;
     const TMap<TTag, TTag> TagMap; // from main to index
     mutable TMaybe<TString> LogPrefix;
 
@@ -328,10 +336,37 @@ private:
 
 }; // TAsyncIndexChangeSenderShard
 
-class TAsyncIndexChangeSenderMain
-    : public TActorBootstrapped<TAsyncIndexChangeSenderMain>
-    , public NChangeExchange::TBaseChangeSender<TChangeRecord>
+struct IChangeSenderMain {
+    enum class EState {
+        Init,
+        ResolveUserTable,
+        ResolveIndex,
+        ResolveTargetTable,
+        ResolveKeys,
+        Unknown,
+    };
+
+    virtual ~IChangeSenderMain() = default;
+    virtual void ResolveUserTable() = 0;
+    virtual void ResolveIndex() = 0;
+    virtual void ResolveTargetTable() = 0;
+    virtual void ResolveKeys() = 0;
+    virtual void Serve() = 0;
+    virtual EState GetState() = 0;
+};
+
+struct IChangeSenderMainImpl {
+    using EState = IChangeSenderMain::EState;
+    virtual ~IChangeSenderMainImpl() = default;
+    virtual void NextState(IChangeSenderMain* self) const = 0;
+    virtual const char* GetLogName() const = 0;
+};
+
+class TChangeSenderMain
+    : public TActorBootstrapped<TChangeSenderMain>
+    , public IChangeSenderMain
     , public NChangeExchange::IChangeSenderIdentity
+    , public NChangeExchange::TBaseChangeSender<TChangeRecord>
     , public NChangeExchange::IChangeSenderResolver
     , public NChangeExchange::ISenderFactory
     , private NSchemeCache::TSchemeCacheHelpers
@@ -339,7 +374,7 @@ class TAsyncIndexChangeSenderMain
     TStringBuf GetLogPrefix() const {
         if (!LogPrefix) {
             LogPrefix = TStringBuilder()
-                << "[AsyncIndexChangeSenderMain]"
+                << "[" << Impl->GetLogName() << "ChangeSenderMain]"
                 << "[" << DataShard.TabletId << ":" << DataShard.Generation << "]"
                 << SelfId() /* contains brackets */ << " ";
         }
@@ -353,6 +388,10 @@ class TAsyncIndexChangeSenderMain
         return TSerializedTableRange(fromValues, true, toValues, false);
     }
 
+    bool IsInit() const {
+        return CurrentStateFunc() == static_cast<TReceiveFunc>(&TThis::StateBootstrap);
+    }
+
     bool IsResolvingUserTable() const {
         return CurrentStateFunc() == static_cast<TReceiveFunc>(&TThis::StateResolveUserTable);
     }
@@ -362,7 +401,7 @@ class TAsyncIndexChangeSenderMain
     }
 
     bool IsResolvingIndexTable() const {
-        return CurrentStateFunc() == static_cast<TReceiveFunc>(&TThis::StateResolveIndexTable);
+        return CurrentStateFunc() == static_cast<TReceiveFunc>(&TThis::StateResolveTargetTable);
     }
 
     bool IsResolvingKeys() const {
@@ -382,7 +421,7 @@ class TAsyncIndexChangeSenderMain
         } else if (IsResolvingIndex()) {
             return "ResolveIndex";
         } else if (IsResolvingIndexTable()) {
-            return "ResolveIndexTable";
+            return "ResolveTargetTable";
         } else if (IsResolvingKeys()) {
             return "ResolveKeys";
         } else {
@@ -444,16 +483,6 @@ class TAsyncIndexChangeSenderMain
         return result;
     }
 
-    /// ResolveUserTable
-
-    void ResolveUserTable() {
-        auto request = MakeHolder<TNavigate>();
-        request->ResultSet.emplace_back(MakeNavigateEntry(UserTableId, TNavigate::OpTable));
-
-        Send(MakeSchemeCacheID(), new TEvNavigate(request.Release()));
-        Become(&TThis::StateResolveUserTable);
-    }
-
     STATEFN(StateResolveUserTable) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleUserTable);
@@ -496,17 +525,7 @@ class TAsyncIndexChangeSenderMain
             MainColumnToTag.emplace(column.Name, tag);
         }
 
-        ResolveIndex();
-    }
-
-    /// ResolveIndex
-
-    void ResolveIndex() {
-        auto request = MakeHolder<TNavigate>();
-        request->ResultSet.emplace_back(MakeNavigateEntry(IndexPathId, TNavigate::OpList));
-
-        Send(MakeSchemeCacheID(), new TEvNavigate(request.Release()));
-        Become(&TThis::StateResolveIndex);
+        Impl->NextState(this);
     }
 
     STATEFN(StateResolveIndex) {
@@ -558,34 +577,24 @@ class TAsyncIndexChangeSenderMain
         const auto& indexTable = entry.ListNodeEntry->Children.at(0);
 
         Y_ABORT_UNLESS(indexTable.Kind == TNavigate::KindTable);
-        IndexTablePathId = indexTable.PathId;
+        TargetTablePathId = indexTable.PathId;
 
-        ResolveIndexTable();
+        Impl->NextState(this);
     }
 
-    /// ResolveIndexTable
-
-    void ResolveIndexTable() {
-        auto request = MakeHolder<TNavigate>();
-        request->ResultSet.emplace_back(MakeNavigateEntry(IndexTablePathId, TNavigate::OpTable));
-
-        Send(MakeSchemeCacheID(), new TEvNavigate(request.Release()));
-        Become(&TThis::StateResolveIndexTable);
-    }
-
-    STATEFN(StateResolveIndexTable) {
+    STATEFN(StateResolveTargetTable) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleIndexTable);
+            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleTargetTable);
             sFunc(TEvents::TEvWakeup, ResolveIndex);
         default:
             return StateBase(ev);
         }
     }
 
-    void HandleIndexTable(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+    void HandleTargetTable(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         const auto& result = ev->Get()->Request;
 
-        LOG_D("HandleIndexTable TEvTxProxySchemeCache::TEvNavigateKeySetResult"
+        LOG_D("HandleTargetTable TEvTxProxySchemeCache::TEvNavigateKeySetResult"
             << ": result# " << (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr"));
 
         if (!CheckNotEmpty(result)) {
@@ -598,7 +607,7 @@ class TAsyncIndexChangeSenderMain
 
         const auto& entry = result->ResultSet.at(0);
 
-        if (!CheckTableId(entry, IndexTablePathId)) {
+        if (!CheckTableId(entry, TargetTablePathId)) {
             return;
         }
 
@@ -641,17 +650,7 @@ class TAsyncIndexChangeSenderMain
 
         SetPartitioner(NChangeExchange::CreateSchemaBoundaryPartitioner<TChangeRecord>(*KeyDesc.Get()));
 
-        ResolveKeys();
-    }
-
-    /// ResolveKeys
-
-    void ResolveKeys() {
-        auto request = MakeHolder<TResolve>();
-        request->ResultSet.emplace_back(std::move(KeyDesc));
-
-        Send(MakeSchemeCacheID(), new TEvResolve(request.Release()));
-        Become(&TThis::StateResolveKeys);
+        Impl->NextState(this);
     }
 
     STATEFN(StateResolveKeys) {
@@ -679,7 +678,7 @@ class TAsyncIndexChangeSenderMain
 
         auto& entry = result->ResultSet.at(0);
 
-        if (!CheckTableId(entry, IndexTablePathId)) {
+        if (!CheckTableId(entry, TargetTablePathId)) {
             return;
         }
 
@@ -693,13 +692,13 @@ class TAsyncIndexChangeSenderMain
             return Retry();
         }
 
-        const bool versionChanged = !IndexTableVersion || IndexTableVersion != entry.GeneralVersion;
-        IndexTableVersion = entry.GeneralVersion;
+        const bool versionChanged = !TargetTableVersion || TargetTableVersion != entry.GeneralVersion;
+        TargetTableVersion = entry.GeneralVersion;
 
         KeyDesc = std::move(entry.KeyDescription);
         CreateSenders(MakePartitionIds(KeyDesc->GetPartitions()), versionChanged);
 
-        Become(&TThis::StateMain);
+        Impl->NextState(this);
     }
 
     /// Main
@@ -709,7 +708,8 @@ class TAsyncIndexChangeSenderMain
     }
 
     void Resolve() override {
-        ResolveIndex();
+        Become(&TThis::StateBootstrap);
+        Impl->NextState(this);
     }
 
     bool IsResolved() const override {
@@ -717,7 +717,7 @@ class TAsyncIndexChangeSenderMain
     }
 
     IActor* CreateSender(ui64 partitionId) const override {
-        return new TAsyncIndexChangeSenderShard(SelfId(), DataShard, partitionId, IndexTablePathId, TagMap);
+        return new TAsyncIndexChangeSenderShard(SelfId(), DataShard, partitionId, TargetTablePathId, TagMap);
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TPtr& ev) {
@@ -772,18 +772,42 @@ public:
         return NKikimrServices::TActivity::CHANGE_SENDER_ASYNC_INDEX_ACTOR_MAIN;
     }
 
-    explicit TAsyncIndexChangeSenderMain(const TDataShardId& dataShard, const TTableId& userTableId, const TPathId& indexPathId)
+    explicit TChangeSenderMain(
+        THolder<IChangeSenderMainImpl> impl,
+        const TDataShardId& dataShard,
+        const TTableId& userTableId,
+        const TIndexPathId& indexPathId)
         : TActorBootstrapped()
         , TBaseChangeSender(this, this, this, this, dataShard.ActorId)
-        , IndexPathId(indexPathId)
+        , IndexPathId(indexPathId.Value)
+        , Impl(std::move(impl))
         , DataShard(dataShard)
         , UserTableId(userTableId)
-        , IndexTableVersion(0)
+        , TargetTableVersion(0)
+    {
+    }
+
+    explicit TChangeSenderMain(
+        THolder<IChangeSenderMainImpl> impl,
+        const TDataShardId& dataShard,
+        const TTableId& userTableId,
+        const TTargetTablePathId& targetTablePathId)
+        : TActorBootstrapped()
+        , TBaseChangeSender(this, this, this, this, dataShard.ActorId)
+        , Impl(std::move(impl))
+        , DataShard(dataShard)
+        , UserTableId(userTableId)
+        , TargetTablePathId(targetTablePathId.Value)
+        , TargetTableVersion(0)
     {
     }
 
     void Bootstrap() {
-        ResolveUserTable();
+        Impl->NextState(this);
+    }
+
+    TPathId GetChangeSenderIdentity() const override final {
+        return IndexPathId;
     }
 
     STFUNC(StateBase) {
@@ -808,26 +832,105 @@ public:
         }
     }
 
-    TPathId GetChangeSenderIdentity() const override final {
-        return IndexPathId;
+    void ResolveUserTable() override final {
+        auto request = MakeHolder<TNavigate>();
+        request->ResultSet.emplace_back(MakeNavigateEntry(UserTableId, TNavigate::OpTable));
+
+        Send(MakeSchemeCacheID(), new TEvNavigate(request.Release()));
+        Become(&TThis::StateResolveUserTable);
+    }
+
+    void ResolveIndex() override final {
+        auto request = MakeHolder<TNavigate>();
+        request->ResultSet.emplace_back(MakeNavigateEntry(IndexPathId, TNavigate::OpList));
+
+        Send(MakeSchemeCacheID(), new TEvNavigate(request.Release()));
+        Become(&TThis::StateResolveIndex);
+    }
+
+    void ResolveTargetTable() override final {
+        auto request = MakeHolder<TNavigate>();
+        request->ResultSet.emplace_back(MakeNavigateEntry(TargetTablePathId, TNavigate::OpTable));
+
+        Send(MakeSchemeCacheID(), new TEvNavigate(request.Release()));
+        Become(&TThis::StateResolveTargetTable);
+    }
+
+    void ResolveKeys() override final {
+        auto request = MakeHolder<TResolve>();
+        request->ResultSet.emplace_back(std::move(KeyDesc));
+
+        Send(MakeSchemeCacheID(), new TEvResolve(request.Release()));
+        Become(&TThis::StateResolveKeys);
+    }
+
+    void Serve() override final {
+        Become(&TThis::StateMain);
+    }
+
+    EState GetState() override final {
+        if (IsInit()) {
+            return EState::Init;
+        } else if (IsResolvingUserTable()) {
+            return EState::ResolveUserTable;
+        } else if (IsResolvingIndex()) {
+            return EState::ResolveIndex;
+        } else if (IsResolvingIndexTable()) {
+            return EState::ResolveTargetTable;
+        } else if (IsResolvingKeys()) {
+            return EState::ResolveKeys;
+        } else {
+            return EState::Unknown;
+        }
     }
 
 private:
     const TPathId IndexPathId;
+    THolder<IChangeSenderMainImpl> Impl;
     const TDataShardId DataShard;
     const TTableId UserTableId;
     mutable TMaybe<TString> LogPrefix;
 
     THashMap<TString, TTag> MainColumnToTag;
-    TMap<TTag, TTag> TagMap; // from main to index
+    TMap<TTag, TTag> TagMap; // from main to target
 
-    TPathId IndexTablePathId;
-    ui64 IndexTableVersion;
+    TPathId TargetTablePathId;
+    ui64 TargetTableVersion;
     THolder<TKeyDesc> KeyDesc;
-}; // TAsyncIndexChangeSenderMain
+}; // TChangeSenderMain
+
+struct TAsyncIndexChangeSenderMainImpl
+    : public IChangeSenderMainImpl
+{
+    void NextState(IChangeSenderMain* self) const override final {
+        switch(self->GetState()) {
+            case EState::Init:
+                self->ResolveUserTable();
+                break;
+            case EState::ResolveUserTable:
+                self->ResolveIndex();
+                break;
+            case EState::ResolveIndex:
+                self->ResolveTargetTable();
+                break;
+            case EState::ResolveTargetTable:
+                self->ResolveKeys();
+                break;
+            case EState::ResolveKeys:
+                self->Serve();
+                break;
+            default:
+                Y_ABORT("unreachable");
+        }
+    }
+
+    const char* GetLogName() const override final {
+        return "AsyncIndex";
+    }
+};
 
 IActor* CreateAsyncIndexChangeSender(const TDataShardId& dataShard, const TTableId& userTableId, const TPathId& indexPathId) {
-    return new TAsyncIndexChangeSenderMain(dataShard, userTableId, indexPathId);
+    return new TChangeSenderMain(MakeHolder<TMainImpl>(), dataShard, userTableId, TIndexPathId(indexPathId));
 }
 
 }

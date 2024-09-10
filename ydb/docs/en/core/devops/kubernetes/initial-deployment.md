@@ -69,13 +69,7 @@ See the operator's source code [on GitHub](https://github.com/ydb-platform/ydb-k
 
 ## Environment preparation
 
-1. Clone the [ydb-kubernetes-operator](https://github.com/ydb-platform/ydb-kubernetes-operator) repository:
-
-  ```bash
-  git clone https://github.com/ydb-platform/ydb-kubernetes-operator && cd ydb-kubernetes-operator
-  ```
-
-2. Add the {{ ydb-short-name }} repository to Helm:
+1. Add the {{ ydb-short-name }} repository to Helm:
 
   Run the command:
 
@@ -92,7 +86,7 @@ See the operator's source code [on GitHub](https://github.com/ydb-platform/ydb-k
   "ydb" has been added to your repositories
   ```
 
-3. Update the Helm chart index:
+2. Update the Helm chart index:
 
   Run the command:
 
@@ -143,7 +137,7 @@ Apply the manifest for creating storage nodes:
 - block-4-2
 
   ```bash
-  kubectl apply -f samples/storage-block-4-2.yaml
+  kubectl apply -f https://raw.githubusercontent.com/ydb-platform/ydb-kubernetes-operator/master/samples/storage-block-4-2.yaml
   ```
 
   This will create 8 {{ ydb-short-name }} storage nodes that persist data using erasure coding. This takes only 50% of additional storage space to provide fault-tolerance.
@@ -151,7 +145,7 @@ Apply the manifest for creating storage nodes:
 - mirror-3-dc
 
   ```bash
-  kubectl apply -f samples/storage-mirror-3-dc.yaml
+  kubectl apply -f https://github.com/ydb-platform/ydb-kubernetes-operator/blob/master/samples/storage-mirror-3dc.yaml
   ```
 
   This will create 9 {{ ydb-short-name }} storage nodes that store data with replication factor 3.
@@ -175,7 +169,7 @@ The cluster configuration is static. The controller won't process any changes wh
 Apply the manifest for creating a database and dynamic nodes:
 
 ```bash
-kubectl apply -f samples/database.yaml
+kubectl apply -f https://raw.githubusercontent.com/ydb-platform/ydb-kubernetes-operator/master/samples/database.yaml
 ```
 
 {% note info %}

@@ -441,7 +441,7 @@ class TAlterOlapStore: public TSubOperation {
         for (const auto& alterSchema : alter.GetAlterSchemaPresets()) {
             for (const auto& alterColumn : alterSchema.GetAlterSchema().GetAlterColumns()) {
                 if (alterColumn.HasSerializer()) {
-                        return true;
+                    return true;
                 }
             }
         }

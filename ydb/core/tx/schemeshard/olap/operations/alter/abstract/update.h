@@ -12,15 +12,6 @@ class ISSEntityUpdate {
 private:
     bool Initialized = false;
 
-    bool IsAlterCompression(const TUpdateInitializationContext& context) const {
-        for (const auto& alterColumn : context.GetModification()->GetAlterColumnTable().GetAlterSchema().GetAlterColumns()) {
-            if (alterColumn.HasSerializer()) {
-                return true;
-            }
-        }
-        return false;
-    }
-
 protected:
     virtual TConclusionStatus DoInitialize(const TUpdateInitializationContext& context) = 0;
     virtual TConclusionStatus DoStart(const TUpdateStartContext& context) = 0;
@@ -54,9 +45,6 @@ public:
 
     TConclusionStatus Initialize(const TUpdateInitializationContext& context) {
         AFL_VERIFY(!Initialized);
-        if (!AppData()->FeatureFlags.GetEnableOlapCompression() && IsAlterCompression(context)) {
-            return TConclusionStatus::Fail("Compression is disabled for OLAP tables");
-        }
         auto result = DoInitialize(context);
         if (result.IsSuccess()) {
             Initialized = true;

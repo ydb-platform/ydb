@@ -1027,12 +1027,12 @@ public:
         return PlanStep;
     }
 
-    void Remove(NIceDb::TNiceDb& db) {
+    void Remove(NIceDb::TNiceDb& db) const {
         AFL_VERIFY(ParsedFlag);
         db.Table<NColumnShard::Schema::InsertTable>().Key((ui8)RecType, PlanStep, WriteTxId, PathId, DedupId).Delete();
     }
 
-    void Upsert(NIceDb::TNiceDb& db) {
+    void Upsert(NIceDb::TNiceDb& db) const {
         AFL_VERIFY(ParsedFlag);
         using namespace NColumnShard;
         if (RangeOffset) {

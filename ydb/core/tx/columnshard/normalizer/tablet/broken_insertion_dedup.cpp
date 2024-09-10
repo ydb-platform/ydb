@@ -12,9 +12,10 @@ public:
     virtual bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& /*normalizationContext*/) const override {
         NIceDb::TNiceDb db(txc.DB);
         for (auto&& i : Insertions) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "remove_aborted_record")("write_id", i.first);
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "remove_aborted_record")("write_id", i.GetInsertWriteId());
             i.Remove(db);
         }
+        return true;
     }
     virtual void ApplyOnComplete(const TNormalizationController& /*normalizationContext*/) const override {
 
@@ -23,29 +24,40 @@ public:
     virtual ui64 GetSize() const override {
         return Insertions.size();
     }
+
+    TNormalizerRemoveChanges(const std::vector<TInsertTableRecordLoadContext>& insertions)
+        : Insertions(insertions)
+    {
+
+    }
 };
 
 class TNormalizerCleanDedupChanges: public INormalizerChanges {
 private:
-    std::vector<TInsertTableRecordLoadContext> Insertions;
+    mutable std::vector<TInsertTableRecordLoadContext> Insertions;
 
 public:
     virtual bool ApplyOnExecute(
         NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& /*normalizationContext*/) const override {
         NIceDb::TNiceDb db(txc.DB);
         for (auto&& i : Insertions) {
-            AFL_VERIFY(constructor.GetDedupId());
+            AFL_VERIFY(i.GetDedupId());
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "correct_record")("dedup", i.GetDedupId());
             i.Remove(db);
             i.SetDedupId("");
             i.Upsert(db);
         }
+        return true;
     }
     virtual void ApplyOnComplete(const TNormalizationController& /*normalizationContext*/) const override {
     }
 
     virtual ui64 GetSize() const override {
         return Insertions.size();
+    }
+
+    TNormalizerCleanDedupChanges(const std::vector<TInsertTableRecordLoadContext>& insertions)
+        : Insertions(insertions) {
     }
 };
 
@@ -74,7 +86,6 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TInsertionsDedupNormalizer::DoIn
     if (!rowset.IsReady()) {
         return TConclusionStatus::Fail("cannot read insertion info");
     }
-
     THashMap<TInsertWriteId, TCollectionStates> insertions;
     while (!rowset.EndOfSet()) {
         TInsertTableRecordLoadContext constructor;
@@ -87,7 +98,6 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TInsertionsDedupNormalizer::DoIn
                 insertions[constructor.GetInsertWriteId()].SetAborted(constructor);
             } else if (constructor.GetRecType() == NColumnShard::Schema::EInsertTableIds::Inserted) {
                 insertions[constructor.GetInsertWriteId()].SetInserted(constructor);
-                AFL_VERIFY(inserted.emplace(constructor.GetInsertWriteId(), constructor).second);
             } else {
                 AFL_VERIFY(false);
             }
@@ -97,18 +107,23 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TInsertionsDedupNormalizer::DoIn
         }
     }
 
+    std::vector<INormalizerTask::TPtr> result;
     std::vector<TInsertTableRecordLoadContext> toRemove;
     std::vector<TInsertTableRecordLoadContext> toCleanDedup;
-    for (auto&& i : insertions) {
+    for (auto&& [id, i] : insertions) {
         if (i.GetInserted() && i.GetAborted()) {
             toRemove.emplace_back(*i.GetInserted());
             if (i.GetAborted()->GetDedupId()) {
                 toCleanDedup.emplace_back(*i.GetAborted());
             }
-        } else if (i.GetAborted() && i.GetAborted()->GetDedupId()) {
-            toCleanDedup.emplace_back(*i.GetAborted());
-        } else if (i.GetInserted() && i.GetInserted()->GetDedupId()) {
-            toCleanDedup.emplace_back(*i.GetInserted());
+        } else if (i.GetAborted()) {
+            if (i.GetAborted()->GetDedupId()) {
+                toCleanDedup.emplace_back(*i.GetAborted());
+            }
+        } else if (i.GetInserted()) {
+            if (i.GetInserted()->GetDedupId()) {
+                toCleanDedup.emplace_back(*i.GetInserted());
+            }
         } else {
             AFL_VERIFY(false);
         }
@@ -130,7 +145,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TInsertionsDedupNormalizer::DoIn
         toRemove.clear();
     }
 
-    return std::vector<INormalizerTask::TPtr>();
+    return result;
 }
 
 }   // namespace NKikimr::NOlap

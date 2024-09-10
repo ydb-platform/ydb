@@ -4,7 +4,7 @@
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 
 
-namespace NKikimr::NOlap {
+namespace NKikimr::NOlap::NInsertionDedup {
 
 class TInsertionsDedupNormalizer: public TNormalizationController::INormalizerComponent {
 public:

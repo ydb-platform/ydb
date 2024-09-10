@@ -2358,7 +2358,10 @@ private:
 
             absl::flat_hash_set<ui64> sendingShardsSet;
             absl::flat_hash_set<ui64> receivingShardsSet;
+            absl::flat_hash_set<ui64> sendingColumnShardsSet;
+            absl::flat_hash_set<ui64> receivingColumnShardsSet;
             ui64 arbiter = 0;
+            std::optional<ui64> columnShardArbiter;
 
             // Gather shards that need to send/receive readsets (shards with effects)
             if (needCommit) {
@@ -2378,17 +2381,32 @@ private:
                 }
 
                 for (auto& [shardId, tx] : evWriteTxs) {
-                    if (tx->HasLocks()) {
-                        // Locks may be broken so shards with locks need to send readsets
-                        sendingShardsSet.insert(shardId);
-                    }
-                    if (ShardsWithEffects.contains(shardId)) {
-                        // Volatile transactions may abort effects, so they send readsets
-                        if (VolatileTx) {
+                    if (ShardIdToTableInfo->at(shardId).IsOlap) {
+                         if (tx->HasLocks()) {
+                            // Locks may be broken so shards with locks need to send readsets
+                            sendingColumnShardsSet.insert(shardId);
+                        }
+                        if (ShardsWithEffects.contains(shardId)) {
+                            // Volatile transactions may abort effects, so they send readsets
+                            if (VolatileTx) {
+                                sendingColumnShardsSet.insert(shardId);
+                            }
+                            // Effects are only applied when all locks are valid
+                            receivingColumnShardsSet.insert(shardId);
+                        }
+                    } else {
+                        if (tx->HasLocks()) {
+                            // Locks may be broken so shards with locks need to send readsets
                             sendingShardsSet.insert(shardId);
                         }
-                        // Effects are only applied when all locks are valid
-                        receivingShardsSet.insert(shardId);
+                        if (ShardsWithEffects.contains(shardId)) {
+                            // Volatile transactions may abort effects, so they send readsets
+                            if (VolatileTx) {
+                                sendingShardsSet.insert(shardId);
+                            }
+                            // Effects are only applied when all locks are valid
+                            receivingShardsSet.insert(shardId);
+                        }
                     }
                 }
 
@@ -2439,9 +2457,19 @@ private:
                     }
                     if (candidates.size() >= minArbiterMeshSize) {
                         // Select a random arbiter
-                        ui32 index = RandomNumber<ui32>(candidates.size());
+                        const ui32 index = RandomNumber<ui32>(candidates.size());
                         arbiter = candidates.at(index);
                     }
+                }
+
+                if (!receivingColumnShardsSet.empty()) {
+                    const ui32 index = RandomNumber<ui32>(receivingColumnShardsSet.size());
+                    auto arbiterIterator = std::begin(receivingColumnShardsSet);
+                    std::advance(arbiterIterator, index);
+                    columnShardArbiter = *arbiterIterator;
+
+                    sendingShardsSet.insert(*columnShardArbiter);
+                    receivingShardsSet.insert(*columnShardArbiter);
                 }
             }
 
@@ -2453,6 +2481,12 @@ private:
 
                 std::sort(sendingShards.begin(), sendingShards.end());
                 std::sort(receivingShards.begin(), receivingShards.end());
+
+                NProtoBuf::RepeatedField<ui64> sendingColumnShards(sendingColumnShardsSet.begin(), sendingColumnShardsSet.end());
+                NProtoBuf::RepeatedField<ui64> receivingColumnShards(receivingColumnShardsSet.begin(), receivingColumnShardsSet.end());
+
+                std::sort(sendingColumnShards.begin(), sendingColumnShards.end());
+                std::sort(receivingColumnShards.begin(), receivingColumnShards.end());
 
                 for (auto& [shardId, shardTx] : datashardTxs) {
                     shardTx->MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
@@ -2467,8 +2501,13 @@ private:
                     tx->MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
                     *tx->MutableLocks()->MutableSendingShards() = sendingShards;
                     *tx->MutableLocks()->MutableReceivingShards() = receivingShards;
+                    *tx->MutableLocks()->MutableSendingColumnShards() = sendingColumnShards;
+                    *tx->MutableLocks()->MutableReceivingColumnShards() = receivingColumnShards;
                     if (arbiter) {
                         tx->MutableLocks()->SetArbiterShard(arbiter);
+                    }
+                    if (columnShardArbiter) {
+                        tx->MutableLocks()->SetArbiterColumnShard(*columnShardArbiter);
                     }
                 }
 

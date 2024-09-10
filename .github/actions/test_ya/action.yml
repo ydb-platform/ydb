@@ -113,7 +113,6 @@ runs:
         export PUBLIC_DIR_URL=$S3_URL_PREFIX
         echo "PUBLIC_DIR_URL=$PUBLIC_DIR_URL" >> $GITHUB_ENV
         mkdir -p $PUBLIC_DIR
-        echo "After check artifacts will be uploaded [here](${PUBLIC_DIR_URL}/index.html)" | .github/scripts/tests/comment-pr.py
 
         echo "LAST_JUNIT_REPORT_XML=$PUBLIC_DIR/last_junit.xml" >> $GITHUB_ENV
         export TESTMO_URL=${{ inputs.testman_url }}
@@ -149,6 +148,7 @@ runs:
       shell: bash
       run: |
         set -x
+        echo "Artifacts will be uploaded [here](${PUBLIC_DIR_URL}/index.html)" | .github/scripts/tests/comment-pr.py
 
         ORIGINAL_HEAD=$(git rev-parse HEAD)
         

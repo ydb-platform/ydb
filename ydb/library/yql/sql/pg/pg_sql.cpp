@@ -4027,7 +4027,7 @@ public:
         }
 
         if (argStrs.empty()) {
-            AddError("Expected at least argument for table function");
+            AddError("Expected at least one argument for table function");
             return nullptr;
         }
 

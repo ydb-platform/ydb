@@ -32,6 +32,11 @@ struct TYdbSetupSettings {
     std::unordered_set<TString> SharedTenants;
     std::unordered_set<TString> ServerlessTenants;
     TDuration InitializationTimeout = TDuration::Seconds(10);
+    TDuration RequestsTimeout;
+
+    bool DisableDiskMock = false;
+    bool UseRealPDisks = false;
+    ui64 DiskSize = 32_GB;
 
     bool MonitoringEnabled = false;
     ui16 MonitoringPortOffset = 0;
@@ -69,6 +74,7 @@ struct TRunnerOptions {
     IOutputStream* SchemeQueryAstOutput = nullptr;
     IOutputStream* ScriptQueryAstOutput = nullptr;
     IOutputStream* ScriptQueryPlanOutput = nullptr;
+    IOutputStream* ScriptQueryTimelineOutput = nullptr;
     TString InProgressStatisticsOutputFile;
 
     EResultOutputFormat ResultOutputFormat = EResultOutputFormat::RowsJson;

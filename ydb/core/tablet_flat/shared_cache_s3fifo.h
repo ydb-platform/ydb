@@ -194,6 +194,7 @@ public:
         const ELocation location = GetLocation(page);
         switch (location) {
             case ELocation::None:
+                EraseGhost(page);
                 break;
             case ELocation::SmallQueue:
                 Erase(SmallQueue, page);
@@ -206,7 +207,6 @@ public:
         }
 
         SetFrequency(page, 0);
-        EraseGhost(page);
     }
 
     void UpdateLimit(ui64 limit) override {

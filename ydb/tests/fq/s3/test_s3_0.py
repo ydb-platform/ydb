@@ -752,7 +752,7 @@ Pear,15,33'''
 
     @yq_v2
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def bad_request_on_invalid_json(self, kikimr, s3, client, unique_prefix):
+    def test_bad_request_on_invalid_parquet(self, kikimr, s3, client, unique_prefix):
         resource = boto3.resource(
             "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
@@ -765,21 +765,22 @@ Pear,15,33'''
             "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
-        s3_client.put_object(Body="blah blah blah", Bucket='bbucket', Key='file.json', ContentType='text/plain')
+
+        s3_client.put_object(Body='not a parquet file', Bucket='bbucket', Key='file.txt', ContentType='text/plain')
 
         kikimr.control_plane.wait_bootstrap(1)
         storage_connection_name = unique_prefix + "badbucket"
         client.create_storage_connection(storage_connection_name, "bbucket")
 
         sql = f'''
-            select * from `{storage_connection_name}`.`file.json` with (format=parquet, schema (data string));
+            select * from `{storage_connection_name}`.`file.txt` with (format=parquet, schema (data string));
             '''
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.FAILED)
-        assert "Query failed with code BAD_REQUEST" in str(
-            client.describe_query(query_id).result
-        )
+
+        error_message = str(client.describe_query(query_id).result)
+        assert ("Query failed with code BAD_REQUEST" in error_message) and ("Parquet magic bytes not found in footer." in error_message)
 
     @yq_v1
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)

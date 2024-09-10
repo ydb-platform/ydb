@@ -12,7 +12,7 @@ Functions for Unicode strings.
 
   Returns the length of a utf-8 string in unicode code points. Surrogate pairs are counted as one character.
 
-```sql
+```yql
 SELECT Unicode::GetLength("жніўня"); -- 6
 ```
 
@@ -22,7 +22,7 @@ SELECT Unicode::GetLength("жніўня"); -- 6
 
   Finding the first (```RFind``` - the last) occurrence of a substring in a string starting from the ```pos``` position. Returns the position of the first character from the found substring. In case of failure, returns Null.
 
-```sql
+```yql
 SELECT Unicode::Find("aaa", "bb"); -- Null
 ```
 
@@ -31,7 +31,7 @@ SELECT Unicode::Find("aaa", "bb"); -- Null
   Returns a ```string``` substring starting with ```from``` that is ```len``` characters long. If the ```len``` argument is omitted, the substring is taken to the end of the source string.
 If ```from``` exceeds the length of the original string, an empty string ```""``` is returned.
 
-```sql
+```yql
 SELECT Unicode::Substring("0123456789abcdefghij", 10); -- "abcdefghij"
 ```
 
@@ -46,7 +46,7 @@ SELECT Unicode::Substring("0123456789abcdefghij", 10); -- "abcdefghij"
 
   Transliterates with Latin letters the words from the passed string, consisting entirely of characters of the alphabet of the language passed by the second argument. If no language is specified, the words are transliterated from Russian. Available languages: "kaz", "rus", "tur", and "ukr".
 
-```sql
+```yql
 SELECT Unicode::Translit("Тот уголок земли, где я провел"); -- "Tot ugolok zemli, gde ya provel"
 ```
 
@@ -64,7 +64,7 @@ Parameters:
   - ```DoSimpleCyr``` converts diacritical Cyrillic characters to similar Latin characters, defaults to ```true```.
   - ```FillOffset``` parameter is not used.
 
-```sql
+```yql
 SELECT Unicode::Fold("Kongreßstraße", false AS DoSimpleCyr, false AS DoRenyxa); -- "kongressstrasse"
 SELECT Unicode::Fold("ҫурт"); -- "сурт"
 SELECT Unicode::Fold("Eylül", "Turkish" AS Language); -- "eylul"
@@ -86,7 +86,7 @@ SELECT Unicode::Fold("Eylül", "Turkish" AS Language); -- "eylul"
 
   Deletes all/first/last occurrences of characters in the ```symbols``` set from the ```input```. The second argument is interpreted as an unordered set of characters to be removed.
 
-```sql
+```yql
 SELECT Unicode::ReplaceLast("absence", "enc", ""); -- "abse"
 SELECT Unicode::RemoveAll("abandon", "an"); -- "bdo"
 ```
@@ -99,7 +99,7 @@ SELECT Unicode::RemoveAll("abandon", "an"); -- "bdo"
 
   Generates a Unicode string from codepoints.
 
-```sql
+```yql
 SELECT Unicode::ToCodePointList("Щавель"); -- [1065, 1072, 1074, 1077, 1083, 1100]
 SELECT Unicode::FromCodePointList(AsList(99,111,100,101,32,112,111,105,110,116,115,32,99,111,110,118,101,114,116,101,114)); -- "code points converter"
 ```
@@ -128,7 +128,7 @@ SELECT Unicode::FromCodePointList(AsList(99,111,100,101,32,112,111,105,110,116,1
 
   Concatenates a list of strings via a ```separator``` into a single string.
 
-```sql
+```yql
 SELECT Unicode::SplitToList("One, two, three, four, five", ", ", 2 AS Limit); -- ["One", "two", "three, four, five"]
 SELECT Unicode::JoinFromList(["One", "two", "three", "four", "five"], ";"); -- "One;two;three;four;five"
 ```
@@ -145,7 +145,7 @@ If there are incorrect characters in a string or a number goes beyond ui64, the 
 
   Similar to the Unicode::ToUint64() function, except that it returns Null instead of an error.
 
-```sql
+```yql
 SELECT Unicode::ToUint64("77741"); -- 77741
 SELECT Unicode::ToUint64("-77741"); -- 18446744073709473875
 SELECT Unicode::TryToUint64("asdh831"); -- Null

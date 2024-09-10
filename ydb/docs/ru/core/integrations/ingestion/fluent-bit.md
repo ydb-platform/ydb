@@ -31,7 +31,7 @@ FluentBit – инструмент, который может собирать �
 
 Пример команды создания строковой таблицы для хранения логов:
 
-```sql
+```yql
 CREATE TABLE `fluent-bit/log` (
     `timestamp`         Timestamp NOT NULL,
     `hostname`          Text NOT NULL,
@@ -48,7 +48,7 @@ CREATE TABLE `fluent-bit/log` (
 
 Пример команды создания колоночной таблицы для хранения логов:
 
-```sql
+```yql
 CREATE TABLE `fluent-bit/log` (
     `timestamp`         Timestamp NOT NULL,
     `hostname`          Text NOT NULL,
@@ -143,7 +143,7 @@ FluentBit очень часто используется для сбора ло�
 
 Структура таблицы {{ ydb-short-name }} для хранения логов Kubernetes:
 
-```sql
+```yql
 CREATE TABLE `fluent-bit/log` (
     `timestamp`         Timestamp NOT NULL,
     `file`              Text NOT NULL,
@@ -322,7 +322,7 @@ kubectl logs -n ydb-fluent-bit-integration -l app.kubernetes.io/instance=fluent-
 
 Проверяем, что записи в таблице {{ ydb-short-name }} есть (появятся спустя примерно несколько минут после запуска FluentBit):
 
-```sql
+```yql
 SELECT * FROM `fluent-bit/log` LIMIT 10 ORDER BY `timestamp` DESC
 ```
 
@@ -336,6 +336,6 @@ kubectl delete namespace ydb-fluent-bit-integration
 
 Далее можно удалить таблицу с логами в базе данных {{ ydb-short-name }}:
 
-```sql
+```yql
 DROP TABLE `fluent-bit/log`
 ```

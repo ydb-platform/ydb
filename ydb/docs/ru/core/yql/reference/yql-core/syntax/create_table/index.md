@@ -43,7 +43,7 @@
 * [Колоночные](../../../../concepts/datamodel/table.md#column-oriented-tables).
 
 Тип таблицы при создании задается параметром `STORE` в блоке `WITH`, где `ROW` означает [строковую таблицу](../../../../concepts/datamodel/table.md#row-oriented-tables), а `COLUMN` — [колоночную](../../../../concepts/datamodel/table.md#column-oriented-tables):
-```sql
+```yql
 CREATE <table_name> (
   columns
   ...
@@ -64,7 +64,7 @@ WITH (
 - Создание строковой таблицы
 
 {% if feature_column_container_type %}
-  ```sql
+```yql
   CREATE TABLE <table_name> (
     a Uint64,
     b Uint64,
@@ -74,7 +74,7 @@ WITH (
   );
   ```
 {% else %}
-  ```sql
+```yql
   CREATE TABLE <table_name> (
     a Uint64,
     b Uint64,
@@ -105,7 +105,7 @@ WITH (
 
 - Создание колоночной таблицы
 
-  ```sql
+```yql
   CREATE TABLE table_name (
     a Uint64 NOT NULL,
     b Uint64 NOT NULL,
@@ -140,7 +140,7 @@ WITH (
 {% endif %}
 
 **Пример**:
-```sql
+```yql
 CREATE TABLE <table_name> (
   a Uint64,
   b Uint64,

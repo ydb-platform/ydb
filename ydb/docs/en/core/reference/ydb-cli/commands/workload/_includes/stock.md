@@ -100,7 +100,7 @@ This type of load reads the specified number of orders for the customer with id 
 
 YQL query:
 
-```sql
+```yql
 DECLARE $cust AS Utf8;
 DECLARE $limit AS UInt32;
 
@@ -131,7 +131,7 @@ This type of load reads the specified number of orders from randomly selected cu
 
 YQL query:
 
-```sql
+```yql
 DECLARE $cust AS Utf8;
 DECLARE $limit AS UInt32;
 

@@ -427,7 +427,7 @@ Liquibase command 'update' was executed successfully.
 
 Допустим нам нужно создать {{ ydb-short-name }} топик и выключить параметр `AUTO_PARTITIONING_BY_SIZE` таблицы. Это можно сделать нативным SQL скриптом:
 
-```sql
+```yql
 --liquibase formatted sql
 
 --changeset kurdyukov-kir:create-a-topic

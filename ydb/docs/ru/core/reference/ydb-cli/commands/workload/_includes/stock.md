@@ -37,7 +37,7 @@
 `--auto-partition <значение>` | - | Включение/выключение автошардирования. Возможные значения: 0 или 1. Значение по умолчанию: 1.
 
 Создаются 3 таблицы со следующими DDL:
-```sql
+```yql
 CREATE TABLE `stock`(product Utf8, quantity Int64, PRIMARY KEY(product)) WITH (AUTO_PARTITIONING_BY_LOAD = ENABLED, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = <min-partitions>);
 CREATE TABLE `orders`(id Uint64, customer Utf8, created Datetime, processed Datetime, PRIMARY KEY(id), INDEX ix_cust GLOBAL ON (customer, created)) WITH (READ_REPLICAS_SETTINGS = "per_az:1", AUTO_PARTITIONING_BY_LOAD = ENABLED, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = <min-partitions>, UNIFORM_PARTITIONS = <min-partitions>, AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 1000);
 CREATE TABLE `orderLines`(id_order Uint64, product Utf8, quantity Int64, PRIMARY KEY(id_order, product)) WITH (AUTO_PARTITIONING_BY_LOAD = ENABLED, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = <min-partitions>, UNIFORM_PARTITIONS = <min-partitions>, AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 1000);
@@ -94,7 +94,7 @@ CREATE TABLE `orderLines`(id_order Uint64, product Utf8, quantity Int64, PRIMARY
 Данный вид нагрузки читает заданное количество заказов покупателя с id = 10 000.
 
 YQL Запрос:
-```sql
+```yql
 DECLARE $cust AS Utf8;
 DECLARE $limit AS UInt32;
 
@@ -122,7 +122,7 @@ SELECT id, customer, created FROM orders view ix_cust
 Данный вид нагрузки читает заданное количество заказов случайно выбранных покупателей.
 
 YQL Запрос:
-```sql
+```yql
 DECLARE $cust AS Utf8;
 DECLARE $limit AS UInt32;
 
@@ -150,7 +150,7 @@ SELECT id, customer, created FROM orders view ix_cust
 Данный вид нагрузки создает случайно сгенерированный заказ. В заказ помещаются несколько различных товаров по 1 штуке. Количество видов товара в заказе генерируется случайно по экспоненциальному распределению.
 
 YQL Запрос:
-```sql
+```yql
 DECLARE $ido AS UInt64;
 DECLARE $cust AS Utf8;
 DECLARE $lines AS List<Struct<product:Utf8,quantity:Int64>>;
@@ -180,7 +180,7 @@ UPSERT INTO `orderLines`(id_order, product, quantity)
 Данный вид нагрузки создает случайно сгенерированный заказ и обрабатывает его. В заказ помещаются несколько различных товаров по 1 штуке. Количество видов товара в заказе генерируется случайно по экспоненциальному распределению. Обработка заказа заключается в уменьшении количества заказанных товаров на складе.
 
 YQL Запрос:
-```sql
+```yql
 DECLARE $ido AS UInt64;
 DECLARE $cust AS Utf8;
 DECLARE $lines AS List<Struct<product:Utf8,quantity:Int64>>;
@@ -234,7 +234,7 @@ SELECT * FROM $newq AS q WHERE q.quantity < 0
 Данный вид нагрузки создает заказ с одним и тем же набором товаров и обрабатывает его. Обработка заказа заключается в уменьшении количества заказанных товаров на складе.
 
 YQL Запрос:
-```sql
+```yql
 DECLARE $ido AS UInt64;
 DECLARE $cust AS Utf8;
 DECLARE $lines AS List<Struct<product:Utf8,quantity:Int64>>;

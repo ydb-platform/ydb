@@ -6,7 +6,7 @@ The names of the source column structures are not used and not returned in the r
 
 ### Example
 
-```sql
+```yql
 SELECT x, y, z
 FROM (
   SELECT

@@ -18,7 +18,7 @@
 
 * Задание значений для `REPLACE INTO` c помощью `VALUES`:
 
-  ```sql
+```yql
   REPLACE INTO my_table (Key1, Key2, Value2) VALUES
       (1u, "One", 101),
       (2u, "Two", 102);
@@ -27,7 +27,7 @@
 
 * Получение значений для `REPLACE INTO` с помощью выборки `SELECT`:
 
-  ```sql
+```yql
   REPLACE INTO my_table
   SELECT Key AS Key1, "Empty" AS Key2, Value AS Value1
   FROM my_table1;

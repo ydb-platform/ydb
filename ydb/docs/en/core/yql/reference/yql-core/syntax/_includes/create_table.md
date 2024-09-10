@@ -83,7 +83,7 @@ It is mandatory to specify the `PRIMARY KEY` with a non-empty list of columns. T
 
 The `INDEX` clause is used to define a {% if concept_secondary_index %}[secondary index]({{ concept_secondary_index }}){% else %}secondary index{% endif %} in a table:
 
-```sql
+```yql
 CREATE TABLE table_name (
     ...
     INDEX <index_name> GLOBAL [SYNC|ASYNC] ON ( <index_columns> ) COVER ( <cover_columns> ),
@@ -100,7 +100,7 @@ Where:
 
 #### Example
 
-```sql
+```yql
 CREATE TABLE my_table (
     a Uint64,
     b Bool,
@@ -115,7 +115,7 @@ CREATE TABLE my_table (
 
 {% if feature_temp_tables %}
 {% if feature_olap_tables %}#{%endif%}## Creating a temporary table {#temporary_tables}
-```sql
+```yql
 CREATE TEMPORARY TABLE table_name (
     ...
 );
@@ -130,7 +130,7 @@ CREATE TEMPORARY TABLE table_name (
 
 You can also specify a number of {{ backend_name }}-specific parameters for the table. When you create a table, those parameters are listed in the ```WITH``` clause:
 
-```sql
+```yql
 CREATE TABLE table_name (...)
 WITH (
     key1 = value1,
@@ -145,7 +145,7 @@ For a list of valid parameter names and values, see the [{{ backend_name }} tabl
 
 For example, this code will create a table with enabled automatic partitioning by partition size and the preferred size of each partition is 512 MB:
 
-```sql
+```yql
 CREATE TABLE my_table (
     id Uint64,
     title Utf8,
@@ -168,7 +168,7 @@ By default, all columns are in the same group named ```default```.  If necessary
 
 In the example below, for the created table, the ```family_large``` group of columns is added and set for the ```series_info``` column, and the parameters for the default group, which is set by ```default``` for all other columns, are also redefined.
 
-```sql
+```yql
 CREATE TABLE series_with_families (
     series_id Uint64,
     title Utf8,
@@ -208,7 +208,7 @@ Column-oriented {{ ydb-short-name }} tables are in the Preview mode.
 
 The `CREATE TABLE` statement creates a [column-oriented](../../../../concepts/datamodel/table.md#olap-data-types) table with the specified data schema and key columns (`PRIMARY KEY`).
 
-```sql
+```yql
 CREATE TABLE table_name (
     column1 type1,
     column2 type2 NOT NULL,
@@ -236,7 +236,7 @@ If you omit modifiers, a column is assigned an [optional](../../types/optional.m
 
 #### Example
 
-```sql
+```yql
 CREATE TABLE my_table (
     a Uint64 NOT NULL,
     b String,
@@ -253,7 +253,7 @@ STORE = COLUMN
 
 You can also specify a number of {{ backend_name }}-specific parameters for the table. When you create a table, those parameters are listed in the ```WITH``` clause:
 
-```sql
+```yql
 CREATE TABLE table_name (...)
 WITH (
     key1 = value1,
@@ -270,7 +270,7 @@ Supported parameters in column-oriented tables:
 
 For example, the following code creates a column-oriented table with ten partitions:
 
-```sql
+```yql
 CREATE TABLE my_table (
     id Uint64,
     title Utf8,

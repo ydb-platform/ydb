@@ -4,7 +4,7 @@ You can use the `ALTER TOPIC` command to change the [topic](../../../../concepts
 
 Here is the general format of the `ALTER TOPIC` command:
 
-```sql
+```yql
 ALTER TOPIC topic_path action1, action2, ..., actionN;
 ```
 
@@ -16,13 +16,13 @@ ALTER TOPIC topic_path action1, action2, ..., actionN;
 
 The following example will add a consumer with default settings to the topic.
 
-```sql
+```yql
 ALTER TOPIC `my_topic` ADD CONSUMER new_consumer;
 ```
 
 When adding consumers, you can specify their settings, for example:
 
-```sql
+```yql
 ALTER TOPIC `my_topic` ADD CONSUMER new_consumer2 WITH (important = false);
 ```
 
@@ -38,7 +38,7 @@ ALTER TOPIC `my_topic` ADD CONSUMER new_consumer2 WITH (important = false);
 
 `DROP CONSUMER`: Deletes the consumer from the topic.
 
-```sql
+```yql
 ALTER TOPIC `my_topic` DROP CONSUMER old_consumer;
 ```
 
@@ -48,7 +48,7 @@ ALTER TOPIC `my_topic` DROP CONSUMER old_consumer;
 
 Here is the general syntax for `ALTER CONSUMER`:
 
-```sql
+```yql
 ALTER TOPIC `topic_name` ALTER CONSUMER consumer_name consumer_action;
 ```
 
@@ -62,14 +62,14 @@ Supports the following types of `consumer_action`:
 
 The following example will assign the `important` parameter to the consumer.
 
-```sql
+```yql
 ALTER TOPIC `my_topic` ALTER CONSUMER my_consumer SET (important = true);
 ```
 
 {% if feature_topic_settings_reset %}
 This example will reset `read_from` to default.
 
-```sql
+```yql
 ALTER TOPIC `my_topic` ALTER CONSUMER my_consumer RESET (read_from);
 ```
 
@@ -80,7 +80,7 @@ repeat.
 
 This is a valid statement:
 
-```sql
+```yql
 ALTER TOPIC `my_topic`
     ALTER CONSUMER my_consumer SET (important = true)
     ALTER CONSUMER my_consumer SET (read_from = 0);
@@ -88,7 +88,7 @@ ALTER TOPIC `my_topic`
 
 But this statement will raise an error.
 
-```sql
+```yql
 ALTER TOPIC `my_topic`
     ALTER CONSUMER my_consumer SET (important = true)
     ALTER CONSUMER my_consumer SET (important = false);
@@ -100,7 +100,7 @@ Using the `SET (option = value[, ...])` action, you can update your topic settin
 
 The example below will change the retention period for the topic and the writing quota per partition:
 
-```sql
+```yql
 ALTER TOPIC `my_topic` SET (
     retention_period = Interval('PT36H'),
     partition_write_speed_bytes_per_second = 3000000
@@ -113,7 +113,7 @@ The `RESET (option[, option2, ...])` action enables you to reset the topic setti
 
 ### Example
 
-```sql
+```yql
 ALTER TOPIC `my_topic` RESET (
     min_active_partitions,
     partition_count_limit

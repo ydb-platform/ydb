@@ -19,7 +19,7 @@ The `Ip`  module supports both the IPv4 and IPv6 addresses. By default, they are
 
 ## Examples
 
-```sql
+```yql
 SELECT Ip::IsEmbeddedIPv4(
   Ip::FromString("::ffff:77.75.155.3")
 ); -- true

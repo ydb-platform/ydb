@@ -4,7 +4,7 @@ Group the `SELECT` results by the values of the specified columns or expressions
 
 ### Syntax
 
-```sql
+```yql
 SELECT                             -- In SELECT, you can use:
     column1,                       -- key columns specified in GROUP BY
     key_n,                         -- named expressions specified in GROUP BY
@@ -33,17 +33,17 @@ YQL also provides aggregation factories implemented by the functions [`AGGREGATI
 
 ### Examples
 
-```sql
+```yql
 SELECT key, COUNT(*) FROM my_table
 GROUP BY key;
 ```
 
-```sql
+```yql
 SELECT double_key, COUNT(*) FROM my_table
 GROUP BY key + key AS double_key;
 ```
 
-```sql
+```yql
 SELECT
    double_key,                           -- OK: A key column
    COUNT(*) AS group_size,               -- OK: COUNT(*)

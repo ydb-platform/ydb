@@ -6,7 +6,7 @@
 
 ## Пример
 
-```sql
+```yql
 INSERT INTO `connection`.`test/`
 WITH
 (

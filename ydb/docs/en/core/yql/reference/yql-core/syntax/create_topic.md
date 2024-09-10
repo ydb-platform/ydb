@@ -20,13 +20,13 @@ the omitted settings are also set by default (both for the topic and its consume
 
 Creating a topic without consumers with default settings:
 
-```sql
+```yql
 CREATE TOPIC `my_topic`;
 ```
 
 Creating a topic with a single consumer and the important option enabled:
 
-```sql
+```yql
 CREATE TOPIC `my_topic` (
     CONSUMER my_consumer WITH (important = true)
 );
@@ -44,7 +44,7 @@ CREATE TOPIC `my_topic` (
 
 Creating a topic with the retention period of one day:
 
-```sql
+```yql
 CREATE TOPIC `my_topic` WITH(
     retention_period = Interval('P1D')
 );

@@ -11,7 +11,7 @@
 
   Возвращает длину utf-8 строки в символах (unicode code points). Суррогатные пары учитываются как один символ.
 
-```sql
+```yql
 SELECT Unicode::GetLength("жніўня"); -- 6
 ```
 
@@ -20,7 +20,7 @@ SELECT Unicode::GetLength("жніўня"); -- 6
 
   Поиск первого(```RFind``` - последнего) вхождения подстроки в строку начиная с позиции ```pos```. Возвращает позицию первого символа от найденной подстроки, в случае неуспеха возвращается Null.
 
-```sql
+```yql
 SELECT Unicode::Find("aaa", "bb"); -- Null
 ```
 
@@ -29,7 +29,7 @@ SELECT Unicode::Find("aaa", "bb"); -- Null
   Возвращает подстроку от ```string``` начиная с символа ```from``` длиной в ```len``` символов. Если аргумент ```len``` опущен, то подстрока берется до конца исходной строки.
   В случае ```from``` больше длины исходной строки, возвращается пустая строка ```""```
 
-```sql
+```yql
 SELECT Unicode::Substring("0123456789abcdefghij", 10); -- "abcdefghij"
 ```
 
@@ -46,7 +46,7 @@ SELECT Unicode::Substring("0123456789abcdefghij", 10); -- "abcdefghij"
 
   Транслитерирует в латинский алфавит слова переданной строки, целиком состоящие из символов алфавита языка, переданного вторым аргументом. Если язык не указан, то транслитерация ведется с русского. Доступные языки: "kaz", "rus", "tur", "ukr".
 
-```sql
+```yql
 SELECT Unicode::Translit("Тот уголок земли, где я провел"); -- "Tot ugolok zemli, gde ya provel"
 ```
 
@@ -64,7 +64,7 @@ SELECT Unicode::Translit("Тот уголок земли, где я провел
   - ```DoSimpleCyr``` приводить кирилические символы с диокрифами к аналогичным латинским символам, по умолчанию ```true```
   - ```FillOffset``` параметр не используется
 
-```sql
+```yql
 SELECT Unicode::Fold("Kongreßstraße",  false AS DoSimpleCyr, false AS DoRenyxa); -- "kongressstrasse"
 SELECT Unicode::Fold("ҫурт"); -- "сурт"
 SELECT Unicode::Fold("Eylül", "Turkish" AS Language); -- "eylul"
@@ -81,7 +81,7 @@ SELECT Unicode::Fold("Eylül", "Turkish" AS Language); -- "eylul"
 * ```Unicode::RemoveLast(input:Utf8{Flags:AutoMap}, symbols:Utf8) -> Utf8```
 
   Удаляются все/первое/последнее вхождения символов в наборе ```symbols``` из ```input```. Второй аргумент интерпретируется как неупорядоченный набор символов для удаления.
-```sql
+```yql
 SELECT Unicode::ReplaceLast("absence", "enc", ""); -- "abse"
 SELECT Unicode::RemoveAll("abandon", "an"); -- "bdo"
 ```
@@ -93,7 +93,7 @@ SELECT Unicode::RemoveAll("abandon", "an"); -- "bdo"
 
   Сформировать unicode строку из codepoint'ов.
 
-```sql
+```yql
 SELECT Unicode::ToCodePointList("Щавель"); -- [1065, 1072, 1074, 1077, 1083, 1100]
 SELECT Unicode::FromCodePointList(AsList(99,111,100,101,32,112,111,105,110,116,115,32,99,111,110,118,101,114,116,101,114)); -- "code points converter"
 ```
@@ -123,7 +123,7 @@ SELECT Unicode::FromCodePointList(AsList(99,111,100,101,32,112,111,105,110,116,1
 
   Конкатенация списка строк через ```separator``` в единую строку.
 
-```sql
+```yql
 SELECT Unicode::SplitToList("One, two, three, four, five", ", ", 2 AS Limit); -- ["One", "two", "three, four, five"]
 SELECT Unicode::JoinFromList(["One", "two", "three", "four", "five"], ";"); -- "One;two;three;four;five"
 ```
@@ -138,7 +138,7 @@ SELECT Unicode::JoinFromList(["One", "two", "three", "four", "five"], ";"); -- "
 * ```Unicode::TryToUint64(string:Utf8{Flags:AutoMap}, [prefix:Uint16?]) -> Uint64?```
 
   Аналогично функции Unicode::ToUint64(), но вместо ошибки возвращает Null.
-```sql
+```yql
 SELECT Unicode::ToUint64("77741"); -- 77741
 SELECT Unicode::ToUint64("-77741"); -- 18446744073709473875
 SELECT Unicode::TryToUint64("asdh831"); -- Null
@@ -147,7 +147,7 @@ SELECT Unicode::TryToUint64("asdh831"); -- Null
 * ```Unicode::Strip(string:Utf8{Flags:AutoMap}) -> Utf8```
 
   Вырезает из строки крайние символы Unicode-категории Space.
-```sql
+```yql
 SELECT Unicode::Strip("\u200ыкль\u2002"u); -- "ыкль"
 ```
 
@@ -167,7 +167,7 @@ SELECT Unicode::Strip("\u200ыкль\u2002"u); -- "ыкль"
 * ```Unicode::IsUnicodeSet(string:Utf8{Flags:AutoMap}, unicode_set:Utf8) -> Bool```
 
   Проверяет, состоит ли utf-8 строка ```string``` исключительно из символов, указанных в ```unicode_set```. Символы в ```unicode_set``` нужно указывать в квадратных скобках.
-```sql
+```yql
 SELECT Unicode::IsUnicodeSet("ваоао"u, "[вао]"u); -- true
 SELECT Unicode::IsUnicodeSet("ваоао"u, "[ваб]"u); -- false
 ```

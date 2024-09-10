@@ -2,7 +2,7 @@
 
 В YQL поддерживаются группировки по сессиям. К обычным выражениям в `GROUP BY` можно добавить специальную функцию `SessionWindow`:
 
-```sql
+```yql
 SELECT
   user,
   session_start,
@@ -41,7 +41,7 @@ GROUP BY user, SessionWindow(<time_expr>, <timeout_expr>) AS session_start
 
 ### Пример
 
-```sql
+```yql
 $max_len = 1000; -- максимальная длина сессии
 $timeout = 100; -- таймаут (timeout_expr в упрощенном варианте SessionWindow)
 

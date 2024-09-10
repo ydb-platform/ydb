@@ -21,7 +21,7 @@
 
 При вызове напрямую, чтобы избежать компиляции регулярного выражения на каждой строке таблицы, необходимо обернуть вызов функции в [именованное выражение](../../syntax/expressions.md#named-nodes):
 
-``` sql
+```yql
 $re = Hyperscan::Grep("\\d+");      -- создаем вызываемое значение для проверки конкретного регулярного выражения
 SELECT * FROM table WHERE $re(key); -- используем его для фильтрации таблицы
 ```
@@ -54,7 +54,7 @@ SELECT * FROM table WHERE $re(key); -- используем его для фил
 
 ### Пример
 
-```sql
+```yql
 $multi_match = Hyperscan::MultiMatch(@@a.*
 .*x.*
 .*axa.*@@);
@@ -76,7 +76,7 @@ SELECT
 
 ## Пример использования
 
-```sql
+```yql
 $value = "xaaxaaXaa";
 
 $match = Hyperscan::Match("a.*");

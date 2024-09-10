@@ -12,7 +12,7 @@
 
 Создание секрета выполняется с помощью SQL-запроса:
 
-```sql
+```yql
 CREATE OBJECT `MySecretName` (TYPE SECRET) WITH value=`MySecretData`;
 ```
 
@@ -22,7 +22,7 @@ CREATE OBJECT `MySecretName` (TYPE SECRET) WITH value=`MySecretData`;
 
 Для управления доступами к секретам используются специальные объекты `SECRET_ACCESS`. Для выдачи разрешения на использование секрета `MySecretName` пользователю `another_user` необходимо создать объект `SECRET_ACCESS` с именем `MySecretName:another_user`.
 
-```sql
+```yql
 CREATE OBJECT `MySecretName:another_user` (TYPE SECRET_ACCESS)
 ```
 

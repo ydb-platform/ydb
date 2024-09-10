@@ -98,7 +98,7 @@ Yson::From(T) -> Resource<'Yson2.Node'>
 
 ### Example
 
-```sql
+```yql
 SELECT Yson::Serialize(Yson::From(TableRow())) FROM table1;
 ```
 
@@ -182,7 +182,7 @@ These functions do not do implicit type casting by default, that is, the value i
 
 ### Example
 
-```sql
+```yql
 $data = Yson(@@{
     "name" = "Anya";
     "age" = 15u;

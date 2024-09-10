@@ -31,7 +31,7 @@ To work with an external MySQL database, you need to follow these steps:
 
 The following SQL query format is used to work with MySQL:
 
-```sql
+```yql
 SELECT * FROM mysql_datasource.<table_name>
 ```
 

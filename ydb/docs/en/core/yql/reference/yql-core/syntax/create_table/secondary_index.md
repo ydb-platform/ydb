@@ -4,7 +4,7 @@
 
 The INDEX construct is used to define a {% if concept_secondary_index %}[secondary index]({{ concept_secondary_index }}){% else %}secondary index{% endif %} in a [row-oriented](../../../../concepts/datamodel/table.md#row-oriented-tables) table:
 
-```sql
+```yql
 CREATE TABLE table_name (
     ...
     INDEX <index_name> GLOBAL [SYNC|ASYNC] ON ( <index_columns> ) COVER ( <cover_columns> ),
@@ -20,7 +20,7 @@ Where:
 
 ## Example
 
-```sql
+```yql
 CREATE TABLE my_table (
     a Uint64,
     b Bool,

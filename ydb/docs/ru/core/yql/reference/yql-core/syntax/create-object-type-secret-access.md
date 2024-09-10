@@ -9,7 +9,7 @@
 
 Для управления доступом к секретам используются специальные объекты `SECRET_ACCESS`.
 
-```sql
+```yql
 CREATE OBJECT `secret_name:user_name` (TYPE SECRET_ACCESS)
 ```
 
@@ -21,6 +21,6 @@ CREATE OBJECT `secret_name:user_name` (TYPE SECRET_ACCESS)
 
 Следующий SQL-запрос выдаст права на использование секрета `MySecretName` пользователю `another_user`:
 
-```sql
+```yql
 CREATE OBJECT `MySecretName:another_user` (TYPE SECRET_ACCESS)
 ```

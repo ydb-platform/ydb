@@ -29,7 +29,7 @@ Year,Manufacturer,Model,Price
 
 {% cut "Example query" %}
 
-```sql
+```yql
 SELECT
     AVG(Price)
 FROM `connection`.`path`
@@ -69,7 +69,7 @@ Year    Manufacturer    Model   Price
 
 {% cut "Example query" %}
 
-```sql
+```yql
 SELECT
     AVG(Price)
 FROM `connection`.`path`
@@ -128,7 +128,7 @@ Example of valid data (each line contains a separate JSON object):
 
 {% cut "Example query" %}
 
-```sql
+```yql
 SELECT
     AVG(Price)
 FROM `connection`.`path`
@@ -169,7 +169,7 @@ Example of valid data (data presented as a list of JSON objects):
 
 {% cut "Example query" %}
 
-```sql
+```yql
 SELECT
     *
 FROM `connection`.`path`
@@ -209,7 +209,7 @@ Supported data compression algorithms for Parquet files:
 
 {% cut "Example query" %}
 
-```sql
+```yql
 SELECT
     AVG(Price)
 FROM `connection`.`path`
@@ -243,7 +243,7 @@ This format should be used if the built-in parsing capabilities in {{ ydb-full-n
 
 {% cut "Example query" %}
 
-```sql
+```yql
 SELECT
     *
 FROM `connection`.`path`

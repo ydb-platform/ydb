@@ -16,7 +16,7 @@ Deletes rows that match the `WHERE` clause, from the table.{% if feature_mapredu
 
 ## Example
 
-```sql
+```yql
 DELETE FROM my_table
 WHERE Key1 == 1 AND Key2 >= "One";
 ```
@@ -29,7 +29,7 @@ The primary key value is used to search for rows to be deleted from the table. T
 
 ### Example
 
-```sql
+```yql
 $to_delete = (
     SELECT Key, SubKey FROM my_table WHERE Value = "ToDelete" LIMIT 100
 );

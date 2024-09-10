@@ -70,7 +70,7 @@ The example above shows working with data at the level of [connections](../../da
 
 When working at the connection level, partitioning is set using the `partitioned_by` parameter, where the list of columns is specified in JSON format.
 
-```sql
+```yql
 SELECT
     *
 FROM

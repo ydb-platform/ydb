@@ -81,7 +81,7 @@ When the work is complete, you can delete the table:
 
 The following YQL command is executed:
 
-```sql
+```yql
 DROP TABLE `kv_test`
 ```
 

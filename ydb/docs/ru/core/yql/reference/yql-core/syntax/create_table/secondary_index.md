@@ -8,7 +8,7 @@
 
 Конструкция `INDEX` используется для определения {% if concept_secondary_index %}[вторичного индекса]({{ concept_secondary_index }}){% else %}вторичного индекса{% endif %} {% if backend_name == "YDB" %}для [строковых](../../../../concepts/datamodel/table.md#row-oriented-tables) таблиц{% else %}на таблице{% endif %}:
 
-```sql
+```yql
 CREATE TABLE table_name (
     ...
     INDEX <index_name> GLOBAL [SYNC|ASYNC] ON ( <index_columns> ) COVER ( <cover_columns> ),
@@ -30,7 +30,7 @@ CREATE TABLE table_name (
 
 - Строковая таблица cо вторичным индексом
 
-    ```sql
+```yql
     CREATE TABLE my_table (
         a Uint64,
         b Uint64,
@@ -44,7 +44,7 @@ CREATE TABLE table_name (
 
 - Колоночная таблица cо вторичным индексом
 
-    ```sql
+```yql
     CREATE TABLE my_table (
     a Uint64 NOT NULL,
     b Uint64,
@@ -64,7 +64,7 @@ CREATE TABLE table_name (
 
 ## Пример
 
-```sql
+```yql
 CREATE TABLE my_table (
     a Uint64,
     b Uint64,

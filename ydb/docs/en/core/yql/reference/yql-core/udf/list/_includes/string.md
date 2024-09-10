@@ -139,7 +139,7 @@ The functions from the String library don't support Cyrillic and can only work w
 
 ## Examples
 
-```sql
+```yql
 SELECT String::Base64Encode("YQL"); -- "WVFM"
 SELECT String::Strip("YQL ");       -- "YQL"
 SELECT String::SplitToList("1,2,3,4,5,6,7", ",", 3 as Limit); -- ["1", "2", "3", "4,5,6,7"]

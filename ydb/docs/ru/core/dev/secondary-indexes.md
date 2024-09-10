@@ -35,7 +35,7 @@
 
 Для обращения к таблице по вторичному индексу его имя должно быть явно указано в секции `VIEW` после имени таблицы, как описано в статье про [команду `SELECT`](../yql/reference/syntax/select#secondary_index) YQL. Например, для получения из таблицы Заказов (`orders`) выборки заказов клиента с заданным ID (`id_customer`) запрос будет выглядеть следующим образом:
 
-```sql
+```yql
 DECLARE $customer_id AS Uint64;
 SELECT *
 FROM   orders VIEW idx_customer AS o
@@ -60,7 +60,7 @@ WHERE  o.id_customer = $customer_id
 
 Чтобы обновить данные в таблице `table1`, выполните запрос:
 
-```sql
+```yql
 $to_update = (
     SELECT pk_field, $f1 AS field1, $f2 AS field2, ...
     FROM   table1 VIEW idx_field3
@@ -81,7 +81,7 @@ UPDATE table1 ON SELECT * FROM $to_update
 
 Чтобы удалить все данные о сериалах с нулевым количеством просмотров в таблице `series`, выполните запрос:
 
-```sql
+```yql
 DELETE FROM series ON
 SELECT series_id
 FROM series VIEW views_index

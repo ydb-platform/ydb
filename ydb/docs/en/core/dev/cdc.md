@@ -59,7 +59,7 @@ As a load generator, you can use the feature of [emulating an online store](../r
 1. [Initialize](../reference/ydb-cli/commands/workload/stock#init) a test.
 1. Add a changefeed:
 
-   ```sql
+```yql
    ALTER TABLE `orders` ADD CHANGEFEED `updates` WITH (
        FORMAT = 'JSON',
        MODE = 'UPDATES'

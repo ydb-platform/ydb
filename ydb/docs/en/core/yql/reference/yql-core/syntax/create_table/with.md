@@ -2,7 +2,7 @@
 
 You can also specify a number of {{ backend_name }}-specific parameters for the table. When you create a table, those parameters are listed in the ```WITH``` clause:
 
-```sql
+```yql
 CREATE TABLE table_name (...)
 WITH (
     key1 = value1,
@@ -17,7 +17,7 @@ The list of allowable parameter names and their values is provided on the table 
 
 For example, such a query will create a string table with automatic partitioning enabled based on partition size and a preferred size of each partition being 512 megabytes:
 
-```sql
+```yql
 CREATE TABLE my_table (
     id Uint64,
     title Utf8,
@@ -33,7 +33,7 @@ WITH (
 
 In the `WITH` clause, you can also specify TTL (Time to Live) — the lifespan of a row. [TTL](../../../../concepts/ttl.md) automatically removes rows from the string table when the specified number of seconds have passed from the time recorded in the TTL column. TTL can be set when the table is created or added later via `ALTER TABLE`. The code below will create a string table with TTL:
 
-```sql
+```yql
 CREATE TABLE my_table (
     id Uint64,
     title Utf8,

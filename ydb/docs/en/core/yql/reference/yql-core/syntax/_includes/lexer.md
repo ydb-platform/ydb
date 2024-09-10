@@ -23,7 +23,7 @@ The following types of comments are supported:
 * Single-line comment: starts with `--` (two minus characters _following one another_) and continues to the end of the line
 * Multiline comment: starts with `/*` and ends with `*/`
 
-```sql
+```yql
 SELECT 1; -- A single-line comment
 /*
    Some multi-line comment
@@ -32,7 +32,7 @@ SELECT 1; -- A single-line comment
 In C++ syntax compatibility mode (default), a multiline comment ends with the _nearest_ `*/`.
 The ANSI SQL syntax compatibility mode accounts for nesting of multiline comments:
 
-```sql
+```yql
 --!ansi_lexer
 SELECT * FROM T; /* this is a comment /* this is a nested comment, without ansi_lexer it raises an error  */ */
 ```
@@ -49,30 +49,30 @@ An identifier can be written in the body of the program without any special form
 * Begins with a Latin letter or underscore
 * Is followed by a Latin letter, an underscore, or a number
 
-```sql
+```yql
 SELECT my_column FROM my_table; -- my_column and my_table are identifiers
 ```
 
 To include an arbitrary ID in the body of a {% if feature_mapreduce %}program{% else %}query{% endif %}, the ID is enclosed in backticks:
-```sql
+```yql
 SELECT `column with space` from T;
 SELECT * FROM `my_dir/my_table`
 ```
 
 IDs in backticks are never interpreted as keywords:
 
-```sql
+```yql
 SELECT `select` FROM T; -- select - Column name in the T table
 ```
 When using backticks, you can use the standard C escaping:
 
-```sql
+```yql
 SELECT 1 as `column with\n newline, \x0a newline and \` backtick `;
 ```
 
 In ANSI SQL syntax compatibility mode, arbitrary IDs can also be enclosed in double quotes. To include a double quote in a quoted ID, use two double quotes:
 
-```sql
+```yql
 --!ansi_lexer
 SELECT 1 as "column with "" double quote"; -- column name will be: column with " double quote
 ```
@@ -86,7 +86,7 @@ and affect only the corresponding statement or even a part of it.
 SQL hints are a set of settings "name-value list" and defined inside special comments —
 comments with SQL hints must have `+` as the first character:
 
-```sql
+```yql
 --+ Name1(Value1 Value2 Value3) Name2(Value4) ...
 ```
 
@@ -94,11 +94,11 @@ An SQL hint name must be comprised of ASCII alphanumeric characters and start wi
 A hint name must be followed by a custom number of space-separated values. A value can be a custom set of characters.
 If there's a space or parenthesis in a set of characters, single quotation marks must be used:
 
-```sql
+```yql
 --+ foo('value with space and paren)')
 ```
 
-```sql
+```yql
 --+ foo('value1' value2)
 -- equivalent to
 --+ foo(value1 value2)
@@ -106,13 +106,13 @@ If there's a space or parenthesis in a set of characters, single quotation marks
 
 To escape a single quotation within a value, double it:
 
-```sql
+```yql
 --+ foo('value with single quote '' inside')
 ```
 
 If there're two or more hints with the same name in the list, the latter is used:
 
-```sql
+```yql
 --+ foo(v1 v2) bar(v3) foo()
 -- equivalent to
 --+ bar(v3) foo()
@@ -120,7 +120,7 @@ If there're two or more hints with the same name in the list, the latter is used
 
 Unknown SQL hint names (or syntactically incorrect hints) never result in errors, they're simply ignored:
 
-```sql
+```yql
 --+ foo(value1) bar(value2  baz(value3)
 -- due to a missing closing parenthesis in bar, is equivalent to
 --+ foo(value1)
@@ -128,7 +128,7 @@ Unknown SQL hint names (or syntactically incorrect hints) never result in errors
 Thanks to this behavior, previous valid YQL queries with comments that look like hints remain intact.
 Syntactically correct SQL hints in a place unexpected for YQL result in a warning:
 
-```sql
+```yql
 -- presently, hints after SELECT are not supported
 SELECT /*+ foo(123) */ 1; -- warning 'Hint foo will not be used'
 ```
@@ -152,7 +152,7 @@ SELECT "string with\n newline, \x0a newline and \" backtick ";
 
 In ASNI SQL compatibility mode, double quotes are used for IDs, and the only escaping that can be used for string literals is a pair of single quotes:
 
-```sql
+```yql
 --!ansi_lexer
 SELECT 'string with '' quote'; -- result: string with ' quote
 ```
@@ -214,7 +214,7 @@ SELECT "foo"u, '[1;2]'y, @@{"a":null}@@j;
 * You can also use hexadecimal, octal, and binary format for integer literals using the prefixes `0x`, `0o` and `0b`, respectively. You can arbitrarily combine them with the above-mentioned suffixes.
 * Floating point literals have the `Double` type by default, but you can use the suffix `f` to narrow it down to `Float`.
 
-```sql
+```yql
 SELECT
   123l AS `Int64`,
   0b01u AS `Uint32`,

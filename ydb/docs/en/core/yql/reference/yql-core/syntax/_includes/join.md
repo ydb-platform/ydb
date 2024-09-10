@@ -4,7 +4,7 @@ It lets you combine multiple data sources (subqueries or tables) by equality of 
 
 ## Syntax
 
-```sql
+```yql
 SELECT ...    FROM table_1
 -- first JOIN step:
   <Join_Type> JOIN table_2 <Join_Condition>
@@ -57,19 +57,19 @@ For any other JOIN types, specify the condition using one of the two methods:
 
 ### Examples
 
-```sql
+```yql
 SELECT    a.value as a_value, b.value as b_value
 FROM      a_table AS a
 FULL JOIN b_table AS b USING (key);
 ```
 
-```sql
+```yql
 SELECT    a.value as a_value, b.value as b_value
 FROM      a_table AS a
 FULL JOIN b_table AS b ON a.key = b.key;
 ```
 
-```sql
+```yql
 SELECT     a.value as a_value, b.value as b_value, c.column2
 FROM       a_table AS a
 CROSS JOIN b_table AS b

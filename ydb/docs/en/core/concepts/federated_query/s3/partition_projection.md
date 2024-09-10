@@ -20,7 +20,7 @@ When executing the query below, {{ ydb-full-name }} will perform the following a
 3. For each subdirectory `year=<DIGITS>`, retrieve a list of all subdirectories in the format `month=<DIGITS>`.
 4. Process the read data.
 
-```sql
+```yql
 SELECT
     *
 FROM

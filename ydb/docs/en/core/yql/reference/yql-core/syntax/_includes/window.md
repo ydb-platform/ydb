@@ -88,7 +88,7 @@ Further, depending on the specific window function, it's calculated either based
 
 **Examples:**
 
-```sql
+```yql
 SELECT
     COUNT(*) OVER w AS rows_count_in_window,
     some_other_value -- access the current row
@@ -99,7 +99,7 @@ WINDOW w AS (
 );
 ```
 
-```sql
+```yql
 SELECT
     LAG(my_column, 2) OVER w AS row_before_previous_one
 FROM `my_table`

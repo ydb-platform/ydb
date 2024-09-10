@@ -188,7 +188,7 @@ Arguments:
 
 **Examples**
 
-```sql
+```yql
 SELECT DictAggregate(AsDict(
     AsTuple(1, AsList("foo", "bar")),
     AsTuple(2, AsList("baz", "qwe"))),
@@ -207,7 +207,7 @@ So there are two options to make a call:
 
 **Examples**
 
-```sql
+```yql
 SELECT SetIsDisjoint(ToSet(AsList(1, 2, 3)), AsList(7, 4)); -- true
 SELECT SetIsDisjoint(ToSet(AsList(1, 2, 3)), ToSet(AsList(3, 4))); -- false
 ```

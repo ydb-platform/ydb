@@ -28,7 +28,7 @@ Year,Manufacturer,Model,Price
 
 {% cut "Пример запроса" %}
 
-```sql
+```yql
 SELECT
     AVG(Price)
 FROM `connection`.`path`
@@ -68,7 +68,7 @@ Year    Manufacturer    Model   Price
 
 {% cut "Пример запроса" %}
 
-```sql
+```yql
 SELECT
     AVG(Price)
 FROM `connection`.`path`
@@ -125,7 +125,7 @@ WITH
 
 {% cut "Пример запроса" %}
 
-```sql
+```yql
 SELECT
     AVG(Price)
 FROM `connection`.`path`
@@ -168,7 +168,7 @@ WITH
 
 {% cut "Пример запроса" %}
 
-```sql
+```yql
 SELECT
     *
 FROM `connection`.`path`
@@ -208,7 +208,7 @@ WITH
 
 {% cut "Пример запроса" %}
 
-```sql
+```yql
 SELECT
     AVG(Price)
 FROM `connection`.`path`
@@ -242,7 +242,7 @@ WITH
 
 {% cut "Пример запроса" %}
 
-```sql
+```yql
 SELECT
     *
 FROM `connection`.`path`

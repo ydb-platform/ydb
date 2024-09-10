@@ -146,7 +146,7 @@ The simplest way to launch your first {{ ydb-short-name }} query is via the buil
 
 {{ ydb-short-name }} is designed to be a multi-tenant system, with potentially thousands of users working with the same cluster simultaneously. Hence, most logical entities inside a {{ ydb-short-name }} cluster reside in a flexible hierarchical structure more akin to Unix's virtual filesystem rather than a fixed-depth schema you might be familiar with from other database management systems. As you can see, the first level of hierarchy consists of databases running inside a single {{ ydb-short-name }} process that might belong to different tenants. `/Root` is for system purposes, while `/Root/test` or `/local` (depending on the chosen installation method) is a playground created during installation in the previous step. Click on either `/Root/test` or `/local`, enter your first query, and hit the "Run" button:
 
-```sql
+```yql
 SELECT "Hello, world!"u;
 ```
 
@@ -166,7 +166,7 @@ The second simplest way to run a SQL query with {{ ydb-short-name }} is the [com
 
 The main purpose of database management systems is to store data for later retrieval. As an SQL-based system, {{ ydb-short-name }}'s primary abstraction for data storage is a table. To create our first one, run the following query:
 
-```sql
+```yql
 CREATE TABLE example
 (
     key UInt64,
@@ -186,7 +186,7 @@ As you can see, it is a simple key-value table. Let's walk through the query ste
 
 Now let's fill our table with some data. The simplest way is to just use literals:
 
-```sql
+```yql
 INSERT INTO example (key, value)
 VALUES (123, "hello"),
        (321, "world");
@@ -200,7 +200,7 @@ Step-by-step walkthrough:
 
 To double-check that the rows were indeed added to the table, there's a common query that should return `2` in this case:
 
-```sql
+```yql
 SELECT COUNT(*) FROM example;
 ```
 
@@ -212,7 +212,7 @@ A few notable details in this one:
 
 Another common way to fill a table with data is by combining `INSERT INTO` (or `UPSERT INTO`) and `SELECT`. In this case, values to be stored are calculated inside the database instead of being provided by the client as literals. We'll use a slightly more realistic query to demonstrate this:
 
-```sql
+```yql
 $subquery = SELECT ListFromRange(1000, 10000) AS keys;
 
 UPSERT INTO example

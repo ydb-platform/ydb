@@ -4,7 +4,7 @@
 
 Рассмотрим следующий запрос, выполняющий поиск серии по названию:
 
-``` sql
+```yql
 SELECT season_id, episode_id
   FROM episodes
   WHERE title = 'The Work Outing'
@@ -56,7 +56,7 @@ SELECT season_id, episode_id
 
 Одним из типовых способов избежать полного сканирования таблицы является добавление [вторичного индекса](secondary-indexes.md). В данном случае имеет смысл добавить вторичный индекс для колонки `title`, для этого воспользуемся запросом:
 
-``` sql
+```yql
 ALTER TABLE episodes
   ADD INDEX title_index GLOBAL ON (title)
 ```

@@ -4,7 +4,7 @@
 
 ## Синтаксис
 
-``` sql
+```yql
 SELECT ...    FROM table_1
 -- первый шаг объединения:
   <Join_Type> JOIN table_2 <Join_Condition>
@@ -57,19 +57,19 @@ WHERE  ...
 
 ### Примеры
 
-``` sql
+```yql
 SELECT    a.value as a_value, b.value as b_value
 FROM      a_table AS a
 FULL JOIN b_table AS b USING (key);
 ```
 
-``` sql
+```yql
 SELECT    a.value as a_value, b.value as b_value
 FROM      a_table AS a
 FULL JOIN b_table AS b ON a.key = b.key;
 ```
 
-``` sql
+```yql
 SELECT     a.value as a_value, b.value as b_value, c.column2
 FROM       a_table AS a
 CROSS JOIN b_table AS b

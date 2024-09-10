@@ -7,12 +7,12 @@
 ## Добавить колонку {#add-column}
 Добавьте неключевую колонку в существующую таблицу:
 
-```sql
+```yql
 ALTER TABLE episodes ADD COLUMN viewers Uint64;
 ```
 ## Удалить колонку {#delete-column}
 Удалите добавленную колонку из таблицы:
 
-```sql
+```yql
 ALTER TABLE episodes DROP COLUMN viewers;
 ```

@@ -136,7 +136,7 @@ public interface SimpleUserRepository extends CrudRepository<User, Long> {
 
 Запрос, который сгенерирует этот метод, будет выглядеть следующим образом:
 
-```sql
+```yql
 SELECT `Users`.`id`        AS `id`,
        `Users`.`login`     AS `login`,
        `Users`.`lastname`  AS `lastname`,

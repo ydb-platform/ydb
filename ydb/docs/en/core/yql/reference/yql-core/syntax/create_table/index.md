@@ -44,7 +44,7 @@ The invocation of `CREATE TABLE` creates {% if concept_table %}a [table]({{ conc
 
 The table type is specified by the `STORE` parameter in the `WITH` clause, where `ROW` indicates a [row-oriented](../../../../concepts/datamodel/table.md#row-oriented-tables) table and `COLUMN` indicates a [column-oriented](../../../../concepts/datamodel/table.md#column-oriented-tables) table:
 
-```sql
+```yql
 CREATE <table_name> (
   columns
   ...
@@ -66,7 +66,7 @@ By default, if the `STORE` parameter is not specified, a row-oriented table is c
 - Creating a row-oriented table
 
   {% if feature_column_container_type %}
-    ```sql
+```yql
     CREATE TABLE <table_name> (
       a Uint64,
       b Uint64,
@@ -76,7 +76,7 @@ By default, if the `STORE` parameter is not specified, a row-oriented table is c
     );
     ```
   {% else %}
-    ```sql
+```yql
     CREATE TABLE <table_name> (
       a Uint64,
       b Uint64,
@@ -112,7 +112,7 @@ By default, if the `STORE` parameter is not specified, a row-oriented table is c
 
 - Creating a column-oriented table
 
-  ```sql
+```yql
   CREATE TABLE table_name (
     a Uint64 NOT NULL,
     b Uint64 NOT NULL,
@@ -154,7 +154,7 @@ Specifying a `PRIMARY KEY` with a non-empty list of columns is mandatory. These 
 
 #### Example
 
-```sql
+```yql
 CREATE TABLE <table_name> (
   a Uint64,
   b Uint64,

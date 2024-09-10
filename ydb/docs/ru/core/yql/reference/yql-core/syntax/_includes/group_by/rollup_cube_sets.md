@@ -33,7 +33,7 @@ GROUP BY
 
 ### Пример
 
-```sql
+```yql
 SELECT
     column1,
     column2,

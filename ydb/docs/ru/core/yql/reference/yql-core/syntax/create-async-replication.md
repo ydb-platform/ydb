@@ -4,7 +4,7 @@
 
 ## Синтаксис {#syntax}
 
-```sql
+```yql
 CREATE ASYNC REPLICATION <name>
 FOR remote_path AS local_path [, another_remote_path AS another_local_path]
 WITH (option = value [, ...])
@@ -37,7 +37,7 @@ WITH (option = value [, ...])
 
 Создание экземпляра асинхронной репликации для таблицы `original_table` из базы `/Root/another_database` в текущую базу в таблицу `replica_table`:
 
-```sql
+```yql
 CREATE ASYNC REPLICATION my_replication_for_single_table
 FOR original_table AS replica_table
 WITH (
@@ -50,7 +50,7 @@ WITH (
 
 Создание экземпляра асинхронной репликации для таблиц `original_table_1` и `original_table_2` в `replica_table_1` и `replica_table_2`, соответственно:
 
-```sql
+```yql
 CREATE ASYNC REPLICATION my_replication_for_multiple_tables
 FOR original_table_1 AS replica_table_1, original_table_2 AS replica_table_2
 WITH (
@@ -61,7 +61,7 @@ WITH (
 
 Создание экземпляра асинхронной репликации для содержимого директории `original_dir`:
 
-```sql
+```yql
 CREATE ASYNC REPLICATION my_replication_for_dir
 FOR original_dir AS replica_dir
 WITH (
@@ -72,7 +72,7 @@ WITH (
 
 Создание экземпляра асинхронной репликации для содержимого базы `/Root/another_database`:
 
-```sql
+```yql
 CREATE ASYNC REPLICATION my_replication_for_database
 FOR `/Root/another_database` AS `/Root/my_database`
 WITH (

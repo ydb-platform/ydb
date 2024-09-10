@@ -193,7 +193,7 @@ jakarta.persistence.schema-generation.database.action=update
 
 The result of changing the schema is:
 
-```sql
+```yql
 ALTER TABLE Groups
    ADD COLUMN department Text
 ```

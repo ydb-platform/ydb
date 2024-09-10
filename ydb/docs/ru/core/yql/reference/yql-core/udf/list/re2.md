@@ -24,7 +24,7 @@ Re2::Options([CaseSensitive:Bool?,DotNl:Bool?,Literal:Bool?,LogErrors:Bool?,Long
 
 ## Примеры
 
-```sql
+```yql
 $value = "xaaxaaxaa";
 $options = Re2::Options(false AS CaseSensitive);
 $match = Re2::Match("[ax]+\\d");
@@ -104,7 +104,7 @@ SELECT
 
 ### Пример использования флагов
 
-```sql
+```yql
 $value = "Foo bar FOO"u;
 -- включить режим без учета регистра
 $capture = Re2::Capture(@@(?i)(foo)@@);

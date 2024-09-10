@@ -4,7 +4,7 @@ The results of calculating the aggregate function as subtotals for the groups an
 
 ### Syntax
 
-```sql
+```yql
 SELECT
     c1, c2, -- the columns to group by
 
@@ -33,7 +33,7 @@ The values of columns not used in calculations are replaced with `NULL` in the s
 
 ### Example
 
-```sql
+```yql
 SELECT
     column1,
     column2,

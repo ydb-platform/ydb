@@ -808,7 +808,7 @@ FROM my_table;
 
 {% endif %}
 
-```sql
+```yql
 $l = AsList(
     <|key:"a", value:1|>,
     <|key:"b", value:2|>

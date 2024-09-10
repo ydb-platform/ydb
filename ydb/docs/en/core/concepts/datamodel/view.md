@@ -29,20 +29,20 @@ The resulting compiled code contains no evidence that the query was made using v
 
 However, users might notice a little increase in the compilation time of the queries made using views compared to the compilation time of the same queries written directly. It happens because a statement reading from a view:
 
-```sql
+```yql
 SELECT * FROM a_view;
 ```
 
 is compiled similarly to a statement reading from a subquery:
 
-```sql
+```yql
 SELECT * FROM (SELECT * FROM underlying_table);
 ```
 but with an additional overhead of loading data from the schema object `a_view`.
 
 Please note that if you execute the same query over and over again, like:
 
-```sql
+```yql
 -- execute multiple times
 SELECT * FROM hot_view;
 ```
@@ -69,14 +69,14 @@ The cache is automatically updated by {{ ydb-short-name }} to stay on track with
 
 Let's consider the following situation. Alice repeatedly executes the following query:
 
-```sql
+```yql
 -- Alice's session
 SELECT * FROM some_view_which_is_going_to_be_redefined;
 ```
 
 while Bob redefines the view's query like this:
 
-```sql
+```yql
 -- Bob's session
 DROP VIEW some_view_which_is_going_to_be_redefined;
 CREATE VIEW some_view_which_is_going_to_be_redefined ...;

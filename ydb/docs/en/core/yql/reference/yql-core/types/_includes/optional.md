@@ -67,7 +67,7 @@ In YQL, there is no implicit type conversion from Optional<T> to T, so the enfor
 
 You can create a non-nullable column in a {{ ydb-short-name }} table using the [CREATE TABLE](../../../reference/syntax/create_table/index.md) operation with the keyword `NOT NULL`:
 
-```sql
+```yql
 CREATE TABLE t (
     Key Uint64 NOT NULL,
     Value String NOT NULL,
@@ -80,7 +80,7 @@ After that, write operations to table `t` will only be executed if the values to
 
 Many of the YQL functions have optional types as return values. Since YQL is a strongly-typed language, a query like
 
-```sql
+```yql
 CREATE TABLE t (
     c Utf8 NOT NULL,
     PRIMARY KEY (c)

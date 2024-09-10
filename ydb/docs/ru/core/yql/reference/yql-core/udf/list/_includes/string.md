@@ -23,7 +23,7 @@
 
 ## Пример
 
-```sql
+```yql
 SELECT String::Base64Encode("YQL"); -- "WVFM"
 ```
 
@@ -33,7 +33,7 @@ SELECT String::Base64Encode("YQL"); -- "WVFM"
 
 ### Пример
 
-```sql
+```yql
 SELECT String::Strip("YQL ");       -- "YQL"
 ```
 
@@ -86,7 +86,7 @@ SELECT String::Strip("YQL ");       -- "YQL"
 
 ### Пример
 
-```sql
+```yql
 SELECT String::SplitToList("1,2,3,4,5,6,7", ",", 3 as Limit); -- ["1", "2", "3", "4,5,6,7"]
 ```
 

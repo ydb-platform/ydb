@@ -8,7 +8,7 @@ Passing of parameters is supported in the SDK, CLI, and graphical interfaces.
 
 ## Syntax
 
-```sql
+```yql
 DECLARE $named-node AS data_type;
 ```
 

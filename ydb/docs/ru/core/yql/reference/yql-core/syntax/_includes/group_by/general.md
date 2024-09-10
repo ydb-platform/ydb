@@ -4,7 +4,7 @@
 
 ### Синтаксис
 
-```sql
+```yql
 SELECT                             -- В SELECT можно использовать:
     column1,                       -- ключевые колонки, заданные в GROUP BY
     key_n,                         -- именованные выражения, заданные в GROUP BY
@@ -34,17 +34,17 @@ GROUP BY
 
 ### Примеры
 
-```sql
+```yql
 SELECT key, COUNT(*) FROM my_table
 GROUP BY key;
 ```
 
-```sql
+```yql
 SELECT double_key, COUNT(*) FROM my_table
 GROUP BY key + key AS double_key;
 ```
 
-```sql
+```yql
 SELECT
    double_key,                           -- ОК: ключевая колонка
    COUNT(*) AS group_size,               -- OK: COUNT(*)

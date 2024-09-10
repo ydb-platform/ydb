@@ -95,7 +95,7 @@ db/migration:
 
 - V1__create_series.sql
 
-  ```sql
+```yql
   CREATE TABLE series -- series is the table name.
   (                           -- Must be unique within the folder.
       series_id    Int64,
@@ -113,7 +113,7 @@ db/migration:
 
 - V2__create_seasons.sql
 
-  ```sql
+```yql
   CREATE TABLE seasons
   (
       series_id Uint64,
@@ -127,7 +127,7 @@ db/migration:
 
 - V3__create_episodes.sql
 
-```sql
+```yql
 CREATE TABLE episodes
 (
     series_id Uint64,
@@ -175,7 +175,7 @@ db/migration:
 
 {% cut "Содержимое файла `V4__load_data.sql`" %}
 
-```sql
+```yql
 INSERT INTO series (series_id, title, release_date, series_info)
 VALUES
 
@@ -307,7 +307,7 @@ db/migration:
 
 {% cut "Содержимое файла `V5__create_series_title_index.sql`" %}
 
-```sql
+```yql
 ALTER TABLE `series` ADD INDEX `title_index` GLOBAL ON (`title`);
 ```
 
@@ -341,7 +341,7 @@ db/migration:
 
 {% cut "Содержимое файла `V6__rename_series_title_index.sql`" %}
 
-```sql
+```yql
 ALTER TABLE `series` RENAME INDEX `title_index` TO `title_index_new`;
 ```
 

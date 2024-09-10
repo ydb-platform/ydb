@@ -24,7 +24,7 @@ Make sure to double all the backslashes in your regular expressions (if they are
 
 ## Examples
 
-```sql
+```yql
 $value = "xaaxaaxaa";
 $options = Re2::Options(false AS CaseSensitive);
 $match = Re2::Match("[ax]+\\d");
@@ -104,7 +104,7 @@ It is not recommended to use Re2::Options in the code. Most parameters can be re
 
 ### Flag usage examples
 
-```sql
+```yql
 $value = "Foo bar FOO"u;
 -- enable case-insensitive mode
 $capture = Re2::Capture(@@(?i)(foo)@@);

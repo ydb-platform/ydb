@@ -4,7 +4,7 @@ A table is a relational [table](https://en.wikipedia.org/wiki/Table_(database)) 
 
 Rows in the table hold the data, while columns define the data types. For example, the id column cannot be empty (`NOT NULL`) and should contain only unique integer values. A record in YQL might look like this:
 
-```sql
+```yql
 CREATE TABLE article (
     id Int64 NOT NULL,
     date_create Date,
@@ -184,7 +184,7 @@ In most cases, working with YDB column-oriented tables is similar to working wit
   + Available only in columns not included in the primary key: `Bool`, `Decimal`, `Double`, `Float`, `Int8`, `Int16`, `Interval`, `JsonDocument`, `Json`, `Uuid`, `Yson`.
 
 Let's recreate the "article" table, this time in column-oriented format, using the following YQL command:
-```sql
+```yql
 CREATE TABLE article_column_table (
     id Int64 NOT NULL,
     author String,
@@ -212,7 +212,7 @@ Unlike row-oriented {{ ydb-short-name }} tables, you cannot partition column-ori
 
 Example of column-oriented partitioning:
 
-```sql
+```yql
 CREATE TABLE article_column_table (
     id Int64 NOT NULL,
     author String,

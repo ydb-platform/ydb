@@ -98,7 +98,7 @@ Yson::From(T) -> Resource<'Yson2.Node'>
 
 ### Пример
 
-```sql
+```yql
 SELECT Yson::Serialize(Yson::From(TableRow())) FROM table1;
 ```
 
@@ -177,7 +177,7 @@ Yson::ConvertToStringDict(Resource<'Yson2.Node'>{Flags:AutoMap}) -> Dict<String,
 
 ### Пример
 
-```sql
+```yql
 $data = Yson(@@{
     "name" = "Anya";
     "age" = 15u;

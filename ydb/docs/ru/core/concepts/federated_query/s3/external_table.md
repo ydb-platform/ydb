@@ -4,7 +4,7 @@
 
 Пример запроса для чтения данных:
 
-```sql
+```yql
 SELECT
     *
 FROM
@@ -17,7 +17,7 @@ WHERE
 
 Чтобы создать внешнюю таблицу, описывающую бакет S3 ({{ objstorage-name }}), выполните следующий SQL-запрос. Запрос создает внешнюю таблицу с именем `s3_test_data`, в котором расположены файлы в формате `CSV` со строковыми полями `key` и `value`, находящиеся внутри бакета по пути `test_folder`, при этом для указания реквизитов подключения используется объект [внешний источник данных](../../datamodel/external_data_source.md) `bucket`:
 
-```sql
+```yql
 CREATE EXTERNAL TABLE `s3_test_data` (
   key Utf8 NOT NULL,
   value Utf8 NOT NULL
@@ -41,7 +41,7 @@ CREATE EXTERNAL TABLE `s3_test_data` (
 
 Чтение данных с помощью внешних таблиц из S3 ({{ objstorage-name }}) выполняется с помощью обычных SQL-запросов, как к обычной таблице.
 
-```sql
+```yql
 SELECT
     <expression>
 FROM

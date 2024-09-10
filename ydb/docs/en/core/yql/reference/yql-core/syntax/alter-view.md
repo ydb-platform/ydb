@@ -9,7 +9,7 @@ This feature is not supported yet.
 {% endnote %}
 
 Instead, you can redefine a view by dropping it and recreating it with a different query or options:
-```sql
+```yql
 DROP VIEW redefined_view;
 CREATE VIEW redefined_view ...;
 ```

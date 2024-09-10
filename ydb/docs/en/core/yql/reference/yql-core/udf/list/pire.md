@@ -24,7 +24,7 @@ To enable the Unicode mode, you can put one character that's beyond ASCII with t
 
 To avoid compiling a regular expression at each table row, wrap the function call by [a named expression](../../syntax/expressions.md#named-nodes):
 
-```sql
+```yql
 $re = Pire::Grep("\\d+"); -- create a callable value to match a specific regular expression
 SELECT * FROM table WHERE $re(key); -- use it to filter the table
 ```
@@ -39,7 +39,7 @@ You can enable the case-insensitive mode by specifying, at the beginning of the 
 
 ### Examples
 
-```sql
+```yql
 $value = "xaaxaaxaa";
 $match = Pire::Match("a.*");
 $grep = Pire::Grep("axa");
@@ -83,7 +83,7 @@ When you call MultiGrep/MultiMatch, regular expressions are passed one per line 
 
 ### Examples
 
-```sql
+```yql
 $multi_match = Pire::MultiMatch(@@a.*
 .*x.*
 .*axa.*@@);

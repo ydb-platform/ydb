@@ -12,7 +12,7 @@ A set of wrappers around the functions from the libm library and the Yandex util
 
 ### Examples
 
-```sql
+```yql
 SELECT Math::Pi();  -- 3.141592654
 SELECT Math::E();   -- 2.718281828
 SELECT Math::Eps(); -- 2.220446049250313e-16
@@ -28,7 +28,7 @@ SELECT Math::Eps(); -- 2.220446049250313e-16
 
 ### Examples
 
-```sql
+```yql
 SELECT Math::IsNaN(0.0/0.0);    -- true
 SELECT Math::IsFinite(1.0/0.0); -- false
 ```
@@ -69,7 +69,7 @@ SELECT Math::IsFinite(1.0/0.0); -- false
 
 ### Examples
 
-```sql
+```yql
 SELECT Math::Sqrt(256);     -- 16
 SELECT Math::Trunc(1.2345); -- 1
 ```
@@ -86,7 +86,7 @@ SELECT Math::Trunc(1.2345); -- 1
 
 ### Examples
 
-```sql
+```yql
 SELECT Math::Atan2(1, 0);       -- 1.570796327
 SELECT Math::Remainder(2.1, 2); -- 0.1
 ```
@@ -100,7 +100,7 @@ SELECT Math::Remainder(2.1, 2); -- 0.1
 
 ### Examples
 
-```sql
+```yql
 SELECT Math::Pow(2, 10);        -- 1024
 SELECT Math::Round(1.2345, -2); -- 1.23
 ```
@@ -113,7 +113,7 @@ SELECT Math::Round(1.2345, -2); -- 1.23
 
 ### Examples
 
-```sql
+```yql
 SELECT Math::FuzzyEquals(1.01, 1.0, 0.05); -- true
 ```
 
@@ -132,7 +132,7 @@ Functions return null if the divisor is zero.
 
 ### Examples
 
-```sql
+```yql
 SELECT Math::Mod(-1, 7);        -- 6
 SELECT Math::Rem(-1, 7);        -- -1
 ```

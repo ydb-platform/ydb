@@ -8,7 +8,7 @@
 
 ## Синтаксис
 
-```sql
+```yql
 DECLARE $named-node AS data_type;
 ```
 1. Ключевое слово `DECLARE`.

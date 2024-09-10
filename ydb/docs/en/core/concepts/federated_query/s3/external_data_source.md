@@ -4,7 +4,7 @@ When working with {{ objstorage-full-name }} using [external data sources](../..
 
 An example query to read data:
 
-```sql
+```yql
 SELECT
     *
 FROM
@@ -26,7 +26,7 @@ The list of supported formats and data compression algorithms for reading data i
 
 In {{ objstorage-full-name }}, data is stored in files. To read data, you need to specify the data format in the files, compression, and lists of fields. This is done using the following SQL expression:
 
-```sql
+```yql
 SELECT
   <expression>
 FROM

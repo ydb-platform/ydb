@@ -2,7 +2,7 @@
 
 Вызов `CREATE EXTERNAL DATA SOURCE` создает [внешний источник данных](../../../concepts/datamodel/external_data_source.md).
 
-```sql
+```yql
 CREATE EXTERNAL DATA SOURCE external_data_source WITH (
   SOURCE_TYPE="source_type",
   LOCATION="ip_address_or_fqdn:port",
@@ -29,7 +29,7 @@ CREATE EXTERNAL DATA SOURCE external_data_source WITH (
 
 Запрос ниже создает внешний источник с именем `TestDataSource` к кластеру ClickHouse c IP-адресом `192.168.1.1` и портом `8443`, логином `admin` и именем секрета `test_secret`:
 
-```sql
+```yql
 CREATE EXTERNAL DATA SOURCE TestDataSource WITH (
   SOURCE_TYPE="ClickHouse",
   LOCATION="192.168.1.1:8443",
@@ -57,7 +57,7 @@ CREATE EXTERNAL DATA SOURCE TestDataSource WITH (
 
 Запрос ниже создает внешний источник с именем `TestDataSource` к кластеру ClickHouse c IP-адресом `192.168.1.1` и портом `8443`, логином `admin` и именем секрета `test_secret`:
 
-```sql
+```yql
 CREATE EXTERNAL DATA SOURCE TestDataSource WITH (
   SOURCE_TYPE="ClickHouse",
   LOCATION="192.168.1.1:8443",
@@ -85,7 +85,7 @@ CREATE EXTERNAL DATA SOURCE TestDataSource WITH (
 
 Запрос ниже создает внешний источник с именем `TestDataSource`, ведущий на кластер PostgreSQL c IP-адресом `192.168.1.2` и портом `5432`, логином `admin` и именем секрета `test_secret`:
 
-```sql
+```yql
 CREATE EXTERNAL DATA SOURCE TestDataSource WITH (
   SOURCE_TYPE="PostgreSQL",
   LOCATION="192.168.1.1:5432",
@@ -123,7 +123,7 @@ CREATE EXTERNAL DATA SOURCE TestDataSource WITH (
 
 Запрос ниже создает внешний источник данных с именем `TestDataSource`, ведущий в каталог `folder` в бакете `bucket` в {{ objstorage-name }}:
 
-```sql
+```yql
 CREATE EXTERNAL DATA SOURCE TestDataSource WITH (
   SOURCE_TYPE="ObjectStorage",
   LOCATION="http://s3.amazonaws.com/bucket/folder/",

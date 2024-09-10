@@ -6,7 +6,7 @@ Updates the data in the table.{% if feature_mapreduce %}  The table is searched 
 
 ## Example
 
-```sql
+```yql
 UPDATE my_table
 SET Value1 = YQL::ToString(Value2 + 1), Value2 = Value2 - 1
 WHERE Key1 > 1;
@@ -20,7 +20,7 @@ The primary key value is used to search for the rows being updated. For each row
 
 ### Example
 
-```sql
+```yql
 $to_update = (
     SELECT Key, SubKey, "Updated" AS Value FROM my_table
     WHERE Key = 1

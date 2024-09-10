@@ -14,7 +14,7 @@
 
 ### Примеры
 
-```sql
+```yql
 SELECT Url::Normalize("hTTp://wWw.yDb.TECH/"); -- "http://www.ydb.tech/"
 SELECT Url::Normalize("http://ydb.tech#foo");      -- "http://ydb.tech/"
 ```
@@ -32,7 +32,7 @@ SELECT Url::Normalize("http://ydb.tech#foo");      -- "http://ydb.tech/"
 
 ### Примеры
 
-```sql
+```yql
 SELECT Url::NormalizeWithDefaultHttpScheme("wWw.yDb.TECH");    -- "http://www.ydb.tech/"
 SELECT Url::NormalizeWithDefaultHttpScheme("http://ydb.tech#foo"); -- "http://ydb.tech/"
 ```
@@ -48,7 +48,7 @@ SELECT Url::NormalizeWithDefaultHttpScheme("http://ydb.tech#foo"); -- "http://yd
 
 ### Примеры
 
-```sql
+```yql
 SELECT Url::Decode("http://ydb.tech/%D1%81%D1%82%D1%80%D0%B0%D0%BD%D0%B8%D1%86%D0%B0");
   -- "http://ydb.tech/страница"
 SELECT Url::Encode("http://ydb.tech/страница");
@@ -65,7 +65,7 @@ Url::Parse(Parse{Flags:AutoMap}) -> Struct< Frag: String?, Host: String?, ParseE
 
 ### Примеры
 
-```sql
+```yql
 SELECT Url::Parse(
   "https://en.wikipedia.org/wiki/Isambard_Kingdom_Brunel?s=24&g=h-24#Great_Western_Railway");
 /*
@@ -112,7 +112,7 @@ SELECT Url::Parse(
 
 ### Примеры
 
-```sql
+```yql
 SELECT Url::GetScheme("https://ydb.tech");           -- "https://"
 SELECT Url::GetDomain("http://www.ydb.tech", 2); -- "ydb.tech"
 ```
@@ -133,7 +133,7 @@ SELECT Url::GetDomain("http://www.ydb.tech", 2); -- "ydb.tech"
 
 ### Примеры
 
-```sql
+```yql
 SELECT Url::CutScheme("http://www.ydb.tech"); -- "www.ydb.tech"
 SELECT Url::CutWWW("www.ydb.tech");           -- "ydb.tech"
 ```
@@ -152,7 +152,7 @@ SELECT Url::CutWWW("www.ydb.tech");           -- "ydb.tech"
 
 ### Примеры
 
-```sql
+```yql
 SELECT Url::PunycodeToHostName("xn--80aniges7g.xn--j1aef"); -- "экзампл.ком"
 ```
 
@@ -162,7 +162,7 @@ SELECT Url::PunycodeToHostName("xn--80aniges7g.xn--j1aef"); -- "экзампл.�
 
 ### Список функций
 
-```sql
+```yql
 Url::QueryStringToList(String{Flag:AutoMap}, [
   KeepBlankValues:Bool?,  -- пустые значения в percent-encoded запросах интерпретируются как пустыe строки; по умолчанию false
   Strict:Bool?,           -- если false - ошибки парсинга игнорируются, ошибочные поля пропускаются; по умолчанию true
@@ -188,7 +188,7 @@ Url::BuildQueryString(List<Tuple<String, String?>>{Flag:AutoMap}, [
 
 ### Примеры
 
-```sql
+```yql
 SELECT Url::QueryStringToList("a=1&b=2&a=3");                       -- [("a", "1"), ("b", "2"), ("a", "3")]
 SELECT Url::QueryStringToDict("a=1&b=2&a=3");                       -- {"b" : ["2"], "a" : ["1", "3"]}
 SELECT Url::BuildQueryString([("a", "1"), ("a", "3"), ("b", "2")]); -- "a=1&a=3&b=2"

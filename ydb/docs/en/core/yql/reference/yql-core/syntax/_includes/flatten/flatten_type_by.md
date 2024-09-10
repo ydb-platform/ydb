@@ -16,7 +16,7 @@ To specify the type of container to convert to, you can use:
 
 ### Examples
 
-```sql
+```yql
 SELECT
   t.item.0 AS key,
   t.item.1 AS value,
@@ -26,7 +26,7 @@ FROM my_table AS t
 FLATTEN DICT BY dict_column AS item;
 ```
 
-```sql
+```yql
 SELECT * FROM (
     SELECT
         AsList(1, 2, 3) AS a,

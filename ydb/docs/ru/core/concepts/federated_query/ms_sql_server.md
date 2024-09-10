@@ -4,11 +4,11 @@
 
 Для работы с внешней базой данных Microsoft SQL Server необходимо выполнить следующие шаги:
 1. Создать [секрет](../datamodel/secrets.md), содержащий пароль для подключения к базе данных.
-    ```sql
+```yql
     CREATE OBJECT ms_sql_server_datasource_user_password (TYPE SECRET) WITH (value = "<password>");
     ```
 1. Создать [внешний источник данных](../datamodel/external_data_source.md), описывающий определённую базу данных Microsoft SQL Server. Параметр `LOCATION` содержит сетевой адрес экземпляра Microsoft SQL Server, к которому осуществляется подключение. В `DATABASE_NAME` указывается имя базы данных (например, `master`). Для аутентификации во внешнюю базу используются значения параметров `LOGIN` и `PASSWORD_SECRET_NAME`. Включить шифрование соединений к внешней базе данных можно с помощью параметра `USE_TLS="TRUE"`.
-    ```sql
+```yql
     CREATE EXTERNAL DATA SOURCE ms_sql_server_datasource WITH (
         SOURCE_TYPE="MsSQLServer",
         LOCATION="<host>:<port>",
@@ -25,7 +25,7 @@
 ## Синтаксис запросов {#query}
 Для работы с Microsoft SQL Server используется следующая форма SQL-запроса:
 
-```sql
+```yql
 SELECT * FROM ms_sql_server_datasource.<table_name>
 ```
 

@@ -21,7 +21,7 @@ By default, all functions work in the single-byte mode. However, if the regular 
 
 To avoid compiling a regular expression at each table row at direct call, wrap the function call by [a named expression](../../syntax/expressions.md#named-nodes):
 
-```sql
+```yql
 $re = Hyperscan::Grep("\\d+");      -- create a callable value to match a specific regular expression
 SELECT * FROM table WHERE $re(key); -- use it to filter the table
 ```
@@ -54,7 +54,7 @@ When you call `MultiGrep`/`MultiMatch`, regular expressions are passed one per l
 
 ### Example
 
-```sql
+```yql
 $multi_match = Hyperscan::MultiMatch(@@a.*
 .*x.*
 .*axa.*@@);
@@ -75,7 +75,7 @@ Hyperscan doesn't support advanced functionality for such operations. Although `
 
 ## Usage example
 
-```sql
+```yql
 $value = "xaaxaaXaa";
 
 $match = Hyperscan::Match("a.*");

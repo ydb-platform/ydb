@@ -2,7 +2,7 @@
 
 Вызов `CREATE EXTERNAL TABLE` создает [внешнюю таблицу](../../../concepts/datamodel/external_table.md) с указанной схемой данных.
 
-```sql
+```yql
 CREATE EXTERNAL TABLE table_name (
   column1 type1,
   column2 type2 NOT NULL,
@@ -39,7 +39,7 @@ CREATE EXTERNAL TABLE table_name (
 
 Cледующий SQL-запрос создает внешнюю таблицу с именем `s3_test_data`, в котором расположены файлы в формате `CSV` со строковыми полями `key` и `value`, находящиеся внутри бакета по пути `test_folder`, при этом для указания реквизитов подключения используется объект [подключение](../../../concepts/datamodel/external_data_source.md) `bucket`:
 
-```sql
+```yql
 CREATE EXTERNAL TABLE s3_test_data (
   key Utf8 NOT NULL,
   value Utf8 NOT NULL

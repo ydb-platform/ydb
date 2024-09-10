@@ -10,7 +10,7 @@ An external data source is an object in {{ ydb-full-name }} that describes the c
 
 The following example demonstrates creating an external data source pointing to a ClickHouse cluster:
 
-```sql
+```yql
 CREATE EXTERNAL DATA SOURCE test_data_source WITH (
   SOURCE_TYPE="ClickHouse",
   LOCATION="192.168.1.1:8123",
@@ -24,7 +24,7 @@ CREATE EXTERNAL DATA SOURCE test_data_source WITH (
 
 After creating an external data source, you can read data from the created `EXTERNAL DATA SOURCE` object. The example below illustrates reading data from the `test_table` table in the `default` database in the ClickHouse cluster:
 
-```sql
+```yql
 SELECT * FROM test_data_source.test_table
 ```
 

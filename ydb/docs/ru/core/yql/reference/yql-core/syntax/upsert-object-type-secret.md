@@ -9,7 +9,7 @@
 
 Для изменения содержимого [секрета](../../../concepts/datamodel/secrets.md) используется следующий SQL-запрос:
 
-```sql
+```yql
 UPSERT OBJECT `secret_name` (TYPE SECRET) WITH value=`secret_value`;
 ```
 Где:
@@ -20,6 +20,6 @@ UPSERT OBJECT `secret_name` (TYPE SECRET) WITH value=`secret_value`;
 
 Следующий запрос устанавливает новое значение секрета с именем `MySecretName` в значение `MySecretData`.
 
-```sql
+```yql
 UPSERT OBJECT `MySecretName` (TYPE SECRET) WITH value=`MySecretData`;
 ```

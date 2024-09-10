@@ -307,7 +307,7 @@ db/migration:
 
 {% cut "The contents of `V5__create_series_title_index.sql`" %}
 
-```sql
+```yql
 ALTER TABLE `series` ADD INDEX `title_index` GLOBAL ON (`title`);
 ```
 

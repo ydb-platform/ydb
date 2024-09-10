@@ -259,7 +259,7 @@ DictAggregate(Dict<K,List<V>>?, List<V>->T)->Dict<K,T>?
 
 ### Примеры
 
-```sql
+```yql
 SELECT DictAggregate(AsDict(
     AsTuple(1, AsList("foo", "bar")),
     AsTuple(2, AsList("baz", "qwe"))),
@@ -292,7 +292,7 @@ SetIsDisjoint(Dict<K,V1>?, List<K>?)->Bool?
 
 ### Примеры
 
-```sql
+```yql
 SELECT SetIsDisjoint(ToSet(AsList(1, 2, 3)), AsList(7, 4)); -- true
 SELECT SetIsDisjoint(ToSet(AsList(1, 2, 3)), ToSet(AsList(3, 4))); -- false
 ```

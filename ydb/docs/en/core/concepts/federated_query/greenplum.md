@@ -33,7 +33,7 @@ Follow these steps to work with an external Greenplum database:
 
 The following SQL query format is used to work with Greenplum:
 
-```sql
+```yql
 SELECT * FROM greenplum_datasource.<table_name>
 ```
 

@@ -6,7 +6,7 @@
 
 ### Пример
 
-```sql
+```yql
 SELECT x, y, z
 FROM (
   SELECT

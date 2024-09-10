@@ -18,10 +18,9 @@ namespace NKqp {
     class TTestHelper {
     public:
         class TColumnSchema {
-            using TTypeDesc = const NKikimr::NScheme::TTypeDesc*;
+            using TTypeDesc = const void*;
             YDB_ACCESSOR_DEF(TString, Name);
-            YDB_ACCESSOR_DEF(NScheme::TTypeId, Type);
-            YDB_ACCESSOR_DEF(TTypeDesc, TypeDesc);
+            YDB_ACCESSOR_DEF(NScheme::TTypeInfo, TypeInfo);
             YDB_FLAG_ACCESSOR(Nullable, true);
         public:
             TString BuildQuery() const;
@@ -49,7 +48,7 @@ namespace NKqp {
         private:
             virtual TString GetObjectType() const = 0;
             TString BuildColumnsStr(const TVector<TColumnSchema>& clumns) const;
-            std::shared_ptr<arrow::Field> BuildField(const TString name, const NScheme::TTypeId typeId, const NScheme::TTypeDesc* typeDesc, bool nullable) const;
+            std::shared_ptr<arrow::Field> BuildField(const TString name, const NScheme::TTypeInfo& typeInfo, bool nullable) const;
         };
 
         class TColumnTable : public TColumnTableBase {

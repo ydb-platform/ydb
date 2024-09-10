@@ -15,9 +15,9 @@ Y_UNIT_TEST_SUITE(KqpOlapStats) {
     constexpr size_t size_single_table = 13152;
 
     const TVector<TTestHelper::TColumnSchema> schema = {
-        TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-        TTestHelper::TColumnSchema().SetName("resource_id").SetType(NScheme::NTypeIds::Utf8),
-        TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32)};
+        TTestHelper::TColumnSchema().SetName("id").SetTypeInfo(NScheme::NTypeIds::Int32).SetNullable(false),
+        TTestHelper::TColumnSchema().SetName("resource_id").SetTypeInfo(NScheme::NTypeIds::Utf8),
+        TTestHelper::TColumnSchema().SetName("level").SetTypeInfo(NScheme::NTypeIds::Int32)};
 
     class TOlapStatsController : public NYDBTest::NColumnShard::TController {
     public:

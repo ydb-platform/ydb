@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/scheme_types/scheme_type_desc.h>
+#include <ydb/core/scheme_types/scheme_type_info.h>
 
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
 

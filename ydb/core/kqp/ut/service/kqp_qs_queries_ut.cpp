@@ -1010,8 +1010,8 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
     Y_UNIT_TEST(DdlColumnTable) {
         const TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("Key").SetType(NScheme::NTypeIds::Uint64).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("Value").SetType(NScheme::NTypeIds::String)
+            TTestHelper::TColumnSchema().SetName("Key").SetTypeInfo(NScheme::NTypeIds::Uint64).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("Value").SetTypeInfo(NScheme::NTypeIds::String)
         };
 
         NKikimrConfig::TAppConfig appConfig;
@@ -3240,8 +3240,8 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
         TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("Col1").SetType(NScheme::NTypeIds::Int64).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("Col2").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("Col1").SetTypeInfo(NScheme::NTypeIds::Int64).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("Col2").SetTypeInfo(NScheme::NTypeIds::Int32).SetNullable(false),
         };
 
         TTestHelper::TColumnTable testTable1;

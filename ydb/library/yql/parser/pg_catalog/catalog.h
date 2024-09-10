@@ -1,5 +1,4 @@
 #pragma once
-#include <ydb/core/scheme_types/scheme_type_desc.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
 #include <util/generic/maybe.h>
 #include <util/generic/string.h>
@@ -106,7 +105,7 @@ enum class ETypType : char {
 
 constexpr char InvalidCategory = '\0';
 
-struct TTypeDesc : NKikimr::NScheme::TTypeDesc {
+struct TTypeDesc {
     ui32 TypeId = 0;
     ui32 ArrayTypeId = 0;
     TString Descr;

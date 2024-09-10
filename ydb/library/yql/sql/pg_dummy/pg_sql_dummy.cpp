@@ -427,23 +427,23 @@ IOptimizerNew* MakePgOptimizerNew(IProviderContext& pctx, TExprContext& ctx, con
 
 namespace NKikimr::NPg {
 
-ui32 PgTypeIdFromTypeDesc(const TTypeDesc* typeDesc) {
+ui32 PgTypeIdFromTypeDesc(const void* typeDesc) {
     Y_UNUSED(typeDesc);
     return 0;
 }
 
-const TTypeDesc* TypeDescFromPgTypeId(ui32 pgTypeId) {
+const void* TypeDescFromPgTypeId(ui32 pgTypeId) {
     Y_UNUSED(pgTypeId);
     return {};
 }
 
-TString PgTypeNameFromTypeDesc(const TTypeDesc* typeDesc, const TString& typeMod) {
+TString PgTypeNameFromTypeDesc(const void* typeDesc, const TString& typeMod) {
     Y_UNUSED(typeDesc);
     Y_UNUSED(typeMod);
     return "";
 }
 
-const TTypeDesc* TypeDescFromPgTypeName(const TStringBuf name) {
+const void* TypeDescFromPgTypeName(const TStringBuf name) {
     Y_UNUSED(name);
     return {};
 }
@@ -453,27 +453,27 @@ TString TypeModFromPgTypeName(const TStringBuf name) {
     return {};
 }
 
-bool TypeDescIsComparable(const TTypeDesc* typeDesc) {
+bool TypeDescIsComparable(const void* typeDesc) {
     Y_UNUSED(typeDesc);
     throw yexception() << "PG types are not supported";
 }
 
-i32 TypeDescGetTypeLen(const TTypeDesc* typeDesc) {
+i32 TypeDescGetTypeLen(const void* typeDesc) {
     Y_UNUSED(typeDesc);
     throw yexception() << "PG types are not supported";
 }
 
-ui32 TypeDescGetStoredSize(const TTypeDesc* typeDesc) {
+ui32 TypeDescGetStoredSize(const void* typeDesc) {
     Y_UNUSED(typeDesc);
     throw yexception() << "PG types are not supported";
 }
 
-bool TypeDescNeedsCoercion(const TTypeDesc* typeDesc) {
+bool TypeDescNeedsCoercion(const void* typeDesc) {
     Y_UNUSED(typeDesc);
     throw yexception() << "PG types are not supported";
 }
 
-int PgNativeBinaryCompare(const char* dataL, size_t sizeL, const char* dataR, size_t sizeR, const TTypeDesc* typeDesc) {
+int PgNativeBinaryCompare(const char* dataL, size_t sizeL, const char* dataR, size_t sizeR, const void* typeDesc) {
     Y_UNUSED(dataL);
     Y_UNUSED(sizeL);
     Y_UNUSED(dataR);
@@ -482,33 +482,33 @@ int PgNativeBinaryCompare(const char* dataL, size_t sizeL, const char* dataR, si
     throw yexception() << "PG types are not supported";
 }
 
-ui64 PgNativeBinaryHash(const char* data, size_t size, const TTypeDesc* typeDesc) {
+ui64 PgNativeBinaryHash(const char* data, size_t size, const void* typeDesc) {
     Y_UNUSED(data);
     Y_UNUSED(size);
     Y_UNUSED(typeDesc);
     throw yexception() << "PG types are not supported";
 }
 
-TTypeModResult BinaryTypeModFromTextTypeMod(const TString& str, const TTypeDesc* typeDesc) {
+TTypeModResult BinaryTypeModFromTextTypeMod(const TString& str, const void* typeDesc) {
     Y_UNUSED(str);
     Y_UNUSED(typeDesc);
     throw yexception() << "PG types are not supported";
 }
 
-TMaybe<TString> PgNativeBinaryValidate(const TStringBuf binary, const TTypeDesc* typeDesc) {
+TMaybe<TString> PgNativeBinaryValidate(const TStringBuf binary, const void* typeDesc) {
     Y_UNUSED(binary);
     Y_UNUSED(typeDesc);
     throw yexception() << "PG types are not supported";
 }
 
-TCoerceResult PgNativeBinaryCoerce(const TStringBuf binary, const TTypeDesc* typeDesc, i32 typmod) {
+TCoerceResult PgNativeBinaryCoerce(const TStringBuf binary, const void* typeDesc, i32 typmod) {
     Y_UNUSED(binary);
     Y_UNUSED(typeDesc);
     Y_UNUSED(typmod);
     throw yexception() << "PG types are not supported";
 }
 
-TConvertResult PgNativeBinaryFromNativeText(const TString& str, const TTypeDesc* typeDesc) {
+TConvertResult PgNativeBinaryFromNativeText(const TString& str, const void* typeDesc) {
     Y_UNUSED(str);
     Y_UNUSED(typeDesc);
     throw yexception() << "PG types are not supported";
@@ -520,7 +520,7 @@ TConvertResult PgNativeBinaryFromNativeText(const TString& str, ui32 pgTypeId) {
     throw yexception() << "PG types are not supported";
 }
 
-TConvertResult PgNativeTextFromNativeBinary(const TStringBuf binary, const TTypeDesc* typeDesc) {
+TConvertResult PgNativeTextFromNativeBinary(const TStringBuf binary, const void* typeDesc) {
     Y_UNUSED(binary);
     Y_UNUSED(typeDesc);
     throw yexception() << "PG types are not supported";

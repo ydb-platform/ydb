@@ -1,6 +1,5 @@
 #pragma once
 
-#include "scheme_type_desc.h"
 
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
@@ -13,12 +12,18 @@ public:
     constexpr TTypeInfo()
     {}
 
-    explicit constexpr TTypeInfo(TTypeId typeId, const TTypeDesc* typeDesc = {})
+    constexpr TTypeInfo(TTypeId typeId)
         : TypeId(typeId)
-        , TypeDesc(typeDesc)
+    { }
+
+    constexpr TTypeInfo(TTypeId typeId, const void* typeDesc)
+        : TypeId(typeId)
+        , TypeDesc(static_cast<const TTypeDesc *>(typeDesc))
     {
         if (TypeId != NTypeIds::Pg) {
             Y_ABORT_UNLESS(!TypeDesc);
+        } else {
+            Y_ABORT_UNLESS(TypeDesc);
         }
     }
 
@@ -40,7 +45,7 @@ public:
 
 private:
     TTypeId TypeId = 0;
-    const TTypeDesc* TypeDesc = {};
+    const TTypeDesc* TypeDesc = nullptr;
 };
 
 } // namespace NKikimr::NScheme

@@ -7316,10 +7316,10 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("id_second").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32),
-            TTestHelper::TColumnSchema().SetName("created_at").SetType(NScheme::NTypeIds::Timestamp).SetNullable(false)
+            TTestHelper::TColumnSchema().SetName("id").SetTypeInfo(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("id_second").SetTypeInfo(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("level").SetTypeInfo(NScheme::NTypeIds::Int32),
+            TTestHelper::TColumnSchema().SetName("created_at").SetTypeInfo(NScheme::NTypeIds::Timestamp).SetNullable(false)
         };
 
         TTestHelper::TColumnTable testTable;
@@ -7348,10 +7348,10 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("id_second").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("resource_id").SetType(NScheme::NTypeIds::Utf8),
-            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32)
+            TTestHelper::TColumnSchema().SetName("id").SetTypeInfo(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("id_second").SetTypeInfo(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("resource_id").SetTypeInfo(NScheme::NTypeIds::Utf8),
+            TTestHelper::TColumnSchema().SetName("level").SetTypeInfo(NScheme::NTypeIds::Int32)
         };
         TTestHelper::TColumnTable testTable;
 
@@ -7359,7 +7359,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         testHelper.CreateTable(testTable);
 
         {
-            schema.push_back(TTestHelper::TColumnSchema().SetName("new_column").SetType(NScheme::NTypeIds::Uint64));
+            schema.push_back(TTestHelper::TColumnSchema().SetName("new_column").SetTypeInfo(NScheme::NTypeIds::Uint64));
             auto alterQuery = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() << "` ADD COLUMN new_column Uint64;";
             auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
@@ -7372,10 +7372,10 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("id_second").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32),
-            TTestHelper::TColumnSchema().SetName("created_at").SetType(NScheme::NTypeIds::Timestamp).SetNullable(false)
+            TTestHelper::TColumnSchema().SetName("id").SetTypeInfo(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("id_second").SetTypeInfo(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("level").SetTypeInfo(NScheme::NTypeIds::Int32),
+            TTestHelper::TColumnSchema().SetName("created_at").SetTypeInfo(NScheme::NTypeIds::Timestamp).SetNullable(false)
         };
 
         TTestHelper::TColumnTable testTable;
@@ -7401,10 +7401,10 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("id_second").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32),
-            TTestHelper::TColumnSchema().SetName("created_at").SetType(NScheme::NTypeIds::Timestamp).SetNullable(false)
+            TTestHelper::TColumnSchema().SetName("id").SetTypeInfo(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("id_second").SetTypeInfo(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("level").SetTypeInfo(NScheme::NTypeIds::Int32),
+            TTestHelper::TColumnSchema().SetName("created_at").SetTypeInfo(NScheme::NTypeIds::Timestamp).SetNullable(false)
         };
 
         TTestHelper::TColumnTable testTable;
@@ -7434,10 +7434,10 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         const TString tableName = "/Root/ColumnTableTest";
 
         TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("id_second").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32),
-            TTestHelper::TColumnSchema().SetName("created_at").SetType(NScheme::NTypeIds::Timestamp).SetNullable(false)
+            TTestHelper::TColumnSchema().SetName("id").SetTypeInfo(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("id_second").SetTypeInfo(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("level").SetTypeInfo(NScheme::NTypeIds::Int32),
+            TTestHelper::TColumnSchema().SetName("created_at").SetTypeInfo(NScheme::NTypeIds::Timestamp).SetNullable(false)
         };
 
         TTestHelper::TColumnTable testTable;
@@ -7475,10 +7475,10 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("id_second").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32),
-            TTestHelper::TColumnSchema().SetName("created_at").SetType(NScheme::NTypeIds::Timestamp).SetNullable(false)
+            TTestHelper::TColumnSchema().SetName("id").SetTypeInfo(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("id_second").SetTypeInfo(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("level").SetTypeInfo(NScheme::NTypeIds::Int32),
+            TTestHelper::TColumnSchema().SetName("created_at").SetTypeInfo(NScheme::NTypeIds::Timestamp).SetNullable(false)
         };
 
         TTestHelper::TColumnTable testTable;
@@ -7611,9 +7611,9 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("resource_id").SetType(NScheme::NTypeIds::Utf8),
-            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32)
+            TTestHelper::TColumnSchema().SetName("id").SetTypeInfo(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("resource_id").SetTypeInfo(NScheme::NTypeIds::Utf8),
+            TTestHelper::TColumnSchema().SetName("level").SetTypeInfo(NScheme::NTypeIds::Int32)
         };
 
         Tests::NCommon::TLoggerInit(testHelper.GetKikimr()).Initialize();
@@ -7632,7 +7632,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=1", "[[1;#;[\"test_res_1\"]]]");
 
         {
-            schema.push_back(TTestHelper::TColumnSchema().SetName("new_column").SetType(NScheme::NTypeIds::Uint64));
+            schema.push_back(TTestHelper::TColumnSchema().SetName("new_column").SetTypeInfo(NScheme::NTypeIds::Uint64));
             auto alterQuery = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() << "` ADD COLUMN new_column Uint64;";
             auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
@@ -7671,9 +7671,9 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("resource_id").SetType(NScheme::NTypeIds::Utf8),
-            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32)
+            TTestHelper::TColumnSchema().SetName("id").SetTypeInfo(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("resource_id").SetTypeInfo(NScheme::NTypeIds::Utf8),
+            TTestHelper::TColumnSchema().SetName("level").SetTypeInfo(NScheme::NTypeIds::Int32)
         };
 
         TTestHelper::TColumnTable testTable;
@@ -7700,9 +7700,9 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("resource_id").SetType(NScheme::NTypeIds::Utf8),
-            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32)
+            TTestHelper::TColumnSchema().SetName("id").SetTypeInfo(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("resource_id").SetTypeInfo(NScheme::NTypeIds::Utf8),
+            TTestHelper::TColumnSchema().SetName("level").SetTypeInfo(NScheme::NTypeIds::Int32)
         };
 
         TTestHelper::TColumnTable testTable;
@@ -7727,9 +7727,9 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("resource_id").SetType(NScheme::NTypeIds::Utf8),
-            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32)
+            TTestHelper::TColumnSchema().SetName("id").SetTypeInfo(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("resource_id").SetTypeInfo(NScheme::NTypeIds::Utf8),
+            TTestHelper::TColumnSchema().SetName("level").SetTypeInfo(NScheme::NTypeIds::Int32)
         };
         TTestHelper::TColumnTableStore testTableStore;
 
@@ -7749,7 +7749,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         testHelper.ReadData("SELECT * FROM `/Root/TableStoreTest/ColumnTableTest` WHERE id=1", "[[1;#;[\"test_res_1\"]]]");
 
         {
-            schema.push_back(TTestHelper::TColumnSchema().SetName("new_column").SetType(NScheme::NTypeIds::Uint64));
+            schema.push_back(TTestHelper::TColumnSchema().SetName("new_column").SetTypeInfo(NScheme::NTypeIds::Uint64));
             auto alterQuery = TStringBuilder() << "ALTER TABLESTORE `" << testTableStore.GetName() << "` ADD COLUMN new_column Uint64;";
 
             auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
@@ -7791,9 +7791,9 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("resource_id").SetType(NScheme::NTypeIds::Utf8),
-            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Pg).SetTypeDesc(NPg::TypeDescFromPgTypeName("pgint4"))
+            TTestHelper::TColumnSchema().SetName("id").SetTypeInfo(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("resource_id").SetTypeInfo(NScheme::NTypeIds::Utf8),
+            TTestHelper::TColumnSchema().SetName("level").SetTypeInfo({NScheme::NTypeIds::Pg, NPg::TypeDescFromPgTypeName("pgint4")})
         };
         TTestHelper::TColumnTableStore testTableStore;
 
@@ -7813,7 +7813,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         testHelper.ReadData("SELECT * FROM `/Root/TableStoreTest/ColumnTableTest` WHERE id=1", "[[1;#;[\"test_res_1\"]]]");
 
         {
-            schema.push_back(TTestHelper::TColumnSchema().SetName("new_column").SetType(NScheme::NTypeIds::Pg).SetTypeDesc(NPg::TypeDescFromPgTypeName("pgfloat4")));
+            schema.push_back(TTestHelper::TColumnSchema().SetName("new_column").SetTypeInfo({NScheme::NTypeIds::Pg, NPg::TypeDescFromPgTypeName("pgfloat4")}));
             auto alterQuery = TStringBuilder() << "ALTER TABLESTORE `" << testTableStore.GetName() << "` ADD COLUMN new_column pgfloat4;";
 
             auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
@@ -7855,9 +7855,9 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("resource_id").SetType(NScheme::NTypeIds::Utf8),
-            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32)
+            TTestHelper::TColumnSchema().SetName("id").SetTypeInfo(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("resource_id").SetTypeInfo(NScheme::NTypeIds::Utf8),
+            TTestHelper::TColumnSchema().SetName("level").SetTypeInfo(NScheme::NTypeIds::Int32)
         };
         TTestHelper::TColumnTable testTable;
         testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
@@ -7876,18 +7876,18 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("resource_id").SetType(NScheme::NTypeIds::Utf8).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32).SetNullable(false)
+            TTestHelper::TColumnSchema().SetName("id").SetTypeInfo(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("resource_id").SetTypeInfo(NScheme::NTypeIds::Utf8).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("level").SetTypeInfo(NScheme::NTypeIds::Int32).SetNullable(false)
         };
         TTestHelper::TColumnTable testTable;
         testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
         testHelper.CreateTable(testTable);
 
         TVector<TTestHelper::TColumnSchema> schemaWithNull = {
-            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("resource_id").SetType(NScheme::NTypeIds::Utf8).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32)
+            TTestHelper::TColumnSchema().SetName("id").SetTypeInfo(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("resource_id").SetTypeInfo(NScheme::NTypeIds::Utf8).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("level").SetTypeInfo(NScheme::NTypeIds::Int32)
         };
         {
             TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schemaWithNull));
@@ -7911,8 +7911,8 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Uuid).SetNullable(true)
+            TTestHelper::TColumnSchema().SetName("id").SetTypeInfo(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("level").SetTypeInfo(NScheme::NTypeIds::Uuid).SetNullable(true)
         };
         TTestHelper::TColumnTable testTable;
         testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
@@ -7924,9 +7924,9 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("resource_id").SetType(NScheme::NTypeIds::Utf8),
-            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32)
+            TTestHelper::TColumnSchema().SetName("id").SetTypeInfo(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("resource_id").SetTypeInfo(NScheme::NTypeIds::Utf8),
+            TTestHelper::TColumnSchema().SetName("level").SetTypeInfo(NScheme::NTypeIds::Int32)
         };
 
         TTestHelper::TColumnTable testTable;
@@ -7961,9 +7961,9 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("resource_id").SetType(NScheme::NTypeIds::Utf8),
-            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32)
+            TTestHelper::TColumnSchema().SetName("id").SetTypeInfo(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("resource_id").SetTypeInfo(NScheme::NTypeIds::Utf8),
+            TTestHelper::TColumnSchema().SetName("level").SetTypeInfo(NScheme::NTypeIds::Int32)
         };
 
         TTestHelper::TColumnTable testTable;
@@ -7988,9 +7988,9 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("resource_id").SetType(NScheme::NTypeIds::Utf8),
-            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32)
+            TTestHelper::TColumnSchema().SetName("id").SetTypeInfo(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("resource_id").SetTypeInfo(NScheme::NTypeIds::Utf8),
+            TTestHelper::TColumnSchema().SetName("level").SetTypeInfo(NScheme::NTypeIds::Int32)
         };
 
         TTestHelper::TColumnTable testTable;
@@ -8015,9 +8015,9 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("resource_id").SetType(NScheme::NTypeIds::Utf8),
-            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32)
+            TTestHelper::TColumnSchema().SetName("id").SetTypeInfo(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("resource_id").SetTypeInfo(NScheme::NTypeIds::Utf8),
+            TTestHelper::TColumnSchema().SetName("level").SetTypeInfo(NScheme::NTypeIds::Int32)
         };
 
         TTestHelper::TColumnTable testTable;
@@ -8032,7 +8032,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         }
         testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=1", "[[1;#;[\"test_res_1\"]]]");
         {
-            schema.push_back(TTestHelper::TColumnSchema().SetName("new_column").SetType(NScheme::NTypeIds::Uint64));
+            schema.push_back(TTestHelper::TColumnSchema().SetName("new_column").SetTypeInfo(NScheme::NTypeIds::Uint64));
             auto alterQuery = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() << "` ADD COLUMN new_column Uint64;";
             auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
@@ -8060,8 +8060,8 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("value").SetType(NScheme::NTypeIds::Utf8),
+            TTestHelper::TColumnSchema().SetName("id").SetTypeInfo(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("value").SetTypeInfo(NScheme::NTypeIds::Utf8),
         };
 
         TTestHelper::TColumnTable testTable;
@@ -8094,7 +8094,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
         }
-        schema.back().SetType(NScheme::NTypeIds::Uint64);
+        schema.back().SetTypeInfo(NScheme::NTypeIds::Uint64);
 
         {
             TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
@@ -8133,10 +8133,10 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("id_second").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32),
-            TTestHelper::TColumnSchema().SetName("created_at").SetType(NScheme::NTypeIds::Timestamp).SetNullable(false)
+            TTestHelper::TColumnSchema().SetName("id").SetTypeInfo(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("id_second").SetTypeInfo(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("level").SetTypeInfo(NScheme::NTypeIds::Int32),
+            TTestHelper::TColumnSchema().SetName("created_at").SetTypeInfo(NScheme::NTypeIds::Timestamp).SetNullable(false)
         };
 
         TTestHelper::TColumnTable testTable;
@@ -8162,9 +8162,9 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("resource_id").SetType(NScheme::NTypeIds::Utf8),
-            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32)
+            TTestHelper::TColumnSchema().SetName("id").SetTypeInfo(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("resource_id").SetTypeInfo(NScheme::NTypeIds::Utf8),
+            TTestHelper::TColumnSchema().SetName("level").SetTypeInfo(NScheme::NTypeIds::Int32)
         };
         TTestHelper::TColumnTable testTable;
 
@@ -8190,9 +8190,9 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("resource_id").SetType(NScheme::NTypeIds::Utf8),
-            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32)
+            TTestHelper::TColumnSchema().SetName("id").SetTypeInfo(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("resource_id").SetTypeInfo(NScheme::NTypeIds::Utf8),
+            TTestHelper::TColumnSchema().SetName("level").SetTypeInfo(NScheme::NTypeIds::Int32)
         };
         TTestHelper::TColumnTableStore testTableStore;
 
@@ -8217,11 +8217,11 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Uint64).SetNullable(false)
+            TTestHelper::TColumnSchema().SetName("id").SetTypeInfo(NScheme::NTypeIds::Uint64).SetNullable(false)
         };
 
         for (ui64 i = 0; i < 10000; ++i) {
-            schema.emplace_back(TTestHelper::TColumnSchema().SetName("column" + ToString(i)).SetType(NScheme::NTypeIds::Int32).SetNullable(true));
+            schema.emplace_back(TTestHelper::TColumnSchema().SetName("column" + ToString(i)).SetTypeInfo(NScheme::NTypeIds::Int32).SetNullable(true));
         }
 
         TTestHelper::TColumnTable testTable;
@@ -8253,9 +8253,9 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(true),
-            TTestHelper::TColumnSchema().SetName("resource_id").SetType(NScheme::NTypeIds::Utf8).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32).SetNullable(false)
+            TTestHelper::TColumnSchema().SetName("id").SetTypeInfo(NScheme::NTypeIds::Int32).SetNullable(true),
+            TTestHelper::TColumnSchema().SetName("resource_id").SetTypeInfo(NScheme::NTypeIds::Utf8).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("level").SetTypeInfo(NScheme::NTypeIds::Int32).SetNullable(false)
         };
         TTestHelper::TColumnTableStore testTableStore;
         testTableStore.SetName("/Root/TableStoreTest").SetPrimaryKey({"id"}).SetSchema(schema);
@@ -8277,9 +8277,9 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int64).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("timestamp").SetType(NScheme::NTypeIds::Timestamp).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("ui64_type").SetType(NScheme::NTypeIds::Uint64).SetNullable(false)
+            TTestHelper::TColumnSchema().SetName("id").SetTypeInfo(NScheme::NTypeIds::Int64).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("timestamp").SetTypeInfo(NScheme::NTypeIds::Timestamp).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("ui64_type").SetTypeInfo(NScheme::NTypeIds::Uint64).SetNullable(false)
         };
 
         TTestHelper::TColumnTable testTable;
@@ -8302,8 +8302,8 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int64).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("dec").SetType(NScheme::NTypeIds::Decimal).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("id").SetTypeInfo(NScheme::NTypeIds::Int64).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("dec").SetTypeInfo(NScheme::NTypeIds::Decimal).SetNullable(false),
         };
 
         TTestHelper::TColumnTable testTable;
@@ -8382,8 +8382,8 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int64).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("dec").SetType(NScheme::NTypeIds::Decimal).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("id").SetTypeInfo(NScheme::NTypeIds::Int64).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("dec").SetTypeInfo(NScheme::NTypeIds::Decimal).SetNullable(false),
         };
 
         TTestHelper::TColumnTable testTable;
@@ -8412,9 +8412,9 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int64).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("timestamp").SetType(NScheme::NTypeIds::Timestamp).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("timestamp_max").SetType(NScheme::NTypeIds::Timestamp).SetNullable(false)
+            TTestHelper::TColumnSchema().SetName("id").SetTypeInfo(NScheme::NTypeIds::Int64).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("timestamp").SetTypeInfo(NScheme::NTypeIds::Timestamp).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("timestamp_max").SetTypeInfo(NScheme::NTypeIds::Timestamp).SetNullable(false)
         };
 
         TTestHelper::TColumnTable testTable;
@@ -8471,9 +8471,9 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int64).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("json").SetType(NScheme::NTypeIds::Json).SetNullable(true),
-            TTestHelper::TColumnSchema().SetName("json_doc").SetType(NScheme::NTypeIds::JsonDocument).SetNullable(true),
+            TTestHelper::TColumnSchema().SetName("id").SetTypeInfo(NScheme::NTypeIds::Int64).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("json").SetTypeInfo(NScheme::NTypeIds::Json).SetNullable(true),
+            TTestHelper::TColumnSchema().SetName("json_doc").SetTypeInfo(NScheme::NTypeIds::JsonDocument).SetNullable(true),
         };
 
         TTestHelper::TColumnTable testTable;

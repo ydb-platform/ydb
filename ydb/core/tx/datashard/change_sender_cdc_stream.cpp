@@ -325,8 +325,8 @@ private:
 
 class TCdcChangeSenderMain
     : public TActorBootstrapped<TCdcChangeSenderMain>
-    , public NChangeExchange::IChangeSenderIdentity
     , public NChangeExchange::TBaseChangeSender<TChangeRecord>
+    , public NChangeExchange::IChangeSenderIdentity
     , public NChangeExchange::IChangeSenderResolver
     , public NChangeExchange::ISenderFactory
     , private NSchemeCache::TSchemeCacheHelpers

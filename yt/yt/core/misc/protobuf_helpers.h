@@ -16,8 +16,10 @@
 #include <library/cpp/yt/misc/optional.h>
 #include <library/cpp/yt/misc/preprocessor.h>
 
+#include <google/protobuf/duration.pb.h>
 #include <google/protobuf/message.h>
 #include <google/protobuf/repeated_field.h>
+#include <google/protobuf/timestamp.pb.h>
 
 #include <google/protobuf/io/zero_copy_stream_impl_lite.h>
 
@@ -28,15 +30,19 @@ namespace NYT {
 inline void ToProto(::google::protobuf::int64* serialized, TDuration original);
 inline void FromProto(TDuration* original, ::google::protobuf::int64 serialized);
 
+inline void ToProto(::google::protobuf::Duration* serialized, TDuration original);
+inline void FromProto(TDuration* original, ::google::protobuf::Duration serialized);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 inline void ToProto(::google::protobuf::int64* serialized, TInstant original);
 inline void FromProto(TInstant* original, ::google::protobuf::int64 serialized);
 
-////////////////////////////////////////////////////////////////////////////////
-
 inline void ToProto(::google::protobuf::uint64* serialized, TInstant original);
 inline void FromProto(TInstant* original, ::google::protobuf::uint64 serialized);
+
+inline void ToProto(::google::protobuf::Timestamp* serialized, TInstant original);
+inline void FromProto(TInstant* original, ::google::protobuf::Timestamp serialized);
 
 ////////////////////////////////////////////////////////////////////////////////
 

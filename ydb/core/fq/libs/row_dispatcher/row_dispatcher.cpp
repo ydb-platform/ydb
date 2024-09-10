@@ -31,7 +31,7 @@ struct TRowDispatcherMetrics {
         : Counters(counters) {
         ErrorsCount = Counters->GetCounter("ErrorsCount");
         ClientsCount = Counters->GetCounter("ClientsCount");
-        RowsSent = Counters->GetCounter("RowsSent");
+        RowsSent = Counters->GetCounter("RowsSent", true);
     }
 
     ::NMonitoring::TDynamicCounterPtr Counters;
@@ -119,22 +119,22 @@ public:
     static constexpr char ActorName[] = "FQ_ROW_DISPATCHER";
 
     void Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& ev);
-    void HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev);
-    void HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr &ev);
+    void HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev);
+    void HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr& ev);
 
-    void Handle(NActors::TEvents::TEvUndelivered::TPtr &ev) ;
-    void Handle(NActors::TEvents::TEvWakeup::TPtr &ev);
-    void Handle(NActors::TEvents::TEvPong::TPtr &ev);
-    void Handle(NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscribe::TPtr &ev);
-    void Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr &ev);
-    void Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr &ev);
-    void Handle(NFq::TEvRowDispatcher::TEvGetNextBatch::TPtr &ev);
-    void Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr &ev);
-    void Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr &ev);
-    void Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr &ev);
-    void Handle(NFq::TEvRowDispatcher::TEvStatus::TPtr &ev);
+    void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) ;
+    void Handle(NActors::TEvents::TEvWakeup::TPtr& ev);
+    void Handle(NActors::TEvents::TEvPong::TPtr& ev);
+    void Handle(NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscribe::TPtr& ev);
+    void Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev);
+    void Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr& ev);
+    void Handle(NFq::TEvRowDispatcher::TEvGetNextBatch::TPtr& ev);
+    void Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr& ev);
+    void Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev);
+    void Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr& ev);
+    void Handle(NFq::TEvRowDispatcher::TEvStatus::TPtr& ev);
 
-    void Handle(NActors::TEvents::TEvPing::TPtr &ev);
+    void Handle(NActors::TEvents::TEvPing::TPtr& ev);
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr&);
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvPing::TPtr&);
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvSessionClosed::TPtr&);
@@ -210,21 +210,21 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& 
     }
 }
 
-void TRowDispatcher::HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr &ev) {
+void TRowDispatcher::HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr& ev) {
     LOG_ROW_DISPATCHER_DEBUG("EvNodeConnected, node id " << ev->Get()->NodeId);
     for (auto& [actorId, consumer] : Consumers) {
         consumer->EventsQueue.HandleNodeConnected(ev->Get()->NodeId);
     }
 }
 
-void TRowDispatcher::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {
+void TRowDispatcher::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
     LOG_ROW_DISPATCHER_DEBUG("TEvNodeDisconnected, node id " << ev->Get()->NodeId);
     for (auto& [actorId, consumer] : Consumers) {
         consumer->EventsQueue.HandleNodeDisconnected(ev->Get()->NodeId);
     }
 }
 
-void TRowDispatcher::Handle(NActors::TEvents::TEvUndelivered::TPtr &ev) {
+void TRowDispatcher::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
     LOG_ROW_DISPATCHER_DEBUG("TEvUndelivered, ev: " << ev->Get()->ToString());
     LOG_ROW_DISPATCHER_DEBUG("TEvUndelivered, Reason: " << ev->Get()->Reason);
     Schedule(TDuration::Seconds(1), new NActors::TEvents::TEvWakeup());
@@ -242,11 +242,11 @@ void TRowDispatcher::Handle(NActors::TEvents::TEvWakeup::TPtr&) {
     Send(*CoordinatorActorId, new NActors::TEvents::TEvPing(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
 }
 
-void TRowDispatcher::Handle(NActors::TEvents::TEvPong::TPtr &) {
+void TRowDispatcher::Handle(NActors::TEvents::TEvPong::TPtr&) {
     LOG_ROW_DISPATCHER_TRACE("NActors::TEvents::TEvPong ");
 }
 
-void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscribe::TPtr &ev) {
+void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscribe::TPtr& ev) {
     LOG_ROW_DISPATCHER_DEBUG("TEvCoordinatorChangesSubscribe from " << ev->Sender);
     CoordinatorChangedSubscribers.insert(ev->Sender);
     if (!CoordinatorActorId) {
@@ -276,7 +276,7 @@ void TRowDispatcher::PrintInternalState(const TString& prefix) {
     LOG_ROW_DISPATCHER_DEBUG(prefix << ":\n" << str.Str());
 }
 
-void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr &ev) {
+void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     LOG_ROW_DISPATCHER_DEBUG("TEvStartSession, topicPath " << ev->Get()->Record.GetSource().GetTopicPath() <<
         " partitionId " << ev->Get()->Record.GetPartitionId());
 
@@ -341,7 +341,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr &ev) {
     PrintInternalState("After AddConsumer:");
 }
 
-void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvGetNextBatch::TPtr &ev) {
+void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvGetNextBatch::TPtr& ev) {
     LOG_ROW_DISPATCHER_TRACE("TEvGetNextBatch from " << ev->Sender << ", partId " << ev->Get()->Record.GetPartitionId());
 
     ConsumerSessionKey key{ev->Sender, ev->Get()->Record.GetPartitionId()};
@@ -365,7 +365,7 @@ void TRowDispatcher::Handle(NActors::TEvents::TEvPing::TPtr& ev) {
     Send(ev->Sender, new NActors::TEvents::TEvPong());
 }
 
-void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr &ev) {
+void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr& ev) {
     LOG_ROW_DISPATCHER_DEBUG("TEvStopSession, topicPath " << ev->Get()->Record.GetSource().GetTopicPath() <<
         " partitionId " << ev->Get()->Record.GetPartitionId());
 
@@ -455,7 +455,7 @@ void TRowDispatcher::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvPing::TPtr
     it->second->EventsQueue.Ping();
 }
 
-void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr &ev) {
+void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr& ev) {
     LOG_ROW_DISPATCHER_TRACE("TEvNewDataArrived from " << ev->Sender);
     ConsumerSessionKey key{ev->Get()->ReadActorId, ev->Get()->Record.GetPartitionId()};
     auto it = Consumers.find(key);
@@ -467,7 +467,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr &ev) 
     it->second->EventsQueue.Send(ev.Release()->Release().Release());
 }
 
-void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr &ev) {
+void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev) {
     LOG_ROW_DISPATCHER_TRACE("TEvMessageBatch from " << ev->Sender);
     ConsumerSessionKey key{ev->Get()->ReadActorId, ev->Get()->Record.GetPartitionId()};
     auto it = Consumers.find(key);
@@ -480,7 +480,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr &ev) {
     it->second->EventsQueue.Send(ev.Release()->Release().Release());
 }
 
-void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr &ev) {
+void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr& ev) {
     LOG_ROW_DISPATCHER_TRACE("TEvSessionError from " << ev->Sender);
     ConsumerSessionKey key{ev->Get()->ReadActorId, ev->Get()->Record.GetPartitionId()};
     auto it = Consumers.find(key);
@@ -494,7 +494,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr &ev) {
     DeleteConsumer(key);
 }
 
-void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStatus::TPtr &ev) {
+void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStatus::TPtr& ev) {
     LOG_ROW_DISPATCHER_TRACE("TEvStatus from " << ev->Sender);
     ConsumerSessionKey key{ev->Get()->ReadActorId, ev->Get()->Record.GetPartitionId()};
     auto it = Consumers.find(key);

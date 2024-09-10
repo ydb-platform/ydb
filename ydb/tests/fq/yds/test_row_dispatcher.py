@@ -30,6 +30,7 @@ def kikimr(request):
     )
     kikimr = StreamingOverKikimr(kikimr_conf)
     kikimr.compute_plane.fq_config['row_dispatcher']['enabled'] = True
+    kikimr.compute_plane.fq_config['row_dispatcher']['without_consumer'] = True
     kikimr.start_mvp_mock_server()
     kikimr.start()
     yield kikimr

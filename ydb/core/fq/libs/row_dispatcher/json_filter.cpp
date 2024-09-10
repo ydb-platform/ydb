@@ -59,10 +59,10 @@ public:
         NYql::NPureCalc::TWorkerHolder<NYql::NPureCalc::IPushStreamWorker> worker)
         : Worker(std::move(worker)) {
         const NKikimr::NMiniKQL::TStructType* structType = Worker->GetInputType();
-        const auto nMembers = structType->GetMembersCount();
+        const auto count = structType->GetMembersCount();
 
         THashMap<TString, size_t> schemaPositions;
-        for (ui32 i = 0; i < nMembers; ++i) { 
+        for (ui32 i = 0; i < count; ++i) { 
             const auto name = structType->GetMemberName(i);
             if (name == OffsetFieldName) {
                 OffsetPosition = i;
@@ -73,7 +73,7 @@ public:
 
         const NYT::TNode& schema = spec.GetSchemas()[0];
         const auto& fields = schema[1];
-        Y_ENSURE(nMembers == fields.Size());
+        Y_ENSURE(count == fields.Size());
         Y_ENSURE(fields.IsList());
         for (size_t i = 0; i < fields.Size(); ++i) {
             auto name = fields[i][0].AsString();
@@ -108,8 +108,7 @@ public:
 
             size_t i = 0;
             for (const auto& v : value.second) {
-                NYql::NUdf::TStringValue str(v.size());
-                std::memcpy(str.Data(), v.data(), v.size());
+                NYql::NUdf::TStringValue str(v);
                 items[FieldsPositions[i++]] = NYql::NUdf::TUnboxedValuePod(std::move(str));
             }
             Worker->Push(std::move(result));

@@ -26,7 +26,7 @@ namespace {
 struct TCoordinatorMetrics {
     TCoordinatorMetrics(const ::NMonitoring::TDynamicCounterPtr& counters)
         : Counters(counters) {
-        IncomingRequests = Counters->GetCounter("IncomingRequests");
+        IncomingRequests = Counters->GetCounter("IncomingRequests", true);
         LeaderChangedCount = Counters->GetCounter("LeaderChangedCount");
     }
 
@@ -68,9 +68,9 @@ public:
     static constexpr char ActorName[] = "YQ_RD_COORDINATOR";
 
     void Handle(NActors::TEvents::TEvPing::TPtr& ev);
-    void HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev);
-    void HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr &ev);
-    void Handle(NActors::TEvents::TEvUndelivered::TPtr &ev);
+    void HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev);
+    void HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr& ev);
+    void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev);
     void Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& ev);
     void Handle(NFq::TEvRowDispatcher::TEvCoordinatorRequest::TPtr& ev);
 
@@ -88,7 +88,7 @@ private:
 
     void AddRowDispatcher(NActors::TActorId actorId);
     void PrintInternalState();
-    NActors::TActorId GetAndUpdateLocation(TPartitionKey key);
+    NActors::TActorId GetAndUpdateLocation(const TPartitionKey& key);
 };
 
 TActorCoordinator::TActorCoordinator(
@@ -160,13 +160,13 @@ void TActorCoordinator::PrintInternalState() {
     LOG_ROW_DISPATCHER_DEBUG(str.Str());
 }
 
-void TActorCoordinator::HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr &ev) {
+void TActorCoordinator::HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr& ev) {
     LOG_ROW_DISPATCHER_DEBUG("EvNodeConnected " << ev->Get()->NodeId);
     // Dont set Connected = false.
     // Wait TEvPing from row dispatchers.
 }
 
-void TActorCoordinator::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {
+void TActorCoordinator::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
     LOG_ROW_DISPATCHER_DEBUG("TEvNodeDisconnected, node id " << ev->Get()->NodeId);
    
     for (auto& [actorId, info] : RowDispatchers) {
@@ -177,7 +177,7 @@ void TActorCoordinator::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected:
     }
 }
 
-void TActorCoordinator::Handle(NActors::TEvents::TEvUndelivered::TPtr &ev) {
+void TActorCoordinator::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
     LOG_ROW_DISPATCHER_DEBUG("TEvUndelivered, ev: " << ev->Get()->ToString());
 
     for (auto& [actorId, info] : RowDispatchers) {
@@ -193,7 +193,7 @@ void TActorCoordinator::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPt
     Metrics.LeaderChangedCount->Inc();
 }
 
-NActors::TActorId TActorCoordinator::GetAndUpdateLocation(TPartitionKey key) {
+NActors::TActorId TActorCoordinator::GetAndUpdateLocation(const TPartitionKey& key) {
     Y_ENSURE(!PartitionLocations.contains(key));
     auto rand = LocationRandomCounter++ % RowDispatchers.size();
 
@@ -245,7 +245,7 @@ void TActorCoordinator::Handle(NFq::TEvRowDispatcher::TEvCoordinatorRequest::TPt
     }
 
     auto response = std::make_unique<TEvRowDispatcher::TEvCoordinatorResult>();
-    for (auto [actorId, partitions] : tmpResult) {
+    for (const auto& [actorId, partitions] : tmpResult) {
         auto* partitionsProto = response->Record.AddPartitions();
         ActorIdToProto(actorId, partitionsProto->MutableActorId());
         for (auto partitionId : partitions) {

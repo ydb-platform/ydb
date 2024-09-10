@@ -63,15 +63,15 @@ public:
         EventsQueue.Send(new TEvDqCompute::TEvInjectCheckpoint());
     }
 
-    void HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {
+    void HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
         EventsQueue.HandleNodeDisconnected(ev->Get()->NodeId);
     }
 
-    void HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr &ev) {
+    void HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr& ev) {
         EventsQueue.HandleNodeConnected(ev->Get()->NodeId);
     }
 
-    void Handle(NActors::TEvents::TEvUndelivered::TPtr &ev) {
+    void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
         EventsQueue.HandleUndelivered(ev);
     }
 
@@ -125,15 +125,15 @@ public:
         Send(ServerEdgeActorId, new TEvDqCompute::TEvInjectCheckpoint());
     }
 
-    void HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {
+    void HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
         EventsQueue.HandleNodeDisconnected(ev->Get()->NodeId);
     }
 
-    void HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr &ev) {
+    void HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr& ev) {
         EventsQueue.HandleNodeConnected(ev->Get()->NodeId);
     }
 
-    void Handle(NActors::TEvents::TEvUndelivered::TPtr &ev) {
+    void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
         EventsQueue.HandleUndelivered(ev);
     }
 

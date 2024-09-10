@@ -138,16 +138,16 @@ struct TFieldsMapping{
         THashMap<TString, size_t> outputPositions;
         Y_ENSURE(outputType->IsStruct());
         const auto structType = static_cast<const NKikimr::NMiniKQL::TStructType*>(outputType);
-        const auto nMembers = structType->GetMembersCount();
+        const auto count = structType->GetMembersCount();
 
-        for (ui32 i = 1; i < nMembers; ++i) {  // 0 index - OffsetFieldName
+        for (ui32 i = 1; i < count; ++i) {  // 0 index - OffsetFieldName
             const auto name = structType->GetMemberName(i);
             outputPositions[name] = i;
         }
 
         const auto& fields = schema[1];
         Y_ENSURE(fields.IsList());
-        Y_ENSURE(nMembers == fields.Size());
+        Y_ENSURE(count == fields.Size());
         for (size_t i = 0; i < fields.Size(); ++i) {
             auto name = fields[i][0].AsString();
             if (name == OffsetFieldName) {

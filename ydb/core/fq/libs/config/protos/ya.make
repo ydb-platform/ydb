@@ -20,9 +20,9 @@ SRCS(
     private_proxy.proto
     quotas_manager.proto
     rate_limiter.proto
-    row_dispatcher.proto
     read_actors_factory.proto
     resource_manager.proto
+    row_dispatcher.proto
     storage.proto
     test_connection.proto
     token_accessor.proto

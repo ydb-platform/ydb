@@ -29,7 +29,7 @@ struct TTopicSessionMetrics {
         SelfId = selfId;
         SubGroup = counters->GetSubgroup("actor_id", SelfId.ToString());
         InFlyAsyncInputData = SubGroup->GetCounter("InFlyAsyncInputData");
-        RowsRead = SubGroup->GetCounter("RowsRead");
+        RowsRead = SubGroup->GetCounter("RowsRead", true);
         InFlySubscribe = SubGroup->GetCounter("InFlySubscribe");
     }
 
@@ -156,7 +156,7 @@ public:
 private:
     NYdb::NTopic::TTopicClientSettings GetTopicClientSettings(const NYql::NPq::NProto::TDqPqTopicSource& sourceParams) const;
     NYdb::NTopic::TTopicClient& GetTopicClient(const NYql::NPq::NProto::TDqPqTopicSource& sourceParams);
-    NYdb::NTopic::TReadSessionSettings GetReadSessionSettings() const;
+    NYdb::NTopic::TReadSessionSettings GetReadSessionSettings(const NYql::NPq::NProto::TDqPqTopicSource& sourceParams) const;
     void CreateTopicSession();
     void CloseTopicSession();
     void SubscribeOnNextEvent();
@@ -184,8 +184,8 @@ private:
     void Handle(NFq::TEvPrivate::TEvStatus::TPtr&);
     void Handle(NFq::TEvPrivate::TEvDataFiltered::TPtr&);
     void Handle(TEvRowDispatcher::TEvGetNextBatch::TPtr&);
-    void Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr &ev);
-    void Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr &ev);
+    void Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr& ev);
+    void Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev);
     void HandleException(const std::exception& err);
 
     void PrintInternalState();
@@ -261,7 +261,7 @@ void TTopicSession::SubscribeOnNextEvent() {
         return;
     }
 
-    if (UsedSize > Config.GetMaxSessionUsedMemory()) {
+    if (Config.GetMaxSessionUsedMemory() && UsedSize > Config.GetMaxSessionUsedMemory()) {
         LOG_ROW_DISPATCHER_TRACE("Too much used memory (" << UsedSize << " bytes), skip subscribing to WaitEvent()");
         return;
     }
@@ -301,7 +301,7 @@ TInstant TTopicSession::GetMinStartingMessageTimestamp() const {
     return result;
 }
 
-NYdb::NTopic::TReadSessionSettings TTopicSession::GetReadSessionSettings() const {
+NYdb::NTopic::TReadSessionSettings TTopicSession::GetReadSessionSettings(const NYql::NPq::NProto::TDqPqTopicSource& sourceParams) const {
     NYdb::NTopic::TTopicReadSettings topicReadSettings;
     topicReadSettings.Path(TopicPath);
     topicReadSettings.AppendPartitionIds(PartitionId);
@@ -309,12 +309,18 @@ NYdb::NTopic::TReadSessionSettings TTopicSession::GetReadSessionSettings() const
     TInstant minTime = GetMinStartingMessageTimestamp();
     LOG_ROW_DISPATCHER_INFO("Create topic session, Path " << TopicPath
         << ", StartingMessageTimestamp " << minTime
-        << ", BufferSize " << BufferSize);
-    return NYdb::NTopic::TReadSessionSettings()
+        << ", BufferSize " << BufferSize << ", WithoutConsumer " << Config.GetWithoutConsumer());
+
+    auto settings = NYdb::NTopic::TReadSessionSettings()
         .AppendTopics(topicReadSettings)
-        .WithoutConsumer()
         .MaxMemoryUsageBytes(BufferSize)
         .ReadFromTimestamp(minTime);
+    if (Config.GetWithoutConsumer()) {
+        settings.WithoutConsumer();
+    } else {
+        settings.ConsumerName(sourceParams.GetConsumerName());
+    }
+    return settings;
 }
 
 void TTopicSession::CreateTopicSession() {
@@ -327,7 +333,7 @@ void TTopicSession::CreateTopicSession() {
 
     if (!ReadSession) {
         InitParser(sourceParams);
-        ReadSession = GetTopicClient(sourceParams).CreateReadSession(GetReadSessionSettings());
+        ReadSession = GetTopicClient(sourceParams).CreateReadSession(GetReadSessionSettings(sourceParams));
         SubscribeOnNextEvent();
     }
 }
@@ -422,7 +428,7 @@ void TTopicSession::HandleNewEvents() {
         if (!ReadSession) {
             return;
         }
-        if (UsedSize > Config.GetMaxSessionUsedMemory()) {
+        if (Config.GetMaxSessionUsedMemory() && UsedSize > Config.GetMaxSessionUsedMemory()) {
             LOG_ROW_DISPATCHER_TRACE("Too much used memory (" << UsedSize << " bytes), stop reading from yds");
             break;
         }
@@ -564,7 +570,7 @@ void TTopicSession::SendData(ClientsInfo& info) {
     Send(RowDispatcherActorId, event.release());
 }
 
-void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr &ev) {
+void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     auto it = Clients.find(ev->Sender);
     if (it != Clients.end()) {
         FatalError("Internal error: sender " + ev->Sender.ToString());
@@ -633,7 +639,7 @@ void TTopicSession::AddDataToClient(ClientsInfo& info, ui64 offset, const TStrin
     SendDataArrived(info);
 }
 
-void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr &ev) {
+void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr& ev) {
     LOG_ROW_DISPATCHER_DEBUG("TEvStopSession, topicPath " << ev->Get()->Record.GetSource().GetTopicPath() <<
         " partitionId " << ev->Get()->Record.GetPartitionId());
 

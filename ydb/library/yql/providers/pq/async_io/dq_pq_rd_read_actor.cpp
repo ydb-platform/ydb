@@ -183,21 +183,21 @@ public:
         bool addBearerToToken,
         const ::NMonitoring::TDynamicCounterPtr& counters);
 
-    void Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr &ev);
-    void Handle(NFq::TEvRowDispatcher::TEvCoordinatorResult::TPtr &ev);
-    void Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr &ev);
-    void Handle(NFq::TEvRowDispatcher::TEvStartSessionAck::TPtr &ev);
-    void Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr &ev);
-    void Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr &ev);
-    void Handle(NFq::TEvRowDispatcher::TEvStatus::TPtr &ev);
+    void Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& ev);
+    void Handle(NFq::TEvRowDispatcher::TEvCoordinatorResult::TPtr& ev);
+    void Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev);
+    void Handle(NFq::TEvRowDispatcher::TEvStartSessionAck::TPtr& ev);
+    void Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr& ev);
+    void Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr& ev);
+    void Handle(NFq::TEvRowDispatcher::TEvStatus::TPtr& ev);
 
-    void HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev);
-    void HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr &ev);
-    void Handle(NActors::TEvents::TEvUndelivered::TPtr &ev);
+    void HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev);
+    void HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr& ev);
+    void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev);
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr&);
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvPing::TPtr&);
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvSessionClosed::TPtr&);
-    void Handle(NActors::TEvents::TEvPong::TPtr &ev);
+    void Handle(NActors::TEvents::TEvPong::TPtr& ev);
     void Handle(const NActors::TEvents::TEvPing::TPtr&);
 
     STRICT_STFUNC(StateFunc, {
@@ -474,7 +474,7 @@ std::vector<ui64> TDqPqRdReadActor::GetPartitionsToRead() const {
     return res;
 }
 
-void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvStartSessionAck::TPtr &ev) {
+void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvStartSessionAck::TPtr& ev) {
     SRC_LOG_D("TEvStartSessionAck " << ev->Sender);
 
     //  TODO 
@@ -488,7 +488,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvStartSessionAck::TPtr &e
     }
 }
 
-void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr &ev) {
+void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr& ev) {
     SRC_LOG_D("TEvSessionError from " << ev->Sender);
 
     ui64 partitionId = ev->Get()->Record.GetPartitionId();
@@ -503,7 +503,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr &ev) 
     Stop(ev->Get()->Record.GetMessage());
 }
 
-void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvStatus::TPtr &ev) {
+void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvStatus::TPtr& ev) {
     SRC_LOG_D("TEvStatus from " << ev->Sender << ", offset " << ev->Get()->Record.GetNextMessageOffset());
     if (ReadyBuffer.empty()) {
         TPartitionKey partitionKey{TString{}, ev->Get()->Record.GetPartitionId()};
@@ -511,7 +511,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvStatus::TPtr &ev) {
     }
 }
 
-void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr &ev) {
+void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr& ev) {
     SRC_LOG_D("TEvNewDataArrived from " << ev->Sender << ", part id " << ev->Get()->Record.GetPartitionId());
     SRC_LOG_D("Sessions size  " << Sessions.size());
 
@@ -563,7 +563,7 @@ void TDqPqRdReadActor::Handle(const NActors::TEvents::TEvPing::TPtr& ev) {
     Send(ev->Sender, new NActors::TEvents::TEvPong());
 }
 
-void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr &ev) {
+void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& ev) {
     SRC_LOG_D("TEvCoordinatorChanged, new coordinator " << ev->Get()->CoordinatorActorId);
 
     if (CoordinatorActorId
@@ -601,7 +601,7 @@ void TDqPqRdReadActor::Stop(const TString& message) {
     Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::BAD_REQUEST)); // TODO: use UNAVAILABLE ?
 }
 
-void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvCoordinatorResult::TPtr &ev) {
+void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvCoordinatorResult::TPtr& ev) {
     SRC_LOG_D("TEvCoordinatorResult from " << ev->Sender.ToString() << ", cookie " << ev->Cookie);
     if (ev->Cookie != CoordinatorRequestCookie) {
         SRC_LOG_W("Ignore TEvCoordinatorResult. wrong cookie");
@@ -624,14 +624,14 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvCoordinatorResult::TPtr 
     ProcessState();
 }
 
-void TDqPqRdReadActor::HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr &ev) {
+void TDqPqRdReadActor::HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr& ev) {
     SRC_LOG_D("EvNodeConnected " << ev->Get()->NodeId);
     for (auto& [partitionId, sessionInfo] : Sessions) {
         sessionInfo.EventsQueue.HandleNodeConnected(ev->Get()->NodeId);
     }
 }
 
-void TDqPqRdReadActor::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {
+void TDqPqRdReadActor::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
     SRC_LOG_D("TEvNodeDisconnected, node id " << ev->Get()->NodeId);
     for (auto& [partitionId, sessionInfo] : Sessions) {
         sessionInfo.EventsQueue.HandleNodeDisconnected(ev->Get()->NodeId);
@@ -641,7 +641,7 @@ void TDqPqRdReadActor::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::
     //Stop(TString{"Node disconnected, nodeId "} + ToString(ev->Get()->NodeId));
 }
 
-void TDqPqRdReadActor::Handle(NActors::TEvents::TEvUndelivered::TPtr &ev) {
+void TDqPqRdReadActor::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
     SRC_LOG_D("TEvUndelivered,  " << ev->Get()->ToString() << " from " << ev->Sender.ToString());
     for (auto& [partitionId, sessionInfo] : Sessions) {
         sessionInfo.EventsQueue.HandleUndelivered(ev);
@@ -653,7 +653,7 @@ void TDqPqRdReadActor::Handle(NActors::TEvents::TEvUndelivered::TPtr &ev) {
     }
 }
 
-void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr &ev) {
+void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev) {
     SRC_LOG_T("TEvMessageBatch from " << ev->Sender);
     ui64 partitionId = ev->Get()->Record.GetPartitionId();
     YQL_ENSURE(Sessions.count(partitionId), "Unknown partition id");
@@ -696,7 +696,7 @@ void TDqPqRdReadActor::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvSessionC
     ReInit();
 }
 
-void TDqPqRdReadActor::Handle(NActors::TEvents::TEvPong::TPtr &ev) {
+void TDqPqRdReadActor::Handle(NActors::TEvents::TEvPong::TPtr& ev) {
     SRC_LOG_T("TEvPong from " << ev->Sender);
 }
 

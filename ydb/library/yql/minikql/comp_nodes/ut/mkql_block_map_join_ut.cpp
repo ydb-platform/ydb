@@ -118,28 +118,6 @@ const TRuntimeNode MakeRightNode(TProgramBuilder& pgmBuilder, const TRightPayloa
     }
 }
 
-TArrays<TKSV> KSVToArrays(const TVector<TKSV>& ksvVector, size_t current,
-    size_t blockSize, arrow::MemoryPool* memoryPool
-) {
-    TArrays<TKSV> arrays;
-    arrow::UInt64Builder keysBuilder(memoryPool);
-    arrow::UInt64Builder subkeysBuilder(memoryPool);
-    arrow::BinaryBuilder valuesBuilder(memoryPool);
-    ARROW_OK(keysBuilder.Reserve(blockSize));
-    ARROW_OK(subkeysBuilder.Reserve(blockSize));
-    ARROW_OK(valuesBuilder.Reserve(blockSize));
-    for (size_t i = 0; i < blockSize; i++) {
-        keysBuilder.UnsafeAppend(std::get<0>(ksvVector[current + i]));
-        subkeysBuilder.UnsafeAppend(std::get<1>(ksvVector[current + i]));
-        const TStringBuf string(std::get<2>(ksvVector[current + i]));
-        ARROW_OK(valuesBuilder.Append(string.data(), string.size()));
-    }
-    ARROW_OK(keysBuilder.FinishInternal(&arrays[0]));
-    ARROW_OK(subkeysBuilder.FinishInternal(&arrays[1]));
-    ARROW_OK(valuesBuilder.FinishInternal(&arrays[2]));
-    return arrays;
-}
-
 template <typename TupleType>
 TVector<TupleType> ArraysToTuples(const TArrays<TupleType>& arrays,
     const int64_t blockSize, bool maybeNull = false

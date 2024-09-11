@@ -475,6 +475,19 @@ void CompareResults(const TType* type, const NUdf::TUnboxedValue& expected,
     }
 }
 
+void RunTestBlockJoin(TSetup<false>& setup, EJoinKind joinKind,
+    const TType* expectedType, const NUdf::TUnboxedValue& expected,
+    const TRuntimeNode& rightNode, const TType* leftType,
+    const NUdf::TUnboxedValue& leftListValue, const TVector<ui32>& leftKeyColumns
+) {
+    const size_t testSize = leftListValue.GetListLength();
+    for (size_t blockSize = 8; blockSize <= testSize; blockSize <<= 1) {
+        const auto got = DoTestBlockJoin(setup, leftType, leftListValue, leftKeyColumns,
+                                         rightNode, joinKind, blockSize);
+        CompareResults(expectedType, expected, got, leftKeyColumns);
+    }
+}
+
 //
 // Auxiliary routines to build list nodes from the given vectors.
 //

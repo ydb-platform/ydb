@@ -54,6 +54,15 @@ TString HmacSHA256(TStringBuf key, TStringBuf data) {
     return TString{reinterpret_cast<const char*>(res), hl};
 }
 
+TString HmacSHA1(TStringBuf key, TStringBuf data) {
+    unsigned char hash[SHA_DIGEST_LENGTH];
+    ui32 hl = SHA_DIGEST_LENGTH;
+    const auto* res = HMAC(EVP_sha1(), key.data(), key.size(), reinterpret_cast<const unsigned char*>(data.data()), data.size(), hash, &hl);
+    Y_ENSURE(res);
+    Y_ENSURE(hl == SHA_DIGEST_LENGTH);
+    return TString{reinterpret_cast<const char*>(res), hl};
+}
+
 void SetHeader(NYdbGrpc::TCallMeta& meta, const TString& name, const TString& value) {
     for (auto& [exname, exvalue] : meta.Aux) {
         if (exname == name) {
@@ -66,20 +75,27 @@ void SetHeader(NYdbGrpc::TCallMeta& meta, const TString& name, const TString& va
 
 NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(const NHttp::THttpIncomingRequestPtr& request, const TOpenIdConnectSettings& settings, TContextStorage* const contextStorage) {
     TContext context(request);
+    TString state;
+    NHttp::THeadersBuilder responseHeaders;
+    state = context.CreateStateContainer(settings.ClientSecret, TString(request->Host));
+    // Cerr << "+++New state: " << state << Endl;
+    // Cerr << "+++decoded sate: " << Base64DecodeUneven(state) << Endl;
+    // Cerr << "+++decoded sate: " << HexDecode(state) << Endl;
+    if (settings.StoreContextOnHost) {
+        state = context.CreateStateContainer(settings.ClientSecret, TString(request->Endpoint->WorkerName));
+        contextStorage->Write(context);
+    } else {
+        state = context.GetState();
+        responseHeaders.Set("Set-Cookie", context.CreateYdbOidcCookie(settings.ClientSecret));
+    }
     const TString redirectUrl = TStringBuilder() << settings.GetAuthEndpointURL()
                                                  << "?response_type=code"
                                                  << "&scope=openid"
-                                                 << "&state=" << context.GetState()
+                                                 << "&state=" << state
                                                  << "&client_id=" << settings.ClientId
                                                  << "&redirect_uri=" << (request->Endpoint->Secure ? "https://" : "http://")
                                                                      << request->Host
                                                                      << GetAuthCallbackUrl();
-    NHttp::THeadersBuilder responseHeaders;
-    if (settings.StoreContextOnHost) {
-        contextStorage->Write(context);
-    } else {
-        responseHeaders.Set("Set-Cookie", context.CreateYdbOidcCookie(settings.ClientSecret));
-    }
     if (context.GetIsAjaxRequest()) {
         return CreateResponseForAjaxRequest(request, responseHeaders, redirectUrl);
     }

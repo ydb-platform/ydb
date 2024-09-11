@@ -1,6 +1,7 @@
 #include <util/generic/string.h>
 #include <util/random/random.h>
 #include <util/string/builder.h>
+#include <util/string/hex.h>
 #include <util/datetime/base.h>
 #include <library/cpp/string_utils/base64/base64.h>
 #include <ydb/library/actors/http/http.h>
@@ -55,6 +56,18 @@ TString TContext::GenerateCookie(const TString& secret) const {
     TString digest = HmacSHA256(secret, stateStruct);
     TString cookieStruct {"{\"state_struct\":\"" + Base64Encode(stateStruct) + "\",\"digest\":\"" + Base64Encode(digest) + "\"}"};
     return Base64Encode(cookieStruct);
+}
+
+TString TContext::CreateStateContainer(const TString& secret, const TString& host) const {
+    TStringBuilder json;
+    json << "{\"state\":\"" << State
+         << "\",\"host\":\"" << host << "\"}";
+    TString digest = HmacSHA1(secret, json);
+    TStringBuilder stateContainer;
+    stateContainer << "{\"container\":\"" << Base64Encode(json) << "\","
+                       "\"digest\":\"" << Base64Encode(digest) << "\"}";
+    Cerr << "+++ State: " << State << Endl;
+    return Base64EncodeNoPadding(stateContainer);
 }
 
 TString TContext::GenerateState() {

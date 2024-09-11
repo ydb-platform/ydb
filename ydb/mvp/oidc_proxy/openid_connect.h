@@ -29,6 +29,7 @@ struct TRestoreOidcContextResult {
     bool IsSuccess() const;
 };
 
+TString HmacSHA1(TStringBuf key, TStringBuf data);
 TString HmacSHA256(TStringBuf key, TStringBuf data);
 void SetHeader(NYdbGrpc::TCallMeta& meta, const TString& name, const TString& value);
 NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(const NHttp::THttpIncomingRequestPtr& request, const TOpenIdConnectSettings& settings, TContextStorage* const contextStorage);

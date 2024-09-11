@@ -19,6 +19,7 @@ SRCS(
     oidc_session_create_yandex.cpp
     oidc_session_create_nebius.cpp
     oidc_session_create.cpp
+    restore_context_handler.cpp
 )
 
 PEERDIR(

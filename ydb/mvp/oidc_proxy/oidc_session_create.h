@@ -25,6 +25,7 @@ protected:
     const TOpenIdConnectSettings Settings;
     TContext RestoredContext;
     TContextStorage* const ContextStorage;
+    TString Code;
 
 public:
     THandlerSessionCreate(const NActors::TActorId& sender,
@@ -41,10 +42,23 @@ public:
 
 protected:
     TString ChangeSameSiteFieldInSessionCookie(const TString& cookie);
-    void TryRestoreContextFromCookie(const NActors::TActorContext& ctx);
-    void TryRestoreContextFromHostStorage(const NActors::TActorContext& ctx);
     void RetryRequestToProtectedResource(const NActors::TActorContext& ctx, const TString& responseMessage = "Found") const;
     void RetryRequestToProtectedResource(NHttp::THeadersBuilder* responseHeaders, const NActors::TActorContext& ctx, const TString& responseMessage = "Found") const;
+
+private:
+    STFUNC(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            HFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, HandleRestoreContext);
+        }
+    }
+
+    void TryRestoreContextFromCookie(const NActors::TActorContext& ctx);
+    void TryRestoreContextFromHostStorage(const NActors::TActorContext& ctx);
+    void TryRestoreContextFromOtherHost(const TString& host, const TString& state, const NActors::TActorContext& ctx);
+
+    void HandleRestoreContext(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event, const NActors::TActorContext& ctx);
+
+    NHttp::THttpOutgoingResponsePtr GetUnknownErrorResponse();
 };
 
 }  // NOIDC

@@ -4,7 +4,7 @@
 #include <ydb/core/fq/libs/common/cache.h>
 #include <ydb/core/fq/libs/config/protos/issue_id.pb.h>
 #include <ydb/core/fq/libs/events/events.h>
-#include <ydb/core/fq/libs/exceptions/exceptions.h>
+#include <ydb/library/yql/utils/exceptions.h>
 #include <ydb/core/util/tuples.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
@@ -213,7 +213,7 @@ private:
                 DatabaseId2Description[std::make_pair(params.Id, params.DatabaseType)] = description;
                 result.ConstructInPlace(description);
                 return "";
-            } catch (const TCodeLineException& ex) {
+            } catch (const NYql::TCodeLineException& ex) {
                 return TStringBuilder()
                     << "response parser error: " << params.ToDebugString() << Endl
                     << ex.GetRawMessage();
@@ -359,7 +359,7 @@ public:
             }
 
             if (aliveHosts.empty()) {
-                ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "No ALIVE ClickHouse hosts found";
+                ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "No ALIVE ClickHouse hosts found";
             }
 
             NYql::IMdbEndpointGenerator::TParams params = {
@@ -407,7 +407,7 @@ public:
             }
             
             if (aliveHosts.empty()) {
-                ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "No ALIVE PostgreSQL hosts found";
+                ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "No ALIVE PostgreSQL hosts found";
             }
 
             NYql::IMdbEndpointGenerator::TParams params = {
@@ -445,7 +445,7 @@ public:
             }
     
             if (aliveHost == "") {
-                ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "No ALIVE Greenplum hosts found";
+                ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "No ALIVE Greenplum hosts found";
             }
 
             NYql::IMdbEndpointGenerator::TParams params = {
@@ -495,7 +495,7 @@ public:
             }
 
             if (aliveHosts.empty()) {
-                ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "No ALIVE MySQL hosts found";
+                ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "No ALIVE MySQL hosts found";
             }
 
             NYql::IMdbEndpointGenerator::TParams params = {

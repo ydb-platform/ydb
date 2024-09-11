@@ -2719,7 +2719,7 @@ namespace NTypeAnnImpl {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus DecimalBinaryWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus DecimalBinaryWrapperBase(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx, bool blocks) {
         if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -2727,6 +2727,7 @@ namespace NTypeAnnImpl {
         const TDataExprType* dataType[2];
         bool isOptional[2];
         bool haveOptional = false;
+        bool allScalars = true;
         const TDataExprType* commonType = nullptr;
         for (ui32 i = 0; i < 2; ++i) {
             if (IsNull(*input->Child(i))) {
@@ -2734,7 +2735,17 @@ namespace NTypeAnnImpl {
                 return IGraphTransformer::TStatus::Repeat;
             }
 
-            if (!EnsureDataOrOptionalOfData(*input->Child(i), isOptional[i], dataType[i], ctx.Expr)) {
+            const TTypeAnnotationNode* itemType = input->Child(i)->GetTypeAnn();
+            if (blocks) {
+                if (!EnsureBlockOrScalarType(*input->Child(i), ctx.Expr)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+                bool isScalar;
+                itemType = GetBlockItemType(*itemType, isScalar);
+                allScalars = allScalars && isScalar;
+            }
+
+            if (!EnsureDataOrOptionalOfData(input->Child(i)->Pos(), itemType, isOptional[i], dataType[i], ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
 
@@ -2780,8 +2791,20 @@ namespace NTypeAnnImpl {
             resultType = ctx.Expr.MakeType<TOptionalExprType>(resultType);
         }
 
-        input->SetTypeAnn(resultType);
+        if (blocks) {
+            if (allScalars) {
+                input->SetTypeAnn(ctx.Expr.MakeType<TScalarExprType>(resultType));
+            } else {
+                input->SetTypeAnn(ctx.Expr.MakeType<TBlockExprType>(resultType));
+            }
+        } else {
+            input->SetTypeAnn(resultType);
+        }
         return IGraphTransformer::TStatus::Ok;
+    }
+
+    IGraphTransformer::TStatus DecimalBinaryWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        return DecimalBinaryWrapperBase(input, output, ctx, /*block = */ false);
     }
 
     IGraphTransformer::TStatus CountBitsWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
@@ -12600,6 +12623,10 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["ReplicateScalar"] = &ReplicateScalarWrapper;
         Functions["BlockPgResolvedOp"] = &BlockPgOpWrapper;
         Functions["BlockPgResolvedCall"] = &BlockPgCallWrapper;
+        Functions["BlockDecimalMul"] = &BlockDecimalBinaryWrapper;
+        Functions["BlockDecimalMod"] = &BlockDecimalBinaryWrapper;
+        Functions["BlockDecimalDiv"] = &BlockDecimalBinaryWrapper;
+
         ExtFunctions["BlockFunc"] = &BlockFuncWrapper;
         ExtFunctions["BlockBitCast"] = &BlockBitCastWrapper;
 

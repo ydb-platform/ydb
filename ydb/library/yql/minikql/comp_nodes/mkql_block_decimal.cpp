@@ -216,7 +216,7 @@ struct TDecimalBlockExec {
 };
 
 template<typename TRight>
-struct TDecimalMulBlockExec: NYql::NDecimal::TDecimalMultiplicator, TDecimalBlockExec<TDecimalMulBlockExec<TRight>, TRight> {
+struct TDecimalMulBlockExec: NYql::NDecimal::TDecimalMultiplicator<TRight>, TDecimalBlockExec<TDecimalMulBlockExec<TRight>, TRight> {
     TDecimalMulBlockExec(
         ui8 precision,
         ui8 scale)
@@ -225,7 +225,7 @@ struct TDecimalMulBlockExec: NYql::NDecimal::TDecimalMultiplicator, TDecimalBloc
 };
 
 template<typename TRight>
-struct TDecimalDivBlockExec: NYql::NDecimal::TDecimalDivisor, TDecimalBlockExec<TDecimalDivBlockExec<TRight>, TRight> {
+struct TDecimalDivBlockExec: NYql::NDecimal::TDecimalDivisor<TRight>, TDecimalBlockExec<TDecimalDivBlockExec<TRight>, TRight> {
     TDecimalDivBlockExec(
         ui8 precision,
         ui8 scale)
@@ -234,7 +234,7 @@ struct TDecimalDivBlockExec: NYql::NDecimal::TDecimalDivisor, TDecimalBlockExec<
 };
 
 template<typename TRight>
-struct TDecimalModBlockExec: NYql::NDecimal::TDecimalRemainder, TDecimalBlockExec<TDecimalModBlockExec<TRight>, TRight> {
+struct TDecimalModBlockExec: NYql::NDecimal::TDecimalRemainder<TRight>, TDecimalBlockExec<TDecimalModBlockExec<TRight>, TRight> {
     TDecimalModBlockExec(
         ui8 precision,
         ui8 scale)

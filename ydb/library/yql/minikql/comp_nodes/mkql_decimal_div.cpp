@@ -18,7 +18,7 @@ namespace NMiniKQL {
 namespace {
 
 template<bool IsLeftOptional, bool IsRightOptional>
-class TDecimalDivWrapper : public TMutableCodegeneratorNode<TDecimalDivWrapper<IsLeftOptional, IsRightOptional>>, NYql::NDecimal::TDecimalDivisor {
+class TDecimalDivWrapper : public TMutableCodegeneratorNode<TDecimalDivWrapper<IsLeftOptional, IsRightOptional>>, NYql::NDecimal::TDecimalDivisor<NYql::NDecimal::TInt128> {
     typedef TMutableCodegeneratorNode<TDecimalDivWrapper<IsLeftOptional, IsRightOptional>> TBaseComputation;
 public:
     TDecimalDivWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right, ui8 precision, ui8 scale)
@@ -141,12 +141,11 @@ private:
 };
 
 template<bool IsLeftOptional, bool IsRightOptional, typename TRight>
-class TDecimalDivIntegralWrapper : public TMutableCodegeneratorNode<TDecimalDivIntegralWrapper<IsLeftOptional, IsRightOptional, TRight>>, NYql::NDecimal::TDecimalDivisor {
+class TDecimalDivIntegralWrapper : public TMutableCodegeneratorNode<TDecimalDivIntegralWrapper<IsLeftOptional, IsRightOptional, TRight>>, NYql::NDecimal::TDecimalDivisor<TRight> {
     typedef TMutableCodegeneratorNode<TDecimalDivIntegralWrapper<IsLeftOptional, IsRightOptional, TRight>> TBaseComputation;
 public:
-    TDecimalDivIntegralWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right, ui8 precision, ui8 scale)
+    TDecimalDivIntegralWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right)
         : TBaseComputation(mutables, EValueRepresentation::Embedded)
-        , NYql::NDecimal::TDecimalDivisor(precision, scale)
         , Left(left)
         , Right(right)
     {}
@@ -276,13 +275,13 @@ IComputationNode* WrapDecimalDiv(TCallable& callable, const TComputationNodeFact
 #define MAKE_PRIMITIVE_TYPE_DIV(type) \
         case NUdf::TDataType<type>::Id: \
             if (isOptionalLeft && isOptionalRight) \
-                return new TDecimalDivIntegralWrapper<true, true, type>(ctx.Mutables, left, right, leftType->GetParams().first, leftType->GetParams().second); \
+                return new TDecimalDivIntegralWrapper<true, true, type>(ctx.Mutables, left, right); \
             else if (isOptionalLeft) \
-                return new TDecimalDivIntegralWrapper<true, false, type>(ctx.Mutables, left, right, leftType->GetParams().first, leftType->GetParams().second); \
+                return new TDecimalDivIntegralWrapper<true, false, type>(ctx.Mutables, left, right); \
             else if (isOptionalRight) \
-                return new TDecimalDivIntegralWrapper<false, true, type>(ctx.Mutables, left, right, leftType->GetParams().first, leftType->GetParams().second); \
+                return new TDecimalDivIntegralWrapper<false, true, type>(ctx.Mutables, left, right); \
             else \
-                return new TDecimalDivIntegralWrapper<false, false, type>(ctx.Mutables, left, right, leftType->GetParams().first, leftType->GetParams().second);
+                return new TDecimalDivIntegralWrapper<false, false, type>(ctx.Mutables, left, right);
         INTEGRAL_VALUE_TYPES(MAKE_PRIMITIVE_TYPE_DIV)
 #undef MAKE_PRIMITIVE_TYPE_DIV
         default:

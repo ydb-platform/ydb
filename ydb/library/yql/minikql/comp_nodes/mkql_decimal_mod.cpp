@@ -10,12 +10,11 @@ namespace NMiniKQL {
 namespace {
 
 template<bool IsLeftOptional, bool IsRightOptional>
-class TDecimalModWrapper : public TMutableCodegeneratorNode<TDecimalModWrapper<IsLeftOptional, IsRightOptional>>, NYql::NDecimal::TDecimalRemainder {
+class TDecimalModWrapper : public TMutableCodegeneratorNode<TDecimalModWrapper<IsLeftOptional, IsRightOptional>>, NYql::NDecimal::TDecimalRemainder<NYql::NDecimal::TInt128> {
     typedef TMutableCodegeneratorNode<TDecimalModWrapper<IsLeftOptional, IsRightOptional>> TBaseComputation;
 public:
-    TDecimalModWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right, ui8 precision, ui8 scale)
+    TDecimalModWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right)
         : TBaseComputation(mutables, EValueRepresentation::Embedded)
-        , NYql::NDecimal::TDecimalRemainder(precision, scale)
         , Left(left)
         , Right(right)
     {}
@@ -110,12 +109,12 @@ private:
 };
 
 template<bool IsLeftOptional, bool IsRightOptional, typename TRight>
-class TDecimalModIntegralWrapper : public TMutableCodegeneratorNode<TDecimalModIntegralWrapper<IsLeftOptional, IsRightOptional, TRight>>, NYql::NDecimal::TDecimalRemainder {
+class TDecimalModIntegralWrapper : public TMutableCodegeneratorNode<TDecimalModIntegralWrapper<IsLeftOptional, IsRightOptional, TRight>>, NYql::NDecimal::TDecimalRemainder<TRight> {
     typedef TMutableCodegeneratorNode<TDecimalModIntegralWrapper<IsLeftOptional, IsRightOptional, TRight>> TBaseComputation;
 public:
     TDecimalModIntegralWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right, ui8 precision, ui8 scale)
         : TBaseComputation(mutables, EValueRepresentation::Embedded)
-        , NYql::NDecimal::TDecimalRemainder(precision, scale)
+        , NYql::NDecimal::TDecimalRemainder<TRight>(precision, scale)
         , Left(left)
         , Right(right)
     {}
@@ -245,13 +244,13 @@ IComputationNode* WrapDecimalMod(TCallable& callable, const TComputationNodeFact
             MKQL_ENSURE(static_cast<TDataDecimalType*>(rightType)->IsSameType(*leftType), "Operands type mismatch");
 
             if (isOptionalLeft && isOptionalRight)
-                return new TDecimalModWrapper<true, true>(ctx.Mutables, left, right, leftType->GetParams().first, leftType->GetParams().second);
+                return new TDecimalModWrapper<true, true>(ctx.Mutables, left, right);
             else if (isOptionalLeft)
-                return new TDecimalModWrapper<true, false>(ctx.Mutables, left, right, leftType->GetParams().first, leftType->GetParams().second);
+                return new TDecimalModWrapper<true, false>(ctx.Mutables, left, right);
             else if (isOptionalRight)
-                return new TDecimalModWrapper<false, true>(ctx.Mutables, left, right, leftType->GetParams().first, leftType->GetParams().second);
+                return new TDecimalModWrapper<false, true>(ctx.Mutables, left, right);
             else
-                return new TDecimalModWrapper<false, false>(ctx.Mutables, left, right, leftType->GetParams().first, leftType->GetParams().second);
+                return new TDecimalModWrapper<false, false>(ctx.Mutables, left, right);
 #define MAKE_PRIMITIVE_TYPE_MOD(type) \
         case NUdf::TDataType<type>::Id: \
             if (isOptionalLeft && isOptionalRight) \

@@ -18,7 +18,7 @@ namespace NMiniKQL {
 namespace {
 
 template<bool IsLeftOptional, bool IsRightOptional>
-class TDecimalMulWrapper : public TMutableCodegeneratorNode<TDecimalMulWrapper<IsLeftOptional, IsRightOptional>>, NYql::NDecimal::TDecimalMultiplicator {
+class TDecimalMulWrapper : public TMutableCodegeneratorNode<TDecimalMulWrapper<IsLeftOptional, IsRightOptional>>, NYql::NDecimal::TDecimalMultiplicator<NYql::NDecimal::TInt128> {
     typedef TMutableCodegeneratorNode<TDecimalMulWrapper<IsLeftOptional, IsRightOptional>> TBaseComputation;
 public:
     TDecimalMulWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right, ui8 precision, ui8 scale)
@@ -176,12 +176,12 @@ private:
 };
 
 template<bool IsLeftOptional, bool IsRightOptional, typename TRight>
-class TDecimalMulIntegralWrapper : public TMutableCodegeneratorNode<TDecimalMulIntegralWrapper<IsLeftOptional, IsRightOptional, TRight>>, NYql::NDecimal::TDecimalMultiplicator {
+class TDecimalMulIntegralWrapper : public TMutableCodegeneratorNode<TDecimalMulIntegralWrapper<IsLeftOptional, IsRightOptional, TRight>>, NYql::NDecimal::TDecimalMultiplicator<TRight> {
     typedef TMutableCodegeneratorNode<TDecimalMulIntegralWrapper<IsLeftOptional, IsRightOptional, TRight>> TBaseComputation;
 public:
-    TDecimalMulIntegralWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right, ui8 precision, ui8 scale)
+    TDecimalMulIntegralWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right, ui8 precision)
         : TBaseComputation(mutables, EValueRepresentation::Embedded)
-        , NYql::NDecimal::TDecimalMultiplicator(precision, scale)
+        , NYql::NDecimal::TDecimalMultiplicator(precision)
         , Left(left)
         , Right(right)
     {}
@@ -328,13 +328,13 @@ IComputationNode* WrapDecimalMul(TCallable& callable, const TComputationNodeFact
 #define MAKE_PRIMITIVE_TYPE_MUL(type) \
         case NUdf::TDataType<type>::Id: \
             if (isOptionalLeft && isOptionalRight) \
-                return new TDecimalMulIntegralWrapper<true, true, type>(ctx.Mutables, left, right, leftType->GetParams().first, leftType->GetParams().second); \
+                return new TDecimalMulIntegralWrapper<true, true, type>(ctx.Mutables, left, right, leftType->GetParams().first); \
             else if (isOptionalLeft) \
-                return new TDecimalMulIntegralWrapper<true, false, type>(ctx.Mutables, left, right, leftType->GetParams().first, leftType->GetParams().second); \
+                return new TDecimalMulIntegralWrapper<true, false, type>(ctx.Mutables, left, right, leftType->GetParams().first); \
             else if (isOptionalRight) \
-                return new TDecimalMulIntegralWrapper<false, true, type>(ctx.Mutables, left, right, leftType->GetParams().first, leftType->GetParams().second); \
+                return new TDecimalMulIntegralWrapper<false, true, type>(ctx.Mutables, left, right, leftType->GetParams().first); \
             else \
-                return new TDecimalMulIntegralWrapper<false, false, type>(ctx.Mutables, left, right, leftType->GetParams().first, leftType->GetParams().second);
+                return new TDecimalMulIntegralWrapper<false, false, type>(ctx.Mutables, left, right, leftType->GetParams().first);
         INTEGRAL_VALUE_TYPES(MAKE_PRIMITIVE_TYPE_MUL)
 #undef MAKE_PRIMITIVE_TYPE_MUL
         default:

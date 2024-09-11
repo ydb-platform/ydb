@@ -155,7 +155,7 @@ private:
         bool ReduceMemory() {
             const bool result = FetchingInfo->InitSourceSeqColumnIds(Source);
             if (result) {
-                Memory = FetchingInfo->PredictRawBytes(source);
+                Memory = FetchingInfo->PredictRawBytes(Source);
             }
             return result;
         }
@@ -174,13 +174,10 @@ public:
         NJson::TJsonValue resultJson;
         auto& memorySourcesArr = resultJson.InsertValue("sources_by_memory", NJson::JSON_ARRAY);
         resultJson.InsertValue("sources_by_memory_count", Sources.size());
-        for (auto it = Sources.rbegin(); it != Sources.rend(); ++it) {
+        for (auto&& it: Sources) {
             auto& sourceMap = memorySourcesArr.AppendValue(NJson::JSON_MAP);
-            sourceMap.InsertValue("memory", it->first);
             auto& sourcesArr = sourceMap.InsertValue("sources", NJson::JSON_ARRAY);
-            for (auto&& s : it->second) {
-                sourcesArr.AppendValue(s.second.DebugJson());
-            }
+            sourcesArr.AppendValue(it.DebugJson());
         }
         return resultJson.GetStringRobust();
     }
@@ -231,16 +228,16 @@ TConclusionStatus TScanHead::DetectSourcesFeatureInContextIntervalScan(
     if (!optimizer.Optimize(Context->ReduceMemoryIntervalLimit) && Context->RejectMemoryIntervalLimit < optimizer.GetMemorySum()) {
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "next_internal_broken")("reason", "a lot of memory need")("start", startMemory)(
             "reduce_limit", Context->ReduceMemoryIntervalLimit)("reject_limit", Context->RejectMemoryIntervalLimit)(
-            "need", optimizer.GetMemorySum())("path_ids", JoinSeq(",", optimizer.GetPathIds()))(
+            "need", optimizer.GetMemorySum())("path_id", Context->GetReadMetadata()->GetPathId())(
             "details", IS_LOG_PRIORITY_ENABLED(NActors::NLog::PRI_DEBUG, NKikimrServices::TX_COLUMNSHARD_SCAN) ? optimizer.DebugString()
                                                                                                                : "NEED_DEBUG_LEVEL");
         Context->GetCommonContext()->GetCounters().OnOptimizedIntervalMemoryFailed(optimizer.GetMemorySum());
         return TConclusionStatus::Fail("We need a lot of memory in time for interval scanner: " + ::ToString(optimizer.GetMemorySum()) +
-                                       " path_ids: " + JoinSeq(",", optimizer.GetPathIds()) + ". We need wait compaction processing. Sorry.");
+                                       " path_id: " + Context->GetReadMetadata()->GetPathId() + ". We need wait compaction processing. Sorry.");
     } else if (optimizer.GetMemorySum() < startMemory) {
         AFL_INFO(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "memory_reduce_active")("reason", "need reduce memory")("start", startMemory)(
             "reduce_limit", Context->ReduceMemoryIntervalLimit)("reject_limit", Context->RejectMemoryIntervalLimit)(
-            "need", optimizer.GetMemorySum())("path_ids", JoinSeq(",", optimizer.GetPathIds()));
+            "need", optimizer.GetMemorySum())("path_id", Context->GetReadMetadata()->GetPathId());
         Context->GetCommonContext()->GetCounters().OnOptimizedIntervalMemoryReduced(startMemory - optimizer.GetMemorySum());
     }
     Context->GetCommonContext()->GetCounters().OnOptimizedIntervalMemoryRequired(optimizer.GetMemorySum());

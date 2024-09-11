@@ -330,7 +330,7 @@ private:
 
 #define DEFINE_STATE_INTRO \
     public: \
-    struct Tag {}; \
+    struct TStateTag {}; \
     private: \
     const TDerived* AsDerived() const { \
         return static_cast<const TDerived*>(this); \
@@ -345,7 +345,7 @@ private:
 #define USE_STATE(STATE) \
     friend class T ## STATE ## State; \
     STATEFN(State ## STATE) { \
-        return TResolveIndexState::State(ev); \
+        return T ## STATE ## State::State(ev); \
     } \
     bool Is ## STATE ## State() const { \
         return CurrentStateFunc() == static_cast<TReceiveFunc>(&TThis::State ## STATE); \
@@ -417,7 +417,7 @@ private:
         Y_ABORT_UNLESS(indexTable.Kind == TNavigate::KindTable);
         AsDerived()->TargetTablePathId = indexTable.PathId;
 
-        AsDerived()->ResolveTargetTable();
+        AsDerived()->NextState(TStateTag{});
     }
 };
 
@@ -478,7 +478,7 @@ private:
             AsDerived()->MainColumnToTag.emplace(column.Name, tag);
         }
 
-        AsDerived()->ResolveIndex();
+        AsDerived()->NextState(TStateTag{});
     }
 };
 
@@ -507,7 +507,7 @@ public:
 
 private:
     void OnRetry() {
-        AsDerived()->OnRetry(Tag{});
+        AsDerived()->OnRetry(TStateTag{});
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
@@ -569,7 +569,7 @@ private:
 
         AsDerived()->SetPartitioner(NChangeExchange::CreateSchemaBoundaryPartitioner<TChangeRecord>(*AsDerived()->KeyDesc.Get()));
 
-        AsDerived()->ResolveKeys();
+        AsDerived()->NextState(TStateTag{});
     }
 };
 
@@ -598,7 +598,7 @@ public:
 
 private:
     void OnRetry() {
-        AsDerived()->OnRetry(Tag{});
+        AsDerived()->OnRetry(TStateTag{});
     }
 
     void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
@@ -637,7 +637,17 @@ private:
         AsDerived()->KeyDesc = std::move(entry.KeyDescription);
         AsDerived()->CreateSenders(MakePartitionIds(AsDerived()->KeyDesc->GetPartitions()), versionChanged);
 
-        AsDerived()->Serve();
+        AsDerived()->NextState(TStateTag{});
+    }
+
+    static TVector<ui64> MakePartitionIds(const TVector<TKeyDesc::TPartitionInfo>& partitions) {
+        TVector<ui64> result(Reserve(partitions.size()));
+
+        for (const auto& partition : partitions) {
+            result.push_back(partition.ShardId); // partition = shard
+        }
+
+        return result;
     }
 };
 
@@ -742,12 +752,28 @@ class TAsyncIndexChangeSenderMain
         }
     }
 
-    void OnRetry(TResolveTargetTableState::Tag) {
+    void OnRetry(TResolveTargetTableState::TStateTag) {
         ResolveIndex();
     }
 
-    void OnRetry(TResolveKeysState::Tag) {
+    void OnRetry(TResolveKeysState::TStateTag) {
         ResolveIndex();
+    }
+
+    void NextState(TResolveUserTableState::TStateTag) {
+        ResolveIndex();
+    }
+
+    void NextState(TResolveIndexState::TStateTag) {
+        ResolveTargetTable();
+    }
+
+    void NextState(TResolveTargetTableState::TStateTag) {
+        ResolveKeys();
+    }
+
+    void NextState(TResolveKeysState::TStateTag) {
+        Serve();
     }
 
     void Retry() {
@@ -766,16 +792,6 @@ class TAsyncIndexChangeSenderMain
     void LogWarnAndRetry(const TString& error) {
         LOG_W(error);
         Retry();
-    }
-
-    static TVector<ui64> MakePartitionIds(const TVector<TKeyDesc::TPartitionInfo>& partitions) {
-        TVector<ui64> result(Reserve(partitions.size()));
-
-        for (const auto& partition : partitions) {
-            result.push_back(partition.ShardId); // partition = shard
-        }
-
-        return result;
     }
 
     /// Main

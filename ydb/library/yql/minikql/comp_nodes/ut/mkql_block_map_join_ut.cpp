@@ -423,21 +423,6 @@ TVector<TOutputTuple> DoTestBlockJoinOnUint64(EJoinKind joinKind,
     return resultTuples;
 }
 
-template <typename TDictPayloadType, typename TGotTupleType
-    = std::conditional<std::is_same_v<TDictPayloadType, TKSVSet>, TKSV,
-      std::conditional<std::is_same_v<TDictPayloadType, TKSWMap>, TKSW<false>,
-      std::conditional<std::is_same_v<TDictPayloadType, TKSWMultiMap>, TKSW<true>,
-          void>>>>
-void RunTestBlockJoinOnUint64(const TVector<TGotTupleType>& expected,
-    EJoinKind joinKind, const TVector<TKSV>& leftFlow, const TDictPayloadType& rightDict
-) {
-    const size_t testSize = leftFlow.size();
-    for (size_t blockSize = 8; blockSize <= testSize; blockSize <<= 1) {
-        const auto got = DoTestBlockJoinOnUint64<TGotTupleType>(joinKind, leftFlow, rightDict, blockSize);
-        UNIT_ASSERT_EQUAL(expected, got);
-    }
-}
-
 TVector<NUdf::TUnboxedValue> ConvertListToVector(const NUdf::TUnboxedValue& list) {
     NUdf::TUnboxedValue current;
     NUdf::TUnboxedValue iterator = list.GetListIterator();

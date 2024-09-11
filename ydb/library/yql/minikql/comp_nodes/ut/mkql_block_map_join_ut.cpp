@@ -307,6 +307,43 @@ void RunTestBlockJoinOnUint64(const TVector<TGotTupleType>& expected,
     }
 }
 
+TVector<NUdf::TUnboxedValue> ConvertListToVector(const NUdf::TUnboxedValue& list) {
+    NUdf::TUnboxedValue current;
+    NUdf::TUnboxedValue iterator = list.GetListIterator();
+    TVector<NUdf::TUnboxedValue> items;
+    while (iterator.Next(current)) {
+        items.push_back(current);
+    }
+    return items;
+}
+
+void CompareResults(const TType* type, const NUdf::TUnboxedValue& expected,
+                    const NUdf::TUnboxedValue& got, const TVector<ui32> keys
+) {
+    const auto itemType = AS_TYPE(TListType, type)->GetItemType();
+    const auto items = AS_TYPE(TTupleType, itemType)->GetElements();
+    TKeyTypes keyTypes;
+    for (const auto& key : keys) {
+        Y_ENSURE(key < items.size(), "Specified key is outside the tuple elements");
+        Y_ENSURE(items[key]->IsData(), "Only Data types are supported now");
+        const auto dataSlot = AS_TYPE(TDataType, items[key])->GetDataSlot();
+        keyTypes.push_back(std::make_pair(*dataSlot, true));
+    }
+    const NUdf::ICompare::TPtr compare = MakeCompareImpl(itemType);
+    const NUdf::IEquate::TPtr equate = MakeEquateImpl(itemType);
+    const TValueLess valueLess(keyTypes, true, compare.Get());
+    const TValueEqual valueEqual(keyTypes, true, equate.Get());
+
+    auto expectedItems = ConvertListToVector(expected);
+    auto gotItems = ConvertListToVector(got);
+    UNIT_ASSERT_VALUES_EQUAL(expectedItems.size(), gotItems.size());
+    Sort(expectedItems, valueLess);
+    Sort(gotItems, valueLess);
+    for (size_t i = 0; i < expectedItems.size(); i++) {
+        UNIT_ASSERT(valueEqual(gotItems[i], expectedItems[i]));
+    }
+}
+
 //
 // Auxiliary routines to build list nodes from the given vectors.
 //

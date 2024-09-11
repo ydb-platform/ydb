@@ -220,6 +220,45 @@ const TRuntimeNode BuildBlockJoin(TProgramBuilder& pgmBuilder, EJoinKind joinKin
     return rootNode;
 }
 
+NUdf::TUnboxedValuePod ToBlocks(TComputationContext& ctx, size_t blockSize,
+    const TArrayRef<TType* const> types, const NUdf::TUnboxedValuePod& values
+) {
+    const auto maxLength = CalcBlockLen(std::accumulate(types.cbegin(), types.cend(), 0ULL,
+        [](size_t max, const TType* type) {
+            return std::max(max, CalcMaxBlockItemSize(type));
+        }));
+    TVector<std::unique_ptr<IArrayBuilder>> builders;
+    std::transform(types.cbegin(), types.cend(), std::back_inserter(builders),
+        [&](const auto& type) {
+            return MakeArrayBuilder(TTypeInfoHelper(), type, ctx.ArrowMemoryPool,
+                                    maxLength, &ctx.Builder->GetPgBuilder());
+        });
+
+    const auto& holderFactory = ctx.HolderFactory;
+    const size_t width = types.size();
+    const size_t total = values.GetListLength();
+    NUdf::TUnboxedValue iterator = values.GetListIterator();
+    NUdf::TUnboxedValue current;
+    size_t converted = 0;
+    TDefaultListRepresentation listValues;
+    while (converted < total) {
+        for (size_t i = 0; i < blockSize && iterator.Next(current); i++, converted++) {
+            for (size_t j = 0; j < builders.size(); j++) {
+                const NUdf::TUnboxedValuePod& item = current.GetElement(j);
+                builders[j]->Add(item);
+            }
+        }
+        NUdf::TUnboxedValue* items = nullptr;
+        const auto tuple = holderFactory.CreateDirectArrayHolder(width + 1, items);
+        for (size_t i = 0; i < width; i++) {
+            items[i] = holderFactory.CreateArrowBlock(builders[i]->Build(converted >= total));
+        }
+        items[width] = MakeBlockCount(holderFactory, blockSize);
+        listValues = listValues.Append(std::move(tuple));
+    }
+    return holderFactory.CreateDirectListHolder(std::move(listValues));
+}
+
 NUdf::TUnboxedValuePod FromBlocks(TComputationContext& ctx,
     const TArrayRef<TType* const> types, const NUdf::TUnboxedValuePod& values
 ) {

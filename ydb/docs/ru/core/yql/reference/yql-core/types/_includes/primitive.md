@@ -109,7 +109,7 @@
 
 <sup>1</sup> При помощи встроенной функции [Yson::ConvertTo](../../udf/list/yson.md#ysonconvertto).
 
-**Примеры**
+##### Примеры
 
 {% include [x](../../_includes/cast_examples.md) %}
 

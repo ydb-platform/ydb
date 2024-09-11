@@ -130,14 +130,17 @@ Entity представляет собой атомарное скалярное
 На любой литерал в YSON можно установить **атрибуты**. Записывается это так: `<key = value; ...; key = value> value`. Внутри угловых скобок синтаксис аналогичен словарю. Например, `<a = 10; b = [7,7,8]>"some-string"` или `<"44" = 44>44`. Но чаще всего атрибуты можно встретить на литералах типа `entity`, например, `<id="aaad6921-b5704588-17990259-7b88bad3">#`.
 
 ## Грамматика {#grammar}
+
 YSON-данные бывают трех типов:
+
   1. **Node** (одно дерево, в примере — `<tree>`)
   2. **ListFragment** (значения, разделенные `;`, в примере — `<list-fragment>`)
   3. **MapFragment** (пары ключ-значение, разделенные `;`, в примере — `<map-fragment>`)
 
 
 Грамматика (определяется с точностью до пробельных символов, которые могут быть в произвольном количестве добавлены и удалены между токенами):
-```
+
+```antlr
           <tree> = [ <attributes> ], <object>;
         <object> = <scalar> | <map> | <list> | <entity>;
 
@@ -159,17 +162,21 @@ YSON-данные бывают трех типов:
 #|
 || **C `;` на конце** | **Сокращенная запись** ||
 ||
-```
+
+```yson
 <a=b;>c
 {a=b;}
 1;2;3;
 ```
+
 |
-```
+
+```yson
 <a=b>c
 {a=b}
 1;2;3
 ```
+
  ||
 |#
 
@@ -177,27 +184,32 @@ YSON-данные бывают трех типов:
 ## Примеры {#examples}
 
 - Map (Node)
-```
+
+```yson
 { performance = 1 ; precision = 0.78 ; recall = 0.21 }
 ```
 
 - Map (Node)
-```
+
+```yson
 { cv-precision = [ 0.85 ; 0.24 ; 0.71 ; 0.70 ] }
 ```
 
 
 - List (Node)
-```
+
+```yson
 [ 1; 2; 3; 4; 5 ]
 ```
 
 
 - String (Node)
-```
+
+```yson
 foobar
 ```
-```
+
+```yson
 "hello world"
 ```
 
@@ -206,19 +218,22 @@ foobar
 - Double (Node) `3.1415926`
 
 - ListFragment
-```
+
+```yson
 { key = a; value = 0 };
 { key = b; value = 1 };
 { key = c; value = 2; unknown_value = [] }
 ```
 
 - MapFragment
-```
+
+```yson
 do = create; type = table; scheme = {}
 ```
 
 - HomeDirectory (Node)
-```
+
+```yson
 { home = { sandello = { mytable = <type = table> # ; anothertable = <type = table> # } ; monster = { } } }
 ```
 
@@ -251,7 +266,7 @@ YPath представляет собой язык описания путей, 
 - **Переход к атрибуту**: последовательность из токенов `/@` и литерала.
   Данный тип шагов применим в любой точке пути и означает переход к атрибуту с данными именем. Пример: `/@attr` — переход к атрибуту с именем `attr`.
 
-{% note info "Примечание" %}
+{% note info %}
 
 В YPath относительные пути начинаются со слешей. Тем самым, слеш служит не разделителем (как в случае файловых систем), а полноправным членом команды перемещения по дереву. В частности, для склейки двух YPath достаточно обычной конкатенации строк. Это свойство может показаться необычным, но во многих местах оно удобно, и к нему достаточно легко привыкнуть.
 
@@ -259,12 +274,12 @@ YPath представляет собой язык описания путей, 
 
 ### Примеры {#simple_ypath_examples}
 
-```json
+```yql
 $data = Yson(@@{"0-25-3ec012f-406daf5c" = {a=<why="I can just do it">1;b=2}}@@);
 SELECT Yson::SerializeJson($data), Yson::SerializeJson(Yson::YPath($data, "/0-25-3ec012f-406daf5c/a/@/why"));
 ```
 
-**Результат:**
+Результат:
 
 #|
 || **column0** | **column1** ||
@@ -288,7 +303,7 @@ SELECT Yson::SerializeJson($data), Yson::SerializeJson(Yson::YPath($data, "/0-25
 |#
 
 
-```json
+```yql
 $data = Yson(@@{
   a = <a=z;x=y>[
     {abc=123; def=456};
@@ -310,7 +325,7 @@ Yson::SerializeJson(Yson::YPath($data, "/a")) AS whole_a,
 Yson::SerializeJson($data) AS whole_data;
 ```
 
-**Результат:**
+Результат:
 
 #|
 || **attrs_root** | **attrs_b_str** | **attr_exact** | **array_index0** | **array_last** | **entity** | **entity1** | **whole_a** | **whole_data** ||
@@ -428,6 +443,7 @@ null
     }
 }
 ```
+
 ||
 |#
 

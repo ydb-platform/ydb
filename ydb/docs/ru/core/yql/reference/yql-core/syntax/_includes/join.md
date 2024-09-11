@@ -101,7 +101,7 @@ INNER JOIN b_table VIEW b_index_ref AS b ON a.ref = b.ref;
 
 Запрос
 
-``` yql
+```yql
 $t1 = AsList(
     AsStruct("1" AS key, "v111" AS value),
     AsStruct("2" AS key, "v121" AS value),

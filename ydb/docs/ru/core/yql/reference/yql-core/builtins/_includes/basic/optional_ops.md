@@ -4,13 +4,13 @@
 
 ### Сигнатура
 
-```
+```yql
 Just(T)->T?
 ```
 
 ### Примеры
 
-``` yql
+```yql
 SELECT
   Just("my_string"); --  String?
 ```
@@ -21,7 +21,7 @@ SELECT
 
 ### Сигнатура
 
-```
+```yql
 Unwrap(T?)->T
 Unwrap(T?, Utf8)->T
 Unwrap(T?, String)->T
@@ -36,7 +36,7 @@ Unwrap(T?, String)->T
 
 ### Примеры
 
-``` yql
+```yql
 $value = Just("value");
 
 SELECT Unwrap($value, "Unexpected NULL for $value");
@@ -46,13 +46,13 @@ SELECT Unwrap($value, "Unexpected NULL for $value");
 
 ### Сигнатура
 
-```
+```yql
 Nothing(Type<T?>)->T?
 ```
 
 ### Примеры
 
-``` yql
+```yql
 SELECT
   Nothing(String?); -- пустое значение (NULL) с типом String?
 ```

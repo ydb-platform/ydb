@@ -454,7 +454,7 @@ A CAST to Date or TzDate outputs a GMT date for a midnight, local time (for exam
 
 ```yql
 $x = DateTime("2019-10-21T21:00:00Z");
-select
+SELECT
     AddTimezone($x, "Europe/Moscow"), -- 2019-10-22T00:00:00,Europe/Moscow
     cast($x as TzDate), -- 2019-10-21,GMT
     cast(AddTimezone($x, "Europe/Moscow") as TzDate), -- 2019-10-21,Europe/Moscow

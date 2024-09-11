@@ -4,11 +4,11 @@
 
 ## Примеры
 
-``` yql
+```yql
 FROM my_table SELECT key, value;
 ```
 
-``` yql
+```yql
 FROM a_table AS a
 JOIN b_table AS b
 USING (key)

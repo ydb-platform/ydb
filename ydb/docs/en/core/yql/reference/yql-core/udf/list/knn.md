@@ -223,6 +223,7 @@ This example differs from the [exact search example](#еxact-search-examples) by
 This allows to first do a approximate preliminary search by the `embedding_bit` column, and then refine the results by the original vector column `embegging`.
 
 {% if backend_name == "YDB" %}
+
 ### Creating a table
 
 ```yql
@@ -245,6 +246,7 @@ VALUES (123, "Williams", "Full name is John Williams", Untag(Knn::ToBinaryString
 ```
 
 {% else %}
+
 ### Data declaration
 
 ```yql
@@ -259,6 +261,7 @@ $facts = AsList(
     ),
 );
 ```
+
 {% endif %}
 
 ### Scalar quantization

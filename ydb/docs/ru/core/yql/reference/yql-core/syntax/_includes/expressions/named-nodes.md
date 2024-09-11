@@ -54,7 +54,7 @@ import utils symbols $sqrt as $_; --- ошибка: Can not import anonymous nam
 
 ### Примеры
 
-``` yql
+```yql
 $multiplier = 712;
 SELECT
   a * $multiplier, -- $multiplier is 712
@@ -63,7 +63,7 @@ SELECT
 FROM abc_table;
 ```
 
-``` yql
+```yql
 $intermediate = (
   SELECT
     value * value AS square,
@@ -76,11 +76,11 @@ INNER JOIN $intermediate AS b
 ON a.value == b.square;
 ```
 
-``` yql
+```yql
 $a, $_, $c = AsTuple(1, 5u, "test"); -- распаковка кортежа
 SELECT $a, $c;
 ```
 
-``` yql
+```yql
 $x, $y = AsTuple($y, $x); -- swap значений выражений
 ```

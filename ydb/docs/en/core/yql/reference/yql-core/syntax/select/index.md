@@ -22,17 +22,29 @@
 * [LIMIT OFFSET](limit_offset.md)
 * [SAMPLE](sample.md)
 * [TABLESAMPLE](sample.md)
+
 {% if feature_map_reduce %}
+
 * [FOLDER](folder.md)
 * [WalkFolders](walk_folders.md)
 * [VIEW](view.md)
+
 {% endif %}
+
 {% if feature_temp_table %}
+
 * [TEMPORARY TABLE](temporary_table.md)
+
 {% endif %}
+
 {% if feature_bulk_tables %}
+
 * [CONCAT](concat.md)
+
 {% endif %}
+
 {% if feature_secondary_index %}
+
 * [VIEW INDEX](secondary_index.md)
+
 {% endif %}

@@ -4,7 +4,7 @@
 
 ### Сигнатура
 
-```
+```yql
 Variant(T, String, Type<Variant<...>>)->Variant<...>
 ```
 
@@ -16,7 +16,7 @@ Variant(T, String, Type<Variant<...>>)->Variant<...>
 
 ### Пример
 
-``` yql
+```yql
 $var_type = Variant<foo: Int32, bar: Bool>;
 
 SELECT
@@ -28,7 +28,7 @@ SELECT
 
 ### Сигнатура
 
-```
+```yql
 AsVariant(T, String)->Variant
 ```
 
@@ -39,7 +39,7 @@ AsVariant(T, String)->Variant
 
 ### Пример
 
-``` yql
+```yql
 SELECT
    AsVariant(6, "foo") as VariantValue
 ```

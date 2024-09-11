@@ -108,7 +108,7 @@ WINDOW w AS (
 );
 ```
 
-``` yql
+```yql
 SELECT
     -- AVG (как и все агрегатные функции, используемые в качестве оконных)
     -- вычисляется на рамке окна
@@ -122,7 +122,7 @@ WINDOW w AS (
 );
 ```
 
-``` yql
+```yql
 SELECT
     -- LAG не зависит от положения рамки окна
     LAG(my_column, 2) OVER w AS row_before_previous_one

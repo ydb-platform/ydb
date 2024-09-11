@@ -4,7 +4,7 @@
 
 ### Сигнатура
 
-```
+```yql
 Enum(String, Type<Enum<...>>)->Enum<...>
 ```
 
@@ -15,7 +15,7 @@ Enum(String, Type<Enum<...>>)->Enum<...>
 
 ### Пример
 
-``` yql
+```yql
 $enum_type = Enum<Foo, Bar>;
 SELECT
    Enum("Foo", $enum_type) as Enum1Value,
@@ -26,7 +26,7 @@ SELECT
 
 ### Сигнатура
 
-```
+```yql
 AsEnum(String)->Enum<'tag'>
 ```
 
@@ -36,7 +36,7 @@ AsEnum(String)->Enum<'tag'>
 
 ### Пример
 
-``` yql
+```yql
 SELECT
    AsEnum("Foo");
 ```

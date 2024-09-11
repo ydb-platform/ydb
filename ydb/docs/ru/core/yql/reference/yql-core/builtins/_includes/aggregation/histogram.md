@@ -86,13 +86,13 @@ While FastGreedyShrink is used most of the time, SlowShrink is mostly used for h
 
 ### Примеры
 
-``` yql
+```yql
 SELECT
     HISTOGRAM(numeric_column)
 FROM my_table;
 ```
 
-``` yql
+```yql
 SELECT
     Histogram::Print(
         HISTOGRAM(numeric_column, 10),

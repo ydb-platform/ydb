@@ -23,9 +23,9 @@ DECLARE $named-node AS data_type;
 * [Контейнеры](../../../types/containers.md) за исключением `Stream<Type>`.
 * `Void` и `Null`— поддерживаемые [специальные типы](../../../types/special.md).
 
-**Пример**
+## Пример
 
-``` yql
+```yql
 DECLARE $x AS String;
 DECLARE $y AS String?;
 DECLARE $z AS List<String>;

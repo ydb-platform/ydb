@@ -621,7 +621,7 @@ private:
         while (InMemoryBucketsCount > 0) {
             ui64 maxLineCount = 0;
             ui32 maxLineBucketInd = (ui32)-1;
-            for (ui64 i = 0; i < SpilledBucketCount - 1; ++i) {
+            for (ui64 i = 0; i < SpilledBucketCount; ++i) {
                 const auto& bucket = SpilledBuckets[i];
                 if (bucket.BucketState == TSpilledBucket::EBucketState::InMemory && (maxLineBucketInd == (ui32)-1 || bucket.LineCount > maxLineCount)) {
                     maxLineCount = bucket.LineCount;

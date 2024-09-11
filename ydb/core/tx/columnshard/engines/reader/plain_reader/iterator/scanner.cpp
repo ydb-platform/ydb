@@ -133,6 +133,7 @@ class TSourcesStorageForMemoryOptimization {
 private:
     class TSourceInfo {
     private:
+        YDB_READONLY(ui64, Memory, 0);
         YDB_READONLY_DEF(std::shared_ptr<IDataSource>, Source);
         YDB_READONLY_DEF(std::shared_ptr<TFetchingScript>, FetchingInfo);
 
@@ -140,19 +141,33 @@ private:
         TSourceInfo(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<TFetchingScript>& fetchingInfo)
             : Source(source)
             , FetchingInfo(fetchingInfo) {
+            Memory = fetching->PredictRawBytes(Source);
         }
 
         NJson::TJsonValue DebugJson() const {
             NJson::TJsonValue result = NJson::JSON_MAP;
             result.InsertValue("source", Source->DebugJsonForMemory());
+            result.InsertValue("memory", Memory);
             //            result.InsertValue("fetching", Fetching->DebugJsonForMemory());
             return result;
         }
+
+        bool ReduceMemory() {
+            const bool result = FetchingInfo->InitSourceSeqColumnIds(Source);
+            if (result) {
+                Memory = fetching->PredictRawBytes(source);
+            }
+            return result;
+        }
+
+        bool operator<(const TSourceInfo& item) const {
+            return Memory < item.Memory;
+        }
+
     };
 
-    std::map<ui64, THashMap<ui32, TSourceInfo>> Sources;
+    std::vector<TSourceInfo> Sources;
     YDB_READONLY(ui64, MemorySum, 0);
-    YDB_READONLY_DEF(std::set<ui64>, PathIds);
 
 public:
     TString DebugString() const {
@@ -170,47 +185,36 @@ public:
         return resultJson.GetStringRobust();
     }
 
-    void UpdateSource(const ui64 oldMemoryInfo, const ui32 sourceIdx) {
-        auto it = Sources.find(oldMemoryInfo);
-        AFL_VERIFY(it != Sources.end());
-        auto itSource = it->second.find(sourceIdx);
-        AFL_VERIFY(itSource != it->second.end());
-        auto sourceInfo = itSource->second;
-        it->second.erase(itSource);
-        if (it->second.empty()) {
-            Sources.erase(it);
-        }
-        AFL_VERIFY(MemorySum >= oldMemoryInfo);
-        MemorySum -= oldMemoryInfo;
-        AddSource(sourceInfo.GetSource(), sourceInfo.GetFetchingInfo());
-    }
-
     void AddSource(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<TFetchingScript>& fetching) {
         const ui64 sourceMemory = fetching->PredictRawBytes(source);
         MemorySum += sourceMemory;
-        AFL_VERIFY(Sources[sourceMemory].emplace(source->GetSourceIdx(), TSourceInfo(source, fetching)).second);
-        PathIds.emplace(source->GetPathId());
+        Sources.emplace_back(TSourceInfo(sourceMemory, source, fetching));
     }
 
     bool Optimize(const ui64 memoryLimit) {
-        bool modified = true;
-        while (MemorySum > memoryLimit && modified) {
-            modified = false;
-            for (auto it = Sources.rbegin(); it != Sources.rend(); ++it) {
-                for (auto&& [sourceIdx, sourceInfo] : it->second) {
-                    if (!sourceInfo.GetFetchingInfo()->InitSourceSeqColumnIds(sourceInfo.GetSource())) {
-                        continue;
-                    }
-                    modified = true;
-                    UpdateSource(it->first, sourceIdx);
-                    break;
-                }
-                if (modified) {
-                    break;
-                }
-            }
+        if (MemorySum <= memoryLimit) {
+            return true;
         }
-        return MemorySum < memoryLimit;
+        std::sort(Sources.begin(), Sources.end());
+        while (true) {
+            std::vector<TSourceInfo> nextSources;
+            while (memoryLimit < MemorySum && Sources.size()) {
+                const ui64 currentMemory = Sources.back().GetMemory();
+                if (Sources.back().ReduceMemory()) {
+                    AFL_VERIFY(currentMemory <= MemorySum);
+                    MemorySum -= currentMemory;
+                    MemorySum += Sources.back().GetMemory();
+                    nextSources.emplace_back(std::move(Sources.back()));
+                }
+                Sources.pop_back();
+            }
+            if (nextSources.empty() || MemorySum <= memoryLimit) {
+                break;
+            }
+            std::sort(nextSources.begin(), nextSources.end());
+            std::swap(nextSources, Sources);
+        }
+        return MemorySum <= memoryLimit;
     }
 };
 

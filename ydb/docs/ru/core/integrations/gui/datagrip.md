@@ -24,7 +24,7 @@ DataGrip позволяет работать с {{ ydb-short-name }} по про
 
 1. В выпадающем списке **Class** выберите `tech.ydb.jdbc.YdbDriver`.
 
-   ![](./_assets/datagrip-ydb-driver.png)
+   ![драйвер](./_assets/datagrip-ydb-driver.png)
 
 1. Нажмите кнопку **OK**.
 
@@ -57,7 +57,7 @@ DataGrip позволяет работать с {{ ydb-short-name }} по про
 
     Если все настройки указаны верно, то появится сообщение об успешном тестировании соединения.
 
-    ![](./_assets/datagrip-ydb-connection.png)
+    ![соединение](./_assets/datagrip-ydb-connection.png)
 
 1. Нажмите кнопку **OK** для сохранения соединения.
 
@@ -65,8 +65,8 @@ DataGrip позволяет работать с {{ ydb-short-name }} по про
 
 С помощью DataGrip можно просматривать список и структуру таблиц:
 
-![](./_assets/datagrip-list-tables.png)
+![список таблиц](./_assets/datagrip-list-tables.png)
 
 А также выполнять запросы к данным:
 
-![](./_assets/datagrip-run-sql.png)
+![выполнение SQL](./_assets/datagrip-run-sql.png)

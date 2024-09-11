@@ -42,7 +42,7 @@ log-levels:
   MD045: 'disabled' # Images should have alternate text (alt text)
   MD046: 'disabled' # Code block style
   MD047: 'disabled' # Files should end with a single newline character
-  MD048: 'disabled' # Code fence style
+  MD048: 'error' # Code fence style
   MD049: 'disabled' # Emphasis style should be consistent
   MD050: 'disabled' # Strong style should be consistent
   MD051: 'error' # Link fragments should be valid

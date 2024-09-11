@@ -642,17 +642,6 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinBasicTest) {
     static const TVector<TString> threeLetterValues = GenerateValues(valueSize);
     static const TSet<ui64> fibonacci = GenerateFibonacci(21);
 
-    const TVector<TKSV> MakeIotaTKSV(const TVector<ui64>& keyInit,
-        const ui64 subkeyMultiplier, const TVector<TString>& valuePayload
-    ) {
-        TVector<TKSV> testKSV;
-        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(testKSV),
-            [subkeyMultiplier, valuePayload](const auto& key) {
-                return std::make_tuple(key, key * subkeyMultiplier, valuePayload[key]);
-            });
-        return testKSV;
-    }
-
     Y_UNIT_TEST(TestInnerOnUint64) {
         TSetup<false> setup;
         // 1. Make input for the "left" flow.

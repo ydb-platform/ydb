@@ -57,7 +57,8 @@ void TKqpExecuterTxResult::FillMkql(NKikimrMiniKQL::TResult* mkqlResult) {
         ExportTypeToProto(
             MkqlItemType,
             *mkqlResult->MutableType()->MutableList()->MutableItem(),
-            ColumnOrder);
+            ColumnOrder,
+            ColumnHints);
 
         Rows.ForEachRow([&](NUdf::TUnboxedValue& value) {
             ExportValueToProto(
@@ -97,7 +98,7 @@ void TKqpExecuterTxResult::FillYdb(Ydb::ResultSet* ydbResult, TMaybe<ui64> rowsL
     for (ui32 idx = 0; idx < mkqlSrcRowStructType->GetMembersCount(); ++idx) {
         auto* column = ydbResult->add_columns();
         ui32 memberIndex = (!ColumnOrder || ColumnOrder->empty()) ? idx : (*ColumnOrder)[idx];
-        column->set_name(TString(mkqlSrcRowStructType->GetMemberName(memberIndex)));
+        column->set_name(ColumnHints && ColumnHints->size() ? ColumnHints[idx] : TString(mkqlSrcRowStructType->GetMemberName(memberIndex)));
         ExportTypeToProto(mkqlSrcRowStructType->GetMemberType(memberIndex), *column->mutable_type());
     }
 

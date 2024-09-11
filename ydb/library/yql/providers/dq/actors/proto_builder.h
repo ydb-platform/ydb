@@ -35,6 +35,7 @@ private:
     NKikimr::NMiniKQL::TTypeEnvironment TypeEnv;
     NKikimr::NMiniKQL::TType* ResultType;
     const TVector<ui32> ColumnOrder;
+    const TVector<TString> ColumnHints;
 };
 
 } // NYql::NDqs

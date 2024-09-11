@@ -49,6 +49,7 @@ TProtoBuilder::TProtoBuilder(const TString& type, const TVector<TString>& column
     , TypeEnv(Alloc)
     , ResultType(static_cast<TType*>(DeserializeNode(type, TypeEnv)))
     , ColumnOrder(BuildColumnOrder(columns, ResultType))
+    , ColumnHints(columns)
 {
     Alloc.Release();
 }
@@ -155,7 +156,7 @@ Ydb::ResultSet TProtoBuilder::BuildResultSet(TVector<NYql::NDq::TDqSerializedBat
     for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
         auto& column = *resultSet.add_columns();
         const ui32 memberIndex = ColumnOrder.empty() ? i : ColumnOrder[i];
-        column.set_name(TString(structType->GetMemberName(memberIndex)));
+        column.set_name(ColumnHints.empty() ? TString(structType->GetMemberName(memberIndex)) : ColumnHints[i]);
         ExportTypeToProto(structType->GetMemberType(memberIndex), *column.mutable_type());
     }
 

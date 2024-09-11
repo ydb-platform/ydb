@@ -76,7 +76,7 @@ namespace {
 Y_UNIT_TEST_SUITE(TS3FIFOGhostQueue) {
     
     Y_UNIT_TEST(Add) {
-        TTS3FIFOGhostQueue<TPageKey, TPageKeyHash, TPageKeyEqual> queue(100);
+        TTS3FIFOGhostPageQueue<TPageKey, TPageKeyHash, TPageKeyEqual> queue(100);
         UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "");
 
         queue.Add(1, 10);
@@ -96,7 +96,7 @@ Y_UNIT_TEST_SUITE(TS3FIFOGhostQueue) {
     }
 
     Y_UNIT_TEST(Erase) {
-        TTS3FIFOGhostQueue<TPageKey, TPageKeyHash, TPageKeyEqual> queue(100);
+        TTS3FIFOGhostPageQueue<TPageKey, TPageKeyHash, TPageKeyEqual> queue(100);
         UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "");
 
         queue.Add(1, 10);
@@ -118,7 +118,7 @@ Y_UNIT_TEST_SUITE(TS3FIFOGhostQueue) {
     }
 
     Y_UNIT_TEST(Erase_Add) {
-        TTS3FIFOGhostQueue<TPageKey, TPageKeyHash, TPageKeyEqual> queue(100);
+        TTS3FIFOGhostPageQueue<TPageKey, TPageKeyHash, TPageKeyEqual> queue(100);
         UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "");
 
         queue.Add(1, 10);
@@ -137,7 +137,7 @@ Y_UNIT_TEST_SUITE(TS3FIFOGhostQueue) {
     }
 
     Y_UNIT_TEST(Add_Big) {
-        TTS3FIFOGhostQueue<TPageKey, TPageKeyHash, TPageKeyEqual> queue(100);
+        TTS3FIFOGhostPageQueue<TPageKey, TPageKeyHash, TPageKeyEqual> queue(100);
         UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "");
 
         queue.Add(1, 101);
@@ -145,7 +145,7 @@ Y_UNIT_TEST_SUITE(TS3FIFOGhostQueue) {
     }
 
     Y_UNIT_TEST(UpdateLimit) {
-        TTS3FIFOGhostQueue<TPageKey, TPageKeyHash, TPageKeyEqual> queue(100);
+        TTS3FIFOGhostPageQueue<TPageKey, TPageKeyHash, TPageKeyEqual> queue(100);
         UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "");
 
         queue.Add(1, 10);
@@ -381,8 +381,7 @@ Y_UNIT_TEST_SUITE(TS3FIFOCache) {
         
         cache.UpdateLimit(45);
         TPage page5{5, 1};
-        TVector<ui32> expected{4, 2, 1};
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page5), expected);
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page5), (TVector<ui32>{4, 2, 1}));
         UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
             << "SmallQueue: {5 0f 1b}" << Endl
             << "MainQueue: {3 0f 40b}" << Endl
@@ -390,8 +389,7 @@ Y_UNIT_TEST_SUITE(TS3FIFOCache) {
         
         cache.UpdateLimit(0);
         TPage page6{6, 1};
-        expected = {5, 6, 3};
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page6), expected);
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page6), (TVector<ui32>{5, 6, 3}));
         UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
             << "SmallQueue: " << Endl
             << "MainQueue: " << Endl

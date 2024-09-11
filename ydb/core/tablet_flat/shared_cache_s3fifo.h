@@ -4,8 +4,6 @@
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <library/cpp/monlib/counters/counters.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
-#include <util/generic/ptr.h>
-#include <util/generic/intrlist.h>
 
 namespace NKikimr::NCache {
 
@@ -14,7 +12,7 @@ namespace NKikimr::NCache {
 template <typename TPageKey
         , typename TPageKeyHash
         , typename TPageKeyEqual>
-class TTS3FIFOGhostQueue {
+class TTS3FIFOGhostPageQueue {
     struct TGhostPage {
         TPageKey Key;
         ui64 Size; // zero size is tombstone
@@ -38,7 +36,7 @@ class TTS3FIFOGhostQueue {
     };
 
 public:
-    TTS3FIFOGhostQueue(ui64 limit)
+    TTS3FIFOGhostPageQueue(ui64 limit)
         : Limit(limit)
     {}
 
@@ -66,7 +64,7 @@ public:
             Y_DEBUG_ABORT_UNLESS(ghost->Size == size);
             Y_ABORT_UNLESS(Size >= ghost->Size);
             Size -= ghost->Size;
-            ghost->Size = 0;// mark as deleted
+            ghost->Size = 0; // mark as deleted
             GhostsSet.erase(it);
             return true;
         }
@@ -356,7 +354,7 @@ private:
     TLimit Limit;
     TQueue SmallQueue;
     TQueue MainQueue;
-    TTS3FIFOGhostQueue<TPageKey, TPageKeyHash, TPageKeyEqual> GhostQueue;
+    TTS3FIFOGhostPageQueue<TPageKey, TPageKeyHash, TPageKeyEqual> GhostQueue;
 
 };
 

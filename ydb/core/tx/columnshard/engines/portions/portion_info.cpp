@@ -77,6 +77,15 @@ ui64 TPortionInfo::GetIndexRawBytes(const std::set<ui32>& entityIds, const bool 
     return sum;
 }
 
+ui64 TPortionInfo::GetIndexRawBytes(const bool validation) const {
+    ui64 sum = 0;
+    const auto aggr = [&](const TIndexChunk& r) {
+        sum += r.GetRawBytes();
+    };
+    AggregateIndexChunksData(aggr, Indexes, nullptr, validation);
+    return sum;
+}
+
 TString TPortionInfo::DebugString(const bool withDetails) const {
     TStringBuilder sb;
     sb << "(portion_id:" << Portion << ";" <<

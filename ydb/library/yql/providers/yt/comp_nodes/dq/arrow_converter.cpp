@@ -313,9 +313,7 @@ public:
 
     NUdf::TBlockItem GetNotNull(TYsonReaderDetails& buf) override final {
         if constexpr (NUdf::EDataSlot::Yson != OriginalT) {
-            if (buf.Current() != StringMarker) {
-                YQL_ENSURE(buf.Current() == StringMarker);
-            }
+            YQL_ENSURE(buf.Current() == StringMarker);
             buf.Next();
             const i32 length = buf.ReadVarI32();
             auto res = NUdf::TBlockItem(NUdf::TStringRef(buf.Data(), length));

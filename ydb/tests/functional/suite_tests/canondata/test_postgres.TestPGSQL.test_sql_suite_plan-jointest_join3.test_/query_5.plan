@@ -5,7 +5,7 @@
         "Plans": [
             {
                 "Node Type": "ResultSet_5",
-                "PlanNodeId": 27,
+                "PlanNodeId": 26,
                 "PlanNodeType": "ResultSet",
                 "Plans": [
                     {
@@ -14,18 +14,18 @@
                             {
                                 "Inputs": [
                                     {
-                                        "ExternalPlanNodeId": 25
+                                        "ExternalPlanNodeId": 24
                                     }
                                 ],
                                 "Limit": "1001",
                                 "Name": "Limit"
                             }
                         ],
-                        "PlanNodeId": 26,
+                        "PlanNodeId": 25,
                         "Plans": [
                             {
                                 "Node Type": "UnionAll",
-                                "PlanNodeId": 25,
+                                "PlanNodeId": 24,
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
@@ -42,7 +42,7 @@
                                                 "Name": "Limit"
                                             },
                                             {
-                                                "Condition": "k = p_1.k",
+                                                "Condition": "x.k = p_1.k",
                                                 "Inputs": [
                                                     {
                                                         "InternalOperatorId": 3
@@ -85,7 +85,7 @@
                                                 "Name": "Iterator"
                                             }
                                         ],
-                                        "PlanNodeId": 24,
+                                        "PlanNodeId": 23,
                                         "Tables": [
                                             "postgres_jointest/join3.test_plan/parent"
                                         ]
@@ -99,7 +99,7 @@
             {
                 "Node Type": "Precompute_4",
                 "Parent Relationship": "InitPlan",
-                "PlanNodeId": 22,
+                "PlanNodeId": 21,
                 "PlanNodeType": "Materialize",
                 "Plans": [
                     {
@@ -112,7 +112,7 @@
                                 "Name": "PartitionByKey"
                             }
                         ],
-                        "PlanNodeId": 21
+                        "PlanNodeId": 20
                     }
                 ],
                 "Subplan Name": "CTE precompute_4_0"
@@ -120,39 +120,39 @@
             {
                 "Node Type": "Precompute_3",
                 "Parent Relationship": "InitPlan",
-                "PlanNodeId": 19,
+                "PlanNodeId": 18,
                 "PlanNodeType": "Materialize",
                 "Plans": [
                     {
                         "Node Type": "Collect",
-                        "PlanNodeId": 18,
+                        "PlanNodeId": 17,
                         "Plans": [
                             {
                                 "Node Type": "UnionAll",
-                                "PlanNodeId": 17,
+                                "PlanNodeId": 16,
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
                                         "Node Type": "LeftJoin (MapJoin)",
                                         "Operators": [
                                             {
-                                                "Condition": "k = k",
+                                                "Condition": "p_1.k = c.k",
                                                 "Inputs": [
                                                     {
-                                                        "ExternalPlanNodeId": 15
+                                                        "ExternalPlanNodeId": 14
                                                     },
                                                     {
-                                                        "ExternalPlanNodeId": 13
+                                                        "ExternalPlanNodeId": 12
                                                     }
                                                 ],
                                                 "Name": "LeftJoin (MapJoin)"
                                             }
                                         ],
-                                        "PlanNodeId": 16,
+                                        "PlanNodeId": 15,
                                         "Plans": [
                                             {
                                                 "Node Type": "Map",
-                                                "PlanNodeId": 15,
+                                                "PlanNodeId": 14,
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
@@ -165,22 +165,22 @@
                                                                 "ToFlow": "precompute_1_0"
                                                             }
                                                         ],
-                                                        "PlanNodeId": 14
+                                                        "PlanNodeId": 13
                                                     }
                                                 ]
                                             },
                                             {
                                                 "Node Type": "Broadcast",
-                                                "PlanNodeId": 13,
+                                                "PlanNodeId": 12,
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
                                                         "Node Type": "Stage",
-                                                        "PlanNodeId": 12,
+                                                        "PlanNodeId": 11,
                                                         "Plans": [
                                                             {
                                                                 "Node Type": "UnionAll",
-                                                                "PlanNodeId": 11,
+                                                                "PlanNodeId": 10,
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
                                                                     {
@@ -214,7 +214,7 @@
                                                                                 "Name": "Iterator"
                                                                             }
                                                                         ],
-                                                                        "PlanNodeId": 10,
+                                                                        "PlanNodeId": 9,
                                                                         "Tables": [
                                                                             "postgres_jointest/join3.test_plan/child"
                                                                         ]
@@ -237,7 +237,7 @@
             {
                 "Node Type": "Precompute_2",
                 "Parent Relationship": "InitPlan",
-                "PlanNodeId": 8,
+                "PlanNodeId": 7,
                 "PlanNodeType": "Materialize",
                 "Plans": [
                     {
@@ -250,7 +250,7 @@
                                 "Name": "PartitionByKey"
                             }
                         ],
-                        "PlanNodeId": 7
+                        "PlanNodeId": 6
                     }
                 ],
                 "Subplan Name": "CTE precompute_2_0"
@@ -258,46 +258,39 @@
             {
                 "Node Type": "Precompute_1",
                 "Parent Relationship": "InitPlan",
-                "PlanNodeId": 5,
+                "PlanNodeId": 4,
                 "PlanNodeType": "Materialize",
                 "Plans": [
                     {
                         "Node Type": "Collect",
-                        "PlanNodeId": 4,
+                        "PlanNodeId": 3,
                         "Plans": [
                             {
                                 "Node Type": "UnionAll",
-                                "PlanNodeId": 3,
+                                "PlanNodeId": 2,
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "Collect",
-                                        "PlanNodeId": 2,
-                                        "Plans": [
+                                        "Node Type": "TableRangeScan",
+                                        "Operators": [
                                             {
-                                                "Node Type": "TableRangeScan",
-                                                "Operators": [
-                                                    {
-                                                        "Inputs": [],
-                                                        "Name": "TableRangeScan",
-                                                        "ReadColumns": [
-                                                            "k",
-                                                            "pd"
-                                                        ],
-                                                        "ReadRangesExpectedSize": "1",
-                                                        "ReadRangesKeys": [
-                                                            "k"
-                                                        ],
-                                                        "ReadRangesPointPrefixLen": "1",
-                                                        "Scan": "Parallel",
-                                                        "Table": "postgres_jointest/join3.test_plan/parent"
-                                                    }
+                                                "Inputs": [],
+                                                "Name": "TableRangeScan",
+                                                "ReadColumns": [
+                                                    "k",
+                                                    "pd"
                                                 ],
-                                                "PlanNodeId": 1,
-                                                "Tables": [
-                                                    "postgres_jointest/join3.test_plan/parent"
-                                                ]
+                                                "ReadRangesExpectedSize": 1,
+                                                "ReadRangesKeys": [
+                                                    "k"
+                                                ],
+                                                "Scan": "Parallel",
+                                                "Table": "postgres_jointest/join3.test_plan/parent"
                                             }
+                                        ],
+                                        "PlanNodeId": 1,
+                                        "Tables": [
+                                            "postgres_jointest/join3.test_plan/parent"
                                         ]
                                     }
                                 ]

@@ -5,7 +5,7 @@
         "Plans": [
             {
                 "Node Type": "ResultSet",
-                "PlanNodeId": 7,
+                "PlanNodeId": 6,
                 "PlanNodeType": "ResultSet",
                 "Plans": [
                     {
@@ -14,18 +14,18 @@
                             {
                                 "Inputs": [
                                     {
-                                        "ExternalPlanNodeId": 5
+                                        "ExternalPlanNodeId": 4
                                     }
                                 ],
                                 "Limit": "1001",
                                 "Name": "Limit"
                             }
                         ],
-                        "PlanNodeId": 6,
+                        "PlanNodeId": 5,
                         "Plans": [
                             {
                                 "Node Type": "UnionAll",
-                                "PlanNodeId": 5,
+                                "PlanNodeId": 4,
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
@@ -43,50 +43,43 @@
                                             {
                                                 "Inputs": [
                                                     {
-                                                        "ExternalPlanNodeId": 3
+                                                        "ExternalPlanNodeId": 2
                                                     }
                                                 ],
                                                 "Name": "Sort",
                                                 "SortBy": "row.salary"
                                             }
                                         ],
-                                        "PlanNodeId": 4,
+                                        "PlanNodeId": 3,
                                         "Plans": [
                                             {
                                                 "KeyColumns": [
                                                     "depname"
                                                 ],
                                                 "Node Type": "HashShuffle",
-                                                "PlanNodeId": 3,
+                                                "PlanNodeId": 2,
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Stage",
-                                                        "PlanNodeId": 2,
-                                                        "Plans": [
+                                                        "Node Type": "TableFullScan",
+                                                        "Operators": [
                                                             {
-                                                                "Node Type": "TableFullScan",
-                                                                "Operators": [
-                                                                    {
-                                                                        "Inputs": [],
-                                                                        "Name": "TableFullScan",
-                                                                        "ReadColumns": [
-                                                                            "depname",
-                                                                            "salary"
-                                                                        ],
-                                                                        "ReadRanges": [
-                                                                            "empno (-\u221e, +\u221e)"
-                                                                        ],
-                                                                        "ReadRangesPointPrefixLen": "0",
-                                                                        "Scan": "Parallel",
-                                                                        "Table": "postgres_window.test_plan/empsalary"
-                                                                    }
+                                                                "Inputs": [],
+                                                                "Name": "TableFullScan",
+                                                                "ReadColumns": [
+                                                                    "depname",
+                                                                    "salary"
                                                                 ],
-                                                                "PlanNodeId": 1,
-                                                                "Tables": [
-                                                                    "postgres_window.test_plan/empsalary"
-                                                                ]
+                                                                "ReadRanges": [
+                                                                    "empno (-\u221e, +\u221e)"
+                                                                ],
+                                                                "Scan": "Parallel",
+                                                                "Table": "postgres_window.test_plan/empsalary"
                                                             }
+                                                        ],
+                                                        "PlanNodeId": 1,
+                                                        "Tables": [
+                                                            "postgres_window.test_plan/empsalary"
                                                         ]
                                                     }
                                                 ]

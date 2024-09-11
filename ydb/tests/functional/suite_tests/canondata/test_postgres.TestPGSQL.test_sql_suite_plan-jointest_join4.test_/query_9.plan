@@ -5,7 +5,7 @@
         "Plans": [
             {
                 "Node Type": "ResultSet",
-                "PlanNodeId": 12,
+                "PlanNodeId": 10,
                 "PlanNodeType": "ResultSet",
                 "Plans": [
                     {
@@ -14,18 +14,18 @@
                             {
                                 "Inputs": [
                                     {
-                                        "ExternalPlanNodeId": 10
+                                        "ExternalPlanNodeId": 8
                                     }
                                 ],
                                 "Limit": "1001",
                                 "Name": "Limit"
                             }
                         ],
-                        "PlanNodeId": 11,
+                        "PlanNodeId": 9,
                         "Plans": [
                             {
                                 "Node Type": "Merge",
-                                "PlanNodeId": 10,
+                                "PlanNodeId": 8,
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
@@ -42,62 +42,55 @@
                                                 "TopSortBy": ""
                                             },
                                             {
-                                                "Condition": "joincol = joincol",
+                                                "Condition": "tt2.joincol = tt1.joincol",
                                                 "Inputs": [
                                                     {
-                                                        "ExternalPlanNodeId": 8
+                                                        "ExternalPlanNodeId": 6
                                                     },
                                                     {
-                                                        "ExternalPlanNodeId": 5
+                                                        "ExternalPlanNodeId": 4
                                                     }
                                                 ],
                                                 "Name": "LeftJoin (MapJoin)"
                                             }
                                         ],
-                                        "PlanNodeId": 9,
+                                        "PlanNodeId": 7,
                                         "Plans": [
                                             {
                                                 "Node Type": "Broadcast",
-                                                "PlanNodeId": 5,
+                                                "PlanNodeId": 4,
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
                                                         "Node Type": "Stage",
-                                                        "PlanNodeId": 4,
+                                                        "PlanNodeId": 3,
                                                         "Plans": [
                                                             {
                                                                 "Node Type": "UnionAll",
-                                                                "PlanNodeId": 3,
+                                                                "PlanNodeId": 2,
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
                                                                     {
-                                                                        "Node Type": "Stage",
-                                                                        "PlanNodeId": 2,
-                                                                        "Plans": [
+                                                                        "Node Type": "TableFullScan",
+                                                                        "Operators": [
                                                                             {
-                                                                                "Node Type": "TableFullScan",
-                                                                                "Operators": [
-                                                                                    {
-                                                                                        "Inputs": [],
-                                                                                        "Name": "TableFullScan",
-                                                                                        "ReadColumns": [
-                                                                                            "joincol",
-                                                                                            "tt2_id"
-                                                                                        ],
-                                                                                        "ReadRanges": [
-                                                                                            "tt2_id (-\u221e, +\u221e)",
-                                                                                            "joincol (-\u221e, +\u221e)"
-                                                                                        ],
-                                                                                        "ReadRangesPointPrefixLen": "0",
-                                                                                        "Scan": "Parallel",
-                                                                                        "Table": "postgres_jointest/join4.test_plan/tt2"
-                                                                                    }
+                                                                                "Inputs": [],
+                                                                                "Name": "TableFullScan",
+                                                                                "ReadColumns": [
+                                                                                    "joincol",
+                                                                                    "tt2_id"
                                                                                 ],
-                                                                                "PlanNodeId": 1,
-                                                                                "Tables": [
-                                                                                    "postgres_jointest/join4.test_plan/tt2"
-                                                                                ]
+                                                                                "ReadRanges": [
+                                                                                    "tt2_id (-\u221e, +\u221e)",
+                                                                                    "joincol (-\u221e, +\u221e)"
+                                                                                ],
+                                                                                "Scan": "Parallel",
+                                                                                "Table": "postgres_jointest/join4.test_plan/tt2"
                                                                             }
+                                                                        ],
+                                                                        "PlanNodeId": 1,
+                                                                        "Tables": [
+                                                                            "postgres_jointest/join4.test_plan/tt2"
                                                                         ]
                                                                     }
                                                                 ]
@@ -108,37 +101,30 @@
                                             },
                                             {
                                                 "Node Type": "Map",
-                                                "PlanNodeId": 8,
+                                                "PlanNodeId": 6,
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Stage",
-                                                        "PlanNodeId": 7,
-                                                        "Plans": [
+                                                        "Node Type": "TableFullScan",
+                                                        "Operators": [
                                                             {
-                                                                "Node Type": "TableFullScan",
-                                                                "Operators": [
-                                                                    {
-                                                                        "Inputs": [],
-                                                                        "Name": "TableFullScan",
-                                                                        "ReadColumns": [
-                                                                            "joincol",
-                                                                            "tt1_id"
-                                                                        ],
-                                                                        "ReadRanges": [
-                                                                            "tt1_id (-\u221e, +\u221e)",
-                                                                            "joincol (-\u221e, +\u221e)"
-                                                                        ],
-                                                                        "ReadRangesPointPrefixLen": "0",
-                                                                        "Scan": "Parallel",
-                                                                        "Table": "postgres_jointest/join4.test_plan/tt1"
-                                                                    }
+                                                                "Inputs": [],
+                                                                "Name": "TableFullScan",
+                                                                "ReadColumns": [
+                                                                    "joincol",
+                                                                    "tt1_id"
                                                                 ],
-                                                                "PlanNodeId": 6,
-                                                                "Tables": [
-                                                                    "postgres_jointest/join4.test_plan/tt1"
-                                                                ]
+                                                                "ReadRanges": [
+                                                                    "tt1_id (-\u221e, +\u221e)",
+                                                                    "joincol (-\u221e, +\u221e)"
+                                                                ],
+                                                                "Scan": "Parallel",
+                                                                "Table": "postgres_jointest/join4.test_plan/tt1"
                                                             }
+                                                        ],
+                                                        "PlanNodeId": 5,
+                                                        "Tables": [
+                                                            "postgres_jointest/join4.test_plan/tt1"
                                                         ]
                                                     }
                                                 ]

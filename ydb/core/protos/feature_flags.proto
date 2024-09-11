@@ -149,4 +149,5 @@ message TFeatureFlags {
     optional bool EnableResourcePoolsCounters = 135 [default = false];
     optional bool EnableOptionalColumnsInColumnShard = 136 [default = false];
     optional bool EnableMetadataObjectsOnServerless = 141 [default = true];
+    optional bool EnableExternalDataSourcesOnServerless = 143 [default = true];
 }

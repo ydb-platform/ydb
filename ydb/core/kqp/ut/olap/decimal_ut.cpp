@@ -44,9 +44,9 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
 
         void PrepareTable1() {
             Schema = {
-                TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-                TTestHelper::TColumnSchema().SetName("int").SetType(NScheme::NTypeIds::Int64),
-                TTestHelper::TColumnSchema().SetName("dec").SetType(NScheme::NTypeIds::Decimal),
+                TTestHelper::TColumnSchema().SetName("id").SetTypeInfo(NScheme::NTypeIds::Int32).SetNullable(false),
+                TTestHelper::TColumnSchema().SetName("int").SetTypeInfo(NScheme::NTypeIds::Int64),
+                TTestHelper::TColumnSchema().SetName("dec").SetTypeInfo(NScheme::NTypeIds::Decimal),
             };
             TestTable.SetName("/Root/Table1").SetPrimaryKey({ "id" }).SetSharding({ "id" }).SetSchema(Schema);
             TestHelper.CreateTable(TestTable);
@@ -68,9 +68,9 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
 
         void PrepareTable2() {
             Schema = {
-                TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-                TTestHelper::TColumnSchema().SetName("table1_id").SetType(NScheme::NTypeIds::Int64),
-                TTestHelper::TColumnSchema().SetName("dec").SetType(NScheme::NTypeIds::Decimal),
+                TTestHelper::TColumnSchema().SetName("id").SetTypeInfo(NScheme::NTypeIds::Int32).SetNullable(false),
+                TTestHelper::TColumnSchema().SetName("table1_id").SetTypeInfo(NScheme::NTypeIds::Int64),
+                TTestHelper::TColumnSchema().SetName("dec").SetTypeInfo(NScheme::NTypeIds::Decimal),
             };
             TestTable.SetName("/Root/Table2").SetPrimaryKey({ "id" }).SetSharding({ "id" }).SetSchema(Schema);
             TestHelper.CreateTable(TestTable);

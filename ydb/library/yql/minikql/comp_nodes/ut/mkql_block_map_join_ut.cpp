@@ -983,11 +983,44 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinMoreTest) {
     }
 
     Y_UNIT_TEST(TestLeftOn1) {
+        TSetup<false> setup;
+        // 1. Make input for the "left" flow.
         TVector<ui64> keyInit(testSize);
         std::fill(keyInit.begin(), keyInit.end(), 1);
-        const auto leftFlow = MakeFillTKSV(keyInit, 1001, threeLetterValues);
+        TVector<ui64> subkeyInit;
+        TVector<TString> valueInit;
+        for (size_t i = 0; i < keyInit.size(); i++) {
+            subkeyInit.push_back(i * 1001);
+            valueInit.push_back(threeLetterValues[i]);
+        }
+        // 2. Make input for the "right" dict.
         TKSWMap rightMap = {{1, hugeString}};
-        TestBlockJoinWithRightOnUint64(EJoinKind::Left, leftFlow, rightMap);;
+        // 3. Make "expected" data.
+        TVector<ui64> keyExpected;
+        TVector<ui64> subkeyExpected;
+        TVector<TString> valueExpected;
+        TVector<std::optional<TString>> rightExpected;
+        for (size_t i = 0; i < keyInit.size(); i++) {
+            keyExpected.push_back(keyInit[i]);
+            subkeyExpected.push_back(subkeyInit[i]);
+            valueExpected.push_back(valueInit[i]);
+            const auto& found = rightMap.find(keyInit[i]);
+            if (found != rightMap.cend()) {
+                rightExpected.push_back(found->second);
+            } else {
+                rightExpected.push_back(std::nullopt);
+            }
+        }
+        // 4. Convert input and expected TVectors to List<UV>.
+        const auto [leftType, leftList] = ConvertVectorsToTuples(setup,
+            keyInit, subkeyInit, valueInit);
+        const auto [expectedType, expected] = ConvertVectorsToTuples(setup,
+            keyExpected, subkeyExpected, valueExpected, rightExpected);
+        // 5. Build "right" computation node.
+        const auto rightMapNode = MakeDict(*setup.PgmBuilder, rightMap);
+        // 6. Run tests.
+        RunTestBlockJoin(setup, EJoinKind::Left, expectedType, expected,
+                         rightMapNode, leftType, leftList, {0});
     }
 
     Y_UNIT_TEST(TestLeftMultiOn1) {

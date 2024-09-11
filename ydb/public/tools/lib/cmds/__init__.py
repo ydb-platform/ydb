@@ -17,7 +17,7 @@ from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.harness.daemon import Daemon
 from ydb.tests.library.harness.util import LogLevels
-from ydb.tests.library.harness.kikimr_port_allocator import KikimrFixedPortAllocator, KikimrFixedNodePortAllocator
+from ydb.tests.library.harness.kikimr_port_allocator import KikimrFixedPortAllocator
 from library.python.testing.recipe import set_env
 
 

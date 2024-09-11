@@ -144,12 +144,11 @@ class TestSetupForStability(object):
 
         log_file = "/Berkanavt/nemesis/log/statistics_workload.log"
         test_path = "/Berkanavt/nemesis/bin/statistics_workload"
-
-        for node_id, node in enumerate(self.kikimr_cluster.nodes.values()):
-            node.ssh_command(
-                f'screen -d -m bash -c "while true; do sudo {test_path} --database /Root/db1 --log_file {log_file} ; done"',
-                raise_on_error=True
-            )
+        node = list(self.kikimr_cluster.nodes.values())[0]
+        node.ssh_command(
+            f'screen -d -m bash -c "while true; do sudo {test_path} --database /Root/db1 --log_file {log_file} ; done"',
+            raise_on_error=True
+        )
         sleep_time_min = 90
 
         logger.info('Sleeping for {} minute(s)'.format(sleep_time_min))

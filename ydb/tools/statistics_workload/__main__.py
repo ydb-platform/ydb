@@ -198,7 +198,7 @@ if __name__ == '__main__':
     parser.add_argument('--duration', default=120, type=lambda x: int(x), help='A duration of workload in seconds')
     parser.add_argument('--batch_size', default=1000, help='Batch size for bulk insert')
     parser.add_argument('--batch_count', default=3, help='The number of butches to be inserted')
-    parser.add_argument('--log_file', default='', help='Append log into specified file')
+    parser.add_argument('--log_file', default=None, help='Append log into specified file')
 
     args = parser.parse_args()
 

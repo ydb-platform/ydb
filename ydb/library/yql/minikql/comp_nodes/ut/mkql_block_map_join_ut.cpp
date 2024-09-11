@@ -18,7 +18,6 @@ namespace {
 using TKSV = std::tuple<ui64, ui64, TStringBuf>;
 template <bool isMulti>
 using TKSW = std::tuple<ui64, ui64, TStringBuf, std::optional<TStringBuf>>;
-using TKSWMultiMap = TMap<std::tuple_element_t<0, TKSW<true>>, TVector<TString>>;
 template <typename TupleType>
 using TArrays = std::array<std::shared_ptr<arrow::ArrayData>, std::tuple_size_v<TupleType>>;
 
@@ -474,7 +473,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinBasicTest) {
         std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(valueInit),
             [](const auto key) { return threeLetterValues[key]; });
         // 2. Make input for the "right" dict.
-        TKSWMultiMap rightMultiMap;
+        TMap<ui64, TVector<TString>> rightMultiMap;
         for (const auto& key : fibonacci) {
             rightMultiMap[key] = {std::to_string(key), std::to_string(key * 1001)};
         }
@@ -562,7 +561,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinBasicTest) {
         std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(valueInit),
             [](const auto key) { return threeLetterValues[key]; });
         // 2. Make input for the "right" dict.
-        TKSWMultiMap rightMultiMap;
+        TMap<ui64, TVector<TString>> rightMultiMap;
         for (const auto& key : fibonacci) {
             rightMultiMap[key] = {std::to_string(key), std::to_string(key * 1001)};
         }
@@ -743,7 +742,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinMoreTest) {
             valueInit.push_back(threeLetterValues[i]);
         }
         // 2. Make input for the "right" dict.
-        TKSWMultiMap rightMultiMap = {{1, {"1", hugeString}}};
+        TMap<ui64, TVector<TString>> rightMultiMap = {{1, {"1", hugeString}}};
         // 3. Make "expected" data.
         TVector<ui64> keyExpected;
         TVector<ui64> subkeyExpected;
@@ -825,7 +824,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinMoreTest) {
             valueInit.push_back(threeLetterValues[i]);
         }
         // 2. Make input for the "right" dict.
-        TKSWMultiMap rightMultiMap = {{1, {"1", hugeString}}};
+        TMap<ui64, TVector<TString>> rightMultiMap = {{1, {"1", hugeString}}};
         // 3. Make "expected" data.
         TVector<ui64> keyExpected;
         TVector<ui64> subkeyExpected;

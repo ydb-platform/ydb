@@ -456,9 +456,8 @@ public:
     }
 
     TCommittedDataSource(const ui32 sourceIdx, const TCommittedBlob& committed, const std::shared_ptr<TSpecialReadContext>& context)
-        : TBase(sourceIdx, context, committed.GetFirstVerified(), committed.GetLastVerified(), committed.GetSnapshotDef(TSnapshot::Zero()),
-              committed.GetSnapshotDef(TSnapshot::Zero()),
-              committed.GetRecordsCount(), {}, committed.GetIsDelete())
+        : TBase(sourceIdx, context, committed.GetFirst(), committed.GetLast(), committed.GetSnapshotDef(TSnapshot::Zero()),
+              committed.GetSnapshotDef(TSnapshot::Zero()), committed.GetRecordsCount(), {}, committed.GetIsDelete())
         , CommittedBlob(committed) {
     }
 };

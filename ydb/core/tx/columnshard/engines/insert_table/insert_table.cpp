@@ -13,6 +13,7 @@ bool TInsertTable::Insert(IDbWrapper& dbTable, TInsertedData&& data) {
         dbTable.Insert(*dataPtr);
         return true;
     } else {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_insertion");
         return false;
     }
 }
@@ -39,11 +40,15 @@ TInsertionSummary::TCounters TInsertTable::Commit(
         auto* pathInfo = Summary.GetPathInfoOptional(pathId);
         // There could be commit after drop: propose, drop, plan
         if (pathInfo && pathExists(pathId)) {
+            AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "commit_insertion")("path_id", data->GetPathId())(
+                "blob_range", data->GetBlobRange().ToString());
             auto committed = data->Commit(planStep, txId);
             dbTable.Commit(committed);
 
             pathInfo->AddCommitted(std::move(committed));
         } else {
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "abort_insertion")("path_id", data->GetPathId())(
+                "blob_range", data->GetBlobRange().ToString());
             dbTable.Abort(*data);
             Summary.AddAborted(std::move(*data));
         }
@@ -58,6 +63,8 @@ void TInsertTable::Abort(IDbWrapper& dbTable, const THashSet<TInsertWriteId>& wr
     for (auto writeId : writeIds) {
         // There could be inconsistency with txs and writes in case of bugs. So we could find no record for writeId.
         if (std::optional<TInsertedData> data = Summary.ExtractInserted(writeId)) {
+            AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "abort_insertion")("path_id", data->GetPathId())(
+                "blob_range", data->GetBlobRange().ToString())("write_id", writeId);
             dbTable.EraseInserted(*data);
             dbTable.Abort(*data);
             Summary.AddAborted(std::move(*data));
@@ -108,8 +115,8 @@ bool TInsertTable::Load(NIceDb::TNiceDb& db, IDbWrapper& dbTable, const TInstant
     return dbTable.Load(*this, loadTime);
 }
 
-std::vector<TCommittedBlob> TInsertTable::Read(
-    ui64 pathId, const std::optional<ui64> lockId, const TSnapshot& reqSnapshot, const std::shared_ptr<arrow::Schema>& pkSchema) const {
+std::vector<TCommittedBlob> TInsertTable::Read(ui64 pathId, const std::optional<ui64> lockId, const TSnapshot& reqSnapshot,
+    const std::shared_ptr<arrow::Schema>& pkSchema, const TPKRangesFilter* pkRangesFilter) const {
     const TPathInfo* pInfo = Summary.GetPathInfoOptional(pathId);
     if (!pInfo) {
         return {};
@@ -120,15 +127,27 @@ std::vector<TCommittedBlob> TInsertTable::Read(
 
     for (const auto& data : pInfo->GetCommitted()) {
         if (lockId || data.GetSnapshot() <= reqSnapshot) {
+            auto start = data.GetMeta().GetFirstPK(pkSchema);
+            auto finish = data.GetMeta().GetLastPK(pkSchema);
+            AFL_VERIFY(start);
+            AFL_VERIFY(finish);
+            if (pkRangesFilter && pkRangesFilter->IsPortionInPartialUsage(*start, *finish) == TPKRangeFilter::EUsageClass::DontUsage) {
+                continue;
+            }
             result.emplace_back(TCommittedBlob(data.GetBlobRange(), data.GetSnapshot(), data.GetSchemaVersion(), data.GetMeta().GetNumRows(),
-                data.GetMeta().GetFirstPK(pkSchema), data.GetMeta().GetLastPK(pkSchema),
-                data.GetMeta().GetModificationType() == NEvWrite::EModificationType::Delete, data.GetMeta().GetSchemaSubset()));
+                *start, *finish, data.GetMeta().GetModificationType() == NEvWrite::EModificationType::Delete, data.GetMeta().GetSchemaSubset()));
         }
     }
     if (lockId) {
         for (const auto& [writeId, data] : pInfo->GetInserted()) {
-            result.emplace_back(TCommittedBlob(data.GetBlobRange(), writeId, data.GetSchemaVersion(), data.GetMeta().GetNumRows(),
-                data.GetMeta().GetFirstPK(pkSchema), data.GetMeta().GetLastPK(pkSchema),
+            auto start = data.GetMeta().GetFirstPK(pkSchema);
+            auto finish = data.GetMeta().GetLastPK(pkSchema);
+            AFL_VERIFY(start);
+            AFL_VERIFY(finish);
+            if (pkRangesFilter && pkRangesFilter->IsPortionInPartialUsage(*start, *finish) == TPKRangeFilter::EUsageClass::DontUsage) {
+                continue;
+            }
+            result.emplace_back(TCommittedBlob(data.GetBlobRange(), writeId, data.GetSchemaVersion(), data.GetMeta().GetNumRows(), *start, *finish,
                 data.GetMeta().GetModificationType() == NEvWrite::EModificationType::Delete, data.GetMeta().GetSchemaSubset()));
         }
     }

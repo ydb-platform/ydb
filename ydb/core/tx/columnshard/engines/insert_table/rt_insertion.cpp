@@ -166,8 +166,9 @@ bool TInsertionSummary::HasCommitted(const TCommittedData& data) {
 const NKikimr::NOlap::TInsertedData* TInsertionSummary::AddAborted(TInsertedData&& data, const bool load /*= false*/) {
     const TInsertWriteId writeId = data.GetInsertWriteId();
     Counters.Aborted.Add(data.BlobSize(), load);
+    AFL_VERIFY_DEBUG(!Inserted.contains(writeId));
     auto insertInfo = Aborted.emplace(writeId, std::move(data));
-    Y_ABORT_UNLESS(insertInfo.second);
+    AFL_VERIFY(insertInfo.second)("write_id", writeId);
     return &insertInfo.first->second;
 }
 
@@ -191,6 +192,7 @@ const NKikimr::NOlap::TInsertedData* TInsertionSummary::AddInserted(TInsertedDat
     const ui32 dataSize = data.BlobSize();
     const ui64 pathId = data.GetPathId();
     auto insertInfo = Inserted.emplace(writeId, std::move(data));
+    AFL_VERIFY_DEBUG(!Aborted.contains(writeId));
     if (insertInfo.second) {
         OnNewInserted(GetPathInfo(pathId), dataSize, load);
         return &insertInfo.first->second;

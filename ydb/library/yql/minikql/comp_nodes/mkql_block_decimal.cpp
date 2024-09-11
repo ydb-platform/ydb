@@ -18,10 +18,9 @@ namespace {
 
 template<typename T, typename TRight>
 struct TDecimalBlockExec {
-    NYql::NDecimal::TInt128 Do(NYql::NDecimal::TInt128 left, NYql::NDecimal::TInt128 right) const {
-        return static_cast<const T*>(this)->Do(left, right);
+    NYql::NDecimal::TInt128 Apply(NYql::NDecimal::TInt128 left, TRight right) const {
+        return static_cast<const T*>(this)->template Do<TRight>(left, right);
     }
-
 
     template<typename U>
     const U* GetScalarValue(const arrow::Scalar& scalar) const {
@@ -48,7 +47,7 @@ struct TDecimalBlockExec {
         Y_UNUSED(offset2);
         for (int64_t i = 0; i < length; ++i, ++val1Ptr, ++resPtr) {
             if (!valid1 || arrow::BitUtil::GetBit(valid1, i + offset1)) {
-                *resPtr = Do(*val1Ptr, *val2Ptr);
+                *resPtr = Apply(*val1Ptr, *val2Ptr);
                 arrow::BitUtil::SetBit(resValid, i);
             } else {
                 arrow::BitUtil::ClearBit(resValid, i);
@@ -71,7 +70,7 @@ struct TDecimalBlockExec {
         Y_UNUSED(offset1);
         for (int64_t i = 0; i < length; ++i, ++val2Ptr, ++resPtr) {
             if (!valid2 || arrow::BitUtil::GetBit(valid2, i + offset2)) {
-                *resPtr = Do(*val1Ptr, *val2Ptr);
+                *resPtr = Apply(*val1Ptr, *val2Ptr);
                 arrow::BitUtil::SetBit(resValid, i);
             } else {
                 arrow::BitUtil::ClearBit(resValid, i);
@@ -95,7 +94,7 @@ struct TDecimalBlockExec {
         for (int64_t i = 0; i < length; ++i, ++val1Ptr, ++val2Ptr, ++resPtr) {
             if ((!valid1 || arrow::BitUtil::GetBit(valid1, i + offset1)) &&
                 (!valid2 || arrow::BitUtil::GetBit(valid2, i + offset2))) {
-                *resPtr = Do(*val1Ptr, *val2Ptr);
+                *resPtr = Apply(*val1Ptr, *val2Ptr);
                 arrow::BitUtil::SetBit(resValid, i);
             } else {
                 arrow::BitUtil::ClearBit(resValid, i);
@@ -117,7 +116,7 @@ struct TDecimalBlockExec {
             std::shared_ptr<arrow::Buffer> buffer(ARROW_RESULT(arrow::AllocateBuffer(16, kernelCtx->memory_pool())));
             auto* mem = reinterpret_cast<NYql::NDecimal::TInt128*>(buffer->mutable_data());
             auto resDatum = arrow::Datum(std::make_shared<TPrimitiveDataType<NYql::NDecimal::TInt128>::TScalarResult>(buffer));
-            *mem = Do(*val1Ptr, *val2Ptr);
+            *mem = Apply(*val1Ptr, *val2Ptr);
             *res = resDatum;
         }
     
@@ -217,86 +216,30 @@ struct TDecimalBlockExec {
 };
 
 template<typename TRight>
-struct TDecimalMulBlockExec: TDecimalBlockExec<TDecimalMulBlockExec<TRight>, TRight> {
-    const NYql::NDecimal::TInt128 Bound;
-    const NYql::NDecimal::TInt128 Divider;
-
+struct TDecimalMulBlockExec: NYql::NDecimal::TDecimalMultiplicator, TDecimalBlockExec<TDecimalMulBlockExec<TRight>, TRight> {
     TDecimalMulBlockExec(
         ui8 precision,
         ui8 scale)
-        : Bound(NYql::NDecimal::GetDivider(precision))
-        , Divider(NYql::NDecimal::GetDivider(scale))
+        : NYql::NDecimal::TDecimalMultiplicator(precision, scale)
     { }
-
-    NYql::NDecimal::TInt128 Do(NYql::NDecimal::TInt128 left, NYql::NDecimal::TInt128 right) const {
-        NYql::NDecimal::TInt128 mul;
-
-        if constexpr(std::is_same_v<TRight, NYql::NDecimal::TInt128>) {
-            mul = Divider > 1 ?
-                NYql::NDecimal::MulAndDivNormalDivider(left, right, Divider):
-                NYql::NDecimal::Mul(left, right);
-        } else {
-            mul = NYql::NDecimal::Mul(left, right);
-        }
-
-        if (mul > -Bound && mul < +Bound)
-            return mul;
-
-        return NYql::NDecimal::IsNan(mul) ? NYql::NDecimal::Nan() : (mul > 0 ? +NYql::NDecimal::Inf() : -NYql::NDecimal::Inf());
-    }
 };
 
 template<typename TRight>
-struct TDecimalDivBlockExec: TDecimalBlockExec<TDecimalDivBlockExec<TRight>, TRight> {
-    const NYql::NDecimal::TInt128 Bound;
-    const NYql::NDecimal::TInt128 Divider;
-
+struct TDecimalDivBlockExec: NYql::NDecimal::TDecimalDivisor, TDecimalBlockExec<TDecimalDivBlockExec<TRight>, TRight> {
     TDecimalDivBlockExec(
         ui8 precision,
         ui8 scale)
-        : Bound(NYql::NDecimal::GetDivider(precision))
-        , Divider(NYql::NDecimal::GetDivider(scale))
+        : NYql::NDecimal::TDecimalDivisor(precision, scale)
     { }
-
-    NYql::NDecimal::TInt128 Do(NYql::NDecimal::TInt128 left, NYql::NDecimal::TInt128 right) const {
-        if constexpr (std::is_same_v<TRight, NYql::NDecimal::TInt128>) {
-            NYql::NDecimal::TInt128 div = NYql::NDecimal::MulAndDivNormalMultiplier(left, Divider, right);
-            if (div > -Bound && div < +Bound) {
-                return div;
-            }
-
-            return NYql::NDecimal::IsNan(div) ? NYql::NDecimal::Nan() : (div > 0 ? +NYql::NDecimal::Inf() : -NYql::NDecimal::Inf());
-        } else {
-            return NYql::NDecimal::Div(left, right);
-        }
-    }
 };
 
 template<typename TRight>
-struct TDecimalModBlockExec: TDecimalBlockExec<TDecimalModBlockExec<TRight>, TRight> {
-    const NYql::NDecimal::TInt128 Bound;
-    const NYql::NDecimal::TInt128 Divider;
-
+struct TDecimalModBlockExec: NYql::NDecimal::TDecimalRemainder, TDecimalBlockExec<TDecimalModBlockExec<TRight>, TRight> {
     TDecimalModBlockExec(
         ui8 precision,
         ui8 scale)
-        : Bound(NYql::NDecimal::GetDivider(precision - scale))
-        , Divider(NYql::NDecimal::GetDivider(scale))
+        : NYql::NDecimal::TDecimalRemainder(precision, scale)
     { }
-
-    NYql::NDecimal::TInt128 Do(NYql::NDecimal::TInt128 left, NYql::NDecimal::TInt128 right) const {
-        if constexpr (std::is_same_v<TRight, NYql::NDecimal::TInt128>) {
-            return NYql::NDecimal::Mod(left, right);
-        } else if constexpr (std::is_signed<TRight>::value) {
-            if (right >= +Bound || right <= -Bound)
-                return left;
-        } else {
-            if (right >= Bound)
-                return left;
-        }
-
-        return NYql::NDecimal::Mod(left, NYql::NDecimal::Mul(Divider, right));
-    }
 };
 
 template<template <typename> class TExec>

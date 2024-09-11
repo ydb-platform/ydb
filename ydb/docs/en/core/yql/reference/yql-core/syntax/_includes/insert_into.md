@@ -38,7 +38,7 @@ INSERT INTO my_stream_dst
 SELECT STREAM key FROM my_stream_src;
 ```
 
-You can specify a table on the ydb cluster as the target. The table must exist at the time you create the operation. The table schema must be compatible with the type of query result.
+You can specify a table on a {{ ydb-short-name }} cluster as the target. The table must exist at the time you create the operation. The table schema must be compatible with the type of query result.
 
 
 ```yql

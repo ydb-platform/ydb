@@ -12,7 +12,7 @@ An anonymous action can't include any parameters.
 
 ### Example
 
-```
+```yql
 DO BEGIN
     SELECT 1;
     SELECT 2 -- here and in the previous example, you might omit ';' before END

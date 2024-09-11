@@ -27,6 +27,7 @@ The `security_invoker` option must always be set to true because the default beh
 The execution context of the view's query differs from the context of the enclosing `SELECT`. It does not see previously defined `PRAGMA`s, named expressions, etc. Most importantly, users must specify the tables (or views) they select from in the view's query by their schema-qualified names. You can see in the [examples](#examples) that the absolute path like `/domain/database/path/to/underlying_table` is used to specify the table from which a view reads data. The particular context of the view's query compilation might change in the upcoming releases. {#context}
 
 If you wish to specify column names that you would like to see in the output of the view, you might do so by modifying the view's query:
+
 ```yql
 CREATE VIEW view_with_a_renamed_column WITH (security_invoker = TRUE) AS
 SELECT
@@ -35,6 +36,7 @@ FROM `/domain/database/path/to/underlying_table`;
 ```
 
 Asterisk (`*`) expansion in the view's query happens each time you read from the view. The list of columns returned by the following statement:
+
 ```yql
 /*
 CREATE VIEW view_with_an_asterisk WITH (security_invoker = TRUE) AS

@@ -89,6 +89,7 @@ Selectors represent a simple predicate language. Selectors for each label are co
 ### Simple selector
 
 The following selector will select nodes where the `label1` is equal to `value1` **and** the `label2` is equal to `value2`:
+
 ```yaml
 selector:
   label1: value1
@@ -96,6 +97,7 @@ selector:
 ```
 
 The following selector will select **ALL** nodes in the cluster, as no conditions are specified:
+
 ```yaml
 selector: {}
 ```
@@ -298,6 +300,7 @@ config:
 ## Generating final configurations {#selectors-resolve}
 
 Configurations can contain complex sets of overrides. With the [{{ ydb-short-name }} CLI](../../reference/ydb-cli/index.md), you can view the final configurations for:
+
 * specific nodes
 * sets of labels
 * all possible combinations for the current configuration

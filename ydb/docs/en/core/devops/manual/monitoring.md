@@ -1,6 +1,6 @@
 # Setting up monitoring for a local {{ ydb-short-name }} cluster
 
-This page provides instructions on how to set up monitoring for a local YDB cluster that is deployed using [Quick start](../../quickstart.md).
+This page provides instructions on how to set up monitoring for a local {{ ydb-short-name }} cluster that is deployed using [Quick start](../../quickstart.md).
 
 {{ ydb-short-name }} has multiple system health sensors. Instant sensor values are available in the web interface:
 

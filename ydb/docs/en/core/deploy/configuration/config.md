@@ -6,7 +6,7 @@ This article describes the main groups of configurable parameters in this file.
 
 ## host_configs: Typical host configurations {#host-configs}
 
-A YDB cluster consists of multiple nodes, and one or more typical server configurations are usually used for their deployment. To avoid repeating its description for each node, there is a `host_configs` section in the configuration file that lists the used configurations and assigned IDs.
+A {{ ydb-short-name }} cluster consists of multiple nodes, and one or more typical server configurations are usually used for their deployment. To avoid repeating its description for each node, there is a `host_configs` section in the configuration file that lists the used configurations and assigned IDs.
 
 ### Syntax
 
@@ -60,7 +60,7 @@ host_configs:
 
 ### Kubernetes features {#host-configs-k8s}
 
-The YDB Kubernetes operator mounts NBS disks for Storage nodes at the path `/dev/kikimr_ssd_00`. To use them, the following `host_configs` configuration must be specified:
+The {{ ydb-short-name }} Kubernetes operator mounts NBS disks for Storage nodes at the path `/dev/kikimr_ssd_00`. To use them, the following `host_configs` configuration must be specified:
 
 ```yaml
 host_configs:
@@ -70,7 +70,7 @@ host_configs:
     type: SSD
 ```
 
-The example configuration files provided with the YDB Kubernetes operator contain this section, and it does not need to be changed.
+The example configuration files provided with the {{ ydb-short-name }} Kubernetes operator contain this section, and it does not need to be changed.
 
 ## hosts: Static cluster nodes {#hosts}
 
@@ -121,11 +121,11 @@ hosts:
 
 ### Kubernetes features {#hosts-k8s}
 
-When deploying YDB with a Kubernetes operator, the entire `hosts` section is generated automatically, replacing any user-specified content in the configuration passed to the operator. All Storage nodes use `host_config_id` = `1`, for which the [correct configuration](#host-configs-k8s) must be specified.
+When deploying {{ ydb-short-name }} with a Kubernetes operator, the entire `hosts` section is generated automatically, replacing any user-specified content in the configuration passed to the operator. All Storage nodes use `host_config_id` = `1`, for which the [correct configuration](#host-configs-k8s) must be specified.
 
 ## domains_config: Cluster domain {#domains-config}
 
-This section contains the configuration of the YDB cluster root domain, including the [Blob Storage](#domains-blob) (binary object storage), [State Storage](#domains-state), and [authentication](#auth) configurations.
+This section contains the configuration of the {{ ydb-short-name }} cluster root domain, including the [Blob Storage](#domains-blob) (binary object storage), [State Storage](#domains-state), and [authentication](#auth) configurations.
 
 ### Syntax
 
@@ -178,11 +178,11 @@ Each database in the cluster is assigned at least one of the available storage p
 
 ### State Storage configuration {#domains-state}
 
-State Storage is an independent in-memory storage for variable data that supports internal YDB processes. It stores data replicas on multiple assigned nodes.
+State Storage is an independent in-memory storage for variable data that supports internal {{ ydb-short-name }} processes. It stores data replicas on multiple assigned nodes.
 
 State Storage usually does not need scaling for better performance, so the number of nodes in it must be kept as small as possible taking into account the required level of fault tolerance.
 
-State Storage availability is key for a YDB cluster because it affects all databases, regardless of which storage pools they use. To ensure fault tolerance of State Storage, its nodes must be selected to guarantee a working majority in case of expected failures.
+State Storage availability is key for a {{ ydb-short-name }} cluster because it affects all databases, regardless of which storage pools they use. To ensure fault tolerance of State Storage, its nodes must be selected to guarantee a working majority in case of expected failures.
 
 The following guidelines can be used to select State Storage nodes:
 

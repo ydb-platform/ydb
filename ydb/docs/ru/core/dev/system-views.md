@@ -81,6 +81,7 @@ SELECT
 FROM `.sys/partition_stats`
 GROUP BY Path
 ```
+
 ## Топы запросов {#top-queries}
 
 Следующие системные таблицы хранят данные для анализа потока пользовательских запросов:
@@ -238,8 +239,8 @@ FROM `.sys/query_metrics_one_minute`
 WHERE SumReadBytes > 0
 ORDER BY IntervalEnd DESC, SumReadBytes DESC
 LIMIT 100
-
 ```
+
 ## История перегруженных партиций {#top-overload-partitions}
 
 Следующие системные таблицы хранят историю моментов высокой нагрузки на отдельные партиции таблиц БД:

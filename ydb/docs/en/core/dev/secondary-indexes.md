@@ -2,7 +2,7 @@
 
 [Indexes](https://en.wikipedia.org/wiki/Database_index) are auxiliary structures within databases that help find data by certain criteria without having to search an entire database and retrieve sorted samples without actually sorting, which would require processing the entire dataset.
 
-Data in a YDB table is always sorted by the primary key. That means that retrieving any entry from the table with specified field values comprising the primary key always takes the minimum fixed time, regardless of the total number of table entries. Indexing by the primary key makes it possible to retrieve any consecutive range of entries in ascending or descending order of the primary key. Execution time for this operation depends only on the number of retrieved entries rather than on the total number of table records.
+Data in a {{ ydb-short-name }} table is always sorted by the primary key. That means that retrieving any entry from the table with specified field values comprising the primary key always takes the minimum fixed time, regardless of the total number of table entries. Indexing by the primary key makes it possible to retrieve any consecutive range of entries in ascending or descending order of the primary key. Execution time for this operation depends only on the number of retrieved entries rather than on the total number of table records.
 
 To use a similar feature with any field or combination of fields, additional indexes called **secondary indexes** can be created for them
 
@@ -14,7 +14,7 @@ This article describes the main operations with secondary indexes and gives refe
 
 A secondary index is a data schema object that can be defined when creating a table with the [`CREATE TABLE` YQL command](../yql/reference/syntax/create_table/index.md) or added to it later with the [`ALTER TABLE` YQL command](../yql/reference/syntax/alter_table.md).
 
-The [`table index add` command](../reference/ydb-cli/commands/secondary_index.md#add) is supported in the YDB CLI.
+The [`table index add` command](../reference/ydb-cli/commands/secondary_index.md#add) is supported in the {{ ydb-short-name }} CLI.
 
 Since an index contains its own data derived from table data, when creating an index on an existing table with data, an operation is performed to initially build an index. This may take a long time. This operation is executed in the background and you can keep working with the table while it's in progress. However, you can't use the new index until it's build is completed.
 
@@ -53,9 +53,9 @@ In transactional applications, such information queries are executed with pagina
 
 ## Checking the cost of queries {#cost}
 
-Any query made in a transactional application should be checked in terms of the number of I/O operations it performed in the database and how much CPU was used to run it. You should also make sure these indicators don't continuously grow as the database volume grows. YDB returns statistics required for the analysis after running each query.
+Any query made in a transactional application should be checked in terms of the number of I/O operations it performed in the database and how much CPU was used to run it. You should also make sure these indicators don't continuously grow as the database volume grows. {{ ydb-short-name }} returns statistics required for the analysis after running each query.
 
-If you use the YDB CLI, select the `--stats` option to enable printing statistics after executing the `yql` command. All YDB SDKs also contain structures with statistics returned after running a query. If you make a query in the UI, you'll see a tab with statistics next to the results tab.
+If you use the {{ ydb-short-name }} CLI, select the `--stats` option to enable printing statistics after executing the `yql` command. All {{ ydb-short-name }} SDKs also contain structures with statistics returned after running a query. If you make a query in the UI, you'll see a tab with statistics next to the results tab.
 
 ## Updating data using a secondary index {#update}
 
@@ -101,7 +101,7 @@ Currently, deleting data is possible only using a synchronous secondary index. T
 
 You can atomically replace a secondary index. This can be useful if you want your index to become [covering](../concepts/secondary_indexes.md#covering). This operation is totally transparent for your running applications: when you replace the index, the compiled queries are invalidated.
 
-To replace an existing index atomically, use the YDB CLI command [{{ ydb-cli }} table index rename](../reference/ydb-cli/commands/secondary_index.md#rename) with the  `--replace` parameter.
+To replace an existing index atomically, use the {{ ydb-short-name }} CLI command [{{ ydb-cli }} table index rename](../reference/ydb-cli/commands/secondary_index.md#rename) with the  `--replace` parameter.
 
 ## Performance of data writes to tables with secondary indexes {#write_performance}
 

@@ -4,7 +4,7 @@
 
 ### Сигнатура
 
-```
+```yql
 AsTagged(T, tagName:String)->Tagged<T,tagName>
 AsTagged(T?, tagName:String)->Tagged<T,tagName>?
 
@@ -22,7 +22,11 @@ Untag(Tagged<T, tagName>?)->T?
 Примеры сценариев использования:
 
 * Возвращение на клиент для отображения в веб-интерфейсе медиа-файлов из base64-encoded строк{% if feature_webui %}. Поддержка меток в веб-UI YQL [описана здесь](../../../interfaces/web_tagged.md){% endif %}.
+
 {% if feature_mapreduce %}
+
 * Защита на границах вызова UDF от передачи некорректных значений;
+
 {% endif %}
+
 * Дополнительные уточнения на уровне типов возвращаемых колонок.

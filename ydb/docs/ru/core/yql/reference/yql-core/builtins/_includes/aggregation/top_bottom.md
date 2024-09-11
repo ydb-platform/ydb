@@ -2,7 +2,7 @@
 
 ### Сигнатура
 
-```
+```yql
 TOP(T?, limit:Uint32)->List<T>
 TOP(T, limit:Uint32)->List<T>
 BOTTOM(T?, limit:Uint32)->List<T>
@@ -13,14 +13,14 @@ BOTTOM(T, limit:Uint32)->List<T>
 
 ### Примеры
 
-``` yql
+```yql
 SELECT
     TOP(key, 3),
     BOTTOM(value, 3)
 FROM my_table;
 ```
 
-``` yql
+```yql
 $top_factory = AggregationFactory("TOP", 3);
 $bottom_factory = AggregationFactory("BOTTOM", 3);
 
@@ -34,7 +34,7 @@ FROM my_table;
 
 ### Сигнатура
 
-```
+```yql
 TOP_BY(T1, T2, limit:Uint32)->List<T1>
 BOTTOM_BY(T1, T2, limit:Uint32)->List<T1>
 ```
@@ -45,14 +45,14 @@ BOTTOM_BY(T1, T2, limit:Uint32)->List<T1>
 
 ### Примеры
 
-``` yql
+```yql
 SELECT
     TOP_BY(value, LENGTH(value), 3),
     BOTTOM_BY(value, key, 3)
 FROM my_table;
 ```
 
-``` yql
+`` yql
 $top_by_factory = AggregationFactory("TOP_BY", 3);
 $bottom_by_factory = AggregationFactory("BOTTOM_BY", 3);
 

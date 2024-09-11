@@ -4,7 +4,7 @@ The [{{ ydb-short-name }} data source plugin](https://grafana.com/grafana/plugin
 
 ## Installation
 
-Prerequisites: the plugin requires Grafana `v9.2` or higher.
+Prerequisites: the plugin requires Grafana v9.2 or higher.
 
 Follow the Grafana's [plugin installation docs](https://grafana.com/docs/grafana/latest/plugins/installation/) to install a plugin named `ydb-grafana-datasource-plugin`.
 

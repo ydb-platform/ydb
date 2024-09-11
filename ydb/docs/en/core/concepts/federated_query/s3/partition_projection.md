@@ -4,7 +4,7 @@
 
 Assume the data in S3 ({{ objstorage-full-name }}) is stored in the following directory structure:
 
-```
+```text
 year=2021
     month=01
     month=02

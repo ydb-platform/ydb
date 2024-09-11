@@ -2,7 +2,7 @@
 
 ### Сигнатура
 
-```
+```yql
 COUNT(*)->Uint64
 COUNT(T)->Uint64
 COUNT(T?)->Uint64
@@ -14,16 +14,16 @@ COUNT(T?)->Uint64
 
 ### Примеры
 
-``` yql
+```yql
 SELECT COUNT(*) FROM my_table;
 ```
 
-``` yql
+```yql
 SELECT key, COUNT(value) FROM my_table GROUP BY key;
 ```
 {% if select_statement != "SELECT STREAM" %}
 
-``` yql
+```yql
 SELECT COUNT(DISTINCT value) FROM my_table;
 ```
 {% endif %}
@@ -32,7 +32,7 @@ SELECT COUNT(DISTINCT value) FROM my_table;
 
 ### Сигнатура
 
-```
+```yql
 MIN(T?)->T?
 MIN(T)->T?
 MAX(T?)->T?
@@ -45,7 +45,7 @@ MAX(T)->T?
 
 ### Примеры
 
-``` yql
+```yql
 SELECT MIN(value), MAX(value) FROM my_table;
 ```
 
@@ -53,7 +53,7 @@ SELECT MIN(value), MAX(value) FROM my_table;
 
 ### Сигнатура
 
-```
+```yql
 SUM(Unsigned?)->Uint64?
 SUM(Signed?)->Int64?
 SUM(Interval?)->Interval?
@@ -66,7 +66,7 @@ SUM(Decimal(N, M)?)->Decimal(35, M)?
 
 Целые числа автоматически расширяются до 64 бит, чтобы уменьшить риск переполнения.
 
-``` yql
+```yql
 SELECT SUM(value) FROM my_table;
 ```
 
@@ -74,7 +74,7 @@ SELECT SUM(value) FROM my_table;
 
 ### Сигнатура
 
-```
+```yql
 AVG(Double?)->Double?
 AVG(Interval?)->Interval?
 AVG(Decimal(N, M)?)->Decimal(N, M)?
@@ -88,7 +88,7 @@ AVG(Decimal(N, M)?)->Decimal(N, M)?
 
 ### Примеры
 
-``` yql
+```yql
 SELECT AVG(value) FROM my_table;
 ```
 
@@ -96,7 +96,7 @@ SELECT AVG(value) FROM my_table;
 
 ### Сигнатура
 
-```
+```yql
 COUNT_IF(Bool?)->Uint64?
 ```
 
@@ -108,24 +108,26 @@ COUNT_IF(Bool?)->Uint64?
 
 ### Примеры
 
-``` yql
+```yql
 SELECT
   COUNT_IF(value % 2 == 1) AS odd_count
 ```
 
 {% if select_statement != "SELECT STREAM" %}
+
 {% note info %}
 
 Если нужно посчитать число уникальных значений на строках, где выполняется условие, то в отличие от остальных агрегатных функций модификатор [DISTINCT](../../../syntax/group_by.md#distinct) тут не поможет, так как в аргументах нет никаких значений. Для получения данного результата, стоит воспользоваться в подзапросе встроенной функцией [IF](../../../builtins/basic.md#if) с двумя аргументами (чтобы в else получился `NULL`), а снаружи сделать [COUNT(DISTINCT ...)](#count) по её результату.
 
 {% endnote %}
+
 {% endif %}
 
 ## SUM_IF и AVG_IF {#sum-if}
 
 ### Сигнатура
 
-```
+```yql
 SUM_IF(Unsigned?, Bool?)->Uint64?
 SUM_IF(Signed?, Bool?)->Int64?
 SUM_IF(Interval?, Bool?)->Interval?
@@ -139,7 +141,7 @@ AVG_IF(Double?, Bool?)->Double?
 
 ### Примеры
 
-``` yql
+```yql
 SELECT
     SUM_IF(value, value % 2 == 1) AS odd_sum,
     AVG_IF(value, value % 2 == 1) AS odd_avg,
@@ -150,7 +152,7 @@ FROM my_table;
 
 ### Примеры
 
-``` yql
+```yql
 $sum_if_factory = AggregationFactory("SUM_IF");
 $avg_if_factory = AggregationFactory("AVG_IF");
 
@@ -164,7 +166,7 @@ FROM my_table;
 
 ### Сигнатура
 
-```
+```yql
 SOME(T?)->T?
 SOME(T)->T?
 ```
@@ -175,7 +177,7 @@ SOME(T)->T?
 
 ### Примеры
 
-``` yql
+```yql
 SELECT
   SOME(value)
 FROM my_table;

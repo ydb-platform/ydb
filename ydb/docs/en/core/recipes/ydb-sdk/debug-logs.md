@@ -306,7 +306,7 @@ Below are examples of code that enables logging in different {{ ydb-short-name }
   * The `com.yandex.ydb.core.grpc` logger provides information about the internal implementation of the gRPC protocol
   * The `debug` level logs all operations run over gRPC, so we recommend using it only for debugging purposes.
   * The `info` level is recommended by default
-  * On the `debug` level, the `com.yandex.ydb.table.impl` logger enables you to track the internal status of the YDB driver, including session pool health.
+  * On the `debug` level, the `com.yandex.ydb.table.impl` logger enables you to track the internal status of the {{ ydb-short-name }} driver, including session pool health.
   * On the `debug` level, the `com.yandex.ydb.table.SessionRetryContext` logger will inform you of the number of retries, results of executed queries, execution time of specific retries, and the total operation execution time
   * On the `debug` level, the `com.yandex.ydb.table.Session` logger gives you details about the query text, response status, and execution time of specific operations within the session
 
@@ -351,7 +351,7 @@ Below are examples of code that enables logging in different {{ ydb-short-name }
 - PHP
 
   For logging purposes, you need to use a class, that implements `\Psr\Log\LoggerInterface`.
-  YDB-PHP-SDK has build-in loggers in `YdbPlatform\Ydb\Logger` namespace:
+  `ydb-php-sdk` has build-in loggers in `YdbPlatform\Ydb\Logger` namespace:
 
   * `NullLogger` - default logger, which writes nothing
   * `SimpleStdLogger($level)` - logger, which writes to logs in stderr.

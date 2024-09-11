@@ -29,4 +29,3 @@ SELECT *
       ON t1.uploaded_user_id == t2.user_id
       WHERE t2.name == userName;
   ```
-

@@ -4,7 +4,7 @@
 
 ### Сигнатура
 
-```
+```yql
 ByteAt(String, Uint32)->Uint8
 ByteAt(String?, Uint32)->Uint8?
 

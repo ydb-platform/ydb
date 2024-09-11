@@ -75,9 +75,13 @@ In the previous example, we used `WHERE` – an optional parameter for filtering
 #|
 || `HAVING` + `GROUP BY` | `HAVING` + `WHERE` + `GROUP BY` ||
 ||
+
 {% include [select_having_group_by](../_includes/statements/select/select_having_group_by.md) %}
+
 |
+
 {% include [select_having_where_group_by](../_includes/statements/select/select_having_where_group_by.md) %}
+
 ||
 |#
 

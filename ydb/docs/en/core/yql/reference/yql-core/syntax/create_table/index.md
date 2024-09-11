@@ -130,13 +130,14 @@ By default, if the `STORE` parameter is not specified, a row-oriented table is c
 
 {% if feature_column_container_type == true %}
 
-For non-key columns, any data types are allowed, whereas for key columns only [primitive](../../types/primitive.md) types are permitted. When specifying complex types (for example, List<String>), the type should be enclosed in double quotes.
+For non-key columns, any data types are allowed, whereas for key columns only [primitive](../../types/primitive.md) types are permitted. When specifying complex types (for example, `List<String>`), the type should be enclosed in double quotes.
 
 {% else %}
 
 For both key and non-key columns, only [primitive](../../types/primitive.md) data types are allowed.
 
 {% endif %}
+
 {% if feature_not_null == true %}
 
 Without additional modifiers, a column acquires an [optional](../../types/optional.md) type and allows `NULL` values. To designate a non-optional type, use the `NOT NULL` constraint.

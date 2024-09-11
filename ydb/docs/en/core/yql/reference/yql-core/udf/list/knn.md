@@ -117,7 +117,7 @@ If both arguments are `Tagged`, tag values should match, or the query will raise
 
 Example:
 
-```
+```text
 Error: Failed to find UDF function: Knn.CosineDistance, reason: Error: Module: Knn, function: CosineDistance, error: Arguments should have same tags, but 'FloatVector' is not equal to 'Uint8Vector'
 ```
 
@@ -145,7 +145,9 @@ $vector = [1.f, 2.f, 3.f, 4.f];
 UPSERT INTO Facts (id, user, fact, embedding)
 VALUES (123, "Williams", "Full name is John Williams", Untag(Knn::ToBinaryStringFloat($vector), "FloatVector"));
 ```
+
 {% else %}
+
 ### Data declaration
 
 ```yql
@@ -159,11 +161,13 @@ $facts = AsList(
     ),
 );
 ```
+
 {% endif %}
 
 ### Exact search of K nearest vectors
 
 {% if backend_name == "YDB" %}
+
 ```yql
 $K = 10;
 $TargetEmbedding = Knn::ToBinaryStringFloat([1.2f, 2.3f, 3.4f, 4.5f]);
@@ -173,7 +177,9 @@ WHERE user="Williams"
 ORDER BY Knn::CosineDistance(embedding, $TargetEmbedding)
 LIMIT $K;
 ```
+
 {% else %}
+
 ```yql
 $K = 10;
 $TargetEmbedding = Knn::ToBinaryStringFloat([1.2f, 2.3f, 3.4f, 4.5f]);
@@ -183,11 +189,13 @@ WHERE user="Williams"
 ORDER BY Knn::CosineDistance(embedding, $TargetEmbedding)
 LIMIT $K;
 ```
+
 {% endif %}
 
 ### Exact search of vectors in radius R
 
 {% if backend_name == "YDB" %}
+
 ```yql
 $R = 0.1f;
 $TargetEmbedding = Knn::ToBinaryStringFloat([1.2f, 2.3f, 3.4f, 4.5f]);
@@ -195,7 +203,9 @@ $TargetEmbedding = Knn::ToBinaryStringFloat([1.2f, 2.3f, 3.4f, 4.5f]);
 SELECT * FROM Facts
 WHERE Knn::CosineDistance(embedding, $TargetEmbedding) < $R;
 ```
+
 {% else %}
+
 ```yql
 $R = 0.1f;
 $TargetEmbedding = Knn::ToBinaryStringFloat([1.2f, 2.3f, 3.4f, 4.5f]);
@@ -203,6 +213,7 @@ $TargetEmbedding = Knn::ToBinaryStringFloat([1.2f, 2.3f, 3.4f, 4.5f]);
 SELECT * FROM AS_TABLE($facts)
 WHERE Knn::CosineDistance(embedding, $TargetEmbedding) < $R;
 ```
+
 {% endif %}
 
 ## Approximate search examples
@@ -232,6 +243,7 @@ $vector = [1.f, 2.f, 3.f, 4.f];
 UPSERT INTO Facts (id, user, fact, embedding, embedding_bit)
 VALUES (123, "Williams", "Full name is John Williams", Untag(Knn::ToBinaryStringFloat($vector), "FloatVector"), Untag(Knn::ToBinaryStringBit($vector), "BitVector"));
 ```
+
 {% else %}
 ### Data declaration
 
@@ -272,11 +284,13 @@ SELECT ListMap($FloatList, $MapInt8);
 ### Approximate search of K nearest vectors: bit quantization
 
 Approximate search algorithm:
+
 * an approximate search is performed using bit quantization;
 * an approximate list of vectors is obtained;
 * we search this list without using quantization.
 
 {% if backend_name == "YDB" %}
+
 ```yql
 $K = 10;
 $Target = [1.2f, 2.3f, 3.4f, 4.5f];
@@ -292,7 +306,9 @@ WHERE id IN $Ids
 ORDER BY Knn::CosineDistance(embedding, $TargetEmbeddingFloat)
 LIMIT $K;
 ```
+
 {% else %}
+
 ```yql
 $K = 10;
 $Target = [1.2f, 2.3f, 3.4f, 4.5f];
@@ -308,4 +324,5 @@ WHERE id IN $Ids
 ORDER BY Knn::CosineDistance(embedding, $TargetEmbeddingFloat)
 LIMIT $K;
 ```
+
 {% endif %}

@@ -2,7 +2,7 @@
 
 ### Сигнатура
 
-```
+```yql
 BOOL_AND(Bool?)->Bool?
 BOOL_OR(Bool?)->Bool?
 BOOL_XOR(Bool?)->Bool?
@@ -16,7 +16,7 @@ BOOL_XOR(Bool?)->Bool?
 
 ### Примеры
 
-``` yql
+```yql
 SELECT
   BOOL_AND(bool_column),
   BOOL_OR(bool_column),
@@ -30,7 +30,7 @@ FROM my_table;
 
 ### Примеры
 
-``` yql
+```yql
 SELECT
     BIT_XOR(unsigned_numeric_value)
 FROM my_table;

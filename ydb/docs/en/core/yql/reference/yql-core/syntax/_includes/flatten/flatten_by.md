@@ -7,12 +7,14 @@ Converts rows in the source table using vertical unpacking of [containers](../..
 For example:
 
 * Source table:
+
   |[a, b, c]|1|
   | --- | --- |
   |[d]|2|
   |[]|3|
 
 * The table resulting from `FLATTEN BY` on the left column:
+
   |a|1|
   | --- | --- |
   |b|1|
@@ -27,7 +29,7 @@ For example:
 
 ### Example
 
-```(sql)
+```yql
 $sample = AsList(
     AsStruct(AsList('a','b','c') AS value, CAST(1 AS Uint32) AS id),
     AsStruct(AsList('d') AS value, CAST(2 AS Uint32) AS id),
@@ -40,8 +42,11 @@ SELECT value, id FROM as_table($sample) FLATTEN BY (value);
 This conversion can be convenient in the following cases:
 
 * When it is necessary to output statistics by cells from a container column (for example, via [`GROUP BY`](../../group_by.md)).
+
 {% if feature_join %}
+
 * When the cells in a container column store IDs from another table that you want to join with [`JOIN`](../../join.md).
+
 {% endif %}
 
 ### Syntax

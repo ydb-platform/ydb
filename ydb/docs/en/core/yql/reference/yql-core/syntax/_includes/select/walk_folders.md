@@ -19,10 +19,13 @@ Optional named parameters:
 
 1. RootAttributes (`String`) — a string containing a list of desired meta-attributes separated by semicolons (e.g., `"schema;row_count"`). Default is `""`.
 1. PreHandler — a lambda function that is called for the list of descendants of the current directory after the `List` operation. It takes a list of nodes, the current state, the current traversal depth, and returns the next state.
+
     Signature: `(List<Struct<'Path':String, 'Type':String, 'Attributes':Yson>>, TypeOf(InitialState), Int32) —> TypeOf(InitialState)`
     TypeOf(InitialState) — the inferred type of InitialState.
     Default implementation: `($nodes, $state, $level) —> ($state)`.
+
 1. ResolveHandler — a lambda function that is called after `PreHandler`, which takes the list of descendant links of the current directory, the current state, the list of requested attributes for the parent directory, and the current traversal depth. It returns a `Tuple<List<Tuple<String,String>>, TypeOf(InitialState)>` — a tuple of the list of links to be visited with the requested meta-attributes and the next state. If a link is broken, `WalkFolders` will ignore it, so you don't need to check for this in the handler.
+
     Signature: `(List<Struct<'Path':String, 'Type':String, 'Attributes':Yson>>, TypeOf(InitialState), List<String>, Int32) -> Tuple<List<Tuple<String,String>>, TypeOf(InitialState)>`.
     Default implementation:
 
@@ -33,8 +36,11 @@ Optional named parameters:
         return ($linksToVisit, $state);
         }
     ```
+
 1. DiveHandler — a lambda function that is called after `ResolveHandler`. It takes the list of descendant directories of the current directory, the current state, the list of requested attributes for the parent directory, and the current traversal depth. It returns a `Tuple<List<Tuple<String,String>>, TypeOf(InitialState)>` — a tuple of the list of directories to visit (after processing the current directory) with the requested meta-attributes and the next state. The obtained paths are placed in the traversal queue.
+
     Signature: `(List<Struct<'Path':String, 'Type':String, 'Attributes':Yson>>, TypeOf(InitialState), List<String>, Int32) -> Tuple<List<Tuple<String,String>>, TypeOf(InitialState)>`.
+
     Default implementation:
 
     ```yql
@@ -44,7 +50,9 @@ Optional named parameters:
         return ($nodesToDive, $state);
         }
     ```
+
 1. PostHandler — a lambda function that is called after `DiveHandler`. It takes the list of descendants of the current directory after resolving links, the current state, and the current traversal depth.
+
     Signature: `(List<Struct<'Path':String, 'Type':String, 'Attributes':Yson>>, TypeOf(InitialState), Int32) -> TypeOf(InitialState)`.
     Default implementation: `($nodes, $state, $level) -> ($state)`
 
@@ -96,6 +104,7 @@ FROM WalkFolders(`initial_folder`, $initialTimestamp, "creation_time" AS RootAtt
 ```
 
 **Recursively collect the paths** of all tables up to 2 levels deep from the `initial_folder`:
+
 ```yql
 $diveHandler = ($nodes, $state, $attrList, $level) -> {
     $paths = ListExtract($nodes, "Path");
@@ -130,7 +139,6 @@ SELECT
 FROM WalkFolders(`initial_folder`, $diveHandler AS DiveHandler, $postHandler AS PostHandler);
 
 ```
-
 
 **Recursively collect the paths** of all broken (destination path does not exist) links from the `initial_folder`:
 
@@ -169,8 +177,8 @@ $serializedYsonNodes =
 
 SELECT
     ListMap(String::SplitToList($serializedYsonNodes, "\n", true AS SkipEmpty), ($str) -> (Yson::Parse($str)));
-
 ```
+
 **Pagination of WalkFolders results**. Skip the first 200 paths, then collect 100 from `initial_folder`:
 
 ```yql
@@ -182,7 +190,7 @@ $diveHandler = ($nodes, $state, $reqAttrs, $_) -> {
     $pathsWithReqAttrs = ListMap($paths, ($x) -> (($x, $reqAttrs)));
 
     $_, $collectedPaths = $state;
-    -- заканчиваем обход, если набрали необходимое число узлов
+    -- finish traversal if the necessary number of items has been found
     $nextToVisit =  IF(
         ListLength($collectedPaths) > $take,
         [],
@@ -208,5 +216,5 @@ $initialState = (0ul, ListCreate(String));
 $walkFoldersRes = SELECT * FROM WalkFolders(`initial_folder`, $initialState, $diveHandler AS DiveHandler, $postHandler AS PostHandler);
 
 $_, $paths = Unwrap($walkFoldersRes);
-select $paths;
+SELECT $paths;
 ```

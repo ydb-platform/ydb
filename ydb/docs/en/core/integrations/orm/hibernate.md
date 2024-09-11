@@ -162,7 +162,7 @@ CREATE TABLE Groups (
 
 ALTER TABLE Groups
   ADD INDEX group_name_index GLOBAL
-       ON (GroupName);
+    ON (GroupName);
 ```
 
 If you evolve the Group entity by adding the `deparment` field:

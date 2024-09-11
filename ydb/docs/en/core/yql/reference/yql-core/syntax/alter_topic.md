@@ -32,6 +32,7 @@ ALTER TOPIC `my_topic` ADD CONSUMER new_consumer2 WITH (important = false);
 * `read_from`: Sets up the message write time starting from which the consumer will receive data. Data written before this time will not be read. Value type: `Datetime` OR `Timestamp` OR `integer` (unix-timestamp in the numeric format). Default value: `now`.
 
 {% if feature_topic_codecs %}
+
 * `supported_codecs`: List of [codecs](../../../../concepts/topic#message-codec) supported by the consumer.
 
 {% endif %}
@@ -53,9 +54,11 @@ ALTER TOPIC `topic_name` ALTER CONSUMER consumer_name consumer_action;
 ```
 
 Supports the following types of `consumer_action`:
+
 * `SET`: Sets consumer settings
 
 {% if feature_topic_settings_reset %}
+
 * `RESET`: Resets consumer settings to defaults.
 
 {% endif %}
@@ -67,6 +70,7 @@ ALTER TOPIC `my_topic` ALTER CONSUMER my_consumer SET (important = true);
 ```
 
 {% if feature_topic_settings_reset %}
+
 This example will reset `read_from` to default.
 
 ```yql
@@ -133,6 +137,7 @@ ALTER TOPIC `my_topic` RESET (
 * `metering_mode`: Resource metering mode (`RESERVED_CAPACITY` - based on the allocated resources or `REQUEST_UNITS` - based on actual usage). This option applies to topics in serverless databases. Value type: `String`.
 
 {% if feature_topic_codecs %}
+
 * `supported_codecs`: List of [codecs](../../../../concepts/topic#message-codec) supported by the topic. Value type: `String`.
 
 {% endif %}

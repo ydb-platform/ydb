@@ -2,7 +2,7 @@
 
 ### Сигнатура
 
-```
+```yql
 MAX_BY(T1?, T2)->T1?
 MAX_BY(T1, T2)->T1?
 MAX_BY(T1, T2, limit:Uint64)->List<T1>?
@@ -33,14 +33,14 @@ MIN_BY(T1, T2, limit:Uint64)->List<T1>?
 
 ### Примеры
 
-``` yql
+```yql
 SELECT
   MIN_BY(value, LENGTH(value)),
   MAX_BY(value, key, 100)
 FROM my_table;
 ```
 
-``` yql
+```yql
 $min_by_factory = AggregationFactory("MIN_BY");
 $max_by_factory = AggregationFactory("MAX_BY", 100);
 

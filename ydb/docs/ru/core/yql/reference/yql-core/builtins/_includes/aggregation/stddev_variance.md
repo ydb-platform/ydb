@@ -2,7 +2,7 @@
 
 ### Сигнатура
 
-```
+```yql
 STDDEV(Double?)->Double?
 STDDEV_POPULATION(Double?)->Double?
 POPULATION_STDDEV(Double?)->Double?
@@ -29,7 +29,7 @@ VARIANCE_SAMPLE(Double?)->Double?
 
 ### Примеры
 
-``` yql
+```yql
 SELECT
   STDDEV(numeric_column),
   VARIANCE(numeric_column)

@@ -33,8 +33,7 @@ For the full list of available settings, [see the table below](../../pragma.md#p
 
 ### Scope {#pragmascope}
 
-Unless otherwise specified, a pragma affects all the subsequent expressions up to the end of the module where it's used.
-If necessary and logically possible, you can change the value of this setting several times within a given query to make it different at different execution steps.
-There are also special scoped pragmas with the scope defined by the same rules as the scope of [named expressions](../../expressions.md#named-nodes).
-Unlike scoped pragmas, regular pragmas can only be used in the global scope (not inside lambda functions, ACTION{% if feature_subquery %}, SUBQUERY{% endif %}, etc.).
+Unless otherwise specified, a pragma affects all the subsequent expressions up to the end of the module where it's used. If necessary and logically possible, you can change the value of this setting several times within a given query to make it different at different execution steps.
+
+There are also special scoped pragmas with the scope defined by the same rules as the scope of [named expressions](../../expressions.md#named-nodes). Unlike scoped pragmas, regular pragmas can only be used in the global scope (not inside lambda functions, `ACTION`{% if feature_subquery %}, `SUBQUERY`{% endif %}, etc.).
 

@@ -4,7 +4,7 @@
 
 ### Сигнатуры
 
-```
+```yql
 TestBit(T, Uint8)->Bool
 TestBit(T?, Uint8)->Bool?
 
@@ -27,7 +27,7 @@ TestBit возвращает `true/false`. Остальные функции в�
 
 ### Примеры
 
-``` yql
+```yql
 SELECT
     TestBit(1u, 0), -- true
     SetBit(8u, 0); -- 9

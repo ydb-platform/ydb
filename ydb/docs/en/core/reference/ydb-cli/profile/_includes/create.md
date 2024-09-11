@@ -52,10 +52,10 @@ Where:
 - `<connection options>` are optional [connection parameters](../../connect.md#command-line-pars) to be written to the profile.
 - `<reset options>` are optional settings for deleting parameters from an existing profile. Possible values:
 
-   `--no-endpoint`: Delete an endpoint from the profile
-   `--no-database`: Delete the database path from the profile
-   `--no-auth`: Delete authentication information from the profile
-   `--no-iam-endpoint`: Delete the IAM server URL
+   - `--no-endpoint`: Delete an endpoint from the profile
+   - `--no-database`: Delete the database path from the profile
+   - `--no-auth`: Delete authentication information from the profile
+   - `--no-iam-endpoint`: Delete the IAM server URL
 
 The profile will update with the parameters entered on the command line. Any properties not listed on the command line will remain unchanged.
 

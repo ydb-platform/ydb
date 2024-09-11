@@ -1,14 +1,15 @@
 # Lexical structure
 
-The {% if feature_mapreduce %}program{% else %}query{% endif %} in the YQL language is a valid UTF-8 text consisting of _commands_ (statements) separated by semicolons (`;`).
+The {% if feature_mapreduce %}program{% else %}query{% endif %} in the YQL language is a valid UTF-8 text consisting of **statements** separated by semicolons (`;`).
 The last semicolon can be omitted.
-Each command is a sequence of _tokens_ that are valid for this command.
-Tokens can be _keywords_, _IDs_, _literals_, and so on.
-Tokens are separated by whitespace characters (space, tab, line feed) or _comments_. The comment is not a part of the command and is syntactically equivalent to a space character.
+Each command is a sequence of **tokens** that are valid for this command.
+Tokens can be **keywords**, **identifiers**, **literals**, and so on.
+Tokens are separated by whitespace characters (space, tab, line feed) or **comments**. The comment is not a part of the command and is syntactically equivalent to a space character.
 
 ## Syntax compatibility modes {#lexer-modes}
 
 Two syntax compatibility modes are supported:
+
 * Advanced C++ (default)
 * ANSI SQL
 
@@ -20,7 +21,7 @@ Specifics of interpretation of lexical elements in different compatibility modes
 
 The following types of comments are supported:
 
-* Single-line comment: starts with `--` (two minus characters _following one another_) and continues to the end of the line
+* Single-line comment: starts with `--` (two minus characters following one another) and continues to the end of the line
 * Multiline comment: starts with `/*` and ends with `*/`
 
 ```yql
@@ -29,7 +30,7 @@ SELECT 1; -- A single-line comment
    Some multi-line comment
 */
 ```
-In C++ syntax compatibility mode (default), a multiline comment ends with the _nearest_ `*/`.
+In C++ syntax compatibility mode (default), a multiline comment ends with the **nearest** `*/`.
 The ANSI SQL syntax compatibility mode accounts for nesting of multiline comments:
 
 ```yql
@@ -141,11 +142,13 @@ What's important is that SQL hints are hints for an optimizer, so:
 ## String literals {#string-literals}
 
 A string literal (constant) is expressed as a sequence of characters enclosed in single quotes. Inside a string literal, you can use the C-style escaping rules:
+
 ```yql
 SELECT 'string with\n newline, \x0a newline and \' backtick ';
 ```
 
 In the C++ syntax compatibility mode (default), you can use double quotes instead of single quotes:
+
 ```yql
 SELECT "string with\n newline, \x0a newline and \" backtick ";
 ```

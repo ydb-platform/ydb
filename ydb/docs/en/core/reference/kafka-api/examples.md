@@ -177,7 +177,7 @@ The data in Kafka Connect is handled by worker processes.
 
 {% note warning %}
 
-Kafka Connect instances for working with YDB should only be deployed in standalone mode. YDB does not support Kafka Connect in distributed mode.
+Kafka Connect instances for working with {{ ydb-short-name }} should only be deployed in standalone mode. {{ ydb-short-name }} does not support Kafka Connect in distributed mode.
 
 {% endnote %}
 
@@ -239,7 +239,7 @@ For more information about Kafka Connect and its configuration, see the [Apache 
     offset.storage.file.filename=/etc/kafka-connect-worker/worker.offset
     ```
 
-1. Create a FileSink connector settings file `/etc/kafka-connect-worker/file-sink.properties` to move data from YDB topics to a file:
+1. Create a FileSink connector settings file `/etc/kafka-connect-worker/file-sink.properties` to move data from {{ ydb-short-name }} topics to a file:
 
     ```ini
     name=local-file-sink
@@ -322,7 +322,7 @@ poll.interval.ms=1000
 validate.non.null=false
 ```
 
-#### From YDB to S3
+#### From {{ ydb-short-name }} to S3
 
 Sample S3Sink connector `/etc/kafka-connect-worker/s3-sink.properties` settings file for moving data from a topic to S3. The [Aiven's S3 Sink Connector for Apache Kafka](https://github.com/Aiven-Open/s3-connector-for-apache-kafka) is used.
 

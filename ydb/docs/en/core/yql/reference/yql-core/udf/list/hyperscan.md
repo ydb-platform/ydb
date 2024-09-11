@@ -8,14 +8,14 @@ By default, all functions work in the single-byte mode. However, if the regular 
 
 ## List of functions
 
-* ```Hyperscan::Grep(pattern:String) -> (string:String?) -> Bool```
-* ```Hyperscan::Match(pattern:String) -> (string:String?) -> Bool```
-* ```Hyperscan::BacktrackingGrep(pattern:String) -> (string:String?) -> Bool```
-* ```Hyperscan::BacktrackingMatch(pattern:String) -> (string:String?) -> Bool```
-* ```Hyperscan::MultiGrep(pattern:String) -> (string:String?) -> Tuple<Bool, Bool, ...>```
-* ```Hyperscan::MultiMatch(pattern:String) -> (string:String?) -> Tuple<Bool, Bool, ...>```
-* ```Hyperscan::Capture(pattern:String) -> (string:String?) -> String?```
-* ```Hyperscan::Replace(pattern:String) -> (string:String?, replacement:String) -> String?```
+* `Hyperscan::Grep(pattern:String) -> (string:String?) -> Bool`
+* `Hyperscan::Match(pattern:String) -> (string:String?) -> Bool`
+* `Hyperscan::BacktrackingGrep(pattern:String) -> (string:String?) -> Bool`
+* `Hyperscan::BacktrackingMatch(pattern:String) -> (string:String?) -> Bool`
+* `Hyperscan::MultiGrep(pattern:String) -> (string:String?) -> Tuple<Bool, Bool, ...>`
+* `Hyperscan::MultiMatch(pattern:String) -> (string:String?) -> Tuple<Bool, Bool, ...>`
+* `Hyperscan::Capture(pattern:String) -> (string:String?) -> String?`
+* `Hyperscan::Replace(pattern:String) -> (string:String?, replacement:String) -> String?`
 
 ## Call syntax {#syntax}
 
@@ -26,7 +26,11 @@ $re = Hyperscan::Grep("\\d+");      -- create a callable value to match a specif
 SELECT * FROM table WHERE $re(key); -- use it to filter the table
 ```
 
-**Please note** escaping of special characters in regular expressions. Be sure to use the second slash, since all the standard string literals in SQL can accept C-escaped strings, and the `\d` sequence is not valid sequence (even if it were, it wouldn't search for numbers as intended).
+{% note info %}
+
+Please note escaping of special characters in regular expressions. Be sure to use the second slash, since all the standard string literals in SQL can accept C-escaped strings, and the `\d` sequence is not valid sequence (even if it were, it wouldn't search for numbers as intended).
+
+{% endnote %}
 
 You can enable the case-insensitive mode by specifying, at the beginning of the regular expression, the flag `(?i)`.
 

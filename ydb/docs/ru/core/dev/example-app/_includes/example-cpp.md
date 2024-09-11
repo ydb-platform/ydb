@@ -63,7 +63,7 @@
 
 Приведенный фрагмент кода при запуске выводит на консоль текст:
 
-```bash
+```text
 > Describe table: series
 Column, name: series_id, type: Uint64
 Column, name: title, type: Utf8?
@@ -202,7 +202,7 @@ static TStatus SelectWithParamsTransaction(TSession session, const TString& path
 
 Приведенный фрагмент кода при запуске выводит на консоль текст:
 
-```bash
+```text
 > SelectWithParams:
 Season, title: Season 3, series title: Silicon Valley
 Finished preparing query: PreparedSelectTransaction
@@ -266,7 +266,7 @@ static TStatus PreparedSelectTransaction(TSession session, const TString& path,
 
 Приведенный фрагмент кода при запуске выводит на консоль текст:
 
-```bash
+```text
 > PreparedSelect:
 Episode 7, title: To Build a Better Beta, Air date: Sun Jun 05, 2016
 ```
@@ -378,7 +378,7 @@ static TStatus MultiStepTransaction(TSession session, const TString& path, ui64 
 
 Приведенные фрагменты кода при запуске выводит на консоль текст:
 
-```bash
+```text
 > MultiStep:
 Episode 1, Season: 5, title: Grow Fast or Die Slow, Air date: Sun Mar 25, 2018
 Episode 2, Season: 5, title: Reorientation, Air date: Sun Apr 01, 2018

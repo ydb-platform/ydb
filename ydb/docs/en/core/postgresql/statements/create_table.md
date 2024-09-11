@@ -20,8 +20,8 @@ When creating a table, you can specify:
 6. Table's Primary Key: `PRIMARY KEY` – a mandatory condition when creating a table in YDB's PostgreSQL compatibility mode.
 7. Table-level Constraints (there can be multiple, delimited by commas): `CONSTRAINT` – this type of constraint is used as an alternative syntax to column constraints, or when the same constraint conditions need to be applied to multiple columns. To specify a constraint, you need to state:
 
-    + The keyword `CONSTRAINT`;
-    + The constraint name `<constraint name>`. The rules for creating an identifier for the constraint are the same as for table names and column names;
+    + The keyword `CONSTRAINT`.
+    + The constraint name `<constraint name>`. The rules for creating an identifier for the constraint are the same as for table names and column names.
     + The constraint. For example, a primary key constraint can be defined for a single column as `PRIMARY KEY (<column name>)` or for multiple columns as a composite key: `PRIMARY KEY (<column name1>, <column name2>, ...)`.
 
 

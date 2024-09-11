@@ -97,9 +97,9 @@ INNER JOIN b_table VIEW b_index_ref AS b ON a.ref = b.ref;
 If the statement filters data in addition to `JOIN`, we recommend wrapping the criteria that would return `true` for most of the rows in the `LIKELY(...)` function call. If your assumption that positive values prevail for the criteria is correct, such a hint might speed up your subquery. `LIKELY` can be useful when the predicate calculation is a resource-intensive operation and JOIN significantly reduces the number of rows.
 
 In front of any data source for `JOIN`, you can add the `ANY` keyword to suppress duplicate `JOIN` keys on the given side. In this case, only one row is left from the set of rows with the same `JOIN` key value (no matter which one, that's why the keyword is called `ANY`).
-This syntax is different from that used in [ClickHouse]{% if lang == "en" %}(https://clickhouse.com/docs/en/sql-reference/statements/select/join/){% endif %}{% if lang == "ru" %}(https://clickhouse.tech/docs/ru/sql-reference/statements/select/join/){% endif %}, where `ANY` is placed before the `JOIN` type and applies to the right side only.
+This syntax is different from that used in [ClickHouse](https://clickhouse.com/docs/en/sql-reference/statements/select/join/), where `ANY` is placed before the `JOIN` type and applies to the right side only.
 
-Request
+Query:
 
 ```yql
 $t1 = AsList(

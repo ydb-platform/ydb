@@ -2,7 +2,7 @@
 
 ### Сигнатура
 
-```
+```yql
 CORRELATION(Double?, Double?)->Double?
 COVARIANCE(Double?, Double?)->Double?
 COVARIANCE_SAMPLE(Double?, Double?)->Double?

@@ -2,7 +2,7 @@
 
 ### Сигнатура
 
-```
+```yql
 TOPFREQ(T [, num:Uint32 [, bufSize:Uint32]])->List<Struct<Frequency:Uint64, Value:T>>
 MODE(T [, num:Uint32 [, bufSize:Uint32]])->List<Struct<Frequency:Uint64, Value:T>>
 ```
@@ -21,7 +21,7 @@ MODE(T [, num:Uint32 [, bufSize:Uint32]])->List<Struct<Frequency:Uint64, Value:T
 
 ### Примеры
 
-``` yql
+```yql
 SELECT
     MODE(my_column),
     TOPFREQ(my_column, 5, 1000)

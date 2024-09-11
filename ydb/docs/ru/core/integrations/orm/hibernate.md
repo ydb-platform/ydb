@@ -212,7 +212,7 @@ Hibernate не предназначен для управления схемам
 
 - FetchType.LAZY
 
-```yql
+  ```yql
   SELECT
       g1_0.GroupId,
       g1_0.GroupName
@@ -233,7 +233,7 @@ Hibernate не предназначен для управления схемам
 
 - FetchType.EAGER
 
-```yql
+  ```yql
   SELECT
       g1_0.GroupId,
       g1_0.GroupName,
@@ -257,7 +257,6 @@ Hibernate не предназначен для управления схемам
 
 ```properties
 spring.jpa.properties.hibernate.dialect=tech.ydb.hibernate.dialect.YdbDialect
-
 spring.datasource.driver-class-name=tech.ydb.jdbc.YdbDriver
 spring.datasource.url=jdbc:ydb:<grpc/grpcs>://<host>:<2135/2136>/path/to/database[?saFile=file:~/sa_key.json]
 ```

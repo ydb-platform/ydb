@@ -25,7 +25,7 @@ Spring Data JDBC является частью экосистемы [Spring Data
     <dependency>
         <groupId>tech.ydb.dialects</groupId>
         <artifactId>spring-data-jdbc-ydb</artifactId>
-        <version>${spring.data.jdbc.ydb}</version> 
+        <version>${spring.data.jdbc.ydb}</version>
     </dependency>
     ```
 

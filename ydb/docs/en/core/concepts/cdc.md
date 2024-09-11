@@ -184,13 +184,16 @@ A [Debezium](https://debezium.io)-compatible JSON record structure has the follo
 ```
 
 * `op`: Operation that was performed on a row:
+
   * `c` — create. Applicable only in `NEW_AND_OLD_IMAGES` mode.
   * `u` — update.
   * `d` — delete.
   * `r` — read from [snapshot](#initial-scan).
+
 * `before`: Row snapshot before the change. Present in `OLD_IMAGE` and `NEW_AND_OLD_IMAGES` modes. Contains column names and values.
 * `after`: Row snapshot after the change. Present in `NEW_IMAGE` and `NEW_AND_OLD_IMAGES` modes. Contains column names and values.
 * `source`: Source metadata for the event.
+
   * `connector`: Connector name. Current name is `ydb`.
   * `version`: Connector version that was used to generate the record. Current version is `1.0.0`.
   * `ts_ms`: Approximate time when the change was applied, in milliseconds.

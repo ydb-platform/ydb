@@ -4,7 +4,7 @@ In S3 ({{ objstorage-full-name }}), it is possible to store very large volumes o
 
 For example, data is stored in the following directory structure:
 
-```
+```text
 year=2021
     month=01
     month=02
@@ -110,6 +110,7 @@ month=03
 ## Supported data types
 
 Partitioning is possible only with the following set of YQL data types:
+
 - Uint16, Uint32, Uint64
 - Int16, Int32, Int64
 - String, Utf8
@@ -122,7 +123,7 @@ The storage path format, where the name of each directory explicitly specifies t
 
 This format looks as follows:
 
-```
+```text
 month=01
     year=2021
     year=2022

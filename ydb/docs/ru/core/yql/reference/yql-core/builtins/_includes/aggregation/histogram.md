@@ -2,7 +2,7 @@
 
 ### Сигнатура
 
-```
+```yql
 HISTOGRAM(Double?)->HistogramStruct?
 HISTOGRAM(Double?, weight:Double)->HistogramStruct?
 HISTOGRAM(Double?, intervals:Uint32)->HistogramStruct?
@@ -25,12 +25,14 @@ HISTOGRAM(Double?, weight:Double, intervals:Uint32)->HistogramStruct?
 В случае, если передано два аргумента, смысл второго аргумента определяется по его типу (целочисленный литерал — ограничение на число корзин, в противном случае — вес).
 
 {% if tech %}
+
 ### Алгоритмы
 
 * [Оригинальный whitepaper](http://jmlr.org/papers/volume11/ben-haim10a/ben-haim10a.pdf);
 
 Доступны разные модификации алгоритма:
-``` yql
+
+```yql
 AdaptiveDistanceHistogram
 AdaptiveWeightHistogram
 AdaptiveWardHistogram
@@ -42,22 +44,22 @@ BlockWardHistogram
 
 Алгоритмы Distance, Weight и Ward отличаются формулами объединения двух точек в одну:
 
-``` c++
-    TWeightedValue CalcDistanceQuality(const TWeightedValue& left, const TWeightedValue& right) {
-        return TWeightedValue(right.first - left.first, left.first);
-    }
+```c++
+TWeightedValue CalcDistanceQuality(const TWeightedValue& left, const TWeightedValue& right) {
+    return TWeightedValue(right.first - left.first, left.first);
+}
 
-    TWeightedValue CalcWeightQuality(const TWeightedValue& left, const TWeightedValue& right) {
-        return TWeightedValue(right.second + left.second, left.first);
-    }
+TWeightedValue CalcWeightQuality(const TWeightedValue& left, const TWeightedValue& right) {
+    return TWeightedValue(right.second + left.second, left.first);
+}
 
-    TWeightedValue CalcWardQuality(const TWeightedValue& left, const TWeightedValue& right) {
-        const double N1 = left.second;
-        const double N2 = right.second;
-        const double mu1 = left.first;
-        const double mu2 = right.first;
-        return TWeightedValue(N1 * N2 / (N1 + N2) * (mu1 - mu2) * (mu1 - mu2), left.first);
-    }
+TWeightedValue CalcWardQuality(const TWeightedValue& left, const TWeightedValue& right) {
+    const double N1 = left.second;
+    const double N2 = right.second;
+    const double mu1 = left.first;
+    const double mu2 = right.first;
+    return TWeightedValue(N1 * N2 / (N1 + N2) * (mu1 - mu2) * (mu1 - mu2), left.first);
+}
 ```
 
 Чем отличается Adaptive и Block:
@@ -113,7 +115,7 @@ FROM my_table;
 
 ### Сигнатура
 
-```
+```yql
 LinearHistogram(Double?)->HistogramStruct?
 LinearHistogram(Double? [, binSize:Double [, min:Double [, max:Double]]])->HistogramStruct?
 
@@ -136,7 +138,7 @@ LogHistogram(Double? [, logBase:Double [, min:Double [, max:Double]]])->Histogra
 
 ### Примеры
 
-``` yql
+```yql
 SELECT
     LogarithmicHistogram(numeric_column, 2)
 FROM my_table;
@@ -146,7 +148,7 @@ FROM my_table;
 
 К каждому виду функции Histogram можно приписать суффикс CDF для построения кумулятивной функции распределения. Конструкции
 
-``` yql
+```yql
 SELECT
     Histogram::ToCumulativeDistributionFunction(Histogram::Normalize(<вид_функции>Histogram(numeric_column)))
 FROM my_table;
@@ -154,9 +156,10 @@ FROM my_table;
 
 и
 
-``` yql
+```yql
 SELECT
     <вид_функции>HistogramCDF(numeric_column)
 FROM my_table;
 ```
+
 полностью эквивалентны.

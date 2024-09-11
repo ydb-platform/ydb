@@ -1,8 +1,8 @@
-# Data schema versioning and migration in YDB using "goose"
+# Data schema versioning and migration in {{ ydb-short-name }} using "goose"
 
 ## Introduction
 
-[Goose](https://github.com/pressly/goose) is an open-source tool that helps to version the data schema in the database and manage migrations between these versions. Goose supports many different database management systems, including YDB. Goose uses migration files and stores the state of migrations directly in the database in a special table.
+[Goose](https://github.com/pressly/goose) is an open-source tool that helps to version the data schema in the database and manage migrations between these versions. Goose supports many different database management systems, including {{ ydb-short-name }}. Goose uses migration files and stores the state of migrations directly in the database in a special table.
 
 ## Install goose
 
@@ -18,14 +18,14 @@ $ goose <DB> <CONNECTION_STRING> <COMMAND> <COMMAND_ARGUMENTS>
 
 Where:
 
-- `<DB>` - database engine, for YDB you should write `goose ydb`
+- `<DB>` - database engine, for {{ ydb-short-name }} you should write `goose ydb`
 - `<CONNECTION_STRING>` - database connection string.
 - `<COMMAND>` - the command to be executed. A complete list of commands is available in the built-in help (`goose help`).
 - `<COMMAND_ARGUMENTS>` - command arguments.
 
-## YDB connection string
+## {{ ydb-short-name }} connection string
 
-To connect to YDB you should use a connection string like:
+To connect to {{ ydb-short-name }} you should use a connection string like:
 
 ```text
 <protocol>://<host>:<port>/<database_path>?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric
@@ -34,14 +34,14 @@ To connect to YDB you should use a connection string like:
 Where:
 
 - `<protocol>` - connection protocol (`grpc` for an unsecured connection or `grpcs` for a secure [TLS](https://en.wikipedia.org/wiki/Transport_Layer_Security) connection). The secure connection requires certificates. You should declare certificates like this: `export YDB_SSL_ROOT_CERTIFICATES_FILE=/path/to/ydb/certs/CA.pem`.
-- `<host>` - hostname for connecting to YDB cluster.
-- `<port>` - port for connecting to YDB cluster.
-- `<database_path>` - database in the YDB cluster.
-- `go_query_mode=scripting` - special `scripting` mode for executing queries by default in the YDB driver. In this mode, all requests from goose are sent to the YDB `scripting` service, which allows processing of both [DDL](https://en.wikipedia.org/wiki/Data_definition_language) and [DML](https://en.wikipedia.org/wiki/Data_manipulation_language) SQL statements.
-- `go_fake_tx=scripting` - support for transaction emulation in query execution mode through the YDB `scripting` service. The fact is that in YDB, executing `DDL` `SQL` statements in a transaction is impossible (or incurs significant overhead). In particular, the `scripting` service does not allow interactive transactions (with explicit `Begin`+`Commit`/`Rollback`). Accordingly, the transaction emulation mode does not actually do anything (`noop`) on the `Begin`+`Commit`/`Rollback` calls from `goose`. This trick can, in rare cases, cause an individual migration step to end up in an intermediate state. The YDB team is working on a new `query` service that should  eliminate this risk.
-- `go_query_bind=declare,numeric` - support for bindings of auto-inference of YQL types from query parameters (`declare`) and support for bindings of numbered parameters (`numeric`). YQL is a strongly typed language that requires you to explicitly specify the types of query parameters in the body of the `SQL` query itself using the special `DECLARE` statement. Also, YQL only supports named query parameters (for example, `$my_arg`), while the goose core generates SQL queries with numbered parameters (`$1`, `$2`, etc.) . The `declare` and `numeric` bindings modify the original queries from `goose` at the YDB driver level.
+- `<host>` - hostname for connecting to {{ ydb-short-name }} cluster.
+- `<port>` - port for connecting to {{ ydb-short-name }} cluster.
+- `<database_path>` - database in the {{ ydb-short-name }} cluster.
+- `go_query_mode=scripting` - special `scripting` mode for executing queries by default in the {{ ydb-short-name }} driver. In this mode, all requests from goose are sent to the {{ ydb-short-name }} `scripting` service, which allows processing of both [DDL](https://en.wikipedia.org/wiki/Data_definition_language) and [DML](https://en.wikipedia.org/wiki/Data_manipulation_language) SQL statements.
+- `go_fake_tx=scripting` - support for transaction emulation in query execution mode through the {{ ydb-short-name }} `scripting` service. The fact is that in {{ ydb-short-name }}, executing `DDL` `SQL` statements in a transaction is impossible (or incurs significant overhead). In particular, the `scripting` service does not allow interactive transactions (with explicit `Begin`+`Commit`/`Rollback`). Accordingly, the transaction emulation mode does not actually do anything (`noop`) on the `Begin`+`Commit`/`Rollback` calls from `goose`. This trick can, in rare cases, cause an individual migration step to end up in an intermediate state. The {{ ydb-short-name }} team is working on a new `query` service that should  eliminate this risk.
+- `go_query_bind=declare,numeric` - support for bindings of auto-inference of YQL types from query parameters (`declare`) and support for bindings of numbered parameters (`numeric`). YQL is a strongly typed language that requires you to explicitly specify the types of query parameters in the body of the `SQL` query itself using the special `DECLARE` statement. Also, YQL only supports named query parameters (for example, `$my_arg`), while the goose core generates SQL queries with numbered parameters (`$1`, `$2`, etc.) . The `declare` and `numeric` bindings modify the original queries from `goose` at the {{ ydb-short-name }} driver level.
 
-If connecting to a local YDB docker container, the connection string could look like:
+If connecting to a local {{ ydb-short-name }} docker container, the connection string could look like:
 
 ```
 grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric
@@ -114,7 +114,7 @@ And
 SELECT 'down SQL query';
 ```
 
-So that we can replace them with the real migration SQL queries for change the schema for the YDB database, which is accessible through the corresponding connection string.
+So that we can replace them with the real migration SQL queries for change the schema for the {{ ydb-short-name }} database, which is accessible through the corresponding connection string.
 
 Let's edit the migration file `<timestamp>_00001_create_table_users.sql` so that when applying the migration we create a table with necessary schema, and when rolling back the migration we delete the created table:
 
@@ -169,11 +169,11 @@ There are alternative options to see the applied changes:
 
 {% list tabs %}
 
-- Using YDB UI on http://localhost:8765
+- Using {{ ydb-short-name }} UI on http://localhost:8765
 
-  ![YDB UI after the first migration](_assets/goose-ydb-ui-after-first-migration.png =450x)
+  ![{{ ydb-short-name }} UI after the first migration](_assets/goose-ydb-ui-after-first-migration.png =450x)
 
-- Using YDB CLI
+- Using {{ ydb-short-name }} CLI
 
   ```bash
   $ ydb -e grpc://localhost:2136 -d /local scheme describe users
@@ -263,11 +263,11 @@ Let's use the same methods to see the new changes:
 
 {% list tabs %}
 
-- Using YDB UI on http://localhost:8765
+- Using {{ ydb-short-name }} UI on http://localhost:8765
 
   ![YDB UI after apply second migration](_assets/goose-ydb-ui-after-second-migration.png =450x)
 
-- Using YDB CLI
+- Using {{ ydb-short-name }} CLI
 
   ```bash
   $ ydb -e grpc://localhost:2136 -d /local scheme describe users
@@ -329,9 +329,9 @@ Let's check the changes again:
 
 {% list tabs %}
 
-- Using YDB UI on http://localhost:8765
+- Using {{ ydb-short-name }} UI on http://localhost:8765
 
-  ![YDB UI after apply first migration](_assets/goose-ydb-ui-after-first-migration.png =450x)
+  ![{{ ydb-short-name }} UI after apply first migration](_assets/goose-ydb-ui-after-first-migration.png =450x)
 
 - Using YDB CLI
 

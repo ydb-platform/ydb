@@ -1,24 +1,24 @@
 # ALTER TABLE
 
-Using the ```ALTER TABLE``` command, you can change the composition of columns and additional table parameters. You can specify several actions in one command. In general, the ```ALTER TABLE``` command looks like this:
+Using the `ALTER TABLE` command, you can change the composition of columns and additional table parameters. You can specify several actions in one command. In general, the `ALTER TABLE` command looks like this:
 
 ```yql
 ALTER TABLE <table_name> <action1>, <action2>, ..., <actionN>;
 ```
 
-```<action>```: Any action to change the table described below.
+`<action>`: Any action to change the table described below.
 
 ## Changing the composition of columns {#columns}
 
 {{ backend_name }} lets you add columns to a table and delete non-key columns from it.
 
-```ADD COLUMN```: Adds a column with the specified name and type. The code below adds the ```is_deleted``` column with the ```Bool``` data type to the ```episodes``` table.
+`ADD COLUMN`: Adds a column with the specified name and type. The code below adds the `is_deleted` column with the `Bool` data type to the `episodes` table.
 
 ```yql
 ALTER TABLE episodes ADD COLUMN is_deleted Bool;
 ```
 
-```DROP COLUMN```: Deletes the column with the specified name. The code below removes the ```is_deleted``` column from the ```episodes``` table.
+`DROP COLUMN`: Deletes the column with the specified name. The code below removes the `is_deleted` column from the `episodes` table.
 
 ```yql
 ALTER TABLE episodes DROP column is_deleted;
@@ -30,7 +30,7 @@ ALTER TABLE episodes DROP column is_deleted;
 
 ### Adding an index {#add-index}
 
-```ADD INDEX```: Adds an index with the specified name and type for a given set of columns. The code below adds a global index named ```title_index``` for the ```title``` column.
+`ADD INDEX`: Adds an index with the specified name and type for a given set of columns. The code below adds a global index named `title_index` for the `title` column.
 
 ```yql
 ALTER TABLE `series` ADD INDEX `title_index` GLOBAL ON (`title`);
@@ -93,7 +93,7 @@ ALTER TABLE `series` ALTER INDEX `title_index` SET (
 
 ### Deleting an index {#drop-index}
 
-```DROP INDEX```: Deletes the index with the specified name. The code below deletes the index named ```title_index```.
+`DROP INDEX`: Deletes the index with the specified name. The code below deletes the index named `title_index`.
 
 ```yql
 ALTER TABLE `series` DROP INDEX `title_index`;
@@ -224,7 +224,7 @@ ALTER TABLE `table1` RENAME TO `backup/table1`;
 
 ## Changing column groups {#column-family}
 
-```ADD FAMILY```: Creates a new group of columns in the table. The code below creates the ```family_small``` column group in the ```series_with_families``` table.
+`ADD FAMILY`: Creates a new group of columns in the table. The code below creates the `family_small` column group in the `series_with_families` table.
 
 ```yql
 ALTER TABLE series_with_families ADD FAMILY family_small (
@@ -233,13 +233,13 @@ ALTER TABLE series_with_families ADD FAMILY family_small (
 );
 ```
 
-Using the ```ALTER COLUMN``` command, you can change a column group for the specified column. The code below for the ```release_date``` column in the ```series_with_families``` table changes the column group to ```family_small```.
+Using the `ALTER COLUMN` command, you can change a column group for the specified column. The code below for the `release_date` column in the `series_with_families` table changes the column group to `family_small`.
 
 ```yql
 ALTER TABLE series_with_families ALTER COLUMN release_date SET FAMILY family_small;
 ```
 
-The two previous commands from listings 8 and 9 can be combined into one ```ALTER TABLE``` call. The code below creates the ```family_small``` column group and sets it for the ```release_date``` column in the ```series_with_families``` table.
+The two previous commands from listings 8 and 9 can be combined into one `ALTER TABLE` call. The code below creates the `family_small` column group and sets it for the `release_date` column in the `series_with_families` table.
 
 ```yql
 ALTER TABLE series_with_families
@@ -250,7 +250,7 @@ ALTER TABLE series_with_families
     ALTER COLUMN release_date SET FAMILY family_small;
 ```
 
-Using the ```ALTER FAMILY``` command, you can change the parameters of the column group. The code below changes the storage type to ```hdd``` for the ```default``` column group in the ```series_with_families``` table:
+Using the `ALTER FAMILY` command, you can change the parameters of the column group. The code below changes the storage type to `hdd` for the `default` column group in the `series_with_families` table:
 
 ```yql
 ALTER TABLE series_with_families ALTER FAMILY default SET DATA "hdd";
@@ -266,7 +266,7 @@ You can specify any parameters of a group of columns from the [`CREATE TABLE`](.
 
 ## Changing additional table parameters {#additional-alter}
 
-Most of the table parameters in YDB specified on the [table description]({{ concept_table }}) page can be changed with the ```ALTER``` command.
+Most of the table parameters in {{ ydb-short-name }} specified on the [table description]({{ concept_table }}) page can be changed with the `ALTER` command.
 
 In general, the command to change any table parameter looks like this:
 
@@ -274,7 +274,7 @@ In general, the command to change any table parameter looks like this:
 ALTER TABLE <table_name> SET (<key> = <value>);
 ```
 
-```<key>``` is a parameter name and ```<value>``` is its new value.
+`<key>` is a parameter name and `<value>` is its new value.
 
 For example, this command disables automatic partitioning of the table:
 
@@ -284,7 +284,7 @@ ALTER TABLE series SET (AUTO_PARTITIONING_BY_SIZE = DISABLED);
 
 ## Resetting additional table parameters {#additional-reset}
 
-Some table parameters in YDB listed on the [table description]({{ concept_table }}) page can be reset with the ```ALTER``` command.
+Some table parameters in {{ ydb-short-name }} listed on the [table description]({{ concept_table }}) page can be reset with the `ALTER` command.
 
 The command to reset the table parameter looks like this:
 
@@ -292,7 +292,7 @@ The command to reset the table parameter looks like this:
 ALTER TABLE <table_name> RESET (<key>);
 ```
 
-```<key>```: Name of the parameter.
+`<key>`: Name of the parameter.
 
 For example, this command resets (deletes) TTL settings for the table:
 

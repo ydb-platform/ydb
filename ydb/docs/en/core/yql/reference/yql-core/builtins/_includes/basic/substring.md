@@ -14,7 +14,7 @@ Optional arguments:
 Indexing starts from zero. If the specified position and length are beyond the string, returns an empty string.
 If the input string is optional, the result is also optional.
 
-**Examples**
+### Examples
 
 ```yql
 SELECT SUBSTRING("abcdefg", 3, 1); -- d

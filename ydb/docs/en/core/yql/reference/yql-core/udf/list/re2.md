@@ -2,7 +2,7 @@
 
 ## List of functions
 
-```
+```yql
 Re2::Grep(pattern:String, options:Struct<...>?) -> (string:String?) -> Bool
 Re2::Match(pattern:String, options:Struct<...>?) -> (string:String?) -> Bool
 Re2::Capture(pattern:String, options:Struct<...>?) -> (string:String?) -> Struct<_1:String?,foo:String?,...>
@@ -50,8 +50,8 @@ You can call the `Re2::Grep` function by using a `REGEXP` expression (see the [b
 
 For example, the following two queries are equivalent (also in terms of computing efficiency):
 
-* ```$grep = Re2::Grep("b+"); SELECT $grep("aaabccc");```
-* ```SELECT "aaabccc" REGEXP "b+";```
+* `$grep = Re2::Grep("b+"); SELECT $grep("aaabccc");`
+* `SELECT "aaabccc" REGEXP "b+";`
 
 ## Re2::Capture {#capture}
 

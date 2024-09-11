@@ -89,7 +89,7 @@ db/migration:
   V3__create_episodes.sql
 ```
 
-Contents of `SQL` files:
+Contents of SQL files:
 
 {% list tabs %}
 

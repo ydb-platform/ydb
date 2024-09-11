@@ -103,7 +103,7 @@ The value of the `ydb_database_groups` variable in the `vars` section has a fixe
 * For the redundancy type `block-4-2`, the value of `ydb_database_groups` is seven.
 * For the redundancy type `mirror-3-dc`, the value of `ydb_database_groups` is eight.
 
-The values of the `system_timezone` and `system_ntp_servers` variables depend on the infrastructure properties where the YDB cluster is being deployed. By default, `system_ntp_servers` includes a set of NTP servers without considering the geographical location of the infrastructure on which the YDB cluster will be deployed. We strongly recommend using a local NTP server for on-premise infrastructure and the following NTP servers for cloud providers:
+The values of the `system_timezone` and `system_ntp_servers` variables depend on the infrastructure properties where the {{ ydb-short-name }} cluster is being deployed. By default, `system_ntp_servers` includes a set of NTP servers without considering the geographical location of the infrastructure on which the {{ ydb-short-name }} cluster will be deployed. We strongly recommend using a local NTP server for on-premise infrastructure and the following NTP servers for cloud providers:
 
 {% list tabs %}
 
@@ -131,7 +131,7 @@ No changes to other sections of the `50-inventory.yaml` configuration file are r
 
 #### Changing the root user password { #change-password }
 
-Next, you can change the standard YDB root user password contained in the encrypted inventory file `99-inventory-vault.yaml` and in the file `ansible_vault_password_file.txt`. To change the password – specify the new password in the `ansible_vault_password_file.txt` file and duplicate it in the `99-inventory-vault.yaml` file in the format:
+Next, you can change the standard {{ ydb-short-name }} root user password contained in the encrypted inventory file `99-inventory-vault.yaml` and in the file `ansible_vault_password_file.txt`. To change the password – specify the new password in the `ansible_vault_password_file.txt` file and duplicate it in the `99-inventory-vault.yaml` file in the format:
 
 ```yaml
 all:
@@ -241,7 +241,7 @@ The `VDisks` indicators should be green, and the `state` status (found in the to
 
 ## Cluster Testing { #testing }
 
-You can test the cluster using the built-in load tests in YDB CLI. To do this, download YDB CLI version [2.5.0](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.5.0/linux/amd64/ydb) to the machine where Ansible is installed. For example, using wget: `wget https://storage.yandexcloud.net/yandexcloud-ydb/release/2.5.0/linux/amd64/ydb`.
+You can test the cluster using the built-in load tests in {{ ydb-short-name }} CLI. To do this, download {{ ydb-short-name }} CLI version [2.5.0](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.5.0/linux/amd64/ydb) to the machine where Ansible is installed. For example, using wget: `wget https://storage.yandexcloud.net/yandexcloud-ydb/release/2.5.0/linux/amd64/ydb`.
 
 Make the downloaded binary file executable – `chmod +x ydb` and execute the connection check command:
 

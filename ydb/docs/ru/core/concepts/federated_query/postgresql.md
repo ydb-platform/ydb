@@ -4,11 +4,14 @@
 
 Для работы с внешней базой данных PostgreSQL необходимо выполнить следующие шаги:
 1. Создать [секрет](../datamodel/secrets.md), содержащий пароль для подключения к базе данных.
-```yql
+
+    ```yql
     CREATE OBJECT postgresql_datasource_user_password (TYPE SECRET) WITH (value = "<password>");
     ```
+
 1. Создать [внешний источник данных](../datamodel/external_data_source.md), описывающий определённую базу данных в составе кластера PostgreSQL. При чтении по умолчанию используется [пространство имен](https://www.postgresql.org/docs/current/catalog-pg-namespace.html) `public`, но это значение можно изменить с помощью опционального параметра `SCHEMA`. Сетевое подключение выполняется по стандартному ([Frontend/Backend Protocol](https://www.postgresql.org/docs/current/protocol.html)) по транспорту TCP (`PROTOCOL="NATIVE"`). Включить шифрование соединений к внешней базе данных можно с помощью параметра `USE_TLS="TRUE"`.
-```yql
+
+    ```yql
     CREATE EXTERNAL DATA SOURCE postgresql_datasource WITH (
         SOURCE_TYPE="PostgreSQL",
         LOCATION="<host>:<port>",
@@ -21,6 +24,7 @@
         SCHEMA="<schema>"
     );
     ```
+
 1. {% include [!](_includes/connector_deployment.md) %}
 1. [Выполнить запрос](#query) к базе данных.
 
@@ -32,6 +36,7 @@ SELECT * FROM postgresql_datasource.<table_name>
 ```
 
 где:
+
 - `postgresql_datasource` - идентификатор внешнего источника данных;
 - `<table_name>` - имя таблицы внутри внешнего источника данных.
 

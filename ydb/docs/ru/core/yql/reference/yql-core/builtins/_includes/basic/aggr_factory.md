@@ -12,7 +12,7 @@
 
 ### Примеры
 
-``` yql
+```yql
 $factory = AggregationFactory("MIN");
 SELECT
     AGGREGATE_BY(value, $factory) AS min_value -- применить MIN агрегацию к колонке value
@@ -30,7 +30,7 @@ FROM my_table;
 
 ### Примеры
 
-``` yql
+```yql
 $f = AggregationFactory("sum");
 $g = AggregateTransformInput($f, ($x) -> (cast($x as Int32)));
 $h = AggregateTransformInput($f, ($x) -> ($x * 2));
@@ -48,11 +48,11 @@ SELECT ListAggregate([1,2,3], $h); -- 12
 
 ### Примеры
 
-``` yql
+```yql
 $f = AggregationFactory("sum");
 $g = AggregateTransformOutput($f, ($x) -> ($x * 2));
-select ListAggregate([1,2,3], $f); -- 6
-select ListAggregate([1,2,3], $g); -- 12
+SELECT ListAggregate([1,2,3], $f); -- 6
+SELECT ListAggregate([1,2,3], $g); -- 12
 ```
 
 ## AggregateFlatten {#aggregateflatten}
@@ -65,13 +65,13 @@ select ListAggregate([1,2,3], $g); -- 12
 
 ### Примеры
 
-``` yql
+```yql
 $i = AggregationFactory("AGGREGATE_LIST_DISTINCT");
 $j = AggregateFlatten($i);
-select AggregateBy(x, $j) from (
-   select [1,2] as x
+SELECT AggregateBy(x, $j) from (
+   SELECT [1,2] as x
    union all
-   select [2,3] as x
+   SELECT [2,3] as x
 ); -- [1, 2, 3]
 
 ```

@@ -30,6 +30,7 @@ You can generate three types of load:
 | `Initial allocation` |  Setting up the [parameters for initial data allocation](#initial-allocation). It defines the amount of data to be written before the start of the main load cycle. This data can be read by read requests along with the data written in the main load cycle.  |
 
 ### Write requests class {#write-class}
+
 | Class | Description |
 --- | ---
 | `TabletLog` | The highest priority of write operation. |
@@ -37,6 +38,7 @@ You can generate three types of load:
 | `UserData` | Used for writing user data as separate blobs. |
 
 ### Read requests class {#read-class}
+
 | Class | Description |
 --- | ---
 | `AsyncRead` | Used for reading compacted tablets' data. |

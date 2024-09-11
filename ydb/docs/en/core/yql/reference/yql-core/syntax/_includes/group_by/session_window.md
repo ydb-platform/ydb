@@ -15,12 +15,16 @@ GROUP BY user, SessionWindow(<time_expr>, <timeout_expr>) AS session_start
 
 The following happens in this case:
 
-1) The input table is partitioned by the grouping keys specified in `GROUP BY`, ignoring SessionWindow (in this case, it's based on `user`).
+1. The input table is partitioned by the grouping keys specified in `GROUP BY`, ignoring SessionWindow (in this case, it's based on `user`).
+
    If `GROUP BY` includes nothing more than SessionWindow, then the input table gets into one partition.
-2) Each partition is split into disjoint subsets of rows (sessions).
+
+2. Each partition is split into disjoint subsets of rows (sessions).
+
    For this, the partition is sorted in the ascending order of the `time_expr` expression.
    The session limits are drawn between neighboring items of the partition, that differ in their `time_expr` values by more than `timeout_expr`.
-3) The sessions obtained in this way are the final partitions on which aggregate functions are calculated.
+
+3. The sessions obtained in this way are the final partitions on which aggregate functions are calculated.
 
 The SessionWindow() key column (in the example, it's `session_start`) has the value "the minimum `time_expr` in the session".
 If `GROUP BY` includes SessionWindow(), you can use a special aggregate function

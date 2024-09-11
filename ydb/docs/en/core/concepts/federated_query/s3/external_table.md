@@ -43,11 +43,11 @@ Reading data using external tables from S3 ({{ objstorage-name }}) is done with 
 
 ```yql
 SELECT
-    <expression>
+  <expression>
 FROM
-    `s3_test_data`
+  `s3_test_data`
 WHERE
-    <filter>;
+  <filter>;
 ```
 
 ## Limitations

@@ -23,7 +23,7 @@ All minor versions within a major version are compatible for updates. Major vers
 * `X.Y.* → X.Y+2.*`: Update is impossible, major versions are inconsistent.
 * `X.Y.* → X.Y-2.*`: Update is impossible, major versions are inconsistent.
 
-A list of available versions can be found on the [download page](../../downloads/index.md). The YDB release policy is described in more details in the [Release management](../../contributor/manage-releases.md) article of the YDB development documentation.
+A list of available versions can be found on the [download page](../../downloads/index.md). The {{ ydb-short-name }} release policy is described in more details in the [Release management](../../contributor/manage-releases.md) article of the {{ ydb-short-name }} development documentation.
 
 {% note warning %}
 

@@ -2,12 +2,12 @@
 
 ## List of functions
 
-* ```Pire::Grep(pattern:String) -> (string:String?) -> Bool```
-* ```Pire::Match(pattern:String) -> (string:String?) -> Bool```
-* ```Pire::MultiGrep(pattern:String) -> (string:String?) -> Tuple<Bool, Bool, ...>```
-* ```Pire::MultiMatch(pattern:String) -> (string:String?) -> Tuple<Bool, Bool, ...>```
-* ```Pire::Capture(pattern:String) -> (string:String?) -> String?```
-* ```Pire::Replace(pattern:String) -> (string:String?, replacement:String) -> String?```
+* `Pire::Grep(pattern:String) -> (string:String?) -> Bool`
+* `Pire::Match(pattern:String) -> (string:String?) -> Bool`
+* `Pire::MultiGrep(pattern:String) -> (string:String?) -> Tuple<Bool, Bool, ...>`
+* `Pire::MultiMatch(pattern:String) -> (string:String?) -> Tuple<Bool, Bool, ...>`
+* `Pire::Capture(pattern:String) -> (string:String?) -> String?`
+* `Pire::Replace(pattern:String) -> (string:String?, replacement:String) -> String?`
 
 One of the options to match regular expressions in YQL is to use  [Pire](https://github.com/yandex/pire) (Perl Incompatible Regular Expressions). This is a very fast library of regular expressions developed at Yandex: at the lower level, it looks up the input string once, without any lookaheads or rollbacks, spending 5 machine instructions per character (on x86 and x86_64).
 
@@ -79,6 +79,7 @@ Use the MultiGrep/MultiMatch functions to optimize the query execution speed. Be
 
 * If you want to match a string against any of the listed expressions (the results are joined with "or"), it would be much more efficient to combine the query parts in a single regular expression with `|` and match it using regular Grep or Match.
 * Pire has a limit on the size of the state machine (YQL uses the default value set in the library). If you exceed the limit, the error is raised at the start of the query: `Failed to glue up regexes, probably the finite state machine appeared to be too large`.
+
 When you call MultiGrep/MultiMatch, regular expressions are passed one per line using [multiline string literals](../../syntax/expressions.md#multiline-string-literals):
 
 ### Examples

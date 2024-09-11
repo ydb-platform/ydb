@@ -4,11 +4,14 @@
 
 Для работы с внешней базой данных Greenplum необходимо выполнить следующие шаги:
 1. Создать [секрет](../datamodel/secrets.md), содержащий пароль для подключения к базе данных.
-```yql
+
+    ```yql
     CREATE OBJECT greenplum_datasource_user_password (TYPE SECRET) WITH (value = "<password>");
     ```
-1. Создать [внешний источник данных](../datamodel/external_data_source.md), описывающий определённую базу данных в составе кластера Greenplum. В параметр `LOCATION` нужно передать сетевой адрес [мастер-ноды](https://greenplum.org/introduction-to-greenplum-architecture/) Greenplum. При чтении по умолчанию используется [пространство имен](https://docs.vmware.com/en/VMware-Greenplum/6/greenplum-database/ref_guide-system_catalogs-pg_namespace.html) `public`, но это значение можно изменить с помощью опционального параметра `SCHEMA`. Включить шифрование соединений к внешней базе данных можно с помощью параметра `USE_TLS="TRUE"`.
-```yql
+
+2. Создать [внешний источник данных](../datamodel/external_data_source.md), описывающий определённую базу данных в составе кластера Greenplum. В параметр `LOCATION` нужно передать сетевой адрес [мастер-ноды](https://greenplum.org/introduction-to-greenplum-architecture/) Greenplum. При чтении по умолчанию используется [пространство имен](https://docs.vmware.com/en/VMware-Greenplum/6/greenplum-database/ref_guide-system_catalogs-pg_namespace.html) `public`, но это значение можно изменить с помощью опционального параметра `SCHEMA`. Включить шифрование соединений к внешней базе данных можно с помощью параметра `USE_TLS="TRUE"`.
+
+    ```yql
     CREATE EXTERNAL DATA SOURCE greenplum_datasource WITH (
         SOURCE_TYPE="Greenplum",
         LOCATION="<host>:<port>",
@@ -20,10 +23,12 @@
         SCHEMA="<schema>"
     );
     ```
+
 1. {% include [!](_includes/connector_deployment.md) %}
-1. [Выполнить запрос](#query) к базе данных.
+2. [Выполнить запрос](#query) к базе данных.
 
 ## Синтаксис запросов {#query}
+
 Для работы с Greenplum используется следующая форма SQL-запроса:
 
 ```yql
@@ -31,6 +36,7 @@ SELECT * FROM greenplum_datasource.<table_name>
 ```
 
 где:
+
 - `greenplum_datasource` - идентификатор внешнего источника данных;
 - `<table_name>` - имя таблицы внутри внешнего источника данных.
 

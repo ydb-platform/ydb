@@ -57,7 +57,7 @@ The data schema description consists of a set of fields:
 
 For example, the data schema below describes a schema field named `Year` of type `Int32` with the requirement that this field must be present in the data:
 
-```
+```text
 Year Int32 NOT NULL
 ```
 

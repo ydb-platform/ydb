@@ -21,7 +21,8 @@ The table below lists the data formats supported in {{ ydb-short-name }}.
 This format is based on the [CSV](https://en.wikipedia.org/wiki/CSV) format. Data is placed in columns separated by commas, with column names in the file's first row.
 
 Example data:
-```
+
+```text
 Year,Manufacturer,Model,Price
 1997,Man_1,Model_1,3000.00
 1999,Man_2,Model_2,4900.00
@@ -61,7 +62,7 @@ This format is based on the [`TSV`](https://en.wikipedia.org/wiki/Tab-separated_
 
 Example data:
 
-```
+```text
 Year    Manufacturer    Model   Price
 1997    Man_1   Model_1    3000.00
 1999    Man_2   Model_2    4900.00

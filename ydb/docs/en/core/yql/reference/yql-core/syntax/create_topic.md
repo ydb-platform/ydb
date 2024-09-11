@@ -4,13 +4,13 @@ The `CREATE TOPIC` call creates a [topic](../../../../concepts/topic).
 
 When creating a topic, you can add topic [consumers](../../../../concepts/topic#consumer) to it and topic settings.
 
-```
-    CREATE TOPIC topic_path (
-        CONSUMER consumer1,
-        CONSUMER consumer2 WITH (setting1 = value1)
-    ) WITH (
-        topic_setting2 = value2
-    );
+```yql
+CREATE TOPIC topic_path (
+    CONSUMER consumer1,
+    CONSUMER consumer2 WITH (setting1 = value1)
+) WITH (
+    topic_setting2 = value2
+);
 ```
 
 All the parameters except the topic name are optional. By default, a topic is created without consumers. All
@@ -61,6 +61,7 @@ CREATE TOPIC `my_topic` WITH(
 * `metering_mode`: Resource metering mode (`RESERVED_CAPACITY` - based on the allocated resources or `REQUEST_UNITS` - based on actual usage). This option applies to topics in serverless databases. Value type: `String`.
 
 {% if feature_topic_codecs %}
+
 * `supported_codecs`: List of [codecs](../../../../concepts/topic#message-codec) supported by the topic. Value type: `String`.
 
 {% endif %}

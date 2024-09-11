@@ -1,12 +1,12 @@
-# Development process: working on a change for YDB
+# Development process: working on a change for {{ ydb-short-name }}
 
-This section contains a step-by-step scenario which helps you complete necessary configuration steps, and learn how to bring a change to the YDB project. This scenario does not have to be strictly followed, you may develop your own approach based on the provided information.
+This section contains a step-by-step scenario which helps you complete necessary configuration steps, and learn how to bring a change to the {{ ydb-short-name }} project. This scenario does not have to be strictly followed, you may develop your own approach based on the provided information.
 
 ## Set up the environment {#envsetup}
 
 ### GitHub account {#github_login}
 
-You need to have a GitHub account to suggest any changes to the YDB source code. Register at [github.com](https://github.com/) if haven't done it yet.
+You need to have a GitHub account to suggest any changes to the {{ ydb-short-name }} source code. Register at [github.com](https://github.com/) if haven't done it yet.
 
 ### SSH key pair {#ssh_key_pair}
 
@@ -20,6 +20,7 @@ You need to have a GitHub account to suggest any changes to the YDB source code.
   * test connection on laptop: `ssh -T git@github.com`
 
 #### Remote development
+
 If you are developing on a remote dev host you can use the key from your laptop (generated keys or keys from yubikey). You need to configure key forwarding. (Full instructions are on  [this GitHub page](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/using-ssh-agent-forwarding) ).
 
 Suppose your remote machine is dev123456.search.yandex.net.
@@ -104,7 +105,7 @@ And copy-paste the shown token to complete the GitHub CLI configuration.
 
 ### Fork and clone repository {#fork_create}
 
-YDB official repository is [https://github.com/ydb-platform/ydb](https://github.com/ydb-platform/ydb), located under the YDB organization account `ydb-platform`.
+{{ ydb-short-name }} official repository is [https://github.com/ydb-platform/ydb](https://github.com/ydb-platform/ydb), located under the {{ ydb-short-name }} organization account `ydb-platform`.
 
 To work on the {{ ydb-short-name }} code changes, you need to create a fork repository under your GitHub account. Create a fork by pressing the `Fork` button on the [official {{ ydb-short-name }} repository page](https://github.com/ydb-platform/ydb).
 
@@ -247,11 +248,11 @@ For changes in the {{ ydb-short-name }} code, precommit checks build {{ ydb-shor
 
 You can see the checks status on the Pull Request page. Also, key information for {{ ydb-short-name }} build/test checks progress and status is published to the comments of the Pull Ruquest.
 
-If you are not a member of the YDB team, build/test checks do not run until a team member reviews your changes and approves the PR for tests by assigning a label `ok-to-test`.
+If you are not a member of the {{ ydb-short-name }} team, build/test checks do not run until a team member reviews your changes and approves the PR for tests by assigning a label `ok-to-test`.
 
 Checks are restarted every time you push changes to the pull request, cancelling the previous run if it's still in progress. Each iteration of checks produces its own comment on the pull request page, so you can see the history of checks.
 
-If you are a member of the YDB team, you can also restart checks on a new merge commit without pushing. To do so, add label `rebase-and-check` to the PR.
+If you are a member of the {{ ydb-short-name }} team, you can also restart checks on a new merge commit without pushing. To do so, add label `rebase-and-check` to the PR.
 
 ### Test results {#test-results}
 
@@ -259,13 +260,13 @@ You can click on the test amounts in different sections of the test results comm
 
 ### Test history {#test_history}
 
-Each time when tests are run by the YDB CI, their results are uploaded to the [test history application](https://nebius.testmo.net/projects/view/1). There's a link "Test history" in the comment with test results heading to the page with the relevant run in this application.
+Each time when tests are run by the {{ ydb-short-name }} CI, their results are uploaded to the [test history application](https://nebius.testmo.net/projects/view/1). There's a link "Test history" in the comment with test results heading to the page with the relevant run in this application.
 
-In the "Test History" YDB team members can browse test runs, search for tests, see the logs, and compare them between different test runs. If some test is failed in a particular precommit check, it can be seen in its history if this failure had been introduced by the change, or the test had been broken/flaky earlier.
+In the "Test History" {{ ydb-short-name }} team members can browse test runs, search for tests, see the logs, and compare them between different test runs. If some test is failed in a particular precommit check, it can be seen in its history if this failure had been introduced by the change, or the test had been broken/flaky earlier.
 
 ### Review and merge {#review}
 
-The Pull Request can be merged after obtaining an approval from the YDB team member. Comments are used for communication. Finally a reviewer from the YDB team clicks on the 'Merge' button.
+The Pull Request can be merged after obtaining an approval from the {{ ydb-short-name }} team member. Comments are used for communication. Finally a reviewer from the {{ ydb-short-name }} team clicks on the 'Merge' button.
 
 ### Update changes {#update}
 

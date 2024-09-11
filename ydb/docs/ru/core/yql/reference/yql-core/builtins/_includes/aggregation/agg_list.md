@@ -2,7 +2,7 @@
 
 ### Сигнатура
 
-```
+```yql
 AGGREGATE_LIST(T? [, limit:Uint64])->List<T>
 AGGREGATE_LIST(T [, limit:Uint64])->List<T>
 AGGREGATE_LIST_DISTINCT(T? [, limit:Uint64])->List<T>
@@ -21,7 +21,7 @@ AGGREGATE_LIST_DISTINCT(T [, limit:Uint64])->List<T>
 
 ### Примеры
 
-``` yql
+```yql
 SELECT
    AGGREGATE_LIST( region ),
    AGGREGATE_LIST( region, 5 ),
@@ -31,12 +31,13 @@ SELECT
 FROM users
 ```
 
-``` yql
+```yql
 -- Аналог GROUP_CONCAT из MySQL
 SELECT
     String::JoinFromList(CAST(AGGREGATE_LIST(region, 2) AS List<String>), ",")
 FROM users
 ```
+
 Существует также короткая форма записи этих функций - `AGG_LIST` и `AGG_LIST_DISTINCT`.
 
 {% note alert %}

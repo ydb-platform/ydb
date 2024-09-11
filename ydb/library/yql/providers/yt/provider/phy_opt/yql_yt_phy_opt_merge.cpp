@@ -468,4 +468,35 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::MergeToCopy(TExprBase n
         .Done();
 }
 
+TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ForceTransform(TExprBase node, TExprContext& ctx) const {
+    auto merge = node.Cast<TYtMerge>();
+
+    if (merge.Ref().HasResult()) {
+        return node;
+    }
+
+    if (NYql::HasSetting(merge.Settings().Ref(), EYtSettingType::ForceTransform)) {
+        return node;
+    }
+
+    const auto cluster = merge.DataSink().Cluster().StringValue();
+    const bool hasOutGroup = NYql::HasSetting(merge.Output().Item(0).Settings().Ref(), EYtSettingType::ColumnGroups);
+    const bool lookup = State_->Configuration->OptimizeFor.Get(cluster).GetOrElse(NYT::OF_LOOKUP_ATTR) == NYT::OF_LOOKUP_ATTR;
+    const bool enabledColGroup = State_->Configuration->ColumnGroupMode.Get().GetOrElse(EColumnGroupMode::Disable) != EColumnGroupMode::Disable;
+    const bool hasNonTmpInput = AnyOf(merge.Input().Item(0).Paths(), [](const TYtPath& path) {
+        return path.Table().Maybe<TYtTable>() && !NYql::HasSetting(path.Table().Cast<TYtTable>().Settings().Ref(), EYtSettingType::Anonymous);
+    });
+    const bool hasSampling = NYql::HasSetting(merge.Input().Item(0).Settings().Ref(), EYtSettingType::Sample);
+
+    const bool addForceTransform = hasSampling
+        || (!lookup && enabledColGroup != hasOutGroup)
+        || (!lookup && hasOutGroup && hasNonTmpInput)
+    ;
+
+    if (addForceTransform) {
+        return TExprBase(ctx.ChangeChild(merge.Ref(), TYtMerge::idx_Settings, NYql::AddSetting(merge.Settings().Ref(), EYtSettingType::ForceTransform, {}, ctx)));
+    }
+    return node;
+}
+
 }  // namespace NYql

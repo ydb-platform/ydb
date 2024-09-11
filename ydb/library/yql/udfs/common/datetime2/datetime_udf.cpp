@@ -2064,6 +2064,30 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
                     });
                     break;
                 }
+                case 's': {
+                    static constexpr size_t size = 2;
+                    Scanners_.emplace_back([](std::string_view::const_iterator& it, size_t limit, TUnboxedValuePod& result, const IDateBuilder&) {
+                        ui32 second = 0U;
+                        if (limit < size || !ParseExaclyNDigits<size>::Do(it, second) || !ValidateSecond(second)) {
+                            return false;
+                        }
+                        SetSecond(result, second);
+                        return true;
+                    });
+                    break;
+                }
+                case 'f': {
+                    static constexpr size_t size = 6;
+                    Scanners_.emplace_back([](std::string_view::const_iterator& it, size_t limit, TUnboxedValuePod& result, const IDateBuilder&) {
+                        ui32 usecond = 0U;
+                        if (limit < size || !ParseExaclyNDigits<size>::Do(it, usecond) || !ValidateMicrosecond(usecond)) {
+                            return false;
+                        }
+                        SetMicrosecond(result, usecond);
+                        return true;
+                    });
+                    break;
+                }
                 case 'S': {
                     static constexpr size_t size = 2;
                     Scanners_.emplace_back([](std::string_view::const_iterator& it, size_t limit, TUnboxedValuePod& result, const IDateBuilder&) {

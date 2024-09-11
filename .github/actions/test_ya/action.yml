@@ -263,7 +263,7 @@ runs:
         fi
 
         params+=(
-          --stat -DCONSISTENT_DEBUG --no-dir-outputs
+          --stat -DCONSISTENT_DEBUG --no-dir-outputs -k
           --test-failure-code 0 --build-all 
           --cache-size 2TB --force-build-depends
         )

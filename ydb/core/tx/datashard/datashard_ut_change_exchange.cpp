@@ -1149,7 +1149,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
             // get records
             auto reader = client.CreateReadSession(TReadSessionSettings()
-                .AppendTopics(TString("/Root/Table/Stream"))
+                .AppendTopics(std::string{"/Root/Table/Stream"})
                 .ConsumerName("user")
                 .DisableClusterDiscovery(true)
             );
@@ -1164,7 +1164,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
                     pStream = data->GetPartitionStream();
                     for (const auto& item : data->GetMessages()) {
                         const auto& record = records.at(reads++);
-                        AssertJsonsEqual(item.GetData(), record);
+                        AssertJsonsEqual(TString{item.GetData()}, record);
                         if (checkKey) {
                             UNIT_ASSERT_VALUES_EQUAL(item.GetPartitionKey(), CalcPartitionKey(record));
                         }
@@ -1314,7 +1314,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
     struct TopicRunner {
     private:
-        using TMessageMeta = TVector<std::pair<TString, TString>>;
+        using TMessageMeta = std::vector<std::pair<std::string, std::string>>;
 
         static TString DumpMessageMeta(TMessageMeta messageMeta) {
             std::stable_sort(messageMeta.begin(), messageMeta.end());
@@ -1324,7 +1324,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         static void AssertMessageMetaContains(const TMessageMeta& actual, const TMessageMeta& expected) {
             for (const auto& e : expected) {
                 auto it = std::find_if(actual.begin(), actual.end(), [&e](const auto& a) {
-                    return a.first == e.first && CheckJsonsEqual(a.second, e.second);
+                    return a.first == e.first && CheckJsonsEqual(TString{a.second}, TString{e.second});
                 });
                 UNIT_ASSERT_C(it != actual.end(), TStringBuilder() << "Message meta '" << e << "' was expected"
                     << ": actual# " << DumpMessageMeta(actual)
@@ -1344,7 +1344,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
                     pStream = data->GetPartitionSession();
                     for (const auto& item : data->GetMessages()) {
                         const auto& [body, meta] = records.at(reads++);
-                        AssertJsonsEqual(item.GetData(), body);
+                        AssertJsonsEqual(TString{item.GetData()}, body);
                         AssertMessageMetaContains(item.GetMessageMeta()->Fields, meta);
                     }
                 } else if (auto* create = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*ev)) {
@@ -1383,7 +1383,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
             // create reader
             auto reader = client.CreateReadSession(NYdb::NTopic::TReadSessionSettings()
-                .AppendTopics(TString("/Root/Table/Stream"))
+                .AppendTopics(std::string{"/Root/Table/Stream"})
                 .ConsumerName("user")
             );
 
@@ -2936,7 +2936,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         // create reader
         auto reader = client.CreateReadSession(NYdb::NTopic::TReadSessionSettings()
-            .AppendTopics(TString("/Root/Table/Stream"))
+            .AppendTopics(std::string{"/Root/Table/Stream"})
             .ConsumerName("user")
         );
 

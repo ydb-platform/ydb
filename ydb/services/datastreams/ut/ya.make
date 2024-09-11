@@ -1,5 +1,9 @@
 UNITTEST_FOR(ydb/services/datastreams)
 
+ADDINCL(
+    ydb/public/sdk/cpp
+)
+
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)

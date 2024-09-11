@@ -736,7 +736,7 @@ namespace {
     }
 
     void PrintAttributes(const NTable::TTableDescription& tableDescription) {
-        if (!tableDescription.GetAttributes().size()) {
+        if (tableDescription.GetAttributes().empty()) {
             return;
         }
         TPrettyTable table({ "Name", "Value" }, TPrettyTableConfig().WithoutRowDelimiters());

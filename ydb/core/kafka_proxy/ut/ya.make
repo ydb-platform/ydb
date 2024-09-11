@@ -1,5 +1,9 @@
 UNITTEST_FOR(ydb/core/kafka_proxy)
 
+ADDINCL(
+    ydb/public/sdk/cpp
+)
+
 SIZE(medium)
 TIMEOUT(600)
 

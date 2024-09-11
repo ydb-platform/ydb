@@ -341,8 +341,8 @@ void AssertTable(NPersQueue::TTestServer& server, const TString& sourceId, ui32 
     UNIT_ASSERT(parser.TryNextRow());
     NYdb::TValueParser p(parser.GetValue(0));
     NYdb::TValueParser s(parser.GetValue(1));
-    UNIT_ASSERT_VALUES_EQUAL(*p.GetOptionalUint32().Get(), partitionId);
-    UNIT_ASSERT_VALUES_EQUAL(*s.GetOptionalUint64().Get(), seqNo);
+    UNIT_ASSERT_VALUES_EQUAL(p.GetOptionalUint32().value(), partitionId);
+    UNIT_ASSERT_VALUES_EQUAL(s.GetOptionalUint64().value(), seqNo);
 }
 
 class TPQTabletMock: public TActor<TPQTabletMock> {

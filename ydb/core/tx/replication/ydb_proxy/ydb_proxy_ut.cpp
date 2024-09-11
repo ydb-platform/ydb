@@ -341,7 +341,7 @@ Y_UNIT_TEST_SUITE(YdbProxy) {
                 .Build();
 
             auto ev = env.Send<TEvYdbProxy::TEvCreateTableResponse>(
-                new TEvYdbProxy::TEvCreateTableRequest(item.SourcePath(), std::move(schema), {}));
+                new TEvYdbProxy::TEvCreateTableRequest(TString{item.SourcePath()}, std::move(schema), {}));
             UNIT_ASSERT(ev);
             UNIT_ASSERT(ev->Get()->Result.IsSuccess());
         }

@@ -46,6 +46,7 @@ class TestSetupForStability(object):
         yatest_common.binary_path('ydb/tests/tools/nemesis/driver/nemesis'),
         yatest_common.binary_path('ydb/tools/simple_queue/simple_queue'),
         yatest_common.binary_path('ydb/tools/olap_workload/olap_workload'),
+        yatest_common.binary_path('ydb/tools/olap_workload_tiering/olap_workload_tiering'),
     )
 
     @classmethod
@@ -126,11 +127,39 @@ class TestSetupForStability(object):
     def test_olap_workload(self):
         self._start_nemesis()
 
+        s3_endpoint = yatest_common.get_param('kikimr.ci.tiering.s3_endpoint')
+        s3_access_key = yatest_common.get_param('kikimr.ci.tiering.s3_access_key')
+        s3_secret_key = yatest_common.get_param('kikimr.ci.tiering.s3_secret_key')
+        s3_tier_buckets = yatest_common.get_param('kikimr.ci.tiering.s3_tier_buckets').split(',')
+        enable_tiering_test = (
+            s3_endpoint is not None
+            and s3_access_key is not None
+            and s3_secret_key is not None
+            and s3_tier_buckets is not None
+        )
+        if not enable_tiering_test:
+            logger.warn('Olap tiering test is disabled because one of required parameters is not defined: '
+                        ' kikimr.ci.tiering.s3_endpoint, kikimr.ci.tiering.s3_access_key,'
+                        ' kikimr.ci.tiering.s3_secret_key, kikimr.ci.tiering.s3_tier_buckets.')
+
         for node_id, node in enumerate(self.kikimr_cluster.nodes.values()):
             node.ssh_command(
                 'screen -d -m bash -c "while true; do /Berkanavt/nemesis/bin/olap_workload --database /Root/db1 ; done"',
                 raise_on_error=True
             )
+            if enable_tiering_test:
+                node.ssh_command(
+                    f"""screen -d -m bash -c "while true; do /Berkanavt/nemesis/bin/olap_workload_tiering \\
+                        --duration 4800 \\
+                        --database /Root/db1 \\
+                        --s3-endpoint {s3_endpoint} \\
+                        --s3-access-key {s3_access_key} \\
+                        --s3-secret-key {s3_secret_key} \\
+                        --s3-buckets {' '.join(s3_tier_buckets)} \\
+                    ; done" """,
+                    raise_on_error=True
+                )
+                
         sleep_time_min = 90
 
         logger.info('Sleeping for {} minute(s)'.format(sleep_time_min))

@@ -219,7 +219,6 @@ class TestAlterTiering(BaseTestSet):
 
         threads = []
 
-        # "Alter table drop column" causes scan failures
         threads.append(self.TestThread(target=self._loop_alter_column, args=[ctx, 'store', test_duration]))
         for table in tables_for_tiering_modification:
             threads.append(self.TestThread(

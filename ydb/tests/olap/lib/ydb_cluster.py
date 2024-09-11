@@ -7,7 +7,7 @@ from ydb.tests.olap.lib.utils import get_external_param
 import ydb
 from copy import deepcopy
 from time import sleep, time
-from typing import List
+from typing import List, Optional
 
 LOGGER = logging.getLogger()
 
@@ -120,9 +120,13 @@ class YdbCluster:
         return result
 
     @classmethod
-    def _describe_path_impl(cls, path: str) -> ydb.SchemeEntry:
+    def _describe_path_impl(cls, path: str) -> Optional[ydb.SchemeEntry]:
         LOGGER.info(f'describe {path}')
-        return cls.get_ydb_driver().scheme_client.describe_path(path)
+        try:
+            return cls.get_ydb_driver().scheme_client.describe_path(path)
+        except ydb.issues.SchemeError as e:
+            if e.message == "Path not found":
+                return None
 
     @classmethod
     def _get_tables(cls, path):

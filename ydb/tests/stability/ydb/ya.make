@@ -15,6 +15,7 @@ DATA(
 DEPENDS(
     ydb/tools/simple_queue
     ydb/tools/olap_workload
+    ydb/tools/olap_workload_tiering
     ydb/tools/cfg/bin
     ydb/tests/tools/nemesis/driver
 )

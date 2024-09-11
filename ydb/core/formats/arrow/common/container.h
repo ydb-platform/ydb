@@ -74,6 +74,8 @@ public:
 
     [[nodiscard]] TConclusionStatus AddField(const std::shared_ptr<arrow::Field>& f, const std::shared_ptr<arrow::ChunkedArray>& data);
 
+    void DeleteFieldsByIndex(const std::vector<ui32>& idxs);
+
     TGeneralContainer(const std::shared_ptr<arrow::Table>& table);
     TGeneralContainer(const std::shared_ptr<arrow::RecordBatch>& table);
     TGeneralContainer(const std::shared_ptr<arrow::Schema>& schema, std::vector<std::shared_ptr<NAccessor::IChunkedArray>>&& columns);

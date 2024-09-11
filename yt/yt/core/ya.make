@@ -104,6 +104,7 @@ SRCS(
     logging/log_writer_detail.cpp
     logging/file_log_writer.cpp
     logging/stream_log_writer.cpp
+    logging/system_log_event_provider.cpp
     logging/random_access_gzip.cpp
     logging/zstd_compression.cpp
 
@@ -122,7 +123,6 @@ SRCS(
     misc/digest.cpp
     misc/error.cpp
     misc/error_code.cpp
-    misc/ema_counter.cpp
     misc/fs.cpp
     # NB: it is necessary to prevent linker optimization of
     # REGISTER_INTERMEDIATE_PROTO_INTEROP_REPRESENTATION macros for TGuid.

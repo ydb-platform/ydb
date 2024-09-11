@@ -742,15 +742,22 @@ TVector<TString> MatchSort(const THashSet<TString>& desiredKeys, const TVector<T
 TVector<TStringBuf> MatchSort(TTypeAnnotationNode::TListType& types, const TVector<TStringBuf>& desiredSort, const TVector<TEquivKeys>& sideSort) {
     TVector<TStringBuf> result;
     types.clear();
-    for (size_t i = 0, j = 0; i < desiredSort.size() && j < sideSort.size(); ++i) {
-        auto key = desiredSort[i];
-        if (sideSort[j].Keys.contains(key) ||
-            (j + 1 < sideSort.size() && sideSort[++j].Keys.contains(key)))
-        {
+    for (size_t i = 0, j = 0; i < desiredSort.size() && j < sideSort.size(); ++j) {
+        auto key = desiredSort[i++];
+        if (!sideSort[j].Keys.contains(key)) {
+            break;
+        }
+        while (true) {
             result.push_back(key);
             types.push_back(sideSort[j].Type);
-        } else {
-            break;
+            if (i >= desiredSort.size()) {
+                break;
+            }
+            key = desiredSort[i];
+            if (!sideSort[j].Keys.contains(key)) {
+                break;
+            }
+            i++;
         }
     }
 

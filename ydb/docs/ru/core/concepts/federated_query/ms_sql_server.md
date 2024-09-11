@@ -22,7 +22,7 @@
 1. {% include [!](_includes/connector_deployment.md) %}
 1. [Выполнить запрос](#query) к базе данных.
 
-## Синтаксис запросов { #query }
+## Синтаксис запросов {#query}
 Для работы с Microsoft SQL Server используется следующая форма SQL-запроса:
 
 ```sql

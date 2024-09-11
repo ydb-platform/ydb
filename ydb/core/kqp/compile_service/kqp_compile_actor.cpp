@@ -146,7 +146,8 @@ private:
             .SetIsEnableExternalDataSources(AppData(ctx)->FeatureFlags.GetEnableExternalDataSources())
             .SetIsEnablePgConstsToParams(Config->EnablePgConstsToParams)
             .SetApplicationName(ApplicationName)
-            .SetQueryParameters(QueryId.QueryParameterTypes);
+            .SetQueryParameters(QueryId.QueryParameterTypes)
+            .SetIsEnablePgSyntax(AppData(ctx)->FeatureFlags.GetEnablePgSyntax());
 
         return ParseStatements(QueryId.Text, QueryId.Settings.Syntax, QueryId.IsSql(), settingsBuilder, PerStatementResult);
     }
@@ -172,8 +173,6 @@ private:
     }
 
     void StartSplitting(const TActorContext &ctx) {
-        YQL_ENSURE(PerStatementResult);
-
         const auto prepareSettings = PrepareCompilationSettings(ctx);
         auto result = KqpHost->SplitQuery(QueryRef, prepareSettings);
 
@@ -280,7 +279,6 @@ private:
         IKqpHost::TPrepareSettings prepareSettings;
         prepareSettings.DocumentApiRestricted = QueryId.Settings.DocumentApiRestricted;
         prepareSettings.IsInternalCall = QueryId.Settings.IsInternalCall;
-        prepareSettings.PerStatementResult = PerStatementResult;
 
         switch (QueryId.Settings.Syntax) {
             case Ydb::Query::Syntax::SYNTAX_YQL_V1:
@@ -452,9 +450,9 @@ private:
     }
 
     void FillCompileResult(std::unique_ptr<NKikimrKqp::TPreparedQuery> preparingQuery, NKikimrKqp::EQueryType queryType,
-            bool allowCache) {
+            bool allowCache, bool success) {
         auto preparedQueryHolder = std::make_shared<TPreparedQueryHolder>(
-            preparingQuery.release(), AppData()->FunctionRegistry);
+            preparingQuery.release(), AppData()->FunctionRegistry, !success);
         preparedQueryHolder->MutableLlvmSettings().Fill(Config, queryType);
         KqpCompileResult->PreparedQuery = preparedQueryHolder;
         KqpCompileResult->AllowCache = CanCacheQuery(KqpCompileResult->PreparedQuery->GetPhysicalQuery()) && allowCache;
@@ -503,7 +501,7 @@ private:
 
         if (status == Ydb::StatusIds::SUCCESS) {
             YQL_ENSURE(kqpResult.PreparingQuery);
-            FillCompileResult(std::move(kqpResult.PreparingQuery), queryType, kqpResult.AllowCache);
+            FillCompileResult(std::move(kqpResult.PreparingQuery), queryType, kqpResult.AllowCache, true);
 
             auto now = TInstant::Now();
             auto duration = now - StartTime;
@@ -514,7 +512,7 @@ private:
                 << ", duration: " << duration);
         } else {
             if (kqpResult.PreparingQuery) {
-                FillCompileResult(std::move(kqpResult.PreparingQuery), queryType, kqpResult.AllowCache);
+                FillCompileResult(std::move(kqpResult.PreparingQuery), queryType, kqpResult.AllowCache, false);
             }
 
             LOG_ERROR_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, "Compilation failed"

@@ -6,8 +6,7 @@
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/string/cast.h>
-
-#include <library/cpp/disjoint_sets/disjoint_sets.h>
+#include <util/string/printf.h>
 
 const TString& ToString(NYql::EJoinKind);
 const TString& ToString(NYql::EJoinAlgoType);
@@ -304,6 +303,42 @@ TCardinalityHints::TCardinalityHints(const TString& json) {
 
         hint.Value = h.at("value").GetDoubleSafe();
         Hints.push_back(hint);
+    }
+}
+
+std::shared_ptr<IBaseOptimizerNode> MakeJoinTreeFromJson(const NJson::TJsonValue& jsonTree) {
+    if (jsonTree.IsArray()) {
+        auto children = jsonTree.GetArraySafe();
+        Y_ENSURE(children.size() == 2, Sprintf("Expected 2 inputs for JoinOrder hints, got: %ld", children.size()));
+        
+        auto joinNode = TJoinOptimizerNode(
+            MakeJoinTreeFromJson(children[0]),
+            MakeJoinTreeFromJson(children[1]),
+            {},
+            EJoinKind::Cross, // just a stub
+            EJoinAlgoType::Undefined,
+            true
+        );
+        return std::make_shared<TJoinOptimizerNode>(std::move(joinNode));
+    }
+
+    Y_ENSURE(
+        jsonTree.IsString(),
+        Sprintf("A relation must be a string for JoinOrder hints! Got %s, expected a string.", jsonTree.GetStringRobust().c_str())
+    );
+    return std::make_shared<TRelOptimizerNode>(jsonTree.GetStringSafe(), nullptr);
+}
+
+TJoinOrderHints::TJoinOrderHints(const TString& json) {
+    const static TString PARSING_FORMAT_ERROR = 
+        R"(Join order hints parsing failed. The example of the format: [ ["A", "B"], ["B", "C"] ])";
+
+    NJson::TJsonValue jsonTree;
+    NJson::ReadJsonTree(json, &jsonTree, true);
+
+    Y_ENSURE(jsonTree.IsArray(), PARSING_FORMAT_ERROR);
+    for (const auto& hintTreeJson: jsonTree.GetArray()) {
+        HintTrees.push_back(MakeJoinTreeFromJson(hintTreeJson));
     }
 }
 

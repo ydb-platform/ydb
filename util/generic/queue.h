@@ -48,6 +48,15 @@ public:
         this->c.clear();
     }
 
+    inline T PopValue() {
+        Y_ASSERT(!this->empty());
+        auto& container = this->c;
+        std::pop_heap(container.begin(), container.end(), this->comp);
+        T value = std::move(container.back());
+        container.pop_back();
+        return value;
+    }
+
     inline S& Container() Y_LIFETIME_BOUND {
         return this->c;
     }

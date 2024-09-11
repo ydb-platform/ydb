@@ -75,7 +75,7 @@ namespace NKikimr {
                 // find the slowest disk and mark it
                 switch (blackboard.AccelerationMode) {
                     case TBlackboard::AccelerationModeSkipTwoSlowest: {
-                        MakeSlowSubgroupDiskMaskForTwoSlowest(state, info, blackboard, false, accelerationParams);
+                        MarkSlowDisks(state, info, blackboard, false, accelerationParams);
                     }
                     case TBlackboard::AccelerationModeSkipMarked:
                         // The slowest disk is already marked!
@@ -156,7 +156,7 @@ namespace NKikimr {
                 return EStrategyOutcome::IN_PROGRESS;
             } else if (!state.Whole.Needed.IsSubsetOf(state.Whole.Here())) {
                 // we haven't requested anything, but there is no required data in buffer, so blob is lost
-                R_LOG_WARN_SX(logCtx, "BPG48", "missing blob# " << state.Id.ToString() << " state# " << state.ToString());
+                DSP_LOG_WARN_SX(logCtx, "BPG48", "missing blob# " << state.Id.ToString() << " state# " << state.ToString());
                 state.WholeSituation = TBlobState::ESituation::Absent;
                 if (PhantomCheck || info.GetQuorumChecker().CheckQuorumForSubgroup(possiblyWritten)) {
                     // this blob is either:

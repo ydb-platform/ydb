@@ -34,7 +34,7 @@ protected:
     void AddGetRequest(TLogContext &logCtx, TGroupDiskRequests &groupDiskRequests, TLogoBlobID &fullId, ui32 partIdx,
             TBlobState::TDisk &disk, TIntervalSet<i32> &intervalSet, const char *logMarker);
     void PreparePartLayout(const TBlobState &state, const TBlobStorageGroupInfo &info,
-            TBlobStorageGroupType::TPartLayout *layout,  const TStackVec<ui32, 2>& slowDiskIdxs);
+            TBlobStorageGroupType::TPartLayout *layout, ui32 slowDiskSubgroupMask);
     bool IsPutNeeded(const TBlobState &state, const TBlobStorageGroupType::TPartPlacement &partPlacement);
     void PreparePutsForPartPlacement(TLogContext &logCtx, TBlobState &state,
             const TBlobStorageGroupInfo &info, TGroupDiskRequests &groupDiskRequests,

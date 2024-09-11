@@ -305,10 +305,10 @@ namespace NYql {
             const TGenericState::TPtr State_;
         };
 
-    }
+    } // namespace
 
     THolder<IDqIntegration> CreateGenericDqIntegration(TGenericState::TPtr state) {
         return MakeHolder<TGenericDqIntegration>(state);
     }
 
-}
+} // namespace NYql

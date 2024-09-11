@@ -4,27 +4,25 @@
 namespace NKikimr::NColumnShard {
 
 bool Schema::InsertTable_Load(NIceDb::TNiceDb& db, const IBlobGroupSelector* dsGroupSelector, NOlap::TInsertTableAccessor& insertTable, const TInstant& /*loadTime*/) {
-    auto rowset = db.Table<InsertTable>().GreaterOrEqual(0, 0, 0, 0, "").Select();
+    auto rowset = db.Table<InsertTable>().Select();
     if (!rowset.IsReady()) {
         return false;
     }
 
     while (!rowset.EndOfSet()) {
         EInsertTableIds recType = (EInsertTableIds)rowset.GetValue<InsertTable::Committed>();
-        ui64 planStep = rowset.GetValue<InsertTable::PlanStep>();
-        ui64 writeTxId = rowset.GetValueOrDefault<InsertTable::WriteTxId>();
-        ui64 pathId = rowset.GetValue<InsertTable::PathId>();
-        TString dedupId = rowset.GetValue<InsertTable::DedupId>();
-        TString strBlobId = rowset.GetValue<InsertTable::BlobId>();
-        TString metaStr = rowset.GetValue<InsertTable::Meta>();
-        ui64 schemaVersion = rowset.HaveValue<InsertTable::SchemaVersion>() ? rowset.GetValue<InsertTable::SchemaVersion>() : 0;
+        const ui64 planStep = rowset.GetValue<InsertTable::PlanStep>();
+        const ui64 writeTxId = rowset.GetValueOrDefault<InsertTable::WriteTxId>();
+        const ui64 pathId = rowset.GetValue<InsertTable::PathId>();
+        const TString dedupId = rowset.GetValue<InsertTable::DedupId>();
+        const ui64 schemaVersion = rowset.HaveValue<InsertTable::SchemaVersion>() ? rowset.GetValue<InsertTable::SchemaVersion>() : 0;
 
         TString error;
-        NOlap::TUnifiedBlobId blobId = NOlap::TUnifiedBlobId::ParseFromString(strBlobId, dsGroupSelector, error);
+        NOlap::TUnifiedBlobId blobId = NOlap::TUnifiedBlobId::ParseFromString(rowset.GetValue<InsertTable::BlobId>(), dsGroupSelector, error);
         Y_ABORT_UNLESS(blobId.IsValid(), "Failied to parse blob id: %s", error.c_str());
 
         NKikimrTxColumnShard::TLogicalMetadata meta;
-        if (metaStr) {
+        if (auto metaStr = rowset.GetValue<InsertTable::Meta>()) {
             Y_ABORT_UNLESS(meta.ParseFromString(metaStr));
         }
 
@@ -36,19 +34,20 @@ bool Schema::InsertTable_Load(NIceDb::TNiceDb& db, const IBlobGroupSelector* dsG
         if (rowset.HaveValue<InsertTable::BlobRangeSize>()) {
             rangeSize = rowset.GetValue<InsertTable::BlobRangeSize>();
         }
-
         AFL_VERIFY(!!rangeOffset == !!rangeSize);
-        TInsertedData data(planStep, writeTxId, pathId, dedupId, NOlap::TBlobRange(blobId, rangeOffset.value_or(0), rangeSize.value_or(blobId.BlobSize())), meta, schemaVersion, {});
+
+        auto userData = std::make_shared<NOlap::TUserData>(pathId,
+            NOlap::TBlobRange(blobId, rangeOffset.value_or(0), rangeSize.value_or(blobId.BlobSize())), meta, schemaVersion, std::nullopt);
 
         switch (recType) {
             case EInsertTableIds::Inserted:
-                insertTable.AddInserted(std::move(data), true);
+                insertTable.AddInserted(NOlap::TInsertedData((TInsertWriteId)writeTxId, userData), true);
                 break;
             case EInsertTableIds::Committed:
-                insertTable.AddCommitted(std::move(data), true);
+                insertTable.AddCommitted(NOlap::TCommittedData(userData, planStep, writeTxId, dedupId), true);
                 break;
             case EInsertTableIds::Aborted:
-                insertTable.AddAborted(std::move(data), true);
+                insertTable.AddAborted(NOlap::TInsertedData((TInsertWriteId)writeTxId, userData), true);
                 break;
         }
         if (!rowset.Next()) {
@@ -59,6 +58,7 @@ bool Schema::InsertTable_Load(NIceDb::TNiceDb& db, const IBlobGroupSelector* dsG
 }
 
 void Schema::SaveTxInfo(NIceDb::TNiceDb& db, const TFullTxInfo& txInfo, const TString& txBody) {
+    AFL_VERIFY(txInfo.TxKind != NKikimrTxColumnShard::TX_KIND_NONE);
     db.Table<TxInfo>().Key(txInfo.TxId).Update(
         NIceDb::TUpdate<TxInfo::TxKind>(txInfo.TxKind),
         NIceDb::TUpdate<TxInfo::TxBody>(txBody),
@@ -70,11 +70,14 @@ void Schema::SaveTxInfo(NIceDb::TNiceDb& db, const TFullTxInfo& txInfo, const TS
 }
 
 void Schema::UpdateTxInfoSource(NIceDb::TNiceDb& db, const TFullTxInfo& txInfo) {
-    db.Table<TxInfo>().Key(txInfo.GetTxId()).Update(
-        NIceDb::TUpdate<TxInfo::Source>(txInfo.Source),
-        NIceDb::TUpdate<TxInfo::Cookie>(txInfo.Cookie),
-        NIceDb::TUpdate<TxInfo::SeqNo>(txInfo.SerializeSeqNoAsString())
-    );
+    db.Table<TxInfo>()
+        .Key(txInfo.GetTxId())
+        .Update(NIceDb::TUpdate<TxInfo::Source>(txInfo.Source), NIceDb::TUpdate<TxInfo::Cookie>(txInfo.Cookie),
+            NIceDb::TUpdate<TxInfo::SeqNo>(txInfo.SerializeSeqNoAsString()));
 }
 
+void Schema::UpdateTxInfoBody(NIceDb::TNiceDb& db, const ui64 txId, const TString& txBody) {
+    db.Table<TxInfo>().Key(txId).Update(NIceDb::TUpdate<TxInfo::TxBody>(txBody));
 }
+
+}   // namespace NKikimr::NColumnShard

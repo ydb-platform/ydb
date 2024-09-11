@@ -5,7 +5,6 @@
 #include "service_initializer.h"
 
 #include <ydb/core/actorlib_impl/destruct_actor.h>
-#include <ydb/core/actorlib_impl/load_network.h>
 
 #include "ydb/core/audit/audit_log_service.h"
 
@@ -771,8 +770,6 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
             // TODO(alexvru): pool?
             setup->LocalServices.emplace_back(NInterconnect::MakeLoadResponderActorId(NodeId),
                 TActorSetupCmd(NInterconnect::CreateLoadResponderActor(), TMailboxType::ReadAsFilled, systemPoolId));
-
-            //IC_Load::InitializeService(setup, appData, maxNode);
         }
     }
 
@@ -1091,6 +1088,7 @@ void TSharedCacheInitializer::InitializeServices(
     }
     config->TotalAsyncQueueInFlyLimit = cfg.GetAsyncQueueInFlyLimit();
     config->TotalScanQueueInFlyLimit = cfg.GetScanQueueInFlyLimit();
+    config->ReplacementPolicy = cfg.GetReplacementPolicy();
 
     if (cfg.HasActivePagesReservationPercent()) {
         config->ActivePagesReservationPercent = cfg.GetActivePagesReservationPercent();
@@ -2047,8 +2045,29 @@ void TMemoryControllerInitializer::InitializeServices(
     NActors::TActorSystemSetup* setup,
     const NKikimr::TAppData* appData)
 {
-    auto config = appData->MemoryControllerConfig;
-    auto* actor = NMemory::CreateMemoryController(TDuration::Seconds(1), ProcessMemoryInfoProvider, config, appData->Counters);
+    NMemory::TResourceBrokerConfig resourceBrokerSelfConfig; // for backward compatibility
+    auto mergeResourceBrokerConfigs = [&](const NKikimrResourceBroker::TResourceBrokerConfig& resourceBrokerConfig) {
+        if (resourceBrokerConfig.HasResourceLimit() && resourceBrokerConfig.GetResourceLimit().HasMemory()) {
+            resourceBrokerSelfConfig.LimitBytes = resourceBrokerConfig.GetResourceLimit().GetMemory();
+        }
+        for (const auto& queue : resourceBrokerConfig.GetQueues()) {
+            if (queue.GetName() == NLocalDb::KqpResourceManagerQueue) {
+                if (queue.HasLimit() && queue.GetLimit().HasMemory()) {
+                    resourceBrokerSelfConfig.QueryExecutionLimitBytes = queue.GetLimit().GetMemory();
+                }
+            }
+        }
+    };
+    if (Config.HasBootstrapConfig() && Config.GetBootstrapConfig().HasResourceBroker()) {
+        mergeResourceBrokerConfigs(Config.GetBootstrapConfig().GetResourceBroker());
+    }
+    if (Config.HasResourceBrokerConfig()) {
+        mergeResourceBrokerConfigs(Config.GetResourceBrokerConfig());
+    }
+
+    auto* actor = NMemory::CreateMemoryController(TDuration::Seconds(1), ProcessMemoryInfoProvider, 
+        Config.GetMemoryControllerConfig(), resourceBrokerSelfConfig, 
+        appData->Counters);
     setup->LocalServices.emplace_back(
         NMemory::MakeMemoryControllerId(0),
         TActorSetupCmd(actor, TMailboxType::HTSwap, appData->BatchPoolId)

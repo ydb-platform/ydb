@@ -1,8 +1,3 @@
----
-title: "YDB. DBMS overview"
-description: "YDB is a horizontally scalable distributed fault-tolerant DBMS. YDB is designed to meet high performance requirements, for example, a typical server can handle dozens of thousands of requests per second. The system is designed to handle hundreds of petabytes of data."
----
-
 # {{ ydb-short-name }} overview
 
 *{{ ydb-short-name }}* is a horizontally scalable distributed fault-tolerant DBMS. {{ ydb-short-name }} is designed for high performance with a typical server being capable of handling tens of thousands of queries per second. The system is designed to handle hundreds of petabytes of data. {{ ydb-short-name }} can operate in single data center and geo-distributed (cross data center) modes on a cluster of thousands of servers.

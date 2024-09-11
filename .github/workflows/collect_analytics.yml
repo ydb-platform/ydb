@@ -1,7 +1,7 @@
 name: Collect-analytics-run
 on:
   schedule:
-    - cron: "0 */4 * * *"  # Every 4 h
+    - cron: "0 * * * *"  # Every 1 h
   workflow_dispatch:
     inputs:
       commit_sha:
@@ -17,7 +17,7 @@ jobs:
     runs-on: [ self-hosted ]
     steps:
     - name: Checkout
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         ref: ${{ inputs.commit_sha }}
     - name: Setup ydb access
@@ -27,7 +27,19 @@ jobs:
     - name: Install dependencies
       run: |
         python3 -m pip install ydb ydb[yc] codeowners
+    - name: Collect testowners 
+      run: python3 .github/scripts/analytics/upload_testowners.py
     - name: Collect test history data with window 5 days
       run: python3 .github/scripts/analytics/flaky_tests_history.py --days-window=5
-    - name: Collect test history data with window 1 day 
+    - name: Collect test history data with window 1 day
       run: python3 .github/scripts/analytics/flaky_tests_history.py --days-window=1
+    - name: Collect test history data with window 10 run relwithdebinfo for main
+      run: python3 .github/scripts/analytics/flaky_tests_history_n_runs.py --runs=10 
+    - name: Collect test history data with window 10 run release-asan for main
+      run: python3 .github/scripts/analytics/flaky_tests_history_n_runs.py --runs=10 --build_type=release-asan
+    - name: Collect test history data with window 50 run relwithdebinfo for main
+      run: python3 .github/scripts/analytics/flaky_tests_history_n_runs.py --runs=50 
+    - name: Collect test history data with window 50 run release-asan for main
+      run: python3 .github/scripts/analytics/flaky_tests_history_n_runs.py --runs=50 --build_type=release-asan
+
+

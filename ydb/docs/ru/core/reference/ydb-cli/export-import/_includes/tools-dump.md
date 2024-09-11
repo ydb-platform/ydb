@@ -37,7 +37,7 @@
 С автоматическим созданием директории `backup_...` в текущей директории:
 
 ```
-{{ ydb-cli }} --profile quickstart tools dump 
+{{ ydb-cli }} --profile quickstart tools dump
 ```
 
 В заданную директорию:

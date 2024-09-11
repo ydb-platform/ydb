@@ -9,7 +9,7 @@ CurrentUtcDatetime(...)->Datetime
 CurrentUtcTimestamp(...)->Timestamp
 ```
 
-Аргументы опциональны и работают по тому же принципу, что и у [RANDOM](#random).
+Аргументы опциональны и работают по тому же принципу, что и у [RANDOM](../../basic.md#random).
 
 **Примеры**
 ``` yql

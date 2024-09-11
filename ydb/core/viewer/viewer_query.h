@@ -21,7 +21,7 @@ class TJsonQuery : public TViewerPipeClient {
     using TBase = TViewerPipeClient;
     TJsonSettings JsonSettings;
     ui32 Timeout = 0;
-    TVector<Ydb::ResultSet> ResultSets;
+    std::vector<std::vector<Ydb::ResultSet>> ResultSets;
     TString Query;
     TString Database;
     TString Action;
@@ -159,21 +159,15 @@ public:
             return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Query is empty"), "EmptyQuery");
         }
 
-        Direct |= Event->Get()->Request.GetUri().StartsWith("/node/"); // we're already forwarding
+        Direct |= !TBase::Event->Get()->Request.GetHeader("X-Forwarded-From-Node").empty(); // we're already forwarding
         Direct |= (Database == AppData()->TenantName); // we're already on the right node
 
         if (Database && !Direct) {
-            BLOG_TRACE("Requesting StateStorageEndpointsLookup for " << Database);
-            RequestStateStorageEndpointsLookup(Database); // to find some dynamic node and redirect query there
+            return RedirectToDatabase(Database); // to find some dynamic node and redirect query there
         } else {
             SendKpqProxyRequest();
         }
         Become(&TThis::StateWork, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
-    }
-
-    void HandleReply(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
-        BLOG_TRACE("Received TEvBoardInfo");
-        TBase::ReplyAndPassAway(MakeForward(GetNodesFromBoardReply(ev)));
     }
 
     void PassAway() override {
@@ -183,11 +177,9 @@ public:
         if (SessionId) {
             auto event = std::make_unique<NKqp::TEvKqp::TEvCloseSessionRequest>();
             event->Record.MutableRequest()->SetSessionId(SessionId);
-            BLOG_TRACE("Closing session " << SessionId);
             Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.release());
         }
         TBase::PassAway();
-        BLOG_TRACE("PassAway()");
     }
 
     void ReplyAndPassAway() override {
@@ -195,7 +187,6 @@ public:
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvStateStorage::TEvBoardInfo, HandleReply);
             hFunc(NKqp::TEvKqp::TEvCreateSessionResponse, HandleReply);
             hFunc(NKqp::TEvKqp::TEvQueryResponse, HandleReply);
             hFunc(NKqp::TEvKqp::TEvAbortExecution, HandleReply);
@@ -234,7 +225,6 @@ public:
                 Span.Attribute("database", Database);
             }
         }
-        BLOG_TRACE("Creating session");
         CreateSessionResponse = MakeRequest<NKqp::TEvKqp::TEvCreateSessionResponse>(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.release());
     }
 
@@ -264,7 +254,6 @@ public:
                     TStringBuilder() << "Failed to create session, error " << ev->Get()->Record.GetYdbStatus()), "InternalError");
         }
         SessionId = CreateSessionResponse->Record.GetResponse().GetSessionId();
-        BLOG_TRACE("Session created " << SessionId);
 
         {
             auto event = std::make_unique<NKqp::TEvKqp::TEvPingSessionRequest>();
@@ -339,7 +328,6 @@ public:
         }
         ActorIdToProto(SelfId(), event->Record.MutableRequestActorId());
         QueryResponse = MakeRequest<NKqp::TEvKqp::TEvQueryResponse>(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.Release());
-        BLOG_TRACE("Query sent");
     }
 
 private:
@@ -378,7 +366,7 @@ private:
             case NYdb::EPrimitiveType::Interval:
                 return TStringBuilder() << valueParser.GetInterval();
             case NYdb::EPrimitiveType::Date32:
-                return valueParser.GetInt32();
+                return valueParser.GetDate32();
             case NYdb::EPrimitiveType::Datetime64:
                 return valueParser.GetDatetime64();
             case NYdb::EPrimitiveType::Timestamp64:
@@ -439,8 +427,8 @@ private:
     }
 
     void HandleReply(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
-        BLOG_TRACE("Query response received");
         NJson::TJsonValue jsonResponse;
+        jsonResponse["version"] = Viewer->GetCapabilityVersion("/viewer/query");
         if (ev->Get()->Record.GetRef().GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
             QueryResponse.Set(std::move(ev));
             MakeOkReply(jsonResponse, QueryResponse->Record.GetRef());
@@ -497,6 +485,7 @@ private:
     }
 
     void HandleReply(NKqp::TEvKqpExecuter::TEvStreamData::TPtr& ev) {
+        QueryResponse.Event("StreamData");
         NKikimrKqp::TEvExecuterStreamData& data(ev->Get()->Record);
 
         if (TotalRows < LimitRows) {
@@ -506,7 +495,10 @@ private:
                 data.MutableResultSet()->set_truncated(true);
             }
             TotalRows += data.GetResultSet().rows_size();
-            ResultSets.emplace_back() = std::move(*data.MutableResultSet());
+            if (ResultSets.size() <= data.GetQueryResultIndex()) {
+                ResultSets.resize(data.GetQueryResultIndex() + 1);
+            }
+            ResultSets[data.GetQueryResultIndex()].emplace_back() = std::move(*data.MutableResultSet());
         }
 
         THolder<NKqp::TEvKqpExecuter::TEvStreamDataAck> ack = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
@@ -523,7 +515,6 @@ private:
         if (SessionId) {
             auto event = std::make_unique<NKqp::TEvKqp::TEvCancelQueryRequest>();
             event->Record.MutableRequest()->SetSessionId(SessionId);
-            BLOG_TRACE("Cancelling query in session " << SessionId);
             Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.release());
             error << ", query was cancelled";
         }
@@ -555,11 +546,11 @@ private:
                 for (const auto& result : response.GetResults()) {
                     Ydb::ResultSet resultSet;
                     NKqp::ConvertKqpQueryResultToDbResult(result, &resultSet);
-                    ResultSets.emplace_back(std::move(resultSet));
+                    ResultSets.emplace_back().emplace_back(std::move(resultSet));
                 }
 
                 for (const auto& result : response.GetYdbResults()) {
-                    ResultSets.emplace_back(result);
+                    ResultSets.emplace_back().emplace_back(result);
                 }
             }
             catch (const std::exception& ex) {
@@ -574,15 +565,16 @@ private:
             if (Schema == ESchemaType::Classic) {
                 NJson::TJsonValue& jsonResults = jsonResponse["result"];
                 jsonResults.SetType(NJson::JSON_ARRAY);
-                for (auto it = ResultSets.begin(); it != ResultSets.end(); ++it) {
-                    NYdb::TResultSet resultSet(*it);
-                    const auto& columnsMeta = resultSet.GetColumnsMeta();
-                    NYdb::TResultSetParser rsParser(resultSet);
-                    while (rsParser.TryNextRow()) {
-                        NJson::TJsonValue& jsonRow = jsonResults.AppendValue({});
-                        for (size_t columnNum = 0; columnNum < columnsMeta.size(); ++columnNum) {
-                            const NYdb::TColumn& columnMeta = columnsMeta[columnNum];
-                            jsonRow[columnMeta.Name] = ColumnValueToJsonValue(rsParser.ColumnParser(columnNum));
+                for (const auto& resultSets : ResultSets) {
+                    for (NYdb::TResultSet resultSet : resultSets) {
+                        const auto& columnsMeta = resultSet.GetColumnsMeta();
+                        NYdb::TResultSetParser rsParser(resultSet);
+                        while (rsParser.TryNextRow()) {
+                            NJson::TJsonValue& jsonRow = jsonResults.AppendValue({});
+                            for (size_t columnNum = 0; columnNum < columnsMeta.size(); ++columnNum) {
+                                const NYdb::TColumn& columnMeta = columnsMeta[columnNum];
+                                jsonRow[columnMeta.Name] = ColumnValueToJsonValue(rsParser.ColumnParser(columnNum));
+                            }
                         }
                     }
                 }
@@ -591,7 +583,7 @@ private:
             if (Schema == ESchemaType::Modern) {
                 {
                     NJson::TJsonValue& jsonColumns = jsonResponse["columns"];
-                    NYdb::TResultSet resultSet(ResultSets.front());
+                    NYdb::TResultSet resultSet(ResultSets.front().front());
                     const auto& columnsMeta = resultSet.GetColumnsMeta();
                     jsonColumns.SetType(NJson::JSON_ARRAY);
                     for (size_t columnNum = 0; columnNum < columnsMeta.size(); ++columnNum) {
@@ -604,16 +596,17 @@ private:
 
                 NJson::TJsonValue& jsonResults = jsonResponse["result"];
                 jsonResults.SetType(NJson::JSON_ARRAY);
-                for (auto it = ResultSets.begin(); it != ResultSets.end(); ++it) {
-                    NYdb::TResultSet resultSet(*it);
-                    const auto& columnsMeta = resultSet.GetColumnsMeta();
-                    NYdb::TResultSetParser rsParser(resultSet);
-                    while (rsParser.TryNextRow()) {
-                        NJson::TJsonValue& jsonRow = jsonResults.AppendValue({});
-                        jsonRow.SetType(NJson::JSON_ARRAY);
-                        for (size_t columnNum = 0; columnNum < columnsMeta.size(); ++columnNum) {
-                            NJson::TJsonValue& jsonColumn = jsonRow.AppendValue({});
-                            jsonColumn = ColumnValueToJsonValue(rsParser.ColumnParser(columnNum));
+                for (const auto& resultSets : ResultSets) {
+                    for (NYdb::TResultSet resultSet : resultSets) {
+                        const auto& columnsMeta = resultSet.GetColumnsMeta();
+                        NYdb::TResultSetParser rsParser(resultSet);
+                        while (rsParser.TryNextRow()) {
+                            NJson::TJsonValue& jsonRow = jsonResults.AppendValue({});
+                            jsonRow.SetType(NJson::JSON_ARRAY);
+                            for (size_t columnNum = 0; columnNum < columnsMeta.size(); ++columnNum) {
+                                NJson::TJsonValue& jsonColumn = jsonRow.AppendValue({});
+                                jsonColumn = ColumnValueToJsonValue(rsParser.ColumnParser(columnNum));
+                            }
                         }
                     }
                 }
@@ -622,32 +615,37 @@ private:
             if (Schema == ESchemaType::Multi) {
                 NJson::TJsonValue& jsonResults = jsonResponse["result"];
                 jsonResults.SetType(NJson::JSON_ARRAY);
-                for (auto it = ResultSets.begin(); it != ResultSets.end(); ++it) {
-                    NYdb::TResultSet resultSet(*it);
-                    const auto& columnsMeta = resultSet.GetColumnsMeta();
+                for (const auto& resultSets : ResultSets) {
                     NJson::TJsonValue& jsonResult = jsonResults.AppendValue({});
-
-                    NJson::TJsonValue& jsonColumns = jsonResult["columns"];
-                    jsonColumns.SetType(NJson::JSON_ARRAY);
-                    for (size_t columnNum = 0; columnNum < columnsMeta.size(); ++columnNum) {
-                        NJson::TJsonValue& jsonColumn = jsonColumns.AppendValue({});
-                        const NYdb::TColumn& columnMeta = columnsMeta[columnNum];
-                        jsonColumn["name"] = columnMeta.Name;
-                        jsonColumn["type"] = columnMeta.Type.ToString();
-                    }
-
-                    NJson::TJsonValue& jsonRows = jsonResult["rows"];
-                    NYdb::TResultSetParser rsParser(resultSet);
-                    while (rsParser.TryNextRow()) {
-                        NJson::TJsonValue& jsonRow = jsonRows.AppendValue({});
-                        jsonRow.SetType(NJson::JSON_ARRAY);
-                        for (size_t columnNum = 0; columnNum < columnsMeta.size(); ++columnNum) {
-                            NJson::TJsonValue& jsonColumn = jsonRow.AppendValue({});
-                            jsonColumn = ColumnValueToJsonValue(rsParser.ColumnParser(columnNum));
+                    bool hasColumns = false;
+                    for (NYdb::TResultSet resultSet : resultSets) {
+                        if (!hasColumns) {
+                            NJson::TJsonValue& jsonColumns = jsonResult["columns"];
+                            jsonColumns.SetType(NJson::JSON_ARRAY);
+                            const auto& columnsMeta = resultSet.GetColumnsMeta();
+                            for (size_t columnNum = 0; columnNum < columnsMeta.size(); ++columnNum) {
+                                NJson::TJsonValue& jsonColumn = jsonColumns.AppendValue({});
+                                const NYdb::TColumn& columnMeta = columnsMeta[columnNum];
+                                jsonColumn["name"] = columnMeta.Name;
+                                jsonColumn["type"] = columnMeta.Type.ToString();
+                            }
+                            hasColumns = true;
                         }
-                    }
-                    if (resultSet.Truncated()) {
-                        jsonResult["truncated"] = true;
+
+                        NJson::TJsonValue& jsonRows = jsonResult["rows"];
+                        NYdb::TResultSetParser rsParser(resultSet);
+                        while (rsParser.TryNextRow()) {
+                            NJson::TJsonValue& jsonRow = jsonRows.AppendValue({});
+                            jsonRow.SetType(NJson::JSON_ARRAY);
+                            for (size_t columnNum = 0; columnNum < rsParser.ColumnsCount(); ++columnNum) {
+                                NJson::TJsonValue& jsonColumn = jsonRow.AppendValue({});
+                                jsonColumn = ColumnValueToJsonValue(rsParser.ColumnParser(columnNum));
+                            }
+                        }
+
+                        if (resultSet.Truncated()) {
+                            jsonResult["truncated"] = true;
+                        }
                     }
                 }
             }
@@ -655,14 +653,15 @@ private:
             if (Schema == ESchemaType::Ydb) {
                 NJson::TJsonValue& jsonResults = jsonResponse["result"];
                 jsonResults.SetType(NJson::JSON_ARRAY);
-                for (auto it = ResultSets.begin(); it != ResultSets.end(); ++it) {
-                    NYdb::TResultSet resultSet(*it);
-                    const auto& columnsMeta = resultSet.GetColumnsMeta();
-                    NYdb::TResultSetParser rsParser(resultSet);
-                    while (rsParser.TryNextRow()) {
-                        NJson::TJsonValue& jsonRow = jsonResults.AppendValue({});
-                        TString row = NYdb::FormatResultRowJson(rsParser, columnsMeta, IsBase64Encode ? NYdb::EBinaryStringEncoding::Base64 : NYdb::EBinaryStringEncoding::Unicode);
-                        NJson::ReadJsonTree(row, &jsonRow);
+                for (const auto& resultSets : ResultSets) {
+                    for (NYdb::TResultSet resultSet : resultSets) {
+                        const auto& columnsMeta = resultSet.GetColumnsMeta();
+                        NYdb::TResultSetParser rsParser(resultSet);
+                        while (rsParser.TryNextRow()) {
+                            NJson::TJsonValue& jsonRow = jsonResults.AppendValue({});
+                            TString row = NYdb::FormatResultRowJson(rsParser, columnsMeta, IsBase64Encode ? NYdb::EBinaryStringEncoding::Base64 : NYdb::EBinaryStringEncoding::Unicode);
+                            NJson::ReadJsonTree(row, &jsonRow);
+                        }
                     }
                 }
             }

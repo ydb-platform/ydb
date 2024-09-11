@@ -20,6 +20,7 @@ namespace {
 
 const TString YtGateway_CanonizePaths = "YtGateway_CanonizePaths";
 const TString YtGateway_GetTableInfo = "YtGateway_GetTableInfo";
+const TString YtGateway_GetTableRange = "YtGateway_GetTableRange";
 const TString YtGateway_GetFolder = "YtGateway_GetFolder";
 const TString YtGateway_GetFolders = "YtGateway_GetFolders";
 const TString YtGateway_ResolveLinks = "YtGateway_ResolveLinks";
@@ -300,12 +301,108 @@ public:
             });
     }
 
-    NThreading::TFuture<TTableRangeResult> GetTableRange(TTableRangeOptions&& options) final {
-        if (QContext_.CanRead()) {
-            throw yexception() << "Can't replay GetTableRange";
+    static TString MakeGetTableRangeKey(const TTableRangeOptions& options) {
+        auto keyNode = NYT::TNode()
+            ("Cluster", options.Cluster())
+            ("Prefix", options.Prefix())
+            ("Suffix", options.Suffix());
+
+        if (options.Filter()) {
+            keyNode("Filter", MakeCacheKey(*options.Filter()));
         }
 
-        return Inner_->GetTableRange(std::move(options));
+        return MakeHash(NYT::NodeToCanonicalYsonString(keyNode, NYT::NYson::EYsonFormat::Binary));
+    }
+
+    NThreading::TFuture<TTableRangeResult> GetTableRange(TTableRangeOptions&& options) final {
+        TString key;
+        if (QContext_) {
+            key = MakeGetTableRangeKey(options);
+        }
+
+        if (QContext_.CanRead()) {
+            TTableRangeResult res;
+            res.SetSuccess();
+            auto item = QContext_.GetReader()->Get({YtGateway_GetTableRange, key}).GetValueSync();
+            if (!item) {
+                throw yexception() << "Missing replay data";
+            }
+
+            auto listNode = NYT::NodeFromYsonString(item->Value);
+            for (const auto& valueNode : listNode.AsList()) {
+                TCanonizedPath p;
+                p.Path = valueNode["Path"].AsString();
+                if (valueNode.HasKey("Columns")) {
+                    p.Columns.ConstructInPlace();
+                    for (const auto& c : valueNode["Columns"].AsList()) {
+                        p.Columns->push_back(c.AsString());
+                    }
+                }
+
+                if (valueNode.HasKey("Ranges")) {
+                    p.Ranges.ConstructInPlace();
+                    for (const auto& r : valueNode["Ranges"].AsString()) {
+                        NYT::TReadRange range;
+                        NYT::Deserialize(range, r);
+                        p.Ranges->push_back(range);
+                    }
+                }
+
+                if (valueNode.HasKey("AdditionalAttributes")) {
+                    p.AdditionalAttributes = valueNode["AdditionalAttributes"].AsString();
+                }
+
+                res.Tables.push_back(p);
+            }
+
+            return NThreading::MakeFuture<TTableRangeResult>(res);
+        }
+
+        return Inner_->GetTableRange(std::move(options))
+            .Subscribe([key, qContext = QContext_](const NThreading::TFuture<TTableRangeResult>& future) {
+                if (!qContext.CanWrite() || future.HasException()) {
+                    return;
+                }
+
+                const auto& res = future.GetValueSync();
+                if (!res.Success()) {
+                    return;
+                }
+
+                auto listNode = NYT::TNode::CreateList();
+                for (const auto& t : res.Tables) {
+                    listNode.Add();
+                    auto& valueNode = listNode.AsList().back();
+                    valueNode("Path", t.Path);
+                    if (t.Columns) {
+                        NYT::TNode columnsNode = NYT::TNode::CreateList();
+                        for (const auto& c : *t.Columns) {
+                            columnsNode.Add(NYT::TNode(c));
+                        }
+
+                        valueNode("Columns", columnsNode);
+                    }
+
+                    if (t.Ranges) {
+                        NYT::TNode rangesNode = NYT::TNode::CreateList();
+                        for (const auto& r : *t.Ranges) {
+                            NYT::TNode rangeNode;
+                            NYT::TNodeBuilder builder(&rangeNode);
+                            NYT::Serialize(r, &builder);
+                            rangesNode.Add(rangeNode);
+                        }
+
+                        valueNode("Ranges", rangesNode);
+                    }
+
+                    if (t.AdditionalAttributes) {
+                        valueNode("AdditionalAttributes", NYT::TNode(*t.AdditionalAttributes));
+                    }
+                }
+
+                auto value = NYT::NodeToYsonString(listNode, NYT::NYson::EYsonFormat::Binary);
+                qContext.GetWriter()->Put({YtGateway_GetTableRange, key}, value).GetValueSync();
+        });
     }
 
     static TString MakeGetFolderKey(const TFolderOptions& options) {

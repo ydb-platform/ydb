@@ -9,6 +9,21 @@
             "uri": "file://test.test_BlockGet_/results.txt"
         }
     ],
+    "test.test[BlockSplitMake]": [
+        {
+            "uri": "file://test.test_BlockSplitMake_/results.txt"
+        }
+    ],
+    "test.test[BlockStartOf]": [
+        {
+            "uri": "file://test.test_BlockStartOf_/results.txt"
+        }
+    ],
+    "test.test[BlockTmGet]": [
+        {
+            "uri": "file://test.test_BlockTmGet_/results.txt"
+        }
+    ],
     "test.test[BlockTo]": [
         {
             "uri": "file://test.test_BlockTo_/results.txt"

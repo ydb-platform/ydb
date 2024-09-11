@@ -17,7 +17,7 @@ class TColumnChunkLoadContext;
 
 namespace NKikimr::NColumnShard {
 
-using NOlap::TWriteId;
+using NOlap::TInsertWriteId;
 using NOlap::IBlobGroupSelector;
 struct TFullTxInfo;
 
@@ -31,6 +31,7 @@ struct Schema : NIceDb::Schema {
     using TSettings = SchemaSettings<EmptySettings>;
 
     using TInsertedData = NOlap::TInsertedData;
+    using TCommittedData = NOlap::TCommittedData;
     using TColumnRecord = NOlap::TColumnRecord;
 
     enum EIndexTables : ui32 {
@@ -109,7 +110,10 @@ struct Schema : NIceDb::Schema {
         SmallBlobs = 12,
         OneToOneEvictedBlobs = 13,
         BlobsToDeleteWT = 14,
-        InFlightSnapshots = 15
+        InFlightSnapshots = 15,
+        TxDependencies = 16,
+        TxStates = 17,
+        TxEvents = 18
     };
 
     // Tablet tables
@@ -257,6 +261,32 @@ struct Schema : NIceDb::Schema {
 
         using TKey = TableKey<PlanStep, TxId>;
         using TColumns = TableColumns<PlanStep, TxId>;
+    };
+
+    struct TxDependencies: Table<(ui32)ECommonTables::TxDependencies> {
+        struct CommitTxId: Column<1, NScheme::NTypeIds::Uint64> {};
+        struct BrokenTxId: Column<2, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<CommitTxId, BrokenTxId>;
+        using TColumns = TableColumns<CommitTxId, BrokenTxId>;
+    };
+
+    struct TxStates: Table<(ui32)ECommonTables::TxStates> {
+        struct TxId: Column<1, NScheme::NTypeIds::Uint64> {};
+        struct Broken: Column<2, NScheme::NTypeIds::Bool> {};
+
+        using TKey = TableKey<TxId>;
+        using TColumns = TableColumns<TxId, Broken>;
+    };
+
+    struct TxEvents: Table<(ui32)ECommonTables::TxEvents> {
+        struct TxId: Column<1, NScheme::NTypeIds::Uint64> {};
+        struct GenerationId: Column<2, NScheme::NTypeIds::Uint64> {};
+        struct GenerationInternalId: Column<3, NScheme::NTypeIds::Uint64> {};
+        struct Data: Column<4, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<TxId, GenerationId, GenerationInternalId>;
+        using TColumns = TableColumns<TxId, GenerationId, GenerationInternalId, Data>;
     };
 
     // Index tables
@@ -555,7 +585,10 @@ struct Schema : NIceDb::Schema {
         ShardingInfo,
         Normalizers,
         NormalizerEvents,
-        InFlightSnapshots
+        InFlightSnapshots,
+        TxDependencies,
+        TxStates,
+        TxEvents
         >;
 
     //
@@ -671,8 +704,8 @@ struct Schema : NIceDb::Schema {
     static void SaveTxInfo(NIceDb::TNiceDb& db, const TFullTxInfo& txInfo,
                            const TString& txBody);
 
+    static void UpdateTxInfoBody(NIceDb::TNiceDb& db, const ui64 txId, const TString& txBody);
     static void UpdateTxInfoSource(NIceDb::TNiceDb& db, const TFullTxInfo& txInfo);
-
     static void UpdateTxInfoSource(NIceDb::TNiceDb& db, ui64 txId, const TActorId& source, ui64 cookie) {
         db.Table<TxInfo>().Key(txId).Update(
             NIceDb::TUpdate<TxInfo::Source>(source),
@@ -752,7 +785,7 @@ struct Schema : NIceDb::Schema {
         db.Table<TableInfo>().Key(pathId).Delete();
     }
 
-    static void SaveLongTxWrite(NIceDb::TNiceDb& db, TWriteId writeId, const ui32 writePartId, const NLongTxService::TLongTxId& longTxId, const std::optional<ui32> granuleShardingVersion) {
+    static void SaveLongTxWrite(NIceDb::TNiceDb& db, const TInsertWriteId writeId, const ui32 writePartId, const NLongTxService::TLongTxId& longTxId, const std::optional<ui32> granuleShardingVersion) {
         NKikimrLongTxService::TLongTxId proto;
         longTxId.ToProto(&proto);
         TString serialized;
@@ -764,32 +797,49 @@ struct Schema : NIceDb::Schema {
             );
     }
 
-    static void EraseLongTxWrite(NIceDb::TNiceDb& db, TWriteId writeId) {
+    static void EraseLongTxWrite(NIceDb::TNiceDb& db, const TInsertWriteId writeId) {
         db.Table<LongTxWrites>().Key((ui64)writeId).Delete();
     }
 
     // InsertTable activities
 
-    static void InsertTable_Upsert(NIceDb::TNiceDb& db, EInsertTableIds recType, const TInsertedData& data) {
-        db.Table<InsertTable>().Key((ui8)recType, data.PlanStep, data.WriteTxId, data.PathId, data.DedupId).Update(
-            NIceDb::TUpdate<InsertTable::BlobId>(data.GetBlobRange().GetBlobId().ToStringLegacy()),
-            NIceDb::TUpdate<InsertTable::BlobRangeOffset>(data.GetBlobRange().Offset),
-            NIceDb::TUpdate<InsertTable::BlobRangeSize>(data.GetBlobRange().Size),
-            NIceDb::TUpdate<InsertTable::Meta>(data.GetMeta().SerializeToProto().SerializeAsString()),
-            NIceDb::TUpdate<InsertTable::SchemaVersion>(data.GetSchemaVersion())
-        );
+    static void InsertTable_Upsert(NIceDb::TNiceDb& db, const EInsertTableIds recType, const TInsertedData& data) {
+        db.Table<InsertTable>()
+            .Key((ui8)recType, 0, (ui64)data.GetInsertWriteId(), data.GetPathId(), "")
+            .Update(NIceDb::TUpdate<InsertTable::BlobId>(data.GetBlobRange().GetBlobId().ToStringLegacy()),
+                NIceDb::TUpdate<InsertTable::BlobRangeOffset>(data.GetBlobRange().Offset),
+                NIceDb::TUpdate<InsertTable::BlobRangeSize>(data.GetBlobRange().Size),
+                NIceDb::TUpdate<InsertTable::Meta>(data.GetMeta().SerializeToProto().SerializeAsString()),
+                NIceDb::TUpdate<InsertTable::SchemaVersion>(data.GetSchemaVersion()));
+    }
+
+    static void InsertTable_Upsert(NIceDb::TNiceDb& db, const TCommittedData& data) {
+        db.Table<InsertTable>()
+            .Key((ui8)EInsertTableIds::Committed, data.GetSnapshot().GetPlanStep(), data.GetSnapshot().GetTxId(), data.GetPathId(),
+                data.GetDedupId())
+            .Update(NIceDb::TUpdate<InsertTable::BlobId>(data.GetBlobRange().GetBlobId().ToStringLegacy()),
+                NIceDb::TUpdate<InsertTable::BlobRangeOffset>(data.GetBlobRange().Offset),
+                NIceDb::TUpdate<InsertTable::BlobRangeSize>(data.GetBlobRange().Size),
+                NIceDb::TUpdate<InsertTable::Meta>(data.GetMeta().SerializeToProto().SerializeAsString()),
+                NIceDb::TUpdate<InsertTable::SchemaVersion>(data.GetSchemaVersion()));
     }
 
     static void InsertTable_Erase(NIceDb::TNiceDb& db, EInsertTableIds recType, const TInsertedData& data) {
-        db.Table<InsertTable>().Key((ui8)recType, data.PlanStep, data.WriteTxId, data.PathId, data.DedupId).Delete();
+        db.Table<InsertTable>().Key((ui8)recType, 0, (ui64)data.GetInsertWriteId(), data.GetPathId(), "").Delete();
+    }
+
+    static void InsertTable_Erase(NIceDb::TNiceDb& db, const TCommittedData& data) {
+        db.Table<InsertTable>()
+            .Key((ui8)EInsertTableIds::Committed, data.GetSnapshot().GetPlanStep(), data.GetSnapshot().GetTxId(), data.GetPathId(), data.GetDedupId())
+            .Delete();
     }
 
     static void InsertTable_Insert(NIceDb::TNiceDb& db, const TInsertedData& data) {
         InsertTable_Upsert(db, EInsertTableIds::Inserted, data);
     }
 
-    static void InsertTable_Commit(NIceDb::TNiceDb& db, const TInsertedData& data) {
-        InsertTable_Upsert(db, EInsertTableIds::Committed, data);
+    static void InsertTable_Commit(NIceDb::TNiceDb& db, const TCommittedData& data) {
+        InsertTable_Upsert(db, data);
     }
 
     static void InsertTable_Abort(NIceDb::TNiceDb& db, const TInsertedData& data) {
@@ -800,8 +850,8 @@ struct Schema : NIceDb::Schema {
         InsertTable_Erase(db, EInsertTableIds::Inserted, data);
     }
 
-    static void InsertTable_EraseCommitted(NIceDb::TNiceDb& db, const TInsertedData& data) {
-        InsertTable_Erase(db, EInsertTableIds::Committed, data);
+    static void InsertTable_EraseCommitted(NIceDb::TNiceDb& db, const TCommittedData& data) {
+        InsertTable_Erase(db, data);
     }
 
     static void InsertTable_EraseAborted(NIceDb::TNiceDb& db, const TInsertedData& data) {

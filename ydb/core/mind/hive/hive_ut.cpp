@@ -3603,6 +3603,13 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         const TActorId hiveActor = CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
         runtime.EnableScheduleForActor(hiveActor);
 
+        // wait for creation of nodes
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvLocal::EvStatus, 2);
+            runtime.DispatchEvents(options);
+        }
+
 
         // creating NUM_TABLETS tablets
         TTabletTypes::EType tabletType = TTabletTypes::Dummy;
@@ -3640,7 +3647,13 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         CreateLocal(runtime, 2);
         CreateLocal(runtime, 3);
 
-        // kill all tablets
+        // no need to kill all tablets, hive must update followers on its own
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvLocal::EvTabletStatus);
+            runtime.DispatchEvents(options);
+        }
+        /*
         for (ui64 tabletId : tablets) {
             runtime.Register(CreateTabletKiller(tabletId));
 
@@ -3649,7 +3662,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
              // leader (death, start) + new extra follower
             options.FinalEvents.emplace_back(TDispatchOptions::TFinalEventCondition(TEvLocal::EvTabletStatus, 3));
             runtime.DispatchEvents(options);
-        }
+        }*/
 
         {
             int leaders = 0;
@@ -3675,7 +3688,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         CreateLocal(runtime, 4);
         CreateLocal(runtime, 5);
 
-        // kill all tablets
+        /*
         for (ui64 tabletId : tablets) {
             runtime.Register(CreateTabletKiller(tabletId));
 
@@ -3683,6 +3696,12 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             TDispatchOptions options;
              // leader (death, start) + new extra follower
             options.FinalEvents.emplace_back(TDispatchOptions::TFinalEventCondition(TEvLocal::EvTabletStatus, 3));
+            runtime.DispatchEvents(options);
+        }
+        */
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvLocal::EvTabletStatus);
             runtime.DispatchEvents(options);
         }
 

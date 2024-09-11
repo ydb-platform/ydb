@@ -304,8 +304,8 @@ inline bool IsErasureChunkId(TChunkId id)
 inline bool IsErasureChunkPartType(NObjectClient::EObjectType type)
 {
     return
-        type >= NObjectClient::MinErasureChunkPartType && type <= NObjectClient::MaxErasureChunkPartType ||
-        type >= NObjectClient::MinErasureJournalChunkPartType && type <= NObjectClient::MaxErasureJournalChunkPartType;
+        (type >= NObjectClient::MinErasureChunkPartType && type <= NObjectClient::MaxErasureChunkPartType) ||
+        (type >= NObjectClient::MinErasureJournalChunkPartType && type <= NObjectClient::MaxErasureJournalChunkPartType);
 }
 
 inline bool IsErasureChunkPartId(TChunkId id)

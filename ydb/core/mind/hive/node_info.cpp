@@ -238,22 +238,6 @@ bool TNodeInfo::IsAbleToRunTablet(const TTabletInfo& tablet, TTabletDebugState* 
         const TFollowerTabletInfo& follower = tablet.AsFollower();
         const TFollowerGroup& followerGroup = follower.FollowerGroup;
         const TLeaderTabletInfo& leader = follower.LeaderTablet;
-        if (followerGroup.RequireAllDataCenters) {
-            auto dataCenters = Hive.GetRegisteredDataCenters();
-            ui32 maxFollowersPerDataCenter = (followerGroup.GetComputedFollowerCount(Hive.GetDataCenters()) + dataCenters - 1) / dataCenters; // ceil
-            ui32 existingFollowers;
-            if (tablet.IsAlive()) {
-                existingFollowers = leader.GetFollowersAliveOnDataCenterExcludingFollower(Location.GetDataCenterId(), tablet);
-            } else {
-                existingFollowers = leader.GetFollowersAliveOnDataCenter(Location.GetDataCenterId());
-            }
-            if (maxFollowersPerDataCenter <= existingFollowers) {
-                if (debugState) {
-                    debugState->NodesFilledWithDatacenterFollowers++;
-                }
-                return false;
-            }
-        }
         if (followerGroup.RequireDifferentNodes) {
             if (leader.IsSomeoneAliveOnNode(Id)) {
                 if (debugState) {
@@ -286,16 +270,18 @@ bool TNodeInfo::IsAbleToRunTablet(const TTabletInfo& tablet, TTabletDebugState* 
         return false;
     }
 
-    auto maximumResources = GetResourceMaximumValues() * Hive.GetResourceOvercommitment();
-    auto allocatedResources = GetResourceCurrentValues() + tablet.GetResourceCurrentValues();
-
-    bool result = min(maximumResources - allocatedResources) > 0;
-    if (!result) {
+    TResourceRawValues maximumResources = GetResourceMaximumValues() * Hive.GetResourceOvercommitment();
+    TResourceRawValues allocatedResources = GetResourceCurrentValues() + tablet.GetResourceCurrentValues();
+    auto cmp = piecewise_compare(allocatedResources, maximumResources);
+    // only check memory because it's the only resource we can actually run out of
+    if (std::get<NMetrics::EResource::Memory>(cmp) != std::partial_ordering::less) {
         if (debugState) {
             debugState->NodesWithoutResources++;
         }
+        return false;
     }
-    return result;
+
+    return true;
 }
 
 ui64 TNodeInfo::GetMaxTabletsScheduled() const {
@@ -489,6 +475,9 @@ void TNodeInfo::UpdateResourceTotalUsage(const NKikimrHive::TEvTabletMetrics& me
     if (metrics.HasTotalNodeUsage()) {
         AveragedNodeTotalUsage.Push(metrics.GetTotalNodeUsage());
         NodeTotalUsage = AveragedNodeTotalUsage.GetValue();
+    }
+    if (metrics.HasTotalNodeCpuUsage()) {
+        AveragedNodeTotalCpuUsage.Push(metrics.GetTotalNodeCpuUsage());
     }
 }
 

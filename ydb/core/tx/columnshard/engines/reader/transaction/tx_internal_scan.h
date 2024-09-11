@@ -7,9 +7,10 @@ namespace NKikimr::NOlap::NReader {
 class TTxInternalScan: public NTabletFlatExecutor::TTransactionBase<NColumnShard::TColumnShard> {
 private:
     using TBase = NTabletFlatExecutor::TTransactionBase<NColumnShard::TColumnShard>;
+    TEvColumnShard::TEvInternalScan::TPtr InternalScanEvent;
     const ui32 ScanGen = 1;
-    const ui32 TxId = 1;
     const ui32 ScanId = 1;
+    const std::optional<ui64> LockId;
     void SendError(const TString& problem, const TString& details, const TActorContext& ctx) const;
 
 public:
@@ -17,15 +18,15 @@ public:
 
     TTxInternalScan(NColumnShard::TColumnShard* self, TEvColumnShard::TEvInternalScan::TPtr& ev)
         : TBase(self)
-        , InternalScanEvent(ev) {
+        , InternalScanEvent(ev)
+        , LockId(InternalScanEvent->Get()->GetLockId())
+    {
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
     void Complete(const TActorContext& ctx) override;
     TTxType GetTxType() const override { return NColumnShard::TXTYPE_START_INTERNAL_SCAN; }
 
-private:
-    TEvColumnShard::TEvInternalScan::TPtr InternalScanEvent;
 };
 
 }

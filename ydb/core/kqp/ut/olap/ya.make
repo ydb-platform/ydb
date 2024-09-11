@@ -1,7 +1,7 @@
 UNITTEST_FOR(ydb/core/kqp)
 
 FORK_SUBTESTS()
-SPLIT_FACTOR(100)
+SPLIT_FACTOR(200)
 
 IF (WITH_VALGRIND)
     TIMEOUT(3600)
@@ -24,6 +24,7 @@ SRCS(
     aggregations_ut.cpp
     write_ut.cpp
     sparsed_ut.cpp
+    tiering_ut.cpp
 )
 
 PEERDIR(

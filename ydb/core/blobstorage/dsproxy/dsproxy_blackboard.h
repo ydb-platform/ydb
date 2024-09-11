@@ -2,6 +2,7 @@
 #include "defs.h"
 
 #include "dsproxy.h"
+#include "request_history.h"
 
 #include <ydb/core/blobstorage/base/batched_vec.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
@@ -165,6 +166,7 @@ public:
 struct TBlackboard {
     enum EAccelerationMode {
         AccelerationModeSkipTwoSlowest,
+        AccelerationModeSkipOneSlowest,
         AccelerationModeSkipMarked
     };
 
@@ -224,6 +226,10 @@ struct TBlackboard {
 
     void RegisterBlobForPut(const TLogoBlobID& id, size_t blobIdx);
 
+    ui32 MarkSlowDisks(TBlobState& state, bool isPut, const TAccelerationParams& accelerationParams);
+
+    ui32 GetMaxNumberOfSlowDisks() const;
+
     TBlobState& operator [](const TLogoBlobID& id);
 };
 
@@ -232,47 +238,6 @@ inline bool RestoreWholeFromMirror(TBlobState& state) {
         state.Whole.Data.CopyFrom(part.Data, part.Here() & state.Whole.NotHere());
     }
     return !state.Whole.NotHere();
-}
-
-inline ui32 MakeSlowSubgroupDiskMaskForTwoSlowest(TBlobState &state, const TBlobStorageGroupInfo &info,
-        TBlackboard &blackboard, bool isPut, const TAccelerationParams& accelerationParams,
-        TStackVec<ui32, 2>* slowIdxs = nullptr) {
-    if (info.GetTotalVDisksNum() < 3) {
-        // when there are less than 3 disks we consider them not slow
-        return 0;
-    }
-    
-    TDiskDelayPredictions worstDisks;
-    state.GetWorstPredictedDelaysNs(info, *blackboard.GroupQueues,
-            (isPut ? HandleClassToQueueId(blackboard.PutHandleClass) :
-                    HandleClassToQueueId(blackboard.GetHandleClass)),
-            &worstDisks, accelerationParams.PredictedDelayMultiplier);
-
-    // Check if two slowest disks are exceptionally slow, or just not very fast
-    ui32 slowDiskSubgroupMask = 0;
-
-    ui64 slowThreshold = worstDisks[2].PredictedNs * accelerationParams.SlowDiskThreshold;
-    if (slowThreshold == 0) {
-        // invalid or non-initialized predicted ns, consider all disks not slow
-        return 0;
-    }
-
-    for (size_t idx = 0; idx < state.Disks.size(); ++idx) {
-        state.Disks[idx].IsSlow = false;
-    }
-
-    for (ui32 idx = 0; idx < 2; ++idx) {
-        if (worstDisks[idx].PredictedNs > slowThreshold) {
-            ui32 orderNumber = worstDisks[idx].DiskIdx;
-            slowDiskSubgroupMask |= 1 << orderNumber;
-            state.Disks[orderNumber].IsSlow = true;
-            if (slowIdxs) {
-                slowIdxs->push_back(orderNumber);
-            }
-        }
-    }
-
-    return slowDiskSubgroupMask;
 }
 
 }//NKikimr

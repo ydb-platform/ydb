@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: google-auth
-Version: 2.32.0
+Version: 2.34.0
 Summary: Google Authentication Library
 Home-page: https://github.com/googleapis/google-auth-library-python
 Author: Google Cloud Platform
@@ -31,8 +31,8 @@ Provides-Extra: aiohttp
 Requires-Dist: aiohttp <4.0.0.dev0,>=3.6.2 ; extra == 'aiohttp'
 Requires-Dist: requests <3.0.0.dev0,>=2.20.0 ; extra == 'aiohttp'
 Provides-Extra: enterprise_cert
-Requires-Dist: cryptography ==36.0.2 ; extra == 'enterprise_cert'
-Requires-Dist: pyopenssl ==22.0.0 ; extra == 'enterprise_cert'
+Requires-Dist: cryptography ; extra == 'enterprise_cert'
+Requires-Dist: pyopenssl ; extra == 'enterprise_cert'
 Provides-Extra: pyopenssl
 Requires-Dist: pyopenssl >=20.0.0 ; extra == 'pyopenssl'
 Requires-Dist: cryptography >=38.0.3 ; extra == 'pyopenssl'

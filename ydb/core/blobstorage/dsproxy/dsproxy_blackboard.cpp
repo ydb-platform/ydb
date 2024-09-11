@@ -542,4 +542,49 @@ void TBlackboard::InvalidatePartStates(ui32 orderNumber) {
     }
 }
 
+ui32 TBlackboard::GetMaxNumberOfSlowDisks() {
+    if (AccelerationMode == EAccelerationMode::AccelerationModeSkipTwoSlowest) {
+        return 2;
+    }
+    return 1;
+}
+
+ui32 TBlackboard::MarkSlowDisks(TBlobState& state, bool isPut, const TAccelerationParams& accelerationParams) {
+    // by default all disks are considered fast
+    for (TDisk& disk : state.Disks) {
+        disk.IsSlow = false;
+    }
+
+    ui32 maxNumSlow = GetMaxNumberOfSlowDisks();
+
+    if (Info.GetTotalVDisksNum() <= maxNumSlow) {
+        // all disks cannot be slow
+        return 0;
+    }
+    
+    TDiskDelayPredictions worstDisks;
+    state.GetWorstPredictedDelaysNs(Info, *GroupQueues,
+            (isPut ? HandleClassToQueueId(PutHandleClass) : HandleClassToQueueId(GetHandleClass)),
+            &worstDisks, accelerationParams.PredictedDelayMultiplier);
+
+    // Check if two slowest disks are exceptionally slow, or just not very fast
+    ui32 slowDiskSubgroupMask = 0;
+
+    ui64 slowThreshold = worstDisks[maxNumSlow].PredictedNs * accelerationParams.SlowDiskThreshold;
+    if (slowThreshold == 0) {
+        // invalid or non-initialized predicted ns, consider all disks not slow
+        return 0;
+    }
+
+    for (ui32 idx = 0; idx < maxNumSlow; ++idx) {
+        if (worstDisks[idx].PredictedNs > slowThreshold) {
+            ui32 orderNumber = worstDisks[idx].DiskIdx;
+            slowDiskSubgroupMask |= 1 << orderNumber;
+            state.Disks[orderNumber].IsSlow = true;
+        }
+    }
+
+    return slowDiskSubgroupMask;
+}
+
 }//NKikimr

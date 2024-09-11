@@ -2,6 +2,7 @@
 
 #include "public.h"
 #include "row_base.h"
+#include "serialize.h"
 #include "unversioned_value.h"
 
 #include <yt/yt/core/logging/log.h>

@@ -132,6 +132,8 @@ private:
 
     NNodes::TMaybeNode<NNodes::TExprBase> MergeToCopy(NNodes::TExprBase node, TExprContext& ctx) const;
 
+    NNodes::TMaybeNode<NNodes::TExprBase> ForceTransform(NNodes::TExprBase node, TExprContext& ctx) const;
+
     template <typename TLMapType>
     NNodes::TMaybeNode<NNodes::TExprBase> LMap(NNodes::TExprBase node, TExprContext& ctx) const;
 

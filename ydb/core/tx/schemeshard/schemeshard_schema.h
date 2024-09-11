@@ -1167,6 +1167,7 @@ struct Schema : NIceDb::Schema {
 
         struct StartTime : Column<14, NScheme::NTypeIds::Uint64> {};
         struct EndTime : Column<15, NScheme::NTypeIds::Uint64> {};
+        struct PeerName : Column<16, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
@@ -1184,7 +1185,8 @@ struct Schema : NIceDb::Schema {
             Kind,
             UserSID,
             StartTime,
-            EndTime
+            EndTime,
+            PeerName
         >;
     };
 
@@ -1419,7 +1421,7 @@ struct Schema : NIceDb::Schema {
         struct Range : Column<4, NScheme::NTypeIds::String> { using Type = NKikimrTx::TKeyRange; };
         struct LastKeyAck : Column<5, NScheme::NTypeIds::String> { using Type = TString; };
 
-        struct Status : Column<6, NScheme::NTypeIds::Uint32> { using Type = NKikimrTxDataShard::TEvBuildIndexProgressResponse::EStatus; };
+        struct Status : Column<6, NScheme::NTypeIds::Uint32> { using Type = NKikimrIndexBuilder::EBuildStatus; };
         struct Message : Column<7, NScheme::NTypeIds::Utf8> {};
         struct UploadStatus : Column<8, NScheme::NTypeIds::Uint32> { using Type = Ydb::StatusIds::StatusCode; };
 
@@ -1489,6 +1491,7 @@ struct Schema : NIceDb::Schema {
 
         struct StartTime : Column<11, NScheme::NTypeIds::Uint64> {};
         struct EndTime : Column<12, NScheme::NTypeIds::Uint64> {};
+        struct PeerName : Column<13, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
@@ -1503,7 +1506,8 @@ struct Schema : NIceDb::Schema {
             Issue,
             UserSID,
             StartTime,
-            EndTime
+            EndTime,
+            PeerName
         >;
     };
 

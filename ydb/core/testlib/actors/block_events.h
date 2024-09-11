@@ -14,7 +14,7 @@ namespace NActors {
     template<class TEvType>
     class TBlockEvents : public std::deque<typename TEvType::TPtr> {
     public:
-        TBlockEvents(TTestActorRuntime& runtime, std::function<bool(typename TEvType::TPtr&)> condition = {})
+        TBlockEvents(TTestActorRuntime& runtime, std::function<bool(const typename TEvType::TPtr&)> condition = {})
             : Runtime(runtime)
             , Condition(std::move(condition))
             , Holder(Runtime.AddObserver<TEvType>(
@@ -36,7 +36,10 @@ namespace NActors {
                 }
                 ui32 nodeId = ev->GetRecipientRewrite().NodeId();
                 ui32 nodeIdx = nodeId - Runtime.GetFirstNodeId();
-                Cerr << "TBlockEvents::Unblock " << typeid(TEvType).name() << " from " << Runtime.FindActorName(ev->Sender) << " to " << Runtime.FindActorName(ev->GetRecipientRewrite()) << Endl;
+                Cerr << "... unblocking " << (ev->HasEvent() ? TypeName(*ev->GetBase()) : TypeName<TEvType>())
+                    << " from " << Runtime.FindActorName(ev->Sender)
+                    << " to " << Runtime.FindActorName(ev->GetRecipientRewrite())
+                    << Endl;
                 Runtime.Send(ev.Release(), nodeIdx, /* viaActorSystem */ true);
                 this->pop_front();
                 --count;
@@ -68,7 +71,10 @@ namespace NActors {
                 return;
             }
 
-            Cerr << "TBlockEvents::Block " << typeid(TEvType).name() << " from " << Runtime.FindActorName(ev->Sender) << " to " << Runtime.FindActorName(ev->GetRecipientRewrite()) << Endl;
+            Cerr << "... blocking " << (ev->HasEvent() ? TypeName(*ev->GetBase()) : TypeName<TEvType>())
+                << " from " << Runtime.FindActorName(ev->Sender)
+                << " to " << Runtime.FindActorName(ev->GetRecipientRewrite())
+                << Endl;
             this->emplace_back(std::move(ev));
         }
 
@@ -79,6 +85,5 @@ namespace NActors {
         THashSet<IEventHandle*> UnblockedOnce;
         bool Stopped = false;
     };
-
 
 } // namespace NActors

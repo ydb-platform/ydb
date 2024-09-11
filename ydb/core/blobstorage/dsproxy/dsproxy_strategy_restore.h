@@ -24,7 +24,7 @@ public:
             bool isErrorDisk = false;
             for (ui32 partIdx = beginPartIdx; partIdx < endPartIdx; ++partIdx) {
                 if (disk.DiskParts[partIdx].Situation == TBlobState::ESituation::Error) {
-                    R_LOG_DEBUG_SX(logCtx, "BPG50", "Id# " << state.Id.ToString()
+                    DSP_LOG_DEBUG_SX(logCtx, "BPG50", "Id# " << state.Id.ToString()
                         << " restore disk# " << diskIdx
                         << " part# " << partIdx
                         << " error");
@@ -36,7 +36,7 @@ public:
             if (!isErrorDisk) {
                 for (ui32 partIdx = beginPartIdx; partIdx < endPartIdx; ++partIdx) {
                     const TBlobState::ESituation partSituation = disk.DiskParts[partIdx].Situation;
-                    R_LOG_DEBUG_SX(logCtx, "BPG51", "Id# " << state.Id.ToString()
+                    DSP_LOG_DEBUG_SX(logCtx, "BPG51", "Id# " << state.Id.ToString()
                         << " restore disk# " << diskIdx
                         << " part# " << partIdx
                         << " situation# " << TBlobState::SituationToString(partSituation));
@@ -60,7 +60,7 @@ public:
         const ui32 optimisticReplicas = optimisticLayout.CountEffectiveReplicas(info.Type);
         *optimisticState = info.BlobState(optimisticReplicas, errorDisks);
 
-        R_LOG_DEBUG_SX(logCtx, "BPG55", "restore Id# " << state.Id.ToString()
+        DSP_LOG_DEBUG_SX(logCtx, "BPG55", "restore Id# " << state.Id.ToString()
             << " optimisticReplicas# " << optimisticReplicas
             << " optimisticState# " << TBlobStorageGroupInfo::BlobStateToString(*optimisticState));
     }
@@ -126,14 +126,13 @@ public:
             return *res;
         }
 
-        TStackVec<ui32, 2> slowDiskSubgroupIdxs;
-        MakeSlowSubgroupDiskMaskForTwoSlowest(state, info, blackboard, true, accelerationParams, &slowDiskSubgroupIdxs);
+        ui32 slowDiskSubgroupMask = MarkSlowDisks(state, info, blackboard, true, accelerationParams);
 
         bool isDone = false;
-        if (!slowDiskSubgroupIdxs.empty()) {
+        if (slowDiskSubgroupMask != 0) {
             // If there is an exceptionally slow disk, try not touching it, mark isDone
             TBlobStorageGroupType::TPartLayout layout;
-            PreparePartLayout(state, info, &layout, slowDiskSubgroupIdxs);
+            PreparePartLayout(state, info, &layout, slowDiskSubgroupMask);
 
             TBlobStorageGroupType::TPartPlacement partPlacement;
             bool isCorrectable = info.Type.CorrectLayout(layout, partPlacement);
@@ -147,7 +146,7 @@ public:
         if (!isDone) {
             // Fill in the part layout
             TBlobStorageGroupType::TPartLayout layout;
-            PreparePartLayout(state, info, &layout, {});
+            PreparePartLayout(state, info, &layout, 0);
             TBlobStorageGroupType::TPartPlacement partPlacement;
             bool isCorrectable = info.Type.CorrectLayout(layout, partPlacement);
             Y_ABORT_UNLESS(isCorrectable);

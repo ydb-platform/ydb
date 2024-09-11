@@ -1,3 +1,4 @@
+import asyncio
 import random
 import time
 
@@ -134,3 +135,27 @@ def retry_operation_sync(callee, retry_settings=None, *args, **kwargs):
             time.sleep(next_opt.timeout)
         else:
             return next_opt.result
+
+
+async def retry_operation_async(callee, retry_settings=None, *args, **kwargs):  # pylint: disable=W1113
+    """
+    The retry operation helper can be used to retry a coroutine that raises YDB specific
+    exceptions.
+
+    :param callee: A coroutine to retry.
+    :param retry_settings: An instance of ydb.RetrySettings that describes how the coroutine
+    should be retried. If None, default instance of retry settings will be used.
+    :param args: A tuple with positional arguments to be passed into the coroutine.
+    :param kwargs: A dictionary with keyword arguments to be passed into the coroutine.
+
+    Returns awaitable result of coroutine. If retries are not succussful exception is raised.
+    """
+    opt_generator = retry_operation_impl(callee, retry_settings, *args, **kwargs)
+    for next_opt in opt_generator:
+        if isinstance(next_opt, YdbRetryOperationSleepOpt):
+            await asyncio.sleep(next_opt.timeout)
+        else:
+            try:
+                return await next_opt.result
+            except BaseException as e:  # pylint: disable=W0703
+                next_opt.set_exception(e)

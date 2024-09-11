@@ -70,6 +70,7 @@ struct TYdbSetupSettings {
     FLUENT_SETTING_DEFAULT(bool, CreateSampleTenants, false);
     FLUENT_SETTING_DEFAULT(bool, EnableResourcePools, true);
     FLUENT_SETTING_DEFAULT(bool, EnableMetadataObjectsOnServerless, true);
+    FLUENT_SETTING_DEFAULT(bool, EnableExternalDataSourcesOnServerless, true);
 
     // Default pool settings
     FLUENT_SETTING_DEFAULT(TString, PoolId, "sample_pool_id");

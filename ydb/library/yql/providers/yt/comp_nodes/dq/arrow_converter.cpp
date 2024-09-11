@@ -254,6 +254,10 @@ public:
             return NUdf::TBlockItem();
         }
         YQL_ENSURE(prev == BeginListSymbol);
+        if (buf.Current() == EndListSymbol) {
+            buf.Next();
+            return NUdf::TBlockItem();
+        }
         auto result = GetNotNull(buf);
         if (buf.Current() == ListItemSeparatorSymbol) {
             buf.Next();
@@ -309,7 +313,9 @@ public:
 
     NUdf::TBlockItem GetNotNull(TYsonReaderDetails& buf) override final {
         if constexpr (NUdf::EDataSlot::Yson != OriginalT) {
-            YQL_ENSURE(buf.Current() == StringMarker);
+            if (buf.Current() != StringMarker) {
+                YQL_ENSURE(buf.Current() == StringMarker);
+            }
             buf.Next();
             const i32 length = buf.ReadVarI32();
             auto res = NUdf::TBlockItem(NUdf::TStringRef(buf.Data(), length));
@@ -513,7 +519,7 @@ public:
             case arrow::Type::UINT64:   PrimitiveConverterImpl_ = GEN_TYPE(UInt64); break;
             case arrow::Type::DOUBLE:   PrimitiveConverterImpl_ = GEN_TYPE(Double); break;
             case arrow::Type::FLOAT:    PrimitiveConverterImpl_ = GEN_TYPE(Float); break;
-            case arrow::Type::STRING:   PrimitiveConverterImpl_ = GEN_TYPE_STR(String); break;
+            case arrow::Type::STRING:   PrimitiveConverterImpl_ = GEN_TYPE_STR(Binary); break; // all strings from yt is in binary format
             case arrow::Type::BINARY:   PrimitiveConverterImpl_ = GEN_TYPE_STR(Binary); break;
             default:
                 return; // will check in runtime
@@ -615,7 +621,11 @@ public:
         : Settings_(std::move(settings))
         , DictYsonConverter_(Settings_)
         , YsonConverter_(Settings_)
-        , DictPrimitiveConverter_(Settings_) {}
+        , DictPrimitiveConverter_(Settings_)
+    {
+        auto type = Settings_.Type;
+        IsJson_ = type->IsData() && static_cast<NKikimr::NMiniKQL::TDataType*>(type)->GetDataSlot() == NUdf::EDataSlot::Json || (Native && type->IsOptional() && static_cast<NKikimr::NMiniKQL::TDataType*>(static_cast<NKikimr::NMiniKQL::TOptionalType*>(type)->GetItemType())->GetDataSlot() == NUdf::EDataSlot::Json);
+    }
 
     arrow::Datum Convert(std::shared_ptr<arrow::ArrayData> block) override {
         if (arrow::Type::DICTIONARY == block->type->id()) {
@@ -628,8 +638,7 @@ public:
                 auto result = arrow::compute::Cast(DictPrimitiveConverter_.Convert(block), Settings_.ArrowType);
                 YQL_ENSURE(result.ok());
                 return *result;
-            } else if (Settings_.Type->IsData() && static_cast<NKikimr::NMiniKQL::TDataType*>(Settings_.Type)->GetDataSlot() == NUdf::EDataSlot::Json 
-                && arrow::Type::STRING == Settings_.ArrowType->id() && arrow::Type::BINARY == valType->id())
+            } else if (IsJson_ && arrow::Type::STRING == Settings_.ArrowType->id() && arrow::Type::BINARY == valType->id())
             {
                 auto result = arrow::compute::Cast(DictPrimitiveConverter_.Convert(block), Settings_.ArrowType);
                 YQL_ENSURE(result.ok());
@@ -646,8 +655,7 @@ public:
                 auto result = arrow::compute::Cast(arrow::Datum(*block), Settings_.ArrowType);
                 YQL_ENSURE(result.ok());
                 return *result;
-            } else if (Settings_.Type->IsData() && static_cast<NKikimr::NMiniKQL::TDataType*>(Settings_.Type)->GetDataSlot() == NUdf::EDataSlot::Json 
-                && arrow::Type::STRING == Settings_.ArrowType->id() && arrow::Type::BINARY == blockType->id())
+            } else if (IsJson_ && arrow::Type::STRING == Settings_.ArrowType->id() && arrow::Type::BINARY == blockType->id())
             {
                 auto result = arrow::compute::Cast(arrow::Datum(*block), Settings_.ArrowType);
                 YQL_ENSURE(result.ok());
@@ -663,6 +671,7 @@ private:
     TYtYsonColumnConverter<Native, IsTopOptional, true> DictYsonConverter_;
     TYtYsonColumnConverter<Native, IsTopOptional, false> YsonConverter_;
     TPrimitiveColumnConverter<true> DictPrimitiveConverter_;
+    bool IsJson_;
 };
 
 TYtColumnConverterSettings::TYtColumnConverterSettings(NKikimr::NMiniKQL::TType* type, const NUdf::IPgBuilder* pgBuilder, arrow::MemoryPool& pool, bool isNative) 

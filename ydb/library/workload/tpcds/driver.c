@@ -7,9 +7,12 @@
 #include <ydb/library/benchmarks/gen/tpcds-dbgen/config.h>
 #include <ydb/library/benchmarks/gen/tpcds-dbgen/constants.h>
 #include <ydb/library/benchmarks/gen/tpcds-dbgen/date.h>
+#include <ydb/library/benchmarks/gen/tpcds-dbgen/genrand.h>
 #include <ydb/library/benchmarks/gen/tpcds-dbgen/grammar_support.h>
+#include <ydb/library/benchmarks/gen/tpcds-dbgen/parallel.h>
 #include <ydb/library/benchmarks/gen/tpcds-dbgen/porting.h>
 #include <ydb/library/benchmarks/gen/tpcds-dbgen/r_params.h>
+#include <ydb/library/benchmarks/gen/tpcds-dbgen/scaling.h>
 #undef DECLARER
 
 option_t options[] = {

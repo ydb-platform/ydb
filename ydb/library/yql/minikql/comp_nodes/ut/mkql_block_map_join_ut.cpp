@@ -16,7 +16,6 @@ namespace NMiniKQL {
 namespace {
 
 using TKSV = std::tuple<ui64, ui64, TStringBuf>;
-using TKSVSet = TSet<std::tuple_element_t<0, TKSV>>;
 template <bool isMulti>
 using TKSW = std::tuple<ui64, ui64, TStringBuf, std::optional<TStringBuf>>;
 using TKSWMap = TMap<std::tuple_element_t<0, TKSW<false>>, TString>;
@@ -613,7 +612,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinBasicTest) {
         std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(valueInit),
             [](const auto key) { return threeLetterValues[key]; });
         // 2. Make input for the "right" dict.
-        const TKSVSet rightSet(fibonacci);
+        const TSet<ui64> rightSet(fibonacci);
         // 3. Make "expected" data.
         TVector<ui64> keyExpected;
         TVector<ui64> subkeyExpected;
@@ -649,7 +648,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinBasicTest) {
         std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(valueInit),
             [](const auto key) { return threeLetterValues[key]; });
         // 2. Make input for the "right" dict.
-        const TKSVSet rightSet(fibonacci);
+        const TSet<ui64> rightSet(fibonacci);
         // 3. Make "expected" data.
         TVector<ui64> keyExpected;
         TVector<ui64> subkeyExpected;
@@ -873,7 +872,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinMoreTest) {
             valueInit.push_back(threeLetterValues[i]);
         }
         // 2. Make input for the "right" dict.
-        const TKSVSet rightSet({1});
+        const TSet<ui64> rightSet({1});
         // 3. Make "expected" data.
         TVector<ui64> keyExpected;
         TVector<ui64> subkeyExpected;
@@ -909,7 +908,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinMoreTest) {
             valueInit.push_back(threeLetterValues[i]);
         }
         // 2. Make input for the "right" dict.
-        const TKSVSet rightSet({1});
+        const TSet<ui64> rightSet({1});
         // 3. Make "expected" data.
         TVector<ui64> keyExpected;
         TVector<ui64> subkeyExpected;

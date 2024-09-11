@@ -261,11 +261,17 @@ struct TEventTypeField {
       TYPES(ui32, ui64, ui64), \
       NAMES("chunkIdx", "size", "offset")) \
     PROBE(PDiskUpdateCycleDetails, GROUPS("PDisk"), \
-      TYPES(ui32, float, float, float, float, float), \
+      TYPES(ui64, float, float, float, float, float), \
       NAMES("pdisk", "entireUpdateMs", "inputQueueMs", "schedulingMs", "processingMs", "waitingMs")) \
     PROBE(PDiskEnqueueAllDetails, GROUPS("PDisk"), \
       TYPES(ui64, size_t, size_t, size_t, double), \
       NAMES("pdisk", "initialQueueSize", "processedReqs", "pushedToForsetiReqs", "spentTimeMs")) \
+    PROBE(PDiskUpdateStarted, GROUPS("PDisk"), TYPES(ui64), NAMES("pdisk")) \
+    PROBE(PDiskProcessLogWriteQueue, GROUPS("PDisk"), TYPES(ui64, size_t, size_t), NAMES("pdisk", "logQueueSize", "commitQueueSize")) \
+    PROBE(PDiskProcessChunkReadQueue, GROUPS("PDisk"), TYPES(ui64, size_t), NAMES("pdisk", "queueSize")) \
+    PROBE(PDiskProcessChunkWriteQueue, GROUPS("PDisk"), TYPES(ui64, size_t), NAMES("pdisk", "queueSize")) \
+    PROBE(PDiskStartWaiting, GROUPS("PDisk"), TYPES(ui64), NAMES("pdisk")) \
+    PROBE(PDiskUpdateEnded, GROUPS("PDisk"), TYPES(ui64), NAMES("pdisk")) \
     PROBE(DSProxyGetEnqueue, GROUPS("DSProxy", "LWTrackStart"), TYPES(), NAMES()) \
     PROBE(DSProxyGetBootstrap, GROUPS("DSProxy"), TYPES(), NAMES()) \
     PROBE(DSProxyGetHandle, GROUPS("DSProxy", "LWTrackStart"), TYPES(), NAMES()) \

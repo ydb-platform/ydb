@@ -3454,7 +3454,7 @@ void TPDisk::EnqueueAll() {
     }
 
     double spentTimeMs = (TInstant::Now() - start).MillisecondsFloat();
-    LWPROBE(PDiskEnqueueAllDetails, PDiskId, initialQueueSize, processedReqs, pushedToForsetiReqs, spentTimeMs);
+    LWPROBE(PDiskEnqueueAllDetails, PCtx->PDiskId, initialQueueSize, processedReqs, pushedToForsetiReqs, spentTimeMs);
 }
 
 void TPDisk::Update() {

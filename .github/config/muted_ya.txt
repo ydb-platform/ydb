@@ -348,3 +348,16 @@ ydb/library/actors/interconnect/ut_huge_cluster HugeCluster.AllToAll
 ydb/tests/functional/hive test_drain.py.TestHive.test_drain_on_stop
 ydb/library/yql/tests/sql/hybrid_file/part1 test.py.test[in-in_noansi_join--Debug]
 ydb/core/kqp/ut/query KqpLimits.QueryExecTimeoutCancel
+ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[column_selection_A_b_C_d_E-dqrun]
+ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[column_selection_A_b_C_d_E-kqprun]
+ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[column_selection_COL1-dqrun]
+ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[column_selection_COL1-kqprun]
+ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[column_selection_asterisk-dqrun]
+ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[column_selection_asterisk-kqprun]
+ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[column_selection_col2-dqrun]
+ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[column_selection_col2-kqprun]
+ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[column_selection_col2_COL1-dqrun]
+ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[column_selection_col2_COL1-kqprun]
+ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[column_selection_col3-dqrun]
+ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[column_selection_col3-kqprun]
+ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[primitive_types-dqrun]

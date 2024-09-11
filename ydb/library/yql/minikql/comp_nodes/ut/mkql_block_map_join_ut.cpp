@@ -56,8 +56,8 @@ const TRuntimeNode MakeDict(TProgramBuilder& pgmBuilder,
 }
 
 const TRuntimeNode BuildBlockJoin(TProgramBuilder& pgmBuilder, EJoinKind joinKind,
-    TVector<ui32> keyColumns, TRuntimeNode& leftArg, TType* leftTuple,
-    const TRuntimeNode& dictNode
+    const TVector<ui32>& leftKeyColumns, const TVector<ui32>& leftKeyDrops,
+    TRuntimeNode& leftArg, TType* leftTuple, const TRuntimeNode& dictNode
 ) {
     const auto tupleType = AS_TYPE(TTupleType, leftTuple);
     const auto listTupleType = pgmBuilder.NewListType(leftTuple);
@@ -73,7 +73,8 @@ const TRuntimeNode BuildBlockJoin(TProgramBuilder& pgmBuilder, EJoinKind joinKin
             return wide;
         });
 
-    const auto joinNode = pgmBuilder.BlockMapJoinCore(leftWideFlow, dictNode, joinKind, keyColumns);
+    const auto joinNode = pgmBuilder.BlockMapJoinCore(leftWideFlow, dictNode, joinKind,
+                                                      leftKeyColumns, leftKeyDrops);
     const auto joinItems = GetWideComponents(AS_TYPE(TFlowType, joinNode.GetStaticType()));
     const auto resultType = AS_TYPE(TTupleType, pgmBuilder.NewTupleType(joinItems));
 
@@ -169,8 +170,8 @@ NUdf::TUnboxedValuePod FromBlocks(TComputationContext& ctx,
 
 NUdf::TUnboxedValue DoTestBlockJoin(TSetup<false>& setup,
     const TType* leftType, const NUdf::TUnboxedValue& leftListValue,
-    const TVector<ui32>& leftKeyColumns, const TRuntimeNode& rightNode,
-    EJoinKind joinKind, size_t blockSize
+    const TVector<ui32>& leftKeyColumns, const TVector<ui32>& leftKeyDrops,
+    const TRuntimeNode& rightNode, EJoinKind joinKind, size_t blockSize
 ) {
     TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -192,7 +193,8 @@ NUdf::TUnboxedValue DoTestBlockJoin(TSetup<false>& setup,
 
     // 2. Build AST with BlockMapJoinCore.
     TRuntimeNode leftArg;
-    const auto joinNode = BuildBlockJoin(pb, joinKind, leftKeyColumns, leftArg, leftBlockType, rightNode);
+    const auto joinNode = BuildBlockJoin(pb, joinKind, leftKeyColumns, leftKeyDrops,
+                                         leftArg, leftBlockType, rightNode);
 
     // 3. Prepare non-block type for the result of the join node.
     const auto joinBlockType = joinNode.GetStaticType();
@@ -256,11 +258,13 @@ void CompareResults(const TType* type, const NUdf::TUnboxedValue& expected,
 void RunTestBlockJoin(TSetup<false>& setup, EJoinKind joinKind,
     const TType* expectedType, const NUdf::TUnboxedValue& expected,
     const TRuntimeNode& rightNode, const TType* leftType,
-    const NUdf::TUnboxedValue& leftListValue, const TVector<ui32>& leftKeyColumns
+    const NUdf::TUnboxedValue& leftListValue, const TVector<ui32>& leftKeyColumns,
+    const TVector<ui32>& leftKeyDrops = {}
 ) {
     const size_t testSize = leftListValue.GetListLength();
     for (size_t blockSize = 8; blockSize <= testSize; blockSize <<= 1) {
-        const auto got = DoTestBlockJoin(setup, leftType, leftListValue, leftKeyColumns,
+        const auto got = DoTestBlockJoin(setup, leftType, leftListValue,
+                                         leftKeyColumns, leftKeyDrops,
                                          rightNode, joinKind, blockSize);
         CompareResults(expectedType, expected, got);
     }

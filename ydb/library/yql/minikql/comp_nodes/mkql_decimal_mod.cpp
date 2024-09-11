@@ -111,6 +111,8 @@ private:
 template<bool IsLeftOptional, bool IsRightOptional, typename TRight>
 class TDecimalModIntegralWrapper : public TMutableCodegeneratorNode<TDecimalModIntegralWrapper<IsLeftOptional, IsRightOptional, TRight>>, NYql::NDecimal::TDecimalRemainder<TRight> {
     typedef TMutableCodegeneratorNode<TDecimalModIntegralWrapper<IsLeftOptional, IsRightOptional, TRight>> TBaseComputation;
+    using NYql::NDecimal::TDecimalRemainder<TRight>::Divider;
+    using NYql::NDecimal::TDecimalRemainder<TRight>::Bound;
 public:
     TDecimalModIntegralWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right, ui8 precision, ui8 scale)
         : TBaseComputation(mutables, EValueRepresentation::Embedded)
@@ -129,7 +131,7 @@ public:
         if (IsRightOptional && !right)
             return NUdf::TUnboxedValuePod();
 
-        return NUdf::TUnboxedValuePod(Do(left.GetInt128(), right.Get<TRight>()));
+        return NUdf::TUnboxedValuePod(this->Do(left.GetInt128(), right.Get<TRight>()));
     }
 
 #ifndef MKQL_DISABLE_CODEGEN

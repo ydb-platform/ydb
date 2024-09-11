@@ -23,7 +23,7 @@ class TDecimalDivWrapper : public TMutableCodegeneratorNode<TDecimalDivWrapper<I
 public:
     TDecimalDivWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right, ui8 precision, ui8 scale)
         : TBaseComputation(mutables, EValueRepresentation::Embedded)
-        , NYql::NDecimal::TDecimalDivisor(precision, scale)
+        , NYql::NDecimal::TDecimalDivisor<NYql::NDecimal::TInt128>(precision, scale)
         , Left(left)
         , Right(right)
     {}
@@ -160,7 +160,7 @@ public:
         if (IsRightOptional && !right)
             return NUdf::TUnboxedValuePod();
 
-        return NUdf::TUnboxedValuePod(Do(left.GetInt128(), right.Get<TRight>()));
+        return NUdf::TUnboxedValuePod(this->Do(left.GetInt128(), right.Get<TRight>()));
     }
 
 #ifndef MKQL_DISABLE_CODEGEN

@@ -23,7 +23,7 @@ class TDecimalMulWrapper : public TMutableCodegeneratorNode<TDecimalMulWrapper<I
 public:
     TDecimalMulWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right, ui8 precision, ui8 scale)
         : TBaseComputation(mutables, EValueRepresentation::Embedded)
-        , NYql::NDecimal::TDecimalMultiplicator(precision, scale)
+        , NYql::NDecimal::TDecimalMultiplicator<NYql::NDecimal::TInt128>(precision, scale)
         , Left(left)
         , Right(right)
     {
@@ -178,10 +178,12 @@ private:
 template<bool IsLeftOptional, bool IsRightOptional, typename TRight>
 class TDecimalMulIntegralWrapper : public TMutableCodegeneratorNode<TDecimalMulIntegralWrapper<IsLeftOptional, IsRightOptional, TRight>>, NYql::NDecimal::TDecimalMultiplicator<TRight> {
     typedef TMutableCodegeneratorNode<TDecimalMulIntegralWrapper<IsLeftOptional, IsRightOptional, TRight>> TBaseComputation;
+    using NYql::NDecimal::TDecimalMultiplicator<TRight>::Bound;
+
 public:
     TDecimalMulIntegralWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right, ui8 precision)
         : TBaseComputation(mutables, EValueRepresentation::Embedded)
-        , NYql::NDecimal::TDecimalMultiplicator(precision)
+        , NYql::NDecimal::TDecimalMultiplicator<TRight>(precision)
         , Left(left)
         , Right(right)
     {}
@@ -196,7 +198,7 @@ public:
         if (IsRightOptional && !right)
             return NUdf::TUnboxedValuePod();
 
-        return NUdf::TUnboxedValuePod(Do(left.GetInt128(), right.template Get<TRight>()));
+        return NUdf::TUnboxedValuePod(this->Do(left.GetInt128(), right.template Get<TRight>()));
     }
 
 #ifndef MKQL_DISABLE_CODEGEN

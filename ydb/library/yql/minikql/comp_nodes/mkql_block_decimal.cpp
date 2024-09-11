@@ -19,7 +19,7 @@ namespace {
 template<typename T, typename TRight>
 struct TDecimalBlockExec {
     NYql::NDecimal::TInt128 Apply(NYql::NDecimal::TInt128 left, TRight right) const {
-        return static_cast<const T*>(this)->template Do<TRight>(left, right);
+        return static_cast<const T*>(this)->Do(left, right);
     }
 
     template<typename U>
@@ -220,7 +220,7 @@ struct TDecimalMulBlockExec: NYql::NDecimal::TDecimalMultiplicator<TRight>, TDec
     TDecimalMulBlockExec(
         ui8 precision,
         ui8 scale)
-        : NYql::NDecimal::TDecimalMultiplicator(precision, scale)
+        : NYql::NDecimal::TDecimalMultiplicator<TRight>(precision, scale)
     { }
 };
 
@@ -229,7 +229,7 @@ struct TDecimalDivBlockExec: NYql::NDecimal::TDecimalDivisor<TRight>, TDecimalBl
     TDecimalDivBlockExec(
         ui8 precision,
         ui8 scale)
-        : NYql::NDecimal::TDecimalDivisor(precision, scale)
+        : NYql::NDecimal::TDecimalDivisor<TRight>(precision, scale)
     { }
 };
 
@@ -238,7 +238,7 @@ struct TDecimalModBlockExec: NYql::NDecimal::TDecimalRemainder<TRight>, TDecimal
     TDecimalModBlockExec(
         ui8 precision,
         ui8 scale)
-        : NYql::NDecimal::TDecimalRemainder(precision, scale)
+        : NYql::NDecimal::TDecimalRemainder<TRight>(precision, scale)
     { }
 };
 

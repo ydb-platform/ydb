@@ -11,9 +11,9 @@
 
 namespace NKikimr::NGRpcService {
 
-using TEvGetRecommendationRequest = TGrpcRequestOperationCall<Ydb::Cms::GetRecommendationRequest, Ydb::Cms::GetRecommendationResponse>;
+using TEvGetScaleRecommendationRequest = TGrpcRequestNoOperationCall<Ydb::Cms::GetScaleRecommendationRequest, Ydb::Cms::GetScaleRecommendationResponse>;
 
-class TGetRecommendationRPC : public TRpcRequestActor<TGetRecommendationRPC, TEvGetRecommendationRequest, true> {
+class TGetScaleRecommendationRPC : public TRpcRequestActor<TGetScaleRecommendationRPC, TEvGetScaleRecommendationRequest, false> {
 public:
     using TRpcRequestActor::TRpcRequestActor;
 
@@ -25,7 +25,7 @@ public:
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
-            hFunc(TEvHive::TEvResponseRecommendation, Handle);
+            hFunc(TEvHive::TEvResponseScaleRecommendation, Handle);
 
             hFunc(TEvTabletPipe::TEvClientConnected, Handle);
             hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
@@ -88,23 +88,16 @@ public:
             PipeClient = this->RegisterWithSameMailbox(NTabletPipe::CreateClient(this->SelfId(), hiveId, config));
         }
 
-        auto ev = std::make_unique<TEvHive::TEvRequestRecommendation>();
+        auto ev = std::make_unique<TEvHive::TEvRequestScaleRecommendation>();
         ev->Record.MutableDomainKey()->SetSchemeShard(domainKey.OwnerId);
         ev->Record.MutableDomainKey()->SetPathId(domainKey.LocalPathId);
         NTabletPipe::SendData(this->SelfId(), PipeClient, ev.release());
     }
 
-    void Handle(TEvHive::TEvResponseRecommendation::TPtr& ev) {
+    void Handle(TEvHive::TEvResponseScaleRecommendation::TPtr& ev) {
         TResponse response;
-        Ydb::Operations::Operation& operation = *response.mutable_operation();
-        operation.set_ready(true);
-        operation.set_status(Ydb::StatusIds::SUCCESS);
-
-        Ydb::Cms::GetRecommendationResult result;
         ui32 recommendedNodes = ev->Get()->Record.GetRecommendedNodes();
-        result.mutable_recommended_resources()->add_computational_units()->set_count(recommendedNodes);
-        operation.mutable_result()->PackFrom(result);
-
+        response.mutable_recommended_resources()->add_computational_units()->set_count(recommendedNodes);
         return this->Reply(response);
     }
 
@@ -132,8 +125,8 @@ private:
 
 };
 
-void DoGetRecommendationRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
-    f.RegisterActor(new TGetRecommendationRPC(p.release()));
+void DoGetScaleRecommendationRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TGetScaleRecommendationRPC(p.release()));
 }
 
 } // namespace NKikimr::NGRpcService

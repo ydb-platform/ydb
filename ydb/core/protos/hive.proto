@@ -590,10 +590,10 @@ message TEvResponseTabletDistribution {
     repeated TNode Nodes = 1;
 }
 
-message TEvRequestRecommendation {
+message TEvRequestScaleRecommendation {
     optional NKikimrSubDomains.TDomainKey DomainKey = 1;
 }
 
-message TEvResponseRecommendation {
+message TEvResponseScaleRecommendation {
     optional uint32 RecommendedNodes = 1;
 }

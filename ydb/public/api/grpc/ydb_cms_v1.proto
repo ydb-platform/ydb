@@ -28,6 +28,6 @@ service CmsService {
     // Describe supported database options.
     rpc DescribeDatabaseOptions(Cms.DescribeDatabaseOptionsRequest) returns (Cms.DescribeDatabaseOptionsResponse);
 
-    // Get resource recommendation for database.
-    rpc GetRecommendation(Cms.GetRecommendationRequest) returns (Cms.GetRecommendationResponse);
+    // Get resources scale recommendation for database.
+    rpc GetScaleRecommendation(Cms.GetScaleRecommendationRequest) returns (Cms.GetScaleRecommendationResponse);
 }

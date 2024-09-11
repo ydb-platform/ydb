@@ -578,7 +578,7 @@ protected:
     void Handle(TEvPrivate::TEvDeleteNode::TPtr& ev);
     void Handle(TEvHive::TEvRequestTabletDistribution::TPtr& ev);
     void Handle(TEvPrivate::TEvUpdateDataCenterFollowers::TPtr& ev);
-    void Handle(TEvHive::TEvRequestRecommendation::TPtr& ev);
+    void Handle(TEvHive::TEvRequestScaleRecommendation::TPtr& ev);
 
 protected:
     void RestartPipeTx(ui64 tabletId);

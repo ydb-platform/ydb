@@ -315,10 +315,14 @@ public:
     }
 
     NThreading::TFuture<TTableRangeResult> GetTableRange(TTableRangeOptions&& options) final {
+        TString key;
+        if (QContext_) {
+            key = MakeGetTableRangeKey(options);
+        }
+
         if (QContext_.CanRead()) {
             TTableRangeResult res;
             res.SetSuccess();
-            auto key = MakeGetTableRangeKey(options);
             auto item = QContext_.GetReader()->Get({YtGateway_GetTableRange, key}).GetValueSync();
             if (!item) {
                 throw yexception() << "Missing replay data";
@@ -354,9 +358,8 @@ public:
             return NThreading::MakeFuture<TTableRangeResult>(res);
         }
 
-        auto optionsDup = options;
         return Inner_->GetTableRange(std::move(options))
-            .Subscribe([optionsDup, qContext = QContext_](const NThreading::TFuture<TTableRangeResult>& future) {
+            .Subscribe([key, qContext = QContext_](const NThreading::TFuture<TTableRangeResult>& future) {
                 if (!qContext.CanWrite() || future.HasException()) {
                     return;
                 }
@@ -366,7 +369,6 @@ public:
                     return;
                 }
 
-                const auto& key = MakeGetTableRangeKey(optionsDup);
                 auto listNode = NYT::TNode::CreateList();
                 for (const auto& t : res.Tables) {
                     listNode.Add();

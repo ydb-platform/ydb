@@ -22,7 +22,7 @@ To change the logging level:
 
 1. Follow the link in the format
 
-    ```bash
+    ```text
     http://<endpoint>:8765/cms
     ```
 

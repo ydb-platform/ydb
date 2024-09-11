@@ -1326,15 +1326,15 @@ public:
     static void Check(TSelfCheckContext& context, const NKikimrWhiteboard::TSystemStateInfo::TPoolStats& poolStats) {
         if (poolStats.name() == "System" || poolStats.name() == "IC" || poolStats.name() == "IO") {
             if (poolStats.usage() >= 0.99) {
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Pool usage is over than 99%", ETags::OverloadState);
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Pool usage is over 99%", ETags::OverloadState);
             } else if (poolStats.usage() >= 0.95) {
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Pool usage is over than 95%", ETags::OverloadState);
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Pool usage is over 95%", ETags::OverloadState);
             } else {
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
             }
         } else {
             if (poolStats.usage() >= 0.99) {
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Pool usage is over than 99%", ETags::OverloadState);
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Pool usage is over 99%", ETags::OverloadState);
             } else {
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
             }
@@ -1530,9 +1530,9 @@ public:
                 if (static_cast<i64>(domain.GetPathsLimit()) - static_cast<i64>(domain.GetPathsInside()) <= 1) {
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Paths quota exhausted", ETags::QuotaUsage);
                 } else if (usage >= 0.99) {
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Paths quota usage is over than 99%", ETags::QuotaUsage);
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Paths quota usage is over 99%", ETags::QuotaUsage);
                 } else if (usage >= 0.90) {
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Paths quota usage is over than 90%", ETags::QuotaUsage);
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Paths quota usage is over 90%", ETags::QuotaUsage);
                 } else {
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
                 }
@@ -1543,9 +1543,9 @@ public:
                 if (static_cast<i64>(domain.GetShardsLimit()) - static_cast<i64>(domain.GetShardsInside()) <= 1) {
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Shards quota exhausted", ETags::QuotaUsage);
                 } else if (usage >= 0.99) {
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Shards quota usage is over than 99%", ETags::QuotaUsage);
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Shards quota usage is over 99%", ETags::QuotaUsage);
                 } else if (usage >= 0.90) {
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Shards quota usage is over than 90%", ETags::QuotaUsage);
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Shards quota usage is over 90%", ETags::QuotaUsage);
                 } else {
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
                 }
@@ -2075,7 +2075,7 @@ public:
             ++DisksColors[status];
             switch (status) {
                 case Ydb::Monitoring::StatusFlag::BLUE: // disk is good, but not available
-                case Ydb::Monitoring::StatusFlag::YELLOW: // disk is initializing, not currently available
+                // No yellow or orange status here - this is intentional - they are used when a disk is running out of space, but is currently available
                 case Ydb::Monitoring::StatusFlag::RED: // disk is bad, probably not available
                 case Ydb::Monitoring::StatusFlag::GREY: // the status is absent, the disk is not available
                     IncrementFor(realm);
@@ -2091,7 +2091,7 @@ public:
             if (ErasureSpecies == NONE) {
                 if (FailedDisks > 0) {
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Group failed", ETags::GroupState, {ETags::VDiskState});
-                } else if (DisksColors[Ydb::Monitoring::StatusFlag::YELLOW] > 0) {
+                } else if (DisksColors[Ydb::Monitoring::StatusFlag::YELLOW] > 0 || DisksColors[Ydb::Monitoring::StatusFlag::ORANGE] > 0) {
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Group degraded", ETags::GroupState, {ETags::VDiskState});
                 }
             } else if (ErasureSpecies == BLOCK_4_2) {
@@ -2105,7 +2105,7 @@ public:
                     } else {
                         context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Group degraded", ETags::GroupState, {ETags::VDiskState});
                     }
-                } else if (DisksColors[Ydb::Monitoring::StatusFlag::YELLOW] > 0) {
+                } else if (DisksColors[Ydb::Monitoring::StatusFlag::YELLOW] > 0 || DisksColors[Ydb::Monitoring::StatusFlag::ORANGE] > 0) {
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Group degraded", ETags::GroupState, {ETags::VDiskState});
                 }
             } else if (ErasureSpecies == MIRROR_3_DC) {
@@ -2119,7 +2119,7 @@ public:
                     } else {
                         context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Group degraded", ETags::GroupState, {ETags::VDiskState});
                     }
-                } else if (DisksColors[Ydb::Monitoring::StatusFlag::YELLOW] > 0) {
+                } else if (DisksColors[Ydb::Monitoring::StatusFlag::YELLOW] > 0 || DisksColors[Ydb::Monitoring::StatusFlag::ORANGE] > 0) {
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Group degraded", ETags::GroupState, {ETags::VDiskState});
                 }
             }
@@ -2241,15 +2241,15 @@ public:
                             break;
                         }
                         case ETags::VDiskState: {
-                            message = std::regex_replace(message.c_str(), std::regex("^VDisk has "), "VDisk have ");
+                            message = std::regex_replace(message.c_str(), std::regex("^VDisk has "), "VDisks have ");
                             message = std::regex_replace(message.c_str(), std::regex("^VDisk is "), "VDisks are ");
-                            message = std::regex_replace(message.c_str(), std::regex("^VDisk "), "VDisk ");
+                            message = std::regex_replace(message.c_str(), std::regex("^VDisk "), "VDisks ");
                             break;
                         }
                         case ETags::PDiskState: {
-                            message = std::regex_replace(message.c_str(), std::regex("^PDisk has "), "PDisk have ");
+                            message = std::regex_replace(message.c_str(), std::regex("^PDisk has "), "PDisks have ");
                             message = std::regex_replace(message.c_str(), std::regex("^PDisk is "), "PDisks are ");
-                            message = std::regex_replace(message.c_str(), std::regex("^PDisk "), "PDisk ");
+                            message = std::regex_replace(message.c_str(), std::regex("^PDisk "), "PDisks ");
                             break;
                         }
                         default:

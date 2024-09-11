@@ -10,7 +10,7 @@
 
 ```ADD INDEX``` — добавляет индекс с указанным именем и типом для заданного набора колонок в {% if backend_name == "YDB" %}строковых таблицах.{% else %}таблицах.{% endif %} Приведенный ниже код добавит глобальный индекс с именем ```title_index``` для колонки ```title```.
 
-```sql
+```yql
 ALTER TABLE `series` ADD INDEX `title_index` GLOBAL ON (`title`);
 ```
 
@@ -32,7 +32,7 @@ ALTER TABLE `series` ADD INDEX `title_index` GLOBAL ON (`title`);
 
 {% endnote %}
 
-```sql
+```yql
 ALTER TABLE <table_name> ALTER INDEX <index_name> SET <partitioning_setting_name> <value>;
 ALTER TABLE <table_name> ALTER INDEX <index_name> SET (<partitioning_setting_name_1> = <value_1>, ...);
 ```
@@ -59,7 +59,7 @@ ALTER TABLE <table_name> ALTER INDEX <index_name> SET (<partitioning_setting_nam
 ### Пример
 
 Код из следующего примера включает автоматическое партиционирование по нагрузке для индекса с именем `title_index` в таблице `series` и устанавливает ему минимальное количество партиций равным 5:
-```sql
+```yql
 ALTER TABLE `series` ALTER INDEX `title_index` SET (
     AUTO_PARTITIONING_BY_LOAD = ENABLED,
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 5
@@ -70,7 +70,7 @@ ALTER TABLE `series` ALTER INDEX `title_index` SET (
 
 ```DROP INDEX``` — удаляет индекс с указанным именем. Приведенный ниже код удалит индекс с именем ```title_index```.
 
-```sql
+```yql
 ALTER TABLE `series` DROP INDEX `title_index`;
 ```
 
@@ -92,6 +92,6 @@ ALTER TABLE `series` DROP INDEX `title_index`;
 
 Пример переименования индекса:
 
-```sql
+```yql
 ALTER TABLE `series` RENAME INDEX `title_index` TO `title_index_new`;
 ```

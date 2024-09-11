@@ -89,7 +89,7 @@ Explicit casting using [CAST](../../syntax/expressions.md#cast):
 
 <sup>4</sup> Using the built-in function [Yson::ConvertTo](../../udf/list/yson.md#ysonconvertto).
 
-**Examples**
+##### Examples
 
 {% include [x](../../_includes/cast_examples.md) %}
 

@@ -16,7 +16,8 @@ namespace NKikimr::NOlap {
 
 class TColumnChunkLoadContext;
 class TIndexChunkLoadContext;
-struct TInsertedData;
+class TInsertedData;
+class TCommittedData;
 class TInsertTableAccessor;
 class TColumnRecord;
 class TIndexChunk;
@@ -30,10 +31,10 @@ public:
     virtual ~IDbWrapper() = default;
 
     virtual void Insert(const TInsertedData& data) = 0;
-    virtual void Commit(const TInsertedData& data) = 0;
+    virtual void Commit(const TCommittedData& data) = 0;
     virtual void Abort(const TInsertedData& data) = 0;
     virtual void EraseInserted(const TInsertedData& data) = 0;
-    virtual void EraseCommitted(const TInsertedData& data) = 0;
+    virtual void EraseCommitted(const TCommittedData& data) = 0;
     virtual void EraseAborted(const TInsertedData& data) = 0;
 
     virtual bool Load(TInsertTableAccessor& insertTable, const TInstant& loadTime) = 0;
@@ -63,10 +64,10 @@ public:
     {}
 
     void Insert(const TInsertedData& data) override;
-    void Commit(const TInsertedData& data) override;
+    void Commit(const TCommittedData& data) override;
     void Abort(const TInsertedData& data) override;
     void EraseInserted(const TInsertedData& data) override;
-    void EraseCommitted(const TInsertedData& data) override;
+    void EraseCommitted(const TCommittedData& data) override;
     void EraseAborted(const TInsertedData& data) override;
 
     bool Load(TInsertTableAccessor& insertTable, const TInstant& loadTime) override;

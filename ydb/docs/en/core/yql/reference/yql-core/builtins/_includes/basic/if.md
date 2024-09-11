@@ -6,7 +6,7 @@ It's a simplified alternative for [CASE WHEN ... THEN ... ELSE ... END](../../..
 
 You may omit the `else_expression` argument. In this case, if the condition is false (`condition_expression` returned `false`), an empty value is returned with the type corresponding to `then_expression` and allowing for `NULL`. Hence, the result will have an [optional data type](../../../types/optional.md).
 
-**Examples**
+### Examples
 
 ```yql
 SELECT

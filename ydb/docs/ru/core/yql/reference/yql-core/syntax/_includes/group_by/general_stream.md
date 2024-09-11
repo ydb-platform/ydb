@@ -29,7 +29,8 @@ HOP(time_extractor, hop, interval, delay)
 
 Известное в других системах **tumbling window** является частным случаем **hopping window**, когда `interval` == `hop`.
 
-**Примеры:**
+### Примеры
+
 ``` yql
 SELECT STREAM
     key,

@@ -28,7 +28,8 @@ No existing profile "<profile_name>". Run "ydb config profile list" without argu
 ```
 
 Если имя профиля не указано, то в интерактивном режиме будет предложено выбрать между следующими вариантами:
-``` text
+
+```text
 Please choose profile to activate:
  [1] Don't do anything, just exit
  [2] Deactivate current active profile (if any)

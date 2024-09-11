@@ -6,7 +6,7 @@
 
 Выборка строчек таблицы по заданному списку значений первичного ключа (или префикса ключа) таблицы выполняется с помощью оператора `IN`:
 
-```sql
+```yql
 DECLARE $keys AS List<UInt64>;
 
 SELECT * FROM some_table
@@ -15,7 +15,7 @@ WHERE Key1 IN $keys;
 
 В случае если выборка делается по составному ключу, параметр запроса должен иметь тип списка таплов:
 
-```sql
+```yql
 DECLARE $keys AS List<Tuple<UInt64, String>>;
 
 SELECT * FROM some_table
@@ -28,7 +28,7 @@ WHERE (Key1, Key2) IN $keys;
 
 Оператор `LIKE` может быть использован для поиска по индексу таблицы только в случае, если он задает префикс строки:
 
-```sql
+```yql
 SELECT * FROM string_key_table
 WHERE Key LIKE "some_prefix%";
 ```
@@ -41,7 +41,7 @@ WHERE Key LIKE "some_prefix%";
 
 Рассмотрим пример c двумя возможными вариантами добавления JSON-строки в таблицу:
 
-```sql
+```yql
 UPSERT INTO test_json(id, json_string)
 VALUES
     (1, Json(@@[{"name":"Peter \"strong cat\" Kourbatov"}]@@)),
@@ -56,7 +56,7 @@ VALUES
 
 Можно использовать операцию `LEFT JOIN`, чтобы пометить отсутствующие в таблице ключи, после чего обновить их значения:
 
-```sql
+```yql
 DECLARE $values AS List<Struct<Key: UInt64, Value: String>>;
 
 UPSERT INTO kv_table
@@ -94,7 +94,7 @@ WHERE t.Key IS NULL;
 
 Данные из параметров запроса можно использовать как константную таблицу. Для этого нужно использовать модификатор `AS_TABLE` с параметром, имеющим тип списка структур:
 
-```sql
+```yql
 DECLARE $data AS List<Struct<Key1: UInt64, Key2: String>>;
 
 SELECT * FROM AS_TABLE($data) AS d
@@ -108,7 +108,7 @@ ON t.Key1 = d.Key1 AND t.Key2 = d.Key2;
 
 Это лучше записывать через JOIN с константной таблицей:
 
-```sql
+```yql
 $keys = AsList(
     AsStruct(1 AS Key1, "One" AS Key2),
     AsStruct(2 AS Key1, "Three" AS Key2),

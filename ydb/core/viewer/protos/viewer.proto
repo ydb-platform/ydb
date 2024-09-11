@@ -441,19 +441,19 @@ message TStorageGroupInfo {
     string Kind = 7;
     string MediaType = 8;
     string ErasureSpecies = 9;
-    uint64 AllocationUnits = 10;
+    optional uint64 AllocationUnits = 10;
     string State = 11;
-    uint64 MissingDisks = 12; // Degraded
-    uint64 Used = 13;
-    uint64 Limit = 14;
-    uint64 Available = 15;
-    float Usage = 16;
-    uint64 Read = 17;
-    uint64 Write = 18;
-    float DiskSpaceUsage = 19;
-    uint64 LatencyPutTabletLog = 20;
-    uint64 LatencyPutUserData = 21;
-    uint64 LatencyGetFast = 22;
+    optional uint64 MissingDisks = 12; // Degraded
+    optional uint64 Used = 13;
+    optional uint64 Limit = 14;
+    optional uint64 Available = 15;
+    optional float Usage = 16;
+    optional uint64 Read = 17;
+    optional uint64 Write = 18;
+    optional float DiskSpaceUsage = 19;
+    optional uint64 LatencyPutTabletLog = 20;
+    optional uint64 LatencyPutUserData = 21;
+    optional uint64 LatencyGetFast = 22;
     repeated TStorageVDisk VDisks = 30;
 }
 
@@ -641,6 +641,7 @@ message TSchemeCacheRequest {
 message TEvViewerRequest {
     TNodeLocation Location = 1;
     uint32 Timeout = 2; // ms
+    string MergeFields = 3;
     oneof Request {
         NKikimrWhiteboard.TEvTabletStateRequest TabletRequest = 11;
         NKikimrWhiteboard.TEvSystemStateRequest SystemRequest = 12;
@@ -728,13 +729,14 @@ message TQueryAutocomplete {
             EAutocompleteType Type = 2;
             string Parent = 3;
         }
-        uint32 Total = 1;
+        optional uint32 Total = 1;
         repeated TEntity Entities = 2;
     }
 
     bool Success = 1;
     TResult Result = 2;
     repeated string Error = 3;
+    uint32 Version = 4;
 }
 
 message TPDiskInfoWhiteboard {

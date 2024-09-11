@@ -1,4 +1,5 @@
 #include "line_reader.h"
+#include "yql_highlight.h"
 
 #include <util/generic/string.h>
 #include <util/system/file.h>
@@ -92,7 +93,12 @@ TLineReader::TLineReader(std::string prompt, std::string historyFilePath, Sugges
         return completions;
     };
 
+    auto highlighter_callback = [](const auto& text, auto& colors) {
+        return YQLHighlight(YQLHighlight::ColorSchema::Monaco()).Apply(text, colors);
+    };
+
     Rx.set_completion_callback(completion_callback);
+    Rx.set_highlighter_callback(highlighter_callback);
     Rx.enable_bracketed_paste();
     Rx.set_unique_history(true);
     Rx.set_complete_on_empty(false);

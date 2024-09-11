@@ -26,6 +26,7 @@ struct TQueryRunnerSettings {
     FLUENT_SETTING_DEFAULT(ui32, NodeIndex, 0);
     FLUENT_SETTING_DEFAULT(std::optional<TString>, PoolId, std::nullopt);
     FLUENT_SETTING_DEFAULT(TString, UserSID, "user@" BUILTIN_SYSTEM_DOMAIN);
+    FLUENT_SETTING_DEFAULT(TVector<TString>, GroupSIDs, {});
     FLUENT_SETTING_DEFAULT(TString, Database, "");
 
     // Runner settings
@@ -70,6 +71,8 @@ struct TYdbSetupSettings {
     FLUENT_SETTING_DEFAULT(bool, CreateSampleTenants, false);
     FLUENT_SETTING_DEFAULT(bool, EnableResourcePools, true);
     FLUENT_SETTING_DEFAULT(bool, EnableResourcePoolsOnServerless, false);
+    FLUENT_SETTING_DEFAULT(bool, EnableMetadataObjectsOnServerless, true);
+    FLUENT_SETTING_DEFAULT(bool, EnableExternalDataSourcesOnServerless, true);
 
     // Default pool settings
     FLUENT_SETTING_DEFAULT(TString, PoolId, "sample_pool_id");
@@ -131,7 +134,7 @@ struct TSampleQueries {
     template <typename TResult>
     static void CheckCancelled(const TResult& result) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::CANCELLED, result.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Request timeout exceeded, cancelling after");
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Request was canceled");
     }
 
     template <typename TResult>

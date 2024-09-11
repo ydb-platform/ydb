@@ -7,6 +7,7 @@
 This section contains code recipes with authentication settings in different {{ ydb-short-name }} SDKs. For a general description of the SDK authentication principles, see the [Authentication in an SDK](auth.md).
 
 Table of contents:
+
 - [Using a token](auth-access-token.md)
 - [Anonymous](auth-anonymous.md)
 - [Service account file](auth-service-account.md)

@@ -607,7 +607,6 @@ join/lookupjoin_bug8533
 join/lookupjoin_semi
 join/lookupjoin_semi_empty
 join/bush_in_in_in
-pg/join_brackets2
 join/mapjoin_with_empty_read
 key_filter/empty_range_over_dynamic
 join/join_without_correlation_and_struct_access

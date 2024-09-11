@@ -9,11 +9,7 @@ The task to load a high-performance distributed system is non-trivial. A softwar
 
 With load actors, you can test both the entire system and its individual components:
 
-<center>
-
 ![load-actors](../_assets/load-actors.svg)
-
-</center>
 
 For example, you can generate a [load on Distributed Storage](load-actors-storage.md) without using tablet and Query Processor layers. This lets you test different system layers separately and find bottlenecks in an efficient way. By combining a variety of actor types, you can run different types of load.
 

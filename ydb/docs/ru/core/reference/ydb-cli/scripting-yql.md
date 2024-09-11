@@ -14,7 +14,7 @@
 Посмотрите описание команды выполнения YQL-скрипта:
 
 ```bash
-ydb scripting yql --help
+{{ ydb-cli }} scripting yql --help
 ```
 
 ## Параметры подкоманды {#options}

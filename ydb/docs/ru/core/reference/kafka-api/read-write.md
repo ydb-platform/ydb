@@ -18,9 +18,12 @@
 
 
 ## Запись данных в топик
+
 {% list tabs %}
+
 - kcat
-  ```ini
+
+  ```bash
   echo "test message" | kcat -P \
     -b <ydb-endpoint> \
     -t <topic-name> \
@@ -32,6 +35,7 @@
   ```
 
 - Java
+
   ```java
   String HOST = "<ydb-endpoint>";
   String TOPIC = "<topic-name>";
@@ -60,7 +64,8 @@
   ```
 
 - Logstash
-  ```
+
+  ```ruby
   output {
     kafka {
       codec => json
@@ -76,7 +81,7 @@
 
 - Fluent Bit
 
-  ```
+  ```ini
   [OUTPUT]
     name                          kafka
     match                         *
@@ -90,12 +95,15 @@
     rdkafka.sasl.username         <sasl.username>
     rdkafka.sasl.password         <sasl.password>
   ```
+
 {% endlist %}
 ## Чтение данных из топика
+
 {% list tabs %}
 
 - kcat
-  ```ini
+
+  ```bash
   kcat -C \
       -b <ydb-endpoint> \
       -X security.protocol=SASL_SSL \
@@ -107,6 +115,7 @@
   ```
 
 - Java
+
   ```java
   String HOST = "<ydb-endpoint>";
   String TOPIC = "<topic-name>";
@@ -139,4 +148,5 @@
       }
   }
   ```
+
 {% endlist %}

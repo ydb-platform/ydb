@@ -81,5 +81,4 @@ Below are examples of the code for enabling metrics in Prometheus in different {
    }
    ```
 
-
 {% endlist %}

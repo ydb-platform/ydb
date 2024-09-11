@@ -4,7 +4,7 @@
 
 {% include [yql-reference-prerequisites](_includes/yql_tutorial_prerequisites.md) %}
 
-```sql
+```yql
 SELECT         -- Оператор выбора данных.
 
     *          -- Выбор всех колонок из таблицы.

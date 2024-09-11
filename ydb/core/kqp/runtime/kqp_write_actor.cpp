@@ -374,7 +374,13 @@ private:
         CA_LOG_D("Recv EvWriteResult from ShardID=" << ev->Get()->Record.GetOrigin()
             << ", Status=" << NKikimrDataEvents::TEvWriteResult::EStatus_Name(ev->Get()->GetStatus())
             << ", TxId=" << ev->Get()->Record.GetTxId()
-            << ", LocksCount= " << ev->Get()->Record.GetTxLocks().size()
+            << ", Locks= " << [&]() {
+                TStringBuilder builder;
+                for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
+                    builder << lock.ShortDebugString();
+                }
+                return builder;
+            }()
             << ", Cookie=" << ev->Cookie);
 
         switch (ev->Get()->GetStatus()) {
@@ -385,8 +391,9 @@ private:
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
             RuntimeError(
-                TStringBuilder() << "Got UNSPECIFIED for table `"
-                    << SchemeEntry->TableId.PathId.ToString() << "`.",
+                TStringBuilder() << "Unspecified error for table `"
+                    << SchemeEntry->TableId.PathId.ToString() << "`. "
+                    << getIssues().ToOneLineString(),
                 NYql::NDqProto::StatusIds::UNSPECIFIED,
                 getIssues());
             return;
@@ -405,8 +412,9 @@ private:
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
             RuntimeError(
-                TStringBuilder() << "Got ABORTED for table `"
-                    << SchemeEntry->TableId.PathId.ToString() << "`.",
+                TStringBuilder() << "Aborted for table `"
+                    << SchemeEntry->TableId.PathId.ToString() << "`. "
+                    << getIssues().ToOneLineString(),
                 NYql::NDqProto::StatusIds::ABORTED,
                 getIssues());
             return;
@@ -424,8 +432,9 @@ private:
                 RetryResolveTable();
             } else {
                 RuntimeError(
-                    TStringBuilder() << "Got INTERNAL ERROR for table `"
-                        << SchemeEntry->TableId.PathId.ToString() << "`.",
+                    TStringBuilder() << "Internal error for table `"
+                        << SchemeEntry->TableId.PathId.ToString() << "`. "
+                        << getIssues().ToOneLineString(),
                     NYql::NDqProto::StatusIds::INTERNAL_ERROR,
                     getIssues());
             }
@@ -439,8 +448,9 @@ private:
                     << getIssues().ToOneLineString());
             
         RuntimeError(
-            TStringBuilder() << "Got DISK_SPACE_EXHAUSTED for table `"
-                << SchemeEntry->TableId.PathId.ToString() << "`.",
+            TStringBuilder() << "Disk space exhausted for table `"
+                << SchemeEntry->TableId.PathId.ToString() << "`. "
+                << getIssues().ToOneLineString(),
             NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
             getIssues());
             return;
@@ -455,8 +465,9 @@ private:
             // TODO: support waiting
             if (!InconsistentTx)  {
                 RuntimeError(
-                    TStringBuilder() << "Got OVERLOADED for table `"
-                        << SchemeEntry->TableId.PathId.ToString() << "`.",
+                    TStringBuilder() << "Tablet " << ev->Get()->Record.GetOrigin() << " is overloaded. Table `"
+                        << SchemeEntry->TableId.PathId.ToString() << "`. "
+                        << getIssues().ToOneLineString(),
                     NYql::NDqProto::StatusIds::OVERLOADED,
                     getIssues());
             }
@@ -469,8 +480,9 @@ private:
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
             RuntimeError(
-                TStringBuilder() << "Got CANCELLED for table `"
-                    << SchemeEntry->TableId.PathId.ToString() << "`.",
+                TStringBuilder() << "Cancelled request to table `"
+                    << SchemeEntry->TableId.PathId.ToString() << "`."
+                    << getIssues().ToOneLineString(),
                 NYql::NDqProto::StatusIds::CANCELLED,
                 getIssues());
             return;
@@ -482,8 +494,9 @@ private:
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
             RuntimeError(
-                TStringBuilder() << "Got BAD REQUEST for table `"
-                    << SchemeEntry->TableId.PathId.ToString() << "`.",
+                TStringBuilder() << "Bad request. Table `"
+                    << SchemeEntry->TableId.PathId.ToString() << "`. "
+                    << getIssues().ToOneLineString(),
                 NYql::NDqProto::StatusIds::BAD_REQUEST,
                 getIssues());
             return;
@@ -499,8 +512,9 @@ private:
                 RetryResolveTable();
             } else {
                 RuntimeError(
-                    TStringBuilder() << "Got SCHEME CHANGED for table `"
-                        << SchemeEntry->TableId.PathId.ToString() << "`.",
+                    TStringBuilder() << "Scheme changed. Table `"
+                        << SchemeEntry->TableId.PathId.ToString() << "`. "
+                        << getIssues().ToOneLineString(),
                     NYql::NDqProto::StatusIds::SCHEME_ERROR,
                     getIssues());
             }
@@ -513,8 +527,9 @@ private:
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
             RuntimeError(
-                TStringBuilder() << "Got LOCKS BROKEN for table `"
-                    << SchemeEntry->TableId.PathId.ToString() << "`.",
+                TStringBuilder() << "Transaction locks invalidated. Table `"
+                    << SchemeEntry->TableId.PathId.ToString() << "`. "
+                    << getIssues().ToOneLineString(),
                 NYql::NDqProto::StatusIds::ABORTED,
                 getIssues());
             return;
@@ -526,14 +541,20 @@ private:
         CA_LOG_D("Got completed result TxId=" << ev->Get()->Record.GetTxId()
             << ", TabletId=" << ev->Get()->Record.GetOrigin()
             << ", Cookie=" << ev->Cookie
-            << ", LocksCount=" << ev->Get()->Record.GetTxLocks().size());
+            << ", Locks=" << [&]() {
+                TStringBuilder builder;
+                for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
+                    builder << lock.ShortDebugString();
+                }
+                return builder;
+            }());
 
         OnMessageAcknowledged(ev->Get()->Record.GetOrigin(), ev->Cookie);
 
         for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
             if (!LocksInfo[ev->Get()->Record.GetOrigin()].AddAndCheckLock(lock)) {
                 RuntimeError(
-                    TStringBuilder() << "Got LOCKS BROKEN for table `"
+                    TStringBuilder() << "Transaction locks invalidated. Table `"
                         << SchemeEntry->TableId.PathId.ToString() << "`.",
                     NYql::NDqProto::StatusIds::ABORTED,
                     NYql::TIssues{});
@@ -625,7 +646,13 @@ private:
         CA_LOG_D("Send EvWrite to ShardID=" << shardId << ", TxId=" << evWrite->Record.GetTxId()
             << ", TxMode=" << evWrite->Record.GetTxMode()
             << ", LockTxId=" << evWrite->Record.GetLockTxId() << ", LockNodeId=" << evWrite->Record.GetLockNodeId()
-            << ", LocksCount= " << evWrite->Record.GetLocks().LocksSize()
+            << ", Locks= " << [&]() {
+                TStringBuilder builder;
+                for (const auto& lock : evWrite->Record.GetLocks().GetLocks()) {
+                    builder << lock.ShortDebugString();
+                }
+                return builder;
+            }()
             << ", Size=" << serializationResult.TotalDataSize << ", Cookie=" << metadata->Cookie
             << ", OperationsCount=" << metadata->OperationsCount << ", IsFinal=" << metadata->IsFinal
             << ", Attempts=" << metadata->SendAttempts);
@@ -695,7 +722,9 @@ private:
             RetryShard(ev->Get()->TabletId, std::nullopt);
         } else {
             RuntimeError(
-                TStringBuilder() << "Error while delivering message to tablet " << ev->Get()->TabletId,
+                TStringBuilder()
+                    << "Error writing to table `" << SchemeEntry->TableId.PathId.ToString() << "`"
+                    << ": can't deliver message to tablet " << ev->Get()->TabletId << ".",
                 NYql::NDqProto::StatusIds::UNAVAILABLE);
         }
     }

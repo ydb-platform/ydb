@@ -101,8 +101,12 @@ public:
 
 private:
     struct TField {
+        TField(TStringBuf name, TWriteFunction func)
+            : Name(name)
+            , WriteFunction(func)
+        {}
         TStringBuf Name;
-        std::function<void(const TItem&, IOutputStream&)> WriteFunction;
+        TWriteFunction WriteFunction;
     };
     TVector<TField> Fields;
     IOutputStream& Out;

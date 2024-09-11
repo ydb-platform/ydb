@@ -401,7 +401,7 @@ bool TTxInitSchema::Execute(TTransactionContext& txc, const TActorContext&) {
     }
     {
         NOlap::TNormalizationController::TInitContext initCtx(Self->Info());
-        Self->NormalizerController.InitNormalizers(initCtx);
+        Self->NormalizerController.InitNormalizers(initCtx, Self);
     }
 
     if (isFirstRun) {

@@ -54,7 +54,7 @@ void TNormalizationController::OnNormalizerFinished(NIceDb::TNiceDb& db) const {
     NColumnShard::Schema::FinishNormalizer(db, GetNormalizer()->GetClassName(), GetNormalizer()->GetUniqueDescription(), GetNormalizer()->GetUniqueId());
 }
 
-void TNormalizationController::InitNormalizers(const TInitContext& ctx) {
+void TNormalizationController::InitNormalizers(const TInitContext& ctx, const NColumnShard::TColumnShard* cs) {
     Counters.clear();
     Normalizers.clear();
     if (HasAppData()) {
@@ -84,6 +84,7 @@ void TNormalizationController::InitNormalizers(const TInitContext& ctx) {
             continue;
         }
         auto normalizer = RegisterNormalizer(std::shared_ptr<INormalizerComponent>(INormalizerComponent::TFactory::Construct(::ToString(nType), ctx)));
+        normalizer->CS = cs;
         AFL_VERIFY(normalizer->GetEnumSequentialIdVerified() == nType);
         AFL_VERIFY(lastRegisteredNormalizer <= nType)("current", ToString(nType))("last", ToString(lastRegisteredNormalizer));
         lastRegisteredNormalizer = nType;

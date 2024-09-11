@@ -3,6 +3,7 @@
 #include <ydb/core/tx/columnshard/engines/scheme/filtered_scheme.h>
 #include <ydb/core/tx/columnshard/engines/portions/constructor.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
+#include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/tables_manager.h>
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
@@ -10,14 +11,15 @@
 
 namespace NKikimr::NOlap {
 
-#if 0
 class TBlobsRemovingResult : public INormalizerChanges {
     std::shared_ptr<IBlobsDeclareRemovingAction> RemovingAction;
     std::vector<std::shared_ptr<TPortionInfo>> Portions;
+    const NColumnShard::TColumnShard* CS;
 public:
-    TBlobsRemovingResult(std::shared_ptr<IBlobsDeclareRemovingAction> removingAction, std::vector<std::shared_ptr<TPortionInfo>>&& portions)
+    TBlobsRemovingResult(std::shared_ptr<IBlobsDeclareRemovingAction> removingAction, std::vector<std::shared_ptr<TPortionInfo>>&& portions,  const NColumnShard::TColumnShard* cs)
         : RemovingAction(removingAction)
         , Portions(std::move(portions))
+        , CS(cs)
     {}
 
     bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& /* normController */) const override {
@@ -27,7 +29,7 @@ public:
         TDbWrapper db(txc.DB, nullptr);
         for (auto&& portion : Portions) {
             AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("message", "remove lost portion")("path_id", portion->GetPathId())("portion_id", portion->GetPortionId());
-            portion->RemoveFromDatabase(db);
+            portion->RemoveFromDatabase(db, &CS->TablesManager);
         }
         return true;
     }
@@ -44,10 +46,13 @@ public:
 class TBlobsRemovingTask : public INormalizerTask {
     std::vector<TUnifiedBlobId> Blobs;
     std::vector<std::shared_ptr<TPortionInfo>> Portions;
+    const NColumnShard::TColumnShard* CS;
+
 public:
-    TBlobsRemovingTask(std::vector<TUnifiedBlobId>&& blobs, std::vector<std::shared_ptr<TPortionInfo>>&& portions)
+    TBlobsRemovingTask(std::vector<TUnifiedBlobId>&& blobs, std::vector<std::shared_ptr<TPortionInfo>>&& portions,  const NColumnShard::TColumnShard* cs)
         : Blobs(std::move(blobs))
         , Portions(std::move(portions))
+        , CS(cs)
     {}
 
     void Start(const TNormalizationController& controller, const TNormalizationContext& nCtx) override {
@@ -56,7 +61,7 @@ public:
         for (auto&& blobId : Blobs) {
             removeAction->DeclareSelfRemove(blobId);
         }
-        TActorContext::AsActorContext().Send(nCtx.GetShardActor(), std::make_unique<NColumnShard::TEvPrivate::TEvNormalizerResult>(std::make_shared<TBlobsRemovingResult>(removeAction, std::move(Portions))));
+        TActorContext::AsActorContext().Send(nCtx.GetShardActor(), std::make_unique<NColumnShard::TEvPrivate::TEvNormalizerResult>(std::make_shared<TBlobsRemovingResult>(removeAction, std::move(Portions), CS)));
     }
 };
 
@@ -82,12 +87,11 @@ INormalizerTask::TPtr TCleanPortionsNormalizer::BuildTask(std::vector<std::share
             AFL_VERIFY(false)("details", "Invalid storage for normalizer");
         }
     }
-    return std::make_shared<TBlobsRemovingTask>(std::move(blobIds), std::move(portions));
+    return std::make_shared<TBlobsRemovingTask>(std::move(blobIds), std::move(portions), CS);
 }
 
  TConclusion<bool> TCleanPortionsNormalizer::DoInitImpl(const TNormalizationController&, NTabletFlatExecutor::TTransactionContext&) {
     return true;
 }
 
-#endif
 }

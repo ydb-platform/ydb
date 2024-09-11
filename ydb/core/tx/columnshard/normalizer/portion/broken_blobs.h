@@ -8,7 +8,7 @@
 namespace NKikimr::NColumnShard {
     class TTablesManager;
 }
-#if 0
+
 namespace NKikimr::NOlap::NNormalizer::NBrokenBlobs {
 
 class TNormalizer : public TPortionsNormalizerBase {
@@ -48,4 +48,3 @@ public:
 };
 
 }
-#endif

@@ -38,6 +38,17 @@ TColumnEngineForLogs::TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<
     RegisterSchemaVersion(snapshot, schema);
 }
 
+TColumnEngineForLogs::TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager)
+    : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, storagesManager))
+    , StoragesManager(storagesManager)
+    , TabletId(tabletId)
+    , LastPortion(0)
+    , LastGranule(0)
+{
+    ActualizationController = std::make_shared<NActualizer::TController>();
+}
+
+
 TColumnEngineForLogs::TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager,
     const TSnapshot& snapshot, TIndexInfo&& schema)
     : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, storagesManager))

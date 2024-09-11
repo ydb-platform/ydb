@@ -3,34 +3,36 @@
 #include <ydb/core/tx/columnshard/engines/scheme/filtered_scheme.h>
 #include <ydb/core/tx/columnshard/engines/portions/constructor.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
+#include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/tables_manager.h>
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 
-#if 0
 namespace NKikimr::NOlap::NNormalizer::NBrokenBlobs {
 
 class TNormalizerResult : public INormalizerChanges {
     THashMap<ui64, std::shared_ptr<TPortionInfo>> BrokenPortions;
     std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> Schemas;
+    const NColumnShard::TColumnShard* CS;
+
 public:
-    TNormalizerResult(THashMap<ui64, std::shared_ptr<TPortionInfo>>&& portions, const std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>>& schemas)
+    TNormalizerResult(THashMap<ui64, std::shared_ptr<TPortionInfo>>&& portions, const std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>>& schemas, const NColumnShard::TColumnShard* cs)
         : BrokenPortions(std::move(portions))
         , Schemas(schemas)
+        , CS(cs)
     {
-        exit(1);
     }
 
     bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& normController) const override {
         NOlap::TBlobManagerDb blobManagerDb(txc.DB);
-        
+
         TDbWrapper db(txc.DB, nullptr);
         for (auto&& [_, portionInfo] : BrokenPortions) {
             auto schema = Schemas->FindPtr(portionInfo->GetPortionId());
             AFL_VERIFY(!!schema)("portion_id", portionInfo->GetPortionId());
             AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "portion_removed_as_broken")("portion_id", portionInfo->GetAddress().DebugString());
             portionInfo->SetRemoveSnapshot(TSnapshot(1, 1));
-            portionInfo->SaveToDatabase(db, (*schema)->GetIndexInfo().GetPKFirstColumnId(), false);
+            portionInfo->SaveToDatabase(db, (*schema)->GetIndexInfo().GetPKFirstColumnId(), false, &CS->TablesManager);
         }
         if (BrokenPortions.size()) {
             TStringBuilder sb;
@@ -63,19 +65,22 @@ private:
     std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> Schemas;
     THashMap<TString, THashMap<TUnifiedBlobId, std::shared_ptr<TPortionInfo>>> PortionsByBlobId;
     THashMap<ui64, std::shared_ptr<TPortionInfo>> BrokenPortions;
+    const NColumnShard::TColumnShard* CS;
+
 public:
     TReadTask(const TNormalizationContext& nCtx, const std::vector<std::shared_ptr<IBlobsReadingAction>>& actions,
-        std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas, THashMap < TString, THashMap<TUnifiedBlobId, std::shared_ptr<TPortionInfo>>>&& portionsByBlobId)
+        std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas, THashMap < TString, THashMap<TUnifiedBlobId, std::shared_ptr<TPortionInfo>>>&& portionsByBlobId, const NColumnShard::TColumnShard* cs)
         : TBase(actions, "CS::NORMALIZER")
         , NormContext(nCtx)
         , Schemas(std::move(schemas))
         , PortionsByBlobId(portionsByBlobId)
+        , CS(cs)
     {
     }
 
 protected:
     virtual void DoOnDataReady(const std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>& /*resourcesGuard*/) override {
-        auto changes = std::make_shared<TNormalizerResult>(std::move(BrokenPortions), Schemas);
+        auto changes = std::make_shared<TNormalizerResult>(std::move(BrokenPortions), Schemas, CS);
         TActorContext::AsActorContext().Send(NormContext.GetShardActor(), std::make_unique<NColumnShard::TEvPrivate::TEvNormalizerResult>(changes));
     }
 
@@ -100,12 +105,15 @@ class TBrokenBlobsTask: public INormalizerTask {
     THashMap<TString, THashSet<TUnifiedBlobId>> Blobs;
     THashMap<TString, THashMap<TUnifiedBlobId, std::shared_ptr<TPortionInfo>>> PortionsByBlobId;
     const std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> Schemas;
+    const NColumnShard::TColumnShard* CS;
+
 public:
     TBrokenBlobsTask(THashMap<TString, THashSet<TUnifiedBlobId>>&& blobs, THashMap<TString, THashMap<TUnifiedBlobId, std::shared_ptr<TPortionInfo>>>&& portionsByBlobId,
-        const std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>>& schemas)
+        const std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>>& schemas, const NColumnShard::TColumnShard* cs)
         : Blobs(std::move(blobs))
         , PortionsByBlobId(portionsByBlobId)
         , Schemas(schemas)
+        , CS(cs)
     {}
 
     void Start(const TNormalizationController& controller, const TNormalizationContext& nCtx) override {
@@ -121,7 +129,7 @@ public:
         }
         NOlap::NResourceBroker::NSubscribe::ITask::StartResourceSubscription(
             nCtx.GetResourceSubscribeActor(), std::make_shared<NOlap::NBlobOperations::NRead::ITask::TReadSubscriber>(
-                std::make_shared<TReadTask>(nCtx, actions, Schemas, std::move(PortionsByBlobId)), 0, memSize, "CS::NORMALIZER", controller.GetTaskSubscription()));
+                std::make_shared<TReadTask>(nCtx, actions, Schemas, std::move(PortionsByBlobId), CS), 0, memSize, "CS::NORMALIZER", controller.GetTaskSubscription()));
     }
 };
 
@@ -155,7 +163,7 @@ INormalizerTask::TPtr TNormalizer::BuildTask(std::vector<std::shared_ptr<TPortio
     if (blobIds.empty()) {
         return nullptr;
     }
-    return std::make_shared<TBrokenBlobsTask>(std::move(blobIds), std::move(portionByBlobId), schemas);
+    return std::make_shared<TBrokenBlobsTask>(std::move(blobIds), std::move(portionByBlobId), schemas, CS);
 }
 
  TConclusion<bool> TNormalizer::DoInitImpl(const TNormalizationController&, NTabletFlatExecutor::TTransactionContext&) {
@@ -164,4 +172,3 @@ INormalizerTask::TPtr TNormalizer::BuildTask(std::vector<std::shared_ptr<TPortio
 
 
 }
-#endif

@@ -6,10 +6,10 @@
 #include "engines/column_engine.h"
 
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storage.h>
+#include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/base/row_version.h>
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/core/protos/tx_columnshard.pb.h>
-
 
 namespace NKikimr::NColumnShard {
 
@@ -141,7 +141,7 @@ private:
     THashSet<ui32> SchemaPresetsIds;
     THashSet<ui64> PathsToDrop;
     TTtl Ttl;
-    std::unique_ptr<NOlap::IColumnEngine> PrimaryIndex;
+    mutable std::unique_ptr<NOlap::IColumnEngine> PrimaryIndex;
     std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
     ui64 TabletId = 0;
 
@@ -245,6 +245,9 @@ public:
     bool FillMonitoringReport(NTabletFlatExecutor::TTransactionContext& txc, NJson::TJsonValue& json);
 
     ui32 VersionAddRef(ui64 schemaVersion, i32 diff) const {
+        if (!PrimaryIndex) {
+            PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId, StoragesManager);
+        }
         return PrimaryIndex->VersionAddRef(schemaVersion, diff);
     }
 

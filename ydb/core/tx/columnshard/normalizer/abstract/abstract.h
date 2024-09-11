@@ -251,7 +251,7 @@ public:
         return TaskSubscription;
     }
 
-    void InitNormalizers(const TInitContext& ctx);
+    void InitNormalizers(const TInitContext& ctx, const NColumnShard::TColumnShard* cs);
     void OnNormalizerFinished(NIceDb::TNiceDb& db) const;
     void AddNormalizerEvent(NIceDb::TNiceDb& db, const TString& eventType, const TString& eventDescription) const;
     bool InitControllerState(NIceDb::TNiceDb& db);

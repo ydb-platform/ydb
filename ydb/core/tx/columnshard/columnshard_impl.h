@@ -45,6 +45,10 @@
 #include <ydb/services/metadata/service.h>
 #include <ydb/services/metadata/abstract/common.h>
 
+namespace NKikimr::NOlap::NNormalizer::NBrokenBlobs {
+class TNormalizerResult;
+}
+
 namespace NKikimr::NOlap {
 class TCleanupPortionsColumnEngineChanges;
 class TCleanupTablesColumnEngineChanges;
@@ -54,6 +58,7 @@ class TCompactColumnEngineChanges;
 class TInsertColumnEngineChanges;
 class TStoragesManager;
 class TPortionsNormalizer;
+class TBlobsRemovingResult;
 
 namespace NReader {
 class TTxScan;
@@ -62,6 +67,7 @@ namespace NPlain {
 class TIndexScannerConstructor;
 }
 }
+
 
 namespace NDataSharing {
 class TTxDataFromSource;
@@ -197,6 +203,8 @@ class TColumnShard
     friend class TSharingTransactionOperator;
 
     friend class NKikimr::NOlap::TPortionsNormalizer;
+    friend class NKikimr::NOlap::TBlobsRemovingResult;
+    friend class NKikimr::NOlap::NNormalizer::NBrokenBlobs::TNormalizerResult;
 
     class TTxProgressTx;
     class TTxProposeCancel;

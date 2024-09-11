@@ -47,15 +47,23 @@ class LoadSuiteBase:
             stats = {}
         if result.query_out is not None:
             allure.attach(result.query_out, 'Query output', attachment_type=allure.attachment_type.TEXT)
-        if result.plan is not None:
-            if result.plan.plan is not None:
-                allure.attach(json.dumps(result.plan.plan), 'Plan json', attachment_type=allure.attachment_type.JSON)
-            if result.plan.table is not None:
-                allure.attach(result.plan.table, 'Plan table', attachment_type=allure.attachment_type.TEXT)
-            if result.plan.ast is not None:
-                allure.attach(result.plan.ast, 'Plan ast', attachment_type=allure.attachment_type.TEXT)
-            if result.plan.svg is not None:
-                allure.attach(result.plan.svg, 'Plan svg', attachment_type=allure.attachment_type.SVG)
+        if result.plans is not None:
+            for i in range(self.iterations):
+                try:
+                    with allure.step(f'Iteration {i}'):
+                        plan = result.plans[i]
+                        if plan.plan is not None:
+                            allure.attach(json.dumps(plan.plan), f'Plan json', attachment_type=allure.attachment_type.JSON)
+                        if plan.table is not None:
+                            allure.attach(plan.table, f'Plan table', attachment_type=allure.attachment_type.TEXT)
+                        if plan.ast is not None:
+                            allure.attach(plan.ast, f'Plan ast', attachment_type=allure.attachment_type.TEXT)
+                        if plan.svg is not None:
+                            allure.attach(plan.svg, f'Plan svg', attachment_type=allure.attachment_type.SVG)
+                        if i in result.errors_by_iter:
+                            pytest.fail(result.errors_by_iter[i])
+                except:
+                    pass
 
         if result.stdout is not None:
             allure.attach(result.stdout, 'Stdout', attachment_type=allure.attachment_type.TEXT)

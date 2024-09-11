@@ -9,13 +9,14 @@ To initiate the check, call the `SelfCheck` method from `NYdb::NMonitoring` name
 - C++
 
   App code snippet for creating a client:
+
   ```cpp
   auto client = NYdb::NMonitoring::TMonitoringClient(driver);
   ```
 
   Calling `SelfCheck` method:
 
-  ```
+  ```c++
   auto settings = TSelfCheckSettings();
   settings.ReturnVerboseStatus(true);
   auto result = client.SelfCheck(settings).GetValueSync();

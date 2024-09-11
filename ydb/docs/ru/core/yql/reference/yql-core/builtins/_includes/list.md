@@ -178,7 +178,7 @@ SELECT ListExtend($l1, $l2, $l3);  -- ["a","b","b","c","d","e"]
 
 ### Сигнатура
 
-```
+```yql
 ListExtend(List<T>..)->List<T>
 ListExtend(List<T>?..)->List<T>?
 ```
@@ -387,7 +387,7 @@ SELECT ListIndexOf($l1, 2);  -- 1
 
 ### Сигнатура
 
-```
+```yql
 ListIndexOf(List<T>, T)->Uint64?
 ListIndexOf(List<T>?, T)->Uint64?
 ```

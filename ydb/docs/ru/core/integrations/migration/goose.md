@@ -148,7 +148,8 @@ $ goose ydb $YDB_CONNECTION_STRING up
 ```
 
 Проверим статус миграций `goose status`:
-```
+
+```bash
 $ goose ydb $YDB_CONNECTION_STRING status
 2024/01/12 11:56:00     Applied At                  Migration
 2024/01/12 11:56:00     =======================================
@@ -159,9 +160,9 @@ $ goose ydb $YDB_CONNECTION_STRING status
 
 {% list tabs %}
 
-- Используя YDB UI по адресу http://localhost:8765
+- Используя {{ ydb-short-name }} UI по адресу http://localhost:8765
 
-  ![YDB UI after apply first migration](_assets/goose-ydb-ui-after-first-migration.png =450x)
+  ![{{ ydb-short-name }} UI after apply first migration](_assets/goose-ydb-ui-after-first-migration.png =450x)
 
 - Используя YDB CLI
 
@@ -251,9 +252,9 @@ $ goose ydb $YDB_CONNECTION_STRING status
 
 {% list tabs %}
 
-- Используя YDB UI по адресу http://localhost:8765
+- Используя {{ ydb-short-name }} UI по адресу http://localhost:8765
 
-  ![YDB UI after apply second migration](_assets/goose-ydb-ui-after-second-migration.png =450x)
+  ![{{ ydb-short-name }} UI after apply second migration](_assets/goose-ydb-ui-after-second-migration.png =450x)
 
 - Используя YDB CLI
 
@@ -315,11 +316,11 @@ $ goose ydb $YDB_CONNECTION_STRING status
 
 {% list tabs %}
 
-- Используя YDB UI по адресу http://localhost:8765
+- Используя {{ ydb-short-name }} UI по адресу http://localhost:8765
 
-  ![YDB UI after apply first migration](_assets/goose-ydb-ui-after-first-migration.png =450x)
+  ![{{ ydb-short-name }} UI after apply first migration](_assets/goose-ydb-ui-after-first-migration.png =450x)
 
-- Используя YDB CLI
+- Используя {{ ydb-short-name }} CLI
 
   ```bash
   $ ydb -e grpc://localhost:2136 -d /local scheme describe users

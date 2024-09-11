@@ -49,7 +49,7 @@ To establish a connection, perform the following steps:
 
 1. On the **General** tab, in the **URL** field, specify the following connection string:
 
-    ```
+    ```text
     jdbc:ydb:<ydb_endpoint>/<ydb_database>?useQueryService=true
     ```
 

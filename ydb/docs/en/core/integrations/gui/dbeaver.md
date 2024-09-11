@@ -48,7 +48,7 @@ Perform the following steps to establish a connection:
 1. In the window that opens, go to the **Main** section.
 1. In the **General** subsection, in the **JDBC URL** input field, specify the following connection string:
 
-    ```
+    ```text
     jdbc:ydb:<ydb_endpoint>/<ydb_database>?useQueryService=true
     ```
 

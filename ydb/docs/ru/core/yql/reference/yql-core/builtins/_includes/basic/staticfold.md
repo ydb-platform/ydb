@@ -1,6 +1,6 @@
 ## StaticFold, StaticFold1 {#staticfold}
 
-```
+```yql
 StaticFold(obj:Struct/Tuple, initVal, updateLambda)
 StaticFold1(obj:Struct/Tuple, initLambda, updateLambda)
 ```

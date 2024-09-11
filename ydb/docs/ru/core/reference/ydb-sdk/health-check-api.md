@@ -9,13 +9,14 @@
 - C++
 
   Пример кода приложения для создания клиента:
+
   ```cpp
   auto client = NYdb::NMonitoring::TMonitoringClient(driver);
   ```
 
   Вызов метода `SelfCheck`:
 
-  ```
+  ```c++
   auto settings = TSelfCheckSettings();
   settings.ReturnVerboseStatus(true);
   auto result = client.SelfCheck(settings).GetValueSync();

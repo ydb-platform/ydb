@@ -46,7 +46,7 @@ Blocks are written in files with the `.tf` extension and are logically grouped i
 
 Modules are connected to the project in the root file `main.tf` as follows:
 
-```
+```hcl
 module "vpc" {
   source                     = "./modules/vpc"
   subnets_count              = var.subnets_count
@@ -98,7 +98,8 @@ The subdirectories contain readme files, a file `variables.td` with local module
 To use ready-made Terraform scripts from the repository, you need to download the repository with the command `git clone https://github.com/ydb-platform/ydb-terraform.git`, make changes to the Terraform configuration file `~/.terraformrc`, set the current values of global script variables and download the CLI of the cloud provider where the infrastructure will be created.
 
 If you plan to use multiple providers, you can add the following code to `~/.terraformrc`, which will set the download paths for all providers described below:
-```
+
+```hcl
 provider_installation {
   network_mirror {
     url     = "https://terraform-mirror.yandexcloud.net/"

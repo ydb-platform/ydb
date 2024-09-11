@@ -34,7 +34,7 @@ log-levels:
   MD037: 'disabled' # Spaces inside emphasis markers
   MD038: 'error' # Spaces inside code span elements
   MD039: 'disabled' # Spaces inside link text
-  MD040: 'disabled' # Fenced code blocks should have a language specified
+  MD040: 'error' # Fenced code blocks should have a language specified
   MD041: 'disabled' # First line in a file should be a top-level heading
   MD042: 'error' # No empty links
   MD043: 'disabled' # Required heading structure

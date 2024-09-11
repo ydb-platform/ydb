@@ -15,6 +15,6 @@ MAX_OF(T[,T,...})->T
 
 ### Примеры
 
-``yql
+```yql
 SELECT MIN_OF(1, 2, 3);
 ```

@@ -10,9 +10,13 @@
 
 Общий синтаксис вызова оконной функции имеет вид
 
-```
+```yql
 function_name([expression [, expression ...]]) OVER (window_definition)
+```
+
 или
+
+```yql
 function_name([expression [, expression ...]]) OVER window_name
 ```
 
@@ -36,7 +40,7 @@ WINDOW
 
 Здесь `window_definition` записывается в виде
 
-```
+```antlr
 [ PARTITION BY (expression AS column_identifier | column_identifier) [, ...] ]
 [ ORDER BY expression [ASC | DESC] ]
 [ frame_definition ]

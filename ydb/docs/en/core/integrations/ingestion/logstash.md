@@ -129,11 +129,14 @@ All commands return `ok` if the messages are sent.
 #### Check that the messages are stored in {{ ydb-short-name }}
 
 To check that all sent messages are written to the table, execute the following query using [ScanQuery mode](../../reference/ydb-cli/commands/scan-query.md):
+
 ```yql
 SELECT * FROM `logstash_demo`;
 ```
+
 The query will return a list of written events:
-```
+
+```text
 ┌───────┬────────────────┬───────────────────────────────┬─────────────┬────────────────────────────────────────┐
 │ level │ message        │ ts                            │  user       │ uuid                                   │
 ├───────┼────────────────┼───────────────────────────────┼─────────────┼────────────────────────────────────────┤
@@ -199,15 +202,15 @@ echo '{"user":123}' | ydb -e grpc://localhost:2136 -d /local topic write /local/
 
 The `stdout` plugin writes the messages to the Logstash logs:
 
-```
+```json
 {
-       "message" => "test",
-    "@timestamp" => 2024-05-23T10:31:47.712896899Z,
+      "message" => "test",
+      "@timestamp" => 2024-05-23T10:31:47.712896899Z,
       "@version" => "1"
 }
 {
-          "user" => 123.0,
-    "@timestamp" => 2024-05-23T10:34:08.574599108Z,
+      "user" => 123.0,
+      "@timestamp" => 2024-05-23T10:34:08.574599108Z,
       "@version" => "1"
 }
 ```

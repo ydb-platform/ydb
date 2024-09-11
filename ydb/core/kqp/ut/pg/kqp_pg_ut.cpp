@@ -5073,7 +5073,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
             .SetKqpSettings({setting})
-            .SetDomainName(std::string(65, 'a'));
+            .SetDomainRoot(std::string(65, 'a'));
         TKikimrRunner kikimr(serverSettings.SetWithSampleTables(false));
         auto db = kikimr.GetQueryClient();
         auto settings = NYdb::NQuery::TExecuteQuerySettings().Syntax(NYdb::NQuery::ESyntax::Pg);

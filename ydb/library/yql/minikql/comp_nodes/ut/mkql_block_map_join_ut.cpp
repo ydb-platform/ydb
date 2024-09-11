@@ -5,6 +5,7 @@
 #include <arrow/compute/kernel.h>
 #include <ydb/library/yql/minikql/computation/mkql_block_builder.h>
 #include <ydb/library/yql/minikql/computation/mkql_block_impl.h>
+#include <ydb/library/yql/minikql/computation/mkql_block_reader.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/public/udf/arrow/udf_arrow_helpers.h>
@@ -217,6 +218,44 @@ const TRuntimeNode BuildBlockJoin(TProgramBuilder& pgmBuilder, EJoinKind joinKin
         }));
 
     return rootNode;
+}
+
+NUdf::TUnboxedValuePod FromBlocks(TComputationContext& ctx,
+    const TArrayRef<TType* const> types, const NUdf::TUnboxedValuePod& values
+) {
+    TVector<std::unique_ptr<IBlockReader>> readers;
+    TVector<std::unique_ptr<IBlockItemConverter>> converters;
+    for (const auto& type : types) {
+        const auto blockItemType = AS_TYPE(TBlockType, type)->GetItemType();
+        readers.push_back(MakeBlockReader(TTypeInfoHelper(), blockItemType));
+        converters.push_back(MakeBlockItemConverter(TTypeInfoHelper(), blockItemType,
+                                                    ctx.Builder->GetPgBuilder()));
+    }
+
+    const auto& holderFactory = ctx.HolderFactory;
+    const size_t width = types.size() - 1;
+    TDefaultListRepresentation listValues;
+    NUdf::TUnboxedValue iterator = values.GetListIterator();
+    NUdf::TUnboxedValue current;
+    while (iterator.Next(current)) {
+        const auto blockLengthValue = current.GetElement(width);
+        const auto blockLengthDatum = TArrowBlock::From(blockLengthValue).GetDatum();
+        Y_ENSURE(blockLengthDatum.is_scalar());
+        const auto blockLength = blockLengthDatum.scalar_as<arrow::UInt64Scalar>().value;
+        for (size_t i = 0; i < blockLength; i++) {
+            NUdf::TUnboxedValue* items = nullptr;
+            const auto tuple = holderFactory.CreateDirectArrayHolder(width, items);
+            for (size_t j = 0; j < width; j++) {
+                const auto arrayValue = current.GetElement(j);
+                const auto arrayDatum = TArrowBlock::From(arrayValue).GetDatum();
+                UNIT_ASSERT(arrayDatum.is_array());
+                const auto blockItem = readers[j]->GetItem(*arrayDatum.array(), i);
+                items[j] = converters[j]->MakeValue(blockItem, holderFactory);
+            }
+            listValues = listValues.Append(std::move(tuple));
+        }
+    }
+    return holderFactory.CreateDirectListHolder(std::move(listValues));
 }
 
 template <typename TOutputTuple, typename TDictPayloadType

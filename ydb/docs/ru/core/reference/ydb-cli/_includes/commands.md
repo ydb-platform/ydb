@@ -61,7 +61,7 @@ table attribute drop | Удаление атрибута у колоночной
 [table query execute](../table-query-execute.md) | Исполнение YQL-запроса
 [table query explain](../commands/explain-plan.md) | План исполнения YQL-запроса
 [table read](../commands/readtable.md) | Потоковое чтение строковой таблицы
-[table ttl set](../table-ttl-set.md) | Установка параметров TTL для строковых и колоночных таблиц 
+[table ttl set](../table-ttl-set.md) | Установка параметров TTL для строковых и колоночных таблиц
 [table ttl reset](../table-ttl-reset.md) | Сброс параметров TTL для строковых и колоночных таблиц
 [tools copy](../tools-copy.md) | Копирование таблиц
 [tools dump](../export-import/tools-dump.md) | Выгрузка директории или таблиц в файловую систему

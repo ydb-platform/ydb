@@ -696,10 +696,10 @@ namespace NMiniKQL {
 void PgCreateSysCacheEntries(void* ctx) {
     auto main = (TMainContext*)ctx;
     if (main->GUCSettings) {
-        if (main->GUCSettings->Get("ydb_database")) {
+        if (main->GUCSettings->Get("ydb_database") && main->GUCSettings->Get("ydb_database")->size() < NAMEDATALEN) {
             main->CurrentDatabaseName = NYql::TSysCache::MakePgDatabaseHeapTuple(NYql::PG_CURRENT_DATABASE_ID, main->GUCSettings->Get("ydb_database")->c_str());
         }
-        if (main->GUCSettings->Get("ydb_user")) {
+        if (main->GUCSettings->Get("ydb_user") && main->GUCSettings->Get("ydb_user")->size() < NAMEDATALEN) {
             main->CurrentUserName = NYql::TSysCache::MakePgRolesHeapTuple(NYql::PG_CURRENT_USER_ID, main->GUCSettings->Get("ydb_user")->c_str());
         }
     }

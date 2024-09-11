@@ -10,7 +10,9 @@ from ydb.tests.fq.generic.utils.settings import Settings
 
 class TestJoinAnalytics:
     @yq_all
-    @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": "tests-fq-generic-ydb:2136"}], indirect=True)
+    @pytest.mark.parametrize(
+        "mvp_external_ydb_endpoint", [{"endpoint": "tests-fq-generic-analytics-ydb:2136"}], indirect=True
+    )
     @pytest.mark.parametrize("fq_client", [{"folder_id": "my_folder"}], indirect=True)
     @pytest.mark.parametrize("query_type", [fq.QueryContent.QueryType.ANALYTICS, fq.QueryContent.QueryType.STREAMING])
     def test_simple(self, fq_client: FederatedQueryClient, settings: Settings, query_type):

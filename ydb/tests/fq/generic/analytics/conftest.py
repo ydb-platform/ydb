@@ -14,7 +14,7 @@ from ydb.tests.fq.generic.utils.settings import Settings
 
 @pytest.fixture
 def settings() -> Settings:
-    return Settings.from_env()
+    return Settings.from_env(docker_compose_file_path='ydb/tests/fq/generic/analytics/docker-compose.yml')
 
 
 @pytest.fixture

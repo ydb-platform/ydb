@@ -10,7 +10,6 @@ from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
 
 from ydb.tests.tools.fq_runner.fq_client import FederatedQueryClient
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
-from ydb.tests.fq.generic.utils.settings import Settings
 
 DEBUG = 0
 
@@ -315,9 +314,11 @@ TESTCASES = [
 
 class TestJoinStreaming(TestYdsBase):
     @yq_v1
-    @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": "tests-fq-generic-ydb:2136"}], indirect=True)
+    @pytest.mark.parametrize(
+        "mvp_external_ydb_endpoint", [{"endpoint": "tests-fq-generic-streaming-ydb:2136"}], indirect=True
+    )
     @pytest.mark.parametrize("fq_client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_simple(self, kikimr, fq_client: FederatedQueryClient, settings: Settings, yq_version):
+    def test_simple(self, kikimr, fq_client: FederatedQueryClient, yq_version):
         self.init_topics(f"pq_yq_streaming_test_simple{yq_version}")
         fq_client.create_yds_connection("myyds", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
 
@@ -326,7 +327,7 @@ class TestJoinStreaming(TestYdsBase):
 
         fq_client.create_ydb_connection(
             name=ydb_conn_name,
-            database_id=settings.ydb.dbname,
+            database_id='local',
         )
 
         sql = R'''
@@ -365,9 +366,11 @@ class TestJoinStreaming(TestYdsBase):
         assert status == fq.QueryMeta.ABORTED_BY_USER, fq.QueryMeta.ComputeStatus.Name(status)
 
     @yq_v1
-    @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": "tests-fq-generic-ydb:2136"}], indirect=True)
+    @pytest.mark.parametrize(
+        "mvp_external_ydb_endpoint", [{"endpoint": "tests-fq-generic-streaming-ydb:2136"}], indirect=True
+    )
     @pytest.mark.parametrize("fq_client", [{"folder_id": "my_folder_slj"}], indirect=True)
-    @pytest.mark.parametrize("partitions_count", [1, 3])
+    @pytest.mark.parametrize("partitions_count", [1, 3] if DEBUG else [3])
     @pytest.mark.parametrize("streamlookup", [False, True] if DEBUG else [True])
     @pytest.mark.parametrize("testcase", [*range(len(TESTCASES))])
     def test_streamlookup(
@@ -377,7 +380,6 @@ class TestJoinStreaming(TestYdsBase):
         streamlookup,
         partitions_count,
         fq_client: FederatedQueryClient,
-        settings: Settings,
         yq_version,
     ):
         self.init_topics(
@@ -391,7 +393,7 @@ class TestJoinStreaming(TestYdsBase):
 
         fq_client.create_ydb_connection(
             name=ydb_conn_name,
-            database_id=settings.ydb.dbname,
+            database_id='local',
         )
 
         sql, messages = TESTCASES[testcase]

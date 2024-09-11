@@ -675,18 +675,6 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinMoreTest) {
     static const TVector<TString> threeLetterValues = GenerateValues(valueSize);
     static const TString hugeString(128, '1');
 
-    const TVector<TKSV> MakeFillTKSV(const TVector<ui64>& keyInit,
-        const ui64 subkeyMultiplier, const TVector<TString>& valuePayload
-    ) {
-        TVector<TKSV> testKSV;
-        for (size_t i = 0; i < keyInit.size(); i++) {
-            testKSV.push_back(std::make_tuple(keyInit[i],
-                                              keyInit[i] * subkeyMultiplier,
-                                              valuePayload[i]));
-        }
-        return testKSV;
-    }
-
     Y_UNIT_TEST(TestInnerOn1) {
         TSetup<false> setup;
         // 1. Make input for the "left" flow.

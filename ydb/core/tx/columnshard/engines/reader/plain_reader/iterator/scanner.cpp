@@ -141,21 +141,21 @@ private:
         TSourceInfo(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<TFetchingScript>& fetchingInfo)
             : Source(source)
             , FetchingInfo(fetchingInfo) {
-            Memory = fetching->PredictRawBytes(Source);
+            Memory = FetchingInfo->PredictRawBytes(Source);
         }
 
         NJson::TJsonValue DebugJson() const {
             NJson::TJsonValue result = NJson::JSON_MAP;
             result.InsertValue("source", Source->DebugJsonForMemory());
             result.InsertValue("memory", Memory);
-            //            result.InsertValue("fetching", Fetching->DebugJsonForMemory());
+            //            result.InsertValue("FetchingInfo", FetchingInfo->DebugJsonForMemory());
             return result;
         }
 
         bool ReduceMemory() {
             const bool result = FetchingInfo->InitSourceSeqColumnIds(Source);
             if (result) {
-                Memory = fetching->PredictRawBytes(source);
+                Memory = FetchingInfo->PredictRawBytes(source);
             }
             return result;
         }
@@ -186,9 +186,8 @@ public:
     }
 
     void AddSource(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<TFetchingScript>& fetching) {
-        const ui64 sourceMemory = fetching->PredictRawBytes(source);
-        MemorySum += sourceMemory;
-        Sources.emplace_back(TSourceInfo(sourceMemory, source, fetching));
+        Sources.emplace_back(TSourceInfo(source, fetching));
+        MemorySum += Sources.back().GetMemory();
     }
 
     bool Optimize(const ui64 memoryLimit) {

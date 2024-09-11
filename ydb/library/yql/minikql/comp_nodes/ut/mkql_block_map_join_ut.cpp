@@ -552,29 +552,6 @@ const std::pair<TType*, NUdf::TUnboxedValue> ConvertVectorsToTuples(
     return std::make_pair(tuplesNodeType, tuples);
 }
 
-//
-// Join type specific test wrappers.
-//
-
-void TestBlockMultiJoinWithRightOnUint64(EJoinKind joinKind,
-    const TVector<TKSV>& leftFlow, const TKSWMultiMap& rightMultiMap
-) {
-    TVector<TKSW<true>> expectedKSW;
-    for (const auto& ksv : leftFlow) {
-        const auto found = rightMultiMap.find(std::get<0>(ksv));
-        if (found != rightMultiMap.cend()) {
-            for (const auto& right : found->second) {
-                expectedKSW.push_back(std::make_tuple(std::get<0>(ksv), std::get<1>(ksv),
-                                                      std::get<2>(ksv), right));
-            }
-        } else if (joinKind == EJoinKind::Left) {
-            expectedKSW.push_back(std::make_tuple(std::get<0>(ksv), std::get<1>(ksv),
-                                                  std::get<2>(ksv), std::nullopt));
-        }
-    }
-    RunTestBlockJoinOnUint64(expectedKSW, joinKind, leftFlow, rightMultiMap);
-}
-
 TVector<TString> GenerateValues(size_t level) {
     constexpr size_t alphaSize = 'Z' - 'A' + 1;
     if (level == 1) {

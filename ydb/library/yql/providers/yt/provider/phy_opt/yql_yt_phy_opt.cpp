@@ -77,6 +77,7 @@ TYtPhysicalOptProposalTransformer::TYtPhysicalOptProposalTransformer(TYtState::T
     AddHandler(2, &TYtPublish::Match, HNDL(UnorderedPublishTarget));
     AddHandler(2, &TYtMap::Match, HNDL(PushDownYtMapOverSortedMerge));
     AddHandler(2, &TYtMerge::Match, HNDL(MergeToCopy));
+    AddHandler(2, &TYtMerge::Match, HNDL(ForceTransform));
 #undef HNDL
 }
 

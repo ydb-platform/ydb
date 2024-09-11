@@ -5,7 +5,8 @@
 
 namespace NYql::NDq {
     TGenericTokenProvider::TGenericTokenProvider(const TString& staticIamToken)
-        : StaticIAMToken_(staticIamToken) {
+        : StaticIAMToken_(staticIamToken)
+    {
     }
 
     TGenericTokenProvider::TGenericTokenProvider(

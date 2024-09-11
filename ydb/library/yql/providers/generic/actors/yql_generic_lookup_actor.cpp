@@ -155,9 +155,9 @@ namespace NYql::NDq {
 
             auto dsi = LookupSource.data_source_instance();
             if (auto issue = TokenProvider->MaybeFillToken(*readRequest.mutable_data_source_instance()); issue) {
-                SendError(TActivationContext::ActorSystem(), SelfId(), std::move(*issue));  
+                SendError(TActivationContext::ActorSystem(), SelfId(), std::move(*issue));
                 return;
-            } 
+            }
 
             *readRequest.add_splits() = split;
             readRequest.Setformat(NConnector::NApi::TReadSplitsRequest_EFormat::TReadSplitsRequest_EFormat_ARROW_IPC_STREAMING);
@@ -205,7 +205,7 @@ namespace NYql::NDq {
             NConnector::NApi::TListSplitsRequest splitRequest;
 
             if (auto issue = FillSelect(*splitRequest.add_selects()); issue) {
-                SendError(TActivationContext::ActorSystem(), SelfId(), std::move(*issue));  
+                SendError(TActivationContext::ActorSystem(), SelfId(), std::move(*issue));
                 return;
             };
 
@@ -298,7 +298,7 @@ namespace NYql::NDq {
         }
 
         static void SendError(NActors::TActorSystem* actorSystem, const NActors::TActorId& selfId, TIssue issue) {
-            NConnector::NApi::TError error; 
+            NConnector::NApi::TError error;
             *error.mutable_message() = issue.GetMessage();
             SendError(actorSystem, selfId, error);
         }
@@ -336,7 +336,7 @@ namespace NYql::NDq {
             auto dsi = LookupSource.data_source_instance();
             if (auto issue = TokenProvider->MaybeFillToken(dsi); issue) {
                 return issue;
-            } 
+            }
             *select.mutable_data_source_instance() = dsi;
 
             for (ui32 i = 0; i != SelectResultType->GetMembersCount(); ++i) {

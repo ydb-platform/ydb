@@ -3,6 +3,7 @@
 #include <util/generic/size_literals.h>
 #include <ydb/library/yql/utils/exceptions.h>
 #include <ydb/library/yql/utils/yql_panic.h>
+#include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
 #include "output_queue_impl.h"
 
 namespace NYql {

@@ -5,6 +5,7 @@
 #include <ydb/library/yql/utils/exceptions.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 #include <contrib/libs/brotli/include/brotli/encode.h>
+#include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
 
 namespace NYql {
 

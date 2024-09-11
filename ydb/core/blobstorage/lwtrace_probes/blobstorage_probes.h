@@ -261,7 +261,7 @@ struct TEventTypeField {
       TYPES(ui32, ui64, ui64), \
       NAMES("chunkIdx", "size", "offset")) \
     PROBE(PDiskUpdateCycleDetails, GROUPS("PDisk"), \
-      TYPES(ui64, float, float, float, float, float), \
+      TYPES(ui32, float, float, float, float, float), \
       NAMES("pdisk", "entireUpdateMs", "inputQueueMs", "schedulingMs", "processingMs", "waitingMs")) \
     PROBE(PDiskEnqueueAllDetails, GROUPS("PDisk"), \
       TYPES(ui64, size_t, size_t, size_t, double), \

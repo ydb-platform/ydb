@@ -3392,7 +3392,7 @@ void TPDisk::ProcessYardInitSet() {
 }
 
 void TPDisk::EnqueueAll() {
-    auto start = TMonitonic::Now();
+    auto start = TMonotonic::Now();
 
     TGuard<TMutex> guard(StateMutex);
     size_t initialQueueSize = InputQueue.GetWaitingSize();
@@ -3450,8 +3450,8 @@ void TPDisk::EnqueueAll() {
         }
     }
 
-    double spentTimeMs = (TInstant::Now() - start).MillisecondsFloat();
-    LWPROBE(PDiskEnqueueAllDetails, UpdateCycleOrbit, PCtx->PDiskId, initialQueueSize, processedReqs, pushedToForsetiReqs, spentTimeMs);
+    double spentTimeMs = (TMonotonic::Now() - start).MillisecondsFloat();
+    LWTRACK(PDiskEnqueueAllDetails, UpdateCycleOrbit, PCtx->PDiskId, initialQueueSize, processedReqs, pushedToForsetiReqs, spentTimeMs);
 }
 
 void TPDisk::Update() {

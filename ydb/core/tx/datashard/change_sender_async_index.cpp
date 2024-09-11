@@ -24,11 +24,11 @@ namespace NKikimr::NDataShard {
 using namespace NTable;
 using ESenderType = TEvChangeExchange::ESenderType;
 
-class TAsyncIndexChangeSenderShard: public TActorBootstrapped<TAsyncIndexChangeSenderShard> {
+class TBaseChangeSenderShard: public TActorBootstrapped<TBaseChangeSenderShard> {
     TStringBuf GetLogPrefix() const {
         if (!LogPrefix) {
             LogPrefix = TStringBuilder()
-                << "[AsyncIndexChangeSenderShard]"
+                << "[BaseChangeSenderShard]"
                 << "[" << DataShard.TabletId << ":" << DataShard.Generation << "]"
                 << "[" << ShardId << "]"
                 << SelfId() /* contains brackets */ << " ";
@@ -245,7 +245,7 @@ class TAsyncIndexChangeSenderShard: public TActorBootstrapped<TAsyncIndexChangeS
         TStringStream html;
 
         HTML(html) {
-            Header(html, "AsyncIndex partition change sender", DataShard.TabletId);
+            Header(html, "Base partition change sender", DataShard.TabletId);
 
             SimplePanel(html, "Info", [this](IOutputStream& html) {
                 HTML(html) {
@@ -283,7 +283,7 @@ public:
         return NKikimrServices::TActivity::CHANGE_SENDER_ASYNC_INDEX_ACTOR_PARTITION;
     }
 
-    TAsyncIndexChangeSenderShard(const TActorId& parent, const TDataShardId& dataShard, ui64 shardId,
+    TBaseChangeSenderShard(const TActorId& parent, const TDataShardId& dataShard, ui64 shardId,
             const TPathId& indexTablePathId, const TMap<TTag, TTag>& tagMap)
         : Parent(parent)
         , DataShard(dataShard)
@@ -326,7 +326,7 @@ private:
     ui32 Attempt = 0;
     TDuration Delay = TDuration::MilliSeconds(10);
 
-}; // TAsyncIndexChangeSenderShard
+}; // TBaseChangeSenderShard
 
 #define DEFINE_STATE_INTRO \
     public: \
@@ -793,7 +793,7 @@ class TAsyncIndexChangeSenderMain
     }
 
     IActor* CreateSender(ui64 partitionId) const override {
-        return new TAsyncIndexChangeSenderShard(SelfId(), DataShard, partitionId, TargetTablePathId, TagMap);
+        return new TBaseChangeSenderShard(SelfId(), DataShard, partitionId, TargetTablePathId, TagMap);
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TPtr& ev) {

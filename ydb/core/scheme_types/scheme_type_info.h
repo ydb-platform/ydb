@@ -1,11 +1,16 @@
 #pragma once
 
-
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
+
+namespace NKikimr::NPg {
+
+struct ITypeDesc;
+
+}
 
 namespace NKikimr::NScheme {
 
-struct TTypeDesc;
+struct ITypeDesc;
 
 class TTypeInfo {
 public:
@@ -16,15 +21,20 @@ public:
         : TypeId(typeId)
     { }
 
-    constexpr TTypeInfo(TTypeId typeId, const void* typeDesc)
+    constexpr TTypeInfo(TTypeId typeId, const ITypeDesc* typeDesc)
         : TypeId(typeId)
-        , TypeDesc(static_cast<const TTypeDesc *>(typeDesc))
+        , TypeDesc(typeDesc)
     {
         if (TypeId != NTypeIds::Pg) {
             Y_ABORT_UNLESS(!TypeDesc);
-        } else {
-            Y_ABORT_UNLESS(TypeDesc);
         }
+    }
+
+    TTypeInfo(TTypeId typeId, const NPg::ITypeDesc* typeDesc)
+        : TypeId(typeId)
+        , TypeDesc(reinterpret_cast<const ITypeDesc *>(typeDesc))
+    {
+        Y_ABORT_UNLESS (TypeId == NTypeIds::Pg);
     }
 
     bool operator==(const TTypeInfo& other) const {
@@ -39,13 +49,17 @@ public:
         return TypeId;
     }
 
-    const TTypeDesc* GetTypeDesc() const {
+    const ITypeDesc* GetTypeDesc() const {
         return TypeDesc;
+    }
+
+    const NPg::ITypeDesc* GetPgTypeDesc() const {
+        return reinterpret_cast<const NPg::ITypeDesc*>(TypeDesc);
     }
 
 private:
     TTypeId TypeId = 0;
-    const TTypeDesc* TypeDesc = nullptr;
+    const ITypeDesc* TypeDesc = nullptr;
 };
 
 } // namespace NKikimr::NScheme

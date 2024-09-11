@@ -235,7 +235,7 @@ bool TKikimrTableDescription::Load(TExprContext& ctx, bool withSystemColumns) {
             if (column.TypeInfo.GetTypeId() != NKikimr::NScheme::NTypeIds::Pg) {
                 type = ctx.MakeType<TDataExprType>(NKikimr::NUdf::GetDataSlot(column.Type));
             } else {
-                type = ctx.MakeType<TPgExprType>(NKikimr::NPg::PgTypeIdFromTypeDesc(column.TypeInfo.GetTypeDesc()));
+                type = ctx.MakeType<TPgExprType>(NKikimr::NPg::PgTypeIdFromTypeDesc(column.TypeInfo.GetPgTypeDesc()));
             }
         }
 

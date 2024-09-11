@@ -592,7 +592,7 @@ bool IsCompatibleKeyTypes(
         auto typeId = item.second.GetTypeId();
 
         if (typeId == NScheme::NTypeIds::Pg) {
-            if (!item.second.GetTypeDesc()) {
+            if (!item.second.GetPgTypeDesc()) {
                 explain += TStringBuilder() << "unknown pg type for column '" << columnName << "'";
                 return false;
             }

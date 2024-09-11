@@ -1606,7 +1606,7 @@ bool FillSequenceDescription(NKikimrSchemeOp::TSequenceDescription& out, const Y
                 break;
             }
             case NScheme::NTypeIds::Pg: {
-                switch (NPg::PgTypeIdFromTypeDesc(typeInfo.GetTypeDesc())) {
+                switch (NPg::PgTypeIdFromTypeDesc(typeInfo.GetPgTypeDesc())) {
                     case INT2OID:
                     case INT4OID:
                     case INT8OID: {
@@ -1614,7 +1614,7 @@ bool FillSequenceDescription(NKikimrSchemeOp::TSequenceDescription& out, const Y
                         break;
                     }
                     default: {
-                        TString sequenceType = NPg::PgTypeNameFromTypeDesc(typeInfo.GetTypeDesc());
+                        TString sequenceType = NPg::PgTypeNameFromTypeDesc(typeInfo.GetPgTypeDesc());
                         status = Ydb::StatusIds::BAD_REQUEST;
                         error = Sprintf(
                             "Invalid type name %s for sequence: %s", sequenceType.c_str(), out.GetName().data()

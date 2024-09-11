@@ -148,7 +148,7 @@ namespace NKqp {
         str << Name << ' ';
         switch (TypeInfo.GetTypeId()) {
         case NScheme::NTypeIds::Pg:
-            str << NPg::PgTypeNameFromTypeDesc(TypeInfo.GetTypeDesc());
+            str << NPg::PgTypeNameFromTypeDesc(TypeInfo.GetPgTypeDesc());
             break;
         case NScheme::NTypeIds::Decimal: {
             TTypeBuilder builder;
@@ -249,7 +249,7 @@ namespace NKqp {
         case NScheme::NTypeIds::Decimal:
             return arrow::field(name, arrow::decimal(22, 9));
         case NScheme::NTypeIds::Pg:
-            switch (NPg::PgTypeIdFromTypeDesc(typeInfo.GetTypeDesc())) {
+            switch (NPg::PgTypeIdFromTypeDesc(typeInfo.GetPgTypeDesc())) {
                 case INT2OID:
                     return arrow::field(name, arrow::int16(), true);
                 case INT4OID:

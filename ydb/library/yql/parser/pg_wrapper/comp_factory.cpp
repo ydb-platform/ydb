@@ -5201,8 +5201,11 @@ namespace NKikimr::NPg {
 
 constexpr char INTERNAL_TYPE_AND_MOD_SEPARATOR = ':';
 
+struct ITypeDesc {};
+
 class TPgTypeDescriptor
     : public NYql::NPg::TTypeDesc
+    , public ITypeDesc
 {
 public:
     explicit TPgTypeDescriptor(const NYql::NPg::TTypeDesc& desc)
@@ -5712,21 +5715,21 @@ private:
     THashMap<TString, ui32> ByName;
 };
 
-ui32 PgTypeIdFromTypeDesc(const void* typeDesc) {
+ui32 PgTypeIdFromTypeDesc(const ITypeDesc* typeDesc) {
     if (!typeDesc) {
         return 0;
     }
     return static_cast<const TPgTypeDescriptor*>(typeDesc)->TypeId;
 }
 
-const void* TypeDescFromPgTypeId(ui32 pgTypeId) {
+const ITypeDesc* TypeDescFromPgTypeId(ui32 pgTypeId) {
     if (!pgTypeId) {
         return {};
     }
-    return (const void*)TPgTypeDescriptors::Instance().Find(pgTypeId);
+    return (const ITypeDesc*)TPgTypeDescriptors::Instance().Find(pgTypeId);
 }
 
-TString PgTypeNameFromTypeDesc(const void* typeDesc, const TString& typeMod) {
+TString PgTypeNameFromTypeDesc(const ITypeDesc* typeDesc, const TString& typeMod) {
     if (!typeDesc) {
         return "";
     }
@@ -5737,12 +5740,12 @@ TString PgTypeNameFromTypeDesc(const void* typeDesc, const TString& typeMod) {
     return pgTypeDesc->YdbTypeName + INTERNAL_TYPE_AND_MOD_SEPARATOR + typeMod;
 }
 
-const void* TypeDescFromPgTypeName(const TStringBuf name) {
+const ITypeDesc* TypeDescFromPgTypeName(const TStringBuf name) {
     auto space = name.find_first_of(INTERNAL_TYPE_AND_MOD_SEPARATOR);
     if (space != TStringBuf::npos) {
-        return (const void*)TPgTypeDescriptors::Instance().Find(name.substr(0, space));
+        return (const ITypeDesc*)TPgTypeDescriptors::Instance().Find(name.substr(0, space));
     }
-    return (const void*)TPgTypeDescriptors::Instance().Find(name);
+    return (const ITypeDesc*)TPgTypeDescriptors::Instance().Find(name);
 }
 
 TString TypeModFromPgTypeName(const TStringBuf name) {
@@ -5753,64 +5756,64 @@ TString TypeModFromPgTypeName(const TStringBuf name) {
     return {};
 }
 
-bool TypeDescIsComparable(const void* typeDesc) {
+bool TypeDescIsComparable(const ITypeDesc* typeDesc) {
     if (!typeDesc) {
         return false;
     }
     return static_cast<const TPgTypeDescriptor*>(typeDesc)->CompareProcId != 0;
 }
 
-i32 TypeDescGetTypeLen(const void* typeDesc) {
+i32 TypeDescGetTypeLen(const ITypeDesc* typeDesc) {
     if (!typeDesc) {
         return 0;
     }
     return static_cast<const TPgTypeDescriptor*>(typeDesc)->TypeLen;
 }
 
-ui32 TypeDescGetStoredSize(const void* typeDesc) {
+ui32 TypeDescGetStoredSize(const ITypeDesc* typeDesc) {
     if (!typeDesc) {
         return 0;
     }
     return static_cast<const TPgTypeDescriptor*>(typeDesc)->StoredSize;
 }
 
-bool TypeDescNeedsCoercion(const void* typeDesc) {
+bool TypeDescNeedsCoercion(const ITypeDesc* typeDesc) {
     if (!typeDesc) {
         return false;
     }
     return static_cast<const TPgTypeDescriptor*>(typeDesc)->NeedsCoercion;
 }
 
-int PgNativeBinaryCompare(const char* dataL, size_t sizeL, const char* dataR, size_t sizeR, const void* typeDesc) {
+int PgNativeBinaryCompare(const char* dataL, size_t sizeL, const char* dataR, size_t sizeR, const ITypeDesc* typeDesc) {
     return static_cast<const TPgTypeDescriptor*>(typeDesc)->Compare(dataL, sizeL, dataR, sizeR);
 }
 
-ui64 PgNativeBinaryHash(const char* data, size_t size, const void* typeDesc) {
+ui64 PgNativeBinaryHash(const char* data, size_t size, const ITypeDesc* typeDesc) {
     return static_cast<const TPgTypeDescriptor*>(typeDesc)->Hash(data, size);
 }
 
-TTypeModResult BinaryTypeModFromTextTypeMod(const TString& str, const void* typeDesc) {
+TTypeModResult BinaryTypeModFromTextTypeMod(const TString& str, const ITypeDesc* typeDesc) {
     if (!typeDesc) {
         return {-1, "invalid type descriptor"};
     }
     return static_cast<const TPgTypeDescriptor*>(typeDesc)->ReadTypeMod(str);
 }
 
-TMaybe<TString> PgNativeBinaryValidate(const TStringBuf binary, const void* typeDesc) {
+TMaybe<TString> PgNativeBinaryValidate(const TStringBuf binary, const ITypeDesc* typeDesc) {
     if (!typeDesc) {
         return "invalid type descriptor";
     }
     return static_cast<const TPgTypeDescriptor*>(typeDesc)->Validate(binary);
 }
 
-TCoerceResult PgNativeBinaryCoerce(const TStringBuf binary, const void* typeDesc, i32 typmod) {
+TCoerceResult PgNativeBinaryCoerce(const TStringBuf binary, const ITypeDesc* typeDesc, i32 typmod) {
     if (!typeDesc) {
         return {{}, "invalid type descriptor"};
     }
     return static_cast<const TPgTypeDescriptor*>(typeDesc)->Coerce(binary, typmod);
 }
 
-TConvertResult PgNativeBinaryFromNativeText(const TString& str, const void* typeDesc) {
+TConvertResult PgNativeBinaryFromNativeText(const TString& str, const ITypeDesc* typeDesc) {
     if (!typeDesc) {
         return {{}, "invalid type descriptor"};
     }
@@ -5821,7 +5824,7 @@ TConvertResult PgNativeBinaryFromNativeText(const TString& str, ui32 pgTypeId) {
     return PgNativeBinaryFromNativeText(str, TypeDescFromPgTypeId(pgTypeId));
 }
 
-TConvertResult PgNativeTextFromNativeBinary(const TStringBuf binary, const void* typeDesc) {
+TConvertResult PgNativeTextFromNativeBinary(const TStringBuf binary, const ITypeDesc* typeDesc) {
     if (!typeDesc) {
         return {{}, "invalid type descriptor"};
     }

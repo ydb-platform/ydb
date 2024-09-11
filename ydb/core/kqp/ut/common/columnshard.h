@@ -18,7 +18,6 @@ namespace NKqp {
     class TTestHelper {
     public:
         class TColumnSchema {
-            using TTypeDesc = const void*;
             YDB_ACCESSOR_DEF(TString, Name);
             YDB_ACCESSOR_DEF(NScheme::TTypeInfo, TypeInfo);
             YDB_FLAG_ACCESSOR(Nullable, true);

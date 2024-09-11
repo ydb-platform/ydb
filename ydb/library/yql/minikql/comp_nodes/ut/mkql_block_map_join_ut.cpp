@@ -16,8 +16,6 @@ namespace NMiniKQL {
 namespace {
 
 using TKSV = std::tuple<ui64, ui64, TStringBuf>;
-template <typename TupleType>
-using TArrays = std::array<std::shared_ptr<arrow::ArrayData>, std::tuple_size_v<TupleType>>;
 
 template <typename T, bool isOptional = false>
 const TRuntimeNode MakeSimpleKey(TProgramBuilder& pgmBuilder, T value, bool isEmpty = false) {

@@ -5,6 +5,8 @@
 #include "event_load.h"
 #include <util/system/type_name.h>
 
+// sample change
+
 namespace NActors {
     template <typename TEv, ui32 TEventType>
     class TEventLocal: public TEventBase<TEv, TEventType> {

@@ -206,7 +206,7 @@ runs:
             ;;
           release-asan)
             params+=(
-              --build "release" --sanitize="address"
+              --build "relwithdebinfo" --sanitize="address"
               -DDEBUGINFO_LINES_ONLY
             )
             if [ $TEST_RETRY_COUNT -z ]; then
@@ -215,7 +215,7 @@ runs:
             ;;
           release-tsan)
             params+=(
-              --build "release" --sanitize="thread"
+              --build "relwithdebinfo" --sanitize="thread"
               -DDEBUGINFO_LINES_ONLY
             )
             if [ $TEST_RETRY_COUNT -z ]; then
@@ -224,7 +224,7 @@ runs:
             ;;
           release-msan)
             params+=(
-              --build "release" --sanitize="memory"
+              --build "relwithdebinfo" --sanitize="memory"
               -DDEBUGINFO_LINES_ONLY
             )
             if [ $TEST_RETRY_COUNT -z ]; then

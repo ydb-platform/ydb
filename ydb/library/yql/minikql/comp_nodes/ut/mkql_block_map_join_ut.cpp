@@ -15,8 +15,6 @@ namespace NMiniKQL {
 
 namespace {
 
-using TKSV = std::tuple<ui64, ui64, TStringBuf>;
-
 template <typename T, bool isOptional = false>
 const TRuntimeNode MakeSimpleKey(TProgramBuilder& pgmBuilder, T value, bool isEmpty = false) {
     if constexpr (!isOptional) {

@@ -1,5 +1,7 @@
 # Создание и удаление вторичных индексов
 
+{% include [not_allow_for_olap_note](../../../../_includes/not_allow_for_olap_note.md) %}
+
 Команда `table index` позволяет создавать и удалять [вторичные индексы](../../../../concepts/secondary_indexes.md):
 
 ```bash

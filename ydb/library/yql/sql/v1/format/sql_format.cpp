@@ -55,7 +55,7 @@ bool Validate(const TParsedTokenList& query, const TParsedTokenList& formattedQu
             if (in->Name != out->Name) {
                 return false;
             }
-            if (AsciiEqualsIgnoreCase(in->Name, in->Content)) {
+            if (const bool isKeyword = AsciiEqualsIgnoreCase(in->Name, in->Content)) {
                 if (!AsciiEqualsIgnoreCase(in->Content, out->Content)) {
                     return false;
                 }

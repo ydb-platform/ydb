@@ -89,7 +89,7 @@ distinct_from_op: IS NOT? DISTINCT FROM;
 cond_expr:
     NOT? match_op eq_subexpr (ESCAPE eq_subexpr)?
   | NOT? IN COMPACT? in_expr
-  | (ISNULL | NOTNULL | IS NULL | (IS)? NOT NULL)
+  | (ISNULL | NOTNULL | IS NULL@GRAMMAR_RESERVED_SUFFIX@ | (IS)? NOT NULL@GRAMMAR_RESERVED_SUFFIX@)
   | NOT? BETWEEN (SYMMETRIC | ASYMMETRIC)? eq_subexpr AND eq_subexpr
   | ((EQUALS | EQUALS2 | NOT_EQUALS | NOT_EQUALS2 | distinct_from_op) eq_subexpr)+ /* order of the eq subexpressions is reversed! */
 ;
@@ -194,7 +194,7 @@ json_variables: json_variable (COMMA json_variable)*;
 
 json_common_args: expr COMMA jsonpath_spec (PASSING json_variables)?;
 
-json_case_handler: ERROR | NULL | DEFAULT expr;
+json_case_handler: ERROR | NULL@GRAMMAR_RESERVED_SUFFIX@ | DEFAULT expr;
 
 json_value: JSON_VALUE LPAREN
   json_common_args
@@ -210,7 +210,7 @@ json_exists: JSON_EXISTS LPAREN
 RPAREN;
 
 json_query_wrapper: WITHOUT ARRAY? | WITH (CONDITIONAL | UNCONDITIONAL)? ARRAY?;
-json_query_handler: ERROR | NULL | EMPTY ARRAY | EMPTY OBJECT;
+json_query_handler: ERROR | NULL@GRAMMAR_RESERVED_SUFFIX@ | EMPTY ARRAY | EMPTY OBJECT;
 
 json_query: JSON_QUERY LPAREN
   json_common_args
@@ -258,7 +258,7 @@ literal_value:
   | real
   | STRING_VALUE
   | BLOB // it's unused right now
-  | NULL
+  | NULL@GRAMMAR_RESERVED_SUFFIX@
   | CURRENT_TIME // it's unused right now
   | CURRENT_DATE // it's unused right now
   | CURRENT_TIMESTAMP // it's unused right now
@@ -282,7 +282,7 @@ type_name_tag: id | STRING_VALUE | bind_parameter;
 
 struct_arg: type_name_tag COLON type_name_or_bind;
 struct_arg_positional:
-    type_name_tag type_name_or_bind (NOT? NULL)?
+    type_name_tag type_name_or_bind (NOT? NULL@GRAMMAR_RESERVED_SUFFIX@)?
   | type_name_or_bind AS type_name_tag; //deprecated
 variant_arg: (type_name_tag COLON)? type_name_or_bind;
 callable_arg: variant_arg (LBRACE_CURLY AUTOMAP RBRACE_CURLY)?;
@@ -710,7 +710,7 @@ alter_table_store_action:
 alter_table_add_column: ADD COLUMN? column_schema;
 alter_table_drop_column: DROP COLUMN? an_id;
 alter_table_alter_column: ALTER COLUMN an_id SET family_relation;
-alter_table_alter_column_drop_not_null: ALTER COLUMN an_id DROP NOT NULL;
+alter_table_alter_column_drop_not_null: ALTER COLUMN an_id DROP NOT NULL@GRAMMAR_RESERVED_SUFFIX@;
 alter_table_add_column_family: ADD family_entry;
 alter_table_alter_column_family: ALTER FAMILY an_id SET an_id family_setting_value;
 alter_table_set_table_setting_uncompat: SET an_id table_setting_value;
@@ -727,7 +727,7 @@ alter_table_alter_index: ALTER INDEX an_id alter_table_alter_index_action;
 
 column_schema: an_id_schema type_name_or_bind family_relation? opt_column_constraints;
 family_relation: FAMILY an_id;
-opt_column_constraints: (NOT? NULL)? (DEFAULT expr)?;
+opt_column_constraints: (NOT? NULL@GRAMMAR_RESERVED_SUFFIX@)? (DEFAULT expr)?;
 column_order_by_specification: an_id (ASC | DESC)?;
 
 table_constraint:
@@ -1173,7 +1173,7 @@ keyword_expr_uncompat:
   | JSON_QUERY
   | LOCAL
   | NOT
-  | NULL
+  | NULL@GRAMMAR_RESERVED_SUFFIX@
   | PROCESS
   | REDUCE
   | RETURN
@@ -1907,7 +1907,15 @@ NEXT: N E X T;
 NO: N O;
 NOT: N O T;
 NOTNULL: N O T N U L L;
-NULL: N U L L;
+
+// YQL Proto Target:
+// GRAMMAR_RESERVED_SUFFIX = "_"
+
+// YQL C++ Target:
+// GRAMMAR_RESERVED_SUFFIX = ""
+
+NULL@GRAMMAR_RESERVED_SUFFIX@: N U L L;
+
 NULLS: N U L L S;
 OBJECT: O B J E C T;
 OF: O F;

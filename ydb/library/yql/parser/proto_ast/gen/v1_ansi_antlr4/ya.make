@@ -17,6 +17,7 @@ SET(LEXER_PARSER_NAMESPACE NALPAnsiAntlr4)
 SET(GRAMMAR_STRING_CORE_SINGLE "\"~([']) | (QUOTE_SINGLE QUOTE_SINGLE)\"")
 SET(GRAMMAR_STRING_CORE_DOUBLE "\"~([#DOUBLE_QUOTE#]) | (QUOTE_DOUBLE QUOTE_DOUBLE)\"")
 SET(GRAMMAR_MULTILINE_COMMENT_CORE       "\"MULTILINE_COMMENT | .\"")
+SET(GRAMMAR_RESERVED_SUFFIX "")
 
 CONFIGURE_FILE(${ARCADIA_ROOT}/ydb/library/yql/parser/proto_ast/org/antlr/v4/tool/templates/codegen/Cpp/Cpp.stg.in ${antlr_templates}/Cpp/Cpp.stg)
 CONFIGURE_FILE(${ARCADIA_ROOT}/ydb/library/yql/parser/proto_ast/org/antlr/v4/tool/templates/codegen/Cpp/Files.stg.in ${antlr_templates}/Cpp/Files.stg)

@@ -28,6 +28,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
             , CSController(NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NYDBTest::NColumnShard::TController>())
             , StoreName(storeName)
         {
+
         }
 
         ui32 GetCount() const {

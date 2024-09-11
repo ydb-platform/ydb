@@ -5,11 +5,7 @@ namespace NSQLTranslation {
 void TTranslationSettingsSerializer::Serialize(
     const TTranslationSettings& settings, NYql::NProto::TTranslationSettings& serializedSettings
 ) const {
-    if (PathPrefixSetter) {
-        PathPrefixSetter(*serializedSettings.MutablePathPrefix());
-    } else {
-        serializedSettings.SetPathPrefix(settings.PathPrefix);
-    }
+    serializedSettings.SetPathPrefix(settings.PathPrefix);
     serializedSettings.SetSyntaxVersion(settings.SyntaxVersion);
     serializedSettings.SetAnsiLexer(settings.AnsiLexer);
     serializedSettings.SetAntlr4Parser(settings.Antlr4Parser);
@@ -17,12 +13,6 @@ void TTranslationSettingsSerializer::Serialize(
 
     auto* pragmas = serializedSettings.MutablePragmas();
     pragmas->Add(settings.Flags.begin(), settings.Flags.end());
-}
-
-void TTranslationSettingsSerializer::Serialize(const TTranslationSettings& settings, TString& serializedSettings) const {
-    NYql::NProto::TTranslationSettings protoSettings;
-    Serialize(settings, protoSettings);
-    serializedSettings = protoSettings.SerializeAsString();
 }
 
 void TTranslationSettingsSerializer::Deserialize(
@@ -42,14 +32,6 @@ void TTranslationSettingsSerializer::Deserialize(
     #undef DeserializeSetting
 
     settings.Flags.insert(serializedSettings.GetPragmas().begin(), serializedSettings.GetPragmas().end());
-}
-
-void TTranslationSettingsSerializer::Deserialize(const TString& serializedSettings, TTranslationSettings& settings) const {
-    NYql::NProto::TTranslationSettings protoSettings;
-    if (!protoSettings.ParseFromString(serializedSettings)) {
-        return;
-    }
-    Deserialize(protoSettings, settings);
 }
 
 }

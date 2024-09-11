@@ -1242,18 +1242,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             if (!ParseViewOptions(features, node.GetRule_with_table_settings4())) {
                 return false;
             }
-            NSQLTranslation::TTranslationSettingsSerializer contextSerializer;
-            contextSerializer.PathPrefixSetter = [&ctx = Ctx](TString& pathPrefix) {
-                const auto& service = ctx.Scoped->CurrService;
-                const auto& cluster = ctx.Scoped->CurrCluster;
-                pathPrefix = ctx.GetPrefixPath(service, cluster);
-            };
-            if (!ParseViewQuery(
-                    features,
-                    node.GetRule_select_stmt6(),
-                    contextSerializer
-                )
-            ) {
+            if (!ParseViewQuery(features, node.GetRule_select_stmt6())) {
                 return false;
             }
 

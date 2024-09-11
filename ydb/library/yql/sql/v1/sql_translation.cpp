@@ -56,10 +56,16 @@ TString CollectTokens(const TRule_select_stmt& selectStatement) {
 
 TNodePtr BuildViewSelect(
     const TRule_select_stmt& query,
-    NYql::TIssues& issues,
-    const NSQLTranslation::TTranslationSettings& translationSettings
+    TContext& parentContext
 ) {
-    TContext context(translationSettings, {}, issues);
+    NSQLTranslation::TTranslationSettings translationSettings = parentContext.Settings;
+    translationSettings.Mode = NSQLTranslation::ESqlMode::LIMITED_VIEW;
+    const auto& cluster = parentContext.Scoped->CurrCluster;
+    translationSettings.DefaultCluster = cluster.GetLiteral()
+        ? *cluster.GetLiteral()
+        : parentContext.Settings.DefaultCluster;
+
+    TContext context(translationSettings, {}, parentContext.Issues);
     TSqlSelect select(context, translationSettings.Mode);
     TPosition pos;
     auto source = select.Build(query, pos);
@@ -4843,31 +4849,24 @@ bool TSqlTranslation::ParseViewOptions(std::map<TString, TDeferredAtom>& feature
 
 bool TSqlTranslation::ParseViewQuery(
     std::map<TString, TDeferredAtom>& features,
-    const TRule_select_stmt& query,
-    const NSQLTranslation::TTranslationSettingsSerializer& contextSerializer
+    const TRule_select_stmt& query
 ) {
-    const TString queryText = CollectTokens(query);
-    features["query_text"] = { Ctx.Pos(), queryText };
-
-    TString capturedContext;
-    contextSerializer.Serialize(Ctx.Settings, capturedContext);
-    features["captured_context"] = { Ctx.Pos(), capturedContext };
-
-    NSQLTranslation::TTranslationSettings translationSettings;
-    translationSettings.Mode = NSQLTranslation::ESqlMode::LIMITED_VIEW;
-    contextSerializer.Deserialize(capturedContext, translationSettings);
+    TString queryText = CollectTokens(query);
     {
+        const auto& service = Ctx.Scoped->CurrService;
         const auto& cluster = Ctx.Scoped->CurrCluster;
-        translationSettings.DefaultCluster = cluster.GetLiteral()
-            ? *cluster.GetLiteral()
-            : Ctx.Settings.DefaultCluster;
+        const auto effectivePathPrefix = Ctx.GetPrefixPath(service, cluster);
 
-        translationSettings.ClusterMapping = Ctx.Settings.ClusterMapping;
+        // TO DO: capture all runtime pragmas in a similar fashion.
+        if (effectivePathPrefix != Ctx.Settings.PathPrefix) {
+            queryText = TStringBuilder() << "PRAGMA TablePathPrefix = \"" << effectivePathPrefix << "\"\n" << queryText;
+        }
     }
+    features["query_text"] = { Ctx.Pos(), queryText };
 
     // AST is needed for ready-made validation of CREATE VIEW statement.
     // Query is stored as plain text, not AST.
-    const auto viewSelect = BuildViewSelect(query, Ctx.Issues, translationSettings);
+    const auto viewSelect = BuildViewSelect(query, Ctx);
     if (!viewSelect) {
         return false;
     }

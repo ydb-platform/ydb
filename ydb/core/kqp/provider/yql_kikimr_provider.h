@@ -125,6 +125,8 @@ struct TKikimrQueryContext : TThrRefBase {
     // we do not want add extra life time for query context here
     std::shared_ptr<NKikimr::NGRpcService::IRequestCtxMtSafe> RpcCtx;
 
+    NSQLTranslation::TTranslationSettings TranslationSettings;
+
     void Reset() {
         PrepareOnly = false;
         SuppressDdlChecks = false;
@@ -143,6 +145,7 @@ struct TKikimrQueryContext : TThrRefBase {
 
         RlPath.Clear();
         RpcCtx.reset();
+        TranslationSettings = NSQLTranslation::TTranslationSettings();
     }
 };
 

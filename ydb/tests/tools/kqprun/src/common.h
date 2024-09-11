@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/core/protos/kqp.pb.h>
 
 #include <ydb/library/yql/minikql/computation/mkql_computation_node.h>

@@ -332,14 +332,6 @@ namespace NYql::NDq {
             return result;
         }
 
-        // NYql::NConnector::NApi::TDataSourceInstance GetDataSourceInstanceWithToken() const {
-        //     auto dsi = LookupSource.data_source_instance();
-        //     // Note: returned token may be stale and we have no way to check or recover here
-        //     // Consider to redesign ICredentialsProvider
-        //     TokenProvider->MaybeFillToken(dsi);
-        //     return dsi;
-        // }
-
         TMaybe<TIssue> FillSelect(NConnector::NApi::TSelect& select) {
             auto dsi = LookupSource.data_source_instance();
             if (auto issue = TokenProvider->MaybeFillToken(dsi); issue) {

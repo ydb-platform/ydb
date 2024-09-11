@@ -287,6 +287,7 @@ bool TTxUpdateSchema::Execute(TTransactionContext& txc, const TActorContext&) {
 
     while (!Self->NormalizerController.IsNormalizationFinished()) {
         auto normalizer = Self->NormalizerController.GetNormalizer();
+        normalizer->CS = Self;
         auto result = normalizer->Init(Self->NormalizerController, txc);
         if (result.IsSuccess()) {
             NormalizerTasks = result.DetachResult();

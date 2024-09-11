@@ -54,6 +54,7 @@ class TChangesWithAppend;
 class TCompactColumnEngineChanges;
 class TInsertColumnEngineChanges;
 class TStoragesManager;
+class TPortionsNormalizer;
 
 namespace NReader {
 class TTxScan;
@@ -196,6 +197,7 @@ class TColumnShard
     friend class IProposeTxOperator;
     friend class TSharingTransactionOperator;
 
+    friend class NKikimr::NOlap::TPortionsNormalizer;
 
     class TTxProgressTx;
     class TTxProposeCancel;

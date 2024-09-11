@@ -10,7 +10,7 @@ namespace NKikimr::NColumnShard {
 }
 
 namespace NKikimr::NOlap {
-
+#if 0
 class TCleanPortionsNormalizer : public TPortionsNormalizerBase {
 public:
     static TString GetClassNameStatic() {
@@ -45,5 +45,5 @@ public:
 
     virtual bool CheckPortion(const NColumnShard::TTablesManager& tablesManager, const TPortionInfo& portionInfo) const override;
 };
-
+#endif
 }

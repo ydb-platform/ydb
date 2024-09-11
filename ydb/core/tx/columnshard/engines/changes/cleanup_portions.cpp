@@ -20,7 +20,7 @@ void TCleanupPortionsColumnEngineChanges::DoWriteIndexOnExecute(NColumnShard::TC
     if (self) {
         THashMap<TString, THashSet<TUnifiedBlobId>> blobIdsByStorage;
         for (auto&& p : PortionsToDrop) {
-            p.RemoveFromDatabase(context.DBWrapper);
+            p.RemoveFromDatabase(context.DBWrapper, &self->TablesManager);
 
             p.FillBlobIdsByStorage(blobIdsByStorage, context.EngineLogs.GetVersionedIndex());
             pathIds.emplace(p.GetPathId());

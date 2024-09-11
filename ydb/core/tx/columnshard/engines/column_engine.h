@@ -298,6 +298,16 @@ public:
         return TSnapshot::Zero();
     }
     virtual void OnTieringModified(const std::shared_ptr<NColumnShard::TTiersManager>& manager, const NColumnShard::TTtl& ttl, const std::optional<ui64> pathId) = 0;
+
+    ui32 VersionAddRef(ui64 version, i32 diff) const {
+        ui32& refCount = VersionCounts[version];
+        refCount += diff;
+        LOG_S_CRIT("Ref count of schema version " << version << " changed from " << refCount - diff << " to " << refCount);
+        return refCount;
+    }
+
+private:
+    mutable THashMap<ui64, ui32> VersionCounts;
 };
 
 }   // namespace NKikimr::NOlap

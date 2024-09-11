@@ -1,6 +1,7 @@
 #include "portion_info.h"
 #include "constructor.h"
 #include <ydb/core/tx/columnshard/blobs_reader/task.h>
+#include <ydb/core/tx/columnshard/tables_manager.h>
 #include <ydb/core/tx/columnshard/data_sharing/protos/data.pb.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/engines/db_wrapper.h>
@@ -111,8 +112,14 @@ std::vector<const NKikimr::NOlap::TColumnRecord*> TPortionInfo::GetColumnChunksP
     return result;
 }
 
-void TPortionInfo::RemoveFromDatabase(IDbWrapper& db) const {
+void TPortionInfo::RemoveFromDatabase(IDbWrapper& db, const NColumnShard::TTablesManager* tablesManager) const {
     db.ErasePortion(*this);
+    if (SchemaVersion.has_value()) {
+        ui32 refCount = tablesManager->VersionAddRef(SchemaVersion.value(), -1);
+        if (refCount == 0) {
+            LOG_S_CRIT("Ref count is set to 0 for version " << SchemaVersion.value() << " need to delete");
+        }
+    }
     for (auto& record : Records) {
         db.EraseColumn(*this, record);
     }
@@ -121,8 +128,11 @@ void TPortionInfo::RemoveFromDatabase(IDbWrapper& db) const {
     }
 }
 
-void TPortionInfo::SaveToDatabase(IDbWrapper& db, const ui32 firstPKColumnId, const bool saveOnlyMeta) const {
+void TPortionInfo::SaveToDatabase(IDbWrapper& db, const ui32 firstPKColumnId, const bool saveOnlyMeta, const NColumnShard::TTablesManager* tablesManager) const {
     FullValidation();
+    if (SchemaVersion.has_value()) {
+        tablesManager->VersionAddRef(SchemaVersion.value(), 1);
+    }
     db.WritePortion(*this);
     if (!saveOnlyMeta) {
         for (auto& record : Records) {
@@ -240,7 +250,9 @@ void TPortionInfo::SerializeToProto(NKikimrColumnShardDataSharingProto::TPortion
 TConclusionStatus TPortionInfo::DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& info) {
     PathId = proto.GetPathId();
     Portion = proto.GetPortionId();
+    TString prev = SchemaVersion ? ToString(SchemaVersion.value()) : "nothing";
     SchemaVersion = proto.GetSchemaVersion();
+    LOG_S_CRIT("Changed schema version in Deserialize from " << prev << " to " << SchemaVersion.value() << " in portion " << (ui64)this);
     for (auto&& i : proto.GetBlobIds()) {
         auto blobId = TUnifiedBlobId::BuildFromProto(i);
         if (!blobId) {

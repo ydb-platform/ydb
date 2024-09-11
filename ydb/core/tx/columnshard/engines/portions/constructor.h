@@ -168,6 +168,14 @@ public:
         SchemaVersion = version;
     }
 
+    bool HasSchemaVersion() const {
+        return SchemaVersion.has_value();
+    }
+
+    ui64 GetSchemaVersion() const {
+        return SchemaVersion.value();
+    }
+
     void SetShardingVersion(const ui64 version) {
 //        AFL_VERIFY(version);
         ShardingVersion = version;

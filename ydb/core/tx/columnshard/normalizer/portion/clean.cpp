@@ -10,6 +10,7 @@
 
 namespace NKikimr::NOlap {
 
+#if 0
 class TBlobsRemovingResult : public INormalizerChanges {
     std::shared_ptr<IBlobsDeclareRemovingAction> RemovingAction;
     std::vector<std::shared_ptr<TPortionInfo>> Portions;
@@ -88,5 +89,5 @@ INormalizerTask::TPtr TCleanPortionsNormalizer::BuildTask(std::vector<std::share
     return true;
 }
 
-
+#endif
 }

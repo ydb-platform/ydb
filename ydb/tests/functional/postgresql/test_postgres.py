@@ -82,7 +82,8 @@ class BasePostgresTest(object):
                 'KQP_COMPILE_ACTOR': LogLevels.DEBUG,
                 'KQP_COMPILE_REQUEST': LogLevels.DEBUG,
                 'KQP_PROXY': LogLevels.DEBUG
-            }
+            },
+            extra_feature_flags=['enable_pg_syntax']
         ))
         cls.cluster.start()
 
@@ -94,7 +95,9 @@ class BasePostgresTest(object):
 class TestPgwireSidecar(object):
     @classmethod
     def setup_class(cls):
-        cls.cluster = kikimr_cluster_factory()
+        cls.cluster = kikimr_cluster_factory(KikimrConfigGenerator(
+            extra_feature_flags=['enable_pg_syntax']
+        ))
         cls.cluster.start()
         cls.endpoint = '%s:%s' % (cls.cluster.nodes[1].host, cls.cluster.nodes[1].port)
         cls.pgwireListenPort = pm.get_port()

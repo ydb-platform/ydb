@@ -134,8 +134,9 @@ private:
         NSQLTranslation::EBindingsMode bindingsMode = Config->BindingsMode;
         bool isEnableExternalDataSources = AppData(ctx)->FeatureFlags.GetEnableExternalDataSources();
         bool isEnablePgConstsToParams = Config->EnablePgConstsToParams;
+        bool isPgSyntaxEnable = AppData(ctx)->FeatureFlags.GetEnablePgSyntax();
 
-        auto astResult = ParseQuery(ConvertType(QueryId.Settings.QueryType), QueryId.Settings.Syntax, QueryId.Text, QueryId.QueryParameterTypes, QueryId.IsSql(), cluster, kqpTablePathPrefix, kqpYqlSyntaxVersion, bindingsMode, isEnableExternalDataSources, isEnablePgConstsToParams);
+        auto astResult = ParseQuery(ConvertType(QueryId.Settings.QueryType), QueryId.Settings.Syntax, QueryId.Text, QueryId.QueryParameterTypes, QueryId.IsSql(), cluster, kqpTablePathPrefix, kqpYqlSyntaxVersion, bindingsMode, isEnableExternalDataSources, isEnablePgConstsToParams, isPgSyntaxEnable);
         YQL_ENSURE(astResult.Ast);
         if (astResult.Ast->IsOk()) {
             AstResult = std::move(astResult);

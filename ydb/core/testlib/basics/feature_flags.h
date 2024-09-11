@@ -60,6 +60,7 @@ public:
     FEATURE_FLAG_SETTER(EnableReplaceIfExistsForExternalEntities)
     FEATURE_FLAG_SETTER(EnableCMSRequestPriorities)
     FEATURE_FLAG_SETTER(EnableChangefeedsOnIndexTables)
+    FEATURE_FLAG_SETTER(EnablePgSyntax)
 
     #undef FEATURE_FLAG_SETTER
 };

@@ -130,6 +130,7 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     ServerSettings->SetEnableUniqConstraint(true);
     ServerSettings->SetUseRealThreads(settings.UseRealThreads);
     ServerSettings->SetEnableTablePgTypes(true);
+    ServerSettings->SetEnablePgSyntax(true);
 
     if (settings.Storage) {
         ServerSettings->SetCustomDiskParams(*settings.Storage);

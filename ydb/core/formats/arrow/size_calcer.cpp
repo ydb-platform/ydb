@@ -249,7 +249,7 @@ NKikimr::NArrow::TSerializedBatch TSerializedBatch::Build(std::shared_ptr<arrow:
         specialKeysPayload = specialKeys.SerializePayloadToString();
         specialKeysFull = specialKeys.SerializeFullToString();
     }
-    return TSerializedBatch(NArrow::SerializeSchema(*batch->schema()), NArrow::SerializeBatchNoCompression(batch), batch->num_rows(),
+    return TSerializedBatch(NArrow::SerializeBatchNoCompression(batch), batch->num_rows(),
         NArrow::GetBatchDataSize(batch), specialKeysPayload, specialKeysFull);
 }
 
@@ -294,7 +294,7 @@ TConclusion<std::vector<TSerializedBatch>> TSerializedBatch::BuildWithLimit(std:
 }
 
 TString TSerializedBatch::DebugString() const {
-    return TStringBuilder() << "(data_size=" << Data.size() << ";schema_data_size=" << SchemaData.size() << ";rows_count=" << RowsCount << ";raw_bytes=" << RawBytes << ";)";
+    return TStringBuilder() << "(data_size=" << Data.size() << ";rows_count=" << RowsCount << ";raw_bytes=" << RawBytes << ";)";
 }
 
 }

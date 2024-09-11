@@ -48,6 +48,7 @@ private:
     std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>> ResourceGuards;
     std::optional<ui64> FirstIntervalId;
     ui32 CurrentPlanStepIndex = 0;
+    YDB_READONLY(TPKRangeFilter::EUsageClass, UsageClass, TPKRangeFilter::EUsageClass::PartialUsage);
 
 protected:
     bool IsSourceInMemoryFlag = true;
@@ -245,6 +246,8 @@ public:
         , RecordsCount(recordsCount)
         , ShardingVersionOptional(shardingVersion)
         , HasDeletions(hasDeletions) {
+        UsageClass = Context->GetReadMetadata()->GetPKRangesFilter().IsPortionInPartialUsage(GetStartReplaceKey(), GetFinishReplaceKey());
+        AFL_VERIFY(UsageClass != TPKRangeFilter::EUsageClass::DontUsage);
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portions_for_merge")("start", Start.DebugJson())("finish", Finish.DebugJson());
         if (Start.IsReverseSort()) {
             std::swap(Start, Finish);

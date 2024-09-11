@@ -32,22 +32,16 @@ ui64 TSpecialReadContext::GetMemoryForSources(const THashMap<ui32, std::shared_p
 std::shared_ptr<TFetchingScript> TSpecialReadContext::GetColumnsFetchingPlan(const std::shared_ptr<IDataSource>& source) {
     const bool needSnapshots = !source->GetExclusiveIntervalOnly() || ReadMetadata->GetRequestSnapshot() < source->GetRecordSnapshotMax() ||
                                !source->IsSourceInMemory();
-    bool partialUsageByPK = false;
-    {
-        const TPKRangeFilter::EUsageClass usage =
-            ReadMetadata->GetPKRangesFilter().IsPortionInPartialUsage(source->GetStartReplaceKey(), source->GetFinishReplaceKey());
-        switch (usage) {
+    const bool partialUsageByPK = [&]() {
+        switch (source->GetPKUsageClass()) {
             case TPKRangeFilter::EUsageClass::PartialUsage:
-                partialUsageByPK = true;
-                break;
+                return true;
             case TPKRangeFilter::EUsageClass::DontUsage:
-                partialUsageByPK = true;
-                break;
+                return true;
             case TPKRangeFilter::EUsageClass::FullUsage:
-                partialUsageByPK = false;
-                break;
+                return false;
         }
-    }
+    }();
     const bool useIndexes = (IndexChecker ? source->HasIndexes(IndexChecker->GetIndexIds()) : false);
     const bool isWholeExclusiveSource = source->GetExclusiveIntervalOnly() && source->IsSourceInMemory();
     const bool hasDeletions = source->GetHasDeletions();

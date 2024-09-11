@@ -537,7 +537,8 @@ public:
         return result;
     }
 
-    ui64 GetIndexRawBytes(const std::optional<std::set<ui32>>& columnIds = {}, const bool validation = true) const;
+    ui64 GetIndexRawBytes(const std::set<ui32>& columnIds, const bool validation = true) const;
+    ui64 GetIndexRawBytes(const bool validation = true) const;
     ui64 GetIndexBlobBytes() const noexcept {
         ui64 sum = 0;
         for (const auto& rec : Indexes) {
@@ -546,11 +547,11 @@ public:
         return sum;
     }
 
-    ui64 GetColumnRawBytes(const std::vector<ui32>& columnIds, const bool validation = true) const;
     ui64 GetColumnRawBytes(const std::set<ui32>& columnIds, const bool validation = true) const;
+    ui64 GetColumnRawBytes(const bool validation = true) const;
 
-    ui64 GetColumnBlobBytes(const std::vector<ui32>& columnIds, const bool validation = true) const;
-    ui64 GetColumnBlobBytes(const std::optional<std::set<ui32>>& columnIds = {}, const bool validation = true) const;
+    ui64 GetColumnBlobBytes(const std::set<ui32>& columnIds, const bool validation = true) const;
+    ui64 GetColumnBlobBytes(const bool validation = true) const;
 
     ui64 GetTotalBlobBytes() const noexcept {
         return GetIndexBlobBytes() + GetColumnBlobBytes();

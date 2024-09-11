@@ -18,15 +18,14 @@ namespace NMiniKQL {
 namespace {
 
 template<bool IsLeftOptional, bool IsRightOptional>
-class TDecimalDivWrapper : public TMutableCodegeneratorNode<TDecimalDivWrapper<IsLeftOptional, IsRightOptional>> {
+class TDecimalDivWrapper : public TMutableCodegeneratorNode<TDecimalDivWrapper<IsLeftOptional, IsRightOptional>>, NYql::NDecimal::TDecimalDivisor {
     typedef TMutableCodegeneratorNode<TDecimalDivWrapper<IsLeftOptional, IsRightOptional>> TBaseComputation;
 public:
     TDecimalDivWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right, ui8 precision, ui8 scale)
         : TBaseComputation(mutables, EValueRepresentation::Embedded)
+        , NYql::NDecimal::TDecimalDivisor(precision, scale)
         , Left(left)
         , Right(right)
-        , Bound(NYql::NDecimal::GetDivider(precision))
-        , Divider(NYql::NDecimal::GetDivider(scale))
     {}
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
@@ -39,11 +38,7 @@ public:
         if (IsRightOptional && !right)
             return NUdf::TUnboxedValuePod();
 
-        const auto div = NYql::NDecimal::MulAndDivNormalMultiplier(left.GetInt128(), Divider, right.GetInt128());
-        if (div > -Bound && div < +Bound)
-            return NUdf::TUnboxedValuePod(div);
-
-        return NUdf::TUnboxedValuePod(NYql::NDecimal::IsNan(div) ? NYql::NDecimal::Nan() : (div > 0 ? +NYql::NDecimal::Inf() : -NYql::NDecimal::Inf()));
+        return NUdf::TUnboxedValuePod(Do(left.GetInt128(), right.GetInt128()));
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
@@ -143,16 +138,15 @@ private:
 
     IComputationNode* const Left;
     IComputationNode* const Right;
-    const NYql::NDecimal::TInt128 Bound;
-    const NYql::NDecimal::TInt128 Divider;
 };
 
 template<bool IsLeftOptional, bool IsRightOptional, typename TRight>
-class TDecimalDivIntegralWrapper : public TMutableCodegeneratorNode<TDecimalDivIntegralWrapper<IsLeftOptional, IsRightOptional, TRight>> {
+class TDecimalDivIntegralWrapper : public TMutableCodegeneratorNode<TDecimalDivIntegralWrapper<IsLeftOptional, IsRightOptional, TRight>>, NYql::NDecimal::TDecimalDivisor {
     typedef TMutableCodegeneratorNode<TDecimalDivIntegralWrapper<IsLeftOptional, IsRightOptional, TRight>> TBaseComputation;
 public:
-    TDecimalDivIntegralWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right)
+    TDecimalDivIntegralWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right, ui8 precision, ui8 scale)
         : TBaseComputation(mutables, EValueRepresentation::Embedded)
+        , NYql::NDecimal::TDecimalDivisor(precision, scale)
         , Left(left)
         , Right(right)
     {}
@@ -167,7 +161,7 @@ public:
         if (IsRightOptional && !right)
             return NUdf::TUnboxedValuePod();
 
-        return NUdf::TUnboxedValuePod(NYql::NDecimal::Div(left.GetInt128(), NYql::NDecimal::TInt128(right.Get<TRight>())));
+        return NUdf::TUnboxedValuePod(Do(left.GetInt128(), right.Get<TRight>()));
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
@@ -282,13 +276,13 @@ IComputationNode* WrapDecimalDiv(TCallable& callable, const TComputationNodeFact
 #define MAKE_PRIMITIVE_TYPE_DIV(type) \
         case NUdf::TDataType<type>::Id: \
             if (isOptionalLeft && isOptionalRight) \
-                return new TDecimalDivIntegralWrapper<true, true, type>(ctx.Mutables, left, right); \
+                return new TDecimalDivIntegralWrapper<true, true, type>(ctx.Mutables, left, right, leftType->GetParams().first, leftType->GetParams().second); \
             else if (isOptionalLeft) \
-                return new TDecimalDivIntegralWrapper<true, false, type>(ctx.Mutables, left, right); \
+                return new TDecimalDivIntegralWrapper<true, false, type>(ctx.Mutables, left, right, leftType->GetParams().first, leftType->GetParams().second); \
             else if (isOptionalRight) \
-                return new TDecimalDivIntegralWrapper<false, true, type>(ctx.Mutables, left, right); \
+                return new TDecimalDivIntegralWrapper<false, true, type>(ctx.Mutables, left, right, leftType->GetParams().first, leftType->GetParams().second); \
             else \
-                return new TDecimalDivIntegralWrapper<false, false, type>(ctx.Mutables, left, right);
+                return new TDecimalDivIntegralWrapper<false, false, type>(ctx.Mutables, left, right, leftType->GetParams().first, leftType->GetParams().second);
         INTEGRAL_VALUE_TYPES(MAKE_PRIMITIVE_TYPE_DIV)
 #undef MAKE_PRIMITIVE_TYPE_DIV
         default:

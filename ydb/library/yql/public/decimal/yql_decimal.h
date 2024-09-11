@@ -210,6 +210,7 @@ struct TDecimal {
 };
 
 class TDecimalMultiplicator {
+protected:
     const TInt128 Bound;
     const TInt128 Divider;
 
@@ -241,6 +242,7 @@ public:
 };
 
 class TDecimalDivisor {
+protected:
     const TInt128 Bound;
     const TInt128 Divider;
 
@@ -268,6 +270,7 @@ public:
 };
 
 class TDecimalRemainder {
+protected:
     const TInt128 Bound;
     const TInt128 Divider;
 

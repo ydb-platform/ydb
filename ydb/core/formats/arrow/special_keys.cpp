@@ -50,13 +50,17 @@ TFirstLastSpecialKeys::TFirstLastSpecialKeys(const std::shared_ptr<arrow::Record
     if (columnNames.size()) {
         keyBatch = NArrow::TColumnOperator().VerifyIfAbsent().Extract(batch, columnNames);
     }
-    std::vector<ui64> indexes = {0};
-    if (batch->num_rows() > 1) {
-        indexes.emplace_back(batch->num_rows() - 1);
-    }
+    if (keyBatch->num_rows() <= 2) {
+        Data = keyBatch;
+    } else {
+        std::vector<ui64> indexes = { 0 };
+        if (batch->num_rows() > 1) {
+            indexes.emplace_back(batch->num_rows() - 1);
+        }
 
-    Data = NArrow::CopyRecords(keyBatch, indexes);
-    Y_ABORT_UNLESS(Data->num_rows() == 1 || Data->num_rows() == 2);
+        Data = NArrow::CopyRecords(keyBatch, indexes);
+        Y_ABORT_UNLESS(Data->num_rows() == 1 || Data->num_rows() == 2);
+    }
 }
 
 TMinMaxSpecialKeys::TMinMaxSpecialKeys(std::shared_ptr<arrow::RecordBatch> batch, const std::shared_ptr<arrow::Schema>& schema) {

@@ -2075,7 +2075,7 @@ public:
             ++DisksColors[status];
             switch (status) {
                 case Ydb::Monitoring::StatusFlag::BLUE: // disk is good, but not available
-                case Ydb::Monitoring::StatusFlag::YELLOW: // disk is initializing, not currently available
+                // No yellow or orange status here - this is intentional - they are used when a disk is running out of space, but is currently available
                 case Ydb::Monitoring::StatusFlag::RED: // disk is bad, probably not available
                 case Ydb::Monitoring::StatusFlag::GREY: // the status is absent, the disk is not available
                     IncrementFor(realm);
@@ -2091,7 +2091,7 @@ public:
             if (ErasureSpecies == NONE) {
                 if (FailedDisks > 0) {
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Group failed", ETags::GroupState, {ETags::VDiskState});
-                } else if (DisksColors[Ydb::Monitoring::StatusFlag::YELLOW] > 0) {
+                } else if (DisksColors[Ydb::Monitoring::StatusFlag::YELLOW] > 0 || DisksColors[Ydb::Monitoring::StatusFlag::ORANGE] > 0) {
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Group degraded", ETags::GroupState, {ETags::VDiskState});
                 }
             } else if (ErasureSpecies == BLOCK_4_2) {
@@ -2105,7 +2105,7 @@ public:
                     } else {
                         context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Group degraded", ETags::GroupState, {ETags::VDiskState});
                     }
-                } else if (DisksColors[Ydb::Monitoring::StatusFlag::YELLOW] > 0) {
+                } else if (DisksColors[Ydb::Monitoring::StatusFlag::YELLOW] > 0 || DisksColors[Ydb::Monitoring::StatusFlag::ORANGE] > 0) {
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Group degraded", ETags::GroupState, {ETags::VDiskState});
                 }
             } else if (ErasureSpecies == MIRROR_3_DC) {
@@ -2119,7 +2119,7 @@ public:
                     } else {
                         context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Group degraded", ETags::GroupState, {ETags::VDiskState});
                     }
-                } else if (DisksColors[Ydb::Monitoring::StatusFlag::YELLOW] > 0) {
+                } else if (DisksColors[Ydb::Monitoring::StatusFlag::YELLOW] > 0 || DisksColors[Ydb::Monitoring::StatusFlag::ORANGE] > 0) {
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Group degraded", ETags::GroupState, {ETags::VDiskState});
                 }
             }

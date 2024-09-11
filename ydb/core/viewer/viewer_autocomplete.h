@@ -33,7 +33,6 @@ class TJsonAutocomplete : public TViewerPipeClient {
         {}
     };
     THashMap<TString, TSchemaWordData> Dictionary;
-    TString Database;
     TVector<TString> Tables;
     TVector<TString> Paths;
     TString Prefix;
@@ -43,7 +42,6 @@ class TJsonAutocomplete : public TViewerPipeClient {
 
     std::optional<TNodeId> SubscribedNodeId;
     std::vector<TNodeId> TenantDynamicNodes;
-    bool Direct = false;
 public:
     TJsonAutocomplete(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
         : TBase(viewer, ev)
@@ -154,73 +152,26 @@ public:
         return request;
     }
 
-    void Bootstrap() override {
-        if (ViewerRequest) {
-            // handle proxied request
-            SendSchemeCacheRequest();
-        } else if (!Database) {
-            // autocomplete database list via console request
-            RequestConsoleListTenants();
-        } else {
-            Direct |= !TBase::Event->Get()->Request.GetHeader("X-Forwarded-From-Node").empty(); // we're already forwarding
-            Direct |= (Database == AppData()->TenantName) || Database.empty(); // we're already on the right node or don't use database filter
-            if (Database && !Direct) {
-                // proxy request to a dynamic node of the specified database
-                return RedirectToDatabase(Database);
-            }
-            if (Requests == 0) {
-                // perform autocomplete without proxying
-                SendSchemeCacheRequest();
-            }
-        }
-
-        Become(&TThis::StateRequestedDescribe, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
-    }
-
-    void Connected(TEvInterconnect::TEvNodeConnected::TPtr &) {}
-
-    void Undelivered(TEvents::TEvUndelivered::TPtr &ev) {
-        if (!Direct && ev->Get()->SourceType == NViewer::TEvViewer::EvViewerRequest) {
-            Direct = true;
-            SendSchemeCacheRequest(); // fallback
-            RequestDone();
-        }
-    }
-
-    void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &) {
-        if (!Direct) {
-            Direct = true;
-            SendSchemeCacheRequest(); // fallback
-            RequestDone();
-        }
-    }
-
     void SendSchemeCacheRequest() {
         SendRequest(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(MakeSchemeCacheRequest()));
     }
 
-    void SendDynamicNodeAutocompleteRequest() {
-        ui64 hash = std::hash<TString>()(Event->Get()->Request.GetRemoteAddr());
-
-        auto itPos = std::next(TenantDynamicNodes.begin(), hash % TenantDynamicNodes.size());
-        std::nth_element(TenantDynamicNodes.begin(), itPos, TenantDynamicNodes.end());
-
-        TNodeId nodeId = *itPos;
-        SubscribedNodeId = nodeId;
-        TActorId viewerServiceId = MakeViewerID(nodeId);
-
-        THolder<TEvViewer::TEvViewerRequest> request = MakeHolder<TEvViewer::TEvViewerRequest>();
-        request->Record.SetTimeout(Timeout);
-        auto autocompleteRequest = request->Record.MutableAutocompleteRequest();
-        autocompleteRequest->SetDatabase(Database);
-        for (TString& path: Paths) {
-            autocompleteRequest->AddTables(path);
+    void Bootstrap() override {
+        if (ViewerRequest) {
+            // handle proxied request
+            SendSchemeCacheRequest();
+        } else {
+            if (NeedToRedirect()) {
+                return;
+            }
+            if (!Database) {
+                // autocomplete database list via console request
+                RequestConsoleListTenants();
+            }
+            SendSchemeCacheRequest();
         }
-        autocompleteRequest->SetPrefix(Prefix);
-        autocompleteRequest->SetLimit(Limit);
 
-        ViewerWhiteboardCookie cookie(NKikimrViewer::TEvViewerRequest::kAutocompleteRequest, nodeId);
-        SendRequest(viewerServiceId, request.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, cookie.ToUi64());
+        Become(&TThis::StateRequestedDescribe, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
     }
 
     void PassAway() override {
@@ -235,10 +186,6 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(NConsole::TEvConsole::TEvListTenantsResponse, Handle);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
-            hFunc(TEvents::TEvUndelivered, Undelivered);
-            hFunc(TEvInterconnect::TEvNodeConnected, Connected);
-            hFunc(TEvInterconnect::TEvNodeDisconnected, Disconnected);
-            hFunc(TEvViewer::TEvViewerResponse, Handle);
             cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
     }
@@ -397,16 +344,6 @@ public:
 
         SendAutocompleteResponse();
         PassAway();
-    }
-
-    void Handle(TEvViewer::TEvViewerResponse::TPtr& ev) {
-        if (ev.Get()->Get()->Record.HasAutocompleteResponse()) {
-            ProxyResult = ev.Release()->Release();
-        } else {
-            Direct = true;
-            SendSchemeCacheRequest(); // fallback
-        }
-        RequestDone();
     }
 
     void HandleTimeout() {

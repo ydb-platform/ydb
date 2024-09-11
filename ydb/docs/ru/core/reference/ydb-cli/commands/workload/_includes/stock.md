@@ -7,6 +7,7 @@
 ## Виды нагрузки {#workload_types}
 
 Данный нагрузочный тест содержит 5 видов нагрузки:
+
 * [user-hist](#get-customer-history) - читает заданное количество заказов покупателя с id = 10 000. Создается нагрузка на чтение одних и тех же строк из разных потоков.
 * [rand-user-hist](#get-random-customer-history) - читает заданное количество заказов у случайно выбранного покупателя. Создается нагрузка на чтение из разных потоков.
 * [add-rand-order](#insert-random-order) - создает случайно сгенерированный заказ. Например, клиент создал заказ из 2 товаров, но еще не оплатил его, поэтому остатки товаров не снижаются. В БД записывается информация о заказе и товарах. Создается нагрузка на запись и чтение (insert перед вставкой проверяет есть ли уже запись).
@@ -16,6 +17,7 @@
 ## Инициализация нагрузочного теста {#init}
 
 Для начала работы необходимо создать строковую таблицы и заполнить их данными:
+
 ```bash
 {{ ydb-cli }} workload stock init [init options...]
 ```
@@ -38,6 +40,7 @@
 `--min-partitions <значение>` | - | Минимальное количество шардов для таблиц. Значение по умолчанию: 40.
 `--auto-partition <значение>` | - | Включение/выключение автошардирования. Возможные значения: 0 или 1. Значение по умолчанию: 1.
 
+
 Создаются 3 строковые таблицы со следующими DDL:
 ```sql
 CREATE TABLE `stock`(product Utf8, quantity Int64, PRIMARY KEY(product)) WITH (AUTO_PARTITIONING_BY_LOAD = ENABLED, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = <min-partitions>);
@@ -54,6 +57,7 @@ CREATE TABLE `orderLines`(id_order Uint64, product Utf8, quantity Int64, PRIMARY
 ```
 
 Создание БД с 10 видами товаров, где каждого товара 100 штук, есть 10 заказов и минимальное количество шардов 100:
+
 ```bash
 {{ ydb-cli }} workload stock init -p 10 -q 100 -o 10 ----min-partitions 100
 ```
@@ -95,8 +99,9 @@ CREATE TABLE `orderLines`(id_order Uint64, product Utf8, quantity Int64, PRIMARY
 
 Данный вид нагрузки читает заданное количество заказов покупателя с id = 10 000.
 
-YQL Запрос:
-```sql
+YQL запрос:
+
+```yql
 DECLARE $cust AS Utf8;
 DECLARE $limit AS UInt32;
 
@@ -107,6 +112,7 @@ SELECT id, customer, created FROM orders view ix_cust
 ```
 
 Для запуска данного вида нагрузки необходимо выполнить команду:
+
 ```bash
 {{ ydb-cli }} workload stock run user-hist [global workload options...] [specific workload options...]
 ```
@@ -115,6 +121,7 @@ SELECT id, customer, created FROM orders view ix_cust
 * `specific workload options` - [параметры конкретного вида нагрузки](#customer_history_options)
 
 ### Параметры для user-hist {#customer_history_options}
+
 Имя параметра | Короткое имя | Описание параметра
 ---|---|---
 `--limit <значение>` | `-l <значение>` | Необходимое количество заказов. Значение по умолчанию: 10.
@@ -123,8 +130,9 @@ SELECT id, customer, created FROM orders view ix_cust
 
 Данный вид нагрузки читает заданное количество заказов случайно выбранных покупателей.
 
-YQL Запрос:
-```sql
+YQL запрос:
+
+```yql
 DECLARE $cust AS Utf8;
 DECLARE $limit AS UInt32;
 
@@ -135,6 +143,7 @@ SELECT id, customer, created FROM orders view ix_cust
 ```
 
 Для запуска данного вида нагрузки необходимо выполнить команду:
+
 ```bash
 {{ ydb-cli }} workload stock run rand-user-hist [global workload options...] [specific workload options...]
 ```
@@ -151,8 +160,9 @@ SELECT id, customer, created FROM orders view ix_cust
 
 Данный вид нагрузки создает случайно сгенерированный заказ. В заказ помещаются несколько различных товаров по 1 штуке. Количество видов товара в заказе генерируется случайно по экспоненциальному распределению.
 
-YQL Запрос:
-```sql
+YQL запрос:
+
+```yql
 DECLARE $ido AS UInt64;
 DECLARE $cust AS Utf8;
 DECLARE $lines AS List<Struct<product:Utf8,quantity:Int64>>;
@@ -165,6 +175,7 @@ UPSERT INTO `orderLines`(id_order, product, quantity)
 ```
 
 Для запуска данного вида нагрузки необходимо выполнить команду:
+
 ```bash
 {{ ydb-cli }} workload stock run add-rand-order [global workload options...] [specific workload options...]
 ```
@@ -173,6 +184,7 @@ UPSERT INTO `orderLines`(id_order, product, quantity)
 * `specific workload options` - [параметры конкретного вида нагрузки](#insert_random_order_options)
 
 ### Параметры для add-rand-order {#insert_random_order_options}
+
 Имя параметра | Короткое имя | Описание параметра
 ---|---|---
 `--products <значение>` | `-p <значение>` | Количество видов товара в тесте. Значение по умолчанию: 100.
@@ -181,8 +193,9 @@ UPSERT INTO `orderLines`(id_order, product, quantity)
 
 Данный вид нагрузки создает случайно сгенерированный заказ и обрабатывает его. В заказ помещаются несколько различных товаров по 1 штуке. Количество видов товара в заказе генерируется случайно по экспоненциальному распределению. Обработка заказа заключается в уменьшении количества заказанных товаров на складе.
 
-YQL Запрос:
-```sql
+YQL запрос:
+
+```yql
 DECLARE $ido AS UInt64;
 DECLARE $cust AS Utf8;
 DECLARE $lines AS List<Struct<product:Utf8,quantity:Int64>>;
@@ -219,6 +232,7 @@ SELECT * FROM $newq AS q WHERE q.quantity < 0
 ```
 
 Для запуска данного вида нагрузки необходимо выполнить команду:
+
 ```bash
 {{ ydb-cli }} workload stock run put-rand-order [global workload options...] [specific workload options...]
 ```
@@ -227,6 +241,7 @@ SELECT * FROM $newq AS q WHERE q.quantity < 0
 * `specific workload options` - [параметры конкретного вида нагрузки](#submit_random_order_options)
 
 ### Параметры для put-rand-order {#submit_random_order_options}
+
 Имя параметра | Короткое имя | Описание параметра
 ---|---|---
 `--products <значение>` | `-p <значение>` | Количество видов товара в тесте. Значение по умолчанию: 100.
@@ -235,8 +250,9 @@ SELECT * FROM $newq AS q WHERE q.quantity < 0
 
 Данный вид нагрузки создает заказ с одним и тем же набором товаров и обрабатывает его. Обработка заказа заключается в уменьшении количества заказанных товаров на складе.
 
-YQL Запрос:
-```sql
+YQL запрос:
+
+```yql
 DECLARE $ido AS UInt64;
 DECLARE $cust AS Utf8;
 DECLARE $lines AS List<Struct<product:Utf8,quantity:Int64>>;
@@ -273,6 +289,7 @@ SELECT * FROM $newq AS q WHERE q.quantity < 0
 ```
 
 Для запуска данного вида нагрузки необходимо выполнить команду:
+
 ```bash
 {{ ydb-cli }} workload stock run put-same-order [global workload options...] [specific workload options...]
 ```
@@ -281,6 +298,7 @@ SELECT * FROM $newq AS q WHERE q.quantity < 0
 * `specific workload options` - [параметры конкретного вида нагрузки](#submit_same_order_options)
 
 ### Параметры для put-same-order {#submit_same_order_options}
+
 Имя параметра | Короткое имя | Описание параметра
 ---|---|---
 `--products <значение>` | `-p <значение>` | Количество видов товара в каждом заказе. Значение по умолчанию: 100.
@@ -288,10 +306,13 @@ SELECT * FROM $newq AS q WHERE q.quantity < 0
 ## Примеры запуска нагрузок
 
 * Запуск `add-rand-order` нагрузки на 5 секунд в 10 потоков с 1000 видами товаров.
+
 ```bash
 {{ ydb-cli }} workload stock run add-rand-order -s 5 -t 10 -p 1000
 ```
+
 Возможный результат:
+
 ```text
 Elapsed Txs/Sec Retries Errors  p50(ms) p95(ms) p99(ms) pMax(ms)
 1           132 0       0       69      108     132     157
@@ -305,20 +326,26 @@ Txs     Txs/Sec Retries Errors  p50(ms) p95(ms) p99(ms) pMax(ms)
 ```
 
 * Запуск `put-same-order` нагрузки на 5 секунд в 5 потоков с 2 видами товаров в заказе с распечаткой только итоговых результатов.
+
 ```bash
 {{ ydb-cli }} workload stock run put-same-order -s 5 -t 5 -p 1000 --quiet
 ```
+
 Возможный результат:
+
 ```text
 Txs     Txs/Sec Retries Errors  p50(ms) p95(ms) p99(ms) pMax(ms)
 16          3.2 67      3       855     1407    1799    1799
 ```
 
 * Запуск `rand-user-hist` нагрузки на 5 секунд в 100 потоков с распечаткой времени каждого временного окна.
+
 ```bash
 {{ ydb-cli }} workload stock run rand-user-hist -s 5 -t 10 --print-timestamp
 ```
+
 Возможный результат:
+
 ```text
 Elapsed Txs/Sec Retries Errors  p50(ms) p95(ms) p99(ms) pMax(ms)        Timestamp
 1          1046 0       0       7       16      25      50      2022-02-08T17:47:26Z

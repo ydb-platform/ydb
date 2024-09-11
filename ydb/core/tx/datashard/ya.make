@@ -166,6 +166,7 @@ SRCS(
     load_and_wait_in_rs_unit.cpp
     load_tx_details_unit.cpp
     load_write_details_unit.cpp
+    local_kmeans.cpp
     make_scan_snapshot_unit.cpp
     make_snapshot_unit.cpp
     move_index_unit.cpp
@@ -238,6 +239,9 @@ PEERDIR(
     library/cpp/monlib/service/pages
     library/cpp/string_utils/base64
     library/cpp/string_utils/quote
+    library/cpp/dot_product
+    library/cpp/l1_distance
+    library/cpp/l2_distance
     ydb/core/actorlib_impl
     ydb/core/base
     ydb/core/change_exchange

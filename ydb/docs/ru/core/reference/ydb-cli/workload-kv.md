@@ -81,7 +81,7 @@ CREATE TABLE `kv_test`(
 
 Исполняется следующая YQL команда:
 
-```sql
+```yql
 DROP TABLE `kv_test`
 ```
 

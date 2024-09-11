@@ -488,6 +488,18 @@ Pear|15|33|2024-05-06'''
         assert result_set.columns[2].name == "c"
         assert result_set.columns[2].type.type_id == ydb.Type.UTF8
 
+        sql = f'''
+            SELECT *
+            FROM `{storage_connection_name}`.`timestamp.csv`
+            WITH (format=csv_with_names, with_infer='true', `data.timestamp.formatname`='ISO');
+            '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
+        assert "parameter is not supported with type inference" in str(
+            client.describe_query(query_id).result
+        )
+
     @yq_v2
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_inference_projection(self, kikimr, s3, client, unique_prefix):

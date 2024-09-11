@@ -257,7 +257,7 @@ YPath представляет собой язык описания путей, 
 
 {% endnote %}
 
-###  Примеры {#simple_ypath_examples}
+### Примеры {#simple_ypath_examples}
 
 ```json
 $data = Yson(@@{"0-25-3ec012f-406daf5c" = {a=<why="I can just do it">1;b=2}}@@);

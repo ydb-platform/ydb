@@ -6,7 +6,7 @@
 
 The page is available at:
 
-```
+```text
 http://<endpoint>:8765/monitoring/cluster
 ```
 
@@ -141,7 +141,7 @@ Under the indicator, you can see a list of tablets, where each tablet is shown a
 
 ## Tenant page {#tenant_page}
 
-```
+```text
 http://<endpoint>:8765/monitoring/tenant/healthcheck?name=<tenant-path>
 ```
 

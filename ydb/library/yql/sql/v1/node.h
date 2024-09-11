@@ -1121,6 +1121,7 @@ namespace NSQLTranslationV1 {
         TMaybe<TIdentifier> AutoPartitioningByLoad;
         TNodePtr MinPartitions;
         TNodePtr MaxPartitions;
+        TNodePtr PartitionCount;
         TNodePtr UniformPartitions;
         TVector<TVector<TNodePtr>> PartitionAtKeys;
         TMaybe<TIdentifier> KeyBloomFilter;

@@ -4,7 +4,7 @@ Counting the number of rows in the table (if `*` or constant is specified as the
 
 Like other aggregate functions, it can be combined with [GROUP BY](../../../syntax/group_by.md) to get statistics on the parts of the table that correspond to the values in the columns being grouped. {% if select_statement != "SELECT STREAM" %}Use the modifier [DISTINCT](../../../syntax/group_by.md#distinct) to count distinct values.{% endif %}
 
-**Examples**
+### Examples
 
 ```yql
 SELECT COUNT(*) FROM my_table;
@@ -28,7 +28,7 @@ Minimum or maximum value.
 
 As an argument, you may use an arbitrary computable expression with a numeric result.
 
-**Examples**
+### Examples
 
 ```yql
 SELECT MIN(value), MAX(value) FROM my_table;
@@ -54,7 +54,7 @@ As an argument, you may use an arbitrary computable expression with a numeric re
 
 Integer values and time intervals are automatically converted to Double.
 
-**Examples**
+### Examples
 
 ```yql
 SELECT AVG(value) FROM my_table;
@@ -68,7 +68,7 @@ The value `NULL` is equated to `false` (if the argument type is `Bool?`).
 
 The function *does not* do the implicit type casting to Boolean for strings and numbers.
 
-**Examples**
+### Examples
 
 ```yql
 SELECT
@@ -76,11 +76,13 @@ SELECT
 ```
 
 {% if select_statement != "SELECT STREAM" %}
+
 {% note info %}
 
 To count distinct values in rows meeting the condition, unlike other aggregate functions, you can't use the modifier [DISTINCT](../../../syntax/group_by.md#distinct) because arguments contain no values. To get this result, use in the subquery the built-in function [IF](../../../builtins/basic.md#if) with two arguments (to get `NULL` in else), and apply an outer [COUNT(DISTINCT ...)](#count) to its result.
 
 {% endnote %}
+
 {% endif %}
 
 ## SUM_IF and AVG_IF {#sum-if}
@@ -89,7 +91,7 @@ Sum or arithmetic average, but only for the rows that satisfy the condition pass
 
 Therefore, `SUM_IF(value, condition)` is a slightly shorter notation for `SUM(IF(condition, value))`, same for `AVG`. The argument's data type expansion is similar to the same-name functions without a suffix.
 
-**Examples**
+### Examples
 
 ```yql
 SELECT
@@ -100,7 +102,7 @@ FROM my_table;
 
 When you use [aggregation factories](../../basic.md#aggregationfactory), a `Tuple` containing a value and a predicate is passed as the first [AGGREGATE_BY](../../aggregation.md#aggregateby) argument.
 
-**Examples**
+### Examples
 
 ```yql
 $sum_if_factory = AggregationFactory("SUM_IF");
@@ -118,7 +120,7 @@ Get the value for an expression specified as an argument, for one of the table r
 
 Because of no guarantee, `SOME` is computationally cheaper than [MIN / MAX](#min-max) often used in similar situations.
 
-**Examples**
+### Examples
 
 ```yql
 SELECT

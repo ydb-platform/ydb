@@ -1,26 +1,26 @@
 # ALTER TABLE
 
-Using the ```ALTER TABLE``` command, you can change the composition of columns and additional table parameters. You can specify several actions in one command. In general, the ```ALTER TABLE``` command looks like this:
+Using the `ALTER TABLE` command, you can change the composition of columns and additional table parameters. You can specify several actions in one command. In general, the `ALTER TABLE` command looks like this:
 
-```sql
+```yql
 ALTER TABLE <table_name> <action1>, <action2>, ..., <actionN>;
 ```
 
-```<action>```: Any action to change the table described below.
+`<action>`: Any action to change the table described below.
 
 ## Changing the composition of columns {#columns}
 
 {{ backend_name }} lets you add columns to a table and delete non-key columns from it.
 
-```ADD COLUMN```: Adds a column with the specified name and type. The code below adds the ```is_deleted``` column with the ```Bool``` data type to the ```episodes``` table.
+`ADD COLUMN`: Adds a column with the specified name and type. The code below adds the `is_deleted` column with the `Bool` data type to the `episodes` table.
 
-```sql
+```yql
 ALTER TABLE episodes ADD COLUMN is_deleted Bool;
 ```
 
-```DROP COLUMN```: Deletes the column with the specified name. The code below removes the ```is_deleted``` column from the ```episodes``` table.
+`DROP COLUMN`: Deletes the column with the specified name. The code below removes the `is_deleted` column from the `episodes` table.
 
-```sql
+```yql
 ALTER TABLE episodes DROP column is_deleted;
 ```
 
@@ -30,9 +30,9 @@ ALTER TABLE episodes DROP column is_deleted;
 
 ### Adding an index {#add-index}
 
-```ADD INDEX```: Adds an index with the specified name and type for a given set of columns. The code below adds a global index named ```title_index``` for the ```title``` column.
+`ADD INDEX`: Adds an index with the specified name and type for a given set of columns. The code below adds a global index named `title_index` for the `title` column.
 
-```sql
+```yql
 ALTER TABLE `series` ADD INDEX `title_index` GLOBAL ON (`title`);
 ```
 
@@ -54,15 +54,13 @@ Currently, specifying secondary index partitioning settings during index creatio
 
 {% endnote %}
 
-```sql
+```yql
 ALTER TABLE <table_name> ALTER INDEX <index_name> SET <partitioning_setting_name> <value>;
 ALTER TABLE <table_name> ALTER INDEX <index_name> SET (<partitioning_setting_name_1> = <value_1>, ...);
 ```
 
 * `<table_name>`: The name of the table whose index is to be modified.
-
 * `<index_name>`: The name of the index to be modified.
-
 * `<partitioning_setting_name>`: The name of the setting to be modified, which should be one of the following:
 
   * [AUTO_PARTITIONING_BY_SIZE]({{ concept_table }}#auto_partitioning_by_size)
@@ -86,7 +84,7 @@ These settings cannot be [reset](#additional-reset).
 
 The query in the following example enables automatic partitioning by load for the index named `title_index` of table `series` and sets its minimum partition count to 5:
 
-```sql
+```yql
 ALTER TABLE `series` ALTER INDEX `title_index` SET (
     AUTO_PARTITIONING_BY_LOAD = ENABLED,
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 5
@@ -95,9 +93,9 @@ ALTER TABLE `series` ALTER INDEX `title_index` SET (
 
 ### Deleting an index {#drop-index}
 
-```DROP INDEX```: Deletes the index with the specified name. The code below deletes the index named ```title_index```.
+`DROP INDEX`: Deletes the index with the specified name. The code below deletes the index named `title_index`.
 
-```sql
+```yql
 ALTER TABLE `series` DROP INDEX `title_index`;
 ```
 
@@ -121,7 +119,7 @@ Replacement of atomic indexes under load is supported by the command [{{ ydb-cli
 
 Example of index renaming:
 
-```sql
+```yql
 ALTER TABLE `series` RENAME INDEX `title_index` TO `title_index_new`;
 ```
 
@@ -161,7 +159,7 @@ ALTER TABLE `series` RENAME INDEX `title_index` TO `title_index_new`;
 
 The code below adds a changefeed named `updates_feed`, where the values of updated table columns will be exported in JSON format:
 
-```sql
+```yql
 ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
     FORMAT = 'JSON',
     MODE = 'UPDATES'
@@ -170,7 +168,7 @@ ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
 
 Records in this changefeed will be stored for 24 hours (default value). The code in the following example will create a changefeed with a record retention period of 12 hours:
 
-```sql
+```yql
 ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
     FORMAT = 'JSON',
     MODE = 'UPDATES',
@@ -180,7 +178,7 @@ ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
 
 The example of creating a changefeed with enabled virtual timestamps:
 
-```sql
+```yql
 ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
     FORMAT = 'JSON',
     MODE = 'UPDATES',
@@ -190,7 +188,7 @@ ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
 
 Example of creating a changefeed with initial scan:
 
-```sql
+```yql
 ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
     FORMAT = 'JSON',
     MODE = 'UPDATES',
@@ -200,7 +198,7 @@ ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
 
 `DROP CHANGEFEED`: Deletes the changefeed with the specified name. The code below deletes the `updates_feed` changefeed:
 
-```sql
+```yql
 ALTER TABLE `series` DROP CHANGEFEED `updates_feed`;
 ```
 
@@ -210,7 +208,7 @@ ALTER TABLE `series` DROP CHANGEFEED `updates_feed`;
 
 ## Renaming a table {#rename}
 
-```sql
+```yql
 ALTER TABLE <old_table_name> RENAME TO <new_table_name>;
 ```
 
@@ -220,30 +218,30 @@ If a YQL query contains multiple `ALTER TABLE ... RENAME TO ...` commands, each 
 
 Renaming can be used to move a table from one directory inside the database to another, for example:
 
-```sql
+```yql
 ALTER TABLE `table1` RENAME TO `backup/table1`;
 ```
 
 ## Changing column groups {#column-family}
 
-```ADD FAMILY```: Creates a new group of columns in the table. The code below creates the ```family_small``` column group in the ```series_with_families``` table.
+`ADD FAMILY`: Creates a new group of columns in the table. The code below creates the `family_small` column group in the `series_with_families` table.
 
-```sql
+```yql
 ALTER TABLE series_with_families ADD FAMILY family_small (
     DATA = "ssd",
     COMPRESSION = "off"
 );
 ```
 
-Using the ```ALTER COLUMN``` command, you can change a column group for the specified column. The code below for the ```release_date``` column in the ```series_with_families``` table changes the column group to ```family_small```.
+Using the `ALTER COLUMN` command, you can change a column group for the specified column. The code below for the `release_date` column in the `series_with_families` table changes the column group to `family_small`.
 
-```sql
+```yql
 ALTER TABLE series_with_families ALTER COLUMN release_date SET FAMILY family_small;
 ```
 
-The two previous commands from listings 8 and 9 can be combined into one ```ALTER TABLE``` call. The code below creates the ```family_small``` column group and sets it for the ```release_date``` column in the ```series_with_families``` table.
+The two previous commands from listings 8 and 9 can be combined into one `ALTER TABLE` call. The code below creates the `family_small` column group and sets it for the `release_date` column in the `series_with_families` table.
 
-```sql
+```yql
 ALTER TABLE series_with_families
     ADD FAMILY family_small (
         DATA = "ssd",
@@ -252,9 +250,9 @@ ALTER TABLE series_with_families
     ALTER COLUMN release_date SET FAMILY family_small;
 ```
 
-Using the ```ALTER FAMILY``` command, you can change the parameters of the column group. The code below changes the storage type to ```hdd``` for the ```default``` column group in the ```series_with_families``` table:
+Using the `ALTER FAMILY` command, you can change the parameters of the column group. The code below changes the storage type to `hdd` for the `default` column group in the `series_with_families` table:
 
-```sql
+```yql
 ALTER TABLE series_with_families ALTER FAMILY default SET DATA "hdd";
 ```
 
@@ -266,40 +264,39 @@ Available types of storage devices depend on the {{ ydb-short-name }} cluster co
 
 You can specify any parameters of a group of columns from the [`CREATE TABLE`](../create_table/family.md) command.
 
-
 ## Changing additional table parameters {#additional-alter}
 
-Most of the table parameters in YDB specified on the [table description]({{ concept_table }}) page can be changed with the ```ALTER``` command.
+Most of the table parameters in {{ ydb-short-name }} specified on the [table description]({{ concept_table }}) page can be changed with the `ALTER` command.
 
 In general, the command to change any table parameter looks like this:
 
-```sql
+```yql
 ALTER TABLE <table_name> SET (<key> = <value>);
 ```
 
-```<key>``` is a parameter name and ```<value>``` is its new value.
+`<key>` is a parameter name and `<value>` is its new value.
 
 For example, this command disables automatic partitioning of the table:
 
-```sql
+```yql
 ALTER TABLE series SET (AUTO_PARTITIONING_BY_SIZE = DISABLED);
 ```
 
 ## Resetting additional table parameters {#additional-reset}
 
-Some table parameters in YDB listed on the [table description]({{ concept_table }}) page can be reset with the ```ALTER``` command.
+Some table parameters in {{ ydb-short-name }} listed on the [table description]({{ concept_table }}) page can be reset with the `ALTER` command.
 
 The command to reset the table parameter looks like this:
 
-```sql
+```yql
 ALTER TABLE <table_name> RESET (<key>);
 ```
 
-```<key>```: Name of the parameter.
+`<key>`: Name of the parameter.
 
 For example, this command resets (deletes) TTL settings for the table:
 
-```sql
+```yql
 ALTER TABLE series RESET (TTL);
 ```
 {% endif %}

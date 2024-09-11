@@ -5,7 +5,8 @@
 Полезно использовать в сочетании с [`Ensure`](../../builtins/basic.md#ensure) для проверки выполнения пользовательских условий на финальный результат вычислений.
 
 {% if select_command != true or select_command == "SELECT" %}
-**Примеры**
+
+### Примеры
 
 ``` yql
 DISCARD SELECT 1;

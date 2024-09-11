@@ -513,7 +513,6 @@ def produce_arguments(args):
     parser.add_argument("--fixed-ports", action='store_true', default=False)
     parser.add_argument("--base-port-offset", action="store", type=int, default=0)
     parser.add_argument("--pq-client-service-type", action='append', default=[])
-    parser.add_argument("--enable-datastreams", action='store_true', default=False)
     parser.add_argument("--enable-pqcd", action='store_true', default=False)
     parsed, _ = parser.parse_known_args(args)
     arguments = EmptyArguments()
@@ -527,7 +526,6 @@ def produce_arguments(args):
         arguments.debug_logging = parsed.debug_logging
     arguments.enable_pq = parsed.enable_pq
     arguments.pq_client_service_types = parsed.pq_client_service_type
-    arguments.enable_datastreams = parsed.enable_datastreams
     arguments.enable_pqcd = parsed.enable_pqcd
     return arguments
 

@@ -1,5 +1,4 @@
 import "ydb/core/scheme/protos/pathid.proto";
-import "ydb/core/protos/data_events.proto";
 
 package NKikimrStat;
 

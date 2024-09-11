@@ -43,7 +43,8 @@ Action:
 
 The warning code is returned with the text itself (it's displayed on the right side of the web interface).
 
-Example:
+#### Example
+
 `PRAGMA Warning("error", "*");`
 `PRAGMA Warning("disable", "1101");`
 `PRAGMA Warning("default", "4503");`
@@ -125,6 +126,7 @@ Aligns the RANK/DENSE_RANK behavior with the standard if there are optional type
 
 * The result type is always Uint64 rather than Uint64?.
 * NULLs in keys are treated as equal to each other (the current implementation returns NULL).
+
 You can explicitly select the old behavior by using the `DisableAnsiRankForNullableKeys` pragma. If no pragma is set, then a warning is issued and the old version works.
 
 ### AnsiCurrentRow

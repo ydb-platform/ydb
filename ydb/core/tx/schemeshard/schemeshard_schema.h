@@ -768,6 +768,7 @@ struct Schema : NIceDb::Schema {
         struct ImportsLimit : Column<29, NScheme::NTypeIds::Uint64> {};
         struct AuditSettings : Column<30, NScheme::NTypeIds::String> {};
         struct ServerlessComputeResourcesMode : Column<31, NScheme::NTypeIds::Uint32> { using Type = EServerlessComputeResourcesMode; };
+        struct ColumnTableColumnsLimit : Column<32, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<PathId>;
         using TColumns = TableColumns<
@@ -801,7 +802,8 @@ struct Schema : NIceDb::Schema {
             ExportsLimit,
             ImportsLimit,
             AuditSettings,
-            ServerlessComputeResourcesMode
+            ServerlessComputeResourcesMode,
+            ColumnTableColumnsLimit
         >;
     };
 

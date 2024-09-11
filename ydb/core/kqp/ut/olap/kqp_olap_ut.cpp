@@ -51,9 +51,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             PARTITION BY HASH(timestamp)
             WITH (
                 STORE = COLUMN,
-                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = %d
+                PARTITION_COUNT = %d
                 )
-            )", storeName.data(), tableName.data(), shardsCount);
+            )",
+                             storeName.data(), tableName.data(), shardsCount);
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             if (result.GetStatus() != EStatus::SUCCESS) {
                 Cerr << result.GetIssues().ToOneLineString() << Endl;
@@ -1845,8 +1846,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             PARTITION BY HASH(WatchID)
             WITH (
                 STORE = COLUMN,
-                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT =)" << numShards
-            << ")";
+                PARTITION_COUNT =)" << numShards
+                                      << ")";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
@@ -1933,10 +1934,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 WITH (
                     STORE = COLUMN,
                     AUTO_PARTITIONING_BY_SIZE = ENABLED,
-                    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1
+                    PARTITION_COUNT = 1
                 );
-            )"
-        );
+            )");
 
         lHelper.StartDataRequest(
             R"(
@@ -1988,10 +1988,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 WITH (
                     STORE = COLUMN,
                     AUTO_PARTITIONING_BY_SIZE = ENABLED,
-                    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1
+                    PARTITION_COUNT = 1
                 );
-            )"
-        );
+            )");
 
         lHelper.StartDataRequest(
             R"(
@@ -2000,7 +1999,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         );
 
     }
-/*
+    /*
     Y_UNIT_TEST(OlapDeletePlanned) {
         TPortManager pm;
 
@@ -2040,7 +2039,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 WITH (
                     STORE = COLUMN,
                     AUTO_PARTITIONING_BY_SIZE = ENABLED,
-                    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 8
+                    PARTITION_COUNT = 8
                 );
             )"
         );
@@ -2511,7 +2510,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 PRIMARY KEY (a)
             )
             PARTITION BY HASH(a)
-            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 4);
+            WITH (STORE = COLUMN, PARTITION_COUNT = 4);
         )";
 
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();

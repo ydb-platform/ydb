@@ -6,7 +6,7 @@
 
 ## Синтаксис {#syntax}
 
-```sql
+```yql
 DROP ASYNC REPLICATION <name> [CASCADE]
 ```
 
@@ -18,7 +18,7 @@ DROP ASYNC REPLICATION <name> [CASCADE]
 
 Рассмотрим примеры удаления экземпляра асинхронной репликации, созданного следующим запросом:
 
-```sql
+```yql
 CREATE ASYNC REPLICATION my_replication
 FOR original_table AS replica_table
 WITH (
@@ -29,13 +29,13 @@ WITH (
 
 Удаление экземпляра асинхронной репликации и автоматически созданного потока изменений в таблице `original_table`, таблица `replica_table` остается:
 
-```sql
+```yql
 DROP ASYNC REPLICATION my_replication;
 ```
 
 Удаление экземпляра асинхронной репликации, автоматически созданного потока изменений в таблице `original_table` и таблицы `replica_table`:
 
-```sql
+```yql
 DROP ASYNC REPLICATION my_replication CASCADE;
 ```
 

@@ -12,7 +12,7 @@ The current syntax for working with secrets is temporary and will be changed in 
 
 Secrets are created using an SQL query:
 
-```sql
+```yql
 CREATE OBJECT `MySecretName` (TYPE SECRET) WITH value=`MySecretData`;
 ```
 
@@ -22,6 +22,6 @@ All rights to use the secret belong to its creator. The creator can grant anothe
 
 Special objects called `SECRET_ACCESS` are used to manage access to secrets. To grant permission to use the secret `MySecretName` to the user `another_user`, a `SECRET_ACCESS` object named `MySecretName:another_user` must be created.
 
-```sql
+```yql
 CREATE OBJECT `MySecretName:another_user` (TYPE SECRET_ACCESS)
 ```

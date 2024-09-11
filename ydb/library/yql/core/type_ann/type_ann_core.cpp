@@ -12715,7 +12715,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
         ColumnOrderFunctions["Merge"] = ColumnOrderFunctions["Extend"] = &OrderForMergeExtend;
         ColumnOrderFunctions[RightName] = &OrderFromFirst;
-        ColumnOrderFunctions["UnionAll"] = &OrderForUnionAll;
+        ColumnOrderFunctions["UnionMerge"] = ColumnOrderFunctions["UnionAll"] = &OrderForUnionAll;
         ColumnOrderFunctions["Union"] = &OrderForUnionAll;
         ColumnOrderFunctions["EquiJoin"] = &OrderForEquiJoin;
         ColumnOrderFunctions["CalcOverWindow"] = &OrderForCalcOverWindow;

@@ -38,8 +38,15 @@ public:
     std::shared_ptr<arrow::RecordBatch> Extract(
         const std::shared_ptr<arrow::RecordBatch>& incoming, const std::vector<std::string>& columnNames);
     std::shared_ptr<arrow::Table> Extract(const std::shared_ptr<arrow::Table>& incoming, const std::vector<std::string>& columnNames);
+    std::shared_ptr<arrow::Table> Extract(
+        const std::shared_ptr<arrow::Table>& incoming, const std::vector<std::shared_ptr<arrow::Field>>& columns);
+    std::shared_ptr<arrow::RecordBatch> Extract(
+        const std::shared_ptr<arrow::RecordBatch>& incoming, const std::vector<std::shared_ptr<arrow::Field>>& columns);
     std::shared_ptr<arrow::RecordBatch> Extract(const std::shared_ptr<arrow::RecordBatch>& incoming, const std::vector<TString>& columnNames);
     std::shared_ptr<arrow::Table> Extract(const std::shared_ptr<arrow::Table>& incoming, const std::vector<TString>& columnNames);
+
+    TConclusion<TSchemaSubset> BuildSequentialSubset(
+        const std::shared_ptr<arrow::RecordBatch>& incoming, const std::shared_ptr<NArrow::TSchemaLite>& dstSchema);
 
     TConclusion<std::shared_ptr<arrow::RecordBatch>> Adapt(
         const std::shared_ptr<arrow::RecordBatch>& incoming, const std::shared_ptr<arrow::Schema>& dstSchema, TSchemaSubset* subset = nullptr);

@@ -77,26 +77,27 @@ Below are examples of the code for connecting to {{ ydb-short-name }} (driver cr
 
   {% cut "Using a connection string" %}
 
-    The `database/sql` driver is registered when importing the package of a specific driver separated by an underscore:
-    ```golang
-    package main
+  The `database/sql` driver is registered when importing the package of a specific driver separated by an underscore:
 
-    import (
-      "database/sql"
+  ```golang
+  package main
 
-      _ "github.com/ydb-platform/ydb-go-sdk/v3"
-    )
+  import (
+    "database/sql"
 
-    func main() {
-      db, err := sql.Open("ydb", "grpc://localhost:2136/local")
-      if err != nil {
-        panic(err)
-      }
-      defer db.Close()
+    _ "github.com/ydb-platform/ydb-go-sdk/v3"
+  )
 
-      // ...
+  func main() {
+    db, err := sql.Open("ydb", "grpc://localhost:2136/local")
+    if err != nil {
+      panic(err)
     }
-    ```
+    defer db.Close()
+
+    // ...
+  }
+  ```
 
   {% endcut %}
 

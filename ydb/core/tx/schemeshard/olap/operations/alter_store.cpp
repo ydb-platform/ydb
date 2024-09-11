@@ -2,6 +2,8 @@
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
+#include "checks.h"
+
 namespace {
 
 using namespace NKikimr;
@@ -434,6 +436,18 @@ class TAlterOlapStore: public TSubOperation {
         }
     }
 
+    bool IsAlterCompression() const {
+        const auto& alter = Transaction.GetAlterColumnStore();
+        for (const auto& alterSchema : alter.GetAlterSchemaPresets()) {
+            for (const auto& alterColumn : alterSchema.GetAlterSchema().GetAlterColumns()) {
+                if (alterColumn.HasSerializer()) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
 public:
     using TSubOperation::TSubOperation;
 
@@ -458,7 +472,13 @@ public:
             return result;
         }
 
-        TPath path = TPath::Resolve(parentPathStr, context.SS).Dive(name);
+        if (!AppData()->FeatureFlags.GetEnableOlapCompression() && IsAlterCompression()) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed, "Compression is disabled for OLAP tables");
+            return result;
+        }
+
+        TPath parentPath = TPath::Resolve(parentPathStr, context.SS);
+        TPath path = parentPath.Dive(name);
         {
             TPath::TChecker checks = path.Check();
             checks
@@ -504,6 +524,15 @@ public:
         if (!alterData) {
             return result;
         }
+
+        auto domainInfo = parentPath.DomainInfo();
+        const TSchemeLimits& limits = domainInfo->GetSchemeLimits();
+
+        if (!NKikimr::NSchemeShard::NOlap::CheckLimits(limits, alterData, errStr)) {
+            result->SetError(NKikimrScheme::StatusSchemeError, errStr);
+            return result;
+        }
+
         storeInfo->AlterData = alterData;
 
         NIceDb::TNiceDb db(context.GetDB());

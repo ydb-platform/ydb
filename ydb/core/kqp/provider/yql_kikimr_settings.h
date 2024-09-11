@@ -172,6 +172,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool OldLookupJoinBehaviour = true;
     bool EnableOlapSink = false;
     bool EnableOltpSink = false;
+    bool EnableHtapTx = false;
     NKikimrConfig::TTableServiceConfig_EBlockChannelsMode BlockChannelsMode;
     bool EnableSpillingGenericQuery = false;
     ui32 DefaultCostBasedOptimizationLevel = 4;

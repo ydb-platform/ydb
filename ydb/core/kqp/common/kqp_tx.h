@@ -121,6 +121,14 @@ private:
     friend class TKqpTransactionContext;
 };
 
+struct TTableInfo {
+    bool IsOlap = false;
+    THashSet<TString> Pathes;
+};
+
+using TShardIdToTableInfo = THashMap<ui64, TTableInfo>;
+using TShardIdToTableInfoPtr = std::shared_ptr<TShardIdToTableInfo>;
+
 class TKqpTransactionContext : public NYql::TKikimrTransactionContextBase  {
 public:
     explicit TKqpTransactionContext(bool implicit, const NMiniKQL::IFunctionRegistry* funcRegistry,
@@ -287,6 +295,12 @@ public:
     TTxAllocatorState::TPtr TxAlloc;
 
     IKqpGateway::TKqpSnapshotHandle SnapshotHandle;
+
+    bool HasOlapTable = false;
+    bool HasOltpTable = false;
+    bool HasTableWrite = false;
+
+    TShardIdToTableInfoPtr ShardIdToTableInfo = std::make_shared<TShardIdToTableInfo>();
 };
 
 struct TTxId {
@@ -435,6 +449,7 @@ public:
 };
 
 NYql::TIssue GetLocksInvalidatedIssue(const TKqpTransactionContext& txCtx, const NYql::TKikimrPathId& pathId);
+NYql::TIssue GetLocksInvalidatedIssue(const TShardIdToTableInfo& shardIdToTableInfo, const ui64& shardId);
 std::pair<bool, std::vector<NYql::TIssue>> MergeLocks(const NKikimrMiniKQL::TType& type,
     const NKikimrMiniKQL::TValue& value, TKqpTransactionContext& txCtx);
 

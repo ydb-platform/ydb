@@ -116,7 +116,7 @@ private:
             Z_.avail_out = OutputBufferSize;
 
             const auto code = deflate(&Z_, done ? Z_FINISH : Z_BLOCK);
-            YQL_ENSURE((done ? Z_STREAM_END : Z_OK) == code, "code: " << code << ", error: " << GetErrMsg(Z_));
+            YQL_ENSURE_CODELINE((done ? Z_STREAM_END : Z_OK) == code, TIssuesIds::KIKIMR_BAD_REQUEST, "code: " << code << ", error: " << GetErrMsg(Z_));
 
             if (const auto size = OutputBufferSize - Z_.avail_out)
                 TOutputQueue::Push(TString(OutputBuffer.get(), size));

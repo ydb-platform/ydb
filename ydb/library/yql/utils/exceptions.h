@@ -24,4 +24,11 @@ struct TCodeLineException: public yexception {
 
 TCodeLineException operator+(const TSourceLocation& sl, TCodeLineException&& t);
 
-} // namespace NFq
+#define YQL_ENSURE_CODELINE(CONDITION, CODE, ...)     \
+    do {                                   \
+        if (Y_UNLIKELY(!(CONDITION))) {    \
+            ythrow TCodeLineException(CODE) << __VA_ARGS__; \
+        }                                  \
+    } while (0)
+
+} // namespace NYql

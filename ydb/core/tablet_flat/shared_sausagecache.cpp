@@ -53,24 +53,6 @@ static bool Satisfies(NLog::EPriority priority = NLog::PRI_DEBUG) {
         return false;
 }
 
-struct TEvPrivate {
-    enum EEv {
-        EvReplacementPolicySwitch = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
-
-        EvEnd
-    };
-
-    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE));
-
-    struct TEvReplacementPolicySwitch : public TEventLocal<TEvReplacementPolicySwitch, EvReplacementPolicySwitch> {
-        TSharedPageCacheConfig::TReplacementPolicy ReplacementPolicy;
-
-        TEvReplacementPolicySwitch(TSharedPageCacheConfig::TReplacementPolicy replacementPolicy)
-            : ReplacementPolicy(replacementPolicy)
-        {}
-    };
-};
-
 class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     using ELnLev = NUtil::ELnLev;
     using TBlocks = TVector<NSharedCache::TEvResult::TLoaded>;
@@ -341,7 +323,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         DoGC();
     }
 
-    void Handle(TEvPrivate::TEvReplacementPolicySwitch::TPtr &ev) {
+    void Handle(NSharedCache::TEvReplacementPolicySwitch::TPtr &ev) {
         auto *msg = ev->Get();
 
         if (msg->ReplacementPolicy == Config->ReplacementPolicy) {
@@ -1165,7 +1147,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         if (msg->Record.GetReplacementPolicy() != Config->ReplacementPolicy) {
             // Note: use random delay to prevent the whole cluster lag and storage ddos
             ui32 delaySeconds = RandomNumber(msg->Record.GetReplacementPolicySwitchUniformDelaySeconds() + 1);
-            Schedule(TDuration::Seconds(delaySeconds), new TEvPrivate::TEvReplacementPolicySwitch(msg->Record.GetReplacementPolicy()));
+            Schedule(TDuration::Seconds(delaySeconds), new NSharedCache::TEvReplacementPolicySwitch(msg->Record.GetReplacementPolicy()));
         }
     }
 
@@ -1261,7 +1243,7 @@ public:
 
             hFunc(NMemory::TEvConsumerRegistered, Handle);
             hFunc(NMemory::TEvConsumerLimit, Handle);
-            hFunc(TEvPrivate::TEvReplacementPolicySwitch, Handle);
+            hFunc(NSharedCache::TEvReplacementPolicySwitch, Handle);
         }
     }
 

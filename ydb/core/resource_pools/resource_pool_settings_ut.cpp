@@ -81,6 +81,12 @@ Y_UNIT_TEST_SUITE(ResourcePoolTest) {
             UNIT_ASSERT_EXCEPTION_CONTAINS(settings.Validate(), yexception, TStringBuilder() << "Invalid resource pool configuration, concurrent_query_limit is " << settings.ConcurrentQueryLimit << ", that exceeds limit in " << POOL_MAX_CONCURRENT_QUERY_LIMIT);
         }
 
+        {  // Max queue size validation
+            TPoolSettings settings;
+            settings.QueueSize = POOL_MAX_QUEUE_SIZE + 1;
+            UNIT_ASSERT_EXCEPTION_CONTAINS(settings.Validate(), yexception, TStringBuilder() << "Invalid resource pool configuration, queue_size is " << settings.QueueSize << ", that exceeds limit in " << POOL_MAX_QUEUE_SIZE);
+        }
+
         {  // Unused queue size validation
             
             TPoolSettings settings;

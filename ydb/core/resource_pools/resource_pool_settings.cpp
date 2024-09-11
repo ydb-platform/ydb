@@ -69,6 +69,9 @@ void TPoolSettings::Validate() const {
     if (ConcurrentQueryLimit > POOL_MAX_CONCURRENT_QUERY_LIMIT) {
         throw yexception() << "Invalid resource pool configuration, concurrent_query_limit is " << ConcurrentQueryLimit << ", that exceeds limit in " << POOL_MAX_CONCURRENT_QUERY_LIMIT;
     }
+    if (QueueSize > POOL_MAX_QUEUE_SIZE) {
+        throw yexception() << "Invalid resource pool configuration, queue_size is " << QueueSize << ", that exceeds limit in " << POOL_MAX_QUEUE_SIZE;
+    }
     if (QueueSize != -1 && ConcurrentQueryLimit == -1 && DatabaseLoadCpuThreshold < 0.0) {
         throw yexception() << "Invalid resource pool configuration, queue_size unsupported without concurrent_query_limit or database_load_cpu_threshold";
     }

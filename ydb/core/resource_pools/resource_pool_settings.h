@@ -12,6 +12,7 @@ namespace NKikimr::NResourcePool {
 inline constexpr char DEFAULT_POOL_ID[] = "default";
 
 inline constexpr i64 POOL_MAX_CONCURRENT_QUERY_LIMIT = 1000;
+inline constexpr i64 POOL_MAX_QUEUE_SIZE = 1000;
 
 struct TPoolSettings : public TSettingsBase {
     typedef double TPercent;

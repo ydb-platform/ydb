@@ -146,7 +146,7 @@ public:
         YDB_ACCESSOR(bool, IsRepair, false);
         YDB_ACCESSOR_DEF(TString, UniqueDescription);
         YDB_ACCESSOR(TString, UniqueId, TGUID::CreateTimebased().AsUuidString());
-        
+
         virtual TString DoDebugString() const {
             return "";
         }
@@ -223,6 +223,9 @@ public:
         virtual TConclusion<std::vector<INormalizerTask::TPtr>> DoInit(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) = 0;
 
         TAtomic ActiveTasksCount = 0;
+
+    public:
+        const NColumnShard::TColumnShard* CS = nullptr;
     };
     using TPtr = std::shared_ptr<INormalizerComponent>;
 

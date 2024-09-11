@@ -7,7 +7,7 @@
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 
-
+#if 0
 namespace NKikimr::NOlap::NNormalizer::NBrokenBlobs {
 
 class TNormalizerResult : public INormalizerChanges {
@@ -17,7 +17,9 @@ public:
     TNormalizerResult(THashMap<ui64, std::shared_ptr<TPortionInfo>>&& portions, const std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>>& schemas)
         : BrokenPortions(std::move(portions))
         , Schemas(schemas)
-    {}
+    {
+        exit(1);
+    }
 
     bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& normController) const override {
         NOlap::TBlobManagerDb blobManagerDb(txc.DB);
@@ -162,3 +164,4 @@ INormalizerTask::TPtr TNormalizer::BuildTask(std::vector<std::shared_ptr<TPortio
 
 
 }
+#endif

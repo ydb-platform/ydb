@@ -64,6 +64,8 @@ void TDbWrapper::WriteColumn(const NOlap::TPortionInfo& portion, const TColumnRe
 }
 
 void TDbWrapper::WritePortion(const NOlap::TPortionInfo& portion) {
+    LOG_S_CRIT("Writing portion, schema version " << portion.GetSchemaVersionVerified() << " path id " << portion.GetPathId() << " portion id " << portion.GetPortion() << " database " << (ui64)&Database);
+//    Database.AddPortionVersion(portion.GetPortion(), portion.GetSchemaVersionVerified());
     NIceDb::TNiceDb db(Database);
     auto metaProto = portion.GetMeta().SerializeToProto();
     using IndexPortions = NColumnShard::Schema::IndexPortions;
@@ -77,6 +79,11 @@ void TDbWrapper::WritePortion(const NOlap::TPortionInfo& portion) {
 }
 
 void TDbWrapper::ErasePortion(const NOlap::TPortionInfo& portion) {
+    LOG_S_CRIT("Erasing portion, schema version " << portion.GetSchemaVersionVerified() << " path id " << portion.GetPathId() << " portion id " << portion.GetPortion() << " database " << (ui64)&Database);
+//    ui32 count = Database.ErasePortion(portion.GetPortion(), portion.GetSchemaVersionVerified());
+//    if (count == 0) {
+//        LOG_S_CRIT("Version " << portion.GetSchemaVersionVerified() << " is not used anymore, need to delete");
+//    }
     NIceDb::TNiceDb db(Database);
     using IndexPortions = NColumnShard::Schema::IndexPortions;
     db.Table<IndexPortions>().Key(portion.GetPathId(), portion.GetPortion()).Delete();
@@ -124,6 +131,7 @@ bool TDbWrapper::LoadPortions(const std::function<void(NOlap::TPortionInfoConstr
     }
 
     while (!rowset.EndOfSet()) {
+        LOG_S_CRIT("Loaded portion, path id " << rowset.GetValue<IndexPortions::PathId>() << " portion id " << rowset.GetValue<IndexPortions::PortionId>() << " schema version " << rowset.GetValue<IndexPortions::SchemaVersion>() << " database " << (ui64)&Database);
         NOlap::TPortionInfoConstructor portion(rowset.GetValue<IndexPortions::PathId>(), rowset.GetValue<IndexPortions::PortionId>());
         portion.SetSchemaVersion(rowset.GetValue<IndexPortions::SchemaVersion>());
         if (rowset.HaveValue<IndexPortions::ShardingVersion>() && rowset.GetValue<IndexPortions::ShardingVersion>()) {

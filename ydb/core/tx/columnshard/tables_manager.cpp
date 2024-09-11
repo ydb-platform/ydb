@@ -44,6 +44,7 @@ bool TTablesManager::FillMonitoringReport(NTabletFlatExecutor::TTransactionConte
 }
 
 bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
+    LOG_S_CRIT("TTablesManager::InitFromDB started")
     using TTableVersionsInfo = TVersionedSchema<NKikimrTxColumnShard::TTableVersionInfo>;
 
     THashMap<ui32, TSchemaPreset> schemaPresets;
@@ -158,6 +159,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
             TSchemaPreset::TSchemaPresetVersionInfo info;
             Y_ABORT_UNLESS(info.ParseFromString(rowset.GetValue<Schema::SchemaPresetVersionInfo::InfoProto>()));
             AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "load_preset")("preset_id", id)("snapshot", version)("version", info.HasSchema() ? info.GetSchema().GetVersion() : -1);
+            LOG_S_CRIT("Read schema version: " << version << " schema: " << info.ShortDebugString());
             preset.AddVersion(version, info);
             if (!rowset.Next()) {
                 return false;
@@ -186,6 +188,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
     for (auto&& i : Tables) {
         PrimaryIndex->RegisterTable(i.first);
     }
+    LOG_S_CRIT("TTablesManager::InitFromDB finished")
     return true;
 }
 

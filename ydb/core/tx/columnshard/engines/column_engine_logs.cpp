@@ -207,6 +207,9 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
             const TIndexInfo& indexInfo = portion.GetSchema(VersionedIndex)->GetIndexInfo();
             AFL_VERIFY(portion.MutableMeta().LoadMetadata(metaProto, indexInfo));
             AFL_VERIFY(constructors.AddConstructorVerified(std::move(portion)));
+            if (portion.HasSchemaVersion()) {
+                VersionAddRef(portion.GetSchemaVersion(), 1);
+            }
         })) {
             return false;
         }

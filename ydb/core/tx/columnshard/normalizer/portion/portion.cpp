@@ -3,6 +3,7 @@
 #include <ydb/core/tx/columnshard/engines/scheme/filtered_scheme.h>
 #include <ydb/core/tx/columnshard/engines/portions/constructor.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
+#include <ydb/core/tx/columnshard/columnshard_impl.h>
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 
@@ -12,11 +13,17 @@ namespace NKikimr::NOlap {
 class TPortionsNormalizer::TNormalizerResult : public INormalizerChanges {
     std::vector<std::shared_ptr<TPortionInfo>> Portions;
     std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> Schemas;
+
 public:
-    TNormalizerResult(std::vector<std::shared_ptr<TPortionInfo>>&& portions, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas)
+    const NColumnShard::TColumnShard* CS;
+
+public:
+    TNormalizerResult(std::vector<std::shared_ptr<TPortionInfo>>&& portions, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas, const NColumnShard::TColumnShard* cs)
         : Portions(std::move(portions))
         , Schemas(schemas)
-    {}
+        , CS(cs)
+    {
+    }
 
     bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& /* normController */) const override {
         using namespace NColumnShard;
@@ -25,7 +32,7 @@ public:
         for (auto&& portionInfo : Portions) {
             auto schema = Schemas->FindPtr(portionInfo->GetPortionId());
             AFL_VERIFY(!!schema)("portion_id", portionInfo->GetPortionId());
-            portionInfo->SaveToDatabase(db, (*schema)->GetIndexInfo().GetPKFirstColumnId(), true);
+            portionInfo->SaveToDatabase(db, (*schema)->GetIndexInfo().GetPKFirstColumnId(), true, &CS->TablesManager);
         }
         return true;
     }
@@ -40,7 +47,7 @@ bool TPortionsNormalizer::CheckPortion(const NColumnShard::TTablesManager&, cons
 }
 
 INormalizerTask::TPtr TPortionsNormalizer::BuildTask(std::vector<std::shared_ptr<TPortionInfo>>&& portions, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas) const {
-    return std::make_shared<TTrivialNormalizerTask>(std::make_shared<TNormalizerResult>(std::move(portions), schemas));
+    return std::make_shared<TTrivialNormalizerTask>(std::make_shared<TNormalizerResult>(std::move(portions), schemas, CS));
 }
 
  TConclusion<bool> TPortionsNormalizer::DoInitImpl(const TNormalizationController&, NTabletFlatExecutor::TTransactionContext& txc) {

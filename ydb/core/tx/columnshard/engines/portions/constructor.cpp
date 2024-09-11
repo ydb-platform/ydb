@@ -22,6 +22,7 @@ TPortionInfo TPortionInfoConstructor::Build(const bool needChunksNormalization) 
         AFL_VERIFY(RemoveSnapshot->Valid());
         result.RemoveSnapshot = *RemoveSnapshot;
     }
+    LOG_S_CRIT("Created portion info with schema version " << SchemaVersion);
     result.SchemaVersion = SchemaVersion;
     result.ShardingVersion = ShardingVersion;
 

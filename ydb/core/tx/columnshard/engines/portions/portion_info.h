@@ -19,6 +19,10 @@ namespace NKikimrColumnShardDataSharingProto {
 class TPortionInfo;
 }
 
+namespace NKikimr::NColumnShard {
+    class TTablesManager;
+}
+
 namespace NKikimr::NOlap {
 
 namespace NBlobOperations::NRead {
@@ -65,8 +69,16 @@ private:
     TPortionInfo(TPortionMeta&& meta)
         : Meta(std::move(meta))
     {
-
     }
+/*
+    ~TPortionInfo() {
+        if (SchemaVersion) {
+            fprintf(stderr, "Destroying info with schema version %lu\n", SchemaVersion.value());
+        } else {
+            fprintf(stderr, "Destroying info with undefined schema version\n");
+        }
+    }
+*/
     ui64 PathId = 0;
     ui64 Portion = 0;   // Id of independent (overlayed by PK) portion of data in pathId
     TSnapshot MinSnapshotDeprecated = TSnapshot::Zero();  // {PlanStep, TxId} is min snapshot for {Granule, Portion}
@@ -260,9 +272,9 @@ public:
         return PathId;
     }
 
-    void RemoveFromDatabase(IDbWrapper& db) const;
+    void RemoveFromDatabase(IDbWrapper& db, const NKikimr::NColumnShard::TTablesManager* tablesManager) const;
 
-    void SaveToDatabase(IDbWrapper& db, const ui32 firstPKColumnId, const bool saveOnlyMeta) const;
+    void SaveToDatabase(IDbWrapper& db, const ui32 firstPKColumnId, const bool saveOnlyMeta, const NKikimr::NColumnShard::TTablesManager* tablesManager) const;
 
     bool OlderThen(const TPortionInfo& info) const {
         return RecordSnapshotMin() < info.RecordSnapshotMin();

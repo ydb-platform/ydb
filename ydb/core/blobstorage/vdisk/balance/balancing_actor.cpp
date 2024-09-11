@@ -111,6 +111,15 @@ namespace NBalancing {
         }
 
         void CollectKeys() {
+            if (ConnectedVDisks.size() + 1 != GInfo->GetTotalVDisksNum()) {
+                // not all vdisks are connected
+                STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB11, VDISKP(Ctx->VCtx, "Not all vdisks are connected, balancing should work only for full groups"),
+                    (ConnectedVDisks, ConnectedVDisks.size()), (TotalVDisksInGroup, GInfo->GetTotalVDisksNum()));
+                Send(Ctx->SkeletonId, new TEvStartBalancing());
+                PassAway();
+                return;
+            }
+
             THPTimer timer;
 
             for (ui32 cnt = 0; It.Valid(); It.Next(), ++cnt) {

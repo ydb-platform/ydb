@@ -297,6 +297,59 @@ NUdf::TUnboxedValuePod FromBlocks(TComputationContext& ctx,
     return holderFactory.CreateDirectListHolder(std::move(listValues));
 }
 
+NUdf::TUnboxedValue DoTestBlockJoin(TSetup<false>& setup,
+    const TType* leftType, const NUdf::TUnboxedValue& leftListValue,
+    const TVector<ui32>& leftKeyColumns, const TRuntimeNode& rightNode,
+    EJoinKind joinKind, size_t blockSize
+) {
+    TProgramBuilder& pb = *setup.PgmBuilder;
+
+    // 1. Prepare block type for the input produced by the left node.
+    Y_ENSURE(leftType->IsList(), "Left node has to be list");
+    const auto leftListType = AS_TYPE(TListType, leftType)->GetItemType();
+    Y_ENSURE(leftListType->IsTuple(), "List item has to be tuple");
+    const auto leftItems = AS_TYPE(TTupleType, leftListType)->GetElements();
+    const auto ui64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id);
+    const auto blockLenType = pb.NewBlockType(ui64Type, TBlockType::EShape::Scalar);
+    TVector<TType*> leftBlockItems;
+    std::transform(leftItems.cbegin(), leftItems.cend(), std::back_inserter(leftBlockItems),
+        [&](const auto& itemType) {
+            return pb.NewBlockType(itemType, TBlockType::EShape::Many);
+        });
+    // XXX: Mind the last block length column.
+    leftBlockItems.push_back(blockLenType);
+    const auto leftBlockType = pb.NewTupleType(leftBlockItems);
+
+    // 2. Build AST with BlockMapJoinCore.
+    TRuntimeNode leftArg;
+    const auto joinNode = BuildBlockJoin(pb, joinKind, leftKeyColumns, leftArg, leftBlockType, rightNode);
+
+    // 3. Prepare non-block type for the result of the join node.
+    const auto joinBlockType = joinNode.GetStaticType();
+    Y_ENSURE(joinBlockType->IsList(), "Join result has to be list");
+    const auto joinListType = AS_TYPE(TListType, joinBlockType)->GetItemType();
+    Y_ENSURE(joinListType->IsTuple(), "List item has to be tuple");
+    const auto joinBlockItems = AS_TYPE(TTupleType, joinListType)->GetElements();
+    TVector<TType*> joinItems;
+    // XXX: Mind the last block length column.
+    std::transform(joinBlockItems.cbegin(), std::prev(joinBlockItems.cend()), std::back_inserter(joinItems),
+        [](const auto& blockItemType) {
+            const auto& blockType = AS_TYPE(TBlockType, blockItemType);
+            Y_ENSURE(blockType->GetShape() == TBlockType::EShape::Many);
+            return blockType->GetItemType();
+        });
+
+    // 4. Build computation graph with BlockMapJoinCore node as a root.
+    //    Pass the values from the "left node" as the input for the
+    //    BlockMapJoinCore graph.
+    const auto graph = setup.BuildGraph(joinNode, {leftArg.GetNode()});
+    const auto& leftBlocks = graph->GetEntryPoint(0, true);
+    auto& ctx = graph->GetContext();
+    leftBlocks->SetValue(ctx, ToBlocks(ctx, blockSize, leftItems, leftListValue));
+    const auto joinValues = FromBlocks(ctx, joinBlockItems, graph->GetValue());
+    return joinValues;
+}
+
 template <typename TOutputTuple, typename TDictPayloadType
     = std::conditional<std::is_same_v<TOutputTuple, TKSV>, TKSVSet,
       std::conditional<std::is_same_v<TOutputTuple, TKSW<false>>, TKSWMap,

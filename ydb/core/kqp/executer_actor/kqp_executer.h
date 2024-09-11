@@ -3,6 +3,7 @@
 #include <library/cpp/lwtrace/shuttle.h>
 #include <ydb/core/kqp/common/kqp_event_ids.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/executer_actor/shards_resolver/kqp_shards_resolver_events.h>
 #include <ydb/core/kqp/query_data/kqp_query_data.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
@@ -84,15 +85,7 @@ struct TEvKqpExecuter {
         TDuration CpuTime;
     };
 
-    struct TEvShardsResolveStatus : public TEventLocal<TEvShardsResolveStatus,
-        TKqpExecuterEvents::EvShardsResolveStatus>
-    {
-        Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
-        NYql::TIssues Issues;
-
-        TMap<ui64, ui64> ShardNodes;
-        ui32 Unresolved = 0;
-    };
+    using TEvShardsResolveStatus = NShardResolver::TEvShardsResolveStatus;
 };
 
 struct TKqpFederatedQuerySetup;

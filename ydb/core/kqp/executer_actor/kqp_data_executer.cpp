@@ -5,7 +5,6 @@
 #include "kqp_planner.h"
 #include "kqp_table_resolver.h"
 #include "kqp_tasks_validate.h"
-#include "kqp_shards_resolver.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet_pipecache.h>

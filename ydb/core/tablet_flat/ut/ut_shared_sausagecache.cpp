@@ -266,6 +266,25 @@ Y_UNIT_TEST(ThreeLeveledLRU) {
     retried = {};
     env.SendSync(new NFake::TEvExecute{ new TTxReadRow(0, retried) }, true);
     UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{1, 1, 1}));
+
+    RestartAndClearCache(env);
+
+    retried = {};
+    for (i64 key = 0; key < 100; ++key) {
+        env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) }, true);
+        env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) }, true);
+    }
+    LogCounters(counters);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB / 3 * 2), static_cast<i64>(1_MB / 3)); // 2 full layers (fresh & staging)
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{200, 100, 14, 2}));
+
+    retried = {};
+    for (i64 key = 0; key < 100; ++key) {
+        env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) }, true);
+    }
+    LogCounters(counters);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB / 3 * 2), static_cast<i64>(1_MB / 3)); // 2 full layers (fresh & staging)
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 100, 14}));
 }
 
 Y_UNIT_TEST(S3FIFO) {
@@ -346,6 +365,25 @@ Y_UNIT_TEST(S3FIFO) {
     retried = {};
     env.SendSync(new NFake::TEvExecute{ new TTxReadRow(0, retried) }, true);
     UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{1}));
+
+    RestartAndClearCache(env);
+
+    retried = {};
+    for (i64 key = 0; key < 100; ++key) {
+        env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) }, true);
+        env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) }, true);
+    }
+    LogCounters(counters);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{200, 100, 14, 2}));
+
+    retried = {};
+    for (i64 key = 0; key < 100; ++key) {
+        env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) }, true);
+    }
+    LogCounters(counters);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 28}));
 }
 
 Y_UNIT_TEST(ReplacementPolicySwitch) {

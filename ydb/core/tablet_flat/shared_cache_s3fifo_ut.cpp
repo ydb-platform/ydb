@@ -76,7 +76,7 @@ namespace {
 Y_UNIT_TEST_SUITE(TS3FIFOGhostQueue) {
     
     Y_UNIT_TEST(Add) {
-        TTS3FIFOGhostQueue<TPageKey, TPageKeyHash, TPageKeyEqual> queue(100);
+        TTS3FIFOGhostPageQueue<TPageKey, TPageKeyHash, TPageKeyEqual> queue(100);
         UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "");
 
         queue.Add(1, 10);
@@ -96,7 +96,7 @@ Y_UNIT_TEST_SUITE(TS3FIFOGhostQueue) {
     }
 
     Y_UNIT_TEST(Erase) {
-        TTS3FIFOGhostQueue<TPageKey, TPageKeyHash, TPageKeyEqual> queue(100);
+        TTS3FIFOGhostPageQueue<TPageKey, TPageKeyHash, TPageKeyEqual> queue(100);
         UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "");
 
         queue.Add(1, 10);
@@ -118,7 +118,7 @@ Y_UNIT_TEST_SUITE(TS3FIFOGhostQueue) {
     }
 
     Y_UNIT_TEST(Erase_Add) {
-        TTS3FIFOGhostQueue<TPageKey, TPageKeyHash, TPageKeyEqual> queue(100);
+        TTS3FIFOGhostPageQueue<TPageKey, TPageKeyHash, TPageKeyEqual> queue(100);
         UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "");
 
         queue.Add(1, 10);
@@ -137,7 +137,7 @@ Y_UNIT_TEST_SUITE(TS3FIFOGhostQueue) {
     }
 
     Y_UNIT_TEST(Add_Big) {
-        TTS3FIFOGhostQueue<TPageKey, TPageKeyHash, TPageKeyEqual> queue(100);
+        TTS3FIFOGhostPageQueue<TPageKey, TPageKeyHash, TPageKeyEqual> queue(100);
         UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "");
 
         queue.Add(1, 101);
@@ -145,7 +145,7 @@ Y_UNIT_TEST_SUITE(TS3FIFOGhostQueue) {
     }
 
     Y_UNIT_TEST(UpdateLimit) {
-        TTS3FIFOGhostQueue<TPageKey, TPageKeyHash, TPageKeyEqual> queue(100);
+        TTS3FIFOGhostPageQueue<TPageKey, TPageKeyHash, TPageKeyEqual> queue(100);
         UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "");
 
         queue.Add(1, 10);

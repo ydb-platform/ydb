@@ -13,6 +13,7 @@
 #include <ydb/public/lib/yson_value/ydb_yson_value.cpp>
 
 #include <ydb/library/grpc/client/grpc_client_low.h>
+#include <ydb/core/protos/table_service_config.pb.h>
 #include <library/cpp/json/json_writer.h>
 
 #include <util/string/printf.h>

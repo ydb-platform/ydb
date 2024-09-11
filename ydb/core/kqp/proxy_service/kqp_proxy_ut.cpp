@@ -558,7 +558,7 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
                 auto executeScrptsResult = client.ExecuteScript("SELECT 42").ExtractValueSync();
                 scriptStatus = executeScrptsResult.Status().GetStatus();
                 UNIT_ASSERT_C(scriptStatus == NYdb::EStatus::UNAVAILABLE || scriptStatus == NYdb::EStatus::SUCCESS, executeScrptsResult.Status().GetIssues().ToString());
-                UNIT_ASSERT(scriptStatus == NYdb::EStatus::UNAVAILABLE || executeScrptsResult.Metadata().ExecutionId);
+                UNIT_ASSERT(scriptStatus == NYdb::EStatus::UNAVAILABLE || !executeScrptsResult.Metadata().ExecutionId.empty());
                 Sleep(TDuration::MilliSeconds(10));
             } while (scriptStatus == NYdb::EStatus::UNAVAILABLE);
         }

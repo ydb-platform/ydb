@@ -1555,7 +1555,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
             THashSet<TString> names;
             for (const auto& child : children) {
-                names.insert(child.Name);
+                names.insert(TString{child.Name});
                 UNIT_ASSERT_VALUES_EQUAL(child.Type, ESchemeEntryType::Table);
             }
             UNIT_ASSERT(names.contains("partition_stats"));
@@ -1573,7 +1573,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
             THashSet<TString> names;
             for (const auto& child : children) {
-                names.insert(child.Name);
+                names.insert(TString{child.Name});
                 UNIT_ASSERT_VALUES_EQUAL(child.Type, ESchemeEntryType::Table);
             }
             UNIT_ASSERT(names.contains("partition_stats"));

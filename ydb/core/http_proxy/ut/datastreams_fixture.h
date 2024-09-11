@@ -443,7 +443,7 @@ private:
         TString endpoint = TStringBuilder() << "localhost:" << KikimrGrpcPort;
         auto driverConfig = NYdb::TDriverConfig()
             .SetEndpoint(endpoint)
-            .SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG));
+            .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
         NYdb::TDriver driver(driverConfig);
         auto tableClient = NYdb::NTable::TTableClient(driver);
 

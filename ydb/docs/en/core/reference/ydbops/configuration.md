@@ -2,7 +2,6 @@
 
 {% include [warning.md](_includes/warning.md) %}
 
-
 `ydbops` can be run by specifying all the necessary command line arguments on the command invocation. However, it has two features that allow to avoid repeating the commonly used arguments:
 
 - [Config file](#config-file)

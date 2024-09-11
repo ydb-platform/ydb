@@ -37,6 +37,7 @@
   ```
 
 - Переименование нескольких таблиц в одной транзакции:
+
   ```bash
   {{ ydb-cli }} tools rename \
     --item source=new-project/main_table,destination=new-project/episodes \

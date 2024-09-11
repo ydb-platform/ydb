@@ -31,7 +31,7 @@ Row-based and columnar tables can both be used for log data storage. Columnar ta
 
 Example of the row-based table for log data storage:
 
-```sql
+```yql
 CREATE TABLE `fluent-bit/log` (
     `timestamp`         Timestamp NOT NULL,
     `hostname`          Text NOT NULL,
@@ -48,7 +48,7 @@ CREATE TABLE `fluent-bit/log` (
 
 Example of the columnar table for log data storage:
 
-```sql
+```yql
 CREATE TABLE `fluent-bit/log` (
     `timestamp`         Timestamp NOT NULL,
     `hostname`          Text NOT NULL,
@@ -127,13 +127,13 @@ Example of `Columns` parameter value:
 FluentBit is often used to collect logs in the Kubernetes environment. Below is the schema of the log delivery process, implemented using FluentBit and {{ ydb-short-name }}, for applications running in the Kubernetes cluster:
 
 ![FluentBit in Kubernetes cluster](../../_assets/fluent-bit-ydb-scheme.png)
-<small>Figure 1 —  Interaction diagram between FluentBit and {{ ydb-short-name }} in the Kubernetes cluster</small>
 
 In this diagram:
 
 * Application pods write logs to stdout/stderr
 * Text from stdout/stderr is saved as files on Kubernetes worker nodes
 * Pod with FluentBit:
+
   * Mounts a folder with log files for itself
   * Reads the contents from the log files
   * Enriches log records with additional metadata
@@ -143,7 +143,7 @@ In this diagram:
 
 Below is the {{ ydb-short-name }} table structure to store the Kubernetes logs:
 
-```sql
+```yql
 CREATE TABLE `fluent-bit/log` (
     `timestamp`         Timestamp NOT NULL,
     `file`              Text NOT NULL,
@@ -322,8 +322,8 @@ kubectl logs -n ydb-fluent-bit-integration -l app.kubernetes.io/instance=fluent-
 
 Check that there are records in the {{ ydb-short-name }} table (they will appear approximately a few minutes after launching FluentBit):
 
-```sql
-SELECT * FROM `fluent-bit/log` LIMIT 10 ORDER BY `timestamp` DESC
+```yql
+SELECT * FROM `fluent-bit/log` LIMIT 10 ORDER BY `timestamp` DESC;
 ```
 
 ### Resources cleanup
@@ -336,6 +336,6 @@ kubectl delete namespace ydb-fluent-bit-integration
 
 After uninstalling FluentBit, the log storage table can be dropped from the {{ ydb-short-name }} database:
 
-```sql
-DROP TABLE `fluent-bit/log`
+```yql
+DROP TABLE `fluent-bit/log`;
 ```

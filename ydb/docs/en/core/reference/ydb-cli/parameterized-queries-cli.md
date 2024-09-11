@@ -358,9 +358,9 @@ Command output:
 {"count":20,"p2":10,"items":["Line181","Line182","Line183","Line184","Line185","Line186","Line187","Line188","Line189","Line190","Line191","Line192","Line193","Line194","Line195","Line196","Line197","Line198","Line199","Line200"]}
 ```
 
-#### Deleting multiple records from a YDB table based on primary keys {#example-adaptive-delete-pk}
+#### Deleting multiple records from a {{ ydb-short-name }} table based on primary keys {#example-adaptive-delete-pk}
 
-This example shows how you can delete an unlimited number of records from YDB tables without risking exceeding the limit on the number of records per transaction.
+This example shows how you can delete an unlimited number of records from {{ ydb-short-name }} tables without risking exceeding the limit on the number of records per transaction.
 
 Let's create a test table:
 

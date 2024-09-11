@@ -39,7 +39,7 @@ To forget an index-building operation (either completed or terminated), use `ope
 
 To retrieve the status of all index-building operations, use `operation list buildindex`.
 
-**Examples**
+### Examples
 
 {% include [ydb-cli-profile.md](../../../../_includes/ydb-cli-profile.md) %}
 
@@ -96,7 +96,7 @@ Secondary indexes are deleted by the `table index drop` command:
 {{ ydb-cli }} [connection options] table index drop <table> --index-name STR
 ```
 
-**Example**
+### Example
 
 {% include [ydb-cli-profile.md](../../../../_includes/ydb-cli-profile.md) %}
 
@@ -122,7 +122,7 @@ To replace your existing index atomically, execute the rename command with the
 {{ ydb-cli }} [connection options] table index rename <table> --index-name STR --to STR --replace
 ```
 
-**Example**
+### Example
 
 {% include [ydb-cli-profile.md](../../../../_includes/ydb-cli-profile.md) %}
 

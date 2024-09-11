@@ -3,9 +3,9 @@ log-levels:
   MD002: 'error' # First heading should be a top-level heading
   MD003: 'disabled' # Heading style
   MD004: 'disabled' # Unordered list style
-  MD005: 'error' # Inconsistent indentation for list items at the same level
+  MD005: 'disabled' # Inconsistent indentation for list items at the same level
   MD006: 'error' # Consider starting bulleted lists at the beginning of the line
-  MD007: 'error' # Unordered list indentation
+  MD007: 'disabled' # Unordered list indentation
   MD009: 'error' # Trailing spaces
   MD010: 'error' # Hard tabs
   MD011: 'error' # Reversed link syntax
@@ -13,9 +13,9 @@ log-levels:
   MD013: 'disabled' # Line length
   MD014: 'disabled' # Dollar signs used before commands without showing output
   MD018: 'disabled' # No space after hash on atx style heading
-  MD019: 'disabled' # Multiple spaces after hash on atx style heading
-  MD020: 'disabled' # No space inside hashes on closed atx style heading
-  MD021: 'disabled' # Multiple spaces inside hashes on closed atx style heading
+  MD019: 'error' # Multiple spaces after hash on atx style heading
+  MD020: 'error' # No space inside hashes on closed atx style heading
+  MD021: 'error' # Multiple spaces inside hashes on closed atx style heading
   MD022: 'disabled' # Headings should be surrounded by blank lines
   MD023: 'disabled' # Headings must start at the beginning of the line
   MD024: 'disabled' # Multiple headings with the same content
@@ -29,11 +29,11 @@ log-levels:
   MD032: 'disabled' # Lists should be surrounded by blank lines
   MD033: 'disabled' # Inline HTML
   MD034: 'disabled' # Bare URL used
-  MD035: 'disabled' # Horizontal rule style
+  MD035: 'error' # Horizontal rule style
   MD036: 'disabled' # Emphasis used instead of a heading
-  MD037: 'error' # Spaces inside emphasis markers
+  MD037: 'disabled' # Spaces inside emphasis markers
   MD038: 'error' # Spaces inside code span elements
-  MD039: 'error' # Spaces inside link text
+  MD039: 'disabled' # Spaces inside link text
   MD040: 'disabled' # Fenced code blocks should have a language specified
   MD041: 'disabled' # First line in a file should be a top-level heading
   MD042: 'error' # No empty links

@@ -15,7 +15,7 @@ The disadvantage is the need for a full data scan. But this disadvantage is insi
 
 Example:
 
-```sql
+```yql
 $TargetEmbedding = Knn::ToBinaryStringFloat([1.2f, 2.3f, 3.4f, 4.5f]);
 
 SELECT id, fact, embedding FROM Facts
@@ -63,7 +63,7 @@ The binary representation of the vector can be stored in the {{ ydb-short-name }
 
 #### Function signatures
 
-```sql
+```yql
 Knn::ToBinaryStringFloat(List<Float>{Flags:AutoMap})->Tagged<String, "FloatVector">
 Knn::ToBinaryStringUint8(List<Uint8>{Flags:AutoMap})->Tagged<String, "Uint8Vector">
 Knn::ToBinaryStringInt8(List<Int8>{Flags:AutoMap})->Tagged<String, "Int8Vector">
@@ -99,7 +99,7 @@ Distance functions:
 
 #### Function signatures
 
-```sql
+```yql
 Knn::InnerProductSimilarity(String{Flags:AutoMap}, String{Flags:AutoMap})->Float?
 Knn::CosineSimilarity(String{Flags:AutoMap}, String{Flags:AutoMap})->Float?
 Knn::CosineDistance(String{Flags:AutoMap}, String{Flags:AutoMap})->Float?
@@ -117,7 +117,7 @@ If both arguments are `Tagged`, tag values should match, or the query will raise
 
 Example:
 
-```
+```text
 Error: Failed to find UDF function: Knn.CosineDistance, reason: Error: Module: Knn, function: CosineDistance, error: Arguments should have same tags, but 'FloatVector' is not equal to 'Uint8Vector'
 ```
 
@@ -128,7 +128,7 @@ Error: Failed to find UDF function: Knn.CosineDistance, reason: Error: Module: K
 {% if backend_name == "YDB" %}
 ### Creating a table
 
-```sql
+```yql
 CREATE TABLE Facts (
     id Uint64,        -- Id of fact
     user Utf8,        -- User name
@@ -140,15 +140,17 @@ CREATE TABLE Facts (
 
 ### Adding vectors
 
-```sql
+```yql
 $vector = [1.f, 2.f, 3.f, 4.f];
 UPSERT INTO Facts (id, user, fact, embedding)
 VALUES (123, "Williams", "Full name is John Williams", Untag(Knn::ToBinaryStringFloat($vector), "FloatVector"));
 ```
+
 {% else %}
+
 ### Data declaration
 
-```sql
+```yql
 $vector = [1.f, 2.f, 3.f, 4.f];
 $facts = AsList(
     AsStruct(
@@ -159,12 +161,14 @@ $facts = AsList(
     ),
 );
 ```
+
 {% endif %}
 
 ### Exact search of K nearest vectors
 
 {% if backend_name == "YDB" %}
-```sql
+
+```yql
 $K = 10;
 $TargetEmbedding = Knn::ToBinaryStringFloat([1.2f, 2.3f, 3.4f, 4.5f]);
 
@@ -173,8 +177,10 @@ WHERE user="Williams"
 ORDER BY Knn::CosineDistance(embedding, $TargetEmbedding)
 LIMIT $K;
 ```
+
 {% else %}
-```sql
+
+```yql
 $K = 10;
 $TargetEmbedding = Knn::ToBinaryStringFloat([1.2f, 2.3f, 3.4f, 4.5f]);
 
@@ -183,26 +189,31 @@ WHERE user="Williams"
 ORDER BY Knn::CosineDistance(embedding, $TargetEmbedding)
 LIMIT $K;
 ```
+
 {% endif %}
 
 ### Exact search of vectors in radius R
 
 {% if backend_name == "YDB" %}
-```sql
+
+```yql
 $R = 0.1f;
 $TargetEmbedding = Knn::ToBinaryStringFloat([1.2f, 2.3f, 3.4f, 4.5f]);
 
 SELECT * FROM Facts
 WHERE Knn::CosineDistance(embedding, $TargetEmbedding) < $R;
 ```
+
 {% else %}
-```sql
+
+```yql
 $R = 0.1f;
 $TargetEmbedding = Knn::ToBinaryStringFloat([1.2f, 2.3f, 3.4f, 4.5f]);
 
 SELECT * FROM AS_TABLE($facts)
 WHERE Knn::CosineDistance(embedding, $TargetEmbedding) < $R;
 ```
+
 {% endif %}
 
 ## Approximate search examples
@@ -214,7 +225,7 @@ This allows to first do a approximate preliminary search by the `embedding_bit` 
 {% if backend_name == "YDB" %}
 ### Creating a table
 
-```sql
+```yql
 CREATE TABLE Facts (
     id Uint64,        -- Id of fact
     user Utf8,        -- User name
@@ -227,15 +238,16 @@ CREATE TABLE Facts (
 
 ### Adding vectors
 
-```sql
+```yql
 $vector = [1.f, 2.f, 3.f, 4.f];
 UPSERT INTO Facts (id, user, fact, embedding, embedding_bit)
 VALUES (123, "Williams", "Full name is John Williams", Untag(Knn::ToBinaryStringFloat($vector), "FloatVector"), Untag(Knn::ToBinaryStringBit($vector), "BitVector"));
 ```
+
 {% else %}
 ### Data declaration
 
-```sql
+```yql
 $vector = [1.f, 2.f, 3.f, 4.f];
 $facts = AsList(
     AsStruct(
@@ -257,7 +269,7 @@ Below there is a quantization example in YQL.
 
 #### Float -> Int8
 
-```sql
+```yql
 $MapInt8 = ($x) -> {
     $min = -5.0f;
     $max =  5.0f;
@@ -272,12 +284,14 @@ SELECT ListMap($FloatList, $MapInt8);
 ### Approximate search of K nearest vectors: bit quantization
 
 Approximate search algorithm:
+
 * an approximate search is performed using bit quantization;
 * an approximate list of vectors is obtained;
 * we search this list without using quantization.
 
 {% if backend_name == "YDB" %}
-```sql
+
+```yql
 $K = 10;
 $Target = [1.2f, 2.3f, 3.4f, 4.5f];
 $TargetEmbeddingBit = Knn::ToBinaryStringBit($Target);
@@ -292,8 +306,10 @@ WHERE id IN $Ids
 ORDER BY Knn::CosineDistance(embedding, $TargetEmbeddingFloat)
 LIMIT $K;
 ```
+
 {% else %}
-```sql
+
+```yql
 $K = 10;
 $Target = [1.2f, 2.3f, 3.4f, 4.5f];
 $TargetEmbeddingBit = Knn::ToBinaryStringBit($Target);
@@ -308,4 +324,5 @@ WHERE id IN $Ids
 ORDER BY Knn::CosineDistance(embedding, $TargetEmbeddingFloat)
 LIMIT $K;
 ```
+
 {% endif %}

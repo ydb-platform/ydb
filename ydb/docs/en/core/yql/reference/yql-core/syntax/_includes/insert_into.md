@@ -8,20 +8,20 @@
 
 * Adding constant values using [`VALUES`](../values.md).
 
-  ```sql
+```yql
   INSERT INTO my_table (Key1, Key2, Value1, Value2)
   VALUES (345987,'ydb', 'Pied piper', 1414);
   COMMIT;
   ```
 
-  ```sql
+```yql
   INSERT INTO my_table (key, value)
   VALUES ("foo", 1), ("bar", 2);
   ```
 
 * Saving the `SELECT` result.
 
-  ```sql
+```yql
   INSERT INTO my_table
   SELECT Key AS Key1, "Empty" AS Key2, Value AS Value1
   FROM my_table1;
@@ -31,16 +31,15 @@
 
 Send the result of the [SELECT STREAM](../select_stream.md) calculation to the specified stream on the cluster specified by the [USE](../use.md) operator. The stream must exist and have a scheme matching the query result.
 
-**Examples:**
+## Examples
 
 ```yql
 INSERT INTO my_stream_dst
 SELECT STREAM key FROM my_stream_src;
 ```
 
-You can specify a table on the ydb cluster as the target. The table must exist at the time you create the operation. The table schema must be compatible with the type of query result.
+You can specify a table on a {{ ydb-short-name }} cluster as the target. The table must exist at the time you create the operation. The table schema must be compatible with the type of query result.
 
-**Examples:**
 
 ```yql
 INSERT INTO ydb_cluster.`my_table_dst`

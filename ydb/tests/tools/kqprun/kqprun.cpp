@@ -568,9 +568,14 @@ protected:
             .Choices(planFormat.GetChoices())
             .StoreMappedResultT<TString>(&RunnerOptions.PlanOutputFormat, planFormat);
 
-        options.AddLongOption("script-timeline-svg", "File with script query timline in svg format (use '-' to write in stdout)")
+        options.AddLongOption("script-timeline-file", "File with script query timline in svg format")
             .RequiredArgument("file")
-            .StoreMappedResultT<TString>(&RunnerOptions.ScriptQueryTimelineOutput, &GetDefaultOutput);
+            .StoreMappedResultT<TString>(&RunnerOptions.ScriptQueryTimelineFile, [](const TString& file) {
+                if (file == "-") {
+                    ythrow yexception() << "Script timline cannot be printed to stdout, please specify file name";
+                }
+                return file;
+            });
 
         // Pipeline settings
 

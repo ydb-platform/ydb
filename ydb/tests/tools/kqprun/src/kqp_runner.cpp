@@ -267,6 +267,7 @@ private:
         }
 
         PrintScriptAst(ExecutionMeta_.Ast);
+        PrintScriptProgress(ExecutionMeta_.Plan);
         PrintScriptPlan(ExecutionMeta_.Plan);
         PrintScriptFinish(ExecutionMeta_, "Script");
 
@@ -328,12 +329,6 @@ private:
             Cout << CoutColors_.Cyan() << "Writing script query plan" << CoutColors_.Default() << Endl;
             PrintPlan(plan, Options_.ScriptQueryPlanOutput);
         }
-        if (Options_.ScriptQueryTimelineOutput) {
-            Cout << CoutColors_.Cyan() << "Writing script query timeline" << CoutColors_.Default() << Endl;
-            TPlanVisualizer planVisualizer;
-            planVisualizer.LoadPlans(plan);
-            Options_.ScriptQueryTimelineOutput->Write(planVisualizer.PrintSvg());
-        }
     }
 
     void PrintScriptProgress(const TString& plan) const {
@@ -362,6 +357,15 @@ private:
 
             outputStream << "\nPlan visualization:" << Endl;
             PrintPlan(convertedPlan, &outputStream);
+
+            outputStream.Finish();
+        }
+        if (Options_.ScriptQueryTimelineFile) {
+            TFileOutput outputStream(Options_.ScriptQueryTimelineFile);
+
+            TPlanVisualizer planVisualizer;
+            planVisualizer.LoadPlans(plan);
+            outputStream.Write(planVisualizer.PrintSvg());
 
             outputStream.Finish();
         }

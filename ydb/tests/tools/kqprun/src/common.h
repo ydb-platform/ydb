@@ -74,7 +74,7 @@ struct TRunnerOptions {
     IOutputStream* SchemeQueryAstOutput = nullptr;
     IOutputStream* ScriptQueryAstOutput = nullptr;
     IOutputStream* ScriptQueryPlanOutput = nullptr;
-    IOutputStream* ScriptQueryTimelineOutput = nullptr;
+    TString ScriptQueryTimelineFile;
     TString InProgressStatisticsOutputFile;
 
     EResultOutputFormat ResultOutputFormat = EResultOutputFormat::RowsJson;

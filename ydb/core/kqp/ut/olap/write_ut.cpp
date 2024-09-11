@@ -133,9 +133,6 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
 
     Y_UNIT_TEST(DefaultValues) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
-        NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableSparsedColumns(true);
-        settings.SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
         TTypedLocalHelper helper("Utf8", kikimr);

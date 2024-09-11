@@ -58,6 +58,13 @@ TDistributedTransaction::TDistributedTransaction(const NKikimrPQ::TTransaction& 
     if (tx.HasWriteId()) {
         WriteId = GetWriteId(tx);
     }
+
+    for (auto& p : tx.GetPartition()) {
+        auto& messageGroup = ExplicitMessageGroups[p.GetPartitionId()];
+        for (auto& g : p.GetMessageGroup()) {
+            messageGroup.emplace_back(g.GetId(), g.GetMaxSeqNo());
+        }
+    }
 }
 
 TString TDistributedTransaction::LogPrefix() const
@@ -228,6 +235,8 @@ void TDistributedTransaction::OnProposePartitionConfigResult(const TEvPQ::TEvPro
 {
     PQ_LOG_D("Handle TEvProposePartitionConfigResult");
 
+    ExplicitMessageGroups[event.Partition] = std::move(event.ExplicitMessageGroups);
+
     OnPartitionResult(event,
                       NKikimrTx::TReadSetData::DECISION_COMMIT);
 }
@@ -373,6 +382,17 @@ void TDistributedTransaction::AddCmdWrite(NKikimrClient::TKeyValueRequest& reque
 
     Y_ABORT_UNLESS(SourceActor != TActorId());
     ActorIdToProto(SourceActor, tx.MutableSourceActor());
+
+    for (auto& [partitionId, messageGroups] : ExplicitMessageGroups) {
+        auto* p = tx.AddPartition();
+        p->SetPartitionId(partitionId);
+
+        for (auto& m : messageGroups) {
+            auto* g = p->AddMessageGroup();
+            g->SetId(m.Id);
+            g->SetMaxSeqNo(m.SeqNo);
+        }
+    }
 
     PQ_LOG_D("save tx " << tx.ShortDebugString());
 

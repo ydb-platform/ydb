@@ -1187,10 +1187,16 @@ void TPartition::ReplyToProposeOrPredicate(TSimpleSharedPtr<TTransaction>& tx, b
     } else {
         auto insRes = TransactionsInflight.emplace(tx->ProposeConfig->TxId, tx);
         Y_ABORT_UNLESS(insRes.second);
-        Send(Tablet,
-             MakeHolder<TEvPQ::TEvProposePartitionConfigResult>(tx->ProposeConfig->Step,
+        auto result = MakeHolder<TEvPQ::TEvProposePartitionConfigResult>(tx->ProposeConfig->Step,
                                                                 tx->ProposeConfig->TxId,
-                                                                Partition).Release());
+                                                                Partition);
+
+        for (auto& [k, v] : SourceIdStorage.GetInMemorySourceIds()) {
+            if (v.Explicit) {
+                result->ExplicitMessageGroups.emplace_back(k, v.SeqNo);
+            }
+        }
+        Send(Tablet, result.Release());
     }
 }
 

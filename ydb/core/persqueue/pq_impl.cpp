@@ -3966,6 +3966,7 @@ void TPersQueue::SendEvReadSetToReceivers(const TActorContext& ctx,
 {
     NKikimrTx::TReadSetData data;
     data.SetDecision(tx.SelfDecision);
+    data.MutableData()->CopyFrom(const Message &from);
 
     TString body;
     Y_ABORT_UNLESS(data.SerializeToString(&body));

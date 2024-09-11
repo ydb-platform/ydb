@@ -1080,6 +1080,11 @@ message TEvPartitionScaleStatusChanged {
     required EScaleStatus ScaleStatus = 2;
 };
 
+message TMessageGroups {
+    required uint32 PartitionId = 1;
+    repeated TMessageGroupInfo MessageGroup = 2;
+};
+
 message TTransaction {
     enum EKind {
         KIND_UNKNOWN = 0;
@@ -1135,6 +1140,8 @@ message TTransaction {
     optional NActorsProto.TActorId SourceActor = 14;
 
     optional TWriteId WriteId = 15;
+
+    repeated TMessageGroups ExplicitMessageGroups = 16;
 };
 
 message TTabletTxInfo {

@@ -66,6 +66,7 @@ struct TDistributedTransaction {
     NKikimrPQ::TPQTabletConfig TabletConfig;
     NKikimrPQ::TBootstrapConfig BootstrapConfig;
     NPersQueue::TTopicConverterPtr TopicConverter;
+    THashMap<ui32, TVector<TEvPQ::TEvProposePartitionConfigResult::TMessageGroupInfo>> ExplicitMessageGroups;
 
     bool WriteInProgress = false;
 

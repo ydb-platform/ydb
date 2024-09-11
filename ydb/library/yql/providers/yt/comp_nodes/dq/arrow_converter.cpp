@@ -6,6 +6,7 @@
 #include <ydb/library/yql/utils/yql_panic.h>
 #include <ydb/library/yql/minikql/mkql_type_builder.h>
 #include <ydb/library/yql/minikql/mkql_type_ops.h>
+#include <ydb/library/yql/minikql/mkql_node_cast.h>
 
 #include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/yson/detail.h>
@@ -622,7 +623,9 @@ public:
         , DictPrimitiveConverter_(Settings_)
     {
         auto type = Settings_.Type;
-        IsJson_ = type->IsData() && static_cast<NKikimr::NMiniKQL::TDataType*>(type)->GetDataSlot() == NUdf::EDataSlot::Json || (Native && type->IsOptional() && static_cast<NKikimr::NMiniKQL::TDataType*>(static_cast<NKikimr::NMiniKQL::TOptionalType*>(type)->GetItemType())->GetDataSlot() == NUdf::EDataSlot::Json);
+        IsJson_ = type->IsData() && AS_TYPE(TDataType, type)->GetDataSlot() == NUdf::EDataSlot::Json 
+            || (Native && type->IsOptional() && AS_TYPE(TOptionalType, type)->GetItemType()->IsData() 
+            && AS_TYPE(TDataType, AS_TYPE(TOptionalType, type)->GetItemType())->GetDataSlot() == NUdf::EDataSlot::Json);
     }
 
     arrow::Datum Convert(std::shared_ptr<arrow::ArrayData> block) override {

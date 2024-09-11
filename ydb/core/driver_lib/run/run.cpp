@@ -61,6 +61,7 @@
 #include <ydb/core/protos/bootstrap.pb.h>
 #include <ydb/core/protos/stream.pb.h>
 #include <ydb/core/protos/cms.pb.h>
+#include <ydb/core/protos/replication.pb.h>
 
 #include <ydb/core/mind/local.h>
 #include <ydb/core/mind/tenant_pool.h>

@@ -33,7 +33,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::GetColumnsFetchingPlan(con
     const bool needSnapshots = !source->GetExclusiveIntervalOnly() || ReadMetadata->GetRequestSnapshot() < source->GetRecordSnapshotMax() ||
                                !source->IsSourceInMemory();
     const bool partialUsageByPK = [&]() {
-        switch (source->GetPKUsageClass()) {
+        switch (source->GetUsageClass()) {
             case TPKRangeFilter::EUsageClass::PartialUsage:
                 return true;
             case TPKRangeFilter::EUsageClass::DontUsage:

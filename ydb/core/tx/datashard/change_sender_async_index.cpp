@@ -406,9 +406,7 @@ private:
         if (entry.Self && entry.Self->Info.GetPathState() == NKikimrSchemeOp::EPathStateDrop) {
             LOG_D("Index is planned to drop, waiting for the EvRemoveSender command");
 
-            AsDerived()->RemoveRecords();
-            AsDerived()->KillSenders();
-            return AsDerived()->Become(&TDerived::StatePendingRemove);
+            return AsDerived()->OnIndexUnderRemove();
         }
 
         Y_ABORT_UNLESS(entry.ListNodeEntry->Children.size() == 1);
@@ -758,6 +756,13 @@ class TAsyncIndexChangeSenderMain
 
     void OnRetry(TResolveKeysState::TStateTag) {
         ResolveIndex();
+    }
+
+    void OnIndexUnderRemove() {
+        RemoveRecords();
+        KillSenders();
+
+        Become(&TThis::StatePendingRemove);
     }
 
     void NextState(TResolveUserTableState::TStateTag) {

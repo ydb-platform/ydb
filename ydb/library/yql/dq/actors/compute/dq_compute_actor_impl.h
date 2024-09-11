@@ -684,6 +684,10 @@ protected: //TDqComputeActorCheckpoints::ICallbacks
             Y_ABORT_UNLESS(source.AsyncInput);
             source.AsyncInput->CommitState(checkpoint);
         }
+        for (auto& [inputIndex, inputTransform] : InputTransformsMap) {
+            Y_ABORT_UNLESS(inputTransform.AsyncInput);
+            inputTransform.AsyncInput->CommitState(checkpoint);
+        }
     }
 
     // void InjectBarrierToOutputs(const NDqProto::TCheckpoint& checkpoint) is pure and must be overriden in a derived class
@@ -743,6 +747,12 @@ protected:
                 YQL_ENSURE(sink, "Failed to load state. Sink with output index " << sinkState.OutputIndex << " was not found");
                 YQL_ENSURE(sink->AsyncOutput, "Sink[" << sinkState.OutputIndex << "] is not created");
                 sink->AsyncOutput->LoadState(sinkState);
+            }
+            for (const TInputTransformState& inputTransformState : state.InputTransforms) {
+                TAsyncInputTransformHelper* inputTransform = InputTransformsMap.FindPtr(inputTransformState.InputIndex);
+                YQL_ENSURE(inputTransform, "Failed to load state. InputTransform with input index " << inputTransformState.InputIndex << " was not found");
+                YQL_ENSURE(inputTransform->AsyncInput, "inputTransform[" << inputTransformState.InputIndex << "] is not created");
+                inputTransform->AsyncInput->LoadState(inputTransformState);
             }
         } catch (const std::exception& e) {
             error = e.what();

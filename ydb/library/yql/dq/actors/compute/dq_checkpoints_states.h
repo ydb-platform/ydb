@@ -43,6 +43,8 @@ struct TSourceState {
     Y_SAVELOAD_DEFINE(Data, InputIndex);
 };
 
+using TInputTransformState = TSourceState;
+
 struct TSinkState {
     TStateData Data;
     ui64 OutputIndex{0};
@@ -55,11 +57,13 @@ struct TComputeActorState {
     TMaybe<TMiniKqlProgramState> MiniKqlProgram;
     std::list<TSourceState> Sources;
     std::list<TSinkState> Sinks;
+    std::list<TInputTransformState> InputTransforms;
 
     void Clear() {
         MiniKqlProgram.Clear();
         Sources.clear();
         Sinks.clear();
+        InputTransforms.clear();
     }
 
     bool ParseFromString(const TString& in) {
@@ -75,7 +79,7 @@ struct TComputeActorState {
     }
     size_t ByteSizeLong() const {return MiniKqlProgram ? MiniKqlProgram->Data.Blob.Size() : 0; }
 
-    Y_SAVELOAD_DEFINE(MiniKqlProgram, Sources, Sinks);
+    Y_SAVELOAD_DEFINE(MiniKqlProgram, Sources, Sinks, InputTransforms);
 };
 
 } // namespace NYql::NDq 

@@ -728,6 +728,13 @@ private:
             source.AsyncInput->SaveState(checkpoint, sourceState);
             sourceState.InputIndex = inputIndex;
         }
+        for (auto& [inputIndex, transform] : InputTransformsMap) {
+            YQL_ENSURE(transform.AsyncInput, "InputTransform[" << inputIndex << "] is not created");
+            state.InputTransforms.push_back({});
+            TInputTransformState& inputTransformState = state.InputTransforms.back();
+            transform.AsyncInput->SaveState(checkpoint, inputTransformState);
+            inputTransformState.InputIndex = inputIndex;
+        }
     }
 
     void OnSourceDataAck(NTaskRunnerActor::TEvSourceDataAck::TPtr& ev) {

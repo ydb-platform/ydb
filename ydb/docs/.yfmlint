@@ -43,8 +43,8 @@ log-levels:
   MD046: 'disabled' # Code block style
   MD047: 'disabled' # Files should end with a single newline character
   MD048: 'error' # Code fence style
-  MD049: 'disabled' # Emphasis style should be consistent
-  MD050: 'disabled' # Strong style should be consistent
+  MD049: 'error' # Emphasis style should be consistent
+  MD050: 'error' # Strong style should be consistent
   MD051: 'error' # Link fragments should be valid
   MD052: 'error' # Reference links and images should use a label that is defined
   MD053: 'error' # Link and image reference definitions should be needed

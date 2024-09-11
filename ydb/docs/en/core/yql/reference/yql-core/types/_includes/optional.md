@@ -1,6 +1,6 @@
 ## Data types accepting NULL
 
-Any typed data in YQL, including table columns, can be either non-nullable (guaranteed value) or nullable (empty value denoted as `NULL`). Data types that can include `NULL` values are called _optional_ or, in SQL terms, _nullable_.
+Any typed data in YQL, including table columns, can be either non-nullable (guaranteed value) or nullable (empty value denoted as `NULL`). Data types that can include `NULL` values are called *optional* or, in SQL terms, *nullable*.
 
 Optional data types in the [text format](../type_string.md) use the question mark at the end (for example, `String?`) or the notation `Optional<...>`.
 The following operations are most often performed on optional data types:

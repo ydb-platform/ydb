@@ -953,5 +953,292 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinMoreTest) {
 
 } // Y_UNIT_TEST_SUITE
 
+Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinDropKeyColumns) {
+
+    constexpr size_t testSize = 1 << 14;
+    constexpr size_t valueSize = 3;
+    static const TVector<TString> threeLetterValues = GenerateValues(valueSize);
+    static const TSet<ui64> fibonacci = GenerateFibonacci(21);
+
+    Y_UNIT_TEST(TestInnerOnUint64) {
+        TSetup<false> setup;
+        TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
+        // 1. Make input for the "left" flow.
+        TVector<ui64> keyInit(testSize);
+        std::iota(keyInit.begin(), keyInit.end(), 1);
+        TVector<ui64> subkeyInit;
+        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(subkeyInit),
+            [](const auto key) { return key * 1001; });
+        TVector<TString> valueInit;
+        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(valueInit),
+            [](const auto key) { return threeLetterValues[key]; });
+        // 2. Make input for the "right" dict.
+        const TVector<ui64> rightKeyInit(fibonacci.cbegin(), fibonacci.cend());
+        TVector<TString> rightPayloadInit;
+        std::transform(rightKeyInit.cbegin(), rightKeyInit.cend(), std::back_inserter(rightPayloadInit),
+            [](const auto key) { return std::to_string(key); });
+        // 3. Make "expected" data.
+        TMap<ui64, TString> rightMap;
+        for (size_t i = 0; i < rightKeyInit.size(); i++) {
+            rightMap[rightKeyInit[i]] = rightPayloadInit[i];
+        }
+        TVector<ui64> subkeyExpected;
+        TVector<TString> valueExpected;
+        TVector<TString> rightExpected;
+        for (size_t i = 0; i < keyInit.size(); i++) {
+            const auto& found = rightMap.find(keyInit[i]);
+            if (found != rightMap.cend()) {
+                subkeyExpected.push_back(subkeyInit[i]);
+                valueExpected.push_back(valueInit[i]);
+                rightExpected.push_back(found->second);
+            }
+        }
+        // 4. Convert input and expected TVectors to List<UV>.
+        const auto [leftType, leftList] = ConvertVectorsToTuples(setup,
+            keyInit, subkeyInit, valueInit);
+        const auto [expectedType, expected] = ConvertVectorsToTuples(setup,
+            subkeyExpected, valueExpected, rightExpected);
+        // 5. Build "right" computation node.
+        const auto rightKeys = BuildListNodes(pgmBuilder, rightKeyInit);
+        const auto rightPayloads = BuildListNodes(pgmBuilder, rightPayloadInit);
+        const auto rightMapNode = MakeDict(pgmBuilder, rightKeys, rightPayloads);
+        // 6. Run tests.
+        RunTestBlockJoin(setup, EJoinKind::Inner, expectedType, expected,
+                         rightMapNode, leftType, leftList, {0}, {0});
+    }
+
+    Y_UNIT_TEST(TestInnerMultiOnUint64) {
+        TSetup<false> setup;
+        TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
+        // 1. Make input for the "left" flow.
+        TVector<ui64> keyInit(testSize);
+        std::iota(keyInit.begin(), keyInit.end(), 1);
+        TVector<ui64> subkeyInit;
+        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(subkeyInit),
+            [](const auto key) { return key * 1001; });
+        TVector<TString> valueInit;
+        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(valueInit),
+            [](const auto key) { return threeLetterValues[key]; });
+        // 2. Make input for the "right" dict.
+        const TVector<ui64> rightKeyInit(fibonacci.cbegin(), fibonacci.cend());
+        TVector<TString> rightPayload1Init;
+        std::transform(rightKeyInit.cbegin(), rightKeyInit.cend(), std::back_inserter(rightPayload1Init),
+            [](const auto key) { return std::to_string(key); });
+        TVector<TString> rightPayload2Init;
+        std::transform(rightKeyInit.cbegin(), rightKeyInit.cend(), std::back_inserter(rightPayload2Init),
+            [](const auto key) { return std::to_string(key * 1001); });
+        // 3. Make "expected" data.
+        TMap<ui64, TVector<TString>> rightMultiMap;
+        for (size_t i = 0; i < rightKeyInit.size(); i++) {
+            rightMultiMap[rightKeyInit[i]] = {rightPayload1Init[i], rightPayload2Init[i]};
+        }
+        TVector<ui64> subkeyExpected;
+        TVector<TString> valueExpected;
+        TVector<TString> rightExpected;
+        for (size_t i = 0; i < keyInit.size(); i++) {
+            const auto& found = rightMultiMap.find(keyInit[i]);
+            if (found != rightMultiMap.cend()) {
+                for (const auto& right : found->second) {
+                    subkeyExpected.push_back(subkeyInit[i]);
+                    valueExpected.push_back(valueInit[i]);
+                    rightExpected.push_back(right);
+                }
+            }
+        }
+        // 4. Convert input and expected TVectors to List<UV>.
+        const auto [leftType, leftList] = ConvertVectorsToTuples(setup,
+            keyInit, subkeyInit, valueInit);
+        const auto [expectedType, expected] = ConvertVectorsToTuples(setup,
+            subkeyExpected, valueExpected, rightExpected);
+        // 5. Build "right" computation node.
+        const auto rightKeys = BuildListNodes(pgmBuilder, rightKeyInit);
+        const auto rightPayloads = BuildListNodes(pgmBuilder, rightPayload1Init, rightPayload2Init);
+        const auto rightMultiMapNode = MakeDict(pgmBuilder, rightKeys, rightPayloads);
+        // 6. Run tests.
+        RunTestBlockJoin(setup, EJoinKind::Inner, expectedType, expected,
+                         rightMultiMapNode, leftType, leftList, {0}, {0});
+    }
+
+    Y_UNIT_TEST(TestLeftOnUint64) {
+        TSetup<false> setup;
+        TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
+        // 1. Make input for the "left" flow.
+        TVector<ui64> keyInit(testSize);
+        std::iota(keyInit.begin(), keyInit.end(), 1);
+        TVector<ui64> subkeyInit;
+        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(subkeyInit),
+            [](const auto key) { return key * 1001; });
+        TVector<TString> valueInit;
+        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(valueInit),
+            [](const auto key) { return threeLetterValues[key]; });
+        // 2. Make input for the "right" dict.
+        const TVector<ui64> rightKeyInit(fibonacci.cbegin(), fibonacci.cend());
+        TVector<TString> rightPayloadInit;
+        std::transform(rightKeyInit.cbegin(), rightKeyInit.cend(), std::back_inserter(rightPayloadInit),
+            [](const auto key) { return std::to_string(key); });
+        // 3. Make "expected" data.
+        TMap<ui64, TString> rightMap;
+        for (size_t i = 0; i < rightKeyInit.size(); i++) {
+            rightMap[rightKeyInit[i]] = rightPayloadInit[i];
+        }
+        TVector<ui64> subkeyExpected;
+        TVector<TString> valueExpected;
+        TVector<std::optional<TString>> rightExpected;
+        for (size_t i = 0; i < keyInit.size(); i++) {
+            subkeyExpected.push_back(subkeyInit[i]);
+            valueExpected.push_back(valueInit[i]);
+            const auto& found = rightMap.find(keyInit[i]);
+            if (found != rightMap.cend()) {
+                rightExpected.push_back(found->second);
+            } else {
+                rightExpected.push_back(std::nullopt);
+            }
+        }
+        // 4. Convert input and expected TVectors to List<UV>.
+        const auto [leftType, leftList] = ConvertVectorsToTuples(setup,
+            keyInit, subkeyInit, valueInit);
+        const auto [expectedType, expected] = ConvertVectorsToTuples(setup,
+            subkeyExpected, valueExpected, rightExpected);
+        // 5. Build "right" computation node.
+        const auto rightKeys = BuildListNodes(pgmBuilder, rightKeyInit);
+        const auto rightPayloads = BuildListNodes(pgmBuilder, rightPayloadInit);
+        const auto rightMapNode = MakeDict(pgmBuilder, rightKeys, rightPayloads);
+        // 6. Run tests.
+        RunTestBlockJoin(setup, EJoinKind::Left, expectedType, expected,
+                         rightMapNode, leftType, leftList, {0}, {0});
+    }
+
+    Y_UNIT_TEST(TestLeftMultiOnUint64) {
+        TSetup<false> setup;
+        TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
+        // 1. Make input for the "left" flow.
+        TVector<ui64> keyInit(testSize);
+        std::iota(keyInit.begin(), keyInit.end(), 1);
+        TVector<ui64> subkeyInit;
+        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(subkeyInit),
+            [](const auto key) { return key * 1001; });
+        TVector<TString> valueInit;
+        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(valueInit),
+            [](const auto key) { return threeLetterValues[key]; });
+        // 2. Make input for the "right" dict.
+        const TVector<ui64> rightKeyInit(fibonacci.cbegin(), fibonacci.cend());
+        TVector<TString> rightPayload1Init;
+        std::transform(rightKeyInit.cbegin(), rightKeyInit.cend(), std::back_inserter(rightPayload1Init),
+            [](const auto key) { return std::to_string(key); });
+        TVector<TString> rightPayload2Init;
+        std::transform(rightKeyInit.cbegin(), rightKeyInit.cend(), std::back_inserter(rightPayload2Init),
+            [](const auto key) { return std::to_string(key * 1001); });
+        // 3. Make "expected" data.
+        TMap<ui64, TVector<TString>> rightMultiMap;
+        for (size_t i = 0; i < rightKeyInit.size(); i++) {
+            rightMultiMap[rightKeyInit[i]] = {rightPayload1Init[i], rightPayload2Init[i]};
+        }
+        TVector<ui64> subkeyExpected;
+        TVector<TString> valueExpected;
+        TVector<std::optional<TString>> rightExpected;
+        for (size_t i = 0; i < keyInit.size(); i++) {
+            const auto& found = rightMultiMap.find(keyInit[i]);
+            if (found != rightMultiMap.cend()) {
+                for (const auto& right : found->second) {
+                    subkeyExpected.push_back(subkeyInit[i]);
+                    valueExpected.push_back(valueInit[i]);
+                    rightExpected.push_back(right);
+                }
+            } else {
+                subkeyExpected.push_back(subkeyInit[i]);
+                valueExpected.push_back(valueInit[i]);
+                rightExpected.push_back(std::nullopt);
+            }
+        }
+        // 4. Convert input and expected TVectors to List<UV>.
+        const auto [leftType, leftList] = ConvertVectorsToTuples(setup,
+            keyInit, subkeyInit, valueInit);
+        const auto [expectedType, expected] = ConvertVectorsToTuples(setup,
+            subkeyExpected, valueExpected, rightExpected);
+        // 5. Build "right" computation node.
+        const auto rightKeys = BuildListNodes(pgmBuilder, rightKeyInit);
+        const auto rightPayloads = BuildListNodes(pgmBuilder, rightPayload1Init, rightPayload2Init);
+        const auto rightMultiMapNode = MakeDict(pgmBuilder, rightKeys, rightPayloads);
+        // 6. Run tests.
+        RunTestBlockJoin(setup, EJoinKind::Left, expectedType, expected,
+                         rightMultiMapNode, leftType, leftList, {0}, {0});
+    }
+
+    Y_UNIT_TEST(TestLeftSemiOnUint64) {
+        TSetup<false> setup;
+        TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
+        // 1. Make input for the "left" flow.
+        TVector<ui64> keyInit(testSize);
+        std::iota(keyInit.begin(), keyInit.end(), 1);
+        TVector<ui64> subkeyInit;
+        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(subkeyInit),
+            [](const auto key) { return key * 1001; });
+        TVector<TString> valueInit;
+        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(valueInit),
+            [](const auto key) { return threeLetterValues[key]; });
+        // 2. Make input for the "right" dict.
+        const TVector<ui64> rightKeyInit(fibonacci.cbegin(), fibonacci.cend());
+        // 3. Make "expected" data.
+        TSet<ui64> rightSet(rightKeyInit.cbegin(), rightKeyInit.cend());
+        TVector<ui64> subkeyExpected;
+        TVector<TString> valueExpected;
+        for (size_t i = 0; i < keyInit.size(); i++) {
+            if (rightSet.contains(keyInit[i])) {
+                subkeyExpected.push_back(subkeyInit[i]);
+                valueExpected.push_back(valueInit[i]);
+            }
+        }
+        // 4. Convert input and expected TVectors to List<UV>.
+        const auto [leftType, leftList] = ConvertVectorsToTuples(setup,
+            keyInit, subkeyInit, valueInit);
+        const auto [expectedType, expected] = ConvertVectorsToTuples(setup,
+            subkeyExpected, valueExpected);
+        // 5. Build "right" computation node.
+        const auto rightKeys = BuildListNodes(pgmBuilder, rightKeyInit);
+        const auto rightSetNode = MakeSet(pgmBuilder, rightKeys);
+        // 6. Run tests.
+        RunTestBlockJoin(setup, EJoinKind::LeftSemi, expectedType, expected,
+                         rightSetNode, leftType, leftList, {0}, {0});
+    }
+
+    Y_UNIT_TEST(TestLeftOnlyOnUint64) {
+        TSetup<false> setup;
+        TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
+        // 1. Make input for the "left" flow.
+        TVector<ui64> keyInit(testSize);
+        std::iota(keyInit.begin(), keyInit.end(), 1);
+        TVector<ui64> subkeyInit;
+        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(subkeyInit),
+            [](const auto key) { return key * 1001; });
+        TVector<TString> valueInit;
+        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(valueInit),
+            [](const auto key) { return threeLetterValues[key]; });
+        // 2. Make input for the "right" dict.
+        const TVector<ui64> rightKeyInit(fibonacci.cbegin(), fibonacci.cend());
+        // 3. Make "expected" data.
+        TSet<ui64> rightSet(rightKeyInit.cbegin(), rightKeyInit.cend());
+        TVector<ui64> subkeyExpected;
+        TVector<TString> valueExpected;
+        for (size_t i = 0; i < keyInit.size(); i++) {
+            if (!rightSet.contains(keyInit[i])) {
+                subkeyExpected.push_back(subkeyInit[i]);
+                valueExpected.push_back(valueInit[i]);
+            }
+        }
+        // 4. Convert input and expected TVectors to List<UV>.
+        const auto [leftType, leftList] = ConvertVectorsToTuples(setup,
+            keyInit, subkeyInit, valueInit);
+        const auto [expectedType, expected] = ConvertVectorsToTuples(setup,
+            subkeyExpected, valueExpected);
+        // 5. Build "right" computation node.
+        const auto rightKeys = BuildListNodes(pgmBuilder, rightKeyInit);
+        const auto rightSetNode = MakeSet(pgmBuilder, rightKeys);
+        // 6. Run tests.
+        RunTestBlockJoin(setup, EJoinKind::LeftOnly, expectedType, expected,
+                         rightSetNode, leftType, leftList, {0}, {0});
+    }
+
+} // Y_UNIT_TEST_SUITE
+
 } // namespace NMiniKQL
 } // namespace NKikimr

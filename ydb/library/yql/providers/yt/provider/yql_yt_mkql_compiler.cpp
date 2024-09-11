@@ -500,9 +500,10 @@ void RegisterDqYtMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler, con
                 for (const auto& flag : wrapper.Flags())
                     if (solid = flag.Value() == "Solid")
                         break;
+                // at this moment, we know, that rpc reader is enabled (see dq_opts + CanBlockRead at integration)
                 return ctx.ProgramBuilder.BlockExpandChunked(
                     solid
-                    ? BuildDqYtInputCall<false>(outputType, inputItemType, cluster, tokenName, ytRead.Input(), state, ctx, inflight, timeout, true && inflight)
+                    ? BuildDqYtInputCall<false>(outputType, inputItemType, cluster, tokenName, ytRead.Input(), state, ctx, 1, timeout, true && inflight)
                     : BuildDqYtInputCall<true>(outputType, inputItemType, cluster, tokenName, ytRead.Input(), state, ctx, inflight, timeout, true && inflight)
                 );
             }
@@ -531,7 +532,7 @@ void RegisterDqYtMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler, con
                         break;
 
                 if (solid)
-                    return BuildDqYtInputCall<false>(outputType, inputItemType, cluster, tokenName, ytRead.Input(), state, ctx, isRPC, timeout, false);
+                    return BuildDqYtInputCall<false>(outputType, inputItemType, cluster, tokenName, ytRead.Input(), state, ctx, isRPC > 0 ? 1 : 0, timeout, false);
                 else
                     return BuildDqYtInputCall<true>(outputType, inputItemType, cluster, tokenName, ytRead.Input(), state, ctx, isRPC, timeout, false);
             }

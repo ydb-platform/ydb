@@ -21806,9 +21806,9 @@
     ],
     "test_sql_format.test[aggregate-group_by_hop_small]": [
         {
-            "checksum": "903e8ccb669e336929fb9a3f9bc25424",
-            "size": 427,
-            "uri": "https://{canondata_backend}/1920236/bb2301e85eb73fecf6260a9c1294520fbf1e952e/resource.tar.gz#test_sql_format.test_aggregate-group_by_hop_small_/formatted.sql"
+            "checksum": "27fdd7af224a36c15155f7f69f14ad07",
+            "size": 393,
+            "uri": "https://{canondata_backend}/1942173/9d793e788c391df831fae057e65f63b2b147c4d4/resource.tar.gz#test_sql_format.test_aggregate-group_by_hop_small_/formatted.sql"
         }
     ],
     "test_sql_format.test[aggregate-group_by_hop_star]": [

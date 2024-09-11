@@ -24,16 +24,10 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
         const TVector<TString> FIELD_NAMES{"utf", "int", "uint", "float", "double"};
     public:
         TSparsedDataTest(const TString& storeName)
-            : Kikimr(GetKikimrSettings())
+            : Kikimr(Settings)
             , CSController(NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NYDBTest::NColumnShard::TController>())
             , StoreName(storeName)
         {
-        }
-
-        TKikimrSettings GetKikimrSettings() {
-            NKikimrConfig::TFeatureFlags featureFlags;
-            featureFlags.SetEnableSparsedColumns(true);
-            return TKikimrSettings().SetWithSampleTables(false).SetFeatureFlags(featureFlags);
         }
 
         ui32 GetCount() const {

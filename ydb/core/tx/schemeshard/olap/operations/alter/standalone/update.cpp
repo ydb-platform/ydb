@@ -52,14 +52,9 @@ NKikimr::TConclusionStatus TStandaloneSchemaUpdate::DoInitializeImpl(const TUpda
         }
     }
 
-    if (!AppData()->FeatureFlags.GetEnableSparsedColumns()) {
-        for (auto& [_, column]: targetSchema.GetColumns().GetColumns()) {
-            if (column.GetDefaultValue().GetValue() || (column.GetAccessorConstructor().GetClassName() == NKikimr::NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName)) {
-                return TConclusionStatus::Fail("schema update error: sparsed columns are disabled");
-            }
-        }
+    if (!CheckTargetSchema(targetSchema)) {
+        return TConclusionStatus::Fail("schema update error: sparsed columns are disabled");
     }
-
     auto description = originalTable.GetTableInfoVerified().Description;
     targetSchema.Serialize(*description.MutableSchema());
     auto ttl = originalTable.GetTableTTLOptional() ? *originalTable.GetTableTTLOptional() : TOlapTTL();

@@ -1,6 +1,7 @@
 #include "gz.h"
 
 #include <util/generic/size_literals.h>
+#include <ydb/library/yql/utils/exceptions.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 #include "output_queue_impl.h"
 
@@ -46,7 +47,7 @@ bool TReadBuffer::nextImpl() {
 
         switch (const auto code = inflate(&Z_, Z_SYNC_FLUSH)) {
             case Z_NEED_DICT:
-                ythrow yexception() << "Need dict.";
+                ythrow TCodeLineException(TIssuesIds::UNEXPECTED) << "Need dict.";
             case Z_STREAM_END:
                 YQL_ENSURE(inflateReset(&Z_) == Z_OK, "Inflate reset error: " << GetErrMsg(Z_));
                 [[fallthrough]];
@@ -57,7 +58,7 @@ bool TReadBuffer::nextImpl() {
                 }
                 break;
             default:
-                ythrow yexception() << GetErrMsg(Z_) << ", code: " << code;
+                ythrow TCodeLineException(TIssuesIds::KIKIMR_BAD_REQUEST) << GetErrMsg(Z_) << ", code: " << code;
         }
     }
 }

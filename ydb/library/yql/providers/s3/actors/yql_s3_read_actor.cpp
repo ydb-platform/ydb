@@ -63,6 +63,7 @@
 #include <ydb/library/yql/public/udf/arrow/block_builder.h>
 #include <ydb/library/yql/public/udf/arrow/block_reader.h>
 #include <ydb/library/yql/public/udf/arrow/util.h>
+#include <ydb/library/yql/utils/exceptions.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/arrow.h>
 
@@ -1152,7 +1153,10 @@ private:
                     Issues.AddIssue(TIssue(ex.message()));
                     FatalCode = NYql::NDqProto::StatusIds::BAD_REQUEST;
                     RetryStuff->Cancel();
-                } catch (const yexception& ex) {
+                } catch (const TCodeLineException& ex) {
+                    if (ex.Code != TIssuesIds::KIKIMR_BAD_REQUEST) {
+                        throw ex;
+                    }
                     Issues.AddIssue(ExceptionToIssue(ex));
                     FatalCode = NYql::NDqProto::StatusIds::BAD_REQUEST;
                     RetryStuff->Cancel();

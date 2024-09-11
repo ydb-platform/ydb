@@ -1,6 +1,7 @@
 #include "xz.h"
 
 #include <util/generic/size_literals.h>
+#include <ydb/library/yql/utils/exceptions.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 #include "output_queue_impl.h"
 
@@ -18,11 +19,11 @@ TReadBuffer::TReadBuffer(NDB::ReadBuffer& source)
         case LZMA_OK:
             return;
         case LZMA_MEM_ERROR:
-            throw yexception() << "Memory allocation failed.";
+            throw TCodeLineException(TIssuesIds::UNEXPECTED) << "Memory allocation failed.";
         case LZMA_OPTIONS_ERROR:
-            throw yexception() << "Unsupported decompressor flags.";
+            throw TCodeLineException(TIssuesIds::KIKIMR_BAD_REQUEST) << "Unsupported decompressor flags.";
         default:
-            throw yexception() << "Unknown error << " << int(ret) << ", possibly a bug.";
+            throw TCodeLineException(TIssuesIds::UNEXPECTED) << "Unknown error << " << int(ret) << ", possibly a bug.";
     }
 }
 
@@ -70,17 +71,17 @@ bool TReadBuffer::nextImpl() {
             case LZMA_OK:
                 continue;
             case LZMA_MEM_ERROR:
-                throw yexception() << "Memory allocation failed.";
+                throw TCodeLineException(TIssuesIds::UNEXPECTED) << "Memory allocation failed.";
             case LZMA_FORMAT_ERROR:
-                throw yexception() << "The input is not in the .xz format.";
+                throw TCodeLineException(TIssuesIds::KIKIMR_BAD_REQUEST) << "The input is not in the .xz format.";
             case LZMA_OPTIONS_ERROR:
-                throw yexception() << "Unsupported compression options.";
+                throw TCodeLineException(TIssuesIds::KIKIMR_BAD_REQUEST) << "Unsupported compression options.";
             case LZMA_DATA_ERROR:
-                throw yexception() << "Compressed file is corrupt.";
+                throw TCodeLineException(TIssuesIds::KIKIMR_BAD_REQUEST) << "Compressed file is corrupt.";
             case LZMA_BUF_ERROR:
-                throw yexception() << "Compressed file is truncated or otherwise corrupt.";
+                throw TCodeLineException(TIssuesIds::KIKIMR_BAD_REQUEST) << "Compressed file is truncated or otherwise corrupt.";
             default:
-                throw yexception() << "Unknown error " << int(ret) << ", possibly a bug.";
+                throw TCodeLineException(TIssuesIds::UNEXPECTED) << "Unknown error " << int(ret) << ", possibly a bug.";
         }
     }
 }
@@ -95,7 +96,7 @@ public:
     // options for further compression
     lzma_options_lzma opt_lzma2;
     if (lzma_lzma_preset(&opt_lzma2, level))
-        throw yexception() << "lzma preset failed: lzma version: " << LZMA_VERSION_STRING;
+        throw TCodeLineException(TIssuesIds::UNEXPECTED) << "lzma preset failed: lzma version: " << LZMA_VERSION_STRING;
 
     lzma_filter filters[] = {
         {.id = LZMA_FILTER_X86, .options = nullptr},
@@ -107,11 +108,11 @@ public:
             case LZMA_OK:
                 return;
             case LZMA_MEM_ERROR:
-                throw yexception() << "Memory allocation failed.";
+                throw TCodeLineException(TIssuesIds::UNEXPECTED) << "Memory allocation failed.";
             case LZMA_OPTIONS_ERROR:
-                throw yexception() << "Unsupported decompressor flags.";
+                throw TCodeLineException(TIssuesIds::KIKIMR_BAD_REQUEST) << "Unsupported decompressor flags.";
             default:
-                throw yexception() << "Unknown error << " << int(ret) << ", possibly a bug.";
+                throw TCodeLineException(TIssuesIds::UNEXPECTED) << "Unknown error << " << int(ret) << ", possibly a bug.";
         }
     }
 
@@ -168,17 +169,17 @@ private:
                 case LZMA_STREAM_END:
                     return TOutputQueue::Seal();
                 case LZMA_MEM_ERROR:
-                    throw yexception() << "Memory allocation failed.";
+                    throw TCodeLineException(TIssuesIds::UNEXPECTED) << "Memory allocation failed.";
                 case LZMA_FORMAT_ERROR:
-                    throw yexception() << "The input is not in the .xz format.";
+                    throw TCodeLineException(TIssuesIds::KIKIMR_BAD_REQUEST) << "The input is not in the .xz format.";
                 case LZMA_OPTIONS_ERROR:
-                    throw yexception() << "Unsupported compression options.";
+                    throw TCodeLineException(TIssuesIds::KIKIMR_BAD_REQUEST) << "Unsupported compression options.";
                 case LZMA_DATA_ERROR:
-                    throw yexception() << "Compressed file is corrupt.";
+                    throw TCodeLineException(TIssuesIds::KIKIMR_BAD_REQUEST) << "Compressed file is corrupt.";
                 case LZMA_BUF_ERROR:
-                    throw yexception() << "Compressed file is truncated or otherwise corrupt.";
+                    throw TCodeLineException(TIssuesIds::KIKIMR_BAD_REQUEST) << "Compressed file is truncated or otherwise corrupt.";
                 default:
-                    throw yexception() << "Unknown error " << int(ret) << ", possibly a bug.";
+                    throw TCodeLineException(TIssuesIds::UNEXPECTED) << "Unknown error " << int(ret) << ", possibly a bug.";
             }
         };
     }

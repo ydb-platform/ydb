@@ -1,6 +1,7 @@
 #include "bzip2.h"
 
 #include <util/generic/size_literals.h>
+#include <ydb/library/yql/utils/exceptions.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 #include "output_queue_impl.h"
 
@@ -57,7 +58,7 @@ bool TReadBuffer::nextImpl() {
 
                 break;
             default:
-                ythrow yexception() << "Bzip error: " << code;
+                ythrow TCodeLineException(TIssuesIds::KIKIMR_BAD_REQUEST) << "Bzip error: " << code;
         }
     }
 }

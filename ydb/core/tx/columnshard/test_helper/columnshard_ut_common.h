@@ -1,20 +1,21 @@
 #pragma once
 
-#include <ydb/core/tx/columnshard/blob_cache.h>
-#include <ydb/core/tx/columnshard/common/snapshot.h>
-
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
-#include <ydb/core/tx/columnshard/test_helper/helper.h>
+#include <ydb/core/protos/tx_columnshard.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/testlib/test_client.h>
-#include <ydb/core/protos/tx_columnshard.pb.h>
+#include <ydb/core/tx/columnshard/blob_cache.h>
+#include <ydb/core/tx/columnshard/common/snapshot.h>
+#include <ydb/core/tx/columnshard/test_helper/helper.h>
+#include <ydb/core/tx/data_events/common/modification_type.h>
+#include <ydb/core/tx/long_tx_service/public/types.h>
+
+#include <ydb/public/sdk/cpp/client/ydb_value/value.h>
 #include <ydb/services/metadata/abstract/fetcher.h>
 
 #include <library/cpp/testing/unittest/registar.h>
-#include <ydb/core/tx/long_tx_service/public/types.h>
-#include <ydb/core/tx/data_events/common/modification_type.h>
 
 namespace NKikimr::NOlap {
 struct TIndexInfo;
@@ -476,10 +477,12 @@ namespace NKikimr::NColumnShard {
                 auto& builder = Owner.Builders[Index];
                 auto type = builder->type();
 
-                NArrow::SwitchType(type->id(), [&](const auto& t) {
+                Y_ABORT_UNLESS(NArrow::SwitchType(type->id(), [&](const auto& t) {
                     using TWrap = std::decay_t<decltype(t)>;
                     using T = typename TWrap::T;
                     using TBuilder = typename arrow::TypeTraits<typename TWrap::T>::BuilderType;
+
+                    AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("T", typeid(T).name());
 
                     auto& typedBuilder = static_cast<TBuilder&>(*builder);
                     if constexpr (std::is_arithmetic<TData>::value) {
@@ -495,9 +498,16 @@ namespace NKikimr::NColumnShard {
                             return true;
                         }
                     }
+
+                    if constexpr (std::is_same<TData, NYdb::TDecimalValue>::value) {
+                        if constexpr (arrow::is_decimal128_type<T>::value) {
+                            Y_ABORT_UNLESS(typedBuilder.Append(arrow::Decimal128(data.Hi_, data.Low_)).ok());
+                            return true;
+                        }
+                    }
                     Y_ABORT("Unknown type combination");
                     return false;
-                });
+                }));
                 return TRowBuilder(Index + 1, Owner);
             }
 

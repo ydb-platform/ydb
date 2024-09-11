@@ -98,7 +98,7 @@ private:
     }
 
     template <class TAggregator, class TChunkInfo>
-    static void AggregateIndexChunksData(const TAggregator& aggr, const std::vector<TChunkInfo>& chunks, const std::optional<std::set<ui32>>& columnIds, const bool validation) {
+    static void AggregateIndexChunksData(const TAggregator& aggr, const std::vector<TChunkInfo>& chunks, const std::set<ui32>* columnIds, const bool validation) {
         if (columnIds) {
             auto itColumn = columnIds->begin();
             auto itRecord = chunks.begin();
@@ -547,7 +547,7 @@ public:
     }
 
     ui64 GetColumnRawBytes(const std::vector<ui32>& columnIds, const bool validation = true) const;
-    ui64 GetColumnRawBytes(const std::optional<std::set<ui32>>& columnIds = {}, const bool validation = true) const;
+    ui64 GetColumnRawBytes(const std::set<ui32>& columnIds, const bool validation = true) const;
 
     ui64 GetColumnBlobBytes(const std::vector<ui32>& columnIds, const bool validation = true) const;
     ui64 GetColumnBlobBytes(const std::optional<std::set<ui32>>& columnIds = {}, const bool validation = true) const;

@@ -31,9 +31,9 @@ Y_UNIT_TEST_SUITE(KqpDatetime64ColumnShard) {
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("id").SetTypeInfo(NScheme::NTypeIds::Int32).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("interval").SetTypeInfo(NScheme::NTypeIds::Interval64),
-            TTestHelper::TColumnSchema().SetName("timestamp").SetTypeInfo(NScheme::NTypeIds::Timestamp64)
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("interval").SetType(NScheme::NTypeIds::Interval64),
+            TTestHelper::TColumnSchema().SetName("timestamp").SetType(NScheme::NTypeIds::Timestamp64)
         };
 
         Tests::NCommon::TLoggerInit(testHelper.GetKikimr()).Initialize();
@@ -59,8 +59,8 @@ Y_UNIT_TEST_SUITE(KqpDatetime64ColumnShard) {
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("timestamp").SetTypeInfo(NScheme::NTypeIds::Timestamp64).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("interval").SetTypeInfo(NScheme::NTypeIds::Interval64)
+            TTestHelper::TColumnSchema().SetName("timestamp").SetType(NScheme::NTypeIds::Timestamp64).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("interval").SetType(NScheme::NTypeIds::Interval64)
         };
 
         Tests::NCommon::TLoggerInit(testHelper.GetKikimr()).Initialize();
@@ -98,8 +98,8 @@ Y_UNIT_TEST_SUITE(KqpDatetime64ColumnShard) {
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("datetime").SetTypeInfo(NScheme::NTypeIds::Datetime64).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("interval").SetTypeInfo(NScheme::NTypeIds::Interval64)
+            TTestHelper::TColumnSchema().SetName("datetime").SetType(NScheme::NTypeIds::Datetime64).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("interval").SetType(NScheme::NTypeIds::Interval64)
         };
 
         Tests::NCommon::TLoggerInit(testHelper.GetKikimr()).Initialize();
@@ -137,8 +137,8 @@ Y_UNIT_TEST_SUITE(KqpDatetime64ColumnShard) {
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("date").SetTypeInfo(NScheme::NTypeIds::Date32).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("interval").SetTypeInfo(NScheme::NTypeIds::Interval64)
+            TTestHelper::TColumnSchema().SetName("date").SetType(NScheme::NTypeIds::Date32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("interval").SetType(NScheme::NTypeIds::Interval64)
         };
 
         Tests::NCommon::TLoggerInit(testHelper.GetKikimr()).Initialize();
@@ -173,10 +173,10 @@ Y_UNIT_TEST_SUITE(KqpDatetime64ColumnShard) {
         Tests::NCommon::TLoggerInit(testHelper.GetKikimr()).SetComponents({ NKikimrServices::GROUPED_MEMORY_LIMITER }, "CS").Initialize();
 
         TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("id").SetTypeInfo(NScheme::NTypeIds::Int64).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("date32").SetTypeInfo(NScheme::NTypeIds::Date32),
-            TTestHelper::TColumnSchema().SetName("timestamp64").SetTypeInfo(NScheme::NTypeIds::Timestamp64),
-            TTestHelper::TColumnSchema().SetName("datetime64").SetTypeInfo(NScheme::NTypeIds::Datetime64),
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int64).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("date32").SetType(NScheme::NTypeIds::Date32),
+            TTestHelper::TColumnSchema().SetName("timestamp64").SetType(NScheme::NTypeIds::Timestamp64),
+            TTestHelper::TColumnSchema().SetName("datetime64").SetType(NScheme::NTypeIds::Datetime64),
         };
 
         TTestHelper::TColumnTable testTable;

@@ -23,6 +23,8 @@ namespace NKqp {
             YDB_FLAG_ACCESSOR(Nullable, true);
         public:
             TString BuildQuery() const;
+
+            TColumnSchema& SetType(NScheme::TTypeId typeId);
         };
 
         using TUpdatesBuilder = NColumnShard::TTableUpdatesBuilder;

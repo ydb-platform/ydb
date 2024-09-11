@@ -165,6 +165,11 @@ namespace NKqp {
         return str;
     }
 
+    TTestHelper::TColumnSchema& TTestHelper::TColumnSchema::SetType(NScheme::TTypeId typeId) {
+        TypeInfo = NScheme::TTypeInfo(typeId);
+        return *this;
+    }
+
     TString TTestHelper::TColumnTableBase::BuildQuery() const {
         auto str = TStringBuilder() << "CREATE " << GetObjectType() << " `" << Name << "`";
         str << " (" << BuildColumnsStr(Schema) << ", PRIMARY KEY (" << JoinStrings(PrimaryKey, ", ") << "))";

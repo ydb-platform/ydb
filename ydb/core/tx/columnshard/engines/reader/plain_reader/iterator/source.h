@@ -266,6 +266,7 @@ private:
     std::set<ui32> SequentialEntityIds;
     std::shared_ptr<TPortionInfo> Portion;
     std::shared_ptr<ISnapshotSchema> Schema;
+    mutable THashMap<ui64, ui64> FingerprintedData;
 
     void NeedFetchColumns(const std::set<ui32>& columnIds, TBlobsAction& blobsAction,
         THashMap<TChunkAddress, TPortionInfo::TAssembleBlobInfo>& nullBlocks, const std::shared_ptr<NArrow::TColumnFilter>& filter);
@@ -307,6 +308,7 @@ private:
         return Portion->GetPathId();
     }
     virtual bool DoAddSequentialEntityIds(const ui32 entityId) override {
+        FingerprintedData.clear();
         return SequentialEntityIds.emplace(entityId).second;
     }
 
@@ -334,6 +336,13 @@ public:
     }
 
     virtual ui64 GetColumnRawBytes(const std::set<ui32>& columnsIds) const override {
+        AFL_VERIFY(columnsIds.size());
+        const ui64 fp = CombineHashes(*columnsIds.begin(), *columnsIds.rbegin());
+        auto it = FingerprintedData.find(fp);
+        if (it != FingerprintedData.end()) {
+            return it->second;
+        }
+        ui64 result = 0;
         if (SequentialEntityIds.size()) {
             std::set<ui32> selectedSeq;
             std::set<ui32> selectedInMem;
@@ -344,11 +353,13 @@ public:
                     selectedInMem.emplace(i);
                 }
             }
-            return Portion->GetMinMemoryForReadColumns(selectedSeq) + Portion->GetColumnBlobBytes(selectedSeq) +
+            result = Portion->GetMinMemoryForReadColumns(selectedSeq) + Portion->GetColumnBlobBytes(selectedSeq) +
                    Portion->GetColumnRawBytes(selectedInMem, false);
         } else {
-            return Portion->GetColumnRawBytes(columnsIds, false);
+            result = Portion->GetColumnRawBytes(columnsIds, false);
         }
+        FingerprintedData.emplace(fp, result);
+        return result;
     }
 
     virtual ui64 GetColumnBlobBytes(const std::set<ui32>& columnsIds) const override {

@@ -141,9 +141,6 @@ class TBaseChangeSender {
             auto it = Senders.find(partitionId);
             if (it != Senders.end()) {
                 senders.emplace(partitionId, std::move(it->second));
-                if (it->second.Ready) {
-                    --ReadySenders;
-                }
                 Senders.erase(it);
             } else {
                 LazyCreateSender(senders, partitionId);
@@ -442,6 +439,7 @@ protected:
                 ActorOps->Send(sender.ActorId, new TEvents::TEvPoisonPill());
             }
         }
+        ReadySenders = 0;
     }
 
     void RemoveRecords() {

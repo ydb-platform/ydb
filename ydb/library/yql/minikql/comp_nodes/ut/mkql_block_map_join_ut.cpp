@@ -734,11 +734,39 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinBasicTest) {
     }
 
     Y_UNIT_TEST(TestLeftOnlyOnUint64) {
+        TSetup<false> setup;
+        // 1. Make input for the "left" flow.
         TVector<ui64> keyInit(testSize);
         std::iota(keyInit.begin(), keyInit.end(), 1);
-        const auto leftFlow = MakeIotaTKSV(keyInit, 1001, threeLetterValues);
+        TVector<ui64> subkeyInit;
+        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(subkeyInit),
+            [](const auto key) { return key * 1001; });
+        TVector<TString> valueInit;
+        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(valueInit),
+            [](const auto key) { return threeLetterValues[key]; });
+        // 2. Make input for the "right" dict.
         const TKSVSet rightSet(fibonacci);
-        TestBlockJoinWithoutRightOnUint64(EJoinKind::LeftOnly, leftFlow, rightSet);
+        // 3. Make "expected" data.
+        TVector<ui64> keyExpected;
+        TVector<ui64> subkeyExpected;
+        TVector<TString> valueExpected;
+        for (size_t i = 0; i < keyInit.size(); i++) {
+            if (!rightSet.contains(keyInit[i])) {
+                keyExpected.push_back(keyInit[i]);
+                subkeyExpected.push_back(subkeyInit[i]);
+                valueExpected.push_back(valueInit[i]);
+            }
+        }
+        // 4. Convert input and expected TVectors to List<UV>.
+        const auto [leftType, leftList] = ConvertVectorsToTuples(setup,
+            keyInit, subkeyInit, valueInit);
+        const auto [expectedType, expected] = ConvertVectorsToTuples(setup,
+            keyExpected, subkeyExpected, valueExpected);
+        // 5. Build "right" computation node.
+        const auto rightSetNode = MakeSet(*setup.PgmBuilder, rightSet);
+        // 6. Run tests.
+        RunTestBlockJoin(setup, EJoinKind::LeftOnly, expectedType, expected,
+                         rightSetNode, leftType, leftList, {0});
     }
 
 } // Y_UNIT_TEST_SUITE

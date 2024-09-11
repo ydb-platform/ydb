@@ -518,7 +518,7 @@ private:
         UNIT_ASSERT_C(settings.PoolId_, "Query pool id is not specified");
 
         auto event = std::make_unique<TEvKqp::TEvQueryRequest>();
-        event->Record.SetUserToken(NACLib::TUserToken("", settings.UserSID_, {}).SerializeAsString());
+        event->Record.SetUserToken(NACLib::TUserToken("", settings.UserSID_, settings.GroupSIDs_).SerializeAsString());
 
         auto request = event->Record.MutableRequest();
         request->SetQuery(query);

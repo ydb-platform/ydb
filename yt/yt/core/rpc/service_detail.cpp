@@ -57,7 +57,7 @@ constexpr auto ServiceLivenessCheckPeriod = TDuration::MilliSeconds(100);
 TRequestQueuePtr CreateRequestQueue(const std::string& name, const NProfiling::TProfiler& profiler)
 {
     // TODO(babenko): migrate to std::string
-    return New<TRequestQueue>(name, profiler.WithTag("user", TString(name)));
+    return New<TRequestQueue>(name, profiler.WithTag("user", std::string(name)));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1643,7 +1643,7 @@ TServiceBase::TServiceBase(
     , MemoryUsageTracker_(std::move(options.MemoryUsageTracker))
     , Profiler_(RpcServerProfiler
         .WithHot(options.UseHotProfiler)
-        .WithTag("yt_service", TString(ServiceId_.ServiceName)))
+        .WithTag("yt_service", ServiceId_.ServiceName))
     , AuthenticationTimer_(Profiler_.Timer("/authentication_time"))
     , ServiceLivenessChecker_(New<TPeriodicExecutor>(
         TDispatcher::Get()->GetLightInvoker(),
@@ -1933,8 +1933,7 @@ void TServiceBase::RegisterRequestQueue(
 
     auto profiler = runtimeInfo->Profiler.WithSparse();
     if (runtimeInfo->Descriptor.RequestQueueProvider) {
-        // TODO(babenko): switch to std::string
-        profiler = profiler.WithTag("queue", TString(requestQueue->GetName()));
+        profiler = profiler.WithTag("queue", requestQueue->GetName());
     }
     profiler.AddFuncGauge("/request_queue_size", MakeStrong(this), [=] {
         return requestQueue->GetQueueSize();
@@ -2327,12 +2326,11 @@ TServiceBase::TMethodPerformanceCountersPtr TServiceBase::CreateMethodPerformanc
 
     auto profiler = runtimeInfo->Profiler.WithSparse();
     if (userTag) {
-        // TODO(babenko): switch to std::string
-        profiler = profiler.WithTag("user", TString(userTag));
+        // TODO(babenko): migrate to std::string
+        profiler = profiler.WithTag("user", std::string(userTag));
     }
     if (runtimeInfo->Descriptor.RequestQueueProvider) {
-        // TODO(babenko): switch to std::string
-        profiler = profiler.WithTag("queue", TString(requestQueue->GetName()));
+        profiler = profiler.WithTag("queue", requestQueue->GetName());
     }
     return New<TMethodPerformanceCounters>(profiler, TimeHistogramConfig_.Acquire());
 }

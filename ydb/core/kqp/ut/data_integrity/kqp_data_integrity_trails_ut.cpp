@@ -105,6 +105,45 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
         // check datashard logs (should be empty, because DataShard only logs modification operations)
         UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: DataShard"), 0);
     }
+
+    Y_UNIT_TEST_TWIN(UpsertViaLegacyScripting, Streaming) {
+        TKikimrSettings serverSettings;
+        TStringStream ss;
+        serverSettings.LogStream = &ss;
+        TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::DATA_INTEGRITY, NLog::PRI_TRACE);
+        NYdb::NScripting::TScriptingClient client(kikimr.GetDriver());
+
+
+        const auto query = R"(
+            --!syntax_v1
+
+            UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES
+                (3u, "Value3"),
+                (101u, "Value101"),
+                (201u, "Value201");
+        )";
+
+        if (Streaming) {
+            auto result = client.StreamExecuteYqlScript(query).GetValueSync();        
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CollectStreamResult(result);
+        } else {
+            auto result = client.ExecuteYqlScript(query).GetValueSync();        
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+            
+        // check executer logs
+        UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: Executer"), 1);
+        // check session actor logs (should contain double logs because this query was executed via worker actor)
+        UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY DEBUG: Component: SessionActor"), 4);
+        // check grpc logs
+        UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY TRACE: Component: Grpc"), 2);
+        // check datashard logs
+        UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: DataShard"), 2);
+
+        Cout << ss.Str() << Endl;
+    }
 }
 
 } // namespace NKqp

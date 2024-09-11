@@ -27,12 +27,12 @@ NKikimr::NArrow::TReplaceKey TSpecialKeys::GetKeyByIndex(const ui32 position, co
     }
 }
 
-TString TSpecialKeys::SerializeToString() const {
-    return NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer()->SerializeFull(Data);
+TString TSpecialKeys::SerializePayloadToString() const {
+    return NArrow::NSerialization::TSerializerContainer::GetFastestSerializer()->SerializePayload(Data);
 }
 
-TString TSpecialKeys::SerializeToStringDataOnlyNoCompression() const {
-    return NArrow::SerializeBatchNoCompression(Data);
+TString TSpecialKeys::SerializeFullToString() const {
+    return NArrow::NSerialization::TSerializerContainer::GetFastestSerializer()->SerializeFull(Data);
 }
 
 ui64 TSpecialKeys::GetMemoryBytes() const {

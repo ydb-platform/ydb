@@ -17,12 +17,12 @@ private:
     YDB_READONLY(NEvWrite::EModificationType, ModificationType, NEvWrite::EModificationType::Upsert);
     YDB_READONLY_DEF(NArrow::TSchemaSubset, SchemaSubset);
 
-    mutable bool KeysParsed = false;
-    mutable std::optional<NArrow::TFirstLastSpecialKeys> SpecialKeysParsed;
-
+    mutable TAtomicCounter KeyInitialized = 0;
+    mutable TAtomic KeyInitialization = 0;
+    mutable std::shared_ptr<NArrow::TFirstLastSpecialKeys> SpecialKeysParsed;
     NKikimrTxColumnShard::TLogicalMetadata OriginalProto;
+    std::shared_ptr<NArrow::TFirstLastSpecialKeys> GetSpecialKeys(const std::shared_ptr<arrow::Schema>& schema) const;
 
-    const std::optional<NArrow::TFirstLastSpecialKeys>& GetSpecialKeys() const;
 public:
     ui64 GetTxVolume() const {
         return 2 * sizeof(ui64) + sizeof(ui32) + sizeof(OriginalProto) + (SpecialKeysParsed ? SpecialKeysParsed->GetMemoryBytes() : 0);
@@ -43,19 +43,11 @@ public:
         }
     }
 
-    std::optional<NArrow::TReplaceKey> GetFirstPK(const std::shared_ptr<arrow::Schema>& schema) const {
-        if (GetSpecialKeys()) {
-            return GetSpecialKeys()->GetFirst(schema);
-        } else {
-            return {};
-        }
+    NArrow::TReplaceKey GetFirstPK(const std::shared_ptr<arrow::Schema>& schema) const {
+        return GetSpecialKeys(schema)->GetFirst();
     }
-    std::optional<NArrow::TReplaceKey> GetLastPK(const std::shared_ptr<arrow::Schema>& schema) const {
-        if (GetSpecialKeys()) {
-            return GetSpecialKeys()->GetLast(schema);
-        } else {
-            return {};
-        }
+    NArrow::TReplaceKey GetLastPK(const std::shared_ptr<arrow::Schema>& schema) const {
+        return GetSpecialKeys(schema)->GetLast();
     }
 
     NKikimrTxColumnShard::TLogicalMetadata SerializeToProto() const;

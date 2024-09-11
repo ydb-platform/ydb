@@ -89,6 +89,7 @@ message TLogicalMetadata {
     optional string SpecialKeysRawData = 6;
     optional TEvWrite.EModificationType ModificationType = 7;
     optional NKikimrArrowSchema.TSchemaSubset SchemaSubset = 8;
+    optional string SpecialKeysPayloadData = 9;
 }
 
 message TEvWriteResult {

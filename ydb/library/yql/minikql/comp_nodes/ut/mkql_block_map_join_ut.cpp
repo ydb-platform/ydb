@@ -105,19 +105,6 @@ const TRuntimeNode MakeMultiDict(TProgramBuilder& pgmBuilder, const TMap<TKey, T
         });
 }
 
-template <typename TRightPayload>
-const TRuntimeNode MakeRightNode(TProgramBuilder& pgmBuilder, const TRightPayload& values) {
-    if constexpr (std::is_same_v<TRightPayload, TKSVSet>) {
-        return MakeSet(pgmBuilder, values);
-    } else if constexpr (std::is_same_v<TRightPayload, TKSWMap>) {
-        return MakeDict(pgmBuilder, values);
-    } else if constexpr (std::is_same_v<TRightPayload, TKSWMultiMap>) {
-        return MakeMultiDict(pgmBuilder, values);
-    } else {
-        Y_ENSURE(false, "Not supported payload type");
-    }
-}
-
 const TRuntimeNode BuildBlockJoin(TProgramBuilder& pgmBuilder, EJoinKind joinKind,
     TVector<ui32> keyColumns, TRuntimeNode& leftArg, TType* leftTuple,
     const TRuntimeNode& dictNode

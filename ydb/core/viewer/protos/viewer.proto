@@ -729,13 +729,14 @@ message TQueryAutocomplete {
             EAutocompleteType Type = 2;
             string Parent = 3;
         }
-        uint32 Total = 1;
+        optional uint32 Total = 1;
         repeated TEntity Entities = 2;
     }
 
     bool Success = 1;
     TResult Result = 2;
     repeated string Error = 3;
+    uint32 Version = 4;
 }
 
 message TPDiskInfoWhiteboard {

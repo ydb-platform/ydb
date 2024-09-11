@@ -245,8 +245,9 @@ NKikimr::NArrow::TSerializedBatch TSerializedBatch::Build(std::shared_ptr<arrow:
     std::optional<TString> specialKeysPayload;
     std::optional<TString> specialKeysFull;
     if (context.GetFieldsForSpecialKeys().size()) {
-        specialKeysPayload = TFirstLastSpecialKeys(batch, context.GetFieldsForSpecialKeys()).SerializePayloadToString();
-        specialKeysFull = TFirstLastSpecialKeys(batch, context.GetFieldsForSpecialKeys()).SerializeFullToString();
+        TFirstLastSpecialKeys specialKeys(batch, context.GetFieldsForSpecialKeys());
+        specialKeysPayload = specialKeys.SerializePayloadToString();
+        specialKeysFull = specialKeys.SerializeFullToString();
     }
     return TSerializedBatch(NArrow::SerializeSchema(*batch->schema()), NArrow::SerializeBatchNoCompression(batch), batch->num_rows(),
         NArrow::GetBatchDataSize(batch), specialKeysPayload, specialKeysFull);

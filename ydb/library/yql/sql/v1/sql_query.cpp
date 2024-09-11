@@ -2821,6 +2821,9 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
         } else if (normalizedPragma == "disableansiimplicitcrossjoin") {
             Ctx.AnsiImplicitCrossJoin = false;
             Ctx.IncrementMonCounter("sql_pragma", "DisableAnsiImplicitCrossJoin");
+        } else if (normalizedPragma == "enabledistinctoverwindow") {
+            Ctx.PragmaEnableDistinctOverWindow = true;
+            Ctx.IncrementMonCounter("sql_pragma", "EnableDistinctOverWindow");
         } else {
             Error() << "Unknown pragma: " << pragma;
             Ctx.IncrementMonCounter("sql_errors", "UnknownPragma");

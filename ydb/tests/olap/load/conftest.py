@@ -53,16 +53,16 @@ class LoadSuiteBase:
                     with allure.step(f'Iteration {i}'):
                         plan = result.plans[i]
                         if plan.plan is not None:
-                            allure.attach(json.dumps(plan.plan), f'Plan json', attachment_type=allure.attachment_type.JSON)
+                            allure.attach(json.dumps(plan.plan), 'Plan json', attachment_type=allure.attachment_type.JSON)
                         if plan.table is not None:
-                            allure.attach(plan.table, f'Plan table', attachment_type=allure.attachment_type.TEXT)
+                            allure.attach(plan.table, 'Plan table', attachment_type=allure.attachment_type.TEXT)
                         if plan.ast is not None:
-                            allure.attach(plan.ast, f'Plan ast', attachment_type=allure.attachment_type.TEXT)
+                            allure.attach(plan.ast, 'Plan ast', attachment_type=allure.attachment_type.TEXT)
                         if plan.svg is not None:
-                            allure.attach(plan.svg, f'Plan svg', attachment_type=allure.attachment_type.SVG)
+                            allure.attach(plan.svg, 'Plan svg', attachment_type=allure.attachment_type.SVG)
                         if i in result.errors_by_iter:
                             pytest.fail(result.errors_by_iter[i])
-                except:
+                except BaseException:
                     pass
 
         if result.stdout is not None:

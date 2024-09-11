@@ -149,7 +149,7 @@ class YdbCliHelper:
                 stdout=exec.stdout.decode('utf-8'),
                 stderr=exec.stderr.decode('utf-8'),
                 error_message=err,
-                errors_by_iter= errors_by_iter
+                errors_by_iter=errors_by_iter
             )
         except BaseException as e:
             return YdbCliHelper.WorkloadRunResult(error_message=str(e))

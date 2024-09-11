@@ -4,7 +4,9 @@ option cc_enable_arenas = true;
 package Ydb.Cms;
 option java_package = "com.yandex.ydb.cms";
 
+import "ydb/public/api/protos/ydb_issue_message.proto";
 import "ydb/public/api/protos/ydb_operation.proto";
+import "ydb/public/api/protos/ydb_status_codes.proto";
 
 // A set of uniform storage units.
 // Single storage unit can be thought of as a reserved part of a RAID.
@@ -302,6 +304,8 @@ message GetScaleRecommendationRequest {
 }
 
 message GetScaleRecommendationResponse {
+    StatusIds.StatusCode status = 1;
+    repeated Ydb.Issue.IssueMessage issues = 2;
     // Recommended resources scale to be allocated for database.
-    Resources recommended_resources = 1;
+    Resources recommended_resources = 3;
 }

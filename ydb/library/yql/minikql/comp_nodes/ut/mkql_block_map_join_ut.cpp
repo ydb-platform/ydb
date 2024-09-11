@@ -955,11 +955,39 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinMoreTest) {
     }
 
     Y_UNIT_TEST(TestLeftOnlyOn1) {
+        TSetup<false> setup;
+        // 1. Make input for the "left" flow.
         TVector<ui64> keyInit(testSize);
         std::fill(keyInit.begin(), keyInit.end(), 1);
-        const auto leftFlow = MakeFillTKSV(keyInit, 1001, threeLetterValues);
+        TVector<ui64> subkeyInit;
+        TVector<TString> valueInit;
+        for (size_t i = 0; i < keyInit.size(); i++) {
+            subkeyInit.push_back(i * 1001);
+            valueInit.push_back(threeLetterValues[i]);
+        }
+        // 2. Make input for the "right" dict.
         const TKSVSet rightSet({1});
-        TestBlockJoinWithoutRightOnUint64(EJoinKind::LeftOnly, leftFlow, rightSet);
+        // 3. Make "expected" data.
+        TVector<ui64> keyExpected;
+        TVector<ui64> subkeyExpected;
+        TVector<TString> valueExpected;
+        for (size_t i = 0; i < keyInit.size(); i++) {
+            if (!rightSet.contains(keyInit[i])) {
+                keyExpected.push_back(keyInit[i]);
+                subkeyExpected.push_back(subkeyInit[i]);
+                valueExpected.push_back(valueInit[i]);
+            }
+        }
+        // 4. Convert input and expected TVectors to List<UV>.
+        const auto [leftType, leftList] = ConvertVectorsToTuples(setup,
+            keyInit, subkeyInit, valueInit);
+        const auto [expectedType, expected] = ConvertVectorsToTuples(setup,
+            keyExpected, subkeyExpected, valueExpected);
+        // 5. Build "right" computation node.
+        const auto rightSetNode = MakeSet(*setup.PgmBuilder, rightSet);
+        // 6. Run tests.
+        RunTestBlockJoin(setup, EJoinKind::LeftOnly, expectedType, expected,
+                         rightSetNode, leftType, leftList, {0});
     }
 
 } // Y_UNIT_TEST_SUITE

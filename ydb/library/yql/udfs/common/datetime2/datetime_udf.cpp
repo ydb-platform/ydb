@@ -1721,6 +1721,22 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
                     ReservedSize_ += size;
                     break;
                 }
+                case 's': {
+                    static constexpr size_t size = 2;
+                    Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
+                        return PrintNDigits<size>::Do(GetSecond(value), out);
+                    });
+                    ReservedSize_ += size;
+                    break;
+                }
+                case 'f': {
+                    static constexpr size_t size = 6;
+                    Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
+                        return PrintNDigits<size>::Do(GetMicrosecond(value), out);
+                    });
+                    ReservedSize_ += size;
+                    break;
+                }
                 case 'S':
                     Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
                         constexpr size_t size = 2;

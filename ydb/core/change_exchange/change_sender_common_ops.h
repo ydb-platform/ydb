@@ -141,6 +141,9 @@ class TBaseChangeSender {
             auto it = Senders.find(partitionId);
             if (it != Senders.end()) {
                 senders.emplace(partitionId, std::move(it->second));
+                if (it->second.Ready) {
+                    --ReadySenders;
+                }
                 Senders.erase(it);
             } else {
                 LazyCreateSender(senders, partitionId);
@@ -283,6 +286,7 @@ class TBaseChangeSender {
 
         Y_ABORT_UNLESS(sender.Ready);
         sender.Ready = false;
+        ReadySenders--;
 
         sender.Pending.reserve(sender.Prepared.size());
         for (const auto& record : sender.Prepared) {
@@ -531,6 +535,7 @@ protected:
 
         auto& sender = it->second;
         sender.Ready = true;
+        ReadySenders++;
 
         if (sender.Pending) {
             RemoveRecords(std::exchange(sender.Pending, {}));
@@ -555,6 +560,9 @@ protected:
         }
 
         ReEnqueueRecords(it->second);
+        if (it->second.Ready) {
+            --ReadySenders;
+        }
         Senders.erase(it);
         GonePartitions.push_back(partitionId);
 
@@ -579,6 +587,10 @@ protected:
             , MemLimit(192_KB)
             , MemUsage(0)
     {}
+
+    bool IsAllSendersReady() {
+        return ReadySenders == Senders.size();
+    }
 
     void RenderHtmlPage(ui64 tabletId, NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx) {
         const auto& cgi = ev->Get()->Cgi();
@@ -782,6 +794,7 @@ private:
     ui64 MemUsage;
 
     THashMap<ui64, TSender> Senders; // ui64 is partition id
+    ui64 ReadySenders = 0;
     TSet<TEnqueuedRecord> Enqueued;
     TSet<TIncompleteRecord> PendingBody;
     TMap<ui64, typename TChangeRecord::TPtr> PendingSent; // ui64 is order

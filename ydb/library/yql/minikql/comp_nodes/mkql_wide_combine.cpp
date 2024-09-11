@@ -491,6 +491,7 @@ public:
 
         value = static_cast<NUdf::TUnboxedValue*>(SpilledBuckets.front().InMemoryProcessingState->Extract());
         if (!value) {
+            SpilledBuckets.front().InMemoryProcessingState->ReadMore<false>();
             SpilledBuckets.pop_front();
             if (SpilledBuckets.empty()) IsEverythingExtracted = true;
         }
@@ -574,6 +575,7 @@ private:
         if (bucket.BucketState == TSpilledBucket::EBucketState::InMemory) {
             bucket.BucketState = TSpilledBucket::EBucketState::SpillingState;
             SpillingBucketsCount++;
+            InMemoryBucketsCount--;
         }
 
         while (const auto keyAndState = static_cast<NUdf::TUnboxedValue*>(bucket.InMemoryProcessingState->Extract())) {
@@ -616,19 +618,18 @@ private:
         if (SpillingBucketsCount > 0) {
             return true;
         }
-        while (true) {
+        while (InMemoryBucketsCount > 0) {
             ui64 maxLineCount = 0;
             ui32 maxLineBucketInd = (ui32)-1;
-            for (ui64 i = 0; i < SpilledBucketCount; ++i) {
+            for (ui64 i = 0; i < SpilledBucketCount - 1; ++i) {
                 const auto& bucket = SpilledBuckets[i];
                 if (bucket.BucketState == TSpilledBucket::EBucketState::InMemory && (maxLineBucketInd == (ui32)-1 || bucket.LineCount > maxLineCount)) {
                     maxLineCount = bucket.LineCount;
                     maxLineBucketInd = i;
                 }
             }
-            if (maxLineBucketInd == (ui32)-1) {
-                break;
-            }
+            MKQL_ENSURE(maxLineBucketInd != (ui32)-1, "Internal logic error");
+
             auto& bucketToSpill = SpilledBuckets[maxLineBucketInd];
             SpillMoreStateFromBucket(bucketToSpill);
             if (bucketToSpill.BucketState == TSpilledBucket::EBucketState::SpillingState) {
@@ -755,6 +756,7 @@ private:
     static constexpr size_t SpilledBucketCount = 128;
     std::deque<TSpilledBucket> SpilledBuckets;
     ui32 SpillingBucketsCount = 0;
+    ui32 InMemoryBucketsCount = SpilledBucketCount;
     ui64 BufferForUsedInputItemsBucketId;
     TUnboxedValueVector BufferForUsedInputItems;
     std::vector<NUdf::TUnboxedValuePod, TMKQLAllocator<NUdf::TUnboxedValuePod>> ViewForKeyAndState;

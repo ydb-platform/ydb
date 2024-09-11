@@ -122,37 +122,45 @@ TString TViewerPipeClient::GetPath(TEvTxProxySchemeCache::TEvNavigateKeySetResul
 }
 
 bool TViewerPipeClient::IsSuccess(const std::unique_ptr<TEvTxProxySchemeCache::TEvNavigateKeySetResult>& ev) {
-    return (ev->Request->ResultSet.size() == 1) && (ev->Request->ResultSet.begin()->Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok);
+    return (ev->Request->ResultSet.size() > 0) && (std::find_if(ev->Request->ResultSet.begin(), ev->Request->ResultSet.end(),
+        [](const auto& entry) {
+            return entry.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok;
+        }) != ev->Request->ResultSet.end());
 }
 
 TString TViewerPipeClient::GetError(const std::unique_ptr<TEvTxProxySchemeCache::TEvNavigateKeySetResult>& ev) {
     if (ev->Request->ResultSet.size() == 0) {
         return "empty response";
     }
-    switch (ev->Request->ResultSet.begin()->Status) {
-        case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
-            return "Ok";
-        case NSchemeCache::TSchemeCacheNavigate::EStatus::Unknown:
-            return "Unknown";
-        case NSchemeCache::TSchemeCacheNavigate::EStatus::RootUnknown:
-            return "RootUnknown";
-        case NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown:
-            return "PathErrorUnknown";
-        case NSchemeCache::TSchemeCacheNavigate::EStatus::PathNotTable:
-            return "PathNotTable";
-        case NSchemeCache::TSchemeCacheNavigate::EStatus::PathNotPath:
-            return "PathNotPath";
-        case NSchemeCache::TSchemeCacheNavigate::EStatus::TableCreationNotComplete:
-            return "TableCreationNotComplete";
-        case NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError:
-            return "LookupError";
-        case NSchemeCache::TSchemeCacheNavigate::EStatus::RedirectLookupError:
-            return "RedirectLookupError";
-        case NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied:
-            return "AccessDenied";
-        default:
-            return ::ToString(static_cast<int>(ev->Request->ResultSet.begin()->Status));
+    for (const auto& entry : ev->Request->ResultSet) {
+        if (entry.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
+            switch (entry.Status) {
+                case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
+                    return "Ok";
+                case NSchemeCache::TSchemeCacheNavigate::EStatus::Unknown:
+                    return "Unknown";
+                case NSchemeCache::TSchemeCacheNavigate::EStatus::RootUnknown:
+                    return "RootUnknown";
+                case NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown:
+                    return "PathErrorUnknown";
+                case NSchemeCache::TSchemeCacheNavigate::EStatus::PathNotTable:
+                    return "PathNotTable";
+                case NSchemeCache::TSchemeCacheNavigate::EStatus::PathNotPath:
+                    return "PathNotPath";
+                case NSchemeCache::TSchemeCacheNavigate::EStatus::TableCreationNotComplete:
+                    return "TableCreationNotComplete";
+                case NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError:
+                    return "LookupError";
+                case NSchemeCache::TSchemeCacheNavigate::EStatus::RedirectLookupError:
+                    return "RedirectLookupError";
+                case NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied:
+                    return "AccessDenied";
+                default:
+                    return ::ToString(static_cast<int>(ev->Request->ResultSet.begin()->Status));
+            }
+        }
     }
+    return "no error";
 }
 
 bool TViewerPipeClient::IsSuccess(const std::unique_ptr<TEvStateStorage::TEvBoardInfo>& ev) {

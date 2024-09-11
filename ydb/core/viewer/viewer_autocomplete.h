@@ -17,22 +17,27 @@ class TJsonAutocomplete : public TViewerPipeClient {
     TJsonSettings JsonSettings;
     ui32 Timeout = 0;
 
-    TAutoPtr<TEvViewer::TEvViewerResponse> ProxyResult;
-    TAutoPtr<NConsole::TEvConsole::TEvListTenantsResponse> ConsoleResult;
-    TAutoPtr<TEvTxProxySchemeCache::TEvNavigateKeySetResult> CacheResult;
+    std::optional<TRequestResponse<NConsole::TEvConsole::TEvListTenantsResponse>> ConsoleResult;
+    std::optional<TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> CacheResult;
 
     struct TSchemaWordData {
         TString Name;
         NKikimrViewer::EAutocompleteType Type;
-        TString Table;
-        TSchemaWordData() {}
-        TSchemaWordData(const TString& name, const NKikimrViewer::EAutocompleteType type, const TString& table = "")
+        TString Parent;
+
+        TSchemaWordData(const TString& name, const NKikimrViewer::EAutocompleteType type, const TString& parent = {})
             : Name(name)
             , Type(type)
-            , Table(table)
+            , Parent(parent)
         {}
+
+        operator TString() const {
+            return Name;
+        }
     };
-    THashMap<TString, TSchemaWordData> Dictionary;
+
+    TVector<TString> DatabasePath;
+    std::vector<TSchemaWordData> Dictionary;
     TVector<TString> Tables;
     TVector<TString> Paths;
     TString Prefix;
@@ -40,8 +45,6 @@ class TJsonAutocomplete : public TViewerPipeClient {
     ui32 Limit = 10;
     NKikimrViewer::TQueryAutocomplete Result;
 
-    std::optional<TNodeId> SubscribedNodeId;
-    std::vector<TNodeId> TenantDynamicNodes;
 public:
     TJsonAutocomplete(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
         : TBase(viewer, ev)
@@ -76,54 +79,48 @@ public:
 
     void PrepareParameters() {
         if (Database) {
-            TString prefixUpToLastSlash = "";
-            auto splitPos = Prefix.find_last_of('/');
-            if (splitPos != std::string::npos) {
-                prefixUpToLastSlash += Prefix.substr(0, splitPos);
-                SearchWord = Prefix.substr(splitPos + 1);
-            } else {
-                SearchWord = Prefix;
+            DatabasePath = SplitPath(Database);
+            auto prefixPaths = SplitPath(Prefix);
+            if (Prefix.EndsWith('/')) {
+                prefixPaths.emplace_back();
             }
-
-            if (Tables.size() == 0) {
-                Paths.emplace_back(Database);
-            } else {
-                for (TString& table: Tables) {
-                    TString path = table;
-                    if (!table.StartsWith(Database)) {
-                        path = Database + "/" + path;
-                    }
-                    path += "/" + prefixUpToLastSlash;
-                    Paths.emplace_back(path);
-                }
+            if (!prefixPaths.empty()) {
+                SearchWord = prefixPaths.back();
+                prefixPaths.pop_back();
+            }
+            if (!prefixPaths.empty()) {
+                Paths.emplace_back(JoinPath(prefixPaths));
+            }
+            for (const TString& table : Tables) {
+                Paths.emplace_back(table);
+            }
+            if (Paths.empty()) {
+                Paths.emplace_back();
             }
         } else {
             SearchWord = Prefix;
         }
         if (Limit == 0) {
-            Limit = std::numeric_limits<ui32>::max();
+            Limit = 1000;
         }
     }
 
     void ParseCgiParameters(const TCgiParameters& params) {
         JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), true);
         JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);
-        Database = params.Get("database");
         StringSplitter(params.Get("table")).Split(',').SkipEmpty().Collect(&Tables);
         Prefix = params.Get("prefix");
         Limit = FromStringWithDefault<ui32>(params.Get("limit"), Limit);
-        Direct = FromStringWithDefault<bool>(params.Get("direct"), Direct);
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
     }
 
     void ParsePostContent(const TStringBuf& content) {
-        static NJson::TJsonReaderConfig JsonConfig;
         NJson::TJsonValue requestData;
-        bool success = NJson::ReadJsonTree(content, &JsonConfig, &requestData);
+        bool success = NJson::ReadJsonTree(content, &requestData);
         if (success) {
             Database = Database.empty() ? requestData["database"].GetStringSafe({}) : Database;
             if (requestData["table"].IsArray()) {
-                for (auto& table: requestData["table"].GetArraySafe()) {
+                for (const auto& table : requestData["table"].GetArraySafe()) {
                     Tables.emplace_back(table.GetStringSafe());
                 }
             }
@@ -138,48 +135,39 @@ public:
         return NViewer::IsPostContent(Event);
     }
 
-    TAutoPtr<NSchemeCache::TSchemeCacheNavigate> MakeSchemeCacheRequest() {
-        TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate());
-
-        for (TString& path: Paths) {
+    TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> MakeRequestSchemeCacheNavigate() {
+        auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
+        for (const TString& path : Paths) {
+            Cerr << "Looking into " << path << Endl;
             NSchemeCache::TSchemeCacheNavigate::TEntry entry;
             entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpList;
             entry.SyncVersion = false;
-            entry.Path = SplitPath(path);
+            auto splittedPath = SplitPath(path);
+            entry.Path = DatabasePath;
+            entry.Path.insert(entry.Path.end(), splittedPath.begin(), splittedPath.end());
             request->ResultSet.emplace_back(entry);
         }
-
-        return request;
-    }
-
-    void SendSchemeCacheRequest() {
-        SendRequest(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(MakeSchemeCacheRequest()));
+        return MakeRequest<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(MakeSchemeCacheID(),
+            new TEvTxProxySchemeCache::TEvNavigateKeySet(request.release()));
     }
 
     void Bootstrap() override {
         if (ViewerRequest) {
             // handle proxied request
-            SendSchemeCacheRequest();
+            CacheResult = MakeRequestSchemeCacheNavigate();
         } else {
             if (NeedToRedirect()) {
                 return;
             }
-            if (!Database) {
+            if (Database) {
+                CacheResult = MakeRequestSchemeCacheNavigate();
+            } else {
                 // autocomplete database list via console request
-                RequestConsoleListTenants();
+                ConsoleResult = MakeRequestConsoleListTenants();
             }
-            SendSchemeCacheRequest();
         }
 
         Become(&TThis::StateRequestedDescribe, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
-    }
-
-    void PassAway() override {
-        if (SubscribedNodeId.has_value()) {
-            Send(TActivationContext::InterconnectProxy(SubscribedNodeId.value()), new TEvents::TEvUnsubscribe());
-        }
-        TBase::PassAway();
-        BLOG_TRACE("PassAway()");
     }
 
     STATEFN(StateRequestedDescribe) {
@@ -190,33 +178,15 @@ public:
         }
     }
 
-    void ParseProxyResult() {
-        if (ProxyResult == nullptr) {
-            Result.add_error("Failed to collect information from ProxyResult");
-            return;
-        }
-        if (ProxyResult->Record.HasAutocompleteResponse()) {
-            Result = ProxyResult->Record.GetAutocompleteResponse();
-        } else {
-            Result.add_error("Proxying return empty response");
-        }
-
-    }
-
     void ParseConsoleResult() {
-        if (ConsoleResult == nullptr) {
-            Result.add_error("Failed to collect information from ConsoleResult");
-            return;
-        }
-
         Ydb::Cms::ListDatabasesResult listTenantsResult;
-        ConsoleResult->Record.GetResponse().operation().result().UnpackTo(&listTenantsResult);
+        ConsoleResult->Get()->Record.GetResponse().operation().result().UnpackTo(&listTenantsResult);
         for (const TString& path : listTenantsResult.paths()) {
-            Dictionary[path] = TSchemaWordData(path, NKikimrViewer::ext_sub_domain);
+            Dictionary.emplace_back(path, NKikimrViewer::ext_sub_domain);
         }
     }
 
-    NKikimrViewer::EAutocompleteType ConvertType(TNavigate::EKind navigate) {
+    static NKikimrViewer::EAutocompleteType ConvertType(TNavigate::EKind navigate) {
         switch (navigate) {
             case TNavigate::KindSubdomain:
                 return NKikimrViewer::sub_domain;
@@ -262,88 +232,86 @@ public:
     }
 
     void ParseCacheResult() {
-        if (CacheResult == nullptr) {
-            Result.add_error("Failed to collect information from CacheResult");
-            return;
-        }
-        NSchemeCache::TSchemeCacheNavigate *navigate = CacheResult->Request.Get();
-        if (navigate->ErrorCount > 0) {
-            for (auto& entry: CacheResult->Request.Get()->ResultSet) {
-                if (entry.Status != TSchemeCacheNavigate::EStatus::Ok) {
-                    Result.add_error(TStringBuilder() << "Error receiving Navigate response: `" << CanonizePath(entry.Path) << "` has <" << ToString(entry.Status) << "> status");
+        NSchemeCache::TSchemeCacheNavigate& navigate = *CacheResult->Get()->Request;
+        for (auto& entry : navigate.ResultSet) {
+            if (entry.Status == TSchemeCacheNavigate::EStatus::Ok) {
+                if (entry.Path.size() >= DatabasePath.size()) {
+                    entry.Path.erase(entry.Path.begin(), entry.Path.begin() + DatabasePath.size());
                 }
-            }
-            return;
-        }
-        for (auto& entry: CacheResult->Request.Get()->ResultSet) {
-            TString path = CanonizePath(entry.Path);
-            if (entry.ListNodeEntry) {
-                for (const auto& child : entry.ListNodeEntry->Children) {
-                    Dictionary[child.Name] = TSchemaWordData(child.Name, ConvertType(child.Kind), path);
+                TString path = JoinPath(entry.Path);
+                for (const auto& [id, column] : entry.Columns) {
+                    Dictionary.emplace_back(column.Name, NKikimrViewer::column, path);
                 }
-            };
-            for (const auto& [id, column] : entry.Columns) {
-                Dictionary[column.Name] = TSchemaWordData(column.Name, NKikimrViewer::column, path);
-            }
-            for (const auto& index : entry.Indexes) {
-                Dictionary[index.GetName()] = TSchemaWordData(index.GetName(), NKikimrViewer::index, path);
-            }
-            for (const auto& cdcStream : entry.CdcStreams) {
-                Dictionary[cdcStream.GetName()] = TSchemaWordData(cdcStream.GetName(), NKikimrViewer::cdc_stream, path);
+                for (const auto& index : entry.Indexes) {
+                    Dictionary.emplace_back(index.GetName(), NKikimrViewer::index, path);
+                }
+                for (const auto& cdcStream : entry.CdcStreams) {
+                    Dictionary.emplace_back(cdcStream.GetName(), NKikimrViewer::cdc_stream, path);
+                }
+                if (entry.ListNodeEntry) {
+                    for (const auto& child : entry.ListNodeEntry->Children) {
+                        Dictionary.emplace_back(child.Name, ConvertType(child.Kind), path);
+                    }
+                };
+            } else {
+                Result.add_error(TStringBuilder() << "Error receiving Navigate response: `" << CanonizePath(entry.Path) << "` has <" << ToString(entry.Status) << "> status");
             }
         }
     }
 
-    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev) {
-        CacheResult = ev->Release();
+    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        CacheResult->Set(std::move(ev));
         RequestDone();
     }
 
     void Handle(NConsole::TEvConsole::TEvListTenantsResponse::TPtr& ev) {
-        ConsoleResult = ev->Release();
+        ConsoleResult->Set(std::move(ev));
         RequestDone();
     }
 
-    void SendAutocompleteResponse() {
-        if (ViewerRequest) {
-            TEvViewer::TEvViewerResponse* viewerResponse = new TEvViewer::TEvViewerResponse();
-            viewerResponse->Record.MutableAutocompleteResponse()->CopyFrom(Result);
-            Send(ViewerRequest->Sender, viewerResponse);
-        } else {
-            TStringStream json;
-            TProtoToJson::ProtoToJson(json, Result, JsonSettings);
-            Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get(), json.Str()), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
-        }
-    }
-
     void ReplyAndPassAway() override {
-        if (ProxyResult) {
-            ParseProxyResult();
-        } else if (Database) {
-            ParseCacheResult();
-        } else {
-            ParseConsoleResult();
+        Result.SetVersion(Viewer->GetCapabilityVersion("/viewer/autocomplete"));
+
+        if (CacheResult) {
+            if (CacheResult->IsOk()) {
+                ParseCacheResult();
+            } else {
+                Result.add_error("Failed to collect information from CacheResult");
+            }
         }
 
-        if (!ProxyResult) {
-            Result.set_success(Result.error_size() == 0);
-            if (Result.error_size() == 0) {
-                auto fuzzy = FuzzySearcher<TSchemaWordData>(Dictionary);
-                auto autocomplete = fuzzy.Search(SearchWord, Limit);
-                Result.MutableResult()->SetTotal(autocomplete.size());
-                for (TSchemaWordData& wordData: autocomplete) {
-                    auto entity = Result.MutableResult()->AddEntities();
-                    entity->SetName(wordData.Name);
-                    entity->SetType(wordData.Type);
-                    if (wordData.Table) {
-                        entity->SetParent(wordData.Table);
-                    }
+        if (ConsoleResult) {
+            if (ConsoleResult->IsOk()) {
+                ParseConsoleResult();
+            } else {
+                Result.add_error("Failed to collect information from ConsoleResult");
+            }
+        }
+
+        Result.set_success(Result.error_size() == 0);
+        if (Result.error_size() == 0) {
+            auto autocomplete = FuzzySearcher::Search(Dictionary, SearchWord, Limit);
+            Result.MutableResult()->SetTotal(autocomplete.size());
+            for (const TSchemaWordData* wordData : autocomplete) {
+                auto entity = Result.MutableResult()->AddEntities();
+                entity->SetName(wordData->Name);
+                entity->SetType(wordData->Type);
+                if (wordData->Parent) {
+                    entity->SetParent(wordData->Parent);
                 }
             }
         }
 
-        SendAutocompleteResponse();
-        PassAway();
+        if (ViewerRequest) {
+            TEvViewer::TEvViewerResponse* viewerResponse = new TEvViewer::TEvViewerResponse();
+            viewerResponse->Record.MutableAutocompleteResponse()->CopyFrom(Result);
+            Send(ViewerRequest->Sender, viewerResponse);
+            PassAway();
+        } else {
+            TStringStream json;
+            TProtoToJson::ProtoToJson(json, Result, JsonSettings);
+            TBase::ReplyAndPassAway(GetHTTPOKJSON(json.Str()));
+        }
     }
 
     void HandleTimeout() {
@@ -351,8 +319,7 @@ public:
             Result.add_error("Request timed out");
             ReplyAndPassAway();
         } else {
-            Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPGATEWAYTIMEOUT(Event->Get()), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
-            PassAway();
+            TBase::ReplyAndPassAway(GetHTTPGATEWAYTIMEOUT());
         }
     }
 

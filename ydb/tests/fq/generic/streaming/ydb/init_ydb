@@ -5,8 +5,8 @@ set -ex
 export PROFILE=tests-ydb-client-$(LC_ALL=C tr -dc A-Za-z0-9 </dev/urandom | head -c 8)
 
 # Wait until server is up
-timeout 30s bash -c 'until /ydb --endpoint grpc://tests-fq-generic-analytics-ydb:2136 --database /local scheme ls; do sleep 3; done'
+timeout 30s bash -c 'until /ydb --endpoint grpc://tests-fq-generic-streaming-ydb:2136 --database /local scheme ls; do sleep 3; done'
 
 # Run initialization scripts
-/ydb config profile create ${PROFILE} --endpoint grpc://tests-fq-generic-analytics-ydb:2136 --database /local
+/ydb config profile create ${PROFILE} --endpoint grpc://tests-fq-generic-streaming-ydb:2136 --database /local
 /bin/bash ./01_basic.sh

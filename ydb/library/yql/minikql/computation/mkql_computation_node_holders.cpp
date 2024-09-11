@@ -2914,7 +2914,7 @@ private:
 ///////////////////////////////////////////////////////////////////////////////
 class TListValueBuilder: public NUdf::IListValueBuilder {
 public:
-    explicit TListValueBuilder(const THolderFactory &HolderFactory)
+    explicit TListValueBuilder(const THolderFactory& HolderFactory)
         : HolderFactory_(HolderFactory) 
     {}
 
@@ -2924,7 +2924,6 @@ public:
     }
 
     IListValueBuilder& AddMany(const NUdf::TUnboxedValue* elements, size_t count) final {
-        List_.reserve(List_.size() + count);
         std::copy_n(std::make_move_iterator(elements), count, std::back_inserter(List_));
         return *this;
     }
@@ -2934,29 +2933,12 @@ public:
             return HolderFactory_.GetEmptyContainerLazy();
         }
 
-        if (List_.size() < Max<ui32>()) {
-            NUdf::TUnboxedValue* inplace = nullptr;
-            auto array = HolderFactory_.CreateDirectArrayHolder(List_.size(), inplace);
-
-            std::copy_n(std::make_move_iterator(List_.begin()), List_.size(), inplace);
-
-            return std::move(array);
-        } else {
-            TDefaultListRepresentation list;
-            
-            for (auto& element : List_) {
-                list = list.Append(std::move(element));
-            }
-
-            return HolderFactory_.CreateDirectListHolder(std::move(list));
-        }
-
-        List_.clear();
+        return HolderFactory_.VectorAsVectorHolder(std::move(List_));
     }
 
 private:
-    const NMiniKQL::THolderFactory &HolderFactory_;
-    TVector<NUdf::TUnboxedValue, TMKQLAllocator<NUdf::TUnboxedValue, EMemorySubPool::Temporary>> List_;
+    const NMiniKQL::THolderFactory& HolderFactory_;
+    TUnboxedValueVector List_;
 };
 
 //////////////////////////////////////////////////////////////////////////////

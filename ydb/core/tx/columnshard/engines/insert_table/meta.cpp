@@ -11,10 +11,10 @@ std::shared_ptr<NArrow::TFirstLastSpecialKeys> TInsertedDataMeta::GetSpecialKeys
         return SpecialKeysParsed;
     }
     std::shared_ptr<NArrow::TFirstLastSpecialKeys> result;
-    if (OriginalProto.HasSpecialKeysRawData()) {
-        result = std::make_shared<NArrow::TFirstLastSpecialKeys>(OriginalProto.GetSpecialKeysRawData());
-    } else if (OriginalProto.HasSpecialKeysPayloadData()) {
+    if (OriginalProto.HasSpecialKeysPayloadData()) {
         result = std::make_shared<NArrow::TFirstLastSpecialKeys>(OriginalProto.GetSpecialKeysPayloadData(), schema);
+    } else if (OriginalProto.HasSpecialKeysRawData()) {
+        result = std::make_shared<NArrow::TFirstLastSpecialKeys>(OriginalProto.GetSpecialKeysRawData());
     } else {
         AFL_VERIFY(false);
     }

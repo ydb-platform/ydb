@@ -1,10 +1,9 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb/public/lib/ydb_cli/common/format.h>
 
 #include <util/string/printf.h>
-
-#include <ydb/public/lib/ydb_cli/common/format.h>
 
 #include <fstream>
 #include <regex>
@@ -92,6 +91,12 @@ static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false,
     return TKikimrRunner(serverSettings);
 }
 
+void PrintPlan(const TString& plan) {
+    Cout << plan << Endl;
+    NYdb::NConsoleClient::TQueryPlanPrinter queryPlanPrinter(NYdb::NConsoleClient::EDataFormat::PrettyTable, true, Cout, 0);
+    queryPlanPrinter.Print(plan);
+}
+
 class TChainTester {
 public:
     TChainTester(size_t chainSize)
@@ -141,9 +146,10 @@ private:
                 );
         }
 
-        auto result = Session.ExecuteDataQuery(joinRequest, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        auto result = Session.ExplainDataQuery(joinRequest).ExtractValueSync();
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        PrintPlan(result.GetPlan());
     }
 
     TKikimrRunner Kikimr;
@@ -164,12 +170,9 @@ void ExplainJoinOrderTestDataQuery(const TString& queryPath, bool useStreamLooku
         const TString query = GetStatic(queryPath);
         
         auto result = session.ExplainDataQuery(query).ExtractValueSync();
-
+        result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-
-        NJson::TJsonValue plan;
-        NJson::ReadJsonTree(result.GetPlan(), &plan, true);
-        Cerr << result.GetPlan() << Endl;
+        PrintPlan(result.GetPlan());
     }
 }
 
@@ -184,9 +187,123 @@ void ExecuteJoinOrderTestDataQuery(const TString& queryPath, bool useStreamLooku
     {
         const TString query = GetStatic(queryPath);
         
-        auto result = session.ExecuteDataQuery(query,TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-
+        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        PrintPlan(result.GetQueryPlan());
+    }
+}
+
+void TestOlapEstimationRowsCorrectness(const TString& queryPath, const TString& statsPath) {
+    auto kikimr = GetKikimrWithJoinSettings(false, GetStatic(statsPath));
+    auto db = kikimr.GetTableClient();
+    auto session = db.CreateSession().GetValueSync().GetSession();
+
+    CreateSampleTable(session, true);
+
+    const TString actualQuery = GetStatic(queryPath);
+    TString actualPlan;
+    {
+        auto result = session.ExplainDataQuery(actualQuery).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        actualPlan = result.GetPlan();
+        PrintPlan(actualPlan);
+        Cout << result.GetAst() << Endl;
+    }
+
+    const TString expectedQuery = R"(PRAGMA kikimr.OptEnableOlapPushdown = "false";)" "\n" + actualQuery;
+    TString expectedPlan;
+    {
+        auto result = session.ExplainDataQuery(expectedQuery).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        expectedPlan = result.GetPlan();
+        PrintPlan(expectedPlan);
+        Cout << result.GetAst() << Endl;
+    }
+
+    auto expectedDetailedPlan = GetDetailedJoinOrder(actualPlan, {.IncludeFilters = true, .IncludeOptimizerEstimation = true, .IncludeTables = false});
+    auto actualDetailedPlan =  GetDetailedJoinOrder(expectedPlan, {.IncludeFilters = true, .IncludeOptimizerEstimation = true, .IncludeTables = false});
+    Cout << expectedDetailedPlan << Endl;
+    Cout << actualDetailedPlan << Endl;
+    UNIT_ASSERT_VALUES_EQUAL(expectedDetailedPlan, actualDetailedPlan);
+}
+
+/* Tests to check olap selectivity correctness */
+Y_UNIT_TEST_SUITE(OlapEstimationRowsCorrectness) {
+    Y_UNIT_TEST(TPCH2) {
+        TestOlapEstimationRowsCorrectness("queries/tpch2.sql", "stats/tpch1000s.json");
+    }
+
+    Y_UNIT_TEST(TPCH3) {
+        TestOlapEstimationRowsCorrectness("queries/tpch3.sql", "stats/tpch1000s.json");
+    }
+
+    Y_UNIT_TEST(TPCH5) {
+        TestOlapEstimationRowsCorrectness("queries/tpch5.sql", "stats/tpch1000s.json");
+    }
+
+    Y_UNIT_TEST(TPCH9) {
+        TestOlapEstimationRowsCorrectness("queries/tpch9.sql", "stats/tpch1000s.json");
+    }
+
+    Y_UNIT_TEST(TPCH10) {
+        TestOlapEstimationRowsCorrectness("queries/tpch10.sql", "stats/tpch1000s.json");
+    }
+
+    Y_UNIT_TEST(TPCH11) {
+        TestOlapEstimationRowsCorrectness("queries/tpch11.sql", "stats/tpch1000s.json");
+    }
+
+    Y_UNIT_TEST(TPCH21) {
+        TestOlapEstimationRowsCorrectness("queries/tpch21.sql", "stats/tpch1000s.json");
+    }
+
+    // Y_UNIT_TEST(TPCDS16) { // filter under filter (filter -> filter -> table) maybe constant folding doesn't work
+    //     TestOlapEstimationRowsCorrectness("queries/tpcds16.sql", "stats/tpcds1000s.json");
+    // }
+
+    // Y_UNIT_TEST(TPCDS34) { // ???
+    //     TestOlapEstimationRowsCorrectness("queries/tpcds34.sql", "stats/tpcds1000s.json");
+    // }
+
+    // Y_UNIT_TEST(TPCDS61) { // ???
+    //     TestOlapEstimationRowsCorrectness("queries/tpcds61.sql", "stats/tpcds1000s.json");
+    // }
+
+    // Y_UNIT_TEST(TPCDS64) { // ???
+    //     TestOlapEstimationRowsCorrectness("queries/tpcds64.sql", "stats/tpcds1000s.json");
+    // }
+
+    Y_UNIT_TEST(TPCDS78) {
+        TestOlapEstimationRowsCorrectness("queries/tpcds78.sql", "stats/tpcds1000s.json");
+    }
+
+    Y_UNIT_TEST(TPCDS87) {
+        TestOlapEstimationRowsCorrectness("queries/tpcds87.sql", "stats/tpcds1000s.json");
+    }
+
+    // Y_UNIT_TEST(TPCDS88) { // ???
+    //     TestOlapEstimationRowsCorrectness("queries/tpcds88.sql", "stats/tpcds1000s.json");
+    // }
+
+    // Y_UNIT_TEST(TPCDS90) { // ??? <---- filter olap + / oltp -
+    //     TestOlapEstimationRowsCorrectness("queries/tpcds90.sql", "stats/tpcds1000s.json");
+    // }
+
+    // Y_UNIT_TEST(TPCDS92) { // ???
+    //     TestOlapEstimationRowsCorrectness("queries/tpcds92.sql", "stats/tpcds1000s.json");
+    // }
+
+    // Y_UNIT_TEST(TPCDS94) { // ???
+    //     TestOlapEstimationRowsCorrectness("queries/tpcds94.sql", "stats/tpcds1000s.json");
+    // }
+
+    // Y_UNIT_TEST(TPCDS95) { // ???
+    //     TestOlapEstimationRowsCorrectness("queries/tpcds95.sql", "stats/tpcds1000s.json");
+    // }
+
+    Y_UNIT_TEST(TPCDS96) {
+        TestOlapEstimationRowsCorrectness("queries/tpcds96.sql", "stats/tpcds1000s.json");
     }
 }
 
@@ -210,7 +327,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
             execRes.GetIssues().PrintTo(Cerr);
             UNIT_ASSERT_VALUES_EQUAL(execRes.GetStatus(), EStatus::SUCCESS);
             auto plan = CollectStreamResult(execRes).PlanJson;
-            Cerr << plan.GetRef();
+            PrintPlan(plan.GetRef());
             return plan.GetRef();
         }
     }
@@ -227,7 +344,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
             const TString query = GetStatic(queryPath);
 
             auto result = session.ExplainDataQuery(query).ExtractValueSync();
-            Cerr << result.GetPlan() << Endl;
+            PrintPlan(result.GetPlan());
             NJson::TJsonValue plan;
             NJson::ReadJsonTree(result.GetPlan(), &plan, true);
 
@@ -400,13 +517,13 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
             const TString query = GetStatic(queryPath);
         
             auto result = session.ExplainDataQuery(query).ExtractValueSync();
+
             result.GetIssues().PrintTo(Cerr);
-            Cerr << result.GetPlan() << Endl;
+            PrintPlan(result.GetPlan());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
             NYdb::NConsoleClient::TQueryPlanPrinter queryPlanPrinter(NYdb::NConsoleClient::EDataFormat::PrettyTable, true, Cout, 0);
             queryPlanPrinter.Print(result.GetPlan());
-
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
             if (useStreamLookupJoin) {
                 return;
             }

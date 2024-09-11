@@ -380,14 +380,19 @@ public:
                             .Struct(rowArg)
                             .Name().Build(attr)
                         .Done();
-                        
+
                 auto value = TExprBase(listPtr->ChildPtr(2));
+                if (listPtr->ChildPtr(2)->ChildrenSize() >= 2 && listPtr->ChildPtr(2)->ChildPtr(0)->Content() == "just") {
+                    value = TExprBase(listPtr->ChildPtr(2)->ChildPtr(1));
+                }
                 if (OlapCompSigns.contains(compSign)) {
                     resSelectivity = this->ComputeComparisonSelectivity(member, value);
                 } else if (compSign == "eq") {
                     resSelectivity = this->ComputeEqualitySelectivity(member, value);
                 } else if (compSign == "neq") {
                     resSelectivity = 1 - this->ComputeEqualitySelectivity(member, value);
+                } else if (RegexpSigns.contains(compSign)) {
+                    return 0.5;
                 }
             }
         }
@@ -407,6 +412,12 @@ private:
         {"lte"},
         {"gt"},
         {"gte"}
+    };
+
+    THashSet<TString> RegexpSigns = {
+        "string_contains",
+        "starts_with",
+        "ends_with"
     };
 };
 

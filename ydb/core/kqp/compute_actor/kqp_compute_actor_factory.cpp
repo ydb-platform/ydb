@@ -104,7 +104,7 @@ public:
         ApplyConfig(config);
     }
 
-    void ApplyConfig(const NKikimrConfig::TTableServiceConfig::TResourceManager& config)
+    void ApplyConfig(const NKikimrConfig::TTableServiceConfig::TResourceManager& config) override
     {
         MkqlLightProgramMemoryLimit.store(config.GetMkqlLightProgramMemoryLimit());
         MkqlHeavyProgramMemoryLimit.store(config.GetMkqlHeavyProgramMemoryLimit());
@@ -114,7 +114,7 @@ public:
         MinMemFreeSize.store(config.GetMinMemFreeSize());
     }
 
-    TActorStartResult CreateKqpComputeActor(TCreateArgs&& args) {
+    TActorStartResult CreateKqpComputeActor(TCreateArgs&& args) override {
         NYql::NDq::TComputeMemoryLimits memoryLimits;
         memoryLimits.ChannelBufferSize = 0;
         memoryLimits.MkqlLightProgramMemoryLimit = MkqlLightProgramMemoryLimit.load();
@@ -213,7 +213,8 @@ public:
             auto& info = args.ComputesByStages->UpsertTaskWithScan(*args.Task, meta, !AppData()->FeatureFlags.GetEnableSeparationComputeActorsFromRead());
             IActor* computeActor = CreateKqpScanComputeActor(args.ExecuterId, args.TxId, args.LockTxId, args.LockNodeId, args.Task,
                 AsyncIoFactory, runtimeSettings, memoryLimits,
-                std::move(args.TraceId), std::move(args.Arena));
+                std::move(args.TraceId), std::move(args.Arena),
+                std::move(args.SchedulingOptions));
             TActorId result = TlsActivationContext->Register(computeActor);
             info.MutableActorIds().emplace_back(result);
             return result;
@@ -223,7 +224,8 @@ public:
                 GUCSettings = std::make_shared<TGUCSettings>(args.SerializedGUCSettings);
             }
             IActor* computeActor = ::NKikimr::NKqp::CreateKqpComputeActor(args.ExecuterId, args.TxId, args.Task, AsyncIoFactory,
-                runtimeSettings, memoryLimits, std::move(args.TraceId), std::move(args.Arena), FederatedQuerySetup, GUCSettings);
+                runtimeSettings, memoryLimits, std::move(args.TraceId), std::move(args.Arena), FederatedQuerySetup, GUCSettings,
+                std::move(args.SchedulingOptions));
             return args.ShareMailbox ? TlsActivationContext->AsActorContext().RegisterWithSameMailbox(computeActor) :
                 TlsActivationContext->AsActorContext().Register(computeActor);
         }

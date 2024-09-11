@@ -18,7 +18,6 @@ namespace {
 using TKSV = std::tuple<ui64, ui64, TStringBuf>;
 template <bool isMulti>
 using TKSW = std::tuple<ui64, ui64, TStringBuf, std::optional<TStringBuf>>;
-using TKSWMap = TMap<std::tuple_element_t<0, TKSW<false>>, TString>;
 using TKSWMultiMap = TMap<std::tuple_element_t<0, TKSW<true>>, TVector<TString>>;
 template <typename TupleType>
 using TArrays = std::array<std::shared_ptr<arrow::ArrayData>, std::tuple_size_v<TupleType>>;
@@ -433,7 +432,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinBasicTest) {
         std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(valueInit),
             [](const auto key) { return threeLetterValues[key]; });
         // 2. Make input for the "right" dict.
-        TKSWMap rightMap;
+        TMap<ui64, TString> rightMap;
         for (const auto& key : fibonacci) {
             rightMap[key] = std::to_string(key);
         }
@@ -519,7 +518,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinBasicTest) {
         std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(valueInit),
             [](const auto key) { return threeLetterValues[key]; });
         // 2. Make input for the "right" dict.
-        TKSWMap rightMap;
+        TMap<ui64, TString> rightMap;
         for (const auto& key : fibonacci) {
             rightMap[key] = std::to_string(key);
         }
@@ -705,7 +704,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinMoreTest) {
             valueInit.push_back(threeLetterValues[i]);
         }
         // 2. Make input for the "right" dict.
-        TKSWMap rightMap = {{1, hugeString}};
+        TMap<ui64, TString> rightMap = {{1, hugeString}};
         // 3. Make "expected" data.
         TVector<ui64> keyExpected;
         TVector<ui64> subkeyExpected;
@@ -785,7 +784,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinMoreTest) {
             valueInit.push_back(threeLetterValues[i]);
         }
         // 2. Make input for the "right" dict.
-        TKSWMap rightMap = {{1, hugeString}};
+        TMap<ui64, TString> rightMap = {{1, hugeString}};
         // 3. Make "expected" data.
         TVector<ui64> keyExpected;
         TVector<ui64> subkeyExpected;

@@ -2918,11 +2918,13 @@ public:
         : HolderFactory_(HolderFactory) 
     {}
 
+    // Destroys (moves out from) the element
     IListValueBuilder& Add(NUdf::TUnboxedValue&& element) final {
         List_.emplace_back(element);
         return *this;
     }
 
+    // Destroys (moves out from) the elements
     IListValueBuilder& AddMany(const NUdf::TUnboxedValue* elements, size_t count) final {
         std::copy_n(std::make_move_iterator(elements), count, std::back_inserter(List_));
         return *this;

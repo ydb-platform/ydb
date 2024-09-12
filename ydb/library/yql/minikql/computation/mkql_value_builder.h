@@ -37,7 +37,7 @@ public:
     NUdf::TUnboxedValue PrependString(const NUdf::TStringRef& ref,NUdf::TUnboxedValuePod value) const final;
 
     NUdf::TUnboxedValue SubString(NUdf::TUnboxedValuePod value, ui32 offset, ui32 size) const final;
-    NUdf::TUnboxedValue NewList(NUdf::TUnboxedValue* items, ui64 count) const final;
+    NUdf::TUnboxedValue NewList(NUdf::TUnboxedValue* items, ui64 count) const final; // Destroys (moves out from) items
 
     NUdf::TUnboxedValue NewString(const NUdf::TStringRef& ref) const final;
 

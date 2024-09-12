@@ -105,7 +105,7 @@ class Runner:
         if self.args.clean_old or not self.queries_dir.exists():
             self.prepare_queries_dir([
                 f"dq.MaxTasksPerStage={self.args.tasks}",
-                "dq.OptLLVM=OFF"
+                "dq.OptLLVM=ON"
             ] + [
                 "dq.UseFinalizeByKey=true",
                 "dq.EnableSpillingNodes=All",

@@ -129,7 +129,7 @@ public:
         const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion,
         const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
         const TActorId& creator, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
-        const bool enableOlapSink, const bool useEvWrite, ui32 statementResultIndex, const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
+        const bool useEvWrite, ui32 statementResultIndex, const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
         const TGUCSettings::TPtr& GUCSettings, const TShardIdToTableInfoPtr& shardIdToTableInfo, const bool htapTx)
         : TBase(std::move(request), database, userToken, counters, executerRetriesConfig, chanTransportVersion, aggregation,
             userRequestContext, statementResultIndex, TWilsonKqp::DataExecuter, "DataExecuter", streamResult)
@@ -2890,13 +2890,13 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion, const TActorId& creator,
     const TIntrusivePtr<TUserRequestContext>& userRequestContext,
-    const bool enableOlapSink, const bool useEvWrite, ui32 statementResultIndex,
+    const bool useEvWrite, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
     const TShardIdToTableInfoPtr& shardIdToTableInfo, const bool htapTx)
 {
     return new TKqpDataExecuter(std::move(request), database, userToken, counters, streamResult, executerRetriesConfig,
         std::move(asyncIoFactory), chanTransportVersion, aggregation, creator, userRequestContext,
-        enableOlapSink, useEvWrite, statementResultIndex, federatedQuerySetup, GUCSettings, shardIdToTableInfo, htapTx);
+        useEvWrite, statementResultIndex, federatedQuerySetup, GUCSettings, shardIdToTableInfo, htapTx);
 }
 
 } // namespace NKqp

@@ -2,6 +2,7 @@ LIBRARY()
 
 PEERDIR (
     ydb/library/yql/parser/proto_ast/gen/v0_proto_split
+    contrib/libs/antlr4_cpp_runtime
 )
 
 SET(antlr_output ${ARCADIA_BUILD_ROOT}/${MODDIR})

@@ -129,7 +129,7 @@ Y_UNIT_TEST_SUITE(TLibraryCompilerTests) {
 
         TExprContext ctx;
         UNIT_ASSERT(!CompileAndLink(libs, ctx));
-        UNIT_ASSERT(ctx.IssueManager.GetIssues().ToString().Contains("Cross reference detected"));
+        UNIT_ASSERT(ctx.IssueManager.GetIssues().ToString().contains("Cross reference detected"));
     }
 
     Y_UNIT_TEST(TestCrorssDependencyWithoutCrossReference) {
@@ -188,7 +188,7 @@ Y_UNIT_TEST_SUITE(TLibraryCompilerTests) {
 
         TExprContext ctx;
         UNIT_ASSERT(!CompileAndLink(libs, ctx));
-        UNIT_ASSERT(ctx.IssueManager.GetIssues().ToString().Contains("Cross reference detected"));
+        UNIT_ASSERT(ctx.IssueManager.GetIssues().ToString().contains("Cross reference detected"));
     }
 
     Y_UNIT_TEST(TestForwarding) {

@@ -118,7 +118,7 @@ bool RunPqProgram(
         NYql::CreateCommonDqTaskTransformFactory()
     });
 
-    const auto driverConfig = NYdb::TDriverConfig().SetLog(CreateLogBackend("cerr"));
+    const auto driverConfig = NYdb::TDriverConfig().SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr").Release()));
     NYdb::TDriver driver(driverConfig);
     auto dqGateway = CreateLocalDqGateway(functionRegistry.Get(), dqCompFactory, dqTaskTransformFactory, {}, false/*spilling*/, CreateAsyncIoFactory(driver, pqGateway));
 

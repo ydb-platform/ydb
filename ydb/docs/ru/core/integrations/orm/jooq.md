@@ -156,7 +156,7 @@ spring.datasource.url=jdbc:ydb:<grpc/grpcs>://<host>:<2135/2136>/path/to/databas
 
 `YdbDSLContext` готов к использованию. Рассмотрим примеры специфичных YQL запросов:
 
-Команда [`UPSERT`](../yql/reference/syntax/upsert_into.md):
+Команда [`UPSERT`](../../yql/reference/syntax/upsert_into.md):
 
 ```java
 public void upsert(YdbDSLContext context) {
@@ -166,7 +166,7 @@ public void upsert(YdbDSLContext context) {
 }
 ```
 
-Команда [`REPLACE`](../yql/reference/syntax/replace_into.md):
+Команда [`REPLACE`](../../yql/reference/syntax/replace_into.md):
 
 ```java
 public void replace(YdbDSLContext context) {

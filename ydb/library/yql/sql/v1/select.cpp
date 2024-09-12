@@ -270,13 +270,30 @@ public:
         FakeSource = BuildFakeSource(pos);
     }
 
+    void AllColumns() final {
+        UseAllColumns = true;
+    }
+
     bool ShouldUseSourceAsColumn(const TString& source) const final {
         return source && source != GetLabel();
     }
 
     TMaybe<bool> AddColumn(TContext& ctx, TColumnNode& column) final {
         Y_UNUSED(ctx);
-        Y_UNUSED(column);
+        if (UseAllColumns) {
+            return true;
+        }
+
+        if (column.IsAsterisk()) {
+            AllColumns();
+        } else {
+            if (column.GetColumnName()) {
+                Columns.insert(*column.GetColumnName());
+            } else {
+                AllColumns();
+            }
+        }
+
         return true;
     }
 
@@ -292,7 +309,17 @@ public:
         if (WrapToList) {
             nodeAst = Y("ToList", nodeAst);
         }
-        return nodeAst;
+
+        if (UseAllColumns) {
+            return nodeAst;
+        } else {
+            auto members = Y();
+            for (auto& column : Columns) {
+                members = L(members, BuildQuotedAtom(Pos, column));
+            }
+
+            return Y(ctx.UseUnordered(*this) ? "OrderedMap" : "Map", nodeAst, BuildLambda(Pos, Y("row"), Y("SelectMembers", "row", Q(members))));
+        }
     }
 
     TPtr DoClone() const final {
@@ -303,6 +330,8 @@ private:
     TNodePtr Node;
     bool WrapToList;
     TSourcePtr FakeSource;
+    TSet<TString> Columns;
+    bool UseAllColumns = false;
 };
 
 TSourcePtr BuildNodeSource(TPosition pos, const TNodePtr& node, bool wrapToList) {

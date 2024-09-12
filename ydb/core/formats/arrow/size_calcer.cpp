@@ -242,12 +242,15 @@ ui64 GetArrayDataSize(const std::shared_ptr<arrow::Array>& column) {
 }
 
 NKikimr::NArrow::TSerializedBatch TSerializedBatch::Build(std::shared_ptr<arrow::RecordBatch> batch, const TBatchSplitttingContext& context) {
-    std::optional<TString> specialKeys;
+    std::optional<TString> specialKeysPayload;
+    std::optional<TString> specialKeysFull;
     if (context.GetFieldsForSpecialKeys().size()) {
-        specialKeys = TFirstLastSpecialKeys(batch, context.GetFieldsForSpecialKeys()).SerializeToString();
+        TFirstLastSpecialKeys specialKeys(batch, context.GetFieldsForSpecialKeys());
+        specialKeysPayload = specialKeys.SerializePayloadToString();
+        specialKeysFull = specialKeys.SerializeFullToString();
     }
-    return TSerializedBatch(NArrow::SerializeSchema(*batch->schema()), NArrow::SerializeBatchNoCompression(batch), batch->num_rows(),
-        NArrow::GetBatchDataSize(batch), specialKeys);
+    return TSerializedBatch(NArrow::SerializeBatchNoCompression(batch), batch->num_rows(),
+        NArrow::GetBatchDataSize(batch), specialKeysPayload, specialKeysFull);
 }
 
 TConclusionStatus TSerializedBatch::BuildWithLimit(std::shared_ptr<arrow::RecordBatch> batch, const TBatchSplitttingContext& context, std::optional<TSerializedBatch>& sbL, std::optional<TSerializedBatch>& sbR) {
@@ -291,7 +294,7 @@ TConclusion<std::vector<TSerializedBatch>> TSerializedBatch::BuildWithLimit(std:
 }
 
 TString TSerializedBatch::DebugString() const {
-    return TStringBuilder() << "(data_size=" << Data.size() << ";schema_data_size=" << SchemaData.size() << ";rows_count=" << RowsCount << ";raw_bytes=" << RawBytes << ";)";
+    return TStringBuilder() << "(data_size=" << Data.size() << ";rows_count=" << RowsCount << ";raw_bytes=" << RawBytes << ";)";
 }
 
 }

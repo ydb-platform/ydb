@@ -10,9 +10,9 @@ The mechanism of [column groups](../../../../concepts/datamodel/table.md#column-
 
 ## Creating column groups {#creating-column-groups}
 
-```ADD FAMILY```: Creates a new group of columns in the table. The code below creates the ```family_small``` column group in the ```series_with_families``` table.
+`ADD FAMILY`: Creates a new group of columns in the table. The code below creates the `family_small` column group in the `series_with_families` table.
 
-```sql
+```yql
 ALTER TABLE series_with_families ADD FAMILY family_small (
     DATA = "ssd",
     COMPRESSION = "off"
@@ -21,15 +21,15 @@ ALTER TABLE series_with_families ADD FAMILY family_small (
 
 ## Modifying column groups {#mod-column-groups}
 
-Using the ```ALTER COLUMN``` command, you can change a column group for the specified column. The code below for the ```release_date``` column in the ```series_with_families``` table changes the column group to ```family_small```.
+Using the `ALTER COLUMN` command, you can change a column group for the specified column. The code below for the `release_date` column in the `series_with_families` table changes the column group to `family_small`.
 
 ```sql
 ALTER TABLE series_with_families ALTER COLUMN release_date SET FAMILY family_small;
 ```
 
-The two previous commands from listings 8 and 9 can be combined into one ```ALTER TABLE``` call. The code below creates the ```family_small``` column group and sets it for the ```release_date``` column in the ```series_with_families``` table.
+The two previous commands from listings 8 and 9 can be combined into one `ALTER TABLE` call. The code below creates the `family_small` column group and sets it for the `release_date` column in the `series_with_families` table.
 
-```sql
+```yql
 ALTER TABLE series_with_families
     ADD FAMILY family_small (
         DATA = "ssd",
@@ -38,9 +38,9 @@ ALTER TABLE series_with_families
     ALTER COLUMN release_date SET FAMILY family_small;
 ```
 
-Using the ```ALTER FAMILY``` command, you can change the parameters of the column group. The code below changes the storage type to ```hdd``` for the ```default``` column group in the ```series_with_families``` table:
+Using the `ALTER FAMILY` command, you can change the parameters of the column group. The code below changes the storage type to `hdd` for the `default` column group in the `series_with_families` table:
 
-```sql
+```yql
 ALTER TABLE series_with_families ALTER FAMILY default SET DATA "hdd";
 ```
 

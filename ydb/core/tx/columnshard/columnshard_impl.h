@@ -137,6 +137,9 @@ using ITransaction = NTabletFlatExecutor::ITransaction;
 template <typename T>
 using TTransactionBase = NTabletFlatExecutor::TTransactionBase<T>;
 
+class TVersionCounts : public THashMap<ui64, ui32> {
+};
+
 class TColumnShard
     : public TActor<TColumnShard>
     , public NTabletFlatExecutor::TTabletExecutedFlat
@@ -623,6 +626,16 @@ public:
     }
 
     TColumnShard(TTabletStorageInfo* info, const TActorId& tablet);
+
+    ui32 VersionAddRef(ui64 version, i32 diff) {
+         ui32& refCount = VersionCounts[version];
+         refCount += diff;
+         LOG_S_CRIT("Ref count of schema version " << version << " changed from " << refCount - diff << " to " << refCount << " this " << (ui64)this);
+         return refCount;
+    }
+
+private:
+     TVersionCounts VersionCounts;
 };
 
 }

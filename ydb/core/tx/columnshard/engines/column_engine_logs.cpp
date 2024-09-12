@@ -14,6 +14,7 @@
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/columnshard_ttl.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
+#include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
 #include <ydb/core/tx/tiering/manager.h>
 
@@ -218,7 +219,7 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
             AFL_VERIFY(portion.MutableMeta().LoadMetadata(metaProto, indexInfo));
             AFL_VERIFY(constructors.AddConstructorVerified(std::move(portion)));
             if (portion.HasSchemaVersion()) {
-                VersionAddRef(portion.GetSchemaVersion(), 1);
+                db.CS->VersionAddRef(portion.GetSchemaVersion(), 1);
             }
         })) {
             return false;

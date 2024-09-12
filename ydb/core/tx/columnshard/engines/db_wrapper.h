@@ -30,8 +30,16 @@ class IColumnEngine;
 class TPortionInfo;
 class TPortionInfoConstructor;
 
+NColumnShard::TColumnShard* GetColumnShard(NTabletFlatExecutor::NFlatExecutorSetup::ITablet *owner);
+
 class IDbWrapper {
 public:
+    IDbWrapper() = default;
+    IDbWrapper(NTabletFlatExecutor::NFlatExecutorSetup::ITablet *owner)
+        : CS(GetColumnShard(owner))
+    {
+    }
+
     virtual ~IDbWrapper() = default;
 
     virtual void Insert(const TInsertedData& data) = 0;
@@ -58,16 +66,17 @@ public:
     virtual void WriteCounter(ui32 counterId, ui64 value) = 0;
     virtual bool LoadCounters(const std::function<void(ui32 id, ui64 value)>& callback) = 0;
     virtual TConclusion<THashMap<ui64, std::map<TSnapshot, TGranuleShardingInfo>>> LoadGranulesShardingInfo() = 0;
-};
 
-NColumnShard::TColumnShard* GetColumnShard(NTabletFlatExecutor::NFlatExecutorSetup::ITablet *owner);
+public:
+    NColumnShard::TColumnShard* CS = nullptr;
+};
 
 class TDbWrapper : public IDbWrapper {
 public:
     TDbWrapper(NTable::TDatabase& db, const IBlobGroupSelector* dsGroupSelector, NTabletFlatExecutor::NFlatExecutorSetup::ITablet *owner)
-        : Database(db)
+        : IDbWrapper(owner)
+        , Database(db)
         , DsGroupSelector(dsGroupSelector)
-        , CS(GetColumnShard(owner))
     {
         AFL_VERIFY(owner != nullptr);
         AFL_VERIFY(CS != nullptr);
@@ -102,7 +111,6 @@ public:
 private:
     NTable::TDatabase& Database;
     const IBlobGroupSelector* DsGroupSelector;
-    NColumnShard::TColumnShard* CS;
 };
 
 }

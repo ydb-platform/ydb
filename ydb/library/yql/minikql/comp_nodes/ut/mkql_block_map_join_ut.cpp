@@ -27,18 +27,12 @@ const TRuntimeNode MakeSimpleKey(TProgramBuilder& pgmBuilder, T value, bool isEm
     return pgmBuilder.NewOptional(pgmBuilder.NewDataLiteral<T>(value));
 }
 
-template <typename TKey>
-const TRuntimeNode MakeSet(TProgramBuilder& pgmBuilder, const TSet<TKey>& keyValues) {
-    const auto keyType = pgmBuilder.NewDataType(NUdf::TDataType<TKey>::Id);
+const TRuntimeNode MakeSet(TProgramBuilder& pgmBuilder,
+    const TVector<const TRuntimeNode>& keys
+) {
+    const auto keysList = keys.front();
 
-    TRuntimeNode::TList keyListItems;
-    std::transform(keyValues.cbegin(), keyValues.cend(),
-        std::back_inserter(keyListItems), [&pgmBuilder](const auto key) {
-            return pgmBuilder.NewDataLiteral<TKey>(key);
-        });
-
-    const auto keyList = pgmBuilder.NewList(keyType, keyListItems);
-    return pgmBuilder.ToHashedDict(keyList, false,
+    return pgmBuilder.ToHashedDict(keysList, false,
         [&](TRuntimeNode item) {
             return item;
         }, [&](TRuntimeNode) {
@@ -590,6 +584,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinBasicTest) {
 
     Y_UNIT_TEST(TestLeftSemiOnUint64) {
         TSetup<false> setup;
+        TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
         // 1. Make input for the "left" flow.
         TVector<ui64> keyInit(testSize);
         std::iota(keyInit.begin(), keyInit.end(), 1);
@@ -600,8 +595,9 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinBasicTest) {
         std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(valueInit),
             [](const auto key) { return threeLetterValues[key]; });
         // 2. Make input for the "right" dict.
-        const TSet<ui64> rightSet(fibonacci);
+        const TVector<ui64> rightKeyInit(fibonacci.cbegin(), fibonacci.cend());
         // 3. Make "expected" data.
+        TSet<ui64> rightSet(rightKeyInit.cbegin(), rightKeyInit.cend());
         TVector<ui64> keyExpected;
         TVector<ui64> subkeyExpected;
         TVector<TString> valueExpected;
@@ -618,7 +614,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinBasicTest) {
         const auto [expectedType, expected] = ConvertVectorsToTuples(setup,
             keyExpected, subkeyExpected, valueExpected);
         // 5. Build "right" computation node.
-        const auto rightSetNode = MakeSet(*setup.PgmBuilder, rightSet);
+        const auto rightKeys = BuildListNodes(pgmBuilder, rightKeyInit);
+        const auto rightSetNode = MakeSet(pgmBuilder, rightKeys);
         // 6. Run tests.
         RunTestBlockJoin(setup, EJoinKind::LeftSemi, expectedType, expected,
                          rightSetNode, leftType, leftList, {0});
@@ -626,6 +623,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinBasicTest) {
 
     Y_UNIT_TEST(TestLeftOnlyOnUint64) {
         TSetup<false> setup;
+        TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
         // 1. Make input for the "left" flow.
         TVector<ui64> keyInit(testSize);
         std::iota(keyInit.begin(), keyInit.end(), 1);
@@ -636,8 +634,9 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinBasicTest) {
         std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(valueInit),
             [](const auto key) { return threeLetterValues[key]; });
         // 2. Make input for the "right" dict.
-        const TSet<ui64> rightSet(fibonacci);
+        const TVector<ui64> rightKeyInit(fibonacci.cbegin(), fibonacci.cend());
         // 3. Make "expected" data.
+        TSet<ui64> rightSet(rightKeyInit.cbegin(), rightKeyInit.cend());
         TVector<ui64> keyExpected;
         TVector<ui64> subkeyExpected;
         TVector<TString> valueExpected;
@@ -654,7 +653,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinBasicTest) {
         const auto [expectedType, expected] = ConvertVectorsToTuples(setup,
             keyExpected, subkeyExpected, valueExpected);
         // 5. Build "right" computation node.
-        const auto rightSetNode = MakeSet(*setup.PgmBuilder, rightSet);
+        const auto rightKeys = BuildListNodes(pgmBuilder, rightKeyInit);
+        const auto rightSetNode = MakeSet(pgmBuilder, rightKeys);
         // 6. Run tests.
         RunTestBlockJoin(setup, EJoinKind::LeftOnly, expectedType, expected,
                          rightSetNode, leftType, leftList, {0});
@@ -838,6 +838,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinMoreTest) {
 
     Y_UNIT_TEST(TestLeftSemiOn1) {
         TSetup<false> setup;
+        TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
         // 1. Make input for the "left" flow.
         TVector<ui64> keyInit(testSize);
         std::fill(keyInit.begin(), keyInit.end(), 1);
@@ -848,8 +849,9 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinMoreTest) {
             valueInit.push_back(threeLetterValues[i]);
         }
         // 2. Make input for the "right" dict.
-        const TSet<ui64> rightSet({1});
+        const TVector<ui64> rightKeyInit({1});
         // 3. Make "expected" data.
+        TSet<ui64> rightSet(rightKeyInit.cbegin(), rightKeyInit.cend());
         TVector<ui64> keyExpected;
         TVector<ui64> subkeyExpected;
         TVector<TString> valueExpected;
@@ -866,7 +868,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinMoreTest) {
         const auto [expectedType, expected] = ConvertVectorsToTuples(setup,
             keyExpected, subkeyExpected, valueExpected);
         // 5. Build "right" computation node.
-        const auto rightSetNode = MakeSet(*setup.PgmBuilder, rightSet);
+        const auto rightKeys = BuildListNodes(pgmBuilder, rightKeyInit);
+        const auto rightSetNode = MakeSet(pgmBuilder, rightKeys);
         // 6. Run tests.
         RunTestBlockJoin(setup, EJoinKind::LeftSemi, expectedType, expected,
                          rightSetNode, leftType, leftList, {0});
@@ -874,6 +877,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinMoreTest) {
 
     Y_UNIT_TEST(TestLeftOnlyOn1) {
         TSetup<false> setup;
+        TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
         // 1. Make input for the "left" flow.
         TVector<ui64> keyInit(testSize);
         std::fill(keyInit.begin(), keyInit.end(), 1);
@@ -884,8 +888,9 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinMoreTest) {
             valueInit.push_back(threeLetterValues[i]);
         }
         // 2. Make input for the "right" dict.
-        const TSet<ui64> rightSet({1});
+        const TVector<ui64> rightKeyInit({1});
         // 3. Make "expected" data.
+        TSet<ui64> rightSet(rightKeyInit.cbegin(), rightKeyInit.cend());
         TVector<ui64> keyExpected;
         TVector<ui64> subkeyExpected;
         TVector<TString> valueExpected;
@@ -902,7 +907,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinMoreTest) {
         const auto [expectedType, expected] = ConvertVectorsToTuples(setup,
             keyExpected, subkeyExpected, valueExpected);
         // 5. Build "right" computation node.
-        const auto rightSetNode = MakeSet(*setup.PgmBuilder, rightSet);
+        const auto rightKeys = BuildListNodes(pgmBuilder, rightKeyInit);
+        const auto rightSetNode = MakeSet(pgmBuilder, rightKeys);
         // 6. Run tests.
         RunTestBlockJoin(setup, EJoinKind::LeftOnly, expectedType, expected,
                          rightSetNode, leftType, leftList, {0});

@@ -287,7 +287,7 @@ inline TNodePtr ISource::AliasOrColumn(const TNodePtr& node, bool withSource) {
 }
 
 bool ISource::AddAggregationOverWindow(TContext& ctx, const TString& windowName, TAggregationPtr func) {
-    if (ctx.PragmaEnableDistinctOverWindow) {
+    if (ctx.DistinctOverWindow) {
         YQL_ENSURE(func->IsOverWindow() || func->IsOverWindowDistinct());    
     } else {
         YQL_ENSURE(func->IsOverWindow());

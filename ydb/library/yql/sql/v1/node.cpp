@@ -3111,7 +3111,7 @@ public:
     }
     
     void CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) override {
-        if (ctx.PragmaEnableDistinctOverWindow) {
+        if (ctx.DistinctOverWindow) {
             FuncNode->CollectPreaggregateExprs(ctx, src, exprs);   
         } else {
             INode::CollectPreaggregateExprs(ctx, src, exprs);

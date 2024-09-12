@@ -378,7 +378,7 @@ bool TSqlCallExpr::Init(const TRule_invoke_expr& node) {
     }
 
     if (tail.HasBlock2()) {
-        if (Ctx.PragmaEnableDistinctOverWindow) {
+        if (Ctx.DistinctOverWindow) {
             AggMode == EAggregateMode::Distinct ? SetOverWindowDistinct() : SetOverWindow();
         } else {
             if (AggMode == EAggregateMode::Distinct) {

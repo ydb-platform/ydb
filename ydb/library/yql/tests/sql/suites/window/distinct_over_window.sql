@@ -3,7 +3,7 @@
 
 USE plato;
 
-PRAGMA EnableDistinctOverWindow;
+PRAGMA DistinctOverWindow;
 
 $input = (SELECT cast(key AS Int32) AS key, cast(subkey AS Int32) AS subkey, value FROM Input);
 

@@ -9,7 +9,7 @@
 #include <ydb/core/tx/columnshard/counters/insert_table.h>
 
 namespace NKikimr::NOlap {
-
+class TPKRangesFilter;
 class IDbWrapper;
 
 /// Use one table for inserted and committed blobs:
@@ -57,6 +57,7 @@ public:
         return Summary.AddInserted(std::move(data), load);
     }
     bool AddAborted(TInsertedData&& data, const bool load) {
+        AFL_VERIFY_DEBUG(!Summary.ExtractInserted(data.GetInsertWriteId()));
         if (load) {
             AddBlobLink(data.GetBlobRange().BlobId);
         }
@@ -114,8 +115,8 @@ public:
     void EraseAbortedOnExecute(IDbWrapper& dbTable, const TInsertedData& key, const std::shared_ptr<IBlobsDeclareRemovingAction>& blobsAction);
     void EraseAbortedOnComplete(const TInsertedData& key);
 
-    std::vector<TCommittedBlob> Read(
-        ui64 pathId, const std::optional<ui64> lockId, const TSnapshot& reqSnapshot, const std::shared_ptr<arrow::Schema>& pkSchema) const;
+    std::vector<TCommittedBlob> Read(ui64 pathId, const std::optional<ui64> lockId, const TSnapshot& reqSnapshot,
+        const std::shared_ptr<arrow::Schema>& pkSchema, const TPKRangesFilter* pkRangesFilter) const;
     bool Load(NIceDb::TNiceDb& db, IDbWrapper& dbTable, const TInstant loadTime);
 
     TInsertWriteId BuildNextWriteId(NTabletFlatExecutor::TTransactionContext& txc);

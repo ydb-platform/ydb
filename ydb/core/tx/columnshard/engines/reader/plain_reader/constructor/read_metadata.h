@@ -106,6 +106,10 @@ public:
         return GetProgram().HasProcessingColumnIds();
     }
 
+    ui64 GetPathId() const {
+        return PathId;
+    }
+
     std::shared_ptr<TSelectInfo> SelectInfo;
     NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_NONE;
     std::vector<TCommittedBlob> CommittedBlobs;

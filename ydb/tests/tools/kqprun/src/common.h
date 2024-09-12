@@ -16,7 +16,6 @@ constexpr char YQL_TOKEN_VARIABLE[] = "YQL_TOKEN";
 struct TYdbSetupSettings {
     ui32 NodeCount = 1;
     TString DomainName = "Root";
-    TString DefaultPoolId;
     TDuration InitializationTimeout = TDuration::Seconds(10);
 
     bool MonitoringEnabled = false;

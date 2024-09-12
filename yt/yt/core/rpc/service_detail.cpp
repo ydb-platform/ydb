@@ -1633,32 +1633,17 @@ struct TServiceBase::TRuntimeMethodInfo::TPerformanceCountersKeyEquals
 TServiceBase::TServiceBase(
     IInvokerPtr defaultInvoker,
     const TServiceDescriptor& descriptor,
-    const NLogging::TLogger& logger,
-    TRealmId realmId,
-    IAuthenticatorPtr authenticator)
-    : TServiceBase(
-        std::move(defaultInvoker),
-        descriptor,
-        GetNullMemoryUsageTracker(),
-        logger,
-        realmId,
-        authenticator)
-{ }
-
-TServiceBase::TServiceBase(
-    IInvokerPtr defaultInvoker,
-    const TServiceDescriptor& descriptor,
-    IMemoryUsageTrackerPtr memoryUsageTracker,
-    const NLogging::TLogger& logger,
-    TRealmId realmId,
-    IAuthenticatorPtr authenticator)
-    : Logger(logger)
+    NLogging::TLogger logger,
+    TServiceOptions options)
+    : Logger(std::move(logger))
     , DefaultInvoker_(std::move(defaultInvoker))
-    , Authenticator_(std::move(authenticator))
+    , Authenticator_(std::move(options.Authenticator))
     , ServiceDescriptor_(descriptor)
-    , ServiceId_(descriptor.FullServiceName, realmId)
-    , MemoryUsageTracker_(std::move(memoryUsageTracker))
-    , Profiler_(RpcServerProfiler.WithHot().WithTag("yt_service", TString(ServiceId_.ServiceName)))
+    , ServiceId_(descriptor.FullServiceName, options.RealmId)
+    , MemoryUsageTracker_(std::move(options.MemoryUsageTracker))
+    , Profiler_(RpcServerProfiler
+        .WithHot(options.UseHotProfiler)
+        .WithTag("yt_service", TString(ServiceId_.ServiceName)))
     , AuthenticationTimer_(Profiler_.Timer("/authentication_time"))
     , ServiceLivenessChecker_(New<TPeriodicExecutor>(
         TDispatcher::Get()->GetLightInvoker(),

@@ -4,6 +4,7 @@
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
+#include <ydb/core/protos/table_stats.pb.h>
 
 using namespace NKikimr::NSchemeShard;
 using namespace NKikimr;

@@ -164,6 +164,8 @@ namespace NYql::NDq {
                         InputIndex_,
                         std::move(*issue));
                 };
+
+                return;
             }
 
             // Server temporary failure

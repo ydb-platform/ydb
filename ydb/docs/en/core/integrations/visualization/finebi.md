@@ -1,8 +1,8 @@
 # FineBI
 
-FineBI is a powerful big data analytics tool for everyone.
+FineBI is a powerful big data analytics tool for everyone. FineBI allows data analysts to analyze and share data across your organization for informed decision-making. It helps transform raw data into insightful visualizations, track KPIs, identify trends, and predict future outcomes.
 
-Support for the [PostgreSQL wire protocol](../../postgresql/intro.md) in {{ ydb-short-name }} enables the use of [FineBI](https://intl.finebi.com/) to query and visualize data from {{ ydb-short-name }}.
+PostgreSQL compatibility mode in {{ ydb-short-name }} enables the use of [FineBI](https://intl.finebi.com/) to query and visualize data from {{ ydb-short-name }}. In this case FineBI works with {{ ydb-short-name }} just like with PostgreSQL.
 
 ## Prerequisites
 
@@ -10,6 +10,13 @@ Before you begin, make sure that the following software is installed:
 
 * [FineBI](https://intl.finebi.com/).
 * PostgreSQL JDBC driver for FineBI.
+
+    {% note info %}
+
+    You can download the latest PostgreSQL JDBC driver from the [Download page](https://jdbc.postgresql.org/download/) of the PostgreSQL web site. For information on how to install the PostgreSQL JDBC driver, refer to the [FineBI documentation](https://help.fanruan.com/finebi-en/doc-view-1540.html).
+
+    {% endnote %}
+
 
 ## Adding a database connection to {{ ydb-short-name }} {#add-database-connection}
 
@@ -31,7 +38,7 @@ To connect to {{ ydb-short-name }} from FineBI using the PostgreSQL wire protoco
 
     * **Driver**. The driver that FineBI uses to connect to {{ ydb-short-name }}.
 
-        Select `Custom` and `org.postgresqlDriver (postgresql)`.
+        Select `Custom` and the installed JDBC driver `org.postgresql.Driver`.
 
     * **Database Name**. The path to the [database](../../concepts/glossary.md#database) in the {{ ydb-short-name }} cluster where queries will be executed.
 
@@ -102,7 +109,7 @@ After creating datasets, you can use data from {{ ydb-short-name }} to create ch
 
 ## Creating a chart {#create-chart}
 
-Let's create a sample chart with the dataset from the `episodes` table that is described in the [YQL tutorial](../../dev/yql-tutorial/index.md).
+Let's create a sample chart with the dataset from the `episodes` table that is described in the [YQL tutorial](../../dev/yql-tutorial/index.md). Among other things, this tutorial covers how to [create](../../dev/yql-tutorial/create_demo_tables.md) this table and [populate it with data](../../dev/yql-tutorial/fill_tables_with_data.md).
 
 The table contains the following columns:
 * series_id

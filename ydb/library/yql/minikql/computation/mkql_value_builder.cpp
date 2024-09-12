@@ -90,20 +90,12 @@ NUdf::TUnboxedValue TDefaultValueBuilder::NewList(NUdf::TUnboxedValue* items, ui
     if (!items || !count)
         return HolderFactory_.GetEmptyContainerLazy();
 
-    if (count < Max<ui32>()) {
-        NUdf::TUnboxedValue* inplace = nullptr;
-        auto array = HolderFactory_.CreateDirectArrayHolder(count, inplace);
-        for (ui64 i = 0; i < count; ++i)
-            *inplace++ = std::move(*items++);
-        return std::move(array);
-    }
-
-    TDefaultListRepresentation list;
+    TUnboxedValueVector list;
     for (ui64 i = 0; i < count; ++i) {
-        list = list.Append(std::move(*items++));
+        list.emplace_back(std::move(*items++));
     }
 
-    return HolderFactory_.CreateDirectListHolder(std::move(list));
+    return HolderFactory_.VectorAsVectorHolder(std::move(list));
 }
 
 NUdf::TUnboxedValue TDefaultValueBuilder::ReverseList(const NUdf::TUnboxedValuePod& list) const

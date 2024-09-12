@@ -60,7 +60,7 @@ Let's look at an example of the `maven` plugin:
 </plugin>
 ```
 
-Example of generated classes from [YQL tutorial](../dev/yql-tutorial/create_demo_tables.md):
+Example of generated classes from [YQL tutorial](../../dev/yql-tutorial/create_demo_tables.md):
 
 ```
 ydb/DefaultCatalog.java

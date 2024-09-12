@@ -112,71 +112,66 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             Y_VERIFY_S(CacheFlags1 == 0, "Unexpected page " << CacheFlags1 << " cache flags 1");
             Y_VERIFY_S(CacheFlags2 == 0, "Unexpected page " << CacheFlags2 << " cache flags 2");
         }
+    };
 
-        struct TKey {
-            TLogoBlobID LogoBlobID;
-            ui32 PageId;
+    struct TCacheCachePageTraits {
+        static ui64 GetWeight(const TPage* page) {
+            return sizeof(TPage) + page->Size;
+        }
 
-            auto operator<=>(const TKey&) const = default;
+        static ECacheCacheGeneration GetGeneration(const TPage *page) {
+            return static_cast<ECacheCacheGeneration>(page->CacheFlags1);
+        }
 
-            static TKey Get(const TPage *page) {
-                return {page->Collection->MetaId, page->PageId};
-            }
+        static void SetGeneration(TPage *page, ECacheCacheGeneration generation) {
+            ui32 generation_ = static_cast<ui32>(generation);
+            Y_ABORT_UNLESS(generation_ < (1 << 4));
+            page->CacheFlags1 = generation_;
+        }
+    };
 
-            TString ToString() const {
-                return TStringBuilder() << "LogoBlobID: " << LogoBlobID.ToString() << " PageId: " << PageId;
-            }
-        };
+    struct TS3FIFOPageKey {
+        TLogoBlobID LogoBlobID;
+        ui32 PageId;
 
-        struct TKeyHash {
-            inline size_t operator()(const TKey& key) const {
-                return MultiHash(key.LogoBlobID.Hash(), key.PageId);
-            }
-        };
+        auto operator<=>(const TS3FIFOPageKey&) const = default;
 
-        struct TKeyEqual {
-            inline bool operator()(const TKey& left, const TKey& right) const {
-                return left.LogoBlobID == right.LogoBlobID && left.PageId == right.PageId;
-            }
-        };
+        size_t GetHash() const {
+            return MultiHash(LogoBlobID.Hash(), PageId);
+        }
 
-        struct TSize {
-            static ui64 Get(const TPage *page) {
-                return sizeof(TPage) + page->Size;
-            }
-        };
+        TString ToString() const {
+            return TStringBuilder() << "LogoBlobID: " << LogoBlobID.ToString() << " PageId: " << PageId;
+        }
+    };
 
-        struct TS3FIFOPageLocation {
-            static ES3FIFOPageLocation Get(const TPage *page) {
-                return static_cast<ES3FIFOPageLocation>(page->CacheFlags1);
-            }
-            static void Set(TPage *x, ES3FIFOPageLocation location) {
-                ui32 location_ = static_cast<ui32>(location);
-                Y_ABORT_UNLESS(location_ < (1 << 4));
-                x->CacheFlags1 = location_;
-            }
-        };
+    struct TS3FIFOPageTraits {
+        static ui64 GetSize(const TPage* page) {
+            return sizeof(TPage) + page->Size;
+        }
 
-        struct TS3FIFOPageFrequency {
-            static ui32 Get(const TPage *page) {
-                return page->CacheFlags2;
-            }
-            static void Set(TPage *x, ui32 frequency) {
-                Y_ABORT_UNLESS(frequency < (1 << 4));
-                x->CacheFlags2 = frequency;
-            }
-        };
+        static TS3FIFOPageKey GetKey(const TPage* page) {
+            return {page->Collection->MetaId, page->PageId};
+        }
 
-        struct TCacheCacheGeneration {
-            static ECacheCacheGeneration Get(const TPage *page) {
-                return static_cast<ECacheCacheGeneration>(page->CacheFlags1);
-            }
-            static void Set(TPage *x, ECacheCacheGeneration generation) {
-                ui32 generation_ = static_cast<ui32>(generation);
-                Y_ABORT_UNLESS(generation_ < (1 << 4));
-                x->CacheFlags1 = generation_;
-            }
-        };
+        static ES3FIFOPageLocation GetLocation(const TPage* page) {
+            return static_cast<ES3FIFOPageLocation>(page->CacheFlags1);
+        }
+
+        static void SetLocation(TPage* page, ES3FIFOPageLocation location) {
+            ui32 location_ = static_cast<ui32>(location);
+            Y_ABORT_UNLESS(location_ < (1 << 4));
+            page->CacheFlags1 = location_;
+        }
+
+        static ui32 GetFrequency(const TPage* page) {
+            return page->CacheFlags2;
+        }
+
+        static void SetFrequency(TPage* page, ui32 frequency) {
+            Y_ABORT_UNLESS(frequency < (1 << 4));
+            page->CacheFlags2 = frequency;
+        }
     };
 
     struct TRequest : public TSimpleRefCount<TRequest> {
@@ -268,11 +263,11 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         switch (Config->ReplacementPolicy) {
             case NKikimrSharedCache::S3FIFO:
-                return MakeHolder<TS3FIFOCache<TPage, TPage::TKey, TPage::TKeyHash, TPage::TKeyEqual, TPage::TSize, TPage::TS3FIFOPageLocation, TPage::TS3FIFOPageFrequency>>(1);
+                return MakeHolder<TS3FIFOCache<TPage, TS3FIFOPageKey, TS3FIFOPageTraits>>(1);
             case NKikimrSharedCache::ThreeLeveledLRU:
             default: {
                 TCacheCacheConfig cacheCacheConfig(1, Config->Counters->FreshBytes, Config->Counters->StagingBytes, Config->Counters->WarmBytes);
-                return MakeHolder<TCacheCache<TPage, TPage::TSize, TPage::TCacheCacheGeneration>>(std::move(cacheCacheConfig));
+                return MakeHolder<TCacheCache<TPage, TCacheCachePageTraits>>(std::move(cacheCacheConfig));
             }
         }
     }

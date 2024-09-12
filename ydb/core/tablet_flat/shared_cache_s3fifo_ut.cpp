@@ -24,8 +24,10 @@ namespace {
             : Id(id)
         {}
 
-        static TPageKey Get(const TPage* page) {
-            return {page->Id};
+        auto operator<=>(const TPageKey&) const = default;
+
+        size_t GetHash() const {
+            return std::hash<ui32>()(Id);
         }
 
         TString ToString() const {
@@ -33,42 +35,32 @@ namespace {
         }
     };
 
-    struct TPageKeyHash {
-        inline size_t operator()(const TPageKey& key) const {
-            return std::hash<ui32>()(key.Id);
-        }
-    };
-
-    struct TPageKeyEqual {
-        inline bool operator()(const TPageKey& left, const TPageKey& right) const {
-            return left.Id == right.Id;
-        }
-    };
-
-    struct TPageSize {
-        static ui64 Get(const TPage *page) {
+    struct TPageTraits {
+        static ui64 GetSize(const TPage* page) {
             return page->Size;
         }
-    };
 
-    struct TPageLocation {
-        static ES3FIFOPageLocation Get(const TPage *page) {
+        static TPageKey GetKey(const TPage* page) {
+            return {page->Id};
+        }
+
+        static ES3FIFOPageLocation GetLocation(const TPage* page) {
             return static_cast<ES3FIFOPageLocation>(page->CacheFlags1);
         }
-        static void Set(TPage *x, ES3FIFOPageLocation location) {
-            ui32 generation_ = static_cast<ui32>(location);
-            Y_ABORT_UNLESS(generation_ < (1 << 4));
-            x->CacheFlags1 = generation_;
-        }
-    };
 
-    struct TPageFrequency {
-        static ui32 Get(const TPage *page) {
+        static void SetLocation(TPage* page, ES3FIFOPageLocation location) {
+            ui32 location_ = static_cast<ui32>(location);
+            Y_ABORT_UNLESS(location_ < (1 << 4));
+            page->CacheFlags1 = location_;
+        }
+
+        static ui32 GetFrequency(const TPage* page) {
             return page->CacheFlags2;
         }
-        static void Set(TPage *x, ui32 frequency) {
+
+        static void SetFrequency(TPage* page, ui32 frequency) {
             Y_ABORT_UNLESS(frequency < (1 << 4));
-            x->CacheFlags2 = frequency;
+            page->CacheFlags2 = frequency;
         }
     };
 
@@ -77,7 +69,7 @@ namespace {
 Y_UNIT_TEST_SUITE(TS3FIFOGhostQueue) {
     
     Y_UNIT_TEST(Add) {
-        TS3FIFOGhostPageQueue<TPageKey, TPageKeyHash, TPageKeyEqual> queue(100);
+        TS3FIFOGhostPageQueue<TPageKey, TPageTraits> queue(100);
         UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "");
 
         queue.Add(1, 10);
@@ -97,7 +89,7 @@ Y_UNIT_TEST_SUITE(TS3FIFOGhostQueue) {
     }
 
     Y_UNIT_TEST(Erase) {
-        TS3FIFOGhostPageQueue<TPageKey, TPageKeyHash, TPageKeyEqual> queue(100);
+        TS3FIFOGhostPageQueue<TPageKey, TPageTraits> queue(100);
         UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "");
 
         queue.Add(1, 10);
@@ -119,7 +111,7 @@ Y_UNIT_TEST_SUITE(TS3FIFOGhostQueue) {
     }
 
     Y_UNIT_TEST(Erase_Add) {
-        TS3FIFOGhostPageQueue<TPageKey, TPageKeyHash, TPageKeyEqual> queue(100);
+        TS3FIFOGhostPageQueue<TPageKey, TPageTraits> queue(100);
         UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "");
 
         queue.Add(1, 10);
@@ -138,7 +130,7 @@ Y_UNIT_TEST_SUITE(TS3FIFOGhostQueue) {
     }
 
     Y_UNIT_TEST(Add_Big) {
-        TS3FIFOGhostPageQueue<TPageKey, TPageKeyHash, TPageKeyEqual> queue(100);
+        TS3FIFOGhostPageQueue<TPageKey, TPageTraits> queue(100);
         UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "");
 
         queue.Add(1, 101);
@@ -146,7 +138,7 @@ Y_UNIT_TEST_SUITE(TS3FIFOGhostQueue) {
     }
 
     Y_UNIT_TEST(UpdateLimit) {
-        TS3FIFOGhostPageQueue<TPageKey, TPageKeyHash, TPageKeyEqual> queue(100);
+        TS3FIFOGhostPageQueue<TPageKey, TPageTraits> queue(100);
         UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "");
 
         queue.Add(1, 10);
@@ -185,7 +177,7 @@ Y_UNIT_TEST_SUITE(TS3FIFOCache) {
     }
 
     Y_UNIT_TEST(Touch) {
-        TS3FIFOCache<TPage, TPageKey, TPageKeyHash, TPageKeyEqual, TPageSize, TPageLocation, TPageFrequency> cache(100);
+        TS3FIFOCache<TPage, TPageKey, TPageTraits> cache(100);
 
         TPage page1{1, 2};
         UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page1), TVector<ui32>{});
@@ -249,7 +241,7 @@ Y_UNIT_TEST_SUITE(TS3FIFOCache) {
     }
 
     Y_UNIT_TEST(Touch_MainQueue) {
-        TS3FIFOCache<TPage, TPageKey, TPageKeyHash, TPageKeyEqual, TPageSize, TPageLocation, TPageFrequency> cache(100);
+        TS3FIFOCache<TPage, TPageKey, TPageTraits> cache(100);
 
         TPage page1{1, 20};
         TPage page2{2, 30};
@@ -297,7 +289,7 @@ Y_UNIT_TEST_SUITE(TS3FIFOCache) {
     }
 
     Y_UNIT_TEST(EvictNext) {
-        TS3FIFOCache<TPage, TPageKey, TPageKeyHash, TPageKeyEqual, TPageSize, TPageLocation, TPageFrequency> cache(100);
+        TS3FIFOCache<TPage, TPageKey, TPageTraits> cache(100);
 
         TPage page1{1, 20};
         TPage page2{2, 30};
@@ -352,7 +344,7 @@ Y_UNIT_TEST_SUITE(TS3FIFOCache) {
     }
 
     Y_UNIT_TEST(UpdateLimit) {
-        TS3FIFOCache<TPage, TPageKey, TPageKeyHash, TPageKeyEqual, TPageSize, TPageLocation, TPageFrequency> cache(100);
+        TS3FIFOCache<TPage, TPageKey, TPageTraits> cache(100);
 
         TPage page1{1, 20};
         TPage page2{2, 30};

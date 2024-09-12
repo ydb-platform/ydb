@@ -15,9 +15,7 @@ enum class ES3FIFOPageLocation {
     MainQueue
 };
 
-template <typename TPageKey
-        , typename TPageKeyHash
-        , typename TPageKeyEqual>
+template <typename TPageKey, typename TPageTraits>
 class TS3FIFOGhostPageQueue {
     struct TGhostPage {
         TPageKey Key;
@@ -31,13 +29,13 @@ class TS3FIFOGhostPageQueue {
 
     struct TGhostPageHash {
         inline size_t operator()(const TGhostPage* ghost) const {
-            return TPageKeyHash()(ghost->Key);
+            return ghost->Key.GetHash();
         }
     };
 
     struct TGhostPageEqual {
         inline bool operator()(const TGhostPage* left, const TGhostPage* right) const {
-            return TPageKeyEqual()(left->Key, right->Key);
+            return left->Key == right->Key;
         }
     };
 
@@ -122,14 +120,7 @@ private:
     TDeque<TGhostPage> GhostsQueue;
 };
 
-template <typename TPage
-        , typename TPageKey
-        , typename TPageKeyHash
-        , typename TPageKeyEqual
-        , typename TPageSize
-        , typename TPageLocation
-        , typename TPageFrequency
-    >
+template <typename TPage, typename TPageKey, typename TPageTraits>
 class TS3FIFOCache : public ICacheCache<TPage> {
     struct TLimit {
         ui64 SmallQueueLimit;
@@ -176,7 +167,7 @@ public:
     }
 
     TIntrusiveList<TPage> Touch(TPage* page) override {
-        const ES3FIFOPageLocation location = GetLocation(page);
+        const ES3FIFOPageLocation location = TPageTraits::GetLocation(page);
         switch (location) {
             case ES3FIFOPageLocation::SmallQueue:
             case ES3FIFOPageLocation::MainQueue: {
@@ -191,7 +182,7 @@ public:
     }
 
     void Erase(TPage* page) override {
-        const ES3FIFOPageLocation location = GetLocation(page);
+        const ES3FIFOPageLocation location = TPageTraits::GetLocation(page);
         switch (location) {
             case ES3FIFOPageLocation::None:
                 EraseGhost(page);
@@ -206,7 +197,7 @@ public:
                 Y_ABORT("Unknown page location");
         }
 
-        SetFrequency(page, 0);
+        TPageTraits::SetFrequency(page, 0);
     }
 
     void UpdateLimit(ui64 limit) override {
@@ -223,9 +214,9 @@ public:
             for (auto it = queue.Queue.begin(); it != queue.Queue.end(); it++) {
                 const TPage* page = &*it;
                 if (count != 0) result << ", ";
-                result << "{" << GetKey(page).ToString() << " " << GetFrequency(page) << "f " << GetSize(page) << "b}";
+                result << "{" << TPageTraits::GetKey(page).ToString() << " " << TPageTraits::GetFrequency(page) << "f " << TPageTraits::GetSize(page) << "b}";
                 count++;
-                size += GetSize(page);
+                size += TPageTraits::GetSize(page);
             }
             Y_DEBUG_ABORT_UNLESS(queue.Size == size);
         };
@@ -245,17 +236,17 @@ private:
         while (true) {
             if (!SmallQueue.Queue.Empty() && SmallQueue.Size > Limit.SmallQueueLimit) {
                 TPage* page = Pop(SmallQueue);
-                if (ui32 frequency = GetFrequency(page); frequency > 1) { // load inserts, first read touches, second read touches
+                if (ui32 frequency = TPageTraits::GetFrequency(page); frequency > 1) { // load inserts, first read touches, second read touches
                     Push(MainQueue, page);
                 } else {
-                    if (frequency) SetFrequency(page, 0);
+                    if (frequency) TPageTraits::SetFrequency(page, 0);
                     AddGhost(page);
                     return page;
                 }
             } else if (!MainQueue.Queue.Empty() && MainQueue.Size > Limit.MainQueueLimit) {
                 TPage* page = Pop(MainQueue);
-                if (ui32 frequency = GetFrequency(page); frequency > 0) {
-                    SetFrequency(page, frequency - 1);
+                if (ui32 frequency = TPageTraits::GetFrequency(page); frequency > 0) {
+                    TPageTraits::SetFrequency(page, frequency - 1);
                     Push(MainQueue, page);
                 } else {
                     return page;
@@ -269,19 +260,19 @@ private:
     }
 
     void TouchFast(TPage* page) {
-        Y_DEBUG_ABORT_UNLESS(GetLocation(page) != ES3FIFOPageLocation::None);
+        Y_DEBUG_ABORT_UNLESS(TPageTraits::GetLocation(page) != ES3FIFOPageLocation::None);
 
-        ui32 frequency = GetFrequency(page);
+        ui32 frequency = TPageTraits::GetFrequency(page);
         if (frequency < 3) {
-            SetFrequency(page, frequency + 1);
+            TPageTraits::SetFrequency(page, frequency + 1);
         }
     }
 
     TIntrusiveList<TPage> Insert(TPage* page) {
-        Y_DEBUG_ABORT_UNLESS(GetLocation(page) == ES3FIFOPageLocation::None);
+        Y_DEBUG_ABORT_UNLESS(TPageTraits::GetLocation(page) == ES3FIFOPageLocation::None);
 
         Push(EraseGhost(page) ? MainQueue : SmallQueue, page);
-        SetFrequency(page, 0);
+        TPageTraits::SetFrequency(page, 0);
 
         TIntrusiveList<TPage> evictedList;
         while (TPage* evictedPage = EvictOneIfFull()) {
@@ -293,70 +284,46 @@ private:
 
     TPage* Pop(TQueue& queue) {
         Y_DEBUG_ABORT_UNLESS(!queue.Queue.Empty());
-        Y_ABORT_UNLESS(GetLocation(queue.Queue.Front()) == queue.Location);
-        Y_ABORT_UNLESS(queue.Size >= GetSize(queue.Queue.Front()));
+        Y_ABORT_UNLESS(TPageTraits::GetLocation(queue.Queue.Front()) == queue.Location);
+        Y_ABORT_UNLESS(queue.Size >= TPageTraits::GetSize(queue.Queue.Front()));
 
         TPage* page = queue.Queue.PopFront();
-        queue.Size -= GetSize(page);
-        SetLocation(page, ES3FIFOPageLocation::None);
+        queue.Size -= TPageTraits::GetSize(page);
+        TPageTraits::SetLocation(page, ES3FIFOPageLocation::None);
 
         return page;
     }
 
     void Push(TQueue& queue, TPage* page) {
-        Y_ABORT_UNLESS(GetLocation(page) == ES3FIFOPageLocation::None);
+        Y_ABORT_UNLESS(TPageTraits::GetLocation(page) == ES3FIFOPageLocation::None);
 
         queue.Queue.PushBack(page);
-        queue.Size += GetSize(page);
-        SetLocation(page, queue.Location);
+        queue.Size += TPageTraits::GetSize(page);
+        TPageTraits::SetLocation(page, queue.Location);
     }
 
     void Erase(TQueue& queue, TPage* page) {
-        Y_ABORT_UNLESS(GetLocation(page) == queue.Location);
-        Y_ABORT_UNLESS(queue.Size >= GetSize(page));
+        Y_ABORT_UNLESS(TPageTraits::GetLocation(page) == queue.Location);
+        Y_ABORT_UNLESS(queue.Size >= TPageTraits::GetSize(page));
 
         page->Unlink();
-        queue.Size -= GetSize(page);
-        SetLocation(page, ES3FIFOPageLocation::None);
+        queue.Size -= TPageTraits::GetSize(page);
+        TPageTraits::SetLocation(page, ES3FIFOPageLocation::None);
     }
 
     void AddGhost(const TPage* page) {
-        GhostQueue.Add(GetKey(page), GetSize(page));
+        GhostQueue.Add(TPageTraits::GetKey(page), TPageTraits::GetSize(page));
     }
 
     bool EraseGhost(const TPage* page) {
-        return GhostQueue.Erase(GetKey(page), GetSize(page));
-    }
-
-    TPageKey GetKey(const TPage* page) const {
-        return TPageKey::Get(page);
-    }
-
-    ui64 GetSize(const TPage* page) const {
-        return TPageSize::Get(page);
-    }
-
-    ES3FIFOPageLocation GetLocation(const TPage* page) const {
-        return TPageLocation::Get(page);
-    }
-
-    void SetLocation(TPage* page, ES3FIFOPageLocation location) const {
-        TPageLocation::Set(page, location);
-    }
-
-    ui32 GetFrequency(const TPage* page) const {
-        return TPageFrequency::Get(page);
-    }
-
-    void SetFrequency(TPage* page, ui32 frequency) const {
-        TPageFrequency::Set(page, frequency);
+        return GhostQueue.Erase(TPageTraits::GetKey(page), TPageTraits::GetSize(page));
     }
 
 private:
     TLimit Limit;
     TQueue SmallQueue;
     TQueue MainQueue;
-    TS3FIFOGhostPageQueue<TPageKey, TPageKeyHash, TPageKeyEqual> GhostQueue;
+    TS3FIFOGhostPageQueue<TPageKey, TPageTraits> GhostQueue;
 
 };
 

@@ -365,7 +365,7 @@ namespace NYql::NDq {
                 *disjunction.mutable_operands()->Add()->mutable_conjunction() = conjunction;
             }
             *select.mutable_where()->mutable_filter_typed()->mutable_disjunction() = disjunction;
-            return "";
+            return {};
         }
 
     private:

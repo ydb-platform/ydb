@@ -29,7 +29,7 @@ namespace NYql::NDq {
     TString TGenericTokenProvider::MaybeFillToken(NConnector::NApi::TDataSourceInstance& dsi) const {
         // 1. Don't need tokens if basic auth is set
         if (dsi.credentials().has_basic()) {
-            return "";
+            return {};
         }
 
         *dsi.mutable_credentials()->mutable_token()->mutable_type() = "IAM";
@@ -37,7 +37,7 @@ namespace NYql::NDq {
         // 2. If static IAM-token has been provided, use it
         if (!StaticIAMToken_.empty()) {
             *dsi.mutable_credentials()->mutable_token()->mutable_value() = StaticIAMToken_;
-            return "";
+            return {};
         }
 
         // 3. Otherwise use credentials provider to get token
@@ -54,7 +54,7 @@ namespace NYql::NDq {
         Y_ENSURE(iamToken, "CredentialsProvider returned empty IAM token");
 
         *dsi.mutable_credentials()->mutable_token()->mutable_value() = std::move(iamToken);
-        return "";
+        return {};
     }
 
     TGenericTokenProvider::TPtr

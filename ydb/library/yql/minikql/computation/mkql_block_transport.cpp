@@ -32,15 +32,7 @@ std::shared_ptr<arrow::Buffer> MakeEmptyBuffer() {
 }
 
 bool HasArrrowAlignment(const void* buf) {
-    using namespace NYql::NUdf;
-    size_t addr = reinterpret_cast<size_t>(buf);
-    return (addr & (ArrowMemoryAlignment - 1)) == 0;
-}
-
-const ui8* MakeArrowAlignment(const ui8* buf) {
-    using namespace NYql::NUdf;
-    size_t addr = reinterpret_cast<size_t>(buf);
-    return reinterpret_cast<const ui8*>((addr + ArrowMemoryAlignment - 1) & size_t(ArrowMemoryAlignment - 1));
+    return AlignUp(buf, NYql::NUdf::ArrowMemoryAlignment) == buf;
 }
 
 std::shared_ptr<arrow::Buffer> MakeZeroBuffer(size_t byteLen) {
@@ -54,9 +46,9 @@ std::shared_ptr<arrow::Buffer> MakeZeroBuffer(size_t byteLen) {
     static const ui64 nulls[NullWordCount + ExtraAlignWords] = { 0 };
 
     // round all buffer length to 64 bytes
-    size_t capacity = (byteLen + 63u) & ~size_t(63);
+    size_t capacity = AlignUp(byteLen, size_t(64));
     if (capacity <= NullWordCount * sizeof(ui64)) {
-        return std::make_shared<arrow::Buffer>(MakeArrowAlignment(reinterpret_cast<const ui8*>(nulls)), byteLen);
+        return std::make_shared<arrow::Buffer>(AlignUp(reinterpret_cast<const ui8*>(nulls), ArrowMemoryAlignment), byteLen);
     }
 
     auto result = AllocateResizableBuffer(byteLen, GetYqlMemoryPool());
@@ -67,7 +59,7 @@ std::shared_ptr<arrow::Buffer> MakeZeroBuffer(size_t byteLen) {
 
 std::shared_ptr<arrow::Buffer> MakeZeroBitmap(size_t bitCount) {
     // align up 8 byte boundary
-    size_t byteCount = ((bitCount + 63u) & ~size_t(63u)) >> 3;
+    size_t byteCount = AlignUp(bitCount, size_t(64)) >> 3;
     return MakeZeroBuffer(byteCount);
 }
 
@@ -84,7 +76,7 @@ void StoreNullsSizes(const arrow::ArrayData& data, const IBlockSerializer::TMeta
     }
 
     const ui64 desiredOffset = data.offset % 8;
-    size_t nullBytes = (((size_t)data.length + desiredOffset + 7) & ~7ull) >> 3;
+    size_t nullBytes = AlignUp((size_t)data.length + desiredOffset, size_t(8)) >> 3;
     metaSink(nullBytes);
 }
 
@@ -99,7 +91,7 @@ void StoreNulls(const arrow::ArrayData& data, TRope& dst) {
         return;
     }
     const ui64 desiredOffset = data.offset % 8;
-    size_t nullBytes = (((size_t)data.length + desiredOffset + 7) & ~7ull) >> 3;
+    size_t nullBytes = AlignUp((size_t)data.length + desiredOffset, size_t(8)) >> 3;
     YQL_ENSURE(desiredOffset <= (size_t)data.offset);
     YQL_ENSURE((data.offset - desiredOffset) % 8 == 0);
     const char* nulls = data.GetValues<char>(0, 0) + (data.offset - desiredOffset) / 8;

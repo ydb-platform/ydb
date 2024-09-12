@@ -31,7 +31,6 @@ public:
         Coordinator3 = Runtime.AllocateEdgeActor();
 
         NConfig::TRowDispatcherCoordinatorConfig config;
-        config.SetEnabled(true);
         auto& storage = *config.MutableStorage();
         storage.SetEndpoint(GetEnv("YDB_ENDPOINT"));
         storage.SetDatabase(GetEnv("YDB_DATABASE"));
@@ -44,7 +43,8 @@ public:
             config,
             NKikimr::CreateYdbCredentialsProviderFactory,
             yqSharedResources,
-            "Tenant"
+            "Tenant",
+            MakeIntrusive<NMonitoring::TDynamicCounters>()
             ).release());
 
         LeaderElection2 = Runtime.Register(NewLeaderElection(
@@ -53,7 +53,8 @@ public:
             config,
             NKikimr::CreateYdbCredentialsProviderFactory,
             yqSharedResources,
-            "Tenant"
+            "Tenant",
+            MakeIntrusive<NMonitoring::TDynamicCounters>()
             ).release());
 
         LeaderElection3 = Runtime.Register(NewLeaderElection(
@@ -62,7 +63,8 @@ public:
             config,
             NKikimr::CreateYdbCredentialsProviderFactory,
             yqSharedResources,
-            "Tenant"
+            "Tenant",
+            MakeIntrusive<NMonitoring::TDynamicCounters>()
             ).release());
 
         Runtime.EnableScheduleForActor(LeaderElection1);

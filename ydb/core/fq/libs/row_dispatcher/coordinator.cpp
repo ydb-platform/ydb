@@ -38,11 +38,34 @@ struct TCoordinatorMetrics {
 
 class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
 
-    using TPartitionKey = std::tuple<TString, TString, TString, ui64>;     // Endpoint / Database / TopicName / PartitionId 
+    struct TPartitionKey {
+        TString Endpoint;
+        TString Database;
+        TString TopicName;
+        ui64 PartitionId;
+
+        size_t Hash() const noexcept {
+            ui64 hash = std::hash<TString>()(Endpoint);
+            hash = CombineHashes<ui64>(hash, std::hash<TString>()(Database));
+            hash = CombineHashes<ui64>(hash, std::hash<TString>()(TopicName));
+            hash = CombineHashes<ui64>(hash, std::hash<ui64>()(PartitionId));
+            return hash;
+        }
+        bool operator==(const TPartitionKey& other) const {
+            return Endpoint == other.Endpoint && Database == other.Database
+                && TopicName == other.TopicName && PartitionId == other.PartitionId;
+        }
+    };
+
+    struct TPartitionKeyHash {
+        int operator()(const TPartitionKey& k) const {
+            return k.Hash();
+        }
+    };
 
     struct RowDispatcherInfo {
         bool Connected = false;
-        TSet<TPartitionKey> Locations;
+        THashSet<TPartitionKey, TPartitionKeyHash> Locations;
         bool IsLocal = false;
     };
 
@@ -52,7 +75,7 @@ class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
     const TString LogPrefix;
     const TString Tenant;
     TMap<NActors::TActorId, RowDispatcherInfo> RowDispatchers;
-    THashMap<TPartitionKey, TActorId> PartitionLocations;
+    THashMap<TPartitionKey, TActorId, TPartitionKeyHash> PartitionLocations;
     TCoordinatorMetrics Metrics;
     ui64 LocationRandomCounter = 0;
 
@@ -157,7 +180,7 @@ void TActorCoordinator::PrintInternalState() {
 
     str << "\nLocations:\n";
     for (auto& [key, actorId] : PartitionLocations) {
-        str << "    " << std::get<0>(key) << " / " << std::get<1>(key) << " / " << std::get<2>(key) << ", partId " << std::get<3>(key)  <<  ",  row dispatcher actor id: " << actorId << "\n";
+        str << "    " << key.Endpoint << " / " << key.Database << " / " << key.TopicName << ", partId " << key.PartitionId  <<  ",  row dispatcher actor id: " << actorId << "\n";
     }
     LOG_ROW_DISPATCHER_DEBUG(str.Str());
 }

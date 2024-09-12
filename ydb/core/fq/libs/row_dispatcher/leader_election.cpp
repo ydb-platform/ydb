@@ -15,12 +15,12 @@ namespace NFq {
 
 using namespace NActors;
 using namespace NThreading;
-
 using NYql::TIssues;
 
-static const ui64 TimeoutDurationSec = 3;
-static const TString SemaphoreName = "RowDispatcher"; 
 namespace {
+
+const ui64 TimeoutDurationSec = 3;
+const TString SemaphoreName = "RowDispatcher"; 
 
 struct TEvPrivate {
     // Event ids
@@ -73,16 +73,28 @@ struct TEvPrivate {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TLeaderElectionMetrics {
+    TLeaderElectionMetrics(const ::NMonitoring::TDynamicCounterPtr& counters)
+        : Counters(counters) {
+        Errors = Counters->GetCounter("LeaderElectionErrors", true);
+        LeaderChangedCount = Counters->GetCounter("LeaderElectionChangedCount");
+    }
+
+    ::NMonitoring::TDynamicCounterPtr Counters;
+    ::NMonitoring::TDynamicCounters::TCounterPtr Errors;
+    ::NMonitoring::TDynamicCounters::TCounterPtr LeaderChangedCount;
+};
+
 class TLeaderElection: public TActorBootstrapped<TLeaderElection> {
 
     enum class EState {
-        INIT,
-        WAIT_NODE_CREATED,
-        WAIT_SESSION_CREATED,
-        WAIT_SEMAPHORE_CREATED,
-        STARTED
+        Init,
+        WaitNodeCreated,
+        WaitSessionCreated,
+        WaitSemaphoreCreated,
+        Started
     };
-    NConfig::TRowDispatcherCoordinatorConfig Config;
+    NFq::NConfig::TRowDispatcherCoordinatorConfig Config;
     const NKikimr::TYdbCredentialsProviderFactory& CredentialsProviderFactory;
     TYqSharedResources::TPtr YqSharedResources;
     TYdbConnectionPtr YdbConnection;
@@ -92,7 +104,7 @@ class TLeaderElection: public TActorBootstrapped<TLeaderElection> {
     TActorId CoordinatorId;
     TString LogPrefix;
     const TString Tenant;
-    EState State = EState::INIT;
+    EState State = EState::Init;
     bool CoordinationNodeCreated = false;
     bool SemaphoreCreated = false;
     bool TimeoutScheduled = false;
@@ -104,7 +116,8 @@ class TLeaderElection: public TActorBootstrapped<TLeaderElection> {
     struct NodeInfo {
         bool Connected = false;
     };
-    std::map<ui32, NodeInfo> RowDispatchersByNode; 
+    std::map<ui32, NodeInfo> RowDispatchersByNode;
+    TLeaderElectionMetrics Metrics;
 
 public:
     TLeaderElection(
@@ -113,7 +126,8 @@ public:
         const NConfig::TRowDispatcherCoordinatorConfig& config,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
         const TYqSharedResources::TPtr& yqSharedResources,
-        const TString tenant);
+        const TString tenant,
+        const ::NMonitoring::TDynamicCounterPtr& counters);
 
     void Bootstrap();
     void PassAway() override;
@@ -159,7 +173,8 @@ TLeaderElection::TLeaderElection(
     const NConfig::TRowDispatcherCoordinatorConfig& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const TYqSharedResources::TPtr& yqSharedResources,
-    const TString tenant)
+    const TString tenant,
+    const ::NMonitoring::TDynamicCounterPtr& counters)
     : Config(config)
     , CredentialsProviderFactory(credentialsProviderFactory)
     , YqSharedResources(yqSharedResources)
@@ -167,8 +182,8 @@ TLeaderElection::TLeaderElection(
     , CoordinationNodePath(JoinPath(YdbConnection->TablePathPrefix, tenant))
     , ParentId(parentId)
     , CoordinatorId(coordinatorId)
-    , LogPrefix("TLeaderElection ")
-    , Tenant(tenant) {
+    , Tenant(tenant)
+    , Metrics(counters) {
 }
 
 ERetryErrorClass RetryFunc(const NYdb::TStatus& status) {
@@ -202,14 +217,14 @@ TYdbSdkRetryPolicy::TPtr MakeSchemaRetryPolicy() {
 
 void TLeaderElection::Bootstrap() {
     Become(&TLeaderElection::StateFunc);
-    LogPrefix = LogPrefix + " " + SelfId().ToString() + " ";
+    LogPrefix = "TLeaderElection " + SelfId().ToString() + " ";
     LOG_ROW_DISPATCHER_DEBUG("Successfully bootstrapped, local coordinator id " << CoordinatorId.ToString());
     ProcessState();
 }
 
 void TLeaderElection::ProcessState() {
     switch (State) {
-    case EState::INIT:
+    case EState::Init:
         if (!CoordinationNodeCreated) {
             Register(MakeCreateCoordinationNodeActor(
                 SelfId(),
@@ -218,33 +233,33 @@ void TLeaderElection::ProcessState() {
                 CoordinationNodePath,
                 MakeSchemaRetryPolicy()));
         }
-        State = EState::WAIT_NODE_CREATED;
+        State = EState::WaitNodeCreated;
         [[fallthrough]];
-    case EState::WAIT_NODE_CREATED:
+    case EState::WaitNodeCreated:
         if (!CoordinationNodeCreated) {
             return;
         }
         if (!Session) {
             StartSession();
         }
-        State = EState::WAIT_SESSION_CREATED;
+        State = EState::WaitSessionCreated;
         [[fallthrough]];
-    case EState::WAIT_SESSION_CREATED:
+    case EState::WaitSessionCreated:
         if (!Session) {
             return;
         }
         if (!SemaphoreCreated) {
             CreateSemaphore();
         }
-        State = EState::WAIT_SEMAPHORE_CREATED;
+        State = EState::WaitSemaphoreCreated;
         [[fallthrough]];
-    case EState::WAIT_SEMAPHORE_CREATED:
+    case EState::WaitSemaphoreCreated:
         if (!SemaphoreCreated) {
             return;
         }
-        State = EState::STARTED;
+        State = EState::Started;
         [[fallthrough]];
-    case EState::STARTED:
+    case EState::Started:
         AcquireSemaphore();
         DescribeSemaphore();
         break;
@@ -252,7 +267,7 @@ void TLeaderElection::ProcessState() {
 }
 
 void TLeaderElection::ResetState() {
-    State = EState::INIT;
+    State = EState::Init;
     SetTimeout();
 }
 
@@ -303,7 +318,8 @@ void TLeaderElection::StartSession() {
 
 void TLeaderElection::Handle(NFq::TEvents::TEvSchemaCreated::TPtr& ev) {
     if (!IsTableCreated(ev->Get()->Result)) {
-        LOG_ROW_DISPATCHER_WARN("Schema created error " << ev->Get()->Result.GetIssues());
+        LOG_ROW_DISPATCHER_ERROR("Schema created error " << ev->Get()->Result.GetIssues());
+        Metrics.Errors->Inc();
         ResetState();
         return;
     }
@@ -314,7 +330,8 @@ void TLeaderElection::Handle(NFq::TEvents::TEvSchemaCreated::TPtr& ev) {
 
 void TLeaderElection::Handle(TEvPrivate::TEvCreateSessionResult::TPtr& ev) {
     if (!ev->Get()->Result.IsSuccess()) {
-        LOG_ROW_DISPATCHER_WARN("StartSession fail, " << ev->Get()->Result.GetIssues());
+        LOG_ROW_DISPATCHER_ERROR("StartSession fail, " << ev->Get()->Result.GetIssues());
+        Metrics.Errors->Inc();
         ResetState();
         return;
     }
@@ -325,7 +342,8 @@ void TLeaderElection::Handle(TEvPrivate::TEvCreateSessionResult::TPtr& ev) {
 
 void TLeaderElection::Handle(TEvPrivate::TEvCreateSemaphoreResult::TPtr& ev) {
     if (!IsTableCreated(ev->Get()->Result)) {
-        LOG_ROW_DISPATCHER_WARN("Semaphore creating error " << ev->Get()->Result.GetIssues());
+        LOG_ROW_DISPATCHER_ERROR("Semaphore creating error " << ev->Get()->Result.GetIssues());
+        Metrics.Errors->Inc();
         ResetState();
         return;
     }
@@ -336,7 +354,8 @@ void TLeaderElection::Handle(TEvPrivate::TEvCreateSemaphoreResult::TPtr& ev) {
 
 void TLeaderElection::Handle(TEvPrivate::TEvAcquireSemaphoreResult::TPtr& ev) {
     if (!ev->Get()->Result.IsSuccess()) {
-        LOG_ROW_DISPATCHER_WARN("Acquired fail " << ev->Get()->Result.GetIssues());
+        LOG_ROW_DISPATCHER_ERROR("Acquired fail " << ev->Get()->Result.GetIssues());
+        Metrics.Errors->Inc();
         PendingAcquire = false;
         ResetState();
         return;
@@ -400,7 +419,8 @@ void TLeaderElection::Handle(TEvPrivate::TEvOnChangedResult::TPtr& /*ev*/) {
 
 void TLeaderElection::Handle(TEvPrivate::TEvDescribeSemaphoreResult::TPtr& ev) {
     if (!ev->Get()->Result.IsSuccess()) {
-        LOG_ROW_DISPATCHER_WARN("Semaphore describe fail, " <<  ev->Get()->Result.GetIssues());
+        LOG_ROW_DISPATCHER_ERROR("Semaphore describe fail, " <<  ev->Get()->Result.GetIssues());
+        Metrics.Errors->Inc();
         PendingDescribe = false;
         ResetState();
         return;
@@ -424,6 +444,7 @@ void TLeaderElection::Handle(TEvPrivate::TEvDescribeSemaphoreResult::TPtr& ev) {
     if (!LeaderActorId || (*LeaderActorId != id)) {
         LOG_ROW_DISPATCHER_INFO("Send TEvCoordinatorChanged to " << ParentId);
         TActivationContext::ActorSystem()->Send(ParentId, new NFq::TEvRowDispatcher::TEvCoordinatorChanged(id));
+        Metrics.LeaderChangedCount->Inc();
     }
     LeaderActorId = id;
 }
@@ -438,9 +459,10 @@ std::unique_ptr<NActors::IActor> NewLeaderElection(
     const NConfig::TRowDispatcherCoordinatorConfig& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const TYqSharedResources::TPtr& yqSharedResources,
-    const TString& tenant)
+    const TString& tenant,
+    const ::NMonitoring::TDynamicCounterPtr& counters)
 {
-    return std::unique_ptr<NActors::IActor>(new TLeaderElection(rowDispatcherId, coordinatorId, config, credentialsProviderFactory, yqSharedResources, tenant));
+    return std::unique_ptr<NActors::IActor>(new TLeaderElection(rowDispatcherId, coordinatorId, config, credentialsProviderFactory, yqSharedResources, tenant, counters));
 }
 
 } // namespace NFq

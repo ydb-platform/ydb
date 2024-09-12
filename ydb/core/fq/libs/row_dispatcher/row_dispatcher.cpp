@@ -192,11 +192,9 @@ void TRowDispatcher::Bootstrap() {
     Become(&TRowDispatcher::StateFunc);
     LOG_ROW_DISPATCHER_DEBUG("Successfully bootstrapped row dispatcher, id " << SelfId() << ", tenant " << Tenant);
 
-    if (Config.GetCoordinator().GetEnabled()) {
-        const auto& config = Config.GetCoordinator();
-        auto coordinatorId = Register(NewCoordinator(SelfId(), config, YqSharedResources, Tenant, Counters).release());
-        Register(NewLeaderElection(SelfId(), coordinatorId, config, CredentialsProviderFactory, YqSharedResources, Tenant).release());
-    }
+    const auto& config = Config.GetCoordinator();
+    auto coordinatorId = Register(NewCoordinator(SelfId(), config, YqSharedResources, Tenant, Counters).release());
+    Register(NewLeaderElection(SelfId(), coordinatorId, config, CredentialsProviderFactory, YqSharedResources, Tenant, Counters).release());
 }
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& ev) {

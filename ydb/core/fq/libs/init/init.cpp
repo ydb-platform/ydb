@@ -157,7 +157,32 @@ void Init(
         actorRegistrator(NYql::NDq::MakeCheckpointStorageID(), checkpointStorage.release());
     }
 
+    TVector<NKikimr::NMiniKQL::TComputationNodeFactory> compNodeFactories = {
+        NYql::GetCommonDqFactory(),
+        NYql::GetDqYdbFactory(yqSharedResources->UserSpaceYdbDriver),
+        NKikimr::NMiniKQL::GetYqlFactory()
+    };
+
+    compNodeFactories.insert(compNodeFactories.end(), additionalCompNodeFactories.begin(), additionalCompNodeFactories.end());
+    NKikimr::NMiniKQL::TComputationNodeFactory dqCompFactory = NKikimr::NMiniKQL::GetCompositeWithBuiltinFactory(std::move(compNodeFactories));
+
+    NYql::TTaskTransformFactory dqTaskTransformFactory = NYql::CreateCompositeTaskTransformFactory({
+        NYql::CreateCommonDqTaskTransformFactory(),
+        NYql::CreateYdbDqTaskTransformFactory()
+    });
+
+    auto asyncIoFactory = MakeIntrusive<NYql::NDq::TDqAsyncIoFactory>();
+
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory;
+
+    const auto httpGateway = NYql::IHTTPGateway::Make(
+        &protoConfig.GetGateways().GetHttpGateway(),
+        yqCounters->GetSubgroup("subcomponent", "http_gateway"));
+
+    NYql::NConnector::IClient::TPtr connectorClient = nullptr;
+    if (protoConfig.GetGateways().GetGeneric().HasConnector()) {
+        connectorClient = NYql::NConnector::MakeClientGRPC(protoConfig.GetGateways().GetGeneric().GetConnector());
+    }
 
     if (protoConfig.GetTokenAccessor().GetEnabled()) {
         const auto& tokenAccessorConfig = protoConfig.GetTokenAccessor();
@@ -180,31 +205,6 @@ void Init(
             tenant,
             yqCounters->GetSubgroup("subsystem", "row_dispatcher"));
         actorRegistrator(NFq::RowDispatcherServiceActorId(), rowDispatcher.release());
-    }
-
-    TVector<NKikimr::NMiniKQL::TComputationNodeFactory> compNodeFactories = {
-        NYql::GetCommonDqFactory(),
-        NYql::GetDqYdbFactory(yqSharedResources->UserSpaceYdbDriver),
-        NKikimr::NMiniKQL::GetYqlFactory()
-    };
-
-    compNodeFactories.insert(compNodeFactories.end(), additionalCompNodeFactories.begin(), additionalCompNodeFactories.end());
-    NKikimr::NMiniKQL::TComputationNodeFactory dqCompFactory = NKikimr::NMiniKQL::GetCompositeWithBuiltinFactory(std::move(compNodeFactories));
-
-    NYql::TTaskTransformFactory dqTaskTransformFactory = NYql::CreateCompositeTaskTransformFactory({
-        NYql::CreateCommonDqTaskTransformFactory(),
-        NYql::CreateYdbDqTaskTransformFactory()
-    });
-
-    auto asyncIoFactory = MakeIntrusive<NYql::NDq::TDqAsyncIoFactory>();
-
-    const auto httpGateway = NYql::IHTTPGateway::Make(
-        &protoConfig.GetGateways().GetHttpGateway(),
-        yqCounters->GetSubgroup("subcomponent", "http_gateway"));
-
-    NYql::NConnector::IClient::TPtr connectorClient = nullptr;
-    if (protoConfig.GetGateways().GetGeneric().HasConnector()) {
-        connectorClient = NYql::NConnector::MakeClientGRPC(protoConfig.GetGateways().GetGeneric().GetConnector());
     }
 
     auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();

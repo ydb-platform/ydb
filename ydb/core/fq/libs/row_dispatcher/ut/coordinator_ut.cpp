@@ -34,7 +34,6 @@ public:
         ReadActor2 = Runtime.AllocateEdgeActor(0);
 
         NConfig::TRowDispatcherCoordinatorConfig config;
-        config.SetEnabled(true);
         auto& storage = *config.MutableStorage();
         storage.SetEndpoint("YDB_ENDPOINT");
         storage.SetDatabase("YDB_DATABASE");

@@ -521,7 +521,7 @@ class YqTenant(BaseTenant):
             'send_status_period_sec': 2,
             'max_session_used_memory': 1000000,
             'without_consumer': True}
-        fq_config['row_dispatcher']['coordinator'] = {'enabled': True, 'node_path': "row_dispatcher"}
+        fq_config['row_dispatcher']['coordinator'] = {'node_path': "row_dispatcher"}
         fq_config['row_dispatcher']['coordinator']['storage'] = {}
         self.fill_storage_config(fq_config['row_dispatcher']['coordinator']['storage'],
                                  "RowDispatcher_" + self.uuid)

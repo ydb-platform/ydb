@@ -15,6 +15,7 @@ std::unique_ptr<NActors::IActor> NewLeaderElection(
     const NConfig::TRowDispatcherCoordinatorConfig& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const TYqSharedResources::TPtr& yqSharedResources,
-    const TString& tenant);
+    const TString& tenant,
+    const ::NMonitoring::TDynamicCounterPtr& counters);
 
 } // namespace NFq

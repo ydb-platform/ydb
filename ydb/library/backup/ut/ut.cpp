@@ -1,4 +1,3 @@
-#include <optional>
 #include <ydb/library/backup/backup.h>
 #include <ydb/library/backup/query_builder.h>
 #include <ydb/library/backup/util.h>
@@ -12,7 +11,9 @@
 #include <util/generic/strbuf.h>
 #include <library/cpp/string_utils/quote/quote.h>
 
-#include "contrib/libs/protobuf/src/google/protobuf/text_format.h"
+#include <contrib/libs/protobuf/src/google/protobuf/text_format.h>
+
+#include <optional>
 
 namespace NYdb {
 

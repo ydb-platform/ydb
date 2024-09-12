@@ -2,9 +2,6 @@ RECURSE_FOR_TESTS(
     ut
 )
 
-# Not allowed: ydb/(?!library|services/bg_tasks/abstract/interface.h)
-# In: ./ydb/library/formats
-
 LIBRARY()
 
 PEERDIR(

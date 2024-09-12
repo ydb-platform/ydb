@@ -6,6 +6,7 @@
 #include "engines/column_engine.h"
 
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storage.h>
+#include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/base/row_version.h>
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/core/protos/tx_columnshard.pb.h>
@@ -249,6 +250,14 @@ public:
     bool FillMonitoringReport(NTabletFlatExecutor::TTransactionContext& txc, NJson::TJsonValue& json);
 
     [[nodiscard]] std::unique_ptr<NTabletFlatExecutor::ITransaction> CreateAddShardingInfoTx(TColumnShard& owner, const ui64 pathId, const ui64 versionId, const NSharding::TGranuleShardingLogicContainer& tabletShardingLogic) const;
+
+    ui32 VersionAddRef(ui64 schemaVersion, i32 diff) {
+        if (!PrimaryIndex) {
+            PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId, StoragesManager);
+        }
+        return PrimaryIndex->VersionAddRef(schemaVersion, diff);
+    }
+
 };
 
 }

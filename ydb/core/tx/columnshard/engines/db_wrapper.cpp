@@ -65,10 +65,12 @@ void TDbWrapper::WriteColumn(const NOlap::TPortionInfo& portion, const TColumnRe
 }
 
 void TDbWrapper::WritePortion(const NOlap::TPortionInfo& portion) {
+    LOG_S_CRIT("Writing portion, schema version " << portion.GetSchemaVersionVerified() << " path id " << portion.GetPathId() << " portion id " << portion.GetPortion() << " database " << (ui64)&Database);
     NIceDb::TNiceDb db(Database);
     auto metaProto = portion.GetMeta().SerializeToProto();
     using IndexPortions = NColumnShard::Schema::IndexPortions;
     auto removeSnapshot = portion.GetRemoveSnapshotOptional();
+    CS->TablesManager.VersionAddRef(portion.GetSchemaVersionVerified(), 1);
     db.Table<IndexPortions>().Key(portion.GetPathId(), portion.GetPortion()).Update(
         NIceDb::TUpdate<IndexPortions::SchemaVersion>(portion.GetSchemaVersionVerified()),
         NIceDb::TUpdate<IndexPortions::ShardingVersion>(portion.GetShardingVersionDef(0)),
@@ -78,8 +80,13 @@ void TDbWrapper::WritePortion(const NOlap::TPortionInfo& portion) {
 }
 
 void TDbWrapper::ErasePortion(const NOlap::TPortionInfo& portion) {
+    LOG_S_CRIT("Erasing portion, schema version " << portion.GetSchemaVersionVerified() << " path id " << portion.GetPathId() << " portion id " << portion.GetPortion() << " database " << (ui64)&Database);
     NIceDb::TNiceDb db(Database);
     using IndexPortions = NColumnShard::Schema::IndexPortions;
+    ui32 refCount = CS->TablesManager.VersionAddRef(portion.GetSchemaVersionVerified(), -1);
+    if (refCount == 0) {
+        LOG_S_CRIT("Ref count is set to 0 for version " << portion.GetSchemaVersionVerified() << " need to delete");
+    }
     db.Table<IndexPortions>().Key(portion.GetPathId(), portion.GetPortion()).Delete();
 }
 
@@ -125,6 +132,7 @@ bool TDbWrapper::LoadPortions(const std::function<void(NOlap::TPortionInfoConstr
     }
 
     while (!rowset.EndOfSet()) {
+        LOG_S_CRIT("Loaded portion, path id " << rowset.GetValue<IndexPortions::PathId>() << " portion id " << rowset.GetValue<IndexPortions::PortionId>() << " schema version " << rowset.GetValue<IndexPortions::SchemaVersion>() << " database " << (ui64)&Database);
         NOlap::TPortionInfoConstructor portion(rowset.GetValue<IndexPortions::PathId>(), rowset.GetValue<IndexPortions::PortionId>());
         portion.SetSchemaVersion(rowset.GetValue<IndexPortions::SchemaVersion>());
         if (rowset.HaveValue<IndexPortions::ShardingVersion>() && rowset.GetValue<IndexPortions::ShardingVersion>()) {

@@ -70,7 +70,7 @@ void TDbWrapper::WritePortion(const NOlap::TPortionInfo& portion) {
     auto metaProto = portion.GetMeta().SerializeToProto();
     using IndexPortions = NColumnShard::Schema::IndexPortions;
     auto removeSnapshot = portion.GetRemoveSnapshotOptional();
-    CS->VersionAddRef(portion.GetSchemaVersionVerified(), 1);
+    CS->VersionAddRef(portion.GetPortion(), portion.GetSchemaVersionVerified());
     db.Table<IndexPortions>().Key(portion.GetPathId(), portion.GetPortion()).Update(
         NIceDb::TUpdate<IndexPortions::SchemaVersion>(portion.GetSchemaVersionVerified()),
         NIceDb::TUpdate<IndexPortions::ShardingVersion>(portion.GetShardingVersionDef(0)),
@@ -83,7 +83,7 @@ void TDbWrapper::ErasePortion(const NOlap::TPortionInfo& portion) {
     LOG_S_CRIT("Erasing portion, schema version " << portion.GetSchemaVersionVerified() << " path id " << portion.GetPathId() << " portion id " << portion.GetPortion() << " database " << (ui64)&Database);
     NIceDb::TNiceDb db(Database);
     using IndexPortions = NColumnShard::Schema::IndexPortions;
-    ui32 refCount = CS->VersionAddRef(portion.GetSchemaVersionVerified(), -1);
+    ui32 refCount = CS->VersionRemoveRef(portion.GetPortion(), portion.GetSchemaVersionVerified());
     if (refCount == 0) {
         LOG_S_CRIT("Ref count is set to 0 for version " << portion.GetSchemaVersionVerified() << " need to delete");
     }

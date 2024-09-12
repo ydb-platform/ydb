@@ -714,7 +714,7 @@ private:
     }
 
     size_t FillHandlers() {
-        const std::unique_lock lock(Sync);
+        const std::unique_lock lock(SyncRef());
         for (auto it = Streams.cbegin(); Streams.cend() != it;) {
             if (const auto& stream = it->lock()) {
                 const auto streamHandle = stream->GetHandle();
@@ -763,7 +763,7 @@ private:
         TEasyCurl::TPtr easy;
         long httpResponseCode = 0L;
         {
-            const std::unique_lock lock(Sync);
+            const std::unique_lock lock(SyncRef());
             if (const auto it = Allocated.find(handle); Allocated.cend() != it) {
                 easy = std::move(it->second);
                 TString codeLabel;
@@ -815,7 +815,7 @@ private:
     void Fail(CURLMcode result) {
         std::stack<TEasyCurl::TPtr> works;
         {
-            const std::unique_lock lock(Sync);
+            const std::unique_lock lock(SyncRef());
 
             for (auto& item : Allocated) {
                 works.emplace(std::move(item.second));
@@ -836,7 +836,7 @@ private:
     void Upload(TString url, THeaders headers, TString body, TOnResult callback, bool put, TRetryPolicy::TPtr retryPolicy) final {
         Rps->Inc();
 
-        const std::unique_lock lock(Sync);
+        const std::unique_lock lock(SyncRef());
         auto easy = TEasyCurlBuffer::Make(InFlight, DownloadedBytes, UploadedBytes, std::move(url), put ? TEasyCurl::EMethod::PUT : TEasyCurl::EMethod::POST, std::move(body), std::move(headers), 0U, 0U, std::move(callback), retryPolicy ? retryPolicy->CreateRetryState() : nullptr, InitConfig, DnsGateway.GetDNSCurlList());
         Await.emplace(std::move(easy));
         Wakeup(0U);
@@ -845,7 +845,7 @@ private:
     void Delete(TString url, THeaders headers, TOnResult callback, TRetryPolicy::TPtr retryPolicy) final {
         Rps->Inc();
 
-        const std::unique_lock lock(Sync);
+        const std::unique_lock lock(SyncRef());
         auto easy = TEasyCurlBuffer::Make(InFlight, DownloadedBytes, UploadedBytes, std::move(url), TEasyCurl::EMethod::DELETE, 0, std::move(headers), 0U, 0U, std::move(callback), retryPolicy ? retryPolicy->CreateRetryState() : nullptr, InitConfig, DnsGateway.GetDNSCurlList());
         Await.emplace(std::move(easy));
         Wakeup(0U);
@@ -866,7 +866,7 @@ private:
             callback(TResult(CURLE_OK, TIssues{error}));
             return;
         }
-        const std::unique_lock lock(Sync);
+        const std::unique_lock lock(SyncRef());
         auto easy = TEasyCurlBuffer::Make(InFlight, DownloadedBytes, UploadedBytes, std::move(url), TEasyCurl::EMethod::GET, std::move(data), std::move(headers), offset, sizeLimit, std::move(callback), retryPolicy ? retryPolicy->CreateRetryState() : nullptr, InitConfig, DnsGateway.GetDNSCurlList());
         Await.emplace(std::move(easy));
         Wakeup(sizeLimit);
@@ -883,13 +883,14 @@ private:
         const ::NMonitoring::TDynamicCounters::TCounterPtr& inflightCounter) final
     {
         auto stream = TEasyCurlStream::Make(InFlightStreams, DownloadedBytes, UploadedBytes, std::move(url), std::move(headers), offset, sizeLimit, std::move(onStart), std::move(onNewData), std::move(onFinish), inflightCounter, InitConfig, DnsGateway.GetDNSCurlList());
-        const std::unique_lock lock(Sync);
+        const std::unique_lock lock(SyncRef());
         const auto handle = stream->GetHandle();
         TEasyCurlStream::TWeakPtr weak = stream;
         Streams.emplace_back(stream);
         Allocated.emplace(handle, std::move(stream));
         Wakeup(0ULL);
-        return [weak](TIssue issue) {
+        return [weak, sync=Sync](TIssue issue) {
+            const std::unique_lock lock(*sync);
             if (const auto& stream = weak.lock())
                 stream->Cancel(issue);
         };
@@ -900,7 +901,7 @@ private:
     }
 
     void OnRetry(TEasyCurlBuffer::TPtr easy) {
-        const std::unique_lock lock(Sync);
+        const std::unique_lock lock(SyncRef());
         const size_t sizeLimit = easy->GetSizeLimit();
         Await.emplace(std::move(easy));
         Wakeup(sizeLimit);
@@ -918,6 +919,10 @@ private:
     }
 
 private:
+    std::mutex& SyncRef() {
+        return *Sync;
+    }
+
     CURLM* Handle = nullptr;
 
     std::queue<TEasyCurlBuffer::TPtr> Await;
@@ -927,7 +932,7 @@ private:
     std::unordered_map<CURL*, TEasyCurl::TPtr> Allocated;
     std::priority_queue<std::pair<TInstant, TEasyCurlBuffer::TPtr>> Delayed;
 
-    std::mutex Sync;
+    std::shared_ptr<std::mutex> Sync = std::make_shared<std::mutex>();
     std::thread Thread;
     std::atomic<bool> IsStopped = false;
 

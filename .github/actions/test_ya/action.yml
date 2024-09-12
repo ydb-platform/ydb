@@ -335,6 +335,7 @@ runs:
           fi
 
           CURRENT_PUBLIC_DIR_RELATIVE=try_$RETRY
+          # Can be used in tests in which you want to publish the results in s3 for each retry separately (for not separate see PUBLIC_DIR)
           export CURRENT_PUBLIC_DIR=$PUBLIC_DIR/$CURRENT_PUBLIC_DIR_RELATIVE
           mkdir $CURRENT_PUBLIC_DIR
 

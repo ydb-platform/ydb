@@ -24,11 +24,11 @@ You can also add a secondary index using the {{ ydb-short-name }} CLI [table ind
 
 ## Altering an index {#alter-index}
 
-Indexes have type-specific parameters that can be tuned. Global indexes, whether [synchronous]({{ concept_secondary_index }}#sync) or [asynchronous]({{ concept_secondary_index }}#async), are implemented as hidden tables, and their automatic partitioning settings can be adjusted just like [those of regular tables](#additional-alter).
+Indexes have type-specific parameters that can be tuned. Global indexes, whether [synchronous]({{ concept_secondary_index }}#sync) or [asynchronous]({{ concept_secondary_index }}#async), are implemented as hidden tables, and their automatic partitioning settings can be adjusted just like those of regular tables.
 
 {% note info %}
 
-Currently, specifying secondary index partitioning settings during index creation is not supported in either the [`ALTER TABLE ADD INDEX`](#add-index) or the [`CREATE TABLE INDEX`](../create_table.md#secondary_index) statements.
+Currently, specifying secondary index partitioning settings during index creation is not supported in either the [`ALTER TABLE ADD INDEX`](#add-index) or the [`CREATE TABLE INDEX`](../create_table/secondary_index.md) statements.
 
 {% endnote %}
 

@@ -44,9 +44,11 @@ public:
     }
 
     NArrow::TReplaceKey GetFirstPK(const std::shared_ptr<arrow::Schema>& schema) const {
+        AFL_VERIFY(schema);
         return GetSpecialKeys(schema)->GetFirst();
     }
     NArrow::TReplaceKey GetLastPK(const std::shared_ptr<arrow::Schema>& schema) const {
+        AFL_VERIFY(schema);
         return GetSpecialKeys(schema)->GetLast();
     }
 

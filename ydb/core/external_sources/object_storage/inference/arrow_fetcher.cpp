@@ -14,6 +14,11 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 
+#if defined(_linux_) || defined(_darwin_)
+#include <ydb/library/yql/providers/s3/compressors/factory.h>
+#include <ydb/library/yql/udfs/common/clickhouse/client/src/IO/ReadBufferFromString.h>
+#endif
+
 namespace NKikimr::NExternalSource::NObjectStorage::NInference {
 
 class TArrowFileFetcher : public NActors::TActorBootstrapped<TArrowFileFetcher> {
@@ -134,6 +139,53 @@ private:
     }
 
     // Cutting file
+
+    TMaybe<TString> DecompressFile(const TString& data, const TRequest& request, const NActors::TActorContext& ctx) {
+#if defined(_linux_) || defined(_darwin_)
+        try {
+            NDB::ReadBufferFromString dataBuffer(data);
+            auto decompressorBuffer = NYql::MakeDecompressor(dataBuffer, *DecompressionFormat_);
+            if (!decompressorBuffer) {
+                auto error = MakeError(
+                    request.Path,
+                    NFq::TIssuesIds::INTERNAL_ERROR,
+                    TStringBuilder{} << "unknown compression: " << *DecompressionFormat_ << ". Use one of: gzip, zstd, lz4, brotli, bzip2, xz" 
+                );
+                SendError(ctx, error);
+                return {};
+            }
+
+            TStringBuilder decompressedData;
+            while (!decompressorBuffer->eof() && decompressedData.size() < 10_MB) {
+                decompressorBuffer->nextIfAtEnd();
+                size_t maxDecompressedChunkSize = std::min(
+                    decompressorBuffer->available(),                
+                    10_MB - decompressedData.size()
+                );
+                TString decompressedChunk{maxDecompressedChunkSize, ' '};
+                decompressorBuffer->read(&decompressedChunk.front(), maxDecompressedChunkSize);
+                decompressedData << decompressedChunk;
+            }
+            return std::move(decompressedData);
+        } catch (const yexception& error) {
+            auto errorEv = MakeError(
+                request.Path,
+                NFq::TIssuesIds::INTERNAL_ERROR,
+                TStringBuilder{} << "couldn't decompress file, check compression params: " << error.what()
+            );
+            SendError(ctx, errorEv);
+            return {};
+        }
+#else
+        auto error = MakeError(
+            request.Path,
+            NFq::TIssuesIds::INTERNAL_ERROR,
+            TStringBuilder{} << "inference with decompression is not supported on windows"
+        );
+        SendError(ctx, error);
+        return {};
+#endif
+    }
 
     std::shared_ptr<arrow::io::RandomAccessFile> CleanupCsvFile(const TString& data, const TRequest& request, const arrow::csv::ParseOptions& options, const NActors::TActorContext& ctx) {
         auto chunker = arrow::csv::MakeChunker(options);

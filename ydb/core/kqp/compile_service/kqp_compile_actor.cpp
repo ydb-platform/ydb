@@ -210,6 +210,29 @@ private:
 
         auto prepareSettings = PrepareCompilationSettings(ctx);
 
+        Config->FeatureFlags = AppData(ctx)->FeatureFlags;
+
+        KqpHost = CreateKqpHost(Gateway, QueryId.Cluster, QueryId.Database, Config, ModuleResolverState->ModuleResolver,
+            FederatedQuerySetup, UserToken, QueryServiceConfig, AppData(ctx)->FunctionRegistry, false, false, std::move(TempTablesState));
+
+        IKqpHost::TPrepareSettings prepareSettings;
+        prepareSettings.DocumentApiRestricted = QueryId.Settings.DocumentApiRestricted;
+        prepareSettings.IsInternalCall = QueryId.Settings.IsInternalCall;
+
+        switch (QueryId.Settings.Syntax) {
+            case Ydb::Query::Syntax::SYNTAX_YQL_V1:
+                prepareSettings.UsePgParser = false;
+                prepareSettings.SyntaxVersion = 1;
+                break;
+
+            case Ydb::Query::Syntax::SYNTAX_PG:
+                prepareSettings.UsePgParser = true;
+                break;
+
+            default:
+                break;
+        }
+
         NCpuTime::TCpuTimer timer(CompileCpuTime);
 
         switch (QueryId.Settings.QueryType) {

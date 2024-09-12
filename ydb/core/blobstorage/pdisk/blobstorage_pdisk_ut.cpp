@@ -926,6 +926,30 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         UNIT_ASSERT_VALUES_EQUAL(writeLog(), NKikimrProto::OK);
     }
 
+    Y_UNIT_TEST(ChunkWrite) {
+        TActorTestContext testCtx({ false });
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        vdisk.ReserveChunk();
+        const auto chunk = *vdisk.Chunks[EChunkState::RESERVED].begin();
+
+
+        const ui32 size = 17;
+        const size_t partsNum = 500;
+        TString data(size, 'a');
+        std::vector<NPDisk::TEvChunkWrite::TPart> parts;
+        for (size_t i = 0; i < partsNum; ++i) {
+            parts.emplace_back(data.data(), data.size());
+        }
+        auto nonOwningParts = MakeIntrusive<NPDisk::TEvChunkWrite::TNonOwningParts>(parts.data(), (ui32)parts.size());
+
+        for (size_t i = 0; i < 15; ++i) {
+            testCtx.TestResponse<NPDisk::TEvChunkWriteResult>(new NPDisk::TEvChunkWrite(
+                vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+                chunk, i * vdisk.PDiskParams->AppendBlockSize, nonOwningParts, nullptr, false, 0),
+            NKikimrProto::OK);
+        }
+    }
 }
 
 Y_UNIT_TEST_SUITE(PDiskCompatibilityInfo) {
@@ -1067,6 +1091,5 @@ Y_UNIT_TEST_SUITE(PDiskCompatibilityInfo) {
             }.ToPB()
         );
     }
-
 }
 } // namespace NKikimr

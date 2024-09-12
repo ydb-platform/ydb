@@ -201,6 +201,8 @@ public:
     // Metadata storage
     NMeta::TInfo Meta;
 
+    TThreadPool ChunkWritePool;
+
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Initialization
     TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig> cfg, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters);
@@ -279,7 +281,8 @@ public:
         bool parseCommitMessage);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Chunk writing
-    bool ChunkWritePiece(TChunkWrite *evChunkWrite, ui32 pieceShift, ui32 pieceSize);
+    bool ChunkWritePiece(TChunkWritePiece *piece, TChunkWrite *evChunkWrite, ui32 pieceShift, ui32 pieceSize);
+    bool ChunkWritePiece2(TChunkWritePiece *piece, TChunkWrite *evChunkWrite, ui32 pieceShift, ui32 pieceSize);
     void SendChunkWriteError(TChunkWrite &evChunkWrite, const TString &errorReason, NKikimrProto::EReplyStatus status);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Chunk reading
@@ -292,8 +295,7 @@ public:
     void SendChunkReadError(const TIntrusivePtr<TChunkRead>& read, TStringStream& errorReason,
             NKikimrProto::EReplyStatus status);
     EChunkReadPieceResult ChunkReadPiece(TIntrusivePtr<TChunkRead> &read, ui64 pieceCurrentSector, ui64 pieceSizeLimit,
-            ui64 *reallyReadBytes, NWilson::TTraceId traceId, NLWTrace::TOrbit&& orbit);
-    void SplitChunkJobSize(ui32 totalSize, ui32 *outSmallJobSize, ui32 *outLargeJObSize, ui32 *outSmallJobCount);
+            NWilson::TTraceId traceId, NLWTrace::TOrbit&& orbit);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Chunk locking
     TVector<TChunkIdx> LockChunksForOwner(TOwner owner, const ui32 count, TString &errorReason);

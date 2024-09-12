@@ -419,6 +419,8 @@ class TRealBlockDevice : public IBlockDevice {
                     Device.Mon.DeviceWriteDuration.Increment(duration);
                     LWPROBE(PDiskDeviceWriteDuration, Device.GetPDiskId(), duration, opSize);
                 }
+                P_LOG(PRI_TRACE, BPD01, "iop is done", (Type, op->GetType()), (Duration, duration),
+                    (Offset, op->GetOffset()), (Size, opSize));
                 if (completionAction->FlushAction) {
                     ui64 idx = completionAction->FlushAction->OperationIdx;
                     Y_ABORT_UNLESS(WaitingNoops[idx % MaxWaitingNoops] == nullptr);
@@ -756,6 +758,8 @@ private:
     TDeque<IAsyncIoOperation*> Trash;
     TMutex TrashMutex;
 
+    TSpinLock SubmitThreadLock;
+
     std::optional<TDriveData> DriveData;
 
 public:
@@ -939,6 +943,7 @@ protected:
         if (Flags & TDeviceMode::UseSpdk) {
             SpdkSubmitGetThread->Schedule(op);
         } else {
+            TGuard<TSpinLock> g(SubmitThreadLock);
             SubmitThread->Schedule(op);
         }
     }

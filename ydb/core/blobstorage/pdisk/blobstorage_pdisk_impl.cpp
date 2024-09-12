@@ -51,6 +51,8 @@ TPDisk::TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig
     , ExpectedSlotCount(cfg->ExpectedSlotCount)
     , UseHugePages(cfg->UseSpdkNvmeDriver)
 {
+    ChunkWritePool.Start(1);
+
     SlowdownAddLatencyNs = TControlWrapper(0, 0, 100'000'000'000ll);
     EnableForsetiBinLog = TControlWrapper(0, 0, 1);
     ForsetiMinLogCostNsControl = TControlWrapper(ForsetiMinLogCostNs, 0, 100'000'000ull);
@@ -58,8 +60,8 @@ TPDisk::TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig
             0, 64 * 1024 * 1024);
     ForsetiMaxLogBatchNs = TControlWrapper((PDiskCategory.IsSolidState() ? 50'000ll : 500'000ll), 0, 100'000'000ll);
     ForsetiMaxLogBatchNsCached = ForsetiMaxLogBatchNs;
-    ForsetiOpPieceSizeSsd = TControlWrapper(64 * 1024, 1, 64 * 1024 * 1024);
-    ForsetiOpPieceSizeRot = TControlWrapper(2 * 1024 * 1024, 1, 64 * 1024 * 1024);
+    ForsetiOpPieceSizeSsd = TControlWrapper(64 * 1024, 1, 512 * 1024);
+    ForsetiOpPieceSizeRot = TControlWrapper(512 * 1024, 1, 512 * 1024);
     ForsetiOpPieceSizeCached = PDiskCategory.IsSolidState() ?  ForsetiOpPieceSizeSsd : ForsetiOpPieceSizeRot;
 
     if (Cfg->SectorMap) {
@@ -796,7 +798,136 @@ void TPDisk::AskVDisksToCutLogs(TOwner ownerFilter, bool doForce) {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Chunk writing
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-bool TPDisk::ChunkWritePiece(TChunkWrite *evChunkWrite, ui32 pieceShift, ui32 pieceSize) {
+bool TPDisk::ChunkWritePiece2(TChunkWritePiece *piece, TChunkWrite *chunkWrite, ui32 pieceShift, ui32 pieceSize) {
+    Y_VERIFY(!chunkWrite->IsReplied);
+
+    Y_VERIFY_S(pieceShift % Format.SectorPayloadSize() == 0, pieceShift);
+    Y_VERIFY_S(pieceSize % Format.SectorPayloadSize() == 0 || pieceShift + pieceSize == chunkWrite->Offset + chunkWrite->TotalSize,
+        "pieceShift# " << pieceShift << " pieceSize# " << pieceSize
+        << " chunkWrite->TotalSize# " << chunkWrite->TotalSize);
+
+    ui32 chunkIdx = chunkWrite->ChunkIdx;
+    Y_ABORT_UNLESS(chunkIdx != 0);
+
+    TChunkState &state = ChunkState[chunkIdx];
+    const ui64 beginSectorIdx = pieceShift / Format.SectorPayloadSize();
+    ui64 nonce = state.Nonce + beginSectorIdx;
+
+    const auto& key = Format.ChunkKey;
+    const ui32 chunkSizeSectors = Format.ChunkSize / Format.SectorSize;
+    // const ui32 sectorSize = Format.SectorSize;
+    const ui32 sectorPayloadSize = Format.SectorPayloadSize();
+    const ui32 pieceSizeSectors = (pieceSize + sectorPayloadSize - 1) / sectorPayloadSize;
+    // sector past the end
+    const ui64 endSectorIdx = beginSectorIdx + pieceSizeSectors;
+    Y_VERIFY(endSectorIdx <= chunkSizeSectors);
+    // Y_VERIFY_S(chunkWrite->Offset + chunkWrite->BytesWritten == pieceShift, pieceShift << " " << chunkWrite->ToString());
+
+    auto f = [=, this] () mutable {
+
+        // Y_VERIFY_S((chunkWrite->Offset + chunkWrite->BytesWritten) % Format.SectorPayloadSize() == 0, chunkWrite->ToString()
+        //     << " pieceShift# " << pieceShift
+        //     << " pieceSize# " << pieceSize);
+        // first sector to write data
+
+        TPDiskStreamCypher cypher(Cfg->EnableSectorEncryption);
+        TPDiskHashCalculator hash;
+        cypher.SetKey(key);
+
+        auto traceId = chunkWrite->SpanStack.GetTraceId();
+
+        TBuffer::TPtr buffer = TBuffer::TPtr(BufferPool->Pop());
+        ui8 *dst = buffer->Data();
+        Y_VERIFY(pieceSize / Format.SectorPayloadSize() * Format.SectorSize <= buffer->Size());
+
+        ui32& partIdx = chunkWrite->CurrentPart;
+        auto& parts = *chunkWrite->PartsPtr;
+        for (ui64 sector = beginSectorIdx; sector < endSectorIdx; ++sector) {
+            cypher.StartMessage(nonce);
+
+            ui32 sectorFreeBytes = sectorPayloadSize;
+            ui32 dstOffset = 0;
+            while (sectorFreeBytes) {
+                ui32 remainingPartSize = partIdx < parts.Size() ? parts[partIdx].second - chunkWrite->CurrentPartOffset : 0;
+                // Y_VERIFY(remainingPartSize);
+                ui32 sizeToWrite = Min(remainingPartSize, sectorFreeBytes);
+                if (partIdx >= parts.Size()) {
+                    cypher.EncryptZeroes(dst + dstOffset, sectorFreeBytes);
+                    sectorFreeBytes = 0;
+                } else if (parts[partIdx].first) {
+                    ui8 *src = (ui8*)parts[partIdx].first + chunkWrite->CurrentPartOffset;
+                    cypher.Encrypt(dst + dstOffset, src, sizeToWrite);
+                } else {
+                    cypher.EncryptZeroes(dst + dstOffset, sizeToWrite);
+                }
+                sectorFreeBytes -= sizeToWrite;
+                remainingPartSize -= sizeToWrite;
+                chunkWrite->RemainingSize -= sizeToWrite;
+                chunkWrite->BytesWritten += sizeToWrite;
+                dstOffset += sizeToWrite;
+                if (remainingPartSize == 0) {
+                    partIdx++;
+                    chunkWrite->CurrentPartOffset = 0;
+                } else {
+                    chunkWrite->CurrentPartOffset += sizeToWrite;
+                }
+                P_LOG(PRI_NOTICE, BPD01, " while ",
+                        (Sector, sector),
+                        (SectorFreeBytes, sectorFreeBytes),
+                        (SizeWritten, sizeToWrite),
+                        (RemainingPartSize, remainingPartSize),
+                        (PartIdx, partIdx),
+                        (PartsSize, parts.Size())
+                        );
+            }
+
+            cypher.Encrypt(dst + Format.SectorSize - sizeof(TDataSectorFooter) - CanarySize, &Canary, CanarySize);
+            TDataSectorFooter &sectorFooter = *(TDataSectorFooter*)(dst + Format.SectorSize - sizeof(TDataSectorFooter));
+            sectorFooter.Version = PDISK_DATA_VERSION;
+            sectorFooter.Nonce = nonce;
+            sectorFooter.Hash = hash.HashSector(Format.Offset(chunkIdx, sector), Format.MagicDataChunk, dst, Format.SectorSize);
+            P_LOG(PRI_DEBUG, BPD01, " PrepareParitySectorFooter",
+                    (SectorOffset, Format.Offset(chunkIdx, sector)),
+                    (Nonce, nonce),
+                    (Hash, sectorFooter.Hash));
+
+            ++nonce;
+            dst += Format.SectorSize;
+
+            // Y_VERIFY_S(sizeToWrite == sectorPayloadSize || chunkWrite->RemainingSize == 0, sizeToWrite << " " << chunkWrite->ToString());
+        }
+
+        bool lastPart = chunkWrite->RemainingSize == 0;
+        P_LOG(PRI_DEBUG, BPD79, "ChunkWritePieceDone",
+                (ChunkIdx, chunkIdx),
+                (EvWrite, chunkWrite->ToString()),
+                (BeginSectorIdx, beginSectorIdx),
+                (EndSectorIdx, endSectorIdx),
+                (LastPart, lastPart));
+
+        if (lastPart) {
+            chunkWrite->Completion->Orbit = std::move(chunkWrite->Orbit);
+            buffer->FlushAction = chunkWrite->Completion.Release();
+            chunkWrite->IsReplied = true;
+            //LWTRACK(PDiskChunkWriteLastPieceSendToDevice, chunkWrite->Orbit, PCtx->PDiskId, chunkWrite->Owner, chunkIdx,
+            //    pieceShift, pieceSize);
+        }
+        auto data = buffer->Data(); // buffer will be released
+        BlockDevice->PwriteAsync(data, pieceSizeSectors * Format.SectorSize, Format.Offset(chunkIdx, beginSectorIdx), buffer.Release(),
+                chunkWrite->ReqId, &traceId);
+
+        delete piece;
+        //return lastPart;
+    };
+
+     //f();
+    bool added = ChunkWritePool.AddFunc(std::move(f));
+    Y_VERIFY(added);
+
+    return false;
+}
+
+bool TPDisk::ChunkWritePiece(TChunkWritePiece *piece, TChunkWrite *evChunkWrite, ui32 pieceShift, ui32 pieceSize) {
     if (evChunkWrite->IsReplied) {
         return true;
     }
@@ -807,13 +938,11 @@ bool TPDisk::ChunkWritePiece(TChunkWrite *evChunkWrite, ui32 pieceShift, ui32 pi
         << " evChunkWrite->TotalSize# " << evChunkWrite->TotalSize);
 
     ui32 chunkIdx = evChunkWrite->ChunkIdx;
-
     Y_ABORT_UNLESS(chunkIdx != 0);
 
-
     ui64 desiredSectorIdx = 0;
-    ui64 sectorOffset = 0;
-    ui64 lastSectorIdx;
+    ui64 sectorOffset = 0; // unused
+    ui64 lastSectorIdx = 0; // unused
     if (!ParseSectorOffset(Format, PCtx->ActorSystem, PCtx->PDiskId, evChunkWrite->Offset + evChunkWrite->BytesWritten,
             evChunkWrite->TotalSize - evChunkWrite->BytesWritten, desiredSectorIdx, lastSectorIdx, sectorOffset)) {
         guard.Release();
@@ -826,79 +955,87 @@ bool TPDisk::ChunkWritePiece(TChunkWrite *evChunkWrite, ui32 pieceShift, ui32 pi
     }
 
     TChunkState &state = ChunkState[chunkIdx];
-    state.CurrentNonce = state.Nonce + (ui64)desiredSectorIdx;
+    auto currentNonce = state.Nonce + (ui64)desiredSectorIdx;
+    
     ui32 dataChunkSizeSectors = Format.ChunkSize / Format.SectorSize;
-    TChunkWriter writer(Mon, *BlockDevice.Get(), Format, state.CurrentNonce, Format.ChunkKey, BufferPool.Get(),
-            desiredSectorIdx, dataChunkSizeSectors, Format.MagicDataChunk, chunkIdx, nullptr, desiredSectorIdx,
-            nullptr, PCtx, &DriveModel, Cfg->EnableSectorEncryption);
 
     guard.Release();
 
-    ui32 bytesAvailable = pieceSize;
-    Y_ABORT_UNLESS(evChunkWrite->BytesWritten == pieceShift);
-    const ui32 count = evChunkWrite->PartsPtr->Size();
-    for (ui32 partIdx = evChunkWrite->CurrentPart; partIdx < count; ++partIdx) {
-        ui32 remainingPartSize = (*evChunkWrite->PartsPtr)[partIdx].second - evChunkWrite->CurrentPartOffset;
-        auto traceId = evChunkWrite->SpanStack.GetTraceId();
-        if (bytesAvailable < remainingPartSize) {
-            ui32 sizeToWrite = bytesAvailable;
-            if (sizeToWrite > 0) {
+    auto f = [=, this] () {
+        auto nonce = currentNonce;
+        TChunkWriter writer(Mon, *BlockDevice.Get(), Format, nonce, Format.ChunkKey, BufferPool.Get(),
+                desiredSectorIdx, dataChunkSizeSectors, Format.MagicDataChunk, chunkIdx, nullptr, desiredSectorIdx,
+                nullptr, PCtx, &DriveModel, Cfg->EnableSectorEncryption);
+        ui32 bytesAvailable = pieceSize;
+        Y_ABORT_UNLESS(evChunkWrite->BytesWritten == pieceShift);
+        const ui32 count = evChunkWrite->PartsPtr->Size();
+        for (ui32 partIdx = evChunkWrite->CurrentPart; partIdx < count; ++partIdx) {
+            ui32 remainingPartSize = (*evChunkWrite->PartsPtr)[partIdx].second - evChunkWrite->CurrentPartOffset;
+            auto traceId = evChunkWrite->SpanStack.GetTraceId();
+            if (bytesAvailable < remainingPartSize) {
+                ui32 sizeToWrite = bytesAvailable;
+                if (sizeToWrite > 0) {
+                    ui8 *data = (ui8*)(*evChunkWrite->PartsPtr)[partIdx].first;
+                    if (data) {
+                        ui8 *source = data + evChunkWrite->CurrentPartOffset;
+                        NSan::CheckMemIsInitialized(source, sizeToWrite);
+                        writer.WriteData(source, sizeToWrite, evChunkWrite->ReqId, &traceId);
+                        *Mon.BandwidthPChunkPayload += sizeToWrite;
+                    } else {
+                        writer.WritePadding(sizeToWrite, evChunkWrite->ReqId, &traceId);
+                        *Mon.BandwidthPChunkPadding += sizeToWrite;
+                    }
+                    evChunkWrite->RemainingSize -= sizeToWrite;
+                    evChunkWrite->BytesWritten += sizeToWrite;
+                }
+                evChunkWrite->CurrentPartOffset += sizeToWrite;
+                evChunkWrite->CurrentPart = partIdx;
+                return;
+            } else {
+                Y_ABORT_UNLESS(remainingPartSize);
+                ui32 sizeToWrite = remainingPartSize;
+                bytesAvailable -= remainingPartSize;
                 ui8 *data = (ui8*)(*evChunkWrite->PartsPtr)[partIdx].first;
                 if (data) {
                     ui8 *source = data + evChunkWrite->CurrentPartOffset;
-                    NSan::CheckMemIsInitialized(source, sizeToWrite);
                     writer.WriteData(source, sizeToWrite, evChunkWrite->ReqId, &traceId);
                     *Mon.BandwidthPChunkPayload += sizeToWrite;
                 } else {
                     writer.WritePadding(sizeToWrite, evChunkWrite->ReqId, &traceId);
                     *Mon.BandwidthPChunkPadding += sizeToWrite;
                 }
+                evChunkWrite->CurrentPartOffset = 0;
                 evChunkWrite->RemainingSize -= sizeToWrite;
                 evChunkWrite->BytesWritten += sizeToWrite;
             }
-            evChunkWrite->CurrentPartOffset += sizeToWrite;
-            evChunkWrite->CurrentPart = partIdx;
-            return false;
-        } else {
-            Y_ABORT_UNLESS(remainingPartSize);
-            ui32 sizeToWrite = remainingPartSize;
-            bytesAvailable -= remainingPartSize;
-            ui8 *data = (ui8*)(*evChunkWrite->PartsPtr)[partIdx].first;
-            if (data) {
-                ui8 *source = data + evChunkWrite->CurrentPartOffset;
-                writer.WriteData(source, sizeToWrite, evChunkWrite->ReqId, &traceId);
-                *Mon.BandwidthPChunkPayload += sizeToWrite;
-            } else {
-                writer.WritePadding(sizeToWrite, evChunkWrite->ReqId, &traceId);
-                *Mon.BandwidthPChunkPadding += sizeToWrite;
-            }
-            evChunkWrite->CurrentPartOffset = 0;
-            evChunkWrite->RemainingSize -= sizeToWrite;
-            evChunkWrite->BytesWritten += sizeToWrite;
         }
-    }
-    Y_ABORT_UNLESS(evChunkWrite->RemainingSize == 0);
+        Y_ABORT_UNLESS(evChunkWrite->RemainingSize == 0);
 
-    P_LOG(PRI_DEBUG, BPD79, "ChunkWrite",
-            (ChunkIdx, chunkIdx),
-            (OwnerId, (ui32)evChunkWrite->Owner),
-            (SectorIdx, writer.SectorIdx));
+        P_LOG(PRI_DEBUG, BPD79, "ChunkWrite",
+                (ChunkIdx, chunkIdx),
+                (OwnerId, (ui32)evChunkWrite->Owner),
+                (SectorIdx, writer.SectorIdx));
 
-    if (!writer.IsEmptySector()) {
+        if (!writer.IsEmptySector()) {
+            auto traceId = evChunkWrite->SpanStack.GetTraceId();
+            *Mon.BandwidthPChunkPadding += writer.SectorBytesFree;
+            writer.WriteZeroes(writer.SectorBytesFree, evChunkWrite->ReqId, &traceId);
+            P_LOG(PRI_INFO, BPD01, "Chunk was zero-padded after writing", (ChunkIdx, chunkIdx));
+        }
+        LWTRACK(PDiskChunkWriteLastPieceSendToDevice, evChunkWrite->Orbit, PCtx->PDiskId, evChunkWrite->Owner, chunkIdx,
+            pieceShift, pieceSize);
+
         auto traceId = evChunkWrite->SpanStack.GetTraceId();
-        *Mon.BandwidthPChunkPadding += writer.SectorBytesFree;
-        writer.WriteZeroes(writer.SectorBytesFree, evChunkWrite->ReqId, &traceId);
-        P_LOG(PRI_INFO, BPD01, "Chunk was zero-padded after writing", (ChunkIdx, chunkIdx));
-    }
-    LWTRACK(PDiskChunkWriteLastPieceSendToDevice, evChunkWrite->Orbit, PCtx->PDiskId, evChunkWrite->Owner, chunkIdx,
-        pieceShift, pieceSize);
+        evChunkWrite->Completion->Orbit = std::move(evChunkWrite->Orbit);
+        writer.Flush(evChunkWrite->ReqId, &traceId, evChunkWrite->Completion.Release());
+        evChunkWrite->IsReplied = true;
 
-    auto traceId = evChunkWrite->SpanStack.GetTraceId();
-    evChunkWrite->Completion->Orbit = std::move(evChunkWrite->Orbit);
-    writer.Flush(evChunkWrite->ReqId, &traceId, evChunkWrite->Completion.Release());
+        delete piece;
+    };
 
+    bool added = ChunkWritePool.AddFunc(std::move(f));
+    Y_VERIFY(added);
 
-    evChunkWrite->IsReplied = true;
     return true;
 }
 
@@ -935,7 +1072,7 @@ void TPDisk::SendChunkReadError(const TIntrusivePtr<TChunkRead>& read, TStringSt
 }
 
 TPDisk::EChunkReadPieceResult TPDisk::ChunkReadPiece(TIntrusivePtr<TChunkRead> &read, ui64 pieceCurrentSector,
-        ui64 pieceSizeLimit, ui64 *reallyReadDiskBytes, NWilson::TTraceId traceId, NLWTrace::TOrbit&& orbit) {
+        ui64 pieceSizeLimit, NWilson::TTraceId traceId, NLWTrace::TOrbit&& orbit) {
     if (read->IsReplied) {
         return ReadPieceResultOk;
     }
@@ -948,12 +1085,11 @@ TPDisk::EChunkReadPieceResult TPDisk::ChunkReadPiece(TIntrusivePtr<TChunkRead> &
         sectorsToRead = pieceSizeLimit / Format.SectorSize;
         bytesToRead = sectorsToRead * Format.SectorSize;
     }
+    Y_VERIFY_S(bytesToRead == pieceSizeLimit, bytesToRead << " " << pieceSizeLimit);
+    Y_VERIFY_S(sectorsToRead == pieceSizeLimit / Format.SectorSize, sectorsToRead << " " << pieceSizeLimit);
+    Y_VERIFY_S(pieceSizeLimit % Format.SectorSize == 0, pieceSizeLimit);
 
     Y_ABORT_UNLESS(sectorsToRead);
-
-    if (reallyReadDiskBytes) {
-        *reallyReadDiskBytes = bytesToRead;
-    }
 
     ui64 firstSector;
     ui64 lastSector;
@@ -2223,19 +2359,16 @@ void TPDisk::ProcessChunkWriteQueue() {
         TRequestBase *req = (*it);
         req->SpanStack.PopOk();
         req->SpanStack.Push(TWilson::PDiskDetailed, "PDisk.InBlockDevice", NWilson::EFlags::AUTO_END);
-        switch (req->GetType()) {
-            case ERequestType::RequestChunkWritePiece:
-            {
-                TChunkWritePiece *piece = static_cast<TChunkWritePiece*>(req);
-                if (ChunkWritePiece(piece->ChunkWrite.Get(), piece->PieceShift, piece->PieceSize)) {
-                    Mon.IncrementQueueTime(piece->ChunkWrite->PriorityClass,
-                            piece->ChunkWrite->LifeDurationMs(now));
-                }
-                delete piece;
-                break;
-            }
-            default:
-                Y_FAIL_S("Unexpected request type# " << ui64(req->GetType()) << " in JointChunkWrites");
+
+        Y_VERIFY(req->GetType() == ERequestType::RequestChunkWritePiece);
+        TChunkWritePiece *piece = static_cast<TChunkWritePiece*>(req);
+        // hack to pass one weird unit test
+        piece->ChunkWrite->Offset = piece->ChunkWrite->Offset / Format.SectorPayloadSize() * Format.SectorPayloadSize(); 
+
+        bool lastPart = ChunkWritePiece2(piece, piece->ChunkWrite.Get(), piece->ChunkWrite->Offset + piece->PieceShift, piece->PieceSize);
+        if (lastPart) {
+            // unused
+            Mon.IncrementQueueTime(piece->ChunkWrite->PriorityClass, piece->ChunkWrite->LifeDurationMs(now));
         }
     }
     JointChunkWrites.clear();
@@ -2251,49 +2384,38 @@ void TPDisk::ProcessChunkReadQueue() {
     ui64 bufferSize = BufferPool->GetBufferSize() / Format.SectorSize * Format.SectorSize;
 
     for (auto& req : JointChunkReads) {
-
         req->SpanStack.PopOk();
         req->SpanStack.Push(TWilson::PDiskDetailed, "PDisk.InBlockDevice", NWilson::EFlags::AUTO_END);
-        switch (req->GetType()) {
-            case ERequestType::RequestChunkReadPiece:
-            {
-                TChunkReadPiece *piece = static_cast<TChunkReadPiece*>(req.Get());
-                Y_ABORT_UNLESS(!piece->SelfPointer);
-                TIntrusivePtr<TChunkRead> &read = piece->ChunkRead;
-                TReqId reqId = read->ReqId;
-                ui32 chunkIdx = read->ChunkIdx;
-                bool isComplete = false;
-                ui8 priorityClass = read->PriorityClass;
-                NHPTimer::STime creationTime = read->CreationTime;
-                if (!read->IsReplied) {
-                    P_LOG(PRI_DEBUG, BPD36, "Performing TChunkReadPiece", (ReqId, reqId), (chunkIdx, chunkIdx));
 
-                    ui32 size = 0;
-                    while (!isComplete && size < piece->PieceSizeLimit) {
-                        ui64 currentLimit = Min(bufferSize, piece->PieceSizeLimit - size);
-                        ui64 reallyReadDiskBytes;
-                        EChunkReadPieceResult result = ChunkReadPiece(read, piece->PieceCurrentSector + size / Format.SectorSize,
-                                currentLimit, &reallyReadDiskBytes, piece->SpanStack.GetTraceId(), std::move(piece->Orbit));
-                        isComplete = (result != ReadPieceResultInProgress);
-                        // Read pieces is sliced previously and it is expected that ChunkReadPiece will read exactly
-                        // currentLimit bytes
-                        Y_VERIFY_S(reallyReadDiskBytes == currentLimit, reallyReadDiskBytes << " != " << currentLimit);
-                        size += currentLimit;
-                    }
-                }
-                piece->OnSuccessfulDestroy(PCtx->ActorSystem);
-                if (isComplete) {
-                    //
-                    // WARNING: Don't access "read" after this point.
-                    // Don't add code before the warning!
-                    //
-                    Mon.IncrementQueueTime(priorityClass, HPMilliSeconds(now - creationTime));
-                    P_LOG(PRI_DEBUG, BPD37, "enqueued all TChunkReadPiece", (ReqId, reqId), (chunkIdx, chunkIdx));
-                }
-                break;
-            }
-            default:
-                Y_FAIL_S("Unexpected request type# " << ui64(req->GetType()) << " in JointChunkReads");
+        Y_VERIFY_S(req->GetType() == ERequestType::RequestChunkReadPiece, "Unexpected request type# " << ui64(req->GetType()) << " in JointChunkReads");
+        TChunkReadPiece *piece = static_cast<TChunkReadPiece*>(req.Get());
+        Y_ABORT_UNLESS(!piece->SelfPointer);
+        TIntrusivePtr<TChunkRead> &read = piece->ChunkRead;
+        TReqId reqId = read->ReqId;
+        ui32 chunkIdx = read->ChunkIdx;
+        ui8 priorityClass = read->PriorityClass;
+        NHPTimer::STime creationTime = read->CreationTime;
+        Y_VERIFY(!read->IsReplied);
+        P_LOG(PRI_DEBUG, BPD36, "Performing TChunkReadPiece", (ReqId, reqId), (chunkIdx, chunkIdx),
+            (PieceCurrentSector, piece->PieceCurrentSector),
+            (PieceSizeLimit, piece->PieceSizeLimit),
+            (IsTheLastPiece, piece->IsTheLastPiece),
+            (BufferSize, bufferSize)
+        );
+
+        ui64 currentLimit = Min(bufferSize, piece->PieceSizeLimit);
+        EChunkReadPieceResult result = ChunkReadPiece(read, piece->PieceCurrentSector, currentLimit,
+            piece->SpanStack.GetTraceId(), std::move(piece->Orbit));
+        bool isComplete = (result != ReadPieceResultInProgress);
+        Y_VERIFY_S(isComplete || currentLimit >= piece->PieceSizeLimit, isComplete << " " << currentLimit << " " << piece->PieceSizeLimit);
+        piece->OnSuccessfulDestroy(PCtx->ActorSystem);
+        if (isComplete) {
+            //
+            // WARNING: Don't access "read" after this point.
+            // Don't add code before the warning!
+            //
+            Mon.IncrementQueueTime(priorityClass, HPMilliSeconds(now - creationTime));
+            P_LOG(PRI_DEBUG, BPD37, "enqueued all TChunkReadPiece", (ReqId, reqId), (chunkIdx, chunkIdx));
         }
     }
     JointChunkReads.clear();
@@ -2923,6 +3045,22 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
                 return false;
             }
 
+            {
+                ui64 desiredSectorIdx; // unused
+                ui64 sectorOffset; // unused
+                ui64 lastSectorIdx; // unused
+                if (!ParseSectorOffset(Format, PCtx->ActorSystem, PCtx->PDiskId, ev.Offset + ev.BytesWritten,
+                        ev.TotalSize - ev.BytesWritten, desiredSectorIdx, lastSectorIdx, sectorOffset)) {
+                    TString err = Sprintf("PDiskId# %" PRIu32 " Can't write chunk: incorrect offset/size offset# %" PRIu32
+                            " size# %" PRIu32 " chunkIdx# %" PRIu32 " ownerId# %" PRIu32, PCtx->PDiskId, (ui32)ev.Offset,
+                            (ui32)ev.TotalSize, (ui32)ev.ChunkIdx, (ui32)ev.Owner);
+                    P_LOG(PRI_ERROR, BPD01, err);
+                    SendChunkWriteError(ev, err, NKikimrProto::ERROR);
+                    delete request;
+                    return false;
+                }
+            }
+
             ev.SetOwnerGroupType(ownerData.IsStaticGroupOwner());
             ownerData.WriteThroughput.Increment(ev.TotalSize, PCtx->ActorSystem->Timestamp());
             request->JobKind = NSchLab::JobKindWrite;
@@ -3150,65 +3288,57 @@ void TPDisk::PushRequestToForseti(TRequestBase *request) {
         if (!isAdded) {
             if (request->GetType() == ERequestType::RequestChunkWrite) {
                 TIntrusivePtr<TChunkWrite> whole(static_cast<TChunkWrite*>(request));
-                ui32 smallJobSize = 0;
-                ui32 smallJobCount = 0;
-                ui32 largeJobSize = 0;
-                SplitChunkJobSize(whole->TotalSize, &smallJobSize, &largeJobSize, &smallJobCount);
-                for (ui32 idx = 0; idx < smallJobCount; ++idx) {
-                    // Schedule small job.
+
+                const ui32 jobSizeLimit  = ui64(ForsetiOpPieceSizeCached) * Format.SectorPayloadSize() / Format.SectorSize;
+                const ui32 jobCount = (whole->TotalSize + jobSizeLimit - 1) / jobSizeLimit;
+
+                ui32 remainingSize = whole->TotalSize;
+                for (ui32 idx = 0; idx < jobCount; ++idx) {
                     auto span = request->SpanStack.CreateChild(TWilson::PDiskBasic, "PDisk.ChunkWritePiece", NWilson::EFlags::AUTO_END);
                     span.Attribute("small_job_idx", idx)
-                        .Attribute("is_last_piece", false);
-                    TChunkWritePiece *piece = new TChunkWritePiece(whole, idx * smallJobSize, smallJobSize, std::move(span));
+                        .Attribute("is_last_piece", idx == jobCount - 1);
+                    ui32 jobSize = Min(remainingSize, jobSizeLimit);
+                    TChunkWritePiece *piece = new TChunkWritePiece(whole, idx * jobSizeLimit, jobSize, std::move(span));
                     piece->EstimateCost(DriveModel);
+                    remainingSize -= jobSize;
+                    whole->UnenqueuedSize -= jobSize;
+                    P_LOG(PRI_NOTICE, BPD01, "Created new ChunkWritePiece",
+                        (PieceOffset, piece->PieceShift),
+                        (PieceSize, piece->PieceSize),
+                        (Idx, idx),
+                        (JobCount, jobCount),
+                        (JobSizeLimit, jobSizeLimit),
+                        (EvChunkWrite, piece->ChunkWrite->ToString())
+                    );
                     AddJobToForseti(cbs, piece, request->JobKind);
                 }
-                // Schedule large job (there always is one)
-                auto span = request->SpanStack.CreateChild(TWilson::PDiskBasic, "PDisk.ChunkWritePiece", NWilson::EFlags::AUTO_END);
-                span.Attribute("is_last_piece", true);
-                TChunkWritePiece *piece = new TChunkWritePiece(whole, smallJobCount * smallJobSize, largeJobSize, std::move(span));
-                piece->EstimateCost(DriveModel);
-                AddJobToForseti(cbs, piece, request->JobKind);
-                LWTRACK(PDiskChunkWriteAddToScheduler, request->Orbit, PCtx->PDiskId, request->ReqId.Id,
-                        HPSecondsFloat(HPNow() - request->CreationTime), request->Owner, request->IsFast,
-                        request->PriorityClass, whole->TotalSize);
+                Y_VERIFY_S(remainingSize == 0, remainingSize);
+                Y_VERIFY_S(whole->UnenqueuedSize == 0, whole->UnenqueuedSize);
+
             } else if (request->GetType() == ERequestType::RequestChunkRead) {
                 TIntrusivePtr<TChunkRead> read = std::move(static_cast<TChunkRead*>(request)->SelfPointer);
                 ui32 totalSectors = read->LastSector - read->FirstSector + 1;
 
-                ui32 smallJobSize = (ForsetiOpPieceSizeCached + Format.SectorSize - 1) / Format.SectorSize;
-                ui32 smallJobCount = totalSectors / smallJobSize;
-                if (smallJobCount) {
-                    smallJobCount--;
-                }
-                ui32 largeJobSize = totalSectors - smallJobSize * smallJobCount;
-
-                for (ui32 idx = 0; idx < smallJobCount; ++idx) {
+                Y_DEBUG_ABORT_UNLESS(ForsetiOpPieceSizeCached % Format.SectorSize == 0);
+                const ui32 jobSizeLimit = ForsetiOpPieceSizeCached / Format.SectorSize;
+                const ui32 jobCount = (totalSectors + jobSizeLimit - 1) / jobSizeLimit;
+                for (ui32 idx = 0; idx < jobCount; ++idx) {
                     auto span = request->SpanStack.CreateChild(TWilson::PDiskBasic, "PDisk.ChunkReadPiece", NWilson::EFlags::AUTO_END);
+                    bool isLast = idx == jobCount - 1;
                     span.Attribute("small_job_idx", idx)
-                        .Attribute("is_last_piece", false);
-                    // Schedule small job.
-                    auto piece = new TChunkReadPiece(read, idx * smallJobSize,
-                            smallJobSize * Format.SectorSize, false, std::move(span));
+                        .Attribute("is_last_piece", isLast);
+
+                    ui32 jobSize = Min(totalSectors, jobSizeLimit);
+                    auto piece = new TChunkReadPiece(read, idx * jobSizeLimit, jobSize * Format.SectorSize, isLast, std::move(span));
                     read->Orbit.Fork(piece->Orbit);
-                    LWTRACK(PDiskChunkReadPieceAddToScheduler, piece->Orbit, PCtx->PDiskId, idx, idx * smallJobSize * Format.SectorSize,
-                            smallJobSize * Format.SectorSize);
+                    LWTRACK(PDiskChunkReadPieceAddToScheduler, piece->Orbit, PCtx->PDiskId, idx, idx * jobSizeLimit * Format.SectorSize,
+                            jobSizeLimit * Format.SectorSize);
                     piece->EstimateCost(DriveModel);
                     piece->SelfPointer = piece;
                     AddJobToForseti(cbs, piece, request->JobKind);
+                    totalSectors -= jobSize;
                 }
-                // Schedule large job (there always is one)
-                auto span = request->SpanStack.CreateChild(TWilson::PDiskBasic, "PDisk.ChunkReadPiece");
-                span.Attribute("is_last_piece", true);
-                auto piece = new TChunkReadPiece(read, smallJobCount * smallJobSize,
-                        largeJobSize * Format.SectorSize, true, std::move(span));
-                read->Orbit.Fork(piece->Orbit);
-                LWTRACK(PDiskChunkReadPieceAddToScheduler, piece->Orbit, PCtx->PDiskId, smallJobCount,
-                        smallJobCount * smallJobSize * Format.SectorSize, largeJobSize * Format.SectorSize);
-                piece->EstimateCost(DriveModel);
-                piece->SelfPointer = piece;
-                AddJobToForseti(cbs, piece, request->JobKind);
-
+                Y_VERIFY_S(totalSectors == 0, totalSectors);
             } else {
                 AddJobToForseti(cbs, request, request->JobKind);
             }
@@ -3219,17 +3349,6 @@ void TPDisk::PushRequestToForseti(TRequestBase *request) {
                 " PushRequestToForseti Push to FastOperationsQueue.size# %" PRIu64,
                 (ui32)PCtx->PDiskId, (ui64)request->ReqId.Id, (ui64)FastOperationsQueue.size());
     }
-}
-
-// Always produces a large job and sometimes produces some small jobs and a large job.
-void TPDisk::SplitChunkJobSize(ui32 totalSize, ui32 *outSmallJobSize, ui32 *outLargeJobSize, ui32 *outSmallJobCount) {
-    const ui64 sectorPayloadSize = Format.SectorPayloadSize();
-    *outSmallJobSize = (ForsetiOpPieceSizeCached + sectorPayloadSize - 1) / sectorPayloadSize * sectorPayloadSize;
-    *outSmallJobCount = totalSize / *outSmallJobSize;
-    if (*outSmallJobCount) {
-        (*outSmallJobCount)--;
-    }
-    *outLargeJobSize = totalSize - *outSmallJobSize * *outSmallJobCount;
 }
 
 void TPDisk::AddJobToForseti(NSchLab::TCbs *cbs, TRequestBase *request, NSchLab::EJobKind jobKind) {
@@ -3443,18 +3562,17 @@ void TPDisk::EnqueueAll() {
 void TPDisk::Update() {
     Mon.UpdateDurationTracker.UpdateStarted();
 
-    // ui32 userSectorSize = 0;
-
-    // Make input queue empty
     {
         TGuard<TMutex> guard(StateMutex);
         ForsetiMaxLogBatchNsCached = ForsetiMaxLogBatchNs;
         ForsetiOpPieceSizeCached = PDiskCategory.IsSolidState() ? ForsetiOpPieceSizeSsd : ForsetiOpPieceSizeRot;
-        EnqueueAll();
-        /*userSectorSize = */Format.SectorPayloadSize();
-
+        ForsetiOpPieceSizeCached = Min<i64>(ForsetiOpPieceSizeCached, Cfg->BufferPoolBufferSizeBytes);
+        ForsetiOpPieceSizeCached = AlignDown<i64>(ForsetiOpPieceSizeCached, Format.SectorSize);
         // Switch the scheduler when possible
         ForsetiScheduler.SetIsBinLogEnabled(EnableForsetiBinLog);
+
+        // Make input queue empty
+        EnqueueAll();
     }
 
     // Make token injection to correct drive model underestimations and avoid disk underutilization

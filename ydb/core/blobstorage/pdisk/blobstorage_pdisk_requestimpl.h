@@ -538,6 +538,22 @@ public:
         return UnenqueuedSize == 0;
     }
 
+    TString ToString() {
+        TStringStream str;
+        str << "TEvChunkWrite{ ";
+        str << " ChunkIdx# " << ChunkIdx;
+        str << " Offset# " << Offset;
+        str << " TotalSize# " << TotalSize;
+        str << " CurrentPart# " << CurrentPart;
+        str << " CurrentPartOffset# " << CurrentPartOffset;
+        str << " RemainingSize# " << RemainingSize;
+        str << " UnenqueuedSize# " << UnenqueuedSize;
+        str << " SlackSize# " << SlackSize;
+        str << " BytesWritten# " << BytesWritten;
+        str << "}";
+        return str.Str();
+    }
+
     bool TryStealSlack(ui64& slackNs, const TDriveModel &drive, ui64 appendBlockSize, bool adhesion) override {
         // Calculate how many bytes can we write within given slack (with single seek)
         // TODO[serxa]: use write speed? but there is no write speed in drive model!

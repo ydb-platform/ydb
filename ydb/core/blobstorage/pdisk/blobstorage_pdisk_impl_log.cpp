@@ -466,6 +466,28 @@ bool TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult, TStrin
     return true;
 }
 
+static void PrintCondensedChunksList(TStringStream& str, const std::vector<ui32>& chunks) {
+    str << " [";
+    bool first = true;
+    std::optional<TChunkIdx> begin;
+    for (size_t i = 0; i < chunks.size(); ++i) {
+        if (!begin) {
+            begin = chunks[i];
+        }
+        if (i + 1 < chunks.size() && chunks[i] + 1 == chunks[i + 1]) {
+            continue;
+        }
+        str << (std::exchange(first, false) ? "" : " ");
+        if (*begin == chunks[i]) {
+            str << chunks[i];
+        } else {
+            str << *begin << "-" << chunks[i];
+        }
+        begin.reset();
+    }
+    str << "];";
+}
+
 void TPDisk::PrintChunksDebugInfo() {
     auto print = [&] () {
         std::map<TOwner, std::vector<ui32>> ownerToChunks;
@@ -479,17 +501,13 @@ void TPDisk::PrintChunksDebugInfo() {
         str << "PDiskId# " << PDiskId << " PrintChunksDebugInfo; ";
         for (auto& [owner, chunks] : ownerToChunks) {
             std::sort(chunks.begin(), chunks.end());
-            str << " Owner# " << owner << " [";
-            bool first = true;
-            for (auto idx : chunks) {
-                str << (std::exchange(first, false) ? "" : " ") << idx;
-            }
-            str << "];";
+            str << " Owner# " << owner;
+            PrintCondensedChunksList(str, chunks);
         }
         return str.Str();
     };
 
-    LOG_INFO_S(*ActorSystem, NKikimrServices::BS_PDISK, print());
+    LOG_DEBUG_S(*ActorSystem, NKikimrServices::BS_PDISK, print());
 }
 
 TRcBuf TPDisk::ProcessReadSysLogResult(ui64 &outWritePosition, ui64 &outLsn,

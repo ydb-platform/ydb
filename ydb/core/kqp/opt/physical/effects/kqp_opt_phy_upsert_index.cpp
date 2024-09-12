@@ -150,7 +150,7 @@ TExprBase MakeNonexistingRowsFilter(const TDqPhyPrecompute& inputRows, const TDq
 
 TExprBase MakeUpsertIndexRows(TKqpPhyUpsertIndexMode mode, const TDqPhyPrecompute& inputRows,
     const TDqPhyPrecompute& lookupDict, const THashSet<TStringBuf>& inputColumns,
-    const THashSet<TStringBuf>& indexColumns, const TKikimrTableDescription& table, TPositionHandle pos,
+    const TVector<TStringBuf>& indexColumns, const TKikimrTableDescription& table, TPositionHandle pos,
     TExprContext& ctx, bool opt)
 {
     // Check if we can update index table from just input data

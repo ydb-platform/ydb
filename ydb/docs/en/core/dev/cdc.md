@@ -4,7 +4,7 @@ With [Change Data Capture](../concepts/cdc.md) (CDC), you can track changes in t
 
 ## Enabling and disabling CDC {#add-drop}
 
-CDC is represented as a data schema object: a changefeed that can be added to a table or deleted from them using the [ADD CHANGEFEED and DROP CHANGEFEED](../yql/reference/syntax/alter_table.md#changefeed) directives of the YQL `ALTER TABLE` statement.
+CDC is represented as a data schema object: a changefeed that can be added to a table or deleted from them using the [ADD CHANGEFEED and DROP CHANGEFEED](../yql/reference/syntax/alter_table/changefeed.md) directives of the YQL `ALTER TABLE` statement.
 
 ## Reading data from a topic {#read}
 
@@ -44,7 +44,7 @@ When writing data to a table with CDC enabled, there are additional overheads fo
 
 * Making records and saving them to a changefeed.
 * Storing records in a changefeed.
-* In some [modes](../yql/reference/syntax/alter_table.md#changefeed-options) (such as `OLD_IMAGE` and `NEW_AND_OLD_IMAGES`), data needs to be pre-fetched even if a user query doesn't require this.
+* In some [modes](../yql/reference/syntax/alter_table/changefeed.md) (such as `OLD_IMAGE` and `NEW_AND_OLD_IMAGES`), data needs to be pre-fetched even if a user query doesn't require this.
 
 As a result, queries may take longer to execute and size limits for stored data may be exceeded.
 

@@ -5903,7 +5903,7 @@ TRuntimeNode TProgramBuilder::BlockMapJoinCore(TRuntimeNode flow, TRuntimeNode d
                 joinKind == EJoinKind::LeftSemi || joinKind == EJoinKind::LeftOnly,
                 "Unsupported join kind");
     MKQL_ENSURE(!leftKeyColumns.empty(), "At least one key column must be specified");
-    const TSet<ui32> leftKeySet(leftKeyColumns.cbegin(), leftKeyColumns.cend());
+    const THashSet<ui32> leftKeySet(leftKeyColumns.cbegin(), leftKeyColumns.cend());
     for (const auto& drop : leftKeyDrops) {
         MKQL_ENSURE(leftKeySet.contains(drop),
                     "Only key columns has to be specified in drop column set");
@@ -5924,7 +5924,7 @@ TRuntimeNode TProgramBuilder::BlockMapJoinCore(TRuntimeNode flow, TRuntimeNode d
         });
 
     const auto leftFlowItems = ValidateBlockFlowType(flow.GetStaticType(), false);
-    const TSet<ui32> leftKeyDropsSet(leftKeyDrops.cbegin(), leftKeyDrops.cend());
+    const THashSet<ui32> leftKeyDropsSet(leftKeyDrops.cbegin(), leftKeyDrops.cend());
     TVector<TType*> returnJoinItems;
     for (size_t i = 0; i < leftFlowItems.size(); i++) {
         if (leftKeyDropsSet.contains(i)) {

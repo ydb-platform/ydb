@@ -27,7 +27,7 @@ template <bool RightRequired>
 class TBlockJoinState : public TBlockState {
 public:
     TBlockJoinState(TMemoryUsageInfo* memInfo, TComputationContext& ctx,
-                    const TVector<TType*>& inputItems, const TSet<ui32>& keyDrops,
+                    const TVector<TType*>& inputItems, const THashSet<ui32>& keyDrops,
                     const TVector<TType*> outputItems,
                     NUdf::TUnboxedValue**const fields)
         : TBlockState(memInfo, outputItems.size())
@@ -175,7 +175,7 @@ private:
     size_t InputWidth_;
     size_t OutputWidth_;
     TUnboxedValueVector Inputs_;
-    const TSet<ui32> KeyDrops_;
+    const THashSet<ui32> KeyDrops_;
     const std::vector<arrow::ValueDescr> InputsDescr_;
     TVector<std::unique_ptr<IBlockReader>> Readers_;
     TVector<std::unique_ptr<IBlockItemConverter>> Converters_;
@@ -281,7 +281,7 @@ private:
     const TVector<TType*> ResultJoinItems_;
     const TVector<TType*> LeftFlowItems_;
     const TVector<ui32> LeftKeyColumns_;
-    const TSet<ui32> LeftKeyDrops_;
+    const THashSet<ui32> LeftKeyDrops_;
     IComputationWideFlowNode* const Flow_;
     IComputationNode* const Dict_;
     ui32 WideFieldsIndex_;
@@ -430,7 +430,7 @@ private:
     const TVector<TType*> ResultJoinItems_;
     const TVector<TType*> LeftFlowItems_;
     const TVector<ui32> LeftKeyColumns_;
-    const TSet<ui32> LeftKeyDrops_;
+    const THashSet<ui32> LeftKeyDrops_;
     IComputationWideFlowNode* const Flow_;
     IComputationNode* const Dict_;
     ui32 WideFieldsIndex_;
@@ -497,7 +497,7 @@ IComputationNode* WrapBlockMapJoinCore(TCallable& callable, const TComputationNo
         leftKeyDrops.emplace_back(item->AsValue().Get<ui32>());
     }
 
-    const TSet<ui32> leftKeySet(leftKeyColumns.cbegin(), leftKeyColumns.cend());
+    const THashSet<ui32> leftKeySet(leftKeyColumns.cbegin(), leftKeyColumns.cend());
     for (const auto& drop : leftKeyDrops) {
         MKQL_ENSURE(leftKeySet.contains(drop),
                     "Only key columns has to be specified in drop column set");

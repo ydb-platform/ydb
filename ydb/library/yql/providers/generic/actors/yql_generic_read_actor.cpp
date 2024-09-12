@@ -59,7 +59,7 @@ namespace NYql::NDq {
 
         void Bootstrap() {
             Become(&TGenericReadActor::StateFunc);
-            auto issue = InitSplitsListing(); 
+            auto issue = InitSplitsListing();
             if (issue) {
                 return NotifyComputeActorWithIssue(
                     TActivationContext::ActorSystem(),
@@ -159,7 +159,7 @@ namespace NYql::NDq {
             // Server sent EOF, now we are ready to start splits reading
             if (NConnector::GrpcStatusEndOfStream(status)) {
                 YQL_CLOG(DEBUG, ProviderGeneric) << "Handle :: EvListSplitsFinished :: last message was reached, start data reading";
-                auto issue = InitSplitsReading(); 
+                auto issue = InitSplitsReading();
                 if (issue) {
                     return NotifyComputeActorWithIssue(
                         TActivationContext::ActorSystem(),

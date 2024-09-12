@@ -500,7 +500,8 @@ private:
                     PatternType,
                     object.GetPath()},
                 Nothing(),
-                false);
+                false,
+                NActors::TActivationContext::ActorSystem());
             Fetch();
             return true;
         }

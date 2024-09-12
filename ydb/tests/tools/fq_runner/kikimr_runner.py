@@ -484,7 +484,7 @@ class YqTenant(BaseTenant):
             self.config_generator.yaml_config['grpc_config']['skip_scheme_check'] = True
             self.config_generator.yaml_config['grpc_config']['services'] = ["local_discovery", "yq", "yq_private"]
             # yq services
-            fq_config['control_plane_storage']['task_lease_ttl'] = "10s"
+            fq_config['control_plane_storage']['task_lease_ttl'] = "20s"
             self.fill_storage_config(fq_config['control_plane_storage']['storage'], "DbPoolStorage_" + self.uuid)
         else:
             self.config_generator.yaml_config.pop('grpc_config', None)

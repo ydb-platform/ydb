@@ -153,7 +153,7 @@ namespace NYql::NDq {
             auto& split = response.splits(0);
             NConnector::NApi::TReadSplitsRequest readRequest;
 
-            auto dsi = LookupSource.data_source_instance();
+            *readRequest.mutable_data_source_instance() = LookupSource.data_source_instance();
             auto error = TokenProvider->MaybeFillToken(*readRequest.mutable_data_source_instance());
             if (error) {
                 SendError(TActivationContext::ActorSystem(), SelfId(), std::move(error));

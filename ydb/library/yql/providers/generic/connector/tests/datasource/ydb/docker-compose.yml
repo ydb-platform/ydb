@@ -8,7 +8,7 @@ services:
         dnsmasq;
         /opt/ydb/bin/fq-connector-go server -c /opt/ydb/cfg/fq-connector-go.yaml"
     container_name: fq-tests-ydb-fq-connector-go
-    image: ghcr.io/ydb-platform/fq-connector-go:v0.5.8-rc.2@sha256:12d15f2e82608bc4e64fa91c549361c587754aeb0e6c6a2cee749caebb11baf8
+    image: ghcr.io/ydb-platform/fq-connector-go:v0.5.9-rc.2@sha256:ebaefb6a93d8d1504436e222f3eb106b38ca944f91ccdd12f118172e5986633b
     ports:
       - 2130
     volumes:
@@ -16,10 +16,10 @@ services:
   ydb:
     container_name: fq-tests-ydb-ydb
     environment:
+      DB_USE_IN_MEMORY_PDISKS: "true"
       POSTGRES_PASSWORD: password
       POSTGRES_USER: user
       YDB_DEFAULT_LOG_LEVEL: DEBUG
-      DB_USE_IN_MEMORY_PDISKS: "true"
     hostname: fq-tests-ydb-ydb
     image: ghcr.io/ydb-platform/local-ydb:latest@sha256:9045e00afec1923dc3277564c7b2f829087c2115f45f18e1d38b80bb89f98be6
     volumes:

@@ -3,6 +3,8 @@
 #include "defs.h"
 #include "change_exchange_helpers.h"
 
+#include <ydb/core/scheme/scheme_tabledefs.h>
+
 namespace NKikimr {
 namespace NDataShard {
 

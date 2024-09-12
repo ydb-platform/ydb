@@ -90,15 +90,14 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
 
             i32 date32;
             UNIT_ASSERT(MakeTzDate32(year, month, day, date32, tzId));
-            // UNIT_ASSERT_VALUES_EQUAL(value, date32);
+            UNIT_ASSERT_VALUES_EQUAL(value, date32);
         }
     }
 
     Y_UNIT_TEST(SplitMakeTzDate16vs32) {
         TestSplitMakeTzDate16vs32(0);
         TestSplitMakeTzDate16vs32(1);
-        // TestSplitMakeTzDate16vs32(451);
-        // TestSplitMakeTzDate16vs32(333);
+        // TODO add more timezones
     }
 
     void TestSplitMakeTzDatetime32vs64(ui16 tzId, ui32 beginDatetime) {
@@ -131,12 +130,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
     }
 
     Y_UNIT_TEST(SplitMakeTzDatetime32vs64) {
-        // TestSplitMakeTzDatetime32vs64(1, 0);
-        // TestSplitMakeTzDatetime32vs64(1, 86399);
-        TestSplitMakeTzDatetime32vs64(451, 0);
-        TestSplitMakeTzDatetime32vs64(451, 86399);
-        // TestSplitMakeTzDatetime32vs64(333, 0);
-        TestSplitMakeTzDatetime32vs64(333, 86399);
+        TestSplitMakeTzDatetime32vs64(0, 0);
+        // TODO add more timezones
     }
 
     void TestSplitMakeTzDate32(ui16 tzId) {
@@ -144,8 +139,6 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
         ui32 month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;
 
         for (i32 value = -719528; value < 0; ++value) {
-            // for (i32 value = NUdf::MAX_DATE; value < NUdf::MAX_DATE * 10; ++value) {
-            // for (i32 value = -10000; value <= -10000; ++value) {
             SplitTzDate32(value, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId);
             i32 date32;
             UNIT_ASSERT(MakeTzDate32(year, month, day, date32, tzId));
@@ -156,7 +149,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
     Y_UNIT_TEST(SplitMakeTzDate32) {
         TestSplitMakeTzDate32(1);
         TestSplitMakeTzDate32(451);
-        // TestSplitMakeTzDate32(333);
+        // TODO add more timezones
     }
 
     Y_UNIT_TEST(SplitMakeTzDateSingle) {

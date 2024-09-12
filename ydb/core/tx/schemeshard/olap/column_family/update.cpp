@@ -18,27 +18,35 @@ bool TOlapColumnFamlilyDiff::ParseFromRequest(const NKikimrSchemeOp::TOlapColumn
 }
 
 bool TOlapColumnFamlilyAdd::ParseFromRequest(const NKikimrSchemeOp::TFamilyDescription& columnFamily, IErrorCollector& errors) {
+    // if (!columnFamily.HasId()) {
+    //     errors.AddError("Column family: empty field Id");
+    //     return false;
+    // }
+
     if (!columnFamily.HasName()) {
-        errors.AddError("Column family: empty field name");
+        errors.AddError("Column family: empty field Name");
         return false;
     }
 
     if (!columnFamily.HasColumnCodec()) {
-        errors.AddError("Column family: empty field codec");
+        errors.AddError("Column family: empty field Codec");
         return false;
     }
 
+    // Id = columnFamily.GetId();
     Name = columnFamily.GetName();
     Codec = columnFamily.GetColumnCodec();
     return true;
 }
 
 void TOlapColumnFamlilyAdd::ParseFromLocalDB(const NKikimrSchemeOp::TFamilyDescription& columnFamily) {
+    // Id = columnFamily.GetId();
     Name = columnFamily.GetName();
     Codec = columnFamily.GetColumnCodec();
 }
 
 void TOlapColumnFamlilyAdd::Serialize(NKikimrSchemeOp::TFamilyDescription& familyDescription) const {
+    // familyDescription.SetId(Id);
     familyDescription.SetName(Name);
     familyDescription.SetColumnCodec(Codec);
 }
@@ -46,7 +54,7 @@ void TOlapColumnFamlilyAdd::Serialize(NKikimrSchemeOp::TFamilyDescription& famil
 bool TOlapColumnFamlilyAdd::ApplyDiff(const TOlapColumnFamlilyDiff& diffColumnFamily, IErrorCollector& errors) {
     Y_ABORT_UNLESS(GetName() == diffColumnFamily.GetName());
     if (!diffColumnFamily.GetCodec()) {
-        errors.AddError("Column family: empty field codec");
+        errors.AddError("Column family: empty field Codec");
         return false;
     }
     Codec = diffColumnFamily.GetCodec();
@@ -56,36 +64,36 @@ bool TOlapColumnFamlilyAdd::ApplyDiff(const TOlapColumnFamlilyDiff& diffColumnFa
 bool TOlapColumnFamiliesUpdate::Parse(const NKikimrSchemeOp::TColumnTableSchema& tableSchema, IErrorCollector& errors) {
     TSet<TString> familyNames;
     for (auto&& family : tableSchema.GetColumnFamilies()) {
-        if (!familyNames.emplace(family.GetName()).second) {
-            errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "Duplicate column family '" << family.GetName() << "'");
+        auto familyName = family.GetName();
+        if (!familyNames.emplace(familyName).second) {
+            errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "Duplicate column family '" << familyName << "'");
             return false;
         }
-        TOlapColumnFamlilyAdd columnFamily({});
+        TOlapColumnFamlilyAdd columnFamily;
         if (!columnFamily.ParseFromRequest(family, errors)) {
             return false;
         }
-        familyNames.insert(family.GetName());
+        familyNames.insert(familyName);
         AddColumnFamilies.emplace_back(columnFamily);
     }
 
     return true;
 }
 
-bool TOlapColumnFamiliesUpdate::Parse(THashMap<TString, TOlapColumnFamlilyAdd>& currentColumnFamilies,
-    const NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest, IErrorCollector& errors) {
+bool TOlapColumnFamiliesUpdate::Parse(const NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest, IErrorCollector& errors) {
     TSet<TString> addColumnFamilies;
     for (auto&& family : alterRequest.GetAddColumnFamily()) {
-        if (!addColumnFamilies.emplace(family.GetName()).second) {
-            errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "Duplicate column family '" << family.GetName() << "'");
+        auto familyName = family.GetName();
+        if (!addColumnFamilies.emplace(familyName).second) {
+            errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "Duplicate column family '" << familyName << "'");
             return false;
         }
         TOlapColumnFamlilyAdd columnFamily({});
         if (!columnFamily.ParseFromRequest(family, errors)) {
             return false;
         }
-        addColumnFamilies.insert(family.GetName());
+        addColumnFamilies.insert(familyName);
         AddColumnFamilies.emplace_back(columnFamily);
-        currentColumnFamilies[family.GetName()] = columnFamily;
     }
 
     for (auto&& family : alterRequest.GetAlterColumnFamily()) {

@@ -487,11 +487,11 @@ bool FillCreateColumnTableDesc(NYql::TKikimrTableMetadataPtr metadata,
         return {};
     };
 
-    THashMap<TString, TColumnFamily> families;
     auto schema = tableDesc.MutableSchema();
+    // ui32 id = 0;
     for (const auto& family : metadata->ColumnFamilies) {
-        families[family.Name] = family;
         auto familyDescription = schema->AddColumnFamilies();
+        // familyDescription->SetId(id++);
         familyDescription->SetName(family.Name);
         if (family.Compression.Defined()) {
             auto codec = getCodecFromString(family.Compression.GetRef());
@@ -500,34 +500,7 @@ bool FillCreateColumnTableDesc(NYql::TKikimrTableMetadataPtr metadata,
                 error = TStringBuilder() << "Unknown compression '" << family.Compression.GetRef() << "' for a column family";
                 return false;
             }
-            familyDescription->set_columncodec(codec.GetRef());
-        }
-    }
-
-    if (families.size()) {
-        if (families.find("default").IsEnd()) {
-            code = Ydb::StatusIds::BAD_REQUEST;
-            error = TStringBuilder() << "Default family is not set";
-            return false;
-        }
-        for (ui32 i = 0; i < schema->ColumnsSize(); i++) {
-            auto column = schema->MutableColumns(i);
-            auto familyIt = families.find(column->GetFamilyName());
-            if (familyIt.IsEnd()) {
-                code = Ydb::StatusIds::BAD_REQUEST;
-                error = TStringBuilder() << "Unknow family " << column->GetFamilyName();
-                return false;
-            }
-            NYql::TColumnFamily family = familyIt->second;
-            auto serializer = column->MutableSerializer();
-            serializer->SetClassName("ARROW_SERIALIZER");
-            auto codec = getCodecFromString(family.Compression.GetRef());
-            if (!codec.Defined()) {
-                code = Ydb::StatusIds::BAD_REQUEST;
-                error = TStringBuilder() << "Unknown compression '" << family.Compression.GetRef() << "' for a column family";
-                return false;
-            }
-            serializer->MutableArrowCompression()->SetCodec(codec.GetRef());
+            familyDescription->SetColumnCodec(codec.GetRef());
         }
     }
 

@@ -2,10 +2,8 @@
 
 namespace NKikimr::NSchemeShard {
 
-void TOlapSchemaUpdate::PutCurrentFamilies(const std::vector<TOlapColumnFamlilyAdd>& currentColumnFamilies) {
-    for (const auto& family : currentColumnFamilies) {
-        CurrentColumnFamilies[family.GetName()] = family;
-    }
+void TOlapSchemaUpdate::PutCurrentFamilies(const TOlapColumnFamiliesDescription& currentColumnFamilies) {
+    CurrentColumnFamilies = currentColumnFamilies;
 }
 
     bool TOlapSchemaUpdate::Parse(const NKikimrSchemeOp::TColumnTableSchema& tableSchema, IErrorCollector& errors, bool allowNullKeys) {
@@ -13,11 +11,15 @@ void TOlapSchemaUpdate::PutCurrentFamilies(const std::vector<TOlapColumnFamlilyA
             Engine = tableSchema.GetEngine();
         }
 
-        if (!ColumnFamilies.Parse(tableSchema, errors)) {
+        TOlapColumnFamiliesUpdate columnFamiliesUpdate;
+        if (!columnFamiliesUpdate.Parse(tableSchema, errors)) {
+            return false;
+        }
+        if (!CurrentColumnFamilies.ApplyUpdate(columnFamiliesUpdate, errors)) {
             return false;
         }
 
-        if (!Columns.Parse(tableSchema, errors, allowNullKeys)) {
+        if (!Columns.Parse(CurrentColumnFamilies, tableSchema, errors, allowNullKeys)) {
             return false;
         }
 
@@ -25,7 +27,12 @@ void TOlapSchemaUpdate::PutCurrentFamilies(const std::vector<TOlapColumnFamlilyA
     }
 
     bool TOlapSchemaUpdate::Parse(const NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest, IErrorCollector& errors) {
-        if (!ColumnFamilies.Parse(CurrentColumnFamilies, alterRequest, errors)) {
+        TOlapColumnFamiliesUpdate columnFamiliesUpdate;
+        if (!columnFamiliesUpdate.Parse(alterRequest, errors)) {
+            return false;
+        }
+
+        if (!CurrentColumnFamilies.ApplyUpdate(columnFamiliesUpdate, errors)) {
             return false;
         }
 

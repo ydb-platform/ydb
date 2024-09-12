@@ -11,8 +11,8 @@ extern "C" {
 
 namespace NKikimr::NSchemeShard {
 
-bool TOlapColumnAdd::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescription& columnSchema, IErrorCollector& errors,
-    const THashMap<TString, TOlapColumnFamlilyAdd>& columnFamilies) {
+bool TOlapColumnAdd::ParseFromRequest(
+    const NKikimrSchemeOp::TOlapColumnDescription& columnSchema, IErrorCollector& errors, const TOlapColumnFamiliesDescription& columnFamilies) {
     if (!columnSchema.GetName()) {
         errors.AddError("Columns cannot have an empty name");
         return false;
@@ -30,14 +30,13 @@ bool TOlapColumnAdd::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescript
             serialzier = columnSchema.GetSerializer();
         } else {
             serialzier.SetClassName("ARROW_SERIALIZER");
-            auto familyIt = columnFamilies.find(columnSchema.GetFamilyName());
-            if (familyIt.IsEnd()) {
+            const TOlapColumnFamilyScheme* family = columnFamilies.GetFamilyByName(columnSchema.GetFamilyName());
+            if (family == nullptr) {
                 errors.AddError("Family " + columnSchema.GetFamilyName() + " not found in table ");
                 return false;
             }
-            auto family = familyIt->second;
             auto mutableCompression = serialzier.MutableArrowCompression();
-            mutableCompression->SetCodec(family.GetCodec());
+            mutableCompression->SetCodec(family->GetCodec());
         }
         if (!serializerContainer.DeserializeFromProto(serialzier)) {
             errors.AddError("Cannot parse serializer info");
@@ -107,10 +106,6 @@ bool TOlapColumnAdd::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescript
         }
     }
 
-    if (columnSchema.HasFamilyName()) {
-        FamilyName = columnSchema.GetFamilyName();
-    }
-
     return true;
 }
 
@@ -133,13 +128,11 @@ bool TOlapColumnAdd::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescript
             DefaultValue.DeserializeFromProto(columnSchema.GetDefaultValue()).Validate();
             AFL_VERIFY(DefaultValue.IsCompatibleType(arrowType));
         }
-        if (columnSchema.HasSerializer()) {
+        if (columnSchema.HasFamilyName()) {
+            FamilyName = columnSchema.GetFamilyName();
+            AFL_VERIFY(columnSchema.HasSerializer());
             NArrow::NSerialization::TSerializerContainer serializer;
             AFL_VERIFY(serializer.DeserializeFromProto(columnSchema.GetSerializer()));
-            Serializer = serializer;
-        } else if (columnSchema.HasCompression()) {
-            NArrow::NSerialization::TSerializerContainer serializer;
-            serializer.DeserializeFromProto(columnSchema.GetCompression()).Validate();
             Serializer = serializer;
         }
         if (columnSchema.HasDataAccessorConstructor()) {
@@ -156,10 +149,6 @@ bool TOlapColumnAdd::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescript
             NotNullFlag = columnSchema.GetNotNull();
         } else {
             NotNullFlag = false;
-        }
-
-        if (columnSchema.HasFamilyName()) {
-            FamilyName = columnSchema.GetFamilyName();
         }
     }
 
@@ -276,7 +265,7 @@ bool TOlapColumnAdd::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescript
         }
     }
 
-    bool TOlapColumnsUpdate::Parse(const THashMap<TString, TOlapColumnFamlilyAdd>& columnFamilies,
+    bool TOlapColumnsUpdate::Parse(const TOlapColumnFamiliesDescription& columnFamilies,
         const NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest, IErrorCollector& errors) {
         for (const auto& column : alterRequest.GetDropColumns()) {
             if (!DropColumns.emplace(column.GetName()).second) {
@@ -318,7 +307,8 @@ bool TOlapColumnAdd::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescript
         return true;
     }
 
-    bool TOlapColumnsUpdate::Parse(const NKikimrSchemeOp::TColumnTableSchema& tableSchema, IErrorCollector& errors, bool allowNullKeys) {
+    bool TOlapColumnsUpdate::Parse(const TOlapColumnFamiliesDescription& columnFamilies, const NKikimrSchemeOp::TColumnTableSchema& tableSchema,
+        IErrorCollector& errors, bool allowNullKeys) {
         TMap<TString, ui32> keyColumnNames;
         for (auto&& pkKey : tableSchema.GetKeyColumnNames()) {
             if (!keyColumnNames.emplace(pkKey, keyColumnNames.size()).second) {
@@ -338,7 +328,7 @@ bool TOlapColumnAdd::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescript
             }
 
             TOlapColumnAdd column(keyOrder);
-            if (!column.ParseFromRequest(columnSchema, errors)) {
+            if (!column.ParseFromRequest(columnSchema, errors, columnFamilies)) {
                 return false;
             }
             if (column.IsKeyColumn()) {
@@ -365,5 +355,4 @@ bool TOlapColumnAdd::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescript
 
         return true;
     }
-
 }

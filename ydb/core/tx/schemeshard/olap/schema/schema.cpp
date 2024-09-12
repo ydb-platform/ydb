@@ -93,10 +93,7 @@ bool TOlapSchema::ValidateTtlSettings(const NKikimrSchemeOp::TColumnDataLifeCycl
 }
 
 bool TOlapSchema::Update(const TOlapSchemaUpdate& schemaUpdate, IErrorCollector& errors) {
-    Cerr << "TOlapSchema::Update ColumnFamilies.size(): " << ColumnFamilies.size() << Endl;
-    for (const auto& family : schemaUpdate.GetColumnFamilies().GetAddColumnFamilies()) {
-        ColumnFamilies.emplace_back(family);
-    }
+    ColumnFamilies = schemaUpdate.GetCurrentColumnFamilies();
 
     if (!Columns.ApplyUpdate(schemaUpdate.GetColumns(), errors, NextColumnId)) {
         return false;
@@ -129,12 +126,7 @@ void TOlapSchema::ParseFromLocalDB(const NKikimrSchemeOp::TColumnTableSchema& ta
     Y_ABORT_UNLESS(tableSchema.HasEngine());
     Engine = tableSchema.GetEngine();
 
-    for (const auto& family : tableSchema.GetColumnFamilies()) {
-        TOlapColumnFamlilyAdd columnFamilyAdd;
-        columnFamilyAdd.ParseFromLocalDB(family);
-        ColumnFamilies.emplace_back(columnFamilyAdd);
-    }
-
+    ColumnFamilies.Parse(tableSchema);
     Columns.Parse(tableSchema);
     Indexes.Parse(tableSchema);
     Options.Parse(tableSchema);
@@ -148,11 +140,7 @@ void TOlapSchema::Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchemaExt)
     Y_ABORT_UNLESS(HasEngine());
     resultLocal.SetEngine(GetEngineUnsafe());
 
-    for (const auto& family : ColumnFamilies) {
-        auto addColumnFamily = resultLocal.AddColumnFamilies();
-        family.Serialize(*addColumnFamily);
-    }
-
+    ColumnFamilies.Serialize(resultLocal);
     Columns.Serialize(resultLocal);
     Indexes.Serialize(resultLocal);
     Options.Serialize(resultLocal);

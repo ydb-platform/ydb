@@ -62,18 +62,19 @@ private:
     YDB_READONLY_DEF(NScheme::TTypeInfo, Type);
     YDB_READONLY_DEF(TString, StorageId);
     YDB_FLAG_ACCESSOR(NotNull, false);
+    YDB_READONLY_DEF(TString, FamilyName);
     YDB_READONLY_DEF(std::optional<NArrow::NSerialization::TSerializerContainer>, Serializer);
     YDB_READONLY_DEF(std::optional<NArrow::NDictionary::TEncodingSettings>, DictionaryEncoding);
     YDB_READONLY_DEF(NOlap::TColumnDefaultScalarValue, DefaultValue);
     YDB_READONLY_DEF(NArrow::NAccessor::TConstructorContainer, AccessorConstructor);
-    YDB_READONLY_DEF(TString, FamilyName);
 
 public:
     TOlapColumnAdd(const std::optional<ui32>& keyOrder)
         : KeyOrder(keyOrder) {
 
     }
-    bool ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescription& columnSchema, IErrorCollector& errors, const THashMap<TString, TOlapColumnFamlilyAdd>& columnFamilies = {});
+    bool ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescription& columnSchema, IErrorCollector& errors,
+        const TOlapColumnFamiliesDescription& columnFamilies = {});
     void ParseFromLocalDB(const NKikimrSchemeOp::TOlapColumnDescription& columnSchema);
     void Serialize(NKikimrSchemeOp::TOlapColumnDescription& columnSchema) const;
     bool ApplyDiff(const TOlapColumnDiff& diffColumn, IErrorCollector& errors);
@@ -91,8 +92,10 @@ private:
     YDB_READONLY_DEF(TSet<TString>, DropColumns);
     YDB_READONLY_DEF(TVector<TOlapColumnDiff>, AlterColumns);
 public:
-    bool Parse(const NKikimrSchemeOp::TColumnTableSchema& tableSchema, IErrorCollector& errors, bool allowNullKeys = false);
-    bool Parse(const THashMap<TString, TOlapColumnFamlilyAdd>& columnFamilies, const NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest, IErrorCollector& errors);
+    bool Parse(const TOlapColumnFamiliesDescription& columnFamilies, const NKikimrSchemeOp::TColumnTableSchema& tableSchema,
+        IErrorCollector& errors, bool allowNullKeys = false);
+    bool Parse(const TOlapColumnFamiliesDescription& columnFamilies, const NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest,
+        IErrorCollector& errors);
 };
 
 }

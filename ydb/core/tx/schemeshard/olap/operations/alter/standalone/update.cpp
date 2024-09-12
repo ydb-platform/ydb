@@ -5,7 +5,6 @@
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 
 NKikimr::TConclusionStatus TStandaloneSchemaUpdate::DoInitializeImpl(const TUpdateInitializationContext& context) {
-    Cerr << "TStandaloneSchemaUpdate::DoInitializeImpl\n";
     const auto& originalTable = context.GetOriginalEntityAsVerified<TStandaloneTable>();
     auto alter = TConverterModifyToAlter().Convert(*context.GetModification());
     if (alter.IsFail()) {
@@ -59,5 +58,4 @@ NKikimr::TConclusionStatus TStandaloneSchemaUpdate::DoInitializeImpl(const TUpda
 
     return TConclusionStatus::Success();
 }
-
 }

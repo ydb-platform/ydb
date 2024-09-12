@@ -8,8 +8,10 @@ namespace NKikimr::NSchemeShard {
 
 class TOlapColumnFamlilyDiff {
 private:
+    // YDB_READONLY_DEF(ui32, Id);
     YDB_READONLY_DEF(TString, Name);
     YDB_READONLY_DEF(NKikimrSchemeOp::EColumnCodec, Codec);
+    YDB_READONLY_DEF(TMaybe<i32>, CodecLevel);
 
 public:
     bool ParseFromRequest(const NKikimrSchemeOp::TOlapColumnFamilyDiff& diffColumnFamily, IErrorCollector& errors);
@@ -17,6 +19,7 @@ public:
 
 class TOlapColumnFamlilyAdd {
 private:
+    // YDB_READONLY_DEF(ui32, Id);
     YDB_READONLY_DEF(TString, Name);
     YDB_READONLY_DEF(TMaybe<TString>, Data);
     YDB_READONLY_DEF(NKikimrSchemeOp::EColumnCodec, Codec);
@@ -33,7 +36,7 @@ class TOlapColumnFamiliesUpdate {
 private:
     YDB_READONLY_DEF(TVector<TOlapColumnFamlilyAdd>, AddColumnFamilies);
     // YDB_READONLY_DEF(TSet<TString>, DropColumnFamily); Delete Column Family ???
-    YDB_READONLY_DEF(TVector<TOlapColumnFamlilyAdd>, AlterColumnFamily);
+    YDB_READONLY_DEF(TVector<TOlapColumnFamlilyDiff>, AlterColumnFamily);
 
 public:
     bool Parse(const NKikimrSchemeOp::TColumnTableSchema& tableSchema, IErrorCollector& errors);

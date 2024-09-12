@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     update.cpp
+    schema.cpp
 )
 
 PEERDIR(

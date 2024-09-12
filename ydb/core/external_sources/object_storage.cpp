@@ -18,6 +18,7 @@
 #include <ydb/library/yql/providers/s3/object_listers/yql_s3_path.h>
 #include <ydb/library/yql/providers/s3/path_generator/yql_s3_path_generator.h>
 #include <ydb/library/yql/providers/s3/proto/credentials.pb.h>
+#include <ydb/library/yql/utils/yql_panic.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_value/value.h>
 
@@ -330,44 +331,87 @@ struct TObjectStorageExternalSource : public IExternalSource {
 
         const TString path = meta->TableLocation;
         const TString filePattern = meta->Attributes.Value("filepattern", TString{});
+        const TString projection = meta->Attributes.Value("projection", TString{});
         const TVector<TString> partitionedBy = GetPartitionedByConfig(meta);
+
+        NYql::NPathGenerator::TPathGeneratorPtr pathGenerator;
+        
+        bool shouldInferPartitions = !partitionedBy.empty() && !projection;
+        bool ignoreEmptyListings = !projection.empty();
+
         NYql::NS3Lister::TListingRequest request {
             .Url = meta->DataSourceLocation,
             .Credentials = credentials
         };
+        TVector<NYql::NS3Lister::TListingRequest> requests;
 
-        auto error = NYql::NS3::BuildS3FilePattern(path, filePattern, partitionedBy, request);
-        if (error) {
-            throw yexception() << *error;
+        if (!projection) {
+            auto error = NYql::NS3::BuildS3FilePattern(path, filePattern, partitionedBy, request);
+            if (error) {
+                throw yexception() << *error;
+            }
+            requests.push_back(request);
+        } else {
+            if (NYql::NS3::HasWildcards(path)) {
+                throw yexception() << "Path prefix: '" << path << "' contains wildcards";
+            }
+
+            pathGenerator = NYql::NPathGenerator::CreatePathGenerator(projection, partitionedBy);
+            for (const auto& rule : pathGenerator->GetRules()) {
+                YQL_ENSURE(rule.ColumnValues.size() == partitionedBy.size());
+                
+                request.Pattern = NYql::NS3::NormalizePath(TStringBuilder() << path << "/" << rule.Path << "/*");
+                request.PatternType = NYql::NS3Lister::ES3PatternType::Wildcard;
+                request.Prefix = request.Pattern.substr(0, NYql::NS3::GetFirstWildcardPos(request.Pattern));
+
+                requests.push_back(request);
+            }
         }
 
         auto partByData = std::make_shared<TStringBuilder>();
+        if (shouldInferPartitions) {
+            *partByData << JoinSeq(",", partitionedBy);
+        }
 
+        TVector<NThreading::TFuture<NYql::NS3Lister::TListResult>> futures;
         auto httpGateway = NYql::IHTTPGateway::Make();
         auto httpRetryPolicy = NYql::GetHTTPDefaultRetryPolicy(NYql::THttpRetryPolicyOptions{.RetriedCurlCodes = NYql::FqRetriedCurlCodes()});
-        auto s3Lister = NYql::NS3Lister::MakeS3Lister(httpGateway, httpRetryPolicy, request, Nothing(), true, ActorSystem);
-        auto afterListing = s3Lister->Next().Apply([partByData, partitionedBy, path = request.Pattern](const NThreading::TFuture<NYql::NS3Lister::TListResult>& listResFut) {
-            auto& listRes = listResFut.GetValue();
-            auto& partByRef = *partByData;
-            if (std::holds_alternative<NYql::NS3Lister::TListError>(listRes)) {
-                auto& error = std::get<NYql::NS3Lister::TListError>(listRes);
-                throw yexception() << error.Issues.ToString();
-            }
-            auto& entries = std::get<NYql::NS3Lister::TListEntries>(listRes);
-            if (entries.Objects.empty()) {
-                throw yexception() << "couldn't find files at " << path;
-            }
+        for (const auto& req : requests) {
+            auto s3Lister = NYql::NS3Lister::MakeS3Lister(httpGateway, httpRetryPolicy, req, Nothing(), true, ActorSystem);
+            futures.push_back(s3Lister->Next());
+        }
 
-            partByRef << JoinSeq(",", partitionedBy);
-            for (const auto& entry : entries.Objects) {
-                Y_ENSURE(entry.MatchedGlobs.size() == partitionedBy.size());
-                partByRef << Endl << JoinSeq(",", entry.MatchedGlobs);
-            }
-            for (const auto& entry : entries.Objects) {
-                if (entry.Size > 0) {
-                    return entry;
+        auto allFuture = NThreading::WaitExceptionOrAll(futures);
+        auto afterListing = allFuture.Apply([partByData, shouldInferPartitions, ignoreEmptyListings, futures = std::move(futures), requests = std::move(requests)](const NThreading::TFuture<void>& result) {
+            result.GetValue();
+            for (size_t i = 0; i < futures.size(); ++i) {
+                auto& listRes = futures[i].GetValue();
+                if (std::holds_alternative<NYql::NS3Lister::TListError>(listRes)) {
+                    auto& error = std::get<NYql::NS3Lister::TListError>(listRes);
+                    throw yexception() << error.Issues.ToString();
+                }
+                auto& entries = std::get<NYql::NS3Lister::TListEntries>(listRes);
+                if (entries.Objects.empty() && !ignoreEmptyListings) {
+                    throw yexception() << "couldn't find files at " << requests[i].Pattern;
+                }
+
+                if (shouldInferPartitions) {
+                    for (const auto& entry : entries.Objects) {
+                        *partByData << Endl << JoinSeq(",", entry.MatchedGlobs);
+                    }
+                }
+
+                for (const auto& entry : entries.Objects) {
+                    if (entry.Size > 0) {
+                        return entry;
+                    }
+                }
+
+                if (!ignoreEmptyListings) {
+                    throw yexception() << "couldn't find any files for type inference, please check that the right path is provided";
                 }
             }
+
             throw yexception() << "couldn't find any files for type inference, please check that the right path is provided";
         });
 
@@ -410,13 +454,45 @@ struct TObjectStorageExternalSource : public IExternalSource {
             ));
 
             return promise.GetFuture();
-        }).Apply([arrowInferencinatorId, meta, partByData, partitionedBy, this](const NThreading::TFuture<TMetadataResult>& result) {
+        }).Apply([arrowInferencinatorId, meta, partByData, partitionedBy, pathGenerator, this](const NThreading::TFuture<TMetadataResult>& result) {
             auto& value = result.GetValue();
             if (!value.Success()) {
                 return result;
             }
 
-            return InferPartitionedColumnsTypes(arrowInferencinatorId, partByData, partitionedBy, result);
+            auto meta = value.Metadata;
+            if (pathGenerator) {
+                for (const auto& rule : pathGenerator->GetConfig().Rules) {
+                    auto& destColumn = *meta->Schema.add_column();
+                    destColumn.mutable_name()->assign(rule.Name);
+                    switch (rule.Type) {
+                    case NYql::NPathGenerator::IPathGenerator::EType::INTEGER:
+                        destColumn.mutable_type()->set_type_id(Ydb::Type::INT64);
+                        break;
+                    
+                    case NYql::NPathGenerator::IPathGenerator::EType::DATE:
+                        destColumn.mutable_type()->set_type_id(Ydb::Type::DATE);
+                        break;
+
+                    case NYql::NPathGenerator::IPathGenerator::EType::ENUM:
+                    default:
+                        destColumn.mutable_type()->set_type_id(Ydb::Type::STRING);
+                        break;
+                    }
+                }
+            } else {
+                for (const auto& partitionName : partitionedBy) {
+                    auto& destColumn = *meta->Schema.add_column();
+                    destColumn.mutable_name()->assign(partitionName);
+                    destColumn.mutable_type()->set_type_id(Ydb::Type::UTF8);
+                }
+            }
+
+            if (!partitionedBy.empty() && !pathGenerator) {
+                return InferPartitionedColumnsTypes(arrowInferencinatorId, partByData, result);
+            }
+
+            return result;
         }).Apply([](const NThreading::TFuture<TMetadataResult>& result) {
             auto& value = result.GetValue();
             if (value.Success()) {
@@ -434,20 +510,10 @@ private:
     NThreading::TFuture<TMetadataResult> InferPartitionedColumnsTypes(
         NActors::TActorId arrowInferencinatorId,
         std::shared_ptr<TStringBuilder> partByData,
-        const TVector<TString>& partitionedBy,
         const NThreading::TFuture<TMetadataResult>& result) const {
 
         auto& value = result.GetValue();
-        if (partitionedBy.empty()) {
-            return result;
-        }
-
         auto meta = value.Metadata;
-        for (const auto& partitionName : partitionedBy) {
-            auto& destColumn = *meta->Schema.add_column();
-            destColumn.mutable_name()->assign(partitionName);
-            destColumn.mutable_type()->set_type_id(Ydb::Type::UTF8);
-        }
 
         arrow::BufferBuilder builder;
         auto partitionBuffer = std::make_shared<arrow::Buffer>(nullptr, 0);
@@ -498,15 +564,19 @@ private:
         THashSet<TString> columns;
         if (auto partitioned = meta->Attributes.FindPtr("partitionedby"); partitioned) {
             NJson::TJsonValue values;
-            Y_ENSURE(NJson::ReadJsonTree(*partitioned, &values));
-            Y_ENSURE(values.GetType() == NJson::JSON_ARRAY);
+            auto successful = NJson::ReadJsonTree(*partitioned, &values);
+            if (!successful) {
+                columns.insert(*partitioned);
+            } else {
+                Y_ENSURE(values.GetType() == NJson::JSON_ARRAY);
 
-            for (const auto& value : values.GetArray()) {
-                Y_ENSURE(value.GetType() == NJson::JSON_STRING);
-                if (columns.contains(value.GetString())) {
-                    throw yexception() << "invalid partitioned_by parameter, column " << value.GetString() << "mentioned twice";
+                for (const auto& value : values.GetArray()) {
+                    Y_ENSURE(value.GetType() == NJson::JSON_STRING);
+                    if (columns.contains(value.GetString())) {
+                        throw yexception() << "invalid partitioned_by parameter, column " << value.GetString() << "mentioned twice";
+                    }
+                    columns.insert(value.GetString());
                 }
-                columns.insert(value.GetString());
             }
         }
 

@@ -166,7 +166,7 @@ namespace NYql::NDq {
                         ComputeActorId_,
                         InputIndex_,
                         std::move(*issue));
-                };
+                }
 
                 return;
             }
@@ -209,7 +209,7 @@ namespace NYql::NDq {
                     return TIssue(std::move(error));
                 }
 
-                *request.mutable_splits()->Add() = std::move(split);
+                *request.mutable_splits()->Add() = std::move(splitCopy);
             }
 
             // Start streaming
@@ -337,8 +337,8 @@ namespace NYql::NDq {
 
         static void NotifyComputeActorWithError(
             TActorSystem* actorSystem,
-            const NActors::TActorId computeActorId,
-            const ui64 inputIndex,
+            NActors::TActorId computeActorId,
+            ui64 inputIndex,
             const NConnector::NApi::TError& error) {
             actorSystem->Send(computeActorId,
                               new TEvAsyncInputError(
@@ -350,8 +350,8 @@ namespace NYql::NDq {
 
         static void NotifyComputeActorWithIssue(
             TActorSystem* actorSystem,
-            const NActors::TActorId computeActorId,
-            const ui64 inputIndex,
+            NActors::TActorId computeActorId,
+            ui64 inputIndex,
             TIssue issue) {
             actorSystem->Send(computeActorId,
                               new TEvAsyncInputError(

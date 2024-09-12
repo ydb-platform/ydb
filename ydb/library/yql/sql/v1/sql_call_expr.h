@@ -61,6 +61,11 @@ public:
         AggMode = EAggregateMode::OverWindow;
     }
 
+    void SetOverWindowDistinct() {
+        YQL_ENSURE(AggMode == EAggregateMode::Distinct);
+        AggMode = EAggregateMode::OverWindowDistinct;
+    }
+
     void SetIgnoreNulls() {
         Func += "_IgnoreNulls";
     }

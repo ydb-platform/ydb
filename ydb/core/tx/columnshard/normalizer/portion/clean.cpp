@@ -23,7 +23,7 @@ public:
         NOlap::TBlobManagerDb blobManagerDb(txc.DB);
         RemovingAction->OnExecuteTxAfterRemoving(blobManagerDb, true);
 
-        TDbWrapper db(txc.DB, nullptr);
+        TDbWrapper db(txc.DB, nullptr, txc.Owner);
         for (auto&& portion : Portions) {
             AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("message", "remove lost portion")("path_id", portion->GetPathId())("portion_id", portion->GetPortionId());
             portion->RemoveFromDatabase(db);

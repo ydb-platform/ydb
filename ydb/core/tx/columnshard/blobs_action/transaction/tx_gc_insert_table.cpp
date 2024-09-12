@@ -6,7 +6,7 @@ namespace NKikimr::NColumnShard {
 bool TTxInsertTableCleanup::Execute(TTransactionContext& txc, const TActorContext& /*ctx*/) {
     TMemoryProfileGuard mpg("TTxInsertTableCleanup::Execute");
     TBlobGroupSelector dsGroupSelector(Self->Info());
-    NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
+    NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector, txc.Owner);
     NIceDb::TNiceDb db(txc.DB);
 
     Self->TryAbortWrites(db, dbTable, std::move(WriteIdsToAbort));

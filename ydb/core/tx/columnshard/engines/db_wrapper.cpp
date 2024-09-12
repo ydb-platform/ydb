@@ -3,6 +3,7 @@
 #include "portions/constructor.h"
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
+#include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/sharding/sharding.h>
 
 namespace NKikimr::NOlap {
@@ -219,6 +220,10 @@ TConclusion<THashMap<ui64, std::map<NOlap::TSnapshot, TGranuleShardingInfo>>> TD
         }
     }
     return result;
+}
+
+NColumnShard::TColumnShard* GetColumnShard(NTabletFlatExecutor::NFlatExecutorSetup::ITablet *owner) {
+    return dynamic_cast<NColumnShard::TColumnShard*>(owner);
 }
 
 }

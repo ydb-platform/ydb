@@ -20,7 +20,7 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
         Y_ABORT_UNLESS(Ev->Get()->IndexInfo->GetLastSchema()->GetSnapshot() <= snapshot);
 
         TBlobGroupSelector dsGroupSelector(Self->Info());
-        NOlap::TDbWrapper dbWrap(txc.DB, &dsGroupSelector);
+        NOlap::TDbWrapper dbWrap(txc.DB, &dsGroupSelector, txc.Owner);
         AFL_VERIFY(Self->TablesManager.MutablePrimaryIndex().ApplyChangesOnExecute(dbWrap, changes, snapshot));
         LOG_S_DEBUG(TxPrefix() << "(" << changes->TypeString() << ") apply" << TxSuffix());
         NOlap::TWriteIndexContext context(&txc.DB, dbWrap, Self->MutableIndexAs<NOlap::TColumnEngineForLogs>());

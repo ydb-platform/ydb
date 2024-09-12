@@ -20,7 +20,7 @@ public:
 
     bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& /* normController */) const override {
         using namespace NColumnShard;
-        TDbWrapper db(txc.DB, nullptr);
+        TDbWrapper db(txc.DB, nullptr, txc.Owner);
 
         for (auto&& portionInfo : Portions) {
             auto schema = Schemas->FindPtr(portionInfo->GetPortionId());

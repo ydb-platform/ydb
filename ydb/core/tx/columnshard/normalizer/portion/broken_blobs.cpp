@@ -22,7 +22,7 @@ public:
     bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& normController) const override {
         NOlap::TBlobManagerDb blobManagerDb(txc.DB);
         
-        TDbWrapper db(txc.DB, nullptr);
+        TDbWrapper db(txc.DB, nullptr, txc.Owner);
         for (auto&& [_, portionInfo] : BrokenPortions) {
             auto schema = Schemas->FindPtr(portionInfo->GetPortionId());
             AFL_VERIFY(!!schema)("portion_id", portionInfo->GetPortionId());

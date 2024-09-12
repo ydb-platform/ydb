@@ -44,7 +44,7 @@ void TWriteOperation::CommitOnExecute(TColumnShard& owner, NTabletFlatExecutor::
     Y_ABORT_UNLESS(Status == EOperationStatus::Prepared);
 
     TBlobGroupSelector dsGroupSelector(owner.Info());
-    NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
+    NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector, &owner);
 
     for (auto gWriteId : InsertWriteIds) {
         auto pathExists = [&](ui64 pathId) {
@@ -108,7 +108,7 @@ void TWriteOperation::AbortOnExecute(TColumnShard& owner, NTabletFlatExecutor::T
     Y_ABORT_UNLESS(Status == EOperationStatus::Prepared);
 
     TBlobGroupSelector dsGroupSelector(owner.Info());
-    NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
+    NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector, &owner);
 
     THashSet<TInsertWriteId> writeIds;
     writeIds.insert(InsertWriteIds.begin(), InsertWriteIds.end());

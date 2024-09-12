@@ -6,7 +6,7 @@ namespace NKikimr::NOlap::NDataSharing {
 
 bool TTxDataFromSource::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     using namespace NKikimr::NColumnShard;
-    TDbWrapper dbWrapper(txc.DB, nullptr);
+    TDbWrapper dbWrapper(txc.DB, nullptr, txc.Owner);
     auto& index = Self->TablesManager.MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>();
     {
         ui64* lastPortionPtr = index.GetLastPortionPointer();

@@ -23,6 +23,10 @@ namespace NTable {
 
 namespace NTabletFlatExecutor {
 
+namespace NFlatExecutorSetup {
+    struct ITablet;
+}
+
 class TTransactionContext;
 class TExecutor;
 struct TPageCollectionTxEnv;
@@ -206,7 +210,7 @@ class TTransactionContext : public TTxMemoryProviderBase {
 
 public:
     TTransactionContext(ui64 tablet, ui32 gen, ui32 step, NTable::TDatabase &db, IExecuting &env,
-                        ui64 memoryLimit, ui64 taskId, NWilson::TSpan &transactionSpan)
+                        ui64 memoryLimit, ui64 taskId, NWilson::TSpan &transactionSpan, NFlatExecutorSetup::ITablet *owner)
         : TTxMemoryProviderBase(memoryLimit, taskId)
         , Tablet(tablet)
         , Generation(gen)
@@ -214,6 +218,7 @@ public:
         , Env(env)
         , DB(db)
         , TransactionSpan(transactionSpan)
+        , Owner(owner)
     {}
 
     ~TTransactionContext() {}
@@ -247,6 +252,7 @@ public:
     NTable::TDatabase &DB;
     NWilson::TSpan &TransactionSpan;
     NWilson::TSpan TransactionExecutionSpan;
+    NFlatExecutorSetup::ITablet* Owner;
 
 private:
     bool Rescheduled_ = false;
@@ -279,7 +285,6 @@ enum class ETerminationReason {
     None = 0,
     MemoryLimitExceeded = 1,
 };
-
 
 class ITransaction : TNonCopyable {
 public:

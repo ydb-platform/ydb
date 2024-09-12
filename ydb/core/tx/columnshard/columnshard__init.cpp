@@ -100,7 +100,7 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
 
     NIceDb::TNiceDb db(txc.DB);
     TBlobGroupSelector dsGroupSelector(Self->Info());
-    NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
+    NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector, txc.Owner);
     {
         ACFL_DEBUG("step", "TInsertTable::Load_Start");
         TMemoryProfileGuard g("TTxInit/InsertTable");

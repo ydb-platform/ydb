@@ -4,6 +4,10 @@
 #include <ydb/core/tx/columnshard/common/blob.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 
+namespace NColumnShard {
+class TColumnShard;
+}
+
 namespace NKikimrTxColumnShard {
 class TIndexPortionMeta;
 }
@@ -56,12 +60,18 @@ public:
     virtual TConclusion<THashMap<ui64, std::map<TSnapshot, TGranuleShardingInfo>>> LoadGranulesShardingInfo() = 0;
 };
 
+NColumnShard::TColumnShard* GetColumnShard(NTabletFlatExecutor::NFlatExecutorSetup::ITablet *owner);
+
 class TDbWrapper : public IDbWrapper {
 public:
-    TDbWrapper(NTable::TDatabase& db, const IBlobGroupSelector* dsGroupSelector)
+    TDbWrapper(NTable::TDatabase& db, const IBlobGroupSelector* dsGroupSelector, NTabletFlatExecutor::NFlatExecutorSetup::ITablet *owner)
         : Database(db)
         , DsGroupSelector(dsGroupSelector)
-    {}
+        , CS(GetColumnShard(owner))
+    {
+        AFL_VERIFY(owner != nullptr);
+        AFL_VERIFY(CS != nullptr);
+    }
 
     void Insert(const TInsertedData& data) override;
     void Commit(const TCommittedData& data) override;
@@ -92,6 +102,7 @@ public:
 private:
     NTable::TDatabase& Database;
     const IBlobGroupSelector* DsGroupSelector;
+    NColumnShard::TColumnShard* CS;
 };
 
 }

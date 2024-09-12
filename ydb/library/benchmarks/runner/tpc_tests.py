@@ -71,7 +71,7 @@ def test_tpc():
     is_ci = os.environ.get("CURRENT_PUBLIC_DIR") is not None
 
     runner = Runner()
-    runner.wrapped_run("h", 1, 1, r"q1\.sql")
+    runner.wrapped_run("h", 1, 1, None)
     result_path = runner.results_path.resolve()
     print("Results path: ", result_path, file=sys.stderr)
 

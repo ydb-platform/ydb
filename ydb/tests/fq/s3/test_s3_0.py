@@ -765,7 +765,6 @@ Pear,15,33'''
             "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
-
         s3_client.put_object(Body='not a parquet file', Bucket='bbucket', Key='file.txt', ContentType='text/plain')
 
         kikimr.control_plane.wait_bootstrap(1)

@@ -257,7 +257,7 @@ inline int CompareTypedCells(const TCell& a, const TCell& b, NScheme::TTypeInfoO
 
     case NKikimr::NScheme::NTypeIds::Pg:
     {
-        auto typeDesc = type.GetTypeDesc();
+        auto typeDesc = type.GetPgTypeDesc();
         Y_ABORT_UNLESS(typeDesc, "no pg type descriptor");
         int result = NPg::PgNativeBinaryCompare(a.Data(), a.Size(), b.Data(), b.Size(), typeDesc);
         return type.IsDescending() ? -result : result;
@@ -358,7 +358,7 @@ inline ui64 GetValueHash(NScheme::TTypeInfo info, const TCell& cell) {
     }
 
     if (typeId == NKikimr::NScheme::NTypeIds::Pg) {
-        auto typeDesc = info.GetTypeDesc();
+        auto typeDesc = info.GetPgTypeDesc();
         Y_ABORT_UNLESS(typeDesc, "no pg type descriptor");
         return NPg::PgNativeBinaryHash(cell.Data(), cell.Size(), typeDesc);
     }

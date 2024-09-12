@@ -368,14 +368,11 @@ public:
 
         KeyColumnTypes.reserve(Settings->GetKeyColumnTypes().size());
         for (size_t i = 0; i < Settings->KeyColumnTypesSize(); ++i) {
-            auto typeId = Settings->GetKeyColumnTypes(i);
-            KeyColumnTypes.push_back(
-                NScheme::TTypeInfo(
-                    (NScheme::TTypeId)typeId,
-                    (typeId == NScheme::NTypeIds::Pg) ?
-                        NPg::TypeDescFromPgTypeId(
-                            Settings->GetKeyColumnTypeInfos(i).GetPgTypeId()
-                        ) : nullptr));
+            NScheme::TTypeId typeId = Settings->GetKeyColumnTypes(i);
+            NScheme::TTypeInfo typeInfo = typeId == NScheme::NTypeIds::Pg ?
+                NScheme::TTypeInfo(typeId, NPg::TypeDescFromPgTypeId(Settings->GetKeyColumnTypeInfos(i).GetPgTypeId())) :
+                NScheme::TTypeInfo(typeId);
+            KeyColumnTypes.push_back(typeInfo);
         }
         Counters->ReadActorsCount->Inc();
 
@@ -1402,13 +1399,12 @@ public:
 
 private:
     NScheme::TTypeInfo MakeTypeInfo(const NKikimrTxDataShard::TKqpTransaction_TColumnMeta& info) {
-        auto typeId = info.GetType();
-        return NScheme::TTypeInfo(
-            (NScheme::TTypeId)typeId,
-            (typeId == NScheme::NTypeIds::Pg) ?
-                NPg::TypeDescFromPgTypeId(
-                    info.GetTypeInfo().GetPgTypeId()
-                ) : nullptr);
+        NScheme::TTypeId typeId = info.GetType();
+        if (typeId == NScheme::NTypeIds::Pg) {
+            return {typeId, NPg::TypeDescFromPgTypeId(info.GetTypeInfo().GetPgTypeId())};
+        } else {
+            return {typeId};
+        }
     }
 
     void InitResultColumns() {

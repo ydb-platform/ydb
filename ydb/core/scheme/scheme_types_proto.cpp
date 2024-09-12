@@ -7,9 +7,9 @@ TProtoColumnType ProtoColumnTypeFromTypeInfoMod(const TTypeInfo typeInfo, const 
     TProtoColumnType columnType;
     columnType.TypeId = (ui32)typeInfo.GetTypeId();
     if (typeInfo.GetTypeId() == NTypeIds::Pg) {
-        Y_ABORT_UNLESS(typeInfo.GetTypeDesc(), "no pg type descriptor");
+        Y_ABORT_UNLESS(typeInfo.GetPgTypeDesc(), "no pg type descriptor");
         columnType.TypeInfo = NKikimrProto::TTypeInfo();
-        columnType.TypeInfo->SetPgTypeId(NPg::PgTypeIdFromTypeDesc(typeInfo.GetTypeDesc()));
+        columnType.TypeInfo->SetPgTypeId(NPg::PgTypeIdFromTypeDesc(typeInfo.GetPgTypeDesc()));
         if (typeMod) {
             columnType.TypeInfo->SetPgTypeMod(typeMod);
         }

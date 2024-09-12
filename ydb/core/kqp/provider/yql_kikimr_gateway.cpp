@@ -214,7 +214,7 @@ EYqlIssueCode YqlStatusFromYdbStatus(ui32 ydbStatus) {
 }
 
 void SetColumnType(Ydb::Type& protoType, const TString& typeName, bool notNull) {
-    auto* typeDesc = NKikimr::NPg::TypeDescFromPgTypeName(typeName);
+    auto typeDesc = NKikimr::NPg::TypeDescFromPgTypeName(typeName);
     if (typeDesc) {
         Y_ABORT_UNLESS(!notNull, "It is not allowed to create NOT NULL pg columns");
         auto* pg = protoType.mutable_pg_type();

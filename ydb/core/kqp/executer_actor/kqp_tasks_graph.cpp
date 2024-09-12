@@ -391,7 +391,7 @@ void BuildStreamLookupChannels(TKqpTasksGraph& graph, const TStageInfo& stageInf
 
         if (columnIt->second.Type.GetTypeId() == NScheme::NTypeIds::Pg) {
             auto& typeInfo = *keyColumnProto->MutableTypeInfo();
-            typeInfo.SetPgTypeId(NPg::PgTypeIdFromTypeDesc(columnIt->second.Type.GetTypeDesc()));
+            typeInfo.SetPgTypeId(NPg::PgTypeIdFromTypeDesc(columnIt->second.Type.GetPgTypeDesc()));
             typeInfo.SetPgTypeMod(columnIt->second.TypeMod);
         }
     }
@@ -413,7 +413,7 @@ void BuildStreamLookupChannels(TKqpTasksGraph& graph, const TStageInfo& stageInf
 
         if (columnIt->second.Type.GetTypeId() == NScheme::NTypeIds::Pg) {
             auto& typeInfo = *columnProto->MutableTypeInfo();
-            typeInfo.SetPgTypeId(NPg::PgTypeIdFromTypeDesc(columnIt->second.Type.GetTypeDesc()));
+            typeInfo.SetPgTypeId(NPg::PgTypeIdFromTypeDesc(columnIt->second.Type.GetPgTypeDesc()));
             typeInfo.SetPgTypeMod(columnIt->second.TypeMod);
         }
     }

@@ -148,17 +148,16 @@ TKqpStreamLookupWorker::TKqpStreamLookupWorker(NKikimrKqp::TKqpStreamLookupSetti
     KeyColumns.reserve(Settings.GetKeyColumns().size());
     i32 keyOrder = 0;
     for (const auto& keyColumn : Settings.GetKeyColumns()) {
+        NScheme::TTypeInfo typeInfo = keyColumn.GetTypeId() == NScheme::NTypeIds::Pg ?
+            NScheme::TTypeInfo(keyColumn.GetTypeId(), NPg::TypeDescFromPgTypeId(keyColumn.GetTypeInfo().GetPgTypeId())) :
+            NScheme::TTypeInfo(keyColumn.GetTypeId());
+
         KeyColumns.emplace(
             keyColumn.GetName(),
             TSysTables::TTableColumnInfo{
                 keyColumn.GetName(),
                 keyColumn.GetId(),
-                NScheme::TTypeInfo{
-                    static_cast<NScheme::TTypeId>(keyColumn.GetTypeId()),
-                    keyColumn.GetTypeId() == NScheme::NTypeIds::Pg
-                        ? NPg::TypeDescFromPgTypeId(keyColumn.GetTypeInfo().GetPgTypeId())
-                        : nullptr
-                },
+                typeInfo,
                 keyColumn.GetTypeInfo().GetPgTypeMod(),
                 keyOrder++
             }
@@ -174,14 +173,14 @@ TKqpStreamLookupWorker::TKqpStreamLookupWorker(NKikimrKqp::TKqpStreamLookupSetti
 
     Columns.reserve(Settings.GetColumns().size());
     for (const auto& column : Settings.GetColumns()) {
+        NScheme::TTypeInfo typeInfo = column.GetTypeId() == NScheme::NTypeIds::Pg ?
+            NScheme::TTypeInfo(column.GetTypeId(), NPg::TypeDescFromPgTypeId(column.GetTypeInfo().GetPgTypeId())) :
+            NScheme::TTypeInfo(column.GetTypeId());
+
         Columns.emplace_back(TSysTables::TTableColumnInfo{
             column.GetName(),
             column.GetId(),
-            NScheme::TTypeInfo{static_cast<NScheme::TTypeId>(column.GetTypeId()),
-                column.GetTypeId() == NScheme::NTypeIds::Pg
-                    ? NPg::TypeDescFromPgTypeId(column.GetTypeInfo().GetPgTypeId())
-                    : nullptr,
-            },
+            typeInfo,
             column.GetTypeInfo().GetPgTypeMod()
         });
     }

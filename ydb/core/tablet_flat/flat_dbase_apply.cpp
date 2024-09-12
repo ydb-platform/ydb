@@ -53,7 +53,7 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
 
         auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(delta.GetColumnType(),
             delta.HasColumnTypeInfo() ? &delta.GetColumnTypeInfo() : nullptr);
-        ui32 pgTypeId = NPg::PgTypeIdFromTypeDesc(typeInfoMod.TypeInfo.GetTypeDesc());
+        ui32 pgTypeId = NPg::PgTypeIdFromTypeDesc(typeInfoMod.TypeInfo.GetPgTypeDesc());
         changes |= AddPgColumn(table, delta.GetColumnName(), delta.GetColumnId(),
             delta.GetColumnType(), pgTypeId, typeInfoMod.TypeMod, delta.GetNotNull(), null);
     } else if (action == TAlterRecord::DropColumn) {
@@ -260,7 +260,7 @@ bool TSchemeModifier::AddPgColumn(ui32 tid, const TString &name, ui32 id, ui32 t
     NScheme::TTypeInfo typeInfo;
     if (pgType != 0) {
         Y_ABORT_UNLESS((NScheme::TTypeId)type == NScheme::NTypeIds::Pg);
-        auto* typeDesc = NPg::TypeDescFromPgTypeId(pgType);
+        auto typeDesc = NPg::TypeDescFromPgTypeId(pgType);
         Y_ABORT_UNLESS(typeDesc);
         typeInfo = NScheme::TTypeInfo(type, typeDesc);
     } else {

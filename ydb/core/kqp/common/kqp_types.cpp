@@ -8,7 +8,7 @@ namespace NKikimr::NScheme {
 void ProtoMiniKQLTypeFromTypeInfo(NKikimrMiniKQL::TType* type, const TTypeInfo typeInfo) {
     if (typeInfo.GetTypeId() == NTypeIds::Pg) {
         type->SetKind(NKikimrMiniKQL::Pg);
-        type->MutablePg()->Setoid(NPg::PgTypeIdFromTypeDesc(typeInfo.GetTypeDesc()));
+        type->MutablePg()->Setoid(NPg::PgTypeIdFromTypeDesc(typeInfo.GetPgTypeDesc()));
     } else {
         type->SetKind(NKikimrMiniKQL::Data);
         type->MutableData()->SetScheme(typeInfo.GetTypeId());
@@ -28,7 +28,7 @@ TTypeInfo TypeInfoFromProtoMiniKQLType(const NKikimrMiniKQL::TType& type) {
 
 const NMiniKQL::TType* MiniKQLTypeFromTypeInfo(const TTypeInfo typeInfo, const NMiniKQL::TTypeEnvironment& env) {
     if (typeInfo.GetTypeId() == NTypeIds::Pg) {
-        return NMiniKQL::TPgType::Create(NPg::PgTypeIdFromTypeDesc(typeInfo.GetTypeDesc()), env);
+        return NMiniKQL::TPgType::Create(NPg::PgTypeIdFromTypeDesc(typeInfo.GetPgTypeDesc()), env);
     } else {
         return NMiniKQL::TDataType::Create((NUdf::TDataTypeId)typeInfo.GetTypeId(), env);
     }

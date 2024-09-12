@@ -357,7 +357,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
 
             if (col.HasDefaultFromSequence()) {
                 if (sourceColumn.PType.GetTypeId() != NScheme::NTypeIds::Int64
-                        && NPg::PgTypeIdFromTypeDesc(sourceColumn.PType.GetTypeDesc()) != INT8OID) {
+                        && NPg::PgTypeIdFromTypeDesc(sourceColumn.PType.GetPgTypeDesc()) != INT8OID) {
                     TString sequenceType = sourceColumn.PType.GetTypeId() == NScheme::NTypeIds::Pg
                         ? NPg::PgTypeNameFromTypeDesc(NPg::TypeDescFromPgTypeId(INT8OID))
                         : NScheme::TypeName(NScheme::NTypeIds::Int64);
@@ -414,7 +414,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                     }
                 }
             } else {
-                auto* typeDesc = NPg::TypeDescFromPgTypeName(typeName);
+                auto typeDesc = NPg::TypeDescFromPgTypeName(typeName);
                 if (!typeDesc) {
                     errStr = Sprintf("Type '%s' specified for column '%s' is not supported by storage", col.GetType().data(), colName.data());
                     return nullptr;

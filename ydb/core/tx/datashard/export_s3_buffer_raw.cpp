@@ -131,7 +131,7 @@ bool TS3BufferRaw::Collect(const NTable::IScan::TRow& row, IOutputStream& out) {
             out << '"' << CGIEscapeRet(NBinaryJson::SerializeToJson(cell.AsBuf())) << '"';
             break;
         case NScheme::NTypeIds::Pg:
-            serialized = PgToStream(cell.AsBuf(), column.Type.GetTypeDesc(), out, ErrorString);
+            serialized = PgToStream(cell.AsBuf(), column.Type, out, ErrorString);
             break;
         case NScheme::NTypeIds::Uuid:
             serialized = UuidToStream(cell.AsValue<std::pair<ui64, ui64>>(), out, ErrorString);

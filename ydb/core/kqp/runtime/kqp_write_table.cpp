@@ -61,15 +61,13 @@ TVector<TSysTables::TTableColumnInfo> BuildColumns(const TConstArrayRef<NKikimrK
     result.reserve(inputColumns.size());
     i32 number = 0;
     for (const auto& column : inputColumns) {
+        NScheme::TTypeInfo typeInfo = (column.GetTypeId() == NScheme::NTypeIds::Pg) ?
+            NScheme::TTypeInfo(column.GetTypeId(), NPg::TypeDescFromPgTypeId(column.GetTypeInfo().GetPgTypeId())) :
+            NScheme::TTypeInfo(column.GetTypeId());
         result.emplace_back(
             column.GetName(),
             column.GetId(),
-            NScheme::TTypeInfo {
-                static_cast<NScheme::TTypeId>(column.GetTypeId()),
-                column.GetTypeId() == NScheme::NTypeIds::Pg
-                    ? NPg::TypeDescFromPgTypeId(column.GetTypeInfo().GetPgTypeId())
-                    : nullptr
-            },
+            std::move(typeInfo),
             column.GetTypeInfo().GetPgTypeMod(),
             number++
         );
@@ -231,7 +229,7 @@ public:
         CellsInfo[index].Value = value;
 
         if (type.GetTypeId() == NScheme::NTypeIds::Pg) {
-            const auto typeDesc = type.GetTypeDesc();
+            auto typeDesc = type.GetPgTypeDesc();
             if (typmod != -1 && NPg::TypeDescNeedsCoercion(typeDesc)) {
                 TMaybe<TString> err;
                 CellsInfo[index].PgBinaryValue = NYql::NCommon::PgValueCoerce(value, NPg::PgTypeIdFromTypeDesc(typeDesc), typmod, &err);

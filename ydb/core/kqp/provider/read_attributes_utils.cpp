@@ -195,7 +195,7 @@ void ReplaceReadAttributes(TExprNode& node,
 static Ydb::Type CreateYdbType(const NKikimr::NScheme::TTypeInfo& typeInfo, bool notNull) {
     Ydb::Type ydbType;
     if (typeInfo.GetTypeId() == NKikimr::NScheme::NTypeIds::Pg) {
-        auto* typeDesc = typeInfo.GetTypeDesc();
+        auto typeDesc = typeInfo.GetPgTypeDesc();
         auto* pg = ydbType.mutable_pg_type();
         pg->set_type_name(NKikimr::NPg::PgTypeNameFromTypeDesc(typeDesc));
         pg->set_oid(NKikimr::NPg::PgTypeIdFromTypeDesc(typeDesc));

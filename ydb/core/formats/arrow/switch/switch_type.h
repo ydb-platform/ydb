@@ -77,7 +77,7 @@ template <typename TFunc>
             break; // Deprecated types
 
         case NScheme::NTypeIds::Pg:
-            switch (NPg::PgTypeIdFromTypeDesc(typeInfo.GetTypeDesc())) {
+            switch (NPg::PgTypeIdFromTypeDesc(typeInfo.GetPgTypeDesc())) {
                 case INT2OID:
                     return callback(TTypeWrapper<arrow::Int16Type>());
                 case INT4OID:

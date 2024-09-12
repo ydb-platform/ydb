@@ -474,7 +474,7 @@ private:
                 if (typeInfo.GetTypeId() != NScheme::NTypeIds::Pg) {
                     ydbType.set_type_id((Ydb::Type::PrimitiveTypeId)typeInfo.GetTypeId());
                 } else {
-                    auto* typeDesc = typeInfo.GetTypeDesc();
+                    auto typeDesc = typeInfo.GetPgTypeDesc();
                     auto* pg = ydbType.mutable_pg_type();
                     pg->set_type_name(NPg::PgTypeNameFromTypeDesc(typeDesc));
                     pg->set_oid(NPg::PgTypeIdFromTypeDesc(typeDesc));
@@ -522,7 +522,7 @@ private:
                 }
             } else if (typeInProto.has_pg_type()) {
                 const auto& typeName = typeInProto.pg_type().type_name();
-                auto* typeDesc = NPg::TypeDescFromPgTypeName(typeName);
+                auto typeDesc = NPg::TypeDescFromPgTypeName(typeName);
                 if (!typeDesc) {
                     errorMessage = Sprintf("Unknown pg type for column %s: %s",
                                            name.c_str(), typeName.c_str());

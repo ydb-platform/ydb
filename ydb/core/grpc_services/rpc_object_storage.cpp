@@ -116,7 +116,7 @@ bool CellFromTuple(NScheme::TTypeInfo type,
         if (tupleValue.Hasbytes_value()) {
             c = TCell(tupleValue.Getbytes_value().data(), tupleValue.Getbytes_value().size());
         } else if (tupleValue.Hastext_value()) {
-            auto typeDesc = type.GetTypeDesc();
+            auto typeDesc = type.GetPgTypeDesc();
             auto convert = NPg::PgNativeBinaryFromNativeText(tupleValue.Gettext_value(), NPg::PgTypeIdFromTypeDesc(typeDesc));
             if (convert.Error) {
                 CHECK_OR_RETURN_ERROR(false, Sprintf("Cannot parse value of type Pg: %s in tuple at position %" PRIu32, convert.Error->data(), position));
@@ -828,7 +828,7 @@ private:
 
     void FillResultRows(Ydb::ResultSet &resultSet, TVector<TSysTables::TTableColumnInfo> &columns, TVector<TSerializedCellVec> resultRows) {
         const auto getPgTypeFromColMeta = [](const auto &colMeta) {
-            return NYdb::TPgType(NPg::PgTypeNameFromTypeDesc(colMeta.PType.GetTypeDesc()),
+            return NYdb::TPgType(NPg::PgTypeNameFromTypeDesc(colMeta.PType.GetPgTypeDesc()),
                                  colMeta.PTypeMod);
         };
 
@@ -859,7 +859,7 @@ private:
                 const auto& cell = row.GetCells()[i];
                 vb.AddMember(colMeta.Name);
                 if (colMeta.PType.GetTypeId() == NScheme::NTypeIds::Pg) {
-                    const NPg::TConvertResult& pgResult = NPg::PgNativeTextFromNativeBinary(cell.AsBuf(), colMeta.PType.GetTypeDesc());
+                    const NPg::TConvertResult& pgResult = NPg::PgNativeTextFromNativeBinary(cell.AsBuf(), colMeta.PType.GetPgTypeDesc());
                     if (pgResult.Error) {
                         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::RPC_REQUEST, "PgNativeTextFromNativeBinary error " << *pgResult.Error);
                     }

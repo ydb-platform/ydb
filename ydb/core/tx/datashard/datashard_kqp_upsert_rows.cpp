@@ -75,7 +75,7 @@ public:
                             "Malformed value for type: " << NUdf::GetDataTypeInfo(slot).Name << ", " << value);
                     } else {
                         Y_UNUSED(
-                            NYql::NCommon::PgValueToNativeBinary(value, NPg::PgTypeIdFromTypeDesc(type.GetTypeDesc()))
+                            NYql::NCommon::PgValueToNativeBinary(value, NPg::PgTypeIdFromTypeDesc(type.GetPgTypeDesc()))
                         );
                     }
                 }
@@ -213,7 +213,7 @@ IComputationNode* WrapKqpUpsertRows(TCallable& callable, const TComputationNodeF
             MKQL_ENSURE_S(itColumnInfo != tableInfo->Columns.end());
             const auto& typeMod = itColumnInfo->second.TypeMod;
             if (!typeMod.empty()) {
-                auto result = NPg::BinaryTypeModFromTextTypeMod(typeMod, rowTypes[i].GetTypeDesc());
+                auto result = NPg::BinaryTypeModFromTextTypeMod(typeMod, rowTypes[i].GetPgTypeDesc());
                 MKQL_ENSURE_S(!result.Error, "invalid type mod");
                 rowTypeMods[i] = result.Typmod;
             }
@@ -231,7 +231,7 @@ IComputationNode* WrapKqpUpsertRows(TCallable& callable, const TComputationNodeF
         if (NKqp::StructHoldsPgType(*rowType, it->second)) {
             auto typeInfo = NKqp::UnwrapPgTypeFromStruct(*rowType, it->second);
             MKQL_ENSURE_S(
-                NPg::PgTypeIdFromTypeDesc(typeInfo.GetTypeDesc()) == NPg::PgTypeIdFromTypeDesc(columnInfo.Type.GetTypeDesc()),
+                NPg::PgTypeIdFromTypeDesc(typeInfo.GetPgTypeDesc()) == NPg::PgTypeIdFromTypeDesc(columnInfo.Type.GetPgTypeDesc()),
                 "row key type mismatch with table key type"
             );
         } else {

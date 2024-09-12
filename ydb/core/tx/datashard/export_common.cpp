@@ -113,8 +113,8 @@ bool DyNumberToStream(TStringBuf data, IOutputStream& out, TString& err) {
     return true;
 }
 
-bool PgToStream(TStringBuf data, void* typeDesc, IOutputStream& out, TString& err) {
-    const NPg::TConvertResult& pgResult = NPg::PgNativeTextFromNativeBinary(data, typeDesc);
+bool PgToStream(TStringBuf data, const NScheme::TTypeInfo& typeInfo, IOutputStream& out, TString& err) {
+    const NPg::TConvertResult& pgResult = NPg::PgNativeTextFromNativeBinary(data, typeInfo.GetPgTypeDesc());
     if (pgResult.Error) {
         err = *pgResult.Error;
         return false;

@@ -68,7 +68,7 @@ def upload(result_path, s3_folder, try_num):
 
 
 def test_tpc():
-    is_ci = os.environ.get("PUBLIC_DIR") is not None
+    is_ci = os.environ.get("CURRENT_PUBLIC_DIR") is not None
 
     runner = Runner()
     runner.wrapped_run("h", 1, 1, r"q1\.sql")

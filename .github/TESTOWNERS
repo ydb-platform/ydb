@@ -53,7 +53,9 @@
 /ydb/tests/functional/ydb_cli @ydb-platform/appteam
 /ydb/public/lib/ydb_cli @ydb-platform/appteam
 /ydb/apps/ydb @ydb-platform/appteam
-/ydb/tests/postgres_integrations/go-libpq @ydb-platform/appteam
+
+#YDB Application Team @rekby TEAM:@ydb-platform/postgres-compatibility
+/ydb/tests/postgres_integrations @ydb-platform/postgres-compatibility
 
 #YDB Engineering Team @maximyurchuk 
    # - tbd

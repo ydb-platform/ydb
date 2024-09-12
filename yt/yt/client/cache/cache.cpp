@@ -18,18 +18,6 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template<class T>
-TIntrusivePtr<T> CopyConfig(const TIntrusivePtr<T>& config)
-{
-    auto newConfig = New<T>();
-    newConfig->Load(
-        ConvertToNode(config),
-        /*postprocess*/ false,
-        /*setDefaults*/ false,
-        /*path*/ "");
-    return newConfig;
-}
-
 TStringBuf GetNormalClusterName(TStringBuf clusterName)
 {
     return NNet::InferYTClusterFromClusterUrlRaw(clusterName).value_or(clusterName);
@@ -40,9 +28,10 @@ TClientsCacheConfigPtr GetClustersConfigWithNormalClusterName(const TClientsCach
 {
     auto newConfig = New<TClientsCacheConfig>();
 
-    newConfig->DefaultConfig = CopyConfig(config->DefaultConfig);
+    newConfig->DefaultConfig = CloneYsonStruct(config->DefaultConfig, /*postprocess*/ false, /*setDefaults*/ false);
     for (const auto& [clusterName, clusterConfig] : config->ClusterConfigs) {
-        newConfig->ClusterConfigs[ToString(GetNormalClusterName(clusterName))] = CopyConfig(clusterConfig);
+        newConfig->ClusterConfigs[ToString(GetNormalClusterName(clusterName))] =
+            CloneYsonStruct(clusterConfig, /*postprocess*/ false, /*setDefaults*/ false);
     }
     return newConfig;
 }
@@ -59,7 +48,7 @@ TConnectionConfigPtr MakeClusterConfig(
     auto it = clustersConfig->ClusterConfigs.find(GetNormalClusterName(cluster));
     auto config = (it != clustersConfig->ClusterConfigs.end()) ? it->second : clustersConfig->DefaultConfig;
 
-    auto newConfig = CopyConfig(config);
+    auto newConfig = CloneYsonStruct(config, /*postprocess*/ false, /*setDefaults*/ false);
     newConfig->ClusterUrl = ToString(cluster);
     newConfig->ClusterName = InferYTClusterFromClusterUrl(*newConfig->ClusterUrl);
     if (!proxyRole.empty()) {
@@ -110,7 +99,7 @@ IClientsCachePtr CreateClientsCache(
     const NApi::TClientOptions& options)
 {
     auto clustersConfig = New<TClientsCacheConfig>();
-    clustersConfig->DefaultConfig = CopyConfig(config);
+    clustersConfig->DefaultConfig = CloneYsonStruct(config, /*postprocess*/ false, /*setDefaults*/ false);
     return CreateClientsCache(clustersConfig, options);
 }
 

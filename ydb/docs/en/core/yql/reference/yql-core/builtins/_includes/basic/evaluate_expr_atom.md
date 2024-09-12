@@ -20,7 +20,7 @@ Restrictions:
 * The expression must not trigger MapReduce operations.
 * This functionality is fully locked in YQL over YDB.
 
-**Examples:**
+### Examples
 
 ```yql
 $now = CurrentUtcDate();

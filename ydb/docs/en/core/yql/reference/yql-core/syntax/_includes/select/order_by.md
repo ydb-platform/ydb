@@ -9,7 +9,7 @@ Each criteria can be followed by the sorting direction:
 
 Multiple sorting criteria will be applied left-to-right.
 
-**Example**
+## Example
 
 ```yql
 SELECT key, string_column
@@ -18,6 +18,7 @@ ORDER BY key DESC, LENGTH(string_column) ASC;
 ```
 
 {% if feature_window_functions %}
-You can also use `ORDER BY` for [window functions](../../window.md).
-{% endif %}
 
+You can also use `ORDER BY` for [window functions](../../window.md).
+
+{% endif %}

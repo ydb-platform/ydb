@@ -2,7 +2,8 @@
 
 Поиск позиции подстроки в строке.
 
-**Сигнатура**
+### Сигнатура
+
 ```
 Find(String, String[, Uint32?])->Uint32?
 Find(String?, String[, Uint32?])->Uint32?
@@ -21,13 +22,16 @@ Find(Utf8?, Utf8[, Uint32?])->Uint32?
 
 Возвращает первую найденную позицию подстроки или `NULL`, означающий что искомая подстрока с указанной позиции не найдена.
 
-**Примеры**
+### Примеры
+
 ``` yql
 SELECT FIND("abcdefg_abcdefg", "abc"); -- 0
 ```
+
 ``` yql
 SELECT FIND("abcdefg_abcdefg", "abc", 1); -- 8
 ```
+
 ``` yql
 SELECT FIND("abcdefg_abcdefg", "abc", 9); -- null
 ```
@@ -36,7 +40,8 @@ SELECT FIND("abcdefg_abcdefg", "abc", 9); -- null
 
 Обратный поиск позиции подстроки в строке, от конца к началу.
 
-**Сигнатура**
+### Сигнатура
+
 ```
 RFind(String, String[, Uint32?])->Uint32?
 RFind(String?, String[, Uint32?])->Uint32?
@@ -55,13 +60,16 @@ RFind(Utf8?, Utf8[, Uint32?])->Uint32?
 
 Возвращает первую найденную позицию подстроки или `NULL`, означающий, что искомая подстрока с указанной позиции не найдена.
 
-**Примеры**
+### Примеры
+
 ``` yql
 SELECT RFIND("abcdefg_abcdefg", "bcd"); -- 9
 ```
+
 ``` yql
 SELECT RFIND("abcdefg_abcdefg", "bcd", 8); -- 1
 ```
+
 ``` yql
 SELECT RFIND("abcdefg_abcdefg", "bcd", 0); -- null
 ```

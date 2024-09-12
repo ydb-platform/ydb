@@ -10,7 +10,7 @@ SELECT *
     WHERE …
 ```
 
-**Examples**
+## Examples
 
 * Select all the fields from the `series` row-oriented table using the `views_index` index with the `views >=someValue` criteria:
 
@@ -29,4 +29,3 @@ SELECT *
       ON t1.uploaded_user_id == t2.user_id
       WHERE t2.name == userName;
   ```
-

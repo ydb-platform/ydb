@@ -196,20 +196,8 @@ void Init(
     auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
 
     if (protoConfig.GetPrivateApi().GetEnabled()) {
-        const auto& s3readConfig = protoConfig.GetReadActorsFactoryConfig().GetS3ReadActorFactoryConfig();
         auto s3HttpRetryPolicy = NYql::GetHTTPDefaultRetryPolicy(NYql::THttpRetryPolicyOptions{.MaxTime = TDuration::Max(), .RetriedCurlCodes = NYql::FqRetriedCurlCodes()});
         NYql::NDq::TS3ReadActorFactoryConfig readActorFactoryCfg = NYql::NDq::CreateReadActorFactoryConfig(protoConfig.GetGateways().GetS3());
-
-        // These fillings were left for the backward compatibility. TODO: remove this part after migration to TS3GatewayConfig
-        if (const ui64 rowsInBatch = s3readConfig.GetRowsInBatch()) {
-            readActorFactoryCfg.RowsInBatch = rowsInBatch;
-        }
-        if (const ui64 maxInflight = s3readConfig.GetMaxInflight()) {
-            readActorFactoryCfg.MaxInflight = maxInflight;
-        }
-        if (const ui64 dataInflight = s3readConfig.GetDataInflight()) {
-            readActorFactoryCfg.DataInflight = dataInflight;
-        }
 
         RegisterDqInputTransformLookupActorFactory(*asyncIoFactory);
         RegisterDqPqReadActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory, yqCounters->GetSubgroup("subsystem", "DqSourceTracker"));

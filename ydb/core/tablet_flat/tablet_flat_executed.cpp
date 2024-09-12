@@ -152,12 +152,12 @@ void TTabletExecutedFlat::HandleLocalReadColumns(TEvTablet::TEvLocalReadColumns:
     Execute(Factory->Make(ev), ctx);
 }
 
-void TTabletExecutedFlat::SignalTabletActive(const TActorIdentity &id) {
-    id.Send(Tablet(), new TEvTablet::TEvTabletActive());
+void TTabletExecutedFlat::SignalTabletActive(const TActorIdentity &id, TString &&versionInfo) {
+    id.Send(Tablet(), new TEvTablet::TEvTabletActive(std::move(versionInfo)));
 }
 
-void TTabletExecutedFlat::SignalTabletActive(const TActorContext &ctx) {
-    ctx.Send(Tablet(), new TEvTablet::TEvTabletActive());
+void TTabletExecutedFlat::SignalTabletActive(const TActorContext &ctx, TString &&versionInfo) {
+    ctx.Send(Tablet(), new TEvTablet::TEvTabletActive(std::move(versionInfo)));
 }
 
 void TTabletExecutedFlat::Enqueue(STFUNC_SIG) {

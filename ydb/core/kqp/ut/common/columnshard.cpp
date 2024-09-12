@@ -246,6 +246,8 @@ namespace NKqp {
             return arrow::field(name, arrow::int64(), nullable);
         case NScheme::NTypeIds::JsonDocument:
             return arrow::field(name, arrow::binary(), nullable);
+        case NScheme::NTypeIds::Decimal:
+            return arrow::field(name, arrow::decimal(22, 9));
         case NScheme::NTypeIds::Pg:
             switch (NPg::PgTypeIdFromTypeDesc(typeDesc)) {
                 case INT2OID:

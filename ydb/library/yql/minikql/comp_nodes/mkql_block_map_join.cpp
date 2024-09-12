@@ -126,6 +126,10 @@ public:
         return true;
     }
 
+    bool HasBlocks() {
+        return Count > 0;
+    }
+
     bool IsNotFull() const {
         return OutputRows_ < MaxLength_
             && BuilderAllocatedSize_ <= MaxBuilderAllocatedSize_;
@@ -190,7 +194,7 @@ public:
         auto** fields = ctx.WideFields.data() + WideFieldsIndex_;
         const auto dict = Dict_->GetValue(ctx);
 
-        do {
+        while (!blockState.HasBlocks()) {
             while (blockState.IsNotFull() && blockState.NextRow()) {
                 const auto key = MakeKeysTuple(ctx, blockState, LeftKeyColumns_);
                 if constexpr (WithoutRight) {
@@ -205,7 +209,7 @@ public:
                     blockState.MakeRow(dict.Lookup(key));
                 }
             }
-            if (!blockState.IsFinished()) {
+            if (blockState.IsNotFull() && !blockState.IsFinished()) {
                 switch (Flow_->FetchValues(ctx, fields)) {
                 case EFetchResult::Yield:
                     return EFetchResult::Yield;
@@ -216,16 +220,15 @@ public:
                     blockState.Finish();
                     break;
                 }
+                // Leave the loop, if no values left in the flow.
+                Y_DEBUG_ABORT_UNLESS(blockState.IsFinished());
             }
-            // Leave the outer loop, if no values left in the flow.
-            Y_DEBUG_ABORT_UNLESS(blockState.IsFinished());
-            break;
-        } while (true);
-
-        if (blockState.IsEmpty()) {
-            return EFetchResult::Finish;
+            if (blockState.IsEmpty()) {
+                return EFetchResult::Finish;
+            }
+            blockState.MakeBlocks(ctx.HolderFactory);
         }
-        blockState.MakeBlocks(ctx.HolderFactory);
+
         const auto sliceSize = blockState.Slice();
 
         for (size_t i = 0; i < ResultJoinItems_.size(); i++) {
@@ -294,7 +297,7 @@ public:
         auto** fields = ctx.WideFields.data() + WideFieldsIndex_;
         const auto dict = Dict_->GetValue(ctx);
 
-        do {
+        while (!blockState.HasBlocks()) {
             if (iterState) {
                 NUdf::TUnboxedValue lookupItem;
                 // Process the remaining items from the iterator.
@@ -329,15 +332,13 @@ public:
                 }
                 // Leave the loop, if no values left in the flow.
                 Y_DEBUG_ABORT_UNLESS(blockState.IsFinished());
-                break;
             }
-            break;
-        } while(true);
-
-        if (blockState.IsEmpty()) {
-            return EFetchResult::Finish;
+            if (blockState.IsEmpty()) {
+                return EFetchResult::Finish;
+            }
+            blockState.MakeBlocks(ctx.HolderFactory);
         }
-        blockState.MakeBlocks(ctx.HolderFactory);
+
         const auto sliceSize = blockState.Slice();
 
         for (size_t i = 0; i < ResultJoinItems_.size(); i++) {

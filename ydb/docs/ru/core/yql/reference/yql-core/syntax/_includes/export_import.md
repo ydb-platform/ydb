@@ -21,9 +21,10 @@
 {% endnote %}
 
 
-**Примеры:**
+### Примеры
 
 my_lib.sql:
+
 ``` yql
 $Square = ($x) -> { RETURN $x * $x; };
 $Sqrt = ($x) -> { RETURN Math::Sqrt($x); };
@@ -37,6 +38,7 @@ EXPORT $Square, $Sqrt, $Agg_sum, $Agg_max;
 ```
 
 Запрос:
+
 ``` yql
 PRAGMA Library("my_lib.sql");
 IMPORT my_lib SYMBOLS $Square, $Sqrt, $Agg_sum, $Agg_max;
@@ -53,4 +55,3 @@ FROM (
   SELECT 3 AS x
 )
 ```
-

@@ -62,6 +62,7 @@ To manually access {{ ydb-short-name }} cluster logs via `ssh`, perform the foll
 2. Choose which systemd unit's logs you need. You can skip this step if you already know the unit name. After logging in to the server using the `ssh` command constructed in the previous step, obtain the list of {{ ydb-short-name }}-related systemd units using `systemctl list-units | grep ydb`. There'll likely be one storage node and multiple database nodes.
 
     {% cut "Example output" %}
+
     ```bash
     $ systemctl list-units | grep ydb
     ydb-transparent-hugepages.service                                              loaded active     exited    Configure Transparent Huge Pages (THP)
@@ -69,6 +70,7 @@ To manually access {{ ydb-short-name }} cluster logs via `ssh`, perform the foll
     ydbd-database-b.service                                                        loaded active     running   YDB dynamic node / database / b
     ydbd-storage.service                                                           loaded active     running   YDB storage node
     ```
+
     {% endcut %}
 
 3. Take the systemd unit name from the previous step and use it in the following command `journalctl -u <systemd-unit>` to actually show logs. You can specify `-u` multiple times to show logs of multiple units or use any other arguments from `man journalctl` to adjust the output.

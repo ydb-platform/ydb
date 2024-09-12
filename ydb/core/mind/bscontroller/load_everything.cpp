@@ -352,6 +352,7 @@ public:
         }
 
         // VSlots
+        const TMonotonic mono = TActivationContext::Monotonic();
         Self->VSlots.clear();
         {
             using T = Schema::VSlot;
@@ -374,6 +375,7 @@ public:
                 if (x.LastSeenReady != TInstant::Zero()) {
                     Self->NotReadyVSlotIds.insert(x.VSlotId);
                 }
+                x.VDiskStatusTimestamp = mono;
 
                 if (!slot.Next()) {
                     return false;

@@ -167,7 +167,11 @@ struct TReadSpec {
     NDB::ColumnsWithTypeAndName CHColumns;
     std::shared_ptr<arrow::Schema> ArrowSchema;
     NDB::FormatSettings Settings;
-    TString Format, Compression;
+    // It's very important to keep here std::string instead of TString 
+    // because of the cast from TString to std::string is using the MutRef (it isn't thread-safe).
+    // This behaviour can be found in the getInputFormat call
+    std::string Format;  
+    TString Compression;
     ui64 SizeLimit = 0;
     ui32 BlockLengthPosition = 0;
     std::vector<ui32> ColumnReorder;
@@ -965,6 +969,7 @@ public:
                 message = ErrorText;
             }
             Issues.AddIssues(BuildIssues(HttpResponseCode, errorCode, message));
+            FatalCode = StatusFromS3ErrorCode(errorCode);
         }
 
         if (ev->Get()->Issues) {
@@ -1115,7 +1120,7 @@ private:
             DecompressorActorId = Register(CreateS3DecompressorActor(SelfActorId, ReadSpec->Compression));
         }
 
-        NYql::NDqProto::StatusIds::StatusCode fatalCode = NYql::NDqProto::StatusIds::EXTERNAL_ERROR;
+        FatalCode = NYql::NDqProto::StatusIds::EXTERNAL_ERROR;
 
         StartCycleCount = GetCycleCountFast();
 
@@ -1123,7 +1128,7 @@ private:
             if (ReadSpec->Arrow) {
                 if (ReadSpec->Compression) {
                     Issues.AddIssue(TIssue("Blocks optimisations are incompatible with external compression"));
-                    fatalCode = NYql::NDqProto::StatusIds::BAD_REQUEST;
+                    FatalCode = NYql::NDqProto::StatusIds::BAD_REQUEST;
                 } else {
                     try {
                         if (Url.StartsWith("file://")) {
@@ -1133,7 +1138,7 @@ private:
                         }
                     } catch (const parquet::ParquetException& ex) {
                         Issues.AddIssue(TIssue(ex.what()));
-                        fatalCode = NYql::NDqProto::StatusIds::BAD_REQUEST;
+                        FatalCode = NYql::NDqProto::StatusIds::BAD_REQUEST;
                         RetryStuff->Cancel();
                     }
                 }
@@ -1149,7 +1154,7 @@ private:
                     LOG_CORO_D("S3 read ERROR");
                 } catch (const NDB::Exception& ex) {
                     Issues.AddIssue(TIssue(ex.message()));
-                    fatalCode = NYql::NDqProto::StatusIds::BAD_REQUEST;
+                    FatalCode = NYql::NDqProto::StatusIds::BAD_REQUEST;
                     RetryStuff->Cancel();
                 }
             }
@@ -1162,7 +1167,7 @@ private:
             return;
         } catch (const std::exception& err) {
             Issues.AddIssue(TIssue(err.what()));
-            fatalCode = NYql::NDqProto::StatusIds::INTERNAL_ERROR;
+            FatalCode = NYql::NDqProto::StatusIds::INTERNAL_ERROR;
             RetryStuff->Cancel();
         }
 
@@ -1170,7 +1175,7 @@ private:
 
         auto issues = NS3Util::AddParentIssue(TStringBuilder{} << "Error while reading file " << Path, std::move(Issues));
         if (issues)
-            Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvAsyncInputError(InputIndex, std::move(issues), fatalCode));
+            Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvAsyncInputError(InputIndex, std::move(issues), FatalCode));
         else
             Send(ParentActorId, new TEvS3Provider::TEvFileFinished(PathIndex, TakeIngressDelta(), TakeCpuTimeDelta(), RetryStuff->SizeLimit));
     }
@@ -1230,6 +1235,7 @@ private:
     bool ServerReturnedError = false;
     TString ErrorText;
     TIssues Issues;
+    NYql::NDqProto::StatusIds::StatusCode FatalCode;
 
     NActors::TActorId DecompressorActorId;
     std::size_t LastOffset = 0;
@@ -1373,12 +1379,7 @@ public:
             DecodedChunkSizeHist,
             HttpInflightSize,
             HttpDataRps,
-            DeferredQueueSize,
-            ReadSpec->Format,
-            ReadSpec->Compression,
-            ReadSpec->ArrowSchema,
-            ReadSpec->RowSpec,
-            ReadSpec->Settings
+            DeferredQueueSize
         );
 
         if (!UseRuntimeListing) {
@@ -1719,7 +1720,7 @@ private:
         IssuesFromMessage(result->Get()->Record.GetIssues(), issues);
         LOG_W("TS3StreamReadActor", "Error while object listing, details: TEvObjectPathReadError: " << issues.ToOneLineString());
         issues = NS3Util::AddParentIssue(TStringBuilder{} << "Error while object listing", std::move(issues));
-        Send(ComputeActorId, new TEvAsyncInputError(InputIndex, std::move(issues), NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
+        Send(ComputeActorId, new TEvAsyncInputError(InputIndex, std::move(issues), result->Get()->Record.GetFatalCode()));
     }
 
     void HandleRetry(TEvS3Provider::TEvRetryEventFunc::TPtr& retry) {

@@ -13,7 +13,7 @@ Optional arguments:
 
 Returns the first substring position found or `NULL` (meaning that the desired substring hasn't been found starting from the specified position).
 
-**Examples**
+### Examples
 
 ```yql
 SELECT FIND("abcdefg_abcdefg", "abc"); -- 0
@@ -42,7 +42,7 @@ Optional arguments:
 
 Returns the first substring position found or `NULL` (meaning that the desired substring hasn't been found starting from the specified position).
 
-**Examples**
+### Examples
 
 ```yql
 SELECT RFIND("abcdefg_abcdefg", "bcd"); -- 9

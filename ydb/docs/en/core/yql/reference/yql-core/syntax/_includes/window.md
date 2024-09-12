@@ -16,9 +16,9 @@ or
 function_name([expression [, expression ...]]) OVER window_name
 ```
 
-Here, `window_name` (_window name_) is an arbitrary ID that is unique within the query and `expression` is an arbitrary expression that contains no window function calls.
+Here, window name (`window_name`) is an arbitrary ID that is unique within the query and `expression` is an arbitrary expression that contains no window function calls.
 
-In the query, each window name must be mapped to the _window definition_ (`window_definition`):
+In the query, each window name must be mapped to the window definition (`window_definition`):
 
 ```
 SELECT
@@ -63,7 +63,7 @@ There should be no window function calls in any of the expressions inside the wi
 
 ### Partitioning {#partition}
 
-If `PARTITION BY` is set, the source table rows are grouped into _partitions_, which are then handled independently of each other.
+If `PARTITION BY` is set, the source table rows are grouped into *partitions*, which are then handled independently of each other.
 If `PARTITION BY` isn't set, all rows in the source table are put in the same partition. If `ORDER BY` is set, it determines the order of rows in a partition.
 Both in `PARTITION BY` and [GROUP BY](../group_by.md) you can use aliases and [SessionWindow](../group_by.md#session-window).
 
@@ -86,9 +86,9 @@ Further, depending on the specific window function, it's calculated either based
 
 [List of available window functions](../../builtins/window.md)
 
-**Examples:**
+#### Examples
 
-```sql
+```yql
 SELECT
     COUNT(*) OVER w AS rows_count_in_window,
     some_other_value -- access the current row
@@ -99,7 +99,7 @@ WINDOW w AS (
 );
 ```
 
-```sql
+```yql
 SELECT
     LAG(my_column, 2) OVER w AS row_before_previous_one
 FROM `my_table`
@@ -136,7 +136,6 @@ WINDOW w AS (
 ## Implementation specifics
 
 * Functions calculated on the `ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING` or `ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW` window frame are implemented efficiently (do not require additional memory and their computation runs on a partition in O(partition size) time).
-
 * For the `ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING` window frame, you can choose the execution strategy in RAM by specifying the `COMPACT` hint after the `PARTITION` keyword.
 
   For example, `PARTITION COMPACT BY key` or `PARTITION COMPACT BY ()` (if `PARTITION BY` was missing initially).
@@ -144,9 +143,7 @@ WINDOW w AS (
   If the `COMPACT` hint is specified, this requires additional memory equal to O(partition size), but then no extra `JOIN` operation is made.
 
 * If the window frame doesn't start with `UNBOUNDED PRECEDING`, calculating window functions on this window requires additional memory equal to O(the maximum number of rows from the window boundaries to the current row), while the computation time is equal to O(number_of_partition_rows * window_size).
-
 * For the window frame starting with `UNBOUNDED PRECEDING` and ending with `N`, where `N` is neither `CURRENT ROW` nor `UNBOUNDED FOLLOWING`, additional memory equal to O(N) is required and the computation time is equal to O(N * number_of_partition_rows).
-
 * The `LEAD(expr, N)` and `LAG(expr, N)` functions always require O(N) of RAM.
 
 Given the above, a query with `ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING` should, if possible, be changed to `ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW` by reversing the `ORDER BY` sorting order.

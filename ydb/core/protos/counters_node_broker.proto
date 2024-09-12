@@ -8,6 +8,7 @@ option (NKikimr.TabletTypeName) = "NodeBroker"; // Used as prefix for all counte
 
 enum ESimpleCounters {
     COUNTER_EPOCH_SIZE_BYTES = 0           [(CounterOpts) = {Name: "EpochSizeBytes"}];
+    COUNTER_EPOCH_DELTAS_SIZE_BYTES = 1    [(CounterOpts) = {Name: "EpochDeltasSizeBytes"}];
 }
 
 enum ECumulativeCounters {

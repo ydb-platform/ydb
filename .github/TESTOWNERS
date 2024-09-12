@@ -22,7 +22,7 @@
 #Distributed System Infrastructure Team @ijon TEAM:@ydb-platform/system-infra
 /ydb/core/mind/hive @ydb-platform/system-infra
 /ydb/core/tx/schemeshard @ydb-platform/system-infra
-/ydb/core/tx/columnshard @ivanmorozov333 @ydb-platform/system-infra
+/ydb/core/tx/columnshard @ydb-platform/system-infra
 /ydb/core/util @ydb-platform/system-infra
 /ydb/core/client @ydb-platform/system-infra
 /ydb/core/engine @ydb-platform/system-infra
@@ -88,6 +88,7 @@
 /ydb/services/persqueue_v1 @ydb-platform/Topics
 /ydb/core/ymq @ydb-platform/Topics
 /ydb/core/http_proxy @ydb-platform/Topics
+/ydb/core/tx/schemeshard/ut_pq_reboots @ydb-platform/Topics
 
 #YDB Analytics TEAM:???
 

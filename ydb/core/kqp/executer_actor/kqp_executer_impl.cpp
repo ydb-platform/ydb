@@ -92,7 +92,7 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
         return CreateKqpDataExecuter(
             std::move(request), database, userToken, counters, false, 
             aggregation, executerRetriesConfig, std::move(asyncIoFactory), chanTransportVersion, creator, 
-            userRequestContext, enableOlapSink, useEvWrite, statementResultIndex, 
+            userRequestContext, useEvWrite, statementResultIndex, 
             federatedQuerySetup, /*GUCSettings*/nullptr, shardIdToTableInfo, htapTx
         );
     }
@@ -115,7 +115,7 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
             return CreateKqpDataExecuter(
                 std::move(request), database, userToken, counters, false, 
                 aggregation, executerRetriesConfig, std::move(asyncIoFactory), chanTransportVersion, creator, 
-                userRequestContext, enableOlapSink, useEvWrite, statementResultIndex, 
+                userRequestContext, useEvWrite, statementResultIndex, 
                 federatedQuerySetup, /*GUCSettings*/nullptr, shardIdToTableInfo, htapTx
             );
 
@@ -130,7 +130,7 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
             return CreateKqpDataExecuter(
                 std::move(request), database, userToken, counters, true,
                 aggregation, executerRetriesConfig, std::move(asyncIoFactory), chanTransportVersion, creator,
-                userRequestContext, enableOlapSink, useEvWrite, statementResultIndex,
+                userRequestContext, useEvWrite, statementResultIndex,
                 federatedQuerySetup, GUCSettings, shardIdToTableInfo, htapTx
             );
 

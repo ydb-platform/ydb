@@ -298,29 +298,23 @@ public:
         ReceivingShards = std::set<ui64>(locks.GetReceivingShards().begin(), locks.GetReceivingShards().end());
         ReceivingColumnShards = std::set<ui64>(locks.GetReceivingColumnShards().begin(), locks.GetReceivingColumnShards().end());
         HtapFormat = locks.HasArbiterColumnShard();
+        if (!ReceivingShards.size() || !SendingShards.size()) {
+            return TConclusionStatus::Fail("empty sending/receiving lists is incorrect case");
+        }
         if (!locks.HasArbiterColumnShard()) {
             AFL_VERIFY(!ReceivingColumnShards.size() && !SendingColumnShards.size());
-            if (!ReceivingShards.size() || !SendingShards.size()) {
-                ReceivingShards.clear();
-                SendingShards.clear();
-            } else {
-                ArbiterColumnShard = *ReceivingShards.begin();
-                if (!ReceivingShards.contains(TabletId) && !SendingShards.contains(TabletId)) {
-                    return TConclusionStatus::Fail("shard is incorrect for sending/receiving lists");
-                }
+            ArbiterColumnShard = *ReceivingShards.begin();
+            if (!ReceivingShards.contains(TabletId) && !SendingShards.contains(TabletId)) {
+                return TConclusionStatus::Fail("shard is incorrect for sending/receiving lists");
             }
         } else {
+            if (!ReceivingColumnShards.size() || !SendingColumnShards.size()) {
+                return TConclusionStatus::Fail("empty sending/receiving lists for columnshards is incorrect case");
+            }
             ArbiterColumnShard = locks.GetArbiterColumnShard();
             AFL_VERIFY(ArbiterColumnShard);
-            if (!ReceivingShards.size() || !SendingShards.size() || !ReceivingColumnShards.size() || !SendingColumnShards.size()) {
-                ReceivingShards.clear();
-                SendingShards.clear();
-                SendingColumnShards.clear();
-                ReceivingColumnShards.clear();
-            } else {
-                if (!ReceivingColumnShards.contains(TabletId) && !SendingColumnShards.contains(TabletId)) {
-                    return TConclusionStatus::Fail("shard is incorrect for sending/receiving lists");
-                }
+            if (!ReceivingColumnShards.contains(TabletId) && !SendingColumnShards.contains(TabletId)) {
+                return TConclusionStatus::Fail("shard is incorrect for sending/receiving lists");
             }
         }
 

@@ -14,7 +14,7 @@
 ALTER TABLE `series` ADD INDEX `title_index` GLOBAL ON (`title`);
 ```
 
-You can specify any index parameters from the [`CREATE TABLE`](../create_table.md#secondary_index) command.
+You can specify any index parameters from the [`CREATE TABLE`](../create_table/secondary_index.md) command.
 
 {% if backend_name == "YDB" %}
 

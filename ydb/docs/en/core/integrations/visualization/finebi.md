@@ -9,11 +9,11 @@ PostgreSQL compatibility mode in {{ ydb-short-name }} enables the use of [FineBI
 Before you begin, make sure that the following software is installed:
 
 * [FineBI](https://intl.finebi.com/).
-* PostgreSQL JDBC driver for FineBI.
+* PostgreSQL JDBC driver uploaded to FineBI.
 
     {% note info %}
 
-    You can download the latest PostgreSQL JDBC driver from the [Download page](https://jdbc.postgresql.org/download/) of the PostgreSQL web site. For information on how to install the PostgreSQL JDBC driver, refer to the [FineBI documentation](https://help.fanruan.com/finebi-en/doc-view-1540.html).
+    You can download the latest PostgreSQL JDBC driver from the [Download page](https://jdbc.postgresql.org/download/) of the PostgreSQL web site. For information on how to upload the PostgreSQL JDBC driver to FineBI, refer to the [FineBI documentation](https://help.fanruan.com/finebi-en/doc-view-1540.html).
 
     {% endnote %}
 
@@ -60,7 +60,7 @@ To connect to {{ ydb-short-name }} from FineBI using the PostgreSQL wire protoco
 
 1. Click **Test Connection**.
 
-    If the connection details are correct, a message about a successful connection will appear.
+    If the connection details are correct, a message confirming a successful connection will appear.
 
 1. To save the database connection, click **Save**.
 
@@ -76,7 +76,7 @@ To create a dataset for a {{ ydb-short-name }} table, follow these steps:
 
     {% note warning %}
 
-    You must have the Management permission for the selected folder.
+    You must have the [Public Data Management](https://help.fanruan.com/finebi-en/doc-view-5734.html) permission for the selected folder in FineBI.
 
     {% endnote %}
 

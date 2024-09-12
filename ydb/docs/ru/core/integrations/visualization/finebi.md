@@ -9,11 +9,11 @@ FineBI — это мощный инструмент для анализа бол
 Для работы понадобятся:
 
 * [FineBI](https://intl.finebi.com/);
-* PostgreSQL JDBC-драйвер, установленный в FineBI.
+* PostgreSQL JDBC-драйвер, загруженный в FineBI.
 
     {% note info %}
 
-    Скачать актуальный PostgreSQL JDBC-драйвер можно со [страницы загрузки](https://jdbc.postgresql.org/download/) сайта PostgreSQL. Чтобы установить JDBC-драйвер для PostgreSQL, следуйте [инструкции](https://help.fanruan.com/finebi-en/doc-view-1540.html) в документации FineBI.
+    Скачать актуальный PostgreSQL JDBC-драйвер можно со [страницы загрузки](https://jdbc.postgresql.org/download/) сайта PostgreSQL. Чтобы загрузить JDBC-драйвер для PostgreSQL в FineBI, следуйте [инструкции](https://help.fanruan.com/finebi-en/doc-view-1540.html) в документации FineBI.
 
     {% endnote %}
 
@@ -75,7 +75,7 @@ FineBI — это мощный инструмент для анализа бол
 
     {% note warning %}
 
-    У вас должны быть права Management для выбранной папки.
+    У вас должны быть права [Public Data Management](https://help.fanruan.com/finebi-en/doc-view-5734.html) для выбранной папки в FineBI.
 
     {% endnote %}
 

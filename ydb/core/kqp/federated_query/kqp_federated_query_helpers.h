@@ -10,6 +10,7 @@
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
 #include <ydb/library/yql/providers/yt/provider/yql_yt_gateway.h>
+#include <ydb/library/yql/providers/s3/actors/yql_s3_source_factory.h>
 
 namespace NKikimrConfig {
     class TQueryServiceConfig;
@@ -30,6 +31,7 @@ namespace NKikimr::NKqp {
         NYql::TYtGatewayConfig YtGatewayConfig;
         NYql::IYtGateway::TPtr YtGateway;
         NMiniKQL::TComputationNodeFactory ComputationFactory;
+        NYql::NDq::TS3ReadActorFactoryConfig S3ReadActorFactoryConfig;
     };
 
     struct IKqpFederatedQuerySetupFactory {
@@ -65,6 +67,7 @@ namespace NKikimr::NKqp {
         NYql::NConnector::IClient::TPtr ConnectorClient;
         std::optional<NActors::TActorId> DatabaseResolverActorId;
         NYql::IMdbEndpointGenerator::TPtr MdbEndpointGenerator;
+        NYql::NDq::TS3ReadActorFactoryConfig S3ReadActorFactoryConfig;
     };
 
     struct TKqpFederatedQuerySetupFactoryMock: public IKqpFederatedQuerySetupFactory {
@@ -107,6 +110,7 @@ namespace NKikimr::NKqp {
         NYql::TYtGatewayConfig YtGatewayConfig;
         NYql::IYtGateway::TPtr YtGateway;
         NMiniKQL::TComputationNodeFactory ComputationFactories;
+        NYql::NDq::TS3ReadActorFactoryConfig S3ReadActorFactoryConfig;
     };
 
     IKqpFederatedQuerySetupFactory::TPtr MakeKqpFederatedQuerySetupFactory(

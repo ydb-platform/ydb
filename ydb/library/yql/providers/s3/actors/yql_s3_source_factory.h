@@ -16,4 +16,6 @@ void RegisterS3ReadActorFactory(
         );
 }
 
+TS3ReadActorFactoryConfig CreateReadActorFactoryConfig(const ::NYql::TS3GatewayConfig& s3Config);
+
 }

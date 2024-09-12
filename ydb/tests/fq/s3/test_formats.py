@@ -104,6 +104,34 @@ class TestS3Formats:
             if type_format != "json_list":
                 assert stat["ResultSet"]["IngressRows"]["sum"] == 3
 
+    @yq_v2
+    @pytest.mark.parametrize(
+        "filename, type_format",
+        [
+            ("test.csv", "csv_with_names"),
+            ("test.tsv", "tsv_with_names"),
+            ("test_each_row.json", "json_each_row"),
+            ("test_list.json", "json_list"),
+            ("test.parquet", "parquet"),
+        ],
+    )
+    def test_format_inference(self, kikimr, s3, client, filename, type_format):
+        self.create_bucket_and_upload_file(filename, s3, kikimr)
+        client.create_storage_connection("fruitbucket", "fbucket")
+
+        sql = f'''
+            SELECT *
+            FROM fruitbucket.`{filename}`
+            WITH (format=`{type_format}`, with_infer='true');
+            '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+
+        data = client.get_result_data(query_id)
+        result_set = data.result.result_set
+        self.validate_result_inference(result_set)
+
     @yq_all
     def test_btc(self, kikimr, s3, client, unique_prefix):
         self.create_bucket_and_upload_file("btct.parquet", s3, kikimr)

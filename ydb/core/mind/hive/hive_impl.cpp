@@ -3030,6 +3030,7 @@ void THive::ProcessEvent(std::unique_ptr<IEventHandle> event) {
         hFunc(TEvHive::TEvUpdateDomain, Handle);
         hFunc(TEvPrivate::TEvDeleteNode, Handle);
         hFunc(TEvHive::TEvRequestTabletDistribution, Handle);
+        hFunc(TEvHive::TEvRequestScaleRecommendation, Handle);
     }
 }
 
@@ -3132,6 +3133,7 @@ STFUNC(THive::StateWork) {
         fFunc(TEvPrivate::TEvProcessStorageBalancer::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvDeleteNode::EventType, EnqueueIncomingEvent);
         fFunc(TEvHive::TEvRequestTabletDistribution::EventType, EnqueueIncomingEvent);
+        fFunc(TEvHive::TEvRequestScaleRecommendation::EventType, EnqueueIncomingEvent);
         hFunc(TEvPrivate::TEvProcessIncomingEvent, Handle);
     default:
         if (!HandleDefaultEvents(ev, SelfId())) {
@@ -3429,6 +3431,11 @@ void THive::Handle(TEvHive::TEvRequestTabletDistribution::TPtr& ev) {
             node->AddTabletIds(tabletId);
         }
     }
+    Send(ev->Sender, response.release());
+}
+
+void THive::Handle(TEvHive::TEvRequestScaleRecommendation::TPtr& ev) {
+    auto response = std::make_unique<TEvHive::TEvResponseScaleRecommendation>();
     Send(ev->Sender, response.release());
 }
 

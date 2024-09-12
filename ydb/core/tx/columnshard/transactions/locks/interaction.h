@@ -1,5 +1,5 @@
 #pragma once
-#include <ydb/core/formats/arrow/replace_key.h>
+#include <ydb/library/formats/arrow/replace_key.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/accessor/validator.h>

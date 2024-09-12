@@ -1,3 +1,4 @@
+#include <optional>
 #include <ydb/library/backup/backup.h>
 #include <ydb/library/backup/query_builder.h>
 #include <ydb/library/backup/util.h>
@@ -10,6 +11,8 @@
 #include <util/folder/tempdir.h>
 #include <util/generic/strbuf.h>
 #include <library/cpp/string_utils/quote/quote.h>
+
+#include "contrib/libs/protobuf/src/google/protobuf/text_format.h"
 
 namespace NYdb {
 
@@ -124,7 +127,7 @@ Y_UNIT_TEST(ParseValuesFromFile) {
                 case 0: {
                     UNIT_ASSERT(parser.GetPrimitiveType() == EPrimitiveType::Uint32);
                     parser.CloseOptional();
-                    const TMaybe<ui32> val = parser.GetOptionalUint32();
+                    const std::optional<ui32> val = parser.GetOptionalUint32();
                     if (rowsRead % 2 == 0) {
                         UNIT_ASSERT(!val);
                     } else {
@@ -137,7 +140,7 @@ Y_UNIT_TEST(ParseValuesFromFile) {
                     UNIT_ASSERT(parser.GetPrimitiveType() == EPrimitiveType::String);
                     parser.CloseOptional();
                     TString col2str = TStringBuilder() << "TestString" << 2 * rowsRead << "with number";
-                    const TMaybe<TString> val = parser.GetOptionalString();
+                    const std::optional<TString> val = parser.GetOptionalString();
                     if (rowsRead % 2 == 0) {
                         UNIT_ASSERT(val);
                         UNIT_ASSERT_STRINGS_EQUAL(*val, col2str);
@@ -149,7 +152,7 @@ Y_UNIT_TEST(ParseValuesFromFile) {
                 case 2: {
                     UNIT_ASSERT(parser.GetPrimitiveType() == EPrimitiveType::Int64);
                     parser.CloseOptional();
-                    const TMaybe<i64> val = parser.GetOptionalInt64();
+                    const std::optional<i64> val = parser.GetOptionalInt64();
                     UNIT_ASSERT(val);
                     UNIT_ASSERT(*val == rowsRead*rowsRead);
                     break;

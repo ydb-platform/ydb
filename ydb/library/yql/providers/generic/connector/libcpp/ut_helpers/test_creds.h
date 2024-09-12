@@ -6,7 +6,7 @@ namespace NYql::NTestCreds {
 
     class TCredentialsProvider: public NYdb::ICredentialsProvider {
     public:
-        NYdb::TStringType GetAuthInfo() const override {
+        std::string GetAuthInfo() const override {
             return "TEST_TOKEN";
         }
         bool IsValid() const override {

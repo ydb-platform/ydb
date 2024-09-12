@@ -771,18 +771,17 @@ public:
                     .Repeat(TExprStep::LoadTablesMetadata)
                     .Repeat(TExprStep::RewriteIO);
 
-                const auto& query = tableDesc.Metadata->ViewPersistedData.QueryText;
-                const auto& capturedContext = tableDesc.Metadata->ViewPersistedData.CapturedContext;
+                const auto& viewData = tableDesc.Metadata->ViewPersistedData;
 
                 NKqp::TKqpTranslationSettingsBuilder settingsBuilder(
                     SessionCtx->Query().Type,
                     SessionCtx->Config()._KqpYqlSyntaxVersion.Get().GetRef(),
                     cluster,
-                    query,
+                    viewData.QueryText,
                     SessionCtx->Config().BindingsMode,
                     GUCSettings
                 );
-                return RewriteReadFromView(node, ctx, query, settingsBuilder, Types.Modules, capturedContext);
+                return RewriteReadFromView(node, ctx, settingsBuilder, Types.Modules, viewData);
             }
         }
 

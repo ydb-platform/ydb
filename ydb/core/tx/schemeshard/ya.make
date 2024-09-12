@@ -286,7 +286,6 @@ PEERDIR(
     ydb/library/protobuf_printer
     ydb/library/yql/minikql
     ydb/library/yql/providers/common/proto
-    ydb/library/yql/sql/settings/serializer/proto
     ydb/services/bg_tasks
     ydb/core/tx/columnshard/bg_tasks/manager
 )

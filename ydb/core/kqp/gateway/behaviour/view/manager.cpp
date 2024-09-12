@@ -3,8 +3,8 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/kqp/gateway/actors/scheme.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
+#include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/library/yql/sql/settings/serializer/serializer.h>
 
 namespace NKikimr::NKqp {
 
@@ -59,9 +59,7 @@ void FillCreateViewProposal(NKikimrSchemeOp::TModifyScheme& modifyScheme,
     auto& viewDesc = *modifyScheme.MutableCreateView();
     viewDesc.SetName(pathPair.second);
     viewDesc.SetQueryText(GetByKeyOrDefault(settings, "query_text"));
-
-    NSQLTranslation::TTranslationSettingsSerializer contextSerializer;
-    contextSerializer.Serialize(context.GetTranslationSettings(), *viewDesc.MutableCapturedContext());
+    NSQLTranslation::Serialize(context.GetTranslationSettings(), *viewDesc.MutableCapturedContext());
 
     if (!settings.GetFeaturesExtractor().IsFinished()) {
         ythrow TBadArgumentException() << "Unknown property: " << settings.GetFeaturesExtractor().GetRemainedParamsString();

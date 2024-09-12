@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package NYql.NProto;
 
-option java_package = "com.yandex.yql.proto";
+option java_package = "ru.yandex.kikimr.proto";
 
 message TTranslationSettings {
     optional string PathPrefix = 1;
@@ -10,5 +10,6 @@ message TTranslationSettings {
     optional bool AnsiLexer = 3;
     optional bool Antlr4Parser = 4;
     optional bool PgParser = 5;
-    repeated string Pragmas = 6;
+
+    repeated string Pragmas = 10;
 }

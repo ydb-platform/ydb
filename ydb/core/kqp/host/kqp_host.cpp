@@ -1231,7 +1231,17 @@ private:
                 .SetApplicationName(ApplicationName)
                 .SetIsEnablePgSyntax(SessionCtx->Config().FeatureFlags.GetEnablePgSyntax());
             NSQLTranslation::TTranslationSettings parsedSettings;
-            auto astRes = ParseQuery(query.Text, isSql, sqlVersion, TypesCtx->DeprecatedSQL, ctx, settingsBuilder, result.KeepInCache, result.CommandTagName, &parsedSettings);
+            auto astRes = ParseQuery(
+                query.Text,
+                isSql,
+                sqlVersion,
+                TypesCtx->DeprecatedSQL,
+                ctx,
+                settingsBuilder,
+                result.KeepInCache,
+                result.CommandTagName,
+                &parsedSettings
+            );
             SessionCtx->Query().TranslationSettings = std::move(parsedSettings);
             if (astRes.ActualSyntaxType == NYql::ESyntaxType::Pg) {
                 SessionCtx->Config().IndexAutoChooserMode = NKikimrConfig::TTableServiceConfig_EIndexAutoChooseMode::TTableServiceConfig_EIndexAutoChooseMode_MAX_USED_PREFIX;

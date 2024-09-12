@@ -9,6 +9,7 @@
 #include <ydb/library/yql/parser/proto_ast/gen/v1/SQLv1Lexer.h>
 #include <ydb/library/yql/parser/proto_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h>
 #include <ydb/library/yql/sql/settings/partitioning.h>
+#include <ydb/library/yql/sql/v1/proto_parser/proto_parser.h>
 
 #include <util/generic/scope.h>
 #include <util/string/join.h>
@@ -54,21 +55,38 @@ TString CollectTokens(const TRule_select_stmt& selectStatement) {
     return tokenCollector.Tokens;
 }
 
-TNodePtr BuildViewSelect(
-    const TRule_select_stmt& query,
-    TContext& parentContext
+bool RestoreContext(
+    TContext& ctx, const NSQLTranslation::TTranslationSettings& settings, const TString& contextRestorationQuery
 ) {
-    NSQLTranslation::TTranslationSettings translationSettings = parentContext.Settings;
-    translationSettings.Mode = NSQLTranslation::ESqlMode::LIMITED_VIEW;
-    const auto& cluster = parentContext.Scoped->CurrCluster;
-    translationSettings.DefaultCluster = cluster.GetLiteral()
-        ? *cluster.GetLiteral()
-        : parentContext.Settings.DefaultCluster;
+    const TString queryName = "context restoration query";
 
-    TContext context(translationSettings, {}, parentContext.Issues);
-    TSqlSelect select(context, translationSettings.Mode);
+    const auto* ast = NSQLTranslationV1::SqlAST(
+        contextRestorationQuery, queryName, ctx.Issues,
+        settings.MaxErrors, settings.AnsiLexer,  settings.Antlr4Parser, settings.TestAntlr4, settings.Arena
+    );
+    if (!ast) {
+        return false;
+    }
+
+    TSqlQuery query(ctx, ctx.Settings.Mode, true);
+    auto node = query.Build(static_cast<const TSQLv1ParserAST&>(*ast));
+
+    return node && node->Init(ctx, nullptr) && node->Translate(ctx);
+}
+
+TNodePtr BuildViewSelect(
+    const TRule_select_stmt& selectQuery,
+    TContext& parentContext,
+    const TString& contextRestorationQuery
+) {
+    TContext context(parentContext.Settings, {}, parentContext.Issues);
+    RestoreContext(context, context.Settings, contextRestorationQuery);
+
+    context.Settings.Mode = NSQLTranslation::ESqlMode::LIMITED_VIEW;
+
+    TSqlSelect select(context, context.Settings.Mode);
     TPosition pos;
-    auto source = select.Build(query, pos);
+    auto source = select.Build(selectQuery, pos);
     if (!source) {
         return nullptr;
     }
@@ -4852,6 +4870,7 @@ bool TSqlTranslation::ParseViewQuery(
     const TRule_select_stmt& query
 ) {
     TString queryText = CollectTokens(query);
+    TString contextRestorationQuery;
     {
         const auto& service = Ctx.Scoped->CurrService;
         const auto& cluster = Ctx.Scoped->CurrCluster;
@@ -4859,14 +4878,19 @@ bool TSqlTranslation::ParseViewQuery(
 
         // TO DO: capture all runtime pragmas in a similar fashion.
         if (effectivePathPrefix != Ctx.Settings.PathPrefix) {
-            queryText = TStringBuilder() << "PRAGMA TablePathPrefix = \"" << effectivePathPrefix << "\"\n" << queryText;
+            contextRestorationQuery = TStringBuilder() << "PRAGMA TablePathPrefix = \"" << effectivePathPrefix << "\";\n";
+        }
+
+        // TO DO: capture other compilation-affecting statements except USE.
+        if (cluster.GetLiteral() && *cluster.GetLiteral() != Ctx.Settings.DefaultCluster) {
+            contextRestorationQuery = TStringBuilder() << "USE " << *cluster.GetLiteral() << ";\n";
         }
     }
-    features["query_text"] = { Ctx.Pos(), queryText };
+    features["query_text"] = { Ctx.Pos(), contextRestorationQuery + queryText };
 
     // AST is needed for ready-made validation of CREATE VIEW statement.
     // Query is stored as plain text, not AST.
-    const auto viewSelect = BuildViewSelect(query, Ctx);
+    const auto viewSelect = BuildViewSelect(query, Ctx, contextRestorationQuery);
     if (!viewSelect) {
         return false;
     }

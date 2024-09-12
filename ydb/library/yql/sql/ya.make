@@ -24,7 +24,6 @@ RECURSE(
     pg
     pg_dummy
     settings
-    settings/serializer
     v0
     v1
 )

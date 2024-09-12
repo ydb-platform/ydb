@@ -80,32 +80,31 @@ To create a dataset for a {{ ydb-short-name }} table, follow these steps:
 
     {% endnote %}
 
-1. Click **Add Dataset** and select **SQL Dataset** in the drop-down list.
+1. Click **Add Dataset** and select **SQL Dataset** from the drop-down list.
 
 1. In the **Table Name** field, enter a name for the dataset.
 
-1. In the **Data from Data Connection** drop-down list, select the YDB connection that you created.
+1. In the **Data from Data Connection** drop-down list, select the {{ ydb-short-name }} connection you created.
 
-1. In the **SQL Statement** field, enter the SQL query to get all columns from a {{ ydb-short-name }} table. For example, `SELECT * FROM <YDB_table_name>`.
+1. In the **SQL Statement** field, enter the SQL query to retrieve the necessary columns from a {{ ydb-short-name }} table. For example, `SELECT * FROM <ydb_table_name>` for all columns.
 
     {% note tip %}
 
     To create a dataset for a table located in a subdirectory of a {{ ydb-short-name }} database, specify the table path in the table name. For example:
 
-    ```yql
+    ```sql
     SELECT * FROM "<path/to/subdirectory/table_name>";
     ```
 
     {% endnote %}
 
-1. To test the SQL query, click **Preview**. If the query is correct, you will see the table data in the preview pane.
+1. To test the SQL query, click **Preview**. If the query is correct, the table data will appear in the preview pane.
 
     ![](_assets/finebi/finebi-sql-dataset.png)
 
 1. To save the dataset, click **OK**.
 
 After creating datasets, you can use data from {{ ydb-short-name }} to create charts in FineBI. For more information, refer to the [FineBI](https://help.fanruan.com/finebi-en/) documentation.
-
 
 ## Creating a chart {#create-chart}
 
@@ -134,7 +133,7 @@ To create a chart, follow these steps:
 
 1. In the **Chart Type** pane, click the **Pie Chart** icon.
 
-1. In the list of columns of the `episodes` dataset, click the arrow next to the `episode_id` column and select **Convert to Dimension** in the drop-down list.
+1. In the list of columns in the `episodes` dataset, click the arrow next to the `episode_id` column and select **Convert to Dimension** from the drop-down list.
 
     ![](_assets/finebi/finebi-convert2dimension.png =350x)
 

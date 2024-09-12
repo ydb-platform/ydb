@@ -373,6 +373,12 @@ ydb/tests/fq/generic test_join_streaming.py.TestJoinStreaming.test_streamlookup[
 ydb/tests/fq/generic test_join_streaming.py.TestJoinStreaming.test_streamlookup[v1-2-False-fq_client0-mvp_external_ydb_endpoint0]
 ydb/tests/fq/generic test_join_streaming.py.TestJoinStreaming.test_streamlookup[v1-4-True-fq_client0-mvp_external_ydb_endpoint0]
 ydb/tests/fq/generic test_join_streaming.py.TestJoinStreaming.test_streamlookup[v1-5-True-3-fq_client0-mvp_external_ydb_endpoint0]
+ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.AlterWithReboots-PQConfigTransactionsAtSchemeShard-true
+ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.Create-PQConfigTransactionsAtSchemeShard-true
+ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.CreateAlter-PQConfigTransactionsAtSchemeShard-true
+ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.CreateAlterDropPqGroupWithReboots-PQConfigTransactionsAtSchemeShard-true
+ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.CreateDrop-PQConfigTransactionsAtSchemeShard-true
+ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.CreateMultiplePqTablets-PQConfigTransactionsAtSchemeShard-true
 ydb/tests/fq/generic test_postgresql.py.TestPostgreSQL.test_simple[v2-fq_client0]
 ydb/tests/fq/generic test_streaming_join.py.TestStreamingJoin.test_streamlookup[v1-4-False-fq_client0-mvp_external_ydb_endpoint0]
 ydb/tests/fq/generic test_ydb.py.TestYdb.test_simple[v2-mvp_external_ydb_endpoint0-fq_client0]

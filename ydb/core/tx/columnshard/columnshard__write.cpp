@@ -299,13 +299,12 @@ public:
         ReceivingColumnShards = std::set<ui64>(locks.GetReceivingColumnShards().begin(), locks.GetReceivingColumnShards().end());
         HtapFormat = locks.HasArbiterColumnShard();
         if (!locks.HasArbiterColumnShard()) {
-            AFL_VERIFY(ReceivingShards.size());
-            ArbiterColumnShard = *ReceivingShards.begin();
             AFL_VERIFY(!ReceivingColumnShards.size() && !SendingColumnShards.size());
             if (!ReceivingShards.size() || !SendingShards.size()) {
                 ReceivingShards.clear();
                 SendingShards.clear();
             } else {
+                ArbiterColumnShard = *ReceivingShards.begin();
                 if (!ReceivingShards.contains(TabletId) && !SendingShards.contains(TabletId)) {
                     return TConclusionStatus::Fail("shard is incorrect for sending/receiving lists");
                 }

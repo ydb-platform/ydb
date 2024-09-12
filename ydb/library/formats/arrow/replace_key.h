@@ -5,8 +5,6 @@
 #include "common/validation.h"
 #include "switch/compare.h"
 
-#include <ydb/core/base/defs.h>
-
 #include <ydb/library/actors/core/log.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
@@ -277,6 +275,37 @@ class TReplaceKeyHelper {
 public:
     static size_t LowerBound(const std::vector<TRawReplaceKey>& batchKeys, const TReplaceKey& key, size_t offset);
 };
+
+template <bool desc, bool uniq>
+static bool IsSelfSorted(const std::shared_ptr<arrow::RecordBatch>& batch) {
+    if (batch->num_rows() < 2) {
+        return true;
+    }
+    auto& columns = batch->columns();
+
+    for (int i = 1; i < batch->num_rows(); ++i) {
+        TRawReplaceKey prev(&columns, i - 1);
+        TRawReplaceKey current(&columns, i);
+        if constexpr (desc) {
+            if (prev < current) {
+                AFL_DEBUG(NKikimrServices::ARROW_HELPER)("event", "prev < current")("current", current.DebugString())("prev", prev.DebugString());
+                return false;
+            }
+        } else {
+            if (current < prev) {
+                AFL_DEBUG(NKikimrServices::ARROW_HELPER)("event", "current < prev")("current", current.DebugString())("prev", prev.DebugString());
+                return false;
+            }
+        }
+        if constexpr (uniq) {
+            if (prev == current) {
+                AFL_DEBUG(NKikimrServices::ARROW_HELPER)("event", "equal")("current", current.DebugString())("prev", prev.DebugString());
+                return false;
+            }
+        }
+    }
+    return true;
+}
 
 }
 

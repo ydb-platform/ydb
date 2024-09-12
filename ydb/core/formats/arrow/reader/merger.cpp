@@ -1,5 +1,6 @@
 #include "merger.h"
 #include "result_builder.h"
+#include <ydb/library/formats/arrow/permutations.h>
 #include <ydb/library/services/services.pb.h>
 
 namespace NKikimr::NArrow::NMerger {

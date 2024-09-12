@@ -712,7 +712,6 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         UNIT_ASSERT_C(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kReadResponse, resp);
     }
 
-
     Y_UNIT_TEST(UpdatePartitionLocation) {
         TPersQueueV1TestServer server;
         SET_LOCALS;
@@ -6661,7 +6660,6 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
 
     Y_UNIT_TEST(PartitionsMapping) {
         NPersQueue::TTestServer server;
-
         TString topic = "topic1";
         TString topicFullName = "rt3.dc1--" + topic;
 
@@ -7029,13 +7027,18 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
 
     Y_UNIT_TEST(ReadWithoutConsumerFederation) {
         const ui32 partititonsCount = 5;
+        const auto topic = "rt3.dc1--topic2";
 
         TPersQueueV1TestServer server;
-        server.Server->AnnoyingClient->CreateTopic("rt3.dc1--topic2", partititonsCount);
+        server.Server->AnnoyingClient->CreateTopic(topic, partititonsCount);
+
+        NACLib::TDiffACL acl;
+        acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericFull, "user@" BUILTIN_ACL_DOMAIN);
+        server.Server->AnnoyingClient->ModifyACL("/Root/PQ", topic, acl.SerializeAsString());
 
         auto writeSettings = NYdb::NPersQueue::TWriteSessionSettings()
-                        .Path("rt3.dc1--topic2")
-                        .MessageGroupId("src_id");
+            .Path(topic)
+            .MessageGroupId("src_id");
 
         auto writer = server.PersQueueClient->CreateSimpleBlockingWriteSession(writeSettings);
 
@@ -7050,15 +7053,15 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
         StubP_ = Ydb::Topic::V1::TopicService::NewStub(Channel_);
 
         grpc::ClientContext rcontext;
+        rcontext.AddMetadata("x-ydb-auth-ticket", "user@" BUILTIN_ACL_DOMAIN);
         auto readStream = StubP_->StreamRead(&rcontext);
         UNIT_ASSERT(readStream);
 
         {
             Ydb::Topic::StreamReadMessage::FromClient  req;
             Ydb::Topic::StreamReadMessage::FromServer resp;
-
             auto topicReadSettings = req.mutable_init_request()->add_topics_read_settings();
-            topicReadSettings->set_path("rt3.dc1--topic2");
+            topicReadSettings->set_path(topic);
             for (ui32 i = 0; i < partititonsCount; i++) {
                 topicReadSettings->add_partition_ids(i);
             }
@@ -7088,8 +7091,6 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
             UNIT_ASSERT(res);
             partitionsSigned++;
         }
-        ui32 offset = 0;
-        ui32 session = 0;
 
         Ydb::Topic::StreamReadMessage::FromClient  req;
         req.mutable_read_request()->set_bytes_size(1);
@@ -7098,20 +7099,9 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
         Ydb::Topic::StreamReadMessage::FromServer resp;
         UNIT_ASSERT(readStream->Read(&resp));
         UNIT_ASSERT_C(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kReadResponse, resp);
-        Cerr << "\n" << "Bytes readed: " << resp.read_response().bytes_size() << "\n";
-        for (int j = 0; j < resp.read_response().partition_data_size(); j++) {
-            for (int k = 0; k < resp.read_response().partition_data(j).batches_size(); k++) {
-                for (int l = 0; l < resp.read_response().partition_data(j).batches(k).message_data_size(); l++) {
-                    offset = resp.read_response().partition_data(j).batches(k).message_data(l).offset();
-                    session = resp.read_response().partition_data(j).partition_session_id();
-                    Cerr << "\n" << "Offset: " << offset << " from session " << session << "\n";
-                }
-            }
-        }
-
     }
 
-    Y_UNIT_TEST(ReadWithoutConsumer) {
+    Y_UNIT_TEST(ReadWithoutConsumerFirstClassCitizen) {
         auto readToEndThenCommit = [] (NPersQueue::TTestServer& server, ui32 partitions, ui32 maxOffset, TString consumer, ui32 readByBytes) {
             std::shared_ptr<grpc::Channel> Channel_;
             std::unique_ptr<Ydb::Topic::V1::TopicService::Stub> StubP_;

@@ -27,8 +27,8 @@ void EatWholeString(TIntrusivePtr<HttpType>& request, const TString& data) {
 
 }
 
-Y_UNIT_TEST_SUITE(Mvp) {
-    void OpenIdConnectRequestWithIamTokenTest(NMvp::EAccessServiceType profile) {
+Y_UNIT_TEST_SUITE(OidcProxyTests) {
+    void RequestWithIamTokenTest(NMvp::EAccessServiceType profile) {
         TPortManager tp;
         ui16 sessionServicePort = tp.GetPort(8655);
         TMvpTestRuntime runtime;
@@ -68,15 +68,15 @@ Y_UNIT_TEST_SUITE(Mvp) {
         UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Body, "this is test.");
     }
 
-    Y_UNIT_TEST(OpenIdConnectRequestWithIamTokenYandex) {
-        OpenIdConnectRequestWithIamTokenTest(NMvp::yandex_v2);
+    Y_UNIT_TEST(RequestWithIamTokenYandex) {
+        RequestWithIamTokenTest(NMvp::yandex_v2);
     }
 
-    Y_UNIT_TEST(OpenIdConnectRequestWithIamTokenNebius) {
-        OpenIdConnectRequestWithIamTokenTest(NMvp::nebius_v1);
+    Y_UNIT_TEST(RequestWithIamTokenNebius) {
+        RequestWithIamTokenTest(NMvp::nebius_v1);
     }
 
-    void OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMvp::EAccessServiceType profile) {
+    void NonAuthorizeRequestWithOptionMethodTest(NMvp::EAccessServiceType profile) {
         TPortManager tp;
         ui16 sessionServicePort = tp.GetPort(8655);
         TMvpTestRuntime runtime;
@@ -123,15 +123,15 @@ Y_UNIT_TEST_SUITE(Mvp) {
         UNIT_ASSERT_STRINGS_EQUAL(headers.Get("Access-Control-Allow-Credentials"), "true");
     }
 
-    Y_UNIT_TEST(OpenIdConnectNonAuthorizeRequestWithOptionMethodYandex) {
-        OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMvp::yandex_v2);
+    Y_UNIT_TEST(NonAuthorizeRequestWithOptionMethodYandex) {
+        NonAuthorizeRequestWithOptionMethodTest(NMvp::yandex_v2);
     }
 
-    Y_UNIT_TEST(OpenIdConnectNonAuthorizeRequestWithOptionMethodNebius) {
-        OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMvp::nebius_v1);
+    Y_UNIT_TEST(NonAuthorizeRequestWithOptionMethodNebius) {
+        NonAuthorizeRequestWithOptionMethodTest(NMvp::nebius_v1);
     }
 
-    void OpenIdConnectSessionServiceCheckValidCookieTest(NMvp::EAccessServiceType profile) {
+    void SessionServiceCheckValidCookieTest(NMvp::EAccessServiceType profile) {
         TPortManager tp;
         ui16 sessionServicePort = tp.GetPort(8655);
         TMvpTestRuntime runtime;
@@ -176,15 +176,15 @@ Y_UNIT_TEST_SUITE(Mvp) {
         UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Body, "this is test.");
     }
 
-    Y_UNIT_TEST(OpenIdConnectSessionServiceCheckValidCookieYandex) {
-        OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMvp::yandex_v2);
+    Y_UNIT_TEST(SessionServiceCheckValidCookieYandex) {
+        NonAuthorizeRequestWithOptionMethodTest(NMvp::yandex_v2);
     }
 
-    Y_UNIT_TEST(OpenIdConnectSessionServiceCheckValidCookieNebius) {
-        OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMvp::nebius_v1);
+    Y_UNIT_TEST(SessionServiceCheckValidCookieNebius) {
+        NonAuthorizeRequestWithOptionMethodTest(NMvp::nebius_v1);
     }
 
-    Y_UNIT_TEST(OpenIdConnectProxyOnHttpsHost) {
+    Y_UNIT_TEST(ProxyOnHttpsHost) {
         TPortManager tp;
         ui16 sessionServicePort = tp.GetPort(8655);
         TMvpTestRuntime runtime;
@@ -266,7 +266,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
     }
 
 
-    Y_UNIT_TEST(OpenIdConnectFixLocationHeader) {
+    Y_UNIT_TEST(FixLocationHeader) {
         TPortManager tp;
         ui16 sessionServicePort = tp.GetPort(8655);
         TMvpTestRuntime runtime;
@@ -378,7 +378,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
     }
 
 
-    Y_UNIT_TEST(OpenIdConnectExchangeNebius) {
+    Y_UNIT_TEST(ExchangeNebius) {
         TPortManager tp;
         ui16 sessionServicePort = tp.GetPort(8655);
         TMvpTestRuntime runtime;
@@ -442,7 +442,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Body, "this is test");
     }
 
-    Y_UNIT_TEST(OpenIdConnectSessionServiceCheckAuthorizationFail) {
+    Y_UNIT_TEST(SessionServiceCheckAuthorizationFail) {
         TPortManager tp;
         ui16 sessionServicePort = tp.GetPort(8655);
         TMvpTestRuntime runtime;
@@ -586,7 +586,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         }
     };
 
-    void OidcFullAuthorizationFlow(TRedirectStrategyBase& redirectStrategy) {
+    void FullAuthorizationFlow(TRedirectStrategyBase& redirectStrategy) {
         TPortManager tp;
         ui16 sessionServicePort = tp.GetPort(8655);
         TMvpTestRuntime runtime;
@@ -699,17 +699,17 @@ Y_UNIT_TEST_SUITE(Mvp) {
         UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Body, "this is test.");
     }
 
-    Y_UNIT_TEST(OpenIdConnectFullAuthorizationFlow) {
+    Y_UNIT_TEST(FullAuthorizationFlow) {
         TRedirectStrategy redirectStrategy;
-        OidcFullAuthorizationFlow(redirectStrategy);
+        FullAuthorizationFlow(redirectStrategy);
     }
 
-    Y_UNIT_TEST(OpenIdConnectFullAuthorizationFlowAjax) {
+    Y_UNIT_TEST(FullAuthorizationFlowAjax) {
         TAjaxRedirectStrategy redirectStrategy;
-        OidcFullAuthorizationFlow(redirectStrategy);
+        FullAuthorizationFlow(redirectStrategy);
     }
 
-    void OidcWrongStateAuthorizationFlow(TRedirectStrategyBase& redirectStrategy) {
+    void WrongStateAuthorizationFlow(TRedirectStrategyBase& redirectStrategy) {
         TPortManager tp;
         ui16 sessionServicePort = tp.GetPort(8655);
         TMvpTestRuntime runtime;
@@ -753,17 +753,17 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
     }
 
-    Y_UNIT_TEST(OpenIdConnectotWrongStateAuthorizationFlow) {
+    Y_UNIT_TEST(WrongStateAuthorizationFlow) {
         TRedirectStrategy redirectStrategy;
-        OidcWrongStateAuthorizationFlow(redirectStrategy);
+        WrongStateAuthorizationFlow(redirectStrategy);
     }
 
-    Y_UNIT_TEST(OpenIdConnectotWrongStateAuthorizationFlowAjax) {
+    Y_UNIT_TEST(WrongStateAuthorizationFlowAjax) {
         TAjaxRedirectStrategy redirectStrategy;
-        OidcWrongStateAuthorizationFlow(redirectStrategy);
+        WrongStateAuthorizationFlow(redirectStrategy);
     }
 
-    Y_UNIT_TEST(OpenIdConnectSessionServiceCreateAuthorizationFail) {
+    Y_UNIT_TEST(SessionServiceCreateAuthorizationFail) {
         TPortManager tp;
         ui16 sessionServicePort = tp.GetPort(8655);
         TMvpTestRuntime runtime;
@@ -870,17 +870,17 @@ Y_UNIT_TEST_SUITE(Mvp) {
         UNIT_ASSERT_STRING_CONTAINS(location, "/requested/page");
     }
 
-    Y_UNIT_TEST(OpenIdConnectSessionServiceCreateAccessTokenInvalid) {
+    Y_UNIT_TEST(SessionServiceCreateAccessTokenInvalid) {
         TRedirectStrategy redirectStrategy;
         SessionServiceCreateAccessTokenInvalid(redirectStrategy);
     }
 
-    Y_UNIT_TEST(OpenIdConnectSessionServiceCreateAccessTokenInvalidAjax) {
+    Y_UNIT_TEST(SessionServiceCreateAccessTokenInvalidAjax) {
         TAjaxRedirectStrategy redirectStrategy;
         SessionServiceCreateAccessTokenInvalid(redirectStrategy);
     }
 
-    Y_UNIT_TEST(OpenIdConnectSessionServiceCreateOpenIdScopeMissed) {
+    Y_UNIT_TEST(SessionServiceCreateOpenIdScopeMissed) {
         TPortManager tp;
         ui16 sessionServicePort = tp.GetPort(8655);
         TMvpTestRuntime runtime;
@@ -974,17 +974,17 @@ Y_UNIT_TEST_SUITE(Mvp) {
         UNIT_ASSERT_STRING_CONTAINS(body, "grant_type=authorization_code");
     }
 
-    Y_UNIT_TEST(OpenIdConnectSessionServiceCreateWithSeveralCookies) {
+    Y_UNIT_TEST(SessionServiceCreateWithSeveralCookies) {
         TRedirectStrategy redirectStrategy;
         SessionServiceCreateWithSeveralCookies(redirectStrategy);
     }
 
-    Y_UNIT_TEST(OpenIdConnectSessionServiceCreateWithSeveralCookiesAjax) {
+    Y_UNIT_TEST(SessionServiceCreateWithSeveralCookiesAjax) {
         TAjaxRedirectStrategy redirectStrategy;
         SessionServiceCreateWithSeveralCookies(redirectStrategy);
     }
 
-    Y_UNIT_TEST(OpenIdConnectAllowedHostsList) {
+    Y_UNIT_TEST(AllowedHostsList) {
         TPortManager tp;
         ui16 sessionServicePort = tp.GetPort(8655);
         TMvpTestRuntime runtime;
@@ -1056,7 +1056,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         }
     }
 
-    Y_UNIT_TEST(OpenIdConnectHandleNullResponseFromProtectedResource) {
+    Y_UNIT_TEST(HandleNullResponseFromProtectedResource) {
         TPortManager tp;
         ui16 sessionServicePort = tp.GetPort(8655);
         TMvpTestRuntime runtime;

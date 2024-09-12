@@ -433,7 +433,7 @@ void InferStatisticsForOlapFilter(const TExprNode::TPtr& input, TTypeAnnotationC
 
     double selectivity = TKqpOlapPredicateSelectivityComputer(inputStats).Compute(filter.Condition());
 
-    auto outputStats = TOptimizerStatistics(inputStats->Type, inputStats->Nrows * selectivity, inputStats->Ncols, inputStats->ByteSize * selectivity, inputStats->Cost, inputStats->KeyColumns );
+    auto outputStats = TOptimizerStatistics(inputStats->Type, inputStats->Nrows * selectivity, inputStats->Ncols, inputStats->ByteSize * selectivity, inputStats->Cost, inputStats->KeyColumns, inputStats->ColumnStatistics );
     outputStats.Labels = inputStats->Labels;
     outputStats.Selectivity *= selectivity;
 

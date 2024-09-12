@@ -862,7 +862,7 @@ struct TEvPQ {
         ui64 TxId;
         NPQ::TPartitionId Partition;
 
-        NKikimrPQ::TMessageGroups ExplicitMessageGroups;
+        NKikimrPQ::TPartitions::TPartitionInfo Data;
     };
 
     struct TEvTxCommit : public TEventLocal<TEvTxCommit, EvTxCommit> {

@@ -59,12 +59,7 @@ TDistributedTransaction::TDistributedTransaction(const NKikimrPQ::TTransaction& 
         WriteId = GetWriteId(tx);
     }
 
-    for (auto& p : tx.GetPartition()) {
-        auto& messageGroup = ExplicitMessageGroups[p.GetPartitionId()];
-        for (auto& g : p.GetMessageGroup()) {
-            messageGroup.emplace_back(g.GetId(), g.GetMaxSeqNo());
-        }
-    }
+    PartitionsData = tx.GetPartitions(); // TODO use move?
 }
 
 TString TDistributedTransaction::LogPrefix() const
@@ -231,11 +226,24 @@ void TDistributedTransaction::OnTxCalcPredicateResult(const TEvPQ::TEvTxCalcPred
     OnPartitionResult(event, decision);
 }
 
+void UpdatePartitionsData(NKikimrPQ::TPartitions& partitionsData, const NKikimrPQ::TPartitions::TPartitionInfo& partition) {
+    NKikimrPQ::TPartitions::TPartitionInfo* info = nullptr;
+    for (auto& p : *partitionsData.MutablePartition()) {
+        if (p.GetPartitionId() == partition.GetPartitionId()) {
+            info = &p;
+        }
+    }
+    if (!info) {
+        info = partitionsData.AddPartition();
+    }
+    *info = std::move(partition);
+}
+
 void TDistributedTransaction::OnProposePartitionConfigResult(const TEvPQ::TEvProposePartitionConfigResult& event)
 {
     PQ_LOG_D("Handle TEvProposePartitionConfigResult");
 
-    ExplicitMessageGroups[event.Partition] = std::move(event.ExplicitMessageGroups);
+    UpdatePartitionsData(PartitionsData, event.Data);
 
     OnPartitionResult(event,
                       NKikimrTx::TReadSetData::DECISION_COMMIT);
@@ -280,6 +288,13 @@ void TDistributedTransaction::OnReadSet(const NKikimrTx::TEvReadSet& event,
             ++ReadSetCount;
 
             PQ_LOG_D("Predicates " << ReadSetCount << "/" << PredicatesReceived.size());
+        }
+
+        NKikimrPQ::TPartitions d;
+        data.GetData().UnpackTo(&d);
+
+        for (auto& v : d.GetPartition()) {
+            UpdatePartitionsData(PartitionsData, v);
         }
     } else {
         Y_DEBUG_ABORT("unknown sender tablet %" PRIu64, event.GetTabletProducer());
@@ -383,16 +398,7 @@ void TDistributedTransaction::AddCmdWrite(NKikimrClient::TKeyValueRequest& reque
     Y_ABORT_UNLESS(SourceActor != TActorId());
     ActorIdToProto(SourceActor, tx.MutableSourceActor());
 
-    for (auto& [partitionId, messageGroups] : ExplicitMessageGroups) {
-        auto* p = tx.AddPartition();
-        p->SetPartitionId(partitionId);
-
-        for (auto& m : messageGroups) {
-            auto* g = p->AddMessageGroup();
-            g->SetId(m.Id);
-            g->SetMaxSeqNo(m.SeqNo);
-        }
-    }
+    *tx.MutablePartitions() = PartitionsData;
 
     PQ_LOG_D("save tx " << tx.ShortDebugString());
 

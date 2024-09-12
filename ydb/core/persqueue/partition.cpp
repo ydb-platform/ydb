@@ -1191,9 +1191,12 @@ void TPartition::ReplyToProposeOrPredicate(TSimpleSharedPtr<TTransaction>& tx, b
                                                                 tx->ProposeConfig->TxId,
                                                                 Partition);
 
-        for (auto& [k, v] : SourceIdStorage.GetInMemorySourceIds()) {
+        result->Data.SetPartitionId(Partition.OriginalPartitionId);
+        for (auto& [id, v] : SourceIdStorage.GetInMemorySourceIds()) {
             if (v.Explicit) {
-                result->ExplicitMessageGroups.emplace_back(k, v.SeqNo);
+                auto* m = result->Data.AddMessageGroup();
+                m->SetId(id);
+                m->SetSeqNo(v.SeqNo);
             }
         }
         Send(Tablet, result.Release());

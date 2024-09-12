@@ -1080,10 +1080,19 @@ message TEvPartitionScaleStatusChanged {
     required EScaleStatus ScaleStatus = 2;
 };
 
-message TMessageGroups {
-    required uint32 PartitionId = 1;
-    repeated TMessageGroupInfo MessageGroup = 2;
-};
+message TPartitions {
+    message TPartitionInfo {
+        required uint32 PartitionId = 1;
+
+        message TMessageGroup {
+            required string Id = 1;
+            optional uint64 SeqNo = 2;
+        };
+        repeated TMessageGroup MessageGroup = 2;
+    };
+
+    repeated TPartitionInfo Partition = 1;
+}
 
 message TTransaction {
     enum EKind {
@@ -1133,6 +1142,7 @@ message TTransaction {
     //
     optional TPQTabletConfig TabletConfig = 12;
     optional TBootstrapConfig BootstrapConfig = 13;
+    optional TPartitions Partitions = 16;
 
     //
     // получатель результата
@@ -1140,8 +1150,6 @@ message TTransaction {
     optional NActorsProto.TActorId SourceActor = 14;
 
     optional TWriteId WriteId = 15;
-
-    repeated TMessageGroups ExplicitMessageGroups = 16;
 };
 
 message TTabletTxInfo {

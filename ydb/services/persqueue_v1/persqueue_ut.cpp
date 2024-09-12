@@ -6997,6 +6997,90 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
         driver->Stop();
     }
 
+    Y_UNIT_TEST(ReadWithoutConsumerFederation) {
+        const ui32 partititonsCount = 5;
+
+        TPersQueueV1TestServer server;
+        server.Server->AnnoyingClient->CreateTopic("rt3.dc1--topic2", partititonsCount);
+
+        auto writeSettings = NYdb::NPersQueue::TWriteSessionSettings()
+                        .Path("rt3.dc1--topic2")
+                        .MessageGroupId("src_id");
+
+        auto writer = server.PersQueueClient->CreateSimpleBlockingWriteSession(writeSettings);
+
+        auto res = writer->Write("some_data");
+        UNIT_ASSERT(res);
+        writer->Close();
+
+        std::shared_ptr<grpc::Channel> Channel_;
+        std::unique_ptr<Ydb::Topic::V1::TopicService::Stub> StubP_;
+
+        Channel_ = grpc::CreateChannel("localhost:" + ToString(server.Server->GrpcPort), grpc::InsecureChannelCredentials());
+        StubP_ = Ydb::Topic::V1::TopicService::NewStub(Channel_);
+
+        grpc::ClientContext rcontext;
+        auto readStream = StubP_->StreamRead(&rcontext);
+        UNIT_ASSERT(readStream);
+
+        {
+            Ydb::Topic::StreamReadMessage::FromClient  req;
+            Ydb::Topic::StreamReadMessage::FromServer resp;
+
+            auto topicReadSettings = req.mutable_init_request()->add_topics_read_settings();
+            topicReadSettings->set_path("rt3.dc1--topic2");
+            for (ui32 i = 0; i < partititonsCount; i++) {
+                topicReadSettings->add_partition_ids(i);
+            }
+
+            req.mutable_init_request()->set_consumer("");
+
+            if (!readStream->Write(req)) {
+                ythrow yexception() << "write fail";
+            }
+
+            UNIT_ASSERT(readStream->Read(&resp));
+            UNIT_ASSERT(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kInitResponse);
+        }
+        ui32 partitionsSigned = 0;
+
+        while (partitionsSigned != partititonsCount) {
+
+            Ydb::Topic::StreamReadMessage::FromServer resp;
+            UNIT_ASSERT(readStream->Read(&resp));
+            UNIT_ASSERT_C(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kStartPartitionSessionRequest, resp);
+            auto assignId = resp.start_partition_session_request().partition_session().partition_session_id();
+
+            Ydb::Topic::StreamReadMessage::FromClient req;
+            req.mutable_start_partition_session_response()->set_partition_session_id(assignId);
+            req.mutable_start_partition_session_response()->set_read_offset(0);
+            auto res = readStream->Write(req);
+            UNIT_ASSERT(res);
+            partitionsSigned++;
+        }
+        ui32 offset = 0;
+        ui32 session = 0;
+
+        Ydb::Topic::StreamReadMessage::FromClient  req;
+        req.mutable_read_request()->set_bytes_size(1);
+        readStream->Write(req);
+
+        Ydb::Topic::StreamReadMessage::FromServer resp;
+        UNIT_ASSERT(readStream->Read(&resp));
+        UNIT_ASSERT_C(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kReadResponse, resp);
+        Cerr << "\n" << "Bytes readed: " << resp.read_response().bytes_size() << "\n";
+        for (int j = 0; j < resp.read_response().partition_data_size(); j++) {
+            for (int k = 0; k < resp.read_response().partition_data(j).batches_size(); k++) {
+                for (int l = 0; l < resp.read_response().partition_data(j).batches(k).message_data_size(); l++) {
+                    offset = resp.read_response().partition_data(j).batches(k).message_data(l).offset();
+                    session = resp.read_response().partition_data(j).partition_session_id();
+                    Cerr << "\n" << "Offset: " << offset << " from session " << session << "\n";
+                }
+            }
+        }
+
+    }
+
     Y_UNIT_TEST(ReadWithoutConsumer) {
         auto readToEndThenCommit = [] (NPersQueue::TTestServer& server, ui32 partitions, ui32 maxOffset, TString consumer, ui32 readByBytes) {
             std::shared_ptr<grpc::Channel> Channel_;

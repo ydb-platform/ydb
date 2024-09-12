@@ -44,7 +44,7 @@ To connect to {{ ydb-short-name }} from FineBI using the PostgreSQL wire protoco
 
         {% note alert %}
 
-        Special characters must be encoded in the path string. For example, ensure that you replace the slash (/) characters with `%2F`.
+        Special characters in the path string must be [URL encoded](https://en.wikipedia.org/wiki/Percent-encoding). For example, ensure that you replace slash (`/`) characters with `%2F`.
 
         {% endnote %}
 
@@ -108,16 +108,14 @@ After creating datasets, you can use data from {{ ydb-short-name }} to create ch
 
 ## Creating a chart {#create-chart}
 
-Let's create a sample chart with the dataset from the `episodes` table that is described in the [YQL tutorial](../../dev/yql-tutorial/index.md). Among other things, this tutorial covers how to [create](../../dev/yql-tutorial/create_demo_tables.md) this table and [populate it with data](../../dev/yql-tutorial/fill_tables_with_data.md).
+Let's create a sample chart using the dataset from the `episodes` table, as described in the [YQL tutorial](../../dev/yql-tutorial/index.md). Among other things, this tutorial covers how to [create](../../dev/yql-tutorial/create_demo_tables.md) this table and [populate it with data](../../dev/yql-tutorial/fill_tables_with_data.md). It will be a pie chart that demonstrates how many episodes each season of a given series contains.
 
 The table contains the following columns:
-* series_id
-* season_id
-* episode_id
-* title
-* air_date
-
-Let's say that we want to make a pie chart to show how many episodes each season contains.
+* `series_id`
+* `season_id`
+* `episode_id`
+* `title`
+* `air_date`
 
 To create a chart, follow these steps:
 

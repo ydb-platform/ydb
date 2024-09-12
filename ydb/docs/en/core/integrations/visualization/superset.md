@@ -2,7 +2,7 @@
 
 Apache Superset is a modern data exploration and data visualization platform.
 
-PostgreSQL compatibility mode in {{ ydb-short-name }} enables the use of [Apache Superset](https://superset.apache.org/) to query and visualize data from {{ ydb-short-name }}. In this case Apache Superset works with {{ ydb-short-name }} just like with PostgreSQL.
+[PostgreSQL compatibility mode in {{ ydb-short-name }}](../../postgresql/intro.md) enables the use of [Apache Superset](https://superset.apache.org/) to query and visualize data from {{ ydb-short-name }}. In this case Apache Superset works with {{ ydb-short-name }} just like with PostgreSQL.
 
 
 ## Adding a database connection to {{ ydb-short-name }} {#add-database-connection}

@@ -2,7 +2,10 @@ services:
   fq-connector-go:
     command: |
       sh -c "
-        echo \"$$(dig fq-tests-ydb-ydb +short) fq-tests-ydb-ydb\" >> /etc/hosts; cat /etc/hosts;
+        apk add dnsmasq bind;
+        echo \"address=/fq-tests-ydb-ydb/$$(dig fq-tests-ydb-ydb +short)\" >> /etc/dnsmasq.conf;
+        echo \"nameserver 127.0.0.1\" > /etc/resolv.conf;
+        dnsmasq;
         /opt/ydb/bin/fq-connector-go server -c /opt/ydb/cfg/fq-connector-go.yaml"
     container_name: fq-tests-ydb-fq-connector-go
     image: ghcr.io/ydb-platform/fq-connector-go:v0.5.8-rc.2@sha256:12d15f2e82608bc4e64fa91c549361c587754aeb0e6c6a2cee749caebb11baf8

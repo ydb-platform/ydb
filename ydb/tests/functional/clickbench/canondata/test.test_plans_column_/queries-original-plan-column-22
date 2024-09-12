@@ -90,7 +90,7 @@
                                                                                             }
                                                                                         ],
                                                                                         "Name": "Filter",
-                                                                                        "Predicate": "Not"
+                                                                                        "Predicate": "string_contains And Not string_contains"
                                                                                     },
                                                                                     {
                                                                                         "Inputs": [],

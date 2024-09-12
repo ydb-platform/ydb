@@ -1139,6 +1139,11 @@ private:
                     {"gt", ">"},
                     {"gte", ">="}
                 };
+                THashSet<TString> strRegexp = {
+                    "string_contains",
+                    "starts_with",
+                    "ends_with"
+                };
                 TString compSign = TString(listPtr->Child(0)->Content());
                 if (strComp.contains(compSign)) {
                     TString attr = TString(listPtr->Child(1)->Content());
@@ -1148,6 +1153,8 @@ private:
                     }
                     
                     return Sprintf("%s %s %s", attr.c_str(), strComp[compSign].c_str(), value.c_str());
+                } else if (strRegexp.contains(compSign)) {
+                    return compSign;
                 }
             }
         }

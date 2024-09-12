@@ -422,7 +422,7 @@ TString ReplaceAll(TString str, const TString& from, const TString& to) {
 }
 
 TString FormatPrettyTableDouble(TString stringValue) {
-    std::strstream stream;
+    std::stringstream stream;
 
     double value = 0.0;
 
@@ -433,12 +433,12 @@ TString FormatPrettyTableDouble(TString stringValue) {
     }
 
     if (1e-3 < value && value < 1e8 || value == 0) {
-        stream << static_cast<int64_t>(std::round(value)) << '\0';
+        stream << static_cast<int64_t>(std::round(value));
         return ToString(stream.str());
     }
 
 
-    stream << std::fixed << std::setprecision(3) << std::scientific << value << '\0';
+    stream << std::fixed << std::setprecision(3) << std::scientific << value;
     return ToString(stream.str());   
 }
 

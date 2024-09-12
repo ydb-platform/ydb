@@ -4900,7 +4900,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         const auto& dropTableSql = "DROP EXTERNAL TABLE MyExternalTable;";
 
-        auto settings = NWorkload::TQueryRunnerSettings().PoolId("");
+        auto settings = NWorkload::TQueryRunnerSettings().PoolId(NResourcePool::DEFAULT_POOL_ID);
 
         // Dedicated, enabled
         settings.Database(ydb->GetSettings().GetDedicatedTenantName()).NodeIndex(1);

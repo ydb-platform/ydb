@@ -5201,7 +5201,9 @@ namespace NKikimr::NPg {
 
 constexpr char INTERNAL_TYPE_AND_MOD_SEPARATOR = ':';
 
-struct ITypeDesc {};
+struct ITypeDesc {
+    virtual ~ITypeDesc() = default;
+};
 
 class TPgTypeDescriptor
     : public NYql::NPg::TTypeDesc

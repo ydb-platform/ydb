@@ -4,7 +4,9 @@
 namespace NKikimr {
 namespace NScheme {
 
-struct ITypeDesc {};    
+struct ITypeDesc {
+    virtual ~ITypeDesc() = default;
+};
 
 } // namespace NScheme
 } // namespace NKikimr

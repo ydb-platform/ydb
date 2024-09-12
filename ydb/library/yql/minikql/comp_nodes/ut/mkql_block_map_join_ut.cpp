@@ -272,21 +272,17 @@ TVector<NUdf::TUnboxedValue> ConvertListToVector(const NUdf::TUnboxedValue& list
 }
 
 void CompareResults(const TType* type, const NUdf::TUnboxedValue& expected,
-                    const NUdf::TUnboxedValue& got, const TVector<ui32> keys
+                    const NUdf::TUnboxedValue& got
 ) {
     const auto itemType = AS_TYPE(TListType, type)->GetItemType();
-    const auto items = AS_TYPE(TTupleType, itemType)->GetElements();
-    TKeyTypes keyTypes;
-    for (const auto& key : keys) {
-        Y_ENSURE(key < items.size(), "Specified key is outside the tuple elements");
-        Y_ENSURE(items[key]->IsData(), "Only Data types are supported now");
-        const auto dataSlot = AS_TYPE(TDataType, items[key])->GetDataSlot();
-        keyTypes.push_back(std::make_pair(*dataSlot, true));
-    }
     const NUdf::ICompare::TPtr compare = MakeCompareImpl(itemType);
     const NUdf::IEquate::TPtr equate = MakeEquateImpl(itemType);
-    const TValueLess valueLess(keyTypes, true, compare.Get());
-    const TValueEqual valueEqual(keyTypes, true, equate.Get());
+    // XXX: Stub both keyTypes and isTuple arguments, since
+    // ICompare/IEquate are used.
+    TKeyTypes keyTypesStub;
+    bool isTupleStub = false;
+    const TValueLess valueLess(keyTypesStub, isTupleStub, compare.Get());
+    const TValueEqual valueEqual(keyTypesStub, isTupleStub, equate.Get());
 
     auto expectedItems = ConvertListToVector(expected);
     auto gotItems = ConvertListToVector(got);
@@ -307,7 +303,7 @@ void RunTestBlockJoin(TSetup<false>& setup, EJoinKind joinKind,
     for (size_t blockSize = 8; blockSize <= testSize; blockSize <<= 1) {
         const auto got = DoTestBlockJoin(setup, leftType, leftListValue, leftKeyColumns,
                                          rightNode, joinKind, blockSize);
-        CompareResults(expectedType, expected, got, leftKeyColumns);
+        CompareResults(expectedType, expected, got);
     }
 }
 

@@ -35,8 +35,10 @@ class RunResults:
         self.user_time_ms = None
         self.system_time = None
         self.rss = None
-        self.output_hash = None
+        self.result_hash = None
         self.perf_file_path = None
+        self.stdout_file_path = None
+        self.stderr_file_path = None
 
     def from_json(self, json):
         self.exitcode = json["exitcode"]
@@ -64,6 +66,8 @@ def pretty_print(value):
         return f"Unwrap(DateTime::FromSeconds({int(delt.total_seconds())}))"
     if type(value) == datetime.timedelta:
         return f"DateTime::IntervalFromMicroseconds({int(value / datetime.timedelta(microseconds=1))})"
+    if isinstance(value, pathlib.Path):
+        return str(value)
     if type(value) == str:
         return f'\"{value}\"'
     if type(value) in [int, float]:
@@ -72,6 +76,15 @@ def pretty_print(value):
         return "TRUE" if value else "FALSE"
 
     assert False, f"unrecognized type: {type(value)}"
+
+
+def upload_file_to_s3(s3_folder, result_path, file):
+    # copying files to folder that will be synced with s3
+    dst = file.relative_to(result_path)
+    s3_file = (s3_folder / dst).resolve()
+    s3_file.parent.mkdir(parents=True, exist_ok=True)
+    _ = shutil.copy2(str(file.resolve()), str(s3_file))
+    return dst
 
 
 def upload_results(result_path, s3_folder, test_start):
@@ -98,17 +111,22 @@ def upload_results(result_path, s3_folder, test_start):
                 if query_num not in this_result:
                     this_result[query_num] = RunResults()
 
+                # q<num>.svg
                 if file.suffix == ".svg":
-                    dst = file.relative_to(result_path)
-                    this_result[query_num].perf_file_path = dst
-                    # copying files to folder that will be synced with s3
-                    dst = (s3_folder / dst).resolve()
-                    dst.parent.mkdir(parents=True, exist_ok=True)
-                    _ = shutil.copy2(str(file.resolve()), str(dst))
+                    this_result[query_num].perf_file_path = upload_file_to_s3(s3_folder, result_path, file)
+
+                # q<num>-result.yson
+                if file.stem == f"q{query_num}-result":
+                    with open(file, "r") as stdout:
+                        this_result[query_num].result_hash = str(hash(stdout.read().strip()))
+
                 # q<num>-stdout.txt
                 if file.stem == f"q{query_num}-stdout":
-                    with open(file, "r") as stdout:
-                        this_result[query_num].output_hash = str(hash(stdout.read().strip()))
+                    this_result[query_num].stdout_file_path = upload_file_to_s3(s3_folder, result_path, file)
+
+                # q<num>-stdout.txt
+                if file.stem == f"q{query_num}-stderr":
+                    this_result[query_num].stderr_file_path = upload_file_to_s3(s3_folder, result_path, file)
 
         summary_file = entry / "summary.json"
 
@@ -146,7 +164,7 @@ def upload_results(result_path, s3_folder, test_start):
                     "MaxTasksPerStage" : params.tasks,
                     "PerfFileLink" : results.perf_file_path,
                     "ExitCode" : results.exitcode,
-                    "ResultHash" : results.output_hash,
+                    "ResultHash" : results.result_hash,
                     "SpilledBytes" : results.read_bytes,
                     "UserTime" : results.user_time,
                     "SystemTime" : results.system_time

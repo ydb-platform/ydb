@@ -4100,6 +4100,11 @@ void Out<std::pair<TString, TString>>(IOutputStream& output, const std::pair<TSt
     output << x.first << ":" << x.second;
 }
 
+template <>
+void Out<std::pair<std::string, std::string>>(IOutputStream& output, const std::pair<std::string, std::string>& x) {
+    output << x.first << ":" << x.second;
+}
+
 void AppendToString(TString& dst, const std::pair<TString, TString>& x) {
     TStringOutput output(dst);
     output << x;

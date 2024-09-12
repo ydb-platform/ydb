@@ -205,8 +205,9 @@ namespace NYql::NDq {
             Request = std::move(request);
             NConnector::NApi::TListSplitsRequest splitRequest;
 
-            if (auto issue = FillSelect(*splitRequest.add_selects()); issue) {
-                SendError(TActivationContext::ActorSystem(), SelfId(), std::move(issue));
+            auto error = FillSelect(*splitRequest.add_selects());
+            if (error) {
+                SendError(TActivationContext::ActorSystem(), SelfId(), std::move(error));
                 return;
             };
 

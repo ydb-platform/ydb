@@ -123,9 +123,11 @@ Window  Write speed     Write time      Inflight        Read speed      Topic ti
 After the test is completed, you can delete the test environment.
 
 Command syntax:
+
 ```bash
 {{ ydb-cli }} [global options...] workload transfer topic-to-table clean [options...]
 ```
+
 * `global options` — [global parameters](commands/global-options.md).
 * `options` - parameters of the subcommand.
 
@@ -136,6 +138,7 @@ View the command description:
 ```
 
 Parameters of the subcommand:
+
 Parameter Name | Parameter Description | Default value
 ---|---|---
 `--topic` | Topic name | `transfer-topic`

@@ -153,7 +153,7 @@ Hibernate - это фреймворк объектно-реляционного 
 
 Будет сгенерирована следующая таблица `Groups` и вторичный индекс `group_name_index` к колонке `GroupName`:
 
-```sql
+```yql
 CREATE TABLE Groups (
     GroupId Int32 NOT NULL,
     GroupName Text,
@@ -193,7 +193,7 @@ jakarta.persistence.schema-generation.database.action=update
 
 Результат изменения схемы:
 
-```sql
+```yql
 ALTER TABLE Groups
    ADD COLUMN department Text
 ```
@@ -212,7 +212,7 @@ Hibernate не предназначен для управления схемам
 
 - FetchType.LAZY
 
-  ```sql
+  ```yql
   SELECT
       g1_0.GroupId,
       g1_0.GroupName
@@ -233,7 +233,7 @@ Hibernate не предназначен для управления схемам
 
 - FetchType.EAGER
 
-  ```sql
+  ```yql
   SELECT
       g1_0.GroupId,
       g1_0.GroupName,
@@ -257,7 +257,6 @@ Hibernate не предназначен для управления схемам
 
 ```properties
 spring.jpa.properties.hibernate.dialect=tech.ydb.hibernate.dialect.YdbDialect
-
 spring.datasource.driver-class-name=tech.ydb.jdbc.YdbDriver
 spring.datasource.url=jdbc:ydb:<grpc/grpcs>://<host>:<2135/2136>/path/to/database[?saFile=file:~/sa_key.json]
 ```

@@ -9,7 +9,7 @@
 {% endnote %}
 
 Для переопределения представления можно его удалить и воссоздать с другим определением:
-```sql
+```yql
 DROP VIEW redefined_view;
 CREATE VIEW redefined_view ...;
 ```

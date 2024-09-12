@@ -4,9 +4,7 @@
 
 DataGrip allows you to work with {{ ydb-short-name }} using the Java Database Connectivity ([JDBC](https://en.wikipedia.org/wiki/Java_Database_Connectivity)) protocol. This article demonstrates how to set up this integration.
 
-
 ## Adding the {{ ydb-short-name }} JDBC Driver to DataGrip {#datagrip_ydb}
-
 
 To connect to {{ ydb-name }} from DataGrip, you need the {{ ydb-name }} JDBC driver.
 

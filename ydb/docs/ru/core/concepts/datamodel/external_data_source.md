@@ -11,7 +11,7 @@
 
 В следующем примере приведен пример создания внешнего источника, ведущего на кластер ClickHouse:
 
-```sql
+```yql
 CREATE EXTERNAL DATA SOURCE test_data_source WITH (
   SOURCE_TYPE="ClickHouse",
   LOCATION="192.168.1.1:8123",
@@ -25,13 +25,14 @@ CREATE EXTERNAL DATA SOURCE test_data_source WITH (
 
 После создания внешнего источника данных можно выполнять чтение данных из созданного объекта `EXTERNAL DATA SOURCE`. Пример ниже иллюстрирует чтение данных из таблицы `test_table` из базы данных `default` в кластере ClickHouse:
 
-```sql
+```yql
 SELECT * FROM test_data_source.test_table
 ```
 
 С помощью внешних источников данных можно выполнять [федеративные запросы](../federated_query/index.md) для задач межсистемной аналитики данных.
 
 В качестве источников данных можно использовать:
+
 - [ClickHouse](../federated_query/clickhouse.md)
 - [PostgreSQL](../federated_query/postgresql.md)
 - [Подключения к S3 ({{ objstorage-name }})](../federated_query/s3/external_data_source.md)

@@ -1,4 +1,4 @@
-# App in PHP
+# Example app in PHP
 
 This page contains a detailed description of the code of a test app that is available as part of the {{ ydb-short-name }} [PHP SDK](https://github.com/yandex-cloud/ydb-php-sdk).
 
@@ -174,6 +174,7 @@ print_r($result->rows());
 {% include [param_queries.md](../_includes/steps/06_param_queries.md) %}
 
 Here's a code sample that shows how to use prepared queries.
+
 ```php
 protected function selectPrepared($series_id, $season_id, $episode_id)
 {

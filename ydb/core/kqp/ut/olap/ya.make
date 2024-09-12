@@ -25,6 +25,7 @@ SRCS(
     write_ut.cpp
     sparsed_ut.cpp
     tiering_ut.cpp
+    decimal_ut.cpp
 )
 
 PEERDIR(

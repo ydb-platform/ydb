@@ -4,7 +4,7 @@ The [{{ ydb-short-name }} data source plugin](https://grafana.com/grafana/plugin
 
 ## Installation
 
-Prerequisites: the plugin requires Grafana `v9.2` or higher.
+Prerequisites: the plugin requires Grafana v9.2 or higher.
 
 Follow the Grafana's [plugin installation docs](https://grafana.com/docs/grafana/latest/plugins/installation/) to install a plugin named `ydb-grafana-datasource-plugin`.
 
@@ -88,7 +88,7 @@ To create a multi-line time series, the query must return at least 3 fields:
 
 For example:
 
-```sql
+```yql
 SELECT
     `timestamp`,
     `responseStatus`
@@ -108,7 +108,6 @@ For this kind of queries, using [column-oriented tables](../../concepts/datamode
 
 Table visualizations will always be available for any valid {{ ydb-short-name }} query that returns exactly one result set.
 
-
 ![Table](_assets/grafana/table.png)
 
 ### Visualizing logs with the Logs Panel
@@ -126,13 +125,13 @@ There are two kinds of macros - [Grafana-level](#macros) and {{ ydb-short-name }
 
 Here is an example of a query with a macro that will use Grafana's time filter:
 
-```sql
+```yql
 SELECT `timeCol`
 FROM `/database/endpoint/my-logs`
 WHERE $__timeFilter(`timeCol`)
 ```
 
-```sql
+```yql
 SELECT `timeCol`
 FROM `/database/endpoint/my-logs`
 WHERE $__timeFilter(`timeCol` + Interval("PT24H"))

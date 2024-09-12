@@ -7,7 +7,8 @@ Syntax of the `DROP TABLE` statement:
 {% include [syntax](../_includes/statements/drop_table/syntax.md) %}
 
 The `DROP TABLE <table name>;` statement is used to delete a table. For example: `DROP TABLE people;`. If the table being deleted does not exist – an error message will be displayed:
-```
+
+```text
 Error: Cannot find table '...' because it does not exist or you do not have access permissions.
 Please check correctness of table path and user permissions., code: 2003.
 ```

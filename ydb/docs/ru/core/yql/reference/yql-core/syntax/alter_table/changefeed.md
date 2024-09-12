@@ -32,7 +32,7 @@
 
 Приведенный ниже код добавит поток изменений с именем `updates_feed`, в который будут выгружаться значения изменившихся столбцов таблицы в формате JSON:
 
-```sql
+```yql
 ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
     FORMAT = 'JSON',
     MODE = 'UPDATES'
@@ -41,7 +41,7 @@ ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
 
 Записи в таком потоке изменений будут храниться в течение 24 часов (значение по умолчанию). Код из следующего примера создаст поток изменений с хранением записей в течение 12 часов:
 
-```sql
+```yql
 ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
     FORMAT = 'JSON',
     MODE = 'UPDATES',
@@ -51,7 +51,7 @@ ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
 
 Пример создания потока изменений с включенными виртуальными метками времени:
 
-```sql
+```yql
 ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
     FORMAT = 'JSON',
     MODE = 'UPDATES',
@@ -61,7 +61,7 @@ ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
 
 Пример создания потока изменений с первоначальным сканированием:
 
-```sql
+```yql
 ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
     FORMAT = 'JSON',
     MODE = 'UPDATES',
@@ -71,6 +71,6 @@ ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
 
 `DROP CHANGEFEED` — удаляет поток изменений с указанным именем. Приведенный ниже код удалит changefeed с именем `updates_feed`:
 
-```sql
+```yql
 ALTER TABLE `series` DROP CHANGEFEED `updates_feed`;
 ```

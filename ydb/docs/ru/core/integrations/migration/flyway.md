@@ -82,7 +82,7 @@ cd lib && curl -L -o flyway-ydb-dialect.jar https://repo.maven.apache.org/maven2
 
 Запишем наши существующие миграции следующим образом:
 
-```
+```text
 db/migration:
   V1__create_series.sql
   V2__create_seasons.sql
@@ -95,7 +95,7 @@ db/migration:
 
 - V1__create_series.sql
 
-  ```sql
+```yql
   CREATE TABLE series -- series is the table name.
   (                           -- Must be unique within the folder.
       series_id    Int64,
@@ -113,7 +113,7 @@ db/migration:
 
 - V2__create_seasons.sql
 
-  ```sql
+```yql
   CREATE TABLE seasons
   (
       series_id Uint64,
@@ -127,7 +127,7 @@ db/migration:
 
 - V3__create_episodes.sql
 
-```sql
+```yql
 CREATE TABLE episodes
 (
     series_id Uint64,
@@ -165,7 +165,7 @@ flyway -url=jdbc:ydb:grpc://localhost:2136/local -locations=db/migration -baseli
 
 Добавим к предыдущему примеру миграцию загрузки данных:
 
-```
+```text
 db/migration:
   V1__create_series.sql
   V2__create_seasons.sql
@@ -175,10 +175,9 @@ db/migration:
 
 {% cut "Содержимое файла `V4__load_data.sql`" %}
 
-```sql
+```yql
 INSERT INTO series (series_id, title, release_date, series_info)
 VALUES
-
     -- By default, numeric literals have type Int32
     -- if the value is within the range.
     -- Otherwise, they automatically expand to Int64.
@@ -296,7 +295,7 @@ flyway -url=jdbc:ydb:grpc://localhost:2136/local -locations=db/migration migrate
 
 Затем мы изменяем схему, добавляя [вторичный индекс](../../yql/reference/syntax/alter_table/index.md) в таблицу `series`:
 
-```
+```text
 db/migration:
   V1__create_series.sql
   V2__create_seasons.sql
@@ -307,7 +306,7 @@ db/migration:
 
 {% cut "Содержимое файла `V5__create_series_title_index.sql`" %}
 
-```sql
+```yql
 ALTER TABLE `series` ADD INDEX `title_index` GLOBAL ON (`title`);
 ```
 
@@ -329,7 +328,7 @@ flyway -url=jdbc:ydb:grpc://localhost:2136/local -locations=db/migration migrate
 
 Добавим еще одну миграцию, которая переименовывает раннее добавленный вторичный индекс:
 
-```
+```text
 db/migration:
   V1__create_series.sql
   V2__create_seasons.sql
@@ -341,7 +340,7 @@ db/migration:
 
 {% cut "Содержимое файла `V6__rename_series_title_index.sql`" %}
 
-```sql
+```yql
 ALTER TABLE `series` RENAME INDEX `title_index` TO `title_index_new`;
 ```
 
@@ -369,7 +368,7 @@ ALTER TABLE `series` RENAME INDEX `title_index` TO `title_index_new`;
 
 После применения к текущим миграциям команды `flyway -url=jdbc:ydb:grpc://localhost:2136/local -locations=db/migration validate`, в логах будет написано, что последняя миграция не была применена к нашей базе данных:
 
-```bash
+```text
 ERROR: Validate failed: Migrations have failed validation
 Detected resolved migration not applied to database: 6.
 To fix this error, either run migrate, or set -ignoreMigrationPatterns='*:pending'.
@@ -381,7 +380,7 @@ To fix this error, either run migrate, or set -ignoreMigrationPatterns='*:pendin
 
 После исполнения команды валидации, получим закономерную ошибку о том, что `checksum` различается в измененной миграции:
 
-```bash
+```text
 ERROR: Validate failed: Migrations have failed validation
 Migration checksum mismatch for migration version 4
 -> Applied to database : 591649768

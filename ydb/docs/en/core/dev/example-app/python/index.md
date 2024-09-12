@@ -87,12 +87,14 @@ App code snippet for session pool initialization:
 There are two primary methods for executing queries, each with different properties and use cases:
 
 * `pool.execute_with_retries`:
+
   * Buffers the entire result set in client memory.
   * Automatically retries execution in case of retriable issues.
   * Does not allow specifying a transaction execution mode.
   * Recommended for one-off queries that are expected to produce small result sets.
 
 * `tx.execute`:
+
   * Returns an iterator over the query results, allowing processing of results that may not fit into client memory.
   * Retries must be handled manually via `pool.retry_operation_sync`.
   * Allows specifying a transaction execution mode.

@@ -49,4 +49,8 @@ RUN_ANTLR4(
     CWD ${antlr_output}
 )
 
+PEERDIR(
+    contrib/libs/antlr4_cpp_runtime
+)
+
 END()

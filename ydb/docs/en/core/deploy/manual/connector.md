@@ -22,25 +22,28 @@ The connector can be installed using a binary distribution or a Docker image.
 Use binary distributions to install the connector on a physical or virtual Linux server without container virtualization.
 
 1. On the [releases page](https://github.com/ydb-platform/fq-connector-go/releases) of the connector, select the latest release and download the archive for your platform and architecture. The following command downloads version `v0.2.4` of the connector for the Linux platform and `amd64` architecture:
+
     ```bash
     mkdir /tmp/connector && cd /tmp/connector
     wget https://github.com/ydb-platform/fq-connector-go/releases/download/v0.2.4/fq-connector-go-v0.2.4-linux-amd64.tar.gz
     tar -xzf fq-connector-go-v0.2.4-linux-amd64.tar.gz
     ```
 
-1. If {{ ydb-short-name }} nodes have not yet been deployed on the server, create directories for storing executable and configuration files:
+2. If {{ ydb-short-name }} nodes have not yet been deployed on the server, create directories for storing executable and configuration files:
 
     ```bash
     sudo mkdir -p /opt/ydb/bin /opt/ydb/cfg
     ```
 
-1. Place the extracted executable and configuration files of the connector into the newly created directories:
+3. Place the extracted executable and configuration files of the connector into the newly created directories:
+
     ```bash
     sudo cp fq-connector-go /opt/ydb/bin
     sudo cp fq-connector-go.yaml /opt/ydb/cfg
     ```
 
-1. In the {% if oss %}[recommended usage mode](../../deploy/manual/deploy-ydb-federated-query.md#general-scheme){% else %}recommended usage mode{% endif %}, the connector is deployed on the same servers as the dynamic nodes of {{ ydb-short-name }}, so encryption of network connections between them *is not required*. However, if you need to enable encryption, [prepare a pair of TLS keys](../manual/deploy-ydb-on-premises.md#tls-certificates) and specify the paths to the public and private keys in the `connector_server.tls.cert` and `connector_server.tls.key` fields of the `fq-connector-go.yaml` configuration file:
+4. In the {% if oss %}[recommended usage mode](../../deploy/manual/deploy-ydb-federated-query.md#general-scheme){% else %}recommended usage mode{% endif %}, the connector is deployed on the same servers as the dynamic nodes of {{ ydb-short-name }}, so encryption of network connections between them *is not required*. However, if you need to enable encryption, [prepare a pair of TLS keys](../manual/deploy-ydb-on-premises.md#tls-certificates) and specify the paths to the public and private keys in the `connector_server.tls.cert` and `connector_server.tls.key` fields of the `fq-connector-go.yaml` configuration file:
+
     ```yaml
     connector_server:
       # ...
@@ -48,23 +51,28 @@ Use binary distributions to install the connector on a physical or virtual Linux
         cert: "/opt/ydb/certs/fq-connector-go.crt"
         key: "/opt/ydb/certs/fq-connector-go.key"
     ```
-1. If external data sources use TLS, the connector will need a root or intermediate Certificate Authority (CA) certificate that signed the sources' certificates to establish encrypted connections. Linux servers usually have some CA root certificates pre-installed. For Ubuntu OS, the list of supported CAs can be displayed with the following command:
+
+5. If external data sources use TLS, the connector will need a root or intermediate Certificate Authority (CA) certificate that signed the sources' certificates to establish encrypted connections. Linux servers usually have some CA root certificates pre-installed. For Ubuntu OS, the list of supported CAs can be displayed with the following command:
+
     ```bash
     awk -v cmd='openssl x509 -noout -subject' '/BEGIN/{close(cmd)};{print | cmd}' < /etc/ssl/certs/ca-certificates.crt
     ```
+
     If the server lacks the required CA certificate, copy it to a special system directory and update the certificates list:
+
     ```bash
     sudo cp root_ca.crt /usr/local/share/ca-certificates/
     sudo update-ca-certificates
     ```
 
-1. You can start the service manually or using `systemd`.
+6. You can start the service manually or using `systemd`.
 
     {% list tabs %}
 
     - Manually
 
         Start the service from the console with the following command:
+
         ```bash
         /opt/ydb/bin/fq-connector-go server -c /opt/ydb/cfg/fq-connector-go.yaml
         ```
@@ -81,6 +89,7 @@ Use binary distributions to install the connector on a physical or virtual Linux
         ```
 
         If successful, the service should enter the `active (running)` state. Check it with the following command:
+
         ```bash
         sudo systemctl status fq-connector-go
         ● fq-connector-go.service - YDB FQ Connector Go
@@ -89,6 +98,7 @@ Use binary distributions to install the connector on a physical or virtual Linux
         ```
 
         Service logs can be read using the command:
+
         ```bash
         sudo journalctl -u fq-connector-go.service
         ```
@@ -126,6 +136,7 @@ Use binary distributions to install the connector on a physical or virtual Linux
         cert: "/opt/ydb/certs/fq-connector-go.crt"
         key: "/opt/ydb/certs/fq-connector-go.key"
     ```
+
     When starting the container, mount the directory with the TLS key pair inside it so that they are accessible to the `fq-connector-go` process at the paths specified in the configuration file:
 
     ```bash
@@ -159,6 +170,7 @@ Use binary distributions to install the connector on a physical or virtual Linux
     ```
 
     Place the `Dockerfile` and the CA root certificate in one folder, navigate to it, and build the image with the following command:
+
     ```bash
     docker build -t fq-connector-go_custom_ca .
     ```
@@ -182,4 +194,4 @@ A current example of the `fq-connector-go` service configuration file can be fou
 | `logger.enable_sql_query_logging` | For data sources supporting SQL, query logging  is enabled. Valid values: `true`, `false`. **IMPORTANT**: Enabling this option may result in printing confidential user data in the logs. Default value: `false`. |
 | `paging` | Optional section. It contains settings for the algorithm of splitting the data stream extracted from the source into Arrow blocks. For each request, a queue of blocks prepared for sending to {{ ydb-short-name }} is created in the connector. Arrow block allocation contributes significantly to the memory consumption of the `fq-connector-go` process. The minimum memory required for the connector's operation can be roughly estimated by the formula $Mem = 2 \cdot Requests \cdot BPP \cdot PQC$, where $Requests$ is the number of concurrent requests, $BPP$ is the `paging.bytes_per_page` parameter, and $PQC$ is the `paging.prefetch_queue_capacity` parameter. |
 | `paging.bytes_per_page` | Maximum number of bytes in one block. Recommended values range from 4 to 8 MiB, and the maximum is 48 MiB. Default value: 4 MiB. |
-| `paging.prefetch_queue_capacity` | Number of pre-read data blocks stored in the connector's address space until YDB requests the next data block. In some scenarios, larger values of this setting can increase throughput but will also lead to higher memory consumption by the process. Recommended values - at least 2. Default value: 2. |
+| `paging.prefetch_queue_capacity` | Number of pre-read data blocks stored in the connector's address space until {{ ydb-short-name }} requests the next data block. In some scenarios, larger values of this setting can increase throughput but will also lead to higher memory consumption by the process. Recommended values - at least 2. Default value: 2. |

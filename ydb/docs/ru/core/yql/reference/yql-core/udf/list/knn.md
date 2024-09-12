@@ -15,7 +15,7 @@
 
 Пример:
 
-```sql
+```yql
 $TargetEmbedding = Knn::ToBinaryStringFloat([1.2f, 2.3f, 3.4f, 4.5f]);
 
 SELECT id, fact, embedding FROM Facts
@@ -65,7 +65,7 @@ LIMIT 10;
 
 #### Сигнатуры функций
 
-```sql
+```yql
 Knn::ToBinaryStringFloat(List<Float>{Flags:AutoMap})->Tagged<String, "FloatVector">
 Knn::ToBinaryStringUint8(List<Uint8>{Flags:AutoMap})->Tagged<String, "Uint8Vector">
 Knn::ToBinaryStringInt8(List<Int8>{Flags:AutoMap})->Tagged<String, "Int8Vector">
@@ -91,17 +91,19 @@ Knn::FloatFromBinaryString(String{Flags:AutoMap})->List<Float>?
 {% endnote %}
 
 Функции сходства:
+
 * скалярное произведение `InnerProductSimilarity` (сумма произведений координат)
 * косинусное сходство `CosineSimilarity` (скалярное произведение разделенное на произведение длин векторов)
 
 Функции расстояния:
+
 * косинусное расстояние `CosineDistance` (1 - косинусное сходство)
 * манхэттенское расстояние `ManhattanDistance`, также известно как `L1 distance`  (сумма модулей покоординатной разности)
 * Евклидово расстояние `EuclideanDistance`, также известно как `L2 distance` (корень суммы квадратов покоординатной разности)
 
 #### Сигнатуры функций
 
-```sql
+```yql
 Knn::InnerProductSimilarity(String{Flags:AutoMap}, String{Flags:AutoMap})->Float?
 Knn::CosineSimilarity(String{Flags:AutoMap}, String{Flags:AutoMap})->Float?
 Knn::CosineDistance(String{Flags:AutoMap}, String{Flags:AutoMap})->Float?
@@ -130,7 +132,7 @@ Error: Failed to find UDF function: Knn.CosineDistance, reason: Error: Module: K
 {% if backend_name == "YDB" %}
 ### Создание таблицы
 
-```sql
+```yql
 CREATE TABLE Facts (
     id Uint64,        -- Id of fact
     user Utf8,        -- User name
@@ -142,7 +144,7 @@ CREATE TABLE Facts (
 
 ### Добавление векторов
 
-```sql
+```yql
 $vector = [1.f, 2.f, 3.f, 4.f];
 UPSERT INTO Facts (id, user, fact, embedding)
 VALUES (123, "Williams", "Full name is John Williams", Untag(Knn::ToBinaryStringFloat($vector), "FloatVector"));
@@ -150,7 +152,7 @@ VALUES (123, "Williams", "Full name is John Williams", Untag(Knn::ToBinaryString
 {% else %}
 ### Декларация данных
 
-```sql
+```yql
 $vector = [1.f, 2.f, 3.f, 4.f];
 $facts = AsList(
     AsStruct(
@@ -166,7 +168,7 @@ $facts = AsList(
 ### Точный поиск K ближайших векторов
 
 {% if backend_name == "YDB" %}
-```sql
+```yql
 $K = 10;
 $TargetEmbedding = Knn::ToBinaryStringFloat([1.2f, 2.3f, 3.4f, 4.5f]);
 
@@ -176,7 +178,7 @@ ORDER BY Knn::CosineDistance(embedding, $TargetEmbedding)
 LIMIT $K;
 ```
 {% else %}
-```sql
+```yql
 $K = 10;
 $TargetEmbedding = Knn::ToBinaryStringFloat([1.2f, 2.3f, 3.4f, 4.5f]);
 
@@ -190,7 +192,7 @@ LIMIT $K;
 ### Точный поиск векторов, находящихся в радиусе R
 
 {% if backend_name == "YDB" %}
-```sql
+```yql
 $R = 0.1f;
 $TargetEmbedding = Knn::ToBinaryStringFloat([1.2f, 2.3f, 3.4f, 4.5f]);
 
@@ -198,7 +200,7 @@ SELECT * FROM Facts
 WHERE Knn::CosineDistance(embedding, $TargetEmbedding) < $R;
 ```
 {% else %}
-```sql
+```yql
 $R = 0.1f;
 $TargetEmbedding = Knn::ToBinaryStringFloat([1.2f, 2.3f, 3.4f, 4.5f]);
 
@@ -215,7 +217,7 @@ WHERE Knn::CosineDistance(embedding, $TargetEmbedding) < $R;
 {% if backend_name == "YDB" %}
 ### Создание таблицы
 
-```sql
+```yql
 CREATE TABLE Facts (
     id Uint64,            -- Id of fact
     user Utf8,            -- User name
@@ -228,7 +230,7 @@ CREATE TABLE Facts (
 
 ### Добавление векторов
 
-```sql
+```yql
 $vector = [1.f, 2.f, 3.f, 4.f];
 UPSERT INTO Facts (id, user, fact, embedding, embedding_bit)
 VALUES (123, "Williams", "Full name is John Williams", Untag(Knn::ToBinaryStringFloat($vector), "FloatVector"), Untag(Knn::ToBinaryStringBit($vector), "BitVector"));
@@ -236,7 +238,7 @@ VALUES (123, "Williams", "Full name is John Williams", Untag(Knn::ToBinaryString
 {% else %}
 ### Декларация данных
 
-```sql
+```yql
 $vector = [1.f, 2.f, 3.f, 4.f];
 $facts = AsList(
     AsStruct(
@@ -258,7 +260,7 @@ ML модель может выполнять квантование или эт
 
 #### Float -> Int8
 
-```sql
+```yql
 $MapInt8 = ($x) -> {
     $min = -5.0f;
     $max =  5.0f;
@@ -278,7 +280,7 @@ SELECT ListMap($FloatList, $MapInt8);
 * в этом списке производим поиск без использования квантования.
 
 {% if backend_name == "YDB" %}
-```sql
+```yql
 $K = 10;
 $Target = [1.2f, 2.3f, 3.4f, 4.5f];
 $TargetEmbeddingBit = Knn::ToBinaryStringBit($Target);
@@ -294,7 +296,7 @@ ORDER BY Knn::CosineDistance(embedding, $TargetEmbeddingFloat)
 LIMIT $K;
 ```
 {% else %}
-```sql
+```yql
 $K = 10;
 $Target = [1.2f, 2.3f, 3.4f, 4.5f];
 $TargetEmbeddingBit = Knn::ToBinaryStringBit($Target);

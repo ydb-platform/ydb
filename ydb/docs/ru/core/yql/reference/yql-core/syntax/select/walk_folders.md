@@ -76,9 +76,10 @@
 
 * В одном запросе результат листинга для каждой директории кешируется, одно и то же поддерево можно быстро обойти заново в другом вызове WalkFolders, если так удобно
 
-**Примеры:**
+## Примеры
 
 Собрать рекурсивно пути всех таблиц начиная из `initial_folder`:
+
 ``` yql
 $postHandler = ($nodes, $state, $level) -> {
     $tables = ListFilter($nodes, ($x)->($x.Type = "table"));
@@ -89,6 +90,7 @@ SELECT State FROM WalkFolders(`initial_folder`, $postHandler AS PostHandler);
 ```
 
 Рекурсивно найти последнюю созданную таблицу в `initial_folder`:
+
 ```yql
 $extractTimestamp = ($node) -> {
     $creation_time_str = Yson::LookupString($node.Attributes, "creation_time");
@@ -105,10 +107,10 @@ $initialTimestamp = CAST(0ul AS Timestamp);
 SELECT
     *
 FROM WalkFolders(`initial_folder`, $initialTimestamp, "creation_time" AS RootAttributes, $postHandler AS PostHandler);
-
 ```
 
 Собрать рекурсивно пути всех таблиц в глубину на 2 уровня из `initial_folder`
+
 ```yql
 $diveHandler = ($nodes, $state, $attrList, $level) -> {
     $paths = ListExtract($nodes, "Path");
@@ -128,6 +130,7 @@ SELECT State FROM WalkFolders(`initial_folder`,
 ```
 
 Собрать пути из всех узлов в `initial_folder`, не заходя в поддиректории
+
 ```yql
 $diveHandler = ($_, $state, $_, $_) -> {
     $nextToVisit = [];
@@ -167,6 +170,7 @@ FROM WalkFolders(`initial_folder`, $resolveHandler AS ResolveHandler, "target_pa
 ```
 
 Собрать рекурсивно Yson для каждого узла из `initial_folder`, содержащий `Type`, `Path`, словарь `Attributes` с атрибутами узла (`creation_time`, пользовательским атрибутом `foo`).
+
 ```yql
 -- В случае, если нужно накопить очень большое состояние в одном запросе, можно хранить его в виде строки, чтобы обойти ограничение на количество узлов во время Evaluate.
 $saveNodesToYsonString = ($list, $stateStr, $_) -> {
@@ -183,6 +187,7 @@ SELECT
 ```
 
 Пагинация результатов WalkFolders. Пропускаем 200 первых путей, собираем 100 из `initial_folder`:
+
 ```yql
 $skip = 200ul;
 $take = 100ul;
@@ -218,5 +223,5 @@ $initialState = (0ul, ListCreate(String));
 $walkFoldersRes = SELECT * FROM WalkFolders(`initial_folder`, $initialState, $diveHandler AS DiveHandler, $postHandler AS PostHandler);
 
 $_, $paths = Unwrap($walkFoldersRes);
-select $paths;
+SELECT $paths;
 ```

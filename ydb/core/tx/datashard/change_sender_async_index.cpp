@@ -330,17 +330,17 @@ private:
 
 #define DEFINE_STATE_INTRO \
     public: \
-    struct TStateTag {}; \
+        struct TStateTag {}; \
     private: \
-    const TDerived* AsDerived() const { \
-        return static_cast<const TDerived*>(this); \
-    } \
-    TDerived* AsDerived() { \
-        return static_cast<TDerived*>(this); \
-    } \
-    TStringBuf GetLogPrefix() const { \
-        return AsDerived()->GetLogPrefix(); \
-    }
+        const TDerived* AsDerived() const { \
+            return static_cast<const TDerived*>(this); \
+        } \
+        TDerived* AsDerived() { \
+            return static_cast<TDerived*>(this); \
+        } \
+        TStringBuf GetLogPrefix() const { \
+            return AsDerived()->GetLogPrefix(); \
+        }
 
 #define USE_STATE(STATE) \
     friend class T ## STATE ## State; \
@@ -351,11 +351,12 @@ private:
         return CurrentStateFunc() == static_cast<TReceiveFunc>(&TThis::State ## STATE); \
     }
 
-template <class TDerived>
+template <typename TDerived>
 class TResolveIndexState
     : virtual public NSchemeCache::TSchemeCacheHelpers
 {
     DEFINE_STATE_INTRO;
+
 public:
     void ResolveIndex() {
         auto request = MakeHolder<TNavigate>();
@@ -419,11 +420,12 @@ private:
     }
 };
 
-template <class TDerived>
+template <typename TDerived>
 class TResolveUserTableState
     : virtual public NSchemeCache::TSchemeCacheHelpers
 {
     DEFINE_STATE_INTRO;
+
 public:
     void ResolveUserTable() {
         auto request = MakeHolder<TNavigate>();
@@ -480,11 +482,12 @@ private:
     }
 };
 
-template <class TDerived>
+template <typename TDerived>
 class TResolveTargetTableState
     : virtual public NSchemeCache::TSchemeCacheHelpers
 {
     DEFINE_STATE_INTRO;
+
 public:
     void ResolveTargetTable() {
         auto request = MakeHolder<TNavigate>();
@@ -571,11 +574,12 @@ private:
     }
 };
 
-template <class TDerived>
+template <typename TDerived>
 class TResolveKeysState
     : virtual public NSchemeCache::TSchemeCacheHelpers
 {
     DEFINE_STATE_INTRO;
+
 public:
     void ResolveKeys() {
         auto request = MakeHolder<TResolve>();
@@ -649,7 +653,7 @@ private:
     }
 };
 
-template <class TDerived>
+template <typename TDerived>
 struct TSchemeChecksMixin
     : virtual private NSchemeCache::TSchemeCacheHelpers
 {

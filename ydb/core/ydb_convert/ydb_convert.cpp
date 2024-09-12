@@ -20,6 +20,28 @@
 
 namespace NKikimr {
 
+namespace {
+
+    bool FillAllowPermissions(NACLib::TDiffACL& out, const Ydb::Scheme::Permissions& in, TString& error) {
+        for (const auto& permission : in.permission_names()) {
+            try {
+                auto aclAttrs = ConvertYdbPermissionNameToACLAttrs(permission);
+                out.AddAccess(
+                    NACLib::EAccessType::Allow,
+                    aclAttrs.AccessMask,
+                    in.subject(),
+                    aclAttrs.InheritanceType
+                );
+            } catch (const std::exception& e) {
+                error = e.what();
+                return false;
+            }
+        }
+        return true;
+    }
+
+} // anonymous namespace
+
 template<typename TOut>
 Y_FORCE_INLINE void ConvertMiniKQLTupleTypeToYdbType(const NKikimrMiniKQL::TTupleType& protoTupleType, TOut& output) {
     const ui32 elementsCount = static_cast<ui32>(protoTupleType.ElementSize());
@@ -1408,6 +1430,28 @@ void ProtoValueFromCell(NYdb::TValueBuilder& vb, const NScheme::TTypeInfo& typeI
     default:
         Y_ENSURE(false, TStringBuilder() << "Unsupported type: " << primitive);
     }
+}
+
+bool FillACL(NKikimrScheme::TEvModifySchemeTransaction& out,
+             const TMaybeFail<Ydb::Scheme::ModifyPermissionsRequest>& in,
+             TString& error) {
+    if (in.Empty()) {
+        return true;
+    }
+
+    NACLib::TDiffACL diffACL;
+    for (const auto& action : in->actions()) {
+        if (action.has_grant() && !FillAllowPermissions(diffACL, action.grant(), error)) {
+            return false;
+        } else if (action.has_change_owner()) {
+            out.SetOwner(action.change_owner());
+        }
+    }
+
+    for (auto& tx : *out.MutableTransaction()) {
+        tx.MutableModifyACL()->SetDiffACL(diffACL.SerializeAsString());
+    }
+    return true;
 }
 
 } // namespace NKikimr

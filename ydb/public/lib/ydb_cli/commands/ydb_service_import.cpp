@@ -95,6 +95,9 @@ void TCommandImportFromS3::Config(TConfig& config) {
     config.Opts->AddLongOption("use-virtual-addressing", "S3 bucket virtual addressing")
         .RequiredArgument("BOOL").StoreResult<bool>(&UseVirtualAddressing).DefaultValue("true");
 
+    config.Opts->AddLongOption("no-acl", "Prevent importing of ACL and owner")
+        .RequiredArgument("BOOL").StoreTrue(&NoACL).DefaultValue("false");
+
     AddDeprecatedJsonOption(config);
     AddOutputFormats(config, { EDataFormat::Pretty, EDataFormat::ProtoJsonBase64 });
     config.Opts->MutuallyExclusive("json", "format");
@@ -134,6 +137,7 @@ int TCommandImportFromS3::Run(TConfig& config) {
     }
 
     settings.NumberOfRetries(NumberOfRetries);
+    settings.NoACL(NoACL);
 #if defined(_win32_)
     for (const auto& item : Items) {
         settings.AppendItem({item.Source, item.Destination});

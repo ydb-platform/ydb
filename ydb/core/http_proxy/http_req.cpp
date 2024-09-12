@@ -277,7 +277,7 @@ namespace NKikimr::NHttpProxy {
                               "' iam token size: " << HttpContext.IamToken.size());
                 TMap<TString, TString> peerMetadata {
                     {NYmq::V1::FOLDER_ID, FolderId},
-                    {NYmq::V1::CLOUD_ID, HttpContext.UserName ? HttpContext.UserName : CloudId},
+                    {NYmq::V1::CLOUD_ID, CloudId ? CloudId : HttpContext.UserName },
                     {NYmq::V1::USER_SID, UserSid},
                     {NYmq::V1::REQUEST_ID, HttpContext.RequestId},
                     {NYmq::V1::SECURITY_TOKEN, HttpContext.SecurityToken},
@@ -408,7 +408,7 @@ namespace NKikimr::NHttpProxy {
                             ctx,
                             NKikimrServices::HTTP_PROXY,
                             "Not retrying GRPC response."
-                                << " Code: " << get<1>(errorAndCode) 
+                                << " Code: " << get<1>(errorAndCode)
                                 << ", Error: " << get<0>(errorAndCode);
                         );
 
@@ -434,7 +434,7 @@ namespace NKikimr::NHttpProxy {
                         ctx,
                         NKikimrServices::HTTP_PROXY,
                         TStringBuilder() << "Got cloud auth response."
-                        << " FolderId: " << ev->Get()->FolderId 
+                        << " FolderId: " << ev->Get()->FolderId
                         << " CloudId: " << ev->Get()->CloudId
                         << " UserSid: " << ev->Get()->Sid;
                     );
@@ -553,7 +553,7 @@ namespace NKikimr::NHttpProxy {
                         .Counters = nullptr,
                         .AWSSignature = std::move(HttpContext.GetSignature()),
                         .IAMToken = HttpContext.IamToken,
-                        .FolderID = "" 
+                        .FolderID = ""
                     };
 
                     auto authRequestProxy = MakeHolder<NSQS::THttpProxyAuthRequestProxy>(

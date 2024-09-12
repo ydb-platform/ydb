@@ -71,16 +71,13 @@ namespace NKikimr {
             // issue request for a specific disk; returns true if the request was issued and not yet completed, otherwise
             // false
 
-            if (info.GetTotalVDisksNum() >= 3) {
-                // find the slowest disk and mark it
-                switch (blackboard.AccelerationMode) {
-                    case TBlackboard::AccelerationModeSkipTwoSlowest: {
-                        MarkSlowDisks(state, info, blackboard, false, accelerationParams);
-                    }
-                    case TBlackboard::AccelerationModeSkipMarked:
-                        // The slowest disk is already marked!
-                        break;
-                }
+            // mark slow disks
+            switch (blackboard.AccelerationMode) {
+                case TBlackboard::AccelerationModeSkipNSlowest:
+                    blackboard.MarkSlowDisks(state, false, accelerationParams);
+                case TBlackboard::AccelerationModeSkipMarked:
+                    // Slow disks are already marked!
+                    break;
             }
 
             // create an array defining order in which we traverse the disks

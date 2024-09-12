@@ -355,11 +355,10 @@ void TStrategyBase::Evaluate3dcSituation(const TBlobState &state,
     }
 }
 
-bool TStrategyBase::Prepare3dcPartPlacement(const TBlobState &state,
-        size_t numFailRealms, size_t numFailDomainsPerFailRealm,
-        ui8 preferredReplicasPerRealm, bool considerSlowAsError,
-        TBlobStorageGroupType::TPartPlacement &outPartPlacement) {
-    bool fullPlacement = true;
+void TStrategyBase::Prepare3dcPartPlacement(const TBlobState& state, size_t numFailRealms, size_t numFailDomainsPerFailRealm,
+        ui8 preferredReplicasPerRealm, bool considerSlowAsError, TBlobStorageGroupType::TPartPlacement& outPartPlacement,
+        bool& fullPlacement) {
+    fullPlacement = true;
     for (size_t realm = 0; realm < numFailRealms; ++realm) {
         ui8 placed = 0;
         for (size_t domain = 0; placed < preferredReplicasPerRealm
@@ -382,27 +381,25 @@ bool TStrategyBase::Prepare3dcPartPlacement(const TBlobState &state,
             fullPlacement = false;
         }
     }
-    return fullPlacement;
 }
 
-ui32 TStrategyBase::MakeSlowSubgroupDiskMask(TBlobState &state, const TBlobStorageGroupInfo &info, TBlackboard &blackboard,
-        bool isPut, const TAccelerationParams& accelerationParams) {
+ui32 TStrategyBase::MakeSlowSubgroupDiskMask(TBlobState &state, TBlackboard &blackboard, bool isPut,
+        const TAccelerationParams& accelerationParams) {
     // Find slow disks
     switch (blackboard.AccelerationMode) {
-        case TBlackboard::AccelerationModeSkipTwoSlowest: {
-            return MarkSlowDisks(state, info, blackboard, isPut, accelerationParams);
-        }
-        case TBlackboard::AccelerationModeSkipMarked: {
-            ui32 slowDiskSubgroupMask = 0;
-            for (size_t diskIdx = 0; diskIdx < state.Disks.size(); ++diskIdx) {
-                if (state.Disks[diskIdx].IsSlow) {
-                    slowDiskSubgroupMask |= 1 << diskIdx;
-                }
-            }
-            return slowDiskSubgroupMask;
+        case TBlackboard::AccelerationModeSkipNSlowest:
+            blackboard.MarkSlowDisks(state, isPut, accelerationParams);
+            break;
+        case TBlackboard::AccelerationModeSkipMarked:
+            break;
+    }
+    ui32 slowDiskSubgroupMask = 0;
+    for (size_t diskIdx = 0; diskIdx < state.Disks.size(); ++diskIdx) {
+        if (state.Disks[diskIdx].IsSlow) {
+            slowDiskSubgroupMask |= 1 << diskIdx;
         }
     }
-    return 0;
+    return slowDiskSubgroupMask;
 }
 
 }//NKikimr

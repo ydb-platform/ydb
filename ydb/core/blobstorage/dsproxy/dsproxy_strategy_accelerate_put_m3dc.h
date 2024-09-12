@@ -69,8 +69,9 @@ public:
                 }
 
                 // now check every realm and check if we have to issue some write requests to it
+                bool fullPlacement;
                 Prepare3dcPartPlacement(state, NumFailRealms, NumFailDomainsPerFailRealm,
-                    PreferredReplicasPerRealm(degraded), true, partPlacement);
+                    PreferredReplicasPerRealm(degraded), true, partPlacement, fullPlacement);
 
                 if (IsPutNeeded(state, partPlacement)) {
                     PreparePutsForPartPlacement(logCtx, state, info, groupDiskRequests, partPlacement);

@@ -92,7 +92,7 @@ ui64 TPutImpl::GetTimeToAccelerateNs(TLogContext &logCtx) {
         TDiskDelayPredictions worstDisks;
         state.GetWorstPredictedDelaysNs(*Info, *Blackboard.GroupQueues, HandleClassToQueueId(Blackboard.PutHandleClass),
                 &worstDisks, AccelerationParams.PredictedDelayMultiplier);
-        nthWorstPredictedNsVec[idx++] = worstDisks[Blackboard.GetMaxNumberOfSlowDisks()].PredictedNs;
+        nthWorstPredictedNsVec[idx++] = worstDisks[AccelerationParams.MaxNumOfSlowDisks].PredictedNs;
     }
     return *MaxElement(nthWorstPredictedNsVec.begin(), nthWorstPredictedNsVec.end());
 }

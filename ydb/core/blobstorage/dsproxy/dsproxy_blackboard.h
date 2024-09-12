@@ -165,8 +165,7 @@ public:
 
 struct TBlackboard {
     enum EAccelerationMode {
-        AccelerationModeSkipTwoSlowest,
-        AccelerationModeSkipOneSlowest,
+        AccelerationModeSkipNSlowest,
         AccelerationModeSkipMarked
     };
 
@@ -190,7 +189,7 @@ struct TBlackboard {
             NKikimrBlobStorage::EPutHandleClass putHandleClass, NKikimrBlobStorage::EGetHandleClass getHandleClass)
         : Info(info)
         , GroupQueues(groupQueues)
-        , AccelerationMode(AccelerationModeSkipTwoSlowest)
+        , AccelerationMode(AccelerationModeSkipNSlowest)
         , PutHandleClass(putHandleClass)
         , GetHandleClass(getHandleClass)
     {}
@@ -226,9 +225,7 @@ struct TBlackboard {
 
     void RegisterBlobForPut(const TLogoBlobID& id, size_t blobIdx);
 
-    ui32 MarkSlowDisks(TBlobState& state, bool isPut, const TAccelerationParams& accelerationParams);
-
-    ui32 GetMaxNumberOfSlowDisks() const;
+    void MarkSlowDisks(TBlobState& state, bool isPut, const TAccelerationParams& accelerationParams);
 
     TBlobState& operator [](const TLogoBlobID& id);
 };

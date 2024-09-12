@@ -36,7 +36,7 @@ public:
         TBlobStorageGroupType::TPartPlacement partPlacement;
         bool degraded = false;
         bool isDone = false;
-        ui32 slowDiskSubgroupMask = MakeSlowSubgroupDiskMask(state, info, blackboard, true, accelerationParams);
+        ui32 slowDiskSubgroupMask = MakeSlowSubgroupDiskMask(state, blackboard, true, accelerationParams);
         do {
             if (slowDiskSubgroupMask == 0) {
                 break; // ignore this case
@@ -60,9 +60,8 @@ public:
                 }
 
                 // now check every realm and check if we have to issue some write requests to it
-                isDone = Prepare3dcPartPlacement(state, NumFailRealms, NumFailDomainsPerFailRealm,
-                        PreferredReplicasPerRealm(degraded),
-                        true, partPlacement);
+                Prepare3dcPartPlacement(state, NumFailRealms, NumFailDomainsPerFailRealm,
+                        PreferredReplicasPerRealm(degraded), true, partPlacement, isDone);
             }
         } while (false);
         if (!isDone) {
@@ -81,9 +80,10 @@ public:
 
             // now check every realm and check if we have to issue some write requests to it
             partPlacement.Records.clear();
+            bool fullPlacement;
             Prepare3dcPartPlacement(state, NumFailRealms, NumFailDomainsPerFailRealm,
                     PreferredReplicasPerRealm(degraded),
-                    false, partPlacement);
+                    false, partPlacement, fullPlacement);
         }
         if (IsPutNeeded(state, partPlacement)) {
             PreparePutsForPartPlacement(logCtx, state, info, groupDiskRequests, partPlacement);

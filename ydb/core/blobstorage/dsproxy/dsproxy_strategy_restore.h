@@ -126,7 +126,7 @@ public:
             return *res;
         }
 
-        ui32 slowDiskSubgroupMask = MarkSlowDisks(state, info, blackboard, true, accelerationParams);
+        ui32 slowDiskSubgroupMask = MakeSlowSubgroupDiskMask(state, blackboard, true, accelerationParams);
 
         bool isDone = false;
         if (slowDiskSubgroupMask != 0) {

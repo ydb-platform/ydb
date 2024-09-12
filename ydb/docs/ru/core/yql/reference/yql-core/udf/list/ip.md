@@ -1,7 +1,8 @@
 # Ip
+
 В модуле `Ip` поддерживаются как IPv4, так и IPv6 адреса. По умолчанию они представляются в виде бинарных строк длиной 4 и 16 байт, соответственно.
 
-**Список функций**
+## Список функций
 
 * ```Ip::FromString(String{Flags:AutoMap}) -> String?``` - из человекочитаемого представления в бинарное
 * ```Ip::SubnetFromString(String{Flags:AutoMap}) -> String?``` - из человекочитаемого представления подсети в бинарное
@@ -15,9 +16,9 @@
 * ```Ip::GetSubnetByMask(String{Flags:AutoMap}, String{Flags:AutoMap}) -> String``` - во втором аргументе битовая маска подсети
 * ```Ip::SubnetMatch(String{Flags:AutoMap}, String{Flags:AutoMap}) -> Bool``` - в первом аргументе подсеть, во втором аргументе подсеть или адрес
 
-**Примеры**
+## Примеры
 
-```sql
+```yql
 SELECT Ip::IsEmbeddedIPv4(
   Ip::FromString("::ffff:77.75.155.3")
 ); -- true

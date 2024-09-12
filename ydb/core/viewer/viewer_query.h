@@ -23,13 +23,11 @@ class TJsonQuery : public TViewerPipeClient {
     ui32 Timeout = 0;
     std::vector<std::vector<Ydb::ResultSet>> ResultSets;
     TString Query;
-    TString Database;
     TString Action;
     TString Stats;
     TString Syntax;
     TString QueryId;
     TString TransactionMode;
-    bool Direct = false;
     bool IsBase64Encode = true;
     int LimitRows = 10000;
     int TotalRows = 0;
@@ -146,8 +144,10 @@ public:
     }
 
     void Bootstrap() override {
+        if (NeedToRedirect()) {
+            return;
+        }
         const auto& params(Event->Get()->Request.GetParams());
-        InitConfig(params);
         ParseCgiParameters(params);
         if (IsPostContent()) {
             TStringBuf content = Event->Get()->Request.GetPostContent();
@@ -159,14 +159,7 @@ public:
             return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Query is empty"), "EmptyQuery");
         }
 
-        Direct |= !TBase::Event->Get()->Request.GetHeader("X-Forwarded-From-Node").empty(); // we're already forwarding
-        Direct |= (Database == AppData()->TenantName); // we're already on the right node
-
-        if (Database && !Direct) {
-            return RedirectToDatabase(Database); // to find some dynamic node and redirect query there
-        } else {
-            SendKpqProxyRequest();
-        }
+        SendKpqProxyRequest();
         Become(&TThis::StateWork, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
     }
 
@@ -366,7 +359,7 @@ private:
             case NYdb::EPrimitiveType::Interval:
                 return TStringBuilder() << valueParser.GetInterval();
             case NYdb::EPrimitiveType::Date32:
-                return valueParser.GetInt32();
+                return valueParser.GetDate32();
             case NYdb::EPrimitiveType::Datetime64:
                 return valueParser.GetDatetime64();
             case NYdb::EPrimitiveType::Timestamp64:
@@ -420,6 +413,9 @@ private:
 
             case NYdb::TTypeParser::ETypeKind::Pg:
                 return valueParser.GetPg().Content_;
+
+            case NYdb::TTypeParser::ETypeKind::Decimal:
+                return valueParser.GetDecimal().ToString();
 
             default:
                 return NJson::JSON_UNDEFINED;

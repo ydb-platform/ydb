@@ -6,7 +6,8 @@
 * `RandomNumber()` — целое число из всего диапазона Uint64;
 * `RandomUuid()` — [Uuid version 4](https://tools.ietf.org/html/rfc4122#section-4.4).
 
-**Сигнатуры**
+### Сигнатуры
+
 ```
 Random(T1[, T2, ...])->Double
 RandomNumber(T1[, T2, ...])->Uint64
@@ -37,7 +38,8 @@ RandomUuid(T1[, T2, ...])->Uuid
 * `SELECT RANDOM(some_column), RANDOM(some_column) FROM table;` — разные случайные числа на каждую строку таблицы, но в рамках одной строки — два одинаковых числа;
 * `SELECT RANDOM(some_column), RANDOM(some_column + 1) FROM table;` или `SELECT RANDOM(some_column), RANDOM(other_column) FROM table;` — две колонки, и все с разными числами.
 
-**Примеры**
+### Примеры
+
 ``` yql
 SELECT
     Random(key) -- [0, 1)

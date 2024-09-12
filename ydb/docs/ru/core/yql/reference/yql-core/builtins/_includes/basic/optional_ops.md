@@ -2,12 +2,14 @@
 
 `Just()` - Изменить тип данных значения на [optional](../../../types/optional.md) от текущего типа данных (то есть `T` превращается в `T?`).
 
-**Сигнатура**
+### Сигнатура
+
 ```
 Just(T)->T?
 ```
 
-**Примеры**
+### Примеры
+
 ``` yql
 SELECT
   Just("my_string"); --  String?
@@ -17,7 +19,8 @@ SELECT
 
 Если значение не является [optional](../../../types/optional.md), то функция возвращает свой первый аргумент без изменений.
 
-**Сигнатура**
+### Сигнатура
+
 ```
 Unwrap(T?)->T
 Unwrap(T?, Utf8)->T
@@ -31,7 +34,8 @@ Unwrap(T?, String)->T
 
 Обратная операция — [Just](#optional-ops).
 
-**Примеры**
+### Примеры
+
 ``` yql
 $value = Just("value");
 
@@ -40,12 +44,14 @@ SELECT Unwrap($value, "Unexpected NULL for $value");
 
 `Nothing()` - Создать пустое значение указанного [Optional](../../../types/optional.md) типа данных.
 
-**Сигнатура**
+### Сигнатура
+
 ```
 Nothing(Type<T?>)->T?
 ```
 
-**Примеры**
+### Примеры
+
 ``` yql
 SELECT
   Nothing(String?); -- пустое значение (NULL) с типом String?

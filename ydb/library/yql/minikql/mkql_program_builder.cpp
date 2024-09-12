@@ -1753,6 +1753,18 @@ TRuntimeNode TProgramBuilder::BlockXor(TRuntimeNode first, TRuntimeNode second) 
     return BuildBlockLogical(__func__, first, second);
 }
 
+TRuntimeNode TProgramBuilder::BlockDecimalDiv(TRuntimeNode first, TRuntimeNode second) {
+    return BuildBlockDecimalBinary(__func__, first, second);
+}
+
+TRuntimeNode TProgramBuilder::BlockDecimalMod(TRuntimeNode first, TRuntimeNode second) {
+    return BuildBlockDecimalBinary(__func__, first, second);
+}
+
+TRuntimeNode TProgramBuilder::BlockDecimalMul(TRuntimeNode first, TRuntimeNode second) {
+    return BuildBlockDecimalBinary(__func__, first, second);
+}
+
 TRuntimeNode TProgramBuilder::ListFromRange(TRuntimeNode start, TRuntimeNode end, TRuntimeNode step) {
     MKQL_ENSURE(start.GetStaticType()->IsData(), "Expected data");
     MKQL_ENSURE(end.GetStaticType()->IsSameType(*start.GetStaticType()), "Mismatch type");
@@ -2754,6 +2766,32 @@ TRuntimeNode TProgramBuilder::BuildBlockLogical(const std::string_view& callable
 
     const auto itemType = NewDataType(NUdf::TDataType<bool>::Id, isOpt1 || isOpt2);
     auto outputType = NewBlockType(itemType, GetResultShape({firstType, secondType}));
+
+    TCallableBuilder callableBuilder(Env, callableName, outputType);
+    callableBuilder.Add(first);
+    callableBuilder.Add(second);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TProgramBuilder::BuildBlockDecimalBinary(const std::string_view& callableName, TRuntimeNode first, TRuntimeNode second) {
+    auto firstType = AS_TYPE(TBlockType, first.GetStaticType());
+    auto secondType = AS_TYPE(TBlockType, second.GetStaticType());
+
+    bool isOpt1, isOpt2;
+    auto* leftDataType = UnpackOptionalData(firstType->GetItemType(), isOpt1);
+    UnpackOptionalData(secondType->GetItemType(), isOpt2);
+
+    MKQL_ENSURE(leftDataType->GetSchemeType() == NUdf::TDataType<NUdf::TDecimal>::Id, "Requires decimal args.");
+
+    const auto& lParams = static_cast<TDataDecimalType*>(leftDataType)->GetParams();
+
+    auto [precision, scale] = lParams;
+
+    TType* outputType = TDataDecimalType::Create(precision, scale, Env);
+    if (isOpt1 || isOpt2) {
+        outputType = TOptionalType::Create(outputType, Env);
+    }
+    outputType = NewBlockType(outputType, TBlockType::EShape::Many);
 
     TCallableBuilder callableBuilder(Env, callableName, outputType);
     callableBuilder.Add(first);

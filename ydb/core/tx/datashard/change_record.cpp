@@ -18,6 +18,10 @@ void TChangeRecord::Serialize(NKikimrChangeExchange::TChangeRecord& record) cons
             Y_ABORT_UNLESS(record.MutableAsyncIndex()->ParseFromArray(Body.data(), Body.size()));
             break;
         }
+        case EKind::IncrementalRestore: {
+            Y_ABORT_UNLESS(record.MutableIncrementalRestore()->ParseFromArray(Body.data(), Body.size()));
+            break;
+        }
         case EKind::CdcDataChange: {
             Y_ABORT_UNLESS(record.MutableCdcDataChange()->ParseFromArray(Body.data(), Body.size()));
             break;
@@ -41,6 +45,7 @@ TConstArrayRef<TCell> TChangeRecord::GetKey() const {
 
     switch (Kind) {
         case EKind::AsyncIndex:
+        case EKind::IncrementalRestore:
         case EKind::CdcDataChange: {
             const auto parsed = ParseBody(Body);
 

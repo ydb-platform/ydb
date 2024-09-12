@@ -1053,5 +1053,6 @@ message TActivity {
         MEMORY_CONTROLLER = 644;
         BUILD_COLUMNS_SCAN_ACTOR = 645;
         SAMPLE_K_UPLOAD_ACTOR = 646;
+        LOCAL_KMEANS_SCAN_ACTOR = 647;
     };
 };

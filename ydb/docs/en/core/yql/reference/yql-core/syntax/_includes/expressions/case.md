@@ -6,7 +6,7 @@ The `ELSE` branch is mandatory in the `CASE` expression. Expressions in `WHEN` a
 
 Since its syntax is quite sophisticated, it's often more convenient to use the built-in function [IF](../../../builtins/basic.md#if).
 
-**Examples**
+### Examples
 
 ```yql
 SELECT

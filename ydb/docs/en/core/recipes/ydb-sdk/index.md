@@ -26,6 +26,7 @@ Table of contents:
 - [Setting the session pool size](session-pool-limit.md)
 - [Inserting data](upsert.md)
 - [Bulk upsert of data](bulk-upsert.md)
+- [Setting up the transaction execution mode](tx-control.md)
 - [Troubleshooting](debug.md)
 
   - [Enable logging](debug-logs.md)

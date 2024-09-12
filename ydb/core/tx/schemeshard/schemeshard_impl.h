@@ -331,6 +331,7 @@ public:
     bool EnableTableDatetime64 = false;
     bool EnableResourcePoolsOnServerless = false;
     bool EnableVectorIndex = false;
+    bool EnableExternalDataSourcesOnServerless = false;
 
     TShardDeleter ShardDeleter;
 

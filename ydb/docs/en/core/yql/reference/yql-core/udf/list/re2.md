@@ -1,8 +1,8 @@
 # Re2
 
-**List of functions**
+## List of functions
 
-```
+```yql
 Re2::Grep(pattern:String, options:Struct<...>?) -> (string:String?) -> Bool
 Re2::Match(pattern:String, options:Struct<...>?) -> (string:String?) -> Bool
 Re2::Capture(pattern:String, options:Struct<...>?) -> (string:String?) -> Struct<_1:String?,foo:String?,...>
@@ -22,9 +22,9 @@ Make sure to double all the backslashes in your regular expressions (if they are
 
 {% endnote %}
 
-**Examples**
+## Examples
 
-```sql
+```yql
 $value = "xaaxaaxaa";
 $options = Re2::Options(false AS CaseSensitive);
 $match = Re2::Match("[ax]+\\d");
@@ -50,8 +50,8 @@ You can call the `Re2::Grep` function by using a `REGEXP` expression (see the [b
 
 For example, the following two queries are equivalent (also in terms of computing efficiency):
 
-* ```$grep = Re2::Grep("b+"); SELECT $grep("aaabccc");```
-* ```SELECT "aaabccc" REGEXP "b+";```
+* `$grep = Re2::Grep("b+"); SELECT $grep("aaabccc");`
+* `SELECT "aaabccc" REGEXP "b+";`
 
 ## Re2::Capture {#capture}
 
@@ -102,9 +102,9 @@ Notes on Re2::Options from the official [repository](https://github.com/google/r
 
 It is not recommended to use Re2::Options in the code. Most parameters can be replaced with regular expression flags.
 
-**Flag usage examples**
+### Flag usage examples
 
-```sql
+```yql
 $value = "Foo bar FOO"u;
 -- enable case-insensitive mode
 $capture = Re2::Capture(@@(?i)(foo)@@);

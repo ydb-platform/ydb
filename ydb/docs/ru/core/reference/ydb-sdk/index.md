@@ -1,11 +1,13 @@
-# Справка по YDB SDK
+# Справка по {{ ydb-short-name }} SDK
 
 {% include [index_intro_overlay.md](_includes/index_intro_overlay.md) %}
 
-Для работы с YDB доступны OpenSource SDK для следующих языков программирования:
+Для работы с {{ ydb-short-name }} доступны OpenSource SDK для следующих языков программирования:
 
 {% if oss %}
+
 - C++ [https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp)
+
 {% endif %}
 - С# (.NET) [https://github.com/ydb-platform/ydb-dotnet-sdk](https://github.com/ydb-platform/ydb-dotnet-sdk)
 - Go [https://github.com/ydb-platform/ydb-go-sdk/v3](https://github.com/ydb-platform/ydb-go-sdk)

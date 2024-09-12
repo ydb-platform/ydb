@@ -12,9 +12,9 @@
 
    Чтобы фильтровать `NULL`-значения без размножения, необходимо уточнить операцию до `FLATTEN OPTIONAL BY`.
 
-**Примеры**
+#### Примеры
 
-```sql
+```yql
 SELECT
   t.item.0 AS key,
   t.item.1 AS value,
@@ -24,7 +24,7 @@ FROM my_table AS t
 FLATTEN DICT BY dict_column AS item;
 ```
 
-```sql
+```yql
 SELECT * FROM (
     SELECT
         AsList(1, 2, 3) AS a,
@@ -32,7 +32,7 @@ SELECT * FROM (
 ) FLATTEN LIST BY (a, b);
 ```
 
-``` yql
+```yql
 SELECT * FROM (
     SELECT
         "1;2;3" AS a,

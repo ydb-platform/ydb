@@ -124,6 +124,7 @@ private:
             if (kqpResponse.HasTxMeta()) {
                 beginTxResult->mutable_tx_meta()->set_id(kqpResponse.GetTxMeta().id());
             }
+            *beginTxResult->mutable_issues() = issueMessage;
         }
 
         Reply(record.GetYdbStatus(), beginTxResult);
@@ -168,7 +169,7 @@ public:
 private:
     virtual std::pair<TString, TString> GetReqData() const = 0;
     virtual void Fill(NKikimrKqp::TQueryRequest* req) const = 0;
-    virtual NProtoBuf::Message* CreateResult(Ydb::StatusIds::StatusCode status) const = 0;
+    virtual NProtoBuf::Message* CreateResult(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues) const = 0;
 
     void StateWork(TAutoPtr<IEventHandle>& ev) {
         try {
@@ -218,15 +219,15 @@ private:
         const auto& record = ev->Get()->Record.GetRef();
         FillCommonKqpRespFields(record, Request.get());
 
+        NYql::TIssues issues;
         if (record.HasResponse()) {
             const auto& kqpResponse = record.GetResponse();
             const auto& issueMessage = kqpResponse.GetQueryIssues();
-            NYql::TIssues issues;
             NYql::IssuesFromMessage(issueMessage, issues);
             Request->RaiseIssues(issues);
         }
 
-        Reply(record.GetYdbStatus(), CreateResult(record.GetYdbStatus()));
+        Reply(record.GetYdbStatus(), CreateResult(record.GetYdbStatus(), issues));
     }
 
     void InternalError(const TString& message) {
@@ -271,9 +272,10 @@ private:
         req->MutableTxControl()->set_commit_tx(true);
     }
 
-    NProtoBuf::Message* CreateResult(Ydb::StatusIds::StatusCode status) const override {
+    NProtoBuf::Message* CreateResult(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues) const override {
         auto result = TEvCommitTransactionRequest::AllocateResult<Ydb::Query::CommitTransactionResponse>(Request);
         result->set_status(status);
+        NYql::IssuesToMessage(issues, result->mutable_issues());
         return result;
     }
 };
@@ -293,9 +295,10 @@ private:
         req->SetAction(NKikimrKqp::QUERY_ACTION_ROLLBACK_TX);
     }
 
-    NProtoBuf::Message* CreateResult(Ydb::StatusIds::StatusCode status) const override {
+    NProtoBuf::Message* CreateResult(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues) const override {
         auto result = TEvRollbackTransactionRequest::AllocateResult<Ydb::Query::RollbackTransactionResponse>(Request);
         result->set_status(status);
+        NYql::IssuesToMessage(issues, result->mutable_issues());
         return result;
     }
 };

@@ -517,7 +517,6 @@ IComputationNode* WrapBlockMapJoinCore(TCallable& callable, const TComputationNo
     const auto dict = LocateNode(ctx.NodeLocator, callable, 1);
 
     switch (joinKind) {
-    static const auto joinNames = GetEnumNames<EJoinKind>();
     case EJoinKind::Inner:
         if (isMulti) {
             return new TBlockWideMultiMapJoinWrapper<true, false>(ctx.Mutables,
@@ -551,8 +550,9 @@ IComputationNode* WrapBlockMapJoinCore(TCallable& callable, const TComputationNo
             std::move(leftKeyColumns), std::move(leftIOMap),
             static_cast<IComputationWideFlowNode*>(flow), dict);
     default:
-        MKQL_ENSURE(false, "BlockMapJoinCore doesn't support %s join type"
-                    << joinNames.at(joinKind));
+        // TODO: Display the human-readable join kind name.
+        MKQL_ENSURE(false, "BlockMapJoinCore doesn't support join type #"
+                    << static_cast<ui32>(joinKind));
     }
 }
 

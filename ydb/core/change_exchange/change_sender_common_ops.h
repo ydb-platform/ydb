@@ -70,6 +70,12 @@ public:
     virtual IActor* CreateSender(ui64 partitionId) const = 0;
 };
 
+class IChangeSenderIdentity {
+public:
+    virtual ~IChangeSenderIdentity() = default;
+    virtual TPathId GetChangeSenderIdentity() const = 0;
+};
+
 template <typename TChangeRecord>
 class TBaseChangeSender {
     using TIncompleteRecord = TEvChangeExchange::TEvRequestRecords::TRecordInfo;
@@ -277,6 +283,7 @@ class TBaseChangeSender {
 
         Y_ABORT_UNLESS(sender.Ready);
         sender.Ready = false;
+        ReadySenders--;
 
         sender.Pending.reserve(sender.Prepared.size());
         for (const auto& record : sender.Prepared) {
@@ -432,6 +439,7 @@ protected:
                 ActorOps->Send(sender.ActorId, new TEvents::TEvPoisonPill());
             }
         }
+        ReadySenders = 0;
     }
 
     void RemoveRecords() {
@@ -470,8 +478,8 @@ protected:
 
     void EnqueueRecords(TVector<TEvChangeExchange::TEvEnqueueRecords::TRecordInfo>&& records) {
         for (auto& record : records) {
-            Y_VERIFY_S(PathId == record.PathId, "Unexpected record's path id"
-                << ": expected# " << PathId
+            Y_VERIFY_S(Identity->GetChangeSenderIdentity() == record.PathId, "Unexpected record's path id"
+                << ": expected# " << Identity->GetChangeSenderIdentity()
                 << ", got# " << record.PathId);
             Enqueued.emplace(record.Order, record.BodySize);
         }
@@ -525,6 +533,7 @@ protected:
 
         auto& sender = it->second;
         sender.Ready = true;
+        ReadySenders++;
 
         if (sender.Pending) {
             RemoveRecords(std::exchange(sender.Pending, {}));
@@ -549,6 +558,9 @@ protected:
         }
 
         ReEnqueueRecords(it->second);
+        if (it->second.Ready) {
+            --ReadySenders;
+        }
         Senders.erase(it);
         GonePartitions.push_back(partitionId);
 
@@ -561,18 +573,22 @@ protected:
 
     explicit TBaseChangeSender(
         IActorOps* const actorOps,
+        IChangeSenderIdentity* const identity,
         IChangeSenderResolver* const resolver,
         ISenderFactory* const senderFactory,
-        const TActorId changeServer,
-        const TPathId& pathId)
+        const TActorId changeServer)
             : ActorOps(actorOps)
+            , Identity(identity)
             , Resolver(resolver)
             , SenderFactory(senderFactory)
             , ChangeServer(changeServer)
-            , PathId(pathId)
             , MemLimit(192_KB)
             , MemUsage(0)
     {}
+
+    bool IsAllSendersReady() {
+        return ReadySenders == Senders.size();
+    }
 
     void RenderHtmlPage(ui64 tabletId, NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx) {
         const auto& cgi = ev->Get()->Cgi();
@@ -585,7 +601,7 @@ protected:
                         ctx.Send(ev->Forward(to));
                     } else {
                         ActorOps->Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes(TStringBuilder()
-                            << "Change sender '" << PathId << ":" << partitionId << "' is not running"));
+                            << "Change sender '" << Identity->GetChangeSenderIdentity() << ":" << partitionId << "' is not running"));
                     }
                 } else {
                     ActorOps->Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPNOTFOUND));
@@ -635,7 +651,7 @@ protected:
                                     TABLED() { html << sender.Pending.size(); }
                                     TABLED() { html << sender.Prepared.size(); }
                                     TABLED() { html << sender.Broadcasting.size(); }
-                                    TABLED() { ActorLink(html, tabletId, PathId, partitionId); }
+                                    TABLED() { ActorLink(html, tabletId, Identity->GetChangeSenderIdentity(), partitionId); }
                                 }
                             }
                         }
@@ -763,19 +779,20 @@ protected:
 
 private:
     IActorOps* const ActorOps;
+    IChangeSenderIdentity* const Identity;
     IChangeSenderResolver* const Resolver;
     ISenderFactory* const SenderFactory;
     THolder<IChangeSenderPartitioner<TChangeRecord>> Partitioner;
 
 protected:
     TActorId ChangeServer;
-    const TPathId PathId;
 
 private:
     const ui64 MemLimit;
     ui64 MemUsage;
 
     THashMap<ui64, TSender> Senders; // ui64 is partition id
+    ui64 ReadySenders = 0;
     TSet<TEnqueuedRecord> Enqueued;
     TSet<TIncompleteRecord> PendingBody;
     TMap<ui64, typename TChangeRecord::TPtr> PendingSent; // ui64 is order

@@ -232,6 +232,8 @@ private:
         appConfig.MutableFeatureFlags()->SetEnableResourcePools(Settings_.EnableResourcePools_);
         appConfig.MutableFeatureFlags()->SetEnableResourcePoolsOnServerless(Settings_.EnableResourcePoolsOnServerless_);
         appConfig.MutableFeatureFlags()->SetEnableMetadataObjectsOnServerless(Settings_.EnableMetadataObjectsOnServerless_);
+        appConfig.MutableFeatureFlags()->SetEnableExternalDataSourcesOnServerless(Settings_.EnableExternalDataSourcesOnServerless_);
+        appConfig.MutableFeatureFlags()->SetEnableExternalDataSources(true);
         appConfig.MutableFeatureFlags()->SetEnableResourcePoolsCounters(true);
 
         return appConfig;
@@ -518,7 +520,7 @@ private:
         UNIT_ASSERT_C(settings.PoolId_, "Query pool id is not specified");
 
         auto event = std::make_unique<TEvKqp::TEvQueryRequest>();
-        event->Record.SetUserToken(NACLib::TUserToken("", settings.UserSID_, {}).SerializeAsString());
+        event->Record.SetUserToken(NACLib::TUserToken("", settings.UserSID_, settings.GroupSIDs_).SerializeAsString());
 
         auto request = event->Record.MutableRequest();
         request->SetQuery(query);

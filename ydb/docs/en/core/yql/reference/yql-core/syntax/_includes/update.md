@@ -4,9 +4,9 @@ Updates the data in the table.{% if feature_mapreduce %}  The table is searched 
 
 `UPDATE` can't change the value of the primary key columns.
 
-**Example**
+## Example
 
-```sql
+```yql
 UPDATE my_table
 SET Value1 = YQL::ToString(Value2 + 1), Value2 = Value2 - 1
 WHERE Key1 > 1;
@@ -18,9 +18,9 @@ Updates the data in the table based on the results of a subquery. The set of col
 
 The primary key value is used to search for the rows being updated. For each row found, the values of the non-key columns is replaced with the values returned in the corresponding row of the result of the subquery. The values of the table columns that are missing in the returned columns of the subquery remain unchanged.
 
-**Example**
+### Example
 
-```sql
+```yql
 $to_update = (
     SELECT Key, SubKey, "Updated" AS Value FROM my_table
     WHERE Key = 1

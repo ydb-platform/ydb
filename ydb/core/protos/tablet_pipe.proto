@@ -22,6 +22,7 @@ message TEvConnectResult {
     optional bool Leader = 5 [default = true];
     optional bool SupportsDataInPayload = 6;
     optional uint32 Generation = 7;
+    optional bytes VersionInfo = 8;
 };
 
 message TEvPush {

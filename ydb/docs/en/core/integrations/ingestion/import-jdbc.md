@@ -78,7 +78,7 @@ If the input table contains several rows with completely identical values, the d
 
 For each BLOB field in the source database, the import tool creates an additional {{ ydb-short-name }} target table (BLOB supplemental table) with the following schema:
 
-```sql
+```yql
 CREATE TABLE `blob_table`(
     `id` Int64,
     `pos` Int32,
@@ -96,7 +96,7 @@ This identifier is also stored in the "main" target table in a field that has th
 
 For PostgreSQL, working with the `EXTENSION lo` BLOBS may require extra permissions for the account used to connect to the data source. An alternative option is to enable the compatibility mode on the database level using the following statement:
 
-```sql
+```yql
 ALTER DATABASE dbname SET lo_compat_privileges TO on;
 ```
 

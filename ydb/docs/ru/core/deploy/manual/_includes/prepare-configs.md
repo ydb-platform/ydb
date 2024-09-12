@@ -7,10 +7,11 @@
     * [mirror-3dc-3nodes](https://github.com/ydb-platform/ydb/blob/stable-23-3//ydb/deploy/yaml_config_examples/mirror-3dc-3-nodes.yaml) - для cross-DC кластера из 3 нод.
 
 1. В секции `host_configs` укажите все диски и их тип на каждой из нод кластера. Возможные варианты типов дисков:
+
     * ROT: rotational, HDD диски.
     * SSD: SSD или NVMe диски.
 
-    ```json
+    ```yaml
     host_configs:
     - drive:
       - path: /dev/disk/by-partlabel/ydb_disk_ssd_01
@@ -20,7 +21,7 @@
 
 1. В секции `hosts` укажите FQDN всех нод, их конфигурацию и расположение по датацентрам (`data_center`) и стойкам (`rack`):
 
-    ```json
+    ```yaml
     hosts:
     - host: node1.ydb.tech
       host_config_id: 1
@@ -51,7 +52,7 @@
 
     Если вы планируете использовать в кластере {{ ydb-short-name }} возможности аутентификации и разграничения доступа пользователей, добавьте в секцию `domains_config` следующие дополнительные параметры:
 
-    ```json
+    ```yaml
     domains_config:
       security_config:
         enforce_user_token_requirement: true

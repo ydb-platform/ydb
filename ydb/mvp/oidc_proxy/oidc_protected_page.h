@@ -229,7 +229,20 @@ private:
     TString GetFixedLocationHeader(TStringBuf location) {
         TStringBuf scheme, host, uri;
         NHttp::CrackURL(ProtectedPageUrl, scheme, host, uri);
-        return TStringBuilder() << '/' << host << location;
+        if (location.StartsWith("//")) {
+            return TStringBuilder() << '/' << (scheme.empty() ? "" : TString(scheme) + "://") << location.SubStr(2);
+        } else if (location.StartsWith('/')) {
+            return TStringBuilder() << '/'
+                                    << (scheme.empty() ? "" : TString(scheme) + "://")
+                                    << host << location;
+        } else {
+            TStringBuf locScheme, locHost, locUri;
+            NHttp::CrackURL(location, locScheme, locHost, locUri);
+            if (!locScheme.empty()) {
+                return TStringBuilder() << '/' << location;
+            }
+        }
+        return TString(location);
     }
 
     NHttp::THttpOutgoingResponsePtr CreateResponseForbiddenHost() {

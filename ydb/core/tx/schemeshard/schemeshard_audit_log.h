@@ -20,6 +20,10 @@ class TEvCreateImportRequest;
 class TEvCreateImportResponse;
 }
 
+namespace NHttp {
+class THttpIncomingRequest;
+}
+
 namespace NKikimr::NSchemeShard {
 
 class TSchemeShard;
@@ -36,4 +40,6 @@ void AuditLogImportStart(const NKikimrImport::TEvCreateImportRequest& request, c
 void AuditLogImportEnd(const TImportInfo& importInfo, TSchemeShard* SS);
 
 void AuditLogLogin(const NKikimrScheme::TEvLogin& request, const NKikimrScheme::TEvLoginResult& response, TSchemeShard* SS);
+void AuditLogWebUILogout(const NHttp::THttpIncomingRequest& request, const TString& userSID);
+
 }

@@ -135,6 +135,10 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     ServerSettings->SetEnablePgSyntax(true);
     ServerSettings->S3ActorsFactory = settings.S3ActorsFactory;
 
+    if (!settings.FeatureFlags.HasEnableOlapCompression()) {
+        ServerSettings->SetEnableOlapCompression(true);
+    }
+
     if (settings.Storage) {
         ServerSettings->SetCustomDiskParams(*settings.Storage);
         ServerSettings->SetEnableMockOnSingleNode(false);

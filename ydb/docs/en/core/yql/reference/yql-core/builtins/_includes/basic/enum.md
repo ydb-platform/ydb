@@ -7,7 +7,7 @@ Arguments:
 * A string with the field name
 * Enumeration type
 
-**Example**
+### Example
 
 ```yql
 $enum_type = Enum<Foo, Bar>;
@@ -22,7 +22,7 @@ Arguments:
 
 * A string with the name of an enumeration item
 
-**Example**
+### Example
 
 ```yql
 SELECT

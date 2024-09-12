@@ -42,7 +42,7 @@ Table of comparison of Liquibase types descriptions with [{{ ydb-short-name }} t
 
 {% note warning %}
 
-In YDB, the `Timestamp` data type stores dates with microsecond precision. The `java.sql.Timestamp` or `java.time.Instant` store timestamps with nanosecond precision, so you should be aware of this when using these data types.
+In {{ ydb-short-name }}, the `Timestamp` data type stores dates with microsecond precision. The `java.sql.Timestamp` or `java.time.Instant` store timestamps with nanosecond precision, so you should be aware of this when using these data types.
 
 The type names are case insensitive.
 
@@ -145,7 +145,7 @@ The `dropTable` changeset - delete a table. For example: `<dropTable tableName="
 
 {% note warning %}
 
-YDB doesn't support unique secondary indexes.
+{{ ydb-short-name }} doesn't support unique secondary indexes.
 
 {% endnote %}
 
@@ -283,7 +283,7 @@ You can also specify any value in the `value` field. Data from the `value` field
 
 The type formatting table to load into the table:
 
-| YDB type                                | Description format                                                                                                                                                                                                                               |
+| {{ ydb-short-name }} type                                | Description format                                                                                                                                                                                                                               |
 |-----------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `Bool`                                  | `true` or `false`                                                                                                                                                                                                                                |
 | `Int8`, `Int16`, `Int32`, `Int64`       | A signed integer                                                                                                                                                                                                                                 |
@@ -392,7 +392,7 @@ Let's apply this changeset to an empty database:
 
 After executing the `liquibase update` command, Liquibase will print the following log:
 
-```bash
+```text
 UPDATE SUMMARY
 Run:                          2
 Previously run:               0
@@ -419,9 +419,9 @@ Example contents of the `DATABASECHANGELOG` table:
 
 ### Database schema evolution
 
-Let's say we need to create a {{ydb-short-name }} topic and turn off the param `AUTO_PARTITIONING_BY_SIZE` of the table. This can be done with a native SQL script:
+Let's say we need to create a {{ ydb-short-name }} topic and turn off the param `AUTO_PARTITIONING_BY_SIZE` of the table. This can be done with a native SQL script:
 
-```sql
+```yql
 --liquibase formatted sql
 
 --changeset kurdyukov-kir:create-a-topic
@@ -453,7 +453,7 @@ Also, let's add a new column `is_deleted` and remove the `index_episodes_title` 
 
 After executing `liquibase update`, the database schema will be successfully updated with all of these changes:
 
-```bash
+```text
 UPDATE SUMMARY
 Run:                          3
 Previously run:               2

@@ -14,9 +14,9 @@ Instead of using `DELETE FROM` to remove data from columnar tables, you can use 
 
 Deletes rows that match the `WHERE` clause, from the table.{% if feature_mapreduce %}  The table is searched by name in the database specified by the [USE](../use.md) operator.{% endif %}
 
-**Example**
+## Example
 
-```sql
+```yql
 DELETE FROM my_table
 WHERE Key1 == 1 AND Key2 >= "One";
 ```
@@ -27,9 +27,9 @@ Deletes rows based on the results of a subquery. The set of columns returned by 
 
 The primary key value is used to search for rows to be deleted from the table. The presence of other (non-key) columns of the table in the output of the subquery does not affect the results of the deletion operation.
 
-**Example**
+### Example
 
-```sql
+```yql
 $to_delete = (
     SELECT Key, SubKey FROM my_table WHERE Value = "ToDelete" LIMIT 100
 );

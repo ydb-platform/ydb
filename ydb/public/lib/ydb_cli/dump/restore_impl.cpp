@@ -45,66 +45,37 @@ TTableDescription TableDescriptionFromProto(const Ydb::Table::CreateTableRequest
     return TProtoAccessor::FromProto(proto);
 }
 
+TTableDescription TableDescriptionWithoutIndexesFromProto(Ydb::Table::CreateTableRequest proto) {
+    proto.clear_indexes();
+    return TableDescriptionFromProto(proto);
+}
+
 Ydb::Scheme::ModifyPermissionsRequest ReadPermissions(const TString& fsPath) {
     Ydb::Scheme::ModifyPermissionsRequest proto;
     Y_ENSURE(google::protobuf::TextFormat::ParseFromString(TFileInput(fsPath).ReadAll(), &proto));
     return proto;
 }
 
-bool HasRunningIndexBuilds(TOperationClient& client, const TString& dbPath) {
-    const ui64 pageSize = 100;
-    TString pageToken;
-
-    do {
-        const ui32 maxRetries = 8;
-        TDuration retrySleep = TDuration::MilliSeconds(100);
-
-        for (ui32 retryNumber = 0; retryNumber <= maxRetries; ++retryNumber) {
-            auto operations = client.List<TBuildIndexOperation>(pageSize, pageToken).GetValueSync();
-
-            if (!operations.IsSuccess()) {
-                if (retryNumber == maxRetries) {
-                    Y_ENSURE(false, "Cannot list operations");
-                }
-
-                switch (operations.GetStatus()) {
-                case EStatus::ABORTED:
-                    break;
+TStatus WaitForIndexBuild(TOperationClient& client, const TOperation::TOperationId& id) {
+    TDuration retrySleep = TDuration::MilliSeconds(100);
+    while (true) {
+        auto operation = client.Get<TBuildIndexOperation>(id).GetValueSync();
+        if (!operation.Status().IsTransportError()) {
+            switch (operation.Status().GetStatus()) {
                 case EStatus::OVERLOADED:
-                case EStatus::CLIENT_RESOURCE_EXHAUSTED:
                 case EStatus::UNAVAILABLE:
-                case EStatus::TRANSPORT_UNAVAILABLE:
-                    NConsoleClient::ExponentialBackoff(retrySleep);
-                    break;
+                case EStatus::STATUS_UNDEFINED:
+                    break; // retry
                 default:
-                    Y_ENSURE(false, "Unexpected status while trying to list operations: " << operations.GetStatus());
-                }
-
-                continue;
-            }
-
-            for (const auto& operation : operations.GetList()) {
-                if (operation.Metadata().Path != dbPath) {
-                    continue;
-                }
-
-                switch (operation.Metadata().State) {
-                case EBuildIndexState::Preparing:
-                case EBuildIndexState::TransferData:
-                case EBuildIndexState::Applying:
-                case EBuildIndexState::Cancellation:
-                case EBuildIndexState::Rejection:
-                    return true;
-                default:
-                    break;
-                }
-            }
-
-            pageToken = operations.NextPageToken();
+                    return operation.Status();
+            }         
         }
-    } while (pageToken != "0");
+        NConsoleClient::ExponentialBackoff(retrySleep, TDuration::Minutes(1));
+    }
+}
 
-    return false;
+bool IsOperationStarted(TStatus operationStatus) {
+    return operationStatus.IsSuccess() || operationStatus.GetStatus() == EStatus::STATUS_UNDEFINED;
 }
 
 } // anonymous
@@ -255,15 +226,25 @@ TRestoreResult TRestoreClient::RestoreTable(const TFsPath& fsPath, const TString
     auto scheme = ReadTableScheme(fsPath.Child(SCHEME_FILE_NAME));
     auto dumpedDesc = TableDescriptionFromProto(scheme);
 
+    if (dumpedDesc.GetAttributes().contains(DOC_API_TABLE_VERSION_ATTR) && settings.SkipDocumentTables_) {
+        return Result<TRestoreResult>();
+    }
+
     if (settings.DryRun_) {
         return CheckSchema(dbPath, dumpedDesc);
     }
 
-    if (settings.RestoreData_) {
-        auto woIndexes = scheme;
-        woIndexes.clear_indexes();
+    auto withoutIndexesDesc = TableDescriptionWithoutIndexesFromProto(scheme);
+    auto createResult = TableClient.RetryOperationSync([&dbPath, &withoutIndexesDesc](TSession session) {
+        return session.CreateTable(dbPath, TTableDescription(withoutIndexesDesc),
+            TCreateTableSettings().RequestType(DOC_API_REQUEST_TYPE)).GetValueSync();
+    });
+    if (!createResult.IsSuccess()) {
+        return Result<TRestoreResult>(dbPath, std::move(createResult));
+    }
 
-        auto result = RestoreData(fsPath, dbPath, settings, TableDescriptionFromProto(woIndexes));
+    if (settings.RestoreData_) {
+        auto result = RestoreData(fsPath, dbPath, settings, withoutIndexesDesc);
         if (!result.IsSuccess()) {
             return result;
         }
@@ -337,18 +318,6 @@ struct TWriterWaiter {
 };
 
 TRestoreResult TRestoreClient::RestoreData(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings, const TTableDescription& desc) {
-    if (desc.GetAttributes().contains(DOC_API_TABLE_VERSION_ATTR) && settings.SkipDocumentTables_) {
-        return Result<TRestoreResult>();
-    }
-
-    auto createResult = TableClient.RetryOperationSync([&dbPath, &desc](TSession session) {
-        return session.CreateTable(dbPath, TTableDescription(desc),
-            TCreateTableSettings().RequestType(DOC_API_REQUEST_TYPE)).GetValueSync();
-    });
-    if (!createResult.IsSuccess()) {
-        return Result<TRestoreResult>(dbPath, std::move(createResult));
-    }
-
     THolder<NPrivate::IDataAccumulator> accumulator;
     THolder<NPrivate::IDataWriter> writer;
 
@@ -416,36 +385,40 @@ TRestoreResult TRestoreClient::RestoreData(const TFsPath& fsPath, const TString&
 
 TRestoreResult TRestoreClient::RestoreIndexes(const TString& dbPath, const TTableDescription& desc) {
     TMaybe<TTableDescription> actualDesc;
+    auto descResult = DescribeTable(TableClient, dbPath, actualDesc);
+    if (!descResult.IsSuccess()) {
+        return Result<TRestoreResult>(dbPath, std::move(descResult));
+    }
 
     for (const auto& index : desc.GetIndexDescriptions()) {
-        // check (and wait) for unuexpected index buils
-        while (HasRunningIndexBuilds(OperationClient, dbPath)) {
-            actualDesc.Clear();
-            Sleep(TDuration::Minutes(1));
-        }
-
-        if (!actualDesc) {
-            auto descResult = DescribeTable(TableClient, dbPath, actualDesc);
-            if (!descResult.IsSuccess()) {
-                return Result<TRestoreResult>(dbPath, std::move(descResult));
-            }
-        }
-
         if (FindPtr(actualDesc->GetIndexDescriptions(), index)) {
             continue;
         }
 
-        auto status = TableClient.RetryOperationSync([&dbPath, &index](TSession session) {
+        TOperation::TOperationId buildIndexId;
+        auto buildIndexStatus = TableClient.RetryOperationSync([&, &outId = buildIndexId](TSession session) {
             auto settings = TAlterTableSettings().AppendAddIndexes(index);
-            return session.AlterTableLong(dbPath, settings).GetValueSync().Status();
+            auto result = session.AlterTableLong(dbPath, settings).GetValueSync();
+            if (IsOperationStarted(result.Status())) {
+                outId = result.Id();
+            }
+            return result.Status();
         });
-        if (!status.IsSuccess() && status.GetStatus() != EStatus::STATUS_UNDEFINED) {
-            return Result<TRestoreResult>(dbPath, std::move(status));
+
+        if (!IsOperationStarted(buildIndexStatus)) {
+            return Result<TRestoreResult>(dbPath, std::move(buildIndexStatus));
         }
 
-        // wait for expected index build
-        while (HasRunningIndexBuilds(OperationClient, dbPath)) {
-            Sleep(TDuration::Minutes(1));
+        auto waitForIndexBuildStatus = WaitForIndexBuild(OperationClient, buildIndexId);
+        if (!waitForIndexBuildStatus.IsSuccess()) {
+            return Result<TRestoreResult>(dbPath, std::move(waitForIndexBuildStatus));
+        }
+
+        auto forgetStatus = NConsoleClient::RetryFunction([&]() {
+            return OperationClient.Forget(buildIndexId).GetValueSync();
+        });
+        if (!forgetStatus.IsSuccess()) {
+            return Result<TRestoreResult>(dbPath, std::move(forgetStatus));
         }
     }
 

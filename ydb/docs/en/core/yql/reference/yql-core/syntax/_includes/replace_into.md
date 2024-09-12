@@ -8,11 +8,11 @@ Unlike [`INSERT INTO`](../insert_into.md) and [`UPDATE`](../update.md), the quer
 
 {% endnote %}
 
+## Examples
+
 * Setting values for `REPLACE INTO` using `VALUES`.
 
-  **Example**
-
-  ```sql
+  ```yql
   REPLACE INTO my_table (Key1, Key2, Value2) VALUES
       (1u, "One", 101),
       (2u, "Two", 102);
@@ -21,9 +21,7 @@ Unlike [`INSERT INTO`](../insert_into.md) and [`UPDATE`](../update.md), the quer
 
 * Fetching values for `REPLACE INTO` using a `SELECT`.
 
-  **Example**
-
-  ```sql
+  ```yql
   REPLACE INTO my_table
   SELECT Key AS Key1, "Empty" AS Key2, Value AS Value1
   FROM my_table1;

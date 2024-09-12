@@ -28,14 +28,26 @@ class TS3FIFOGhostPageQueue {
     };
 
     struct TGhostPageHash {
+        using is_transparent = void;
+
         inline size_t operator()(const TGhostPage* ghost) const {
             return ghost->Key.GetHash();
+        }
+
+        inline size_t operator()(const TPageKey& key) const {
+            return key.GetHash();
         }
     };
 
     struct TGhostPageEqual {
+        using is_transparent = void;
+
         inline bool operator()(const TGhostPage* left, const TGhostPage* right) const {
             return left->Key == right->Key;
+        }
+
+        inline bool operator()(const TGhostPage* left, const TPageKey& right) const {
+            return left->Key == right;
         }
     };
 
@@ -63,8 +75,7 @@ public:
     }
 
     bool Erase(const TPageKey& key, ui64 size) {
-        TGhostPage key_(key, size);
-        if (auto it = GhostsSet.find(&key_); it != GhostsSet.end()) {
+        if (auto it = GhostsSet.find(key); it != GhostsSet.end()) {
             TGhostPage* ghost = *it;
             Y_DEBUG_ABORT_UNLESS(ghost->Size == size);
             Y_ABORT_UNLESS(Size >= ghost->Size);
@@ -116,6 +127,7 @@ private:
 
     ui64 Limit;
     ui64 Size = 0;
+    // TODO: store ghost withing PageMap
     THashSet<TGhostPage*, TGhostPageHash, TGhostPageEqual> GhostsSet;
     TDeque<TGhostPage> GhostsQueue;
 };

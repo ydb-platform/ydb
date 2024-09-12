@@ -77,7 +77,7 @@ NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(const NHttp::THttpInc
     TContext context(request);
     TString state;
     NHttp::THeadersBuilder responseHeaders;
-    state = context.CreateStateContainer(settings.ClientSecret, TString(request->Host));
+    // state = context.CreateStateContainer(settings.ClientSecret, TString(request->Host));
     // Cerr << "+++New state: " << state << Endl;
     // Cerr << "+++decoded sate: " << Base64DecodeUneven(state) << Endl;
     // Cerr << "+++decoded sate: " << HexDecode(state) << Endl;

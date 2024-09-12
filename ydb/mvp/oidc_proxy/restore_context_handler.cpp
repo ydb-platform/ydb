@@ -60,7 +60,7 @@ void TRestoreContextImpl::Bootstrap(const NActors::TActorContext& ctx) {
         TContext context = restoreContextResult.second.GetContext();
         TStringBuilder body;
         body << "{\"requested_address\":\"" << context.GetRequestedAddress() << "\","
-                 "\"is_ajax_request\":\"" << context.GetIsAjaxRequest() << "\","
+                 "\"is_ajax_request\":" << (context.GetIsAjaxRequest() ? "true" : "false") << ","
                  "\"expiration_time\":" << ToString(restoreContextResult.second.GetExpirationTime().TimeT()) << "}";
         response = Request->CreateResponseOK(body, "application/json; charset=utf-8");
 

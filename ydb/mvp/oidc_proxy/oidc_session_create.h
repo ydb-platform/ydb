@@ -42,8 +42,8 @@ public:
 
 protected:
     TString ChangeSameSiteFieldInSessionCookie(const TString& cookie);
-    void RetryRequestToProtectedResource(const NActors::TActorContext& ctx, const TString& responseMessage = "Found") const;
-    void RetryRequestToProtectedResource(NHttp::THeadersBuilder* responseHeaders, const NActors::TActorContext& ctx, const TString& responseMessage = "Found") const;
+    void RetryRequestToProtectedResourceAndDie(const NActors::TActorContext& ctx, const TString& responseMessage = "Found");
+    void RetryRequestToProtectedResourceAndDie(NHttp::THeadersBuilder* responseHeaders, const NActors::TActorContext& ctx, const TString& responseMessage = "Found");
 
 private:
     STFUNC(StateWork) {
@@ -58,7 +58,7 @@ private:
 
     void HandleRestoreContext(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event, const NActors::TActorContext& ctx);
 
-    NHttp::THttpOutgoingResponsePtr GetUnknownErrorResponse();
+    void SendUnknownErrorResponseAndDie(const NActors::TActorContext& ctx);
 };
 
 }  // NOIDC

@@ -8,6 +8,7 @@
 #include <ydb/mvp/core/mvp_test_runtime.h>
 #include "oidc_protected_page_handler.h"
 #include "oidc_session_create_handler.h"
+#include "restore_context_handler.h"
 #include "oidc_settings.h"
 #include "openid_connect.h"
 #include "context.h"
@@ -484,6 +485,7 @@ Y_UNIT_TEST_SUITE(OidcProxyTests) {
         virtual TString GetRedirectUrl(NHttp::TEvHttpProxy::TEvHttpOutgoingResponse* outgoingResponseEv) = 0;
         virtual void CheckRedirectStatus(NHttp::TEvHttpProxy::TEvHttpOutgoingResponse* outgoingResponseEv) = 0;
         virtual void CheckLocationHeader(const TStringBuf& location, const TString& host, const TString& url) = 0;
+        virtual void CheckRequestedAddress(const TStringBuf& body, const TString& host, const TString& url) = 0;
         virtual TString GetUrlFromLocationHeader(const TStringBuf& location) = 0;
         virtual void CheckSpecificHeaders(const NHttp::THeaders&) {}
         virtual bool IsAjaxRequest() const {
@@ -512,6 +514,11 @@ Y_UNIT_TEST_SUITE(OidcProxyTests) {
         void CheckLocationHeader(const TStringBuf& location, const TString& host, const TString& url) override {
             Y_UNUSED(host);
             UNIT_ASSERT_STRINGS_EQUAL(location, url);
+        }
+
+        virtual void CheckRequestedAddress(const TStringBuf& body, const TString& host, const TString& url) override {
+            Y_UNUSED(host);
+            UNIT_ASSERT_STRING_CONTAINS(body, "\"requested_address\":\"" + url + "\"");
         }
 
         TString GetUrlFromLocationHeader(const TStringBuf& location) override {
@@ -556,6 +563,10 @@ Y_UNIT_TEST_SUITE(OidcProxyTests) {
             UNIT_ASSERT_STRINGS_EQUAL(location, "https://" + host + url);
         }
 
+        virtual void CheckRequestedAddress(const TStringBuf& body, const TString& host, const TString& url) override {
+            UNIT_ASSERT_STRING_CONTAINS(body, "\"requested_address\":\"https://" + host + url + "\"");
+        }
+
         TString GetUrlFromLocationHeader(const TStringBuf& location) override {
             TStringBuf scheme, host, url;
             NHttp::CrackURL(location, scheme, host, url);
@@ -586,7 +597,7 @@ Y_UNIT_TEST_SUITE(OidcProxyTests) {
         }
     };
 
-    void FullAuthorizationFlow(TRedirectStrategyBase& redirectStrategy) {
+    void FullAuthorizationFlow(TRedirectStrategyBase& redirectStrategy, bool storeContextOnHost = true) {
         TPortManager tp;
         ui16 sessionServicePort = tp.GetPort(8655);
         TMvpTestRuntime runtime;
@@ -599,7 +610,8 @@ Y_UNIT_TEST_SUITE(OidcProxyTests) {
             .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
             .AuthorizationServerAddress = "https://auth.test.net",
             .ClientSecret = "0123456789abcdef",
-            .AllowedProxyHosts = {allowedProxyHost}
+            .AllowedProxyHosts = {allowedProxyHost},
+            .StoreContextOnHost = storeContextOnHost
         };
 
         TContextStorage contextStorage;
@@ -640,9 +652,14 @@ Y_UNIT_TEST_SUITE(OidcProxyTests) {
         const TString state = urlParameters["state"];
 
         const NHttp::THeaders headers(outgoingResponseEv->Response->Headers);
-        UNIT_ASSERT(headers.Has("Set-Cookie"));
-        TStringBuf setCookie = headers.Get("Set-Cookie");
-        UNIT_ASSERT_STRING_CONTAINS(setCookie, CreateNameYdbOidcCookie(settings.ClientSecret, state));
+        TStringBuf setCookie;
+        if (storeContextOnHost) {
+            UNIT_ASSERT(!headers.Has("Set-Cookie"));
+        } else {
+            UNIT_ASSERT(headers.Has("Set-Cookie"));
+            setCookie = headers.Get("Set-Cookie");
+            UNIT_ASSERT_STRING_CONTAINS(setCookie, CreateNameYdbOidcCookie(settings.ClientSecret, state));
+        }
         redirectStrategy.CheckSpecificHeaders(headers);
 
         const NActors::TActorId sessionCreator = runtime.Register(new TSessionCreateHandler(edge, settings, &contextStorage));
@@ -650,7 +667,9 @@ Y_UNIT_TEST_SUITE(OidcProxyTests) {
         TStringBuilder request;
         request << "GET /auth/callback?code=code_template&state=" << state << " HTTP/1.1\r\n";
         request << "Host: " + hostProxy + "\r\n";
-        request << "Cookie: " << setCookie.NextTok(";") << "\r\n";
+        if (!storeContextOnHost) {
+            request << "Cookie: " << setCookie.NextTok(";") << "\r\n";
+        }
         EatWholeString(incomingRequest, redirectStrategy.CreateRequest(request));
         runtime.Send(new IEventHandle(sessionCreator, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(incomingRequest)));
 
@@ -701,15 +720,25 @@ Y_UNIT_TEST_SUITE(OidcProxyTests) {
 
     Y_UNIT_TEST(FullAuthorizationFlow) {
         TRedirectStrategy redirectStrategy;
-        FullAuthorizationFlow(redirectStrategy);
+        FullAuthorizationFlow(redirectStrategy, false);
     }
 
     Y_UNIT_TEST(FullAuthorizationFlowAjax) {
         TAjaxRedirectStrategy redirectStrategy;
+        FullAuthorizationFlow(redirectStrategy, false);
+    }
+
+    Y_UNIT_TEST(FullAuthorizationFlowWithSaveContextOnHost) {
+        TRedirectStrategy redirectStrategy;
         FullAuthorizationFlow(redirectStrategy);
     }
 
-    void WrongStateAuthorizationFlow(TRedirectStrategyBase& redirectStrategy) {
+    Y_UNIT_TEST(FullAuthorizationFlowAjaxWithSaveContextOnHost) {
+        TAjaxRedirectStrategy redirectStrategy;
+        FullAuthorizationFlow(redirectStrategy);
+    }
+
+    void WrongStateAuthorizationFlow(TRedirectStrategyBase& redirectStrategy, bool storeContextOnHost = true) {
         TPortManager tp;
         ui16 sessionServicePort = tp.GetPort(8655);
         TMvpTestRuntime runtime;
@@ -719,7 +748,8 @@ Y_UNIT_TEST_SUITE(OidcProxyTests) {
             .ClientId = "client_id",
             .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
             .AuthorizationServerAddress = "https://auth.test.net",
-            .ClientSecret = "0123456789abcdef"
+            .ClientSecret = "0123456789abcdef",
+            .StoreContextOnHost = storeContextOnHost
         };
 
         TContextStorage contextStorage;
@@ -733,14 +763,16 @@ Y_UNIT_TEST_SUITE(OidcProxyTests) {
         std::unique_ptr<grpc::Server> sessionServer(builder.BuildAndStart());
 
         const NActors::TActorId sessionCreator = runtime.Register(new TSessionCreateHandler(edge, settings, &contextStorage));
-        const TString state = "test_state";
         const TString wrongState = "wrong_state";
         const TString hostProxy = "oidcproxy.net";
         TStringBuilder request;
-        request << "GET /auth/callback?code=code_template&state=" << state << " HTTP/1.1\r\n";
+        request << "GET /auth/callback?code=code_template&state=" << wrongState << " HTTP/1.1\r\n";
         request << "Host: " + hostProxy + "\r\n";
-        TContext context(wrongState, "/requested/page", redirectStrategy.IsAjaxRequest());
-        request << "Cookie: " << context.CreateYdbOidcCookie(settings.ClientSecret) << "\r\n";
+        if (!storeContextOnHost) {
+            const TString state = "test_state";
+            TContext context(state, "/requested/page", redirectStrategy.IsAjaxRequest());
+            request << "Cookie: " << context.CreateYdbOidcCookie(settings.ClientSecret) << "\r\n";
+        }
         NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
         EatWholeString(incomingRequest, redirectStrategy.CreateRequest(request));
         incomingRequest->Endpoint->Secure = true;
@@ -755,15 +787,25 @@ Y_UNIT_TEST_SUITE(OidcProxyTests) {
 
     Y_UNIT_TEST(WrongStateAuthorizationFlow) {
         TRedirectStrategy redirectStrategy;
-        WrongStateAuthorizationFlow(redirectStrategy);
+        WrongStateAuthorizationFlow(redirectStrategy, false);
     }
 
     Y_UNIT_TEST(WrongStateAuthorizationFlowAjax) {
         TAjaxRedirectStrategy redirectStrategy;
+        WrongStateAuthorizationFlow(redirectStrategy, false);
+    }
+
+    Y_UNIT_TEST(WrongStateAuthorizationFlowWithSaveContextOnHost) {
+        TRedirectStrategy redirectStrategy;
         WrongStateAuthorizationFlow(redirectStrategy);
     }
 
-    Y_UNIT_TEST(SessionServiceCreateAuthorizationFail) {
+    Y_UNIT_TEST(WrongStateAuthorizationFlowAjaxWithSaveContextOnHost) {
+        TAjaxRedirectStrategy redirectStrategy;
+        WrongStateAuthorizationFlow(redirectStrategy);
+    }
+
+    void SessionServiceCreateAuthorizationFail(bool storeContextOnHost = true) {
         TPortManager tp;
         ui16 sessionServicePort = tp.GetPort(8655);
         TMvpTestRuntime runtime;
@@ -772,7 +814,8 @@ Y_UNIT_TEST_SUITE(OidcProxyTests) {
         TOpenIdConnectSettings settings {
             .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
             .AuthorizationServerAddress = "https://auth.test.net",
-            .ClientSecret = "123456789abcdef"
+            .ClientSecret = "123456789abcdef",
+            .StoreContextOnHost = storeContextOnHost
         };
 
         TContextStorage contextStorage;
@@ -786,12 +829,17 @@ Y_UNIT_TEST_SUITE(OidcProxyTests) {
         builder.AddListeningPort(settings.SessionServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&sessionServiceMock);
         std::unique_ptr<grpc::Server> sessionServer(builder.BuildAndStart());
 
-        const TString state = "test_state";
+        TContext context("test_state", "/requested/page", false);
+        if (storeContextOnHost) {
+            contextStorage.Write(context);
+        }
+        const TString stateParam = (storeContextOnHost ? context.CreateStateContainer(settings.ClientSecret, "localhost") : context.GetState());
         TStringBuilder request;
-        request << "GET /auth/callback?code=code_template&state=" << state << " HTTP/1.1\r\n";
+        request << "GET /auth/callback?code=code_template&state=" << stateParam << " HTTP/1.1\r\n";
         request << "Host: oidcproxy.net\r\n";
-        TContext context(state, "/requested/page", false);
-        request << "Cookie: " << context.CreateYdbOidcCookie(settings.ClientSecret) << "\r\n\r\n";
+        if (!storeContextOnHost) {
+            request << "Cookie: " << context.CreateYdbOidcCookie(settings.ClientSecret) << "\r\n\r\n";
+        }
         NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
         EatWholeString(incomingRequest, request);
         runtime.Send(new IEventHandle(sessionCreator, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(incomingRequest)));
@@ -814,7 +862,15 @@ Y_UNIT_TEST_SUITE(OidcProxyTests) {
         UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Message, "Authorization IAM token are invalid or may have expired");
     }
 
-    void SessionServiceCreateAccessTokenInvalid(TRedirectStrategyBase& redirectStrategy) {
+    Y_UNIT_TEST(SessionServiceCreateAuthorizationFail) {
+        SessionServiceCreateAuthorizationFail(false);
+    }
+
+    Y_UNIT_TEST(SessionServiceCreateAuthorizationFailWithSaveContextOnHost) {
+        SessionServiceCreateAuthorizationFail(true);
+    }
+
+    void SessionServiceCreateAccessTokenInvalid(TRedirectStrategyBase& redirectStrategy, bool storeContextOnHost) {
         TPortManager tp;
         ui16 sessionServicePort = tp.GetPort(8655);
         TMvpTestRuntime runtime;
@@ -824,7 +880,8 @@ Y_UNIT_TEST_SUITE(OidcProxyTests) {
             .ClientId = "client_id",
             .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
             .AuthorizationServerAddress = "https://auth.test.net",
-            .ClientSecret = "123456789abcdef"
+            .ClientSecret = "123456789abcdef",
+            .StoreContextOnHost = storeContextOnHost
         };
 
         TContextStorage contextStorage;
@@ -838,12 +895,17 @@ Y_UNIT_TEST_SUITE(OidcProxyTests) {
         std::unique_ptr<grpc::Server> sessionServer(builder.BuildAndStart());
 
         const NActors::TActorId sessionCreator = runtime.Register(new TSessionCreateHandler(edge, settings, &contextStorage));
-        const TString state = "test_state";
+        TContext context("test_state", "/requested/page", redirectStrategy.IsAjaxRequest());
+        if (storeContextOnHost) {
+            contextStorage.Write(context);
+        }
+        const TString stateParam = (storeContextOnHost ? context.CreateStateContainer(settings.ClientSecret, "localhost") : context.GetState());
         TStringBuilder request;
-        request << "GET /auth/callback?code=code_template&state=" << state << " HTTP/1.1\r\n";
+        request << "GET /auth/callback?code=code_template&state=" << stateParam << " HTTP/1.1\r\n";
         request << "Host: oidcproxy.net\r\n";
-        TContext context(state, "/requested/page", redirectStrategy.IsAjaxRequest());
-        request << "Cookie: " << context.CreateYdbOidcCookie(settings.ClientSecret) << "\r\n";
+        if (!storeContextOnHost) {
+            request << "Cookie: " << context.CreateYdbOidcCookie(settings.ClientSecret) << "\r\n";
+        }
         NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
         EatWholeString(incomingRequest, redirectStrategy.CreateRequest(request));
         incomingRequest->Endpoint->Secure = true;
@@ -872,15 +934,25 @@ Y_UNIT_TEST_SUITE(OidcProxyTests) {
 
     Y_UNIT_TEST(SessionServiceCreateAccessTokenInvalid) {
         TRedirectStrategy redirectStrategy;
-        SessionServiceCreateAccessTokenInvalid(redirectStrategy);
+        SessionServiceCreateAccessTokenInvalid(redirectStrategy, false);
     }
 
     Y_UNIT_TEST(SessionServiceCreateAccessTokenInvalidAjax) {
         TAjaxRedirectStrategy redirectStrategy;
-        SessionServiceCreateAccessTokenInvalid(redirectStrategy);
+        SessionServiceCreateAccessTokenInvalid(redirectStrategy, false);
     }
 
-    Y_UNIT_TEST(SessionServiceCreateOpenIdScopeMissed) {
+    Y_UNIT_TEST(SessionServiceCreateAccessTokenInvalidWithSaveContextOnHost) {
+        TRedirectStrategy redirectStrategy;
+        SessionServiceCreateAccessTokenInvalid(redirectStrategy, true);
+    }
+
+    Y_UNIT_TEST(SessionServiceCreateAccessTokenInvalidAjaxWithSaveContextOnHost) {
+        TAjaxRedirectStrategy redirectStrategy;
+        SessionServiceCreateAccessTokenInvalid(redirectStrategy, true);
+    }
+
+    void SessionServiceCreateOpenIdScopeMissed(bool storeContextOnHost) {
         TPortManager tp;
         ui16 sessionServicePort = tp.GetPort(8655);
         TMvpTestRuntime runtime;
@@ -889,7 +961,8 @@ Y_UNIT_TEST_SUITE(OidcProxyTests) {
         TOpenIdConnectSettings settings {
             .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
             .AuthorizationServerAddress = "https://auth.test.net",
-            .ClientSecret = "123456789abcdef"
+            .ClientSecret = "123456789abcdef",
+            .StoreContextOnHost = storeContextOnHost
         };
 
         TContextStorage contextStorage;
@@ -903,12 +976,18 @@ Y_UNIT_TEST_SUITE(OidcProxyTests) {
         builder.AddListeningPort(settings.SessionServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&sessionServiceMock);
         std::unique_ptr<grpc::Server> sessionServer(builder.BuildAndStart());
 
-        const TString state = "test_state";
+
+        TContext context("test_state", "/requested/page", false);
+        const TString stateParam = (storeContextOnHost ? context.CreateStateContainer(settings.ClientSecret, "localhost") : context.GetState());
+        if (storeContextOnHost) {
+            contextStorage.Write(context);
+        }
         TStringBuilder request;
-        request << "GET /callback?code=code_template&state=" << state << " HTTP/1.1\r\n";
+        request << "GET /callback?code=code_template&state=" << stateParam << " HTTP/1.1\r\n";
         request << "Host: oidcproxy.net\r\n";
-        TContext context(state, "/requested/page", false);
-        request << "Cookie: " << context.CreateYdbOidcCookie(settings.ClientSecret) << "\r\n\r\n";
+        if (!storeContextOnHost) {
+            request << "Cookie: " << context.CreateYdbOidcCookie(settings.ClientSecret) << "\r\n\r\n";
+        }
         NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
         EatWholeString(incomingRequest, request);
         runtime.Send(new IEventHandle(sessionCreator, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(incomingRequest)));
@@ -931,7 +1010,15 @@ Y_UNIT_TEST_SUITE(OidcProxyTests) {
         UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Message, "Openid scope is missed for specified access_token");
     }
 
-    void SessionServiceCreateWithSeveralCookies(TRedirectStrategyBase& redirectStrategy) {
+    Y_UNIT_TEST(SessionServiceCreateOpenIdScopeMissed) {
+        SessionServiceCreateOpenIdScopeMissed(false);
+    }
+
+    Y_UNIT_TEST(SessionServiceCreateOpenIdScopeMissedWithSaveContextOnHost) {
+        SessionServiceCreateOpenIdScopeMissed(true);
+    }
+
+    void SessionServiceCreateWithSeveralCookies(TRedirectStrategyBase& redirectStrategy, bool storeContextOnHost) {
         TPortManager tp;
         ui16 sessionServicePort = tp.GetPort(8655);
         TMvpTestRuntime runtime;
@@ -940,7 +1027,8 @@ Y_UNIT_TEST_SUITE(OidcProxyTests) {
         TOpenIdConnectSettings settings {
             .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
             .AuthorizationServerAddress = "https://auth.test.net",
-            .ClientSecret = "123456789abcdef"
+            .ClientSecret = "123456789abcdef",
+            .StoreContextOnHost = storeContextOnHost
         };
 
         TContextStorage contextStorage;
@@ -954,14 +1042,19 @@ Y_UNIT_TEST_SUITE(OidcProxyTests) {
         std::unique_ptr<grpc::Server> sessionServer(builder.BuildAndStart());
 
         const NActors::TActorId sessionCreator = runtime.Register(new TSessionCreateHandler(edge, settings, &contextStorage));
-        TString firstRequestState = "first_request_state";
-        TString secondRequestState = "second_request_state";
-        TContext context1(firstRequestState, "/requested/page", redirectStrategy.IsAjaxRequest());
-        TContext context2(secondRequestState, "/requested/page", redirectStrategy.IsAjaxRequest());
+        TContext context1("first_request_state", "/requested/page", redirectStrategy.IsAjaxRequest());
+        TContext context2("second_request_state", "/requested/page", redirectStrategy.IsAjaxRequest());
+        if (storeContextOnHost) {
+            contextStorage.Write(context1);
+            contextStorage.Write(context2);
+        }
+        const TString stateParam = (storeContextOnHost ? context1.CreateStateContainer(settings.ClientSecret, "localhost") : context1.GetState());
         TStringBuilder request;
-        request << "GET /auth/callback?code=code_template&state=" << firstRequestState << " HTTP/1.1\r\n";
+        request << "GET /auth/callback?code=code_template&state=" << stateParam << " HTTP/1.1\r\n";
         request << "Host: oidcproxy.net\r\n";
-        request << "Cookie: " << context1.CreateYdbOidcCookie(settings.ClientSecret) << "; " << context2.CreateYdbOidcCookie(settings.ClientSecret) << "\r\n";
+        if (!storeContextOnHost) {
+            request << "Cookie: " << context1.CreateYdbOidcCookie(settings.ClientSecret) << "; " << context2.CreateYdbOidcCookie(settings.ClientSecret) << "\r\n";
+        }
         NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
         EatWholeString(incomingRequest, redirectStrategy.CreateRequest(request));
         incomingRequest->Endpoint->Secure = true;
@@ -976,12 +1069,22 @@ Y_UNIT_TEST_SUITE(OidcProxyTests) {
 
     Y_UNIT_TEST(SessionServiceCreateWithSeveralCookies) {
         TRedirectStrategy redirectStrategy;
-        SessionServiceCreateWithSeveralCookies(redirectStrategy);
+        SessionServiceCreateWithSeveralCookies(redirectStrategy, false);
     }
 
     Y_UNIT_TEST(SessionServiceCreateWithSeveralCookiesAjax) {
         TAjaxRedirectStrategy redirectStrategy;
-        SessionServiceCreateWithSeveralCookies(redirectStrategy);
+        SessionServiceCreateWithSeveralCookies(redirectStrategy, false);
+    }
+
+    Y_UNIT_TEST(SessionServiceCreateWithSeveralCookiesWithSaveContextOnHost) {
+        TRedirectStrategy redirectStrategy;
+        SessionServiceCreateWithSeveralCookies(redirectStrategy, true);
+    }
+
+    Y_UNIT_TEST(SessionServiceCreateWithSeveralCookiesAjaxWithSaveContextOnHost) {
+        TAjaxRedirectStrategy redirectStrategy;
+        SessionServiceCreateWithSeveralCookies(redirectStrategy, true);
     }
 
     Y_UNIT_TEST(AllowedHostsList) {
@@ -1093,5 +1196,390 @@ Y_UNIT_TEST_SUITE(OidcProxyTests) {
         auto outgoingResponseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
         UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Status, "400");
         UNIT_ASSERT_STRING_CONTAINS(outgoingResponseEv->Response->Body, expectedError);
+    }
+
+    void FullAuthorizationFlowWithStoreContextOnOtherHost(TRedirectStrategyBase& redirectStrategy) {
+        TPortManager tp;
+        ui16 sessionServicePort = tp.GetPort(8655);
+        TMvpTestRuntime runtime;
+        runtime.Initialize();
+
+        const TString allowedProxyHost {"ydb.viewer.page"};
+
+        TOpenIdConnectSettings settings {
+            .ClientId = "client_id",
+            .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
+            .AuthorizationServerAddress = "https://auth.test.net",
+            .ClientSecret = "0123456789abcdef",
+            .AllowedProxyHosts = {allowedProxyHost},
+            .StoreContextOnHost = true
+        };
+
+        TContextStorage contextStorageFirstHost;
+        TContextStorage contextStorageSecondHost;
+
+        const NActors::TActorId edge = runtime.AllocateEdgeActor();
+        const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings, &contextStorageFirstHost));
+
+        TSessionServiceMock sessionServiceMock;
+        sessionServiceMock.AllowedCookies.second = "allowed_session_cookie";
+        sessionServiceMock.AllowedAccessTokens.insert("access_token_value");
+        grpc::ServerBuilder builder;
+        builder.AddListeningPort(settings.SessionServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&sessionServiceMock);
+        std::unique_ptr<grpc::Server> sessionServer(builder.BuildAndStart());
+
+        // Try request protected resource
+        const TString workerName1 = "oidc-01.host.net";
+        NHttp::THttpIncomingRequestPtr incomingRequestToOidcHost1 = new NHttp::THttpIncomingRequest();
+        incomingRequestToOidcHost1->Endpoint->Secure = true;
+        incomingRequestToOidcHost1->Endpoint->WorkerName = workerName1;
+
+        const TString hostProxy = "oidcproxy.net";
+        const TString protectedPage = "/" + allowedProxyHost + "/counters";
+
+        EatWholeString(incomingRequestToOidcHost1, redirectStrategy.CreateRequest("GET " + protectedPage + " HTTP/1.1\r\n"
+                                                                                   "Host: " + hostProxy + "\r\n"
+                                                                                   "Cookie: yc_session=invalid_cookie\r\n"
+                                                                                   "Referer: https://" + hostProxy + protectedPage + "\r\n"));
+        runtime.Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(incomingRequestToOidcHost1)));
+
+        // Need authorization. Return code to /auth/callback handler
+        TAutoPtr<IEventHandle> handle;
+        NHttp::TEvHttpProxy::TEvHttpOutgoingResponse* outgoingResponseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        redirectStrategy.CheckRedirectStatus(outgoingResponseEv);
+        TString location = redirectStrategy.GetRedirectUrl(outgoingResponseEv);
+        UNIT_ASSERT_STRING_CONTAINS(location, "https://auth.test.net/oauth/authorize");
+        UNIT_ASSERT_STRING_CONTAINS(location, "response_type=code");
+        UNIT_ASSERT_STRING_CONTAINS(location, "scope=openid");
+        UNIT_ASSERT_STRING_CONTAINS(location, "client_id=" + settings.ClientId);
+        UNIT_ASSERT_STRING_CONTAINS(location, "redirect_uri=https://" + hostProxy + "/auth/callback");
+
+        NHttp::TUrlParameters urlParameters(location);
+        const TString stateParam = urlParameters["state"];
+
+        const NHttp::THeaders headers(outgoingResponseEv->Response->Headers);
+        UNIT_ASSERT(!headers.Has("Set-Cookie"));
+        redirectStrategy.CheckSpecificHeaders(headers);
+
+        const NActors::TActorId sessionCreator = runtime.Register(new TSessionCreateHandler(edge, settings, &contextStorageSecondHost));
+        const TString workerName2 = "oidc-02.host.net";
+        NHttp::THttpIncomingRequestPtr incomingRequestToOidcHost2 = new NHttp::THttpIncomingRequest();
+        incomingRequestToOidcHost2->Endpoint->Secure = true;
+        incomingRequestToOidcHost2->Endpoint->WorkerName = workerName2;
+        TStringBuilder request;
+        request << "GET /auth/callback?code=code_template&state=" << stateParam << " HTTP/1.1\r\n";
+        request << "Host: " << hostProxy << "\r\n";
+        EatWholeString(incomingRequestToOidcHost2, redirectStrategy.CreateRequest(request));
+        runtime.Send(new IEventHandle(sessionCreator, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(incomingRequestToOidcHost2)));
+
+        // Context was not found on host2. Restore context on host1
+        NJson::TJsonValue jsonValue;
+        NJson::TJsonReaderConfig jsonConfig;
+        NJson::ReadJsonTree(Base64DecodeUneven(stateParam), &jsonConfig, &jsonValue);
+        const NJson::TJsonValue* jsonStateContainer = nullptr;
+        jsonValue.GetValuePointer("container", &jsonStateContainer);
+        TString stateContainer = jsonStateContainer->GetStringRobust();
+        NJson::ReadJsonTree(Base64Decode(stateContainer), &jsonConfig, &jsonValue);
+        const NJson::TJsonValue* jsonState = nullptr;
+        jsonValue.GetValuePointer("state", &jsonState);
+        const TString expectedState = jsonState->GetStringRobust();
+
+        auto outgoingRequestEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(handle);
+        TActorId createSessionActor = handle->Sender;
+        NHttp::THttpIncomingResponsePtr incomingResponse = new NHttp::THttpIncomingResponse(outgoingRequestEv->Request);
+        incomingResponse = incomingResponse->Duplicate(outgoingRequestEv->Request);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->Host, workerName1);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->URL, "/context?state=" + expectedState);
+        const NActors::TActorId restoreContextHandler = runtime.Register(new TRestoreContextHandler(edge, &contextStorageFirstHost));
+        incomingRequestToOidcHost1 = new NHttp::THttpIncomingRequest();
+        incomingRequestToOidcHost1->Endpoint->Secure = true;
+        incomingRequestToOidcHost1->Endpoint->WorkerName = workerName1;
+        request.clear();
+        request << "GET /context?state=" << expectedState << " HTTP/1.1\r\n"
+                   "Host: " << workerName1 << "\r\n";
+        EatWholeString(incomingRequestToOidcHost1, redirectStrategy.CreateRequest(request));
+        runtime.Send(new IEventHandle(restoreContextHandler, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(incomingRequestToOidcHost1)));
+        outgoingResponseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        const TStringBuf& outgoingResponseBody = outgoingResponseEv->Response->Body;
+        redirectStrategy.CheckRequestedAddress(outgoingResponseBody, hostProxy, protectedPage);
+        const TString expectedAjaxRequest = (redirectStrategy.IsAjaxRequest() ? "true" : "false");
+        UNIT_ASSERT_STRING_CONTAINS(outgoingResponseBody, "\"is_ajax_request\":" + expectedAjaxRequest);
+
+        EatWholeString(incomingResponse, "HTTP/1.1 200 OK\r\n"
+                                                    "Connection: close\r\n"
+                                                    "Content-Type: application/json; charset=utf-8\r\n"
+                                                    "Content-Length: " + ToString(outgoingResponseBody.length()) + "\r\n\r\n" + outgoingResponseBody);
+        runtime.Send(new IEventHandle(createSessionActor, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(incomingResponse->GetRequest(), incomingResponse)));
+
+        // State is OK. Context was restored
+        outgoingRequestEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(handle);
+        const TStringBuf& outgoingRequestBody = outgoingRequestEv->Request->Body;
+        UNIT_ASSERT_STRING_CONTAINS(outgoingRequestBody, "code=code_template");
+        UNIT_ASSERT_STRING_CONTAINS(outgoingRequestBody, "grant_type=authorization_code");
+
+        const TString authorizationServerResponse = R"___({"access_token":"access_token_value","token_type":"bearer","expires_in":43199,"scope":"openid","id_token":"id_token_value"})___";
+        incomingResponse = new NHttp::THttpIncomingResponse(outgoingRequestEv->Request);
+        EatWholeString(incomingResponse, "HTTP/1.1 200 OK\r\n"
+                                                    "Connection: close\r\n"
+                                                    "Content-Type: application/json; charset=utf-8\r\n"
+                                                    "Content-Length: " + ToString(authorizationServerResponse.length()) + "\r\n\r\n" + authorizationServerResponse);
+        runtime.Send(new IEventHandle(handle->Sender, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(outgoingRequestEv->Request, incomingResponse)));
+
+        outgoingResponseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Status, "302");
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Message, "Cookie set");
+        const NHttp::THeaders protectedPageHeaders(outgoingResponseEv->Response->Headers);
+        UNIT_ASSERT(protectedPageHeaders.Has("Location"));
+        redirectStrategy.CheckLocationHeader(protectedPageHeaders.Get("Location"), hostProxy, protectedPage);
+        UNIT_ASSERT(protectedPageHeaders.Has("Set-Cookie"));
+        TStringBuf sessionCookie = protectedPageHeaders.Get("Set-Cookie");
+        UNIT_ASSERT_STRINGS_EQUAL(sessionCookie, "yc_session=allowed_session_cookie; SameSite=None");
+
+        // Get session cookie. Try request original resource
+        incomingRequestToOidcHost1 = new NHttp::THttpIncomingRequest();
+        incomingRequestToOidcHost1->Endpoint->Secure = true;
+        incomingRequestToOidcHost1->Endpoint->WorkerName = workerName1;
+        request.clear();
+        TString redirectUrl = redirectStrategy.GetUrlFromLocationHeader(protectedPageHeaders.Get("Location"));
+        request << "GET " << redirectUrl << " HTTP/1.1\r\n";
+        request << "Host: " + hostProxy + "\r\n";
+        request << "Cookie: " << sessionCookie.NextTok(';') << "\r\n";
+        EatWholeString(incomingRequestToOidcHost1, redirectStrategy.CreateRequest(request));
+        runtime.Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(incomingRequestToOidcHost1)));
+
+        outgoingRequestEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(handle);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->Host, allowedProxyHost);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->URL, "/counters");
+        UNIT_ASSERT_STRING_CONTAINS(outgoingRequestEv->Request->Headers, "Authorization: Bearer protected_page_iam_token");
+        incomingResponse = new NHttp::THttpIncomingResponse(outgoingRequestEv->Request);
+        EatWholeString(incomingResponse, "HTTP/1.1 200 OK\r\nConnection: close\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nthis\r\n4\r\n is \r\n5\r\ntest.\r\n0\r\n\r\n");
+        runtime.Send(new IEventHandle(handle->Sender, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(outgoingRequestEv->Request, incomingResponse)));
+
+        outgoingResponseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Status, "200");
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Body, "this is test.");
+    }
+
+    Y_UNIT_TEST(FullAuthorizationFlowWithStoreContextOnOtherHost) {
+        TRedirectStrategy redirectStrategy;
+        FullAuthorizationFlowWithStoreContextOnOtherHost(redirectStrategy);
+    }
+
+    Y_UNIT_TEST(FullAuthorizationFlowAjaxWithStoreContextOnOtherHost) {
+        TAjaxRedirectStrategy redirectStrategy;
+        FullAuthorizationFlowWithStoreContextOnOtherHost(redirectStrategy);
+    }
+
+    Y_UNIT_TEST(RestoreContextFromHostOtherHostUnavailable) {
+        TPortManager tp;
+        ui16 sessionServicePort = tp.GetPort(8655);
+        TMvpTestRuntime runtime;
+        runtime.Initialize();
+
+        TOpenIdConnectSettings settings {
+            .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
+            .AuthorizationServerAddress = "https://auth.test.net",
+            .ClientSecret = "123456789abcdef",
+            .StoreContextOnHost = true
+        };
+
+        TContextStorage contextStorage;
+
+        const NActors::TActorId edge = runtime.AllocateEdgeActor();
+        const NActors::TActorId sessionCreatorHandler = runtime.Register(new TSessionCreateHandler(edge, settings, &contextStorage));
+
+        TSessionServiceMock sessionServiceMock;
+        sessionServiceMock.IsOpenIdScopeMissed = true;
+        grpc::ServerBuilder builder;
+        builder.AddListeningPort(settings.SessionServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&sessionServiceMock);
+        std::unique_ptr<grpc::Server> sessionServer(builder.BuildAndStart());
+
+        const TString expectedState = "test_state";
+        const TString workerName2 = "oidc-02.host.net";
+        TContext context(expectedState, "/requested/page", false);
+        const TString stateParam = context.CreateStateContainer(settings.ClientSecret, workerName2);
+        TStringBuilder request;
+        request << "GET /callback?code=code_template&state=" << stateParam << " HTTP/1.1\r\n";
+        request << "Host: oidcproxy.net\r\n";
+        const TString workerName1 = "oidc-01.host.net";
+        NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
+        incomingRequest->Endpoint->Secure = true;
+        incomingRequest->Endpoint->WorkerName = workerName1;
+        EatWholeString(incomingRequest, request);
+        runtime.Send(new IEventHandle(sessionCreatorHandler, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(incomingRequest)));
+
+        // Context was not found on host1. Try restore context on host2
+        TAutoPtr<IEventHandle> handle;
+        auto outgoingRequestEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(handle);
+        TActorId createSessionActor = handle->Sender;
+        NHttp::THttpIncomingResponsePtr incomingResponse = new NHttp::THttpIncomingResponse(outgoingRequestEv->Request);
+        incomingResponse = incomingResponse->Duplicate(outgoingRequestEv->Request);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->Host, workerName2);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->URL, "/context?state=" + expectedState);
+
+        // host2 is unavailable
+        EatWholeString(incomingResponse, "HTTP/1.1 503 Service Unavailable\r\n"
+                                                    "Connection: close\r\n"
+                                                    "Transfer-Encoding: chunked\r\n\r\n7\r\nService\r\n12\r\n Unavailable\r\n0\r\n\r\n");
+        runtime.Send(new IEventHandle(createSessionActor, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(incomingResponse->GetRequest(), incomingResponse)));
+
+        // Can not restore context.
+        auto outgoingResponseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Status, "400");
+        UNIT_ASSERT_STRING_CONTAINS(outgoingResponseEv->Response->Body, "Unknown error has occurred. Please open the page again");
+    }
+
+    Y_UNIT_TEST(RestoreContextFromHostCanNotFindContextOnOtherHost) {
+        TPortManager tp;
+        ui16 sessionServicePort = tp.GetPort(8655);
+        TMvpTestRuntime runtime;
+        runtime.Initialize();
+
+        TOpenIdConnectSettings settings {
+            .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
+            .AuthorizationServerAddress = "https://auth.test.net",
+            .ClientSecret = "123456789abcdef",
+            .StoreContextOnHost = true
+        };
+
+        TContextStorage contextStorageHost1;
+        TContextStorage contextStorageHost2;
+
+        const NActors::TActorId edge = runtime.AllocateEdgeActor();
+        const NActors::TActorId sessionCreatorHandler = runtime.Register(new TSessionCreateHandler(edge, settings, &contextStorageHost1));
+
+        TSessionServiceMock sessionServiceMock;
+        sessionServiceMock.IsOpenIdScopeMissed = true;
+        grpc::ServerBuilder builder;
+        builder.AddListeningPort(settings.SessionServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&sessionServiceMock);
+        std::unique_ptr<grpc::Server> sessionServer(builder.BuildAndStart());
+
+        const TString expectedState = "test_state";
+        const TString workerName2 = "oidc-02.host.net";
+        TContext context(expectedState, "/requested/page", false);
+        const TString stateParam = context.CreateStateContainer(settings.ClientSecret, workerName2);
+        TStringBuilder request;
+        request << "GET /callback?code=code_template&state=" << stateParam << " HTTP/1.1\r\n";
+        request << "Host: oidcproxy.net\r\n";
+        const TString workerName1 = "oidc-01.host.net";
+        NHttp::THttpIncomingRequestPtr incomingRequestToOidcHost1 = new NHttp::THttpIncomingRequest();
+        incomingRequestToOidcHost1->Endpoint->Secure = true;
+        incomingRequestToOidcHost1->Endpoint->WorkerName = workerName1;
+        EatWholeString(incomingRequestToOidcHost1, request);
+        runtime.Send(new IEventHandle(sessionCreatorHandler, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(incomingRequestToOidcHost1)));
+
+        // Context was not found on host1. Try restore context on host2
+        TAutoPtr<IEventHandle> handle;
+        auto outgoingRequestEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(handle);
+        TActorId createSessionActor = handle->Sender;
+        NHttp::THttpIncomingResponsePtr incomingResponse = new NHttp::THttpIncomingResponse(outgoingRequestEv->Request);
+        incomingResponse = incomingResponse->Duplicate(outgoingRequestEv->Request);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->Host, workerName2);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->URL, "/context?state=" + expectedState);
+
+        // Request to host2 to restore context
+        const NActors::TActorId restoreContextHandler = runtime.Register(new TRestoreContextHandler(edge, &contextStorageHost2));
+        NHttp::THttpIncomingRequestPtr incomingRequestToOidcHost2 = new NHttp::THttpIncomingRequest();
+        incomingRequestToOidcHost2->Endpoint->Secure = true;
+        incomingRequestToOidcHost2->Endpoint->WorkerName = workerName2;
+        request.clear();
+        request << "GET /context?state=" << expectedState << " HTTP/1.1\r\n"
+                   "Host: " << workerName2 << "\r\n";
+        EatWholeString(incomingRequestToOidcHost2, request);
+        runtime.Send(new IEventHandle(restoreContextHandler, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(incomingRequestToOidcHost2)));
+        NHttp::TEvHttpProxy::TEvHttpOutgoingResponse* outgoingResponseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Status, "401");
+
+        // host2 is unavailable
+        EatWholeString(incomingResponse, "HTTP/1.1 401 Unauthorized\r\n"
+                                                    "Connection: close\r\n"
+                                                    "Transfer-Encoding: chunked\r\n\r\n12\r\nUnauthorized\r\n0\r\n\r\n");
+        runtime.Send(new IEventHandle(createSessionActor, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(incomingResponse->GetRequest(), incomingResponse)));
+
+        // Can not restore context.
+        outgoingResponseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Status, "400");
+        UNIT_ASSERT_STRING_CONTAINS(outgoingResponseEv->Response->Body, "Unknown error has occurred. Please open the page again");
+    }
+
+    Y_UNIT_TEST(RestoreContextFromHostOtherHostReturnExpiredState) {
+        TPortManager tp;
+        ui16 sessionServicePort = tp.GetPort(8655);
+        TMvpTestRuntime runtime;
+        runtime.Initialize();
+
+        TOpenIdConnectSettings settings {
+            .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
+            .AuthorizationServerAddress = "https://auth.test.net",
+            .ClientSecret = "123456789abcdef",
+            .StoreContextOnHost = true
+        };
+
+        TContextStorage contextStorageHost1;
+        TContextStorage contextStorageHost2;
+
+        const NActors::TActorId edge = runtime.AllocateEdgeActor();
+        const NActors::TActorId sessionCreatorHandler = runtime.Register(new TSessionCreateHandler(edge, settings, &contextStorageHost1));
+
+        TSessionServiceMock sessionServiceMock;
+        sessionServiceMock.IsOpenIdScopeMissed = true;
+        grpc::ServerBuilder builder;
+        builder.AddListeningPort(settings.SessionServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&sessionServiceMock);
+        std::unique_ptr<grpc::Server> sessionServer(builder.BuildAndStart());
+
+        const TString expectedState = "test_state";
+        const TString workerName2 = "oidc-02.host.net";
+        TContext context(expectedState, "/requested/page", false);
+        const TString stateParam = context.CreateStateContainer(settings.ClientSecret, workerName2);
+        contextStorageHost2.Write(context);
+        TStringBuilder request;
+        request << "GET /callback?code=code_template&state=" << stateParam << " HTTP/1.1\r\n";
+        request << "Host: oidcproxy.net\r\n";
+        const TString workerName1 = "oidc-01.host.net";
+        NHttp::THttpIncomingRequestPtr incomingRequestToOidcHost1 = new NHttp::THttpIncomingRequest();
+        incomingRequestToOidcHost1->Endpoint->Secure = true;
+        incomingRequestToOidcHost1->Endpoint->WorkerName = workerName1;
+        EatWholeString(incomingRequestToOidcHost1, request);
+        runtime.Send(new IEventHandle(sessionCreatorHandler, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(incomingRequestToOidcHost1)));
+
+        // Context was not found on host1. Try restore context on host2
+        TAutoPtr<IEventHandle> handle;
+        auto outgoingRequestEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(handle);
+        TActorId createSessionActor = handle->Sender;
+        NHttp::THttpIncomingResponsePtr incomingResponse = new NHttp::THttpIncomingResponse(outgoingRequestEv->Request);
+        incomingResponse = incomingResponse->Duplicate(outgoingRequestEv->Request);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->Host, workerName2);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->URL, "/context?state=" + expectedState);
+
+        // Request to host2 to restore context
+        const NActors::TActorId restoreContextHandler = runtime.Register(new TRestoreContextHandler(edge, &contextStorageHost2));
+        NHttp::THttpIncomingRequestPtr incomingRequestToOidcHost2 = new NHttp::THttpIncomingRequest();
+        incomingRequestToOidcHost2->Endpoint->Secure = true;
+        incomingRequestToOidcHost2->Endpoint->WorkerName = workerName2;
+        request.clear();
+        request << "GET /context?state=" << expectedState << " HTTP/1.1\r\n"
+                   "Host: " << workerName2 << "\r\n";
+        EatWholeString(incomingRequestToOidcHost2, request);
+        runtime.Send(new IEventHandle(restoreContextHandler, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(incomingRequestToOidcHost2)));
+        NHttp::TEvHttpProxy::TEvHttpOutgoingResponse* outgoingResponseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Status, "200");
+
+        const TString bodyWithExpiredState = "{\"requested_address\":\"/requested/page\","
+                                              "\"is_ajax_request\":false,"
+                                              "\"expiration_time\":100}";
+
+        // host2 return expired state
+        EatWholeString(incomingResponse, "HTTP/1.1 200 OK\r\n"
+                                                    "Connection: close\r\n"
+                                                    "Content-Type: application/json; charset=utf-8\r\n"
+                                                    "Content-Length: " + ToString(bodyWithExpiredState.length()) + "\r\n\r\n" + bodyWithExpiredState);
+        runtime.Send(new IEventHandle(createSessionActor, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(incomingResponse->GetRequest(), incomingResponse)));
+
+        // State is expired. Try request protected resource again
+        outgoingResponseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Status, "302");
+        const NHttp::THeaders headers(outgoingResponseEv->Response->Headers);
+        UNIT_ASSERT(headers.Has("Location"));
+        UNIT_ASSERT_STRINGS_EQUAL(headers.Get("Location"), "/requested/page");
     }
 }

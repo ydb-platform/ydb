@@ -282,7 +282,7 @@ void TDqPqRdReadActor::ProcessState() {
             return;
         }
         if (!CoordinatorActorId) {
-            SRC_LOG_D("Send TEvCoordinatorChangesSubscribe to local row dispatcher");
+            SRC_LOG_D("Send TEvCoordinatorChangesSubscribe to local row dispatcher, self id " << SelfId());
             Send(LocalRowDispatcherActorId, new NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscribe());
         }
         State = EState::WAIT_COORDINATOR_ID; 
@@ -323,7 +323,8 @@ void TDqPqRdReadActor::ProcessState() {
                     Token,
                     AddBearerToToken,
                     readOffset,
-                    StartingMessageTimestamp.MilliSeconds());
+                    StartingMessageTimestamp.MilliSeconds(),
+                    std::visit([](auto arg) { return ToString(arg); }, TxId));
                 sessionInfo.EventsQueue.Send(event);
                 sessionInfo.IsWaitingRowDispatcherResponse = true;
                 sessionInfo.Status = SessionInfo::ESessionStatus::Started;
@@ -415,7 +416,7 @@ void TDqPqRdReadActor::StopSessions() {
             continue;
         }
         auto event = std::make_unique<NFq::TEvRowDispatcher::TEvStopSession>();
-        event->Record.MutableSource()->CopyFrom(SourceParams);
+        *event->Record.MutableSource() = SourceParams;
         event->Record.SetPartitionId(partitionId);
         SRC_LOG_D("Send StopSession to " << sessionInfo.RowDispatcherActorId);
         sessionInfo.EventsQueue.Send(event.release());
@@ -672,13 +673,17 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev) 
     ReadyBuffer.emplace(partitionId, ev->Get()->Record.MessagesSize());
     TReadyBatch& activeBatch = ReadyBuffer.back();
 
+    ui64 bytes = 0;
     for (const auto& message : ev->Get()->Record.GetMessages()) {
         SRC_LOG_T("Json: " << message.GetJson());    
         activeBatch.Data.emplace_back(message.GetJson());
         activeBatch.UsedSpace += message.GetJson().size();
         sessionInfo.NextOffset = message.GetOffset() + 1;
+        bytes += message.GetJson().size();
         SRC_LOG_T("TEvMessageBatch NextOffset " << sessionInfo.NextOffset);
     }
+    IngressStats.Bytes += bytes;
+    IngressStats.Chunks++;
     activeBatch.NextOffset = ev->Get()->Record.GetNextMessageOffset();
     Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
 }

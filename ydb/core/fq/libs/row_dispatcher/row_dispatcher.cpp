@@ -72,7 +72,8 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
             , StartingMessageTimestampMs(proto.GetStartingMessageTimestampMs())
             , EventQueueId(eventQueueId)
             , Proto(proto)
-            , TopicSessionId(topicSessionId) {
+            , TopicSessionId(topicSessionId)
+            , QueryId(proto.GetQueryId()) {
                 EventsQueue.Init("txId", selfId, selfId, eventQueueId, /* KeepAlive */ true);
                 EventsQueue.OnNewRecipientId(readActorId);
             }
@@ -89,6 +90,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
         ui64 EventQueueId;
         NFq::NRowDispatcherProto::TEvStartSession Proto;
         TActorId TopicSessionId;
+        const TString QueryId;
     };
 
     struct SessionInfo {
@@ -258,9 +260,8 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscrib
 void TRowDispatcher::PrintInternalState(const TString& prefix) {
     TStringStream str;
     str << "Consumers:\n";
-
     for (auto& [key, consumerInfo] : Consumers) {
-        str << "    read actor id: " << key.first << ", partId: " << key.second << "\n";
+        str << "    query id " << consumerInfo->QueryId << ", partId: " << key.second << ", read actor id: " << key.first <<  "\n";
     }
 
     str << "\nSessions:\n";
@@ -277,7 +278,7 @@ void TRowDispatcher::PrintInternalState(const TString& prefix) {
 }
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
-    LOG_ROW_DISPATCHER_DEBUG("TEvStartSession, topicPath " << ev->Get()->Record.GetSource().GetTopicPath() <<
+    LOG_ROW_DISPATCHER_DEBUG("TEvStartSession from " << ev->Sender << ", topicPath " << ev->Get()->Record.GetSource().GetTopicPath() <<
         " partitionId " << ev->Get()->Record.GetPartitionId());
 
     PrintInternalState("Before AddConsumer:");
@@ -397,7 +398,7 @@ void TRowDispatcher::DeleteConsumer(const ConsumerSessionKey& key) {
     }
     const auto& consumer = consumerIt->second;
     auto event = std::make_unique<NFq::TEvRowDispatcher::TEvStopSession>();
-    event->Record.MutableSource()->CopyFrom(consumer->SourceParams);
+    *event->Record.MutableSource() = consumer->SourceParams;
     event->Record.SetPartitionId(consumer->PartitionId);
     Send(new IEventHandle(consumerIt->second->TopicSessionId, consumer->ReadActorId, event.release(), 0));
 

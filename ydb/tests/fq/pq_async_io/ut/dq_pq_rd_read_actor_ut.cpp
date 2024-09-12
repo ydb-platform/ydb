@@ -126,7 +126,7 @@ struct TFixture : public TPqIoTestFixture {
                 NFq::NRowDispatcherProto::TEvMessage message;
                 message.SetJson(json);
                 message.SetOffset(offset++);
-                event->Record.AddMessages()->CopyFrom(message);
+                *event->Record.AddMessages() = message;
             }
             event->Record.SetPartitionId(PartitionId);
             event->Record.SetNextMessageOffset(offset);

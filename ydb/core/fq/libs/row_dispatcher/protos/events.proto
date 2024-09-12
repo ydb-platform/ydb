@@ -28,6 +28,7 @@ message TEvStartSession {
     bool AddBearerToToken = 4;
     optional uint64 Offset = 5;
     uint64 StartingMessageTimestampMs = 6;
+    string QueryId = 7;
     optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
 }
 

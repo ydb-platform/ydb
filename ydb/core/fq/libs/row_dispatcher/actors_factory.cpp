@@ -22,7 +22,7 @@ struct TActorFactory : public IActorFactory {
             config,
             rowDispatcherActorId,
             partitionId,
-            driver,
+            std::move(driver),
             credentialsProviderFactory,
             counters
         );

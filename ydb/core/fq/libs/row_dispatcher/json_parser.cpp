@@ -7,13 +7,14 @@
 #include <ydb/core/fq/libs/actors/logging/log.h>
 
 
-namespace NFq {
+namespace {
 
-using TCallback = TJsonParser::TCallback;
+using TCallback = NFq::TJsonParser::TCallback;
 using TInputConsumerArg = std::pair<ui64, TString>;
-static const char* OffsetFieldName = "_offset"; 
+const char* OffsetFieldName = "_offset";
+TString LogPrefix = "JsonParser: ";
 
-static void AddField(NYT::TNode& node, const TString& fieldName, const TString& fieldType) {
+void AddField(NYT::TNode& node, const TString& fieldName, const TString& fieldType) {
     node.Add(
         NYT::TNode::CreateList()
             .Add(fieldName)
@@ -21,14 +22,14 @@ static void AddField(NYT::TNode& node, const TString& fieldName, const TString& 
     );
 }
 
-static NYT::TNode MakeInputSchema() {
+NYT::TNode MakeInputSchema() {
     auto structMembers = NYT::TNode::CreateList();
     AddField(structMembers, OffsetFieldName, "Uint64");
     AddField(structMembers, "data", "String");
     return NYT::TNode::CreateList().Add("StructType").Add(std::move(structMembers));
 }
 
-static NYT::TNode MakeOutputSchema(const TVector<TString>& columns) {
+NYT::TNode MakeOutputSchema(const TVector<TString>& columns) {
     auto structMembers = NYT::TNode::CreateList();
     AddField(structMembers, OffsetFieldName, "Uint64");
     for (const auto& col : columns) {
@@ -79,7 +80,6 @@ public:
 private:
     NYql::NPureCalc::TWorkerHolder<NYql::NPureCalc::IPushStreamWorker> Worker;
     NKikimr::NMiniKQL::TPlainContainerCache Cache;
-    TString LogPrefix = "JsonParser: ";
 };
 
 
@@ -192,38 +192,35 @@ public:
 
 private:
     THolder<NYql::NPureCalc::IConsumer<std::pair<ui64, TList<TString>>>> Underlying;
-    [[maybe_unused]] NYql::NPureCalc::IWorker* Worker;
+    NYql::NPureCalc::IWorker* Worker;
     TFieldsMapping FieldsMapping;
 };
 
-} // namespace NFq
+}
 
 template <>
-struct NYql::NPureCalc::TInputSpecTraits<NFq::TParserInputSpec> {
+struct NYql::NPureCalc::TInputSpecTraits<TParserInputSpec> {
     static constexpr bool IsPartial = false;
     static constexpr bool SupportPushStreamMode = true;
 
-    using TConsumerType = THolder<NYql::NPureCalc::IConsumer<NFq::TInputConsumerArg>>;
+    using TConsumerType = THolder<NYql::NPureCalc::IConsumer<TInputConsumerArg>>;
 
     static TConsumerType MakeConsumer(
-        const NFq::TParserInputSpec& spec,
+        const TParserInputSpec& spec,
         NYql::NPureCalc::TWorkerHolder<NYql::NPureCalc::IPushStreamWorker> worker
     ) {
         Y_UNUSED(spec);
-        return MakeHolder<NFq::TParserInputConsumer>(std::move(worker));
+        return MakeHolder<TParserInputConsumer>(std::move(worker));
     }
 };
 
 template <>
-struct NYql::NPureCalc::TOutputSpecTraits<NFq::TParserOutputSpec> {
+struct NYql::NPureCalc::TOutputSpecTraits<TParserOutputSpec> {
     static const constexpr bool IsPartial = false;
-
-    static const constexpr bool SupportPullStreamMode = false;
-    static const constexpr bool SupportPullListMode = false;
     static const constexpr bool SupportPushStreamMode = true;
 
-    static void SetConsumerToWorker(const NFq::TParserOutputSpec& outputSpec, NYql::NPureCalc::IPushStreamWorker* worker, THolder<NYql::NPureCalc::IConsumer<std::pair<ui64, TList<TString>>>> consumer) {
-        worker->SetConsumer(MakeHolder<NFq::TParserPushRelayImpl>(outputSpec, worker, std::move(consumer)));
+    static void SetConsumerToWorker(const TParserOutputSpec& outputSpec, NYql::NPureCalc::IPushStreamWorker* worker, THolder<NYql::NPureCalc::IConsumer<std::pair<ui64, TList<TString>>>> consumer) {
+        worker->SetConsumer(MakeHolder<TParserPushRelayImpl>(outputSpec, worker, std::move(consumer)));
     }
 };
 
@@ -235,8 +232,7 @@ public:
         const TString& udfDir,
         const TVector<TString>& columns,
         TCallback callback)
-        : LogPrefix("JsonParser: ")
-        , Sql(GenerateSql(columns)) {
+        : Sql(GenerateSql(columns)) {
         auto options = NYql::NPureCalc::TProgramFactoryOptions();
         if (!udfDir.empty()) {
             options.SetUDFsDir(udfDir);
@@ -281,7 +277,6 @@ private:
 private:
     THolder<NYql::NPureCalc::TPushStreamProgram<TParserInputSpec, TParserOutputSpec>> Program;
     THolder<NYql::NPureCalc::IConsumer<TInputConsumerArg>> InputConsumer;
-    const TString LogPrefix;
     const TString Sql;
 };
 

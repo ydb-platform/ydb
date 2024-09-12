@@ -43,6 +43,7 @@ class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
     struct RowDispatcherInfo {
         bool Connected = false;
         TSet<TPartitionKey> Locations;
+        bool IsLocal = false;
     };
 
     NConfig::TRowDispatcherCoordinatorConfig Config;
@@ -86,7 +87,7 @@ public:
 
 private:
 
-    void AddRowDispatcher(NActors::TActorId actorId);
+    void AddRowDispatcher(NActors::TActorId actorId, bool isLocal);
     void PrintInternalState();
     NActors::TActorId GetAndUpdateLocation(const TPartitionKey& key);
 };
@@ -103,7 +104,7 @@ TActorCoordinator::TActorCoordinator(
     , LogPrefix("Coordinator: ")
     , Tenant(tenant)
     , Metrics(counters) {
-    AddRowDispatcher(localRowDispatcherId);
+    AddRowDispatcher(localRowDispatcherId, true);
 }
 
 void TActorCoordinator::Bootstrap() {
@@ -112,7 +113,7 @@ void TActorCoordinator::Bootstrap() {
     LOG_ROW_DISPATCHER_DEBUG("Successfully bootstrapped coordinator, id " << SelfId());
 }
 
-void TActorCoordinator::AddRowDispatcher(NActors::TActorId actorId) {
+void TActorCoordinator::AddRowDispatcher(NActors::TActorId actorId, bool isLocal) {
     auto it = RowDispatchers.find(actorId);
     if (it != RowDispatchers.end()) {
         it->second.Connected = true;
@@ -135,11 +136,12 @@ void TActorCoordinator::AddRowDispatcher(NActors::TActorId actorId) {
         return;
     }
     RowDispatchers[actorId].Connected = true;
+    RowDispatchers[actorId].IsLocal = isLocal;
 }
 
 void TActorCoordinator::Handle(NActors::TEvents::TEvPing::TPtr& ev) {
     LOG_ROW_DISPATCHER_TRACE("TEvPing received, " << ev->Sender);
-    AddRowDispatcher(ev->Sender);
+    AddRowDispatcher(ev->Sender, false);
     PrintInternalState();
     LOG_ROW_DISPATCHER_TRACE("Send TEvPong to " << ev->Sender);
     Send(ev->Sender, new NActors::TEvents::TEvPong(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
@@ -162,7 +164,7 @@ void TActorCoordinator::PrintInternalState() {
 
 void TActorCoordinator::HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr& ev) {
     LOG_ROW_DISPATCHER_DEBUG("EvNodeConnected " << ev->Get()->NodeId);
-    // Dont set Connected = false.
+    // Dont set Connected = true.
     // Wait TEvPing from row dispatchers.
 }
 
@@ -173,6 +175,7 @@ void TActorCoordinator::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected:
         if (ev->Get()->NodeId != actorId.NodeId()) {
             continue;
         }
+        Y_ENSURE(!info.IsLocal, "EvNodeDisconnected from local row dispatcher");
         info.Connected = false;
     }
 }
@@ -199,16 +202,13 @@ NActors::TActorId TActorCoordinator::GetAndUpdateLocation(const TPartitionKey& k
 
     auto it = std::begin(RowDispatchers);
     std::advance(it, rand);
-    auto counter = RowDispatchers.size();
-    while (true) {
+
+    for (size_t i = 0; i < RowDispatchers.size(); ++i) {
         auto& info = it->second;
         if (!info.Connected) {
             it++;
             if (it == std::end(RowDispatchers)) {
                 it = std::begin(RowDispatchers);
-            }
-            if (!counter--) {
-                Y_ENSURE(false, "Infinite cycle");
             }
             continue;
         }
@@ -216,6 +216,7 @@ NActors::TActorId TActorCoordinator::GetAndUpdateLocation(const TPartitionKey& k
         it->second.Locations.insert(key);
         return it->first;
     }
+    Y_ENSURE(false, "Local row dispatcher should always be connected");
 }
 
 void TActorCoordinator::Handle(NFq::TEvRowDispatcher::TEvCoordinatorRequest::TPtr& ev) {

@@ -44,7 +44,7 @@ struct TEvRowDispatcher {
         TEvCoordinatorRequest(
             const NYql::NPq::NProto::TDqPqTopicSource& sourceParams, 
             const std::vector<ui64>& partitionIds) {
-            Record.MutableSource()->CopyFrom(sourceParams);
+            *Record.MutableSource() = sourceParams;
             for (const auto& id : partitionIds) {
                 Record.AddPartitionId(id);
             }
@@ -66,8 +66,9 @@ struct TEvRowDispatcher {
             const TString token,
             bool addBearerToToken,
             TMaybe<ui64> readOffset,
-            ui64 startingMessageTimestampMs) {
-            Record.MutableSource()->CopyFrom(sourceParams);
+            ui64 startingMessageTimestampMs,
+            const TString& queryId) {
+            *Record.MutableSource() = sourceParams;
             Record.SetPartitionId(partitionId);
             Record.SetToken(token);
             Record.SetAddBearerToToken(addBearerToToken);
@@ -75,6 +76,7 @@ struct TEvRowDispatcher {
                 Record.SetOffset(*readOffset);
             }
             Record.SetStartingMessageTimestampMs(startingMessageTimestampMs);
+            Record.SetQueryId(queryId);
         }
     };
 
@@ -83,7 +85,7 @@ struct TEvRowDispatcher {
         TEvStartSessionAck() = default;
         explicit TEvStartSessionAck(
             const NFq::NRowDispatcherProto::TEvStartSession& consumer) {
-            Record.MutableConsumer()->CopyFrom(consumer);
+            *Record.MutableConsumer() = consumer;
         }
     };
 

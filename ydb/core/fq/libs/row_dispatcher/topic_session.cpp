@@ -231,7 +231,7 @@ TTopicSession::TTopicSession(
     : TopicPath(topicPath)
     , RowDispatcherActorId(rowDispatcherActorId)
     , PartitionId(partitionId)
-    , Driver(driver)
+    , Driver(std::move(driver))
     , CredentialsProviderFactory(credentialsProviderFactory)
     , BufferSize(16_MB)
     , LogPrefix("TopicSession")
@@ -751,7 +751,7 @@ std::unique_ptr<NActors::IActor> NewTopicSession(
     NYdb::TDriver driver,
     std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters) {
-    return std::unique_ptr<NActors::IActor>(new TTopicSession(topicPath, config, rowDispatcherActorId, partitionId, driver, credentialsProviderFactory, counters));
+    return std::unique_ptr<NActors::IActor>(new TTopicSession(topicPath, config, rowDispatcherActorId, partitionId, std::move(driver), credentialsProviderFactory, counters));
 }
 
 } // namespace NFq

@@ -108,7 +108,8 @@ public:
             "Token",
             true,       // AddBearerToToken
             Nothing(),  // readOffset,
-            0);         // StartingMessageTimestamp;
+            0,          // StartingMessageTimestamp;
+            "QueryId");
         Runtime.Send(new IEventHandle(RowDispatcher, readActorId, event));
     }
 

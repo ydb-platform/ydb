@@ -9,12 +9,13 @@
 #include <ydb/core/fq/libs/actors/logging/log.h>
 
 
-namespace NFq {
+namespace {
 
-using TCallback = TJsonFilter::TCallback;
-static const char* OffsetFieldName = "_offset"; 
+using TCallback = NFq::TJsonFilter::TCallback;
+const char* OffsetFieldName = "_offset";
+TString LogPrefix = "JsonFilter: ";
 
-static void AddField(NYT::TNode& node, const TString& fieldName, const TString& fieldType) {
+void AddField(NYT::TNode& node, const TString& fieldName, const TString& fieldType) {
     node.Add(
         NYT::TNode::CreateList()
             .Add(fieldName)
@@ -22,7 +23,7 @@ static void AddField(NYT::TNode& node, const TString& fieldName, const TString& 
     );
 }
 
-static NYT::TNode MakeInputSchema(const TVector<TString>& columns) {
+NYT::TNode MakeInputSchema(const TVector<TString>& columns) {
     auto structMembers = NYT::TNode::CreateList();
     AddField(structMembers, OffsetFieldName, "Uint64");
     for (const auto& col : columns) {
@@ -31,7 +32,7 @@ static NYT::TNode MakeInputSchema(const TVector<TString>& columns) {
     return NYT::TNode::CreateList().Add("StructType").Add(std::move(structMembers));
 }
 
-static NYT::TNode MakeOutputSchema() {
+NYT::TNode MakeOutputSchema() {
     auto structMembers = NYT::TNode::CreateList();
     AddField(structMembers, OffsetFieldName, "Uint64");
     AddField(structMembers, "data", "String");
@@ -54,8 +55,8 @@ private:
 
 class TFilterInputConsumer : public NYql::NPureCalc::IConsumer<std::pair<ui64, TList<TString>>> {
 public:
-    explicit TFilterInputConsumer(
-        const NFq::TFilterInputSpec& spec,
+    TFilterInputConsumer(
+        const TFilterInputSpec& spec,
         NYql::NPureCalc::TWorkerHolder<NYql::NPureCalc::IPushStreamWorker> worker)
         : Worker(std::move(worker)) {
         const NKikimr::NMiniKQL::TStructType* structType = Worker->GetInputType();
@@ -125,7 +126,6 @@ public:
 private:
     NYql::NPureCalc::TWorkerHolder<NYql::NPureCalc::IPushStreamWorker> Worker;
     NKikimr::NMiniKQL::TPlainContainerCache Cache;
-    TString LogPrefix = "JsonFilter: ";
     size_t OffsetPosition = 0;
     TVector<size_t> FieldsPositions;
 };
@@ -186,38 +186,33 @@ public:
 
 private:
     THolder<NYql::NPureCalc::IConsumer<std::pair<ui64, TString>>> Underlying;
-    [[maybe_unused]]    NYql::NPureCalc::IWorker* Worker;
+    NYql::NPureCalc::IWorker* Worker;
 };
 
-} // namespace NFq
-
-TString LogPrefix = "JsonFilter: ";
+}
 
 template <>
-struct NYql::NPureCalc::TInputSpecTraits<NFq::TFilterInputSpec> {
+struct NYql::NPureCalc::TInputSpecTraits<TFilterInputSpec> {
     static constexpr bool IsPartial = false;
     static constexpr bool SupportPushStreamMode = true;
 
     using TConsumerType = THolder<NYql::NPureCalc::IConsumer<std::pair<ui64, TList<TString>>>>;
 
     static TConsumerType MakeConsumer(
-        const NFq::TFilterInputSpec& spec,
+        const TFilterInputSpec& spec,
         NYql::NPureCalc::TWorkerHolder<NYql::NPureCalc::IPushStreamWorker> worker)
     {
-        return MakeHolder<NFq::TFilterInputConsumer>(spec, std::move(worker));
+        return MakeHolder<TFilterInputConsumer>(spec, std::move(worker));
     }
 };
 
 template <>
-struct NYql::NPureCalc::TOutputSpecTraits<NFq::TFilterOutputSpec> {
+struct NYql::NPureCalc::TOutputSpecTraits<TFilterOutputSpec> {
     static const constexpr bool IsPartial = false;
-
-    static const constexpr bool SupportPullStreamMode = false;
-    static const constexpr bool SupportPullListMode = false;
     static const constexpr bool SupportPushStreamMode = true;
 
-    static void SetConsumerToWorker(const NFq::TFilterOutputSpec& outputSpec, NYql::NPureCalc::IPushStreamWorker* worker, THolder<NYql::NPureCalc::IConsumer<std::pair<ui64, TString>>> consumer) {
-        worker->SetConsumer(MakeHolder<NFq::TFilterPushRelayImpl>(outputSpec, worker, std::move(consumer)));
+    static void SetConsumerToWorker(const TFilterOutputSpec& outputSpec, NYql::NPureCalc::IPushStreamWorker* worker, THolder<NYql::NPureCalc::IConsumer<std::pair<ui64, TString>>> consumer) {
+        worker->SetConsumer(MakeHolder<TFilterPushRelayImpl>(outputSpec, worker, std::move(consumer)));
     }
 };
 
@@ -229,8 +224,7 @@ public:
         const TVector<TString>& types,
         const TString& whereFilter,
         TCallback callback)
-        : LogPrefix("JsonFilter: ")
-        , Sql(GenerateSql(columns, types, whereFilter)) {
+        : Sql(GenerateSql(columns, types, whereFilter)) {
         auto factory = NYql::NPureCalc::MakeProgramFactory(NYql::NPureCalc::TProgramFactoryOptions());
 
         LOG_ROW_DISPATCHER_DEBUG("Creating program...");
@@ -273,7 +267,6 @@ private:
 private:
     THolder<NYql::NPureCalc::TPushStreamProgram<TFilterInputSpec, TFilterOutputSpec>> Program;
     THolder<NYql::NPureCalc::IConsumer<std::pair<ui64, TList<TString>>>> InputConsumer;
-    const TString LogPrefix;
     const TString Sql;
 };
 

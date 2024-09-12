@@ -68,8 +68,8 @@ public:
             "Token",
             true,       // AddBearerToToken
             readOffset, // readOffset,
-            0);         // StartingMessageTimestamp;
-
+            0,         // StartingMessageTimestamp;
+            "QueryId");
         Runtime.Send(new IEventHandle(TopicSession, readActorId, event));
     }
 
@@ -92,7 +92,7 @@ public:
 
     void StopSession(NActors::TActorId readActorId, const NYql::NPq::NProto::TDqPqTopicSource& source) {
         auto event = std::make_unique<NFq::TEvRowDispatcher::TEvStopSession>();
-        event->Record.MutableSource()->CopyFrom(source);
+        *event->Record.MutableSource() = source;
         event->Record.SetPartitionId(PartitionId);
         Runtime.Send(new IEventHandle(TopicSession, readActorId, event.release()));
     }

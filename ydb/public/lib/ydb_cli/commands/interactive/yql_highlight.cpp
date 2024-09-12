@@ -3,14 +3,12 @@
 #include <contrib/libs/antlr4_cpp_runtime/src/antlr4-runtime.h>
 #include <regex>
 
-#include <ydb/library/yql/parser/proto_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h>
+#include <ydb/public/lib/ydb_cli/commands/interactive/gen/SQLv1Antlr4Lexer.h>
 
 #define TOKEN(NAME) SQLv1Antlr4Lexer::TOKEN_##NAME
 
 namespace NYdb {
     namespace NConsoleClient {
-
-        using NALPDefaultAntlr4::SQLv1Antlr4Lexer;
 
         constexpr const char* builtinFunctionPattern = ( //
             "^("

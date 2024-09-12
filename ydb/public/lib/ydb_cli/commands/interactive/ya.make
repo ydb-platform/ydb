@@ -9,7 +9,7 @@ SRCS(
 PEERDIR(
     contrib/restricted/patched/replxx
     contrib/libs/antlr4_cpp_runtime
-    ydb/library/yql/parser/proto_ast/gen/v1_antlr4
+    ydb/public/lib/ydb_cli/commands/interactive/gen
     ydb/public/lib/ydb_cli/common
 )
 

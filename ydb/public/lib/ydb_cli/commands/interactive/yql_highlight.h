@@ -6,7 +6,7 @@
 #include <contrib/libs/antlr4_cpp_runtime/src/BufferedTokenStream.h>
 #include <contrib/libs/antlr4_cpp_runtime/src/ANTLRInputStream.h>
 
-#include <ydb/library/yql/parser/proto_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h>
+#include <ydb/public/lib/ydb_cli/commands/interactive/gen/SQLv1Antlr4Lexer.h>
 
 #include <regex>
 
@@ -60,7 +60,7 @@ namespace NYdb {
             std::regex TypeRegex;
 
             antlr4::ANTLRInputStream Chars;
-            NALPDefaultAntlr4::SQLv1Antlr4Lexer Lexer;
+            SQLv1Antlr4Lexer Lexer;
             antlr4::BufferedTokenStream Tokens;
         };
 

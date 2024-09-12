@@ -162,12 +162,14 @@ def upload_results(result_path, s3_folder, test_start):
                     "WasSpillingInJoin" : None,
                     "WasSpillingInChannels" : None,
                     "MaxTasksPerStage" : params.tasks,
-                    "PerfFileLink" : results.perf_file_path,
                     "ExitCode" : results.exitcode,
                     "ResultHash" : results.result_hash,
                     "SpilledBytes" : results.read_bytes,
                     "UserTime" : results.user_time,
-                    "SystemTime" : results.system_time
+                    "SystemTime" : results.system_time,
+                    "StdoutFileLink" : results.stdout_file_path,
+                    "StderrFileLink" : results.stderr_file_path,
+                    "PerfFileLink" : results.perf_file_path
                 }
                 sql = 'UPSERT INTO `perfomance/olap/dq_spilling_nightly_runs`\n\t({columns})\nVALUES\n\t({values})'.format(
                     columns=", ".join(map(str, mapping.keys())),

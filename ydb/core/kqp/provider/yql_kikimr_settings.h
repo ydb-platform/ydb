@@ -58,6 +58,7 @@ struct TKikimrSettings {
     NCommon::TConfSetting<TString, false> OptCardinalityHints;
     NCommon::TConfSetting<TString, false> OptJoinAlgoHints;
     NCommon::TConfSetting<TString, false> OptJoinOrderHints;
+    NCommon::TConfSetting<TString, false> OverrideStatistics;
 
     /* Disable optimizer rules */
     NCommon::TConfSetting<bool, false> OptDisableTopSort;
@@ -175,6 +176,10 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableSpillingGenericQuery = false;
     ui32 DefaultCostBasedOptimizationLevel = 4;
     bool EnableConstantFolding = true;
+    ui64 DefaultEnableSpillingNodes = 0;
+
+    void SetDefaultEnabledSpillingNodes(const TString& node);
+    ui64 GetEnabledSpillingNodes() const;
 };
 
 }

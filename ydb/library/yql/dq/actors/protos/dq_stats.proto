@@ -195,6 +195,14 @@ message TDqTaskStats {
     repeated TDqOutputChannelStats OutputChannels = 153;
     repeated TDqAsyncInputBufferStats InputTransforms = 155;
 
+    uint64 SpillingComputeWriteBytes = 160;
+    uint64 SpillingChannelWriteBytes = 161;
+
+    uint64 SpillingComputeReadTimeUs = 162;
+    uint64 SpillingComputeWriteTimeUs = 163;
+    uint64 SpillingChannelReadTimeUs = 164;
+    uint64 SpillingChannelWriteTimeUs = 165;
+
     // profile stats
     repeated TDqTableStats Tables = 10;
 

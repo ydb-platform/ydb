@@ -11,21 +11,28 @@ using namespace NActors;
 class TDqSpillerFactory : public NKikimr::NMiniKQL::ISpillerFactory
 {
 public:
-    TDqSpillerFactory(TTxId txId, TActorSystem* actorSystem, std::function<void()> wakeUpCallback) 
+    TDqSpillerFactory(TTxId txId, TActorSystem* actorSystem, TWakeUpCallback wakeUpCallback, TErrorCallback errorCallback) 
         : ActorSystem_(actorSystem),
         TxId_(txId),
-        WakeUpCallback_(wakeUpCallback)
+        WakeUpCallback_(wakeUpCallback),
+        ErrorCallback_(errorCallback)
     {
     }
 
+    void SetTaskCounters(TIntrusivePtr<TSpillingTaskCounters> spillingTaskCounters) override {
+        SpillingTaskCounters_ = spillingTaskCounters;
+    }
+
     NKikimr::NMiniKQL::ISpiller::TPtr CreateSpiller() override {
-        return std::make_shared<TDqComputeStorage>(TxId_, WakeUpCallback_, ActorSystem_);
+        return std::make_shared<TDqComputeStorage>(TxId_, WakeUpCallback_, ErrorCallback_, SpillingTaskCounters_, ActorSystem_);
     }
 
 private:
     TActorSystem* ActorSystem_;
     TTxId TxId_;
-    std::function<void()> WakeUpCallback_;
+    TWakeUpCallback WakeUpCallback_;
+    TErrorCallback ErrorCallback_;
+    TIntrusivePtr<TSpillingTaskCounters> SpillingTaskCounters_;
 };
 
 } // namespace NYql::NDq

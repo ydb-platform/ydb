@@ -2,6 +2,7 @@ LIBRARY()
 
 PEERDIR (
     ydb/library/yql/parser/proto_ast/gen/v1_proto_split
+    ydb/library/yql/parser/proto_ast
 )
 
 SET(antlr_output ${ARCADIA_BUILD_ROOT}/${MODDIR})
@@ -47,10 +48,6 @@ RUN_ANTLR4(
     ${PROTOBUF_HEADER_PATH}/SQLv1Parser.pb.main.h
     ${STG_INCLUDES}
     CWD ${antlr_output}
-)
-
-PEERDIR(
-    contrib/libs/antlr4_cpp_runtime
 )
 
 END()

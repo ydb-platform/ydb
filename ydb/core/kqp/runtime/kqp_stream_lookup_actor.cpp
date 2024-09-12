@@ -38,6 +38,7 @@ public:
         , Snapshot(settings.GetSnapshot().GetStep(), settings.GetSnapshot().GetTxId())
         , AllowInconsistentReads(settings.GetAllowInconsistentReads())
         , LockTxId(settings.HasLockTxId() ? settings.GetLockTxId() : TMaybe<ui64>())
+        , NodeLockId(settings.HasLockNodeId() ? settings.GetLockNodeId() : TMaybe<ui32>())
         , SchemeCacheRequestTimeout(SCHEME_CACHE_REQUEST_TIMEOUT)
         , StreamLookupWorker(CreateStreamLookupWorker(std::move(settings), args.TypeEnv, args.HolderFactory, args.InputDesc))
         , Counters(counters)
@@ -456,6 +457,10 @@ private:
             record.SetLockTxId(*LockTxId);
         }
 
+        if (NodeLockId) {
+            record.SetLockNodeId(*NodeLockId);
+        }
+
         auto defaultSettings = GetDefaultReadSettings()->Record;
         record.SetMaxRows(defaultSettings.GetMaxRows());
         record.SetMaxBytes(defaultSettings.GetMaxBytes());
@@ -586,6 +591,7 @@ private:
     IKqpGateway::TKqpSnapshot Snapshot;
     const bool AllowInconsistentReads;
     const TMaybe<ui64> LockTxId;
+    const TMaybe<ui32> NodeLockId;
     std::unordered_map<ui64, TReadState> Reads;
     std::unordered_map<ui64, TShardState> ReadsPerShard;
     std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> Partitioning;

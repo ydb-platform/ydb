@@ -512,6 +512,7 @@ protected:
         }
 
         TasksGraph.GetMeta().SetLockTxId(lockTxId);
+        TasksGraph.GetMeta().SetLockNodeId(SelfId().NodeId());
 
         LWTRACK(KqpBaseExecuterHandleReady, ResponseEv->Orbit, TxId);
         if (IsDebugLogEnabled()) {

@@ -32,7 +32,7 @@ Using these stamps, you can arrange records from different partitions of the top
 
 {% note info %}
 
-By default, virtual timestamps are not uploaded to the changefeed. To enable them, use the [appropriate parameter](../yql/reference/syntax/alter_table.md#changefeed-options) when creating a changefeed.
+By default, virtual timestamps are not uploaded to the changefeed. To enable them, use the [appropriate parameter](../yql/reference/syntax/alter_table/changefeed.md) when creating a changefeed.
 
 {% endnote %}
 
@@ -58,7 +58,7 @@ During the scanning process, depending on the table update frequency, you might 
 
 ## Record structure {#record-structure}
 
-Depending on the [changefeed parameters](../yql/reference/syntax/alter_table.md#changefeed-options), the structure of a record may differ.
+Depending on the [changefeed parameters](../yql/reference/syntax/alter_table.md/changefeed.md), the structure of a record may differ.
 
 ### JSON format {#json-record-structure}
 
@@ -223,11 +223,11 @@ Records whose retention time has expired are deleted, regardless of whether they
 
 Deleting records before they are processed by the client will cause [offset](topic.md#offset) skips, which means that the offsets of the last record read from the partition and the earliest available record will differ by more than one.
 
-To set up the record retention period, specify the [RETENTION_PERIOD](../yql/reference/syntax/alter_table.md#changefeed-options) parameter when creating a changefeed.
+To set up the record retention period, specify the [RETENTION_PERIOD](../yql/reference/syntax/alter_table/changefeed.md) parameter when creating a changefeed.
 
 ## Topic partitions {#topic-partitions}
 
-By default, the number of [topic partitions](topic.md#partitioning) is equal to the number of table partitions. The number of topic partitions can be redefined by specifying [TOPIC_MIN_ACTIVE_PARTITIONS](../yql/reference/syntax/alter_table.md#changefeed-options) parameter when creating a changefeed.
+By default, the number of [topic partitions](topic.md#partitioning) is equal to the number of table partitions. The number of topic partitions can be redefined by specifying [TOPIC_MIN_ACTIVE_PARTITIONS](../yql/reference/syntax/alter_table/changefeed.md) parameter when creating a changefeed.
 
 {% note info %}
 
@@ -237,7 +237,7 @@ Currently, the ability to explicitly specify the number of topic partitions is a
 
 ## Creating and deleting a changefeed {#ddl}
 
-You can add a changefeed to an existing table or erase it using the [ADD CHANGEFEED and DROP CHANGEFEED](../yql/reference/syntax/alter_table.md#changefeed) directives of the YQL `ALTER TABLE` statement. When erasing a table, the changefeed added to it is also deleted.
+You can add a changefeed to an existing table or erase it using the [ADD CHANGEFEED and DROP CHANGEFEED](../yql/reference/syntax/alter_table.md/changefeed.md) directives of the YQL `ALTER TABLE` statement. When erasing a table, the changefeed added to it is also deleted.
 
 ## CDC purpose and use {#best_practices}
 

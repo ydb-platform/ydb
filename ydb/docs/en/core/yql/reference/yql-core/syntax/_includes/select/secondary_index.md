@@ -1,6 +1,10 @@
 # VIEW (INDEX)
 
+{% if oss == true and backend_name == "YDB" %}
+
 {% include [olap_warning_note](../../../../../_includes/not_allow_for_olap_note.md) %}
+
+{% endif %}
 
 To make a `SELECT` by secondary index of row-oriented table statement, use the following:
 

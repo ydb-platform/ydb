@@ -67,7 +67,7 @@ def pretty_print(value):
     if type(value) == datetime.timedelta:
         return f"DateTime::IntervalFromMicroseconds({int(value / datetime.timedelta(microseconds=1))})"
     if isinstance(value, pathlib.Path):
-        return str(value)
+        return f'\"{value}\"'
     if type(value) == str:
         return f'\"{value}\"'
     if type(value) in [int, float]:

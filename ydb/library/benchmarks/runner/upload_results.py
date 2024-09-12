@@ -36,9 +36,9 @@ class RunResults:
         self.system_time = None
         self.rss = None
         self.result_hash = None
-        self.perf_file_path = None
         self.stdout_file_path = None
         self.stderr_file_path = None
+        self.perf_file_path = None
 
     def from_json(self, json):
         self.exitcode = json["exitcode"]
@@ -87,7 +87,12 @@ def upload_file_to_s3(s3_folder, result_path, file):
     return dst
 
 
-def upload_results(result_path, s3_folder, test_start):
+def upload_results(result_path, s3_folder, test_start, try_num):
+    def add_try_num_to_path(path):
+        if try_num:
+            path = f"try_{try_num}" / path
+        return path
+
     results_map = {}
     for entry in result_path.glob("*/*"):
         if not entry.is_dir():
@@ -113,20 +118,20 @@ def upload_results(result_path, s3_folder, test_start):
 
                 # q<num>.svg
                 if file.suffix == ".svg":
-                    this_result[query_num].perf_file_path = upload_file_to_s3(s3_folder, result_path, file)
+                    this_result[query_num].perf_file_path = add_try_num_to_path(upload_file_to_s3(s3_folder, result_path, file))
 
                 # q<num>-result.yson
                 if file.stem == f"q{query_num}-result":
-                    with open(file, "r") as stdout:
-                        this_result[query_num].result_hash = str(hash(stdout.read().strip()))
+                    with open(file, "r") as result:
+                        this_result[query_num].result_hash = str(hash(result.read().strip()))
 
                 # q<num>-stdout.txt
                 if file.stem == f"q{query_num}-stdout":
-                    this_result[query_num].stdout_file_path = upload_file_to_s3(s3_folder, result_path, file)
+                    this_result[query_num].stdout_file_path = add_try_num_to_path(upload_file_to_s3(s3_folder, result_path, file))
 
-                # q<num>-stdout.txt
+                # q<num>-stderr.txt
                 if file.stem == f"q{query_num}-stderr":
-                    this_result[query_num].stderr_file_path = upload_file_to_s3(s3_folder, result_path, file)
+                    this_result[query_num].stderr_file_path = add_try_num_to_path(upload_file_to_s3(s3_folder, result_path, file))
 
         summary_file = entry / "summary.json"
 
@@ -184,14 +189,15 @@ def main():
 
     parser.add_argument("--result-path", type=pathlib.Path)
     parser.add_argument("--s3-folder", type=pathlib.Path)
+    parser.add_argument("--try-num", default=None)
 
     args = parser.parse_args()
 
-    if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
-        raise AttributeError("Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping uploading")
-    os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = os.environ["CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"]
+    # if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
+        # raise AttributeError("Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping uploading")
+    # os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = os.environ["CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"]
 
-    upload_results(args.result_path, args.s3_folder, upload_time)
+    upload_results(args.result_path, args.s3_folder, upload_time, args.try_num)
 
 
 if __name__ == "__main__":

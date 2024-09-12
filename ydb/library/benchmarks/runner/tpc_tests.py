@@ -58,11 +58,12 @@ class Runner:
         yatest.common.execute(cmd, stdout=sys.stdout, stderr=sys.stderr)
 
 
-def upload(result_path, s3_folder):
+def upload(result_path, s3_folder, try_num):
     uploader = pathlib.Path(yatest.common.source_path("ydb/library/benchmarks/runner/upload_results.py")).resolve()
     cmd = ["python3", str(uploader)]
     cmd += ["--result-path", str(result_path)]
     cmd += ["--s3-folder", str(s3_folder)]
+    cmd += ["--try-num", str(try_num)] if try_num else []
     yatest.common.execute(cmd, stdout=sys.stdout, stderr=sys.stderr)
 
 
@@ -75,6 +76,10 @@ def test_tpc():
     print("Results path: ", result_path, file=sys.stderr)
 
     if is_ci:
-        s3_folder = pathlib.Path(os.environ["PUBLIC_DIR"]).resolve()
+        s3_folder = pathlib.Path(os.environ["CURRENT_PUBLIC_DIR"]).resolve()
+        try:
+            try_num = int(s3_folder.name.split("try_")[-1])
+        except Exception:
+            try_num = None
 
-        upload(result_path, s3_folder)
+        upload(result_path, s3_folder, try_num)

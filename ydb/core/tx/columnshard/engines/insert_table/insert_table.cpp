@@ -129,25 +129,21 @@ std::vector<TCommittedBlob> TInsertTable::Read(ui64 pathId, const std::optional<
         if (lockId || data.GetSnapshot() <= reqSnapshot) {
             auto start = data.GetMeta().GetFirstPK(pkSchema);
             auto finish = data.GetMeta().GetLastPK(pkSchema);
-            AFL_VERIFY(start);
-            AFL_VERIFY(finish);
-            if (pkRangesFilter && pkRangesFilter->IsPortionInPartialUsage(*start, *finish) == TPKRangeFilter::EUsageClass::DontUsage) {
+            if (pkRangesFilter && pkRangesFilter->IsPortionInPartialUsage(start, finish) == TPKRangeFilter::EUsageClass::DontUsage) {
                 continue;
             }
             result.emplace_back(TCommittedBlob(data.GetBlobRange(), data.GetSnapshot(), data.GetSchemaVersion(), data.GetMeta().GetNumRows(),
-                *start, *finish, data.GetMeta().GetModificationType() == NEvWrite::EModificationType::Delete, data.GetMeta().GetSchemaSubset()));
+                start, finish, data.GetMeta().GetModificationType() == NEvWrite::EModificationType::Delete, data.GetMeta().GetSchemaSubset()));
         }
     }
     if (lockId) {
         for (const auto& [writeId, data] : pInfo->GetInserted()) {
             auto start = data.GetMeta().GetFirstPK(pkSchema);
             auto finish = data.GetMeta().GetLastPK(pkSchema);
-            AFL_VERIFY(start);
-            AFL_VERIFY(finish);
-            if (pkRangesFilter && pkRangesFilter->IsPortionInPartialUsage(*start, *finish) == TPKRangeFilter::EUsageClass::DontUsage) {
+            if (pkRangesFilter && pkRangesFilter->IsPortionInPartialUsage(start, finish) == TPKRangeFilter::EUsageClass::DontUsage) {
                 continue;
             }
-            result.emplace_back(TCommittedBlob(data.GetBlobRange(), writeId, data.GetSchemaVersion(), data.GetMeta().GetNumRows(), *start, *finish,
+            result.emplace_back(TCommittedBlob(data.GetBlobRange(), writeId, data.GetSchemaVersion(), data.GetMeta().GetNumRows(), start, finish,
                 data.GetMeta().GetModificationType() == NEvWrite::EModificationType::Delete, data.GetMeta().GetSchemaSubset()));
         }
     }

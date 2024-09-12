@@ -516,44 +516,54 @@ IComputationNode* WrapBlockMapJoinCore(TCallable& callable, const TComputationNo
     const auto flow = LocateNode(ctx.NodeLocator, callable, 0);
     const auto dict = LocateNode(ctx.NodeLocator, callable, 1);
 
-    switch (joinKind) {
-    case EJoinKind::Inner:
-        if (isMulti) {
-            return new TBlockWideMultiMapJoinWrapper<true, false>(ctx.Mutables,
-                std::move(joinItems), std::move(leftFlowItems),
-                std::move(leftKeyColumns), std::move(leftIOMap),
-                static_cast<IComputationWideFlowNode*>(flow), dict);
-        }
-        return new TBlockWideMapJoinWrapper<false, true, false>(ctx.Mutables,
-            std::move(joinItems), std::move(leftFlowItems),
-            std::move(leftKeyColumns), std::move(leftIOMap),
-            static_cast<IComputationWideFlowNode*>(flow), dict);
-    case EJoinKind::Left:
-        if (isMulti) {
-            return new TBlockWideMultiMapJoinWrapper<false, false>(ctx.Mutables,
-                std::move(joinItems), std::move(leftFlowItems),
-                std::move(leftKeyColumns), std::move(leftIOMap),
-                static_cast<IComputationWideFlowNode*>(flow), dict);
-        }
-        return new TBlockWideMapJoinWrapper<false, false, false>(ctx.Mutables,
-            std::move(joinItems), std::move(leftFlowItems),
-            std::move(leftKeyColumns), std::move(leftIOMap),
-            static_cast<IComputationWideFlowNode*>(flow), dict);
-    case EJoinKind::LeftSemi:
-        return new TBlockWideMapJoinWrapper<true, true, false>(ctx.Mutables,
-            std::move(joinItems), std::move(leftFlowItems),
-            std::move(leftKeyColumns), std::move(leftIOMap),
-            static_cast<IComputationWideFlowNode*>(flow), dict);
-    case EJoinKind::LeftOnly:
-        return new TBlockWideMapJoinWrapper<true, false, false>(ctx.Mutables,
-            std::move(joinItems), std::move(leftFlowItems),
-            std::move(leftKeyColumns), std::move(leftIOMap),
-            static_cast<IComputationWideFlowNode*>(flow), dict);
-    default:
-        // TODO: Display the human-readable join kind name.
-        MKQL_ENSURE(false, "BlockMapJoinCore doesn't support join type #"
-                    << static_cast<ui32>(joinKind));
+#define DISPATCH_JOIN(IS_TUPLE) do {                                                \
+    switch (joinKind) {                                                             \
+    case EJoinKind::Inner:                                                          \
+        if (isMulti) {                                                              \
+            return new TBlockWideMultiMapJoinWrapper<true, IS_TUPLE>(ctx.Mutables,  \
+                std::move(joinItems), std::move(leftFlowItems),                     \
+                std::move(leftKeyColumns), std::move(leftIOMap),                    \
+                static_cast<IComputationWideFlowNode*>(flow), dict);                \
+        }                                                                           \
+        return new TBlockWideMapJoinWrapper<false, true, IS_TUPLE>(ctx.Mutables,    \
+            std::move(joinItems), std::move(leftFlowItems),                         \
+            std::move(leftKeyColumns), std::move(leftIOMap),                        \
+            static_cast<IComputationWideFlowNode*>(flow), dict);                    \
+    case EJoinKind::Left:                                                           \
+        if (isMulti) {                                                              \
+            return new TBlockWideMultiMapJoinWrapper<false, IS_TUPLE>(ctx.Mutables, \
+                std::move(joinItems), std::move(leftFlowItems),                     \
+                std::move(leftKeyColumns), std::move(leftIOMap),                    \
+                static_cast<IComputationWideFlowNode*>(flow), dict);                \
+        }                                                                           \
+        return new TBlockWideMapJoinWrapper<false, false, IS_TUPLE>(ctx.Mutables,   \
+            std::move(joinItems), std::move(leftFlowItems),                         \
+            std::move(leftKeyColumns), std::move(leftIOMap),                        \
+            static_cast<IComputationWideFlowNode*>(flow), dict);                    \
+    case EJoinKind::LeftSemi:                                                       \
+        return new TBlockWideMapJoinWrapper<true, true, IS_TUPLE>(ctx.Mutables,     \
+            std::move(joinItems), std::move(leftFlowItems),                         \
+            std::move(leftKeyColumns), std::move(leftIOMap),                        \
+            static_cast<IComputationWideFlowNode*>(flow), dict);                    \
+    case EJoinKind::LeftOnly:                                                       \
+        return new TBlockWideMapJoinWrapper<true, false, IS_TUPLE>(ctx.Mutables,    \
+            std::move(joinItems), std::move(leftFlowItems),                         \
+            std::move(leftKeyColumns), std::move(leftIOMap),                        \
+            static_cast<IComputationWideFlowNode*>(flow), dict);                    \
+    default:                                                                        \
+        /* TODO: Display the human-readable join kind name. */                      \
+        MKQL_ENSURE(false, "BlockMapJoinCore doesn't support join type #"           \
+                    << static_cast<ui32>(joinKind));                                \
+    }                                                                               \
+} while(0)
+
+    if (isTupleKey) {
+        DISPATCH_JOIN(true);
+    } else {
+        DISPATCH_JOIN(false);
     }
+
+#undef DISPATCH_JOIN
 }
 
 } // namespace NMiniKQL

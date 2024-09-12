@@ -154,8 +154,9 @@ namespace NYql::NDq {
             NConnector::NApi::TReadSplitsRequest readRequest;
 
             auto dsi = LookupSource.data_source_instance();
-            if (auto issue = TokenProvider->MaybeFillToken(*readRequest.mutable_data_source_instance()); issue) {
-                SendError(TActivationContext::ActorSystem(), SelfId(), std::move(*issue));
+            auto error = TokenProvider->MaybeFillToken(*readRequest.mutable_data_source_instance());
+            if (error) {
+                SendError(TActivationContext::ActorSystem(), SelfId(), std::move(error));
                 return;
             }
 
@@ -205,7 +206,7 @@ namespace NYql::NDq {
             NConnector::NApi::TListSplitsRequest splitRequest;
 
             if (auto issue = FillSelect(*splitRequest.add_selects()); issue) {
-                SendError(TActivationContext::ActorSystem(), SelfId(), std::move(*issue));
+                SendError(TActivationContext::ActorSystem(), SelfId(), std::move(issue));
                 return;
             };
 
@@ -297,10 +298,10 @@ namespace NYql::NDq {
             SendError(actorSystem, selfId, NConnector::ErrorFromGRPCStatus(status));
         }
 
-        static void SendError(NActors::TActorSystem* actorSystem, const NActors::TActorId& selfId, TIssue issue) {
-            NConnector::NApi::TError error;
-            *error.mutable_message() = issue.GetMessage();
-            SendError(actorSystem, selfId, error);
+        static void SendError(NActors::TActorSystem* actorSystem, const NActors::TActorId& selfId, TString error) {
+            NConnector::NApi::TError dst;
+            *dst.mutable_message() = error;
+            SendError(actorSystem, selfId, std::move(dst));
         }
 
     private:
@@ -332,10 +333,11 @@ namespace NYql::NDq {
             return result;
         }
 
-        TMaybe<TIssue> FillSelect(NConnector::NApi::TSelect& select) {
+        TString FillSelect(NConnector::NApi::TSelect& select) {
             auto dsi = LookupSource.data_source_instance();
-            if (auto issue = TokenProvider->MaybeFillToken(dsi); issue) {
-                return issue;
+            auto error = TokenProvider->MaybeFillToken(dsi);
+            if (error) {
+                return error;
             }
             *select.mutable_data_source_instance() = dsi;
 
@@ -362,7 +364,7 @@ namespace NYql::NDq {
                 *disjunction.mutable_operands()->Add()->mutable_conjunction() = conjunction;
             }
             *select.mutable_where()->mutable_filter_typed()->mutable_disjunction() = disjunction;
-            return Nothing();
+            return "";
         }
 
     private:

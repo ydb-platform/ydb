@@ -1255,7 +1255,7 @@ bool CellFromProtoVal(NScheme::TTypeInfo type, i32 typmod, const Ydb::Value* vp,
         TString text = val.Gettext_value();
         if (!text.empty()) {
             isText = true;
-            auto desc = type.GetTypeDesc();
+            auto desc = type.GetPgTypeDesc();
             auto res = NPg::PgNativeBinaryFromNativeText(text, desc);
             if (res.Error) {
                 err = TStringBuilder() << "Invalid text value for "
@@ -1266,7 +1266,7 @@ bool CellFromProtoVal(NScheme::TTypeInfo type, i32 typmod, const Ydb::Value* vp,
         } else {
             binary = val.Getbytes_value();
         }
-        auto* desc = type.GetTypeDesc();
+        auto* desc = type.GetPgTypeDesc();
         if (typmod != -1 && NPg::TypeDescNeedsCoercion(desc)) {
             auto res = NPg::PgNativeBinaryCoerce(TStringBuf(binary), desc, typmod);
             if (res.Error) {

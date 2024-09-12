@@ -3,6 +3,7 @@
 
 #include <ydb/library/yql/minikql/mkql_type_builder.h>
 #include <ydb/library/yql/public/udf/arrow/block_reader.h>
+#include <ydb/library/yql/public/udf/arrow/memory_pool.h>
 #include <ydb/library/yql/utils/rope_over_buffer.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
@@ -30,17 +31,38 @@ std::shared_ptr<arrow::Buffer> MakeEmptyBuffer() {
     return std::make_shared<arrow::Buffer>(nullptr, 0);
 }
 
+bool HasArrrowAlignment(const void* buf) {
+    using namespace NYql::NUdf;
+    size_t addr = reinterpret_cast<size_t>(buf);
+    return (addr & (ArrowMemoryAlignment - 1)) == 0;
+}
+
+const ui8* MakeArrowAlignment(const ui8* buf) {
+    using namespace NYql::NUdf;
+    size_t addr = reinterpret_cast<size_t>(buf);
+    return reinterpret_cast<const ui8*>((addr + ArrowMemoryAlignment - 1) & size_t(ArrowMemoryAlignment - 1));
+}
+
 std::shared_ptr<arrow::Buffer> MakeZeroBuffer(size_t byteLen) {
-    constexpr size_t NullWordCount = (MaxBlockSizeInBytes + sizeof(ui64) - 1) / sizeof(ui64);
-    static ui64 nulls[NullWordCount] = { 0 };
-    if (byteLen <= sizeof(nulls)) {
-        return std::make_shared<arrow::Buffer>(reinterpret_cast<const ui8*>(nulls), byteLen);
+    using namespace NYql::NUdf;
+    if (!byteLen) {
+        return MakeEmptyBuffer();
     }
 
-    size_t wordCount = (byteLen + sizeof(ui64) - 1) / sizeof(ui64);
-    std::shared_ptr<ui64[]> buf(new ui64[wordCount]);
-    std::fill(buf.get(), buf.get() + wordCount, 0);
-    return std::make_shared<TOwnedArrowBuffer>(TContiguousSpan{ reinterpret_cast<const char*>(buf.get()), byteLen }, buf);
+    constexpr size_t NullWordCount = (MaxBlockSizeInBytes + sizeof(ui64) - 1) / sizeof(ui64);
+    constexpr size_t ExtraAlignWords = (ArrowMemoryAlignment > sizeof(ui64)) ? (ArrowMemoryAlignment / sizeof(ui64) - 1) : 0;
+    static const ui64 nulls[NullWordCount + ExtraAlignWords] = { 0 };
+
+    // round all buffer length to 64 bytes
+    size_t capacity = (byteLen + 63u) & ~size_t(63);
+    if (capacity <= NullWordCount * sizeof(ui64)) {
+        return std::make_shared<arrow::Buffer>(MakeArrowAlignment(reinterpret_cast<const ui8*>(nulls)), byteLen);
+    }
+
+    auto result = AllocateResizableBuffer(byteLen, GetYqlMemoryPool());
+    ARROW_OK(result->Resize(byteLen));
+    std::memset(result->mutable_data(), 0, byteLen);
+    return result;
 }
 
 std::shared_ptr<arrow::Buffer> MakeZeroBitmap(size_t bitCount) {
@@ -90,9 +112,10 @@ void LoadBufferSize(const IBlockDeserializer::TMetadataSource& metaSource, TMayb
 }
 
 std::shared_ptr<arrow::Buffer> LoadBuffer(TRope& source, TMaybe<ui64> size) {
+    using namespace NYql::NUdf;
     YQL_ENSURE(size.Defined(), "Buffer size is not loaded");
     if (!*size) {
-        return std::make_shared<arrow::Buffer>(nullptr, 0);
+        return MakeEmptyBuffer();
     }
 
     YQL_ENSURE(source.size() >= *size, "Premature end of data");
@@ -100,7 +123,15 @@ std::shared_ptr<arrow::Buffer> LoadBuffer(TRope& source, TMaybe<ui64> size) {
     source.EraseFront(*size);
 
     owner->Compact();
-    return std::make_shared<TOwnedArrowBuffer>(owner->GetContiguousSpan(), owner);
+    auto span = owner->GetContiguousSpan();
+    if (HasArrrowAlignment(span.Data())) {
+        return std::make_shared<TOwnedArrowBuffer>(span, owner);
+    }
+
+    auto result = AllocateResizableBuffer(span.Size(), NYql::NUdf::GetYqlMemoryPool());
+    ARROW_OK(result->Resize((int64_t)span.Size()));
+    std::memcpy(result->mutable_data(), span.Data(), span.Size());
+    return result;
 }
 
 std::shared_ptr<arrow::Buffer> LoadNullsBitmap(TRope& source, TMaybe<ui64> nullCount, TMaybe<ui64> bitmapSize) {

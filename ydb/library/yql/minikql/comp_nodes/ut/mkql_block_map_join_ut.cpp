@@ -15,18 +15,6 @@ namespace NMiniKQL {
 
 namespace {
 
-template <typename T, bool isOptional = false>
-const TRuntimeNode MakeSimpleKey(TProgramBuilder& pgmBuilder, T value, bool isEmpty = false) {
-    if constexpr (!isOptional) {
-        return pgmBuilder.NewDataLiteral<T>(value);
-    }
-    const auto keyType = pgmBuilder.NewDataType(NUdf::TDataType<T>::Id, true);
-    if (isEmpty) {
-        return pgmBuilder.NewEmptyOptional(keyType);
-    }
-    return pgmBuilder.NewOptional(pgmBuilder.NewDataLiteral<T>(value));
-}
-
 const TRuntimeNode MakeSet(TProgramBuilder& pgmBuilder,
     const TVector<const TRuntimeNode>& keys
 ) {

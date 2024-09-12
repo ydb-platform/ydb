@@ -2,7 +2,7 @@
 
 Apache Superset — это современная платформа для анализа и визуализации данных.
 
-Поддержка [сетевого протокола PostgreSQL](../../postgresql/intro.md) в {{ ydb-short-name }} позволяет использовать [Apache Superset](https://superset.apache.org/) для выполнения запросов и визуализации данных из {{ ydb-short-name }}.
+Режим совместимости с PostgreSQL в {{ ydb-short-name }} позволяет использовать [Apache Superset](https://superset.apache.org/) для выполнения запросов и визуализации данных из {{ ydb-short-name }}. В этом случае Apache Superset работает с {{ ydb-short-name }} как с PostgreSQL.
 
 
 ## Создание подключения к {{ ydb-short-name }} {#add-database-connection}

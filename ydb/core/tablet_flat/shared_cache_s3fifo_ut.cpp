@@ -52,12 +52,13 @@ namespace {
     };
 
     struct TPageLocation {
-        static ui32 Get(const TPage *page) {
-            return page->CacheFlags1;
+        static ES3FIFOPageLocation Get(const TPage *page) {
+            return static_cast<ES3FIFOPageLocation>(page->CacheFlags1);
         }
-        static void Set(TPage *x, ui32 flags) {
-            Y_ABORT_UNLESS(flags < (1 << 4));
-            x->CacheFlags1 = flags;
+        static void Set(TPage *x, ES3FIFOPageLocation location) {
+            ui32 generation_ = static_cast<ui32>(location);
+            Y_ABORT_UNLESS(generation_ < (1 << 4));
+            x->CacheFlags1 = generation_;
         }
     };
 
@@ -65,9 +66,9 @@ namespace {
         static ui32 Get(const TPage *page) {
             return page->CacheFlags2;
         }
-        static void Set(TPage *page, ui32 flags) {
-            Y_ABORT_UNLESS(flags < (1 << 4));
-            page->CacheFlags2 = flags;
+        static void Set(TPage *x, ui32 frequency) {
+            Y_ABORT_UNLESS(frequency < (1 << 4));
+            x->CacheFlags2 = frequency;
         }
     };
 
@@ -76,7 +77,7 @@ namespace {
 Y_UNIT_TEST_SUITE(TS3FIFOGhostQueue) {
     
     Y_UNIT_TEST(Add) {
-        TTS3FIFOGhostPageQueue<TPageKey, TPageKeyHash, TPageKeyEqual> queue(100);
+        TS3FIFOGhostPageQueue<TPageKey, TPageKeyHash, TPageKeyEqual> queue(100);
         UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "");
 
         queue.Add(1, 10);
@@ -96,7 +97,7 @@ Y_UNIT_TEST_SUITE(TS3FIFOGhostQueue) {
     }
 
     Y_UNIT_TEST(Erase) {
-        TTS3FIFOGhostPageQueue<TPageKey, TPageKeyHash, TPageKeyEqual> queue(100);
+        TS3FIFOGhostPageQueue<TPageKey, TPageKeyHash, TPageKeyEqual> queue(100);
         UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "");
 
         queue.Add(1, 10);
@@ -118,7 +119,7 @@ Y_UNIT_TEST_SUITE(TS3FIFOGhostQueue) {
     }
 
     Y_UNIT_TEST(Erase_Add) {
-        TTS3FIFOGhostPageQueue<TPageKey, TPageKeyHash, TPageKeyEqual> queue(100);
+        TS3FIFOGhostPageQueue<TPageKey, TPageKeyHash, TPageKeyEqual> queue(100);
         UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "");
 
         queue.Add(1, 10);
@@ -137,7 +138,7 @@ Y_UNIT_TEST_SUITE(TS3FIFOGhostQueue) {
     }
 
     Y_UNIT_TEST(Add_Big) {
-        TTS3FIFOGhostPageQueue<TPageKey, TPageKeyHash, TPageKeyEqual> queue(100);
+        TS3FIFOGhostPageQueue<TPageKey, TPageKeyHash, TPageKeyEqual> queue(100);
         UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "");
 
         queue.Add(1, 101);
@@ -145,7 +146,7 @@ Y_UNIT_TEST_SUITE(TS3FIFOGhostQueue) {
     }
 
     Y_UNIT_TEST(UpdateLimit) {
-        TTS3FIFOGhostPageQueue<TPageKey, TPageKeyHash, TPageKeyEqual> queue(100);
+        TS3FIFOGhostPageQueue<TPageKey, TPageKeyHash, TPageKeyEqual> queue(100);
         UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "");
 
         queue.Add(1, 10);

@@ -146,23 +146,35 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             }
         };
 
-        struct TCacheFlags1 {
-            static ui32 Get(const TPage *page) {
-                return page->CacheFlags1;
+        struct TS3FIFOPageLocation {
+            static ES3FIFOPageLocation Get(const TPage *page) {
+                return static_cast<ES3FIFOPageLocation>(page->CacheFlags1);
             }
-            static void Set(TPage *x, ui32 flags) {
-                Y_ABORT_UNLESS(flags < (1 << 4));
-                x->CacheFlags1 = flags;
+            static void Set(TPage *x, ES3FIFOPageLocation location) {
+                ui32 location_ = static_cast<ui32>(location);
+                Y_ABORT_UNLESS(location_ < (1 << 4));
+                x->CacheFlags1 = location_;
             }
         };
 
-        struct TCacheFlags2 {
+        struct TS3FIFOPageFrequency {
             static ui32 Get(const TPage *page) {
                 return page->CacheFlags2;
             }
-            static void Set(TPage *page, ui32 flags) {
-                Y_ABORT_UNLESS(flags < (1 << 4));
-                page->CacheFlags2 = flags;
+            static void Set(TPage *x, ui32 frequency) {
+                Y_ABORT_UNLESS(frequency < (1 << 4));
+                x->CacheFlags2 = frequency;
+            }
+        };
+
+        struct TCacheCacheGeneration {
+            static ECacheCacheGeneration Get(const TPage *page) {
+                return static_cast<ECacheCacheGeneration>(page->CacheFlags1);
+            }
+            static void Set(TPage *x, ECacheCacheGeneration generation) {
+                ui32 generation_ = static_cast<ui32>(generation);
+                Y_ABORT_UNLESS(generation_ < (1 << 4));
+                x->CacheFlags1 = generation_;
             }
         };
     };
@@ -256,11 +268,11 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         switch (Config->ReplacementPolicy) {
             case NKikimrSharedCache::S3FIFO:
-                return MakeHolder<TS3FIFOCache<TPage, TPage::TKey, TPage::TKeyHash, TPage::TKeyEqual, TPage::TSize, TPage::TCacheFlags1, TPage::TCacheFlags2>>(1);
+                return MakeHolder<TS3FIFOCache<TPage, TPage::TKey, TPage::TKeyHash, TPage::TKeyEqual, TPage::TSize, TPage::TS3FIFOPageLocation, TPage::TS3FIFOPageFrequency>>(1);
             case NKikimrSharedCache::ThreeLeveledLRU:
             default: {
                 TCacheCacheConfig cacheCacheConfig(1, Config->Counters->FreshBytes, Config->Counters->StagingBytes, Config->Counters->WarmBytes);
-                return MakeHolder<TCacheCache<TPage, TPage::TSize, TPage::TCacheFlags1>>(std::move(cacheCacheConfig));
+                return MakeHolder<TCacheCache<TPage, TPage::TSize, TPage::TCacheCacheGeneration>>(std::move(cacheCacheConfig));
             }
         }
     }

@@ -9,10 +9,16 @@ namespace NKikimr::NCache {
 
 // TODO: remove template args and make some page base class
 
+enum class ES3FIFOPageLocation {
+    None,
+    SmallQueue,
+    MainQueue
+};
+
 template <typename TPageKey
         , typename TPageKeyHash
         , typename TPageKeyEqual>
-class TTS3FIFOGhostPageQueue {
+class TS3FIFOGhostPageQueue {
     struct TGhostPage {
         TPageKey Key;
         ui64 Size; // zero size is tombstone
@@ -36,7 +42,7 @@ class TTS3FIFOGhostPageQueue {
     };
 
 public:
-    TTS3FIFOGhostPageQueue(ui64 limit)
+    TS3FIFOGhostPageQueue(ui64 limit)
         : Limit(limit)
     {}
 
@@ -50,6 +56,7 @@ public:
         if (Y_UNLIKELY(!GhostsSet.emplace(ghost).second)) {
             GhostsQueue.pop_back();
             Y_DEBUG_ABORT_S("Duplicated " << key.ToString() << " page");
+            return;
         }
 
         Size += ghost->Size;
@@ -60,7 +67,7 @@ public:
     bool Erase(const TPageKey& key, ui64 size) {
         TGhostPage key_(key, size);
         if (auto it = GhostsSet.find(&key_); it != GhostsSet.end()) {
-            TGhostPage* ghost = const_cast<TGhostPage*>(*it);
+            TGhostPage* ghost = *it;
             Y_DEBUG_ABORT_UNLESS(ghost->Size == size);
             Y_ABORT_UNLESS(Size >= ghost->Size);
             Size -= ghost->Size;
@@ -102,7 +109,8 @@ private:
             if (ghost->Size) { // isn't deleted
                 Y_ABORT_UNLESS(Size >= ghost->Size);
                 Size -= ghost->Size;
-                Y_ABORT_UNLESS(GhostsSet.erase(ghost));
+                bool erased = GhostsSet.erase(ghost);
+                Y_ABORT_UNLESS(erased);
             }
             GhostsQueue.pop_front();
         }
@@ -123,12 +131,6 @@ template <typename TPage
         , typename TPageFrequency
     >
 class TS3FIFOCache : public ICacheCache<TPage> {
-    enum class ELocation {
-        None,
-        SmallQueue,
-        MainQueue
-    };
-
     struct TLimit {
         ui64 SmallQueueLimit;
         ui64 MainQueueLimit;
@@ -140,11 +142,11 @@ class TS3FIFOCache : public ICacheCache<TPage> {
     };
 
     struct TQueue {
-        TQueue(ELocation location)
+        TQueue(ES3FIFOPageLocation location)
             : Location(location)
         {}
 
-        ELocation Location;
+        ES3FIFOPageLocation Location;
         TIntrusiveList<TPage> Queue;
         ui64 Size = 0;
     };
@@ -152,8 +154,8 @@ class TS3FIFOCache : public ICacheCache<TPage> {
 public:
     TS3FIFOCache(ui64 limit)
         : Limit(limit)
-        , SmallQueue(ELocation::SmallQueue)
-        , MainQueue(ELocation::MainQueue)
+        , SmallQueue(ES3FIFOPageLocation::SmallQueue)
+        , MainQueue(ES3FIFOPageLocation::MainQueue)
         , GhostQueue(limit)
     {}
 
@@ -174,14 +176,14 @@ public:
     }
 
     TIntrusiveList<TPage> Touch(TPage* page) override {
-        const ELocation location = GetLocation(page);
+        const ES3FIFOPageLocation location = GetLocation(page);
         switch (location) {
-            case ELocation::SmallQueue:
-            case ELocation::MainQueue: {
+            case ES3FIFOPageLocation::SmallQueue:
+            case ES3FIFOPageLocation::MainQueue: {
                 TouchFast(page);
                 return {};
             }
-            case ELocation::None:
+            case ES3FIFOPageLocation::None:
                 return Insert(page);
             default:
                 Y_ABORT("Unknown page location");
@@ -189,15 +191,15 @@ public:
     }
 
     void Erase(TPage* page) override {
-        const ELocation location = GetLocation(page);
+        const ES3FIFOPageLocation location = GetLocation(page);
         switch (location) {
-            case ELocation::None:
+            case ES3FIFOPageLocation::None:
                 EraseGhost(page);
                 break;
-            case ELocation::SmallQueue:
+            case ES3FIFOPageLocation::SmallQueue:
                 Erase(SmallQueue, page);
                 break;
-            case ELocation::MainQueue:
+            case ES3FIFOPageLocation::MainQueue:
                 Erase(MainQueue, page);
                 break;
             default:
@@ -267,7 +269,7 @@ private:
     }
 
     void TouchFast(TPage* page) {
-        Y_DEBUG_ABORT_UNLESS(GetLocation(page) != ELocation::None);
+        Y_DEBUG_ABORT_UNLESS(GetLocation(page) != ES3FIFOPageLocation::None);
 
         ui32 frequency = GetFrequency(page);
         if (frequency < 3) {
@@ -276,7 +278,7 @@ private:
     }
 
     TIntrusiveList<TPage> Insert(TPage* page) {
-        Y_DEBUG_ABORT_UNLESS(GetLocation(page) == ELocation::None);
+        Y_DEBUG_ABORT_UNLESS(GetLocation(page) == ES3FIFOPageLocation::None);
 
         Push(EraseGhost(page) ? MainQueue : SmallQueue, page);
         SetFrequency(page, 0);
@@ -296,13 +298,13 @@ private:
 
         TPage* page = queue.Queue.PopFront();
         queue.Size -= GetSize(page);
-        SetLocation(page, ELocation::None);
+        SetLocation(page, ES3FIFOPageLocation::None);
 
         return page;
     }
 
     void Push(TQueue& queue, TPage* page) {
-        Y_ABORT_UNLESS(GetLocation(page) == ELocation::None);
+        Y_ABORT_UNLESS(GetLocation(page) == ES3FIFOPageLocation::None);
 
         queue.Queue.PushBack(page);
         queue.Size += GetSize(page);
@@ -315,7 +317,7 @@ private:
 
         page->Unlink();
         queue.Size -= GetSize(page);
-        SetLocation(page, ELocation::None);
+        SetLocation(page, ES3FIFOPageLocation::None);
     }
 
     void AddGhost(const TPage* page) {
@@ -334,12 +336,12 @@ private:
         return TPageSize::Get(page);
     }
 
-    ELocation GetLocation(const TPage* page) const {
-        return static_cast<ELocation>(TPageLocation::Get(page));
+    ES3FIFOPageLocation GetLocation(const TPage* page) const {
+        return TPageLocation::Get(page);
     }
 
-    void SetLocation(TPage* page, ELocation location) const {
-        TPageLocation::Set(page, static_cast<ui32>(location));
+    void SetLocation(TPage* page, ES3FIFOPageLocation location) const {
+        TPageLocation::Set(page, location);
     }
 
     ui32 GetFrequency(const TPage* page) const {
@@ -354,7 +356,7 @@ private:
     TLimit Limit;
     TQueue SmallQueue;
     TQueue MainQueue;
-    TTS3FIFOGhostPageQueue<TPageKey, TPageKeyHash, TPageKeyEqual> GhostQueue;
+    TS3FIFOGhostPageQueue<TPageKey, TPageKeyHash, TPageKeyEqual> GhostQueue;
 
 };
 

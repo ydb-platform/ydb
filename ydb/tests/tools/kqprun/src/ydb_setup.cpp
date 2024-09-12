@@ -329,7 +329,7 @@ public:
     TQueryResponse QueryRequest(const TRequestOptions& query, TProgressCallback progressCallback) const {
         auto request = GetQueryRequest(query);
         auto promise = NThreading::NewPromise<TQueryResponse>();
-        GetRuntime()->Register(CreateRunScriptActorMock(std::move(request), promise, progressCallback), 0, GetRuntime()->GetAppData().UserPoolId);
+        GetRuntime()->Register(CreateRunScriptActorMock(std::move(request), promise, progressCallback), request.TargetNode - GetRuntime()->GetFirstNodeId(), GetRuntime()->GetAppData().UserPoolId);
 
         return promise.GetFuture().GetValueSync();
     }

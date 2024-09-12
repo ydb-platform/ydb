@@ -450,7 +450,7 @@ class TLocalTableWriter
 
         for (auto& record : ev->Get()->Records) {
             records.emplace_back(record.Offset, TablePathId, record.Data.size());
-            auto res = PendingRecords.emplace(record.Offset, TChangeRecordBuilderTrait<TChangeRecord>()
+            auto res = PendingRecords.emplace(record.Offset, typename TChangeRecord::TBuilder()
                 .WithSourceId(ev->Get()->Source)
                 .WithOrder(record.Offset)
                 .WithBody(std::move(record.Data))

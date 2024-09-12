@@ -31,6 +31,7 @@ class TChangeRecord: public NChangeExchange::TChangeRecordBase {
 
 public:
     using TPtr = TIntrusivePtr<TChangeRecord>;
+    using TBuilder = TChangeRecordBuilder;
 
     const static NKikimrSchemeOp::ECdcStreamFormat StreamType = NKikimrSchemeOp::ECdcStreamFormatJson;
 
@@ -87,11 +88,6 @@ struct TChangeRecordContainer<NReplication::NService::TChangeRecord>
 {
     using TBaseChangeRecordContainer<NReplication::NService::TChangeRecord>::TBaseChangeRecordContainer;
 };
-
-template <>
-struct TChangeRecordBuilderTrait<NReplication::NService::TChangeRecord>
-    : public NReplication::NService::TChangeRecordBuilder
-{};
 
 template <>
 struct TChangeRecordBuilderContextTrait<NReplication::NService::TChangeRecord> {

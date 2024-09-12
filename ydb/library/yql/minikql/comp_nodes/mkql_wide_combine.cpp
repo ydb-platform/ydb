@@ -355,6 +355,7 @@ class TSpillingSupportState : public TComputationValue<TSpillingSupportState> {
         };
 
         EBucketState BucketState = EBucketState::InMemory;
+        ui64 LineCount = 0;
     };
 
     enum class EOperatingMode {
@@ -417,7 +418,9 @@ public:
             case EOperatingMode::Spilling: {
                 UpdateSpillingBuckets();
 
-                if (!HasMemoryForProcessing() && InputStatus != EFetchResult::Finish && TryToReduceMemoryAndWait()) return EUpdateResult::Yield;
+                if (!HasMemoryForProcessing() && InputStatus != EFetchResult::Finish && TryToReduceMemoryAndWait()) {
+                        return EUpdateResult::Yield;
+                }
 
                 if (BufferForUsedInputItems.size()) {
                     auto& bucket = SpilledBuckets[BufferForUsedInputItemsBucketId];
@@ -456,13 +459,16 @@ public:
 
         if (bucket.BucketState == TSpilledBucket::EBucketState::InMemory) {
             std::copy_n(ViewForKeyAndState.data(), KeyWidth, static_cast<NUdf::TUnboxedValue*>(bucket.InMemoryProcessingState->Tongue));
-            
+
             bool isNew = bucket.InMemoryProcessingState->TasteIt();
             Throat = bucket.InMemoryProcessingState->Throat;
+            bucket.LineCount += isNew;
+
             return isNew ? ETasteResult::Init : ETasteResult::Update;
         }
-        
-        // Prepare space for raw data 
+        bucket.LineCount++;
+
+        // Prepare space for raw data
         MKQL_ENSURE(BufferForUsedInputItems.size() == 0, "Internal logic error");
         BufferForUsedInputItems.resize(ItemNodesSize);
         BufferForUsedInputItemsBucketId = bucketId;
@@ -485,6 +491,7 @@ public:
 
         value = static_cast<NUdf::TUnboxedValue*>(SpilledBuckets.front().InMemoryProcessingState->Extract());
         if (!value) {
+            SpilledBuckets.front().InMemoryProcessingState->ReadMore<false>();
             SpilledBuckets.pop_front();
             if (SpilledBuckets.empty()) IsEverythingExtracted = true;
         }
@@ -521,6 +528,7 @@ private:
             auto bucketId = hash % SpilledBucketCount;
             auto& bucket = SpilledBuckets[bucketId];
 
+            bucket.LineCount++;
             auto& processingState = *bucket.InMemoryProcessingState;
 
             for (size_t i = 0; i < KeyWidth; ++i) {
@@ -566,6 +574,8 @@ private:
 
         if (bucket.BucketState == TSpilledBucket::EBucketState::InMemory) {
             bucket.BucketState = TSpilledBucket::EBucketState::SpillingState;
+            SpillingBucketsCount++;
+            InMemoryBucketsCount--;
         }
 
         while (const auto keyAndState = static_cast<NUdf::TUnboxedValue*>(bucket.InMemoryProcessingState->Extract())) {
@@ -583,10 +593,11 @@ private:
         bucket.InMemoryProcessingState->ReadMore<false>();
 
         bucket.BucketState = TSpilledBucket::EBucketState::SpillingData;
+        SpillingBucketsCount--;
     }
 
     void UpdateSpillingBuckets() {
-        for (ui64 i = 0; i < NextBucketToSpill; ++i) {
+        for (ui64 i = 0; i < SpilledBucketCount; ++i) {
             auto& bucket = SpilledBuckets[i];
             if (bucket.AsyncWriteOperation.has_value() && bucket.AsyncWriteOperation->HasValue()) {
                 if (bucket.BucketState == TSpilledBucket::EBucketState::SpillingState) {
@@ -604,16 +615,27 @@ private:
     }
 
     bool TryToReduceMemoryAndWait() {
-        for (ui64 i = 0; i < NextBucketToSpill; ++i) {
-            if (SpilledBuckets[i].BucketState == TSpilledBucket::EBucketState::SpillingState) return true;
+        if (SpillingBucketsCount > 0) {
+            return true;
         }
+        while (InMemoryBucketsCount > 0) {
+            ui64 maxLineCount = 0;
+            ui32 maxLineBucketInd = (ui32)-1;
+            for (ui64 i = 0; i < SpilledBucketCount; ++i) {
+                const auto& bucket = SpilledBuckets[i];
+                if (bucket.BucketState == TSpilledBucket::EBucketState::InMemory && (maxLineBucketInd == (ui32)-1 || bucket.LineCount > maxLineCount)) {
+                    maxLineCount = bucket.LineCount;
+                    maxLineBucketInd = i;
+                }
+            }
+            MKQL_ENSURE(maxLineBucketInd != (ui32)-1, "Internal logic error");
 
-        while (NextBucketToSpill < SpilledBucketCount) {
-            auto& bucket = SpilledBuckets[NextBucketToSpill++];
-            SpillMoreStateFromBucket(bucket);
-            if (bucket.BucketState == TSpilledBucket::EBucketState::SpillingState) return true;
+            auto& bucketToSpill = SpilledBuckets[maxLineBucketInd];
+            SpillMoreStateFromBucket(bucketToSpill);
+            if (bucketToSpill.BucketState == TSpilledBucket::EBucketState::SpillingState) {
+                return true;
+            }
         }
-
         return false;
     }
 
@@ -661,7 +683,7 @@ private:
 
             Throat = BufferForUsedInputItems.data();
             Tongue = bucket.InMemoryProcessingState->Tongue;
-            
+
             return EUpdateResult::ExtractRawData;
         }
         bucket.BucketState = TSpilledBucket::EBucketState::InMemory;
@@ -719,8 +741,6 @@ public:
     NUdf::TUnboxedValuePod* Throat = nullptr;
 
 private:
-    ui64 NextBucketToSpill = 0;
-
     bool IsEverythingExtracted = false;
 
     TState InMemoryProcessingState;
@@ -735,6 +755,8 @@ private:
     TAsyncReadOperation AsyncReadOperation = std::nullopt;
     static constexpr size_t SpilledBucketCount = 128;
     std::deque<TSpilledBucket> SpilledBuckets;
+    ui32 SpillingBucketsCount = 0;
+    ui32 InMemoryBucketsCount = SpilledBucketCount;
     ui64 BufferForUsedInputItemsBucketId;
     TUnboxedValueVector BufferForUsedInputItems;
     std::vector<NUdf::TUnboxedValuePod, TMKQLAllocator<NUdf::TUnboxedValuePod>> ViewForKeyAndState;
@@ -1237,7 +1259,7 @@ public:
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
         if (!state.HasValue()) {
             MakeState(ctx, state);
-        } 
+        }
 
         if (const auto ptr = static_cast<TSpillingSupportState*>(state.AsBoxed().Get())) {
             auto **fields = ctx.WideFields.data() + WideFieldsIndex;

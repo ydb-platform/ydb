@@ -1619,7 +1619,7 @@
       auto events = ReadSession->GetEvents(topicSettings);
 
       for (auto& event : events) {
-          // обработать событие и записать результаты в таблицу
+          // обработать событие и записать результаты в строковую таблицу
       }
 
       NYdb::NTable::TCommitTxSettings commitSettings;
@@ -1643,7 +1643,7 @@
           if (auto* e = std::get_if<TStopPartitionSessionEvent>(&event) {
               stopPartitionSessionEvent = std::move(*e);
           } else {
-              // обработать событие и записать результаты в таблицу
+              // обработать событие и записать результаты в строковую таблицу
           }
       }
 

@@ -519,6 +519,7 @@ private:
                         res->Record.GetTxLocks(0).GetPathId());
                 }
                 ReplyErrorAndDie(Ydb::StatusIds::ABORTED, {});
+                return;
             }
             default:
             {
@@ -1211,7 +1212,7 @@ private:
                     ResponseEv->BrokenLockPathId = NYql::TKikimrPathId(
                         res->Record.GetTxLocks(0).GetSchemeShard(),
                         res->Record.GetTxLocks(0).GetPathId());
-                    ReplyErrorAndDie(Ydb::StatusIds::ABORTED, {});
+                    return ReplyErrorAndDie(Ydb::StatusIds::ABORTED, {});
                 }
                 CheckExecutionComplete();
                 return;
@@ -1269,7 +1270,7 @@ private:
 
                 Counters->TxProxyMon->TxResultAborted->Inc(); // TODO: dedicated counter?
                 LocksBroken = true;
-                ResponseEv->BrokenLockShardId = shardId; // todo: without responseEv
+                ResponseEv->BrokenLockShardId = shardId;
 
                 if (!res->Record.GetTxLocks().empty()) {
                     ResponseEv->BrokenLockPathId = NYql::TKikimrPathId(

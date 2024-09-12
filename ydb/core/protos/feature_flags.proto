@@ -154,4 +154,6 @@ message TFeatureFlags {
     optional bool EnableTieringInColumnShard = 140 [default = false];
     //optional bool EnableMetadataObjectsOnServerless = 141 [default = true]; NB. exists in main
     optional bool EnableOlapCompression = 142 [default = false];
+    //optional bool EnableExternalDataSourcesOnServerless = 143 [default = true]; NB. exists in main
+    optional bool EnableSparsedColumns = 144 [default = false];
 }

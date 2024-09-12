@@ -15,7 +15,7 @@ services:
         echo \"$$(dig tests-fq-generic-ydb +short) tests-fq-generic-ydb\" >> /etc/hosts; cat /etc/hosts;
         /opt/ydb/bin/fq-connector-go server -c /opt/ydb/cfg/fq-connector-go.yaml"
     container_name: tests-fq-generic-fq-connector-go
-    image: ghcr.io/ydb-platform/fq-connector-go:v0.4.9@sha256:3a1fe086be50c0edbae2c2b284aee5ce76bd056d7f46cb460919ec37a6f8ab5c
+    image: ghcr.io/ydb-platform/fq-connector-go:v0.5.0@sha256:6d3cec43478bef88dda195cd38c10e4df719c8ce6d13c9bd288c7ec40410e9d8
     ports:
     - "2130"
   postgresql:

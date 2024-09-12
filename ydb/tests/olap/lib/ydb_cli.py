@@ -82,6 +82,8 @@ class YdbCliHelper:
             if wait_error is not None:
                 return YdbCliHelper.WorkloadRunResult(error_message=f'Ydb cluster is dead: {wait_error}')
 
+            cluster_start_time = YdbCluster.get_cluster_info().get('max_start_time', 0)
+
             json_path = yatest.common.work_path(f'q{query_num}.json')
             qout_path = yatest.common.work_path(f'q{query_num}.out')
             plan_path = yatest.common.work_path(f'q{query_num}.plan')
@@ -111,6 +113,8 @@ class YdbCliHelper:
                         err = f'Invalid return code: {exec.returncode} instesd 0.'
             except (yatest.common.process.TimeoutError, yatest.common.process.ExecutionTimeoutError):
                 err = f'Timeout {timeout}s expeared.'
+            if YdbCluster.get_cluster_info().get('max_start_time', 0) != cluster_start_time:
+                err = ('' if err is None else f'{err}\n\n') + 'Some nodes were restart'
             stats = {}
             if (os.path.exists(json_path)):
                 with open(json_path, 'r') as r:

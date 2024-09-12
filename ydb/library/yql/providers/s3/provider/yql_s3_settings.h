@@ -29,7 +29,7 @@ struct TS3Settings {
     NCommon::TConfSetting<ui64, false> FileQueueBatchObjectCountLimit; // Limits count of files in one PathBatch from FileQueue
     NCommon::TConfSetting<ui64, false> FileQueuePrefetchSize;
     NCommon::TConfSetting<bool, false> AsyncDecoding;  // Parse and decode input data at separate mailbox/thread of TaskRunner
-    NCommon::TConfSetting<bool, false> UsePredicatePushdown;
+    NCommon::TConfSetting<bool, false> AsyncDecompressing;  // Decompression and parsing input data in different mailbox/thread
 };
 
 struct TS3ClusterSettings {

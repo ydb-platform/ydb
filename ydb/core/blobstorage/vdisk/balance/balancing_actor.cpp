@@ -76,6 +76,7 @@ namespace NBalancing {
 
         TBatchedQueue<TPartInfo> SendOnMainParts;
         TBatchedQueue<TLogoBlobID> TryDeleteParts;
+        std::unordered_map<TLogoBlobID, TVector<TPartInfo>> TryDeletePartsFullData; // if part on main by ingress, but actualy it is not, we could not delete it, so we need to send it on main
 
         TBatchManager BatchManager;
 
@@ -101,9 +102,11 @@ namespace NBalancing {
 
         void ScheduleJobQuant() {
             Ctx->MonGroup.ReplTokenAquired()++;
+            Ctx->MonGroup.PlannedToSendOnMain() = SendOnMainParts.Data.size();
+            Ctx->MonGroup.CandidatesToDelete() = TryDeleteParts.Data.size();
 
             // once repl token received, start balancing - waking up sender and deleter
-            STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB02, VDISKP(Ctx->VCtx, "Schedule job quant"),
+            STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB02, VDISKP(Ctx->VCtx, "Schedule job quant"),
                 (SendPartsLeft, SendOnMainParts.Size()), (DeletePartsLeft, TryDeleteParts.Size()),
                 (ConnectedVDisks, ConnectedVDisks.size()), (TotalVDisks, GInfo->GetTotalVDisksNum()));
 
@@ -157,9 +160,18 @@ namespace NBalancing {
 
                 if (auto partsToDelete = merger.Ingress.LocalParts(top.GType) & delMask; !partsToDelete.Empty() && TryDeleteParts.Size() < MAX_TO_DELETE_PER_EPOCH) {
                     // collect parts to delete
+                    auto key = It.GetCurKey().LogoBlobID();
                     for (ui8 partIdx = partsToDelete.FirstPosition(); partIdx < partsToDelete.GetSize(); partIdx = partsToDelete.NextPosition(partIdx)) {
-                        TryDeleteParts.Data.emplace_back(TLogoBlobID(It.GetCurKey().LogoBlobID(), partIdx + 1));
+                        TryDeleteParts.Data.emplace_back(TLogoBlobID(key, partIdx + 1));
                         STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB10, VDISKP(Ctx->VCtx, "Delete"), (LogoBlobId, TryDeleteParts.Data.back().ToString()));
+                    }
+
+                    for (const auto& [parts, data]: merger.Parts) {
+                        if (!(partsToDelete & parts).Empty()) {
+                            TryDeletePartsFullData[key].emplace_back(TPartInfo{
+                                .Key=key, .PartsMask=parts, .PartData=data
+                            });
+                        }
                     }
                 }
 
@@ -173,8 +185,6 @@ namespace NBalancing {
 
             STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB08, VDISKP(Ctx->VCtx, "Keys collected"),
                 (SendOnMainParts, SendOnMainParts.Data.size()), (TryDeleteParts, TryDeleteParts.Data.size()));
-            Ctx->MonGroup.PlannedToSendOnMain() = SendOnMainParts.Data.size();
-            Ctx->MonGroup.CandidatesToDelete() = TryDeleteParts.Data.size();
 
             // start balancing
             ContinueBalancing();
@@ -193,6 +203,23 @@ namespace NBalancing {
                 Send(MakeBlobStorageReplBrokerID(), new TEvReleaseReplToken);
 
                 ContinueBalancing();
+            }
+        }
+
+        void Handle(TEvBalancingSendPartsOnMain::TPtr ev) {
+            Ctx->MonGroup.OnMainByIngressButNotRealy() += ev->Get()->Ids.size();
+            STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB05, VDISKP(Ctx->VCtx, "Received from deleter TEvBalancingSendPartsOnMain"), (Parts, ev->Get()->Ids.size()));
+            for (const auto& id: ev->Get()->Ids) {
+                if (auto it = TryDeletePartsFullData.find(TLogoBlobID(id, 0)); it != TryDeletePartsFullData.end()) {
+                    for (const auto& part: it->second) {
+                        if (part.PartsMask.Get(id.PartId() - 1)) {
+                            SendOnMainParts.Data.push_back(part);
+                            break;
+                        }
+                    }
+                } else {
+                    Y_DEBUG_ABORT_S("Part not found in TryDeletePartsFullData");
+                }
             }
         }
 
@@ -257,6 +284,7 @@ namespace NBalancing {
             cFunc(NActors::TEvents::TEvWakeup::EventType, CollectKeys)
             cFunc(TEvReplToken::EventType, ScheduleJobQuant)
             hFunc(NActors::TEvents::TEvCompleted, Handle)
+            hFunc(TEvBalancingSendPartsOnMain, Handle)
 
             // System events
             hFunc(NActors::TEvents::TEvUndelivered, Handle)

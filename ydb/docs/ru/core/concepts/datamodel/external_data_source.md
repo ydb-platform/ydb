@@ -12,11 +12,7 @@ CREATE EXTERNAL DATA SOURCE test_data_source WITH (
   AUTH_METHOD="BASIC",
   USE_TLS="TRUE",
   LOGIN="login",
-  PASSWOR{% note warning %}
-
-This functionality is in "Preview" mode.
-
-{% endnote %}D_SECRET_NAME="test_password_name",
+  PASSWORD_SECRET_NAME="test_password_name",
   PROTOCOL="NATIVE"
 );
 ```

@@ -2,6 +2,7 @@
 #include "change_record_body_serializer.h"
 #include "datashard_impl.h"
 #include "incr_restore_helpers.h"
+#include "stream_scan_common.h"
 
 #include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
@@ -184,17 +185,6 @@ class TDataShard::TTxCdcStreamScanProgress
     TVector<IDataShardChangeCollector::TChange> ChangeRecords;
     bool Reschedule = false;
 
-    static TVector<TRawTypeValue> MakeKey(TArrayRef<const TCell> cells, TUserTable::TCPtr table) {
-        TVector<TRawTypeValue> key(Reserve(cells.size()));
-
-        Y_ABORT_UNLESS(cells.size() == table->KeyColumnTypes.size());
-        for (TPos pos = 0; pos < cells.size(); ++pos) {
-            key.emplace_back(cells.at(pos).AsRef(), table->KeyColumnTypes.at(pos));
-        }
-
-        return key;
-    }
-
     static TVector<TUpdateOp> MakeUpdates(TArrayRef<const TCell> cells, TArrayRef<const TTag> tags, TUserTable::TCPtr table) {
         TVector<TUpdateOp> updates(Reserve(cells.size()));
 
@@ -286,7 +276,7 @@ public:
         bool pageFault = false;
 
         for (const auto& [k, v] : ev.Rows) {
-            const auto key = MakeKey(k.GetCells(), table);
+            const auto key = NStreamScan::MakeKey(k.GetCells(), table);
             const auto& keyTags = table->KeyColumnIds;
 
             TRowState row(0);
@@ -402,50 +392,8 @@ class TCdcStreamScan: public IActorCallback, public IScan {
         ui64 TabletId;
     };
 
-    struct TLimits {
-        ui32 BatchMaxBytes;
-        ui32 BatchMinRows;
-        ui32 BatchMaxRows;
-
-        TLimits(const NKikimrTxDataShard::TEvCdcStreamScanRequest::TLimits& proto)
-            : BatchMaxBytes(proto.GetBatchMaxBytes())
-            , BatchMinRows(proto.GetBatchMinRows())
-            , BatchMaxRows(proto.GetBatchMaxRows())
-        {
-        }
-    };
-
-    class TBuffer {
-    public:
-        void AddRow(TArrayRef<const TCell> key, TArrayRef<const TCell> value) {
-            const auto& [k, v] = Data.emplace_back(
-                TSerializedCellVec(key),
-                TSerializedCellVec(value)
-            );
-            ByteSize += k.GetBuffer().size() + v.GetBuffer().size();
-        }
-
-        auto&& Flush() {
-            ByteSize = 0;
-            return std::move(Data);
-        }
-
-        ui64 Bytes() const {
-            return ByteSize;
-        }
-
-        ui64 Rows() const {
-            return Data.size();
-        }
-
-        explicit operator bool() const {
-            return !Data.empty();
-        }
-
-    private:
-        TVector<std::pair<TSerializedCellVec, TSerializedCellVec>> Data; // key & value (if any)
-        ui64 ByteSize = 0;
-    };
+    using TLimits = NStreamScan::TLimits;
+    using TBuffer = NStreamScan::TBuffer;
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {

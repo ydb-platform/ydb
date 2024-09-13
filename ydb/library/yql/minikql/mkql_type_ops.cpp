@@ -862,7 +862,7 @@ public:
     void SplitDate32(i32 value, i32& year, ui32& month, ui32& day) const {
         i32 solarCycles;
         value = UpdateBySolarCycleModulo(value, solarCycles);
-        value = EnrichYear2(value, solarCycles, year);
+        value = EnrichYear(value, solarCycles, year);
         EnrichMonthDay(year, value, month, day);
     }
 
@@ -871,7 +871,7 @@ public:
     {
         auto cache = -1 + std::upper_bound(YearsCache_.cbegin(), YearsCache_.cend(), solarDate,
                 [](ui32 value, const TYearCache& entry) {
-                    return value < entry.CumulatveDays;
+                    return value < entry.CumulativeDays;
                 });
         dayOfWeek = 1 + (3 + solarDate) % 7;
         weekOfYear = (dayOfYear + cache->WeekOffset) / 7;
@@ -888,12 +888,12 @@ public:
     {
         i32 solarCycles;
         auto solarDate = UpdateBySolarCycleModulo(date, solarCycles);
-        date = EnrichYear2(solarDate, solarCycles, year);
+        date = EnrichYear(solarDate, solarCycles, year);
         EnrichMonthDay(year, date, month, day);
 
         auto cache = -1 + std::upper_bound(YearsCache_.cbegin(), YearsCache_.cend(), solarDate,
                 [](ui32 value, const TYearCache& entry) {
-                    return value < entry.CumulatveDays;
+                    return value < entry.CumulativeDays;
                 });
         dayOfYear = 1 + date;
         dayOfWeek = 1 + (3 + solarDate) % 7;
@@ -1124,7 +1124,7 @@ private:
     };
 
     struct TYearCache {
-        ui32 CumulatveDays : 18; // max SOLAR_CYCLE_DAYS
+        ui32 CumulativeDays: 18; // max SOLAR_CYCLE_DAYS
         ui32 WeekOffset: 4;
         ui32 Iso8601WeekOffset: 4;
         ui32 LastDayOfWeek: 3;
@@ -1148,7 +1148,7 @@ private:
         day = 1 + dayOfYear - *m;
     }
 
-    i32 EnrichYear2(i32 value, i32 solarCycles, i32& year) const {
+    i32 EnrichYear(i32 value, i32 solarCycles, i32& year) const {
         auto y = std::upper_bound(Years_.cbegin(), Years_.cend(), value) - 1;
         value -= *y;
         year = NUdf::MIN_YEAR + SOLAR_CYCLE_YEARS * solarCycles + std::distance(Years_.cbegin(), y);
@@ -1156,15 +1156,6 @@ private:
             --year;
         }
         return value;
-    }
-
-    void EnrichYear(i32& value, i32 solarCycles, i32& year) const {
-        auto y = std::upper_bound(Years_.cbegin(), Years_.cend(), value) - 1;
-        value -= *y;
-        year = NUdf::MIN_YEAR + SOLAR_CYCLE_YEARS * solarCycles + std::distance(Years_.cbegin(), y);
-        if (Y_UNLIKELY(year <= 0)) {
-            --year;
-        }
     }
 
     void InitializeSolarCycle() {

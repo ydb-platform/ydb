@@ -13,7 +13,7 @@ class TEvCdcStreamScanRequest_TLimits;
 
 namespace NKikimr::NDataShard::NStreamScan {
 
-TVector<TRawTypeValue> MakeKey(TArrayRef<const TCell> cells, TUserTable::TCPtr table);
+TVector<TRawTypeValue> MakeKey(TArrayRef<const TCell> cells, const TVector<NScheme::TTypeInfo>& keyColumnTypes);
 
 struct TLimits {
     ui32 BatchMaxBytes;

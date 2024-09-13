@@ -1,5 +1,6 @@
 #include "incr_restore_scan.h"
 #include "change_exchange_impl.h"
+#include "datashard_impl.h"
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/core/tx/datashard/change_record_body_serializer.h>
@@ -27,20 +28,24 @@ class TIncrementalRestoreScan
 
 public:
     explicit TIncrementalRestoreScan(
+        TActorId parent,
         std::function<IActor*()> changeSenderFactory,
         ui64 txId,
         const TPathId& tablePathId,
         const TPathId& targetPathId)
         : IActorCallback(static_cast<TReceiveFunc>(&TIncrementalRestoreScan::StateWork), NKikimrServices::TActivity::CDC_STREAM_SCAN_ACTOR)
+        , Parent(parent)
         , ChangeSenderFactory(changeSenderFactory)
-        // , DataShard{self->SelfId(), self->TabletID()}
         , TxId(txId)
         , TablePathId(tablePathId)
         , TargetPathId(targetPathId)
-        , ReadVersion({})
-        , Limits({})
+        , Limits()
         // , ValueTags(InitValueTags(self, tablePathId))
     {}
+
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::INCREMENTAL_RESTORE_SCAN_ACTOR;
+    }
 
     void Registered(TActorSystem*, const TActorId&) override {
         ChangeSender = RegisterWithSameMailbox(ChangeSenderFactory());
@@ -52,16 +57,43 @@ public:
         IActorCallback::PassAway();
     }
 
+    void Start(TEvents::TEvWakeup::TPtr&) {
+        Driver->Touch(EScan::Feed);
+    }
+
+    void Handle(NChangeExchange::TEvChangeExchange::TEvRequestRecords::TPtr& ev) {
+        // LOG_D("Handltypename e " << ev->Get()->ToString());
+
+        TVector<TChangeRecord::TPtr> records(::Reserve(ev->Get()->Records.size()));
+
+        for (const auto& record : ev->Get()->Records) {
+            auto it = PendingRecords.find(record.Order);
+            Y_ABORT_UNLESS(it != PendingRecords.end());
+            records.emplace_back(it->second);
+        }
+
+        Send(ChangeSender, new NChangeExchange::TEvChangeExchange::TEvRecords(
+                 std::make_shared<TChangeRecordContainer<NKikimr::NDataShard::TChangeRecord>>(std::move(records))));
+    }
+
+    void Handle(NChangeExchange::TEvChangeExchange::TEvRemoveRecords::TPtr& ev) {
+        // LOG_D("Handltypename e " << ev->Get()->ToString());
+
+        for (auto recordId : ev->Get()->Records) {
+            PendingRecords.erase(recordId);
+        }
+    }
+
+    void Handle(TEvIncrementalRestoreScan::TEvFinished::TPtr&) {
+        Driver->Touch(EScan::Final);
+    }
+
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            // hFunc(TEvDataShard::TEvCdcStreamScanRequest, Handle);
-            // hFunc(TDataShard::TEvPrivate::TEvCdcStreamScanContinue, Handle);
-            // hFunc(TEvents::TEvWakeup, Start);
-            // hFunc(NChangeExchange::TEvChangeExchange::TEvRequestRecords, Handle);
-            // IgnoreFunc(NChangeExchange::TEvChangeExchange::TEvRemoveRecords);
-            // hFunc(TEvChangeExchange::TEvAllSent, Handle);
-            // IgnoreFunc(TDataShard::TEvPrivate::TEvConfirmReadonlyLease);
-            default: Y_ABORT("unexpected event Type# 0x%08" PRIx32, ev->GetTypeRewrite());
+            hFunc(TEvents::TEvWakeup, Start);
+            hFunc(NChangeExchange::TEvChangeExchange::TEvRequestRecords, Handle);
+            hFunc(NChangeExchange::TEvChangeExchange::TEvRemoveRecords, Handle);
+            hFunc(TEvIncrementalRestoreScan::TEvFinished, Handle);
         }
     }
 
@@ -110,7 +142,7 @@ public:
     }
 
     TAutoPtr<IDestructable> Finish(EAbort abort) noexcept override {
-        // Send(DataShard.ActorId, new TEvDataShard::TEvRestoreFinished{TxId});
+        Send(Parent, new TEvIncrementalRestoreScan::TEvFinished{});
 
         if (abort != EAbort::None) {
             // Reply(NKikimrTxDataShard::TEvCdcStreamScanResponse::ABORTED);
@@ -139,20 +171,17 @@ public:
         // LOG_D("IncrRestore@Progress()"
             // << ": Buffer.Rows()# " << Buffer.Rows());
 
-        // auto reservationCookie = Self->ReserveChangeQueueCapacity(Buffer.Rows());
         auto rows = Buffer.Flush();
         TVector<TChange> changeRecords;
         TVector<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TRecordInfo> records;
 
-        // auto table = Self->GetUserTables().at(TablePathId.LocalPathId);
-        NDataShard::TUserTable::TCPtr table;
         for (auto& [k, v] : rows) {
             // LOG_D("IncrRestore@Progress()#iter"
                 // << ": k.GetCells().size()# " << k.GetCells().size() << ", v.GetCells().size()# " << v.GetCells().size());
-            const auto key = NStreamScan::MakeKey(k.GetCells(), table);
-            const auto& keyTags = table->KeyColumnIds;
+            const auto key = NStreamScan::MakeKey(k.GetCells(), KeyColumnTypes);
+            const auto& keyTags = KeyColumnIds;
             NKikimrChangeExchange::TDataChange body;
-            if (auto updates = NIncrRestoreHelpers::MakeRestoreUpdates(v.GetCells(), ValueTags, table); updates) {
+            if (auto updates = NIncrRestoreHelpers::MakeRestoreUpdates(v.GetCells(), ValueTags, Columns); updates) {
                 Serialize(body, ERowOp::Upsert, key, keyTags, *updates);
             } else {
                 Serialize(body, ERowOp::Erase, key, keyTags, {});
@@ -160,11 +189,9 @@ public:
             auto recordPtr = TChangeRecordBuilder(TChangeRecord::EKind::AsyncIndex)
                 .WithOrder(++Order)
                 .WithGroup(0)
-                .WithStep(ReadVersion.Step)
-                .WithTxId(ReadVersion.TxId)
                 .WithPathId(TargetPathId)
                 .WithTableId(TablePathId)
-                .WithSchemaVersion(table->GetTableSchemaVersion())
+                // .WithSchemaVersion(ReadVersion) // TODO(use SchemaVersion)
                 .WithBody(body.SerializeAsString())
                 .WithSource(TChangeRecord::ESource::InitialScan)
                 .Build();
@@ -178,39 +205,42 @@ public:
         Send(ChangeSender, new NChangeExchange::TEvChangeExchange::TEvEnqueueRecords(records));
 
         if (NoMoreData) {
-            // Send(ChangeSender, new TEvChangeExchange::TEvNoMoreData());
+            Send(ChangeSender, new TEvIncrementalRestoreScan::TEvNoMoreData());
+            return EScan::Sleep;
         }
 
-        return NoMoreData ? EScan::Sleep : EScan::Feed;
+        return EScan::Feed;
     }
 private:
-    // const TDataShardId DataShard;
+    TActorId Parent;
     std::function<IActor*()> ChangeSenderFactory;
-    TActorId ReplyTo;
     const ui64 TxId;
     const TPathId TablePathId;
     const TPathId TargetPathId;
-    const TRowVersion ReadVersion;
     const TVector<TTag> ValueTags;
     const TMaybe<TSerializedCellVec> LastKey;
     const TLimits Limits;
     IDriver* Driver;
     bool NoMoreData;
     TBuffer Buffer;
-    // TStats Stats;
-    // TDataShard* Self;
     ui64 Order = 0;
     TActorId ChangeSender;
     TMap<ui64, TChangeRecord::TPtr> PendingRecords;
+
+    TMap<ui32, TUserTable::TUserColumn> Columns;
+    TVector<NScheme::TTypeInfo> KeyColumnTypes;
+    TVector<ui32> KeyColumnIds;
 };
 
 THolder<NTable::IScan> CreateIncrementalRestoreScan(
-        std::function<IActor*()> changeSenderFactory,
+        NActors::TActorId parent,
+        std::function<NActors::IActor*()> changeSenderFactory,
         TPathId tablePathId,
         const TPathId& targetPathId,
         ui64 txId)
 {
-     return MakeHolder<TIncrementalRestoreScan>(
+    return MakeHolder<TIncrementalRestoreScan>(
+        parent,
         changeSenderFactory,
         txId,
         tablePathId,

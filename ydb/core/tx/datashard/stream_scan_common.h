@@ -21,6 +21,7 @@ struct TLimits {
     ui32 BatchMaxRows;
 
     TLimits(const NKikimrTxDataShard::TEvCdcStreamScanRequest_TLimits& proto);
+    TLimits() = default;
 };
 
 class TBuffer {

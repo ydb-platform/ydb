@@ -6,6 +6,10 @@
 #include <ydb/core/tx/datashard/datashard_user_table.h>
 #include <ydb/core/tx/datashard/change_record.h>
 #include <ydb/core/change_exchange/change_exchange.h>
+#include <ydb/core/tx/datashard/change_collector.h>
+#include <ydb/library/services/services.pb.h>
+#include <ydb/core/tx/datashard/stream_scan_common.h>
+#include <ydb/core/tx/datashard/incr_restore_helpers.h>
 
 namespace NKikimr::NDataShard {
 
@@ -17,104 +21,9 @@ class TIncrementalRestoreScan
     , public NTable::IScan
     , protected TChangeRecordBodySerializer
 {
-    struct TLimits {
-        ui32 BatchMaxBytes;
-        ui32 BatchMinRows;
-        ui32 BatchMaxRows;
-
-        // TLimits(const NKikimrTxDataShard::TEvCdcStreamScanRequest::TLimits& proto)
-        //     : BatchMaxBytes(proto.GetBatchMaxBytes())
-        //     , BatchMinRows(proto.GetBatchMinRows())
-        //     , BatchMaxRows(proto.GetBatchMaxRows())
-        // {
-        // }
-    };
-
-    class TBuffer {
-    public:
-        void AddRow(TArrayRef<const TCell> key, TArrayRef<const TCell> value) {
-            const auto& [k, v] = Data.emplace_back(
-                TSerializedCellVec(key),
-                TSerializedCellVec(value)
-            );
-            ByteSize += k.GetBuffer().size() + v.GetBuffer().size();
-        }
-
-        auto&& Flush() {
-            ByteSize = 0;
-            return std::move(Data);
-        }
-
-        ui64 Bytes() const {
-            return ByteSize;
-        }
-
-        ui64 Rows() const {
-            return Data.size();
-        }
-
-        explicit operator bool() const {
-            return !Data.empty();
-        }
-
-    private:
-        TVector<std::pair<TSerializedCellVec, TSerializedCellVec>> Data; // key & value (if any)
-        ui64 ByteSize = 0;
-    };
-
-    struct TChange {
-        ui64 Order;
-        ui64 Group;
-        ui64 Step;
-        ui64 TxId;
-        TPathId PathId;
-        ui64 BodySize;
-        TPathId TableId;
-        ui64 SchemaVersion;
-        ui64 LockId = 0;
-        ui64 LockOffset = 0;
-
-        TInstant CreatedAt() const {
-            return Group
-                ? TInstant::MicroSeconds(Group)
-                : TInstant::MilliSeconds(Step);
-        }
-    };
-
-    static TVector<TRawTypeValue> MakeKey(TArrayRef<const TCell> cells, TUserTable::TCPtr table) {
-        TVector<TRawTypeValue> key(Reserve(cells.size()));
-
-        Y_ABORT_UNLESS(cells.size() == table->KeyColumnTypes.size());
-        for (TPos pos = 0; pos < cells.size(); ++pos) {
-            key.emplace_back(cells.at(pos).AsRef(), table->KeyColumnTypes.at(pos));
-        }
-
-        return key;
-    }
-
-    static std::optional<TVector<TUpdateOp>> MakeRestoreUpdates(TArrayRef<const TCell> cells, TArrayRef<const TTag> tags, TUserTable::TCPtr table) {
-        Y_ABORT_UNLESS(cells.size() >= 1);
-        TVector<TUpdateOp> updates(::Reserve(cells.size() - 1));
-
-        bool foundSpecialColumn = false;
-        Y_ABORT_UNLESS(cells.size() == tags.size());
-        for (TPos pos = 0; pos < cells.size(); ++pos) {
-            const auto tag = tags.at(pos);
-            auto it = table->Columns.find(tag);
-            Y_ABORT_UNLESS(it != table->Columns.end());
-            if (it->second.Name == "__ydb_incrBackupImpl_deleted") {
-                if (const auto& cell = cells.at(pos); !cell.IsNull() && cell.AsValue<bool>()) {
-                    return std::nullopt;
-                }
-                foundSpecialColumn = true;
-                continue;
-            }
-            updates.emplace_back(tag, ECellOp::Set, TRawTypeValue(cells.at(pos).AsRef(), it->second.Type));
-        }
-        Y_ABORT_UNLESS(foundSpecialColumn);
-
-        return updates;
-    }
+    using TLimits = NStreamScan::TLimits;
+    using TBuffer = NStreamScan::TBuffer;
+    using TChange = IDataShardChangeCollector::TChange;
 
 public:
     explicit TIncrementalRestoreScan(
@@ -240,10 +149,10 @@ public:
         for (auto& [k, v] : rows) {
             // LOG_D("IncrRestore@Progress()#iter"
                 // << ": k.GetCells().size()# " << k.GetCells().size() << ", v.GetCells().size()# " << v.GetCells().size());
-            const auto key = MakeKey(k.GetCells(), table);
+            const auto key = NStreamScan::MakeKey(k.GetCells(), table);
             const auto& keyTags = table->KeyColumnIds;
             NKikimrChangeExchange::TDataChange body;
-            if (auto updates = MakeRestoreUpdates(v.GetCells(), ValueTags, table); updates) {
+            if (auto updates = NIncrRestoreHelpers::MakeRestoreUpdates(v.GetCells(), ValueTags, table); updates) {
                 Serialize(body, ERowOp::Upsert, key, keyTags, *updates);
             } else {
                 Serialize(body, ERowOp::Erase, key, keyTags, {});

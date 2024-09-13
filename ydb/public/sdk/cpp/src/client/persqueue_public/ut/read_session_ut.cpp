@@ -330,7 +330,7 @@ struct TMockReadSessionProcessor : public TMockProcessorFactory<Ydb::PersQueue::
     void Cancel() override {
     }
 
-    void ReadInitialMetadata(std::unordered_multimap<TString, TString>* metadata, TReadCallback callback) override {
+    void ReadInitialMetadata(std::unordered_multimap<std::string, std::string>* metadata, TReadCallback callback) override {
         Y_UNUSED(metadata);
         Y_UNUSED(callback);
         UNIT_ASSERT_C(false, "This method is not expected to be called");
@@ -578,7 +578,7 @@ class TSynchronousExecutor : public ::IExecutor {
     }
 };
 
-extern TLogFormatter NYdb::GetPrefixLogFormatter(const TString& prefix); // Defined in ydb.cpp.
+extern TLogFormatter NYdb::GetPrefixLogFormatter(const std::string& prefix); // Defined in ydb.cpp.
 
 TReadSessionImplTestSetup::TReadSessionImplTestSetup() {
     Settings
@@ -775,7 +775,7 @@ Y_UNIT_TEST_SUITE(PersQueueSdkReadSessionTest) {
         std::shared_ptr<IReadSession> session =                         \
             setup.GetPersQueueClient().CreateReadSession(settings);     \
         session->WaitEvent().Wait();                                    \
-        TMaybe<TReadSessionEvent::TEvent> event =                       \
+        std::optional<TReadSessionEvent::TEvent> event =                       \
             session->GetEvent(true);                                    \
         UNIT_ASSERT(event);                                             \
         Cerr << DebugString(*event) << Endl;                            \
@@ -869,7 +869,7 @@ Y_UNIT_TEST_SUITE(PersQueueSdkReadSessionTest) {
         }
 
         // Event 2: receive data.
-        auto GetDataEvent = [&](const TString& content) -> TMaybe<TReadSessionEvent::TEvent> {
+        auto GetDataEvent = [&](const TString& content) -> std::optional<TReadSessionEvent::TEvent> {
             std::optional<TReadSessionEvent::TEvent> event = session->GetEvent(true);
             UNIT_ASSERT(event);
             UNIT_ASSERT_EVENT_TYPE(*event, TReadSessionEvent::TDataReceivedEvent);
@@ -880,7 +880,7 @@ Y_UNIT_TEST_SUITE(PersQueueSdkReadSessionTest) {
             return event;
         };
 
-        TMaybe<TReadSessionEvent::TEvent> dataEvents[2];
+        std::optional<TReadSessionEvent::TEvent> dataEvents[2];
 
         dataEvents[0] = GetDataEvent("message1");
 
@@ -1105,7 +1105,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
 
         setup.MockProcessor->AddServerResponse(TMockReadSessionProcessor::TServerReadInfo().CreatePartitionStream()); // Callback will be called.
         {
-            TVector<TReadSessionEvent::TEvent> events = setup.EventsQueue->GetEvents(true);
+            std::vector<TReadSessionEvent::TEvent> events = setup.EventsQueue->GetEvents(true);
             UNIT_ASSERT_VALUES_EQUAL(events.size(), 1);
             UNIT_ASSERT_EVENT_TYPE(events[0], TReadSessionEvent::TCreatePartitionStreamEvent);
             auto& event = std::get<TReadSessionEvent::TCreatePartitionStreamEvent>(events[0]);
@@ -1500,7 +1500,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
         }
 
         {
-            std::optional<TReadSessionEvent::TEvent> events = setup.EventsQueue->GetEvents(true);
+            std::vector<TReadSessionEvent::TEvent> events = setup.EventsQueue->GetEvents(true);
             UNIT_ASSERT_VALUES_EQUAL(events.size(), 1);
             UNIT_ASSERT_EVENT_TYPE(events[0], TReadSessionEvent::TDataReceivedEvent);
             TReadSessionEvent::TDataReceivedEvent& dataEvent = std::get<TReadSessionEvent::TDataReceivedEvent>(events[0]);
@@ -1509,7 +1509,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
         }
 
         {
-            TVector<TReadSessionEvent::TEvent> events = setup.EventsQueue->GetEvents(true);
+            std::vector<TReadSessionEvent::TEvent> events = setup.EventsQueue->GetEvents(true);
             UNIT_ASSERT_VALUES_EQUAL(events.size(), 1);
             UNIT_ASSERT_EVENT_TYPE(events[0], TReadSessionEvent::TDataReceivedEvent);
             TReadSessionEvent::TDataReceivedEvent& dataEvent = std::get<TReadSessionEvent::TDataReceivedEvent>(events[0]);

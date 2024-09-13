@@ -187,11 +187,11 @@ public:
         TValueParser& idParser = parser.ColumnParser("query_id");
         TValueParser& queryText = parser.ColumnParser("query_text");
         do {
-            TString queryId = std::move(idParser.GetOptionalString().GetRef());
+            TString queryId = std::move(idParser.GetOptionalString().value());
             if (AllQueries.find(queryId) != AllQueries.end())
                 continue;
 
-            ui64 QueryHash = CityHash64(queryText.GetOptionalString().GetRef());
+            ui64 QueryHash = CityHash64(queryText.GetOptionalString().value());
 
             if (Hashes.find(QueryHash) != Hashes.end() || QueryHash % Modulo != ShardId)
                 continue;

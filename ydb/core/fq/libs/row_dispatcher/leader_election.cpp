@@ -74,7 +74,7 @@ struct TEvPrivate {
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TLeaderElectionMetrics {
-    TLeaderElectionMetrics(const ::NMonitoring::TDynamicCounterPtr& counters)
+    explicit TLeaderElectionMetrics(const ::NMonitoring::TDynamicCounterPtr& counters)
         : Counters(counters) {
         Errors = Counters->GetCounter("LeaderElectionErrors", true);
         LeaderChangedCount = Counters->GetCounter("LeaderElectionChangedCount");
@@ -184,6 +184,7 @@ TLeaderElection::TLeaderElection(
     , CoordinatorId(coordinatorId)
     , Tenant(tenant)
     , Metrics(counters) {
+    LOG_ROW_DISPATCHER_DEBUG("TLeaderElection created");
 }
 
 ERetryErrorClass RetryFunc(const NYdb::TStatus& status) {
@@ -216,6 +217,7 @@ TYdbSdkRetryPolicy::TPtr MakeSchemaRetryPolicy() {
 }
 
 void TLeaderElection::Bootstrap() {
+    LOG_ROW_DISPATCHER_DEBUG("TLeaderElection Bootstrap");
     Become(&TLeaderElection::StateFunc);
     LogPrefix = "TLeaderElection " + SelfId().ToString() + " ";
     LOG_ROW_DISPATCHER_DEBUG("Successfully bootstrapped, local coordinator id " << CoordinatorId.ToString());

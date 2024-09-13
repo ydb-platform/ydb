@@ -24,7 +24,7 @@ namespace {
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TCoordinatorMetrics {
-    TCoordinatorMetrics(const ::NMonitoring::TDynamicCounterPtr& counters)
+    explicit TCoordinatorMetrics(const ::NMonitoring::TDynamicCounterPtr& counters)
         : Counters(counters) {
         IncomingRequests = Counters->GetCounter("IncomingRequests", true);
         LeaderChangedCount = Counters->GetCounter("LeaderChangedCount");

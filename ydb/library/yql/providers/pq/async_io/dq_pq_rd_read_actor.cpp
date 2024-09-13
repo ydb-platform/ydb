@@ -72,7 +72,7 @@ LWTRACE_USING(DQ_PQ_PROVIDER);
 } // namespace
 
 struct TRowDispatcherReadActorMetrics {
-    TRowDispatcherReadActorMetrics(const TTxId& txId, ui64 taskId, const ::NMonitoring::TDynamicCounterPtr& counters)
+    explicit TRowDispatcherReadActorMetrics(const TTxId& txId, ui64 taskId, const ::NMonitoring::TDynamicCounterPtr& counters)
         : TxId(std::visit([](auto arg) { return ToString(arg); }, txId))
         , Counters(counters) {
         SubGroup = Counters->GetSubgroup("sink", "RdPqRead");

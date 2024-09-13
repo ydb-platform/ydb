@@ -127,16 +127,16 @@ public:
         const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
         NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
         const TActorId& creator, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
-        const bool useEvWriteForOltp, ui32 statementResultIndex, const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
-        const TGUCSettings::TPtr& GUCSettings, const TShardIdToTableInfoPtr& shardIdToTableInfo, const bool htapTx)
+        ui32 statementResultIndex, const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
+        const TGUCSettings::TPtr& GUCSettings, const TShardIdToTableInfoPtr& shardIdToTableInfo)
         : TBase(std::move(request), database, userToken, counters, tableServiceConfig,
             userRequestContext, statementResultIndex, TWilsonKqp::DataExecuter, "DataExecuter", streamResult)
         , AsyncIoFactory(std::move(asyncIoFactory))
-        , UseEvWriteForOltp(useEvWriteForOltp)
+        , UseEvWriteForOltp(tableServiceConfig.GetEnableOltpSink())
+        , HtapTx(tableServiceConfig.GetEnableHtapTx())
         , FederatedQuerySetup(federatedQuerySetup)
         , GUCSettings(GUCSettings)
         , ShardIdToTableInfo(shardIdToTableInfo)
-        , HtapTx(htapTx)
     {
         Target = creator;
 
@@ -2844,11 +2844,11 @@ private:
 
 private:
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
-    bool UseEvWriteForOltp = false;
+    const bool UseEvWriteForOltp = false;
+    const bool HtapTx = false;
     const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
     const TGUCSettings::TPtr GUCSettings;
     TShardIdToTableInfoPtr ShardIdToTableInfo;
-    const bool HtapTx = false;
 
     bool HasExternalSources = false;
     bool SecretSnapshotRequired = false;
@@ -2890,13 +2890,13 @@ private:
 IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
     TKqpRequestCounters::TPtr counters, bool streamResult, const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, const TActorId& creator,
-    const TIntrusivePtr<TUserRequestContext>& userRequestContext, const bool useEvWriteForOltp, ui32 statementResultIndex,
+    const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
-    const TShardIdToTableInfoPtr& shardIdToTableInfo, const bool htapTx)
+    const TShardIdToTableInfoPtr& shardIdToTableInfo)
 {
     return new TKqpDataExecuter(std::move(request), database, userToken, counters, streamResult, tableServiceConfig,
         std::move(asyncIoFactory), creator, userRequestContext,
-        useEvWriteForOltp, statementResultIndex, federatedQuerySetup, GUCSettings, shardIdToTableInfo, htapTx);
+        statementResultIndex, federatedQuerySetup, GUCSettings, shardIdToTableInfo);
 }
 
 } // namespace NKqp

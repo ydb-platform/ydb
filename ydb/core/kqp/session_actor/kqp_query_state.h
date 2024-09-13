@@ -413,8 +413,8 @@ public:
         const auto& phyQuery = PreparedQuery->GetPhysicalQuery();
         auto tx = PreparedQuery->GetPhyTxOrEmpty(CurrentTx);
 
-        if (TxCtx->CanDeferEffects() && TxCtx->HasOlapTable) {
-            // HTAP/OLAP transactions and sinks can't be deffered.
+        if (TxCtx->CanDeferEffects()) {
+            // At current time sinks require separate tnx with commit.
             while (tx && tx->GetHasEffects() && !HasTxSinkInTx(tx)) {
                 QueryData->CreateKqpValueMap(tx);
                 bool success = TxCtx->AddDeferredEffect(tx, QueryData);

@@ -595,6 +595,7 @@ public:                                                                         
                 COUNTER_INIT(BalancingIterations, true);
                 COUNTER_INIT(EpochTimeouts, true);
                 COUNTER_INIT(ReplTokenAquired, true);
+                COUNTER_INIT(OnMainByIngressButNotRealy, true);
 
                 COUNTER_INIT(PlannedToSendOnMain, false);
                 COUNTER_INIT(CandidatesToDelete, false);
@@ -620,6 +621,7 @@ public:                                                                         
             COUNTER_DEF(BalancingIterations);
             COUNTER_DEF(EpochTimeouts);
             COUNTER_DEF(ReplTokenAquired);
+            COUNTER_DEF(OnMainByIngressButNotRealy);
 
             COUNTER_DEF(PlannedToSendOnMain);
             COUNTER_DEF(ReadFromHandoffBytes);

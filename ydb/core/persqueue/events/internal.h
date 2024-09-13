@@ -822,7 +822,7 @@ struct TEvPQ {
     };
 
     struct TEvTxCalcPredicateResult : public TEventLocal<TEvTxCalcPredicateResult, EvTxCalcPredicateResult> {
-        TEvTxCalcPredicateResult(ui64 step, ui64 txId, const NPQ::TPartitionId& partition, bool predicate) :
+        TEvTxCalcPredicateResult(ui64 step, ui64 txId, const NPQ::TPartitionId& partition, TMaybe<bool> predicate) :
             Step(step),
             TxId(txId),
             Partition(partition),
@@ -833,7 +833,7 @@ struct TEvPQ {
         ui64 Step;
         ui64 TxId;
         NPQ::TPartitionId Partition;
-        bool Predicate = false;
+        TMaybe<bool> Predicate;
     };
 
     struct TEvProposePartitionConfig : public TEventLocal<TEvProposePartitionConfig, EvProposePartitionConfig> {

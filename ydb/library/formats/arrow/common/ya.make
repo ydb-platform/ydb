@@ -1,4 +1,4 @@
-LIBRARY()
+LIBRARY(library-formats-arrow-common)
 
 PEERDIR(
     contrib/libs/apache/arrow

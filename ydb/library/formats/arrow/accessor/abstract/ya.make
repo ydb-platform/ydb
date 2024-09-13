@@ -1,4 +1,4 @@
-LIBRARY()
+LIBRARY(library-formats-arrow-accessor-abstract)
 
 PEERDIR(
     ydb/library/formats/arrow/protos

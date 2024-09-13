@@ -399,6 +399,24 @@ copy=[
 ]
 add_values=[{attr="includes", values=["cmake/swig.cmake"]}]
 
+[[rules]]
+attrs=[
+    "packages-name=IDN",
+]
+copy=[
+    "cmake/FindIDN.cmake",
+]
+add_values=[{attr="includes", values=["cmake/FindIDN.cmake"]}]
+
+[[rules]]
+attrs=[
+    "packages-name=AIO",
+]
+copy=[
+    "cmake/FindAIO.cmake",
+]
+add_values=[{attr="includes", values=["cmake/FindAIO.cmake"]}]
+
 # Conan profiles for platforms
 [[rules]]
 platforms=[

@@ -1398,6 +1398,7 @@ message TColumnSchema
 
     optional string lock = 4;
     optional string expression = 5;
+    optional bool materialized = 13;
     optional string aggregate = 6;
     optional int32 sort_order = 7;
     optional string group = 8;

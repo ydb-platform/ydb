@@ -25,14 +25,14 @@ TVector<TKqpTableColumn> GetKqpColumns(const TKikimrTableMetadata& table, const 
         ui32 columnId = 0;
         ui32 columnType = 0;
         bool notNull = false;
-        void* columnTypeDesc = nullptr;
+        NScheme::TTypeInfo columnTypeInfo;
 
         auto columnData = table.Columns.FindPtr(name);
         if (columnData) {
             columnId = columnData->Id;
             columnType = columnData->TypeInfo.GetTypeId();
             if (columnType == NScheme::NTypeIds::Pg) {
-                columnTypeDesc = columnData->TypeInfo.GetTypeDesc();
+                columnTypeInfo = columnData->TypeInfo;
             }
             notNull = columnData->NotNull;
         } else if (allowSystemColumns) {
@@ -43,7 +43,7 @@ TVector<TKqpTableColumn> GetKqpColumns(const TKikimrTableMetadata& table, const 
         }
 
         YQL_ENSURE(columnId, "Unknown column: " << name);
-        pgmColumns.emplace_back(columnId, name, columnType, notNull, columnTypeDesc);
+        pgmColumns.emplace_back(columnId, name, columnType, notNull, columnTypeInfo);
     }
 
     return pgmColumns;
@@ -77,7 +77,7 @@ NMiniKQL::TType* CreateColumnType(const NKikimr::NScheme::TTypeInfo& typeInfo, c
     if (typeId == NUdf::TDataType<NUdf::TDecimal>::Id) {
         return ctx.PgmBuilder().NewDecimalType(22, 9);
     } else if (typeId == NKikimr::NScheme::NTypeIds::Pg) {
-        return ctx.PgmBuilder().NewPgType(NPg::PgTypeIdFromTypeDesc(typeInfo.GetTypeDesc()));
+        return ctx.PgmBuilder().NewPgType(NPg::PgTypeIdFromTypeDesc(typeInfo.GetPgTypeDesc()));
     } else {
         return ctx.PgmBuilder().NewDataType(typeId);
     }

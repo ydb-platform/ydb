@@ -285,7 +285,10 @@ void ResolveYPath(
 
     auto currentService = rootService;
 
-    const auto& originalPath = GetOriginalRequestTargetYPath(context->RequestHeader());
+    // NB: of course, we could use reference here. But Resolve() can change
+    // request header due to master compat.
+    // COMPAT(kvk1920): use const reference.
+    auto originalPath = GetOriginalRequestTargetYPath(context->RequestHeader());
     auto currentPath = GetRequestTargetYPath(context->RequestHeader());
 
     int iteration = 0;

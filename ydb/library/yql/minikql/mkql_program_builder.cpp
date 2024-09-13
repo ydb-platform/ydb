@@ -5893,7 +5893,8 @@ TRuntimeNode TProgramBuilder::ScalarApply(const TArrayRef<const TRuntimeNode>& a
 }
 
 TRuntimeNode TProgramBuilder::BlockMapJoinCore(TRuntimeNode flow, TRuntimeNode dict,
-    EJoinKind joinKind, const TArrayRef<const ui32>& leftKeyColumns
+    EJoinKind joinKind, const TArrayRef<const ui32>& leftKeyColumns,
+    const TArrayRef<const ui32>& leftKeyDrops
 ) {
     if constexpr (RuntimeVersion < 51U) {
         THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
@@ -5902,6 +5903,11 @@ TRuntimeNode TProgramBuilder::BlockMapJoinCore(TRuntimeNode flow, TRuntimeNode d
                 joinKind == EJoinKind::LeftSemi || joinKind == EJoinKind::LeftOnly,
                 "Unsupported join kind");
     MKQL_ENSURE(!leftKeyColumns.empty(), "At least one key column must be specified");
+    const THashSet<ui32> leftKeySet(leftKeyColumns.cbegin(), leftKeyColumns.cend());
+    for (const auto& drop : leftKeyDrops) {
+        MKQL_ENSURE(leftKeySet.contains(drop),
+                    "Only key columns has to be specified in drop column set");
+    }
 
     TRuntimeNode::TList leftKeyColumnsNodes;
     leftKeyColumnsNodes.reserve(leftKeyColumns.size());
@@ -5910,7 +5916,23 @@ TRuntimeNode TProgramBuilder::BlockMapJoinCore(TRuntimeNode flow, TRuntimeNode d
             return NewDataLiteral(idx);
         });
 
-    auto returnJoinItems = ValidateBlockFlowType(flow.GetStaticType(), false);
+    TRuntimeNode::TList leftKeyDropsNodes;
+    leftKeyDropsNodes.reserve(leftKeyDrops.size());
+    std::transform(leftKeyDrops.cbegin(), leftKeyDrops.cend(),
+        std::back_inserter(leftKeyDropsNodes), [this](const ui32 idx) {
+            return NewDataLiteral(idx);
+        });
+
+    const auto leftFlowItems = ValidateBlockFlowType(flow.GetStaticType(), false);
+    const THashSet<ui32> leftKeyDropsSet(leftKeyDrops.cbegin(), leftKeyDrops.cend());
+    TVector<TType*> returnJoinItems;
+    for (size_t i = 0; i < leftFlowItems.size(); i++) {
+        if (leftKeyDropsSet.contains(i)) {
+            continue;
+        }
+        returnJoinItems.push_back(leftFlowItems[i]);
+    }
+
     const auto payloadType = AS_TYPE(TDictType, dict.GetStaticType())->GetPayloadType();
     const auto payloadItemType = payloadType->IsList()
                                ? AS_TYPE(TListType, payloadType)->GetItemType()
@@ -5945,6 +5967,7 @@ TRuntimeNode TProgramBuilder::BlockMapJoinCore(TRuntimeNode flow, TRuntimeNode d
     callableBuilder.Add(dict);
     callableBuilder.Add(NewDataLiteral((ui32)joinKind));
     callableBuilder.Add(NewTuple(leftKeyColumnsNodes));
+    callableBuilder.Add(NewTuple(leftKeyDropsNodes));
 
     return TRuntimeNode(callableBuilder.Build(), false);
 }

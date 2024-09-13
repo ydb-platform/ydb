@@ -31,11 +31,15 @@ struct TChangeRecordBuilderContextTrait<NBackup::NImpl::TChangeRecord> {
 
 namespace NKikimr::NBackup::NImpl {
 
+class TChangeRecordBuilder;
+
 class TChangeRecord: public NChangeExchange::TChangeRecordBase {
     friend class TChangeRecordBuilder;
 
 public:
     using TPtr = TIntrusivePtr<TChangeRecord>;
+    using TBuilder = TChangeRecordBuilder;
+
     const static NKikimrSchemeOp::ECdcStreamFormat StreamType = NKikimrSchemeOp::ECdcStreamFormatProto;
 
     ui64 GetGroup() const override {
@@ -196,10 +200,5 @@ struct TChangeRecordContainer<NBackup::NImpl::TChangeRecord>
 {
     using TBaseChangeRecordContainer<NBackup::NImpl::TChangeRecord>::TBaseChangeRecordContainer;
 };
-
-template <>
-struct TChangeRecordBuilderTrait<NBackup::NImpl::TChangeRecord>
-    : public NBackup::NImpl::TChangeRecordBuilder
-{};
 
 }

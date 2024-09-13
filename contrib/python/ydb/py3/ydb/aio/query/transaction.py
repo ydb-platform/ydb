@@ -5,6 +5,7 @@ from typing import (
 
 from .base import AsyncResponseContextIterator
 from ... import issues
+from ...settings import BaseRequestSettings
 from ...query import base
 from ...query.transaction import (
     BaseQueryTxContext,
@@ -46,25 +47,25 @@ class QueryTxContextAsync(BaseQueryTxContext):
                 pass
             self._prev_stream = None
 
-    async def begin(self, settings: Optional[base.QueryClientSettings] = None) -> "QueryTxContextAsync":
+    async def begin(self, settings: Optional[BaseRequestSettings] = None) -> "QueryTxContextAsync":
         """WARNING: This API is experimental and could be changed.
 
         Explicitly begins a transaction
 
-        :param settings: A request settings
+        :param settings: An additional request settings BaseRequestSettings;
 
         :return: None or exception if begin is failed
         """
         await self._begin_call(settings)
         return self
 
-    async def commit(self, settings: Optional[base.QueryClientSettings] = None) -> None:
+    async def commit(self, settings: Optional[BaseRequestSettings] = None) -> None:
         """WARNING: This API is experimental and could be changed.
 
         Calls commit on a transaction if it is open otherwise is no-op. If transaction execution
         failed then this method raises PreconditionFailed.
 
-        :param settings: A request settings
+        :param settings: An additional request settings BaseRequestSettings;
 
         :return: A committed transaction or exception if commit is failed
         """
@@ -79,13 +80,13 @@ class QueryTxContextAsync(BaseQueryTxContext):
 
         await self._commit_call(settings)
 
-    async def rollback(self, settings: Optional[base.QueryClientSettings] = None) -> None:
+    async def rollback(self, settings: Optional[BaseRequestSettings] = None) -> None:
         """WARNING: This API is experimental and could be changed.
 
         Calls rollback on a transaction if it is open otherwise is no-op. If transaction execution
         failed then this method raises PreconditionFailed.
 
-        :param settings: A request settings
+        :param settings: An additional request settings BaseRequestSettings;
 
         :return: A committed transaction or exception if commit is failed
         """
@@ -108,7 +109,7 @@ class QueryTxContextAsync(BaseQueryTxContext):
         syntax: Optional[base.QuerySyntax] = None,
         exec_mode: Optional[base.QueryExecMode] = None,
         concurrent_result_sets: Optional[bool] = False,
-        settings: Optional[base.QueryClientSettings] = None,
+        settings: Optional[BaseRequestSettings] = None,
     ) -> AsyncResponseContextIterator:
         """WARNING: This API is experimental and could be changed.
 
@@ -137,9 +138,9 @@ class QueryTxContextAsync(BaseQueryTxContext):
             exec_mode=exec_mode,
             parameters=parameters,
             concurrent_result_sets=concurrent_result_sets,
+            settings=settings,
         )
 
-        settings = settings if settings is not None else self.session._settings
         self._prev_stream = AsyncResponseContextIterator(
             stream_it,
             lambda resp: base.wrap_execute_query_response(
@@ -147,7 +148,7 @@ class QueryTxContextAsync(BaseQueryTxContext):
                 response_pb=resp,
                 tx=self,
                 commit_tx=commit_tx,
-                settings=settings,
+                settings=self.session._settings,
             ),
         )
         return self._prev_stream

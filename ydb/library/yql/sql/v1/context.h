@@ -324,6 +324,7 @@ namespace NSQLTranslationV1 {
         bool CompactNamedExprs = false;
         bool ValidateUnusedExprs = false;
         bool AnsiImplicitCrossJoin = false; // select * from A,B
+        bool DistinctOverWindow = false;
     };
 
     class TColumnRefScope {

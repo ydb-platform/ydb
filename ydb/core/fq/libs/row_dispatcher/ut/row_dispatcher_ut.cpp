@@ -54,8 +54,14 @@ public:
         Runtime.SetLogPriority(NKikimrServices::FQ_ROW_DISPATCHER, NLog::PRI_TRACE);
         NConfig::TRowDispatcherConfig config;
         config.SetEnabled(true);
+        NConfig::TRowDispatcherCoordinatorConfig& coordinatorConfig = *config.MutableCoordinator();
+        auto& storage = *coordinatorConfig.MutableStorage();
+        storage.SetEndpoint("YDB_ENDPOINT");
+        storage.SetDatabase("YDB_DATABASE");
+        storage.SetToken("");
+        storage.SetTablePrefix("tablePrefix");
+
         NConfig::TCommonConfig commonConfig;
-        NKikimr::TYdbCredentialsProviderFactory credentialsProviderFactory;
         auto credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
         auto yqSharedResources = NFq::TYqSharedResources::Cast(NFq::CreateYqSharedResourcesImpl({}, credFactory, MakeIntrusive<NMonitoring::TDynamicCounters>()));
    
@@ -69,7 +75,7 @@ public:
         RowDispatcher = Runtime.Register(NewRowDispatcher(
             config,
             commonConfig,
-            credentialsProviderFactory,
+            NKikimr::CreateYdbCredentialsProviderFactory,
             yqSharedResources,
             credentialsFactory,
             "Tenant",

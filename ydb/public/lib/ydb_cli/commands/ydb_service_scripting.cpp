@@ -43,25 +43,13 @@ void TCommandExecuteYqlScript::Config(TConfig& config) {
     });
 
     AddParametersOption(config);
-    AddParametersFileOption(config);
+    AddLegacyParametersFileOption(config);
 
-    AddInputFormats(config, {
-        EDataFormat::JsonUnicode,
-        EDataFormat::JsonBase64
-    });
+    AddParamFormats(config);
+    AddLegacyParamFormats(config);
 
-    AddStdinFormats(config, {
-        EDataFormat::JsonUnicode,
-        EDataFormat::JsonBase64,
-        EDataFormat::Raw,
-        EDataFormat::Csv,
-        EDataFormat::Tsv
-    }, {
-        EDataFormat::NoFraming,
-        EDataFormat::NewlineDelimited
-    });
-
-    AddParametersStdinOption(config, "script");
+    AddBatchParametersOptions(config, "script");
+    AddLegacyBatchParametersOptions(config);
 
     config.SetFreeArgsNum(0);
 
@@ -104,7 +92,8 @@ void TCommandExecuteYqlScript::Parse(TConfig& config) {
 }
 
 int TCommandExecuteYqlScript::Run(TConfig& config) {
-    NScripting::TScriptingClient client(CreateDriver(config));
+    TDriver driver = CreateDriver(config);
+    NScripting::TScriptingClient client(driver);
 
     if (Explain) {
         NScripting::TExplainYqlRequestSettings settings;
@@ -124,11 +113,9 @@ int TCommandExecuteYqlScript::Run(TConfig& config) {
                                         + (CollectStatsMode.Empty() ? "none" : CollectStatsMode) + '.';
         }
 
-        if (!Parameters.empty() || !IsStdinInteractive()) {
-            ValidateResult = MakeHolder<NScripting::TExplainYqlResult>(
-                ExplainQuery(config, Script, NScripting::ExplainYqlRequestMode::Validate));
+        if (!Parameters.empty() || InputParamStream) {
             THolder<TParamsBuilder> paramBuilder;
-            while (GetNextParams(paramBuilder)) {
+            while (GetNextParams(driver, Script, paramBuilder)) {
                 auto asyncResult = client.ExecuteYqlScript(
                         Script,
                         paramBuilder->Build(),

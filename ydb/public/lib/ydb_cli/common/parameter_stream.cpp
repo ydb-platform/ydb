@@ -8,21 +8,28 @@
 namespace NYdb {
 namespace NConsoleClient {
 
+TSimpleParamStream::TSimpleParamStream(IInputStream* input)
+    : Input(input) {
+}
+
 size_t TSimpleParamStream::ReadLine(TString& res) {
-    return Cin.ReadLine(res);
+    return Input->ReadLine(res);
 }
 
 TString TSimpleParamStream::ReadAll() {
-    return Cin.ReadAll();
+    return Input->ReadAll();
 }
 
-TCsvParamStream::TCsvParamStream() : Input(&Cin), Splitter(Input) {
+TCsvParamStream::TCsvParamStream(IInputStream* input)
+    : Input(std::move(input))
+    , CountingInput(Input)
+    , Splitter(CountingInput) {
 }
 
 size_t TCsvParamStream::ReadLine(TString& res) {
     res = Splitter.ConsumeLine();
-    size_t len = Input.Counter() - CurrentCount;
-    CurrentCount = Input.Counter();
+    size_t len = CountingInput.Counter() - CurrentCount;
+    CurrentCount = CountingInput.Counter();
     return len;
 }
 

@@ -377,25 +377,13 @@ void TCommandExecuteQuery::Config(TConfig& config) {
     });
 
     AddParametersOption(config, "(for data, scan and generic queries)");
-    AddParametersFileOption(config);
+    AddLegacyParametersFileOption(config);
 
-    AddInputFormats(config, {
-        EDataFormat::JsonUnicode,
-        EDataFormat::JsonBase64
-    });
+    AddParamFormats(config);
+    AddLegacyParamFormats(config);
 
-    AddStdinFormats(config, {
-        EDataFormat::JsonUnicode,
-        EDataFormat::JsonBase64,
-        EDataFormat::Raw,
-        EDataFormat::Csv,
-        EDataFormat::Tsv,
-    }, {
-        EDataFormat::NoFraming,
-        EDataFormat::NewlineDelimited
-    });
-
-    AddParametersStdinOption(config, "query");
+    AddBatchParametersOptions(config, "query");
+    AddLegacyBatchParametersOptions(config);
 
     CheckExamples(config);
 
@@ -409,9 +397,11 @@ void TCommandExecuteQuery::Parse(TConfig& config) {
     if (BasicStats && CollectStatsMode) {
         throw TMisuseException() << "Both mutually exclusive options \"--stats\" and \"-s\" are provided.";
     }
-    if ((!ParameterOptions.empty() || !ParameterFiles.empty() || !StdinParameters.empty() || IsStdinFormatSet || IsFramingFormatSet ||
-            config.ParseResult->Has("batch")) && QueryType == "scheme") {
-        throw TMisuseException() << "Scheme queries does not support parameters.";
+    if ((!ParameterOptions.empty() || !ParameterFiles.empty() || !InputParamNames.empty()
+            || InputFormat != EDataFormat::Default || InputFramingFormat != EFramingFormat::Default
+            || InputBinaryStringEncodingFormat != EBinaryStringEncodingFormat::Default
+            || BatchMode != EBatchMode::Default) && QueryType == "scheme") {
+        throw TMisuseException() << "Scheme queries does not support parameter options.";
     }
     CheckQueryOptions();
     CheckQueryFile();
@@ -455,14 +445,13 @@ int TCommandExecuteQuery::ExecuteDataQuery(TConfig& config) {
         }
     }
 
-    NTable::TTableClient client(CreateDriver(config));
+    TDriver driver = CreateDriver(config);
+    NTable::TTableClient client(driver);
     NTable::TAsyncDataQueryResult asyncResult;
 
-    if (!Parameters.empty() || !IsStdinInteractive()) {
-        ValidateResult = MakeHolder<NScripting::TExplainYqlResult>(
-            ExplainQuery(config, Query, NScripting::ExplainYqlRequestMode::Validate));
+    if (!Parameters.empty() || InputParamStream) {
         THolder<TParamsBuilder> paramBuilder;
-        while (GetNextParams(paramBuilder)) {
+        while (GetNextParams(driver, Query, paramBuilder)) {
             TParams params = paramBuilder->Build();
             auto operation = [this, &txSettings, &params, &settings, &asyncResult](NTable::TSession session) {
                 auto promise = NThreading::NewPromise<NTable::TDataQueryResult>();
@@ -678,7 +667,8 @@ int TCommandExecuteQuery::ExecuteScanQuery(TConfig& config) {
 
 template <typename TClient>
 int TCommandExecuteQuery::ExecuteQueryImpl(TConfig& config) {
-    TClient client(CreateDriver(config));
+    TDriver driver = CreateDriver(config);
+    TClient client(driver);
     std::optional<TDuration> optTimeout;
     if (OperationTimeout) {
         optTimeout = TDuration::MilliSeconds(FromString<ui64>(OperationTimeout));
@@ -687,11 +677,9 @@ int TCommandExecuteQuery::ExecuteQueryImpl(TConfig& config) {
 
     TAsyncPartIterator<TClient> asyncResult;
     SetInterruptHandlers();
-    if (!Parameters.empty() || !IsStdinInteractive()) {
-        ValidateResult = MakeHolder<NScripting::TExplainYqlResult>(
-            ExplainQuery(config, Query, NScripting::ExplainYqlRequestMode::Validate));
+    if (!Parameters.empty() || InputParamStream) {
         THolder<TParamsBuilder> paramBuilder;
-        while (GetNextParams(paramBuilder)) {
+        while (GetNextParams(driver, Query, paramBuilder)) {
             auto operation = [this, &paramBuilder, &settings, &asyncResult](TClient client) {
                 auto promise = NThreading::NewPromise<TPartIterator<TClient>>();
                 asyncResult = promise.GetFuture();

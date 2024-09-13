@@ -271,7 +271,6 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
 class TCommitOperation {
 private:
     const ui64 TabletId;
-    bool HtapFormat = false;
 
 public:
     using TPtr = std::shared_ptr<TCommitOperation>;
@@ -295,19 +294,15 @@ public:
         auto& lock = evWrite.Record.GetLocks().GetLocks()[0];
         SendingShards = std::set<ui64>(locks.GetSendingShards().begin(), locks.GetSendingShards().end());
         ReceivingShards = std::set<ui64>(locks.GetReceivingShards().begin(), locks.GetReceivingShards().end());
-        HtapFormat = locks.HasArbiterColumnShard();
         if (!ReceivingShards.size() || !SendingShards.size()) {
             ReceivingShards.clear();
             SendingShards.clear();
-        } else if (!HtapFormat) {
+        } else if (!locks.HasArbiterColumnShard()) {
             ArbiterColumnShard = *ReceivingShards.begin();
             if (!ReceivingShards.contains(TabletId) && !SendingShards.contains(TabletId)) {
                 return TConclusionStatus::Fail("shard is incorrect for sending/receiving lists");
             }
         } else {
-            if (!ReceivingShards.size() || !SendingShards.size()) {
-                return TConclusionStatus::Fail("empty sending/receiving lists for columnshards is incorrect case");
-            }
             ArbiterColumnShard = locks.GetArbiterColumnShard();
             AFL_VERIFY(ArbiterColumnShard);
             if (!ReceivingShards.contains(TabletId) && !SendingShards.contains(TabletId)) {
@@ -334,22 +329,12 @@ public:
     std::unique_ptr<NColumnShard::TEvWriteCommitSyncTransactionOperator> CreateTxOperator(
         const NKikimrTxColumnShard::ETransactionKind kind) const {
         AFL_VERIFY(ReceivingShards.size());
-        if (HtapFormat) {
-            if (IsPrimary()) {
-                return std::make_unique<NColumnShard::TEvWriteCommitPrimaryTransactionOperator>(
-                    TFullTxInfo::BuildFake(kind), LockId, ReceivingShards, SendingShards);
-            } else {
-                return std::make_unique<NColumnShard::TEvWriteCommitSecondaryTransactionOperator>(TFullTxInfo::BuildFake(kind), LockId,
-                    ArbiterColumnShard, ReceivingShards.contains(TabletId));
-            }
+        if (IsPrimary()) {
+            return std::make_unique<NColumnShard::TEvWriteCommitPrimaryTransactionOperator>(
+                TFullTxInfo::BuildFake(kind), LockId, ReceivingShards, SendingShards);
         } else {
-            if (IsPrimary()) {
-                return std::make_unique<NColumnShard::TEvWriteCommitPrimaryTransactionOperator>(
-                    TFullTxInfo::BuildFake(kind), LockId, ReceivingShards, SendingShards);
-            } else {
-                return std::make_unique<NColumnShard::TEvWriteCommitSecondaryTransactionOperator>(TFullTxInfo::BuildFake(kind), LockId,
-                    ArbiterColumnShard, ReceivingShards.contains(TabletId));
-            }
+            return std::make_unique<NColumnShard::TEvWriteCommitSecondaryTransactionOperator>(TFullTxInfo::BuildFake(kind), LockId,
+                ArbiterColumnShard, ReceivingShards.contains(TabletId));
         }
     }
 

@@ -41,7 +41,7 @@ class TIncrementalRestoreScan
 public:
     explicit TIncrementalRestoreScan(
             TActorId parent,
-            std::function<IActor*()> changeSenderFactory,
+            std::function<TActorId(const TActorContext& ctx)> changeSenderFactory,
             ui64 txId,
             const TPathId& sourcePathId,
             TUserTable::TCPtr table,
@@ -73,7 +73,7 @@ public:
     }
 
     void Registered(TActorSystem*, const TActorId&) override {
-        ChangeSender = RegisterWithSameMailbox(ChangeSenderFactory());
+        ChangeSender = ChangeSenderFactory(TlsActivationContext->AsActorContext());
     }
 
     void PassAway() override {
@@ -177,7 +177,7 @@ public:
     }
 
     TAutoPtr<IDestructable> Finish(EAbort abort) noexcept override {
-        LOG_D("Finish " << abort);
+        LOG_D("Finish " << static_cast<ui64>(abort));
 
         if (abort != EAbort::None) {
             Send(Parent, new TEvIncrementalRestoreScan::TEvFinished{});
@@ -240,7 +240,7 @@ public:
 
 private:
     const TActorId Parent;
-    const std::function<IActor*()> ChangeSenderFactory;
+    const std::function<TActorId(const TActorContext& ctx)> ChangeSenderFactory;
     const ui64 TxId;
     const TPathId SourcePathId;
     const TPathId TargetPathId;
@@ -262,7 +262,7 @@ private:
 
 THolder<NTable::IScan> CreateIncrementalRestoreScan(
         NActors::TActorId parent,
-        std::function<NActors::IActor*()> changeSenderFactory,
+        std::function<TActorId(const TActorContext& ctx)> changeSenderFactory,
         TPathId sourcePathId,
         TUserTable::TCPtr table,
         const TPathId& targetPathId,

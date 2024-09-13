@@ -866,23 +866,6 @@ public:
         EnrichMonthDay(year, value, month, day);
     }
 
-    void EnrichDayInfo(i32 solarDate, i32 dayOfYear,
-            ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek) const
-    {
-        auto cache = -1 + std::upper_bound(YearsCache_.cbegin(), YearsCache_.cend(), solarDate,
-                [](ui32 value, const TYearCache& entry) {
-                    return value < entry.CumulativeDays;
-                });
-        dayOfWeek = 1 + (3 + solarDate) % 7;
-        weekOfYear = (dayOfYear + cache->WeekOffset) / 7;
-        weekOfYearIso8601 = (dayOfYear + cache->Iso8601WeekOffset) / 7;
-        if (weekOfYearIso8601 == 0) {
-            weekOfYearIso8601 = cache->FirstIsoWeek53 ? 53 : 52;
-        } else if (weekOfYearIso8601 == 53 && cache->LastDayOfWeek < 3) {
-                weekOfYearIso8601 = 1;
-        }
-    }
-
     void SplitDate32(i32 date, i32& year, ui32& month, ui32& day,
             ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek) const
     {

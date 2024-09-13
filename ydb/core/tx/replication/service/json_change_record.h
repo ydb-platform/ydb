@@ -27,11 +27,22 @@ class TChangeRecordBuilder;
 
 class TChangeRecord: public NChangeExchange::TChangeRecordBase {
     friend class TChangeRecordBuilder;
-    using TSerializationContext = TChangeRecordBuilderContextTrait<TChangeRecord>;
 
 public:
     using TPtr = TIntrusivePtr<TChangeRecord>;
     using TBuilder = TChangeRecordBuilder;
+
+    struct TSerializationContext {
+        TMemoryPool MemoryPool;
+
+        TSerializationContext()
+            : MemoryPool(256)
+        {}
+
+        TSerializationContext(const TSerializationContext&)
+            : MemoryPool(256) // do not preserve any state between writers, just construct new one.
+        {}
+    };
 
     const static NKikimrSchemeOp::ECdcStreamFormat StreamType = NKikimrSchemeOp::ECdcStreamFormatJson;
 
@@ -87,20 +98,6 @@ struct TChangeRecordContainer<NReplication::NService::TChangeRecord>
     : public TBaseChangeRecordContainer<NReplication::NService::TChangeRecord>
 {
     using TBaseChangeRecordContainer<NReplication::NService::TChangeRecord>::TBaseChangeRecordContainer;
-};
-
-template <>
-struct TChangeRecordBuilderContextTrait<NReplication::NService::TChangeRecord> {
-    TMemoryPool MemoryPool;
-
-    TChangeRecordBuilderContextTrait()
-        : MemoryPool(256)
-    {}
-
-    // do not preserve any state between writers, just construct new one.
-    TChangeRecordBuilderContextTrait(const TChangeRecordBuilderContextTrait<NReplication::NService::TChangeRecord>&)
-        : MemoryPool(256)
-    {}
 };
 
 }

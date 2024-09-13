@@ -195,7 +195,12 @@ DEFINE_REFCOUNTED_TYPE(TRetryingChannelConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TBalancingChannelConfigBase
+DEFINE_ENUM(EPeerPriorityStrategy,
+    (None)
+    (PreferLocal)
+);
+
+class TViablePeerRegistryConfig
     : public virtual NYTree::TYsonStruct
 {
 public:
@@ -227,22 +232,6 @@ public:
     //! returns a soft failure (i.e. "down" response) to |Discover| request.
     TDuration SoftBackoffTime;
 
-    REGISTER_YSON_STRUCT(TBalancingChannelConfigBase);
-
-    static void Register(TRegistrar registrar);
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
-DEFINE_ENUM(EPeerPriorityStrategy,
-    (None)
-    (PreferLocal)
-);
-
-class TViablePeerRegistryConfig
-    : public TBalancingChannelConfigBase
-{
-public:
     //! In case too many peers are known, the registry will only maintain this many peers active.
     int MaxPeerCount;
 
@@ -322,26 +311,39 @@ DEFINE_REFCOUNTED_TYPE(TServiceDiscoveryEndpointsConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TBalancingChannelConfig
+class TBalancingChannelConfigBase
     : public TDynamicChannelPoolConfig
 {
 public:
-    //! First option: static list of addresses.
-    std::optional<std::vector<std::string>> Addresses;
-
     //! Disables discovery and balancing when just one address is given.
     //! This is vital for jobs since node's redirector is incapable of handling
     //! discover requests properly.
     bool DisableBalancingOnSingleAddress;
-
-    //! Second option: SD endpoints.
-    TServiceDiscoveryEndpointsConfigPtr Endpoints;
 
     //! Delay before sending a hedged request. If null then hedging is disabled.
     std::optional<TDuration> HedgingDelay;
 
     //! Whether to cancel the primary request when backup one is sent.
     bool CancelPrimaryRequestOnHedging;
+
+    REGISTER_YSON_STRUCT(TBalancingChannelConfigBase);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TBalancingChannelConfigBase)
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TBalancingChannelConfig
+    : public TBalancingChannelConfigBase
+{
+public:
+    //! First option: static list of addresses.
+    std::optional<std::vector<std::string>> Addresses;
+
+    //! Second option: SD endpoints.
+    TServiceDiscoveryEndpointsConfigPtr Endpoints;
 
     REGISTER_YSON_STRUCT(TBalancingChannelConfig);
 

@@ -27,6 +27,10 @@ ydb/core/kqp/ut/service KqpService.CloseSessionsWithLoad
 ydb/core/kqp/ut/service KqpQueryService.TableSink_OlapRWQueries
 ydb/core/kqp/ut/service KqpQueryService.TableSink_Htap
 ydb/core/kqp/ut/tx KqpSnapshotRead.ReadOnlyTxWithIndexCommitsOnConcurrentWrite+withSink
+ydb/core/kqp/ut/tx KqpSinkMvcc.OltpNamedStatement
+ydb/core/kqp/ut/tx KqpSinkMvcc.OlapNamedStatement
+ydb/core/kqp/ut/tx KqpSinkMvcc.OltpMultiSinks
+ydb/core/kqp/ut/tx KqpSinkMvcc.OlapMultiSinks
 ydb/core/persqueue/ut [*/*]*
 ydb/core/persqueue/ut TPQTest.*DirectRead*
 ydb/core/persqueue/ut/ut_with_sdk [*/*]*
@@ -361,6 +365,18 @@ ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_se
 ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[column_selection_col3-dqrun]
 ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[column_selection_col3-kqprun]
 ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[primitive_types-dqrun]
+ydb/library/yql/providers/generic/connector/tests/datasource/clickhouse test.py.test_select_positive[column_selection_COL1_HTTP-dqrun]
+ydb/library/yql/providers/generic/connector/tests/datasource/clickhouse test.py.test_select_positive[column_selection_col2_COL1_NATIVE-kqprun]
+ydb/library/yql/providers/generic/connector/tests/datasource/clickhouse test.py.test_select_positive[constant_NATIVE-dqrun]
+ydb/library/yql/providers/generic/connector/tests/datasource/clickhouse test.py.test_select_positive[constant_NATIVE-kqprun]
+ydb/library/yql/providers/generic/connector/tests/datasource/clickhouse test.py.test_select_positive[primitive_types_HTTP-dqrun]
+ydb/library/yql/providers/generic/connector/tests/datasource/clickhouse test.py.test_select_positive[primitive_types_HTTP-kqprun]
+ydb/library/yql/providers/generic/connector/tests/datasource/clickhouse test.py.test_select_positive[primitive_types_NATIVE-dqrun]
+ydb/library/yql/providers/generic/connector/tests/datasource/clickhouse test.py.test_select_positive[primitive_types_NATIVE-kqprun]
+ydb/library/yql/providers/generic/connector/tests/datasource/clickhouse test.py.test_select_positive[primitive_types_nullable_HTTP-dqrun]
+ydb/library/yql/providers/generic/connector/tests/datasource/clickhouse test.py.test_select_positive[primitive_types_nullable_HTTP-kqprun]
+ydb/library/yql/providers/generic/connector/tests/datasource/clickhouse test.py.test_select_positive[primitive_types_nullable_NATIVE-dqrun]
+ydb/library/yql/providers/generic/connector/tests/datasource/clickhouse test.py.test_select_positive[primitive_types_nullable_NATIVE-kqprun]
 ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup[v1-1-True-3-fq_client0-mvp_external_ydb_endpoint0]
 ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup[v1-2-True-3-fq_client0-mvp_external_ydb_endpoint0]
 ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup[v1-3-True-3-fq_client0-mvp_external_ydb_endpoint0]
@@ -382,3 +398,4 @@ ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.CreateAlter-PQConfigTr
 ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.CreateAlterDropPqGroupWithReboots-PQConfigTransactionsAtSchemeShard-true
 ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.CreateDrop-PQConfigTransactionsAtSchemeShard-true
 ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.CreateMultiplePqTablets-PQConfigTransactionsAtSchemeShard-true
+ydb/tests/postgres_integrations/go-libpq [docker_wrapper_test.py] chunk chunk

@@ -1,12 +1,10 @@
 #include "accessor.h"
 
-#include <ydb/core/formats/arrow/arrow_helpers.h>
-#include <ydb/core/formats/arrow/permutations.h>
-#include <ydb/core/formats/arrow/save_load/saver.h>
-#include <ydb/core/formats/arrow/size_calcer.h>
-#include <ydb/core/formats/arrow/splitter/simple.h>
-#include <ydb/core/formats/arrow/switch/compare.h>
-#include <ydb/core/formats/arrow/switch/switch_type.h>
+#include <ydb/library/formats/arrow/arrow_helpers.h>
+#include <ydb/library/formats/arrow/permutations.h>
+#include <ydb/library/formats/arrow/size_calcer.h>
+#include <ydb/library/formats/arrow/switch/compare.h>
+#include <ydb/library/formats/arrow/switch/switch_type.h>
 
 #include <ydb/library/actors/core/log.h>
 

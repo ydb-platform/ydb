@@ -51,7 +51,7 @@ namespace NBalancing {
             } else if (ev->Sender == DeleterId) {
                 IsDeleteCompleted = true;
             } else {
-                STLOG(PRI_WARN, BS_VDISK_BALANCING, BSVB05, "Unexpected id", (Id, ev->Sender));
+                STLOG(PRI_WARN, BS_VDISK_BALANCING, BSVB05, "Unexpected actor id", (Id, ev->Sender));
             }
         }
 
@@ -79,6 +79,8 @@ namespace NBalancing {
 
         TBatchManager BatchManager;
 
+        TInstant StartTime;
+
         ///////////////////////////////////////////////////////////////////////////////////////////
         //  Main logic
         ///////////////////////////////////////////////////////////////////////////////////////////
@@ -98,6 +100,8 @@ namespace NBalancing {
         }
 
         void ScheduleJobQuant() {
+            Ctx->MonGroup.ReplTokenAquired()++;
+
             // once repl token received, start balancing - waking up sender and deleter
             STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB02, VDISKP(Ctx->VCtx, "Schedule job quant"),
                 (SendPartsLeft, SendOnMainParts.Size()), (DeletePartsLeft, TryDeleteParts.Size()),
@@ -125,7 +129,7 @@ namespace NBalancing {
             for (ui32 cnt = 0; It.Valid(); It.Next(), ++cnt) {
                 if (cnt % 100 == 99 && TDuration::Seconds(timer.Passed()) > JOB_GRANULARITY) {
                     // actor should not block the thread for a long time, so we should yield
-                    STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB04, VDISKP(Ctx->VCtx, "Collect keys"), (collected, cnt), (passed, timer.Passed()));
+                    // STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB04, VDISKP(Ctx->VCtx, "Collect keys"), (collected, cnt), (passed, timer.Passed()));
                     Send(SelfId(), new NActors::TEvents::TEvWakeup());
                     return;
                 }
@@ -138,7 +142,7 @@ namespace NBalancing {
 
                 auto [moveMask, delMask] = merger.Ingress.HandoffParts(&top, Ctx->VCtx->ShortSelfVDisk, key);
 
-                if (auto partsToSend = merger.Ingress.LocalParts(top.GType) & moveMask; !partsToSend.Empty()) {
+                if (auto partsToSend = merger.Ingress.LocalParts(top.GType) & moveMask; !partsToSend.Empty() && SendOnMainParts.Size() < MAX_TO_SEND_PER_EPOCH) {
                     // collect parts to send on main
                     for (const auto& [parts, data]: merger.Parts) {
                         if (!(partsToSend & parts).Empty()) {
@@ -151,7 +155,7 @@ namespace NBalancing {
                     }
                 }
 
-                if (auto partsToDelete = merger.Ingress.LocalParts(top.GType) & delMask; !partsToDelete.Empty()) {
+                if (auto partsToDelete = merger.Ingress.LocalParts(top.GType) & delMask; !partsToDelete.Empty() && TryDeleteParts.Size() < MAX_TO_DELETE_PER_EPOCH) {
                     // collect parts to delete
                     for (ui8 partIdx = partsToDelete.FirstPosition(); partIdx < partsToDelete.GetSize(); partIdx = partsToDelete.NextPosition(partIdx)) {
                         TryDeleteParts.Data.emplace_back(TLogoBlobID(It.GetCurKey().LogoBlobID(), partIdx + 1));
@@ -160,6 +164,11 @@ namespace NBalancing {
                 }
 
                 merger.Clear();
+
+                if (SendOnMainParts.Size() >= MAX_TO_SEND_PER_EPOCH && TryDeleteParts.Size() >= MAX_TO_DELETE_PER_EPOCH) {
+                    // reached the limit of parts to send and delete
+                    break;
+                }
             }
 
             STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB08, VDISKP(Ctx->VCtx, "Keys collected"),
@@ -173,6 +182,13 @@ namespace NBalancing {
 
         void Handle(NActors::TEvents::TEvCompleted::TPtr ev) {
             BatchManager.Handle(ev);
+
+            if (StartTime + EPOCH_TIMEOUT < TlsActivationContext->Now()) {
+                Ctx->MonGroup.EpochTimeouts()++;
+                STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB04, VDISKP(Ctx->VCtx, "Epoch timeout"));
+                PassAway();
+            }
+
             if (BatchManager.IsBatchCompleted()) {
                 Send(MakeBlobStorageReplBrokerID(), new TEvReleaseReplToken);
 
@@ -259,6 +275,7 @@ namespace NBalancing {
             , It(Ctx->Snap.HullCtx, &Ctx->Snap.LogoBlobsSnap)
             , SendOnMainParts(BATCH_SIZE)
             , TryDeleteParts(BATCH_SIZE)
+            , StartTime(TlsActivationContext->Now())
         {
         }
 

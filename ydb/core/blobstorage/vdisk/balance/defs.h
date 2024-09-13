@@ -72,5 +72,9 @@ namespace NBalancing {
 
     static constexpr ui32 BATCH_SIZE = 32;
 
+    static constexpr ui32 MAX_TO_SEND_PER_EPOCH = 1000;
+    static constexpr ui32 MAX_TO_DELETE_PER_EPOCH = 1000;
+    static constexpr TDuration EPOCH_TIMEOUT = TDuration::Minutes(1);
+
 } // NBalancing
 } // NKikimr

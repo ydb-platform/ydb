@@ -27,6 +27,10 @@ ydb/core/kqp/ut/service KqpService.CloseSessionsWithLoad
 ydb/core/kqp/ut/service KqpQueryService.TableSink_OlapRWQueries
 ydb/core/kqp/ut/service KqpQueryService.TableSink_Htap
 ydb/core/kqp/ut/tx KqpSnapshotRead.ReadOnlyTxWithIndexCommitsOnConcurrentWrite+withSink
+ydb/core/kqp/ut/tx KqpSinkMvcc.OltpNamedStatement
+ydb/core/kqp/ut/tx KqpSinkMvcc.OlapNamedStatement
+ydb/core/kqp/ut/tx KqpSinkMvcc.OltpMultiSinks
+ydb/core/kqp/ut/tx KqpSinkMvcc.OlapMultiSinks
 ydb/core/persqueue/ut [*/*]*
 ydb/core/persqueue/ut TPQTest.*DirectRead*
 ydb/core/persqueue/ut/ut_with_sdk [*/*]*

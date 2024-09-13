@@ -210,7 +210,7 @@ protected:
     }
 
     [[nodiscard]]
-    bool HandleResolve(TEvKqpExecuter::TEvShardsResolveStatus::TPtr& ev) {
+    bool HandleResolve(NShardResolver::TEvShardsResolveStatus::TPtr& ev) {
         auto& reply = *ev->Get();
 
         KqpShardsResolverId = {};

@@ -84,8 +84,6 @@ struct TEvKqpExecuter {
         NYql::TIssues Issues;
         TDuration CpuTime;
     };
-
-    using TEvShardsResolveStatus = NShardResolver::TEvShardsResolveStatus;
 };
 
 struct TKqpFederatedQuerySetup;

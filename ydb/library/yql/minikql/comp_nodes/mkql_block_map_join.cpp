@@ -207,7 +207,7 @@ public:
 
         while (!blockState.HasBlocks()) {
             while (blockState.IsNotFull() && blockState.NextRow()) {
-                const auto key = MakeKeysTuple(ctx, blockState, LeftKeyColumns_);
+                const auto key = MakeKeysTuple(ctx, blockState);
                 if constexpr (WithoutRight) {
                     if (key && dict.Contains(key) == RightRequired) {
                         blockState.CopyRow();
@@ -270,11 +270,11 @@ private:
         return *static_cast<TState*>(state.AsBoxed().Get());
     }
 
-    NUdf::TUnboxedValue MakeKeysTuple(const TComputationContext& ctx, const TState& state, const TVector<ui32>& keyColumns) const {
+    NUdf::TUnboxedValue MakeKeysTuple(const TComputationContext& ctx, const TState& state) const {
         // TODO: Handle complex key.
         // TODO: Handle converters.
         Y_ABORT_IF(IsTuple);
-        return state.GetValue(ctx.HolderFactory, keyColumns.front());
+        return state.GetValue(ctx.HolderFactory, LeftKeyColumns_.front());
     }
 
     const TVector<TType*> ResultJoinItems_;
@@ -321,7 +321,7 @@ public:
                 }
             }
             if (blockState.IsNotFull() && blockState.NextRow()) {
-                const auto key = MakeKeysTuple(ctx, blockState, LeftKeyColumns_);
+                const auto key = MakeKeysTuple(ctx, blockState);
                 // Lookup the item in the right dict. If the lookup succeeds,
                 // reset the iterator and proceed the execution from the
                 // beginning of the outer loop. Otherwise, the iterState is
@@ -420,11 +420,11 @@ private:
         return *static_cast<TIterator*>(iterator.AsBoxed().Get());
     }
 
-    NUdf::TUnboxedValue MakeKeysTuple(const TComputationContext& ctx, const TState& state, const TVector<ui32>& keyColumns) const {
+    NUdf::TUnboxedValue MakeKeysTuple(const TComputationContext& ctx, const TState& state) const {
         // TODO: Handle complex key.
         // TODO: Handle converters.
         Y_ABORT_IF(IsTuple);
-        return state.GetValue(ctx.HolderFactory, keyColumns.front());
+        return state.GetValue(ctx.HolderFactory, LeftKeyColumns_.front());
     }
 
     const TVector<TType*> ResultJoinItems_;

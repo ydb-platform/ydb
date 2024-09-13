@@ -225,9 +225,7 @@ public:
 
                     const auto& task = TasksGraph.GetTask(taskId);
                     const auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
-                    auto& info = (*ShardIdToTableInfo)[lock.GetDataShard()];
-                    info.IsOlap = (stageInfo.Meta.TableKind == ETableKind::Olap);
-                    info.Pathes.insert(stageInfo.Meta.TablePath);
+                    ShardIdToTableInfo->Add(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
                 }
             } else if (data.GetData().template Is<NKikimrKqp::TEvKqpOutputActorResultInfo>()) {
                 NKikimrKqp::TEvKqpOutputActorResultInfo info;
@@ -237,9 +235,7 @@ public:
 
                     const auto& task = TasksGraph.GetTask(taskId);
                     const auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
-                    auto& info = (*ShardIdToTableInfo)[lock.GetDataShard()];
-                    info.IsOlap = (stageInfo.Meta.TableKind == ETableKind::Olap);
-                    info.Pathes.insert(stageInfo.Meta.TablePath);
+                    ShardIdToTableInfo->Add(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
                 }
             }
         };
@@ -1981,9 +1977,7 @@ private:
                 NYql::NDqProto::TDqTask* protoTask = ArenaSerializeTaskToProto(TasksGraph, task, true);
                 datashardTasks[task.Meta.ShardId].emplace_back(protoTask);
 
-                auto& info = (*ShardIdToTableInfo)[task.Meta.ShardId];
-                info.IsOlap = (stageInfo.Meta.TableKind == ETableKind::Olap);
-                info.Pathes.insert(stageInfo.Meta.TablePath);
+                ShardIdToTableInfo->Add(task.Meta.ShardId, stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
             } else if (stageInfo.Meta.IsSysView()) {
                 computeTasks.emplace_back(task.Id);
             } else {
@@ -2382,7 +2376,7 @@ private:
                 }
 
                 for (auto& [shardId, tx] : evWriteTxs) {
-                    if (ShardIdToTableInfo->at(shardId).IsOlap && HtapTx) {
+                    if (ShardIdToTableInfo->Get(shardId).IsOlap && HtapTx) {
                          if (tx->HasLocks()) {
                             // Locks may be broken so shards with locks need to send readsets
                             sendingColumnShardsSet.insert(shardId);

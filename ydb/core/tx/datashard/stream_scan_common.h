@@ -55,23 +55,4 @@ private:
     ui64 ByteSize = 0;
 };
 
-struct TChange {
-    ui64 Order;
-    ui64 Group;
-    ui64 Step;
-    ui64 TxId;
-    TPathId PathId;
-    ui64 BodySize;
-    TPathId TableId;
-    ui64 SchemaVersion;
-    ui64 LockId = 0;
-    ui64 LockOffset = 0;
-
-    inline TInstant CreatedAt() const {
-        return Group
-            ? TInstant::MicroSeconds(Group)
-            : TInstant::MilliSeconds(Step);
-    }
-};
-
 } // namespace NKikimr::NDataShard::NStreamScan

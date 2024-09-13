@@ -3,9 +3,13 @@
 #include <ydb/core/tablet_flat/flat_update_op.h>
 #include <ydb/core/tx/datashard/datashard_user_table.h>
 
-#include <ydb/core/protos/tx_datashard.pb.h>
-
 #include <util/generic/vector.h>
+
+namespace NKikimrTxDataShard {
+
+class TEvCdcStreamScanRequest_TLimits;
+
+} // namespace NKikimrTxDataShard
 
 namespace NKikimr::NDataShard::NStreamScan {
 
@@ -16,12 +20,7 @@ struct TLimits {
     ui32 BatchMinRows;
     ui32 BatchMaxRows;
 
-    TLimits(const NKikimrTxDataShard::TEvCdcStreamScanRequest::TLimits& proto)
-        : BatchMaxBytes(proto.GetBatchMaxBytes())
-        , BatchMinRows(proto.GetBatchMinRows())
-        , BatchMaxRows(proto.GetBatchMaxRows())
-    {
-    }
+    TLimits(const NKikimrTxDataShard::TEvCdcStreamScanRequest_TLimits& proto);
 };
 
 class TBuffer {

@@ -37,6 +37,7 @@
 #endif
 
 #include "yql_arrow_column_converters.h"
+#include "yql_arrow_push_down.h"
 #include "yql_s3_decompressor_actor.h"
 #include "yql_s3_actors_util.h"
 #include "yql_s3_raw_read_actor.h"

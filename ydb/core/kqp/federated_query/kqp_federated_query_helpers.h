@@ -97,7 +97,7 @@ namespace NKikimr::NKqp {
 
         std::optional<TKqpFederatedQuerySetup> Make(NActors::TActorSystem*) override {
             return TKqpFederatedQuerySetup{
-                HttpGateway, ConnectorClient, CredentialsFactory, DatabaseAsyncResolver, S3GatewayConfig, GenericGatewayConfig, YtGatewayConfig, YtGateway, ComputationFactories};
+                HttpGateway, ConnectorClient, CredentialsFactory, DatabaseAsyncResolver, S3GatewayConfig, GenericGatewayConfig, YtGatewayConfig, YtGateway, ComputationFactories, S3ReadActorFactoryConfig};
         }
 
     private:

@@ -33,6 +33,7 @@ struct TS3State : public TThrRefBase
     IHTTPGateway::TPtr Gateway;
     IHTTPGateway::TRetryPolicy::TPtr GatewayRetryPolicy = GetHTTPDefaultRetryPolicy();
     ui32 ExecutorPoolId = 0;
+    std::list<TVector<TString>> PrimaryKeys;
     NActors::TActorSystem* ActorSystem = nullptr;
 };
 

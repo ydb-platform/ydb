@@ -25,5 +25,6 @@ message TSource {
     uint64 RowsLimitHint = 12;
     bool UseRuntimeListing = 13;
     bool AsyncDecoding = 14;
+    NYql.NConnector.NApi.TPredicate Predicate = 15;
     bool AsyncDecompressing = 16;
 }

@@ -40,6 +40,7 @@
 #include <ydb/library/yql/providers/dq/worker_manager/local_worker_manager.h>
 #include <ydb/library/yql/providers/generic/actors/yql_generic_provider_factories.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
+#include <ydb/library/yql/providers/s3/actors/yql_s3_source_factory.h>
 #include <ydb/library/yql/providers/s3/proto/retry_config.pb.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_read_actor.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_write_actor.h>
@@ -211,7 +212,7 @@ void Init(
             readActorFactoryCfg.DataInflight = dataInflight;
         }
 
-        RegisterDqPqReadActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory, yqCounters->GetSubgroup("subsystem", "DqSourceTracker"), !protoConfig.GetReadActorsFactoryConfig().GetPqReadActorFactoryConfig().GetCookieCommitMode());
+        RegisterDqPqReadActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory);
         RegisterYdbReadActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory);
         RegisterS3ReadActorFactory(*asyncIoFactory, credentialsFactory, httpGateway, s3HttpRetryPolicy, readActorFactoryCfg,
             yqCounters->GetSubgroup("subsystem", "S3ReadActor"));

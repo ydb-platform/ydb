@@ -129,8 +129,8 @@ namespace NKikimr::NKqp {
             GenericGatewaysConfig,
             YtGatewayConfig,
             YtGateway,
+            nullptr,
             S3ReadActorFactoryConfig};
-            nullptr};
 
         // Init DatabaseAsyncResolver only if all requirements are met
         if (DatabaseResolverActorId && MdbEndpointGenerator &&

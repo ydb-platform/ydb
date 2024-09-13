@@ -1031,10 +1031,9 @@ public:
     TKqpHost(TIntrusivePtr<IKqpGateway> gateway, const TString& cluster, const TString& database, const TGUCSettings::TPtr& gUCSettings,
         const TMaybe<TString>& applicationName, TKikimrConfiguration::TPtr config, IModuleResolver::TPtr moduleResolver,
         std::optional<TKqpFederatedQuerySetup> federatedQuerySetup, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
-        const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, 
-        const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry, bool keepConfigChanges,
-        bool isInternalCall, TKqpTempTablesState::TConstPtr tempTablesState = nullptr,
-        NActors::TActorSystem* actorSystem = nullptr)
+        const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry, bool keepConfigChanges, bool isInternalCall,
+        TKqpTempTablesState::TConstPtr tempTablesState = nullptr, NActors::TActorSystem* actorSystem = nullptr,
+        NYql::TExprContext* ctx = nullptr, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig = NKikimrConfig::TQueryServiceConfig())
         : Gateway(gateway)
         , Cluster(cluster)
         , GUCSettings(gUCSettings)
@@ -1954,15 +1953,14 @@ Ydb::Table::QueryStatsCollection::Mode GetStatsMode(NYql::EKikimrStatsMode stats
     }
 }
 
-TIntrusivePtr<IKqpHost> CreateKqpHost(TIntrusivePtr<IKqpGateway> gateway,
-    const TString& cluster, const TString& database, TKikimrConfiguration::TPtr config, IModuleResolver::TPtr moduleResolver,
-    std::optional<TKqpFederatedQuerySetup> federatedQuerySetup, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
-    const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
-    const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry, bool keepConfigChanges, bool isInternalCall,
-    TKqpTempTablesState::TConstPtr tempTablesState, NActors::TActorSystem* actorSystem)
+TIntrusivePtr<IKqpHost> CreateKqpHost(TIntrusivePtr<IKqpGateway> gateway, const TString& cluster,
+    const TString& database, TKikimrConfiguration::TPtr config, IModuleResolver::TPtr moduleResolver,
+    std::optional<TKqpFederatedQuerySetup> federatedQuerySetup, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TGUCSettings::TPtr& gUCSettings,
+    const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, const TMaybe<TString>& applicationName, const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry, bool keepConfigChanges,
+    bool isInternalCall, TKqpTempTablesState::TConstPtr tempTablesState, NActors::TActorSystem* actorSystem, NYql::TExprContext* ctx)
 {
-    return MakeIntrusive<TKqpHost>(gateway, cluster, database, config, moduleResolver, federatedQuerySetup, userToken, queryServiceConfig, 
-                                   funcRegistry, keepConfigChanges, isInternalCall, std::move(tempTablesState), actorSystem);
+    return MakeIntrusive<TKqpHost>(gateway, cluster, database, gUCSettings, applicationName, config, moduleResolver, federatedQuerySetup, userToken, funcRegistry,
+                                   keepConfigChanges, isInternalCall, std::move(tempTablesState), actorSystem, ctx, queryServiceConfig);
 }
 
 } // namespace NKqp

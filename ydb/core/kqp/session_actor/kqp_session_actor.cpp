@@ -521,8 +521,7 @@ public:
 
     void CompileQuery() {
         YQL_ENSURE(QueryState);
-        QueryState->CompilationRunning = true;
-        auto ev = QueryState->BuildCompileRequest(CompilationCookie);
+        auto ev = QueryState->BuildCompileRequest(CompilationCookie, GUCSettings);
         LOG_D("Sending CompileQuery request");
 
         Send(MakeKqpCompileServiceID(SelfId().NodeId()), ev.release(), 0, QueryState->QueryId,
@@ -1522,22 +1521,16 @@ public:
         TString logMsg = TStringBuilder() << "got TEvAbortExecution in " << CurrentStateFuncName();
         LOG_I(logMsg << ", status: " << NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode()) << " send to: " << ExecuterId);
 
-        auto issues = ev->Get()->GetIssues();
-        TStringBuilder reason = TStringBuilder() << "Cancelling after " << (AppData()->MonotonicTimeProvider->Now() - QueryState->StartedAt).MilliSeconds() << "ms";
-        if (QueryState->CompilationRunning) {
-            reason << " during compilation";
-        } else if (ExecuterId) {
-            reason << " during execution";
-        } else {
-            reason << " in " << CurrentStateFuncName();
-        }
-        issues.AddIssue(reason);
+        TString reason = TStringBuilder() << "Request timeout exceeded, cancelling after "
+            << (AppData()->MonotonicTimeProvider->Now() - QueryState->StartedAt).MilliSeconds()
+            << " milliseconds.";
 
         if (ExecuterId) {
-            auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(msg.GetStatusCode(), issues);
+            auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(msg.GetStatusCode(), reason);
             Send(ExecuterId, abortEv.Release(), IEventHandle::FlagTrackDelivery);
         } else {
-            ReplyQueryError(NYql::NDq::DqStatusToYdbStatus(msg.GetStatusCode()), "", MessageFromIssues(issues));
+            const auto& issues = ev->Get()->GetIssues();
+            ReplyQueryError(NYql::NDq::DqStatusToYdbStatus(msg.GetStatusCode()), logMsg, MessageFromIssues(issues));
         }
     }
 
@@ -2260,7 +2253,9 @@ public:
 
     void Handle(TEvKqp::TEvCancelQueryRequest::TPtr& ev) {
         {
-            auto abort = MakeHolder<NYql::NDq::TEvDq::TEvAbortExecution>(NYql::NDqProto::StatusIds::CANCELLED, "Request was canceled");
+            auto abort = MakeHolder<NYql::NDq::TEvDq::TEvAbortExecution>();
+            abort->Record.SetStatusCode(NYql::NDqProto::StatusIds::CANCELLED);
+            abort->Record.AddIssues()->set_message("Canceled");
             Send(SelfId(), abort.Release());
         }
 

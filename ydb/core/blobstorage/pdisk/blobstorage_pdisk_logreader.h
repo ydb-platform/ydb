@@ -17,9 +17,7 @@ public:
             ui64 offset)
         : Reader(reader)
         , Offset(offset)
-    {
-        TCompletionAction::ShouldBeExecutedInCompletionThread = true;
-    }
+    {}
 
     void Exec(TActorSystem *actorSystem) override {
         Reader->Exec(Offset, BadOffsets, actorSystem);

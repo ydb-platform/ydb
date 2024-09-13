@@ -107,9 +107,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
 
     @property
     def binary_path(self):
-        if self.__binary_path:
-            return self.__binary_path
-        return self.__configurator.binary_path
+        return self.__binary_path
 
     @property
     def command(self):
@@ -376,6 +374,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             configurator=self.__configurator,
             udfs_dir=self.__common_udfs_dir,
             tenant_affiliation=self.__configurator.yq_tenant,
+            binary_path=self.__configurator.get_binary_path(0),
             data_center=data_center,
         )
         return self._nodes[node_index]

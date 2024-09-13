@@ -93,6 +93,7 @@ public:
         , ReqId(reqId)
         , Span(std::move(span))
     {
+        TCompletionAction::ShouldBeExecutedInCompletionThread = false;
     }
 
     ~TCompletionChunkWrite() {
@@ -142,7 +143,9 @@ public:
         , LogWriteQueue(std::move(logWriteQueue))
         , Commits(std::move(commits))
         , CommitedLogChunks(std::move(commitedLogChunks))
-    {}
+    {
+        TCompletionAction::ShouldBeExecutedInCompletionThread = false;
+    }
 
     TVector<ui32>* GetCommitedLogChunksPtr() {
         return &CommitedLogChunks;

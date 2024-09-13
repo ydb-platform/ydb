@@ -13,6 +13,8 @@
 
 #include <util/system/unaligned_mem.h>
 
+constexpr size_t MAX_REQS_PER_CYCLE = 200; // 200 requests take ~0.2ms in EnqueueAll function
+
 namespace NKikimr {
 namespace NPDisk {
 
@@ -843,9 +845,6 @@ bool TPDisk::ChunkWritePiece(TChunkWrite *evChunkWrite, ui32 pieceShift, ui32 pi
 
     guard.Release();
 
-    LWTRACK(PDiskChunkWritePieceSendToDevice, evChunkWrite->Orbit, PDiskId, evChunkWrite->Owner, chunkIdx,
-            pieceShift, pieceSize);
-
     ui32 bytesAvailable = pieceSize;
     Y_ABORT_UNLESS(evChunkWrite->BytesWritten == pieceShift);
     const ui32 count = evChunkWrite->PartsPtr->Size();
@@ -904,6 +903,9 @@ bool TPDisk::ChunkWritePiece(TChunkWrite *evChunkWrite, ui32 pieceShift, ui32 pi
         LOG_INFO(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# %" PRIu32 " chunkIdx# %" PRIu32
             " was zero-padded after writing", (ui32)PDiskId, (ui32)chunkIdx);
     }
+    LWTRACK(PDiskChunkWriteLastPieceSendToDevice, evChunkWrite->Orbit, PDiskId, evChunkWrite->Owner, chunkIdx,
+        pieceShift, pieceSize);
+
     auto traceId = evChunkWrite->SpanStack.GetTraceId();
     evChunkWrite->Completion->Orbit = std::move(evChunkWrite->Orbit);
     writer.Flush(evChunkWrite->ReqId, &traceId, evChunkWrite->Completion.Release());
@@ -946,7 +948,7 @@ void TPDisk::SendChunkReadError(const TIntrusivePtr<TChunkRead>& read, TStringSt
 }
 
 TPDisk::EChunkReadPieceResult TPDisk::ChunkReadPiece(TIntrusivePtr<TChunkRead> &read, ui64 pieceCurrentSector,
-        ui64 pieceSizeLimit, ui64 *reallyReadDiskBytes, NWilson::TTraceId traceId) {
+        ui64 pieceSizeLimit, ui64 *reallyReadDiskBytes, NWilson::TTraceId traceId, NLWTrace::TOrbit&& orbit) {
     if (read->IsReplied) {
         return ReadPieceResultOk;
     }
@@ -1015,6 +1017,8 @@ TPDisk::EChunkReadPieceResult TPDisk::ChunkReadPiece(TIntrusivePtr<TChunkRead> &
     THolder<TCompletionChunkReadPart> completion(new TCompletionChunkReadPart(this, read, bytesToRead,
                 payloadBytesToRead, payloadOffset, read->FinalCompletion, isTheLastPart, Cfg->UseT1ha0HashInFooter, std::move(span)));
     completion->CostNs = DriveModel.TimeForSizeNs(bytesToRead, read->ChunkIdx, TDriveModel::OP_TYPE_READ);
+    LWTRACK(PDiskChunkReadPiecesSendToDevice, orbit, PDiskId);
+    completion->Orbit = std::move(orbit);
     Y_ABORT_UNLESS(bytesToRead <= completion->GetBuffer()->Size());
     ui8 *data = completion->GetBuffer()->Data();
     BlockDevice->PreadAsync(data, bytesToRead, readOffset, completion.Release(),
@@ -2279,7 +2283,7 @@ void TPDisk::ProcessChunkReadQueue() {
                         ui64 currentLimit = Min(bufferSize, piece->PieceSizeLimit - size);
                         ui64 reallyReadDiskBytes;
                         EChunkReadPieceResult result = ChunkReadPiece(read, piece->PieceCurrentSector + size / Format.SectorSize,
-                                currentLimit, &reallyReadDiskBytes, piece->SpanStack.GetTraceId());
+                                currentLimit, &reallyReadDiskBytes, piece->SpanStack.GetTraceId(), std::move(piece->Orbit));
                         isComplete = (result != ReadPieceResultInProgress);
                         // Read pieces is sliced previously and it is expected that ChunkReadPiece will read exactly
                         // currentLimit bytes
@@ -2941,7 +2945,6 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
 
             auto result = std::make_unique<TEvChunkWriteResult>(NKikimrProto::OK, ev.ChunkIdx, ev.Cookie,
                         GetStatusFlags(ev.Owner, ev.OwnerGroupType), TString());
-            result->Orbit = std::move(ev.Orbit);
 
             ++state.OperationsInProgress;
             ++ownerData.InFlight->ChunkWrites;
@@ -3185,7 +3188,7 @@ void TPDisk::PushRequestToForseti(TRequestBase *request) {
                 TChunkWritePiece *piece = new TChunkWritePiece(whole, smallJobCount * smallJobSize, largeJobSize, std::move(span));
                 piece->EstimateCost(DriveModel);
                 AddJobToForseti(cbs, piece, request->JobKind);
-                LWTRACK(PDiskAddWritePieceToScheduler, request->Orbit, PDiskId, request->ReqId.Id,
+                LWTRACK(PDiskChunkWriteAddToScheduler, request->Orbit, PDiskId, request->ReqId.Id,
                         HPSecondsFloat(HPNow() - request->CreationTime), request->Owner, request->IsFast,
                         request->PriorityClass, whole->TotalSize);
             } else if (request->GetType() == ERequestType::RequestChunkRead) {
@@ -3206,7 +3209,8 @@ void TPDisk::PushRequestToForseti(TRequestBase *request) {
                     // Schedule small job.
                     auto piece = new TChunkReadPiece(read, idx * smallJobSize,
                             smallJobSize * Format.SectorSize, false, std::move(span));
-                    LWTRACK(PDiskChunkReadPieceAddToScheduler, read->Orbit, PDiskId, idx, idx * smallJobSize,
+                    read->Orbit.Fork(piece->Orbit);
+                    LWTRACK(PDiskChunkReadPieceAddToScheduler, piece->Orbit, PDiskId, idx, idx * smallJobSize * Format.SectorSize,
                             smallJobSize * Format.SectorSize);
                     piece->EstimateCost(DriveModel);
                     piece->SelfPointer = piece;
@@ -3217,8 +3221,9 @@ void TPDisk::PushRequestToForseti(TRequestBase *request) {
                 span.Attribute("is_last_piece", true);
                 auto piece = new TChunkReadPiece(read, smallJobCount * smallJobSize,
                         largeJobSize * Format.SectorSize, true, std::move(span));
-                LWTRACK(PDiskChunkReadPieceAddToScheduler, read->Orbit, PDiskId, smallJobCount,
-                        smallJobCount * smallJobSize, largeJobSize * Format.SectorSize);
+                read->Orbit.Fork(piece->Orbit);
+                LWTRACK(PDiskChunkReadPieceAddToScheduler, piece->Orbit, PDiskId, smallJobCount,
+                        smallJobCount * smallJobSize * Format.SectorSize, largeJobSize * Format.SectorSize);
                 piece->EstimateCost(DriveModel);
                 piece->SelfPointer = piece;
                 AddJobToForseti(cbs, piece, request->JobKind);
@@ -3406,7 +3411,14 @@ void TPDisk::ProcessYardInitSet() {
 }
 
 void TPDisk::EnqueueAll() {
+    TInstant start = TInstant::Now();
+
     TGuard<TMutex> guard(StateMutex);
+    size_t initialQueueSize = InputQueue.GetWaitingSize();
+    size_t processedReqs = 0;
+    size_t pushedToForsetiReqs = 0;
+
+
     while (InputQueue.GetWaitingSize() > 0) {
         TRequestBase* request = InputQueue.Pop();
         AtomicSub(InputQueueCost, request->Cost);
@@ -3449,9 +3461,17 @@ void TPDisk::EnqueueAll() {
         } else {
             if (PreprocessRequest(request)) {
                 PushRequestToForseti(request);
+                ++pushedToForsetiReqs;
             }
         }
+        ++processedReqs;
+        if (processedReqs >= MAX_REQS_PER_CYCLE) {
+            break;
+        }
     }
+
+    double spentTimeMs = (TInstant::Now() - start).MillisecondsFloat();
+    LWPROBE(PDiskEnqueueAllDetails, PDiskId, initialQueueSize, processedReqs, pushedToForsetiReqs, spentTimeMs);
 }
 
 void TPDisk::Update() {

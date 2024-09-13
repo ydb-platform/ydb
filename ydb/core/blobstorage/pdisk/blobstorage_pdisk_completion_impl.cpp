@@ -2,6 +2,8 @@
 #include "blobstorage_pdisk_impl.h"
 #include "blobstorage_pdisk_sectorrestorator.h"
 
+constexpr size_t MAX_RESULTS_PER_BATCH = 50; // It took ~0.25ms in VDisk's handler to process such batch
+
 namespace NKikimr {
 namespace NPDisk {
 
@@ -53,7 +55,9 @@ void TCompletionLogWrite::Exec(TActorSystem *actorSystem) {
                 HPMilliSecondsFloat(now - evLog.CreationTime),
                 HPMilliSecondsFloat(evLog.InputTime - evLog.CreationTime),
                 HPMilliSecondsFloat(evLog.ScheduleTime - evLog.InputTime),
-                HPMilliSecondsFloat(now - evLog.ScheduleTime));
+                HPMilliSecondsFloat(now - evLog.ScheduleTime),
+                HPMilliSecondsFloat(GetTime - SubmitTime),
+                batch ? batch->Result->Results.size() : 0);
         if (evLog.Result->Results) {
             evLog.Result->Results.front().Orbit = std::move(evLog.Orbit);
         }
@@ -65,7 +69,7 @@ void TCompletionLogWrite::Exec(TActorSystem *actorSystem) {
         }
         if (evLog.Result->Status == NKikimrProto::OK) {
             if (batch) {
-                if (batch->Sender == evLog.Sender) {
+                if (batch->Sender == evLog.Sender && batch->Result->Results.size() < MAX_RESULTS_PER_BATCH) {
                     batch->Result->Results.push_back(std::move(evLog.Result->Results[0]));
                 } else {
                     sendResponse(batch);
@@ -275,7 +279,9 @@ void TCompletionChunkReadPart::Exec(TActorSystem *actorSystem) {
         endBadUserOffset = 0xffffffff;
     }
 
-    LWTRACK(PDiskChunkReadPieceComplete, Read->Orbit, PDisk->PDiskId, RawReadSize, CommonBufferOffset);
+    double deviceTimeMs = HPMilliSecondsFloat(GetTime - SubmitTime);
+    LWTRACK(PDiskChunkReadPieceComplete, Orbit, PDisk->PDiskId, RawReadSize, CommonBufferOffset, deviceTimeMs);
+    Read->Orbit.Join(Orbit);
     CumulativeCompletion->PartReadComplete(actorSystem);
     CumulativeCompletion = nullptr;
 

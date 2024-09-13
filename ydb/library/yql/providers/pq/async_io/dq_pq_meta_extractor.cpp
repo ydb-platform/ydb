@@ -25,7 +25,7 @@ namespace {
         },
         {
             "_yql_sys_partition_id", [](const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message){
-                using TDataType = NYql::NUdf::TDataType<ui64>;
+                using TDataType = NYql::NUdf::TDataType<uint64_t>;
                 return std::make_pair(
                     NYql::NUdf::TUnboxedValuePod(message.GetPartitionSession()->GetPartitionId()),
                     NYql::NUdf::GetDataTypeInfo(TDataType::Slot).FixedSize
@@ -34,7 +34,7 @@ namespace {
         },
         {
             "_yql_sys_offset", [](const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message){
-                using TDataType = NYql::NUdf::TDataType<ui64>;
+                using TDataType = NYql::NUdf::TDataType<uint64_t>;
                 return std::make_pair(
                     NYql::NUdf::TUnboxedValuePod(message.GetOffset()),
                     NYql::NUdf::GetDataTypeInfo(TDataType::Slot).FixedSize);
@@ -51,7 +51,7 @@ namespace {
         },
         {
             "_yql_sys_seq_no", [](const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message){
-                using TDataType = NYql::NUdf::TDataType<ui64>;
+                using TDataType = NYql::NUdf::TDataType<uint64_t>;
                 return std::make_pair(
                     NYql::NUdf::TUnboxedValuePod(message.GetSeqNo()),
                     NYql::NUdf::GetDataTypeInfo(TDataType::Slot).FixedSize

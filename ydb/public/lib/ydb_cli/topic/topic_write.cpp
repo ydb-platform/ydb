@@ -70,7 +70,7 @@ namespace NYdb::NConsoleClient {
 
     int TTopicWriter::Init() {
         TInstant endPreparationTime = Now() + DefaultMessagesWaitTimeout;
-        NThreading::TFuture<ui64> initSeqNo = WriteSession_->GetInitSeqNo();
+        NThreading::TFuture<uint64_t> initSeqNo = WriteSession_->GetInitSeqNo();
 
         while (Now() < endPreparationTime) {
             // TODO(shmel1k@): handle situation if seqNo already exists but with exception.

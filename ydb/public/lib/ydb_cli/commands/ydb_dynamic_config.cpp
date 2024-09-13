@@ -251,7 +251,7 @@ int TCommandConfigResolve::Run(TConfig& config) {
     }
 
     TString configStr;
-    std::map<ui64, std::string> volatileConfigStrs;
+    std::map<uint64_t, std::string> volatileConfigStrs;
 
     if (!Filename.empty()) {
         configStr = TFileInput(Filename).ReadAll();
@@ -584,10 +584,10 @@ int TCommandConfigVolatileDrop::Run(TConfig& config) {
         }
 
         if (Force) {
-            return client.ForceRemoveVolatileConfig(TVector<ui64>(Ids.begin(), Ids.end())).GetValueSync();
+            return client.ForceRemoveVolatileConfig(std::vector<uint64_t>(Ids.begin(), Ids.end())).GetValueSync();
         }
 
-        return client.RemoveVolatileConfig(Cluster, Version, TVector<ui64>(Ids.begin(), Ids.end())).GetValueSync();
+        return client.RemoveVolatileConfig(Cluster, Version, std::vector<uint64_t>(Ids.begin(), Ids.end())).GetValueSync();
     }();
 
     ThrowOnError(status);

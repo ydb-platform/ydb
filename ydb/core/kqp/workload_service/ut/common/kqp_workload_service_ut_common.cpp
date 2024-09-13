@@ -529,7 +529,7 @@ private:
         request->SetQuery(query);
         request->SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
         request->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
-        request->SetDatabase(Settings_.DomainName_);
+        request->SetDatabase(settings.Database_ ? settings.Database_ : Settings_.DomainName_);
         request->SetPoolId(settings.PoolId_);
 
         return event;

@@ -34,12 +34,7 @@ struct TSourceContext {
         , NMonitoring::THistogramPtr decodedChunkSizeHist
         , NMonitoring::TDynamicCounters::TCounterPtr httpInflightSize
         , NMonitoring::TDynamicCounters::TCounterPtr httpDataRps
-        , NMonitoring::TDynamicCounters::TCounterPtr deferredQueueSize
-        , const TString format
-        , const TString compression
-        , std::shared_ptr<arrow::Schema> schema
-        , std::unordered_map<TStringBuf, NKikimr::NMiniKQL::TType*, THash<TStringBuf>> rowTypes
-        , NDB::FormatSettings settings)
+        , NMonitoring::TDynamicCounters::TCounterPtr deferredQueueSize)
         : SourceId(sourceId)
         , Limit(limit)
         , ActorSystem(actorSystem)
@@ -54,11 +49,6 @@ struct TSourceContext {
         , HttpInflightSize(httpInflightSize)
         , HttpDataRps(httpDataRps)
         , DeferredQueueSize(deferredQueueSize)
-        , Format(format)
-        , Compression(compression)
-        , Schema(schema)
-        , RowTypes(rowTypes)
-        , Settings(settings)
     {
     }
 
@@ -105,11 +95,6 @@ struct TSourceContext {
     NMonitoring::TDynamicCounters::TCounterPtr HttpInflightSize;
     NMonitoring::TDynamicCounters::TCounterPtr HttpDataRps;
     NMonitoring::TDynamicCounters::TCounterPtr DeferredQueueSize;
-    const TString Format;
-    const TString Compression;
-    std::shared_ptr<arrow::Schema> Schema;
-    std::unordered_map<TStringBuf, NKikimr::NMiniKQL::TType*, THash<TStringBuf>> RowTypes;
-    NDB::FormatSettings Settings;
 private:
     std::atomic_uint64_t Value;
     std::mutex Mutex;

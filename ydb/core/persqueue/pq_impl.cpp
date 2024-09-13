@@ -4667,6 +4667,8 @@ void TPersQueue::TryStartTransaction(const TActorContext& ctx)
     Y_ABORT_UNLESS(next);
 
     CheckTxState(ctx, *next);
+
+    TryWriteTxs(ctx);
 }
 
 void TPersQueue::OnInitComplete(const TActorContext& ctx)

@@ -1247,6 +1247,8 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
             // get records
             {
+                WaitForDataRecords(client, shardIt);
+
                 auto res = client.GetRecords(shardIt).ExtractValueSync();
                 UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
                 UNIT_ASSERT_VALUES_EQUAL(res.GetResult().records().size(), records.size());
@@ -1266,6 +1268,19 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 auto res = client.DeregisterStreamConsumer("/Root/Table/Stream", "user").ExtractValueSync();
                 UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
             }
+        }
+
+        static void WaitForDataRecords(TDataStreamsClient& client, const TString& shardIt) {
+            int n = 0;
+            for (; n < 100; ++n) {
+                auto res = client.GetRecords(shardIt).ExtractValueSync();
+                UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+                if (res.GetResult().records().size()) {
+                    break;
+                }
+                Sleep(TDuration::MilliSeconds(100));
+            }
+            UNIT_ASSERT_VALUES_UNEQUAL(n, 100);
         }
 
         static void Write(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc) {

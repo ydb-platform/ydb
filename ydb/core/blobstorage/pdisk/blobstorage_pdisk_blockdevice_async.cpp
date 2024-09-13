@@ -425,7 +425,7 @@ class TRealBlockDevice : public IBlockDevice {
                     WaitingNoops[idx % MaxWaitingNoops] = completionAction->FlushAction;
                     completionAction->FlushAction = nullptr;
                 }
-                if (completionAction->IsChunkRead) {
+                if (completionAction->ShouldBeExecutedInCompletionThread) {
                     Device.CompletionThread->Schedule(completionAction);
                 } else {
                     completionAction->Exec(Device.PCtx->ActorSystem);
@@ -447,7 +447,7 @@ class TRealBlockDevice : public IBlockDevice {
                     LWTRACK(PDiskDeviceGetFromWaiting, WaitingNoops[i]->Orbit);
                     double durationMs = HPMilliSecondsFloat(HPNow() - WaitingNoops[i]->GetTime);
                     Device.Mon.DeviceFlushDuration.Increment(durationMs);
-                    if (WaitingNoops[i]->IsChunkRead) {
+                    if (WaitingNoops[i]->ShouldBeExecutedInCompletionThread) {
                         Device.CompletionThread->Schedule(WaitingNoops[i]);
                     } else {
                         WaitingNoops[i]->Exec(Device.PCtx->ActorSystem);

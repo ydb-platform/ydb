@@ -18,7 +18,9 @@ struct TCompletionAction {
     NWilson::TTraceId TraceId;
     EIoResult Result = EIoResult::Unknown;
     TString ErrorReason;
-    bool IsChunkRead = false;
+    // Only reads should be executed in a separate thread(s) sinse their complitions consist of
+    // time-consuming decyphering of read data
+    bool ShouldBeExecutedInCompletionThread = false;
 
     mutable NLWTrace::TOrbit Orbit;
 protected:

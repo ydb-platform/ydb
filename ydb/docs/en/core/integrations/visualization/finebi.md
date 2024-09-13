@@ -1,5 +1,7 @@
 # FineBI
 
+{% include [../../postgresql/_includes/alert_preview.md](../../postgresql/_includes/alert_preview.md) %}
+
 FineBI is a powerful big data analytics tool. FineBI allows organizations to analyze and share data for informed decision-making. It helps transform raw data into insightful visualizations, track KPIs, identify trends, and predict future outcomes.
 
 [PostgreSQL compatibility mode in {{ ydb-short-name }}](../../postgresql/intro.md) enables the use of [FineBI](https://intl.finebi.com/) to query and visualize data from {{ ydb-short-name }}. In this case FineBI works with {{ ydb-short-name }} just like with PostgreSQL.

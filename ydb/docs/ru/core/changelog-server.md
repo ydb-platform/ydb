@@ -10,7 +10,8 @@
 
 **Встроенный UI:**
 
-* --
+* Resource consumption diagnostics
+* Built-in charts
 
 **Производительность:**
 
@@ -19,6 +20,7 @@
 **Исправления ошибок:**
 
 * --
+* Исправлено нарушение порядка передаваемых изменений https://github.com/ydb-platform/ydb/pull/4105
 
 
 

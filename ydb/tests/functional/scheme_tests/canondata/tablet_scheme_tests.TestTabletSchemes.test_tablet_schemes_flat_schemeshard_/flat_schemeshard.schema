@@ -5833,6 +5833,11 @@
                 "ColumnId": 10,
                 "ColumnName": "Issue",
                 "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 11,
+                "ColumnName": "Permissions",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -5848,7 +5853,8 @@
                     7,
                     8,
                     9,
-                    10
+                    10,
+                    11
                 ],
                 "RoomID": 0,
                 "Codec": 0,

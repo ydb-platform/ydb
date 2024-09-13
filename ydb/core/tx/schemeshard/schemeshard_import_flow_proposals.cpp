@@ -66,8 +66,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     if (importInfo->UserSID) {
         record.SetOwner(*importInfo->UserSID);
     }
+    FillOwner(record, item.Permissions);
 
-    if (!FillACL(record, item.Permissions, error)) {
+    if (!FillACL(modifyScheme, item.Permissions, error)) {
         return nullptr;
     }
 

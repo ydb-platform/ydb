@@ -1432,7 +1432,7 @@ void ProtoValueFromCell(NYdb::TValueBuilder& vb, const NScheme::TTypeInfo& typeI
     }
 }
 
-bool FillACL(NKikimrScheme::TEvModifySchemeTransaction& out,
+bool FillACL(NKikimrSchemeOp::TModifyScheme& out,
              const TMaybeFail<Ydb::Scheme::ModifyPermissionsRequest>& in,
              TString& error) {
     if (in.Empty()) {
@@ -1443,15 +1443,24 @@ bool FillACL(NKikimrScheme::TEvModifySchemeTransaction& out,
     for (const auto& action : in->actions()) {
         if (action.has_grant() && !FillAllowPermissions(diffACL, action.grant(), error)) {
             return false;
-        } else if (action.has_change_owner()) {
+        }
+    }
+    out.MutableModifyACL()->SetDiffACL(diffACL.SerializeAsString());
+
+    return true;
+}
+
+void FillOwner(NKikimrScheme::TEvModifySchemeTransaction& out,
+    const TMaybeFail<Ydb::Scheme::ModifyPermissionsRequest>& in) {
+    if (in.Empty()) {
+        return;
+    }
+
+    for (const auto& action : in->actions()) {
+        if (action.has_change_owner()) {
             out.SetOwner(action.change_owner());
         }
     }
-
-    for (auto& tx : *out.MutableTransaction()) {
-        tx.MutableModifyACL()->SetDiffACL(diffACL.SerializeAsString());
-    }
-    return true;
 }
 
 } // namespace NKikimr

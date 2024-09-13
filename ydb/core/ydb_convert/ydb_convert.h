@@ -57,8 +57,11 @@ bool CellFromProtoVal(NScheme::TTypeInfo type, i32 typmod, const Ydb::Value* vp,
 
 void ProtoValueFromCell(NYdb::TValueBuilder& vb, const NScheme::TTypeInfo& typeInfo, const TCell& cell);
 
-bool FillACL(NKikimrScheme::TEvModifySchemeTransaction& out,
+bool FillACL(NKikimrSchemeOp::TModifyScheme& out,
     const TMaybeFail<Ydb::Scheme::ModifyPermissionsRequest>& in,
     TString& error);
+
+void FillOwner(NKikimrScheme::TEvModifySchemeTransaction& out,
+    const TMaybeFail<Ydb::Scheme::ModifyPermissionsRequest>& in);
 
 } // namespace NKikimr

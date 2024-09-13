@@ -321,4 +321,6 @@ message TTableServiceConfig {
     optional TComputeSchedulerSettings ComputeSchedulerSettings = 70;
 
     optional bool EnableRowsDuplicationCheck = 69 [ default = false ];
+
+    optional bool EnableReadsMerge = 71 [default = false];
 };

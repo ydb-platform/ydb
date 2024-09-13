@@ -137,6 +137,7 @@ public:
         , HasOlapTable(false)
         , StreamResult(streamResult)
         , StatementResultIndex(statementResultIndex)
+        , EnableReadsMerge(tableServiceConfig.GetEnableReadsMerge())
     {
         TasksGraph.GetMeta().Snapshot = IKqpGateway::TKqpSnapshot(Request.Snapshot.Step, Request.Snapshot.TxId);
         TasksGraph.GetMeta().Arena = MakeIntrusive<NActors::TProtoArenaHolder>();
@@ -1020,7 +1021,11 @@ protected:
         return result;
     }
 
-    TMaybe<size_t> BuildScanTasksFromSource(TStageInfo& stageInfo, const bool shardsResolved, const bool limitTasksPerNode) {
+    TMaybe<size_t> BuildScanTasksFromSource(TStageInfo& stageInfo, const bool shardsResolved, bool limitTasksPerNode) {
+        if (EnableReadsMerge) {
+            limitTasksPerNode = true;
+        }
+
         THashMap<ui64, std::vector<ui64>> nodeTasks;
         THashMap<ui64, ui64> assignedShardsCount;
 
@@ -1998,6 +2003,7 @@ protected:
 
     ui32 StatementResultIndex;
     bool AlreadyReplied = false;
+    bool EnableReadsMerge = false;
 
 private:
     static constexpr TDuration ResourceUsageUpdateInterval = TDuration::MilliSeconds(100);

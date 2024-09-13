@@ -1,12 +1,5 @@
 # Внешние источники данных
 
-{% note warning %}
-
-Данная функциональность находится в режиме "Experimental".
-
-{% endnote %}
-
-
 Внешний источник (external data source) - это объект в {{ ydb-full-name }}, описывающий параметры подключения к внешнему источнику данных. Например, в случае ClickHouse внешний источник описывает сетевой адрес, логин и пароль для аутентификации в кластере ClickHouse, а в случае S3 ({{ objstorage-name }}) описывает реквизиты доступа и путь к бакету.
 
 В следующем примере приведен пример создания внешнего источника, ведущего на кластер ClickHouse:
@@ -19,7 +12,11 @@ CREATE EXTERNAL DATA SOURCE test_data_source WITH (
   AUTH_METHOD="BASIC",
   USE_TLS="TRUE",
   LOGIN="login",
-  PASSWORD_SECRET_NAME="test_password_name",
+  PASSWOR{% note warning %}
+
+This functionality is in "Preview" mode.
+
+{% endnote %}D_SECRET_NAME="test_password_name",
   PROTOCOL="NATIVE"
 );
 ```

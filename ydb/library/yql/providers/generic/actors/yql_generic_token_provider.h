@@ -3,6 +3,7 @@
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 #include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
 #include <ydb/library/yql/providers/generic/proto/source.pb.h>
+#include <ydb/library/yql/public/issue/yql_issue.h>
 
 namespace NYql::NDq {
     // When accessing external data sources using authentication via tokens,
@@ -16,7 +17,9 @@ namespace NYql::NDq {
         TGenericTokenProvider(const NYql::Generic::TSource& source,
                               const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory);
 
-        void MaybeFillToken(NConnector::NApi::TDataSourceInstance& dsi) const;
+        // MaybeFillToken sets IAM-token within DataSourceInstance.
+        // Returns string containing error, if it happened.
+        TString MaybeFillToken(NConnector::NApi::TDataSourceInstance& dsi) const;
 
     private:
         NYql::Generic::TSource Source_;

@@ -253,7 +253,7 @@ IInvokerPtr CreateSerializedInvoker(IInvokerPtr underlyingInvoker, const NProfil
 IInvokerPtr CreateSerializedInvoker(IInvokerPtr underlyingInvoker, const TString& invokerName, NProfiling::IRegistryImplPtr registry)
 {
     NProfiling::TTagSet tagSet;
-    tagSet.AddTag(std::pair<TString, TString>("invoker", invokerName));
+    tagSet.AddTag(NProfiling::TTag("invoker", invokerName));
     return CreateSerializedInvoker(std::move(underlyingInvoker), std::move(tagSet), std::move(registry));
 }
 
@@ -326,7 +326,7 @@ IPrioritizedInvokerPtr CreatePrioritizedInvoker(IInvokerPtr underlyingInvoker, c
 IPrioritizedInvokerPtr CreatePrioritizedInvoker(IInvokerPtr underlyingInvoker, const TString& invokerName, NProfiling::IRegistryImplPtr registry)
 {
     NProfiling::TTagSet tagSet;
-    tagSet.AddTag(std::pair<TString, TString>("invoker", invokerName));
+    tagSet.AddTag(NProfiling::TTag("invoker", invokerName));
     return CreatePrioritizedInvoker(std::move(underlyingInvoker), std::move(tagSet), std::move(registry));
 }
 

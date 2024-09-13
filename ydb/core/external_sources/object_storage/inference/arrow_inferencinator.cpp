@@ -15,6 +15,14 @@
 #include <ydb/library/services/services.pb.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
 
+#define LOG_E(name, stream) \
+    LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::OBJECT_STORAGE_INFERENCINATOR, name << ": " << this->SelfId() << ". " << stream)
+#define LOG_I(name, stream) \
+    LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::OBJECT_STORAGE_INFERENCINATOR, name << ": " << this->SelfId() << ". " << stream)
+#define LOG_D(name, stream) \
+    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::OBJECT_STORAGE_INFERENCINATOR, name << ": " << this->SelfId() << ". " << stream)
+#define LOG_T(name, stream) \
+    LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::OBJECT_STORAGE_INFERENCINATOR, name << ": " << this->SelfId() << ". " << stream)
 
 namespace NKikimr::NExternalSource::NObjectStorage::NInference {
 
@@ -91,7 +99,7 @@ bool ArrowToYdbType(Ydb::Type& maybeOptionalType, const arrow::DataType& type, s
         resType.set_type_id(Ydb::Type::DATE);
         return true;
     case arrow::Type::DATE64: // TODO: is it true?
-        resType.set_type_id(Ydb::Type::DATETIME64);
+        resType.set_type_id(Ydb::Type::DATETIME);
         return true;
     case arrow::Type::TIMESTAMP:
         if (config->Format == EFileFormat::JsonEachRow || config->Format == EFileFormat::JsonList) {
@@ -107,7 +115,7 @@ bool ArrowToYdbType(Ydb::Type& maybeOptionalType, const arrow::DataType& type, s
     case arrow::Type::INTERVAL_MONTHS: // TODO: is it true?
         return false;
     case arrow::Type::INTERVAL_DAY_TIME: // TODO: is it true?
-        resType.set_type_id(Ydb::Type::INTERVAL64);
+        resType.set_type_id(Ydb::Type::INTERVAL);
         return true;
     case arrow::Type::DECIMAL128: // TODO: is it true?
         resType.set_type_id(Ydb::Type::DOUBLE);
@@ -154,7 +162,7 @@ bool ArrowToYdbType(Ydb::Type& maybeOptionalType, const arrow::DataType& type, s
     case arrow::Type::EXTENSION: // TODO: is representable?
         return false;
     case arrow::Type::DURATION: // TODO: is it true?
-        resType.set_type_id(Ydb::Type::INTERVAL64);
+        resType.set_type_id(Ydb::Type::INTERVAL);
         return true;
     case arrow::Type::LARGE_STRING: // TODO: is it true?
         resType.set_type_id(Ydb::Type::UTF8);
@@ -315,7 +323,6 @@ public:
             RequesterId_ = {};
             return;
         }
-
         auto& arrowFields = std::get<ArrowFields>(mbArrowFields);
         std::vector<Ydb::Column> ydbFields;
         for (const auto& field : arrowFields) {
@@ -334,7 +341,7 @@ public:
     }
 
     void HandleFileError(TEvFileError::TPtr& ev, const NActors::TActorContext& ctx) {
-        Cout << "TArrowInferencinator::HandleFileError" << Endl;
+        LOG_D("TArrowInferencinator", "HandleFileError: " << ev->Get()->Issues.ToOneLineString());
         ctx.Send(RequesterId_, new TEvInferredFileSchema(ev->Get()->Path, std::move(ev->Get()->Issues)));
     }
 

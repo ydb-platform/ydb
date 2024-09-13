@@ -173,7 +173,7 @@ public:
         IHTTPGateway::TPtr gateway,
         IHTTPGateway::TRetryPolicy::TPtr retryPolicy,
         TString url,
-        const TS3Credentials& credentials,
+        TS3Credentials::TAuthInfo authInfo,
         TString pattern,
         NS3Lister::ES3PatternVariant patternVariant,
         NS3Lister::ES3PatternType patternType)
@@ -189,7 +189,7 @@ public:
         , Gateway(std::move(gateway))
         , RetryPolicy(std::move(retryPolicy))
         , Url(std::move(url))
-        , Credentials(credentials)
+        , AuthInfo(std::move(authInfo))
         , Pattern(std::move(pattern))
         , PatternVariant(patternVariant)
         , PatternType(patternType) {
@@ -493,7 +493,7 @@ private:
                 RetryPolicy,
                 NS3Lister::TListingRequest{
                     Url,
-                    Credentials,
+                    AuthInfo,
                     PatternVariant == NS3Lister::ES3PatternVariant::PathPattern
                         ? Pattern
                         : TStringBuilder{} << object.GetPath() << Pattern,
@@ -617,7 +617,7 @@ private:
     const IHTTPGateway::TPtr Gateway;
     const IHTTPGateway::TRetryPolicy::TPtr RetryPolicy;
     const TString Url;
-    const TS3Credentials Credentials;
+    const TS3Credentials::TAuthInfo AuthInfo;
     const TString Pattern;
     const NS3Lister::ES3PatternVariant PatternVariant;
     const NS3Lister::ES3PatternType PatternType;
@@ -639,7 +639,7 @@ NActors::IActor* CreateS3FileQueueActor(
         IHTTPGateway::TPtr gateway,
         IHTTPGateway::TRetryPolicy::TPtr retryPolicy,
         TString url,
-        const TS3Credentials& credentials,
+        TS3Credentials::TAuthInfo authInfo,
         TString pattern,
         NS3Lister::ES3PatternVariant patternVariant,
         NS3Lister::ES3PatternType patternType) {
@@ -656,7 +656,7 @@ NActors::IActor* CreateS3FileQueueActor(
         gateway,
         retryPolicy,
         url,
-        credentials,
+        authInfo,
         pattern,
         patternVariant,
         patternType

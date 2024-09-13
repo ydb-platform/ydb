@@ -26,11 +26,13 @@
 namespace NYql::NS3Lister {
 
 IOutputStream& operator<<(IOutputStream& stream, const TListingRequest& request) {
-    return stream << "[TS3Lister] TListingRequest{.url=" << request.Url
+    return stream << "TListingRequest{.url=" << request.Url
                   << ",.Prefix=" << request.Prefix
                   << ",.Pattern=" << request.Pattern
                   << ",.PatternType=" << request.PatternType
-                  << ",.Credentials=" << request.Credentials << "}";
+                  << ",.AwsUserPwd=<some token with length" << request.AuthInfo.GetAwsUserPwd().length() << ">"
+                  << ",.AwsSigV4=" << request.AuthInfo.GetAwsSigV4().length()
+                  << ",.Token=<some token with length " << request.AuthInfo.GetToken().length() << ">}";
 }
 
 namespace {
@@ -52,7 +54,7 @@ std::pair<TPathFilter, TEarlyStopChecker> MakeFilterRegexp(const TString& regex,
 
     const size_t numGroups = re->NumberOfCapturingGroups();
     YQL_CLOG(DEBUG, ProviderS3)
-        << "[TS3Lister] Got regex: '" << regex << "' with " << numGroups << " capture groups ";
+        << "Got regex: '" << regex << "' with " << numGroups << " capture groups ";
 
     auto groups = std::make_shared<std::vector<std::string>>(numGroups);
     auto reArgs = std::make_shared<std::vector<re2::RE2::Arg>>(numGroups);
@@ -102,7 +104,7 @@ std::pair<TPathFilter, TEarlyStopChecker> MakeFilterWildcard(const TString& patt
     }
 
     const auto regex = NS3::RegexFromWildcards(pattern);
-    YQL_CLOG(DEBUG, ProviderS3) << "[TS3Lister] Got prefix: '" << regexPatternPrefix << "', regex: '"
+    YQL_CLOG(DEBUG, ProviderS3) << "Got prefix: '" << regexPatternPrefix << "', regex: '"
                                 << regex << "' from original pattern '" << pattern << "'";
 
     return MakeFilterRegexp(regex, sharedCtx);
@@ -292,7 +294,7 @@ public:
     ~TS3Lister() override = default;
 private:
     static void SubmitRequestIntoGateway(TListingContext& ctx) {
-        const auto& authInfo = ctx.ListingRequest.Credentials.GetAuthInfo();
+        const auto& authInfo = ctx.ListingRequest.AuthInfo;
         IHTTPGateway::THeaders headers = IHTTPGateway::MakeYcHeaders(ctx.RequestId, authInfo.GetToken(), {}, authInfo.GetAwsUserPwd(), authInfo.GetAwsSigV4());
 
         // We have to sort the cgi parameters for the correct aws signature
@@ -341,7 +343,6 @@ private:
             /*data=*/"",
             retryPolicy);
     }
-
     static IHTTPGateway::TOnResult CallbackFactoryMethod(TListingContext&& listingContext) {
         return [c = std::move(listingContext)](IHTTPGateway::TResult&& result) {
             if (c.ActorSystem) {
@@ -367,7 +368,7 @@ private:
             const NXml::TDocument xml(xmlString, NXml::TDocument::String);
             auto parsedResponse = ParseListObjectV2Response(xml, ctx.RequestId);
             YQL_CLOG(DEBUG, ProviderS3)
-                << "[TS3Lister] Listing of " << ctx.ListingRequest.Url
+                << "Listing of " << ctx.ListingRequest.Url
                 << ctx.ListingRequest.Prefix << ": have " << ctx.Output->Size()
                 << " entries, got another " << parsedResponse.KeyCount
                 << " entries, request id: [" << ctx.RequestId << "]";
@@ -396,7 +397,7 @@ private:
             }
 
             if (parsedResponse.IsTruncated && !earlyStop) {
-                YQL_CLOG(DEBUG, ProviderS3) << "[TS3Lister] Listing of " << ctx.ListingRequest.Url
+                YQL_CLOG(DEBUG, ProviderS3) << "Listing of " << ctx.ListingRequest.Url
                                             << ctx.ListingRequest.Prefix
                                             << ": got truncated flag, will continue";
 
@@ -427,14 +428,14 @@ private:
                 TStringBuilder{} << "request id: [" << ctx.RequestId << "]",
                 std::move(result.Issues));
             YQL_CLOG(INFO, ProviderS3)
-                << "[TS3Lister] Listing of " << ctx.ListingRequest.Url << ctx.ListingRequest.Prefix
+                << "Listing of " << ctx.ListingRequest.Url << ctx.ListingRequest.Prefix
                 << ": got error from http gateway: " << issues.ToString(true);
             ctx.Promise.SetValue(TListError{EListError::GENERAL, std::move(issues)});
             ctx.NextRequestPromise.SetValue(Nothing());
         }
     } catch (const std::exception& ex) {
         YQL_CLOG(INFO, ProviderS3)
-            << "[TS3Lister] Listing of " << ctx.ListingRequest.Url << ctx.ListingRequest.Prefix
+            << "Listing of " << ctx.ListingRequest.Url << ctx.ListingRequest.Prefix
             << " : got exception: " << ex.what();
         ctx.Promise.SetException(std::current_exception());
         ctx.NextRequestPromise.SetValue(Nothing());

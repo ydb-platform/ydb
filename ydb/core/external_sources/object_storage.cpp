@@ -341,7 +341,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
 
         NYql::NS3Lister::TListingRequest request {
             .Url = meta->DataSourceLocation,
-            .Credentials = credentials
+            .AuthInfo = credentials.GetAuthInfo()
         };
         TVector<NYql::NS3Lister::TListingRequest> requests;
 
@@ -427,24 +427,25 @@ struct TObjectStorageExternalSource : public IExternalSource {
         auto arrowFetcherId = ActorSystem->Register(NObjectStorage::NInference::CreateArrowFetchingActor(s3FetcherId, meta->Attributes));
         auto arrowInferencinatorId = ActorSystem->Register(NObjectStorage::NInference::CreateArrowInferencinator(arrowFetcherId));
 
-        return afterListing.Apply([arrowInferencinatorId, meta, actorSystem = ActorSystem](const NThreading::TFuture<TString>& pathFut) {
+        return afterListing.Apply([arrowInferencinatorId, meta, actorSystem = ActorSystem](const NThreading::TFuture<NYql::NS3Lister::TObjectListEntry>& entryFut) {
             auto promise = NThreading::NewPromise<TMetadataResult>();
             auto schemaToMetadata = [meta](NThreading::TPromise<TMetadataResult> metaPromise, NObjectStorage::TEvInferredFileSchema&& response) {
                 if (!response.Status.IsSuccess()) {
                     metaPromise.SetValue(NYql::NCommon::ResultFromError<TMetadataResult>(response.Status.GetIssues()));
                     return;
                 }
-                TMetadataResult result;
                 meta->Changed = true;
                 meta->Schema.clear_column();
                 for (const auto& column : response.Fields) {
                     auto& destColumn = *meta->Schema.add_column();
                     destColumn = column;
                 }
+                TMetadataResult result;
                 result.SetSuccess();
                 result.Metadata = meta;
                 metaPromise.SetValue(std::move(result));
             };
+            auto [path, size, _] = entryFut.GetValue();
             actorSystem->Register(new NKqp::TActorRequestHandler<NObjectStorage::TEvInferFileSchema, NObjectStorage::TEvInferredFileSchema, TMetadataResult>(
                 arrowInferencinatorId,
                 new NObjectStorage::TEvInferFileSchema(std::move(path), size),

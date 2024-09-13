@@ -86,7 +86,7 @@ TEST_F(ArrowInferenceTest, csv_simple) {
 
     auto inferencinatorId = RegisterInferencinator("csv_with_names");
     ActorSystem.WrapInActorContext(EdgeActorId, [this, inferencinatorId] {
-        NActors::TActivationContext::AsActorContext().Send(inferencinatorId, new TEvInferFileSchema(TString{Path}));
+        NActors::TActivationContext::AsActorContext().Send(inferencinatorId, new TEvInferFileSchema(TString{Path}, 0));
     });
 
     std::unique_ptr<NActors::IEventHandle> event = ActorSystem.WaitForEdgeActorEvent({EdgeActorId});
@@ -122,7 +122,7 @@ TEST_F(ArrowInferenceTest, tsv_simple) {
 
     auto inferencinatorId = RegisterInferencinator("tsv_with_names");
     ActorSystem.WrapInActorContext(EdgeActorId, [this, inferencinatorId] {
-        NActors::TActivationContext::AsActorContext().Send(inferencinatorId, new TEvInferFileSchema(TString{Path}));
+        NActors::TActivationContext::AsActorContext().Send(inferencinatorId, new TEvInferFileSchema(TString{Path}, 0));
     });
 
     std::unique_ptr<NActors::IEventHandle> event = ActorSystem.WaitForEdgeActorEvent({EdgeActorId});

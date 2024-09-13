@@ -42,7 +42,7 @@ public:
         IHTTPGateway::TPtr gateway,
         const NKikimr::NMiniKQL::THolderFactory& holderFactory,
         const TString& url,
-        const TS3Credentials& credentials,
+        const TS3Credentials::TAuthInfo& authInfo,
         const TString& pattern,
         NYql::NS3Lister::ES3PatternVariant patternVariant,
         NYql::NS3Details::TPathList&& paths,
@@ -69,7 +69,7 @@ public:
         , RetryPolicy(retryPolicy)
         , ActorSystem(NActors::TActivationContext::ActorSystem())
         , Url(url)
-        , Credentials(credentials)
+        , AuthInfo(authInfo)
         , Pattern(pattern)
         , PatternVariant(patternVariant)
         , Paths(std::move(paths))
@@ -113,7 +113,7 @@ public:
                 Gateway,
                 RetryPolicy,
                 Url,
-                Credentials,
+                AuthInfo,
                 Pattern,
                 PatternVariant,
                 NYql::NS3Lister::ES3PatternType::Wildcard));
@@ -164,11 +164,10 @@ public:
         auto url = Url + object.GetPath();
         auto id = object.GetPathIndex();
         const TString requestId = CreateGuidAsString();
-        const auto& authInfo = Credentials.GetAuthInfo();
         LOG_D("TS3ReadActor", "Download: " << url << ", ID: " << id << ", request id: [" << requestId << "]");
         Gateway->Download(
-            NS3Util::UrlEscapeRet(url),
-            IHTTPGateway::MakeYcHeaders(requestId, authInfo.GetToken(), {}, authInfo.GetAwsUserPwd(), authInfo.GetAwsSigV4()),
+            UrlEscapeRet(url, true),
+            IHTTPGateway::MakeYcHeaders(requestId, AuthInfo.GetToken(), {}, AuthInfo.GetAwsUserPwd(), AuthInfo.GetAwsSigV4()),
             0U,
             std::min(object.GetSize(), SizeLimit),
             std::bind(&TS3ReadActor::OnDownloadFinished, ActorSystem, SelfId(), requestId, std::placeholders::_1, id, object.GetPath()),
@@ -457,7 +456,7 @@ private:
     NActors::TActorSystem* const ActorSystem;
 
     const TString Url;
-    const TS3Credentials Credentials;
+    const TS3Credentials::TAuthInfo AuthInfo;
     const TString Pattern;
     const NYql::NS3Lister::ES3PatternVariant PatternVariant;
     NYql::NS3Details::TPathList Paths;
@@ -504,7 +503,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateRawRead
     IHTTPGateway::TPtr gateway,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
     const TString& url,
-    const TS3Credentials& credentials,
+    const TS3Credentials::TAuthInfo& authInfo,
     const TString& pattern,
     NYql::NS3Lister::ES3PatternVariant patternVariant,
     NYql::NS3Details::TPathList&& paths,
@@ -528,14 +527,14 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateRawRead
         statsLevel,
         txId,
         std::move(gateway),
-        holderFactory,
-        url,
-        credentials,
+        holderFactory, 
+        url, 
+        authInfo, 
         pattern,
         patternVariant,
         std::move(paths),
         addPathIndex,
-        computeActorId,
+        computeActorId, 
         sizeLimit,
         retryPolicy,
         readActorFactoryCfg,

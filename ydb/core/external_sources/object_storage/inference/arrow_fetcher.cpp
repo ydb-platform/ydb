@@ -9,6 +9,7 @@
 #include <arrow/json/chunker.h>
 #include <arrow/json/options.h>
 #include <arrow/io/memory.h>
+#include <arrow/util/endian.h>
 
 #include <util/generic/guid.h>
 #include <util/generic/size_literals.h>
@@ -53,10 +54,10 @@ public:
         const auto& request = *ev->Get();
         TRequest localRequest{
             .Path = request.Path,
-            .RequestId = {},
+            .RequestId = TGUID::Create(),
             .Requester = ev->Sender,
+            .MetadataRequest = false,
         };
-        CreateGuid(&localRequest.RequestId);
 
         switch (Config_->Format) {
             case EFileFormat::CsvWithNames:
@@ -64,6 +65,11 @@ public:
             case EFileFormat::JsonEachRow:
             case EFileFormat::JsonList: {
                 RequestPartialFile(std::move(localRequest), ctx, 0, 10_MB);
+                break;
+            }
+            case EFileFormat::Parquet: {
+                localRequest.MetadataRequest = true;
+                RequestPartialFile(std::move(localRequest), ctx, request.Size - 8, request.Size - 4);
                 break;
             }
             default: {
@@ -85,6 +91,15 @@ public:
         Y_ABORT_UNLESS(requestIt != InflightRequests_.end(), "S3 response with path %s for unknown request %s", response.Path.c_str(), response.RequestId.AsGuidString().c_str());
 
         const auto& request = requestIt->second;
+
+        TString data = std::move(response.Data);
+        if (DecompressionFormat_) {
+            auto decompressedData = DecompressFile(data, request, ctx);
+            if (!decompressedData) {
+                return;
+            }
+            data = std::move(*decompressedData);
+        }
 
         std::shared_ptr<arrow::io::RandomAccessFile> file;
         switch (Config_->Format) {
@@ -133,16 +148,17 @@ private:
         uint64_t From = 0;
         uint64_t To = 0;
         NActors::TActorId Requester;
+        bool MetadataRequest;
     };
 
     // Reading file
 
-    void HandleAsPrefixFile(TRequest&& insertedRequest, const NActors::TActorContext& ctx) {
+    void RequestPartialFile(TRequest&& insertedRequest, const NActors::TActorContext& ctx, uint64_t from, uint64_t to) {
         auto path = insertedRequest.Path;
-        insertedRequest.From = 0;
-        insertedRequest.To = 10_MB;
+        insertedRequest.From = from;
+        insertedRequest.To = to;
         auto it = InflightRequests_.try_emplace(path, std::move(insertedRequest));
-        Y_ABORT_UNLESS(it.second, "couldn't insert request for path: %s", path.c_str());
+        Y_ABORT_UNLESS(it.second, "couldn't insert request for path: %s", insertedRequest.RequestId.AsGuidString().c_str());
 
         const auto& request = it.first->second;
         auto s3Request = new TEvRequestS3Range(

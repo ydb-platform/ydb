@@ -151,7 +151,7 @@ using TListResult = std::variant<TListEntries, TListError>;
 
 struct TListingRequest {
     TString Url;
-    TS3Credentials Credentials;
+    TS3Credentials::TAuthInfo AuthInfo;
     TString Pattern;
     ES3PatternType PatternType = ES3PatternType::Wildcard;
     TString Prefix;

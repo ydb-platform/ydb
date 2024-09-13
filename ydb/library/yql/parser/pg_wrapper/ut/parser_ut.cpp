@@ -56,7 +56,7 @@ Y_UNIT_TEST_SUITE(ParseTests) {
             UNIT_ASSERT(events.Issue);
             auto msg = events.Issue->GetMessage();
             UNIT_ASSERT_VALUES_EQUAL(events.Issue->Position.Row, 1);
-            UNIT_ASSERT_VALUES_EQUAL(events.Issue->Position.Column, 14);
+            UNIT_ASSERT_VALUES_EQUAL(events.Issue->Position.Column, 13);
         }
 
         {

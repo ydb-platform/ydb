@@ -208,7 +208,7 @@ void PGParse(const TString& input, IPGParseEvents& events) {
     };
 
     if (parsetree_and_error.error) {
-        TPosition position(1, 1);
+        TPosition position(0, 1);
         // cursorpos is about codepoints, not bytes
         TTextWalker walker(position, true);
         auto cursorpos = parsetree_and_error.error->cursorpos;

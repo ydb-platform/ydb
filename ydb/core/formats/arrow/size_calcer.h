@@ -15,8 +15,11 @@ class TRowSizeCalculator {
 private:
     std::shared_ptr<arrow::RecordBatch> Batch;
     ui32 CommonSize = 0;
+    ui32 LegacyIpcFormat = 0;
+    ui32 MetadataSize = 0;
+    ui32 CountColomnsWithNull = 0;
     std::vector<const arrow::BinaryArray*> BinaryColumns;
-    std::vector<const arrow::StringArray*> StringColumns;
+    std::vector<ui16> FixedBitWidthColumns;
     bool Prepared = false;
     const ui32 AlignBitsCount = 1;
 
@@ -32,20 +35,19 @@ private:
         return result;
     }
 
-public:
+    ui32 GetNullBitmapBytesSize(ui32 countRows) const;
 
-    ui64 GetApproxSerializeSize(const ui64 dataSize) const {
-        return Max<ui64>(dataSize * 1.05, dataSize + Batch->num_columns() * 8);
+    public:
+        TRowSizeCalculator(const ui32 alignBitsCount)
+            : AlignBitsCount(alignBitsCount) {
+            FixedBitWidthColumns.resize(9, 0);
     }
 
-    TRowSizeCalculator(const ui32 alignBitsCount)
-        : AlignBitsCount(alignBitsCount)
-    {
-
-    }
     bool InitBatch(const std::shared_ptr<arrow::RecordBatch>& batch);
     ui32 GetRowBitWidth(const ui32 row) const;
     ui32 GetRowBytesSize(const ui32 row) const;
+
+    ui32 GetSliceSize(ui32 startIndex, ui32 length) const;
 };
 
 class TBatchSplitttingContext {

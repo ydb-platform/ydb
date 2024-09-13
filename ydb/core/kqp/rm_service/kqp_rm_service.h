@@ -114,10 +114,10 @@ public:
     {}
 
     TString ToString() const {
-        return TStringBuilder() << "TxResourcesInfo{ "
+        return TStringBuilder() << "TxResourcesInfo { "
             << "TxId: " << TxId
             << ", memory initially granted resources: " << TxExternalDataQueryMemory.load()
-            << ", extra allocations " << TxScanQueryMemory.load()
+            << ", tx total allocations " << TxScanQueryMemory.load()
             << ", execution units: " << TxExecutionUnits.load()
             << ", started at: " << CreatedAt
             << " }";

@@ -352,8 +352,9 @@ public:
             auto abortEv = TEvKqp::TEvAbortExecution::Aborted("Client lost"); // any status code can be here
 
             Send(ExecuterId, abortEv.Release());
+        } else {
+            Cleanup();
         }
-        Cleanup();
     }
 
     void Handle(TEvKqp::TEvQueryRequest::TPtr& ev) {
@@ -1438,6 +1439,12 @@ public:
 
         ExecuterId = TActorId{};
 
+        auto& executerResults = *response->MutableResult();
+        if (executerResults.HasStats()) {
+            QueryState->QueryStats.Executions.emplace_back();
+            QueryState->QueryStats.Executions.back().Swap(executerResults.MutableStats());
+        }
+
         if (response->GetStatus() != Ydb::StatusIds::SUCCESS) {
             const auto executionType = ev->ExecutionType;
 
@@ -1499,14 +1506,8 @@ public:
             QueryState->TxCtx->Locks.LockHandle = std::move(ev->LockHandle);
         }
 
-        auto& executerResults = *response->MutableResult();
         if (!MergeLocksWithTxResult(executerResults)) {
             return;
-        }
-
-        if (executerResults.HasStats()) {
-            QueryState->QueryStats.Executions.emplace_back();
-            QueryState->QueryStats.Executions.back().Swap(executerResults.MutableStats());
         }
 
         if (!response->GetIssues().empty()){
@@ -1602,6 +1603,10 @@ public:
 
     void FillStats(NKikimrKqp::TEvQueryResponse* record) {
         YQL_ENSURE(QueryState);
+        // workaround to ensure that request was not transfered to worker.
+        if (WorkerId || !QueryState->RequestEv) {
+            return;
+        }
 
         FillSystemViewQueryStats(record);
 
@@ -2240,6 +2245,8 @@ public:
                 response->SetQueryAst(preparedQuery->GetPhysicalQuery().GetQueryAst());
             }
         }
+
+        FillStats(&QueryResponse->Record.GetRef());
 
         if (issues) {
             for (auto& i : *issues) {

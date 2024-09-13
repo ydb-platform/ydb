@@ -4,6 +4,7 @@
 #include <ydb/core/tablet_flat/flat_scan_iface.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/core/base/events.h>
+#include <ydb/core/tx/datashard/datashard_user_table.h>
 
 #include <functional>
 
@@ -29,6 +30,7 @@ THolder<NTable::IScan> CreateIncrementalRestoreScan(
         NActors::TActorId parent,
         std::function<NActors::IActor*()> changeSenderFactory,
         TPathId tablePathId,
+        TUserTable::TCPtr table,
         const TPathId& targetPathId,
         ui64 txId);
 

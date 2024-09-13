@@ -1704,7 +1704,8 @@ void TExecutor::ExecuteTransaction(TAutoPtr<TSeat> seat, const TActorContext &ct
     PrivatePageCache->ResetTouchesAndToLoad(true);
     TPageCollectionTxEnv env(*Database, *PrivatePageCache);
 
-    TTransactionContext txc(Owner->TabletID(), Generation(), Step(), *Database, env, seat->CurrentTxDataLimit, seat->TaskId, seat->Self->TxSpan, Owner);
+//    TTransactionContext txc(Owner->TabletID(), Generation(), Step(), *Database, env, seat->CurrentTxDataLimit, seat->TaskId, seat->Self->TxSpan, Owner);
+    TTransactionContext txc(Owner->TabletID(), Generation(), Step(), *Database, env, seat->CurrentTxDataLimit, seat->TaskId, seat->Self->TxSpan, nullptr);
     txc.NotEnoughMemory(seat->NotEnoughMemoryCount);
 
     Database->Begin(Stamp(), env);

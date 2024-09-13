@@ -25,6 +25,7 @@ public:
         for (auto&& portionInfo : Portions) {
             auto schema = Schemas->FindPtr(portionInfo->GetPortionId());
             AFL_VERIFY(!!schema)("portion_id", portionInfo->GetPortionId());
+            LOG_S_CRIT("Saving normalized");
             portionInfo->SaveToDatabase(db, (*schema)->GetIndexInfo().GetPKFirstColumnId(), true);
         }
         return true;

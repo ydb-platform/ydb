@@ -45,6 +45,8 @@
 #include <ydb/services/metadata/service.h>
 #include <ydb/services/metadata/abstract/common.h>
 
+#include <util/generic/string.h>
+
 namespace NKikimr::NOlap {
 class TCleanupPortionsColumnEngineChanges;
 class TCleanupTablesColumnEngineChanges;
@@ -137,14 +139,50 @@ using ITransaction = NTabletFlatExecutor::ITransaction;
 template <typename T>
 using TTransactionBase = NTabletFlatExecutor::TTransactionBase<T>;
 
+class TInsertKey {
+public:
+    ui64 PlanStep;
+    ui64 TxId;
+    TString DedupId;
+    ui8 RecType;
+
+public:
+    TInsertKey() = default;
+
+    TInsertKey(ui64 planStep, ui64 txId, const TString& dedupId, ui8 recType)
+        : PlanStep(planStep)
+        , TxId(txId)
+        , DedupId(dedupId)
+        , RecType(recType)
+    {
+    }
+
+    bool operator==(const TInsertKey& other) const {
+        return (PlanStep == other.PlanStep) && (TxId == other.TxId) && (DedupId == other.DedupId) && (RecType == other.RecType);
+    }
+
+    ui64 Hash() const {
+        return CombineHashes(PlanStep, CombineHashes(TxId, CombineHashes(hash<TString>()(DedupId), (ui64)RecType)));
+    }
+};
+
 class TVersionCounts {
 private:
+    struct Hasher {
+        inline size_t operator()(const TInsertKey& key) const noexcept {
+            return key.Hash();
+        }
+    };
+
+private:
+    THashMap<TInsertKey, ui64, Hasher> InsertVersions;
     THashMap<ui64, ui64> PortionVersions;
     THashMap<ui64, ui32> VersionCounts;
 
 public:
-    void VersionAddRef(ui64 portion, ui64 version) {
-        ui64& curVer = PortionVersions[portion];
+    template<class Key, class Versions>
+    void VersionAddRef(Versions& versions, const Key& portion, ui64 version) {
+        ui64& curVer = versions[portion];
         if (curVer != 0) {// Portion is already in the local database, no need to increase ref count
             AFL_VERIFY(version == curVer);
             return;
@@ -155,17 +193,34 @@ public:
         LOG_S_CRIT("Ref count of schema version " << version << " changed from " << refCount - 1 << " to " << refCount << " this " << (ui64)this);
     }
 
-    ui32 VersionRemoveRef(ui64 portion, ui64 version) {
-        auto iter = PortionVersions.find(portion);
-//        AFL_VERIFY(iter != PortionVersions.end());
-        if (iter == PortionVersions.end()) { //Portion is already removed from local databae, no need to decrease ref count
+    template<class Key, class Versions>
+    ui32 VersionRemoveRef(Versions& versions, const Key& portion, ui64 version) {
+        auto iter = versions.find(portion);
+        if (iter == versions.end()) { //Portion is already removed from local databae, no need to decrease ref count
             return (ui32)-1;
         }
-        PortionVersions.erase(iter);
+        versions.erase(iter);
         ui32& refCount = VersionCounts[version];
         LOG_S_CRIT("Ref count of schema version " << version << " changed from " << refCount << " to " << refCount - 1 << " this " << (ui64)this);
         return --refCount;
     }
+
+    void VersionAddRef(ui64 portion, ui64 version) {
+        VersionAddRef(PortionVersions, portion, version);
+    }
+
+    ui32 VersionRemoveRef(ui64 portion, ui64 version) {
+        return VersionRemoveRef(PortionVersions, portion, version);
+    }
+
+    void VersionAddRef(const TInsertKey& key, ui64 version) {
+        VersionAddRef(InsertVersions, key, version);
+    }
+
+    ui32 VersionRemoveRef(const TInsertKey& key, ui64 version) {
+        return VersionRemoveRef(InsertVersions, key, version);
+    }
+
 };
 
 class TColumnShard
@@ -662,6 +717,15 @@ public:
     ui32 VersionRemoveRef(ui64 portion, ui64 version) {
         return VersionCounts.VersionRemoveRef(portion, version);
     }
+
+    void VersionAddRef(ui64 planStep, ui64 txId, const TString& dedupId, ui8 recType, ui64 version) {
+        VersionCounts.VersionAddRef(TInsertKey(planStep, txId, dedupId, recType), version);
+    }
+
+    ui32 VersionRemoveRef(ui64 planStep, ui64 txId, const TString& dedupId, ui8 recType, ui64 version) {
+        return VersionCounts.VersionRemoveRef(TInsertKey(planStep, txId, dedupId, recType), version);
+    }
+
 
 private:
      TVersionCounts VersionCounts;

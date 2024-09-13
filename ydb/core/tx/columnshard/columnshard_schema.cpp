@@ -1,5 +1,6 @@
 #include "columnshard_schema.h"
 #include "transactions/tx_controller.h"
+#include "columnshard_impl.h"
 
 namespace NKikimr::NColumnShard {
 
@@ -13,6 +14,7 @@ bool Schema::InsertTable_Load(NIceDb::TNiceDb& db, const IBlobGroupSelector* dsG
         NOlap::TInsertTableRecordLoadContext constructor;
         constructor.ParseFromDatabase(rowset);
 
+        insertTable.CS->VersionAddRef(constructor.GetPlanStep(), constructor.GetInsertWriteId(), constructor.PathId, constructor.GetDedupId(), (ui8)constructor.GetRecType(), constructor.SchemaVersion);
         switch (constructor.GetRecType()) {
             case Schema::EInsertTableIds::Inserted:
                 insertTable.AddInserted(constructor.BuildInsertedOrAborted(dsGroupSelector), true);

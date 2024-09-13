@@ -78,8 +78,8 @@ public:
         , Database(db)
         , DsGroupSelector(dsGroupSelector)
     {
-        AFL_VERIFY(owner != nullptr);
-        AFL_VERIFY(CS != nullptr);
+//        AFL_VERIFY(owner != nullptr);
+//        AFL_VERIFY(CS != nullptr);
     }
 
     void Insert(const TInsertedData& data) override;

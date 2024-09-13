@@ -28,6 +28,7 @@ public:
             AFL_VERIFY(!!schema)("portion_id", portionInfo->GetPortionId());
             AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "portion_removed_as_broken")("portion_id", portionInfo->GetAddress().DebugString());
             portionInfo->SetRemoveSnapshot(TSnapshot(1, 1));
+            LOG_S_CRIT("Saving broken portion");
             portionInfo->SaveToDatabase(db, (*schema)->GetIndexInfo().GetPKFirstColumnId(), false);
         }
         if (BrokenPortions.size()) {

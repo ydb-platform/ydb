@@ -41,6 +41,7 @@ void TDbWrapper::EraseAborted(const TInsertedData& data) {
 bool TDbWrapper::Load(TInsertTableAccessor& insertTable,
                       const TInstant& loadTime) {
     NIceDb::TNiceDb db(Database);
+    insertTable.CS = CS;
     return NColumnShard::Schema::InsertTable_Load(db, DsGroupSelector, insertTable, loadTime);
 }
 

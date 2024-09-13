@@ -1,9 +1,10 @@
 #include "insert_table.h"
 
-#include <ydb/core/protos/tx_columnshard.pb.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
+#include <ydb/core/protos/tx_columnshard.pb.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/engines/db_wrapper.h>
+//#include <ydb/core/tx/columnshard/columnshard_impl.h>
 
 namespace NKikimr::NOlap {
 
@@ -17,7 +18,11 @@ bool TInsertTable::Insert(IDbWrapper& dbTable, TInsertedData&& data) {
         return false;
     }
 }
-
+/*
+void TInsertTableAccessor::AddSchemaVersion(ui64 planStep, ui64 txId, const TString& dedupId, ui8 recType, ui64 schemaVersion) {
+    CS->VersionAddRec(planStep, txId, dedupId, recType, schemaVersion);
+}
+*/
 TInsertionSummary::TCounters TInsertTable::Commit(
     IDbWrapper& dbTable, ui64 planStep, ui64 txId, const THashSet<TInsertWriteId>& writeIds, std::function<bool(ui64)> pathExists) {
     Y_ABORT_UNLESS(!writeIds.empty());

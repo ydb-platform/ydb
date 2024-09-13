@@ -8,6 +8,10 @@
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 #include <ydb/core/tx/columnshard/counters/insert_table.h>
 
+namespace NKikimr::NColumnShard {
+class TColumnShard;
+}
+
 namespace NKikimr::NOlap {
 class TPKRangesFilter;
 class IDbWrapper;
@@ -45,6 +49,8 @@ public:
             return info->GetCommitted().begin()->GetSnapshot();
         }
     }
+
+    void AddSchemaVersion(ui64 planStep, ui64 txId, const TString& dedupId, ui8 recType, ui64 schemaVersion);
 
     bool AddInserted(TInsertedData&& data, const bool load) {
         if (load) {
@@ -84,6 +90,9 @@ public:
     bool IsOverloadedByCommitted(const ui64 pathId) const {
         return Summary.IsOverloaded(pathId);
     }
+
+public:
+    NKikimr::NColumnShard::TColumnShard* CS;
 };
 
 class TInsertTable: public TInsertTableAccessor {

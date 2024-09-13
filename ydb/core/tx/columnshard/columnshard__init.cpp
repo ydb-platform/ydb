@@ -239,6 +239,7 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
 }
 
 bool TTxInit::Execute(TTransactionContext& txc, const TActorContext& ctx) {
+    txc.Owner = Self;
     NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("event", "initialize_shard");
     LOG_S_DEBUG("TTxInit.Execute at tablet " << Self->TabletID());
 
@@ -340,6 +341,7 @@ private:
 };
 
 bool TTxApplyNormalizer::Execute(TTransactionContext& txc, const TActorContext&) {
+    txc.Owner = Self;
     NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("event", "initialize_shard");
     AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("step", "TTxApplyNormalizer.Execute")("details", Self->NormalizerController.DebugString());
     if (!Changes->ApplyOnExecute(txc, Self->NormalizerController)) {

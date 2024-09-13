@@ -1,5 +1,9 @@
 PROGRAM()
 
+ADDINCL(
+    ydb/public/sdk/cpp
+)
+
 SRCS(
     appdata.h
     log_impl.h

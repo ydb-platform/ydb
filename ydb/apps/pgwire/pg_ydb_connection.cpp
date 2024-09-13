@@ -104,7 +104,7 @@ public:
             try {
                 NYdb::NScripting::TExecuteYqlResult result = NYdb::NScripting::TAsyncExecuteYqlResult(feature).ExtractValue();
                 if (result.IsSuccess()) {
-                    const TVector<NYdb::TResultSet>& resultSets = result.GetResultSets();
+                    const std::vector<NYdb::TResultSet>& resultSets = result.GetResultSets();
                     if (!resultSets.empty()) {
                         NYdb::TResultSet resultSet = resultSets[0];
 
@@ -282,7 +282,7 @@ public:
             try {
                 NYdb::NScripting::TExecuteYqlResult result = NYdb::NScripting::TAsyncExecuteYqlResult(feature).ExtractValue();
                 if (result.IsSuccess()) {
-                    const TVector<NYdb::TResultSet>& resultSets = result.GetResultSets();
+                    const std::vector<NYdb::TResultSet>& resultSets = result.GetResultSets();
                     if (!resultSets.empty()) {
                         NYdb::TResultSet resultSet = resultSets[0];
 
@@ -381,7 +381,7 @@ public:
             try {
                 NYdb::NScripting::TExecuteYqlResult result = NYdb::NScripting::TAsyncExecuteYqlResult(feature).ExtractValue();
                 if (result.IsSuccess()) {
-                    const TVector<NYdb::TResultSet>& resultSets = result.GetResultSets();
+                    const std::vector<NYdb::TResultSet>& resultSets = result.GetResultSets();
                     if (!resultSets.empty()) {
                         NYdb::TResultSet resultSet = resultSets[0];
 

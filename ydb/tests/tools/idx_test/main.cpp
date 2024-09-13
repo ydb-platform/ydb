@@ -4,6 +4,7 @@
 
 #include <library/cpp/getopt/last_getopt.h>
 #include <library/cpp/json/json_writer.h>
+#include <library/cpp/resource/resource.h>
 
 #include <ydb/public/lib/idx_test/idx_test.h>
 #include <ydb-cpp-sdk/client/scheme/scheme.h>

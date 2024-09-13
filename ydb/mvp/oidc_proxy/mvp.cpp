@@ -24,6 +24,7 @@
 #include <ydb/mvp/core/cache_policy.h>
 
 #include "mvp.h"
+#include "context_storage_refresher.h"
 #include "oidc_client.h"
 
 NActors::IActor* CreateMemProfiler();
@@ -104,6 +105,9 @@ int TMVP::Init() {
         ActorSystem.Send(HttpProxyId, ev);
     }
 
+    if (OpenIdConnectSettings.StoreContextOnHost) {
+        ActorSystem.Register(TContextStorageRefresher::CreateRestoreContextRefresher(&ContextStorage));
+    }
     InitOIDC(ActorSystem, BaseHttpProxyId, OpenIdConnectSettings, &ContextStorage);
 
     ActorSystem.Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
@@ -239,6 +243,9 @@ void TMVP::TryGetOidcOptionsFromConfig(const YAML::Node& config) {
         OpenIdConnectSettings.AllowedProxyHosts.push_back(TString(host));
     }
     Cout << "Finished processing allowed_proxy_hosts." << Endl;
+    auto storeContextOnHost = oidc["store_context_on_host"];
+    OpenIdConnectSettings.StoreContextOnHost = storeContextOnHost["enable"].as<bool>(false);
+    ContextStorage.SetTtl(TDuration::Parse(storeContextOnHost["context_ttl"].as<std::string>("10m")));
 }
 
 void TMVP::TryGetGenericOptionsFromConfig(

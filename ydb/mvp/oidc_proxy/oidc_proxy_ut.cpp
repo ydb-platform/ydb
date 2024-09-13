@@ -1583,3 +1583,63 @@ Y_UNIT_TEST_SUITE(OidcProxyTests) {
         UNIT_ASSERT_STRINGS_EQUAL(headers.Get("Location"), "/requested/page");
     }
 }
+
+Y_UNIT_TEST_SUITE(StorageContextTests) {
+    Y_UNIT_TEST(ContextRemoveAfterTimeExpire) {
+        TContextStorage storage;
+        storage.SetTtl(TDuration::Seconds(5));
+        TContext context("state1", "/protected/page");
+        storage.Write(context);
+        auto storageRecord = storage.Find("state1");
+        UNIT_ASSERT(storageRecord.first);
+
+        storage.Refresh(TInstant::Now() + TDuration::Minutes(15)); // context should be removed after 10m 5s
+        storageRecord = storage.Find("state1");
+        UNIT_ASSERT(!storageRecord.first);
+    }
+
+    Y_UNIT_TEST(ContextRemoveAfterTimeExpire3Records) {
+        TContextStorage storage;
+        storage.SetTtl(TDuration::Seconds(10));
+        TContext context1("state1", "/protected/page");
+        storage.Write(context1);
+        Sleep(TDuration::Seconds(2));
+        TContext context2("state2", "/protected/page");
+        storage.Write(context2);
+        Sleep(TDuration::Seconds(2));
+        TContext context3("state3", "/protected/page");
+        storage.Write(context3);
+        Sleep(TDuration::Seconds(2));
+
+        auto storageRecord = storage.Find("state1");
+        UNIT_ASSERT(storageRecord.first);
+        storageRecord = storage.Find("state2");
+        UNIT_ASSERT(storageRecord.first);
+        storageRecord = storage.Find("state3");
+        UNIT_ASSERT(storageRecord.first);
+
+        storage.Refresh(TInstant::Now() + TDuration::Minutes(10) + TDuration::Seconds(5));
+        storageRecord = storage.Find("state1");
+        UNIT_ASSERT(!storageRecord.first);
+        storageRecord = storage.Find("state2");
+        UNIT_ASSERT(storageRecord.first);
+        storageRecord = storage.Find("state3");
+        UNIT_ASSERT(storageRecord.first);
+
+        storage.Refresh(TInstant::Now() + TDuration::Minutes(10) + TDuration::Seconds(7));
+        storageRecord = storage.Find("state1");
+        UNIT_ASSERT(!storageRecord.first);
+        storageRecord = storage.Find("state2");
+        UNIT_ASSERT(!storageRecord.first);
+        storageRecord = storage.Find("state3");
+        UNIT_ASSERT(storageRecord.first);
+
+        storage.Refresh(TInstant::Now() + TDuration::Minutes(11));
+        storageRecord = storage.Find("state1");
+        UNIT_ASSERT(!storageRecord.first);
+        storageRecord = storage.Find("state2");
+        UNIT_ASSERT(!storageRecord.first);
+        storageRecord = storage.Find("state3");
+        UNIT_ASSERT(!storageRecord.first);
+    }
+}

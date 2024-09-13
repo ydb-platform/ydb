@@ -23,3 +23,7 @@ oidc:
   allowed_proxy_hosts:
     - "*.yandex.net"
     - "*.yandex-team.ru"
+
+  store_context_on_host:
+    enable: true
+    context_ttl: "10m"

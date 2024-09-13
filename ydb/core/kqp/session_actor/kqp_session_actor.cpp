@@ -1292,28 +1292,19 @@ public:
         request.ResourceManager_ = ResourceManager_;
         LOG_D("Sending to Executer TraceId: " << request.TraceId.GetTraceId() << " " << request.TraceId.GetSpanIdSize());
 
-        bool useEvWrite = (
-                    (txCtx->HasOlapTable // olap only
-                    && !txCtx->HasOltpTable
-                    && Settings.TableService.GetEnableOlapSink())
-                || (txCtx->HasOltpTable // oltp only
-                    && !txCtx->HasOlapTable
-                    && Settings.TableService.GetEnableOltpSink())
-                || (txCtx->HasOlapTable // htap
-                    && txCtx->HasOltpTable
-                    && Settings.TableService.GetEnableOlapSink()
-                    && Settings.TableService.GetEnableHtapTx()))
-            && (request.QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_UNDEFINED
+        const bool querySupportsEvWrite = (request.QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_UNDEFINED
                 || request.QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_GENERIC_QUERY
                 || request.QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY
                 || (!txCtx->HasOlapTable && request.QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_DML)
                 || (!txCtx->HasOlapTable && request.QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_PREPARED_DML));
+        const bool useEvWriteForOltp = querySupportsEvWrite && Settings.TableService.GetEnableOltpSink();
+
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
             QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(),
             RequestCounters, Settings.TableService,
             AsyncIoFactory, QueryState ? QueryState->PreparedQuery : nullptr, SelfId(),
             QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId),
-            useEvWrite, QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup, GUCSettings, txCtx->ShardIdToTableInfo,
+            useEvWriteForOltp, QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup, GUCSettings, txCtx->ShardIdToTableInfo,
             Settings.TableService.GetEnableHtapTx());
 
         auto exId = RegisterWithSameMailbox(executerActor);

@@ -127,12 +127,12 @@ public:
         const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
         NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
         const TActorId& creator, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
-        const bool useEvWrite, ui32 statementResultIndex, const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
+        const bool useEvWriteForOltp, ui32 statementResultIndex, const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
         const TGUCSettings::TPtr& GUCSettings, const TShardIdToTableInfoPtr& shardIdToTableInfo, const bool htapTx)
         : TBase(std::move(request), database, userToken, counters, tableServiceConfig,
             userRequestContext, statementResultIndex, TWilsonKqp::DataExecuter, "DataExecuter", streamResult)
         , AsyncIoFactory(std::move(asyncIoFactory))
-        , UseEvWrite(useEvWrite)
+        , UseEvWriteForOltp(useEvWriteForOltp)
         , FederatedQuerySetup(federatedQuerySetup)
         , GUCSettings(GUCSettings)
         , ShardIdToTableInfo(shardIdToTableInfo)
@@ -1487,7 +1487,7 @@ private:
         auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
         auto getShardTask = [&](ui64 shardId) -> TTask& {
-            YQL_ENSURE(!UseEvWrite);
+            YQL_ENSURE(!UseEvWriteForOltp);
             auto it  = shardTasks.find(shardId);
             if (it != shardTasks.end()) {
                 return TasksGraph.GetTask(it->second);
@@ -1627,7 +1627,7 @@ private:
 
     void ExecuteDatashardTransaction(ui64 shardId, NKikimrTxDataShard::TKqpTransaction& kqpTx, const bool isOlap)
     {
-        YQL_ENSURE(!UseEvWrite);
+        YQL_ENSURE(!UseEvWriteForOltp);
         TShardState shardState;
         shardState.State = ImmediateTx ? TShardState::EState::Executing : TShardState::EState::Preparing;
         shardState.DatashardState.ConstructInPlace();
@@ -2261,7 +2261,7 @@ private:
             YQL_ENSURE(!locksList.empty(), "unexpected empty locks list in DataShardLocks");
             NKikimrDataEvents::TKqpLocks* locks = nullptr;
 
-            if (UseEvWrite) {
+            if (UseEvWriteForOltp || ShardIdToTableInfo->at(shardId).IsOlap) {
                 if (auto it = evWriteTxs.find(shardId); it != evWriteTxs.end()) {
                     locks = it->second->MutableLocks();
                 } else {
@@ -2333,7 +2333,7 @@ private:
             // Note: currently persistent channels are never used
             !HasPersistentChannels &&
             // Can't use volatile transactions for EvWrite at current time
-            !UseEvWrite);
+            evWriteTxs.empty());
 
         const bool useGenericReadSets = (
             // Use generic readsets when feature is explicitly enabled
@@ -2844,7 +2844,7 @@ private:
 
 private:
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
-    bool UseEvWrite = false;
+    bool UseEvWriteForOltp = false;
     const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
     const TGUCSettings::TPtr GUCSettings;
     TShardIdToTableInfoPtr ShardIdToTableInfo;
@@ -2890,13 +2890,13 @@ private:
 IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
     TKqpRequestCounters::TPtr counters, bool streamResult, const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, const TActorId& creator,
-    const TIntrusivePtr<TUserRequestContext>& userRequestContext, const bool useEvWrite, ui32 statementResultIndex,
+    const TIntrusivePtr<TUserRequestContext>& userRequestContext, const bool useEvWriteForOltp, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
     const TShardIdToTableInfoPtr& shardIdToTableInfo, const bool htapTx)
 {
     return new TKqpDataExecuter(std::move(request), database, userToken, counters, streamResult, tableServiceConfig,
         std::move(asyncIoFactory), creator, userRequestContext,
-        useEvWrite, statementResultIndex, federatedQuerySetup, GUCSettings, shardIdToTableInfo, htapTx);
+        useEvWriteForOltp, statementResultIndex, federatedQuerySetup, GUCSettings, shardIdToTableInfo, htapTx);
 }
 
 } // namespace NKqp

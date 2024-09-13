@@ -349,6 +349,11 @@ public:
             return false;
         }
 
+        if (TxCtx->HasOlapTable) {
+            // HTAP/OLAP transactions always use separate commit.
+            return false;
+        }
+
         if (TxCtx->HasUncommittedChangesRead || AppData()->FeatureFlags.GetEnableForceImmediateEffectsExecution()) {
             if (tx && tx->GetHasEffects()) {
                 YQL_ENSURE(tx->ResultsSize() == 0);
@@ -408,8 +413,8 @@ public:
         const auto& phyQuery = PreparedQuery->GetPhysicalQuery();
         auto tx = PreparedQuery->GetPhyTxOrEmpty(CurrentTx);
 
-        if (TxCtx->CanDeferEffects()) {
-            // At current time sinks require separate tnx with commit.
+        if (TxCtx->CanDeferEffects() && TxCtx->HasOlapTable) {
+            // HTAP/OLAP transactions and sinks can't be deffered.
             while (tx && tx->GetHasEffects() && !HasTxSinkInTx(tx)) {
                 QueryData->CreateKqpValueMap(tx);
                 bool success = TxCtx->AddDeferredEffect(tx, QueryData);

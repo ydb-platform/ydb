@@ -1,8 +1,9 @@
 #include "process_columns.h"
 
 #include "common/adapter.h"
-#include "modifier/schema.h"
-#include "modifier/subset.h"
+
+#include <ydb/library/formats/arrow/modifier/schema.h>
+#include <ydb/library/formats/arrow/modifier/subset.h>
 
 #include <util/string/join.h>
 

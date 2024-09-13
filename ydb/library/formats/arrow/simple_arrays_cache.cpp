@@ -1,6 +1,8 @@
 #include "simple_arrays_cache.h"
 #include "common/validation.h"
 
+#include <arrow/array/util.h>
+
 namespace NKikimr::NArrow {
 
 std::shared_ptr<arrow::Array> TThreadSimpleArraysCache::GetNullImpl(const std::shared_ptr<arrow::DataType>& type, const ui32 recordsCount) {

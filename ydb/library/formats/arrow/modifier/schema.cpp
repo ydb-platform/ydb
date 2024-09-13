@@ -1,6 +1,6 @@
 #include "schema.h"
 #include <util/string/builder.h>
-#include <ydb/core/formats/arrow/common/vector_operations.h>
+#include <ydb/library/formats/arrow/common/vector_operations.h>
 #include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NArrow::NModifier {

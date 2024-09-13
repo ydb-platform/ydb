@@ -13,7 +13,7 @@ struct ICacheCache {
     virtual void Erase(TItem *item) = 0;
 
     // WARN: do not evict items
-    virtual void UpdateCacheSize(ui64 cacheSize) = 0;
+    virtual void UpdateLimit(ui64 limit) = 0;
 
     virtual ~ICacheCache() = default;
 };

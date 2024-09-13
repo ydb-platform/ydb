@@ -3,6 +3,7 @@
 #include "flat_bio_events.h"
 #include "flat_bio_actor.h"
 #include "util_fmt_logger.h"
+#include <ydb/core/tablet_flat/shared_cache_s3fifo.h>
 #include <ydb/core/util/cache_cache.h>
 #include <ydb/core/util/page_map.h>
 #include <ydb/core/base/blobstorage.h>
@@ -224,7 +225,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         , public TIntrusiveListItem<TPage>
     {
         ui32 State : 4 = PageStateNo;
-        ui32 CacheFlags : 16 = 0;
+        ui32 CacheFlags1 : 4 = 0;
+        ui32 CacheFlags2 : 4 = 0;
 
         const ui32 PageId;
         const size_t Size;
@@ -257,24 +259,75 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         }
 
         void EnsureNoCacheFlags() {
-            Y_VERIFY_S(CacheFlags == 0, "Unexpected " << CacheFlags << " page cache flags");
+            Y_VERIFY_S(CacheFlags1 == 0, "Unexpected page " << CacheFlags1 << " cache flags 1");
+            Y_VERIFY_S(CacheFlags2 == 0, "Unexpected page " << CacheFlags2 << " cache flags 2");
+        }
+    };
+
+    struct TCacheCachePageTraits {
+        static ui64 GetWeight(const TPage* page) {
+            return sizeof(TPage) + page->Size;
         }
 
-        struct TWeight {
-            static ui64 Get(TPage *x) {
-                return sizeof(TPage) + (x->State == PageStateLoaded ? x->Size : 0);
-            }
-        };
+        static ECacheCacheGeneration GetGeneration(const TPage *page) {
+            return static_cast<ECacheCacheGeneration>(page->CacheFlags1);
+        }
 
-        struct TCacheFlags {
-            static ui32 Get(TPage *x) {
-                return x->CacheFlags;
-            }
-            static void Set(TPage *x, ui32 flags) {
-                Y_ABORT_UNLESS(flags < Max<ui16>());
-                x->CacheFlags = flags;
-            }
+        static void SetGeneration(TPage *page, ECacheCacheGeneration generation) {
+            ui32 generation_ = static_cast<ui32>(generation);
+            Y_ABORT_UNLESS(generation_ < (1 << 4));
+            page->CacheFlags1 = generation_;
+        }
+    };
+
+    struct TS3FIFOPageTraits {
+        struct TPageKey {
+            TLogoBlobID LogoBlobID;
+            ui32 PageId;
         };
+        
+        static ui64 GetSize(const TPage* page) {
+            return sizeof(TPage) + page->Size;
+        }
+
+        static TPageKey GetKey(const TPage* page) {
+            return {page->Collection->MetaId, page->PageId};
+        }
+
+        static size_t GetHash(const TPageKey& key) {
+            return MultiHash(key.LogoBlobID.Hash(), key.PageId);
+        }
+
+        static bool Equals(const TPageKey& left, const TPageKey& right) {
+            return left.PageId == right.PageId && left.LogoBlobID == right.LogoBlobID;
+        }
+
+        static TString ToString(const TPageKey& key) {
+            return TStringBuilder() << "LogoBlobID: " << key.LogoBlobID.ToString() << " PageId: " << key.PageId;
+        }
+
+        static TString GetKeyToString(const TPage* page) {
+            return ToString(GetKey(page));
+        }
+
+        static ES3FIFOPageLocation GetLocation(const TPage* page) {
+            return static_cast<ES3FIFOPageLocation>(page->CacheFlags1);
+        }
+
+        static void SetLocation(TPage* page, ES3FIFOPageLocation location) {
+            ui32 location_ = static_cast<ui32>(location);
+            Y_ABORT_UNLESS(location_ < (1 << 4));
+            page->CacheFlags1 = location_;
+        }
+
+        static ui32 GetFrequency(const TPage* page) {
+            return page->CacheFlags2;
+        }
+
+        static void SetFrequency(TPage* page, ui32 frequency) {
+            Y_ABORT_UNLESS(frequency < (1 << 4));
+            page->CacheFlags2 = frequency;
+        }
     };
 
     struct TRequest : public TSimpleRefCount<TRequest> {
@@ -370,10 +423,12 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         // now it will be fixed by ActualizeCacheSizeLimit call
 
         switch (Config->ReplacementPolicy) {
+            case NKikimrSharedCache::S3FIFO:
+                return MakeHolder<TS3FIFOCache<TPage, TS3FIFOPageTraits>>(1);
             case NKikimrSharedCache::ThreeLeveledLRU:
             default: {
                 TCacheCacheConfig cacheCacheConfig(1, Config->Counters->FreshBytes, Config->Counters->StagingBytes, Config->Counters->WarmBytes);
-                return MakeHolder<TCacheCache<TPage, TPage::TWeight, TPage::TCacheFlags>>(std::move(cacheCacheConfig));
+                return MakeHolder<TCacheCache<TPage, TCacheCachePageTraits>>(std::move(cacheCacheConfig));
             }
         }
     }
@@ -487,7 +542,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         }
     }
 
-    void Handle(TEvPrivate::TEvReplacementPolicySwitch::TPtr &ev) {
+    void Handle(NSharedCache::TEvReplacementPolicySwitch::TPtr &ev) {
         auto *msg = ev->Get();
 
         if (msg->ReplacementPolicy == Config->ReplacementPolicy) {
@@ -510,7 +565,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             page->EnsureNoCacheFlags();
             
             // touch each page multiple times to make it warm
-            for (ui32 touchTimes = 0; touchTimes < 2; touchTimes++) {
+            for (ui32 touchTimes = 0; touchTimes < 3; touchTimes++) {
                 Evict(Cache->Touch(page));
             }
         }
@@ -1330,7 +1385,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         if (msg->Record.GetReplacementPolicy() != Config->ReplacementPolicy) {
             // Note: use random delay to prevent the whole cluster lag and storage ddos
             ui32 delaySeconds = RandomNumber(msg->Record.GetReplacementPolicySwitchUniformDelaySeconds() + 1);
-            Schedule(TDuration::Seconds(delaySeconds), new TEvPrivate::TEvReplacementPolicySwitch(msg->Record.GetReplacementPolicy()));
+            Schedule(TDuration::Seconds(delaySeconds), new NSharedCache::TEvReplacementPolicySwitch(msg->Record.GetReplacementPolicy()));
         }
     }
 

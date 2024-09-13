@@ -11,7 +11,9 @@ namespace NKikimr::NOlap {
 bool TInsertTable::Insert(IDbWrapper& dbTable, TInsertedData&& data) {
     if (auto* dataPtr = Summary.AddInserted(std::move(data))) {
         AddBlobLink(dataPtr->GetBlobRange().BlobId);
-        CS->VersionAddRef(0, (ui64)dataPtr->GetInsertWriteId(), dataPtr->GetPathId(), "", (ui8)NKikimr::NColumnShard::Schema::EInsertTableIds::Inserted, dataPtr->GetSchemaVersion());
+        if (CS != nullptr) { // Can happen in tests
+            CS->VersionAddRef(0, (ui64)dataPtr->GetInsertWriteId(), dataPtr->GetPathId(), "", (ui8)NKikimr::NColumnShard::Schema::EInsertTableIds::Inserted, dataPtr->GetSchemaVersion());
+        }
         dbTable.Insert(*dataPtr);
         return true;
     } else {
@@ -36,7 +38,9 @@ TInsertionSummary::TCounters TInsertTable::Commit(
         counters.RawBytes += data->GetMeta().GetRawBytes();
         counters.Bytes += data->BlobSize();
 
-        CS->VersionRemoveRef(0, (ui64)data->GetInsertWriteId(), data->GetPathId(), "", (ui8)NKikimr::NColumnShard::Schema::EInsertTableIds::Inserted, data->GetSchemaVersion());
+        if (CS != nullptr) { // Can happen in tests
+            CS->VersionRemoveRef(0, (ui64)data->GetInsertWriteId(), data->GetPathId(), "", (ui8)NKikimr::NColumnShard::Schema::EInsertTableIds::Inserted, data->GetSchemaVersion());
+        }
         dbTable.EraseInserted(*data);
 
         const ui64 pathId = data->GetPathId();
@@ -46,14 +50,18 @@ TInsertionSummary::TCounters TInsertTable::Commit(
             AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "commit_insertion")("path_id", data->GetPathId())(
                 "blob_range", data->GetBlobRange().ToString());
             auto committed = data->Commit(planStep, txId);
-            CS->VersionAddRef(committed.GetSnapshot().GetPlanStep(), committed.GetSnapshot().GetTxId(), committed.GetPathId(), committed.GetDedupId(), (ui8)NKikimr::NColumnShard::Schema::EInsertTableIds::Committed, committed.GetSchemaVersion());
+            if (CS != nullptr) { // Can happen in tests
+                CS->VersionAddRef(committed.GetSnapshot().GetPlanStep(), committed.GetSnapshot().GetTxId(), committed.GetPathId(), committed.GetDedupId(), (ui8)NKikimr::NColumnShard::Schema::EInsertTableIds::Committed, committed.GetSchemaVersion());
+            }
             dbTable.Commit(committed);
 
             pathInfo->AddCommitted(std::move(committed));
         } else {
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "abort_insertion")("path_id", data->GetPathId())(
                 "blob_range", data->GetBlobRange().ToString());
-            CS->VersionAddRef(0, (ui64)data->GetInsertWriteId(), data->GetPathId(), "", (ui8)NKikimr::NColumnShard::Schema::EInsertTableIds::Aborted, data->GetSchemaVersion());
+            if (CS != nullptr) { // Can happen in tests
+                CS->VersionAddRef(0, (ui64)data->GetInsertWriteId(), data->GetPathId(), "", (ui8)NKikimr::NColumnShard::Schema::EInsertTableIds::Aborted, data->GetSchemaVersion());
+            }
             dbTable.Abort(*data);
             Summary.AddAborted(std::move(*data));
         }

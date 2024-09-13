@@ -147,7 +147,9 @@ void TPortionInfo::RemoveFromDatabase(IDbWrapper& db, NColumnShard::TColumnShard
 
 void TPortionInfo::SaveToDatabase(IDbWrapper& db, const ui32 firstPKColumnId, const bool saveOnlyMeta, NColumnShard::TColumnShard* cs) const {
     FullValidation();
-    cs->VersionAddRef(GetPortion(), GetPathId(), GetSchemaVersionVerified());
+    if (cs != nullptr) { // Can happen in tests
+        cs->VersionAddRef(GetPortion(), GetPathId(), GetSchemaVersionVerified());
+    }
     db.WritePortion(*this);
     if (!saveOnlyMeta) {
         for (auto& record : Records) {

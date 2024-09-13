@@ -209,10 +209,21 @@ void PGParse(const TString& input, IPGParseEvents& events) {
 
     if (parsetree_and_error.error) {
         TPosition position(1, 1);
-        TTextWalker walker(position);
-        size_t distance = Min(size_t(parsetree_and_error.error->cursorpos), input.Size());
-        for (size_t i = 0; i < distance; ++i) {
-            walker.Advance(input[i]);
+        // cursorpos is about codepoints, not bytes
+        TTextWalker walker(position, true);
+        auto cursorpos = parsetree_and_error.error->cursorpos;
+        size_t codepoints = 0;
+        if (cursorpos >= 0) {
+            for (size_t i = 0; i < input.Size(); ++i) {
+                if (codepoints == cursorpos) {
+                    break;
+                }
+
+                if (!TTextWalker::IsUtf8Intermediate(input[i])) {
+                    ++codepoints;
+                }
+                walker.Advance(input[i]);
+            }
         }
 
         events.OnError(TIssue(position, "ERROR:  " + TString(parsetree_and_error.error->message) + "\n"));

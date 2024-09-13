@@ -360,8 +360,6 @@ private:
     YDB_READONLY(ui64, TxId, 0);
     YDB_READONLY_DEF(std::set<ui64>, SendingShards);
     YDB_READONLY_DEF(std::set<ui64>, ReceivingShards);
-    YDB_READONLY_DEF(std::set<ui64>, SendingColumnShards);
-    YDB_READONLY_DEF(std::set<ui64>, ReceivingColumnShards);
     ui64 ArbiterColumnShard = 0;
 };
 

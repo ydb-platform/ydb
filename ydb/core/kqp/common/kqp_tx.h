@@ -268,7 +268,7 @@ public:
     }
 
     bool ShouldExecuteDeferredEffects() const {
-        if (HasUncommittedChangesRead) {
+        if (HasUncommittedChangesRead || HasOlapTable) {
             return !DeferredEffects.Empty();
         }
 
@@ -297,7 +297,7 @@ public:
     }
 
     bool CanDeferEffects() const {
-        if (HasUncommittedChangesRead || AppData()->FeatureFlags.GetEnableForceImmediateEffectsExecution()) {
+        if (HasUncommittedChangesRead || AppData()->FeatureFlags.GetEnableForceImmediateEffectsExecution() || HasOlapTable) {
             return false;
         }
 

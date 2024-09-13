@@ -184,7 +184,7 @@ private:
         auto result = Session.ExplainDataQuery(joinRequest).ExtractValueSync();
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-        PrintPlan(result.GetPlan());
+        PrintPlan(TString{result.GetPlan()});
     }
 
     TKikimrRunner Kikimr;
@@ -207,7 +207,7 @@ void ExplainJoinOrderTestDataQueryWithStats(const TString& queryPath, const TStr
         auto result = session.ExplainDataQuery(query).ExtractValueSync();
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-        PrintPlan(result.GetPlan());
+        PrintPlan(TString{result.GetPlan()});
     }
 }
 
@@ -361,7 +361,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
             const TString query = GetStatic(queryPath);
 
             auto result = session.ExplainDataQuery(query).ExtractValueSync();
-            PrintPlan(result.GetPlan());
+            PrintPlan(TString{result.GetPlan()});
             NJson::TJsonValue plan;
             NJson::ReadJsonTree(result.GetPlan(), &plan, true);
 
@@ -547,7 +547,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
             auto result = session.ExplainDataQuery(query).ExtractValueSync();
 
             result.GetIssues().PrintTo(Cerr);
-            PrintPlan(result.GetPlan());
+            PrintPlan(TString{result.GetPlan()});
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
             if (useStreamLookupJoin) {

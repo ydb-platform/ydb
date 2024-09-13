@@ -1151,12 +1151,12 @@ private:
             i32 year = yearIdx + NUdf::MIN_YEAR;
             auto daysInYear = IsLeapYear(year) ? 366u : 365u;
             auto lastDayOfWeek = (dayOfWeek + daysInYear - 1) % 7;
-            YearsCache_[yearIdx] = TYearCache(date, 7 + dayOfWeek, (dayOfWeek >= 4) ? dayOfWeek : dayOfWeek + 7, lastDayOfWeek, weekOfYearIso8601 == 53);
+            YearsCache_[yearIdx] = TYearCache{date, 7 + dayOfWeek, (dayOfWeek >= 4) ? dayOfWeek : dayOfWeek + 7, lastDayOfWeek, weekOfYearIso8601 == 53};
             ui32 weekOfYear = 1;
             for (ui32 dayOfYear = 0; dayOfYear < daysInYear; ++dayOfYear) {
                 ui32 month, day;
                 EnrichMonthDay(year, dayOfYear, month, day);
-                DaysCache_[date] = TDayCache(month, day, dayOfYear, weekOfYear, weekOfYearIso8601);
+                DaysCache_[date] = TDayCache{month, day, dayOfYear, weekOfYear, weekOfYearIso8601};
 
                 date++;
                 if (dayOfWeek < 6) {

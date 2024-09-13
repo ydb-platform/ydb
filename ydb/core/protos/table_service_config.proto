@@ -322,5 +322,5 @@ message TTableServiceConfig {
 
     optional bool EnableRowsDuplicationCheck = 69 [ default = false ];
 
-    optional bool EnableHtapTx = 71 [default = false];
+    optional bool EnableHtapTx = 71 [default = true];
 };

@@ -17,8 +17,8 @@ namespace NDecimal {
 #endif
 
 #ifdef DONT_USE_NATIVE_INT128
-using TInt128 = TWide<i64>;
-using TUint128 = TWide<ui64>;
+using TInt128 = TWide<int64_t>;
+using TUint128 = TWide<uint64_t>;
 #else
 using TInt128 = signed __int128;
 using TUint128 = unsigned __int128;

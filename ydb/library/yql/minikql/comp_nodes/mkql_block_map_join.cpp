@@ -198,6 +198,7 @@ public:
         , Flow_(flow)
         , Dict_(dict)
         , WideFieldsIndex_(mutables.IncrementWideFieldsIndex(LeftFlowItems_.size()))
+        , KeyTuple_(mutables)
     {}
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
@@ -270,11 +271,18 @@ private:
         return *static_cast<TState*>(state.AsBoxed().Get());
     }
 
-    NUdf::TUnboxedValue MakeKeysTuple(const TComputationContext& ctx, const TState& state) const {
-        // TODO: Handle complex key.
+    NUdf::TUnboxedValue MakeKeysTuple(TComputationContext& ctx, const TState& state) const {
         // TODO: Handle converters.
-        Y_ABORT_IF(IsTuple);
-        return state.GetValue(ctx.HolderFactory, LeftKeyColumns_.front());
+        if constexpr (!IsTuple) {
+            return state.GetValue(ctx.HolderFactory, LeftKeyColumns_.front());
+        }
+
+        NUdf::TUnboxedValue* items = nullptr;
+        const auto keys = KeyTuple_.NewArray(ctx, LeftKeyColumns_.size(), items);
+        for (size_t i = 0; i < LeftKeyColumns_.size(); i++) {
+            items[i] = state.GetValue(ctx.HolderFactory, LeftKeyColumns_[i]);
+        }
+        return keys;
     }
 
     const TVector<TType*> ResultJoinItems_;
@@ -284,6 +292,7 @@ private:
     IComputationWideFlowNode* const Flow_;
     IComputationNode* const Dict_;
     ui32 WideFieldsIndex_;
+    const TContainerCacheOnContext KeyTuple_;
 };
 
 template<bool RightRequired, bool IsTuple>
@@ -304,6 +313,7 @@ public:
         , Flow_(flow)
         , Dict_(dict)
         , WideFieldsIndex_(mutables.IncrementWideFieldsIndex(LeftFlowItems_.size()))
+        , KeyTuple_(mutables)
     {}
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, NUdf::TUnboxedValue& iterator, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
@@ -420,11 +430,18 @@ private:
         return *static_cast<TIterator*>(iterator.AsBoxed().Get());
     }
 
-    NUdf::TUnboxedValue MakeKeysTuple(const TComputationContext& ctx, const TState& state) const {
-        // TODO: Handle complex key.
+    NUdf::TUnboxedValue MakeKeysTuple(TComputationContext& ctx, const TState& state) const {
         // TODO: Handle converters.
-        Y_ABORT_IF(IsTuple);
-        return state.GetValue(ctx.HolderFactory, LeftKeyColumns_.front());
+        if constexpr (!IsTuple) {
+            return state.GetValue(ctx.HolderFactory, LeftKeyColumns_.front());
+        }
+
+        NUdf::TUnboxedValue* items = nullptr;
+        const auto keys = KeyTuple_.NewArray(ctx, LeftKeyColumns_.size(), items);
+        for (size_t i = 0; i < LeftKeyColumns_.size(); i++) {
+            items[i] = state.GetValue(ctx.HolderFactory, LeftKeyColumns_[i]);
+        }
+        return keys;
     }
 
     const TVector<TType*> ResultJoinItems_;
@@ -434,6 +451,7 @@ private:
     IComputationWideFlowNode* const Flow_;
     IComputationNode* const Dict_;
     ui32 WideFieldsIndex_;
+    const TContainerCacheOnContext KeyTuple_;
 };
 
 } // namespace
@@ -485,8 +503,7 @@ IComputationNode* WrapBlockMapJoinCore(TCallable& callable, const TComputationNo
         const auto item = AS_VALUE(TDataLiteral, keyColumnsTuple->GetValue(i));
         leftKeyColumns.emplace_back(item->AsValue().Get<ui32>());
     }
-    // TODO: Handle multi keys.
-    Y_ENSURE(leftKeyColumns.size() == 1);
+    const bool isTupleKey = leftKeyColumns.size() > 1;
 
     const auto keyDropsLiteral = callable.GetInput(4);
     const auto keyDropsTuple = AS_VALUE(TTupleLiteral, keyDropsLiteral);

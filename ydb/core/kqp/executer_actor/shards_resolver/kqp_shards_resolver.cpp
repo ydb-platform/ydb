@@ -1,8 +1,7 @@
 #include "kqp_shards_resolver.h"
+#include "kqp_shards_resolver_events.h"
 
 #include <ydb/core/base/tablet_pipecache.h>
-#include <ydb/core/kqp/executer_actor/kqp_executer.h>
-#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -87,7 +86,6 @@ private:
             LOG_W(reply);
             ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, std::move(reply));
             return;
-
         }
 
         ++retryCount;
@@ -95,7 +93,7 @@ private:
     }
 
     void ReplyErrorAndDie(Ydb::StatusIds::StatusCode status, TString&& message) {
-        auto replyEv = std::make_unique<TEvKqpExecuter::TEvShardsResolveStatus>();
+        auto replyEv = std::make_unique<NShardResolver::TEvShardsResolveStatus>();
         replyEv->Status = status;
         replyEv->Issues.AddIssue(TIssue(message));
         Send(Owner, replyEv.release());
@@ -103,7 +101,7 @@ private:
     }
 
     void ReplyAndDie() {
-        auto replyEv = std::make_unique<TEvKqpExecuter::TEvShardsResolveStatus>();
+        auto replyEv = std::make_unique<NShardResolver::TEvShardsResolveStatus>();
         replyEv->ShardNodes = std::move(Result);
         Send(Owner, replyEv.release());
         PassAway();

@@ -72,10 +72,10 @@ namespace NKikimr::NKqp {
 
         S3GatewayConfig = queryServiceConfig.GetS3();
 
+        S3ReadActorFactoryConfig = NYql::NDq::CreateReadActorFactoryConfig(S3GatewayConfig);
+
         YtGatewayConfig = queryServiceConfig.GetYt();
         YtGateway = MakeYtGateway(appData->FunctionRegistry, queryServiceConfig);
-
-        S3ReadActorFactoryConfig = NYql::NDq::CreateReadActorFactoryConfig(S3GatewayConfig);
 
         // Initialize Token Accessor
         if (appConfig.GetAuthConfig().HasTokenAccessorConfig()) {

@@ -27,7 +27,7 @@
 
 ### Пример
 
-```(sql)
+```yql
 $sample = AsList(
     AsStruct(AsList('a','b','c') AS value, CAST(1 AS Uint32) AS id),
     AsStruct(AsList('d') AS value, CAST(2 AS Uint32) AS id),

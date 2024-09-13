@@ -1005,7 +1005,6 @@ void Serialize(const TTranslationSettings& settings, NYql::NProto::TTranslationS
     serializedSettings.SetPathPrefix(settings.PathPrefix);
     serializedSettings.SetSyntaxVersion(settings.SyntaxVersion);
     serializedSettings.SetAnsiLexer(settings.AnsiLexer);
-    serializedSettings.SetAntlr4Parser(settings.Antlr4Parser);
     serializedSettings.SetPgParser(settings.PgParser);
 
     auto* pragmas = serializedSettings.MutablePragmas();
@@ -1022,7 +1021,6 @@ void Deserialize(const NYql::NProto::TTranslationSettings& serializedSettings, T
         DeserializeSetting(PathPrefix);
         DeserializeSetting(SyntaxVersion);
         DeserializeSetting(AnsiLexer);
-        DeserializeSetting(Antlr4Parser);
         DeserializeSetting(PgParser);
 
     #undef DeserializeSetting

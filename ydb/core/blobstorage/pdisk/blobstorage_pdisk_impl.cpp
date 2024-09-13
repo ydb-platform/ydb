@@ -2219,14 +2219,11 @@ void TPDisk::ProcessChunkWriteQueue() {
                 Y_FAIL_S("Unexpected request type# " << ui64(req->GetType()) << " in JointChunkWrites");
         }
     }
+    LWTRACK(PDiskProcessChunkWriteQueue, UpdateCycleOrbit, PCtx->PDiskId, JointChunkWrites.size());
     JointChunkWrites.clear();
 }
 
 void TPDisk::ProcessChunkReadQueue() {
-    if (JointChunkReads.empty()) {
-        return;
-    }
-
     NHPTimer::STime now = HPNow();
     // Size (bytes) of elementary sectors block, it is useless to read/write less than that blockSize
     ui64 bufferSize = BufferPool->GetBufferSize() / Format.SectorSize * Format.SectorSize;
@@ -2277,6 +2274,7 @@ void TPDisk::ProcessChunkReadQueue() {
                 Y_FAIL_S("Unexpected request type# " << ui64(req->GetType()) << " in JointChunkReads");
         }
     }
+    LWTRACK(PDiskProcessChunkReadQueue, UpdateCycleOrbit, PCtx->PDiskId, JointChunkReads.size());
     JointChunkReads.clear();
 }
 
@@ -3361,13 +3359,12 @@ void TPDisk::ProcessYardInitSet() {
 }
 
 void TPDisk::EnqueueAll() {
-    TInstant start = TInstant::Now();
+    auto start = TMonotonic::Now();
 
     TGuard<TMutex> guard(StateMutex);
     size_t initialQueueSize = InputQueue.GetWaitingSize();
     size_t processedReqs = 0;
     size_t pushedToForsetiReqs = 0;
-
 
     while (InputQueue.GetWaitingSize() > 0) {
         TRequestBase* request = InputQueue.Pop();
@@ -3420,12 +3417,13 @@ void TPDisk::EnqueueAll() {
         }
     }
 
-    double spentTimeMs = (TInstant::Now() - start).MillisecondsFloat();
-    LWPROBE(PDiskEnqueueAllDetails, PCtx->PDiskId, initialQueueSize, processedReqs, pushedToForsetiReqs, spentTimeMs);
+    double spentTimeMs = (TMonotonic::Now() - start).MillisecondsFloat();
+    LWTRACK(PDiskEnqueueAllDetails, UpdateCycleOrbit, PCtx->PDiskId, initialQueueSize, processedReqs, pushedToForsetiReqs, spentTimeMs);
 }
 
 void TPDisk::Update() {
     Mon.UpdateDurationTracker.UpdateStarted();
+    LWTRACK(PDiskUpdateStarted, UpdateCycleOrbit, PCtx->PDiskId);
 
     // ui32 userSectorSize = 0;
 
@@ -3521,9 +3519,9 @@ void TPDisk::Update() {
         }
     }
     ui64 totalCost = totalLogCost + totalNonLogCost;
-    LWPROBE(PDiskForsetiCycle, PCtx->PDiskId, nowCycles, prevForsetiTimeNs, ForsetiPrevTimeNs, timeCorrection,
+    LWTRACK(PDiskForsetiCycle, UpdateCycleOrbit, PCtx->PDiskId, nowCycles, prevForsetiTimeNs, ForsetiPrevTimeNs, timeCorrection,
             realDuration, virtualDuration, ForsetiTimeNs, totalCost, virtualDeadline);
-    LWPROBE(PDiskMilliBatchSize, PCtx->PDiskId, totalLogCost, totalNonLogCost, totalLogReqs, totalNonLogReqs);
+    LWTRACK(PDiskMilliBatchSize, UpdateCycleOrbit, PCtx->PDiskId, totalLogCost, totalNonLogCost, totalLogReqs, totalNonLogReqs);
     ForsetiRealTimeCycles = nowCycles;
 
 
@@ -3603,6 +3601,7 @@ void TPDisk::Update() {
 
 
     Mon.UpdateDurationTracker.WaitingStart(isNothingToDo);
+    LWTRACK(PDiskStartWaiting, UpdateCycleOrbit, PCtx->PDiskId);
 
     if (Cfg->SectorMap) {
         auto diskModeParams = Cfg->SectorMap->GetDiskModeParams();
@@ -3635,6 +3634,8 @@ void TPDisk::Update() {
         InputQueue.ProducedWait(TDuration::MilliSeconds(10));
     }
 
+    LWTRACK(PDiskUpdateEnded, UpdateCycleOrbit, PCtx->PDiskId);
+    UpdateCycleOrbit.Reset();
     Mon.UpdateDurationTracker.UpdateEnded();
     *Mon.PDiskThreadCPU = ThreadCPUTime();
 }

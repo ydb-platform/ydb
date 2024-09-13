@@ -707,8 +707,10 @@ void TPDisk::WriteSysLogRestorePoint(TCompletionAction *action, TReqId reqId, NW
 // Common log writing
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void TPDisk::ProcessLogWriteQueueAndCommits() {
-    if (JointLogWrites.empty())
+    if (JointLogWrites.empty()) {
+        LWTRACK(PDiskProcessLogWriteQueue, UpdateCycleOrbit, PCtx->PDiskId, JointLogWrites.size(), JointCommits.size());
         return;
+    }
 
     NHPTimer::STime now = HPNow();
     for (TLogWrite *logCommit : JointCommits) {
@@ -748,6 +750,7 @@ void TPDisk::ProcessLogWriteQueueAndCommits() {
                 double(logWrite->Cost) / 1000000.0, HPSecondsFloat(logWrite->Deadline),
                 logWrite->Owner, logWrite->IsFast, logWrite->PriorityClass);
     }
+    LWTRACK(PDiskProcessLogWriteQueue, UpdateCycleOrbit, PCtx->PDiskId, JointLogWrites.size(), JointCommits.size());
     TReqId reqId = JointLogWrites.back()->ReqId;
     auto write = MakeHolder<TCompletionLogWrite>(
         this, std::move(JointLogWrites), std::move(JointCommits), std::move(logChunksToCommit));

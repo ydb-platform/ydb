@@ -685,8 +685,12 @@ namespace NKikimr::NGRpcProxy::V1 {
     }
 
     std::optional<TYdbPqCodes> ValidatePartitionStrategy(const ::NKikimrPQ::TPQTabletConfig& config, TString& error) {
-        if (!config.has_partitionstrategy())
+        if (!config.HasPartitionStrategy()) {
             return std::nullopt;
+        }
+        if (::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED == config.GetPartitionStrategy().GetPartitionStrategyType()) {
+            return std::nullopt;
+        }
         auto strategy = config.GetPartitionStrategy();
         if (strategy.GetMinPartitionCount() < 0) {
             error = TStringBuilder() << "Partitions count must be non-negative, provided " << strategy.GetMinPartitionCount();
@@ -713,7 +717,7 @@ namespace NKikimr::NGRpcProxy::V1 {
             error = TStringBuilder() << "Partition scale threshold time must be greater then 1 second, provided " << strategy.GetScaleThresholdSeconds() << " seconds";
             return TYdbPqCodes(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
         }
-        if (strategy.GetPartitionStrategyType() != ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED && config.GetPartitionConfig().HasStorageLimitBytes()) {
+        if (config.GetPartitionConfig().HasStorageLimitBytes()) {
             error = TStringBuilder() << "Auto partitioning is incompatible with retention storage bytes option";
             return TYdbPqCodes(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
         }

@@ -119,7 +119,14 @@ namespace NYql::NDq {
 
         void Bootstrap() {
             Become(&TGenericReadActor::StateFunc);
-            InitSplitsListing();
+            auto issue = InitSplitsListing();
+            if (issue) {
+                return NotifyComputeActorWithIssue(
+                    TActivationContext::ActorSystem(),
+                    ComputeActorId_,
+                    InputIndex_,
+                    std::move(*issue));
+            };
         }
 
         static constexpr char ActorName[] = "GENERIC_READ_ACTOR";
@@ -139,13 +146,18 @@ namespace NYql::NDq {
 
         // ListSplits
 
-        void InitSplitsListing() {
+        TMaybe<TIssue> InitSplitsListing() {
             YQL_CLOG(DEBUG, ProviderGeneric) << "Start splits listing";
 
             // Prepare request
             NConnector::NApi::TListSplitsRequest request;
             NConnector::NApi::TSelect select = Source_.select(); // copy TSelect from source
-            TokenProvider_->MaybeFillToken(*select.mutable_data_source_instance());
+
+            auto error = TokenProvider_->MaybeFillToken(*select.mutable_data_source_instance());
+            if (error) {
+                return TIssue(error);
+            }
+
             *request.mutable_selects()->Add() = std::move(select);
 
             // Initialize stream
@@ -160,6 +172,8 @@ namespace NYql::NDq {
                         TEvPrivate::TEvListSplitsIterator>(
                         actorSystem, selfId, computeActorId, inputIndex, future);
                 });
+
+            return Nothing();
         }
 
         void Handle(TEvPrivate::TEvListSplitsIterator::TPtr& ev) {
@@ -205,7 +219,16 @@ namespace NYql::NDq {
             // Server sent EOF, now we are ready to start splits reading
             if (NConnector::GrpcStatusEndOfStream(status)) {
                 YQL_CLOG(DEBUG, ProviderGeneric) << "Handle :: EvListSplitsFinished :: last message was reached, start data reading";
-                return InitSplitsReading();
+                auto issue = InitSplitsReading();
+                if (issue) {
+                    return NotifyComputeActorWithIssue(
+                        TActivationContext::ActorSystem(),
+                        ComputeActorId_,
+                        InputIndex_,
+                        std::move(*issue));
+                }
+
+                return;
             }
 
             // Server temporary failure
@@ -223,13 +246,14 @@ namespace NYql::NDq {
         }
 
         // ReadSplits
-        void InitSplitsReading() {
+        TMaybe<TIssue> InitSplitsReading() {
             YQL_CLOG(DEBUG, ProviderGeneric) << "Start splits reading";
 
             if (Splits_.empty()) {
                 YQL_CLOG(WARN, ProviderGeneric) << "Accumulated empty list of splits";
                 ReadSplitsFinished_ = true;
-                return NotifyComputeActorWithData();
+                NotifyComputeActorWithData();
+                return Nothing();
             }
 
             // Prepare request
@@ -237,13 +261,16 @@ namespace NYql::NDq {
             request.set_format(NConnector::NApi::TReadSplitsRequest::ARROW_IPC_STREAMING);
             request.mutable_splits()->Reserve(Splits_.size());
 
-            std::for_each(
-                Splits_.cbegin(), Splits_.cend(),
-                [&](const NConnector::NApi::TSplit& split) {
-                    NConnector::NApi::TSplit splitCopy = split;
-                    TokenProvider_->MaybeFillToken(*splitCopy.mutable_select()->mutable_data_source_instance());
-                    *request.mutable_splits()->Add() = std::move(split);
-                });
+            for (const auto& split : Splits_) {
+                NConnector::NApi::TSplit splitCopy = split;
+
+                auto error = TokenProvider_->MaybeFillToken(*splitCopy.mutable_select()->mutable_data_source_instance());
+                if (error) {
+                    return TIssue(std::move(error));
+                }
+
+                *request.mutable_splits()->Add() = std::move(splitCopy);
+            }
 
             // Start streaming
             Client_->ReadSplits(request).Subscribe(
@@ -257,6 +284,8 @@ namespace NYql::NDq {
                         TEvPrivate::TEvReadSplitsIterator>(
                         actorSystem, selfId, computeActorId, inputIndex, future);
                 });
+
+            return Nothing();
         }
 
         void Handle(TEvPrivate::TEvReadSplitsIterator::TPtr& ev) {
@@ -371,14 +400,27 @@ namespace NYql::NDq {
 
         static void NotifyComputeActorWithError(
             TActorSystem* actorSystem,
-            const NActors::TActorId computeActorId,
-            const ui64 inputIndex,
+            NActors::TActorId computeActorId,
+            ui64 inputIndex,
             const NConnector::NApi::TError& error) {
             actorSystem->Send(computeActorId,
                               new TEvAsyncInputError(
                                   inputIndex,
                                   NConnector::ErrorToIssues(error),
                                   NConnector::ErrorToDqStatus(error)));
+            return;
+        }
+
+        static void NotifyComputeActorWithIssue(
+            TActorSystem* actorSystem,
+            NActors::TActorId computeActorId,
+            ui64 inputIndex,
+            TIssue issue) {
+            actorSystem->Send(computeActorId,
+                              new TEvAsyncInputError(
+                                  inputIndex,
+                                  TIssues{std::move(issue)},
+                                  NDqProto::StatusIds::StatusCode::StatusIds_StatusCode_INTERNAL_ERROR));
             return;
         }
 
@@ -546,7 +588,10 @@ namespace NYql::NDq {
         part << ';';
         */
 
-        auto tokenProvider = CreateGenericTokenProvider(source, credentialsFactory);
+        auto tokenProvider = CreateGenericTokenProvider(
+            source.GetToken(),
+            source.GetServiceAccountId(), source.GetServiceAccountIdSignature(),
+            credentialsFactory);
 
         const auto actor = new TGenericReadActor(
             inputIndex,

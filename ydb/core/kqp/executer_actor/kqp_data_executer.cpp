@@ -2260,7 +2260,7 @@ private:
             YQL_ENSURE(!locksList.empty(), "unexpected empty locks list in DataShardLocks");
             NKikimrDataEvents::TKqpLocks* locks = nullptr;
 
-            if (UseEvWriteForOltp || ShardIdToTableInfo->at(shardId).IsOlap) {
+            if (UseEvWriteForOltp || ShardIdToTableInfo->Get(shardId).IsOlap) {
                 if (auto it = evWriteTxs.find(shardId); it != evWriteTxs.end()) {
                     locks = it->second->MutableLocks();
                 } else {

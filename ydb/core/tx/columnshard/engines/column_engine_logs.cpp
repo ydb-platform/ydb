@@ -219,7 +219,7 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
             AFL_VERIFY(portion.MutableMeta().LoadMetadata(metaProto, indexInfo));
             AFL_VERIFY(constructors.AddConstructorVerified(std::move(portion)));
             if (portion.HasSchemaVersion()) {
-                db.CS->VersionAddRef(portion.GetSchemaVersion(), 1);
+                db.CS->VersionAddRef(portion.GetPortionIdVerified(), portion.GetPathId(), portion.GetSchemaVersion());
             }
         })) {
             return false;

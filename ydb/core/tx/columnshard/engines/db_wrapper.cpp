@@ -10,31 +10,37 @@ namespace NKikimr::NOlap {
 
 void TDbWrapper::Insert(const TInsertedData& data) {
     NIceDb::TNiceDb db(Database);
+    CS->VersionAddRef(0, (ui64)data.GetInsertWriteId(), data.GetPathId(), "", (ui8)NKikimr::NColumnShard::Schema::EInsertTableIds::Inserted, data.GetSchemaVersion());
     NColumnShard::Schema::InsertTable_Insert(db, data);
 }
 
 void TDbWrapper::Commit(const TCommittedData& data) {
     NIceDb::TNiceDb db(Database);
+    CS->VersionAddRef(data.GetSnapshot().GetPlanStep(), data.GetSnapshot().GetTxId(), data.GetPathId(), data.GetDedupId(), (ui8)NKikimr::NColumnShard::Schema::EInsertTableIds::Committed, data.GetSchemaVersion());
     NColumnShard::Schema::InsertTable_Commit(db, data);
 }
 
 void TDbWrapper::Abort(const TInsertedData& data) {
     NIceDb::TNiceDb db(Database);
+    CS->VersionAddRef(0, (ui64)data.GetInsertWriteId(), data.GetPathId(), "", (ui8)NKikimr::NColumnShard::Schema::EInsertTableIds::Aborted, data.GetSchemaVersion());
     NColumnShard::Schema::InsertTable_Abort(db, data);
 }
 
 void TDbWrapper::EraseInserted(const TInsertedData& data) {
     NIceDb::TNiceDb db(Database);
+    CS->VersionRemoveRef(0, (ui64)data.GetInsertWriteId(), data.GetPathId(), "", (ui8)NKikimr::NColumnShard::Schema::EInsertTableIds::Inserted, data.GetSchemaVersion());
     NColumnShard::Schema::InsertTable_EraseInserted(db, data);
 }
 
 void TDbWrapper::EraseCommitted(const TCommittedData& data) {
     NIceDb::TNiceDb db(Database);
+    CS->VersionRemoveRef(data.GetSnapshot().GetPlanStep(), data.GetSnapshot().GetTxId(), data.GetPathId(), data.GetDedupId(), (ui8)NKikimr::NColumnShard::Schema::EInsertTableIds::Committed, data.GetSchemaVersion());
     NColumnShard::Schema::InsertTable_EraseCommitted(db, data);
 }
 
 void TDbWrapper::EraseAborted(const TInsertedData& data) {
     NIceDb::TNiceDb db(Database);
+    CS->VersionRemoveRef(0, (ui64)data.GetInsertWriteId(), data.GetPathId(), "", (ui8)NKikimr::NColumnShard::Schema::EInsertTableIds::Aborted, data.GetSchemaVersion());
     NColumnShard::Schema::InsertTable_EraseAborted(db, data);
 }
 
@@ -71,7 +77,7 @@ void TDbWrapper::WritePortion(const NOlap::TPortionInfo& portion) {
     auto metaProto = portion.GetMeta().SerializeToProto();
     using IndexPortions = NColumnShard::Schema::IndexPortions;
     auto removeSnapshot = portion.GetRemoveSnapshotOptional();
-    CS->VersionAddRef(portion.GetPortion(), portion.GetSchemaVersionVerified());
+    CS->VersionAddRef(portion.GetPortion(), portion.GetPathId(), portion.GetSchemaVersionVerified());
     db.Table<IndexPortions>().Key(portion.GetPathId(), portion.GetPortion()).Update(
         NIceDb::TUpdate<IndexPortions::SchemaVersion>(portion.GetSchemaVersionVerified()),
         NIceDb::TUpdate<IndexPortions::ShardingVersion>(portion.GetShardingVersionDef(0)),
@@ -84,7 +90,7 @@ void TDbWrapper::ErasePortion(const NOlap::TPortionInfo& portion) {
     LOG_S_CRIT("Erasing portion, schema version " << portion.GetSchemaVersionVerified() << " path id " << portion.GetPathId() << " portion id " << portion.GetPortion() << " database " << (ui64)&Database);
     NIceDb::TNiceDb db(Database);
     using IndexPortions = NColumnShard::Schema::IndexPortions;
-    ui32 refCount = CS->VersionRemoveRef(portion.GetPortion(), portion.GetSchemaVersionVerified());
+    ui32 refCount = CS->VersionRemoveRef(portion.GetPortion(), portion.GetPathId(), portion.GetSchemaVersionVerified());
     if (refCount == 0) {
         LOG_S_CRIT("Ref count is set to 0 for version " << portion.GetSchemaVersionVerified() << " need to delete");
     }

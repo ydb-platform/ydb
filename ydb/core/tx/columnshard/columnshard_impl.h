@@ -143,26 +143,28 @@ class TInsertKey {
 public:
     ui64 PlanStep;
     ui64 TxId;
+    ui64 PathId;
     TString DedupId;
     ui8 RecType;
 
 public:
     TInsertKey() = default;
 
-    TInsertKey(ui64 planStep, ui64 txId, const TString& dedupId, ui8 recType)
+    TInsertKey(ui64 planStep, ui64 txId, ui64 pathId, const TString& dedupId, ui8 recType)
         : PlanStep(planStep)
         , TxId(txId)
+        , PathId(pathId)
         , DedupId(dedupId)
         , RecType(recType)
     {
     }
 
     bool operator==(const TInsertKey& other) const {
-        return (PlanStep == other.PlanStep) && (TxId == other.TxId) && (DedupId == other.DedupId) && (RecType == other.RecType);
+        return (PlanStep == other.PlanStep) && (TxId == other.TxId) && (PathId == other.PathId) && (DedupId == other.DedupId) && (RecType == other.RecType);
     }
 
     ui64 Hash() const {
-        return CombineHashes(PlanStep, CombineHashes(TxId, CombineHashes(hash<TString>()(DedupId), (ui64)RecType)));
+        return CombineHashes(PlanStep, CombineHashes(TxId, CombineHashes(PathId, CombineHashes(hash<TString>()(DedupId), (ui64)RecType))));
     }
 };
 
@@ -176,7 +178,7 @@ private:
 
 private:
     THashMap<TInsertKey, ui64, Hasher> InsertVersions;
-    THashMap<ui64, ui64> PortionVersions;
+    THashMap<std::pair<ui64, ui64>, ui64> PortionVersions;
     THashMap<ui64, ui32> VersionCounts;
 
 public:
@@ -184,6 +186,7 @@ public:
     void VersionAddRef(Versions& versions, const Key& portion, ui64 version) {
         ui64& curVer = versions[portion];
         if (curVer != 0) {// Portion is already in the local database, no need to increase ref count
+            LOG_S_CRIT("Schema version is already written");
             AFL_VERIFY(version == curVer);
             return;
         }
@@ -205,12 +208,12 @@ public:
         return --refCount;
     }
 
-    void VersionAddRef(ui64 portion, ui64 version) {
-        VersionAddRef(PortionVersions, portion, version);
+    void VersionAddRef(ui64 portion, ui64 pathId, ui64 version) {
+        VersionAddRef(PortionVersions, std::pair<ui64, ui64>(portion, pathId), version);
     }
 
-    ui32 VersionRemoveRef(ui64 portion, ui64 version) {
-        return VersionRemoveRef(PortionVersions, portion, version);
+    ui32 VersionRemoveRef(ui64 portion, ui64 pathId, ui64 version) {
+        return VersionRemoveRef(PortionVersions, std::pair<ui64, ui64>(portion, pathId), version);
     }
 
     void VersionAddRef(const TInsertKey& key, ui64 version) {
@@ -710,20 +713,20 @@ public:
 
     TColumnShard(TTabletStorageInfo* info, const TActorId& tablet);
 
-    void VersionAddRef(ui64 portion, ui64 version) {
-        VersionCounts.VersionAddRef(portion, version);
+    void VersionAddRef(ui64 portion, ui64 pathId, ui64 version) {
+        VersionCounts.VersionAddRef(portion, pathId, version);
     }
 
-    ui32 VersionRemoveRef(ui64 portion, ui64 version) {
-        return VersionCounts.VersionRemoveRef(portion, version);
+    ui32 VersionRemoveRef(ui64 portion, ui64 pathId, ui64 version) {
+        return VersionCounts.VersionRemoveRef(portion, pathId, version);
     }
 
-    void VersionAddRef(ui64 planStep, ui64 txId, const TString& dedupId, ui8 recType, ui64 version) {
-        VersionCounts.VersionAddRef(TInsertKey(planStep, txId, dedupId, recType), version);
+    void VersionAddRef(ui64 planStep, ui64 txId, ui64 pathId, const TString& dedupId, ui8 recType, ui64 version) {
+        VersionCounts.VersionAddRef(TInsertKey(planStep, txId, pathId, dedupId, recType), version);
     }
 
-    ui32 VersionRemoveRef(ui64 planStep, ui64 txId, const TString& dedupId, ui8 recType, ui64 version) {
-        return VersionCounts.VersionRemoveRef(TInsertKey(planStep, txId, dedupId, recType), version);
+    ui32 VersionRemoveRef(ui64 planStep, ui64 txId, ui64 pathId, const TString& dedupId, ui8 recType, ui64 version) {
+        return VersionCounts.VersionRemoveRef(TInsertKey(planStep, txId, pathId, dedupId, recType), version);
     }
 
 

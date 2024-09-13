@@ -167,7 +167,11 @@ struct TReadSpec {
     NDB::ColumnsWithTypeAndName CHColumns;
     std::shared_ptr<arrow::Schema> ArrowSchema;
     NDB::FormatSettings Settings;
-    TString Format, Compression;
+    // It's very important to keep here std::string instead of TString 
+    // because of the cast from TString to std::string is using the MutRef (it isn't thread-safe).
+    // This behaviour can be found in the getInputFormat call
+    std::string Format;  
+    TString Compression;
     ui64 SizeLimit = 0;
     ui32 BlockLengthPosition = 0;
     std::vector<ui32> ColumnReorder;
@@ -1373,12 +1377,7 @@ public:
             DecodedChunkSizeHist,
             HttpInflightSize,
             HttpDataRps,
-            DeferredQueueSize,
-            ReadSpec->Format,
-            ReadSpec->Compression,
-            ReadSpec->ArrowSchema,
-            ReadSpec->RowSpec,
-            ReadSpec->Settings
+            DeferredQueueSize
         );
 
         if (!UseRuntimeListing) {

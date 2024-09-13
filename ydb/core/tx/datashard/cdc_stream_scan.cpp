@@ -1,6 +1,7 @@
 #include "cdc_stream_scan.h"
 #include "change_record_body_serializer.h"
 #include "datashard_impl.h"
+#include "incr_restore_helpers.h"
 
 #include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
@@ -208,30 +209,6 @@ class TDataShard::TTxCdcStreamScanProgress
         return updates;
     }
 
-    static std::optional<TVector<TUpdateOp>> MakeRestoreUpdates(TArrayRef<const TCell> cells, TArrayRef<const TTag> tags, TUserTable::TCPtr table) {
-        Y_ABORT_UNLESS(cells.size() >= 1);
-        TVector<TUpdateOp> updates(::Reserve(cells.size() - 1));
-
-        bool foundSpecialColumn = false;
-        Y_ABORT_UNLESS(cells.size() == tags.size());
-        for (TPos pos = 0; pos < cells.size(); ++pos) {
-            const auto tag = tags.at(pos);
-            auto it = table->Columns.find(tag);
-            Y_ABORT_UNLESS(it != table->Columns.end());
-            if (it->second.Name == "__ydb_incrBackupImpl_deleted") {
-                if (const auto& cell = cells.at(pos); !cell.IsNull() && cell.AsValue<bool>()) {
-                    return std::nullopt;
-                }
-                foundSpecialColumn = true;
-                continue;
-            }
-            updates.emplace_back(tag, ECellOp::Set, TRawTypeValue(cells.at(pos).AsRef(), it->second.Type));
-        }
-        Y_ABORT_UNLESS(foundSpecialColumn);
-
-        return updates;
-    }
-
     static TRowState MakeRow(TArrayRef<const TCell> cells) {
         TRowState row(cells.size());
 
@@ -332,7 +309,7 @@ public:
                     Serialize(body, ERowOp::Upsert, key, keyTags, MakeUpdates(v.GetCells(), valueTags, table));
                     break;
                 case NKikimrSchemeOp::ECdcStreamModeRestoreIncrBackup:
-                    if (auto updates = MakeRestoreUpdates(v.GetCells(), valueTags, table); updates) {
+                    if (auto updates = NIncrRestoreHelpers::MakeRestoreUpdates(v.GetCells(), valueTags, table); updates) {
                         Serialize(body, ERowOp::Upsert, key, keyTags, *updates);
                     } else {
                         Serialize(body, ERowOp::Erase, key, keyTags, {});

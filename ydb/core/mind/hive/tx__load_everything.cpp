@@ -537,11 +537,13 @@ public:
                     while (tablet->TabletStorageInfo->Channels.size() <= channelId) {
                         tablet->TabletStorageInfo->Channels.emplace_back();
                         tablet->TabletStorageInfo->Channels.back().Channel = tablet->TabletStorageInfo->Channels.size() - 1;
+                        tablet->DeletedHistory.emplace_back();
                     }
                     TTabletChannelInfo::THistoryEntry entry(generationId, groupId, timestamp);
                     auto deletedAtGeneration = tabletChannelGenRowset.GetValueOrDefault<Schema::TabletChannelGen::DeletedAtGeneration>();
                     if (deletedAtGeneration) {
-                        tablet->DeletedHistory.emplace(channelId, entry, deletedAtGeneration);
+                        auto mode = tabletChannelGenRowset.GetValueOrDefault<Schema::TabletChannelGen::CutHistoryMode>();
+                        tablet->DeletedHistory[channelId].emplace(entry, deletedAtGeneration, mode);
                     } else {
                         TTabletChannelInfo& channel = tablet->TabletStorageInfo->Channels[channelId];
                         channel.History.push_back(entry);

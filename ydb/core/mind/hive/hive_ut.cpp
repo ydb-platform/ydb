@@ -719,7 +719,8 @@ Y_UNIT_TEST_SUITE(THiveTest) {
                 ui32 nodeIndex,
                 NTabletPipe::TClientConfig* pipeConfig = nullptr,
                 bool* roleConnected = nullptr,
-                ui32 maxAttempts = 10) {
+                ui32 maxAttempts = 10,
+                ui32 generation = 0) {
         TActorId sender = runtime.AllocateEdgeActor(nodeIndex);
         ui32 attempts = 0;
         runtime.ConnectToPipe(tabletId, sender, nodeIndex, pipeConfig ? *pipeConfig : GetPipeConfigWithRetries());
@@ -734,6 +735,11 @@ Y_UNIT_TEST_SUITE(THiveTest) {
                 }
                 TEvTabletPipe::TEvClientConnected* event = std::get<TEvTabletPipe::TEvClientConnected*>(result);
                 UNIT_ASSERT(event != nullptr);
+                if (event->Generation < generation) {
+                    UNIT_ASSERT(++attempts < maxAttempts);
+                    runtime.ConnectToPipe(tabletId, sender, nodeIndex, pipeConfig ? *pipeConfig : GetPipeConfigWithRetries());
+                    continue;
+                }
                 UNIT_ASSERT(event->Type() == TEvTabletPipe::TEvClientConnected::EventType);
                 UNIT_ASSERT(event->Status == NKikimrProto::OK);
                 if (roleConnected != nullptr) {
@@ -6888,6 +6894,142 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             auto createTabletReply = runtime.GrabEdgeEventRethrow<TEvHive::TEvCreateTabletReply>(handle);
             ui64 tabletId = createTabletReply->Record.GetTabletID();
             MakeSureTabletIsUp(runtime, tabletId, 0);
+        }
+    }
+
+    Y_UNIT_TEST(TestCutHistoryAuto) {
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime, true, 5, [](TAppPrepare& app) {
+            app.HiveConfig.SetCutHistoryAllowList("Dummy");
+        });
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
+        TActorId senderA = runtime.AllocateEdgeActor();
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+
+        TTabletTypes::EType tabletType = TTabletTypes::Dummy;
+        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet,
+            MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 0, tabletType, BINDED_CHANNELS), 0, true);
+        MakeSureTabletIsUp(runtime, tabletId, 0);
+        for (int i = 0; i < 5; ++i) {
+            SendReassignTablet(runtime, hiveTablet, tabletId, {}, 0);
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvLocal::EvTabletStatus, 2);
+            runtime.DispatchEvents(options);
+            MakeSureTabletIsUp(runtime, tabletId, 0);
+        }
+        {
+            SendGetTabletStorageInfo(runtime, hiveTablet, tabletId, 0);
+
+            TAutoPtr<IEventHandle> handle;
+            auto getTabletStorageResult = runtime.GrabEdgeEventRethrow<TEvHive::TEvGetTabletStorageInfoResult>(handle);
+            const auto& tabletStorageInfo = getTabletStorageResult->Record.GetInfo();
+            for (const auto& channel : tabletStorageInfo.GetChannels()) {
+                for (ui32 i = 1; i < 4; ++i) {
+                    const auto& entry = channel.GetHistory(i);
+                    auto ev = std::make_unique<TEvHive::TEvCutTabletHistory>();
+                    ev->Record.SetTabletID(tabletId);
+                    ev->Record.SetChannel(channel.GetChannel());
+                    ev->Record.SetGroupID(entry.GetGroupID());
+                    ev->Record.SetFromGeneration(entry.GetFromGeneration());
+                    ev->Record.SetCutHistoryMode(NKikimrTabletBase::TEvCutTabletHistory::CutHistoryModeAuto);
+                    runtime.SendToPipe(hiveTablet, senderA, ev.release(), 0, GetPipeConfigWithRetries());
+                }
+            }
+        }
+
+        bool wasCut = false;
+
+        auto holder = runtime.AddObserver<TEvLocal::TEvBootTablet>([&](TEvLocal::TEvBootTablet::TPtr& event) {
+            const auto& record = event->Get()->Record;
+            size_t historySize = record.GetInfo().GetChannels(1).GetHistory().size();
+            if (historySize == 3) {
+                // history was cut - emulate tablet not starting without it
+                wasCut = true;
+                auto* response = new TEvLocal::TEvTabletStatus(
+                    TEvLocal::TEvTabletStatus::EStatus::StatusBootFailed,
+                    TEvTablet::TEvTabletDead::EReason::ReasonError,
+                    {record.GetInfo().GetTabletID(), record.GetFollowerId()},
+                    record.GetSuggestedGeneration()
+                );
+                runtime.Send(new IEventHandle(event->Sender, event->Recipient, response));
+                event.Reset();
+            } else {
+                // history must be fully restored
+                UNIT_ASSERT_VALUES_EQUAL(historySize, 6);
+            }
+        });
+
+        runtime.SendToPipe(tabletId, senderA, new TEvents::TEvPoisonPill(), 0, GetPipeConfigWithRetries());
+        WaitForTabletIsUp(runtime, tabletId, 0, nullptr, nullptr, 10, 12);
+        UNIT_ASSERT(wasCut);
+    }
+
+    Y_UNIT_TEST(TestCutHistoryManual) {
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime, true, 5, [](TAppPrepare& app) {
+            app.HiveConfig.SetCutHistoryAllowList("Dummy");
+        });
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
+        TActorId senderA = runtime.AllocateEdgeActor();
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+
+        TTabletTypes::EType tabletType = TTabletTypes::Dummy;
+        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet,
+            MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 0, tabletType, BINDED_CHANNELS), 0, true);
+        MakeSureTabletIsUp(runtime, tabletId, 0);
+        for (int i = 0; i < 5; ++i) {
+            SendReassignTablet(runtime, hiveTablet, tabletId, {}, 0);
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvLocal::EvTabletStatus, 2);
+            runtime.DispatchEvents(options);
+            MakeSureTabletIsUp(runtime, tabletId, 0);
+        }
+        {
+            SendGetTabletStorageInfo(runtime, hiveTablet, tabletId, 0);
+
+            TAutoPtr<IEventHandle> handle;
+            auto getTabletStorageResult = runtime.GrabEdgeEventRethrow<TEvHive::TEvGetTabletStorageInfoResult>(handle);
+            const auto& tabletStorageInfo = getTabletStorageResult->Record.GetInfo();
+            for (const auto& channel : tabletStorageInfo.GetChannels()) {
+                for (ui32 i = 1; i < 4; ++i) {
+                    const auto& entry = channel.GetHistory(i);
+                    auto ev = std::make_unique<TEvHive::TEvCutTabletHistory>();
+                    ev->Record.SetTabletID(tabletId);
+                    ev->Record.SetChannel(channel.GetChannel());
+                    ev->Record.SetGroupID(entry.GetGroupID());
+                    ev->Record.SetFromGeneration(entry.GetFromGeneration());
+                    ev->Record.SetCutHistoryMode(NKikimrTabletBase::TEvCutTabletHistory::CutHistoryModeManual);
+                    runtime.SendToPipe(hiveTablet, senderA, ev.release(), 0, GetPipeConfigWithRetries());
+                }
+            }
+        }
+
+        {
+            auto ev = std::make_unique<TEvHive::TEvCommitCutTabletHistory>();
+            ev->Record.SetTabletID(tabletId);
+            ev->Record.AddChannels(0);
+            runtime.SendToPipe(hiveTablet, senderA, ev.release(), 0, GetPipeConfigWithRetries());
+        }
+
+        {
+            auto ev = std::make_unique<TEvHive::TEvRevertCutTabletHistory>();
+            ev->Record.SetTabletID(tabletId);
+            ev->Record.AddChannels(2);
+            ev->Record.AddChannels(0); // this should do nothing - we've committed it
+            runtime.SendToPipe(hiveTablet, senderA, ev.release(), 0, GetPipeConfigWithRetries());
+        }
+
+        {
+            SendGetTabletStorageInfo(runtime, hiveTablet, tabletId, 0);
+
+            TAutoPtr<IEventHandle> handle;
+            auto getTabletStorageResult = runtime.GrabEdgeEventRethrow<TEvHive::TEvGetTabletStorageInfoResult>(handle);
+            const auto& tabletStorageInfo = getTabletStorageResult->Record.GetInfo();
+            UNIT_ASSERT_VALUES_EQUAL(tabletStorageInfo.GetChannels(0).GetHistory().size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(tabletStorageInfo.GetChannels(1).GetHistory().size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(tabletStorageInfo.GetChannels(2).GetHistory().size(), 6);
         }
     }
 }

@@ -624,3 +624,14 @@ message TEvConfigureScaleRecommender {
 message TEvConfigureScaleRecommenderReply {
     optional NKikimrProto.EReplyStatus Status = 1;
 }
+
+message TEvCommitCutTabletHistory {
+   optional fixed64 TabletID = 1;
+   repeated uint32 Channels = 2;
+}
+
+
+message TEvRevertCutTabletHistory {
+   optional fixed64 TabletID = 1;
+   repeated uint32 Channels = 2;
+}

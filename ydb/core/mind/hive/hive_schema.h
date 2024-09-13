@@ -179,9 +179,13 @@ struct Schema : NIceDb::Schema {
         struct Version : Column<4, NScheme::NTypeIds::Uint64> {};
         struct Timestamp : Column<5, NScheme::NTypeIds::Uint64> {};
         struct DeletedAtGeneration : Column<6, NScheme::NTypeIds::Uint64> { static constexpr uint64_t Default = 0; };
+        struct CutHistoryMode : Column<7, NScheme::NTypeIds::Uint64> {
+            using Type = NKikimrTabletBase::TEvCutTabletHistory::ECutHistoryMode;
+            static constexpr Type Default = NKikimrTabletBase::TEvCutTabletHistory::CutHistoryModeAuto;
+        };
 
         using TKey = TableKey<Tablet, Channel, Generation>;
-        using TColumns = TableColumns<Tablet, Channel, Generation, Group, Version, Timestamp, DeletedAtGeneration>;
+        using TColumns = TableColumns<Tablet, Channel, Generation, Group, Version, Timestamp, DeletedAtGeneration, CutHistoryMode>;
     };
 
     struct Node : Table<4> {

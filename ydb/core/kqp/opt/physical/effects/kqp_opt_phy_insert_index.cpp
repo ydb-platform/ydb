@@ -122,8 +122,9 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
         }
 
         for (const auto& column : table.Metadata->KeyColumnNames) {
-            indexTableColumnsSet.insert(column);
-            indexTableColumns.emplace_back(column);
+            if (indexTableColumnsSet.insert(column).second) {
+                indexTableColumns.emplace_back(column);
+            }
         }
 
         for (const auto& column : indexDesc->DataColumns) {

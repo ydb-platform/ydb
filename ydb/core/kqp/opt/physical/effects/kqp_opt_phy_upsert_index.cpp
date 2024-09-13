@@ -686,9 +686,11 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
 
     for (const auto& [tableNode, indexDesc] : indexes) {
         bool indexKeyColumnsUpdated = false;
-        THashSet<TStringBuf> indexTableColumns;
+        THashSet<TStringBuf> indexTableColumnsSet;
+        TVector<TStringBuf> indexTableColumns;
         for (const auto& column : indexDesc->KeyColumns) {
-            YQL_ENSURE(indexTableColumns.emplace(column).second);
+            YQL_ENSURE(indexTableColumnsSet.emplace(column).second);
+            indexTableColumns.emplace_back(column);
 
             if (mode == TKqpPhyUpsertIndexMode::UpdateOn && table.GetKeyColumnIndex(column)) {
                 // Table PK cannot be updated, so don't consider PK columns update as index update
@@ -701,7 +703,9 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
         }
 
         for (const auto& column : pk) {
-            indexTableColumns.insert(column);
+            if (indexTableColumnsSet.insert(column).second) {
+                indexTableColumns.emplace_back(column);
+            }
         }
 
         auto indexTableColumnsWithoutData = indexTableColumns;
@@ -710,7 +714,8 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
         bool optUpsert = true;
         for (const auto& column : indexDesc->DataColumns) {
             // TODO: Conder not fetching/updating data columns without input value.
-            YQL_ENSURE(indexTableColumns.emplace(column).second);
+            YQL_ENSURE(indexTableColumnsSet.emplace(column).second);
+            indexTableColumns.emplace_back(column);
 
             if (inputColumnsSet.contains(column)) {
                 indexDataColumnsUpdated = true;

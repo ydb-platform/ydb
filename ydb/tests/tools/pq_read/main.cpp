@@ -52,7 +52,7 @@ int main(int argc, const char* argv[]) {
         .SetNetworkThreadsNum(2)
         .SetEndpoint(opts.Endpoint)
         .SetDatabase(opts.Database)
-        .SetLog(CreateLogBackend("cerr"));
+        .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr").Release()));
     NYdb::TDriver driver(driverConfig);
 
     NYdb::NPersQueue::TPersQueueClient persqueueClient(driver);
@@ -61,7 +61,7 @@ int main(int argc, const char* argv[]) {
     settings
         .DisableClusterDiscovery(opts.DisableClusterDiscovery)
         .ConsumerName(opts.ConsumerName)
-        .AppendTopics(opts.TopicPath);
+        .AppendTopics(std::string{opts.TopicPath});
 
     std::shared_ptr<NYdb::NPersQueue::IReadSession> readSession;
     size_t messagesReceived = 0;

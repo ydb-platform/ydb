@@ -9,6 +9,8 @@
 
 #include <ydb/public/api/protos/ydb_table.pb.h>
 
+#include <google/protobuf/text_format.h>
+
 Y_UNIT_TEST_SUITE(YdbDump) {
 
 Y_UNIT_TEST(NotNullTypeDump) {

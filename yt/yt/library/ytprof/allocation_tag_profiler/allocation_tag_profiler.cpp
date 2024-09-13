@@ -69,8 +69,7 @@ private:
                 auto it = guages.find(tagValue);
                 if (it == guages.end()) {
                     it = guages.emplace(tagValue, Profiler_
-                        // TODO(babenko): migrate to std::string
-                        .WithTag(TString(tagKey), TString(tagValue))
+                        .WithTag(tagKey, tagValue)
                         .Gauge(Format("/%v", NYPath::ToYPathLiteral(tagKey))))
                         .first;
                     it->second.Update(usage);

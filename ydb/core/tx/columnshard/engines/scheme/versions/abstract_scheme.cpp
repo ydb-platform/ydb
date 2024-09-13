@@ -51,8 +51,10 @@ TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> ISnapshotSchema::Normali
                 }
                 continue;
             }
-        } else if (restoreColumnIds.contains(columnId)) {
-            AFL_VERIFY(!!GetExternalDefaultValueVerified(columnId) || GetIndexInfo().IsNullableVerified(columnId));
+        }
+        if (restoreColumnIds.contains(columnId)) {
+            AFL_VERIFY(!!GetExternalDefaultValueVerified(columnId) || GetIndexInfo().IsNullableVerified(columnId))("column_name",
+                                                                          GetIndexInfo().GetColumnName(columnId, false))("id", columnId);
             result->AddField(resultField, GetColumnLoaderVerified(columnId)->BuildDefaultAccessor(batch->num_rows())).Validate();
         }
     }

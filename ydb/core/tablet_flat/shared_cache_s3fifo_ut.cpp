@@ -17,31 +17,37 @@ namespace {
         ui32 CacheFlags2 : 4 = 0;
     };
 
-    struct TPageKey {
-        ui32 Id;
-
-        TPageKey(ui32 id)
-            : Id(id)
-        {}
-
-        auto operator<=>(const TPageKey&) const = default;
-
-        size_t GetHash() const {
-            return std::hash<ui32>()(Id);
-        }
-
-        TString ToString() const {
-            return std::to_string(Id);
-        }
-    };
-
     struct TPageTraits {
+        struct TPageKey {
+            ui32 Id;
+
+            TPageKey(ui32 id)
+                : Id(id)
+            {}
+        };
+        
         static ui64 GetSize(const TPage* page) {
             return page->Size;
         }
 
         static TPageKey GetKey(const TPage* page) {
             return {page->Id};
+        }
+
+        static size_t GetHash(const TPageKey& key) {
+            return std::hash<ui32>()(key.Id);
+        }
+
+        static bool Equals(const TPageKey& left, const TPageKey& right) {
+            return left.Id == right.Id;
+        }
+
+        static TString ToString(const TPageKey& key) {
+            return std::to_string(key.Id);
+        }
+
+        static TString GetKeyToString(const TPage* page) {
+            return ToString(GetKey(page));
         }
 
         static ES3FIFOPageLocation GetLocation(const TPage* page) {
@@ -69,7 +75,7 @@ namespace {
 Y_UNIT_TEST_SUITE(TS3FIFOGhostQueue) {
     
     Y_UNIT_TEST(Add) {
-        TS3FIFOGhostPageQueue<TPageKey, TPageTraits> queue(100);
+        TS3FIFOGhostPageQueue<TPageTraits> queue(100);
         UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "");
 
         queue.Add(1, 10);
@@ -89,7 +95,7 @@ Y_UNIT_TEST_SUITE(TS3FIFOGhostQueue) {
     }
 
     Y_UNIT_TEST(Erase) {
-        TS3FIFOGhostPageQueue<TPageKey, TPageTraits> queue(100);
+        TS3FIFOGhostPageQueue<TPageTraits> queue(100);
         UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "");
 
         queue.Add(1, 10);
@@ -111,7 +117,7 @@ Y_UNIT_TEST_SUITE(TS3FIFOGhostQueue) {
     }
 
     Y_UNIT_TEST(Erase_Add) {
-        TS3FIFOGhostPageQueue<TPageKey, TPageTraits> queue(100);
+        TS3FIFOGhostPageQueue<TPageTraits> queue(100);
         UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "");
 
         queue.Add(1, 10);
@@ -130,7 +136,7 @@ Y_UNIT_TEST_SUITE(TS3FIFOGhostQueue) {
     }
 
     Y_UNIT_TEST(Add_Big) {
-        TS3FIFOGhostPageQueue<TPageKey, TPageTraits> queue(100);
+        TS3FIFOGhostPageQueue<TPageTraits> queue(100);
         UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "");
 
         queue.Add(1, 101);
@@ -138,7 +144,7 @@ Y_UNIT_TEST_SUITE(TS3FIFOGhostQueue) {
     }
 
     Y_UNIT_TEST(UpdateLimit) {
-        TS3FIFOGhostPageQueue<TPageKey, TPageTraits> queue(100);
+        TS3FIFOGhostPageQueue<TPageTraits> queue(100);
         UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "");
 
         queue.Add(1, 10);
@@ -177,7 +183,7 @@ Y_UNIT_TEST_SUITE(TS3FIFOCache) {
     }
 
     Y_UNIT_TEST(Touch) {
-        TS3FIFOCache<TPage, TPageKey, TPageTraits> cache(100);
+        TS3FIFOCache<TPage, TPageTraits> cache(100);
 
         TPage page1{1, 2};
         UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page1), TVector<ui32>{});
@@ -241,7 +247,7 @@ Y_UNIT_TEST_SUITE(TS3FIFOCache) {
     }
 
     Y_UNIT_TEST(Touch_MainQueue) {
-        TS3FIFOCache<TPage, TPageKey, TPageTraits> cache(100);
+        TS3FIFOCache<TPage, TPageTraits> cache(100);
 
         TPage page1{1, 20};
         TPage page2{2, 30};
@@ -289,7 +295,7 @@ Y_UNIT_TEST_SUITE(TS3FIFOCache) {
     }
 
     Y_UNIT_TEST(EvictNext) {
-        TS3FIFOCache<TPage, TPageKey, TPageTraits> cache(100);
+        TS3FIFOCache<TPage, TPageTraits> cache(100);
 
         TPage page1{1, 20};
         TPage page2{2, 30};
@@ -341,10 +347,16 @@ Y_UNIT_TEST_SUITE(TS3FIFOCache) {
             << "SmallQueue: " << Endl
             << "MainQueue: " << Endl
             << "GhostQueue: {4 10b}"));
+
+        UNIT_ASSERT_VALUES_EQUAL(EvictNext(cache), std::optional<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
+            << "SmallQueue: " << Endl
+            << "MainQueue: " << Endl
+            << "GhostQueue: {4 10b}"));
     }
 
     Y_UNIT_TEST(UpdateLimit) {
-        TS3FIFOCache<TPage, TPageKey, TPageTraits> cache(100);
+        TS3FIFOCache<TPage, TPageTraits> cache(100);
 
         TPage page1{1, 20};
         TPage page2{2, 30};

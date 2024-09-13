@@ -15,8 +15,10 @@ enum class ES3FIFOPageLocation {
     MainQueue
 };
 
-template <typename TPageKey, typename TPageTraits>
+template <typename TPageTraits>
 class TS3FIFOGhostPageQueue {
+    using TPageKey = typename TPageTraits::TPageKey;
+
     struct TGhostPage {
         TPageKey Key;
         ui64 Size; // zero size is tombstone
@@ -31,11 +33,11 @@ class TS3FIFOGhostPageQueue {
         using is_transparent = void;
 
         inline size_t operator()(const TGhostPage* ghost) const {
-            return ghost->Key.GetHash();
+            return TPageTraits::GetHash(ghost->Key);
         }
 
         inline size_t operator()(const TPageKey& key) const {
-            return key.GetHash();
+            return TPageTraits::GetHash(key);
         }
     };
 
@@ -43,11 +45,11 @@ class TS3FIFOGhostPageQueue {
         using is_transparent = void;
 
         inline bool operator()(const TGhostPage* left, const TGhostPage* right) const {
-            return left->Key == right->Key;
+            return TPageTraits::Equals(left->Key, right->Key);
         }
 
         inline bool operator()(const TGhostPage* left, const TPageKey& right) const {
-            return left->Key == right;
+            return TPageTraits::Equals(left->Key, right);
         }
     };
 
@@ -58,14 +60,14 @@ public:
 
     void Add(const TPageKey& key, ui64 size) {
         if (Y_UNLIKELY(size == 0)) {
-            Y_DEBUG_ABORT_S("Empty " << key.ToString() << " page");
+            Y_DEBUG_ABORT_S("Empty " << TPageTraits::ToString(key) << " page");
             return;
         }
 
         TGhostPage* ghost = &GhostsQueue.emplace_back(key, size);
         if (Y_UNLIKELY(!GhostsSet.emplace(ghost).second)) {
             GhostsQueue.pop_back();
-            Y_DEBUG_ABORT_S("Duplicated " << key.ToString() << " page");
+            Y_DEBUG_ABORT_S("Duplicated " << TPageTraits::ToString(key) << " page");
             return;
         }
 
@@ -101,7 +103,7 @@ public:
             if (ghost->Size) { // isn't deleted
                 Y_DEBUG_ABORT_UNLESS(GhostsSet.contains(ghost));
                 if (count != 0) result << ", ";
-                result << "{" << ghost->Key.ToString() << " " << ghost->Size << "b}";
+                result << "{" << TPageTraits::ToString(ghost->Key) << " " << ghost->Size << "b}";
                 count++;
                 size += ghost->Size;
             }
@@ -132,8 +134,10 @@ private:
     TDeque<TGhostPage> GhostsQueue;
 };
 
-template <typename TPage, typename TPageKey, typename TPageTraits>
+template <typename TPage, typename TPageTraits>
 class TS3FIFOCache : public ICacheCache<TPage> {
+    using TPageKey = typename TPageTraits::TPageKey;
+
     struct TLimit {
         ui64 SmallQueueLimit;
         ui64 MainQueueLimit;
@@ -226,7 +230,7 @@ public:
             for (auto it = queue.Queue.begin(); it != queue.Queue.end(); it++) {
                 const TPage* page = &*it;
                 if (count != 0) result << ", ";
-                result << "{" << TPageTraits::GetKey(page).ToString() << " " << TPageTraits::GetFrequency(page) << "f " << TPageTraits::GetSize(page) << "b}";
+                result << "{" << TPageTraits::GetKeyToString(page) << " " << TPageTraits::GetFrequency(page) << "f " << TPageTraits::GetSize(page) << "b}";
                 count++;
                 size += TPageTraits::GetSize(page);
             }
@@ -335,7 +339,7 @@ private:
     TLimit Limit;
     TQueue SmallQueue;
     TQueue MainQueue;
-    TS3FIFOGhostPageQueue<TPageKey, TPageTraits> GhostQueue;
+    TS3FIFOGhostPageQueue<TPageTraits> GhostQueue;
 
 };
 

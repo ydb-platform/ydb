@@ -130,28 +130,34 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         }
     };
 
-    struct TS3FIFOPageKey {
-        TLogoBlobID LogoBlobID;
-        ui32 PageId;
-
-        auto operator<=>(const TS3FIFOPageKey&) const = default;
-
-        size_t GetHash() const {
-            return MultiHash(LogoBlobID.Hash(), PageId);
-        }
-
-        TString ToString() const {
-            return TStringBuilder() << "LogoBlobID: " << LogoBlobID.ToString() << " PageId: " << PageId;
-        }
-    };
-
     struct TS3FIFOPageTraits {
+        struct TPageKey {
+            TLogoBlobID LogoBlobID;
+            ui32 PageId;
+        };
+        
         static ui64 GetSize(const TPage* page) {
             return sizeof(TPage) + page->Size;
         }
 
-        static TS3FIFOPageKey GetKey(const TPage* page) {
+        static TPageKey GetKey(const TPage* page) {
             return {page->Collection->MetaId, page->PageId};
+        }
+
+        static size_t GetHash(const TPageKey& key) {
+            return MultiHash(key.LogoBlobID.Hash(), key.PageId);
+        }
+
+        static bool Equals(const TPageKey& left, const TPageKey& right) {
+            return left.PageId == right.PageId && left.LogoBlobID == right.LogoBlobID;
+        }
+
+        static TString ToString(const TPageKey& key) {
+            return TStringBuilder() << "LogoBlobID: " << key.LogoBlobID.ToString() << " PageId: " << key.PageId;
+        }
+
+        static TString GetKeyToString(const TPage* page) {
+            return ToString(GetKey(page));
         }
 
         static ES3FIFOPageLocation GetLocation(const TPage* page) {
@@ -263,7 +269,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         switch (Config->ReplacementPolicy) {
             case NKikimrSharedCache::S3FIFO:
-                return MakeHolder<TS3FIFOCache<TPage, TS3FIFOPageKey, TS3FIFOPageTraits>>(1);
+                return MakeHolder<TS3FIFOCache<TPage, TS3FIFOPageTraits>>(1);
             case NKikimrSharedCache::ThreeLeveledLRU:
             default: {
                 TCacheCacheConfig cacheCacheConfig(1, Config->Counters->FreshBytes, Config->Counters->StagingBytes, Config->Counters->WarmBytes);

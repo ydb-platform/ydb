@@ -153,7 +153,7 @@ namespace {
             ++Responses;
             ++Ctx->MonGroup.MarkedReadyToDeleteResponse();
             Ctx->MonGroup.MarkedReadyToDeleteWithResponseBytes() += GInfo->GetTopology().GType.PartSize(ev->Get()->Id);
-            STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB21, VDISKP(Ctx->VCtx, "Deleted local"), (LogoBlobID, ev->Get()->Id));
+            STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB21, VDISKP(Ctx->VCtx, "Deleted local"), (LogoBlobID, ev->Get()->Id));
         }
 
         bool IsDone() const {
@@ -200,7 +200,8 @@ namespace {
             if (ev->Get()->Tag != REQUEST_TIMEOUT_TAG) {
                 return;
             }
-            STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB24, VDISKP(Ctx->VCtx, "SendRequestsToCheckPartsOnMain timeout"));
+            STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB24, VDISKP(Ctx->VCtx, "CandidatesToDeleteAskFromMainBatchTimeout"));
+            Ctx->MonGroup.CandidatesToDeleteAskFromMainBatchTimeout()++;
             DeleteLocalParts();
         }
 
@@ -232,6 +233,12 @@ namespace {
                     partsOnMain += part.HasOnMain;
                 }
                 STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB26, VDISKP(Ctx->VCtx, "DeleteLocalParts"), (Parts, PartsRequester.GetResult().size()), (PartsOnMain, partsOnMain));
+
+                if (partsOnMain == 0) {
+                    STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB26, VDISKP(Ctx->VCtx, "Nothing to delete. PassAway"));
+                    PassAway();
+                    return;
+                }
             }
 
             PartsDeleter.DeleteParts(SelfId(), PartsRequester.GetResult());
@@ -251,12 +258,14 @@ namespace {
             if (ev->Get()->Tag != DELETE_TIMEOUT_TAG) {
                 return;
             }
-            STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB28, VDISKP(Ctx->VCtx, "DeleteLocalParts timeout"));
+            STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB28, VDISKP(Ctx->VCtx, "MarkReadyBatchTimeout"));
+            Ctx->MonGroup.MarkReadyBatchTimeout()++;
             PassAway();
         }
 
         void PassAway() override {
             Send(NotifyId, new NActors::TEvents::TEvCompleted(DELETER_ID));
+            STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB28, VDISKP(Ctx->VCtx, "TDeleter::PassAway"));
             TActorBootstrapped::PassAway();
         }
 

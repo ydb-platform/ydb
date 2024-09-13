@@ -490,14 +490,10 @@ std::pair<bool, std::vector<NYql::TIssue>> MergeLocks(const NKikimrMiniKQL::TTyp
 bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfiguration& config, bool rollbackTx,
     bool commitTx, const NKqpProto::TKqpPhyQuery& physicalQuery);
 
+bool HasOlapTableReadInTx(const NKqpProto::TKqpPhyQuery& physicalQuery);
 bool HasOlapTableWriteInStage(
     const NKqpProto::TKqpPhyStage& stage,
     const google::protobuf::RepeatedPtrField< ::NKqpProto::TKqpPhyTable>& tables);
-bool HasOltpTableWriteInStage(
-    const NKqpProto::TKqpPhyStage& stage,
-    const google::protobuf::RepeatedPtrField< ::NKqpProto::TKqpPhyTable>& tables);
-
-bool HasOlapTableReadInTx(const NKqpProto::TKqpPhyQuery& physicalQuery);
 bool HasOlapTableWriteInTx(const NKqpProto::TKqpPhyQuery& physicalQuery);
 bool HasOltpTableReadInTx(const NKqpProto::TKqpPhyQuery& physicalQuery);
 bool HasOltpTableWriteInTx(const NKqpProto::TKqpPhyQuery& physicalQuery);

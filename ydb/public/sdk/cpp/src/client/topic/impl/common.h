@@ -381,7 +381,7 @@ protected:
 
     void WaitEventsImpl() { // Assumes that we're under lock. Posteffect: HasEventsImpl() is true.
         while (!HasEventsImpl()) {
-            std::unique_lock<std::mutex> lk(Mutex, std::defer_lock);
+            std::unique_lock<std::mutex> lk(Mutex, std::adopt_lock);
             CondVar.wait(lk);
         }
     }

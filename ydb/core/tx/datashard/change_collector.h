@@ -1,4 +1,5 @@
 #pragma once
+#include "stream_scan_common.h"
 
 #include <ydb/core/engine/minikql/change_collector_iface.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
@@ -47,25 +48,7 @@ private:
 
 class IDataShardChangeCollector : public NMiniKQL::IChangeCollector {
 public:
-    // basic change record's info
-    struct TChange {
-        ui64 Order;
-        ui64 Group;
-        ui64 Step;
-        ui64 TxId;
-        TPathId PathId;
-        ui64 BodySize;
-        TPathId TableId;
-        ui64 SchemaVersion;
-        ui64 LockId = 0;
-        ui64 LockOffset = 0;
-
-        TInstant CreatedAt() const {
-            return Group
-                ? TInstant::MicroSeconds(Group)
-                : TInstant::MilliSeconds(Step);
-        }
-    };
+    using TChange = NStreamScan::TChange;
 
 public:
     virtual void OnRestart() = 0;

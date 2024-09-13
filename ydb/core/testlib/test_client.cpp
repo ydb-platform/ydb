@@ -975,7 +975,7 @@ namespace Tests {
 
         {
             IActor* txProxy = CreateTxProxy(Runtime->GetTxAllocatorTabletIds());
-            TActorId txProxyId = Runtime->Register(txProxy, nodeIdx, userPoolId);
+            TActorId txProxyId = Runtime->Register(txProxy, nodeIdx);
             Runtime->RegisterService(MakeTxProxyID(), txProxyId, nodeIdx);
         }
 
@@ -1000,7 +1000,7 @@ namespace Tests {
         if (BusServer && nodeIdx == 0) { // MsgBus and GRPC are run now only on first node
             {
                 IActor* proxy = BusServer->CreateProxy();
-                TActorId proxyId = Runtime->Register(proxy, nodeIdx, userPoolId, TMailboxType::Revolving, 0);
+                TActorId proxyId = Runtime->Register(proxy, nodeIdx, Runtime->GetAppData(nodeIdx).SystemPoolId, TMailboxType::Revolving, 0);
                 Runtime->RegisterService(NMsgBusProxy::CreateMsgBusProxyId(), proxyId, nodeIdx);
             }
         }

@@ -2,7 +2,7 @@
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/ssa_runtime_version.h>
-#include <ydb/core/formats/arrow/protos/ssa.pb.h>
+#include <ydb/library/formats/arrow/protos/ssa.pb.h>
 
 #include <ydb/library/yql/core/arrow_kernels/request/request.h>
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>

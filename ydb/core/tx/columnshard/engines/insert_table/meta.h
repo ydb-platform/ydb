@@ -1,6 +1,6 @@
 #pragma once
 #include <ydb/core/formats/arrow/special_keys.h>
-#include <ydb/core/formats/arrow/modifier/subset.h>
+#include <ydb/library/formats/arrow/modifier/subset.h>
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/engines/defs.h>
 #include <ydb/core/tx/data_events/common/modification_type.h>

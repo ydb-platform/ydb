@@ -79,8 +79,6 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
         const TString& columnName = resultFiltered->GetIndexInfo().GetColumnName(columnId);
         NActors::TLogContextGuard logGuard(NActors::TLogContextBuilder::Build()("field_name", columnName));
         auto columnInfo = stats->GetColumnInfo(columnId);
-        std::shared_ptr<IColumnMerger> merger = std::make_shared<TPlainMerger>();
-        auto resultField = resultFiltered->GetIndexInfo().GetColumnFieldVerified(columnId);
 
         TColumnMergeContext commonContext(
             columnId, resultFiltered, NSplitter::TSplitSettings().GetExpectedUnpackColumnChunkRawSize(), columnInfo);

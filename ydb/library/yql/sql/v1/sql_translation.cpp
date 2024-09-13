@@ -2041,7 +2041,7 @@ bool TSqlTranslation::StoreExternalTableSettingsEntry(const TIdentifier& id, con
 }
 
 bool TSqlTranslation::ValidateTableSettings(const TTableSettings& settings) {
-    if (settings.PartitionsCount) {
+    if (settings.PartitionCount) {
         if (!settings.StoreType || to_lower(settings.StoreType->Name) != "column") {
             Ctx.Error() << " PARTITION_COUNT can be used only with STORE=COLUMN";
             return false;
@@ -2109,13 +2109,13 @@ bool TSqlTranslation::StoreTableSettingsEntry(const TIdentifier& id, const TRule
             Ctx.Error() << to_upper(id.Name) << " value should be an integer";
             return false;
         }
-    } else if (to_lower(id.Name) == "partitions_count") {
+    } else if (to_lower(id.Name) == "partition_count") {
         if (reset) {
             Ctx.Error() << to_upper(id.Name) << " reset is not supported";
             return false;
         }
 
-        if (!StoreInt(*value, settings.PartitionsCount, Ctx)) {
+        if (!StoreInt(*value, settings.PartitionCount, Ctx)) {
             Ctx.Error() << to_upper(id.Name) << " value should be an integer";
             return false;
         }

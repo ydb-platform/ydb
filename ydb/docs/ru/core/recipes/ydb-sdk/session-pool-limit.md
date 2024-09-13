@@ -43,6 +43,7 @@
   Библиотека `database/sql` имеет свой пул соединений. Каждое соединение в `database/sql` соответствует конкретной сессии {{ ydb-short-name }}. Управлением пулом соединений в `database/sql` осуществляется с помощью функций `sql.DB.SetMaxOpenConns` и `sql.DB.SetMaxIdleConns`. Подробнее об этом написано в [документации](https://pkg.go.dev/database/sql#DB.SetMaxOpenConns) `database/sql`.
 
   Пример кода, использующего размер пула соединений `database/sql`:
+
   ```golang
   package main
 

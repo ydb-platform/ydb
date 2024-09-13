@@ -2049,7 +2049,7 @@ STRING_VALUE: ((STRING_SINGLE | STRING_DOUBLE | STRING_MULTILINE) (S | U | Y | J
 
 ID_PLAIN: ('a'..'z' | 'A'..'Z' | '_') ('a'..'z' | 'A'..'Z' | '_' | DIGIT)*;
 
-fragment ID_QUOTED_CORE: '``' | '\\`' | ~'`';
+fragment ID_QUOTED_CORE: '\\'. | '``' | ~('`' | '\\');
 ID_QUOTED: BACKTICK ID_QUOTED_CORE* BACKTICK;
 
 fragment DIGIT: '0'..'9';

@@ -25,6 +25,7 @@
 #include <ydb/core/protos/subdomains.pb.h>
 #include <ydb/core/protos/data_events.pb.h>
 #include <ydb/core/protos/statistics.pb.h>
+#include <ydb/core/protos/index_builder.pb.h>
 
 #include <util/stream/output.h>
 

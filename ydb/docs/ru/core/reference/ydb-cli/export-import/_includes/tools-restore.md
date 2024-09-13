@@ -36,7 +36,7 @@
 
 Приведенные ниже параметры позволяют ограничить нагрузку на базу данных, создаваемую в процессе загрузки данных.
 
-{% note warning "Внимание" %}
+{% note warning %}
 
 Некоторые из перечисленных ниже параметров имеют действующие значения по умолчанию . Это значит, что если даже ни один из них не задан в команде вызова `tools restore`, нагрузка все равно будет ограничена.
 
@@ -57,13 +57,13 @@
 
 Из текущей директории файловой системы:
 
-```
+```bash
 {{ ydb-cli }} -p quickstart tools restore -p . -i .
 ```
 
 Из заданной директории файловой системы:
 
-```
+```bash
 {{ ydb-cli }} -p quickstart tools restore -p . -i ~/backup_quickstart
 ```
 
@@ -71,18 +71,18 @@
 
 Из текущей директории файловой системы:
 
-```
+```bash
 {{ ydb-cli }} -p quickstart tools restore -p dir1/dir2 -i .
 ```
 
 Из заданной директории файловой системы:
 
-```
+```bash
 {{ ydb-cli }} -p quickstart tools restore -p dir1/dir2 -i ~/backup_quickstart
 ```
 
 Проверка соответствия схемы данных в базе данных и файловой системе:
 
-```
+```bash
 {{ ydb-cli }} -p quickstart tools restore -p dir1/dir2 -i ~/backup_quickstart --dry-run
 ```

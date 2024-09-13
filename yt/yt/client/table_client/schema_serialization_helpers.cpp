@@ -42,6 +42,8 @@ void TSerializableColumnSchema::Register(TRegistrar registrar)
         .Default();
     registrar.BaseClassParameter("expression", &TThis::Expression_)
         .Default();
+    registrar.BaseClassParameter("materialized", &TThis::Materialized_)
+        .Default();
     registrar.BaseClassParameter("aggregate", &TThis::Aggregate_)
         .Default();
     registrar.BaseClassParameter("sort_order", &TThis::SortOrder_)
@@ -81,6 +83,9 @@ void TSerializableColumnSchema::DeserializeFromCursor(NYson::TYsonPullParserCurs
         } else if (key == TStringBuf("expression")) {
             cursor->Next();
             SetExpression(ExtractTo<std::optional<TString>>(cursor));
+        } else if (key == TStringBuf("materialized")) {
+            cursor->Next();
+            SetMaterialized(ExtractTo<std::optional<bool>>(cursor));
         } else if (key == TStringBuf("aggregate")) {
             cursor->Next();
             SetAggregate(ExtractTo<std::optional<TString>>(cursor));

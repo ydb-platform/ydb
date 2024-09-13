@@ -24,7 +24,8 @@ mvn package -f ./ydb-java-examples
 
 {% include [init.md](../_includes/steps/01_init.md) %}
 
-Основные параметры инициализации драйвера
+Основные параметры инициализации драйвера:
+
 * Cтрока подключения с информацией об [эндпоинте](../../../concepts/connect.md#endpoint) и [базе данных](../../../concepts/connect.md#database). Единственный обязательный параметр.
 * Провайдер [аутенфикации](../../../recipes/ydb-sdk/auth.md##auth-provider). В случае отсутствия прямого указания будет использоваться [анонимное подключение](../../../concepts/auth.md).
 * Настройки [пула сессий](../../../recipes/ydb-sdk/session-pool-limit.md)
@@ -38,7 +39,7 @@ this.transport = GrpcTransport.forConnectionString(connectionString)
 this.queryClient = QueryClient.newClient(transport).build();
 ```
 
-Все операции с YDB [рекомендуется](../../../recipes/ydb-sdk/retry.md) выполнять с помощью класса-хелпера `SessionRetryContext`, который обеспечивает корректное повторное выполнение операции в случае частичной недоступности. Фрагмент кода для инициализации контекста ретраев:
+Все операции с {{ ydb-short-name }} [рекомендуется](../../../recipes/ydb-sdk/retry.md) выполнять с помощью класса-хелпера `SessionRetryContext`, который обеспечивает корректное повторное выполнение операции в случае частичной недоступности. Фрагмент кода для инициализации контекста ретраев:
 
 ```java
 this.retryCtx = SessionRetryContext.create(queryClient).build();

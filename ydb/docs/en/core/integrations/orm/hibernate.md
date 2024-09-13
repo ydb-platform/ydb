@@ -153,7 +153,7 @@ For example, for the `Group` class:
 
 The following `Groups` table will be created, and the `GroupName` will be indexed by a global secondary index named `group_name_index`:
 
-```sql
+```yql
 CREATE TABLE Groups (
     GroupId Int32 NOT NULL,
     GroupName Text,
@@ -162,7 +162,7 @@ CREATE TABLE Groups (
 
 ALTER TABLE Groups
   ADD INDEX group_name_index GLOBAL
-       ON (GroupName);
+    ON (GroupName);
 ```
 
 If you evolve the Group entity by adding the `deparment` field:
@@ -193,7 +193,7 @@ jakarta.persistence.schema-generation.database.action=update
 
 The result of changing the schema is:
 
-```sql
+```yql
 ALTER TABLE Groups
    ADD COLUMN department Text
 ```
@@ -212,7 +212,7 @@ For example, for `@OneToMany` generates a SQL script:
 
 - FetchType.LAZY
 
-  ```sql
+  ```yql
   SELECT
       g1_0.GroupId,
       g1_0.GroupName
@@ -233,7 +233,7 @@ For example, for `@OneToMany` generates a SQL script:
 
 - FetchType.EAGER
 
-  ```sql
+  ```yql
   SELECT
       g1_0.GroupId,
       g1_0.GroupName,

@@ -32,38 +32,57 @@ std::shared_ptr<arrow::Scalar> TPortionInfo::MaxValue(ui32 columnId) const {
     return result;
 }
 
-ui64 TPortionInfo::GetColumnRawBytes(const std::vector<ui32>& columnIds, const bool validation) const {
-    return GetColumnRawBytes(std::set<ui32>(columnIds.begin(), columnIds.end()), validation);
-}
-
-ui64 TPortionInfo::GetColumnRawBytes(const std::optional<std::set<ui32>>& entityIds, const bool validation) const {
+ui64 TPortionInfo::GetColumnRawBytes(const std::set<ui32>& entityIds, const bool validation) const {
     ui64 sum = 0;
     const auto aggr = [&](const TColumnRecord& r) {
         sum += r.GetMeta().GetRawBytes();
     };
-    AggregateIndexChunksData(aggr, Records, entityIds, validation);
+    AggregateIndexChunksData(aggr, Records, &entityIds, validation);
     return sum;
 }
 
-ui64 TPortionInfo::GetColumnBlobBytes(const std::optional<std::set<ui32>>& entityIds, const bool validation) const {
+ui64 TPortionInfo::GetColumnBlobBytes(const std::set<ui32>& entityIds, const bool validation) const {
     ui64 sum = 0;
     const auto aggr = [&](const TColumnRecord& r) {
         sum += r.GetBlobRange().GetSize();
     };
-    AggregateIndexChunksData(aggr, Records, entityIds, validation);
+    AggregateIndexChunksData(aggr, Records, &entityIds, validation);
     return sum;
 }
 
-ui64 TPortionInfo::GetColumnBlobBytes(const std::vector<ui32>& columnIds, const bool validation) const {
-    return GetColumnBlobBytes(std::set<ui32>(columnIds.begin(), columnIds.end()), validation);
+ui64 TPortionInfo::GetColumnRawBytes(const bool validation) const {
+    ui64 sum = 0;
+    const auto aggr = [&](const TColumnRecord& r) {
+        sum += r.GetMeta().GetRawBytes();
+    };
+    AggregateIndexChunksData(aggr, Records, nullptr, validation);
+    return sum;
 }
 
-ui64 TPortionInfo::GetIndexRawBytes(const std::optional<std::set<ui32>>& entityIds, const bool validation) const {
+ui64 TPortionInfo::GetColumnBlobBytes(const bool validation) const {
+    ui64 sum = 0;
+    const auto aggr = [&](const TColumnRecord& r) {
+        sum += r.GetBlobRange().GetSize();
+    };
+    AggregateIndexChunksData(aggr, Records, nullptr, validation);
+    return sum;
+}
+
+ui64 TPortionInfo::GetIndexRawBytes(const std::set<ui32>& entityIds, const bool validation) const {
     ui64 sum = 0;
     const auto aggr = [&](const TIndexChunk& r) {
         sum += r.GetRawBytes();
     };
-    AggregateIndexChunksData(aggr, Indexes, entityIds, validation);
+    AggregateIndexChunksData(aggr, Indexes, &entityIds, validation);
+    return sum;
+}
+
+ui64 TPortionInfo::GetIndexRawBytes(const bool validation) const {
+    ui64 sum = 0;
+    const auto aggr = [&](const TIndexChunk& r) {
+        sum += r.GetRawBytes();
+    };
+    AggregateIndexChunksData(aggr, Indexes, nullptr, validation);
     return sum;
 }
 

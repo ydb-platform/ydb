@@ -2,7 +2,7 @@
 
 Исключение столбцов из результата запроса `SELECT *`.
 
-**Примеры**
+## Примеры
 
 ``` yql
 SELECT * WITHOUT foo, bar FROM my_table;

@@ -7,9 +7,6 @@
 namespace NKikimr {
 
 template <typename TChangeRecord>
-struct TChangeRecordBuilderTrait;
-
-template <typename TChangeRecord>
 struct TChangeRecordBuilderContextTrait {};
 
 } // namespace NKikimr

@@ -18,7 +18,7 @@ The following options are available for the command:
 * `-R`: Recursive traversal of all subdirectories.
 * `-1`: Output a single schema object per row (for example, to be later handled in a script).
 
-**Examples**
+## Examples
 
 {% include [ydb-cli-profile.md](../../../../_includes/ydb-cli-profile.md) %}
 

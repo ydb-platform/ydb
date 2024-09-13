@@ -128,6 +128,7 @@ int TCommandImportFromS3::Run(TConfig& config) {
     settings.Bucket(AwsBucket);
     settings.AccessKey(AwsAccessKey);
     settings.SecretKey(AwsSecretKey);
+    settings.UseVirtualAddressing(UseVirtualAddressing);
 
     if (Description) {
         settings.Description(Description);

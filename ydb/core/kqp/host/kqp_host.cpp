@@ -811,6 +811,7 @@ public:
                 TKiDataQueryBlocks dataQueryBlocks(query);
 
                 auto queryAstStr = SerializeExpr(ctx, *query);
+                TMaybe<TString> traceId = SessionCtx->GetUserRequestContext() ? SessionCtx->GetUserRequestContext()->TraceId : TMaybe<TString>{};
 
                 bool useGenericQuery = ShouldUseGenericQuery(dataQueryBlocks);
                 bool useScanQuery = ShouldUseScanQuery(dataQueryBlocks, settings);
@@ -828,7 +829,7 @@ public:
                             future = Gateway->ExplainGenericQuery(Cluster, SessionCtx->Query().PreparingQuery->GetText());
                         } else {
                             future = Gateway->ExecGenericQuery(Cluster, SessionCtx->Query().PreparingQuery->GetText(), CollectParameters(query),
-                                querySettings, txSettings);
+                                querySettings, txSettings, traceId);
                         }
                     } else if (useScanQuery) {
                         ui64 rowsLimit = 0;
@@ -850,7 +851,7 @@ public:
                             future = Gateway->ExplainDataQueryAst(Cluster, queryAstStr);
                         } else {
                             future = Gateway->ExecDataQueryAst(Cluster, queryAstStr, CollectParameters(query),
-                                querySettings, txSettings);
+                                querySettings, txSettings, traceId);
                         }
                     }
                     break;
@@ -860,7 +861,7 @@ public:
                         txSettings.mutable_serializable_read_write();
 
                         future = Gateway->StreamExecGenericQuery(Cluster, SessionCtx->Query().PreparingQuery->GetText(), CollectParameters(query),
-                                querySettings, txSettings, SessionCtx->Query().ReplyTarget);
+                                querySettings, txSettings, SessionCtx->Query().ReplyTarget, traceId);
                     } else if (useScanQuery) {
                         future = Gateway->StreamExecScanQueryAst(Cluster, queryAstStr, CollectParameters(query),
                             querySettings, SessionCtx->Query().ReplyTarget, SessionCtx->Query().RpcCtx);
@@ -869,7 +870,7 @@ public:
                         txSettings.mutable_serializable_read_write();
 
                         future = Gateway->StreamExecDataQueryAst(Cluster, queryAstStr, CollectParameters(query),
-                            querySettings, txSettings, SessionCtx->Query().ReplyTarget);
+                            querySettings, txSettings, SessionCtx->Query().ReplyTarget, traceId);
                     }
                     break;
 

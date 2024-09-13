@@ -181,6 +181,10 @@ FeatureFlags {
   EnableScriptExecutionOperations: true
 }
 
+TableServiceConfig {
+    CompileTimeoutMs: 600000
+}
+
 QueryServiceConfig {
   Generic {
     Connector {

@@ -215,6 +215,7 @@ template <typename TChangeRecord>
 class TLocalTableWriter
     : public TActor<TLocalTableWriter<TChangeRecord>>
     , public NChangeExchange::TBaseChangeSender<TChangeRecord>
+    , public NChangeExchange::IChangeSenderIdentity
     , public NChangeExchange::IChangeSenderResolver
     , public NChangeExchange::ISenderFactory
     , private NSchemeCache::TSchemeCacheHelpers
@@ -227,7 +228,7 @@ class TLocalTableWriter
         if (!LogPrefix) {
             LogPrefix = TStringBuilder()
                 << "[LocalTableWriter]"
-                << this->PathId
+                << TablePathId
                 << TBase::SelfId() << " ";
         }
 
@@ -318,7 +319,7 @@ class TLocalTableWriter
         Resolving = true;
 
         auto request = MakeHolder<TNavigate>();
-        request->ResultSet.emplace_back(MakeNavigateEntry(this->PathId, TNavigate::OpTable));
+        request->ResultSet.emplace_back(MakeNavigateEntry(TablePathId, TNavigate::OpTable));
         this->Send(MakeSchemeCacheID(), new TEvNavigate(request.Release()));
     }
 
@@ -338,7 +339,7 @@ class TLocalTableWriter
 
         const auto& entry = result->ResultSet.at(0);
 
-        if (!CheckTableId(entry, this->PathId)) {
+        if (!CheckTableId(entry, TablePathId)) {
             return;
         }
 
@@ -407,7 +408,7 @@ class TLocalTableWriter
 
         auto& entry = result->ResultSet.at(0);
 
-        if (!CheckTableId(entry, this->PathId)) {
+        if (!CheckTableId(entry, TablePathId)) {
             return;
         }
 
@@ -437,7 +438,7 @@ class TLocalTableWriter
         return new TTablePartitionWriter<TChangeRecord>(
             this->SelfId(),
             partitionId,
-            TTableId(this->PathId, Schema->Version),
+            TTableId(TablePathId, Schema->Version),
             BuilderContext);
     }
 
@@ -448,8 +449,8 @@ class TLocalTableWriter
         TVector<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TRecordInfo> records(::Reserve(ev->Get()->Records.size()));
 
         for (auto& record : ev->Get()->Records) {
-            records.emplace_back(record.Offset, this->PathId, record.Data.size());
-            auto res = PendingRecords.emplace(record.Offset, TChangeRecordBuilderTrait<TChangeRecord>()
+            records.emplace_back(record.Offset, TablePathId, record.Data.size());
+            auto res = PendingRecords.emplace(record.Offset, typename TChangeRecord::TBuilder()
                 .WithSourceId(ev->Get()->Source)
                 .WithOrder(record.Offset)
                 .WithBody(std::move(record.Data))
@@ -528,9 +529,14 @@ public:
     template <class... TArgs>
     explicit TLocalTableWriter(const TPathId& tablePathId, TArgs&&... args)
         : TBase(&TThis::StateWork)
-        , TBaseSender(this, this, this, TActorId(), tablePathId)
+        , TBaseSender(this, this, this, this, TActorId())
+        , TablePathId(tablePathId)
         , BuilderContext(std::forward<TArgs>(args)...)
     {
+    }
+
+    TPathId GetChangeSenderIdentity() const override final {
+        return TablePathId;
     }
 
     STFUNC(StateWork) {
@@ -550,6 +556,7 @@ public:
 
 private:
     mutable TMaybe<TString> LogPrefix;
+    const TPathId TablePathId;
     TChangeRecordBuilderContextTrait<TChangeRecord> BuilderContext;
 
     TActorId Worker;

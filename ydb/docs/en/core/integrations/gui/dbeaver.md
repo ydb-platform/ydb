@@ -9,25 +9,28 @@ DBeaver allows you to work with {{ ydb-short-name }} using the Java DataBase Con
 
 
 To connect to {{ ydb-name }} from DBeaver, you will need the JDBC driver. Follow these steps to download the JDBC driver:
+
 1. Go to the [ydb-jdbc-driver repository](https://github.com/ydb-platform/ydb-jdbc-driver/releases).
 1. Select the latest release (tagged as `Latest`) and save the `ydb-jdbc-driver-shaded-<driver-version>.jar` file.
 
 Follow these steps to connect the downloaded JDBC driver:
 1. In the top menu of DBeaver, select the **Database** option, then select **Driver Manager**:
+
     ![](./_assets/dbeaver-driver-management.png)
 
-1. To create a new driver, click the **New** button in the **Driver Manager** window that opens
+2. To create a new driver, click the **New** button in the **Driver Manager** window that opens
+
     ![](./_assets/dbeaver-driver-create-new-driver.png)
 
-1. In the **Create Driver** window that opens, specify `YDB` in the **Driver Name** field:
+3. In the **Create Driver** window that opens, specify `YDB` in the **Driver Name** field:
 
     ![](./_assets/dbeaver-driver-create-new-driver-set-name.png)
 
-1.  Go to the **Libraries** section, click **Add File**, specify the path to the previously downloaded {{ ydb-short-name }} JDBC driver (the `ydb-jdbc-driver-shaded-<driver-version>.jar` file), and click **OK**:
+4.  Go to the **Libraries** section, click **Add File**, specify the path to the previously downloaded {{ ydb-short-name }} JDBC driver (the `ydb-jdbc-driver-shaded-<driver-version>.jar` file), and click **OK**:
 
     ![](./_assets/dbeaver-driver-management-driver.png)
 
-1. The **YDB** item will appear in the list of drivers. Double-click the new driver and go to the **Libraries** tab, click **Find Class**, and select `tech.ydb.jdbc.YdbDriver` from the dropdown list.
+5. The **YDB** item will appear in the list of drivers. Double-click the new driver and go to the **Libraries** tab, click **Find Class**, and select `tech.ydb.jdbc.YdbDriver` from the dropdown list.
 
     {% note warning %}
 
@@ -50,6 +53,7 @@ Perform the following steps to establish a connection:
     ```
 
     Where:
+
     - `ydb_endpoint` — the [endpoint](../../concepts/connect.md#endpoint) of the {{ydb-name}} cluster to which the connection will be made.
     - `ydb_database` — the path to the [database](../../concepts/glossary.md#database) in the {{ydb-name}} cluster to which queries will be made.
 

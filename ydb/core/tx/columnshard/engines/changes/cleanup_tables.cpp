@@ -17,13 +17,15 @@ void TCleanupTablesColumnEngineChanges::DoDebugString(TStringOutput& out) const 
 void TCleanupTablesColumnEngineChanges::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) {
     if (self && context.DB) {
         for (auto&& t : TablesToDrop) {
-            self->TablesManager.TryFinalizeDropPathOnExecute(*context.DB, t);
+            AFL_VERIFY(!self->InsertTable->HasDataInPathId(t));
+            AFL_VERIFY(self->TablesManager.TryFinalizeDropPathOnExecute(*context.DB, t));
         }
     }
 }
 
 void TCleanupTablesColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& /*context*/) {
     for (auto&& t : TablesToDrop) {
+        self->InsertTable->ErasePath(t);
         self->TablesManager.TryFinalizeDropPathOnComplete(t);
     }
     self->Subscribers->OnEvent(std::make_shared<NColumnShard::NSubscriber::TEventTablesErased>(TablesToDrop));

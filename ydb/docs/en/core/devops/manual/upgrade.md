@@ -18,12 +18,12 @@ You must update {{ ydb-short-name }} nodes one by one and monitor the cluster st
 
 All minor versions within a major version are compatible for updates. Major versions are consecutively compatible. To update to the next major version, you must first update to the latest minor release of the current major version. For example:
 
-* X.Y.* → X.Y.*: Update is possible, all minor versions within a single major version are compatible.
-* X.Y.Z (the latest available version in X.Y.*) → X.Y+1.* : Update is possible, major versions are consistent.
-* X.Y.* → X.Y+2.*: Update is impossible, major versions are inconsistent.
-* X.Y.* → X.Y-2.*: Update is impossible, major versions are inconsistent.
+* `X.Y.* → X.Y.*`: Update is possible, all minor versions within a single major version are compatible.
+* `X.Y.Z` (the latest available version in `X.Y.*`) → `X.Y+1.*` : Update is possible, major versions are consistent.
+* `X.Y.* → X.Y+2.*`: Update is impossible, major versions are inconsistent.
+* `X.Y.* → X.Y-2.*`: Update is impossible, major versions are inconsistent.
 
-A list of available versions can be found on the [download page](../../downloads/index.md). The YDB release policy is described in more details in the [Release management](../../contributor/manage-releases.md) article of the YDB development documentation.
+A list of available versions can be found on the [download page](../../downloads/index.md). The {{ ydb-short-name }} release policy is described in more details in the [Release management](../../contributor/manage-releases.md) article of the {{ ydb-short-name }} development documentation.
 
 {% note warning %}
 
@@ -33,10 +33,10 @@ Also, in any case, you cannot roll back more than 2 major versions relative to t
 
 ### Examples of version compatibility
 
-* v.22.2.5	->	v.22.2.47: Update is possible.
-* v.22.2.47	->	v.22.3.21: Update is possible.
-* v.22.2.40	->	v.22.3.21: Update is impossible, first upgrade to the latest minor version (v.22.2.47).
-* v.22.2.47	->	v.22.4.5: Update is impossible, upgrade to the next major version first (v.22.3.*).
+* v.22.2.5  ->  v.22.2.47: Update is possible.
+* v.22.2.47  ->  v.22.3.21: Update is possible.
+* v.22.2.40  ->  v.22.3.21: Update is impossible, first upgrade to the latest minor version (v.22.2.47).
+* v.22.2.47  ->  v.22.4.5: Update is impossible, upgrade to the next major version first (v.22.3.*).
 
 ## Checking update results {#upgrade_check}
 

@@ -189,7 +189,7 @@ std::unique_ptr<ITreeBuilder> CreateBuilderFromFactory(
 std::unique_ptr<ITreeBuilder> CreateBuilderFromFactory(
     INodeFactory* factory)
 {
-    return CreateBuilderFromFactory(factory, std::numeric_limits<int>::max());
+    return CreateBuilderFromFactory(std::move(factory), std::numeric_limits<int>::max());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

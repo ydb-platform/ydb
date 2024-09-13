@@ -146,6 +146,7 @@ class BaseTenant(abc.ABC):
         gateways['yql_core'] = {}
         gateways['yql_core']['flags'] = []
         gateways['yql_core']['flags'].append({'name': "_EnableMatchRecognize"})
+        gateways['yql_core']['flags'].append({'name': "_EnableStreamLookupJoin"})
 
     def fill_storage_config(self, storage, directory):
         storage['endpoint'] = os.getenv("YDB_ENDPOINT")
@@ -518,14 +519,6 @@ class YqTenant(BaseTenant):
         fq_config['rate_limiter'] = {'enabled': True}
         fq_config['quotas_manager'] = {'enabled': True}
         self.fill_rate_limiter_config(fq_config['rate_limiter'], "RateLimiter_" + self.uuid)
-
-        fq_config['read_actors_factory_config'] = {
-            's3_read_actor_factory_config': {
-                'retry_config': {
-                    'max_retry_time_ms': 3000
-                }
-            }
-        }
 
 
 class TenantType(Enum):

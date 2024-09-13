@@ -18,13 +18,13 @@ namespace NKqp {
     class TTestHelper {
     public:
         class TColumnSchema {
-            using TTypeDesc = void*;
             YDB_ACCESSOR_DEF(TString, Name);
-            YDB_ACCESSOR_DEF(NScheme::TTypeId, Type);
-            YDB_ACCESSOR_DEF(TTypeDesc, TypeDesc);
+            YDB_ACCESSOR_DEF(NScheme::TTypeInfo, TypeInfo);
             YDB_FLAG_ACCESSOR(Nullable, true);
         public:
             TString BuildQuery() const;
+
+            TColumnSchema& SetType(NScheme::TTypeId typeId);
         };
 
         using TUpdatesBuilder = NColumnShard::TTableUpdatesBuilder;
@@ -49,7 +49,7 @@ namespace NKqp {
         private:
             virtual TString GetObjectType() const = 0;
             TString BuildColumnsStr(const TVector<TColumnSchema>& clumns) const;
-            std::shared_ptr<arrow::Field> BuildField(const TString name, const NScheme::TTypeId typeId, void*const typeDesc, bool nullable) const;
+            std::shared_ptr<arrow::Field> BuildField(const TString name, const NScheme::TTypeInfo& typeInfo, bool nullable) const;
         };
 
         class TColumnTable : public TColumnTableBase {
@@ -63,9 +63,9 @@ namespace NKqp {
         };
 
     private:
-        TKikimrRunner Kikimr;
-        NYdb::NTable::TTableClient TableClient;
-        NYdb::NTable::TSession Session;
+        std::unique_ptr<TKikimrRunner> Kikimr;
+        std::unique_ptr<NYdb::NTable::TTableClient> TableClient;
+        std::unique_ptr<NYdb::NTable::TSession> Session;
 
     public:
         TTestHelper(const TKikimrSettings& settings);

@@ -32,7 +32,7 @@ TExprNode::TPtr TAggregateExpander::ExpandAggregateWithFullOutput()
     auto settings = Node->Child(3);
 
     bool allTraitsCollected = CollectTraits();
-    YQL_ENSURE(!HasSetting(*settings, "hopping"), "Aggregate with hopping unsupported here.");
+    // YQL_ENSURE(!HasSetting(*settings, "hopping"), "Aggregate with hopping unsupported here."); // TODO(YQ-3661): uncomment
 
     HaveDistinct = AnyOf(AggregatedColumns->ChildrenList(),
         [](const auto& child) { return child->ChildrenSize() == 3; });

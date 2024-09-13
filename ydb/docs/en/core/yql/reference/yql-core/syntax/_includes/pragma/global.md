@@ -43,7 +43,8 @@ Action:
 
 The warning code is returned with the text itself (it's displayed on the right side of the web interface).
 
-Example:
+#### Example
+
 `PRAGMA Warning("error", "*");`
 `PRAGMA Warning("disable", "1101");`
 `PRAGMA Warning("default", "4503");`
@@ -97,7 +98,7 @@ Controls implicit Coalesce for the key `JOIN` columns in the SimpleColumns mode.
 
 If the flag is set, then [JOIN](../../join.md) will require strict matching of key types.
 By default, JOIN preconverts keys to a shared type, which might result in performance degradation.
-StrictJoinKeyTypes is a [scoped](#pragmascope) setting.
+StrictJoinKeyTypes is a [scoped](../../pragma.md#pragmascope) setting.
 
 {% endif %}
 
@@ -125,6 +126,7 @@ Aligns the RANK/DENSE_RANK behavior with the standard if there are optional type
 
 * The result type is always Uint64 rather than Uint64?.
 * NULLs in keys are treated as equal to each other (the current implementation returns NULL).
+
 You can explicitly select the old behavior by using the `DisableAnsiRankForNullableKeys` pragma. If no pragma is set, then a warning is issued and the old version works.
 
 ### AnsiCurrentRow
@@ -181,7 +183,7 @@ Use Re2 UDF instead of Pcre to execute SQL the `REGEX`,`MATCH`,`RLIKE` statement
 
 In the classical version, the result of integer division remains integer (by default).
 If disabled, the result is always Double.
-ClassicDivision is a [scoped](#pragmascope) setting.
+ClassicDivision is a [scoped](../../pragma.md#pragmascope) setting.
 
 ### UnicodeLiterals
 
@@ -192,7 +194,7 @@ ClassicDivision is a [scoped](#pragmascope) setting.
 | Flag | false |
 
 When this mode is enabled, string literals without suffixes like "foo"/'bar'/@@multiline@@ will be of type `Utf8`, when disabled - `String`.
-UnicodeLiterals is a [scoped](#pragmascope) setting.
+UnicodeLiterals is a [scoped](../../pragma.md#pragmascope) setting.
 
 ### WarnUntypedStringLiterals
 
@@ -203,7 +205,7 @@ UnicodeLiterals is a [scoped](#pragmascope) setting.
 | Flag | false |
 
 When this mode is enabled, a warning will be generated for string literals without suffixes like "foo"/'bar'/@@multiline@@. It can be suppressed by explicitly choosing the suffix `s` for the `String` type, or `u` for the `Utf8` type.
-WarnUntypedStringLiterals is a [scoped](#pragmascope) setting.
+WarnUntypedStringLiterals is a [scoped](../../pragma.md#pragmascope) setting.
 
 ### AllowDotInAlias
 

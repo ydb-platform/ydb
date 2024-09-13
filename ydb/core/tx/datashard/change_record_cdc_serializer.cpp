@@ -61,6 +61,7 @@ public:
         case TChangeRecord::EKind::CdcHeartbeat:
             return SerializeHeartbeat(cmd, record);
         case TChangeRecord::EKind::AsyncIndex:
+        case TChangeRecord::EKind::IncrementalRestore:
             Y_ABORT("Unexpected");
         }
     }

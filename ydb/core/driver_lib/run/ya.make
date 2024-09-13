@@ -1,5 +1,15 @@
 LIBRARY(run)
 
+IF (OS_WINDOWS)
+    CFLAGS(
+        -DKIKIMR_DISABLE_S3_OPS
+    )
+ELSE()
+    PEERDIR(
+        contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core
+    )
+ENDIF()
+
 SRCS(
     auto_config_initializer.cpp
     config.cpp
@@ -21,7 +31,6 @@ SRCS(
 )
 
 PEERDIR(
-    contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core
     contrib/libs/protobuf
     ydb/library/actors/core
     ydb/library/actors/dnsresolver
@@ -165,6 +174,7 @@ PEERDIR(
     ydb/services/persqueue_v1
     ydb/services/rate_limiter
     ydb/services/replication
+    ydb/services/tablet
     ydb/services/ydb
 )
 

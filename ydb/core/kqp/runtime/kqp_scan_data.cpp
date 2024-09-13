@@ -28,7 +28,7 @@ TBytesStatistics GetUnboxedValueSize(const NUdf::TUnboxedValue& value, const NSc
         {
             return {
                 sizeof(NUdf::TUnboxedValue),
-                PgValueSize(value, NPg::TypeDescGetTypeLen(type.GetTypeDesc()))
+                PgValueSize(value, NPg::TypeDescGetTypeLen(type.GetPgTypeDesc()))
             };
         }
 
@@ -438,7 +438,7 @@ TBytesStatistics WriteColumnValuesFromArrowImpl(TAccessor editAccessor,
             return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::FixedSizeBinaryArray, NUdf::TStringRef>>(editAccessor, batch, columnIndex, columnPtr, columnType);
         }
         case NTypeIds::Pg:
-            switch (NPg::PgTypeIdFromTypeDesc(columnType.GetTypeDesc())) {
+            switch (NPg::PgTypeIdFromTypeDesc(columnType.GetPgTypeDesc())) {
                 case INT2OID:
                     return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::Int16Array>>(editAccessor, batch, columnIndex, columnPtr, columnType);
                 case INT4OID:

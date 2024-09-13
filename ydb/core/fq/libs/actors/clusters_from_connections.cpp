@@ -122,11 +122,17 @@ void FillGenericClusterConfigBase(
     FillClusterAuth(clusterCfg, connection.auth(), authToken, accountIdSignatures);
     clusterCfg.SetUseSsl(!common.GetDisableSslForGenericDataSources());
 
-    // In YQv1 we just hardcode desired protocols here.
+    // In YQv1 we just hardcode the appropriate protocols here.
     // In YQv2 protocol can be configured via `CREATE EXTERNAL DATA SOURCE` params.
     switch (dataSourceKind) {
         case NYql::NConnector::NApi::CLICKHOUSE:
             clusterCfg.SetProtocol(common.GetUseNativeProtocolForClickHouse() ? NYql::NConnector::NApi::EProtocol::NATIVE : NYql::NConnector::NApi::EProtocol::HTTP);
+            break;
+        case NYql::NConnector::NApi::GREENPLUM:
+            clusterCfg.SetProtocol(NYql::NConnector::NApi::EProtocol::NATIVE);
+            break;
+        case NYql::NConnector::NApi::MYSQL:
+            clusterCfg.SetProtocol(NYql::NConnector::NApi::EProtocol::NATIVE);
             break;
         case NYql::NConnector::NApi::POSTGRESQL:
             clusterCfg.SetProtocol(NYql::NConnector::NApi::EProtocol::NATIVE);

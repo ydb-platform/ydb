@@ -6,6 +6,7 @@
 #include <ydb/core/tx/columnshard/engines/reader/plain_reader/constructor/constructor.h>
 #include <ydb/core/tx/columnshard/engines/reader/sys_view/abstract/policy.h>
 #include <ydb/core/tx/columnshard/engines/reader/sys_view/constructor/constructor.h>
+#include <ydb/core/tx/columnshard/transactions/locks/read_start.h>
 
 namespace NKikimr::NOlap::NReader {
 
@@ -40,13 +41,14 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
     {
         TReadDescription read(snapshot, request.GetReverse());
         read.PathId = request.GetPathId();
+        read.LockId = LockId;
         read.ReadNothing = !Self->TablesManager.HasTable(read.PathId);
         std::unique_ptr<IScannerConstructor> scannerConstructor(
             new NPlain::TIndexScannerConstructor(snapshot, request.GetItemsLimit(), request.GetReverse()));
         read.ColumnIds = request.GetColumnIds();
         read.ColumnNames = request.GetColumnNames();
         if (request.RangesFilter) {
-            read.PKRangesFilter = std::move(*request.RangesFilter);
+            read.PKRangesFilter = request.RangesFilter;
         }
 
         const TVersionedIndex* vIndex = Self->GetIndexOptional() ? &Self->GetIndexOptional()->GetVersionedIndex() : nullptr;
@@ -75,9 +77,12 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
     if (Self->HasIndex()) {
         index = &Self->GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex();
     }
+    readMetadataRange->OnBeforeStartReading(*Self);
+
     const ui64 requestCookie = Self->InFlightReadsTracker.AddInFlightRequest(readMetadataRange, index);
     auto scanActor = ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor, Self->GetStoragesManager(), TComputeShardingPolicy(),
-        ScanId, TxId, ScanGen, requestCookie, Self->TabletID(), TDuration::Max(), readMetadataRange, NKikimrDataEvents::FORMAT_ARROW,
+        ScanId, LockId.value_or(0), ScanGen, requestCookie, Self->TabletID(), TDuration::Max(), readMetadataRange,
+        NKikimrDataEvents::FORMAT_ARROW,
         Self->Counters.GetScanCounters()));
 
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TTxInternalScan started")("actor_id", scanActor)("trace_detailed", detailedInfo);

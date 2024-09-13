@@ -3,12 +3,16 @@
 This section provides basic information on working with external [PostgreSQL](http://postgresql.org) databases.
 
 To work with an external PostgreSQL database, you need to follow these steps:
+
 1. Create a [secret](../datamodel/secrets.md) containing the password for connecting to the database.
-    ```sql
+
+    ```yql
     CREATE OBJECT postgresql_datasource_user_password (TYPE SECRET) WITH (value = "<password>");
     ```
-1. Create an [external data source](../datamodel/external_data_source.md) that describes a specific database within the PostgreSQL cluster. By default, the [namespace](https://www.postgresql.org/docs/current/catalog-pg-namespace.html) `public` is used for reading, but this value can be changed using the optional `SCHEMA` parameter. The network connection is made using the standard ([Frontend/Backend Protocol](https://www.postgresql.org/docs/current/protocol.html)) over TCP transport (`PROTOCOL="NATIVE"`). You can enable encryption of connections to the external database using the `USE_TLS="TRUE"` parameter.
-    ```sql
+
+2. Create an [external data source](../datamodel/external_data_source.md) that describes a specific database within the PostgreSQL cluster. By default, the [namespace](https://www.postgresql.org/docs/current/catalog-pg-namespace.html) `public` is used for reading, but this value can be changed using the optional `SCHEMA` parameter. The network connection is made using the standard ([Frontend/Backend Protocol](https://www.postgresql.org/docs/current/protocol.html)) over TCP transport (`PROTOCOL="NATIVE"`). You can enable encryption of connections to the external database using the `USE_TLS="TRUE"` parameter.
+
+    ```yql
     CREATE EXTERNAL DATA SOURCE postgresql_datasource WITH (
         SOURCE_TYPE="PostgreSQL",
         LOCATION="<host>:<port>",
@@ -21,17 +25,19 @@ To work with an external PostgreSQL database, you need to follow these steps:
         SCHEMA="<schema>"
     );
     ```
-1. {% include [!](_includes/connector_deployment.md) %}
-1. [Execute a query](#query) to the database.
 
-## Query syntax { #query }
+3. {% include [!](_includes/connector_deployment.md) %}
+4. [Execute a query](#query) to the database.
+
+## Query syntax {#query}
 The following SQL query format is used to work with PostgreSQL:
 
-```sql
+```yql
 SELECT * FROM postgresql_datasource.<table_name>
 ```
 
 where:
+
 - `postgresql_datasource` - identifier of the external data source;
 - `<table_name>` - table name within the external data source.
 

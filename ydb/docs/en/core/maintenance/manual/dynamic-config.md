@@ -15,6 +15,7 @@ This configuration is uploaded to the cluster, where it is reliably stored and d
 ### Configuration examples {#example}
 
 Example of a minimal dynamic configuration for a single-datacenter cluster:
+
 ```yaml
 # Configuration metadata.
 # This field is managed by the server.

@@ -321,14 +321,18 @@ private:
     ui64 CPU = 0;
 };
 
-struct TAggregatedStats {
+struct TTableAggregatedStats {
     TPartitionStats Aggregated;
     THashMap<TShardIdx, TPartitionStats> PartitionStats;
-    THashMap<TPathId, TPartitionStats> TableStats;
     size_t PartitionStatsUpdated = 0;
 
     void UpdateShardStats(TShardIdx datashardIdx, const TPartitionStats& newStats);
-    void UpdateTableStats(const TPathId& pathId, const TPartitionStats& newStats);
+};
+
+struct TAggregatedStats : public TTableAggregatedStats {
+    THashMap<TPathId, TTableAggregatedStats> TableStats;
+
+    void UpdateTableStats(TShardIdx datashardIdx, const TPathId& pathId, const TPartitionStats& newStats);
 };
 
 struct TSubDomainInfo;
@@ -2629,12 +2633,13 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
         static bool IsDropped(const TItem& item);
     };
 
-    ui64 Id;
+    ui64 Id;  // TxId from the original TEvCreateExportRequest
     TString Uid;
     EKind Kind;
     TString Settings;
     TPathId DomainPathId;
     TMaybe<TString> UserSID;
+    TString PeerName;  // required for making audit log records
     TVector<TItem> Items;
 
     TPathId ExportPathId = InvalidPathId;
@@ -2659,12 +2664,14 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
             const TString& uid,
             const EKind kind,
             const TString& settings,
-            const TPathId domainPathId)
+            const TPathId domainPathId,
+            const TString& peerName)
         : Id(id)
         , Uid(uid)
         , Kind(kind)
         , Settings(settings)
         , DomainPathId(domainPathId)
+        , PeerName(peerName)
     {
     }
 
@@ -2674,8 +2681,9 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
             const TString& uid,
             const EKind kind,
             const TSettingsPB& settingsPb,
-            const TPathId domainPathId)
-        : TExportInfo(id, uid, kind, SerializeSettings(settingsPb), domainPathId)
+            const TPathId domainPathId,
+            const TString& peerName)
+        : TExportInfo(id, uid, kind, SerializeSettings(settingsPb), domainPathId, peerName)
     {
     }
 
@@ -2786,12 +2794,13 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         static bool IsDone(const TItem& item);
     };
 
-    ui64 Id;
+    ui64 Id;  // TxId from the original TEvCreateImportRequest
     TString Uid;
     EKind Kind;
     Ydb::Import::ImportFromS3Settings Settings;
     TPathId DomainPathId;
     TMaybe<TString> UserSID;
+    TString PeerName;  // required for making audit log records
 
     EState State = EState::Invalid;
     TString Issue;
@@ -2807,12 +2816,14 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
             const TString& uid,
             const EKind kind,
             const Ydb::Import::ImportFromS3Settings& settings,
-            const TPathId domainPathId)
+            const TPathId domainPathId,
+            const TString& peerName)
         : Id(id)
         , Uid(uid)
         , Kind(kind)
         , Settings(settings)
         , DomainPathId(domainPathId)
+        , PeerName(peerName)
     {
     }
 
@@ -2920,7 +2931,8 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
     enum class EBuildKind : ui32 {
         BuildKindUnspecified = 0,
-        BuildIndex = 10,
+        BuildSecondaryIndex = 10,
+        BuildVectorIndex = 11,
         BuildColumns = 20,
     };
 
@@ -2948,6 +2960,11 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     TVector<NKikimrSchemeOp::TTableDescription> ImplTableDescriptions;
 
     std::variant<std::monostate, NKikimrSchemeOp::TVectorIndexKmeansTreeDescription> SpecializedIndexDescription;
+
+    struct TKMeansTreeSettings {
+        ui64 K = 128;
+    };
+    TKMeansTreeSettings KMeansSettings;
 
     EState State = EState::Invalid;
     TString Issue;
@@ -3009,7 +3026,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             result << " DebugMessage: " << DebugMessage;
             result << " SeqNoRound: " << SeqNoRound;
             result << " Processed: " << Processed.ToString();
-            
+
             result << " }";
 
             return result;
@@ -3025,6 +3042,66 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
     TBillingStats Processed;
     TBillingStats Billed;
+
+    struct TSampleK {
+        struct TRow {
+            ui64 P = 0;
+            TString Row;
+
+            explicit TRow(ui64 p, TString&& row)
+                : P{p}
+                , Row{std::move(row)}
+            {
+            }
+
+            bool operator<(const TRow& other) const {
+                return P < other.P;
+            }
+        };
+        using TRows = TVector<TRow>;
+
+        TRows Rows;
+        ui64 MaxProbability = std::numeric_limits<ui64>::max();
+
+        void MakeWeakTop(ui64 k) {
+            // 2 * k is needed to make it linear, 2 * N at all.
+            // x * k approximately is x / (x - 1) * N, but with larger x more memory used
+            if (Rows.size() < 2 * k) {
+                return;
+            }
+            MakeTop(k);
+        }
+
+        void MakeStrictTop(ui64 k) {
+            // The idea is send to shards smallest possible max probability
+            // Even if only single element was pushed from last time,
+            // we want to account it and decrease max possible probability.
+            // to potentially decrease counts of serialized and sent by network rows
+            if (Rows.size() < k) {
+                return;
+            }
+            if (Rows.size() == k) {
+                if (Y_UNLIKELY(MaxProbability == std::numeric_limits<ui64>::max())) {
+                    MaxProbability = std::max_element(Rows.begin(), Rows.end())->P;
+                }
+                return;
+            }
+            MakeTop(k);
+        }
+
+    private:
+        void MakeTop(ui64 k) {
+            Y_ASSERT(k > 0);
+            auto kth = Rows.begin() + k - 1;
+            // TODO(mbkkt) use floyd rivest 
+            std::nth_element(Rows.begin(), kth, Rows.end());
+            Rows.erase(kth + 1, Rows.end());
+            Y_ASSERT(kth->P < MaxProbability);
+            MaxProbability = kth->P;
+        }
+    };
+
+    TSampleK Sample;
 
     TIndexBuildInfo(TIndexBuildId id, TString uid)
         : Id(id)
@@ -3146,11 +3223,11 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             row.template GetValueOrDefault<Schema::IndexBuild::UnlockTxDone>(
                 indexInfo->UnlockTxDone);
 
-        // note: please note that here we specify BuildIndex as operation default,
-        // because previosly this table was dedicated for build index operations only.
+        // note: please note that here we specify BuildSecondaryIndex as operation default,
+        // because previosly this table was dedicated for build secondary index operations only.
         indexInfo->BuildKind = TIndexBuildInfo::EBuildKind(
             row.template GetValueOrDefault<Schema::IndexBuild::BuildKind>(
-                ui32(TIndexBuildInfo::EBuildKind::BuildIndex)));
+                ui32(TIndexBuildInfo::EBuildKind::BuildSecondaryIndex)));
 
         indexInfo->AlterMainTableTxId =
             row.template GetValueOrDefault<Schema::IndexBuild::AlterMainTableTxId>(
@@ -3210,8 +3287,16 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         return CancelRequested;
     }
 
+    bool IsBuildSecondaryIndex() const {
+        return BuildKind == EBuildKind::BuildSecondaryIndex;
+    }
+
+    bool IsBuildVectorIndex() const {
+        return BuildKind == EBuildKind::BuildVectorIndex;
+    }
+
     bool IsBuildIndex() const {
-        return BuildKind == EBuildKind::BuildIndex;
+        return IsBuildSecondaryIndex() || IsBuildVectorIndex();
     }
 
     bool IsBuildColumns() const {

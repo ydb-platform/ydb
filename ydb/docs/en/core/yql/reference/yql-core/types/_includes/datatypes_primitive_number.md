@@ -1,6 +1,6 @@
 | Type | Description | Notes |
 | ----- | ----- | ----- |
-| `Bool ` | Boolean value. |
+| `Bool` | Boolean value. |
 | `Int8` | A signed integer.<br/>Acceptable values: from -2<sup>7</sup> to 2<sup>7</sup>–1. |
 | `Int16` | A signed integer.<br/>Acceptable values: from –2<sup>15</sup> to 2<sup>15</sup>–1. |
 | `Int32` | A signed integer.<br/>Acceptable values: from –2<sup>31</sup> to 2<sup>31</sup>–1. |

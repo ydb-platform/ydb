@@ -1043,12 +1043,11 @@ Y_UNIT_TEST_SUITE(Viewer) {
     TVector<TString> DifferentWordsDictionary = { "/orders", "/peoples", "/OrdinaryScheduleTables" };
 
     void FuzzySearcherTest(TVector<TString>& dictionary, TString search, ui32 limit, TVector<TString> expectations) {
-        auto fuzzy = FuzzySearcher<TString>(dictionary);
-        auto result = fuzzy.Search(search, limit);
+        auto result = FuzzySearcher::Search(dictionary, search, limit);
 
         UNIT_ASSERT_VALUES_EQUAL(expectations.size(), result.size());
         for (ui32 i = 0; i < expectations.size(); i++) {
-            UNIT_ASSERT_VALUES_EQUAL(expectations[i], result[i]);
+            UNIT_ASSERT_VALUES_EQUAL(expectations[i], *result[i]);
         }
     }
 
@@ -1312,7 +1311,10 @@ Y_UNIT_TEST_SUITE(Viewer) {
         JsonAutocompleteTest(HTTP_METHOD_GET, value, "nam", "/Root/Database", {"orders", "products"});
         VerifyJsonAutocompleteSuccess(value, {
             "name",
+            "name",
             "id",
+            "id",
+            "description",
             "description",
         });
     }
@@ -1322,7 +1324,10 @@ Y_UNIT_TEST_SUITE(Viewer) {
         JsonAutocompleteTest(HTTP_METHOD_POST, value, "nam", "/Root/Database", {"orders", "products"});
         VerifyJsonAutocompleteSuccess(value, {
             "name",
+            "name",
             "id",
+            "id",
+            "description",
             "description",
         });
     }
@@ -1816,8 +1821,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TKeepAliveHttpClient httpClient("localhost", monPort);
         TStringStream responseStream;
         TKeepAliveHttpClient::THeaders headers;
-        headers["Content-Type"] = "application/json";
-        const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoGet("/viewer/feature_flags?timeout=600000&base64=false", &responseStream, headers);
+        headers["Accept"] = "application/json";
+        const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoGet("/viewer/feature_flags", &responseStream, headers);
         const TString response = responseStream.ReadAll();
         UNIT_ASSERT_EQUAL_C(statusCode, HTTP_OK, statusCode << ": " << response);
         NJson::TJsonReaderConfig jsonCfg;

@@ -11,7 +11,7 @@
 ## Создание группы колонок
 ```ADD FAMILY``` — создаёт новую группу колонок в строковой таблице. Приведенный ниже код создаст в таблице ```series_with_families``` группу колонок ```family_small```.
 
-```sql
+```yql
 ALTER TABLE series_with_families ADD FAMILY family_small (
     DATA = "ssd",
     COMPRESSION = "off"
@@ -22,24 +22,24 @@ ALTER TABLE series_with_families ADD FAMILY family_small (
 
 При помощи команды ```ALTER COLUMN``` можно изменить группу колонок для указанной колонки. Приведенный ниже код для колонки ```release_date``` в таблице ```series_with_families``` сменит группу колонок на ```family_small```.
 
-```sql
+```yql
 ALTER TABLE series_with_families ALTER COLUMN release_date SET FAMILY family_small;
 ```
 
 Две предыдущие команды можно объединить в один вызов ```ALTER TABLE```. Приведенный ниже код создаст в таблице ```series_with_families``` группу колонок ```family_small``` и установит её для колонки ```release_date```.
 
-```sql
+```yql
 ALTER TABLE series_with_families
-	ADD FAMILY family_small (
-    	DATA = "ssd",
-    	COMPRESSION = "off"
-	),
-	ALTER COLUMN release_date SET FAMILY family_small;
+  ADD FAMILY family_small (
+      DATA = "ssd",
+      COMPRESSION = "off"
+  ),
+  ALTER COLUMN release_date SET FAMILY family_small;
 ```
 
 При помощи команды ```ALTER FAMILY``` можно изменить параметры группы колонок. Приведенный ниже код для группы колонок ```default``` в таблице ```series_with_families``` сменит тип хранилища на ```hdd```:
 
-```sql
+```yql
 ALTER TABLE series_with_families ALTER FAMILY default SET DATA "hdd";
 ```
 

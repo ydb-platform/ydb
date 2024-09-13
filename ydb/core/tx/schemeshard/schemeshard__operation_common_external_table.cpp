@@ -54,7 +54,7 @@ bool Validate(const TString& sourceType, const NKikimrSchemeOp::TExternalTableDe
 Ydb::Type CreateYdbType(const NScheme::TTypeInfo& typeInfo, bool notNull) {
     Ydb::Type ydbType;
     if (typeInfo.GetTypeId() == NScheme::NTypeIds::Pg) {
-        auto* typeDesc = typeInfo.GetTypeDesc();
+        auto typeDesc = typeInfo.GetPgTypeDesc();
         auto* pg = ydbType.mutable_pg_type();
         pg->set_type_name(NPg::PgTypeNameFromTypeDesc(typeDesc));
         pg->set_oid(NPg::PgTypeIdFromTypeDesc(typeDesc));
@@ -113,6 +113,14 @@ std::pair<TExternalTableInfo::TPtr, TMaybe<TString>> CreateExternalTable(
         }
 
         auto typeName = NMiniKQL::AdaptLegacyYqlType(col.GetType());
+        if (typeName == "Decimal(22,9)"sv) {
+            //
+            // typename is reformatted as above
+            // should discard (SCALE,PRECISION)
+            // they are validated to be (22,9)
+            //
+            typeName = "Decimal"sv;
+        }
         const NScheme::IType* type = typeRegistry->GetType(typeName);
 
         NScheme::TTypeInfo typeInfo;
@@ -124,7 +132,7 @@ std::pair<TExternalTableInfo::TPtr, TMaybe<TString>> CreateExternalTable(
             }
             typeInfo = NScheme::TTypeInfo(type->GetTypeId());
         } else {
-            auto* typeDesc = NPg::TypeDescFromPgTypeName(typeName);
+            auto typeDesc = NPg::TypeDescFromPgTypeName(typeName);
             if (!typeDesc) {
                 errStr = Sprintf("Type '%s' specified for column '%s' is not supported by storage", col.GetType().data(), colName.data());
                 return std::make_pair(nullptr, errStr);

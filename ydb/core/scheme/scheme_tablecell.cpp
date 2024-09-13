@@ -122,9 +122,7 @@ namespace {
         if (!SerializeCellVecInit(cells, resultBuffer, resultCells))
             return;
 
-        size_t size = sizeof(ui16);
-        for (auto& cell : cells)
-            size += sizeof(TCellHeader) + cell.Size();
+        auto size = TSerializedCellVec::SerializedSize(cells);
 
         resultBuffer.ReserveAndResize(size);
         char* resultBufferData = resultBuffer.Detach();
@@ -252,6 +250,14 @@ TString TSerializedCellVec::Serialize(TConstArrayRef<TCell> cells) {
     SerializeCellVec(cells, result, nullptr /*resultCells*/);
 
     return result;
+}
+
+size_t TSerializedCellVec::SerializedSize(TConstArrayRef<TCell> cells) {
+    size_t size = sizeof(ui16) + sizeof(TCellHeader) * cells.size();
+    for (auto& cell : cells) {
+        size += cell.Size();
+    }
+    return size;
 }
 
 bool TSerializedCellVec::DoTryParse(const TString& data) {
@@ -424,7 +430,7 @@ TString DbgPrintCell(const TCell& r, NScheme::TTypeInfo typeInfo, const NScheme:
     TString res;
 
     if (typeId == NScheme::NTypeIds::Pg) {
-        res = NPg::PgTypeNameFromTypeDesc(typeInfo.GetTypeDesc());
+        res = NPg::PgTypeNameFromTypeDesc(typeInfo.GetPgTypeDesc());
     } else {
         NScheme::ITypeSP t = reg.GetType(typeId);
 

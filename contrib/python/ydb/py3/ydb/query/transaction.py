@@ -15,6 +15,7 @@ from .._grpc.grpcwrapper import ydb_query as _ydb_query
 from ..connection import _RpcState as RpcState
 
 from . import base
+from ..settings import BaseRequestSettings
 
 logger = logging.getLogger(__name__)
 
@@ -214,7 +215,7 @@ class BaseQueryTxContext:
         """
         return self._tx_state.tx_id
 
-    def _begin_call(self, settings: Optional[base.QueryClientSettings]) -> "BaseQueryTxContext":
+    def _begin_call(self, settings: Optional[BaseRequestSettings]) -> "BaseQueryTxContext":
         self._tx_state._check_invalid_transition(QueryTxStateEnum.BEGINED)
 
         return self._driver(
@@ -226,7 +227,7 @@ class BaseQueryTxContext:
             (self._session_state, self._tx_state, self),
         )
 
-    def _commit_call(self, settings: Optional[base.QueryClientSettings]) -> "BaseQueryTxContext":
+    def _commit_call(self, settings: Optional[BaseRequestSettings]) -> "BaseQueryTxContext":
         self._tx_state._check_invalid_transition(QueryTxStateEnum.COMMITTED)
 
         return self._driver(
@@ -238,7 +239,7 @@ class BaseQueryTxContext:
             (self._session_state, self._tx_state, self),
         )
 
-    def _rollback_call(self, settings: Optional[base.QueryClientSettings]) -> "BaseQueryTxContext":
+    def _rollback_call(self, settings: Optional[BaseRequestSettings]) -> "BaseQueryTxContext":
         self._tx_state._check_invalid_transition(QueryTxStateEnum.ROLLBACKED)
 
         return self._driver(
@@ -253,11 +254,12 @@ class BaseQueryTxContext:
     def _execute_call(
         self,
         query: str,
-        commit_tx: bool = False,
-        syntax: base.QuerySyntax = None,
-        exec_mode: base.QueryExecMode = None,
-        parameters: dict = None,
-        concurrent_result_sets: bool = False,
+        commit_tx: Optional[bool],
+        syntax: Optional[base.QuerySyntax],
+        exec_mode: Optional[base.QueryExecMode],
+        parameters: Optional[dict],
+        concurrent_result_sets: Optional[bool],
+        settings: Optional[BaseRequestSettings],
     ) -> Iterable[_apis.ydb_query.ExecuteQueryResponsePart]:
         self._tx_state._check_tx_ready_to_use()
 
@@ -277,6 +279,7 @@ class BaseQueryTxContext:
             request.to_proto(),
             _apis.QueryService.Stub,
             _apis.QueryService.ExecuteQuery,
+            settings=settings,
         )
 
     def _move_to_beginned(self, tx_id: str) -> None:
@@ -323,12 +326,12 @@ class QueryTxContextSync(BaseQueryTxContext):
                 pass
             self._prev_stream = None
 
-    def begin(self, settings: Optional[base.QueryClientSettings] = None) -> "QueryTxContextSync":
+    def begin(self, settings: Optional[BaseRequestSettings] = None) -> "QueryTxContextSync":
         """WARNING: This API is experimental and could be changed.
 
         Explicitly begins a transaction
 
-        :param settings: A request settings
+        :param settings: An additional request settings BaseRequestSettings;
 
         :return: Transaction object or exception if begin is failed
         """
@@ -336,13 +339,13 @@ class QueryTxContextSync(BaseQueryTxContext):
 
         return self
 
-    def commit(self, settings: Optional[base.QueryClientSettings] = None) -> None:
+    def commit(self, settings: Optional[BaseRequestSettings] = None) -> None:
         """WARNING: This API is experimental and could be changed.
 
         Calls commit on a transaction if it is open otherwise is no-op. If transaction execution
         failed then this method raises PreconditionFailed.
 
-        :param settings: A request settings
+        :param settings: An additional request settings BaseRequestSettings;
 
         :return: A committed transaction or exception if commit is failed
         """
@@ -357,13 +360,13 @@ class QueryTxContextSync(BaseQueryTxContext):
 
         self._commit_call(settings)
 
-    def rollback(self, settings: Optional[base.QueryClientSettings] = None) -> None:
+    def rollback(self, settings: Optional[BaseRequestSettings] = None) -> None:
         """WARNING: This API is experimental and could be changed.
 
         Calls rollback on a transaction if it is open otherwise is no-op. If transaction execution
         failed then this method raises PreconditionFailed.
 
-        :param settings: A request settings
+        :param settings: An additional request settings BaseRequestSettings;
 
         :return: A committed transaction or exception if commit is failed
         """
@@ -386,7 +389,7 @@ class QueryTxContextSync(BaseQueryTxContext):
         syntax: Optional[base.QuerySyntax] = None,
         exec_mode: Optional[base.QueryExecMode] = None,
         concurrent_result_sets: Optional[bool] = False,
-        settings: Optional[base.QueryClientSettings] = None,
+        settings: Optional[BaseRequestSettings] = None,
     ) -> base.SyncResponseContextIterator:
         """WARNING: This API is experimental and could be changed.
 
@@ -403,7 +406,7 @@ class QueryTxContextSync(BaseQueryTxContext):
          3) QueryExecMode.VALIDATE;
          4) QueryExecMode.PARSE.
         :param concurrent_result_sets: A flag to allow YDB mix parts of different result sets. Default is False;
-        :param settings: An additional request settings QueryClientSettings;
+        :param settings: An additional request settings BaseRequestSettings;
 
         :return: Iterator with result sets
         """
@@ -416,9 +419,9 @@ class QueryTxContextSync(BaseQueryTxContext):
             exec_mode=exec_mode,
             parameters=parameters,
             concurrent_result_sets=concurrent_result_sets,
+            settings=settings,
         )
 
-        settings = settings if settings is not None else self.session._settings
         self._prev_stream = base.SyncResponseContextIterator(
             stream_it,
             lambda resp: base.wrap_execute_query_response(
@@ -426,7 +429,7 @@ class QueryTxContextSync(BaseQueryTxContext):
                 response_pb=resp,
                 tx=self,
                 commit_tx=commit_tx,
-                settings=settings,
+                settings=self.session._settings,
             ),
         )
         return self._prev_stream

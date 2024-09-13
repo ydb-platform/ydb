@@ -19,12 +19,11 @@
 
 namespace NActors {
 
-#ifndef NDEBUG
+#ifdef ACTOR_SANITIZER
     constexpr bool DebugMode = true;
 #else
     constexpr bool DebugMode = false;
 #endif
-
 
 
     LWTRACE_USING(ACTORLIB_PROVIDER);

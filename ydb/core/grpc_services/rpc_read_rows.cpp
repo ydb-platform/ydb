@@ -164,7 +164,7 @@ public:
                 }
             } else if (typeInProto.has_pg_type()) {
                 const auto& typeName = typeInProto.pg_type().type_name();
-                auto* typeDesc = NPg::TypeDescFromPgTypeName(typeName);
+                auto typeDesc = NPg::TypeDescFromPgTypeName(typeName);
                 if (!typeDesc) {
                     errorMessage = Sprintf("Unknown pg type for column %s: %s",
                                            name.c_str(), typeName.c_str());
@@ -567,7 +567,7 @@ public:
         auto& ioStats = stats.ReadIOStat;
 
         const auto getPgTypeFromColMeta = [](const auto &colMeta) {
-            return NYdb::TPgType(NPg::PgTypeNameFromTypeDesc(colMeta.Type.GetTypeDesc()),
+            return NYdb::TPgType(NPg::PgTypeNameFromTypeDesc(colMeta.Type.GetPgTypeDesc()),
                                  colMeta.PTypeMod);
         };
 
@@ -604,7 +604,7 @@ public:
                     vb.AddMember(colMeta.Name);
                     if (colMeta.Type.GetTypeId() == NScheme::NTypeIds::Pg)
                     {
-                        const NPg::TConvertResult& pgResult = NPg::PgNativeTextFromNativeBinary(cell.AsBuf(), colMeta.Type.GetTypeDesc());
+                        const NPg::TConvertResult& pgResult = NPg::PgNativeTextFromNativeBinary(cell.AsBuf(), colMeta.Type.GetPgTypeDesc());
                         if (pgResult.Error) {
                             LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::RPC_REQUEST, "PgNativeTextFromNativeBinary error " << *pgResult.Error);
                         }

@@ -2,7 +2,8 @@
 
 Заменяет значения `NaN` (not a number) в выражениях типа `Float`, `Double` или [Optional](../../../types/optional.md).
 
-**Сигнатура**
+### Сигнатура
+
 ```
 NANVL(Float, Float)->Float
 NANVL(Double, Double)->Double
@@ -15,7 +16,8 @@ NANVL(Double, Double)->Double
 
 Если один из агрументов `Double`, то в выдаче `Double`, иначе `Float`. Если один из агрументов `Optional`, то и в выдаче `Optional`.
 
-**Примеры**
+### Примеры
+
 ``` yql
 SELECT
   NANVL(double_column, 0.0)

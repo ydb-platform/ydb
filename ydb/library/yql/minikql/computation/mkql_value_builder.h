@@ -37,7 +37,7 @@ public:
     NUdf::TUnboxedValue PrependString(const NUdf::TStringRef& ref,NUdf::TUnboxedValuePod value) const final;
 
     NUdf::TUnboxedValue SubString(NUdf::TUnboxedValuePod value, ui32 offset, ui32 size) const final;
-    NUdf::TUnboxedValue NewList(NUdf::TUnboxedValue* items, ui64 count) const final;
+    NUdf::TUnboxedValue NewList(NUdf::TUnboxedValue* items, ui64 count) const final; // Destroys (moves out from) items
 
     NUdf::TUnboxedValue NewString(const NUdf::TStringRef& ref) const final;
 
@@ -99,6 +99,8 @@ public:
     bool MakeTzDate32(i32 year, ui32 month, ui32 day, i32& date, ui16 timezoneId = 0) const final;
     bool MakeTzDatetime64(i32 year, ui32 month, ui32 day,
             ui32 hour, ui32 minute, ui32 second, i64& datetime, ui16 timezoneId = 0) const final;
+
+    NUdf::IListValueBuilder::TPtr NewListBuilder() const final;
 
 private:
     const THolderFactory& HolderFactory_;

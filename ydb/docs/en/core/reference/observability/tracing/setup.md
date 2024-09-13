@@ -165,10 +165,10 @@ This section can be modified without restarting the node using the [dynamic conf
 Each rule includes an optional `scope` field with a set of selectors that determine which requests the rule applies to. Currently, the supported selectors are:
 
 * `request_types`
-    
+
     Accepts a list of request types. A request matches this selector if its type is in the list.
 
-    
+
 {% cut "Possible values" %}
 
 - KeyValue.CreateVolume
@@ -329,7 +329,7 @@ tracing_config:
     - scope:
         database: /Root/db1
       fraction: 0.5
-      level: 5 
+      level: 5
       max_traces_per_minute: 100
     - scope:
         database: /Root/db1

@@ -3,6 +3,8 @@
 #include "defs.h"
 #include "dsproxy.h"
 
+#include <ydb/core/blobstorage/base/utility.h>
+
 namespace NKikimr {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -121,6 +123,7 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
 
     TMemorizableControlWrapper SlowDiskThreshold;
     TMemorizableControlWrapper PredictedDelayMultiplier;
+    TMemorizableControlWrapper LongRequestThresholdMs;
 
     TAccelerationParams GetAccelerationParams();
 

@@ -234,6 +234,15 @@ def on_set_package_manager(unit):
             pm_type = pm_key
             break
 
+    if pm_type == 'npm' and "devtools/dummy_arcadia/typescript/npm" not in source_path:
+        ymake.report_configure_error(
+            "\n"
+            "Project is configured to use npm as a package manager. \n"
+            "Only pnpm is supported at the moment.\n"
+            "Please follow the instruction to migrate your project:\n"
+            "https://docs.yandex-team.ru/frontend-in-arcadia/tutorials/migrate#migrate-to-pnpm"
+        )
+
     unit.on_peerdir_ts_resource(pm_type)
     unit.set(["PM_TYPE", pm_type])
     unit.set(["PM_SCRIPT", f"${pm_type.upper()}_SCRIPT"])
@@ -852,6 +861,7 @@ def on_ts_package_check_files(unit):
         ymake.report_configure_error(
             "\n"
             "In the TS_PACKAGE module, you should define at least one file using the TS_FILES() macro.\n"
+            "If you use the TS_FILES_GLOB, check the expression. For example, use `src/**/*` instead of `src/*`.\n"
             "Docs: https://docs.yandex-team.ru/frontend-in-arcadia/references/TS_PACKAGE#ts-files."
         )
 

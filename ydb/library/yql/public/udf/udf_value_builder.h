@@ -42,6 +42,24 @@ public:
 
 UDF_ASSERT_TYPE_SIZE(IDictValueBuilder, 8);
 
+class IListValueBuilder {
+public:
+    using TPtr = TUniquePtr<IListValueBuilder>;
+
+public:
+    virtual ~IListValueBuilder() = default;
+
+    // Destroys (moves out from) the element
+    virtual IListValueBuilder& Add(TUnboxedValue&& element) = 0;
+
+    // Destroys (moves out from) the elements
+    virtual IListValueBuilder& AddMany(const NUdf::TUnboxedValue* elements, size_t count) = 0;
+
+    virtual TUnboxedValue Build() = 0;
+};
+
+UDF_ASSERT_TYPE_SIZE(IListValueBuilder, 8);
+
 ///////////////////////////////////////////////////////////////////////////////
 // IDateBuilder
 ///////////////////////////////////////////////////////////////////////////////
@@ -228,6 +246,7 @@ public:
 
     virtual IDictValueBuilder::TPtr NewDict(const TType* dictType, ui32 flags) const = 0;
 
+    // Destroys (moves out from) items
     virtual TUnboxedValue NewList(TUnboxedValue* items, ui64 count) const = 0;
 
     virtual TUnboxedValue ReverseList(const TUnboxedValuePod& list) const = 0;
@@ -308,7 +327,19 @@ public:
 };
 #endif
 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 27)
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 39)
+class IValueBuilder8: public IValueBuilder7 {
+public:
+    virtual IListValueBuilder::TPtr NewListBuilder() const = 0;
+};
+#endif
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 39)
+class IValueBuilder: public IValueBuilder8 {
+protected:    
+    IValueBuilder();
+};
+#elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 27)
 class IValueBuilder: public IValueBuilder7 {
 protected:    
     IValueBuilder();

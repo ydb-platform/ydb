@@ -25,13 +25,14 @@ namespace NYT::NPhoenix2::NDetail {
 #undef PHOENIX_DEFINE_TYPE
 #undef PHOENIX_DEFINE_TEMPLATE_TYPE
 #undef PHOENIX_DEFINE_OPAQUE_TYPE
+#undef PHOENIX_REGISTER_FIELD
 
 ////////////////////////////////////////////////////////////////////////////////
 
 #define PHOENIX_DEFINE_TYPE(type) \
     const ::NYT::NPhoenix2::TTypeDescriptor& type::GetTypeDescriptor() \
     { \
-        static const auto& descriptor = ::NYT::NPhoenix2::NDetail::GetTypeDescriptorByTagUnchecked(TypeTag); \
+        static const auto& descriptor = ::NYT::NPhoenix2::ITypeRegistry::Get()->GetUniverseDescriptor().GetTypeDescriptorByTag(TypeTag); \
         return descriptor; \
     } \
     \
@@ -80,20 +81,20 @@ namespace NYT::NPhoenix2::NDetail {
         [[maybe_unused]] static inline const void* Dummy = &::NYT::NPhoenix2::NDetail::RegisterTypeDescriptorImpl<type, false>(); \
     }
 
-#define PHOENIX_DEFINE_TEMPLATE_TYPE(type, parenthesizedTypeArgs) \
+#define PHOENIX_DEFINE_TEMPLATE_TYPE(type, typeArgs) \
     template <class T> \
     struct TPhoenixTypeInitializer__; \
     \
     template <> \
-    struct TPhoenixTypeInitializer__<type PP_DEPAREN(parenthesizedTypeArgs)> \
+    struct TPhoenixTypeInitializer__<type<PP_DEPAREN(typeArgs)>> \
     { \
-        [[maybe_unused]] static inline const void* Dummy = &::NYT::NPhoenix2::NDetail::RegisterTypeDescriptorImpl<type PP_DEPAREN(parenthesizedTypeArgs), true>(); \
+        [[maybe_unused]] static inline const void* Dummy = &::NYT::NPhoenix2::NDetail::RegisterTypeDescriptorImpl<type<PP_DEPAREN(typeArgs)>, true>(); \
     }
 
 #define PHOENIX_DEFINE_OPAQUE_TYPE(type) \
     const ::NYT::NPhoenix2::TTypeDescriptor& type::GetTypeDescriptor() \
     { \
-        static const auto& descriptor = ::NYT::NPhoenix2::NDetail::GetTypeDescriptorByTagUnchecked(TypeTag); \
+        static const auto& descriptor = ::NYT::NPhoenix2::ITypeRegistry::Get()->GetUniverseDescriptor().GetTypeDescriptorByTag(TypeTag); \
         return descriptor; \
     } \
     \
@@ -106,9 +107,8 @@ namespace NYT::NPhoenix2::NDetail {
         [[maybe_unused]] static inline const void* Dummy = &::NYT::NPhoenix2::NDetail::RegisterOpaqueTypeDescriptorImpl<type>(); \
     }
 
-////////////////////////////////////////////////////////////////////////////////
-
-const TTypeDescriptor& GetTypeDescriptorByTagUnchecked(TTypeTag tag);
+#define PHOENIX_REGISTER_FIELD(fieldTag, fieldName) \
+    registrar.template Field<fieldTag, &TThis::fieldName>(#fieldName)
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -244,7 +244,7 @@ public:
     template <class TBase>
     void BaseType()
     {
-        TypeDescriptor_->BaseTypes_.push_back(&TBase::GetTypeDescriptor());
+        TypeDescriptor_->BaseTypeTags_.push_back(TBase::TypeTag);
     }
 
     const TTypeDescriptor& operator()() &&;

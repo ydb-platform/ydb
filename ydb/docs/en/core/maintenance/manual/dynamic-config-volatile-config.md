@@ -25,6 +25,7 @@ These configurations are added at the end of the selectors set, and the syntax f
 ## Example of working with volatile configuration
 
 Temporarily enabling logging settings for the `blobstorage` component to `DEBUG` on the node `host1.example.com`:
+
 ```bash
 # Request current metadata to form a correct header for the volatile configuration
 $ {{ ydb-cli }} admin config fetch --all

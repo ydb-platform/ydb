@@ -19,7 +19,7 @@
 
 Порядок выходных колонок в этом режиме совпадает с порядком колонок первого входа.
 
-**Примеры**
+### Примеры
 
 ``` yql
 SELECT 1 AS x
@@ -43,7 +43,7 @@ SELECT * FROM AS_TABLE([<|x:3, y:4|>]); -- ошибка: порядок коло
 ``` yql
 SELECT * FROM T1
 UNION ALL
-(SELECT * FROM T2 ORDER BY key LIMIT 100); -- при отсутствии скобок ORDER BY/LIMIT применится к результату всего UNION ALL 
+(SELECT * FROM T2 ORDER BY key LIMIT 100); -- при отсутствии скобок ORDER BY/LIMIT применится к результату всего UNION ALL
 ```
 
 {% if feature_mapreduce %}
@@ -68,6 +68,5 @@ SELECT * FROM @tmp;
 ```
 
 {% endnote %}
-
 
 {% endif %}

@@ -87,23 +87,15 @@ NUdf::TUnboxedValue TDefaultValueBuilder::SubString(NUdf::TUnboxedValuePod value
 }
 
 NUdf::TUnboxedValue TDefaultValueBuilder::NewList(NUdf::TUnboxedValue* items, ui64 count) const {
-    if (!items || !count)
+    if (items == nullptr || count == 0) {
         return HolderFactory_.GetEmptyContainerLazy();
-
-    if (count < Max<ui32>()) {
-        NUdf::TUnboxedValue* inplace = nullptr;
-        auto array = HolderFactory_.CreateDirectArrayHolder(count, inplace);
-        for (ui64 i = 0; i < count; ++i)
-            *inplace++ = std::move(*items++);
-        return std::move(array);
     }
 
-    TDefaultListRepresentation list;
-    for (ui64 i = 0; i < count; ++i) {
-        list = list.Append(std::move(*items++));
-    }
+    NUdf::TUnboxedValue* inplace = nullptr;
+    auto array = HolderFactory_.CreateDirectArrayHolder(count, inplace);
+    std::copy_n(std::make_move_iterator(items), count, inplace);
 
-    return HolderFactory_.CreateDirectListHolder(std::move(list));
+    return array;
 }
 
 NUdf::TUnboxedValue TDefaultValueBuilder::ReverseList(const NUdf::TUnboxedValuePod& list) const
@@ -354,6 +346,10 @@ bool TDefaultValueBuilder::MakeTzDatetime64(i32 year, ui32 month, ui32 day,
         ui32 hour, ui32 minute, ui32 second, i64& datetime, ui16 timezoneId) const
 {
     return ::NKikimr::NMiniKQL::MakeTzDatetime64(year, month, day, hour, minute, second, datetime, timezoneId);
+}
+
+NUdf::IListValueBuilder::TPtr TDefaultValueBuilder::NewListBuilder() const {
+    return HolderFactory_.NewList();
 }
 
 } // namespace NMiniKQL

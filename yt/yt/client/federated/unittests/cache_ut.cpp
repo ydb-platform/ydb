@@ -5,8 +5,6 @@
 
 #include <yt/yt/core/misc/error.h>
 
-#include <yt/yt_proto/yt/client/cache/proto/config.pb.h>
-
 #include <library/cpp/testing/gtest/gtest.h>
 
 #include <util/system/env.h>
@@ -14,6 +12,7 @@
 namespace NYT::NClient::NFederated {
 
 using namespace NYT::NApi;
+using namespace NYT::NClient::NCache;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -22,8 +21,8 @@ TEST(TFederatedClientsCacheTest, GetSameClient)
     SetEnv("YT_TOKEN", "AAAA-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
     auto ytClientsCache = CreateFederatedClientsCache(
         New<TConnectionConfig>(),
-        TClustersConfig{},
-        NApi::GetClientOpsFromEnvStatic());
+        New<TClientsCacheConfig>(),
+        NApi::GetClientOptionsFromEnvStatic());
 
     auto client1 = ytClientsCache->GetClient("localhost");
     auto client2 = ytClientsCache->GetClient("localhost");
@@ -41,8 +40,8 @@ TEST(TFederatedClientsCacheTest, GetFederatedWithEmptyConfig)
     SetEnv("YT_TOKEN", "AAAA-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
     auto ytClientsCache = CreateFederatedClientsCache(
         New<TConnectionConfig>(),
-        TClustersConfig{},
-        NApi::GetClientOpsFromEnvStatic());
+        New<TClientsCacheConfig>(),
+        NApi::GetClientOptionsFromEnvStatic());
 
     EXPECT_THROW(
         ytClientsCache->GetClient("primary+secondary"),
@@ -61,8 +60,8 @@ TEST(TFederatedClientsCacheTest, ConfigurationAndClusterUrlMismatch1)
 
     auto ytClientsCache = CreateFederatedClientsCache(
         connectionConfig,
-        TClustersConfig{},
-        NApi::GetClientOpsFromEnvStatic());
+        New<TClientsCacheConfig>(),
+        NApi::GetClientOptionsFromEnvStatic());
 
     EXPECT_THROW(
         ytClientsCache->GetClient("primary+tertiary"),
@@ -83,8 +82,8 @@ TEST(TFederatedClientsCacheTest, ConfigurationAndClusterUrlMismatch2)
 
     auto ytClientsCache = CreateFederatedClientsCache(
         connectionConfig,
-        TClustersConfig{},
-        NApi::GetClientOpsFromEnvStatic());
+        New<TClientsCacheConfig>(),
+        NApi::GetClientOptionsFromEnvStatic());
 
     EXPECT_THROW(
         ytClientsCache->GetClient("primary+tertiary"),
@@ -103,8 +102,8 @@ TEST(TFederatedClientsCacheTest, ConfigurationMissingCluster)
 
     auto ytClientsCache = CreateFederatedClientsCache(
         connectionConfig,
-        TClustersConfig{},
-        NApi::GetClientOpsFromEnvStatic());
+        New<TClientsCacheConfig>(),
+        NApi::GetClientOptionsFromEnvStatic());
 
     EXPECT_THROW(
         ytClientsCache->GetClient("primary+secondary+tertiary"),

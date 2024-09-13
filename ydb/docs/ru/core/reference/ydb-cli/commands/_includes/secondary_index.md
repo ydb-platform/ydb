@@ -39,7 +39,7 @@
 
 Получить информацию о статусе всех операций построения индекса можно командой `operation list buildindex`.
 
-**Примеры**
+### Примеры
 
 {% include [ydb-cli-profile.md](../../../../_includes/ydb-cli-profile.md) %}
 
@@ -59,7 +59,7 @@
 
 Вывод (id операции при фактическом запуске будет другой):
 
-``` text
+```text
 ┌──────────────────────────────────┬───────┬────────┐
 | id                               | ready | status |
 ├──────────────────────────────────┼───────┼────────┤
@@ -75,7 +75,7 @@
 
 Возвращаемое значение:
 
-``` text
+```text
 ┌──────────────────────────────────┬───────┬─────────┬───────┬──────────┬─────────────────┬───────────┐
 | id                               | ready | status  | state | progress | table           | index     |
 ├──────────────────────────────────┼───────┼─────────┼───────┼──────────┼─────────────────┼───────────┤
@@ -84,6 +84,7 @@
 ```
 
 Удаление информации о построении индекса (подставьте фактический id операции):
+
 ```bash
 {{ ydb-cli }} -p quickstart operation forget ydb://buildindex/7?id=2814749869
 ```
@@ -96,7 +97,7 @@
 {{ ydb-cli }} [connection options] table index drop <table> --index-name STR
 ```
 
-**Пример**
+### Пример
 
 {% include [ydb-cli-profile.md](../../../../_includes/ydb-cli-profile.md) %}
 
@@ -122,7 +123,7 @@
 {{ ydb-cli }} [connection options] table index rename <table> --index-name STR --to STR --replace
 ```
 
-**Пример**
+### Пример
 
 {% include [ydb-cli-profile.md](../../../../_includes/ydb-cli-profile.md) %}
 

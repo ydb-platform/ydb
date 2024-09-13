@@ -4,9 +4,9 @@
 
 Рассмотрим следующий запрос, выполняющий поиск серии по названию:
 
-``` sql
-SELECT season_id, episode_id 
-  FROM episodes 
+```yql
+SELECT season_id, episode_id
+  FROM episodes
   WHERE title = 'The Work Outing'
 ```
 
@@ -21,15 +21,17 @@ SELECT season_id, episode_id
 - {{ ydb-short-name }} CLI
 
   Получить план запроса через {{ ydb-short-name }} [CLI](../reference/ydb-cli/_includes/index.md) можно с помощью следующей команды:
-  ```
+
+  ```bash
   ydb -p <profile_name> table query explain \
-    -q "SELECT season_id, episode_id 
-    FROM episodes 
+    -q "SELECT season_id, episode_id
+    FROM episodes
     WHERE title = 'The Work Outing'"
   ```
 
   Результат:
-  ```
+
+  ```text
   Query Plan:
   ResultSet
   └──Limit (Limit: 1001)
@@ -56,7 +58,7 @@ SELECT season_id, episode_id
 
 Одним из типовых способов избежать полного сканирования таблицы является добавление [вторичного индекса](secondary-indexes.md). В данном случае имеет смысл добавить вторичный индекс для колонки `title`, для этого воспользуемся запросом:
 
-``` sql
+```yql
 ALTER TABLE episodes
   ADD INDEX title_index GLOBAL ON (title)
 ```
@@ -70,15 +72,17 @@ ALTER TABLE episodes
 - {{ ydb-short-name }} CLI
 
   Команда:
-  ```
+
+  ```bash
   ydb -p <profile_name> table query explain \
-    -q "SELECT season_id, episode_id 
+    -q "SELECT season_id, episode_id
     FROM episodes VIEW title_index
     WHERE title = 'The Work Outing'"
   ```
-  
+
   Результат:
-  ```
+
+  ```text
   Query Plan:
   ResultSet
   └──Limit (Limit: 1001)
@@ -88,6 +92,7 @@ ALTER TABLE episodes
         └──TablePointLookup (ReadRange: ["title (The Work Outing)","series_id (-∞, +∞)","season_id (-∞, +∞)","episode_id (-∞, +∞)"], ReadLimit: 1001, ReadColumns: ["episode_id","season_id","title"], Table: episodes/title_index/indexImplTable)
            Tables: ["episodes/title_index/indexImplTable"]
   ```
+
 - Embedded UI
 
   ![explain_ui](../_assets/explain_with_index_ui.png)
@@ -98,4 +103,4 @@ ALTER TABLE episodes
 
 {% endlist %}
 
-С использованием вторичного индекса запрос выполняется без полного сканирования основной таблицы. Вместо `TableFullScan` появился `TablePointLookup` - чтение индексной таблицы по ключу, а основную таблицу мы теперь совсем не читаем, так как все нужные нам колонки содержатся в индексной таблице. 
+С использованием вторичного индекса запрос выполняется без полного сканирования основной таблицы. Вместо `TableFullScan` появился `TablePointLookup` - чтение индексной таблицы по ключу, а основную таблицу мы теперь совсем не читаем, так как все нужные нам колонки содержатся в индексной таблице.

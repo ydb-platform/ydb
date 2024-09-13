@@ -9,4 +9,4 @@ namespace NYql::NDq {
     void RegisterGenericProviderFactories(TDqAsyncIoFactory& factory,
                                           ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
                                           NYql::NConnector::IClient::TPtr genericClient);
-}
+} // namespace NYql::NDq

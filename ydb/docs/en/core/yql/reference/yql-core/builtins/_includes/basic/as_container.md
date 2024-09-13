@@ -1,6 +1,6 @@
 ## AsTuple, AsStruct, AsList, AsDict, AsSet, AsListStrict, AsDictStrict and AsSetStrict {#as-container}
 
-Creates containers of the applicable types. For container literals, [operator notation](#containerliteral) is also supported.
+Creates containers of the applicable types. For container literals, [operator notation](../../basic.md#containerliteral) is also supported.
 
 Specifics:
 
@@ -17,7 +17,7 @@ Specifics:
 * `AsDict` and `AsDictStrict` expect `Tuple` of two elements as arguments (key and value, respectively). If the keys repeat, only the value for the first key remains in the dictionary.
 * `AsSet` and `AsSetStrict` expect keys as arguments.
 
-**Examples**
+### Examples
 
 ```yql
 SELECT

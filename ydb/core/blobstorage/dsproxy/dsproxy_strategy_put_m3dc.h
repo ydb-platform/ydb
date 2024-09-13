@@ -61,7 +61,7 @@ public:
 
                 // now check every realm and check if we have to issue some write requests to it
                 Prepare3dcPartPlacement(state, NumFailRealms, NumFailDomainsPerFailRealm,
-                        PreferredReplicasPerRealm(degraded), true, partPlacement, isDone);
+                        PreferredReplicasPerRealm(degraded), true, false, partPlacement, isDone);
             }
         } while (false);
         if (!isDone) {
@@ -82,8 +82,7 @@ public:
             partPlacement.Records.clear();
             bool fullPlacement;
             Prepare3dcPartPlacement(state, NumFailRealms, NumFailDomainsPerFailRealm,
-                    PreferredReplicasPerRealm(degraded),
-                    false, partPlacement, fullPlacement);
+                    PreferredReplicasPerRealm(degraded), false, false, partPlacement, fullPlacement);
         }
         if (IsPutNeeded(state, partPlacement)) {
             PreparePutsForPartPlacement(logCtx, state, info, groupDiskRequests, partPlacement);

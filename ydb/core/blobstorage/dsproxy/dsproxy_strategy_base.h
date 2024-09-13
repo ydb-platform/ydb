@@ -48,8 +48,8 @@ protected:
         TBlobStorageGroupInfo::TSubgroupVDisks &inOutError,
         bool &outIsDegraded);
     void Prepare3dcPartPlacement(const TBlobState& state, size_t numFailRealms, size_t numFailDomainsPerFailRealm,
-            ui8 preferredReplicasPerRealm, bool considerSlowAsError, TBlobStorageGroupType::TPartPlacement& outPartPlacement,
-            bool& fullPlacement);
+            ui8 preferredReplicasPerRealm, bool considerSlowAsError, bool replaceUnresponsive,
+            TBlobStorageGroupType::TPartPlacement& outPartPlacement, bool& fullPlacement);
     // Sets IsSlow for the slow disk, resets for other disks.
     // returns bit mask with 1 on positions of slow disks
     ui32 MakeSlowSubgroupDiskMask(TBlobState &state, TBlackboard &blackboard, bool isPut, const TAccelerationParams& accelerationParams);

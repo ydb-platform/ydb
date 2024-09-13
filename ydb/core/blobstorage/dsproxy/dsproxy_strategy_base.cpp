@@ -356,8 +356,8 @@ void TStrategyBase::Evaluate3dcSituation(const TBlobState &state,
 }
 
 void TStrategyBase::Prepare3dcPartPlacement(const TBlobState& state, size_t numFailRealms, size_t numFailDomainsPerFailRealm,
-        ui8 preferredReplicasPerRealm, bool considerSlowAsError, TBlobStorageGroupType::TPartPlacement& outPartPlacement,
-        bool& fullPlacement) {
+        ui8 preferredReplicasPerRealm, bool considerSlowAsError, bool replaceUnresponsive,
+        TBlobStorageGroupType::TPartPlacement& outPartPlacement, bool& fullPlacement) {
     fullPlacement = true;
     for (size_t realm = 0; realm < numFailRealms; ++realm) {
         ui8 placed = 0;
@@ -369,6 +369,10 @@ void TStrategyBase::Prepare3dcPartPlacement(const TBlobState& state, size_t numF
             if (situation != TBlobState::ESituation::Error) {
                 if (situation == TBlobState::ESituation::Present) {
                     placed++;
+                } else if (situation == TBlobState::ESituation::Sent) {
+                    if (!replaceUnresponsive) {
+                        placed++;
+                    }
                 } else if (!considerSlowAsError || !disk.IsSlow) {
                     if (situation != TBlobState::ESituation::Sent) {
                         outPartPlacement.Records.emplace_back(subgroupIdx, realm);

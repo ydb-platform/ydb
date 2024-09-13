@@ -15,61 +15,59 @@
 namespace NSQLTranslation {
 
     NYql::TAstParseResult SqlToYql(const TString& query, const TTranslationSettings& settings,
-        NYql::TWarningRules* warningRules, NYql::TStmtParseInfo* stmtParseInfo)
-    {
-        TTranslationSettings parsedSettings = settings;
-        return SqlToYql(query, parsedSettings, warningRules, stmtParseInfo);
-    }
-
-    NYql::TAstParseResult SqlToYql(const TString& query, TTranslationSettings& settings,
-        NYql::TWarningRules* warningRules, NYql::TStmtParseInfo* stmtParseInfo)
+        NYql::TWarningRules* warningRules, NYql::TStmtParseInfo* stmtParseInfo, TTranslationSettings* effectiveSettings)
     {
         NYql::TAstParseResult result;
-        google::protobuf::Arena arena;
-        if (!settings.Arena) {
-            settings.Arena = &arena;
-        }
+        TTranslationSettings parsedSettings(settings);
 
-        if (!ParseTranslationSettings(query, settings, result.Issues)) {
+        if (!ParseTranslationSettings(query, parsedSettings, result.Issues)) {
             return result;
         }
+        if (effectiveSettings) {
+            *effectiveSettings = parsedSettings;
+        }
 
-        if (!settings.DeclaredNamedExprs.empty() && !settings.PgParser && settings.SyntaxVersion != 1) {
+        google::protobuf::Arena arena;
+        if (!parsedSettings.Arena) {
+            parsedSettings.Arena = &arena;
+        }
+
+        if (!parsedSettings.DeclaredNamedExprs.empty() && !parsedSettings.PgParser && parsedSettings.SyntaxVersion != 1) {
             result.Issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
                 "Externally declared named expressions not supported in V0 syntax"));
             return result;
         }
 
-        if (settings.PgParser && settings.PGDisable) {
+        if (parsedSettings.PgParser && parsedSettings.PGDisable) {
             result.Issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
                 "PG syntax is disabled"));
             return result;
         }
 
-        if (settings.PgParser) {
-            return NSQLTranslationPG::PGToYql(query, settings, stmtParseInfo);
+        if (parsedSettings.PgParser) {
+            return NSQLTranslationPG::PGToYql(query, parsedSettings, stmtParseInfo);
         }
 
-        switch (settings.SyntaxVersion) {
+        switch (parsedSettings.SyntaxVersion) {
             case 0:
-                if (settings.V0ForceDisable || settings.V0Behavior == EV0Behavior::Disable) {
+                if (settings.V0ForceDisable || parsedSettings.V0Behavior == EV0Behavior::Disable) {
                     result.Issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
                         "V0 syntax is disabled"));
                     return result;
                 }
 
-                if (settings.AnsiLexer) {
+                if (parsedSettings.AnsiLexer) {
                     result.Issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
                         "Ansi lexer is not supported in V0 syntax"));
                     return result;
                 }
 
-                return NSQLTranslationV0::SqlToYql(query, settings, warningRules);
+                return NSQLTranslationV0::SqlToYql(query, parsedSettings, warningRules);
             case 1:
-                return NSQLTranslationV1::SqlToYql(query, settings, warningRules);
+                return NSQLTranslationV1::SqlToYql(query, parsedSettings, warningRules);
             default:
                 result.Issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
-                    TStringBuilder() << "Unknown SQL syntax version: " << settings.SyntaxVersion));
+                    TStringBuilder() << "Unknown SQL syntax version: " << parsedSettings.SyntaxVersion));
                 return result;
         }
     }

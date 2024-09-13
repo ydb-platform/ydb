@@ -155,16 +155,13 @@ NSQLTranslation::TTranslationSettings TKqpTranslationSettingsBuilder::Build(NYql
 
 NYql::TAstParseResult ParseQuery(const TString& queryText, bool isSql, TMaybe<ui16>& sqlVersion, bool& deprecatedSQL,
         NYql::TExprContext& ctx, TKqpTranslationSettingsBuilder& settingsBuilder, bool& keepInCache, TMaybe<TString>& commandTagName,
-        NSQLTranslation::TTranslationSettings* parsedSettings) {
+        NSQLTranslation::TTranslationSettings* effectiveSettings) {
     NYql::TAstParseResult astRes;
     settingsBuilder.SetSqlVersion(sqlVersion);
     if (isSql) {
         auto settings = settingsBuilder.Build(ctx);
         NYql::TStmtParseInfo stmtParseInfo;
-        auto ast = NSQLTranslation::SqlToYql(queryText, settings, nullptr, &stmtParseInfo);
-        if (parsedSettings) {
-            *parsedSettings = std::move(settings);
-        }
+        auto ast = NSQLTranslation::SqlToYql(queryText, settings, nullptr, &stmtParseInfo, effectiveSettings);
         deprecatedSQL = (ast.ActualSyntaxType == NYql::ESyntaxType::YQLv0);
         sqlVersion = ast.ActualSyntaxType == NYql::ESyntaxType::YQLv1 ? 1 : 0;
         keepInCache = stmtParseInfo.KeepInCache;

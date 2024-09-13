@@ -4,13 +4,14 @@
 #include <ydb/core/protos/tx_columnshard.pb.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/engines/db_wrapper.h>
-//#include <ydb/core/tx/columnshard/columnshard_impl.h>
+#include <ydb/core/tx/columnshard/columnshard_impl.h>
 
 namespace NKikimr::NOlap {
 
 bool TInsertTable::Insert(IDbWrapper& dbTable, TInsertedData&& data) {
     if (auto* dataPtr = Summary.AddInserted(std::move(data))) {
         AddBlobLink(dataPtr->GetBlobRange().BlobId);
+        CS->VersionAddRef(0, (ui64)dataPtr->GetInsertWriteId(), dataPtr->GetPathId(), "", (ui8)NKikimr::NColumnShard::Schema::EInsertTableIds::Inserted, dataPtr->GetSchemaVersion());
         dbTable.Insert(*dataPtr);
         return true;
     } else {
@@ -18,11 +19,7 @@ bool TInsertTable::Insert(IDbWrapper& dbTable, TInsertedData&& data) {
         return false;
     }
 }
-/*
-void TInsertTableAccessor::AddSchemaVersion(ui64 planStep, ui64 txId, const TString& dedupId, ui8 recType, ui64 schemaVersion) {
-    CS->VersionAddRec(planStep, txId, dedupId, recType, schemaVersion);
-}
-*/
+
 TInsertionSummary::TCounters TInsertTable::Commit(
     IDbWrapper& dbTable, ui64 planStep, ui64 txId, const THashSet<TInsertWriteId>& writeIds, std::function<bool(ui64)> pathExists) {
     Y_ABORT_UNLESS(!writeIds.empty());
@@ -39,6 +36,7 @@ TInsertionSummary::TCounters TInsertTable::Commit(
         counters.RawBytes += data->GetMeta().GetRawBytes();
         counters.Bytes += data->BlobSize();
 
+        CS->VersionRemoveRef(0, (ui64)data->GetInsertWriteId(), data->GetPathId(), "", (ui8)NKikimr::NColumnShard::Schema::EInsertTableIds::Inserted, data->GetSchemaVersion());
         dbTable.EraseInserted(*data);
 
         const ui64 pathId = data->GetPathId();
@@ -48,12 +46,14 @@ TInsertionSummary::TCounters TInsertTable::Commit(
             AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "commit_insertion")("path_id", data->GetPathId())(
                 "blob_range", data->GetBlobRange().ToString());
             auto committed = data->Commit(planStep, txId);
+            CS->VersionAddRef(committed.GetSnapshot().GetPlanStep(), committed.GetSnapshot().GetTxId(), committed.GetPathId(), committed.GetDedupId(), (ui8)NKikimr::NColumnShard::Schema::EInsertTableIds::Committed, committed.GetSchemaVersion());
             dbTable.Commit(committed);
 
             pathInfo->AddCommitted(std::move(committed));
         } else {
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "abort_insertion")("path_id", data->GetPathId())(
                 "blob_range", data->GetBlobRange().ToString());
+            CS->VersionAddRef(0, (ui64)data->GetInsertWriteId(), data->GetPathId(), "", (ui8)NKikimr::NColumnShard::Schema::EInsertTableIds::Aborted, data->GetSchemaVersion());
             dbTable.Abort(*data);
             Summary.AddAborted(std::move(*data));
         }
@@ -86,6 +86,8 @@ void TInsertTable::Abort(IDbWrapper& dbTable, const THashSet<TInsertWriteId>& wr
         if (std::optional<TInsertedData> data = Summary.ExtractInserted(writeId)) {
             AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "abort_insertion")("path_id", data->GetPathId())(
                 "blob_range", data->GetBlobRange().ToString())("write_id", writeId);
+            CS->VersionRemoveRef(0, (ui64)data->GetInsertWriteId(), data->GetPathId(), "", (ui8)NKikimr::NColumnShard::Schema::EInsertTableIds::Inserted, data->GetSchemaVersion());
+            CS->VersionAddRef(0, (ui64)data->GetInsertWriteId(), data->GetPathId(), "", (ui8)NKikimr::NColumnShard::Schema::EInsertTableIds::Aborted, data->GetSchemaVersion());
             dbTable.EraseInserted(*data);
             dbTable.Abort(*data);
             Summary.AddAborted(std::move(*data));
@@ -100,6 +102,7 @@ THashSet<TInsertWriteId> TInsertTable::OldWritesToAbort(const TInstant& now) con
 void TInsertTable::EraseCommittedOnExecute(
     IDbWrapper& dbTable, const TCommittedData& data, const std::shared_ptr<IBlobsDeclareRemovingAction>& blobsAction) {
     if (Summary.HasCommitted(data)) {
+        CS->VersionRemoveRef(data.GetSnapshot().GetPlanStep(), data.GetSnapshot().GetTxId(), data.GetPathId(), data.GetDedupId(), (ui8)NKikimr::NColumnShard::Schema::EInsertTableIds::Committed, data.GetSchemaVersion());
         dbTable.EraseCommitted(data);
         RemoveBlobLinkOnExecute(data.GetBlobRange().BlobId, blobsAction);
     }
@@ -114,6 +117,7 @@ void TInsertTable::EraseCommittedOnComplete(const TCommittedData& data) {
 void TInsertTable::EraseAbortedOnExecute(
     IDbWrapper& dbTable, const TInsertedData& data, const std::shared_ptr<IBlobsDeclareRemovingAction>& blobsAction) {
     if (Summary.HasAborted(data.GetInsertWriteId())) {
+        CS->VersionRemoveRef(0, (ui64)data.GetInsertWriteId(), data.GetPathId(), "", (ui8)NKikimr::NColumnShard::Schema::EInsertTableIds::Aborted, data.GetSchemaVersion());
         dbTable.EraseAborted(data);
         RemoveBlobLinkOnExecute(data.GetBlobRange().BlobId, blobsAction);
     }

@@ -55,7 +55,7 @@ namespace NKikimr::NColumnShard {
 
         bool ProgressOnExecute(TColumnShard& owner, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) override {
             TBlobGroupSelector dsGroupSelector(owner.Info());
-            NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector, &owner);
+            NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
 
             auto pathExists = [&](ui64 pathId) {
                 return owner.TablesManager.HasTable(pathId);
@@ -88,7 +88,7 @@ namespace NKikimr::NColumnShard {
                 AFL_VERIFY(owner.RemoveLongTxWrite(db, writeId, GetTxId()));
             }
             TBlobGroupSelector dsGroupSelector(owner.Info());
-            NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector, &owner);
+            NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
             owner.InsertTable->Abort(dbTable, WriteIds);
             return true;
         }

@@ -81,9 +81,9 @@ public:
         ADD,
     };
 
-    TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, const NKikimrSchemeOp::TColumnTableSchema& schema);
-    TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, TIndexInfo&& schema);
-    TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager);
+    TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, const NKikimrSchemeOp::TColumnTableSchema& schema, NColumnShard::TColumnShard* cs);
+    TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, TIndexInfo&& schema, NColumnShard::TColumnShard* cs);
+//    TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager);
 
     virtual void OnTieringModified(const std::shared_ptr<NColumnShard::TTiersManager>& manager, const NColumnShard::TTtl& ttl, const std::optional<ui64> pathId) override;
 
@@ -189,6 +189,7 @@ private:
     TColumnEngineStats Counters;
     ui64 LastPortion;
     ui64 LastGranule;
+    NColumnShard::TColumnShard* CS = nullptr;
     TSnapshot LastSnapshot = TSnapshot::Zero();
     bool Loaded = false;
 

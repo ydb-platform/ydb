@@ -100,11 +100,11 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
 
     NIceDb::TNiceDb db(txc.DB);
     TBlobGroupSelector dsGroupSelector(Self->Info());
-    NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector, txc.Owner);
+    NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
     {
         ACFL_DEBUG("step", "TInsertTable::Load_Start");
         TMemoryProfileGuard g("TTxInit/InsertTable");
-        auto localInsertTable = std::make_unique<NOlap::TInsertTable>();
+        auto localInsertTable = std::make_unique<NOlap::TInsertTable>(Self);
         if (!localInsertTable->Load(db, dbTable, TAppData::TimeProvider->Now())) {
             ACFL_ERROR("step", "TInsertTable::Load_Fails");
             return false;
@@ -115,7 +115,7 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
 
     {
         ACFL_DEBUG("step", "TTablesManager::Load_Start");
-        TTablesManager tManagerLocal(Self->StoragesManager, Self->TabletID());
+        TTablesManager tManagerLocal(Self->StoragesManager, Self->TabletID(), Self);
         {
             TMemoryProfileGuard g("TTxInit/TTablesManager");
             if (!tManagerLocal.InitFromDB(db)) {

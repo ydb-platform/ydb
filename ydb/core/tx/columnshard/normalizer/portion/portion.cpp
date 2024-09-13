@@ -3,6 +3,7 @@
 #include <ydb/core/tx/columnshard/engines/scheme/filtered_scheme.h>
 #include <ydb/core/tx/columnshard/engines/portions/constructor.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
+#include <ydb/core/tx/columnshard/columnshard_impl.h>
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 
@@ -20,13 +21,13 @@ public:
 
     bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& /* normController */) const override {
         using namespace NColumnShard;
-        TDbWrapper db(txc.DB, nullptr, txc.Owner);
+        TDbWrapper db(txc.DB, nullptr);
 
         for (auto&& portionInfo : Portions) {
             auto schema = Schemas->FindPtr(portionInfo->GetPortionId());
             AFL_VERIFY(!!schema)("portion_id", portionInfo->GetPortionId());
             LOG_S_CRIT("Saving normalized");
-            portionInfo->SaveToDatabase(db, (*schema)->GetIndexInfo().GetPKFirstColumnId(), true);
+            portionInfo->SaveToDatabase(db, (*schema)->GetIndexInfo().GetPKFirstColumnId(), true, static_cast<NColumnShard::TColumnShard*>(txc.Owner));
         }
         return true;
     }

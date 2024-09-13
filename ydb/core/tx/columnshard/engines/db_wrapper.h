@@ -4,10 +4,6 @@
 #include <ydb/core/tx/columnshard/common/blob.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 
-namespace NColumnShard {
-class TColumnShard;
-}
-
 namespace NKikimrTxColumnShard {
 class TIndexPortionMeta;
 }
@@ -30,16 +26,8 @@ class IColumnEngine;
 class TPortionInfo;
 class TPortionInfoConstructor;
 
-NColumnShard::TColumnShard* GetColumnShard(NTabletFlatExecutor::NFlatExecutorSetup::ITablet *owner);
-
 class IDbWrapper {
 public:
-    IDbWrapper() = default;
-    IDbWrapper(NTabletFlatExecutor::NFlatExecutorSetup::ITablet *owner)
-        : CS(GetColumnShard(owner))
-    {
-    }
-
     virtual ~IDbWrapper() = default;
 
     virtual void Insert(const TInsertedData& data) = 0;
@@ -66,21 +54,14 @@ public:
     virtual void WriteCounter(ui32 counterId, ui64 value) = 0;
     virtual bool LoadCounters(const std::function<void(ui32 id, ui64 value)>& callback) = 0;
     virtual TConclusion<THashMap<ui64, std::map<TSnapshot, TGranuleShardingInfo>>> LoadGranulesShardingInfo() = 0;
-
-public:
-    NColumnShard::TColumnShard* CS = nullptr;
 };
 
 class TDbWrapper : public IDbWrapper {
 public:
-    TDbWrapper(NTable::TDatabase& db, const IBlobGroupSelector* dsGroupSelector, NTabletFlatExecutor::NFlatExecutorSetup::ITablet *owner)
-        : IDbWrapper(owner)
-        , Database(db)
+    TDbWrapper(NTable::TDatabase& db, const IBlobGroupSelector* dsGroupSelector)
+        : Database(db)
         , DsGroupSelector(dsGroupSelector)
-    {
-//        AFL_VERIFY(owner != nullptr);
-//        AFL_VERIFY(CS != nullptr);
-    }
+    {}
 
     void Insert(const TInsertedData& data) override;
     void Commit(const TCommittedData& data) override;

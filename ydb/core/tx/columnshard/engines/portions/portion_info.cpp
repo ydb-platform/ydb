@@ -1,5 +1,6 @@
 #include "portion_info.h"
 #include "constructor.h"
+#include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/blobs_reader/task.h>
 #include <ydb/core/tx/columnshard/data_sharing/protos/data.pb.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
@@ -130,7 +131,11 @@ std::vector<const NKikimr::NOlap::TColumnRecord*> TPortionInfo::GetColumnChunksP
     return result;
 }
 
-void TPortionInfo::RemoveFromDatabase(IDbWrapper& db) const {
+void TPortionInfo::RemoveFromDatabase(IDbWrapper& db, NColumnShard::TColumnShard* cs) const {
+    ui32 refCount = cs->VersionRemoveRef(GetPortion(), GetPathId(), GetSchemaVersionVerified());
+    if (refCount == 0) {
+        LOG_S_CRIT("Ref count is set to 0 for version " << GetSchemaVersionVerified() << " need to delete");
+    }
     db.ErasePortion(*this);
     for (auto& record : Records) {
         db.EraseColumn(*this, record);
@@ -140,8 +145,9 @@ void TPortionInfo::RemoveFromDatabase(IDbWrapper& db) const {
     }
 }
 
-void TPortionInfo::SaveToDatabase(IDbWrapper& db, const ui32 firstPKColumnId, const bool saveOnlyMeta) const {
+void TPortionInfo::SaveToDatabase(IDbWrapper& db, const ui32 firstPKColumnId, const bool saveOnlyMeta, NColumnShard::TColumnShard* cs) const {
     FullValidation();
+    cs->VersionAddRef(GetPortion(), GetPathId(), GetSchemaVersionVerified());
     db.WritePortion(*this);
     if (!saveOnlyMeta) {
         for (auto& record : Records) {

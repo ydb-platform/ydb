@@ -26,7 +26,7 @@
 #include <concepts>
 
 namespace NKikimr::NOlap {
-
+/*
 TColumnEngineForLogs::TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager)
     : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, storagesManager))
     , StoragesManager(storagesManager)
@@ -36,26 +36,28 @@ TColumnEngineForLogs::TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<
 {
     ActualizationController = std::make_shared<NActualizer::TController>();
 }
-
+*/
 TColumnEngineForLogs::TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager,
-    const TSnapshot& snapshot, const NKikimrSchemeOp::TColumnTableSchema& schema)
+    const TSnapshot& snapshot, const NKikimrSchemeOp::TColumnTableSchema& schema, NColumnShard::TColumnShard* cs)
     : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, storagesManager))
     , StoragesManager(storagesManager)
     , TabletId(tabletId)
     , LastPortion(0)
     , LastGranule(0)
+    , CS(cs)
 {
     ActualizationController = std::make_shared<NActualizer::TController>();
     RegisterSchemaVersion(snapshot, schema);
 }
 
 TColumnEngineForLogs::TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager,
-    const TSnapshot& snapshot, TIndexInfo&& schema)
+    const TSnapshot& snapshot, TIndexInfo&& schema, NColumnShard::TColumnShard* cs)
     : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, storagesManager))
     , StoragesManager(storagesManager)
     , TabletId(tabletId)
     , LastPortion(0)
-    , LastGranule(0) {
+    , LastGranule(0)
+    , CS(cs) {
     ActualizationController = std::make_shared<NActualizer::TController>();
     RegisterSchemaVersion(snapshot, std::move(schema));
 }
@@ -219,7 +221,7 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
             AFL_VERIFY(portion.MutableMeta().LoadMetadata(metaProto, indexInfo));
             AFL_VERIFY(constructors.AddConstructorVerified(std::move(portion)));
             if (portion.HasSchemaVersion()) {
-                db.CS->VersionAddRef(portion.GetPortionIdVerified(), portion.GetPathId(), portion.GetSchemaVersion());
+                CS->VersionAddRef(portion.GetPortionIdVerified(), portion.GetPathId(), portion.GetSchemaVersion());
             }
         })) {
             return false;

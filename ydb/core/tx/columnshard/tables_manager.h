@@ -150,8 +150,10 @@ private:
     std::unique_ptr<NOlap::IColumnEngine> PrimaryIndex;
     std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
     ui64 TabletId = 0;
+    NColumnShard::TColumnShard* CS = nullptr;
+
 public:
-    TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager, const ui64 tabletId);
+    TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager, const ui64 tabletId, NColumnShard::TColumnShard* cs);
 
     bool TryFinalizeDropPathOnExecute(NTable::TDatabase& dbTable, const ui64 pathId) const;
     bool TryFinalizeDropPathOnComplete(const ui64 pathId);

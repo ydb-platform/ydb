@@ -6,7 +6,7 @@ namespace NKikimr::NOlap::NDataSharing {
 
 bool TTxDataFromSource::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     using namespace NKikimr::NColumnShard;
-    TDbWrapper dbWrapper(txc.DB, nullptr, txc.Owner);
+    TDbWrapper dbWrapper(txc.DB, nullptr);
     auto& index = Self->TablesManager.MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>();
     {
         ui64* lastPortionPtr = index.GetLastPortionPointer();
@@ -21,7 +21,7 @@ bool TTxDataFromSource::DoExecute(NTabletFlatExecutor::TTransactionContext& txc,
     THashMap<TString, THashSet<NBlobCache::TUnifiedBlobId>> sharedBlobIds;
     for (auto&& i : PortionsByPathId) {
         for (auto&& p : i.second.GetPortions()) {
-            p.SaveToDatabase(dbWrapper, schemaPtr->GetIndexInfo().GetPKFirstColumnId(), false);
+            p.SaveToDatabase(dbWrapper, schemaPtr->GetIndexInfo().GetPKFirstColumnId(), false, static_cast<NColumnShard::TColumnShard*>(txc.Owner));
         }
     }
     NIceDb::TNiceDb db(txc.DB);

@@ -984,11 +984,11 @@ class TInsertTableRecordLoadContext {
 private:
     NColumnShard::Schema::EInsertTableIds RecType;
     ui64 PlanStep;
-    ui64 WriteTxId;
     TInsertWriteId InsertWriteId;
-    ui64 PathId;
+    YDB_ACCESSOR_DEF(ui64, WriteTxId);
+    YDB_ACCESSOR_DEF(ui64, PathId);
     YDB_ACCESSOR_DEF(TString, DedupId);
-    ui64 SchemaVersion;
+    YDB_ACCESSOR_DEF(ui64, SchemaVersion);
     TString BlobIdString;
     std::optional<NOlap::TUnifiedBlobId> BlobId;
     TString MetadataString;

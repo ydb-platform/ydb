@@ -29,6 +29,11 @@ protected:
     bool RemoveBlobLinkOnComplete(const TUnifiedBlobId& blobId);
 
 public:
+    TInsertTableAccessor(NColumnShard::TColumnShard* cs = nullptr)
+        : CS(cs)
+    {
+    }
+
     void ErasePath(const ui64 pathId) {
         Summary.ErasePath(pathId);
     }
@@ -49,8 +54,6 @@ public:
             return info->GetCommitted().begin()->GetSnapshot();
         }
     }
-
-    void AddSchemaVersion(ui64 planStep, ui64 txId, const TString& dedupId, ui8 recType, ui64 schemaVersion);
 
     bool AddInserted(TInsertedData&& data, const bool load) {
         if (load) {
@@ -101,6 +104,11 @@ private:
     TInsertWriteId LastWriteId = TInsertWriteId{ 0 };
 
 public:
+    TInsertTable(NColumnShard::TColumnShard* cs = nullptr)
+        : TInsertTableAccessor(cs)
+    {
+    }
+
     static constexpr const TDuration WaitCommitDelay = TDuration::Minutes(10);
     static constexpr ui64 CleanupPackageSize = 10000;
 

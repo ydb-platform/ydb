@@ -3,6 +3,7 @@
 #include <ydb/core/tx/columnshard/engines/scheme/filtered_scheme.h>
 #include <ydb/core/tx/columnshard/engines/portions/constructor.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
+#include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/tables_manager.h>
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
@@ -22,14 +23,14 @@ public:
     bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& normController) const override {
         NOlap::TBlobManagerDb blobManagerDb(txc.DB);
         
-        TDbWrapper db(txc.DB, nullptr, txc.Owner);
+        TDbWrapper db(txc.DB, nullptr);
         for (auto&& [_, portionInfo] : BrokenPortions) {
             auto schema = Schemas->FindPtr(portionInfo->GetPortionId());
             AFL_VERIFY(!!schema)("portion_id", portionInfo->GetPortionId());
             AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "portion_removed_as_broken")("portion_id", portionInfo->GetAddress().DebugString());
             portionInfo->SetRemoveSnapshot(TSnapshot(1, 1));
             LOG_S_CRIT("Saving broken portion");
-            portionInfo->SaveToDatabase(db, (*schema)->GetIndexInfo().GetPKFirstColumnId(), false);
+            portionInfo->SaveToDatabase(db, (*schema)->GetIndexInfo().GetPKFirstColumnId(), false, static_cast<NColumnShard::TColumnShard*>(txc.Owner));
         }
         if (BrokenPortions.size()) {
             TStringBuilder sb;

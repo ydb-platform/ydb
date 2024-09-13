@@ -260,9 +260,9 @@ public:
         return PathId;
     }
 
-    void RemoveFromDatabase(IDbWrapper& db) const;
+    void RemoveFromDatabase(IDbWrapper& db, NColumnShard::TColumnShard* cs) const;
 
-    void SaveToDatabase(IDbWrapper& db, const ui32 firstPKColumnId, const bool saveOnlyMeta) const;
+    void SaveToDatabase(IDbWrapper& db, const ui32 firstPKColumnId, const bool saveOnlyMeta, NColumnShard::TColumnShard* cs) const;
 
     bool OlderThen(const TPortionInfo& info) const {
         return RecordSnapshotMin() < info.RecordSnapshotMin();

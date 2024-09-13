@@ -2030,7 +2030,6 @@ private:
         TDatashardTxs datashardTxs;
         TEvWriteTxs evWriteTxs;
         BuildDatashardTxs(datashardTasks, datashardTxs, evWriteTxs, topicTxs);
-        YQL_ENSURE(evWriteTxs.empty() || datashardTxs.empty());
 
         // Single-shard datashard transactions are always immediate
         ImmediateTx = (datashardTxs.size() + evWriteTxs.size() + Request.TopicOperations.GetSize() + sourceScanPartitionsCount) <= 1
@@ -2341,7 +2340,9 @@ private:
             // Volatile transactions must always use generic readsets
             VolatileTx ||
             // Transactions with topics must always use generic readsets
-            !topicTxs.empty());
+            !topicTxs.empty() || 
+            // HTAP transactions always use generic readsets
+            !evWriteTxs.empty());
 
         if (!locksMap.empty() || VolatileTx ||
             Request.TopicOperations.HasReadOperations() || Request.TopicOperations.HasWriteOperations())
@@ -2463,12 +2464,23 @@ private:
                 std::sort(receivingShards.begin(), receivingShards.end());
 
                 for (auto& [shardId, shardTx] : datashardTxs) {
-                    AFL_ENSURE(!columnShardArbiter);
                     shardTx->MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
-                    *shardTx->MutableLocks()->MutableSendingShards() = sendingShards;
-                    *shardTx->MutableLocks()->MutableReceivingShards() = receivingShards;
-                    if (arbiter) {
-                        shardTx->MutableLocks()->SetArbiterShard(arbiter);
+                    if (columnShardArbiter) {
+                        shardTx->MutableLocks()->AddSendingShards(*columnShardArbiter);
+                        shardTx->MutableLocks()->AddReceivingShards(*columnShardArbiter);
+                        if (sendingShardsSet.contains(shardId)) {
+                            shardTx->MutableLocks()->AddSendingShards(shardId);
+                        }
+                        if (receivingShardsSet.contains(shardId)) {
+                            shardTx->MutableLocks()->AddReceivingShards(shardId);
+                        }
+                        AFL_ENSURE(!arbiter);
+                    } else {
+                        *shardTx->MutableLocks()->MutableSendingShards() = sendingShards;
+                        *shardTx->MutableLocks()->MutableReceivingShards() = receivingShards;
+                        if (arbiter) {
+                            shardTx->MutableLocks()->SetArbiterShard(arbiter);
+                        }
                     }
                 }
 

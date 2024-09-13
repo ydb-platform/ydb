@@ -48,7 +48,7 @@ Y_UNIT_TEST_SUITE(TableWriter) {
                     .Build();
 
             NKikimrTxDataShard::TEvApplyReplicationChanges_TChange result;
-            TChangeRecordBuilderContextTrait<NBackup::NImpl::TChangeRecord> ctx(EWriterType::Backup);
+            NBackup::NImpl::TChangeRecord::TSerializationContext ctx(EWriterType::Backup);
             record->Serialize(result, ctx);
 
             TVector<TCell> outCells{
@@ -89,7 +89,7 @@ Y_UNIT_TEST_SUITE(TableWriter) {
                     .Build();
 
             NKikimrTxDataShard::TEvApplyReplicationChanges_TChange result;
-            TChangeRecordBuilderContextTrait<NBackup::NImpl::TChangeRecord> ctx(EWriterType::Backup);
+            NBackup::NImpl::TChangeRecord::TSerializationContext ctx(EWriterType::Backup);
             record->Serialize(result, ctx);
 
             TVector<TCell> outCells{
@@ -144,7 +144,7 @@ Y_UNIT_TEST_SUITE(TableWriter) {
                     .Build();
 
             NKikimrTxDataShard::TEvApplyReplicationChanges_TChange result;
-            TChangeRecordBuilderContextTrait<NBackup::NImpl::TChangeRecord> ctx(EWriterType::Restore);
+            NBackup::NImpl::TChangeRecord::TSerializationContext ctx(EWriterType::Restore);
             record->Serialize(result, ctx);
 
             UNIT_ASSERT_VALUES_EQUAL(TSerializedCellVec::Serialize(keyCells), result.GetKey());

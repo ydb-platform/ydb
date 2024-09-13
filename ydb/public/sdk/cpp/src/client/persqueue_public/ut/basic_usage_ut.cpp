@@ -71,7 +71,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             std::visit(TOverloaded {
                 [&](TReadSessionEvent::TDataReceivedEvent& event) {
                     for (auto& message: event.GetMessages()) {
-                        TString sourceId = message.GetMessageGroupId();
+                        std::string sourceId = message.GetMessageGroupId();
                         ui32 seqNo = message.GetSeqNo();
                         UNIT_ASSERT_VALUES_EQUAL(readMessageCount + 1, seqNo);
                         ++readMessageCount;
@@ -190,16 +190,16 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         auto readSession = client.CreateReadSession(readSettings);
 
         auto event = readSession->GetEvent(true);
-        UNIT_ASSERT(event.Defined());
+        UNIT_ASSERT(event.has_value());
 
         auto& createPartitionStream = std::get<TReadSessionEvent::TCreatePartitionStreamEvent>(*event);
         createPartitionStream.Confirm();
 
         UNIT_CHECK_GENERATED_EXCEPTION(readSession->GetEvent(true, 0), TContractViolation);
-        UNIT_CHECK_GENERATED_EXCEPTION(readSession->GetEvents(true, Nothing(), 0), TContractViolation);
+        UNIT_CHECK_GENERATED_EXCEPTION(readSession->GetEvents(true, std::nullopt, 0), TContractViolation);
 
         event = readSession->GetEvent(true, 1);
-        UNIT_ASSERT(event.Defined());
+        UNIT_ASSERT(event.has_value());
 
         auto& dataReceived = std::get<TReadSessionEvent::TDataReceivedEvent>(*event);
         dataReceived.Commit();
@@ -380,7 +380,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             std::visit(TOverloaded {
                 [&](TReadSessionEvent::TDataReceivedEvent& event) {
                     for (auto& message: event.GetMessages()) {
-                        TString sourceId = message.GetMessageGroupId();
+                        std::string sourceId = message.GetMessageGroupId();
                         ui32 seqNo = message.GetSeqNo();
                         UNIT_ASSERT_VALUES_EQUAL(readMessageCount + 1, seqNo);
                         ++readMessageCount;
@@ -447,7 +447,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
     public:
         TBrokenCredentialsProvider() {}
         virtual ~TBrokenCredentialsProvider() {}
-        TStringType GetAuthInfo() const {
+        std::string GetAuthInfo() const {
             ythrow yexception() << "exception during creation";
             return "";
         }
@@ -463,7 +463,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             return std::make_shared<TBrokenCredentialsProvider>();
         }
 
-        virtual TStringType GetClientIdentity() const {
+        virtual std::string GetClientIdentity() const {
             return "abacaba";
         }
     };

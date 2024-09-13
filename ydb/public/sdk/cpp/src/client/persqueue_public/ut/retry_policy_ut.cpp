@@ -316,7 +316,7 @@ Y_UNIT_TEST_SUITE(RetryPolicy) {
                         Cerr << "===Data event\n";
                         auto& clusterName = event.GetPartitionStream()->GetCluster();
                         for (auto& message: event.GetMessages()) {
-                            TString sourceId = message.GetMessageGroupId();
+                            auto sourceId = TString{message.GetMessageGroupId()};
                             ui32 seqNo = message.GetSeqNo();
                             if (sourceId == sourceId1) {
                                 UNIT_ASSERT_VALUES_EQUAL(seqNo, seqNoByClusterSrc1[clusterName] + 1);

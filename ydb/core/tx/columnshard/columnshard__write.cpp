@@ -294,9 +294,7 @@ public:
         auto& locks = evWrite.Record.GetLocks();
         auto& lock = evWrite.Record.GetLocks().GetLocks()[0];
         SendingShards = std::set<ui64>(locks.GetSendingShards().begin(), locks.GetSendingShards().end());
-        SendingColumnShards = std::set<ui64>(locks.GetSendingColumnShards().begin(), locks.GetSendingColumnShards().end());
         ReceivingShards = std::set<ui64>(locks.GetReceivingShards().begin(), locks.GetReceivingShards().end());
-        ReceivingColumnShards = std::set<ui64>(locks.GetReceivingColumnShards().begin(), locks.GetReceivingColumnShards().end());
         HtapFormat = locks.HasArbiterColumnShard();
         if (!ReceivingShards.size() || !SendingShards.size()) {
             ReceivingShards.clear();
@@ -307,12 +305,12 @@ public:
                 return TConclusionStatus::Fail("shard is incorrect for sending/receiving lists");
             }
         } else {
-            if (!ReceivingColumnShards.size() || !SendingColumnShards.size()) {
+            if (!ReceivingShards.size() || !SendingShards.size()) {
                 return TConclusionStatus::Fail("empty sending/receiving lists for columnshards is incorrect case");
             }
             ArbiterColumnShard = locks.GetArbiterColumnShard();
             AFL_VERIFY(ArbiterColumnShard);
-            if (!ReceivingColumnShards.contains(TabletId) && !SendingColumnShards.contains(TabletId)) {
+            if (!ReceivingShards.contains(TabletId) && !SendingShards.contains(TabletId)) {
                 return TConclusionStatus::Fail("shard is incorrect for sending/receiving lists");
             }
         }
@@ -338,19 +336,11 @@ public:
         AFL_VERIFY(ReceivingShards.size());
         if (HtapFormat) {
             if (IsPrimary()) {
-                std::set<ui64> fullReceiving = ReceivingShards;
-                fullReceiving.insert(ReceivingColumnShards.begin(), ReceivingColumnShards.end());
-                AFL_VERIFY(fullReceiving.size() + 1 == ReceivingShards.size() + ReceivingColumnShards.size());
-
-                std::set<ui64> fullSending = SendingShards;
-                fullSending.insert(SendingColumnShards.begin(), SendingColumnShards.end());
-                AFL_VERIFY(fullSending.size() + 1 == SendingShards.size() + SendingColumnShards.size());
-
                 return std::make_unique<NColumnShard::TEvWriteCommitPrimaryTransactionOperator>(
-                    TFullTxInfo::BuildFake(kind), LockId, fullReceiving, fullSending);
+                    TFullTxInfo::BuildFake(kind), LockId, ReceivingShards, SendingShards);
             } else {
                 return std::make_unique<NColumnShard::TEvWriteCommitSecondaryTransactionOperator>(TFullTxInfo::BuildFake(kind), LockId,
-                    ArbiterColumnShard, ReceivingColumnShards.contains(TabletId));
+                    ArbiterColumnShard, ReceivingShards.contains(TabletId));
             }
         } else {
             if (IsPrimary()) {

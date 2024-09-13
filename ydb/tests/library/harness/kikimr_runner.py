@@ -216,10 +216,6 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         return 'localhost'
 
     @property
-    def hostname(self):
-        return kikimr_config.get_fqdn()
-
-    @property
     def port(self):
         return self.grpc_port
 

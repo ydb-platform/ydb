@@ -25,7 +25,7 @@ struct TLimits {
 
 class TBuffer {
 public:
-    void AddRow(TArrayRef<const TCell> key, TArrayRef<const TCell> value) {
+    inline void AddRow(TArrayRef<const TCell> key, TArrayRef<const TCell> value) {
         const auto& [k, v] = Data.emplace_back(
             TSerializedCellVec(key),
             TSerializedCellVec(value)
@@ -33,20 +33,20 @@ public:
         ByteSize += k.GetBuffer().size() + v.GetBuffer().size();
     }
 
-    auto&& Flush() {
+    inline auto&& Flush() {
         ByteSize = 0;
         return std::move(Data);
     }
 
-    ui64 Bytes() const {
+    inline ui64 Bytes() const {
         return ByteSize;
     }
 
-    ui64 Rows() const {
+    inline ui64 Rows() const {
         return Data.size();
     }
 
-    explicit operator bool() const {
+    inline explicit operator bool() const {
         return !Data.empty();
     }
 
@@ -67,7 +67,7 @@ struct TChange {
     ui64 LockId = 0;
     ui64 LockOffset = 0;
 
-    TInstant CreatedAt() const {
+    inline TInstant CreatedAt() const {
         return Group
             ? TInstant::MicroSeconds(Group)
             : TInstant::MilliSeconds(Step);

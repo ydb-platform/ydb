@@ -4,7 +4,6 @@
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/simple_arrays_cache.h>
-#include <ydb/library/accessor/validator.h>
 
 #include <ydb/library/actors/core/log.h>
 

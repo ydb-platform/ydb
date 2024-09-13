@@ -382,3 +382,4 @@ ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.CreateAlter-PQConfigTr
 ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.CreateAlterDropPqGroupWithReboots-PQConfigTransactionsAtSchemeShard-true
 ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.CreateDrop-PQConfigTransactionsAtSchemeShard-true
 ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.CreateMultiplePqTablets-PQConfigTransactionsAtSchemeShard-true
+ydb/tests/postgres_integrations/go-libpq [docker_wrapper_test.py] chunk chunk

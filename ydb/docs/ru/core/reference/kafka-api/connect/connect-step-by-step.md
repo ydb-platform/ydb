@@ -58,7 +58,7 @@
     offset.storage.file.filename=/etc/kafka-connect-worker/worker.offset
     ```
 
-5. Создайте файл настроек FileSink коннектора `/etc/kafka-connect-worker/file-sink.properties` для переноса данных из топика YDB в файл:
+5. Создайте файл настроек FileSink коннектора `/etc/kafka-connect-worker/file-sink.properties` для переноса данных из топика {{ ydb-short-name }} в файл:
 
     ```ini
     name=local-file-sink
@@ -74,6 +74,7 @@
     * `topics` — имя топика, из которого коннектор будет читать данные.
 
 6. Запустите Kafka Connect в режиме Standalone:
+
     ```bash
     cd ~/opt/kafka/bin/ && \
     sudo ./connect-standalone.sh \

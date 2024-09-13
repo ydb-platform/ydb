@@ -66,7 +66,7 @@ All columns allow writing `NULL` values, that is, they are [optional](../../type
 It is mandatory to specify the `PRIMARY KEY` with a non-empty list of columns. Those columns become part of the key in the listed order.
 {% endif %}
 
-**Example**
+### Example
 
     CREATE TABLE my_table (
 {% if feature_not_null_for_pk %}        a Uint64 NOT NULL,{% else %}        a Uint64,{% endif %}
@@ -78,13 +78,12 @@ It is mandatory to specify the `PRIMARY KEY` with a non-empty list of columns. T
 {% endif %}
     )
 
-
 {% if feature_secondary_index %}
 {% if feature_olap_tables %}#{% endif %}## Secondary indexes {#secondary_index}
 
-The INDEX construct is used to define a {% if concept_secondary_index %}[secondary index]({{ concept_secondary_index }}){% else %}secondary index{% endif %} in a table:
+The `INDEX` clause is used to define a {% if concept_secondary_index %}[secondary index]({{ concept_secondary_index }}){% else %}secondary index{% endif %} in a table:
 
-```sql
+```yql
 CREATE TABLE table_name (
     ...
     INDEX <index_name> GLOBAL [SYNC|ASYNC] ON ( <index_columns> ) COVER ( <cover_columns> ),
@@ -93,14 +92,15 @@ CREATE TABLE table_name (
 ```
 
 Where:
+
 * **Index_name** is the unique name of the index to be used to access data.
 * **SYNC/ASYNC** indicates synchronous/asynchronous data writes to the index. If not specified, synchronous.
 * **Index_columns** is a list of comma-separated names of columns in the created table to be used for a search in the index.
 * **Cover_columns** is a list of comma-separated names of columns in the created table, which will be stored in the index in addition to the search columns, making it possible to fetch additional data without accessing the table for it.
 
-**Example**
+#### Example
 
-```sql
+```yql
 CREATE TABLE my_table (
     a Uint64,
     b Bool,
@@ -115,7 +115,7 @@ CREATE TABLE my_table (
 
 {% if feature_temp_tables %}
 {% if feature_olap_tables %}#{%endif%}## Creating a temporary table {#temporary_tables}
-```sql
+```yql
 CREATE TEMPORARY TABLE table_name (
     ...
 );
@@ -130,7 +130,7 @@ CREATE TEMPORARY TABLE table_name (
 
 You can also specify a number of {{ backend_name }}-specific parameters for the table. When you create a table, those parameters are listed in the ```WITH``` clause:
 
-```sql
+```yql
 CREATE TABLE table_name (...)
 WITH (
     key1 = value1,
@@ -145,9 +145,7 @@ For a list of valid parameter names and values, see the [{{ backend_name }} tabl
 
 For example, this code will create a table with enabled automatic partitioning by partition size and the preferred size of each partition is 512 MB:
 
-<small>Listing 4</small>
-
-```sql
+```yql
 CREATE TABLE my_table (
     id Uint64,
     title Utf8,
@@ -170,7 +168,7 @@ By default, all columns are in the same group named ```default```.  If necessary
 
 In the example below, for the created table, the ```family_large``` group of columns is added and set for the ```series_info``` column, and the parameters for the default group, which is set by ```default``` for all other columns, are also redefined.
 
-```sql
+```yql
 CREATE TABLE series_with_families (
     series_id Uint64,
     title Utf8,
@@ -210,7 +208,7 @@ Column-oriented {{ ydb-short-name }} tables are in the Preview mode.
 
 The `CREATE TABLE` statement creates a [column-oriented](../../../../concepts/datamodel/table.md#olap-data-types) table with the specified data schema and key columns (`PRIMARY KEY`).
 
-```sql
+```yql
 CREATE TABLE table_name (
     column1 type1,
     column2 type2 NOT NULL,
@@ -236,9 +234,9 @@ Make sure to add the `PRIMARY KEY` and `PARTITION BY` clauses with a non-empty l
 
 If you omit modifiers, a column is assigned an [optional](../../types/optional.md) type and can accept `NULL` values. To create a non-optional type, use `NOT NULL`.
 
-**Example**
+#### Example
 
-```sql
+```yql
 CREATE TABLE my_table (
     a Uint64 NOT NULL,
     b String,
@@ -255,7 +253,7 @@ STORE = COLUMN
 
 You can also specify a number of {{ backend_name }}-specific parameters for the table. When you create a table, those parameters are listed in the ```WITH``` clause:
 
-```sql
+```yql
 CREATE TABLE table_name (...)
 WITH (
     key1 = value1,
@@ -272,7 +270,7 @@ Supported parameters in column-oriented tables:
 
 For example, the following code creates a column-oriented table with ten partitions:
 
-```sql
+```yql
 CREATE TABLE my_table (
     id Uint64,
     title Utf8,

@@ -324,6 +324,7 @@ namespace NSQLTranslationV1 {
         bool CompactNamedExprs = false;
         bool ValidateUnusedExprs = false;
         bool AnsiImplicitCrossJoin = false; // select * from A,B
+        bool DistinctOverWindow = false;
     };
 
     class TColumnRefScope {
@@ -379,7 +380,7 @@ namespace NSQLTranslationV1 {
             return Ctx.Token(token);
         }
 
-        uint UnifiedToken(uint id) const {
+        ui32 UnifiedToken(ui32 id) const {
             return Ctx.Settings.Antlr4Parser + (id << 16);
         }
 

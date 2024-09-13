@@ -9,7 +9,7 @@ Arguments:
 
 Result: a structure or tuple with the same number and naming of items as in the first argument, and with item data types determined by lambda results.
 
-**Examples:**
+### Examples
 
 ```yql
 SELECT *

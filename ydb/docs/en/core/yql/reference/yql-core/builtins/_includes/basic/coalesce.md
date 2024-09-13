@@ -6,7 +6,7 @@ Lets you pass potentially empty values to functions that can't handle them by th
 
 A short format using the low-priority `??` operator is available (lower than the Boolean operations). You can use the `NVL` alias.
 
-**Examples**
+### Examples
 
 ```yql
 SELECT COALESCE(
@@ -28,5 +28,5 @@ SELECT NVL(
 ) FROM my_table;
 ```
 
-<span style="color: gray;">(all three examples above are equivalent)</span>
+All three examples above are equivalent.
 

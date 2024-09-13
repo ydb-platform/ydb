@@ -4,16 +4,6 @@
 #include <util/generic/string.h>
 #include <util/stream/output.h>
 
-namespace NKikimr {
-
-template <typename TChangeRecord>
-struct TChangeRecordBuilderTrait;
-
-template <typename TChangeRecord>
-struct TChangeRecordBuilderContextTrait {};
-
-} // namespace NKikimr
-
 namespace NKikimr::NChangeExchange {
 
 class IChangeSenderResolver;
@@ -31,6 +21,7 @@ public:
         AsyncIndex,
         CdcDataChange,
         CdcHeartbeat,
+        IncrementalRestore,
     };
 
 public:

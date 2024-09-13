@@ -4,7 +4,7 @@
 
 ## Синтаксис {#syntax}
 
-```sql
+```yql
 ALTER ASYNC REPLICATION <name> SET (option = value [, ...])
 ```
 
@@ -23,7 +23,7 @@ ALTER ASYNC REPLICATION <name> SET (option = value [, ...])
 
 Следующий запрос принудительно завершит процесс асинхронной репликации:
 
-```sql
+```yql
 ALTER ASYNC REPLICATION my_replication SET (STATE = "DONE", FAILOVER_MODE = "FORCE");
 ```
 

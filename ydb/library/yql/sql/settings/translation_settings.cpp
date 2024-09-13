@@ -74,6 +74,10 @@ namespace NSQLTranslation {
             return false;
         }
 
+        if (settings.Flags.contains("Antlr4")) {
+            settings.Antlr4Parser = true;
+        }
+
         TSplitDelimiters lineDelimiters("\n\r");
         TDelimitersSplit linesSplit(query, lineDelimiters);
         auto lineIterator = linesSplit.Iterator();
@@ -126,6 +130,8 @@ namespace NSQLTranslation {
                 settings.AnsiLexer = true;
             } else if (value == "antlr4_parser") {
                 settings.Antlr4Parser = true;
+            } else if (value == "antlr3_parser") {
+                settings.Antlr4Parser = false;
             } else if (value == "syntax_pg") {
                 settings.PgParser = true;
             } else {

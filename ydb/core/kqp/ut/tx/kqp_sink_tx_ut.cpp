@@ -96,7 +96,7 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
 
             commitResult = tx.Commit().ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::NOT_FOUND, commitResult.GetIssues().ToString());
-            //TODO: UNIT_ASSERT_C(HasIssue(commitResult.GetIssues(), NYql::TIssuesIds::KIKIMR_TRANSACTION_NOT_FOUND), commitResult.GetIssues().ToString());
+            UNIT_ASSERT_C(HasIssue(commitResult.GetIssues(), NYql::TIssuesIds::KIKIMR_TRANSACTION_NOT_FOUND), commitResult.GetIssues().ToString());
         }
     };
 
@@ -145,8 +145,10 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
                 UPDATE `/Root/KV` SET Value = "third" WHERE Key = 4;
             )"), TTxControl::Tx(tx->GetId())).ExtractValueSync();
             if (GetIsOlap()) {
+                // Olap has Reads in this query, so it breaks now.
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
             } else {
+                // Oltp doesn't have Reads in this query, so it breaks later.
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             }
 
@@ -155,7 +157,7 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
             if (GetIsOlap()) {
                 UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::NOT_FOUND, commitResult.GetIssues().ToString());
             } else {
-                UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::ABORTED, commitResult.GetIssues().ToString());
             }
         }
     };
@@ -186,14 +188,13 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
             auto result = session.ExecuteQuery(Q_(R"(
                 INSERT INTO `/Root/KV` (Key, Value) VALUES (1u, "New");
             )"), TTxControl::Tx(tx.GetId())).ExtractValueSync();
-            // result.GetIssues().PrintTo(Cerr);
-            //TODO: UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            result.GetIssues().PrintTo(Cerr);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
 
             result = session.ExecuteQuery(Q_(R"(
                 UPSERT INTO `/Root/KV` (Key, Value) VALUES (1u, "New");
             )"), TTxControl::Tx(tx.GetId())).ExtractValueSync();
-            // result.GetIssues().PrintTo(Cerr);
+            result.GetIssues().PrintTo(Cerr);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::NOT_FOUND, result.GetIssues().ToString());
         }
     };

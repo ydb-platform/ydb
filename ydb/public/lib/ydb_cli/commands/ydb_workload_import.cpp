@@ -61,7 +61,7 @@ int TWorkloadCommandImport::TUploadCommand::DoRun(NYdbWorkload::IWorkloadQueryGe
         }
         NThreading::WaitAll(sendings).Wait();
         const bool wereErrors = AtomicGet(ErrorsCount);
-        Cout << "Fill table " << dataGen->GetName() << (wereErrors ? "Failed" : "OK" ) << " " << Bar->GetCurProgress() << " / " << Bar->GetCapacity() << " (" << (Now() - start) << ")" << Endl;
+        Cout << "Fill table " << dataGen->GetName()  << " "<< (wereErrors ? "Failed" : "OK" ) << " " << Bar->GetCurProgress() << " / " << Bar->GetCapacity() << " (" << (Now() - start) << ")" << Endl;
         if (wereErrors) {
             break;
         }

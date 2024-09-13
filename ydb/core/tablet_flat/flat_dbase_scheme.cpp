@@ -31,7 +31,7 @@ TAutoPtr<TSchemeChanges> TScheme::GetSnapshot() const {
             const auto &col = it.second;
 
             delta.AddPgColumn(table, col.Name, it.first, col.PType.GetTypeId(),
-                NPg::PgTypeIdFromTypeDesc(col.PType.GetTypeDesc()),
+                NPg::PgTypeIdFromTypeDesc(col.PType.GetPgTypeDesc()),
                 col.PTypeMod, col.NotNull, col.Null);
             delta.AddColumnToFamily(table, it.first, col.Family);
         }

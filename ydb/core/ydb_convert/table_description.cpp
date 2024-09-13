@@ -388,7 +388,7 @@ static Ydb::Type* AddColumn(Ydb::Table::ColumnMeta* newColumn, const TColumn& co
     newColumn->set_name(column.GetName());
 
     Ydb::Type* columnType = nullptr;
-    auto* typeDesc = NPg::TypeDescFromPgTypeName(column.GetType());
+    auto typeDesc = NPg::TypeDescFromPgTypeName(column.GetType());
     if (typeDesc) {
         columnType = newColumn->mutable_type();
         auto* pg = columnType->mutable_pg_type();
@@ -429,7 +429,7 @@ Ydb::Type* AddColumn<NKikimrSchemeOp::TColumnDescription>(Ydb::Table::ColumnMeta
     newColumn->set_name(column.GetName());
 
     Ydb::Type* columnType = nullptr;
-    auto* typeDesc = NPg::TypeDescFromPgTypeName(column.GetType());
+    auto typeDesc = NPg::TypeDescFromPgTypeName(column.GetType());
     if (typeDesc) {
         columnType = newColumn->mutable_type();
         auto* pg = columnType->mutable_pg_type();
@@ -629,7 +629,7 @@ bool ExtractColumnTypeInfo(NScheme::TTypeInfo& outTypeInfo, TString& outTypeMod,
         case Ydb::Type::kPgType: {
             const auto& pgType = itemType.pg_type();
             const auto& typeName = pgType.type_name();
-            auto* desc = NPg::TypeDescFromPgTypeName(typeName);
+            auto desc = NPg::TypeDescFromPgTypeName(typeName);
             if (!desc) {
                 status = Ydb::StatusIds::BAD_REQUEST;
                 error = TStringBuilder() << "Invalid PG type name: " << typeName;
@@ -1505,7 +1505,7 @@ bool FillSequenceDescription(Ydb::Table::CreateTableRequest& out, const NKikimrS
                 }
                 if (sequenceDescription.HasDataType()) {
                     auto* dataType = fromSequence->mutable_data_type();
-                    auto* typeDesc = NPg::TypeDescFromPgTypeName(sequenceDescription.GetDataType());
+                    auto typeDesc = NPg::TypeDescFromPgTypeName(sequenceDescription.GetDataType());
                     if (typeDesc) {
                         auto* pg = dataType->mutable_pg_type();
                         auto typeId = NPg::PgTypeIdFromTypeDesc(typeDesc);
@@ -1606,7 +1606,7 @@ bool FillSequenceDescription(NKikimrSchemeOp::TSequenceDescription& out, const Y
                 break;
             }
             case NScheme::NTypeIds::Pg: {
-                switch (NPg::PgTypeIdFromTypeDesc(typeInfo.GetTypeDesc())) {
+                switch (NPg::PgTypeIdFromTypeDesc(typeInfo.GetPgTypeDesc())) {
                     case INT2OID:
                     case INT4OID:
                     case INT8OID: {
@@ -1614,7 +1614,7 @@ bool FillSequenceDescription(NKikimrSchemeOp::TSequenceDescription& out, const Y
                         break;
                     }
                     default: {
-                        TString sequenceType = NPg::PgTypeNameFromTypeDesc(typeInfo.GetTypeDesc());
+                        TString sequenceType = NPg::PgTypeNameFromTypeDesc(typeInfo.GetPgTypeDesc());
                         status = Ydb::StatusIds::BAD_REQUEST;
                         error = Sprintf(
                             "Invalid type name %s for sequence: %s", sequenceType.c_str(), out.GetName().data()

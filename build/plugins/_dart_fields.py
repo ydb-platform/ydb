@@ -22,6 +22,9 @@ CANON_OUTPUT_STORAGE = 'canondata_storage'
 KTLINT_CURRENT_EDITOR_CONFIG = "arcadia/build/platform/java/ktlint/.editorconfig"
 KTLINT_OLD_EDITOR_CONFIG = "arcadia/build/platform/java/ktlint_old/.editorconfig"
 
+ARCADIA_ROOT = '${ARCADIA_ROOT}/'
+SOURCE_ROOT_SHORT = '$S/'
+
 
 class DartValueError(ValueError):
     pass
@@ -256,6 +259,15 @@ def _get_ts_test_data_dirs(unit):
     )
 
 
+@_common.lazy
+def get_linter_configs(unit, config_paths):
+    rel_config_path = _common.rootrel_arc_src(config_paths, unit)
+    arc_config_path = unit.resolve_arc_path(rel_config_path)
+    abs_config_path = unit.resolve(arc_config_path)
+    with open(abs_config_path, 'r') as fd:
+        return list(json.load(fd).values())
+
+
 class AndroidApkTestActivity:
     KEY = 'ANDROID_APK_TEST_ACTIVITY'
 
@@ -360,10 +372,10 @@ class CustomDependencies:
 
     @classmethod
     def depends_with_linter(cls, unit, flat_args, spec_args):
-        deps = []
-        _, linter = flat_args
-        deps.append(os.path.dirname(linter))
-        deps += spec_args.get('DEPENDS', [])
+        linter = Linter.value(unit, flat_args, spec_args)[Linter.KEY]
+        deps = spec_args.get('DEPENDS', []) + [os.path.dirname(linter)]
+        for dep in deps:
+            unit.ondepends(dep)
         return {cls.KEY: " ".join(deps)}
 
     @classmethod
@@ -478,7 +490,7 @@ class JavaClasspathCmdType:
                     unit.path(), java_cp_arg_type
                 )
             )
-            raise DartValueError
+            raise DartValueError()
         return {cls.KEY: java_cp_arg_type}
 
 
@@ -528,8 +540,68 @@ class KtlintBinary:
         return {cls.KEY: value}
 
 
+class Linter:
+    KEY = 'LINTER'
+
+    @classmethod
+    def value(cls, unit, flat_args, spec_args):
+        return {cls.KEY: spec_args['LINTER'][0]}
+
+
+class LintConfigs:
+    KEY = 'LINT-CONFIGS'
+
+    @classmethod
+    def value(cls, unit, flat_args, spec_args):
+        resolved_configs = []
+        configs = spec_args.get('CONFIGS', [])
+        for cfg in configs:
+            filename = unit.resolve(SOURCE_ROOT_SHORT + cfg)
+            if not os.path.exists(filename):
+                message = 'Configuration file {} is not found'.format(filename)
+                raise DartValueError(message)
+            resolved_configs.append(cfg)
+            if os.path.splitext(filename)[-1] == '.json':
+                cfgs = get_linter_configs(unit, cfg)
+                for c in cfgs:
+                    filename = unit.resolve(SOURCE_ROOT_SHORT + c)
+                    if not os.path.exists(filename):
+                        message = 'Configuration file {} is not found'.format(filename)
+                        raise DartValueError(message)
+                    resolved_configs.append(c)
+        return {cls.KEY: serialize_list(resolved_configs)}
+
+
+class LintExtraParams:
+    KEY = 'LINT-EXTRA-PARAMS'
+
+    @classmethod
+    def from_macro_args(cls, unit, flat_args, spec_args):
+        extra_params = spec_args.get('EXTRA_PARAMS', [])
+        for arg in extra_params:
+            if '=' not in arg:
+                message = 'Wrong EXTRA_PARAMS value: "{}". Values must have format "name=value".'.format(arg)
+                raise DartValueError(message)
+        return {cls.KEY: serialize_list(extra_params)}
+
+
 class LintFileProcessingTime:
     KEY = 'LINT-FILE-PROCESSING-TIME'
+
+    @classmethod
+    def from_macro_args(cls, unit, flat_args, spec_args):
+        return {cls.KEY: spec_args.get('FILE_PROCESSING_TIME', [''])[0]}
+
+
+class LintName:
+    KEY = 'LINT-NAME'
+
+    @classmethod
+    def value(cls, unit, flat_args, spec_args):
+        lint_name = spec_args['NAME'][0]
+        if lint_name in ('flake8', 'py2_flake8') and (unit.get('DISABLE_FLAKE8') or 'no') == 'yes':
+            raise DartValueError('Flake8 linting is disabled by `DISABLE_FLAKE8`')
+        return {cls.KEY: lint_name}
 
 
 class ModuleLang:
@@ -841,9 +913,8 @@ class TestData:
 
         props, error_mgs = extract_java_system_properties(unit, get_values_list(unit, 'SYSTEM_PROPERTIES_VALUE'))
         if error_mgs:
-            # TODO move error reporting out of field classes
             ymake.report_configure_error(error_mgs)
-            raise DartValueError
+            raise DartValueError()
         for prop in props:
             if prop['type'] == 'file':
                 test_data.append(prop['path'].replace('${ARCADIA_ROOT}', 'arcadia'))
@@ -949,7 +1020,8 @@ class TestedProjectName:
 
 class TestFiles:
     KEY = 'TEST-FILES'
-    # TODO remove FILES, see DEVTOOLS-7052
+    # TODO remove FILES, see DEVTOOLS-7052, currently it's required
+    # https://a.yandex-team.ru/arcadia/devtools/ya/test/dartfile/__init__.py?rev=r14292146#L10
     KEY2 = 'FILES'
 
     @classmethod
@@ -993,32 +1065,55 @@ class TestFiles:
     @classmethod
     def test_srcs(cls, unit, flat_args, spec_args):
         test_files = get_values_list(unit, 'TEST_SRCS_VALUE')
-        return {cls.KEY: serialize_list(test_files)}
+        value = serialize_list(test_files)
+        return {cls.KEY: value, cls.KEY2: value}
 
     @classmethod
     def ts_test_srcs(cls, unit, flat_args, spec_args):
         test_files = get_values_list(unit, "_TS_TEST_SRCS_VALUE")
         test_files = _resolve_module_files(unit, unit.get("MODDIR"), test_files)
-        return {cls.KEY: serialize_list(test_files)}
+        value = serialize_list(test_files)
+        return {cls.KEY: value, cls.KEY2: value}
 
     @classmethod
     def ts_input_files(cls, unit, flat_args, spec_args):
         typecheck_files = get_values_list(unit, "TS_INPUT_FILES")
         test_files = [_common.resolve_common_const(f) for f in typecheck_files]
-        return {cls.KEY: serialize_list(test_files)}
+        value = serialize_list(test_files)
+        return {cls.KEY: value, cls.KEY2: value}
 
     @classmethod
     def ts_lint_srcs(cls, unit, flat_args, spec_args):
         test_files = get_values_list(unit, "_TS_LINT_SRCS_VALUE")
         test_files = _resolve_module_files(unit, unit.get("MODDIR"), test_files)
-        return {cls.KEY: serialize_list(test_files)}
+        value = serialize_list(test_files)
+        return {cls.KEY: value, cls.KEY2: value}
 
     @classmethod
     def stylesheets(cls, unit, flat_args, spec_args):
         test_files = get_values_list(unit, "_TS_STYLELINT_FILES")
         test_files = _resolve_module_files(unit, unit.get("MODDIR"), test_files)
+        value = serialize_list(test_files)
+        return {cls.KEY: value, cls.KEY2: value}
 
-        return {cls.KEY: serialize_list(test_files)}
+    @classmethod
+    def py_linter_files(cls, unit, flat_args, spec_args):
+        files = unit.get('PY_LINTER_FILES')
+        if not files:
+            raise DartValueError()
+        files = json.loads(files)
+        test_files = []
+        for path in files:
+            if path.startswith(ARCADIA_ROOT):
+                test_files.append(path.replace(ARCADIA_ROOT, SOURCE_ROOT_SHORT, 1))
+            elif path.startswith(SOURCE_ROOT_SHORT):
+                test_files.append(path)
+        if not test_files:
+            lint_name = LintName.value(unit, flat_args, spec_args)[LintName.KEY]
+            message = 'No files to lint for {}'.format(lint_name)
+            raise DartValueError(message)
+        test_files = serialize_list(test_files)
+        return {cls.KEY: test_files, cls.KEY2: test_files}
 
 
 class TestEnv:
@@ -1096,6 +1191,10 @@ class TestName:
     def filename_without_pkg_ext(cls, unit, flat_args, spec_args):
         test_name = os.path.basename(os.path.join(unit.path(), unit.filename()).replace(".pkg", ""))
         return {cls.KEY: os.path.splitext(test_name)[0]}
+
+    @classmethod
+    def name_from_macro_args(cls, unit, flat_args, spec_args):
+        return {cls.KEY: spec_args['NAME'][0]}
 
 
 class TestPartition:
@@ -1181,9 +1280,8 @@ class SystemProperties:
     def value(cls, unit, flat_args, spec_args):
         props, error_mgs = extract_java_system_properties(unit, get_values_list(unit, 'SYSTEM_PROPERTIES_VALUE'))
         if error_mgs:
-            # TODO move error reporting out of field classes
             ymake.report_configure_error(error_mgs)
-            raise DartValueError
+            raise DartValueError()
 
         props = base64.b64encode(six.ensure_binary(json.dumps(props)))
         return {cls.KEY: props}

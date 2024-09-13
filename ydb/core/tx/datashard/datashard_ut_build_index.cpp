@@ -13,11 +13,6 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-template <>
-inline void Out<NKikimrIndexBuilder::EBuildStatus>(IOutputStream& o, NKikimrIndexBuilder::EBuildStatus status) {
-    o << NKikimrIndexBuilder::EBuildStatus_Name(status);
-}
-
 namespace NKikimr {
 
 using namespace NKikimr::NDataShard::NKqpHelpers;

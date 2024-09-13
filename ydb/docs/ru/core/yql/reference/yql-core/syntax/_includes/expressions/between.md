@@ -6,7 +6,7 @@
 `x BETWEEN SYMMETRIC a AND b` эквивалентно `(x BETWEEN a AND b) OR (x BETWEEN b AND a)`.
 * `NOT` инвертирует результат проверки.
 
-**Примеры**
+### Примеры
 
 ``` yql
 SELECT * FROM my_table

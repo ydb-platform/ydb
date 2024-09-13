@@ -331,7 +331,16 @@ bool TWorkloadCommandBenchmark::RunBench(TClient& client, NYdbWorkload::IWorkloa
         ui32 failsCount = 0;
         ui32 diffsCount = 0;
         std::optional<TString> prevResult;
-        bool planSaved = false;
+        if (PlanFileName) {
+            TQueryBenchmarkResult res = TQueryBenchmarkResult::Error("undefined", "undefined", "undefined");
+            try {
+                res = Explain(query, client);
+            } catch (...) {
+                res = TQueryBenchmarkResult::Error(CurrentExceptionMessage(), "", "");
+            }
+            SavePlans(res, queryN, "explain");
+        }
+
         for (ui32 i = 0; i < IterationsCount; ++i) {
             auto t1 = TInstant::Now();
             TQueryBenchmarkResult res = TQueryBenchmarkResult::Error("undefined", "undefined", "undefined");
@@ -365,36 +374,14 @@ bool TWorkloadCommandBenchmark::RunBench(TClient& client, NYdbWorkload::IWorkloa
             } else {
                 ++failsCount;
                 Cout << "failed\t" << duration << " seconds" << Endl;
-                Cerr << queryN << ": " << Endl
+                Cerr << queryN << ":" << Endl
+                    << "iteration " << i << Endl
                     << res.GetErrorInfo() << Endl;
                 Cerr << "Query text:" << Endl;
                 Cerr << query << Endl << Endl;
                 Sleep(TDuration::Seconds(1));
             }
-            if (!planSaved && PlanFileName) {
-                TFsPath(PlanFileName).Parent().MkDirs();
-                {
-                    TFileOutput out(PlanFileName + ".table");
-                    TQueryPlanPrinter queryPlanPrinter(EDataFormat::PrettyTable, true, out, 120);
-                    queryPlanPrinter.Print(res.GetQueryPlan());
-                }
-                {
-                    TFileOutput out(PlanFileName + ".json");
-                    TQueryPlanPrinter queryPlanPrinter(EDataFormat::JsonBase64, true, out, 120);
-                    queryPlanPrinter.Print(res.GetQueryPlan());
-                }
-                {
-                    TFileOutput out(PlanFileName + ".ast");
-                    out << res.GetPlanAst();
-                }
-                {
-                    TPlanVisualizer pv;
-                    pv.LoadPlans(res.GetQueryPlan());
-                    TFileOutput out(PlanFileName + ".svg");
-                    out << pv.PrintSvgSafe();
-                }
-                planSaved = true;
-            }
+            SavePlans(res, queryN, ToString(i));
         }
 
         auto [inserted, success] = queryRuns.emplace(queryN, TTestInfo(std::move(clientTimings), std::move(serverTimings)));
@@ -459,6 +446,36 @@ bool TWorkloadCommandBenchmark::RunBench(TClient& client, NYdbWorkload::IWorkloa
     }
 
     return !someFailQueries;
+}
+
+void TWorkloadCommandBenchmark::SavePlans(const BenchmarkUtils::TQueryBenchmarkResult& res, ui32 queryNum, const TStringBuf name) const {
+    if (!PlanFileName) {
+        return;
+    }
+    TFsPath(PlanFileName).Parent().MkDirs();
+    const TString planFName =  TStringBuilder() << PlanFileName << "." << queryNum << "." << name << ".";
+    if (res.GetQueryPlan()) {
+        {
+            TFileOutput out(planFName + "table");
+            TQueryPlanPrinter queryPlanPrinter(EDataFormat::PrettyTable, true, out, 120);
+            queryPlanPrinter.Print(res.GetQueryPlan());
+        }
+        {
+            TFileOutput out(planFName + "json");
+            TQueryPlanPrinter queryPlanPrinter(EDataFormat::JsonBase64, true, out, 120);
+            queryPlanPrinter.Print(res.GetQueryPlan());
+        }
+        {
+            TPlanVisualizer pv;
+            pv.LoadPlans(res.GetQueryPlan());
+            TFileOutput out(planFName + "svg");
+            out << pv.PrintSvgSafe();
+        }
+    }
+    if (res.GetPlanAst()) {
+        TFileOutput out(planFName + "ast");
+        out << res.GetPlanAst();
+    }
 }
 
 int TWorkloadCommandBenchmark::DoRun(NYdbWorkload::IWorkloadQueryGenerator& workloadGen, TConfig& /*config*/) {

@@ -1,4 +1,4 @@
-## Variant, AsVariant {#variant}
+## Variant {#variant}
 
 `Variant()` creates a variant value over a tuple or structure.
 
@@ -8,7 +8,7 @@ Arguments:
 * String with a field name or tuple index
 * Variant type
 
-**Example**
+### Example
 
 ```yql
 $var_type = Variant<foo: Int32, bar: Bool>;
@@ -18,6 +18,8 @@ SELECT
    Variant(false, "bar", $var_type) as Variant2Value;
 ```
 
+## AsVariant {#asvariant}
+
 `AsVariant()` creates a value of a [variant over a structure](../../../types/containers.md) including one field. This value can be implicitly converted to any variant over a structure that has a matching data type for this field name and might include more fields with other names.
 
 Arguments:
@@ -25,7 +27,7 @@ Arguments:
 * Value
 * A string with the field name
 
-**Example**
+### Example
 
 ```yql
 SELECT

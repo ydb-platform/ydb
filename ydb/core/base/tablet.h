@@ -338,7 +338,13 @@ struct TEvTablet {
         {}
     };
 
-    struct TEvTabletActive : public TEventLocal<TEvTabletActive, EvTabletActive> {};
+    struct TEvTabletActive : public TEventLocal<TEvTabletActive, EvTabletActive> {
+        TString VersionInfo;
+
+        explicit TEvTabletActive(TString&& versionInfo)
+            : VersionInfo(std::move(versionInfo))
+        {}
+    };
 
     struct TEvDemoted : public TEventLocal<TEvDemoted, EvDemoted> {
         const bool ByIsolation;

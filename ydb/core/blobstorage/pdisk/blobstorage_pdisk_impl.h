@@ -201,6 +201,8 @@ public:
     // Metadata storage
     NMeta::TInfo Meta;
 
+    NLWTrace::TOrbit UpdateCycleOrbit;
+
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Initialization
     TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig> cfg, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters);

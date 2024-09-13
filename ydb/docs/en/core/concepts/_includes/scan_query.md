@@ -5,7 +5,7 @@ Scan Queries is a separate data access interface designed primarily for running 
 This method of executing queries has the following unique features:
 
 * Only *Read-Only* queries.
-* In *SERIALIZABLE_RW* mode, a data snapshot is taken and then used for all subsequent operations. As a result, the impact on OLTP transactions is minimal (only taking a snapshot).
+* In `SERIALIZABLE_RW` mode, a data snapshot is taken and then used for all subsequent operations. As a result, the impact on OLTP transactions is minimal (only taking a snapshot).
 * The output of a query is a data stream ([grpc stream](https://grpc.io/docs/what-is-grpc/core-concepts/)). This means scan queries have no limit on the number of rows in the result.
 * Due to the high overhead, it is only suitable for ad hoc queries.
 

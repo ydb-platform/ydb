@@ -705,6 +705,34 @@
             "uri": "https://{canondata_backend}/1031349/6f298ac212db1b4165ece4e91f6ac236bd3b6670/resource.tar.gz#test.test_blocks-date_not_equals--Results_/results.txt"
         }
     ],
+    "test.test[blocks-decimal_multiplicative_ops--Debug]": [
+        {
+            "checksum": "9f10affba1e58c06b6aff2150e8b65e2",
+            "size": 4136,
+            "uri": "https://{canondata_backend}/1600758/22a5353e4a340461cbf13384701169966063d713/resource.tar.gz#test.test_blocks-decimal_multiplicative_ops--Debug_/opt.yql"
+        }
+    ],
+    "test.test[blocks-decimal_multiplicative_ops--Peephole]": [
+        {
+            "checksum": "361e8ebd133b65a26b0035485eddd9ee",
+            "size": 3884,
+            "uri": "https://{canondata_backend}/1936997/927e406c01406b20d3377f131b49b052ad497cc5/resource.tar.gz#test.test_blocks-decimal_multiplicative_ops--Peephole_/opt.yql"
+        }
+    ],
+    "test.test[blocks-decimal_multiplicative_ops--Plan]": [
+        {
+            "checksum": "4578f9a1b54bf43aa6ebe0c94d50b4c1",
+            "size": 4059,
+            "uri": "https://{canondata_backend}/1600758/22a5353e4a340461cbf13384701169966063d713/resource.tar.gz#test.test_blocks-decimal_multiplicative_ops--Plan_/plan.txt"
+        }
+    ],
+    "test.test[blocks-decimal_multiplicative_ops--Results]": [
+        {
+            "checksum": "4cc6904a9863a4ac94519c73b2810098",
+            "size": 32624,
+            "uri": "https://{canondata_backend}/1600758/22a5353e4a340461cbf13384701169966063d713/resource.tar.gz#test.test_blocks-decimal_multiplicative_ops--Results_/results.txt"
+        }
+    ],
     "test.test[blocks-interval_div_scalar--Debug]": [
         {
             "checksum": "f2422c71c8473bc3a292d4590d187069",
@@ -854,9 +882,9 @@
     ],
     "test.test[column_group-min_group-default.txt-Debug]": [
         {
-            "checksum": "1aaf16e9c5132c0572386fd4d56c7277",
-            "size": 2735,
-            "uri": "https://{canondata_backend}/1924537/b951bd7340443ed2b617ca5ca2a4a02ac6a08281/resource.tar.gz#test.test_column_group-min_group-default.txt-Debug_/opt.yql"
+            "checksum": "e773cf7052b0fc660a18e8315628900d",
+            "size": 2755,
+            "uri": "https://{canondata_backend}/1814674/38d85c1805c6536b3e75cfe9e8d9b3260b17f2bc/resource.tar.gz#test.test_column_group-min_group-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[column_group-min_group-default.txt-Plan]": [

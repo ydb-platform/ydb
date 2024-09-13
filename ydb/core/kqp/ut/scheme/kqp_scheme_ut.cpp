@@ -4864,6 +4864,66 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         session.Close().GetValueSync();
     }
 
+    Y_UNIT_TEST(DisableExternalDataSourcesOnServerless) {
+        auto ydb = NWorkload::TYdbSetupSettings()
+            .CreateSampleTenants(true)
+            .EnableExternalDataSourcesOnServerless(false)
+            .Create();
+
+        auto checkDisabled = [](const auto& result, NYdb::EStatus status) {
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), status, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "External data sources are disabled for serverless domains. Please contact your system administrator to enable it");
+        };
+
+        auto checkNotFound = [](const auto& result, NYdb::EStatus status) {
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), status, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Path does not exist");
+        };
+
+        const auto& createSourceSql = R"(
+            CREATE EXTERNAL DATA SOURCE MyExternalDataSource WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="my-bucket",
+                AUTH_METHOD="NONE"
+            );)";
+
+        const auto& createTableSql = R"(
+            CREATE EXTERNAL TABLE MyExternalTable (
+                Key Uint64,
+                Value String
+            ) WITH (
+                DATA_SOURCE="MyExternalDataSource",
+                LOCATION="/"
+            );)";
+
+        const auto& dropSourceSql = "DROP EXTERNAL DATA SOURCE MyExternalDataSource;";
+
+        const auto& dropTableSql = "DROP EXTERNAL TABLE MyExternalTable;";
+
+        auto settings = NWorkload::TQueryRunnerSettings().PoolId(NResourcePool::DEFAULT_POOL_ID);
+
+        // Dedicated, enabled
+        settings.Database(ydb->GetSettings().GetDedicatedTenantName()).NodeIndex(1);
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createSourceSql, settings));
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createTableSql, settings));
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropTableSql, settings));
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSourceSql, settings));
+
+        // Shared, enabled
+        settings.Database(ydb->GetSettings().GetSharedTenantName()).NodeIndex(2);
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createSourceSql, settings));
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createTableSql, settings));
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropTableSql, settings));
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSourceSql, settings));
+
+        // Serverless, disabled
+        settings.Database(ydb->GetSettings().GetServerlessTenantName()).NodeIndex(2);
+        checkDisabled(ydb->ExecuteQuery(createSourceSql, settings), NYdb::EStatus::GENERIC_ERROR);
+        checkDisabled(ydb->ExecuteQuery(createTableSql, settings), NYdb::EStatus::PRECONDITION_FAILED);
+        checkNotFound(ydb->ExecuteQuery(dropTableSql, settings), NYdb::EStatus::SCHEME_ERROR);
+        checkNotFound(ydb->ExecuteQuery(dropSourceSql, settings), NYdb::EStatus::GENERIC_ERROR);
+    }
+
     Y_UNIT_TEST(CreateExternalDataSource) {
         NKikimrConfig::TAppConfig appCfg;
         appCfg.MutableQueryServiceConfig()->AddHostnamePatterns("my-bucket");

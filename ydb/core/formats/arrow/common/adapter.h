@@ -1,10 +1,9 @@
 #pragma once
 #include "container.h"
-#include "validation.h"
 
-#include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 
+#include <ydb/library/formats/arrow/common/validation.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>

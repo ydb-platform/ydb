@@ -1,5 +1,16 @@
 # REPLACE INTO
 
+{% if oss == true and backend_name == "YDB" %}
+
+{% note warning %}
+
+{% include [OLAP_not_allow_text](../../../../_includes/not_allow_for_olap_text.md) %}
+{% include [OLAP_not_allow_text](../../../../_includes/ways_add_data_to_olap.md) %}
+
+{% endnote %}
+
+{% endif %}
+
 Saves data to a table, overwriting the rows based on the primary key.{% if feature_mapreduce %}  The table is searched by name in the database specified by the [USE](../use.md) operator.{% endif %} If the given primary key is missing, a new row is added to the table. If the given `PRIMARY_KEY` exists, the row is overwritten. The values of columns not involved in the operation are replaced by their default values.
 
 {% note info %}

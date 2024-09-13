@@ -1,4 +1,5 @@
 from __future__ import annotations
+from typing import Optional
 import yatest.common
 import json
 import os
@@ -25,7 +26,7 @@ class YdbCliHelper:
         else:
             return [cli]
 
-    class QueuePlan:
+    class QueryPlan:
         def __init__(self, plan: dict | None = None, table: str | None = None, ast: str | None = None, svg: str | None = None) -> None:
             self.plan = plan
             self.table = table
@@ -34,9 +35,9 @@ class YdbCliHelper:
 
     class WorkloadRunResult:
         def __init__(
-            self, stats: dict[str, dict[str, any]] = {}, query_out: str = None, stdout: str = None, stderr: str = None,
-            error_message: str | None = None, plans: list[YdbCliHelper.QueuePlan] | None = None,
-            errors_by_iter: dict[int, str] | None = None
+            self, stats: dict[str, dict[str, any]] = {}, query_out: Optional[str] = None, stdout: Optional[str] = None, stderr: Optional[str] = None,
+            error_message: Optional[str] = None, plans: Optional[list[YdbCliHelper.QueryPlan]] = None,
+            errors_by_iter: Optional[dict[int, str]] = None, explain_plan: Optional[YdbCliHelper.QueryPlan] = None
         ) -> None:
             self.stats = stats
             self.query_out = query_out if str != '' else None
@@ -45,6 +46,7 @@ class YdbCliHelper:
             self.success = error_message is None
             self.error_message = '' if self.success else error_message
             self.plans = plans
+            self.explain_plan = explain_plan
             self.errors_by_iter = errors_by_iter
 
     @staticmethod
@@ -76,11 +78,30 @@ class YdbCliHelper:
                 else:
                     result[iter] = stderr[begin_pos:end_pos].strip()
 
+        def _load_plans(plan_path: str, name: str) -> YdbCliHelper.QueryPlan:
+            result = YdbCliHelper.QueryPlan()
+            pp = f'{plan_path}.{query_num}.{name}'
+            if (os.path.exists(f'{pp}.json')):
+                with open(f'{pp}.json') as f:
+                    result.plan = json.load(f)
+            if (os.path.exists(f'{pp}.table')):
+                with open(f'{pp}.table') as f:
+                    result.table = f.read()
+            if (os.path.exists(f'{pp}.ast')):
+                with open(f'{pp}.ast') as f:
+                    result.ast = f.read()
+            if (os.path.exists(f'{pp}.svg')):
+                with open(f'{pp}.svg') as f:
+                    result.svg = f.read()
+            return result
+
         errors_by_iter = {}
         try:
             wait_error = YdbCluster.wait_ydb_alive(300, path)
             if wait_error is not None:
                 return YdbCliHelper.WorkloadRunResult(error_message=f'Ydb cluster is dead: {wait_error}')
+
+            cluster_start_time = YdbCluster.get_cluster_info().get('max_start_time', 0)
 
             json_path = yatest.common.work_path(f'q{query_num}.json')
             qout_path = yatest.common.work_path(f'q{query_num}.out')
@@ -111,6 +132,8 @@ class YdbCliHelper:
                         err = f'Invalid return code: {exec.returncode} instesd 0.'
             except (yatest.common.process.TimeoutError, yatest.common.process.ExecutionTimeoutError):
                 err = f'Timeout {timeout}s expeared.'
+            if YdbCluster.get_cluster_info().get('max_start_time', 0) != cluster_start_time:
+                err = ('' if err is None else f'{err}\n\n') + 'Some nodes were restart'
             stats = {}
             if (os.path.exists(json_path)):
                 with open(json_path, 'r') as r:
@@ -125,29 +148,16 @@ class YdbCliHelper:
             if (os.path.exists(qout_path)):
                 with open(qout_path, 'r') as r:
                     qout = r.read()
-            plans = []
-            for i in range(iterations):
-                plans.append(YdbCliHelper.QueuePlan())
-                pp = f'{plan_path}.{i}'
-                if (os.path.exists(f'{pp}.json')):
-                    with open(f'{pp}.json') as f:
-                        plans[i].plan = json.load(f)
-                if (os.path.exists(f'{pp}.table')):
-                    with open(f'{pp}.table') as f:
-                        plans[i].table = f.read()
-                if (os.path.exists(f'{pp}.ast')):
-                    with open(f'{pp}.ast') as f:
-                        plans[i].ast = f.read()
-                if (os.path.exists(f'{pp}.svg')):
-                    with open(f'{pp}.svg') as f:
-                        plans[i].svg = f.read()
+            plans = [_load_plans(plan_path, str(i)) for i in range(iterations)]
+            explain_plan = _load_plans(plan_path, 'explain')
 
             return YdbCliHelper.WorkloadRunResult(
                 stats=stats,
                 query_out=qout,
                 plans=plans,
-                stdout=exec.stdout.decode('utf-8'),
-                stderr=exec.stderr.decode('utf-8'),
+                explain_plan=explain_plan,
+                stdout=exec.stdout.decode('utf-8', 'ignore'),
+                stderr=exec.stderr.decode('utf-8', 'ignore'),
                 error_message=err,
                 errors_by_iter=errors_by_iter
             )

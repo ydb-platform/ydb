@@ -119,12 +119,15 @@ NKikimr::TConclusionStatus TSchemaTransactionOperator::ValidateTableSchema(const
     TVector<TString> columnErrors;
     for (const NKikimrSchemeOp::TOlapColumnDescription& column : schema.GetColumns()) {
         TString name = column.GetName();
-        void* typeDescr = nullptr;
+        NScheme::TTypeId typeId = column.GetTypeId();
+        NScheme::TTypeInfo schemeType;
         if (column.GetTypeId() == NTypeIds::Pg && column.HasTypeInfo()) {
-            typeDescr = NPg::TypeDescFromPgTypeId(column.GetTypeInfo().GetPgTypeId());
+            auto typeDescr = NPg::TypeDescFromPgTypeId(column.GetTypeInfo().GetPgTypeId());
+            schemeType = {typeId, typeDescr};
+        } else {
+            schemeType = {typeId};
         }
 
-        NScheme::TTypeInfo schemeType(column.GetTypeId(), typeDescr);
         if (keyColumns.contains(name) && !pkSupportedTypes.contains(column.GetTypeId())) {
             columnErrors.emplace_back("key column " + name + " has unsupported type " + column.GetTypeName());
         }

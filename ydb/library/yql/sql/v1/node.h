@@ -36,6 +36,7 @@ namespace NSQLTranslationV1 {
         Aggregated,
         AggregationKey,
         OverWindow,
+        OverWindowDistinct,
         Failed,
         End,
     };
@@ -150,6 +151,7 @@ namespace NSQLTranslationV1 {
         bool IsAggregated() const;
         bool IsAggregationKey() const;
         bool IsOverWindow() const;
+        bool IsOverWindowDistinct() const;
         bool HasState(ENodeState state) const {
             PrecacheState();
             return State.Test(state);
@@ -882,6 +884,7 @@ namespace NSQLTranslationV1 {
         Normal,
         Distinct,
         OverWindow,
+        OverWindowDistinct,
     };
 
     class TTupleNode: public TAstListNode {

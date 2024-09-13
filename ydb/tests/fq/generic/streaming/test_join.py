@@ -280,11 +280,11 @@ TESTCASES = [
 
             $enriched = select e.id as id,
                             e.user as user_id,
-                            u.id as uid
+                            eu.id as uid
                 from
                     $input as e
-                left join {streamlookup} ydb_conn_{table_name}.`users` as u
-                on(e.user = u.id)
+                left join {streamlookup} ydb_conn_{table_name}.`users` as eu
+                on(e.user = eu.id)
             ;
 
             insert into myyds.`{output_topic}`

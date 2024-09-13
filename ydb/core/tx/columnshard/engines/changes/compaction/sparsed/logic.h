@@ -1,6 +1,6 @@
 #pragma once
-#include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
-#include <ydb/core/formats/arrow/accessor/common/const.h>
+#include <ydb/library/formats/arrow/accessor/abstract/accessor.h>
+#include <ydb/library/formats/arrow/accessor/common/const.h>
 #include <ydb/core/formats/arrow/accessor/sparsed/accessor.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction/abstract/merger.h>
 

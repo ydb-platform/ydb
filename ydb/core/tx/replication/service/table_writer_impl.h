@@ -23,6 +23,12 @@
 namespace NKikimr::NReplication::NService {
 
 template <typename TChangeRecord>
+using TSerializationContext = typename TChangeRecord::TSerializationContext;
+
+template <typename TChangeRecord>
+using TBuilder = typename TChangeRecord::TBuilder;
+
+template <typename TChangeRecord>
 class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter<TChangeRecord>> {
     using TBase = TActorBootstrapped<TTablePartitionWriter<TChangeRecord>>;
     using TThis = TTablePartitionWriter;
@@ -85,7 +91,7 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter<TCh
 
         for (auto recordPtr : ev->Get()->GetRecords<TChangeRecord>()) {
             const auto& record = *recordPtr;
-            record.Serialize(*event->Record.AddChanges(), BuilderContext);
+            record.Serialize(*event->Record.AddChanges(), SerializationContext);
 
             if (!source) {
                 source = record.GetSourceId();
@@ -180,11 +186,11 @@ public:
             const TActorId& parent,
             ui64 tabletId,
             const TTableId& tableId,
-            TChangeRecordBuilderContextTrait<TChangeRecord> builderContext)
+            const TSerializationContext<TChangeRecord>& ctx)
         : Parent(parent)
         , TabletId(tabletId)
         , TableId(tableId)
-        , BuilderContext(builderContext)
+        , SerializationContext(ctx)
     {}
 
     void Bootstrap() {
@@ -207,7 +213,7 @@ private:
 
     TActorId LeaderPipeCache;
     ui64 SubscribeCookie = 0;
-    TChangeRecordBuilderContextTrait<TChangeRecord> BuilderContext;
+    TSerializationContext<TChangeRecord> SerializationContext;
 
 }; // TTablePartitionWriter
 
@@ -435,11 +441,8 @@ class TLocalTableWriter
     }
 
     IActor* CreateSender(ui64 partitionId) const override {
-        return new TTablePartitionWriter<TChangeRecord>(
-            this->SelfId(),
-            partitionId,
-            TTableId(TablePathId, Schema->Version),
-            BuilderContext);
+        const auto tableId = TTableId(TablePathId, Schema->Version);
+        return new TTablePartitionWriter<TChangeRecord>(this->SelfId(), partitionId, tableId, SerializationContext);
     }
 
     void Handle(TEvWorker::TEvData::TPtr& ev) {
@@ -450,7 +453,7 @@ class TLocalTableWriter
 
         for (auto& record : ev->Get()->Records) {
             records.emplace_back(record.Offset, TablePathId, record.Data.size());
-            auto res = PendingRecords.emplace(record.Offset, TChangeRecordBuilderTrait<TChangeRecord>()
+            auto res = PendingRecords.emplace(record.Offset, TBuilder<TChangeRecord>()
                 .WithSourceId(ev->Get()->Source)
                 .WithOrder(record.Offset)
                 .WithBody(std::move(record.Data))
@@ -531,7 +534,7 @@ public:
         : TBase(&TThis::StateWork)
         , TBaseSender(this, this, this, this, TActorId())
         , TablePathId(tablePathId)
-        , BuilderContext(std::forward<TArgs>(args)...)
+        , SerializationContext(std::forward<TArgs>(args)...)
     {
     }
 
@@ -557,7 +560,7 @@ public:
 private:
     mutable TMaybe<TString> LogPrefix;
     const TPathId TablePathId;
-    TChangeRecordBuilderContextTrait<TChangeRecord> BuilderContext;
+    TSerializationContext<TChangeRecord> SerializationContext;
 
     TActorId Worker;
     ui64 TableVersion = 0;

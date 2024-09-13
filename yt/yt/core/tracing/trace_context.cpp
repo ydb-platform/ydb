@@ -255,7 +255,7 @@ void FormatValue(TStringBuilderBase* builder, const TSpanContext& context, TStri
 
 TTraceContext::TTraceContext(
     TSpanContext parentSpanContext,
-    TString spanName,
+    const std::string& spanName,
     TTraceContextPtr parentTraceContext,
     std::optional<NProfiling::TCpuInstant> startTime)
     : TraceId_(parentSpanContext.TraceId)
@@ -266,7 +266,7 @@ TTraceContext::TTraceContext(
         ? parentTraceContext->State_.load()
         : (parentSpanContext.Sampled ? ETraceContextState::Sampled : ETraceContextState::Disabled))
     , ParentContext_(std::move(parentTraceContext))
-    , SpanName_(std::move(spanName))
+    , SpanName_(spanName)
     , RequestId_(ParentContext_ ? ParentContext_->GetRequestId() : TRequestId{})
     , TargetEndpoint_(ParentContext_ ? ParentContext_->GetTargetEndpoint() : std::nullopt)
     , LoggingTag_(ParentContext_ ? ParentContext_->GetLoggingTag() : TString{})
@@ -291,75 +291,56 @@ void TTraceContext::SetLoggingTag(const TString& loggingTag)
     LoggingTag_ = loggingTag;
 }
 
-void TTraceContext::ClearAllocationTagsPtr() noexcept
+TAllocationTags TTraceContext::GetAllocationTags() const
 {
-    auto writerGuard = WriterGuard(AllocationTagsLock_);
-    auto guard = Guard(AllocationTagsAsRefCountedLock_);
-    AllocationTags_ = nullptr;
+    // NB: No lock is needed.
+    auto list = AllocationTagList_.Acquire();
+    return list ? list->GetTags() : TAllocationTags();
 }
 
-TAllocationTags::TTags TTraceContext::DoGetAllocationTags() const
+void TTraceContext::SetAllocationTags(TAllocationTags&& tags)
 {
-    VERIFY_SPINLOCK_AFFINITY(AllocationTagsLock_);
-
-    TAllocationTagsPtr tags;
-
-    {
-        // Local guard for copy RefCounted AllocationTags_.
-        auto guard = Guard(AllocationTagsAsRefCountedLock_);
-        tags = AllocationTags_;
-    }
-
-    if (!tags) {
-        return {};
-    }
-
-    return tags->GetTags();
-}
-
-TAllocationTags::TTags TTraceContext::GetAllocationTags() const
-{
-    auto readerGuard = ReaderGuard(AllocationTagsLock_);
-    return DoGetAllocationTags();
-}
-
-TAllocationTagsPtr TTraceContext::GetAllocationTagsPtr() const noexcept
-{
-    // Local guard for copy RefCounted AllocationTags_ for allocator callback CreateAllocationTagsData().
-    auto guard = Guard(AllocationTagsAsRefCountedLock_);
-
-    return AllocationTags_;
-}
-
-void TTraceContext::SetAllocationTagsPtr(TAllocationTagsPtr allocationTags) noexcept
-{
-    auto writerGuard = WriterGuard(AllocationTagsLock_);
-
-    // Local guard for setting RefCounted AllocationTags_.
-    auto guard = Guard(AllocationTagsAsRefCountedLock_);
-
-    AllocationTags_ = std::move(allocationTags);
-}
-
-void TTraceContext::DoSetAllocationTags(TAllocationTags::TTags&& tags)
-{
-    VERIFY_SPINLOCK_AFFINITY(AllocationTagsLock_);
-
-    TAllocationTagsPtr allocationTagsPtr;
-    if (!tags.empty()) {
-        // Allocation MUST be done BEFORE Guard(AllocationTagsAsRefCountedSpinlock_) to avoid deadlock with CreateAllocationTagsData().
-        allocationTagsPtr = New<TAllocationTags>(std::move(tags));
-    }
-
-    auto guard = Guard(AllocationTagsAsRefCountedLock_);
-    AllocationTags_ = std::move(allocationTagsPtr);
-}
-
-void TTraceContext::SetAllocationTags(TAllocationTags::TTags&& tags)
-{
-    auto writerGuard = WriterGuard(AllocationTagsLock_);
-
+    auto guard = Guard(AllocationTagsLock_);
     return DoSetAllocationTags(std::move(tags));
+}
+
+void TTraceContext::RemoveAllocationTag(const TAllocationTagKey& key)
+{
+    auto guard = Guard(AllocationTagsLock_);
+
+    auto newTags = GetAllocationTags();
+    auto it = std::remove_if(
+        newTags.begin(),
+        newTags.end(),
+        [&] (const auto& pair) {
+            return pair.first == key;
+        });
+
+    if (it == newTags.end()) {
+        return;
+    }
+
+    std::swap(newTags.back(), *it);
+    newTags.pop_back();
+    DoSetAllocationTags(std::move(newTags));
+}
+
+TAllocationTagListPtr TTraceContext::GetAllocationTagList() const noexcept
+{
+    return AllocationTagList_.Acquire();
+}
+
+void TTraceContext::SetAllocationTagList(TAllocationTagListPtr list) noexcept
+{
+    auto guard = Guard(AllocationTagsLock_);
+    AllocationTagList_.Store(std::move(list));
+}
+
+void TTraceContext::DoSetAllocationTags(TAllocationTags&& tags)
+{
+    VERIFY_SPINLOCK_AFFINITY(AllocationTagsLock_);
+    auto holder = tags.empty() ? nullptr : New<TAllocationTagList>(std::move(tags));
+    AllocationTagList_.Store(std::move(holder));
 }
 
 void TTraceContext::SetRecorded()
@@ -374,19 +355,19 @@ void TTraceContext::SetPropagated(bool value)
 }
 
 TTraceContextPtr TTraceContext::CreateChild(
-    TString spanName,
+    const std::string& spanName,
     std::optional<NProfiling::TCpuInstant> startTime)
 {
     auto child = New<TTraceContext>(
         GetSpanContext(),
-        std::move(spanName),
+        spanName,
         /*parentTraceContext*/ this,
         startTime);
 
     auto guard = Guard(Lock_);
     child->ProfilingTags_ = ProfilingTags_;
     child->TargetEndpoint_ = TargetEndpoint_;
-    child->AllocationTags_ = AllocationTags_;
+    child->AllocationTagList_.Store(AllocationTagList_.Acquire());
     return child;
 }
 
@@ -469,7 +450,7 @@ void TTraceContext::PackBaggage(const IAttributeDictionaryPtr& baggage)
     SetBaggage(baggage ? ConvertToYsonString(baggage) : TYsonString{});
 }
 
-void TTraceContext::AddTag(const TString& tagKey, const TString& tagValue)
+void TTraceContext::AddTag(const std::string& tagKey, const std::string& tagValue)
 {
     if (!IsRecorded()) {
         return;
@@ -483,19 +464,19 @@ void TTraceContext::AddTag(const TString& tagKey, const TString& tagValue)
     Tags_.emplace_back(tagKey, tagValue);
 }
 
-void TTraceContext::AddProfilingTag(const TString& name, const TString& value)
+void TTraceContext::AddProfilingTag(const std::string& name, const std::string& value)
 {
     auto guard = Guard(Lock_);
     ProfilingTags_.emplace_back(name, value);
 }
 
-void TTraceContext::AddProfilingTag(const TString& name, i64 value)
+void TTraceContext::AddProfilingTag(const std::string& name, i64 value)
 {
     auto guard = Guard(Lock_);
     ProfilingTags_.emplace_back(name, value);
 }
 
-std::vector<std::pair<TString, std::variant<TString, i64>>> TTraceContext::GetProfilingTags()
+std::vector<std::pair<std::string, std::variant<std::string, i64>>> TTraceContext::GetProfilingTags()
 {
     auto guard = Guard(Lock_);
     return ProfilingTags_;
@@ -654,7 +635,7 @@ void ToProto(NProto::TTracingExt* ext, const TTraceContextPtr& context)
     }
 }
 
-TTraceContextPtr TTraceContext::NewRoot(TString spanName, TTraceId traceId)
+TTraceContextPtr TTraceContext::NewRoot(const std::string& spanName, TTraceId traceId)
 {
     return New<TTraceContext>(
         TSpanContext{
@@ -663,18 +644,18 @@ TTraceContextPtr TTraceContext::NewRoot(TString spanName, TTraceId traceId)
             .Sampled = false,
             .Debug = false,
         },
-        std::move(spanName));
+        spanName);
 }
 
 TTraceContextPtr TTraceContext::NewChildFromSpan(
     TSpanContext parentSpanContext,
-    TString spanName,
+    const std::string& spanName,
     std::optional<TString> endpoint,
     TYsonString baggage)
 {
     auto result = New<TTraceContext>(
         parentSpanContext,
-        std::move(spanName));
+        spanName);
     result->SetBaggage(std::move(baggage));
     result->SetTargetEndpoint(endpoint);
     return result;
@@ -682,7 +663,7 @@ TTraceContextPtr TTraceContext::NewChildFromSpan(
 
 TTraceContextPtr TTraceContext::NewChildFromRpc(
     const NProto::TTracingExt& ext,
-    TString spanName,
+    const std::string& spanName,
     TRequestId requestId,
     bool forceTracing)
 {
@@ -692,7 +673,7 @@ TTraceContextPtr TTraceContext::NewChildFromRpc(
             return nullptr;
         }
 
-        auto root = NewRoot(std::move(spanName));
+        auto root = NewRoot(spanName);
         root->SetRequestId(requestId);
         root->SetRecorded();
         return root;
@@ -705,7 +686,7 @@ TTraceContextPtr TTraceContext::NewChildFromRpc(
             ext.sampled(),
             ext.debug()
         },
-        std::move(spanName));
+        spanName);
     traceContext->SetRequestId(requestId);
     if (ext.has_baggage()) {
         traceContext->SetBaggage(TYsonString(ext.baggage()));
@@ -800,7 +781,7 @@ void* AcquireFiberTagStorage()
     return reinterpret_cast<void*>(traceContext);
 }
 
-std::vector<std::pair<TString, std::variant<TString, i64>>> ReadFiberTags(void* storage)
+std::vector<std::pair<std::string, NTracing::TTraceContext::TProfilingTagValue>> ReadFiberTags(void* storage)
 {
     if (auto* traceContext = reinterpret_cast<NTracing::TTraceContext*>(storage)) {
         return traceContext->GetProfilingTags();

@@ -270,6 +270,7 @@ class IDNATests(unittest.TestCase):
         self.assertRaises(idna.IDNAError, decode, b'xn--')
         self.assertRaises(idna.IDNAError, decode, b'\x8d\xd2')
         self.assertRaises(idna.IDNAError, decode, b'A.A.0.a.a.A.0.a.A.A.0.a.A.0A.2.a.A.A.0.a.A.0.A.a.A0.a.a.A.0.a.fB.A.A.a.A.A.B.A.A.a.A.A.B.A.A.a.A.A.0.a.A.a.a.A.A.0.a.A.0.A.a.A0.a.a.A.0.a.fB.A.A.a.A.A.B.0A.A.a.A.A.B.A.A.a.A.A.a.A.A.B.A.A.a.A.0.a.B.A.A.a.A.B.A.a.A.A.5.a.A.0.a.Ba.A.B.A.A.a.A.0.a.Xn--B.A.A.A.a')
+        self.assertRaises(idna.IDNAError, decode, b'xn--ukba655qaaaa14431eeaaba.c')
 
 if __name__ == '__main__':
     unittest.main()

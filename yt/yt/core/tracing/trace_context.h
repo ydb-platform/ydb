@@ -15,6 +15,8 @@
 #include <library/cpp/yt/threading/rw_spin_lock.h>
 #include <library/cpp/yt/threading/spin_lock.h>
 
+#include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
+
 #include <atomic>
 
 namespace NYT::NTracing {
@@ -127,21 +129,17 @@ public:
     void SetRequestId(TRequestId requestId);
     TRequestId GetRequestId() const;
 
-    void SetAllocationTags(TAllocationTags::TTags&& tags);
-    TAllocationTags::TTags GetAllocationTags() const;
+    TAllocationTags GetAllocationTags() const;
+    void SetAllocationTags(TAllocationTags&& tags);
 
-    TAllocationTagsPtr GetAllocationTagsPtr() const noexcept;
-    void SetAllocationTagsPtr(TAllocationTagsPtr allocationTags) noexcept;
-    void ClearAllocationTagsPtr() noexcept;
+    TAllocationTagListPtr GetAllocationTagList() const noexcept;
+    void SetAllocationTagList(TAllocationTagListPtr list) noexcept;
 
-    template <typename TTag>
-    std::optional<TTag> FindAllocationTag(const TString& key) const;
-    template <typename TTag>
-    std::optional<TTag> SetAllocationTag(
-        const TString& key,
-        TTag value);
-    template <typename TTag>
-    std::optional<TTag> RemoveAllocationTag(const TString& key);
+    template <typename T>
+    std::optional<T> FindAllocationTag(const TAllocationTagKey& key) const;
+    template <typename T>
+    std::optional<T> SetAllocationTag(const TAllocationTagKey& key, const T& value);
+    void RemoveAllocationTag(const TAllocationTagKey& key);
 
     //! Sets logging tag.
     /*!
@@ -158,7 +156,7 @@ public:
      */
     TDuration GetDuration() const;
 
-    using TTagList = TCompactVector<std::pair<TString, TString>, 4>;
+    using TTagList = TCompactVector<std::pair<std::string, std::string>, 4>;
     TTagList GetTags() const;
 
     NYson::TYsonString GetBaggage() const;
@@ -167,10 +165,10 @@ public:
     NYTree::IAttributeDictionaryPtr UnpackOrCreateBaggage() const;
     void PackBaggage(const NYTree::IAttributeDictionaryPtr& baggage);
 
-    void AddTag(const TString& tagKey, const TString& tagValue);
+    void AddTag(const std::string& tagKey, const std::string& tagValue);
 
     template <class T>
-    void AddTag(const TString& tagName, const T& tagValue);
+    void AddTag(const std::string& tagName, const T& tagValue);
 
     //! Adds error tag. Spans containing errors are highlighted in tracing UI.
     void AddErrorTag();
@@ -192,27 +190,29 @@ public:
     NProfiling::TCpuDuration GetElapsedCpuTime() const;
     TDuration GetElapsedTime() const;
 
-    static TTraceContextPtr NewRoot(TString spanName, TTraceId traceId = {});
+    static TTraceContextPtr NewRoot(const std::string& spanName, TTraceId traceId = {});
 
     static TTraceContextPtr NewChildFromRpc(
         const NProto::TTracingExt& ext,
-        TString spanName,
+        const std::string& spanName,
         TRequestId requestId = {},
         bool forceTracing = false);
 
     static TTraceContextPtr NewChildFromSpan(
         TSpanContext parentSpanContext,
-        TString spanName,
+        const std::string& spanName,
         std::optional<TString> endpoint = {},
         NYson::TYsonString baggage = NYson::TYsonString());
 
     TTraceContextPtr CreateChild(
-        TString spanName,
+        const std::string& spanName,
         std::optional<NProfiling::TCpuInstant> startTime = {});
 
-    void AddProfilingTag(const TString& name, const TString& value);
-    void AddProfilingTag(const TString& name, i64 value);
-    std::vector<std::pair<TString, std::variant<TString, i64>>> GetProfilingTags();
+    void AddProfilingTag(const std::string& name, const std::string& value);
+    void AddProfilingTag(const std::string& name, i64 value);
+
+    using TProfilingTagValue = std::variant<std::string, i64>;
+    std::vector<std::pair<std::string, TProfilingTagValue>> GetProfilingTags();
 
     friend void ToProto(NProto::TTracingExt* ext, const TTraceContextPtr& context);
 
@@ -244,29 +244,20 @@ private:
     TAsyncChildrenList AsyncChildren_;
     NYson::TYsonString Baggage_;
 
-    std::vector<std::pair<TString, std::variant<TString, i64>>> ProfilingTags_;
+    std::vector<std::pair<std::string, TProfilingTagValue>> ProfilingTags_;
 
-    // Must NOT allocate memory on the heap in callbacks with modifying AllocationTags_ to avoid deadlock with allocator.
-    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, AllocationTagsLock_);
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, AllocationTagsAsRefCountedLock_);
-    TAllocationTagsPtr AllocationTags_;
+    // Must NOT allocate memory while modifying AllocationTagList_ to avoid deadlock with allocator.
+    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, AllocationTagsLock_);
+    TAtomicIntrusivePtr<TAllocationTagList> AllocationTagList_;
 
     TTraceContext(
         TSpanContext parentSpanContext,
-        TString spanName,
+        const std::string& spanName,
         TTraceContextPtr parentTraceContext = nullptr,
         std::optional<NProfiling::TCpuInstant> startTime = {});
     DECLARE_NEW_FRIEND()
 
-    void DoSetAllocationTags(TAllocationTags::TTags&& tags);
-
-    template <typename TTag>
-    std::optional<TTag> DoSetAllocationTag(const TString& key, TTag newTag);
-
-    TAllocationTags::TTags DoGetAllocationTags() const;
-
-    template <typename TTag>
-    std::optional<TTag> DoFindAllocationTag(const TString& key) const;
+    void DoSetAllocationTags(TAllocationTags&& tags);
 
     void SubmitToTracer(const ITracerPtr& tracer);
 };
@@ -292,7 +283,7 @@ TTraceContext* TryGetTraceContextFromPropagatingStorage(const NConcurrency::TPro
 
 //! Creates a new trace context. If the current trace context exists, it becomes the parent of the
 //! created trace context.
-TTraceContextPtr CreateTraceContextFromCurrent(TString spanName);
+TTraceContextPtr CreateTraceContextFromCurrent(const std::string& spanName);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -384,10 +375,10 @@ class TChildTraceContextGuard
 public:
     TChildTraceContextGuard(
         const TTraceContextPtr& traceContext,
-        TString spanName,
+        const std::string& spanName,
         std::optional<NProfiling::TCpuInstant> startTime = {});
     explicit TChildTraceContextGuard(
-        TString spanName,
+        const std::string& spanName,
         std::optional<NProfiling::TCpuInstant> startTime = {});
     TChildTraceContextGuard(TChildTraceContextGuard&& other) = default;
 

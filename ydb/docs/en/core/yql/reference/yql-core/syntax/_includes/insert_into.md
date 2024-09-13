@@ -1,5 +1,16 @@
 # INSERT INTO
 
+{% if oss == true and backend_name == "YDB" %}
+
+{% note warning %}
+
+{% include [OLAP_not_allow_text](../../../../_includes/not_allow_for_olap_text.md) %}
+{% include [OLAP_not_allow_text](../../../../_includes/ways_add_data_to_olap.md) %}
+
+{% endnote %}
+
+{% endif %}
+
 {% if select_command != "SELECT STREAM" %} Adds rows to the table. {% if feature_bulk_tables %} If the target table already exists and is not sorted, the operation `INSERT INTO` adds rows at the end of the table. In the case of a sorted table, YQL tries to preserve sorting by running a sorted merge. {% endif %}{% if feature_map_tables %} If you try to insert a row into a table with an existing primary key value, the operation fails with the `PRECONDITION_FAILED` error code and the `Operation aborted due to constraint violation: insert_pk` message returned.{% endif %}
 
 {% if feature_mapreduce %}The table is searched by name in the database specified by the [USE](../use.md) operator.{% endif %}

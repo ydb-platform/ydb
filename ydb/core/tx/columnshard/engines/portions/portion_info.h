@@ -5,9 +5,9 @@
 
 #include <ydb/core/formats/arrow/accessor/composite_serial/accessor.h>
 #include <ydb/core/formats/arrow/special_keys.h>
-#include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
+#include <ydb/library/formats/arrow/accessor/abstract/accessor.h>
 #include <ydb/core/formats/arrow/common/container.h>
-#include <ydb/core/formats/arrow/splitter/stats.h>
+#include <ydb/library/formats/arrow/splitter/stats.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storage.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract_scheme.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
@@ -98,7 +98,7 @@ private:
     }
 
     template <class TAggregator, class TChunkInfo>
-    static void AggregateIndexChunksData(const TAggregator& aggr, const std::vector<TChunkInfo>& chunks, const std::optional<std::set<ui32>>& columnIds, const bool validation) {
+    static void AggregateIndexChunksData(const TAggregator& aggr, const std::vector<TChunkInfo>& chunks, const std::set<ui32>* columnIds, const bool validation) {
         if (columnIds) {
             auto itColumn = columnIds->begin();
             auto itRecord = chunks.begin();
@@ -537,7 +537,8 @@ public:
         return result;
     }
 
-    ui64 GetIndexRawBytes(const std::optional<std::set<ui32>>& columnIds = {}, const bool validation = true) const;
+    ui64 GetIndexRawBytes(const std::set<ui32>& columnIds, const bool validation = true) const;
+    ui64 GetIndexRawBytes(const bool validation = true) const;
     ui64 GetIndexBlobBytes() const noexcept {
         ui64 sum = 0;
         for (const auto& rec : Indexes) {
@@ -546,11 +547,11 @@ public:
         return sum;
     }
 
-    ui64 GetColumnRawBytes(const std::vector<ui32>& columnIds, const bool validation = true) const;
-    ui64 GetColumnRawBytes(const std::optional<std::set<ui32>>& columnIds = {}, const bool validation = true) const;
+    ui64 GetColumnRawBytes(const std::set<ui32>& columnIds, const bool validation = true) const;
+    ui64 GetColumnRawBytes(const bool validation = true) const;
 
-    ui64 GetColumnBlobBytes(const std::vector<ui32>& columnIds, const bool validation = true) const;
-    ui64 GetColumnBlobBytes(const std::optional<std::set<ui32>>& columnIds = {}, const bool validation = true) const;
+    ui64 GetColumnBlobBytes(const std::set<ui32>& columnIds, const bool validation = true) const;
+    ui64 GetColumnBlobBytes(const bool validation = true) const;
 
     ui64 GetTotalBlobBytes() const noexcept {
         return GetIndexBlobBytes() + GetColumnBlobBytes();

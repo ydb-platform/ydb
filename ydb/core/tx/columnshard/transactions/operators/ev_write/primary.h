@@ -203,9 +203,9 @@ private:
         for (auto&& i : ReceivingShards) {
             if (WaitShardsResultAck.contains(i)) {
                 NActors::TActivationContext::AsActorContext().Send(MakePipePerNodeCacheID(EPipePerNodeCache::Persistent),
-                    new TEvPipeCache::TEvForward(
-                        new TEvTxProcessing::TEvReadSet(0, GetTxId(), owner.TabletID(), i, owner.TabletID(), readSetData.SerializeAsString()), i,
-                        true),
+                    new TEvPipeCache::TEvForward(new TEvTxProcessing::TEvReadSet(TxInfo.PlanStep, GetTxId(), owner.TabletID(), i,
+                                                     owner.TabletID(), readSetData.SerializeAsString()),
+                        i, true),
                     IEventHandle::FlagTrackDelivery, GetTxId());
             }
         }

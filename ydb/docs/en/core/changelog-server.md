@@ -199,7 +199,7 @@ Release date: March 7, 2023. To update to version **22.5**, select the [Download
 
 ### What's new
 
-* Added [changefeed configuration parameters](yql/reference/syntax/alter_table.md#changefeed-options) to transfer additional information about changes to a topic.
+* Added [changefeed configuration parameters](yql/reference/syntax/alter_table/changefeed.md) to transfer additional information about changes to a topic.
 * You can now [rename tables](concepts/datamodel/table.md#rename) that have TTL enabled.
 * You can now [manage the record retention period](concepts/cdc.md#retention-period).
 

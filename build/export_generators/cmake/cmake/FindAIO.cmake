@@ -6,11 +6,11 @@
 
 find_path(AIO_INCLUDE_DIR
   libaio.h
-  HINTS $ENV{AIO_ROOT}/include)
+  HINTS $ENV{AIO_ROOT}/include /usr/include REQUIRED)
 
 find_library(AIO_LIBRARIES
   aio
-  HINTS $ENV{AIO_ROOT}/lib)
+  HINTS $ENV{AIO_ROOT}/lib REQUIRED)
 
 include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(AIO DEFAULT_MSG AIO_LIBRARIES AIO_INCLUDE_DIR)

@@ -81,7 +81,7 @@ public:
 class TConnection {
 
 public:
-    TConnection(const TString& nodeType) : NodeType(nodeType) {
+    TConnection(const TString& nodeType, ui32 stagePlanNodeId) : NodeType(nodeType), StagePlanNodeId(stagePlanNodeId) {
     }
 
     TString NodeType;
@@ -92,7 +92,10 @@ public:
     bool CteConnection = false;
     ui32 CteIndentX = 0;
     ui32 CteOffsetY = 0;
+    std::shared_ptr<TSingleMetric> CteOutputBytes;
+    std::shared_ptr<TSingleMetric> CteOutputRows;
     const NJson::TJsonValue* StatsNode = nullptr;
+    const ui32 StagePlanNodeId;
 };
 
 class TSource {
@@ -143,6 +146,7 @@ struct TColorPalette {
     TString StageDark;
     TString StageLight;
     TString StageText;
+    TString StageTextHighlight;
     TString StageGrid;
     TString IngressDark;
     TString IngressMedium;
@@ -199,7 +203,7 @@ public:
     }
 
     void Load(const NJson::TJsonValue& node);
-    void LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& node);
+    void LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& node, ui32 parentPlanNodeId);
     void LoadSource(std::shared_ptr<TSource> source, const NJson::TJsonValue& node);
     void MarkStageIndent(ui32 indentX, ui32& offsetY, std::shared_ptr<TStage> stage);
     void MarkLayout();

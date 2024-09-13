@@ -637,6 +637,7 @@ message TReqSelectRows
     optional int32 syntax_version = 22 [default = 1];
     optional int32 execution_backend = 23; // EExecutionBackend
     optional NYT.NTableClient.NProto.TVersionedReadOptions versioned_read_options = 25;
+    optional bool use_lookup_cache = 26;
 
     optional TSuppressableAccessTrackingOptions suppressable_access_tracking_options = 104;
 

@@ -47,11 +47,11 @@ TBsCostTracker::TBsCostTracker(const TBlobStorageGroupType& groupType, NPDisk::E
     : GroupType(groupType)
     , CostCounters(counters->GetSubgroup("subsystem", "advancedCost"))
     , MonGroup(std::make_shared<NMonGroup::TCostTrackerGroup>(CostCounters))
-    , Bucket(&DiskTimeAvailable, &BucketCapacity, nullptr, nullptr, nullptr, nullptr, true)
+    , Bucket(BucketUpperLimit, BucketLowerLimit, DiskTimeAvailable)
     , BurstThresholdNs(costMetricsParameters.BurstThresholdNs)
     , DiskTimeAvailableScale(costMetricsParameters.DiskTimeAvailableScale)
 {
-    AtomicSet(BucketCapacity, GetDiskTimeAvailableScale() * BurstThresholdNs);
+    BucketUpperLimit.store(BurstThresholdNs * GetDiskTimeAvailableScale());
     BurstDetector.Initialize(CostCounters, "BurstDetector");
     switch (GroupType.GetErasure()) {
     case TBlobStorageGroupType::ErasureMirror3dc:

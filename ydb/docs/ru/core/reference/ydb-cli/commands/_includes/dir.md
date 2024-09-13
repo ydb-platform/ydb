@@ -18,7 +18,7 @@
 
 Если конечная директория на пути уже существовала, то выполнение команды завершится успешно (код результата 0) с выдачей предупреждения о том, что никаких изменений не было произведено:
 
-``` text
+```text
 Status: SUCCESS
 Issues:
 <main>: Error: dst path fail checks, path: /<database>/<path>: path exist, request accepts it,

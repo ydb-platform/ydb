@@ -1,7 +1,6 @@
 import "ydb/library/actors/protos/actors.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
 import "ydb/core/protos/long_tx_service.proto";
-import "ydb/core/protos/statistics.proto";
 import "ydb/core/protos/subdomains.proto";
 import "ydb/core/protos/tx.proto";
 import "ydb/core/formats/arrow/protos/fields.proto";
@@ -90,6 +89,7 @@ message TLogicalMetadata {
     optional string SpecialKeysRawData = 6;
     optional TEvWrite.EModificationType ModificationType = 7;
     optional NKikimrArrowSchema.TSchemaSubset SchemaSubset = 8;
+    optional string SpecialKeysPayloadData = 9;
 }
 
 message TEvWriteResult {

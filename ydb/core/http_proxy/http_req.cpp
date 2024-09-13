@@ -45,7 +45,7 @@
 #include <ydb/services/datastreams/shard_iterator.h>
 #include <ydb/services/lib/sharding/sharding.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_ymq/ymq.h>
+#include <ydb/services/ymq/grpc_service.h>
 #include <ydb/services/ymq/ymq_proxy.h>
 
 
@@ -277,7 +277,7 @@ namespace NKikimr::NHttpProxy {
                               "' iam token size: " << HttpContext.IamToken.size());
                 TMap<TString, TString> peerMetadata {
                     {NYmq::V1::FOLDER_ID, FolderId},
-                    {NYmq::V1::CLOUD_ID, HttpContext.UserName ? HttpContext.UserName : CloudId},
+                    {NYmq::V1::CLOUD_ID, CloudId ? CloudId : HttpContext.UserName },
                     {NYmq::V1::USER_SID, UserSid},
                     {NYmq::V1::REQUEST_ID, HttpContext.RequestId},
                     {NYmq::V1::SECURITY_TOKEN, HttpContext.SecurityToken},
@@ -408,7 +408,7 @@ namespace NKikimr::NHttpProxy {
                             ctx,
                             NKikimrServices::HTTP_PROXY,
                             "Not retrying GRPC response."
-                                << " Code: " << get<1>(errorAndCode) 
+                                << " Code: " << get<1>(errorAndCode)
                                 << ", Error: " << get<0>(errorAndCode);
                         );
 
@@ -434,7 +434,7 @@ namespace NKikimr::NHttpProxy {
                         ctx,
                         NKikimrServices::HTTP_PROXY,
                         TStringBuilder() << "Got cloud auth response."
-                        << " FolderId: " << ev->Get()->FolderId 
+                        << " FolderId: " << ev->Get()->FolderId
                         << " CloudId: " << ev->Get()->CloudId
                         << " UserSid: " << ev->Get()->Sid;
                     );
@@ -553,7 +553,7 @@ namespace NKikimr::NHttpProxy {
                         .Counters = nullptr,
                         .AWSSignature = std::move(HttpContext.GetSignature()),
                         .IAMToken = HttpContext.IamToken,
-                        .FolderID = "" 
+                        .FolderID = ""
                     };
 
                     auto authRequestProxy = MakeHolder<NSQS::THttpProxyAuthRequestProxy>(
@@ -1056,16 +1056,16 @@ namespace NKikimr::NHttpProxy {
 
 
         #define DECLARE_YMQ_PROCESSOR_QUEUE_UNKNOWN(name) Name2YmqProcessor[#name] = MakeHolder<TYmqHttpRequestProcessor<Ydb::Ymq::V1::YmqService, Ydb::Ymq::V1::name##Request, Ydb::Ymq::V1::name##Response, Ydb::Ymq::V1::name##Result,\
-                    decltype(&Ydb::Ymq::V1::YmqService::Stub::Async##name), NKikimr::NGRpcService::TEvYmq##name##Request>> \
-                    (#name, &Ydb::Ymq::V1::YmqService::Stub::Async##name, [](Ydb::Ymq::V1::name##Request&){return "";});
+                    decltype(&Ydb::Ymq::V1::YmqService::Stub::AsyncYmq##name), NKikimr::NGRpcService::TEvYmq##name##Request>> \
+                    (#name, &Ydb::Ymq::V1::YmqService::Stub::AsyncYmq##name, [](Ydb::Ymq::V1::name##Request&){return "";});
         DECLARE_YMQ_PROCESSOR_QUEUE_UNKNOWN(GetQueueUrl);
         DECLARE_YMQ_PROCESSOR_QUEUE_UNKNOWN(CreateQueue);
         DECLARE_YMQ_PROCESSOR_QUEUE_UNKNOWN(ListQueues);
         #undef DECLARE_YMQ_PROCESSOR_QUEUE_UNKNOWN
 
         #define DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(name) Name2YmqProcessor[#name] = MakeHolder<TYmqHttpRequestProcessor<Ydb::Ymq::V1::YmqService, Ydb::Ymq::V1::name##Request, Ydb::Ymq::V1::name##Response, Ydb::Ymq::V1::name##Result,\
-                    decltype(&Ydb::Ymq::V1::YmqService::Stub::Async##name), NKikimr::NGRpcService::TEvYmq##name##Request>> \
-                    (#name, &Ydb::Ymq::V1::YmqService::Stub::Async##name, [](Ydb::Ymq::V1::name##Request& request){return request.Getqueue_url();});
+                    decltype(&Ydb::Ymq::V1::YmqService::Stub::AsyncYmq##name), NKikimr::NGRpcService::TEvYmq##name##Request>> \
+                    (#name, &Ydb::Ymq::V1::YmqService::Stub::AsyncYmq##name, [](Ydb::Ymq::V1::name##Request& request){return request.Getqueue_url();});
         DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(SendMessage);
         DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(ReceiveMessage);
         DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(GetQueueAttributes);

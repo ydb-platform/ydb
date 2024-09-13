@@ -6,6 +6,7 @@
 #include <ydb/core/base/tablet_types.h>
 #include <ydb/core/base/domain.h>
 #include <ydb/core/driver_lib/run/config.h>
+#include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 #include <ydb/public/lib/deprecated/client/msgbus_client.h>
 #include <ydb/core/client/server/grpc_server.h>
@@ -22,6 +23,7 @@
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/protos/kesus.pb.h>
 #include <ydb/core/protos/table_service_config.pb.h>
+#include <ydb/core/protos/console_tenant.pb.h>
 #include <ydb/core/kesus/tablet/events.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/core/security/ticket_parser.h>
@@ -634,6 +636,8 @@ namespace Tests {
         ui32 Size() const;
         ui32 Availabe() const;
         ui32 Capacity() const;
+
+        void CreateTenant(Ydb::Cms::CreateDatabaseRequest request, ui32 nodes = 1, TDuration timeout = TDuration::Seconds(30));
 
     private:
         TVector<ui32>& Nodes(const TString &name);

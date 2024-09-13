@@ -115,10 +115,6 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
     def command(self):
         return self.__make_run_command()
 
-    def set_binary_path(self, binary_path):
-        self.__binary_path = binary_path
-        return self.__binary_path
-
     def format_pdisk(self, pdisk_path, disk_size, **kwargs):
         logger.debug("Formatting pdisk %s on node %s, disk_size %s" % (pdisk_path, self, disk_size))
         if pdisk_path.startswith('SectorMap'):

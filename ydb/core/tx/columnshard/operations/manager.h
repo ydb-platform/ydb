@@ -78,7 +78,7 @@ public:
 
     void SetBroken() {
         SharingInfo->Broken = 1;
-        SharingInfo->InternalGenerationCounter = TSysTables::TLocksTable::TLock::ESetErrors::ErrorBroken;
+        SharingInfo->InternalGenerationCounter = (i64)TSysTables::TLocksTable::TLock::ESetErrors::ErrorBroken;
     }
 
     bool IsBroken() const {
@@ -119,21 +119,33 @@ class TOperationsManager {
     NOlap::NTxInteractions::TInteractionsContext InteractionsContext;
 
     THashMap<ui64, ui64> Tx2Lock;
+    THashMap<TInsertWriteId, TOperationWriteId> InsertWriteIdToOpWriteId;
     THashMap<ui64, TLockFeatures> LockFeatures;
-    THashMap<TWriteId, TWriteOperation::TPtr> Operations;
-    TWriteId LastWriteId = TWriteId(0);
+    THashMap<TOperationWriteId, TWriteOperation::TPtr> Operations;
+    TOperationWriteId LastWriteId = TOperationWriteId(0);
 
 public:
 
+    TWriteOperation::TPtr GetOperationByInsertWriteIdVerified(const TInsertWriteId insertWriteId) const {
+        auto it = InsertWriteIdToOpWriteId.find(insertWriteId);
+        AFL_VERIFY(it != InsertWriteIdToOpWriteId.end());
+        return GetOperationVerified(it->second);
+    }
+
+    void LinkInsertWriteIdToOperationWriteId(const std::vector<TInsertWriteId>& insertions, const TOperationWriteId operationId) {
+        for (auto&& i : insertions) {
+            InsertWriteIdToOpWriteId.emplace(i, operationId);
+        }
+    }
     bool Load(NTabletFlatExecutor::TTransactionContext& txc);
     void AddEventForTx(TColumnShard& owner, const ui64 txId, const std::shared_ptr<NOlap::NTxInteractions::ITxEventWriter>& writer);
     void AddEventForLock(TColumnShard& owner, const ui64 lockId, const std::shared_ptr<NOlap::NTxInteractions::ITxEventWriter>& writer);
 
-    TWriteOperation::TPtr GetOperation(const TWriteId writeId) const;
-    TWriteOperation::TPtr GetOperationVerified(const TWriteId writeId) const {
+    TWriteOperation::TPtr GetOperation(const TOperationWriteId writeId) const;
+    TWriteOperation::TPtr GetOperationVerified(const TOperationWriteId writeId) const {
         return TValidator::CheckNotNull(GetOperationOptional(writeId));
     }
-    TWriteOperation::TPtr GetOperationOptional(const TWriteId writeId) const {
+    TWriteOperation::TPtr GetOperationOptional(const TOperationWriteId writeId) const {
         return GetOperation(writeId);
     }
     void CommitTransactionOnExecute(
@@ -180,7 +192,7 @@ public:
             return true;
         }
     }
-    static EOperationBehaviour GetBehaviour(const NEvents::TDataEvents::TEvWrite& evWrite);
+    static TConclusion<EOperationBehaviour> GetBehaviour(const NEvents::TDataEvents::TEvWrite& evWrite);
     TLockFeatures& GetLockVerified(const ui64 lockId) {
         auto result = GetLockOptional(lockId);
         AFL_VERIFY(result)("lock_id", lockId);
@@ -199,7 +211,7 @@ public:
     TOperationsManager();
 
 private:
-    TWriteId BuildNextWriteId();
+    TOperationWriteId BuildNextOperationWriteId();
     void RemoveOperationOnExecute(const TWriteOperation::TPtr& op, NTabletFlatExecutor::TTransactionContext& txc);
     void RemoveOperationOnComplete(const TWriteOperation::TPtr& op);
     void OnTransactionFinishOnExecute(const TVector<TWriteOperation::TPtr>& operations, const TLockFeatures& lock, const ui64 txId,

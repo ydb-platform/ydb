@@ -45,7 +45,7 @@ public:
         WaitFor(BIND(std::forward<F>(func)).AsyncVia(invoker).Run()).ThrowOnError();
     }
 
-    auto GetSensors(TString json)
+    auto GetSensors(std::string json)
     {
         for (auto& c : json) {
             if (c == ':') {
@@ -65,7 +65,7 @@ public:
     }
 
     template <class EQueues, class EBuckets>
-    void VerifyJson(TString json, THashMap<EBuckets, std::vector<EQueues>> bucketToQueues)
+    void VerifyJson(const std::string& json, THashMap<EBuckets, std::vector<EQueues>> bucketToQueues)
     {
         TEnumIndexedArray<EQueues, int> enqueuedPerQueue;
         TEnumIndexedArray<EBuckets, int> enqueuedPerBucket;
@@ -141,8 +141,8 @@ TEST_F(TTestFairShareActionQueue, TestProfiling)
     auto registry = New<TSolomonRegistry>();
 
     THashMap<EBuckets, std::vector<EQueues>> bucketToQueues{};
-    bucketToQueues[EBuckets::Bucket1] = std::vector{EQueues::Queue1, EQueues::Queue2};
-    bucketToQueues[EBuckets::Bucket2] = std::vector{EQueues::Queue3};
+    bucketToQueues[EBuckets::Bucket1] = {EQueues::Queue1, EQueues::Queue2};
+    bucketToQueues[EBuckets::Bucket2] = {EQueues::Queue3};
     auto queue = CreateEnumIndexedFairShareActionQueue<EQueues>("ActionQueue", bucketToQueues, registry);
 
     auto config = CreateExporterConfig();

@@ -25,14 +25,14 @@ conversion:
   use_unsafe_converters: true
 
 data_source_default:  &data_source_default_var
-  open_connection_timeout: 5s
-  ping_connection_timeout: 5s
+  open_connection_timeout: 20s
+  ping_connection_timeout: 20s
   exponential_backoff:
-    initial_interval: 500ms
+    initial_interval: 100ms
     randomization_factor: 0.5
     multiplier: 1.5
     max_interval: 20s
-    max_elapsed_time: 2m
+    max_elapsed_time: 3m
 
 datasources:
   clickhouse:

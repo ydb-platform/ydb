@@ -785,7 +785,7 @@ void THive::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev) {
     for (const TEvInterconnect::TNodeInfo& node : ev->Get()->Nodes) {
         NodesInfo[node.NodeId] = node;
         auto dataCenterId = node.Location.GetDataCenterId();
-        if (dataCenterId != 0) {
+        if (dataCenterId) {
             DataCenters[dataCenterId]; // just create entry in hash map
         }
     }
@@ -2743,7 +2743,7 @@ ui32 THive::GetDataCenters() {
 
 void THive::AddRegisteredDataCentersNode(TDataCenterId dataCenterId, TNodeId nodeId) {
     BLOG_D("AddRegisteredDataCentersNode(" << dataCenterId << ", " << nodeId << ")");
-    if (dataCenterId != 0) { // ignore default data center id if exists
+    if (dataCenterId) { // ignore default data center id if exists
         auto& dataCenter = DataCenters[dataCenterId];
         bool wasRegistered = dataCenter.IsRegistered();
         dataCenter.RegisteredNodes.insert(nodeId);
@@ -2756,7 +2756,7 @@ void THive::AddRegisteredDataCentersNode(TDataCenterId dataCenterId, TNodeId nod
 
 void THive::RemoveRegisteredDataCentersNode(TDataCenterId dataCenterId, TNodeId nodeId) {
     BLOG_D("RemoveRegisteredDataCentersNode(" << dataCenterId << ", " << nodeId << ")");
-    if (dataCenterId != 0) { // ignore default data center id if exists
+    if (dataCenterId) { // ignore default data center id if exists
         auto& dataCenter = DataCenters[dataCenterId];
         bool wasRegistered = dataCenter.IsRegistered();
         dataCenter.RegisteredNodes.erase(nodeId);
@@ -3054,6 +3054,7 @@ void THive::ProcessEvent(std::unique_ptr<IEventHandle> event) {
         hFunc(TEvPrivate::TEvDeleteNode, Handle);
         hFunc(TEvHive::TEvRequestTabletDistribution, Handle);
         hFunc(TEvPrivate::TEvUpdateDataCenterFollowers, Handle);
+        hFunc(TEvHive::TEvRequestScaleRecommendation, Handle);
     }
 }
 
@@ -3157,6 +3158,7 @@ STFUNC(THive::StateWork) {
         fFunc(TEvPrivate::TEvDeleteNode::EventType, EnqueueIncomingEvent);
         fFunc(TEvHive::TEvRequestTabletDistribution::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvUpdateDataCenterFollowers::EventType, EnqueueIncomingEvent);
+        fFunc(TEvHive::TEvRequestScaleRecommendation::EventType, EnqueueIncomingEvent);
         hFunc(TEvPrivate::TEvProcessIncomingEvent, Handle);
     default:
         if (!HandleDefaultEvents(ev, SelfId())) {
@@ -3456,6 +3458,11 @@ void THive::Handle(TEvHive::TEvRequestTabletDistribution::TPtr& ev) {
 
 void THive::Handle(TEvPrivate::TEvUpdateDataCenterFollowers::TPtr& ev) {
     Execute(CreateUpdateDcFollowers(ev->Get()->DataCenter));
+}
+
+void THive::Handle(TEvHive::TEvRequestScaleRecommendation::TPtr& ev) {
+    auto response = std::make_unique<TEvHive::TEvResponseScaleRecommendation>();
+    Send(ev->Sender, response.release());
 }
 
 TVector<TNodeId> THive::GetNodesForWhiteboardBroadcast(size_t maxNodesToReturn) {

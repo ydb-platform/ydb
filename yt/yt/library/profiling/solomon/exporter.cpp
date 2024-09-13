@@ -154,14 +154,14 @@ void TSolomonExporterConfig::Register(TRegistrar registrar)
     });
 }
 
-TShardConfigPtr TSolomonExporterConfig::MatchShard(const TString& sensorName)
+TShardConfigPtr TSolomonExporterConfig::MatchShard(const std::string& sensorName)
 {
     TShardConfigPtr matchedShard;
     int matchSize = -1;
 
     for (const auto& [name, config] : Shards) {
         for (auto prefix : config->Filter) {
-            if (!sensorName.StartsWith(prefix)) {
+            if (!sensorName.starts_with(prefix)) {
                 continue;
             }
 
@@ -224,7 +224,7 @@ TSolomonExporter::TSolomonExporter(
 
     Registry_->SetWindowSize(Config_->WindowSize);
     Registry_->SetProducerCollectionBatchSize(Config_->ProducerCollectionBatchSize);
-    Registry_->SetGridFactor([config = Config_] (const TString& name) -> int {
+    Registry_->SetGridFactor([config = Config_] (const std::string& name) -> int {
         auto shard = config->MatchShard(name);
         if (!shard) {
             return 1;
@@ -266,12 +266,12 @@ TSolomonExporter::TSolomonExporter(
     }
 }
 
-void TSolomonExporter::Register(const TString& prefix, const NYT::NHttp::IServerPtr& server)
+void TSolomonExporter::Register(const std::string& prefix, const NYT::NHttp::IServerPtr& server)
 {
     Register(prefix, server->GetPathMatcher());
 }
 
-void TSolomonExporter::Register(const TString& prefix, const NYT::NHttp::IRequestPathMatcherPtr& handlers)
+void TSolomonExporter::Register(const std::string& prefix, const NYT::NHttp::IRequestPathMatcherPtr& handlers)
 {
     handlers->Add(prefix + "/", BIND(&TSolomonExporter::HandleIndex, MakeStrong(this), prefix));
     handlers->Add(prefix + "/sensors", BIND(&TSolomonExporter::HandleDebugSensors, MakeStrong(this)));
@@ -426,7 +426,7 @@ constexpr auto IndexPage = R"EOF(
 </html>
 )EOF";
 
-void TSolomonExporter::HandleIndex(const TString& prefix, const IRequestPtr& req, const IResponseWriterPtr& rsp)
+void TSolomonExporter::HandleIndex(const std::string& prefix, const IRequestPtr& req, const IResponseWriterPtr& rsp)
 {
     if (req->GetUrl().Path != prefix && req->GetUrl().Path != prefix + "/") {
         rsp->SetStatus(EStatusCode::NotFound);
@@ -451,7 +451,7 @@ void TSolomonExporter::HandleStatus(const IRequestPtr&, const IResponseWriterPtr
         .ValueOrThrow();
 
     auto sensors = Registry_->ListSensors();
-    THashMap<TString, TError> invalidSensors;
+    THashMap<std::string, TError> invalidSensors;
     for (const auto& sensor : sensors) {
         if (sensor.Error.IsOK()) {
             continue;
@@ -520,7 +520,7 @@ void TSolomonExporter::HandleDebugTags(const IRequestPtr&, const IResponseWriter
     rsp->GetHeaders()->Add("Content-Type", "text/plain; charset=UTF-8");
 
     auto tags = Registry_->GetTags().GetTopByKey();
-    std::vector<std::pair<TString, size_t>> tagList{tags.begin(), tags.end()};
+    std::vector<std::pair<std::string, size_t>> tagList{tags.begin(), tags.end()};
     std::sort(tagList.begin(), tagList.end(), [] (auto a, auto b) {
         return std::tie(a.second, a.first) > std::tie(b.second, b.first);
     });
@@ -535,7 +535,7 @@ void TSolomonExporter::HandleDebugTags(const IRequestPtr&, const IResponseWriter
         .ThrowOnError();
 }
 
-std::optional<TString> TSolomonExporter::ReadJson(const TReadOptions& options, std::optional<TString> shard)
+std::optional<std::string> TSolomonExporter::ReadJson(const TReadOptions& options, std::optional<std::string> shard)
 {
     TStringStream buffer;
     auto encoder = NMonitoring::BufferedEncoderJson(&buffer);
@@ -545,7 +545,7 @@ std::optional<TString> TSolomonExporter::ReadJson(const TReadOptions& options, s
     return {};
 }
 
-std::optional<TString> TSolomonExporter::ReadSpack(const TReadOptions& options, std::optional<TString> shard)
+std::optional<std::string> TSolomonExporter::ReadSpack(const TReadOptions& options, std::optional<std::string> shard)
 {
     TStringStream buffer;
     auto encoder = NMonitoring::EncoderSpackV1(
@@ -561,7 +561,7 @@ std::optional<TString> TSolomonExporter::ReadSpack(const TReadOptions& options, 
 bool TSolomonExporter::ReadSensors(
     NMonitoring::IMetricEncoderPtr encoder,
     const TReadOptions& options,
-    std::optional<TString> shard)
+    std::optional<std::string> shard)
 {
     auto guard = WaitFor(TAsyncLockReaderGuard::Acquire(&Lock_))
         .ValueOrThrow();
@@ -591,11 +591,11 @@ bool TSolomonExporter::ReadSensors(
     }
 
     if (shard) {
-        readOptions.SensorFilter = [&, name = shard.value()] (const TString& sensorName) {
+        readOptions.SensorFilter = [&, name = shard.value()] (const std::string& sensorName) {
             return Config_->MatchShard(sensorName) == Config_->Shards[name];
         };
     } else {
-        readOptions.SensorFilter = [this] (const TString& sensorName) {
+        readOptions.SensorFilter = [this] (const std::string& sensorName) {
             return FilterDefaultGrid(sensorName);
         };
     }
@@ -609,7 +609,7 @@ bool TSolomonExporter::ReadSensors(
 }
 
 void TSolomonExporter::HandleShard(
-    const std::optional<TString>& name,
+    const std::optional<std::string>& name,
     const IRequestPtr& req,
     const IResponseWriterPtr& rsp)
 {
@@ -622,7 +622,7 @@ void TSolomonExporter::HandleShard(
 }
 
 void TSolomonExporter::DoHandleShard(
-    const std::optional<TString>& name,
+    const std::optional<std::string>& name,
     const IRequestPtr& req,
     const IResponseWriterPtr& rsp)
 {
@@ -790,11 +790,11 @@ void TSolomonExporter::DoHandleShard(
         options.LingerWindowSize = Config_->LingerTimeout / gridStep;
 
         if (name) {
-            options.SensorFilter = [&] (const TString& sensorName) {
+            options.SensorFilter = [&] (const std::string& sensorName) {
                 return Config_->MatchShard(sensorName) == Config_->Shards[*name];
             };
         } else {
-            options.SensorFilter = [this] (const TString& sensorName) {
+            options.SensorFilter = [this] (const std::string& sensorName) {
                 return FilterDefaultGrid(sensorName);
             };
         }
@@ -986,7 +986,7 @@ void TSolomonExporter::ValidateSummaryPolicy(ESummaryPolicy policy)
     }
 }
 
-bool TSolomonExporter::FilterDefaultGrid(const TString& sensorName)
+bool TSolomonExporter::FilterDefaultGrid(const std::string& sensorName)
 {
     auto shard = Config_->MatchShard(sensorName);
     if (shard && shard->GridStep) {

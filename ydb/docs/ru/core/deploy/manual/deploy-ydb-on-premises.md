@@ -194,7 +194,7 @@ sudo chmod 700 /opt/ydb/certs
 
   Создайте на каждом сервере, где будет размещен статический узел кластера, конфигурационный файл systemd `/etc/systemd/system/ydbd-storage.service` по приведенному ниже образцу. Образец файла также можно [скачать из репозитория](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/systemd_services/ydbd-storage.service).
 
-  ```text
+  ```ini
   [Unit]
   Description=YDB storage node
   After=network-online.target rc-local.service
@@ -321,6 +321,7 @@ sudo chmod 700 /opt/ydb/certs
 При успешном создании базы данных, выведенный на экран код завершения команды должен быть нулевым.
 
 В приведенном выше примере команд используются следующие параметры:
+
 * `/Root` - имя корневого домена, должно соответствовать настройке `domains_config`.`domain`.`name` в файле конфигурации кластера;
 * `testdb` - имя создаваемой базы данных;
 * `ssd:1` - имя пула хранения и количество выделяемых групп хранения. Имя пула обычно означает тип устройств хранения данных и должно соответствовать настройке `storage_pool_types`.`kind` внутри элемента `domains_config`.`domain` файла конфигурации.
@@ -352,7 +353,7 @@ sudo chmod 700 /opt/ydb/certs
 
   Создайте конфигурационный файл systemd `/etc/systemd/system/ydbd-testdb.service` по приведенному ниже образцу. Образец файла также можно [скачать из репозитория](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/systemd_services/ydbd-testdb.service).
 
-  ```text
+  ```ini
   [Unit]
   Description=YDB testdb dynamic node
   After=network-online.target rc-local.service

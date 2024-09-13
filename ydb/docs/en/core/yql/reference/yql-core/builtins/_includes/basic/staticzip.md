@@ -4,7 +4,7 @@ Merges structures or tuples element-by-element. All arguments (one or more) must
 The result will be a structure or tuple, respectively.
 Each item of the result is a tuple comprised of items taken from arguments.
 
-**Examples:**
+### Examples
 
 ```yql
 $one = <|k1:1, k2:2.0|>;

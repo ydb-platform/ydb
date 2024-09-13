@@ -66,6 +66,7 @@
 #include <ydb/core/kqp/proxy_service/kqp_proxy_service.h>
 #include <ydb/core/kqp/finalize_script_service/kqp_finalize_script_service.h>
 #include <ydb/core/metering/metering.h>
+#include <ydb/core/protos/stream.pb.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
@@ -420,14 +421,13 @@ namespace Tests {
         GRpcServer->AddService(new NGRpcService::V1::TGRpcPersQueueService(system, counters, NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), grpcRequestProxies[0], true));
         GRpcServer->AddService(new NGRpcService::V1::TGRpcTopicService(system, counters, NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), grpcRequestProxies[0], true));
         GRpcServer->AddService(new NGRpcService::TGRpcPQClusterDiscoveryService(system, counters, grpcRequestProxies[0]));
-        GRpcServer->AddService(new NKesus::TKesusGRpcService(system, counters, grpcRequestProxies[0], true));
+        GRpcServer->AddService(new NKesus::TKesusGRpcService(system, counters, appData.InFlightLimiterRegistry, grpcRequestProxies[0], true));
         GRpcServer->AddService(new NGRpcService::TGRpcCmsService(system, counters, grpcRequestProxies[0], true));
         GRpcServer->AddService(new NGRpcService::TGRpcDiscoveryService(system, counters, grpcRequestProxies[0], true));
         GRpcServer->AddService(new NGRpcService::TGRpcYdbClickhouseInternalService(system, counters, appData.InFlightLimiterRegistry, grpcRequestProxies[0], true));
         GRpcServer->AddService(new NGRpcService::TGRpcYdbObjectStorageService(system, counters, grpcRequestProxies[0], true));
         GRpcServer->AddService(new NQuoter::TRateLimiterGRpcService(system, counters, grpcRequestProxies[0]));
         GRpcServer->AddService(new NGRpcService::TGRpcDataStreamsService(system, counters, grpcRequestProxies[0], true));
-        GRpcServer->AddService(new NGRpcService::TGRpcYmqService(system, counters, grpcRequestProxies[0], true));
         GRpcServer->AddService(new NGRpcService::TGRpcMonitoringService(system, counters, grpcRequestProxies[0], true));
         GRpcServer->AddService(new NGRpcService::TGRpcYdbQueryService(system, counters, grpcRequestProxies, true, 1));
         GRpcServer->AddService(new NGRpcService::TGRpcYdbTabletService(system, counters, grpcRequestProxies, true, 1));
@@ -2718,6 +2718,50 @@ namespace Tests {
 
     ui32 TTenants::Capacity() const {
         return Server->DynamicNodes();
+    }
+
+    void TTenants::CreateTenant(Ydb::Cms::CreateDatabaseRequest request, ui32 nodes, TDuration timeout) {
+        const TString path = request.path();
+        const bool serverless = request.has_serverless_resources();
+
+        // Create new tenant
+        auto& runtime = *Server->GetRuntime();
+        const auto result = NKikimr::NRpcService::DoLocalRpc<NKikimr::NGRpcService::TGrpcRequestOperationCall<Ydb::Cms::CreateDatabaseRequest, Ydb::Cms::CreateDatabaseResponse>>(
+            std::move(request), "", "", runtime.GetActorSystem(0), true
+        ).ExtractValueSync();
+
+        if (result.operation().status() != Ydb::StatusIds::SUCCESS) {
+            NYql::TIssues issues;
+            NYql::IssuesFromMessage(result.operation().issues(), issues);
+            ythrow yexception() << "Failed to create tenant " << path << ", " << result.operation().status() << ", reason:\n" << issues.ToString();
+        }
+
+        // Run new tenant
+        if (!serverless) {
+            Run(path, nodes);
+        }
+
+        // Wait tenant is up
+        Ydb::Cms::GetDatabaseStatusResult getTenantResult;
+        const TActorId edgeActor = runtime.AllocateEdgeActor();
+        const TInstant start = TInstant::Now();
+        while (TInstant::Now() - start <= timeout) {
+            auto getTenantRequest = std::make_unique<NConsole::TEvConsole::TEvGetTenantStatusRequest>();
+            getTenantRequest->Record.MutableRequest()->set_path(path);
+            runtime.SendToPipe(MakeConsoleID(), edgeActor, getTenantRequest.release(), 0, GetPipeConfigWithRetries());
+
+            auto response = runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvGetTenantStatusResponse>(edgeActor, timeout);
+            if (!response) {
+                ythrow yexception() << "Waiting CMS get tenant response timeout. Last tenant description:\n" << getTenantResult.DebugString();
+            }
+            response->Get()->Record.GetResponse().operation().result().UnpackTo(&getTenantResult);
+            if (getTenantResult.state() == Ydb::Cms::GetDatabaseStatusResult::RUNNING) {
+                return;
+            }
+
+            Sleep(TDuration::MilliSeconds(100));
+        }
+        ythrow yexception() << "Waiting tenant status RUNNING timeout. Spent time " << TInstant::Now() - start << " exceeds limit " << timeout << ". Last tenant description:\n" << getTenantResult.DebugString();
     }
 
     TVector<ui32> &TTenants::Nodes(const TString &name) {

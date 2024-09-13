@@ -57,7 +57,7 @@
 
 ## Обзор {{ ydb-short-name }} Helm-чарта
 
-Helm-чарт устанавливает [YDB Kubernetes Operator](https://github.com/ydb-platform/ydb-kubernetes-operator) в {{ k8s }} кластер. Он представляет собой контроллер, построенный по паттерну [Оператор](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/). Он реализует необходимую логику для развертывания и управления компонентами {{ ydb-short-name }}.
+Helm-чарт устанавливает [{{ ydb-short-name }} Kubernetes Operator](https://github.com/ydb-platform/ydb-kubernetes-operator) в {{ k8s }} кластер. Он представляет собой контроллер, построенный по паттерну [Оператор](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/). Он реализует необходимую логику для развертывания и управления компонентами {{ ydb-short-name }}.
 
 Кластер {{ ydb-short-name }} состоит из двух видов узлов:
 
@@ -237,7 +237,7 @@ Events:
 
     Результат:
 
-    ```
+    ```text
     NAME                READY   STATUS    RESTARTS   AGE
     database-sample-0   1/1     Running   0          1m
     database-sample-1   1/1     Running   0          1m

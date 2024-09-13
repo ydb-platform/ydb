@@ -2,6 +2,7 @@ import argparse
 import os
 import shutil
 import subprocess
+import sys
 import tarfile
 
 
@@ -55,7 +56,10 @@ def main():
     names = []
     with tarfile.open(args.input, 'r') as tar:
         names = tar.getnames()
-        tar.extractall()
+        if sys.version_info >= (3, 12):
+            tar.extractall(filter='data')
+        else:
+            tar.extractall()
 
     if args.mode == 'py3':
         pycc_cmd = [args.pycc]

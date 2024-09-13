@@ -224,6 +224,10 @@ static INode::TPtr CreateTableSettings(const TTableSettings& tableSettings, ETab
     if (tableSettings.MaxPartitions) {
         settings = L(settings, Q(Y(Q("maxPartitions"), tableSettings.MaxPartitions)));
     }
+    if (tableSettings.PartitionCount) {
+        settings = L(settings, Q(Y(Q("maxPartitions"), tableSettings.PartitionCount)));
+        settings = L(settings, Q(Y(Q("minPartitions"), tableSettings.PartitionCount)));
+    }
     if (tableSettings.KeyBloomFilter) {
         const auto& ref = tableSettings.KeyBloomFilter.GetRef();
         settings = L(settings, Q(Y(Q("keyBloomFilter"), BuildQuotedAtom(ref.Pos, ref.Name))));
@@ -949,7 +953,7 @@ public:
             auto options = tr.Options ? Q(tr.Options) : Q(Y());
             Add(Y("let", "x", keys->Y(TString(ReadName), "world", source, keys, fields, options)));
 
-            if (tr.Service != YtProviderName && InSubquery) {
+            if (IsIn({KikimrProviderName, YdbProviderName}, tr.Service) && InSubquery) {
                 ctx.Error() << "Using of system '" << tr.Service << "' is not allowed in SUBQUERY";
                 return false;
             }

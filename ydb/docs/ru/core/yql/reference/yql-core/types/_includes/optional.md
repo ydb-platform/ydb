@@ -26,7 +26,7 @@
 
 **Пример**
 
-```sql
+```yql
 $dict = {"a":1, "b":null};
 $found = $dict["b"];
 select if($found is not null, unwrap($found), -1);
@@ -67,7 +67,7 @@ SELECT
 
 Создать non-nullable колонку в таблице {{ ydb-short-name }} можно с помощью операции [CREATE TABLE](../../../reference/syntax/create_table/index.md), пользуясь ключевым словом `NOT NULL`.
 **Пример**
-```sql
+```yql
 CREATE TABLE t (
     Key Uint64 NOT NULL,
     Value String NOT NULL,
@@ -79,7 +79,7 @@ CREATE TABLE t (
 ### Пример взаимодействия NOT NULL ограничения с функциями YQL
 
 Многие из функций YQL имеют опциональные типы в качестве возвращаемого значения. Так как YQL является строго типизированным языком, запрос вида
-```sql
+```yql
 CREATE TABLE t (
     c Utf8 NOT NULL,
     PRIMARY KEY (c)

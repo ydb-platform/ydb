@@ -229,6 +229,8 @@ message TVDiskStateInfo {
     optional uint64 ReadThroughput = 22 [(DefaultField) = true];
     // Write bytes per second to PDisk for TEvVPut blobs and replication bytes only
     optional uint64 WriteThroughput = 23 [(DefaultField) = true];
+
+    optional string PDiskErrorReason = 32 [(DefaultField) = true];
 }
 
 message TEvVDiskStateRequest {

@@ -80,18 +80,12 @@ namespace NKikimr {
         TOutOfSpaceState OutOfSpaceState;
         // Global stat about huge heap fragmentation
         THugeHeapFragmentation HugeHeapFragmentation;
-        // Tracks PDisk errors
-        TPDiskErrorState PDiskErrorState;
         friend class TDskSpaceTrackerActor;
 
         NMonGroup::TCostGroup CostMonGroup;
 
     public:
         TLogger Logger;
-
-        TPDiskErrorState::EState GetPDiskErrorState() const {
-            return PDiskErrorState.GetState();
-        }
 
     public:
         TVDiskContext(
@@ -137,14 +131,11 @@ namespace NKikimr {
                 case NKikimrProto::CORRUPTED:
                 case NKikimrProto::OUT_OF_SPACE: {
                     // Device is out of order
-                    PDiskErrorState.Set(ev.Status, ev.StatusFlags);
-                    auto newState = PDiskErrorState.GetState();
                     LOG_ERROR(actorSystemOrCtx, NKikimrServices::BS_VDISK_OTHER,
                             VDISKP(VDiskLogPrefix,
-                                "CheckPDiskResponse: Recoverable error from PDisk: %s newState# %s",
-                                FormatMessage(ev.Status, ev.ErrorReason, ev.StatusFlags, message).data(),
-                                TPDiskErrorState::StateToString(newState)));
-                    actorSystemOrCtx.Send(VDiskActorId, new TEvPDiskErrorStateChange(newState));
+                                "CheckPDiskResponse: Recoverable error from PDisk: %s",
+                                FormatMessage(ev.Status, ev.ErrorReason, ev.StatusFlags, message).data()));
+                    actorSystemOrCtx.Send(VDiskActorId, new TEvPDiskErrorStateChange(ev.Status, ev.StatusFlags, ev.ErrorReason));
                     return false;
                 }
                 default:

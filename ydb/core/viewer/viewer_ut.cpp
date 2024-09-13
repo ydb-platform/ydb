@@ -1365,7 +1365,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         }
     }
 
-    void ChangeVDiskStateOn9NodeResponse(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateResponse::TPtr* ev) {
+    void ChangeVDiskStateOn9NodeResponse(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateResponse::TPtr* ev, bool pdiskError) {
         ui64 nodeId = (*ev)->Cookie;
         auto& pbRecord = (*ev)->Get()->Record;
 
@@ -1382,7 +1382,12 @@ Y_UNIT_TEST_SUITE(Viewer) {
             state->mutable_vdiskid()->set_groupid(groupId);
             state->mutable_vdiskid()->set_groupgeneration(1);
             state->mutable_vdiskid()->set_vdisk(vdisk++);
-            state->set_vdiskstate(NKikimrWhiteboard::EVDiskState::OK);
+            if (pdiskError) {
+                state->set_vdiskstate(NKikimrWhiteboard::EVDiskState::PDiskError);
+                state->set_pdiskerrorreason("Fake error");
+            } else {
+                state->set_vdiskstate(NKikimrWhiteboard::EVDiskState::OK);
+            }
             state->set_nodeid(nodeId);
         }
     }
@@ -1402,7 +1407,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         }
     };
 
-    void JsonStorage9Nodes9GroupsListingTest(TString version, bool groupFilter, bool nodeFilter, bool pdiskFilter, ui32 expectedFoundGroups, ui32 expectedTotalGroups) {
+    void JsonStorage9Nodes9GroupsListingTest(TString version, bool groupFilter, bool nodeFilter, bool pdiskFilter, ui32 expectedFoundGroups, ui32 expectedTotalGroups, bool pdiskError = false) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
         ui16 grpcPort = tp.GetPort(2135);
@@ -1454,7 +1459,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 }
                 case TEvWhiteboard::EvVDiskStateResponse: {
                     auto *x = reinterpret_cast<TEvWhiteboard::TEvVDiskStateResponse::TPtr*>(&ev);
-                    ChangeVDiskStateOn9NodeResponse(x);
+                    ChangeVDiskStateOn9NodeResponse(x, pdiskError);
                     break;
                 }
                 case TEvWhiteboard::EvPDiskStateResponse: {
@@ -1488,6 +1493,15 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
         UNIT_ASSERT_VALUES_EQUAL(json.GetMap().at("FoundGroups"), ToString(expectedFoundGroups));
         UNIT_ASSERT_VALUES_EQUAL(json.GetMap().at("TotalGroups"), ToString(expectedTotalGroups));
+
+        if (pdiskError) {
+            for (auto& group : json.GetMap().at("StorageGroups").GetArray()) {
+                for (auto& vdisk : group.GetMap().at("VDisks").GetArray()) {
+                    UNIT_ASSERT_VALUES_EQUAL(vdisk.GetMap().at("VDiskState"), "PDiskError");
+                    UNIT_ASSERT_VALUES_EQUAL(vdisk.GetMap().at("PDiskErrorReason"), "Fake error");
+                }
+            }
+        }
     }
 
     Y_UNIT_TEST(JsonStorageListingV1) {
@@ -1523,6 +1537,10 @@ Y_UNIT_TEST_SUITE(Viewer) {
         JsonStorage9Nodes9GroupsListingTest("v2", false, true, true, 4, 8);
     }
 
+    Y_UNIT_TEST(JsonStorageListingV2PDiskError) {
+        JsonStorage9Nodes9GroupsListingTest("v2", false, true, true, 4, 8, true);
+    }
+    
     struct TFakeTicketParserActor : public TActor<TFakeTicketParserActor> {
         TFakeTicketParserActor()
             : TActor<TFakeTicketParserActor>(&TFakeTicketParserActor::StFunc)

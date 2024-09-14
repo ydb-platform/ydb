@@ -1,5 +1,6 @@
 #include "change_record.h"
 
+#include <ydb/core/change_exchange/resolve_partition.h>
 #include <ydb/core/protos/change_exchange.pb.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 
@@ -85,6 +86,10 @@ bool TChangeRecord::IsBroadcast() const {
     }
 }
 
+void TChangeRecord::Accept(NChangeExchange::IVisitor& visitor) const {
+    return visitor.Visit(*this);
+}
+
 void TChangeRecord::Out(IOutputStream& out) const {
     out << "{"
         << " Order: " << Order
@@ -100,6 +105,25 @@ void TChangeRecord::Out(IOutputStream& out) const {
         << " LockId: " << LockId
         << " LockOffset: " << LockOffset
     << " }";
+}
+
+class TDefaultPartitionResolver final: public NChangeExchange::TBasePartitionResolver {
+public:
+    TDefaultPartitionResolver(const NKikimr::TKeyDesc& keyDesc)
+        : KeyDesc(keyDesc)
+    {
+    }
+
+    void Visit(const TChangeRecord& record) override {
+        SetPartitionId(NChangeExchange::ResolveSchemaBoundaryPartitionId(KeyDesc, record.GetKey()));
+    }
+
+private:
+    const NKikimr::TKeyDesc& KeyDesc;
+};
+
+NChangeExchange::IPartitionResolverVisitor* CreateDefaultPartitionResolver(const NKikimr::TKeyDesc& keyDesc) {
+    return new TDefaultPartitionResolver(keyDesc);
 }
 
 }

@@ -1,4 +1,4 @@
-#include "change_sender_partitioner.h"
+#include "resolve_partition.h"
 
 namespace NKikimr::NChangeExchange {
 
@@ -28,4 +28,4 @@ ui64 ResolveSchemaBoundaryPartitionId(const NKikimr::TKeyDesc& keyDesc, TConstAr
     return it->ShardId;
 }
 
-} // NKikimr::NChangeExchange
+}

@@ -5,7 +5,8 @@
 #include "lightweight_schema.h"
 
 #include <ydb/core/base/tablet_pipecache.h>
-#include <ydb/core/change_exchange/change_sender_common_ops.h>
+#include <ydb/core/change_exchange/change_sender.h>
+#include <ydb/core/change_exchange/resolve_partition.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tablet_flat/flat_row_eggs.h>
 #include <ydb/core/tx/datashard/datashard.h>
@@ -78,6 +79,22 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter<TCh
         }
     }
 
+    class TSerializer: public NChangeExchange::TBaseVisitor {
+        TSerializationContext<TChangeRecord>& Context;
+        NKikimrTxDataShard::TEvApplyReplicationChanges::TChange& Record;
+
+    public:
+        explicit TSerializer(TSerializationContext<TChangeRecord>& ctx, NKikimrTxDataShard::TEvApplyReplicationChanges::TChange& record)
+            : Context(ctx)
+            , Record(record)
+        {
+        }
+
+        void Visit(const TChangeRecord& record) override {
+            record.Serialize(Record, Context);
+        }
+    };
+
     void Handle(NChangeExchange::TEvChangeExchange::TEvRecords::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
 
@@ -89,9 +106,11 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter<TCh
 
         TString source;
 
-        for (auto recordPtr : ev->Get()->GetRecords<TChangeRecord>()) {
+        for (auto recordPtr : ev->Get()->Records) {
             const auto& record = *recordPtr;
-            record.Serialize(*event->Record.AddChanges(), SerializationContext);
+
+            TSerializer serializer(SerializationContext, *event->Record.AddChanges());
+            record.Accept(serializer);
 
             if (!source) {
                 source = record.GetSourceId();
@@ -220,15 +239,29 @@ private:
 template <typename TChangeRecord>
 class TLocalTableWriter
     : public TActor<TLocalTableWriter<TChangeRecord>>
-    , public NChangeExchange::TBaseChangeSender<TChangeRecord>
+    , public NChangeExchange::TChangeSender
     , public NChangeExchange::IChangeSenderIdentity
-    , public NChangeExchange::IChangeSenderResolver
-    , public NChangeExchange::ISenderFactory
+    , public NChangeExchange::IChangeSenderPathResolver
+    , public NChangeExchange::IChangeSenderFactory
     , private NSchemeCache::TSchemeCacheHelpers
 {
     using TBase = TActor<TLocalTableWriter<TChangeRecord>>;
     using TThis = TLocalTableWriter;
-    using TBaseSender = NChangeExchange::TBaseChangeSender<TChangeRecord>;
+
+    class TPartitionResolver final: public NChangeExchange::TBasePartitionResolver {
+    public:
+        TPartitionResolver(const NKikimr::TKeyDesc& keyDesc)
+            : KeyDesc(keyDesc)
+        {
+        }
+
+        void Visit(const TChangeRecord& record) override {
+            SetPartitionId(NChangeExchange::ResolveSchemaBoundaryPartitionId(KeyDesc, record.GetKey()));
+        }
+
+    private:
+        const NKikimr::TKeyDesc& KeyDesc;
+    };
 
     TStringBuf GetLogPrefix() const {
         if (!LogPrefix) {
@@ -387,7 +420,7 @@ class TLocalTableWriter
             TVector<TKeyDesc::TColumnOp>()
         );
 
-        TBaseSender::SetPartitioner(NChangeExchange::CreateSchemaBoundaryPartitioner<TChangeRecord>(*KeyDesc.Get()));
+        TChangeSender::SetPartitionResolver(new TPartitionResolver(*KeyDesc.Get()));
 
         ResolveKeys();
     }
@@ -469,7 +502,7 @@ class TLocalTableWriter
     void Handle(NChangeExchange::TEvChangeExchange::TEvRequestRecords::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
 
-        TVector<typename TChangeRecord::TPtr> records(::Reserve(ev->Get()->Records.size()));
+        TVector<NChangeExchange::IChangeRecord::TPtr> records(::Reserve(ev->Get()->Records.size()));
 
         for (const auto& record : ev->Get()->Records) {
             auto it = PendingRecords.find(record.Order);
@@ -532,7 +565,7 @@ public:
     template <class... TArgs>
     explicit TLocalTableWriter(const TPathId& tablePathId, TArgs&&... args)
         : TBase(&TThis::StateWork)
-        , TBaseSender(this, this, this, this, TActorId())
+        , TChangeSender(this, this, this, this, TActorId())
         , TablePathId(tablePathId)
         , SerializationContext(std::forward<TArgs>(args)...)
     {
@@ -569,7 +602,7 @@ private:
     bool Resolving = false;
     bool Initialized = false;
 
-    TMap<ui64, typename TChangeRecord::TPtr> PendingRecords;
+    TMap<ui64, NChangeExchange::IChangeRecord::TPtr> PendingRecords;
 
 }; // TLocalTableWriter
 

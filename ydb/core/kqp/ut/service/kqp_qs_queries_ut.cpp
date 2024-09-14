@@ -3225,7 +3225,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }*/
     }
 
-     Y_UNIT_TEST_TWIN(TableSink_HtapInteractive, withOltpSink) {
+    Y_UNIT_TEST_TWIN(TableSink_HtapInteractive, withOltpSink) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         appConfig.MutableTableServiceConfig()->SetEnableOltpSink(withOltpSink);

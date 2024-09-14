@@ -97,7 +97,6 @@ ydb/tests/fq/yds *
 ydb/tests/fq/control_plane_storage *
 ydb/tests/functional/audit *
 ydb/tests/functional/blobstorage test_replication.py.TestReplicationAfterNodesRestart.test_replication*
-ydb/tests/functional/clickbench test.py.test_plans[column]
 ydb/tests/functional/kqp/kqp_indexes ConsistentIndexRead.InteractiveTx
 ydb/tests/functional/kqp/kqp_query_session KqpQuerySession.NoLocalAttach
 ydb/tests/functional/restarts test_restarts.py.*

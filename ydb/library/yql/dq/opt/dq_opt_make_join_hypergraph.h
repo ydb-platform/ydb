@@ -110,7 +110,7 @@ TJoinHypergraph<TNodeSet> MakeJoinHypergraph(
     }
 
     TTransitiveClosureConstructor transitveClosure(graph);
-    // transitveClosure.Construct();
+    transitveClosure.Construct();
 
     if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {
         YQL_CLOG(TRACE, CoreDq) << "Hypergraph after transitive closure: ";

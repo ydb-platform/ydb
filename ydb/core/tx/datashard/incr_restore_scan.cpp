@@ -57,6 +57,7 @@ public:
     {}
 
     static TVector<TTag> InitValueTags(TUserTable::TCPtr table) {
+        Y_VERIFY(table->Columns.size() >= 1);
         TVector<TTag> valueTags;
         valueTags.reserve(table->Columns.size() - 1);
         for (const auto& [tag, column] : table->Columns) {

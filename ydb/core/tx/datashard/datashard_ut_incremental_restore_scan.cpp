@@ -6,6 +6,24 @@
 
 namespace NKikimr::NDataShard {
 
+class TDriverMock
+    : public NTable::IDriver
+{
+public:
+    void Touch(NTable::EScan) noexcept {
+
+    }
+};
+
+class TCbExecutorActor : public TActorBootstrapped<TCbExecutorActor> {
+public:
+    std::function<void()> Cb;
+
+    void Bootstrap() {
+        Cb();
+    }
+};
+
 Y_UNIT_TEST_SUITE(IncrementalRestoreScan) {
     Y_UNIT_TEST(Simple) {
         TPortManager pm;
@@ -21,7 +39,15 @@ Y_UNIT_TEST_SUITE(IncrementalRestoreScan) {
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
 
-        TUserTable::TCPtr table;
+        TUserTable::TPtr table = new TUserTable;
+
+        table->Columns.emplace(0, TUserTable::TUserColumn{});
+
+        NTable::TScheme::TTableSchema tableSchema;
+        tableSchema.Columns[0] = NTable::TColumn("test", 0, {}, "");
+        tableSchema.Columns[0].KeyOrder = 0;
+        auto scheme = NTable::TRowScheme::Make(tableSchema.Columns, NUtil::TSecond());
+
         TPathId targetPathId{};
         ui64 txId = 0;
 
@@ -34,6 +60,17 @@ Y_UNIT_TEST_SUITE(IncrementalRestoreScan) {
             table,
             targetPathId,
             txId);
+
+        TDriverMock driver;
+        auto* executor = new TCbExecutorActor;
+        executor->Cb = [&]() {
+            scan->Prepare(&driver, scheme);
+        };
+        auto executorActor = runtime.Register(executor);
+        runtime.EnableScheduleForActor(executorActor);
+
+        auto resp = runtime.GrabEdgeEventRethrow<TEvIncrementalRestoreScan::TEvFinished>(sender);
+        Y_UNUSED(resp);
     }
 }
 

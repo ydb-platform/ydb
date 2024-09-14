@@ -8,11 +8,11 @@ namespace NKikimr {
 namespace NKqp {
 
 struct TWriteActorSettings : TAtomicRefCount<TWriteActorSettings> {
-    ui64 InFlightMemoryLimitPerActorBytes = 64_MB;
-    ui64 MemoryLimitPerMessageBytes = 64_MB;
-    ui64 MaxBatchesPerMessage = 1000;
+    i64 InFlightMemoryLimitPerActorBytes = 64_MB;
+    i64 MemoryLimitPerMessageBytes = 64_MB;
+    i64 MaxBatchesPerMessage = 1000;
 
-    TDuration StartRetryDelay = TDuration::MilliSeconds(1);
+    TDuration StartRetryDelay = TDuration::Seconds(1);
     TDuration MaxRetryDelay = TDuration::Seconds(10);
     double UnsertaintyRatio = 0.5;
     double Multiplier = 2.0;

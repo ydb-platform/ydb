@@ -430,6 +430,13 @@ struct TTypeAnnotationContext: public TThrRefBase {
     void Reset();
 
     /**
+     * Helper method to check statistics in type annotation context
+     */
+    bool ContainsStats(const TExprNode* input) {
+        return StatisticsMap.contains(input ? input->UniqueId() : 0);
+    }
+
+    /**
      * Helper method to fetch statistics from type annotation context
      */
     std::shared_ptr<TOptimizerStatistics> GetStats(const TExprNode* input) {

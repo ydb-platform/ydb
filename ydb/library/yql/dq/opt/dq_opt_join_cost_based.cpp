@@ -295,7 +295,7 @@ TExprBase DqOptimizeEquiJoinWithCosts(
     auto equiJoin = node.Cast<TCoEquiJoin>();
     YQL_ENSURE(equiJoin.ArgCount() >= 4);
 
-    if (typesCtx.GetStats(equiJoin.Raw())) {
+    if (typesCtx.ContainsStats(equiJoin.Raw())) {
         return node;
     }
 

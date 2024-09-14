@@ -39,20 +39,20 @@ public:
     TDPHypSolver(
         TJoinHypergraph<TNodeSet>& graph,
         IProviderContext& ctx,
-        const TCardinalityHints& hints,
-        const TJoinAlgoHints& joinHints
+        const TOptimizerHints& hints
     ) 
         : Graph_(graph) 
         , NNodes_(graph.GetNodes().size())
         , Pctx_(ctx)
     {
-        for (const auto& h : hints.Hints) {
+        for (auto& h : hints.CardinalityHints->Hints) {
             TNodeSet hintSet = Graph_.GetNodesByRelNames(h.JoinLabels);
-            CardHintsTable_[hintSet] = h;
+            CardHintsTable_[hintSet] = &h;
         }
-        for (const auto& h : joinHints.Hints) {
+
+        for (auto& h : hints.JoinAlgoHints->Hints) {
             TNodeSet hintSet = Graph_.GetNodesByRelNames(h.JoinLabels);
-            JoinAlgoHintsTable_[hintSet] = h;
+            JoinAlgoHintsTable_[hintSet] = &h;
         }
     }
 
@@ -98,7 +98,7 @@ private:
         const TVector<TString>& leftJoinKeys,
         const TVector<TString>& rightJoinKeys,
         IProviderContext& ctx,
-        TCardinalityHints::TCardinalityHint* maybeHint,
+        TCardinalityHints::TCardinalityHint* maybeCardHint,
         TJoinAlgoHints::TJoinAlgoHint* maybeJoinHint
     );
 
@@ -115,8 +115,8 @@ private:
     #endif
 private:
     THashMap<TNodeSet, std::shared_ptr<IBaseOptimizerNode>, std::hash<TNodeSet>> DpTable_;
-    THashMap<TNodeSet, TCardinalityHints::TCardinalityHint, std::hash<TNodeSet>> CardHintsTable_;
-    THashMap<TNodeSet, TJoinAlgoHints::TJoinAlgoHint, std::hash<TNodeSet>> JoinAlgoHintsTable_;
+    THashMap<TNodeSet, TCardinalityHints::TCardinalityHint*, std::hash<TNodeSet>> CardHintsTable_;
+    THashMap<TNodeSet, TJoinAlgoHints::TJoinAlgoHint*, std::hash<TNodeSet>> JoinAlgoHintsTable_;
 };
 
 /*
@@ -242,7 +242,7 @@ template<typename TNodeSet> std::shared_ptr<TJoinOptimizerNodeInternal> TDPHypSo
         s[i] = 1;
         DpTable_[s] = nodes[i].RelationOptimizerNode;
         if (CardHintsTable_.contains(s)){
-            DpTable_[s]->Stats->Nrows = CardHintsTable_.at(s).ApplyHint(DpTable_[s]->Stats->Nrows);
+            DpTable_[s]->Stats->Nrows = CardHintsTable_.at(s)->ApplyHint(DpTable_[s]->Stats->Nrows);
         }
     }
 
@@ -416,7 +416,7 @@ template <typename TNodeSet> std::shared_ptr<TJoinOptimizerNodeInternal> TDPHypS
     const TVector<TString>& leftJoinKeys,
     const TVector<TString>& rightJoinKeys,
     IProviderContext& ctx,
-    TCardinalityHints::TCardinalityHint* maybeHint,
+    TCardinalityHints::TCardinalityHint* maybeCardHint,
     TJoinAlgoHints::TJoinAlgoHint* maybeJoinHint
 ) {
     double bestCost = std::numeric_limits<double>::infinity();
@@ -425,11 +425,10 @@ template <typename TNodeSet> std::shared_ptr<TJoinOptimizerNodeInternal> TDPHypS
 
     for (auto joinAlgo : AllJoinAlgos) {
         if (ctx.IsJoinApplicable(left, right, joinConditions, leftJoinKeys, rightJoinKeys, joinAlgo, joinKind)){
-            auto cost = ctx.ComputeJoinStats(*left->Stats, *right->Stats, leftJoinKeys, rightJoinKeys, joinAlgo, joinKind, maybeHint).Cost;
-            if (maybeJoinHint) {
-                if (joinAlgo == maybeJoinHint->JoinHint) {
-                    cost = -1;
-                }
+            auto cost = ctx.ComputeJoinStats(*left->Stats, *right->Stats, leftJoinKeys, rightJoinKeys, joinAlgo, joinKind, maybeCardHint).Cost;
+            if (maybeJoinHint && joinAlgo == maybeJoinHint->JoinHint) {
+                cost = -1;
+                maybeJoinHint->Applied = true;
             }
             if (cost < bestCost) {
                 bestCost = cost;
@@ -440,11 +439,10 @@ template <typename TNodeSet> std::shared_ptr<TJoinOptimizerNodeInternal> TDPHypS
 
         if (isCommutative) {
             if (ctx.IsJoinApplicable(right, left, reversedJoinConditions, rightJoinKeys, leftJoinKeys, joinAlgo, joinKind)){
-                auto cost = ctx.ComputeJoinStats(*right->Stats, *left->Stats,  rightJoinKeys, leftJoinKeys, joinAlgo, joinKind, maybeHint).Cost;
-                if (maybeJoinHint) {
-                    if (joinAlgo == maybeJoinHint->JoinHint) {
-                        cost = -1;
-                    }
+                auto cost = ctx.ComputeJoinStats(*right->Stats, *left->Stats,  rightJoinKeys, leftJoinKeys, joinAlgo, joinKind, maybeCardHint).Cost;
+                if (maybeJoinHint && joinAlgo == maybeJoinHint->JoinHint) {
+                    cost = -1;
+                    maybeJoinHint->Applied = true;
                 }
                 if (cost < bestCost) {
                     bestCost = cost;
@@ -458,10 +456,10 @@ template <typename TNodeSet> std::shared_ptr<TJoinOptimizerNodeInternal> TDPHypS
     Y_ENSURE(bestCost != std::numeric_limits<double>::infinity(), "No join was chosen!");
 
     if (bestJoinIsReversed) {
-        return MakeJoinInternal(right, left, reversedJoinConditions, rightJoinKeys, leftJoinKeys, joinKind, bestAlgo, ctx, maybeHint);
+        return MakeJoinInternal(right, left, reversedJoinConditions, rightJoinKeys, leftJoinKeys, joinKind, bestAlgo, ctx, maybeCardHint);
     }
     
-    return MakeJoinInternal(left, right, joinConditions, leftJoinKeys, rightJoinKeys, joinKind, bestAlgo, ctx, maybeHint);
+    return MakeJoinInternal(left, right, joinConditions, leftJoinKeys, rightJoinKeys, joinKind, bestAlgo, ctx, maybeCardHint);
 }
 
 /* 
@@ -485,8 +483,8 @@ template<typename TNodeSet> void TDPHypSolver<TNodeSet>::EmitCsgCmp(const TNodeS
 
     TNodeSet joined = s1 | s2;
 
-    auto maybeCardHint = CardHintsTable_.contains(joined) ? & CardHintsTable_[joined] : nullptr;
-    auto maybeJoinAlgoHint = JoinAlgoHintsTable_.contains(joined) ? & JoinAlgoHintsTable_[joined] : nullptr;
+    auto maybeCardHint = CardHintsTable_.contains(joined) ? CardHintsTable_[joined] : nullptr;
+    auto maybeJoinAlgoHint = JoinAlgoHintsTable_.contains(joined) ? JoinAlgoHintsTable_[joined] : nullptr;
 
     auto bestJoin = PickBestJoin(
         leftNodes,

@@ -243,8 +243,8 @@ private:
         const std::shared_ptr<TJoinOptimizerNode>& joinTree, 
         const TOptimizerHints& hints = {}
     ) {
-        TJoinHypergraph<TNodeSet> hypergraph = MakeJoinHypergraph<TNodeSet>(joinTree, hints.JoinOrderHints);
-        TDPHypSolver<TNodeSet> solver(hypergraph, this->Pctx, hints.CardinalityHints, hints.JoinAlgoHints);
+        TJoinHypergraph<TNodeSet> hypergraph = MakeJoinHypergraph<TNodeSet>(joinTree, hints);
+        TDPHypSolver<TNodeSet> solver(hypergraph, this->Pctx, hints);
 
         if (solver.CountCC(MaxDPhypTableSize_) >= MaxDPhypTableSize_) {
             YQL_CLOG(TRACE, CoreDq) << "Maximum DPhyp threshold exceeded\n";
@@ -330,7 +330,7 @@ TExprBase DqOptimizeEquiJoinWithCosts(
     // Generate an initial tree
     auto joinTree = ConvertToJoinTree(joinTuple, rels);
 
-    if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::ProviderKqp, NYql::NLog::ELevel::TRACE)) {
+    if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {
         std::stringstream str;
         str << "Converted join tree:\n";
         joinTree->Print(str);
@@ -339,7 +339,7 @@ TExprBase DqOptimizeEquiJoinWithCosts(
 
     joinTree = opt.JoinSearch(joinTree, hints);
 
-    if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::ProviderKqp, NYql::NLog::ELevel::TRACE)) {
+    if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {
         std::stringstream str;
         str << "Optimizied join tree:\n";
         joinTree->Print(str);

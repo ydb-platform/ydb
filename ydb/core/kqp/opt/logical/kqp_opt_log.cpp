@@ -11,6 +11,7 @@
 #include <ydb/library/yql/dq/opt/dq_opt_join.h>
 #include <ydb/library/yql/dq/opt/dq_opt_log.h>
 #include <ydb/library/yql/dq/opt/dq_opt_hopping.h>
+#include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/providers/common/transform/yql_optimize.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 
@@ -155,11 +156,7 @@ protected:
                 rels.emplace_back(std::make_shared<TKqpRelOptimizerNode>(TString(label), stat, node));
             },
             KqpCtx.EquiJoinsCount,
-            TOptimizerHints{
-                .CardinalityHints = KqpCtx.GetCardinalityHints(),
-                .JoinAlgoHints = KqpCtx.GetJoinAlgoHints(),
-                .JoinOrderHints = KqpCtx.GetJoinOrderHints()
-            }
+            KqpCtx.GetOptimizerHints()
         );
         DumpAppliedRule("OptimizeEquiJoinWithCosts", node.Ptr(), output.Ptr(), ctx);
         return output;
@@ -375,6 +372,38 @@ TAutoPtr<IGraphTransformer> CreateKqpLogOptTransformer(TIntrusivePtr<TKqpOptimiz
     TTypeAnnotationContext& typesCtx, const TKikimrConfiguration::TPtr& config)
 {
     return THolder<IGraphTransformer>(new TKqpLogicalOptTransformer(typesCtx, kqpCtx, config));
+}
+
+class TUnappliedOptimizerHintsChecker : public TSyncTransformerBase {
+public:
+    TUnappliedOptimizerHintsChecker(
+        TIntrusivePtr<TKqpOptimizeContext>& kqpCtx
+    ) : KqpCtx(*kqpCtx)
+    {}
+
+    TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
+        Y_UNUSED(ctx);
+
+        output = input;
+       
+        for (const auto& hint: KqpCtx.GetOptimizerHints().GetUnappliedHintStrings()) {
+            YQL_CLOG(WARN, ProviderYdb) << "Unapplied hint: " + hint;
+        }
+
+        return TStatus::Ok;
+    }
+
+    void Rewind() final {}
+
+private:
+    TKqpOptimizeContext& KqpCtx;
+};
+
+TAutoPtr<NYql::IGraphTransformer> CreateUnappliedOptimizerHintsChecker(
+    TIntrusivePtr<TKqpOptimizeContext>& kqpCtx
+)
+{
+    return THolder<IGraphTransformer>(new TUnappliedOptimizerHintsChecker(kqpCtx));
 }
 
 } // namespace NKikimr::NKqp::NOpt

@@ -5,6 +5,7 @@
 #include "dsproxy_blackboard.h"
 
 #include "dsproxy_strategy_get_m3dc_basic.h"
+#include "dsproxy_strategy_get_m3dc_check.h"
 #include "dsproxy_strategy_get_m3dc_restore.h"
 #include "dsproxy_strategy_get_m3of4.h"
 #include "dsproxy_strategy_restore.h"
@@ -35,6 +36,47 @@ void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReas
             outResponse.LooksLikePhantom = PhantomCheck
                 ? std::make_optional(false)
                 : std::nullopt;
+
+            if (IntegrityCheck) {
+                const TBlobState &blobState = Blackboard.GetState(query.Id);
+                outResponse.CompletenessFailed = !blobState.HasWrittenQuorum(*Info, nullptr);
+
+                std::unordered_set<ui32> partIndexes;
+                ui32 partCount = 0;
+                for (const auto &item : blobState.PartMap) {
+                    if (!item.Data.IsEmpty()) {
+                        partIndexes.insert(item.PartIdRequested);
+                        ++partCount;
+                    }
+                }
+                TRope data;
+                if (Info->Type.GetErasure() == TErasureType::Erasure4Plus2Block && partIndexes.size() > 3 || 
+                    Info->Type.GetErasure() != TErasureType::Erasure4Plus2Block && partCount > 1) {
+                    ui32 shift = Min(query.Shift, query.Id.BlobSize());
+                    ui32 size = query.Size ? Min(query.Size, query.Id.BlobSize() - shift) : query.Id.BlobSize() - shift;
+                    data = blobState.Whole.Data.Read(shift, size);
+                } else {
+                    continue;
+                }
+
+                if (CheckDataInconsistency(blobState, data)) {
+                    outResponse.IntegrityCheckFailed = true;
+                    ui32 corruptedPartIdx = 0;
+
+                    switch (Info->Type.GetErasure()) {
+                        case TBlobStorageGroupType::ErasureMirror3dc:
+                        case TBlobStorageGroupType::ErasureMirror3of4:
+                            outResponse.CorruptedPartFound = FindCorruptedPartMirror(blobState, corruptedPartIdx);
+                            outResponse.CorruptedPartIndex = corruptedPartIdx;
+                            break;
+                        default: {
+                            outResponse.CorruptedPartFound = (outResponse.CompletenessFailed) ? false : FindCorruptedPart42(blobState, data, corruptedPartIdx);
+                            outResponse.CorruptedPartIndex = corruptedPartIdx;
+                            break;
+                        }
+                    }
+                }
+            }
         }
     } else {
         for (ui32 i = 0, e = QuerySize; i != e; ++i) {
@@ -113,16 +155,40 @@ void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReas
                 outResponse.Shift = query.Shift;
                 outResponse.RequestedSize = query.Size;
 
+                if (PhantomCheck) {
+                    continue;
+                }
+
                 ui32 shift = Min(query.Shift, query.Id.BlobSize());
                 ui32 size = query.Size ? Min(query.Size, query.Id.BlobSize() - shift) : query.Id.BlobSize() - shift;
+                TRope data = blobState.Whole.Data.Read(shift, size);
 
-                if (!PhantomCheck) {
-                    TRope data = blobState.Whole.Data.Read(shift, size);
-                    DecryptInplace(data, 0, shift, size, query.Id, *Info);
-                    outResponse.Buffer = std::move(data);
-                    Y_ABORT_UNLESS(outResponse.Buffer, "%s empty response buffer", RequestPrefix.data());
-                    ReplyBytes += outResponse.Buffer.size();
+                if (IntegrityCheck) {
+                    outResponse.CompletenessFailed = !blobState.HasWrittenQuorum(*Info, nullptr);
+                    if (CheckDataInconsistency(blobState, data)) {
+                        outResponse.Status = NKikimrProto::ERROR;
+                        outResponse.IntegrityCheckFailed = true;
+                        ui32 corruptedPartIdx = 0;
+
+                        switch (Info->Type.GetErasure()) {
+                            case TBlobStorageGroupType::ErasureMirror3dc:
+                            case TBlobStorageGroupType::ErasureMirror3of4:
+                                outResponse.CorruptedPartFound = FindCorruptedPartMirror(blobState, corruptedPartIdx);
+                                outResponse.CorruptedPartIndex = corruptedPartIdx;
+                                break;
+                            default: {
+                                outResponse.CorruptedPartFound = (outResponse.CompletenessFailed) ? false : FindCorruptedPart42(blobState, data, corruptedPartIdx);
+                                outResponse.CorruptedPartIndex = corruptedPartIdx;
+                                break;
+                            }
+                        }
+                    }
                 }
+                
+                DecryptInplace(data, 0, shift, size, query.Id, *Info);
+                outResponse.Buffer = std::move(data);
+                Y_ABORT_UNLESS(outResponse.Buffer, "%s empty response buffer", RequestPrefix.data());
+                ReplyBytes += outResponse.Buffer.size();
             } else if (blobState.WholeSituation == TBlobState::ESituation::Error) {
                 outResponse.Status = NKikimrProto::ERROR;
             } else {
@@ -260,7 +326,7 @@ void TGetImpl::PrepareRequests(TLogContext &logCtx, TDeque<std::unique_ptr<TEvBl
                 TEvBlobStorage::TEvVGet::EFlags::None, {}, {}, ForceBlockTabletData);
         }
         std::optional<ui64> cookie;
-        if (ReportDetailedPartMap) {
+        if (ReportDetailedPartMap || IntegrityCheck) {
             cookie = Blackboard.AddPartMap(get.Id, get.OrderNumber, RequestIndex);
         }
         vget->AddExtremeQuery(get.Id, get.Shift, get.Size, cookie ? &cookie.value() : nullptr);
@@ -288,7 +354,7 @@ void TGetImpl::PrepareRequests(TLogContext &logCtx, TDeque<std::unique_ptr<TEvBl
             ++RequestIndex;
         }
     }
-
+    
     Blackboard.GroupDiskRequests.GetsPending.clear();
 }
 
@@ -309,7 +375,7 @@ void TGetImpl::PrepareVPuts(TLogContext &logCtx, TDeque<std::unique_ptr<TEvBlobS
 
 EStrategyOutcome TGetImpl::RunBoldStrategy(TLogContext &logCtx) {
     TStackVec<IStrategy*, 1> strategies;
-    TBoldStrategy s1(PhantomCheck);
+    TBoldStrategy s1(PhantomCheck || IntegrityCheck);
     strategies.push_back(&s1);
     TRestoreStrategy s2;
     if (MustRestoreFirst) {
@@ -319,6 +385,9 @@ EStrategyOutcome TGetImpl::RunBoldStrategy(TLogContext &logCtx) {
 }
 
 EStrategyOutcome TGetImpl::RunMirror3dcStrategy(TLogContext &logCtx) {
+    if (IntegrityCheck) {
+        return Blackboard.RunStrategy(logCtx, TMirror3dcCheckGetStrategy(), AccelerationParams);
+    }
     return MustRestoreFirst
         ? Blackboard.RunStrategy(logCtx, TMirror3dcGetWithRestoreStrategy(), AccelerationParams)
         : Blackboard.RunStrategy(logCtx, TMirror3dcBasicGetStrategy(NodeLayout, PhantomCheck), AccelerationParams);
@@ -326,7 +395,7 @@ EStrategyOutcome TGetImpl::RunMirror3dcStrategy(TLogContext &logCtx) {
 
 EStrategyOutcome TGetImpl::RunMirror3of4Strategy(TLogContext &logCtx) {
     TStackVec<IStrategy*, 1> strategies;
-    TMirror3of4GetStrategy s1;
+    TMirror3of4GetStrategy s1(IntegrityCheck);
     strategies.push_back(&s1);
     TPut3of4Strategy s2(TEvBlobStorage::TEvPut::TacticMaxThroughput);
     if (MustRestoreFirst) {
@@ -336,19 +405,25 @@ EStrategyOutcome TGetImpl::RunMirror3of4Strategy(TLogContext &logCtx) {
 }
 
 EStrategyOutcome TGetImpl::RunStrategies(TLogContext &logCtx) {
-    if (Info->Type.GetErasure() == TErasureType::ErasureMirror3dc) {
+    auto erasureType = Info->Type.GetErasure();
+    auto erasureFamily = Info->Type.ErasureFamily();
+
+    if (erasureType == TErasureType::ErasureMirror3dc) {
         return RunMirror3dcStrategy(logCtx);
-    } else if (Info->Type.GetErasure() == TErasureType::ErasureMirror3of4) {
+    }
+    if (erasureType == TErasureType::ErasureMirror3of4) {
         return RunMirror3of4Strategy(logCtx);
-    } else if (MustRestoreFirst || PhantomCheck) {
-        return RunBoldStrategy(logCtx);
-    } else if (Info->Type.ErasureFamily() == TErasureType::ErasureParityBlock) {
-        return Blackboard.RunStrategy(logCtx, TMinIopsBlockStrategy(), AccelerationParams);
-    } else if (Info->Type.ErasureFamily() == TErasureType::ErasureMirror) {
-        return Blackboard.RunStrategy(logCtx, TMinIopsMirrorStrategy(), AccelerationParams);
-    } else {
+    }
+    if (MustRestoreFirst || PhantomCheck || IntegrityCheck) {
         return RunBoldStrategy(logCtx);
     }
+    if (erasureFamily == TErasureType::ErasureParityBlock) {
+        return Blackboard.RunStrategy(logCtx, TMinIopsBlockStrategy(), AccelerationParams);
+    }
+    if (erasureFamily == TErasureType::ErasureMirror) {
+        return Blackboard.RunStrategy(logCtx, TMinIopsMirrorStrategy(), AccelerationParams);
+    }
+    return RunBoldStrategy(logCtx);
 }
 
 void TGetImpl::OnVPutResult(TLogContext &logCtx, TEvBlobStorage::TEvVPutResult &ev,
@@ -380,4 +455,103 @@ void TGetImpl::OnVPutResult(TLogContext &logCtx, TEvBlobStorage::TEvVPutResult &
     History.AddVPutResult(orderNumber, status, record.GetErrorReason());
 }
 
+bool TGetImpl::CheckDataInconsistency(const TBlobState &blobState, const TRope &data) {
+    TStackVec<TRope, TypicalPartsInBlob> partData(Info->Type.TotalPartCount());
+    const bool isBlock42 = (Info->Type.GetErasure() == TBlobStorageGroupType::Erasure4Plus2Block);
+    if (isBlock42) {
+        ErasureSplit((TErasureType::ECrcMode)blobState.Id.CrcMode(), Info->Type, data, partData);
+    }
+    for (const auto &item : blobState.PartMap) {
+        if (item.Data.IsEmpty()) {
+            continue;
+        }
+        const TRope &partToCheck = isBlock42 ? partData[item.PartIdRequested - 1] : data;
+        if (item.Data != partToCheck) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool TGetImpl::FindCorruptedPart42(const TBlobState &blobState, const TRope &data, ui32 &outPartIndex) {
+    const auto &parts = blobState.PartMap;
+    auto crcMode = static_cast<TErasureType::ECrcMode>(blobState.Id.CrcMode());
+    TStackVec<TRope, TypicalPartsInBlob> selectedParts(Info->Type.TotalPartCount());
+    TStackVec<TRope, TypicalPartsInBlob> restoredParts(Info->Type.TotalPartCount());
+    TRope restoredBlob;
+
+    for (ui32 excludedPart = 0; excludedPart < parts.size(); ++excludedPart) {
+        if (parts[excludedPart].Data.IsEmpty()) {
+            continue;
+        }
+        std::fill(selectedParts.begin(), selectedParts.end(), TRope());
+        std::fill(restoredParts.begin(), restoredParts.end(), TRope());
+        ui32 restoreMask = 0;
+        ui32 selectedCount = 0;
+        for (ui32 i = 0; i < parts.size(); ++i) {
+            if (i == excludedPart || parts[i].Data.IsEmpty()) {
+                continue;
+            }
+            ui32 partId = parts[i].PartIdRequested - 1;
+            if (selectedParts[partId].IsEmpty()) {
+                selectedParts[partId] = parts[i].Data;
+                restoreMask |= (1 << partId);
+                ++selectedCount;
+            }
+            if (selectedCount == 4) {
+                break;
+            }
+        }
+        if (selectedCount != 4) {
+            continue;
+        }
+        
+        restoredBlob.clear();
+        ErasureRestore(crcMode, Info->Type, data.size(), &restoredBlob, selectedParts, restoreMask);
+        ErasureSplit(crcMode, Info->Type, restoredBlob, restoredParts);
+        
+        ui32 mismatch = 0;
+        for (ui32 i = 0; i < parts.size(); ++i) {
+            if (i == excludedPart || parts[i].Data.IsEmpty()) {
+                continue;
+            }
+            ui32 partId = parts[i].PartIdRequested - 1;
+            if (parts[i].Data != restoredParts[partId]) {
+                ++mismatch;
+            }
+        }
+        if (mismatch == 0) {
+            outPartIndex = excludedPart;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool TGetImpl::FindCorruptedPartMirror(const TBlobState &blobState, ui32 &outPartIndex) {
+    const auto &parts = blobState.PartMap;
+    ui32 corruptedParts = 0;
+
+    for (ui32 checkedPart = 0; checkedPart < parts.size(); ++checkedPart) {
+        if (parts[checkedPart].Data.IsEmpty()) {
+            continue;
+        }
+        ui32 mismatch = 0;
+        for (ui32 i = 0; i < parts.size(); ++i) {
+            if (i == checkedPart || parts[i].Data.IsEmpty()) {
+                continue;
+            }
+            if (parts[checkedPart].Data != parts[i].Data) {
+                ++mismatch;
+            }
+        }
+        if (mismatch > 1) {
+            outPartIndex = checkedPart;
+            ++corruptedParts;
+        }
+    }
+    return corruptedParts == 1;
+}
+
 }//NKikimr
+

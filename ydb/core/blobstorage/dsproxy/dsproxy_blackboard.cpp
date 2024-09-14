@@ -191,13 +191,14 @@ void TBlobState::GetWorstPredictedDelaysNs(const TBlobStorageGroupInfo &info, TG
     std::partial_sort(outNWorst->begin(), outNWorst->begin() + sortedPrefixSize, outNWorst->end());
 }
 
-bool TBlobState::HasWrittenQuorum(const TBlobStorageGroupInfo& info, const TBlobStorageGroupInfo::TGroupVDisks& expired) const {
+bool TBlobState::HasWrittenQuorum(const TBlobStorageGroupInfo& info, const TBlobStorageGroupInfo::TGroupVDisks *expired) const {
     TSubgroupPartLayout layout;
     for (ui32 diskIdx = 0, numDisks = Disks.size(); diskIdx < numDisks; ++diskIdx) {
         const TDisk& disk = Disks[diskIdx];
         for (ui32 partIdx = 0, numParts = disk.DiskParts.size(); partIdx < numParts; ++partIdx) {
             const TDiskPart& part = disk.DiskParts[partIdx];
-            if (part.Situation == ESituation::Present && !expired[disk.OrderNumber]) {
+            bool isExpired = (expired != nullptr) ? (*expired)[disk.OrderNumber] : false;
+            if (part.Situation == ESituation::Present && !isExpired) {    
                 layout.AddItem(diskIdx, partIdx, info.Type);
             }
         }
@@ -374,7 +375,7 @@ EStrategyOutcome TBlackboard::RunStrategies(TLogContext &logCtx, const TStackVec
             ++it;
             continue;
         }
-
+        
         // recalculate blob outcome if it is not yet determined
         NKikimrProto::EReplyStatus status = NKikimrProto::OK;
         TString errorReason;
@@ -399,7 +400,7 @@ EStrategyOutcome TBlackboard::RunStrategies(TLogContext &logCtx, const TStackVec
                 break;
             }
         }
-        if (status == NKikimrProto::OK && expired && !blob.HasWrittenQuorum(*Info, *expired)) {
+        if (status == NKikimrProto::OK && expired && !blob.HasWrittenQuorum(*Info, expired)) {
             status = NKikimrProto::UNKNOWN;
         }
         if (status != NKikimrProto::UNKNOWN) {
@@ -449,11 +450,13 @@ ssize_t TBlackboard::AddPartMap(const TLogoBlobID &id, ui32 diskOrderNumber, ui3
             requestIndex,
             Max<ui32>(),
             {},
+            {}
         });
     return ret;
 }
 
-void TBlackboard::ReportPartMapStatus(const TLogoBlobID &id, ssize_t partMapIndex, ui32 responseIndex, NKikimrProto::EReplyStatus status) {
+void TBlackboard::ReportPartMapStatus(const TLogoBlobID &id, ssize_t partMapIndex, ui32 responseIndex, 
+        NKikimrProto::EReplyStatus status, const TRope &data) {
     Y_ABORT_UNLESS(id);
     Y_ABORT_UNLESS(partMapIndex >= 0);
     TBlobState &state = GetState(id);
@@ -462,6 +465,9 @@ void TBlackboard::ReportPartMapStatus(const TLogoBlobID &id, ssize_t partMapInde
     Y_ABORT_UNLESS(item.ResponseIndex == responseIndex || item.ResponseIndex == Max<ui32>());
     item.ResponseIndex = responseIndex;
     item.Status.emplace_back(id.PartId(), status);
+    if (!data.IsEmpty()) {
+        item.Data = data;
+    }
 }
 
 void TBlackboard::GetWorstPredictedDelaysNs(const TBlobStorageGroupInfo &info, TGroupQueues &groupQueues,

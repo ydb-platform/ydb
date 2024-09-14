@@ -44,6 +44,7 @@ class TGetImpl {
     const TString RequestPrefix;
 
     const bool PhantomCheck;
+    const bool IntegrityCheck;
     const bool Decommission;
 
     std::optional<TEvBlobStorage::TEvGet::TReaderTabletData> ReaderTabletData;
@@ -75,6 +76,7 @@ public:
         , Blackboard(info, groupQueues, NKikimrBlobStorage::AsyncBlob, ev->GetHandleClass)
         , RequestPrefix(requestPrefix)
         , PhantomCheck(ev->PhantomCheck)
+        , IntegrityCheck(ev->IntegrityCheck)
         , Decommission(ev->Decommission)
         , ReaderTabletData(ev->ReaderTabletData)
         , AccelerationParams(accelerationParams)
@@ -89,6 +91,7 @@ public:
             ReportDetailedPartMap);
         ev->RestartCounter = counter;
         ev->PhantomCheck = PhantomCheck;
+        ev->IntegrityCheck = IntegrityCheck;
         ev->Decommission = Decommission;
         ev->ReaderTabletData = ReaderTabletData;
         return ev;
@@ -193,14 +196,13 @@ public:
             const NKikimrProto::EReplyStatus replyStatus = result.GetStatus();
             Y_ABORT_UNLESS(result.HasBlobID());
             const TLogoBlobID blobId = LogoBlobIDFromLogoBlobID(result.GetBlobID());
-
-            if (ReportDetailedPartMap) {
-                Blackboard.ReportPartMapStatus(blobId, result.GetCookie(), ResponseIndex, replyStatus);
-            }
-
+            
             TRope resultBuffer = ev.GetBlobData(result);
+            if (ReportDetailedPartMap || IntegrityCheck) {
+                const TRope &partData = IntegrityCheck ? resultBuffer : TRope();
+                Blackboard.ReportPartMapStatus(blobId, result.GetCookie(), ResponseIndex, replyStatus, partData);
+            }
             ui32 resultShift = result.HasShift() ? result.GetShift() : 0;
-
             // Currently CRC can be checked only if blob part is fully read
             if (resultShift == 0 && resultBuffer.size() == Info->Type.PartSize(blobId)) {
                 bool isCrcOk = CheckCrcAtTheEnd((TErasureType::ECrcMode)blobId.CrcMode(), resultBuffer);
@@ -330,6 +332,10 @@ protected:
             TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> &outVPuts);
 
     ui64 GetTimeToAccelerateNs(TLogContext &logCtx, NKikimrBlobStorage::EVDiskQueueId queueId);
+    
+    bool CheckDataInconsistency(const TBlobState &blobState, const TRope &data);
+    bool FindCorruptedPart42(const TBlobState &blobState, const TRope &data, ui32 &outPartIndex);
+    bool FindCorruptedPartMirror(const TBlobState &blobState, ui32 &outPartIndex);
 }; //TGetImpl
 
 }//NKikimr

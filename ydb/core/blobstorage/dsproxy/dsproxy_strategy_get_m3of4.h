@@ -8,28 +8,38 @@
 namespace NKikimr {
 
     class TMirror3of4GetStrategy : public TMirror3of4StrategyBase {
+        const bool IntegrityCheck;
     public:
-        EStrategyOutcome Process(TLogContext& /*logCtx*/, TBlobState& state, const TBlobStorageGroupInfo& info,
-                TBlackboard& /*blackboard*/, TGroupDiskRequests& groupDiskRequests,
+        TMirror3of4GetStrategy(bool integrityCheck) :
+            IntegrityCheck(integrityCheck) {
+        };
+
+        EStrategyOutcome Process(TLogContext &logCtx, TBlobState& state, const TBlobStorageGroupInfo& info,
+                TBlackboard &blackboard, TGroupDiskRequests& groupDiskRequests,
                 const TAccelerationParams& accelerationParams) override {
+            Y_UNUSED(logCtx);
+            Y_UNUSED(blackboard);
             Y_UNUSED(accelerationParams);
-            if (!CheckFailModel(state, info)) {
-                state.WholeSituation = TBlobState::ESituation::Error;
-                return EStrategyOutcome::Error("failure model exceeded");
-            }
+            
+            if (!IntegrityCheck) {
+                if (!CheckFailModel(state, info)) {
+                    state.WholeSituation = TBlobState::ESituation::Error;
+                    return EStrategyOutcome::Error("failure model exceeded");
+                }
 
-            // check if the blob is already restored and can be returned to caller
-            if (state.WholeSituation == TBlobState::ESituation::Present || RestoreWholeFromMirror(state)) {
-                state.WholeSituation = TBlobState::ESituation::Present;
-                Y_ABORT_UNLESS(state.Whole.Data && state.Whole.Data.GetTotalSize(), "%s", state.ToString().data());
-                return EStrategyOutcome::DONE;
+                // check if the blob is already restored and can be returned to caller
+                if (state.WholeSituation == TBlobState::ESituation::Present || RestoreWholeFromMirror(state)) {
+                    state.WholeSituation = TBlobState::ESituation::Present;
+                    Y_ABORT_UNLESS(state.Whole.Data && state.Whole.Data.GetTotalSize(), "%s", state.ToString().data());
+                    return EStrategyOutcome::DONE;
+                }
             }
-
+            
             TGroups groups;
-
+            bool isUnknown = false;
             ui32 numRequested = 0;
             ui32 numDone = 0;
-
+            
             TBlobStorageGroupInfo::TSubgroupVDisks failedSubgroupDisks(&info.GetTopology());
 
             for (auto& group : groups.Groups) {
@@ -41,6 +51,7 @@ namespace NKikimr {
                         // query is either unsent or unanswered for this disk/part
                         case TBlobState::ESituation::Unknown:
                             untouched += p.Requested.IsEmpty();
+                            isUnknown = true;
                             break;
 
                         // if this disk has answered the query
@@ -71,6 +82,7 @@ namespace NKikimr {
 
                 switch (disk.DiskParts[MetadataPartIdx].Situation) {
                     case TBlobState::ESituation::Unknown:
+                        isUnknown = true;
                         break;
 
                     case TBlobState::ESituation::Error:
@@ -84,6 +96,36 @@ namespace NKikimr {
 
                     case TBlobState::ESituation::Sent:
                         Y_ABORT();
+                }
+            }
+            
+            if (IntegrityCheck) {
+                if (!numRequested) {
+                    for (auto& group : groups.Groups) {
+                        for (const ui32 diskIdx : group.DiskIdx) {
+                            auto& disk = state.Disks[diskIdx];
+                            auto& part = disk.DiskParts[group.PartIdx];
+                            const TLogoBlobID id(state.Id, group.PartIdx + 1);
+                            groupDiskRequests.AddGet(disk.OrderNumber, id, state.Whole.NotHere());
+                            part.Requested.Add(state.Whole.NotHere());
+                        }
+                    }
+                    for (auto& disk : state.Disks) {
+                        groupDiskRequests.AddGet(disk.OrderNumber, TLogoBlobID(state.Id, MetadataPartIdx + 1), 0, 0);
+                    }
+                }
+
+                if (isUnknown) {
+                    return EStrategyOutcome::IN_PROGRESS;
+                }
+                if (!CheckFailModel(state, info)) {
+                    state.WholeSituation = TBlobState::ESituation::Error;
+                    return EStrategyOutcome::Error("failure model exceeded");
+                }
+                if (state.WholeSituation == TBlobState::ESituation::Present || RestoreWholeFromMirror(state)) {
+                    state.WholeSituation = TBlobState::ESituation::Present;
+                    Y_ABORT_UNLESS(state.Whole.Data && state.Whole.Data.GetTotalSize(), "%s", state.ToString().data());
+                    return EStrategyOutcome::DONE;
                 }
             }
 

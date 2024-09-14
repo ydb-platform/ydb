@@ -441,6 +441,10 @@ public:
         Group.SetError(domainIdx, status);
     }
 
+    void SetCorrupted(ui32 domainIdx) {
+        Group.SetCorrupted(domainIdx);
+    }
+
     void SetPredictedDelayNs(ui32 domainIdx, ui64 predictedDelayNs) {
         Group.SetPredictedDelayNs(domainIdx, predictedDelayNs);
     }
@@ -458,7 +462,7 @@ public:
         TLogContext logCtx(NKikimrServices::BS_PROXY_GET, false);
         logCtx.LogAcc.IsLogEnabled = false;
         getImpl.GenerateInitialRequests(logCtx, vGets);
-
+        
         for (ui64 vGetIdx = 0; vGetIdx < vGets.size(); ++vGetIdx) {
 
             bool isLast = (vGetIdx == vGets.size() - 1);
@@ -1134,6 +1138,41 @@ void SpecificTest(ui32 badA, ui32 badB, ui32 blobSize, TMap<i64, i64> sizeForOff
     }
 }
 
+bool SpecificTestCorrupted(TErasureType::EErasureSpecies erasureSpecies, ui32 badDomainIdx, ui32 blobSize) {
+    TActorSystemStub actorSystemStub;
+
+    const ui32 groupId = 0;
+    TBlobStorageGroupType groupType(erasureSpecies);
+    const ui32 domainCount = groupType.BlobSubgroupSize();
+    TGetSimulator simulator(groupId, erasureSpecies, domainCount, 1);
+    simulator.GenerateBlobSet(0, 1, blobSize);
+    simulator.SetCorrupted(badDomainIdx);
+
+    const auto& blobId = simulator.BlobSet.Get(0).Id;
+    const ui32 shift = 0;
+    const ui32 size = blobSize;
+    const TInstant deadline = TInstant::Max();
+    const auto handleClass = NKikimrBlobStorage::EGetHandleClass::FastRead;
+
+    TEvBlobStorage::TEvGet ev(blobId, shift, size, deadline, handleClass, false, false);
+
+    ev.IntegrityCheck = true;
+    ev.IsVerboseNoDataEnabled = false;
+
+    VERBOSE("simulation start");
+    TInstant begin = TInstant::Now();
+    TAutoPtr<TEvBlobStorage::TEvGetResult> getResult = simulator.Simulate(&ev);
+    TInstant end = TInstant::Now();
+    VERBOSE("duration " << (end - begin));
+
+    UNIT_ASSERT(getResult);
+    UNIT_ASSERT_VALUES_EQUAL(getResult->ResponseSz, 1);
+    if (getResult->Responses[0].IntegrityCheckFailed) {
+        UNIT_ASSERT(getResult->Responses[0].CorruptedPartFound);
+    }
+    return getResult->Responses[0].Status == NKikimrProto::ERROR && getResult->Responses[0].IntegrityCheckFailed;
+}
+
 Y_UNIT_TEST(TestBlock42GetSpecific) {
     TMap<i64, i64> sizeForOffset;
     sizeForOffset[1999000] = 7000;
@@ -1152,6 +1191,36 @@ Y_UNIT_TEST(TestBlock42GetSpecific3) {
         sizeForOffset[i * 14000] = 7000;
     }
     SpecificTest(5, 6, 8000000, sizeForOffset);
+}
+
+Y_UNIT_TEST(TestBlock42GetSpecificCorrupted) {
+    ui32 testPassed = 0;
+    for (ui32 domainIdx = 0; domainIdx < 8; ++domainIdx) {
+        if (SpecificTestCorrupted(TErasureType::Erasure4Plus2Block, domainIdx, 8000000)) {
+            ++testPassed;
+        }
+    }
+    UNIT_ASSERT_VALUES_EQUAL(testPassed, 6);
+}
+
+Y_UNIT_TEST(TestMirror3dcGetSpecificCorrupted) {
+    ui32 testPassed = 0;
+    for (ui32 domainIdx = 0; domainIdx < 9; ++domainIdx) {
+        if (SpecificTestCorrupted(TErasureType::ErasureMirror3dc, domainIdx, 8000000)) {
+            ++testPassed;
+        }
+    }
+    UNIT_ASSERT_VALUES_EQUAL(testPassed, 3);
+}
+
+Y_UNIT_TEST(TestMirror3of4GetSpecificCorrupted) {
+    ui32 testPassed = 0;
+    for (ui32 domainIdx = 0; domainIdx < 8; ++domainIdx) {
+        if (SpecificTestCorrupted(TErasureType::ErasureMirror3of4, domainIdx, 8000000)) {
+            ++testPassed;
+        }
+    }
+    UNIT_ASSERT_VALUES_EQUAL(testPassed, 4);
 }
 
 }

@@ -64,7 +64,7 @@ struct TEvPrivate {
     struct TEvDataParsed : public NActors::TEventLocal<TEvDataParsed, EvDataParsed> {
         TEvDataParsed(ui64 offset, TList<TString>&& value) 
             : Offset(offset)
-            , Value(value)
+            , Value(std::move(value))
         {}
         ui64 Offset = 0; 
         TList<TString> Value;
@@ -115,6 +115,20 @@ private:
         bool DataArrivedSent = false;
         TMaybe<ui64> NextMessageOffset;
         ui64 LastSendedNextMessageOffset = 0;
+    };
+
+    struct TTopicEventProcessor {
+        void operator()(NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& event);
+        void operator()(NYdb::NTopic::TSessionClosedEvent& event);
+        void operator()(NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent& event);
+        void operator()(NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent& event);
+        void operator()(NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent& event);
+        void operator()(NYdb::NTopic::TReadSessionEvent::TPartitionSessionClosedEvent& event);
+        void operator()(NYdb::NTopic::TReadSessionEvent::TCommitOffsetAcknowledgementEvent&) {}
+        void operator()(NYdb::NTopic::TReadSessionEvent::TPartitionSessionStatusEvent&) { }
+
+        TTopicSession& Self;
+        const TString& LogPrefix;    
     };
 
     const TString TopicPath;
@@ -171,10 +185,6 @@ private:
     TInstant GetMinStartingMessageTimestamp() const;
     void AddDataToClient(ClientsInfo& client, ui64 offset, const TString& json);
 
-    std::optional<NYql::TIssues> ProcessDataReceivedEvent(NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& event);
-    std::optional<NYql::TIssues> ProcessSessionClosedEvent(NYdb::NTopic::TSessionClosedEvent& ev);
-    std::optional<NYql::TIssues> ProcessStartPartitionSessionEvent(NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent& event);
-    std::optional<NYql::TIssues> ProcessStopPartitionSessionEvent(NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent& event);
     std::pair<NYql::NUdf::TUnboxedValuePod, i64> CreateItem(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message);
 
     void Handle(NFq::TEvPrivate::TEvPqEventsReady::TPtr&);
@@ -436,24 +446,7 @@ void TTopicSession::HandleNewEvents() {
         if (!event) {
             break;
         }
-        std::optional<NYql::TIssues> issues;
-
-        if (auto* e = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
-            issues = ProcessDataReceivedEvent(*e);
-        } else if (auto* e = std::get_if<NYdb::NTopic::TSessionClosedEvent>(&*event)) {
-            issues = ProcessSessionClosedEvent(*e);
-        } else if (auto* e = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*event)) {
-            issues = ProcessStartPartitionSessionEvent(*e);
-        } else if (auto* e = std::get_if<NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent>(&*event)) {
-            issues = ProcessStopPartitionSessionEvent(*e);
-        } else if (auto* e = std::get_if<NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent>(&*event)) {
-            LOG_ROW_DISPATCHER_WARN("TEndPartitionSessionEvent");
-        }
-
-        if (issues) {
-            FatalError(issues->ToOneLineString());
-            break;
-        }
+        std::visit(TTopicEventProcessor{*this, LogPrefix}, *event);
     }
 }
 
@@ -466,50 +459,52 @@ void TTopicSession::CloseTopicSession() {
     ReadSession.reset();
 }
 
-std::optional<NYql::TIssues> TTopicSession::ProcessDataReceivedEvent(NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& event) {
-    Metrics.RowsRead->Add(event.GetMessages().size());
+void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& event) {
+    Self.Metrics.RowsRead->Add(event.GetMessages().size());
     for (const auto& message : event.GetMessages()) {
         const TString& data = message.GetData();
-        IngressStats.Bytes += data.size();
+        Self.IngressStats.Bytes += data.size();
         LOG_ROW_DISPATCHER_TRACE("Data received: " << message.DebugString(true));
 
         const TString& item = message.GetData();
-
-        SendToParsing(message.GetOffset(), item);
-        LastMessageOffset = message.GetOffset();
+        Self.SendToParsing(message.GetOffset(), item);
+        Self.LastMessageOffset = message.GetOffset();
     }
-    return std::nullopt;
 }
 
-std::optional<NYql::TIssues> TTopicSession::ProcessSessionClosedEvent(NYdb::NTopic::TSessionClosedEvent& ev) {
-    TString message = TStringBuilder() << "Read session to topic \"" << TopicPath << "\" was closed: " << ev.DebugString();
+void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TSessionClosedEvent& ev) {
+    TString message = TStringBuilder() << "Read session to topic \"" << Self.TopicPath << "\" was closed: " << ev.DebugString();
     LOG_ROW_DISPATCHER_DEBUG(message);
-
     NYql::TIssues issues;
     issues.AddIssue(message);
-    return issues;
+    Self.FatalError(issues.ToOneLineString());
 }
 
-std::optional<NYql::TIssues> TTopicSession::ProcessStartPartitionSessionEvent(NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent& event) {
+void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent& event) {
     LOG_ROW_DISPATCHER_DEBUG("StartPartitionSessionEvent received");
 
     TMaybe<ui64> minOffset;
-    for (const auto& [actorId, info] : Clients) {
+    for (const auto& [actorId, info] : Self.Clients) {
          if (!minOffset
             || (info.NextMessageOffset && (info.NextMessageOffset < *minOffset))) {
                 minOffset = info.NextMessageOffset;
             } 
     }
     LOG_ROW_DISPATCHER_DEBUG("Confirm StartPartitionSession with offset " << minOffset);
-
     event.Confirm(minOffset);
-    return std::nullopt;
 }
 
-std::optional<NYql::TIssues> TTopicSession::ProcessStopPartitionSessionEvent(NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent& event) {
-    LOG_ROW_DISPATCHER_DEBUG("SessionId: " << GetSessionId() << " StopPartitionSessionEvent received");
+void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent& event) {
+    LOG_ROW_DISPATCHER_DEBUG("SessionId: " << Self.GetSessionId() << " StopPartitionSessionEvent received");
     event.Confirm();
-    return std::nullopt;
+}
+
+void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent& /*event*/) {
+    LOG_ROW_DISPATCHER_WARN("TEndPartitionSessionEvent");
+}
+
+void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionEvent::TPartitionSessionClosedEvent& /*event*/) {
+    LOG_ROW_DISPATCHER_WARN("TPartitionSessionClosedEvent");
 }
 
 std::pair<NYql::NUdf::TUnboxedValuePod, i64> TTopicSession::CreateItem(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message) {
@@ -687,7 +682,7 @@ void TTopicSession::FatalError(const TString& message, const std::unique_ptr<TJs
     }
     StopReadSession();
     Become(&TTopicSession::ErrorState);
-    ythrow yexception() << "FatalError";    // To exit from current stack and call once PassAway() in HandleException().
+    ythrow yexception() << "FatalError: " << str.Str();    // To exit from current stack and call once PassAway() in HandleException().
 }
 
 void TTopicSession::SendSessionError(NActors::TActorId readActorId, const TString& message) {

@@ -36,12 +36,13 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
                                                          NActors::TActorSystem* actorSystem,
                                                          size_t pathsLimit,
                                                          std::shared_ptr<NYql::ISecuredServiceAccountCredentialsFactory> credentialsFactory,
-                                                         bool enableInfer) {
+                                                         bool enableInfer,
+                                                         bool allowLocalFiles) {
     std::vector<TRegExMatch> hostnamePatternsRegEx(hostnamePatterns.begin(), hostnamePatterns.end());
     return MakeIntrusive<TExternalSourceFactory>(TMap<TString, IExternalSource::TPtr>{
         {
             ToString(NYql::EDatabaseType::ObjectStorage),
-            CreateObjectStorageExternalSource(hostnamePatternsRegEx, actorSystem, pathsLimit, std::move(credentialsFactory), enableInfer)
+            CreateObjectStorageExternalSource(hostnamePatternsRegEx, actorSystem, pathsLimit, std::move(credentialsFactory), enableInfer, allowLocalFiles)
         },
         {
             ToString(NYql::EDatabaseType::ClickHouse),

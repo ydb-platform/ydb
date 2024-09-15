@@ -36,7 +36,8 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateRawRead
     NActors::TActorId fileQueueActor,
     ui64 fileQueueBatchSizeLimit,
     ui64 fileQueueBatchObjectCountLimit,
-    ui64 fileQueueConsumersCountDelta
+    ui64 fileQueueConsumersCountDelta,
+    bool allowLocalFiles
 );
 
 } // namespace NYql::NDq

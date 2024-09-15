@@ -176,7 +176,8 @@ public:
         TS3Credentials::TAuthInfo authInfo,
         TString pattern,
         NS3Lister::ES3PatternVariant patternVariant,
-        NS3Lister::ES3PatternType patternType)
+        NS3Lister::ES3PatternType patternType,
+        bool allowLocalFiles)
         : TxId(std::move(txId))
         , PrefetchSize(prefetchSize)
         , FileSizeLimit(fileSizeLimit)
@@ -192,7 +193,8 @@ public:
         , AuthInfo(std::move(authInfo))
         , Pattern(std::move(pattern))
         , PatternVariant(patternVariant)
-        , PatternType(patternType) {
+        , PatternType(patternType)
+        , AllowLocalFiles(allowLocalFiles) {
         for (size_t i = 0; i < paths.size(); ++i) {
             NS3::FileQueue::TObjectPath object;
             object.SetPath(paths[i].Path);
@@ -500,7 +502,7 @@ private:
                     PatternType,
                     object.GetPath()},
                 Nothing(),
-                false,
+                AllowLocalFiles,
                 NActors::TActivationContext::ActorSystem());
             Fetch();
             return true;
@@ -621,6 +623,7 @@ private:
     const TString Pattern;
     const NS3Lister::ES3PatternVariant PatternVariant;
     const NS3Lister::ES3PatternType PatternType;
+    const bool AllowLocalFiles;
 
     static constexpr TDuration PoisonTimeout = TDuration::Hours(3);
     static constexpr TDuration RoundRobinStageTimeout = TDuration::Seconds(3);
@@ -642,7 +645,8 @@ NActors::IActor* CreateS3FileQueueActor(
         TS3Credentials::TAuthInfo authInfo,
         TString pattern,
         NS3Lister::ES3PatternVariant patternVariant,
-        NS3Lister::ES3PatternType patternType) {
+        NS3Lister::ES3PatternType patternType,
+        bool allowLocalFiles) {
     return new TS3FileQueueActor(
         txId,
         paths,
@@ -659,7 +663,8 @@ NActors::IActor* CreateS3FileQueueActor(
         authInfo,
         pattern,
         patternVariant,
-        patternType
+        patternType,
+        allowLocalFiles
     );
 }
 

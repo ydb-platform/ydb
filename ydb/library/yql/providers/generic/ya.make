@@ -6,7 +6,3 @@ RECURSE(
     provider
     pushdown
 )
-
-RECURSE_FOR_TESTS(
-    style
-)

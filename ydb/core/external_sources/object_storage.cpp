@@ -341,7 +341,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
 
         NYql::NS3Lister::TListingRequest request {
             .Url = meta->DataSourceLocation,
-            .AuthInfo = credentials.GetAuthInfo()
+            .Credentials = credentials
         };
         TVector<NYql::NS3Lister::TListingRequest> requests;
 
@@ -377,7 +377,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
         auto httpGateway = NYql::IHTTPGateway::Make();
         auto httpRetryPolicy = NYql::GetHTTPDefaultRetryPolicy(NYql::THttpRetryPolicyOptions{.RetriedCurlCodes = NYql::FqRetriedCurlCodes()});
         for (const auto& req : requests) {
-            auto s3Lister = NYql::NS3Lister::MakeS3Lister(httpGateway, httpRetryPolicy, req, Nothing(), true, ActorSystem);
+            auto s3Lister = NYql::NS3Lister::MakeS3Lister(httpGateway, httpRetryPolicy, req, Nothing(), ActorSystem);
             futures.push_back(s3Lister->Next());
         }
 

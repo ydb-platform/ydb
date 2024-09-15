@@ -166,7 +166,7 @@ public:
         const TString requestId = CreateGuidAsString();
         LOG_D("TS3ReadActor", "Download: " << url << ", ID: " << id << ", request id: [" << requestId << "]");
         Gateway->Download(
-            UrlEscapeRet(url, true),
+            NS3Util::UrlEscapeRet(url),
             IHTTPGateway::MakeYcHeaders(requestId, AuthInfo.GetToken(), {}, AuthInfo.GetAwsUserPwd(), AuthInfo.GetAwsSigV4()),
             0U,
             std::min(object.GetSize(), SizeLimit),

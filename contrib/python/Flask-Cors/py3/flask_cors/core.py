@@ -57,7 +57,7 @@ DEFAULT_OPTIONS = dict(origins='*',
                        resources=r'/*',
                        intercept_exceptions=True,
                        always_send=True,
-                       allow_private_network=True)
+                       allow_private_network=False)
 
 
 def parse_resources(resources):

@@ -10,22 +10,99 @@ class TDriverMock
     : public NTable::IDriver
 {
 public:
-    void Touch(NTable::EScan) noexcept {
+    std::optional<NTable::EScan> LastScan;
 
+    void Touch(NTable::EScan scan) noexcept {
+        LastScan = scan;
     }
 };
 
 class TCbExecutorActor : public TActorBootstrapped<TCbExecutorActor> {
 public:
-    std::function<void()> Cb;
+    enum EEv {
+        EvExec = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
+        EvBoot,
+        EvExecuted,
+
+        EvEnd
+    };
+
+    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE),
+        "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE)");
+
+    struct TEvExec : public TEventLocal<TEvExec, EvExec> {
+        std::function<void()> OnHandle;
+        bool Async;
+
+        TEvExec(std::function<void()> onHandle, bool async = true)
+            : OnHandle(onHandle)
+            , Async(async)
+        {}
+    };
+
+    struct TEvBoot : public TEventLocal<TEvBoot, EvBoot> {};
+    struct TEvExecuted : public TEventLocal<TEvExecuted, EvExecuted> {};
+
+    std::function<void()> OnBootstrap;
+    TActorId ReplyTo;
+    TActorId ForwardTo;
 
     void Bootstrap() {
-        Cb();
+        if (OnBootstrap) {
+            OnBootstrap();
+        }
+
+        Become(&TThis::Serve);
+        Send(ReplyTo, new TCbExecutorActor::TEvBoot());
+    }
+
+    void Handle(TEvExec::TPtr& ev) {
+        ev->Get()->OnHandle();
+        if (!ev->Get()->Async) {
+            Send(ReplyTo, new TCbExecutorActor::TEvExecuted());
+        }
+    }
+
+    STATEFN(Serve) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvExec, Handle);
+            default: Y_ABORT("unexpected");
+        }
     }
 };
 
+class TRuntimeCbExecutor {
+public:
+    TRuntimeCbExecutor(TTestActorRuntime& runtime, std::function<void()> onBootstrap = {}, TActorId forwardTo = {})
+        : Runtime(runtime)
+        , Sender(runtime.AllocateEdgeActor())
+    {
+        auto* executor = new TCbExecutorActor;
+        executor->OnBootstrap = onBootstrap;
+        executor->ForwardTo = forwardTo;
+        executor->ReplyTo = Sender;
+        Impl = runtime.Register(executor);
+        Runtime.EnableScheduleForActor(Impl);
+        Runtime.GrabEdgeEventRethrow<TCbExecutorActor::TEvBoot>(Sender);
+    }
+
+    void AsyncExecute(std::function<void()> cb) {
+        Runtime.Send(new IEventHandle(Impl, Sender, new TCbExecutorActor::TEvExec(cb), 0, 0), 0);
+    }
+
+    void Execute(std::function<void()> cb) {
+        Runtime.Send(new IEventHandle(Impl, Sender, new TCbExecutorActor::TEvExec(cb, false), 0, 0), 0);
+        Runtime.GrabEdgeEventRethrow<TCbExecutorActor::TEvExecuted>(Sender);
+    }
+
+private:
+    TTestActorRuntime& Runtime;
+    TActorId Sender;
+    TActorId Impl;
+};
+
 Y_UNIT_TEST_SUITE(IncrementalRestoreScan) {
-    Y_UNIT_TEST(Simple) {
+    Y_UNIT_TEST(Empty) {
         TPortManager pm;
         Tests::TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
@@ -51,7 +128,7 @@ Y_UNIT_TEST_SUITE(IncrementalRestoreScan) {
         TPathId targetPathId{};
         ui64 txId = 0;
 
-        auto scan = CreateIncrementalRestoreScan(
+        auto* scan = CreateIncrementalRestoreScan(
             sender,
             [&](const TActorContext&) {
                 return sender2;
@@ -59,18 +136,29 @@ Y_UNIT_TEST_SUITE(IncrementalRestoreScan) {
             TPathId{} /*sourcePathId*/,
             table,
             targetPathId,
-            txId);
+            txId).Release();
 
         TDriverMock driver;
-        auto* executor = new TCbExecutorActor;
-        executor->Cb = [&]() {
-            scan->Prepare(&driver, scheme);
-        };
-        auto executorActor = runtime.Register(executor);
-        runtime.EnableScheduleForActor(executorActor);
 
-        auto resp = runtime.GrabEdgeEventRethrow<TEvIncrementalRestoreScan::TEvFinished>(sender);
-        Y_UNUSED(resp);
+        // later we can use driver, scan and scheme ONLY with additional sync, e.g. from actorExec to avoid races
+        TRuntimeCbExecutor actorExec(runtime, [&]() {
+            scan->Prepare(&driver, scheme);
+        });
+
+        actorExec.Execute([&]() {
+            UNIT_ASSERT_EQUAL(scan->Exhausted(), NTable::EScan::Sleep);
+        });
+
+        auto resp = runtime.GrabEdgeEventRethrow<TEvIncrementalRestoreScan::TEvNoMoreData>(sender2);
+
+        runtime.Send(new IEventHandle(resp->Sender, sender2, new TEvIncrementalRestoreScan::TEvFinished(), 0, 0), 0);
+
+        actorExec.Execute([&]() {
+            UNIT_ASSERT(driver.LastScan && *driver.LastScan == NTable::EScan::Final);
+            scan->Finish(NTable::EAbort::None);
+        });
+
+        runtime.GrabEdgeEventRethrow<TEvIncrementalRestoreScan::TEvFinished>(sender);
     }
 }
 

@@ -1628,8 +1628,8 @@ void TPersQueue::ProcessUpdateConfigRequest(TAutoPtr<TEvPersQueue::TEvUpdateConf
 {
     auto& record = ev->Record;
 
-    int oldConfigVersion = Config.HasVersion() ? Config.GetVersion() : -1;
-    int newConfigVersion = NewConfig.HasVersion() ? NewConfig.GetVersion() : oldConfigVersion;
+    int oldConfigVersion = Config.HasVersion() ? static_cast<int>(Config.GetVersion()) : -1;
+    int newConfigVersion = NewConfig.HasVersion() ? static_cast<int>(NewConfig.GetVersion()) : oldConfigVersion;
 
     Y_ABORT_UNLESS(newConfigVersion >= oldConfigVersion);
 

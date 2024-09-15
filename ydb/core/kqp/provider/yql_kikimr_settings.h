@@ -50,6 +50,7 @@ struct TKikimrSettings {
     NCommon::TConfSetting<bool, false> UseLlvm;
     NCommon::TConfSetting<bool, false> EnableLlvm;
     NCommon::TConfSetting<NDq::EHashJoinMode, false> HashJoinMode;
+    NCommon::TConfSetting<ui64, false> EnableSpillingNodes;
     NCommon::TConfSetting<TString, false> OverridePlanner;
     NCommon::TConfSetting<bool, false> UseGraceJoinCoreForMap;
 

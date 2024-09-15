@@ -192,7 +192,7 @@ namespace NKikimr {
         }
 
         ValidateWriteQuery(ctx, id, writtenBeyondBarrier);
-        return {NKikimrProto::OK, 0, false};
+        return {NKikimrProto::OK, "", false};
     }
 
     void THull::AddLogoBlob(
@@ -259,7 +259,7 @@ namespace NKikimr {
                 // allocate lsn in case of success
                 *seg = Fields->LsnMngr->AllocLsnForHullAndSyncLog();
                 BlocksCache.UpdateInFlight(tabletID, g, seg->Point());
-                return {NKikimrProto::OK, 0, false};
+                return {NKikimrProto::OK, "", false};
             case TBlocksCache::EStatus::BLOCKED_PERS:
                 return {NKikimrProto::ALREADY, "already got", 0, false};
             case TBlocksCache::EStatus::BLOCKED_INFLIGH:
@@ -411,7 +411,7 @@ namespace NKikimr {
         const bool completeDel = NGc::CompleteDelCmd(collectGeneration, collectStep);
 
         if (!CheckGC(ctx, record))
-            return {NKikimrProto::ERROR, 0, false}; // record has duplicates
+            return {NKikimrProto::ERROR, "", false}; // record has duplicates
 
         if (!collect && !record.KeepSize() && !record.DoNotKeepSize()) {
             LOG_ERROR_S(ctx, NKikimrServices::BS_HULLRECS, HullDs->HullCtx->VCtx->VDiskLogPrefix

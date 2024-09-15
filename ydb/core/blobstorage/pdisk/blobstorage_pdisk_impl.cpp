@@ -729,7 +729,7 @@ void TPDisk::AskVDisksToCutLogs(TOwner ownerFilter, bool doForce) {
                         data.LogChunkCountBeforeCut = ownedLogChunks;
                         // ADD_RECORD_WITH_TIMESTAMP_TO_OPERATION_LOG(data.OperationLog, "System owner asked to cut log, OwnerId# " << chunkOwner);
                     } else {
-                        P_LOG(PRI_INFO, BPD14, "Can't send CutLog", 
+                        P_LOG(PRI_INFO, BPD14, "Can't send CutLog",
                             (OwnerId, ui32(chunkOwner)),
                             (VDiskId, data.VDiskId.ToStringWOGeneration()));
                     }
@@ -786,7 +786,7 @@ void TPDisk::AskVDisksToCutLogs(TOwner ownerFilter, bool doForce) {
                     data.LogChunkCountBeforeCut = ownedLogChunks;
                     // ADD_RECORD_WITH_TIMESTAMP_TO_OPERATION_LOG(data.OperationLog, "User owner asked to cut log, OwnerId# " << ownerFilter);
                 } else {
-                    P_LOG(PRI_INFO, BPD14, "Can't send CutLog", 
+                    P_LOG(PRI_INFO, BPD14, "Can't send CutLog",
                         (OwnerId, ui32(ownerFilter)),
                         (VDiskId, data.VDiskId.ToStringWOGeneration()));
                 }
@@ -1436,7 +1436,7 @@ void TPDisk::ChunkForget(TChunkForget &evChunkForget) {
                     case TChunkState::DATA_DECOMMITTED:
                         Y_VERIFY_S(state.CommitsInProgress == 0,
                                 "PDiskId# " << PCtx->PDiskId << " chunkIdx# " << chunkIdx << " state# " << state.ToString());
-                        P_LOG(PRI_INFO, BPD01, "chunk was forgotten", 
+                        P_LOG(PRI_INFO, BPD01, "chunk was forgotten",
                                 (ChunkIdx, chunkIdx),
                                 (OldOwner, (ui32)state.OwnerId),
                                 (NewOwner, (ui32)OwnerUnallocated));
@@ -1798,7 +1798,7 @@ bool TPDisk::YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner) {
                 DriveModel.Speed(TDriveModel::OP_TYPE_WRITE), readBlockSize, writeBlockSize,
                 DriveModel.BulkWriteBlockSize(), GetUserAccessibleChunkSize(), GetChunkAppendBlockSize(), owner,
                 ownerRound, GetStatusFlags(OwnerSystem, evYardInit.OwnerGroupType), ownedChunks,
-                Cfg->RetrieveDeviceType(), nullptr));
+                Cfg->RetrieveDeviceType(), ""));
     GetStartingPoints(owner, result->StartingPoints);
     ownerData.VDiskId = vDiskId;
     ownerData.CutLogId = evYardInit.CutLogId;
@@ -1948,7 +1948,7 @@ void TPDisk::YardInitFinish(TYardInit &evYardInit) {
         DriveModel.Speed(TDriveModel::OP_TYPE_WRITE), readBlockSize, writeBlockSize,
         DriveModel.BulkWriteBlockSize(), GetUserAccessibleChunkSize(), GetChunkAppendBlockSize(), owner, ownerRound,
         GetStatusFlags(OwnerSystem, evYardInit.OwnerGroupType) | ui32(NKikimrBlobStorage::StatusNewOwner), TVector<TChunkIdx>(),
-        Cfg->RetrieveDeviceType(), nullptr));
+        Cfg->RetrieveDeviceType(), ""));
     GetStartingPoints(result->PDiskParams->Owner, result->StartingPoints);
     WriteSysLogRestorePoint(new TCompletionEventSender(
         this, evYardInit.Sender, result.Release(), Mon.YardInit.Results), evYardInit.ReqId, {});

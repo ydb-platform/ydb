@@ -481,7 +481,7 @@ public:
                 paths.clear();
                 ReadPathsList({}, serialized, paths);
 
-                NDq::TS3ReadActorFactoryConfig readActorConfig;
+                const NDq::TS3ReadActorFactoryConfig& readActorConfig = State_->Configuration->S3ReadActorFactoryConfig;
                 ui64 fileSizeLimit = readActorConfig.FileSizeLimit;
                 if (srcDesc.HasFormat()) {
                     if (auto it = readActorConfig.FormatSizeLimits.find(srcDesc.GetFormat()); it != readActorConfig.FormatSizeLimits.end()) {
@@ -543,7 +543,7 @@ public:
                         State_->Gateway,
                         State_->GatewayRetryPolicy,
                         connect.Url,
-                        GetAuthInfo(State_->CredentialsFactory, State_->Configuration->Tokens.at(cluster)),
+                        TS3Credentials(State_->CredentialsFactory, State_->Configuration->Tokens.at(cluster)),
                         pathPattern,
                         pathPatternVariant,
                         NS3Lister::ES3PatternType::Wildcard,

@@ -16,6 +16,7 @@
 #include <util/generic/overloaded.h>
 #include <deque>
 #include <utility>
+#include <mutex>
 
 namespace NYql {
 IOutputStream& operator<<(IOutputStream& stream, const TS3ListingOptions& options) {

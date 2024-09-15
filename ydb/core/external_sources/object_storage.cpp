@@ -343,14 +343,14 @@ struct TObjectStorageExternalSource : public IExternalSource {
 
         NYql::NS3Lister::TListingRequest request {
             .Url = meta->DataSourceLocation,
-            .Credentials = credentials,
-            .Pattern = effectiveFilePattern,
-        }, Nothing(), AllowLocalFiles);
-        auto afterListing = s3Lister->Next().Apply([path = effectiveFilePattern](const NThreading::TFuture<NYql::NS3Lister::TListResult>& listResFut) {
-            auto& listRes = listResFut.GetValue();
-            if (std::holds_alternative<NYql::NS3Lister::TListError>(listRes)) {
-                auto& error = std::get<NYql::NS3Lister::TListError>(listRes);
-                throw yexception() << error.Issues.ToString();
+            .Credentials = credentials
+        };
+        TVector<NYql::NS3Lister::TListingRequest> requests;
+
+        if (!projection) {
+            auto error = NYql::NS3::BuildS3FilePattern(path, filePattern, partitionedBy, request);
+            if (error) {
+                throw yexception() << *error;
             }
             requests.push_back(request);
         } else {
@@ -379,7 +379,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
         auto httpGateway = NYql::IHTTPGateway::Make();
         auto httpRetryPolicy = NYql::GetHTTPDefaultRetryPolicy(NYql::THttpRetryPolicyOptions{.RetriedCurlCodes = NYql::FqRetriedCurlCodes()});
         for (const auto& req : requests) {
-            auto s3Lister = NYql::NS3Lister::MakeS3Lister(httpGateway, httpRetryPolicy, req, Nothing(), ActorSystem);
+            auto s3Lister = NYql::NS3Lister::MakeS3Lister(httpGateway, httpRetryPolicy, req, Nothing(), AllowLocalFiles, ActorSystem);
             futures.push_back(s3Lister->Next());
         }
 

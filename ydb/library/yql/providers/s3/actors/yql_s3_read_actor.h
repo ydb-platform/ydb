@@ -13,8 +13,6 @@
 
 namespace NYql::NDq {
 
-struct TS3ReadActorFactoryConfig;
-
 NActors::IActor* CreateS3FileQueueActor(
         TTxId txId,
         NS3Details::TPathList paths,
@@ -28,7 +26,7 @@ NActors::IActor* CreateS3FileQueueActor(
         IHTTPGateway::TPtr gateway,
         IHTTPGateway::TRetryPolicy::TPtr retryPolicy,
         TString url,
-        TS3Credentials::TAuthInfo authInfo,
+        const TS3Credentials& credentials,
         TString pattern,
         NYql::NS3Lister::ES3PatternVariant patternVariant,
         NS3Lister::ES3PatternType patternType,

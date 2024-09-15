@@ -22,7 +22,6 @@ PEERDIR(
 
     ydb/core/external_sources/object_storage
 
-    ydb/library/services
     ydb/library/yql/providers/s3/compressors
 )
 

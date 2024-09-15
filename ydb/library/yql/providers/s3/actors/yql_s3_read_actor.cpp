@@ -37,12 +37,11 @@
 #endif
 
 #include "yql_arrow_column_converters.h"
-#include "yql_s3_decompressor_actor.h"
 #include "yql_arrow_push_down.h"
+#include "yql_s3_decompressor_actor.h"
 #include "yql_s3_actors_util.h"
 #include "yql_s3_raw_read_actor.h"
 #include "yql_s3_read_actor.h"
-#include "yql_s3_source_factory.h"
 #include "yql_s3_source_queue.h"
 
 #include <ydb/core/base/events.h>
@@ -85,7 +84,6 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/util/datetime.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
 
 #include <util/generic/size_literals.h>
 #include <util/stream/format.h>
@@ -971,6 +969,7 @@ public:
                 message = ErrorText;
             }
             Issues.AddIssues(BuildIssues(HttpResponseCode, errorCode, message));
+            FatalCode = StatusFromS3ErrorCode(errorCode);
         }
 
         if (ev->Get()->Issues) {
@@ -1121,7 +1120,7 @@ private:
             DecompressorActorId = Register(CreateS3DecompressorActor(SelfActorId, ReadSpec->Compression));
         }
 
-        NYql::NDqProto::StatusIds::StatusCode fatalCode = NYql::NDqProto::StatusIds::EXTERNAL_ERROR;
+        FatalCode = NYql::NDqProto::StatusIds::EXTERNAL_ERROR;
 
         StartCycleCount = GetCycleCountFast();
 
@@ -1129,7 +1128,7 @@ private:
             if (ReadSpec->Arrow) {
                 if (ReadSpec->Compression) {
                     Issues.AddIssue(TIssue("Blocks optimisations are incompatible with external compression"));
-                    fatalCode = NYql::NDqProto::StatusIds::BAD_REQUEST;
+                    FatalCode = NYql::NDqProto::StatusIds::BAD_REQUEST;
                 } else {
                     try {
                         if (Url.StartsWith("file://")) {
@@ -1139,7 +1138,7 @@ private:
                         }
                     } catch (const parquet::ParquetException& ex) {
                         Issues.AddIssue(TIssue(ex.what()));
-                        fatalCode = NYql::NDqProto::StatusIds::BAD_REQUEST;
+                        FatalCode = NYql::NDqProto::StatusIds::BAD_REQUEST;
                         RetryStuff->Cancel();
                     }
                 }
@@ -1155,7 +1154,7 @@ private:
                     LOG_CORO_D("S3 read ERROR");
                 } catch (const NDB::Exception& ex) {
                     Issues.AddIssue(TIssue(ex.message()));
-                    fatalCode = NYql::NDqProto::StatusIds::BAD_REQUEST;
+                    FatalCode = NYql::NDqProto::StatusIds::BAD_REQUEST;
                     RetryStuff->Cancel();
                 }
             }
@@ -1168,7 +1167,7 @@ private:
             return;
         } catch (const std::exception& err) {
             Issues.AddIssue(TIssue(err.what()));
-            fatalCode = NYql::NDqProto::StatusIds::INTERNAL_ERROR;
+            FatalCode = NYql::NDqProto::StatusIds::INTERNAL_ERROR;
             RetryStuff->Cancel();
         }
 
@@ -1176,7 +1175,7 @@ private:
 
         auto issues = NS3Util::AddParentIssue(TStringBuilder{} << "Error while reading file " << Path, std::move(Issues));
         if (issues)
-            Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvAsyncInputError(InputIndex, std::move(issues), fatalCode));
+            Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvAsyncInputError(InputIndex, std::move(issues), FatalCode));
         else
             Send(ParentActorId, new TEvS3Provider::TEvFileFinished(PathIndex, TakeIngressDelta(), TakeCpuTimeDelta(), RetryStuff->SizeLimit));
     }
@@ -1236,6 +1235,7 @@ private:
     bool ServerReturnedError = false;
     TString ErrorText;
     TIssues Issues;
+    NYql::NDqProto::StatusIds::StatusCode FatalCode;
 
     NActors::TActorId DecompressorActorId;
     std::size_t LastOffset = 0;
@@ -1277,7 +1277,7 @@ public:
         IHTTPGateway::TPtr gateway,
         const THolderFactory& holderFactory,
         const TString& url,
-        const TS3Credentials::TAuthInfo& authInfo,
+        const TS3Credentials& credentials,
         const TString& pattern,
         ES3PatternVariant patternVariant,
         TPathList&& paths,
@@ -1308,7 +1308,7 @@ public:
         , ComputeActorId(computeActorId)
         , RetryPolicy(retryPolicy)
         , Url(url)
-        , AuthInfo(authInfo)
+        , Credentials(credentials)
         , Pattern(pattern)
         , PatternVariant(patternVariant)
         , Paths(std::move(paths))
@@ -1360,7 +1360,7 @@ public:
         // After exact mem control implementation, this allocation should be deleted
         if (!MemoryQuotaManager->AllocateQuota(ReadActorFactoryCfg.DataInflight)) {
             TIssues issues;
-            issues.AddIssue(TIssue{TStringBuilder() << "OutOfMemory - can't allocate read buffer"});
+            issues.AddIssue(TIssue{TStringBuilder() << "OutOfMemory - can't allocate " << ReadActorFactoryCfg.DataInflight << "b read buffer"});
             Send(ComputeActorId, new TEvAsyncInputError(InputIndex, std::move(issues), NYql::NDqProto::StatusIds::OVERLOADED));
             return;
         }
@@ -1396,7 +1396,7 @@ public:
                 Gateway,
                 RetryPolicy,
                 Url,
-                AuthInfo,
+                Credentials,
                 Pattern,
                 PatternVariant,
                 ES3PatternType::Wildcard,
@@ -1461,10 +1461,11 @@ public:
                                       << pathIndex);
 
         TActorId actorId;
+        const auto& authInfo = Credentials.GetAuthInfo();
         auto stuff = std::make_shared<TRetryStuff>(
             Gateway,
             Url + object.GetPath(),
-            IHTTPGateway::MakeYcHeaders(requestId, AuthInfo.GetToken(), {}, AuthInfo.GetAwsUserPwd(), AuthInfo.GetAwsSigV4()),
+            IHTTPGateway::MakeYcHeaders(requestId, authInfo.GetToken(), {}, authInfo.GetAwsUserPwd(), authInfo.GetAwsSigV4()),
             object.GetSize(),
             TxId,
             requestId,
@@ -1719,7 +1720,7 @@ private:
         IssuesFromMessage(result->Get()->Record.GetIssues(), issues);
         LOG_W("TS3StreamReadActor", "Error while object listing, details: TEvObjectPathReadError: " << issues.ToOneLineString());
         issues = NS3Util::AddParentIssue(TStringBuilder{} << "Error while object listing", std::move(issues));
-        Send(ComputeActorId, new TEvAsyncInputError(InputIndex, std::move(issues), NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
+        Send(ComputeActorId, new TEvAsyncInputError(InputIndex, std::move(issues), result->Get()->Record.GetFatalCode()));
     }
 
     void HandleRetry(TEvS3Provider::TEvRetryEventFunc::TPtr& retry) {
@@ -1863,7 +1864,7 @@ private:
     const IHTTPGateway::TRetryPolicy::TPtr RetryPolicy;
 
     const TString Url;
-    const TS3Credentials::TAuthInfo AuthInfo;
+    const TS3Credentials Credentials;
     const TString Pattern;
     const ES3PatternVariant PatternVariant;
     TPathList Paths;
@@ -2080,7 +2081,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
     ReadPathsList(taskParams, readRanges, paths);
 
     const auto token = secureParams.Value(params.GetToken(), TString{});
-    const auto authInfo = GetAuthInfo(credentialsFactory, token);
+    const TS3Credentials credentials(credentialsFactory, token);
 
     const auto& settings = params.GetSettings();
     TString pathPattern = "*";
@@ -2258,7 +2259,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
             sizeLimit = FromString<ui64>(it->second);
         }
 
-        const auto actor = new TS3StreamReadActor(inputIndex, statsLevel, txId, std::move(gateway), holderFactory, params.GetUrl(), authInfo, pathPattern, pathPatternVariant,
+        const auto actor = new TS3StreamReadActor(inputIndex, statsLevel, txId, std::move(gateway), holderFactory, params.GetUrl(), credentials, pathPattern, pathPatternVariant,
                                                   std::move(paths), addPathIndex, readSpec, computeActorId, retryPolicy,
                                                   cfg, counters, taskCounters, fileSizeLimit, sizeLimit, rowsLimitHint, memoryQuotaManager,
                                                   params.GetUseRuntimeListing(), fileQueueActor, fileQueueBatchSizeLimit, fileQueueBatchObjectCountLimit, fileQueueConsumersCountDelta,
@@ -2270,7 +2271,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
         if (const auto it = settings.find("sizeLimit"); settings.cend() != it)
             sizeLimit = FromString<ui64>(it->second);
 
-        return CreateRawReadActor(inputIndex, statsLevel, txId, std::move(gateway), holderFactory, params.GetUrl(), authInfo, pathPattern, pathPatternVariant,
+        return CreateRawReadActor(inputIndex, statsLevel, txId, std::move(gateway), holderFactory, params.GetUrl(), credentials, pathPattern, pathPatternVariant,
                                             std::move(paths), addPathIndex, computeActorId, sizeLimit, retryPolicy,
                                             cfg, counters, taskCounters, fileSizeLimit, rowsLimitHint,
                                             params.GetUseRuntimeListing(), fileQueueActor, fileQueueBatchSizeLimit, fileQueueBatchObjectCountLimit, fileQueueConsumersCountDelta, allowLocalFiles);

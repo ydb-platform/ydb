@@ -12,7 +12,6 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
-#include <ydb/library/services/services.pb.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
 
 #define LOG_E(name, stream) \
@@ -99,7 +98,7 @@ bool ArrowToYdbType(Ydb::Type& maybeOptionalType, const arrow::DataType& type, s
         resType.set_type_id(Ydb::Type::DATE);
         return true;
     case arrow::Type::DATE64: // TODO: is it true?
-        resType.set_type_id(Ydb::Type::DATETIME);
+        resType.set_type_id(Ydb::Type::DATETIME64);
         return true;
     case arrow::Type::TIMESTAMP:
         if (config->Format == EFileFormat::JsonEachRow || config->Format == EFileFormat::JsonList) {
@@ -115,7 +114,7 @@ bool ArrowToYdbType(Ydb::Type& maybeOptionalType, const arrow::DataType& type, s
     case arrow::Type::INTERVAL_MONTHS: // TODO: is it true?
         return false;
     case arrow::Type::INTERVAL_DAY_TIME: // TODO: is it true?
-        resType.set_type_id(Ydb::Type::INTERVAL);
+        resType.set_type_id(Ydb::Type::INTERVAL64);
         return true;
     case arrow::Type::DECIMAL128: // TODO: is it true?
         resType.set_type_id(Ydb::Type::DOUBLE);
@@ -162,7 +161,7 @@ bool ArrowToYdbType(Ydb::Type& maybeOptionalType, const arrow::DataType& type, s
     case arrow::Type::EXTENSION: // TODO: is representable?
         return false;
     case arrow::Type::DURATION: // TODO: is it true?
-        resType.set_type_id(Ydb::Type::INTERVAL);
+        resType.set_type_id(Ydb::Type::INTERVAL64);
         return true;
     case arrow::Type::LARGE_STRING: // TODO: is it true?
         resType.set_type_id(Ydb::Type::UTF8);

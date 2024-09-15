@@ -109,8 +109,7 @@ public:
             records.emplace_back(it->second);
         }
 
-        Send(ChangeSender, new NChangeExchange::TEvChangeExchange::TEvRecords(
-                 std::make_shared<TChangeRecordContainer<NKikimr::NDataShard::TChangeRecord>>(std::move(records))));
+        Send(ChangeSender, new NChangeExchange::TEvChangeExchange::TEvRecords(std::move(records)));
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvRemoveRecords::TPtr& ev) {

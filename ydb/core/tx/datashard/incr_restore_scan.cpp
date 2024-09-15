@@ -2,15 +2,14 @@
 #include "change_exchange_impl.h"
 #include "datashard_impl.h"
 
-#include <ydb/library/actors/core/actor.h>
-#include <ydb/core/tx/datashard/change_record_body_serializer.h>
-#include <ydb/core/tx/datashard/datashard_user_table.h>
-#include <ydb/core/tx/datashard/change_record.h>
 #include <ydb/core/change_exchange/change_exchange.h>
 #include <ydb/core/tx/datashard/change_collector.h>
-#include <ydb/library/services/services.pb.h>
-#include <ydb/core/tx/datashard/stream_scan_common.h>
+#include <ydb/core/tx/datashard/change_record.h>
+#include <ydb/core/tx/datashard/change_record_body_serializer.h>
+#include <ydb/core/tx/datashard/datashard_user_table.h>
 #include <ydb/core/tx/datashard/incr_restore_helpers.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/services/services.pb.h>
 
 namespace NKikimr::NDataShard {
 
@@ -45,26 +44,33 @@ public:
             ui64 txId,
             const TPathId& sourcePathId,
             TUserTable::TCPtr table,
-            const TPathId& targetPathId)
-        : IActorCallback(static_cast<TReceiveFunc>(&TIncrementalRestoreScan::StateWork), NKikimrServices::TActivity::CDC_STREAM_SCAN_ACTOR)
+            const TPathId& targetPathId,
+            NStreamScan::TLimits limits)
+        : IActorCallback(static_cast<TReceiveFunc>(&TIncrementalRestoreScan::StateWork), NKikimrServices::TActivity::INCREMENTAL_RESTORE_SCAN_ACTOR)
         , Parent(parent)
         , ChangeSenderFactory(changeSenderFactory)
         , TxId(txId)
         , SourcePathId(sourcePathId)
         , TargetPathId(targetPathId)
         , ValueTags(InitValueTags(table))
-        , Limits()
+        , Limits(limits)
     {}
 
     static TVector<TTag> InitValueTags(TUserTable::TCPtr table) {
-        Y_VERIFY(table->Columns.size() >= 1);
+        Y_VERIFY(table->Columns.size() >= 2);
         TVector<TTag> valueTags;
         valueTags.reserve(table->Columns.size() - 1);
+        bool deletedMarkerColumnFound = false;
         for (const auto& [tag, column] : table->Columns) {
             if (!column.IsKey) {
                 valueTags.push_back(tag);
+                if (column.Name == "__ydb_incrBackupImpl_deleted") {
+                    deletedMarkerColumnFound = true;
+                }
             }
         }
+
+        Y_VERIFY(deletedMarkerColumnFound);
 
         return valueTags;
     }
@@ -267,7 +273,8 @@ THolder<NTable::IScan> CreateIncrementalRestoreScan(
         TPathId sourcePathId,
         TUserTable::TCPtr table,
         const TPathId& targetPathId,
-        ui64 txId)
+        ui64 txId,
+        NStreamScan::TLimits limits)
 {
     return MakeHolder<TIncrementalRestoreScan>(
         parent,
@@ -275,7 +282,8 @@ THolder<NTable::IScan> CreateIncrementalRestoreScan(
         txId,
         sourcePathId,
         table,
-        targetPathId);
+        targetPathId,
+        limits);
 }
 
 } // namespace NKikimr::NDataShard

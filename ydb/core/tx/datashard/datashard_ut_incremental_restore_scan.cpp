@@ -117,26 +117,31 @@ Y_UNIT_TEST_SUITE(IncrementalRestoreScan) {
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
 
         TUserTable::TPtr table = new TUserTable;
-
-        table->Columns.emplace(0, TUserTable::TUserColumn{});
-
         NTable::TScheme::TTableSchema tableSchema;
-        tableSchema.Columns[0] = NTable::TColumn("test", 0, {}, "");
+        table->Columns.emplace(0, TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::Uint32), "", "Key", true));
+        tableSchema.Columns[0] = NTable::TColumn("key", 0, {}, "");
         tableSchema.Columns[0].KeyOrder = 0;
+
+        table->Columns.emplace(1, TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::Bool), "", "__ydb_incrBackupImpl_deleted", false));
+        tableSchema.Columns[1] = NTable::TColumn("__ydb_incrBackupImpl_deleted", 1, {}, "");
+        tableSchema.Columns[1].KeyOrder = 1;
+
         auto scheme = NTable::TRowScheme::Make(tableSchema.Columns, NUtil::TSecond());
 
-        TPathId targetPathId{};
-        ui64 txId = 0;
+        TPathId sourcePathId{1, 2};
+        TPathId targetPathId{3, 4};
+        ui64 txId = 1337;
 
         auto* scan = CreateIncrementalRestoreScan(
             sender,
             [&](const TActorContext&) {
                 return sender2;
             },
-            TPathId{} /*sourcePathId*/,
+            sourcePathId,
             table,
             targetPathId,
-            txId).Release();
+            txId,
+            {}).Release();
 
         TDriverMock driver;
 

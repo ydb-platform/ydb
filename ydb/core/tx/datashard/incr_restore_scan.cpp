@@ -31,7 +31,7 @@ class TIncrementalRestoreScan
                 << "[TIncrementalRestoreScan]"
                 << "[" << TxId << "]"
                 << "[" << SourcePathId << "]"
-                << "[" << SourcePathId << "]"
+                << "[" << TargetPathId << "]"
                 << SelfId() /* contains brackets */ << " ";
         }
 
@@ -41,10 +41,10 @@ public:
     explicit TIncrementalRestoreScan(
             TActorId parent,
             std::function<TActorId(const TActorContext& ctx)> changeSenderFactory,
-            ui64 txId,
             const TPathId& sourcePathId,
             TUserTable::TCPtr table,
             const TPathId& targetPathId,
+            ui64 txId,
             NStreamScan::TLimits limits)
         : IActorCallback(static_cast<TReceiveFunc>(&TIncrementalRestoreScan::StateWork), NKikimrServices::TActivity::INCREMENTAL_RESTORE_SCAN_ACTOR)
         , Parent(parent)
@@ -54,6 +54,9 @@ public:
         , TargetPathId(targetPathId)
         , ValueTags(InitValueTags(table))
         , Limits(limits)
+        , Columns(table->Columns)
+        , KeyColumnTypes(table->KeyColumnTypes)
+        , KeyColumnIds(table->KeyColumnIds)
     {}
 
     static TVector<TTag> InitValueTags(TUserTable::TCPtr table) {
@@ -154,7 +157,6 @@ public:
     }
 
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) noexcept override {
-
         Buffer.AddRow(key, *row);
         if (Buffer.Bytes() < Limits.BatchMaxBytes) {
             if (Buffer.Rows() < Limits.BatchMaxRows) {
@@ -270,7 +272,7 @@ private:
 THolder<NTable::IScan> CreateIncrementalRestoreScan(
         NActors::TActorId parent,
         std::function<TActorId(const TActorContext& ctx)> changeSenderFactory,
-        TPathId sourcePathId,
+        const TPathId& sourcePathId,
         TUserTable::TCPtr table,
         const TPathId& targetPathId,
         ui64 txId,
@@ -279,10 +281,10 @@ THolder<NTable::IScan> CreateIncrementalRestoreScan(
     return MakeHolder<TIncrementalRestoreScan>(
         parent,
         changeSenderFactory,
-        txId,
         sourcePathId,
         table,
         targetPathId,
+        txId,
         limits);
 }
 

@@ -30,7 +30,7 @@ struct TEvIncrementalRestoreScan {
 THolder<NTable::IScan> CreateIncrementalRestoreScan(
         NActors::TActorId parent,
         std::function<TActorId(const TActorContext& ctx)> changeSenderFactory,
-        TPathId tablePathId,
+        const TPathId& sourcePathId,
         TUserTable::TCPtr table,
         const TPathId& targetPathId,
         ui64 txId,

@@ -898,7 +898,7 @@ namespace NKikimr {
         CountEvent(event.get(), type);
 
         TVDiskID vdiskId;
-        NKikimrBlobStorage::EVDiskQueueId queueId;
+        NKikimrBlobStorage::EVDiskQueueId queueId = NKikimrBlobStorage::EVDiskQueueId::Unknown;
 
         auto preprocess = [&](auto& ev) {
             Y_DEBUG_ABORT_UNLESS(ev.Record.HasVDiskID());

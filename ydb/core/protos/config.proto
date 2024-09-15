@@ -1361,6 +1361,14 @@ message TImmediateControlsConfig {
             DefaultValue: 0 }];
     }
 
+    message TTableServiceControls {
+        optional uint64 EnableMergeDatashardReads = 1 [(ControlOptions) = {
+            Description: "Merge reading tasks on the same node",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0 }];
+    }
+
     optional TDataShardControls DataShardControls = 1;
     optional TTxLimitControls TxLimitControls = 2;
     optional TCoordinatorControls CoordinatorControls = 3;
@@ -1372,6 +1380,7 @@ message TImmediateControlsConfig {
     optional TDSProxyControls DSProxyControls = 9;
     optional TPDiskControls PDiskControls = 10;
     optional TBlobStorageControllerControls BlobStorageControllerControls = 11;
+    optional TTableServiceControls TableServiceControls = 12;
 };
 
 message TMeteringConfig {

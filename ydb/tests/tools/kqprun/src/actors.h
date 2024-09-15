@@ -1,5 +1,3 @@
-#pragma once
-
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 

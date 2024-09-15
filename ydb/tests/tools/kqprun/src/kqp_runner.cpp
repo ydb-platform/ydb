@@ -34,7 +34,22 @@ TString FormatNumber(i64 number) {
     return stream.str();
 }
 
-void PrintStatistics(const TString& fullStat, const NFq::TPublicStat& publicStat, IOutputStream& output) {
+void PrintStatistics(const TString& fullStat, const THashMap<TString, i64>& flatStat, const NFq::TPublicStat& publicStat, IOutputStream& output) {
+    output << "\nFlat statistics:" << Endl;
+    for (const auto& [propery, value] : flatStat) {
+        TString valueString = ToString(value);
+        if (propery.Contains("Bytes")) {
+            valueString = NKikimr::NBlobDepot::FormatByteSize(value);
+        } else if (propery.Contains("TimeUs")) {
+            valueString = NFq::FormatDurationUs(value);
+        } else if (propery.Contains("TimeMs")) {
+            valueString = NFq::FormatDurationMs(value);
+        } else {
+            valueString = FormatNumber(value);
+        }
+        output << propery << " = " << valueString << Endl;
+    }
+
     output << "\nPublic statistics:" << Endl;
     if (auto memoryUsageBytes = publicStat.MemoryUsageBytes) {
         output << "MemoryUsage = " << NKikimr::NBlobDepot::FormatByteSize(*memoryUsageBytes) << Endl;
@@ -300,12 +315,19 @@ private:
 
             auto convertedPlan = plan;
             try {
+                convertedPlan = StatProcessor_->ConvertPlan(plan);
+            } catch (const NJson::TJsonException& ex) {
+                outputStream << "Error plan conversion: " << ex.what() << Endl;
+            }
+
+            try {
                 double cpuUsage = 0.0;
                 auto fullStat = StatProcessor_->GetQueryStat(convertedPlan, cpuUsage);
+                auto flatStat = StatProcessor_->GetFlatStat(convertedPlan);
                 auto publicStat = StatProcessor_->GetPublicStat(fullStat);
 
                 outputStream << "\nCPU usage: " << cpuUsage << Endl;
-                PrintStatistics(fullStat, publicStat, outputStream);
+                PrintStatistics(fullStat, flatStat, publicStat, outputStream);
             } catch (const NJson::TJsonException& ex) {
                 outputStream << "Error stat conversion: " << ex.what() << Endl;
             }

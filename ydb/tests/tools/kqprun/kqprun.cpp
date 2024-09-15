@@ -13,7 +13,6 @@
 
 #include <ydb/core/base/backtrace.h>
 
-#include <ydb/library/yaml_config/yaml_config.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 #include <ydb/library/yql/providers/yt/gateway/file/yql_yt_file.h>
 #include <ydb/library/yql/providers/yt/gateway/file/yql_yt_file_comp_nodes.h>
@@ -91,13 +90,11 @@ void RunArgumentQueries(const TExecutionOptions& executionOptions, NKqpRun::TKqp
             Cout << "..." << colors.Default() << Endl;
         }
 
-        TInstant startTime = TInstant::Now();
         switch (executionCase) {
         case TExecutionOptions::EExecutionCase::GenericScript:
             if (!runner.ExecuteScript(executionOptions.ScriptQueries[id], executionOptions.ScriptQueryAction, executionOptions.TraceId)) {
                 ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Script execution failed";
             }
-            Cout << colors.Cyan() << "Script request finished. Time: " << TInstant::Now() - startTime << colors.Default() << Endl;
             Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Fetching script results..." << colors.Default() << Endl;
             if (!runner.FetchScriptResults()) {
                 ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Fetch script results failed";
@@ -114,14 +111,12 @@ void RunArgumentQueries(const TExecutionOptions& executionOptions, NKqpRun::TKqp
             if (!runner.ExecuteQuery(executionOptions.ScriptQueries[id], executionOptions.ScriptQueryAction, executionOptions.TraceId)) {
                 ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Query execution failed";
             }
-            Cout << colors.Cyan() << "Generic request finished. Time: " << TInstant::Now() - startTime << colors.Default() << Endl;
             break;
 
         case TExecutionOptions::EExecutionCase::YqlScript:
             if (!runner.ExecuteYqlScript(executionOptions.ScriptQueries[id], executionOptions.ScriptQueryAction, executionOptions.TraceId)) {
                 ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Yql script execution failed";
             }
-            Cout << colors.Cyan() << "Yql script request finished. Time: " << TInstant::Now() - startTime << colors.Default() << Endl;
             break;
 
         case TExecutionOptions::EExecutionCase::AsyncQuery:
@@ -212,10 +207,12 @@ class TMain : public TMainClassArgs {
     TExecutionOptions ExecutionOptions;
     NKqpRun::TRunnerOptions RunnerOptions;
 
+    THashMap<TString, TString> TablesMapping;
     TVector<TString> UdfsPaths;
     TString UdfsDirectory;
     bool ExcludeLinkedUdfs = false;
     ui64 ResultsRowsLimit = 1000;
+    bool EmulateYt = false;
 
     static TString LoadFile(const TString& file) {
         return TFileInput(file).ReadAll();
@@ -284,15 +281,27 @@ protected:
                 ExecutionOptions.ScriptQueries.emplace_back(LoadFile(option->CurVal()));
             });
 
+        options.AddLongOption('t', "table", "File with input table (can be used by YT with -E flag), table@file")
+            .RequiredArgument("table@file")
+            .Handler1([this](const NLastGetopt::TOptsParser* option) {
+                TStringBuf tableName;
+                TStringBuf filePath;
+                TStringBuf(option->CurVal()).Split('@', tableName, filePath);
+                if (tableName.empty() || filePath.empty()) {
+                    ythrow yexception() << "Incorrect table mapping, expected form table@file, e.g. yt.Root/plato.Input@input.txt";
+                }
+                if (TablesMapping.contains(tableName)) {
+                    ythrow yexception() << "Got duplicate table name: " << tableName;
+                }
+                TablesMapping[tableName] = filePath;
+            });
+
         options.AddLongOption('c', "app-config", "File with app config (TAppConfig for ydb tennant)")
             .RequiredArgument("file")
             .DefaultValue("./configuration/app_config.conf")
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
                 TString file(option->CurValOrDef());
-                if (file.EndsWith(".yaml")) {
-                    auto document = NKikimr::NFyaml::TDocument::Parse(LoadFile(file));
-                    RunnerOptions.YdbSettings.AppConfig = NKikimr::NYamlConfig::YamlToProto(document.Root());
-                } else if (!google::protobuf::TextFormat::ParseFromString(LoadFile(file), &RunnerOptions.YdbSettings.AppConfig)) {
+                if (!google::protobuf::TextFormat::ParseFromString(LoadFile(file), &RunnerOptions.YdbSettings.AppConfig)) {
                     ythrow yexception() << "Bad format of app configuration";
                 }
             });
@@ -421,6 +430,10 @@ protected:
             .DefaultValue(1000)
             .StoreMappedResultT<ui64>(&ExecutionOptions.LoopDelay, &TDuration::MilliSeconds<ui64>);
 
+        options.AddLongOption("pool", "Workload manager pool in which queries will be executed")
+            .RequiredArgument("pool-id")
+            .StoreResult(&RunnerOptions.YdbSettings.DefaultPoolId);
+
         // Cluster settings
 
         options.AddLongOption('N', "node-count", "Number of nodes to create")
@@ -441,6 +454,10 @@ protected:
                     RunnerOptions.YdbSettings.MonitoringPortOffset = FromString(port);
                 }
             });
+
+        options.AddLongOption('E', "emulate-yt", "Emulate YT tables (use file gateway instead of native gateway)")
+            .NoArgument()
+            .SetFlag(&EmulateYt);
 
         TChoices<std::function<void()>> backtrace({
             {"heavy", &NKikimr::EnableYDBBacktraceFormat},
@@ -464,6 +481,16 @@ protected:
         RunnerOptions.YdbSettings.YqlToken = YqlToken;
         RunnerOptions.YdbSettings.FunctionRegistry = CreateFunctionRegistry(UdfsDirectory, UdfsPaths, ExcludeLinkedUdfs).Get();
         RunnerOptions.YdbSettings.AppConfig.MutableQueryServiceConfig()->SetScriptResultRowsLimit(ResultsRowsLimit);
+
+        if (EmulateYt) {
+            const auto& fileStorageConfig = RunnerOptions.YdbSettings.AppConfig.GetQueryServiceConfig().GetFileStorage();
+            auto fileStorage = WithAsync(CreateFileStorage(fileStorageConfig, {MakeYtDownloader(fileStorageConfig)}));
+            auto ytFileServices = NYql::NFile::TYtFileServices::Make(RunnerOptions.YdbSettings.FunctionRegistry.Get(), TablesMapping, fileStorage);
+            RunnerOptions.YdbSettings.YtGateway = NYql::CreateYtFileGateway(ytFileServices);
+            RunnerOptions.YdbSettings.ComputationFactory = NYql::NFile::GetYtFileFactory(ytFileServices);
+        } else if (!TablesMapping.empty()) {
+            ythrow yexception() << "Tables mapping is not supported without emulate YT mode";
+        }
 
         RunScript(ExecutionOptions, RunnerOptions);
         return 0;

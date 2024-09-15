@@ -21,7 +21,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
         TTypedLocalHelper helper("Utf8", kikimr);
         helper.CreateTestOlapTable();
-        const auto addData = [&](const double shiftKff, const ui32 expectation, const ui32 expectationCount) {
+        const auto addData = [&](const double shiftKff, const ui32 /*expectation*/, const ui32 expectationCount) {
             const double frq = 0.9;
             {
                 NArrow::NConstruction::TStringPoolFiller sPool(1000, 52, "abcde", frq);

@@ -99,7 +99,7 @@ public:
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvRequestRecords::TPtr& ev) {
-        LOG_D("Handle TEvChangeExchange::TEvRequestRecords " << ev->Get()->ToString());
+        LOG_D("Handle " << ev->Get()->ToString());
 
         TVector<TChangeRecord::TPtr> records(::Reserve(ev->Get()->Records.size()));
 
@@ -114,7 +114,7 @@ public:
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvRemoveRecords::TPtr& ev) {
-        LOG_D("Handle TEvChangeExchange::TEvRemoveRecords " << ev->Get()->ToString());
+        LOG_D("Handle " << ev->Get()->ToString());
 
         for (auto recordId : ev->Get()->Records) {
             PendingRecords.erase(recordId);

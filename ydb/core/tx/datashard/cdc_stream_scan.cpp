@@ -276,7 +276,7 @@ public:
         bool pageFault = false;
 
         for (const auto& [k, v] : ev.Rows) {
-            const auto key = NStreamScan::MakeKey(k.GetCells(), table);
+            const auto key = NStreamScan::MakeKey(k.GetCells(), table->KeyColumnTypes);
             const auto& keyTags = table->KeyColumnIds;
 
             TRowState row(0);
@@ -299,7 +299,7 @@ public:
                     Serialize(body, ERowOp::Upsert, key, keyTags, MakeUpdates(v.GetCells(), valueTags, table));
                     break;
                 case NKikimrSchemeOp::ECdcStreamModeRestoreIncrBackup:
-                    if (auto updates = NIncrRestoreHelpers::MakeRestoreUpdates(v.GetCells(), valueTags, table); updates) {
+                    if (auto updates = NIncrRestoreHelpers::MakeRestoreUpdates(v.GetCells(), valueTags, table->Columns); updates) {
                         Serialize(body, ERowOp::Upsert, key, keyTags, *updates);
                     } else {
                         Serialize(body, ERowOp::Erase, key, keyTags, {});

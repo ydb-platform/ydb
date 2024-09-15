@@ -168,7 +168,6 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         return proto;
     }
 
-
     Y_UNIT_TEST(SimpleBackup) {
         TPortManager portManager;
         TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())

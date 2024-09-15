@@ -2,7 +2,7 @@
 
 namespace NKikimr::NDataShard::NIncrRestoreHelpers {
 
-std::optional<TVector<TUpdateOp>> MakeRestoreUpdates(TArrayRef<const TCell> cells, TArrayRef<const TTag> tags, TUserTable::TCPtr table) {
+std::optional<TVector<TUpdateOp>> MakeRestoreUpdates(TArrayRef<const TCell> cells, TArrayRef<const TTag> tags, const TMap<ui32, TUserTable::TUserColumn>& columns) {
     Y_ABORT_UNLESS(cells.size() >= 1);
     TVector<TUpdateOp> updates(::Reserve(cells.size() - 1));
 
@@ -10,8 +10,8 @@ std::optional<TVector<TUpdateOp>> MakeRestoreUpdates(TArrayRef<const TCell> cell
     Y_ABORT_UNLESS(cells.size() == tags.size());
     for (TPos pos = 0; pos < cells.size(); ++pos) {
         const auto tag = tags.at(pos);
-        auto it = table->Columns.find(tag);
-        Y_ABORT_UNLESS(it != table->Columns.end());
+        auto it = columns.find(tag);
+        Y_ABORT_UNLESS(it != columns.end());
         if (it->second.Name == "__ydb_incrBackupImpl_deleted") {
             if (const auto& cell = cells.at(pos); !cell.IsNull() && cell.AsValue<bool>()) {
                 return std::nullopt;

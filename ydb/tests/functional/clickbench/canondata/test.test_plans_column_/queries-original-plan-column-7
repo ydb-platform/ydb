@@ -59,12 +59,22 @@
                                                         "PlanNodeType": "Connection",
                                                         "Plans": [
                                                             {
-                                                                "Node Type": "Filter-TableFullScan",
+                                                                "Node Type": "Aggregate-Filter-TableFullScan",
                                                                 "Operators": [
                                                                     {
+                                                                        "Aggregation": "{_yql_agg_0: SUM(state._yql_agg_0,1)}",
+                                                                        "GroupBy": "item.AdvEngineID",
                                                                         "Inputs": [
                                                                             {
                                                                                 "InternalOperatorId": 1
+                                                                            }
+                                                                        ],
+                                                                        "Name": "Aggregate"
+                                                                    },
+                                                                    {
+                                                                        "Inputs": [
+                                                                            {
+                                                                                "InternalOperatorId": 2
                                                                             }
                                                                         ],
                                                                         "Name": "Filter",
@@ -133,7 +143,7 @@
                                                                                     }
                                                                                 }
                                                                             ],
-                                                                            "Version": 5
+                                                                            "Version": 4
                                                                         },
                                                                         "Table": "clickbench/plans/column/hits"
                                                                     }

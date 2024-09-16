@@ -141,7 +141,10 @@ private:
             auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitPrimaryTransactionOperator>(TxId);
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "ack_tablet")("wait", JoinSeq(",", op->WaitShardsResultAck))(
                 "receive", TabletId);
-            AFL_VERIFY(op->WaitShardsResultAck.erase(TabletId));
+            if (!op->WaitShardsResultAck.erase(TabletId)) {
+                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "ack_tablet_duplication")("wait", JoinSeq(",", op->WaitShardsResultAck))(
+                    "receive", TabletId);
+            }
             op->CheckFinished(*Self);
         }
 

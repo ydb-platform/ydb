@@ -22,8 +22,6 @@ protected:
     NActors::TActorId HttpProxyId;
     const TOpenIdConnectSettings Settings;
     TContext Context;
-    // TString RedirectUrl;
-    // bool IsAjaxRequest = false;
 
 public:
     THandlerSessionCreate(const NActors::TActorId& sender,

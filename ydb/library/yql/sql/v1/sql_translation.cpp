@@ -1795,16 +1795,6 @@ namespace {
         return true;
     }
 
-    bool StoreBool(const TRule_table_setting_value& from, TDeferredAtom& to, TContext& ctx) {
-        if (!from.HasAlt_table_setting_value6()) {
-            return false;
-        }
-        // bool_value
-        const TString value = to_lower(ctx.Token(from.GetAlt_table_setting_value6().GetRule_bool_value1().GetToken1()));
-        to = TDeferredAtom(BuildLiteralBool(ctx.Pos(), FromString<bool>(value)), ctx);
-        return true;
-    }
-
     bool StoreSplitBoundary(const TRule_literal_value_list& boundary, TVector<TVector<TNodePtr>>& to,
             TSqlExpression& expr, TContext& ctx) {
         TVector<TNodePtr> boundaryKeys;
@@ -1928,26 +1918,6 @@ namespace {
         default:
             return false;
         }
-        return true;
-    }
-
-    bool StoreViewOptionsEntry(const TIdentifier& id,
-                               const TRule_table_setting_value& value,
-                               std::map<TString, TDeferredAtom>& features,
-                               TContext& ctx) {
-        const auto name = to_lower(id.Name);
-        const auto publicName = to_upper(name);
-
-        if (features.find(name) != features.end()) {
-            ctx.Error(ctx.Pos()) << publicName << " is a duplicate";
-            return false;
-        }
-
-        if (!StoreBool(value, features[name], ctx)) {
-            ctx.Error(ctx.Pos()) << "Value of " << publicName << " must be a bool";
-            return false;
-        }
-
         return true;
     }
 
@@ -4625,7 +4595,7 @@ bool TSqlTranslation::BindParameterClause(const TRule_bind_parameter& node, TDef
 }
 
 bool TSqlTranslation::ObjectFeatureValueClause(const TRule_object_feature_value& node, TDeferredAtom& result) {
-    // object_feature_value: an_id_or_type | bind_parameter;
+    // object_feature_value: id_or_type | bind_parameter | STRING_VALUE | bool_value;
     switch (node.Alt_case()) {
         case TRule_object_feature_value::kAltObjectFeatureValue1:
         {
@@ -4648,6 +4618,12 @@ bool TSqlTranslation::ObjectFeatureValueClause(const TRule_object_feature_value&
                 return false;
             }
             result = TDeferredAtom(Ctx.Pos(), strValue->Content);
+            break;
+        }
+        case TRule_object_feature_value::kAltObjectFeatureValue4:
+        {
+            TString value = Ctx.Token(node.GetAlt_object_feature_value4().GetRule_bool_value1().GetToken1());
+            result = TDeferredAtom(BuildLiteralBool(Ctx.Pos(), FromString<bool>(value)), Ctx);
             break;
         }
         case TRule_object_feature_value::ALT_NOT_SET:
@@ -4836,32 +4812,6 @@ bool TSqlTranslation::ValidateExternalTable(const TCreateTableParameters& params
         return false;
     }
 
-    return true;
-}
-
-bool TSqlTranslation::ParseViewOptions(std::map<TString, TDeferredAtom>& features,
-                                       const TRule_with_table_settings& options) {
-    const auto& firstEntry = options.GetRule_table_settings_entry3();
-    if (!StoreViewOptionsEntry(IdEx(firstEntry.GetRule_an_id1(), *this),
-                               firstEntry.GetRule_table_setting_value3(),
-                               features,
-                               Ctx)) {
-        return false;
-    }
-    for (const auto& block : options.GetBlock4()) {
-        const auto& entry = block.GetRule_table_settings_entry2();
-        if (!StoreViewOptionsEntry(IdEx(entry.GetRule_an_id1(), *this),
-                                   entry.GetRule_table_setting_value3(),
-                                   features,
-                                   Ctx)) {
-            return false;
-        }
-    }
-    if (const auto securityInvoker = features.find("security_invoker");
-        securityInvoker == features.end() || securityInvoker->second.Build()->GetLiteralValue() != "true") {
-        Ctx.Error(Ctx.Pos()) << "SECURITY_INVOKER option must be explicitly enabled";
-        return false;
-    }
     return true;
 }
 

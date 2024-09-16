@@ -1,7 +1,6 @@
 #include "oidc_client.h"
 #include "oidc_protected_page_handler.h"
 #include "oidc_session_create_handler.h"
-#include "restore_context_handler.h"
 
 namespace NMVP {
 namespace NOIDC {
@@ -13,12 +12,6 @@ void InitOIDC(NActors::TActorSystem& actorSystem,
     actorSystem.Send(httpProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
                          "/auth/callback",
                          actorSystem.Register(new TSessionCreateHandler(httpProxyId, settings, contextStorage))
-                         )
-                     );
-
-    actorSystem.Send(httpProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
-                         "/context",
-                         actorSystem.Register(new TRestoreContextHandler(httpProxyId, contextStorage))
                          )
                      );
 

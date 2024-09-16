@@ -75,23 +75,16 @@ void SetHeader(NYdbGrpc::TCallMeta& meta, const TString& name, const TString& va
 
 NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(const NHttp::THttpIncomingRequestPtr& request, const TOpenIdConnectSettings& settings, TContextStorage* const contextStorage) {
     TContext context(request);
-    TString state;
     NHttp::THeadersBuilder responseHeaders;
-    // state = context.CreateStateContainer(settings.ClientSecret, TString(request->Host));
-    // Cerr << "+++New state: " << state << Endl;
-    // Cerr << "+++decoded sate: " << Base64DecodeUneven(state) << Endl;
-    // Cerr << "+++decoded sate: " << HexDecode(state) << Endl;
     if (settings.StoreContextOnHost) {
-        state = context.CreateStateContainer(settings.ClientSecret, TString(request->Endpoint->WorkerName));
         contextStorage->Write(context);
     } else {
-        state = context.GetState();
         responseHeaders.Set("Set-Cookie", context.CreateYdbOidcCookie(settings.ClientSecret));
     }
     const TString redirectUrl = TStringBuilder() << settings.GetAuthEndpointURL()
                                                  << "?response_type=code"
                                                  << "&scope=openid"
-                                                 << "&state=" << state
+                                                 << "&state=" << context.GetState()
                                                  << "&client_id=" << settings.ClientId
                                                  << "&redirect_uri=" << (request->Endpoint->Secure ? "https://" : "http://")
                                                                      << request->Host
@@ -123,9 +116,9 @@ TString CreateSecureCookie(const TString& key, const TString& value) {
     return cookieBuilder;
 }
 
-TRestoreOidcContextResult RestoreSessionStoredOnClientSide(const TString& state, const NHttp::TCookies& cookies, const TString& secret) {
+TRestoreOidcContextResult RestoreContextFromCookie(const TString& state, const NHttp::TCookies& cookies, const TString& secret) {
     TStringBuilder errorMessage;
-    errorMessage << "Restore oidc session failed: ";
+    errorMessage << "Restore context from cookie failed: ";
     const TString cookieName {CreateNameYdbOidcCookie(secret, state)};
     if (!cookies.Has(cookieName)) {
         return TRestoreOidcContextResult({.IsSuccess = false,

@@ -58,18 +58,6 @@ TString TContext::GenerateCookie(const TString& secret) const {
     return Base64Encode(cookieStruct);
 }
 
-TString TContext::CreateStateContainer(const TString& secret, const TString& host) const {
-    TStringBuilder json;
-    json << "{\"state\":\"" << State
-         << "\",\"host\":\"" << host << "\"}";
-    TString digest = HmacSHA1(secret, json);
-    TStringBuilder stateContainer;
-    stateContainer << "{\"container\":\"" << Base64Encode(json) << "\","
-                       "\"digest\":\"" << Base64Encode(digest) << "\"}";
-    Cerr << "+++ State: " << State << Endl;
-    return Base64EncodeNoPadding(stateContainer);
-}
-
 TString TContext::GenerateState() {
     TStringBuilder sb;
     static constexpr size_t CHAR_NUMBER = 15;

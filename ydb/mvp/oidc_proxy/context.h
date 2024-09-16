@@ -32,7 +32,6 @@ public:
     TString GetRequestedAddress() const;
 
     TString CreateYdbOidcCookie(const TString& secret) const;
-    TString CreateStateContainer(const TString& secret, const TString& host) const;
 
 private:
     static TString GenerateState();

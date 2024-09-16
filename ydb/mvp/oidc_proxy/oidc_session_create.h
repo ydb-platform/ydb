@@ -25,7 +25,6 @@ protected:
     const TOpenIdConnectSettings Settings;
     TContext RestoredContext;
     TContextStorage* const ContextStorage;
-    TString Code;
 
 public:
     THandlerSessionCreate(const NActors::TActorId& sender,
@@ -46,17 +45,8 @@ protected:
     void RetryRequestToProtectedResourceAndDie(NHttp::THeadersBuilder* responseHeaders, const NActors::TActorContext& ctx, const TString& responseMessage = "Found");
 
 private:
-    STFUNC(StateWork) {
-        switch (ev->GetTypeRewrite()) {
-            HFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, HandleRestoreContext);
-        }
-    }
-
     void TryRestoreContextFromCookie(const NActors::TActorContext& ctx);
     void TryRestoreContextFromHostStorage(const NActors::TActorContext& ctx);
-    void TryRestoreContextFromOtherHost(const TString& host, const TString& state, const NActors::TActorContext& ctx);
-
-    void HandleRestoreContext(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event, const NActors::TActorContext& ctx);
 
     void SendUnknownErrorResponseAndDie(const NActors::TActorContext& ctx);
 };

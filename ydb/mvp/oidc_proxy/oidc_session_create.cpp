@@ -97,25 +97,25 @@ void THandlerSessionCreate::RetryRequestToProtectedResourceAndDie(NHttp::THeader
 void THandlerSessionCreate::TryRestoreContextFromCookie(const NActors::TActorContext& ctx) {
     LOG_DEBUG_S(ctx, NMVP::EService::MVP, "Try restore context from cookie");
     NHttp::TUrlParameters urlParameters(Request->URL);
-    Code = urlParameters["code"];
+    TString code = urlParameters["code"];
     TString state = urlParameters["state"];
 
     NHttp::THeaders headers(Request->Headers);
     NHttp::TCookies cookies(headers.Get("cookie"));
-    TRestoreOidcContextResult restoreSessionResult = RestoreSessionStoredOnClientSide(state, cookies, Settings.ClientSecret);
+    TRestoreOidcContextResult restoreSessionResult = RestoreContextFromCookie(state, cookies, Settings.ClientSecret);
     RestoredContext = restoreSessionResult.Context;
     if (restoreSessionResult.IsSuccess()) {
-        if (Code.empty()) {
-            LOG_DEBUG_S(ctx, NMVP::EService::MVP, "Restore oidc session failed: receive empty 'code' parameter");
+        if (code.empty()) {
+            LOG_DEBUG_S(ctx, NMVP::EService::MVP, "Restore context from cookie failed: receive empty 'code' parameter");
             RetryRequestToProtectedResourceAndDie(ctx, "Empty code");
         } else {
-            RequestSessionToken(Code, ctx);
+            RequestSessionToken(code, ctx);
         }
     } else {
         const auto& restoreSessionStatus = restoreSessionResult.Status;
         LOG_DEBUG_S(ctx, NMVP::EService::MVP, restoreSessionStatus.ErrorMessage);
         if (restoreSessionStatus.IsErrorRetryable) {
-            RetryRequestToProtectedResourceAndDie(ctx, "Cannot restore oidc context");
+            RetryRequestToProtectedResourceAndDie(ctx, "Cannot restore oidc context from cookie");
         } else {
             SendUnknownErrorResponseAndDie(ctx);
         }
@@ -125,167 +125,24 @@ void THandlerSessionCreate::TryRestoreContextFromCookie(const NActors::TActorCon
 void THandlerSessionCreate::TryRestoreContextFromHostStorage(const NActors::TActorContext& ctx) {
     LOG_DEBUG_S(ctx, NMVP::EService::MVP, "Try restore context from host storage");
     NHttp::TUrlParameters urlParameters(Request->URL);
-    Code = urlParameters["code"];
-    TString stateParam = urlParameters["state"];
-
+    TString code = urlParameters["code"];
+    TString state = urlParameters["state"];
     static const TString ERROR_RESTORE_CONTEXT_FROM_HOST = "Restore context from host failed: ";
-
-    TString decodedStateParam = Base64DecodeUneven(stateParam);
-    TString stateContainer;
-    TString expectedDigest;
-    NJson::TJsonValue jsonValue;
-    NJson::TJsonReaderConfig jsonConfig;
-    TString error = "Can not read decoded state parameter";
-    bool wasStateParameterRead = false;
-    if (NJson::ReadJsonTree(decodedStateParam, &jsonConfig, &jsonValue)) {
-        const NJson::TJsonValue* jsonStateContainer = nullptr;
-        if (jsonValue.GetValuePointer("container", &jsonStateContainer)) {
-            stateContainer = jsonStateContainer->GetStringRobust();
-            stateContainer = Base64Decode(stateContainer);
-            const NJson::TJsonValue* jsonDigest = nullptr;
-            if (jsonValue.GetValuePointer("digest", &jsonDigest)) {
-                expectedDigest = jsonDigest->GetStringRobust();
-                expectedDigest = Base64Decode(expectedDigest);
-                wasStateParameterRead = true;
-            } else {
-                error = "Can not read digest from state parameter";
-            }
-        } else {
-            error = "Can not read state container from state parameter";
-        }
-    }
-    if (!wasStateParameterRead) {
-        LOG_DEBUG_S(ctx, NMVP::EService::MVP, ERROR_RESTORE_CONTEXT_FROM_HOST << error);
-        SendUnknownErrorResponseAndDie(ctx);
-        return;
-    }
-
-    if (stateContainer.empty() || expectedDigest.empty()) {
-        LOG_DEBUG_S(ctx, NMVP::EService::MVP, ERROR_RESTORE_CONTEXT_FROM_HOST << "Receive empty digest or state container");
-        SendUnknownErrorResponseAndDie(ctx);
-        return;
-    }
-
-    TString digest = HmacSHA1(Settings.ClientSecret, stateContainer);
-    if (expectedDigest != digest) {
-        LOG_DEBUG_S(ctx, NMVP::EService::MVP, ERROR_RESTORE_CONTEXT_FROM_HOST << "Receive unknown state");
-        SendUnknownErrorResponseAndDie(ctx);
-        return;
-    }
-
-    TString state;
-    TString host;
-    bool wasStateContainerRead = false;
-    error = "Can not read state container";
-    if (NJson::ReadJsonTree(stateContainer, &jsonConfig, &jsonValue)) {
-        const NJson::TJsonValue* jsonState = nullptr;
-        if (jsonValue.GetValuePointer("state", &jsonState)) {
-            state = jsonState->GetStringRobust();
-            const NJson::TJsonValue* jsonHost = nullptr;
-            if (jsonValue.GetValuePointer("host", &jsonHost)) {
-                host = jsonHost->GetStringRobust();
-                wasStateContainerRead = true;
-            } else {
-                error = "Can not read host from state container";
-            }
-        } else {
-            error = "Can not read state from state container";
-        }
-    }
-    if (!wasStateContainerRead) {
-        LOG_DEBUG_S(ctx, NMVP::EService::MVP, ERROR_RESTORE_CONTEXT_FROM_HOST << error);
-        SendUnknownErrorResponseAndDie(ctx);
-        return;
-    }
 
     std::pair<bool, TContextRecord> restoreContextResult = ContextStorage->Find(state);
     if (restoreContextResult.first) {
         RestoredContext = restoreContextResult.second.GetContext();
-        if (Code.empty()) {
+        if (code.empty()) {
             LOG_DEBUG_S(ctx, NMVP::EService::MVP, ERROR_RESTORE_CONTEXT_FROM_HOST << "Receive empty 'code' parameter");
             RetryRequestToProtectedResourceAndDie(ctx, "Empty code");
         } else if (TInstant::Now() > restoreContextResult.second.GetExpirationTime()) {
             LOG_DEBUG_S(ctx, NMVP::EService::MVP, ERROR_RESTORE_CONTEXT_FROM_HOST << "State life time expired");
             RetryRequestToProtectedResourceAndDie(ctx, "Found");
         } else {
-            RequestSessionToken(Code, ctx);
+            RequestSessionToken(code, ctx);
         }
     } else {
-        LOG_DEBUG_S(ctx, NMVP::EService::MVP, "Did not find context on " << Request->Endpoint->WorkerName << ". Try find on " << host);
-        TryRestoreContextFromOtherHost(host, state, ctx);
-    }
-}
-
-void THandlerSessionCreate::TryRestoreContextFromOtherHost(const TString& host, const TString& state, const NActors::TActorContext& ctx) {
-    const TString restoreContextUrl = TStringBuilder()
-                                << (Request->Endpoint->Secure ? "https://" : "http://")
-                                << host << "/context?state=" << state;
-    ctx.Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(NHttp::THttpOutgoingRequest::CreateRequestGet(restoreContextUrl)));
-    Become(&THandlerSessionCreate::StateWork);
-}
-
-void THandlerSessionCreate::HandleRestoreContext(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event, const NActors::TActorContext& ctx) {
-    TStringBuf requestHost = event->Get()->Request->Host;
-    static TString ERROR_RESTORE_CONTEXT_FROM_HOST = "Restore context from " + TString(requestHost) + " failed: ";
-    if (event->Get()->Error.empty() && event->Get()->Response) {
-        NHttp::THttpIncomingResponsePtr response = event->Get()->Response;
-        LOG_DEBUG_S(ctx, EService::MVP, "Incoming response from " << requestHost << ": " << response->Status);
-        if (response->Status == "200") {
-            NJson::TJsonValue jsonValue;
-            NJson::TJsonReaderConfig jsonConfig;
-            if (NJson::ReadJsonTree(response->Body, &jsonConfig, &jsonValue)) {
-                TString requestedAddress;
-                const NJson::TJsonValue* jsonRequestedAddress = nullptr;
-                if (jsonValue.GetValuePointer("requested_address", &jsonRequestedAddress)) {
-                    requestedAddress = jsonRequestedAddress->GetStringRobust();
-                } else {
-                    LOG_DEBUG_S(ctx, NMVP::EService::MVP, ERROR_RESTORE_CONTEXT_FROM_HOST << "Can not read requested_address");
-                    SendUnknownErrorResponseAndDie(ctx);
-                    return;
-                }
-                bool isAjaxRequest = false;
-                const NJson::TJsonValue* jsonAjaxRequest = nullptr;
-                if (jsonValue.GetValuePointer("is_ajax_request", &jsonAjaxRequest)) {
-                    isAjaxRequest = jsonAjaxRequest->GetBooleanRobust();
-                } else {
-                    LOG_DEBUG_S(ctx, NMVP::EService::MVP, ERROR_RESTORE_CONTEXT_FROM_HOST << "Can not read is_ajax_request");
-                    RetryRequestToProtectedResourceAndDie(ctx);
-                    return;
-                }
-                TInstant expirationTime;
-                const NJson::TJsonValue* jsonExpirationTime = nullptr;
-                if (jsonValue.GetValuePointer("expiration_time", &jsonExpirationTime)) {
-                    timeval timeVal {
-                        .tv_sec = jsonExpirationTime->GetIntegerRobust(),
-                        .tv_usec = 0
-                    };
-                    expirationTime = TInstant(timeVal);
-                } else {
-                    LOG_DEBUG_S(ctx, NMVP::EService::MVP, ERROR_RESTORE_CONTEXT_FROM_HOST << "Can not read expiration_time");
-                    RetryRequestToProtectedResourceAndDie(ctx);
-                    return;
-                }
-                RestoredContext = TContext("", requestedAddress, isAjaxRequest);
-                if (Code.empty()) {
-                    LOG_DEBUG_S(ctx, NMVP::EService::MVP, ERROR_RESTORE_CONTEXT_FROM_HOST << "Receive empty 'code' parameter");
-                    RetryRequestToProtectedResourceAndDie(ctx, "Empty code");
-                } else if (TInstant::Now() > expirationTime) {
-                    LOG_DEBUG_S(ctx, NMVP::EService::MVP, ERROR_RESTORE_CONTEXT_FROM_HOST << "State life time expired");
-                    RetryRequestToProtectedResourceAndDie(ctx, "Found");
-                } else {
-                    RequestSessionToken(Code, ctx);
-                    return;
-                }
-            } else {
-                LOG_DEBUG_S(ctx, NMVP::EService::MVP, ERROR_RESTORE_CONTEXT_FROM_HOST << "Can not read response");
-                SendUnknownErrorResponseAndDie(ctx);
-            }
-        } else {
-             LOG_DEBUG_S(ctx, NMVP::EService::MVP, ERROR_RESTORE_CONTEXT_FROM_HOST << "Response status: " << response->Status);
-             SendUnknownErrorResponseAndDie(ctx);
-        }
-    } else {
-        LOG_DEBUG_S(ctx, NMVP::EService::MVP, ERROR_RESTORE_CONTEXT_FROM_HOST << "Unknown response");
+        LOG_DEBUG_S(ctx, NMVP::EService::MVP, "Did not find context on host.");
         SendUnknownErrorResponseAndDie(ctx);
     }
 }

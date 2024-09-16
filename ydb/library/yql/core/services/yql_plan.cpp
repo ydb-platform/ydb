@@ -127,7 +127,9 @@ void WriteProviders(const TString& tag, const TProviderInfoMap& providers, NYson
             writer.OnListItem();
             writer.OnBeginMap();
             writer.OnKeyedItem("Id");
-            writer.OnUint64Scalar(p.second.Pin.find(pin)->second);
+            const auto found = p.second.Pin.find(pin);
+            YQL_ENSURE(found != p.second.Pin.cend());
+            writer.OnUint64Scalar(found->second);
             p.second.Provider->GetPlanFormatter().WritePinDetails(*pin, writer);
             writer.OnEndMap();
         }

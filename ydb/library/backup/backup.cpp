@@ -742,19 +742,26 @@ void BackupFolder(TDriver driver, const TString& database, const TString& relDbP
 //                               Restore
 ////////////////////////////////////////////////////////////////////////////////
 
-TString ProcessColumnType(const TString& name, TTypeParser parser, NTable::TTableBuilder *builder) {
+TString ProcessColumnType(const TString& name, TTypeParser parser, NTable::TTableBuilder *builder, bool isSerial) {
     TStringStream ss;
     ss << "name: " << name << "; ";
     if (parser.GetKind() == TTypeParser::ETypeKind::Optional) {
         ss << " optional; ";
         parser.OpenOptional();
     }
+    if (isSerial) {
+        ss << "serial; ";
+    }
     ss << "kind: " << parser.GetKind() << "; ";
     switch (parser.GetKind()) {
         case TTypeParser::ETypeKind::Primitive:
             ss << " type_id: " << parser.GetPrimitive() << "; ";
             if (builder) {
-                builder->AddNullableColumn(name, parser.GetPrimitive());
+                if (isSerial) {
+                    builder->AddSerialColumn(name, parser.GetPrimitive());
+                } else {
+                    builder->AddNullableColumn(name, parser.GetPrimitive());
+                }
             }
             break;
         case TTypeParser::ETypeKind::Decimal:
@@ -776,7 +783,17 @@ NTable::TTableDescription TableDescriptionFromProto(const Ydb::Table::CreateTabl
     NTable::TTableBuilder builder;
 
     for (const auto &col : proto.Getcolumns()) {
-        LOG_DEBUG("AddNullableColumn: " << ProcessColumnType(col.Getname(), TType(col.Gettype()), &builder));
+        bool isSerial = false;
+        switch (col.default_value_case()) {
+            case Ydb::Table::ColumnMeta::kFromSequence: {
+                if (col.from_sequence().name() == "_serial_" + col.Getname()) {
+                    isSerial = true;
+                }
+                break;
+            }
+            default: break;
+        }
+        LOG_DEBUG("AddColumn: " << ProcessColumnType(col.Getname(), TType(col.Gettype()), &builder, isSerial));
     }
 
     for (const auto &primary : proto.Getprimary_key()) {
@@ -805,7 +822,7 @@ TString SerializeColumnsToString(const TVector<TColumn>& columns, TVector<TStrin
         if (BinarySearch(primary.cbegin(), primary.cend(), col.Name)) {
             ss << "primary; ";
         }
-        ss << ProcessColumnType(col.Name, col.Type, nullptr) << Endl;
+        ss << ProcessColumnType(col.Name, col.Type, nullptr, false) << Endl;
     }
     // Cerr << "Parse column to : " << ss.Str() << Endl;
     return ss.Str();

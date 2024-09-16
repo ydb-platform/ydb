@@ -1423,7 +1423,6 @@ bool FillTableDescription(NKikimrSchemeOp::TModifyScheme& out,
         const Ydb::Table::CreateTableRequest& in, const TTableProfiles& profiles,
         Ydb::StatusIds::StatusCode& status, TString& error, bool indexedTable)
 {
-
     NKikimrSchemeOp::TTableDescription* tableDesc = nullptr;
     if (indexedTable) {
         tableDesc = out.MutableCreateIndexedTable()->MutableTableDescription();

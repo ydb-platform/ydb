@@ -153,8 +153,7 @@ class Workload(object):
             count = self.rows_count(table_name)
             logger.info(f"[{trace_id}] number of rows in table '{table_name}' {count}")
             if count != self.batch_count*self.batch_size:
-                logger.error(f"[{trace_id}] table '{table_name}' is empty")
-                return
+                raise Exception(f"[{trace_id}] the number of rows in the '{table_name}' does not match the expected")
 
             logger.info(f"[{trace_id}] waiting to receive information about the table '{table_name}' from scheme shard")
             time.sleep(300)
@@ -165,7 +164,7 @@ class Workload(object):
             count = self.statistics_count(table_statistics, path_id)
             logger.info(f"[{trace_id}] number of rows in statistics table '{table_statistics}' {count}")
             if count == 0:
-                logger.error(f"[{trace_id}] statistics table '{table_statistics}' is empty")
+                raise Exception(f"[{trace_id}] statistics table '{table_statistics}' is empty")
         except Exception as e:
             logger.error(f"[{trace_id}] {type(e)}, {e}")
 

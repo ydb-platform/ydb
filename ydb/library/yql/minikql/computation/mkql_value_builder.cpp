@@ -91,12 +91,11 @@ NUdf::TUnboxedValue TDefaultValueBuilder::NewList(NUdf::TUnboxedValue* items, ui
         return HolderFactory_.GetEmptyContainerLazy();
     }
 
-    TUnboxedValueVector list;
-    for (ui64 i = 0; i < count; ++i) {
-        list.emplace_back(std::move(*items++));
-    }
+    NUdf::TUnboxedValue* inplace = nullptr;
+    auto array = HolderFactory_.CreateDirectArrayHolder(count, inplace);
+    std::copy_n(std::make_move_iterator(items), count, inplace);
 
-    return HolderFactory_.VectorAsVectorHolder(std::move(list));
+    return array;
 }
 
 NUdf::TUnboxedValue TDefaultValueBuilder::ReverseList(const NUdf::TUnboxedValuePod& list) const

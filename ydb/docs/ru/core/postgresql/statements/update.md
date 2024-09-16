@@ -54,17 +54,21 @@ WHERE country = 'USA' AND city = 'Los Angeles' OR city = 'Florida';
 #|
 || **Обновление с применением выражений** | **Обновление с применением функций** ||
 ||
+
 ```sql
 UPDATE people
 SET age = age + 1
 WHERE country = 'Canada';
 ```
+
 |
+
 ```sql
 UPDATE people
 SET name = UPPER(name)
 WHERE country = 'USA';
 ```
+
 ||
 |#
 

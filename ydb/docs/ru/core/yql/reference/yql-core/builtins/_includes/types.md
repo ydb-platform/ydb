@@ -229,6 +229,7 @@ SELECT FormatType(VariantType(
 ```yql
 ResourceType(String)->тип ресурса
 ```
+
 Возвращает тип [ресурса](../../types/special.md) по переданной строковой метке.
 
 ### Примеры
@@ -456,6 +457,7 @@ TypeHandle(Type)->хэндл типа
 ```yql
 SELECT FormatType(TypeHandle(TypeOf("foo")));  -- String
 ```
+
 ### EvaluateType
 
 #### Сигнатура

@@ -63,9 +63,11 @@ CREATE TABLE `orderLines`(id_order Uint64, product Utf8, quantity Int64, PRIMARY
 ## Запуск нагрузочного теста {#run}
 
 Для запуска нагрузки необходимо выполнить команду:
+
 ```bash
 {{ ydb-cli }} workload stock run [workload type...] [global workload options...] [specific workload options...]
 ```
+
 В течение теста на экран выводится статистика по нагрузке для каждого временного окна.
 
 * `workload type` — [виды нагрузки](#workload_types).
@@ -103,10 +105,11 @@ YQL запрос:
 DECLARE $cust AS Utf8;
 DECLARE $limit AS UInt32;
 
-SELECT id, customer, created FROM orders view ix_cust
-    WHERE customer = 'Name10000'
-    ORDER BY customer DESC, created DESC
-    LIMIT $limit;
+SELECT id, customer, created
+FROM orders VIEW ix_cust
+WHERE customer = 'Name10000'
+ORDER BY customer DESC, created DESC
+LIMIT $limit;
 ```
 
 Для запуска данного вида нагрузки необходимо выполнить команду:
@@ -134,10 +137,11 @@ YQL запрос:
 DECLARE $cust AS Utf8;
 DECLARE $limit AS UInt32;
 
-SELECT id, customer, created FROM orders view ix_cust
-    WHERE customer = $cust
-    ORDER BY customer DESC, created DESC
-    LIMIT $limit;
+SELECT id, customer, created
+FROM orders VIEW ix_cust
+WHERE customer = $cust
+ORDER BY customer DESC, created DESC
+LIMIT $limit;
 ```
 
 Для запуска данного вида нагрузки необходимо выполнить команду:

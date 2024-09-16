@@ -350,8 +350,8 @@ The status (severity) of the current issue:
 
   - Primary Source: `/sys/fs/cgroup/cpu.max`
   - Fallback Sources: `/sys/fs/cgroup/cpu/cpu.cfs_quota_us`, `/sys/fs/cgroup/cpu/cpu.cfs_period_us`
--
- The number of cores is calculated by dividing the quota by the period (quota / period).
+
+The number of cores is calculated by dividing the quota by the period $(quota / period)$.
 
 **Actions:** Check the CPU load on the nodes.
 

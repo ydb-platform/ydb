@@ -109,6 +109,7 @@ The minimum required scopes are 'repo', 'read:org', 'admin:public_key'.
 Чтобы работать над изменениями в {{ ydb-short-name }}, вы должны создать форк репозитория в вашем аккаунте GitHub. Нажмите на кнопку `Fork` на странице [официального репозитория {{ ydb-short-name }}](https://github.com/ydb-platform/ydb).
 
 После того, как ваш форк создан, создайте локальный git репозиторий с двумя remote:
+
 - `official`: официальный репозиторий {{ ydb-short-name }}, с ветками main и stable
 - `fork`: ваш форк {{ ydb-short-name }} для разработки
 

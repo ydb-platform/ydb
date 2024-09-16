@@ -12,6 +12,7 @@ To connect to {{ ydb-name }} from DBeaver, you will need the JDBC driver. Follow
 1. Select the latest release (tagged as `Latest`) and save the `ydb-jdbc-driver-shaded-<driver-version>.jar` file.
 
 Follow these steps to connect the downloaded JDBC driver:
+
 1. In the top menu of DBeaver, select the **Database** option, then select **Driver Manager**:
 
     ![driver management](./_assets/dbeaver-driver-management.png)
@@ -24,7 +25,7 @@ Follow these steps to connect the downloaded JDBC driver:
 
     ![set name](./_assets/dbeaver-driver-create-new-driver-set-name.png)
 
-4.  Go to the **Libraries** section, click **Add File**, specify the path to the previously downloaded {{ ydb-short-name }} JDBC driver (the `ydb-jdbc-driver-shaded-<driver-version>.jar` file), and click **OK**:
+4. Go to the **Libraries** section, click **Add File**, specify the path to the previously downloaded {{ ydb-short-name }} JDBC driver (the `ydb-jdbc-driver-shaded-<driver-version>.jar` file), and click **OK**:
 
     ![driver management](./_assets/dbeaver-driver-management-driver.png)
 

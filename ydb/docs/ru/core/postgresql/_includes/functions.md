@@ -1,3 +1,4 @@
+<!-- markdownlint-disable blanks-around-fences -->
 ## 9.1. Logical Operators {#logical-operators}
 
 The usual logical operators are available:

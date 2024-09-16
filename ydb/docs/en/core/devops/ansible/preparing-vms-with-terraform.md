@@ -1,5 +1,7 @@
 # Deploy infrastructure for {{ ydb-short-name }} cluster using Terraform
 
+<!-- markdownlint-disable blanks-around-fences -->
+
 You can deploy a {{ ydb-short-name }} cluster for production use in three recommended ways: using [Ansible](./initial-deployment.md), [Kubernetes](../kubernetes/index.md) or [manually](../../devops/manual/index.md). While the Kubernetes option is almost self-sufficient, the Ansible and manual options require SSH access to properly configured servers or virtual machines.
 
 This article describes how to create and configure the necessary set of virtual machines in various cloud providers for a {{ ydb-short-name }} cluster, using Terraform.

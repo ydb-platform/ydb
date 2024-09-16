@@ -1,5 +1,7 @@
 # Приложение на Java
 
+<!-- markdownlint-disable blanks-around-fences -->
+
 На этой странице подробно разбирается код [тестового приложения](https://github.com/ydb-platform/ydb-java-examples/tree/master/query-example), доступного в составе [Java SDK Examples](https://github.com/ydb-platform/ydb-java-examples) {{ ydb-short-name }}.
 
 ## Скачивание SDK Examples и запуск примера {#download}
@@ -8,13 +10,13 @@
 
 Создайте рабочую директорию и выполните в ней из командной строки команду клонирования репозитория с github.com:
 
-``` bash
+```bash
 git clone https://github.com/ydb-platform/ydb-java-examples
 ```
 
 Далее выполните сборку SDK Examples
 
-``` bash
+```bash
 mvn package -f ./ydb-java-examples
 ```
 
@@ -28,7 +30,7 @@ mvn package -f ./ydb-java-examples
 
 * Cтрока подключения с информацией об [эндпоинте](../../../concepts/connect.md#endpoint) и [базе данных](../../../concepts/connect.md#database). Единственный обязательный параметр.
 * Провайдер [аутенфикации](../../../recipes/ydb-sdk/auth.md##auth-provider). В случае отсутствия прямого указания будет использоваться [анонимное подключение](../../../concepts/auth.md).
-* Настройки [пула сессий](../../../recipes/ydb-sdk/session-pool-limit.md)
+* Настройки [пула сессий](../../../recipes/ydb-sdk/session-pool-limit.md).
 
 Фрагмент кода приложения для инициализации драйвера:
 
@@ -217,6 +219,7 @@ private void asyncSelectRead(long seriesID, long seasonID) {
 Для обеспечения корректности совместной работы транзакций и контекста ретраев каждая транзакция должна выполняться целиком внутри callback, передаваемого в `SessionRetryContext`. Возврат из callback должен происходить после полного завершения транзакции.
 
 Шаблон кода по использованию сложных транзакций в `SessionRetryContext`
+
 ```java
 private void multiStepTransaction(long seriesID, long seasonID) {
     retryCtx.supplyStatus(session -> {

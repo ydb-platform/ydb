@@ -165,6 +165,7 @@ Each file must contain:
 - JSON objects combined into an array.
 
 Example of valid data (data presented as a list of JSON objects):
+
 ```json
 { "Year": 1997, "Manufacturer": "Man_1", "Model": "Model_1", "Price": 3000.0 }
 { "Year": 1999, "Manufacturer": "Man_2", "Model": "Model_2", "Price": 4900.00 }

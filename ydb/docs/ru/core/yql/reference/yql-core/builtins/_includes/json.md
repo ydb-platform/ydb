@@ -426,7 +426,7 @@ JsonPath поддерживает некоторые логические опе
 
 - `! (true == true)`, результат `false`
 - `(true == true) && (true == false)`, результат `false`
--  `(true == true) || (true == false)`, результат `true`
+- `(true == true) || (true == false)`, результат `true`
 
 ### Операторы сравнения
 

@@ -7,6 +7,7 @@ DataGrip позволяет работать с {{ ydb-short-name }} по про
 ## Подключение JDBC-драйвера {{ ydb-name }} к DataGrip {#datagrip_ydb}
 
 Для подключения к {{ ydb-name }} из DataGrip понадобится JDBC-драйвер. Для загрузки JDBC-драйвера выполните следующие шаги:
+
 1. Перейдите в [репозиторий ydb-jdbc-driver](https://github.com/ydb-platform/ydb-jdbc-driver/releases).
 1. Выберите последний релиз (отмечен тегом `Latest`) и сохраните файл `ydb-jdbc-driver-shaded-<driver-version>.jar`.
 

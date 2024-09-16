@@ -1,3 +1,5 @@
+<!-- markdownlint-disable blanks-around-fences -->
+
 {% include [x](../_includes/select/calc.md) %}
 
 {% include [x](../_includes/select/execution.md) %}

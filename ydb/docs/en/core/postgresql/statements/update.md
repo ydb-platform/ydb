@@ -1,5 +1,7 @@
 # UPDATE
 
+<!-- markdownlint-disable blanks-around-fences -->
+
 {% include [alert_preview.md](../_includes/alert_preview.md) %}
 
 The syntax of the `UPDATE` statement:
@@ -18,9 +20,13 @@ The `UPDATE ... SET ... WHERE` statements works as follows:
 #|
 || **Update without conditions** | **Update with conditions** ||
 ||
+
 {% include [update_where](../_includes/statements/update/update_where.md) %}
+
 |
+
 {% include [update_where_and](../_includes/statements/update/update_where_and.md) %}
+
 ||
 |#
 
@@ -34,9 +40,13 @@ Frequently during updates, it is necessary to perform mathematical actions on th
 #|
 || **Update with the use of expressions** | **Update with the use of functions** ||
 ||
+
 {% include [update_set_where](../_includes/statements/update/update_set_where.md) %}
+
 |
+
 {% include [update_set_func_where](../_includes/statements/update/update_set_func_where.md) %}
+
 ||
 |#
 

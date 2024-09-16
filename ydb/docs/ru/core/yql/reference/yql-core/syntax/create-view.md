@@ -47,6 +47,7 @@ FROM `/domain/database/path/to/underlying_table`;
 
 SELECT * FROM view_with_an_asterisk;
 ```
+
 изменится при добавлении или удалении колонок из подлежащей таблицы.
 
 ## Примеры {#examples}

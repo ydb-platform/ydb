@@ -24,9 +24,9 @@ log-levels:
   MD027: 'disabled' # Multiple spaces after blockquote symbol
   MD028: 'disabled' # Blank line inside blockquote
   MD029: 'disabled' # Ordered list item prefix
-  MD030: 'disabled' # Spaces after list markers
-  MD031: 'disabled' # Fenced code blocks should be surrounded by blank lines
-  MD032: 'disabled' # Lists should be surrounded by blank lines
+  MD030: 'error' # Spaces after list markers
+  MD031: 'error' # Fenced code blocks should be surrounded by blank lines
+  MD032: 'error' # Lists should be surrounded by blank lines
   MD033: 'disabled' # Inline HTML
   MD034: 'disabled' # Bare URL used
   MD035: 'error' # Horizontal rule style

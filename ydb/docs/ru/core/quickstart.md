@@ -282,6 +282,7 @@ FLATTEN LIST BY keys AS key
    ```bash
    kubectl delete storage.ydb.tech storage-minikube-sample
    ```
+
    Чтобы удалить контроллер {{ ydb-short-name }} из кластера Kubernetes, удалите релиз, созданный Helm:
 
    ```bash

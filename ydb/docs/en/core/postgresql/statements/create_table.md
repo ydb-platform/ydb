@@ -1,11 +1,10 @@
 # CREATE TABLE
 
+<!-- markdownlint-disable blanks-around-fences -->
 
 {% include [alert_preview](../_includes/alert_preview.md) %}
 
-
 The `CREATE TABLE` statement is used to create an empty table in the current database. The syntax of the command is:
-
 
 {% include [syntax](../_includes/statements/create_table/syntax.md) %}
 

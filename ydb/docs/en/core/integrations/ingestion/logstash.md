@@ -112,6 +112,7 @@ input {
   }
 }
 ```
+
 To apply these changes, restart Logstash.
 
 #### Send test messages
@@ -187,6 +188,7 @@ output {
   stdout { }
 }
 ```
+
 To apply these changes, restart Logstash.
 
 #### Write a test message to the topic

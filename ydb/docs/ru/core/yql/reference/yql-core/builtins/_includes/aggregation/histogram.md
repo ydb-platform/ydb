@@ -8,6 +8,7 @@ HISTOGRAM(Double?, weight:Double)->HistogramStruct?
 HISTOGRAM(Double?, intervals:Uint32)->HistogramStruct?
 HISTOGRAM(Double?, weight:Double, intervals:Uint32)->HistogramStruct?
 ```
+
 В описании сигнатур под HistogramStruct подразумевается результат работы агрегатной функции, который является структурой определенного вида.
 
 Построение примерной гистограммы по числовому выражению с автоматическим выбором корзин.

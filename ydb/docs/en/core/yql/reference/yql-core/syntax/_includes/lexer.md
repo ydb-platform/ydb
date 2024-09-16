@@ -30,6 +30,7 @@ SELECT 1; -- A single-line comment
    Some multi-line comment
 */
 ```
+
 In C++ syntax compatibility mode (default), a multiline comment ends with the **nearest** `*/`.
 The ANSI SQL syntax compatibility mode accounts for nesting of multiline comments:
 

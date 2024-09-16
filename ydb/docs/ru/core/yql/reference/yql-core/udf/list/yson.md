@@ -239,6 +239,7 @@ Yson::YPathString(Resource<'Yson2.Node'>{Flags:AutoMap}, String) -> String?
 Yson::YPathDict(Resource<'Yson2.Node'>{Flags:AutoMap}, String) -> Dict<String,Resource<'Yson2.Node'>>?
 Yson::YPathList(Resource<'Yson2.Node'>{Flags:AutoMap}, String) -> List<Resource<'Yson2.Node'>>?
 ```
+
 Позволяет по входному ресурсу и пути на языке YPath получить ресурс, указывающий на соответствующую пути часть исходного ресурса.
 
 {% include [_includes/yson/ypath_overlay.md](_includes/yson/ypath_overlay.md) %}

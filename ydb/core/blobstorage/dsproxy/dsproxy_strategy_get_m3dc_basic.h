@@ -75,6 +75,7 @@ namespace NKikimr {
             switch (blackboard.AccelerationMode) {
                 case TBlackboard::AccelerationModeSkipNSlowest:
                     blackboard.MarkSlowDisks(state, false, accelerationParams);
+                    break;
                 case TBlackboard::AccelerationModeSkipMarked:
                     // Slow disks are already marked!
                     break;

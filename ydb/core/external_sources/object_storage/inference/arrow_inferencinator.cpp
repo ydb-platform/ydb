@@ -325,6 +325,9 @@ public:
         auto& arrowFields = std::get<ArrowFields>(mbArrowFields);
         std::vector<Ydb::Column> ydbFields;
         for (const auto& field : arrowFields) {
+            if (field->name().empty()) {
+                continue;
+            }
             ydbFields.emplace_back();
             auto& ydbField = ydbFields.back();
             if (!ArrowToYdbType(*ydbField.mutable_type(), *field->type(), file.Config)) {

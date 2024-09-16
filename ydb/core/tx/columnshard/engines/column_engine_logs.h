@@ -202,6 +202,10 @@ private:
     bool ErasePortion(const TPortionInfo& portionInfo, bool updateStats = true);
     void UpdatePortionStats(const TPortionInfo& portionInfo, EStatsUpdateType updateType = EStatsUpdateType::DEFAULT, const TPortionInfo* exPortionInfo = nullptr);
     void UpdatePortionStats(TColumnEngineStats& engineStats, const TPortionInfo& portionInfo, EStatsUpdateType updateType, const TPortionInfo* exPortionInfo = nullptr) const;
+
+    void RemoveSchemaVersion(ui64 version) override {
+        VersionedIndex.RemoveVersion(version);
+    }
 };
 
 }   // namespace NKikimr::NOlap

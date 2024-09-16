@@ -108,6 +108,7 @@ public:
         return PrimaryKey;
     }
 
+    void RemoveVersion(ui64 version);
     const TIndexInfo* AddIndex(const TSnapshot& snapshot, TIndexInfo&& indexInfo);
 
     bool LoadShardingInfo(IDbWrapper& db);

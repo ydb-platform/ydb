@@ -298,6 +298,9 @@ public:
         return TSnapshot::Zero();
     }
     virtual void OnTieringModified(const std::shared_ptr<NColumnShard::TTiersManager>& manager, const NColumnShard::TTtl& ttl, const std::optional<ui64> pathId) = 0;
+
+    virtual void RemoveSchemaVersion(ui64) {
+    }
 };
 
 }   // namespace NKikimr::NOlap

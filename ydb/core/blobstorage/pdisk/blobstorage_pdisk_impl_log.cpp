@@ -21,6 +21,7 @@ public:
         , CommonLogger(commonLogger)
         , CompletionLogWrite(completionLogWrite)
     {
+        TCompletionAction::ShouldBeExecutedInCompletionThread = false;
         Orbit = std::move(completionLogWrite->Orbit);
     }
 

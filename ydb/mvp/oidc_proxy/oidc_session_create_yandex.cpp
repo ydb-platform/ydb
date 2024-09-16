@@ -71,7 +71,7 @@ void THandlerSessionCreateYandex::HandleError(TEvPrivate::TEvErrorResponse::TPtr
     LOG_DEBUG_S(ctx, EService::MVP, "SessionService.Create(): " << event->Get()->Status);
     NHttp::THttpOutgoingResponsePtr httpResponse;
     if (event->Get()->Status == "400") {
-        httpResponse = GetHttpOutgoingResponsePtr(event->Get()->Details, Request, Settings, ResponseHeaders, IsAjaxRequest);
+        httpResponse = GetHttpOutgoingResponsePtr(Request, Settings, ResponseHeaders, IsAjaxRequest);
     } else {
         ResponseHeaders.Set("Content-Type", "text/plain");
         httpResponse = Request->CreateResponse( event->Get()->Status, event->Get()->Message, ResponseHeaders, event->Get()->Details);

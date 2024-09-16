@@ -30,7 +30,7 @@ void THandlerSessionCreate::Bootstrap(const NActors::TActorContext& ctx) {
     if (IsStateValid(state, cookies, ctx) && !code.Empty()) {
         RequestSessionToken(code, ctx);
     } else {
-        NHttp::THttpOutgoingResponsePtr response = GetHttpOutgoingResponsePtr(TStringBuf(), Request, Settings, ResponseHeaders, IsAjaxRequest);
+        NHttp::THttpOutgoingResponsePtr response = GetHttpOutgoingResponsePtr(Request, Settings, ResponseHeaders, IsAjaxRequest);
         ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
         TBase::Die(ctx);
         return;

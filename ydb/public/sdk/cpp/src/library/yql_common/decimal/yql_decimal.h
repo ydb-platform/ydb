@@ -313,10 +313,10 @@ public:
 
     TInt128 Do(TInt128 left, TRight right) const {
         if constexpr (std::is_signed<TRight>::value) {
-            if (right >= +Bound || right <= -Bound)
+            if (TInt128(right) >= +Bound || TInt128(right) <= -Bound)
                 return left;
         } else {
-            if (right >= Bound)
+            if (TInt128(right) >= Bound)
                 return left;
         }
 

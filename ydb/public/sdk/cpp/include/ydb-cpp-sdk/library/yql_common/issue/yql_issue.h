@@ -58,11 +58,16 @@ struct TPosition {
 
 class TTextWalker {
 public:
-    TTextWalker(TPosition& position)
+    TTextWalker(TPosition& position, bool utf8Aware)
         : Position(position)
+        , Utf8Aware(utf8Aware)
         , HaveCr(false)
         , LfCount(0)
     {
+    }
+
+    static inline bool IsUtf8Intermediate(char c) {
+        return (c & 0xC0) == 0x80;
     }
 
     template<typename T>
@@ -77,6 +82,7 @@ public:
 
 private:
     TPosition& Position;
+    const bool Utf8Aware;
     bool HaveCr;
     uint32_t LfCount;
 };

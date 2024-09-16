@@ -92,7 +92,7 @@ Y_UNIT_TEST_SUITE(TextWalkerTest) {
         TPosition pos;
         pos.Row = 1;
 
-        TTextWalker walker(pos);
+        TTextWalker walker(pos, false);
         walker.Advance("a\r\taa"sv);
 
         UNIT_ASSERT_VALUES_EQUAL(pos, TPosition(5, 1));
@@ -104,7 +104,7 @@ Y_UNIT_TEST_SUITE(TextWalkerTest) {
         TPosition pos;
         pos.Row = 1;
 
-        TTextWalker walker(pos);
+        TTextWalker walker(pos, false);
         walker.Advance("a\raa\r"sv);
         UNIT_ASSERT_VALUES_EQUAL(pos, TPosition(4, 1));
         walker.Advance('\n');
@@ -117,6 +117,28 @@ Y_UNIT_TEST_SUITE(TextWalkerTest) {
         UNIT_ASSERT_VALUES_EQUAL(pos, TPosition(4, 2));
         walker.Advance('a');
         UNIT_ASSERT_VALUES_EQUAL(pos, TPosition(1, 3));
+    }
+
+    Y_UNIT_TEST(UnicodeTest) {
+        {
+            TPosition pos;
+            pos.Row = 1;
+
+            TTextWalker walker(pos, false);
+            walker.Advance(TStringBuf("привет"));
+
+            UNIT_ASSERT_VALUES_EQUAL(pos, TPosition(12, 1));
+        }
+
+        {
+            TPosition pos;
+            pos.Row = 1;
+
+            TTextWalker walker(pos, true);
+            walker.Advance(TStringBuf("привет"));
+
+            UNIT_ASSERT_VALUES_EQUAL(pos, TPosition(6, 1));
+        }
     }
 }
 

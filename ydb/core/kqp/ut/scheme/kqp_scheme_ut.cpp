@@ -8325,6 +8325,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSchema(schema);
         testHelper.CreateTable(testTable, EStatus::SCHEME_ERROR);
     }
+
 }
 
 Y_UNIT_TEST_SUITE(KqpOlapTypes) {

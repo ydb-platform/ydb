@@ -3037,10 +3037,10 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
     }
 
-    Y_UNIT_TEST(TableSink_Htap) {
+    Y_UNIT_TEST_TWIN(TableSink_Htap, withOltpSink) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(withOltpSink);
         appConfig.MutableTableServiceConfig()->SetEnableHtapTx(true);
         auto settings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -3053,7 +3053,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         const TString query = R"(
             CREATE TABLE `/Root/ColumnShard` (
                 Col1 Uint64 NOT NULL,
-                Col2 String,
+                Col2 String NOT NULL,
                 Col3 Int32 NOT NULL,
                 PRIMARY KEY (Col1)
             )
@@ -3062,7 +3062,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
             CREATE TABLE `/Root/DataShard` (
                 Col1 Uint64 NOT NULL,
-                Col2 String,
+                Col2 String NOT NULL,
                 Col3 Int32 NOT NULL,
                 PRIMARY KEY (Col1)
             )
@@ -3073,12 +3073,13 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
 
         auto client = kikimr.GetQueryClient();
+
         {
             auto result = client.ExecuteQuery(R"(
                 UPSERT INTO `/Root/ColumnShard` (Col1, Col2, Col3) VALUES
-                    (1u, "test1", 10), (2u, "test2", 11), (3u, "test3", 12), (4u, NULL, 13);
+                    (1u, "test1", 10), (2u, "test2", 11), (3u, "test3", 12), (4u, "test", 13);
                 UPSERT INTO `/Root/DataShard` (Col1, Col2, Col3) VALUES
-                    (10u, "test1", 10), (20u, "test2", 11), (30u, "test3", 12), (40u, NULL, 13);
+                    (10u, "test1", 10), (20u, "test2", 11), (30u, "test3", 12), (40u, "test", 13);
                 INSERT INTO `/Root/ColumnShard` SELECT * FROM `/Root/DataShard`;
                 REPLACE INTO `/Root/DataShard` SELECT * FROM `/Root/ColumnShard`;
                 SELECT * FROM `/Root/ColumnShard` ORDER BY Col1;
@@ -3189,13 +3190,12 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
         {
             auto result = client.ExecuteQuery(R"(
-                SELECT * FROM `/Root/DataShard` ORDER BY Col1;
-                SELECT * FROM `/Root/ColumnShard` ORDER BY Col1;
+                SELECT * FROM `/Root/DataShard`;
+                SELECT * FROM `/Root/ColumnShard`;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            CompareYson(R"([[10u;"test1";10];[20u;"test2";11];[30u;"test3";12];[40u;"test";13];[101u;"test";101];[102u;"test";101];[103u;"test";101];[104u;"test";101];[1001u;"test";1001];[1002u;"test";1001];[1003u;"test";1001];[1004u;"test";1001]])",
-                FormatResultSetYson(result.GetResultSet(0)));
-            CompareYson(R"([[1u;"test";1];[2u;"test";1];[3u;"test";1];[4u;"test";1]])", FormatResultSetYson(result.GetResultSet(1)));
+            CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(1)));
         }
 
         {
@@ -3210,7 +3210,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             auto result = client.ExecuteQuery(R"(
                 SELECT * FROM `/Root/DataShard`;
                 SELECT * FROM `/Root/ColumnShard`;
-                SELECT * FROM `/Root/DataShard`;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));

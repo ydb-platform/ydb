@@ -4,6 +4,7 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/visitor_inline.h>
 #include <util/system/yassert.h>
 #include <util/string/builder.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 
 namespace NKikimr::NArrow {
 
@@ -165,7 +166,7 @@ public:
     template <typename TType>
         requires arrow::is_base_binary_type<TType>::value
     arrow::Status Visit(const TType&) {
-        using TArray = arrow::TypeTraits<TType>::ArrayType;
+        using TArray = typename arrow::TypeTraits<TType>::ArrayType;
 
         auto typedColumn = std::static_pointer_cast<TArray>(Column);
         Bytes += typedColumn->total_values_length() + sizeof(typename TArray::offset_type) * Column->length();
@@ -175,7 +176,7 @@ public:
     template <typename TType>
         requires arrow::is_fixed_size_binary_type<TType>::value
     arrow::Status Visit(const TType&) {
-        using TArray = arrow::TypeTraits<TType>::ArrayType;
+        using TArray = typename arrow::TypeTraits<TType>::ArrayType;
 
         auto typedColumn = std::static_pointer_cast<TArray>(Column);
         Bytes += typedColumn->byte_width() * typedColumn->length();
@@ -194,7 +195,7 @@ public:
     template <typename TType>
         requires arrow::is_var_length_list_type<TType>::value
     arrow::Status Visit(const TType&) {
-        using TArray = arrow::TypeTraits<TType>::ArrayType;
+        using TArray = typename arrow::TypeTraits<TType>::ArrayType;
 
         auto typedColumn = std::static_pointer_cast<TArray>(Column);
         auto numberElements = typedColumn->length();
@@ -239,7 +240,7 @@ ui64 GetArrayDataSize(const std::shared_ptr<arrow::Array>& column) {
 
     TSizeVisitor visitor(column);
     auto status = arrow::VisitTypeInline(*type, &visitor);
-    Y_DEBUG_ABORT_UNLESS(status.ok(), "Failed to calculate array size: %s", status.ToString().data());
+    Y_VERIFY_S(status.ok(), "Failed to calculate array size: " << status.ToString());
 
     ui64 bytes = visitor.GetBytes();
 

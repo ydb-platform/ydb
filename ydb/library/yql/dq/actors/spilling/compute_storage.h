@@ -16,8 +16,8 @@ namespace NYql::NDq {
 class TDqComputeStorage : public NKikimr::NMiniKQL::ISpiller
 {
 public:
-
-    TDqComputeStorage(TTxId txId, std::function<void()> wakeUpCallback, NActors::TActorSystem* actorSystem);
+    TDqComputeStorage(TTxId txId, TWakeUpCallback wakeUpCallback, TErrorCallback errorCallback,
+        TIntrusivePtr<TSpillingTaskCounters> spillingTaskCounters, NActors::TActorSystem* actorSystem);
 
     ~TDqComputeStorage();
 

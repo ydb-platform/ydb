@@ -42,7 +42,7 @@ message TTableServiceConfig {
         optional TInfoExchangerSettings InfoExchangerSettings = 19;
         optional uint64 KqpPatternCachePatternAccessTimesBeforeTryToCompile = 20 [default = 5];
         optional uint64 KqpPatternCacheCompiledCapacityBytes = 21 [default = 104857600]; // 100 MiB
-        optional uint64 ReasonableSpillingTreshold = 22 [default = 104857600]; // 100 MiB
+        optional double SpillingPercent = 22 [default = 80]; // 100 MiB
 
         optional uint64 MinMemAllocSize = 23 [default = 8388608]; // 8 MiB
         optional uint64 MinMemFreeSize = 24  [default = 33554432]; // 32 MiB
@@ -55,8 +55,8 @@ message TTableServiceConfig {
 
     message TSpillingServiceConfig {
         message TLocalFileConfig {
-            optional bool Enable = 1 [default = false];
-            optional string Root = 2 [default = "/tmp/kikimr_spilling/"];
+            optional bool Enable = 1 [default = true];
+            optional string Root = 2 [default = ""];
             optional uint64 MaxTotalSize = 3 [default = 21474836480];  // 20 GiB
             optional uint64 MaxFileSize = 4 [default = 5368709120];    // 5 GiB
             optional uint64 MaxFilePartSize = 5 [default = 104857600]; // 100 MB

@@ -452,9 +452,9 @@
     ],
     "test.test[aggregate-group_by_gs_duo--Debug]": [
         {
-            "checksum": "25b53d13ad1aaa9594a636741e68d3ea",
-            "size": 4031,
-            "uri": "https://{canondata_backend}/1937027/591a1ceca790d81eaf524a7a3e730722b0d7bdb7/resource.tar.gz#test.test_aggregate-group_by_gs_duo--Debug_/opt.yql_patched"
+            "checksum": "59257d703f2930e08d3b7f69094f53c9",
+            "size": 4083,
+            "uri": "https://{canondata_backend}/1130705/223d79eda7e49588c54267c8b7c488154ed801c9/resource.tar.gz#test.test_aggregate-group_by_gs_duo--Debug_/opt.yql_patched"
         }
     ],
     "test.test[aggregate-group_by_gs_duo--Plan]": [
@@ -474,9 +474,9 @@
     ],
     "test.test[aggregate-group_by_gs_flatten-default.txt-Debug]": [
         {
-            "checksum": "49cd9fa336a5fec980795d60d46618cc",
-            "size": 3857,
-            "uri": "https://{canondata_backend}/1871102/093ef1237a5eb90e2e1f6670f45824dd7aa652e1/resource.tar.gz#test.test_aggregate-group_by_gs_flatten-default.txt-Debug_/opt.yql_patched"
+            "checksum": "78c0e51be35dd604e8e44b570af2881b",
+            "size": 3909,
+            "uri": "https://{canondata_backend}/1937424/0a7fa81182305af7b414a8e11e361266a61bc724/resource.tar.gz#test.test_aggregate-group_by_gs_flatten-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[aggregate-group_by_gs_flatten-default.txt-Plan]": [
@@ -496,9 +496,9 @@
     ],
     "test.test[aggregate-group_by_ru_join_simple--Debug]": [
         {
-            "checksum": "a62a866c286f0e79edc3e7d637dd8286",
-            "size": 5861,
-            "uri": "https://{canondata_backend}/1937492/31087c071b969ea75eb59570bea0f09cbff39e8c/resource.tar.gz#test.test_aggregate-group_by_ru_join_simple--Debug_/opt.yql_patched"
+            "checksum": "8091f4227f492e86b7a87449851aae3b",
+            "size": 5916,
+            "uri": "https://{canondata_backend}/1817427/c9d5452335f1bec2244311087380ff1cb48cc606/resource.tar.gz#test.test_aggregate-group_by_ru_join_simple--Debug_/opt.yql_patched"
         }
     ],
     "test.test[aggregate-group_by_ru_join_simple--Plan]": [
@@ -1139,9 +1139,9 @@
     ],
     "test.test[hor_join-out_sampling--Debug]": [
         {
-            "checksum": "a7a731afc7145a0cee7006d262255061",
-            "size": 5549,
-            "uri": "https://{canondata_backend}/1917492/1ed6d08398686e90568735860251083949d84e4e/resource.tar.gz#test.test_hor_join-out_sampling--Debug_/opt.yql_patched"
+            "checksum": "8606ab607900ab1c285f8ba104e78a82",
+            "size": 5612,
+            "uri": "https://{canondata_backend}/1880306/b2c00ff823e390f0263acf2dbb68c876e0b31abd/resource.tar.gz#test.test_hor_join-out_sampling--Debug_/opt.yql_patched"
         }
     ],
     "test.test[hor_join-out_sampling--Plan]": [
@@ -2447,9 +2447,9 @@
     ],
     "test.test[pg-tpch-q22-default.txt-Debug]": [
         {
-            "checksum": "bf86e2ecfe907ef46642b1c2b774198d",
-            "size": 12643,
-            "uri": "https://{canondata_backend}/1937492/31087c071b969ea75eb59570bea0f09cbff39e8c/resource.tar.gz#test.test_pg-tpch-q22-default.txt-Debug_/opt.yql_patched"
+            "checksum": "887c733dbb7fff78b7a31c2119e08130",
+            "size": 12647,
+            "uri": "https://{canondata_backend}/1937150/ada84f9d693b3fd476e8c136d4ac0c0ff177279b/resource.tar.gz#test.test_pg-tpch-q22-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-tpch-q22-default.txt-Plan]": [
@@ -2914,9 +2914,9 @@
     ],
     "test.test[table_range-range_with_view--Debug]": [
         {
-            "checksum": "8c3ab9a7d76fc314c4d5be392e075ad7",
-            "size": 3947,
-            "uri": "https://{canondata_backend}/1917492/1ed6d08398686e90568735860251083949d84e4e/resource.tar.gz#test.test_table_range-range_with_view--Debug_/opt.yql_patched"
+            "checksum": "5b6927fd57b28a292fc0a17afefdf28a",
+            "size": 3982,
+            "uri": "https://{canondata_backend}/1871102/a14717a3c8c558cf8fefe6d46cd5b04ed47ccc80/resource.tar.gz#test.test_table_range-range_with_view--Debug_/opt.yql_patched"
         }
     ],
     "test.test[table_range-range_with_view--Plan]": [

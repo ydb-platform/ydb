@@ -261,11 +261,15 @@ public:
             settings.ReadRanges.push_back(readRange);
         }
         auto ctx = ExecutionContext;
+        TLogFunc logger {};
+        if (YQL_CLOG_ACTIVE(DEBUG, ProviderDq)) {
+            logger = [taskId = task.GetId(), traceId = traceId](const TString& message) {
+                YQL_LOG_CTX_ROOT_SESSION_SCOPE(traceId, ToString(taskId));
+                YQL_CLOG(DEBUG, ProviderDq) << message;
+            };
+        }
         ctx.FuncProvider = TaskTransformFactory(settings.TaskParams, ctx.FuncRegistry);
-        return MakeDqTaskRunner(alloc, ctx, settings, [taskId = task.GetId(), traceId = traceId](const TString& message) {
-            YQL_LOG_CTX_ROOT_SESSION_SCOPE(traceId, ToString(taskId));
-            YQL_CLOG(DEBUG, ProviderDq) << message;
-        });
+        return MakeDqTaskRunner(alloc, ctx, settings, logger);
     }
 
 private:

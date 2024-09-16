@@ -1133,6 +1133,11 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
 
             PQ_LOG_D("Load tx " << tx.ShortDebugString());
 
+            if (tx.GetState() == NKikimrPQ::TTransaction::CALCULATED) {
+                PQ_LOG_D("fix tx state");
+                tx.SetState(NKikimrPQ::TTransaction::PLANNED);
+            }
+
             Txs.emplace(tx.GetTxId(), tx);
 
             if (tx.HasStep()) {

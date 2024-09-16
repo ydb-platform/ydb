@@ -177,6 +177,7 @@ StrictJoinKeyTypes является [scoped](../../pragma.md#pragmascope) нас
 А в режиме `RANGE` конец рамки `CURRENT ROW` означает "последняя строка в партиции с ключом сортировки, равным текущей строке".
 
 ### OrderedColumns {#orderedcolumns}
+
 `OrderedColumns` / `DisableOrderedColumns`
 
 Выводить [порядок колонок](../../select/index.md#orderedcolumns) в SELECT/JOIN/UNION ALL и сохранять его при записи результатов. По умолчанию порядок колонок не определен.

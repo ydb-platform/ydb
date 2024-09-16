@@ -94,7 +94,6 @@ CREATE TABLE `orderLines`(id_order Uint64, product Utf8, quantity Int64, PRIMARY
 `--cancel-after` | - | [Таймаут отмены операции в миллисекундах](../../../../../dev/timeouts.md).
 `--window` | - | Длительность окна сбора статистики в секундах. Значение по умолчанию: 1.
 
-
 ## Нагрузка user-hist {#get-customer-history}
 
 Данный вид нагрузки читает заданное количество заказов покупателя с id = 10 000.
@@ -154,6 +153,7 @@ LIMIT $limit;
 * `specific workload options` - [параметры конкретного вида нагрузки](#random_customer_history_options)
 
 ### Параметры для rand-user-hist {#random_customer_history_options}
+
 Имя параметра | Короткое имя | Описание параметра
 ---|---|---
 `--limit <значение>` | `-l <значение>` | Необходимое количество заказов. Значение по умолчанию: 10.

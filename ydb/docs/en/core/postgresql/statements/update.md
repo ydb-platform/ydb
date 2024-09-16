@@ -35,6 +35,7 @@ In the example "Update with conditions", the condition combining operator `AND` 
 {% include [update_where_and_or](../_includes/statements/update/update_where_and_or.md) %}
 
 ## Updating a single record in a table using expressions or functions: {#update_set_func_where}
+
 Frequently during updates, it is necessary to perform mathematical actions on the data or to modify it using functions.
 
 #|

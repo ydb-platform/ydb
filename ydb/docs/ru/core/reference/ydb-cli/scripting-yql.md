@@ -42,6 +42,7 @@
 
 ||
 |#
+
 ### Работа с параметризованными запросами {#parameterized-query}
 
 {% include [parameterized-query](../../_includes/parameterized-query.md) %}

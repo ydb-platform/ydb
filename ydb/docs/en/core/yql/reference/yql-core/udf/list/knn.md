@@ -1,4 +1,5 @@
 # KNN
+
 ## Introduction
 
 [Nearest Neighbor search](https://en.wikipedia.org/wiki/Nearest_neighbor_search) (NN) is an optimization task that consists of finding the closest point in a given dataset to a given query point. Closeness can be defined in terms of distance or similarity metrics.
@@ -128,6 +129,7 @@ Error: Failed to find UDF function: Knn.CosineDistance, reason: Error: Module: K
 ## Еxact search examples
 
 {% if backend_name == "YDB" %}
+
 ### Creating a table
 
 ```yql

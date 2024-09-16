@@ -1,5 +1,6 @@
-<!-- markdownlint-disable blanks-around-fences -->
 ## 9.1. Logical Operators {#logical-operators}
+
+<!-- markdownlint-disable blanks-around-fences blanks-around-headings -->
 
 The usual logical operators are available:
 

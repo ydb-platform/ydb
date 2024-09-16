@@ -16,7 +16,7 @@ log-levels:
   MD019: 'error' # Multiple spaces after hash on atx style heading
   MD020: 'error' # No space inside hashes on closed atx style heading
   MD021: 'error' # Multiple spaces inside hashes on closed atx style heading
-  MD022: 'disabled' # Headings should be surrounded by blank lines
+  MD022: 'error' # Headings should be surrounded by blank lines
   MD023: 'disabled' # Headings must start at the beginning of the line
   MD024: 'error' # Multiple headings with the same content
   MD025: 'error' # Multiple top-level headings in the same document

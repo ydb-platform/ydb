@@ -231,6 +231,7 @@ The plugin configuration is done by adding a `ydb_topic` block to the `output` s
 ### Usage example
 
 #### Create a topic
+
 Create a topic in any existing {{ ydb-short-name }} database:
 
 ```bash

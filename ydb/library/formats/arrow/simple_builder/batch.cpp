@@ -11,8 +11,7 @@ std::shared_ptr<arrow::RecordBatch> TRecordBatchConstructor::BuildBatch(const ui
     }
     auto batch = arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(fields), numRows, columns);
     Y_ABORT_UNLESS(batch);
-    arrow::Status valudateStatus = batch->ValidateFull();
-    Y_DEBUG_ABORT_UNLESS(valudateStatus.ok(), "BuildBatch failed: %s", valudateStatus.ToString().data());
+    Y_DEBUG_ABORT_UNLESS(batch->ValidateFull().ok());
     return batch;
 }
 

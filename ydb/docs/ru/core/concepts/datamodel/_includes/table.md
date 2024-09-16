@@ -73,7 +73,6 @@ YDB поддерживает создание строковых и колоно
 
 Например, пользователь может задать размер партиции [AUTO_PARTITIONING_PARTITION_SIZE_MB](#auto_partitioning_partition_size_mb) = 100 MB и ограничение в [AUTO_PARTITIONING_MAX_PARTITIONS_COUNT](#auto_partitioning_max_partitions_count) = 10 партиций. Когда у таблицы станет 10 партиций по 100 MB, она перестанет разделяться, и партиции начнут расти в размерах. Когда какая-то партиция превысит размер в 2GB она разделится, и в таблице станет 11 партиций, и т.д.
 
-
 #### AUTO_PARTITIONING_MIN_PARTITIONS_COUNT
 
 * Тип: `Uint64`.

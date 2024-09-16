@@ -347,6 +347,11 @@ public:
             return false;
         }
 
+        if (TxCtx->HasOlapTable) {
+            // HTAP/OLAP transactions always use separate commit.
+            return false;
+        }
+
         if (TxCtx->HasUncommittedChangesRead || AppData()->FeatureFlags.GetEnableForceImmediateEffectsExecution()) {
             YQL_ENSURE(TxCtx->EnableImmediateEffects);
 

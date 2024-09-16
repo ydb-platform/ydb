@@ -268,8 +268,7 @@ public:
     }
 
     bool ShouldExecuteDeferredEffects() const {
-        if (HasUncommittedChangesRead) {
-            YQL_ENSURE(EnableImmediateEffects);
+        if (HasUncommittedChangesRead || HasOlapTable) {
             return !DeferredEffects.Empty();
         }
 
@@ -298,8 +297,7 @@ public:
     }
 
     bool CanDeferEffects() const {
-        if (HasUncommittedChangesRead || AppData()->FeatureFlags.GetEnableForceImmediateEffectsExecution()) {
-            YQL_ENSURE(EnableImmediateEffects);
+        if (HasUncommittedChangesRead || AppData()->FeatureFlags.GetEnableForceImmediateEffectsExecution() || HasOlapTable) {
             return false;
         }
 

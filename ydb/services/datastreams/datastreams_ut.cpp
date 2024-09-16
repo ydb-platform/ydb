@@ -2896,6 +2896,21 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             UNIT_ASSERT_VALUES_EQUAL(d.partitioning_settings().auto_partitioning_settings().partition_write_speed().up_utilization_percent(), 93);
             UNIT_ASSERT_VALUES_EQUAL(d.partitioning_settings().auto_partitioning_settings().partition_write_speed().down_utilization_percent(), 17);
         }
+
+        {
+            auto result = testServer.DataStreamsClient->UpdateStream(streamName2,
+                 NYDS_V1::TUpdateStreamSettings()
+                    .BeginConfigurePartitioningSettings()
+                        .MaxActivePartitions(0)
+                        .BeginConfigureAutoPartitioningSettings()
+                            .Strategy(NYdb::NDataStreams::V1::EAutoPartitioningStrategy::Disabled)
+                        .EndConfigureAutoPartitioningSettings()
+                    .EndConfigurePartitioningSettings()
+                ).ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        }
     }
 
 }

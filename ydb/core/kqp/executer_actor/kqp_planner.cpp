@@ -60,7 +60,6 @@ bool TKqpPlanner::UseMockEmptyPlanner = false;
 // Task can allocate extra memory during execution.
 // So, we estimate total memory amount required for task as apriori task size multiplied by this constant.
 constexpr ui32 MEMORY_ESTIMATION_OVERFLOW = 2;
-constexpr ui32 MAX_NON_PARALLEL_TASKS_EXECUTION_LIMIT = 8;
 
 TKqpPlanner::TKqpPlanner(TKqpPlanner::TArgs&& args)
     : TxId(args.TxId)
@@ -256,9 +255,24 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
 
     auto localResources = ResourceManager_->GetLocalResources();
     Y_UNUSED(MEMORY_ESTIMATION_OVERFLOW);
+
+    auto placingOptions = ResourceManager_->GetPlacingOptions();
+
+    ui64 nonParallelLimit = placingOptions.MaxNonParallelTasksExecutionLimit;
+    if (MayRunTasksLocally) {
+        // not applied to column shards and external sources
+        nonParallelLimit = placingOptions.MaxNonParallelDataQueryTasksLimit;
+    }
+
+    bool singleNodeExecutionMakeSence = (
+        ResourceEstimations.size() <= nonParallelLimit ||
+        // all readers are located on the one node.
+        TasksPerNode.size() == 1
+    );
+
     if (LocalRunMemoryEst * MEMORY_ESTIMATION_OVERFLOW <= localResources.Memory[NRm::EKqpMemoryPool::ScanQuery] &&
         ResourceEstimations.size() <= localResources.ExecutionUnits &&
-        ResourceEstimations.size() <= MAX_NON_PARALLEL_TASKS_EXECUTION_LIMIT)
+        singleNodeExecutionMakeSence)
     {
         ui64 selfNodeId = ExecuterId.NodeId();
         for(ui64 taskId: ComputeTasks) {
@@ -293,21 +307,23 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
         return std::make_unique<IEventHandle>(ExecuterId, ExecuterId, ev.Release());
     }
 
-    auto planner = (UseMockEmptyPlanner ? CreateKqpMockEmptyPlanner() : CreateKqpGreedyPlanner());  // KqpMockEmptyPlanner is a mock planner for tests
+    std::vector<ui64> deepestTasks;
+    ui64 maxLevel = 0;
+    for(auto& task: TasksGraph.GetTasks()) {
+        // const auto& task = TasksGraph.GetTask(taskId);
+        const auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
+        const NKqpProto::TKqpPhyStage& stage = stageInfo.Meta.GetStage(stageInfo.Id);
+        const ui64 stageLevel = stage.GetProgram().GetSettings().GetStageLevel();
 
-    auto ctx = TlsActivationContext->AsActorContext();
-    if (ctx.LoggerSettings() && ctx.LoggerSettings()->Satisfies(NActors::NLog::PRI_DEBUG, NKikimrServices::KQP_EXECUTER)) {
-        planner->SetLogFunc([TxId = TxId, &UserRequestContext = UserRequestContext](TStringBuf msg) { LOG_D(msg); });
+        if (stageLevel > maxLevel) {
+            maxLevel = stageLevel;
+            deepestTasks.clear();
+        }
+
+        if (stageLevel == maxLevel) {
+            deepestTasks.push_back(task.Id);
+        }
     }
-
-    THashMap<ui64, size_t> nodeIdtoIdx;
-    for (size_t idx = 0; idx < ResourcesSnapshot.size(); ++idx) {
-        nodeIdtoIdx[ResourcesSnapshot[idx].nodeid()] = idx;
-    }
-
-    LogMemoryStatistics([TxId = TxId, &UserRequestContext = UserRequestContext](TStringBuf msg) { LOG_D(msg); });
-
-    auto plan = planner->Plan(ResourcesSnapshot, ResourceEstimations);
 
     THashMap<ui64, ui64> alreadyAssigned;
     for(auto& [nodeId, tasks] : TasksPerNode) {
@@ -316,24 +332,75 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
         }
     }
 
-    if (!plan.empty()) {
-        for (auto& group : plan) {
-            for(ui64 taskId: group.TaskIds) {
-                auto [it, success] = alreadyAssigned.emplace(taskId, group.NodeId);
-                if (success) {
-                    TasksPerNode[group.NodeId].push_back(taskId);
-                }
+    if (deepestTasks.size() <= placingOptions.MaxNonParallelTopStageExecutionLimit) {
+        // looks like the merge / union all connection
+        for(ui64 taskId: deepestTasks) {
+            auto [it, success] = alreadyAssigned.emplace(taskId, ExecuterId.NodeId());
+            if (success) {
+                TasksPerNode[ExecuterId.NodeId()].push_back(taskId);
             }
         }
+    }
 
-        return nullptr;
-    }  else {
+    auto planner = (UseMockEmptyPlanner ? CreateKqpMockEmptyPlanner() : CreateKqpGreedyPlanner());  // KqpMockEmptyPlanner is a mock planner for tests
+
+    auto ctx = TlsActivationContext->AsActorContext();
+    if (ctx.LoggerSettings() && ctx.LoggerSettings()->Satisfies(NActors::NLog::PRI_DEBUG, NKikimrServices::KQP_EXECUTER)) {
+        planner->SetLogFunc([TxId = TxId, &UserRequestContext = UserRequestContext](TStringBuf msg) { LOG_D(msg); });
+    }
+
+    LogMemoryStatistics([TxId = TxId, &UserRequestContext = UserRequestContext](TStringBuf msg) { LOG_D(msg); });
+
+    ui64 selfNodeId = ExecuterId.NodeId();
+    TString selfNodeDC;
+
+    TVector<const NKikimrKqp::TKqpNodeResources*> allNodes;
+    TVector<const NKikimrKqp::TKqpNodeResources*> executerDcNodes;
+    allNodes.reserve(ResourcesSnapshot.size());
+
+    for(auto& snapNode: ResourcesSnapshot) {
+        const TString& dc = snapNode.GetKqpProxyNodeResources().GetDataCenterId();
+        if (snapNode.GetNodeId() == selfNodeId) {
+            selfNodeDC = dc;
+            break;
+        }
+    }
+
+    for(auto& snapNode: ResourcesSnapshot) {
+        allNodes.push_back(&snapNode);
+        if (selfNodeDC == snapNode.GetKqpProxyNodeResources().GetDataCenterId()) {
+            executerDcNodes.push_back(&snapNode);
+        }
+    }
+
+    TVector<IKqpPlannerStrategy::TResult> plan;
+
+    if (!executerDcNodes.empty() && placingOptions.PreferLocalDatacenterExecution) {
+        plan = planner->Plan(executerDcNodes, ResourceEstimations);
+    }
+
+    if (plan.empty()) {
+        plan = planner->Plan(allNodes, ResourceEstimations);
+    }
+
+    if (plan.empty()) {
         LogMemoryStatistics([TxId = TxId, &UserRequestContext = UserRequestContext](TStringBuf msg) { LOG_E(msg); });
 
         auto ev = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
             TStringBuilder() << "Not enough resources to execute query. " << "TraceId: " << UserRequestContext->TraceId);
         return std::make_unique<IEventHandle>(ExecuterId, ExecuterId, ev.Release());
     }
+
+    for (auto& group : plan) {
+        for(ui64 taskId: group.TaskIds) {
+            auto [it, success] = alreadyAssigned.emplace(taskId, group.NodeId);
+            if (success) {
+                TasksPerNode[group.NodeId].push_back(taskId);
+            }
+        }
+    }
+
+    return nullptr;
 }
 
 const IKqpGateway::TKqpSnapshot& TKqpPlanner::GetSnapshot() const {

@@ -118,8 +118,8 @@ message TFeatureFlags {
     optional bool SuppressCompatibilityCheck = 103 [default = false];
     optional bool EnableUniqConstraint = 104 [default = false];
     optional bool EnableChangefeedDebeziumJsonFormat = 105 [default = false];
-    optional bool EnableStatistics = 106 [default = false];
-    optional bool EnableUuidAsPrimaryKey = 107 [default = false];
+    optional bool EnableStatistics = 106 [default = true];
+    optional bool EnableUuidAsPrimaryKey = 107 [default = true];
     optional bool EnableTablePgTypes = 108 [default = false];
     optional bool EnableLocalDBBtreeIndex = 109 [default = false];
     optional bool EnablePDiskHighHDDInFlight = 110 [default = false];
@@ -129,7 +129,7 @@ message TFeatureFlags {
     optional bool EnableAccessServiceBulkAuthorization = 114 [default = false];
     optional bool EnableAddColumsWithDefaults = 115 [ default = false];
     optional bool EnableReplaceIfExistsForExternalEntities = 116 [ default = false];
-    optional bool EnableCMSRequestPriorities = 117 [default = false];
+    optional bool EnableCMSRequestPriorities = 117 [default = true];
     optional bool EnableKeyvalueLogBatching = 118 [default = false];
     optional bool EnableLocalDBFlatIndex = 119 [default = true];
     optional bool ExtendedVDiskCounters = 120 [default = true];
@@ -146,4 +146,7 @@ message TFeatureFlags {
     optional bool EnableSingleCompositeActionGroup = 131 [default = false];
     optional bool EnableResourcePoolsOnServerless = 132 [default = false];
     optional bool EnableChangefeedsOnIndexTables = 134 [default = false];
+    optional bool EnableResourcePoolsCounters = 135 [default = false];
+    optional bool EnableOptionalColumnsInColumnShard = 136 [default = false];
+    optional bool EnablePgSyntax = 139 [default = false];
 }

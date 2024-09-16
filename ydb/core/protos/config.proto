@@ -24,6 +24,7 @@ import "ydb/core/protos/local.proto";
 import "ydb/core/protos/netclassifier.proto";
 import "ydb/core/protos/node_broker.proto";
 import "ydb/core/protos/pqconfig.proto";
+import "ydb/core/protos/replication.proto";
 import "ydb/core/protos/resource_broker.proto";
 import "ydb/core/protos/shared_cache.proto";
 import "ydb/core/protos/stream.proto";
@@ -117,6 +118,7 @@ message TActorSystemConfig {
     optional ENodeType NodeType = 14 [default = COMPUTE];
     optional uint32 ForceIOPoolThreads = 17;
     optional bool UseSharedThreads = 18;
+    optional bool UseRingQueue = 19;
 
     optional bool MonitorStuckActors = 15;
     optional EActorSystemProfile ActorSystemProfile = 16;
@@ -700,6 +702,10 @@ message THttpProxyConfig {
     optional string AccessServiceEndpoint = 9;
 
     optional string JwtFile = 10;
+
+    optional bool YandexCloudMode = 11 [default = false];
+    optional bool DataStreamsEnabled = 12 [default = true];
+    optional bool YmqEnabled = 13 [default = false];
 }
 
 message TS3ProxyResolverConfig {
@@ -1014,6 +1020,7 @@ message TQueryServiceConfig {
     optional NYql.TGenericGatewayConfig Generic = 11;
     optional TFinalizeScriptServiceConfig FinalizeScriptServiceConfig = 12;
     optional uint64 ProgressStatsPeriodMs = 14 [default = 0]; // 0 = disabled
+    optional bool EnableMatchRecognize = 20 [default = false];
 }
 
 // Config describes immediate controls and allows
@@ -1287,6 +1294,11 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1000000,
             DefaultValue: 1000 }];
+        optional uint64 DefaultHugeGarbagePerMille = 12 [(ControlOptions) = {
+            Description: "Default threshold of huge chunk garbage per mille which triggers huge chunk defragmentation",
+            MinValue: 1,
+            MaxValue: 1000,
+            DefaultValue: 300 }];
     }
 
     message TTabletControls {
@@ -1471,6 +1483,7 @@ message THiveConfig {
     optional bool EnableDestroyOperations = 74 [default = false];
     optional double NodeUsageRangeToKick = 75 [default = 0.2];
     optional bool LessSystemTabletsMoves = 77 [default = true];
+    optional uint64 MaxPingsInFlight = 78 [default = 1000];
 }
 
 message TBlobCacheConfig {
@@ -1896,6 +1909,7 @@ message TAppConfig {
     optional TBlobCacheConfig BlobCacheConfig = 78;
     optional TLimiterConfig CompDiskLimiterConfig = 79;
     optional TMetadataCacheConfig MetadataCacheConfig = 80;
+    optional NKikimrReplication.TReplicationDefaults ReplicationConfig = 83;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

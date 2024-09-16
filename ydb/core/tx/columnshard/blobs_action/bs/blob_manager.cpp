@@ -140,8 +140,13 @@ bool TBlobManager::LoadState(IBlobManagerDb& db, const TTabletId selfTabletId) {
     if (!db.LoadLastGcBarrier(LastCollectedGenStep)) {
         return false;
     }
-    if (!db.LoadGCBarrierPreparation(GCBarrierPreparation)) {
+    //https://github.com/ydb-platform/ydb/issues/7468
+    TGenStep storedGCBarrierPreparation;
+    if (!db.LoadGCBarrierPreparation(storedGCBarrierPreparation)) {
         return false;
+    }
+    if (storedGCBarrierPreparation < LastCollectedGenStep) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)("mem_genstep", GCBarrierPreparation)("last_genstep", LastCollectedGenStep)("db_genstep", storedGCBarrierPreparation);
     }
     AFL_VERIFY(!GCBarrierPreparation.Generation() || LastCollectedGenStep <= GCBarrierPreparation)("prepared", GCBarrierPreparation)("last", LastCollectedGenStep);
 

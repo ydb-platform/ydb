@@ -270,9 +270,6 @@ TStatus AnnotateStage(const TExprNode::TPtr& stage, TExprContext& ctx) {
         }
 
         if (!sinks.empty()) {
-            for (auto sink : sinks) {
-                sink->SetTypeAnn(resultType);
-            }
             stageResultTypes.assign(programResultTypesTuple.begin(), programResultTypesTuple.end());
         } else {
             for (auto transform : transforms) {

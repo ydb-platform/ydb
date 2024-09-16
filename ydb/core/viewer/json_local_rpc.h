@@ -209,7 +209,7 @@ public:
             if (!Result->Status->IsSuccess()) {
                 NJson::TJsonValue json;
                 TString message;
-                MakeErrorReply(json, message, Result->Status.value());
+                MakeJsonErrorReply(json, message, Result->Status.value());
                 TStringStream stream;
                 NJson::WriteJson(&stream, &json);
                 if (Result->Status->GetStatus() == NYdb::EStatus::UNAUTHORIZED) {

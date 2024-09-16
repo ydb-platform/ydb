@@ -2,13 +2,69 @@
 
 #include <queue>
 
+#include <ydb/core/kqp/workload_service/actors/actors.h>
 #include <ydb/core/kqp/workload_service/common/cpu_quota_manager.h>
 #include <ydb/core/kqp/workload_service/common/events.h>
+#include <ydb/core/kqp/workload_service/common/helpers.h>
 
 
 namespace NKikimr::NKqp::NWorkload {
 
 constexpr TDuration IDLE_DURATION = TDuration::Seconds(60);
+
+
+struct TDatabaseState {
+    NActors::TActorContext ActorContext;
+    bool& EnabledResourcePoolsOnServerless;
+
+    std::vector<TEvPlaceRequestIntoPool::TPtr> PendingRequersts = {};
+    bool HasDefaultPool = false;
+    bool Serverless = false;
+
+    TInstant LastUpdateTime = TInstant::Zero();
+
+    void DoPlaceRequest(TEvPlaceRequestIntoPool::TPtr ev) {
+        TString database = ev->Get()->Database;
+        PendingRequersts.emplace_back(std::move(ev));
+
+        if (!EnabledResourcePoolsOnServerless && (TInstant::Now() - LastUpdateTime) > IDLE_DURATION) {
+            ActorContext.Register(CreateDatabaseFetcherActor(ActorContext.SelfID, database));
+        } else {
+            StartPendingRequests();
+        }
+    }
+
+    void UpdateDatabaseInfo(const TEvPrivate::TEvFetchDatabaseResponse::TPtr& ev) {
+        if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
+            ReplyContinueError(ev->Get()->Status, GroupIssues(ev->Get()->Issues, "Failed to fetch database info"));
+            return;
+        }
+
+        LastUpdateTime = TInstant::Now();
+        Serverless = ev->Get()->Serverless;
+        StartPendingRequests();
+    }
+
+private:
+    void StartPendingRequests() {
+        if (!EnabledResourcePoolsOnServerless && Serverless) {
+            ReplyContinueError(Ydb::StatusIds::UNSUPPORTED, {NYql::TIssue("Resource pools are disabled for serverless domains. Please contact your system administrator to enable it")});
+            return;
+        }
+
+        for (auto& ev : PendingRequersts) {
+            ActorContext.Register(CreatePoolResolverActor(std::move(ev), HasDefaultPool));
+        }
+        PendingRequersts.clear();
+    }
+
+    void ReplyContinueError(Ydb::StatusIds::StatusCode status, NYql::TIssues issues) {
+        for (const auto& ev : PendingRequersts) {
+            ActorContext.Send(ev->Sender, new TEvContinueRequest(status, {}, {}, issues));
+        }
+        PendingRequersts.clear();
+    }
+};
 
 struct TPoolState {
     NActors::TActorId PoolHandler;

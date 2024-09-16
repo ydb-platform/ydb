@@ -67,8 +67,9 @@ public:
         , StartedAt(startedAt)
     {
         RequestEv.reset(ev->Release().Release());
-
-        if (AppData()->FeatureFlags.GetEnableImplicitQueryParameterTypes() && !RequestEv->GetYdbParameters().empty()) {
+        bool enableImplicitQueryParameterTypes = tableServiceConfig.GetEnableImplicitQueryParameterTypes() ||
+            AppData()->FeatureFlags.GetEnableImplicitQueryParameterTypes();
+        if (enableImplicitQueryParameterTypes && !RequestEv->GetYdbParameters().empty()) {
             QueryParameterTypes = std::make_shared<std::map<TString, Ydb::Type>>();
             for (const auto& [name, typedValue] : RequestEv->GetYdbParameters()) {
                 QueryParameterTypes->insert({name, typedValue.Gettype()});
@@ -89,6 +90,7 @@ public:
             UserRequestContext = MakeIntrusive<TUserRequestContext>(RequestEv->GetTraceId(), Database, sessionId);
         }
         UserRequestContext->PoolId = RequestEv->GetPoolId();
+        UserRequestContext->PoolConfig = RequestEv->GetPoolConfig();
     }
 
     // the monotonously growing counter, the ordinal number of the query,
@@ -120,6 +122,7 @@ public:
     bool IsDocumentApiRestricted_ = false;
 
     TInstant StartTime;
+    TInstant ContinueTime;
     NYql::TKikimrQueryDeadlines QueryDeadlines;
     TKqpQueryStats QueryStats;
     bool KeepSession = false;
@@ -314,10 +317,6 @@ public:
 
     bool NeedPersistentSnapshot() const {
         auto type = GetType();
-        if (type == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY ||
-            type == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY) {
-            return ::NKikimr::NKqp::HasOlapTableReadInTx(PreparedQuery->GetPhysicalQuery());
-        }
         return (
             type == NKikimrKqp::QUERY_TYPE_SQL_SCAN ||
             type == NKikimrKqp::QUERY_TYPE_AST_SCAN
@@ -604,6 +603,8 @@ public:
     std::unique_ptr<NSchemeCache::TSchemeCacheNavigate> BuildSchemeCacheNavigate();
     bool IsAccessDenied(const NSchemeCache::TSchemeCacheNavigate& response, TString& message);
     bool HasErrors(const NSchemeCache::TSchemeCacheNavigate& response, TString& message);
+
+    bool HasUserToken() const;
 };
 
 

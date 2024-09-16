@@ -260,6 +260,9 @@ Y_UNIT_TEST_SUITE(KqpWorkloadService) {
         TSampleQueries::TSelect42::CheckResult(ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, TQueryRunnerSettings().PoolId(NResourcePool::DEFAULT_POOL_ID)));
 
         ydb->WaitPoolHandlersCount(0, 2, TDuration::Seconds(95));
+
+        // Check pool creation after cleanup
+        TSampleQueries::TSelect42::CheckResult(ydb->ExecuteQuery(TSampleQueries::TSelect42::Query));
     }
 }
 

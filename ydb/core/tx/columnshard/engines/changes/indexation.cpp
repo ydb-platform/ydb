@@ -130,17 +130,7 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
     Y_ABORT_UNLESS(!DataToIndex.empty());
     Y_ABORT_UNLESS(AppendedPortions.empty());
 
-    auto maxSnapshot = TSnapshot::Zero();
-    for (auto& inserted : DataToIndex) {
-        TSnapshot insertSnap = inserted.GetSnapshot();
-        Y_ABORT_UNLESS(insertSnap.Valid());
-        if (insertSnap > maxSnapshot) {
-            maxSnapshot = insertSnap;
-        }
-    }
-    Y_ABORT_UNLESS(maxSnapshot.Valid());
-
-    auto resultSchema = context.SchemaVersions.GetSchema(maxSnapshot);
+    auto resultSchema = context.SchemaVersions.GetLastSchema();
     Y_ABORT_UNLESS(resultSchema->GetIndexInfo().IsSorted());
 
     TPathesData pathBatches;
@@ -209,6 +199,7 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
         merger.SetOptimizationWritingPackMode(true);
         auto localAppended = merger.Execute(stats, itGranule->second, filteredSnapshot, pathId, shardingVersion);
         for (auto&& i : localAppended) {
+            i.GetPortionConstructor().MutableMeta().UpdateRecordsMeta(NPortion::EProduced::INSERTED);
             AppendedPortions.emplace_back(std::move(i));
         }
     }

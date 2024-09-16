@@ -653,29 +653,6 @@ private:
     ui16 ColCount;
 };
 
-class TCellsBatcher {
-public:
-    explicit TCellsBatcher(ui16 colCount, ui64 maxBytesPerBatch);
-
-    bool IsEmpty() const;
-
-    struct TBatch {
-        ui64 Memory = 0;
-        ui64 MemorySerialized = 0;
-        TVector<TCell> Data;
-    };
-
-    TBatch Flush(bool force);
-
-    ui64 AddRow(TArrayRef<TCell> cells);
-
-private:
-    std::deque<TBatch> Batches;
-
-    ui16 ColCount;
-    ui64 MaxBytesPerBatch;
-};
-
 class TCellsStorage
 {
 public:
@@ -759,5 +736,8 @@ private:
 void DbgPrintValue(TString&, const TCell&, NScheme::TTypeInfo typeInfo);
 TString DbgPrintCell(const TCell& r, NScheme::TTypeInfo typeInfo, const NScheme::TTypeRegistry& typeRegistry);
 TString DbgPrintTuple(const TDbTupleRef& row, const NScheme::TTypeRegistry& typeRegistry);
+
+size_t GetCellMatrixHeaderSize();
+size_t GetCellHeaderSize();
 
 }

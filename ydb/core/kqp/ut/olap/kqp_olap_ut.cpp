@@ -2624,6 +2624,78 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
     }
 
+    Y_UNIT_TEST(NormalizeAbsentColumn) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        TLocalHelper testHelper(kikimr);
+
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetPeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->SetLagForCompactionBeforeTierings(TDuration::Seconds(1));
+        csController->SetOverrideReduceMemoryIntervalLimit(1LLU << 30);
+        csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
+
+        testHelper.CreateTestOlapTable();
+        auto tableClient = kikimr.GetTableClient();
+
+        Tests::NCommon::TLoggerInit(kikimr).SetComponents({ NKikimrServices::TX_COLUMNSHARD, NKikimrServices::TX_COLUMNSHARD_SCAN }, "CS").SetPriority(NActors::NLog::PRI_DEBUG).Initialize();
+
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto alterQuery = TStringBuilder() << "ALTER TABLESTORE `/Root/olapStore` ADD COLUMN new_column1 Uint64;";
+            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1000000, 300000000, 1000);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1100000, 300100000, 1000);
+
+        {
+            auto alterQuery = TStringBuilder() << "ALTER TABLESTORE `/Root/olapStore` ADD COLUMN new_column2 Uint64;";
+            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+
+        csController->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
+        csController->WaitIndexation(TDuration::Seconds(5));
+
+    }
+
+    Y_UNIT_TEST(MultiInsertWithSinks) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TLocalHelper(kikimr).CreateTestOlapTable();
+
+        auto db = kikimr.GetQueryClient();
+
+        auto result = db.ExecuteQuery(R"(
+            INSERT INTO `/Root/olapStore/olapTable` (timestamp, uid, resource_id) VALUES (Timestamp('1970-01-01T00:00:00Z'), 'a', '0');
+            INSERT INTO `/Root/olapStore/olapTable` (timestamp, uid, resource_id) VALUES (Timestamp('1970-01-01T00:00:01Z'), 'b', 't');
+            INSERT INTO `/Root/olapStore/olapTable` (timestamp, uid, resource_id) VALUES (Timestamp('1970-01-01T00:00:02Z'), 'c', 'test');
+        )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        {
+            auto it = db.StreamExecuteQuery(R"(
+                --!syntax_v1
+
+                SELECT
+                    *
+                FROM `/Root/olapStore/olapTable` ORDER BY uid
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TString result = StreamResultToYson(it);
+            CompareYson(result, R"([[#;#;["0"];0u;"a"];[#;#;["t"];1000000u;"b"];[#;#;["test"];2000000u;"c"]])");
+        }
+    }
+
 }
 
 }

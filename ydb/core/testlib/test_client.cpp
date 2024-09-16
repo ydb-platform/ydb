@@ -13,6 +13,7 @@
 #include <ydb/services/fq/private_grpc.h>
 #include <ydb/services/cms/grpc_service.h>
 #include <ydb/services/datastreams/grpc_service.h>
+#include <ydb/services/ymq/grpc_service.h>
 #include <ydb/services/kesus/grpc_service.h>
 #include <ydb/core/grpc_services/grpc_mon.h>
 #include <ydb/services/ydb/ydb_clickhouse_internal.h>
@@ -250,6 +251,7 @@ namespace Tests {
             appData.PersQueueMirrorReaderFactory = Settings->PersQueueMirrorReaderFactory.get();
             appData.HiveConfig.MergeFrom(Settings->AppConfig->GetHiveConfig());
             appData.GraphConfig.MergeFrom(Settings->AppConfig->GetGraphConfig());
+            appData.SqsConfig.MergeFrom(Settings->AppConfig->GetSqsConfig());
 
             appData.DynamicNameserviceConfig = new TDynamicNameserviceConfig;
             auto dnConfig = appData.DynamicNameserviceConfig;
@@ -1133,7 +1135,7 @@ namespace Tests {
                 "TestTenant",
                 nullptr, // MakeIntrusive<NPq::NConfigurationManager::TConnections>(),
                 YqSharedResources,
-                NKikimr::NFolderService::CreateMockFolderServiceAdapterActor,
+                [](auto& config) { return NKikimr::NFolderService::CreateMockFolderServiceAdapterActor(config, "");},
                 /*IcPort = */0,
                 {}
                 );

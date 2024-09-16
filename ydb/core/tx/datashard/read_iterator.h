@@ -205,6 +205,7 @@ public:
     TActorId SessionId;
     TMonotonic StartTs;
     bool IsFinished = false;
+    bool ReadContinuePending = false;
 
     // note that we send SeqNo's starting from 1
     ui64 SeqNo = 0;

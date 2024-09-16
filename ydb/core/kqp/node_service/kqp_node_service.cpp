@@ -329,6 +329,8 @@ private:
             FORCE_VALUE(EnableInstantMkqlMemoryAlloc);
             FORCE_VALUE(MaxTotalChannelBuffersSize);
             FORCE_VALUE(MinChannelBufferSize);
+            FORCE_VALUE(MinMemAllocSize);
+            FORCE_VALUE(MinMemFreeSize);
 #undef FORCE_VALUE
 
             LOG_I("Updated table service config: " << Config.DebugString());

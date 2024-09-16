@@ -142,6 +142,9 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(
         shardingActualVersion = shardingActual->GetSnapshotVersion();
     }
     AppendedPortions = merger.Execute(stats, CheckPoints, resultFiltered, GranuleMeta->GetPathId(), shardingActualVersion);
+    for (auto&& p : AppendedPortions) {
+        p.GetPortionConstructor().MutableMeta().UpdateRecordsMeta(NPortion::EProduced::SPLIT_COMPACTED);
+    }
 }
 
 TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstructionContext& context) noexcept {
@@ -213,7 +216,7 @@ NColumnShard::ECumulativeCounters TGeneralCompactColumnEngineChanges::GetCounter
 
 void TGeneralCompactColumnEngineChanges::AddCheckPoint(
     const NArrow::NMerger::TSortableBatchPosition& position, const bool include) {
-    CheckPoints.AddPosition(position, include);
+    CheckPoints.InsertPosition(position, include);
 }
 
 std::shared_ptr<TGeneralCompactColumnEngineChanges::IMemoryPredictor> TGeneralCompactColumnEngineChanges::BuildMemoryPredictor() {

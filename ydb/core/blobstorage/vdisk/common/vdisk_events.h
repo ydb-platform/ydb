@@ -1585,7 +1585,7 @@ namespace NKikimr {
             if (deadline != TInstant::Max()) {
                 this->Record.MutableMsgQoS()->SetDeadlineSeconds((ui32)deadline.Seconds());
             }
-            this->Record.MutableMsgQoS()->SetExtQueueId(HandleClassToQueueId(NKikimrBlobStorage::AsyncBlob));
+            this->Record.MutableMsgQoS()->SetExtQueueId(NKikimrBlobStorage::PutAsyncBlob);
         }
 
         bool GetIgnoreBlock() const {
@@ -1965,6 +1965,25 @@ namespace NKikimr {
             }
             Record.MutableMsgQoS()->SetExtQueueId(NKikimrBlobStorage::EVDiskQueueId::GetFastRead);
         }
+
+        TString ToString() const {
+            return ToString(this->Record);
+        }
+
+        static TString ToString(const NKikimrBlobStorage::TEvVPatchStart &record) {
+            TStringStream str;
+            TLogoBlobID originalId = LogoBlobIDFromLogoBlobID(record.GetOriginalBlobId());
+            TLogoBlobID patchedId = LogoBlobIDFromLogoBlobID(record.GetPatchedBlobId());
+            str << "{TEvVPatchStart";
+            str << " OriginalBlobId# " << originalId.ToString();
+            str << " PatchedBlobId# " << patchedId.ToString();
+            if (record.HasMsgQoS()) {
+                str << " ";
+                TEvBlobStorage::TEvVPut::OutMsgQos(record.GetMsgQoS(), str);
+            }
+            str << "}";
+            return str.Str();
+        }
     };
 
     struct TEvBlobStorage::TEvVPatchFoundParts
@@ -2008,6 +2027,25 @@ namespace NKikimr {
 
         void SetStatus(NKikimrProto::EReplyStatus status) {
             Record.SetStatus(status);
+        }
+
+        TString ToString() const {
+            return ToString(this->Record);
+        }
+
+        static TString ToString(const NKikimrBlobStorage::TEvVPatchFoundParts &record) {
+            TStringStream str;
+            TLogoBlobID originalId = LogoBlobIDFromLogoBlobID(record.GetOriginalBlobId());
+            TLogoBlobID patchedId = LogoBlobIDFromLogoBlobID(record.GetPatchedBlobId());
+            str << "{TEvVPatchFoundParts";
+            str << " OriginalBlobId# " << originalId.ToString();
+            str << " PatchedBlobId# " << patchedId.ToString();
+            if (record.HasMsgQoS()) {
+                str << " ";
+                TEvBlobStorage::TEvVPut::OutMsgQos(record.GetMsgQoS(), str);
+            }
+            str << "}";
+            return str.Str();
         }
 
         void MakeError(NKikimrProto::EReplyStatus status, const TString& errorReason,
@@ -2099,6 +2137,25 @@ namespace NKikimr {
             }
             return result;
         }
+
+        TString ToString() const {
+            return ToString(this->Record);
+        }
+
+        static TString ToString(const NKikimrBlobStorage::TEvVPatchDiff &record) {
+            TStringStream str;
+            TLogoBlobID originalId = LogoBlobIDFromLogoBlobID(record.GetOriginalPartBlobId());
+            TLogoBlobID patchedId = LogoBlobIDFromLogoBlobID(record.GetPatchedPartBlobId());
+            str << "{TEvVPatchDiff";
+            str << " OriginalBlobId# " << originalId.ToString();
+            str << " PatchedBlobId# " << patchedId.ToString();
+            if (record.HasMsgQoS()) {
+                str << " ";
+                TEvBlobStorage::TEvVPut::OutMsgQos(record.GetMsgQoS(), str);
+            }
+            str << "}";
+            return str.Str();
+        }
     };
 
 
@@ -2143,6 +2200,25 @@ namespace NKikimr {
                 result += diff.GetBuffer().size();
             }
             return result;
+        }
+
+        TString ToString() const {
+            return ToString(this->Record);
+        }
+
+        static TString ToString(const NKikimrBlobStorage::TEvVPatchXorDiff &record) {
+            TStringStream str;
+            TLogoBlobID originalId = LogoBlobIDFromLogoBlobID(record.GetOriginalPartBlobId());
+            TLogoBlobID patchedId = LogoBlobIDFromLogoBlobID(record.GetPatchedPartBlobId());
+            str << "{TEvVPatchXorDiff";
+            str << " OriginalBlobId# " << originalId.ToString();
+            str << " PatchedBlobId# " << patchedId.ToString();
+            if (record.HasMsgQoS()) {
+                str << " ";
+                TEvBlobStorage::TEvVPut::OutMsgQos(record.GetMsgQoS(), str);
+            }
+            str << "}";
+            return str.Str();
         }
     };
 

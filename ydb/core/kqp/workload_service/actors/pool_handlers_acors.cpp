@@ -54,6 +54,12 @@ class TPoolHandlerActorBase : public TActor<TDerived> {
             UpdateConfigCounters(poolConfig);
         }
 
+        void CollectRequestLatency(TInstant continueTime) {
+            if (continueTime) {
+                RequestsLatencyMs->Collect((TInstant::Now() - continueTime).MilliSeconds());
+            }
+        }
+
         void UpdateConfigCounters(const NResourcePool::TPoolSettings& poolConfig) {
             InFlightLimit->Set(std::max(poolConfig.ConcurrentQueryLimit, 0));
             QueueSizeLimit->Set(std::max(poolConfig.QueueSize, 0));
@@ -106,6 +112,7 @@ protected:
         const TActorId WorkerActorId;
         const TString SessionId;
         const TInstant StartTime = TInstant::Now();
+        TInstant ContinueTime;
 
         EState State = EState::Pending;
         bool Started = false;  // after TEvContinueRequest success
@@ -141,7 +148,7 @@ public:
 
         // Schemeboard events
         hFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
-        IgnoreFunc(TEvTxProxySchemeCache::TEvWatchNotifyDeleted);
+        hFunc(TEvTxProxySchemeCache::TEvWatchNotifyDeleted, Handle);
         IgnoreFunc(TEvTxProxySchemeCache::TEvWatchNotifyUnavailable);
     )
 
@@ -149,6 +156,8 @@ public:
         if (WatchPathId) {
             this->Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvWatchRemove(0));
         }
+
+        SendPoolInfoUpdate(std::nullopt, std::nullopt);
 
         Counters.OnCleanup();
 
@@ -254,6 +263,24 @@ private:
         NResourcePool::TPoolSettings poolConfig;
         ParsePoolSettings(result->GetPathDescription().GetResourcePoolDescription(), poolConfig);
         UpdatePoolConfig(poolConfig);
+
+        const auto& pathDescription = result->GetPathDescription().GetSelf();
+        NACLib::TSecurityObject object(pathDescription.GetOwner(), false);
+        if (object.MutableACL()->ParseFromString(pathDescription.GetEffectiveACL())) {
+            SendPoolInfoUpdate(poolConfig, object);
+        } else {
+            SendPoolInfoUpdate(poolConfig, std::nullopt);
+        }
+    }
+
+    void Handle(TEvTxProxySchemeCache::TEvWatchNotifyDeleted::TPtr& ev) {
+        if (ev->Get()->Key != WatchKey) {
+            // Skip old paths watch notifications
+            return;
+        }
+
+        LOG_D("Got delete notification");
+        SendPoolInfoUpdate(std::nullopt, std::nullopt);
     }
 
 public:
@@ -267,6 +294,7 @@ public:
         if (status == Ydb::StatusIds::SUCCESS) {
             LocalInFlight++;
             request->Started = true;
+            request->ContinueTime = TInstant::Now();
             Counters.LocalInFly->Inc();
             Counters.ContinueOk->Inc();
             Counters.DelayedTimeMs->Collect((TInstant::Now() - request->StartTime).MilliSeconds());
@@ -316,6 +344,10 @@ public:
         }
 
         RemoveRequest(request);
+    }
+
+    void SendPoolInfoUpdate(const std::optional<NResourcePool::TPoolSettings>& config, const std::optional<NACLib::TSecurityObject>& securityObject) const {
+        this->Send(MakeKqpProxyID(this->SelfId().NodeId()), new TEvUpdatePoolInfo(Database, PoolId, config, securityObject));
     }
 
 protected:
@@ -387,7 +419,7 @@ private:
 
         if (status == Ydb::StatusIds::SUCCESS) {
             Counters.CleanupOk->Inc();
-            Counters.RequestsLatencyMs->Collect((TInstant::Now() - request->StartTime).MilliSeconds());
+            Counters.CollectRequestLatency(request->ContinueTime);
             LOG_D("Reply cleanup success to " << request->WorkerActorId << ", session id: " << request->SessionId << ", local in flight: " << LocalInFlight);
         } else {
             Counters.CleanupError->Inc();
@@ -401,7 +433,7 @@ private:
         this->Send(MakeKqpProxyID(this->SelfId().NodeId()), ev.release());
 
         Counters.Cancelled->Inc();
-        Counters.RequestsLatencyMs->Collect((TInstant::Now() - request->StartTime).MilliSeconds());
+        Counters.CollectRequestLatency(request->ContinueTime);
         LOG_I("Cancel request for worker " << request->WorkerActorId << ", session id: " << request->SessionId << ", local in flight: " << LocalInFlight);
     }
 

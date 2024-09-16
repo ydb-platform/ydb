@@ -11,6 +11,7 @@
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/common/events/script_executions.h>
+#include <ydb/core/kqp/common/events/workload_service.h>
 #include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
 #include <ydb/core/kqp/common/kqp_timeouts.h>
 #include <ydb/core/kqp/compile_service/kqp_compile_service.h>
@@ -691,11 +692,8 @@ public:
             LocalSessions->AttachQueryText(sessionInfo, ev->Get()->GetQuery());
         }
 
-        if (!FeatureFlags.GetEnableResourcePools()) {
-            ev->Get()->SetPoolId("");
-        } else if (!ev->Get()->GetPoolId()) {
-            // TODO: do not use default pool if there is no limits
-            ev->Get()->SetPoolId(NResourcePool::DEFAULT_POOL_ID);
+        if (!TryFillPoolInfoFromCache(ev, requestId)) {
+            return;
         }
 
         TActorId targetId;
@@ -1348,6 +1346,7 @@ public:
             hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
             hFunc(TEvKqp::TEvListSessionsRequest, Handle);
             hFunc(TEvKqp::TEvListProxyNodesRequest, Handle);
+            hFunc(NWorkload::TEvUpdatePoolInfo, Handle);
         default:
             Y_ABORT("TKqpProxyService: unexpected event type: %" PRIx32 " event: %s",
                 ev->GetTypeRewrite(), ev->ToString().data());
@@ -1570,6 +1569,43 @@ private:
         }
     }
 
+    bool TryFillPoolInfoFromCache(TEvKqp::TEvQueryRequest::TPtr& ev, ui64 requestId) {
+        if (!FeatureFlags.GetEnableResourcePools()) {
+            ev->Get()->SetPoolId("");
+            return true;
+        }
+
+        if (!ev->Get()->GetPoolId()) {
+            ev->Get()->SetPoolId(NResourcePool::DEFAULT_POOL_ID);
+        }
+
+        const auto& poolId = ev->Get()->GetPoolId();
+        const auto& poolInfo = ResourcePoolsCache.GetPoolInfo(ev->Get()->GetDatabase(), poolId);
+        if (!poolInfo) {
+            return true;
+        }
+
+        const auto& securityObject = poolInfo->SecurityObject;
+        const auto& userToken = ev->Get()->GetUserToken();
+        if (securityObject && userToken && !userToken->GetSerializedToken().empty()) {
+            if (!securityObject->CheckAccess(NACLib::EAccessRights::DescribeSchema, *userToken)) {
+                ReplyProcessError(Ydb::StatusIds::NOT_FOUND, TStringBuilder() << "Resource pool " << poolId << " not found or you don't have access permissions", requestId);
+                return false;
+            }
+            if (!securityObject->CheckAccess(NACLib::EAccessRights::SelectRow, *userToken)) {
+                ReplyProcessError(Ydb::StatusIds::UNAUTHORIZED, TStringBuilder() << "You don't have access permissions for resource pool " << poolId, requestId);
+                return false;
+            }
+        }
+
+        const auto& poolConfig = poolInfo->Config;
+        if (!NWorkload::IsWorkloadServiceRequired(poolConfig)) {
+            ev->Get()->SetPoolConfig(poolConfig);
+        }
+
+        return true;
+    }
+
     void UpdateYqlLogLevels() {
         const auto& kqpYqlName = NKikimrServices::EServiceKikimr_Name(NKikimrServices::KQP_YQL);
         for (auto &entry : LogConfig.GetEntry()) {
@@ -1696,7 +1732,11 @@ private:
         KQP_PROXY_LOG_D("incoming list sessions request " << ev->Get()->Record.ShortUtf8DebugString());
 
         auto result = std::make_unique<TEvKqp::TEvListSessionsResponse>();
-        auto startIt = LocalSessions->GetOrderedLowerBound(ev->Get()->Record.GetSessionIdStart());
+
+        const auto& tenant = ev->Get()->Record.GetTenantName();
+        bool checkTenant = (AppData()->TenantName != tenant);
+
+        auto startIt = LocalSessions->GetOrderedLowerBound(tenant, ev->Get()->Record.GetSessionIdStart());
         auto endIt = LocalSessions->GetOrderedEnd();
         i32 freeSpace = ev->Get()->Record.GetFreeSpace();
 
@@ -1707,6 +1747,10 @@ private:
 
         while(startIt != endIt && freeSpace > 0) {
             auto* sessionInfo = startIt->second;
+            if (checkTenant && sessionInfo->Database != ev->Get()->Record.GetTenantName()) {
+                finished = true;
+                break;
+            }
 
             if (!until.empty()) {
                 if (sessionInfo->SessionId > until) {
@@ -1734,7 +1778,8 @@ private:
         if (finished) {
             result->Record.SetFinished(true);
         } else {
-            result->Record.SetContinuationToken(startIt->first);
+            Y_ABORT_UNLESS(startIt != endIt);
+            result->Record.SetContinuationToken(startIt->first.second);
             result->Record.SetFinished(false);
         }
 
@@ -1753,6 +1798,10 @@ private:
         }
 
         Send(ev->Sender, result.release(), 0, ev->Cookie);
+    }
+
+    void Handle(NWorkload::TEvUpdatePoolInfo::TPtr& ev) {
+        ResourcePoolsCache.UpdatePoolInfo(ev->Get()->Database, ev->Get()->PoolId, ev->Get()->Config, ev->Get()->SecurityObject);
     }
 
 private:
@@ -1816,6 +1865,8 @@ private:
     std::deque<TDelayedEvent> DelayedEventsQueue;
     bool IsLookupByRmScheduled = false;
     TActorId KqpTempTablesAgentActor;
+
+    TResourcePoolsCache ResourcePoolsCache;
 };
 
 } // namespace

@@ -6343,6 +6343,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                         "PartitionPerTablet: 10 "
                         "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}"
                         );
+        env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/PQGroup_1", true),
                            {NLs::CheckPartCount("PQGroup_1", 100, 10, 10, 100),
@@ -6865,7 +6866,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         AsyncForceDropUnsafe(runtime, ++txId, pVer.PathId.LocalPathId);
 
         TestModificationResult(runtime, txId-2, NKikimrScheme::StatusAccepted);
-        TestModificationResult(runtime, txId-1, NKikimrScheme::StatusAccepted);
+        TestModificationResults(runtime, txId-1, {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications});
         TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
 
         TActorId sender = runtime.AllocateEdgeActor();
@@ -10137,7 +10138,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                               }, 100);
             UNIT_ASSERT_VALUES_EQUAL(splitKey, "(Uint64 : 0, Utf8 : a, Uint32 : 1)");
         }
-        
+
         {
             TString splitKey =
                     schemaHelper.FindSplitKey({
@@ -11082,6 +11083,74 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         )");
         env.TestWaitNotification(runtime, txId);
         AssertReserve("/MyRoot/Topic2", 3 * 17);
+    }
+
+    Y_UNIT_TEST(TopicWithAutopartitioningReserveSize) {
+        TTestEnvOptions opts;
+        opts.EnableTopicSplitMerge(true);
+        opts.EnablePQConfigTransactionsAtSchemeShard(true);
+
+        TTestBasicRuntime runtime;
+
+        TTestEnv env(runtime, opts);
+        ui64 txId = 100;
+
+        const auto AssertReserve = [&] (TString path, ui64 expectedReservedStorage) {
+            TestDescribeResult(DescribePath(runtime, path),
+                               {NLs::Finished,
+                                NLs::TopicReservedStorage(expectedReservedStorage)});
+        };
+
+        // create with WriteSpeedInBytesPerSecond
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "Topic1"
+            TotalGroupCount: 1
+            PartitionPerTablet: 1
+            PQTabletConfig {
+                PartitionConfig {
+                    LifetimeSeconds: 13
+                    WriteSpeedInBytesPerSecond : 19
+                }
+                MeteringMode: METERING_MODE_RESERVED_CAPACITY
+                PartitionStrategy {
+                    MinPartitionCount: 1
+                    MaxPartitionCount: 7
+                    PartitionStrategyType: CAN_SPLIT_AND_MERGE
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        AssertReserve("/MyRoot/Topic1", 1 * 13 * 19);
+
+        TestAlterPQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "Topic1"
+            Split {
+                Partition: 0
+                SplitBoundary: 'A'
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        AssertReserve("/MyRoot/Topic1", 2 * 13 * 19); // There are only 2 active partitions
+
+        TestAlterPQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "Topic1"
+            Split {
+                Partition: 1
+                SplitBoundary: '0'
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        AssertReserve("/MyRoot/Topic1", 3 * 13 * 19); // There are only 3 active partitions
+
+        TestAlterPQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "Topic1"
+            Merge {
+                Partition: 2
+                AdjacentPartition: 4
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        AssertReserve("/MyRoot/Topic1", 2 * 13 * 19); // There are only 2 active partitions
     }
 
     Y_UNIT_TEST(FindSubDomainPathId) {

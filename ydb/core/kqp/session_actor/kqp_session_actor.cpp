@@ -243,6 +243,12 @@ public:
     }
 
     void PassRequestToResourcePool() {
+        if (QueryState->UserRequestContext->PoolConfig) {
+            LOG_D("request placed into pool from cache: " << QueryState->UserRequestContext->PoolId);
+            CompileQuery();
+            return;
+        }
+
         Send(MakeKqpWorkloadServiceId(SelfId().NodeId()), new NWorkload::TEvPlaceRequestIntoPool(
             QueryState->Database,
             SessionId,
@@ -477,6 +483,7 @@ public:
 
     void Handle(NWorkload::TEvContinueRequest::TPtr& ev) {
         YQL_ENSURE(QueryState);
+        QueryState->ContinueTime = TInstant::Now();
 
         if (ev->Get()->Status == Ydb::StatusIds::UNSUPPORTED) {
             LOG_T("Failed to place request in resource pool, feature flag is disabled");
@@ -839,9 +846,10 @@ public:
         const NKqpProto::TKqpPhyQuery& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
         HasOlapTable |= ::NKikimr::NKqp::HasOlapTableReadInTx(phyQuery) || ::NKikimr::NKqp::HasOlapTableWriteInTx(phyQuery);
         HasOltpTable |= ::NKikimr::NKqp::HasOltpTableReadInTx(phyQuery) || ::NKikimr::NKqp::HasOltpTableWriteInTx(phyQuery);
-        if (HasOlapTable && HasOltpTable) {
+        HasTableWrite |= ::NKikimr::NKqp::HasOlapTableWriteInTx(phyQuery) || ::NKikimr::NKqp::HasOltpTableWriteInTx(phyQuery);
+        if (HasOlapTable && HasOltpTable && HasTableWrite) {
             ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
-                            "Transactions between column and row tables are disabled at current time.");
+                            "Write transactions between column and row tables are disabled at current time.");
             return false;
         }
         QueryState->TxCtx->SetTempTables(QueryState->TempTablesState);
@@ -1434,6 +1442,12 @@ public:
 
             // Invalidate query cache on scheme/internal errors
             switch (status) {
+                case Ydb::StatusIds::ABORTED: {
+                    if (ev->BrokenLockPathId) {
+                        issues.AddIssue(GetLocksInvalidatedIssue(*QueryState->TxCtx, *ev->BrokenLockPathId));
+                    }
+                    break;
+                }
                 case Ydb::StatusIds::SCHEME_ERROR:
                 case Ydb::StatusIds::INTERNAL_ERROR:
                     InvalidateQuery();
@@ -1555,6 +1569,9 @@ public:
 
         stats->DurationUs = ((TInstant::Now() - QueryState->StartTime).MicroSeconds());
         stats->WorkerCpuTimeUs = (QueryState->GetCpuTime().MicroSeconds());
+        if (const auto continueTime = QueryState->ContinueTime) {
+            stats->QueuedTimeUs = (continueTime - QueryState->StartTime).MicroSeconds();
+        }
         if (QueryState->CompileResult) {
             stats->Compilation.emplace();
             stats->Compilation->FromCache = (QueryState->CompileStats.FromCache);
@@ -2561,6 +2578,7 @@ private:
 
     bool HasOlapTable = false;
     bool HasOltpTable = false;
+    bool HasTableWrite = false;
 
     TGUCSettings::TPtr GUCSettings;
 };

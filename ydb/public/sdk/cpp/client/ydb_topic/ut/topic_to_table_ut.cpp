@@ -146,6 +146,8 @@ protected:
 
     void TestTxWithBigBlobs(const TTestTxWithBigBlobsParams& params);
 
+    void WriteMessagesInTx(size_t big, size_t small);
+
     const TDriver& GetDriver() const;
 
     void CheckTabletKeys(const TString& topicName);
@@ -1317,7 +1319,7 @@ void TFixture::WaitForTheTabletToDeleteTheWriteInfo(const TActorId& actorId,
         for (size_t i = 0; i < info.TxWritesSize(); ++i) {
             auto& writeInfo = info.GetTxWrites(i);
             UNIT_ASSERT(writeInfo.HasWriteId());
-            if (NPQ::GetWriteId(writeInfo) == writeId) {
+            if ((NPQ::GetWriteId(writeInfo) == writeId) && writeInfo.HasOriginalPartitionId()) {
                 found = true;
                 break;
             }
@@ -1595,20 +1597,21 @@ void TFixture::TestTxWithBigBlobs(const TTestTxWithBigBlobsParams& params)
 
     for (size_t i = 0; i < params.OldHeadCount; ++i) {
         WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(100'000, 'x'));
+        WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
         ++oldHeadMsgCount;
     }
 
     for (size_t i = 0; i < params.BigBlobsCount; ++i) {
-        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(7'900'000, 'x'), &tx);
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(7'000'000, 'x'), &tx);
+        WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
         ++bigBlobMsgCount;
     }
 
     for (size_t i = 0; i < params.NewHeadCount; ++i) {
         WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(100'000, 'x'), &tx);
+        WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
         ++newHeadMsgCount;
     }
-
-    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
 
     if (params.RestartMode == ERestartBeforeCommit) {
         RestartPQTablet("topic_A", 0);
@@ -1638,7 +1641,7 @@ void TFixture::TestTxWithBigBlobs(const TTestTxWithBigBlobsParams& params)
     start += oldHeadMsgCount;
 
     for (size_t i = 0; i < bigBlobMsgCount; ++i) {
-        UNIT_ASSERT_VALUES_EQUAL(messages[start + i].size(), 7'900'000);
+        UNIT_ASSERT_VALUES_EQUAL(messages[start + i].size(), 7'000'000);
     }
     start += bigBlobMsgCount;
 
@@ -1844,6 +1847,147 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_26, TFixture)
 
     messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2), nullptr, PARTITION_1);
     UNIT_ASSERT_VALUES_EQUAL(messages.size(), 3);
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_27, TFixture)
+{
+    CreateTopic("topic_A", TEST_CONSUMER);
+    CreateTopic("topic_B", TEST_CONSUMER);
+    CreateTopic("topic_C", TEST_CONSUMER);
+
+    for (size_t i = 0; i < 2; ++i) {
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #1", nullptr, 0);
+        WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "message #2", nullptr, 0);
+
+        NTable::TSession tableSession = CreateTableSession();
+        NTable::TTransaction tx = BeginTx(tableSession);
+
+        auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2), &tx, 0);
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
+        WriteToTopic("topic_C", TEST_MESSAGE_GROUP_ID, messages[0], &tx, 0);
+        WaitForAcks("topic_C", TEST_MESSAGE_GROUP_ID);
+
+        messages = ReadFromTopic("topic_B", TEST_CONSUMER, TDuration::Seconds(2), &tx, 0);
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
+        WriteToTopic("topic_C", TEST_MESSAGE_GROUP_ID, messages[0], &tx, 0);
+        WaitForAcks("topic_C", TEST_MESSAGE_GROUP_ID);
+
+        CommitTx(tx, EStatus::SUCCESS);
+
+        messages = ReadFromTopic("topic_C", TEST_CONSUMER, TDuration::Seconds(2), nullptr, 0);
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2);
+
+        DumpPQTabletKeys("topic_A");
+        DumpPQTabletKeys("topic_B");
+        DumpPQTabletKeys("topic_C");
+    }
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_28, TFixture)
+{
+    // The test verifies that the `WriteInflightSize` is correctly considered for the main partition.
+    // Writing to the service partition does not change the `WriteInflightSize` of the main one.
+    CreateTopic("topic_A", TEST_CONSUMER);
+
+    NTable::TSession tableSession = CreateTableSession();
+    NTable::TTransaction tx = BeginTx(tableSession);
+
+    TString message(16'000, 'a');
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, TString(16'000, 'a'), &tx, 0);
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID_1);
+
+    CommitTx(tx, EStatus::SUCCESS);
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_2, TString(20'000, 'b'), nullptr, 0);
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID_2);
+
+    auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2), nullptr, 0);
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2);
+}
+
+void TFixture::WriteMessagesInTx(size_t big, size_t small)
+{
+    CreateTopic("topic_A", TEST_CONSUMER);
+
+    NTable::TSession tableSession = CreateTableSession();
+    NTable::TTransaction tx = BeginTx(tableSession);
+
+    for (size_t i = 0; i < big; ++i) {
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(7'000'000, 'x'), &tx, 0);
+        WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
+    }
+
+    for (size_t i = 0; i < small; ++i) {
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(16'384, 'x'), &tx, 0);
+        WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
+    }
+
+    CommitTx(tx, EStatus::SUCCESS);
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_29, TFixture)
+{
+    WriteMessagesInTx(1, 0);
+    WriteMessagesInTx(1, 0);
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_30, TFixture)
+{
+    WriteMessagesInTx(1, 0);
+    WriteMessagesInTx(0, 1);
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_31, TFixture)
+{
+    WriteMessagesInTx(1, 0);
+    WriteMessagesInTx(1, 1);
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_32, TFixture)
+{
+    WriteMessagesInTx(0, 1);
+    WriteMessagesInTx(1, 0);
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_33, TFixture)
+{
+    WriteMessagesInTx(0, 1);
+    WriteMessagesInTx(0, 1);
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_34, TFixture)
+{
+    WriteMessagesInTx(0, 1);
+    WriteMessagesInTx(1, 1);
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_35, TFixture)
+{
+    WriteMessagesInTx(1, 1);
+    WriteMessagesInTx(1, 0);
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_36, TFixture)
+{
+    WriteMessagesInTx(1, 1);
+    WriteMessagesInTx(0, 1);
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_37, TFixture)
+{
+    WriteMessagesInTx(1, 1);
+    WriteMessagesInTx(1, 1);
+}
+
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_38, TFixture)
+{
+    WriteMessagesInTx(2, 202);
+    WriteMessagesInTx(2, 200);
+    WriteMessagesInTx(0, 1);
+    WriteMessagesInTx(4, 0);
+    WriteMessagesInTx(0, 1);
 }
 
 }

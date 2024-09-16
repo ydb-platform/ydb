@@ -323,7 +323,6 @@ public:
 
         for (const auto& info : tableInfos) {
             tableInfoMap.emplace(info.GetTableName(), &info);
-
             TKikimrPathId pathId(info.GetTableId().GetOwnerId(), info.GetTableId().GetTableId());
             TableByIdMap.emplace(pathId, info.GetTableName());
         }
@@ -567,7 +566,8 @@ TIntrusivePtr<IDataProvider> CreateKikimrDataSource(
     TIntrusivePtr<IKikimrGateway> gateway,
     TIntrusivePtr<TKikimrSessionContext> sessionCtx,
     const NKikimr::NExternalSource::IExternalSourceFactory::TPtr& sourceFactory,
-    bool isInternalCall);
+    bool isInternalCall,
+    TGUCSettings::TPtr gucSettings);
 
 TIntrusivePtr<IDataProvider> CreateKikimrDataSink(
     const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,

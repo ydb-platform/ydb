@@ -827,6 +827,8 @@ public:
 
     inline TStringValue AsStringValue() const;
     inline IBoxedValuePtr AsBoxed() const;
+    inline TStringValue::TData* AsRawStringValue() const;
+    inline IBoxedValue* AsRawBoxed() const;
     inline bool UniqueBoxed() const;
 
     // special values

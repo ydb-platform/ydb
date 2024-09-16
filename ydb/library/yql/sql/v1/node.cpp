@@ -1728,7 +1728,7 @@ TNodePtr IAggregation::WindowTraits(const TNodePtr& type, TContext& ctx) const {
 }
 
 namespace {
-bool UnescapeQuoted(const TString& str, TPosition& pos, char quoteChar, TString& result, TString& error) {
+bool UnescapeQuoted(const TString& str, TPosition& pos, char quoteChar, TString& result, TString& error, bool utf8Aware) {
     result = error = {};
 
     size_t readBytes = 0;
@@ -1739,7 +1739,7 @@ bool UnescapeQuoted(const TString& str, TPosition& pos, char quoteChar, TString&
 
     auto unescapeResult = UnescapeArbitraryAtom(atom, quoteChar, &sout, &readBytes);
     if (unescapeResult != EUnescapeResult::OK) {
-        TTextWalker walker(pos);
+        TTextWalker walker(pos, utf8Aware);
         walker.Advance(atom.Trunc(readBytes));
         error = UnescapeResultToString(unescapeResult);
         return false;
@@ -1834,7 +1834,7 @@ StringContentInternal(TContext& ctx, TPosition pos, const TString& input, EStrin
             result.Content = UnescapeAnsiQuoted(str);
         } else {
             TString error;
-            if (!UnescapeQuoted(str, pos, str[0], result.Content, error)) {
+            if (!UnescapeQuoted(str, pos, str[0], result.Content, error, ctx.Settings.Antlr4Parser)) {
                 ctx.Error(pos) << "Failed to parse string literal: " << error;
                 return {};
             }
@@ -1902,7 +1902,7 @@ TString IdContent(TContext& ctx, const TString& s) {
 
     auto unescapeResult = UnescapeArbitraryAtom(atom, endSym, &sout, &readBytes);
     if (unescapeResult != EUnescapeResult::OK) {
-        TTextWalker walker(pos);
+        TTextWalker walker(pos, ctx.Settings.Antlr4Parser);
         walker.Advance(atom.Trunc(readBytes));
         ctx.Error(pos) << "Cannot parse broken identifier: " << UnescapeResultToString(unescapeResult);
         return {};

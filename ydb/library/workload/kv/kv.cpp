@@ -75,7 +75,7 @@ void AddResultSet(const NYdb::TResultSet& resultSet, TVector<TRow>& rows) {
 
         for (size_t col = 0; col < parser.ColumnsCount(); col++) {
             auto& valueParser = parser.ColumnParser(col);
-            bool optional = valueParser.GetKind() == NYdb::TTypeParser::ETypeKind::Optional; 
+            bool optional = valueParser.GetKind() == NYdb::TTypeParser::ETypeKind::Optional;
             if (optional) {
                 valueParser.OpenOptional();
             }
@@ -139,6 +139,8 @@ TKvWorkloadGenerator::TKvWorkloadGenerator(const TKvWorkloadParams* params)
         MixedNextChangePartitionsSize = TInstant::Max();
     }
 
+    UpsertSequentialNextFirstKey = Params.StartFirstKey;
+
     Y_ABORT_UNLESS(Params.IntColumnsCnt <= Params.ColumnsCnt);
     Y_ABORT_UNLESS(Params.KeyColumnsCnt <= Params.ColumnsCnt);
 }
@@ -181,6 +183,8 @@ TQueryInfoList TKvWorkloadGenerator::GetWorkload(int type) {
     switch (static_cast<EType>(type)) {
         case EType::UpsertRandom:
             return Upsert(GenerateRandomRows());
+        case EType::UpsertSequential:
+            return Upsert(GenerateSequentialRows());
         case EType::InsertRandom:
             return Insert(GenerateRandomRows());
         case EType::SelectRandom:
@@ -198,6 +202,7 @@ TQueryInfoList TKvWorkloadGenerator::GetWorkload(int type) {
 TVector<IWorkloadQueryGenerator::TWorkloadType> TKvWorkloadGenerator::GetSupportedWorkloadTypes() const {
     TVector<TWorkloadType> result;
     result.emplace_back(static_cast<int>(EType::UpsertRandom), "upsert", "Upsert random rows into table");
+    result.emplace_back(static_cast<int>(EType::UpsertSequential), "upsert-seq", "Upsert sequential rows into table");
     result.emplace_back(static_cast<int>(EType::InsertRandom), "insert", "Insert random rows into table");
     result.emplace_back(static_cast<int>(EType::SelectRandom), "select", "Select rows matching primary key(s)");
     result.emplace_back(static_cast<int>(EType::ReadRowsRandom), "read-rows", "ReadRows rows matching primary key(s)");
@@ -492,6 +497,36 @@ TVector<TRow> TKvWorkloadGenerator::GenerateRandomRows(bool randomValues) {
     return result;
 }
 
+TVector<TRow> TKvWorkloadGenerator::GenerateSequentialRows() {
+    TVector<TRow> result(Params.RowsCnt);
+
+    ui64 nextFirstKey = UpsertSequentialNextFirstKey.fetch_add(Params.RowsCnt, std::memory_order_relaxed);
+
+    for (size_t row = 0; row < Params.RowsCnt; ++row) {
+        result[row].Ints.resize(Params.IntColumnsCnt);
+        result[row].Strings.resize(Params.ColumnsCnt - Params.IntColumnsCnt);
+
+        for (size_t col = 0; col < Params.ColumnsCnt; ++col) {
+            if (col < Params.IntColumnsCnt) {
+                ui64 val = col < Params.KeyColumnsCnt ? nextFirstKey : RandomNumber<ui64>();
+                result[row].Ints[col] = val;
+            } else {
+                TString val;
+                if (col < Params.KeyColumnsCnt) {
+                    val = TString(std::format("{:x}", nextFirstKey));
+                } else {
+                    val = BigString;
+                }
+                result[row].Strings[col - Params.IntColumnsCnt] = val;
+            }
+        }
+
+        ++nextFirstKey;
+    }
+
+    return result;
+}
+
 void TKvWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) {
     switch (commandType) {
     case TWorkloadParams::ECommandType::Init:
@@ -529,6 +564,16 @@ void TKvWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandTy
         case TKvWorkloadGenerator::EType::UpsertRandom:
             opts.AddLongOption("len", "String len")
                 .DefaultValue((ui64)KvWorkloadConstants::STRING_LEN).StoreResult(&StringLen);
+            opts.AddLongOption("cols", "Number of columns to upsert")
+                .DefaultValue((ui64)KvWorkloadConstants::COLUMNS_CNT).StoreResult(&ColumnsCnt);
+            opts.AddLongOption("rows", "Number of rows to upsert")
+                .DefaultValue((ui64)NYdbWorkload::KvWorkloadConstants::ROWS_CNT).StoreResult(&RowsCnt);
+            break;
+        case TKvWorkloadGenerator::EType::UpsertSequential:
+            opts.AddLongOption("len", "String len")
+                .DefaultValue((ui64)KvWorkloadConstants::STRING_LEN).StoreResult(&StringLen);
+            opts.AddLongOption("start-first-key", "First primary key to start at")
+                .DefaultValue((ui64)KvWorkloadConstants::START_FIRST_KEY).StoreResult(&StartFirstKey);
             opts.AddLongOption("cols", "Number of columns to upsert")
                 .DefaultValue((ui64)KvWorkloadConstants::COLUMNS_CNT).StoreResult(&ColumnsCnt);
             opts.AddLongOption("rows", "Number of rows to upsert")

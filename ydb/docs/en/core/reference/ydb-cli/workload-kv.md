@@ -7,6 +7,7 @@ A simple load type using a YDB database as a Key-Value storage.
 This load test runs several types of load:
 
 * [upsert](#upsert-kv): Using the UPSERT operation, inserts rows that are tuples (key1, key2, ... keyK, value1, value2, ... valueN) into the table created previously with the init command, the K and N numbers are specified in the settings.
+* [upsert-seq](#upsert-seq-kv): variant of upsert load, but inserts rows by sequential keys.
 * [insert](#insert-kv): The function is the same as the upsert load, only the INSERT operation is used for insertion.
 * [select](#select-kv): Reads data using the SELECT * WHERE key = $key operation. A query always affects all table columns, but isn't always a point query, and the number of primary key variations can be controlled using parameters.
 * [read-rows](#read-rows-kv): Reads data using the ReadRows operation, which performs faster key reading than select operation. A query always affects all table columns, but isn't always a point query, and the number of primary key variations can be controlled using parameters.
@@ -34,6 +35,7 @@ Parameter name | Parameter description
 ---|---
 `--init-upserts <value>` | Number of insertion operations to be performed during initialization. Default: 1000.
 `--min-partitions` | Minimum number of shards for tables. Default: 40.
+`--max-partitions` | Maximum number of shards for tables. Default: 1000.
 `--partition-size` | Maximum size of one shard (the `AUTO_PARTITIONING_PARTITION_SIZE_MB` setting). Default: 2000.
 `--auto-partition` | Enabling/disabling auto-sharding. Possible values: 0 or 1. Default: 1.
 `--max-first-key` | Maximum value of the primary key of the table. Default: $2^{64} — 1$.
@@ -161,6 +163,28 @@ UPSERT INTO `kv_test` (c0, c1, c2) VALUES ($c0_0, $c0_1, $c0_2), ($c1_0, $c1_1, 
 Parameter name | Parameter description
 ---|---
 `--len` | The size of the rows in bytes that are inserted into the table as values. Default: 8.
+
+## Upsert-seq load {#upsert-seq-kv}
+
+Upsert load variant for inserting rows by sequential keys instead of random.
+
+Sequential upserts generate a concentrated load on a small number of table partitions (at each point in time) instead of creating a uniform load on the entire table.
+
+To run this type of load, execute the command:
+
+```bash
+{{ ydb-cli }} workload kv run upsert-seq [global workload options...] [specific workload options...]
+```
+
+* `global workload options`: [The global options for all load types](#global-workload-options).
+* `specific workload options`: [Options of a specific load type](#upsert-seq-options).
+
+### Parameters for upsert {#upsert-seq-options}
+
+Parameter name | Parameter description
+---|---
+`--len` | The size of the rows in bytes inserted into the table as values. Default: 8.
+`--start-first-key` | The starting value for the primary key's first column. Default: 0.
 
 ## Insert load {#insert-kv}
 

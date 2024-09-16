@@ -1,6 +1,6 @@
 # Rules for type casting using the operator [CAST](../../syntax/expressions.md#cast)
 
-## Rules for casting primitive data types.
+## Rules for casting primitive data types
 
 * When casting primitive data types, some of the source information may be discarded unless contained in the target type. For example:
 

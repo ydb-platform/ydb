@@ -250,7 +250,7 @@ The status (severity) of the current issue:
 
 **Description:** `HealthCheck` the system can't parse pdisk state.
 
-#### PDisk state is ...
+#### PDisk state is
 
 **Description:** Indicates state of physical disk.
 

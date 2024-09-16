@@ -1,5 +1,7 @@
 # Yson
 
+<!-- markdownlint-disable no-trailing-punctuation -->
+
 {% include [_includes/yson/intro_header.md](_includes/yson/intro_header.md) %}
 
 * Сходства с JSON:

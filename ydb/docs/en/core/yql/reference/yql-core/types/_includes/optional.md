@@ -78,7 +78,7 @@ CREATE TABLE t (
 
 After that, write operations to table `t` will only be executed if the values to be inserted into the `key` and `value` columns do not contain `NULL` values.
 
-### Example of the interaction between the NOT NULL constraint and YQL functions.
+### Example of the interaction between the NOT NULL constraint and YQL functions
 
 Many of the YQL functions have optional types as return values. Since YQL is a strongly-typed language, a query like
 

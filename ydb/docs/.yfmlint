@@ -20,8 +20,8 @@ log-levels:
   MD023: 'disabled' # Headings must start at the beginning of the line
   MD024: 'disabled' # Multiple headings with the same content
   MD025: 'error' # Multiple top-level headings in the same document
-  MD026: 'disabled' # Trailing punctuation in heading
-  MD027: 'disabled' # Multiple spaces after blockquote symbol
+  MD026: 'error' # Trailing punctuation in heading
+  MD027: 'error' # Multiple spaces after blockquote symbol
   MD028: 'disabled' # Blank line inside blockquote
   MD029: 'disabled' # Ordered list item prefix
   MD030: 'error' # Spaces after list markers

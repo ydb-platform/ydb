@@ -1,3 +1,5 @@
+<!-- markdownlint-disable no-trailing-punctuation -->
+
 # FROM ... SELECT ...
 
 Перевернутая форма записи, в которой сначала указывается источник данных, а затем — операция.

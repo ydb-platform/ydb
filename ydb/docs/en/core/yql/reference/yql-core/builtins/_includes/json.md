@@ -1,5 +1,7 @@
 # Functions for JSON
 
+<!-- markdownlint-disable no-trailing-punctuation -->
+
 **JSON** is a lightweight [data-interchange format](https://www.json.org). In YQL, it's represented by the `Json` type. Unlike relational tables, JSON can store data with no schema defined. Here is an example of a valid JSON object:
 
 ```json

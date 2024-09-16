@@ -29,8 +29,6 @@ public:
         TSerializationContext(const TSerializationContext& other) = default;
     };
 
-    const static NKikimrSchemeOp::ECdcStreamFormat StreamType = NKikimrSchemeOp::ECdcStreamFormatProto;
-
     ui64 GetGroup() const override {
         return ProtoBody.GetGroup();
     }
@@ -42,9 +40,6 @@ public:
     }
     EKind GetKind() const override {
         return EKind::CdcDataChange;
-    }
-    TString GetSourceId() const {
-        return SourceId;
     }
 
     void Serialize(NKikimrTxDataShard::TEvApplyReplicationChanges::TChange& record, TSerializationContext& ctx) const {
@@ -67,8 +62,12 @@ public:
         Y_ABORT_UNLESS(Key);
         return Key->GetCells();
     }
+
+    void Accept(NChangeExchange::IVisitor& visitor) const override {
+        return visitor.Visit(*this);
+    }
+
 private:
-    TString SourceId;
     NKikimrChangeExchange::TChangeRecord ProtoBody;
     NReplication::NService::TLightweightSchema::TCPtr Schema;
 
@@ -175,16 +174,5 @@ public:
     }
 
 }; // TChangeRecordBuilder
-
-}
-
-namespace NKikimr {
-
-template <>
-struct TChangeRecordContainer<NBackup::NImpl::TChangeRecord>
-    : public TBaseChangeRecordContainer<NBackup::NImpl::TChangeRecord>
-{
-    using TBaseChangeRecordContainer<NBackup::NImpl::TChangeRecord>::TBaseChangeRecordContainer;
-};
 
 }

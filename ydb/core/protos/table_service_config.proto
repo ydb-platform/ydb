@@ -322,7 +322,7 @@ message TTableServiceConfig {
 
     optional bool EnableRowsDuplicationCheck = 69 [ default = false ];
 
-    optional bool EnableHtapTx = 71 [default = false];
+    optional bool EnableHtapTx = 71 [default = true];
 
     message TWriteActorSettings {
         optional uint64 InFlightMemoryLimitPerActorBytes = 1 [ default = 67108864 ];

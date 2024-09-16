@@ -127,16 +127,16 @@ public:
         const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
         NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
         const TActorId& creator, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
-        const bool useEvWrite, ui32 statementResultIndex, const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
-        const TGUCSettings::TPtr& GUCSettings, const TShardIdToTableInfoPtr& shardIdToTableInfo, const bool htapTx)
+        ui32 statementResultIndex, const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
+        const TGUCSettings::TPtr& GUCSettings, const TShardIdToTableInfoPtr& shardIdToTableInfo)
         : TBase(std::move(request), database, userToken, counters, tableServiceConfig,
             userRequestContext, statementResultIndex, TWilsonKqp::DataExecuter, "DataExecuter", streamResult)
         , AsyncIoFactory(std::move(asyncIoFactory))
-        , UseEvWrite(useEvWrite)
+        , UseEvWriteForOltp(tableServiceConfig.GetEnableOltpSink())
+        , HtapTx(tableServiceConfig.GetEnableHtapTx())
         , FederatedQuerySetup(federatedQuerySetup)
         , GUCSettings(GUCSettings)
         , ShardIdToTableInfo(shardIdToTableInfo)
-        , HtapTx(htapTx)
     {
         Target = creator;
 
@@ -1487,7 +1487,7 @@ private:
         auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
         auto getShardTask = [&](ui64 shardId) -> TTask& {
-            YQL_ENSURE(!UseEvWrite);
+            YQL_ENSURE(!UseEvWriteForOltp);
             auto it  = shardTasks.find(shardId);
             if (it != shardTasks.end()) {
                 return TasksGraph.GetTask(it->second);
@@ -1627,7 +1627,7 @@ private:
 
     void ExecuteDatashardTransaction(ui64 shardId, NKikimrTxDataShard::TKqpTransaction& kqpTx, const bool isOlap)
     {
-        YQL_ENSURE(!UseEvWrite);
+        YQL_ENSURE(!UseEvWriteForOltp);
         TShardState shardState;
         shardState.State = ImmediateTx ? TShardState::EState::Executing : TShardState::EState::Preparing;
         shardState.DatashardState.ConstructInPlace();
@@ -2030,7 +2030,6 @@ private:
         TDatashardTxs datashardTxs;
         TEvWriteTxs evWriteTxs;
         BuildDatashardTxs(datashardTasks, datashardTxs, evWriteTxs, topicTxs);
-        YQL_ENSURE(evWriteTxs.empty() || datashardTxs.empty());
 
         // Single-shard datashard transactions are always immediate
         ImmediateTx = (datashardTxs.size() + evWriteTxs.size() + Request.TopicOperations.GetSize() + sourceScanPartitionsCount) <= 1
@@ -2261,7 +2260,7 @@ private:
             YQL_ENSURE(!locksList.empty(), "unexpected empty locks list in DataShardLocks");
             NKikimrDataEvents::TKqpLocks* locks = nullptr;
 
-            if (UseEvWrite) {
+            if (UseEvWriteForOltp || ShardIdToTableInfo->Get(shardId).IsOlap) {
                 if (auto it = evWriteTxs.find(shardId); it != evWriteTxs.end()) {
                     locks = it->second->MutableLocks();
                 } else {
@@ -2333,7 +2332,7 @@ private:
             // Note: currently persistent channels are never used
             !HasPersistentChannels &&
             // Can't use volatile transactions for EvWrite at current time
-            !UseEvWrite);
+            evWriteTxs.empty());
 
         const bool useGenericReadSets = (
             // Use generic readsets when feature is explicitly enabled
@@ -2341,7 +2340,9 @@ private:
             // Volatile transactions must always use generic readsets
             VolatileTx ||
             // Transactions with topics must always use generic readsets
-            !topicTxs.empty());
+            !topicTxs.empty() || 
+            // HTAP transactions always use generic readsets
+            !evWriteTxs.empty());
 
         if (!locksMap.empty() || VolatileTx ||
             Request.TopicOperations.HasReadOperations() || Request.TopicOperations.HasWriteOperations())
@@ -2463,12 +2464,23 @@ private:
                 std::sort(receivingShards.begin(), receivingShards.end());
 
                 for (auto& [shardId, shardTx] : datashardTxs) {
-                    AFL_ENSURE(!columnShardArbiter);
                     shardTx->MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
-                    *shardTx->MutableLocks()->MutableSendingShards() = sendingShards;
-                    *shardTx->MutableLocks()->MutableReceivingShards() = receivingShards;
-                    if (arbiter) {
-                        shardTx->MutableLocks()->SetArbiterShard(arbiter);
+                    if (columnShardArbiter) {
+                        shardTx->MutableLocks()->AddSendingShards(*columnShardArbiter);
+                        shardTx->MutableLocks()->AddReceivingShards(*columnShardArbiter);
+                        if (sendingShardsSet.contains(shardId)) {
+                            shardTx->MutableLocks()->AddSendingShards(shardId);
+                        }
+                        if (receivingShardsSet.contains(shardId)) {
+                            shardTx->MutableLocks()->AddReceivingShards(shardId);
+                        }
+                        AFL_ENSURE(!arbiter);
+                    } else {
+                        *shardTx->MutableLocks()->MutableSendingShards() = sendingShards;
+                        *shardTx->MutableLocks()->MutableReceivingShards() = receivingShards;
+                        if (arbiter) {
+                            shardTx->MutableLocks()->SetArbiterShard(arbiter);
+                        }
                     }
                 }
 
@@ -2844,11 +2856,11 @@ private:
 
 private:
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
-    bool UseEvWrite = false;
+    const bool UseEvWriteForOltp = false;
+    const bool HtapTx = false;
     const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
     const TGUCSettings::TPtr GUCSettings;
     TShardIdToTableInfoPtr ShardIdToTableInfo;
-    const bool HtapTx = false;
 
     bool HasExternalSources = false;
     bool SecretSnapshotRequired = false;
@@ -2890,13 +2902,13 @@ private:
 IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
     TKqpRequestCounters::TPtr counters, bool streamResult, const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, const TActorId& creator,
-    const TIntrusivePtr<TUserRequestContext>& userRequestContext, const bool useEvWrite, ui32 statementResultIndex,
+    const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
-    const TShardIdToTableInfoPtr& shardIdToTableInfo, const bool htapTx)
+    const TShardIdToTableInfoPtr& shardIdToTableInfo)
 {
     return new TKqpDataExecuter(std::move(request), database, userToken, counters, streamResult, tableServiceConfig,
         std::move(asyncIoFactory), creator, userRequestContext,
-        useEvWrite, statementResultIndex, federatedQuerySetup, GUCSettings, shardIdToTableInfo, htapTx);
+        statementResultIndex, federatedQuerySetup, GUCSettings, shardIdToTableInfo);
 }
 
 } // namespace NKqp

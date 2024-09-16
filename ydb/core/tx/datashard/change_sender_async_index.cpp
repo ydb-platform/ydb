@@ -4,7 +4,7 @@
 #include "datashard_impl.h"
 
 #include <ydb/core/base/tablet_pipecache.h>
-#include <ydb/core/change_exchange/change_sender_common_ops.h>
+#include <ydb/core/change_exchange/change_sender.h>
 #include <ydb/core/change_exchange/change_sender_monitoring.h>
 #include <ydb/core/tablet_flat/flat_row_eggs.h>
 #include <ydb/core/tx/scheme_cache/helpers.h>
@@ -121,6 +121,20 @@ class TBaseChangeSenderShard: public TActorBootstrapped<TBaseChangeSenderShard> 
         }
     }
 
+    class TSerializer: public NChangeExchange::TBaseVisitor {
+        NKikimrChangeExchange::TChangeRecord& Record;
+
+    public:
+        explicit TSerializer(NKikimrChangeExchange::TChangeRecord& record)
+            : Record(record)
+        {
+        }
+
+        void Visit(const TChangeRecord& record) override {
+            record.Serialize(Record);
+        }
+    };
+
     void Handle(NChangeExchange::TEvChangeExchange::TEvRecords::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
 
@@ -128,7 +142,7 @@ class TBaseChangeSenderShard: public TActorBootstrapped<TBaseChangeSenderShard> 
         records->Record.SetOrigin(DataShard.TabletId);
         records->Record.SetGeneration(DataShard.Generation);
 
-        for (auto recordPtr : ev->Get()->GetRecords<TChangeRecord>()) {
+        for (auto recordPtr : ev->Get()->Records) {
             const auto& record = *recordPtr;
 
             if (record.GetOrder() <= LastRecordOrder) {
@@ -136,7 +150,8 @@ class TBaseChangeSenderShard: public TActorBootstrapped<TBaseChangeSenderShard> 
             }
 
             auto& proto = *records->Record.AddRecords();
-            record.Serialize(proto);
+            TSerializer serializer(proto);
+            record.Accept(serializer);
             Adjust(proto);
         }
 
@@ -568,7 +583,7 @@ private:
             TVector<TKeyDesc::TColumnOp>()
         );
 
-        AsDerived()->SetPartitioner(NChangeExchange::CreateSchemaBoundaryPartitioner<TChangeRecord>(*AsDerived()->KeyDesc.Get()));
+        AsDerived()->SetPartitionResolver(CreateDefaultPartitionResolver(*AsDerived()->KeyDesc.Get()));
 
         AsDerived()->NextState(TStateTag{});
     }
@@ -699,10 +714,10 @@ struct TSchemeChecksMixin
 
 class TAsyncIndexChangeSenderMain
     : public TActorBootstrapped<TAsyncIndexChangeSenderMain>
-    , public NChangeExchange::TBaseChangeSender<TChangeRecord>
+    , public NChangeExchange::TChangeSender
     , public NChangeExchange::IChangeSenderIdentity
-    , public NChangeExchange::IChangeSenderResolver
-    , public NChangeExchange::ISenderFactory
+    , public NChangeExchange::IChangeSenderPathResolver
+    , public NChangeExchange::IChangeSenderFactory
     , private TSchemeChecksMixin<TAsyncIndexChangeSenderMain>
     , private TResolveUserTableState<TAsyncIndexChangeSenderMain>
     , private TResolveIndexState<TAsyncIndexChangeSenderMain>
@@ -828,7 +843,7 @@ class TAsyncIndexChangeSenderMain
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvRecords::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
-        ProcessRecords(std::move(ev->Get()->GetRecords<TChangeRecord>()));
+        ProcessRecords(std::move(ev->Get()->Records));
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvForgetRecords::TPtr& ev) {
@@ -875,7 +890,7 @@ public:
 
     explicit TAsyncIndexChangeSenderMain(const TDataShardId& dataShard, const TTableId& userTableId, const TPathId& indexPathId)
         : TActorBootstrapped()
-        , TBaseChangeSender(this, this, this, this, dataShard.ActorId)
+        , TChangeSender(this, this, this, this, dataShard.ActorId)
         , IndexPathId(indexPathId)
         , DataShard(dataShard)
         , UserTableId(userTableId)

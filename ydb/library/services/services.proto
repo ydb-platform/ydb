@@ -1054,5 +1054,6 @@ message TActivity {
         BUILD_COLUMNS_SCAN_ACTOR = 645;
         SAMPLE_K_UPLOAD_ACTOR = 646;
         LOCAL_KMEANS_SCAN_ACTOR = 647;
+        INCREMENTAL_RESTORE_SCAN_ACTOR = 648;
     };
 };

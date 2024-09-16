@@ -236,7 +236,7 @@ private:
                 break;
 
             case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT:
-                AsyncCompileResult = KqpHost->PrepareGenericScript(QueryRef, prepareSettings);
+                AsyncCompileResult = KqpHost->PrepareGenericScript(QueryRef, prepareSettings, SplitExpr);
                 break;
 
             default:

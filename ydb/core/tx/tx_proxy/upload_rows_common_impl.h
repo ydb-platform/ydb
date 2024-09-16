@@ -43,7 +43,8 @@ private:
     NMonitoring::THistogramPtr ReplyDuration;
 
     NMonitoring::TDynamicCounters::TCounterPtr RowsCount;
-    NMonitoring::THistogramPtr PackageSize;
+    NMonitoring::THistogramPtr PackageSizeRecordsByRecords;
+    NMonitoring::THistogramPtr PackageSizeCountByRecords;
 
     NMonitoring::THistogramPtr PreparingDuration;
     NMonitoring::THistogramPtr WritingDuration;
@@ -108,7 +109,8 @@ public:
     void OnRequest(const ui64 rowsCount) const {
         RequestsCount->Add(1);
         RowsCount->Add(rowsCount);
-        PackageSize->Collect(rowsCount);
+        PackageSizeRecordsByRecords->Collect(rowsCount, rowsCount);
+        PackageSizeCountByRecords->Collect(rowsCount);
     }
 
     void OnReply(const TDuration dFull, const TDuration dDelta, const ::Ydb::StatusIds::StatusCode code) const;

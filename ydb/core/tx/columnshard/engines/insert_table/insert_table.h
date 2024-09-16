@@ -12,10 +12,6 @@ namespace NKikimr::NOlap {
 class TPKRangesFilter;
 class IDbWrapper;
 
-/// Use one table for inserted and committed blobs:
-/// !Commited => {PlanStep, WriteTxId} are {0, WriteId}
-///  Commited => {PlanStep, WriteTxId} are {PlanStep, TxId}
-
 class TInsertTableAccessor {
 protected:
     TInsertionSummary Summary;
@@ -76,7 +72,7 @@ public:
     const THashMap<TInsertWriteId, TInsertedData>& GetAborted() const {
         return Summary.GetAborted();
     }
-    const THashMap<TInsertWriteId, TInsertedData>& GetInserted() const {
+    const TInsertedContainer& GetInserted() const {
         return Summary.GetInserted();
     }
     const TInsertionSummary::TCounters& GetCountersPrepared() const {

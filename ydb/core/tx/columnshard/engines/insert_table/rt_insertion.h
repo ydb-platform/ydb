@@ -48,6 +48,10 @@ public:
         return Inserted.size();
     }
 
+    bool contains(const TInsertWriteId id) const {
+        return Inserted.contains(id);
+    }
+
     THashMap<TInsertWriteId, TInsertedData>::const_iterator begin() const {
         return Inserted.begin();
     }

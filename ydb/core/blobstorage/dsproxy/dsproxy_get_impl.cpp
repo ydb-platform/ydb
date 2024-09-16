@@ -147,10 +147,10 @@ ui64 TGetImpl::GetTimeToAccelerateNs(TLogContext &logCtx, NKikimrBlobStorage::EV
     TDiskDelayPredictions worstDisks;
     if (Blackboard.BlobStates.size() == 1) {
         Blackboard.BlobStates.begin()->second.GetWorstPredictedDelaysNs(*Info, *Blackboard.GroupQueues,
-                queueId, &worstDisks, AccelerationParams.PredictedDelayMultiplier);
+                queueId, &worstDisks, AccelerationParams);
     } else {
         Blackboard.GetWorstPredictedDelaysNs(*Info, *Blackboard.GroupQueues, queueId, &worstDisks,
-                AccelerationParams.PredictedDelayMultiplier);
+                AccelerationParams);
     }
     return worstDisks[std::min(AccelerationParams.MaxNumOfSlowDisks, (ui32)worstDisks.size() - 1)].PredictedNs;
 }

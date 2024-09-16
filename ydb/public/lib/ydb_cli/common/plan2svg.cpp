@@ -309,6 +309,15 @@ TSingleMetric::TSingleMetric(std::shared_ptr<TSummaryMetric> summary, const NJso
 }
 
 void TPlan::Load(const NJson::TJsonValue& node) {
+    if (auto* subplanNameNode = node.GetValueByPath("Subplan Name")) {
+        auto subplanName = subplanNameNode->GetStringSafe();
+        if (subplanName.StartsWith("CTE ")) {
+            if (auto* nodeTypeNode = node.GetValueByPath("Node Type")) {
+                CteSubPlans[subplanName] = nodeTypeNode->GetStringSafe();
+            }
+        }
+    }
+
     if (auto* subNode = node.GetValueByPath("Plans")) {
         for (auto& plan : subNode->GetArray()) {
             TString nodeType;
@@ -331,6 +340,13 @@ void TPlan::Load(const NJson::TJsonValue& node) {
 }
 
 void TPlan::ResolveCteRefs() {
+    for (auto& memberRef : MemberRefs) {
+        auto it = CteSubPlans.find(memberRef.first);
+        if (it == CteSubPlans.end()) {
+            ythrow yexception() << "Can not find CTE Ref " << memberRef.first;
+        }
+        memberRef.second.first->Info.at(memberRef.second.second) = "Reference: " + it->second;
+    }
     for (auto& cteRef : CteRefs) {
         auto it = CteStages.find(cteRef.first);
         if (it == CteStages.end()) {
@@ -405,11 +421,42 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
     auto operators = node.GetValueByPath("Operators");
 
     if (operators) {
+        TString prevFilter;
+        std::set<std::string> references;
         for (const auto& subNode : operators->GetArray()) {
             if (auto* nameNode = subNode.GetValueByPath("Name")) {
                 auto name = nameNode->GetStringSafe();
+
+                if (name == "Iterator" || name == "Member") {
+                    if (auto* referenceNode = subNode.GetValueByPath(name)) {
+                        auto referenceName = referenceNode->GetStringSafe();
+                        if (references.contains(referenceName)) {
+                            continue;
+                        }
+                        if (name == "Iterator" && !referenceName.StartsWith("precompute_")) {
+                            continue;
+                        }
+                    }
+                }
+
+                if (name == "Filter" && prevFilter) {
+                    if (auto* predicateNode = subNode.GetValueByPath("Predicate")) {
+                        auto filter = predicateNode->GetStringSafe();
+                        if (filter == prevFilter) {
+                            continue;
+                        }
+                    }
+                }
+                prevFilter = "";
+
                 TStringBuilder builder;
-                builder << name;
+
+                if (name == "Iterator" || name == "Member") {
+                    builder << "Reference";
+                } else {
+                    builder << name;
+                }
+
                 if (name == "Limit") {
                     if (auto* limitNode = subNode.GetValueByPath("Limit")) {
                         builder << ": " << limitNode->GetStringSafe();
@@ -417,6 +464,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                 } else if (name == "Filter") {
                     if (auto* predicateNode = subNode.GetValueByPath("Predicate")) {
                         auto filter = predicateNode->GetStringSafe();
+                        prevFilter = filter;
                         while(true) {
                             auto p = filter.find("item.");
                             if (p == filter.npos) {
@@ -440,6 +488,15 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                     }
                     if (auto* topSortByNode = subNode.GetValueByPath("TopSortBy")) {
                         builder << ", TopSortBy: " << topSortByNode->GetStringSafe();
+                    }
+                } else if (name == "Iterator" || name == "Member") {
+                    if (auto* referenceNode = subNode.GetValueByPath(name)) {
+                        auto referenceName = referenceNode->GetStringSafe();
+                        references.insert(referenceName);
+                        builder << ": " << referenceName;
+                        auto cteRef = "CTE " + referenceName;
+                        auto stageCopy = stage;
+                        MemberRefs.emplace_back(cteRef, std::make_pair<std::shared_ptr<TStage>, ui32>(std::move(stageCopy), stage->Info.size()));
                     }
                 } else if (name.Contains("Join")) {
                     if (auto* conditionNode = subNode.GetValueByPath("Condition")) {
@@ -747,7 +804,6 @@ void TPlan::MarkStageIndent(ui32 indent, ui32& offsetY, std::shared_ptr<TStage> 
             c->CteOffsetY = offsetY;
             offsetY += GAP_Y + INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2;
             stage->IndentY = std::max(stage->IndentY, offsetY);
-            stage->CteHeight += GAP_Y + INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2;
         } else {
             MarkStageIndent(indent, offsetY, c->FromStage);
             stage->IndentY = std::max(stage->IndentY, c->FromStage->IndentY);
@@ -758,6 +814,33 @@ void TPlan::MarkStageIndent(ui32 indent, ui32& offsetY, std::shared_ptr<TStage> 
 void TPlan::MarkLayout() {
     ui32 offsetY = 0;
     MarkStageIndent(0, offsetY, Stages.front());
+    // Compress Reference(s)
+    for (auto& stage : Stages) {
+        auto& info = stage->Info;
+        ui32 i = 0;
+        while (i < info.size()) {
+            auto& s = info[i];
+            if (s.starts_with("Reference: ")) {
+                auto next = i + 1;
+                if (next < info.size()) {
+                    auto& sn = info[next];
+                    if (sn.starts_with("Reference: ")) {
+                        s.insert(9, "s");
+                        while (next < info.size()) {
+                            auto& sn = info[next];
+                            if (sn.starts_with("Reference: ")) {
+                                s += ", " + sn.substr(11);
+                                info.erase(info.begin() + next);
+                            } else {
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            i++;
+        }
+    }
 }
 
 void TPlan::PrintTimeline(TStringBuilder& background, TStringBuilder& canvas, const TString& title, TAggregation& firstMessage, TAggregation& lastMessage, ui32 x, ui32 y, ui32 w, ui32 h, const TString& color) {
@@ -915,9 +998,10 @@ void TPlan::PrintStageSummary(TStringBuilder& background, TStringBuilder&, ui32 
 
 void TPlan::PrintSvg(ui64 maxTime, ui32& offsetY, TStringBuilder& background, TStringBuilder& canvas) {
     OffsetY = offsetY;
-    ui32 planHeight = Stages.back()->OffsetY + Stages.back()->Height + Stages.back()->CteHeight;
+    ui32 planHeight = 0;
 
     for (auto& s : Stages) {
+        planHeight = std::max(planHeight, s->IndentY);
         background
             << "<rect x='" << s->IndentX << "' y='" << s->OffsetY + offsetY
             << "' width='" << Config.HeaderWidth - s->IndentX - INTERNAL_WIDTH << "' height='" << s->Height
@@ -1385,7 +1469,7 @@ void TPlanVisualizer::LoadPlans(const TString& plans) {
 }
 
 void TPlanVisualizer::LoadPlan(const TString& nodeType, const NJson::TJsonValue& node) {
-    Plans.emplace_back(nodeType, Config, CteStages);
+    Plans.emplace_back(nodeType, Config, CteStages, CteSubPlans);
     Plans.back().Load(node);
 }
 

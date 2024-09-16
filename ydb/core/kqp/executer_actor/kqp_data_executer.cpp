@@ -2688,7 +2688,7 @@ private:
         for (auto& [tabletId, t] : topicTxs) {
             auto& transaction = t.tx;
 
-            auto ev = std::make_unique<TEvPersQueue::TEvProposeTransaction>();
+            auto ev = std::make_unique<TEvPersQueue::TEvProposeTransactionBuilder>();
 
             if (t.hasWrite && writeId.Defined()) {
                 auto* w = transaction.MutableWriteId();

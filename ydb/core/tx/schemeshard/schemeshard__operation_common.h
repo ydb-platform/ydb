@@ -701,6 +701,19 @@ public:
             }
         }
 
+        std::optional<TString> preSerializedBootstrapConfig;
+        if (bootstrapConfig) {
+            if (context.SS->EnablePQConfigTransactionsAtSchemeShard) {
+                NKikimrPQ::TEvProposeTransaction proto;
+                proto.MutableConfig()->MutableBootstrapConfig()->Swap(&*bootstrapConfig);
+                preSerializedBootstrapConfig.emplace(proto.SerializeAsString());
+            } else {
+                NKikimrPQ::TUpdateConfig proto;
+                proto.MutableBootstrapConfig()->Swap(&*bootstrapConfig);
+                preSerializedBootstrapConfig.emplace(proto.SerializeAsString());
+            }
+        }
+
         for (auto shard : txState->Shards) {
             TShardIdx idx = shard.Idx;
             TTabletId tabletId = context.SS->ShardInfos.at(idx).TabletID;
@@ -723,7 +736,7 @@ public:
                                                      *pqShard,
                                                      topicName,
                                                      topicPath.PathString(),
-                                                     bootstrapConfig,
+                                                     preSerializedBootstrapConfig,
                                                      cloudId,
                                                      folderId,
                                                      databaseId,
@@ -736,7 +749,7 @@ public:
                                                *pqShard,
                                                topicName,
                                                topicPath.PathString(),
-                                               bootstrapConfig,
+                                               preSerializedBootstrapConfig,
                                                cloudId,
                                                folderId,
                                                databaseId,
@@ -918,7 +931,7 @@ private:
                                  const TTopicTabletInfo& pqShard,
                                  const TString& topicName,
                                  const TString& topicPath,
-                                 const std::optional<NKikimrPQ::TBootstrapConfig>& bootstrapConfig,
+                                 const std::optional<TString>& bootstrapConfig,
                                  const TString& cloudId,
                                  const TString& folderId,
                                  const TString& databaseId,
@@ -931,7 +944,7 @@ private:
                            const TTopicTabletInfo& pqShard,
                            const TString& topicName,
                            const TString& topicPath,
-                           const std::optional<NKikimrPQ::TBootstrapConfig>& bootstrapConfig,
+                           const std::optional<TString>& bootstrapConfig,
                            const TString& cloudId,
                            const TString& folderId,
                            const TString& databaseId,

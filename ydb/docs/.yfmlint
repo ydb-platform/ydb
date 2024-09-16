@@ -27,7 +27,7 @@ log-levels:
   MD030: 'error' # Spaces after list markers
   MD031: 'error' # Fenced code blocks should be surrounded by blank lines
   MD032: 'error' # Lists should be surrounded by blank lines
-  MD033: 'disabled' # Inline HTML
+  MD033: 'error' # Inline HTML
   MD034: 'error' # Bare URL used
   MD035: 'error' # Horizontal rule style
   MD036: 'disabled' # Emphasis used instead of a heading
@@ -38,7 +38,7 @@ log-levels:
   MD041: 'disabled' # First line in a file should be a top-level heading
   MD042: 'error' # No empty links
   MD043: 'disabled' # Required heading structure
-  MD044: 'disabled' # Proper names should have the correct capitalization
+  MD044: 'error' # Proper names should have the correct capitalization
   MD045: 'disabled' # Images should have alternate text (alt text)
   MD046: 'disabled' # Code block style
   MD047: 'disabled' # Files should end with a single newline character
@@ -65,6 +65,12 @@ log-levels:
 # Multiple headings with the same content
 MD024:
   siblings_only: true
+
+MD044:
+  code_blocks: false
+  names:
+    - 'GitHub'
+    - 'ClickHouse'
 
 # Inline code length
 YFM001:

@@ -8,7 +8,7 @@
 
 Приведенный ниже сценарий запуска использует [git](https://git-scm.com/downloads) и [Go](https://go.dev/doc/install). Предварительно должен быть установлен [{{ ydb-short-name }} Go SDK](../../../reference/ydb-sdk/install.md).
 
-Создайте рабочую директорию и выполните в ней из командной строки команду клонирования репозитория с github.com:
+Создайте рабочую директорию и выполните в ней из командной строки команду клонирования репозитория с GitHub:
 
 ```bash
 git clone https://github.com/ydb-platform/ydb-go-examples/

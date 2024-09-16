@@ -119,8 +119,10 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
     bool HasInvalidGroupId() const { return GroupId.GetRawId() == Max<ui32>(); }
     void ProcessInitQueue();
 
+    // Acceleration parameters
     TMemorizableControlWrapper SlowDiskThreshold;
     TMemorizableControlWrapper PredictedDelayMultiplier;
+    TMemorizableControlWrapper MaxNumOfSlowDisks;
 
     TAccelerationParams GetAccelerationParams();
 

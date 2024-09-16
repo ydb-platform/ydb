@@ -42,6 +42,7 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
                             .EnableVPatch = EnableVPatch,
                             .SlowDiskThreshold = SlowDiskThreshold,
                             .PredictedDelayMultiplier = PredictedDelayMultiplier,
+                            .MaxNumOfSlowDisks = MaxNumOfSlowDisks,
                         }), TMailboxType::ReadAsFilled, AppData()->SystemPoolId);
                     [[fallthrough]];
                 case NKikimrBlobStorage::TGroupDecommitStatus::DONE:
@@ -61,6 +62,7 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
                         .EnableVPatch = EnableVPatch,
                         .SlowDiskThreshold = SlowDiskThreshold,
                         .PredictedDelayMultiplier = PredictedDelayMultiplier,
+                        .MaxNumOfSlowDisks = MaxNumOfSlowDisks,
                     }
                 )
             );
@@ -72,6 +74,7 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
             .EnableVPatch = EnableVPatch,
             .SlowDiskThreshold = SlowDiskThreshold,
             .PredictedDelayMultiplier = PredictedDelayMultiplier,
+            .MaxNumOfSlowDisks = MaxNumOfSlowDisks,
         }));
     }
 

@@ -1310,15 +1310,43 @@ message TImmediateControlsConfig {
 
     message TDSProxyControls {
         optional uint64 SlowDiskThreshold = 1 [(ControlOptions) = {
-            Description: "The minimum ratio of slowest and second slowest disks, required to accelerate, actual value is divided by 1000",
+            Description: "The minimum ratio of slowest and second slowest disks, required to accelerate, promille",
             MinValue: 1,
             MaxValue: 1000000,
             DefaultValue: 2000 }];
         optional uint64 PredictedDelayMultiplier = 2 [(ControlOptions) = {
-            Description: "Predicted time of VDisk's response is multiplied by this value divided by 1000",
+            Description: "Predicted time of VDisk's response multiplier, promille",
             MinValue: 0,
             MaxValue: 1000000,
             DefaultValue: 1000 }];
+        reserved 3;
+        reserved 4;
+        optional uint64 MaxNumOfSlowDisks = 5 [(ControlOptions) = {
+            Description: "Maximum number of slow disks, which DSProxy can skip with Accelerations",
+            MinValue: 1,
+            MaxValue: 2,
+            DefaultValue: 2 }];
+    }
+
+    message TPDiskControls {
+        optional uint64 MaxCommonLogChunksHDD = 1 [(ControlOptions) = {
+            Description: "Regulate the maximum of log chunks on the PDisk, setting for HDD",
+            MinValue: 1,
+            MaxValue: 1000000,
+            DefaultValue: 200 }];
+        optional uint64 MaxCommonLogChunksSSD = 2 [(ControlOptions) = {
+            Description: "Regulate the maximum of log chunks on the PDisk, setting for SSD, NVME",
+            MinValue: 1,
+            MaxValue: 1000000,
+            DefaultValue: 200 }];
+    }
+
+    message TBlobStorageControllerControls {
+        optional uint64 EnableSelfHealWithDegraded = 1 [(ControlOptions) = {
+            Description: "Should SelfHeal automatically process groups that are in DEGRADED status (one step from nonworking)",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0 }];
     }
 
     optional TDataShardControls DataShardControls = 1;

@@ -55,8 +55,9 @@ const ui32 MaskSizeBits = 32;
 constexpr bool DefaultEnablePutBatching = true;
 constexpr bool DefaultEnableVPatch = false;
 
-constexpr float DefaultSlowDiskThreshold = 2;
-constexpr float DefaultPredictedDelayMultiplier = 1;
+constexpr double DefaultSlowDiskThreshold = 2;
+constexpr double DefaultPredictedDelayMultiplier = 1;
+constexpr ui32 DefaultMaxNumOfSlowDisks = 2;
 
 constexpr bool WithMovingPatchRequestToStaticNode = true;
 
@@ -172,8 +173,9 @@ inline void SetExecutionRelay(IEventBase& ev, std::shared_ptr<TEvBlobStorage::TE
 }
 
 struct TAccelerationParams {
-    double SlowDiskThreshold = 2;
-    double PredictedDelayMultiplier = 1;
+    double SlowDiskThreshold = DefaultSlowDiskThreshold;
+    double PredictedDelayMultiplier = DefaultPredictedDelayMultiplier;
+    ui32 MaxNumOfSlowDisks = DefaultMaxNumOfSlowDisks;
 };
 
 template<typename TDerived>
@@ -851,6 +853,7 @@ struct TBlobStorageProxyParameters {
     const TControlWrapper& EnableVPatch;
     const TControlWrapper& SlowDiskThreshold;
     const TControlWrapper& PredictedDelayMultiplier;
+    const TControlWrapper& MaxNumOfSlowDisks = TControlWrapper(DefaultMaxNumOfSlowDisks, 1, 2);
 };
 
 IActor* CreateBlobStorageGroupProxyConfigured(TIntrusivePtr<TBlobStorageGroupInfo>&& info,

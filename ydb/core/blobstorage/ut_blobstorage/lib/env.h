@@ -50,6 +50,7 @@ struct TEnvironmentSetup {
         const bool UseFakeConfigDispatcher = false;
         const float SlowDiskThreshold = 2;
         const float VDiskPredictedDelayMultiplier = 1;
+        const ui32 MaxNumOfSlowDisks = 2;
     };
 
     const TSettings Settings;
@@ -402,6 +403,8 @@ struct TEnvironmentSetup {
 
                 ADD_ICB_CONTROL("DSProxyControls.SlowDiskThreshold", 2'000, 1, 1'000'000, std::round(Settings.SlowDiskThreshold * 1'000));
                 ADD_ICB_CONTROL("DSProxyControls.PredictedDelayMultiplier", 1'000, 1, 1'000'000, std::round(Settings.VDiskPredictedDelayMultiplier * 1'000));
+                ADD_ICB_CONTROL("DSProxyControls.MaxNumOfSlowDisks", 2, 1, 2, Settings.MaxNumOfSlowDisks);
+                
 #undef ADD_ICB_CONTROL
 
                 {

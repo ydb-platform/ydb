@@ -13,8 +13,4 @@ TAutoPtr<NYql::IGraphTransformer> CreateKqpLogOptTransformer(
     const NYql::TKikimrConfiguration::TPtr& config
 );
 
-TAutoPtr<NYql::IGraphTransformer> CreateUnappliedOptimizerHintsChecker(
-    TIntrusivePtr<TKqpOptimizeContext>& kqpCtx
-);
-
 } // namespace NKikimr::NKqp::NOpt

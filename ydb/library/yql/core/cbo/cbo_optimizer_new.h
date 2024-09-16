@@ -179,6 +179,13 @@ struct TOptimizerHints {
     std::shared_ptr<TJoinOrderHints> JoinOrderHints = std::make_shared<TJoinOrderHints>();
 
     TVector<TString> GetUnappliedHintStrings();
+
+    /* 
+     *   The function accepts string with three type of expressions: array of (JoinAlgo | Card | JoinOrder):
+     *   1) JoinAlgo(t1 t2 ... tn Map | Grace | Lookup) to change join algo for join, where these labels take part
+     *   2) Card(t1 t2 ... tn (*|/|+|-) Number) to change cardinality for join, where these labels take part or labels only
+     *   3) JoinOrder( (t1 t2) (t3 (t4 ...)) ) - fixate this join subtree in the general join tree
+     */  
     static TOptimizerHints Parse(const TString&);
 };
 

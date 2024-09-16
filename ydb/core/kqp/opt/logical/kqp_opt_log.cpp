@@ -88,6 +88,17 @@ public:
         SetGlobal(4u);
     }
 
+public:
+    TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
+        auto status = TOptimizeTransformerBase::DoTransform(input, output, ctx);
+
+        for (const auto& hint: KqpCtx.GetOptimizerHints().GetUnappliedHintStrings()) {
+            YQL_CLOG(WARN, ProviderYdb) << "Unapplied hint: " + hint;
+        }
+
+        return status;
+    }
+
 protected:
     TMaybeNode<TExprBase> PushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
         TExprBase output = KqpPushExtractedPredicateToReadTable(node, ctx, KqpCtx, TypesCtx, *getParents());
@@ -372,38 +383,6 @@ TAutoPtr<IGraphTransformer> CreateKqpLogOptTransformer(TIntrusivePtr<TKqpOptimiz
     TTypeAnnotationContext& typesCtx, const TKikimrConfiguration::TPtr& config)
 {
     return THolder<IGraphTransformer>(new TKqpLogicalOptTransformer(typesCtx, kqpCtx, config));
-}
-
-class TUnappliedOptimizerHintsChecker : public TSyncTransformerBase {
-public:
-    TUnappliedOptimizerHintsChecker(
-        TIntrusivePtr<TKqpOptimizeContext>& kqpCtx
-    ) : KqpCtx(*kqpCtx)
-    {}
-
-    TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
-        Y_UNUSED(ctx);
-
-        output = input;
-       
-        for (const auto& hint: KqpCtx.GetOptimizerHints().GetUnappliedHintStrings()) {
-            YQL_CLOG(WARN, ProviderYdb) << "Unapplied hint: " + hint;
-        }
-
-        return TStatus::Ok;
-    }
-
-    void Rewind() final {}
-
-private:
-    TKqpOptimizeContext& KqpCtx;
-};
-
-TAutoPtr<NYql::IGraphTransformer> CreateUnappliedOptimizerHintsChecker(
-    TIntrusivePtr<TKqpOptimizeContext>& kqpCtx
-)
-{
-    return THolder<IGraphTransformer>(new TUnappliedOptimizerHintsChecker(kqpCtx));
 }
 
 } // namespace NKikimr::NKqp::NOpt

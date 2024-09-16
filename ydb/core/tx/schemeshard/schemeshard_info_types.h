@@ -2886,7 +2886,8 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         GatheringStatistics = 20,
         Initiating = 30,
         Filling = 40,
-        // TODO(mbkkt) TruncateTmpTables = 45,
+        DropTmp = 45,
+        CreateTmp = 46,
         Applying = 50,
         Unlocking = 60,
         Done = 200,
@@ -2962,10 +2963,23 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
     std::variant<std::monostate, NKikimrSchemeOp::TVectorIndexKmeansTreeDescription> SpecializedIndexDescription;
 
-    struct TKMeansTreeSettings {
-        ui64 K = 128;
+    struct TKMeans {
+        // settings
+        ui32 K = 128;
+        ui32 Levels = 5;
+
+        // pools
+        ui32 Ids = 0;
+        
+        // progress
+        ui32 Level = 0;
+        ui32 Parent = 0;
+
+        bool NeedsAnotherLevel() const {
+            return Level < Levels;
+        }
     };
-    TKMeansTreeSettings KMeansSettings;
+    TKMeans KMeans;
 
     EState State = EState::Invalid;
     TString Issue;
@@ -3322,7 +3336,13 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     }
 
     float CalcProgressPercent() const {
-        // TODO(mbkkt) different calculation for vector index
+        if (IsBuildVectorIndex()) {
+            // TODO(mbkkt) better calculation for vector index
+            if (KMeans.Level == 0) {
+                return 0.0;
+            }
+            return KMeans.Levels * 100. / KMeans.Level;
+        }
         if (Shards) {
             float totalShards = Shards.size();
             return 100.0 * DoneShardsSize / totalShards;

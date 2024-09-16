@@ -7044,7 +7044,59 @@ Y_UNIT_TEST_SUITE(BackupCollection) {
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
                 UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"storage" '"local") '('"tag" '"test"))#");
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("createObject"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'create"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(CreateBackupCollectionWithDatabase) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+                USE plato;
+                CREATE BACKUP COLLECTION TestCollection WITH (
+                    STORAGE="local",
+                    TAG="test" -- for testing purposes, not a real thing
+                )
+                    DATABASE;
+            )sql");
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"storage" '"local") '('"tag" '"test"))#");
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'create"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'('type 'database)"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(CreateBackupCollectionWithTables) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+                USE plato;
+                CREATE BACKUP COLLECTION TestCollection WITH (
+                    STORAGE="local",
+                    TAG="test" -- for testing purposes, not a real thing
+                )
+                    TABLE someTable,
+                    TABLE `prefix/anotherTable`;
+            )sql");
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"storage" '"local") '('"tag" '"test"))#");
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'create"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"#('('('type 'table) '('path '"someTable")))#"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"#('('('type 'table) '('path '"prefix/anotherTable")))#"));
             }
         };
 
@@ -7059,6 +7111,21 @@ Y_UNIT_TEST_SUITE(BackupCollection) {
                 USE plato;
                 CREATE BACKUP COLLECTION TestCollection;
             )sql" , "<main>:3:55: Error: Unexpected token ';' : syntax error...\n\n");
+
+        ExpectFailWithError(R"sql(
+                USE plato;
+                CREATE BACKUP COLLECTION TestCollection TABLE;
+            )sql" , "<main>:3:56: Error: Unexpected token 'TABLE' : syntax error...\n\n");
+
+        ExpectFailWithError(R"sql(
+                USE plato;
+                CREATE BACKUP COLLECTION TestCollection DATABASE `test`;
+            )sql" , "<main>:3:56: Error: Unexpected token 'DATABASE' : syntax error...\n\n");
+
+        ExpectFailWithError(R"sql(
+                USE plato;
+                CREATE BACKUP COLLECTION TestCollection DATABASE, TABLE `test`;
+            )sql" , "<main>:3:56: Error: Unexpected token 'DATABASE' : syntax error...\n\n");
 
         ExpectFailWithError(R"sql(
                 USE plato;

@@ -3979,6 +3979,16 @@ bool TSqlTranslation::ParseBackupCollectionSettings(std::map<TString, TDeferredA
     return true;
 }
 
+bool TSqlTranslation::ParseBackupCollectionTables(TVector<TDeferredAtom>& result, const TRule_table_list& tables) {
+    const auto& firstEntry = tables.GetRule_an_id_table2();
+    result.push_back(TDeferredAtom(Ctx.Pos(), Id(firstEntry, *this)));
+    for (const auto& block : tables.GetBlock3()) {
+        const auto& entry = block.GetRule_an_id_table3();
+        result.push_back(TDeferredAtom(Ctx.Pos(), Id(entry, *this)));
+    }
+    return true;
+}
+
 TString TSqlTranslation::FrameSettingsToString(EFrameSettings settings, bool isUnbounded) {
     TString result;
     switch (settings) {

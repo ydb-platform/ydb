@@ -1386,16 +1386,28 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                  return false;
             }
 
+            bool database = false;
+            TVector<TDeferredAtom> tables;
+            if (node.HasBlock7()) {
+                 database = node.GetBlock7().GetRule_database_or_table_list1().has_alt_database_or_table_list1();
+                 if (node.GetBlock7().GetRule_database_or_table_list1().has_alt_database_or_table_list2()) {
+                     if (!ParseBackupCollectionTables(tables, node.GetBlock7().GetRule_database_or_table_list1().alt_database_or_table_list2().rule_table_list1())) {
+                         return false;
+                     }
+                 }
+            }
+
             const TString& objectId = Id(node.GetRule_backup_collection2().GetRule_object_ref3().GetRule_id_or_at2(), *this).second;
-            constexpr const char* typeId = "BACKUP_COLLECTION";
             AddStatementToBlocks(blocks,
-                                 BuildCreateObjectOperation(Ctx.Pos(),
-                                                            BuildTablePath(Ctx.GetPrefixPath(context.ServiceId, context.Cluster), objectId),
-                                                            typeId,
-                                                            false,
-                                                            false,
-                                                            std::move(kv),
-                                                            context));
+                                 BuildCreateBackupCollection(Ctx.Pos(),
+                                                             BuildTablePath(Ctx.GetPrefixPath(context.ServiceId, context.Cluster), objectId),
+                                                             TCreateBackupCollectionParameters {
+                                                                .Settings = std::move(kv),
+                                                                .Database = database,
+                                                                .Tables = tables,
+                                                                .ExistingOk = false,
+                                                             },
+                                                             context));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore49: {

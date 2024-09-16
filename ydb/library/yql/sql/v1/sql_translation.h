@@ -250,6 +250,7 @@ protected:
     bool StoreStringSettingsEntry(const TRule_alter_table_setting_entry& entry, std::map<TString, TDeferredAtom>& result);
     bool ParseBackupCollectionSettings(std::map<TString, TDeferredAtom>& result, const TRule_backup_collection_settings& settings);
     bool ParseBackupCollectionSettings(std::map<TString, TDeferredAtom>& result, std::set<TString>& toReset, const TRule_alter_backup_collection_actions& actions);
+    bool ParseBackupCollectionTables(TVector<TDeferredAtom>& result, const TRule_table_list& tables);
 
     bool ValidateAuthMethod(const std::map<TString, TDeferredAtom>& result);
     bool ValidateExternalTable(const TCreateTableParameters& params);

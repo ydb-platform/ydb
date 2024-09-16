@@ -3259,4 +3259,69 @@ TNodePtr BuildAnalyze(TPosition pos, const TString& service, const TDeferredAtom
     return new TAnalyzeNode(pos, service, cluster, params, scoped);
 }
 
+class TCreateBackupCollectionNode final
+    : public TAstListNode
+    , public TObjectOperatorContext
+{
+    using TBase = TAstListNode;
+public:
+    TCreateBackupCollectionNode(
+        TPosition pos,
+        const TString& objectId,
+        const TCreateBackupCollectionParameters& params,
+        const TObjectOperatorContext& context)
+            : TBase(pos)
+            , TObjectOperatorContext(context)
+            , Id(objectId)
+            , Params(params)
+    {}
+
+    bool DoInit(TContext& ctx, ISource* src) final {
+        auto keys = Y("Key");
+        keys = L(keys, Q(Y(Q("backupCollection"), Y("String", BuildQuotedAtom(Pos, Id)))));
+
+        auto options = Y();
+        options->Add(Q(Y(Q("mode"), Q("create"))));
+
+        auto settings = Y();
+        for (auto& [key, value] : Params.Settings) {
+            settings->Add(Q(Y(BuildQuotedAtom(Pos, key), value.Build())));
+        }
+        options->Add(Q(Y(Q("settings"), Q(settings))));
+
+        auto entries = Y();
+        if (Params.Database) {
+            entries->Add(Q(Y(Q(Y(Q("type"), Q("database"))))));
+        }
+        for (auto& table : Params.Tables) {
+            auto path = ctx.GetPrefixedPath(ServiceId, Cluster, table);
+            Y_UNUSED(path);
+            entries->Add(Q(Y(Q(Y(Q("type"), Q("table"))), Q(Y(Q("path"), path)))));
+        }
+        options->Add(Q(Y(Q("entries"), Q(entries))));
+
+        Add("block", Q(Y(
+            Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos, ServiceId), Scoped->WrapCluster(Cluster, ctx))),
+            Y("let", "world", Y(TString(WriteName), "world", "sink", keys, Y("Void"), Q(options))),
+            Y("return", ctx.PragmaAutoCommit ? Y(TString(CommitName), "world", "sink") : AstNode("world"))
+        )));
+        return TAstListNode::DoInit(ctx, src);
+    }
+
+    TPtr DoClone() const final {
+        return {};
+    }
+private:
+    TString Id;
+    TCreateBackupCollectionParameters Params;
+};
+
+TNodePtr BuildCreateBackupCollection(TPosition pos, const TString& id,
+    const TCreateBackupCollectionParameters& params,
+    const TObjectOperatorContext& context)
+{
+    return new TCreateBackupCollectionNode(pos, id, params, context);
+}
+
+
 } // namespace NSQLTranslationV1

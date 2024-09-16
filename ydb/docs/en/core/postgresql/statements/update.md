@@ -18,7 +18,7 @@ The `UPDATE ... SET ... WHERE` statements works as follows:
 ## Updating a single row in a table with conditions
 
 #|
-|| **Update without conditions** | **Update with conditions** ||
+|| Update without conditions | Update with conditions ||
 ||
 
 {% include [update_where](../_includes/statements/update/update_where.md) %}
@@ -39,7 +39,7 @@ In the example "Update with conditions", the condition combining operator `AND` 
 Frequently during updates, it is necessary to perform mathematical actions on the data or to modify it using functions.
 
 #|
-|| **Update with the use of expressions** | **Update with the use of functions** ||
+|| Update with the use of expressions | Update with the use of functions ||
 ||
 
 {% include [update_set_where](../_includes/statements/update/update_set_where.md) %}

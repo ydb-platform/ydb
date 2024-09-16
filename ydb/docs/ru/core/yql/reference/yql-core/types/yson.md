@@ -163,7 +163,7 @@ YSON-данные бывают трех типов:
 Символ `;` после последнего элемента внутри `<list-fragment>`  и `<map-fragment>`  может быть опущен. Следующие конструкции следует считать валидными при чтении:
 
 #|
-|| **C `;` на конце** | **Сокращенная запись** ||
+|| C `;` на конце | Сокращенная запись ||
 ||
 
 ```yson
@@ -285,7 +285,7 @@ SELECT Yson::SerializeJson($data), Yson::SerializeJson(Yson::YPath($data, "/0-25
 Результат:
 
 #|
-|| **column0** | **column1** ||
+|| column0 | column1 ||
 ||
 
 ```json
@@ -331,7 +331,7 @@ Yson::SerializeJson($data) AS whole_data;
 Результат:
 
 #|
-|| **attrs_root** | **attrs_b_str** | **attr_exact** | **array_index0** | **array_last** | **entity** | **entity1** | **whole_a** | **whole_data** ||
+|| attrs_root | attrs_b_str | attr_exact | array_index0 | array_last | entity | entity1 | whole_a | whole_data ||
 ||
 
 ```json

@@ -33,7 +33,7 @@ CREATE [TEMPORARY | TEMP] TABLE <table name> (
 ## Создание двух таблиц с первичным ключом и автоинкрементом {#create_table_pk_serial}
 
 #|
-|| **Таблица people** | **Таблица social_card** ||
+|| Таблица `people` | Таблица `social_card` ||
 ||
 
 ```sql

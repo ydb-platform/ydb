@@ -20,7 +20,7 @@ View the description of the YQL script command:
 ## Parameters of the subcommand {#options}
 
 #|
-|| **Name** | **Description** ||
+|| Name | Description ||
 || `--timeout` | The time within which the operation should be completed on the server. ||
 || `--stats` | Statistics mode.
 

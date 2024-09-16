@@ -27,9 +27,8 @@ When creating a table, you can specify:
 ## Creating two tables with primary key autoincrement {#create_table_pk_serial}
 
 #|
-|| **Table people** | **Table social_card** ||
+|| Table `people` | Table `social_card` ||
 ||
-
 
 {% include [create_table_people](../_includes/statements/create_table/create_table_people.md) %}
 

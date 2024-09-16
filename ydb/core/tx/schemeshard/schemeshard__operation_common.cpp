@@ -695,7 +695,7 @@ THolder<TEvPersQueue::TEvProposeTransaction> TConfigureParts::MakeEvProposeTrans
                                                                                        const TTopicTabletInfo& pqShard,
                                                                                        const TString& topicName,
                                                                                        const TString& topicPath,
-                                                                                       const std::optional<TString>& bootstrapConfig,
+                                                                                       const std::optional<TBootstrapConfigWrapper>& bootstrapConfig,
                                                                                        const TString& cloudId,
                                                                                        const TString& folderId,
                                                                                        const TString& databaseId,
@@ -719,7 +719,7 @@ THolder<TEvPersQueue::TEvProposeTransaction> TConfigureParts::MakeEvProposeTrans
                        databasePath);
     if (bootstrapConfig) {
         Y_ABORT_UNLESS(txType == TTxState::TxCreatePQGroup);
-        event->PreSerializedData += *bootstrapConfig;
+        event->PreSerializedData += bootstrapConfig->GetPreSerializedProposeTransaction();
     }
 
     LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -734,7 +734,7 @@ THolder<TEvPersQueue::TEvUpdateConfig> TConfigureParts::MakeEvUpdateConfig(TTxId
                                                                            const TTopicTabletInfo& pqShard,
                                                                            const TString& topicName,
                                                                            const TString& topicPath,
-                                                                           const std::optional<TString>& bootstrapConfig,
+                                                                           const std::optional<TBootstrapConfigWrapper>& bootstrapConfig,
                                                                            const TString& cloudId,
                                                                            const TString& folderId,
                                                                            const TString& databaseId,
@@ -757,7 +757,7 @@ THolder<TEvPersQueue::TEvUpdateConfig> TConfigureParts::MakeEvUpdateConfig(TTxId
                        databasePath);
     if (bootstrapConfig) {
         Y_ABORT_UNLESS(txType == TTxState::TxCreatePQGroup);
-        event->PreSerializedData += *bootstrapConfig;
+        event->PreSerializedData += bootstrapConfig->GetPreSerializedUpdateConfig();
     }
 
     LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,

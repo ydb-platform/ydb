@@ -1626,7 +1626,7 @@ void TPersQueue::CreateTopicConverter(const NKikimrPQ::TPQTabletConfig& config,
 
 void TPersQueue::ProcessUpdateConfigRequest(TAutoPtr<TEvPersQueue::TEvUpdateConfig> ev, const TActorId& sender, const TActorContext& ctx)
 {
-    auto record = ev->GetRecord();
+    const auto& record = ev->GetRecord();
 
     int oldConfigVersion = Config.HasVersion() ? static_cast<int>(Config.GetVersion()) : -1;
     int newConfigVersion = NewConfig.HasVersion() ? static_cast<int>(NewConfig.GetVersion()) : oldConfigVersion;
@@ -3259,7 +3259,7 @@ void TPersQueue::Handle(TEvPersQueue::TEvCancelTransactionProposal::TPtr& ev, co
 
 void TPersQueue::Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx)
 {
-    NKikimrPQ::TEvProposeTransaction event = ev->Get()->GetRecord();
+    const NKikimrPQ::TEvProposeTransaction& event = ev->Get()->GetRecord();
     PQ_LOG_D("Handle TEvPersQueue::TEvProposeTransaction " << event.ShortDebugString());
 
     switch (event.GetTxBodyCase()) {
@@ -3316,7 +3316,7 @@ bool TPersQueue::CheckTxWriteOperations(const NKikimrPQ::TDataTransaction& txBod
 void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransaction> ev,
                                        const TActorContext& ctx)
 {
-    NKikimrPQ::TEvProposeTransaction event = ev->GetRecord();
+    NKikimrPQ::TEvProposeTransaction& event = *ev->MutableRecord();
     Y_ABORT_UNLESS(event.GetTxBodyCase() == NKikimrPQ::TEvProposeTransaction::kData);
     Y_ABORT_UNLESS(event.HasData());
     const NKikimrPQ::TDataTransaction& txBody = event.GetData();
@@ -3427,7 +3427,7 @@ void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransact
 void TPersQueue::HandleConfigTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransaction> ev,
                                          const TActorContext& ctx)
 {
-    NKikimrPQ::TEvProposeTransaction event = ev->GetRecord();
+    const NKikimrPQ::TEvProposeTransaction& event = ev->GetRecord();
     Y_ABORT_UNLESS(event.GetTxBodyCase() == NKikimrPQ::TEvProposeTransaction::kConfig);
     Y_ABORT_UNLESS(event.HasConfig());
 
@@ -3705,7 +3705,7 @@ void TPersQueue::ProcessProposeTransactionQueue(const TActorContext& ctx)
         const auto front = std::move(EvProposeTransactionQueue.front());
         EvProposeTransactionQueue.pop_front();
 
-        NKikimrPQ::TEvProposeTransaction event = front->GetRecord();
+        const NKikimrPQ::TEvProposeTransaction& event = front->GetRecord();
         TDistributedTransaction& tx = Txs[event.GetTxId()];
 
         switch (tx.State) {

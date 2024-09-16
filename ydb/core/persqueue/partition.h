@@ -73,7 +73,7 @@ struct TTransaction {
         : ProposeTransaction(proposeTx)
         , State(ECommitState::Committed)
     {
-        auto record = proposeTx->GetRecord();
+        const auto& record = proposeTx->GetRecord();
         if (record.HasSupportivePartitionActor()) {
             SupportivePartitionActor = ActorIdFromProto(record.GetSupportivePartitionActor());
         }

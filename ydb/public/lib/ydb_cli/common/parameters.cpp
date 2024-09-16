@@ -315,7 +315,7 @@ void TCommandWithParameters::ParseParameters(TClientCommand::TConfig& config) {
     if (InputParamNames.empty() && InputFormat == EDataFormat::Raw) {
         throw TMisuseException() << "For \"raw\" format \"--input-param-name\" option should be used.";
     }
-    if (!InputParamNames.empty() && !InputFileHolder) {
+    if (!InputParamNames.empty() && !InputParamStream) {
         throw TMisuseException() << "\"--input-param-name\" option is allowed only with input from stdin or input file.";
     }
     if (BatchMode == EBatchMode::Full || BatchMode == EBatchMode::Adaptive) {

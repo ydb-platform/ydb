@@ -5,7 +5,6 @@
 #include "kqp_planner.h"
 #include "kqp_table_resolver.h"
 #include "kqp_tasks_validate.h"
-#include "kqp_shards_resolver.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet_pipecache.h>
@@ -225,9 +224,7 @@ public:
 
                     const auto& task = TasksGraph.GetTask(taskId);
                     const auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
-                    auto& info = (*ShardIdToTableInfo)[lock.GetDataShard()];
-                    info.IsOlap = (stageInfo.Meta.TableKind == ETableKind::Olap);
-                    info.Pathes.insert(stageInfo.Meta.TablePath);
+                    ShardIdToTableInfo->Add(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
                 }
             } else if (data.GetData().template Is<NKikimrKqp::TEvKqpOutputActorResultInfo>()) {
                 NKikimrKqp::TEvKqpOutputActorResultInfo info;
@@ -237,9 +234,7 @@ public:
 
                     const auto& task = TasksGraph.GetTask(taskId);
                     const auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
-                    auto& info = (*ShardIdToTableInfo)[lock.GetDataShard()];
-                    info.IsOlap = (stageInfo.Meta.TableKind == ETableKind::Olap);
-                    info.Pathes.insert(stageInfo.Meta.TablePath);
+                    ShardIdToTableInfo->Add(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
                 }
             }
         };
@@ -299,7 +294,7 @@ public:
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvKqpExecuter::TEvTableResolveStatus, HandleResolve);
-                hFunc(TEvKqpExecuter::TEvShardsResolveStatus, HandleResolve);
+                hFunc(NShardResolver::TEvShardsResolveStatus, HandleResolve);
                 hFunc(TEvPrivate::TEvResourcesSnapshot, HandleResolve);
                 hFunc(TEvSaveScriptExternalEffectResponse, HandleResolve);
                 hFunc(TEvDescribeSecretsResponse, HandleResolve);
@@ -1981,9 +1976,7 @@ private:
                 NYql::NDqProto::TDqTask* protoTask = ArenaSerializeTaskToProto(TasksGraph, task, true);
                 datashardTasks[task.Meta.ShardId].emplace_back(protoTask);
 
-                auto& info = (*ShardIdToTableInfo)[task.Meta.ShardId];
-                info.IsOlap = (stageInfo.Meta.TableKind == ETableKind::Olap);
-                info.Pathes.insert(stageInfo.Meta.TablePath);
+                ShardIdToTableInfo->Add(task.Meta.ShardId, stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
             } else if (stageInfo.Meta.IsSysView()) {
                 computeTasks.emplace_back(task.Id);
             } else {
@@ -2151,7 +2144,7 @@ private:
         DoExecute();
     }
 
-    void HandleResolve(TEvKqpExecuter::TEvShardsResolveStatus::TPtr& ev) {
+    void HandleResolve(NShardResolver::TEvShardsResolveStatus::TPtr& ev) {
         if (!TBase::HandleResolve(ev)) {
             return;
         }
@@ -2359,7 +2352,6 @@ private:
 
             absl::flat_hash_set<ui64> sendingShardsSet;
             absl::flat_hash_set<ui64> receivingShardsSet;
-            absl::flat_hash_set<ui64> sendingColumnShardsSet;
             absl::flat_hash_set<ui64> receivingColumnShardsSet;
             ui64 arbiter = 0;
             std::optional<ui64> columnShardArbiter;
@@ -2382,31 +2374,20 @@ private:
                 }
 
                 for (auto& [shardId, tx] : evWriteTxs) {
-                    if (ShardIdToTableInfo->at(shardId).IsOlap && HtapTx) {
-                         if (tx->HasLocks()) {
-                            // Locks may be broken so shards with locks need to send readsets
-                            sendingColumnShardsSet.insert(shardId);
-                        }
-                        if (ShardsWithEffects.contains(shardId)) {
-                            // Volatile transactions may abort effects, so they send readsets
-                            if (VolatileTx) {
-                                sendingColumnShardsSet.insert(shardId);
-                            }
-                            // Effects are only applied when all locks are valid
-                            receivingColumnShardsSet.insert(shardId);
-                        }
-                    } else {
-                        if (tx->HasLocks()) {
-                            // Locks may be broken so shards with locks need to send readsets
+                    if (tx->HasLocks()) {
+                        // Locks may be broken so shards with locks need to send readsets
+                        sendingShardsSet.insert(shardId);
+                    }
+                    if (ShardsWithEffects.contains(shardId)) {
+                        // Volatile transactions may abort effects, so they send readsets
+                        if (VolatileTx) {
                             sendingShardsSet.insert(shardId);
                         }
-                        if (ShardsWithEffects.contains(shardId)) {
-                            // Volatile transactions may abort effects, so they send readsets
-                            if (VolatileTx) {
-                                sendingShardsSet.insert(shardId);
-                            }
-                            // Effects are only applied when all locks are valid
-                            receivingShardsSet.insert(shardId);
+                        // Effects are only applied when all locks are valid
+                        receivingShardsSet.insert(shardId);
+
+                        if (HtapTx && ShardIdToTableInfo->Get(shardId).IsOlap) {
+                            receivingColumnShardsSet.insert(shardId);
                         }
                     }
                 }
@@ -2464,13 +2445,11 @@ private:
                 }
 
                 if (!receivingColumnShardsSet.empty()) {
+                    AFL_ENSURE(HtapTx);
                     const ui32 index = RandomNumber<ui32>(receivingColumnShardsSet.size());
                     auto arbiterIterator = std::begin(receivingColumnShardsSet);
                     std::advance(arbiterIterator, index);
                     columnShardArbiter = *arbiterIterator;
-
-                    sendingShardsSet.insert(*columnShardArbiter);
-                    receivingShardsSet.insert(*columnShardArbiter);
                 }
             }
 
@@ -2483,13 +2462,8 @@ private:
                 std::sort(sendingShards.begin(), sendingShards.end());
                 std::sort(receivingShards.begin(), receivingShards.end());
 
-                NProtoBuf::RepeatedField<ui64> sendingColumnShards(sendingColumnShardsSet.begin(), sendingColumnShardsSet.end());
-                NProtoBuf::RepeatedField<ui64> receivingColumnShards(receivingColumnShardsSet.begin(), receivingColumnShardsSet.end());
-
-                std::sort(sendingColumnShards.begin(), sendingColumnShards.end());
-                std::sort(receivingColumnShards.begin(), receivingColumnShards.end());
-
                 for (auto& [shardId, shardTx] : datashardTxs) {
+                    AFL_ENSURE(!columnShardArbiter);
                     shardTx->MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
                     *shardTx->MutableLocks()->MutableSendingShards() = sendingShards;
                     *shardTx->MutableLocks()->MutableReceivingShards() = receivingShards;
@@ -2498,24 +2472,46 @@ private:
                     }
                 }
 
-                for (auto& [_, tx] : evWriteTxs) {
+                for (auto& [shardId, tx] : evWriteTxs) {
                     tx->MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
-                    *tx->MutableLocks()->MutableSendingShards() = sendingShards;
-                    *tx->MutableLocks()->MutableReceivingShards() = receivingShards;
-                    *tx->MutableLocks()->MutableSendingColumnShards() = sendingColumnShards;
-                    *tx->MutableLocks()->MutableReceivingColumnShards() = receivingColumnShards;
-                    if (arbiter) {
-                        tx->MutableLocks()->SetArbiterShard(arbiter);
-                    }
-                    if (columnShardArbiter) {
+                    if (columnShardArbiter && *columnShardArbiter == shardId) {
                         tx->MutableLocks()->SetArbiterColumnShard(*columnShardArbiter);
+                        *tx->MutableLocks()->MutableSendingShards() = sendingShards;
+                        *tx->MutableLocks()->MutableReceivingShards() = receivingShards;
+                    } else if (columnShardArbiter) {
+                        tx->MutableLocks()->SetArbiterColumnShard(*columnShardArbiter);
+                        tx->MutableLocks()->AddSendingShards(*columnShardArbiter);
+                        tx->MutableLocks()->AddReceivingShards(*columnShardArbiter);
+                        if (sendingShardsSet.contains(shardId)) {
+                            tx->MutableLocks()->AddSendingShards(shardId);
+                        }
+                        if (receivingShardsSet.contains(shardId)) {
+                            tx->MutableLocks()->AddReceivingShards(shardId);
+                        }
+                    } else {
+                        *tx->MutableLocks()->MutableSendingShards() = sendingShards;
+                        *tx->MutableLocks()->MutableReceivingShards() = receivingShards;
+                        if (arbiter) {
+                            tx->MutableLocks()->SetArbiterShard(arbiter);
+                        }
                     }
                 }
 
-                for (auto& [_, t] : topicTxs) {
+                for (auto& [shardId, t] : topicTxs) {
                     t.tx.SetOp(NKikimrPQ::TDataTransaction::Commit);
-                    *t.tx.MutableSendingShards() = sendingShards;
-                    *t.tx.MutableReceivingShards() = receivingShards;
+                    if (columnShardArbiter) {
+                        t.tx.AddSendingShards(*columnShardArbiter);
+                        t.tx.AddReceivingShards(*columnShardArbiter);
+                        if (sendingShardsSet.contains(shardId)) {
+                            t.tx.AddSendingShards(shardId);
+                        }
+                        if (receivingShardsSet.contains(shardId)) {
+                            t.tx.AddReceivingShards(shardId);
+                        }
+                    } else {
+                        *t.tx.MutableSendingShards() = sendingShards;
+                        *t.tx.MutableReceivingShards() = receivingShards;
+                    }
                     YQL_ENSURE(!arbiter);
                 }
             }

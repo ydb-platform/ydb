@@ -58,6 +58,7 @@ enum class ENormalizerSequentialId: ui32 {
     CleanGranuleId,
     EmptyPortionsCleaner,
     CleanInsertionDedup,
+    GCCountersNormalizer,
 
     MAX
 };

@@ -1,6 +1,7 @@
 #include "update.h"
 #include <ydb/core/tx/schemeshard/olap/operations/alter/abstract/converter.h>
 #include <ydb/core/tx/schemeshard/olap/common/common.h>
+#include <ydb/library/formats/arrow/accessor/common/const.h>
 
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 
@@ -51,6 +52,9 @@ NKikimr::TConclusionStatus TStandaloneSchemaUpdate::DoInitializeImpl(const TUpda
         }
     }
 
+    if (!CheckTargetSchema(targetSchema)) {
+        return TConclusionStatus::Fail("schema update error: sparsed columns are disabled");
+    }
     auto description = originalTable.GetTableInfoVerified().Description;
     targetSchema.Serialize(*description.MutableSchema());
     auto ttl = originalTable.GetTableTTLOptional() ? *originalTable.GetTableTTLOptional() : TOlapTTL();

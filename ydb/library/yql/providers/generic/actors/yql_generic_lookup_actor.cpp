@@ -152,7 +152,14 @@ namespace NYql::NDq {
             Y_ABORT_UNLESS(response.splits_size() == 1);
             auto& split = response.splits(0);
             NConnector::NApi::TReadSplitsRequest readRequest;
-            *readRequest.mutable_data_source_instance() = GetDataSourceInstanceWithToken();
+
+            *readRequest.mutable_data_source_instance() = LookupSource.data_source_instance();
+            auto error = TokenProvider->MaybeFillToken(*readRequest.mutable_data_source_instance());
+            if (error) {
+                SendError(TActivationContext::ActorSystem(), SelfId(), std::move(error));
+                return;
+            }
+
             *readRequest.add_splits() = split;
             readRequest.Setformat(NConnector::NApi::TReadSplitsRequest_EFormat::TReadSplitsRequest_EFormat_ARROW_IPC_STREAMING);
             Connector->ReadSplits(readRequest).Subscribe([actorSystem = TActivationContext::ActorSystem(), selfId = SelfId()](const NConnector::TReadSplitsStreamIteratorAsyncResult& asyncResult) {
@@ -194,9 +201,16 @@ namespace NYql::NDq {
             YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << SelfId() << " Got LookupRequest for " << request.size() << " keys";
             Y_ABORT_IF(InProgress);
             Y_ABORT_IF(request.size() == 0 || request.size() > MaxKeysInRequest);
+
             Request = std::move(request);
             NConnector::NApi::TListSplitsRequest splitRequest;
-            *splitRequest.add_selects() = CreateSelect();
+
+            auto error = FillSelect(*splitRequest.add_selects());
+            if (error) {
+                SendError(TActivationContext::ActorSystem(), SelfId(), std::move(error));
+                return;
+            };
+
             splitRequest.Setmax_split_count(1);
             Connector->ListSplits(splitRequest).Subscribe([actorSystem = TActivationContext::ActorSystem(), selfId = SelfId()](const NConnector::TListSplitsStreamIteratorAsyncResult& asyncResult) {
                 auto result = ExtractFromConstFuture(asyncResult);
@@ -285,6 +299,12 @@ namespace NYql::NDq {
             SendError(actorSystem, selfId, NConnector::ErrorFromGRPCStatus(status));
         }
 
+        static void SendError(NActors::TActorSystem* actorSystem, const NActors::TActorId& selfId, TString error) {
+            NConnector::NApi::TError dst;
+            *dst.mutable_message() = error;
+            SendError(actorSystem, selfId, std::move(dst));
+        }
+
     private:
         enum class EColumnDestination {
             Key,
@@ -314,17 +334,13 @@ namespace NYql::NDq {
             return result;
         }
 
-        NYql::NConnector::NApi::TDataSourceInstance GetDataSourceInstanceWithToken() const {
+        TString FillSelect(NConnector::NApi::TSelect& select) {
             auto dsi = LookupSource.data_source_instance();
-            // Note: returned token may be stale and we have no way to check or recover here
-            // Consider to redesign ICredentialsProvider
-            TokenProvider->MaybeFillToken(dsi);
-            return dsi;
-        }
-
-        NConnector::NApi::TSelect CreateSelect() {
-            NConnector::NApi::TSelect select;
-            *select.mutable_data_source_instance() = GetDataSourceInstanceWithToken();
+            auto error = TokenProvider->MaybeFillToken(dsi);
+            if (error) {
+                return error;
+            }
+            *select.mutable_data_source_instance() = dsi;
 
             for (ui32 i = 0; i != SelectResultType->GetMembersCount(); ++i) {
                 auto c = select.mutable_what()->add_items()->mutable_column();
@@ -349,7 +365,7 @@ namespace NYql::NDq {
                 *disjunction.mutable_operands()->Add()->mutable_conjunction() = conjunction;
             }
             *select.mutable_where()->mutable_filter_typed()->mutable_disjunction() = disjunction;
-            return select;
+            return {};
         }
 
     private:

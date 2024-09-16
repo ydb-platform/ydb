@@ -49,7 +49,7 @@ public:
     TAggregationFactory(TPosition pos, const TString& name, const TString& func, EAggregateMode aggMode,
         bool multi = false, bool validateArgs = true)
         : IAggregation(pos, name, func, aggMode), Factory(!func.empty() ?
-            BuildBind(Pos, aggMode == EAggregateMode::OverWindow ? "window_module" : "aggregate_module", func) : nullptr),
+            BuildBind(Pos, aggMode == EAggregateMode::OverWindow || aggMode == EAggregateMode::OverWindowDistinct ? "window_module" : "aggregate_module", func) : nullptr),
         Multi(multi), ValidateArgs(validateArgs), DynamicFactory(!Factory)
     {
         if (aggMode != EAggregateMode::OverWindow && !func.empty() && AggApplyFuncs.contains(func)) {
@@ -176,7 +176,7 @@ protected:
             ctx.Error(Pos) << "Aggregation of aggregated values is forbidden";
             return false;
         }
-        if (AggMode == EAggregateMode::Distinct) {
+        if (AggMode == EAggregateMode::Distinct || AggMode == EAggregateMode::OverWindowDistinct) {
             const auto column = Expr->GetColumnName();
             if (!column) {
                 // TODO: improve TBasicAggrFunc::CollectPreaggregateExprs()

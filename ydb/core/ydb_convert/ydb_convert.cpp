@@ -20,6 +20,28 @@
 
 namespace NKikimr {
 
+namespace {
+
+    bool FillAllowPermissions(NACLib::TDiffACL& out, const Ydb::Scheme::Permissions& in, TString& error) {
+        for (const auto& permission : in.permission_names()) {
+            try {
+                auto aclAttrs = ConvertYdbPermissionNameToACLAttrs(permission);
+                out.AddAccess(
+                    NACLib::EAccessType::Allow,
+                    aclAttrs.AccessMask,
+                    in.subject(),
+                    aclAttrs.InheritanceType
+                );
+            } catch (const std::exception& e) {
+                error = e.what();
+                return false;
+            }
+        }
+        return true;
+    }
+
+} // anonymous namespace
+
 template<typename TOut>
 Y_FORCE_INLINE void ConvertMiniKQLTupleTypeToYdbType(const NKikimrMiniKQL::TTupleType& protoTupleType, TOut& output) {
     const ui32 elementsCount = static_cast<ui32>(protoTupleType.ElementSize());
@@ -1255,7 +1277,7 @@ bool CellFromProtoVal(NScheme::TTypeInfo type, i32 typmod, const Ydb::Value* vp,
         TString text = val.Gettext_value();
         if (!text.empty()) {
             isText = true;
-            auto desc = type.GetTypeDesc();
+            auto desc = type.GetPgTypeDesc();
             auto res = NPg::PgNativeBinaryFromNativeText(text, desc);
             if (res.Error) {
                 err = TStringBuilder() << "Invalid text value for "
@@ -1266,7 +1288,7 @@ bool CellFromProtoVal(NScheme::TTypeInfo type, i32 typmod, const Ydb::Value* vp,
         } else {
             binary = val.Getbytes_value();
         }
-        auto* desc = type.GetTypeDesc();
+        auto* desc = type.GetPgTypeDesc();
         if (typmod != -1 && NPg::TypeDescNeedsCoercion(desc)) {
             auto res = NPg::PgNativeBinaryCoerce(TStringBuf(binary), desc, typmod);
             if (res.Error) {
@@ -1407,6 +1429,37 @@ void ProtoValueFromCell(NYdb::TValueBuilder& vb, const NScheme::TTypeInfo& typeI
         break;
     default:
         Y_ENSURE(false, TStringBuilder() << "Unsupported type: " << primitive);
+    }
+}
+
+bool FillACL(NKikimrSchemeOp::TModifyScheme& out,
+             const TMaybeFail<Ydb::Scheme::ModifyPermissionsRequest>& in,
+             TString& error) {
+    if (in.Empty()) {
+        return true;
+    }
+
+    NACLib::TDiffACL diffACL;
+    for (const auto& action : in->actions()) {
+        if (action.has_grant() && !FillAllowPermissions(diffACL, action.grant(), error)) {
+            return false;
+        }
+    }
+    out.MutableModifyACL()->SetDiffACL(diffACL.SerializeAsString());
+
+    return true;
+}
+
+void FillOwner(NKikimrScheme::TEvModifySchemeTransaction& out,
+    const TMaybeFail<Ydb::Scheme::ModifyPermissionsRequest>& in) {
+    if (in.Empty()) {
+        return;
+    }
+
+    for (const auto& action : in->actions()) {
+        if (action.has_change_owner()) {
+            out.SetOwner(action.change_owner());
+        }
     }
 }
 

@@ -238,7 +238,7 @@ TMaybeNode<TDqPhyPrecompute> PrecomputeTableLookupDict(const TDqPhyPrecompute& l
 }
 
 TExprBase MakeRowsFromDict(const TDqPhyPrecompute& dict, const TVector<TString>& dictKeys,
-    const THashSet<TStringBuf>& columns, TPositionHandle pos, TExprContext& ctx)
+    const TVector<TStringBuf>& columns, TPositionHandle pos, TExprContext& ctx)
 {
     THashSet<TString> dictKeysSet(dictKeys.begin(), dictKeys.end());
     auto dictTupleArg = TCoArgument(ctx.NewArgument(pos, "dict_tuple"));
@@ -296,7 +296,7 @@ TExprBase MakeRowsFromDict(const TDqPhyPrecompute& dict, const TVector<TString>&
 }
 
 TExprBase MakeRowsFromTupleDict(const TDqPhyPrecompute& dict, const TVector<TString>& dictKeys,
-    const THashSet<TStringBuf>& columns, TPositionHandle pos, TExprContext& ctx)
+    const TVector<TStringBuf>& columns, TPositionHandle pos, TExprContext& ctx)
 {
     THashSet<TString> dictKeysSet(dictKeys.begin(), dictKeys.end());
     auto dictTupleArg = TCoArgument(ctx.NewArgument(pos, "dict_tuple"));

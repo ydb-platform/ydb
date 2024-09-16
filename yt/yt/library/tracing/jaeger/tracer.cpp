@@ -168,6 +168,8 @@ void ToProtoUInt64(TString* proto, i64 i)
 
 void ToProto(NProto::Span* proto, const TTraceContextPtr& traceContext)
 {
+    using NYT::ToProto;
+
     ToProtoGuid(proto->mutable_trace_id(), traceContext->GetTraceId());
     ToProtoUInt64(proto->mutable_span_id(), traceContext->GetSpanId());
 
@@ -182,8 +184,8 @@ void ToProto(NProto::Span* proto, const TTraceContextPtr& traceContext)
     for (const auto& [name, value] : traceContext->GetTags()) {
         auto* protoTag = proto->add_tags();
 
-        protoTag->set_key(name);
-        protoTag->set_v_str(value);
+        protoTag->set_key(ToProto<TProtobufString>(name));
+        protoTag->set_v_str(ToProto<TProtobufString>(value));
     }
 
     for (const auto& logEntry : traceContext->GetLogEntries()) {

@@ -8,9 +8,9 @@
 
 ## Adding an index {#add-index}
 
-```ADD INDEX```: Adds an index with the specified name and type for a given set of columns. The code below adds a global index named ```title_index``` for the ```title``` column.
+`ADD INDEX`: Adds an index with the specified name and type for a given set of columns. The code below adds a global index named `title_index` for the `title` column.
 
-```sql
+```yql
 ALTER TABLE `series` ADD INDEX `title_index` GLOBAL ON (`title`);
 ```
 
@@ -24,7 +24,7 @@ You can also add a secondary index using the {{ ydb-short-name }} CLI [table ind
 
 ## Altering an index {#alter-index}
 
-Indexes have type-specific parameters that can be tuned. Global indexes, whether [synchronous]({{ concept_secondary_index }}#sync) or [asynchronous]({{ concept_secondary_index }}#async), are implemented as hidden tables, and their automatic partitioning settings can be adjusted just like [those of regular tables](#additional-alter).
+Indexes have type-specific parameters that can be tuned. Global indexes, whether [synchronous]({{ concept_secondary_index }}#sync) or [asynchronous]({{ concept_secondary_index }}#async), are implemented as hidden tables, and their automatic partitioning settings can be adjusted just like those of regular tables.
 
 {% note info %}
 
@@ -48,7 +48,7 @@ ALTER TABLE <table_name> ALTER INDEX <index_name> SET (<partitioning_setting_nam
 
 {% note info %}
 
-These settings cannot be [reset](#additional-reset).
+These settings cannot be reset.
 
 {% endnote %}
 
@@ -60,7 +60,7 @@ These settings cannot be [reset](#additional-reset).
 
 The query in the following example enables automatic partitioning by load for the index named `title_index` of table `series` and sets its minimum partition count to 5:
 
-```sql
+```yql
 ALTER TABLE `series` ALTER INDEX `title_index` SET (
     AUTO_PARTITIONING_BY_LOAD = ENABLED,
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 5
@@ -69,9 +69,9 @@ ALTER TABLE `series` ALTER INDEX `title_index` SET (
 
 ## Deleting an index {#drop-index}
 
-```DROP INDEX```: Deletes the index with the specified name. The code below deletes the index named ```title_index```.
+`DROP INDEX`: Deletes the index with the specified name. The code below deletes the index named `title_index`.
 
-```sql
+```yql
 ALTER TABLE `series` DROP INDEX `title_index`;
 ```
 
@@ -95,6 +95,6 @@ Replacement of atomic indexes under load is supported by the command [{{ ydb-cli
 
 Example of index renaming:
 
-```sql
+```yql
 ALTER TABLE `series` RENAME INDEX `title_index` TO `title_index_new`;
 ```

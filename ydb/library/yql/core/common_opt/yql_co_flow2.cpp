@@ -1928,7 +1928,13 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
     };
 
     map["WindowTraits"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
-        auto structType = node->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+        auto type = node->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        if (type->GetKind() != ETypeAnnotationKind::Struct) {
+            // usually distinct, type of column is used instead
+            return node;
+        }
+
+        auto structType = type->Cast<TStructExprType>();
         TSet<TStringBuf> usedFields;
         auto initLambda = node->Child(1);
         auto updateLambda = node->Child(2);

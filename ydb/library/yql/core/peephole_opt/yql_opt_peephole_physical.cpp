@@ -5708,7 +5708,7 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
         std::visit([&types](const auto& value) { types.IncNoBlockType(value); }, typeKindOrSlot);
     };
 
-    auto resolveStatus = types.ArrowResolver->AreTypesSupported(ctx.GetPosition(lambda->Pos()), allInputTypes, ctx, onUnsupportedType);
+    auto resolveStatus = types.ArrowResolver->AreTypesSupported(ctx.GetPosition(lambda->Pos()), allInputTypes, ctx, false, onUnsupportedType);
     YQL_ENSURE(resolveStatus != IArrowResolver::ERROR);
     if (resolveStatus != IArrowResolver::OK) {
         return false;
@@ -5848,7 +5848,7 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
                 allTypes.push_back(node->Child(i)->GetTypeAnn());
             }
 
-            auto resolveStatus = types.ArrowResolver->AreTypesSupported(ctx.GetPosition(node->Pos()), allTypes, ctx, onUnsupportedType);
+            auto resolveStatus = types.ArrowResolver->AreTypesSupported(ctx.GetPosition(node->Pos()), allTypes, ctx, false, onUnsupportedType);
             YQL_ENSURE(resolveStatus != IArrowResolver::ERROR);
             if (resolveStatus != IArrowResolver::OK) {
                 return true;

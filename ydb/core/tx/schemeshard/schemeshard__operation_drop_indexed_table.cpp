@@ -425,7 +425,7 @@ TVector<ISubOperation::TPtr> CreateDropIndexedTable(TOperationId nextId, const T
                     .IsTable()
                     .NotUnderDeleting()
                     .NotUnderOperation();
-                if (!NTableIndex::IsTmpImplTable(table.LeafName())) {
+                if (!table.Parent()->IsTableIndex() || !NTableIndex::IsTmpImplTable(table.LeafName())) {
                     checks.IsCommonSensePath();                    
                 }
             }

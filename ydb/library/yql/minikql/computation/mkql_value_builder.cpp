@@ -89,6 +89,7 @@ NUdf::TUnboxedValue TDefaultValueBuilder::SubString(NUdf::TUnboxedValuePod value
 NUdf::TUnboxedValue TDefaultValueBuilder::NewList(NUdf::TUnboxedValue* items, ui64 count) const {
     if (items == nullptr || count == 0) {
         return HolderFactory_.GetEmptyContainerLazy();
+    }
 
     TUnboxedValueVector list;
     for (ui64 i = 0; i < count; ++i) {

@@ -91,7 +91,7 @@ After the last answer, you will be asked for a token which you can generate in t
 
 {% note tip %}
 
-You can generate a Personal Access Token here https://github.com/settings/tokens
+You can generate a Personal Access Token [here](https://github.com/settings/tokens).
 The minimum required scopes are 'repo', 'read:org', 'admin:public_key'.
 
 {% endnote %}
@@ -212,7 +212,7 @@ When the changes are completed and locally tested (see [Ya Build and Test](build
 
 - GitHub UI
 
-  Visit your branch's page on GitHub.com (https://github.com/{your_github_user_name}/ydb/tree/{branch_name}), press `Contribute` and then `Open Pull Request`.
+  Visit your branch's page on GitHub.com (`https://github.com/{your_github_user_name}/ydb/tree/{branch_name}`), press `Contribute` and then `Open Pull Request`.
   You can also use the link in the `git push` output to open a Pull Request:
 
   ```text

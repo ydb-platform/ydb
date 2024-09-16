@@ -160,7 +160,7 @@ $ goose ydb $YDB_CONNECTION_STRING status
 
 {% list tabs %}
 
-- Используя {{ ydb-short-name }} UI по адресу http://localhost:8765
+- Используя {{ ydb-short-name }} UI по адресу `http://localhost:8765`
 
   ![{{ ydb-short-name }} UI after apply first migration](_assets/goose-ydb-ui-after-first-migration.png =450x)
 
@@ -252,7 +252,7 @@ $ goose ydb $YDB_CONNECTION_STRING status
 
 {% list tabs %}
 
-- Используя {{ ydb-short-name }} UI по адресу http://localhost:8765
+- Используя {{ ydb-short-name }} UI по адресу `http://localhost:8765`
 
   ![{{ ydb-short-name }} UI after apply second migration](_assets/goose-ydb-ui-after-second-migration.png =450x)
 
@@ -316,7 +316,7 @@ $ goose ydb $YDB_CONNECTION_STRING status
 
 {% list tabs %}
 
-- Используя {{ ydb-short-name }} UI по адресу http://localhost:8765
+- Используя {{ ydb-short-name }} UI по адресу `http://localhost:8765`
 
   ![{{ ydb-short-name }} UI after apply first migration](_assets/goose-ydb-ui-after-first-migration.png =450x)
 

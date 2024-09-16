@@ -116,8 +116,8 @@ CREATE EXTERNAL DATA SOURCE TestDataSource WITH (
 
 |Название системы|URL|
 |------|-------|
-|{{ objstorage-name }}|https://storage.yandexcloud.net/bucket/|
-|AWS S3|http://s3.amazonaws.com/bucket/|
+|{{ objstorage-name }}|`https://storage.yandexcloud.net/bucket/`|
+|AWS S3|`http://s3.amazonaws.com/bucket/`|
 
 ### Пример
 

@@ -169,7 +169,7 @@ There are alternative options to see the applied changes:
 
 {% list tabs %}
 
-- Using {{ ydb-short-name }} UI on http://localhost:8765
+- Using {{ ydb-short-name }} UI on `http://localhost:8765`
 
   ![{{ ydb-short-name }} UI after the first migration](_assets/goose-ydb-ui-after-first-migration.png =450x)
 
@@ -263,7 +263,7 @@ Let's use the same methods to see the new changes:
 
 {% list tabs %}
 
-- Using {{ ydb-short-name }} UI on http://localhost:8765
+- Using {{ ydb-short-name }} UI on `http://localhost:8765`
 
   ![YDB UI after apply second migration](_assets/goose-ydb-ui-after-second-migration.png =450x)
 
@@ -329,7 +329,7 @@ Let's check the changes again:
 
 {% list tabs %}
 
-- Using {{ ydb-short-name }} UI on http://localhost:8765
+- Using {{ ydb-short-name }} UI on `http://localhost:8765`
 
   ![{{ ydb-short-name }} UI after apply first migration](_assets/goose-ydb-ui-after-first-migration.png =450x)
 

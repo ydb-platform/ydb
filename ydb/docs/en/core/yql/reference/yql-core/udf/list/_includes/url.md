@@ -101,7 +101,7 @@ Get a component of the URL.
 * `Url::GetCGIParam(String?, String) -> String?` -- The second parameter is the name of the intended CGI parameter.
 * `Url::GetDomain(String?, Uint8) -> String?` -- The second parameter is the required domain level.
 * `Url::GetTLD(String{Flags:AutoMap}) -> String`
-* `Url::IsKnownTLD(String{Flags:AutoMap}) -> Bool` -- Registered on http://www.iana.org/
+* `Url::IsKnownTLD(String{Flags:AutoMap}) -> Bool` -- Registered on [iana.org](http://www.iana.org/).
 * `Url::IsWellKnownTLD(String{Flags:AutoMap}) -> Bool` -- Belongs to a small whitelist of com, net, org, ru, and so on.
 * `Url::GetDomainLevel(String{Flags:AutoMap}) -> Uint64`
 * `Url::GetSignificantDomain(String{Flags:AutoMap}, [List<String>?]) -> String`

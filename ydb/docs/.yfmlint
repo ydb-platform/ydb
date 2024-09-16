@@ -28,7 +28,7 @@ log-levels:
   MD031: 'error' # Fenced code blocks should be surrounded by blank lines
   MD032: 'error' # Lists should be surrounded by blank lines
   MD033: 'disabled' # Inline HTML
-  MD034: 'disabled' # Bare URL used
+  MD034: 'error' # Bare URL used
   MD035: 'error' # Horizontal rule style
   MD036: 'disabled' # Emphasis used instead of a heading
   MD037: 'disabled' # Spaces inside emphasis markers

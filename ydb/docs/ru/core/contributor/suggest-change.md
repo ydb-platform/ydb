@@ -16,7 +16,7 @@
 
   * Предположим, что у вас уже есть настроенный yubikey (или вы настроили yubikey локально)
   * На вашем ноутбуке: `skotty ssh keys`
-  * Загрузите ssh-ключ `legacy@yubikey` на github (через пользовательский интерфейс: https://github.com/settings/keys)
+  * Загрузите ssh-ключ `legacy@yubikey` на github ([через пользовательский интерфейс](https://github.com/settings/keys))
   * Проверьте подключение на ноутбуке: `ssh -T git@github.com`
 
 #### Удаленная разработка
@@ -95,7 +95,7 @@ The minimum required scopes are 'repo', 'read:org', 'admin:public_key'.
 ? Paste your authentication token:
 ```
 
-Откройте [https://github.com/settings/tokens](https://github.com/settings/tokens), нажмите  "Generate new token" / "Classic", поставьте галочки в четырех полях:
+Откройте [настройки токенов в GitHub](https://github.com/settings/tokens), нажмите  "Generate new token" / "Classic", поставьте галочки в четырех полях:
 
 * Поле **`workflow`**
 * Три других, как указано в подсказке:  "repo", "admin:public_key" and "read:org" (в разделе "admin:org")
@@ -210,7 +210,7 @@ git push
 
 - GitHub UI
 
-  Откройте страницу вашей ветки на GitHub.com (https://github.com/{your_github_user_name}/ydb/tree/{branch_name}), нажмите `Contribute` и затем `Open Pull Request`.
+  Откройте страницу вашей ветки на GitHub.com (`https://github.com/{your_github_user_name}/ydb/tree/{branch_name}`), нажмите `Contribute` и затем `Open Pull Request`.
   Также можно использовать ссылку в выводе команды `git push`, чтобы создать Pull Request:
 
   ```text

@@ -101,7 +101,7 @@ SELECT Url::Parse(
 * `Url::GetCGIParam(String?, String) -> String?` -- второй параметр — имя нужного CGI параметра
 * `Url::GetDomain(String?, Uint8) -> String?` -- второй параметр — необходимый уровень домена
 * `Url::GetTLD(String{Flags:AutoMap}) -> String`
-* `Url::IsKnownTLD(String{Flags:AutoMap}) -> Bool` -- зарегистрирован на http://www.iana.org/
+* `Url::IsKnownTLD(String{Flags:AutoMap}) -> Bool` -- зарегистрирован на [iana.org](http://www.iana.org/).
 * `Url::IsWellKnownTLD(String{Flags:AutoMap}) -> Bool` -- находится в небольшом whitelist из com, net, org, ru и пр.
 * `Url::GetDomainLevel(String{Flags:AutoMap}) -> Uint64`
 * `Url::GetSignificantDomain(String{Flags:AutoMap}, [List<String>?]) -> String`

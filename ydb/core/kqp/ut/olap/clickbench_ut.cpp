@@ -166,9 +166,9 @@ Y_UNIT_TEST_SUITE(KqpOlapClickbench) {
                 GROUP BY RegionID
                 ORDER BY c DESC
                 LIMIT 10
-            )");
+            )")
             //.SetExpectedReply("[[[\"40999\"];[4];1u];[[\"40998\"];[3];1u];[[\"40997\"];[2];1u]]")
-            // .SetExpectedReadNodeType("TableFullScan");
+            .SetExpectedReadNodeType("TableFullScan");
             // .SetExpectedReadNodeType("Aggregate-TableFullScan");
         q9.FillExpectedAggregationGroupByPlanOptions();
 
@@ -213,9 +213,7 @@ Y_UNIT_TEST_SUITE(KqpOlapClickbench) {
                 GROUP BY SearchPhrase
                 ORDER BY c DESC
                 LIMIT 10;
-            )")
-            .AddExpectedPlanOptions("KqpOlapFilter");
-            // .SetExpectedReadNodeType("TableFullScan");
+            )");
         q22.FillExpectedAggregationGroupByPlanOptions();
 
         TAggregationTestCase q39;

@@ -720,9 +720,9 @@
     ],
     "test.test[column_group-groups-lookup-Debug]": [
         {
-            "checksum": "81ea96f82489be2a18dd3971d295ffd7",
-            "size": 2770,
-            "uri": "https://{canondata_backend}/1899731/7897b30eef0bb27e4ec2a81827074c48697423a5/resource.tar.gz#test.test_column_group-groups-lookup-Debug_/opt.yql"
+            "checksum": "4596262be89842240e238e1caf56d85b",
+            "size": 2704,
+            "uri": "https://{canondata_backend}/1937424/76220321015a525a6d6ba6e26477a4c8e59fe581/resource.tar.gz#test.test_column_group-groups-lookup-Debug_/opt.yql"
         }
     ],
     "test.test[column_group-groups-lookup-Plan]": [

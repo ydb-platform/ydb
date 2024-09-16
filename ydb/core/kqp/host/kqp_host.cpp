@@ -1140,10 +1140,10 @@ public:
             });
     }
 
-    IAsyncQueryResultPtr PrepareGenericScript(const TKqpQueryRef& query, const TPrepareSettings& settings) override {
+    IAsyncQueryResultPtr PrepareGenericScript(const TKqpQueryRef& query, const TPrepareSettings& settings, NYql::TExprNode::TPtr expr = nullptr) override {
         return CheckedProcessQuery(*ExprCtx,
-            [this, &query, settings] (TExprContext& ctx) mutable {
-                return PrepareQueryInternal(query, nullptr, EKikimrQueryType::Script, settings, ctx);
+            [this, &query, settings, expr] (TExprContext& ctx) mutable {
+                return PrepareQueryInternal(query, expr, EKikimrQueryType::Script, settings, ctx);
             });
     }
 

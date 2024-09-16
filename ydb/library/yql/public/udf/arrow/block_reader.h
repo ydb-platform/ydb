@@ -438,9 +438,9 @@ public:
 
     ui64 GetDataWeight(const arrow::ArrayData& data) const final {
         if constexpr (Nullable) {
-            return Inner->GetDataWeight(data) * data.length + 1;
+            return Inner->GetDataWeight(*data.child_data[0]) * data.length + 1;
         }
-        return Inner->GetDataWeight(data) * data.length;
+        return Inner->GetDataWeight(*data.child_data[0]) * data.length;
     }
 
     ui64 GetDataWeight(TBlockItem item) const final {

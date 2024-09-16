@@ -1517,7 +1517,7 @@ bool ConvertArrowType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>& ty
     }
 }
 
-bool ConvertArrowType(TType* itemType, std::shared_ptr<arrow::DataType>& type, const TArrowConvertFailedCallback& onFail) {
+bool ConvertArrowType(TType* itemType, std::shared_ptr<arrow::DataType>& type, bool extraTypes, const TArrowConvertFailedCallback& onFail) {
     bool isOptional;
     auto unpacked = UnpackOptional(itemType, isOptional);
     if (unpacked->IsOptional() || isOptional && unpacked->IsPg()) {
@@ -1538,7 +1538,7 @@ bool ConvertArrowType(TType* itemType, std::shared_ptr<arrow::DataType>& type, c
 
         // previousType is always Optional
         std::shared_ptr<arrow::DataType> innerArrowType;
-        if (!ConvertArrowType(previousType, innerArrowType, onFail)) {
+        if (!ConvertArrowType(previousType, innerArrowType, extraTypes, onFail)) {
             return false;
         }
 
@@ -1560,7 +1560,7 @@ bool ConvertArrowType(TType* itemType, std::shared_ptr<arrow::DataType>& type, c
             std::shared_ptr<arrow::DataType> childType;
             const TString memberName(structType->GetMemberName(i));
             auto memberType = structType->GetMemberType(i);
-            if (!ConvertArrowType(memberType, childType, onFail)) {
+            if (!ConvertArrowType(memberType, childType, extraTypes, onFail)) {
                 return false;
             }
             members.emplace_back(std::make_shared<arrow::Field>(memberName, childType, memberType->IsOptional()));
@@ -1570,16 +1570,19 @@ bool ConvertArrowType(TType* itemType, std::shared_ptr<arrow::DataType>& type, c
         return true;
     }
 
-    if (unpacked->IsList()) {
-        auto listType = AS_TYPE(TListType, unpacked);
-        std::shared_ptr<arrow::DataType> childType;
-        auto itemType = listType->GetItemType();
-        if (!ConvertArrowType(itemType, childType)) {
-            return false;
+    if (extraTypes) {
+        if (unpacked->IsList()) {
+            auto listType = AS_TYPE(TListType, unpacked);
+            std::shared_ptr<arrow::DataType> childType;
+            auto itemType = listType->GetItemType();
+            if (!ConvertArrowType(itemType, childType, extraTypes)) {
+                return false;
+            }
+            type = std::make_shared<arrow::ListType>(std::make_shared<arrow::Field>("item", childType, itemType->IsOptional()));
+            return true;
         }
-        type = std::make_shared<arrow::ListType>(std::make_shared<arrow::Field>("item", childType, itemType->IsOptional()));
-        return true;
     }
+
 
     if (unpacked->IsTuple()) {
         auto tupleType = AS_TYPE(TTupleType, unpacked);
@@ -1587,7 +1590,7 @@ bool ConvertArrowType(TType* itemType, std::shared_ptr<arrow::DataType>& type, c
         for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
             std::shared_ptr<arrow::DataType> childType;
             auto elementType = tupleType->GetElementType(i);
-            if (!ConvertArrowType(elementType, childType, onFail)) {
+            if (!ConvertArrowType(elementType, childType, extraTypes, onFail)) {
                 return false;
             }
 

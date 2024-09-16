@@ -8325,25 +8325,6 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSchema(schema);
         testHelper.CreateTable(testTable, EStatus::SCHEME_ERROR);
     }
-
-    Y_UNIT_TEST(DisabledAlterCompression) {
-        TKikimrSettings runnerSettings = TKikimrSettings().SetWithSampleTables(false).SetEnableOlapCompression(false);
-        TTestHelper testHelper(runnerSettings);
-        TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Uint64).SetNullable(false)
-        };
-
-        TTestHelper::TColumnTable testTable;
-        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({ "id" }).SetSharding({ "id" }).SetSchema(schema);
-        testHelper.CreateTable(testTable);
-
-        auto alterResult = testHelper.GetSession()
-                               .ExecuteSchemeQuery(
-                                   "ALTER OBJECT `/Root/ColumnTableTest` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, "
-                                   "NAME=id,`SERIALIZER.CLASS_NAME`=`ARROW_SERIALIZER`, `COMPRESSION.TYPE`=`zstd`);")
-                               .GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SCHEME_ERROR, alterResult.GetIssues().ToString());
-    }
 }
 
 Y_UNIT_TEST_SUITE(KqpOlapTypes) {

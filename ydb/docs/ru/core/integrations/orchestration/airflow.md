@@ -29,7 +29,7 @@ pip install ydb apache-airflow-providers-ydb
 * `sql` — текст SQL-запроса, который необходимо выполнить в {{ ydb-full-name }}.
 
 Опциональные аргументы:
-* `ydb_conn_id` — идентификатор подключения с типом `YDB`, содержащий параметры соединения с {{ ydb-full-name }}. Если не указан, то используется соединение с именем `ydb_default`. Соединение `ydb_default` предустанавливается в составе {{ airflow-name }}, отдельно его заводить не нужно.
+* `ydb_conn_id` — идентификатор подключения с типом `YDB`, содержащий параметры соединения с {{ ydb-full-name }}. Если не указан, то используется соединение с именем [`ydb_default`](#ydb_default). Соединение `ydb_default` предустанавливается в составе {{ airflow-name }}, отдельно его заводить не нужно.
 * `is_ddl` — признак, что выполняется [SQL DDL](https://en.wikipedia.org/wiki/Data_definition_language) запрос. Если аргумент не указан, или установлен в `False`, то будет выполняться [SQL DML](https://ru.wikipedia.org/wiki/Data_Manipulation_Language) запрос.
 * `params` — словарь [параметров запроса](https://airflow.apache.org/docs/apache-airflow/stable/core-concepts/params.html).
 
@@ -47,7 +47,7 @@ ydb_operator = YDBExecuteQueryOperator(task_id="ydb_operator", sql="SELECT 'Hell
 Для выполнения низкоуровневых команд в {{ ydb-full-name }} используется {{ airflow-name }} класс `YDBHook`.
 
 Опциональные аргументы:
-* `ydb_conn_id` — идентификатор подключения с типом `YDB`, содержащий параметры соединения с {{ ydb-full-name }}. Если не указан, то используется соединение с именем `ydb_default`. Соединение `ydb_default` предустанавливается в составе {{ airflow-name }}, отдельно его заводить не нужно.
+* `ydb_conn_id` — идентификатор подключения с типом `YDB`, содержащий параметры соединения с {{ ydb-full-name }}. Если не указан, то используется соединение с именем [`ydb_default`](#ydb_default). Соединение `ydb_default` предустанавливается в составе {{ airflow-name }}, отдельно его заводить не нужно.
 * `is_ddl` — признак, что выполняется [SQL DDL](https://en.wikipedia.org/wiki/Data_definition_language) запрос. Если аргумент не указан, или установлен в `False`, то будет выполняться [SQL DML](https://ru.wikipedia.org/wiki/Data_Manipulation_Language) запрос.
 
 `YDBHook` поддерживает следующие методы:
@@ -110,6 +110,25 @@ connection.close()
 ```
 
 В данном примере создается объект `YDBHook`, у созданного объекта запрашивается объект `DbApiConnection`, через который выполняется чтение данных и получение списка колонок.
+
+## Подключение к {{ ydb-full-name }} {#ydb_default}
+
+Для подключения к {{ ydb-full-name }} необходимо создать новое или отредактировать существующее [`подключение {{ airflow-name }}`](https://airflow.apache.org/docs/apache-airflow/stable/howto/connection.html) с типом `YDB`.
+
+![](_assets/ydb_connection.png)
+
+Где:
+- `Connection Id` - название подключения {{ airflow-name }}.
+- `Host` - протокол и адрес кластера {{ ydb-full-name }}.
+- `Port` - порт для подключения к кластеру {{ ydb-full-name }}.
+- `Database name` - название базы данных {{ ydb-full-name }}.
+
+В зависимости от способа аутентификации в кластере {{ ydb-full-name }} выберите один из способов:
+- `Service account auth JSON` - укажите значение [`Service Account Key`](../../concepts/auth.md#iam).
+- `Service account auth JSON file path` - укажите путь к файлу, содержащему `Service Account Key`.
+- `IAM token` - укажите [`IAM токен`](../../concepts/auth.md#iam).
+- `Use VM metadata` - указание использовать [метаданные виртуальной машины](../../concepts/auth.md#iam).
+- `Login` и `Password` - укажите реквизиты пользователя для аутентификации [по логину и паролю](../../concepts/auth.md#static-credentials).
 
 ## Соответствие YQL и Python-типов
 

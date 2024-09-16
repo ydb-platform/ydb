@@ -67,12 +67,12 @@ TUpdateMerger::TUpdateMerger(const std::shared_ptr<arrow::RecordBatch>& incoming
     , DefaultExists(defaultExists)
     , InsertDenyReason(insertDenyReason)
 {
-    for (auto&& i : actualSchema->GetIndexInfo().ArrowSchema()->field_names()) {
-        auto fIdx = IncomingData->schema()->GetFieldIndex(i);
+    for (auto&& f : actualSchema->GetIndexInfo().ArrowSchema()->fields()) {
+        auto fIdx = IncomingData->schema()->GetFieldIndex(f->name());
         if (fIdx == -1) {
             IncomingColumnRemap.emplace_back();
         } else {
-            auto fExistsIdx = IncomingData->schema()->GetFieldIndex("$$EXISTS::" + i);
+            auto fExistsIdx = IncomingData->schema()->GetFieldIndex("$$EXISTS::" + f->name());
             std::shared_ptr<arrow::Array> flagsArray;
             if (fExistsIdx != -1) {
                 AFL_VERIFY(IncomingData->column(fExistsIdx)->type_id() == arrow::Type::BOOL);

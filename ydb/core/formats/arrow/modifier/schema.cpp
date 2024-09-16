@@ -1,5 +1,6 @@
 #include "schema.h"
 #include <util/string/builder.h>
+#include <ydb/core/formats/arrow/common/vector_operations.h>
 #include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NArrow::NModifier {
@@ -27,6 +28,12 @@ TConclusionStatus TSchema::AddField(const std::shared_ptr<arrow::Field>& f) {
     }
     Fields.emplace_back(f);
     return TConclusionStatus::Success();
+}
+
+void TSchema::DeleteFieldsByIndex(const std::vector<ui32>& idxs) {
+    AFL_VERIFY(Initialized);
+    AFL_VERIFY(!Finished);
+    NUtil::EraseItems(Fields, idxs, TFieldsErasePolicy(this));
 }
 
 TString TSchema::ToString() const {

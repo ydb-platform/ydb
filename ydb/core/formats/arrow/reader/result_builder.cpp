@@ -64,7 +64,7 @@ std::shared_ptr<arrow::RecordBatch> TRecordBatchBuilder::Finalize() {
     for (auto&& i : Builders) {
         columns.emplace_back(NArrow::TStatusValidator::GetValid(i->Finish()));
     }
-    auto result = arrow::RecordBatch::Make(schema, columns.front()->length(), columns);
+    auto result = arrow::RecordBatch::Make(schema, columns.front()->length(), std::move(columns));
 #ifndef NDEBUG
     NArrow::TStatusValidator::Validate(result->ValidateFull());
 #endif

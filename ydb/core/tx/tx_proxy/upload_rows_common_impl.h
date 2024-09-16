@@ -45,9 +45,65 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr RowsCount;
     NMonitoring::THistogramPtr PackageSize;
 
+    NMonitoring::THistogramPtr PreparingDuration;
+    NMonitoring::THistogramPtr WritingDuration;
+    NMonitoring::THistogramPtr CommitDuration;
+    NMonitoring::THistogramPtr PrepareReplyDuration;
+
     THashMap<TString, NMonitoring::TDynamicCounters::TCounterPtr> CodesCount;
 public:
     TUploadCounters();
+
+    class TGuard: TMoveOnly {
+    private:
+        TMonotonic Start = TMonotonic::Now();
+        std::optional<TMonotonic> WritingStarted;
+        std::optional<TMonotonic> CommitStarted;
+        std::optional<TMonotonic> CommitFinished;
+        std::optional<TMonotonic> ReplyFinished;
+        TUploadCounters& Owner;
+    public:
+        TGuard(const TMonotonic start, TUploadCounters& owner)
+            : Start(start)
+            , Owner(owner)
+        {
+
+        }
+
+        void OnWritingStarted() {
+            WritingStarted = TMonotonic::Now();
+            Owner.PreparingDuration->Collect((*WritingStarted - Start).MilliSeconds());
+        }
+
+        void OnCommitStarted() {
+            CommitStarted = TMonotonic::Now();
+            AFL_VERIFY(WritingStarted);
+            Owner.WritingDuration->Collect((*CommitStarted - *WritingStarted).MilliSeconds());
+        }
+
+        void OnCommitFinished() {
+            CommitFinished = TMonotonic::Now();
+            AFL_VERIFY(CommitStarted);
+            Owner.CommitDuration->Collect((*CommitFinished - *CommitStarted).MilliSeconds());
+        }
+
+        void OnReply(const ::Ydb::StatusIds::StatusCode code) {
+            ReplyFinished = TMonotonic::Now();
+            if (CommitFinished) {
+                Owner.PrepareReplyDuration->Collect((*ReplyFinished - *CommitFinished).MilliSeconds());
+            }
+            Owner.ReplyDuration->Collect((*ReplyFinished - Start).MilliSeconds());
+
+            const TString name = ::Ydb::StatusIds::StatusCode_Name(code);
+            auto it = Owner.CodesCount.find(name);
+            Y_ABORT_UNLESS(it != Owner.CodesCount.end());
+            it->second->Add(1);
+        }
+    };
+
+    TGuard BuildGuard(const TMonotonic start) {
+        return TGuard(start, *this);
+    }
 
     void OnRequest(const ui64 rowsCount) const {
         RequestsCount->Add(1);
@@ -55,7 +111,7 @@ public:
         PackageSize->Collect(rowsCount);
     }
 
-    void OnReply(const TDuration d, const ::Ydb::StatusIds::StatusCode code) const;
+    void OnReply(const TDuration dFull, const TDuration dDelta, const ::Ydb::StatusIds::StatusCode code) const;
 };
 
 
@@ -148,6 +204,7 @@ private:
     TActorId LeaderPipeCache;
     TDuration Timeout;
     TInstant StartTime;
+    std::optional<TInstant> StartCommitTime;
     TActorId TimeoutTimerActorId;
 
     TAutoPtr<NSchemeCache::TSchemeCacheRequest> ResolvePartitionsResult;
@@ -164,7 +221,7 @@ private:
     std::shared_ptr<NYql::TIssues> Issues = std::make_shared<NYql::TIssues>();
     NLongTxService::TLongTxId LongTxId;
     TUploadCounters UploadCounters;
-
+    TUploadCounters::TGuard UploadCountersGuard;
 protected:
     enum class EUploadSource {
         ProtoValues = 0,
@@ -216,6 +273,7 @@ public:
         , LeaderPipeCache(MakePipePerNodeCacheID(false))
         , Timeout((timeout && timeout <= DEFAULT_TIMEOUT) ? timeout : DEFAULT_TIMEOUT)
         , Status(Ydb::StatusIds::SUCCESS)
+        , UploadCountersGuard(UploadCounters.BuildGuard(TMonotonic::Now()))
         , DiskQuotaExceeded(diskQuotaExceeded)
         , Span(std::move(span))
     {}
@@ -741,6 +799,7 @@ private:
     }
 
     void WriteToColumnTable(const NActors::TActorContext& ctx) {
+        UploadCountersGuard.OnWritingStarted();
         TString accessCheckError;
         if (!CheckAccess(accessCheckError)) {
             return ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, LogPrefix() << accessCheckError, ctx);
@@ -894,6 +953,7 @@ private:
     }
 
     void CommitLongTx(const TActorContext& ctx) {
+        UploadCountersGuard.OnCommitStarted();
         TActorId longTxServiceId = NLongTxService::MakeLongTxServiceID(ctx.SelfID.NodeId());
         ctx.Send(longTxServiceId, new NLongTxService::TEvLongTxService::TEvCommitTx(LongTxId), 0, 0, Span.GetTraceId());
         TBase::Become(&TThis::StateWaitCommitLongTx);
@@ -908,6 +968,7 @@ private:
     }
 
     void Handle(NLongTxService::TEvLongTxService::TEvCommitTxResult::TPtr& ev, const NActors::TActorContext& ctx) {
+        UploadCountersGuard.OnCommitFinished();
         const auto* msg = ev->Get();
 
         if (msg->Record.GetStatus() == Ydb::StatusIds::SUCCESS) {
@@ -1263,7 +1324,7 @@ private:
     }
 
     void ReplyWithResult(::Ydb::StatusIds::StatusCode status, const TActorContext& ctx) {
-        UploadCounters.OnReply(TAppData::TimeProvider->Now() - StartTime, status);
+        UploadCountersGuard.OnReply(status);
         SendResult(ctx, status);
 
         LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, LogPrefix() << "completed with status " << status);

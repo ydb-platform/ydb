@@ -70,23 +70,29 @@ public:
 
 class TSerializedBatch {
 private:
-    YDB_READONLY_DEF(TString, SchemaData);
     YDB_READONLY_DEF(TString, Data);
     YDB_READONLY(ui32, RowsCount, 0);
     YDB_READONLY(ui32, RawBytes, 0);
-    std::optional<TString> SpecialKeys;
+    std::optional<TString> SpecialKeysFull;
+    std::optional<TString> SpecialKeysPayload;
+
 public:
     size_t GetSize() const {
         return Data.size();
     }
 
-    const TString& GetSpecialKeysSafe() const {
-        AFL_VERIFY(SpecialKeys);
-        return *SpecialKeys;
+    const TString& GetSpecialKeysPayloadSafe() const {
+        AFL_VERIFY(SpecialKeysPayload);
+        return *SpecialKeysPayload;
+    }
+
+    const TString& GetSpecialKeysFullSafe() const {
+        AFL_VERIFY(SpecialKeysFull);
+        return *SpecialKeysFull;
     }
 
     bool HasSpecialKeys() const {
-        return !!SpecialKeys;
+        return !!SpecialKeysFull;
     }
 
     TString DebugString() const;
@@ -95,14 +101,14 @@ public:
     static TConclusionStatus BuildWithLimit(std::shared_ptr<arrow::RecordBatch> batch, const TBatchSplitttingContext& context, std::optional<TSerializedBatch>& sbL, std::optional<TSerializedBatch>& sbR);
     static TSerializedBatch Build(std::shared_ptr<arrow::RecordBatch> batch, const TBatchSplitttingContext& context);
 
-    TSerializedBatch(TString&& schemaData, TString&& data, const ui32 rowsCount, const ui32 rawBytes, const std::optional<TString>& specialKeys)
-        : SchemaData(schemaData)
-        , Data(data)
+    TSerializedBatch(TString&& data, const ui32 rowsCount, const ui32 rawBytes,
+        const std::optional<TString>& specialKeysPayload, const std::optional<TString>& specialKeysFull)
+        : Data(data)
         , RowsCount(rowsCount)
         , RawBytes(rawBytes)
-        , SpecialKeys(specialKeys)
-    {
-
+        , SpecialKeysFull(specialKeysFull)
+        , SpecialKeysPayload(specialKeysPayload) {
+        AFL_VERIFY(!!SpecialKeysPayload == !!SpecialKeysFull);
     }
 };
 

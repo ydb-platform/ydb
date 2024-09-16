@@ -265,6 +265,19 @@ public:
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
+        const bool isAlterSharding = Transaction.HasAlterColumnTable() && Transaction.GetAlterColumnTable().HasReshardColumnTable();
+        if (isAlterSharding && !AppData()->FeatureFlags.GetEnableAlterShardingInColumnShard()) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed, "Alter sharding is disabled for OLAP tables");
+            return result;
+        }
+
+        const bool hasTiering = Transaction.HasAlterColumnTable() && Transaction.GetAlterColumnTable().HasAlterTtlSettings() &&
+                                Transaction.GetAlterColumnTable().GetAlterTtlSettings().HasUseTiering();
+        if (hasTiering && HasAppData() && !AppDataVerified().FeatureFlags.GetEnableTieringInColumnShard()) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed, "Tiering functionality is disabled for OLAP tables");
+            return result;
+        }
+
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = Transaction.HasAlterColumnTable() ? Transaction.GetAlterColumnTable().GetName() : Transaction.GetAlterTable().GetName();
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,

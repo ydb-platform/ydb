@@ -20,7 +20,6 @@ public:
     virtual ~IColumnResolver() = default;
     virtual TString GetColumnName(ui32 id, bool required = true) const = 0;
     virtual std::optional<ui32> GetColumnIdOptional(const TString& name) const = 0;
-    virtual const NTable::TScheme::TTableSchema& GetSchema() const = 0;
     virtual NSsa::TColumnInfo GetDefaultColumn() const = 0;
 };
 
@@ -35,10 +34,6 @@ public:
 
     virtual TString GetColumnName(ui32 id, bool required = true) const override;
     virtual std::optional<ui32> GetColumnIdOptional(const TString& name) const override;
-    virtual const NTable::TScheme::TTableSchema& GetSchema() const override {
-        AFL_VERIFY(false);
-        return Default<NTable::TScheme::TTableSchema>();
-    }
     virtual NSsa::TColumnInfo GetDefaultColumn() const override {
         return NSsa::TColumnInfo::Original((ui32)NOlap::NPortion::TSpecialColumns::SPEC_COL_PLAN_STEP_INDEX, NOlap::NPortion::TSpecialColumns::SPEC_COL_PLAN_STEP);
     }

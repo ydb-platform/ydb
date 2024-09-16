@@ -22,8 +22,6 @@ protected:
 public:
     ui64 GetMemoryBytes() const;
 
-    TString SerializeToStringDataOnlyNoCompression() const;
-
     TSpecialKeys(const TString& data, const std::shared_ptr<arrow::Schema>& schema) {
         Data = NArrow::DeserializeBatch(data, schema);
         Y_ABORT_UNLESS(Data);
@@ -34,7 +32,8 @@ public:
         Y_ABORT_UNLESS(DeserializeFromString(data));
     }
 
-    TString SerializeToString() const;
+    TString SerializePayloadToString() const;
+    TString SerializeFullToString() const;
     ui64 GetMemorySize() const;
 };
 

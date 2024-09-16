@@ -2,12 +2,11 @@
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/sbuckets/optimizer/optimizer.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/sbuckets/logic/one_head/logic.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/sbuckets/logic/slices/logic.h>
-#include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
 namespace NKikimr::NOlap::NStorageOptimizer::NSBuckets {
 
 std::shared_ptr<IOptimizationLogic> TOptimizerPlannerConstructor::BuildLogic() const {
-    const TDuration freshnessCheckDuration = NYDBTest::TControllers::GetColumnShardController()->GetOptimizerFreshnessCheckDuration(FreshnessCheckDuration);
+    const TDuration freshnessCheckDuration = NYDBTest::TControllers::GetColumnShardController()->GetOptimizerFreshnessCheckDuration();
     std::shared_ptr<IOptimizationLogic> logic;
     if (LogicName == "one_head") {
         logic = std::make_shared<TOneHeadLogic>(freshnessCheckDuration);

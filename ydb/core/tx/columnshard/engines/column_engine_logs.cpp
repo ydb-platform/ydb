@@ -157,10 +157,9 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, TInd
 }
 
 void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, const NKikimrSchemeOp::TColumnTableSchema& schema) {
-    std::optional<NOlap::TIndexInfo> indexInfoOptional = NOlap::TIndexInfo::BuildFromProto(schema, StoragesManager);
+    std::optional<NOlap::TIndexInfo> indexInfoOptional = NOlap::TIndexInfo::BuildFromProto(schema, StoragesManager, SchemaObjectsCache);
     AFL_VERIFY(indexInfoOptional);
     NOlap::TIndexInfo indexInfo = std::move(*indexInfoOptional);
-    indexInfo.SetAllKeys(StoragesManager);
     RegisterSchemaVersion(snapshot, std::move(indexInfo));
 }
 
@@ -272,7 +271,7 @@ bool TColumnEngineForLogs::LoadCounters(IDbWrapper& db) {
     return db.LoadCounters(callback);
 }
 
-std::shared_ptr<TInsertColumnEngineChanges> TColumnEngineForLogs::StartInsert(std::vector<TInsertedData>&& dataToIndex) noexcept {
+std::shared_ptr<TInsertColumnEngineChanges> TColumnEngineForLogs::StartInsert(std::vector<TCommittedData>&& dataToIndex) noexcept {
     Y_ABORT_UNLESS(dataToIndex.size());
 
     TSaverContext saverContext(StoragesManager);
@@ -280,12 +279,15 @@ std::shared_ptr<TInsertColumnEngineChanges> TColumnEngineForLogs::StartInsert(st
     auto pkSchema = VersionedIndex.GetLastSchema()->GetIndexInfo().GetReplaceKey();
 
     for (const auto& data : changes->GetDataToIndex()) {
-        const ui64 pathId = data.PathId;
+        const ui64 pathId = data.GetPathId();
 
         if (changes->PathToGranule.contains(pathId)) {
             continue;
         }
-        AFL_VERIFY(changes->PathToGranule.emplace(pathId, GetGranulePtrVerified(pathId)->GetBucketPositions()).second);
+        if (!data.GetRemove()) {
+            AFL_VERIFY(changes->PathToGranule.emplace(pathId, GetGranulePtrVerified(pathId)->GetBucketPositions()).second);
+        }
+        
     }
 
     return changes;
@@ -381,7 +383,7 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
             }
             const auto inserted = uniquePortions.emplace(it->second[i].GetAddress()).second;
             if (inserted) {
-                Y_ABORT_UNLESS(it->second[i].CheckForCleanup(snapshot));
+                AFL_VERIFY(it->second[i].CheckForCleanup(snapshot))("p_snapshot", it->second[i].GetRemoveSnapshotOptional())("snapshot", snapshot);
                 if (txSize + it->second[i].GetTxVolume() < txSizeLimit || changes->PortionsToDrop.empty()) {
                     txSize += it->second[i].GetTxVolume();
                 } else {
@@ -421,7 +423,7 @@ std::vector<std::shared_ptr<TTTLColumnEngineChanges>> TColumnEngineForLogs::Star
 
     TSaverContext saverContext(StoragesManager);
     NActualizer::TTieringProcessContext context(memoryUsageLimit, saverContext, dataLocksManager, SignalCounters, ActualizationController);
-    const TDuration actualizationLag = NYDBTest::TControllers::GetColumnShardController()->GetActualizationTasksLag(TDuration::Seconds(1));
+    const TDuration actualizationLag = NYDBTest::TControllers::GetColumnShardController()->GetActualizationTasksLag();
     for (auto&& i : pathEviction) {
         auto g = GetGranuleOptional(i.first);
         if (g) {
@@ -486,9 +488,8 @@ void TColumnEngineForLogs::UpsertPortion(const TPortionInfo& portionInfo, const 
 bool TColumnEngineForLogs::ErasePortion(const TPortionInfo& portionInfo, bool updateStats) {
     Y_ABORT_UNLESS(!portionInfo.Empty());
     const ui64 portion = portionInfo.GetPortion();
-    auto spg = GetGranulePtrVerified(portionInfo.GetPathId());
-    Y_ABORT_UNLESS(spg);
-    auto p = spg->GetPortionOptional(portion);
+    auto& spg = MutableGranuleVerified(portionInfo.GetPathId());
+    auto p = spg.GetPortionOptional(portion);
 
     if (!p) {
         LOG_S_WARN("Portion erased already " << portionInfo << " at tablet " << TabletId);
@@ -497,7 +498,7 @@ bool TColumnEngineForLogs::ErasePortion(const TPortionInfo& portionInfo, bool up
         if (updateStats) {
             UpdatePortionStats(*p, EStatsUpdateType::ERASE);
         }
-        Y_ABORT_UNLESS(spg->ErasePortion(portion));
+        Y_ABORT_UNLESS(spg.ErasePortion(portion));
         return true;
     }
 }
@@ -510,20 +511,18 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(ui64 pathId, TSnapshot
         return out;
     }
 
-    for (const auto& [indexKey, keyPortions] : spg->GetPortionsIndex().GetPoints()) {
-        for (auto&& [_, portionInfo] : keyPortions.GetStart()) {
-            if (!portionInfo->IsVisible(snapshot)) {
-                continue;
-            }
-            Y_ABORT_UNLESS(portionInfo->Produced());
-            const bool skipPortion = !pkRangesFilter.IsPortionInUsage(*portionInfo, VersionedIndex.GetLastSchema()->GetIndexInfo());
-            AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", skipPortion ? "portion_skipped" : "portion_selected")
-                ("pathId", pathId)("portion", portionInfo->DebugString());
-            if (skipPortion) {
-                continue;
-            }
-            out->PortionsOrderedPK.emplace_back(portionInfo);
+    for (const auto& [_, portionInfo] : spg->GetPortions()) {
+        if (!portionInfo->IsVisible(snapshot)) {
+            continue;
         }
+        Y_ABORT_UNLESS(portionInfo->Produced());
+        const bool skipPortion = !pkRangesFilter.IsPortionInUsage(*portionInfo);
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", skipPortion ? "portion_skipped" : "portion_selected")("pathId", pathId)(
+            "portion", portionInfo->DebugString());
+        if (skipPortion) {
+            continue;
+        }
+        out->PortionsOrderedPK.emplace_back(portionInfo);
     }
 
     return out;
@@ -573,14 +572,6 @@ void TColumnEngineForLogs::DoRegisterTable(const ui64 pathId) {
         g->StartActualizationIndex();
         g->RefreshScheme();
     }
-}
-
-TDuration TColumnEngineForLogs::GetRemovedPortionLivetime() {
-    TDuration result = TDuration::Minutes(10);
-    if (HasAppData() && AppDataVerified().ColumnShardConfig.HasRemovedPortionLivetimeSeconds()) {
-        result = TDuration::Seconds(AppDataVerified().ColumnShardConfig.GetRemovedPortionLivetimeSeconds());
-    }
-    return NYDBTest::TControllers::GetColumnShardController()->GetRemovedPortionLivetime(result);
 }
 
 } // namespace NKikimr::NOlap

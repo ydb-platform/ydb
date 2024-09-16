@@ -278,8 +278,6 @@ private:
     void Handle(TEvDataShard::TEvReadResult::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
-        CA_LOG_D("TEvReadResult was received for table: " << StreamLookupWorker->GetTablePath() <<
-            ", readId: " << record.GetReadId() << ", finished: " << record.GetFinished());
 
         auto readIt = Reads.find(record.GetReadId());
         if (readIt == Reads.end() || readIt->second.State != EReadState::Running) {
@@ -288,6 +286,27 @@ private:
         }
 
         auto& read = readIt->second;
+
+        CA_LOG_D("Recv TEvReadResult (stream lookup) from ShardID=" << read.ShardId
+            << ", Table = " << StreamLookupWorker->GetTablePath()
+            << ", ReadId=" << record.GetReadId()
+            << ", Status=" << Ydb::StatusIds::StatusCode_Name(record.GetStatus().GetCode())
+            << ", Finished=" << record.GetFinished()
+            << ", RowCount=" << record.GetRowCount()
+            << ", TxLocks= " << [&]() {
+                TStringBuilder builder;
+                for (const auto& lock : record.GetTxLocks()) {
+                    builder << lock.ShortDebugString();
+                }
+                return builder;
+            }()
+            << ", BrokenTxLocks= " << [&]() {
+                TStringBuilder builder;
+                for (const auto& lock : record.GetBrokenTxLocks()) {
+                    builder << lock.ShortDebugString();
+                }
+                return builder;
+            }());
 
         for (auto& lock : record.GetBrokenTxLocks()) {
             BrokenLocks.push_back(lock);
@@ -465,6 +484,13 @@ private:
         record.SetMaxRows(defaultSettings.GetMaxRows());
         record.SetMaxBytes(defaultSettings.GetMaxBytes());
         record.SetResultFormat(NKikimrDataEvents::FORMAT_CELLVEC);
+
+        CA_LOG_D(TStringBuilder() << "Send EvRead (stream lookup) to shardId=" << shardId
+            << ", readId = " << record.GetReadId()
+            << ", tablePath: " << StreamLookupWorker->GetTablePath()
+            << ", snapshot=(txid=" << record.GetSnapshot().GetTxId() << ", step=" << record.GetSnapshot().GetStep() << ")"
+            << ", lockTxId=" << record.GetLockTxId()
+            << ", lockNodeId=" << record.GetLockNodeId());
 
         Send(MainPipeCacheId, new TEvPipeCache::TEvForward(request.Release(), shardId, true),
             IEventHandle::FlagTrackDelivery, 0, LookupActorSpan.GetTraceId());

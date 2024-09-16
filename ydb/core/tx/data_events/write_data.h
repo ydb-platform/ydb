@@ -46,7 +46,21 @@ private:
     YDB_ACCESSOR(TMonotonic, WriteMiddle4StartInstant, TMonotonic::Now());
     YDB_ACCESSOR(TMonotonic, WriteMiddle5StartInstant, TMonotonic::Now());
     YDB_ACCESSOR(TMonotonic, WriteMiddle6StartInstant, TMonotonic::Now());
+    std::optional<ui64> LockId;
 public:
+    void SetLockId(const ui64 lockId) {
+        LockId = lockId;
+    }
+
+    ui64 GetLockIdVerified() const {
+        AFL_VERIFY(LockId);
+        return *LockId;
+    }
+
+    std::optional<ui64> GetLockIdOptional() const {
+        return LockId;
+    }
+
     bool IsGuaranteeWriter() const {
         switch (ModificationType) {
             case EModificationType::Delete:

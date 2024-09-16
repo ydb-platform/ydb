@@ -146,6 +146,7 @@ public:
     using TBase::DeserializeFromProto;
 
     static std::shared_ptr<ISerializer> GetDefaultSerializer();
+    static std::shared_ptr<ISerializer> GetFastestSerializer();
 
     TConclusionStatus DeserializeFromProto(const NKikimrSchemeOp::TCompressionOptions& proto);
 

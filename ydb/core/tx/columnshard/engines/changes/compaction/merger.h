@@ -1,8 +1,8 @@
 #pragma once
-#include <ydb/core/formats/arrow/common/container.h>
 #include <ydb/core/formats/arrow/arrow_filter.h>
+#include <ydb/core/formats/arrow/common/container.h>
 #include <ydb/core/formats/arrow/reader/position.h>
-#include <ydb/core/tx/columnshard/splitter/stats.h>
+#include <ydb/core/formats/arrow/splitter/stats.h>
 #include <ydb/core/tx/columnshard/engines/changes/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/portions/write_with_blobs.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/filtered_scheme.h>
@@ -25,14 +25,11 @@ public:
 
     TMerger(const TConstructionContext& context, const TSaverContext& saverContext)
         : Context(context)
-        , SaverContext(saverContext)
-    {
-    
+        , SaverContext(saverContext) {
     }
 
     TMerger(const TConstructionContext& context, const TSaverContext& saverContext,
-        std::vector<std::shared_ptr<NArrow::TGeneralContainer>>&& batches,
-        std::vector<std::shared_ptr<NArrow::TColumnFilter>>&& filters)
+        std::vector<std::shared_ptr<NArrow::TGeneralContainer>>&& batches, std::vector<std::shared_ptr<NArrow::TColumnFilter>>&& filters)
         : Batches(std::move(batches))
         , Filters(std::move(filters))
         , Context(context)
@@ -40,9 +37,8 @@ public:
         AFL_VERIFY(Batches.size() == Filters.size());
     }
 
-    std::vector<NKikimr::NOlap::TWritePortionInfoWithBlobsResult> Execute(
-        const std::shared_ptr<TSerializationStats>& stats,
-        const NArrow::NMerger::TIntervalPositions& checkPoints,
-        const std::shared_ptr<TFilteredSnapshotSchema>& resultFiltered, const ui64 pathId, const std::optional<ui64> shardingActualVersion);
+    std::vector<TWritePortionInfoWithBlobsResult> Execute(const std::shared_ptr<NArrow::NSplitter::TSerializationStats>& stats,
+        const NArrow::NMerger::TIntervalPositions& checkPoints, const std::shared_ptr<TFilteredSnapshotSchema>& resultFiltered,
+        const ui64 pathId, const std::optional<ui64> shardingActualVersion);
 };
-}
+}   // namespace NKikimr::NOlap::NCompaction

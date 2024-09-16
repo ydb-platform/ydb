@@ -12,11 +12,12 @@
 pip install ydb apache-airflow-providers-ydb
 ```
 
-Для работы требуется Python версии не ниже, чем `3.8`.
+Для работы требуется Python версии не ниже, чем 3.8.
 
 ## Объектная модель {#object_model}
 
 Пакет `airflow.providers.ydb` содержит набор компонентов для взаимодействия с {{ ydb-full-name }}:
+
 - Оператор [YDBExecuteQueryOperator](#ydb_execute_query_operator) для интеграции задач в планировщик {{ airflow-name }}.
 - Хук [YDBHook](#ydb_hook) для прямого взаимодействия с {{ ydb-name }}.
 
@@ -25,10 +26,12 @@ pip install ydb apache-airflow-providers-ydb
 Для выполнения запросов к {{ ydb-full-name }} используется {{ airflow-name }} оператор `YDBExecuteQueryOperator`.
 
 Обязательные аргументы:
+
 * `task_id` — название задания {{ airflow-name }}.
 * `sql` — текст SQL-запроса, который необходимо выполнить в {{ ydb-full-name }}.
 
 Опциональные аргументы:
+
 * `ydb_conn_id` — идентификатор подключения с типом `YDB`, содержащий параметры соединения с {{ ydb-full-name }}. Если не указан, то используется соединение с именем [`ydb_default`](#ydb_default). Соединение `ydb_default` предустанавливается в составе {{ airflow-name }}, отдельно его заводить не нужно.
 * `is_ddl` — признак, что выполняется [SQL DDL](https://en.wikipedia.org/wiki/Data_definition_language) запрос. Если аргумент не указан, или установлен в `False`, то будет выполняться [SQL DML](https://ru.wikipedia.org/wiki/Data_Manipulation_Language) запрос.
 * `params` — словарь [параметров запроса](https://airflow.apache.org/docs/apache-airflow/stable/core-concepts/params.html).
@@ -47,11 +50,13 @@ ydb_operator = YDBExecuteQueryOperator(task_id="ydb_operator", sql="SELECT 'Hell
 Для выполнения низкоуровневых команд в {{ ydb-full-name }} используется {{ airflow-name }} класс `YDBHook`.
 
 Опциональные аргументы:
+
 * `ydb_conn_id` — идентификатор подключения с типом `YDB`, содержащий параметры соединения с {{ ydb-full-name }}. Если не указан, то используется соединение с именем [`ydb_default`](#ydb_default). Соединение `ydb_default` предустанавливается в составе {{ airflow-name }}, отдельно его заводить не нужно.
 * `is_ddl` — признак, что выполняется [SQL DDL](https://en.wikipedia.org/wiki/Data_definition_language) запрос. Если аргумент не указан, или установлен в `False`, то будет выполняться [SQL DML](https://ru.wikipedia.org/wiki/Data_Manipulation_Language) запрос.
 
 `YDBHook` поддерживает следующие методы:
-- [bulk_upsert](#bulk_upsert).
+
+- [bulk_upsert](#bulk_upsert);
 - [get_conn](#get_conn).
 
 #### bulk_upsert {#bulk_upsert}
@@ -59,6 +64,7 @@ ydb_operator = YDBExecuteQueryOperator(task_id="ydb_operator", sql="SELECT 'Hell
 Выполняет [пакетную вставку данных](../../recipes/ydb-sdk/bulk-upsert.md) в таблицы {{ ydb-full-name }}.
 
 Обязательные аргументы:
+
 * `table_name` — название таблицы {{ ydb-full-name }}, куда будет выполняться вставка данных.
 * `rows` — массив строк для вставки.
 * `column_types` — описание типов колонок.
@@ -88,7 +94,7 @@ hook.bulk_upsert("pet", rows=rows, column_types=column_types)
 
 #### get_conn {#get_conn}
 
-Возвращает объект `YDBConnection`, реализующий интерфейс [`DbApiConnection`](https://peps.python.org/pep-0249/#connection-objects) для работы с данными. Класс `DbApiConnection` используется для создания стандартизированного интерфейса взаимодействия с базой данных, обеспечивающего выполнение операций, таких как подключение, выполнение SQL-запросов и управление транзакциями независимо от конкретной системы управления базами данных.
+Возвращает объект `YDBConnection`, реализующий интерфейс [`DbApiConnection`](https://peps.python.org/pep-0249/#connection-objects) для работы с данными. Класс `DbApiConnection` обеспечивает стандартизированный интерфейс для взаимодействия с базой данных, позволяющий выполнять такие операции, как подключение, выполнение SQL-запросов и управление транзакциями, независимо от конкретной системы управления базами данных.
 
 Пример:
 
@@ -109,26 +115,28 @@ cursor.close()
 connection.close()
 ```
 
-В данном примере создается объект `YDBHook`, у созданного объекта запрашивается объект `DbApiConnection`, через который выполняется чтение данных и получение списка колонок.
+В данном примере создается объект `YDBHook`, у созданного объекта запрашивается объект `YDBConnection`, через который выполняется чтение данных и получение списка колонок.
 
 ## Подключение к {{ ydb-full-name }} {#ydb_default}
 
-Для подключения к {{ ydb-full-name }} необходимо создать новое или отредактировать существующее [`подключение {{ airflow-name }}`](https://airflow.apache.org/docs/apache-airflow/stable/howto/connection.html) с типом `YDB`.
+Для подключения к {{ ydb-full-name }} необходимо создать новое или отредактировать существующее [подключение {{ airflow-name }}](https://airflow.apache.org/docs/apache-airflow/stable/howto/connection.html) с типом `YDB`.
 
 ![](_assets/ydb_connection.png)
 
 Где:
+
 - `Connection Id` - название подключения {{ airflow-name }}.
 - `Host` - протокол и адрес кластера {{ ydb-full-name }}.
 - `Port` - порт для подключения к кластеру {{ ydb-full-name }}.
 - `Database name` - название базы данных {{ ydb-full-name }}.
 
-В зависимости от способа аутентификации в кластере {{ ydb-full-name }} выберите один из способов:
+Укажите реквизиты для одного из следующих способов аутентификации на кластере {{ ydb-full-name }}:
+
+- `Login` и `Password` - укажите реквизиты пользователя для аутентификации [по логину и паролю](../../concepts/auth.md#static-credentials).
 - `Service account auth JSON` - укажите значение [`Service Account Key`](../../concepts/auth.md#iam).
 - `Service account auth JSON file path` - укажите путь к файлу, содержащему `Service Account Key`.
-- `IAM token` - укажите [`IAM токен`](../../concepts/auth.md#iam).
+- `IAM token` - укажите [IAM токен](../../concepts/auth.md#iam).
 - `Use VM metadata` - указание использовать [метаданные виртуальной машины](../../concepts/auth.md#iam).
-- `Login` и `Password` - укажите реквизиты пользователя для аутентификации [по логину и паролю](../../concepts/auth.md#static-credentials).
 
 ## Соответствие YQL и Python-типов
 
@@ -185,7 +193,7 @@ connection.close()
 
 ![](_assets/airflow_dag.png)
 
-Для выполнения запросов к базе данных {{ ydb-short-name }} используется предварительно созданное соединение c {{ ydb-short-name }} типа [`YDB Connection`](https://airflow.apache.org/docs/apache-airflow-providers-ydb/stable/connections/ydb.html) c именем `test_ydb_connection`.
+Для выполнения запросов к базе данных {{ ydb-short-name }} используется предварительно созданное соединение c {{ ydb-short-name }} типа [YDB Connection](https://airflow.apache.org/docs/apache-airflow-providers-ydb/stable/connections/ydb.html) c именем `test_ydb_connection`.
 
 ```python
 from __future__ import annotations

@@ -35,10 +35,18 @@ private:
 
         for (auto&& dsColumn : dsDescription.GetColumns()) {
             NKikimrSchemeOp::TAlterColumnTableSchema* alterSchema = olapDescription.MutableAlterSchema();
-            NKikimrSchemeOp::TOlapColumnDescription* olapColumn = alterSchema->AddAddColumns();
-            auto parse = ParseFromDSRequest(dsColumn, *olapColumn);
-            if (parse.IsFail()) {
-                return parse;
+            if (dsColumn.HasType()) {
+                NKikimrSchemeOp::TOlapColumnDescription* olapColumn = alterSchema->AddAddColumns();
+                auto parse = ParseFromDSRequest(dsColumn, *olapColumn);
+                if (parse.IsFail()) {
+                    return parse;
+                }
+            } else {
+                NKikimrSchemeOp::TOlapColumnDiff* olapColumn = alterSchema->AddAlterColumns();
+                auto parse = ParseFromDSRequest(dsColumn, *olapColumn);
+                if (parse.IsFail()) {
+                    return parse;
+                }
             }
         }
 
@@ -61,8 +69,11 @@ private:
 
     TConclusionStatus ParseFromDSRequest(
         const NKikimrSchemeOp::TColumnDescription& dsColumn, NKikimrSchemeOp::TOlapColumnDescription& olapColumn) const {
+        Cerr << "ParseFromDSRequest from TColumn " << dsColumn.GetName() << " has type " << dsColumn.HasType() << Endl;
         olapColumn.SetName(dsColumn.GetName());
-        olapColumn.SetType(dsColumn.GetType());
+        if (dsColumn.HasType()) {
+            olapColumn.SetType(dsColumn.GetType());
+        }
         if (dsColumn.HasTypeId()) {
             olapColumn.SetTypeId(dsColumn.GetTypeId());
         }
@@ -83,6 +94,19 @@ private:
         }
         return TConclusionStatus::Success();
     }
+
+    TConclusionStatus ParseFromDSRequest(
+        const NKikimrSchemeOp::TColumnDescription& dsColumn, NKikimrSchemeOp::TOlapColumnDiff& olapColumn) const {
+        olapColumn.SetName(dsColumn.GetName());
+        if (dsColumn.HasDefaultFromSequence()) {
+            return TConclusionStatus::Fail("DefaultFromSequence not supported");
+        }
+        if (dsColumn.HasFamilyName() || dsColumn.HasFamily()) {
+            olapColumn.SetFamilyName(dsColumn.GetFamilyName());
+        }
+        return TConclusionStatus::Success();
+    }
+
 public:
     TConclusion<NKikimrSchemeOp::TAlterColumnTable> Convert(const NKikimrSchemeOp::TModifyScheme& modify) {
         NKikimrSchemeOp::TAlterColumnTable result;

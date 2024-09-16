@@ -196,7 +196,8 @@ bool TOlapColumnAdd::ParseFromRequest(
         if (diffColumn.GetStorageId()) {
             StorageId = *diffColumn.GetStorageId();
         }
-        if (diffColumn.GetSerializer()) {
+        if (diffColumn.GetFamilyName()) {
+            FamilyName = diffColumn.GetFamilyName();
             Serializer = diffColumn.GetSerializer();
         }
         {
@@ -290,7 +291,7 @@ bool TOlapColumnAdd::ParseFromRequest(
         TSet<TString> alterColumnNames;
         for (auto& columnSchemaDiff : alterRequest.GetAlterColumns()) {
             TOlapColumnDiff columnDiff;
-            if (!columnDiff.ParseFromRequest(/*columnFamilies,*/ columnSchemaDiff, errors)) {
+            if (!columnDiff.ParseFromRequest(columnSchemaDiff, errors, columnFamilies)) {
                 return false;
             }
             if (addColumnNames.contains(columnDiff.GetName())) {

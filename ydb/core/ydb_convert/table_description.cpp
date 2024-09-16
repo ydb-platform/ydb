@@ -1305,7 +1305,7 @@ void FillColumnFamiliesImpl(TYdbProto& out,
                     r->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZ4_HADOOP);
                     break;
             }
-        } else if (family.GetCodec() == 5) {
+        } else if (family.GetCodec() == 1) {
             // Legacy setting, see datashard
             r->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZ4);
         } else {

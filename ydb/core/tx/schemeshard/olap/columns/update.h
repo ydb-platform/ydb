@@ -22,7 +22,8 @@ private:
     YDB_READONLY_DEF(std::optional<TString>, DefaultValue);
     YDB_READONLY_DEF(NArrow::NAccessor::TRequestedConstructorContainer, AccessorConstructor);
 public:
-    bool ParseFromRequest(/*const THashMap<TString, TOlapColumnFamlilyAdd>& columnFamilies,*/ const NKikimrSchemeOp::TOlapColumnDiff& columnSchema, IErrorCollector& errors) {
+    bool ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDiff& columnSchema, IErrorCollector& errors,
+        const TOlapColumnFamiliesDescription& columnFamilies = {}) {
         Name = columnSchema.GetName();
         if (!!columnSchema.GetStorageId()) {
             StorageId = columnSchema.GetStorageId();
@@ -40,9 +41,23 @@ public:
                 return false;
             }
         }
-        if (columnSchema.HasSerializer()) {
-            if (!Serializer.DeserializeFromProto(columnSchema.GetSerializer())) {
-                errors.AddError("cannot parse serializer diff from proto");
+        if (columnSchema.HasFamilyName()) {
+            FamilyName = columnSchema.GetFamilyName();
+            NKikimrSchemeOp::TOlapColumn_TSerializer serialzier;
+            if (columnSchema.HasSerializer()) {
+                serialzier = columnSchema.GetSerializer();
+            } else {
+                serialzier.SetClassName("ARROW_SERIALIZER");
+                const TOlapColumnFamilyScheme* family = columnFamilies.GetFamilyByName(columnSchema.GetFamilyName());
+                if (family == nullptr) {
+                    errors.AddError("Family " + columnSchema.GetFamilyName() + " not found in table ");
+                    return false;
+                }
+                auto mutableCompression = serialzier.MutableArrowCompression();
+                mutableCompression->SetCodec(family->GetCodec());
+            }
+            if (!Serializer.DeserializeFromProto(serialzier)) {
+                errors.AddError("Cannot parse serializer info");
                 return false;
             }
         }

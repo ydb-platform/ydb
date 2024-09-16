@@ -795,9 +795,6 @@ Y_UNIT_TEST_SUITE(Mvp) {
         auto outgoingResponseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
         UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Status, "401");
         UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Message, "Authorization IAM token are invalid or may have expired");
-        const NHttp::THeaders headers(outgoingResponseEv->Response->Headers);
-        UNIT_ASSERT(headers.Has("Set-Cookie"));
-        UNIT_ASSERT_STRINGS_EQUAL(headers.Get("Set-Cookie"), oidcCookie + "=; Path=/auth/callback; Max-Age=0");
     }
 
     void SessionServiceCreateAccessTokenInvalid(TRedirectStrategyBase& redirectStrategy) {
@@ -921,9 +918,6 @@ Y_UNIT_TEST_SUITE(Mvp) {
         auto outgoingResponseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
         UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Status, "412");
         UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Message, "Openid scope is missed for specified access_token");
-        const NHttp::THeaders headers(outgoingResponseEv->Response->Headers);
-        UNIT_ASSERT(headers.Has("Set-Cookie"));
-        UNIT_ASSERT_STRINGS_EQUAL(headers.Get("Set-Cookie"), oidcCookie + "=; Path=/auth/callback; Max-Age=0");
     }
 
     void SessionServiceCreateWithSeveralCookies(TRedirectStrategyBase& redirectStrategy) {

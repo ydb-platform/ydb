@@ -33,10 +33,11 @@ void THandlerSessionCreateNebius::RequestSessionToken(const TString& code, const
 }
 
 void THandlerSessionCreateNebius::ProcessSessionToken(const TString& sessionToken, const NActors::TActorContext& ctx) {
-    ResponseHeaders.Set("Set-Cookie", CreateSecureCookie(Settings.ClientId, sessionToken));
-    ResponseHeaders.Set("Location", RedirectUrl);
+    NHttp::THeadersBuilder responseHeaders;
+    responseHeaders.Set("Set-Cookie", CreateSecureCookie(Settings.ClientId, sessionToken));
+    responseHeaders.Set("Location", RedirectUrl);
     NHttp::THttpOutgoingResponsePtr httpResponse;
-    httpResponse = Request->CreateResponse("302", "Cookie set", ResponseHeaders);
+    httpResponse = Request->CreateResponse("302", "Cookie set", responseHeaders);
     ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse));
     Die(ctx);
 }

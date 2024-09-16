@@ -104,7 +104,7 @@ TString GenerateCookie(TStringBuf state, TStringBuf redirectUrl, const TString& 
     return Base64Encode(cookieStruct);
 }
 
-NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(const NHttp::THttpIncomingRequestPtr& request, const TOpenIdConnectSettings& settings, NHttp::THeadersBuilder& responseHeaders, bool isAjaxRequest) {
+NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(const NHttp::THttpIncomingRequestPtr& request, const TOpenIdConnectSettings& settings, bool isAjaxRequest) {
     TString state = GenerateState();
     const TString redirectUrl = CreateRedirectUrl({.OidcSettings = settings,
                                                     .CallbackUrl = GetAuthCallbackUrl(),
@@ -117,17 +117,13 @@ NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(const NHttp::THttpInc
     TStringBuilder setCookieBuilder;
     setCookieBuilder << CreateNameYdbOidcCookie(settings.ClientSecret, state) << "=" << GenerateCookie(state, GetRequestedUrl(request, isAjaxRequest), settings.ClientSecret, isAjaxRequest)
                      << "; Path=" << GetAuthCallbackUrl() << "; Max-Age=" << cookieMaxAgeSec <<"; SameSite=None; Secure";
+    NHttp::THeadersBuilder responseHeaders;
     responseHeaders.Set("Set-Cookie", setCookieBuilder);
     if (isAjaxRequest) {
         return CreateResponseForAjaxRequest(request, responseHeaders, redirectUrl);
     }
     responseHeaders.Set("Location", redirectUrl);
     return request->CreateResponse("302", "Authorization required", responseHeaders);
-}
-
-NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(const NHttp::THttpIncomingRequestPtr& request, const TOpenIdConnectSettings& settings, bool isAjaxRequest) {
-    NHttp::THeadersBuilder responseHeaders;
-    return GetHttpOutgoingResponsePtr(request, settings, responseHeaders, isAjaxRequest);
 }
 
 bool DetectAjaxRequest(const NHttp::THeaders& headers) {

@@ -30,7 +30,7 @@ void THandlerSessionCreate::Bootstrap(const NActors::TActorContext& ctx) {
     if (IsStateValid(state, cookies, ctx) && !code.Empty()) {
         RequestSessionToken(code, ctx);
     } else {
-        NHttp::THttpOutgoingResponsePtr response = GetHttpOutgoingResponsePtr(Request, Settings, ResponseHeaders, IsAjaxRequest);
+        NHttp::THttpOutgoingResponsePtr response = GetHttpOutgoingResponsePtr(Request, Settings, IsAjaxRequest);
         ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
         TBase::Die(ctx);
         return;
@@ -58,22 +58,21 @@ void THandlerSessionCreate::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse:
             } else {
                 jsonError =  "Wrong OIDC response";
             }
-            ResponseHeaders.Set("Content-Type", "text/plain");
-            httpResponse = Request->CreateResponse("400", "Bad Request", ResponseHeaders, jsonError);
+            NHttp::THeadersBuilder responseHeaders;
+            responseHeaders.Set("Content-Type", "text/plain");
+            httpResponse = Request->CreateResponse("400", "Bad Request", responseHeaders, jsonError);
         } else {
-            ResponseHeaders.Parse(response->Headers);
-            httpResponse = Request->CreateResponse(response->Status, response->Message, ResponseHeaders, response->Body);
+            NHttp::THeadersBuilder responseHeaders;
+            responseHeaders.Parse(response->Headers);
+            httpResponse = Request->CreateResponse(response->Status, response->Message, responseHeaders, response->Body);
         }
     } else {
-        ResponseHeaders.Set("Content-Type", "text/plain");
-        httpResponse = Request->CreateResponse("400", "Bad Request", ResponseHeaders, event->Get()->Error);
+        NHttp::THeadersBuilder responseHeaders;
+        responseHeaders.Set("Content-Type", "text/plain");
+        httpResponse = Request->CreateResponse("400", "Bad Request", responseHeaders, event->Get()->Error);
     }
     ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse));
     Die(ctx);
-}
-
-void THandlerSessionCreate::RemoveAppliedCookie(const TString& cookieName) {
-    ResponseHeaders.Set("Set-Cookie", TStringBuilder() << cookieName << "=; Path=" << GetAuthCallbackUrl() << "; Max-Age=0");
 }
 
 bool THandlerSessionCreate::IsStateValid(const TString& state, const NHttp::TCookies& cookies, const NActors::TActorContext& ctx) {
@@ -82,7 +81,6 @@ bool THandlerSessionCreate::IsStateValid(const TString& state, const NHttp::TCoo
         LOG_DEBUG_S(ctx, EService::MVP, "Check state: Cannot find cookie " << cookieName);
         return false;
     }
-    RemoveAppliedCookie(cookieName);
     TString cookieStruct = Base64Decode(cookies.Get(cookieName));
     TString stateStruct;
     TString expectedDigest;

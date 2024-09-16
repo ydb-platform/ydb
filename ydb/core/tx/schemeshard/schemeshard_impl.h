@@ -272,6 +272,8 @@ public:
     THashMap<TTabletId, TShardIdx> TabletIdToShardIdx;
     THashMap<TShardIdx, TVector<TActorId>> ShardDeletionSubscribers; // for tests
 
+    TObjectsInfo Objects;
+
     // in case of integral hists we need to remember what values we have set
     struct TPartitionMetrics {
         ui64 SearchHeight = 0;
@@ -1409,6 +1411,21 @@ public:
     void ConnectToSA();
     TDuration SendBaseStatsToSA();
 
+    // namespace NObjectModification {
+    void Handle(const TEvSchemeShard::TEvModifyObject::TPtr& ev, const TActorContext& ctx);
+    void Handle(const TEvPrivate::TEvCommitObjectModification::TPtr& ev, const TActorContext& ctx);
+    void Handle(const TEvPrivate::TEvObjectModificationResult::TPtr& ev, const TActorContext& ctx);
+
+    NTabletFlatExecutor::ITransaction* CreateTxStartObjectModification(const TEvSchemeShard::TEvModifyObject::TPtr& ev, const TActorContext& ctx);
+    NTabletFlatExecutor::ITransaction* CreateTxCommitObjectModification(const TEvPrivate::TEvCommitObjectModification::TPtr& ev, const TActorContext& ctx);
+    NTabletFlatExecutor::ITransaction* CreateTxCompleteObjectModification(const TEvPrivate::TEvObjectModificationResult::TPtr& ev, const TActorContext& ctx);
+
+    void PersistObjectModificationStarted(NIceDb::TNiceDb& db, const TObjectId& objectId, TInstant prevHistoryInstant, const TActorId& sender) const;
+    void PersistObjectModificationFinished(NIceDb::TNiceDb& db, const TObjectId& objectId) const;
+
+    void InitializeObjects(const TActorContext& ctx);
+    void InitializeObjectMetadata(TString typeId, const TActorContext& ctx);
+    // } // NObjectModification
 
 
 public:

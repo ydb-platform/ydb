@@ -84,6 +84,8 @@ struct TEvSchemeShard {
         EvPublishTenantResult,  // 271125012
         EvLogin,
         EvLoginResult,
+        EvModifyObject,
+        EvModifyObjectResult,
 
 
         EvBackupDatashard = EvModifySchemeTransaction + 6 * 512,
@@ -660,6 +662,23 @@ struct TEvSchemeShard {
 
     struct TEvOwnerActorAck : TEventPB<TEvOwnerActorAck, NKikimrScheme::TEvOwnerActorAck, EvOwnerActorAck> {
         TEvOwnerActorAck() = default;
+    };
+
+    struct TEvModifyObject : TEventPB<TEvModifyObject, NKikimrSchemeOp::TModifyObjectDescription, EvModifyObject> {
+        using TBase = TEventPB<TEvModifyObject, NKikimrSchemeOp::TModifyObjectDescription, EvModifyObject>;
+
+        TEvModifyObject() = default;
+
+        TEvModifyObject(NKikimrSchemeOp::TModifyObjectDescription&& proto) : TBase(std::move(proto)) {}
+        TEvModifyObject(const NKikimrSchemeOp::TModifyObjectDescription& proto) : TBase(proto) {}
+    };
+
+    struct TEvModifyObjectResult : TEventPB<TEvModifyObjectResult, NKikimrSchemeOp::TModifyObjectResult, EvModifyObjectResult> {
+        TEvModifyObjectResult() = default;
+
+        TEvModifyObjectResult(const TString& error) {
+            Record.SetError(error);
+        }
     };
 };
 

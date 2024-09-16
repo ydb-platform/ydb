@@ -2,6 +2,8 @@
 #include "defs.h"
 
 #include "schemeshard_identificators.h"
+// TODO: Consider removing dependency
+#include "schemeshard_info_types.h"
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -31,6 +33,8 @@ struct TEvPrivate {
         EvSendBaseStatsToSA,
         EvRunBackgroundCleaning,
         EvRetryNodeSubscribe,
+        EvCommitObjectModification,
+        EvObjectModificationResult,
         EvEnd
     };
 
@@ -191,6 +195,29 @@ struct TEvPrivate {
         explicit TEvRetryNodeSubscribe(ui32 nodeId)
             : NodeId(nodeId)
         { }
+    };
+
+    struct TEvCommitObjectModification: public TEventLocal<TEvCommitObjectModification, EvCommitObjectModification> {
+        // Not implemented
+
+        explicit TEvCommitObjectModification(/* TODO */) {
+            // Not implemented
+        }
+    };
+
+    struct TEvObjectModificationResult: public TEventLocal<TEvObjectModificationResult, EvObjectModificationResult> {
+        TString TypeId;
+        TString ObjectId;
+        TConclusion<std::shared_ptr<TObjectSnapshotBase>> Result;
+
+        explicit TEvObjectModificationResult(TString typeId, TString objectId, TConclusion<std::shared_ptr<TObjectSnapshotBase>> result)
+            : TypeId(std::move(typeId))
+            , ObjectId(std::move(objectId))
+            , Result(std::move(result)) {
+            if (Result.IsSuccess()) {
+                AFL_VERIFY(Result.GetResult()->GetTypeId() == typeId)("result", Result.GetResult()->GetTypeId())("type_id", typeId);
+            }
+        }
     };
 }; // TEvPrivate
 

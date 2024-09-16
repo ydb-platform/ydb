@@ -1,5 +1,7 @@
 #include "update.h"
+
 #include <ydb/core/tx/schemeshard/olap/operations/alter/abstract/converter.h>
+#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 
@@ -44,6 +46,34 @@ NKikimr::TConclusionStatus TInStoreSchemaUpdate::DoInitializeImpl(const TUpdateI
         if (!originalSchema.ValidateTtlSettings(ttl.GetData(), collector)) {
             return TConclusionStatus::Fail("ttl update error: " + collector->GetErrorMessage() + ". in alter constructor STANDALONE_UPDATE");
         }
+
+        // TODO: Consider moving to a function
+        if (AlterTTL->GetPatch().HasUseTiering() && !ttl.GetData().GetUseTiering().empty()) {
+            const TString& tiering = ttl.GetData().GetUseTiering();
+            const TObjectsInfo& objects = context.GetSSOperationContext()->SS->Objects;
+            if (!objects.IsInitialized<NColumnShard::NTiers::TTieringRule>()) {
+                return TConclusionStatus::Fail("Tiering metadata hasn't been initialized at Scheme Shard yet.");
+            }
+            if (objects.IsModificationInFly<NColumnShard::NTiers::TTieringRule>(tiering)) {
+                return TConclusionStatus::Fail("Modification of tiering is in progress: " + tiering);
+            }
+            auto findTiering = objects.GetMetadataVerified<NColumnShard::NTiers::TTieringRule>()->FindObject(tiering);
+            if (!findTiering) {
+                return TConclusionStatus::Fail("Unknown tiering: " + tiering);
+            }
+            const TString evictionColumn = findTiering->GetMetadata().GetDefaultColumn();
+            const auto* findColumn = originalSchema.GetColumns().GetByName(evictionColumn);
+            // TODO: Add unit-test: check that DROP COLUMN under tiering doesn't work
+            // TODO: Add unit-test: check that DROP COLUMN and SET tiering on that column doesn't work
+            if (!findColumn) {
+                return TConclusionStatus::Fail("Can't set tiering rule with invalid default column: " + evictionColumn);
+            }
+            if (!findColumn->IsNotNull()) {
+                return TConclusionStatus::Fail("Can't set tiering rule with nullable default column: " + evictionColumn);
+            }
+            // TODO: validate column type
+        }
+
         *description.MutableTtlSettings() = ttl.SerializeToProto();
     }
 

@@ -1817,6 +1817,16 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<OwnerPathId, LocalPathId, AlterVersion, Properties>;
     };
 
+    struct ObjectModificationsInFly: Table<113> {
+        struct ObjectType: Column<1, NScheme::NTypeIds::String> {};
+        struct ObjectId: Column<2, NScheme::NTypeIds::String> {};
+        struct PreviousHistoryInstant: Column<3, NScheme::NTypeIds::Uint64> { using Type = TInstant::TValue; };
+        struct SenderActorId: Column<4, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<ObjectType, ObjectId>;
+        using TColumns = TableColumns<ObjectType, ObjectId, PreviousHistoryInstant, SenderActorId>;
+    };
+
     using TTables = SchemaTables<
         Paths,
         TxInFlight,
@@ -1926,7 +1936,8 @@ struct Schema : NIceDb::Schema {
         BuildColumnOperationSettings,
         View,
         BackgroundSessions,
-        ResourcePool
+        ResourcePool,
+        ObjectModificationsInFly
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

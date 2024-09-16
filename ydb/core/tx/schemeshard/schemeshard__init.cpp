@@ -4849,6 +4849,34 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
+        // Read object modifications in fly
+        {
+            auto rowset = db.Table<Schema::ObjectModificationsInFly>().Range().Select();
+            if (!rowset.IsReady()) {
+                return false;
+            }
+
+            while (!rowset.EndOfSet()) {
+                const TString typeId = rowset.GetValue<Schema::ObjectModificationsInFly::ObjectType>();
+                const TString objectId = rowset.GetValue<Schema::ObjectModificationsInFly::ObjectId>();
+                const TInstant historyInstant =
+                    TInstant::MicroSeconds(rowset.GetValue<Schema::ObjectModificationsInFly::PreviousHistoryInstant>());
+                TActorId sender;
+                {
+                    const TString senderSerialized = rowset.GetValue<Schema::ObjectModificationsInFly::SenderActorId>();
+                    sender.Parse(senderSerialized.c_str(), senderSerialized.size());
+                }
+
+                if (!Self->Objects.RestoreModificationInFly(typeId, objectId, historyInstant, sender)) {
+                    return false;
+                }
+
+                if (!rowset.Next()) {
+                    return false;
+                }
+            }
+        }
+
         {
             if (!Self->BackgroundSessionsManager->LoadIdempotency(txc)) {
                 return false;

@@ -3372,6 +3372,172 @@ struct TResourcePoolInfo : TSimpleRefCount<TResourcePoolInfo> {
     NKikimrSchemeOp::TResourcePoolProperties Properties;
 };
 
+// TODO: Consider moving somewhere
+template <typename T>
+concept MetadataObject = requires {
+    { T::GetTypeId() } -> std::same_as<TString>;
+} && std::derived_from<T, NMetadata::NModifications::TBaseObject>;
+
+// TODO: Definitely move somewhere
+//////////////////////////////////////////////// BEGIN MOVE
+class TObjectSnapshotBase {
+private:
+    YDB_ACCESSOR(TInstant, LastHistoryInstant, TInstant::Zero());
+
+public:
+    virtual TString GetTypeId() const = 0;
+};
+
+template <MetadataObject TObject>
+class TObjectSnapshot: TObjectSnapshotBase {
+private:
+    YDB_READONLY_DEF(TObject, Metadata);
+
+public:
+    TString GetTypeId() const override {
+        // TODO: Consider returning static string from GetTypeId everywhere
+        return TObject::GetTypeId();
+    }
+};
+
+class TAbstractObjectContainer {
+private:
+    using TObjectPtr = std::shared_ptr<TObjectSnapshotBase>;
+
+    THashMap<TString, TObjectPtr> Objects;
+
+protected:
+    bool MatchElementTypeId(const TString& objectType) {
+        return Objects.empty() || Objects.begin()->second->GetTypeId() == objectType;
+    }
+
+public:
+    bool EmplaceAbstractVerified(const TString& objectId, TObjectPtr object) {
+        AFL_VERIFY(object);
+        if (!Objects.empty()) {
+            AFL_VERIFY(MatchElementTypeId(object->GetTypeId()))("container", Objects.begin()->second->GetTypeId())(
+                "emplaced", object->GetTypeId());
+        }
+        return Objects.emplace(objectId, std::move(object)).second;
+    }
+
+    bool Contains(const TString& objectId) const {
+        return Objects.contains(objectId);
+    }
+
+    std::shared_ptr<TObjectSnapshotBase> FindObjectAbstract(const TString& objectId) const {
+        auto findObject = Objects.FindPtr(objectId);
+        if (!findObject) {
+            return {};
+        }
+        return *findObject;
+    }
+
+    bool Erase(const TString& objectId) {
+        return Objects.erase(objectId);
+    }
+};
+
+template <MetadataObject TObject>
+class TObjectContainer: public TAbstractObjectContainer {
+public:
+    using TSnapshotPtr = std::shared_ptr<TObjectSnapshot<TObject>>;
+    using TSelf = TObjectContainer<TObject>;
+
+    const TSnapshotPtr& FindObject(const TString& objectId) const {
+        auto findObject = FindObjectAbstract(objectId);
+        if (!findObject) {
+            return findObject;
+        }
+        auto resultPtr = dynamic_pointer_cast<TObjectSnapshot<TObject>>(findObject);
+        AFL_VERIFY(!!resultPtr);
+        return *resultPtr;
+    }
+
+    bool Emplace(const TString& objectId, TSnapshotPtr snapshot) {
+        return EmplaceAbstractVerified(objectId, std::move(snapshot));
+    }
+
+    static std::shared_ptr<TSelf> ConvertFromAbstractVerified(const std::shared_ptr<TAbstractObjectContainer>& container) {
+        auto resultPtr = static_pointer_cast<TSelf>(container);
+        AFL_VERIFY(resultPtr->MatchElementTypeId(TObject::GetTypeId()));
+        return *resultPtr;
+    }
+};
+//////////////////////////////////////////////// END MOVE
+
+class TObjectsInfo {
+public:
+    struct TModificationInfo {
+        TInstant PreviousHistoryInstant;
+        TActorId Sender;
+    };
+
+private:
+    using TSnapshot = NMetadata::NFetcher::ISnapshot;
+
+    THashMap<TString, std::shared_ptr<TAbstractObjectContainer>> Metadata;
+    THashMap<TObjectId, TModificationInfo> ModificationsInFly;
+
+public:
+    bool IsModificationInFly(const TString& objectType, const TString& objectId) const {
+        return ModificationsInFly.contains({ objectType, objectId });
+    }
+
+    template <MetadataObject TObject>
+    bool IsModificationInFly(const TString& objectId) const {
+        return IsModificationInFly(TObject::GetTypeId(), objectId);
+    }
+
+    // TODO: Unify terminology everywhere: typeId, objectType (to typeId)
+    const TModificationInfo* FindModificationInfo(const TString& objectType, const TString& objectId) const {
+        return ModificationsInFly.FindPtr(TObjectId(objectType, objectId));
+    }
+
+    bool RestoreModificationInFly(const TString& objectType, const TString& objectId, const TInstant historyInstant, const TActorId& sender) {
+        bool emplaced = ModificationsInFly.emplace(TObjectId(objectType, objectId), TModificationInfo(historyInstant, sender)).second;
+        return emplaced;
+    }
+
+    const TModificationInfo& OnModificationStarted(const TString& objectType, const TString& objectId, const TActorId& sender) {
+        AFL_VERIFY(IsInitialized(objectType))(
+            "type", objectType);   // TODO: Consider the scenario when events come, but metadata is not initialized
+        AFL_VERIFY(!IsModificationInFly(objectType, objectId))("type", objectType)("id", objectId);
+        const auto& metadata = Metadata[objectType];
+        const auto& findObject = metadata->FindObjectAbstract(objectId);
+        TInstant prevHistoryInstant = findObject ? findObject->GetLastHistoryInstant() : TInstant::Zero();
+        return ModificationsInFly.emplace(TObjectId(objectType, objectId), TModificationInfo(prevHistoryInstant, sender)).first->second;
+    }
+
+    // TODO: Consider using ObjectId in args
+    void OnModificationFinished(const TString& objectType, const TString& objectId) {
+        AFL_VERIFY(IsModificationInFly(objectType, objectId))("type", objectType)("id", objectId);
+        ModificationsInFly.erase(TObjectId(objectType, objectId));
+    }
+
+    bool IsInitialized(const TString& objectType) const {
+        return Metadata.contains(objectType);
+    }
+
+    template <MetadataObject TObject>
+    bool IsInitialized() const {
+        return IsInitialized(TObject::GetTypeId());
+    }
+
+    template <MetadataObject TObject>
+    const std::shared_ptr<TObjectContainer<TObject>>& GetMetadataVerified() const {
+        auto findMetadata = Metadata.FindPtr(TObject::GetTypeId());
+        AFL_VERIFY(findMetadata);
+        return TObjectContainer<TObject>::ConvertFromAbstractVerified(*findMetadata);
+    }
+
+    const std::shared_ptr<TAbstractObjectContainer>& GetMetadataVerified(const TString& objectType) const {
+        auto findMetadata = Metadata.FindPtr(objectType);
+        AFL_VERIFY(findMetadata);
+        return *findMetadata;
+    }
+};
+
 bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
     const THashMap<ui32, TTableInfo::TColumn>& sourceColumns,
     const THashMap<ui32, TTableInfo::TColumn>& alterColumns,

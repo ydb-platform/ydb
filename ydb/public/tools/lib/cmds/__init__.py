@@ -250,10 +250,6 @@ def default_users():
     return {user: password}
 
 
-def enable_survive_restart():
-    return os.getenv('YDB_LOCAL_SURVIVE_RESTART') == 'true'
-
-
 def enable_tls():
     return os.getenv('YDB_GRPC_ENABLE_TLS') == 'true'
 

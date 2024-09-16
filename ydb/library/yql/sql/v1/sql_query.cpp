@@ -1413,8 +1413,19 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
 
             std::map<TString, TDeferredAtom> kv;
             std::set<TString> toReset;
-            if (!ParseBackupCollectionSettings(kv, toReset, node.GetRule_alter_backup_collection_actions3())) {
-                return false;
+
+            switch (node.GetBlock3().Alt_case()) {
+            case TRule_alter_backup_collection_stmt_TBlock3::kAlt1: {
+                if (!ParseBackupCollectionSettings(kv, toReset, node.GetBlock3().GetAlt1().GetRule_alter_backup_collection_actions1())) {
+                    return false;
+                }
+                break;
+            }
+            case TRule_alter_backup_collection_stmt_TBlock3::kAlt2: {
+                // TODO
+                break;
+            }
+            case TRule_alter_backup_collection_stmt_TBlock3::ALT_NOT_SET: {} // do nothing
             }
 
             const TString& objectId = Id(node.GetRule_backup_collection2().GetRule_object_ref3().GetRule_id_or_at2(), *this).second;

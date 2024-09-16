@@ -1,4 +1,4 @@
-## Just, Unwrap, Nothing {#optional-ops}
+## Just {#optional-ops}
 
 `Just()` - Изменить тип данных значения на [optional](../../../types/optional.md) от текущего типа данных (то есть `T` превращается в `T?`).
 
@@ -14,6 +14,8 @@ Just(T)->T?
 SELECT
   Just("my_string"); --  String?
 ```
+
+## Unwrap {#unwrap}
 
 `Unwrap()` - Преобразование значения [optional](../../../types/optional.md) типа данных в соответствующий не-optional тип с ошибкой времени выполнений, если в данных оказался `NULL`. Таким образом, `T?` превращается в `T`.
 
@@ -41,6 +43,8 @@ $value = Just("value");
 
 SELECT Unwrap($value, "Unexpected NULL for $value");
 ```
+
+## Nothing {#nothing}
 
 `Nothing()` - Создать пустое значение указанного [Optional](../../../types/optional.md) типа данных.
 

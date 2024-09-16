@@ -18,7 +18,7 @@ log-levels:
   MD021: 'error' # Multiple spaces inside hashes on closed atx style heading
   MD022: 'disabled' # Headings should be surrounded by blank lines
   MD023: 'disabled' # Headings must start at the beginning of the line
-  MD024: 'disabled' # Multiple headings with the same content
+  MD024: 'error' # Multiple headings with the same content
   MD025: 'error' # Multiple top-level headings in the same document
   MD026: 'error' # Trailing punctuation in heading
   MD027: 'error' # Multiple spaces after blockquote symbol
@@ -61,6 +61,10 @@ log-levels:
   YFM007: 'error' # Term used without definition
   YFM008: 'error' # Term inside definition not allowed
   YFM009: 'error' # Term definition used not at the end of file
+
+# Multiple headings with the same content
+MD024:
+  siblings_only: true
 
 # Inline code length
 YFM001:

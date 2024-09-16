@@ -234,8 +234,6 @@ The status (severity) of the current issue:
 
 #### Replication in progress
 
-#### Replication in progress
-
 **Description:** The disk is accepting queries, but not all data has been replicated.
 
 **Actions:** In [Embedded UI](../embedded-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, and apply the `Groups` and `Degraded` filters. The group `id` can be found through the related `STORAGE_GROUP` issue. Hover over the relevant VDisk to identify the node with the problem and check the availability of nodes and disks on those nodes.
@@ -328,10 +326,6 @@ The status (severity) of the current issue:
 **Description:** Tablets are not running (likely cannot be started).
 
 **Actions:** In [Embedded UI](../embedded-ui/ydb-monitoring.md), navigate to the `Nodes` tab. Check the `Uptime` and the nodes' statuses. If the `Uptime` is short, review the logs to determine the reasons for the node restarts.
-
-### LOAD_AVERAGE
-
-#### LoadAverage above 100%
 
 ### LOAD_AVERAGE
 

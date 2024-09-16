@@ -1,4 +1,4 @@
-## Enum, AsEnum {#enum}
+## Enum {#enum}
 
 `Enum()` cоздает значение перечисления.
 
@@ -21,6 +21,8 @@ SELECT
    Enum("Foo", $enum_type) as Enum1Value,
    Enum("Bar", $enum_type) as Enum2Value;
 ```
+
+## AsEnum {#asenum}
 
 `AsEnum()` создает значение [перечисления](../../../types/containers.md) с одним элементом. Это значение может быть неявно преобразовано к любому перечислению, содержащему такое имя.
 

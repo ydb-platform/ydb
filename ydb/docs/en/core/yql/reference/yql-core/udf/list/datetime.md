@@ -328,6 +328,8 @@ SELECT
 
 For the common formats, wrappers around the corresponding util methods are supported. You can only get TM with components in the UTC timezone.
 
+## Parse specific formats
+
 ### List of functions
 
 * `DateTime::ParseRfc822(String{Flags:AutoMap}) -> Resource<TM>?`
